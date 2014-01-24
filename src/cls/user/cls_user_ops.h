@@ -29,6 +29,9 @@ struct cls_user_set_buckets_op {
     ::decode(time, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_user_set_buckets_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_set_buckets_op)
 
@@ -48,6 +51,9 @@ struct cls_user_remove_bucket_op {
     ::decode(bucket, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_user_remove_bucket_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_remove_bucket_op)
 
@@ -71,6 +77,9 @@ struct cls_user_list_buckets_op {
     ::decode(max_entries, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_user_list_buckets_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_list_buckets_op)
 
@@ -96,6 +105,9 @@ struct cls_user_list_buckets_ret {
     ::decode(truncated, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_user_list_buckets_ret*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_list_buckets_ret)
 
@@ -112,6 +124,9 @@ struct cls_user_get_header_op {
     DECODE_START(1, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_user_get_header_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_get_header_op)
 
@@ -131,6 +146,9 @@ struct cls_user_get_header_ret {
     ::decode(header, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_user_get_header_ret*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_get_header_ret)
 
@@ -150,6 +168,9 @@ struct cls_user_complete_stats_sync_op {
     ::decode(time, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_user_complete_stats_sync_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_complete_stats_sync_op)
 

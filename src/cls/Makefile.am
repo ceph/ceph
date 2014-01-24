@@ -100,7 +100,11 @@ DENCODER_DEPS += libcls_rgw_client.la
 libcls_rbd_client_la_SOURCES = cls/rbd/cls_rbd_client.cc
 noinst_LTLIBRARIES += libcls_rbd_client.la
 
-libcls_user_client_a_SOURCES = cls/user/cls_user_client.cc cls/user/cls_user_types.cc
+libcls_user_client_a_SOURCES = cls/user/cls_user_client.cc \
+	cls/user/cls_user_types.cc \
+	cls/user/cls_user_ops.cc
+DENCODER_DEPS += libcls_user_client.a
+
 noinst_LIBRARIES += libcls_user_client.a
 
 noinst_HEADERS += \
