@@ -8,6 +8,7 @@
     user suspend               suspend a user
     user enable                reenable user after suspension
     user check                 check user info
+    user stats                 show user stats as accounted by quota subsystem
     caps add                   add user capabilities
     caps rm                    remove user capabilities
     subuser create             create a new subuser
@@ -105,6 +106,8 @@
                                subuser keys
      --purge-objects           remove a bucket's objects before deleting it
                                (NOTE: required to delete a non-empty bucket)
+     --sync-stats              option to 'user stats', update user stats with current
+                               stats reported by user's buckets indexes
      --show-log-entries=<flag> enable/disable dump of log entries on log show
      --show-log-sum=<flag>     enable/disable dump of log summation on log show
      --skip-zero-entries       log show only dumps entries that don't have zero value

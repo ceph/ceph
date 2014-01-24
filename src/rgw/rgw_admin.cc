@@ -47,6 +47,7 @@ void _usage()
   cerr << "  user suspend               suspend a user\n";
   cerr << "  user enable                reenable user after suspension\n";
   cerr << "  user check                 check user info\n";
+  cerr << "  user stats                 show user stats as accounted by quota subsystem\n";
   cerr << "  caps add                   add user capabilities\n";
   cerr << "  caps rm                    remove user capabilities\n";
   cerr << "  subuser create             create a new subuser\n" ;
@@ -144,6 +145,8 @@ void _usage()
   cerr << "                             subuser keys\n";
   cerr << "   --purge-objects           remove a bucket's objects before deleting it\n";
   cerr << "                             (NOTE: required to delete a non-empty bucket)\n";
+  cerr << "   --sync-stats              option to 'user stats', update user stats with current\n";
+  cerr << "                             stats reported by user's buckets indexes\n";
   cerr << "   --show-log-entries=<flag> enable/disable dump of log entries on log show\n";
   cerr << "   --show-log-sum=<flag>     enable/disable dump of log summation on log show\n";
   cerr << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
