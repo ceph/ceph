@@ -7,3 +7,13 @@ For more information please visit:
 
 * [Blueprint](http://wiki.ceph.com/Planning/Blueprints/Firefly/Ceph-Brag)
 * [CDS Etherpad](http://pad.ceph.com/p/cdsfirefly-ceph-brag)
+
+How to use:
+===========
+Pre-requisites:
+---------------
+ceph-brag uses 'ceph' python script. Hence, before executing ceph-brag script ensure that ceph services are all running and 'ceph' script is in 'PATH' environment
+
+Runtime instructions:
+---------------------
+Run 'ceph-brag -h' to get the usage information of this tool.
