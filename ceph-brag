@@ -168,7 +168,8 @@ def get_sysinfo():
     hw_info['swap_kb'] = int(jmeta['mem_swap_kb'])
     meta['hw_info'] = hw_info
   
-  sysinfo.append(meta)
+    sysinfo.append(meta)
+ 
   return sysinfo
 
 def get_osd_hosts():
