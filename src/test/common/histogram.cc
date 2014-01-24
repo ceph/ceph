@@ -93,3 +93,14 @@ TEST(Histogram, Position) {
     ASSERT_EQ(500000, ub);
   }
 }
+
+TEST(Histogram, Decay) {
+  pow2_hist_t h;
+  h.set_bin(0, 123);
+  h.set_bin(3, 12);
+  h.set_bin(5, 1);
+  h.decay(1);
+  ASSERT_EQ(61, h.h[0]);
+  ASSERT_EQ(6, h.h[3]);
+  ASSERT_EQ(4u, h.h.size());
+}
