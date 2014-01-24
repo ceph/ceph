@@ -18,6 +18,7 @@
 #include "OSD.h"
 #include "PGBackend.h"
 #include "osd_types.h"
+#include "../include/memory.h"
 
 struct C_ReplicatedBackend_OnPullComplete;
 class ReplicatedBackend : public PGBackend {
@@ -466,7 +467,7 @@ private:
     RepModify() : applied(false), committed(false), ackerosd(-1),
 		  epoch_started(0), bytes_written(0) {}
   };
-  typedef std::tr1::shared_ptr<RepModify> RepModifyRef;
+  typedef ceph::shared_ptr<RepModify> RepModifyRef;
 
   struct C_OSD_RepModifyApply : public Context {
     ReplicatedBackend *pg;
