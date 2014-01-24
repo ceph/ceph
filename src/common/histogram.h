@@ -116,6 +116,9 @@ public:
     return 1 << h.size();
   }
 
+  /// decay histogram by N bits (default 1, for a halflife)
+  void decay(int bits = 1);
+
   void dump(Formatter *f) const;
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);

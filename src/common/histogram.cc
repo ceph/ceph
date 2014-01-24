@@ -49,3 +49,10 @@ void pow2_hist_t::generate_test_instances(std::list<pow2_hist_t*>& ls)
   ls.back()->h.push_back(2);
 }
 
+void pow2_hist_t::decay(int bits)
+{
+  for (std::vector<int32_t>::iterator p = h.begin(); p != h.end(); ++p) {
+    *p >>= bits;
+  }
+  _contract();
+}
