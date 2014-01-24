@@ -868,7 +868,7 @@ void Monitor::sync_obtain_latest_monmap(bufferlist &bl)
 
   dout(1) << __func__ << " obtained monmap e" << latest_monmap.epoch << dendl;
 
-  latest_monmap.encode(bl, CEPH_FEATURES_ALL);
+  latest_monmap.encode(bl, quorum_features);
 }
 
 void Monitor::sync_reset_requester()
@@ -2514,7 +2514,7 @@ void Monitor::try_send_message(Message *m, const entity_inst_t& to)
   dout(10) << "try_send_message " << *m << " to " << to << dendl;
 
   bufferlist bl;
-  encode_message(m, CEPH_FEATURES_ALL, bl);  // fixme: assume peers have all features we do.
+  encode_message(m, quorum_features, bl);
 
   messenger->send_message(m, to);
 
