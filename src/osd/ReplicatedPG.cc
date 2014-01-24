@@ -10264,6 +10264,13 @@ void ReplicatedPG::agent_work(int start_max)
       break;
   }
 
+  if (++agent_state->hist_age > g_conf->osd_agent_hist_halflife) {
+    dout(20) << __func__ << " resetting atime and temp histograms" << dendl;
+    agent_state->hist_age = 0;
+    agent_state->atime_hist.decay();
+    agent_state->temp_hist.decay();
+  }
+
   if (next.is_max())
     agent_state->position = hobject_t();
   else
