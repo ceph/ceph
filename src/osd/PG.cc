@@ -5940,6 +5940,7 @@ void PG::RecoveryState::Active::exit()
   pg->state_clear(PG_STATE_REPLAY);
   utime_t dur = ceph_clock_now(pg->cct) - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_active_latency, dur);
+  pg->agent_stop();
 }
 
 /*------ReplicaActive-----*/

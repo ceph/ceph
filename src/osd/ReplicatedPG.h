@@ -28,6 +28,7 @@
 #include "PG.h"
 #include "Watch.h"
 #include "OpRequest.h"
+#include "TierAgentState.h"
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
@@ -677,7 +678,31 @@ protected:
   hobject_t get_hit_set_current_object(utime_t stamp);
   hobject_t get_hit_set_archive_object(utime_t start, utime_t end);
 
+  // agent
+  boost::scoped_ptr<TierAgentState> agent_state;
+
   friend class C_AgentFlushStartStop;
+
+  void agent_setup();       ///< initialize agent state
+  void agent_work(int max); ///< entry point to do some agent work
+  bool agent_maybe_flush(ObjectContextRef& obc);  ///< maybe flush
+  bool agent_maybe_evict(ObjectContextRef& obc);  ///< maybe evict
+
+  /// estimate object atime and temperature
+  ///
+  /// @param oid [in] object name
+  /// @param atime [out] seconds since last access (lower bound)
+  /// @param temperature [out] relative temperature (# hitset bins we appear in)
+  void agent_estimate_atime_temp(const hobject_t& oid,
+				 int *atime, int *temperature);
+
+  /// stop the agent
+  void agent_stop();
+
+  /// clear agent state
+  void agent_clear();
+
+  bool agent_choose_mode();  ///< choose (new) agent mode(s)
 
   /// true if we can send an ondisk/commit for v
   bool already_complete(eversion_t v) {
@@ -1238,8 +1263,6 @@ public:
   int getattrs_maybe_cache(
     ObjectContextRef obc,
     map<string, bufferlist> *out);
-
-  void agent_work(int max) { /* placeholder */ }
 };
 
 inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
