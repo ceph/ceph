@@ -22,9 +22,9 @@
 #include <map>
 #include <string>
 #include <vector>
-#include <tr1/memory>
 #include <boost/scoped_ptr.hpp>
 
+#include "include/memory.h"
 #include "ObjectMap.h"
 #include "KeyValueDB.h"
 #include "osd/osd_types.h"
@@ -211,7 +211,7 @@ class GenericObjectMap {
     _Header() : seq(0), parent(0), num_children(1) {}
   };
 
-  typedef std::tr1::shared_ptr<_Header> Header;
+  typedef ceph::shared_ptr<_Header> Header;
 
   Header lookup_header(const coll_t &cid, const ghobject_t &oid) {
     Mutex::Locker l(header_lock);
@@ -318,12 +318,12 @@ private:
     Header header;
 
     /// parent_iter == NULL iff no parent
-    std::tr1::shared_ptr<GenericObjectMapIteratorImpl> parent_iter;
+    ceph::shared_ptr<GenericObjectMapIteratorImpl> parent_iter;
     KeyValueDB::Iterator key_iter;
     KeyValueDB::Iterator complete_iter;
 
     /// cur_iter points to currently valid iterator
-    std::tr1::shared_ptr<ObjectMap::ObjectMapIteratorImpl> cur_iter;
+    ceph::shared_ptr<ObjectMap::ObjectMapIteratorImpl> cur_iter;
     int r;
 
     /// init() called, key_iter, complete_iter, parent_iter filled in
@@ -365,7 +365,7 @@ private:
     int adjust();
   };
 
-  typedef std::tr1::shared_ptr<GenericObjectMapIteratorImpl> GenericObjectMapIterator;
+  typedef ceph::shared_ptr<GenericObjectMapIteratorImpl> GenericObjectMapIterator;
   GenericObjectMapIterator _get_iterator(Header header, string prefix) {
     return GenericObjectMapIterator(new GenericObjectMapIteratorImpl(this, header, prefix));
   }

@@ -21,12 +21,11 @@
 #include <set>
 #include <map>
 #include <string>
-#include <tr1/memory>
 #include <vector>
 
-#include "GenericObjectMap.h"
 #include <errno.h>
 
+#include "GenericObjectMap.h"
 #include "common/debug.h"
 #include "common/config.h"
 #include "include/assert.h"
