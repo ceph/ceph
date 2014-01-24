@@ -633,7 +633,7 @@ for your master zone and your secondary zones in each region. When creating
 pools for a specific zone, consider prepending the region name and zone name to
 the default pool names. For example:
 
-- ``.region1-zone1.rgw``
+- ``.region1-zone1.domain.rgw``
 - ``.region1-zone1.rgw.control``
 - ``.region1-zone1.rgw.gc``
 - ``.region1-zone1.log``
