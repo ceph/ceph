@@ -21,6 +21,7 @@ struct TierAgentState {
   /// histogram of ages we've encountered
   pow2_hist_t atime_hist;
   pow2_hist_t temp_hist;
+  int hist_age;
 
   /// past HitSet(s) (not current)
   map<time_t,HitSetRef> hit_set_map;
@@ -65,7 +66,8 @@ struct TierAgentState {
   unsigned evict_effort;
 
   TierAgentState()
-    : flush_mode(FLUSH_MODE_IDLE),
+    : hist_age(0),
+      flush_mode(FLUSH_MODE_IDLE),
       evict_mode(EVICT_MODE_IDLE),
       evict_effort(0)
   {}
