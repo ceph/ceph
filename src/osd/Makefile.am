@@ -41,6 +41,7 @@ noinst_HEADERS += \
 	osd/ReplicatedPG.h \
 	osd/PGBackend.h \
 	osd/ReplicatedBackend.h \
+	osd/TierAgentState.h \
 	osd/Watch.h \
 	osd/osd_types.h
 
