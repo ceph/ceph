@@ -52,6 +52,10 @@ map is ``active + clean``.
 *Wait-backfill*
   The placement group is waiting in line to start backfill.
 
+*Backfill-toofull*
+  A backfill operation is waiting because the destination OSD is over its
+  full ratio.
+
 *Incomplete*
   Ceph detects that a placement group is missing a necessary period of history 
   from its log.  If you see this state, report a bug, and try to start any
