@@ -1,8 +1,8 @@
 
 #include <string.h>
 
-#include "mongoose/mongoose.h"
-#include "rgw_mongoose.h"
+#include "civetweb/civetweb.h"
+#include "rgw_civetweb.h"
 
 
 #define dout_subsys ceph_subsys_rgw
