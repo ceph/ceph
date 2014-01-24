@@ -239,6 +239,21 @@ TYPE(cls_rgw_bi_log_list_ret)
 #include "cls/rgw/cls_rgw_client.h"
 TYPE(rgw_bi_log_entry)
 
+#include "cls/user/cls_user_types.h"
+TYPE(cls_user_bucket)
+TYPE(cls_user_bucket_entry)
+TYPE(cls_user_stats)
+TYPE(cls_user_header)
+
+#include "cls/user/cls_user_ops.h"
+TYPE(cls_user_set_buckets_op)
+TYPE(cls_user_remove_bucket_op)
+TYPE(cls_user_list_buckets_op)
+TYPE(cls_user_list_buckets_ret)
+TYPE(cls_user_get_header_op)
+TYPE(cls_user_get_header_ret)
+TYPE(cls_user_complete_stats_sync_op)
+
 #include "rgw/rgw_common.h"
 TYPE(RGWAccessKey);
 TYPE(RGWSubUser);

@@ -54,6 +54,9 @@ struct cls_user_bucket {
   bool operator<(const cls_user_bucket& b) const {
     return name.compare(b.name) < 0;
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_user_bucket*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_bucket)
 
@@ -106,6 +109,8 @@ struct cls_user_bucket_entry {
       ::decode(user_stats_sync, bl);
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_user_bucket_entry*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_bucket_entry)
 
@@ -130,6 +135,7 @@ struct cls_user_stats {
   }
 
   void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_user_stats*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_stats)
 
@@ -157,8 +163,14 @@ struct cls_user_header {
   }
 
   void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_user_header*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_header)
+
+void cls_user_gen_test_bucket(cls_user_bucket *bucket, int i);
+void cls_user_gen_test_bucket_entry(cls_user_bucket_entry *entry, int i);
+void cls_user_gen_test_stats(cls_user_stats *stats);
+void cls_user_gen_test_header(cls_user_header *h);
 
 #endif
 
