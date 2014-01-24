@@ -168,6 +168,7 @@ def worker(ctx):
 
         job_config['job_id'] = str(job.jid)
         safe_archive = safepath.munge(job_config['name'])
+        job_config['worker_log'] = log_file_path
         archive_path_full = os.path.join(
             ctx.archive_dir, safe_archive, str(job.jid))
         job_config['archive_path'] = archive_path_full
@@ -300,6 +301,11 @@ def run_job(job_config, teuth_bin_path):
         arg.append(tmp.name)
         p = subprocess.Popen(args=arg)
         log.info("Job archive: %s", job_config['archive_path'])
+        try:
+            os.symlink(job_config['worker_log'],
+                       os.path.join(job_config['archive_path'], 'worker.log'))
+        except Exception:
+            log.exception("Failed to symlink worker log")
 
         if teuth_config.results_server:
             log.info("Running with watchdog")
