@@ -219,7 +219,7 @@ def build_ceph_cluster(ctx, config):
             if estatus_mon != 0:
                 raise RuntimeError("ceph-deploy: Failed to create monitor")
     else:
-        mon_create_nodes = './ceph-deploy mon create'+" "+mon_nodes
+        mon_create_nodes = './ceph-deploy mon create-initial'
         estatus_mon = execute_ceph_deploy(ctx, config, mon_create_nodes)
         if estatus_mon != 0:
             raise RuntimeError("ceph-deploy: Failed to create monitors")
