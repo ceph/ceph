@@ -25,8 +25,9 @@ void cls_user_remove_bucket(librados::ObjectWriteOperation& op,  const cls_user_
 void cls_user_bucket_list(librados::ObjectReadOperation& op,
                        const string& in_marker, int max_entries,
                        list<cls_user_bucket_entry>& entries,
-                       string *out_marker, bool *truncated);
-void cls_user_get_header(librados::ObjectReadOperation& op, cls_user_header *header);
+                       string *out_marker, bool *truncated,
+                       int *pret);
+void cls_user_get_header(librados::ObjectReadOperation& op, cls_user_header *header, int *pret);
 int cls_user_get_header_async(librados::IoCtx& io_ctx, string& oid, RGWGetUserHeader_CB *ctx);
 
 #endif
