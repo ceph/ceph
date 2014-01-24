@@ -10,8 +10,17 @@
  * Copyright 2013 Inktank
  */
 
-#ifndef HISTOGRAM_H_
-#define HISTOGRAM_H_
+#ifndef CEPH_HISTOGRAM_H
+#define CEPH_HISTOGRAM_H
+
+#include <vector>
+#include <list>
+
+#include "include/encoding.h"
+
+namespace ceph {
+  class Formatter;
+}
 
 /**
  * power of 2 histogram
@@ -23,7 +32,7 @@ struct pow2_hist_t { //
    * bin size is 2^index
    * value is count of elements that are <= the current bin but > the previous bin.
    */
-  vector<int32_t> h;
+  std::vector<int32_t> h;
 
 private:
   /// expand to at least another's size
@@ -49,6 +58,13 @@ public:
     _contract();
   }
 
+  void add(int32_t v) {
+    int bin = calc_bits_of(v);
+    _expand_to(bin + 1);
+    h[bin]++;
+    _contract();
+  }
+
   static int calc_bits_of(int t) {
     int b = 0;
     while (t > 0) {
@@ -68,7 +84,7 @@ public:
   /// @param upper [out] pointer to the upper bound (0..1000000)
   int get_position_micro(int32_t v, unsigned *lower, unsigned *upper) {
     if (v < 0)
-      return -ERANGE;
+      return -1;
     unsigned bin = calc_bits_of(v);
     unsigned lower_sum = 0, upper_sum = 0, total = 0;
     for (unsigned i=0; i<h.size(); ++i) {
@@ -107,4 +123,4 @@ public:
 };
 WRITE_CLASS_ENCODER(pow2_hist_t)
 
-#endif /* HISTOGRAM_H_ */
+#endif /* CEPH_HISTOGRAM_H */
