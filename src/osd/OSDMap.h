@@ -240,6 +240,26 @@ private:
     memset(&fsid, 0, sizeof(fsid));
   }
 
+  // no copying
+  /* oh, how i long for c++11...
+private:
+  OSDMap(const OSDMap& other) = default;
+  const OSDMap& operator=(const OSDMap& other) = default;
+public:
+  */
+
+  void deepish_copy_from(const OSDMap& o) {
+    primary_temp.reset(new map<pg_t,int>(*o.primary_temp));
+    pg_temp.reset(new map<pg_t,vector<int> >(*o.pg_temp));
+    osd_uuid.reset(new vector<uuid_d>(*o.osd_uuid));
+
+    // NOTE: this still references shared entity_addr_t's.
+    osd_addrs.reset(new addrs_s(*o.osd_addrs));
+
+    // NOTE: we do not copy crush.  note that apply_incremental will
+    // allocate a new CrushWrapper, though.
+  }
+
   // map info
   const uuid_d& get_fsid() const { return fsid; }
   void set_fsid(uuid_d& f) { fsid = f; }
