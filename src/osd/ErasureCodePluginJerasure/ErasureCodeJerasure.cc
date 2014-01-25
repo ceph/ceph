@@ -52,14 +52,39 @@ unsigned int ErasureCodeJerasure::get_chunk_size(unsigned int object_size) const
   return padded_length / k;
 }
 
+int ErasureCodeJerasure::encode_chunks(vector<bufferlist> &chunks)
+{
+  assert(chunks.size() == (unsigned int)(k + m));
+  char *buffers[k + m];
+  unsigned int i = 0;
+  for (vector<bufferlist>::iterator chunk = chunks.begin();
+       chunk != chunks.end();
+       chunk++, i++)
+    buffers[i] = chunk->c_str();
+  jerasure_encode(&buffers[0], &buffers[k], chunks.front().length());
   return 0;
 }
 
+int ErasureCodeJerasure::decode_chunks(vector<bool> erasures,
+				       vector<bufferlist> &chunks)
 {
+  int e[k + m + 1];
+  int e_count = 0;
+
   char *data[k];
   char *coding[m];
+
+  for (unsigned int i = 0; i < chunks.size(); i++) {
+    if (i < (unsigned int)k)
+      data[i] = chunks[i].c_str();
     else
+      coding[i - k] = chunks[i].c_str();
+    if (erasures[i])
+      e[e_count++] = i;
   }
+  e[e_count] = -1;
+  if (e_count > 0)
+    return jerasure_decode(e, data, coding, chunks.front().length());
   else
     return 0;
 }
