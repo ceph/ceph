@@ -236,6 +236,27 @@ TEST(ErasureCodeTest, encode)
 
   {
     //
+    // When bufferptr are exactly aligned, they are re-used and there is no
+    // copy or reallocation.
+    //
+    bufferlist in;
+    map<int,bufferlist> encoded;
+    int want_to_encode[] = { 0, 1, 2, 3 };
+    bufferptr ptr0(buffer::create_page_aligned(jerasure.get_chunk_size(1)));
+    in.append(ptr0);
+    bufferptr ptr1(buffer::create_page_aligned(jerasure.get_chunk_size(1)));
+    in.append(ptr1);
+    in.zero();
+    EXPECT_EQ(0, jerasure.encode(set<int>(want_to_encode, want_to_encode+4),
+				 in,
+				 &encoded));
+    EXPECT_EQ(4u, encoded.size());
+    EXPECT_EQ(ptr0.get_raw(), encoded[0].buffers().front().get_raw());
+    EXPECT_EQ(ptr1.get_raw(), encoded[1].buffers().front().get_raw());
+  }
+
+  {
+    //
     // When only the first chunk is required, the encoded map only
     // contains the first chunk. Although the jerasure encode
     // internally allocated a buffer because of padding requirements
@@ -252,6 +273,52 @@ TEST(ErasureCodeTest, encode)
     EXPECT_EQ(0, jerasure.encode(want_to_encode, in, &encoded));
     EXPECT_EQ(1u, encoded.size());
     EXPECT_EQ(alignment, encoded[0].length());
+  }
+}
+
+TEST(ErasureCodeTest, decode)
+{
+  ErasureCodeJerasureReedSolomonVandermonde jerasure;
+  map<std::string,std::string> parameters;
+  parameters["erasure-code-k"] = "2";
+  parameters["erasure-code-m"] = "2";
+  parameters["erasure-code-w"] = "8";
+  jerasure.init(parameters);
+
+  unsigned int chunk_size = jerasure.get_chunk_size(1);
+  string payload(chunk_size * jerasure.get_data_chunk_count(), 'X');
+  bufferlist in;
+  in.append(payload);
+  map<int, bufferlist> encoded;
+  {
+    int want_to_encode[] = { 0, 1, 2, 3 };
+    EXPECT_EQ(0, jerasure.encode(set<int>(want_to_encode, want_to_encode+4),
+				 in,
+				 &encoded));
+  }
+  {
+    int want_to_decode[] = { 0, 1 };
+    map<int, bufferlist> decoded;
+    EXPECT_EQ(0, jerasure.decode(set<int>(want_to_decode, want_to_decode+2),
+				 encoded,
+				 &decoded));
+    EXPECT_EQ(payload[0], decoded[0][0]);
+  }
+  // when a chunk is missing use decoded buffer if provided instead of
+  // allocating a new one
+  {
+    unsigned int missing = 2;
+    set<int> want_to_decode;
+    want_to_decode.insert(missing);
+    map<int, bufferlist> degraded = encoded;
+    degraded.erase(missing);
+    map<int, bufferlist> decoded;
+    bufferptr ptr(buffer::create_page_aligned(chunk_size));
+    bufferlist chunk;
+    chunk.append(ptr);
+    decoded[missing] = chunk;
+    EXPECT_EQ(0, jerasure.decode(want_to_decode, degraded, &decoded));
+    EXPECT_EQ(ptr.get_raw(), decoded[missing].buffers().front().get_raw());
   }
 }
 
