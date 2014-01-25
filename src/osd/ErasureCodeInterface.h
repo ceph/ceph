@@ -142,6 +142,7 @@
 
 #include <map>
 #include <set>
+#include <vector>
 #include "include/memory.h"
 #include "include/buffer.h"
 
@@ -283,6 +284,20 @@ namespace ceph {
                        map<int, bufferlist> *encoded) = 0;
 
     /**
+     * Encode the content of the first get_data_chunk_count()
+     * bufferlist from **chunks** and store the result in the
+     * remaining chunks. All buffers pointed to by **chunks** must
+     * have the same size and the underlying bufferptr must be
+     * aligned.
+     *
+     * Returns 0 on success.
+     *
+     * @param [chunks] bufferlists to be encoded
+     * @return **0** on success or a negative errno on error.
+     */
+    virtual int encode_chunks(vector<bufferlist> &chunks) = 0;
+
+    /**
      * Decode the **chunks** and store at least **want_to_read**
      * chunks in **decoded**.
      *
@@ -318,6 +333,23 @@ namespace ceph {
     virtual int decode(const set<int> &want_to_read,
                        const map<int, bufferlist> &chunks,
                        map<int, bufferlist> *decoded) = 0;
+
+    /**
+     * Decode the **chunks** and recover **erasures**, if any.  For
+     * each bufferlist in **chunks**, if the value of **erasures** is
+     * true the content is invalid and must be recovered. If the value
+     * is false, the content of the bufferlist is valid.
+     *
+     * Returns -EIO if some chunks cannot be recovered.
+     *
+     * Returns 0 on success.
+     *
+     * @param [erasures] true for each chunk with invalid data
+     * @param [chunks] bufferlists to be decoded
+     * @return **0** on success or a negative errno on error.
+     */
+    virtual int decode_chunks(vector<bool> erasures,
+			      vector<bufferlist> &chunks) = 0;
 
     /**
      * Decode the first **get_data_chunk_count()** **chunks** and
