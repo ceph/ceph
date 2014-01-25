@@ -332,7 +332,8 @@ for name in $what; do
 			-- \
 			$id \
 			${osd_weight:-${defaultweight:-1}} \
-			$osd_location"
+			$osd_location \
+            || :"
 		fi
 	    fi
 
