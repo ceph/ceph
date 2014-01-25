@@ -21,7 +21,7 @@
 #include <errno.h>
 #include <algorithm>
 #include <sstream>
-#include "osd/ErasureCodeInterface.h"
+#include "osd/ErasureCode.h"
 
 #define FIRST_DATA_CHUNK 0
 #define SECOND_DATA_CHUNK 1
@@ -32,7 +32,7 @@
 
 #define MINIMUM_TO_RECOVER 2u
 
-class ErasureCodeExample : public ErasureCodeInterface {
+class ErasureCodeExample : public ErasureCode {
 public:
   virtual ~ErasureCodeExample() {}
   

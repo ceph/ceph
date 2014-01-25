@@ -52,95 +52,14 @@ unsigned int ErasureCodeJerasure::get_chunk_size(unsigned int object_size) const
   return padded_length / k;
 }
 
-int ErasureCodeJerasure::minimum_to_decode(const set<int> &want_to_read,
-                                           const set<int> &available_chunks,
-                                           set<int> *minimum) 
-{
-  if (includes(available_chunks.begin(), available_chunks.end(),
-	       want_to_read.begin(), want_to_read.end())) {
-    *minimum = want_to_read;
-  } else {
-    if (available_chunks.size() < (unsigned)k)
-      return -EIO;
-    set<int>::iterator i;
-    unsigned j;
-    for (i = available_chunks.begin(), j = 0; j < (unsigned)k; ++i, j++)
-      minimum->insert(*i);
-  }
   return 0;
 }
 
-int ErasureCodeJerasure::minimum_to_decode_with_cost(const set<int> &want_to_read,
-                                                     const map<int, int> &available,
-                                                     set<int> *minimum)
 {
-  set <int> available_chunks;
-  for (map<int, int>::const_iterator i = available.begin();
-       i != available.end();
-       ++i)
-    available_chunks.insert(i->first);
-  return minimum_to_decode(want_to_read, available_chunks, minimum);
-}
-
-int ErasureCodeJerasure::encode(const set<int> &want_to_encode,
-                                const bufferlist &in,
-                                map<int, bufferlist> *encoded)
-{
-  unsigned blocksize = get_chunk_size(in.length());
-  unsigned padded_length = blocksize * k;
-  dout(10) << "encode adjusted buffer length from " << in.length()
-	   << " to " << padded_length << dendl;
-  bufferlist out(in);
-  if (padded_length - in.length() > 0) {
-    bufferptr pad(padded_length - in.length());
-    pad.zero();
-    out.push_back(pad);
-    out.rebuild_page_aligned();
-  }
-  unsigned coding_length = blocksize * m;
-  bufferptr coding(buffer::create_page_aligned(coding_length));
-  out.push_back(coding);
-  char *chunks[k + m];
-  for (int i = 0; i < k + m; i++) {
-    bufferlist &chunk = (*encoded)[i];
-    chunk.substr_of(out, i * blocksize, blocksize);
-    chunks[i] = chunk.c_str();
-  }
-  jerasure_encode(&chunks[0], &chunks[k], blocksize);
-  for (int i = 0; i < k + m; i++) {
-    if (want_to_encode.count(i) == 0)
-      encoded->erase(i);
-  }
-  return 0;
-}
-
-int ErasureCodeJerasure::decode(const set<int> &want_to_read,
-                                const map<int, bufferlist> &chunks,
-                                map<int, bufferlist> *decoded)
-{
-  unsigned blocksize = (*chunks.begin()).second.length();
-  int erasures[k + m + 1];
-  int erasures_count = 0;
   char *data[k];
   char *coding[m];
-  for (int i =  0; i < k + m; i++) {
-    if (chunks.find(i) == chunks.end()) {
-      erasures[erasures_count] = i;
-      erasures_count++;
-      bufferptr ptr(blocksize);
-      (*decoded)[i].push_front(ptr);
-    } else {
-      (*decoded)[i] = chunks.find(i)->second;
-    }
-    if (i < k)
-      data[i] = (*decoded)[i].c_str();
     else
-      coding[i - k] = (*decoded)[i].c_str();
   }
-  erasures[erasures_count] = -1;
-
-  if (erasures_count > 0)
-    return jerasure_decode(erasures, data, coding, blocksize);
   else
     return 0;
 }

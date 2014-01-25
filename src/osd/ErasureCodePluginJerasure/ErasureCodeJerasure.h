@@ -17,9 +17,9 @@
 #ifndef CEPH_ERASURE_CODE_JERASURE_H
 #define CEPH_ERASURE_CODE_JERASURE_H
 
-#include "osd/ErasureCodeInterface.h"
+#include "osd/ErasureCode.h"
 
-class ErasureCodeJerasure : public ErasureCodeInterface {
+class ErasureCodeJerasure : public ErasureCode {
 public:
   int k;
   int m;
@@ -41,23 +41,9 @@ public:
   }
 
   virtual unsigned int get_chunk_size(unsigned int object_size) const;
-
-  virtual int minimum_to_decode(const set<int> &want_to_read,
-                                const set<int> &available_chunks,
-                                set<int> *minimum);
-
-  virtual int minimum_to_decode_with_cost(const set<int> &want_to_read,
-                                          const map<int, int> &available,
-                                          set<int> *minimum);
-
-  virtual int encode(const set<int> &want_to_encode,
-                     const bufferlist &in,
-                     map<int, bufferlist> *encoded);
-
-  virtual int decode(const set<int> &want_to_read,
-                     const map<int, bufferlist> &chunks,
-                     map<int, bufferlist> *decoded);
-
+  virtual int encode_chunks(vector<bufferlist> &chunks);
+  virtual int decode_chunks(vector<bool> erasures,
+			    vector<bufferlist> &chunks);
   void init(const map<std::string,std::string> &parameters);
   virtual void jerasure_encode(char **data,
                                char **coding,

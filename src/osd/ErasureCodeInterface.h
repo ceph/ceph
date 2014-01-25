@@ -362,17 +362,7 @@ namespace ceph {
      * @return **0** on success or a negative errno on error.
      */
     virtual int decode_concat(const map<int, bufferlist> &chunks,
-			      bufferlist *decoded) {
-      set<int> want_to_read;
-      for (unsigned int i = 0; i < get_data_chunk_count(); i++)
-	want_to_read.insert(i);
-      map<int, bufferlist> decoded_map;
-      int r = decode(want_to_read, chunks, &decoded_map);
-      if (r == 0)
-	for (unsigned int i = 0; i < get_data_chunk_count(); i++)
-	  decoded->claim_append(decoded_map[i]);
-      return r;
-    }
+			      bufferlist *decoded) = 0;
   };
 
   typedef ceph::shared_ptr<ErasureCodeInterface> ErasureCodeInterfaceRef;
