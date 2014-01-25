@@ -1,3 +1,4 @@
+include test/osd/ErasureCodePluginJerasure/Makefile.am
 ## Unknown/other tests
 
 ceph_test_timers_SOURCES = test/TestTimers.cc
@@ -405,25 +406,6 @@ if LINUX
 unittest_erasure_code_plugin_LDADD += -ldl
 endif
 check_PROGRAMS += unittest_erasure_code_plugin
-
-unittest_erasure_code_jerasure_SOURCES = \
-	test/osd/TestErasureCodeJerasure.cc \
-	$(libec_jerasure_la_SOURCES)
-unittest_erasure_code_jerasure_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-unittest_erasure_code_jerasure_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-if LINUX
-unittest_erasure_code_jerasure_LDADD += -ldl
-endif
-check_PROGRAMS += unittest_erasure_code_jerasure
-
-unittest_erasure_code_plugin_jerasure_SOURCES = \
-	test/osd/TestErasureCodePluginJerasure.cc
-unittest_erasure_code_plugin_jerasure_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-unittest_erasure_code_plugin_jerasure_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-if LINUX
-unittest_erasure_code_plugin_jerasure_LDADD += -ldl
-endif
-check_PROGRAMS += unittest_erasure_code_plugin_jerasure
 
 unittest_erasure_code_example_SOURCES = test/osd/TestErasureCodeExample.cc 
 noinst_HEADERS += test/osd/ErasureCodeExample.h
