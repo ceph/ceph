@@ -1,4 +1,6 @@
 include test/osd/ErasureCodePluginJerasure/Makefile.am
+include test/osd/ErasureCodePluginPyramid/Makefile.am
+
 ## Unknown/other tests
 
 ceph_test_timers_SOURCES = test/TestTimers.cc
