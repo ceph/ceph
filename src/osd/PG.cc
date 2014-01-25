@@ -2776,111 +2776,6 @@ void PG::sub_op_scrub_map(OpRequestRef op)
   }
 }
 
-/* 
- * pg lock may or may not be held
- */
-void PG::_scan_list(
-  ScrubMap &map, vector<hobject_t> &ls, bool deep,
-  ThreadPool::TPHandle &handle)
-{
-  dout(10) << "_scan_list scanning " << ls.size() << " objects"
-           << (deep ? " deeply" : "") << dendl;
-  int i = 0;
-  for (vector<hobject_t>::iterator p = ls.begin(); 
-       p != ls.end(); 
-       ++p, i++) {
-    handle.reset_tp_timeout();
-    hobject_t poid = *p;
-
-    struct stat st;
-    int r = osd->store->stat(coll, poid, &st, true);
-    if (r == 0) {
-      ScrubMap::object &o = map.objects[poid];
-      o.size = st.st_size;
-      assert(!o.negative);
-      osd->store->getattrs(coll, poid, o.attrs);
-
-      // calculate the CRC32 on deep scrubs
-      if (deep) {
-        bufferhash h, oh;
-        bufferlist bl, hdrbl;
-        int r;
-        __u64 pos = 0;
-        while ( (r = osd->store->read(coll, poid, pos,
-                                       cct->_conf->osd_deep_scrub_stride, bl,
-		                      true)) > 0) {
-	  handle.reset_tp_timeout();
-          h << bl;
-          pos += bl.length();
-          bl.clear();
-        }
-	if (r == -EIO) {
-	  dout(25) << "_scan_list  " << poid << " got "
-		   << r << " on read, read_error" << dendl;
-	  o.read_error = true;
-	}
-        o.digest = h.digest();
-        o.digest_present = true;
-
-        bl.clear();
-        r = osd->store->omap_get_header(coll, poid, &hdrbl, true);
-        if (r == 0) {
-          dout(25) << "CRC header " << string(hdrbl.c_str(), hdrbl.length())
-             << dendl;
-          ::encode(hdrbl, bl);
-          oh << bl;
-          bl.clear();
-        } else if (r == -EIO) {
-	  dout(25) << "_scan_list  " << poid << " got "
-		   << r << " on omap header read, read_error" << dendl;
-	  o.read_error = true;
-	}
-
-        ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
-          coll, poid);
-        assert(iter);
-	uint64_t keys_scanned = 0;
-        for (iter->seek_to_first(); iter->valid() ; iter->next()) {
-	  if (cct->_conf->osd_scan_list_ping_tp_interval &&
-	      (keys_scanned % cct->_conf->osd_scan_list_ping_tp_interval == 0)) {
-	    handle.reset_tp_timeout();
-	  }
-	  ++keys_scanned;
-
-          dout(25) << "CRC key " << iter->key() << " value "
-            << string(iter->value().c_str(), iter->value().length()) << dendl;
-
-          ::encode(iter->key(), bl);
-          ::encode(iter->value(), bl);
-          oh << bl;
-          bl.clear();
-        }
-	if (iter->status() == -EIO) {
-	  dout(25) << "_scan_list  " << poid << " got "
-		   << r << " on omap scan, read_error" << dendl;
-	  o.read_error = true;
-	  break;
-	}
-
-        //Store final calculated CRC32 of omap header & key/values
-        o.omap_digest = oh.digest();
-        o.omap_digest_present = true;
-      }
-
-      dout(25) << "_scan_list  " << poid << dendl;
-    } else if (r == -ENOENT) {
-      dout(25) << "_scan_list  " << poid << " got " << r << ", skipping" << dendl;
-    } else if (r == -EIO) {
-      dout(25) << "_scan_list  " << poid << " got " << r << ", read_error" << dendl;
-      ScrubMap::object &o = map.objects[poid];
-      o.read_error = true;
-    } else {
-      derr << "_scan_list got: " << cpp_strerror(r) << dendl;
-      assert(0);
-    }
-  }
-}
-
 // send scrub v2-compatible messages (classic scrub)
 void PG::_request_scrub_map_classic(int replica, eversion_t version)
 {
@@ -3143,7 +3038,7 @@ int PG::build_scrub_map_chunk(
     return ret;
   }
 
-  _scan_list(map, ls, deep, handle);
+  get_pgbackend()->be_scan_list(map, ls, deep, handle);
   _scan_snaps(map);
 
   // pg attrs
@@ -3174,7 +3069,7 @@ void PG::build_scrub_map(ScrubMap &map, ThreadPool::TPHandle &handle)
   vector<hobject_t> ls;
   osd->store->collection_list(coll, ls);
 
-  _scan_list(map, ls, false, handle);
+  get_pgbackend()->be_scan_list(map, ls, false, handle);
   lock();
   _scan_snaps(map);
 
@@ -3223,7 +3118,7 @@ void PG::build_inc_scrub_map(
     }
   }
 
-  _scan_list(map, ls, false, handle);
+  get_pgbackend()->be_scan_list(map, ls, false, handle);
   // pg attrs
   osd->store->collection_getattrs(coll, map.attrs);
 }

@@ -966,9 +966,6 @@ public:
   void scrub_finish();
   void scrub_clear_state();
   bool scrub_gather_replica_maps();
-  void _scan_list(
-    ScrubMap &map, vector<hobject_t> &ls, bool deep,
-    ThreadPool::TPHandle &handle);
   void _scan_snaps(ScrubMap &map);
   void _request_scrub_map_classic(int replica, eversion_t version);
   void _request_scrub_map(int replica, eversion_t version,
