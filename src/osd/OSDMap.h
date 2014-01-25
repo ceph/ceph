@@ -191,6 +191,13 @@ private:
     vector<std::tr1::shared_ptr<entity_addr_t> > hb_back_addr;
     vector<std::tr1::shared_ptr<entity_addr_t> > hb_front_addr;
     entity_addr_t blank;
+
+    void deep_copy_from(const addrs_s& o) {
+      client_addr.reset(new vector<ceph::shared_ptr<entity_addr_t> >(*o.client_addr));
+      cluster_addr.reset(new vector<ceph::shared_ptr<entity_addr_t> >(*o.cluster_addr));
+      hb_back_addr.reset(new vector<ceph::shared_ptr<entity_addr_t> >(*o.hb_back_addr));
+      hb_front_addr.reset(new vector<ceph::shared_ptr<entity_addr_t> >(*o.hb_front_addr));
+    }
   };
   std::tr1::shared_ptr<addrs_s> osd_addrs;
 
@@ -230,6 +237,27 @@ private:
 	     new_blacklist_entries(false),
 	     crush(new CrushWrapper) {
     memset(&fsid, 0, sizeof(fsid));
+  }
+
+  // no copying
+  /* oh, how i long for c++11...
+private:
+  OSDMap(const OSDMap& other) = default;
+  const OSDMap& operator=(const OSDMap& other) = default;
+public:
+  */
+
+  void deepish_copy_from(const OSDMap& o) {
+    primary_temp.reset(new map<pg_t,int>(*o.primary_temp));
+    pg_temp.reset(new map<pg_t,vector<int> >(*o.pg_temp));
+    osd_uuid.reset(new vector<uuid_d>(*o.osd_uuid));
+
+    // NOTE: this still references shared entity_addr_t's.
+    osd_addrs.reset(new addrs_s);
+    osd_addrs.deep_copy_from(*o.osd_addrs);
+
+    // NOTE: we do not copy crush.  note that apply_incremental will
+    // allocate a new CrushWrapper, though.
   }
 
   // map info
