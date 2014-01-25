@@ -490,6 +490,8 @@ private:
   void sub_op_modify_applied(RepModifyRef rm);
   void sub_op_modify_commit(RepModifyRef rm);
   bool scrub_supported() { return true; }
+  void be_scan_list(ScrubMap &map, vector<hobject_t> &ls, bool deep,
+    ThreadPool::TPHandle &handle);
 };
 
 #endif
