@@ -77,15 +77,18 @@ int ErasureCodePluginRegistry::factory(const std::string &plugin_name,
 				       const map<std::string,std::string> &parameters,
 				       ErasureCodeInterfaceRef *erasure_code)
 {
-  Mutex::Locker l(lock);
-  int r = 0;
-  ErasureCodePlugin *plugin = get(plugin_name);
-  if (plugin == 0) {
-    loading = true;
-    r = load(plugin_name, parameters, &plugin);
-    loading = false;
-    if (r != 0)
-      return r;
+  ErasureCodePlugin *plugin;
+  {
+    Mutex::Locker l(lock);
+    int r = 0;
+    plugin = get(plugin_name);
+    if (plugin == 0) {
+      loading = true;
+      r = load(plugin_name, parameters, &plugin);
+      loading = false;
+      if (r != 0)
+	return r;
+    }
   }
 
   return plugin->factory(parameters, erasure_code);
