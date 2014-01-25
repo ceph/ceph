@@ -198,7 +198,7 @@ TEST(ErasureCodeExample, decode)
   // cannot recover
   map<int, bufferlist> degraded;  
   degraded[0] = encoded[0];
-  EXPECT_EQ(-ERANGE, example.decode_concat(degraded, &out));
+  EXPECT_EQ(-EIO, example.decode_concat(degraded, &out));
 }
 
 int main(int argc, char **argv) {

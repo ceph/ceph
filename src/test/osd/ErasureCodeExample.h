@@ -93,80 +93,33 @@ public:
     return ( object_size / DATA_CHUNKS ) + 1;
   }
 
-  virtual int encode(const set<int> &want_to_encode,
-                     const bufferlist &in,
-                     map<int, bufferlist> *encoded) {
-    //
-    // make sure all data chunks have the same length, allocating
-    // padding if necessary.
-    //
-    unsigned int chunk_length = get_chunk_size(in.length());
-    bufferlist out(in);
-    unsigned int width = get_chunk_count() * get_chunk_size(in.length());
-    bufferptr pad(width - in.length());
-    pad.zero(0, get_data_chunk_count());
-    out.push_back(pad);
+  virtual int encode_chunks(vector<bufferlist> &chunks) {
     //
     // compute the coding chunk with first chunk ^ second chunk
     //
-    char *p = out.c_str();
-    for (unsigned i = 0; i < chunk_length; i++)
-      p[i + CODING_CHUNK * chunk_length] =
-        p[i + FIRST_DATA_CHUNK * chunk_length] ^
-	p[i + SECOND_DATA_CHUNK * chunk_length];
-    //
-    // populate the bufferlist with bufferptr pointing
-    // to chunk boundaries
-    //
-    const bufferptr ptr = out.buffers().front();
-    for (set<int>::iterator j = want_to_encode.begin();
-         j != want_to_encode.end();
-         ++j) {
-      bufferptr chunk(ptr, (*j) * chunk_length, chunk_length);
-      (*encoded)[*j].push_front(chunk);
-    }
+    unsigned int chunk_length = chunks[FIRST_DATA_CHUNK].length();
+    char *first = chunks[FIRST_DATA_CHUNK].c_str();
+    char *second = chunks[SECOND_DATA_CHUNK].c_str();
+    char *coding = chunks[CODING_CHUNK].c_str();
+    for (unsigned int i = 0; i < chunk_length; i++)
+      coding[i] = first[i] ^ second[i];
     return 0;
   }
 
-  virtual int decode(const set<int> &want_to_read,
-                     const map<int, bufferlist> &chunks,
-                     map<int, bufferlist> *decoded) {
-    //
-    // All chunks have the same size
-    //
-    unsigned chunk_length = (*chunks.begin()).second.length();
-    for (set<int>::iterator i = want_to_read.begin();
-         i != want_to_read.end();
-         ++i) {
-      if (chunks.find(*i) != chunks.end()) {
-	//
-	// If the chunk is available, just copy the bufferptr pointer
-	// to the decoded argument.
-	//
-        (*decoded)[*i] = chunks.find(*i)->second;
-      } else if(chunks.size() != 2) {
-	//
-	// If a chunk is missing and there are not enough chunks
-	// to recover, abort.
-	//
-	return -ERANGE;
-      } else {
-	//
-	// No matter what the missing chunk is, XOR of the other
-	// two recovers it.
-	//
-        map<int, bufferlist>::const_iterator k = chunks.begin();
-        const char *a = k->second.buffers().front().c_str();
-        ++k;
-        const char *b = k->second.buffers().front().c_str();
-        bufferptr chunk(chunk_length);
-	char *c = chunk.c_str();
-        for (unsigned j = 0; j < chunk_length; j++) {
-          c[j] = a[j] ^ b[j];
-        }
-        (*decoded)[*i].push_front(chunk);
-      }
-    }
+  virtual int decode_chunks(vector<bool> erasures,
+			    vector<bufferlist> &chunks) {
+    int erasure = -1;
+    for (unsigned int i = 0; i < erasures.size(); i++)
+      if (erasures[i])
+	erasure = i;
+    if (erasure < 0)
+      return 0;
+    char *destination = chunks[erasure].c_str();
+    const char *one = chunks[(erasure + 1) % erasures.size()].c_str();
+    const char *two = chunks[(erasure + 2) % erasures.size()].c_str();
+    unsigned chunk_length = chunks[0].length();
+    for (unsigned int i = 0; i < chunk_length; i++)
+      destination[i] = one[i] ^ two[i];
     return 0;
   }
 };
