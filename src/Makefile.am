@@ -40,9 +40,6 @@ bin_PROGRAMS += ceph-mon
 
 ceph_osd_SOURCES = ceph_osd.cc
 ceph_osd_LDADD = $(LIBOSD) $(CEPH_GLOBAL) $(LIBCOMMON)
-if LINUX
-ceph_osd_LDADD += -ldl
-endif # LINUX
 bin_PROGRAMS += ceph-osd
 
 ceph_mds_SOURCES = ceph_mds.cc
