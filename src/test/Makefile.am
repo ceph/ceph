@@ -246,6 +246,7 @@ check_SCRIPTS += \
 	test/mon/osd-pool-create.sh \
 	test/mon/mkfs.sh \
 	test/ceph-disk.sh \
+	test/mon/mon-handle-forward.sh \
 	test/vstart_wrapped_tests.sh
 
 # target to build but not run the unit tests
