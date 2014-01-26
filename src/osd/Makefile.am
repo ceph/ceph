@@ -4,8 +4,15 @@ erasure_codelib_LTLIBRARIES =
 
 include osd/ErasureCodePluginJerasure/Makefile.am
 
+liberasure_code_la_SOURCES = \
+	osd/ErasureCodePlugin.cc
+liberasure_code_la_LIBADD = $(LIBOSDC) $(LIBOS)
+if LINUX
+liberasure_code_la_LIBADD += -ldl
+endif # LINUX
+noinst_LTLIBRARIES += liberasure_code.la
+
 libosd_la_SOURCES = \
-	osd/ErasureCodePlugin.cc \
 	osd/PG.cc \
 	osd/PGLog.cc \
 	osd/ReplicatedPG.cc \
@@ -22,7 +29,7 @@ libosd_la_SOURCES = \
 	osd/SnapMapper.cc \
 	osd/osd_types.cc \
 	objclass/class_api.cc
-libosd_la_LIBADD = $(LIBOSDC) $(LIBOS)
+libosd_la_LIBADD = $(LIBOSDC) $(LIBOS) $(LIBERASURE_CODE)
 noinst_LTLIBRARIES += libosd.la
 
 noinst_HEADERS += \
