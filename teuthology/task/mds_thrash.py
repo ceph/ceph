@@ -103,7 +103,7 @@ class MDSThrasher:
     self.weight = weight
 
   def log(self, x):
-    """Write data to logger assigned to this MDThrasher""" 
+    """Write data to logger assigned to this MDThrasher"""
     self.logger.info(x)
 
   def do_join(self):
@@ -228,102 +228,102 @@ class MDSThrasher:
         self.log('revive mds.{id}'.format(id=self.to_kill))
         self.manager.revive_mds(self.to_kill)
 
+
 @contextlib.contextmanager
 def task(ctx, config):
-  """
-  Stress test the mds by thrashing while another task/workunit
-  is running.
+    """
+    Stress test the mds by thrashing while another task/workunit
+    is running.
 
-  Please refer to MDSThrasher class for further information on the
-  available options.
-  """
-  if config is None:
-    config = {}
-  assert isinstance(config, dict), \
-      'mds_thrash task only accepts a dict for configuration'
-  mdslist = list(teuthology.all_roles_of_type(ctx.cluster, 'mds'))
-  assert len(mdslist) > 1, \
-      'mds_thrash task requires at least 2 metadata servers'
+    Please refer to MDSThrasher class for further information on the
+    available options.
+    """
+    if config is None:
+        config = {}
+    assert isinstance(config, dict), \
+        'mds_thrash task only accepts a dict for configuration'
+    mdslist = list(teuthology.all_roles_of_type(ctx.cluster, 'mds'))
+    assert len(mdslist) > 1, \
+        'mds_thrash task requires at least 2 metadata servers'
 
-  # choose random seed
-  seed = None
-  if 'seed' in config:
-      seed = int(config['seed'])
-  else:
-      seed = int(time.time())
-  log.info('mds thrasher using random seed: {seed}'.format(seed=seed))
-  random.seed(seed)
+    # choose random seed
+    seed = None
+    if 'seed' in config:
+        seed = int(config['seed'])
+    else:
+        seed = int(time.time())
+    log.info('mds thrasher using random seed: {seed}'.format(seed=seed))
+    random.seed(seed)
 
-  max_thrashers = config.get('max_thrash', 1)
-  thrashers = {}
+    max_thrashers = config.get('max_thrash', 1)
+    thrashers = {}
 
-  (first,) = ctx.cluster.only('mds.{_id}'.format(_id=mdslist[0])).remotes.iterkeys()
-  manager = ceph_manager.CephManager(
-    first, ctx=ctx, logger=log.getChild('ceph_manager'),
+    (first,) = ctx.cluster.only('mds.{_id}'.format(_id=mdslist[0])).remotes.iterkeys()
+    manager = ceph_manager.CephManager(
+        first, ctx=ctx, logger=log.getChild('ceph_manager'),
     )
 
-  # make sure everyone is in active, standby, or standby-replay
-  log.info('Wait for all MDSs to reach steady state...')
-  statuses = None
-  statuses_by_rank = None
-  while True:
-      statuses = {m : manager.get_mds_status(m) for m in mdslist}
-      statuses_by_rank = {}
-      for _, s in statuses.iteritems():
-          if isinstance(s, dict):
-              statuses_by_rank[s['rank']] = s
+    # make sure everyone is in active, standby, or standby-replay
+    log.info('Wait for all MDSs to reach steady state...')
+    statuses = None
+    statuses_by_rank = None
+    while True:
+        statuses = {m : manager.get_mds_status(m) for m in mdslist}
+        statuses_by_rank = {}
+        for _, s in statuses.iteritems():
+            if isinstance(s, dict):
+                statuses_by_rank[s['rank']] = s
 
-      ready = filter(lambda (_,s): s['state'] == 'up:active'
-                        or s['state'] == 'up:standby'
-                        or s['state'] == 'up:standby-replay',
-                     statuses.items())
-      if len(ready) == len(statuses):
-          break
-      time.sleep(2)
-  log.info('Ready to start thrashing')
+        ready = filter(lambda (_,s): s['state'] == 'up:active'
+                          or s['state'] == 'up:standby'
+                          or s['state'] == 'up:standby-replay',
+                       statuses.items())
+        if len(ready) == len(statuses):
+            break
+        time.sleep(2)
+    log.info('Ready to start thrashing')
 
-  # setup failure groups
-  failure_groups = {}
-  actives = {s['name'] : s for (_,s) in statuses.iteritems() if s['state'] == 'up:active'}
-  log.info('Actives is: {d}'.format(d=actives))
-  log.info('Statuses is: {d}'.format(d=statuses_by_rank))
-  for active in actives:
-      for (r,s) in statuses.iteritems():
-          if s['standby_for_name'] == active:
-              if not active in failure_groups:
-                  failure_groups[active] = []
-              log.info('Assigning mds rank {r} to failure group {g}'.format(r=r, g=active))
-              failure_groups[active].append(r)
+    # setup failure groups
+    failure_groups = {}
+    actives = {s['name'] : s for (_,s) in statuses.iteritems() if s['state'] == 'up:active'}
+    log.info('Actives is: {d}'.format(d=actives))
+    log.info('Statuses is: {d}'.format(d=statuses_by_rank))
+    for active in actives:
+        for (r,s) in statuses.iteritems():
+            if s['standby_for_name'] == active:
+                if not active in failure_groups:
+                    failure_groups[active] = []
+                log.info('Assigning mds rank {r} to failure group {g}'.format(r=r, g=active))
+                failure_groups[active].append(r)
 
-  for (active,standbys) in failure_groups.iteritems():
+    for (active,standbys) in failure_groups.iteritems():
 
-      weight = 1.0
-      if 'thrash_weights' in config:
-          weight = int(config['thrash_weights'].get('mds.{_id}'.format(_id=active), '0.0'))
+        weight = 1.0
+        if 'thrash_weights' in config:
+            weight = int(config['thrash_weights'].get('mds.{_id}'.format(_id=active), '0.0'))
 
-      failure_group = [active]
-      failure_group.extend(standbys)
-      thrashers[active] = MDSThrasher(
-          ctx, manager, config,
-          logger=log.getChild('mds_thrasher.failure_group.[{a}, {sbs}]'.format(
-                                    a=active,
-                                    sbs=', '.join(standbys)
-                                    )
-                                ),
-          failure_group=failure_group,
-          weight=weight)
-      # if thrash_weights isn't specified and we've reached max_thrash,
-      # we're done
-      if not 'thrash_weights' in config and len(thrashers) == max_thrashers:
-          break
+        failure_group = [active]
+        failure_group.extend(standbys)
+        thrashers[active] = MDSThrasher(
+            ctx, manager, config,
+            logger=log.getChild('mds_thrasher.failure_group.[{a}, {sbs}]'.format(
+                                      a=active,
+                                      sbs=', '.join(standbys)
+                                      )
+                                  ),
+            failure_group=failure_group,
+            weight=weight)
+        # if thrash_weights isn't specified and we've reached max_thrash,
+        # we're done
+        if not 'thrash_weights' in config and len(thrashers) == max_thrashers:
+            break
 
-  try:
-    log.debug('Yielding')
-    yield
-  finally:
-    log.info('joining mds_thrashers')
-    for t in thrashers:
-      log.info('join thrasher for failure group [{fg}]'.format(fg=', '.join(failure_group))
-                )
-      thrashers[t].do_join()
-    log.info('done joining')
+    try:
+        log.debug('Yielding')
+        yield
+    finally:
+        log.info('joining mds_thrashers')
+        for t in thrashers:
+            log.info('join thrasher for failure group [{fg}]'.format(fg=', '.join(failure_group)))
+            thrashers[t].do_join()
+        log.info('done joining')
