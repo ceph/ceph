@@ -25,7 +25,8 @@ import datetime
 stamp = datetime.datetime.now().strftime("%y%m%d%H%M")
 is_vm = lambda x: x.startswith('vpm') or x.startswith('ubuntu@vpm')
 
-is_arm = lambda x: x.startswith('tala') or x.startswith('ubuntu@tala') or x.startswith('saya') or x.startswith('ubuntu@saya')
+is_arm = lambda x: x.startswith('tala') or x.startswith(
+    'ubuntu@tala') or x.startswith('saya') or x.startswith('ubuntu@saya')
 
 
 def config_file(string):
@@ -41,6 +42,7 @@ def config_file(string):
 
 
 class MergeConfig(argparse.Action):
+
     def __call__(self, parser, namespace, values, option_string=None):
         config_dict = getattr(namespace, self.dest)
         for new in values:
@@ -54,7 +56,8 @@ def get_testdir(ctx):
     # FIXME this ideally should use os.path.expanduser() in the future, in case
     # $HOME isn't /home/$USER - e.g. on a Mac. However, since we're executing
     # this on the server side, it won't work properly.
-    return ctx.teuthology_config.get('test_path', '/home/%s/cephtest' % test_user)
+    return ctx.teuthology_config.get('test_path', '/home/%s/cephtest' %
+                                     test_user)
 
 
 def get_test_user(ctx):
@@ -125,6 +128,7 @@ def get_ceph_binary_url(package=None,
     bindir_url = urlparse.urljoin(BASE, 'sha1/{sha1}/'.format(sha1=sha1))
     return (sha1, bindir_url)
 
+
 def feed_many_stdins(fp, processes):
     while True:
         data = fp.read(8192)
@@ -133,10 +137,12 @@ def feed_many_stdins(fp, processes):
         for proc in processes:
             proc.stdin.write(data)
 
+
 def feed_many_stdins_and_close(fp, processes):
     feed_many_stdins(fp, processes)
     for proc in processes:
         proc.stdin.close()
+
 
 def get_mons(roles, ips):
     mons = {}
@@ -159,6 +165,7 @@ def get_mons(roles, ips):
     assert mons
     return mons
 
+
 def generate_caps(type_):
     defaults = dict(
         osd=dict(
@@ -180,6 +187,7 @@ def generate_caps(type_):
         yield '--cap'
         yield subsystem
         yield capability
+
 
 def skeleton_config(ctx, roles, ips):
     """
@@ -207,6 +215,7 @@ def skeleton_config(ctx, roles, ips):
                     conf[role]['mds standby for name'] = standby_mds
     return conf
 
+
 def roles_of_type(roles_for_host, type_):
     prefix = '{type}.'.format(type=type_)
     for name in roles_for_host:
@@ -215,10 +224,12 @@ def roles_of_type(roles_for_host, type_):
         id_ = name[len(prefix):]
         yield id_
 
+
 def all_roles(cluster):
     for _, roles_for_host in cluster.remotes.iteritems():
         for name in roles_for_host:
             yield name
+
 
 def all_roles_of_type(cluster, type_):
     prefix = '{type}.'.format(type=type_)
@@ -229,21 +240,26 @@ def all_roles_of_type(cluster, type_):
             id_ = name[len(prefix):]
             yield id_
 
+
 def is_type(type_):
     """
     Returns a matcher function for whether role is of type given.
     """
     prefix = '{type}.'.format(type=type_)
+
     def _is_type(role):
         return role.startswith(prefix)
     return _is_type
+
 
 def num_instances_of_type(cluster, type_):
     remotes_and_roles = cluster.remotes.items()
     roles = [roles for (remote, roles) in remotes_and_roles]
     prefix = '{type}.'.format(type=type_)
-    num = sum(sum(1 for role in hostroles if role.startswith(prefix)) for hostroles in roles)
+    num = sum(sum(1 for role in hostroles if role.startswith(prefix))
+              for hostroles in roles)
     return num
+
 
 def create_simple_monmap(ctx, remote, conf):
     """
@@ -280,17 +296,19 @@ def create_simple_monmap(ctx, remote, conf):
     for (name, addr) in addresses:
         args.extend(('--add', name, addr))
     args.extend([
-            '--print',
-            '{tdir}/monmap'.format(tdir=testdir),
-            ])
+        '--print',
+        '{tdir}/monmap'.format(tdir=testdir),
+        ])
 
     r = remote.run(
         args=args,
         stdout=StringIO()
         )
     monmap_output = r.stdout.getvalue()
-    fsid = re.search("generated fsid (.+)$", monmap_output, re.MULTILINE).group(1)
+    fsid = re.search("generated fsid (.+)$",
+                     monmap_output, re.MULTILINE).group(1)
     return fsid
+
 
 def write_file(remote, path, data):
     remote.run(
@@ -303,10 +321,11 @@ def write_file(remote, path, data):
         stdin=data,
         )
 
+
 def sudo_write_file(remote, path, data, perms=None):
     permargs = []
     if perms:
-        permargs=[run.Raw('&&'), 'sudo', 'chmod', perms, path]
+        permargs = [run.Raw('&&'), 'sudo', 'chmod', perms, path]
     remote.run(
         args=[
             'sudo',
@@ -318,6 +337,7 @@ def sudo_write_file(remote, path, data, perms=None):
         stdin=data,
         )
 
+
 def move_file(remote, from_path, to_path, sudo=False):
 
     # need to stat the file first, to make sure we
@@ -326,11 +346,11 @@ def move_file(remote, from_path, to_path, sudo=False):
     if sudo:
         args.append('sudo')
     args.extend([
-            'stat',
-            '-c',
-            '\"%a\"',
-            to_path
-            ])
+        'stat',
+        '-c',
+        '\"%a\"',
+        to_path
+        ])
     proc = remote.run(
         args=args,
         stdout=StringIO(),
@@ -341,11 +361,11 @@ def move_file(remote, from_path, to_path, sudo=False):
     if sudo:
         args.append('sudo')
     args.extend([
-            'mv',
-            '--',
-            from_path,
-            to_path,
-            ])
+        'mv',
+        '--',
+        from_path,
+        to_path,
+        ])
     proc = remote.run(
         args=args,
         stdout=StringIO(),
@@ -356,10 +376,10 @@ def move_file(remote, from_path, to_path, sudo=False):
     if sudo:
         args.append('sudo')
     args.extend([
-            'chmod',
-            perms,
-            to_path,
-            ])
+        'chmod',
+        perms,
+        to_path,
+        ])
     proc = remote.run(
         args=args,
         stdout=StringIO(),
@@ -383,7 +403,8 @@ def delete_file(remote, path, sudo=False, force=False):
         )
 
 
-def remove_lines_from_file(remote, path, line_is_valid_test, string_to_test_for):
+def remove_lines_from_file(remote, path, line_is_valid_test,
+                           string_to_test_for):
     # read in the specified file
     in_data = get_file(remote, path, False)
     out_data = ""
@@ -413,6 +434,7 @@ def remove_lines_from_file(remote, path, line_is_valid_test, string_to_test_for)
     # then do a 'mv' to the actual file location
     move_file(remote, temp_file_path, path)
 
+
 def append_lines_to_file(remote, path, lines, sudo=False):
     temp_file_path = remote_mktemp(remote)
 
@@ -428,15 +450,16 @@ def append_lines_to_file(remote, path, lines, sudo=False):
     # then do a 'mv' to the actual file location
     move_file(remote, temp_file_path, path)
 
+
 def remote_mktemp(remote, sudo=False):
     args = []
     if sudo:
         args.append('sudo')
     args.extend([
-            'python',
-            '-c',
-            'import os; import tempfile; (fd,fname) = tempfile.mkstemp(); os.close(fd); print fname.rstrip()'
-            ])
+        'python',
+        '-c',
+        'import os; import tempfile; (fd,fname) = tempfile.mkstemp(); os.close(fd); print fname.rstrip()'
+        ])
     proc = remote.run(
         args=args,
         stdout=StringIO(),
@@ -478,16 +501,17 @@ def get_file(remote, path, sudo=False):
     if sudo:
         args.append('sudo')
     args.extend([
-            'cat',
-            '--',
-            path,
-            ])
+        'cat',
+        '--',
+        path,
+        ])
     proc = remote.run(
         args=args,
         stdout=StringIO(),
         )
     data = proc.stdout.getvalue()
     return data
+
 
 def pull_directory(remote, remotedir, localdir):
     """
@@ -536,6 +560,7 @@ def pull_directory(remote, remotedir, localdir):
                 continue
     proc.exitstatus.get()
 
+
 def pull_directory_tarball(remote, remotedir, localfile):
     """
     Copy a remote directory to a local tarball.
@@ -560,6 +585,8 @@ def pull_directory_tarball(remote, remotedir, localfile):
 
 # returns map of devices to device id links:
 # /dev/sdb: /dev/disk/by-id/wwn-0xf00bad
+
+
 def get_wwn_id_map(remote, devs):
     stdout = None
     try:
@@ -574,19 +601,20 @@ def get_wwn_id_map(remote, devs):
         stdout = r.stdout.getvalue()
     except Exception:
         log.error('Failed to get wwn devices! Using /dev/sd* devices...')
-        return dict((d,d) for d in devs)
+        return dict((d, d) for d in devs)
 
     devmap = {}
 
     # lines will be:
-    # lrwxrwxrwx 1 root root  9 Jan 22 14:58 /dev/disk/by-id/wwn-0x50014ee002ddecaf -> ../../sdb
+    # lrwxrwxrwx 1 root root  9 Jan 22 14:58
+    # /dev/disk/by-id/wwn-0x50014ee002ddecaf -> ../../sdb
     for line in stdout.splitlines():
         comps = line.split(' ')
         # comps[-1] should be:
         # ../../sdb
         rdev = comps[-1]
         # translate to /dev/sdb
-        dev='/dev/{d}'.format(d=rdev.split('/')[-1])
+        dev = '/dev/{d}'.format(d=rdev.split('/')[-1])
 
         # comps[-3] should be:
         # /dev/disk/by-id/wwn-0x50014ee002ddecaf
@@ -596,6 +624,7 @@ def get_wwn_id_map(remote, devs):
             devmap[dev] = iddev
 
     return devmap
+
 
 def get_scratch_devices(remote):
     """
@@ -607,12 +636,12 @@ def get_scratch_devices(remote):
         devs = file_data.split()
     except Exception:
         r = remote.run(
-                args=['ls', run.Raw('/dev/[sv]d?')],
-                stdout=StringIO()
-                )
+            args=['ls', run.Raw('/dev/[sv]d?')],
+            stdout=StringIO()
+            )
         devs = r.stdout.getvalue().strip().split('\n')
 
-    #Remove root device (vm guests) from the disk list
+    # Remove root device (vm guests) from the disk list
     for dev in devs:
         if 'vda' in dev:
             devs.remove(dev)
@@ -667,6 +696,7 @@ def wait_until_healthy(ctx, remote):
             break
         time.sleep(1)
 
+
 def wait_until_osds_up(ctx, cluster, remote):
     """Wait until all Ceph OSDs are booted."""
     num_osds = num_instances_of_type(cluster, 'osd')
@@ -691,6 +721,7 @@ def wait_until_osds_up(ctx, cluster, remote):
             break
         time.sleep(1)
 
+
 def wait_until_fuse_mounted(remote, fuse, mountpoint):
     while True:
         proc = remote.run(
@@ -706,13 +737,15 @@ def wait_until_fuse_mounted(remote, fuse, mountpoint):
         fstype = proc.stdout.getvalue().rstrip('\n')
         if fstype == 'fuseblk':
             break
-        log.debug('ceph-fuse not yet mounted, got fs type {fstype!r}'.format(fstype=fstype))
+        log.debug('ceph-fuse not yet mounted, got fs type {fstype!r}'.format(
+            fstype=fstype))
 
         # it shouldn't have exited yet; exposes some trivial problems
         assert not fuse.exitstatus.ready()
 
         time.sleep(5)
     log.info('ceph-fuse is mounted on %s', mountpoint)
+
 
 def reconnect(ctx, timeout, remotes=None):
     """
@@ -756,8 +789,10 @@ def reconnect(ctx, timeout, remotes=None):
             else:
                 need_reconnect.remove(remote)
 
-        log.debug('waited {elapsed}'.format(elapsed=str(time.time() - starttime)))
+        log.debug('waited {elapsed}'.format(
+            elapsed=str(time.time() - starttime)))
         time.sleep(1)
+
 
 def write_secret_file(ctx, remote, role, keyring, filename):
     testdir = get_testdir(ctx)
@@ -775,6 +810,7 @@ def write_secret_file(ctx, remote, role, keyring, filename):
             ],
         )
 
+
 def get_clients(ctx, roles):
     for role in roles:
         assert isinstance(role, basestring)
@@ -783,6 +819,7 @@ def get_clients(ctx, roles):
         id_ = role[len(PREFIX):]
         (remote,) = ctx.cluster.only(role).remotes.iterkeys()
         yield (id_, remote)
+
 
 def get_user():
     return getpass.getuser() + '@' + socket.gethostname()
@@ -801,6 +838,7 @@ def read_config(ctx):
         for new in g:
             ctx.teuthology_config.update(new)
 
+
 def get_mon_names(ctx):
     mons = []
     for remote, roles in ctx.cluster.remotes.items():
@@ -811,10 +849,13 @@ def get_mon_names(ctx):
     return mons
 
 # return the "first" mon (alphanumerically, for lack of anything better)
+
+
 def get_first_mon(ctx, config):
     firstmon = sorted(get_mon_names(ctx))[0]
     assert firstmon
     return firstmon
+
 
 def replace_all_with_clients(cluster, config):
     """
@@ -830,6 +871,7 @@ def replace_all_with_clients(cluster, config):
     for client in all_roles_of_type(cluster, 'client'):
         norm_config['client.{id}'.format(id=client)] = config['all']
     return norm_config
+
 
 def deep_merge(a, b):
     if a is None:
@@ -849,6 +891,7 @@ def deep_merge(a, b):
                 a[k] = v
         return a
     return b
+
 
 def get_valgrind_args(testdir, name, preamble, v):
     """
@@ -886,6 +929,7 @@ def get_valgrind_args(testdir, name, preamble, v):
     log.debug('running %s under valgrind with args %s', name, args)
     return args
 
+
 def stop_daemons_of_type(ctx, type_):
     log.info('Shutting down %s daemons...' % type_)
     exc_info = (None, None, None)
@@ -900,25 +944,27 @@ def stop_daemons_of_type(ctx, type_):
     if exc_info != (None, None, None):
         raise exc_info[0], exc_info[1], exc_info[2]
 
+
 def get_system_type(remote, distro=False):
     """
     Return this system type (deb or rpm) or Distro.
     """
     r = remote.run(
         args=[
-            'sudo','lsb_release', '-is',
+            'sudo', 'lsb_release', '-is',
         ],
-    stdout=StringIO(),
+        stdout=StringIO(),
     )
     system_value = r.stdout.getvalue().strip()
     log.debug("System to be installed: %s" % system_value)
     if distro:
         return system_value.lower()
-    if system_value in ['Ubuntu','Debian']:
+    if system_value in ['Ubuntu', 'Debian']:
         return "deb"
-    if system_value in ['CentOS','Fedora','RedHatEnterpriseServer']:
+    if system_value in ['CentOS', 'Fedora', 'RedHatEnterpriseServer']:
         return "rpm"
     return system_value
+
 
 def get_distro(ctx):
     try:
@@ -931,6 +977,7 @@ def get_distro(ctx):
         return os_type
     except AttributeError:
         return ctx.os_type
+
 
 def get_distro_version(ctx):
     default_os_version = dict(
@@ -954,12 +1001,13 @@ def get_distro_version(ctx):
     except (KeyError, AttributeError):
         return os_version
 
+
 def get_multi_machine_types(machinetype):
     """
     Converts machine type string to list based on common deliminators
     """
     machinetypes = []
-    machine_type_deliminator = [',',' ','\t']
+    machine_type_deliminator = [',', ' ', '\t']
     for deliminator in machine_type_deliminator:
         if deliminator in machinetype:
             machinetypes = machinetype.split(deliminator)

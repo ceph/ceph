@@ -32,7 +32,7 @@ def run_tasks(tasks, ctx):
             if hasattr(manager, '__enter__'):
                 manager.__enter__()
                 stack.append(manager)
-    except Exception, e:
+    except Exception as e:
         ctx.summary['success'] = False
         if 'failure_reason' not in ctx.summary:
             ctx.summary['failure_reason'] = str(e)
@@ -80,7 +80,7 @@ def run_tasks(tasks, ctx):
                 log.debug('Unwinding manager %s', manager)
                 try:
                     suppress = manager.__exit__(*exc_info)
-                except Exception, e:
+                except Exception as e:
                     ctx.summary['success'] = False
                     if 'failure_reason' not in ctx.summary:
                         ctx.summary['failure_reason'] = str(e)
@@ -93,7 +93,8 @@ def run_tasks(tasks, ctx):
 
                     if ctx.config.get('interactive-on-error'):
                         from .task import interactive
-                        log.warning('Saw failure, going into interactive mode...')
+                        log.warning(
+                            'Saw failure, going into interactive mode...')
                         interactive.task(ctx=ctx, config=None)
                 else:
                     if suppress:
@@ -101,7 +102,8 @@ def run_tasks(tasks, ctx):
                         exc_info = (None, None, None)
 
             if exc_info != (None, None, None):
-                log.debug('Exception was not quenched, exiting: %s: %s', exc_info[0].__name__, exc_info[1])
+                log.debug('Exception was not quenched, exiting: %s: %s',
+                          exc_info[0].__name__, exc_info[1])
                 raise SystemExit(1)
         finally:
             # be careful about cyclic references
