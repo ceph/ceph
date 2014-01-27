@@ -333,9 +333,11 @@ int ReplicatedBackend::objects_read_sync(
   const hobject_t &hoid,
   uint64_t off,
   uint64_t len,
-  bufferlist *bl)
+  bufferlist *bl,
+  int fd,
+  string *fullPath)
 {
-  return osd->store->read(coll, hoid, off, len, *bl);
+  return osd->store->read(coll, hoid, off, len, *bl, false, fd, fullPath);
 }
 
 struct AsyncReadCallback : public GenContext<ThreadPool::TPHandle&> {

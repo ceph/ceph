@@ -423,7 +423,9 @@
      const hobject_t &hoid,
      uint64_t off,
      uint64_t len,
-     bufferlist *bl) = 0;
+     bufferlist *bl,
+     int fd = -1,
+     string *fullPath = NULL) = 0;
 
    virtual void objects_read_async(
      const hobject_t &hoid,

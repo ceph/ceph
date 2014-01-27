@@ -183,7 +183,9 @@ public:
     const hobject_t &hoid,
     uint64_t off,
     uint64_t len,
-    bufferlist *bl);
+    bufferlist *bl,
+    int fd = -1,
+    string *fullPath = NULL);
 
   void objects_read_async(
     const hobject_t &hoid,
