@@ -123,6 +123,7 @@ Unilogic Networks B.V <contact@unilogicnetworks.net> Pascal de Bruijn <pascal@un
 Los Alamos National Laboratory <contact@lanl.gov> Esteban Molina-Estolano <eestolan@lanl.gov>
 Choopa, LLC <contact@choopa.com> Adam Twardowski <adam.twardowski@gmail.com>
 CISCO <contact@cisco.com> Kai Zhang <zakir.exe@gmail.com>
+Anchor Hosting <contact@anchor.com.au> Christian Marie <pingu@anchor.net.au>
 #
 # Local Variables:
 # compile-command: "git log --pretty='%aN <%aE>' | \
