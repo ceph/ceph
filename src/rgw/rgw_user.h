@@ -38,6 +38,7 @@ struct RGWUID
 };
 WRITE_CLASS_ENCODER(RGWUID)
 
+extern int rgw_user_sync_all_stats(RGWRados *store, const string& user_id);
 /**
  * Get the anonymous (ie, unauthenticated) user info.
  */
@@ -175,8 +176,10 @@ struct RGWUserAdminOpState {
   bool user_params_checked;
 
   bool bucket_quota_specified;
+  bool user_quota_specified;
 
   RGWQuotaInfo bucket_quota;
+  RGWQuotaInfo user_quota;
 
   void set_access_key(std::string& access_key) {
     if (access_key.empty())
@@ -295,10 +298,14 @@ struct RGWUserAdminOpState {
     key_op = true;
   }
 
-  void set_bucket_quota(RGWQuotaInfo& quota)
-  {
+  void set_bucket_quota(RGWQuotaInfo& quota) {
     bucket_quota = quota;
     bucket_quota_specified = true;
+  }
+
+  void set_user_quota(RGWQuotaInfo& quota) {
+    user_quota = quota;
+    user_quota_specified = true;
   }
 
   bool is_populated() { return populated; };
@@ -320,6 +327,7 @@ struct RGWUserAdminOpState {
   bool will_purge_data() { return purge_data; };
   bool will_generate_subuser() { return gen_subuser; };
   bool has_bucket_quota() { return bucket_quota_specified; }
+  bool has_user_quota() { return user_quota_specified; }
   void set_populated() { populated = true; };
   void clear_populated() { populated = false; };
   void set_initialized() { initialized = true; };
@@ -335,6 +343,7 @@ struct RGWUserAdminOpState {
   uint32_t get_max_buckets() { return max_buckets; };
   uint32_t get_op_mask() { return op_mask; };
   RGWQuotaInfo& get_bucket_quota() { return bucket_quota; }
+  RGWQuotaInfo& get_user_quota() { return user_quota; }
 
   std::string get_user_id() { return user_id; };
   std::string get_subuser() { return subuser; };
@@ -425,6 +434,7 @@ struct RGWUserAdminOpState {
     user_params_checked = false;
     bucket_quota_specified = false;
     temp_url_key_specified = false;
+    user_quota_specified = false;
   }
 };
 

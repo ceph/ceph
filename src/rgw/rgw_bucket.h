@@ -20,7 +20,7 @@
 using namespace std;
 
 // define as static when RGWBucket implementation compete
-extern void rgw_get_buckets_obj(string& user_id, string& buckets_obj_id);
+extern void rgw_get_buckets_obj(const string& user_id, string& buckets_obj_id);
 
 extern int rgw_bucket_store_info(RGWRados *store, const string& bucket_name, bufferlist& bl, bool exclusive,
                                  map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker,
@@ -32,6 +32,9 @@ extern int rgw_bucket_instance_store_info(RGWRados *store, string& oid, bufferli
 extern int rgw_bucket_instance_remove_entry(RGWRados *store, string& entry, RGWObjVersionTracker *objv_tracker);
 
 extern int rgw_bucket_delete_bucket_obj(RGWRados *store, string& bucket_name, RGWObjVersionTracker& objv_tracker);
+
+extern int rgw_bucket_sync_user_stats(RGWRados *store, const string& user_id, rgw_bucket& bucket);
+extern int rgw_bucket_sync_user_stats(RGWRados *store, const string& bucket_name);
 
 /**
  * Store a list of the user's buckets, with associated functinos.
@@ -102,8 +105,8 @@ extern int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets
 extern int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t creation_time, bool update_entrypoint = true);
 extern int rgw_unlink_bucket(RGWRados *store, string user_id, const string& bucket_name, bool update_entrypoint = true);
 
-extern int rgw_remove_object(RGWRados *store, rgw_bucket& bucket, std::string& object);
-extern int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children);
+extern int rgw_remove_object(RGWRados *store, const string& bucket_owner, rgw_bucket& bucket, std::string& object);
+extern int rgw_remove_bucket(RGWRados *store, const string& bucket_owner, rgw_bucket& bucket, bool delete_children);
 
 extern int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
                                 map<string, bufferlist>& attrs,
@@ -183,6 +186,8 @@ class RGWBucket
 
   bool failure;
 
+  RGWBucketInfo bucket_info;
+
 private:
 
 public:
@@ -196,8 +201,8 @@ public:
           map<string, RGWObjEnt> result, std::string *err_msg = NULL);
 
   int check_index(RGWBucketAdminOpState& op_state,
-          map<RGWObjCategory, RGWBucketStats>& existing_stats,
-          map<RGWObjCategory, RGWBucketStats>& calculated_stats,
+          map<RGWObjCategory, RGWStorageStats>& existing_stats,
+          map<RGWObjCategory, RGWStorageStats>& calculated_stats,
           std::string *err_msg = NULL);
 
   int remove(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);

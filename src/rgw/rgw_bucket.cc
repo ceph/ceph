@@ -17,6 +17,8 @@
 // until everything is moved from rgw_common
 #include "rgw_common.h"
 
+#include "cls/user/cls_user_types.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 #define BUCKET_TAG_TIMEOUT 30
@@ -27,7 +29,7 @@ static RGWMetadataHandler *bucket_meta_handler = NULL;
 static RGWMetadataHandler *bucket_instance_meta_handler = NULL;
 
 // define as static when RGWBucket implementation compete
-void rgw_get_buckets_obj(string& user_id, string& buckets_obj_id)
+void rgw_get_buckets_obj(const string& user_id, string& buckets_obj_id)
 {
   buckets_obj_id = user_id;
   buckets_obj_id += RGW_BUCKETS_OBJ_SUFFIX;
@@ -47,21 +49,24 @@ int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& bucke
   bufferlist bl;
   rgw_obj obj(store->zone.user_uid_pool, buckets_obj_id);
   bufferlist header;
-  map<string,bufferlist> m;
+  list<cls_user_bucket_entry> entries;
 
-  ret = store->omap_get_vals(obj, header, marker, max, m);
-  if (ret == -ENOENT)
-    ret = 0;
+  bool truncated;
+  string m = marker;
 
-  if (ret < 0)
-    return ret;
+  do {
+    ret = store->cls_user_list_buckets(obj, m, max, entries, &m, &truncated);
+    if (ret == -ENOENT)
+      ret = 0;
 
-  for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); ++q) {
-    bufferlist::iterator iter = q->second.begin();
-    RGWBucketEnt bucket;
-    ::decode(bucket, iter);
-    buckets.add(bucket);
-  }
+    if (ret < 0)
+      return ret;
+
+    for (list<cls_user_bucket_entry>::iterator q = entries.begin(); q != entries.end(); ++q) {
+      RGWBucketEnt e(*q);
+      buckets.add(e);
+    }
+  } while (truncated);
 
   if (need_stats) {
     map<string, RGWBucketEnt>& m = buckets.get_buckets();
@@ -73,25 +78,49 @@ int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& bucke
   return 0;
 }
 
+int rgw_bucket_sync_user_stats(RGWRados *store, const string& user_id, rgw_bucket& bucket)
+{
+  string buckets_obj_id;
+  rgw_get_buckets_obj(user_id, buckets_obj_id);
+  rgw_obj obj(store->zone.user_uid_pool, buckets_obj_id);
+
+  return store->cls_user_sync_bucket_stats(obj, bucket);
+}
+
+int rgw_bucket_sync_user_stats(RGWRados *store, const string& bucket_name)
+{
+  RGWBucketInfo bucket_info;
+  int ret = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: could not fetch bucket info: ret=" << ret << dendl;
+    return ret;
+  }
+
+  ret = rgw_bucket_sync_user_stats(store, bucket_info.owner, bucket_info.bucket);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: could not sync user stats for bucket " << bucket_name << ": ret=" << ret << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
 int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t creation_time, bool update_entrypoint)
 {
   int ret;
   string& bucket_name = bucket.name;
 
-  bufferlist bl;
-
-  RGWBucketEnt new_bucket;
+  cls_user_bucket_entry new_bucket;
 
   RGWBucketEntryPoint ep;
   RGWObjVersionTracker ot;
 
-  new_bucket.bucket = bucket;
+  bucket.convert(&new_bucket.bucket);
   new_bucket.size = 0;
   if (!creation_time)
     time(&new_bucket.creation_time);
   else
     new_bucket.creation_time = creation_time;
-  ::encode(new_bucket, bl);
 
   map<string, bufferlist> attrs;
 
@@ -109,7 +138,7 @@ int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t 
   rgw_get_buckets_obj(user_id, buckets_obj_id);
 
   rgw_obj obj(store->zone.user_uid_pool, buckets_obj_id);
-  ret = store->omap_set(obj, bucket_name, bl);
+  ret = store->cls_user_add_bucket(obj, new_bucket);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: error adding bucket to directory: "
         << cpp_strerror(-ret)<< dendl;
@@ -143,8 +172,10 @@ int rgw_unlink_bucket(RGWRados *store, string user_id, const string& bucket_name
   string buckets_obj_id;
   rgw_get_buckets_obj(user_id, buckets_obj_id);
 
+  cls_user_bucket bucket;
+  bucket.name = bucket_name;
   rgw_obj obj(store->zone.user_uid_pool, buckets_obj_id);
-  ret = store->omap_del(obj, bucket_name);
+  ret = store->cls_user_remove_bucket(obj, bucket);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: error removing bucket from directory: "
         << cpp_strerror(-ret)<< dendl;
@@ -297,21 +328,21 @@ static bool bucket_object_check_filter(const string& name)
   return rgw_obj::translate_raw_obj_to_obj_in_ns(obj, ns);
 }
 
-int rgw_remove_object(RGWRados *store, rgw_bucket& bucket, std::string& object)
+int rgw_remove_object(RGWRados *store, const string& bucket_owner, rgw_bucket& bucket, std::string& object)
 {
   RGWRadosCtx rctx(store);
 
-  rgw_obj obj(bucket,object);
+  rgw_obj obj(bucket, object);
 
-  int ret = store->delete_obj((void *)&rctx, obj);
+  int ret = store->delete_obj((void *)&rctx, bucket_owner, obj);
 
   return ret;
 }
 
-int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
+int rgw_remove_bucket(RGWRados *store, const string& bucket_owner, rgw_bucket& bucket, bool delete_children)
 {
   int ret;
-  map<RGWObjCategory, RGWBucketStats> stats;
+  map<RGWObjCategory, RGWStorageStats> stats;
   std::vector<RGWObjEnt> objs;
   std::string prefix, delim, marker, ns;
   map<string, bool> common_prefixes;
@@ -343,7 +374,7 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
     while (!objs.empty()) {
       std::vector<RGWObjEnt>::iterator it = objs.begin();
       for (it = objs.begin(); it != objs.end(); ++it) {
-        ret = rgw_remove_object(store, bucket, (*it).name);
+        ret = rgw_remove_object(store, bucket_owner, bucket, (*it).name);
         if (ret < 0)
           return ret;
       }
@@ -389,8 +420,6 @@ int RGWBucket::init(RGWRados *storage, RGWBucketAdminOpState& op_state)
     return -EINVAL;
 
   store = storage;
-
-  RGWBucketInfo bucket_info;
 
   string user_id = op_state.get_user_id();
   bucket_name = op_state.get_bucket_name();
@@ -515,7 +544,7 @@ int RGWBucket::remove(RGWBucketAdminOpState& op_state, std::string *err_msg)
   bool delete_children = op_state.will_delete_children();
   rgw_bucket bucket = op_state.get_bucket();
 
-  int ret = rgw_remove_bucket(store, bucket, delete_children);
+  int ret = rgw_remove_bucket(store, bucket_info.owner, bucket, delete_children);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to remove bucket" + cpp_strerror(-ret));
     return ret;
@@ -529,7 +558,7 @@ int RGWBucket::remove_object(RGWBucketAdminOpState& op_state, std::string *err_m
   rgw_bucket bucket = op_state.get_bucket();
   std::string object_name = op_state.get_object_name();
 
-  int ret = rgw_remove_object(store, bucket, object_name);
+  int ret = rgw_remove_object(store, bucket_info.owner, bucket, object_name);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to remove object" + cpp_strerror(-ret));
     return ret;
@@ -546,13 +575,13 @@ static void dump_bucket_index(map<string, RGWObjEnt> result,  Formatter *f)
    }
 }
 
-static void dump_bucket_usage(map<RGWObjCategory, RGWBucketStats>& stats, Formatter *formatter)
+static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, Formatter *formatter)
 {
-  map<RGWObjCategory, RGWBucketStats>::iterator iter;
+  map<RGWObjCategory, RGWStorageStats>::iterator iter;
 
   formatter->open_object_section("usage");
   for (iter = stats.begin(); iter != stats.end(); ++iter) {
-    RGWBucketStats& s = iter->second;
+    RGWStorageStats& s = iter->second;
     const char *cat_name = rgw_obj_category_name(iter->first);
     formatter->open_object_section(cat_name);
     formatter->dump_int("size_kb", s.num_kb);
@@ -563,8 +592,8 @@ static void dump_bucket_usage(map<RGWObjCategory, RGWBucketStats>& stats, Format
   formatter->close_section();
 }
 
-static void dump_index_check(map<RGWObjCategory, RGWBucketStats> existing_stats,
-        map<RGWObjCategory, RGWBucketStats> calculated_stats,
+static void dump_index_check(map<RGWObjCategory, RGWStorageStats> existing_stats,
+        map<RGWObjCategory, RGWStorageStats> calculated_stats,
         Formatter *formatter)
 {
   formatter->open_object_section("check_result");
@@ -703,8 +732,8 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
 
 
 int RGWBucket::check_index(RGWBucketAdminOpState& op_state,
-        map<RGWObjCategory, RGWBucketStats>& existing_stats,
-        map<RGWObjCategory, RGWBucketStats>& calculated_stats,
+        map<RGWObjCategory, RGWStorageStats>& existing_stats,
+        map<RGWObjCategory, RGWStorageStats>& calculated_stats,
         std::string *err_msg)
 {
   rgw_bucket bucket = op_state.get_bucket();
@@ -841,8 +870,8 @@ int RGWBucketAdminOp::check_index(RGWRados *store, RGWBucketAdminOpState& op_sta
 {
   int ret;
   map<string, RGWObjEnt> result;
-  map<RGWObjCategory, RGWBucketStats> existing_stats;
-  map<RGWObjCategory, RGWBucketStats> calculated_stats;
+  map<RGWObjCategory, RGWStorageStats> existing_stats;
+  map<RGWObjCategory, RGWStorageStats> calculated_stats;
   list<std::string> objs_to_unlink;
 
   RGWBucket bucket;
@@ -904,7 +933,7 @@ static int bucket_stats(RGWRados *store, std::string&  bucket_name, Formatter *f
 {
   RGWBucketInfo bucket_info;
   rgw_bucket bucket;
-  map<RGWObjCategory, RGWBucketStats> stats;
+  map<RGWObjCategory, RGWStorageStats> stats;
 
   time_t mtime;
   int r = store->get_bucket_info(NULL, bucket_name, bucket_info, &mtime);

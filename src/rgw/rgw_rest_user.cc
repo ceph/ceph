@@ -1,3 +1,5 @@
+#include "common/ceph_json.h"
+
 #include "rgw_op.h"
 #include "rgw_user.h"
 #include "rgw_rest_user.h"
@@ -609,8 +611,268 @@ void RGWOp_Caps_Remove::execute()
   http_ret = RGWUserAdminOp_Caps::remove(store, op_state, flusher);
 }
 
+struct UserQuotas {
+  RGWQuotaInfo bucket_quota;
+  RGWQuotaInfo user_quota;
+
+  UserQuotas() {}
+
+  UserQuotas(RGWUserInfo& info) {
+    bucket_quota = info.bucket_quota;
+    user_quota = info.user_quota;
+  }
+  void dump(Formatter *f) const {
+    encode_json("bucket_quota", bucket_quota, f);
+    encode_json("user_quota", user_quota, f);
+  }
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
+    JSONDecoder::decode_json("user_quota", user_quota, obj);
+  }
+};
+
+class RGWOp_Quota_Info : public RGWRESTOp {
+
+public:
+  RGWOp_Quota_Info() {}
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("users", RGW_CAP_READ);
+  }
+
+  void execute();
+
+  virtual const string name() { return "get_quota_info"; }
+};
+
+
+void RGWOp_Quota_Info::execute()
+{
+  RGWUserAdminOpState op_state;
+
+  std::string uid;
+  std::string quota_type;
+
+  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "quota-type", quota_type, &quota_type);
+
+  if (uid.empty()) {
+    http_ret = -EINVAL;
+    return;
+  }
+
+  bool show_all = quota_type.empty();
+  bool show_bucket = show_all || (quota_type == "bucket");
+  bool show_user = show_all || (quota_type == "user");
+
+  if (!(show_all || show_bucket || show_user)) {
+    http_ret = -EINVAL;
+    return;
+  }
+
+  op_state.set_user_id(uid);
+
+  RGWUser user;
+  http_ret = user.init(store, op_state);
+  if (http_ret < 0)
+    return;
+
+  RGWUserInfo info;
+  string err_msg;
+  http_ret = user.info(info, &err_msg);
+  if (http_ret < 0)
+    return;
+
+  if (show_all) {
+    UserQuotas quotas(info);
+    encode_json("quota", quotas, s->formatter);
+  } else if (show_user) {
+    encode_json("user_quota", info.user_quota, s->formatter);
+  } else {
+    encode_json("bucket_quota", info.bucket_quota, s->formatter);
+  }
+
+  flusher.flush();
+}
+
+class RGWOp_Quota_Set : public RGWRESTOp {
+
+public:
+  RGWOp_Quota_Set() {}
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("users", RGW_CAP_WRITE);
+  }
+
+  void execute();
+
+  virtual const string name() { return "set_quota_info"; }
+};
+
+/**
+ * set quota
+ *
+ * two different ways to set the quota info: as json struct in the message body or via http params.
+ *
+ * as json:
+ *
+ * PUT /admin/user?uid=<uid>[&quota-type=<type>]
+ *
+ * whereas quota-type is optional and is either user, or bucket
+ *
+ * if quota-type is not specified then we expect to get a structure that contains both quotas,
+ * otherwise we'll only get the relevant configuration.
+ *
+ * E.g., if quota type not specified:
+ * {
+ *    "user_quota" : {
+ *      "max_size_kb" : 4096,
+ *      "max_objects" : -1,
+ *      "enabled" : false
+ *    },
+ *    "bucket_quota" : {
+ *      "max_size_kb" : 1024,
+ *      "max_objects" : -1,
+ *      "enabled" : true
+ *    }
+ * }
+ *
+ *
+ * or if quota type is specified:
+ * {
+ *   "max_size_kb" : 4096,
+ *   "max_objects" : -1,
+ *   "enabled" : false
+ * }
+ *
+ * Another option is not to pass any body and set the following http params:
+ *
+ *
+ * max-size-kb=<size>
+ * max-objects=<max objects>
+ * enabled[={true,false}]
+ *
+ * all params are optionals and default to the current settings. With this type of configuration the
+ * quota-type param is mandatory.
+ *
+ */
+
+void RGWOp_Quota_Set::execute()
+{
+  RGWUserAdminOpState op_state;
+
+  std::string uid;
+  std::string quota_type;
+
+  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "quota-type", quota_type, &quota_type);
+
+  if (uid.empty()) {
+    http_ret = -EINVAL;
+    return;
+  }
+
+  bool set_all = quota_type.empty();
+  bool set_bucket = set_all || (quota_type == "bucket");
+  bool set_user = set_all || (quota_type == "user");
+
+  if (!(set_all || set_bucket || set_user)) {
+    ldout(store->ctx(), 20) << "invalid quota type" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  bool use_http_params;
+
+  if (s->length > 0) {
+    use_http_params = false;
+  } else {
+    const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
+    use_http_params = (!encoding || strcmp(encoding, "chunked") != 0);
+  }
+
+  if (use_http_params && set_all) {
+    ldout(store->ctx(), 20) << "quota type was not specified, can't set all quotas via http headers" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  op_state.set_user_id(uid);
+
+  RGWUser user;
+  http_ret = user.init(store, op_state);
+  if (http_ret < 0) {
+    ldout(store->ctx(), 20) << "failed initializing user info: " << http_ret << dendl;
+    return;
+  }
+
+#define QUOTA_INPUT_MAX_LEN 1024
+  if (set_all) {
+    UserQuotas quotas;
+
+    if ((http_ret = rgw_rest_get_json_input(store->ctx(), s, quotas, QUOTA_INPUT_MAX_LEN, NULL)) < 0) {
+      ldout(store->ctx(), 20) << "failed to retrieve input" << dendl;
+      return;
+    }
+
+    op_state.set_user_quota(quotas.user_quota);
+    op_state.set_bucket_quota(quotas.bucket_quota);
+  } else {
+    RGWQuotaInfo quota;
+
+    if (!use_http_params) {
+      bool empty;
+      http_ret = rgw_rest_get_json_input(store->ctx(), s, quota, QUOTA_INPUT_MAX_LEN, &empty);
+      if (http_ret < 0) {
+        ldout(store->ctx(), 20) << "failed to retrieve input" << dendl;
+        if (!empty)
+          return;
+
+        /* was probably chunked input, but no content provided, configure via http params */
+        use_http_params = true;
+      }
+    }
+
+    if (use_http_params) {
+      RGWUserInfo info;
+      string err_msg;
+      http_ret = user.info(info, &err_msg);
+      if (http_ret < 0) {
+        ldout(store->ctx(), 20) << "failed to get user info: " << http_ret << dendl;
+        return;
+      }
+      RGWQuotaInfo *old_quota;
+      if (set_user) {
+        old_quota = &info.user_quota;
+      } else {
+        old_quota = &info.bucket_quota;
+      }
+
+      RESTArgs::get_int64(s, "max-objects", old_quota->max_objects, &quota.max_objects);
+      RESTArgs::get_int64(s, "max-size-kb", old_quota->max_size_kb, &quota.max_size_kb);
+      RESTArgs::get_bool(s, "enabled", old_quota->enabled, &quota.enabled);
+    }
+
+    if (set_user) {
+      op_state.set_user_quota(quota);
+    } else {
+      op_state.set_bucket_quota(quota);
+    }
+  }
+
+  string err;
+  http_ret = user.modify(op_state, &err);
+  if (http_ret < 0) {
+    ldout(store->ctx(), 20) << "failed updating user info: " << http_ret << ": " << err << dendl;
+    return;
+  }
+}
+
 RGWOp *RGWHandler_User::op_get()
 {
+  if (s->info.args.sub_resource_exists("quota"))
+    return new RGWOp_Quota_Info;
+
   return new RGWOp_User_Info;
 };
 
@@ -624,6 +886,9 @@ RGWOp *RGWHandler_User::op_put()
 
   if (s->info.args.sub_resource_exists("caps"))
     return new RGWOp_Caps_Add;
+
+  if (s->info.args.sub_resource_exists("quota"))
+    return new RGWOp_Quota_Set;
 
   return new RGWOp_User_Create;
 };
