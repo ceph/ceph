@@ -2000,7 +2000,8 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 			 CEPH_OSDMAP_NOBACKFILL |
 			 CEPH_OSDMAP_NORECOVER |
 			 CEPH_OSDMAP_NOSCRUB |
-			 CEPH_OSDMAP_NODEEP_SCRUB)) {
+			 CEPH_OSDMAP_NODEEP_SCRUB |
+			 CEPH_OSDMAP_NOTIERAGENT)) {
       ostringstream ss;
       ss << osdmap.get_flag_string() << " flag(s) set";
       summary.push_back(make_pair(HEALTH_WARN, ss.str()));
@@ -3914,6 +3915,8 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       return prepare_set_flag(m, CEPH_OSDMAP_NOSCRUB);
     else if (key == "nodeep-scrub")
       return prepare_set_flag(m, CEPH_OSDMAP_NODEEP_SCRUB);
+    else if (key == "notieragent")
+      return prepare_set_flag(m, CEPH_OSDMAP_NOTIERAGENT);
 
   } else if (prefix == "osd unset") {
     string key;
@@ -3936,6 +3939,8 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       return prepare_unset_flag(m, CEPH_OSDMAP_NOSCRUB);
     else if (key == "nodeep-scrub")
       return prepare_unset_flag(m, CEPH_OSDMAP_NODEEP_SCRUB);
+    else if (key == "notieragent")
+      return prepare_unset_flag(m, CEPH_OSDMAP_NOTIERAGENT);
 
   } else if (prefix == "osd cluster_snap") {
     // ** DISABLE THIS FOR NOW **
