@@ -186,6 +186,7 @@ protected:
   RGWRados *store;
   void *obj_ctx;
   bool is_complete;
+  string bucket_owner;
 
   virtual int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs) = 0;
 
@@ -195,7 +196,7 @@ protected:
     objs.push_back(obj);
   }
 public:
-  RGWPutObjProcessor() : store(NULL), obj_ctx(NULL), is_complete(false) {}
+  RGWPutObjProcessor(const string& _bo) : store(NULL), obj_ctx(NULL), is_complete(false), bucket_owner(_bo) {}
   virtual ~RGWPutObjProcessor();
   virtual int prepare(RGWRados *_store, void *_o) {
     store = _store;
@@ -223,7 +224,8 @@ protected:
 
 public:
   int throttle_data(void *handle) { return 0; }
-  RGWPutObjProcessor_Plain(rgw_bucket& b, const string& o) : bucket(b), obj_str(o), ofs(0) {}
+  RGWPutObjProcessor_Plain(const string& bucket_owner, rgw_bucket& b, const string& o) : RGWPutObjProcessor(bucket_owner),
+                                                                                         bucket(b), obj_str(o), ofs(0) {}
 };
 
 struct put_obj_aio_info {
@@ -248,7 +250,7 @@ protected:
 public:
   int throttle_data(void *handle);
 
-  RGWPutObjProcessor_Aio() : max_chunks(RGW_MAX_PENDING_CHUNKS), obj_len(0) {}
+  RGWPutObjProcessor_Aio(const string& bucket_owner) : RGWPutObjProcessor(bucket_owner), max_chunks(RGW_MAX_PENDING_CHUNKS), obj_len(0) {}
   virtual ~RGWPutObjProcessor_Aio() {
     drain_pending();
   }
@@ -288,7 +290,9 @@ protected:
 
 public:
   ~RGWPutObjProcessor_Atomic() {}
-  RGWPutObjProcessor_Atomic(rgw_bucket& _b, const string& _o, uint64_t _p, const string& _t) : part_size(_p),
+  RGWPutObjProcessor_Atomic(const string& bucket_owner, rgw_bucket& _b, const string& _o, uint64_t _p, const string& _t) :
+                                RGWPutObjProcessor_Aio(bucket_owner),
+                                part_size(_p),
                                 cur_part_ofs(0),
                                 next_part_ofs(_p),
                                 cur_part_id(0),
@@ -640,6 +644,7 @@ struct RGWRegionMap {
   string master_region;
 
   RGWQuotaInfo bucket_quota;
+  RGWQuotaInfo user_quota;
 
   RGWRegionMap() : lock("RGWRegionMap") {}
 
@@ -769,14 +774,14 @@ protected:
   rgw_bucket bucket;
   uint64_t bucket_ver;
   uint64_t master_ver;
-  map<RGWObjCategory, RGWBucketStats> *stats;
+  map<RGWObjCategory, RGWStorageStats> *stats;
   string max_marker;
 public:
   RGWGetBucketStats_CB(rgw_bucket& _bucket) : bucket(_bucket), stats(NULL) {}
   virtual ~RGWGetBucketStats_CB() {}
   virtual void handle_response(int r) = 0;
   virtual void set_response(uint64_t _bucket_ver, uint64_t _master_ver,
-                            map<RGWObjCategory, RGWBucketStats> *_stats,
+                            map<RGWObjCategory, RGWStorageStats> *_stats,
                             const string &_max_marker) {
     bucket_ver = _bucket_ver;
     master_ver = _master_ver;
@@ -785,7 +790,21 @@ public:
   }
 };
 
+class RGWGetUserStats_CB : public RefCountedObject {
+protected:
+  string user;
+  RGWStorageStats stats;
+public:
+  RGWGetUserStats_CB(const string& _user) : user(_user) {}
+  virtual ~RGWGetUserStats_CB() {}
+  virtual void handle_response(int r) = 0;
+  virtual void set_response(RGWStorageStats& _stats) {
+    stats = _stats;
+  }
+};
+
 class RGWGetDirHeader_CB;
+class RGWGetUserHeader_CB;
 
 
 class RGWRados
@@ -824,6 +843,7 @@ class RGWRados
 
   RGWGC *gc;
   bool use_gc_thread;
+  bool quota_threads;
 
   int num_watchers;
   RGWWatcher **watchers;
@@ -874,13 +894,14 @@ class RGWRados
     v.push_back(info);
     return clone_objs(ctx, dst_obj, v, attrs, category, pmtime, true, false);
   }
-  int delete_obj_impl(void *ctx, rgw_obj& src_obj, RGWObjVersionTracker *objv_tracker);
   int complete_atomic_overwrite(RGWRadosCtx *rctx, RGWObjState *state, rgw_obj& obj);
 
   int update_placement_map();
   int store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker, bool exclusive);
 
 protected:
+  virtual int delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj& src_obj, RGWObjVersionTracker *objv_tracker);
+
   CephContext *cct;
   librados::Rados *rados;
   librados::IoCtx gc_pool_ctx;        // .rgw.gc
@@ -894,7 +915,7 @@ protected:
 
 public:
   RGWRados() : lock("rados_timer_lock"), timer(NULL),
-               gc(NULL), use_gc_thread(false),
+               gc(NULL), use_gc_thread(false), quota_threads(false),
                num_watchers(0), watchers(NULL), watch_handles(NULL),
                watch_initialized(false),
                bucket_id_lock("rados_bucket_id"), max_bucket_id(0),
@@ -947,9 +968,10 @@ public:
 
   CephContext *ctx() { return cct; }
   /** do all necessary setup of the storage device */
-  int initialize(CephContext *_cct, bool _use_gc_thread) {
+  int initialize(CephContext *_cct, bool _use_gc_thread, bool _quota_threads) {
     set_context(_cct);
     use_gc_thread = _use_gc_thread;
+    quota_threads = _quota_threads;
     return initialize();
   }
   /** Initialize the RADOS instance and prepare to do other ops */
@@ -1038,6 +1060,7 @@ public:
     bool modify_version;
     RGWObjVersionTracker *objv_tracker;
     time_t set_mtime;
+    string owner;
 
     PutObjMetaExtraParams() : mtime(NULL), rmattrs(NULL),
                      data(NULL), manifest(NULL), ptag(NULL),
@@ -1051,21 +1074,22 @@ public:
               map<std::string, bufferlist>* rmattrs, const bufferlist *data,
               RGWObjManifest *manifest, const string *ptag, list<string> *remove_objs,
               bool modify_version, RGWObjVersionTracker *objv_tracker,
-              time_t set_mtime /* 0 for don't set */);
+              time_t set_mtime /* 0 for don't set */,
+              const string& owner);
 
   virtual int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
               map<std::string, bufferlist>& attrs, RGWObjCategory category, int flags,
-              const bufferlist *data = NULL) {
+              const string& owner, const bufferlist *data = NULL) {
     return put_obj_meta_impl(ctx, obj, size, mtime, attrs, category, flags,
                         NULL, data, NULL, NULL, NULL,
-                        false, NULL, 0);
+                        false, NULL, 0, owner);
   }
 
   virtual int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size,  map<std::string, bufferlist>& attrs,
                            RGWObjCategory category, int flags, PutObjMetaExtraParams& params) {
     return put_obj_meta_impl(ctx, obj, size, params.mtime, attrs, category, flags,
                         params.rmattrs, params.data, params.manifest, params.ptag, params.remove_objs,
-                        params.modify_version, params.objv_tracker, params.set_mtime);
+                        params.modify_version, params.objv_tracker, params.set_mtime, params.owner);
   }
 
   virtual int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
@@ -1161,6 +1185,7 @@ public:
                void *progress_data);
 
   int copy_obj_data(void *ctx,
+               const string& owner,
 	       void **handle, off_t end,
                rgw_obj& dest_obj,
                rgw_obj& src_obj,
@@ -1181,7 +1206,8 @@ public:
   int bucket_suspended(rgw_bucket& bucket, bool *suspended);
 
   /** Delete an object.*/
-  virtual int delete_obj(void *ctx, rgw_obj& src_obj, RGWObjVersionTracker *objv_tracker = NULL);
+  virtual int delete_obj(void *ctx, const string& bucket_owner, rgw_obj& src_obj, RGWObjVersionTracker *objv_tracker = NULL);
+  virtual int delete_system_obj(void *ctx, rgw_obj& src_obj, RGWObjVersionTracker *objv_tracker = NULL);
 
   /** Remove an object from the bucket index */
   int delete_obj_index(rgw_obj& obj);
@@ -1321,9 +1347,11 @@ public:
   }
 
   int decode_policy(bufferlist& bl, ACLOwner *owner);
-  int get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_t *master_ver, map<RGWObjCategory, RGWBucketStats>& stats,
+  int get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_t *master_ver, map<RGWObjCategory, RGWStorageStats>& stats,
                        string *max_marker);
   int get_bucket_stats_async(rgw_bucket& bucket, RGWGetBucketStats_CB *cb);
+  int get_user_stats(const string& user, RGWStorageStats& stats);
+  int get_user_stats_async(const string& user, RGWGetUserStats_CB *cb);
   void get_bucket_instance_obj(rgw_bucket& bucket, rgw_obj& obj);
   void get_bucket_instance_entry(rgw_bucket& bucket, string& entry);
   void get_bucket_meta_oid(rgw_bucket& bucket, string& oid);
@@ -1338,7 +1366,7 @@ public:
   int get_bucket_instance_from_oid(void *ctx, string& oid, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs);
 
   int convert_old_bucket_info(void *ctx, string& bucket_name);
-  virtual int get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info,
+  virtual int get_bucket_info(void *ctx, const string& bucket_name, RGWBucketInfo& info,
                               time_t *pmtime, map<string, bufferlist> *pattrs = NULL);
   virtual int put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, time_t mtime, obj_version *pep_objv,
                                      map<string, bufferlist> *pattrs, bool create_entry_point);
@@ -1408,12 +1436,28 @@ public:
   int defer_gc(void *ctx, rgw_obj& obj);
 
   int bucket_check_index(rgw_bucket& bucket,
-                         map<RGWObjCategory, RGWBucketStats> *existing_stats,
-                         map<RGWObjCategory, RGWBucketStats> *calculated_stats);
+                         map<RGWObjCategory, RGWStorageStats> *existing_stats,
+                         map<RGWObjCategory, RGWStorageStats> *calculated_stats);
   int bucket_rebuild_index(rgw_bucket& bucket);
   int remove_objs_from_index(rgw_bucket& bucket, list<string>& oid_list);
 
-  int check_quota(rgw_bucket& bucket, RGWQuotaInfo& quota_info, uint64_t obj_size);
+  int cls_user_get_header(const string& user_id, cls_user_header *header);
+  int cls_user_get_header_async(const string& user_id, RGWGetUserHeader_CB *ctx);
+  int cls_user_sync_bucket_stats(rgw_obj& user_obj, rgw_bucket& bucket);
+  int update_user_bucket_stats(const string& user_id, rgw_bucket& bucket, RGWStorageStats& stats);
+  int cls_user_list_buckets(rgw_obj& obj,
+                            const string& in_marker, int max_entries,
+                            list<cls_user_bucket_entry>& entries,
+                            string *out_marker, bool *truncated);
+  int cls_user_add_bucket(rgw_obj& obj, const cls_user_bucket_entry& entry);
+  int cls_user_update_buckets(rgw_obj& obj, list<cls_user_bucket_entry>& entries, bool add);
+  int cls_user_complete_stats_sync(rgw_obj& obj);
+  int complete_sync_user_stats(const string& user_id);
+  int cls_user_add_bucket(rgw_obj& obj, list<cls_user_bucket_entry>& entries);
+  int cls_user_remove_bucket(rgw_obj& obj, const cls_user_bucket& bucket);
+
+  int check_quota(const string& bucket_owner, rgw_bucket& bucket,
+                  RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size);
 
   string unique_id(uint64_t unique_num) {
     char buf[32];
@@ -1488,15 +1532,15 @@ public:
 class RGWStoreManager {
 public:
   RGWStoreManager() {}
-  static RGWRados *get_storage(CephContext *cct, bool use_gc_thread) {
-    RGWRados *store = init_storage_provider(cct, use_gc_thread);
+  static RGWRados *get_storage(CephContext *cct, bool use_gc_thread, bool quota_threads) {
+    RGWRados *store = init_storage_provider(cct, use_gc_thread, quota_threads);
     return store;
   }
   static RGWRados *get_raw_storage(CephContext *cct) {
     RGWRados *store = init_raw_storage_provider(cct);
     return store;
   }
-  static RGWRados *init_storage_provider(CephContext *cct, bool use_gc_thread);
+  static RGWRados *init_storage_provider(CephContext *cct, bool use_gc_thread, bool quota_threads);
   static RGWRados *init_raw_storage_provider(CephContext *cct);
   static void close_storage(RGWRados *store);
 
