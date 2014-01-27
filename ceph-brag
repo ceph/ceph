@@ -170,6 +170,9 @@ def get_sysinfo():
 
     sysinfo.append(meta)
 
+  if len(sysinfo) is 0:
+    print >> sys.stderr, "'ceph osd metadata' is not available at all"
+
   return sysinfo
 
 def get_osd_hosts():
