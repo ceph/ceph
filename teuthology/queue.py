@@ -203,7 +203,7 @@ def worker(ctx):
             ]
             subprocess.Popen(args=args).wait()
         else:
-            log.debug('Creating archive dir...')
+            log.debug('Creating archive dir %s', archive_path_full)
             safepath.makedirs(ctx.archive_dir, safe_archive)
             log.info('Running job %d', job.jid)
             run_job(job_config, teuth_bin_path)
@@ -302,6 +302,7 @@ def run_job(job_config, teuth_bin_path):
         p = subprocess.Popen(args=arg)
         log.info("Job archive: %s", job_config['archive_path'])
         try:
+            log.debug("Worker log: %s", job_config['worker_log'])
             os.symlink(job_config['worker_log'],
                        os.path.join(job_config['archive_path'], 'worker.log'))
         except Exception:
