@@ -106,10 +106,18 @@ ceph osd dump | grep '^epoch'
 ceph --concise osd dump | grep '^epoch'
 
 # df
-ceph df | grep GLOBAL
-ceph df detail | grep CATEGORY
-ceph df --format json | grep 'total_space'
-ceph df detail --format json | grep 'rd_kb'
+ceph df > $TMPFILE
+grep GLOBAL $TMPFILE
+grep -v DIRTY $TMPFILE
+ceph df detail > $TMPFILE
+grep CATEGORY $TMPFILE
+grep DIRTY $TMPFILE
+ceph df --format json > $TMPFILE
+grep 'total_space' $TMPFILE
+grep -v 'dirty' $TMPFILE
+ceph df detail --format json > $TMPFILE
+grep 'rd_kb' $TMPFILE
+grep 'dirty' $TMPFILE
 ceph df --format xml | grep '<total_space>'
 ceph df detail --format xml | grep '<rd_kb>'
 
