@@ -164,6 +164,22 @@ void ECBackend::RecoveryOp::dump(Formatter *f) const
   f->dump_stream("extent_requested") << extent_requested;
 }
 
+ECBackend::ECBackend(
+  PGBackend::Listener *pg,
+  coll_t coll,
+  coll_t temp_coll,
+  ObjectStore *store,
+  CephContext *cct,
+  ErasureCodeInterfaceRef ec_impl,
+  uint64_t stripe_width)
+  : PGBackend(pg, store, coll, temp_coll),
+    cct(cct),
+    ec_impl(ec_impl),
+    sinfo(ec_impl->get_data_chunk_count(), stripe_width) {
+  assert((ec_impl->get_data_chunk_count() *
+	  ec_impl->get_chunk_size(stripe_width)) == stripe_width);
+}
+
 PGBackend::RecoveryHandle *ECBackend::open_recovery_op()
 {
   return new ECRecoveryHandle;
