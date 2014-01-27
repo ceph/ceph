@@ -442,12 +442,8 @@ public:
     coll_t temp_coll,
     ObjectStore *store,
     CephContext *cct,
-    ErasureCodeInterfaceRef ec_impl)
-    : PGBackend(pg, store, coll, temp_coll),
-      cct(cct),
-      ec_impl(ec_impl),
-      stripe_width(ec_impl->get_chunk_count()),
-      stripe_size(4*(2<<10) /* TODO: make more flexible */) {}
+    ErasureCodeInterfaceRef ec_impl,
+    uint64_t stripe_width);
 
   /// Returns to_read replicas sufficient to reconstruct want
   int get_min_avail_to_read_shards(

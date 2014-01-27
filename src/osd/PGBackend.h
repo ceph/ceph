@@ -583,13 +583,20 @@
      const spg_t pgid,
      const vector<int> &acting,
      ostream &errorstream);
-
    virtual uint64_t be_get_ondisk_size(
      uint64_t logical_size) { assert(0); return 0; }
    virtual void be_deep_scrub(
      const hobject_t &poid,
      ScrubMap::object &o,
      ThreadPool::TPHandle &handle) { assert(0); }
+
+   static PGBackend *build_pg_backend(
+     const pg_pool_t &pool,
+     Listener *l,
+     coll_t coll,
+     coll_t temp_coll,
+     ObjectStore *store,
+     CephContext *cct);
  };
 
 struct PG_SendMessageOnConn: public Context {
