@@ -29,10 +29,13 @@ static ostream& _prefix(std::ostream *_dout, ReplicatedBackend *pgb) {
 }
 
 ReplicatedBackend::ReplicatedBackend(
-  PGBackend::Listener *pg, coll_t coll, ObjectStore *store,
+  PGBackend::Listener *pg,
+  coll_t coll,
+  coll_t temp_coll,
+  ObjectStore *store,
   CephContext *cct) :
   PGBackend(pg, store,
-	    coll, coll_t::make_temp_coll(pg->get_info().pgid)),
+	    coll, temp_coll),
   cct(cct) {}
 
 void ReplicatedBackend::run_recovery_op(

@@ -31,7 +31,10 @@ public:
   CephContext *cct;
 
   ReplicatedBackend(
-    PGBackend::Listener *pg, coll_t coll, ObjectStore *store,
+    PGBackend::Listener *pg,
+    coll_t coll,
+    coll_t temp_coll,
+    ObjectStore *store,
     CephContext *cct);
 
   /// @see PGBackend::open_recovery_op
