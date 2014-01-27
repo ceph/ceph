@@ -229,7 +229,7 @@ ceph osd scrub 0
 ceph osd deep-scrub 0
 ceph osd repair 0
 
-for f in noup nodown noin noout noscrub nodeep-scrub nobackfill norecover
+for f in noup nodown noin noout noscrub nodeep-scrub nobackfill norecover notieragent
 do
     ceph osd set $f
     ceph osd unset $f
