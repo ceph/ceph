@@ -672,15 +672,12 @@ protected:
   string etag;
   char *data;
   int len;
-  uint64_t min_part_size;
 
 public:
   RGWCompleteMultipart() {
     ret = 0;
     data = NULL;
     len = 0;
-    // min_part_size = RGW_MIN_MULTIPART_SIZE;
-    min_part_size = 0;
   }
   virtual ~RGWCompleteMultipart() {
     free(data);
