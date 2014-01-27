@@ -38,6 +38,7 @@ protected:
   RGWCORSConfiguration bucket_cors;
   bool cors_exist;
   RGWQuotaInfo bucket_quota;
+  RGWQuotaInfo user_quota;
 
   virtual int init_quota();
 public:
