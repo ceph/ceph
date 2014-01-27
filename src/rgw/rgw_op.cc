@@ -2549,9 +2549,12 @@ void RGWCompleteMultipart::execute()
   meta_oid = mp.get_meta();
 
   int total_parts = 0;
+  int handled_parts = 0;
   int max_parts = 1000;
   int marker = 0;
   bool truncated;
+
+  uint64_t min_part_size = s->cct->_conf->rgw_multipart_min_part_size;
 
   list<string> remove_objs; /* objects to be removed from index listing */
 
@@ -2571,7 +2574,14 @@ void RGWCompleteMultipart::execute()
       return;
     }
 
-    for (obj_iter = obj_parts.begin(); iter != parts->parts.end() && obj_iter != obj_parts.end(); ++iter, ++obj_iter) {
+    for (obj_iter = obj_parts.begin(); iter != parts->parts.end() && obj_iter != obj_parts.end(); ++iter, ++obj_iter, ++handled_parts) {
+      uint64_t part_size = obj_iter->second.size;
+      if (handled_parts < (int)parts->parts.size() - 1 &&
+          part_size < min_part_size) {
+        ret = -ERR_TOO_SMALL;
+        return;
+      }
+
       char etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
       if (iter->first != (int)obj_iter->first) {
         ldout(s->cct, 0) << "NOTICE: parts num mismatch: next requested: " << iter->first << " next uploaded: " << obj_iter->first << dendl;
@@ -2600,7 +2610,7 @@ void RGWCompleteMultipart::execute()
 
         part.loc = src_obj;
         part.loc_ofs = 0;
-        part.size = obj_iter->second.size;
+        part.size = part_size;
       } else {
         manifest.append(obj_part.manifest);
       }
