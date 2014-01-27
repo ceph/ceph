@@ -268,7 +268,10 @@ def task(ctx, config):
   statuses_by_rank = None
   while True:
       statuses = {m : manager.get_mds_status(m) for m in mdslist}
-      statuses_by_rank = {s['rank'] : s for (_,s) in statuses.iteritems()}
+      statuses_by_rank = {}
+      for _, s in statuses.iteritems():
+          if isinstance(s, dict):
+              statuses_by_rank[s['rank']] = s
 
       ready = filter(lambda (_,s): s['state'] == 'up:active'
                         or s['state'] == 'up:standby'
