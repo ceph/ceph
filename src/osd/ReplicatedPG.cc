@@ -10354,7 +10354,7 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
     int atime = -1, temp = 0;
     agent_estimate_atime_temp(soid, &atime, NULL /*FIXME &temp*/);
 
-    unsigned atime_upper = 0, atime_lower = 0;
+    uint64_t atime_upper = 0, atime_lower = 0;
     if (atime < 0 && obc->obs.oi.mtime != utime_t())
       atime = ceph_clock_now(NULL).sec() - obc->obs.oi.mtime;
     if (atime < 0)

@@ -82,11 +82,11 @@ public:
   /// @param v [in] value (non-negative)
   /// @param lower [out] pointer to lower-bound (0..1000000)
   /// @param upper [out] pointer to the upper bound (0..1000000)
-  int get_position_micro(int32_t v, unsigned *lower, unsigned *upper) {
+  int get_position_micro(int32_t v, uint64_t *lower, uint64_t *upper) {
     if (v < 0)
       return -1;
     unsigned bin = calc_bits_of(v);
-    unsigned lower_sum = 0, upper_sum = 0, total = 0;
+    uint64_t lower_sum = 0, upper_sum = 0, total = 0;
     for (unsigned i=0; i<h.size(); ++i) {
       if (i <= bin)
 	upper_sum += h[i];

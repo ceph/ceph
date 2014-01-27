@@ -49,48 +49,58 @@ TEST(Histogram, Set) {
 TEST(Histogram, Position) {
   {
     pow2_hist_t h;
-    unsigned lb, ub;
+    uint64_t lb, ub;
     h.add(0);
     ASSERT_EQ(-1, h.get_position_micro(-20, &lb, &ub));
   }
   {
     pow2_hist_t h;
     h.add(0);
-    unsigned lb, ub;
+    uint64_t lb, ub;
     h.get_position_micro(0, &lb, &ub);
-    ASSERT_EQ(0, lb);
-    ASSERT_EQ(1000000, ub);
+    ASSERT_EQ(0u, lb);
+    ASSERT_EQ(1000000u, ub);
     h.add(0);
     h.add(0);
     h.add(0);
     h.get_position_micro(0, &lb, &ub);
-    ASSERT_EQ(0, lb);
-    ASSERT_EQ(1000000, ub);
+    ASSERT_EQ(0u, lb);
+    ASSERT_EQ(1000000u, ub);
   }
   {
     pow2_hist_t h;
     h.add(1);
     h.add(1);
-    unsigned lb, ub;
+    uint64_t lb, ub;
     h.get_position_micro(0, &lb, &ub);
-    ASSERT_EQ(0, lb);
-    ASSERT_EQ(0, ub);
+    ASSERT_EQ(0u, lb);
+    ASSERT_EQ(0u, ub);
     h.add(0);
     h.get_position_micro(0, &lb, &ub);
-    ASSERT_EQ(0, lb);
-    ASSERT_EQ(333333, ub);
+    ASSERT_EQ(0u, lb);
+    ASSERT_EQ(333333u, ub);
     h.get_position_micro(1, &lb, &ub);
-    ASSERT_EQ(333333, lb);
-    ASSERT_EQ(1000000, ub);
+    ASSERT_EQ(333333u, lb);
+    ASSERT_EQ(1000000u, ub);
   }
   {
     pow2_hist_t h;
-    h.add(1);
-    h.add(10);
-    unsigned lb, ub;
+    h.h.resize(10, 0);
+    h.h[0] = 1;
+    h.h[5] = 1;
+    uint64_t lb, ub;
     h.get_position_micro(4, &lb, &ub);
-    ASSERT_EQ(500000, lb);
-    ASSERT_EQ(500000, ub);
+    ASSERT_EQ(500000u, lb);
+    ASSERT_EQ(500000u, ub);
+  }
+  {
+    pow2_hist_t h;
+    h.h.resize(10, 0);
+    h.h[0] = UINT_MAX;
+    h.h[5] = UINT_MAX;
+    uint64_t lb, ub;
+    ASSERT_EQ(500000u, lb);
+    ASSERT_EQ(500000u, ub);
   }
 }
 
@@ -104,3 +114,13 @@ TEST(Histogram, Decay) {
   ASSERT_EQ(6, h.h[3]);
   ASSERT_EQ(4u, h.h.size());
 }
+
+/*
+ * Local Variables:
+ * compile-command: "cd ../.. ; make -j4 &&
+ *   make unittest_histogram &&
+ *   valgrind --tool=memcheck --leak-check=full \
+ *      ./unittest_histogram
+ *   "
+ * End:
+ */
