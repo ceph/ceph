@@ -455,7 +455,9 @@ void OSDService::activate_map()
 {
   // wake/unwake the tiering agent
   agent_lock.Lock();
-  agent_active = !osdmap->test_flag(CEPH_OSDMAP_NOTIERAGENT);
+  agent_active =
+    !osdmap->test_flag(CEPH_OSDMAP_NOTIERAGENT) &&
+    osd->is_active();
   agent_cond.Signal();
   agent_lock.Unlock();
 }
