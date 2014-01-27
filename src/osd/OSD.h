@@ -359,6 +359,9 @@ public:
     Mutex::Locker l(pre_publish_lock);
     next_osdmap = map;
   }
+
+  void activate_map();
+
   ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch);
   pair<ConnectionRef,ConnectionRef> get_con_osd_hb(int peer, epoch_t from_epoch);  // (back, front)
   void send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch);
@@ -435,6 +438,7 @@ public:
   set<PGRef>::iterator agent_queue_pos;
   int agent_ops;
   set<hobject_t> agent_oids;
+  bool agent_active;
   struct AgentThread : public Thread {
     OSDService *osd;
     AgentThread(OSDService *o) : osd(o) {}

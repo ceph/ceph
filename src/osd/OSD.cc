@@ -194,6 +194,7 @@ OSDService::OSDService(OSD *osd) :
   agent_lock("OSD::agent_lock"),
   agent_queue_pos(agent_queue.begin()),
   agent_ops(0),
+  agent_active(true),
   agent_thread(this),
   agent_stop_flag(false),
   objecter_lock("OSD::objecter_lock"),
@@ -450,6 +451,15 @@ void OSDService::init()
   agent_thread.create();
 }
 
+void OSDService::activate_map()
+{
+  // wake/unwake the tiering agent
+  agent_lock.Lock();
+  agent_active = !osdmap->test_flag(CEPH_OSDMAP_NOTIERAGENT);
+  agent_cond.Signal();
+  agent_lock.Unlock();
+}
+
 void OSDService::agent_entry()
 {
   dout(10) << __func__ << " start" << dendl;
@@ -459,9 +469,11 @@ void OSDService::agent_entry()
 	     << " pgs " << agent_queue.size()
 	     << " ops " << agent_ops << "/"
 	     << g_conf->osd_agent_max_ops
+	     << (agent_active ? " active" : " NOT ACTIVE")
 	     << dendl;
     dout(20) << __func__ << " oids " << agent_oids << dendl;
-    if (agent_ops >= g_conf->osd_agent_max_ops || agent_queue.empty()) {
+    if (agent_ops >= g_conf->osd_agent_max_ops || agent_queue.empty() ||
+	!agent_active) {
       agent_cond.Wait(agent_lock);
       continue;
     }
@@ -5630,6 +5642,8 @@ void OSD::activate_map()
       recovery_tp.unpause();
     }
   }
+
+  service.activate_map();
 
   // process waiters
   take_waiters(waiting_for_osdmap);
