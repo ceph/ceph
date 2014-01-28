@@ -10183,8 +10183,16 @@ void ReplicatedPG::agent_setup()
     return;
   }
   if (!agent_state) {
-    dout(10) << __func__ << " allocated new state" << dendl;
     agent_state.reset(new TierAgentState);
+
+    // choose random starting position
+    agent_state->position = hobject_t();
+    agent_state->position.pool = info.pgid.pool();
+    agent_state->position.hash = pool.info.get_random_pg_position(info.pgid,
+								  rand());
+
+    dout(10) << __func__ << " allocated new state, position "
+	     << agent_state->position << dendl;
   } else {
     dout(10) << __func__ << " keeping existing state" << dendl;
   }
