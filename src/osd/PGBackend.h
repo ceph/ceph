@@ -118,12 +118,41 @@
      virtual const map<hobject_t, set<pg_shard_t> > &get_missing_loc_shards()
        const = 0;
 
+     virtual const pg_missing_t &get_local_missing() const = 0;
      virtual const map<pg_shard_t, pg_missing_t> &get_shard_missing()
        const = 0;
+     virtual boost::optional<const pg_missing_t &> maybe_get_shard_missing(
+       pg_shard_t peer) const {
+       if (peer == primary_shard()) {
+	 return get_local_missing();
+       } else {
+	 map<pg_shard_t, pg_missing_t>::const_iterator i =
+	   get_shard_missing().find(peer);
+	 if (i == get_shard_missing().end()) {
+	   return boost::optional<const pg_missing_t &>();
+	 } else {
+	   return i->second;
+	 }
+       }
+     }
+     virtual const pg_missing_t &get_shard_missing(pg_shard_t peer) const {
+       boost::optional<const pg_missing_t &> m = maybe_get_shard_missing(peer);
+       assert(m);
+       return *m;
+     }
 
      virtual const map<pg_shard_t, pg_info_t> &get_shard_info() const = 0;
+     virtual const pg_info_t &get_shard_info(pg_shard_t peer) const {
+       if (peer == primary_shard()) {
+	 return get_info();
+       } else {
+	 map<pg_shard_t, pg_info_t>::const_iterator i =
+	   get_shard_info().find(peer);
+	 assert(i != get_shard_info().end());
+	 return i->second;
+       }
+     }
 
-     virtual const pg_missing_t &get_local_missing() const = 0;
      virtual const PGLog &get_log() const = 0;
      virtual bool pgb_is_primary() const = 0;
      virtual OSDMapRef pgb_get_osdmap() const = 0;
