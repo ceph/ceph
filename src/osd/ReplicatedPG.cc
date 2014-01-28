@@ -10457,23 +10457,35 @@ bool ReplicatedPG::agent_choose_mode()
 
   // flush mode
   TierAgentState::flush_mode_t flush_mode = TierAgentState::FLUSH_MODE_IDLE;
-  if (dirty_micro > pool.info.cache_target_dirty_ratio_micro)
+  uint64_t flush_target = pool.info.cache_target_dirty_ratio_micro;
+  uint64_t flush_slop = (float)flush_target * g_conf->osd_agent_slop;
+  if (agent_state->flush_mode == TierAgentState::FLUSH_MODE_IDLE)
+    flush_target += flush_slop;
+  else
+    flush_target -= MIN(flush_target, flush_slop);
+  if (dirty_micro > flush_target)
     flush_mode = TierAgentState::FLUSH_MODE_ACTIVE;
 
   // evict mode
   TierAgentState::evict_mode_t evict_mode = TierAgentState::EVICT_MODE_IDLE;
   unsigned evict_effort = 0;
+  uint64_t evict_target = pool.info.cache_target_full_ratio_micro;
+  uint64_t evict_slop = (float)evict_target * g_conf->osd_agent_slop;
+  if (agent_state->evict_mode == TierAgentState::EVICT_MODE_IDLE)
+    evict_target += evict_slop;
+  else
+    evict_target -= MIN(evict_target, evict_slop);
 
   if (full_micro > 1000000 ||
-      pool.info.cache_target_full_ratio_micro >= 1000000) {
+      evict_target >= 1000000) {
     // evict anything clean
     evict_mode = TierAgentState::EVICT_MODE_FULL;
     evict_effort = 1000000;
-  } else if (full_micro > pool.info.cache_target_full_ratio_micro) {
+  } else if (full_micro > evict_target) {
     // set effort in [0..1] range based on where we are between
     evict_mode = TierAgentState::EVICT_MODE_SOME;
-    uint64_t over = full_micro - pool.info.cache_target_full_ratio_micro;
-    uint64_t span = 1000000 - pool.info.cache_target_full_ratio_micro;
+    uint64_t over = full_micro - evict_target;
+    uint64_t span = 1000000 - evict_target;
     evict_effort = MIN(over * 1000000 / span,
 		       (unsigned)(1000000.0 * g_conf->osd_agent_min_evict_effort));
   }
