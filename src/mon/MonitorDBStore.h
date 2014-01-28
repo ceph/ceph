@@ -502,7 +502,7 @@ class MonitorDBStore
       db->options.max_open_files = g_conf->mon_leveldb_max_open_files;
     if (g_conf->mon_leveldb_paranoid)
       db->options.paranoid_checks = g_conf->mon_leveldb_paranoid;
-    if (g_conf->mon_leveldb_log)
+    if (g_conf->mon_leveldb_log.length())
       db->options.log_file = g_conf->mon_leveldb_log;
   }
 
