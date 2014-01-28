@@ -470,15 +470,15 @@ public:
     : str(str_)
   { }
 
-  explicit coll_t(pg_t pgid, snapid_t snap = CEPH_NOSNAP)
+  explicit coll_t(spg_t pgid, snapid_t snap = CEPH_NOSNAP)
     : str(pg_and_snap_to_str(pgid, snap))
   { }
 
-  static coll_t make_temp_coll(pg_t pgid) {
+  static coll_t make_temp_coll(spg_t pgid) {
     return coll_t(pg_to_tmp_str(pgid));
   }
 
-  static coll_t make_removal_coll(uint64_t seq, pg_t pgid) {
+  static coll_t make_removal_coll(uint64_t seq, spg_t pgid) {
     return coll_t(seq_to_removal_str(seq, pgid));
   }
 
@@ -494,10 +494,10 @@ public:
     return str < rhs.str;
   }
 
-  bool is_pg_prefix(pg_t& pgid) const;
-  bool is_pg(pg_t& pgid, snapid_t& snap) const;
-  bool is_temp(pg_t& pgid) const;
-  bool is_removal(uint64_t *seq, pg_t *pgid) const;
+  bool is_pg_prefix(spg_t& pgid) const;
+  bool is_pg(spg_t& pgid, snapid_t& snap) const;
+  bool is_temp(spg_t& pgid) const;
+  bool is_removal(uint64_t *seq, spg_t *pgid) const;
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
   inline bool operator==(const coll_t& rhs) const {
@@ -511,17 +511,17 @@ public:
   static void generate_test_instances(list<coll_t*>& o);
 
 private:
-  static std::string pg_and_snap_to_str(pg_t p, snapid_t s) {
+  static std::string pg_and_snap_to_str(spg_t p, snapid_t s) {
     std::ostringstream oss;
     oss << p << "_" << s;
     return oss.str();
   }
-  static std::string pg_to_tmp_str(pg_t p) {
+  static std::string pg_to_tmp_str(spg_t p) {
     std::ostringstream oss;
     oss << p << "_TEMP";
     return oss.str();
   }
-  static std::string seq_to_removal_str(uint64_t seq, pg_t pgid) {
+  static std::string seq_to_removal_str(uint64_t seq, spg_t pgid) {
     std::ostringstream oss;
     oss << "FORREMOVAL_" << seq << "_" << pgid;
     return oss.str();
@@ -1528,7 +1528,7 @@ inline ostream& operator<<(ostream& out, const pg_history_t& h) {
  *    otherwise, we have no idea what the pg is supposed to contain.
  */
 struct pg_info_t {
-  pg_t pgid;
+  spg_t pgid;
   eversion_t last_update;    // last object version applied to store.
   eversion_t last_complete;  // last version pg was complete through.
   epoch_t last_epoch_started;// last epoch at which this pg started on this osd
@@ -1550,7 +1550,7 @@ struct pg_info_t {
     : last_epoch_started(0), last_user_version(0),
       last_backfill(hobject_t::get_max())
   { }
-  pg_info_t(pg_t p)
+  pg_info_t(spg_t p)
     : pgid(p),
       last_epoch_started(0), last_user_version(0),
       last_backfill(hobject_t::get_max())
@@ -1564,6 +1564,11 @@ struct pg_info_t {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
+  bool overlaps_with(const pg_info_t &oinfo) const {
+    return last_update > oinfo.log_tail ?
+      oinfo.last_update >= log_tail :
+      last_update >= oinfo.log_tail;
+  }
   static void generate_test_instances(list<pg_info_t*>& o);
 };
 WRITE_CLASS_ENCODER(pg_info_t)
@@ -1595,13 +1600,22 @@ struct pg_notify_t {
   epoch_t query_epoch;
   epoch_t epoch_sent;
   pg_info_t info;
-  pg_notify_t() : query_epoch(0), epoch_sent(0) {}
-  pg_notify_t(epoch_t query_epoch,
-	      epoch_t epoch_sent,
-	      const pg_info_t &info)
+  shard_id_t to;
+  shard_id_t from;
+  pg_notify_t() :
+    query_epoch(0), epoch_sent(0), to(ghobject_t::no_shard()),
+    from(ghobject_t::no_shard()) {}
+  pg_notify_t(
+    shard_id_t to,
+    shard_id_t from,
+    epoch_t query_epoch,
+    epoch_t epoch_sent,
+    const pg_info_t &info)
     : query_epoch(query_epoch),
       epoch_sent(epoch_sent),
-      info(info) {}
+      info(info), to(to), from(from) {
+    assert(from == info.pgid.shard);
+  }
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &p);
   void dump(Formatter *f) const;
@@ -1679,18 +1693,32 @@ struct pg_query_t {
   eversion_t since;
   pg_history_t history;
   epoch_t epoch_sent;
+  shard_id_t to;
+  shard_id_t from;
 
-  pg_query_t() : type(-1), epoch_sent(0) {}
-  pg_query_t(int t, const pg_history_t& h,
-	     epoch_t epoch_sent)
-    : type(t), history(h),
-      epoch_sent(epoch_sent) {
+  pg_query_t() : type(-1), epoch_sent(0), to(ghobject_t::NO_SHARD),
+		 from(ghobject_t::NO_SHARD) {}
+  pg_query_t(
+    int t,
+    shard_id_t to,
+    shard_id_t from,
+    const pg_history_t& h,
+    epoch_t epoch_sent)
+    : type(t),
+      history(h),
+      epoch_sent(epoch_sent),
+      to(to), from(from) {
     assert(t != LOG);
   }
-  pg_query_t(int t, eversion_t s, const pg_history_t& h,
-	     epoch_t epoch_sent)
+  pg_query_t(
+    int t,
+    shard_id_t to,
+    shard_id_t from,
+    eversion_t s,
+    const pg_history_t& h,
+    epoch_t epoch_sent)
     : type(t), since(s), history(h),
-      epoch_sent(epoch_sent) {
+      epoch_sent(epoch_sent), to(to), from(from) {
     assert(t == LOG);
   }
   
