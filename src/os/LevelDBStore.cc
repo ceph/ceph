@@ -10,7 +10,12 @@
 using std::string;
 #include "common/perf_counters.h"
 
-int LevelDBStore::init(ostream &out, bool create_if_missing)
+int LevelDBStore::init()
+{
+  return 0;
+}
+
+int LevelDBStore::do_open(ostream &out, bool create_if_missing)
 {
   leveldb::Options ldoptions;
 
