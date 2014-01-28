@@ -990,6 +990,9 @@ public:
    */
   ps_t raw_pg_to_pps(pg_t pg) const;
 
+  /// choose a random hash position within a pg
+  uint32_t get_random_pg_position(pg_t pgid, uint32_t seed) const;
+
   void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
 
