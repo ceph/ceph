@@ -1,4 +1,13 @@
 {
+	tcmalloc: msync heap allocation points to uninit bytes
+	Memcheck:Param
+	msync(start)
+	obj:*libpthread*
+	...
+	fun:*tcmalloc*GrowHeap*
+	...
+}
+{
 	ceph global: deliberate onexit leak
 	Memcheck:Leak
 	...
@@ -6,21 +15,21 @@
 	...
 }
 {
-	ignore all static leveldb leaks
+	libleveldb: ignore all static leveldb leaks
 	Memcheck:Leak
 	...
 	fun:*leveldb*
 	...
 }
 {
-	ignore all dynamic libleveldb leaks
+	libleveldb: ignore all dynamic libleveldb leaks
 	Memcheck:Leak
 	...
 	obj:*libleveldb.so*
 	...
 }
 {
-	ignore libcurl leaks
+	libcurl: ignore libcurl leaks
 	Memcheck:Leak
 	...
 	fun:*curl_global_init
