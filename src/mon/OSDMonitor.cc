@@ -431,7 +431,8 @@ void OSDMonitor::remove_redundant_pg_temp()
 void OSDMonitor::remove_down_pg_temp()
 {
   dout(10) << "remove_down_pg_temp" << dendl;
-  OSDMap tmpmap(osdmap);
+  OSDMap tmpmap;
+  tmpmap.deepish_copy_from(osdmap);
   tmpmap.apply_incremental(pending_inc);
 
   for (map<pg_t,vector<int> >::iterator p = tmpmap.pg_temp->begin();
