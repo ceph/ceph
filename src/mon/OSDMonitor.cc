@@ -1376,6 +1376,7 @@ bool OSDMonitor::preprocess_pgtemp(MOSDPGTemp *m)
   dout(10) << "preprocess_pgtemp " << *m << dendl;
   vector<int> empty;
   int from = m->get_orig_source().num();
+  size_t ignore_cnt = 0;
 
   // check caps
   MonSession *session = m->get_session();
@@ -1396,7 +1397,25 @@ bool OSDMonitor::preprocess_pgtemp(MOSDPGTemp *m)
   for (map<pg_t,vector<int> >::iterator p = m->pg_temp.begin(); p != m->pg_temp.end(); ++p) {
     dout(20) << " " << p->first
 	     << (osdmap.pg_temp->count(p->first) ? (*osdmap.pg_temp)[p->first] : empty)
-	     << " -> " << p->second << dendl;
+             << " -> " << p->second << dendl;
+
+    // does the pool exist?
+    if (!osdmap.have_pg_pool(p->first.pool())) {
+      /*
+       * 1. If the osdmap does not have the pool, it means the pool has been
+       *    removed in-between the osd sending this message and us handling it.
+       * 2. If osdmap doesn't have the pool, it is safe to assume the pool does
+       *    not exist in the pending either, as the osds would not send a
+       *    message about a pool they know nothing about (yet).
+       * 3. However, if the pool does exist in the pending, then it must be a
+       *    new pool, and not relevant to this message (see 1).
+       */
+      dout(10) << __func__ << " ignore " << p->first << " -> " << p->second
+               << ": pool has been removed" << dendl;
+      ignore_cnt++;
+      continue;
+    }
+
     // removal?
     if (p->second.empty() && osdmap.pg_temp->count(p->first))
       return false;
@@ -1405,6 +1424,10 @@ bool OSDMonitor::preprocess_pgtemp(MOSDPGTemp *m)
 			     (*osdmap.pg_temp)[p->first] != p->second))
       return false;
   }
+
+  // should we ignore all the pgs?
+  if (ignore_cnt == m->pg_temp.size())
+    goto ignore;
 
   dout(7) << "preprocess_pgtemp e" << m->map_epoch << " no changes from " << m->get_orig_source_inst() << dendl;
   _reply_map(m, m->map_epoch);
@@ -1419,8 +1442,20 @@ bool OSDMonitor::prepare_pgtemp(MOSDPGTemp *m)
 {
   int from = m->get_orig_source().num();
   dout(7) << "prepare_pgtemp e" << m->map_epoch << " from " << m->get_orig_source_inst() << dendl;
-  for (map<pg_t,vector<int> >::iterator p = m->pg_temp.begin(); p != m->pg_temp.end(); ++p)
+  for (map<pg_t,vector<int> >::iterator p = m->pg_temp.begin(); p != m->pg_temp.end(); ++p) {
+    uint64_t pool = p->first.pool();
+    if (pending_inc.old_pools.count(pool)) {
+      dout(10) << __func__ << " ignore " << p->first << " -> " << p->second
+               << ": pool pending removal" << dendl;
+      continue;
+    }
+    if (!osdmap.have_pg_pool(pool)) {
+      dout(10) << __func__ << " ignore " << p->first << " -> " << p->second
+               << ": pool has been removed" << dendl;
+      continue;
+    }
     pending_inc.new_pg_temp[p->first] = p->second;
+  }
   pending_inc.new_up_thru[from] = m->map_epoch;   // set up_thru too, so the osd doesn't have to ask again
   wait_for_finished_proposal(new C_ReplyMap(this, m, m->map_epoch));
   return true;
