@@ -6792,19 +6792,20 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
     mdlog->submit_entry(le, new C_MDS_CommittedSlave(this, mdr));
     mdlog->flush();
   } else {
-    if (srcdn->is_auth() && destdnl->is_primary()) {
-      dout(10) << " reversing inode export of " << *destdnl->get_inode() << dendl;
-      destdnl->get_inode()->abort_export();
-    }
 
     // abort
     //  rollback_bl may be empty if we froze the inode but had to provide an expanded
     // witness list from the master, and they failed before we tried prep again.
     if (mdr->more()->rollback_bl.length()) {
+      if (mdr->more()->is_inode_exporter) {
+	dout(10) << " reversing inode export of " << *destdnl->get_inode() << dendl;
+	destdnl->get_inode()->abort_export();
+      }
       if (mdcache->is_ambiguous_slave_update(mdr->reqid, mdr->slave_to_mds)) {
 	mdcache->remove_ambiguous_slave_update(mdr->reqid, mdr->slave_to_mds);
 	// rollback but preserve the slave request
 	do_rename_rollback(mdr->more()->rollback_bl, mdr->slave_to_mds, mdr, false);
+	mdr->more()->rollback_bl.clear();
       } else
 	do_rename_rollback(mdr->more()->rollback_bl, mdr->slave_to_mds, mdr, true);
     } else {
