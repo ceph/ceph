@@ -5947,6 +5947,10 @@ void OSD::handle_pg_create(OpRequestRef op)
       dout(20) << "ignoring localized pg " << pgid << dendl;
       continue;
     }
+    if (!osdmap->have_pg_pool(pgid.pool())) {
+      dout(20) << "ignoring pg on deleted pool " << pgid << dendl;
+      continue;
+    }
 
     dout(20) << "mkpg " << pgid << " e" << created << dendl;
    
