@@ -1,0 +1,9 @@
+tasks:
+- mon_thrash:
+    revive_delay: 20
+    thrash_delay: 1
+- workunit:
+    clients:
+      client.0:
+        - rados/test.sh
+
