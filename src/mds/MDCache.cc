@@ -4662,14 +4662,17 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
        ++p) {
     // we may have had incorrect dir fragmentation; refragment based
     // on what they auth tells us.
-    CDir *dir = get_dirfrag(p->first);
-    if (!dir) {
-      dir = get_force_dirfrag(p->first);
-      if (dir)
-	refragged_inodes.insert(dir->get_inode());
+    CInode *diri = get_inode(p->first.ino);
+    CDir *dir = NULL;
+    if (diri) {
+      dir = diri->get_dirfrag(p->first.frag);
+      if (!dir) {
+	dir = force_dir_fragment(diri, p->first.frag, false);
+	if (dir)
+	  refragged_inodes.insert(dir->get_inode());
+      }
     }
     if (!dir) {
-      CInode *diri = get_inode(p->first.ino);
       if (!diri) {
 	// barebones inode; the full inode loop below will clean up.
 	diri = new CInode(this, false);
@@ -10928,7 +10931,7 @@ void MDCache::adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
   adjust_dir_fragments(diri, srcfrags, basefrag, bits, resultfrags, waiters, replay);
 }
 
-CDir *MDCache::force_dir_fragment(CInode *diri, frag_t fg)
+CDir *MDCache::force_dir_fragment(CInode *diri, frag_t fg, bool replay)
 {
   CDir *dir = diri->get_dirfrag(fg);
   if (dir)
@@ -10947,7 +10950,7 @@ CDir *MDCache::force_dir_fragment(CInode *diri, frag_t fg)
       int split = fg.bits() - parent.bits();
       dout(10) << " splitting parent by " << split << " " << *pdir << dendl;
       src.push_back(pdir);
-      adjust_dir_fragments(diri, src, parent, split, result, waiters, true);
+      adjust_dir_fragments(diri, src, parent, split, result, waiters, replay);
       dir = diri->get_dirfrag(fg);
       if (dir)
         dout(10) << "force_dir_fragment result " << *dir << dendl;
@@ -10967,7 +10970,7 @@ CDir *MDCache::force_dir_fragment(CInode *diri, frag_t fg)
     return NULL;
   }
   dout(10) << " will combine frags under " << fg << ": " << src << dendl;
-  adjust_dir_fragments(diri, src, fg, 0, result, waiters, true);
+  adjust_dir_fragments(diri, src, fg, 0, result, waiters, replay);
   dir = result.front();
   dout(10) << "force_dir_fragment result " << *dir << dendl;
   return dir;

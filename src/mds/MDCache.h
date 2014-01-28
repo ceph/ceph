@@ -973,7 +973,7 @@ private:
 			    list<CDir*>& resultfrags, 
 			    list<Context*>& waiters,
 			    bool replay);
-  CDir *force_dir_fragment(CInode *diri, frag_t fg);
+  CDir *force_dir_fragment(CInode *diri, frag_t fg, bool replay=true);
   void get_force_dirfrag_bound_set(vector<dirfrag_t>& dfs, set<CDir*>& bounds);
 
   bool can_fragment(CInode *diri, list<CDir*>& dirs);
