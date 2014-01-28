@@ -910,6 +910,23 @@ ps_t pg_pool_t::raw_pg_to_pps(pg_t pg) const
   }
 }
 
+uint32_t pg_pool_t::get_random_pg_position(pg_t pg, uint32_t seed) const
+{
+  uint32_t r = crush_hash32_2(CRUSH_HASH_RJENKINS1, seed, 123);
+  if (pg_num == pg_num_mask + 1) {
+    r &= ~pg_num_mask;
+  } else {
+    unsigned smaller_mask = pg_num_mask >> 1;
+    if ((pg.ps() & smaller_mask) < (pg_num & smaller_mask)) {
+      r &= ~pg_num_mask;
+    } else {
+      r &= ~smaller_mask;
+    }
+  }
+  r |= pg.ps();
+  return r;
+}
+
 void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
 {
   if ((features & CEPH_FEATURE_PGPOOL3) == 0) {
