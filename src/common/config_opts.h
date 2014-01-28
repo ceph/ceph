@@ -766,6 +766,8 @@ OPTION(rgw_user_quota_sync_interval, OPT_INT, 3600 * 24) // time period for accu
 OPTION(rgw_user_quota_sync_idle_users, OPT_BOOL, false) // whether stats for idle users be fully synced
 OPTION(rgw_user_quota_sync_wait_time, OPT_INT, 3600 * 24) // min time between two full stats syc for non-idle users
 
+OPTION(rgw_multipart_min_part_size, OPT_INT, 5 * 1024 * 1024) // min size for each part (except for last one) in multipart upload
+
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 
 // This will be set to true when it is safe to start threads.
