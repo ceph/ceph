@@ -23,8 +23,8 @@
 struct C_ReplicatedBackend_OnPullComplete;
 class ReplicatedBackend : public PGBackend {
   struct RPGHandle : public PGBackend::RecoveryHandle {
-    map<int, vector<PushOp> > pushes;
-    map<int, vector<PullOp> > pulls;
+    map<pg_shard_t, vector<PushOp> > pushes;
+    map<pg_shard_t, vector<PullOp> > pulls;
   };
   friend struct C_ReplicatedBackend_OnPullComplete;
 public:
@@ -73,11 +73,11 @@ public:
   virtual void dump_recovery_info(Formatter *f) const {
     {
       f->open_array_section("pull_from_peer");
-      for (map<int, set<hobject_t> >::const_iterator i = pull_from_peer.begin();
+      for (map<pg_shard_t, set<hobject_t> >::const_iterator i = pull_from_peer.begin();
 	   i != pull_from_peer.end();
 	   ++i) {
 	f->open_object_section("pulling_from");
-	f->dump_int("pull_from", i->first);
+	f->dump_stream("pull_from") << i->first;
 	{
 	  f->open_array_section("pulls");
 	  for (set<hobject_t>::const_iterator j = i->second.begin();
@@ -96,7 +96,7 @@ public:
     }
     {
       f->open_array_section("pushing");
-      for (map<hobject_t, map<int, PushInfo> >::const_iterator i =
+      for (map<hobject_t, map<pg_shard_t, PushInfo> >::const_iterator i =
 	     pushing.begin();
 	   i != pushing.end();
 	   ++i) {
@@ -104,11 +104,11 @@ public:
 	f->dump_stream("pushing") << i->first;
 	{
 	  f->open_array_section("pushing_to");
-	  for (map<int, PushInfo>::const_iterator j = i->second.begin();
+	  for (map<pg_shard_t, PushInfo>::const_iterator j = i->second.begin();
 	       j != i->second.end();
 	       ++j) {
 	    f->open_object_section("push_progress");
-	    f->dump_stream("object_pushing") << j->first;
+	    f->dump_stream("pushing_to") << j->first;
 	    {
 	      f->open_object_section("push_info");
 	      j->second.dump(f);
@@ -157,7 +157,7 @@ private:
       }
     }
   };
-  map<hobject_t, map<int, PushInfo> > pushing;
+  map<hobject_t, map<pg_shard_t, PushInfo> > pushing;
 
   // pull
   struct PullInfo {
@@ -188,7 +188,7 @@ private:
   map<hobject_t, PullInfo> pulling;
 
   // Reverse mapping from osd peer to objects beging pulled from that peer
-  map<int, set<hobject_t> > pull_from_peer;
+  map<pg_shard_t, set<hobject_t> > pull_from_peer;
 
   void sub_op_push(OpRequestRef op);
   void sub_op_push_reply(OpRequestRef op);
@@ -206,13 +206,13 @@ private:
   void do_pull(OpRequestRef op);
   void do_push_reply(OpRequestRef op);
 
-  bool handle_push_reply(int peer, PushReplyOp &op, PushOp *reply);
-  void handle_pull(int peer, PullOp &op, PushOp *reply);
+  bool handle_push_reply(pg_shard_t peer, PushReplyOp &op, PushOp *reply);
+  void handle_pull(pg_shard_t peer, PullOp &op, PushOp *reply);
   bool handle_pull_response(
-    int from, PushOp &op, PullOp *response,
+    pg_shard_t from, PushOp &op, PullOp *response,
     list<hobject_t> *to_continue,
     ObjectStore::Transaction *t);
-  void handle_push(int from, PushOp &op, PushReplyOp *response,
+  void handle_push(pg_shard_t from, PushOp &op, PushReplyOp *response,
 		   ObjectStore::Transaction *t);
 
   static void trim_pushed_data(const interval_set<uint64_t> &copy_subset,
@@ -220,18 +220,18 @@ private:
 			       bufferlist data_received,
 			       interval_set<uint64_t> *intervals_usable,
 			       bufferlist *data_usable);
-  void _failed_push(int from, const hobject_t &soid);
+  void _failed_push(pg_shard_t from, const hobject_t &soid);
 
-  void send_pushes(int prio, map<int, vector<PushOp> > &pushes);
+  void send_pushes(int prio, map<pg_shard_t, vector<PushOp> > &pushes);
   void prep_push_op_blank(const hobject_t& soid, PushOp *op);
-  int send_push_op_legacy(int priority, int peer,
+  int send_push_op_legacy(int priority, pg_shard_t peer,
 			  PushOp &pop);
-  int send_pull_legacy(int priority, int peer,
+  int send_pull_legacy(int priority, pg_shard_t peer,
 		       const ObjectRecoveryInfo& recovery_info,
 		       ObjectRecoveryProgress progress);
   void send_pulls(
     int priority,
-    map<int, vector<PullOp> > &pulls);
+    map<pg_shard_t, vector<PullOp> > &pulls);
 
   int build_push_op(const ObjectRecoveryInfo &recovery_info,
 		    const ObjectRecoveryProgress &progress,
@@ -265,13 +265,13 @@ private:
     ObjectContextRef obj,
     RPGHandle *h);
   void prep_push_to_replica(
-    ObjectContextRef obc, const hobject_t& soid, int peer,
+    ObjectContextRef obc, const hobject_t& soid, pg_shard_t peer,
     PushOp *pop);
   void prep_push(ObjectContextRef obc,
-		 const hobject_t& oid, int dest,
+		 const hobject_t& oid, pg_shard_t dest,
 		 PushOp *op);
   void prep_push(ObjectContextRef obc,
-		 const hobject_t& soid, int peer,
+		 const hobject_t& soid, pg_shard_t peer,
 		 eversion_t version,
 		 interval_set<uint64_t> &data_subset,
 		 map<hobject_t, interval_set<uint64_t> >& clone_subsets,
@@ -291,8 +291,8 @@ private:
    */
   struct InProgressOp {
     tid_t tid;
-    set<int> waiting_for_commit;
-    set<int> waiting_for_applied;
+    set<pg_shard_t> waiting_for_commit;
+    set<pg_shard_t> waiting_for_applied;
     Context *on_commit;
     Context *on_applied;
     OpRequestRef op;
@@ -380,24 +380,27 @@ private:
   void sub_op_modify_applied(RepModifyRef rm);
   void sub_op_modify_commit(RepModifyRef rm);
   bool scrub_supported() { return true; }
-  void be_scan_list(ScrubMap &map, const vector<hobject_t> &ls, bool deep,
+
+  void be_scan_list(
+    ScrubMap &map, const vector<hobject_t> &ls, bool deep,
     ThreadPool::TPHandle &handle);
   enum scrub_error_type be_compare_scrub_objects(
-				const ScrubMap::object &auth,
-				const ScrubMap::object &candidate,
-				ostream &errorstream);
-  map<int, ScrubMap *>::const_iterator be_select_auth_object(
+    const ScrubMap::object &auth,
+    const ScrubMap::object &candidate,
+    ostream &errorstream);
+  map<pg_shard_t, ScrubMap *>::const_iterator be_select_auth_object(
     const hobject_t &obj,
-    const map<int,ScrubMap*> &maps);
-  void be_compare_scrubmaps(const map<int,ScrubMap*> &maps,
-			    map<hobject_t, set<int> > &missing,
-			    map<hobject_t, set<int> > &inconsistent,
-			    map<hobject_t, int> &authoritative,
-			    map<hobject_t, set<int> > &invalid_snapcolls,
-			    int &shallow_errors, int &deep_errors,
-			    const pg_t pgid,
-			    const vector<int> &acting,
-			    ostream &errorstream);
+    const map<pg_shard_t,ScrubMap*> &maps);
+  void be_compare_scrubmaps(
+    const map<pg_shard_t,ScrubMap*> &maps,
+    map<hobject_t, set<pg_shard_t> > &missing,
+    map<hobject_t, set<pg_shard_t> > &inconsistent,
+    map<hobject_t, pg_shard_t> &authoritative,
+    map<hobject_t, set<pg_shard_t> > &invalid_snapcolls,
+    int &shallow_errors, int &deep_errors,
+    const spg_t pgid,
+    const vector<int> &acting,
+    ostream &errorstream);
 };
 
 #endif

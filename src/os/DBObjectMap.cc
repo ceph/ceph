@@ -248,9 +248,9 @@ bool DBObjectMap::parse_ghobject_key_v0(const string &in, coll_t *c,
 
   *c = coll_t(coll);
   int64_t pool = -1;
-  pg_t pg;
+  spg_t pg;
   if (c->is_pg_prefix(pg))
-    pool = (int64_t)pg.pool();
+    pool = (int64_t)pg.pgid.pool();
   (*oid) = ghobject_t(hobject_t(name, key, snap, hash, pool, ""));
   return true;
 }

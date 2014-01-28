@@ -76,10 +76,10 @@ void ReplicatedBackend::recover_object(
 
 void ReplicatedBackend::check_recovery_sources(const OSDMapRef osdmap)
 {
-  for(map<int, set<hobject_t> >::iterator i = pull_from_peer.begin();
+  for(map<pg_shard_t, set<hobject_t> >::iterator i = pull_from_peer.begin();
       i != pull_from_peer.end();
       ) {
-    if (osdmap->is_down(i->first)) {
+    if (osdmap->is_down(i->first.osd)) {
       dout(10) << "check_recovery_sources resetting pulls from osd." << i->first
 	       << ", osdmap has it marked down" << dendl;
       for (set<hobject_t>::iterator j = i->second.begin();
@@ -504,6 +504,14 @@ void ReplicatedBackend::submit_transaction(
       )
     ).first->second;
 
+  op.waiting_for_applied.insert(
+    parent->get_actingbackfill_shards().begin(),
+    parent->get_actingbackfill_shards().end());
+  op.waiting_for_commit.insert(
+    parent->get_actingbackfill_shards().begin(),
+    parent->get_actingbackfill_shards().end());
+
+
   issue_op(
     soid,
     at_version,
@@ -516,10 +524,6 @@ void ReplicatedBackend::submit_transaction(
     log_entries,
     &op,
     op_t);
-
-  // add myself to gather set
-  op.waiting_for_applied.insert(osd->whoami);
-  op.waiting_for_commit.insert(osd->whoami);
 
   ObjectStore::Transaction local_t;
   if (t->get_temp_added().size()) {
@@ -553,7 +557,7 @@ void ReplicatedBackend::op_applied(
   if (op->op)
     op->op->mark_event("op_applied");
 
-  op->waiting_for_applied.erase(get_parent()->whoami());
+  op->waiting_for_applied.erase(get_parent()->whoami_shard());
   parent->op_applied(op->v);
 
   if (op->waiting_for_applied.empty()) {
@@ -573,7 +577,7 @@ void ReplicatedBackend::op_commit(
   if (op->op)
     op->op->mark_event("op_commit");
 
-  op->waiting_for_commit.erase(get_parent()->whoami());
+  op->waiting_for_commit.erase(get_parent()->whoami_shard());
 
   if (op->waiting_for_commit.empty()) {
     op->on_commit->complete(0);
@@ -594,7 +598,7 @@ void ReplicatedBackend::sub_op_modify_reply(OpRequestRef op)
 
   // must be replication.
   tid_t rep_tid = r->get_tid();
-  int fromosd = r->get_source().num();
+  pg_shard_t from = r->from;
 
   if (in_progress_ops.count(rep_tid)) {
     map<tid_t, InProgressOp>::iterator iter =
@@ -607,30 +611,30 @@ void ReplicatedBackend::sub_op_modify_reply(OpRequestRef op)
     if (m)
       dout(7) << __func__ << ": tid " << ip_op.tid << " op " //<< *m
 	      << " ack_type " << (int)r->ack_type
-	      << " from osd." << fromosd
+	      << " from " << from
 	      << dendl;
     else
       dout(7) << __func__ << ": tid " << ip_op.tid << " (no op) "
 	      << " ack_type " << (int)r->ack_type
-	      << " from osd." << fromosd
+	      << " from " << from
 	      << dendl;
 
     // oh, good.
 
     if (r->ack_type & CEPH_OSD_FLAG_ONDISK) {
-      assert(ip_op.waiting_for_commit.count(fromosd));
-      ip_op.waiting_for_commit.erase(fromosd);
+      assert(ip_op.waiting_for_commit.count(from));
+      ip_op.waiting_for_commit.erase(from);
       if (ip_op.op)
 	ip_op.op->mark_event("sub_op_commit_rec");
     } else {
-      assert(ip_op.waiting_for_applied.count(fromosd));
+      assert(ip_op.waiting_for_applied.count(from));
       if (ip_op.op)
 	ip_op.op->mark_event("sub_op_applied_rec");
     }
-    ip_op.waiting_for_applied.erase(fromosd);
+    ip_op.waiting_for_applied.erase(from);
 
     parent->update_peer_last_complete_ondisk(
-      fromosd,
+      from,
       r->get_last_complete_ondisk());
 
     if (ip_op.waiting_for_applied.empty() &&
@@ -667,12 +671,21 @@ void ReplicatedBackend::be_scan_list(
     hobject_t poid = *p;
 
     struct stat st;
-    int r = osd->store->stat(coll, poid, &st, true);
+    int r = store->stat(
+      coll,
+      ghobject_t(
+	poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+      &st,
+      true);
     if (r == 0) {
       ScrubMap::object &o = map.objects[poid];
       o.size = st.st_size;
       assert(!o.negative);
-      osd->store->getattrs(coll, poid, o.attrs);
+      store->getattrs(
+	coll,
+	ghobject_t(
+	  poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+	o.attrs);
 
       // calculate the CRC32 on deep scrubs
       if (deep) {
@@ -680,9 +693,14 @@ void ReplicatedBackend::be_scan_list(
         bufferlist bl, hdrbl;
         int r;
         __u64 pos = 0;
-        while ( (r = osd->store->read(coll, poid, pos,
-                                       cct->_conf->osd_deep_scrub_stride, bl,
-		                      true)) > 0) {
+        while ( (
+	    r = store->read(
+	      coll,
+	      ghobject_t(
+		poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+	      pos,
+	      cct->_conf->osd_deep_scrub_stride, bl,
+	      true)) > 0) {
 	  handle.reset_tp_timeout();
           h << bl;
           pos += bl.length();
@@ -697,7 +715,11 @@ void ReplicatedBackend::be_scan_list(
         o.digest_present = true;
 
         bl.clear();
-        r = osd->store->omap_get_header(coll, poid, &hdrbl, true);
+        r = store->omap_get_header(
+	  coll,
+	  ghobject_t(
+	    poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+	  &hdrbl, true);
         if (r == 0) {
           dout(25) << "CRC header " << string(hdrbl.c_str(), hdrbl.length())
              << dendl;
@@ -710,8 +732,10 @@ void ReplicatedBackend::be_scan_list(
 	  o.read_error = true;
 	}
 
-        ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
-          coll, poid);
+        ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(
+          coll,
+	  ghobject_t(
+	    poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
         assert(iter);
 	uint64_t keys_scanned = 0;
         for (iter->seek_to_first(); iter->valid() ; iter->next()) {
@@ -756,9 +780,9 @@ void ReplicatedBackend::be_scan_list(
 }
 
 enum scrub_error_type ReplicatedBackend::be_compare_scrub_objects(
-				const ScrubMap::object &auth,
-				const ScrubMap::object &candidate,
-				ostream &errorstream)
+  const ScrubMap::object &auth,
+  const ScrubMap::object &candidate,
+  ostream &errorstream)
 {
   enum scrub_error_type error = CLEAN;
   if (candidate.read_error) {
@@ -824,12 +848,13 @@ enum scrub_error_type ReplicatedBackend::be_compare_scrub_objects(
   return error;
 }
 
-map<int, ScrubMap *>::const_iterator ReplicatedBackend::be_select_auth_object(
+map<pg_shard_t, ScrubMap *>::const_iterator
+  ReplicatedBackend::be_select_auth_object(
   const hobject_t &obj,
-  const map<int,ScrubMap*> &maps)
+  const map<pg_shard_t,ScrubMap*> &maps)
 {
-  map<int, ScrubMap *>::const_iterator auth = maps.end();
-  for (map<int, ScrubMap *>::const_iterator j = maps.begin();
+  map<pg_shard_t, ScrubMap *>::const_iterator auth = maps.end();
+  for (map<pg_shard_t, ScrubMap *>::const_iterator j = maps.begin();
        j != maps.end();
        ++j) {
     map<hobject_t, ScrubMap::object>::iterator i =
@@ -896,19 +921,19 @@ map<int, ScrubMap *>::const_iterator ReplicatedBackend::be_select_auth_object(
   return auth;
 }
 
-void ReplicatedBackend::be_compare_scrubmaps(const map<int,ScrubMap*> &maps,
-			    map<hobject_t, set<int> > &missing,
-			    map<hobject_t, set<int> > &inconsistent,
-			    map<hobject_t, int> &authoritative,
-			    map<hobject_t, set<int> > &invalid_snapcolls,
-			    int &shallow_errors,
-			    int &deep_errors,
-			    const pg_t pgid,
-			    const vector<int> &acting,
-			    ostream &errorstream)
+void ReplicatedBackend::be_compare_scrubmaps(
+  const map<pg_shard_t,ScrubMap*> &maps,
+  map<hobject_t, set<pg_shard_t> > &missing,
+  map<hobject_t, set<pg_shard_t> > &inconsistent,
+  map<hobject_t, pg_shard_t> &authoritative,
+  map<hobject_t, set<pg_shard_t> > &invalid_snapcolls,
+  int &shallow_errors, int &deep_errors,
+  const spg_t pgid,
+  const vector<int> &acting,
+  ostream &errorstream)
 {
   map<hobject_t,ScrubMap::object>::const_iterator i;
-  map<int, ScrubMap *>::const_iterator j;
+  map<pg_shard_t, ScrubMap *>::const_iterator j;
   set<hobject_t> master_set;
 
   // Construct master set
@@ -922,10 +947,11 @@ void ReplicatedBackend::be_compare_scrubmaps(const map<int,ScrubMap*> &maps,
   for (set<hobject_t>::const_iterator k = master_set.begin();
        k != master_set.end();
        ++k) {
-    map<int, ScrubMap *>::const_iterator auth = be_select_auth_object(*k, maps);
+    map<pg_shard_t, ScrubMap *>::const_iterator auth =
+      be_select_auth_object(*k, maps);
     assert(auth != maps.end());
-    set<int> cur_missing;
-    set<int> cur_inconsistent;
+    set<pg_shard_t> cur_missing;
+    set<pg_shard_t> cur_inconsistent;
     for (j = maps.begin(); j != maps.end(); ++j) {
       if (j == auth)
 	continue;
@@ -941,14 +967,13 @@ void ReplicatedBackend::be_compare_scrubmaps(const map<int,ScrubMap*> &maps,
 	    ++shallow_errors;
           else
 	    ++deep_errors;
-	  errorstream << pgid << " osd." << acting[j->first]
+	  errorstream << pgid << " shard " << j->first
 		      << ": soid " << *k << " " << ss.str() << std::endl;
 	}
       } else {
 	cur_missing.insert(j->first);
 	++shallow_errors;
-	errorstream << pgid
-		    << " osd." << acting[j->first]
+	errorstream << pgid << " shard " << j->first
 		    << " missing " << *k << std::endl;
       }
     }

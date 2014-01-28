@@ -225,17 +225,17 @@ public:
     ObjectStore::Transaction *t
     );
   void on_peer_recover(
-    int peer,
+    pg_shard_t peer,
     const hobject_t &oid,
     const ObjectRecoveryInfo &recovery_info,
     const object_stat_sum_t &stat
     );
   void begin_peer_recover(
-    int peer,
+    pg_shard_t peer,
     const hobject_t oid);
   void on_global_recover(
     const hobject_t &oid);
-  void failed_push(int from, const hobject_t &soid);
+  void failed_push(pg_shard_t from, const hobject_t &soid);
   void cancel_pull(const hobject_t &soid);
 
   template <typename T>
@@ -288,27 +288,27 @@ public:
     tls.push_back(t);
     osd->store->queue_transaction(osr.get(), t, 0, 0, 0, op);
   }
-  epoch_t get_epoch() {
+  epoch_t get_epoch() const {
     return get_osdmap()->get_epoch();
   }
-  const vector<int> &get_actingbackfill() {
+  const set<pg_shard_t> &get_actingbackfill_shards() const {
     return actingbackfill;
   }
   std::string gen_dbg_prefix() const { return gen_prefix(); }
   
-  const map<hobject_t, set<int> > &get_missing_loc() {
+  const map<hobject_t, set<pg_shard_t> > &get_missing_loc_shards() const {
     return missing_loc;
   }
-  const map<int, pg_missing_t> &get_peer_missing() {
+  const map<pg_shard_t, pg_missing_t> &get_shard_missing() const {
     return peer_missing;
   }
-  const map<int, pg_info_t> &get_peer_info() {
+  const map<pg_shard_t, pg_info_t> &get_shard_info() const {
     return peer_info;
   }
-  const pg_missing_t &get_local_missing() {
+  const pg_missing_t &get_local_missing() const {
     return pg_log.get_missing();
   }
-  const PGLog &get_log() {
+  const PGLog &get_log() const {
     return pg_log;
   }
   bool pgb_is_primary() const {
@@ -337,8 +337,10 @@ public:
     const eversion_t &applied_version);
 
   bool should_send_op(
-    int peer,
+    pg_shard_t peer,
     const hobject_t &hoid) {
+    if (peer == get_primary())
+      return true;
     assert(peer_info.count(peer));
     bool should_send = hoid.pool != (int64_t)info.pgid.pool() ||
       hoid <= MAX(last_backfill_started, peer_info[peer].last_backfill);
@@ -348,7 +350,7 @@ public:
   }
   
   void update_peer_last_complete_ondisk(
-    int fromosd,
+    pg_shard_t fromosd,
     eversion_t lcod) {
     peer_last_complete_ondisk[fromosd] = lcod;
   }
@@ -366,8 +368,14 @@ public:
   void schedule_work(
     GenContext<ThreadPool::TPHandle&> *c);
 
-  int whoami() const {
-    return osd->whoami;
+  pg_shard_t whoami_shard() const {
+    return pg_whoami;
+  }
+  spg_t primary_spg_t() const {
+    return spg_t(info.pgid.pgid, primary.shard);
+  }
+  pg_shard_t primary_shard() const {
+    return primary;
   }
 
   void send_message_osd_cluster(
@@ -852,14 +860,14 @@ protected:
 
   void dump_recovery_info(Formatter *f) const {
     f->open_array_section("backfill_targets");
-    for (vector<int>::const_iterator p = backfill_targets.begin();
+    for (set<pg_shard_t>::const_iterator p = backfill_targets.begin();
         p != backfill_targets.end(); ++p)
-      f->dump_int("osd", *p);
+      f->dump_stream("replica") << *p;
     f->close_section();
     f->open_array_section("waiting_on_backfill");
-    for (set<int>::const_iterator p = waiting_on_backfill.begin();
+    for (set<pg_shard_t>::const_iterator p = waiting_on_backfill.begin();
         p != waiting_on_backfill.end(); ++p)
-      f->dump_int("osd", *p);
+      f->dump_stream("osd") << *p;
     f->close_section();
     f->dump_stream("last_backfill_started") << last_backfill_started;
     {
@@ -869,9 +877,10 @@ protected:
     }
     {
       f->open_array_section("peer_backfill_info");
-      for (map<int, BackfillInterval>::const_iterator pbi = peer_backfill_info.begin();
+      for (map<pg_shard_t, BackfillInterval>::const_iterator pbi =
+	     peer_backfill_info.begin();
           pbi != peer_backfill_info.end(); ++pbi) {
-        f->dump_int("osd", pbi->first);
+        f->dump_stream("osd") << pbi->first;
         f->open_object_section("BackfillInterval");
           pbi->second.dump(f);
         f->close_section();
@@ -1011,9 +1020,9 @@ protected:
 
   void prep_backfill_object_push(
     hobject_t oid, eversion_t v, ObjectContextRef obc,
-    vector<int> peer,
+    vector<pg_shard_t> peers,
     PGBackend::RecoveryHandle *h);
-  void send_remove_op(const hobject_t& oid, eversion_t v, int peer);
+  void send_remove_op(const hobject_t& oid, eversion_t v, pg_shard_t peer);
 
 
   struct C_OSD_OndiskWriteUnlock : public Context {
@@ -1140,7 +1149,7 @@ protected:
 
 public:
   ReplicatedPG(OSDService *o, OSDMapRef curmap,
-	       const PGPool &_pool, pg_t p, const hobject_t& oid,
+	       const PGPool &_pool, spg_t p, const hobject_t& oid,
 	       const hobject_t& ioid);
   ~ReplicatedPG() {}
 
@@ -1182,7 +1191,7 @@ public:
     return pgbackend->temp_colls(out);
   }
   void split_colls(
-    pg_t child,
+    spg_t child,
     int split_bits,
     int seed,
     ObjectStore::Transaction *t) {

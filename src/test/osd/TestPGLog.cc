@@ -670,7 +670,7 @@ TEST_F(PGLogTest, merge_log) {
     ObjectStore::Transaction t;
     pg_log_t olog;
     pg_info_t oinfo;
-    int fromosd = -1;
+    pg_shard_t fromosd;
     pg_info_t info;
     list<hobject_t> remove_snap;
     bool dirty_info = false;
@@ -718,7 +718,7 @@ TEST_F(PGLogTest, merge_log) {
     ObjectStore::Transaction t;
     pg_log_t olog;
     pg_info_t oinfo;
-    int fromosd = -1;
+    pg_shard_t fromosd;
     pg_info_t info;
     list<hobject_t> remove_snap;
     bool dirty_info = false;
@@ -805,7 +805,7 @@ TEST_F(PGLogTest, merge_log) {
     ObjectStore::Transaction t;
     pg_log_t olog;
     pg_info_t oinfo;
-    int fromosd = -1;
+    pg_shard_t fromosd;
     pg_info_t info;
     list<hobject_t> remove_snap;
     bool dirty_info = false;
@@ -900,7 +900,7 @@ TEST_F(PGLogTest, merge_log) {
     ObjectStore::Transaction t;
     pg_log_t olog;
     pg_info_t oinfo;
-    int fromosd = -1;
+    pg_shard_t fromosd;
     pg_info_t info;
     list<hobject_t> remove_snap;
     bool dirty_info = false;
@@ -1015,7 +1015,7 @@ TEST_F(PGLogTest, merge_log) {
     ObjectStore::Transaction t;
     pg_log_t olog;
     pg_info_t oinfo;
-    int fromosd = -1;
+    pg_shard_t fromosd;
     pg_info_t info;
     list<hobject_t> remove_snap;
     bool dirty_info = false;
@@ -1088,7 +1088,7 @@ TEST_F(PGLogTest, merge_log) {
     ObjectStore::Transaction t;
     pg_log_t olog;
     pg_info_t oinfo;
-    int fromosd = -1;
+    pg_shard_t fromosd;
     pg_info_t info;
     list<hobject_t> remove_snap;
     bool dirty_info = false;
@@ -1129,7 +1129,7 @@ TEST_F(PGLogTest, merge_log) {
     ObjectStore::Transaction t;
     pg_log_t olog;
     pg_info_t oinfo;
-    int fromosd = -1;
+    pg_shard_t fromosd;
     pg_info_t info;
     list<hobject_t> remove_snap;
     bool dirty_info = false;
@@ -1176,7 +1176,7 @@ TEST_F(PGLogTest, proc_replica_log) {
     pg_log_t olog;
     pg_info_t oinfo;
     pg_missing_t omissing;
-    int from = -1;
+    pg_shard_t from;
 
     eversion_t last_update(1, 1);
     oinfo.last_update = last_update;
@@ -1228,7 +1228,7 @@ TEST_F(PGLogTest, proc_replica_log) {
     pg_log_t olog;
     pg_info_t oinfo;
     pg_missing_t omissing;
-    int from = -1;
+    pg_shard_t from;
 
     {
       pg_log_entry_t e;
@@ -1279,7 +1279,7 @@ TEST_F(PGLogTest, proc_replica_log) {
     pg_log_t olog;
     pg_info_t oinfo;
     pg_missing_t omissing;
-    int from = -1;
+    pg_shard_t from;
 
     hobject_t divergent_object;
 
@@ -1408,7 +1408,7 @@ TEST_F(PGLogTest, proc_replica_log) {
     pg_log_t olog;
     pg_info_t oinfo;
     pg_missing_t omissing;
-    int from = -1;
+    pg_shard_t from;
 
     eversion_t last_update(1, 2);
 
@@ -1491,7 +1491,7 @@ TEST_F(PGLogTest, proc_replica_log) {
     pg_log_t olog;
     pg_info_t oinfo;
     pg_missing_t omissing;
-    int from = -1;
+    pg_shard_t from;
 
     eversion_t last_update(1, 2);
     hobject_t divergent_object;
@@ -1579,7 +1579,7 @@ TEST_F(PGLogTest, proc_replica_log) {
     pg_log_t olog;
     pg_info_t oinfo;
     pg_missing_t omissing;
-    int from = -1;
+    pg_shard_t from;
 
     eversion_t last_update(1, 2);
     hobject_t divergent_object;
