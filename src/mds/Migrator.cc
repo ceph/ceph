@@ -511,15 +511,16 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	break;
       }
     } else {
-      if (q->second.state == IMPORT_ABORTING &&
-	  q->second.bystanders.count(who)) {
-	assert(dir);
-	dout(10) << "faking export_notify_ack from mds." << who
-		 << " on aborting import " << *dir << " from mds." << q->second.peer
-		 << dendl;
+      if (q->second.bystanders.count(who)) {
 	q->second.bystanders.erase(who);
-	if (q->second.bystanders.empty()) {
-	  import_reverse_unfreeze(dir);
+	if (q->second.state == IMPORT_ABORTING) {
+	  assert(dir);
+	  dout(10) << "faking export_notify_ack from mds." << who
+		   << " on aborting import " << *dir << " from mds." << q->second.peer
+		   << dendl;
+	  if (q->second.bystanders.empty()) {
+	    import_reverse_unfreeze(dir);
+	  }
 	}
       }
     }
