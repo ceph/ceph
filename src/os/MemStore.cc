@@ -289,8 +289,14 @@ int MemStore::read(
     uint64_t offset,
     size_t len,
     bufferlist& bl,
-    bool allow_eio)
+    bool allow_eio,
+    int fd,
+    string *fullpath)
 {
+  // the MemStore doesn't use file descriptors
+  assert(fd == -1);
+  assert(fullpath == NULL);
+
   dout(10) << __func__ << " " << cid << " " << oid << " "
 	   << offset << "~" << len << dendl;
   CollectionRef c = get_collection(cid);
@@ -338,7 +344,9 @@ int MemStore::fiemap(coll_t cid, const ghobject_t& oid,
 }
 
 int MemStore::getattr(coll_t cid, const ghobject_t& oid,
-		      const char *name, bufferptr& value)
+		      const char *name, bufferptr& value,
+		      // MemStore ignores these params
+		      int *fd, string *fullpath)
 {
   dout(10) << __func__ << " " << cid << " " << oid << " " << name << dendl;
   CollectionRef c = get_collection(cid);
