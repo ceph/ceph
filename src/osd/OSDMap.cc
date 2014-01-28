@@ -1048,8 +1048,8 @@ void OSDMap::remove_redundant_temporaries(CephContext *cct, const OSDMap& osdmap
     }
   }
   if (!osdmap.primary_temp->empty()) {
-    OSDMap templess(osdmap);
-    templess.primary_temp.reset(new map<pg_t,int>(*osdmap.primary_temp));
+    OSDMap templess;
+    templess.deepish_copy_from(osdmap);
     templess.primary_temp->clear();
     for (map<pg_t,int>::iterator p = osdmap.primary_temp->begin();
         p != osdmap.primary_temp->end();
