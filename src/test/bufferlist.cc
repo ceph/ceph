@@ -1522,7 +1522,7 @@ TEST(BufferList, splice) {
     bl.push_back(ptr);
   }
   EXPECT_EQ((unsigned)4, bl.buffers().size());
-  EXPECT_THROW(bl.splice(0, 0), FailedAssertion);
+  bl.splice(0, 0);
 
   bufferlist other;
   other.append('X');
