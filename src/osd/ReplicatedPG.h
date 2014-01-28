@@ -294,6 +294,13 @@ public:
   const set<pg_shard_t> &get_actingbackfill_shards() const {
     return actingbackfill;
   }
+  const set<pg_shard_t> &get_acting_shards() const {
+    return actingset;
+  }
+  const set<pg_shard_t> &get_backfill_shards() const {
+    return backfill_targets;
+  }
+
   std::string gen_dbg_prefix() const { return gen_prefix(); }
   
   const map<hobject_t, set<pg_shard_t> > &get_missing_loc_shards() const {
