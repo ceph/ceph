@@ -637,7 +637,7 @@ ceph_test_cls_rgw_meta_LDADD = \
 	-lcurl -luuid -lexpat \
 	libcls_version_client.a libcls_log_client.a \
 	libcls_statelog_client.a libcls_refcount_client.la \
-	libcls_rgw_client.la libcls_lock_client.la
+	libcls_rgw_client.la libcls_user_client.a libcls_lock_client.la
 ceph_test_cls_rgw_meta_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_rgw_meta
 
@@ -648,7 +648,7 @@ ceph_test_cls_rgw_log_LDADD = \
 	-lcurl -luuid -lexpat \
 	libcls_version_client.a libcls_log_client.a \
 	libcls_statelog_client.a libcls_refcount_client.la \
-	libcls_rgw_client.la libcls_lock_client.la
+	libcls_rgw_client.la libcls_user_client.a libcls_lock_client.la
 ceph_test_cls_rgw_log_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_rgw_log
 
@@ -659,7 +659,7 @@ ceph_test_cls_rgw_opstate_LDADD = \
 	-lcurl -luuid -lexpat \
 	libcls_version_client.a libcls_log_client.a \
 	libcls_statelog_client.a libcls_refcount_client.la \
-	libcls_rgw_client.la libcls_lock_client.la
+	libcls_rgw_client.la libcls_user_client.a libcls_lock_client.la
 ceph_test_cls_rgw_opstate_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_rgw_opstate
 endif # WITH_RADOSGW
