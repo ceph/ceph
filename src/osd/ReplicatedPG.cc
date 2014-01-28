@@ -10476,8 +10476,7 @@ bool ReplicatedPG::agent_choose_mode()
   else
     evict_target -= MIN(evict_target, evict_slop);
 
-  if (full_micro > 1000000 ||
-      evict_target >= 1000000) {
+  if (full_micro > 1000000) {
     // evict anything clean
     evict_mode = TierAgentState::EVICT_MODE_FULL;
     evict_effort = 1000000;
