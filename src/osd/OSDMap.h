@@ -622,6 +622,12 @@ public:
     assert(up.empty() || up_primary == up.front());
     assert(acting.empty() || acting_primary == acting.front());
   }
+  bool pg_is_ec(pg_t pg) const {
+    map<int64_t, pg_pool_t>::const_iterator i = pools.find(pg.pool());
+    assert(i != pools.end());
+    return i->second.ec_pool();
+  }
+  spg_t get_primary_shard(pg_t pgid) const { return spg_t(); /* TODOSAM: fix */}
 
   int64_t lookup_pg_pool_name(const string& name) {
     if (name_pool.count(name))
