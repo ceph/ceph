@@ -1186,6 +1186,20 @@ TEST(pg_pool_t_test, get_pg_num_divisor) {
   ASSERT_EQ(16u, p.get_pg_num_divisor(pg_t(11, 1)));
 }
 
+TEST(pg_pool_t_test, get_random_pg_position) {
+  srand(getpid());
+  for (int i = 0; i < 100; ++i) {
+    pg_pool_t p;
+    p.set_pg_num(1 + (rand() % 1000));
+    p.set_pgp_num(p.get_pg_num());
+    pg_t pgid(rand() % p.get_pg_num(), 1);
+    uint32_t h = p.get_random_pg_position(pgid, rand());
+    uint32_t ps = p.raw_hash_to_pg(h);
+    cout << p.get_pg_num() << " " << pgid << ": "
+	 << h << " -> " << pg_t(ps, 1) << std::endl;
+    ASSERT_EQ(pgid.ps(), ps);
+  }
+}
 
 /*
  * Local Variables:
