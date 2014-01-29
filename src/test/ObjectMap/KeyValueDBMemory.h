@@ -19,6 +19,8 @@ public:
   KeyValueDBMemory(KeyValueDBMemory *db) : db(db->db) { }
   virtual ~KeyValueDBMemory() { }
 
+  virtual int init(ostream &out, bool create_if_missing) {}
+
   int get(
     const string &prefix,
     const std::set<string> &key,
