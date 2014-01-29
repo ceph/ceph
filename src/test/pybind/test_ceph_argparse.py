@@ -695,37 +695,38 @@ class TestOSD(TestArgparse):
                                        tunable])
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
                                                     'tunables']))
-        assert_equal(None, validate_command(sigdict, ['osd', 'crush',
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+													  'tunables',
                                                       'default', 'toomany']))
 
     def test_crush_rule_create_simple(self):
         self.assert_valid_command(['osd', 'crush', 'rule', 'create-simple',
                                    'AZaz09-_.', 'AZaz09-_.', 'AZaz09-_.'])
-        assert_equal(None, validate_command(sigdict, ['osd', 'crush',
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
                                                       'create-simple']))
-        assert_equal(None, validate_command(sigdict, ['osd', 'crush',
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
                                                       'create-simple',
                                                       'AZaz09-_.']))
-        assert_equal(None, validate_command(sigdict, ['osd', 'crush',
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
                                                       'create-simple',
                                                       'AZaz09-_.',
                                                       'AZaz09-_.']))
-        assert_equal(None, validate_command(sigdict, ['osd', 'crush',
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
                                                       'create-simple',
                                                       '!!!',
                                                       'AZaz09-_.',
                                                       'AZaz09-_.']))
-        assert_equal(None, validate_command(sigdict, ['osd', 'crush',
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
                                                       'create-simple',
                                                       'AZaz09-_.',
                                                       '|||',
                                                       'AZaz09-_.']))
-        assert_equal(None, validate_command(sigdict, ['osd', 'crush',
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
                                                       'create-simple',
                                                       'AZaz09-_.',
                                                       'AZaz09-_.',
                                                       '+++']))
-        assert_equal(None, validate_command(sigdict, ['osd', 'crush',
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
                                                       'create-simple',
                                                       'AZaz09-_.',
                                                       'AZaz09-_.',
