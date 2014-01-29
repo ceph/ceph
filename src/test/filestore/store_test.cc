@@ -18,6 +18,7 @@
 #include <time.h>
 #include <sys/mount.h>
 #include "os/FileStore.h"
+#include "os/KeyValueStore.h"
 #include "include/Context.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
@@ -33,7 +34,9 @@
 #include "include/unordered_map.h"
 typedef boost::mt11213b gen_type;
 
-class StoreTest : public ::testing::Test {
+#if GTEST_HAS_PARAM_TEST
+
+class StoreTest : public ::testing::TestWithParam<const char*> {
 public:
   boost::scoped_ptr<ObjectStore> store;
 
@@ -46,7 +49,10 @@ public:
       return;
     }
 
-    ObjectStore *store_ = new FileStore(string("store_test_temp_dir"), string("store_test_temp_journal"));
+    ObjectStore *store_ = ObjectStore::create(g_ceph_context,
+                                              string(GetParam()),
+                                              string("store_test_temp_dir"),
+                                              string("store_test_temp_journal"));
     store.reset(store_);
     EXPECT_EQ(store->mkfs(), 0);
     EXPECT_EQ(store->mount(), 0);
@@ -68,7 +74,7 @@ bool sorted(const vector<ghobject_t> &in) {
   return true;
 }
 
-TEST_F(StoreTest, SimpleColTest) {
+TEST_P(StoreTest, SimpleColTest) {
   coll_t cid = coll_t("initial");
   int r = 0;
   {
@@ -101,7 +107,7 @@ TEST_F(StoreTest, SimpleColTest) {
   }
 }
 
-TEST_F(StoreTest, SimpleObjectTest) {
+TEST_P(StoreTest, SimpleObjectTest) {
   int r;
   coll_t cid = coll_t("coll");
   {
@@ -129,7 +135,7 @@ TEST_F(StoreTest, SimpleObjectTest) {
   }
 }
 
-TEST_F(StoreTest, SimpleObjectLongnameTest) {
+TEST_P(StoreTest, SimpleObjectLongnameTest) {
   int r;
   coll_t cid = coll_t("coll");
   {
@@ -157,7 +163,7 @@ TEST_F(StoreTest, SimpleObjectLongnameTest) {
   }
 }
 
-TEST_F(StoreTest, ManyObjectTest) {
+TEST_P(StoreTest, ManyObjectTest) {
   int NUM_OBJS = 2000;
   int r = 0;
   coll_t cid("blah");
@@ -468,7 +474,7 @@ public:
   }
 };
 
-TEST_F(StoreTest, Synthetic) {
+TEST_P(StoreTest, Synthetic) {
   ObjectStore::Sequencer osr("test");
   MixedGenerator gen;
   gen_type rng(time(NULL));
@@ -500,7 +506,7 @@ TEST_F(StoreTest, Synthetic) {
   test_obj.wait_for_done();
 }
 
-TEST_F(StoreTest, HashCollisionTest) {
+TEST_P(StoreTest, HashCollisionTest) {
   coll_t cid("blah");
   int r;
   {
@@ -580,7 +586,7 @@ TEST_F(StoreTest, HashCollisionTest) {
   store->apply_transaction(t);
 }
 
-TEST_F(StoreTest, OMapTest) {
+TEST_P(StoreTest, OMapTest) {
   coll_t cid("blah");
   ghobject_t hoid(hobject_t("tesomap", "", CEPH_NOSNAP, 0, 0, ""));
   int r;
@@ -676,7 +682,7 @@ TEST_F(StoreTest, OMapTest) {
   store->apply_transaction(t);
 }
 
-TEST_F(StoreTest, XattrTest) {
+TEST_P(StoreTest, XattrTest) {
   coll_t cid("blah");
   ghobject_t hoid(hobject_t("tesomap", "", CEPH_NOSNAP, 0, 0, ""));
   bufferlist big;
@@ -822,15 +828,15 @@ void colsplittest(
   ASSERT_EQ(r, 0);
 }
 
-TEST_F(StoreTest, ColSplitTest1) {
+TEST_P(StoreTest, ColSplitTest1) {
   colsplittest(store.get(), 10000, 11);
 }
-TEST_F(StoreTest, ColSplitTest2) {
+TEST_P(StoreTest, ColSplitTest2) {
   colsplittest(store.get(), 100, 7);
 }
 
 #if 0
-TEST_F(StoreTest, ColSplitTest3) {
+TEST_P(StoreTest, ColSplitTest3) {
   colsplittest(store.get(), 100000, 25);
 }
 #endif
@@ -842,7 +848,7 @@ TEST_F(StoreTest, ColSplitTest3) {
  * in order to verify that the merging correctly
  * stops at the common prefix subdir.  See bug
  * #5273 */
-TEST_F(StoreTest, TwoHash) {
+TEST_P(StoreTest, TwoHash) {
   coll_t cid("asdf");
   int r;
   {
@@ -904,7 +910,7 @@ TEST_F(StoreTest, TwoHash) {
   ASSERT_EQ(r, 0);
 }
 
-TEST_F(StoreTest, MoveRename) {
+TEST_P(StoreTest, MoveRename) {
   coll_t temp_cid("mytemp");
   hobject_t temp_oid("tmp_oid", "", CEPH_NOSNAP, 0, 0, "");
   coll_t cid("dest");
@@ -963,6 +969,24 @@ TEST_F(StoreTest, MoveRename) {
   }
 }
 
+INSTANTIATE_TEST_CASE_P(
+  ObjectStore,
+  StoreTest,
+  ::testing::Values("filestore", "keyvaluestore"));
+
+#else
+
+// Google Test may not support value-parameterized tests with some
+// compilers. If we use conditional compilation to compile out all
+// code referring to the gtest_main library, MSVC linker will not link
+// that library at all and consequently complain about missing entry
+// point defined in that library (fatal error LNK1561: entry point
+// must be defined). This dummy test keeps gtest_main linked in.
+TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
+
+#endif
+
+
 //
 // support tests for qa/workunits/filestore/filestore.sh
 //
@@ -1018,6 +1042,7 @@ TEST(EXT4StoreTest, _detect_fs) {
     EXPECT_EQ(::umount(mnt.c_str()), 0);
   }
 }
+
 
 int main(int argc, char **argv) {
   vector<const char*> args;
