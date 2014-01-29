@@ -355,7 +355,7 @@ class KeyValueStore : public ObjectStore,
  public:
 
   KeyValueStore(const std::string &base,
-                const char *internal_name = "keyvaluestore",
+                const char *internal_name = "keyvaluestore-dev",
                 bool update_to=false);
   ~KeyValueStore();
 

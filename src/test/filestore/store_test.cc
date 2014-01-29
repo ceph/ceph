@@ -972,7 +972,7 @@ TEST_P(StoreTest, MoveRename) {
 INSTANTIATE_TEST_CASE_P(
   ObjectStore,
   StoreTest,
-  ::testing::Values("filestore", "keyvaluestore"));
+  ::testing::Values("filestore", "keyvaluestore-dev"));
 
 #else
 
