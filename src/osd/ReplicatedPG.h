@@ -304,7 +304,7 @@ public:
   std::string gen_dbg_prefix() const { return gen_prefix(); }
   
   const map<hobject_t, set<pg_shard_t> > &get_missing_loc_shards() const {
-    return missing_loc;
+    return missing_loc.get_missing_locs();
   }
   const map<pg_shard_t, pg_missing_t> &get_shard_missing() const {
     return peer_missing;
@@ -1272,8 +1272,12 @@ public:
   bool same_for_modify_since(epoch_t e);
   bool same_for_rep_modify_since(epoch_t e);
 
-  bool is_missing_object(const hobject_t& oid);
-  void wait_for_missing_object(const hobject_t& oid, OpRequestRef op);
+  bool is_missing_object(const hobject_t& oid) const;
+  bool is_unreadable_object(const hobject_t &oid) const {
+    return is_missing_object(oid) ||
+      !missing_loc.readable_with_acting(oid, actingset);
+  }
+  void wait_for_unreadable_object(const hobject_t& oid, OpRequestRef op);
   void wait_for_all_missing(OpRequestRef op);
 
   bool is_degraded_object(const hobject_t& oid);

@@ -80,6 +80,18 @@ public:
     return new RPCRecPred;
   }
 
+  class RPCReadPred : public IsReadablePredicate {
+    pg_shard_t whoami;
+  public:
+    RPCReadPred(pg_shard_t whoami) : whoami(whoami) {}
+    bool operator()(const set<pg_shard_t> &have) const {
+      return have.count(whoami);
+    }
+  };
+  IsReadablePredicate *get_is_readable_predicate() {
+    return new RPCReadPred(get_parent()->whoami_shard());
+  }
+
   virtual void dump_recovery_info(Formatter *f) const {
     {
       f->open_array_section("pull_from_peer");
