@@ -1369,6 +1369,9 @@ void buffer::list::rebuild_page_aligned()
   // funky modifer
   void buffer::list::splice(unsigned off, unsigned len, list *claim_by /*, bufferlist& replace_with */)
   {    // fixme?
+    if (len == 0)
+      return;
+
     if (off >= length())
       throw end_of_buffer();
 
