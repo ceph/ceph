@@ -249,6 +249,7 @@ public:
   */
 
   void deepish_copy_from(const OSDMap& o) {
+    *this = o;
     primary_temp.reset(new map<pg_t,int>(*o.primary_temp));
     pg_temp.reset(new map<pg_t,vector<int> >(*o.pg_temp));
     osd_uuid.reset(new vector<uuid_d>(*o.osd_uuid));
