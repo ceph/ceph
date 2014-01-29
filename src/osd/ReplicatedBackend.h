@@ -492,6 +492,22 @@ private:
   bool scrub_supported() { return true; }
   void be_scan_list(ScrubMap &map, vector<hobject_t> &ls, bool deep,
     ThreadPool::TPHandle &handle);
+  enum scrub_error_type be_compare_scrub_objects(
+				ScrubMap::object &auth,
+				ScrubMap::object &candidate,
+				ostream &errorstream);
+  map<int, ScrubMap *>::const_iterator be_select_auth_object(
+    const hobject_t &obj,
+    const map<int,ScrubMap*> &maps);
+  void be_compare_scrubmaps(const map<int,ScrubMap*> &maps,
+			    map<hobject_t, set<int> > &missing,
+			    map<hobject_t, set<int> > &inconsistent,
+			    map<hobject_t, int> &authoritative,
+			    map<hobject_t, set<int> > &invalid_snapcolls,
+			    int &shallow_errors, int &deep_errors,
+			    const pg_t pgid,
+			    const vector<int> &acting,
+			    ostream &errorstream);
 };
 
 #endif
