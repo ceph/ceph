@@ -54,7 +54,7 @@ class LevelDBStore : public KeyValueDB {
 #endif
   boost::scoped_ptr<leveldb::DB> db;
 
-  int init(ostream &out, bool create_if_missing);
+  int do_open(ostream &out, bool create_if_missing);
 
   // manage async compactions
   Mutex compact_queue_lock;
@@ -154,13 +154,15 @@ public:
 
   ~LevelDBStore();
 
+  int init();
+
   /// Opens underlying db
   int open(ostream &out) {
-    return init(out, false);
+    return do_open(out, false);
   }
   /// Creates underlying db if missing and opens it
   int create_and_open(ostream &out) {
-    return init(out, true);
+    return do_open(out, true);
   }
 
   void close();
