@@ -4306,11 +4306,11 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
 	pg->pg_log.get_missing().missing.begin();
       for (; mi != mend; ++mi) {
 	fout << mi->first << " -> " << mi->second << std::endl;
-	map<hobject_t, set<pg_shard_t> >::const_iterator mli =
-	  pg->missing_loc.find(mi->first);
-	if (mli == pg->missing_loc.end())
+	if (!pg->missing_loc.needs_recovery(mi->first))
 	  continue;
-	const set<pg_shard_t> &mls(mli->second);
+	if (pg->missing_loc.is_unfound(mi->first))
+	  fout << " unfound ";
+	const set<pg_shard_t> &mls(pg->missing_loc.get_locations(mi->first));
 	if (mls.empty())
 	  continue;
 	fout << "missing_loc: " << mls << std::endl;
