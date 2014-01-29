@@ -119,6 +119,11 @@ struct cls_user_stats {
   uint64_t total_bytes;
   uint64_t total_bytes_rounded;
 
+  cls_user_stats()
+    : total_entries(0),
+      total_bytes(0),
+      total_bytes_rounded(0) {}
+
   void encode(bufferlist& bl) const {
      ENCODE_START(1, 1, bl);
     ::encode(total_entries, bl);
