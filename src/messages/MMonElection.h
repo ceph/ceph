@@ -45,11 +45,11 @@ public:
   bufferlist monmap_bl;
   set<int> quorum;
   uint64_t quorum_features;
+  bufferlist sharing_bl;
   /* the following were both used in the next branch for a while
    * on user cluster, so we've left them in for compatibility. */
   version_t defunct_one;
   version_t defunct_two;
-  bufferlist commands;
   
   MMonElection() : Message(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
     op(0), epoch(0), quorum_features(0), defunct_one(0),
@@ -75,7 +75,7 @@ public:
   }
   
   void encode_payload(uint64_t features) {
-    if (monmap_bl.length() && (features & CEPH_FEATURE_MONENC) == 0) {
+    if (monmap_bl.length() && (features != CEPH_FEATURES_ALL)) {
       // reencode old-format monmap
       MonMap t;
       t.decode(monmap_bl);
@@ -91,7 +91,7 @@ public:
     ::encode(quorum_features, payload);
     ::encode(defunct_one, payload);
     ::encode(defunct_two, payload);
-    ::encode(commands, payload);
+    ::encode(sharing_bl, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -112,7 +112,7 @@ public:
       ::decode(defunct_two, p);
     }
     if (header.version >= 5)
-      ::decode(commands, p);
+      ::decode(sharing_bl, p);
   }
   
 };
