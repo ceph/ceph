@@ -64,6 +64,10 @@ public:
   };
   typedef ceph::shared_ptr< TransactionImpl > Transaction;
 
+  virtual int init() = 0;
+  virtual int open(ostream &out) = 0;
+  virtual int create_and_open(ostream &out) = 0;
+
   virtual Transaction get_transaction() = 0;
   virtual int submit_transaction(Transaction) = 0;
   virtual int submit_transaction_sync(Transaction t) {
