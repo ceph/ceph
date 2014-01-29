@@ -115,6 +115,8 @@ class Elector {
    */
   map<int, uint64_t> acked_me;
   set<int> classic_mons;
+  /// features which a monitor must hold for us to defer to them
+  uint64_t required_features;
   /**
    * @}
    */
@@ -243,7 +245,7 @@ class Elector {
    * @post  We sent a message of type OP_VICTORY to each quorum member.
    */
   void victory();
-  
+
   /**
    * Handle a message from some other node proposing himself to become him
    * the Leader.
@@ -315,6 +317,31 @@ class Elector {
    * @param m A message with an operation type of OP_VICTORY
    */
   void handle_victory(class MMonElection *m);
+  /**
+   * Send a nak to a peer who's out of date, containing information about why.
+   *
+   * If we get a message from a peer who can't support the required quorum
+   * features, we have to ignore them. This function will at least send
+   * them a message about *why* they're being ignored -- if they're new
+   * enough to support such a message.
+   *
+   * @param m A message from a monitor not supporting required features. We
+   * take ownership of the reference.
+   */
+  void nak_old_peer(class MMonElection *m);
+  /**
+   * Handle a message from some other participant declaring
+   * we cannot join the quorum.
+   *
+   * Apparently the quorum requires some feature that we do not implement. Shut
+   * down gracefully.
+   *
+   * @pre Election is on-going.
+   * @post We've shut down.
+   *
+   * @param m A message with an operation type of OP_NAK
+   */
+  void handle_nak(class MMonElection *m);
   
  public:
   /**
@@ -323,11 +350,12 @@ class Elector {
    * @param m A Monitor instance
    */
   Elector(Monitor *m) : mon(m),
-			       expire_event(0),
-			       epoch(0),
-			       participating(true),
-			       electing_me(false),
-			       leader_acked(-1) { }
+			expire_event(0),
+			epoch(0),
+			participating(true),
+			electing_me(false),
+			required_features(0),
+			leader_acked(-1) { }
 
   /**
    * Initiate the Elector class.

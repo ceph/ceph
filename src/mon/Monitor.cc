@@ -303,6 +303,8 @@ CompatSet Monitor::get_supported_features()
   CompatSet::FeatureSet ceph_mon_feature_incompat;
   ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_BASE);
   ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_SINGLE_PAXOS);
+  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES);
+  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC);
   return CompatSet(ceph_mon_feature_compat, ceph_mon_feature_ro_compat,
 		   ceph_mon_feature_incompat);
 }
@@ -322,25 +324,7 @@ int Monitor::check_features(MonitorDBStore *store)
   CompatSet required = get_supported_features();
   CompatSet ondisk;
 
-  bufferlist features;
-  store->get(MONITOR_NAME, COMPAT_SET_LOC, features);
-  if (features.length() == 0) {
-    generic_dout(0) << "WARNING: mon fs missing feature list.\n"
-	    << "Assuming it is old-style and introducing one." << dendl;
-    //we only want the baseline ~v.18 features assumed to be on disk.
-    //If new features are introduced this code needs to disappear or
-    //be made smarter.
-    ondisk = get_legacy_features();
-
-    bufferlist bl;
-    ondisk.encode(bl);
-    MonitorDBStore::Transaction t;
-    t.put(MONITOR_NAME, COMPAT_SET_LOC, bl);
-    store->apply_transaction(t);
-  } else {
-    bufferlist::iterator it = features.begin();
-    ondisk.decode(it);
-  }
+  read_features_off_disk(store, &ondisk);
 
   if (!required.writeable(ondisk)) {
     CompatSet diff = required.unsupported(ondisk);
@@ -351,14 +335,32 @@ int Monitor::check_features(MonitorDBStore *store)
   return 0;
 }
 
+void Monitor::read_features_off_disk(MonitorDBStore *store, CompatSet *features)
+{
+  bufferlist featuresbl;
+  store->get(MONITOR_NAME, COMPAT_SET_LOC, featuresbl);
+  if (featuresbl.length() == 0) {
+    generic_dout(0) << "WARNING: mon fs missing feature list.\n"
+            << "Assuming it is old-style and introducing one." << dendl;
+    //we only want the baseline ~v.18 features assumed to be on disk.
+    //If new features are introduced this code needs to disappear or
+    //be made smarter.
+    *features = get_legacy_features();
+
+    bufferlist bl;
+    features->encode(bl);
+    MonitorDBStore::Transaction t;
+    t.put(MONITOR_NAME, COMPAT_SET_LOC, bl);
+    store->apply_transaction(t);
+  } else {
+    bufferlist::iterator it = featuresbl.begin();
+    features->decode(it);
+  }
+}
+
 void Monitor::read_features()
 {
-  bufferlist bl;
-  store->get(MONITOR_NAME, COMPAT_SET_LOC, bl);
-  assert(bl.length());
-
-  bufferlist::iterator p = bl.begin();
-  ::decode(features, p);
+  read_features_off_disk(store, &features);
   dout(10) << "features " << features << dendl;
 }
 
@@ -866,7 +868,7 @@ void Monitor::sync_obtain_latest_monmap(bufferlist &bl)
 
   dout(1) << __func__ << " obtained monmap e" << latest_monmap.epoch << dendl;
 
-  latest_monmap.encode(bl, CEPH_FEATURES_ALL);
+  latest_monmap.encode(bl, quorum_features);
 }
 
 void Monitor::sync_reset_requester()
@@ -1588,6 +1590,7 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features
 
 void Monitor::finish_election()
 {
+  apply_quorum_to_compatset_features();
   timecheck_finish();
   exited_quorum = utime_t();
   finish_contexts(g_ceph_context, waitfor_quorum);
@@ -1605,6 +1608,37 @@ void Monitor::finish_election()
   }
 }
 
+void Monitor::apply_quorum_to_compatset_features()
+{
+  CompatSet new_features(features);
+  if (quorum_features & CEPH_FEATURE_OSD_ERASURE_CODES) {
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES);
+  }
+  if (quorum_features & CEPH_FEATURE_OSDMAP_ENC) {
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC);
+  }
+
+  if (new_features.compare(features) != 0) {
+    CompatSet diff = features.unsupported(new_features);
+    dout(1) << "Enabling new quorum features: " << diff << dendl;
+    features = new_features;
+    MonitorDBStore::Transaction t;
+    write_features(t);
+    store->apply_transaction(t);
+  }
+}
+
+uint64_t Monitor::apply_compatset_features_to_quorum_requirements()
+{
+  uint64_t required_features = 0;
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES)) {
+    required_features |= CEPH_FEATURE_OSD_ERASURE_CODES;
+  }
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC)) {
+    required_features |= CEPH_FEATURE_OSDMAP_ENC;
+  }
+  return required_features;
+}
 
 void Monitor::sync_force(Formatter *f, ostream& ss)
 {
@@ -2480,7 +2514,7 @@ void Monitor::try_send_message(Message *m, const entity_inst_t& to)
   dout(10) << "try_send_message " << *m << " to " << to << dendl;
 
   bufferlist bl;
-  encode_message(m, CEPH_FEATURES_ALL, bl);  // fixme: assume peers have all features we do.
+  encode_message(m, quorum_features, bl);
 
   messenger->send_message(m, to);
 

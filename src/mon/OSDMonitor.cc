@@ -103,7 +103,7 @@ void OSDMonitor::create_initial()
   newmap.created = newmap.modified = ceph_clock_now(g_ceph_context);
 
   // encode into pending incremental
-  newmap.encode(pending_inc.fullmap);
+  newmap.encode(pending_inc.fullmap, mon->quorum_features);
 }
 
 void OSDMonitor::update_from_paxos(bool *need_bootstrap)
@@ -203,7 +203,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 
     // write out the full map for all past epochs
     bufferlist full_bl;
-    osdmap.encode(full_bl);
+    osdmap.encode(full_bl, mon->quorum_features);
     tx_size += full_bl.length();
 
     put_version_full(t, osdmap.epoch, full_bl);
@@ -555,7 +555,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::Transaction *t)
 
   // encode
   assert(get_last_committed() + 1 == pending_inc.epoch);
-  ::encode(pending_inc, bl, CEPH_FEATURES_ALL);
+  ::encode(pending_inc, bl, mon->quorum_features);
 
   /* put everything in the transaction */
   put_version(t, pending_inc.epoch, bl);
@@ -2153,7 +2153,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       } 
       rdata.append(ds);
     } else if (prefix == "osd getmap") {
-      p->encode(rdata);
+      p->encode(rdata, m->get_connection()->get_features());
       ss << "got osdmap epoch " << p->get_epoch();
     } else if (prefix == "osd getcrushmap") {
       p->crush->encode(rdata);
@@ -4000,12 +4000,16 @@ done:
       pool_type = pg_pool_t::TYPE_REPLICATED;
     } else if (pool_type_str == "erasure") {
 
-      // check if all up osds support erasure coding
-      set<int32_t> up_osds;
-      osdmap.get_up_osds(up_osds);
+      // make sure all the daemons support erasure coding
       stringstream ec_unsupported_ss;
       int ec_unsupported_count = 0;
+      if (!(mon->get_quorum_features() & CEPH_FEATURE_OSD_ERASURE_CODES)) {
+        ec_unsupported_ss << "the monitor cluster";
+        ++ec_unsupported_count;
+      }
 
+      set<int32_t> up_osds;
+      osdmap.get_up_osds(up_osds);
       for (set<int32_t>::iterator it = up_osds.begin();
            it != up_osds.end(); it ++) {
         const osd_xinfo_t &xi = osdmap.get_xinfo(*it);
