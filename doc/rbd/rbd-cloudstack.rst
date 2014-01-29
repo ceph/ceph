@@ -72,6 +72,18 @@ See `Create a Pool`_ for details on specifying the number of placement groups
 for your pools, and `Placement Groups`_ for details on the number of placement
 groups you should set for your pools.
 
+Create a CephX user
+===================
+
+To access the Ceph cluster we require a CephX user which has the correct credentials
+to access the ``cloudstack`` pool we just created.
+
+Although we could use ``client.admin`` for this, it's recommended to create a user
+with only access to the ``cloudstack`` pool.
+
+  ceph auth get-or-create client.cloudstack mon 'allow r' osd 'allow allow rwx pool=cloudstack'
+
+Use the information returned by the command in the next step when adding the Primary Storage.
 
 Add Primary Storage
 ===================
@@ -89,7 +101,7 @@ include:
 #. Follow the CloudStack instructions.
 
    - For **Protocol**, select ``RBD``.
-   - Add cluster information (cephx is supported).
+   - Add cluster information (cephx is supported). Note: Do not include the ``client.`` part of the user.
    - Add ``rbd`` as a tag.
 
 
@@ -108,8 +120,6 @@ Limitations
 ===========
 
 - CloudStack will only bind to one monitor (You can however create a Round Robin DNS record over multiple monitors)
-- CloudStack does not support cloning snapshots.
-- You still need a (small) NFS based Primary Storage for the SystemVMs
 - You may need to compile ``libvirt`` to use version 0.9.13 with Ubuntu.
 
 
