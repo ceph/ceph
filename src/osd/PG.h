@@ -939,24 +939,6 @@ public:
   int active_pushes;
 
   void repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer);
-  map<int, ScrubMap *>::const_iterator _select_auth_object(
-    const hobject_t &obj,
-    const map<int,ScrubMap*> &maps);
-
-  enum error_type {
-    CLEAN,
-    DEEP_ERROR,
-    SHALLOW_ERROR
-  };
-  enum error_type _compare_scrub_objects(ScrubMap::object &auth,
-			      ScrubMap::object &candidate,
-			      ostream &errorstream);
-  void _compare_scrubmaps(const map<int,ScrubMap*> &maps,  
-			  map<hobject_t, set<int> > &missing,
-			  map<hobject_t, set<int> > &inconsistent,
-			  map<hobject_t, int> &authoritative,
-			  map<hobject_t, set<int> > &inconsistent_snapcolls,
-			  ostream &errorstream);
   void scrub(ThreadPool::TPHandle &handle);
   void classic_scrub(ThreadPool::TPHandle &handle);
   void chunky_scrub(ThreadPool::TPHandle &handle);
