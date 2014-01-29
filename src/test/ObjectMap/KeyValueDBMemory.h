@@ -19,7 +19,15 @@ public:
   KeyValueDBMemory(KeyValueDBMemory *db) : db(db->db) { }
   virtual ~KeyValueDBMemory() { }
 
-  virtual int init(ostream &out, bool create_if_missing) {}
+  virtual int init() {
+    return 0;
+  }
+  virtual int open(ostream &out) {
+    return 0;
+  }
+  virtual int create_and_open(ostream &out) {
+    return 0;
+  }
 
   int get(
     const string &prefix,
