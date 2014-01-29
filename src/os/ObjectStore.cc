@@ -32,7 +32,7 @@ ObjectStore *ObjectStore::create(CephContext *cct,
   if (type == "memstore") {
     return new MemStore(cct, data);
   }
-  if (type == "keyvaluestore") {
+  if (type == "keyvaluestore-dev") {
     return new KeyValueStore(data);
   }
   return NULL;
