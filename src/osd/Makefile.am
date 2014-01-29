@@ -4,6 +4,7 @@ erasure_codelib_LTLIBRARIES =
 
 include osd/ErasureCodePluginJerasure/Makefile.am
 include osd/ErasureCodePluginPyramid/Makefile.am
+include osd/ErasureCodePluginXor/Makefile.am
 
 libosd_la_SOURCES = \
 	osd/ErasureCodePlugin.cc \
