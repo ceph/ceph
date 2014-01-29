@@ -151,7 +151,7 @@ packages, so you must ensure that you set ``priority=2``. ::
 
 	[ceph-extras-source]
 	name=Ceph Extras Sources
-	baseurl=http://ceph.com/packages/ceph-extras/rpm/c{distro}/SRPMS
+	baseurl=http://ceph.com/packages/ceph-extras/rpm/{distro}/SRPMS
 	enabled=1
 	priority=2
 	gpgcheck=1
