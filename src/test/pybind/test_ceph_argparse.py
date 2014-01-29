@@ -4,7 +4,7 @@
 #
 # Ceph - scalable distributed file system
 #
-# Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+# Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -696,42 +696,42 @@ class TestOSD(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
                                                     'tunables']))
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
-													  'tunables',
-                                                      'default', 'toomany']))
+                                                    'tunables',
+                                                    'default', 'toomany']))
 
     def test_crush_rule_create_simple(self):
         self.assert_valid_command(['osd', 'crush', 'rule', 'create-simple',
                                    'AZaz09-_.', 'AZaz09-_.', 'AZaz09-_.'])
         assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
-                                                      'create-simple']))
+                                                    'create-simple']))
         assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
-                                                      'create-simple',
+                                                    'create-simple',
+                                                    'AZaz09-_.']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
+                                                    'create-simple',
+                                                    'AZaz09-_.',
+                                                    'AZaz09-_.']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
+                                                    'create-simple',
+                                                    '!!!',
+                                                      'AZaz09-_.',
+                                                    'AZaz09-_.']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
+                                                    'create-simple',
+                                                    'AZaz09-_.',
+                                                    '|||',
                                                       'AZaz09-_.']))
         assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
-                                                      'create-simple',
-                                                      'AZaz09-_.',
-                                                      'AZaz09-_.']))
+                                                    'create-simple',
+                                                    'AZaz09-_.',
+                                                    'AZaz09-_.',
+                                                    '+++']))
         assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
-                                                      'create-simple',
-                                                      '!!!',
-                                                      'AZaz09-_.',
-                                                      'AZaz09-_.']))
-        assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
-                                                      'create-simple',
-                                                      'AZaz09-_.',
-                                                      '|||',
-                                                      'AZaz09-_.']))
-        assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
-                                                      'create-simple',
-                                                      'AZaz09-_.',
-                                                      'AZaz09-_.',
-                                                      '+++']))
-        assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
-                                                      'create-simple',
-                                                      'AZaz09-_.',
-                                                      'AZaz09-_.',
-                                                      'AZaz09-_.',
-                                                      'toomany']))
+                                                    'create-simple',
+                                                    'AZaz09-_.',
+                                                    'AZaz09-_.',
+                                                    'AZaz09-_.',
+                                                    'toomany']))
 
     def test_crush_rule_rm(self):
         self.assert_valid_command(['osd', 'crush', 'rule', 'rm', 'AZaz09-_.'])
@@ -925,7 +925,7 @@ class TestOSD(TestArgparse):
     def test_pool_set(self):
         for var in ('size', 'min_size', 'crash_replay_interval',
                     'pg_num', 'pgp_num', 'crush_ruleset',
-					'hashpspool'):
+                    'hashpspool'):
             self.assert_valid_command(['osd', 'pool',
                                        'set', 'poolname', var, 'value'])
         assert_equal({}, validate_command(sigdict, ['osd', 'pool',
