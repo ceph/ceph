@@ -363,7 +363,11 @@ class TestImage(object):
         self.image.remove_snap('snap1')
 
     def test_remove_with_watcher(self):
+        data = rand_data(256)
+        self.image.write(data, 0)
         assert_raises(ImageBusy, remove_image)
+        read = self.image.read(0, 256)
+        eq(read, data)
 
     def test_rollback_to_snap(self):
         self.image.write('\0' * 256, 0)
