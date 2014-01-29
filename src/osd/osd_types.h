@@ -3082,4 +3082,9 @@ struct obj_list_snap_response_t {
 
 WRITE_CLASS_ENCODER(obj_list_snap_response_t)
 
+enum scrub_error_type {
+  CLEAN,
+  DEEP_ERROR,
+  SHALLOW_ERROR
+};
 #endif
