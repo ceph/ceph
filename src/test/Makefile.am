@@ -364,7 +364,7 @@ check_PROGRAMS += unittest_ceph_compatset
 libec_example_la_SOURCES = test/osd/ErasureCodePluginExample.cc
 libec_example_la_CFLAGS = ${AM_CFLAGS}
 libec_example_la_CXXFLAGS= ${AM_CXXFLAGS}
-libec_example_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libec_example_la_LIBADD = $(LIBCRUSH) $(PTHREAD_LIBS) $(EXTRALIBS)
 libec_example_la_LDFLAGS = ${AM_LDFLAGS} -export-symbols-regex '.*__erasure_code_.*'
 erasure_codelib_LTLIBRARIES += libec_example.la
 

@@ -14,6 +14,7 @@
  * 
  */
 
+#include "include/stringify.h"
 #include "global/global_init.h"
 #include "ErasureCodeExample.h"
 #include "common/ceph_argparse.h"
@@ -199,6 +200,37 @@ TEST(ErasureCodeExample, decode)
   map<int, bufferlist> degraded;  
   degraded[0] = encoded[0];
   EXPECT_EQ(-ERANGE, example.decode_concat(degraded, &out));
+}
+
+TEST(ErasureCodeExample, create_ruleset)
+{
+  CrushWrapper *c = new CrushWrapper;
+  c->create();
+  c->set_type_name(2, "root");
+  c->set_type_name(1, "host");
+  c->set_type_name(0, "osd");
+
+  int rootno;
+  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+		5, 0, NULL, NULL, &rootno);
+  c->set_item_name(rootno, "default");
+
+  map<string,string> loc;
+  loc["root"] = "default";
+
+  int num_host = 2;
+  int num_osd = 5;
+  int osd = 0;
+  for (int h=0; h<num_host; ++h) {
+    loc["host"] = string("host-") + stringify(h);
+    for (int o=0; o<num_osd; ++o, ++osd) {
+      c->insert_item(g_ceph_context, osd, 1.0, string("osd.") + stringify(osd), loc);
+    }
+  }
+
+  stringstream ss;
+  ErasureCodeExample example;
+  EXPECT_EQ(0, example.create_ruleset("myrule", *c, &ss));
 }
 
 int main(int argc, char **argv) {
