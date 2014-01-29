@@ -1385,6 +1385,7 @@ reprotect_and_return_err:
 				   parent_info.spec, id);
       if (r < 0 && r != -ENOENT) {
 	lderr(cct) << "error removing child from children list" << dendl;
+        close_image(ictx);
 	return r;
       }
       close_image(ictx);
