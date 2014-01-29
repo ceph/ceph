@@ -18,6 +18,8 @@
 #include <algorithm>
 #include "common/debug.h"
 #include "ErasureCodeJerasure.h"
+#include "crush/CrushWrapper.h"
+#include "osd/osd_types.h"
 #include "vectorop.h"
 extern "C" {
 #include "jerasure.h"
@@ -36,9 +38,24 @@ static ostream& _prefix(std::ostream* _dout)
   return *_dout << "ErasureCodeJerasure: ";
 }
 
-void ErasureCodeJerasure::init(const map<std::string,std::string> &parameters)
+int ErasureCodeJerasure::create_ruleset(const string &name,
+					CrushWrapper &crush,
+					ostream *ss) const
+{
+  return crush.add_simple_ruleset(name, ruleset_root, ruleset_failure_domain,
+				  "indep", pg_pool_t::TYPE_ERASURE, ss);
+}
+
+void ErasureCodeJerasure::init(const map<string,string> &parameters)
 {
   dout(10) << "technique=" << technique << dendl;
+  map<string,string>::const_iterator parameter;
+  parameter = parameters.find("erasure-code-ruleset-root");
+  if (parameter != parameters.end())
+    ruleset_root = parameter->second;
+  parameter = parameters.find("erasure-code-ruleset-failure-domain");
+  if (parameter != parameters.end())
+    ruleset_failure_domain = parameter->second;
   parse(parameters);
   prepare();
 }
