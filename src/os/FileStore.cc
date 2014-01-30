@@ -236,7 +236,6 @@ int FileStore::lfn_open(coll_t cid,
 
   int fd, exist;
   if (!replaying) {
-    Mutex::Locker l(fdcache_lock);
     *outfd = fdcache.lookup(oid);
     if (*outfd)
       return 0;
@@ -287,15 +286,11 @@ int FileStore::lfn_open(coll_t cid,
   }
 
   if (!replaying) {
-    Mutex::Locker l(fdcache_lock);
-    *outfd = fdcache.lookup(oid);
-    if (*outfd) {
-      VOID_TEMP_FAILURE_RETRY(::close(fd));
+    bool existed;
+    *outfd = fdcache.add(oid, fd, &existed);
+    if (existed) {
+      TEMP_FAILURE_RETRY(::close(fd));
       return 0;
-    } else {
-      bool existed;
-      *outfd = fdcache.add(oid, fd, &existed);
-      assert(!existed);
     }
   } else {
     *outfd = FDRef(new FDCache::FD(fd));
@@ -376,7 +371,6 @@ int FileStore::lfn_unlink(coll_t cid, const ghobject_t& o,
   int r = get_index(cid, &index);
   if (r < 0)
     return r;
-  Mutex::Locker l(fdcache_lock);
   {
     IndexedPath path;
     int exist;
@@ -436,7 +430,6 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   sync_entry_timeo_lock("sync_entry_timeo_lock"),
   timer(g_ceph_context, sync_entry_timeo_lock),
   stop(false), sync_thread(this),
-  fdcache_lock("fdcache_lock"),
   fdcache(g_ceph_context),
   wbthrottle(g_ceph_context),
   default_osr("default"),
