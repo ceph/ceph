@@ -153,8 +153,9 @@ public:
       bool retry = false;
       do {
 	retry = false;
-	if (weak_refs.count(key)) {
-	  val = weak_refs[key].lock();
+	typename map<K, WeakVPtr>::iterator i = weak_refs.find(key);
+	if (i != weak_refs.end()) {
+	  val = i->second.lock();
 	  if (val) {
 	    lru_add(key, val, &to_release);
 	  } else {
