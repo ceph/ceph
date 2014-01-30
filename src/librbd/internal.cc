@@ -1353,15 +1353,31 @@ reprotect_and_return_err:
     if (r < 0) {
       ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
     } else {
+      string header_oid = ictx->header_oid;
+      old_format = ictx->old_format;
+      unknown_format = false;
+      id = ictx->id;
+
       if (ictx->snaps.size()) {
 	lderr(cct) << "image has snapshots - not removing" << dendl;
 	close_image(ictx);
 	return -ENOTEMPTY;
       }
-      string header_oid = ictx->header_oid;
-      old_format = ictx->old_format;
-      unknown_format = false;
-      id = ictx->id;
+
+      std::list<obj_watch_t> watchers;
+      r = io_ctx.list_watchers(header_oid, &watchers);
+      if (r < 0) {
+        lderr(cct) << "error listing watchers" << dendl;
+        close_image(ictx);
+        return r;
+      }
+      if (watchers.size() > 1) {
+        lderr(cct) << "image has watchers - not removing" << dendl;
+        close_image(ictx);
+        return -EBUSY;
+      }
+      assert(watchers.size() == 1);
+
       ictx->md_lock.get_read();
       trim_image(ictx, 0, prog_ctx);
       ictx->md_lock.put_read();
@@ -1375,6 +1391,7 @@ reprotect_and_return_err:
 				   parent_info.spec, id);
       if (r < 0 && r != -ENOENT) {
 	lderr(cct) << "error removing child from children list" << dendl;
+        close_image(ictx);
 	return r;
       }
       close_image(ictx);
