@@ -2479,7 +2479,7 @@ def main():
         )
 
     if args.prepend_to_path != '':
-        path = os.environ.get('PATH', '')
+        path = os.environ.get('PATH', os.defpath)
         os.environ['PATH'] = args.prepend_to_path + ":" + path
 
     setup_statedir(args.statedir)
