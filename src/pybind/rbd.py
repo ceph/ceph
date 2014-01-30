@@ -122,9 +122,15 @@ def load_librbd():
     Load the librbd shared library.
     """
     librbd_path = find_library('rbd')
-    if not librbd_path:
+    if librbd_path:
+        return CDLL(librbd_path)
+
+    # try harder, find_library() doesn't search LD_LIBRARY_PATH
+    # in addition, it doesn't seem work on centos 6.4 (see e46d2ca067b5)
+    try:
+        return CDLL('librbd.so.1')
+    except OSError:
         raise EnvironmentError("Unable to find librbd")
-    return CDLL(librbd_path)
 
 class RBD(object):
     """
