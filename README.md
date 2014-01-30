@@ -25,7 +25,10 @@ Sample output:
       "cluster_creation_date": "2014-01-16 13:38:41.928551",
       "uuid": "20679d0e-04b1-4004-8ee9-45ac271510e9",
       "components_count": {
-        "bytes": "0 bytes",
+        "bytes": {
+          "count": 0,
+          "scale": "bytes"
+        },
         "osds": 1,
         "objects": 0,
         "pgs": 192,
@@ -46,16 +49,10 @@ Sample output:
         "region",
         "root"
       ],
-      "hosts": [
-        {
-          "ip": "127.0.0.1",
-          "hostname": "ceph-brag"
-        }
-      ],
       "ownership": {
         "organization": "eNovance",
+        "description": "Use case1",
         "email": "mail@enovance.com",
-        "description": "Use case",
         "name": "Cluster1"
       },
       "pool_metadata": [
@@ -77,6 +74,10 @@ Sample output:
       ],
       "sysinfo": [
         {
+          "nw_info": {
+            "hostname": "ceph-brag",
+            "address": "127.0.0.1"
+          },
           "hw_info": {
             "swap_kb": 0,
             "arch": "x86_64",
