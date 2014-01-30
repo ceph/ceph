@@ -9,3 +9,6 @@ v0.78
   inode that has an outdated backtrace attribute will get updated when
   the inode itself is modified.  This will result in some extra workload
   after a legacy CephFS file system is upgraded.
+
+* The per-op return code in librados' ObjectWriteOperation interface
+  is now filled in.
