@@ -959,6 +959,16 @@ uint64_t OSDMap::get_features(uint64_t *pmask) const
   mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL |
           CEPH_FEATURE_OSD_ERASURE_CODES;
 
+  if (osd_primary_affinity) {
+    for (int i = 0; i < max_osd; ++i) {
+      if ((*osd_primary_affinity)[i] != CEPH_OSD_DEFAULT_PRIMARY_AFFINITY) {
+	features |= CEPH_FEATURE_OSD_PRIMARY_AFFINITY;
+	break;
+      }
+    }
+  }
+  mask |= CEPH_FEATURE_OSD_PRIMARY_AFFINITY;
+
   if (pmask)
     *pmask = mask;
   return features;
