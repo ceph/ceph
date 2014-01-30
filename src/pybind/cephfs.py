@@ -115,6 +115,21 @@ class cephfs_stat(Structure):
                 ('__unused2', c_long),
                 ('__unused3', c_long) ]
 
+def load_libcephfs():
+    """
+    Load the libcephfs shared library.
+    """
+    libcephfs_path = find_library('cephfs')
+    if libcephfs_path:
+        return CDLL(libcephfs_path)
+
+    # try harder, find_library() doesn't search LD_LIBRARY_PATH
+    # in addition, it doesn't seem work on centos 6.4 (see e46d2ca067b5)
+    try:
+        return CDLL('libcephfs.so.1')
+    except OSError:
+        raise EnvironmentError("Unable to find libcephfs")
+
 class LibCephFS(object):
     """libcephfs python wrapper"""
     def require_state(self, *args):
@@ -125,10 +140,7 @@ class LibCephFS(object):
                                   "CephFS object in state %s." % (self.state))
 
     def __init__(self, conf=None, conffile=None):
-        libcephfs_path = find_library('cephfs')
-        if not libcephfs_path:
-            raise EnvironmentError("Unable to find libcephfs")
-        self.libcephfs = CDLL(libcephfs_path)
+        self.libcephfs = load_libcephfs()
         self.cluster = c_void_p()
 
         if conffile is not None and not isinstance(conffile, str):
