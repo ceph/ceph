@@ -79,20 +79,21 @@ def get_nums():
   num_pools = 0
   num_bytes = 0
   num_objs = 0
-  mo = re.search('.*pgmap\ v\d+:\ (\d+).*,\ (\d+).*,\ (\d+.*)\ data,\ (\d+).*', o)
+  mo = re.search('.*pgmap\ v\d+:\ (\d+).*,\ (\d+).*,\ (\d+)\ (\S+)\ data,\ (\d+).*', o)
   if not mo:
     raise RuntimeError("Unmatched pattern for pgmap in \'ceph status\'")
   else:
     num_pgs = int(mo.group(1))
     num_pools = int(mo.group(2))
-    num_bytes = mo.group(3)
-    num_objs = int(mo.group(4))
+    byte_count = int(mo.group(3))
+    byte_scale = mo.group(4)
+    num_objs = int(mo.group(5))
   nums = {'mons':num_mons,
           'osds':num_osds,
           'mdss':num_mdss,
           'pgs':num_pgs,
           'pools':num_pools,
-          'bytes':num_bytes,
+          'bytes': {'count':byte_count, 'scale':byte_scale},
           'objects':num_objs}
   return nums
 
@@ -130,84 +131,76 @@ def get_pool_metadata():
 
   return pool_meta
 
-def get_sysinfo():
+def get_sysinfo(max_osds):
   sysinfo = []
   count = 0
+  osd_metadata_available = False
 
-  while True:
-    (rc, o, e) = run_command(['ceph', 'osd', 'metadata', str(count)])
-    if rc is not 0:
-      break
-
+  while count < max_osds:
     meta = {'id':count}
-    os_info = {}
-    hw_info = {}
+    (rc, o, e) = run_command(['ceph', 'osd', 'metadata', str(count)])
+    if rc is 0:
+      if osd_metadata_available is False:
+        osd_metadata_available = True
+      os_info = {}
+      hw_info = {}
+      nw_info = {}
 
-    jmeta = json.loads(o)
-    count = count + 1
+      jmeta = json.loads(o)
 
-    meta['ceph_version'] = jmeta['ceph_version']
+      meta['ceph_version'] = jmeta['ceph_version']
 
-    os_info['os'] = jmeta['os']
-    os_info['version'] = jmeta['kernel_version']
-    os_info['description'] = jmeta['kernel_description']
+      os_info['os'] = jmeta['os']
+      os_info['version'] = jmeta['kernel_version']
+      os_info['description'] = jmeta['kernel_description']
 
-    try:
-      distro = jmeta['distro'] + ' '
-      distro += jmeta['distro_version'] + ' '
-      distro += jmeta['distro_codename'] + ' ('
-      distro += jmeta['distro_description'] + ')'
-      os_info['distro'] = distro
-    except KeyError as ke:
-      pass
-    meta['os_info'] = os_info
-
-    hw_info['cpu'] = jmeta['cpu']
-    hw_info['arch'] = jmeta['arch']
-    hw_info['mem_kb'] = int(jmeta['mem_total_kb'])
-    hw_info['swap_kb'] = int(jmeta['mem_swap_kb'])
-    meta['hw_info'] = hw_info
+      try:
+        distro = jmeta['distro'] + ' '
+        distro += jmeta['distro_version'] + ' '
+        distro += jmeta['distro_codename'] + ' ('
+        distro += jmeta['distro_description'] + ')'
+        os_info['distro'] = distro
+      except KeyError as ke:
+        pass
+      meta['os_info'] = os_info
+  
+      hw_info['cpu'] = jmeta['cpu']
+      hw_info['arch'] = jmeta['arch']
+      hw_info['mem_kb'] = int(jmeta['mem_total_kb'])
+      hw_info['swap_kb'] = int(jmeta['mem_swap_kb'])
+      meta['hw_info'] = hw_info
+  
+    (ip, hname) = get_osd_host(count)
+    nw_info['address'] = ip
+    nw_info['hostname'] = hname
+    meta['nw_info'] = nw_info
 
     sysinfo.append(meta)
+    count = count + 1
 
-  if len(sysinfo) is 0:
+  if osd_metadata_available is False:
     print >> sys.stderr, "'ceph osd metadata' is not available at all"
 
   return sysinfo
 
-def get_osd_hosts():
-  locs = []
-  osd_id = 0
+def get_osd_host(osd_id):
   loc = {}
 
-  while True:
-    (rc, o, e) = run_command(['ceph', 'osd', 'find', str(osd_id)])
-    if rc is not 0:
-      break
+  (rc, o, e) = run_command(['ceph', 'osd', 'find', str(osd_id)])
+  if rc is not 0:
+    raise RuntimeError("\'ceph osd find\' failed - " + e)
 
-    jloc = json.loads(o)
+  jloc = json.loads(o)
 
-    mo = re.search("(\d+.\d+.\d+.\d+).*", jloc['ip'])
-    if mo is None:
-      #Might be in ipv6 format, TODO: Verify
-      return None;
+  mo = re.search("(\d+.\d+.\d+.\d+).*", jloc['ip'])
+  if mo is None:
+    #Might be in ipv6 format, TODO: Verify
+    return None;
 
-    ip = mo.group(1)
-    host = jloc['crush_location']['host']
+  ip = mo.group(1)
+  host = jloc['crush_location']['host']
 
-    if ip not in loc:
-      loc[ip] = host
-    elif loc[ip] != host:
-      #Mismatching details
-      print >> sys.stderr, "ip-hostname conflict"
-      assert(0)
-
-    for k,v in loc.iteritems():
-      locs.append({'ip':k, 'hostname':v})
-
-    osd_id += 1
-
-  return locs
+  return (ip, host)
 
 def get_ownership_info():
   (rc, o, e) = run_command(['ceph', 'config-key', 'get',
@@ -221,11 +214,12 @@ def output_json():
   out = {}
   out['uuid'] = get_uuid()
   out['cluster_creation_date'] = get_cluster_creation_date()
-  out['components_count'] = get_nums()
-  out['hosts'] = get_osd_hosts()
+  nums = get_nums()
+  num_osds = int(nums['osds'])
+  out['components_count'] = nums
   out['crush_types'] = get_crush_types()
   out['pool_metadata'] = get_pool_metadata()
-  out['sysinfo'] = get_sysinfo()
+  out['sysinfo'] = get_sysinfo(num_osds)
 
   owner = get_ownership_info()
   if owner is not None:
