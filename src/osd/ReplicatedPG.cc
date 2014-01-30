@@ -10262,6 +10262,11 @@ void ReplicatedPG::agent_work(int start_max)
       dout(20) << __func__ << " scrubbing, skipping " << obc->obs.oi << dendl;
       continue;
     }
+    if (obc->obs.oi.soid.nspace == cct->_conf->osd_hit_set_namespace) {
+      dout(20) << __func__ << " skip (hit set) " << obc->obs.oi << dendl;
+      continue;
+    }
+
     if (agent_state->flush_mode != TierAgentState::FLUSH_MODE_IDLE &&
 	agent_maybe_flush(obc))
       ++started;
