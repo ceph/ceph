@@ -493,8 +493,8 @@ private:
   void be_scan_list(ScrubMap &map, const vector<hobject_t> &ls, bool deep,
     ThreadPool::TPHandle &handle);
   enum scrub_error_type be_compare_scrub_objects(
-				ScrubMap::object &auth,
-				ScrubMap::object &candidate,
+				const ScrubMap::object &auth,
+				const ScrubMap::object &candidate,
 				ostream &errorstream);
   map<int, ScrubMap *>::const_iterator be_select_auth_object(
     const hobject_t &obj,

@@ -869,8 +869,8 @@ void ReplicatedBackend::be_scan_list(
 }
 
 enum scrub_error_type ReplicatedBackend::be_compare_scrub_objects(
-				ScrubMap::object &auth,
-				ScrubMap::object &candidate,
+				const ScrubMap::object &auth,
+				const ScrubMap::object &candidate,
 				ostream &errorstream)
 {
   enum scrub_error_type error = CLEAN;

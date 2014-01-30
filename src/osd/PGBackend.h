@@ -434,8 +434,8 @@
    virtual void be_scan_list(ScrubMap &map, const vector<hobject_t> &ls, bool deep,
      ThreadPool::TPHandle &handle) { assert(0); }
    virtual enum scrub_error_type be_compare_scrub_objects(
-				ScrubMap::object &auth,
-				ScrubMap::object &candidate,
+				const ScrubMap::object &auth,
+				const ScrubMap::object &candidate,
 				ostream &errorstream) { assert(0); }
    virtual map<int, ScrubMap *>::const_iterator be_select_auth_object(
      const hobject_t &obj,
