@@ -266,7 +266,7 @@ def _get_command_executable(arguments):
     return arguments
 
 
-def command(arguments):
+def command(arguments, **kwargs):
     """
     Safely execute a ``subprocess.Popen`` call making sure that the
     executable exists and raising a helpful error message
@@ -275,13 +275,18 @@ def command(arguments):
     .. note:: This should be the prefered way of calling ``subprocess.Popen``
     since it provides the caller with the safety net of making sure that
     executables *will* be found and will error nicely otherwise.
+
+    This returns the output of the command and the return code of the
+    process in a tuple: (output, returncode).
     """
     arguments = _get_command_executable(arguments)
 
-    return subprocess.Popen(
+    process = subprocess.Popen(
         arguments,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE).stdout.read()
+        **kwargs)
+    out, _ = process.communicate()
+    return out, process.returncode
 
 
 def command_check_call(arguments):
@@ -579,16 +584,10 @@ def get_osd_id(path):
     return osd_id
 
 
-def _check_output(*args, **kwargs):
-    process = subprocess.Popen(
-        stdout=subprocess.PIPE,
-        *args, **kwargs)
-    out, _ = process.communicate()
-    ret = process.wait()
+def _check_output(args=None, **kwargs):
+    out, ret = command(args, **kwargs)
     if ret:
-        cmd = kwargs.get("args")
-        if cmd is None:
-            cmd = args[0]
+        cmd = args[0]
         error = subprocess.CalledProcessError(ret, cmd)
         error.output = out
         raise error
@@ -604,8 +603,8 @@ def get_conf(cluster, variable):
     :return: The variable value or None.
     """
     try:
-        process = subprocess.Popen(
-            args=[
+        out, ret = command(
+            [
                 'ceph-conf',
                 '--cluster={cluster}'.format(
                     cluster=cluster,
@@ -614,19 +613,16 @@ def get_conf(cluster, variable):
                 '--lookup',
                 variable,
                 ],
-            stdout=subprocess.PIPE,
             close_fds=True,
             )
     except OSError as e:
         raise Error('error executing ceph-conf', e)
-    (out, _err) = process.communicate()
-    ret = process.wait()
     if ret == 1:
         # config entry not found
         return None
     elif ret != 0:
         raise Error('getting variable from configuration failed')
-    value = str(out).split('\n', 1)[0]
+    value = out.split('\n', 1)[0]
     # don't differentiate between "var=" and no var set
     if not value:
         return None
@@ -724,7 +720,7 @@ def dmcrypt_map(
         rawdev,
         ]
     try:
-        subprocess.check_call(args)
+        command_check_call(args)
         return dev
 
     except subprocess.CalledProcessError as e:
@@ -744,7 +740,7 @@ def dmcrypt_unmap(
     ]
 
     try:
-        subprocess.check_call(args)
+        command_check_call(args)
 
     except subprocess.CalledProcessError as e:
         raise Error('unable to unmap device', _uuid, e)
@@ -770,8 +766,8 @@ def mount(
         )
     try:
         LOG.debug('Mounting %s on %s with options %s', dev, path, options)
-        subprocess.check_call(
-            args=[
+        command_check_call(
+            [
                 'mount',
                 '-t', fstype,
                 '-o', options,
@@ -798,8 +794,8 @@ def unmount(
     """
     try:
         LOG.debug('Unmounting %s', path)
-        subprocess.check_call(
-            args=[
+        command_check_call(
+            [
                 '/bin/umount',
                 '--',
                 path,
@@ -887,7 +883,7 @@ def zap(dev):
                 '--mbrtogpt',
                 '--',
                 dev,
-            ]
+            ],
         )
     except subprocess.CalledProcessError as e:
         raise Error(e)
@@ -952,23 +948,23 @@ def prepare_journal_dev(
                 '--mbrtogpt',
                 '--',
                 journal,
-            ]
+            ],
         )
 
         # try to make sure the kernel refreshes the table.  note
         # that if this gets ebusy, we are probably racing with
         # udev because it already updated it.. ignore failure here.
         LOG.debug('Calling partprobe on prepared device %s', journal)
-        subprocess.call(
-            args=[
+        command(
+            [
                 'partprobe',
                 journal,
                 ],
             )
 
         # wait for udev event queue to clear
-        subprocess.call(
-            args=[
+        command(
+            [
                 'udevadm',
                 'settle',
                 ],
@@ -1147,10 +1143,10 @@ def prepare_dev(
                     '--typecode=1:%s' % ptype_tobe,
                     '--',
                     data,
-                ]
+                ],
             )
-            subprocess.call(
-                args=[
+            command(
+                [
                     # wait for udev event queue to clear
                     'udevadm',
                     'settle',
@@ -1185,7 +1181,7 @@ def prepare_dev(
                 ])
         try:
             LOG.debug('Creating %s fs on %s', fstype, dev)
-            subprocess.check_call(args=args)
+            command_check_call(args)
         except subprocess.CalledProcessError as e:
             raise Error(e)
 
@@ -1218,7 +1214,7 @@ def prepare_dev(
                     '--typecode=1:%s' % ptype_osd,
                     '--',
                     data,
-                ]
+                ],
             )
         except subprocess.CalledProcessError as e:
             raise Error(e)
@@ -1368,8 +1364,8 @@ def main_prepare(args):
             # that if this gets ebusy, we are probably racing with
             # udev because it already updated it.. ignore failure here.
             LOG.debug('Calling partprobe on prepared device %s', args.data)
-            subprocess.call(
-                args=[
+            command(
+                [
                     'partprobe',
                     args.data,
                     ],
@@ -1396,8 +1392,8 @@ def mkfs(
     keyring,
     ):
     monmap = os.path.join(path, 'activate.monmap')
-    subprocess.check_call(
-        args=[
+    command_check_call(
+        [
             'ceph',
             '--cluster', cluster,
             '--name', 'client.bootstrap-osd',
@@ -1406,8 +1402,8 @@ def mkfs(
             ],
         )
 
-    subprocess.check_call(
-        args=[
+    command_check_call(
+        [
             'ceph-osd',
             '--cluster', cluster,
             '--mkfs',
@@ -1432,8 +1428,8 @@ def auth_key(
     ):
     try:
         # try dumpling+ cap scheme
-        subprocess.check_call(
-            args=[
+        command_check_call(
+            [
                 'ceph',
                 '--cluster', cluster,
                 '--name', 'client.bootstrap-osd',
@@ -1447,8 +1443,8 @@ def auth_key(
     except subprocess.CalledProcessError as err:
         if err.returncode == errno.EACCES:
             # try old cap scheme
-            subprocess.check_call(
-                args=[
+            command_check_call(
+                [
                     'ceph',
                     '--cluster', cluster,
                     '--name', 'client.bootstrap-osd',
@@ -1489,8 +1485,8 @@ def move_mount(
     # /etc/mtab, which *still* isn't a symlink to /proc/mounts despite
     # this being 2013.  Instead, mount the original device at the final
     # location.
-    subprocess.check_call(
-        args=[
+    command_check_call(
+        [
             '/bin/mount',
             '-o',
             mount_options,
@@ -1499,8 +1495,8 @@ def move_mount(
             osd_data,
             ],
         )
-    subprocess.check_call(
-        args=[
+    command_check_call(
+        [
             '/bin/umount',
             '-l',   # lazy, in case someone else is peeking at the
                     # wrong moment
@@ -1522,8 +1518,8 @@ def start_daemon(
     # upstart?
     try:
         if os.path.exists(os.path.join(path,'upstart')):
-            subprocess.check_call(
-                args=[
+            command_check_call(
+                [
                     '/sbin/initctl',
                     # use emit, not start, because start would fail if the
                     # instance was already running
@@ -1543,8 +1539,8 @@ def start_daemon(
                 svc = '/usr/sbin/service'
             else:
                 svc = '/sbin/service'
-            subprocess.check_call(
-                args=[
+            command_check_call(
+                [
                     svc,
                     'ceph',
                     'start',
@@ -1998,15 +1994,14 @@ def get_oneliner(base, name):
     return None
 
 def get_dev_fs(dev):
-    fscheck = subprocess.Popen(
+    fscheck, _ = command(
         [
             'blkid',
             '-s',
             'TYPE',
-            dev
-            ],
-        stdout = subprocess.PIPE,
-        stderr=subprocess.PIPE).stdout.read()
+            dev,
+        ],
+    )
     if 'TYPE' in fscheck:
         fstype = fscheck.split()[1].split('"')[1]
         return fstype
@@ -2015,7 +2010,7 @@ def get_dev_fs(dev):
 
 def get_partition_type(part):
     (base, partnum) = re.match('(\D+)(\d+)', part).group(1, 2)
-    sgdisk = command(
+    sgdisk, _ = command(
         [
             'sgdisk',
             '-p',
@@ -2034,7 +2029,7 @@ def get_partition_type(part):
 
 def get_partition_uuid(dev):
     (base, partnum) = re.match('(\D+)(\d+)', dev).group(1, 2)
-    out = command(['sgdisk', '-i', partnum, base])
+    out, _ = command(['sgdisk', '-i', partnum, base])
     for line in out.splitlines():
         m = re.match('Partition unique GUID: (\S+)', line)
         if m:
