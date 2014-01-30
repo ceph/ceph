@@ -1605,6 +1605,7 @@ public:
     o->priority = op.priority;
     o->mtime = mtime;
     o->snapc = snapc;
+    o->out_rval.swap(op.out_rval);
     return o;
   }
   tid_t mutate(const object_t& oid, const object_locator_t& oloc, 
