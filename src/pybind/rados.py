@@ -200,8 +200,8 @@ Rados object in state %s." % (self.state))
             #maybe find_library can not find it correctly on all platforms.
             try:
                 self.librados = CDLL('librados.so.2')
-            except OSError:
-                raise EnvironmentError("Unable to find librados")
+            except OSError as e:
+                    raise EnvironmentError("Unable to load librados: %s" % e)
             except:
                 raise Error("Unexpected error")
         else:
