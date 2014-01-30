@@ -111,6 +111,9 @@ class OSDMap {
 public:
   class Incremental {
   public:
+    /// feature bits we were encoded with.  the subsequent OSDMap
+    /// encoding should match.
+    uint64_t encode_features;
     uuid_d fsid;
     epoch_t epoch;   // new epoch; we are a diff from epoch-1 to epoch
     utime_t modified;
@@ -158,6 +161,7 @@ public:
     static void generate_test_instances(list<Incremental*>& o);
 
     Incremental(epoch_t e=0) :
+      encode_features(0),
       epoch(e), new_pool_max(-1), new_flags(-1), new_max_osd(-1) {
       memset(&fsid, 0, sizeof(fsid));
     }
