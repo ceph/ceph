@@ -431,7 +431,7 @@
      Context *on_complete) = 0;
 
    virtual bool scrub_supported() { return false; }
-   virtual void be_scan_list(ScrubMap &map, vector<hobject_t> &ls, bool deep,
+   virtual void be_scan_list(ScrubMap &map, const vector<hobject_t> &ls, bool deep,
      ThreadPool::TPHandle &handle) { assert(0); }
    virtual enum scrub_error_type be_compare_scrub_objects(
 				ScrubMap::object &auth,
