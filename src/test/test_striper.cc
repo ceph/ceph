@@ -54,7 +54,7 @@ TEST(Striper, EmptyPartialResult)
   bufferlist outbl;
   r.assemble_result(g_ceph_context, outbl, false);
 
-  ASSERT_EQ(65536, outbl.length());
+  ASSERT_EQ(65536u, outbl.length());
 }
 
 
