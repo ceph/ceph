@@ -160,7 +160,7 @@
 
      virtual ObjectContextRef get_obc(
        const hobject_t &hoid,
-       map<string, bufferptr> &attrs) = 0;
+       map<string, bufferlist> &attrs) = 0;
 
      virtual void op_applied(
        const eversion_t &applied_version) = 0;

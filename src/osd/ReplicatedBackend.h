@@ -266,7 +266,7 @@ private:
 			const interval_set<uint64_t> &intervals_included,
 			bufferlist data_included,
 			bufferlist omap_header,
-			map<string, bufferptr> &attrs,
+			map<string, bufferlist> &attrs,
 			map<string, bufferlist> &omap_entries,
 			ObjectStore::Transaction *t);
   void submit_push_complete(ObjectRecoveryInfo &recovery_info,

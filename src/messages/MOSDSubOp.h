@@ -65,7 +65,7 @@ public:
   eversion_t pg_trim_to;   // primary->replica: trim to here
   osd_peer_stat_t peer_stat;
 
-  map<string,bufferptr> attrset;
+  map<string,bufferlist> attrset;
 
   interval_set<uint64_t> data_subset;
   map<hobject_t, interval_set<uint64_t> > clone_subsets;
