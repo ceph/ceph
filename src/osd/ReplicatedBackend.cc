@@ -767,13 +767,13 @@ void ReplicatedBackend::sub_op_modify_reply(OpRequestRef op)
  * pg lock may or may not be held
  */
 void ReplicatedBackend::be_scan_list(
-  ScrubMap &map, vector<hobject_t> &ls, bool deep,
+  ScrubMap &map, const vector<hobject_t> &ls, bool deep,
   ThreadPool::TPHandle &handle)
 {
   dout(10) << "_scan_list scanning " << ls.size() << " objects"
            << (deep ? " deeply" : "") << dendl;
   int i = 0;
-  for (vector<hobject_t>::iterator p = ls.begin();
+  for (vector<hobject_t>::const_iterator p = ls.begin();
        p != ls.end();
        ++p, i++) {
     handle.reset_tp_timeout();
