@@ -129,8 +129,8 @@ def load_librbd():
     # in addition, it doesn't seem work on centos 6.4 (see e46d2ca067b5)
     try:
         return CDLL('librbd.so.1')
-    except OSError:
-        raise EnvironmentError("Unable to find librbd")
+    except OSError as e:
+        raise EnvironmentError("Unable to load librbd: %s" % e)
 
 class RBD(object):
     """
