@@ -67,8 +67,8 @@ public:
     return registry.lookup(hoid);
   }
 
-  FDRef add(const ghobject_t &hoid, int fd) {
-    return registry.add(hoid, new FD(fd));
+  FDRef add(const ghobject_t &hoid, int fd, bool *existed) {
+    return registry.add(hoid, new FD(fd), existed);
   }
 
   /// clear cached fd for hoid, subsequent lookups will get an empty FD

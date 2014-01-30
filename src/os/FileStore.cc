@@ -293,7 +293,9 @@ int FileStore::lfn_open(coll_t cid,
       VOID_TEMP_FAILURE_RETRY(::close(fd));
       return 0;
     } else {
-      *outfd = fdcache.add(oid, fd);
+      bool existed;
+      *outfd = fdcache.add(oid, fd, &existed);
+      assert(!existed);
     }
   } else {
     *outfd = FDRef(new FDCache::FD(fd));
