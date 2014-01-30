@@ -1269,7 +1269,7 @@ int rados_tmap_get(rados_ioctx_t io, const char *o, char *buf, size_t buflen);
  * operations on an object atomically. These plugins are called
  * classes. This function allows librados users to call the custom
  * methods. The input and output formats are defined by the class.
- * Classes in ceph.git can be found in src/cls_*.cc
+ * Classes in ceph.git can be found in src/cls subdirectories
  *
  * @param io the context in which to call the method
  * @param oid the object to call the method on
