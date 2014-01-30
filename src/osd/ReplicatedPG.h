@@ -329,7 +329,7 @@ public:
   }
   ObjectContextRef get_obc(
     const hobject_t &hoid,
-    map<string, bufferptr> &attrs) {
+    map<string, bufferlist> &attrs) {
     return get_object_context(hoid, true, &attrs);
   }
   void log_operation(
@@ -802,7 +802,7 @@ protected:
   ObjectContextRef get_object_context(
     const hobject_t& soid,
     bool can_create,
-    map<string, bufferptr> *attrs = 0
+    map<string, bufferlist> *attrs = 0
     );
 
   void context_registry_on_change();
@@ -830,7 +830,7 @@ protected:
   SnapSetContext *get_snapset_context(
     const object_t& oid, const string &key,
     ps_t seed, bool can_create, const string &nspace,
-    map<string, bufferptr> *attrs = 0
+    map<string, bufferlist> *attrs = 0
     );
   void register_snapset_context(SnapSetContext *ssc) {
     Mutex::Locker l(snapset_contexts_lock);

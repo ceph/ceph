@@ -2928,7 +2928,7 @@ struct PushOp {
   interval_set<uint64_t> data_included;
   bufferlist omap_header;
   map<string, bufferlist> omap_entries;
-  map<string, bufferptr> attrset;
+  map<string, bufferlist> attrset;
 
   ObjectRecoveryInfo recovery_info;
   ObjectRecoveryProgress before_progress;
