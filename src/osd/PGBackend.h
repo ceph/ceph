@@ -34,6 +34,7 @@
   * 1) Handling client operations
   * 2) Handling object recovery
   * 3) Handling object access
+  * 4) Handling scrub, deep-scrub, repair
   */
  class PGBackend {
  public:	
@@ -428,6 +429,26 @@
      const list<pair<pair<uint64_t, uint64_t>,
 		pair<bufferlist*, Context*> > > &to_read,
      Context *on_complete) = 0;
+
+   virtual bool scrub_supported() { return false; }
+   virtual void be_scan_list(ScrubMap &map, const vector<hobject_t> &ls, bool deep,
+     ThreadPool::TPHandle &handle) { assert(0); }
+   virtual enum scrub_error_type be_compare_scrub_objects(
+				const ScrubMap::object &auth,
+				const ScrubMap::object &candidate,
+				ostream &errorstream) { assert(0); }
+   virtual map<int, ScrubMap *>::const_iterator be_select_auth_object(
+     const hobject_t &obj,
+     const map<int,ScrubMap*> &maps) { assert(0); }
+   virtual void be_compare_scrubmaps(const map<int,ScrubMap*> &maps,
+			    map<hobject_t, set<int> > &missing,
+			    map<hobject_t, set<int> > &inconsistent,
+			    map<hobject_t, int> &authoritative,
+			    map<hobject_t, set<int> > &invalid_snapcolls,
+			    int &shallow_errors, int &deep_errors,
+			    const pg_t pgid,
+			    const vector<int> &acting,
+			    ostream &errorstream) { assert(0); }
  };
 
 #endif
