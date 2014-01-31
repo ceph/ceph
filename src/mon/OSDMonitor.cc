@@ -203,7 +203,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 
     // write out the full map for all past epochs
     bufferlist full_bl;
-    osdmap.encode(full_bl, mon->quorum_features);
+    osdmap.encode(full_bl, inc.encode_features);
     tx_size += full_bl.length();
 
     put_version_full(t, osdmap.epoch, full_bl);

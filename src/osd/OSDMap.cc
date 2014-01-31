@@ -410,7 +410,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   }
 
   {
-    ENCODE_START(1, 1, bl); // extended, osd-only data
+    ENCODE_START(2, 1, bl); // extended, osd-only data
     ::encode(new_hb_back_up, bl);
     ::encode(new_up_thru, bl);
     ::encode(new_last_clean_interval, bl);
@@ -422,6 +422,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
     ::encode(new_uuid, bl);
     ::encode(new_xinfo, bl);
     ::encode(new_hb_front_up, bl);
+    ::encode(features, bl);         // NOTE: features arg, not the member
     ENCODE_FINISH(bl); // osd-only data
   }
 
@@ -536,6 +537,7 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     int struct_v_size = sizeof(struct_v);
     bl.advance(-struct_v_size);
     decode_classic(bl);
+    encode_features = 0;
     return;
   }
   {
@@ -561,7 +563,7 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
   }
 
   {
-    DECODE_START(1, bl); // extended, osd-only data
+    DECODE_START(2, bl); // extended, osd-only data
     ::decode(new_hb_back_up, bl);
     ::decode(new_up_thru, bl);
     ::decode(new_last_clean_interval, bl);
@@ -573,6 +575,10 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     ::decode(new_uuid, bl);
     ::decode(new_xinfo, bl);
     ::decode(new_hb_front_up, bl);
+    if (struct_v >= 2)
+      ::decode(encode_features, bl);
+    else
+      encode_features = 0;
     DECODE_FINISH(bl); // osd-only data
   }
 
