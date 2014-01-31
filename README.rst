@@ -291,6 +291,12 @@ that implement tasks.
 Many of these tasks are used to run shell scripts that are defined in the
 ceph/ceph-qa-suite.
 
+If machines were locked as part of the run (with the --lock switch), 
+teuthology normally leaves them locked when there is any task failure
+for investigation of the machine state.  When developing new teuthology
+tasks, sometimes this behavior is not useful.  The ``unlock_on_failure``
+global option can be set to True to make the unlocking happen unconditionally.
+
 Troubleshooting
 ===============
 
@@ -311,6 +317,14 @@ calls multiple subtasks, e.g. with ``contextutil.nested``, those
 cleanups *will* be performed. Later on, we can let tasks communicate
 the subtasks they wish to invoke to the top-level runner, avoiding
 this issue.
+
+Interactive task facilities
+===========================
+The ``interactive`` task presents a prompt for you to interact with the
+teuthology configuration.  The ``ctx`` variable is available to explore,
+and a ``pprint.PrettyPrinter().pprint`` object is added for convenience as
+'pp', so you can do things like pp(dict-of-interest) to see a formatted
+view of the dict.
 
 Test Sandbox Directory
 ======================
