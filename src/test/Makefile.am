@@ -1,3 +1,7 @@
+include test/osd/ErasureCodePluginJerasure/Makefile.am
+include test/osd/ErasureCodePluginPyramid/Makefile.am
+include test/osd/ErasureCodePluginXor/Makefile.am
+
 ## Unknown/other tests
 
 ceph_test_timers_SOURCES = test/TestTimers.cc
@@ -361,7 +365,9 @@ unittest_ceph_compatset_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_ceph_compatset_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_ceph_compatset
 
-libec_example_la_SOURCES = test/osd/ErasureCodePluginExample.cc
+libec_example_la_SOURCES = \
+	osd/ErasureCode.cc \
+	test/osd/ErasureCodePluginExample.cc
 libec_example_la_CFLAGS = ${AM_CFLAGS}
 libec_example_la_CXXFLAGS= ${AM_CXXFLAGS}
 libec_example_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
@@ -403,25 +409,6 @@ if LINUX
 unittest_erasure_code_plugin_LDADD += -ldl
 endif
 check_PROGRAMS += unittest_erasure_code_plugin
-
-unittest_erasure_code_jerasure_SOURCES = \
-	test/osd/TestErasureCodeJerasure.cc \
-	$(libec_jerasure_la_SOURCES)
-unittest_erasure_code_jerasure_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-unittest_erasure_code_jerasure_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-if LINUX
-unittest_erasure_code_jerasure_LDADD += -ldl
-endif
-check_PROGRAMS += unittest_erasure_code_jerasure
-
-unittest_erasure_code_plugin_jerasure_SOURCES = \
-	test/osd/TestErasureCodePluginJerasure.cc
-unittest_erasure_code_plugin_jerasure_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-unittest_erasure_code_plugin_jerasure_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-if LINUX
-unittest_erasure_code_plugin_jerasure_LDADD += -ldl
-endif
-check_PROGRAMS += unittest_erasure_code_plugin_jerasure
 
 unittest_erasure_code_example_SOURCES = test/osd/TestErasureCodeExample.cc 
 noinst_HEADERS += test/osd/ErasureCodeExample.h

@@ -1,9 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
- * Ceph - scalable distributed file system
+ * Ceph distributed storage system
  *
- * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -26,29 +26,28 @@ TEST(ErasureCodePlugin, factory)
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   map<std::string,std::string> parameters;
   parameters["erasure-code-directory"] = ".libs";
-  {
-    ErasureCodeInterfaceRef erasure_code;
-    EXPECT_FALSE(erasure_code);
-    EXPECT_EQ(-ENOENT, instance.factory("jerasure", parameters, &erasure_code));
-    EXPECT_FALSE(erasure_code);
-  }
-  const char *techniques[] = {
-    "reed_sol_van",
-    "reed_sol_r6_op",
-    "cauchy_orig",
-    "cauchy_good",
-    "liberation",
-    "blaum_roth",
-    "liber8tion",
-    0
-  };
-  for(const char **technique = techniques; *technique; technique++) {
-    ErasureCodeInterfaceRef erasure_code;
-    parameters["erasure-code-technique"] = *technique;
-    EXPECT_FALSE(erasure_code);
-    EXPECT_EQ(0, instance.factory("jerasure", parameters, &erasure_code));
-    EXPECT_TRUE(erasure_code);
-  }
+  ErasureCodeInterfaceRef erasure_code;
+  const char *pyramid =
+    "["
+    "    { \"erasure-code-plugin\": \"jerasure\","
+    "      \"erasure-code-technique\": \"cauchy_good\","
+    "      \"erasure-code-k\": \"12\","
+    "      \"erasure-code-m\": \"6\","
+    "      \"mapping\": \"0000^^-0000^^-0000^^-\","
+    "    },"
+    "    { \"erasure-code-plugin\": \"jerasure\","
+    "      \"erasure-code-technique\": \"cauchy_good\","
+    "      \"erasure-code-k\": \"6\","
+    "      \"erasure-code-m\": \"1\","
+    "      \"type\": \"datacenter\","
+    "      \"mapping\": \"000000^111111^222222^\","
+    "    },"
+    "]";
+
+  parameters["erasure-code-pyramid"] = pyramid;
+  EXPECT_FALSE(erasure_code);
+  EXPECT_EQ(0, instance.factory("pyramid", parameters, &erasure_code));
+  EXPECT_TRUE(erasure_code);
 }
 
 int main(int argc, char **argv)
@@ -65,9 +64,9 @@ int main(int argc, char **argv)
 
 /* 
  * Local Variables:
- * compile-command: "cd ../.. ; make -j4 && 
- *   make unittest_erasure_code_plugin_jerasure && 
- *   valgrind --tool=memcheck ./unittest_erasure_code_plugin_jerasure \
+ * compile-command: "cd ../../.. ; make -j4 && 
+ *   make unittest_erasure_code_plugin_pyramid && 
+ *   valgrind --tool=memcheck ./unittest_erasure_code_plugin_pyramid \
  *      --gtest_filter=*.* --log-to-stderr=true --debug-osd=20"
  * End:
  */

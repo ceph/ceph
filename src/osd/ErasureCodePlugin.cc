@@ -1,9 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
- * Ceph - scalable distributed file system
+ * Ceph distributed storage system
  *
- * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -77,15 +77,18 @@ int ErasureCodePluginRegistry::factory(const std::string &plugin_name,
 				       const map<std::string,std::string> &parameters,
 				       ErasureCodeInterfaceRef *erasure_code)
 {
-  Mutex::Locker l(lock);
-  int r = 0;
-  ErasureCodePlugin *plugin = get(plugin_name);
-  if (plugin == 0) {
-    loading = true;
-    r = load(plugin_name, parameters, &plugin);
-    loading = false;
-    if (r != 0)
-      return r;
+  ErasureCodePlugin *plugin;
+  {
+    Mutex::Locker l(lock);
+    int r = 0;
+    plugin = get(plugin_name);
+    if (plugin == 0) {
+      loading = true;
+      r = load(plugin_name, parameters, &plugin);
+      loading = false;
+      if (r != 0)
+	return r;
+    }
   }
 
   return plugin->factory(parameters, erasure_code);

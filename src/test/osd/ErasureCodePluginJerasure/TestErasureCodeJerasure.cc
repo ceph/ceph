@@ -1,9 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
- * Ceph - scalable distributed file system
+ * Ceph distributed storage system
  *
- * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -79,8 +79,7 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
     EXPECT_EQ(0, jerasure.decode(set<int>(want_to_decode, want_to_decode+2),
                                 encoded,
                                 &decoded));
-    // always decode all, regardless of want_to_decode
-    EXPECT_EQ(4u, decoded.size()); 
+    EXPECT_EQ(2u, decoded.size()); 
     EXPECT_EQ(length, decoded[0].length());
     EXPECT_EQ(0, strncmp(decoded[0].c_str(), in.c_str(), length));
     EXPECT_EQ(0, strncmp(decoded[1].c_str(), in.c_str() + length,
@@ -98,8 +97,7 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
     EXPECT_EQ(0, jerasure.decode(set<int>(want_to_decode, want_to_decode+2),
                                 degraded,
                                 &decoded));
-    // always decode all, regardless of want_to_decode
-    EXPECT_EQ(4u, decoded.size()); 
+    EXPECT_EQ(2u, decoded.size()); 
     EXPECT_EQ(length, decoded[0].length());
     EXPECT_EQ(0, strncmp(decoded[0].c_str(), in.c_str(), length));
     EXPECT_EQ(0, strncmp(decoded[1].c_str(), in.c_str() + length,
@@ -238,6 +236,27 @@ TEST(ErasureCodeTest, encode)
 
   {
     //
+    // When bufferptr are exactly aligned, they are re-used and there is no
+    // copy or reallocation.
+    //
+    bufferlist in;
+    map<int,bufferlist> encoded;
+    int want_to_encode[] = { 0, 1, 2, 3 };
+    bufferptr ptr0(buffer::create_page_aligned(jerasure.get_chunk_size(1)));
+    in.append(ptr0);
+    bufferptr ptr1(buffer::create_page_aligned(jerasure.get_chunk_size(1)));
+    in.append(ptr1);
+    in.zero();
+    EXPECT_EQ(0, jerasure.encode(set<int>(want_to_encode, want_to_encode+4),
+				 in,
+				 &encoded));
+    EXPECT_EQ(4u, encoded.size());
+    EXPECT_EQ(ptr0.get_raw(), encoded[0].buffers().front().get_raw());
+    EXPECT_EQ(ptr1.get_raw(), encoded[1].buffers().front().get_raw());
+  }
+
+  {
+    //
     // When only the first chunk is required, the encoded map only
     // contains the first chunk. Although the jerasure encode
     // internally allocated a buffer because of padding requirements
@@ -257,6 +276,52 @@ TEST(ErasureCodeTest, encode)
   }
 }
 
+TEST(ErasureCodeTest, decode)
+{
+  ErasureCodeJerasureReedSolomonVandermonde jerasure;
+  map<std::string,std::string> parameters;
+  parameters["erasure-code-k"] = "2";
+  parameters["erasure-code-m"] = "2";
+  parameters["erasure-code-w"] = "8";
+  jerasure.init(parameters);
+
+  unsigned int chunk_size = jerasure.get_chunk_size(1);
+  string payload(chunk_size * jerasure.get_data_chunk_count(), 'X');
+  bufferlist in;
+  in.append(payload);
+  map<int, bufferlist> encoded;
+  {
+    int want_to_encode[] = { 0, 1, 2, 3 };
+    EXPECT_EQ(0, jerasure.encode(set<int>(want_to_encode, want_to_encode+4),
+				 in,
+				 &encoded));
+  }
+  {
+    int want_to_decode[] = { 0, 1 };
+    map<int, bufferlist> decoded;
+    EXPECT_EQ(0, jerasure.decode(set<int>(want_to_decode, want_to_decode+2),
+				 encoded,
+				 &decoded));
+    EXPECT_EQ(payload[0], decoded[0][0]);
+  }
+  // when a chunk is missing use decoded buffer if provided instead of
+  // allocating a new one
+  {
+    unsigned int missing = 2;
+    set<int> want_to_decode;
+    want_to_decode.insert(missing);
+    map<int, bufferlist> degraded = encoded;
+    degraded.erase(missing);
+    map<int, bufferlist> decoded;
+    bufferptr ptr(buffer::create_page_aligned(chunk_size));
+    bufferlist chunk;
+    chunk.append(ptr);
+    decoded[missing] = chunk;
+    EXPECT_EQ(0, jerasure.decode(want_to_decode, degraded, &decoded));
+    EXPECT_EQ(ptr.get_raw(), decoded[missing].buffers().front().get_raw());
+  }
+}
+
 int main(int argc, char **argv)
 {
   vector<const char*> args;
@@ -271,7 +336,7 @@ int main(int argc, char **argv)
 
 /* 
  * Local Variables:
- * compile-command: "cd ../.. ; make -j4 && 
+ * compile-command: "cd ../../.. ; make -j4 && 
  *   make unittest_erasure_code_jerasure && 
  *   valgrind --tool=memcheck --leak-check=full \
  *      ./unittest_erasure_code_jerasure \

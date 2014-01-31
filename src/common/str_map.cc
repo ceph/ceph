@@ -24,7 +24,7 @@
 using namespace std;
 
 int get_str_map(const string &str,
-                stringstream &ss,
+                ostream &ss,
                 map<string,string> *str_map)
 {
   json_spirit::mValue json;

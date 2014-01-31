@@ -1,9 +1,9 @@
 // -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
- * Ceph - scalable distributed file system
+ * Ceph distributed storage system
  *
- * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -198,7 +198,7 @@ TEST(ErasureCodeExample, decode)
   // cannot recover
   map<int, bufferlist> degraded;  
   degraded[0] = encoded[0];
-  EXPECT_EQ(-ERANGE, example.decode_concat(degraded, &out));
+  EXPECT_EQ(-EIO, example.decode_concat(degraded, &out));
 }
 
 int main(int argc, char **argv) {
