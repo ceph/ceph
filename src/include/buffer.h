@@ -208,7 +208,7 @@ public:
 
     unsigned wasted();
 
-    int cmp(const ptr& o);
+    int cmp(const ptr& o) const;
     bool is_zero() const;
 
     // modifiers

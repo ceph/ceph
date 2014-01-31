@@ -4856,7 +4856,7 @@ void OSD::sched_scrub()
 
       PG *pg = _lookup_lock_pg(pgid);
       if (pg) {
-	if (pg->is_active() &&
+	if (pg->get_pgbackend()->scrub_supported() && pg->is_active() &&
 	    (load_is_low ||
 	     (double)diff >= cct->_conf->osd_scrub_max_interval ||
 	     pg->scrubber.must_scrub)) {
