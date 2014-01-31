@@ -274,9 +274,9 @@ def task(ctx, config):
             if isinstance(s, dict):
                 statuses_by_rank[s['rank']] = s
 
-        ready = filter(lambda (_,s): s['state'] == 'up:active'
-                          or s['state'] == 'up:standby'
-                          or s['state'] == 'up:standby-replay',
+        ready = filter(lambda (_, s): s is not None and (s['state'] == 'up:active'
+                                                         or s['state'] == 'up:standby'
+                                                         or s['state'] == 'up:standby-replay'),
                        statuses.items())
         if len(ready) == len(statuses):
             break
