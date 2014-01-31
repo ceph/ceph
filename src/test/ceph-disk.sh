@@ -35,6 +35,11 @@ CEPH_DISK_ARGS+=" --statedir=$DIR"
 CEPH_DISK_ARGS+=" --sysconfdir=$DIR"
 CEPH_DISK_ARGS+=" --prepend-to-path="
 CEPH_DISK_ARGS+=" --verbose"
+TIMEOUT=360
+
+cat=$(which cat)
+timeout=$(which timeout)
+diff=$(which diff)
 
 function setup() {
     teardown
@@ -138,6 +143,10 @@ function test_path() {
     tweak_path use_path || return 1
 }
 
+function test_no_path() {
+    ( unset PATH ; test_activate_dir ) || return 1
+}
+
 # ceph-disk prepare returns immediately on success if the magic file
 # exists on the --osd-data directory.
 function test_activate_dir_magic() {
@@ -178,18 +187,18 @@ function test_activate_dir() {
         prepare $osd_data || return 1
 
     CEPH_ARGS="$CEPH_ARGS --osd-journal-size=100 --osd-data=$osd_data" \
-        timeout 5 ./ceph-disk $CEPH_DISK_ARGS \
+        $timeout $TIMEOUT ./ceph-disk $CEPH_DISK_ARGS \
                       activate \
                      --mark-init=none \
                     $osd_data || return 1
-    timeout 5 ./ceph osd pool set data size 1 || return 1
-    local id=$(cat $osd_data/whoami)
+    $timeout $TIMEOUT ./ceph osd pool set data size 1 || return 1
+    local id=$($cat $osd_data/whoami)
     local weight=1
     ./ceph osd crush add osd.$id $weight root=default host=localhost || return 1
     echo FOO > $DIR/BAR
-    timeout 10 ./rados --pool data put BAR $DIR/BAR || return 1
-    timeout 10 ./rados --pool data get BAR $DIR/BAR.copy || return 1
-    diff $DIR/BAR $DIR/BAR.copy || return 1
+    $timeout $TIMEOUT ./rados --pool data put BAR $DIR/BAR || return 1
+    $timeout $TIMEOUT ./rados --pool data get BAR $DIR/BAR.copy || return 1
+    $diff $DIR/BAR $DIR/BAR.copy || return 1
 }
 
 function test_find_cluster_by_uuid() {
@@ -208,6 +217,7 @@ function test_find_cluster_by_uuid() {
 function run() {
     local default_actions
     default_actions+="test_path "
+    default_actions+="test_no_path "
     default_actions+="test_find_cluster_by_uuid "
     default_actions+="test_prepend_to_path "
     default_actions+="test_activate_dir_magic "
