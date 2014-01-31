@@ -58,7 +58,8 @@ using namespace std;
 
 class CephContext;
 
-extern CompatSet get_mdsmap_compat_set();
+extern CompatSet get_mdsmap_compat_set_all();
+extern CompatSet get_mdsmap_compat_set_default();
 extern CompatSet get_mdsmap_compat_set_base(); // pre v0.20
 
 #define MDS_FEATURE_INCOMPAT_BASE CompatSet::Feature(1, "base v0.20")
@@ -67,6 +68,7 @@ extern CompatSet get_mdsmap_compat_set_base(); // pre v0.20
 #define MDS_FEATURE_INCOMPAT_DIRINODE CompatSet::Feature(4, "dir inode in separate object")
 #define MDS_FEATURE_INCOMPAT_ENCODING CompatSet::Feature(5, "mds uses versioned encoding")
 #define MDS_FEATURE_INCOMPAT_OMAPDIRFRAG CompatSet::Feature(6, "dirfrag is stored in omap")
+#define MDS_FEATURE_INCOMPAT_INLINE CompatSet::Feature(7, "mds uses inline data")
 
 class MDSMap {
 public:
@@ -179,6 +181,8 @@ protected:
   bool ever_allowed_snaps; //< the cluster has ever allowed snap creation
   bool explicitly_allowed_snaps; //< the user has explicitly enabled snap creation
 
+  bool inline_data_enabled;
+
 public:
   CompatSet compat;
 
@@ -194,8 +198,12 @@ public:
       metadata_pool(0),
       max_mds(0),
       ever_allowed_snaps(false),
-      explicitly_allowed_snaps(false)
+      explicitly_allowed_snaps(false),
+      inline_data_enabled(false)
   { }
+
+  bool get_inline_data_enabled() { return inline_data_enabled; }
+  void set_inline_data_enabled(bool enabled) { inline_data_enabled = enabled; }
 
   utime_t get_session_timeout() {
     return utime_t(session_timeout,0);
