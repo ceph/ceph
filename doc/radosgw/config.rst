@@ -239,6 +239,8 @@ restarting your ``ceph`` and ``apache`` services. Then,  start up the
 	sudo service apache2 restart
 	sudo /etc/init.d/radosgw start
 
+.. note:: The service name on RPM based distribution is ceph-radosgw.
+
 See `Operating a Cluster`_ for details. Some versions of Ceph use different
 methods for starting and stopping clusters.
 
