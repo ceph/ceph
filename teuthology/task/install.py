@@ -248,19 +248,12 @@ def _block_looking_for_package_version(remote, base_url, wait=False):
     version = r.stdout.getvalue().strip()
     return version
 
-def _get_local_dir(ctx, remote):
+def _get_local_dir(config, remote):
     """
-    Extract local directory name from the task lists. 
+    Extract local directory name from the task lists.
     Copy files over to the remote site.
     """
-    ldir = None
-    for tsk in ctx.config['tasks']:
-        if 'install' in tsk:
-            try:
-                ldir = tsk['install']['local']
-                break
-            except (TypeError, KeyError):
-                log.info("Attempted to install invalid local file")
+    ldir = config.get('local', None)
     if ldir:
         remote.run(args=['sudo', 'mkdir', '-p', ldir,])
         for fyle in os.listdir(ldir):
@@ -349,7 +342,7 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
         ] + ['%s=%s' % (d, version) for d in debs],
         stdout=StringIO(),
     )
-    ldir = _get_local_dir(ctx, remote)
+    ldir = _get_local_dir(config, remote)
     if ldir:
         for fyle in os.listdir(ldir):
             fname = "%s/%s" % (ldir, fyle)
@@ -446,7 +439,7 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     tmp_vers = version_no.getvalue().strip()[1:]
     if '-' in tmp_vers:
         tmp_vers = tmp_vers.split('-')[0]
-    ldir = _get_local_dir(ctx, remote)
+    ldir = _get_local_dir(config, remote)
     for cpack in rpm:
         pk_err_mess = StringIO()
         pkg2add = "{cpack}-{version}".format(cpack=cpack, version=tmp_vers)
