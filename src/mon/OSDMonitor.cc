@@ -4238,6 +4238,14 @@ done:
       goto reply;
     }
 
+    // If the Pool is in use by CephFS, refuse to delete it
+    MDSMap const &pending_mdsmap = mon->mdsmon()->pending_mdsmap;
+    if (pending_mdsmap.is_data_pool(pool) || pending_mdsmap.get_metadata_pool() == pool) {
+      ss << "Cannot delete pool '" << poolstr << "' because it is in use by CephFS";
+      err = -EBUSY;
+      goto reply;
+    }
+
     if (poolstr2 != poolstr || sure != "--yes-i-really-really-mean-it") {
       ss << "WARNING: this will *PERMANENTLY DESTROY* all data stored in pool " << poolstr
 	 << ".  If you are *ABSOLUTELY CERTAIN* that is what you want, pass the pool name *twice*, "
