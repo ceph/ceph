@@ -1023,6 +1023,23 @@ def cluster(ctx, config):
                 ),
             )
 
+def osd_scrub_pgs(ctx, config):
+    """
+    Scrub pgs when we exit.
+    """
+    
+    for remotes in ctx.cluster.remotes:
+        site_info = remotes.values()
+        for st_info in site_info:
+            for role in st_info:
+                if role.startswith('osd.'):
+                    log.info("Scrubbing osd {osd}".format(osd=role))
+                    testdir = teuthology.get_testdir(ctx)
+                    remotes.run(args=[
+                        'adjust-ulimits',
+                        'ceph-coverage',
+                        '{tdir}/archive/coverage'.format(tdir=testdir),
+                        'ceph', 'osd', 'scrub', role])
 
 @contextlib.contextmanager
 def run_daemon(ctx, config, type_):
@@ -1103,6 +1120,8 @@ def run_daemon(ctx, config, type_):
     try:
         yield
     finally:
+        if type_ == 'osd':
+            osd_scrub_pgs(ctx, config)
         teuthology.stop_daemons_of_type(ctx, type_)
 
 def healthy(ctx, config):
