@@ -2,74 +2,61 @@
  Documenting Ceph
 ==================
 
-One of the ways you can help Ceph is to contribute documentation to the project.
-Until 2012, Ceph documentation consisted primarily of scholarly papers, wiki
-articles and restructuredText contributions from a few core developers. Since
-early 2012, most of the Ceph documentation has been written by a single person!
-The Ceph project is growing rapidly, and will benefit greatly with more
-participation from the community. Contributions don't need to be extensive to
-benefit the project. We welcome any contributions you may offer. 
+The **easiest way** to help the Ceph project is to contribute to the
+documentation. As the Ceph user base grows and the development pace quickens, an
+increasing number of people are updating the documentation and adding new
+information. Even small contributions like fixing spelling errors or clarifying
+instructions help the Ceph project immensely.
+
+When you view Ceph documentation online, the primary link is
+http://ceph.com/docs/master. The documentation source in the ``ceph/docs``
+directory gets rendered to HTML and presented online. The ``master`` portion of
+the path reflects the branch name,  which means you can view documentation for
+older branches (e.g., ``argonaut``) or future branches (e.g., ``next``) as well
+as work-in-progress branches.
 
 
 Making Contributions
 ====================
 
-Making a documentation contribution generally involves the same procedural 
+Making a documentation contribution generally involves the same procedural
 sequence as making a code contribution, except that you must build documentation
-source instead of compiling program source.
+source instead of compiling program source. The sequence includes the following
+steps:
 
-
-.. ditaa:: +----------------------------+        +-----------------------------+
-           |                            |        |                             |
-           |      Get the Source        |------->|       Create a Branch       |
-           |                            |        |                             |
-           +----------------------------+        +-----------------------------+
-                                                                |
-                         +--------------------------------------+ 
-                         |
-                         v
-           +----------------------------+        +-----------------------------+
-           |                            |        |                             |
-           |       Make a Change        |------->|       Build the Source      |
-           |                            |        |                             |
-           +----------------------------+        +-----------------------------+
-                                                                |
-                         +--------------------------------------+ 
-                         |
-                         v
-           +----------------------------+        +-----------------------------+
-           |                            |        |                             |
-           |     Commit the Change      |------->|       Push the Change       |
-           |                            |        |                             |
-           +----------------------------+        +-----------------------------+
-                                                                |
-                         +--------------------------------------+ 
-                         |
-                         v
-           +----------------------------+        +-----------------------------+
-           |                            |        |                             |
-           |    Make a Pull Request     |------->|   Notify Relevant Parties   |
-           |                            |        |                             |
-           +----------------------------+        +-----------------------------+
+#. `Get the Source`_
+#. `Select a Branch`_
+#. `Make a Change`_
+#. `Build the Source`_
+#. `Commit the Change`_
+#. `Push the Change`_
+#. `Make a Pull Request`_
+#. `Notify the Relevant Person`_
 
 
 
-Getting the Source
-------------------
+Get the Source
+--------------
 
 Ceph documentation lives in the Ceph repository right along side the Ceph source
 code under the ``ceph/doc`` directory. The most common way to make contributions
-if you don't have push access to the Ceph repository is to use the `Fork and
-Pull`_ approach. To use this approach, you must:
+is to use the `Fork and Pull`_ approach. To use this approach, you must:
 
-- Create a  `github`_ account (if you don't have one)
-- Fork the Ceph project
-- Clone your forked project
+- Install git locally. :: 
 
-If you have push access for the Ceph repository, you can simply, 
-clone the Ceph source code repository::
+	sudo apt-get install git
 
-	git clone --recursive https://github.com/ceph/ceph.git
+- Ensure your ``.gitconfig`` file has your name and email address. :: 
+
+	[user]
+	   email = {your-email-address}
+	   name = {your-name}
+
+- Create a  `github`_ account (if you don't have one).
+
+- Fork the Ceph project.
+
+- Clone your forked project.
 
 All Ceph documentation resides under the ``ceph/doc`` directory and
 subdirectories of the Ceph repository. Ceph organizes documentation into an
@@ -102,23 +89,38 @@ information architecture primarily by its main components.
   store them under the ``doc/images`` directory.
 
 
-Creating a Branch
------------------
+Select a Branch
+---------------
 
-To distinguish branches that include only documentation updates, we prepend them
-with ``wip-doc`` by convention, following the form ``wip-doc-{your-branch-name}``.
-If the branch relates to a single bug, it assumes the bug number. For example, 
-if a documentation branch is a fix for bug report #7000, the branch name should be
-``wip-doc-7000`` by convention.
+When you make small changes to the documentation, such as fixing typographical
+errors or clarifying explanations, use the ``master`` branch (default). You
+should also use the ``master`` branch when making contributions to features that
+are in the current release. ``master`` is the most commonly used branch. ::
 
-.. note:: Do not include anything but document changes in a documentation branch, 
-   or your pull request will be rejected.
+	git checkout master
 
-Before you create a branch and start making changes, we recommend making a pull 
-request on the ``master`` branch so that your repository has all the recent 
-changes. :: 
+When you make changes to documentation that affect an upcoming release, use 
+the ``next`` branch. ``next`` is the second most commonly used branch. ::
 
-	git pull
+	git checkout next
+
+When you are making substantial contributions such as new features that are not
+yet in the current release; if your contribution is related to an issue with a
+tracker ID; or, if you want to see your documentation rendered on the Ceph.com
+website before it gets merged into the ``master`` branch, you should create a
+branch. To distinguish branches that include only documentation updates, we
+prepend them with ``wip-doc`` by convention, following the form
+``wip-doc-{your-branch-name}``. If the branch relates to an issue filed in
+http://tracker.ceph.com/issues, the branch name incorporates the issue number.
+For example, if a documentation branch is a fix for issue #4000, the branch name
+should be ``wip-doc-4000`` by convention and the relevant tracker URL will be
+http://tracker.ceph.com/issues/4000.
+
+.. note:: Please don't commingle documentation contributions and source code
+   contributions in a single pull request. Editors review the documentation
+   and engineers review source code changes. When you keep documentation 
+   pull requests separate from source code pull requests, it simplifies the 
+   process and we won't have to ask you to resubmit the requests separately.
 
 Before you create your branch name, ensure that it doesn't already exist in the
 local or remote repository. ::
@@ -160,8 +162,8 @@ Deleting a document involves removing it from the repository with ``git rm
 You must also remove any reference to the document from other documents.
 
 
-Building the Source
--------------------
+Build the Source
+----------------
 
 To build the documentation, navigate to the ``ceph`` repository directory;
 then execute the build script:: 
@@ -207,8 +209,8 @@ There should be an ``html`` directory and a ``man`` directory containing
 documentation in HTML and manpage formats respectively.
 
 
-Committing Changes
-------------------
+Commit the Change
+-----------------
 
 An easy way to manage your documentation commits is to use visual tools for
 ``git``. For example, ``gitk`` provides a graphical interface for viewing the
@@ -256,9 +258,22 @@ There is a carriage return between the summary line and the description::
 	to config_opts.h.
 	
 	signed-off by: john.doe@gmail.com
-	
 
-Pushing Commits
+
+To commit changes, execute the following:: 
+
+	git commit -a
+	
+You can also a graphical editor like ``gitk`` and ``git-gui``. :: 
+
+	sudo apt-get install gitk git-gui
+	cd {git-ceph-repo-path}
+	gitk
+	
+Then select **File->Start git gui** to activate the graphical user interface.
+
+
+Push the Change
 ---------------
 
 Once you have one or more commits, you must push them from the local copy of the
@@ -269,12 +284,19 @@ interface for pushing to the repository. ::
 
 
 
-Making Pull Requests
---------------------
+Make a Pull Request
+-------------------
 
 As noted earlier, you can make documentation contributions using the `Fork and
 Pull`_ approach.
 
+
+
+Notify the Relevant Person
+--------------------------
+
+After you make a pull request, notify the relevant person. For general
+documentation pull requests, notify `John Wilkins`_.
 
 
 
@@ -421,3 +443,4 @@ improves the readability of the document in a command line interface.
 .. _Showing code examples: http://sphinx-doc.org/markup/code.html
 .. _paragraph level markup: http://sphinx-doc.org/markup/para.html
 .. _topic directive: http://docutils.sourceforge.net/docs/ref/rst/directives.html#topic
+.. _John Wilkins: mailto:john.wilkins@inktank.com
