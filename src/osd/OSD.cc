@@ -82,6 +82,10 @@
 #include "messages/MOSDPGMissing.h"
 #include "messages/MBackfillReserve.h"
 #include "messages/MRecoveryReserve.h"
+#include "messages/MOSDECSubOpWrite.h"
+#include "messages/MOSDECSubOpWriteReply.h"
+#include "messages/MOSDECSubOpRead.h"
+#include "messages/MOSDECSubOpReadReply.h"
 
 #include "messages/MOSDAlive.h"
 
@@ -4766,6 +4770,18 @@ void OSD::dispatch_op(OpRequestRef op)
     break;
   case MSG_OSD_PG_PUSH_REPLY:
     handle_replica_op<MOSDPGPushReply, MSG_OSD_PG_PUSH_REPLY>(op);
+    break;
+  case MSG_OSD_EC_WRITE:
+    handle_replica_op<MOSDECSubOpWrite, MSG_OSD_EC_WRITE>(op);
+    break;
+  case MSG_OSD_EC_WRITE_REPLY:
+    handle_replica_op<MOSDECSubOpWriteReply, MSG_OSD_EC_WRITE_REPLY>(op);
+    break;
+  case MSG_OSD_EC_READ:
+    handle_replica_op<MOSDECSubOpRead, MSG_OSD_EC_READ>(op);
+    break;
+  case MSG_OSD_EC_READ_REPLY:
+    handle_replica_op<MOSDECSubOpReadReply, MSG_OSD_EC_READ_REPLY>(op);
     break;
   }
 }
