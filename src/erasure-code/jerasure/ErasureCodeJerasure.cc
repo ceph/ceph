@@ -113,11 +113,11 @@ int ErasureCodeJerasure::encode(const set<int> &want_to_encode,
     bufferptr pad(padded_length - in.length());
     pad.zero();
     out.push_back(pad);
-    out.rebuild_page_aligned();
   }
   unsigned coding_length = blocksize * m;
   bufferptr coding(buffer::create_page_aligned(coding_length));
   out.push_back(coding);
+  out.rebuild_page_aligned();
   char *chunks[k + m];
   for (int i = 0; i < k + m; i++) {
     bufferlist &chunk = (*encoded)[i];
@@ -145,10 +145,11 @@ int ErasureCodeJerasure::decode(const set<int> &want_to_read,
     if (chunks.find(i) == chunks.end()) {
       erasures[erasures_count] = i;
       erasures_count++;
-      bufferptr ptr(blocksize);
+      bufferptr ptr(buffer::create_page_aligned(blocksize));
       (*decoded)[i].push_front(ptr);
     } else {
       (*decoded)[i] = chunks.find(i)->second;
+      (*decoded)[i].rebuild_page_aligned();
     }
     if (i < k)
       data[i] = (*decoded)[i].c_str();
