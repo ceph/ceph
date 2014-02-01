@@ -1931,6 +1931,7 @@ public:
 
   virtual void agent_work(int max) = 0;
   virtual void agent_stop() = 0;
+  virtual void agent_clear() = 0;
 };
 
 ostream& operator<<(ostream& out, const PG& pg);

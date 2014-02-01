@@ -5955,6 +5955,8 @@ PG::RecoveryState::ReplicaActive::ReplicaActive(my_context ctx)
     context< RecoveryMachine >().get_cur_transaction(),
     context< RecoveryMachine >().get_on_applied_context_list(),
     context< RecoveryMachine >().get_on_safe_context_list());
+
+  pg->agent_clear();
 }
 
 
