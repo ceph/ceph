@@ -236,6 +236,10 @@ private:
   bool prepare_pool_op (MPoolOp *m);
   bool prepare_pool_op_create (MPoolOp *m);
   bool prepare_pool_op_delete(MPoolOp *m);
+  int prepare_pool_properties(const unsigned pool_type,
+			      const vector<string> &properties,
+			      map<string,string> *properties_map,
+			      stringstream &ss);
   int prepare_new_pool(string& name, uint64_t auid, int crush_ruleset,
                        unsigned pg_num, unsigned pgp_num,
 		       const vector<string> &properties,
