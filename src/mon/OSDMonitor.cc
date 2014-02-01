@@ -2742,6 +2742,38 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
                             properties, pg_pool_t::TYPE_REPLICATED, ss);
 }
 
+int OSDMonitor::prepare_pool_properties(const unsigned pool_type,
+					const vector<string> &properties,
+					map<string,string> *properties_map,
+					stringstream &ss)
+{
+  if (pool_type == pg_pool_t::TYPE_ERASURE) {
+    int r = get_str_map(g_conf->osd_pool_default_erasure_code_properties,
+			ss,
+			properties_map);
+    if (r)
+      return r;
+    (*properties_map)["erasure-code-directory"] =
+      g_conf->osd_pool_default_erasure_code_directory;
+  }
+
+  for (vector<string>::const_iterator i = properties.begin();
+       i != properties.end();
+       ++i) {
+    size_t equal = i->find('=');
+    if (equal == string::npos)
+      (*properties_map)[*i] = string();
+    else {
+      const string key = i->substr(0, equal);
+      equal++;
+      const string value = i->substr(equal);
+      (*properties_map)[key] = value;
+    }
+  }
+
+  return 0;
+}
+
 /**
  * @param name The name of the new pool
  * @param auid The auid of the pool owner. Can be -1
@@ -2760,17 +2792,10 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_ruleset,
                                  const unsigned pool_type,
 				 stringstream &ss)
 {
-  map<string,string> default_properties;
-  if (pool_type == pg_pool_t::TYPE_ERASURE) {
-    int r = get_str_map(g_conf->osd_pool_default_erasure_code_properties,
-			ss,
-			&default_properties);
-    if (r)
-      return r;
-    default_properties["erasure-code-directory"] =
-      g_conf->osd_pool_default_erasure_code_directory;
-  }
-
+  map<string,string> properties_map;
+  int r = prepare_pool_properties(pool_type, properties, &properties_map, ss);
+  if (r)
+    return r;
   for (map<int64_t,string>::iterator p = pending_inc.new_pool_names.begin();
        p != pending_inc.new_pool_names.end();
        ++p) {
@@ -2808,20 +2833,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_ruleset,
   pi->set_pgp_num(pgp_num ? pgp_num : g_conf->osd_pool_default_pgp_num);
   pi->last_change = pending_inc.epoch;
   pi->auid = auid;
-  pi->properties = default_properties;
-  for (vector<string>::const_iterator i = properties.begin();
-       i != properties.end();
-       ++i) {
-    size_t equal = i->find('=');
-    if (equal == string::npos)
-      pi->properties[*i] = string();
-    else {
-      const string key = i->substr(0, equal);
-      equal++;
-      const string value = i->substr(equal);
-      pi->properties[key] = value;
-    }
-  }
+  pi->properties = properties_map;
   pending_inc.new_pool_names[pool] = name;
   return 0;
 }
