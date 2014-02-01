@@ -661,8 +661,8 @@ string LFNIndex::lfn_generate_object_name(const ghobject_t &oid)
     t += snprintf(t, end - t, "%llx", (long long unsigned)oid.hobj.pool);
   full_name += string(buf);
 
-  if (oid.generation != ghobject_t::NO_GEN) {
-    assert(oid.shard_id != ghobject_t::NO_SHARD);
+  if (oid.generation != ghobject_t::NO_GEN ||
+      oid.shard_id != ghobject_t::NO_SHARD) {
     full_name.append("_");
 
     t = buf;
