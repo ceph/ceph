@@ -238,21 +238,34 @@ public:
 
 class AppendGenerator : public RandGenerator {
   uint64_t off;
+  uint64_t alignment;
   uint64_t min_append_size;
   uint64_t max_append_size;
   uint64_t max_append_total;
+
+  uint64_t round_up(uint64_t in, uint64_t by) {
+    if (by)
+      in += (by - (in % by));
+    return in;
+  }
+
 public:
   AppendGenerator(
     uint64_t off,
+    uint64_t alignment,
     uint64_t min_append_size,
-    uint64_t max_append_size,
-    uint64_t max_append_total) :
-    off(off), min_append_size(min_append_size),
-    max_append_size(max_append_size),
-    max_append_total(max_append_total) {}
+    uint64_t _max_append_size,
+    uint64_t max_append_multiple) :
+    off(off), alignment(alignment),
+    min_append_size(round_up(min_append_size, alignment)),
+    max_append_size(round_up(_max_append_size, alignment)) {
+    if (_max_append_size == min_append_size)
+      max_append_size += alignment;
+    max_append_total = max_append_multiple * max_append_size;
+  }
   uint64_t get_append_size(const ContDesc &in) {
     RandWrap rand(in.seqnum);
-    return rand() % max_append_total;
+    return round_up(rand() % max_append_total, alignment);
   }
   uint64_t get_length(const ContDesc &in) {
     return off + get_append_size(in);

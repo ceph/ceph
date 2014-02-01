@@ -708,9 +708,11 @@ public:
 	0;
       cont_gen = new AppendGenerator(
 	prev_length,
+	(context->io_ctx.pool_requires_alignment() ?
+	 context->io_ctx.pool_required_alignment() : 0),
 	context->min_stride_size,
 	context->max_stride_size,
-	3 * context->max_stride_size);
+	3);
     } else {
       cont_gen = new VarLenGenerator(
 	context->max_size, context->min_stride_size, context->max_stride_size);
