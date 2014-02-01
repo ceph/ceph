@@ -345,7 +345,7 @@ public:
     version_t former_version) {
     t->collection_move_rename(
       coll, hoid, coll,
-      ghobject_t(hoid, former_version, 0));
+      ghobject_t(hoid, former_version, ghobject_t::NO_SHARD));
   }
   void setattrs(
     const hobject_t &hoid,

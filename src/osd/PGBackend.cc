@@ -143,7 +143,7 @@ int PGBackend::objects_get_attr(
   bufferptr bp;
   int r = store->getattr(
     coll,
-    hoid,
+    ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     attr.c_str(),
     bp);
   if (r >= 0 && out) {
@@ -159,7 +159,7 @@ int PGBackend::objects_get_attrs(
 {
   return store->getattrs(
     coll,
-    hoid,
+    ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     *out);
 }
 
@@ -175,7 +175,10 @@ void PGBackend::rollback_setattrs(
     if (i->second) {
       to_set[i->first] = i->second.get();
     } else {
-      t->rmattr(coll, hoid, i->first);
+      t->rmattr(
+	coll,
+	ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+	i->first);
     }
   }
   t->setattrs(
@@ -188,7 +191,10 @@ void PGBackend::rollback_append(
   const hobject_t &hoid,
   uint64_t old_size,
   ObjectStore::Transaction *t) {
-  t->truncate(coll, hoid, old_size);
+  t->truncate(
+    coll,
+    ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+    old_size);
 }
 
 void PGBackend::rollback_stash(
@@ -198,7 +204,7 @@ void PGBackend::rollback_stash(
   t->remove(coll, hoid);
   t->collection_move_rename(
     coll,
-    ghobject_t(hoid, old_version, 0),
+    ghobject_t(hoid, old_version, get_parent()->whoami_shard().shard),
     coll,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
 }
@@ -206,12 +212,15 @@ void PGBackend::rollback_stash(
 void PGBackend::rollback_create(
   const hobject_t &hoid,
   ObjectStore::Transaction *t) {
-  t->remove(coll, hoid);
+  t->remove(
+    coll,
+    ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
 }
 
 void PGBackend::trim_stashed_object(
   const hobject_t &hoid,
   version_t old_version,
   ObjectStore::Transaction *t) {
-  t->remove(coll, ghobject_t(hoid, old_version, 0));
+  t->remove(
+    coll, ghobject_t(hoid, old_version, get_parent()->whoami_shard().shard));
 }
