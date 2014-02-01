@@ -872,6 +872,21 @@ def replace_all_with_clients(cluster, config):
         norm_config['client.{id}'.format(id=client)] = config['all']
     return norm_config
 
+def roles_to_remotes(cluster, config, attrname='roles', unique=True):
+    """
+    Get a list of roles from attrname, and return a list of
+    remotes corresponding to those roles.  If 'unique' is False,
+    allow duplicates in the returned remote list (if a remote serves
+    multiple roles).  attrname may not exist, in which case the
+    returned list is empty.
+    """
+    roles = config.get(attrname, list())
+    remotes = []
+    for role in roles:
+        rem = cluster.only(role).remotes.keys()[0]
+        if (not unique) or (rem not in remotes):
+            remotes.append(rem)
+    return remotes
 
 def deep_merge(a, b):
     if a is None:
