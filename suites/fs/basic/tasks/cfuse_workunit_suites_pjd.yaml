@@ -1,6 +1,5 @@
-tasks:
-- install:
-- ceph:
+overrides:
+  ceph:
     conf:
       client:
         debug ms: 1
@@ -8,6 +7,7 @@ tasks:
       mds:
         debug ms: 1
         debug mds: 20
+tasks:
 - ceph-fuse:
 - workunit:
     clients:

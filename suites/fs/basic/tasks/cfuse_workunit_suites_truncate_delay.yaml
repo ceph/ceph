@@ -1,12 +1,12 @@
-tasks:
-- install:
-- ceph:
+overrides:
+  ceph:
     conf:
       client:
         ms_inject_delay_probability: 1
         ms_inject_delay_type: osd
         ms_inject_delay_max: 5
         client_oc_max_dirty_age: 1
+tasks:
 - ceph-fuse:
 - exec:
     client.0:

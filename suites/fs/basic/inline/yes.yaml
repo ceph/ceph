@@ -1,0 +1,6 @@
+tasks:
+- install:
+- ceph:
+- exec:
+    client.0:
+      - ceph mds set inline_data --yes-i-really-mean-it

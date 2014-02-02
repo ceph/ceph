@@ -1,9 +1,9 @@
-tasks:
-- install:
-- ceph:
+overrides:
+  ceph:
     conf:
       osd:
         filestore flush min: 0
+tasks:
 - ceph-fuse:
 - workunit:
     clients:
