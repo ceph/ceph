@@ -8,6 +8,14 @@
 	...
 }
 {
+	tcmalloc: string
+	Memcheck:Leak
+	...
+	obj:*tcmalloc*
+	fun:call_init.part.0
+	...
+}
+{
 	ceph global: deliberate onexit leak
 	Memcheck:Leak
 	...
