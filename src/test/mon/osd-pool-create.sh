@@ -19,7 +19,7 @@ PS4='$LINENO: '
 
 DIR=osd-pool-create
 rm -fr $DIR
-trap "set +x ; kill_mon || true ; rm -fr $DIR" EXIT
+trap "test \$? = 0 || cat $DIR/log ; set +x ; kill_mon || true && rm -fr $DIR" EXIT
 mkdir $DIR
 export CEPH_ARGS="--conf /dev/null --auth-supported=none --mon-host=127.0.0.1" 
 
