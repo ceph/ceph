@@ -240,6 +240,10 @@ private:
 			      const vector<string> &properties,
 			      map<string,string> *properties_map,
 			      stringstream &ss);
+  int prepare_pool_crush_ruleset(const unsigned pool_type,
+				 const map<string,string> &properties,
+				 int *crush_ruleset,
+				 stringstream &ss);
   int prepare_pool_size(const unsigned pool_type,
 			const map<string,string> &properties,
 			unsigned *size,
