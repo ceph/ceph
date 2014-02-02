@@ -43,7 +43,7 @@ function run_mon() {
 function kill_mon() {
     for try in 0 1 1 1 2 3 ; do
         if [ ! -e $DIR/pidfile ] ||
-            ! kill $(cat $DIR/pidfile) ; then
+            ! kill -9 $(cat $DIR/pidfile) ; then
             break
         fi
         sleep $try
