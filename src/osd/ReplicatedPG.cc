@@ -10247,6 +10247,10 @@ void ReplicatedPG::agent_work(int start_max)
   for (vector<hobject_t>::iterator p = ls.begin();
        p != ls.end();
        ++p) {
+    if (is_degraded_object(*p)) {
+      dout(20) << __func__ << " skip (degraded) " << *p << dendl;
+      continue;
+    }
     ObjectContextRef obc = get_object_context(*p, false, NULL);
     if (!obc) {
       // we didn't flush; we may miss something here.
