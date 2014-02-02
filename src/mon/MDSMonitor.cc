@@ -842,6 +842,27 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       if (interr.length())
 	goto out;
       pending_mdsmap.max_mds = n;
+    } else if (var == "inline_data") {
+      if (val == "true" || val == "yes" || (!interr.length() && n == 1)) {
+	string confirm;
+	if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
+	    confirm != "--yes-i-really-mean-it") {
+	  ss << "inline data is new and experimental; you must specify --yes-i-really-mean-it";
+	  r = -EPERM;
+	  goto out;
+	}
+	ss << "inline data enabled";
+	pending_mdsmap.set_inline_data_enabled(true);
+	pending_mdsmap.compat.incompat.insert(MDS_FEATURE_INCOMPAT_INLINE);
+      } else if (val == "false" || val == "no" ||
+		 (!interr.length() && n == 0)) {
+	ss << "inline data disabled";
+	pending_mdsmap.set_inline_data_enabled(false);
+      } else {
+	ss << "value must be false|no|0 or true|yes|1";
+	r = -EINVAL;
+	goto out;
+      }
     } else if (var == "max_file_size") {
       if (interr.length()) {
 	ss << var << " requires an integer value";
@@ -994,13 +1015,6 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       r = 0;
     }
 
-  } else if (prefix == "mds inline enable") {
-    pending_mdsmap.set_inline_data_enabled(true);
-    pending_mdsmap.compat.incompat.insert(MDS_FEATURE_INCOMPAT_INLINE);
-    r = 0;
-  } else if (prefix == "mds inline disable") {
-    pending_mdsmap.set_inline_data_enabled(false);
-    r = 0;
   } else if (prefix == "mds add_data_pool") {
     string poolname;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolname);
