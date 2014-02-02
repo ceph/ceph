@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+# Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -82,12 +82,19 @@ run_mon --osd_pool_default_erasure_code_properties 1
 ./ceph osd pool create poolA 12 12 erasure 2>&1 | grep 'must be a JSON object'
 kill_mon
 
-# explicitly set the default erasure crush rule
-expected=88
-run_mon --osd_pool_default_crush_erasure_ruleset $expected
-./ceph --format json osd dump | grep '"crush_ruleset":'$expected && exit 1
-./ceph osd pool create pool_erasure 12 12 erasure
-./ceph --format json osd dump | grep '"crush_ruleset":'$expected
+# set the erasure crush rule
+run_mon 
+crush_ruleset=erasure_ruleset
+./ceph osd crush rule create-erasure $crush_ruleset
+./ceph osd crush rule ls | grep $crush_ruleset
+./ceph osd pool create pool_erasure 12 12 erasure 2>&1 | 
+  grep 'crush_ruleset is missing'
+! ./ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=WRONG > $DIR/out 2>&1 
+grep 'WRONG does not exist' $DIR/out
+grep 'EINVAL' $DIR/out
+! ./ceph --format json osd dump | grep '"crush_ruleset":1' || exit 1
+./ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=$crush_ruleset
+./ceph --format json osd dump | grep '"crush_ruleset":1'
 kill_mon
 
 expected='"foo":"bar"'
