@@ -2801,6 +2801,14 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
   case pg_pool_t::TYPE_REPLICATED:
     *size = g_conf->osd_pool_default_size;
     break;
+  case pg_pool_t::TYPE_ERASURE:
+    {
+      ErasureCodeInterfaceRef erasure_code;
+      err = get_erasure_code(properties, &erasure_code, ss);
+      if (err == 0)
+	*size = erasure_code->get_chunk_count();
+    }
+    break;
   default:
     ss << "prepare_pool_size: " << pool_type << " is not a known pool type";
     err = -EINVAL;
