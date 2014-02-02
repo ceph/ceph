@@ -725,7 +725,8 @@ bool OSDMonitor::should_propose(double& delay)
     return true;
 
   // adjust osd weights?
-  if (osd_weight.size() == (unsigned)osdmap.get_max_osd()) {
+  if (osd_weight.size() > 0 &&
+      osd_weight.size() == (unsigned)osdmap.get_max_osd()) {
     dout(0) << " adjusting osd weights based on " << osd_weight << dendl;
     osdmap.adjust_osd_weights(osd_weight, pending_inc);
     delay = 0.0;
