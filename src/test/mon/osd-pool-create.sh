@@ -109,18 +109,23 @@ crush_ruleset=erasure_ruleset
 grep "$crush_ruleset try again" $DIR/log
 kill_mon
 
-expected='"foo":"bar"'
 # osd_pool_default_erasure_code_properties is JSON
+expected='"erasure-code-plugin":"example"'
 run_mon --osd_pool_default_erasure_code_properties "{$expected}"
-./ceph --format json osd dump | grep "$expected" && exit 1
-./ceph osd pool create poolA 12 12 erasure
+! ./ceph --format json osd dump | grep "$expected" || exit 1
+crush_ruleset=erasure_ruleset
+./ceph osd crush rule create-erasure $crush_ruleset
+./ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=$crush_ruleset
 ./ceph --format json osd dump | grep "$expected"
 kill_mon
 
 # osd_pool_default_erasure_code_properties is plain text
-run_mon --osd_pool_default_erasure_code_properties 'foo=bar'
-./ceph --format json osd dump | grep "$expected" && exit 1
-./ceph osd pool create poolA 12 12 erasure
+expected='"erasure-code-plugin":"example"'
+run_mon --osd_pool_default_erasure_code_properties "erasure-code-plugin=example"
+! ./ceph --format json osd dump | grep "$expected" || exit 1
+crush_ruleset=erasure_ruleset
+./ceph osd crush rule create-erasure $crush_ruleset
+./ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=$crush_ruleset
 ./ceph --format json osd dump | grep "$expected"
 kill_mon
 
@@ -128,8 +133,9 @@ run_mon
 
 # creating an erasure code pool sets defaults properties
 ./ceph --format json osd dump > $DIR/osd.json
-./ceph osd pool create erasurecodes 12 12 erasure
 ! grep "erasure-code-plugin" $DIR/osd.json || exit 1
+./ceph osd crush rule create-erasure erasure_ruleset
+./ceph osd pool create erasurecodes 12 12 erasure crush_ruleset=erasure_ruleset
 ./ceph --format json osd dump | tee $DIR/osd.json
 grep "erasure-code-plugin" $DIR/osd.json > /dev/null
 grep "erasure-code-directory" $DIR/osd.json > /dev/null
