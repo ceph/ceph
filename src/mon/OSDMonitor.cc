@@ -2742,6 +2742,23 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
                             properties, pg_pool_t::TYPE_REPLICATED, ss);
 }
 
+int OSDMonitor::get_erasure_code(const map<string,string> &properties,
+				 ErasureCodeInterfaceRef *erasure_code,
+				 stringstream &ss)
+{
+  map<string,string>::const_iterator plugin =
+    properties.find("erasure-code-plugin");
+  if (plugin == properties.end()) {
+    ss << "cannot determine the erasure code plugin"
+       << " because erasure-code-plugin is not in the properties "
+       << properties;
+    return -EINVAL;
+  }
+  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  return instance.factory(plugin->second, properties, erasure_code);
+}
+
+
 int OSDMonitor::prepare_pool_properties(const unsigned pool_type,
 					const vector<string> &properties,
 					map<string,string> *properties_map,
