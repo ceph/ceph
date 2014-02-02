@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include "mds/mdstypes.h"
 #include "include/buffer.h"
 #include "include/rbd_types.h"
@@ -22,8 +25,7 @@ using std::string;
 
 TEST(LibRadosCmd, MonDescribe) {
   rados_t cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
+  ASSERT_EQ("", connect_cluster(&cluster));
 
   char *buf, *st;
   size_t buflen, stlen;
@@ -53,30 +55,24 @@ TEST(LibRadosCmd, MonDescribe) {
   //ASSERT_LT(0u, stlen);
   rados_buffer_free(buf);
   rados_buffer_free(st);
-
-  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+  rados_shutdown(cluster);
 }
 
 TEST(LibRadosCmd, MonDescribePP) {
   Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-
+  ASSERT_EQ("", connect_cluster_pp(cluster));
   bufferlist inbl, outbl;
   string outs;
   ASSERT_EQ(0, cluster.mon_command("{\"prefix\": \"get_command_descriptions\"}",
 				   inbl, &outbl, &outs));
   ASSERT_LT(0u, outbl.length());
   ASSERT_LE(0u, outs.length());
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+  cluster.shutdown();
 }
 
 TEST(LibRadosCmd, OSDCmd) {
   rados_t cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
-
+  ASSERT_EQ("", connect_cluster(&cluster));
   int r;
   char *buf, *st;
   size_t buflen, stlen;
@@ -95,8 +91,7 @@ TEST(LibRadosCmd, OSDCmd) {
   ASSERT_TRUE((r == 0 && buflen > 0) || (r == -ENXIO && buflen == 0));
   rados_buffer_free(buf);
   rados_buffer_free(st);
-
-  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+  rados_shutdown(cluster);
 }
 
 TEST(LibRadosCmd, PGCmd) {
@@ -172,9 +167,7 @@ void log_cb(void *arg,
 
 TEST(LibRadosCmd, WatchLog) {
   rados_t cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
-
+  ASSERT_EQ("", connect_cluster(&cluster));
   char *buf, *st;
   char *cmd[2];
   cmd[1] = NULL;
@@ -213,7 +206,5 @@ TEST(LibRadosCmd, WatchLog) {
   ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
   sleep(2);
   ASSERT_FALSE(l.contains("fourxx"));
-
-
-  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+  rados_shutdown(cluster);
 }
