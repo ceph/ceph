@@ -160,6 +160,15 @@ ceph mds set_max_mds 4
 ceph mds set_max_mds 3
 ceph mds set max_mds 4
 expect_false ceph mds set max_mds asdf
+expect_false ceph mds set inline_data true
+ceph mds set inline_data true --yes-i-really-mean-it
+ceph mds set inline_data yes --yes-i-really-mean-it
+ceph mds set inline_data 1 --yes-i-really-mean-it
+expect_false ceph mds set inline_data --yes-i-really-mean-it
+ceph mds set inline_data false
+ceph mds set inline_data no
+ceph mds set inline_data 0
+expect_false ceph mds set inline_data asdf
 ceph mds set max_file_size 1000000000
 expect_false ceph mds set max_file_size 123asdf
 

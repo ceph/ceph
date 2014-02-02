@@ -249,7 +249,7 @@ COMMAND("mds set_max_mds " \
 	"name=maxmds,type=CephInt,range=0", \
 	"set max MDS index", "mds", "rw", "cli,rest")
 COMMAND("mds set " \
-	"name=var,type=CephChoices,strings=max_mds|max_file_size|allow_new_snaps " \
+	"name=var,type=CephChoices,strings=max_mds|max_file_size|allow_new_snaps|inline_data " \
 	"name=val,type=CephString "					\
 	"name=confirm,type=CephString,req=false",			\
 	"set mds parameter <var> to <val>", "mds", "rw", "cli,rest")
@@ -279,12 +279,6 @@ COMMAND("mds compat rm_compat " \
 COMMAND("mds compat rm_incompat " \
 	"name=feature,type=CephInt,range=0", \
 	"remove incompatible feature", "mds", "rw", "cli,rest")
-COMMAND("mds inline enable", \
-        "enable inline data feature", \
-        "mds", "rw", "cli,rest")
-COMMAND("mds inline disable", \
-        "disable inline data feature", \
-        "mds", "rw", "cli,rest")
 COMMAND("mds add_data_pool " \
 	"name=pool,type=CephString", \
 	"add data pool <pool>", "mds", "rw", "cli,rest")
