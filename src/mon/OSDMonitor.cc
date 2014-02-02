@@ -2791,6 +2791,27 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
   }
   return err;
 }
+int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
+					   const map<string,string> &properties,
+					   int *crush_ruleset,
+					   stringstream &ss)
+{
+  if (*crush_ruleset < 0) {
+    switch (pool_type) {
+    case pg_pool_t::TYPE_REPLICATED:
+      *crush_ruleset =
+	CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(g_ceph_context);
+      break;
+    default:
+      ss << "prepare_pool_crush_ruleset: " << pool_type
+	 << " is not a known pool type";
+      return -EINVAL;
+      break;
+    }
+  }
+
+  return 0;
+}
 /**
  * @param name The name of the new pool
  * @param auid The auid of the pool owner. Can be -1
@@ -2813,15 +2834,9 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_ruleset,
   int r = prepare_pool_properties(pool_type, properties, &properties_map, ss);
   if (r)
     return r;
-  if (crush_ruleset < 0) {
-    if (pool_type == pg_pool_t::TYPE_REPLICATED) {
-      crush_ruleset =
-	CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(g_ceph_context);
-    } else {
-      ss << "prepare_new_pool(" << name << ") ruleset must be set";
-      return -EINVAL;
-    }
-  }
+  r = prepare_pool_crush_ruleset(pool_type, properties_map, &crush_ruleset, ss);
+  if (r)
+    return r;
   unsigned size;
   r = prepare_pool_size(pool_type, properties_map, &size, ss);
   if (r)
