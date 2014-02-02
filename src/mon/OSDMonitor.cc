@@ -3010,6 +3010,10 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
   }
 
   if (var == "size") {
+    if (p.type == pg_pool_t::TYPE_ERASURE) {
+      ss << "can not change the size of an erasure-coded pool";
+      return -ENOSYS;
+    }
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
