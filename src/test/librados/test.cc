@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*
+// vim: ts=8 sw=2 smarttab
+
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "test/librados/test.h"
@@ -27,29 +30,10 @@ std::string get_temp_pool_name()
 
 std::string create_one_pool(const std::string &pool_name, rados_t *cluster)
 {
-  int ret;
-  ret = rados_create(cluster, NULL);
-  if (ret) {
-    std::ostringstream oss;
-    oss << "rados_create failed with error " << ret;
-    return oss.str();
-  }
-  ret = rados_conf_read_file(*cluster, NULL);
-  if (ret) {
-    rados_shutdown(*cluster);
-    std::ostringstream oss;
-    oss << "rados_conf_read_file failed with error " << ret;
-    return oss.str();
-  }
-  rados_conf_parse_env(*cluster, NULL);
-  ret = rados_connect(*cluster);
-  if (ret) {
-    rados_shutdown(*cluster);
-    std::ostringstream oss;
-    oss << "rados_connect failed with error " << ret;
-    return oss.str();
-  }
-  ret = rados_pool_create(*cluster, pool_name.c_str());
+  std::string err = connect_cluster(cluster);
+  if (err.length())
+    return err;
+  int ret = rados_pool_create(*cluster, pool_name.c_str());
   if (ret) {
     rados_shutdown(*cluster);
     std::ostringstream oss;
@@ -91,6 +75,36 @@ std::string create_one_pool_pp(const std::string &pool_name, Rados &cluster)
     cluster.shutdown();
     std::ostringstream oss;
     oss << "cluster.pool_create(" << pool_name << ") failed with error " << ret;
+    return oss.str();
+  }
+  return "";
+}
+
+std::string connect_cluster(rados_t *cluster)
+{
+  char *id = getenv("CEPH_CLIENT_ID");
+  if (id) std::cerr << "Client id is: " << id << std::endl;
+
+  int ret;
+  ret = rados_create(cluster, NULL);
+  if (ret) {
+    std::ostringstream oss;
+    oss << "rados_create failed with error " << ret;
+    return oss.str();
+  }
+  ret = rados_conf_read_file(*cluster, NULL);
+  if (ret) {
+    rados_shutdown(*cluster);
+    std::ostringstream oss;
+    oss << "rados_conf_read_file failed with error " << ret;
+    return oss.str();
+  }
+  rados_conf_parse_env(*cluster, NULL);
+  ret = rados_connect(*cluster);
+  if (ret) {
+    rados_shutdown(*cluster);
+    std::ostringstream oss;
+    oss << "rados_connect failed with error " << ret;
     return oss.str();
   }
   return "";
