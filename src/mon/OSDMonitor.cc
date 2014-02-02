@@ -2827,6 +2827,34 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
       *crush_ruleset =
 	CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(g_ceph_context);
       break;
+    case pg_pool_t::TYPE_ERASURE:
+      {
+	map<string,string>::const_iterator ruleset =
+	  properties.find("crush_ruleset");
+	if (ruleset == properties.end()) {
+	  ss << "prepare_pool_crush_ruleset: crush_ruleset is missing from "
+	     << properties;
+	  return -EINVAL;
+	}
+
+	*crush_ruleset = osdmap.crush->get_rule_id(ruleset->second);
+	if (*crush_ruleset < 0) {
+	  CrushWrapper newcrush;
+	  _get_pending_crush(newcrush);
+
+	  int rule = newcrush.get_rule_id(ruleset->second);
+	  if (rule < 0) {
+	    ss << "prepare_pool_crush_ruleset: ruleset " << ruleset->second
+	       << " does not exist";
+	    return -EINVAL;
+	  } else {
+	    dout(20) << "prepare_pool_crush_ruleset: ruleset "
+		     << ruleset->second << " try again" << dendl;
+	    return -EAGAIN;
+	  }
+	}
+      }
+      break;
     default:
       ss << "prepare_pool_crush_ruleset: " << pool_type
 	 << " is not a known pool type";
@@ -4112,11 +4140,18 @@ done:
 			   pg_num, pgp_num,
 			   properties, pool_type,
 			   ss);
-    if (err < 0 && err != -EEXIST) {
-      goto reply;
-    }
-    if (err == -EEXIST) {
-      ss << "pool '" << poolstr << "' already exists";
+    if (err < 0) {
+      switch(err) {
+      case -EEXIST:
+	ss << "pool '" << poolstr << "' already exists";
+	break;
+      case -EAGAIN:
+	wait_for_finished_proposal(new C_RetryMessage(this, m));
+	return true;
+      default:
+	goto reply;
+	break;
+      }
     } else {
       ss << "pool '" << poolstr << "' created";
     }
