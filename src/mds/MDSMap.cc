@@ -20,7 +20,22 @@ using std::stringstream;
 
 
 // features
-CompatSet get_mdsmap_compat_set() {
+CompatSet get_mdsmap_compat_set_all() {
+  CompatSet::FeatureSet feature_compat;
+  CompatSet::FeatureSet feature_ro_compat;
+  CompatSet::FeatureSet feature_incompat;
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_BASE);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_CLIENTRANGES);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_FILELAYOUT);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_DIRINODE);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_ENCODING);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_OMAPDIRFRAG);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_INLINE);
+
+  return CompatSet(feature_compat, feature_ro_compat, feature_incompat);
+}
+
+CompatSet get_mdsmap_compat_set_default() {
   CompatSet::FeatureSet feature_compat;
   CompatSet::FeatureSet feature_ro_compat;
   CompatSet::FeatureSet feature_incompat;
@@ -136,7 +151,7 @@ void MDSMap::generate_test_instances(list<MDSMap*>& ls)
   m->data_pools.insert(0);
   m->metadata_pool = 1;
   m->cas_pool = 2;
-  m->compat = get_mdsmap_compat_set();
+  m->compat = get_mdsmap_compat_set_all();
 
   // these aren't the defaults, just in case anybody gets confused
   m->session_timeout = 61;
@@ -166,6 +181,7 @@ void MDSMap::print(ostream& out)
       << "stopped\t" << stopped << "\n";
   out << "data_pools\t" << data_pools << "\n";
   out << "metadata_pool\t" << metadata_pool << "\n";
+  out << "inline_data\t" << (inline_data_enabled ? "enabled" : "disabled") << "\n";
 
   multimap< pair<unsigned,unsigned>, uint64_t > foo;
   for (map<uint64_t,mds_info_t>::iterator p = mds_info.begin();
@@ -472,7 +488,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(cas_pool, bl);
 
     // kclient ignores everything from here
-    __u16 ev = 6;
+    __u16 ev = 7;
     ::encode(ev, bl);
     ::encode(compat, bl);
     ::encode(metadata_pool, bl);
@@ -487,6 +503,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(last_failure_osd_epoch, bl);
     ::encode(ever_allowed_snaps, bl);
     ::encode(explicitly_allowed_snaps, bl);
+    ::encode(inline_data_enabled, bl);
     ENCODE_FINISH(bl);
   }
 }
@@ -551,5 +568,7 @@ void MDSMap::decode(bufferlist::iterator& p)
     ever_allowed_snaps = true;
     explicitly_allowed_snaps = false;
   }
+  if (ev >= 7)
+    ::decode(inline_data_enabled, p);
   DECODE_FINISH(p);
 }
