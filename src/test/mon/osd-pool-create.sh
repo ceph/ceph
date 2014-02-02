@@ -56,7 +56,7 @@ function kill_mon() {
 expected=66
 run_mon --osd_pool_default_crush_replicated_ruleset $expected
 ./ceph --format json osd dump | grep '"crush_ruleset":'$expected
-grep "osd_pool_default_crush_rule is deprecated " $DIR/log && exit 1
+! grep "osd_pool_default_crush_rule is deprecated " $DIR/log || exit 1
 kill_mon
 
 # explicitly set the default crush rule using deprecated option
@@ -72,7 +72,7 @@ run_mon \
     --osd_pool_default_crush_rule $expected \
     --osd_pool_default_crush_replicated_ruleset $unexpected
 ./ceph --format json osd dump | grep '"crush_ruleset":'$expected
-./ceph --format json osd dump | grep '"crush_ruleset":'$unexpected && exit 1
+! ./ceph --format json osd dump | grep '"crush_ruleset":'$unexpected || exit 1
 grep "osd_pool_default_crush_rule is deprecated " $DIR/log
 kill_mon
 
@@ -107,10 +107,10 @@ kill_mon
 
 run_mon
 
-# creating an erasure code plugin sets defaults properties
+# creating an erasure code pool sets defaults properties
 ./ceph --format json osd dump > $DIR/osd.json
-grep "erasure-code-plugin" $DIR/osd.json && exit 1
 ./ceph osd pool create erasurecodes 12 12 erasure
+! grep "erasure-code-plugin" $DIR/osd.json || exit 1
 ./ceph --format json osd dump | tee $DIR/osd.json
 grep "erasure-code-plugin" $DIR/osd.json > /dev/null
 grep "erasure-code-directory" $DIR/osd.json > /dev/null
