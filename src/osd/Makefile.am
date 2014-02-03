@@ -3,9 +3,11 @@ erasure_codelibdir = $(pkglibdir)/erasure-code
 erasure_codelib_LTLIBRARIES =  
 
 include osd/ErasureCodePluginJerasure/Makefile.am
+include osd/ErasureCodePluginPyramid/Makefile.am
 
 libosd_la_SOURCES = \
 	osd/ErasureCodePlugin.cc \
+	osd/ErasureCode.cc \
 	osd/PG.cc \
 	osd/PGLog.cc \
 	osd/ReplicatedPG.cc \
@@ -28,6 +30,7 @@ noinst_LTLIBRARIES += libosd.la
 noinst_HEADERS += \
 	osd/Ager.h \
 	osd/ClassHandler.h \
+	osd/ErasureCode.h \
 	osd/ErasureCodeInterface.h \
 	osd/ErasureCodePlugin.h \
 	osd/HitSet.h \

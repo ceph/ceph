@@ -1,9 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
- * Ceph - scalable distributed file system
+ * Ceph distributed storage system
  *
- * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -142,6 +142,7 @@
 
 #include <map>
 #include <set>
+#include <vector>
 #include "include/memory.h"
 #include "include/buffer.h"
 
@@ -283,6 +284,20 @@ namespace ceph {
                        map<int, bufferlist> *encoded) = 0;
 
     /**
+     * Encode the content of the first get_data_chunk_count()
+     * bufferlist from **chunks** and store the result in the
+     * remaining chunks. All buffers pointed to by **chunks** must
+     * have the same size and the underlying bufferptr must be
+     * aligned.
+     *
+     * Returns 0 on success.
+     *
+     * @param [chunks] bufferlists to be encoded
+     * @return **0** on success or a negative errno on error.
+     */
+    virtual int encode_chunks(vector<bufferlist> &chunks) = 0;
+
+    /**
      * Decode the **chunks** and store at least **want_to_read**
      * chunks in **decoded**.
      *
@@ -320,6 +335,23 @@ namespace ceph {
                        map<int, bufferlist> *decoded) = 0;
 
     /**
+     * Decode the **chunks** and recover **erasures**, if any.  For
+     * each bufferlist in **chunks**, if the value of **erasures** is
+     * true the content is invalid and must be recovered. If the value
+     * is false, the content of the bufferlist is valid.
+     *
+     * Returns -EIO if some chunks cannot be recovered.
+     *
+     * Returns 0 on success.
+     *
+     * @param [erasures] true for each chunk with invalid data
+     * @param [chunks] bufferlists to be decoded
+     * @return **0** on success or a negative errno on error.
+     */
+    virtual int decode_chunks(vector<bool> erasures,
+			      vector<bufferlist> &chunks) = 0;
+
+    /**
      * Decode the first **get_data_chunk_count()** **chunks** and
      * concatenate them them into **decoded**.
      *
@@ -329,18 +361,8 @@ namespace ceph {
      * @param [out] decoded concatenante of the data chunks
      * @return **0** on success or a negative errno on error.
      */
-    int decode_concat(const map<int, bufferlist> &chunks,
-		      bufferlist *decoded) {
-      set<int> want_to_read;
-      for (unsigned int i = 0; i < get_data_chunk_count(); i++)
-	want_to_read.insert(i);
-      map<int, bufferlist> decoded_map;
-      int r = decode(want_to_read, chunks, &decoded_map);
-      if (r == 0)
-	for (unsigned int i = 0; i < get_data_chunk_count(); i++)
-	  decoded->claim_append(decoded_map[i]);
-      return r;
-    }
+    virtual int decode_concat(const map<int, bufferlist> &chunks,
+			      bufferlist *decoded) = 0;
   };
 
   typedef ceph::shared_ptr<ErasureCodeInterface> ErasureCodeInterfaceRef;
