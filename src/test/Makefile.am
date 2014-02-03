@@ -1,3 +1,5 @@
+include test/erasure-code/Makefile.am
+
 ## Unknown/other tests
 
 ceph_test_timers_SOURCES = test/TestTimers.cc
@@ -180,15 +182,6 @@ ceph_multi_stress_watch_SOURCES = \
 	test/librados/test.cc
 ceph_multi_stress_watch_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_multi_stress_watch 
-
-ceph_erasure_code_benchmark_SOURCES = \
-	test/osd/ceph_erasure_code_benchmark.cc
-ceph_erasure_code_benchmark_LDADD = $(LIBOSD) $(LIBCOMMON) $(BOOST_PROGRAM_OPTIONS_LIBS) $(CEPH_GLOBAL)
-if LINUX
-ceph_erasure_code_benchmark_LDADD += -ldl
-endif
-bin_DEBUGPROGRAMS += ceph_erasure_code_benchmark
-
 
 ## System tests
 
@@ -959,7 +952,6 @@ noinst_HEADERS += \
 	test/librados/test.h \
 	test/ObjectMap/KeyValueDBMemory.h \
 	test/omap_bench.h \
-	test/osd/ceph_erasure_code_benchmark.h \
 	test/osdc/FakeWriteback.h \
 	test/osd/Object.h \
 	test/osd/RadosModel.h \
