@@ -249,8 +249,9 @@ COMMAND("mds set_max_mds " \
 	"name=maxmds,type=CephInt,range=0", \
 	"set max MDS index", "mds", "rw", "cli,rest")
 COMMAND("mds set " \
-	"name=var,type=CephChoices,strings=max_mds|max_file_size " \
-	"name=val,type=CephString", \
+	"name=var,type=CephChoices,strings=max_mds|max_file_size|allow_new_snaps " \
+	"name=val,type=CephString "					\
+	"name=confirm,type=CephString,req=false",			\
 	"set mds parameter <var> to <val>", "mds", "rw", "cli,rest")
 COMMAND("mds setmap " \
 	"name=epoch,type=CephInt,range=0", \
@@ -284,15 +285,6 @@ COMMAND("mds inline enable", \
 COMMAND("mds inline disable", \
         "disable inline data feature", \
         "mds", "rw", "cli,rest")
-COMMAND("mds set " \
-        "name=key,type=CephChoices,strings=allow_new_snaps " \
-        "name=sure,type=CephString,req=false", \
-        "set <key>", \
-        "mds", "rw", "cli,rest")
-COMMAND("mds unset " \
-        "name=key,type=CephChoices,strings=allow_new_snaps " \
-        "name=sure,type=CephString,req=false", \
-        "unset <key>", "mds", "rw", "cli,rest")
 COMMAND("mds add_data_pool " \
 	"name=pool,type=CephString", \
 	"add data pool <pool>", "mds", "rw", "cli,rest")

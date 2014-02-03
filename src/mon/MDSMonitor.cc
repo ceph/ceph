@@ -853,6 +853,25 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	goto out;
       }
       pending_mdsmap.max_file_size = n;
+    } else if (var == "allow_new_snaps") {
+      if (val == "false" || val == "no" || (interr.length() == 0 && n == 0)) {
+	pending_mdsmap.clear_snaps_allowed();
+	ss << "disabled new snapshots";
+      } else if (val == "true" || val == "yes" || (interr.length() == 0 && n == 1)) {
+	string confirm;
+	if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
+	    confirm != "--yes-i-really-mean-it") {
+	  ss << "Snapshots are unstable and will probably break your FS! Set to --yes-i-really-mean-it if you are sure you want to enable them";
+	  r = -EPERM;
+	  goto out;
+	}
+	pending_mdsmap.set_snaps_allowed();
+	ss << "enabled new snapshots";
+      } else {
+	ss << "value must be true|yes|1 or false|no|0";
+	r = -EINVAL;
+	goto out;
+      }
     } else {
       ss << "unknown variable " << var;
       goto out;
@@ -982,36 +1001,6 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
   } else if (prefix == "mds inline disable") {
     pending_mdsmap.set_inline_data_enabled(false);
     r = 0;
-  } else if (prefix == "mds set") {
-    string key;
-    cmd_getval(g_ceph_context, cmdmap, "key", key);
-    string sure;
-    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
-    if (key == "allow_new_snaps") {
-      if (sure != "--yes-i-really-mean-it") {
-	ss << "Snapshots are unstable and will probably break your FS! Add --yes-i-really-mean-it if you are sure";
-	r = -EPERM;
-      } else {
-	pending_mdsmap.set_snaps_allowed();
-	ss << "turned on snaps";
-	r = 0;
-      }
-    }
-  } else if (prefix == "mds unset") {
-    string key;
-    cmd_getval(g_ceph_context, cmdmap, "key", key);
-    string sure;
-    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
-    if (key == "allow_new_snaps") {
-      if (sure != "--yes-i-really-mean-it") {
-	ss << "this won't get rid of snapshots or restore the cluster if it's broken. Add --yes-i-really-mean-it if you are sure";
-	r = -EPERM;
-      } else {
-	pending_mdsmap.clear_snaps_allowed();
-	ss << "disabled new snapshots";
-	r = 0;
-      }
-    }
   } else if (prefix == "mds add_data_pool") {
     string poolname;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolname);
