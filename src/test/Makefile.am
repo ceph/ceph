@@ -610,7 +610,8 @@ bin_DEBUGPROGRAMS += ceph_test_cls_rgw_opstate
 endif # WITH_RADOSGW
 
 libradostest_la_SOURCES = \
-	test/librados/test.cc
+	test/librados/test.cc \
+	test/librados/TestCase.cc
 noinst_LTLIBRARIES += libradostest.la
 libradostest_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 RADOS_TEST_LDADD = libradostest.la
@@ -866,6 +867,7 @@ noinst_HEADERS += \
 	test/objectstore/workload_generator.h \
 	test/kv_store_bench.h \
 	test/librados/test.h \
+	test/librados/TestCase.h \
 	test/ObjectMap/KeyValueDBMemory.h \
 	test/omap_bench.h \
 	test/osdc/FakeWriteback.h \
