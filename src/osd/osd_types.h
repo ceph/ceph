@@ -2549,6 +2549,14 @@ public:
 	return false;
       }
     }
+    /// same as get_write_lock, but ignore starvation
+    bool take_write_lock() {
+      if (state == RWWRITE) {
+	count++;
+	return true;
+      }
+      return get_write_lock();
+    }
     void dec(list<OpRequestRef> *requeue) {
       assert(count > 0);
       assert(requeue);
