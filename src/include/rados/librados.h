@@ -1683,7 +1683,22 @@ int rados_unwatch(rados_ioctx_t io, const char *o, uint64_t handle);
  */
 int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver, const char *buf, int buf_len);
 
-/** @} Atomic write operations */
+/** @} Watch/Notify */
+
+/**
+ * @defgroup librados_h_obj_op Object Operations
+ *
+ * A single rados operation can do multiple operations on one object
+ * atomicly. The whole operation will suceed or fail, and no partial
+ * results will be visible.
+ *
+ * Operations may be either reads, which can return data, or writes,
+ * which cannot. The effects of writes are applied and visible all at
+ * once, so an operation that sets an xattr and then checks its value
+ * will not see the updated value.
+ *
+ * @{
+ */
 
 /**
  * Create a new rados_write_op_t write operation. This will store all actions
@@ -1830,7 +1845,7 @@ int rados_aio_write_op_operate(rados_write_op_t write_op,
                                time_t *mtime);
 
 
-/** @} Watch/Notify */
+/** @} Object Operations */
 
 /**
  * Take an exclusive lock on an object.
