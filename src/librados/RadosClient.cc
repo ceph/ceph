@@ -101,7 +101,9 @@ const char *librados::RadosClient::get_pool_name(int64_t pool_id)
 int librados::RadosClient::pool_get_auid(uint64_t pool_id, unsigned long long *auid)
 {
   Mutex::Locker l(lock);
-  wait_for_osdmap();
+  int r = wait_for_osdmap();
+  if (r < 0)
+    return r;
   const pg_pool_t *pg = osdmap.get_pg_pool(pool_id);
   if (!pg)
     return -ENOENT;
@@ -112,7 +114,9 @@ int librados::RadosClient::pool_get_auid(uint64_t pool_id, unsigned long long *a
 int librados::RadosClient::pool_get_name(uint64_t pool_id, std::string *s)
 {
   Mutex::Locker l(lock);
-  wait_for_osdmap();
+  int r = wait_for_osdmap();
+  if (r < 0)
+    return r;
   const char *str = osdmap.get_pool_name(pool_id);
   if (!str)
     return -ENOENT;
@@ -377,21 +381,42 @@ bool librados::RadosClient::_dispatch(Message *m)
   return true;
 }
 
-void librados::RadosClient::wait_for_osdmap()
+int librados::RadosClient::wait_for_osdmap()
 {
   assert(lock.is_locked());
+
+  utime_t timeout;
+  if (cct->_conf->rados_mon_op_timeout > 0)
+    timeout.set_from_double(cct->_conf->rados_mon_op_timeout);
+
   if (osdmap.get_epoch() == 0) {
     ldout(cct, 10) << __func__ << " waiting" << dendl;
-    while (osdmap.get_epoch() == 0)
-      cond.Wait(lock);
+    utime_t start = ceph_clock_now(cct);
+
+    while (osdmap.get_epoch() == 0) {
+      cond.WaitInterval(cct, lock, timeout);
+
+      utime_t elapsed = ceph_clock_now(cct) - start;
+      if (!timeout.is_zero() && elapsed > timeout)
+	break;
+    }
+
     ldout(cct, 10) << __func__ << " done waiting" << dendl;
+
+    if (osdmap.get_epoch() == 0) {
+      lderr(cct) << "timed out waiting for first osdmap from monitors" << dendl;
+      return -ETIMEDOUT;
+    }
   }
+  return 0;
 }
 
 int librados::RadosClient::pool_list(std::list<std::string>& v)
 {
   Mutex::Locker l(lock);
-  wait_for_osdmap();
+  int r = wait_for_osdmap();
+  if (r < 0)
+    return r;
   for (map<int64_t,pg_pool_t>::const_iterator p = osdmap.get_pools().begin();
        p != osdmap.get_pools().end();
        ++p)
@@ -487,7 +512,9 @@ int librados::RadosClient::pool_create_async(string& name, PoolAsyncCompletionIm
 int librados::RadosClient::pool_delete(const char *name)
 {
   lock.Lock();
-  wait_for_osdmap();
+  int r = wait_for_osdmap();
+  if (r < 0)
+    return r;
   int tmp_pool_id = osdmap.lookup_pg_pool_name(name);
   if (tmp_pool_id < 0) {
     lock.Unlock();
@@ -516,13 +543,15 @@ int librados::RadosClient::pool_delete(const char *name)
 int librados::RadosClient::pool_delete_async(const char *name, PoolAsyncCompletionImpl *c)
 {
   Mutex::Locker l(lock);
-  wait_for_osdmap();
+  int r = wait_for_osdmap();
+  if (r < 0)
+    return r;
   int tmp_pool_id = osdmap.lookup_pg_pool_name(name);
   if (tmp_pool_id < 0)
     return -ENOENT;
 
   Context *onfinish = new C_PoolAsync_Safe(c);
-  int r = objecter->delete_pool(tmp_pool_id, onfinish);
+  r = objecter->delete_pool(tmp_pool_id, onfinish);
   if (r < 0) {
     delete onfinish;
   }
