@@ -1705,7 +1705,9 @@ void FileStore::_finish_op(OpSequencer *osr)
   if (o->onreadable_sync) {
     o->onreadable_sync->complete(0);
   }
-  op_finisher.queue(o->onreadable);
+  if (o->onreadable) {
+    op_finisher.queue(o->onreadable);
+  }
   delete o;
 }
 
