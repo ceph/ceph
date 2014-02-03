@@ -2,12 +2,16 @@
 #include "include/rados/librados.hpp"
 #include "include/rados/rados_types.h"
 #include "test/librados/test.h"
+#include "test/librados/TestCase.h"
 
 #include <errno.h>
 #include <semaphore.h>
 #include "gtest/gtest.h"
 
 using namespace librados;
+
+typedef RadosTest LibRadosWatchNotify;
+typedef RadosTestPP LibRadosWatchNotifyPP;
 
 static sem_t sem;
 
@@ -25,14 +29,9 @@ public:
     }
 };
 
-TEST(LibRadosWatchNotify, WatchNotifyTest) {
+TEST_F(LibRadosWatchNotify, WatchNotifyTest) {
   ASSERT_EQ(0, sem_init(&sem, 0, 0));
   char buf[128];
-  rados_t cluster;
-  rados_ioctx_t ioctx;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
-  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   uint64_t handle;
@@ -42,18 +41,11 @@ TEST(LibRadosWatchNotify, WatchNotifyTest) {
   TestAlarm alarm;
   sem_wait(&sem);
   rados_unwatch(ioctx, "foo", handle);
-  rados_ioctx_destroy(ioctx);
-  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
   sem_destroy(&sem);
 }
 
-TEST(LibRadosWatchNotify, WatchNotifyTestPP) {
+TEST_F(LibRadosWatchNotifyPP, WatchNotifyTestPP) {
   ASSERT_EQ(0, sem_init(&sem, 0, 0));
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
@@ -70,23 +62,14 @@ TEST(LibRadosWatchNotify, WatchNotifyTestPP) {
   TestAlarm alarm;
   sem_wait(&sem);
   ioctx.unwatch("foo", handle);
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
   sem_destroy(&sem);
 }
 
-TEST(LibRadosWatchNotify, WatchNotifyTimeoutTestPP) {
+TEST_F(LibRadosWatchNotifyPP, WatchNotifyTimeoutTestPP) {
   ASSERT_EQ(0, sem_init(&sem, 0, 0));
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
   ioctx.set_notify_timeout(1);
   uint64_t handle;
   WatchNotifyTestCtx ctx;
   ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
   sem_destroy(&sem);
 }
