@@ -162,6 +162,15 @@ ceph mds set max_mds 4
 expect_false ceph mds set max_mds asdf
 ceph mds set max_file_size 1000000000
 expect_false ceph mds set max_file_size 123asdf
+
+expect_false ceph mds set allow_new_snaps
+expect_false ceph mds set allow_new_snaps true
+ceph mds set allow_new_snaps true --yes-i-really-mean-it
+ceph mds set allow_new_snaps 0
+ceph mds set allow_new_snaps false
+ceph mds set allow_new_snaps no
+expect_false ceph mds set allow_new_snaps taco
+
 ceph mds stat
 # ceph mds tell mds.a getmap
 # ceph mds rm
