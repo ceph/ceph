@@ -5596,8 +5596,8 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
   tctx->new_snapset.head_exists = true;
   dout(20) << __func__ << " new_snapset " << tctx->new_snapset << dendl;
 
-  // take RWWRITE lock for duration of our local write
-  if (!obc->rwstate.get_write_lock()) {
+  // take RWWRITE lock for duration of our local write.  ignore starvation.
+  if (!obc->rwstate.take_write_lock()) {
     assert(0 == "problem!");
   }
   tctx->lock_to_release = OpContext::W_LOCK;
