@@ -162,9 +162,11 @@ public:
     ctx->copy_cb = NULL;
     if (r < 0) {
       if (r != -ECANCELED) { // on cancel just toss it out; client resends
-	ctx->pg->osd->reply_op_error(ctx->op, r);
+	if (ctx->op)
+	  ctx->pg->osd->reply_op_error(ctx->op, r);
       } else if (results->should_requeue) {
-	ctx->pg->requeue_op(ctx->op);
+	if (ctx->op)
+	  ctx->pg->requeue_op(ctx->op);
       }
       ctx->pg->close_op_ctx(ctx, r);
     }
@@ -1718,13 +1720,15 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 
 void ReplicatedPG::reply_ctx(OpContext *ctx, int r)
 {
-  osd->reply_op_error(ctx->op, r);
+  if (ctx->op)
+    osd->reply_op_error(ctx->op, r);
   close_op_ctx(ctx, r);
 }
 
 void ReplicatedPG::reply_ctx(OpContext *ctx, int r, eversion_t v, version_t uv)
 {
-  osd->reply_op_error(ctx->op, r, v, uv);
+  if (ctx->op)
+    osd->reply_op_error(ctx->op, r, v, uv);
   close_op_ctx(ctx, r);
 }
 
