@@ -3,6 +3,7 @@
 #include "include/rados/librados.hpp"
 #include "include/stringify.h"
 #include "test/librados/test.h"
+#include "test/librados/TestCase.h"
 
 #include "include/types.h"
 #include "gtest/gtest.h"
@@ -11,13 +12,11 @@
 
 using namespace librados;
 
-TEST(LibRadosList, ListObjects) {
+typedef RadosTest LibRadosList;
+typedef RadosTestPP LibRadosListPP;
+
+TEST_F(LibRadosList, ListObjects) {
   char buf[128];
-  rados_t cluster;
-  rados_ioctx_t ioctx;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
-  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   rados_list_ctx_t ctx;
@@ -30,16 +29,9 @@ TEST(LibRadosList, ListObjects) {
   }
   ASSERT_TRUE(foundit);
   rados_objects_list_close(ctx);
-  rados_ioctx_destroy(ioctx);
-  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
-TEST(LibRadosList, ListObjectsPP) {
-  std::string pool_name = get_temp_pool_name();
-  Rados cluster;
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
+TEST_F(LibRadosListPP, ListObjectsPP) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
@@ -53,8 +45,6 @@ TEST(LibRadosList, ListObjectsPP) {
     ++iter;
   }
   ASSERT_TRUE(foundit);
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
 static void check_list(std::set<std::string>& myset, rados_list_ctx_t& ctx)
@@ -74,15 +64,11 @@ static void check_list(std::set<std::string>& myset, rados_list_ctx_t& ctx)
   ASSERT_TRUE(myset.empty());
 }
 
-TEST(LibRadosList, ListObjectsNS) {
+TEST_F(LibRadosList, ListObjectsNS) {
   char buf[128];
-  rados_t cluster;
-  rados_ioctx_t ioctx;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
-  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
   memset(buf, 0xcc, sizeof(buf));
   // Create :foo1, :foo2, :foo3, n1:foo1, ns1:foo4, ns1:foo5, ns2:foo6, n2:foo7
+  rados_ioctx_set_namespace(ioctx, "");
   ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo1", buf, sizeof(buf), 0));
   rados_ioctx_set_namespace(ioctx, "ns1");
   ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo1", buf, sizeof(buf), 0));
@@ -124,9 +110,6 @@ TEST(LibRadosList, ListObjectsNS) {
   ASSERT_EQ(0, rados_objects_list_open(ioctx, &ctx));
   check_list(ns2, ctx);
   rados_objects_list_close(ctx);
-
-  rados_ioctx_destroy(ioctx);
-  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
 static void check_listpp(std::set<std::string>& myset, IoCtx& ioctx)
@@ -147,17 +130,13 @@ static void check_listpp(std::set<std::string>& myset, IoCtx& ioctx)
   ASSERT_TRUE(myset.empty());
 }
 
-TEST(LibRadosList, ListObjectsPPNS) {
-  std::string pool_name = get_temp_pool_name();
-  Rados cluster;
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
+TEST_F(LibRadosListPP, ListObjectsPPNS) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
   // Create :foo1, :foo2, :foo3, n1:foo1, ns1:foo4, ns1:foo5, ns2:foo6, n2:foo7
+  ioctx.set_namespace("");
   ASSERT_EQ((int)sizeof(buf), ioctx.write("foo1", bl1, sizeof(buf), 0));
   ioctx.set_namespace("ns1");
   ASSERT_EQ((int)sizeof(buf), ioctx.write("foo1", bl1, sizeof(buf), 0));
@@ -189,18 +168,9 @@ TEST(LibRadosList, ListObjectsPPNS) {
 
   ioctx.set_namespace("ns2");
   check_listpp(ns2, ioctx);
-
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(LibRadosList, ListObjectsManyPP) {
-  std::string pool_name = get_temp_pool_name();
-  Rados cluster;
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_F(LibRadosListPP, ListObjectsManyPP) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
@@ -224,20 +194,9 @@ TEST(LibRadosList, ListObjectsManyPP) {
   // make sure they are 0..n
   for (unsigned i = 0; i < saw_pg.size(); ++i)
     ASSERT_TRUE(saw_pg.count(i));
-
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-
-
-TEST(LibRadosList, ListObjectsStart) {
-  rados_t cluster;
-  rados_ioctx_t ioctx;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
-  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
-
+TEST_F(LibRadosList, ListObjectsStart) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
 
@@ -268,17 +227,9 @@ TEST(LibRadosList, ListObjectsStart) {
     ++p;
   }
   rados_objects_list_close(ctx);
-  rados_ioctx_destroy(ioctx);
-  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
-TEST(LibRadosList, ListObjectsStartPP) {
-  std::string pool_name = get_temp_pool_name();
-  Rados cluster;
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_F(LibRadosListPP, ListObjectsStartPP) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
@@ -304,7 +255,4 @@ TEST(LibRadosList, ListObjectsStartPP) {
     ASSERT_TRUE(p->second.count(it->first));
     ++p;
   }
-
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
