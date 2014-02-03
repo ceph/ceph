@@ -3964,6 +3964,11 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       err = -EINVAL;
       goto reply;
     }
+    if (!g_conf->mon_osd_allow_primary_affinity) {
+      ss << "you must enable 'mon osd allow primary affinity = true' on the mons before you can adjust primary-affinity.  note that older clients will no longer be able to communicate with the cluster.";
+      err = -EPERM;
+      goto reply;
+    }
     if (osdmap.exists(id)) {
       pending_inc.new_primary_affinity[id] = ww;
       ss << "set osd." << id << " primary-affinity to " << w << " (" << ios::hex << ww << ios::dec << ")";
