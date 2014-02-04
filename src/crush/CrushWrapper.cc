@@ -24,6 +24,22 @@ bool CrushWrapper::has_v2_rules() const
   return false;
 }
 
+bool CrushWrapper::has_v3_rules() const
+{
+  // check rules for use of SET_CHOOSELEAF_VARY_R step
+  for (unsigned i=0; i<crush->max_rules; i++) {
+    crush_rule *r = crush->rules[i];
+    if (!r)
+      continue;
+    for (unsigned j=0; j<r->len; j++) {
+      if (r->steps[j].op == CRUSH_RULE_SET_CHOOSELEAF_VARY_R)
+	return true;
+    }
+  }
+  return false;
+}
+
+
 void CrushWrapper::find_takes(set<int>& roots) const
 {
   for (unsigned i=0; i<crush->max_rules; i++) {
