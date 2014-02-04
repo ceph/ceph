@@ -54,8 +54,10 @@ int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& bucke
   bool truncated;
   string m = marker;
 
+  uint64_t total = 0;
+
   do {
-    ret = store->cls_user_list_buckets(obj, m, max, entries, &m, &truncated);
+    ret = store->cls_user_list_buckets(obj, m, max - total, entries, &m, &truncated);
     if (ret == -ENOENT)
       ret = 0;
 
@@ -65,8 +67,10 @@ int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& bucke
     for (list<cls_user_bucket_entry>::iterator q = entries.begin(); q != entries.end(); ++q) {
       RGWBucketEnt e(*q);
       buckets.add(e);
+      total++;
     }
-  } while (truncated);
+
+  } while (truncated && total < max);
 
   if (need_stats) {
     map<string, RGWBucketEnt>& m = buckets.get_buckets();
