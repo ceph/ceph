@@ -5890,7 +5890,7 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
           bl->substr_of(in->inline_data, offset, len - offset);
           bl->append_zero(endoff - len);
         }
-      } else if (offset < endoff) {
+      } else if ((uint64_t)offset < endoff) {
         bl->append_zero(endoff - offset);
       }
 
