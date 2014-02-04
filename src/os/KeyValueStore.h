@@ -170,7 +170,7 @@ class KeyValueStore : public ObjectStore,
 
   string strip_object_key(uint64_t no) {
     char n[100];
-    snprintf(n, 100, "%lld", no);
+    snprintf(n, 100, "%lld", (long long)no);
     return string(n);
   }
 
