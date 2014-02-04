@@ -2760,6 +2760,37 @@ int OSDMonitor::get_erasure_code(const map<string,string> &properties,
   return instance.factory(plugin->second, properties, erasure_code);
 }
 
+int OSDMonitor::check_cluster_features(uint64_t features,
+				       stringstream &ss)
+{
+  stringstream unsupported_ss;
+  int unsupported_count = 0;
+  if (!(mon->get_quorum_features() & features)) {
+    unsupported_ss << "the monitor cluster";
+    ++unsupported_count;
+  }
+
+  set<int32_t> up_osds;
+  osdmap.get_up_osds(up_osds);
+  for (set<int32_t>::iterator it = up_osds.begin();
+       it != up_osds.end(); it ++) {
+    const osd_xinfo_t &xi = osdmap.get_xinfo(*it);
+    if (!(xi.features & features)) {
+      if (unsupported_count > 0)
+	unsupported_ss << ", ";
+      unsupported_ss << "osd." << *it;
+      unsupported_count ++;
+    }
+  }
+
+  if (unsupported_count > 0) {
+    ss << "features " << features << " unsupported by: "
+       << unsupported_ss.str();
+    return -ENOTSUP;
+  } else {
+    return 0;
+  }
+}
 
 int OSDMonitor::prepare_pool_properties(const unsigned pool_type,
 					const vector<string> &properties,
@@ -3646,6 +3677,9 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     return true;
 
   } else if (prefix == "osd crush rule create-erasure") {
+    err = check_cluster_features(CEPH_FEATURE_CRUSH_V2, ss);
+    if (err)
+      goto reply;
     string name, poolstr;
     cmd_getval(g_ceph_context, cmdmap, "name", name);
     vector<string> properties;
@@ -4154,35 +4188,11 @@ done:
     if (pool_type_str == "replicated") {
       pool_type = pg_pool_t::TYPE_REPLICATED;
     } else if (pool_type_str == "erasure") {
-
-      // make sure all the daemons support erasure coding
-      stringstream ec_unsupported_ss;
-      int ec_unsupported_count = 0;
-      if (!(mon->get_quorum_features() & CEPH_FEATURE_OSD_ERASURE_CODES)) {
-        ec_unsupported_ss << "the monitor cluster";
-        ++ec_unsupported_count;
-      }
-
-      set<int32_t> up_osds;
-      osdmap.get_up_osds(up_osds);
-      for (set<int32_t>::iterator it = up_osds.begin();
-           it != up_osds.end(); it ++) {
-        const osd_xinfo_t &xi = osdmap.get_xinfo(*it);
-        if (!(xi.features & CEPH_FEATURE_OSD_ERASURE_CODES)) {
-          if (ec_unsupported_count > 0)
-            ec_unsupported_ss << ", ";
-          ec_unsupported_ss << "osd." << *it;
-          ec_unsupported_count ++;
-        }
-      }
-
-      if (ec_unsupported_count > 0) {
-        ss << "unable to create erasure pool; unsupported by: "
-           << ec_unsupported_ss.str();
-        err = -ENOTSUP;
-        goto reply;
-      }
-
+      err = check_cluster_features(CEPH_FEATURE_CRUSH_V2 |
+				   CEPH_FEATURE_OSD_ERASURE_CODES,
+				   ss);
+      if (err)
+	goto reply;
       pool_type = pg_pool_t::TYPE_ERASURE;
     } else {
       ss << "unknown pool type '" << pool_type_str << "'";
