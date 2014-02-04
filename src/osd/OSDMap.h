@@ -712,6 +712,11 @@ public:
 
   bool crush_ruleset_in_use(int ruleset) const;
 
+  void clear_temp() {
+    pg_temp->clear();
+    primary_temp->clear();
+  }
+
 private:
   void print_osd_line(int cur, ostream *out, Formatter *f) const;
 public:
