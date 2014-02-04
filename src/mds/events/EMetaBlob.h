@@ -448,6 +448,9 @@ private:
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
     inode_t *pi = in->get_projected_inode();
+    if ((state & fullbit::STATE_DIRTY) && pi->is_backtrace_updated())
+      state |= fullbit::STATE_DIRTYPARENT;
+
     bufferlist snapbl;
     sr_t *sr = in->get_projected_srnode();
     if (sr)
