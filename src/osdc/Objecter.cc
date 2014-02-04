@@ -1175,7 +1175,7 @@ void Objecter::resend_mon_ops()
   }
 
   for (map<tid_t,PoolOp*>::iterator p = pool_ops.begin(); p!=pool_ops.end(); ++p) {
-    pool_op_submit(p->second);
+    _pool_op_submit(p->second);
     logger->inc(l_osdc_poolop_resend);
   }
 
@@ -1205,6 +1205,19 @@ void Objecter::resend_mon_ops()
 
 // read | write ---------------------------
 
+class C_CancelOp : public Context
+{
+  Objecter::Op *op;
+  Objecter *objecter;
+public:
+  C_CancelOp(Objecter::Op *op, Objecter *objecter) : op(op),
+						     objecter(objecter) {}
+  void finish(int r) {
+    // note that objecter lock == timer lock, and is already held
+    objecter->op_cancel(op->tid, -ETIMEDOUT);
+  }
+};
+
 tid_t Objecter::op_submit(Op *op)
 {
   assert(client_lock.is_locked());
@@ -1213,6 +1226,11 @@ tid_t Objecter::op_submit(Op *op)
   assert(op->ops.size() == op->out_bl.size());
   assert(op->ops.size() == op->out_rval.size());
   assert(op->ops.size() == op->out_handler.size());
+
+  if (osd_timeout > 0) {
+    op->ontimeout = new C_CancelOp(op, this);
+    timer.add_event_after(osd_timeout, op->ontimeout);
+  }
 
   // throttle.  before we look at any state, because
   // take_op_budget() may drop our lock while it blocks.
@@ -1330,7 +1348,7 @@ tid_t Objecter::_op_submit(Op *op)
   return op->tid;
 }
 
-int Objecter::op_cancel(tid_t tid)
+int Objecter::op_cancel(tid_t tid, int r)
 {
   assert(client_lock.is_locked());
   assert(initialized);
@@ -1344,11 +1362,11 @@ int Objecter::op_cancel(tid_t tid)
   ldout(cct, 10) << __func__ << " tid " << tid << dendl;
   Op *op = p->second;
   if (op->onack) {
-    op->onack->complete(-ECANCELED);
+    op->onack->complete(r);
     op->onack = NULL;
   }
   if (op->oncommit) {
-    op->oncommit->complete(-ECANCELED);
+    op->oncommit->complete(r);
     op->oncommit = NULL;
   }
   op_cancel_map_check(op);
@@ -1562,6 +1580,9 @@ void Objecter::finish_op(Op *op)
   ops.erase(op->tid);
   logger->set(l_osdc_op_active, ops.size());
   assert(check_latest_map_ops.find(op->tid) == check_latest_map_ops.end());
+
+  if (op->ontimeout)
+    timer.cancel_event(op->ontimeout);
 
   delete op;
 }
@@ -2108,7 +2129,29 @@ int Objecter::change_pool_auid(int64_t pool, Context *onfinish, uint64_t auid)
   return 0;
 }
 
+class C_CancelPoolOp : public Context
+{
+  tid_t tid;
+  Objecter *objecter;
+public:
+  C_CancelPoolOp(tid_t tid, Objecter *objecter) : tid(tid),
+						  objecter(objecter) {}
+  void finish(int r) {
+    // note that objecter lock == timer lock, and is already held
+    objecter->pool_op_cancel(tid, -ETIMEDOUT);
+  }
+};
+
 void Objecter::pool_op_submit(PoolOp *op)
+{
+  if (mon_timeout > 0) {
+    op->ontimeout = new C_CancelPoolOp(op->tid, this);
+    timer.add_event_after(mon_timeout, op->ontimeout);
+  }
+  _pool_op_submit(op);
+}
+
+void Objecter::_pool_op_submit(PoolOp *op)
 {
   ldout(cct, 10) << "pool_op_submit " << op->tid << dendl;
   MPoolOp *m = new MPoolOp(monc->get_fsid(), op->tid, op->pool,
@@ -2150,11 +2193,7 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m)
       op->onfinish->complete(m->replyCode);
     }
     op->onfinish = NULL;
-    delete op;
-    pool_ops.erase(tid);
-
-    logger->set(l_osdc_poolop_active, pool_ops.size());
-
+    finish_pool_op(op);
   } else {
     ldout(cct, 10) << "unknown request " << tid << dendl;
   }
@@ -2162,8 +2201,51 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m)
   m->put();
 }
 
+int Objecter::pool_op_cancel(tid_t tid, int r)
+{
+  assert(client_lock.is_locked());
+  assert(initialized);
+
+  map<tid_t, PoolOp*>::iterator it = pool_ops.find(tid);
+  if (it == pool_ops.end()) {
+    ldout(cct, 10) << __func__ << " tid " << tid << " dne" << dendl;
+    return -ENOENT;
+  }
+
+  ldout(cct, 10) << __func__ << " tid " << tid << dendl;
+
+  PoolOp *op = it->second;
+  if (op->onfinish)
+    op->onfinish->complete(r);
+  finish_pool_op(op);
+  return 0;
+}
+
+void Objecter::finish_pool_op(PoolOp *op)
+{
+  pool_ops.erase(op->tid);
+  logger->set(l_osdc_poolop_active, pool_ops.size());
+
+  if (op->ontimeout)
+    timer.cancel_event(op->ontimeout);
+
+  delete op;
+}
 
 // pool stats
+
+class C_CancelPoolStatOp : public Context
+{
+  tid_t tid;
+  Objecter *objecter;
+public:
+  C_CancelPoolStatOp(tid_t tid, Objecter *objecter) : tid(tid),
+						      objecter(objecter) {}
+  void finish(int r) {
+    // note that objecter lock == timer lock, and is already held
+    objecter->pool_stat_op_cancel(tid, -ETIMEDOUT);
+  }
+};
 
 void Objecter::get_pool_stats(list<string>& pools, map<string,pool_stat_t> *result,
 			      Context *onfinish)
@@ -2175,6 +2257,11 @@ void Objecter::get_pool_stats(list<string>& pools, map<string,pool_stat_t> *resu
   op->pools = pools;
   op->pool_stats = result;
   op->onfinish = onfinish;
+  op->ontimeout = NULL;
+  if (mon_timeout > 0) {
+    op->ontimeout = new C_CancelPoolStatOp(op->tid, this);
+    timer.add_event_after(mon_timeout, op->ontimeout);
+  }
   poolstat_ops[op->tid] = op;
 
   logger->set(l_osdc_poolstat_active, poolstat_ops.size());
@@ -2205,11 +2292,6 @@ void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
     if (m->version > last_seen_pgmap_version)
       last_seen_pgmap_version = m->version;
     op->onfinish->complete(0);
-    poolstat_ops.erase(tid);
-    delete op;
-
-    logger->set(l_osdc_poolstat_active, poolstat_ops.size());
-
   } else {
     ldout(cct, 10) << "unknown request " << tid << dendl;
   } 
@@ -2217,6 +2299,49 @@ void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
   m->put();
 }
 
+int Objecter::pool_stat_op_cancel(tid_t tid, int r)
+{
+  assert(client_lock.is_locked());
+  assert(initialized);
+
+  map<tid_t, PoolStatOp*>::iterator it = poolstat_ops.find(tid);
+  if (it == poolstat_ops.end()) {
+    ldout(cct, 10) << __func__ << " tid " << tid << " dne" << dendl;
+    return -ENOENT;
+  }
+
+  ldout(cct, 10) << __func__ << " tid " << tid << dendl;
+
+  PoolStatOp *op = it->second;
+  if (op->onfinish)
+    op->onfinish->complete(r);
+  finish_pool_stat_op(op);
+  return 0;
+}
+
+void Objecter::finish_pool_stat_op(PoolStatOp *op)
+{
+  poolstat_ops.erase(op->tid);
+  logger->set(l_osdc_poolstat_active, poolstat_ops.size());
+
+  if (op->ontimeout)
+    timer.cancel_event(op->ontimeout);
+
+  delete op;
+}
+
+class C_CancelStatfsOp : public Context
+{
+  tid_t tid;
+  Objecter *objecter;
+public:
+  C_CancelStatfsOp(tid_t tid, Objecter *objecter) : tid(tid),
+						    objecter(objecter) {}
+  void finish(int r) {
+    // note that objecter lock == timer lock, and is already held
+    objecter->statfs_op_cancel(tid, -ETIMEDOUT);
+  }
+};
 
 void Objecter::get_fs_stats(ceph_statfs& result, Context *onfinish)
 {
@@ -2226,6 +2351,11 @@ void Objecter::get_fs_stats(ceph_statfs& result, Context *onfinish)
   op->tid = ++last_tid;
   op->stats = &result;
   op->onfinish = onfinish;
+  op->ontimeout = NULL;
+  if (mon_timeout > 0) {
+    op->ontimeout = new C_CancelStatfsOp(op->tid, this);
+    timer.add_event_after(mon_timeout, op->ontimeout);
+  }
   statfs_ops[op->tid] = op;
 
   logger->set(l_osdc_statfs_active, statfs_ops.size());
@@ -2256,11 +2386,7 @@ void Objecter::handle_fs_stats_reply(MStatfsReply *m)
     if (m->h.version > last_seen_pgmap_version)
       last_seen_pgmap_version = m->h.version;
     op->onfinish->complete(0);
-    statfs_ops.erase(tid);
-    delete op;
-
-    logger->set(l_osdc_statfs_active, statfs_ops.size());
-
+    finish_statfs_op(op);
   } else {
     ldout(cct, 10) << "unknown request " << tid << dendl;
   }
@@ -2268,6 +2394,36 @@ void Objecter::handle_fs_stats_reply(MStatfsReply *m)
   m->put();
 }
 
+int Objecter::statfs_op_cancel(tid_t tid, int r)
+{
+  assert(client_lock.is_locked());
+  assert(initialized);
+
+  map<tid_t, StatfsOp*>::iterator it = statfs_ops.find(tid);
+  if (it == statfs_ops.end()) {
+    ldout(cct, 10) << __func__ << " tid " << tid << " dne" << dendl;
+    return -ENOENT;
+  }
+
+  ldout(cct, 10) << __func__ << " tid " << tid << dendl;
+
+  StatfsOp *op = it->second;
+  if (op->onfinish)
+    op->onfinish->complete(r);
+  finish_statfs_op(op);
+  return 0;
+}
+
+void Objecter::finish_statfs_op(StatfsOp *op)
+{
+  statfs_ops.erase(op->tid);
+  logger->set(l_osdc_statfs_active, statfs_ops.size());
+
+  if (op->ontimeout)
+    timer.cancel_event(op->ontimeout);
+
+  delete op;
+}
 
 // scatter/gather
 
@@ -2560,11 +2716,28 @@ void Objecter::handle_command_reply(MCommandReply *m)
   m->put();
 }
 
+class C_CancelCommandOp : public Context
+{
+  tid_t tid;
+  Objecter *objecter;
+public:
+  C_CancelCommandOp(tid_t tid, Objecter *objecter) : tid(tid),
+						     objecter(objecter) {}
+  void finish(int r) {
+    // note that objecter lock == timer lock, and is already held
+    objecter->command_op_cancel(tid, -ETIMEDOUT);
+  }
+};
+
 int Objecter::_submit_command(CommandOp *c, tid_t *ptid)
 {
   tid_t tid = ++last_tid;
   ldout(cct, 10) << "_submit_command " << tid << " " << c->cmd << dendl;
   c->tid = tid;
+  if (osd_timeout > 0) {
+    c->ontimeout = new C_CancelCommandOp(tid, this);
+    timer.add_event_after(osd_timeout, c->ontimeout);
+  }
   command_ops[tid] = c;
   num_homeless_ops++;
   (void)recalc_command_target(c);
@@ -2638,6 +2811,25 @@ void Objecter::_send_command(CommandOp *c)
   logger->inc(l_osdc_command_send);
 }
 
+int Objecter::command_op_cancel(tid_t tid, int r)
+{
+  assert(client_lock.is_locked());
+  assert(initialized);
+
+  map<tid_t, CommandOp*>::iterator it = command_ops.find(tid);
+  if (it == command_ops.end()) {
+    ldout(cct, 10) << __func__ << " tid " << tid << " dne" << dendl;
+    return -ENOENT;
+  }
+
+  ldout(cct, 10) << __func__ << " tid " << tid << dendl;
+
+  CommandOp *op = it->second;
+  command_cancel_map_check(op);
+  _finish_command(op, -ETIMEDOUT, "");
+  return 0;
+}
+
 void Objecter::_finish_command(CommandOp *c, int r, string rs)
 {
   ldout(cct, 10) << "_finish_command " << c->tid << " = " << r << " " << rs << dendl;
@@ -2647,6 +2839,8 @@ void Objecter::_finish_command(CommandOp *c, int r, string rs)
   if (c->onfinish)
     c->onfinish->complete(r);
   command_ops.erase(c->tid);
+  if (c->ontimeout)
+    timer.cancel_event(c->ontimeout);
   c->put();
 
   logger->set(l_osdc_command_active, command_ops.size());

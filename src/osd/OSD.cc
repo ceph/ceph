@@ -194,7 +194,7 @@ OSDService::OSDService(OSD *osd) :
   objecter_lock("OSD::objecter_lock"),
   objecter_timer(osd->client_messenger->cct, objecter_lock),
   objecter(new Objecter(osd->client_messenger->cct, osd->objecter_messenger, osd->monc, &objecter_osdmap,
-			objecter_lock, objecter_timer)),
+			objecter_lock, objecter_timer, 0, 0)),
   objecter_finisher(osd->client_messenger->cct),
   objecter_dispatcher(this),
   watch_lock("OSD::watch_lock"),
