@@ -204,6 +204,7 @@ void ReplicatedPG::on_local_recover(
   ObjectStore::Transaction *t
   )
 {
+  dout(10) << __func__ << ": " << hoid << dendl;
   ObjectRecoveryInfo recovery_info(_recovery_info);
   if (recovery_info.soid.snap < CEPH_NOSNAP) {
     assert(recovery_info.oi.snaps.size());
@@ -6597,7 +6598,8 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
   ObjectContextRef obc = object_contexts.lookup(soid);
   if (obc) {
     dout(10) << "get_object_context " << obc << " " << soid
-	     << " " << obc->rwstate << dendl;
+	     << " " << obc->rwstate
+	     << " oi:" << obc->obs.oi << dendl;
   } else {
     // check disk
     bufferlist bv;
@@ -6655,6 +6657,7 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
 
     dout(10) << "get_object_context " << obc << " " << soid
 	     << " " << obc->rwstate
+	     << " oi:" << obc->obs.oi
 	     << " 0 -> 1 read " << obc->obs.oi << dendl;
   }
   return obc;
@@ -6709,7 +6712,10 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
 	*pmissing = head;
       return -ENOENT;
     }
-    dout(10) << "find_object_context " << oid << " @" << oid.snap << dendl;
+    dout(10) << "find_object_context " << oid
+	     << " @" << oid.snap
+	     << " oi=" << obc->obs.oi
+	     << dendl;
     *pobc = obc;
 
     // always populate ssc for SNAPDIR...
@@ -6727,7 +6733,10 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
 	*pmissing = head;
       return -ENOENT;
     }
-    dout(10) << "find_object_context " << oid << " @" << oid.snap << dendl;
+    dout(10) << "find_object_context " << oid
+	     << " @" << oid.snap
+	     << " oi=" << obc->obs.oi
+	     << dendl;
     *pobc = obc;
 
     if (can_create && !obc->ssc)
