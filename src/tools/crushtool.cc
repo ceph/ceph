@@ -129,6 +129,8 @@ void usage()
   cout << "                         set choose total descent attempts\n";
   cout << "   --set-chooseleaf-descend-once <0|1>\n";
   cout << "                         set chooseleaf to (not) retry the recursive descent\n";
+  cout << "   --set-chooseleaf-vary-r <0|1>\n";
+  cout << "                         set chooseleaf to (not) vary r based on parent\n";
   cout << "   --output-name name\n";
   cout << "                         prepend the data file(s) generated during the\n";
   cout << "                         testing routine with name\n";
@@ -187,6 +189,7 @@ int main(int argc, const char **argv)
   int choose_local_fallback_tries = -1;
   int choose_total_tries = -1;
   int chooseleaf_descend_once = -1;
+  int chooseleaf_vary_r = -1;
 
   CrushWrapper crush;
 
@@ -256,6 +259,9 @@ int main(int argc, const char **argv)
       adjust = true;
     } else if (ceph_argparse_withint(args, i, &chooseleaf_descend_once, &err,
 				     "--set_chooseleaf_descend_once", (char*)NULL)) {
+      adjust = true;
+    } else if (ceph_argparse_withint(args, i, &chooseleaf_vary_r, &err,
+				     "--set_chooseleaf_vary_r", (char*)NULL)) {
       adjust = true;
     } else if (ceph_argparse_flag(args, i, "--reweight", (char*)NULL)) {
       reweight = true;
@@ -700,6 +706,10 @@ int main(int argc, const char **argv)
   }
   if (chooseleaf_descend_once >= 0) {
     crush.set_chooseleaf_descend_once(chooseleaf_descend_once);
+    modified = true;
+  }
+  if (chooseleaf_vary_r >= 0) {
+    crush.set_chooseleaf_vary_r(chooseleaf_vary_r);
     modified = true;
   }
   if (modified) {

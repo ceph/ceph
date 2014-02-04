@@ -44,6 +44,8 @@
                            set choose total descent attempts
      --set-chooseleaf-descend-once <0|1>
                            set chooseleaf to (not) retry the recursive descent
+     --set-chooseleaf-vary-r <0|1>
+                           set chooseleaf to (not) vary r based on parent
      --output-name name
                            prepend the data file(s) generated during the
                            testing routine with name

@@ -48,6 +48,7 @@
    this bit to determine if peers support NAK messages. */
 #define CEPH_FEATURE_OSDMAP_ENC    (1ULL<<39)
 #define CEPH_FEATURE_MDS_INLINE_DATA     (1ULL<<40)
+#define CEPH_FEATURE_CRUSH_TUNABLES3     (1ULL<<41)
 
 /*
  * The introduction of CEPH_FEATURE_OSD_SNAPMAPPER caused the feature
@@ -116,6 +117,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
          CEPH_FEATURE_OSD_ERASURE_CODES |   \
 	 CEPH_FEATURE_OSDMAP_ENC |          \
 	 CEPH_FEATURE_MDS_INLINE_DATA |	    \
+	 CEPH_FEATURE_CRUSH_TUNABLES3 |	    \
 	 0ULL)
 
 #define CEPH_FEATURES_SUPPORTED_DEFAULT  CEPH_FEATURES_ALL
@@ -126,6 +128,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 #define CEPH_FEATURES_CRUSH			\
 	(CEPH_FEATURE_CRUSH_TUNABLES |		\
 	 CEPH_FEATURE_CRUSH_TUNABLES2 |		\
+	 CEPH_FEATURE_CRUSH_TUNABLES3 |		\
 	 CEPH_FEATURE_CRUSH_V2)
 
 #endif
