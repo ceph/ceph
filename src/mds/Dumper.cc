@@ -51,7 +51,8 @@ void Dumper::init(int rank)
   inodeno_t ino = MDS_INO_LOG_OFFSET + rank;
   unsigned pg_pool = MDS_METADATA_POOL;
   osdmap = new OSDMap();
-  objecter = new Objecter(g_ceph_context, messenger, monc, osdmap, lock, timer);
+  objecter = new Objecter(g_ceph_context, messenger, monc, osdmap, lock, timer,
+			  0, 0);
   journaler = new Journaler(ino, pg_pool, CEPH_FS_ONDISK_MAGIC,
                                        objecter, 0, 0, &timer);
 
