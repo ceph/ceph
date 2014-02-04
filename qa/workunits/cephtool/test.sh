@@ -4,7 +4,7 @@ set -e
 set -o functrace
 PS4=' ${FUNCNAME[0]}: $LINENO: '
 
-get_pg()
+function get_pg()
 {
 	local pool obj map_output pg
 	pool=$1
@@ -21,7 +21,7 @@ get_pg()
 	echo $pg
 }
 
-expect_false()
+function expect_false()
 {
 	set -x
 	if "$@"; then return 1; else return 0; fi
@@ -35,16 +35,16 @@ TMPFILE=$TMPDIR/test_invalid.$$
 
 function check_response()
 {
-	retcode=$1
-	expected_retcode=$2
-	expected_stderr_string=$3
-	if [ $1 != $2 ] ; then
-		echo "return code invalid: got $1, expected $2" >&2
+	expected_stderr_string=$1
+	retcode=$2
+	expected_retcode=$3
+	if [ "$expected_retcode" -a $retcode != $expected_retcode ] ; then
+		echo "return code invalid: got $retcode, expected $expected_retcode" >&2
 		exit 1
 	fi
 
-	if ! grep "$3" $TMPFILE >/dev/null 2>&1 ; then 
-		echo "Didn't find $3 in stderr output" >&2
+	if ! grep "$expected_stderr_string" $TMPFILE >/dev/null 2>&1 ; then 
+		echo "Didn't find $expected_stderr_string in stderr output" >&2
 		echo "Stderr: " >&2
 		cat $TMPFILE >&2
 		exit 1
@@ -369,6 +369,13 @@ ceph osd pool set data size $new_size
 ceph osd pool get data size | grep "size: $new_size"
 ceph osd pool set data size $old_size
 
+ceph osd crush rule create-erasure ec_ruleset
+ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=ec_ruleset
+set +e
+ceph osd pool set pool_erasure size 4444 2>$TMPFILE
+check_response $? 38 'can not change the size'
+set -e
+
 ceph osd pool set data hashpspool true
 ceph osd pool set data hashpspool false
 ceph osd pool set data hashpspool 0
@@ -391,16 +398,16 @@ ceph osd thrash 10
 set +e
 
 # expect error about missing 'pool' argument
-ceph osd map 2>$TMPFILE; check_response $? 22 'pool'
+ceph osd map 2>$TMPFILE; check_response 'pool' $? 22
 
 # expect error about unused argument foo
-ceph osd ls foo 2>$TMPFILE; check_response $? 22 'unused'
+ceph osd ls foo 2>$TMPFILE; check_response 'unused' $? 22 
 
 # expect "not in range" for invalid full ratio
-ceph pg set_full_ratio 95 2>$TMPFILE; check_response $? 22 'not in range'
+ceph pg set_full_ratio 95 2>$TMPFILE; check_response 'not in range' $? 22
 
 # expect "not in range" for invalid overload percentage
-ceph osd reweight-by-utilization 80 2>$TMPFILE; check_response $? 22 'not in range'
+ceph osd reweight-by-utilization 80 2>$TMPFILE; check_response 'not in range' $? 22
 
 # expect 'heap' commands to be correctly parsed
 ceph heap stats
