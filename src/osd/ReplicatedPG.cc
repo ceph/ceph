@@ -394,12 +394,18 @@ bool ReplicatedPG::is_degraded_object(const hobject_t& soid)
 	peer_missing[peer].missing.count(soid))
       return true;
 
+    bool in_flight = backfills_in_flight.count(soid);
+    // Prevent head operations if snapdir operations are in flight
+    if (!in_flight && soid.is_head()) {
+      hobject_t oid = soid.get_snapdir();
+      in_flight = backfills_in_flight.count(oid);
+    }
     // Object is degraded if after last_backfill AND
     // we are backfilling it
     if (is_backfill_targets(peer) &&
 	peer_info[peer].last_backfill <= soid &&
 	last_backfill_started >= soid &&
-	backfills_in_flight.count(soid))
+	in_flight)
       return true;
   }
   return false;
