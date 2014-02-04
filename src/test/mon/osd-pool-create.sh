@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+# Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -17,9 +17,12 @@
 set -xe
 PS4='$LINENO: '
 
+# must be larger than the time it takes for osd pool create to perform
+# on the slowest http://ceph.com/gitbuilder.cgi machine
+TIMEOUT=${TIMEOUT:-30}
 DIR=osd-pool-create
 rm -fr $DIR
-trap "set +x ; kill_mon || true ; rm -fr $DIR" EXIT
+trap "test \$? = 0 || cat $DIR/log ; set +x ; kill_mon || true && rm -fr $DIR" EXIT
 mkdir $DIR
 export CEPH_ARGS="--conf /dev/null --auth-supported=none --mon-host=127.0.0.1" 
 
@@ -30,6 +33,8 @@ function run_mon() {
 
     ./ceph-mon --id a \
         --chdir= \
+        --paxos-propose-interval=0.1 \
+        --osd-pool-default-erasure-code-directory=.libs \
         --mon-data=$DIR \
         --log-file=$DIR/log \
         --mon-cluster-log-file=$DIR/log \
@@ -41,7 +46,7 @@ function run_mon() {
 function kill_mon() {
     for try in 0 1 1 1 2 3 ; do
         if [ ! -e $DIR/pidfile ] ||
-            ! kill $(cat $DIR/pidfile) ; then
+            ! kill -9 $(cat $DIR/pidfile) ; then
             break
         fi
         sleep $try
@@ -54,7 +59,7 @@ function kill_mon() {
 expected=66
 run_mon --osd_pool_default_crush_replicated_ruleset $expected
 ./ceph --format json osd dump | grep '"crush_ruleset":'$expected
-grep "osd_pool_default_crush_rule is deprecated " $DIR/log && exit 1
+! grep "osd_pool_default_crush_rule is deprecated " $DIR/log || exit 1
 kill_mon
 
 # explicitly set the default crush rule using deprecated option
@@ -70,7 +75,7 @@ run_mon \
     --osd_pool_default_crush_rule $expected \
     --osd_pool_default_crush_replicated_ruleset $unexpected
 ./ceph --format json osd dump | grep '"crush_ruleset":'$expected
-./ceph --format json osd dump | grep '"crush_ruleset":'$unexpected && exit 1
+! ./ceph --format json osd dump | grep '"crush_ruleset":'$unexpected || exit 1
 grep "osd_pool_default_crush_rule is deprecated " $DIR/log
 kill_mon
 
@@ -80,35 +85,57 @@ run_mon --osd_pool_default_erasure_code_properties 1
 ./ceph osd pool create poolA 12 12 erasure 2>&1 | grep 'must be a JSON object'
 kill_mon
 
-# explicitly set the default erasure crush rule
-expected=88
-run_mon --osd_pool_default_crush_erasure_ruleset $expected
-./ceph --format json osd dump | grep '"crush_ruleset":'$expected && exit 1
-./ceph osd pool create pool_erasure 12 12 erasure
-./ceph --format json osd dump | grep '"crush_ruleset":'$expected
+# set the erasure crush rule
+run_mon 
+crush_ruleset=erasure_ruleset
+./ceph osd crush rule create-erasure $crush_ruleset
+./ceph osd crush rule ls | grep $crush_ruleset
+./ceph osd pool create pool_erasure 12 12 erasure 2>&1 | 
+  grep 'crush_ruleset is missing'
+! ./ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=WRONG > $DIR/out 2>&1 
+grep 'WRONG does not exist' $DIR/out
+grep 'EINVAL' $DIR/out
+! ./ceph --format json osd dump | grep '"crush_ruleset":1' || exit 1
+./ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=$crush_ruleset
+./ceph --format json osd dump | grep '"crush_ruleset":1'
 kill_mon
 
-expected='"foo":"bar"'
+# try again if the ruleset creation is pending
+run_mon --paxos-propose-interval=200 --debug-mon=20 --debug-paxos=20 
+crush_ruleset=erasure_ruleset
+./ceph osd crush rule create-erasure nevermind # the first modification ignores the propose interval, get past it
+! timeout $TIMEOUT ./ceph osd crush rule create-erasure $crush_ruleset || exit 1
+! timeout $TIMEOUT ./ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=$crush_ruleset
+grep "$crush_ruleset try again" $DIR/log
+kill_mon
+
 # osd_pool_default_erasure_code_properties is JSON
+expected='"erasure-code-plugin":"example"'
 run_mon --osd_pool_default_erasure_code_properties "{$expected}"
-./ceph --format json osd dump | grep "$expected" && exit 1
-./ceph osd pool create poolA 12 12 erasure
+! ./ceph --format json osd dump | grep "$expected" || exit 1
+crush_ruleset=erasure_ruleset
+./ceph osd crush rule create-erasure $crush_ruleset
+./ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=$crush_ruleset
 ./ceph --format json osd dump | grep "$expected"
 kill_mon
 
 # osd_pool_default_erasure_code_properties is plain text
-run_mon --osd_pool_default_erasure_code_properties 'foo=bar'
-./ceph --format json osd dump | grep "$expected" && exit 1
-./ceph osd pool create poolA 12 12 erasure
+expected='"erasure-code-plugin":"example"'
+run_mon --osd_pool_default_erasure_code_properties "erasure-code-plugin=example"
+! ./ceph --format json osd dump | grep "$expected" || exit 1
+crush_ruleset=erasure_ruleset
+./ceph osd crush rule create-erasure $crush_ruleset
+./ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=$crush_ruleset
 ./ceph --format json osd dump | grep "$expected"
 kill_mon
 
 run_mon
 
-# creating an erasure code plugin sets defaults properties
+# creating an erasure code pool sets defaults properties
 ./ceph --format json osd dump > $DIR/osd.json
-grep "erasure-code-plugin" $DIR/osd.json && exit 1
-./ceph osd pool create erasurecodes 12 12 erasure
+! grep "erasure-code-plugin" $DIR/osd.json || exit 1
+./ceph osd crush rule create-erasure erasure_ruleset
+./ceph osd pool create erasurecodes 12 12 erasure crush_ruleset=erasure_ruleset
 ./ceph --format json osd dump | tee $DIR/osd.json
 grep "erasure-code-plugin" $DIR/osd.json > /dev/null
 grep "erasure-code-directory" $DIR/osd.json > /dev/null
@@ -128,5 +155,5 @@ grep "erasure-code-directory" $DIR/osd.json > /dev/null
 kill_mon
 
 # Local Variables:
-# compile-command: "cd ../.. ; make TESTS=test/mon/osd-pool-create.sh check"
+# compile-command: "cd ../.. ; make -j4 && TIMEOUT=1 test/mon/osd-pool-create.sh"
 # End:

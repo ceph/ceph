@@ -21,6 +21,9 @@
 #include <errno.h>
 #include <algorithm>
 #include <sstream>
+
+#include "crush/CrushWrapper.h"
+#include "osd/osd_types.h"
 #include "osd/ErasureCodeInterface.h"
 
 #define FIRST_DATA_CHUNK 0
@@ -35,6 +38,13 @@
 class ErasureCodeExample : public ErasureCodeInterface {
 public:
   virtual ~ErasureCodeExample() {}
+
+  virtual int create_ruleset(const string &name,
+			     CrushWrapper &crush,
+			     ostream *ss) const {
+    return crush.add_simple_ruleset(name, "default", "host",
+				    "indep", pg_pool_t::TYPE_ERASURE, ss);
+  }
   
   virtual int minimum_to_decode(const set<int> &want_to_read,
                                 const set<int> &available_chunks,
