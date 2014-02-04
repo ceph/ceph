@@ -879,7 +879,7 @@ public:
     vector<int*> out_rval;
 
     int flags, priority;
-    Context *onack, *oncommit;
+    Context *onack, *oncommit, *ontimeout;
 
     tid_t tid;
     eversion_t replay_version;        // for op replay
@@ -908,6 +908,7 @@ public:
       snapid(CEPH_NOSNAP),
       outbl(NULL),
       flags(f), priority(0), onack(ac), oncommit(co),
+      ontimeout(NULL),
       tid(0), attempts(0),
       paused(false), objver(ov), reply_epoch(NULL), precalc_pgid(false),
       map_dne_bound(0),
@@ -1039,7 +1040,7 @@ public:
     list<string> pools;
 
     map<string,pool_stat_t> *pool_stats;
-    Context *onfinish;
+    Context *onfinish, *ontimeout;
 
     utime_t last_submit;
   };
@@ -1047,7 +1048,7 @@ public:
   struct StatfsOp {
     tid_t tid;
     struct ceph_statfs *stats;
-    Context *onfinish;
+    Context *onfinish, *ontimeout;
 
     utime_t last_submit;
   };
@@ -1056,7 +1057,7 @@ public:
     tid_t tid;
     int64_t pool;
     string name;
-    Context *onfinish;
+    Context *onfinish, *ontimeout;
     int pool_op;
     uint64_t auid;
     __u8 crush_rule;
@@ -1064,7 +1065,7 @@ public:
     bufferlist *blp;
 
     utime_t last_submit;
-    PoolOp() : tid(0), pool(0), onfinish(0), pool_op(0),
+    PoolOp() : tid(0), pool(0), onfinish(NULL), ontimeout(NULL), pool_op(0),
 	       auid(0), crush_rule(0), snapid(0), blp(NULL) {}
   };
 
@@ -1082,7 +1083,7 @@ public:
     epoch_t map_dne_bound;
     int map_check_error;           // error to return if map check fails
     const char *map_check_error_str;
-    Context *onfinish;
+    Context *onfinish, *ontimeout;
     utime_t last_submit;
 
     CommandOp()
@@ -1091,12 +1092,13 @@ public:
 	map_dne_bound(0),
 	map_check_error(0),
 	map_check_error_str(NULL),
-	onfinish(NULL) {}
+	onfinish(NULL), ontimeout(NULL) {}
   };
 
   int _submit_command(CommandOp *c, tid_t *ptid);
   int recalc_command_target(CommandOp *c);
   void _send_command(CommandOp *c);
+  int command_op_cancel(tid_t tid, int r);
   void _finish_command(CommandOp *c, int r, string rs);
   void handle_command_reply(MCommandReply *m);
 
@@ -1214,6 +1216,8 @@ public:
 
   map<epoch_t,list< pair<Context*, int> > > waiting_for_map;
 
+  double mon_timeout, osd_timeout;
+
   void send_op(Op *op);
   void cancel_linger_op(Op *op);
   void finish_op(Op *op);
@@ -1282,7 +1286,8 @@ public:
 
  public:
   Objecter(CephContext *cct_, Messenger *m, MonClient *mc,
-	   OSDMap *om, Mutex& l, SafeTimer& t) : 
+	   OSDMap *om, Mutex& l, SafeTimer& t, double mon_timeout,
+	   double osd_timeout) :
     messenger(m), monc(mc), osdmap(om), cct(cct_),
     initialized(false),
     last_tid(0), client_inc(-1), max_linger_id(0),
@@ -1296,6 +1301,8 @@ public:
     logger(NULL), tick_event(NULL),
     m_request_state_hook(NULL),
     num_homeless_ops(0),
+    mon_timeout(mon_timeout),
+    osd_timeout(osd_timeout),
     op_throttle_bytes(cct, "objecter_bytes", cct->_conf->objecter_inflight_op_bytes),
     op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops)
   { }
@@ -1375,8 +1382,8 @@ private:
   /** Clear the passed flags from the global op flag set */
   void clear_global_op_flag(int flags) { global_op_flags &= ~flags; }
 
-  /// cancel an in-progress request
-  int op_cancel(tid_t tid);
+  /// cancel an in-progress request with the given return code
+  int op_cancel(tid_t tid, int r);
 
   // commands
   int osd_command(int osd, vector<string>& cmd, bufferlist& inbl, tid_t *ptid,
@@ -1774,6 +1781,7 @@ private:
   // pool ops
 private:
   void pool_op_submit(PoolOp *op);
+  void _pool_op_submit(PoolOp *op);
 public:
   int create_pool_snap(int64_t pool, string& snapName, Context *onfinish);
   int allocate_selfmanaged_snap(int64_t pool, snapid_t *psnapid, Context *onfinish);
@@ -1786,6 +1794,8 @@ public:
   int change_pool_auid(int64_t pool, Context *onfinish, uint64_t auid);
 
   void handle_pool_op_reply(MPoolOpReply *m);
+  int pool_op_cancel(tid_t tid, int r);
+  void finish_pool_op(PoolOp *op);
 
   // --------------------------
   // pool stats
@@ -1795,6 +1805,8 @@ public:
   void handle_get_pool_stats_reply(MGetPoolStatsReply *m);
   void get_pool_stats(list<string>& pools, map<string,pool_stat_t> *result,
 		      Context *onfinish);
+  int pool_stat_op_cancel(tid_t tid, int r);
+  void finish_pool_stat_op(PoolStatOp *op);
 
   // ---------------------------
   // df stats
@@ -1803,6 +1815,8 @@ private:
 public:
   void handle_fs_stats_reply(MStatfsReply *m);
   void get_fs_stats(struct ceph_statfs& result, Context *onfinish);
+  int statfs_op_cancel(tid_t tid, int r);
+  void finish_statfs_op(StatfsOp *op);
 
   // ---------------------------
   // some scatter/gather hackery

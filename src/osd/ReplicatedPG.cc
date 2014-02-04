@@ -4559,7 +4559,7 @@ void ReplicatedPG::cancel_copy(CopyOpRef cop, bool requeue)
   // cancel objecter op, if we can
   if (cop->objecter_tid) {
     Mutex::Locker l(osd->objecter_lock);
-    osd->objecter->op_cancel(cop->objecter_tid);
+    osd->objecter->op_cancel(cop->objecter_tid, -ECANCELED);
   }
 
   copy_ops.erase(cop->obc->obs.oi.soid);
