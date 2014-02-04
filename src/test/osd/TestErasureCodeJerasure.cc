@@ -15,6 +15,9 @@
  */
 
 #include <errno.h>
+
+#include "crush/CrushWrapper.h"
+#include "include/stringify.h"
 #include "global/global_init.h"
 #include "osd/ErasureCodePluginJerasure/ErasureCodeJerasure.h"
 #include "common/ceph_argparse.h"
@@ -254,6 +257,85 @@ TEST(ErasureCodeTest, encode)
     EXPECT_EQ(0, jerasure.encode(want_to_encode, in, &encoded));
     EXPECT_EQ(1u, encoded.size());
     EXPECT_EQ(alignment, encoded[0].length());
+  }
+}
+
+TEST(ErasureCodeTest, create_ruleset)
+{
+  CrushWrapper *c = new CrushWrapper;
+  c->create();
+  int root_type = 2;
+  c->set_type_name(root_type, "root");
+  int host_type = 1;
+  c->set_type_name(host_type, "host");
+  int osd_type = 0;
+  c->set_type_name(osd_type, "osd");
+
+  int rootno;
+  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+		root_type, 0, NULL, NULL, &rootno);
+  c->set_item_name(rootno, "default");
+
+  map<string,string> loc;
+  loc["root"] = "default";
+
+  int num_host = 4;
+  int num_osd = 5;
+  int osd = 0;
+  for (int h=0; h<num_host; ++h) {
+    loc["host"] = string("host-") + stringify(h);
+    for (int o=0; o<num_osd; ++o, ++osd) {
+      c->insert_item(g_ceph_context, osd, 1.0, string("osd.") + stringify(osd), loc);
+    }
+  }
+
+  {
+    stringstream ss;
+    ErasureCodeJerasureReedSolomonVandermonde jerasure;
+    map<std::string,std::string> parameters;
+    parameters["erasure-code-k"] = "2";
+    parameters["erasure-code-m"] = "2";
+    parameters["erasure-code-w"] = "8";
+    jerasure.init(parameters);
+    int ruleset = jerasure.create_ruleset("myrule", *c, &ss);
+    EXPECT_EQ(0, ruleset);
+    EXPECT_EQ(-EEXIST, jerasure.create_ruleset("myrule", *c, &ss));
+    //
+    // the minimum that is expected from the created ruleset is to
+    // successfully map get_chunk_count() devices from the crushmap,
+    // at least once.
+    //
+    vector<__u32> weight(c->get_max_devices(), 0x10000);
+    vector<int> out;
+    int x = 0;
+    c->do_rule(ruleset, x, out, jerasure.get_chunk_count(), weight);
+    ASSERT_EQ(out.size(), jerasure.get_chunk_count());
+    for (unsigned i=0; i<out.size(); ++i)
+      ASSERT_NE(CRUSH_ITEM_NONE, out[i]);
+  }
+  {
+    stringstream ss;
+    ErasureCodeJerasureReedSolomonVandermonde jerasure;
+    map<std::string,std::string> parameters;
+    parameters["erasure-code-k"] = "2";
+    parameters["erasure-code-m"] = "2";
+    parameters["erasure-code-w"] = "8";
+    parameters["erasure-code-ruleset-root"] = "BAD";
+    jerasure.init(parameters);
+    EXPECT_EQ(-ENOENT, jerasure.create_ruleset("otherrule", *c, &ss));
+    EXPECT_EQ("root item BAD does not exist", ss.str());
+  }
+  {
+    stringstream ss;
+    ErasureCodeJerasureReedSolomonVandermonde jerasure;
+    map<std::string,std::string> parameters;
+    parameters["erasure-code-k"] = "2";
+    parameters["erasure-code-m"] = "2";
+    parameters["erasure-code-w"] = "8";
+    parameters["erasure-code-ruleset-failure-domain"] = "WORSE";
+    jerasure.init(parameters);
+    EXPECT_EQ(-EINVAL, jerasure.create_ruleset("otherrule", *c, &ss));
+    EXPECT_EQ("unknown type WORSE", ss.str());
   }
 }
 

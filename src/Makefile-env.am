@@ -149,6 +149,7 @@ LIBRADOS = librados.la
 LIBRGW = librgw.la
 LIBRBD = librbd.la
 LIBCEPHFS = libcephfs.la
+LIBERASURE_CODE = liberasure_code.la
 
 if WITH_LIBAIO
 LIBOS += -laio

@@ -145,6 +145,8 @@
 #include "include/memory.h"
 #include "include/buffer.h"
 
+class CrushWrapper;
+
 using namespace std;
 
 namespace ceph {
@@ -152,6 +154,24 @@ namespace ceph {
   class ErasureCodeInterface {
   public:
     virtual ~ErasureCodeInterface() {}
+
+    /**
+     * Create a new ruleset in **crush** under the name **name**,
+     * unless it already exists.
+     *
+     * Return the ruleset number that was created on success. If a
+     * ruleset **name** already exists, return -EEXISTS, otherwise
+     * return a negative value indicating an error with a semantic
+     * defined by the implementation.
+     *
+     * @param [in] name of the ruleset to create
+     * @param [in] crush crushmap in which the ruleset is created
+     * @param [out] ss contains informative messages when an error occurs
+     * @return **0** on success or a negative errno on error.
+     */
+    virtual int create_ruleset(const string &name,
+			       CrushWrapper &crush,
+			       ostream *ss) const = 0;
 
     /**
      * Return the number of chunks created by a call to the **encode**
