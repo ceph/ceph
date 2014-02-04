@@ -2941,10 +2941,6 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 
     wrlock_force(&in->xattrlock, mut);
   }
-
-  // update backtrace for old format inode. (see inode_t::decode)
-  if (pi->backtrace_version == 0)
-    pi->update_backtrace();
   
   mut->auth_pin(in);
   mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, 0, follows);
