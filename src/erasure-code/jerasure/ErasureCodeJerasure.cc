@@ -136,6 +136,22 @@ int ErasureCodeJerasure::decode(const set<int> &want_to_read,
                                 const map<int, bufferlist> &chunks,
                                 map<int, bufferlist> *decoded)
 {
+  vector<int> have;
+  have.reserve(chunks.size());
+  for (map<int, bufferlist>::const_iterator i = chunks.begin();
+       i != chunks.end();
+       ++i) {
+    have.push_back(i->first);
+  }
+  if (includes(
+	have.begin(), have.end(), want_to_read.begin(), want_to_read.end())) {
+    for (set<int>::iterator i = want_to_read.begin();
+	 i != want_to_read.end();
+	 ++i) {
+      (*decoded)[*i] = chunks.find(*i)->second;
+    }
+    return 0;
+  }
   unsigned blocksize = (*chunks.begin()).second.length();
   int erasures[k + m + 1];
   int erasures_count = 0;
