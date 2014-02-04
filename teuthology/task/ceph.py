@@ -10,6 +10,8 @@ import contextlib
 import logging
 import os
 import struct
+import json
+import time
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -1023,23 +1025,82 @@ def cluster(ctx, config):
                 ),
             )
 
-def osd_scrub_pgs(ctx, config):
+def get_all_pg_info(rem_site, testdir):
     """
-    Scrub pgs when we exit.
+    Get the results of a ceph pg dump
     """
-    
-    for remotes in ctx.cluster.remotes:
-        site_info = remotes.values()
-        for st_info in site_info:
-            for role in st_info:
-                if role.startswith('osd.'):
-                    log.info("Scrubbing osd {osd}".format(osd=role))
-                    testdir = teuthology.get_testdir(ctx)
-                    remotes.run(args=[
+    info = rem_site.run(args=[
                         'adjust-ulimits',
                         'ceph-coverage',
                         '{tdir}/archive/coverage'.format(tdir=testdir),
-                        'ceph', 'osd', 'scrub', role])
+                        'ceph', 'pg', 'dump',
+                        '--format', 'json'], stdout=StringIO())
+    all_info = json.loads(info.stdout.getvalue())
+    return all_info['pg_stats']
+    
+def osd_scrub_pgs(ctx, config):
+    """
+    Scrub pgs when we exit.
+    
+    First make sure all pgs are active and clean.
+    Next scrub all osds.
+    Then periodically check until all pgs have scrub time stamps that
+    indicate the last scrub completed.  Time out if no progess is made
+    here after two minutes.
+    """
+    retries = 12
+    delays = 10
+    vlist = ctx.cluster.remotes.values()
+    testdir = teuthology.get_testdir(ctx)
+    rem_site = ctx.cluster.remotes.keys()[0]
+    all_clean = False
+    for _ in range(0, retries):
+	stats = get_all_pg_info(rem_site, testdir)
+        states = [stat['state'] for stat in stats]
+        if len(set(states)) == 1 and states[0] == 'active+clean':
+            all_clean = True
+            break
+        log.info("Waiting for all osds to be active and clean.")
+        time.sleep(delays)
+    if not all_clean:
+        log.info("Scrubbing terminated -- not all pgs were active and clean.")
+        return
+    check_time_now = time.localtime()
+    time.sleep(1)
+    for slists in vlist:
+        for role in slists:
+            if role.startswith('osd.'):
+                log.info("Scrubbing osd {osd}".format(osd=role))
+                rem_site.run(args=[
+                            'adjust-ulimits',
+                            'ceph-coverage',
+                            '{tdir}/archive/coverage'.format(tdir=testdir),
+                            'ceph', 'osd', 'scrub', role])
+    prev_good = 0
+    gap_cnt = 0
+    loop = True
+    while loop:
+	stats = get_all_pg_info(rem_site, testdir)
+        timez = [stat['last_scrub_stamp'] for stat in stats]
+        loop = False
+        thiscnt = 0
+        for tmval in timez:
+            pgtm = time.strptime(tmval[0:tmval.find('.')], '%Y-%m-%d %H:%M:%S')
+            if pgtm > check_time_now:
+                thiscnt += 1
+            else:
+                loop = True
+        if thiscnt > prev_good:
+            prev_good = thiscnt
+            gap_cnt = 0
+        else:
+            gap_cnt += 1
+            if gap_cnt > retries:
+                log.info('Exiting scrub checking -- not all pgs scrubbed.')
+                return
+        if loop:
+            log.info('Still waiting for all pgs to be scrubbed.')
+            time.sleep(delays)
 
 @contextlib.contextmanager
 def run_daemon(ctx, config, type_):
@@ -1167,8 +1228,6 @@ def wait_for_mon_quorum(ctx, config):
     :param ctx: Context
     :param config: Configuration
     """
-    import json
-    import time
 
     assert isinstance(config, list)
     firstmon = teuthology.get_first_mon(ctx, config)
