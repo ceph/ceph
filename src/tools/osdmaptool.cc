@@ -37,6 +37,7 @@ void usage()
   cout << "   --test-map-pgs          map all pgs" << std::endl;
   cout << "   --mark-all-up-in        mark osds up and in (but do not persist)" << std::endl;
   cout << "   --clear-temp            clear pg_temp and primary_temp" << std::endl;
+  cout << "   --test-random           do random placements" << std::endl;
   cout << "   --test-map-pg <pgid>    map a pgid to osds" << std::endl;
   cout << "   --test-map-object <objectname> [--pool <poolid>] map an object to osds"
        << std::endl;
@@ -75,6 +76,7 @@ int main(int argc, const char **argv)
   bool clear_temp = false;
   bool test_map_pgs = false;
   int test_pool = -1;
+  bool test_random = false;
 
   std::string val;
   std::ostringstream err;
@@ -103,6 +105,8 @@ int main(int argc, const char **argv)
       clear_temp = true;
     } else if (ceph_argparse_flag(args, i, "--test-map-pgs", (char*)NULL)) {
       test_map_pgs = true;
+    } else if (ceph_argparse_flag(args, i, "--test-random", (char*)NULL)) {
+      test_random = true;
     } else if (ceph_argparse_withint(args, i, &test_pool, &err, "--pool", (char*)NULL)) {
     } else if (ceph_argparse_flag(args, i, "--clobber", (char*)NULL)) {
       clobber = true;
@@ -309,6 +313,8 @@ int main(int argc, const char **argv)
     vector<int> first_count(n, 0);
     vector<int> primary_count(n, 0);
     vector<int> size(30, 0);
+    if (test_random)
+      srand(getpid());
     const map<int64_t,pg_pool_t>& pools = osdmap.get_pools();
     for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin();
 	 p != pools.end(); ++p) {
@@ -321,7 +327,15 @@ int main(int argc, const char **argv)
 
 	vector<int> osds;
 	int primary;
-	osdmap.pg_to_acting_osds(pgid, &osds, &primary);
+	if (test_random) {
+	  osds.resize(p->second.size);
+	  for (unsigned i=0; i<osds.size(); ++i) {
+	    osds[i] = rand() % osdmap.get_max_osd();
+	  }
+	  primary = osds[0];
+	} else {
+	  osdmap.pg_to_acting_osds(pgid, &osds, &primary);
+	}
 	size[osds.size()]++;
 
 	for (unsigned i=0; i<osds.size(); i++) {
