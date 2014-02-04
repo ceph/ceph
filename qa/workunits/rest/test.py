@@ -202,6 +202,12 @@ if __name__ == '__main__':
     expect('osd/pool/delete?pool=data2&pool2=data2'
            '&sure=--yes-i-really-really-mean-it', 'PUT', 200, '')
     expect('mds/set_max_mds?maxmds=4', 'PUT', 200, '')
+    expect('mds/set?var=max_mds&val=4', 'PUT', 200, '')
+    expect('mds/set?var=max_file_size&val=16384', 'PUT', 200, '')
+    expect('mds/set?var=allow_new_snaps&val=true&confirm=--yes-i-really-mean-it', 'PUT', 200, '')
+    expect('mds/set?var=allow_new_snaps&val=0', 'PUT', 200, '')
+    expect('mds/set?var=inline_data&val=true&confirm=--yes-i-really-mean-it', 'PUT', 200, '')
+    expect('mds/set?var=inline_data&val=0', 'PUT', 200, '')
     r = expect('mds/dump.json', 'GET', 200, 'json')
     assert(r.myjson['output']['max_mds'] == 4)
     expect('mds/set_max_mds?maxmds=3', 'PUT', 200, '')
