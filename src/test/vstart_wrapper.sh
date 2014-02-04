@@ -25,7 +25,9 @@ function vstart_setup()
     mkdir -p dev
     trap "vstart_teardown ; rm -f $TMPFILE" EXIT
     export LC_ALL=C # some tests are vulnerable to i18n
-    MON=1 OSD=3 ./vstart.sh -n -X -l mon osd || return 1
+    MON=1 OSD=3 ./vstart.sh \
+        -o 'paxos propose interval = 0.01' \
+        -n -X -l mon osd || return 1
     export PATH=.:$PATH
     export CEPH_CONF=ceph.conf
 
