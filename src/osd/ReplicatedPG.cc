@@ -3896,6 +3896,7 @@ public:
 };
 
 class C_OSD_OpCommit : public Context {
+
 public:
   ReplicatedPGRef pg;
   ReplicatedPG::RepGather *repop;
