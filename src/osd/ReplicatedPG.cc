@@ -2403,7 +2403,7 @@ int ReplicatedPG::do_xattr_cmp_u64(int op, __u64 v1, bufferlist& xattr)
 int ReplicatedPG::do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr)
 {
   const char *v1, *v2;
-  v1 = v1s.data();
+  v1 = v1s.c_str();
   string v2s;
   if (xattr.length()) {
     v2s = string(xattr.c_str(), xattr.length());
