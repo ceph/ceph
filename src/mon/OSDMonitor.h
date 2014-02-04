@@ -182,6 +182,7 @@ private:
   void encode_trim_extra(MonitorDBStore::Transaction *tx, version_t first);
 
   void update_msgr_features();
+  int check_cluster_features(uint64_t features, stringstream &ss);
 
   void share_map_with_random_osd();
 
