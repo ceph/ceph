@@ -51,6 +51,40 @@ function check_response()
 	fi
 }
 
+function waitfor()
+{
+    local expect="$1"
+    shift
+    for delay in 1 1 2 3 4 5 6 7 8 9 10 ; do
+        "$@" >$TMPFILE 2>&1 || true
+        if grep "$expect" $TMPFILE ; then
+            break
+        else
+            sleep $delay
+        fi
+    done
+    if ! grep "$expect" $TMPFILE ; then
+        cat $TMPFILE
+        exit 1
+    fi
+}
+
+test "$(ceph osd pool get data no_omap)" = "no_omap: false"
+rados --pool data setomapval MYOBJECT KEY VALUE
+rados --pool data getomapval MYOBJECT KEY | grep VALUE
+ceph osd pool set data no_omap true
+test "$(ceph osd pool get data no_omap)" = "no_omap: true"
+ceph osd pool set data no_omap false
+waitfor 'VALUE' rados --pool data getomapval MYOBJECT KEY
+
+# FIXME: uncomment when ErasureCodePG is available
+#ceph osd crush rule create-erasure ec_ruleset
+#ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=ec_ruleset
+#test "$(ceph osd pool get pool_erasure no_omap)" = "no_omap: true"
+#waitfor 'error getting' rados --pool pool_erasure setomapval MYOBJECT KEY VALUE
+#ceph osd pool set data no_omap true
+#! ceph osd pool set data no_omap false
+#ceph osd pool delete pool_erasure pool_erasure --yes-i-really-really-mean-it
 
 # tiering
 ceph osd pool create cache 2
