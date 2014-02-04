@@ -82,8 +82,7 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
     EXPECT_EQ(0, jerasure.decode(set<int>(want_to_decode, want_to_decode+2),
                                 encoded,
                                 &decoded));
-    // always decode all, regardless of want_to_decode
-    EXPECT_EQ(4u, decoded.size()); 
+    EXPECT_EQ(2u, decoded.size()); 
     EXPECT_EQ(length, decoded[0].length());
     EXPECT_EQ(0, strncmp(decoded[0].c_str(), in.c_str(), length));
     EXPECT_EQ(0, strncmp(decoded[1].c_str(), in.c_str() + length,
