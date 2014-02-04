@@ -2,6 +2,50 @@
  Release Notes
 ===============
 
+v0.77 (frozen, pending release)
+-------------------------------
+
+This promises to be the final release before the firefly feature freeze.
+
+Upgrading
+~~~~~~~~~
+
+* The 'ceph -s' or 'ceph status' command's 'num_in_osds' field in the
+  JSON and XML output has been changed from a string to an int.
+
+* The recently added 'ceph mds set allow_new_snaps' command's syntax
+  has changed slightly; it is now 'ceph mds set allow_new_snaps true'.
+  The 'unset' command has been removed; instead, set the value to
+  'false'.
+
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* osd: client IO path changes for EC (Samuel Just)
+* common: portability changes to support libc++ (Noah Watkins)
+* common: switch to unordered_map from hash_map (Noah Watkins)
+* rgw: switch from mongoose to civetweb (Yehuda Sadeh)
+* osd: improve locking in fd lookup cache (Samuel Just, Greg Farnum)
+* doc: many many updates (John Wilkins)
+* rgw: user quotas (Yehuda Sadeh)
+* mon: persist quorum features to disk (Greg Farnum)
+* mon: MForward tests (Loic Dachary)
+* mds: inline data support (Li Wang, Yunchuan Wen)
+* rgw: fix many-part multipart uploads (Yehuda Sadeh)
+* osd: new keyvaluestore-dev backend based on leveldb (Haomai Wang)
+* rbd: prevent deletion of images with watchers (Ilya Dryomov)
+* osd: avoid touching leveldb for some xattrs (Haomai Wang, Sage Weil)
+* mailmap: affiliation updates (Loic Dachary)
+* osd: new OSDMap encoding (Greg Farnum)
+* osd: generalize scrubbing infrastructure to allow EC (David Zafman)
+* rgw: several doc fixes (Alexandre Marangone)
+* librados: add C API coverage for atomic write operations (Christian Marie)
+* rgw: improve swift temp URL support (Yehuda Sadeh)
+
+thru  2c504ea
+
+
 v0.76
 -----
 
