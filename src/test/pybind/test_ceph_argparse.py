@@ -435,28 +435,12 @@ class TestMDS(TestArgparse):
                                                     'rm_incompat', '1', '1']))
 
     def test_mds_set(self):
-        self.assert_valid_command(['mds', 'set', 'allow_new_snaps'])
-        self.assert_valid_command(['mds', 'set', 'allow_new_snaps', 'sure'])
+        self.assert_valid_command(['mds', 'set', 'max_mds', '2'])
+        self.assert_valid_command(['mds', 'set', 'max_file_size', '2'])
+        self.assert_valid_command(['mds', 'set', 'allow_new_snaps', 'no'])
         assert_equal({}, validate_command(sigdict, ['mds',
                                                     'set',
                                                     'invalid']))
-        assert_equal({}, validate_command(sigdict, ['mds',
-                                                    'set',
-                                                    'allow_new_snaps',
-													'sure',
-													'toomany']))
-
-    def test_mds_unset(self):
-        self.assert_valid_command(['mds', 'unset', 'allow_new_snaps'])
-        self.assert_valid_command(['mds', 'unset', 'allow_new_snaps', 'sure'])
-        assert_equal({}, validate_command(sigdict, ['mds',
-                                                    'unset',
-                                                    'invalid']))
-        assert_equal({}, validate_command(sigdict, ['mds',
-                                                    'unset',
-                                                    'allow_new_snaps',
-													'sure',
-													'toomany']))
 
     def test_add_data_pool(self):
         self.assert_valid_command(['mds', 'add_data_pool', '1'])
