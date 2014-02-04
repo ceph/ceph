@@ -214,6 +214,7 @@ public:
       crush->chooseleaf_vary_r != 0;
   }
   bool has_v2_rules() const;
+  bool has_v3_rules() const;
 
 
   // bucket types
@@ -659,6 +660,9 @@ public:
   }
   int set_rule_step_set_chooseleaf_tries(unsigned ruleno, unsigned step, int val) {
     return set_rule_step(ruleno, step, CRUSH_RULE_SET_CHOOSELEAF_TRIES, val, 0);
+  }
+  int set_rule_step_set_chooseleaf_vary_r(unsigned ruleno, unsigned step, int val) {
+    return set_rule_step(ruleno, step, CRUSH_RULE_SET_CHOOSELEAF_VARY_R, val, 0);
   }
   int set_rule_step_choose_firstn(unsigned ruleno, unsigned step, int val, int type) {
     return set_rule_step(ruleno, step, CRUSH_RULE_CHOOSE_FIRSTN, val, type);
