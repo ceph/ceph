@@ -1,7 +1,7 @@
 overrides:
-  ceph:
+  ceph-deploy:
     conf:
-      client:
+      mon:
         debug mon: 10
 roles:
 - - mon.a
