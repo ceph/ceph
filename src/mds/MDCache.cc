@@ -2777,6 +2777,10 @@ void MDCache::handle_mds_recovery(int who)
 {
   dout(7) << "handle_mds_recovery mds." << who << dendl;
 
+  // exclude all discover waiters. kick_discovers() will do the job
+  static const uint64_t i_mask = CInode::WAIT_ANY_MASK & ~CInode::WAIT_DIR;
+  static const uint64_t d_mask = CDir::WAIT_ANY_MASK & ~CDir::WAIT_DENTRY;
+
   list<Context*> waiters;
 
   // wake up any waiters in their subtrees
@@ -2797,7 +2801,7 @@ void MDCache::handle_mds_recovery(int who)
     while (!q.empty()) {
       CDir *d = q.front();
       q.pop_front();
-      d->take_waiting(CDir::WAIT_ANY_MASK, waiters);
+      d->take_waiting(d_mask, waiters);
 
       // inode waiters too
       for (CDir::map_t::iterator p = d->items.begin();
@@ -2806,7 +2810,7 @@ void MDCache::handle_mds_recovery(int who)
 	CDentry *dn = p->second;
 	CDentry::linkage_t *dnl = dn->get_linkage();
 	if (dnl->is_primary()) {
-	  dnl->get_inode()->take_waiting(CInode::WAIT_ANY_MASK, waiters);
+	  dnl->get_inode()->take_waiting(i_mask, waiters);
 	  
 	  // recurse?
 	  list<CDir*> ls;
@@ -9904,8 +9908,11 @@ void MDCache::kick_discovers(int who)
 {
   for (map<tid_t,discover_info_t>::iterator p = discovers.begin();
        p != discovers.end();
-       ++p)
+       ++p) {
+    if (p->second.mds != who)
+      continue;
     _send_discover(p->second);
+  }
 }
 
 
