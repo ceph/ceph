@@ -5,6 +5,7 @@ import teuthology.kill
 
 doc = """
 usage: teuthology-kill [-h] [-a ARCHIVE] -r RUN
+       teuthology-kill [-h] [-a ARCHIVE] -m MACHINE_TYPE -r RUN
        teuthology-kill [-h] [-a ARCHIVE] -r RUN -j JOB ...
        teuthology-kill [-h] -o OWNER -m MACHINE_TYPE -r RUN
 
@@ -22,7 +23,9 @@ optional arguments:
   -j, --job JOB         The job_id of the job to kill
   -o, --owner OWNER     The owner of the job(s)
   -m, --machine_type MACHINE_TYPE
-                        The type of machine the job(s) are running on
+                        The type of machine the job(s) are running on.
+                        This is required if killing a job that is still
+                        entirely in the queue.
 """.format(archive_base=teuthology.config.config.archive_base)
 
 

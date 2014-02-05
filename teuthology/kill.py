@@ -31,14 +31,19 @@ def kill_run(run_name, archive_base=None, owner=None, machine_type=None):
     run_info = {}
     if archive_base:
         run_archive_dir = os.path.join(archive_base, run_name)
-        run_info = find_run_info(run_archive_dir)
-        machine_type = run_info['machine_type']
-        owner = run_info['owner']
+        if os.path.isdir(run_archive_dir):
+            run_info = find_run_info(run_archive_dir)
+            machine_type = run_info['machine_type']
+            owner = run_info['owner']
+        elif machine_type is None:
+            raise RuntimeError("The run is still entirely enqueued; " +
+                               "you must also pass --machine-type")
 
     remove_beanstalk_jobs(run_name, machine_type)
     kill_processes(run_name, run_info.get('pids'))
-    targets = find_targets(run_name, owner)
-    nuke_targets(targets, owner)
+    if owner is not None:
+        targets = find_targets(run_name, owner)
+        nuke_targets(targets, owner)
 
 
 def kill_job(run_name, job_id, archive_base=None, owner=None,
