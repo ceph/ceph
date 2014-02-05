@@ -98,6 +98,38 @@ public:
       ::decode(write_pos, bl);
       ::decode(layout, bl);
     }
+
+    void dump(Formatter *f) const {
+      f->open_object_section("journal_header");
+      {
+	f->dump_string("magic", magic);
+	f->dump_unsigned("write_pos", write_pos);
+	f->dump_unsigned("expire_pos", expire_pos);
+	f->dump_unsigned("trimmed_pos", trimmed_pos);
+	f->open_object_section("layout");
+	{
+	  f->dump_unsigned("stripe_unit", layout.fl_stripe_unit);
+	  f->dump_unsigned("stripe_count", layout.fl_stripe_unit);
+	  f->dump_unsigned("object_size", layout.fl_stripe_unit);
+	  f->dump_unsigned("cas_hash", layout.fl_stripe_unit);
+	  f->dump_unsigned("object_stripe_unit", layout.fl_stripe_unit);
+	  f->dump_unsigned("pg_pool", layout.fl_stripe_unit);
+	}
+	f->close_section(); // layout
+      }
+      f->close_section(); // journal_header
+    }
+
+    static void generate_test_instances(list<Header*> &ls)
+    {
+      ls.push_back(new Header());
+      ls.push_back(new Header());
+      ls.back()->trimmed_pos = 1;
+      ls.back()->expire_pos = 2;
+      ls.back()->unused_field = 3;
+      ls.back()->write_pos = 4;
+      ls.back()->magic = "magique";
+    }
   } last_written, last_committed;
   WRITE_CLASS_ENCODER(Header)
 
