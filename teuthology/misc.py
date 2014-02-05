@@ -435,6 +435,18 @@ def sudo_write_file(remote, path, data, perms=None):
         )
 
 
+def copy_file(from_remote, from_path, to_remote, to_path=None):
+    """
+    Copies a file from one remote to another.
+    """
+    if to_path is None:
+        to_path = from_path
+    from_remote.run(args=[
+        'sudo', 'scp', '-v', from_path, "{host}:{file}".format(
+            host=to_remote.name, file=to_path)
+    ])
+
+
 def move_file(remote, from_path, to_path, sudo=False):
     """
     Move a file from one path to another on a remote site
