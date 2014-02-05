@@ -43,7 +43,7 @@ class InoTable : public MDSTable {
   void replay_reset();
 
   void reset_state();
-  void encode_state(bufferlist& bl) {
+  void encode_state(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
     ::encode(free, bl);
     ENCODE_FINISH(bl);
@@ -54,6 +54,17 @@ class InoTable : public MDSTable {
     projected_free = free;
     DECODE_FINISH(bl);
   }
+
+  // To permit enc/decoding in isolation in dencoder
+  InoTable() : MDSTable(NULL, "inotable", true) {}
+  void encode(bufferlist& bl) const {
+    encode_state(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    decode_state(bl);
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<InoTable*>& ls);
 
   void skip_inos(inodeno_t i);
 };

@@ -45,6 +45,11 @@ Commands
 
    Select the given type for future ``encode`` or ``decode`` operations.
 
+.. option:: skip <bytes>
+
+   Seek <bytes> into the imported file before reading data structure, use
+   this with objects that have a preamble/header before the object of interest.
+
 .. option:: decode
 
    Decode the contents of the in-memory buffer into an instance of the
@@ -84,7 +89,9 @@ Commands
 Example
 =======
 
-Say you want to examine an attribute on an object stored by ``ceph-osd``.  You can do::
+Say you want to examine an attribute on an object stored by ``ceph-osd``.  You can do this:
+
+::
 
     $ cd /mnt/osd.12/current/2.b_head
     $ attr -l foo_bar_head_EFE6384B
@@ -112,6 +119,21 @@ Say you want to examine an attribute on an object stored by ``ceph-osd``.  You c
       "truncate_seq": 0,
       "truncate_size": 0,
       "watchers": {}}
+
+Alternatively, perhaps you wish to dump an internal CephFS metadata object, you might
+do that like this:
+
+::
+
+   $ rados -p metadata get mds_snaptable mds_snaptable.bin
+   $ ceph-dencoder type SnapServer skip 8 import mds_snaptable.bin decode dump_json
+   { "snapserver": { "last_snap": 1,
+      "pending_noop": [],
+      "snaps": [],
+      "need_to_purge": {},
+      "pending_create": [],
+      "pending_destroy": []}} 
+
 
 Availability
 ============

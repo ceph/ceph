@@ -129,6 +129,9 @@ TYPE(MonCap)
 TYPE(DBObjectMap::_Header)
 TYPE(DBObjectMap::State)
 
+#include "osdc/Journaler.h"
+TYPE(Journaler::Header)
+
 #include "mds/Anchor.h"
 TYPE(Anchor)
 
@@ -164,7 +167,13 @@ TYPE_FEATUREFUL(MDSMap::mds_info_t)
 TYPE_NOCOPY(Capability)
 
 #include "mds/AnchorServer.h"
-TYPE(AnchorServer)
+TYPEWITHSTRAYDATA(AnchorServer)
+
+#include "mds/InoTable.h"
+TYPE(InoTable)
+
+#include "mds/SnapServer.h"
+TYPEWITHSTRAYDATA(SnapServer)
 
 #include "mds/SessionMap.h"
 TYPE(SessionMap)
