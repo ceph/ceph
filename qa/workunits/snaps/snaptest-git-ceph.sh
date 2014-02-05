@@ -2,7 +2,7 @@
 
 set -e
 
-ceph mds set allow_new_snaps --yes-i-really-mean-it
+ceph mds set allow_new_snaps true --yes-i-really-mean-it
 
 git clone git://ceph.com/git/ceph.git
 cd ceph
