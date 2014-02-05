@@ -24,7 +24,6 @@ def resurrect_traceback(exc):
     if isinstance(exc, ExceptionHolder):
         exc_info = exc.exc_info
     elif isinstance(exc, BaseException):
-        print type(exc)
         exc_info = (type(exc), exc, None)
     else:
         return
