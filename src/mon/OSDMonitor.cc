@@ -2849,6 +2849,36 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
   }
   return err;
 }
+
+int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
+					  const map<string,string> &properties,
+					  uint32_t *stripe_width,
+					  stringstream &ss)
+{
+  int err = 0;
+  switch (pool_type) {
+  case pg_pool_t::TYPE_REPLICATED:
+    // ignored
+    break;
+  case pg_pool_t::TYPE_ERASURE:
+    {
+      ErasureCodeInterfaceRef erasure_code;
+      err = get_erasure_code(properties, &erasure_code, ss);
+      uint32_t desired_stripe_width = g_conf->osd_pool_erasure_code_stripe_width;
+      if (err == 0)
+	*stripe_width = erasure_code->get_data_chunk_count() *
+	  erasure_code->get_chunk_size(desired_stripe_width);
+    }
+    break;
+  default:
+    ss << "prepare_pool_stripe_width: "
+       << pool_type << " is not a known pool type";
+    err = -EINVAL;
+    break;
+  }
+  return err;
+}
+
 int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
 					   const map<string,string> &properties,
 					   int *crush_ruleset,
@@ -2927,6 +2957,10 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_ruleset,
   r = prepare_pool_size(pool_type, properties_map, &size, ss);
   if (r)
     return r;
+  uint32_t stripe_width = 0;
+  r = prepare_pool_stripe_width(pool_type, properties_map, &stripe_width, ss);
+  if (r)
+    return r;
 
   for (map<int64_t,string>::iterator p = pending_inc.new_pool_names.begin();
        p != pending_inc.new_pool_names.end();
@@ -2954,6 +2988,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_ruleset,
   pi->last_change = pending_inc.epoch;
   pi->auid = auid;
   pi->properties = properties_map;
+  pi->stripe_width = stripe_width;
   pending_inc.new_pool_names[pool] = name;
   return 0;
 }
