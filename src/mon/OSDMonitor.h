@@ -254,6 +254,10 @@ private:
 			const map<string,string> &properties,
 			unsigned *size,
 			stringstream &ss);
+  int prepare_pool_stripe_width(const unsigned pool_type,
+				const map<string,string> &properties,
+				unsigned *stripe_width,
+				stringstream &ss);
   int prepare_new_pool(string& name, uint64_t auid, int crush_ruleset,
                        unsigned pg_num, unsigned pgp_num,
 		       const vector<string> &properties,
