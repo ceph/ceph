@@ -70,6 +70,8 @@ fi
 [ ! -d ~/src/ceph-qa-suite ] && schedule_fail "error: expects to find ~/src/ceph-qa-suite"
 [ ! -d ~/src/teuthology/virtualenv/bin ] && schedule_fail "error: expects to find ~/src/teuthology/virtualenv/bin"
 
+echo kernel sha1 $KERNEL_SHA1
+
 ## get sha1
 if [ "$distro" = "ubuntu" ]
 then
@@ -84,6 +86,8 @@ else
 fi
 
 [ -z "$CEPH_SHA1" ] && schedule_fail "Can't find ceph branch $ceph"
+
+echo ceph sha1 $CEPH_SHA1
 
 # Are there packages for this sha1?
 if [ "$distro" = "ubuntu" ]
