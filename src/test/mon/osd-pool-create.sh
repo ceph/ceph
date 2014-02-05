@@ -129,8 +129,37 @@ crush_ruleset=erasure_ruleset
 ./ceph --format json osd dump | grep "$expected"
 kill_mon
 
+# the default stripe width is used to initialize the pool
 run_mon
+stripe_width=$(./ceph-conf --show-config-value osd_pool_erasure_code_stripe_width)
+crush_ruleset=erasure_ruleset
+./ceph osd crush rule create-erasure $crush_ruleset
+./ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=$crush_ruleset
+./ceph --format json osd dump | tee $DIR/osd.json
+grep '"stripe_width":'$stripe_width $DIR/osd.json > /dev/null
+kill_mon
 
+# setting osd_pool_erasure_code_stripe_width modifies the stripe_width
+# and it is padded as required by the default plugin
+properties+=" erasure-code-plugin=jerasure"
+properties+=" erasure-code-technique=reed_sol_van"
+k=4
+properties+=" erasure-code-k=$k"
+properties+=" erasure-code-m=2"
+expected_chunk_size=2048
+actual_stripe_width=$(($expected_chunk_size * $k))
+desired_stripe_width=$(($actual_stripe_width - 1))
+run_mon \
+    --osd_pool_erasure_code_stripe_width $desired_stripe_width \
+    --osd_pool_default_erasure_code_properties "$properties"
+crush_ruleset=erasure_ruleset
+./ceph osd crush rule create-erasure $crush_ruleset
+./ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=$crush_ruleset
+./ceph osd dump | tee $DIR/osd.json
+grep "stripe_width $actual_stripe_width" $DIR/osd.json > /dev/null
+kill_mon
+
+run_mon
 # creating an erasure code pool sets defaults properties
 ./ceph --format json osd dump > $DIR/osd.json
 ! grep "erasure-code-plugin" $DIR/osd.json || exit 1
