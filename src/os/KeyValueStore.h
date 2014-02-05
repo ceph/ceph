@@ -550,7 +550,6 @@ class KeyValueStore : public ObjectStore,
                                   const std::set <std::string> &changed);
 
   std::string m_osd_rollback_to_cluster_snap;
-  bool m_osd_use_stale_snap;
   bool m_fail_eio;
 
   int do_update;
