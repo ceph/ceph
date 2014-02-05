@@ -83,6 +83,8 @@ class parallel(object):
                 log.debug('result is %s', repr(result))
                 pass
         except Exception:
+            # Emit message here because traceback gets stomped when we re-raise
+            log.exception("Exception in parallel execution")
             self.group.kill(block=True)
             raise
         return True
