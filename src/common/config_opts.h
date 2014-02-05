@@ -404,8 +404,7 @@ OPTION(osd_pool_default_erasure_code_directory, OPT_STR, CEPH_PKGLIBDIR"/erasure
 OPTION(osd_pool_default_erasure_code_properties,
        OPT_STR,
        "erasure-code-plugin=jerasure "
-       "erasure-code-technique=cauchy_good "
-       "erasure-code-packetsize=3072 "
+       "erasure-code-technique=reed_sol_van "
        "erasure-code-k=4 "
        "erasure-code-m=2 "
        ) // default properties of osd pool create
