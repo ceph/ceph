@@ -18,6 +18,8 @@ class TestRun(object):
         transport.expects('getpeername').with_args().returns(('HOST', 22))
         cmd = ssh.expects('exec_command')
         cmd.with_args("foo 'bar baz'")
+
+        # The I/O channels of the SSH child process
         in_ = fudge.Fake('ChannelFile(stdin)')
         out = fudge.Fake('ChannelFile(stdout)')
         err = fudge.Fake('ChannelFile(stderr)')
@@ -26,8 +28,13 @@ class TestRun(object):
         in_chan = fudge.Fake('channel')
         in_chan.expects('shutdown_write').with_args()
         in_.has_attr(channel=in_chan)
+
+        # The values we expect to see from the SSH child process
+        err.expects('read').with_args().returns("bad").expects('read').with_args().returns(None)
         out.expects('xreadlines').with_args().returns(['foo', 'bar'])
         err.expects('xreadlines').with_args().returns(['bad'])
+
+        # The outputs we will expect to see child output forwarded to
         logger = fudge.Fake('logger')
         log_err = fudge.Fake('log_err')
         logger.expects('getChild').with_args('err').returns(log_err)
@@ -36,6 +43,7 @@ class TestRun(object):
         logger.expects('getChild').with_args('out').returns(log_out)
         log_out.expects('log').with_args(logging.INFO, '[HOST]: foo')
         log_out.expects('log').with_args(logging.INFO, '[HOST]: bar')
+
         channel = fudge.Fake('channel')
         out.has_attr(channel=channel)
         channel.expects('recv_exit_status').with_args().returns(0)
@@ -66,6 +74,7 @@ class TestRun(object):
         out.expects('read').with_args().returns('foo\nb')
         out.expects('read').with_args().returns('ar\n')
         out.expects('read').with_args().returns('')
+        err.expects('read').with_args().returns("bad").expects('read').with_args().returns(None)
         err.expects('xreadlines').with_args().returns(['bad'])
         logger = fudge.Fake('logger')
         log_err = fudge.Fake('log_err')
@@ -99,6 +108,7 @@ class TestRun(object):
         cmd.returns((in_, out, err))
         out.expects('xreadlines').with_args().returns([])
         err.expects('xreadlines').with_args().returns([])
+        err.expects('read').with_args().returns("bad").expects('read').with_args().returns(None)
         logger = fudge.Fake('logger').is_a_stub()
         channel = fudge.Fake('channel')
         out.has_attr(channel=channel)
@@ -112,7 +122,8 @@ class TestRun(object):
             )
         assert e.command == 'foo'
         assert e.exitstatus == 42
-        assert str(e) == "Command failed on HOST with status 42: 'foo'"
+        assert str(e) == """Command failed on HOST with status 42: 'foo'
+stderr output: bad"""
 
     @fudge.with_fakes
     def test_run_status_bad_nocheck(self):
@@ -128,6 +139,7 @@ class TestRun(object):
         cmd.returns((in_, out, err))
         out.expects('xreadlines').with_args().returns([])
         err.expects('xreadlines').with_args().returns([])
+        err.expects('read').with_args().returns("bad").expects('read').with_args().returns(None)
         logger = fudge.Fake('logger').is_a_stub()
         channel = fudge.Fake('channel')
         out.has_attr(channel=channel)
@@ -155,6 +167,7 @@ class TestRun(object):
         cmd.returns((in_, out, err))
         out.expects('xreadlines').with_args().returns([])
         err.expects('xreadlines').with_args().returns([])
+        err.expects('read').with_args().returns("bad").expects('read').with_args().returns(None)
         logger = fudge.Fake('logger').is_a_stub()
         channel = fudge.Fake('channel')
         out.has_attr(channel=channel)
@@ -183,6 +196,7 @@ class TestRun(object):
         cmd.returns((in_, out, err))
         out.expects('xreadlines').with_args().returns([])
         err.expects('xreadlines').with_args().returns([])
+        err.expects('read').with_args().returns("bad").expects('read').with_args().returns(None)
         logger = fudge.Fake('logger').is_a_stub()
         channel = fudge.Fake('channel')
         out.has_attr(channel=channel)
@@ -207,6 +221,7 @@ class TestRun(object):
         cmd.returns((in_, out, err))
         out.expects('xreadlines').with_args().returns([])
         err.expects('xreadlines').with_args().returns([])
+        err.expects('read').with_args().returns("bad").expects('read').with_args().returns(None)
         logger = fudge.Fake('logger').is_a_stub()
         channel = fudge.Fake('channel')
         out.has_attr(channel=channel)
@@ -239,6 +254,7 @@ class TestRun(object):
         cmd.returns((in_, out, err))
         out.expects('xreadlines').with_args().returns([])
         err.expects('xreadlines').with_args().returns([])
+        err.expects('read').with_args().returns("bad").expects('read').with_args().returns(None)
         logger = fudge.Fake('logger').is_a_stub()
         channel = fudge.Fake('channel')
         out.has_attr(channel=channel)
@@ -265,6 +281,7 @@ class TestRun(object):
         cmd.returns((in_, out, err))
         out.expects('xreadlines').with_args().returns([])
         err.expects('xreadlines').with_args().returns([])
+        err.expects('read').with_args().returns("bad").expects('read').with_args().returns(None)
         logger = fudge.Fake('logger').is_a_stub()
         channel = fudge.Fake('channel')
         out.has_attr(channel=channel)
@@ -282,7 +299,8 @@ class TestRun(object):
             r.exitstatus.get,
             )
         assert e.exitstatus == 42
-        assert str(e) == "Command failed on HOST with status 42: 'foo'"
+        assert str(e) == """Command failed on HOST with status 42: 'foo'
+stderr output: bad"""
 
     @fudge.with_fakes
     def test_run_stdin_pipe(self):
@@ -298,6 +316,7 @@ class TestRun(object):
         cmd.returns((in_, out, err))
         out.expects('xreadlines').with_args().returns([])
         err.expects('xreadlines').with_args().returns([])
+        err.expects('read').with_args().returns("bad").expects('read').with_args().returns(None)
         logger = fudge.Fake('logger').is_a_stub()
         channel = fudge.Fake('channel')
         out.has_attr(channel=channel)
@@ -332,6 +351,7 @@ class TestRun(object):
         out.expects('read').with_args().returns('two')
         out.expects('read').with_args().returns('')
         err.expects('xreadlines').with_args().returns([])
+        err.expects('read').with_args().returns("bad").expects('read').with_args().returns(None)
         logger = fudge.Fake('logger').is_a_stub()
         channel = fudge.Fake('channel')
         out.has_attr(channel=channel)
