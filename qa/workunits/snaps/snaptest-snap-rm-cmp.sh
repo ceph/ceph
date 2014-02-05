@@ -2,7 +2,7 @@
 
 set -e
 
-ceph mds set allow_new_snaps --yes-i-really-mean-it
+ceph mds set allow_new_snaps true --yes-i-really-mean-it
 
 file=linux-2.6.33.tar.bz2
 wget -q http://ceph.com/qa/$file

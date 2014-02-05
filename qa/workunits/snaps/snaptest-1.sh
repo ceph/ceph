@@ -2,7 +2,7 @@
 
 set -e
 
-ceph mds set allow_new_snaps --yes-i-really-mean-it
+ceph mds set allow_new_snaps true --yes-i-really-mean-it
 
 echo 1 > file1
 echo 2 > file2
