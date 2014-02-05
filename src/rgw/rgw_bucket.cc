@@ -51,7 +51,7 @@ int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& bucke
   bufferlist header;
   list<cls_user_bucket_entry> entries;
 
-  bool truncated;
+  bool truncated = false;
   string m = marker;
 
   uint64_t total = 0;
