@@ -26,9 +26,6 @@
 #include <fstream>
 using namespace std;
 
-#include <ext/hash_map>
-using namespace __gnu_cxx;
-
 #include "include/assert.h"
 
 #include "ObjectStore.h"
