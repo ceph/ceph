@@ -31,12 +31,13 @@ def run_tasks(tasks, ctx):
             manager = run_one_task(taskname, ctx=ctx, config=config)
             if hasattr(manager, '__enter__'):
                 manager.__enter__()
-                stack.append(manager)
+                stack.append((taskname, manager))
     except Exception as e:
         ctx.summary['success'] = False
         if 'failure_reason' not in ctx.summary:
             ctx.summary['failure_reason'] = str(e)
         log.exception('Saw exception from tasks.')
+
         sentry = get_sentry_client()
         if sentry:
             config = deepcopy(ctx.config)
@@ -68,6 +69,7 @@ def run_tasks(tasks, ctx):
                 server=teuth_config.sentry_server.strip('/'), id=exc_id)
             log.exception(" Sentry event: %s" % event_url)
             ctx.summary['sentry_event'] = event_url
+
         if ctx.config.get('interactive-on-error'):
             from .task import interactive
             log.warning('Saw failure, going into interactive mode...')
@@ -76,15 +78,15 @@ def run_tasks(tasks, ctx):
         try:
             exc_info = sys.exc_info()
             while stack:
-                manager = stack.pop()
-                log.debug('Unwinding manager %s', manager)
+                taskname, manager = stack.pop()
+                log.debug('Unwinding manager %s', taskname)
                 try:
                     suppress = manager.__exit__(*exc_info)
                 except Exception as e:
                     ctx.summary['success'] = False
                     if 'failure_reason' not in ctx.summary:
                         ctx.summary['failure_reason'] = str(e)
-                    log.exception('Manager failed: %s', manager)
+                    log.exception('Manager failed: %s', taskname)
 
                     if exc_info == (None, None, None):
                         # if first failure is in an __exit__, we don't
