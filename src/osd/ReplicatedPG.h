@@ -510,7 +510,7 @@ public:
       }
     }
   };
-  friend class OpContext;
+  friend struct OpContext;
 
   /*
    * State on the PG primary associated with the replicated mutation
