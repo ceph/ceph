@@ -61,6 +61,9 @@ def configure_devstack_and_ceph(ctx, config, devstack_node, ceph_node):
     pool_size = config.get('pool_size', '128')
     create_pools(ceph_node, pool_size)
     distribute_ceph_conf(devstack_node, ceph_node)
+    # This is where we would install python-ceph and ceph-common but it appears
+    # the ceph task does that for us.
+    generate_ceph_keys(ceph_node)
     distribute_ceph_keys(devstack_node, ceph_node)
     secret_uuid = set_libvirt_secret(devstack_node, ceph_node)
     update_devstack_config_files(devstack_node, secret_uuid)
@@ -74,10 +77,11 @@ def create_pools(ceph_node, pool_size):
 
 
 def distribute_ceph_conf(devstack_node, ceph_node):
-    ### Copy ceph.conf to OpenStack node
+    ### Copy ceph.conf to devstack node
     misc.copy_file(ceph_node, '/etc/ceph/ceph.conf', devstack_node)
-    # This is where we would install python-ceph and ceph-common but it
-    # appears the ceph task will do that for us.
+
+
+def generate_ceph_keys(ceph_node):
     ceph_auth_cmds = [
         ['ceph', 'auth', 'get-or-create', 'client.cinder', 'mon',
             'allow r', 'osd', 'allow class-read object_prefix rbd_children, allow rwx pool=volumes, allow rx pool=images'],  # noqa
