@@ -1260,7 +1260,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   // list pools?
   if (strcmp(nargs[0], "lspools") == 0) {
     list<string> vec;
-    rados.pool_list(vec);
+    ret = rados.pool_list(vec);
+    if (ret < 0) {
+      cerr << "error listing pools: " << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
     for (list<string>::iterator i = vec.begin(); i != vec.end(); ++i)
       cout << *i << std::endl;
   }
@@ -1268,13 +1272,22 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     // pools
     list<string> vec;
 
-    if (!pool_name)
-      rados.pool_list(vec);
-    else
+    if (!pool_name) {
+      ret = rados.pool_list(vec);
+      if (ret < 0) {
+	cerr << "error listing pools: " << cpp_strerror(ret) << std::endl;
+	goto out;
+      }
+    } else {
       vec.push_back(pool_name);
+    }
 
     map<string, map<string, pool_stat_t> > stats;
-    rados.get_pool_stats(vec, category, stats);
+    ret = rados.get_pool_stats(vec, category, stats);
+    if (ret < 0) {
+      cerr << "error fetching pool stats: " << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
 
     if (!formatter) {
       printf("%-15s %-15s"
@@ -1351,7 +1364,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
     // total
     cluster_stat_t tstats;
-    rados.cluster_stat(tstats);
+    ret = rados.cluster_stat(tstats);
+    if (ret < 0) {
+      cerr << "error getting total cluster usage: " << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
     if (!formatter) {
       printf("  total used    %12lld %12lld\n", (long long unsigned)tstats.kb_used,
 	     (long long unsigned)tstats.num_objects);
