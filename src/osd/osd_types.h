@@ -831,6 +831,8 @@ public:
   uint32_t hit_set_period;      ///< periodicity of HitSet segments (seconds)
   uint32_t hit_set_count;       ///< number of periods to retain
 
+  uint32_t stripe_width;        ///< erasure coded stripe size in bytes
+
   pg_pool_t()
     : flags(0), type(0), size(0), min_size(0),
       crush_ruleset(0), object_hash(0),
@@ -845,7 +847,8 @@ public:
       cache_mode(CACHEMODE_NONE),
       hit_set_params(),
       hit_set_period(0),
-      hit_set_count(0)
+      hit_set_count(0),
+      stripe_width(0)
   { }
 
   void dump(Formatter *f) const;
@@ -873,6 +876,9 @@ public:
 
   void set_snap_seq(snapid_t s) { snap_seq = s; }
   void set_snap_epoch(epoch_t e) { snap_epoch = e; }
+
+  void set_stripe_width(uint32_t s) { stripe_width = s; }
+  uint32_t get_stripe_width() const { return stripe_width; }
 
   bool is_replicated()   const { return get_type() == TYPE_REPLICATED; }
   bool is_erasure() const { return get_type() == TYPE_ERASURE; }

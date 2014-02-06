@@ -73,6 +73,16 @@ Ceph configuration file.
 :Default: ``0``
 
 
+``osd pool erasure code stripe width`` 
+
+:Description: Sets the desired size, in bytes, of an object stripe on every
+              erasure coded pools. Every object if size S will be stored as 
+              N stripes and each stripe will be encoded/decoded individually.
+
+:Type: Unsigned 32-bit Integer
+:Default: ``4096`` 
+
+
 ``osd pool default size`` 
 
 :Description: Sets the number of replicas for objects in the pool. The default 
