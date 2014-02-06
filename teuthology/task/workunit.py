@@ -134,7 +134,7 @@ def _delete_dir(ctx, role):
             )
         log.info("Deleted dir {dir}".format(dir=client))
     except Exception:
-        log.exception("Caught an execption deleting dir {dir}".format(dir=client))
+        log.exception("Caught an exception deleting dir {dir}".format(dir=client))
 
     try:
         remote.run(
@@ -146,7 +146,7 @@ def _delete_dir(ctx, role):
             )
         log.info("Deleted dir {dir}".format(dir=mnt))
     except Exception:
-        log.exception("Caught an execption deleting dir {dir}".format(dir=mnt))
+        log.exception("Caught an exception deleting dir {dir}".format(dir=mnt))
 
 def _make_scratch_dir(ctx, role, subdir):
     """
