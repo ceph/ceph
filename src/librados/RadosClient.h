@@ -99,6 +99,8 @@ public:
   int get_fsid(std::string *s);
   int64_t lookup_pool(const char *name);
   const char *get_pool_name(int64_t pool_id);
+  bool pool_requires_alignment(int64_t pool_id);
+  uint64_t pool_required_alignment(int64_t pool_id);
   int pool_get_auid(uint64_t pool_id, unsigned long long *auid);
   int pool_get_name(uint64_t pool_id, std::string *auid);
 

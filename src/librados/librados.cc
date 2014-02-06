@@ -724,6 +724,16 @@ int librados::IoCtx::get_auid(uint64_t *auid_)
   return rados_ioctx_pool_get_auid(io_ctx_impl, auid_);
 }
 
+bool librados::IoCtx::pool_requires_alignment()
+{
+  return io_ctx_impl->client->pool_requires_alignment(get_id());
+}
+
+uint64_t librados::IoCtx::pool_required_alignment()
+{
+  return io_ctx_impl->client->pool_required_alignment(get_id());
+}
+
 std::string librados::IoCtx::get_pool_name()
 {
   std::string s;

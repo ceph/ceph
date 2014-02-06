@@ -897,6 +897,9 @@ public:
   bool is_replicated()   const { return get_type() == TYPE_REPLICATED; }
   bool is_erasure() const { return get_type() == TYPE_ERASURE; }
 
+  bool requires_aligned_append() const { return is_erasure(); }
+  uint64_t required_alignment() const { return stripe_width; }
+
   bool can_shift_osds() const {
     switch (get_type()) {
     case TYPE_REPLICATED:
