@@ -756,6 +756,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->close_section(); // hit_set_params
   f->dump_unsigned("hit_set_period", hit_set_period);
   f->dump_unsigned("hit_set_count", hit_set_count);
+  f->dump_unsigned("stripe_width", get_stripe_width());
 }
 
 
@@ -979,7 +980,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   }
 
   __u8 encode_compat = 5;
-  ENCODE_START(11, encode_compat, bl);
+  ENCODE_START(12, encode_compat, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -1012,12 +1013,13 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(hit_set_params, bl);
   ::encode(hit_set_period, bl);
   ::encode(hit_set_count, bl);
+  ::encode(stripe_width, bl);
   ENCODE_FINISH_NEW_COMPAT(bl, encode_compat);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(11, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(12, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
@@ -1091,6 +1093,11 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
     hit_set_period = def.hit_set_period;
     hit_set_count = def.hit_set_count;
   }
+  if (struct_v >= 12) {
+    ::decode(stripe_width, bl);
+  } else {
+    set_stripe_width(0);
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
 }
@@ -1137,6 +1144,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.hit_set_params = HitSet::Params(new BloomHitSet::Params);
   a.hit_set_period = 3600;
   a.hit_set_count = 8;
+  a.set_stripe_width(12345);
   o.push_back(new pg_pool_t(a));
 }
 
@@ -1174,6 +1182,7 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
 	<< " " << p.hit_set_period << "s"
 	<< " x" << p.hit_set_count;
   }
+  out << " stripe_width " << p.get_stripe_width();
   return out;
 }
 
