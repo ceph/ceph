@@ -1631,6 +1631,8 @@ int librados::Rados::get_pool_stats(std::list<string>& v, string& category,
 {
   map<string,::pool_stat_t> rawresult;
   int r = client->get_pool_stats(v, rawresult);
+  if (r < 0)
+    return r;
   for (map<string,::pool_stat_t>::iterator p = rawresult.begin();
        p != rawresult.end();
        ++p) {
@@ -1945,7 +1947,9 @@ extern "C" int rados_pool_reverse_lookup(rados_t cluster, int64_t id,
 {
   librados::RadosClient *radosp = (librados::RadosClient *)cluster;
   std::string name;
-  radosp->pool_get_name(id, &name);
+  int r = radosp->pool_get_name(id, &name);
+  if (r < 0)
+    return r;
   if (name.length() >= maxlen)
     return -ERANGE;
   strcpy(buf, name.c_str());
@@ -1968,7 +1972,9 @@ extern "C" int rados_pool_list(rados_t cluster, char *buf, size_t len)
 {
   librados::RadosClient *client = (librados::RadosClient *)cluster;
   std::list<std::string> pools;
-  client->pool_list(pools);
+  int r = client->pool_list(pools);
+  if (r < 0)
+    return r;
 
   if (!buf)
     return -EINVAL;
