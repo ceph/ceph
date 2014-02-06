@@ -2,6 +2,7 @@
 import contextlib
 import logging
 from cStringIO import StringIO
+import textwrap
 
 from ..orchestra import run
 from teuthology import misc
@@ -35,7 +36,6 @@ def task(ctx, config):
     an_osd_node = ctx.cluster.only(is_osd_node).remotes.keys()[0]
     install_devstack(devstack_node)
     try:
-        # OTHER STUFF
         configure_devstack_and_ceph(ctx, devstack_node, an_osd_node)
         yield
     #except Exception as e:
@@ -57,13 +57,22 @@ def install_devstack(devstack_node):
 
 
 def configure_devstack_and_ceph(config, devstack_node, ceph_node):
-    # Create pools on Ceph cluster
     pool_size = config.get('pool_size', 128)
+    create_pools(ceph_node, pool_size)
+    distribute_ceph_conf(devstack_node, ceph_node)
+    distribute_ceph_keys(devstack_node, ceph_node)
+    set_libvirt_secret(devstack_node, ceph_node)
+
+
+def create_pools(ceph_node, pool_size):
+    ### Create pools on Ceph cluster
     for pool_name in ['volumes', 'images', 'backups']:
         args = ['ceph', 'osd', 'pool', 'create', pool_name, pool_size]
         ceph_node.run(args=args)
 
-    # Copy ceph.conf to OpenStack node
+
+def distribute_ceph_conf(devstack_node, ceph_node):
+    ### Copy ceph.conf to OpenStack node
     misc.copy_file(ceph_node, '/etc/ceph/ceph.conf', devstack_node)
     # This is where we would install python-ceph and ceph-common but it
     # appears the ceph task will do that for us.
@@ -78,7 +87,9 @@ def configure_devstack_and_ceph(config, devstack_node, ceph_node):
     for cmd in ceph_auth_cmds:
         ceph_node.run(args=cmd)
 
-    # Copy ceph auth keys to devstack node
+
+def distribute_ceph_keys(devstack_node, ceph_node):
+    ### Copy ceph auth keys to devstack node
     def copy_key(from_remote, key_name, to_remote, dest_path, owner):
         key_stringio = StringIO()
         from_remote.run(
@@ -100,3 +111,30 @@ def configure_devstack_and_ceph(config, devstack_node, ceph_node):
     for key_dict in keys:
         copy_key(ceph_node, key_dict['name'], devstack_node,
                  key_dict['path'], key_dict['owner'])
+
+
+def set_libvirt_secret(devstack_node, ceph_node):
+    cinder_key_stringio = StringIO()
+    ceph_node.run(args=['ceph', 'auth', 'get-key', 'client.cinder'],
+                  stdout=cinder_key_stringio)
+    cinder_key = cinder_key_stringio.read().strip()
+
+    uuid_stringio = StringIO()
+    devstack_node.run(args=['uuidgen'], stdout=uuid_stringio)
+    uuid = uuid_stringio.read().strip()
+
+    secret_path = '/tmp/secret.xml'
+    secret_template = textwrap.dedent("""
+    <secret ephemeral='no' private='no'>
+        <uuid>{uuid}</uuid>
+        <usage type='ceph'>
+            <name>client.cinder secret</name>
+        </usage>
+    </secret>""")
+    misc.sudo_write_file(devstack_node, secret_path,
+                         secret_template.format(uuid=uuid))
+    devstack_node.run(args=['sudo', 'virsh', 'secret-define', '--file',
+                            secret_path])
+    devstack_node.run(args=['sudo', 'virsh', 'set-secret-value', '--secret',
+                            uuid, '--base64', cinder_key])
+
