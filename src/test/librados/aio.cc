@@ -283,7 +283,6 @@ TEST(LibRadosAio, RoundTrip) {
     sem_wait(&test_data.m_sem);
     sem_wait(&test_data.m_sem);
   }
-  ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
   char buf2[256];
   memset(buf2, 0, sizeof(buf2));
   rados_completion_t my_completion2;
@@ -295,7 +294,7 @@ TEST(LibRadosAio, RoundTrip) {
     TestAlarm alarm;
     ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion2));
   }
-  ASSERT_EQ((int)sizeof(buf), rados_aio_get_return_value(my_completion2));
+  ASSERT_EQ(sizeof(buf), rados_aio_get_return_value(my_completion2));
   ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
   rados_aio_release(my_completion);
   rados_aio_release(my_completion2);
