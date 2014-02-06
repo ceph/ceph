@@ -344,28 +344,13 @@ void MDCache::create_empty_hierarchy(C_Gather *gather)
   adjust_subtree_auth(rootdir, mds->whoami);   
   rootdir->dir_rep = CDir::REP_ALL;   //NONE;
 
-  // create ceph dir
-  CInode *ceph = create_system_inode(MDS_INO_CEPH, S_IFDIR);
-  CDentry *dn = rootdir->add_primary_dentry(".ceph", ceph);
-  dn->_mark_dirty(mds->mdlog->get_current_segment());
-
-  CDir *cephdir = ceph->get_or_open_dirfrag(this, frag_t());
-  cephdir->dir_rep = CDir::REP_ALL;   //NONE;
-
-  ceph->inode.dirstat = cephdir->fnode.fragstat;
-
   rootdir->fnode.fragstat.nsubdirs = 1;
-  rootdir->fnode.rstat = ceph->inode.rstat;
   rootdir->fnode.accounted_fragstat = rootdir->fnode.fragstat;
   rootdir->fnode.accounted_rstat = rootdir->fnode.rstat;
 
   root->inode.dirstat = rootdir->fnode.fragstat;
   root->inode.rstat = rootdir->fnode.rstat;
   root->inode.accounted_rstat = root->inode.rstat;
-
-  cephdir->mark_complete();
-  cephdir->mark_dirty(cephdir->pre_dirty(), mds->mdlog->get_current_segment());
-  cephdir->commit(0, gather->new_sub());
 
   rootdir->mark_complete();
   rootdir->mark_dirty(rootdir->pre_dirty(), mds->mdlog->get_current_segment());
@@ -380,7 +365,6 @@ void MDCache::create_mydir_hierarchy(C_Gather *gather)
   char myname[10];
   snprintf(myname, sizeof(myname), "mds%d", mds->whoami);
   CInode *my = create_system_inode(MDS_INO_MDSDIR(mds->whoami), S_IFDIR);
-  //cephdir->add_remote_dentry(myname, MDS_INO_MDSDIR(mds->whoami), S_IFDIR);
 
   CDir *mydir = my->get_or_open_dirfrag(this, frag_t());
   adjust_subtree_auth(mydir, mds->whoami);   
@@ -10298,23 +10282,7 @@ void MDCache::handle_discover(MDiscover *dis)
 	reply->set_flag_error_ino();
 	break;
       }
-      
-      // is this a new mds dir?
-      /*
-      if (curdir->ino() == MDS_INO_CEPH) {
-	char t[10];
-	snprintf(t, sizeof(t), "mds%d", from);
-	if (t == dis->get_dentry(i)) {
-	  // yes.
-	  _create_mdsdir_dentry(curdir, from, t, new C_MDS_RetryMessage(mds, dis));
-	  //_create_system_file(curdir, t, create_system_inode(MDS_INO_MDSDIR(from), S_IFDIR),
-	  //new C_MDS_RetryMessage(mds, dis));
-	  reply->put();
-	  return;
-	}
-      }	
-      */
-      
+
       // send null dentry
       dout(7) << "dentry " << dis->get_dentry(i) << " dne, returning null in "
 	      << *curdir << dendl;
