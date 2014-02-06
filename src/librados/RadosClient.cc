@@ -412,9 +412,11 @@ int librados::RadosClient::get_pool_stats(std::list<string>& pools,
   Mutex mylock("RadosClient::get_pool_stats::mylock");
   Cond cond;
   bool done;
+  int ret = 0;
 
   lock.Lock();
-  objecter->get_pool_stats(pools, &result, new C_SafeCond(&mylock, &cond, &done));
+  objecter->get_pool_stats(pools, &result, new C_SafeCond(&mylock, &cond, &done,
+							  &ret));
   lock.Unlock();
 
   mylock.Lock();
@@ -422,7 +424,7 @@ int librados::RadosClient::get_pool_stats(std::list<string>& pools,
     cond.Wait(mylock);
   mylock.Unlock();
 
-  return 0;
+  return ret;
 }
 
 int librados::RadosClient::get_fs_stats(ceph_statfs& stats)
@@ -430,15 +432,17 @@ int librados::RadosClient::get_fs_stats(ceph_statfs& stats)
   Mutex mylock ("RadosClient::get_fs_stats::mylock");
   Cond cond;
   bool done;
+  int ret = 0;
+
   lock.Lock();
-  objecter->get_fs_stats(stats, new C_SafeCond(&mylock, &cond, &done));
+  objecter->get_fs_stats(stats, new C_SafeCond(&mylock, &cond, &done, &ret));
   lock.Unlock();
 
   mylock.Lock();
   while (!done) cond.Wait(mylock);
   mylock.Unlock();
 
-  return 0;
+  return ret;
 }
 
 void librados::RadosClient::get() {
