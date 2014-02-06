@@ -629,6 +629,12 @@ noinst_LTLIBRARIES += libradostest.la
 libradostest_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 RADOS_TEST_LDADD = libradostest.la
 
+libradosstripertest_la_SOURCES = test/libradosstriper/TestCase.cc
+noinst_LTLIBRARIES += libradosstripertest.la
+libradosstripertest_la_LIBADD = $(RADOS_TEST_LDADD)
+libradosstripertest_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+RADOS_STRIPER_TEST_LDADD = libradosstripertest.la
+
 ceph_multi_stress_watch_SOURCES = test/multi_stress_watch.cc
 ceph_multi_stress_watch_LDADD = $(LIBRADOS) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 bin_DEBUGPROGRAMS += ceph_multi_stress_watch
@@ -775,6 +781,21 @@ ceph_test_rados_api_lock_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDAD
 ceph_test_rados_api_lock_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_lock
 
+ceph_test_rados_striper_api_io_SOURCES = test/libradosstriper/io.cc
+ceph_test_rados_striper_api_io_LDADD = $(LIBRADOS) $(LIBRADOSSTRIPER) $(UNITTEST_LDADD) $(RADOS_STRIPER_TEST_LDADD)
+ceph_test_rados_striper_api_io_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_rados_striper_api_io
+
+ceph_test_rados_striper_api_aio_SOURCES = test/libradosstriper/aio.cc
+ceph_test_rados_striper_api_aio_LDADD = $(LIBRADOS) $(LIBRADOSSTRIPER) $(UNITTEST_LDADD) $(RADOS_STRIPER_TEST_LDADD)
+ceph_test_rados_striper_api_aio_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_rados_striper_api_aio
+
+ceph_test_rados_striper_api_striping_SOURCES = test/libradosstriper/striping.cc
+ceph_test_rados_striper_api_striping_LDADD = $(LIBRADOS) $(LIBRADOSSTRIPER) $(UNITTEST_LDADD) $(RADOS_STRIPER_TEST_LDADD)
+ceph_test_rados_striper_api_striping_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_rados_striper_api_striping
+
 ceph_test_libcephfs_SOURCES = \
 	test/libcephfs/test.cc \
 	test/libcephfs/readdir_r_cb.cc \
@@ -893,6 +914,7 @@ noinst_HEADERS += \
 	test/kv_store_bench.h \
 	test/librados/test.h \
 	test/librados/TestCase.h \
+	test/libradosstriper/TestCase.h \
 	test/ObjectMap/KeyValueDBMemory.h \
 	test/omap_bench.h \
 	test/osdc/FakeWriteback.h \
