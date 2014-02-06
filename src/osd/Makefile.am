@@ -1,17 +1,3 @@
-## erasure code plugins
-erasure_codelibdir = $(pkglibdir)/erasure-code
-erasure_codelib_LTLIBRARIES =  
-
-include osd/ErasureCodePluginJerasure/Makefile.am
-
-liberasure_code_la_SOURCES = \
-	osd/ErasureCodePlugin.cc
-liberasure_code_la_LIBADD = $(LIBOSDC) $(LIBOS)
-if LINUX
-liberasure_code_la_LIBADD += -ldl
-endif # LINUX
-noinst_LTLIBRARIES += liberasure_code.la
-
 libosd_la_SOURCES = \
 	osd/PG.cc \
 	osd/PGLog.cc \
@@ -35,8 +21,6 @@ noinst_LTLIBRARIES += libosd.la
 noinst_HEADERS += \
 	osd/Ager.h \
 	osd/ClassHandler.h \
-	osd/ErasureCodeInterface.h \
-	osd/ErasureCodePlugin.h \
 	osd/HitSet.h \
 	osd/OSD.h \
 	osd/OSDCap.h \

@@ -17,7 +17,7 @@
 #ifndef CEPH_ERASURE_CODE_JERASURE_H
 #define CEPH_ERASURE_CODE_JERASURE_H
 
-#include "osd/ErasureCodeInterface.h"
+#include "erasure-code/ErasureCodeInterface.h"
 
 class ErasureCodeJerasure : public ErasureCodeInterface {
 public:

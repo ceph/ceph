@@ -37,7 +37,7 @@ class Monitor;
 #include "messages/MOSDFailure.h"
 #include "messages/MPoolOp.h"
 
-#include "osd/ErasureCodeInterface.h"
+#include "erasure-code/ErasureCodeInterface.h"
 
 #define OSD_METADATA_PREFIX "osd_metadata"
 
