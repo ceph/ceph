@@ -38,6 +38,8 @@ enum {
 #define OSD_REP_SPLAY   1
 #define OSD_REP_CHAIN   2
 
+#define OSD_POOL_ERASURE_CODE_STRIPE_WIDTH 4096
+
 struct config_option;
 class CephContext;
 
