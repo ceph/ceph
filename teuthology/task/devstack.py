@@ -78,7 +78,9 @@ def create_pools(ceph_node, pool_size):
 
 def distribute_ceph_conf(devstack_node, ceph_node):
     ### Copy ceph.conf to devstack node
-    misc.copy_file(ceph_node, '/etc/ceph/ceph.conf', devstack_node)
+    ceph_conf_path = '/etc/ceph/ceph.conf'
+    ceph_conf = misc.get_file(ceph_node, ceph_conf_path, sudo=True)
+    misc.sudo_write_file(devstack_node, ceph_conf_path, ceph_conf)
 
 
 def generate_ceph_keys(ceph_node):
