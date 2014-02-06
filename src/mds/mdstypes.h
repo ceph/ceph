@@ -45,6 +45,9 @@ using namespace std;
 #define NUM_STRAY                 10
 
 #define MDS_INO_ROOT              1
+
+// No longer created but recognised in existing filesystems
+// so that we don't try to fragment it.
 #define MDS_INO_CEPH              2
 
 #define MDS_INO_MDSDIR_OFFSET     (1*MAX_MDS)
