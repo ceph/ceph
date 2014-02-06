@@ -1,0 +1,43 @@
+body {
+  background: #311F00;
+  color: white;
+  font-family: 'Helvetica Neue', 'Helvetica', 'Verdana', sans-serif;
+  padding: 1em 2em;
+}
+
+a {
+  color: #FAFF78;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+div#content  {
+  width: 800px;
+  margin: 0 auto;
+}
+
+form {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+fieldset {
+  border: 0;
+}
+
+input.error {
+  background: #FAFF78;
+}
+
+header {
+  text-align: center;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Futura-CondensedExtraBold', 'Futura', 'Helvetica', sans-serif;
+  text-transform: uppercase;
+}
