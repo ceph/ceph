@@ -3476,6 +3476,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  break;
 	}
 
+	if (pool.info.requires_aligned_append() &&
+	    (op.extent.offset % pool.info.required_alignment() != 0)) {
+	  result = -EOPNOTSUPP;
+	  break;
+	}
+
 	if (!obs.exists) {
 	  ctx->mod_desc.create();
 	} else if (op.extent.offset == oi.size) {
