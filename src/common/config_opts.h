@@ -121,6 +121,7 @@ OPTION(ms_pq_max_tokens_per_priority, OPT_U64, 4194304)
 OPTION(ms_pq_min_cost, OPT_U64, 65536)
 OPTION(ms_inject_socket_failures, OPT_U64, 0)
 OPTION(ms_inject_delay_type, OPT_STR, "")          // "osd mds mon client" allowed
+OPTION(ms_inject_delay_msg_type, OPT_STR, "")      // the type of message to delay, as returned by Message::get_type_name(). This is an additional restriction on the general type filter ms_inject_delay_type.
 OPTION(ms_inject_delay_max, OPT_DOUBLE, 1)         // seconds
 OPTION(ms_inject_delay_probability, OPT_DOUBLE, 0) // range [0, 1]
 OPTION(ms_inject_internal_delays, OPT_DOUBLE, 0)   // seconds
