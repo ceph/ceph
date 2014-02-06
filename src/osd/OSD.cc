@@ -1698,13 +1698,17 @@ void OSD::recursive_remove_collection(ObjectStore *store, coll_t tmp)
     store,
     coll_t(),
     make_snapmapper_oid());
-  SnapMapper mapper(&driver, 0, 0, 0);
+
+  spg_t pg;
+  tmp.is_pg_prefix(pg);
+
+  ObjectStore::Transaction t;
+  SnapMapper mapper(&driver, 0, 0, 0, pg.shard);
 
   vector<ghobject_t> objects;
   store->collection_list(tmp, objects);
 
   // delete them.
-  ObjectStore::Transaction t;
   unsigned removed = 0;
   for (vector<ghobject_t>::iterator p = objects.begin();
        p != objects.end();

@@ -374,11 +374,13 @@ int get_log(ObjectStore *fs, coll_t coll, pg_t pgid, const pg_info_t &info,
 //Based on RemoveWQ::_process()
 void remove_coll(ObjectStore *store, const coll_t &coll)
 {
+  spg_t pg;
+  coll.is_pg_prefix(pg);
   OSDriver driver(
     store,
     coll_t(),
     OSD::make_snapmapper_oid());
-  SnapMapper mapper(&driver, 0, 0, 0);
+  SnapMapper mapper(&driver, 0, 0, 0, pg.shard);
 
   vector<ghobject_t> objects;
   ghobject_t next;
@@ -856,7 +858,9 @@ int get_object(ObjectStore *store, coll_t coll, bufferlist &bl)
     store,
     coll_t(),
     OSD::make_snapmapper_oid());
-  SnapMapper mapper(&driver, 0, 0, 0);
+  spg_t pg;
+  coll.is_pg_prefix(pg);
+  SnapMapper mapper(&driver, 0, 0, 0, pg.shard);
 
   t->touch(coll, ob.hoid);
 
