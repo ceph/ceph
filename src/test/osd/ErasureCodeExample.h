@@ -24,7 +24,7 @@
 
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
-#include "osd/ErasureCodeInterface.h"
+#include "erasure-code/ErasureCodeInterface.h"
 
 #define FIRST_DATA_CHUNK 0
 #define SECOND_DATA_CHUNK 1

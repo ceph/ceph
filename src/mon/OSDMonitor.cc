@@ -44,7 +44,7 @@
 #include "common/config.h"
 #include "common/errno.h"
 
-#include "osd/ErasureCodePlugin.h"
+#include "erasure-code/ErasureCodePlugin.h"
 
 #include "include/compat.h"
 #include "include/assert.h"
