@@ -29,7 +29,7 @@
 #include "common/config.h"
 #include "common/Clock.h"
 #include "include/utime.h"
-#include "osd/ErasureCodePlugin.h"
+#include "erasure-code/ErasureCodePlugin.h"
 
 namespace po = boost::program_options;
 

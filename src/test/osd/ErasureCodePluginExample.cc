@@ -16,7 +16,7 @@
 
 #include <unistd.h>
 
-#include "osd/ErasureCodePlugin.h"
+#include "erasure-code/ErasureCodePlugin.h"
 #include "ErasureCodeExample.h"
 
 class ErasureCodePluginExample : public ErasureCodePlugin {
