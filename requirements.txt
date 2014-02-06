@@ -16,6 +16,7 @@ raven
 web.py
 docopt
 psutil
+configparser
 
 # Test Dependencies
 # nose >=1.0.0

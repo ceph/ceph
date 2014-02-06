@@ -3,6 +3,7 @@ import contextlib
 import logging
 from cStringIO import StringIO
 import textwrap
+from configparser import ConfigParser
 
 from ..orchestra import run
 from teuthology import misc
@@ -36,7 +37,7 @@ def task(ctx, config):
     an_osd_node = ctx.cluster.only(is_osd_node).remotes.keys()[0]
     install_devstack(devstack_node)
     try:
-        configure_devstack_and_ceph(ctx, devstack_node, an_osd_node)
+        configure_devstack_and_ceph(ctx, config, devstack_node, an_osd_node)
         yield
     #except Exception as e:
         # FAIL
@@ -56,12 +57,13 @@ def install_devstack(devstack_node):
     devstack_node.run(args=args)
 
 
-def configure_devstack_and_ceph(config, devstack_node, ceph_node):
-    pool_size = config.get('pool_size', 128)
+def configure_devstack_and_ceph(ctx, config, devstack_node, ceph_node):
+    pool_size = config.get('pool_size', '128')
     create_pools(ceph_node, pool_size)
     distribute_ceph_conf(devstack_node, ceph_node)
     distribute_ceph_keys(devstack_node, ceph_node)
-    set_libvirt_secret(devstack_node, ceph_node)
+    secret_uuid = set_libvirt_secret(devstack_node, ceph_node)
+    update_devstack_config_files(devstack_node, secret_uuid)
 
 
 def create_pools(ceph_node, pool_size):
@@ -137,4 +139,61 @@ def set_libvirt_secret(devstack_node, ceph_node):
                             secret_path])
     devstack_node.run(args=['sudo', 'virsh', 'set-secret-value', '--secret',
                             uuid, '--base64', cinder_key])
+    return uuid
 
+
+def update_devstack_config_files(devstack_node, secret_uuid):
+    def backup_config(node, file_name, backup_ext='.orig.teuth'):
+        node.run(args=['cp', '-f', file_name, file_name + backup_ext])
+
+    def update_config(config_name, config_stream, update_dict):
+        parser = ConfigParser()
+        parser.read_file(config_stream, filename=config_name)
+        parser.update(update_dict)
+        out_stream = StringIO()
+        parser.write(out_stream)
+        return out_stream
+
+    updates = [
+        dict(name='/etc/glance/glance-api.conf', options=dict(
+            default_store='rbd',
+            rbd_store_user='glance',
+            rbd_store_pool='images',
+            show_image_direct_url='True',)),
+        dict(name='/etc/cinder/cinder.conf', options=dict(
+            volume_driver='cinder.volume.drivers.rbd.RBDDriver',
+            rbd_pool='volumes',
+            rbd_ceph_conf='/etc/ceph/ceph.conf',
+            rbd_flatten_volume_from_snapshot='false',
+            rbd_max_clone_depth='5',
+            glance_api_version='2',
+            rbd_user='cinder',
+            rbd_secret_uuid=secret_uuid,
+            backup_driver='cinder.backup.drivers.ceph',
+            backup_ceph_conf='/etc/ceph/ceph.conf',
+            backup_ceph_user='cinder-backup',
+            backup_ceph_chunk_size='134217728',
+            backup_ceph_pool='backups',
+            backup_ceph_stripe_unit='0',
+            backup_ceph_stripe_count='0',
+            restore_discard_excess_bytes='true',
+            )),
+        dict(name='/etc/nova/nova.conf', options=dict(
+            libvirt_images_type='rbd',
+            libvirt_images_rbd_pool='volumes',
+            libvirt_images_rbd_ceph_conf='/etc/ceph/ceph.conf',
+            rbd_user='cinder',
+            rbd_secret_uuid=secret_uuid,
+            libvirt_inject_password='false',
+            libvirt_inject_key='false',
+            libvirt_inject_partition='-2',
+            )),
+    ]
+
+    for update in updates:
+        file_name = update['name']
+        options = update['options']
+        config_stream = misc.get_file(devstack_node, file_name, sudo=True)
+        backup_config(devstack_node, file_name)
+        new_config_stream = update_config(file_name, config_stream, options)
+        misc.sudo_write_file(devstack_node, file_name, new_config_stream)
