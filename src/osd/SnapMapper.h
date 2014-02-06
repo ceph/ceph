@@ -115,10 +115,10 @@ private:
 
   static std::string get_prefix(snapid_t snap);
 
-  static std::string to_raw_key(
+  std::string to_raw_key(
     const std::pair<snapid_t, hobject_t> &to_map);
 
-  static std::pair<std::string, bufferlist> to_raw(
+  std::pair<std::string, bufferlist> to_raw(
     const std::pair<snapid_t, hobject_t> &to_map);
 
   static bool is_mapping(const std::string &to_test);
@@ -150,17 +150,29 @@ private:
     );
 
 public:
+  static string make_shard_prefix(shard_id_t shard) {
+    if (shard == ghobject_t::NO_SHARD)
+      return string();
+    char buf[20];
+    int r = snprintf(buf, sizeof(buf), ".%x", (int)shard);
+    assert(r < (int)sizeof(buf));
+    return string(buf, r) + '_';
+  }
   uint32_t mask_bits;
   const uint32_t match;
   string last_key_checked;
   const int64_t pool;
+  const shard_id_t shard;
+  const string shard_prefix;
   SnapMapper(
     MapCacher::StoreDriver<std::string, bufferlist> *driver,
     uint32_t match,  ///< [in] pgid
     uint32_t bits,   ///< [in] current split bits
-    int64_t pool     ///< [in] pool
+    int64_t pool,    ///< [in] pool
+    shard_id_t shard ///< [in] shard
     )
-    : backend(driver), mask_bits(bits), match(match), pool(pool) {
+    : backend(driver), mask_bits(bits), match(match), pool(pool),
+      shard(shard), shard_prefix(make_shard_prefix(shard)) {
     update_bits(mask_bits);
   }
 
@@ -171,10 +183,16 @@ public:
     ) {
     assert(new_bits >= mask_bits);
     mask_bits = new_bits;
-    prefixes = hobject_t::get_prefixes(
+    set<string> _prefixes = hobject_t::get_prefixes(
       mask_bits,
       match,
       pool);
+    prefixes.clear();
+    for (set<string>::iterator i = _prefixes.begin();
+	 i != _prefixes.end();
+	 ++i) {
+      prefixes.insert(shard_prefix + *i);
+    }
   }
 
   /// Update snaps for oid, empty new_snaps removes the mapping
