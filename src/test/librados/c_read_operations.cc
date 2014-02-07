@@ -75,6 +75,104 @@ TEST_F(CReadOpsTest, AssertExists) {
   remove_object();
 }
 
+TEST_F(CReadOpsTest, Read) {
+  write_object();
+
+  char buf[len];
+  // check that using read_ops returns the same data with
+  // or without bytes_read and rval out params
+  {
+    rados_read_op_t op = rados_create_read_op();
+    rados_read_op_read(op, 0, len, buf, NULL, NULL);
+    ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+    ASSERT_EQ(0, memcmp(data, buf, len));
+    rados_release_read_op(op);
+  }
+
+  {
+    rados_read_op_t op = rados_create_read_op();
+    int rval;
+    rados_read_op_read(op, 0, len, buf, NULL, &rval);
+    ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+    ASSERT_EQ(0, rval);
+    ASSERT_EQ(0, memcmp(data, buf, len));
+    rados_release_read_op(op);
+  }
+
+  {
+    rados_read_op_t op = rados_create_read_op();
+    size_t bytes_read = 0;
+    rados_read_op_read(op, 0, len, buf, &bytes_read, NULL);
+    ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+    ASSERT_EQ(len, (int)bytes_read);
+    ASSERT_EQ(0, memcmp(data, buf, len));
+    rados_release_read_op(op);
+  }
+
+  {
+    rados_read_op_t op = rados_create_read_op();
+    size_t bytes_read = 0;
+    int rval;
+    rados_read_op_read(op, 0, len, buf, &bytes_read, &rval);
+    ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+    ASSERT_EQ(len, (int)bytes_read);
+    ASSERT_EQ(0, rval);
+    ASSERT_EQ(0, memcmp(data, buf, len));
+    rados_release_read_op(op);
+  }
+
+  remove_object();
+}
+
+TEST_F(CReadOpsTest, ShortRead) {
+  write_object();
+
+  char buf[len * 2];
+  // check that using read_ops returns the same data with
+  // or without bytes_read and rval out params
+  {
+    rados_read_op_t op = rados_create_read_op();
+    rados_read_op_read(op, 0, len * 2, buf, NULL, NULL);
+    ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+    ASSERT_EQ(0, memcmp(data, buf, len));
+    rados_release_read_op(op);
+  }
+
+  {
+    rados_read_op_t op = rados_create_read_op();
+    int rval;
+    rados_read_op_read(op, 0, len * 2, buf, NULL, &rval);
+    ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+    ASSERT_EQ(0, rval);
+    ASSERT_EQ(0, memcmp(data, buf, len));
+    rados_release_read_op(op);
+  }
+
+  {
+    rados_read_op_t op = rados_create_read_op();
+    size_t bytes_read = 0;
+    rados_read_op_read(op, 0, len * 2, buf, &bytes_read, NULL);
+    ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+    ASSERT_EQ(len, (int)bytes_read);
+    ASSERT_EQ(0, memcmp(data, buf, len));
+    rados_release_read_op(op);
+  }
+
+  {
+    rados_read_op_t op = rados_create_read_op();
+    size_t bytes_read = 0;
+    int rval;
+    rados_read_op_read(op, 0, len * 2, buf, &bytes_read, &rval);
+    ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+    ASSERT_EQ(len, (int)bytes_read);
+    ASSERT_EQ(0, rval);
+    ASSERT_EQ(0, memcmp(data, buf, len));
+    rados_release_read_op(op);
+  }
+
+  remove_object();
+}
+
 TEST_F(CReadOpsTest, Stat) {
   rados_read_op_t op = rados_create_read_op();
   uint64_t size = 1;
