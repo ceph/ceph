@@ -14,9 +14,10 @@
  * 
  */
 
-#include "osd/ErasureCodePlugin.h"
+#include <errno.h>
+#include "erasure-code/ErasureCodePlugin.h"
 
 int __erasure_code_init(char *plugin_name)
 {
-  return 0;
+  return -ESRCH;
 }
