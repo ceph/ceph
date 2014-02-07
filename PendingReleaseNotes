@@ -12,3 +12,6 @@ v0.78
 
 * The per-op return code in librados' ObjectWriteOperation interface
   is now filled in.
+
+* The librados cmpxattr operation now handles xattrs containing null bytes as
+  data rather than null-terminated strings.
