@@ -161,13 +161,16 @@ def update_devstack_config_files(devstack_node, secret_uuid):
     def backup_config(node, file_name, backup_ext='.orig.teuth'):
         node.run(args=['cp', '-f', file_name, file_name + backup_ext])
 
-    def update_config(config_name, config_stream, update_dict):
+    def update_config(config_name, config_stream, update_dict,
+                      section='DEFAULT'):
         parser = ConfigParser()
         parser.read_file(config_stream)
         parser.update(update_dict)
+        for (key, value) in update_dict.items():
+            parser.set(section, key, value)
         out_stream = StringIO()
-        out_stream.seek(0)
         parser.write(out_stream)
+        out_stream.seek(0)
         return out_stream
 
     updates = [
