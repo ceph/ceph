@@ -11,6 +11,8 @@ ceph_test_rados_api_snapshots
 ceph_test_rados_api_stat
 ceph_test_rados_api_watch_notify
 ceph_test_rados_api_cmd
+ceph_test_rados_api_c_write_operations
+ceph_test_rados_api_c_read_operations
 
 ceph_test_rados_list_parallel
 ceph_test_rados_open_pools_parallel
