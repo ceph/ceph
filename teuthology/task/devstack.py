@@ -165,7 +165,6 @@ def update_devstack_config_files(devstack_node, secret_uuid):
                       section='DEFAULT'):
         parser = ConfigParser()
         parser.read_file(config_stream)
-        parser.update(update_dict)
         for (key, value) in update_dict.items():
             parser.set(section, key, value)
         out_stream = StringIO()
@@ -212,7 +211,8 @@ def update_devstack_config_files(devstack_node, secret_uuid):
     for update in updates:
         file_name = update['name']
         options = update['options']
-        config_stream = misc.get_file(devstack_node, file_name, sudo=True)
+        config_str = misc.get_file(devstack_node, file_name, sudo=True)
+        config_stream = StringIO(config_str)
         backup_config(devstack_node, file_name)
         new_config_stream = update_config(file_name, config_stream, options)
         misc.sudo_write_file(devstack_node, file_name, new_config_stream)
