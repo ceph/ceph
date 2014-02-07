@@ -135,7 +135,7 @@ TEST_F(CReadOpsTest, SetOpFlags) {
 		     &bytes_read, &rval);
   rados_read_op_set_flags(op, LIBRADOS_OP_FLAG_FAILOK);
   EXPECT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
-  EXPECT_EQ(0, rval);
+  EXPECT_EQ(-EIO, rval);
   EXPECT_EQ(0u, bytes_read);
   EXPECT_EQ((char*)NULL, out);
   rados_release_read_op(op);
@@ -477,8 +477,7 @@ TEST_F(CReadOpsTest, Omap) {
   rados_write_op_omap_rm_keys(op, keys, 2);
   EXPECT_EQ(-ECANCELED, rados_write_op_operate(op, ioctx, obj, NULL, 0));
   rados_release_write_op(op);
-  // due to http://tracker.ceph.com/issues/6483 this is 0:
-  EXPECT_EQ(0, r_vals);
+  ASSERT_EQ(-ECANCELED, r_vals);
 
   // verifying the keys are still there, and then remove them
   op = rados_create_write_op();
