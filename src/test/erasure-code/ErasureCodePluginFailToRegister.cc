@@ -14,11 +14,9 @@
  * 
  */
 
-#include <unistd.h>
-#include "osd/ErasureCodePlugin.h"
+#include "erasure-code/ErasureCodePlugin.h"
 
 int __erasure_code_init(char *plugin_name)
 {
-  sleep(1000);
   return 0;
 }
