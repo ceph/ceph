@@ -115,3 +115,25 @@ TEST(LibRadosCWriteOps, Write) {
 
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
+
+TEST(LibRadosCWriteOps, Exec) {
+  rados_t cluster;
+  rados_ioctx_t ioctx;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
+  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
+
+  int rval = 1;
+  rados_write_op_t op = rados_create_write_op();
+  rados_write_op_exec(op, "hello", "record_hello", "test", 4, &rval);
+  ASSERT_EQ(0, rados_write_op_operate(op, ioctx, "test", NULL, 0));
+  rados_release_write_op(op);
+  ASSERT_EQ(0, rval);
+
+  char hi[100];
+  ASSERT_EQ(12, rados_read(ioctx, "test", hi, 100, 0));
+  hi[12] = '\0';
+  ASSERT_EQ(0, strcmp("Hello, test!", hi));
+
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}

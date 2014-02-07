@@ -3142,6 +3142,18 @@ extern "C" void rados_write_op_zero(rados_write_op_t write_op,
   ((::ObjectOperation *)write_op)->zero(offset, len);
 }
 
+extern "C" void rados_write_op_exec(rados_write_op_t write_op,
+				    const char *cls,
+				    const char *method,
+				    const char *in_buf,
+				    size_t in_len,
+				    int *prval)
+{
+  bufferlist inbl;
+  inbl.append(in_buf, in_len);
+  ((::ObjectOperation *)write_op)->call(cls, method, inbl, NULL, NULL, prval);
+}
+
 extern "C" int rados_write_op_operate(rados_write_op_t write_op,
                                       rados_ioctx_t io,
                                       const char *oid,
