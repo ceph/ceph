@@ -34,15 +34,16 @@ Step 1: Getting librados
 ========================
 
 The ``librados`` API is written in C, with additional bindings for C++, Python
-and Java. Your client app needs to import ``librados``, which means it must be
-installed on your client host first.
+and Java. Your client app needs to bind with ``librados``, which is part
+of Ceph, but there are extra packages provided for writing applications
+using librados directly which must be installed on your client host first.
 
 
-Getting librados for C/C++ and Python
--------------------------------------
+Getting librados development support files for C/C++
+----------------------------------------------------
 
-To install ``librados`` for C/C++ and Python, execute the following for 
-Debian/Ubuntu distributions::
+To install ``librados`` development support files for C/C++, execute
+the following for Debian/Ubuntu distributions::
 
 	sudo apt-get install librados-dev
 
@@ -55,10 +56,20 @@ headers for C/C++ under ``/usr/include/rados``. ::
 
 	ls /usr/include/rados
 
-For Python, you can find the required library under ``/usr/share/pyshared``. ::
+Getting librados for Python
+---------------------------
 
-	ls /usr/share/pyshared
+``librados`` Python support is the ``rados.py`` module, provided in
+the ``python-ceph`` package for both Debian and RedHat systems.
 
+	sudo apt-get install librados-dev
+
+For CentOS/RHEL distributions, execute the following:: 
+
+	sudo yum install ceph-devel
+
+You can find the module under ``/usr/share/pyshared`` on Debian systems,
+or under ``/usr/lib/python2.X/site-packages`` on Centos/RHEL systems.
 
 Getting librados for Java
 -------------------------
@@ -98,7 +109,6 @@ To build the documentation, execute the following::
 	ant docs
 
 
-
 Step 2: Configuring a Cluster Handle
 ====================================
 
@@ -134,16 +144,17 @@ The Ceph Storage Cluster handle encapsulates the client configuration, including
 - Logging levels
 - Debugging levels
 
-Create a Ceph client source file and import RADOS and any other relevant
-libraries for your app. Then, create a cluster handle that your app will use to
-connect to the storage cluster. To connect to the cluster, the handle must have
-a monitor address, a username and an authentication key (cephx is enabled by
-default).
+
+Thus, the first steps in using the cluster from your app are to 1) create
+a cluster handle that your app will use to connect to the storage cluster,
+and then 2) use that handle to connect. To connect to the cluster, the
+app must supply a monitor address, a username and an authentication key
+(cephx is enabled by default).
 
 .. tip:: Talking to different Ceph Storage Clusters – or to the same cluster 
    with different users – requires different cluster handles.
 
-RADOS provides a number of ways for you to set the minimum required values. For
+RADOS provides a number of ways for you to set the required values. For
 the monitor and encryption key settings, an easy way to handle them is to ensure
 that your Ceph configuration file contains a ``keyring`` path to a keyring file
 and at least one monitor address (e.g,. ``mon host``). Once you create the
@@ -175,17 +186,18 @@ The following diagram provides a high-level flow for the initial connection.
                 |               |
 
 
-Once connected, your app can invoke methods that require a cluster handle, but
-don't require an I/O context. For example, once you have a cluster handle and
-a connection, you can: 
+Once connected, your app can invoke functions that affect the whole cluster
+with only the cluster handle. For example, once you have a cluster
+handle, you can:
 
 - Get cluster statistics
 - Use Pool Operation (exists, create, list, delete)
 - Get and set the configuration
 
-The main difference in the various ``librados`` bindings is between C and the
-object-oriented binds for C++, Java and Python. The object-oriented bindings use
-objects to represent cluster handles, IO Contexts, iterators, exceptions, etc.
+The main difference in the various ``librados`` bindings is between C and
+the object-oriented bindings for C++, Java and Python. The object-oriented
+bindings use objects to represent cluster handles, IO Contexts, iterators,
+exceptions, etc.
 
 
 C Example
@@ -200,7 +212,7 @@ it and connecting to the cluster might look something like this:
 	#include <string.h>
 	#include <rados/librados.h>
 
-	main (const char argv**) 
+	int main (int argc, char argv**) 
 	{
 
 		/* Declare the cluster handle and required arguments. */
@@ -250,8 +262,7 @@ it and connecting to the cluster might look something like this:
 
 	}
 
-Compile your client and be sure to include the ``rados`` library 
-using ``-lrados``. For example:: 
+Compile your client and link to ``librados`` using ``-lrados``. For example:: 
 
 	gcc ceph-client.c -lrados -o ceph-client
 
@@ -260,7 +271,7 @@ C++ Example
 -----------
 
 For C++, a simple cluster handle using the ``admin`` user requires you to
-initialize a ``Rados`` cluster handle object:
+initialize a ``librados::Rados`` cluster handle object:
 
 .. code-block:: c++
 
@@ -332,7 +343,7 @@ initialize a ``Rados`` cluster handle object:
 	
 
 
-Compile the source; then, link the ``rados`` library in using ``-lrados``. 
+Compile the source; then, link ``librados`` using ``-lrados``. 
 For example::
 
 	g++ -g -c ceph-client.cc -o ceph-client.o
@@ -343,8 +354,10 @@ For example::
 Python Example
 --------------
 
-Python uses the ``admin`` user and the ``ceph`` cluster name by default. The
-Python binding converts C-based errors into exceptions.
+Python uses the ``admin`` id and the ``ceph`` cluster name by default, and
+will read the standard ``ceph.conf`` file if the conffile parameter is
+set to the empty string. The Python binding converts C-based errors
+into Python exceptions.
 
 
 .. code-block:: python
@@ -352,16 +365,18 @@ Python binding converts C-based errors into exceptions.
 	import rados
 
 	try:
-		cluster = rados.Rados(None, "client.admin", "ceph")
-		print "Created cluster handle."
+		cluster = rados.Rados(conffile='')
+	except TypeError as e:
+		print 'Argument validation error: ', e
+		raise e
+		
+	print "Created cluster handle."
 
-		cluster.conf_read_file("/etc/ceph/ceph.conf")
-		print "Read Ceph configuration file."
-
+	try:
 		cluster.connect()
-	
-	except TypeError:
-		print "Encountered an error."
+	except Exception as e:
+		print "connection error: ", e
+		raise e
 	finally:
 		print "Connected to the cluster."
 
@@ -425,7 +440,7 @@ functionality includes:
 
 - Write/read data and extended attributes
 - List and iterate over objects and extended attributes
-- Shapshot pools, list snapshots, etc.
+- Snapshot pools, list snapshots, etc.
 
 
 .. ditaa:: +---------+     +---------+     +---------+
@@ -489,9 +504,10 @@ C Example
 	#include <string.h>
 	#include <rados/librados.h>
 
-	main (const char argv**) 
+	int main (int argc, const char argv**) 
 	{
-		/* Continued from previous C example, where cluster handle and
+		/* 
+		 * Continued from previous C example, where cluster handle and
 		 * connection are established. First declare an I/O Context. 
 		 */
 
@@ -508,9 +524,9 @@ C Example
 		}
 
 		/* Write data to the cluster synchronously. */	
-		err = rados_write_full(io, "hw", "Hello World!", 12);
+		err = rados_write(io, "hw", "Hello World!", 12, 0);
 		if (err < 0) {
-			fprintf(stderr, "%s: Cannot write object. %s %s\n", argv[0], poolname, strerror(-err));
+			fprintf(stderr, "%s: Cannot write object \"hw\" to pool %s: %s\n", argv[0], poolname, strerror(-err));
 			rados_ioctx_destroy(io);
 			rados_shutdown(cluster);
 			exit(1);
@@ -518,10 +534,10 @@ C Example
 			printf("\nWrote \"Hello World\" to object \"hw\".\n");
 		}
 	
-		char xattr[5] = "en_US";
+		char xattr[] = "en_US";
 		err = rados_setxattr(io, "hw", "lang", xattr, 5);
 		if (err < 0) {
-			fprintf(stderr, "%s: Cannot write xattr. %s %s\n", argv[0], poolname, strerror(-err));
+			fprintf(stderr, "%s: Cannot write xattr to pool %s: %s\n", argv[0], poolname, strerror(-err));
 			rados_ioctx_destroy(io);
 			rados_shutdown(cluster);
 			exit(1);
@@ -529,9 +545,9 @@ C Example
 			printf("\nWrote \"en_US\" to xattr \"lang\" for object \"hw\".\n");
 		}
 	
-
-		/* Read data from the cluster asynchronously. 
-		 * First, set up asynchronous I/O completion. *
+		/*
+		 * Read data from the cluster asynchronously. 
+		 * First, set up asynchronous I/O completion.
 		 */
 		rados_completion_t comp;
 		err = rados_aio_create_completion(NULL, NULL, NULL, &comp);
@@ -633,7 +649,7 @@ C++ Example
 		{
 			librados::bufferlist bl;
 			bl.append("Hello World!");
-			ret = io_ctx.write_full("hw", bl);
+			ret = io_ctx.write("hw", bl);
 			if (ret < 0) {
 				std::cerr << "Couldn't write object! error " << ret << std::endl;
 				exit(EXIT_FAILURE);
@@ -746,17 +762,18 @@ Python Example
 	print "================================="
 	
 	print "\nCreating a context for the 'data' pool"
-	if cluster.pool_exists('data'):
-		ioctx = cluster.open_ioctx('data')
+	if not cluster.pool_exists('data'):
+		raise RuntimeError('No data pool exists')
+	ioctx = cluster.open_ioctx('data')
 	
 	print "\nWriting object 'hw' with contents 'Hello World!' to pool 'data'."
-	ioctx.write_full("hw", "Hello World!")
+	ioctx.write("hw", "Hello World!")
 	print "Writing XATTR 'lang' with value 'en_US' to object 'hw'"
 	ioctx.set_xattr("hw", "lang", "en_US")
 	
 	
 	print "\nWriting object 'bm' with contents 'Bonjour tout le monde!' to pool 'data'."
-	ioctx.write_full("bm", "Bonjour tout le monde!")
+	ioctx.write("bm", "Bonjour tout le monde!")
 	print "Writing XATTR 'lang' with value 'fr_FR' to object 'bm'"
 	ioctx.set_xattr("bm", "lang", "fr_FR")
 	
