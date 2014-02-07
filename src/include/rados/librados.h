@@ -59,6 +59,15 @@ extern "C" {
 #define LIBRADOS_CREATE_EXCLUSIVE 1
 #define LIBRADOS_CREATE_IDEMPOTENT 0
 
+/*
+ * Flags that can be set on a per-op basis via
+ * rados_read_op_set_flags() and rados_write_op_set_flags().
+ */
+// fail a create operation if the object already exists
+#define LIBRADOS_OP_FLAG_EXCL 1
+// allow the transaction to succeed even if the flagged op fails
+#define LIBRADOS_OP_FLAG_FAILOK 2
+
 /**
  * @defgroup librados_h_xattr_comp xattr comparison operations
  * Operators for comparing xattrs on objects, and aborting the
@@ -1740,6 +1749,13 @@ rados_write_op_t rados_create_write_op();
  * @param write_op operation to deallocate, created with rados_create_write_op
  */
 void rados_release_write_op(rados_write_op_t write_op);
+
+/**
+ * Set flags for the last operation added to this write_op.
+ * At least one op must have been added to the write_op.
+ * @param flags see librados.h constants beginning with LIBRADOS_OP_FLAG
+ */
+void rados_write_op_set_flags(rados_write_op_t write_op, int flags);
 
 /**
  * Ensure that the object exists before writing
