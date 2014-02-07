@@ -173,6 +173,65 @@ TEST_F(CReadOpsTest, ShortRead) {
   remove_object();
 }
 
+TEST_F(CReadOpsTest, Exec) {
+  // create object so we don't get -ENOENT
+  write_object();
+
+  rados_read_op_t op = rados_create_read_op();
+  ASSERT_TRUE(op);
+  size_t bytes_read = 0;
+  char *out = NULL;
+  int rval = 0;
+  rados_read_op_exec(op, "rbd", "get_all_features", NULL, 0, &out,
+		     &bytes_read, &rval);
+  ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+  rados_release_read_op(op);
+  EXPECT_EQ(0, rval);
+  EXPECT_TRUE(out);
+  uint64_t features;
+  EXPECT_EQ(sizeof(features), bytes_read);
+  // make sure buffer is at least as long as it claims
+  ASSERT_TRUE(out[bytes_read-1] == out[bytes_read-1]);
+  rados_buffer_free(out);
+
+  remove_object();
+}
+
+TEST_F(CReadOpsTest, ExecUserBuf) {
+  // create object so we don't get -ENOENT
+  write_object();
+
+  rados_read_op_t op = rados_create_read_op();
+  size_t bytes_read = 0;
+  uint64_t features;
+  char out[sizeof(features)];
+  int rval = 0;
+  rados_read_op_exec_user_buf(op, "rbd", "get_all_features", NULL, 0, out,
+			      sizeof(out), &bytes_read, &rval);
+  ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+  rados_release_read_op(op);
+  EXPECT_EQ(0, rval);
+  EXPECT_EQ(sizeof(features), bytes_read);
+
+  // buffer too short
+  bytes_read = 1024;
+  op = rados_create_read_op();
+  rados_read_op_exec_user_buf(op, "rbd", "get_all_features", NULL, 0, out,
+			      sizeof(features) - 1, &bytes_read, &rval);
+  ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+  EXPECT_EQ(0u, bytes_read);
+  EXPECT_EQ(-ERANGE, rval);
+
+  // input buffer and no rval or bytes_read
+  op = rados_create_read_op();
+  rados_read_op_exec_user_buf(op, "rbd", "get_all_features", out, sizeof(out),
+			      out, sizeof(out), NULL, NULL);
+  ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+  rados_release_read_op(op);
+
+  remove_object();
+}
+
 TEST_F(CReadOpsTest, Stat) {
   rados_read_op_t op = rados_create_read_op();
   uint64_t size = 1;
