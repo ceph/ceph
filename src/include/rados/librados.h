@@ -235,6 +235,7 @@ typedef void *rados_write_op_t;
  * executed atomically. For usage, see:
  * - Creation and deletion: rados_create_read_op() rados_release_read_op()
  * - Object properties: rados_read_op_stat(), rados_read_op_assert_exists()
+ * - IO on objects: rados_read_op_read()
  * - Request properties: rados_read_op_set_flags()
  * - Performing the operation: rados_read_op_operate(),
  *   rados_aio_read_op_operate()
@@ -1959,6 +1960,28 @@ void rados_read_op_stat(rados_read_op_t read_op,
 			time_t *pmtime,
 			int *prval);
 
+/**
+ * Read bytes from offset into buffer.
+ *
+ * prlen will be filled with the number of bytes read if successful.
+ * A short read can only occur if the read reaches the end of the
+ * object.
+ *
+ * @param read_op operation to add this action to
+ * @param offset offset to read from
+ * @param buffer where to put the data
+ * @param len length of buffer
+ * @param prval where to store the return value of this action
+ * @param bytes_read where to store the number of bytes read by this action
+ */
+void rados_read_op_read(rados_read_op_t read_op,
+			uint64_t offset,
+			size_t len,
+			char *buf,
+			size_t *bytes_read,
+			int *prval);
+
+/**
 
 /**
  * Perform a write operation synchronously
