@@ -124,8 +124,8 @@ namespace librados
    * ops added to an ObjectOperation.
    */
   enum ObjectOperationFlags {
-    OP_EXCL =   1,
-    OP_FAILOK = 2,
+    OP_EXCL =   LIBRADOS_OP_FLAG_EXCL,
+    OP_FAILOK = LIBRADOS_OP_FLAG_FAILOK,
   };
 
   class ObjectOperationCompletion {

@@ -75,16 +75,20 @@ size_t librados::ObjectOperation::size()
   return o->size();
 }
 
-void librados::ObjectOperation::set_op_flags(ObjectOperationFlags flags)
+static void set_op_flags(::ObjectOperation *o, int flags)
 {
   int rados_flags = 0;
-  if (flags & OP_EXCL)
+  if (flags & LIBRADOS_OP_FLAG_EXCL)
     rados_flags |= CEPH_OSD_OP_FLAG_EXCL;
-  if (flags & OP_FAILOK)
+  if (flags & LIBRADOS_OP_FLAG_FAILOK)
     rados_flags |= CEPH_OSD_OP_FLAG_FAILOK;
-
-  ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->set_last_op_flags(rados_flags);
+}
+
+void librados::ObjectOperation::set_op_flags(ObjectOperationFlags flags)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  ::set_op_flags(o, (int)flags);
 }
 
 void librados::ObjectOperation::cmpxattr(const char *name, uint8_t op, const bufferlist& v)
@@ -3020,6 +3024,11 @@ extern "C" rados_write_op_t rados_create_write_op()
 extern "C" void rados_release_write_op(rados_write_op_t write_op)
 {
   delete (::ObjectOperation*)write_op;
+}
+
+extern "C" void rados_write_op_set_flags(rados_write_op_t write_op, int flags)
+{
+  set_op_flags((::ObjectOperation *)write_op, flags);
 }
 
 extern "C" void rados_write_op_assert_exists(rados_write_op_t write_op)
