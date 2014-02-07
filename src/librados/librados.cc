@@ -3231,6 +3231,53 @@ extern "C" void rados_read_op_read(rados_read_op_t read_op,
   ((::ObjectOperation *)read_op)->read(offset, len, &ctx->out_bl, prval, ctx);
 }
 
+class C_out_buffer : public Context {
+  char **out_buf;
+  size_t *out_len;
+public:
+  bufferlist out_bl;
+  C_out_buffer(char **out_buf, size_t *out_len) : out_buf(out_buf),
+						  out_len(out_len) {}
+  void finish(int r) {
+    // ignore r since we don't know the meaning of return values
+    // from custom class methods
+    do_out_buffer(out_bl, out_buf, out_len);
+  }
+};
+
+extern "C" void rados_read_op_exec(rados_read_op_t read_op,
+				   const char *cls,
+				   const char *method,
+				   const char *in_buf,
+				   size_t in_len,
+				   char **out_buf,
+				   size_t *out_len,
+				   int *prval)
+{
+  bufferlist inbl;
+  inbl.append(in_buf, in_len);
+  C_out_buffer *ctx = new C_out_buffer(out_buf, out_len);
+  ((::ObjectOperation *)read_op)->call(cls, method, inbl, &ctx->out_bl, ctx,
+				       prval);
+}
+
+extern "C" void rados_read_op_exec_user_buf(rados_read_op_t read_op,
+					    const char *cls,
+					    const char *method,
+					    const char *in_buf,
+					    size_t in_len,
+					    char *out_buf,
+					    size_t out_len,
+					    size_t *used_len,
+					    int *prval)
+{
+  C_bl_to_buf *ctx = new C_bl_to_buf(out_buf, out_len, used_len, prval);
+  bufferlist inbl;
+  inbl.append(in_buf, in_len);
+  ((::ObjectOperation *)read_op)->call(cls, method, inbl, &ctx->out_bl, ctx,
+				       prval);
+}
+
 extern "C" int rados_read_op_operate(rados_read_op_t read_op,
 				     rados_ioctx_t io,
 				     const char *oid,
