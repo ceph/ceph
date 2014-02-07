@@ -69,7 +69,6 @@ extern "C" {
  */
 /** @cond TODO_enums_not_yet_in_asphyxiate */
 enum {
-	LIBRADOS_CMPXATTR_OP_NOP = 0,
 	LIBRADOS_CMPXATTR_OP_EQ  = 1,
 	LIBRADOS_CMPXATTR_OP_NE  = 2,
 	LIBRADOS_CMPXATTR_OP_GT  = 3,
