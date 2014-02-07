@@ -79,6 +79,21 @@ enum {
 /** @endcond */
 /** @} */
 
+/**
+ * Flags for rados_read_op_opeprate(), rados_write_op_operate(),
+ * rados_aio_read_op_operate(), and rados_aio_write_op_operate().
+ * See librados.hpp for details.
+ */
+enum {
+  LIBRADOS_OPERATION_NOFLAG             = 0,
+  LIBRADOS_OPERATION_BALANCE_READS      = 1,
+  LIBRADOS_OPERATION_LOCALIZE_READS     = 2,
+  LIBRADOS_OPERATION_ORDER_READS_WRITES = 4,
+  LIBRADOS_OPERATION_IGNORE_CACHE       = 8,
+  LIBRADOS_OPERATION_SKIPRWLOCKS        = 16,
+  LIBRADOS_OPERATION_IGNORE_OVERLAY     = 32,
+};
+
 /*
  * snap id contants
  */
@@ -1831,11 +1846,13 @@ void rados_write_op_zero(rados_write_op_t write_op,
  * @io the ioctx that the object is in
  * @oid the object id
  * @mtime the time to set the mtime to, NULL for the current time
+ * @flags flags to apply to the entire operation (LIBRADOS_OPERATION_*)
  */
 int rados_write_op_operate(rados_write_op_t write_op,
-                           rados_ioctx_t io,
-                           const char *oid,
-                           time_t *mtime);
+			   rados_ioctx_t io,
+			   const char *oid,
+			   time_t *mtime,
+			   int flags);
 /**
  * Perform a write operation asynchronously
  * @param write_op operation to perform
@@ -1843,12 +1860,14 @@ int rados_write_op_operate(rados_write_op_t write_op,
  * @param completion what to do when operation has been attempted
  * @oid the object id
  * @mtime the time to set the mtime to, NULL for the current time
+ * @flags flags to apply to the entire operation (LIBRADOS_OPERATION_*)
  */
 int rados_aio_write_op_operate(rados_write_op_t write_op,
                                rados_ioctx_t io,
                                rados_completion_t completion,
                                const char *oid,
-                               time_t *mtime);
+                               time_t *mtime,
+			       int flags);
 
 
 /** @} Object Operations */
