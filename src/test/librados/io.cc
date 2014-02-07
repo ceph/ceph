@@ -33,6 +33,128 @@ TEST_F(LibRadosIoPP, SimpleWritePP) {
   ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl, sizeof(buf), 0));
 }
 
+TEST_F(LibRadosIoPP, ReadOpPP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl, sizeof(buf), 0));
+
+  {
+      bufferlist op_bl;
+      ObjectReadOperation op;
+      op.read(0, sizeof(buf), NULL, NULL);
+      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      ASSERT_EQ(sizeof(buf), op_bl.length());
+      ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
+  }
+
+  {
+      bufferlist read_bl, op_bl;
+      ObjectReadOperation op;
+      op.read(0, sizeof(buf), &read_bl, NULL);
+      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      ASSERT_EQ(sizeof(buf), read_bl.length());
+      ASSERT_EQ(sizeof(buf), op_bl.length());
+      ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
+      ASSERT_EQ(0, memcmp(read_bl.c_str(), buf, sizeof(buf)));
+  }
+
+  {
+      bufferlist op_bl;
+      int rval = 1000;
+      ObjectReadOperation op;
+      op.read(0, sizeof(buf), NULL, &rval);
+      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      ASSERT_EQ(sizeof(buf), op_bl.length());
+      ASSERT_EQ(0, rval);
+      ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
+  }
+
+  {
+      bufferlist read_bl, op_bl;
+      int rval = 1000;
+      ObjectReadOperation op;
+      op.read(0, sizeof(buf), &read_bl, &rval);
+      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      ASSERT_EQ(sizeof(buf), read_bl.length());
+      ASSERT_EQ(sizeof(buf), op_bl.length());
+      ASSERT_EQ(0, rval);
+      ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
+      ASSERT_EQ(0, memcmp(read_bl.c_str(), buf, sizeof(buf)));
+  }
+
+  {
+      bufferlist read_bl1, read_bl2, op_bl;
+      int rval1 = 1000, rval2 = 1002;
+      ObjectReadOperation op;
+      op.read(0, sizeof(buf), &read_bl1, &rval1);
+      op.read(0, sizeof(buf), &read_bl2, &rval2);
+      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      ASSERT_EQ(sizeof(buf), read_bl1.length());
+      ASSERT_EQ(sizeof(buf), read_bl2.length());
+      ASSERT_EQ(sizeof(buf) * 2, op_bl.length());
+      ASSERT_EQ(0, rval1);
+      ASSERT_EQ(0, rval2);
+      ASSERT_EQ(0, memcmp(read_bl1.c_str(), buf, sizeof(buf)));
+      ASSERT_EQ(0, memcmp(read_bl2.c_str(), buf, sizeof(buf)));
+      ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
+      ASSERT_EQ(0, memcmp(op_bl.c_str() + sizeof(buf), buf, sizeof(buf)));
+  }
+
+  {
+      bufferlist op_bl;
+      ObjectReadOperation op;
+      op.read(0, sizeof(buf), NULL, NULL);
+      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      ASSERT_EQ(sizeof(buf), op_bl.length());
+      ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
+  }
+
+  {
+      bufferlist read_bl;
+      ObjectReadOperation op;
+      op.read(0, sizeof(buf), &read_bl, NULL);
+      ASSERT_EQ(0, ioctx.operate("foo", &op, NULL));
+      ASSERT_EQ(sizeof(buf), read_bl.length());
+      ASSERT_EQ(0, memcmp(read_bl.c_str(), buf, sizeof(buf)));
+  }
+
+  {
+      int rval = 1000;
+      ObjectReadOperation op;
+      op.read(0, sizeof(buf), NULL, &rval);
+      ASSERT_EQ(0, ioctx.operate("foo", &op, NULL));
+      ASSERT_EQ(0, rval);
+  }
+
+  {
+      bufferlist read_bl;
+      int rval = 1000;
+      ObjectReadOperation op;
+      op.read(0, sizeof(buf), &read_bl, &rval);
+      ASSERT_EQ(0, ioctx.operate("foo", &op, NULL));
+      ASSERT_EQ(sizeof(buf), read_bl.length());
+      ASSERT_EQ(0, rval);
+      ASSERT_EQ(0, memcmp(read_bl.c_str(), buf, sizeof(buf)));
+  }
+
+  {
+      bufferlist read_bl1, read_bl2;
+      int rval1 = 1000, rval2 = 1002;
+      ObjectReadOperation op;
+      op.read(0, sizeof(buf), &read_bl1, &rval1);
+      op.read(0, sizeof(buf), &read_bl2, &rval2);
+      ASSERT_EQ(0, ioctx.operate("foo", &op, NULL));
+      ASSERT_EQ(sizeof(buf), read_bl1.length());
+      ASSERT_EQ(sizeof(buf), read_bl2.length());
+      ASSERT_EQ(0, rval1);
+      ASSERT_EQ(0, rval2);
+      ASSERT_EQ(0, memcmp(read_bl1.c_str(), buf, sizeof(buf)));
+      ASSERT_EQ(0, memcmp(read_bl2.c_str(), buf, sizeof(buf)));
+  }
+}
+
 TEST_F(LibRadosIo, RoundTrip) {
   char buf[128];
   char buf2[128];
