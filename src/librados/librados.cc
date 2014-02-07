@@ -3208,6 +3208,45 @@ extern "C" void rados_read_op_stat(rados_read_op_t read_op,
   ((::ObjectOperation *)read_op)->stat(psize, pmtime, prval);
 }
 
+class C_bl_to_buf : public Context {
+  char *out_buf;
+  size_t out_len;
+  size_t *bytes_read;
+  int *prval;
+public:
+  bufferlist out_bl;
+  C_bl_to_buf(char *out_buf,
+	      size_t out_len,
+	      size_t *bytes_read,
+	      int *prval) : out_buf(out_buf), out_len(out_len),
+			    bytes_read(bytes_read), prval(prval) {}
+  void finish(int r) {
+    if (out_bl.length() > out_len) {
+      if (prval)
+	*prval = -ERANGE;
+      if (bytes_read)
+	*bytes_read = 0;
+      return;
+    }
+    if (bytes_read)
+      *bytes_read = out_bl.length();
+    if (out_buf && out_bl.c_str() != out_buf)
+      out_bl.copy(0, out_bl.length(), out_buf);
+  }
+};
+
+extern "C" void rados_read_op_read(rados_read_op_t read_op,
+				   uint64_t offset,
+				   size_t len,
+				   char *buf,
+				   size_t *bytes_read,
+				   int *prval)
+{
+  C_bl_to_buf *ctx = new C_bl_to_buf(buf, len, bytes_read, prval);
+  ctx->out_bl.push_back(buffer::create_static(len, buf));
+  ((::ObjectOperation *)read_op)->read(offset, len, &ctx->out_bl, prval, ctx);
+}
+
 extern "C" int rados_read_op_operate(rados_read_op_t read_op,
 				     rados_ioctx_t io,
 				     const char *oid,
