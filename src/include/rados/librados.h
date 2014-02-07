@@ -241,6 +241,7 @@ typedef void *rados_write_op_t;
  * - Creation and deletion: rados_create_read_op() rados_release_read_op()
  * - Object properties: rados_read_op_stat(), rados_read_op_assert_exists()
  * - IO on objects: rados_read_op_read()
+ * - Custom operations: rados_read_op_exec(), rados_read_op_exec_user_buf()
  * - Request properties: rados_read_op_set_flags()
  * - Performing the operation: rados_read_op_operate(),
  *   rados_aio_read_op_operate()
@@ -1987,6 +1988,59 @@ void rados_read_op_read(rados_read_op_t read_op,
 			int *prval);
 
 /**
+ * Execute an OSD class method on an object
+ * See rados_exec() for general description.
+ *
+ * The output buffer is allocated on the heap; the caller is
+ * expected to release that memory with rados_buffer_free(). The
+ * buffer and length pointers can all be NULL, in which case they are
+ * not filled in.
+ *
+ * @param read_op operation to add this action to
+ * @param cls the name of the class
+ * @param method the name of the method
+ * @param in_buf where to find input
+ * @param in_len length of in_buf in bytes
+ * @param out_buf where to put librados-allocated output buffer
+ * @param out_len length of out_buf in bytes
+ * @param prval where to store the return value from the method
+ */
+void rados_read_op_exec(rados_read_op_t read_op,
+			const char *cls,
+			const char *method,
+			const char *in_buf,
+			size_t in_len,
+			char **out_buf,
+			size_t *out_len,
+			int *prval);
+
+/**
+ * Execute an OSD class method on an object
+ * See rados_exec() for general description.
+ *
+ * If the output buffer is too small, prval will
+ * be set to -ERANGE and used_len will be 0.
+ *
+ * @param read_op operation to add this action to
+ * @param cls the name of the class
+ * @param method the name of the method
+ * @param in_buf where to find input
+ * @param in_len length of in_buf in bytes
+ * @param out_buf user-provided buffer to read into
+ * @param out_len length of out_buf in bytes
+ * @param used_len where to store the number of bytes read into out_buf
+ * @param prval where to store the return value from the method
+ */
+void rados_read_op_exec_user_buf(rados_read_op_t read_op,
+				 const char *cls,
+				 const char *method,
+				 const char *in_buf,
+				 size_t in_len,
+				 char *out_buf,
+				 size_t out_len,
+				 size_t *used_len,
+				 int *prval);
+
 
 /**
  * Perform a write operation synchronously
