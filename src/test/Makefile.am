@@ -752,6 +752,12 @@ ceph_test_rados_api_c_write_operations_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(R
 ceph_test_rados_api_c_write_operations_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_c_write_operations
 
+ceph_test_rados_api_c_read_operations_SOURCES = \
+	test/librados/c_read_operations.cc
+ceph_test_rados_api_c_read_operations_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
+ceph_test_rados_api_c_read_operations_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_rados_api_c_read_operations
+
 ceph_test_rados_api_aio_SOURCES = test/librados/aio.cc
 ceph_test_rados_api_aio_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_rados_api_aio_CXXFLAGS = $(UNITTEST_CXXFLAGS)

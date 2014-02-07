@@ -229,6 +229,19 @@ struct rados_cluster_stat_t {
 typedef void *rados_write_op_t;
 
 /**
+ * @typedef rados_read_op_t
+ *
+ * An object read operation stores a number of operations which can be
+ * executed atomically. For usage, see:
+ * - Creation and deletion: rados_create_read_op() rados_release_read_op()
+ * - Object properties: rados_read_op_stat(), rados_read_op_assert_exists()
+ * - Request properties: rados_read_op_set_flags()
+ * - Performing the operation: rados_read_op_operate(),
+ *   rados_aio_read_op_operate()
+ */
+typedef void *rados_read_op_t;
+
+/**
  * Get the version of librados.
  *
  * The version number is major.minor.extra. Note that this is
@@ -1904,6 +1917,74 @@ int rados_aio_write_op_operate(rados_write_op_t write_op,
                                time_t *mtime,
 			       int flags);
 
+/**
+ * Create a new rados_read_op_t write operation. This will store all
+ * actions to be performed atomically. You must call
+ * rados_release_read_op when you are finished with it (after it
+ * completes, or you decide not to send it in the first place).
+ *
+ * @returns non-NULL on success, NULL on memory allocation error.
+ */
+rados_read_op_t rados_create_read_op();
+
+/**
+ * Free a rados_read_op_t, must be called when you're done with it.
+ * @param read_op operation to deallocate, created with rados_create_read_op
+ */
+void rados_release_read_op(rados_read_op_t read_op);
+
+/**
+ * Set flags for the last operation added to this read_op.
+ * At least one op must have been added to the read_op.
+ * @param flags see librados.h constants beginning with LIBRADOS_OP_FLAG
+ */
+void rados_read_op_set_flags(rados_read_op_t read_op, int flags);
+
+/**
+ * Ensure that the object exists before reading
+ * @param read_op operation to add this action to
+ */
+void rados_read_op_assert_exists(rados_read_op_t read_op);
+
+
+/**
+ * Get object size and mtime
+ * @param read_op operation to add this action to
+ * @param psize where to store object size
+ * @param pmtime where to store modification time
+ * @param prval where to store the return value of this action
+ */
+void rados_read_op_stat(rados_read_op_t read_op,
+			uint64_t *psize,
+			time_t *pmtime,
+			int *prval);
+
+
+/**
+ * Perform a write operation synchronously
+ * @param read_op operation to perform
+ * @io the ioctx that the object is in
+ * @oid the object id
+ * @flags flags to apply to the entire operation (LIBRADOS_OPERATION_*)
+ */
+int rados_read_op_operate(rados_read_op_t read_op,
+			  rados_ioctx_t io,
+			  const char *oid,
+			  int flags);
+
+/**
+ * Perform a write operation asynchronously
+ * @param read_op operation to perform
+ * @io the ioctx that the object is in
+ * @param completion what to do when operation has been attempted
+ * @oid the object id
+ * @flags flags to apply to the entire operation (LIBRADOS_OPERATION_*)
+ */
+int rados_aio_read_op_operate(rados_read_op_t read_op,
+			      rados_ioctx_t io,
+			      rados_completion_t completion,
+			      const char *oid,
+			      int flags);
 
 /** @} Object Operations */
 
