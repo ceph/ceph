@@ -181,6 +181,15 @@ typedef uint64_t rados_snap_t;
 typedef void *rados_xattrs_iter_t;
 
 /**
+ * @typedef rados_omap_iter_t
+ * An iterator for listing omap key/value pairs on an object.
+ * Used with rados_read_op_omap_get_keys(), rados_read_op_omap_get_vals(),
+ * rados_read_op_omap_get_vals_by_keys(), rados_omap_get_next(), and
+ * rados_omap_get_end().
+ */
+typedef void *rados_omap_iter_t;
+
+/**
  * @struct rados_pool_stat_t
  * Usage information for a pool.
  */
@@ -225,6 +234,9 @@ struct rados_cluster_stat_t {
  * - Extended attribute manipulation: rados_write_op_cmpxattr()
  *   rados_write_op_cmpxattr(), rados_write_op_setxattr(),
  *   rados_write_op_rmxattr()
+ * - Object map key/value pairs: rados_write_op_omap_set(),
+ *   rados_write_op_omap_rm_keys(), rados_write_op_omap_clear(),
+ *   rados_write_op_omap_cmp()
  * - Creating objects: rados_write_op_create()
  * - IO on objects: rados_write_op_append(), rados_write_op_write(), rados_write_op_zero
  *   rados_write_op_write_full(), rados_write_op_remove, rados_write_op_truncate(),
@@ -241,6 +253,9 @@ typedef void *rados_write_op_t;
  * - Creation and deletion: rados_create_read_op() rados_release_read_op()
  * - Extended attribute manipulation: rados_read_op_cmpxattr(),
  *   rados_read_op_getxattr(), rados_read_op_getxattrs()
+ * - Object map key/value pairs: rados_read_op_omap_get_vals(),
+ *   rados_read_op_omap_get_keys(), rados_read_op_omap_get_vals_by_keys(),
+ *   rados_read_op_omap_cmp()
  * - Object properties: rados_read_op_stat(), rados_read_op_assert_exists()
  * - IO on objects: rados_read_op_read()
  * - Custom operations: rados_read_op_exec(), rados_read_op_exec_user_buf()
@@ -1215,6 +1230,37 @@ void rados_getxattrs_end(rados_xattrs_iter_t iter);
 /** @} Xattrs */
 
 /**
+ * Get the next omap key/value pair on the object
+ *
+ * @pre iter is a valid iterator
+ *
+ * @post key and val are the next key/value pair. key is
+ * null-terminated, and val has length len. If the end of the list has
+ * been reached, key and val are NULL, and len is 0. key and val will
+ * not be accessible after rados_omap_get_end() is called on iter, so
+ * if they are needed after that they should be copied.
+ *
+ * @param iter iterator to advance
+ * @param key where to store the key of the next omap entry
+ * @param val where to store the value of the next omap entry
+ * @param len where to store the number of bytes in val
+ * @returns 0 on success, negative error code on failure
+ */
+int rados_omap_get_next(rados_omap_iter_t iter,
+			char **key,
+			char **val,
+			size_t *len);
+
+/**
+ * Close the omap iterator.
+ *
+ * iter should not be used after this is called.
+ *
+ * @param iter the iterator to close
+ */
+void rados_omap_get_end(rados_omap_iter_t iter);
+
+/**
  * Get object stats (size/mtime)
  *
  * TODO: when are these set, and by whom? can they be out of date?
@@ -1796,6 +1842,26 @@ void rados_write_op_cmpxattr(rados_write_op_t write_op,
                              size_t value_len);
 
 /**
+ * Ensure that the an omap value satisfies a comparison,
+ * with the supplied value on the right hand side (i.e.
+ * for OP_LT, the comparison is actual_value < value.
+ *
+ * @param write_op operation to add this action to
+ * @param key which omap value to compare
+ * @param comparison_operator one of LIBRADOS_CMPXATTR_OP_EQ,
+   LIBRADOS_CMPXATTR_OP_LT, or LIBRADOS_CMPXATTR_OP_GT
+ * @param val value to compare with
+ * @param val_len length of value in bytes
+ * @param prval where to store the return value from this action
+ */
+void rados_write_op_omap_cmp(rados_write_op_t write_op,
+			     const char *key,
+			     uint8_t comparison_operator,
+			     const char *val,
+			     size_t val_len,
+			     int *prval);
+
+/**
  * Set an xattr
  * @param write_op operation to add this action to
  * @param name name of the xattr
@@ -1898,6 +1964,39 @@ void rados_write_op_exec(rados_write_op_t write_op,
 			 int *prval);
 
 /**
+ * Set key/value pairs on an object
+ *
+ * @param write_op operation to add this action to
+ * @param keys array of null-terminated char arrays representing keys to set
+ * @param vals array of pointers to values to set
+ * @param lens array of lengths corresponding to each value
+ * @param num number of key/value pairs to set
+ */
+void rados_write_op_omap_set(rados_write_op_t write_op,
+			     char const* const* keys,
+			     char const* const* vals,
+			     const size_t *lens,
+			     size_t num);
+
+/**
+ * Remove key/value pairs from an object
+ *
+ * @param write_op operation to add this action to
+ * @param keys array of null-terminated char arrays representing keys to remove
+ * @param keys_len number of key/value pairs to remove
+ */
+void rados_write_op_omap_rm_keys(rados_write_op_t write_op,
+				 char const* const* keys,
+				 size_t keys_len);
+
+/**
+ * Remove all key/value pairs from an object
+ *
+ * @param write_op operation to add this action to
+ */
+void rados_write_op_omap_clear(rados_write_op_t write_op);
+
+/**
  * Perform a write operation synchronously
  * @param write_op operation to perform
  * @io the ioctx that the object is in
@@ -1981,6 +2080,25 @@ void rados_read_op_getxattrs(rados_read_op_t read_op,
 			     rados_xattrs_iter_t *iter,
 			     int *prval);
 
+/**
+ * Ensure that the an omap value satisfies a comparison,
+ * with the supplied value on the right hand side (i.e.
+ * for OP_LT, the comparison is actual_value < value.
+ *
+ * @param read_op operation to add this action to
+ * @param key which omap value to compare
+ * @param comparison_operator one of LIBRADOS_CMPXATTR_OP_EQ,
+   LIBRADOS_CMPXATTR_OP_LT, or LIBRADOS_CMPXATTR_OP_GT
+ * @param val value to compare with
+ * @param val_len length of value in bytes
+ * @param prval where to store the return value from this action
+ */
+void rados_read_op_omap_cmp(rados_read_op_t read_op,
+			    const char *key,
+			    uint8_t comparison_operator,
+			    const char *val,
+			    size_t val_len,
+			    int *prval);
 
 /**
  * Get object size and mtime
@@ -2069,6 +2187,59 @@ void rados_read_op_exec_user_buf(rados_read_op_t read_op,
 				 size_t *used_len,
 				 int *prval);
 
+/**
+ * Start iterating over key/value pairs on an object.
+ *
+ * They will be returned sorted by key.
+ *
+ * @param read_op operation to add this action to
+ * @param start_after list keys starting after start_after
+ * @param filter_prefix list only keys beginning with filter_prefix
+ * @parem max_return list no more than max_return key/value pairs
+ * @param iter where to store the iterator
+ * @param prval where to store the return value from this action
+ */
+void rados_read_op_omap_get_vals(rados_read_op_t read_op,
+				 const char *start_after,
+				 const char *filter_prefix,
+				 uint64_t max_return,
+				 rados_omap_iter_t *iter,
+				 int *prval);
+
+/**
+ * Start iterating over keys on an object.
+ *
+ * They will be returned sorted by key, and the iterator
+ * will fill in NULL for all values if specified.
+ *
+ * @param read_op operation to add this action to
+ * @param start_after list keys starting after start_after
+ * @parem max_return list no more than max_return keys
+ * @param iter where to store the iterator
+ * @param prval where to store the return value from this action
+ */
+void rados_read_op_omap_get_keys(rados_read_op_t read_op,
+				 const char *start_after,
+				 uint64_t max_return,
+				 rados_omap_iter_t *iter,
+				 int *prval);
+
+/**
+ * Start iterating over specific key/value pairs
+ *
+ * They will be returned sorted by key.
+ *
+ * @param read_op operation to add this action to
+ * @param keys array of pointers to null-terminated keys to get
+ * @param keys_len the number of strings in keys
+ * @param iter where to store the iterator
+ * @param prval where to store the return value from this action
+ */
+void rados_read_op_omap_get_vals_by_keys(rados_read_op_t read_op,
+					 char const* const* keys,
+					 size_t keys_len,
+					 rados_omap_iter_t *iter,
+					 int *prval);
 
 /**
  * Perform a write operation synchronously
