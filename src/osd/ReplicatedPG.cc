@@ -4385,6 +4385,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     ctx->bytes_read += osd_op.outdata.length();
 
   fail:
+    osd_op.rval = result;
     if (result < 0 && (op.flags & CEPH_OSD_OP_FLAG_FAILOK))
       result = 0;
 
