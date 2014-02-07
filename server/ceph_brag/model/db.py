@@ -160,7 +160,7 @@ def put_new_version(data):
 def delete_uuid(uuid):
   ci = Session.query(cluster_info).filter_by(uuid=uuid).first()
   if ci is None:
-    return {'status':400, 'comment':'No information for this UUID'}
+    return {'status':400, 'msg':'No information for this UUID'}
 
   for v in Session.query(version_info).filter_by(cluster_id=ci.index).all():
     Session.query(components_info).filter_by(vid=v.index).delete()

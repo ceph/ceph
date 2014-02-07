@@ -17,6 +17,7 @@ def jsonify_cluster_info(ci):
               email=ci.contact_email,
               cluster_name=ci.cluster_name,
               cluster_creation_date=str(ci.cluster_creation_date),
+              num_versions=ci.num_versions
               )
 
 @jsonify.register(db.components_info)
