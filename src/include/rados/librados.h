@@ -1859,8 +1859,27 @@ void rados_write_op_truncate(rados_write_op_t write_op, uint64_t offset);
  * @len length to zero
  */
 void rados_write_op_zero(rados_write_op_t write_op,
-				    uint64_t offset,
-				    uint64_t len);
+			 uint64_t offset,
+			 uint64_t len);
+
+/**
+ * Execute an OSD class method on an object
+ * See rados_exec() for general description.
+ *
+ * @param write_op operation to add this action to
+ * @param cls the name of the class
+ * @param method the name of the method
+ * @param in_buf where to find input
+ * @param in_len length of in_buf in bytes
+ * @param prval where to store the return value from the method
+ */
+void rados_write_op_exec(rados_write_op_t write_op,
+			 const char *cls,
+			 const char *method,
+			 const char *in_buf,
+			 size_t in_len,
+			 int *prval);
+
 /**
  * Perform a write operation synchronously
  * @param write_op operation to perform
