@@ -18,7 +18,7 @@
 #include <signal.h>
 #include "common/Thread.h"
 #include "global/global_init.h"
-#include "osd/ErasureCodePlugin.h"
+#include "erasure-code/ErasureCodePlugin.h"
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "gtest/gtest.h"

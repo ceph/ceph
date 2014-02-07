@@ -14,10 +14,23 @@
  * 
  */
 
-#include <errno.h>
-#include "osd/ErasureCodePlugin.h"
+#include <unistd.h>
+
+#include "erasure-code/ErasureCodePlugin.h"
+#include "ErasureCodeExample.h"
+
+class ErasureCodePluginExample : public ErasureCodePlugin {
+public:
+  virtual int factory(const map<std::string,std::string> &parameters,
+                      ErasureCodeInterfaceRef *erasure_code)
+  {
+    *erasure_code = ErasureCodeInterfaceRef(new ErasureCodeExample());
+    return 0;
+  }
+};
 
 int __erasure_code_init(char *plugin_name)
 {
-  return -ESRCH;
+  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  return instance.add(plugin_name, new ErasureCodePluginExample());
 }

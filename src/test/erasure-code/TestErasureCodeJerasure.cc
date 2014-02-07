@@ -19,7 +19,7 @@
 #include "crush/CrushWrapper.h"
 #include "include/stringify.h"
 #include "global/global_init.h"
-#include "osd/ErasureCodePluginJerasure/ErasureCodeJerasure.h"
+#include "erasure-code/jerasure/ErasureCodeJerasure.h"
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "gtest/gtest.h"

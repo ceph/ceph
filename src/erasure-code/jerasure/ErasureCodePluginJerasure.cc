@@ -15,7 +15,7 @@
  */
 
 #include "common/debug.h"
-#include "osd/ErasureCodePlugin.h"
+#include "erasure-code/ErasureCodePlugin.h"
 #include "ErasureCodeJerasure.h"
 
 #define dout_subsys ceph_subsys_osd
