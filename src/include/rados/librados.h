@@ -53,11 +53,18 @@ extern "C" {
  */
 #define LIBRADOS_LOCK_FLAG_RENEW 0x1
 
+/*
+ * Constants for rados_write_op_create().
+ */
 #define LIBRADOS_CREATE_EXCLUSIVE 1
 #define LIBRADOS_CREATE_IDEMPOTENT 0
 
 /**
  * @defgroup librados_h_xattr_comp xattr comparison operations
+ * Operators for comparing xattrs on objects, and aborting the
+ * rados_read_op or rados_write_op transaction if the comparison
+ * fails.
+ *
  * @{
  */
 /** @cond TODO_enums_not_yet_in_asphyxiate */
