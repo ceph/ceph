@@ -41,7 +41,7 @@ logging = {
 
 sqlalchemy = {
     'url'           : 'sqlite:////tmp/test.db',
-    'echo'          : True,
+    'echo'          : False,
     'encoding'      : 'utf-8'
 }
 

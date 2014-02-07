@@ -18,6 +18,7 @@ class cluster_info(Base):
   contact_email = Column(String)
   cluster_name = Column(String)
   cluster_creation_date = Column(DateTime)
+  description = Column(String)
   num_versions = Column(Integer)
 
 class version_info(Base):
@@ -70,6 +71,17 @@ class osds_info(Base):
   distro = Column(String)
   ceph_version = Column(String)
 
+class brag(object):
+  def __init__(self, uuid, version_number):
+    self.ci = Session.query(cluster_info).filter_by(uuid=uuid).first()
+    if self.ci is not None:
+      self.vi = Session.query(version_info).filter_by(cluster_id=self.ci.index, version_number=version_number).first()
+    
+    if self.ci is not None and self.vi is not None:
+      self.comps = Session.query(components_info).filter_by(vid=self.vi.index).first()
+      self.pools = Session.query(pools_info).filter_by(vid=self.vi.index).all()
+      self.osds = Session.query(osds_info).filter_by(vid=self.vi.index).all()
+
 def put_new_version(data):
   info = json.loads(data)
   def add_cluster_info():
@@ -80,6 +92,7 @@ def put_new_version(data):
                         organization=info['ownership']['organization'],
                         contact_email=info['ownership']['email'],
                         cluster_name=info['ownership']['name'],
+                        description=info['ownership']['description'],
                         cluster_creation_date=dt,
                         num_versions=1)
       Session.add(ci)
@@ -143,4 +156,34 @@ def put_new_version(data):
   add_components_info(vi)
   add_pools_info(vi)
   add_osds_info(vi)
-  
+ 
+def delete_uuid(uuid):
+  ci = Session.query(cluster_info).filter_by(uuid=uuid).first()
+  if ci is None:
+    return {'status':400, 'comment':'No information for this UUID'}
+
+  for v in Session.query(version_info).filter_by(cluster_id=ci.index).all():
+    Session.query(components_info).filter_by(vid=v.index).delete()
+    Session.query(pools_info).filter_by(vid=v.index).delete()
+    Session.query(osds_info).filter_by(vid=v.index).delete()
+    Session.delete(v)
+
+  Session.delete(ci)
+  return None
+
+def get_uuids():
+  return Session.query(cluster_info).all()
+
+def get_versions(uuid):
+  ci = Session.query(cluster_info).filter_by(uuid=uuid).first()
+  if ci is None:
+    return None
+
+  return Session.query(version_info).filter_by(cluster_id=ci.index).all()
+
+def get_brag(uuid, version_id):
+  b = brag(uuid, version_id)
+  if b.ci is None or b.vi is None:
+    return None
+
+  return b

@@ -1,8 +1,10 @@
 MANIFEST.in
+config.py
 setup.cfg
 setup.py
 ceph_brag/__init__.py
 ceph_brag/app.py
+ceph_brag/json.py
 ceph_brag.egg-info/PKG-INFO
 ceph_brag.egg-info/SOURCES.txt
 ceph_brag.egg-info/dependency_links.txt
@@ -17,5 +19,3 @@ ceph_brag/tests/__init__.py
 ceph_brag/tests/config.py
 ceph_brag/tests/test_functional.py
 ceph_brag/tests/test_units.py
-public/css/style.css
-public/images/logo.png

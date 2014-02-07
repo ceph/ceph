@@ -1,5 +1,5 @@
 from pecan import make_app
-from ceph_brag import model
+from ceph_brag import model, json
 from pecan.hooks import TransactionHook
 
 def setup_app(config):
