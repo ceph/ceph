@@ -56,11 +56,12 @@ headers for C/C++ under ``/usr/include/rados``. ::
 
 	ls /usr/include/rados
 
+
 Getting librados for Python
 ---------------------------
 
 ``librados`` Python support is the ``rados.py`` module, provided in
-the ``python-ceph`` package for both Debian and RedHat systems.
+the ``python-ceph`` package for both Debian and RedHat systems. ::
 
 	sudo apt-get install librados-dev
 
@@ -70,6 +71,7 @@ For CentOS/RHEL distributions, execute the following::
 
 You can find the module under ``/usr/share/pyshared`` on Debian systems,
 or under ``/usr/lib/python2.X/site-packages`` on Centos/RHEL systems.
+
 
 Getting librados for Java
 -------------------------
