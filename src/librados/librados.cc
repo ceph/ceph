@@ -3066,6 +3066,31 @@ extern "C" void rados_write_op_cmpxattr(rados_write_op_t write_op,
 					    bl);
 }
 
+static void rados_c_omap_cmp(ObjectOperation *op,
+			     const char *key,
+			     uint8_t comparison_operator,
+			     const char *val,
+			     size_t val_len,
+			     int *prval)
+{
+  bufferlist bl;
+  bl.append(val, val_len);
+  std::map<std::string, pair<bufferlist, int> > assertions;
+  assertions[key] = std::make_pair(bl, comparison_operator);
+  op->omap_cmp(assertions, prval);
+}
+
+extern "C" void rados_write_op_omap_cmp(rados_write_op_t write_op,
+					const char *key,
+					uint8_t comparison_operator,
+					const char *val,
+					size_t val_len,
+					int *prval)
+{
+  rados_c_omap_cmp((::ObjectOperation *)write_op, key, comparison_operator,
+		   val, val_len, prval);
+}
+
 extern "C" void rados_write_op_setxattr(rados_write_op_t write_op,
                                        const char *name,
 				       const char *value,
@@ -3154,6 +3179,34 @@ extern "C" void rados_write_op_exec(rados_write_op_t write_op,
   ((::ObjectOperation *)write_op)->call(cls, method, inbl, NULL, NULL, prval);
 }
 
+extern "C" void rados_write_op_omap_set(rados_write_op_t write_op,
+					char const* const* keys,
+					char const* const* vals,
+					const size_t *lens,
+					size_t num)
+{
+  std::map<std::string, bufferlist> entries;
+  for (size_t i = 0; i < num; ++i) {
+    bufferlist bl(lens[i]);
+    bl.append(vals[i], lens[i]);
+    entries[keys[i]] = bl;
+  }
+  ((::ObjectOperation *)write_op)->omap_set(entries);
+}
+
+extern "C" void rados_write_op_omap_rm_keys(rados_write_op_t write_op,
+					    char const* const* keys,
+					    size_t keys_len)
+{
+  std::set<std::string> to_remove(keys, keys + keys_len);
+  ((::ObjectOperation *)write_op)->omap_rm_keys(to_remove);
+}
+
+extern "C" void rados_write_op_omap_clear(rados_write_op_t write_op)
+{
+  ((::ObjectOperation *)write_op)->omap_clear();
+}
+
 extern "C" int rados_write_op_operate(rados_write_op_t write_op,
                                       rados_ioctx_t io,
                                       const char *oid,
@@ -3212,6 +3265,17 @@ extern "C" void rados_read_op_cmpxattr(rados_read_op_t read_op,
 					   comparison_operator,
 					   CEPH_OSD_CMPXATTR_MODE_STRING,
 					   bl);
+}
+
+extern "C" void rados_read_op_omap_cmp(rados_read_op_t read_op,
+				       const char *key,
+				       uint8_t comparison_operator,
+				       const char *val,
+				       size_t val_len,
+				       int *prval)
+{
+  rados_c_omap_cmp((::ObjectOperation *)read_op, key, comparison_operator,
+		   val, val_len, prval);
 }
 
 extern "C" void rados_read_op_stat(rados_read_op_t read_op,
@@ -3308,6 +3372,20 @@ extern "C" void rados_read_op_exec_user_buf(rados_read_op_t read_op,
 				       prval);
 }
 
+struct RadosOmapIter {
+  std::map<std::string, bufferlist> values;
+  std::map<std::string, bufferlist>::iterator i;
+};
+
+class C_OmapIter : public Context {
+  RadosOmapIter *iter;
+public:
+  C_OmapIter(RadosOmapIter *iter) : iter(iter) {}
+  void finish(int r) {
+    iter->i = iter->values.begin();
+  }
+};
+
 class C_XattrsIter : public Context {
   RadosXattrsIter *iter;
 public:
@@ -3325,6 +3403,97 @@ extern "C" void rados_read_op_getxattrs(rados_read_op_t read_op,
   ((::ObjectOperation *)read_op)->getxattrs(&xattrs_iter->attrset, prval);
   ((::ObjectOperation *)read_op)->add_handler(new C_XattrsIter(xattrs_iter));
   *iter = xattrs_iter;
+}
+
+extern "C" void rados_read_op_omap_get_vals(rados_read_op_t read_op,
+					    const char *start_after,
+					    const char *filter_prefix,
+					    uint64_t max_return,
+					    rados_omap_iter_t *iter,
+					    int *prval)
+{
+  RadosOmapIter *omap_iter = new RadosOmapIter;
+  const char *start = start_after ? start_after : "";
+  const char *filter = filter_prefix ? filter_prefix : "";
+  ((::ObjectOperation *)read_op)->omap_get_vals(start,
+						filter,
+						max_return,
+						&omap_iter->values,
+						prval);
+  ((::ObjectOperation *)read_op)->add_handler(new C_OmapIter(omap_iter));
+  *iter = omap_iter;
+}
+
+struct C_OmapKeysIter : public Context {
+  RadosOmapIter *iter;
+  std::set<std::string> keys;
+  C_OmapKeysIter(RadosOmapIter *iter) : iter(iter) {}
+  void finish(int r) {
+    // map each key to an empty bl
+    for (std::set<std::string>::const_iterator i = keys.begin();
+	 i != keys.end(); ++i) {
+      iter->values[*i];
+    }
+    iter->i = iter->values.begin();
+  }
+};
+
+extern "C" void rados_read_op_omap_get_keys(rados_read_op_t read_op,
+					    const char *start_after,
+					    uint64_t max_return,
+					    rados_omap_iter_t *iter,
+					    int *prval)
+{
+  RadosOmapIter *omap_iter = new RadosOmapIter;
+  C_OmapKeysIter *ctx = new C_OmapKeysIter(omap_iter);
+  ((::ObjectOperation *)read_op)->omap_get_keys(start_after ? start_after : "",
+						max_return, &ctx->keys, prval);
+  ((::ObjectOperation *)read_op)->add_handler(ctx);
+  *iter = omap_iter;
+}
+
+extern "C" void rados_read_op_omap_get_vals_by_keys(rados_read_op_t read_op,
+						    char const* const* keys,
+						    size_t keys_len,
+						    rados_omap_iter_t *iter,
+						    int *prval)
+{
+  std::set<std::string> to_get(keys, keys + keys_len);
+
+  RadosOmapIter *omap_iter = new RadosOmapIter;
+  ((::ObjectOperation *)read_op)->omap_get_vals_by_keys(to_get,
+							&omap_iter->values,
+							prval);
+  ((::ObjectOperation *)read_op)->add_handler(new C_OmapIter(omap_iter));
+  *iter = omap_iter;
+}
+
+extern "C" int rados_omap_get_next(rados_omap_iter_t iter,
+				   char **key,
+				   char **val,
+				   size_t *len)
+{
+  RadosOmapIter *it = (RadosOmapIter *)iter;
+  if (it->i == it->values.end()) {
+    *key = NULL;
+    *val = NULL;
+    *len = 0;
+    return 0;
+  }
+  if (key)
+    *key = (char*)it->i->first.c_str();
+  if (val)
+    *val = it->i->second.c_str();
+  if (len)
+    *len = it->i->second.length();
+  ++it->i;
+  return 0;
+}
+
+extern "C" void rados_omap_get_end(rados_omap_iter_t iter)
+{
+  RadosOmapIter *it = (RadosOmapIter *)iter;
+  delete it;
 }
 
 extern "C" int rados_read_op_operate(rados_read_op_t read_op,
