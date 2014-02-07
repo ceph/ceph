@@ -1181,8 +1181,6 @@ def run_daemon(ctx, config, type_):
     try:
         yield
     finally:
-        if type_ == 'osd':
-            osd_scrub_pgs(ctx, config)
         teuthology.stop_daemons_of_type(ctx, type_)
 
 def healthy(ctx, config):
@@ -1437,5 +1435,8 @@ def task(ctx, config):
         lambda: run_daemon(ctx=ctx, config=config, type_='mds'),
         ):
         if config.get('wait-for-healthy', True):
-          healthy(ctx=ctx, config=None)
-        yield
+            healthy(ctx=ctx, config=None)
+        try:
+            yield
+        finally:
+            osd_scrub_pgs(ctx, config)
