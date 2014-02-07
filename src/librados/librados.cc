@@ -3136,23 +3136,26 @@ extern "C" void rados_write_op_zero(rados_write_op_t write_op,
 extern "C" int rados_write_op_operate(rados_write_op_t write_op,
                                       rados_ioctx_t io,
                                       const char *oid,
-				      time_t *mtime)
+				      time_t *mtime,
+				      int flags)
 {
   object_t obj(oid);
   ::ObjectOperation *oo = (::ObjectOperation *) write_op;
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  return ctx->operate(obj, oo, mtime);
+  return ctx->operate(obj, oo, mtime, flags);
 }
 
 extern "C" int rados_aio_write_op_operate(rados_write_op_t write_op,
-                                      rados_ioctx_t io,
-				      rados_completion_t completion,
-                                      const char *oid,
-				      time_t *mtime)
+					  rados_ioctx_t io,
+					  rados_completion_t completion,
+					  const char *oid,
+					  time_t *mtime,
+					  int flags)
 {
   object_t obj(oid);
   ::ObjectOperation *oo = (::ObjectOperation *) write_op;
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   librados::AioCompletionImpl *c = (librados::AioCompletionImpl*)completion;
-  return ctx->aio_operate(obj, oo, c, ctx->snapc, 0);
+  return ctx->aio_operate(obj, oo, c, ctx->snapc, flags);
+}
 }
