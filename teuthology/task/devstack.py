@@ -108,17 +108,23 @@ def distribute_ceph_keys(devstack_node, ceph_node):
     keys = [
         dict(name='client.glance',
              path='/etc/ceph/ceph.client.glance.keyring',
-             owner='glance:glance'),
+             # devstack appears to just want root:root
+             #owner='glance:glance',
+             ),
         dict(name='client.cinder',
              path='/etc/ceph/ceph.client.cinder.keyring',
-             owner='cinder:cinder'),
+             # devstack appears to just want root:root
+             #owner='cinder:cinder',
+             ),
         dict(name='client.cinder-backup',
              path='/etc/ceph/ceph.client.cinder-backup.keyring',
-             owner='cinder:cinder'),
+             # devstack appears to just want root:root
+             #owner='cinder:cinder',
+             ),
     ]
     for key_dict in keys:
         copy_key(ceph_node, key_dict['name'], devstack_node,
-                 key_dict['path'], key_dict['owner'])
+                 key_dict['path'], key_dict.get('owner'))
 
 
 def set_libvirt_secret(devstack_node, ceph_node):
