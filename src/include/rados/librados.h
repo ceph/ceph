@@ -234,6 +234,8 @@ typedef void *rados_write_op_t;
  * An object read operation stores a number of operations which can be
  * executed atomically. For usage, see:
  * - Creation and deletion: rados_create_read_op() rados_release_read_op()
+ * - Extended attribute manipulation: rados_read_op_cmpxattr(),
+ *   rados_read_op_getxattr(), rados_read_op_getxattrs()
  * - Object properties: rados_read_op_stat(), rados_read_op_assert_exists()
  * - IO on objects: rados_read_op_read()
  * - Custom operations: rados_read_op_exec(), rados_read_op_exec_user_buf()
@@ -1947,6 +1949,32 @@ void rados_read_op_set_flags(rados_read_op_t read_op, int flags);
  * @param read_op operation to add this action to
  */
 void rados_read_op_assert_exists(rados_read_op_t read_op);
+
+/**
+ * Ensure that the an xattr satisfies a comparison
+ * @param read_op operation to add this action to
+ * @param name name of the xattr to look up
+ * @param comparison_operator currently undocumented, look for
+ * LIBRADOS_CMPXATTR_OP_EQ in librados.h
+ * @param value buffer to compare actual xattr value to
+ * @param value_len length of buffer to compare actual xattr value to
+ */
+void rados_read_op_cmpxattr(rados_read_op_t read_op,
+			    const char *name,
+			    uint8_t comparison_operator,
+			    const char *value,
+			    size_t value_len);
+
+/**
+ * Start iterating over xattrs on an object.
+ *
+ * @param read_op operation to add this action to
+ * @param iter where to store the iterator
+ * @param prval where to store the return value of this action
+ */
+void rados_read_op_getxattrs(rados_read_op_t read_op,
+			     rados_xattrs_iter_t *iter,
+			     int *prval);
 
 
 /**
