@@ -149,7 +149,7 @@ def set_libvirt_secret(devstack_node, ceph_node):
                          secret_template.format(uuid=uuid))
     devstack_node.run(args=['sudo', 'virsh', 'secret-define', '--file',
                             secret_path])
-    devstack_node.run(args=['sudo', 'virsh', 'set-secret-value', '--secret',
+    devstack_node.run(args=['sudo', 'virsh', 'secret-set-value', '--secret',
                             uuid, '--base64', cinder_key])
     return uuid
 
