@@ -3200,6 +3200,20 @@ extern "C" void rados_read_op_assert_exists(rados_read_op_t read_op)
   ((::ObjectOperation *)read_op)->stat(NULL, (utime_t *)NULL, NULL);
 }
 
+extern "C" void rados_read_op_cmpxattr(rados_read_op_t read_op,
+				       const char *name,
+				       uint8_t comparison_operator,
+				       const char *value,
+				       size_t value_len)
+{
+  bufferlist bl;
+  bl.append(value, value_len);
+  ((::ObjectOperation *)read_op)->cmpxattr(name,
+					   comparison_operator,
+					   CEPH_OSD_CMPXATTR_MODE_STRING,
+					   bl);
+}
+
 extern "C" void rados_read_op_stat(rados_read_op_t read_op,
 				   uint64_t *psize,
 				   time_t *pmtime,
@@ -3292,6 +3306,25 @@ extern "C" void rados_read_op_exec_user_buf(rados_read_op_t read_op,
   inbl.append(in_buf, in_len);
   ((::ObjectOperation *)read_op)->call(cls, method, inbl, &ctx->out_bl, ctx,
 				       prval);
+}
+
+class C_XattrsIter : public Context {
+  RadosXattrsIter *iter;
+public:
+  C_XattrsIter(RadosXattrsIter *iter) : iter(iter) {}
+  void finish(int r) {
+    iter->i = iter->attrset.begin();
+  }
+};
+
+extern "C" void rados_read_op_getxattrs(rados_read_op_t read_op,
+					rados_xattrs_iter_t *iter,
+					int *prval)
+{
+  RadosXattrsIter *xattrs_iter = new RadosXattrsIter;
+  ((::ObjectOperation *)read_op)->getxattrs(&xattrs_iter->attrset, prval);
+  ((::ObjectOperation *)read_op)->add_handler(new C_XattrsIter(xattrs_iter));
+  *iter = xattrs_iter;
 }
 
 extern "C" int rados_read_op_operate(rados_read_op_t read_op,
