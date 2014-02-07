@@ -502,7 +502,7 @@ int librados::IoCtxImpl::clone_range(const object_t& dst_oid,
 }
 
 int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
-				 time_t *pmtime)
+				 time_t *pmtime, int flags)
 {
   utime_t ut;
   if (pmtime) {
@@ -529,7 +529,7 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
   int op = o->ops[0].op.op;
   ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid << " nspace=" << oloc.nspace << dendl;
   Objecter::Op *objecter_op = objecter->prepare_mutate_op(oid, oloc,
-	                                                  *o, snapc, ut, 0,
+	                                                  *o, snapc, ut, flags,
 	                                                  NULL, oncommit, &ver);
   lock->Lock();
   objecter->op_submit(objecter_op);
@@ -548,7 +548,9 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
 }
 
 int librados::IoCtxImpl::operate_read(const object_t& oid,
-				      ::ObjectOperation *o, bufferlist *pbl)
+				      ::ObjectOperation *o,
+				      bufferlist *pbl,
+				      int flags)
 {
   if (!o->size())
     return 0;
@@ -564,7 +566,7 @@ int librados::IoCtxImpl::operate_read(const object_t& oid,
   int op = o->ops[0].op.op;
   ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid << " nspace=" << oloc.nspace << dendl;
   Objecter::Op *objecter_op = objecter->prepare_read_op(oid, oloc,
-	                                      *o, snap_seq, pbl, 0,
+	                                      *o, snap_seq, pbl, flags,
 	                                      onack, &ver);
   lock->Lock();
   objecter->op_submit(objecter_op);
