@@ -163,7 +163,7 @@ def update_devstack_config_files(devstack_node, secret_uuid):
 
     def update_config(config_name, config_stream, update_dict):
         parser = ConfigParser()
-        parser.read_file(config_stream, filename=config_name)
+        parser.read_file(config_stream)
         parser.update(update_dict)
         out_stream = StringIO()
         out_stream.seek(0)
