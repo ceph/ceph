@@ -1046,6 +1046,13 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	ss << "pool '" << poolname << "' does not exist";
       }
     }
+
+    if (pending_mdsmap.get_first_data_pool() == poolid) {
+      r = -EINVAL;
+      poolid = -1;
+      ss << "cannot remove default data pool";
+    }
+
     if (poolid >= 0) {
       cmd_getval(g_ceph_context, cmdmap, "poolid", poolid);
       r = pending_mdsmap.remove_data_pool(poolid);
