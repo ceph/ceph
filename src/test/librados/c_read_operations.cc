@@ -204,16 +204,15 @@ TEST_F(CReadOpsTest, CmpXattr) {
   EXPECT_EQ(-ECANCELED, cmp_xattr(xattr, buf, sizeof(buf), LIBRADOS_CMPXATTR_OP_LT));
   EXPECT_EQ(-ECANCELED, cmp_xattr(xattr, buf, sizeof(buf), LIBRADOS_CMPXATTR_OP_LTE));
 
-  // it compares C strings, so NUL at the beginning is the same
-  // regardless of the following data
-  rados_setxattr(ioctx, obj, xattr, "\0\0", 1);
+  // check that null bytes are compared correctly
+  rados_setxattr(ioctx, obj, xattr, "\0\0", 2);
   buf[0] = '\0';
-  EXPECT_EQ(1, cmp_xattr(xattr, buf, 2, LIBRADOS_CMPXATTR_OP_EQ));
-  EXPECT_EQ(-ECANCELED, cmp_xattr(xattr, buf, 2, LIBRADOS_CMPXATTR_OP_NE));
-  EXPECT_EQ(-ECANCELED, cmp_xattr(xattr, buf, 2, LIBRADOS_CMPXATTR_OP_GT));
+  EXPECT_EQ(-ECANCELED, cmp_xattr(xattr, buf, 2, LIBRADOS_CMPXATTR_OP_EQ));
+  EXPECT_EQ(1, cmp_xattr(xattr, buf, 2, LIBRADOS_CMPXATTR_OP_NE));
+  EXPECT_EQ(1, cmp_xattr(xattr, buf, 2, LIBRADOS_CMPXATTR_OP_GT));
   EXPECT_EQ(1, cmp_xattr(xattr, buf, 2, LIBRADOS_CMPXATTR_OP_GTE));
   EXPECT_EQ(-ECANCELED, cmp_xattr(xattr, buf, 2, LIBRADOS_CMPXATTR_OP_LT));
-  EXPECT_EQ(1, cmp_xattr(xattr, buf, 2, LIBRADOS_CMPXATTR_OP_LTE));
+  EXPECT_EQ(-ECANCELED, cmp_xattr(xattr, buf, 2, LIBRADOS_CMPXATTR_OP_LTE));
 
   buf[1] = '\0';
   EXPECT_EQ(1, cmp_xattr(xattr, buf, 2, LIBRADOS_CMPXATTR_OP_EQ));

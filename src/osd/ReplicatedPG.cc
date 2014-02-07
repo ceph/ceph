@@ -2402,30 +2402,23 @@ int ReplicatedPG::do_xattr_cmp_u64(int op, __u64 v1, bufferlist& xattr)
 
 int ReplicatedPG::do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr)
 {
-  const char *v1, *v2;
-  v1 = v1s.data();
-  string v2s;
-  if (xattr.length()) {
-    v2s = string(xattr.c_str(), xattr.length());
-    v2 = v2s.c_str();
-  } else
-    v2 = "";
+  string v2s(xattr.c_str(), xattr.length());
 
-  dout(20) << "do_xattr_cmp_str '" << v1s << "' vs '" << v2 << "' op " << op << dendl;
+  dout(20) << "do_xattr_cmp_str '" << v1s << "' vs '" << v2s << "' op " << op << dendl;
 
   switch (op) {
   case CEPH_OSD_CMPXATTR_OP_EQ:
-    return (strcmp(v1, v2) == 0);
+    return (v1s.compare(v2s) == 0);
   case CEPH_OSD_CMPXATTR_OP_NE:
-    return (strcmp(v1, v2) != 0);
+    return (v1s.compare(v2s) != 0);
   case CEPH_OSD_CMPXATTR_OP_GT:
-    return (strcmp(v1, v2) > 0);
+    return (v1s.compare(v2s) > 0);
   case CEPH_OSD_CMPXATTR_OP_GTE:
-    return (strcmp(v1, v2) >= 0);
+    return (v1s.compare(v2s) >= 0);
   case CEPH_OSD_CMPXATTR_OP_LT:
-    return (strcmp(v1, v2) < 0);
+    return (v1s.compare(v2s) < 0);
   case CEPH_OSD_CMPXATTR_OP_LTE:
-    return (strcmp(v1, v2) <= 0);
+    return (v1s.compare(v2s) <= 0);
   default:
     return -EINVAL;
   }
