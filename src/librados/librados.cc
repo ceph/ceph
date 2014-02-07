@@ -3179,4 +3179,54 @@ extern "C" int rados_aio_write_op_operate(rados_write_op_t write_op,
   librados::AioCompletionImpl *c = (librados::AioCompletionImpl*)completion;
   return ctx->aio_operate(obj, oo, c, ctx->snapc, flags);
 }
+
+extern "C" rados_read_op_t rados_create_read_op()
+{
+  return new (std::nothrow)::ObjectOperation;
+}
+
+extern "C" void rados_release_read_op(rados_read_op_t read_op)
+{
+  delete (::ObjectOperation *)read_op;
+}
+
+extern "C" void rados_read_op_set_flags(rados_read_op_t read_op, int flags)
+{
+  set_op_flags((::ObjectOperation *)read_op, flags);
+}
+
+extern "C" void rados_read_op_assert_exists(rados_read_op_t read_op)
+{
+  ((::ObjectOperation *)read_op)->stat(NULL, (utime_t *)NULL, NULL);
+}
+
+extern "C" void rados_read_op_stat(rados_read_op_t read_op,
+				   uint64_t *psize,
+				   time_t *pmtime,
+				   int *prval)
+{
+  ((::ObjectOperation *)read_op)->stat(psize, pmtime, prval);
+}
+
+extern "C" int rados_read_op_operate(rados_read_op_t read_op,
+				     rados_ioctx_t io,
+				     const char *oid,
+				     int flags)
+{
+  object_t obj(oid);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  return ctx->operate_read(obj, (::ObjectOperation *)read_op, NULL, flags);
+}
+
+extern "C" int rados_aio_read_op_operate(rados_read_op_t read_op,
+					 rados_ioctx_t io,
+					 rados_completion_t completion,
+					 const char *oid,
+					 int flags)
+{
+  object_t obj(oid);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  librados::AioCompletionImpl *c = (librados::AioCompletionImpl*)completion;
+  return ctx->aio_operate_read(obj, (::ObjectOperation *)read_op,
+			       c, flags, NULL);
 }
