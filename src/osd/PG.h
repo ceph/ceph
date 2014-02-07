@@ -664,7 +664,12 @@ public:
       to_remove.insert(hoid);
     }
     void rollback(const pg_log_entry_t &entry) {
-      assert(!cannot_rollback.count(entry.soid));
+      if (cannot_rollback.count(entry.soid)) {
+	/* we already failed to rollback a previous item
+         * and made the appropriate adjustments to the
+         * missing set and/or store */
+	return;
+      }
       to_rollback[entry.soid].push_back(entry);
     }
     void cant_rollback(const pg_log_entry_t &entry) {
