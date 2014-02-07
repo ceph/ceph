@@ -596,13 +596,14 @@ static void fuse_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  Inode *i1 = cfuse->iget(parent);
+  Inode *i1 = cfuse->iget(parent), *i2;
   struct fuse_entry_param fe;
   Fh *fh = NULL;
 
   memset(&fe, 0, sizeof(fe));
 
-  int r = cfuse->client->ll_create(i1, name, mode, fi->flags, &fe.attr, NULL,
+  // pass &i2 for the created inode so that ll_create takes an initial ll_ref
+  int r = cfuse->client->ll_create(i1, name, mode, fi->flags, &fe.attr, &i2,
 				   &fh, ctx->uid, ctx->gid);
   if (r == 0) {
     fi->fh = (long)fh;
