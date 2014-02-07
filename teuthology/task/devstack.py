@@ -103,6 +103,7 @@ def distribute_ceph_keys(devstack_node, ceph_node):
         from_remote.run(
             args=['ceph', 'auth', 'get-or-create', key_name],
             stdout=key_stringio)
+        key_stringio.seek(0)
         misc.sudo_write_file(to_remote, dest_path,
                              key_stringio, owner=owner)
     keys = [
@@ -131,10 +132,12 @@ def set_libvirt_secret(devstack_node, ceph_node):
     cinder_key_stringio = StringIO()
     ceph_node.run(args=['ceph', 'auth', 'get-key', 'client.cinder'],
                   stdout=cinder_key_stringio)
+    cinder_key_stringio.seek(0)
     cinder_key = cinder_key_stringio.read().strip()
 
     uuid_stringio = StringIO()
     devstack_node.run(args=['uuidgen'], stdout=uuid_stringio)
+    uuid_stringio.seek(0)
     uuid = uuid_stringio.read().strip()
 
     secret_path = '/tmp/secret.xml'
@@ -163,6 +166,7 @@ def update_devstack_config_files(devstack_node, secret_uuid):
         parser.read_file(config_stream, filename=config_name)
         parser.update(update_dict)
         out_stream = StringIO()
+        out_stream.seek(0)
         parser.write(out_stream)
         return out_stream
 
