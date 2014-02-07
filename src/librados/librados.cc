@@ -180,7 +180,7 @@ void librados::ObjectReadOperation::stat(uint64_t *psize, time_t *pmtime, int *p
 void librados::ObjectReadOperation::read(size_t off, uint64_t len, bufferlist *pbl, int *prval)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->read(off, len, pbl, prval);
+  o->read(off, len, pbl, prval, NULL);
 }
 
 void librados::ObjectReadOperation::sparse_read(uint64_t off, uint64_t len,

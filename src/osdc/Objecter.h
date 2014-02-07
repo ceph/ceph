@@ -237,12 +237,14 @@ struct ObjectOperation {
   }
 
   // object data
-  void read(uint64_t off, uint64_t len, bufferlist *pbl, int *prval) {
+  void read(uint64_t off, uint64_t len, bufferlist *pbl, int *prval,
+	    Context* ctx) {
     bufferlist bl;
     add_data(CEPH_OSD_OP_READ, off, len, bl);
     unsigned p = ops.size() - 1;
     out_bl[p] = pbl;
     out_rval[p] = prval;
+    out_handler[p] = ctx;
   }
 
   struct C_ObjectOperation_sparse_read : public Context {
