@@ -4168,6 +4168,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	t->omap_setkeys(soid, to_set);
 	ctx->delta_stats.num_wr++;
       }
+      obs.oi.set_flag(object_info_t::FLAG_OMAP);
       break;
 
     case CEPH_OSD_OP_OMAPSETHEADER:
@@ -4186,6 +4187,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	t->omap_setheader(soid, osd_op.indata);
 	ctx->delta_stats.num_wr++;
       }
+      obs.oi.set_flag(object_info_t::FLAG_OMAP);
       break;
 
     case CEPH_OSD_OP_OMAPCLEAR:
@@ -4204,6 +4206,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	t->omap_clear(soid);
 	ctx->delta_stats.num_wr++;
       }
+      obs.oi.set_flag(object_info_t::FLAG_OMAP);
       break;
 
     case CEPH_OSD_OP_OMAPRMKEYS:
@@ -4230,6 +4233,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	t->omap_rmkeys(soid, to_rm);
 	ctx->delta_stats.num_wr++;
       }
+      obs.oi.set_flag(object_info_t::FLAG_OMAP);
       break;
 
     case CEPH_OSD_OP_COPY_GET_CLASSIC:
