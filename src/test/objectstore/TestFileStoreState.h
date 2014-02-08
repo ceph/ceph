@@ -10,10 +10,10 @@
 * License version 2.1, as published by the Free Software
 * Foundation. See file COPYING.
 */
-#ifndef TEST_FILESTORE_STATE_H_
-#define TEST_FILESTORE_STATE_H_
+#ifndef TEST_OBJECTSTORE_STATE_H_
+#define TEST_OBJECTSTORE_STATE_H_
 
-#include "os/FileStore.h"
+#include "os/ObjectStore.h"
 #include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
@@ -22,7 +22,7 @@
 
 typedef boost::mt11213b rngen_t;
 
-class TestFileStoreState {
+class TestObjectStoreState {
 public:
   struct coll_entry_t {
     int m_id;
@@ -96,13 +96,13 @@ public:
   static const int m_default_num_colls = 30;
 
  public:
-  TestFileStoreState(FileStore *store) :
+  TestObjectStoreState(ObjectStore *store) :
     m_next_coll_nr(0), m_num_objs_per_coll(10), m_num_objects(0),
     m_max_in_flight(0), m_finished_lock("Finished Lock") {
     m_in_flight.set(0);
     m_store.reset(store);
   }
-  ~TestFileStoreState() { 
+  ~TestObjectStoreState() { 
     map<int, coll_entry_t*>::iterator it = m_collections.begin();
     while (it != m_collections.end()) {
       if (it->second)
@@ -128,11 +128,11 @@ public:
 
   class C_OnFinished: public Context {
    protected:
-    TestFileStoreState *m_state;
+    TestObjectStoreState *m_state;
     ObjectStore::Transaction *m_tx;
 
    public:
-    C_OnFinished(TestFileStoreState *state,
+    C_OnFinished(TestObjectStoreState *state,
         ObjectStore::Transaction *t) : m_state(state), m_tx(t) { }
 
     void finish(int r) {
@@ -145,4 +145,4 @@ public:
   };
 };
 
-#endif /* TEST_FILESTORE_STATE_H_ */
+#endif /* TEST_OBJECTSTORE_STATE_H_ */

@@ -17,7 +17,7 @@
 #include <iostream>
 #include <time.h>
 #include <sys/mount.h>
-#include "os/FileStore.h"
+#include "os/ObjectStore.h"
 #include "os/KeyValueStore.h"
 #include "include/Context.h"
 #include "common/ceph_argparse.h"

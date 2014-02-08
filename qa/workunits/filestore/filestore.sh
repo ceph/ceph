@@ -23,7 +23,7 @@ export PATH=/sbin:$PATH
 : ${EXT3:=$(which mkfs.ext3)}
 : ${XFS:=$(which mkfs.xfs)}
 : ${BTRFS:=$(which mkfs.btrfs)}
-: ${CEPH_TEST_FILESTORE:=ceph_test_filestore}
+: ${CEPH_TEST_FILESTORE:=ceph_test_objectstore}
 : ${FILE_SYSTEMS:=EXT4} #  EXT3 XFS BTRFS
 : ${DEBUG:=}
 
@@ -76,5 +76,5 @@ else
     main
 fi
 # Local Variables:
-# compile-command: "CEPH_TEST_FILESTORE=../../../src/ceph_test_filestore filestore.sh TEST"
+# compile-command: "CEPH_TEST_FILESTORE=../../../src/ceph_test_objectstore filestore.sh TEST"
 # End:

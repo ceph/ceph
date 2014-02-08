@@ -18,7 +18,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <sstream>
-#include "os/FileStore.h"
+#include "os/ObjectStore.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "common/debug.h"
@@ -34,9 +34,9 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "deterministic_seq "
 
-DeterministicOpSequence::DeterministicOpSequence(FileStore *store,
+DeterministicOpSequence::DeterministicOpSequence(ObjectStore *store,
 						 std::string status)
-  : TestFileStoreState(store),
+  : TestObjectStoreState(store),
     txn(0),
     m_osr("OSR")
 {
