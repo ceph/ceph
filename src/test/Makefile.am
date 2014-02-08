@@ -51,7 +51,7 @@ ceph_dencoder_SOURCES = \
 	test/encoding/ceph_dencoder.cc \
 	$(DENCODER_SOURCES)
 ceph_dencoder_LDADD = \
-	$(LIBOSD) $(LIBMDS) $(LIBMON) \
+	$(LIBOSD) $(LIBMDS) $(LIBMON) $(LIBRGW) $(LIBRGW_DEPS) \
 	$(DENCODER_DEPS) $(CEPH_GLOBAL)
 
 # These should always use explicit _CFLAGS/_CXXFLAGS so avoid basename conflicts
