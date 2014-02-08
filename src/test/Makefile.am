@@ -523,7 +523,7 @@ unittest_escape_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_escape_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_escape
 
-unittest_chain_xattr_SOURCES = test/filestore/chain_xattr.cc
+unittest_chain_xattr_SOURCES = test/objectstore/chain_xattr.cc
 unittest_chain_xattr_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_chain_xattr_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_chain_xattr
@@ -853,30 +853,30 @@ ceph_test_libcephfs_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_libcephfs
 
 if LINUX
-ceph_test_filestore_SOURCES = test/filestore/store_test.cc
-ceph_test_filestore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-ceph_test_filestore_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-bin_DEBUGPROGRAMS += ceph_test_filestore
+ceph_test_objectstore_SOURCES = test/objectstore/store_test.cc
+ceph_test_objectstore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_objectstore_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_objectstore
 endif
 
-ceph_test_filestore_workloadgen_SOURCES = \
-	test/filestore/workload_generator.cc \
-	test/filestore/TestFileStoreState.cc
-ceph_test_filestore_workloadgen_LDADD = $(LIBOS) $(CEPH_GLOBAL)
-bin_DEBUGPROGRAMS += ceph_test_filestore_workloadgen
+ceph_test_objectstore_workloadgen_SOURCES = \
+	test/objectstore/workload_generator.cc \
+	test/objectstore/TestObjectStoreState.cc
+ceph_test_objectstore_workloadgen_LDADD = $(LIBOS) $(CEPH_GLOBAL)
+bin_DEBUGPROGRAMS += ceph_test_objectstore_workloadgen
 
 ceph_test_filestore_idempotent_SOURCES = \
-	test/filestore/test_idempotent.cc \
-	test/filestore/FileStoreTracker.cc \
+	test/objectstore/test_idempotent.cc \
+	test/objectstore/FileStoreTracker.cc \
 	test/common/ObjectContents.cc
 ceph_test_filestore_idempotent_LDADD = $(LIBOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_test_filestore_idempotent
 
 ceph_test_filestore_idempotent_sequence_SOURCES = \
-	test/filestore/test_idempotent_sequence.cc \
-	test/filestore/DeterministicOpSequence.cc \
-	test/filestore/TestFileStoreState.cc \
-	test/filestore/FileStoreDiff.cc
+	test/objectstore/test_idempotent_sequence.cc \
+	test/objectstore/DeterministicOpSequence.cc \
+	test/objectstore/TestObjectStoreState.cc \
+	test/objectstore/FileStoreDiff.cc
 ceph_test_filestore_idempotent_sequence_LDADD = $(LIBOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_test_filestore_idempotent_sequence
 
@@ -950,11 +950,11 @@ noinst_HEADERS += \
 	test/bench/testfilestore_backend.h \
 	test/common/ObjectContents.h \
 	test/encoding/types.h \
-	test/filestore/DeterministicOpSequence.h \
-	test/filestore/FileStoreDiff.h \
-	test/filestore/FileStoreTracker.h \
-	test/filestore/TestFileStoreState.h \
-	test/filestore/workload_generator.h \
+	test/objectstore/DeterministicOpSequence.h \
+	test/objectstore/FileStoreDiff.h \
+	test/objectstore/FileStoreTracker.h \
+	test/objectstore/TestObjectStoreState.h \
+	test/objectstore/workload_generator.h \
 	test/kv_store_bench.h \
 	test/librados/test.h \
 	test/ObjectMap/KeyValueDBMemory.h \
