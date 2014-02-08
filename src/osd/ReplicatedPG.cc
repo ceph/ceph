@@ -5838,6 +5838,9 @@ void ReplicatedPG::finish_flush(hobject_t oid, tid_t tid, int r)
     return;
   }
 
+  delete fop->ctx->op_t;
+  fop->ctx->op_t = pgbackend->get_transaction();
+
   r = try_flush_mark_clean(fop);
   if (r == -EBUSY) {
     reply_ctx(fop->ctx, -EBUSY, obc->obs.oi.version,
