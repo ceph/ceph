@@ -403,26 +403,6 @@ private:
   void sub_op_modify_commit(RepModifyRef rm);
   bool scrub_supported() { return true; }
 
-  void be_scan_list(
-    ScrubMap &map, const vector<hobject_t> &ls, bool deep,
-    ThreadPool::TPHandle &handle);
-  enum scrub_error_type be_compare_scrub_objects(
-    const ScrubMap::object &auth,
-    const ScrubMap::object &candidate,
-    ostream &errorstream);
-  map<pg_shard_t, ScrubMap *>::const_iterator be_select_auth_object(
-    const hobject_t &obj,
-    const map<pg_shard_t,ScrubMap*> &maps);
-  void be_compare_scrubmaps(
-    const map<pg_shard_t,ScrubMap*> &maps,
-    map<hobject_t, set<pg_shard_t> > &missing,
-    map<hobject_t, set<pg_shard_t> > &inconsistent,
-    map<hobject_t, pg_shard_t> &authoritative,
-    map<hobject_t, set<pg_shard_t> > &invalid_snapcolls,
-    int &shallow_errors, int &deep_errors,
-    const spg_t pgid,
-    const vector<int> &acting,
-    ostream &errorstream);
   void be_deep_scrub(
     const hobject_t &obj,
     ScrubMap::object &o,
