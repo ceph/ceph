@@ -584,6 +584,8 @@
      const vector<int> &acting,
      ostream &errorstream);
 
+   virtual uint64_t be_get_ondisk_size(
+     uint64_t logical_size) { assert(0); return 0; }
    virtual void be_deep_scrub(
      const hobject_t &poid,
      ScrubMap::object &o,
