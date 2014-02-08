@@ -224,7 +224,7 @@ int HashIndex::col_split_level(
 int HashIndex::_split(
   uint32_t match,
   uint32_t bits,
-  std::tr1::shared_ptr<CollectionIndex> dest) {
+  ceph::shared_ptr<CollectionIndex> dest) {
   assert(collection_version() == dest->collection_version());
   unsigned mkdirred = 0;
   return col_split_level(

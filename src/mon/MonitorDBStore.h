@@ -322,7 +322,7 @@ class MonitorDBStore
     virtual void get_chunk_tx(Transaction &tx, uint64_t max) = 0;
     virtual pair<string,string> get_next_key() = 0;
   };
-  typedef std::tr1::shared_ptr<StoreIteratorImpl> Synchronizer;
+  typedef ceph::shared_ptr<StoreIteratorImpl> Synchronizer;
 
   class WholeStoreIteratorImpl : public StoreIteratorImpl {
     KeyValueDB::WholeSpaceIterator iter;
@@ -389,7 +389,7 @@ class MonitorDBStore
     else
       iter->seek_to_first();
 
-    return std::tr1::shared_ptr<StoreIteratorImpl>(
+    return ceph::shared_ptr<StoreIteratorImpl>(
 	new WholeStoreIteratorImpl(iter, prefixes)
     );
   }
@@ -486,19 +486,33 @@ class MonitorDBStore
     db->submit_transaction_sync(dbt);
   }
 
+  void init_options() {
+    db->init();
+    if (g_conf->mon_leveldb_write_buffer_size)
+      db->options.write_buffer_size = g_conf->mon_leveldb_write_buffer_size;
+    if (g_conf->mon_leveldb_cache_size)
+      db->options.cache_size = g_conf->mon_leveldb_cache_size;
+    if (g_conf->mon_leveldb_block_size)
+      db->options.block_size = g_conf->mon_leveldb_block_size;
+    if (g_conf->mon_leveldb_bloom_size)
+      db->options.bloom_size = g_conf->mon_leveldb_bloom_size;
+    if (g_conf->mon_leveldb_compression)
+      db->options.compression_enabled = g_conf->mon_leveldb_compression;
+    if (g_conf->mon_leveldb_max_open_files)
+      db->options.max_open_files = g_conf->mon_leveldb_max_open_files;
+    if (g_conf->mon_leveldb_paranoid)
+      db->options.paranoid_checks = g_conf->mon_leveldb_paranoid;
+    if (g_conf->mon_leveldb_log.length())
+      db->options.log_file = g_conf->mon_leveldb_log;
+  }
+
   int open(ostream &out) {
-    db->options.write_buffer_size = g_conf->mon_leveldb_write_buffer_size;
-    db->options.cache_size = g_conf->mon_leveldb_cache_size;
-    db->options.block_size = g_conf->mon_leveldb_block_size;
-    db->options.bloom_size = g_conf->mon_leveldb_bloom_size;
-    db->options.compression_enabled = g_conf->mon_leveldb_compression;
-    db->options.max_open_files = g_conf->mon_leveldb_max_open_files;
-    db->options.paranoid_checks = g_conf->mon_leveldb_paranoid;
-    db->options.log_file = g_conf->mon_leveldb_log;
+    init_options();
     return db->open(out);
   }
 
   int create_and_open(ostream &out) {
+    init_options();
     return db->create_and_open(out);
   }
 

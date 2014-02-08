@@ -3,7 +3,7 @@
 #include "bencher.h"
 #include "include/utime.h"
 #include <unistd.h>
-#include <tr1/memory>
+#include "include/memory.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
 
@@ -35,10 +35,10 @@ struct Cleanup : public Context {
 struct OnWriteApplied : public Context {
   Bencher *bench;
   uint64_t seq;
-  std::tr1::shared_ptr<OnDelete> on_delete;
+  ceph::shared_ptr<OnDelete> on_delete;
   OnWriteApplied(
     Bencher *bench, uint64_t seq,
-    std::tr1::shared_ptr<OnDelete> on_delete
+    ceph::shared_ptr<OnDelete> on_delete
     ) : bench(bench), seq(seq), on_delete(on_delete) {}
   void finish(int r) {
     bench->stat_collector->write_applied(seq);
@@ -48,10 +48,10 @@ struct OnWriteApplied : public Context {
 struct OnWriteCommit : public Context {
   Bencher *bench;
   uint64_t seq;
-  std::tr1::shared_ptr<OnDelete> on_delete;
+  ceph::shared_ptr<OnDelete> on_delete;
   OnWriteCommit(
     Bencher *bench, uint64_t seq,
-    std::tr1::shared_ptr<OnDelete> on_delete
+    ceph::shared_ptr<OnDelete> on_delete
     ) : bench(bench), seq(seq), on_delete(on_delete) {}
   void finish(int r) {
     bench->stat_collector->write_committed(seq);
@@ -120,7 +120,7 @@ void Bencher::init(
   Cond cond;
   bool done = 0;
   {
-    std::tr1::shared_ptr<OnFinish> on_finish(
+    ceph::shared_ptr<OnFinish> on_finish(
       new OnFinish(&done, &lock, &cond));
     uint64_t num = 0;
     for (set<std::string>::const_iterator i = objects.begin();
@@ -132,8 +132,8 @@ void Bencher::init(
 	*i,
 	0,
 	bl,
-	new C_Holder<std::tr1::shared_ptr<OnFinish> >(on_finish),
-	new C_Holder<std::tr1::shared_ptr<OnFinish> >(on_finish)
+	new C_Holder<ceph::shared_ptr<OnFinish> >(on_finish),
+	new C_Holder<ceph::shared_ptr<OnFinish> >(on_finish)
 	);
     }
   }
@@ -162,7 +162,7 @@ void Bencher::run_bench()
     OpType op_type = next.get<3>();
     switch (op_type) {
       case WRITE: {
-	std::tr1::shared_ptr<OnDelete> on_delete(
+	ceph::shared_ptr<OnDelete> on_delete(
 	  new OnDelete(new Cleanup(this)));
 	stat_collector->start_write(seq, length);
 	while (bl.length() < length) {

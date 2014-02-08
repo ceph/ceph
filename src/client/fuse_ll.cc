@@ -81,8 +81,8 @@ public:
 
   Mutex stag_lock;
   int last_stag;
-  hash_map<uint64_t,int> snap_stag_map;
-  hash_map<int,uint64_t> stag_snap_map;
+  ceph::unordered_map<uint64_t,int> snap_stag_map;
+  ceph::unordered_map<int,uint64_t> stag_snap_map;
 
 };
 
@@ -769,7 +769,11 @@ done:
 
 int CephFuse::Handle::loop()
 {
-  return fuse_session_loop(se);
+  if (client->cct->_conf->fuse_multithreaded) {
+    return fuse_session_loop_mt(se);
+  } else {
+    return fuse_session_loop(se);
+  }
 }
 
 uint64_t CephFuse::Handle::fino_snap(uint64_t fino)

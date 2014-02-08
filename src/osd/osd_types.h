@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <memory>
 #include <boost/scoped_ptr.hpp>
+#include <boost/optional.hpp>
 
 #include "include/rados/rados_types.hpp"
 
@@ -35,6 +36,7 @@
 #include "HitSet.h"
 #include "Watch.h"
 #include "OpRequest.h"
+#include "include/hash_namespace.h"
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
@@ -82,14 +84,14 @@ inline bool operator<=(const osd_reqid_t& l, const osd_reqid_t& r) {
 inline bool operator>(const osd_reqid_t& l, const osd_reqid_t& r) { return !(l <= r); }
 inline bool operator>=(const osd_reqid_t& l, const osd_reqid_t& r) { return !(l < r); }
 
-namespace __gnu_cxx {
+CEPH_HASH_NAMESPACE_START
   template<> struct hash<osd_reqid_t> {
     size_t operator()(const osd_reqid_t &r) const { 
       static hash<uint64_t> H;
       return H(r.name.num() ^ r.tid ^ r.inc);
     }
   };
-}
+CEPH_HASH_NAMESPACE_END
 
 
 // -----
@@ -355,7 +357,7 @@ inline bool operator>=(const pg_t& l, const pg_t& r) {
 
 ostream& operator<<(ostream& out, const pg_t &pg);
 
-namespace __gnu_cxx {
+CEPH_HASH_NAMESPACE_START
   template<> struct hash< pg_t >
   {
     size_t operator()( const pg_t& x ) const
@@ -364,7 +366,7 @@ namespace __gnu_cxx {
       return H((x.pool() & 0xffffffff) ^ (x.pool() >> 32) ^ x.ps() ^ x.preferred());
     }
   };
-}
+CEPH_HASH_NAMESPACE_END
 
 
 // ----------------------
@@ -448,7 +450,7 @@ inline ostream& operator<<(ostream& out, const coll_t& c) {
   return out;
 }
 
-namespace __gnu_cxx {
+CEPH_HASH_NAMESPACE_START
   template<> struct hash<coll_t> {
     size_t operator()(const coll_t &c) const { 
       size_t h = 0;
@@ -465,7 +467,7 @@ namespace __gnu_cxx {
       return h;
     }
   };
-}
+CEPH_HASH_NAMESPACE_END
 
 inline ostream& operator<<(ostream& out, const ceph_object_layout &ol)
 {
@@ -719,12 +721,14 @@ struct pg_pool_t {
   enum {
     FLAG_HASHPSPOOL = 1, // hash pg seed and pool together (instead of adding)
     FLAG_FULL       = 2, // pool is full
+    FLAG_DEBUG_FAKE_EC_POOL = 1<<2, // require ReplicatedPG to act like an EC pg
   };
 
   static const char *get_flag_name(int f) {
     switch (f) {
     case FLAG_HASHPSPOOL: return "hashpspool";
     case FLAG_FULL: return "full";
+    case FLAG_DEBUG_FAKE_EC_POOL: return "require_local_rollback";
     default: return "???";
     }
   }
@@ -847,6 +851,12 @@ public:
   void dump(Formatter *f) const;
 
   uint64_t get_flags() const { return flags; }
+
+  /// This method will later return true for ec pools as well
+  bool ec_pool() const {
+    return flags & FLAG_DEBUG_FAKE_EC_POOL;
+  }
+
   unsigned get_type() const { return type; }
   unsigned get_size() const { return size; }
   unsigned get_min_size() const { return min_size; }
@@ -1507,8 +1517,8 @@ struct pg_interval_t {
     const vector<int> &new_up,                  ///< [in] up as of osdmap
     epoch_t same_interval_since,                ///< [in] as of osdmap
     epoch_t last_epoch_clean,                   ///< [in] current
-    std::tr1::shared_ptr<const OSDMap> osdmap,  ///< [in] current map
-    std::tr1::shared_ptr<const OSDMap> lastmap, ///< [in] last map
+    ceph::shared_ptr<const OSDMap> osdmap,  ///< [in] current map
+    ceph::shared_ptr<const OSDMap> lastmap, ///< [in] last map
     int64_t poolid,                             ///< [in] pool for pg
     pg_t pgid,                                  ///< [in] pgid for pg
     map<epoch_t, pg_interval_t> *past_intervals,///< [out] intervals
@@ -1579,6 +1589,100 @@ inline ostream& operator<<(ostream& out, const pg_query_t& q) {
   return out;
 }
 
+class PGBackend;
+class ObjectModDesc {
+  bool can_local_rollback;
+  bool stashed;
+public:
+  class Visitor {
+  public:
+    virtual void append(uint64_t old_offset) {}
+    virtual void setattrs(map<string, boost::optional<bufferlist> > &attrs) {}
+    virtual void rmobject(version_t old_version) {}
+    virtual void create() {}
+    virtual void update_snaps(set<snapid_t> &old_snaps) {}
+    virtual ~Visitor() {}
+  };
+  void visit(Visitor *visitor) const;
+  mutable bufferlist bl;
+  enum ModID {
+    APPEND = 1,
+    SETATTRS = 2,
+    DELETE = 3,
+    CREATE = 4,
+    UPDATE_SNAPS = 5
+  };
+  ObjectModDesc() : can_local_rollback(true), stashed(false) {}
+  void claim(ObjectModDesc &other) {
+    bl.clear();
+    bl.claim(other.bl);
+    can_local_rollback = other.can_local_rollback;
+    stashed = other.stashed;
+  }
+  void append_id(ModID id) {
+    uint8_t _id(id);
+    ::encode(_id, bl);
+  }
+  void append(uint64_t old_size) {
+    if (!can_local_rollback || stashed)
+      return;
+    ENCODE_START(1, 1, bl);
+    append_id(APPEND);
+    ::encode(old_size, bl);
+    ENCODE_FINISH(bl);
+  }
+  void setattrs(map<string, boost::optional<bufferlist> > &old_attrs) {
+    if (!can_local_rollback || stashed)
+      return;
+    ENCODE_START(1, 1, bl);
+    append_id(SETATTRS);
+    ::encode(old_attrs, bl);
+    ENCODE_FINISH(bl);
+  }
+  bool rmobject(version_t deletion_version) {
+    if (!can_local_rollback || stashed)
+      return false;
+    ENCODE_START(1, 1, bl);
+    append_id(DELETE);
+    ::encode(deletion_version, bl);
+    ENCODE_FINISH(bl);
+    stashed = true;
+    return true;
+  }
+  void create() {
+    if (!can_local_rollback || stashed)
+      return;
+    ENCODE_START(1, 1, bl);
+    append_id(CREATE);
+    ENCODE_FINISH(bl);
+  }
+  void update_snaps(set<snapid_t> &old_snaps) {
+    if (!can_local_rollback || stashed)
+      return;
+    ENCODE_START(1, 1, bl);
+    append_id(UPDATE_SNAPS);
+    ::encode(old_snaps, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  // cannot be rolled back
+  void mark_unrollbackable() {
+    can_local_rollback = false;
+    bl.clear();
+  }
+  bool can_rollback() const {
+    return can_local_rollback;
+  }
+  bool empty() const {
+    return can_local_rollback && (bl.length() == 0);
+  }
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ObjectModDesc*>& o);
+};
+WRITE_CLASS_ENCODER(ObjectModDesc)
+
 
 /**
  * pg_log_entry_t - single entry/event in pg log
@@ -1635,6 +1739,9 @@ struct pg_log_entry_t {
   bool invalid_pool; // only when decoding pool-less hobject based entries
 
   uint64_t offset;   // [soft state] my offset on disk
+
+  /// describes state for a locally-rollbackable entry
+  ObjectModDesc mod_desc;
       
   pg_log_entry_t()
     : op(0), user_version(0),
@@ -1701,13 +1808,16 @@ struct pg_log_t {
   eversion_t head;    // newest entry
   eversion_t tail;    // version prior to oldest
 
+  // We can rollback rollback-able entries > can_rollback_to
+  eversion_t can_rollback_to;
+
   list<pg_log_entry_t> log;  // the actual log.
   
   pg_log_t() {}
 
   void clear() {
     eversion_t z;
-    head = tail = z;
+    can_rollback_to = head = tail = z;
     log.clear();
   }
 
@@ -1795,7 +1905,8 @@ WRITE_CLASS_ENCODER(pg_log_t)
 
 inline ostream& operator<<(ostream& out, const pg_log_t& log) 
 {
-  out << "log(" << log.tail << "," << log.head << "]";
+  out << "log((" << log.tail << "," << log.head << "], crt="
+      << log.can_rollback_to << ")";
   return out;
 }
 
@@ -2301,7 +2412,7 @@ struct SnapSetContext {
 
 struct ObjectContext;
 
-typedef std::tr1::shared_ptr<ObjectContext> ObjectContextRef;
+typedef ceph::shared_ptr<ObjectContext> ObjectContextRef;
 
 struct ObjectContext {
   ObjectState obs;
@@ -2519,6 +2630,24 @@ public:
     if (!readers && writers_waiting)
       cond.Signal();
     lock.Unlock();
+  }
+
+  // attr cache
+  map<string, bufferlist> attr_cache;
+
+  void fill_in_setattrs(const set<string> &changing, ObjectModDesc *mod) {
+    map<string, boost::optional<bufferlist> > to_set;
+    for (set<string>::const_iterator i = changing.begin();
+	 i != changing.end();
+	 ++i) {
+      map<string, bufferlist>::iterator iter = attr_cache.find(*i);
+      if (iter != attr_cache.end()) {
+	to_set[*i] = iter->second;
+      } else {
+	to_set[*i];
+      }
+    }
+    mod->setattrs(to_set);
   }
 };
 
@@ -2953,4 +3082,9 @@ struct obj_list_snap_response_t {
 
 WRITE_CLASS_ENCODER(obj_list_snap_response_t)
 
+enum scrub_error_type {
+  CLEAN,
+  DEEP_ERROR,
+  SHALLOW_ERROR
+};
 #endif

@@ -16,10 +16,9 @@
 #ifndef CEPH_MEMSTORE_H
 #define CEPH_MEMSTORE_H
 
-#include <ext/hash_map>
-using namespace __gnu_cxx;
-
 #include "include/assert.h"
+#include "include/unordered_map.h"
+#include "include/memory.h"
 #include "common/Finisher.h"
 #include "common/RWLock.h"
 #include "ObjectStore.h"
@@ -75,10 +74,10 @@ public:
       f->close_section();
     }
   };
-  typedef std::tr1::shared_ptr<Object> ObjectRef;
+  typedef ceph::shared_ptr<Object> ObjectRef;
 
   struct Collection {
-    hash_map<ghobject_t, ObjectRef> object_hash;  ///< for lookup
+    ceph::unordered_map<ghobject_t, ObjectRef> object_hash;  ///< for lookup
     map<ghobject_t, ObjectRef> object_map;        ///< for iteration
     map<string,bufferptr> xattr;
     RWLock lock;   ///< for object_{map,hash}
@@ -89,7 +88,7 @@ public:
     // level.
 
     ObjectRef get_object(ghobject_t oid) {
-      hash_map<ghobject_t,ObjectRef>::iterator o = object_hash.find(oid);
+      ceph::unordered_map<ghobject_t,ObjectRef>::iterator o = object_hash.find(oid);
       if (o == object_hash.end())
 	return ObjectRef();
       return o->second;
@@ -126,7 +125,7 @@ public:
 
     Collection() : lock("MemStore::Collection::lock") {}
   };
-  typedef std::tr1::shared_ptr<Collection> CollectionRef;
+  typedef ceph::shared_ptr<Collection> CollectionRef;
 
 private:
   class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
@@ -175,7 +174,7 @@ private:
   };
 
 
-  hash_map<coll_t, CollectionRef> coll_map;
+  ceph::unordered_map<coll_t, CollectionRef> coll_map;
   RWLock coll_lock;    ///< rwlock to protect coll_map
   Mutex apply_lock;    ///< serialize all updates
 

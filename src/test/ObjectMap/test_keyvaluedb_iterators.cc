@@ -10,7 +10,7 @@
 * License version 2.1, as published by the Free Software
 * Foundation. See file COPYING.
 */
-#include <tr1/memory>
+#include "include/memory.h"
 #include <map>
 #include <set>
 #include <deque>

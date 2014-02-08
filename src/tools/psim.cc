@@ -47,7 +47,8 @@ int main(int argc, char **argv)
       vector<int> osds;
       pg_t pgid = pg_t(l.ol_pgid);
       //pgid.u.ps = f * 4 + b;
-      osdmap.pg_to_osds(pgid, osds);
+      int primary;
+      osdmap.pg_to_osds(pgid, &osds, &primary);
       size[osds.size()]++;
 #if 0
       if (0) {

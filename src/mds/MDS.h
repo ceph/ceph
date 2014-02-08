@@ -316,6 +316,9 @@ class MDS : public Dispatcher {
  public:
 
   int get_req_rate() { return req_rate; }
+  Session *get_session(client_t client) {
+    return sessionmap.get_session(entity_name_t::CLIENT(client.v));
+  }
 
  private:
   bool ms_dispatch(Message *m);

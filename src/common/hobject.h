@@ -35,6 +35,7 @@ struct hobject_t {
   uint32_t hash;
 private:
   bool max;
+  static const int64_t POOL_IS_TEMP = -1;
 public:
   int64_t pool;
   string nspace;
@@ -54,6 +55,14 @@ public:
   }
   bool match(uint32_t bits, uint32_t match) const {
     return match_hash(hash, bits, match);
+  }
+
+  static hobject_t make_temp(const string &name) {
+    hobject_t ret(object_t(name), "", CEPH_NOSNAP, 0, POOL_IS_TEMP, "");
+    return ret;
+  }
+  bool is_temp() const {
+    return pool == POOL_IS_TEMP;
   }
   
   hobject_t() : snap(0), hash(0), max(false), pool(-1) {}
@@ -116,7 +125,7 @@ public:
   /* Do not use when a particular hash function is needed */
   explicit hobject_t(const sobject_t &o) :
     oid(o.oid), snap(o.snap), max(false), pool(-1) {
-    hash = __gnu_cxx::hash<sobject_t>()(o);
+    hash = CEPH_HASH_NAMESPACE::hash<sobject_t>()(o);
   }
 
   // maximum sorted value.
@@ -198,7 +207,7 @@ public:
 };
 WRITE_CLASS_ENCODER(hobject_t)
 
-namespace __gnu_cxx {
+CEPH_HASH_NAMESPACE_START
   template<> struct hash<hobject_t> {
     size_t operator()(const hobject_t &r) const {
       static hash<object_t> H;
@@ -206,7 +215,7 @@ namespace __gnu_cxx {
       return H(r.oid) ^ I(r.snap);
     }
   };
-}
+CEPH_HASH_NAMESPACE_END
 
 ostream& operator<<(ostream& out, const hobject_t& o);
 
@@ -221,7 +230,7 @@ WRITE_CMP_OPERATORS_7(hobject_t,
 		      oid,
 		      snap)
 
-typedef uint64_t gen_t;
+typedef version_t gen_t;
 typedef uint8_t shard_t;
 
 #ifndef UINT8_MAX
@@ -268,6 +277,14 @@ public:
     return generation == NO_GEN && shard_id == NO_SHARD;
   }
 
+  bool is_no_gen() const {
+    return generation == NO_GEN;
+  }
+
+  bool is_no_shard() const {
+    return shard_id == NO_SHARD;
+  }
+
   // maximum sorted value.
   static ghobject_t get_max() {
     ghobject_t h(hobject_t::get_max());
@@ -297,7 +314,7 @@ public:
 };
 WRITE_CLASS_ENCODER(ghobject_t)
 
-namespace __gnu_cxx {
+CEPH_HASH_NAMESPACE_START
   template<> struct hash<ghobject_t> {
     size_t operator()(const ghobject_t &r) const {
       static hash<object_t> H;
@@ -305,7 +322,7 @@ namespace __gnu_cxx {
       return H(r.hobj.oid) ^ I(r.hobj.snap);
     }
   };
-}
+CEPH_HASH_NAMESPACE_END
 
 ostream& operator<<(ostream& out, const ghobject_t& o);
 

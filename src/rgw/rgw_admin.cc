@@ -47,6 +47,7 @@ void _usage()
   cerr << "  user suspend               suspend a user\n";
   cerr << "  user enable                reenable user after suspension\n";
   cerr << "  user check                 check user info\n";
+  cerr << "  user stats                 show user stats as accounted by quota subsystem\n";
   cerr << "  caps add                   add user capabilities\n";
   cerr << "  caps rm                    remove user capabilities\n";
   cerr << "  subuser create             create a new subuser\n" ;
@@ -114,6 +115,7 @@ void _usage()
   cerr << "   --gen-access-key          generate random access key (for S3)\n";
   cerr << "   --gen-secret              generate random secret key\n";
   cerr << "   --key-type=<type>         key type, options are: swift, s3\n";
+  cerr << "   --temp-url-key[-2]=<key>  temp url key\n";
   cerr << "   --access=<access>         Set access permissions for sub-user, should be one\n";
   cerr << "                             of read, write, readwrite, full\n";
   cerr << "   --display-name=<name>\n";
@@ -144,6 +146,8 @@ void _usage()
   cerr << "                             subuser keys\n";
   cerr << "   --purge-objects           remove a bucket's objects before deleting it\n";
   cerr << "                             (NOTE: required to delete a non-empty bucket)\n";
+  cerr << "   --sync-stats              option to 'user stats', update user stats with current\n";
+  cerr << "                             stats reported by user's buckets indexes\n";
   cerr << "   --show-log-entries=<flag> enable/disable dump of log entries on log show\n";
   cerr << "   --show-log-sum=<flag>     enable/disable dump of log summation on log show\n";
   cerr << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
@@ -187,6 +191,7 @@ enum {
   OPT_USER_SUSPEND,
   OPT_USER_ENABLE,
   OPT_USER_CHECK,
+  OPT_USER_STATS,
   OPT_SUBUSER_CREATE,
   OPT_SUBUSER_MODIFY,
   OPT_SUBUSER_RM,
@@ -300,6 +305,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_USER_ENABLE;
     if (strcmp(cmd, "check") == 0)
       return OPT_USER_CHECK;
+    if (strcmp(cmd, "stats") == 0)
+      return OPT_USER_STATS;
   } else if (strcmp(prev_cmd, "subuser") == 0) {
     if (strcmp(cmd, "create") == 0)
       return OPT_SUBUSER_CREATE;
@@ -475,13 +482,13 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
   cout << std::endl;
 }
 
-static void dump_bucket_usage(map<RGWObjCategory, RGWBucketStats>& stats, Formatter *formatter)
+static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, Formatter *formatter)
 {
-  map<RGWObjCategory, RGWBucketStats>::iterator iter;
+  map<RGWObjCategory, RGWStorageStats>::iterator iter;
 
   formatter->open_object_section("usage");
   for (iter = stats.begin(); iter != stats.end(); ++iter) {
-    RGWBucketStats& s = iter->second;
+    RGWStorageStats& s = iter->second;
     const char *cat_name = rgw_obj_category_name(iter->first);
     formatter->open_object_section(cat_name);
     formatter->dump_int("size_kb", s.num_kb);
@@ -501,7 +508,7 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
   if (r < 0)
     return r;
 
-  map<RGWObjCategory, RGWBucketStats> stats;
+  map<RGWObjCategory, RGWStorageStats> stats;
   uint64_t bucket_ver, master_ver;
   string max_marker;
   int ret = store->get_bucket_stats(bucket, &bucket_ver, &master_ver, stats, &max_marker);
@@ -536,10 +543,9 @@ public:
   }
 };
 
-static int init_bucket(string& bucket_name, rgw_bucket& bucket)
+static int init_bucket(string& bucket_name, RGWBucketInfo& bucket_info, rgw_bucket& bucket)
 {
   if (!bucket_name.empty()) {
-    RGWBucketInfo bucket_info;
     int r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL);
     if (r < 0) {
       cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;
@@ -720,6 +726,24 @@ int set_user_bucket_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_st
   return 0;
 }
 
+int set_user_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, int64_t max_size, int64_t max_objects,
+                   bool have_max_size, bool have_max_objects)
+{
+  RGWUserInfo& user_info = op_state.get_user_info();
+
+  set_quota_info(user_info.user_quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
+
+  op_state.set_user_quota(user_info.user_quota);
+
+  string err;
+  int r = user.modify(op_state, &err);
+  if (r < 0) {
+    cerr << "ERROR: failed updating user info: " << cpp_strerror(-r) << ": " << err << std::endl;
+    return -r;
+  }
+  return 0;
+}
+
 int main(int argc, char **argv) 
 {
   vector<const char*> args;
@@ -743,6 +767,8 @@ int main(int argc, char **argv)
   int gen_access_key = 0;
   int gen_secret_key = 0;
   bool set_perm = false;
+  bool set_temp_url_key = false;
+  map<int, string> temp_url_keys;
   string bucket_id;
   Formatter *formatter = NULL;
   int purge_data = false;
@@ -786,6 +812,8 @@ int main(int argc, char **argv)
   int64_t max_size = -1;
   bool have_max_objects = false;
   bool have_max_size = false;
+
+  int sync_stats = false;
 
   std::string val;
   std::ostringstream errs;
@@ -886,6 +914,12 @@ int main(int argc, char **argv)
       access = val;
       perm_mask = rgw_str_to_perm(access.c_str());
       set_perm = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--temp-url-key", (char*)NULL)) {
+      temp_url_keys[0] = val;
+      set_temp_url_key = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--temp-url-key2", "--temp-url-key-2", (char*)NULL)) {
+      temp_url_keys[1] = val;
+      set_temp_url_key = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--bucket-id", (char*)NULL)) {
       bucket_id = val;
       if (bucket_id.empty()) {
@@ -915,6 +949,8 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &fix, NULL, "--fix", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &check_objects, NULL, "--check-objects", (char*)NULL)) {
+     // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &sync_stats, NULL, "--sync-stats", (char*)NULL)) {
      // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
       caps = val;
@@ -1010,7 +1046,7 @@ int main(int argc, char **argv)
   if (raw_storage_op) {
     store = RGWStoreManager::get_raw_storage(g_ceph_context);
   } else {
-    store = RGWStoreManager::get_storage(g_ceph_context, false);
+    store = RGWStoreManager::get_storage(g_ceph_context, false, false);
   }
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
@@ -1263,6 +1299,13 @@ int main(int argc, char **argv)
   if (set_perm)
     user_op.set_perm(perm_mask);
 
+  if (set_temp_url_key) {
+    map<int, string>::iterator iter = temp_url_keys.begin();
+    for (; iter != temp_url_keys.end(); ++iter) {
+      user_op.set_temp_url_key(iter->second, iter->first);
+    }
+  }
+
   if (!op_mask_str.empty()) {
     uint32_t op_mask;
     int ret = rgw_parse_op_type_list(op_mask_str, &op_mask);
@@ -1425,7 +1468,8 @@ int main(int argc, char **argv)
     if (bucket_name.empty()) {
       RGWBucketAdminOp::info(store, bucket_op, f);
     } else {
-     int ret = init_bucket(bucket_name, bucket);
+      RGWBucketInfo bucket_info;
+      int ret = init_bucket(bucket_name, bucket_info, bucket);
       if (ret < 0) {
         cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -1749,12 +1793,13 @@ next:
   }
 
   if (opt_cmd == OPT_OBJECT_RM) {
-    int ret = init_bucket(bucket_name, bucket);
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(bucket_name, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    ret = rgw_remove_object(store, bucket, object);
+    ret = rgw_remove_object(store, bucket_info.owner, bucket, object);
 
     if (ret < 0) {
       cerr << "ERROR: object remove returned: " << cpp_strerror(-ret) << std::endl;
@@ -1763,7 +1808,8 @@ next:
   }
 
   if (opt_cmd == OPT_OBJECT_UNLINK) {
-    int ret = init_bucket(bucket_name, bucket);
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(bucket_name, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -1778,7 +1824,8 @@ next:
   }
 
   if (opt_cmd == OPT_OBJECT_STAT) {
-    int ret = init_bucket(bucket_name, bucket);
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(bucket_name, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -1883,6 +1930,38 @@ next:
 
   if (opt_cmd == OPT_USER_CHECK) {
     check_bad_user_bucket_mapping(store, user_id, fix);
+  }
+
+  if (opt_cmd == OPT_USER_STATS) {
+    if (sync_stats) {
+      if (!bucket_name.empty()) {
+        int ret = rgw_bucket_sync_user_stats(store, bucket_name);
+        if (ret < 0) {
+          cerr << "ERROR: could not sync bucket stats: " << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+      } else {
+        int ret = rgw_user_sync_all_stats(store, user_id);
+        if (ret < 0) {
+          cerr << "ERROR: failed to sync user stats: " << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+      }
+    }
+
+    if (user_id.empty()) {
+      cerr << "ERROR: uid not specified" << std::endl;
+      return EINVAL;
+    }
+    cls_user_header header;
+    int ret = store->cls_user_get_header(user_id, &header);
+    if (ret < 0) {
+      cerr << "ERROR: can't read user header: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    encode_json("header", header, formatter);
+    formatter->flush(cout);
   }
 
   if (opt_cmd == OPT_METADATA_GET) {
@@ -2029,7 +2108,8 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return -EINVAL;
     }
-    int ret = init_bucket(bucket_name, bucket);
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(bucket_name, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2068,7 +2148,8 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return -EINVAL;
     }
-    int ret = init_bucket(bucket_name, bucket);
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(bucket_name, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2248,7 +2329,8 @@ next:
         cerr << "ERROR: bucket not specified" << std::endl;
         return -EINVAL;
       }
-      int ret = init_bucket(bucket_name, bucket);
+      RGWBucketInfo bucket_info;
+      int ret = init_bucket(bucket_name, bucket_info, bucket);
       if (ret < 0) {
         cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -2298,7 +2380,8 @@ next:
         cerr << "ERROR: bucket not specified" << std::endl;
         return -EINVAL;
       }
-      int ret = init_bucket(bucket_name, bucket);
+      RGWBucketInfo bucket_info;
+      int ret = init_bucket(bucket_name, bucket_info, bucket);
       if (ret < 0) {
         cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -2326,12 +2409,16 @@ next:
       }
       set_bucket_quota(store, opt_cmd, bucket_name, max_size, max_objects, have_max_size, have_max_objects);
     } else if (!user_id.empty()) {
-      if (quota_scope != "bucket") {
-        cerr << "ERROR: only bucket-level user quota can be handled. Please specify --quota-scope=bucket" << std::endl;
+      if (quota_scope == "bucket") {
+        set_user_bucket_quota(opt_cmd, user, user_op, max_size, max_objects, have_max_size, have_max_objects);
+      } else if (quota_scope == "user") {
+        set_user_quota(opt_cmd, user, user_op, max_size, max_objects, have_max_size, have_max_objects);
+      } else {
+        cerr << "ERROR: invalid quota scope specification. Please specify either --quota-scope=bucket, or --quota-scope=user" << std::endl;
         return EINVAL;
       }
-      set_user_bucket_quota(opt_cmd, user, user_op, max_size, max_objects, have_max_size, have_max_objects);
     }
   }
+
   return 0;
 }

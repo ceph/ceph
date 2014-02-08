@@ -26,9 +26,12 @@ public:
 			int objects,
 			map<TestOpType, unsigned int> op_weights,
 			TestOpStat *stats,
-			int max_seconds) :
-    m_nextop(NULL), m_op(0), m_ops(ops), m_seconds(max_seconds), m_objects(objects), m_stats(stats),
-    m_total_weight(0)
+			int max_seconds,
+			bool ec_pool) :
+    m_nextop(NULL), m_op(0), m_ops(ops), m_seconds(max_seconds),
+    m_objects(objects), m_stats(stats),
+    m_total_weight(0),
+    m_ec_pool(ec_pool)
   {
     m_start = time(0);
     for (map<TestOpType, unsigned int>::const_iterator it = op_weights.begin();
@@ -50,7 +53,11 @@ public:
       oid << m_op;
       cout << m_op << ": write initial oid " << oid.str() << std::endl;
       context.oid_not_flushing.insert(oid.str());
-      return new WriteOp(m_op, &context, oid.str());
+      if (m_ec_pool) {
+	return new WriteOp(m_op, &context, oid.str(), true);
+      } else {
+	return new WriteOp(m_op, &context, oid.str(), false);
+      }
     } else if (m_op >= m_ops) {
       return NULL;
     }
@@ -97,7 +104,7 @@ private:
       oid = *(rand_choose(context.oid_not_in_use));
       cout << m_op << ": " << "write oid " << oid << " current snap is "
 	   << context.current_snap << std::endl;
-      return new WriteOp(m_op, &context, oid, m_stats);
+      return new WriteOp(m_op, &context, oid, false, m_stats);
 
     case TEST_OP_DELETE:
       oid = *(rand_choose(context.oid_not_in_use));
@@ -140,12 +147,6 @@ private:
       cout << m_op << ": " << "rmattr oid " << oid
 	   << " current snap is " << context.current_snap << std::endl;
       return new RemoveAttrsOp(m_op, &context, oid, m_stats);
-
-    case TEST_OP_TMAPPUT:
-      oid = *(rand_choose(context.oid_not_in_use));
-      cout << m_op << ": " << "tmapput oid " << oid
-	   << " current snap is " << context.current_snap << std::endl;
-      return new TmapPutOp(m_op, &context, oid, m_stats);
 
     case TEST_OP_WATCH:
       oid = *(rand_choose(context.oid_not_in_use));
@@ -200,6 +201,12 @@ private:
 	return new CacheEvictOp(m_op, &context, oid, m_stats);
       }
 
+    case TEST_OP_APPEND:
+      oid = *(rand_choose(context.oid_not_in_use));
+      cout << "append oid " << oid << " current snap is "
+	   << context.current_snap << std::endl;
+      return new WriteOp(m_op, &context, oid, true, m_stats);
+
     default:
       cerr << m_op << ": Invalid op type " << type << std::endl;
       assert(0);
@@ -215,6 +222,7 @@ private:
   TestOpStat *m_stats;
   map<TestOpType, unsigned int> m_weight_sums;
   unsigned int m_total_weight;
+  bool m_ec_pool;
 };
 
 int main(int argc, char **argv)
@@ -229,29 +237,31 @@ int main(int argc, char **argv)
   struct {
     TestOpType op;
     const char *name;
+    bool ec_pool_valid;
   } op_types[] = {
-    { TEST_OP_READ, "read" },
-    { TEST_OP_WRITE, "write" },
-    { TEST_OP_DELETE, "delete" },
-    { TEST_OP_SNAP_CREATE, "snap_create" },
-    { TEST_OP_SNAP_REMOVE, "snap_remove" },
-    { TEST_OP_ROLLBACK, "rollback" },
-    { TEST_OP_SETATTR, "setattr" },
-    { TEST_OP_RMATTR, "rmattr" },
-    { TEST_OP_TMAPPUT, "tmapput" },
-    { TEST_OP_WATCH, "watch" },
-    { TEST_OP_COPY_FROM, "copy_from" },
-    { TEST_OP_HIT_SET_LIST, "hit_set_list" },
-    { TEST_OP_IS_DIRTY, "is_dirty" },
-    { TEST_OP_UNDIRTY, "undirty" },
-    { TEST_OP_CACHE_FLUSH, "cache_flush" },
-    { TEST_OP_CACHE_TRY_FLUSH, "cache_try_flush" },
-    { TEST_OP_CACHE_EVICT, "cache_evict" },
+    { TEST_OP_READ, "read", true },
+    { TEST_OP_WRITE, "write", false },
+    { TEST_OP_DELETE, "delete", true },
+    { TEST_OP_SNAP_CREATE, "snap_create", true },
+    { TEST_OP_SNAP_REMOVE, "snap_remove", true },
+    { TEST_OP_ROLLBACK, "rollback", true },
+    { TEST_OP_SETATTR, "setattr", true },
+    { TEST_OP_RMATTR, "rmattr", true },
+    { TEST_OP_WATCH, "watch", true },
+    { TEST_OP_COPY_FROM, "copy_from", true },
+    { TEST_OP_HIT_SET_LIST, "hit_set_list", true },
+    { TEST_OP_IS_DIRTY, "is_dirty", true },
+    { TEST_OP_UNDIRTY, "undirty", true },
+    { TEST_OP_CACHE_FLUSH, "cache_flush", true },
+    { TEST_OP_CACHE_TRY_FLUSH, "cache_try_flush", true },
+    { TEST_OP_CACHE_EVICT, "cache_evict", true },
+    { TEST_OP_APPEND, "append", true },
     { TEST_OP_READ /* grr */, NULL },
   };
 
   map<TestOpType, unsigned int> op_weights;
   string pool_name = "data";
+  bool ec_pool = false;
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--max-ops") == 0)
@@ -270,7 +280,13 @@ int main(int argc, char **argv)
       min_stride_size = atoi(argv[++i]);
     else if (strcmp(argv[i], "--max-stride-size") == 0)
       max_stride_size = atoi(argv[++i]);
-    else if (strcmp(argv[i], "--op") == 0) {
+    else if (strcmp(argv[i], "--ec-pool") == 0) {
+      if (op_weights.size()) {
+	cerr << "--ec-pool must be specified prior to any ops" << std::endl;
+	exit(1);
+      }
+      ec_pool = true;
+    } else if (strcmp(argv[i], "--op") == 0) {
       i++;
       int j;
       for (j = 0; op_types[j].name; ++j) {
@@ -286,9 +302,15 @@ int main(int argc, char **argv)
       if (weight < 0) {
 	cerr << "Weights must be nonnegative." << std::endl;
 	return 1;
+      } else if (weight > 0) {
+	if (ec_pool && !op_types[j].ec_pool_valid) {
+	  cerr << "Error: cannot use op type " << op_types[j].name
+	       << " with --ec-pool" << std::endl;
+	  exit(1);
+	}
+	cout << "adding op weight " << op_types[j].name << " -> " << weight << std::endl;
+	op_weights.insert(pair<TestOpType, unsigned int>(op_types[j].op, weight));
       }
-      cout << "adding op weight " << op_types[j].name << " -> " << weight << std::endl;
-      op_weights.insert(pair<TestOpType, unsigned int>(op_types[j].op, weight));
     } else {
       cerr << "unknown arg " << argv[i] << std::endl;
       //usage();
@@ -335,12 +357,20 @@ int main(int argc, char **argv)
   }
 
   char *id = getenv("CEPH_CLIENT_ID");
-  VarLenGenerator cont_gen(size, min_stride_size, max_stride_size);
-  RadosTestContext context(pool_name, max_in_flight, cont_gen, id);
+  RadosTestContext context(
+    pool_name,
+    max_in_flight,
+    size,
+    min_stride_size,
+    max_stride_size,
+    ec_pool,
+    id);
 
   TestOpStat stats;
-  WeightedTestGenerator gen = WeightedTestGenerator(ops, objects,
-						    op_weights, &stats, max_seconds);
+  WeightedTestGenerator gen = WeightedTestGenerator(
+    ops, objects,
+    op_weights, &stats, max_seconds,
+    ec_pool);
   int r = context.init();
   if (r < 0) {
     cerr << "Error initializing rados test context: "

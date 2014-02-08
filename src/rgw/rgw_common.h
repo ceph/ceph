@@ -32,6 +32,7 @@
 #include "rgw_quota.h"
 #include "rgw_string.h"
 #include "cls/version/cls_version_types.h"
+#include "cls/user/cls_user_types.h"
 #include "include/rados/librados.hpp"
 
 using namespace std;
@@ -434,11 +435,13 @@ struct RGWUserInfo
   string default_placement;
   list<string> placement_tags;
   RGWQuotaInfo bucket_quota;
+  map<int, string> temp_url_keys;
+  RGWQuotaInfo user_quota;
 
   RGWUserInfo() : auid(0), suspended(0), max_buckets(RGW_DEFAULT_MAX_BUCKETS), op_mask(RGW_OP_TYPE_ALL), system(0) {}
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(14, 9, bl);
+     ENCODE_START(16, 9, bl);
      ::encode(auid, bl);
      string access_key;
      string secret_key;
@@ -474,10 +477,12 @@ struct RGWUserInfo
      ::encode(default_placement, bl);
      ::encode(placement_tags, bl);
      ::encode(bucket_quota, bl);
+     ::encode(temp_url_keys, bl);
+     ::encode(user_quota, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(13, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(16, 9, 9, bl);
      if (struct_v >= 2) ::decode(auid, bl);
      else auid = CEPH_AUTH_UID_DEFAULT;
      string access_key;
@@ -533,6 +538,12 @@ struct RGWUserInfo
     if (struct_v >= 14) {
       ::decode(bucket_quota, bl);
     }
+    if (struct_v >= 15) {
+     ::decode(temp_url_keys, bl);
+    }
+    if (struct_v >= 16) {
+      ::decode(user_quota, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -563,6 +574,13 @@ struct rgw_bucket {
                     */
 
   rgw_bucket() { }
+  rgw_bucket(const cls_user_bucket& b) {
+    name = b.name;
+    data_pool = b.data_pool;
+    index_pool = b.index_pool;
+    marker = b.marker;
+    bucket_id = b.bucket_id;
+  }
   rgw_bucket(const char *n) : name(n) {
     assert(*n == '.'); // only rgw private buckets should be initialized without pool
     data_pool = index_pool = n;
@@ -570,6 +588,14 @@ struct rgw_bucket {
   }
   rgw_bucket(const char *n, const char *dp, const char *ip, const char *m, const char *id, const char *h) :
     name(n), data_pool(dp), index_pool(ip), marker(m), bucket_id(id) {}
+
+  void convert(cls_user_bucket *b) {
+    b->name = name;
+    b->data_pool = data_pool;
+    b->index_pool = index_pool;
+    b->marker = marker;
+    b->bucket_id = bucket_id;
+  }
 
   void clear() {
     name = "";
@@ -771,14 +797,14 @@ struct RGWBucketEntryPoint
 };
 WRITE_CLASS_ENCODER(RGWBucketEntryPoint)
 
-struct RGWBucketStats
+struct RGWStorageStats
 {
   RGWObjCategory category;
   uint64_t num_kb;
   uint64_t num_kb_rounded;
   uint64_t num_objects;
 
-  RGWBucketStats() : num_kb(0), num_kb_rounded(0), num_objects(0) {}
+  RGWStorageStats() : category(RGW_OBJ_CATEGORY_NONE), num_kb(0), num_kb_rounded(0), num_objects(0) {}
 };
 
 struct req_state;
@@ -903,6 +929,22 @@ struct RGWBucketEnt {
   uint64_t count;
 
   RGWBucketEnt() : size(0), size_rounded(0), creation_time(0), count(0) {}
+
+  RGWBucketEnt(const cls_user_bucket_entry& e) {
+    bucket = e.bucket;
+    size = e.size;
+    size_rounded = e.size_rounded;
+    creation_time = e.creation_time;
+    count = e.count;
+  }
+
+  void convert(cls_user_bucket_entry *b) {
+    bucket.convert(&b->bucket);
+    b->size = size;
+    b->size_rounded = size_rounded;
+    b->creation_time = creation_time;
+    b->count = count;
+  }
 
   void encode(bufferlist& bl) const {
     ENCODE_START(5, 5, bl);
@@ -1243,6 +1285,11 @@ static inline const char *rgw_obj_category_name(RGWObjCategory category)
 static inline uint64_t rgw_rounded_kb(uint64_t bytes)
 {
   return (bytes + 1023) / 1024;
+}
+
+static inline uint64_t rgw_rounded_objsize_kb(uint64_t bytes)
+{
+  return ((bytes + 4095) & ~4095) / 1024;
 }
 
 extern string rgw_string_unquote(const string& s);

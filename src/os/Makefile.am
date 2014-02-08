@@ -1,6 +1,7 @@
 libos_la_SOURCES = \
 	os/chain_xattr.cc \
 	os/DBObjectMap.cc \
+	os/GenericObjectMap.cc \
 	os/FileJournal.cc \
 	os/FileStore.cc \
 	os/FlatIndex.cc \
@@ -11,6 +12,7 @@ libos_la_SOURCES = \
 	os/LevelDBStore.cc \
 	os/LFNIndex.cc \
 	os/MemStore.cc \
+	os/KeyValueStore.cc \
 	os/ObjectStore.cc \
 	os/WBThrottle.cc \
 	common/TrackedOp.cc
@@ -31,6 +33,7 @@ noinst_HEADERS += \
 	os/BtrfsFileStoreBackend.h \
 	os/CollectionIndex.h \
 	os/DBObjectMap.h \
+	os/GenericObjectMap.h \
 	os/FileJournal.h \
 	os/FileStore.h \
 	os/FlatIndex.h \
@@ -44,6 +47,7 @@ noinst_HEADERS += \
 	os/LevelDBStore.h \
 	os/LFNIndex.h \
 	os/MemStore.h \
+	os/KeyValueStore.h \
 	os/ObjectMap.h \
 	os/ObjectStore.h \
 	os/SequencerPosition.h \

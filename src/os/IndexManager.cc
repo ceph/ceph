@@ -12,7 +12,7 @@
  * 
  */
 
-#include <tr1/memory>
+#include "include/memory.h"
 #include <map>
 
 #if defined(__FreeBSD__)

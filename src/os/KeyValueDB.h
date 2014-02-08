@@ -7,7 +7,7 @@
 #include <set>
 #include <map>
 #include <string>
-#include <tr1/memory>
+#include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
 #include "ObjectMap.h"
 
@@ -62,7 +62,11 @@ public:
 
     virtual ~TransactionImpl() {};
   };
-  typedef std::tr1::shared_ptr< TransactionImpl > Transaction;
+  typedef ceph::shared_ptr< TransactionImpl > Transaction;
+
+  virtual int init() = 0;
+  virtual int open(ostream &out) = 0;
+  virtual int create_and_open(ostream &out) = 0;
 
   virtual Transaction get_transaction() = 0;
   virtual int submit_transaction(Transaction) = 0;
@@ -94,7 +98,7 @@ public:
     virtual int status() = 0;
     virtual ~WholeSpaceIteratorImpl() { }
   };
-  typedef std::tr1::shared_ptr< WholeSpaceIteratorImpl > WholeSpaceIterator;
+  typedef ceph::shared_ptr< WholeSpaceIteratorImpl > WholeSpaceIterator;
 
   class IteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
     const string prefix;
@@ -143,14 +147,14 @@ public:
     }
   };
 
-  typedef std::tr1::shared_ptr< IteratorImpl > Iterator;
+  typedef ceph::shared_ptr< IteratorImpl > Iterator;
 
   WholeSpaceIterator get_iterator() {
     return _get_iterator();
   }
 
   Iterator get_iterator(const string &prefix) {
-    return std::tr1::shared_ptr<IteratorImpl>(
+    return ceph::shared_ptr<IteratorImpl>(
       new IteratorImpl(prefix, get_iterator())
     );
   }
@@ -160,7 +164,7 @@ public:
   }
 
   Iterator get_snapshot_iterator(const string &prefix) {
-    return std::tr1::shared_ptr<IteratorImpl>(
+    return ceph::shared_ptr<IteratorImpl>(
       new IteratorImpl(prefix, get_snapshot_iterator())
     );
   }

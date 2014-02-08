@@ -20,7 +20,7 @@
 #include <map>
 #include <set>
 #include <vector>
-#include <tr1/memory>
+#include "include/memory.h"
 #include <exception>
 
 #include "osd/osd_types.h"
@@ -99,7 +99,7 @@ class LFNIndex : public CollectionIndex {
   /// Path to Index base.
   const string base_path;
   /// For reference counting the collection @see Path
-  std::tr1::weak_ptr<CollectionIndex> self_ref;
+  ceph::weak_ptr<CollectionIndex> self_ref;
 
 protected:
   const uint32_t index_version;
@@ -155,7 +155,7 @@ public:
   virtual ~LFNIndex() {}
 
   /// @see CollectionIndex
-  void set_ref(std::tr1::shared_ptr<CollectionIndex> ref);
+  void set_ref(ceph::shared_ptr<CollectionIndex> ref);
 
   /// @see CollectionIndex
   int init();
@@ -199,14 +199,14 @@ public:
   virtual int _split(
     uint32_t match,                             //< [in] value to match
     uint32_t bits,                              //< [in] bits to check
-    std::tr1::shared_ptr<CollectionIndex> dest  //< [in] destination index
+    ceph::shared_ptr<CollectionIndex> dest  //< [in] destination index
     ) = 0;
   
   /// @see CollectionIndex
   int split(
     uint32_t match,
     uint32_t bits,
-    std::tr1::shared_ptr<CollectionIndex> dest
+    ceph::shared_ptr<CollectionIndex> dest
     ) {
     WRAP_RETRY(
       r = _split(match, bits, dest);

@@ -61,7 +61,7 @@ TEST(FlatIndex, created_unlink) {
   const std::string base_path("PATH");
   EXPECT_EQ(0, ::system("rm -fr PATH"));
   EXPECT_EQ(0, ::mkdir("PATH", 0700));
-  std::tr1::shared_ptr<CollectionIndex> index(new FlatIndex(collection, base_path));
+  ceph::shared_ptr<CollectionIndex> index(new FlatIndex(collection, base_path));
   const std::string key("KEY");
   uint64_t hash = 111;
   uint64_t pool = 222;
@@ -111,7 +111,7 @@ TEST(FlatIndex, collection_list) {
   const std::string object_name("ABC");
   const std::string filename("PATH/" + object_name + "_head");
   EXPECT_EQ(0, ::close(::creat(filename.c_str(), 0600)));
-  std::tr1::shared_ptr<CollectionIndex> index(new FlatIndex(collection, base_path));
+  ceph::shared_ptr<CollectionIndex> index(new FlatIndex(collection, base_path));
   vector<ghobject_t> ls;
   index->collection_list(&ls);
   EXPECT_EQ((unsigned)1, ls.size());

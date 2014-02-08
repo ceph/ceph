@@ -249,8 +249,9 @@ COMMAND("mds set_max_mds " \
 	"name=maxmds,type=CephInt,range=0", \
 	"set max MDS index", "mds", "rw", "cli,rest")
 COMMAND("mds set " \
-	"name=var,type=CephChoices,strings=max_mds|max_file_size " \
-	"name=val,type=CephString", \
+	"name=var,type=CephChoices,strings=max_mds|max_file_size|allow_new_snaps|inline_data " \
+	"name=val,type=CephString "					\
+	"name=confirm,type=CephString,req=false",			\
 	"set mds parameter <var> to <val>", "mds", "rw", "cli,rest")
 COMMAND("mds setmap " \
 	"name=epoch,type=CephInt,range=0", \
@@ -278,15 +279,6 @@ COMMAND("mds compat rm_compat " \
 COMMAND("mds compat rm_incompat " \
 	"name=feature,type=CephInt,range=0", \
 	"remove incompatible feature", "mds", "rw", "cli,rest")
-COMMAND("mds set " \
-        "name=key,type=CephChoices,strings=allow_new_snaps " \
-        "name=sure,type=CephString,req=false", \
-        "set <key>", \
-        "mds", "w", "cli,rest")
-COMMAND("mds unset " \
-        "name=key,type=CephChoices,strings=allow_new_snaps " \
-        "name=sure,type=CephString,req=false", \
-        "unset <key>", "mds", "w", "cli,rest")
 COMMAND("mds add_data_pool " \
 	"name=pool,type=CephString", \
 	"add data pool <pool>", "mds", "rw", "cli,rest")
@@ -519,7 +511,7 @@ COMMAND("osd pool get " \
 	"get pool parameter <var>", "osd", "r", "cli,rest")
 COMMAND("osd pool set " \
 	"name=pool,type=CephPoolname " \
-	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_ruleset|hashpspool|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp " \
+	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_ruleset|hashpspool|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|debug_fake_ec_pool " \
 	"name=val,type=CephString", \
 	"set pool parameter <var> to <val>", "osd", "rw", "cli,rest")
 // 'val' is a CephString because it can include a unit.  Perhaps
@@ -553,7 +545,7 @@ COMMAND("osd tier remove " \
 	"remove the tier <tierpool> from base pool <pool>", "osd", "rw", "cli,rest")
 COMMAND("osd tier cache-mode " \
 	"name=pool,type=CephPoolname " \
-	"name=mode,type=CephChoices,strings=none|writeback|invalidate+forward|readonly", \
+	"name=mode,type=CephChoices,strings=none|writeback|forward|readonly", \
 	"specify the caching mode for cache tier <pool>", "osd", "rw", "cli,rest")
 COMMAND("osd tier set-overlay " \
 	"name=pool,type=CephPoolname " \

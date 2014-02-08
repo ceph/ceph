@@ -9,7 +9,7 @@
 #include <set>
 #include <map>
 #include <string>
-#include <tr1/memory>
+#include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
 #include "leveldb/db.h"
 #include "leveldb/env.h"
@@ -48,13 +48,13 @@ class LevelDBStore : public KeyValueDB {
   CephContext *cct;
   PerfCounters *logger;
   string path;
-  boost::scoped_ptr<leveldb::DB> db;
   boost::scoped_ptr<leveldb::Cache> db_cache;
 #ifdef HAVE_LEVELDB_FILTER_POLICY
   boost::scoped_ptr<const leveldb::FilterPolicy> filterpolicy;
 #endif
+  boost::scoped_ptr<leveldb::DB> db;
 
-  int init(ostream &out, bool create_if_missing);
+  int do_open(ostream &out, bool create_if_missing);
 
   // manage async compactions
   Mutex compact_queue_lock;
@@ -154,13 +154,15 @@ public:
 
   ~LevelDBStore();
 
+  int init();
+
   /// Opens underlying db
   int open(ostream &out) {
-    return init(out, false);
+    return do_open(out, false);
   }
   /// Creates underlying db if missing and opens it
   int create_and_open(ostream &out) {
-    return init(out, true);
+    return do_open(out, true);
   }
 
   void close();
@@ -186,7 +188,7 @@ public:
   };
 
   KeyValueDB::Transaction get_transaction() {
-    return std::tr1::shared_ptr< LevelDBTransactionImpl >(
+    return ceph::shared_ptr< LevelDBTransactionImpl >(
       new LevelDBTransactionImpl(this));
   }
 
@@ -372,7 +374,7 @@ err:
 
 protected:
   WholeSpaceIterator _get_iterator() {
-    return std::tr1::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
+    return ceph::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
       new LevelDBWholeSpaceIteratorImpl(
 	db->NewIterator(leveldb::ReadOptions())
       )
@@ -386,7 +388,7 @@ protected:
     snapshot = db->GetSnapshot();
     options.snapshot = snapshot;
 
-    return std::tr1::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
+    return ceph::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
       new LevelDBSnapshotIteratorImpl(db.get(), snapshot,
 	db->NewIterator(options))
     );

@@ -26,6 +26,37 @@ TEST(Striper, Stripe1)
   ASSERT_EQ(94208u, ex[2].truncate_size);
 }
 
+TEST(Striper, EmptyPartialResult)
+{
+  ceph_file_layout l;
+  memset(&l, 0, sizeof(l));
+
+  l.fl_object_size = 4194304;
+  l.fl_stripe_unit = 4194304;
+  l.fl_stripe_count = 1;
+
+  vector<ObjectExtent> ex;
+  Striper::file_to_extents(g_ceph_context, 1, &l, 725549056, 131072, 72554905600, ex);
+  cout << "ex " << ex << std::endl;
+  ASSERT_EQ(2u, ex.size());
+
+  Striper::StripedReadResult r;
+
+  bufferlist bl;
+  r.add_partial_result(g_ceph_context, bl, ex[1].buffer_extents);
+
+  bufferptr bp(65536);
+  bp.zero();
+  bl.append(bp);
+
+  r.add_partial_result(g_ceph_context, bl, ex[0].buffer_extents);
+
+  bufferlist outbl;
+  r.assemble_result(g_ceph_context, outbl, false);
+
+  ASSERT_EQ(65536u, outbl.length());
+}
+
 
 
 int main(int argc, char **argv)

@@ -155,7 +155,7 @@ public:
   int _split(
     uint32_t match,
     uint32_t bits,
-    std::tr1::shared_ptr<CollectionIndex> dest
+    ceph::shared_ptr<CollectionIndex> dest
     );
 	
 protected:

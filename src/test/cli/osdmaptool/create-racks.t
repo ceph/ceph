@@ -773,23 +773,13 @@
   \tstep chooseleaf firstn 0 type host (esc)
   \tstep emit (esc)
   }
-  rule erasure_ruleset {
-  \truleset 1 (esc)
-  \ttype erasure (esc)
-  \tmin_size 3 (esc)
-  \tmax_size 20 (esc)
-  \tstep set_chooseleaf_tries 5 (esc)
-  \tstep take default (esc)
-  \tstep chooseleaf indep 0 type host (esc)
-  \tstep emit (esc)
-  }
   
   # end crush map
   $ rm oc
   $ osdmaptool --test-map-pg 0.0 om
   osdmaptool: osdmap file 'om'
    parsed '0.0' -> 0.0
-  0.0 raw [] up [] acting []
+  0.0 raw ([], p-1) up ([], p-1) acting ([], p-1)
   $ osdmaptool --print om
   osdmaptool: osdmap file 'om'
   epoch 1

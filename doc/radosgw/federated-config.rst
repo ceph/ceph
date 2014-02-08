@@ -105,6 +105,7 @@ prefer. For example:
 
 - ``.us.rgw.root``
 
+- ``.us-east.domain.rgw``
 - ``.us-east.rgw.root``
 - ``.us-east.rgw.control``
 - ``.us-east.rgw.gc``
@@ -118,6 +119,7 @@ prefer. For example:
 - ``.us-east.users.swift``
 - ``.us-east.users.uid``
 
+- ``.us-west.domain.rgw``
 - ``.us-west.rgw.root``
 - ``.us-west.rgw.control``
 - ``.us-west.rgw.gc``
@@ -256,6 +258,14 @@ Repeat the process for the secondary zone (e.g., ``rgw-us-west.conf``).
    you create the master region and the secondary region.
 
 
+Finally, if you enabled SSL, make sure that you set the port to your SSL port
+(usually 443) and your configuration file includes the following::
+
+	SSLEngine on
+	SSLCertificateFile /etc/apache2/ssl/apache.crt
+	SSLCertificateKeyFile /etc/apache2/ssl/apache.key
+	SetEnv SERVER_PORT_SECURE 443
+
 
 Enable the Configuration
 ------------------------
@@ -382,14 +392,19 @@ Create a Region
 	        { "name": "us-east",
 	          "endpoints": [
 	                "http:\/\/{fqdn}:80\/"],
-	          "log_meta": "false",
-	          "log_data": "false"},
+	          "log_meta": "true",
+	          "log_data": "true"},
 	        { "name": "us-west",
 	          "endpoints": [
 	                "http:\/\/{fqdn}:80\/"],
-	          "log_meta": "false",
-	          "log_data": "false"}],
-	  "placement_targets": [],
+	          "log_meta": "true",
+	          "log_data": "true"}],
+	  "placement_targets": [
+	   {
+	     "name": "default-placement",
+	     "tags": []
+	   }
+	  ],
 	  "default_placement": "default-placement"}
 
 
@@ -436,7 +451,7 @@ Create Zones
    gateway pools. See `Configuration Reference - Zones`_ for additional 
    details on zones. ::
 
-	{ "domain_root": ".us-east.rgw.root",
+	{ "domain_root": ".us-east.domain.rgw",
 	  "control_pool": ".us-east.rgw.control",
 	  "gc_pool": ".us-east.rgw.gc",
 	  "log_pool": ".us-east.log",
@@ -446,7 +461,7 @@ Create Zones
 	  "user_email_pool": ".us-east.users.email",
 	  "user_swift_pool": ".us-east.users.swift",
 	  "user_uid_pool": ".us-east.users.uid",
-	  "system_key": { "access_key": "", "secret_key": ""}
+	  "system_key": { "access_key": "", "secret_key": ""},
 	  "placement_pools": [
 	    { "key": "default-placement",
 	      "val": { "index_pool": ".us-east.rgw.buckets.index",
@@ -515,7 +530,7 @@ the synchronization agents can authenticate with the zones.
    zone users into the ``system_key`` field of your zone configuration 
    infile. ::
 
-	{ "domain_root": ".us-east.rgw",
+	{ "domain_root": ".us-east.domain.rgw",
 	  "control_pool": ".us-east.rgw.control",
 	  "gc_pool": ".us-east.rgw.gc",
 	  "log_pool": ".us-east.log",
@@ -777,7 +792,7 @@ unified namespace across the cluster. The master zone of the master region is
 the source for the master zone of the secondary region and it gets selected
 automatically.
 
-.. image:: ../images/region-zone-sync.png
+.. image:: ../images/region-sync.png
    :align: center
 
 Follow the same steps in `Multi-Site Data Replication`_ by specifying the master
