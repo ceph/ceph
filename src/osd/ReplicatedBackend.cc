@@ -654,6 +654,84 @@ void ReplicatedBackend::sub_op_modify_reply(OpRequestRef op)
   }
 }
 
+void ReplicatedBackend::be_deep_scrub(
+  const hobject_t &poid,
+  ScrubMap::object &o,
+  ThreadPool::TPHandle &handle) {
+  bufferhash h, oh;
+  bufferlist bl, hdrbl;
+  int r;
+  __u64 pos = 0;
+  while ( (r = store->read(
+	     coll,
+	     ghobject_t(
+	       poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+	     pos,
+	     cct->_conf->osd_deep_scrub_stride, bl,
+	     true)) > 0) {
+    handle.reset_tp_timeout();
+    h << bl;
+    pos += bl.length();
+    bl.clear();
+  }
+  if (r == -EIO) {
+    dout(25) << "_scan_list  " << poid << " got "
+	     << r << " on read, read_error" << dendl;
+    o.read_error = true;
+  }
+  o.digest = h.digest();
+  o.digest_present = true;
+
+  bl.clear();
+  r = store->omap_get_header(
+    coll,
+    ghobject_t(
+      poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+    &hdrbl, true);
+  if (r == 0) {
+    dout(25) << "CRC header " << string(hdrbl.c_str(), hdrbl.length())
+             << dendl;
+    ::encode(hdrbl, bl);
+    oh << bl;
+    bl.clear();
+  } else if (r == -EIO) {
+    dout(25) << "_scan_list  " << poid << " got "
+	     << r << " on omap header read, read_error" << dendl;
+    o.read_error = true;
+  }
+
+  ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(
+    coll,
+    ghobject_t(
+      poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
+  assert(iter);
+  uint64_t keys_scanned = 0;
+  for (iter->seek_to_first(); iter->valid() ; iter->next()) {
+    if (cct->_conf->osd_scan_list_ping_tp_interval &&
+	(keys_scanned % cct->_conf->osd_scan_list_ping_tp_interval == 0)) {
+      handle.reset_tp_timeout();
+    }
+    ++keys_scanned;
+
+    dout(25) << "CRC key " << iter->key() << " value "
+	     << string(iter->value().c_str(), iter->value().length()) << dendl;
+
+    ::encode(iter->key(), bl);
+    ::encode(iter->value(), bl);
+    oh << bl;
+    bl.clear();
+  }
+  if (iter->status() == -EIO) {
+    dout(25) << "_scan_list  " << poid << " got "
+	     << r << " on omap scan, read_error" << dendl;
+    o.read_error = true;
+  }
+
+  //Store final calculated CRC32 of omap header & key/values
+  o.omap_digest = oh.digest();
+  o.omap_digest_present = true;
+}
+
 /*
  * pg lock may or may not be held
  */
@@ -689,80 +767,7 @@ void ReplicatedBackend::be_scan_list(
 
       // calculate the CRC32 on deep scrubs
       if (deep) {
-        bufferhash h, oh;
-        bufferlist bl, hdrbl;
-        int r;
-        __u64 pos = 0;
-        while ( (
-	    r = store->read(
-	      coll,
-	      ghobject_t(
-		poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-	      pos,
-	      cct->_conf->osd_deep_scrub_stride, bl,
-	      true)) > 0) {
-	  handle.reset_tp_timeout();
-          h << bl;
-          pos += bl.length();
-          bl.clear();
-        }
-	if (r == -EIO) {
-	  dout(25) << "_scan_list  " << poid << " got "
-		   << r << " on read, read_error" << dendl;
-	  o.read_error = true;
-	}
-        o.digest = h.digest();
-        o.digest_present = true;
-
-        bl.clear();
-        r = store->omap_get_header(
-	  coll,
-	  ghobject_t(
-	    poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-	  &hdrbl, true);
-        if (r == 0) {
-          dout(25) << "CRC header " << string(hdrbl.c_str(), hdrbl.length())
-             << dendl;
-          ::encode(hdrbl, bl);
-          oh << bl;
-          bl.clear();
-        } else if (r == -EIO) {
-	  dout(25) << "_scan_list  " << poid << " got "
-		   << r << " on omap header read, read_error" << dendl;
-	  o.read_error = true;
-	}
-
-        ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(
-          coll,
-	  ghobject_t(
-	    poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
-        assert(iter);
-	uint64_t keys_scanned = 0;
-        for (iter->seek_to_first(); iter->valid() ; iter->next()) {
-	  if (cct->_conf->osd_scan_list_ping_tp_interval &&
-	      (keys_scanned % cct->_conf->osd_scan_list_ping_tp_interval == 0)) {
-	    handle.reset_tp_timeout();
-	  }
-	  ++keys_scanned;
-
-          dout(25) << "CRC key " << iter->key() << " value "
-            << string(iter->value().c_str(), iter->value().length()) << dendl;
-
-          ::encode(iter->key(), bl);
-          ::encode(iter->value(), bl);
-          oh << bl;
-          bl.clear();
-        }
-	if (iter->status() == -EIO) {
-	  dout(25) << "_scan_list  " << poid << " got "
-		   << r << " on omap scan, read_error" << dendl;
-	  o.read_error = true;
-	  break;
-	}
-
-        //Store final calculated CRC32 of omap header & key/values
-        o.omap_digest = oh.digest();
-        o.omap_digest_present = true;
+	be_deep_scrub(*p, o, handle);
       }
 
       dout(25) << "_scan_list  " << poid << dendl;
