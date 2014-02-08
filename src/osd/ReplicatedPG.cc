@@ -10186,7 +10186,9 @@ void ReplicatedPG::agent_setup()
 {
   assert(is_locked());
   if (!is_primary() ||
-      pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE) {
+      pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE ||
+      pool.info.tier_of < 0 ||
+      !get_osdmap()->have_pg_pool(pool.info.tier_of)) {
     agent_clear();
     return;
   }
