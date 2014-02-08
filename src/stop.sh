@@ -74,3 +74,5 @@ else
 	[ $stop_osd -eq 1 ] && do_killall ceph-osd
 	[ $stop_rgw -eq 1 ] && do_killall radosgw lt-radosgw apache2
 fi
+
+exit 0
