@@ -16,18 +16,18 @@
 #include <iostream>
 #include <fstream>
 #include <set>
-#include "os/FileStore.h"
+#include "os/ObjectStore.h"
 #include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
 
-#include "TestFileStoreState.h"
+#include "TestObjectStoreState.h"
 
 typedef boost::mt11213b rngen_t;
 
-class DeterministicOpSequence : public TestFileStoreState {
+class DeterministicOpSequence : public TestObjectStoreState {
  public:
-  DeterministicOpSequence(FileStore *store, std::string status = std::string());
+  DeterministicOpSequence(ObjectStore *store, std::string status = std::string());
   virtual ~DeterministicOpSequence();
 
   virtual void generate(int seed, int num_txs);

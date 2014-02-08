@@ -16,23 +16,23 @@
 #include <time.h>
 #include <stdlib.h>
 #include <signal.h>
-#include "os/FileStore.h"
+#include "os/ObjectStore.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "common/debug.h"
 #include <boost/scoped_ptr.hpp>
 #include <boost/lexical_cast.hpp>
-#include "TestFileStoreState.h"
+#include "TestObjectStoreState.h"
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout << "ceph_test_filestore_state "
 
-const coll_t TestFileStoreState::META_COLL("meta");
-const coll_t TestFileStoreState::TEMP_COLL("temp");
+const coll_t TestObjectStoreState::META_COLL("meta");
+const coll_t TestObjectStoreState::TEMP_COLL("temp");
 
-void TestFileStoreState::init(int colls, int objs)
+void TestObjectStoreState::init(int colls, int objs)
 {
   dout(5) << "init " << colls << " colls " << objs << " objs" << dendl;
 
@@ -77,7 +77,7 @@ void TestFileStoreState::init(int colls, int objs)
   dout(5) << "init finished" << dendl;
 }
 
-TestFileStoreState::coll_entry_t *TestFileStoreState::coll_create(int id)
+TestObjectStoreState::coll_entry_t *TestObjectStoreState::coll_create(int id)
 {
   char buf[100];
   char meta_buf[100];
@@ -88,8 +88,8 @@ TestFileStoreState::coll_entry_t *TestFileStoreState::coll_create(int id)
   return (new coll_entry_t(id, buf, meta_buf));
 }
 
-TestFileStoreState::coll_entry_t*
-TestFileStoreState::get_coll(int key, bool erase)
+TestObjectStoreState::coll_entry_t*
+TestObjectStoreState::get_coll(int key, bool erase)
 {
   dout(5) << "get_coll id " << key << dendl;
 
@@ -115,8 +115,8 @@ TestFileStoreState::get_coll(int key, bool erase)
   return entry;
 }
 
-TestFileStoreState::coll_entry_t*
-TestFileStoreState::get_coll_at(int pos, bool erase)
+TestObjectStoreState::coll_entry_t*
+TestObjectStoreState::get_coll_at(int pos, bool erase)
 {
   dout(5) << "get_coll_at pos " << pos << dendl;
 
@@ -147,7 +147,7 @@ TestFileStoreState::get_coll_at(int pos, bool erase)
   return entry;
 }
 
-TestFileStoreState::coll_entry_t::~coll_entry_t()
+TestObjectStoreState::coll_entry_t::~coll_entry_t()
 {
   if (m_objects.size() > 0) {
     map<int, hobject_t*>::iterator it = m_objects.begin();
@@ -161,14 +161,14 @@ TestFileStoreState::coll_entry_t::~coll_entry_t()
   }
 }
 
-bool TestFileStoreState::coll_entry_t::check_for_obj(int id)
+bool TestObjectStoreState::coll_entry_t::check_for_obj(int id)
 {
   if (m_objects.count(id))
     return true;
   return false;
 }
 
-hobject_t *TestFileStoreState::coll_entry_t::touch_obj(int id)
+hobject_t *TestObjectStoreState::coll_entry_t::touch_obj(int id)
 {
   map<int, hobject_t*>::iterator it = m_objects.find(id);
   if (it != m_objects.end()) {
@@ -188,7 +188,7 @@ hobject_t *TestFileStoreState::coll_entry_t::touch_obj(int id)
   return obj;
 }
 
-hobject_t *TestFileStoreState::coll_entry_t::get_obj(int id)
+hobject_t *TestObjectStoreState::coll_entry_t::get_obj(int id)
 {
   return get_obj(id, false);
 }
@@ -198,12 +198,12 @@ hobject_t *TestFileStoreState::coll_entry_t::get_obj(int id)
  * @param id Object's id in the map.
  * @return The object or NULL in case of error.
  */
-hobject_t *TestFileStoreState::coll_entry_t::remove_obj(int id)
+hobject_t *TestObjectStoreState::coll_entry_t::remove_obj(int id)
 {
   return get_obj(id, true);
 }
 
-hobject_t *TestFileStoreState::coll_entry_t::get_obj(int id, bool remove)
+hobject_t *TestObjectStoreState::coll_entry_t::get_obj(int id, bool remove)
 {
   map<int, hobject_t*>::iterator it = m_objects.find(id);
   if (it == m_objects.end()) {
@@ -222,7 +222,7 @@ hobject_t *TestFileStoreState::coll_entry_t::get_obj(int id, bool remove)
   return obj;
 }
 
-hobject_t *TestFileStoreState::coll_entry_t::get_obj_at(int pos, int *key)
+hobject_t *TestObjectStoreState::coll_entry_t::get_obj_at(int pos, int *key)
 {
   return get_obj_at(pos, false, key);
 }
@@ -232,12 +232,12 @@ hobject_t *TestFileStoreState::coll_entry_t::get_obj_at(int pos, int *key)
  * @param pos The map's position in which the object lies.
  * @return The object or NULL in case of error.
  */
-hobject_t *TestFileStoreState::coll_entry_t::remove_obj_at(int pos, int *key)
+hobject_t *TestObjectStoreState::coll_entry_t::remove_obj_at(int pos, int *key)
 {
   return get_obj_at(pos, true, key);
 }
 
-hobject_t *TestFileStoreState::coll_entry_t::get_obj_at(int pos,
+hobject_t *TestObjectStoreState::coll_entry_t::get_obj_at(int pos,
     bool remove, int *key)
 {
   if (m_objects.empty()) {
@@ -274,13 +274,13 @@ hobject_t *TestFileStoreState::coll_entry_t::get_obj_at(int pos,
 }
 
 hobject_t*
-TestFileStoreState::coll_entry_t::replace_obj(int id, hobject_t *obj) {
+TestObjectStoreState::coll_entry_t::replace_obj(int id, hobject_t *obj) {
   hobject_t *old_obj = remove_obj(id);
   m_objects.insert(make_pair(id, obj));
   return old_obj;
 }
 
-int TestFileStoreState::coll_entry_t::get_random_obj_id(rngen_t& gen)
+int TestObjectStoreState::coll_entry_t::get_random_obj_id(rngen_t& gen)
 {
   ceph_assert(!m_objects.empty());
 
