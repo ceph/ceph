@@ -126,11 +126,11 @@ TEST(pg_interval_t, check_new_interval)
   //
   int osd_id = 1;
   epoch_t epoch = 40;
-  std::tr1::shared_ptr<OSDMap> osdmap(new OSDMap());
+  ceph::shared_ptr<OSDMap> osdmap(new OSDMap());
   osdmap->set_max_osd(10);
   osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
   osdmap->set_epoch(epoch);
-  std::tr1::shared_ptr<OSDMap> lastmap(new OSDMap());
+  ceph::shared_ptr<OSDMap> lastmap(new OSDMap());
   lastmap->set_max_osd(10);
   lastmap->set_state(osd_id, CEPH_OSD_EXISTS);
   lastmap->set_epoch(epoch);
@@ -184,7 +184,7 @@ TEST(pg_interval_t, check_new_interval)
   // pool did not exist in the old osdmap
   //
   {
-    std::tr1::shared_ptr<OSDMap> lastmap(new OSDMap());
+    ceph::shared_ptr<OSDMap> lastmap(new OSDMap());
     lastmap->set_max_osd(10);
     lastmap->set_state(osd_id, CEPH_OSD_EXISTS);
     lastmap->set_epoch(epoch);
@@ -272,7 +272,7 @@ TEST(pg_interval_t, check_new_interval)
   // PG is splitting
   //
   {
-    std::tr1::shared_ptr<OSDMap> osdmap(new OSDMap());
+    ceph::shared_ptr<OSDMap> osdmap(new OSDMap());
     osdmap->set_max_osd(10);
     osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
     osdmap->set_epoch(epoch);
@@ -307,7 +307,7 @@ TEST(pg_interval_t, check_new_interval)
   // PG size has changed
   //
   {
-    std::tr1::shared_ptr<OSDMap> osdmap(new OSDMap());
+    ceph::shared_ptr<OSDMap> osdmap(new OSDMap());
     osdmap->set_max_osd(10);
     osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
     osdmap->set_epoch(epoch);
@@ -383,7 +383,7 @@ TEST(pg_interval_t, check_new_interval)
     // The new osdmap is created so that it triggers the
     // bug.
     //
-    std::tr1::shared_ptr<OSDMap> osdmap(new OSDMap());
+    ceph::shared_ptr<OSDMap> osdmap(new OSDMap());
     osdmap->set_max_osd(10);
     osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
     osdmap->set_epoch(epoch);
@@ -455,7 +455,7 @@ TEST(pg_interval_t, check_new_interval)
     new_acting.push_back(osd_id + 4); 
     new_acting.push_back(osd_id + 5); 
 
-    std::tr1::shared_ptr<OSDMap> lastmap(new OSDMap());
+    ceph::shared_ptr<OSDMap> lastmap(new OSDMap());
     lastmap->set_max_osd(10);
     lastmap->set_state(osd_id, CEPH_OSD_EXISTS);
     lastmap->set_epoch(epoch);
@@ -500,7 +500,7 @@ TEST(pg_interval_t, check_new_interval)
 
     epoch_t last_epoch_clean = epoch - 10;
 
-    std::tr1::shared_ptr<OSDMap> lastmap(new OSDMap());
+    ceph::shared_ptr<OSDMap> lastmap(new OSDMap());
     lastmap->set_max_osd(10);
     lastmap->set_state(osd_id, CEPH_OSD_EXISTS);
     lastmap->set_epoch(epoch);

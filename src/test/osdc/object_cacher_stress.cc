@@ -67,7 +67,7 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
   obc.start();
 
   atomic_t outstanding_reads;
-  vector<std::tr1::shared_ptr<op_data> > ops;
+  vector<ceph::shared_ptr<op_data> > ops;
   ObjectCacher::ObjectSet object_set(NULL, 0, 0);
   SnapContext snapc;
   ceph::buffer::ptr bp(max_op_len);
@@ -91,7 +91,7 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
     uint64_t length = random() % (MAX(max_len - 1, 1)) + 1;
     std::string oid = "test" + stringify(random() % num_objs);
     bool is_read = random() < percent_reads * RAND_MAX;
-    std::tr1::shared_ptr<op_data> op(new op_data(oid, offset, length, is_read));
+    ceph::shared_ptr<op_data> op(new op_data(oid, offset, length, is_read));
     ops.push_back(op);
     std::cout << "op " << i << " " << (is_read ? "read" : "write")
 	      << " " << op->extent << "\n";

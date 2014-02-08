@@ -63,7 +63,7 @@ void LFNIndex::maybe_inject_failure()
 
 /* Public methods */
 
-void LFNIndex::set_ref(std::tr1::shared_ptr<CollectionIndex> ref)
+void LFNIndex::set_ref(ceph::shared_ptr<CollectionIndex> ref)
 {
   self_ref = ref;
 }

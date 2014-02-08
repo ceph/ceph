@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-#include <tr1/memory>
+#include "include/memory.h"
 #include <map>
 #include <set>
 #include <boost/scoped_ptr.hpp>
@@ -42,7 +42,7 @@ class PausyAsyncMap : public MapCacher::StoreDriver<string, bufferlist> {
     virtual void operate(map<string, bufferlist> *store) = 0;
     virtual ~_Op() {}
   };
-  typedef std::tr1::shared_ptr<_Op> Op;
+  typedef ceph::shared_ptr<_Op> Op;
   struct Remove : public _Op {
     set<string> to_remove;
     Remove(const set<string> &to_remove) : to_remove(to_remove) {}
@@ -582,7 +582,7 @@ public:
 class SnapMapperTest : public ::testing::Test {
 protected:
   boost::scoped_ptr< PausyAsyncMap > driver;
-  map<pg_t, std::tr1::shared_ptr<MapperVerifier> > mappers;
+  map<pg_t, ceph::shared_ptr<MapperVerifier> > mappers;
   uint32_t pgnum;
 
   virtual void SetUp() {

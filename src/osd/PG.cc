@@ -301,10 +301,16 @@ bool PG::proc_replica_info(int from, const pg_info_t &oinfo)
 }
 
 void PG::remove_snap_mapped_object(
-  ObjectStore::Transaction& t, const hobject_t& soid)
+  ObjectStore::Transaction &t, const hobject_t &soid)
 {
   t.remove(coll, soid);
-  OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
+  clear_object_snap_mapping(&t, soid);
+}
+
+void PG::clear_object_snap_mapping(
+  ObjectStore::Transaction *t, const hobject_t &soid)
+{
+  OSDriver::OSTransaction _t(osdriver.get_transaction(t));
   if (soid.snap < CEPH_MAXSNAP) {
     int r = snap_mapper.remove_oid(
       soid,
@@ -316,24 +322,39 @@ void PG::remove_snap_mapped_object(
   }
 }
 
-void PG::merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, int from)
+void PG::update_object_snap_mapping(
+  ObjectStore::Transaction *t, const hobject_t &soid, const set<snapid_t> &snaps)
 {
-  list<hobject_t> to_remove;
-  pg_log.merge_log(t, oinfo, olog, from, info, to_remove, dirty_info, dirty_big_info);
-  for(list<hobject_t>::iterator i = to_remove.begin();
-      i != to_remove.end();
-      ++i)
-    remove_snap_mapped_object(t, *i);
+  OSDriver::OSTransaction _t(osdriver.get_transaction(t));
+  assert(soid.snap < CEPH_MAXSNAP);
+  int r = snap_mapper.remove_oid(
+    soid,
+    &_t);
+  if (!(r == 0 || r == -ENOENT)) {
+    derr << __func__ << ": remove_oid returned " << cpp_strerror(r) << dendl;
+    assert(0);
+  }
+  snap_mapper.add_oid(
+    soid,
+    snaps,
+    &_t);
+}
+
+void PG::merge_log(
+  ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, int from)
+{
+  PGLogEntryHandler rollbacker;
+  pg_log.merge_log(
+    t, oinfo, olog, from, info, &rollbacker, dirty_info, dirty_big_info);
+  rollbacker.apply(this, &t);
 }
 
 void PG::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead)
 {
-  list<hobject_t> to_remove;
-  pg_log.rewind_divergent_log(t, newhead, info, to_remove, dirty_info, dirty_big_info);
-  for(list<hobject_t>::iterator i = to_remove.begin();
-      i != to_remove.end();
-      ++i)
-    remove_snap_mapped_object(t, *i);
+  PGLogEntryHandler rollbacker;
+  pg_log.rewind_divergent_log(
+    t, newhead, info, &rollbacker, dirty_info, dirty_big_info);
+  rollbacker.apply(this, &t);
 }
 
 /*
@@ -794,7 +815,8 @@ map<int, pg_info_t>::const_iterator PG::find_best_info(const map<int, pg_info_t>
   assert(min_last_update_acceptable != eversion_t::max());
 
   map<int, pg_info_t>::const_iterator best = infos.end();
-  // find osd with newest last_update.  if there are multiples, prefer
+  // find osd with newest last_update (oldest for ec_pool).
+  // if there are multiples, prefer
   //  - a longer tail, if it brings another peer into log contiguity
   //  - the current primary
   for (map<int, pg_info_t>::const_iterator p = infos.begin();
@@ -811,11 +833,20 @@ map<int, pg_info_t>::const_iterator PG::find_best_info(const map<int, pg_info_t>
       continue;
     }
     // Prefer newer last_update
-    if (p->second.last_update < best->second.last_update)
-      continue;
-    if (p->second.last_update > best->second.last_update) {
-      best = p;
-      continue;
+    if (pool.info.ec_pool()) {
+      if (p->second.last_update > best->second.last_update)
+	continue;
+      if (p->second.last_update < best->second.last_update) {
+	best = p;
+	continue;
+      }
+    } else {
+      if (p->second.last_update < best->second.last_update)
+	continue;
+      if (p->second.last_update > best->second.last_update) {
+	best = p;
+	continue;
+      }
     }
     // Prefer longer tail if it brings another peer into contiguity
     for (map<int, pg_info_t>::const_iterator q = infos.begin();
@@ -926,7 +957,15 @@ bool PG::calc_acting(int& newest_update_osd_id, vector<int>& want, vector<int>& 
     if (*i == primary->first)
       continue;
     const pg_info_t &cur_info = all_info.find(*i)->second;
-    if (cur_info.is_incomplete() || cur_info.last_update < primary->second.log_tail) {
+    if (cur_info.is_incomplete() ||
+      cur_info.last_update < MIN(
+	primary->second.log_tail,
+	newest_update_osd->second.log_tail)) {
+      /* We include newest_update_osd->second.log_tail because in GetLog,
+       * we will request logs back to the min last_update over our
+       * acting_backfill set, which will result in our log being extended
+       * as far backwards as necessary to pick up any peers which can
+       * be log recovered by newest_update_osd's log */
       dout(10) << " osd." << *i << " (up) backfill " << cur_info << dendl;
       backfill.push_back(*i);
     } else {
@@ -1191,7 +1230,7 @@ void PG::activate(ObjectStore::Transaction& t,
     }
   }
  
-  if (role == 0) {    // primary state
+  if (is_primary()) {
     last_update_ondisk = info.last_update;
     min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
   }
@@ -1499,7 +1538,7 @@ void PG::_activate_committed(epoch_t e)
   if (dirty_info) {
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     write_if_dirty(*t);
-    int tr = osd->store->queue_transaction(osr.get(), t);
+    int tr = osd->store->queue_transaction_and_cleanup(osr.get(), t);
     assert(tr == 0);
   }
 
@@ -1753,7 +1792,7 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
 
   // There can't be recovery/backfill going on now
   get_osdmap()->pg_to_up_acting_osds(child->info.pgid, child->up, child->acting);
-  child->role = get_osdmap()->calc_pg_role(osd->whoami, child->acting);
+  child->role = OSDMap::calc_pg_role(osd->whoami, child->acting);
   if (get_primary() != child->get_primary())
     child->info.history.same_primary_since = get_osdmap()->get_epoch();
 
@@ -1852,7 +1891,7 @@ void PG::update_heartbeat_peers()
   assert(is_locked());
 
   set<int> new_peers;
-  if (role == 0) {
+  if (is_primary()) {
     for (unsigned i=0; i<acting.size(); i++)
       new_peers.insert(acting[i]);
     for (unsigned i=0; i<up.size(); i++)
@@ -2305,8 +2344,11 @@ void PG::add_log_entry(pg_log_entry_t& e, bufferlist& log_bl)
 
 
 void PG::append_log(
-  vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t)
+  vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t,
+  bool transaction_applied)
 {
+  if (transaction_applied)
+    update_snap_map(logv, t);
   dout(10) << "append_log " << pg_log.get_log() << " " << logv << dendl;
 
   map<string,bufferlist> keys;
@@ -2316,11 +2358,14 @@ void PG::append_log(
     p->offset = 0;
     add_log_entry(*p, keys[p->get_key_name()]);
   }
+  if (!transaction_applied)
+    pg_log.clear_can_rollback_to();
 
   dout(10) << "append_log  adding " << keys.size() << " keys" << dendl;
   t.omap_setkeys(coll_t::META_COLL, log_oid, keys);
-
-  pg_log.trim(trim_to, info);
+  PGLogEntryHandler handler;
+  pg_log.trim(&handler, trim_to, info);
+  handler.apply(this, &t);
 
   // update the local pg, pg log
   dirty_info = true;
@@ -2731,111 +2776,6 @@ void PG::sub_op_scrub_map(OpRequestRef op)
   }
 }
 
-/* 
- * pg lock may or may not be held
- */
-void PG::_scan_list(
-  ScrubMap &map, vector<hobject_t> &ls, bool deep,
-  ThreadPool::TPHandle &handle)
-{
-  dout(10) << "_scan_list scanning " << ls.size() << " objects"
-           << (deep ? " deeply" : "") << dendl;
-  int i = 0;
-  for (vector<hobject_t>::iterator p = ls.begin(); 
-       p != ls.end(); 
-       ++p, i++) {
-    handle.reset_tp_timeout();
-    hobject_t poid = *p;
-
-    struct stat st;
-    int r = osd->store->stat(coll, poid, &st, true);
-    if (r == 0) {
-      ScrubMap::object &o = map.objects[poid];
-      o.size = st.st_size;
-      assert(!o.negative);
-      osd->store->getattrs(coll, poid, o.attrs);
-
-      // calculate the CRC32 on deep scrubs
-      if (deep) {
-        bufferhash h, oh;
-        bufferlist bl, hdrbl;
-        int r;
-        __u64 pos = 0;
-        while ( (r = osd->store->read(coll, poid, pos,
-                                       cct->_conf->osd_deep_scrub_stride, bl,
-		                      true)) > 0) {
-	  handle.reset_tp_timeout();
-          h << bl;
-          pos += bl.length();
-          bl.clear();
-        }
-	if (r == -EIO) {
-	  dout(25) << "_scan_list  " << poid << " got "
-		   << r << " on read, read_error" << dendl;
-	  o.read_error = true;
-	}
-        o.digest = h.digest();
-        o.digest_present = true;
-
-        bl.clear();
-        r = osd->store->omap_get_header(coll, poid, &hdrbl, true);
-        if (r == 0) {
-          dout(25) << "CRC header " << string(hdrbl.c_str(), hdrbl.length())
-             << dendl;
-          ::encode(hdrbl, bl);
-          oh << bl;
-          bl.clear();
-        } else if (r == -EIO) {
-	  dout(25) << "_scan_list  " << poid << " got "
-		   << r << " on omap header read, read_error" << dendl;
-	  o.read_error = true;
-	}
-
-        ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
-          coll, poid);
-        assert(iter);
-	uint64_t keys_scanned = 0;
-        for (iter->seek_to_first(); iter->valid() ; iter->next()) {
-	  if (cct->_conf->osd_scan_list_ping_tp_interval &&
-	      (keys_scanned % cct->_conf->osd_scan_list_ping_tp_interval == 0)) {
-	    handle.reset_tp_timeout();
-	  }
-	  ++keys_scanned;
-
-          dout(25) << "CRC key " << iter->key() << " value "
-            << string(iter->value().c_str(), iter->value().length()) << dendl;
-
-          ::encode(iter->key(), bl);
-          ::encode(iter->value(), bl);
-          oh << bl;
-          bl.clear();
-        }
-	if (iter->status() == -EIO) {
-	  dout(25) << "_scan_list  " << poid << " got "
-		   << r << " on omap scan, read_error" << dendl;
-	  o.read_error = true;
-	  break;
-	}
-
-        //Store final calculated CRC32 of omap header & key/values
-        o.omap_digest = oh.digest();
-        o.omap_digest_present = true;
-      }
-
-      dout(25) << "_scan_list  " << poid << dendl;
-    } else if (r == -ENOENT) {
-      dout(25) << "_scan_list  " << poid << " got " << r << ", skipping" << dendl;
-    } else if (r == -EIO) {
-      dout(25) << "_scan_list  " << poid << " got " << r << ", read_error" << dendl;
-      ScrubMap::object &o = map.objects[poid];
-      o.read_error = true;
-    } else {
-      derr << "_scan_list got: " << cpp_strerror(r) << dendl;
-      assert(0);
-    }
-  }
-}
-
 // send scrub v2-compatible messages (classic scrub)
 void PG::_request_scrub_map_classic(int replica, eversion_t version)
 {
@@ -3098,7 +3038,7 @@ int PG::build_scrub_map_chunk(
     return ret;
   }
 
-  _scan_list(map, ls, deep, handle);
+  get_pgbackend()->be_scan_list(map, ls, deep, handle);
   _scan_snaps(map);
 
   // pg attrs
@@ -3129,7 +3069,7 @@ void PG::build_scrub_map(ScrubMap &map, ThreadPool::TPHandle &handle)
   vector<hobject_t> ls;
   osd->store->collection_list(coll, ls);
 
-  _scan_list(map, ls, false, handle);
+  get_pgbackend()->be_scan_list(map, ls, false, handle);
   lock();
   _scan_snaps(map);
 
@@ -3178,7 +3118,7 @@ void PG::build_inc_scrub_map(
     }
   }
 
-  _scan_list(map, ls, false, handle);
+  get_pgbackend()->be_scan_list(map, ls, false, handle);
   // pg attrs
   osd->store->collection_getattrs(coll, map.attrs);
 }
@@ -3402,6 +3342,7 @@ void PG::scrub(ThreadPool::TPHandle &handle)
  */
 void PG::classic_scrub(ThreadPool::TPHandle &handle)
 {
+  assert(pool.info.type == pg_pool_t::TYPE_REPLICATED);
   if (!scrubber.active) {
     dout(10) << "scrub start" << dendl;
     scrubber.active = true;
@@ -3809,212 +3750,7 @@ bool PG::scrub_gather_replica_maps()
   }
 }
 
-enum PG::error_type PG::_compare_scrub_objects(ScrubMap::object &auth,
-				ScrubMap::object &candidate,
-				ostream &errorstream)
-{
-  enum PG::error_type error = CLEAN;
-  if (candidate.read_error) {
-    // This can occur on stat() of a shallow scrub, but in that case size will
-    // be invalid, and this will be over-ridden below.
-    error = DEEP_ERROR;
-    errorstream << "candidate had a read error";
-  }
-  if (auth.digest_present && candidate.digest_present) {
-    if (auth.digest != candidate.digest) {
-      if (error != CLEAN)
-        errorstream << ", ";
-      error = DEEP_ERROR;
 
-      errorstream << "digest " << candidate.digest
-                  << " != known digest " << auth.digest;
-    }
-  }
-  if (auth.omap_digest_present && candidate.omap_digest_present) {
-    if (auth.omap_digest != candidate.omap_digest) {
-      if (error != CLEAN)
-        errorstream << ", ";
-      error = DEEP_ERROR;
-
-      errorstream << "omap_digest " << candidate.omap_digest
-                  << " != known omap_digest " << auth.omap_digest;
-    }
-  }
-  // Shallow error takes precendence because this will be seen by
-  // both types of scrubs.
-  if (auth.size != candidate.size) {
-    if (error != CLEAN)
-      errorstream << ", ";
-    error = SHALLOW_ERROR;
-    errorstream << "size " << candidate.size 
-		<< " != known size " << auth.size;
-  }
-  for (map<string,bufferptr>::const_iterator i = auth.attrs.begin();
-       i != auth.attrs.end();
-       ++i) {
-    if (!candidate.attrs.count(i->first)) {
-      if (error != CLEAN)
-        errorstream << ", ";
-      error = SHALLOW_ERROR;
-      errorstream << "missing attr " << i->first;
-    } else if (candidate.attrs.find(i->first)->second.cmp(i->second)) {
-      if (error != CLEAN)
-        errorstream << ", ";
-      error = SHALLOW_ERROR;
-      errorstream << "attr value mismatch " << i->first;
-    }
-  }
-  for (map<string,bufferptr>::const_iterator i = candidate.attrs.begin();
-       i != candidate.attrs.end();
-       ++i) {
-    if (!auth.attrs.count(i->first)) {
-      if (error != CLEAN)
-        errorstream << ", ";
-      error = SHALLOW_ERROR;
-      errorstream << "extra attr " << i->first;
-    }
-  }
-  return error;
-}
-
-
-
-map<int, ScrubMap *>::const_iterator PG::_select_auth_object(
-  const hobject_t &obj,
-  const map<int,ScrubMap*> &maps)
-{
-  map<int, ScrubMap *>::const_iterator auth = maps.end();
-  for (map<int, ScrubMap *>::const_iterator j = maps.begin();
-       j != maps.end();
-       ++j) {
-    map<hobject_t, ScrubMap::object>::iterator i =
-      j->second->objects.find(obj);
-    if (i == j->second->objects.end()) {
-      continue;
-    }
-    if (auth == maps.end()) {
-      // Something is better than nothing
-      // TODO: something is NOT better than nothing, do something like
-      // unfound_lost if no valid copies can be found, or just mark unfound
-      auth = j;
-      dout(10) << __func__ << ": selecting osd " << j->first
-	       << " for obj " << obj
-	       << ", auth == maps.end()"
-	       << dendl;
-      continue;
-    }
-    if (i->second.read_error) {
-      // scrub encountered read error, probably corrupt
-      dout(10) << __func__ << ": rejecting osd " << j->first
-	       << " for obj " << obj
-	       << ", read_error"
-	       << dendl;
-      continue;
-    }
-    map<string, bufferptr>::iterator k = i->second.attrs.find(OI_ATTR);
-    if (k == i->second.attrs.end()) {
-      // no object info on object, probably corrupt
-      dout(10) << __func__ << ": rejecting osd " << j->first
-	       << " for obj " << obj
-	       << ", no oi attr"
-	       << dendl;
-      continue;
-    }
-    bufferlist bl;
-    bl.push_back(k->second);
-    object_info_t oi;
-    try {
-      bufferlist::iterator bliter = bl.begin();
-      ::decode(oi, bliter);
-    } catch (...) {
-      dout(10) << __func__ << ": rejecting osd " << j->first
-	       << " for obj " << obj
-	       << ", corrupt oi attr"
-	       << dendl;
-      // invalid object info, probably corrupt
-      continue;
-    }
-    if (oi.size != i->second.size) {
-      // invalid size, probably corrupt
-      dout(10) << __func__ << ": rejecting osd " << j->first
-	       << " for obj " << obj
-	       << ", size mismatch"
-	       << dendl;
-      // invalid object info, probably corrupt
-      continue;
-    }
-    dout(10) << __func__ << ": selecting osd " << j->first
-	     << " for obj " << obj
-	     << dendl;
-    auth = j;
-  }
-  return auth;
-}
-
-void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,  
-			    map<hobject_t, set<int> > &missing,
-			    map<hobject_t, set<int> > &inconsistent,
-			    map<hobject_t, int> &authoritative,
-			    map<hobject_t, set<int> > &invalid_snapcolls,
-			    ostream &errorstream)
-{
-  map<hobject_t,ScrubMap::object>::const_iterator i;
-  map<int, ScrubMap *>::const_iterator j;
-  set<hobject_t> master_set;
-
-  // Construct master set
-  for (j = maps.begin(); j != maps.end(); ++j) {
-    for (i = j->second->objects.begin(); i != j->second->objects.end(); ++i) {
-      master_set.insert(i->first);
-    }
-  }
-
-  // Check maps against master set and each other
-  for (set<hobject_t>::const_iterator k = master_set.begin();
-       k != master_set.end();
-       ++k) {
-    map<int, ScrubMap *>::const_iterator auth = _select_auth_object(*k, maps);
-    assert(auth != maps.end());
-    set<int> cur_missing;
-    set<int> cur_inconsistent;
-    for (j = maps.begin(); j != maps.end(); ++j) {
-      if (j == auth)
-	continue;
-      if (j->second->objects.count(*k)) {
-	// Compare
-	stringstream ss;
-	enum PG::error_type error = _compare_scrub_objects(auth->second->objects[*k],
-	    j->second->objects[*k],
-	    ss);
-        if (error != CLEAN) {
-	  cur_inconsistent.insert(j->first);
-          if (error == SHALLOW_ERROR)
-	    ++scrubber.shallow_errors;
-          else
-	    ++scrubber.deep_errors;
-	  errorstream << info.pgid << " osd." << acting[j->first]
-		      << ": soid " << *k << " " << ss.str() << std::endl;
-	}
-      } else {
-	cur_missing.insert(j->first);
-	++scrubber.shallow_errors;
-	errorstream << info.pgid
-		    << " osd." << acting[j->first] 
-		    << " missing " << *k << std::endl;
-      }
-    }
-    assert(auth != maps.end());
-    if (!cur_missing.empty()) {
-      missing[*k] = cur_missing;
-    }
-    if (!cur_inconsistent.empty()) {
-      inconsistent[*k] = cur_inconsistent;
-    }
-    if (!cur_inconsistent.empty() || !cur_missing.empty()) {
-      authoritative[*k] = auth->first;
-    }
-  }
-}
 
 void PG::scrub_compare_maps() 
 {
@@ -4041,12 +3777,15 @@ void PG::scrub_compare_maps()
       maps[i] = &scrubber.received_maps[acting[i]];
     }
 
-    _compare_scrubmaps(
+    get_pgbackend()->be_compare_scrubmaps(
       maps,
       scrubber.missing,
       scrubber.inconsistent,
       authoritative,
       scrubber.inconsistent_snapcolls,
+      scrubber.shallow_errors,
+      scrubber.deep_errors,
+      info.pgid, acting,
       ss);
     dout(2) << ss.str() << dendl;
 
@@ -4241,7 +3980,7 @@ void PG::scrub_finish()
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     dirty_info = true;
     write_if_dirty(*t);
-    int tr = osd->store->queue_transaction(osr.get(), t);
+    int tr = osd->store->queue_transaction_and_cleanup(osr.get(), t);
     assert(tr == 0);
   }
 
@@ -4501,7 +4240,7 @@ struct FlushState {
     pg->unlock();
   }
 };
-typedef std::tr1::shared_ptr<FlushState> FlushStateRef;
+typedef ceph::shared_ptr<FlushState> FlushStateRef;
 
 void PG::start_flush(ObjectStore::Transaction *t,
 		     list<Context *> *on_applied,
@@ -4529,6 +4268,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
   vector<int> oldacting, oldup;
   int oldrole = get_role();
   int oldprimary = get_primary();
+  bool was_old_primary = is_primary();
   acting.swap(oldacting);
   up.swap(oldup);
 
@@ -4604,7 +4344,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
   actingbackfill.clear();
 
   // reset primary state?
-  if (oldrole == 0 || get_role() == 0)
+  if (was_old_primary || is_primary())
     clear_primary_state();
 
     
@@ -4613,9 +4353,10 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
 
   assert(!deleting);
 
-  if (role != oldrole) {
-    // old primary?
-    if (oldrole == 0) {
+  if (role != oldrole ||
+      was_old_primary != is_primary()) {
+    // did primary change?
+    if (was_old_primary != is_primary()) {
       state_clear(PG_STATE_CLEAN);
       clear_publish_stats();
 	
@@ -4635,7 +4376,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
     requeue_ops(waiting_for_active);
 
     // should we tell the primary we are here?
-    send_notify = (role != 0);
+    send_notify = !is_primary();
       
   } else {
     // no role change.
@@ -4650,7 +4391,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
 	       << dendl;
     } else {
       // primary is the same.
-      if (role == 0) {
+      if (is_primary()) {
 	// i am (still) primary. but my replica set changed.
 	state_clear(PG_STATE_CLEAN);
 	  
@@ -4750,11 +4491,12 @@ ostream& operator<<(ostream& out, const PG& pg)
 
   if (!pg.backfill_targets.empty())
     out << " bft=" << pg.backfill_targets;
+  out << " crt=" << pg.pg_log.get_log().can_rollback_to;
 
   if (pg.last_complete_ondisk != pg.info.last_complete)
     out << " lcod " << pg.last_complete_ondisk;
 
-  if (pg.get_role() == 0) {
+  if (pg.is_primary()) {
     out << " mlcod " << pg.min_last_complete_ondisk;
   }
 
@@ -4819,6 +4561,15 @@ bool PG::can_discard_replica_op(OpRequestRef op)
 {
   T *m = static_cast<T *>(op->get_req());
   assert(m->get_header().type == MSGTYPE);
+
+  /* Mostly, this overlaps with the old_peering_msg
+   * condition.  An important exception is pushes
+   * sent by replicas not in the acting set, since
+   * if such a replica goes down it does not cause
+   * a new interval. */
+  int from = m->get_source().num();
+  if (get_osdmap()->get_down_at(from) >= m->map_epoch)
+    return true;
 
   // same pg?
   //  if pg changes _at all_, we reset and repeer!
@@ -5124,7 +4875,7 @@ boost::statechart::result PG::RecoveryState::Initial::react(const Load& l)
   PG *pg = context< RecoveryMachine >().pg;
 
   // do we tell someone we're here?
-  pg->send_notify = (pg->role != 0);
+  pg->send_notify = (!pg->is_primary());
 
   return transit< Reset >();
 }

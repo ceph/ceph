@@ -8,7 +8,7 @@ using namespace std;
 
 int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask)
 {
-  Mutex::Locker l(lock);
+  RWLock::RLocker l(lock);
 
   map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
   if (iter == cache_map.end()) {
@@ -17,7 +17,18 @@ int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask)
     return -ENOENT;
   }
 
-  touch_lru(name, iter->second.lru_iter);
+  ObjectCacheEntry& entry = iter->second;
+
+  if (lru_counter - entry.lru_promotion_ts > lru_window) {
+    ldout(cct, 20) << "cache get: touching lru, lru_counter=" << lru_counter << " promotion_ts=" << entry.lru_promotion_ts << dendl;
+    lock.unlock();
+    lock.get_write(); /* promote lock to writer */
+
+    /* check again, we might have lost a race here */
+    if (lru_counter - entry.lru_promotion_ts > lru_window) {
+      touch_lru(name, entry, iter->second.lru_iter);
+    }
+  }
 
   ObjectCacheInfo& src = iter->second.info;
   if ((src.flags & mask) != mask) {
@@ -35,7 +46,7 @@ int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask)
 
 void ObjectCache::put(string& name, ObjectCacheInfo& info)
 {
-  Mutex::Locker l(lock);
+  RWLock::WLocker l(lock);
 
   ldout(cct, 10) << "cache put: name=" << name << dendl;
   map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
@@ -48,7 +59,7 @@ void ObjectCache::put(string& name, ObjectCacheInfo& info)
   ObjectCacheEntry& entry = iter->second;
   ObjectCacheInfo& target = entry.info;
 
-  touch_lru(name, entry.lru_iter);
+  touch_lru(name, entry, entry.lru_iter);
 
   target.status = info.status;
 
@@ -93,7 +104,7 @@ void ObjectCache::put(string& name, ObjectCacheInfo& info)
 
 void ObjectCache::remove(string& name)
 {
-  Mutex::Locker l(lock);
+  RWLock::WLocker l(lock);
 
   map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
   if (iter == cache_map.end())
@@ -105,7 +116,7 @@ void ObjectCache::remove(string& name)
   cache_map.erase(iter);
 }
 
-void ObjectCache::touch_lru(string& name, std::list<string>::iterator& lru_iter)
+void ObjectCache::touch_lru(string& name, ObjectCacheEntry& entry, std::list<string>::iterator& lru_iter)
 {
   while (lru_size > (size_t)cct->_conf->rgw_cache_lru_size) {
     list<string>::iterator iter = lru.begin();
@@ -136,6 +147,9 @@ void ObjectCache::touch_lru(string& name, std::list<string>::iterator& lru_iter)
     lru_iter = lru.end();
     --lru_iter;
   }
+
+  lru_counter++;
+  entry.lru_promotion_ts = lru_counter;
 }
 
 void ObjectCache::remove_lru(string& name, std::list<string>::iterator& lru_iter)

@@ -116,7 +116,7 @@ To install Apache with 100-continue, execute the following steps:
 
 	[fastcgi-ceph-basearch]
 	name=FastCGI basearch packages for Ceph
-	baseurl=http://gitbuilder.ceph.com/mod_fastcgi-rpm-centos6-x86_64-basic/ref/master
+	baseurl=http://gitbuilder.ceph.com/mod_fastcgi-rpm-{distro}-x86_64-basic/ref/master
 	enabled=1
 	priority=2
 	gpgcheck=1
@@ -125,7 +125,7 @@ To install Apache with 100-continue, execute the following steps:
 	
 	[fastcgi-ceph-noarch]
 	name=FastCGI noarch packages for Ceph
-	baseurl=http://gitbuilder.ceph.com/mod_fastcgi-rpm-centos6-x86_64-basic/ref/master
+	baseurl=http://gitbuilder.ceph.com/mod_fastcgi-rpm-{distro}-x86_64-basic/ref/master
 	enabled=1
 	priority=2
 	gpgcheck=1
@@ -134,7 +134,7 @@ To install Apache with 100-continue, execute the following steps:
 
 	[fastcgi-ceph-source]
 	name=FastCGI source packages for Ceph
-	baseurl=http://gitbuilder.ceph.com/mod_fastcgi-rpm-centos6-x86_64-basic/ref/master
+	baseurl=http://gitbuilder.ceph.com/mod_fastcgi-rpm-{distro}-x86_64-basic/ref/master
 	enabled=0
 	priority=2
 	gpgcheck=1
@@ -209,7 +209,7 @@ RPM-based Packages
 
 #. Restart Apache so that the foregoing changes take effect.. :: 
 
-	etc/init.d/httpd restart
+	/etc/init.d/httpd restart
 
 .. _RFC 2616, Section 8: http://www.w3.org/Protocols/rfc2616/rfc2616-sec8.html
 .. _gitbuilder.ceph.com: http://gitbuilder.ceph.com
@@ -346,7 +346,7 @@ RPM Packages
 To install the Ceph Object Gateway daemon, execute the
 following:: 
 
-	yum install ceph-radosgw
+	yum install ceph-radosgw ceph
 
 
 To install the Ceph Object Gateway synchronization agent, execute the

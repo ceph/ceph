@@ -246,6 +246,7 @@ check_SCRIPTS += \
 	test/mon/osd-pool-create.sh \
 	test/mon/mkfs.sh \
 	test/ceph-disk.sh \
+	test/mon/mon-handle-forward.sh \
 	test/vstart_wrapped_tests.sh
 
 # target to build but not run the unit tests
@@ -304,6 +305,11 @@ unittest_crush_indep_SOURCES = test/crush/indep.cc
 unittest_crush_indep_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_crush_indep_LDADD = $(LIBCOMMON) -lm $(UNITTEST_LDADD) $(CEPH_CRUSH) $(EXTRALIBS) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_crush_indep
+
+unittest_osdmap_SOURCES = test/osd/TestOSDMap.cc
+unittest_osdmap_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_osdmap_LDADD = $(UNITTEST_LDADD) $(LIBCOMMON) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_osdmap
 
 unittest_workqueue_SOURCES = test/test_workqueue.cc
 unittest_workqueue_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -631,7 +637,7 @@ ceph_test_cls_rgw_meta_LDADD = \
 	-lcurl -luuid -lexpat \
 	libcls_version_client.a libcls_log_client.a \
 	libcls_statelog_client.a libcls_refcount_client.la \
-	libcls_rgw_client.la libcls_lock_client.la
+	libcls_rgw_client.la libcls_user_client.a libcls_lock_client.la
 ceph_test_cls_rgw_meta_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_rgw_meta
 
@@ -642,7 +648,7 @@ ceph_test_cls_rgw_log_LDADD = \
 	-lcurl -luuid -lexpat \
 	libcls_version_client.a libcls_log_client.a \
 	libcls_statelog_client.a libcls_refcount_client.la \
-	libcls_rgw_client.la libcls_lock_client.la
+	libcls_rgw_client.la libcls_user_client.a libcls_lock_client.la
 ceph_test_cls_rgw_log_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_rgw_log
 
@@ -653,7 +659,7 @@ ceph_test_cls_rgw_opstate_LDADD = \
 	-lcurl -luuid -lexpat \
 	libcls_version_client.a libcls_log_client.a \
 	libcls_statelog_client.a libcls_refcount_client.la \
-	libcls_rgw_client.la libcls_lock_client.la
+	libcls_rgw_client.la libcls_user_client.a libcls_lock_client.la
 ceph_test_cls_rgw_opstate_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_rgw_opstate
 endif # WITH_RADOSGW
@@ -758,6 +764,13 @@ ceph_test_rados_api_io_SOURCES = \
 ceph_test_rados_api_io_LDADD = $(LIBRADOS) $(UNITTEST_LDADD)
 ceph_test_rados_api_io_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_io
+
+ceph_test_rados_api_c_write_operations_SOURCES = \
+	test/librados/c_write_operations.cc \
+	test/librados/test.cc
+ceph_test_rados_api_c_write_operations_LDADD = $(LIBRADOS) $(UNITTEST_LDADD)
+ceph_test_rados_api_c_write_operations_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_rados_api_c_write_operations
 
 ceph_test_rados_api_aio_SOURCES = \
 	test/librados/aio.cc \

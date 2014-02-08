@@ -1761,6 +1761,10 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
     // add in any xlocker-only caps (for locks this client is the xlocker for)
     allowed |= xlocker_allowed & in->get_xlocker_mask(it->first);
 
+    if (in->inode.inline_version != CEPH_INLINE_NONE &&
+        !mds->get_session(it->first)->connection->has_feature(CEPH_FEATURE_MDS_INLINE_DATA))
+      allowed &= ~(CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR);
+
     int pending = cap->pending();
     int wanted = cap->wanted();
 
@@ -2718,6 +2722,7 @@ void Locker::_update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *
     utime_t mtime = m->get_mtime();
     utime_t ctime = m->get_ctime();
     uint64_t size = m->get_size();
+    version_t inline_version = m->inline_version;
     
     if (((dirty & CEPH_CAP_FILE_WR) && mtime > pi->mtime) ||
 	((dirty & CEPH_CAP_FILE_EXCL) && mtime != pi->mtime)) {
@@ -2736,6 +2741,12 @@ void Locker::_update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *
 	      << " for " << *in << dendl;
       pi->size = size;
       pi->rstat.rbytes = size;
+    }
+    if (in->inode.is_file() &&
+        (dirty & CEPH_CAP_FILE_WR) &&
+        inline_version > pi->inline_version) {
+      pi->inline_version = inline_version;
+      pi->inline_data = m->inline_data;
     }
     if ((dirty & CEPH_CAP_FILE_EXCL) && atime != pi->atime) {
       dout(7) << "  atime " << pi->atime << " -> " << atime

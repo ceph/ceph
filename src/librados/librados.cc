@@ -3011,3 +3011,132 @@ extern "C" int rados_break_lock(rados_ioctx_t io, const char *o,
 
   return ctx.break_lock(o, name, client, cookie);
 }
+
+extern "C" rados_write_op_t rados_create_write_op()
+{
+  return new (std::nothrow)::ObjectOperation;
+}
+
+extern "C" void rados_release_write_op(rados_write_op_t write_op)
+{
+  delete (::ObjectOperation*)write_op;
+}
+
+extern "C" void rados_write_op_assert_exists(rados_write_op_t write_op)
+{
+  ((::ObjectOperation *)write_op)->stat(NULL, (utime_t *)NULL, NULL);
+}
+
+extern "C" void rados_write_op_cmpxattr(rados_write_op_t write_op,
+                                       const char *name,
+				       uint8_t comparison_operator,
+				       const char *value,
+				       size_t value_len)
+{
+  bufferlist bl;
+  bl.append(value, value_len);
+  ((::ObjectOperation *)write_op)->cmpxattr(name,
+					    comparison_operator,
+					    CEPH_OSD_CMPXATTR_MODE_STRING,
+					    bl);
+}
+
+extern "C" void rados_write_op_setxattr(rados_write_op_t write_op,
+                                       const char *name,
+				       const char *value,
+				       size_t value_len)
+{
+  bufferlist bl;
+  bl.append(value, value_len);
+  ((::ObjectOperation *)write_op)->setxattr(name, bl);
+}
+
+extern "C" void rados_write_op_rmxattr(rados_write_op_t write_op,
+                                       const char *name)
+{
+  bufferlist bl;
+  ((::ObjectOperation *)write_op)->rmxattr(name);
+}
+
+extern "C" void rados_write_op_create(rados_write_op_t write_op,
+                                      int exclusive,
+				      const char* category)
+{
+  ::ObjectOperation *oo = (::ObjectOperation *) write_op;
+  if(category) {
+    std::string cpp_category = category;
+    oo->create(exclusive, category);
+  } else {
+    oo->create(!!exclusive);
+  }
+}
+
+extern "C" void rados_write_op_write(rados_write_op_t write_op,
+				     const char *buffer,
+				     size_t len,
+                                     uint64_t offset)
+{
+  bufferlist bl;
+  bl.append(buffer,len);
+  ((::ObjectOperation *)write_op)->write(offset, bl);
+}
+
+extern "C" void rados_write_op_write_full(rados_write_op_t write_op,
+				          const char *buffer,
+				          size_t len)
+{
+  bufferlist bl;
+  bl.append(buffer,len);
+  ((::ObjectOperation *)write_op)->write_full(bl);
+}
+
+extern "C" void rados_write_op_append(rados_write_op_t write_op,
+				      const char *buffer,
+				      size_t len)
+{
+  bufferlist bl;
+  bl.append(buffer,len);
+  ((::ObjectOperation *)write_op)->append(bl);
+}
+
+extern "C" void rados_write_op_remove(rados_write_op_t write_op)
+{
+  ((::ObjectOperation *)write_op)->remove();
+}
+
+extern "C" void rados_write_op_truncate(rados_write_op_t write_op,
+				        uint64_t offset)
+{
+  ((::ObjectOperation *)write_op)->truncate(offset);
+}
+
+extern "C" void rados_write_op_zero(rados_write_op_t write_op,
+				    uint64_t offset,
+				    uint64_t len)
+{
+  ((::ObjectOperation *)write_op)->zero(offset, len);
+}
+
+extern "C" int rados_write_op_operate(rados_write_op_t write_op,
+                                      rados_ioctx_t io,
+                                      const char *oid,
+				      time_t *mtime)
+{
+  object_t obj(oid);
+  ::ObjectOperation *oo = (::ObjectOperation *) write_op;
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  return ctx->operate(obj, oo, mtime);
+}
+
+extern "C" int rados_aio_write_op_operate(rados_write_op_t write_op,
+                                      rados_ioctx_t io,
+				      rados_completion_t completion,
+                                      const char *oid,
+				      time_t *mtime)
+{
+  object_t obj(oid);
+  ::ObjectOperation *oo = (::ObjectOperation *) write_op;
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  librados::AioCompletionImpl *c = (librados::AioCompletionImpl*)completion;
+  return ctx->aio_operate(obj, oo, c, ctx->snapc, 0);
+}

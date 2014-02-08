@@ -6,6 +6,7 @@ usr/include/rados/librados.hpp
 usr/include/rados/page.h
 usr/include/rados/rados_types.h
 usr/include/rados/rados_types.hpp
+usr/include/rados/memory.h
 usr/lib/librados.a
 usr/lib/librados.la
 usr/lib/librados.so

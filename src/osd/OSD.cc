@@ -185,6 +185,7 @@ OSDService::OSDService(OSD *osd) :
   scrub_finalize_wq(osd->scrub_finalize_wq),
   rep_scrub_wq(osd->rep_scrub_wq),
   push_wq("push_wq", cct->_conf->osd_recovery_thread_timeout, &osd->recovery_tp),
+  gen_wq("gen_wq", cct->_conf->osd_recovery_thread_timeout, &osd->recovery_tp),
   class_handler(osd->class_handler),
   publish_lock("OSDService::publish_lock"),
   pre_publish_lock("OSDService::pre_publish_lock"),
@@ -645,7 +646,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
 	for (int i=0; i<1000; i++) {
 	  ObjectStore::Transaction *t = new ObjectStore::Transaction;
 	  t->write(coll_t::META_COLL, hobject_t(sobject_t(oid, 0)), i*bl.length(), bl.length(), bl);
-	  store->queue_transaction(NULL, t);
+	  store->queue_transaction_and_cleanup(NULL, t);
 	}
 	store->sync();
 	utime_t end = ceph_clock_now(cct);
@@ -937,7 +938,7 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     list<obj_watch_item_t> watchers;
     osd_lock.Lock();
     // scan pg's
-    for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
+    for (ceph::unordered_map<pg_t,PG*>::iterator it = pg_map.begin();
 	 it != pg_map.end();
 	 ++it) {
 
@@ -1299,19 +1300,23 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(l_osd_op_inb,   "op_in_bytes");       // client op in bytes (writes)
   osd_plb.add_u64_counter(l_osd_op_outb,  "op_out_bytes");      // client op out bytes (reads)
   osd_plb.add_time_avg(l_osd_op_lat,   "op_latency");       // client op latency
+  osd_plb.add_time_avg(l_osd_op_process_lat, "op_process_latency");   // client op process latency
 
   osd_plb.add_u64_counter(l_osd_op_r,      "op_r");        // client reads
   osd_plb.add_u64_counter(l_osd_op_r_outb, "op_r_out_bytes");   // client read out bytes
   osd_plb.add_time_avg(l_osd_op_r_lat,  "op_r_latency");    // client read latency
+  osd_plb.add_time_avg(l_osd_op_r_process_lat, "op_r_process_latency");   // client read process latency
   osd_plb.add_u64_counter(l_osd_op_w,      "op_w");        // client writes
   osd_plb.add_u64_counter(l_osd_op_w_inb,  "op_w_in_bytes");    // client write in bytes
   osd_plb.add_time_avg(l_osd_op_w_rlat, "op_w_rlat");   // client write readable/applied latency
   osd_plb.add_time_avg(l_osd_op_w_lat,  "op_w_latency");    // client write latency
+  osd_plb.add_time_avg(l_osd_op_w_process_lat, "op_w_process_latency");   // client write process latency
   osd_plb.add_u64_counter(l_osd_op_rw,     "op_rw");       // client rmw
   osd_plb.add_u64_counter(l_osd_op_rw_inb, "op_rw_in_bytes");   // client rmw in bytes
   osd_plb.add_u64_counter(l_osd_op_rw_outb,"op_rw_out_bytes");  // client rmw out bytes
   osd_plb.add_time_avg(l_osd_op_rw_rlat,"op_rw_rlat");  // client rmw readable/applied latency
   osd_plb.add_time_avg(l_osd_op_rw_lat, "op_rw_latency");   // client rmw latency
+  osd_plb.add_time_avg(l_osd_op_rw_process_lat, "op_rw_process_latency");   // client rmw process latency
 
   osd_plb.add_u64_counter(l_osd_sop,       "subop");         // subops
   osd_plb.add_u64_counter(l_osd_sop_inb,   "subop_in_bytes");     // subop in bytes
@@ -1447,7 +1452,7 @@ int OSD::shutdown()
   cct->_conf->apply_changes(NULL);
   
   // Shutdown PGs
-  for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
+  for (ceph::unordered_map<pg_t, PG*>::iterator p = pg_map.begin();
        p != pg_map.end();
        ++p) {
     dout(20) << " kicking pg " << p->first << dendl;
@@ -1543,7 +1548,7 @@ int OSD::shutdown()
 #ifdef PG_DEBUG_REFS
   service.dump_live_pgids();
 #endif
-  for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
+  for (ceph::unordered_map<pg_t, PG*>::iterator p = pg_map.begin();
        p != pg_map.end();
        ++p) {
     dout(20) << " kicking pg " << p->first << dendl;
@@ -1713,7 +1718,7 @@ void OSD::add_newly_split_pg(PG *pg, PG::RecoveryCtx *rctx)
   dout(10) << "Adding newly split pg " << *pg << dendl;
   vector<int> up, acting;
   pg->get_osdmap()->pg_to_up_acting_osds(pg->info.pgid, up, acting);
-  int role = pg->get_osdmap()->calc_pg_role(service.whoami, acting);
+  int role = OSDMap::calc_pg_role(service.whoami, acting);
   pg->set_role(role);
   pg->reg_next_scrub();
   pg->handle_loaded(rctx);
@@ -1967,7 +1972,7 @@ void OSD::load_pgs()
 
     // generate state for PG's current mapping
     pg->get_osdmap()->pg_to_up_acting_osds(pgid, pg->up, pg->acting);
-    int role = pg->get_osdmap()->calc_pg_role(whoami, pg->acting);
+    int role = OSDMap::calc_pg_role(whoami, pg->acting);
     pg->set_role(role);
 
     PG::RecoveryCtx rctx(0, 0, 0, 0, 0, 0);
@@ -2004,7 +2009,7 @@ void OSD::build_past_intervals_parallel()
   // calculate untion of map range
   epoch_t end_epoch = superblock.oldest_map;
   epoch_t cur_epoch = superblock.newest_map;
-  for (hash_map<pg_t, PG*>::iterator i = pg_map.begin();
+  for (ceph::unordered_map<pg_t, PG*>::iterator i = pg_map.begin();
        i != pg_map.end();
        ++i) {
     PG *pg = i->second;
@@ -2146,8 +2151,6 @@ void OSD::handle_pg_peering_evt(
 
     bool create = false;
     if (primary) {
-      assert(role == 0);  // otherwise, probably bug in project_pg_history.
-
       // DNE on source?
       if (info.dne()) {
 	// is there a creation pending on this pg?
@@ -2165,8 +2168,7 @@ void OSD::handle_pg_peering_evt(
       }
       creating_pgs.erase(info.pgid);
     } else {
-      assert(role != 0);    // i should be replica
-      assert(!info.dne());  // and pg exists if we are hearing about it
+      assert(!info.dne());  // pg exists if we are hearing about it
     }
 
     // do we need to resurrect a deleting pg?
@@ -2585,7 +2587,7 @@ void OSD::maybe_update_heartbeat_peers()
 
   // build heartbeat from set
   if (is_active()) {
-    for (hash_map<pg_t, PG*>::iterator i = pg_map.begin();
+    for (ceph::unordered_map<pg_t, PG*>::iterator i = pg_map.begin();
 	 i != pg_map.end();
 	 ++i) {
       PG *pg = i->second;
@@ -4119,14 +4121,14 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
       hobject_t soid(sobject_t(oid, 0));
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       t->write(coll_t::META_COLL, soid, 0, bsize, bl);
-      store->queue_transaction(NULL, t);
+      store->queue_transaction_and_cleanup(NULL, t);
       cleanupt->remove(coll_t::META_COLL, soid);
     }
     store->sync_and_flush();
     utime_t end = ceph_clock_now(cct);
 
     // clean up
-    store->queue_transaction(NULL, cleanupt);
+    store->queue_transaction_and_cleanup(NULL, cleanupt);
 
     uint64_t rate = (double)count / (end - start);
     if (f) {
@@ -4172,7 +4174,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     }
 
     std::set <pg_t> keys;
-    for (hash_map<pg_t, PG*>::const_iterator pg_map_e = pg_map.begin();
+    for (ceph::unordered_map<pg_t, PG*>::const_iterator pg_map_e = pg_map.begin();
 	 pg_map_e != pg_map.end(); ++pg_map_e) {
       keys.insert(pg_map_e->first);
     }
@@ -4180,7 +4182,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     fout << "*** osd " << whoami << ": dump_missing ***" << std::endl;
     for (std::set <pg_t>::iterator p = keys.begin();
 	 p != keys.end(); ++p) {
-      hash_map<pg_t, PG*>::iterator q = pg_map.find(*p);
+      ceph::unordered_map<pg_t, PG*>::iterator q = pg_map.find(*p);
       assert(q != pg_map.end());
       PG *pg = q->second;
       pg->lock();
@@ -4752,7 +4754,7 @@ void OSD::handle_scrub(MOSDScrub *m)
   }
 
   if (m->scrub_pgs.empty()) {
-    for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
+    for (ceph::unordered_map<pg_t, PG*>::iterator p = pg_map.begin();
 	 p != pg_map.end();
 	 ++p) {
       PG *pg = p->second;
@@ -4854,7 +4856,7 @@ void OSD::sched_scrub()
 
       PG *pg = _lookup_lock_pg(pgid);
       if (pg) {
-	if (pg->is_active() &&
+	if (pg->get_pgbackend()->scrub_supported() && pg->is_active() &&
 	    (load_is_low ||
 	     (double)diff >= cct->_conf->osd_scrub_max_interval ||
 	     pg->scrubber.must_scrub)) {
@@ -5462,16 +5464,16 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
   }
 
   // scan pg creations
-  hash_map<pg_t, create_pg_info>::iterator n = creating_pgs.begin();
+  ceph::unordered_map<pg_t, create_pg_info>::iterator n = creating_pgs.begin();
   while (n != creating_pgs.end()) {
-    hash_map<pg_t, create_pg_info>::iterator p = n++;
+    ceph::unordered_map<pg_t, create_pg_info>::iterator p = n++;
     pg_t pgid = p->first;
 
     // am i still primary?
     vector<int> acting;
-    int nrep = osdmap->pg_to_acting_osds(pgid, acting);
-    int role = osdmap->calc_pg_role(whoami, acting, nrep);
-    if (role != 0) {
+    int primary;
+    osdmap->pg_to_acting_osds(pgid, &acting, &primary);
+    if (primary != whoami) {
       dout(10) << " no longer primary for " << pgid << ", stopping creation" << dendl;
       creating_pgs.erase(p);
     } else {
@@ -5488,7 +5490,6 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
   while (p != waiting_for_pg.end()) {
     pg_t pgid = p->first;
 
-    // am i still primary?
     vector<int> acting;
     int nrep = osdmap->pg_to_acting_osds(pgid, acting);
     int role = osdmap->calc_pg_role(whoami, acting, nrep);
@@ -5513,7 +5514,7 @@ void OSD::consume_map()
   list<PGRef> to_remove;
 
   // scan pg's
-  for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
+  for (ceph::unordered_map<pg_t,PG*>::iterator it = pg_map.begin();
        it != pg_map.end();
        ++it) {
     PG *pg = it->second;
@@ -5550,7 +5551,7 @@ void OSD::consume_map()
   service.publish_map(osdmap);
 
   // scan pg's
-  for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
+  for (ceph::unordered_map<pg_t,PG*>::iterator it = pg_map.begin();
        it != pg_map.end();
        ++it) {
     PG *pg = it->second;
@@ -5946,15 +5947,20 @@ void OSD::handle_pg_create(OpRequestRef op)
       dout(20) << "ignoring localized pg " << pgid << dendl;
       continue;
     }
+    if (!osdmap->have_pg_pool(pgid.pool())) {
+      dout(20) << "ignoring pg on deleted pool " << pgid << dendl;
+      continue;
+    }
 
     dout(20) << "mkpg " << pgid << " e" << created << dendl;
    
     // is it still ours?
     vector<int> up, acting;
-    osdmap->pg_to_up_acting_osds(on, up, acting);
+    int up_primary, acting_primary;
+    osdmap->pg_to_up_acting_osds(on, &up, &up_primary, &acting, &acting_primary);
     int role = osdmap->calc_pg_role(whoami, acting, acting.size());
 
-    if (role != 0) {
+    if (up_primary != whoami) {
       dout(10) << "mkpg " << pgid << "  not primary (role=" << role << "), skipping" << dendl;
       continue;
     }
@@ -6378,11 +6384,14 @@ void OSD::handle_pg_trim(OpRequestRef op)
     } else {
       // primary is instructing us to trim
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      pg->pg_log.trim(m->trim_to, pg->info);
+      PG::PGLogEntryHandler handler;
+      pg->pg_log.trim(&handler, m->trim_to, pg->info);
+      handler.apply(pg, t);
       pg->dirty_info = true;
       pg->write_if_dirty(*t);
-      int tr = store->queue_transaction(pg->osr.get(), t,
-					new ObjectStore::C_DeleteTransaction(t));
+      int tr = store->queue_transaction(
+	pg->osr.get(), t,
+	new ObjectStore::C_DeleteTransaction(t));
       assert(tr == 0);
     }
     pg->unlock();
@@ -6601,7 +6610,6 @@ void OSD::handle_pg_query(OpRequestRef op)
     // get active crush mapping
     vector<int> up, acting;
     osdmap->pg_to_up_acting_osds(pgid, up, acting);
-    int role = osdmap->calc_pg_role(whoami, acting, acting.size());
 
     // same primary?
     pg_history_t history = it->second.history;
@@ -6616,7 +6624,6 @@ void OSD::handle_pg_query(OpRequestRef op)
       continue;
     }
 
-    assert(role != 0);
     dout(10) << " pg " << pgid << " dne" << dendl;
     pg_info_t empty(pgid);
     if (it->second.type == pg_query_t::LOG ||
@@ -6751,7 +6758,7 @@ void OSD::check_replay_queue()
       dout(10) << "check_replay_queue " << *pg << dendl;
       if (pg->is_active() &&
 	  pg->is_replay() &&
-	  pg->get_role() == 0 &&
+	  pg->is_primary() &&
 	  pg->replay_until == p->second) {
 	pg->replay_queued_ops();
       }
@@ -7231,7 +7238,9 @@ void OSD::dequeue_op(
   PGRef pg, OpRequestRef op,
   ThreadPool::TPHandle &handle)
 {
-  utime_t latency = ceph_clock_now(cct) - op->get_req()->get_recv_stamp();
+  utime_t now = ceph_clock_now(cct);
+  op->set_dequeued_time(now);
+  utime_t latency = now - op->get_req()->get_recv_stamp();
   dout(10) << "dequeue_op " << op << " prio " << op->get_req()->get_priority()
 	   << " cost " << op->get_req()->get_cost()
 	   << " latency " << latency

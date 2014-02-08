@@ -2,6 +2,8 @@
 #define CEPH_RGW_REST_H
 #define TIME_BUF_SIZE 128
 
+#include "common/ceph_json.h"
+#include "include/assert.h" /* needed because of common/ceph_json.h */
 #include "rgw_op.h"
 #include "rgw_formats.h"
 
@@ -17,6 +19,41 @@ extern void rgw_flush_formatter(struct req_state *s,
                                          ceph::Formatter *formatter);
 
 extern int rgw_rest_read_all_input(struct req_state *s, char **data, int *plen, int max_len);
+
+template <class T>
+int rgw_rest_get_json_input(CephContext *cct, req_state *s, T& out, int max_len, bool *empty)
+{
+  int rv, data_len;
+  char *data;
+
+  if (empty)
+    *empty = false;
+
+  if ((rv = rgw_rest_read_all_input(s, &data, &data_len, max_len)) < 0) {
+    return rv;
+  }
+
+  if (!data_len) {
+    if (empty) {
+      *empty = true;
+    }
+
+    return -EINVAL;
+  }
+
+  JSONParser parser;
+
+  if (!parser.parse(data, data_len)) {
+    free(data);
+    return -EINVAL;
+  }
+
+  decode_json_obj(out, &parser);
+
+  free(data);
+  return 0;
+}
+
 
 class RESTArgs {
 public:
@@ -126,6 +163,12 @@ class RGWPutMetadata_ObjStore : public RGWPutMetadata
 public:
   RGWPutMetadata_ObjStore() {}
   ~RGWPutMetadata_ObjStore() {}
+};
+
+class RGWSetTempUrl_ObjStore : public RGWSetTempUrl {
+public:
+  RGWSetTempUrl_ObjStore() {}
+  ~RGWSetTempUrl_ObjStore() {}
 };
 
 class RGWDeleteObj_ObjStore : public RGWDeleteObj {

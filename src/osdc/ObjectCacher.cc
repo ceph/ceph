@@ -522,7 +522,7 @@ ObjectCacher::~ObjectCacher()
   finisher.stop();
   perf_stop();
   // we should be empty.
-  for (vector<hash_map<sobject_t, Object *> >::iterator i = objects.begin();
+  for (vector<ceph::unordered_map<sobject_t, Object *> >::iterator i = objects.begin();
       i != objects.end();
       ++i)
     assert(i->empty());
@@ -1764,11 +1764,11 @@ uint64_t ObjectCacher::release_all()
   ldout(cct, 10) << "release_all" << dendl;
   uint64_t unclean = 0;
   
-  vector<hash_map<sobject_t, Object*> >::iterator i = objects.begin();
+  vector<ceph::unordered_map<sobject_t, Object*> >::iterator i = objects.begin();
   while (i != objects.end()) {
-    hash_map<sobject_t, Object*>::iterator p = i->begin();
+    ceph::unordered_map<sobject_t, Object*>::iterator p = i->begin();
     while (p != i->end()) {
-      hash_map<sobject_t, Object*>::iterator n = p;
+      ceph::unordered_map<sobject_t, Object*>::iterator n = p;
       ++n;
 
       Object *ob = p->second;
@@ -1853,10 +1853,10 @@ void ObjectCacher::verify_stats() const
   ldout(cct, 10) << "verify_stats" << dendl;
 
   loff_t clean = 0, zero = 0, dirty = 0, rx = 0, tx = 0, missing = 0, error = 0;
-  for (vector<hash_map<sobject_t, Object*> >::const_iterator i = objects.begin();
+  for (vector<ceph::unordered_map<sobject_t, Object*> >::const_iterator i = objects.begin();
       i != objects.end();
       ++i) {
-    for (hash_map<sobject_t, Object*>::const_iterator p = i->begin();
+    for (ceph::unordered_map<sobject_t, Object*>::const_iterator p = i->begin();
         p != i->end();
         ++p) {
       Object *ob = p->second;

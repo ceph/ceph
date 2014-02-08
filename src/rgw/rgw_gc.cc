@@ -17,11 +17,17 @@ using namespace librados;
 static string gc_oid_prefix = "gc";
 static string gc_index_lock_name = "gc_process";
 
+
+#define HASH_PRIME 7877
+
 void RGWGC::initialize(CephContext *_cct, RGWRados *_store) {
   cct = _cct;
   store = _store;
 
   max_objs = cct->_conf->rgw_gc_max_objs;
+  if (max_objs > HASH_PRIME)
+    max_objs = HASH_PRIME;
+
   obj_names = new string[max_objs];
 
   for (int i = 0; i < max_objs; i++) {
@@ -39,7 +45,7 @@ void RGWGC::finalize()
 
 int RGWGC::tag_index(const string& tag)
 {
-  return ceph_str_hash_linux(tag.c_str(), tag.size()) % max_objs;
+  return ceph_str_hash_linux(tag.c_str(), tag.size()) % HASH_PRIME % max_objs;
 }
 
 void RGWGC::add_chain(ObjectWriteOperation& op, cls_rgw_obj_chain& chain, const string& tag)

@@ -27,8 +27,7 @@ using std::set;
 using std::map;
 using std::fstream;
 
-#include <ext/hash_map>
-using namespace __gnu_cxx;
+#include "include/unordered_map.h"
 
 #include "include/filepath.h"
 #include "include/interval_set.h"
@@ -302,14 +301,14 @@ protected:
   WritebackHandler      *writeback_handler;
 
   // cache
-  hash_map<vinodeno_t, Inode*> inode_map;
+  ceph::unordered_map<vinodeno_t, Inode*> inode_map;
   Inode*                 root;
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
 
   // all inodes with caps sit on either cap_list or delayed_caps.
   xlist<Inode*> delayed_caps, cap_list;
   int num_flushing_caps;
-  hash_map<inodeno_t,SnapRealm*> snap_realms;
+  ceph::unordered_map<inodeno_t,SnapRealm*> snap_realms;
 
   SnapRealm *get_snap_realm(inodeno_t r);
   SnapRealm *get_snap_realm_maybe(inodeno_t r);
@@ -324,7 +323,7 @@ protected:
 
   // file handles, etc.
   interval_set<int> free_fd_set;  // unused fds
-  hash_map<int, Fh*> fd_map;
+  ceph::unordered_map<int, Fh*> fd_map;
   
   int get_fd() {
     int fd = free_fd_set.range_start();
@@ -339,7 +338,7 @@ protected:
    * Resolve file descriptor, or return NULL.
    */
   Fh *get_filehandle(int fd) {
-    hash_map<int, Fh*>::iterator p = fd_map.find(fd);
+    ceph::unordered_map<int, Fh*>::iterator p = fd_map.find(fd);
     if (p == fd_map.end())
       return NULL;
     return p->second;
@@ -429,6 +428,9 @@ protected:
 
   void handle_lease(MClientLease *m);
 
+  // inline data
+  int uninline_data(Inode *in, Context *onfinish);
+
   // file caps
   void check_cap_issue(Inode *in, Cap *cap, unsigned issued);
   void add_update_cap(Inode *in, MetaSession *session, uint64_t cap_id,
@@ -508,6 +510,7 @@ protected:
   void update_inode_file_bits(Inode *in,
 			      uint64_t truncate_seq, uint64_t truncate_size, uint64_t size,
 			      uint64_t time_warp_seq, utime_t ctime, utime_t mtime, utime_t atime,
+			      version_t inline_version, bufferlist& inline_data,
 			      int issued);
   Inode *add_update_inode(InodeStat *st, utime_t ttl, MetaSession *session);
   Dentry *insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 

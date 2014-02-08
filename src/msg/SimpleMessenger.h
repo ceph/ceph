@@ -21,9 +21,8 @@
 #include <list>
 #include <map>
 using namespace std;
-#include <ext/hash_map>
-#include <ext/hash_set>
-using namespace __gnu_cxx;
+#include "include/unordered_map.h"
+#include "include/unordered_set.h"
 
 #include "common/Mutex.h"
 #include "include/atomic.h"
@@ -317,7 +316,7 @@ private:
    * NOTE: a Pipe* with state CLOSED may still be in the map but is considered
    * invalid and can be replaced by anyone holding the msgr lock
    */
-  hash_map<entity_addr_t, Pipe*> rank_pipe;
+  ceph::unordered_map<entity_addr_t, Pipe*> rank_pipe;
   /**
    * list of pipes are in teh process of accepting
    *
@@ -351,7 +350,7 @@ private:
   friend class Pipe;
 
   Pipe *_lookup_pipe(const entity_addr_t& k) {
-    hash_map<entity_addr_t, Pipe*>::iterator p = rank_pipe.find(k);
+    ceph::unordered_map<entity_addr_t, Pipe*>::iterator p = rank_pipe.find(k);
     if (p == rank_pipe.end())
       return NULL;
     // see lock cribbing in Pipe::fault()

@@ -203,7 +203,7 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
     assert(p != NULL);
 
     if (prefix == "mon getmap") {
-      p->encode(rdata, CEPH_FEATURES_ALL);
+      p->encode(rdata, m->get_connection()->get_features());
       r = 0;
       ss << "got monmap epoch " << p->get_epoch();
     } else if (prefix == "mon dump") {

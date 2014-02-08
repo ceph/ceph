@@ -23,7 +23,7 @@
 #include <boost/statechart/transition.hpp>
 #include <boost/statechart/event_base.hpp>
 #include <boost/scoped_ptr.hpp>
-#include <tr1/memory>
+#include "include/memory.h"
 
 // re-include our assert to clobber boost's
 #include "include/assert.h" 
@@ -55,9 +55,8 @@
 #include <string>
 using namespace std;
 
-#include <ext/hash_map>
-#include <ext/hash_set>
-using namespace __gnu_cxx;
+#include "include/unordered_map.h"
+#include "include/unordered_set.h"
 
 
 //#define DEBUG_RECOVERY_OIDS   // track set of recovering oids explicitly, to find counting bugs
@@ -554,7 +553,7 @@ protected:
   pg_stat_t pg_stats_publish;
 
   // for ordering writes
-  std::tr1::shared_ptr<ObjectStore::Sequencer> osr;
+  ceph::shared_ptr<ObjectStore::Sequencer> osr;
 
   void _update_calc_stats();
   void publish_stats_to_osd();
@@ -621,6 +620,97 @@ public:
   void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
 		       pg_missing_t& omissing, int from);
   bool proc_replica_info(int from, const pg_info_t &info);
+
+
+  struct LogEntryTrimmer : public ObjectModDesc::Visitor {
+    const hobject_t &soid;
+    PG *pg;
+    ObjectStore::Transaction *t;
+    LogEntryTrimmer(const hobject_t &soid, PG *pg, ObjectStore::Transaction *t)
+      : soid(soid), pg(pg), t(t) {}
+    void rmobject(version_t old_version) {
+      pg->get_pgbackend()->trim_stashed_object(
+	soid,
+	old_version,
+	t);
+    }
+  };
+
+  struct SnapRollBacker : public ObjectModDesc::Visitor {
+    const hobject_t &soid;
+    PG *pg;
+    ObjectStore::Transaction *t;
+    SnapRollBacker(const hobject_t &soid, PG *pg, ObjectStore::Transaction *t)
+      : soid(soid), pg(pg), t(t) {}
+    void update_snaps(set<snapid_t> &snaps) {
+      pg->update_object_snap_mapping(t, soid, snaps);
+    }
+    void create() {
+      pg->clear_object_snap_mapping(
+	t,
+	soid);
+    }
+  };
+
+  struct PGLogEntryHandler : public PGLog::LogEntryHandler {
+    map<hobject_t, list<pg_log_entry_t> > to_rollback;
+    set<hobject_t> cannot_rollback;
+    set<hobject_t> to_remove;
+    list<pg_log_entry_t> to_trim;
+    
+    // LogEntryHandler
+    void remove(const hobject_t &hoid) {
+      to_remove.insert(hoid);
+    }
+    void rollback(const pg_log_entry_t &entry) {
+      assert(!cannot_rollback.count(entry.soid));
+      to_rollback[entry.soid].push_back(entry);
+    }
+    void cant_rollback(const pg_log_entry_t &entry) {
+      to_rollback.erase(entry.soid);
+      cannot_rollback.insert(entry.soid);
+    }
+    void trim(const pg_log_entry_t &entry) {
+      to_trim.push_back(entry);
+    }
+
+    void apply(PG *pg, ObjectStore::Transaction *t) {
+      for (map<hobject_t, list<pg_log_entry_t> >::iterator i =
+	     to_rollback.begin();
+	   i != to_rollback.end();
+	   ++i) {
+	for (list<pg_log_entry_t>::reverse_iterator j = i->second.rbegin();
+	     j != i->second.rend();
+	     ++j) {
+	  assert(j->mod_desc.can_rollback());
+	  pg->get_pgbackend()->rollback(j->soid, j->mod_desc, t);
+	  SnapRollBacker rollbacker(j->soid, pg, t);
+	  j->mod_desc.visit(&rollbacker);
+	}
+      }
+      for (set<hobject_t>::iterator i = to_remove.begin();
+	   i != to_remove.end();
+	   ++i) {
+	pg->get_pgbackend()->rollback_create(*i, t);
+	pg->remove_snap_mapped_object(*t, *i);
+      }
+      for (list<pg_log_entry_t>::reverse_iterator i = to_trim.rbegin();
+	   i != to_trim.rend();
+	   ++i) {
+	LogEntryTrimmer trimmer(i->soid, pg, t);
+	i->mod_desc.visit(&trimmer);
+      }
+    }
+  };
+  
+  friend struct SnapRollBacker;
+  friend struct PGLogEntryHandler;
+  friend struct LogEntryTrimmer;
+  void update_object_snap_mapping(
+    ObjectStore::Transaction *t, const hobject_t &soid,
+    const set<snapid_t> &snaps);
+  void clear_object_snap_mapping(
+    ObjectStore::Transaction *t, const hobject_t &soid);
   void remove_snap_mapped_object(
     ObjectStore::Transaction& t, const hobject_t& soid);
   void merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, int from);
@@ -849,24 +939,6 @@ public:
   int active_pushes;
 
   void repair_object(const hobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer);
-  map<int, ScrubMap *>::const_iterator _select_auth_object(
-    const hobject_t &obj,
-    const map<int,ScrubMap*> &maps);
-
-  enum error_type {
-    CLEAN,
-    DEEP_ERROR,
-    SHALLOW_ERROR
-  };
-  enum error_type _compare_scrub_objects(ScrubMap::object &auth,
-			      ScrubMap::object &candidate,
-			      ostream &errorstream);
-  void _compare_scrubmaps(const map<int,ScrubMap*> &maps,  
-			  map<hobject_t, set<int> > &missing,
-			  map<hobject_t, set<int> > &inconsistent,
-			  map<hobject_t, int> &authoritative,
-			  map<hobject_t, set<int> > &inconsistent_snapcolls,
-			  ostream &errorstream);
   void scrub(ThreadPool::TPHandle &handle);
   void classic_scrub(ThreadPool::TPHandle &handle);
   void chunky_scrub(ThreadPool::TPHandle &handle);
@@ -876,9 +948,6 @@ public:
   void scrub_finish();
   void scrub_clear_state();
   bool scrub_gather_replica_maps();
-  void _scan_list(
-    ScrubMap &map, vector<hobject_t> &ls, bool deep,
-    ThreadPool::TPHandle &handle);
   void _scan_snaps(ScrubMap &map);
   void _request_scrub_map_classic(int replica, eversion_t version);
   void _request_scrub_map(int replica, eversion_t version,
@@ -967,7 +1036,7 @@ public:
     const boost::statechart::event_base &get_event() { return *evt; }
     string get_desc() { return desc; }
   };
-  typedef std::tr1::shared_ptr<CephPeeringEvt> CephPeeringEvtRef;
+  typedef ceph::shared_ptr<CephPeeringEvt> CephPeeringEvtRef;
   list<CephPeeringEvtRef> peering_queue;  // op queue
   list<CephPeeringEvtRef> peering_waiters;
 
@@ -1726,7 +1795,8 @@ public:
 
   void add_log_entry(pg_log_entry_t& e, bufferlist& log_bl);
   void append_log(
-    vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t);
+    vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t,
+    bool transaction_applied = true);
   bool check_log_for_corruption(ObjectStore *store);
   void trim_peers();
 

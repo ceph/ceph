@@ -103,7 +103,7 @@ void OSDMonitor::create_initial()
   newmap.created = newmap.modified = ceph_clock_now(g_ceph_context);
 
   // encode into pending incremental
-  newmap.encode(pending_inc.fullmap);
+  newmap.encode(pending_inc.fullmap, mon->quorum_features);
 }
 
 void OSDMonitor::update_from_paxos(bool *need_bootstrap)
@@ -203,7 +203,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 
     // write out the full map for all past epochs
     bufferlist full_bl;
-    osdmap.encode(full_bl);
+    osdmap.encode(full_bl, inc.encode_features);
     tx_size += full_bl.length();
 
     put_version_full(t, osdmap.epoch, full_bl);
@@ -247,6 +247,10 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   while (p != osd_epoch.end()) {
     osd_epoch.erase(p++);
   }
+
+  /** we don't have any of the feature bit infrastructure in place for
+   * supporting primary_temp mappings without breaking old clients/OSDs.*/
+  assert(osdmap.primary_temp->empty());
 
   if (mon->is_leader()) {
     // kick pgmon, make sure it's seen the latest map
@@ -332,10 +336,10 @@ bool OSDMonitor::thrash()
   }
 
   // generate some pg_temp entries.
-  // let's assume the hash_map iterates in a random-ish order.
+  // let's assume the ceph::unordered_map iterates in a random-ish order.
   int n = rand() % mon->pgmon()->pg_map.pg_stat.size();
-  hash_map<pg_t,pg_stat_t>::iterator p = mon->pgmon()->pg_map.pg_stat.begin();
-  hash_map<pg_t,pg_stat_t>::iterator e = mon->pgmon()->pg_map.pg_stat.end();
+  ceph::unordered_map<pg_t,pg_stat_t>::iterator p = mon->pgmon()->pg_map.pg_stat.begin();
+  ceph::unordered_map<pg_t,pg_stat_t>::iterator e = mon->pgmon()->pg_map.pg_stat.end();
   while (n--)
     ++p;
   for (int i=0; i<50; i++) {
@@ -410,45 +414,6 @@ void OSDMonitor::update_logger()
   mon->cluster_logger->set(l_cluster_osd_epoch, osdmap.get_epoch());
 }
 
-void OSDMonitor::remove_redundant_pg_temp()
-{
-  dout(10) << "remove_redundant_pg_temp" << dendl;
-
-  for (map<pg_t,vector<int> >::iterator p = osdmap.pg_temp->begin();
-       p != osdmap.pg_temp->end();
-       ++p) {
-    if (pending_inc.new_pg_temp.count(p->first) == 0) {
-      vector<int> raw_up;
-      osdmap.pg_to_raw_up(p->first, raw_up);
-      if (raw_up == p->second) {
-	dout(10) << " removing unnecessary pg_temp " << p->first << " -> " << p->second << dendl;
-	pending_inc.new_pg_temp[p->first].clear();
-      }
-    }
-  }
-}
-
-void OSDMonitor::remove_down_pg_temp()
-{
-  dout(10) << "remove_down_pg_temp" << dendl;
-  OSDMap tmpmap(osdmap);
-  tmpmap.apply_incremental(pending_inc);
-
-  for (map<pg_t,vector<int> >::iterator p = tmpmap.pg_temp->begin();
-       p != tmpmap.pg_temp->end();
-       ++p) {
-    unsigned num_up = 0;
-    for (vector<int>::iterator i = p->second.begin();
-	 i != p->second.end();
-	 ++i) {
-      if (!tmpmap.is_down(*i))
-	++num_up;
-    }
-    if (num_up == 0)
-      pending_inc.new_pg_temp[p->first].clear();
-  }
-}
-
 /* Assign a lower weight to overloaded OSDs.
  *
  * The osds that will get a lower weight are those with with a utilization
@@ -500,7 +465,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str)
   std::string sep;
   oss << "overloaded osds: ";
   bool changed = false;
-  for (hash_map<int,osd_stat_t>::const_iterator p = pgm.osd_stat.begin();
+  for (ceph::unordered_map<int,osd_stat_t>::const_iterator p = pgm.osd_stat.begin();
        p != pgm.osd_stat.end();
        ++p) {
     float util = p->second.kb_used;
@@ -537,10 +502,10 @@ void OSDMonitor::create_pending()
   dout(10) << "create_pending e " << pending_inc.epoch << dendl;
 
   // drop any redundant pg_temp entries
-  remove_redundant_pg_temp();
+  OSDMap::remove_redundant_temporaries(g_ceph_context, osdmap, &pending_inc);
 
-  // drop any pg_temp entries with no up entries
-  remove_down_pg_temp();
+  // drop any pg or primary_temp entries with no up entries
+  OSDMap::remove_down_temps(g_ceph_context, osdmap, &pending_inc);
 }
 
 /**
@@ -590,7 +555,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::Transaction *t)
 
   // encode
   assert(get_last_committed() + 1 == pending_inc.epoch);
-  ::encode(pending_inc, bl, CEPH_FEATURES_ALL);
+  ::encode(pending_inc, bl, mon->quorum_features);
 
   /* put everything in the transaction */
   put_version(t, pending_inc.epoch, bl);
@@ -1443,6 +1408,7 @@ bool OSDMonitor::preprocess_pgtemp(MOSDPGTemp *m)
   dout(10) << "preprocess_pgtemp " << *m << dendl;
   vector<int> empty;
   int from = m->get_orig_source().num();
+  size_t ignore_cnt = 0;
 
   // check caps
   MonSession *session = m->get_session();
@@ -1463,7 +1429,25 @@ bool OSDMonitor::preprocess_pgtemp(MOSDPGTemp *m)
   for (map<pg_t,vector<int> >::iterator p = m->pg_temp.begin(); p != m->pg_temp.end(); ++p) {
     dout(20) << " " << p->first
 	     << (osdmap.pg_temp->count(p->first) ? (*osdmap.pg_temp)[p->first] : empty)
-	     << " -> " << p->second << dendl;
+             << " -> " << p->second << dendl;
+
+    // does the pool exist?
+    if (!osdmap.have_pg_pool(p->first.pool())) {
+      /*
+       * 1. If the osdmap does not have the pool, it means the pool has been
+       *    removed in-between the osd sending this message and us handling it.
+       * 2. If osdmap doesn't have the pool, it is safe to assume the pool does
+       *    not exist in the pending either, as the osds would not send a
+       *    message about a pool they know nothing about (yet).
+       * 3. However, if the pool does exist in the pending, then it must be a
+       *    new pool, and not relevant to this message (see 1).
+       */
+      dout(10) << __func__ << " ignore " << p->first << " -> " << p->second
+               << ": pool has been removed" << dendl;
+      ignore_cnt++;
+      continue;
+    }
+
     // removal?
     if (p->second.empty() && osdmap.pg_temp->count(p->first))
       return false;
@@ -1472,6 +1456,10 @@ bool OSDMonitor::preprocess_pgtemp(MOSDPGTemp *m)
 			     (*osdmap.pg_temp)[p->first] != p->second))
       return false;
   }
+
+  // should we ignore all the pgs?
+  if (ignore_cnt == m->pg_temp.size())
+    goto ignore;
 
   dout(7) << "preprocess_pgtemp e" << m->map_epoch << " no changes from " << m->get_orig_source_inst() << dendl;
   _reply_map(m, m->map_epoch);
@@ -1486,8 +1474,20 @@ bool OSDMonitor::prepare_pgtemp(MOSDPGTemp *m)
 {
   int from = m->get_orig_source().num();
   dout(7) << "prepare_pgtemp e" << m->map_epoch << " from " << m->get_orig_source_inst() << dendl;
-  for (map<pg_t,vector<int> >::iterator p = m->pg_temp.begin(); p != m->pg_temp.end(); ++p)
+  for (map<pg_t,vector<int> >::iterator p = m->pg_temp.begin(); p != m->pg_temp.end(); ++p) {
+    uint64_t pool = p->first.pool();
+    if (pending_inc.old_pools.count(pool)) {
+      dout(10) << __func__ << " ignore " << p->first << " -> " << p->second
+               << ": pool pending removal" << dendl;
+      continue;
+    }
+    if (!osdmap.have_pg_pool(pool)) {
+      dout(10) << __func__ << " ignore " << p->first << " -> " << p->second
+               << ": pool has been removed" << dendl;
+      continue;
+    }
     pending_inc.new_pg_temp[p->first] = p->second;
+  }
   pending_inc.new_up_thru[from] = m->map_epoch;   // set up_thru too, so the osd doesn't have to ask again
   wait_for_finished_proposal(new C_ReplyMap(this, m, m->map_epoch));
   return true;
@@ -1851,7 +1851,7 @@ void OSDMonitor::tick()
   }
 
   // expire blacklisted items?
-  for (hash_map<entity_addr_t,utime_t>::iterator p = osdmap.blacklist.begin();
+  for (ceph::unordered_map<entity_addr_t,utime_t>::iterator p = osdmap.blacklist.begin();
        p != osdmap.blacklist.end();
        ++p) {
     if (p->second < now) {
@@ -2153,7 +2153,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       } 
       rdata.append(ds);
     } else if (prefix == "osd getmap") {
-      p->encode(rdata);
+      p->encode(rdata, m->get_connection()->get_features());
       ss << "got osdmap epoch " << p->get_epoch();
     } else if (prefix == "osd getcrushmap") {
       p->crush->encode(rdata);
@@ -2239,7 +2239,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     pg_t pgid = osdmap.object_locator_to_pg(oid, oloc);
     pg_t mpgid = osdmap.raw_pg_to_pg(pgid);
     vector<int> up, acting;
-    osdmap.pg_to_up_acting_osds(mpgid, up, acting);
+    int up_p, acting_p;
+    osdmap.pg_to_up_acting_osds(mpgid, &up, &up_p, &acting, &acting_p);
 
     string fullobjname;
     if (!namespacestr.empty())
@@ -2255,7 +2256,9 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       f->dump_stream("raw_pgid") << pgid;
       f->dump_stream("pgid") << mpgid;
       f->dump_stream("up") << up;
+      f->dump_int("up_primary", up_p);
       f->dump_stream("acting") << acting;
+      f->dump_int("acting_primary", acting_p);
       f->close_section(); // osd_map
       f->flush(rdata);
     } else {
@@ -2263,7 +2266,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
         << " pool '" << poolstr << "' (" << pool << ")"
         << " object '" << fullobjname << "' ->"
         << " pg " << pgid << " (" << mpgid << ")"
-        << " -> up " << up << " acting " << acting;
+        << " -> up (" << up << ", p" << up_p << ") acting ("
+        << acting << ", p" << acting_p << ")";
       rdata.append(ds);
     }
   } else if ((prefix == "osd scrub" ||
@@ -2330,7 +2334,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     if (f)
       f->open_array_section("blacklist");
 
-    for (hash_map<entity_addr_t,utime_t>::iterator p = osdmap.blacklist.begin();
+    for (ceph::unordered_map<entity_addr_t,utime_t>::iterator p = osdmap.blacklist.begin();
 	 p != osdmap.blacklist.end();
 	 ++p) {
       if (f) {
@@ -2915,21 +2919,18 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     p.size = n;
     if (n < p.min_size)
       p.min_size = n;
-    ss << "set pool " << pool << " size to " << n;
   } else if (var == "min_size") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
     p.min_size = n;
-    ss << "set pool " << pool << " min_size to " << n;
   } else if (var == "crash_replay_interval") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
     p.crash_replay_interval = n;
-    ss << "set pool " << pool << " to crash_replay_interval to " << n;
   } else if (var == "pg_num") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
@@ -2939,30 +2940,27 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "specified pg_num " << n << " <= current " << p.get_pg_num();
       if (n < (int)p.get_pg_num())
 	return -EEXIST;
-      else
-	return 0;
-    } else {
-      int expected_osds = MIN(p.get_pg_num(), osdmap.get_num_osds());
-      int64_t new_pgs = n - p.get_pg_num();
-      int64_t pgs_per_osd = new_pgs / expected_osds;
-      if (pgs_per_osd > g_conf->mon_osd_max_split_count) {
-            ss << "specified pg_num " << n << " is too large (creating "
-               << new_pgs << " new PGs on ~" << expected_osds
-               << " OSDs exceeds per-OSD max of" << g_conf->mon_osd_max_split_count
-               << ')';
-            return -E2BIG;
-      }
-      for(set<pg_t>::iterator i = mon->pgmon()->pg_map.creating_pgs.begin();
-	  i != mon->pgmon()->pg_map.creating_pgs.end();
-	  ++i) {
-	if (i->m_pool == static_cast<uint64_t>(pool)) {
-	  ss << "currently creating pgs, wait";
-	  return -EAGAIN;
-	}
-      }
-      p.set_pg_num(n);
-      ss << "set pool " << pool << " pg_num to " << n;
+      return 0;
     }
+    int expected_osds = MIN(p.get_pg_num(), osdmap.get_num_osds());
+    int64_t new_pgs = n - p.get_pg_num();
+    int64_t pgs_per_osd = new_pgs / expected_osds;
+    if (pgs_per_osd > g_conf->mon_osd_max_split_count) {
+      ss << "specified pg_num " << n << " is too large (creating "
+	 << new_pgs << " new PGs on ~" << expected_osds
+	 << " OSDs exceeds per-OSD max of" << g_conf->mon_osd_max_split_count
+	 << ')';
+      return -E2BIG;
+    }
+    for(set<pg_t>::iterator i = mon->pgmon()->pg_map.creating_pgs.begin();
+	i != mon->pgmon()->pg_map.creating_pgs.end();
+	++i) {
+      if (i->m_pool == static_cast<uint64_t>(pool)) {
+	ss << "currently creating pgs, wait";
+	return -EAGAIN;
+      }
+    }
+    p.set_pg_num(n);
   } else if (var == "pgp_num") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
@@ -2970,45 +2968,41 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     if (n <= 0) {
       ss << "specified pgp_num must > 0, but you set to " << n;
-    } else if (n > (int)p.get_pg_num()) {
-      ss << "specified pgp_num " << n << " > pg_num " << p.get_pg_num();
-    } else {
-      for(set<pg_t>::iterator i = mon->pgmon()->pg_map.creating_pgs.begin();
-	  i != mon->pgmon()->pg_map.creating_pgs.end();
-	  ++i) {
-	if (i->m_pool == static_cast<uint64_t>(pool)) {
-	  ss << "currently creating pgs, wait";
-	  return -EAGAIN;
-	}
-      }
-      p.set_pgp_num(n);
-      ss << "set pool " << pool << " pgp_num to " << n;
+      return -EINVAL;
     }
+    if (n > (int)p.get_pg_num()) {
+      ss << "specified pgp_num " << n << " > pg_num " << p.get_pg_num();
+      return -EINVAL;
+    }
+    for(set<pg_t>::iterator i = mon->pgmon()->pg_map.creating_pgs.begin();
+	i != mon->pgmon()->pg_map.creating_pgs.end();
+	++i) {
+      if (i->m_pool == static_cast<uint64_t>(pool)) {
+	ss << "currently creating pgs, wait";
+	return -EAGAIN;
+      }
+    }
+    p.set_pgp_num(n);
   } else if (var == "crush_ruleset") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
-    if (osdmap.crush->rule_exists(n)) {
-      p.crush_ruleset = n;
-      ss << "set pool " << pool << " crush_ruleset to " << n;
-    } else {
+    if (!osdmap.crush->rule_exists(n)) {
       ss << "crush ruleset " << n << " does not exist";
       return -ENOENT;
     }
+    p.crush_ruleset = n;
   } else if (var == "hashpspool") {
     // make sure we only compare against 'n' if we didn't receive a string
     if (val == "true" || (interr.empty() && n == 1)) {
       p.flags |= pg_pool_t::FLAG_HASHPSPOOL;
-      ss << "set";
     } else if (val == "false" || (interr.empty() && n == 0)) {
       p.flags ^= pg_pool_t::FLAG_HASHPSPOOL;
-      ss << "unset";
     } else {
       ss << "expecting value 'true', 'false', '0', or '1'";
       return -EINVAL;
     }
-    ss << " pool " << pool << " flag hashpspool";
   } else if (var == "hit_set_type") {
     if (val == "none")
       p.hit_set_params = HitSet::Params();
@@ -3024,21 +3018,18 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "unrecognized hit_set type '" << val << "'";
       return -EINVAL;
     }
-    ss << "set hit_set_type to " << p.hit_set_params;
   } else if (var == "hit_set_period") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
     p.hit_set_period = n;
-    ss << "set hit_set_period to " << n;
   } else if (var == "hit_set_count") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
     p.hit_set_count = n;
-    ss << "set hit_set_count to " << n;
   } else if (var == "hit_set_fpp") {
     if (floaterr.length()) {
       ss << "error parsing floating point value '" << val << "': " << floaterr;
@@ -3050,12 +3041,16 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     BloomHitSet::Params *bloomp = static_cast<BloomHitSet::Params*>(p.hit_set_params.impl.get());
     bloomp->set_fpp(f);
-    ss << "set hit_set_fpp to " << bloomp->get_fpp();
+  } else if (var == "debug_fake_ec_pool") {
+    if (val == "true" || (interr.empty() && n == 1)) {
+      p.flags |= pg_pool_t::FLAG_DEBUG_FAKE_EC_POOL;
+    }
+    ss << " pool " << pool << " set debug_fake_ec_pool";
   } else {
     ss << "unrecognized variable '" << var << "'";
     return -EINVAL;
   }
-
+  ss << "set pool " << pool << " " << var << " to " << val;
   p.last_change = pending_inc.epoch;
   pending_inc.new_pools[pool] = p;
   return 0;
@@ -4005,12 +4000,16 @@ done:
       pool_type = pg_pool_t::TYPE_REPLICATED;
     } else if (pool_type_str == "erasure") {
 
-      // check if all up osds support erasure coding
-      set<int32_t> up_osds;
-      osdmap.get_up_osds(up_osds);
+      // make sure all the daemons support erasure coding
       stringstream ec_unsupported_ss;
       int ec_unsupported_count = 0;
+      if (!(mon->get_quorum_features() & CEPH_FEATURE_OSD_ERASURE_CODES)) {
+        ec_unsupported_ss << "the monitor cluster";
+        ++ec_unsupported_count;
+      }
 
+      set<int32_t> up_osds;
+      osdmap.get_up_osds(up_osds);
       for (set<int32_t>::iterator it = up_osds.begin();
            it != up_osds.end(); it ++) {
         const osd_xinfo_t &xi = osdmap.get_xinfo(*it);
@@ -4644,6 +4643,15 @@ int OSDMonitor::_prepare_remove_pool(uint64_t pool)
       dout(10) << "_prepare_remove_pool " << pool << " removing obsolete pg_temp "
 	       << p->first << dendl;
       pending_inc.new_pg_temp[p->first].clear();
+    }
+  }
+  for (map<pg_t,int>::iterator p = osdmap.primary_temp->begin();
+      p != osdmap.primary_temp->end();
+      ++p) {
+    if (p->first.pool() == pool) {
+      dout(10) << "_prepare_remove_pool " << pool
+               << " removing obsolete primary_temp" << p->first << dendl;
+      pending_inc.new_primary_temp[p->first] = -1;
     }
   }
   return 0;

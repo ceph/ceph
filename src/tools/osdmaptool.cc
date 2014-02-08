@@ -266,16 +266,21 @@ int main(int argc, const char **argv)
     cout << " parsed '" << test_map_pg << "' -> " << pgid << std::endl;
 
     vector<int> raw, up, acting;
-    osdmap.pg_to_osds(pgid, raw);
-    osdmap.pg_to_up_acting_osds(pgid, up, acting);
-    cout << pgid << " raw " << raw << " up " << up << " acting " << acting << std::endl;
+    int calced_primary, up_primary, acting_primary;
+    osdmap.pg_to_osds(pgid, &raw, &calced_primary);
+    osdmap.pg_to_up_acting_osds(pgid, &up, &up_primary,
+                                &acting, &acting_primary);
+    cout << pgid << " raw (" << raw << ", p" << calced_primary
+         << ") up (" << up << ", p" << up_primary
+         << ") acting (" << acting << ", p" << acting_primary << ")"
+         << std::endl;
   }
   if (test_crush) {
     int pass = 0;
     while (1) {
       cout << "pass " << ++pass << std::endl;
 
-      hash_map<pg_t,vector<int> > m;
+      ceph::unordered_map<pg_t,vector<int> > m;
       for (map<int64_t,pg_pool_t>::const_iterator p = osdmap.get_pools().begin();
 	   p != osdmap.get_pools().end();
 	   ++p) {

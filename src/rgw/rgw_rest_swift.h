@@ -91,6 +91,15 @@ public:
   void send_response();
 };
 
+class RGWSetTempUrl_ObjStore_SWIFT : public RGWSetTempUrl_ObjStore {
+public:
+  RGWSetTempUrl_ObjStore_SWIFT() {}
+  ~RGWSetTempUrl_ObjStore_SWIFT() {}
+
+  int get_params();
+  void send_response();
+};
+
 class RGWDeleteObj_ObjStore_SWIFT : public RGWDeleteObj_ObjStore {
 public:
   RGWDeleteObj_ObjStore_SWIFT() {}
@@ -160,6 +169,7 @@ class RGWHandler_ObjStore_Service_SWIFT : public RGWHandler_ObjStore_SWIFT {
 protected:
   RGWOp *op_get();
   RGWOp *op_head();
+  RGWOp *op_post();
 public:
   RGWHandler_ObjStore_Service_SWIFT() {}
   virtual ~RGWHandler_ObjStore_Service_SWIFT() {}

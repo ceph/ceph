@@ -6,7 +6,7 @@
 #include <dirent.h>
 #include <string>
 #include <vector>
-#include <tr1/memory>
+#include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
 #include <sstream>
 #include "stdlib.h"

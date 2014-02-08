@@ -7,7 +7,7 @@
 #include <set>
 #include <map>
 #include <string>
-#include <tr1/memory>
+#include "include/memory.h"
 #include <vector>
 
 #include "ObjectMap.h"
