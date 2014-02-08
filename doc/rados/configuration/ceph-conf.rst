@@ -403,7 +403,7 @@ Ceph is still on the leading edge, so you may encounter situations that require
 modifying logging output and using Ceph's debugging. See `Debugging and
 Logging`_ for details on log rotation.
 
-.. _Debugging and Logging: ../../operations/troubleshooting/debug
+.. _Debugging and Logging: ../../troubleshooting/log-and-debug
 
 
 Example ceph.conf
@@ -502,7 +502,7 @@ See `General Settings`_, `OSD Settings`_, `Monitor Settings`_, `MDS Settings`_,
 .. _Monitor Settings: ../mon-config-ref
 .. _MDS Settings: ../../../cephfs/mds-config-ref
 .. _RGW Settings: ../../../radosgw/config-ref/
-.. _Log Settings: ../log-and-debug-ref
+.. _Log Settings: ../../troubleshooting/log-and-debug
 
 
 When creating default directories or files, you should use the cluster
