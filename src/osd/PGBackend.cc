@@ -416,6 +416,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 	       << dendl;
       continue;
     }
+
     bufferlist bl;
     bl.push_back(k->second);
     object_info_t oi;
@@ -430,7 +431,8 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       // invalid object info, probably corrupt
       continue;
     }
-    if (oi.size != i->second.size) {
+    uint64_t correct_size = be_get_ondisk_size(oi.size);
+    if (correct_size != i->second.size) {
       // invalid size, probably corrupt
       dout(10) << __func__ << ": rejecting osd " << j->first
 	       << " for obj " << obj
