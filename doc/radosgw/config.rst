@@ -132,8 +132,8 @@ log files and to turn off server signatures. ::
 	
 .. important:: If you are using CentOS or similar, make sure that ``FastCgiWrapper`` is turned off in ``/etc/httpd/conf.d/fastcgi.conf``.
 
-Finally, if you enabled SSL, make sure that your configuration file  includes
-the following::
+Finally, if you enabled SSL, make sure that you set the port to your SSL port
+(usually 443) and your configuration file includes the following::
 
 	SSLEngine on
 	SSLCertificateFile /etc/apache2/ssl/apache.crt
@@ -238,6 +238,8 @@ restarting your ``ceph`` and ``apache`` services. Then,  start up the
 	sudo service ceph restart
 	sudo service apache2 restart
 	sudo /etc/init.d/radosgw start
+
+.. note:: The service name on RPM based distribution is ceph-radosgw.
 
 See `Operating a Cluster`_ for details. Some versions of Ceph use different
 methods for starting and stopping clusters.

@@ -24,6 +24,7 @@ MON_ID=a
 MON_DIR=$DIR/$MON_ID
 PORT=7451
 MONA=127.0.0.1:$PORT
+TIMEOUT=360
 
 function setup() {
     teardown
@@ -84,7 +85,7 @@ function auth_none() {
 
     mon_run --auth-supported=none
     
-    timeout 10 ./ceph --mon-host $MONA mon stat || return 1
+    timeout $TIMEOUT ./ceph --mon-host $MONA mon stat || return 1
 }
 
 function auth_cephx_keyring() {
@@ -100,7 +101,7 @@ EOF
 
     mon_run
 
-    timeout 10 ./ceph \
+    timeout $TIMEOUT ./ceph \
         --name mon. \
         --keyring $MON_DIR/keyring \
         --mon-host $MONA mon stat || return 1
@@ -122,7 +123,7 @@ function auth_cephx_key() {
 
     mon_run
 
-    timeout 10 ./ceph \
+    timeout $TIMEOUT ./ceph \
         --name mon. \
         --keyring $MON_DIR/keyring \
         --mon-host $MONA mon stat || return 1

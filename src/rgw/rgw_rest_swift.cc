@@ -425,6 +425,36 @@ void RGWPutMetadata_ObjStore_SWIFT::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+int RGWSetTempUrl_ObjStore_SWIFT::get_params()
+{
+  const char *temp_url = s->info.env->get("HTTP_X_ACCOUNT_META_TEMP_URL_KEY");
+  if (temp_url) {
+    temp_url_keys[0] = temp_url;
+  }
+
+  temp_url = s->info.env->get("HTTP_X_ACCOUNT_META_TEMP_URL_KEY_2");
+  if (temp_url) {
+    temp_url_keys[1] = temp_url;
+  }
+
+  if (temp_url_keys.size() == 0)
+    return -EINVAL;
+
+  return 0;
+}
+
+void RGWSetTempUrl_ObjStore_SWIFT::send_response()
+{
+  int r = ret;
+  if (!r)
+    r = STATUS_NO_CONTENT;
+
+  set_req_state_err(s, r);
+  dump_errno(s);
+  end_header(s, this);
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
 void RGWDeleteObj_ObjStore_SWIFT::send_response()
 {
   int r = ret;
@@ -600,6 +630,19 @@ RGWOp *RGWHandler_ObjStore_Service_SWIFT::op_head()
   return new RGWStatAccount_ObjStore_SWIFT;
 }
 
+RGWOp *RGWHandler_ObjStore_Service_SWIFT::op_post()
+{
+  const char *temp_url = s->info.env->get("HTTP_X_ACCOUNT_META_TEMP_URL_KEY");
+  if (temp_url) {
+    return new RGWSetTempUrl_ObjStore_SWIFT;
+  }
+  temp_url = s->info.env->get("HTTP_X_ACCOUNT_META_TEMP_URL_KEY_2");
+  if (temp_url) {
+    return new RGWSetTempUrl_ObjStore_SWIFT;
+  }
+  return NULL;
+}
+
 RGWOp *RGWHandler_ObjStore_Bucket_SWIFT::get_obj_op(bool get_data)
 {
   if (is_acl_op()) {
@@ -711,7 +754,7 @@ RGWOp *RGWHandler_ObjStore_Obj_SWIFT::op_options()
 
 int RGWHandler_ObjStore_SWIFT::authorize()
 {
-  if (!s->os_auth_token) {
+  if (!s->os_auth_token && s->info.args.get("temp_url_sig").empty()) {
     /* anonymous access */
     rgw_get_anon_user(s->user);
     s->perm_mask = RGW_PERM_FULL_CONTROL;
@@ -816,9 +859,15 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
     first = req;
   }
 
+  string tenant_path;
+  if (!g_conf->rgw_swift_tenant_name.empty()) {
+    tenant_path = "/AUTH_";
+    tenant_path.append(g_conf->rgw_swift_tenant_name);
+  }
+
   /* verify that the request_uri conforms with what's expected */
-  char buf[g_conf->rgw_swift_url_prefix.length() + 16];
-  int blen = sprintf(buf, "/%s/v1", g_conf->rgw_swift_url_prefix.c_str());
+  char buf[g_conf->rgw_swift_url_prefix.length() + 16 + tenant_path.length()];
+  int blen = sprintf(buf, "/%s/v1%s", g_conf->rgw_swift_url_prefix.c_str(), tenant_path.c_str());
   if (s->decoded_uri[0] != '/' ||
     s->decoded_uri.compare(0, blen, buf) !=  0) {
     return -ENOENT;
@@ -831,6 +880,12 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
   string ver;
 
   next_tok(req, ver, '/');
+
+  string tenant;
+  if (!tenant_path.empty()) {
+    next_tok(req, tenant, '/');
+  }
+
   s->os_auth_token = s->info.env->get("HTTP_X_AUTH_TOKEN");
   next_tok(req, first, '/');
 

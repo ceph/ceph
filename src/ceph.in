@@ -44,7 +44,7 @@ if MYDIR.endswith('src') and \
         print >> sys.stderr, DEVMODEMSG
         os.execvp('python', ['python'] + sys.argv)
     sys.path.insert(0, os.path.join(MYDIR, 'pybind'))
-    if MYDIR not in os.environ['PATH']:
+    if os.environ.has_key('PATH') and MYDIR not in os.environ['PATH']:
         os.environ['PATH'] += ':' + MYDIR
 
 import argparse

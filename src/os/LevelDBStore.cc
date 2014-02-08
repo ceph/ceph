@@ -5,12 +5,27 @@
 #include <set>
 #include <map>
 #include <string>
-#include <tr1/memory>
+#include "include/memory.h"
 #include <errno.h>
 using std::string;
 #include "common/perf_counters.h"
 
-int LevelDBStore::init(ostream &out, bool create_if_missing)
+int LevelDBStore::init()
+{
+  // init defaults.  caller can override these if they want
+  // prior to calling open.
+  options.write_buffer_size = g_conf->leveldb_write_buffer_size;
+  options.cache_size = g_conf->leveldb_cache_size;
+  options.block_size = g_conf->leveldb_block_size;
+  options.bloom_size = g_conf->leveldb_bloom_size;
+  options.compression_enabled = g_conf->leveldb_compression;
+  options.paranoid_checks = g_conf->leveldb_paranoid;
+  options.max_open_files = g_conf->leveldb_max_open_files;
+  options.log_file = g_conf->leveldb_log;
+  return 0;
+}
+
+int LevelDBStore::do_open(ostream &out, bool create_if_missing)
 {
   leveldb::Options ldoptions;
 
@@ -59,6 +74,12 @@ int LevelDBStore::init(ostream &out, bool create_if_missing)
     return -EINVAL;
   }
 
+  if (g_conf->leveldb_compact_on_mount) {
+    derr << "Compacting leveldb store..." << dendl;
+    compact();
+    derr << "Finished compacting leveldb store" << dendl;
+  }
+
   PerfCountersBuilder plb(g_ceph_context, "leveldb", l_leveldb_first, l_leveldb_last);
   plb.add_u64_counter(l_leveldb_gets, "leveldb_get");
   plb.add_u64_counter(l_leveldb_txns, "leveldb_transaction");
@@ -75,6 +96,9 @@ LevelDBStore::~LevelDBStore()
 {
   close();
   delete logger;
+
+  // Ensure db is destroyed before dependent db_cache and filterpolicy
+  db.reset();
 }
 
 void LevelDBStore::close()

@@ -3,7 +3,7 @@
 #include <map>
 #include <set>
 #include <string>
-#include <tr1/memory>
+#include "include/memory.h"
 
 #include "os/KeyValueDB.h"
 #include "include/buffer.h"
@@ -18,6 +18,16 @@ public:
   KeyValueDBMemory() { }
   KeyValueDBMemory(KeyValueDBMemory *db) : db(db->db) { }
   virtual ~KeyValueDBMemory() { }
+
+  virtual int init() {
+    return 0;
+  }
+  virtual int open(ostream &out) {
+    return 0;
+  }
+  virtual int create_and_open(ostream &out) {
+    return 0;
+  }
 
   int get(
     const string &prefix,

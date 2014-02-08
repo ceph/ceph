@@ -664,7 +664,7 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
     return _raw->len - _len;
   }
 
-  int buffer::ptr::cmp(const ptr& o)
+  int buffer::ptr::cmp(const ptr& o) const
   {
     int l = _len < o._len ? _len : o._len;
     if (l) {
@@ -1369,6 +1369,9 @@ void buffer::list::rebuild_page_aligned()
   // funky modifer
   void buffer::list::splice(unsigned off, unsigned len, list *claim_by /*, bufferlist& replace_with */)
   {    // fixme?
+    if (len == 0)
+      return;
+
     if (off >= length())
       throw end_of_buffer();
 

@@ -226,7 +226,7 @@ Client::~Client()
 void Client::tear_down_cache()
 {
   // fd's
-  for (hash_map<int, Fh*>::iterator it = fd_map.begin();
+  for (ceph::unordered_map<int, Fh*>::iterator it = fd_map.begin();
        it != fd_map.end();
        ++it) {
     Fh *fh = it->second;
@@ -286,7 +286,7 @@ void Client::dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconne
   did.insert(in);
   if (in->dir) {
     ldout(cct, 1) << "  dir " << in->dir << " size " << in->dir->dentries.size() << dendl;
-    for (hash_map<string, Dentry*>::iterator it = in->dir->dentries.begin();
+    for (ceph::unordered_map<string, Dentry*>::iterator it = in->dir->dentries.begin();
          it != in->dir->dentries.end();
          ++it) {
       ldout(cct, 1) << "   " << in->ino << " dn " << it->first << " " << it->second << " ref " << it->second->ref << dendl;
@@ -314,7 +314,7 @@ void Client::dump_cache(Formatter *f)
     dump_inode(f, root, did, true);
 
   // make a second pass to catch anything disconnected
-  for (hash_map<vinodeno_t, Inode*>::iterator it = inode_map.begin();
+  for (ceph::unordered_map<vinodeno_t, Inode*>::iterator it = inode_map.begin();
        it != inode_map.end();
        ++it) {
     if (did.count(it->second))
@@ -494,6 +494,8 @@ void Client::update_inode_file_bits(Inode *in,
 				    uint64_t time_warp_seq, utime_t ctime,
 				    utime_t mtime,
 				    utime_t atime,
+				    version_t inline_version,
+				    bufferlist& inline_data,
 				    int issued)
 {
   bool warn = false;
@@ -503,6 +505,11 @@ void Client::update_inode_file_bits(Inode *in,
 	   << in->truncate_seq << " time_warp_seq: mds " << time_warp_seq
 	   << " local " << in->time_warp_seq << dendl;
   uint64_t prior_size = in->size;
+
+  if (inline_version > in->inline_version) {
+    in->inline_data = inline_data;
+    in->inline_version = inline_version;
+  }
 
   if (truncate_seq > in->truncate_seq ||
       (truncate_seq == in->truncate_seq && size > in->size)) {
@@ -519,6 +526,13 @@ void Client::update_inode_file_bits(Inode *in,
       if (prior_size > size) {
 	_invalidate_inode_cache(in, truncate_size, prior_size - truncate_size, true);
       }
+    }
+
+    // truncate inline data
+    if (in->inline_version < CEPH_INLINE_NONE) {
+      uint32_t len = in->inline_data.length();
+      if (size < len)
+        in->inline_data.splice(size, len - size);
     }
   }
   if (truncate_seq >= in->truncate_seq &&
@@ -654,6 +668,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, MetaSession *sessi
   
     update_inode_file_bits(in, st->truncate_seq, st->truncate_size, st->size,
 			   st->time_warp_seq, st->ctime, st->mtime, st->atime,
+			   st->inline_version, st->inline_data,
 			   issued);
   }
 
@@ -1184,7 +1199,7 @@ int Client::verify_reply_trace(int r,
   bufferlist extra_bl;
   inodeno_t created_ino;
   bool got_created_ino = false;
-  hash_map<vinodeno_t, Inode*>::iterator p;
+  ceph::unordered_map<vinodeno_t, Inode*>::iterator p;
 
   extra_bl.claim(reply->get_extra_bl());
   if (extra_bl.length() >= 8) {
@@ -1958,8 +1973,8 @@ void Client::send_reconnect(MetaSession *session)
   MClientReconnect *m = new MClientReconnect;
 
   // i have an open session.
-  hash_set<inodeno_t> did_snaprealm;
-  for (hash_map<vinodeno_t, Inode*>::iterator p = inode_map.begin();
+  ceph::unordered_set<inodeno_t> did_snaprealm;
+  for (ceph::unordered_map<vinodeno_t, Inode*>::iterator p = inode_map.begin();
        p != inode_map.end();
        ++p) {
     Inode *in = p->second;
@@ -2389,6 +2404,11 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
   in->ctime.encode_timeval(&m->head.ctime);
   m->head.time_warp_seq = in->time_warp_seq;
     
+  if (flush & CEPH_CAP_FILE_WR) {
+    m->inline_version = in->inline_version;
+    m->inline_data = in->inline_data;
+  }
+
   in->reported_size = in->size;
   m->set_snap_follows(follows);
   cap->wanted = want;
@@ -3529,7 +3549,9 @@ void Client::handle_cap_trunc(MetaSession *session, Inode *in, MClientCaps *m)
   issued |= implemented;
   update_inode_file_bits(in, m->get_truncate_seq(), m->get_truncate_size(),
                          m->get_size(), m->get_time_warp_seq(), m->get_ctime(),
-                         m->get_mtime(), m->get_atime(), issued);
+                         m->get_mtime(), m->get_atime(),
+                         m->inline_version, m->inline_data,
+                         issued);
   m->put();
 }
 
@@ -3679,7 +3701,8 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     in->xattr_version = m->head.xattr_version;
   }
   update_inode_file_bits(in, m->get_truncate_seq(), m->get_truncate_size(), m->get_size(),
-			 m->get_time_warp_seq(), m->get_ctime(), m->get_mtime(), m->get_atime(), issued);
+			 m->get_time_warp_seq(), m->get_ctime(), m->get_mtime(), m->get_atime(),
+			 m->inline_version, m->inline_data, issued);
 
   // max_size
   if (cap == in->auth_cap &&
@@ -3859,8 +3882,8 @@ void Client::unmount()
 
   if (cct->_conf->client_oc) {
     // flush/release all buffered data
-    hash_map<vinodeno_t, Inode*>::iterator next;
-    for (hash_map<vinodeno_t, Inode*>::iterator p = inode_map.begin();
+    ceph::unordered_map<vinodeno_t, Inode*>::iterator next;
+    for (ceph::unordered_map<vinodeno_t, Inode*>::iterator p = inode_map.begin();
          p != inode_map.end(); 
          p = next) {
       next = p;
@@ -5749,6 +5772,52 @@ void Client::unlock_fh_pos(Fh *f)
   f->pos_locked = false;
 }
 
+int Client::uninline_data(Inode *in, Context *onfinish)
+{
+  if (!in->inline_data.length()) {
+    onfinish->complete(0);
+    return 0;
+  }
+
+  char oid_buf[32];
+  snprintf(oid_buf, sizeof(oid_buf), "%llx.00000000", (long long unsigned)in->ino);
+  object_t oid = oid_buf;
+
+  ObjectOperation create_ops;
+  create_ops.create(false);
+
+  objecter->mutate(oid,
+                   OSDMap::file_to_object_locator(in->layout),
+                   create_ops,
+                   in->snaprealm->get_snap_context(),
+                   ceph_clock_now(cct),
+                   0,
+                   NULL,
+                   NULL);
+
+  bufferlist inline_version_bl;
+  ::encode(in->inline_version, inline_version_bl);
+
+  ObjectOperation uninline_ops;
+  uninline_ops.cmpxattr("inline_version",
+                        CEPH_OSD_CMPXATTR_OP_GT,
+                        CEPH_OSD_CMPXATTR_MODE_U64,
+                        inline_version_bl);
+  bufferlist inline_data = in->inline_data;
+  uninline_ops.write(0, inline_data, in->truncate_size, in->truncate_seq);
+  uninline_ops.setxattr("inline_version", inline_version_bl);
+
+  objecter->mutate(oid,
+                   OSDMap::file_to_object_locator(in->layout),
+                   uninline_ops,
+                   in->snaprealm->get_snap_context(),
+                   ceph_clock_now(cct),
+                   0,
+                   NULL,
+                   onfinish);
+
+  return 0;
+}
 
 // 
 
@@ -5794,6 +5863,41 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
     movepos = true;
   }
 
+  Mutex uninline_flock("Clinet::_read_uninline_data flock");
+  Cond uninline_cond;
+  bool uninline_done = false;
+  int uninline_ret = 0;
+  Context *onuninline = NULL;
+
+  if (in->inline_version < CEPH_INLINE_NONE) {
+    if (!(have & CEPH_CAP_FILE_CACHE)) {
+      onuninline = new C_SafeCond(&uninline_flock,
+                                  &uninline_cond,
+                                  &uninline_done,
+                                  &uninline_ret);
+      uninline_data(in, onuninline);
+    } else {
+      uint32_t len = in->inline_data.length();
+
+      uint64_t endoff = offset + size;
+      if (endoff > in->size)
+        endoff = in->size;
+
+      if (offset < len) {
+        if (endoff <= len) {
+          bl->substr_of(in->inline_data, offset, endoff - offset);
+        } else {
+          bl->substr_of(in->inline_data, offset, len - offset);
+          bl->append_zero(endoff - len);
+        }
+      } else if ((uint64_t)offset < endoff) {
+        bl->append_zero(endoff - offset);
+      }
+
+      goto success;
+    }
+  }
+
   if (!conf->client_debug_force_sync_read &&
       (cct->_conf->client_oc && (have & CEPH_CAP_FILE_CACHE))) {
 
@@ -5809,6 +5913,8 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
   if (r < 0) {
     goto done;
   }
+
+success:
 
   if (movepos) {
     // adjust fd pos
@@ -5831,6 +5937,24 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
 
 done:
   // done!
+
+  if (onuninline) {
+    client_lock.Unlock();
+    uninline_flock.Lock();
+    while (!uninline_done)
+      uninline_cond.Wait(uninline_flock);
+    uninline_flock.Unlock();
+    client_lock.Lock();
+
+    if (uninline_ret >= 0 || uninline_ret == -ECANCELED) {
+      in->inline_data.clear();
+      in->inline_version = CEPH_INLINE_NONE;
+      mark_caps_dirty(in, CEPH_CAP_FILE_WR);
+      check_caps(in, false);
+    } else
+      r = uninline_ret;
+  }
+
   put_cap_ref(in, CEPH_CAP_FILE_RD);
   return r;
 }
@@ -5971,7 +6095,7 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
     if (r >= 0 && r < wanted) {
       if (pos < in->size) {
 	// zero up to known EOF
-	int some = in->size - pos;
+	int64_t some = in->size - pos;
 	if (some > left)
 	  some = left;
 	bufferptr z(some);
@@ -6101,6 +6225,43 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
 
   ldout(cct, 10) << " snaprealm " << *in->snaprealm << dendl;
 
+  Mutex uninline_flock("Clinet::_write_uninline_data flock");
+  Cond uninline_cond;
+  bool uninline_done = false;
+  int uninline_ret = 0;
+  Context *onuninline = NULL;
+
+  if (in->inline_version < CEPH_INLINE_NONE) {
+    if (endoff > cct->_conf->client_max_inline_size ||
+        endoff > CEPH_INLINE_MAX_SIZE ||
+        !(have & CEPH_CAP_FILE_BUFFER)) {
+      onuninline = new C_SafeCond(&uninline_flock,
+                                  &uninline_cond,
+                                  &uninline_done,
+                                  &uninline_ret);
+      uninline_data(in, onuninline);
+    } else {
+      get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+
+      uint32_t len = in->inline_data.length();
+
+      if (endoff < len)
+        in->inline_data.copy(endoff, len - endoff, bl);
+
+      if (offset < len)
+        in->inline_data.splice(offset, len - offset);
+      else if (offset > len)
+        in->inline_data.append_zero(offset - len);
+
+      in->inline_data.append(bl);
+      in->inline_version++;
+
+      put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+
+      goto success;
+    }
+  }
+
   if (cct->_conf->client_oc && (have & CEPH_CAP_FILE_BUFFER)) {
     // do buffered write
     if (!in->oset.dirty_or_tx)
@@ -6151,7 +6312,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   }
 
   // if we get here, write was successful, update client metadata
-
+success:
   // time
   lat = ceph_clock_now(cct);
   lat -= start;
@@ -6179,6 +6340,24 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   mark_caps_dirty(in, CEPH_CAP_FILE_WR);
 
 done:
+
+  if (onuninline) {
+    client_lock.Unlock();
+    uninline_flock.Lock();
+    while (!uninline_done)
+      uninline_cond.Wait(uninline_flock);
+    uninline_flock.Unlock();
+    client_lock.Lock();
+
+    if (uninline_ret >= 0 || uninline_ret == -ECANCELED) {
+      in->inline_data.clear();
+      in->inline_version = CEPH_INLINE_NONE;
+      mark_caps_dirty(in, CEPH_CAP_FILE_WR);
+      check_caps(in, false);
+    } else
+      r = uninline_ret;
+  }
+
   put_cap_ref(in, CEPH_CAP_FILE_WR);
   return r;
 }
@@ -6655,8 +6834,8 @@ int Client::_ll_put(Inode *in, int num)
 void Client::_ll_drop_pins()
 {
   ldout(cct, 10) << "_ll_drop_pins" << dendl;
-  hash_map<vinodeno_t, Inode*>::iterator next;
-  for (hash_map<vinodeno_t, Inode*>::iterator it = inode_map.begin();
+  ceph::unordered_map<vinodeno_t, Inode*>::iterator next;
+  for (ceph::unordered_map<vinodeno_t, Inode*>::iterator it = inode_map.begin();
        it != inode_map.end();
        it = next) {
     Inode *in = it->second;
@@ -7835,34 +8014,69 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
   if (r < 0)
     return r;
 
+  Mutex uninline_flock("Clinet::_fallocate_uninline_data flock");
+  Cond uninline_cond;
+  bool uninline_done = false;
+  int uninline_ret = 0;
+  Context *onuninline = NULL;
+
   if (mode & FALLOC_FL_PUNCH_HOLE) {
-    Mutex flock("Client::_punch_hole flock");
-    Cond cond;
-    bool done = false;
-    Context *onfinish = new C_SafeCond(&flock, &cond, &done);
-    Context *onsafe = new C_Client_SyncCommit(this, in);
+    if (in->inline_version < CEPH_INLINE_NONE &&
+        (have & CEPH_CAP_FILE_BUFFER)) {
+      bufferlist bl;
+      int len = in->inline_data.length();
+      if (offset < len) {
+        if (offset > 0)
+          in->inline_data.copy(0, offset, bl);
+        int size = length;
+        if (offset + size > len)
+          size = len - offset;
+        if (size > 0)
+          bl.append_zero(size);
+        if (offset + size < len)
+          in->inline_data.copy(offset + size, len - offset - size, bl);
+        in->inline_data = bl;
+        in->inline_version++;
+      }
+      in->mtime = ceph_clock_now(cct);
+      mark_caps_dirty(in, CEPH_CAP_FILE_WR);
+    } else {
+      if (in->inline_version < CEPH_INLINE_NONE) {
+        onuninline = new C_SafeCond(&uninline_flock,
+                                    &uninline_cond,
+                                    &uninline_done,
+                                    &uninline_ret);
+        uninline_data(in, onuninline);
+      }
 
-    unsafe_sync_write++;
-    get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+      Mutex flock("Client::_punch_hole flock");
+      Cond cond;
+      bool done = false;
+      Context *onfinish = new C_SafeCond(&flock, &cond, &done);
+      Context *onsafe = new C_Client_SyncCommit(this, in);
 
-    _invalidate_inode_cache(in, offset, length, true);
-    r = filer->zero(in->ino, &in->layout,
-                    in->snaprealm->get_snap_context(),
-                    offset, length,
-                    ceph_clock_now(cct),
-                    0, true, onfinish, onsafe);
-    if (r < 0)
-      goto done;
+      unsafe_sync_write++;
+      get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
-    in->mtime = ceph_clock_now(cct);
-    mark_caps_dirty(in, CEPH_CAP_FILE_WR);
+      _invalidate_inode_cache(in, offset, length, true);
+      r = filer->zero(in->ino, &in->layout,
+                      in->snaprealm->get_snap_context(),
+                      offset, length,
+                      ceph_clock_now(cct),
+                      0, true, onfinish, onsafe);
+      if (r < 0)
+        goto done;
 
-    client_lock.Unlock();
-    flock.Lock();
-    while (!done)
-      cond.Wait(flock);
-    flock.Unlock();
-    client_lock.Lock();
+      in->mtime = ceph_clock_now(cct);
+      mark_caps_dirty(in, CEPH_CAP_FILE_WR);
+
+      client_lock.Unlock();
+      flock.Lock();
+      while (!done)
+        cond.Wait(flock);
+      flock.Unlock();
+      client_lock.Lock();
+    }
   } else if (!(mode & FALLOC_FL_KEEP_SIZE)) {
     uint64_t size = offset + length;
     if (size > in->size) {
@@ -7877,6 +8091,24 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
   }
 
 done:
+
+  if (onuninline) {
+    client_lock.Unlock();
+    uninline_flock.Lock();
+    while (!uninline_done)
+      uninline_cond.Wait(uninline_flock);
+    uninline_flock.Unlock();
+    client_lock.Lock();
+
+    if (uninline_ret >= 0 || uninline_ret == -ECANCELED) {
+      in->inline_data.clear();
+      in->inline_version = CEPH_INLINE_NONE;
+      mark_caps_dirty(in, CEPH_CAP_FILE_WR);
+      check_caps(in, false);
+    } else
+      r = uninline_ret;
+  }
+
   put_cap_ref(in, CEPH_CAP_FILE_WR);
   return r;
 }

@@ -8,7 +8,7 @@
 #include <string>
 
 #include <vector>
-#include <tr1/memory>
+#include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
 
 #include "ObjectMap.h"
@@ -280,7 +280,7 @@ public:
 				   coll_t *c, ghobject_t *oid);
 private:
   /// Implicit lock on Header->seq
-  typedef std::tr1::shared_ptr<_Header> Header;
+  typedef ceph::shared_ptr<_Header> Header;
 
   string map_header_key(const ghobject_t &oid);
   string header_key(uint64_t seq);
@@ -316,12 +316,12 @@ private:
     Header header;
 
     /// parent_iter == NULL iff no parent
-    std::tr1::shared_ptr<DBObjectMapIteratorImpl> parent_iter;
+    ceph::shared_ptr<DBObjectMapIteratorImpl> parent_iter;
     KeyValueDB::Iterator key_iter;
     KeyValueDB::Iterator complete_iter;
 
     /// cur_iter points to currently valid iterator
-    std::tr1::shared_ptr<ObjectMapIteratorImpl> cur_iter;
+    ceph::shared_ptr<ObjectMapIteratorImpl> cur_iter;
     int r;
 
     /// init() called, key_iter, complete_iter, parent_iter filled in
@@ -360,7 +360,7 @@ private:
     int adjust();
   };
 
-  typedef std::tr1::shared_ptr<DBObjectMapIteratorImpl> DBObjectMapIterator;
+  typedef ceph::shared_ptr<DBObjectMapIteratorImpl> DBObjectMapIterator;
   DBObjectMapIterator _get_iterator(Header header) {
     return DBObjectMapIterator(new DBObjectMapIteratorImpl(this, header));
   }

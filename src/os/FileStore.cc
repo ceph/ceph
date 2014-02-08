@@ -86,6 +86,13 @@ using ceph::crypto::SHA1;
 #define REPLAY_GUARD_XATTR "user.cephos.seq"
 #define GLOBAL_REPLAY_GUARD_XATTR "user.cephos.gseq"
 
+// XATTR_SPILL_OUT_NAME as a xattr is used to maintain that indicates whether
+// xattrs spill over into DBObjectMap, if XATTR_SPILL_OUT_NAME exists in file
+// xattrs and the value is "no", it indicates no xattrs in DBObjectMap
+#define XATTR_SPILL_OUT_NAME "user.cephos.spill_out"
+#define XATTR_NO_SPILL_OUT "0"
+#define XATTR_SPILL_OUT "1"
+
 //Initial features in new superblock.
 static CompatSet get_fs_initial_compat_set() {
   CompatSet::FeatureSet ceph_osd_feature_compat;
@@ -225,50 +232,63 @@ int FileStore::lfn_open(coll_t cid,
   if (!(*index)) {
     r = get_index(cid, index);
   }
-  Mutex::Locker l(fdcache_lock);
-  if (!replaying)
-    *outfd = fdcache.lookup(oid);
-  if (*outfd) {
-    return 0;
-  }
-  IndexedPath path2;
-  if (!path)
-    path = &path2;
+
   int fd, exist;
-  if (r < 0) {
-    derr << "error getting collection index for " << cid
-	 << ": " << cpp_strerror(-r) << dendl;
-    goto fail;
-  }
-  r = (*index)->lookup(oid, path, &exist);
-  if (r < 0) {
-    derr << "could not find " << oid << " in index: "
-	 << cpp_strerror(-r) << dendl;
-    goto fail;
+  if (!replaying) {
+    Mutex::Locker l(fdcache_lock);
+    *outfd = fdcache.lookup(oid);
+    if (*outfd)
+      return 0;
   }
 
-  r = ::open((*path)->path(), flags, 0644);
-  if (r < 0) {
-    r = -errno;
-    dout(10) << "error opening file " << (*path)->path() << " with flags="
-	     << flags << ": " << cpp_strerror(-r) << dendl;
-    goto fail;
-  }
-  fd = r;
-
-  if (create && (!exist)) {
-    r = (*index)->created(oid, (*path)->path());
+  {
+    IndexedPath path2;
+    if (!path)
+      path = &path2;
     if (r < 0) {
-      TEMP_FAILURE_RETRY(::close(fd));
-      derr << "error creating " << oid << " (" << (*path)->path()
-	   << ") in index: " << cpp_strerror(-r) << dendl;
+      derr << "error getting collection index for " << cid
+	   << ": " << cpp_strerror(-r) << dendl;
       goto fail;
     }
+    r = (*index)->lookup(oid, path, &exist);
+    if (r < 0) {
+      derr << "could not find " << oid << " in index: "
+	   << cpp_strerror(-r) << dendl;
+      goto fail;
+    }
+
+    r = ::open((*path)->path(), flags, 0644);
+    if (r < 0) {
+      r = -errno;
+      dout(10) << "error opening file " << (*path)->path() << " with flags="
+	       << flags << ": " << cpp_strerror(-r) << dendl;
+      goto fail;
+    }
+    fd = r;
+
+    if (create && (!exist)) {
+      r = (*index)->created(oid, (*path)->path());
+      if (r < 0) {
+	TEMP_FAILURE_RETRY(::close(fd));
+	derr << "error creating " << oid << " (" << (*path)->path()
+	     << ") in index: " << cpp_strerror(-r) << dendl;
+	goto fail;
+      }
+    }
   }
-  if (!replaying)
-    *outfd = fdcache.add(oid, fd);
-  else
+
+  if (!replaying) {
+    Mutex::Locker l(fdcache_lock);
+    *outfd = fdcache.lookup(oid);
+    if (*outfd) {
+      TEMP_FAILURE_RETRY(::close(fd));
+      return 0;
+    } else {
+      *outfd = fdcache.add(oid, fd);
+    }
+  } else {
     *outfd = FDRef(new FDCache::FD(fd));
+  }
   return 0;
 
  fail:
@@ -293,6 +313,11 @@ int FileStore::lfn_link(coll_t c, coll_t newcid, const ghobject_t& o, const ghob
     r = get_index(c, &index_old);
     if (r < 0)
       return r;
+  } else if (c == newcid) {
+    r = get_index(c, &index_old);
+    if (r < 0)
+      return r;
+    index_new = index_old;
   } else {
     r = get_index(c, &index_old);
     if (r < 0)
@@ -1005,7 +1030,8 @@ void FileStore::set_allow_sharded_objects()
 
 bool FileStore::get_allow_sharded_objects()
 {
-  return superblock.compat_features.incompat.contains(CEPH_FS_FEATURE_INCOMPAT_SHARDS);
+  return g_conf->filestore_debug_disable_sharded_check ||
+    superblock.compat_features.incompat.contains(CEPH_FS_FEATURE_INCOMPAT_SHARDS);
 }
 
 int FileStore::update_version_stamp()
@@ -1306,14 +1332,23 @@ int FileStore::mount()
   {
     LevelDBStore *omap_store = new LevelDBStore(g_ceph_context, omap_dir);
 
-    omap_store->options.write_buffer_size = g_conf->osd_leveldb_write_buffer_size;
-    omap_store->options.cache_size = g_conf->osd_leveldb_cache_size;
-    omap_store->options.block_size = g_conf->osd_leveldb_block_size;
-    omap_store->options.bloom_size = g_conf->osd_leveldb_bloom_size;
-    omap_store->options.compression_enabled = g_conf->osd_leveldb_compression;
-    omap_store->options.paranoid_checks = g_conf->osd_leveldb_paranoid;
-    omap_store->options.max_open_files = g_conf->osd_leveldb_max_open_files;
-    omap_store->options.log_file = g_conf->osd_leveldb_log;
+    omap_store->init();
+    if (g_conf->osd_leveldb_write_buffer_size)
+      omap_store->options.write_buffer_size = g_conf->osd_leveldb_write_buffer_size;
+    if (g_conf->osd_leveldb_cache_size)
+      omap_store->options.cache_size = g_conf->osd_leveldb_cache_size;
+    if (g_conf->osd_leveldb_block_size)
+      omap_store->options.block_size = g_conf->osd_leveldb_block_size;
+    if (g_conf->osd_leveldb_bloom_size)
+      omap_store->options.bloom_size = g_conf->osd_leveldb_bloom_size;
+    if (g_conf->osd_leveldb_compression)
+      omap_store->options.compression_enabled = g_conf->osd_leveldb_compression;
+    if (g_conf->osd_leveldb_paranoid)
+      omap_store->options.paranoid_checks = g_conf->osd_leveldb_paranoid;
+    if (g_conf->osd_leveldb_max_open_files)
+      omap_store->options.max_open_files = g_conf->osd_leveldb_max_open_files;
+    if (g_conf->osd_leveldb_log.length())
+      omap_store->options.log_file = g_conf->osd_leveldb_log;
 
     stringstream err;
     if (omap_store->create_and_open(err)) {
@@ -3464,15 +3499,29 @@ int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>
   Index index;
   dout(15) << "getattrs " << cid << "/" << oid << dendl;
   FDRef fd;
+  bool spill_out = true;
+  char buf[2];
+
   int r = lfn_open(cid, oid, false, &fd);
   if (r < 0) {
     goto out;
   }
+
+  r = chain_fgetxattr(**fd, XATTR_SPILL_OUT_NAME, buf, sizeof(buf));
+  if (r >= 0 && !strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT)))
+    spill_out = false;
+
   r = _fgetattrs(**fd, aset, user_only);
   if (r < 0) {
     goto out;
   }
   lfn_close(fd);
+
+  if (!spill_out) {
+    dout(10) << __func__ << " no xattr exists in object_map r = " << r << dendl;
+    goto out;
+  }
+
   r = get_index(cid, &index);
   if (r < 0) {
     dout(10) << __func__ << " could not get index r = " << r << dendl;
@@ -3483,6 +3532,7 @@ int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>
     dout(10) << __func__ << " could not get omap_attrs r = " << r << dendl;
     goto out;
   }
+
   r = object_map->get_xattrs(oid, omap_attrs, &omap_aset);
   if (r < 0 && r != -ENOENT) {
     dout(10) << __func__ << " could not get omap_attrs r = " << r << dendl;
@@ -3527,14 +3577,25 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
   map<string, bufferptr> inline_set;
   map<string, bufferptr> inline_to_set;
   FDRef fd;
+  int spill_out = -1;
+
   int r = lfn_open(cid, oid, false, &fd);
   if (r < 0) {
     goto out;
   }
+
+  char buf[2];
+  r = chain_fgetxattr(**fd, XATTR_SPILL_OUT_NAME, buf, sizeof(buf));
+  if (r >= 0 && !strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT)))
+    spill_out = 0;
+  else
+    spill_out = 1;
+
   r = _fgetattrs(**fd, inline_set, false);
   assert(!m_filestore_fail_eio || r != -EIO);
   dout(15) << "setattrs " << cid << "/" << oid << dendl;
   r = 0;
+
   for (map<string,bufferptr>::iterator p = aset.begin();
        p != aset.end();
        ++p) {
@@ -3567,14 +3628,18 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
     inline_set.insert(*p);
 
     inline_to_set.insert(*p);
+  }
 
+  if (spill_out != 1 && omap_set.size()) {
+    chain_fsetxattr(**fd, XATTR_SPILL_OUT_NAME, XATTR_SPILL_OUT,
+		    sizeof(XATTR_SPILL_OUT));
   }
 
   r = _fsetattrs(**fd, inline_to_set);
   if (r < 0)
     goto out_close;
 
-  if (!omap_remove.empty()) {
+  if (spill_out && !omap_remove.empty()) {
     r = object_map->remove_xattrs(oid, omap_remove, &spos);
     if (r < 0 && r != -ENOENT) {
       dout(10) << __func__ << " could not remove_xattrs r = " << r << dendl;
@@ -3584,7 +3649,7 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
       r = 0; // don't confuse the debug output
     }
   }
-  
+
   if (!omap_set.empty()) {
     r = object_map->set_xattrs(oid, omap_set, &spos);
     if (r < 0) {
@@ -3606,14 +3671,24 @@ int FileStore::_rmattr(coll_t cid, const ghobject_t& oid, const char *name,
 {
   dout(15) << "rmattr " << cid << "/" << oid << " '" << name << "'" << dendl;
   FDRef fd;
+  bool spill_out = true;
+  bufferptr bp;
+
   int r = lfn_open(cid, oid, false, &fd);
   if (r < 0) {
     goto out;
   }
+
+  char buf[2];
+  r = chain_fgetxattr(**fd, XATTR_SPILL_OUT_NAME, buf, sizeof(buf));
+  if (r >= 0 && !strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT))) {
+    spill_out = false;
+  }
+
   char n[CHAIN_XATTR_MAX_NAME_LEN];
   get_attrname(name, n, CHAIN_XATTR_MAX_NAME_LEN);
   r = chain_fremovexattr(**fd, n);
-  if (r == -ENODATA) {
+  if (r == -ENODATA && spill_out) {
     Index index;
     r = get_index(cid, &index);
     if (r < 0) {
@@ -3645,10 +3720,19 @@ int FileStore::_rmattrs(coll_t cid, const ghobject_t& oid,
   FDRef fd;
   set<string> omap_attrs;
   Index index;
+  bool spill_out = true;
+
   int r = lfn_open(cid, oid, false, &fd);
   if (r < 0) {
     goto out;
   }
+
+  char buf[2];
+  r = chain_fgetxattr(**fd, XATTR_SPILL_OUT_NAME, buf, sizeof(buf));
+  if (r >= 0 && !strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT))) {
+    spill_out = false;
+  }
+
   r = _fgetattrs(**fd, aset, false);
   if (r >= 0) {
     for (map<string,bufferptr>::iterator p = aset.begin(); p != aset.end(); ++p) {
@@ -3659,26 +3743,36 @@ int FileStore::_rmattrs(coll_t cid, const ghobject_t& oid,
 	break;
     }
   }
-  lfn_close(fd);
+
+  if (!spill_out) {
+    dout(10) << __func__ << " no xattr exists in object_map r = " << r << dendl;
+    goto out_close;
+  }
 
   r = get_index(cid, &index);
   if (r < 0) {
     dout(10) << __func__ << " could not get index r = " << r << dendl;
-    return r;
+    goto out_close;
   }
   r = object_map->get_all_xattrs(oid, &omap_attrs);
   if (r < 0 && r != -ENOENT) {
     dout(10) << __func__ << " could not get omap_attrs r = " << r << dendl;
     assert(!m_filestore_fail_eio || r != -EIO);
-    return r;
+    goto out_close;
   }
   r = object_map->remove_xattrs(oid, omap_attrs, &spos);
   if (r < 0 && r != -ENOENT) {
     dout(10) << __func__ << " could not remove omap_attrs r = " << r << dendl;
-    return r;
+    goto out_close;
   }
   if (r == -ENOENT)
     r = 0;
+
+  chain_fsetxattr(**fd, XATTR_SPILL_OUT_NAME, XATTR_NO_SPILL_OUT,
+		  sizeof(XATTR_NO_SPILL_OUT));
+
+ out_close:
+  lfn_close(fd);
  out:
   dout(10) << "rmattrs " << cid << "/" << oid << " = " << r << dendl;
   return r;
@@ -4342,12 +4436,25 @@ int FileStore::_collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,
 
     _inject_failure();
 
+    lfn_close(fd);
+    fd = FDRef();
+
+    if (r == 0)
+      r = lfn_unlink(oldcid, oldoid, spos, true);
+
+    if (r == 0)
+      r = lfn_open(c, o, 0, &fd);
+
     // close guard on object so we don't do this again
-    if (r == 0) {
+    if (r == 0)
       _close_replay_guard(**fd, spos);
-    }
+
     lfn_close(fd);
   }
+
+  dout(10) << __func__ << " " << c << "/" << o << " from " << oldcid << "/" << oldoid
+	   << " = " << r << dendl;
+  return r;
 
  out_rm_src:
   // remove source

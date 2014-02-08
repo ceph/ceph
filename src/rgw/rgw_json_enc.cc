@@ -397,6 +397,8 @@ void RGWUserInfo::dump(Formatter *f) const
   encode_json("default_placement", default_placement, f);
   encode_json("placement_tags", placement_tags, f);
   encode_json("bucket_quota", bucket_quota, f);
+  encode_json("user_quota", user_quota, f);
+  encode_json("temp_url_keys", temp_url_keys, f);
 }
 
 
@@ -448,6 +450,8 @@ void RGWUserInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("default_placement", default_placement, obj);
   JSONDecoder::decode_json("placement_tags", placement_tags, obj);
   JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
+  JSONDecoder::decode_json("user_quota", user_quota, obj);
+  JSONDecoder::decode_json("temp_url_keys", temp_url_keys, obj);
 }
 
 void RGWQuotaInfo::dump(Formatter *f) const
@@ -692,13 +696,14 @@ void RGWRegionMap::dump(Formatter *f) const
   encode_json("regions", regions, f);
   encode_json("master_region", master_region, f);
   encode_json("bucket_quota", bucket_quota, f);
+  encode_json("user_quota", user_quota, f);
 }
 
 void RGWRegionMap::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("regions", regions, obj);
   JSONDecoder::decode_json("master_region", master_region, obj);
-  JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
+  JSONDecoder::decode_json("user_quota", user_quota, obj);
 }
 
 void RGWMetadataLogInfo::dump(Formatter *f) const

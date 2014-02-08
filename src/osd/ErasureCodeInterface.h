@@ -25,12 +25,57 @@
     are systematic (i.e. the data is not mangled and can be
     reconstructed by concatenating chunks ).
     
-    All methods return **0** on success and a negative value on
-    error. If the value returned on error is not explained in
-    **ErasureCodeInterface**, the sources or the documentation of the
-    interface implementer (i.e. the plugin ) must be read to figure
-    out what it means. It is recommended that each error code matches
-    an *errno* value that relates to the cause of the error.
+    Methods returning an **int** return **0** on success and a
+    negative value on error. If the value returned on error is not
+    explained in **ErasureCodeInterface**, the sources or the
+    documentation of the interface implementer (i.e. the plugin ) must
+    be read to figure out what it means. It is recommended that each
+    error code matches an *errno* value that relates to the cause of
+    the error.
+
+    If an object is small enough, the caller can process it with
+    one call to the **encode** or **decode** method.
+
+	+---------------- coded object O -------------------------+
+	|+----------------+ +----------------+ +----------------+ |
+	||    chunk  0    | |    chunk  1    | |    chunk  2    | |
+	||    [0,N)       | |    [N,2N)      | |    [2N,3N)     | |
+	|+----------------+ +----------------+ +----------------+ |
+	+------^--------------------------------------------------+
+	       |
+   chunk B / C | offset B % C ( where C is the chunk size )
+	       |
+	 +-----^---- raw object O ----+------+
+	 |     B     [0,X)            | pad  |
+	 +----------------------------+------+
+
+    The object size is paded so that each chunks are of the same size.
+    In the example above, if the actual object size was X, then it
+    will be padded to 2N >= X assuming there are two data chunks (0
+    and 1) and one coding chunk (2).
+
+    For chunks of size C, byte B of the object is found in chunk number
+    B / C at offset B % C.
+
+    If an object is too large to be encoded in memory, the caller
+    should divide it in smaller units named **stripes**.
+
+	+---------------------- object O -------------------------+
+	|+----------------+ +----------------+ +----------------+ |
+ stripe ||    chunk  0    | |    chunk  1    | |    chunk  2    | |
+   0    ||    [0,N)       | |    [N,2N)      | |    [2N,3N)     | |
+	|+----------------+ +----------------+ +----------------+ |
+	|+----------------+ +----------------+ +----------------+ |
+ stripe ||    chunk  0    | |    chunk  1    | |    chunk  2    | |
+   1    ||    [X,M)       | |   [X+M,X+2M)   | |   [X+2M,X+3M)  | |
+	||                | |                | |                | |
+	|+----------------+ +----------------+ +----------------+ |
+	|                         ...                             |
+	+---------------------------------------------------------+
+
+    The interface does not concern itself with stripes nor does it
+    impose constraints on the size of each stripe. Variable names in
+    the interface always use **object** and never use **stripe**. 
 
     Assuming the interface implementer provides three data chunks ( K
     = 3 ) and two coding chunks ( M = 2 ), a buffer could be encoded as
@@ -97,7 +142,7 @@
 
 #include <map>
 #include <set>
-#include <tr1/memory>
+#include "include/memory.h"
 #include "include/buffer.h"
 
 using namespace std;
@@ -107,6 +152,48 @@ namespace ceph {
   class ErasureCodeInterface {
   public:
     virtual ~ErasureCodeInterface() {}
+
+    /**
+     * Return the number of chunks created by a call to the **encode**
+     * method.
+     *
+     * In the simplest case it can be K + M, i.e. the number
+     * of data chunks (K) plus the number of parity chunks
+     * (M). However, if the implementation provides local parity there
+     * could be an additional overhead.
+     *
+     * @return the number of chunks created by encode()
+     */
+    virtual unsigned int get_chunk_count() const = 0;
+
+    /**
+     * Return the number of data chunks created by a call to the
+     * **encode** method. The data chunks contain the buffer provided
+     * to **encode**, verbatim, with padding at the end of the last
+     * chunk.
+     *
+     * @return the number of data chunks created by encode()
+     */
+    virtual unsigned int get_data_chunk_count() const = 0;
+
+    /**
+     * Return the size (in bytes) of a single chunk created by a call
+     * to the **decode** method. The returned size multiplied by
+     * **get_chunk_count()** is greater or equal to **object_size**.
+     *
+     * If the object size is properly aligned, the chunk size is
+     * **object_size / get_chunk_count()**. However, if
+     * **object_size** is not a multiple of **get_chunk_count** or if
+     * the implementation imposes additional alignment constraints,
+     * the chunk size may be larger.
+     *
+     * The byte found at offset **B** of the original object is mapped
+     * to chunk **B / get_chunk_size()** at offset **B % get_chunk_size()**.
+     *
+     * @param [in] object_size the number of bytes of the object to **encode()**
+     * @return the size (in bytes) of a single chunk created by **encode()**
+     */
+    virtual unsigned int get_chunk_size(unsigned int object_size) const = 0;
 
     /**
      * Compute the smallest subset of **available** chunks that needs
@@ -231,9 +318,32 @@ namespace ceph {
     virtual int decode(const set<int> &want_to_read,
                        const map<int, bufferlist> &chunks,
                        map<int, bufferlist> *decoded) = 0;
+
+    /**
+     * Decode the first **get_data_chunk_count()** **chunks** and
+     * concatenate them them into **decoded**.
+     *
+     * Returns 0 on success.
+     *
+     * @param [in] chunks map chunk indexes to chunk data
+     * @param [out] decoded concatenante of the data chunks
+     * @return **0** on success or a negative errno on error.
+     */
+    int decode_concat(const map<int, bufferlist> &chunks,
+		      bufferlist *decoded) {
+      set<int> want_to_read;
+      for (unsigned int i = 0; i < get_data_chunk_count(); i++)
+	want_to_read.insert(i);
+      map<int, bufferlist> decoded_map;
+      int r = decode(want_to_read, chunks, &decoded_map);
+      if (r == 0)
+	for (unsigned int i = 0; i < get_data_chunk_count(); i++)
+	  decoded->claim_append(decoded_map[i]);
+      return r;
+    }
   };
 
-  typedef std::tr1::shared_ptr<ErasureCodeInterface> ErasureCodeInterfaceRef;
+  typedef ceph::shared_ptr<ErasureCodeInterface> ErasureCodeInterfaceRef;
 
 }
 

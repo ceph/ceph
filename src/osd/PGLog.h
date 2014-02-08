@@ -27,6 +27,17 @@ using namespace std;
 
 struct PGLog {
   ////////////////////////////// sub classes //////////////////////////////
+  struct LogEntryHandler {
+    virtual void rollback(
+      const pg_log_entry_t &entry) = 0;
+    virtual void remove(
+      const hobject_t &hoid) = 0;
+    virtual void trim(
+      const pg_log_entry_t &entry) = 0;
+    virtual void cant_rollback(
+      const pg_log_entry_t &entry) = 0;
+    virtual ~LogEntryHandler() {}
+  };
 
   /* Exceptions */
   class read_log_error : public buffer::error {
@@ -46,8 +57,8 @@ struct PGLog {
    * plus some methods to manipulate it all.
    */
   struct IndexedLog : public pg_log_t {
-    hash_map<hobject_t,pg_log_entry_t*> objects;  // ptrs into log.  be careful!
-    hash_map<osd_reqid_t,pg_log_entry_t*> caller_ops;
+    ceph::unordered_map<hobject_t,pg_log_entry_t*> objects;  // ptrs into log.  be careful!
+    ceph::unordered_map<osd_reqid_t,pg_log_entry_t*> caller_ops;
 
     // recovery pointers
     list<pg_log_entry_t>::iterator complete_to;  // not inclusive of referenced item
@@ -85,7 +96,7 @@ struct PGLog {
       return caller_ops.count(r);
     }
     const pg_log_entry_t *get_request(const osd_reqid_t &r) const {
-      hash_map<osd_reqid_t,pg_log_entry_t*>::const_iterator p = caller_ops.find(r);
+      ceph::unordered_map<osd_reqid_t,pg_log_entry_t*>::const_iterator p = caller_ops.find(r);
       if (p == caller_ops.end())
 	return NULL;
       return p->second;
@@ -142,7 +153,10 @@ struct PGLog {
 	caller_ops[e.reqid] = &(log.back());
     }
 
-    void trim(eversion_t s, set<eversion_t> *trimmed);
+    void trim(
+      LogEntryHandler *handler,
+      eversion_t s,
+      set<eversion_t> *trimmed);
 
     ostream& print(ostream& out) const;
   };
@@ -304,7 +318,14 @@ public:
     const hobject_t &log_oid,
     ObjectStore::Transaction *t);
 
-  void trim(eversion_t trim_to, pg_info_t &info);
+  void trim(
+    LogEntryHandler *handler,
+    eversion_t trim_to,
+    pg_info_t &info);
+
+  void clear_can_rollback_to() {
+    log.can_rollback_to = log.head;
+  }
 
   //////////////////// get or set log & missing ////////////////////
 
@@ -342,6 +363,9 @@ public:
 	log.complete_to++;
       }
     }
+
+    if (log.can_rollback_to < v)
+      log.can_rollback_to = v;
   }
 
   void activate_not_complete(pg_info_t &info) {
@@ -364,16 +388,39 @@ public:
 			pg_missing_t& omissing, int from) const;
 
 protected:
-  bool merge_old_entry(ObjectStore::Transaction& t, const pg_log_entry_t& oe,
-		       const pg_info_t& info, list<hobject_t>& remove_snap);
+  bool _merge_old_entry(
+    ObjectStore::Transaction& t,
+    const pg_log_entry_t &oe,
+    const pg_info_t& info,
+    pg_missing_t &missing,
+    eversion_t olog_can_rollback_to,
+    boost::optional<pair<eversion_t, hobject_t> > *new_divergent_prior,
+    LogEntryHandler *rollbacker) const;
+  bool merge_old_entry(
+    ObjectStore::Transaction& t,
+    const pg_log_entry_t& oe,
+    const pg_info_t& info,
+    LogEntryHandler *rollbacker) {
+    boost::optional<pair<eversion_t, hobject_t> > new_divergent_prior;
+    bool merged = _merge_old_entry(
+      t, oe, info, missing,
+      log.can_rollback_to,
+      &new_divergent_prior,
+      rollbacker);
+    if (new_divergent_prior)
+      add_divergent_prior(
+	(*new_divergent_prior).first,
+	(*new_divergent_prior).second);
+    return merged;
+  }
 public:
   void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead,
-                            pg_info_t &info, list<hobject_t>& remove_snap,
+                            pg_info_t &info, LogEntryHandler *rollbacker,
                             bool &dirty_info, bool &dirty_big_info);
 
   void merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, int from,
-                      pg_info_t &info, list<hobject_t>& remove_snap,
-                      bool &dirty_info, bool &dirty_big_info);
+		 pg_info_t &info, LogEntryHandler *rollbacker,
+		 bool &dirty_info, bool &dirty_big_info);
 
   void write_log(ObjectStore::Transaction& t, const hobject_t &log_oid);
 

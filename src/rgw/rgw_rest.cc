@@ -202,7 +202,7 @@ void set_req_state_err(struct req_state *s, int err_no)
 
   if (err_no < 0)
     err_no = -err_no;
-  s->err.ret = err_no;
+  s->err.ret = -err_no;
   if (s->prot_flags & RGW_REST_SWIFT) {
     r = search_err(err_no, RGW_HTTP_SWIFT_ERRORS, ARRAY_LEN(RGW_HTTP_SWIFT_ERRORS));
     if (r) {
@@ -269,8 +269,11 @@ void dump_pair(struct req_state *s, const char *key, const char *value)
 
 void dump_bucket_from_state(struct req_state *s)
 {
-  if (!s->bucket_name_str.empty())
-    s->cio->print("Bucket: \"%s\"\n", s->bucket_name_str.c_str());
+  int expose_bucket = g_conf->rgw_expose_bucket;
+  if (expose_bucket) {
+    if (!s->bucket_name_str.empty())
+      s->cio->print("Bucket: \"%s\"\n", s->bucket_name_str.c_str());
+  }
 }
 
 void dump_object_from_state(struct req_state *s)
@@ -462,6 +465,7 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no)
   }
   set_req_state_err(s, err_no);
   dump_errno(s);
+  dump_bucket_from_state(s);
   end_header(s, op);
   rgw_flush_formatter_and_reset(s, s->formatter);
   perfcounter->inc(l_rgw_failed_req);
@@ -886,11 +890,19 @@ int RGWListMultipart_ObjStore::get_params()
   if (upload_id.empty()) {
     ret = -ENOTSUP;
   }
-  string str = s->info.args.get("part-number-marker");
-  if (!str.empty())
-    marker = atoi(str.c_str());
+  string marker_str = s->info.args.get("part-number-marker");
+
+  if (!marker_str.empty()) {
+    string err;
+    marker = strict_strtol(marker_str.c_str(), 10, &err);
+    if (!err.empty()) {
+      ldout(s->cct, 20) << "bad marker: "  << marker << dendl;
+      ret = -EINVAL;
+      return ret;
+    }
+  }
   
-  str = s->info.args.get("max-parts");
+  string str = s->info.args.get("max-parts");
   if (!str.empty())
     max_parts = atoi(str.c_str());
 

@@ -19,6 +19,7 @@ const char *ceph_osd_op_name(int op)
 {
 	switch (op) {
 	case CEPH_OSD_OP_READ: return "read";
+	case CEPH_OSD_OP_SYNC_READ: return "sync_read";
 	case CEPH_OSD_OP_STAT: return "stat";
 	case CEPH_OSD_OP_MAPEXT: return "mapext";
 	case CEPH_OSD_OP_SPARSE_READ: return "sparse-read";
