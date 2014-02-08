@@ -4393,6 +4393,7 @@ inline int ReplicatedPG::_delete_head(OpContext *ctx, bool no_whiteout)
     } else {
       t->remove(soid);
     }
+    ctx->obc->attr_cache.clear();
   } else {
     ctx->mod_desc.mark_unrollbackable();
     t->remove(soid);
@@ -4501,6 +4502,7 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 	    t->remove(soid);
 	  }
 	}
+	ctx->obc->attr_cache = rollback_to->attr_cache;
       } else {
 	if (obs.exists) {
 	  ctx->mod_desc.mark_unrollbackable();
