@@ -169,7 +169,7 @@ ceph mds set inline_data false
 ceph mds set inline_data no
 ceph mds set inline_data 0
 expect_false ceph mds set inline_data asdf
-ceph mds set max_file_size 1000000000
+ceph mds set max_file_size 1048576
 expect_false ceph mds set max_file_size 123asdf
 
 expect_false ceph mds set allow_new_snaps
