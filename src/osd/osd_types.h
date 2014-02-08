@@ -2330,6 +2330,7 @@ struct object_info_t {
     FLAG_LOST     = 1<<0,
     FLAG_WHITEOUT = 1<<1,  // object logically does not exist
     FLAG_DIRTY    = 1<<2,  // object has been modified since last flushed or undirtied
+    FLAG_OMAP     = 1 << 3,  // has (or may have) some/any omap data
     // ...
     FLAG_USES_TMAP = 1<<8,  // deprecated; no longer used.
   } flag_t;
@@ -2346,6 +2347,8 @@ struct object_info_t {
       s += "|dirty";
     if (flags & FLAG_USES_TMAP)
       s += "|uses_tmap";
+    if (flags & FLAG_OMAP)
+      s += "|omap";
     if (s.length())
       return s.substr(1);
     return s;
