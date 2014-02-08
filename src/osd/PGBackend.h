@@ -563,17 +563,17 @@
      Context *on_complete) = 0;
 
    virtual bool scrub_supported() { return false; }
-   virtual void be_scan_list(
+   void be_scan_list(
      ScrubMap &map, const vector<hobject_t> &ls, bool deep,
-     ThreadPool::TPHandle &handle) { assert(0); }
-   virtual enum scrub_error_type be_compare_scrub_objects(
+     ThreadPool::TPHandle &handle);
+   enum scrub_error_type be_compare_scrub_objects(
      const ScrubMap::object &auth,
      const ScrubMap::object &candidate,
-     ostream &errorstream) { assert(0); }
-   virtual map<pg_shard_t, ScrubMap *>::const_iterator be_select_auth_object(
+     ostream &errorstream);
+   map<pg_shard_t, ScrubMap *>::const_iterator be_select_auth_object(
      const hobject_t &obj,
-     const map<pg_shard_t,ScrubMap*> &maps) { assert(0); }
-   virtual void be_compare_scrubmaps(
+     const map<pg_shard_t,ScrubMap*> &maps);
+   void be_compare_scrubmaps(
      const map<pg_shard_t,ScrubMap*> &maps,
      map<hobject_t, set<pg_shard_t> > &missing,
      map<hobject_t, set<pg_shard_t> > &inconsistent,
@@ -582,7 +582,12 @@
      int &shallow_errors, int &deep_errors,
      const spg_t pgid,
      const vector<int> &acting,
-     ostream &errorstream) { assert(0); }
+     ostream &errorstream);
+
+   virtual void be_deep_scrub(
+     const hobject_t &poid,
+     ScrubMap::object &o,
+     ThreadPool::TPHandle &handle) { assert(0); }
  };
 
 struct PG_SendMessageOnConn: public Context {
