@@ -423,6 +423,10 @@ private:
     const spg_t pgid,
     const vector<int> &acting,
     ostream &errorstream);
+  void be_deep_scrub(
+    const hobject_t &obj,
+    ScrubMap::object &o,
+    ThreadPool::TPHandle &handle);
 };
 
 #endif
