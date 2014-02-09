@@ -1550,7 +1550,7 @@ TEST(LibRadosTier, FlushWriteRaces) {
     completion2->release();
   }
 
-  int tries = 10;
+  int tries = 1000;
   do {
     // create/dirty object
     {
@@ -1704,7 +1704,7 @@ TEST(LibRadosTier, FlushTryFlushRaces) {
   }
 
   // create/dirty object
-  int tries = 10;
+  int tries = 1000;
   do {
     {
       bufferlist bl;
