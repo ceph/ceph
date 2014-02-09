@@ -62,11 +62,13 @@ TEST(CrushWrapper, get_immediate_parent) {
   EXPECT_EQ(0, ret);
   EXPECT_EQ("root", loc.first);
   EXPECT_EQ("default", loc.second);
+
+  delete c;
 }
 
 TEST(CrushWrapper, move_bucket) {
   CrushWrapper *c = new CrushWrapper;
-  
+
   const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
   const int HOST_TYPE = 1;
@@ -120,6 +122,8 @@ TEST(CrushWrapper, move_bucket) {
     EXPECT_EQ("root", loc.first);
     EXPECT_EQ("root1", loc.second);
   }
+
+  delete c;
 }
 
 TEST(CrushWrapper, check_item_loc) {
@@ -185,6 +189,8 @@ TEST(CrushWrapper, check_item_loc) {
     EXPECT_TRUE(c->check_item_loc(g_ceph_context, item, loc, &weight));
     EXPECT_EQ(expected_weight, weight);
   }
+
+  delete c;
 }
 
 TEST(CrushWrapper, update_item) {
@@ -279,6 +285,8 @@ TEST(CrushWrapper, update_item) {
   EXPECT_EQ(modified_weight, c->get_item_weightf(item));
   EXPECT_FALSE(c->check_item_loc(g_ceph_context, item, loc, &weight));
   EXPECT_TRUE(c->check_item_loc(g_ceph_context, item, other_loc, &weight));
+
+  delete c;
 }
 
 TEST(CrushWrapper, insert_item) {
@@ -477,9 +485,10 @@ int main(int argc, char **argv) {
 
 /*
  * Local Variables:
- * compile-command: "cd ../.. ; make unittest_crush_wrapper && 
+ * compile-command: "cd ../.. ; make -j4 unittest_crush_wrapper && 
  *    valgrind \
  *    --max-stackframe=20000000 --tool=memcheck \
- *    ./unittest_crush_wrapper --log-to-stderr=true --debug-crush=20 # --gtest_filter=CrushWrapper.insert_item"
+ *    ./unittest_crush_wrapper --log-to-stderr=true --debug-crush=20 \
+ *        # --gtest_filter=CrushWrapper.insert_item"
  * End:
  */
