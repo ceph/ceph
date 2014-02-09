@@ -1200,7 +1200,14 @@ void CrushWrapper::dump_rule(int ruleset, Formatter *f) const
       break;
     case CRUSH_RULE_TAKE:
       f->dump_string("op", "take");
-      f->dump_int("item", get_rule_arg1(ruleset, j));
+      {
+        int item = get_rule_arg1(ruleset, j);
+        const char *name = get_item_name(item);
+        if (name == NULL)
+          f->dump_int("item", item);
+        else
+          f->dump_string("item", name);
+      }
       break;
     case CRUSH_RULE_EMIT:
       f->dump_string("op", "emit");
