@@ -363,10 +363,13 @@ COMMAND("osd lspools " \
 COMMAND("osd blacklist ls", "show blacklisted clients", "osd", "r", "cli,rest")
 COMMAND("osd crush rule list", "list crush rules", "osd", "r", "cli,rest")
 COMMAND("osd crush rule ls", "list crush rules", "osd", "r", "cli,rest")
-COMMAND("osd crush dump", "dump crush map", "osd", "r", "cli,rest")
 COMMAND("osd crush rule dump " \
 	"name=format,type=CephChoices,strings=json|json-pretty|xml|xml-pretty,req=false", \
 	"dump crush rules formatted as <format> (default json-pretty)", \
+	"osd", "r", "cli,rest")
+COMMAND("osd crush dump " \
+	"name=format,type=CephChoices,strings=json|json-pretty|xml|xml-pretty,req=false", \
+	"dump crush map formatted as <format> (default json-pretty)", \
 	"osd", "r", "cli,rest")
 COMMAND("osd setcrushmap", "set crush map from input file", \
 	"osd", "rw", "cli,rest")
