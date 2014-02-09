@@ -585,9 +585,12 @@ class TestOSD(TestArgparse):
 
     def test_crush_dump(self):
         self.assert_valid_command(['osd', 'crush', 'dump'])
+        for format in ('json', 'json-pretty', 'xml', 'xml-pretty'):
+			self.assert_valid_command(['osd', 'crush', 'dump', format])
         assert_equal({}, validate_command(sigdict, ['osd', 'crush']))
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
-                                                    'dump', 'toomany']))
+                                                    'dump', 'json',
+                                                    'toomany']))
 
     def test_setcrushmap(self):
         self.check_no_arg('osd', 'setcrushmap')
