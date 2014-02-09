@@ -894,6 +894,7 @@ public:
   void decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator &blp);
   void dump(Formatter *f) const;
   void dump_rules(Formatter *f) const;
+  void dump_rule(int ruleset, Formatter *f) const;
   void dump_tunables(Formatter *f) const;
   void list_rules(Formatter *f) const;
   void dump_tree(const vector<__u32>& w, ostream *out, Formatter *f) const;

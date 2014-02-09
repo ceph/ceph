@@ -526,6 +526,15 @@ TEST(CrushWrapper, dump_rules) {
     EXPECT_EQ(0, ss.str().find("<rule><rule_id>0</rule_id><rule_name>NAME</rule_name>"));
   }
 
+  {
+    Formatter *f = new_formatter("xml");
+    c->dump_rule(ruleset, f);
+    stringstream ss;
+    f->flush(ss);
+    delete f;
+    EXPECT_EQ(0, ss.str().find("<rule><rule_id>0</rule_id><rule_name>NAME</rule_name>"));
+  }
+
   delete c;
 }
 
