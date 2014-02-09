@@ -41,8 +41,12 @@ function run_mon() {
 
     ./ceph-mon \
         --id $id \
+        --paxos-propose-interval=0.1 \
+        --osd-pool-default-erasure-code-directory=.libs \
         --debug-mon 20 \
         --debug-ms 20 \
+        --debug-paxos 20 \
+        --mon-advanced-debug-mode \
         --chdir= \
         --mon-data=$dir \
         --log-file=$dir/log \
@@ -56,7 +60,7 @@ function kill_daemons() {
     local dir=$1
     for pidfile in $(find $dir | grep pidfile) ; do
         for try in 0 1 1 1 2 3 ; do
-            kill $(cat $pidfile 2> /dev/null) 2> /dev/null || break
+            kill -9 $(cat $pidfile 2> /dev/null) 2> /dev/null || break
             sleep $try
         done
     done
@@ -69,9 +73,8 @@ function main() {
     export CEPH_CONF=/dev/null
     unset CEPH_ARGS
 
-    setup $dir || return 1
     set -x
+    setup $dir || return 1
     run $dir || return 1
-    set +x
     teardown $dir || return 1
 }
