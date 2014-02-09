@@ -27,6 +27,7 @@
 #include "global/global_init.h"
 #include "global/global_context.h"
 #include "include/Context.h"
+#include "osd/osd_types.h"
 
 #include "crush/CrushWrapper.h"
 
@@ -469,6 +470,63 @@ TEST(CrushWrapper, is_valid_crush_loc) {
     loc["host"] = "\003";
     EXPECT_FALSE(CrushWrapper::is_valid_crush_loc(g_ceph_context, loc));
   }
+}
+
+TEST(CrushWrapper, dump_rules) {
+  CrushWrapper *c = new CrushWrapper;
+
+  const int ROOT_TYPE = 1;
+  c->set_type_name(ROOT_TYPE, "root");
+  const int OSD_TYPE = 0;
+  c->set_type_name(OSD_TYPE, "osd");
+
+  string failure_domain_type("osd");
+  string root_name("default");
+  int rootno;
+  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+		ROOT_TYPE, 0, NULL, NULL, &rootno);
+  c->set_item_name(rootno, root_name);
+
+  int item = 0;
+
+  pair <string,string> loc;
+  int ret;
+  loc = c->get_immediate_parent(item, &ret);
+  EXPECT_EQ(-ENOENT, ret);
+
+  {
+    map<string,string> loc;
+    loc["root"] = root_name;
+
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, item, 1.0,
+				"osd.0", loc));
+  }
+
+  // no ruleset by default
+  {
+    Formatter *f = new_formatter("json-pretty");
+    c->dump_rules(f);
+    stringstream ss;
+    f->flush(ss);
+    delete f;
+    EXPECT_EQ("", ss.str());
+  }
+
+  string name("NAME");
+  int ruleset = c->add_simple_ruleset(name, root_name, failure_domain_type,
+				      "firstn", pg_pool_t::TYPE_ERASURE);
+  EXPECT_EQ(0, ruleset);
+
+  {
+    Formatter *f = new_formatter("xml");
+    c->dump_rules(f);
+    stringstream ss;
+    f->flush(ss);
+    delete f;
+    EXPECT_EQ(0, ss.str().find("<rule><rule_id>0</rule_id><rule_name>NAME</rule_name>"));
+  }
+
+  delete c;
 }
 
 int main(int argc, char **argv) {
