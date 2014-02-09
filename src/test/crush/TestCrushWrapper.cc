@@ -533,6 +533,8 @@ TEST(CrushWrapper, dump_rules) {
     f->flush(ss);
     delete f;
     EXPECT_EQ(0, ss.str().find("<rule><rule_id>0</rule_id><rule_name>NAME</rule_name>"));
+    EXPECT_NE(string::npos,
+	      ss.str().find("<step><op>take</op><item>default</item></step>"));
   }
 
   delete c;
