@@ -4,6 +4,7 @@ import logging
 from cStringIO import StringIO
 import textwrap
 from configparser import ConfigParser
+import time
 
 from ..orchestra import run
 from teuthology import misc
@@ -67,6 +68,10 @@ def configure_devstack_and_ceph(ctx, config, devstack_node, ceph_node):
     distribute_ceph_keys(devstack_node, ceph_node)
     secret_uuid = set_libvirt_secret(devstack_node, ceph_node)
     update_devstack_config_files(devstack_node, secret_uuid)
+    set_apache_servername(devstack_node)
+    # Rebooting is the most-often-used method of restarting devstack services
+    reboot(devstack_node)
+    start_devstack(devstack_node)
 
 
 def create_pools(ceph_node, pool_size):
@@ -216,3 +221,34 @@ def update_devstack_config_files(devstack_node, secret_uuid):
         backup_config(devstack_node, file_name)
         new_config_stream = update_config(file_name, config_stream, options)
         misc.sudo_write_file(devstack_node, file_name, new_config_stream)
+
+
+def set_apache_servername(devstack_node):
+    # Apache complains: "Could not reliably determine the server's fully
+    # qualified domain name, using 127.0.0.1 for ServerName"
+    # So, let's make sure it knows its name.
+    hostname = devstack_node.hostname
+    config_file = '/etc/apache2/conf.d/servername'
+    misc.sudo_write_file(devstack_node, config_file,
+                         "ServerName {name}".format(name=hostname))
+    devstack_node.run(args=['sudo', '/etc/init.d/apache2', 'restart'],
+                      wait=True)
+
+
+def reboot(node, timeout=300, interval=10):
+    log.info("Rebooting {host}...".format(host=node.hostname))
+    node.run(args=['sudo', 'shutdown', '-r', 'now'])
+    reboot_start_time = time.time()
+    while time.time() - reboot_start_time < timeout:
+        time.sleep(interval)
+        if node.is_online:
+            return
+    raise RuntimeError(
+        "{host} did not come up after reboot within {time}s".format(
+            host=node.hostname, time=timeout))
+
+
+def start_devstack(devstack_node):
+    log.info("Starting devstack...")
+    args = ['cd', 'devstack', run.Raw('&&'), './rejoin-stack.sh']
+    devstack_node.run(args=args)
