@@ -2,7 +2,7 @@
 Support for paramiko remote objects.
 """
 from . import run
-from .connection import connect
+import connection
 from teuthology import misc
 import time
 import pexpect
@@ -37,12 +37,19 @@ class Remote(object):
         self.keep_alive = keep_alive
         self.console = console
         if ssh is None:
-            ssh = self._connect()
-        self.ssh = ssh
+            ssh = self.connect()
+        else:
+            self.ssh = ssh
 
-    def _connect(self):
-        return connect(user_at_host=self.name, host_key=self.host_key,
-                       keep_alive=self.keep_alive)
+    def connect(self):
+        self.ssh = connection.connect(user_at_host=self.name,
+                                      host_key=self.host_key,
+                                      keep_alive=self.keep_alive)
+        return self.ssh
+
+    def reconnect(self):
+        self.ssh.close()
+        self.ssh = self.connect()
 
     @property
     def shortname(self):
