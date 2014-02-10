@@ -269,7 +269,30 @@ bool PGLog::_merge_old_entry(
 	       << " new " << ne << " : same" << dendl;
       return true;
     }
-    if (oe.is_delete()) {
+
+    if (missing.is_missing(oe.soid)) {
+      if (!ne.is_delete()) {
+	dout(20) << __func__ << ": ne.version < oe.version && already missing, "
+		 << "revising missing need" << dendl;
+	if (rollbacker) {
+	  rollbacker->cant_rollback(oe);
+	}
+	missing.revise_need(ne.soid, ne.version);
+      } else {
+	dout(20) << __func__ << ": ne.version < oe.version && already missing, "
+		 << "ne is delete, clearing missing need" << dendl;
+	if (rollbacker) {
+	  rollbacker->remove(oe.soid);
+	  rollbacker->cant_rollback(oe);
+	}
+	missing.rm(oe.soid, oe.version);
+      }
+    } else if (oe.mod_desc.can_rollback() && oe.version > olog_can_rollback_to) {
+      dout(20) << __func__ << ": ne.version < oe.version && can rollback, "
+	       << "rolling back " << oe << dendl;
+      if (rollbacker)
+	rollbacker->rollback(oe);
+    } else if (oe.is_delete()) {
       if (ne.is_delete()) {
 	// old and new are delete
 	dout(20) << "merge_old_entry  had " << oe
@@ -291,22 +314,14 @@ bool PGLog::_merge_old_entry(
 	  rollbacker->remove(oe.soid);
 	  rollbacker->cant_rollback(oe);
 	}
-	if (missing.is_missing(oe.soid))
-	  missing.rm(oe.soid, oe.version);
+	assert(!missing.is_missing(oe.soid));
       } else {
 	// old update, new update
 	dout(20) << "merge_old_entry  had " << oe
 		 << " new " << ne << " : new item supercedes" << dendl;
-	if (oe.mod_desc.can_rollback() && oe.version > olog_can_rollback_to) {
-	  dout(20) << __func__ << ": ne.version < oe.version && can rollback, "
-		   << "rolling back " << oe << dendl;
-	  if (rollbacker)
-	    rollbacker->rollback(oe);
-	} else {
-	  missing.revise_need(ne.soid, ne.version);
-	  if (rollbacker)
-	    rollbacker->cant_rollback(oe);
-	}
+	missing.revise_need(ne.soid, ne.version);
+	if (rollbacker)
+	  rollbacker->cant_rollback(oe);
       }
     }
   } else if (oe.op == pg_log_entry_t::CLONE) {
@@ -338,7 +353,23 @@ bool PGLog::_merge_old_entry(
 	     << " oe.soid " << oe.soid
 	     << " must already have been merged" << dendl;
   } else {
-    if (oe.mod_desc.can_rollback() && oe.version > olog_can_rollback_to) {
+    if (missing.is_missing(oe.soid)) {
+      if (oe.prior_version > eversion_t()) {
+	dout(20) << __func__ << ": oe.prior_version > 0 && already missing, "
+		 << "revising missing need " << oe << dendl;
+	if (new_divergent_prior)
+	  *new_divergent_prior = make_pair(oe.prior_version, oe.soid);
+	missing.revise_need(oe.soid, oe.prior_version);
+      } else {
+	dout(20) << __func__ << ": oe.prior_version == 0 && already missing, "
+		 << "removing missing " << oe << dendl;
+	missing.rm(oe.soid, missing.missing[oe.soid].need);
+	if (rollbacker)
+	  rollbacker->remove(oe.soid);
+      }
+      if (rollbacker)
+	rollbacker->cant_rollback(oe);
+    } else if (oe.mod_desc.can_rollback() && oe.version > olog_can_rollback_to) {
       dout(20) << __func__ << ": rolling back " << oe << dendl;
       if (rollbacker)
 	rollbacker->rollback(oe);
@@ -356,8 +387,8 @@ bool PGLog::_merge_old_entry(
 	missing.revise_need(oe.soid, oe.prior_version);
 	if (rollbacker)
 	  rollbacker->cant_rollback(oe);
-      } else if (missing.is_missing(oe.soid)) {
-	missing.rm(oe.soid, missing.missing[oe.soid].need);
+      } else {
+	assert(!missing.is_missing(oe.soid));
       }
     }
   }
