@@ -3,4 +3,4 @@ tasks:
 - ceph:
 - exec:
     client.0:
-      - ceph mds set inline_data --yes-i-really-mean-it
+      - ceph mds set inline_data true --yes-i-really-mean-it
