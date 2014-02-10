@@ -212,6 +212,8 @@ def get_ownership_info():
 
 def output_json():
   out = {}
+  url = None
+  
   out['uuid'] = get_uuid()
   out['cluster_creation_date'] = get_cluster_creation_date()
   nums = get_nums()
@@ -223,9 +225,10 @@ def output_json():
 
   owner = get_ownership_info()
   if owner is not None:
+    url = owner.pop['url']
     out['ownership'] = owner
 
-  return json.dumps(out, indent=2, separators=(',', ': '))
+  return json.dumps(out, indent=2, separators=(',', ': ')), url
 
 def describe_usage():
   print >> sys.stderr, "Usage:"
@@ -245,11 +248,12 @@ def describe_usage():
   print >> sys.stderr, "--organization= - Name of the organization"
   print >> sys.stderr, "--email= - Email contact address"
   print >> sys.stderr, "--description= - Reporting use-case"
+  print >> sys.stderr, "--url= - The URL that is used to publish and unpublish"
   print >> sys.stderr, ""
 
 def update_metadata():
   info = {}
-  possibles = ['name', 'organization', 'email', 'description']
+  possibles = ['name', 'organization', 'email', 'description', 'url']
 
   #get the existing values
   info = get_ownership_info();
@@ -279,25 +283,50 @@ def clear_metadata():
                             CLUSTER_OWNERSHIP_NAME])
   return rc
 
+def publish():
+  data, url = output_json()
+  if url is None:
+    print >> sys.stderr, "Cannot publish until a URL is set using update-metadata"
+    return 1
+
+  #TODO: Execute the HTTP request
+  return 0
+
+def unpublish():
+  if len(sys.argv) <= 2 or sys.argv[2] != '--yes-i-am-shy':
+    print >> sys.stderr, "unpublish should be followed by --yes-i-am-shy"
+    return 22
+
+  fail = False
+  owner = get_ownership_info()
+  if owner is None:
+    fail = True
+  try:
+    url = owner['url']
+  except KeyError as e:
+    fail = True
+
+  if fail:
+    print >> sys.stderr, "URL is not updated yet"
+    return 1
+
+  uuid = get_uuid()
+
+  #TODO: Execute the HTTP request
+  return 0
+
 def main():
   if len(sys.argv) is 1:
-    print output_json()
+    print output_json()[0]
     return 0
   elif sys.argv[1] == 'update-metadata':
     return update_metadata()
   elif sys.argv[1] == 'clear-metadata':
     return clear_metadata()
   elif sys.argv[1] == 'publish':
-    data = output_json()
-    #TODO: post this data to the server
-    return 0
+    return publish()
   elif sys.argv[1] == 'unpublish':
-    if len(sys.argv) <= 2 or sys.argv[2] != '--yes-i-am-shy':
-      print >> sys.stderr, "unpublish should be followed by --yes-i-am-shy"
-      return 22
-
-    #TODO: delete this data from the server
-    return 0
+    return unpublish()
   else:
     describe_usage()
     return 22
