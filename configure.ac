@@ -640,11 +640,21 @@ AC_CHECK_FUNC([splice],
 	[AC_DEFINE([CEPH_HAVE_SPLICE], [], [splice(2) is supported])],
 	[])
 
-AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <fcntl.h>
-F_SETPIPE_SZ]])],
-	[AC_DEFINE([CEPH_HAVE_SETPIPE_SZ], [], [F_SETPIPE_SZ is supported])],
-	[AC_MSG_NOTICE(["F_SETPIPE_SZ not found, zero-copy may be less efficent"])])
-
+# F_SETPIPE_SZ in fcntl.h
+AC_MSG_CHECKING([for F_SETPIPE_SZ in fcntl.h])
+AC_EGREP_CPP([yes_have_f_setpipe_sz], [
+  #define _GNU_SOURCE
+  #include <fcntl.h>
+  #ifdef F_SETPIPE_SZ
+  yes_have_f_setpipe_sz
+  #endif
+], [
+  AC_MSG_RESULT([yes])
+  AC_DEFINE([CEPH_HAVE_SETPIPE_SZ], [], [F_SETPIPE_SZ is supported])
+], [
+  AC_MSG_RESULT([no])
+  AC_MSG_NOTICE([F_SETPIPE_SZ not found, zero-copy may be less efficent])
+])
 
 AC_CHECK_FUNCS([posix_fallocate])
 AC_CHECK_HEADERS([sys/prctl.h])
