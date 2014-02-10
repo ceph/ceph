@@ -1434,9 +1434,9 @@ def task(ctx, config):
         lambda: run_daemon(ctx=ctx, config=config, type_='osd'),
         lambda: run_daemon(ctx=ctx, config=config, type_='mds'),
         ):
-        if config.get('wait-for-healthy', True):
-            healthy(ctx=ctx, config=None)
         try:
+            if config.get('wait-for-healthy', True):
+                healthy(ctx=ctx, config=None)
             yield
         finally:
             osd_scrub_pgs(ctx, config)
