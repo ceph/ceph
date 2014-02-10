@@ -257,7 +257,7 @@ class ClientStub : public TestStub
 	    << messenger->get_myaddr() << dendl;
 
     objecter.reset(new Objecter(cct, messenger.get(), &monc, &osdmap,
-				lock, timer));
+				lock, timer, 0, 0));
     assert(objecter.get() != NULL);
     objecter->set_balanced_budget();
 
