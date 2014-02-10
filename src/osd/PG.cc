@@ -303,7 +303,9 @@ bool PG::proc_replica_info(int from, const pg_info_t &oinfo)
 void PG::remove_snap_mapped_object(
   ObjectStore::Transaction &t, const hobject_t &soid)
 {
-  t.remove(coll, soid);
+  t.remove(
+    coll,
+    ghobject_t(soid, ghobject_t::NO_GEN, pg_whoami.shard));
   clear_object_snap_mapping(&t, soid);
 }
 
