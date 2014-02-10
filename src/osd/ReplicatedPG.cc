@@ -5605,9 +5605,9 @@ void ReplicatedPG::cancel_copy(CopyOpRef cop, bool requeue)
   // cancel objecter op, if we can
   if (cop->objecter_tid) {
     Mutex::Locker l(osd->objecter_lock);
-    osd->objecter->op_cancel(cop->objecter_tid);
+    osd->objecter->op_cancel(cop->objecter_tid, -ECANCELED);
     if (cop->objecter_tid2) {
-      osd->objecter->op_cancel(cop->objecter_tid2);
+      osd->objecter->op_cancel(cop->objecter_tid2, -ECANCELED);
     }
   }
 
@@ -5918,7 +5918,7 @@ void ReplicatedPG::cancel_flush(FlushOpRef fop, bool requeue)
 	   << fop->objecter_tid << dendl;
   if (fop->objecter_tid) {
     Mutex::Locker l(osd->objecter_lock);
-    osd->objecter->op_cancel(fop->objecter_tid);
+    osd->objecter->op_cancel(fop->objecter_tid, -ECANCELED);
   }
   if (fop->ctx->op && requeue) {
     requeue_op(fop->ctx->op);
