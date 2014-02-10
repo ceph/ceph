@@ -2,6 +2,7 @@
 Support for paramiko remote objects.
 """
 from . import run
+from .connection import connect
 from teuthology import misc
 import time
 import pexpect
@@ -28,11 +29,20 @@ class Remote(object):
     # for unit tests to hook into
     _runner = staticmethod(run.run)
 
-    def __init__(self, name, ssh, shortname=None, console=None):
+    def __init__(self, name, ssh=None, shortname=None, console=None, host_key=None,
+                 keep_alive=True):
         self.name = name
         self._shortname = shortname
-        self.ssh = ssh
+        self.host_key = host_key
+        self.keep_alive = keep_alive
         self.console = console
+        if ssh is None:
+            ssh = self._connect()
+        self.ssh = ssh
+
+    def _connect(self):
+        return connect(user_at_host=self.name, host_key=self.host_key,
+                       keep_alive=self.keep_alive)
 
     @property
     def shortname(self):
