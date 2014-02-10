@@ -45,6 +45,10 @@ class Remote(object):
         return name
 
     @property
+    def hostname(self):
+        return self.name.split('@')[1]
+
+    @property
     def system_type(self):
         """
         System type decorator
