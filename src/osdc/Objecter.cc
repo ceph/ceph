@@ -2507,6 +2507,8 @@ bool Objecter::RequestStateHook::call(std::string command, cmdmap_t& cmdmap,
 				      std::string format, bufferlist& out)
 {
   Formatter *f = new_formatter(format);
+  if (!f)
+    f = new_formatter("json-pretty");
   m_objecter->client_lock.Lock();
   m_objecter->dump_requests(f);
   m_objecter->client_lock.Unlock();
