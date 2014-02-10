@@ -211,12 +211,14 @@ void *Pipe::DelayedDelivery::entry()
       continue;
     }
     utime_t release = delay_queue.front().first;
-    if (release > ceph_clock_now(pipe->msgr->cct)) {
+    Message *m = delay_queue.front().second;
+    string delay_msg_type = pipe->msgr->cct->_conf->ms_inject_delay_msg_type;
+    if (release > ceph_clock_now(pipe->msgr->cct) &&
+	(delay_msg_type.empty() || m->get_type_name() == delay_msg_type)) {
       lgeneric_subdout(pipe->msgr->cct, ms, 10) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::entry sleeping on delay_cond until " << release << dendl;
       delay_cond.WaitUntil(delay_lock, release);
       continue;
     }
-    Message *m = delay_queue.front().second;
     lgeneric_subdout(pipe->msgr->cct, ms, 10) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::entry dequeuing message " << m << " for delivery, past " << release << dendl;
     delay_queue.pop_front();
     pipe->in_q->enqueue(m, m->get_priority(), pipe->conn_id);
