@@ -94,7 +94,7 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
     if (r < 0)
       return r;
     buf[r] = '\0';
-    size = strict_strtol(buf, 10, &err);
+    size_t size = strict_strtol(buf, 10, &err);
     if (!err.empty())
       return -EIO;
     buffer_max_pipe_size.set(size);
@@ -108,7 +108,7 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
     if (size)
       return size;
     if (update_max_pipe_size() == 0)
-      return buffer_max_pipe_size.read()
+      return buffer_max_pipe_size.read();
 #endif
     // this is the max size hardcoded in linux before 2.6.35
     return 65536;
