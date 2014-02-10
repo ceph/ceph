@@ -247,13 +247,13 @@ def set_apache_servername(devstack_node):
                       wait=True)
 
 
-def reboot(node, timeout=300, interval=10):
+def reboot(node, timeout=300, interval=30):
     log.info("Rebooting {host}...".format(host=node.hostname))
     node.run(args=['sudo', 'shutdown', '-r', 'now'])
     reboot_start_time = time.time()
     while time.time() - reboot_start_time < timeout:
         time.sleep(interval)
-        if node.is_online:
+        if node.is_online or node.reconnect():
             return
     raise RuntimeError(
         "{host} did not come up after reboot within {time}s".format(
