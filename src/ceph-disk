@@ -995,7 +995,8 @@ def prepare_journal_dev(
         # server. Since we are not resizing partitons so we rely on calling
         # partx
         if platform_distro().startswith(('centos', 'red')):
-            LOG.debug('Calling partx on prepared device %s', journal)
+            LOG.info('calling partx on prepared device %s', journal)
+            LOG.info('re-reading known partitions will display errors')
             command(
                 [
                     'partx',
@@ -1419,7 +1420,9 @@ def main_prepare(args):
             # the server. Since we are not resizing partitons so we rely on
             # calling partx
             if platform_distro().startswith(('centos', 'red')):
-                LOG.debug('Calling partx on prepared device %s', args.data)
+                LOG.info('calling partx on prepared device %s', args.data)
+                LOG.info('re-reading known partitions will display errors')
+
                 command(
                     [
                         'partx',
