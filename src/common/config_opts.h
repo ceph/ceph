@@ -122,6 +122,7 @@ OPTION(ms_pq_max_tokens_per_priority, OPT_U64, 4194304)
 OPTION(ms_pq_min_cost, OPT_U64, 65536)
 OPTION(ms_inject_socket_failures, OPT_U64, 0)
 OPTION(ms_inject_delay_type, OPT_STR, "")          // "osd mds mon client" allowed
+OPTION(ms_inject_delay_msg_type, OPT_STR, "")      // the type of message to delay, as returned by Message::get_type_name(). This is an additional restriction on the general type filter ms_inject_delay_type.
 OPTION(ms_inject_delay_max, OPT_DOUBLE, 1)         // seconds
 OPTION(ms_inject_delay_probability, OPT_DOUBLE, 0) // range [0, 1]
 OPTION(ms_inject_internal_delays, OPT_DOUBLE, 0)   // seconds
@@ -645,6 +646,9 @@ OPTION(journal_align_min_size, OPT_INT, 64 << 10)  // align data payloads >= thi
 OPTION(journal_replay_from, OPT_INT, 0)
 OPTION(journal_zero_on_create, OPT_BOOL, false)
 OPTION(journal_ignore_corruption, OPT_BOOL, false) // assume journal is not corrupt
+
+OPTION(rados_mon_op_timeout, OPT_DOUBLE, 0) // how many seconds to wait for a response from the monitor before returning an error from a rados operation. 0 means on limit.
+OPTION(rados_osd_op_timeout, OPT_DOUBLE, 0) // how many seconds to wait for a response from osds before returning an error from a rados operation. 0 means no limit.
 
 OPTION(rbd_cache, OPT_BOOL, false) // whether to enable caching (writeback unless rbd_cache_max_dirty is 0)
 OPTION(rbd_cache_writethrough_until_flush, OPT_BOOL, false) // whether to make writeback caching writethrough until flush is called, to be sure the user of librbd will send flushs so that writeback is safe
