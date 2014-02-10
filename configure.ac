@@ -596,6 +596,7 @@ AC_CHECK_MEMBER([struct fiemap_extent.fe_logical],
 
 AC_CHECK_HEADERS([ \
 	arpa/inet.h \
+	arpa/nameser_compat.h \
 	linux/version.h \
 	netdb.h \
 	netinet/in.h \
@@ -639,16 +640,12 @@ AC_CHECK_FUNC([splice],
 	[AC_DEFINE([CEPH_HAVE_SPLICE], [], [splice(2) is supported])],
 	[])
 
-
-AC_CHECK_HEADERS([arpa/nameser_compat.h])
-
 AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <fcntl.h>
 F_SETPIPE_SZ]])],
 	[AC_DEFINE([CEPH_HAVE_SETPIPE_SZ], [], [F_SETPIPE_SZ is supported])],
 	[AC_MSG_NOTICE(["F_SETPIPE_SZ not found, zero-copy may be less efficent"])])
 
 
-AC_CHECK_HEADERS([arpa/nameser_compat.h])
 AC_CHECK_FUNCS([posix_fallocate])
 AC_CHECK_HEADERS([sys/prctl.h])
 AC_CHECK_FUNCS([prctl])
