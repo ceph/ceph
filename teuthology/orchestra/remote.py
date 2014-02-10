@@ -49,6 +49,10 @@ class Remote(object):
         return self.name.split('@')[1]
 
     @property
+    def is_online(self):
+        return self.ssh.get_transport().is_active()
+
+    @property
     def system_type(self):
         """
         System type decorator
