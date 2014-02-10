@@ -303,6 +303,42 @@ def command_check_call(arguments):
     return subprocess.check_call(arguments)
 
 
+def platform_distro():
+    """
+    Returns a normalized, lower case string without any leading nor trailing
+    whitespace that represents the distribution name of the current machine.
+    """
+    distro = platform_information()[0] or ''
+    return distro.strip().lower()
+
+
+def platform_information():
+    distro, release, codename = platform.linux_distribution()
+    if not codename and 'debian' in distro.lower():  # this could be an empty string in Debian
+        debian_codenames = {
+            '8': 'jessie',
+            '7': 'wheezy',
+            '6': 'squeeze',
+        }
+        major_version = release.split('.')[0]
+        codename = debian_codenames.get(major_version, '')
+
+        # In order to support newer jessie/sid or wheezy/sid strings we test this
+        # if sid is buried in the minor, we should use sid anyway.
+        if not codename and '/' in release:
+            major, minor = release.split('/')
+            if minor == 'sid':
+                codename = minor
+            else:
+                codename = major
+
+    return (
+        str(distro).strip(),
+        str(release).strip(),
+        str(codename).strip()
+    )
+
+
 # a device "name" is something like
 #  sdb
 #  cciss!c0d1
@@ -954,13 +990,29 @@ def prepare_journal_dev(
         # try to make sure the kernel refreshes the table.  note
         # that if this gets ebusy, we are probably racing with
         # udev because it already updated it.. ignore failure here.
-        LOG.debug('Calling partprobe on prepared device %s', journal)
-        command(
-            [
-                'partprobe',
-                journal,
-                ],
-            )
+
+        # On RHEL and CentOS distros, calling partprobe forces a reboot of the
+        # server. Since we are not resizing partitons so we rely on calling
+        # partx
+        if platform_distro().startswith(('centos', 'red')):
+            LOG.info('calling partx on prepared device %s', journal)
+            LOG.info('re-reading known partitions will display errors')
+            command(
+                [
+                    'partx',
+                    '-a',
+                    journal,
+                    ],
+                )
+
+        else:
+            LOG.debug('Calling partprobe on prepared device %s', journal)
+            command(
+                [
+                    'partprobe',
+                    journal,
+                    ],
+                )
 
         # wait for udev event queue to clear
         command(
@@ -1363,14 +1415,30 @@ def main_prepare(args):
             # try to make sure the kernel refreshes the table.  note
             # that if this gets ebusy, we are probably racing with
             # udev because it already updated it.. ignore failure here.
-            LOG.debug('Calling partprobe on prepared device %s', args.data)
-            command(
-                [
-                    'partprobe',
-                    args.data,
-                    ],
-                )
 
+            # On RHEL and CentOS distros, calling partprobe forces a reboot of
+            # the server. Since we are not resizing partitons so we rely on
+            # calling partx
+            if platform_distro().startswith(('centos', 'red')):
+                LOG.info('calling partx on prepared device %s', args.data)
+                LOG.info('re-reading known partitions will display errors')
+
+                command(
+                    [
+                        'partx',
+                        '-a',
+                        args.data,
+                        ],
+                    )
+
+            else:
+                LOG.debug('Calling partprobe on prepared device %s', args.data)
+                command(
+                    [
+                        'partprobe',
+                        args.data,
+                        ],
+                    )
 
     except Error as e:
         if journal_dm_keypath:
