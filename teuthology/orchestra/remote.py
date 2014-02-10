@@ -48,8 +48,16 @@ class Remote(object):
         return self.ssh
 
     def reconnect(self):
+        """
+        Attempts to re-establish connection. Returns True for success; False
+        for failure.
+        """
         self.ssh.close()
-        self.ssh = self.connect()
+        try:
+            self.ssh = self.connect()
+            return self.is_online
+        except Exception:
+            return False
 
     @property
     def shortname(self):
@@ -67,10 +75,12 @@ class Remote(object):
 
     @property
     def is_online(self):
+        if self.ssh is None:
+            return False
         try:
             self.run(args="echo online")
         except Exception:
-            pass
+            return False
         return self.ssh.get_transport().is_active()
 
     @property
