@@ -517,7 +517,7 @@ void PG::discover_all_missing(map<int, map<spg_t,pg_query_t> > &query_map)
     peer_missing_requested.insert(peer);
     query_map[peer.osd][spg_t(info.pgid.pgid, peer.shard)] =
       pg_query_t(
-	pg_query_t::MISSING,
+	pg_query_t::FULLLOG,
 	peer.shard, pg_whoami.shard,
 	info.history, get_osdmap()->get_epoch());
   }
