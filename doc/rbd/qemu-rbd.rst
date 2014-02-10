@@ -40,11 +40,18 @@ You can create a block device image from QEMU. You must specify ``rbd``,  the
 pool name, and the name of the image you wish to create. You must also specify
 the size of the image. ::
 
-	qemu-img create -f rbd rbd:{pool-name}/{image-name} {size}
+	qemu-img create -f raw rbd:{pool-name}/{image-name} {size}
 
 For example::
 
-	qemu-img create -f rbd rbd:data/foo 10G
+	qemu-img create -f raw rbd:data/foo 10G
+
+.. important:: The ``raw`` data format is really the only sensible
+   ``format`` option to use with RBD. Technically, you could use other
+   QEMU-supported formats (such as ``qcow2`` or ``vmdk``), but doing
+   so would add additional overhead, and would also render the volume
+   unsafe for virtual machine live migration when caching (see below)
+   is enabled.
 
 
 Resizing Images with QEMU
@@ -54,11 +61,11 @@ You can resize a block device image from QEMU. You must specify ``rbd``,
 the pool name, and the name of the image you wish to resize. You must also
 specify the size of the image. ::
 
-	qemu-img resize -f rbd rbd:{pool-name}/{image-name} {size}
+	qemu-img resize rbd:{pool-name}/{image-name} {size}
 
 For example::
 
-	qemu-img resize -f rbd rbd:data/foo 10G
+	qemu-img resize rbd:data/foo 10G
 
 
 Retrieving Image Info with QEMU
@@ -67,11 +74,11 @@ Retrieving Image Info with QEMU
 You can retrieve block device image information from QEMU. You must 
 specify ``rbd``, the pool name, and the name of the image. ::
 
-	qemu-img info -f rbd rbd:{pool-name}/{image-name}
+	qemu-img info rbd:{pool-name}/{image-name}
 
 For example::
 
-	qemu-img info -f rbd rbd:data/foo
+	qemu-img info rbd:data/foo
 
 
 Running QEMU with RBD
@@ -86,7 +93,7 @@ an additional context switch, and can take advantage of `RBD caching`_.
 You can use ``qemu-img`` to convert existing virtual machine images to Ceph
 block device images. For example, if you have a qcow2 image, you could run::
 
-    qemu-img convert -f qcow2 -O rbd debian_squeeze.qcow2 rbd:data/squeeze
+    qemu-img convert -f qcow2 -O raw debian_squeeze.qcow2 rbd:data/squeeze
 
 To run a virtual machine booting from that image, you could run::
 
