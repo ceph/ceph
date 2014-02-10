@@ -193,7 +193,6 @@ void ReplicatedPG::on_local_recover_start(
 {
   pg_log.revise_have(oid, eversion_t());
   remove_snap_mapped_object(*t, oid);
-  t->remove(coll, oid);
 }
 
 void ReplicatedPG::on_local_recover(
