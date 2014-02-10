@@ -16,6 +16,8 @@
 
 	osd pool default size = 2
 
+	mon osd allow primary affinity = true
+
 [osd]
         osd journal size = 100
 
