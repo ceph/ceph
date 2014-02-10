@@ -60,6 +60,10 @@ class Remote(object):
 
     @property
     def is_online(self):
+        try:
+            self.run(args="echo online")
+        except Exception:
+            pass
         return self.ssh.get_transport().is_active()
 
     @property
