@@ -1018,9 +1018,9 @@ public:
 bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
 		       ostream& ss)
 {
-  if (format == "")
-    format = "json-pretty";
   Formatter *f = new_formatter(format);
+  if (!f)
+    f = new_formatter("json-pretty");
   if (command == "dump_ops_in_flight") {
     op_tracker.dump_ops_in_flight(f);
   } else if (command == "dump_historic_ops") {

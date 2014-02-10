@@ -56,6 +56,38 @@ TEST(AdminSocket, TeardownSetup) {
   ASSERT_EQ(true, asoct.shutdown());
 }
 
+TEST(AdminSocket, SendHelp) {
+  std::auto_ptr<AdminSocket>
+      asokc(new AdminSocket(g_ceph_context));
+  AdminSocketTest asoct(asokc.get());
+  ASSERT_EQ(true, asoct.shutdown());
+  ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
+  AdminSocketClient client(get_rand_socket_path());
+
+  {
+    string help;
+    ASSERT_EQ("", client.do_request("{\"prefix\":\"help\"}", &help));
+    ASSERT_NE(string::npos, help.find("\"list available commands\""));
+  }
+  {
+    string help;
+    ASSERT_EQ("", client.do_request("{"
+				    " \"prefix\":\"help\","
+				    " \"format\":\"xml\","
+				    "}", &help));
+    ASSERT_NE(string::npos, help.find(">list available commands<"));
+  }
+  {
+    string help;
+    ASSERT_EQ("", client.do_request("{"
+				    " \"prefix\":\"help\","
+				    " \"format\":\"UNSUPPORTED\","
+				    "}", &help));
+    ASSERT_NE(string::npos, help.find("\"list available commands\""));
+  }
+  ASSERT_EQ(true, asoct.shutdown());
+}
+
 TEST(AdminSocket, SendNoOp) {
   std::auto_ptr<AdminSocket>
       asokc(new AdminSocket(g_ceph_context));
@@ -146,3 +178,14 @@ TEST(AdminSocket, RegisterCommandPrefixes) {
   ASSERT_EQ("test| this thing", result);
   ASSERT_EQ(true, asoct.shutdown());
 }
+
+/*
+ * Local Variables:
+ * compile-command: "cd .. ;
+ *   make unittest_admin_socket &&
+ *    valgrind \
+ *    --max-stackframe=20000000 --tool=memcheck \
+ *   ./unittest_admin_socket # --gtest_filter=AdminSocket.*
+ * "
+ * End:
+ */
