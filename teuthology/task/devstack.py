@@ -49,11 +49,12 @@ def task(ctx, config):
 
 
 def install_devstack(devstack_node):
-    log.info("Cloning devstack repo...")
+    log.info("Cloning DevStack repo...")
+
     args = ['git', 'clone', DEVSTACK_GIT_REPO]
     devstack_node.run(args=args)
 
-    log.info("Installing devstack...")
+    log.info("Installing DevStack...")
     args = ['cd', 'devstack', run.Raw('&&'), './stack.sh']
     devstack_node.run(args=args)
 
@@ -75,20 +76,24 @@ def configure_devstack_and_ceph(ctx, config, devstack_node, ceph_node):
 
 
 def create_pools(ceph_node, pool_size):
-    ### Create pools on Ceph cluster
+    log.info("Creating pools on Ceph cluster...")
+
     for pool_name in ['volumes', 'images', 'backups']:
         args = ['ceph', 'osd', 'pool', 'create', pool_name, pool_size]
         ceph_node.run(args=args)
 
 
 def distribute_ceph_conf(devstack_node, ceph_node):
-    ### Copy ceph.conf to devstack node
+    log.info("Copying ceph.conf to DevStack node...")
+
     ceph_conf_path = '/etc/ceph/ceph.conf'
     ceph_conf = misc.get_file(ceph_node, ceph_conf_path, sudo=True)
     misc.sudo_write_file(devstack_node, ceph_conf_path, ceph_conf)
 
 
 def generate_ceph_keys(ceph_node):
+    log.info("Generating Ceph keys...")
+
     ceph_auth_cmds = [
         ['ceph', 'auth', 'get-or-create', 'client.cinder', 'mon',
             'allow r', 'osd', 'allow class-read object_prefix rbd_children, allow rwx pool=volumes, allow rx pool=images'],  # noqa
@@ -102,7 +107,8 @@ def generate_ceph_keys(ceph_node):
 
 
 def distribute_ceph_keys(devstack_node, ceph_node):
-    ### Copy ceph auth keys to devstack node
+    log.info("Copying Ceph keys to DevStack node...")
+
     def copy_key(from_remote, key_name, to_remote, dest_path, owner):
         key_stringio = StringIO()
         from_remote.run(
@@ -134,6 +140,8 @@ def distribute_ceph_keys(devstack_node, ceph_node):
 
 
 def set_libvirt_secret(devstack_node, ceph_node):
+    log.info("Setting libvirt secret...")
+
     cinder_key_stringio = StringIO()
     ceph_node.run(args=['ceph', 'auth', 'get-key', 'client.cinder'],
                   stdout=cinder_key_stringio)
@@ -163,6 +171,8 @@ def set_libvirt_secret(devstack_node, ceph_node):
 
 
 def update_devstack_config_files(devstack_node, secret_uuid):
+    log.info("Updating DevStack config files to use Ceph...")
+
     def backup_config(node, file_name, backup_ext='.orig.teuth'):
         node.run(args=['cp', '-f', file_name, file_name + backup_ext])
 
@@ -227,6 +237,8 @@ def set_apache_servername(devstack_node):
     # Apache complains: "Could not reliably determine the server's fully
     # qualified domain name, using 127.0.0.1 for ServerName"
     # So, let's make sure it knows its name.
+    log.info("Setting Apache ServerName...")
+
     hostname = devstack_node.hostname
     config_file = '/etc/apache2/conf.d/servername'
     misc.sudo_write_file(devstack_node, config_file,
@@ -250,5 +262,6 @@ def reboot(node, timeout=300, interval=10):
 
 def start_devstack(devstack_node):
     log.info("Starting devstack...")
+
     args = ['cd', 'devstack', run.Raw('&&'), './rejoin-stack.sh']
     devstack_node.run(args=args)
