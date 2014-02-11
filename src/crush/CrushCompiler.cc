@@ -188,6 +188,8 @@ int CrushCompiler::decompile(ostream &out)
     out << "tunable choose_total_tries " << crush.get_choose_total_tries() << "\n";
   if (crush.get_chooseleaf_descend_once() != 0)
     out << "tunable chooseleaf_descend_once " << crush.get_chooseleaf_descend_once() << "\n";
+  if (crush.get_chooseleaf_vary_r() != 0)
+    out << "tunable chooseleaf_vary_r " << crush.get_chooseleaf_vary_r() << "\n";
 
   out << "\n# devices\n";
   for (int i=0; i<crush.get_max_devices(); i++) {
@@ -267,6 +269,10 @@ int CrushCompiler::decompile(ostream &out)
 	break;
       case CRUSH_RULE_SET_CHOOSELEAF_TRIES:
 	out << "\tstep set_chooseleaf_tries " << crush.get_rule_arg1(i, j)
+	    << "\n";
+	break;
+      case CRUSH_RULE_SET_CHOOSELEAF_VARY_R:
+	out << "\tstep set_chooseleaf_vary_r " << crush.get_rule_arg1(i, j)
 	    << "\n";
 	break;
       case CRUSH_RULE_CHOOSE_FIRSTN:
@@ -359,6 +365,8 @@ int CrushCompiler::parse_tunable(iter_t const& i)
     crush.set_choose_total_tries(val);
   else if (name == "chooseleaf_descend_once")
     crush.set_chooseleaf_descend_once(val);
+  else if (name == "chooseleaf_vary_r")
+    crush.set_chooseleaf_vary_r(val);
   else {
     err << "tunable " << name << " not recognized" << std::endl;
     return -1;
@@ -642,6 +650,13 @@ int CrushCompiler::parse_rule(iter_t const& i)
       {
 	int val = int_node(s->children[1]);
 	crush.set_rule_step_set_chooseleaf_tries(ruleno, step++, val);
+      }
+      break;
+
+    case crush_grammar::_step_set_chooseleaf_vary_r:
+      {
+	int val = int_node(s->children[1]);
+	crush.set_rule_step_set_chooseleaf_vary_r(ruleno, step++, val);
       }
       break;
 
