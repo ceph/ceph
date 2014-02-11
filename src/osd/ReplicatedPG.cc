@@ -4622,6 +4622,8 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
       if (pool.info.require_rollback())
 	ctx->clone_obc->attr_cache = ctx->obc->attr_cache;
       snap_oi = &ctx->clone_obc->obs.oi;
+      bool got = ctx->clone_obc->get_write(ctx->op);
+      assert(got);
     } else {
       snap_oi = &static_snap_oi;
     }
