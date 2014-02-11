@@ -261,7 +261,12 @@ def reboot(node, timeout=300, interval=30):
 
 
 def start_devstack(devstack_node):
-    log.info("Starting devstack...")
+    log.info("Patching devstack start script...")
+    # This causes screen to start headless - otherwise rejoin-stack.sh fails
+    # because there is no terminal attached.
+    cmd = "cd devstack && sed -ie 's/screen -c/screen -dm -c/' rejoin-stack.sh"
+    devstack_node.run(args=cmd)
 
-    args = ['cd', 'devstack', run.Raw('&&'), './rejoin-stack.sh']
-    devstack_node.run(args=args)
+    log.info("Starting devstack...")
+    cmd = "cd devstack && ./rejoin-stack.sh"
+    devstack_node.run(args=cmd)
