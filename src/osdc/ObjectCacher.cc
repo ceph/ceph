@@ -953,7 +953,7 @@ void ObjectCacher::trim()
 		 << ", objects: max " << max_objects << " current " << ob_lru.lru_get_size()
 		 << dendl;
 
-  while (get_stat_clean() > max_size) {
+  while (get_stat_clean() > 0 && (uint64_t) get_stat_clean() > max_size) {
     BufferHead *bh = static_cast<BufferHead*>(bh_lru_rest.lru_expire());
     if (!bh)
       break;
@@ -1353,7 +1353,9 @@ void ObjectCacher::maybe_wait_for_writeback(uint64_t len)
   //  - do not wait for bytes other waiters are waiting on.  this means that
   //    threads do not wait for each other.  this effectively allows the cache
   //    size to balloon proportional to the data that is in flight.
-  while (get_stat_dirty() + get_stat_tx() >= max_dirty + get_stat_dirty_waiting()) {
+  while (get_stat_dirty() + get_stat_tx() > 0 &&
+	 (uint64_t) (get_stat_dirty() + get_stat_tx()) >=
+	 max_dirty + get_stat_dirty_waiting()) {
     ldout(cct, 10) << __func__ << " waiting for dirty|tx "
 		   << (get_stat_dirty() + get_stat_tx()) << " >= max "
 		   << max_dirty << " + dirty_waiting "
@@ -1408,7 +1410,7 @@ int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset, M
   }
 
   // start writeback anyway?
-  if (get_stat_dirty() > target_dirty) {
+  if (get_stat_dirty() > 0 && (uint64_t) get_stat_dirty() > target_dirty) {
     ldout(cct, 10) << "wait_for_write " << get_stat_dirty() << " > target "
 		   << target_dirty << ", nudging flusher" << dendl;
     flusher_cond.Signal();
@@ -1432,7 +1434,7 @@ void ObjectCacher::flusher_entry()
 		   << max_dirty << " max)"
 		   << dendl;
     loff_t actual = get_stat_dirty() + get_stat_dirty_waiting();
-    if (actual > target_dirty) {
+    if (actual > 0 && (uint64_t) actual > target_dirty) {
       // flush some dirty pages
       ldout(cct, 10) << "flusher " 
 		     << get_stat_dirty() << " dirty + " << get_stat_dirty_waiting()
