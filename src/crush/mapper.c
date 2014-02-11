@@ -296,7 +296,9 @@ static int is_out(const struct crush_map *map,
  * @local_retries: localized retries
  * @local_fallback_retries: localized fallback retries
  * @recurse_to_leaf: true if we want one device under each item of given type (chooseleaf instead of choose)
+ * @vary_r: pass r to recursive calls
  * @out2: second output vector for leaf items (if @recurse_to_leaf)
+ * @parent_r: r value passed from the parent
  */
 static int crush_choose_firstn(const struct crush_map *map,
 			       struct crush_bucket *bucket,
@@ -308,7 +310,9 @@ static int crush_choose_firstn(const struct crush_map *map,
 			       unsigned int local_retries,
 			       unsigned int local_fallback_retries,
 			       int recurse_to_leaf,
-			       int *out2)
+			       unsigned int vary_r,
+			       int *out2,
+			       int parent_r)
 {
 	int rep;
 	unsigned int ftotal, flocal;
@@ -320,8 +324,11 @@ static int crush_choose_firstn(const struct crush_map *map,
 	int itemtype;
 	int collide, reject;
 
-	dprintk("CHOOSE%s bucket %d x %d outpos %d numrep %d\n", recurse_to_leaf ? "_LEAF" : "",
-		bucket->id, x, outpos, numrep);
+	dprintk("CHOOSE%s bucket %d x %d outpos %d numrep %d tries %d recurse_tries %d local_retries %d local_fallback_retries %d parent_r %d\n",
+		recurse_to_leaf ? "_LEAF" : "",
+		bucket->id, x, outpos, numrep,
+		tries, recurse_tries, local_retries, local_fallback_retries,
+		parent_r);
 
 	for (rep = outpos; rep < numrep; rep++) {
 		/* keep trying until we get a non-out, non-colliding item */
@@ -336,7 +343,7 @@ static int crush_choose_firstn(const struct crush_map *map,
 			do {
 				collide = 0;
 				retry_bucket = 0;
-				r = rep;
+				r = rep + parent_r;
 				/* r' = r + f_total */
 				r += ftotal;
 
@@ -388,6 +395,11 @@ static int crush_choose_firstn(const struct crush_map *map,
 				reject = 0;
 				if (!collide && recurse_to_leaf) {
 					if (item < 0) {
+						int sub_r;
+						if (vary_r)
+							sub_r = r >> (vary_r-1);
+						else
+							sub_r = 0;
 						if (crush_choose_firstn(map,
 							 map->buckets[-1-item],
 							 weight, weight_max,
@@ -397,7 +409,9 @@ static int crush_choose_firstn(const struct crush_map *map,
 							 local_retries,
 							 local_fallback_retries,
 							 0,
-							 NULL) <= outpos)
+							 vary_r,
+							 NULL,
+							 sub_r) <= outpos)
 							/* didn't get leaf */
 							reject = 1;
 					} else {
@@ -685,6 +699,8 @@ int crush_do_rule(const struct crush_map *map,
 	int choose_local_retries = map->choose_local_tries;
 	int choose_local_fallback_retries = map->choose_local_fallback_tries;
 
+	int vary_r = map->chooseleaf_vary_r;
+
 	if ((__u32)ruleno >= map->max_rules) {
 		dprintk(" bad ruleno %d\n", ruleno);
 		return 0;
@@ -723,6 +739,11 @@ int crush_do_rule(const struct crush_map *map,
 		case CRUSH_RULE_SET_CHOOSE_LOCAL_FALLBACK_TRIES:
 			if (curstep->arg1 >= 0)
 				choose_local_fallback_retries = curstep->arg1;
+			break;
+
+		case CRUSH_RULE_SET_CHOOSELEAF_VARY_R:
+			if (curstep->arg1 >= 0)
+				vary_r = curstep->arg1;
 			break;
 
 		case CRUSH_RULE_CHOOSELEAF_FIRSTN:
@@ -777,7 +798,9 @@ int crush_do_rule(const struct crush_map *map,
 						choose_local_retries,
 						choose_local_fallback_retries,
 						recurse_to_leaf,
-						c+osize);
+						vary_r,
+						c+osize,
+						0);
 				} else {
 					crush_choose_indep(
 						map,

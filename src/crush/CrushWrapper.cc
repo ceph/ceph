@@ -24,6 +24,22 @@ bool CrushWrapper::has_v2_rules() const
   return false;
 }
 
+bool CrushWrapper::has_v3_rules() const
+{
+  // check rules for use of SET_CHOOSELEAF_VARY_R step
+  for (unsigned i=0; i<crush->max_rules; i++) {
+    crush_rule *r = crush->rules[i];
+    if (!r)
+      continue;
+    for (unsigned j=0; j<r->len; j++) {
+      if (r->steps[j].op == CRUSH_RULE_SET_CHOOSELEAF_VARY_R)
+	return true;
+    }
+  }
+  return false;
+}
+
+
 void CrushWrapper::find_takes(set<int>& roots) const
 {
   for (unsigned i=0; i<crush->max_rules; i++) {
@@ -872,6 +888,7 @@ void CrushWrapper::encode(bufferlist& bl, bool lean) const
   ::encode(crush->choose_local_fallback_tries, bl);
   ::encode(crush->choose_total_tries, bl);
   ::encode(crush->chooseleaf_descend_once, bl);
+  ::encode(crush->chooseleaf_vary_r, bl);
 }
 
 static void decode_32_or_64_string_map(map<int32_t,string>& m, bufferlist::iterator& blp)
@@ -951,6 +968,9 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
     }
     if (!blp.end()) {
       ::decode(crush->chooseleaf_descend_once, blp);
+    }
+    if (!blp.end()) {
+      ::decode(crush->chooseleaf_vary_r, blp);
     }
     finalize();
   }
@@ -1137,7 +1157,9 @@ void CrushWrapper::dump_tunables(Formatter *f) const
   f->dump_int("chooseleaf_descend_once", get_chooseleaf_descend_once());
 
   // be helpful about it
-  if (has_bobtail_tunables())
+  if (has_firefly_tunables())
+    f->dump_string("profile", "firefly");
+  else if (has_bobtail_tunables())
     f->dump_string("profile", "bobtail");
   else if (has_argonaut_tunables())
     f->dump_string("profile", "argonaut");
