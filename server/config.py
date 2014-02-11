@@ -8,8 +8,6 @@ server = {
 app = {
     'root': 'ceph_brag.controllers.root.RootController',
     'modules': ['ceph_brag'],
-    'static_root': '%(confdir)s/public',
-    'template_path': '%(confdir)s/ceph_brag/templates',
     'debug': True,
     'errors': {
         404: '/error/404',

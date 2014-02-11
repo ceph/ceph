@@ -6,6 +6,7 @@ import re
 import json
 import sys
 import ast
+import requests
 
 CLUSTER_UUID_NAME='cluster-uuid'
 CLUSTER_OWNERSHIP_NAME='cluster-ownership'
@@ -224,8 +225,8 @@ def output_json():
   out['sysinfo'] = get_sysinfo(num_osds)
 
   owner = get_ownership_info()
-  if owner is not None:
-    url = owner.pop['url']
+  if owner is not None and 'url' in owner:
+    url = owner.pop('url')
     out['ownership'] = owner
 
   return json.dumps(out, indent=2, separators=(',', ': ')), url
@@ -289,7 +290,11 @@ def publish():
     print >> sys.stderr, "Cannot publish until a URL is set using update-metadata"
     return 1
 
-  #TODO: Execute the HTTP request
+  req = requests.put(url, data=data)
+  if req.status_code is not 201:
+    print >> sys.stderr, "Failed to publish, server responded with code " + str(req.status_code)
+    return 1
+
   return 0
 
 def unpublish():
@@ -311,8 +316,13 @@ def unpublish():
     return 1
 
   uuid = get_uuid()
+  
+  params = {'uuid':uuid}
+  req = requests.delete(url, params=params)
+  if req.status_code is not 200:
+    print >> sys.stderr, "Failed to unpublish, server responsed with code " + str(req.status_code)
+    return 1 
 
-  #TODO: Execute the HTTP request
   return 0
 
 def main():

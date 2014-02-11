@@ -105,6 +105,7 @@ The ceph-brag server code is a python based web application.
 
 ### Prerequisites
 * [pecan](http://pecanpy.org) is the web framework that is used by this application.
+* [sqlalchemy](www.sqlalchemy.org) is the ORM that is used by this application
 
 ### How to deploy
 * [Common recipes to deploy](http://pecan.readthedocs.org/en/latest/deployment.html#common-recipes)
