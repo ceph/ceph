@@ -306,7 +306,7 @@ TEST_F(TestRawPipe, buffer_list_write_fd_zero_copy) {
   EXPECT_EQ(0, ::stat("testfile_out", &st));
   EXPECT_EQ(len, st.st_size);
   char buf[len + 1];
-  EXPECT_EQ(len, safe_read(out_fd, buf, len + 1));
+  EXPECT_EQ((int)len, safe_read(out_fd, buf, len + 1));
   EXPECT_EQ(0, memcmp(buf, "ABC\n", len));
   ::close(out_fd);
   ::unlink("testfile_out");
