@@ -1351,7 +1351,8 @@ void OSDMap::_remove_nonexistent_osds(const pg_pool_t& pool,
 }
 
 int OSDMap::_pg_to_osds(const pg_pool_t& pool, pg_t pg,
-                        vector<int> *osds, int *primary) const
+                        vector<int> *osds, int *primary,
+			ps_t *ppps) const
 {
   // map to osds[]
   ps_t pps = pool.raw_pg_to_pps(pg);  // placement ps
@@ -1365,6 +1366,8 @@ int OSDMap::_pg_to_osds(const pg_pool_t& pool, pg_t pg,
   _remove_nonexistent_osds(pool, *osds);
 
   *primary = (osds->empty() ? -1 : osds->front());
+  if (ppps)
+    *ppps = pps;
 
   return osds->size();
 }
