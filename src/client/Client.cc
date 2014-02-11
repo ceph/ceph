@@ -111,6 +111,8 @@ bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
 {
   stringstream ss;
   Formatter *f = new_formatter(format);
+  if (!f)
+    f = new_formatter("json-pretty");
   f->open_object_section("result");
   m_client->client_lock.Lock();
   if (command == "mds_requests")
