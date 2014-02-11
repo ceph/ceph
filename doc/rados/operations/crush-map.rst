@@ -911,6 +911,18 @@ CRUSH_TUNABLES2
    will retry, or only try once and allow the original placement to
    retry.  Legacy default is 0, optimal value is 1.
 
+CRUSH_TUNABLES3
+---------------
+
+ * ``chooseleaf_vary_r``: Whether a recursive chooseleaf attempt will
+   start with a non-zero value of r, based on how many attempts the
+   parent has already made.  Legacy default is 0, but with this value
+   CRUSH is sometimes unable to find a mapping.  The optimal value (in
+   terms of computational cost and correctness) is 1.  However, for
+   legacy clusters that have lots of existing data, changing from 0 to
+   1 will cause a lot of data to move; a value of 4 or 5 will allow
+   CRUSH to find a valid mapping but will make less data move.
+
 
 Which client versions support CRUSH_TUNABLES
 --------------------------------------------
@@ -924,6 +936,12 @@ Which client versions support CRUSH_TUNABLES2
 
  * v0.55 or later, including bobtail series (v0.56.x)
  * Linux kernel version v3.9 or later (for the file system and RBD kernel clients)
+
+Which client versions support CRUSH_TUNABLES3
+---------------------------------------------
+
+ * v0.78 (firefly) or later
+ * Linux kernel version v3.15 or later (for the file system and RBD kernel clients)
 
 Warning when tunables are non-optimal
 -------------------------------------
@@ -987,11 +1005,9 @@ profile.  Those are:
  * ``legacy``: the legacy behavior from argonaut and earlier.
  * ``argonaut``: the legacy values supported by the original argonaut release
  * ``bobtail``: the values supported by the bobtail release
+ * ``firefly``: the values supported by the firefly release
  * ``optimal``: the current best values
  * ``default``: the current default values for a new cluster
-
-Currently, ``legacy``, ``default``, and ``argonaut`` are the same, and
-``bobtail`` and ``optimal`` include ``CRUSH_TUNABLES`` and ``CRUSH_TUNABLES2``.
 
 You can select a profile on a running cluster with the command::
 
@@ -1029,7 +1045,7 @@ Legacy values
 For reference, the legacy values for the CRUSH tunables can be set
 with::
 
-   crushtool -i /tmp/crush --set-choose-local-tries 2 --set-choose-local-fallback-tries 5 --set-choose-total-tries 19 -o /tmp/crush.legacy
+   crushtool -i /tmp/crush --set-choose-local-tries 2 --set-choose-local-fallback-tries 5 --set-choose-total-tries 19 --set-chooseleaf-descend-once 0 --set-chooseleaf-vary-r 0 -o /tmp/crush.legacy
 
 Again, the special ``--enable-unsafe-tunables`` option is required.
 Further, as noted above, be careful running old versions of the

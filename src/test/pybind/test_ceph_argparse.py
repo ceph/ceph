@@ -690,7 +690,8 @@ class TestOSD(TestArgparse):
                                                     '2.3']))
 
     def test_crush_tunables(self):
-        for tunable in ('legacy', 'argonaut', 'bobtail', 'optimal', 'default'):
+        for tunable in ('legacy', 'argonaut', 'bobtail', 'firefly',
+						'optimal', 'default'):
             self.assert_valid_command(['osd', 'crush', 'tunables',
                                        tunable])
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
