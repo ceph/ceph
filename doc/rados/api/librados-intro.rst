@@ -33,25 +33,26 @@ See `Installation (Quick)`_ for details.
 Step 1: Getting librados
 ========================
 
-The ``librados`` API is written in C, with additional bindings for C++, Python
-and Java. Your client app needs to bind with ``librados``, which is part
-of Ceph, but there are extra packages provided for writing applications
-using librados directly which must be installed on your client host first.
+Your client application must bind with ``librados`` to connect to the Ceph
+Storage Cluster. You must install ``librados`` and any required packages to
+write applications that use ``librados``. The ``librados`` API is written in
+C++, with additional bindings for C, Python and Java. 
 
 
-Getting librados development support files for C/C++
-----------------------------------------------------
+Getting librados for C/C++
+--------------------------
 
-To install ``librados`` development support files for C/C++, execute
-the following for Debian/Ubuntu distributions::
+To install ``librados`` development support files for C/C++ on Debian/Ubuntu
+distributions, execute the following::
 
 	sudo apt-get install librados-dev
 
-For CentOS/RHEL distributions, execute the following:: 
+To install ``librados`` development support files for C/C++ on RHEL/CentOS
+distributions, execute the following::
 
 	sudo yum install ceph-devel
 
-Once you've installed ``librados`` for developers, you can find the required 
+Once you install ``librados`` for developers, you can find the required 
 headers for C/C++ under ``/usr/include/rados``. ::
 
 	ls /usr/include/rados
@@ -60,17 +61,24 @@ headers for C/C++ under ``/usr/include/rados``. ::
 Getting librados for Python
 ---------------------------
 
-``librados`` Python support is the ``rados.py`` module, provided in
-the ``python-ceph`` package for both Debian and RedHat systems. ::
+The ``rados.py`` modules provides ``librados`` support to Python
+applications. The ``librados-dev`` package for Debian/Ubuntu
+and the ``ceph-devel`` package for RHEL/CentOS will install the
+``python-ceph`` package for you. You may install ``python-ceph``
+directly too.
 
-	sudo apt-get install librados-dev
+To install ``librados`` development support files for Python on Debian/Ubuntu
+distributions, execute the following::
 
-For CentOS/RHEL distributions, execute the following:: 
+	sudo apt-get install python-ceph
 
-	sudo yum install ceph-devel
+To install ``librados`` development support files for C/C++ on RHEL/CentOS
+distributions, execute the following::
+
+	sudo yum install python-ceph
 
 You can find the module under ``/usr/share/pyshared`` on Debian systems,
-or under ``/usr/lib/python2.X/site-packages`` on Centos/RHEL systems.
+or under ``/usr/lib/python*/site-packages`` on CentOS/RHEL systems.
 
 
 Getting librados for Java
@@ -115,12 +123,17 @@ Step 2: Configuring a Cluster Handle
 ====================================
 
 A :term:`Ceph Client`, via ``librados``, interacts directly with OSDs to store
-and retrieve data. To interact with OSDs in a manner that's substantially
-transparent to the client app, the client app must invoke ``librados`` to
-retrieve the cluster map. Ceph Clients retrieve a :term:`Cluster Map` from a
-Ceph Monitor, and write objects to pools. Ceph's CRUSH algorithm determines how
-Ceph will place data. ``librados`` will do this for your client app, so your
-client app doesn't need to learn about the topology of the cluster.
+and retrieve data. To interact with OSDs, the client app must invoke
+``librados``  and connect to a Ceph Monitor. Once connected, ``librados``
+retrieves the  :term:`Cluster Map` from the Ceph Monitor. When the client app
+wants to read or write data, it creates an I/O context and binds to a
+:term:`pool`. The pool has an associated :term:`ruleset` that defines how it
+will place data in the storage cluster. Via the I/O context, the client 
+provides the object name to ``librados``, which takes the object name
+and the cluster map (i.e., the topology of the cluster) and `computes`_ the
+placement group and `OSD`_  for locating the data. Then the client application
+can read or write data. The client app doesn't need to learn about the topology
+of the cluster directly.
 
 .. ditaa:: 
             +--------+  Retrieves  +---------------+
@@ -140,12 +153,12 @@ client app doesn't need to learn about the topology of the cluster.
 
 The Ceph Storage Cluster handle encapsulates the client configuration, including:
 
-- The `user ID`_
-- The authentication key
-- The monitor ID and address
+- The `user ID`_ for ``rados_create()`` or user name for ``rados_create2()`` 
+  (preferred).
+- The :term:`cephx` authentication key
+- The monitor ID and IP address
 - Logging levels
 - Debugging levels
-
 
 Thus, the first steps in using the cluster from your app are to 1) create
 a cluster handle that your app will use to connect to the storage cluster,
@@ -159,13 +172,19 @@ app must supply a monitor address, a username and an authentication key
 RADOS provides a number of ways for you to set the required values. For
 the monitor and encryption key settings, an easy way to handle them is to ensure
 that your Ceph configuration file contains a ``keyring`` path to a keyring file
-and at least one monitor address (e.g,. ``mon host``). Once you create the
-handle, you can read a Ceph configuration file to configure the handle. You can
-also pass arguments to your app and parse them with the function for parsing
-command line arguments (e.g., ``rados_conf_parse_argv()``), or parse Ceph
-environment variables (e.g., ``rados_conf_parse_env()``). Some wrappers may not
-implement convenience methods, so you may need to implement these capabilities.
-The following diagram provides a high-level flow for the initial connection.
+and at least one monitor address (e.g,. ``mon host``). For example:: 
+
+	[global]
+	mon host = 192.168.1.1
+	keyring = /etc/ceph/ceph.client.admin.keyring
+
+Once you create the handle, you can read a Ceph configuration file to configure
+the handle. You can also pass arguments to your app and parse them with the
+function for parsing command line arguments (e.g., ``rados_conf_parse_argv()``),
+or parse Ceph environment variables (e.g., ``rados_conf_parse_env()``). Some
+wrappers may not implement convenience methods, so you may need to implement
+these capabilities. The following diagram provides a high-level flow for the
+initial connection.
 
 
 .. ditaa:: +---------+     +---------+
@@ -195,6 +214,12 @@ handle, you can:
 - Get cluster statistics
 - Use Pool Operation (exists, create, list, delete)
 - Get and set the configuration
+
+
+One of the powerful features of Ceph is the ability to bind to different pools.
+Each pool may have a different number of placement groups, object replicas and
+replication strategies. For example, a pool could be set up as a "hot" pool that
+uses SSDs for frequently used objects or a "cold" pool that uses erasure coding.
 
 The main difference in the various ``librados`` bindings is between C and
 the object-oriented bindings for C++, Java and Python. The object-oriented
@@ -272,8 +297,9 @@ Compile your client and link to ``librados`` using ``-lrados``. For example::
 C++ Example
 -----------
 
-For C++, a simple cluster handle using the ``admin`` user requires you to
-initialize a ``librados::Rados`` cluster handle object:
+The Ceph project provides a C++ example in the ``ceph/examples/librados``
+directory. For C++, a simple cluster handle using the ``admin`` user requires
+you to initialize a ``librados::Rados`` cluster handle object:
 
 .. code-block:: c++
 
@@ -344,7 +370,6 @@ initialize a ``librados::Rados`` cluster handle object:
 	}
 	
 
-
 Compile the source; then, link ``librados`` using ``-lrados``. 
 For example::
 
@@ -358,8 +383,8 @@ Python Example
 
 Python uses the ``admin`` id and the ``ceph`` cluster name by default, and
 will read the standard ``ceph.conf`` file if the conffile parameter is
-set to the empty string. The Python binding converts C-based errors
-into Python exceptions.
+set to the empty string. The Python binding converts C++ errors
+into exceptions.
 
 
 .. code-block:: python
@@ -391,8 +416,9 @@ Execute the example to verify that it connects to your cluster. ::
 Java Example
 ------------
 
-Java requires you to specify the user ID, and uses the ``ceph`` cluster name by
-default . The Java binding converts C-based errors into exceptions.
+Java requires you to specify the user ID (``admin``) or user name
+(``client.admin``), and uses the ``ceph`` cluster name by default . The Java
+binding converts C++-based errors into exceptions.
 
 .. code-block:: java
 
@@ -435,7 +461,7 @@ Step 3: Creating an I/O Context
 
 Once your app has a cluster handle and a connection to a Ceph Storage Cluster,
 you may create an I/O Context and begin reading and writing data. An I/O Context
-binds the connection to a specific pool. The user ID must have appropriate
+binds the connection to a specific pool. The user must have appropriate
 `CAPS`_ permissions to access the specified pool. For example, a user with read
 access but not write access will only be able to read data. I/O Context 
 functionality includes:
@@ -483,9 +509,8 @@ RADOS enables you to interact both synchronously and asynchronously. Once your
 app has an I/O Context, read/write operations only require you to know the
 object/xattr name. The CRUSH algorithm encapsulated in ``librados`` uses the
 cluster map to identify the appropriate OSD. OSD daemons handle the replication,
-as described in `Smart Daemons Enable Hyperscale`_. The mapping of objects to
-placement groups is also performed by the library as described in  `Calculating
-PG IDs`_.
+as described in `Smart Daemons Enable Hyperscale`_. The ``librados`` library also 
+maps objects to placement groups, as described in  `Calculating PG IDs`_.
 
 The following examples use the default ``data`` pool. However, you may also
 use the API to list pools, ensure they exist, or create and delete pools. For 
@@ -846,3 +871,5 @@ Python Example
 .. _Installation (Quick): ../../../start
 .. _Smart Daemons Enable Hyperscale: ../../../architecture#smart-daemons-enable-hyperscale
 .. _Calculating PG IDs: ../../../architecture#calculating-pg-ids
+.. _computes: ../../../architecture#calculating-pg-ids
+.. _OSD: ../../../architecture#mapping-pgs-to-osds
