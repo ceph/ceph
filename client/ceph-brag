@@ -225,9 +225,10 @@ def output_json():
   out['sysinfo'] = get_sysinfo(num_osds)
 
   owner = get_ownership_info()
-  if owner is not None and 'url' in owner:
-    url = owner.pop('url')
+  if owner is not None:
     out['ownership'] = owner
+    if 'url' in owner:
+      url = owner.pop('url')
 
   return json.dumps(out, indent=2, separators=(',', ': ')), url
 
