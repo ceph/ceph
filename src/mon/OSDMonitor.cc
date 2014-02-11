@@ -2529,15 +2529,27 @@ stats_out:
     rs << "\n";
     rdata.append(rs.str());
   } else if (prefix == "osd crush rule dump") {
+    string name;
+    cmd_getval(g_ceph_context, cmdmap, "name", name);
     string format;
     cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
     Formatter *fp = new_formatter(format);
     if (!fp)
       fp = new_formatter("json-pretty");
     boost::scoped_ptr<Formatter> f(fp);
-    f->open_array_section("rules");
-    osdmap.crush->dump_rules(f.get());
-    f->close_section();
+    if (name == "") {
+      f->open_array_section("rules");
+      osdmap.crush->dump_rules(f.get());
+      f->close_section();
+    } else {
+      int ruleset = osdmap.crush->get_rule_id(name);
+      if (ruleset < 0) {
+	ss << "unknown crush ruleset '" << name << "'";
+	r = ruleset;
+	goto reply;
+      }
+      osdmap.crush->dump_rule(ruleset, f.get());
+    }
     ostringstream rs;
     f->flush(rs);
     rs << "\n";
