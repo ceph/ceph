@@ -800,6 +800,12 @@ unittest_throttle_LDADD = libcommon.la ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
 unittest_throttle_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} -O2
 check_PROGRAMS += unittest_throttle
 
+unittest_context_SOURCES = test/common/test_context.cc
+unittest_context_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
+unittest_context_LDADD = libcommon.la ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
+unittest_context_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} -O2
+check_PROGRAMS += unittest_context
+
 unittest_base64_SOURCES = test/base64.cc
 unittest_base64_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
 unittest_base64_LDADD = libcephfs.la -lm ${UNITTEST_LDADD}

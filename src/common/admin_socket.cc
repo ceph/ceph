@@ -320,6 +320,9 @@ bool AdminSocket::do_accept()
     return false;
   }
   cmd_getval(m_cct, cmdmap, "format", format);
+  if (format != "json" && format != "json-pretty" &&
+      format != "xml" && format != "xml-pretty")
+    format = "json-pretty";
   cmd_getval(m_cct, cmdmap, "prefix", c);
 
   string firstword;
@@ -443,6 +446,8 @@ public:
   HelpHook(AdminSocket *as) : m_as(as) {}
   bool call(string command, cmdmap_t &cmdmap, string format, bufferlist& out) {
     Formatter *f = new_formatter(format);
+    if (!f)
+      f = new_formatter("json-pretty");
     f->open_object_section("help");
     for (map<string,string>::iterator p = m_as->m_help.begin();
 	 p != m_as->m_help.end();
