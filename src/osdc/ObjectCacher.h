@@ -434,7 +434,7 @@ class ObjectCacher {
   void bh_read(BufferHead *bh);
   void bh_write(BufferHead *bh);
 
-  void trim(loff_t max_bytes=-1, loff_t max_objects=-1);
+  void trim();
   void flush(loff_t amount=0);
 
   /**
