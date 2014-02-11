@@ -1353,8 +1353,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
     map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(obc->obs.oi.soid);
     if (p == flush_ops.end()) {
       dout(10) << __func__ << " no flush in progress, aborting" << dendl;
-      close_op_ctx(ctx, -EINVAL);
-      osd->reply_op_error(op, -EINVAL);
+      reply_ctx(ctx, -EINVAL);
       return;
     }
   } else if (!get_rw_locks(ctx)) {
@@ -1368,14 +1367,12 @@ void ReplicatedPG::do_op(OpRequestRef op)
     // This object is lost. Reading from it returns an error.
     dout(20) << __func__ << ": object " << obc->obs.oi.soid
 	     << " is lost" << dendl;
-    close_op_ctx(ctx, -ENFILE);
-    osd->reply_op_error(op, -ENFILE);
+    reply_ctx(ctx, -ENFILE);
     return;
   }
   if (!op->may_write() && !op->may_cache() && (!obc->obs.exists ||
 					       obc->obs.oi.is_whiteout())) {
-    close_op_ctx(ctx, -ENOENT);
-    osd->reply_op_error(op, -ENOENT);
+    reply_ctx(ctx, -ENOENT);
     return;
   }
 
