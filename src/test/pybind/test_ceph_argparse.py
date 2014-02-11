@@ -576,11 +576,13 @@ class TestOSD(TestArgparse):
 
     def test_crush_rule_dump(self):
         self.assert_valid_command(['osd', 'crush', 'rule', 'dump'])
+        self.assert_valid_command(['osd', 'crush', 'rule', 'dump', 'RULE'])
         for format in ('json', 'json-pretty', 'xml', 'xml-pretty'):
-            self.assert_valid_command(['osd', 'crush', 'rule', 'dump', format])
+            self.assert_valid_command(['osd', 'crush', 'rule',
+                                       'dump', 'RULE', format])
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
                                                     'rule', 'dump',
-                                                    'json',
+                                                    'RULE', 'json',
                                                     'toomany']))
 
     def test_crush_dump(self):
