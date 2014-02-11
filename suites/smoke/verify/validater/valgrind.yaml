@@ -1,7 +1,4 @@
 overrides:
-  install:
-    ceph:
-      flavor: notcmalloc
   ceph:
     valgrind:
       mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
