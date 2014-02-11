@@ -58,7 +58,7 @@ Building packages
 You can build packages for Debian or Debian-derived (e.g., Ubuntu)
 systems with
 
-$ sudo apt-get dpkg-dev
+$ sudo apt-get install dpkg-dev
 $ dpkg-checkbuilddeps        # make sure we have all dependencies
 $ dpkg-buildpackage
 
