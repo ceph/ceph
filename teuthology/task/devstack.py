@@ -73,6 +73,7 @@ def configure_devstack_and_ceph(ctx, config, devstack_node, ceph_node):
     # Rebooting is the most-often-used method of restarting devstack services
     reboot(devstack_node)
     start_devstack(devstack_node)
+    restart_apache(devstack_node)
 
 
 def create_pools(ceph_node, pool_size):
@@ -233,18 +234,16 @@ def update_devstack_config_files(devstack_node, secret_uuid):
         misc.sudo_write_file(devstack_node, file_name, new_config_stream)
 
 
-def set_apache_servername(devstack_node):
+def set_apache_servername(node):
     # Apache complains: "Could not reliably determine the server's fully
     # qualified domain name, using 127.0.0.1 for ServerName"
     # So, let's make sure it knows its name.
     log.info("Setting Apache ServerName...")
 
-    hostname = devstack_node.hostname
+    hostname = node.hostname
     config_file = '/etc/apache2/conf.d/servername'
-    misc.sudo_write_file(devstack_node, config_file,
+    misc.sudo_write_file(node, config_file,
                          "ServerName {name}".format(name=hostname))
-    devstack_node.run(args=['sudo', '/etc/init.d/apache2', 'restart'],
-                      wait=True)
 
 
 def reboot(node, timeout=300, interval=30):
@@ -270,3 +269,7 @@ def start_devstack(devstack_node):
     log.info("Starting devstack...")
     cmd = "cd devstack && ./rejoin-stack.sh"
     devstack_node.run(args=cmd)
+
+
+def restart_apache(node):
+    node.run(args=['sudo', '/etc/init.d/apache2', 'restart'], wait=True)
