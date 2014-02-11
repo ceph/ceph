@@ -1398,7 +1398,60 @@ void OSDMap::_raw_to_up_osds(const pg_pool_t& pool, const vector<int>& raw,
     }
   }
 }
-  
+
+void OSDMap::_apply_primary_affinity(ps_t seed,
+				     const pg_pool_t& pool,
+				     vector<int> *osds,
+				     int *primary) const
+{
+  // do we have any non-default primary_affinity values for these osds?
+  if (!osd_primary_affinity)
+    return;
+
+  bool any = false;
+  for (vector<int>::const_iterator p = osds->begin(); p != osds->end(); ++p) {
+    if ((*osd_primary_affinity)[*p] != CEPH_OSD_DEFAULT_PRIMARY_AFFINITY) {
+      any = true;
+    }
+  }
+  if (!any)
+    return;
+
+  // pick the primary.  feed both the seed (for the pg) and the osd
+  // into the hash/rng so that a proportional fraction of an osd's pgs
+  // get rejected as primary.
+  int pos = -1;
+  for (unsigned i = 0; i < osds->size(); ++i) {
+    int o = (*osds)[i];
+    if (o == CRUSH_ITEM_NONE)
+      continue;
+    unsigned a = (*osd_primary_affinity)[o];
+    if (a < CEPH_OSD_MAX_PRIMARY_AFFINITY &&
+	(crush_hash32_2(CRUSH_HASH_RJENKINS1,
+			seed, o) >> 16) >= a) {
+      // we chose not to use this primary.  note it anyway as a
+      // fallback in case we don't pick anyone else, but keep looking.
+      if (pos < 0)
+	pos = i;
+    } else {
+      pos = i;
+      break;
+    }
+  }
+  if (pos < 0)
+    return;
+
+  *primary = (*osds)[pos];
+
+  if (pool.can_shift_osds() && pos > 0) {
+    // move the new primary to the front.
+    for (int i = pos; i > 0; --i) {
+      (*osds)[i] = (*osds)[i-1];
+    }
+    (*osds)[0] = *primary;
+  }
+}
+
 void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
                             vector<int> *temp_pg, int *temp_primary) const
 {
@@ -1442,8 +1495,10 @@ void OSDMap::pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const
     return;
   }
   vector<int> raw;
-  _pg_to_osds(*pool, pg, &raw, primary);
+  ps_t pps;
+  _pg_to_osds(*pool, pg, &raw, primary, &pps);
   _raw_to_up_osds(*pool, raw, up, primary);
+  _apply_primary_affinity(pps, *pool, up, primary);
 }
   
 void OSDMap::_pg_to_up_acting_osds(pg_t pg, vector<int> *up, int *up_primary,
@@ -1466,8 +1521,10 @@ void OSDMap::_pg_to_up_acting_osds(pg_t pg, vector<int> *up, int *up_primary,
   vector<int> _acting;
   int _up_primary;
   int _acting_primary;
-  _pg_to_osds(*pool, pg, &raw, &_up_primary);
+  ps_t pps;
+  _pg_to_osds(*pool, pg, &raw, &_up_primary, &pps);
   _raw_to_up_osds(*pool, raw, &_up, &_up_primary);
+  _apply_primary_affinity(pps, *pool, &_up, &_up_primary);
   _get_temp_osds(*pool, pg, &_acting, &_acting_primary);
   if (_acting.empty())
     _acting = _up;

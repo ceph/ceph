@@ -559,6 +559,9 @@ private:
 		  ps_t *ppps) const;
   void _remove_nonexistent_osds(const pg_pool_t& pool, vector<int>& osds) const;
 
+  void _apply_primary_affinity(ps_t seed, const pg_pool_t& pool,
+			       vector<int> *osds, int *primary) const;
+
   /// pg -> (up osd list)
   void _raw_to_up_osds(const pg_pool_t& pool, const vector<int>& raw,
                        vector<int> *up, int *primary) const;
