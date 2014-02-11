@@ -1,7 +1,5 @@
 tasks:
 - install:
-    ceph:
-      flavor: notcmalloc
 - ceph:
     conf:
       client.0: 
