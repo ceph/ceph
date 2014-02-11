@@ -388,7 +388,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   ENCODE_START(7, 7, bl);
 
   {
-    ENCODE_START(1, 1, bl); // client-usable data
+    ENCODE_START(2, 1, bl); // client-usable data
     ::encode(fsid, bl);
     ::encode(epoch, bl);
     ::encode(modified, bl);
@@ -406,6 +406,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
     ::encode(new_weight, bl);
     ::encode(new_pg_temp, bl);
     ::encode(new_primary_temp, bl);
+    ::encode(new_primary_affinity, bl);
     ENCODE_FINISH(bl); // client-usable data
   }
 
@@ -541,7 +542,7 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     return;
   }
   {
-    DECODE_START(1, bl); // client-usable data
+    DECODE_START(2, bl); // client-usable data
     ::decode(fsid, bl);
     ::decode(epoch, bl);
     ::decode(modified, bl);
@@ -559,6 +560,10 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     ::decode(new_weight, bl);
     ::decode(new_pg_temp, bl);
     ::decode(new_primary_temp, bl);
+    if (struct_v >= 2)
+      ::decode(new_primary_affinity, bl);
+    else
+      new_primary_affinity.clear();
     DECODE_FINISH(bl); // client-usable data
   }
 
@@ -824,6 +829,8 @@ void OSDMap::set_max_osd(int m)
   osd_addrs->hb_back_addr.resize(m);
   osd_addrs->hb_front_addr.resize(m);
   osd_uuid->resize(m);
+  if (osd_primary_affinity)
+    osd_primary_affinity->resize(m, CEPH_OSD_DEFAULT_PRIMARY_AFFINITY);
 
   calc_num_osds();
 }
@@ -1168,6 +1175,12 @@ int OSDMap::apply_incremental(const Incremental &inc)
       osd_state[i->first] &= ~(CEPH_OSD_AUTOOUT | CEPH_OSD_NEW);
   }
 
+  for (map<int32_t,uint32_t>::const_iterator i = inc.new_primary_affinity.begin();
+       i != inc.new_primary_affinity.end();
+       ++i) {
+    set_primary_affinity(i->first, i->second);
+  }
+
   // up/down
   for (map<int32_t,uint8_t>::const_iterator i = inc.new_state.begin();
        i != inc.new_state.end();
@@ -1397,7 +1410,7 @@ int OSDMap::pg_to_osds(pg_t pg, vector<int> *raw, int *primary) const
   const pg_pool_t *pool = get_pg_pool(pg.pool());
   if (!pool)
     return 0;
-  int r = _pg_to_osds(*pool, pg, raw, primary);
+  int r = _pg_to_osds(*pool, pg, raw, primary, NULL);
   return r;
 }
 
@@ -1589,7 +1602,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   ENCODE_START(7, 7, bl);
 
   {
-    ENCODE_START(1, 1, bl); // client-usable data
+    ENCODE_START(2, 1, bl); // client-usable data
     // base
     ::encode(fsid, bl);
     ::encode(epoch, bl);
@@ -1609,6 +1622,12 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
 
     ::encode(*pg_temp, bl);
     ::encode(*primary_temp, bl);
+    if (osd_primary_affinity) {
+      ::encode(*osd_primary_affinity, bl);
+    } else {
+      vector<__u32> v;
+      ::encode(v, bl);
+    }
 
     // crush
     bufferlist cbl;
@@ -1746,6 +1765,8 @@ void OSDMap::decode_classic(bufferlist::iterator& p)
   else
     osd_addrs->hb_front_addr.resize(osd_addrs->hb_back_addr.size());
 
+  osd_primary_affinity.reset();
+
   post_decode();
 }
 
@@ -1769,7 +1790,7 @@ void OSDMap::decode(bufferlist::iterator& bl)
    * Since we made it past that hurdle, we can use our normal paths.
    */
   {
-    DECODE_START(1, bl); // client-usable data
+    DECODE_START(2, bl); // client-usable data
     // base
     ::decode(fsid, bl);
     ::decode(epoch, bl);
@@ -1789,6 +1810,14 @@ void OSDMap::decode(bufferlist::iterator& bl)
 
     ::decode(*pg_temp, bl);
     ::decode(*primary_temp, bl);
+    if (struct_v >= 2) {
+      osd_primary_affinity.reset(new vector<__u32>);
+      ::decode(*osd_primary_affinity, bl);
+      if (osd_primary_affinity->empty())
+	osd_primary_affinity.reset();
+    } else {
+      osd_primary_affinity.reset();
+    }
 
     // crush
     bufferlist cbl;
@@ -1871,6 +1900,8 @@ void OSDMap::dump(Formatter *f) const
       f->dump_stream("uuid") << get_uuid(i);
       f->dump_int("up", is_up(i));
       f->dump_int("in", is_in(i));
+      f->dump_float("weight", get_weightf(i));
+      f->dump_float("primary_affinity", get_primary_affinityf(i));
       get_info(i).dump(f);
       f->dump_stream("public_addr") << get_addr(i);
       f->dump_stream("cluster_addr") << get_cluster_addr(i);

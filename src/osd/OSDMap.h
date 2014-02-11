@@ -135,6 +135,7 @@ public:
     map<int32_t,uint32_t> new_weight;
     map<pg_t,vector<int32_t> > new_pg_temp;     // [] to remove
     map<pg_t, int> new_primary_temp;            // [-1] to remove
+    map<int32_t,uint32_t> new_primary_affinity;
     map<int32_t,epoch_t> new_up_thru;
     map<int32_t,pair<epoch_t,epoch_t> > new_last_clean_interval;
     map<int32_t,epoch_t> new_lost;
@@ -208,6 +209,7 @@ private:
   vector<osd_info_t> osd_info;
   ceph::shared_ptr< map<pg_t,vector<int> > > pg_temp;  // temp pg mapping (e.g. while we rebuild)
   ceph::shared_ptr< map<pg_t,int > > primary_temp;  // temp primary mapping (e.g. while we rebuild)
+  ceph::shared_ptr< vector<__u32> > osd_primary_affinity; ///< 16.16 fixed point, 0x10000 = baseline
 
   map<int64_t,pg_pool_t> pools;
   map<int64_t,string> pool_name;
@@ -340,6 +342,23 @@ public:
     return (float)get_weight(o) / (float)CEPH_OSD_IN;
   }
   void adjust_osd_weights(const map<int,double>& weights, Incremental& inc) const;
+
+  void set_primary_affinity(int o, int w) {
+    assert(o < max_osd);
+    if (!osd_primary_affinity)
+      osd_primary_affinity.reset(new vector<__u32>(max_osd,
+						   CEPH_OSD_DEFAULT_PRIMARY_AFFINITY));
+    (*osd_primary_affinity)[o] = w;
+  }
+  unsigned get_primary_affinity(int o) const {
+    assert(o < max_osd);
+    if (!osd_primary_affinity)
+      return CEPH_OSD_DEFAULT_PRIMARY_AFFINITY;
+    return (*osd_primary_affinity)[o];
+  }
+  float get_primary_affinityf(int o) const {
+    return (float)get_primary_affinity(o) / (float)CEPH_OSD_MAX_PRIMARY_AFFINITY;
+  }
 
   bool exists(int osd) const {
     //assert(osd >= 0);
