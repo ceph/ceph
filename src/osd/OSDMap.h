@@ -598,7 +598,6 @@ public:
   int pg_to_acting_osds(pg_t pg, vector<int>& acting) const {
     int primary;
     int r = pg_to_acting_osds(pg, &acting, &primary);
-    assert(acting.empty() || primary == acting.front());
     return r;
   }
   /**
