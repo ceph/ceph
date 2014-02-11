@@ -944,19 +944,14 @@ void ObjectCacher::flush(loff_t amount)
 }
 
 
-void ObjectCacher::trim(loff_t max_bytes, loff_t max_ob)
+void ObjectCacher::trim()
 {
   assert(lock.is_locked());
-  if (max_bytes < 0) 
-    max_bytes = max_size;
-  if (max_ob < 0)
-    max_ob = max_objects;
-  
-  ldout(cct, 10) << "trim  start: bytes: max " << max_bytes << "  clean " << get_stat_clean()
-		 << ", objects: max " << max_ob << " current " << ob_lru.lru_get_size()
+  ldout(cct, 10) << "trim  start: bytes: max " << max_size << "  clean " << get_stat_clean()
+		 << ", objects: max " << max_objects << " current " << ob_lru.lru_get_size()
 		 << dendl;
 
-  while (get_stat_clean() > max_bytes) {
+  while (get_stat_clean() > max_size) {
     BufferHead *bh = static_cast<BufferHead*>(bh_lru_rest.lru_expire());
     if (!bh)
       break;
@@ -974,7 +969,7 @@ void ObjectCacher::trim(loff_t max_bytes, loff_t max_ob)
     }
   }
 
-  while (ob_lru.lru_get_size() > max_ob) {
+  while (ob_lru.lru_get_size() > max_objects) {
     Object *ob = static_cast<Object*>(ob_lru.lru_expire());
     if (!ob)
       break;
@@ -983,8 +978,8 @@ void ObjectCacher::trim(loff_t max_bytes, loff_t max_ob)
     close_object(ob);
   }
   
-  ldout(cct, 10) << "trim finish:  max " << max_bytes << "  clean " << get_stat_clean()
-		 << ", objects: max " << max_ob << " current " << ob_lru.lru_get_size()
+  ldout(cct, 10) << "trim finish:  max " << max_size << "  clean " << get_stat_clean()
+		 << ", objects: max " << max_objects << " current " << ob_lru.lru_get_size()
 		 << dendl;
 }
 
