@@ -5011,6 +5011,18 @@ struct C_OnMapApply : public Context {
   }
 };
 
+void OSD::osdmap_subscribe(version_t epoch, bool force_request)
+{
+  OSDMapRef osdmap = service.get_osdmap();
+  if (osdmap->get_epoch() >= epoch)
+    return;
+
+  if (monc->sub_want_increment("osdmap", epoch, CEPH_SUBSCRIBE_ONETIME) ||
+      force_request) {
+    monc->renew_subs();
+  }
+}
+
 void OSD::handle_osd_map(MOSDMap *m)
 {
   assert(osd_lock.is_locked());
@@ -5061,6 +5073,9 @@ void OSD::handle_osd_map(MOSDMap *m)
     m->put();
     return;
   }
+
+  // even if this map isn't from a mon, we may have satisfied our subscription
+  monc->sub_got("osdmap", last);
 
   // missing some?
   bool skip_maps = false;
