@@ -629,10 +629,13 @@ protected:
   void release_op_ctx_locks(OpContext *ctx) {
     list<OpRequestRef> to_req;
     bool requeue_recovery = false;
+    bool requeue_recovery_clone = false;
     switch (ctx->lock_to_release) {
     case OpContext::W_LOCK:
       ctx->obc->put_write(&to_req, &requeue_recovery);
-      if (requeue_recovery)
+      if (ctx->clone_obc)
+	ctx->clone_obc->put_write(&to_req, &requeue_recovery_clone);
+      if (requeue_recovery || requeue_recovery_clone)
 	osd->recovery_wq.queue(this);
       break;
     case OpContext::R_LOCK:
