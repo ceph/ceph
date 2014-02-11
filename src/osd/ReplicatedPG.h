@@ -910,9 +910,11 @@ protected:
    * This helper function is called from do_op if the ObjectContext lookup fails.
    * @returns true if the caching code is handling the Op, false otherwise.
    */
-  inline bool maybe_handle_cache(OpRequestRef op, ObjectContextRef obc, int r,
+  inline bool maybe_handle_cache(OpRequestRef op,
+				 bool write_ordered,
+				 ObjectContextRef obc, int r,
 				 const hobject_t& missing_oid,
-				 bool must_promote = false);
+				 bool must_promote);
   /**
    * This helper function tells the client to redirect their request elsewhere.
    */
