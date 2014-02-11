@@ -2814,8 +2814,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
   case MOSDPing::YOU_DIED:
     dout(10) << "handle_osd_ping " << m->get_source_inst() << " says i am down in " << m->map_epoch
 	     << dendl;
-    if (monc->sub_want("osdmap", m->map_epoch, CEPH_SUBSCRIBE_ONETIME))
-      monc->renew_subs();
+    osdmap_subscribe(m->map_epoch, false);
     break;
   }
 
@@ -2939,8 +2938,7 @@ void OSD::heartbeat()
     if (now - last_mon_heartbeat > cct->_conf->osd_mon_heartbeat_interval && is_active()) {
       last_mon_heartbeat = now;
       dout(10) << "i have no heartbeat peers; checking mon for new map" << dendl;
-      monc->sub_want("osdmap", osdmap->get_epoch() + 1, CEPH_SUBSCRIBE_ONETIME);
-      monc->renew_subs();
+      osdmap_subscribe(osdmap->get_epoch() + 1, true);
     }
   }
 
@@ -3424,10 +3422,9 @@ void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
   
   // get all the latest maps
   if (osdmap->get_epoch() > oldest)
-    monc->sub_want("osdmap", osdmap->get_epoch(), CEPH_SUBSCRIBE_ONETIME);
+    osdmap_subscribe(osdmap->get_epoch(), true);
   else
-    monc->sub_want("osdmap", oldest - 1, CEPH_SUBSCRIBE_ONETIME);
-  monc->renew_subs();
+    osdmap_subscribe(oldest - 1, true);
 }
 
 void OSD::start_waiting_for_healthy()
@@ -4958,8 +4955,7 @@ void OSD::wait_for_new_map(OpRequestRef op)
 {
   // ask?
   if (waiting_for_osdmap.empty()) {
-    monc->sub_want("osdmap", osdmap->get_epoch() + 1, CEPH_SUBSCRIBE_ONETIME);
-    monc->renew_subs();
+    osdmap_subscribe(osdmap->get_epoch() + 1, true);
   }
   
   logger->inc(l_osd_waiting_for_map);
@@ -5083,8 +5079,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     dout(10) << "handle_osd_map message skips epochs " << osdmap->get_epoch() + 1
 	     << ".." << (first-1) << dendl;
     if (m->oldest_map <= osdmap->get_epoch() + 1) {
-      monc->sub_want("osdmap", osdmap->get_epoch()+1, CEPH_SUBSCRIBE_ONETIME);
-      monc->renew_subs();
+      osdmap_subscribe(osdmap->get_epoch()+1, true);
       m->put();
       return;
     }
@@ -5093,8 +5088,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     //  2- is at present the only way to ensure that we get a *full* map as
     //     the first map!
     if (m->oldest_map < first) {
-      monc->sub_want("osdmap", m->oldest_map - 1, CEPH_SUBSCRIBE_ONETIME);
-      monc->renew_subs();
+      osdmap_subscribe(m->oldest_map - 1, true);
       m->put();
       return;
     }
@@ -5337,8 +5331,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   if (m->newest_map && m->newest_map > last) {
     dout(10) << " msg say newest map is " << m->newest_map << ", requesting more" << dendl;
-    monc->sub_want("osdmap", osdmap->get_epoch()+1, CEPH_SUBSCRIBE_ONETIME);
-    monc->renew_subs();
+    osdmap_subscribe(osdmap->get_epoch()+1, true);
   }
   else if (is_booting()) {
     start_boot();  // retry
@@ -5576,8 +5569,7 @@ void OSD::activate_map()
 
   if (osdmap->test_flag(CEPH_OSDMAP_FULL)) {
     dout(10) << " osdmap flagged full, doing onetime osdmap subscribe" << dendl;
-    monc->sub_want("osdmap", osdmap->get_epoch() + 1, CEPH_SUBSCRIBE_ONETIME);
-    monc->renew_subs();
+    osdmap_subscribe(osdmap->get_epoch() + 1, true);
   }
 
   // norecover?
