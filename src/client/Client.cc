@@ -7167,6 +7167,9 @@ int Client::_setxattr(Inode *in, const char *name, const void *value, size_t siz
       strncmp(name, "ceph.", 5))
     return -EOPNOTSUPP;
 
+  if (!value)
+    flags |= CEPH_XATTR_REMOVE;
+
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETXATTR);
   filepath path;
   in->make_nosnap_relative_path(path);
