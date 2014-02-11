@@ -559,7 +559,7 @@ private:
   void _remove_nonexistent_osds(const pg_pool_t& pool, vector<int>& osds) const;
 
   /// pg -> (up osd list)
-  void _raw_to_up_osds(pg_t pg, const vector<int>& raw,
+  void _raw_to_up_osds(const pg_pool_t& pool, const vector<int>& raw,
                        vector<int> *up, int *primary) const;
 
   /**
