@@ -105,9 +105,6 @@ void Dumper::dump(const char *dump_file)
 
   if (r < 0) { // Error
     derr << "error on recovery: " << cpp_strerror(r) << dendl;
-    messenger->shutdown();
-    // wait for messenger to finish
-    messenger->wait();
     shutdown();
   } else {
     dout(10) << "completed journal recovery" << dendl;
@@ -158,11 +155,6 @@ void Dumper::dump(const char *dump_file)
     int err = errno;
     derr << "unable to open " << dump_file << ": " << cpp_strerror(err) << dendl;
   }
-
-  messenger->shutdown();
-
-  // wait for messenger to finish
-  messenger->wait();
 
   shutdown();
 }

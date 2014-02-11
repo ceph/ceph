@@ -88,6 +88,8 @@ static int do_cmds_special_action(const std::string &action,
     journal_dumper->init(rank);
     journal_dumper->dump(dump_file.c_str());
     mc.shutdown();
+    messenger->shutdown();
+    messenger->wait();
   }
   else if (action == "undump-journal") {
     dout(0) << "undumping journal for mds." << rank << " from " << dump_file << dendl;
@@ -95,6 +97,8 @@ static int do_cmds_special_action(const std::string &action,
     journal_dumper->init(rank);
     journal_dumper->undump(dump_file.c_str());
     mc.shutdown();
+    messenger->shutdown();
+    messenger->wait();
   }
   else if (action == "reset-journal") {
     dout(0) << "resetting journal" << dendl;
@@ -102,7 +106,10 @@ static int do_cmds_special_action(const std::string &action,
     jr->init(rank);
     jr->reset();
     mc.shutdown();
+    messenger->shutdown();
+    messenger->wait();
   }
+
   else {
     assert(0);
   }
