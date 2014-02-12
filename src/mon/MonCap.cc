@@ -349,7 +349,7 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
     unquoted_word %= +char_("a-zA-Z0-9_.-");
     str %= quoted_string | unquoted_word;
 
-    spaces = +lit(' ');
+    spaces = +(lit(' ') | lit('\n') | lit('\t'));
 
     // command := command[=]cmd [k1=v1 k2=v2 ...]
     str_match = '=' >> str >> qi::attr(string());
