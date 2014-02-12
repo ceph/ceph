@@ -67,6 +67,8 @@ MonClient::MonClient(CephContext *cct_) :
   want_keys(0), global_id(0),
   authenticate_err(0),
   session_established_context(NULL),
+  had_a_connection(false),
+  reopen_interval_multiplier(1.0),
   auth(NULL),
   keyring(NULL),
   rotating_secrets(NULL),
@@ -613,6 +615,15 @@ void MonClient::_reopen_session(int rank, string name)
     version_requests.erase(version_requests.begin());
   }
 
+  // adjust timeouts if necessary
+  if (had_a_connection) {
+    reopen_interval_multiplier *= cct->_conf->mon_client_hunt_interval_backoff;
+    if (reopen_interval_multiplier >
+          cct->_conf->mon_client_hunt_interval_max_multiple)
+      reopen_interval_multiplier =
+          cct->_conf->mon_client_hunt_interval_max_multiple;
+  }
+
   // restart authentication handshake
   state = MC_STATE_NEGOTIATING;
   hunting = true;
@@ -658,6 +669,10 @@ void MonClient::_finish_hunting()
   if (hunting) {
     ldout(cct, 1) << "found mon." << cur_mon << dendl; 
     hunting = false;
+    had_a_connection = true;
+    reopen_interval_multiplier /= 2.0;
+    if (reopen_interval_multiplier < 1.0)
+      reopen_interval_multiplier = 1.0;
   }
 }
 
@@ -696,7 +711,8 @@ void MonClient::tick()
 void MonClient::schedule_tick()
 {
   if (hunting)
-    timer.add_event_after(cct->_conf->mon_client_hunt_interval, new C_Tick(this));
+    timer.add_event_after(cct->_conf->mon_client_hunt_interval
+                          * reopen_interval_multiplier, new C_Tick(this));
   else
     timer.add_event_after(cct->_conf->mon_client_ping_interval, new C_Tick(this));
 }
