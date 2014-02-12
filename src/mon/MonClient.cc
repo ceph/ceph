@@ -543,6 +543,7 @@ void MonClient::_reopen_session(int rank, string name)
 
   // restart authentication handshake
   state = MC_STATE_NEGOTIATING;
+  hunting = true;
 
   MAuth *m = new MAuth;
   m->protocol = 0;
@@ -573,7 +574,6 @@ bool MonClient::ms_handle_reset(Connection *con)
 	return true;
       
       ldout(cct, 0) << "hunting for new mon" << dendl;
-      hunting = true;
       _reopen_session();
     }
   }
