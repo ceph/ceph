@@ -13,18 +13,18 @@
 #ifndef WORKLOAD_GENERATOR_H_
 #define WORKLOAD_GENERATOR_H_
 
-#include "os/FileStore.h"
+#include "os/ObjectStore.h"
 #include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
 #include <map>
 #include <sys/time.h>
 
-#include "TestFileStoreState.h"
+#include "TestObjectStoreState.h"
 
 typedef boost::mt11213b rngen_t;
 
-class WorkloadGenerator : public TestFileStoreState {
+class WorkloadGenerator : public TestObjectStoreState {
  public:
   static const int def_max_in_flight = 50;
 
@@ -125,17 +125,17 @@ public:
     m_store->umount();
   }
 
-  class C_OnReadable: public TestFileStoreState::C_OnFinished {
+  class C_OnReadable: public TestObjectStoreState::C_OnFinished {
     WorkloadGenerator *wrkldgen_state;
 
   public:
     C_OnReadable(WorkloadGenerator *state,
                                   ObjectStore::Transaction *t)
-     :TestFileStoreState::C_OnFinished(state, t), wrkldgen_state(state) { }
+     :TestObjectStoreState::C_OnFinished(state, t), wrkldgen_state(state) { }
 
     void finish(int r)
     {
-      TestFileStoreState::C_OnFinished::finish(r);
+      TestObjectStoreState::C_OnFinished::finish(r);
       wrkldgen_state->m_nr_runs.inc();
     }
   };

@@ -20,7 +20,7 @@
 #include <cctype>
 #include <errno.h>
 #include <sys/time.h>
-#include "os/FileStore.h"
+#include "os/ObjectStore.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "common/debug.h"
@@ -29,7 +29,7 @@
 #include "workload_generator.h"
 #include "include/assert.h"
 
-#include "TestFileStoreState.h"
+#include "TestObjectStoreState.h"
 
 static const char *our_name = NULL;
 void usage();
@@ -40,7 +40,7 @@ boost::scoped_ptr<WorkloadGenerator> wrkldgen;
 
 
 WorkloadGenerator::WorkloadGenerator(vector<const char*> args)
-  : TestFileStoreState(NULL),
+  : TestObjectStoreState(NULL),
     m_max_in_flight(def_max_in_flight),
     m_num_ops(-1),
     m_destroy_coll_every_nr_runs(def_destroy_coll_every_nr_runs),
@@ -67,7 +67,10 @@ WorkloadGenerator::WorkloadGenerator(vector<const char*> args)
 
   err = ::mkdir(g_conf->osd_data.c_str(), 0755);
   ceph_assert(err == 0 || (err < 0 && errno == EEXIST));
-  ObjectStore *store_ptr = new FileStore(g_conf->osd_data, g_conf->osd_journal);
+  ObjectStore *store_ptr = ObjectStore::create(g_ceph_context,
+                                               g_conf->osd_objectstore,
+                                               g_conf->osd_data,
+                                               g_conf->osd_journal);
   m_store.reset(store_ptr);
   err = m_store->mkfs();
   ceph_assert(err == 0);
@@ -193,7 +196,7 @@ int WorkloadGenerator::get_uniform_random_value(int min, int max)
   return value(m_rng);
 }
 
-TestFileStoreState::coll_entry_t *WorkloadGenerator::get_rnd_coll_entry(bool erase = false)
+TestObjectStoreState::coll_entry_t *WorkloadGenerator::get_rnd_coll_entry(bool erase = false)
 {
   int index = get_uniform_random_value(0, m_collections_ids.size()-1);
   coll_entry_t *entry = get_coll_at(index, erase);
@@ -358,7 +361,7 @@ void WorkloadGenerator::do_destroy_collection(ObjectStore::Transaction *t,
   t->remove(META_COLL, entry->m_meta_obj);
 }
 
-TestFileStoreState::coll_entry_t
+TestObjectStoreState::coll_entry_t
 *WorkloadGenerator::do_create_collection(ObjectStore::Transaction *t,
                                          C_StatState *stat)
 {
@@ -429,7 +432,7 @@ void WorkloadGenerator::run()
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     Context *c;
     bool destroy_collection = false;
-    TestFileStoreState::coll_entry_t *entry = NULL;
+    TestObjectStoreState::coll_entry_t *entry = NULL;
 
 
     if (m_do_stats) {
@@ -508,6 +511,7 @@ void usage()
 \n\
 Global Options:\n\
   -c FILE                             Read configuration from FILE\n\
+  --osd-objectstore TYPE              Set OSD ObjectStore type\n\
   --osd-data PATH                     Set OSD Data path\n\
   --osd-journal PATH                  Set OSD Journal path\n\
   --osd-journal-size VAL              Set Journal size\n\
