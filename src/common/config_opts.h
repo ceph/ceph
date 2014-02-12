@@ -239,6 +239,8 @@ OPTION(auth_service_ticket_ttl, OPT_DOUBLE, 60*60)
 OPTION(auth_debug, OPT_BOOL, false)          // if true, assert when weird things happen
 OPTION(mon_client_hunt_interval, OPT_DOUBLE, 3.0)   // try new mon every N seconds until we connect
 OPTION(mon_client_ping_interval, OPT_DOUBLE, 10.0)  // ping every N seconds
+OPTION(mon_client_hunt_interval_backoff, OPT_DOUBLE, 2.0) // each time we reconnect to a monitor, double our timeout
+OPTION(mon_client_hunt_interval_max_multiple, OPT_DOUBLE, 10.0) // up to a max of 10*default (30 seconds)
 OPTION(mon_client_max_log_entries_per_message, OPT_INT, 1000)
 OPTION(mon_max_pool_pg_num, OPT_INT, 65536)
 OPTION(mon_pool_quota_warn_threshold, OPT_INT, 0) // percent of quota at which to issue warnings
