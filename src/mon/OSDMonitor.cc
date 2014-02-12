@@ -3230,12 +3230,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
 
 bool OSDMonitor::prepare_command(MMonCommand *m)
 {
-  bool ret = false;
   stringstream ss;
-  string rs;
-  bufferlist rdata;
-  int err = 0;
-
   map<string, cmd_vartype> cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
@@ -3243,15 +3238,27 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     return true;
   }
 
-  string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
-  boost::scoped_ptr<Formatter> f(new_formatter(format));
-
   MonSession *session = m->get_session();
   if (!session) {
     mon->reply_command(m, -EACCES, "access denied", get_last_committed());
     return true;
   }
+
+  return prepare_command_impl(m, cmdmap);
+}
+
+bool OSDMonitor::prepare_command_impl(MMonCommand *m,
+				      map<string,cmd_vartype> &cmdmap)
+{
+  bool ret = false;
+  stringstream ss;
+  string rs;
+  bufferlist rdata;
+  int err = 0;
+
+  string format;
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  boost::scoped_ptr<Formatter> f(new_formatter(format));
 
   string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
