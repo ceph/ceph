@@ -2056,23 +2056,30 @@ ostream &operator<<(ostream &lhs, const pg_notify_t &notify)
 
 void pg_interval_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   ::encode(first, bl);
   ::encode(last, bl);
   ::encode(up, bl);
   ::encode(acting, bl);
   ::encode(maybe_went_rw, bl);
+  ::encode(primary, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_interval_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   ::decode(first, bl);
   ::decode(last, bl);
   ::decode(up, bl);
   ::decode(acting, bl);
   ::decode(maybe_went_rw, bl);
+  if (struct_v >= 3) {
+    ::decode(primary, bl);
+  } else {
+    if (acting.size())
+      primary = acting[0];
+  }
   DECODE_FINISH(bl);
 }
 
@@ -2104,6 +2111,8 @@ void pg_interval_t::generate_test_instances(list<pg_interval_t*>& o)
 }
 
 bool pg_interval_t::check_new_interval(
+  int old_primary,
+  int new_primary,
   const vector<int> &old_acting,
   const vector<int> &new_acting,
   const vector<int> &old_up,
@@ -2118,7 +2127,8 @@ bool pg_interval_t::check_new_interval(
   std::ostream *out)
 {
   // remember past interval
-  if (new_acting != old_acting || new_up != old_up ||
+  if (old_primary != new_primary ||
+      new_acting != old_acting || new_up != old_up ||
       (!(lastmap->get_pools().count(pool_id))) ||
       (lastmap->get_pools().find(pool_id)->second.min_size !=
        osdmap->get_pools().find(pool_id)->second.min_size)  ||
@@ -2129,24 +2139,25 @@ bool pg_interval_t::check_new_interval(
     i.last = osdmap->get_epoch() - 1;
     i.acting = old_acting;
     i.up = old_up;
+    i.primary = old_primary;
 
-    if (!i.acting.empty() &&
+    if (!i.acting.empty() && i.primary != -1 &&
 	i.acting.size() >=
 	lastmap->get_pools().find(pool_id)->second.min_size) {
       if (out)
 	*out << "generate_past_intervals " << i
 	     << ": not rw,"
-	     << " up_thru " << lastmap->get_up_thru(i.acting[0])
-	     << " up_from " << lastmap->get_up_from(i.acting[0])
+	     << " up_thru " << lastmap->get_up_thru(i.primary)
+	     << " up_from " << lastmap->get_up_from(i.primary)
 	     << " last_epoch_clean " << last_epoch_clean
 	     << std::endl;
-      if (lastmap->get_up_thru(i.acting[0]) >= i.first &&
-	  lastmap->get_up_from(i.acting[0]) <= i.first) {
+      if (lastmap->get_up_thru(i.primary) >= i.first &&
+	  lastmap->get_up_from(i.primary) <= i.first) {
 	i.maybe_went_rw = true;
 	if (out)
 	  *out << "generate_past_intervals " << i
-	       << " : primary up " << lastmap->get_up_from(i.acting[0])
-	       << "-" << lastmap->get_up_thru(i.acting[0])
+	       << " : primary up " << lastmap->get_up_from(i.primary)
+	       << "-" << lastmap->get_up_thru(i.primary)
 	       << " includes interval"
 	       << std::endl;
       } else if (last_epoch_clean >= i.first &&
@@ -2168,8 +2179,8 @@ bool pg_interval_t::check_new_interval(
 	i.maybe_went_rw = false;
 	if (out)
 	  *out << "generate_past_intervals " << i
-	       << " : primary up " << lastmap->get_up_from(i.acting[0])
-	       << "-" << lastmap->get_up_thru(i.acting[0])
+	       << " : primary up " << lastmap->get_up_from(i.primary)
+	       << "-" << lastmap->get_up_thru(i.primary)
 	       << " does not include interval"
 	       << std::endl;
       }
