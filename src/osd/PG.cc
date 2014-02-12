@@ -749,6 +749,7 @@ void PG::build_prior(std::auto_ptr<PriorSet> &prior_set)
   prior_set.reset(
     new PriorSet(
       pool.info.ec_pool(),
+      get_pgbackend()->get_is_recoverable_predicate(),
       *get_osdmap(),
       past_intervals,
       up,
@@ -1245,13 +1246,16 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id)
     return false;
   }
 
-  /* Check whether we have enough acting shards to perform reads */
-  boost::scoped_ptr<PGBackend::IsReadablePredicate> readable_dec(
-    get_pgbackend()->get_is_readable_predicate());
+  /* Check whether we have enough acting shards to later perform recovery */
+  boost::scoped_ptr<PGBackend::IsRecoverablePredicate> recoverable_predicate(
+    get_pgbackend()->get_is_recoverable_predicate());
   set<pg_shard_t> have;
   for (int i = 0; i < (int)want.size(); ++i)
-    have.insert(pg_shard_t(acting[i], i));
-  if (!(*readable_dec)(have)) {
+    have.insert(
+      pg_shard_t(
+	want[i],
+	pool.info.ec_pool() ? i : ghobject_t::NO_SHARD));
+  if (!(*recoverable_predicate)(have)) {
     want_acting.clear();
     return false;
   }
@@ -7126,13 +7130,14 @@ void PG::RecoveryState::RecoveryMachine::log_exit(const char *state_name, utime_
 #define dout_prefix (*_dout << (debug_pg ? debug_pg->gen_prefix() : string()) << " PriorSet: ")
 
 PG::PriorSet::PriorSet(bool ec_pool,
+		       PGBackend::IsRecoverablePredicate *c,
 		       const OSDMap &osdmap,
 		       const map<epoch_t, pg_interval_t> &past_intervals,
 		       const vector<int> &up,
 		       const vector<int> &acting,
 		       const pg_info_t &info,
 		       const PG *debug_pg)
-  : ec_pool(ec_pool), pg_down(false)
+  : ec_pool(ec_pool), pg_down(false), pcontdec(c)
 {
   /*
    * We have to be careful to gracefully deal with situations like
@@ -7210,7 +7215,7 @@ PG::PriorSet::PriorSet(bool ec_pool,
     // look at candidate osds during this interval.  each falls into
     // one of three categories: up, down (but potentially
     // interesting), or lost (down, but we won't wait for it).
-    bool any_up_now = false;    // any candidates up now
+    set<pg_shard_t> up_now;
     bool any_down_now = false;  // any candidates down now (that might have useful data)
 
     // consider ACTING osds
@@ -7227,7 +7232,7 @@ PG::PriorSet::PriorSet(bool ec_pool,
       if (osdmap.is_up(o)) {
 	// include past acting osds if they are up.
 	probe.insert(so);
-	any_up_now = true;
+	up_now.insert(so);
       } else if (!pinfo) {
 	dout(10) << "build_prior  prior osd." << o << " no longer exists" << dendl;
 	down.insert(o);
@@ -7241,12 +7246,13 @@ PG::PriorSet::PriorSet(bool ec_pool,
       }
     }
 
-    // if nobody survived this interval, and we may have gone rw,
+    // if not enough osds survived this interval, and we may have gone rw,
     // then we need to wait for one of those osds to recover to
     // ensure that we haven't lost any information.
-    if (!any_up_now && any_down_now) {
+    if (!(*pcontdec)(up_now) && any_down_now) {
       // fixme: how do we identify a "clean" shutdown anyway?
-      dout(10) << "build_prior  possibly went active+rw, none up; including down osds" << dendl;
+      dout(10) << "build_prior  possibly went active+rw, insufficient up;"
+	       << " including down osds" << dendl;
       for (vector<int>::const_iterator i = interval.acting.begin();
 	   i != interval.acting.end();
 	   ++i) {
