@@ -27,7 +27,8 @@ libmds_la_SOURCES = \
 	mds/SnapServer.cc \
 	mds/snap.cc \
 	mds/SessionMap.cc \
-	mds/MDLog.cc 
+	mds/MDLog.cc \
+	mds/MDSUtility.cc
 libmds_la_LIBADD = $(LIBOSDC)
 noinst_LTLIBRARIES += libmds.la
 
@@ -57,6 +58,7 @@ noinst_HEADERS += \
 	mds/MDSTable.h \
 	mds/MDSTableServer.h \
 	mds/MDSTableClient.h \
+	mds/MDSUtility.h \
 	mds/Mutation.h \
 	mds/Migrator.h \
 	mds/Resetter.h \
