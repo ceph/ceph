@@ -388,7 +388,8 @@ OPTION(osd_backfill_retry_interval, OPT_DOUBLE, 10.0)
 
 // max agent flush ops
 OPTION(osd_agent_max_ops, OPT_INT, 4)
-OPTION(osd_agent_min_evict_effort, OPT_FLOAT, .05)
+OPTION(osd_agent_min_evict_effort, OPT_FLOAT, .1)
+OPTION(osd_agent_quantize_effort, OPT_FLOAT, .1)
 
 // decay atime and hist histograms after how many objects go by
 OPTION(osd_agent_hist_halflife, OPT_INT, 1000)
