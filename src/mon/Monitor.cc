@@ -2526,7 +2526,14 @@ void Monitor::try_send_message(Message *m, const entity_inst_t& to)
 
 void Monitor::send_reply(PaxosServiceMessage *req, Message *reply)
 {
-  MonSession *session = static_cast<MonSession*>(req->get_connection()->get_priv());
+  ConnectionRef connection = req->get_connection();
+  if (!connection) {
+    dout(2) << "send_reply no connection, dropping reply " << *reply
+	    << " to " << req << " " << *req << dendl;
+    reply->put();
+    return;
+  }
+  MonSession *session = static_cast<MonSession*>(connection->get_priv());
   if (!session) {
     dout(2) << "send_reply no session, dropping reply " << *reply
 	    << " to " << req << " " << *req << dendl;
