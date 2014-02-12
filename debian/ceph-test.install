@@ -35,10 +35,10 @@ usr/bin/ceph_test_cls_version
 usr/bin/ceph_test_cors
 usr/bin/ceph_test_crypto
 usr/bin/ceph_test_filejournal
-usr/bin/ceph_test_filestore
+usr/bin/ceph_test_objectstore
 usr/bin/ceph_test_filestore_idempotent
 usr/bin/ceph_test_filestore_idempotent_sequence
-usr/bin/ceph_test_filestore_workloadgen
+usr/bin/ceph_test_objectstore_workloadgen
 usr/bin/ceph_test_ioctls
 usr/bin/ceph_test_keys
 usr/bin/ceph_test_keyvaluedb_atomicity
