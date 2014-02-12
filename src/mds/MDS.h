@@ -35,7 +35,7 @@
 #include "SessionMap.h"
 
 
-#define CEPH_MDS_PROTOCOL    20 /* cluster internal */
+#define CEPH_MDS_PROTOCOL    21 /* cluster internal */
 
 
 enum {
