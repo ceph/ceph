@@ -25,6 +25,16 @@ def task(ctx, config):
     Glance and Cinder.
 
     Requires one node with a role 'devstack'
+
+    Since devstack runs rampant on the system it's used on, typically you will
+    want to reprovision that machine after using devstack on it.
+
+    Also, the default 2GB of RAM that is given to vps nodes is insufficient. I
+    recommend 4GB. Downburst can be instructed to give 4GB to a vps node by
+    adding this to the yaml:
+
+    downburst:
+        ram: 4G
     """
     if config is None:
         config = {}
