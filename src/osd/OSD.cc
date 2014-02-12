@@ -192,7 +192,7 @@ OSDService::OSDService(OSD *osd) :
   sched_scrub_lock("OSDService::sched_scrub_lock"), scrubs_pending(0),
   scrubs_active(0),
   agent_lock("OSD::agent_lock"),
-  agent_queue_pos(agent_queue.begin()),
+  agent_valid_iterator(false),
   agent_ops(0),
   agent_active(true),
   agent_thread(this),
@@ -466,22 +466,33 @@ void OSDService::agent_entry()
 {
   dout(10) << __func__ << " start" << dendl;
   agent_lock.Lock();
+
+  // stick at least one level in there to simplify other paths
+  if (agent_queue.empty())
+    agent_queue[0];
+
   while (!agent_stop_flag) {
+    uint64_t level = agent_queue.rbegin()->first;
+    set<PGRef>& top = agent_queue.rbegin()->second;
     dout(10) << __func__
-	     << " pgs " << agent_queue.size()
-	     << " ops " << agent_ops << "/"
+	     << " tiers " << agent_queue.size()
+	     << ", top is " << level
+	     << " with pgs " << top.size()
+	     << ", ops " << agent_ops << "/"
 	     << g_conf->osd_agent_max_ops
 	     << (agent_active ? " active" : " NOT ACTIVE")
 	     << dendl;
     dout(20) << __func__ << " oids " << agent_oids << dendl;
-    if (agent_ops >= g_conf->osd_agent_max_ops || agent_queue.empty() ||
+    if (agent_ops >= g_conf->osd_agent_max_ops || top.empty() ||
 	!agent_active) {
       agent_cond.Wait(agent_lock);
       continue;
     }
 
-    if (agent_queue_pos == agent_queue.end())
-      agent_queue_pos = agent_queue.begin();
+    if (!agent_valid_iterator || agent_queue_pos == top.end()) {
+      agent_queue_pos = top.begin();
+      agent_valid_iterator = true;
+    }
     PGRef pg = *agent_queue_pos;
     int max = g_conf->osd_agent_max_ops - agent_ops;
     agent_lock.Unlock();

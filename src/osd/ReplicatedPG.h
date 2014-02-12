@@ -702,7 +702,7 @@ protected:
   /// clear agent state
   void agent_clear();
 
-  bool agent_choose_mode();  ///< choose (new) agent mode(s)
+  void agent_choose_mode();  ///< choose (new) agent mode(s)
 
   /// true if we can send an ondisk/commit for v
   bool already_complete(eversion_t v) {

@@ -434,8 +434,9 @@ public:
   // -- agent shared state --
   Mutex agent_lock;
   Cond agent_cond;
-  set<PGRef> agent_queue;
+  map<uint64_t, set<PGRef> > agent_queue;
   set<PGRef>::iterator agent_queue_pos;
+  bool agent_valid_iterator;
   int agent_ops;
   set<hobject_t> agent_oids;
   bool agent_active;
@@ -452,22 +453,48 @@ public:
   void agent_entry();
   void agent_stop();
 
-  /// enable agent for a pg
-  void agent_enable_pg(PG *pg) {
-    Mutex::Locker l(agent_lock);
-    if (agent_queue.empty())
+  void _enqueue(PG *pg, uint64_t priority) {
+    if (!agent_queue.empty() &&
+	agent_queue.rbegin()->first < priority)
+      agent_valid_iterator = false;  // inserting higher-priority queue
+    set<PGRef>& nq = agent_queue[priority];
+    if (nq.empty())
       agent_cond.Signal();
-    agent_queue.insert(pg);
+    nq.insert(pg);
+  }
+
+  void _dequeue(PG *pg, uint64_t old_priority) {
+    set<PGRef>& oq = agent_queue[old_priority];
+    set<PGRef>::iterator p = oq.find(pg);
+    assert(p != oq.end());
+    if (p == agent_queue_pos)
+      ++agent_queue_pos;
+    oq.erase(p);
+    if (oq.empty() && agent_queue.size() > 1) {
+      if (agent_queue.rbegin()->first == old_priority)
+	agent_valid_iterator = false;
+      agent_queue.erase(old_priority);
+    }
+  }
+
+  /// enable agent for a pg
+  void agent_enable_pg(PG *pg, uint64_t priority) {
+    Mutex::Locker l(agent_lock);
+    _enqueue(pg, priority);
+  }
+
+  /// adjust priority for an enagled pg
+  void agent_adjust_pg(PG *pg, uint64_t old_priority, uint64_t new_priority) {
+    Mutex::Locker l(agent_lock);
+    assert(new_priority != old_priority);
+    _enqueue(pg, new_priority);
+    _dequeue(pg, old_priority);
   }
 
   /// disable agent for a pg
-  void agent_disable_pg(PG *pg) {
+  void agent_disable_pg(PG *pg, uint64_t old_priority) {
     Mutex::Locker l(agent_lock);
-    set<PGRef>::iterator p = agent_queue.find(pg);
-    assert(p != agent_queue.end());
-    if (p == agent_queue_pos)
-      ++agent_queue_pos;
-    agent_queue.erase(p);
+    _dequeue(pg, old_priority);
   }
 
   /// note start of an async (flush) op
