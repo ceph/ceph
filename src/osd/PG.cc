@@ -1740,6 +1740,7 @@ static void split_replay_queue(
 void PG::split_ops(PG *child, unsigned split_bits) {
   unsigned match = child->info.pgid.m_seed;
   assert(waiting_for_all_missing.empty());
+  assert(waiting_for_cache_not_full.empty());
   assert(waiting_for_missing_object.empty());
   assert(waiting_for_degraded_object.empty());
   assert(waiting_for_ack.empty());
