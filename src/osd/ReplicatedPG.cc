@@ -10468,6 +10468,8 @@ void ReplicatedPG::agent_stop()
 
 bool ReplicatedPG::agent_choose_mode()
 {
+  uint64_t divisor = pool.info.get_pg_num_divisor(info.pgid);
+
   // get dirty, full ratios
   uint64_t dirty_micro = 0;
   uint64_t full_micro = 0;
@@ -10476,20 +10478,20 @@ bool ReplicatedPG::agent_choose_mode()
       info.stats.stats.sum.num_objects;
     dirty_micro =
       info.stats.stats.sum.num_objects_dirty * avg_size * 1000000 /
-      (pool.info.target_max_bytes / pool.info.get_pg_num_divisor(info.pgid));
+      (pool.info.target_max_bytes / divisor);
     full_micro =
       info.stats.stats.sum.num_bytes * 1000000 /
-      (pool.info.target_max_bytes / pool.info.get_pg_num_divisor(info.pgid));
+      (pool.info.target_max_bytes / divisor);
   }
   if (pool.info.target_max_objects) {
     uint64_t dirty_objects_micro =
       info.stats.stats.sum.num_objects_dirty * 1000000 /
-      (pool.info.target_max_objects / pool.info.get_pg_num_divisor(info.pgid));
+      (pool.info.target_max_objects / divisor);
     if (dirty_objects_micro > dirty_micro)
       dirty_micro = dirty_objects_micro;
     uint64_t full_objects_micro =
       info.stats.stats.sum.num_objects * 1000000 /
-      (pool.info.target_max_objects / pool.info.get_pg_num_divisor(info.pgid));
+      (pool.info.target_max_objects / divisor);
     if (full_objects_micro > full_micro)
       full_micro = full_objects_micro;
   }
