@@ -1161,13 +1161,26 @@ void ReplicatedPG::do_op(OpRequestRef op)
   ObjectContextRef obc;
   bool can_create = op->may_write() || op->may_cache();
   hobject_t missing_oid;
-  hobject_t oid(m->get_oid(),
-		m->get_object_locator().key,
-		m->get_snapid(),
-		m->get_pg().ps(),
-		m->get_object_locator().get_pool(),
-		m->get_object_locator().nspace);
-  int r = find_object_context(oid, &obc, can_create, &missing_oid);
+  hobject_t *hitset_oid;
+  bool created_hitset_oid = false;
+  int r;
+  
+  if (m->get_snapid() == CEPH_SNAPDIR) {
+    r = find_object_context(snapdir, &obc, can_create, &missing_oid);
+    hitset_oid = &snapdir;
+  } else if (m->get_snapid() == CEPH_NOSNAP) {
+    r = find_object_context(head, &obc, can_create, &missing_oid);
+    hitset_oid = &head;
+  } else {
+    hitset_oid = new hobject_t(m->get_oid(),
+			       m->get_object_locator().key,
+			       m->get_snapid(),
+			       m->get_pg().ps(),
+			       m->get_object_locator().get_pool(),
+			       m->get_object_locator().nspace);
+    created_hitset_oid = true;
+    r = find_object_context(*hitset_oid, &obc, can_create, &missing_oid);
+  }
 
   if (r == -EAGAIN) {
     // If we're not the primary of this OSD, and we have
@@ -1184,12 +1197,14 @@ void ReplicatedPG::do_op(OpRequestRef op)
   }
 
   if (hit_set) {
-    hit_set->insert(oid);
+    hit_set->insert(*hitset_oid);
     if (hit_set->is_full() ||
 	hit_set_start_stamp + pool.info.hit_set_period <= m->get_recv_stamp()) {
       hit_set_persist();
     }
   }
+  if (created_hitset_oid)
+    delete hitset_oid;
 
   if ((m->get_flags() & CEPH_OSD_FLAG_IGNORE_CACHE) == 0 &&
       maybe_handle_cache(op, obc, r, missing_oid))
@@ -1523,7 +1538,6 @@ void ReplicatedPG::promote_object(OpRequestRef op, ObjectContextRef obc,
 void ReplicatedPG::execute_ctx(OpContext *ctx)
 {
   dout(10) << __func__ << " " << ctx << dendl;
-  ctx->reset_obs(ctx->obc);
   OpRequestRef op = ctx->op;
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   ObjectContextRef obc = ctx->obc;
@@ -2852,7 +2866,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  dout(10) << " async_read noted for " << soid << dendl;
 	} else {
 	  int r = pgbackend->objects_read_sync(
-	    soid, op.extent.offset, op.extent.length, &osd_op.outdata);
+	    soid, op.extent.offset, op.extent.length, &osd_op.outdata,
+	    obs.fd, &obs.fullPath);
 	  if (r >= 0)
 	    op.extent.length = r;
 	  else {
@@ -6534,7 +6549,8 @@ ObjectContextRef ReplicatedPG::create_object_context(const object_info_t& oi,
 
 ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
 						  bool can_create,
-						  map<string, bufferptr> *attrs)
+						  map<string, bufferptr> *attrs, 
+                                                  bool need_snap)
 {
   assert(
     attrs || !pg_log.get_missing().is_missing(soid) ||
@@ -6542,6 +6558,10 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
     (pg_log.get_log().objects.count(soid) &&
       pg_log.get_log().objects.find(soid)->second->op ==
       pg_log_entry_t::LOST_REVERT));
+
+  int fd,r;
+  string fullPath;
+
   ObjectContextRef obc = object_contexts.lookup(soid);
   if (obc) {
     dout(10) << "get_object_context " << obc << " " << soid
@@ -6553,7 +6573,13 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
       assert(attrs->count(OI_ATTR));
       bv.push_back(attrs->find(OI_ATTR)->second);
     } else {
-      int r = pgbackend->objects_get_attr(soid, OI_ATTR, &bv);
+      if (!need_snap){
+        r = pgbackend->objects_get_attr(soid, "user.ceph._", &bv, &fd, &fullPath);
+      }
+      else {
+        r = pgbackend->objects_get_attr(soid, OI_ATTR, &bv);
+      }
+
       if (r < 0) {
 	if (!can_create)
 	  return ObjectContextRef();   // -ENOENT!
@@ -6576,11 +6602,18 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
     obc->obs.oi = oi;
     obc->obs.exists = true;
 
-    obc->ssc = get_snapset_context(
-      soid.oid, soid.get_key(), soid.hash,
-      true, soid.get_namespace(),
-      soid.has_snapset() ? attrs : 0);
-    register_snapset_context(obc->ssc);
+    if (!need_snap)
+    {
+        obc->obs.fd = fd;
+        obc->obs.fullPath = fullPath;
+    }
+    else
+    {
+        obc->ssc = get_snapset_context(
+                soid.oid, soid.get_key(), soid.hash,
+                true, soid.get_namespace(),
+                soid.has_snapset() ? attrs : 0);
+    }
 
     populate_obc_watchers(obc);
 
@@ -6669,7 +6702,14 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
 
   // want the head?
   if (oid.snap == CEPH_NOSNAP) {
-    ObjectContextRef obc = get_object_context(head, can_create);
+    bool need_snap = true;
+
+    if (!can_create){
+      need_snap = false;
+    }
+
+    ObjectContextRef obc = get_object_context(head, can_create, NULL, need_snap);
+
     if (!obc) {
       if (pmissing)
 	*pmissing = head;
@@ -6870,12 +6910,14 @@ SnapSetContext *ReplicatedPG::get_snapset_context(
   const string& nspace,
   map<string, bufferptr> *attrs)
 {
-  Mutex::Locker l(snapset_contexts_lock);
   SnapSetContext *ssc;
+  snapset_contexts_lock.Lock();
   map<object_t, SnapSetContext*>::iterator p = snapset_contexts.find(oid);
   if (p != snapset_contexts.end()) {
     ssc = p->second;
+    snapset_contexts_lock.Unlock();
   } else {
+    snapset_contexts_lock.Unlock();
     bufferlist bv;
     if (!attrs) {
       hobject_t head(oid, key, CEPH_NOSNAP, seed,
@@ -6894,7 +6936,10 @@ SnapSetContext *ReplicatedPG::get_snapset_context(
       bv.push_back(attrs->find(SS_ATTR)->second);
     }
     ssc = new SnapSetContext(oid);
+    snapset_contexts_lock.Lock();
     _register_snapset_context(ssc);
+    snapset_contexts_lock.Unlock();
+
     if (bv.length()) {
       bufferlist::iterator bvp = bv.begin();
       ssc->snapset.decode(bvp);

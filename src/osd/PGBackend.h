@@ -412,7 +412,9 @@
    virtual int objects_get_attr(
      const hobject_t &hoid,
      const string &attr,
-     bufferlist *out) = 0;
+     bufferlist *out,
+     int* fd = NULL,
+     string* fullPath = NULL) = 0;
 
    virtual int objects_get_attrs(
      const hobject_t &hoid,
@@ -422,7 +424,9 @@
      const hobject_t &hoid,
      uint64_t off,
      uint64_t len,
-     bufferlist *bl) = 0;
+     bufferlist *bl,
+     int fd = -1,
+     string *fullPath = NULL) = 0;
 
    virtual void objects_read_async(
      const hobject_t &hoid,

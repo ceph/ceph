@@ -181,6 +181,10 @@ public:
     int *exist
     );
 
+  int fast_lookup(const ghobject_t &oid, 
+    int flags, 
+    string& full_path);
+
   /// @see CollectionIndex
   int collection_list(
     vector<ghobject_t> *ls
@@ -239,6 +243,10 @@ protected:
     string *mangled_name, ///< [out] Mangled filename.
     int *exists		  ///< [out] True if the object exists.
     ) = 0;
+
+  virtual int _lookup(
+    const ghobject_t &oid, 
+    string& full_path) = 0;
 
   /**
    * List contents of the collection, must be implemented by derived class.
@@ -414,6 +422,15 @@ protected:
     const string &attr_name	///< [in] attr to remove
     ); ///< @return Error code, 0 on success
 
+  /* other common methods */
+  /// Gets the base path
+  const string &get_base_path(); ///< @return Index base_path
+
+  int lfn_get_name(
+    const ghobject_t &oid,
+    string& full_path );
+
+
 private:
   /* lfn translation functions */
 
@@ -442,6 +459,7 @@ private:
     string *full_path,
     int *exists
     );
+
 
   /// Adjusts path contents when oid is created at name mangled_name.
   int lfn_created(
@@ -486,6 +504,9 @@ private:
     const ghobject_t &oid ///< [in] Object for which to generate.
     ); ///< @return Generated object name.
 
+  int lfn_generate_object_name(
+    const ghobject_t &oid, 
+    string& full_name);
   /// Generate object name
   string lfn_generate_object_name(
     const ghobject_t &oid ///< [in] Object for which to generate.
@@ -525,9 +546,6 @@ private:
     int i		   ///< [in] Index of hashed name to generate.
     ); ///< @return Hashed filename.
 
-  /* other common methods */
-  /// Gets the base path
-  const string &get_base_path(); ///< @return Index base_path
 
   /// Get full path the subdir
   string get_full_path_subdir(

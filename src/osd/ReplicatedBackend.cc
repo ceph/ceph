@@ -300,14 +300,19 @@ int ReplicatedBackend::objects_list_range(
 int ReplicatedBackend::objects_get_attr(
   const hobject_t &hoid,
   const string &attr,
-  bufferlist *out)
+  bufferlist *out,
+  int* fd,
+  string* fullPath
+  )
 {
   bufferptr bp;
   int r = osd->store->getattr(
     coll,
     hoid,
     attr.c_str(),
-    bp);
+    bp,
+    fd,
+    fullPath);
   if (r >= 0 && out) {
     out->clear();
     out->push_back(bp);
@@ -329,9 +334,11 @@ int ReplicatedBackend::objects_read_sync(
   const hobject_t &hoid,
   uint64_t off,
   uint64_t len,
-  bufferlist *bl)
+  bufferlist *bl,
+  int fd,
+  string *fullPath)
 {
-  return osd->store->read(coll, hoid, off, len, *bl);
+  return osd->store->read(coll, hoid, off, len, *bl, false, fd, fullPath);
 }
 
 struct AsyncReadCallback : public GenContext<ThreadPool::TPHandle&> {

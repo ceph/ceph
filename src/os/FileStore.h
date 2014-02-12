@@ -358,6 +358,13 @@ public:
     FDRef *outfd,
     IndexedPath *path = 0,
     Index *index = 0);
+
+  int lfn_open(
+    coll_t& cid,
+    const ghobject_t& oid,
+    int& outfd,
+    string& fullPath);
+
   void lfn_close(FDRef fd);
   int lfn_link(coll_t c, coll_t newcid, const ghobject_t& o, const ghobject_t& newoid) ;
   int lfn_unlink(coll_t cid, const ghobject_t& o, const SequencerPosition &spos,
@@ -474,7 +481,9 @@ public:
     uint64_t offset,
     size_t len,
     bufferlist& bl,
-    bool allow_eio = false);
+    bool allow_eio = false,
+    int fd = -1,
+    string* fullPath = NULL);
   int fiemap(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
 
   int _touch(coll_t cid, const ghobject_t& oid);
@@ -524,7 +533,7 @@ public:
   int snapshot(const string& name);
 
   // attrs
-  int getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr &bp);
+  int getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr &bp, int* fd = NULL, string* fullPath = NULL);
   int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset, bool user_only = false);
 
   int _setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset,
