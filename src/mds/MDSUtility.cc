@@ -1,0 +1,160 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2014 John Spray <john.spray@inktank.com>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ */
+
+#include "mds/MDSUtility.h"
+#include "mon/MonClient.h"
+
+#define dout_subsys ceph_subsys_mds
+
+
+MDSUtility::MDSUtility() :
+  Dispatcher(g_ceph_context),
+  objecter(NULL),
+  lock("MDSUtility::lock"),
+  timer(g_ceph_context, lock),
+  waiting_for_mds_map(NULL)
+{
+  monc = new MonClient(g_ceph_context);
+  messenger = Messenger::create(g_ceph_context, entity_name_t::CLIENT(), "mds", getpid());
+  mdsmap = new MDSMap();
+  osdmap = new OSDMap();
+  objecter = new Objecter(g_ceph_context, messenger, monc, osdmap, lock, timer, 0, 0);
+}
+
+
+MDSUtility::~MDSUtility()
+{
+  delete objecter;
+  delete monc;
+  delete messenger;
+  delete osdmap;
+  delete mdsmap;
+  assert(waiting_for_mds_map == NULL);
+}
+
+
+int MDSUtility::init()
+{
+  // Initialize Messenger
+  int r = messenger->bind(g_conf->public_addr);
+  if (r < 0)
+    return r;
+
+  messenger->add_dispatcher_head(this);
+  messenger->start();
+
+  // Initialize MonClient
+  if (monc->build_initial_monmap() < 0)
+    return -1;
+
+  monc->set_want_keys(CEPH_ENTITY_TYPE_MON|CEPH_ENTITY_TYPE_OSD|CEPH_ENTITY_TYPE_MDS);
+  monc->set_messenger(messenger);
+  monc->init();
+  r = monc->authenticate();
+  if (r < 0) {
+    derr << "Authentication failed, did you specify an MDS ID with a valid keyring?" << dendl;
+    return r;
+  }
+
+  client_t whoami = monc->get_global_id();
+  messenger->set_myname(entity_name_t::CLIENT(whoami.v));
+
+  // Initialize Objecter and wait for OSD map
+  objecter->set_client_incarnation(0);
+  objecter->init_unlocked();
+  lock.Lock();
+  objecter->init_locked();
+  lock.Unlock();
+  objecter->wait_for_osd_map();
+  timer.init();
+
+  // Prepare to receive MDS map and request it
+  Mutex init_lock("MDSUtility:init");
+  Cond cond;
+  bool done = false;
+  assert(!mdsmap->get_epoch());
+  lock.Lock();
+  waiting_for_mds_map = new C_SafeCond(&init_lock, &cond, &done, NULL);
+  lock.Unlock();
+  monc->sub_want("mdsmap", 0, CEPH_SUBSCRIBE_ONETIME);
+  monc->renew_subs();
+
+  // Wait for MDS map
+  dout(4) << "waiting for MDS map..." << dendl;
+  init_lock.Lock();
+  while (!done)
+    cond.Wait(init_lock);
+  init_lock.Unlock();
+  dout(4) << "Got MDS map " << mdsmap->get_epoch() << dendl;
+
+  return 0;
+}
+
+
+void MDSUtility::shutdown()
+{
+  lock.Lock();
+  timer.shutdown();
+  objecter->shutdown_locked();
+  lock.Unlock();
+  objecter->shutdown_unlocked();
+  monc->shutdown();
+  messenger->shutdown();
+  messenger->wait();
+}
+
+
+bool MDSUtility::ms_dispatch(Message *m)
+{
+   Mutex::Locker locker(lock);
+   switch (m->get_type()) {
+   case CEPH_MSG_OSD_OPREPLY:
+     objecter->handle_osd_op_reply((MOSDOpReply *)m);
+     break;
+   case CEPH_MSG_OSD_MAP:
+     objecter->handle_osd_map((MOSDMap*)m);
+     break;
+   case CEPH_MSG_MDS_MAP:
+     handle_mds_map((MMDSMap*)m);
+     break;
+   default:
+     return false;
+   }
+   return true;
+}
+
+
+void MDSUtility::handle_mds_map(MMDSMap* m)
+{
+  mdsmap->decode(m->get_encoded());
+  if (waiting_for_mds_map) {
+    waiting_for_mds_map->complete(0);
+    waiting_for_mds_map = NULL;
+  }
+}
+
+
+bool MDSUtility::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
+                         bool force_new)
+{
+  if (dest_type == CEPH_ENTITY_TYPE_MON)
+    return true;
+
+  if (force_new) {
+    if (monc->wait_auth_rotating(10) < 0)
+      return false;
+  }
+
+  *authorizer = monc->auth->build_authorizer(dest_type);
+  return *authorizer != NULL;
+}
