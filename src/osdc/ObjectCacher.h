@@ -332,7 +332,7 @@ class ObjectCacher {
   string name;
   Mutex& lock;
   
-  int64_t max_dirty, target_dirty, max_size, max_objects;
+  uint64_t max_dirty, target_dirty, max_size, max_objects;
   utime_t max_dirty_age;
   bool block_writes_upfront;
 
@@ -434,7 +434,7 @@ class ObjectCacher {
   void bh_read(BufferHead *bh);
   void bh_write(BufferHead *bh);
 
-  void trim(loff_t max_bytes=-1, loff_t max_objects=-1);
+  void trim();
   void flush(loff_t amount=0);
 
   /**
@@ -615,22 +615,9 @@ public:
 
 
   // cache sizes
-  void set_max_dirty(int64_t v) {
+  void set_max_dirty(uint64_t v) {
     max_dirty = v;
   }
-  void set_target_dirty(int64_t v) {
-    target_dirty = v;
-  }
-  void set_max_size(int64_t v) {
-    max_size = v;
-  }
-  void set_max_dirty_age(double a) {
-    max_dirty_age.set_from_double(a);
-  }
-  void set_max_objects(int64_t v) {
-    max_objects = v;
-  }
-
 
   // file functions
 
