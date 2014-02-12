@@ -141,7 +141,7 @@ def _install_repo(remote, pkgdir, username, password):
                          '-y'])
         result = remote.run(args=['sudo', 'apt-get', 'update', '-y'],
                             stdout=StringIO())
-        return True
+        return result
 
     elif relmap['flavor'] == 'rpm':
         baseurl = 'https://{username}:{password}@download.inktank.com/' \
@@ -175,7 +175,7 @@ def _remove_repo(remote):
                                sudo=True, force=True)
         result = remote.run(args=['sudo', 'apt-get', 'update', '-y'],
                             stdout=StringIO())
-        return True
+        return result
 
     elif flavor == 'rpm':
         teuthology.delete_file(remote, '/etc/yum.repos.d/inktank.repo',
