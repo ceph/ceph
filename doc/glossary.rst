@@ -18,6 +18,10 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 		The aggregate term for the people, software, mission and infrastructure 
 		of Ceph.
 		
+	cephx
+		The Ceph authentication protocol. Cephx operates like Kerberos, but it
+		has no single point of failure.
+
 	Ceph
 	Ceph Platform
 		All Ceph software, which includes any piece of code hosted at 
@@ -130,6 +134,13 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 	CRUSH
 		Controlled Replication Under Scalable Hashing. It is the algorithm
 		Ceph uses to compute object storage locations.
+		
+	ruleset
+		A set of CRUSH data placement rules that applies to a particular pool(s).
+
+	Pool
+	Pools
+		Pools are logical partitions for storing objects.
 
 .. _http://github.com/ceph: http://github.com/ceph
 .. _Cluster Map: ../architecture#cluster-map
