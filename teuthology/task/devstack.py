@@ -257,6 +257,18 @@ def set_apache_servername(node):
 
 
 def reboot(node, timeout=300, interval=30):
+    """
+    Reboots a given system, then waits for it to come back up and
+    re-establishes the ssh connection.
+
+    :param node: The teuthology.orchestra.remote.Remote object of the node
+    :param timeout: The amount of time, in seconds, after which to give up
+                    waiting for the node to return
+    :param interval: The amount of time, in seconds, to wait between attempts
+                     to re-establish with the node. This should not be set to
+                     less than maybe 10, to make sure the node actually goes
+                     down first.
+    """
     log.info("Rebooting {host}...".format(host=node.hostname))
     node.run(args=['sudo', 'shutdown', '-r', 'now'])
     reboot_start_time = time.time()
