@@ -66,6 +66,7 @@ MonClient::MonClient(CephContext *cct_) :
   want_monmap(true),
   want_keys(0), global_id(0),
   authenticate_err(0),
+  session_established_context(NULL),
   auth(NULL),
   keyring(NULL),
   rotating_secrets(NULL),
@@ -77,6 +78,7 @@ MonClient::MonClient(CephContext *cct_) :
 MonClient::~MonClient()
 {
   delete auth_supported;
+  delete session_established_context;
   delete auth;
   delete keyring;
   delete rotating_secrets;
@@ -462,6 +464,7 @@ int MonClient::authenticate(double timeout)
 
 void MonClient::handle_auth(MAuthReply *m)
 {
+  Context *cb = NULL;
   bufferlist::iterator p = m->result_bl.begin();
   if (state == MC_STATE_NEGOTIATING) {
     if (!auth || (int)m->protocol != auth->get_protocol()) {
@@ -521,11 +524,20 @@ void MonClient::handle_auth(MAuthReply *m)
 	log_client->reset_session();
 	send_log();
       }
+      if (session_established_context) {
+        cb = session_established_context;
+        session_established_context = NULL;
+      }
     }
   
     _check_auth_tickets();
   }
   auth_cond.SignalAll();
+  if (cb) {
+    monc_lock.Unlock();
+    cb->complete(0);
+    monc_lock.Lock();
+  }
 }
 
 
