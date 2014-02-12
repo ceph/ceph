@@ -1,0 +1,9 @@
+ - ceph:
+  - install.upgrade:
+      branch: next
+- ceph:
+   fs: xfs
+- ceph.restart:
+  - parallel:
+     - workload
+
