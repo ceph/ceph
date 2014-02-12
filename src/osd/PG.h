@@ -530,6 +530,7 @@ protected:
 
   // Ops waiting on backfill_pos to change
   list<OpRequestRef>            waiting_for_active;
+  list<OpRequestRef>            waiting_for_cache_not_full;
   list<OpRequestRef>            waiting_for_all_missing;
   map<hobject_t, list<OpRequestRef> > waiting_for_missing_object,
 			     waiting_for_degraded_object,
