@@ -277,6 +277,8 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
     sync_force(f.get(), ss);
   } else if (command.find("add_bootstrap_peer_hint") == 0) {
     _add_bootstrap_peer_hint(command, cmdmap, ss);
+  } else if (command.find("osdmonitor_prepare_command") == 0) {
+    _osdmonitor_prepare_command(cmdmap, ss);
   } else if (command == "quorum enter") {
     elector.start_participating();
     start_election();
@@ -518,6 +520,11 @@ int Monitor::preinit()
   r = admin_socket->register_command("mon_status", "mon_status", admin_hook,
 				     "show current monitor status");
   assert(r == 0);
+  if (g_conf->mon_advanced_debug_mode) {
+    r = admin_socket->register_command("osdmonitor_prepare_command", "osdmonitor_prepare_command", admin_hook,
+				       "call OSDMonitor::prepare_command");
+    assert(r == 0);
+  }
   r = admin_socket->register_command("quorum_status", "quorum_status",
 				     admin_hook, "show current quorum status");
   assert(r == 0);
@@ -744,6 +751,26 @@ void Monitor::bootstrap()
       messenger->send_message(new MMonProbe(monmap->fsid, MMonProbe::OP_PROBE, name, has_ever_joined), i);
     }
   }
+}
+
+void Monitor::_osdmonitor_prepare_command(cmdmap_t& cmdmap, ostream& ss)
+{
+  if (!is_leader()) {
+    ss << "mon must be a leader";
+    return;
+  }
+
+  string cmd;
+  cmd_getval(g_ceph_context, cmdmap, "prepare", cmd);
+  cmdmap["prefix"] = cmdmap["prepare"];
+  
+  OSDMonitor *monitor = osdmon();
+  MMonCommand *m = static_cast<MMonCommand *>((new MMonCommand())->get());
+  if (monitor->prepare_command_impl(m, cmdmap))
+    ss << "true";
+  else
+    ss << "false";
+  m->put();
 }
 
 void Monitor::_add_bootstrap_peer_hint(string cmd, cmdmap_t& cmdmap, ostream& ss)
