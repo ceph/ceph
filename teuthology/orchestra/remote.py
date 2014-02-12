@@ -1,6 +1,18 @@
 from . import run
 from teuthology import misc
 import time
+import pexpect
+import re
+import logging
+from teuthology import lockstatus as ls
+
+try:
+    import libvirt
+except ImportError:
+    libvirt = None
+
+log = logging.getLogger(__name__)
+
 
 class Remote(object):
     """
@@ -48,13 +60,6 @@ class Remote(object):
         r.remote = self
         return r
 
-import pexpect
-import re
-import logging
-import libvirt
-from teuthology import lockstatus as ls
-
-log = logging.getLogger(__name__)
 
 def getShortName(name):
     hn = name.split('@')[-1]
@@ -212,6 +217,9 @@ class PhysicalConsole():
 class VirtualConsole():
 
     def __init__(self, name, ipmiuser, ipmipass, ipmidomain, logfile=None, timeout=20):
+        if libvirt is None:
+            raise RuntimeError("libvirt not found")
+
         self.shortname = getShortName(name)
         status_info = ls.get_status('', self.shortname)
         try:
