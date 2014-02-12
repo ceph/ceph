@@ -10462,11 +10462,11 @@ void ReplicatedPG::agent_stop()
   if (agent_state && !agent_state->is_idle()) {
     agent_state->evict_mode = TierAgentState::EVICT_MODE_IDLE;
     agent_state->flush_mode = TierAgentState::FLUSH_MODE_IDLE;
-    osd->agent_disable_pg(this);
+    osd->agent_disable_pg(this, agent_state->evict_effort);
   }
 }
 
-bool ReplicatedPG::agent_choose_mode()
+void ReplicatedPG::agent_choose_mode()
 {
   uint64_t divisor = pool.info.get_pg_num_divisor(info.pgid);
 
@@ -10529,11 +10529,21 @@ bool ReplicatedPG::agent_choose_mode()
     evict_mode = TierAgentState::EVICT_MODE_SOME;
     uint64_t over = full_micro - evict_target;
     uint64_t span = 1000000 - evict_target;
-    evict_effort = MIN(over * 1000000 / span,
+    evict_effort = MAX(over * 1000000 / span,
 		       (unsigned)(1000000.0 * g_conf->osd_agent_min_evict_effort));
+
+    // quantize effort to avoid too much reordering in the agent_queue.
+    uint64_t inc = g_conf->osd_agent_quantize_effort * 1000000;
+    assert(inc > 0);
+    uint64_t was = evict_effort;
+    evict_effort -= evict_effort % inc;
+    if (evict_effort < inc)
+      evict_effort = inc;
+    assert(evict_effort >= inc && evict_effort <= 1000000);
+    dout(30) << __func__ << " evict_effort " << was << " quantized by " << inc << " to " << evict_effort << dendl;
   }
 
-  bool changed = false;
+  bool old_idle = agent_state->is_idle();
   if (flush_mode != agent_state->flush_mode) {
     dout(5) << __func__ << " flush_mode "
 	    << TierAgentState::get_flush_mode_name(agent_state->flush_mode)
@@ -10541,7 +10551,6 @@ bool ReplicatedPG::agent_choose_mode()
 	    << TierAgentState::get_flush_mode_name(flush_mode)
 	    << dendl;
     agent_state->flush_mode = flush_mode;
-    changed = true;
   }
   if (evict_mode != agent_state->evict_mode) {
     dout(5) << __func__ << " evict_mode "
@@ -10553,8 +10562,8 @@ bool ReplicatedPG::agent_choose_mode()
       requeue_ops(waiting_for_cache_not_full);
     }
     agent_state->evict_mode = evict_mode;
-    changed = true;
   }
+  uint64_t old_effort = agent_state->evict_effort;
   if (evict_effort != agent_state->evict_effort) {
     dout(5) << __func__ << " evict_effort "
 	    << ((float)agent_state->evict_effort / 1000000.0)
@@ -10563,13 +10572,21 @@ bool ReplicatedPG::agent_choose_mode()
 	    << dendl;
     agent_state->evict_effort = evict_effort;
   }
-  if (changed) {
-    if (agent_state->is_idle())
-      osd->agent_disable_pg(this);
-    else
-      osd->agent_enable_pg(this);
+
+  // NOTE: we are using evict_effort as a proxy for *all* agent effort
+  // (including flush).  This is probably fine (they should be
+  // correlated) but it is not precisely correct.
+  if (agent_state->is_idle()) {
+    if (!old_idle) {
+      osd->agent_disable_pg(this, old_effort);
+    }
+  } else {
+    if (old_idle) {
+      osd->agent_enable_pg(this, agent_state->evict_effort);
+    } else if (old_effort != agent_state->evict_effort) {
+      osd->agent_adjust_pg(this, old_effort, agent_state->evict_effort);
+    }
   }
-  return changed;
 }
 
 void ReplicatedPG::agent_estimate_atime_temp(const hobject_t& oid,
