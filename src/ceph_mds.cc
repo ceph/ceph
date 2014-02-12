@@ -71,46 +71,27 @@ void usage()
 static int do_cmds_special_action(const std::string &action,
 				  const std::string &dump_file, int rank)
 {
-  common_init_finish(g_ceph_context);
-  Messenger *messenger = Messenger::create(g_ceph_context,
-					   entity_name_t::CLIENT(), "mds",
-					   getpid());
-  int r = messenger->bind(g_conf->public_addr);
-  if (r < 0)
-    return r;
-  MonClient mc(g_ceph_context);
-  if (mc.build_initial_monmap() < 0)
-    return -1;
+  common_init_finish(g_ceph_context, CINIT_FLAG_NO_DAEMON_ACTIONS);
 
   if (action == "dump-journal") {
     dout(0) << "dumping journal for mds." << rank << " to " << dump_file << dendl;
-    Dumper *journal_dumper = new Dumper(messenger, &mc);
-    journal_dumper->init(rank);
-    journal_dumper->dump(dump_file.c_str());
-    mc.shutdown();
-    messenger->shutdown();
-    messenger->wait();
-  }
-  else if (action == "undump-journal") {
+    Dumper journal_dumper;
+    journal_dumper.init(rank);
+    journal_dumper.dump(dump_file.c_str());
+    journal_dumper.shutdown();
+  } else if (action == "undump-journal") {
     dout(0) << "undumping journal for mds." << rank << " from " << dump_file << dendl;
-    Dumper *journal_dumper = new Dumper(messenger, &mc);
-    journal_dumper->init(rank);
-    journal_dumper->undump(dump_file.c_str());
-    mc.shutdown();
-    messenger->shutdown();
-    messenger->wait();
-  }
-  else if (action == "reset-journal") {
+    Dumper journal_dumper;
+    journal_dumper.init(rank);
+    journal_dumper.undump(dump_file.c_str());
+    journal_dumper.shutdown();
+  } else if (action == "reset-journal") {
     dout(0) << "resetting journal" << dendl;
-    Resetter *jr = new Resetter(messenger, &mc);
-    jr->init(rank);
-    jr->reset();
-    mc.shutdown();
-    messenger->shutdown();
-    messenger->wait();
-  }
-
-  else {
+    Resetter resetter;
+    resetter.init(rank);
+    resetter.reset();
+    resetter.shutdown();
+  } else {
     assert(0);
   }
   return 0;

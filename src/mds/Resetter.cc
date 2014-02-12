@@ -18,82 +18,21 @@
 #include "mon/MonClient.h"
 #include "mds/events/EResetJournal.h"
 
-Resetter::~Resetter()
-{
-}
 
-bool Resetter::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
-                         bool force_new)
+int Resetter::init(int rank)
 {
-  if (dest_type == CEPH_ENTITY_TYPE_MON)
-    return true;
-
-  if (force_new) {
-    if (monc->wait_auth_rotating(10) < 0)
-      return false;
+  int r = MDSUtility::init();
+  if (r < 0) {
+    return r;
   }
 
-  *authorizer = monc->auth->build_authorizer(dest_type);
-  return *authorizer != NULL;
-}
-
-bool Resetter::ms_dispatch(Message *m)
-{
-  Mutex::Locker l(lock);
-  switch (m->get_type()) {
-  case CEPH_MSG_OSD_OPREPLY:
-    objecter->handle_osd_op_reply((MOSDOpReply *)m);
-    break;
-  case CEPH_MSG_OSD_MAP:
-    objecter->handle_osd_map((MOSDMap*)m);
-    break;
-  default:
-    return false;
-  }
-  return true;
-}
-
-
-void Resetter::init(int rank) 
-{
   inodeno_t ino = MDS_INO_LOG_OFFSET + rank;
-  unsigned pg_pool = MDS_METADATA_POOL;
-  osdmap = new OSDMap();
-  objecter = new Objecter(g_ceph_context, messenger, monc, osdmap, lock, timer,
-			  0, 0);
-  journaler = new Journaler(ino, pg_pool, CEPH_FS_ONDISK_MAGIC,
-                                       objecter, 0, 0, &timer);
+  journaler = new Journaler(ino,
+      mdsmap->get_metadata_pool(),
+      CEPH_FS_ONDISK_MAGIC,
+      objecter, 0, 0, &timer);
 
-  objecter->set_client_incarnation(0);
-
-  messenger->add_dispatcher_head(this);
-  messenger->start();
-
-  monc->set_want_keys(CEPH_ENTITY_TYPE_MON|CEPH_ENTITY_TYPE_OSD|CEPH_ENTITY_TYPE_MDS);
-  monc->set_messenger(messenger);
-  monc->init();
-  monc->authenticate();
-
-  client_t whoami = monc->get_global_id();
-  messenger->set_myname(entity_name_t::CLIENT(whoami.v));
-
-  objecter->init_unlocked();
-  lock.Lock();
-  objecter->init_locked();
-  lock.Unlock();
-  objecter->wait_for_osd_map();
-  timer.init();
-}
-
-void Resetter::shutdown()
-{
-  lock.Lock();
-  timer.shutdown();
-  objecter->shutdown_locked();
-  lock.Unlock();
-  objecter->shutdown_unlocked();
-  messenger->shutdown();
-  messenger->wait();
+  return 0;
 }
 
 void Resetter::reset()
@@ -172,5 +111,4 @@ void Resetter::reset()
   assert(r == 0);
 
   cout << "done" << std::endl;
-  shutdown();
 }
