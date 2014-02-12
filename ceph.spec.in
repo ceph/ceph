@@ -416,7 +416,8 @@ fi
 %{_sbindir}/rcceph
 /sbin/mkcephfs
 /sbin/mount.ceph
-%{_libdir}/ceph
+%dir %{_libdir}/ceph
+%{_libdir}/ceph/ceph_common.sh
 %dir %{_libdir}/rados-classes
 %{_libdir}/rados-classes/libcls_rbd.so*
 %{_libdir}/rados-classes/libcls_hello.so*
