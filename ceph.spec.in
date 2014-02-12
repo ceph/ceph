@@ -648,10 +648,10 @@ fi
 %{_bindir}/ceph_test_cls_version
 %{_bindir}/ceph_test_cors
 %{_bindir}/ceph_test_filejournal
-%{_bindir}/ceph_test_filestore
+%{_bindir}/ceph_test_objectstore
 %{_bindir}/ceph_test_filestore_idempotent
 %{_bindir}/ceph_test_filestore_idempotent_sequence
-%{_bindir}/ceph_test_filestore_workloadgen
+%{_bindir}/ceph_test_objectstore_workloadgen
 %{_bindir}/ceph_test_get_blkdev_size
 %{_bindir}/ceph_test_ioctls
 %{_bindir}/ceph_test_keyvaluedb_atomicity

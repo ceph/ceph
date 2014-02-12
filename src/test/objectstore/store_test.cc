@@ -1062,5 +1062,5 @@ int main(int argc, char **argv) {
 }
 
 // Local Variables:
-// compile-command: "cd ../.. ; make ceph_test_filestore ; ./ceph_test_filestore --gtest_filter=StoreTest.* --log-to-stderr=true --debug-filestore=20"
+// compile-command: "cd ../.. ; make ceph_test_objectstore ; ./ceph_test_objectstore --gtest_filter=StoreTest.* --log-to-stderr=true --debug-filestore=20"
 // End:
