@@ -447,7 +447,7 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
       if (r < (ssize_t)len) {
 	bdout << "raw_pipe: error reading from temp pipe:" << cpp_strerror(r)
 	      << bendl;
-	delete data;
+	free(data);
 	data = NULL;
 	close_pipe(tmpfd);
 	throw error_code(r);
