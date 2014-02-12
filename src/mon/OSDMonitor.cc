@@ -2010,9 +2010,9 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 
     // old crush tunables?
     if (g_conf->mon_warn_on_legacy_crush_tunables) {
-      if (!osdmap.crush->has_optimal_tunables()) {
+      if (osdmap.crush->has_legacy_tunables()) {
 	ostringstream ss;
-	ss << "crush map has non-optimal tunables";
+	ss << "crush map has legacy tunables";
 	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
 	if (detail) {
 	  ss << "; see http://ceph.com/docs/master/rados/operations/crush-map/#tunables";
