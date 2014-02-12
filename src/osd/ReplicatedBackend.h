@@ -70,6 +70,16 @@ public:
   void clear_state();
   void on_flushed();
 
+  class RPCRecPred : public IsRecoverablePredicate {
+  public:
+    bool operator()(const set<pg_shard_t> &have) const {
+      return have.size() >= 1;
+    }
+  };
+  IsRecoverablePredicate *get_is_recoverable_predicate() {
+    return new RPCRecPred;
+  }
+
   virtual void dump_recovery_info(Formatter *f) const {
     {
       f->open_array_section("pull_from_peer");

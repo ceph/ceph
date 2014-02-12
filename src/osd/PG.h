@@ -350,7 +350,9 @@ public:
     map<int, epoch_t> blocked_by;  /// current lost_at values for any OSDs in cur set for which (re)marking them lost would affect cur set
 
     bool pg_down;   /// some down osds are included in @a cur; the DOWN pg state bit should be set.
+    boost::scoped_ptr<PGBackend::IsRecoverablePredicate> pcontdec;
     PriorSet(bool ec_pool,
+	     PGBackend::IsRecoverablePredicate *c,
 	     const OSDMap &osdmap,
 	     const map<epoch_t, pg_interval_t> &past_intervals,
 	     const vector<int> &up,
