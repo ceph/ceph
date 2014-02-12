@@ -3804,9 +3804,10 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   pi->ctime = ceph_clock_now(g_ceph_context);
   pi->xattr_version++;
   px->erase(name);
-  (*px)[name] = buffer::create(len);
-  if (len)
+  if (len) {
+    (*px)[name] = buffer::create(len);
     req->get_data().copy(0, len, (*px)[name].c_str());
+  }
 
   // log + wait
   mdr->ls = mdlog->get_current_segment();
