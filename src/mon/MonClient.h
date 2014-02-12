@@ -127,6 +127,8 @@ private:
 
   list<Message*> waiting_for_session;
   Context *session_established_context;
+  bool had_a_connection;
+  double reopen_interval_multiplier;
 
   string _pick_random_mon();
   void _finish_hunting();
