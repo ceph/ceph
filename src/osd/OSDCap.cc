@@ -182,7 +182,8 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
     str %= quoted_string | unquoted_word;
     estr %= equoted_string | unquoted_word;
 
-    spaces = +lit(' ');
+    spaces = +(lit(' ') | lit('\n') | lit('\t'));
+
 
     // match := [pool[=]<poolname> [namespace[=]<namespace>] | auid <123>] [object_prefix <prefix>]
     pool_name %= -(spaces >> lit("pool") >> (lit('=') | spaces) >> str);
