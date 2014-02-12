@@ -938,23 +938,14 @@ def reconnect(ctx, timeout, remotes=None):
     else:
         need_reconnect = ctx.cluster.remotes.keys()
 
-    for r in need_reconnect:
-        r.ssh.close()
-
     while need_reconnect:
         for remote in need_reconnect:
-            try:
-                log.info('trying to connect to %s', remote.name)
-                key = ctx.config['targets'][remote.name]
-                from .orchestra import connection
-                remote.ssh = connection.connect(
-                    user_at_host=remote.name,
-                    host_key=key,
-                    keep_alive=True,
-                    )
-            except Exception:
+            log.info('trying to connect to %s', remote.name)
+            success = remote.reconnect()
+            if not success:
                 if time.time() - starttime > timeout:
-                    raise
+                    raise RuntimeError("Could not reconnect to %s" %
+                                       remote.name)
             else:
                 need_reconnect.remove(remote)
 
