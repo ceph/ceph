@@ -619,8 +619,6 @@ public:
   void pg_to_up_acting_osds(pg_t pg, vector<int>& up, vector<int>& acting) const {
     int up_primary, acting_primary;
     pg_to_up_acting_osds(pg, &up, &up_primary, &acting, &acting_primary);
-    assert(up.empty() || up_primary == up.front());
-    assert(acting.empty() || acting_primary == acting.front());
   }
   bool pg_is_ec(pg_t pg) const {
     map<int64_t, pg_pool_t>::const_iterator i = pools.find(pg.pool());
