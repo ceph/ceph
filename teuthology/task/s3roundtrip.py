@@ -1,3 +1,6 @@
+"""
+Run rgw roundtrip message tests
+"""
 from cStringIO import StringIO
 import base64
 import contextlib
@@ -18,6 +21,13 @@ log = logging.getLogger(__name__)
 
 @contextlib.contextmanager
 def download(ctx, config):
+    """
+    Download the s3 tests from the git builder.
+    Remove downloaded s3 file upon exit.
+    
+    The context passed in should be identical to the context
+    passed in to the main task.
+    """
     assert isinstance(config, list)
     log.info('Downloading s3-tests...')
     testdir = teuthology.get_testdir(ctx)
@@ -43,6 +53,10 @@ def download(ctx, config):
                 )
 
 def _config_user(s3tests_conf, section, user):
+    """
+    Configure users for this section by stashing away keys, ids, and
+    email addresses.
+    """
     s3tests_conf[section].setdefault('user_id', user)
     s3tests_conf[section].setdefault('email', '{user}+test@test.test'.format(user=user))
     s3tests_conf[section].setdefault('display_name', 'Mr. {user}'.format(user=user))
@@ -51,6 +65,9 @@ def _config_user(s3tests_conf, section, user):
 
 @contextlib.contextmanager
 def create_users(ctx, config):
+    """
+    Create a default s3 user.
+    """
     assert isinstance(config, dict)
     log.info('Creating rgw users...')
     testdir = teuthology.get_testdir(ctx)
@@ -105,6 +122,10 @@ def create_users(ctx, config):
 
 @contextlib.contextmanager
 def configure(ctx, config):
+    """
+    Configure the s3-tests.  This includes the running of the
+    bootstrap code and the updating of local conf files.
+    """
     assert isinstance(config, dict)
     log.info('Configuring s3-roundtrip-tests...')
     testdir = teuthology.get_testdir(ctx)
@@ -151,6 +172,12 @@ def configure(ctx, config):
 
 @contextlib.contextmanager
 def run_tests(ctx, config):
+    """
+    Run the s3 roundtrip after everything is set up.
+
+    :param ctx: Context passed to task
+    :param config: specific configuration information
+    """
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.iteritems():
