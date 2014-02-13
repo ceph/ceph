@@ -34,7 +34,7 @@ void usage()
   cout << " usage: [--print] [--createsimple <numosd> [--clobber] [--pg_bits <bitsperosd>]] <mapfilename>" << std::endl;
   cout << "   --export-crush <file>   write osdmap's crush map to <file>" << std::endl;
   cout << "   --import-crush <file>   replace osdmap's crush map with <file>" << std::endl;
-  cout << "   --test-map-pgs          map all pgs" << std::endl;
+  cout << "   --test-map-pgs [--pool <poolid>] map all pgs" << std::endl;
   cout << "   --mark-up-in            mark osds up and in (but do not persist)" << std::endl;
   cout << "   --clear-temp            clear pg_temp and primary_temp" << std::endl;
   cout << "   --test-random           do random placements" << std::endl;
