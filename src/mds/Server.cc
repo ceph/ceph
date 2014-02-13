@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #include <boost/lexical_cast.hpp>
@@ -1066,7 +1066,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
 
   // inode
   if (in) {
-    in->encode_inodestat(bl, session, NULL, snapid);
+    in->encode_inodestat(bl, session, NULL, snapid, 0, mdr->getattr_caps);
     dout(20) << "set_trace_dist added in   " << *in << dendl;
     reply->head.is_target = 1;
   } else
@@ -1795,7 +1795,7 @@ CDir *Server::validate_dentry_dir(MDRequest *mdr, CInode *diri, const string& dn
     dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
     return NULL;
   }
-  
+
   return dir;
 }
 
@@ -1808,7 +1808,7 @@ CDentry* Server::prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dn
 {
   dout(10) << "prepare_null_dentry " << dname << " in " << *dir << dendl;
   assert(dir->is_auth());
-  
+
   client_t client = mdr->get_client();
 
   // does it already exist?
@@ -2331,6 +2331,10 @@ void Server::handle_client_getattr(MDRequest *mdr, bool is_lookup)
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
+
+  // note which caps are requested, so we return at least a snapshot
+  // value for them.  (currently this only matters for xattrs)
+  mdr->getattr_caps = mask;
 
   mds->balancer->hit_inode(ceph_clock_now(g_ceph_context), ref, META_POP_IRD,
 			   mdr->client_request->get_source().num());
