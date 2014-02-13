@@ -1,4 +1,4 @@
- - ceph:
+- ceph:
   - install.upgrade:
       branch: next
 - ceph:
