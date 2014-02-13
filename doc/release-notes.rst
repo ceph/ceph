@@ -943,6 +943,32 @@ Notable Changes
 * rgw: fix S3 auth with response-* query string params (Sylvain Munaut, Yehuda Sadeh)
 * sysvinit: add condrestart command (Dan van der Ster)
 
+v0.67.6 "Dumpling" (pending, not yet released)
+------------------
+
+(write me)
+
+Upgrading
+~~~~~~~~~
+
+* The OSD has long contained a feature that allows large xattrs to
+  spill over into the leveldb backing store in situations where not
+  all local file systems are able to store them reliably.  This option
+  is now enabled unconditionally in order to avoid rare cases where
+  storing large xattrs renders the object unreadable. This is known to
+  be triggered by very large multipart objects, but could be caused by
+  other workloads as well.  Although there is some small risk that
+  performance for certain workloads will degrade, it is more important
+  that data be retrievable.  Note that newer versions of Ceph (e.g.,
+  firefly) do some additional work to avoid the potential performance
+  regression in this case, but that is current considered too complex
+  for backport to the Dumpling stable series.
+
+Notable changes
+~~~~~~~~~~~~~~~
+
+(write me)
+
 
 v0.67.5 "Dumpling"
 ------------------
