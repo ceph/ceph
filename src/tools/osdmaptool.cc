@@ -71,11 +71,10 @@ int main(int argc, const char **argv)
   bool test_crush = false;
   int range_first = -1;
   int range_last = -1;
-  int pool = 0;
+  int pool = -1;
   bool mark_up_in = false;
   bool clear_temp = false;
   bool test_map_pgs = false;
-  int test_pool = -1;
   bool test_random = false;
 
   std::string val;
@@ -107,7 +106,6 @@ int main(int argc, const char **argv)
       test_map_pgs = true;
     } else if (ceph_argparse_flag(args, i, "--test-random", (char*)NULL)) {
       test_random = true;
-    } else if (ceph_argparse_withint(args, i, &test_pool, &err, "--pool", (char*)NULL)) {
     } else if (ceph_argparse_flag(args, i, "--clobber", (char*)NULL)) {
       clobber = true;
     } else if (ceph_argparse_withint(args, i, &pg_bits, &err, "--pg_bits", (char*)NULL)) {
@@ -133,6 +131,10 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_withint(args, i, &range_first, &err, "--range_first", (char*)NULL)) {
     } else if (ceph_argparse_withint(args, i, &range_last, &err, "--range_last", (char*)NULL)) {
     } else if (ceph_argparse_withint(args, i, &pool, &err, "--pool", (char*)NULL)) {
+      if (!err.str().empty()) {
+        cerr << err.str() << std::endl;
+        exit(EXIT_FAILURE);
+      }
     } else {
       ++i;
     }
@@ -273,6 +275,10 @@ int main(int argc, const char **argv)
 
   if (!test_map_object.empty()) {
     object_t oid(test_map_object);
+    if (pool == -1) {
+      cout << me << ": assuming pool 0 (use --pool to override)" << std::endl;
+      pool = 0;
+    }
     if (!osdmap.have_pg_pool(pool)) {
       cerr << "There is no pool " << pool << std::endl;
       exit(1);
@@ -308,6 +314,10 @@ int main(int argc, const char **argv)
          << std::endl;
   }
   if (test_map_pgs) {
+    if (pool != -1 && !osdmap.have_pg_pool(pool)) {
+      cerr << "There is no pool " << pool << std::endl;
+      exit(1);
+    }
     int n = osdmap.get_max_osd();
     vector<int> count(n, 0);
     vector<int> first_count(n, 0);
@@ -318,7 +328,7 @@ int main(int argc, const char **argv)
     const map<int64_t,pg_pool_t>& pools = osdmap.get_pools();
     for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin();
 	 p != pools.end(); ++p) {
-      if (test_pool >= 0 && p->first != test_pool)
+      if (pool != -1 && p->first != pool)
 	continue;
       cout << "pool " << p->first
 	   << " pg_num " << p->second.get_pg_num() << std::endl;
