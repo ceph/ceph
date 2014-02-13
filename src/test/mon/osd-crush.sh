@@ -33,11 +33,29 @@ function run() {
         fi
     done
     teardown $dir || return 1
+}
 
+function TEST_crush_rule_create_simple() {
+    local dir=$1
+    ./ceph osd crush rule dump replicated_ruleset xml | \
+        grep '<op>take</op><item>default</item>' | \
+        grep '<op>chooseleaf_firstn</op><num>0</num><type>host</type>' || return 1
+    local ruleset=ruleset0
+    local root=host1
+    ./ceph osd crush add-bucket $root host
+    local failure_domain=osd
+    ./ceph osd crush rule create-simple $ruleset $root $failure_domain || return 1
+    ./ceph osd crush rule create-simple $ruleset $root $failure_domain 2>&1 | \
+        grep "$ruleset already exists" || return 1
+    ./ceph osd crush rule dump $ruleset xml | \
+        grep '<op>take</op><item>'$root'</item>' | \
+        grep '<op>choose_firstn</op><num>0</num><type>'$failure_domain'</type>' || return 1
+    ./ceph osd crush rule rm $ruleset || return 1
+}
 
 function TEST_crush_rule_dump() {
     local dir=$1
-    local ruleset=ruleset
+    local ruleset=ruleset1
     ./ceph osd crush rule create-erasure $ruleset || return 1
     local expected
     expected="<rule_name>$ruleset</rule_name>"
@@ -65,6 +83,19 @@ function TEST_crush_rule_all() {
 
     ./ceph osd crush rule rm $crush_ruleset || return 1
     ! ./ceph osd crush rule ls | grep $crush_ruleset || return 1
+}
+
+function TEST_crush_rule_create_simple_exists() {
+    local dir=$1
+    local ruleset=ruleset2
+    local root=default
+    local failure_domain=host
+    # add to the pending OSD map without triggering a paxos proposal
+    result=$(echo '{"prefix":"osdmonitor_prepare_command","prepare":"osd crush rule create-simple","name":"'$ruleset'","root":"'$root'","type":"'$failure_domain'"}' | nc -U $dir/a/ceph-mon.a.asok | cut --bytes=5-)
+    test $result = true || return 1
+    ./ceph osd crush rule create-simple $ruleset $root $failure_domain 2>&1 | \
+        grep "$ruleset already exists" || return 1
+    ./ceph osd crush rule rm $ruleset || return 1
 }
 
 main osd-crush
