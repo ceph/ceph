@@ -17,9 +17,6 @@
 set -xe
 PS4='$LINENO: '
 
-# must be larger than the time it takes for osd pool create to perform
-# on the slowest http://ceph.com/gitbuilder.cgi machine
-TIMEOUT=${TIMEOUT:-30}
 DIR=osd-pool-create
 rm -fr $DIR
 trap "test \$? = 0 || cat $DIR/log ; set +x ; kill_mon || true && rm -fr $DIR" EXIT
@@ -101,11 +98,12 @@ grep 'EINVAL' $DIR/out
 kill_mon
 
 # try again if the ruleset creation is pending
-run_mon --paxos-propose-interval=200 --debug-mon=20 --debug-paxos=20 
+run_mon --mon-advanced-debug-mode --debug-mon=20 --debug-paxos=20 
 crush_ruleset=erasure_ruleset
-./ceph osd crush rule create-erasure nevermind # the first modification ignores the propose interval, get past it
-! timeout $TIMEOUT ./ceph osd crush rule create-erasure $crush_ruleset || exit 1
-! timeout $TIMEOUT ./ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=$crush_ruleset
+# add to the pending OSD map without triggering a paxos proposal
+result=$(echo '{"prefix":"osdmonitor_prepare_command","prepare":"osd crush rule create-erasure","name":"'$crush_ruleset'"}' | nc -U $DIR/ceph-mon.a.asok | cut --bytes=5-)
+test $result = true || exit 1
+./ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=$crush_ruleset
 grep "$crush_ruleset try again" $DIR/log
 kill_mon
 
@@ -184,5 +182,5 @@ grep "erasure-code-directory" $DIR/osd.json > /dev/null
 kill_mon
 
 # Local Variables:
-# compile-command: "cd ../.. ; make -j4 && TIMEOUT=1 test/mon/osd-pool-create.sh"
+# compile-command: "cd ../.. ; make -j4 && test/mon/osd-pool-create.sh"
 # End:
