@@ -237,6 +237,7 @@ check_SCRIPTS += \
 	unittest_bufferlist.sh \
 	test/encoding/check-generated.sh \
 	test/mon/osd-pool-create.sh \
+	test/mon/misc.sh \
 	test/mon/osd-crush.sh \
 	test/mon/mkfs.sh \
 	test/ceph-disk.sh \
