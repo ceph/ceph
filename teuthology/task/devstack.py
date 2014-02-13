@@ -4,10 +4,10 @@ import logging
 from cStringIO import StringIO
 import textwrap
 from configparser import ConfigParser
-import time
 
 from ..orchestra import run
-from teuthology import misc
+from .. import misc
+from ..contextutil import nested
 
 """
 https://github.com/openstack-dev/devstack/blob/master/README.md
@@ -17,9 +17,24 @@ log = logging.getLogger(__name__)
 
 DEVSTACK_GIT_REPO = 'https://github.com/openstack-dev/devstack.git'
 
+is_devstack_node = lambda role: role.startswith('devstack')
+is_osd_node = lambda role: role.startswith('osd')
+
 
 @contextlib.contextmanager
 def task(ctx, config):
+    if config is None:
+        config = {}
+    if not isinstance(config, dict):
+        raise TypeError("config must be a dict")
+    with nested(lambda: install(ctx=ctx, config=config),
+                lambda: exercise(ctx=ctx, config=config),
+                ):
+        yield
+
+
+@contextlib.contextmanager
+def install(ctx, config):
     """
     Install OpenStack DevStack and configure it to use a Ceph cluster for
     Glance and Cinder.
@@ -41,20 +56,14 @@ def task(ctx, config):
     if not isinstance(config, dict):
         raise TypeError("config must be a dict")
 
-    # SETUP
-    is_devstack_node = lambda role: role.startswith('devstack')
-    is_osd_node = lambda role: role.startswith('osd')
     devstack_node = ctx.cluster.only(is_devstack_node).remotes.keys()[0]
     an_osd_node = ctx.cluster.only(is_osd_node).remotes.keys()[0]
+
     install_devstack(devstack_node)
     try:
         configure_devstack_and_ceph(ctx, config, devstack_node, an_osd_node)
         yield
-    #except Exception as e:
-        # FAIL
-        #pass
     finally:
-        # CLEANUP
         pass
 
 
@@ -270,3 +279,33 @@ def start_devstack(devstack_node):
 
 def restart_apache(node):
     node.run(args=['sudo', '/etc/init.d/apache2', 'restart'], wait=True)
+
+
+@contextlib.contextmanager
+def exercise(ctx, config):
+    log.info("Running devstack exercises...")
+
+    if config is None:
+        config = {}
+    if not isinstance(config, dict):
+        raise TypeError("config must be a dict")
+
+    devstack_node = ctx.cluster.only(is_devstack_node).remotes.keys()[0]
+
+    devstack_archive_dir = create_devstack_archive(ctx, devstack_node)
+
+    try:
+        cmd = "cd devstack && ./exercise.sh 2>&1 | tee {dir}/exercise.log".format(  # noqa
+            dir=devstack_archive_dir)
+        devstack_node.run(args=cmd, wait=True)
+        yield
+    finally:
+        pass
+
+
+def create_devstack_archive(ctx, devstack_node):
+    test_dir = misc.get_testdir(ctx)
+    devstack_archive_dir = "{test_dir}/archive/devstack".format(
+        test_dir=test_dir)
+    devstack_node.run(args="mkdir -p " + devstack_archive_dir)
+    return devstack_archive_dir
