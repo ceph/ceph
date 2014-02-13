@@ -204,7 +204,7 @@ ostream& operator<<(ostream& out, const client_writeable_range_t& r)
  */
 void inode_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(9, 6, bl);
+  ENCODE_START(10, 6, bl);
 
   ::encode(ino, bl);
   ::encode(rdev, bl);
@@ -247,7 +247,7 @@ void inode_t::encode(bufferlist &bl) const
 
 void inode_t::decode(bufferlist::iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(9, 6, 6, p);
+  DECODE_START_LEGACY_COMPAT_LEN(10, 6, 6, p);
 
   ::decode(ino, p);
   ::decode(rdev, p);
@@ -297,8 +297,6 @@ void inode_t::decode(bufferlist::iterator &p)
     ::decode(backtrace_version, p);
   if (struct_v >= 7)
     ::decode(old_pools, p);
-  else
-    backtrace_version = 0; // note inode which has no backtrace
   if (struct_v >= 8)
     ::decode(max_size_ever, p);
   if (struct_v >= 9) {
@@ -307,6 +305,8 @@ void inode_t::decode(bufferlist::iterator &p)
   } else {
     inline_version = CEPH_INLINE_NONE;
   }
+  if (struct_v < 10)
+    backtrace_version = 0; // force update backtrace
 
   DECODE_FINISH(p);
 }
