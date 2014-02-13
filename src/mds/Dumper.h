@@ -38,8 +38,10 @@ public:
   void handle_mds_map(MMDSMap* m);
 
   int init(int rank);
+  int recover_journal();
   void dump(const char *dumpfile);
   void undump(const char *dumpfile);
+  void dump_entries();
 };
 
 #endif /* JOURNAL_DUMPER_H_ */

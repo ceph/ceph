@@ -22,6 +22,7 @@
 #include "common/safe_io.h"
 #include "mds/Dumper.h"
 #include "mds/mdstypes.h"
+#include "mds/LogEvent.h"
 #include "osdc/Journaler.h"
 
 #define dout_subsys ceph_subsys_mds
@@ -43,13 +44,12 @@ int Dumper::init(int rank_)
 }
 
 
-void Dumper::dump(const char *dump_file)
+int Dumper::recover_journal()
 {
   bool done = false;
-  int r = 0;
-
   Cond cond;
-  Mutex localLock("dump:lock");
+  Mutex localLock("dump:recover_journal");
+  int r;
 
   lock.Lock();
   journaler->recover(new C_SafeCond(&localLock, &cond, &done, &r));
@@ -61,10 +61,25 @@ void Dumper::dump(const char *dump_file)
 
   if (r < 0) { // Error
     derr << "error on recovery: " << cpp_strerror(r) << dendl;
+    return r;
   } else {
     dout(10) << "completed journal recovery" << dendl;
+    return 0;
   }
+}
 
+
+void Dumper::dump(const char *dump_file)
+{
+  bool done = false;
+  int r = 0;
+  Cond cond;
+  Mutex localLock("dump:lock");
+
+  r = recover_journal();
+  if (r) {
+    return;
+  }
   uint64_t start = journaler->get_read_pos();
   uint64_t end = journaler->get_write_pos();
   uint64_t len = end-start;
@@ -196,4 +211,64 @@ void Dumper::undump(const char *dump_file)
 
   VOID_TEMP_FAILURE_RETRY(::close(fd));
   cout << "done." << std::endl;
+}
+
+
+/**
+ * Write JSON-formatted log entries to standard out.
+ */
+void Dumper::dump_entries()
+{
+  Mutex localLock("dump_entries");
+  JSONFormatter jf(true);
+
+  int r = recover_journal();
+  if (r) {
+    return;
+  }
+
+  jf.open_array_section("log");
+  bool got_data = true;
+  lock.Lock();
+  // Until the journal is empty, pop an event or wait for one to
+  // be available.
+  dout(10) << "Journaler read/write/size: "
+      << journaler->get_read_pos() << "/" << journaler->get_write_pos()
+      << "/" << journaler->get_write_pos() - journaler->get_read_pos() << dendl;
+  while (journaler->get_read_pos() != journaler->get_write_pos()) {
+    bufferlist entry_bl;
+    got_data = journaler->try_read_entry(entry_bl);
+    dout(10) << "try_read_entry: " << got_data << dendl;
+    if (got_data) {
+      LogEvent *le = LogEvent::decode(entry_bl);
+      if (!le) {
+	dout(0) << "Error decoding LogEvent" << dendl;
+	break;
+      } else {
+	jf.open_object_section("log_event");
+	jf.dump_unsigned("type", le->get_type());
+	jf.dump_unsigned("start_off", le->get_start_off());
+	jf.dump_unsigned("stamp_sec", le->get_stamp().tv.tv_sec);
+	jf.dump_unsigned("stamp_nsec", le->get_stamp().tv.tv_nsec);
+	le->dump(&jf);
+	jf.close_section();
+	delete le;
+      }
+    } else {
+      bool done = false;
+      Cond cond;
+
+      journaler->wait_for_readable(new C_SafeCond(&localLock, &cond, &done));
+      lock.Unlock();
+      localLock.Lock();
+      while (!done)
+        cond.Wait(localLock);
+      localLock.Unlock();
+      lock.Lock();
+    }
+  }
+  lock.Unlock();
+  jf.close_section();
+  jf.flush(cout);
+  return;
 }
