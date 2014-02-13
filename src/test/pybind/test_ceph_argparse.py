@@ -568,17 +568,31 @@ class TestOSD(TestArgparse):
     def test_crush_rule(self):
         assert_equal({}, validate_command(sigdict, ['osd', 'crush']))
         assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule']))
-        for subcommand in ('list', 'ls', 'dump'):
+        for subcommand in ('list', 'ls'):
             self.assert_valid_command(['osd', 'crush', 'rule', subcommand])
             assert_equal({}, validate_command(sigdict, ['osd', 'crush',
                                                         'rule', subcommand,
                                                         'toomany']))
 
+    def test_crush_rule_dump(self):
+        self.assert_valid_command(['osd', 'crush', 'rule', 'dump'])
+        self.assert_valid_command(['osd', 'crush', 'rule', 'dump', 'RULE'])
+        for format in ('json', 'json-pretty', 'xml', 'xml-pretty'):
+            self.assert_valid_command(['osd', 'crush', 'rule',
+                                       'dump', 'RULE', format])
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'rule', 'dump',
+                                                    'RULE', 'json',
+                                                    'toomany']))
+
     def test_crush_dump(self):
         self.assert_valid_command(['osd', 'crush', 'dump'])
+        for format in ('json', 'json-pretty', 'xml', 'xml-pretty'):
+			self.assert_valid_command(['osd', 'crush', 'dump', format])
         assert_equal({}, validate_command(sigdict, ['osd', 'crush']))
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
-                                                    'dump', 'toomany']))
+                                                    'dump', 'json',
+                                                    'toomany']))
 
     def test_setcrushmap(self):
         self.check_no_arg('osd', 'setcrushmap')
