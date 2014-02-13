@@ -1,3 +1,9 @@
+ceph (0.67.6-1) UNRELEASED; urgency=low
+
+  * New upstream release 
+
+ -- Alfredo Deza <jenkins-build@jenkins.front.sepia.ceph.com>  Thu, 13 Feb 2014 20:10:29 +0000
+
 ceph (0.67.5-1) stable; urgency=low
 
   * New upstream release 
