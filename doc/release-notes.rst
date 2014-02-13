@@ -964,6 +964,11 @@ Upgrading
   regression in this case, but that is current considered too complex
   for backport to the Dumpling stable series.
 
+* It is very dangerous to downgrade from v0.67.6 to a prior version of
+  Dumpling.  If the old version does not have 'filestore xattr use
+  omap = true' it may not be able to read all xattrs for an object and
+  can cause undefined behavior.
+
 Notable changes
 ~~~~~~~~~~~~~~~
 
