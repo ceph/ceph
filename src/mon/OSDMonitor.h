@@ -348,6 +348,7 @@ private:
 		  list<pair<health_status_t,string> > *detail) const;
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);
+  bool prepare_command_impl(MMonCommand *m, map<string,cmd_vartype> &cmdmap);
 
   int prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
                                stringstream& ss);
