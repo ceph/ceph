@@ -599,7 +599,8 @@ private:
 
   // for giving to clients
   int encode_inodestat(bufferlist& bl, Session *session, SnapRealm *realm,
-		       snapid_t snapid=CEPH_NOSNAP, unsigned max_bytes=0);
+		       snapid_t snapid=CEPH_NOSNAP, unsigned max_bytes=0,
+		       int getattr_wants=0);
   void encode_cap_message(MClientCaps *m, Capability *cap);
 
 

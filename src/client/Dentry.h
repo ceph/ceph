@@ -19,18 +19,18 @@ class Dentry : public LRUObject {
   uint64_t lease_gen;
   ceph_seq_t lease_seq;
   int cap_shared_gen;
-  
+
   /*
    * ref==1 -> cached, unused
    * ref >1 -> pinned in lru
    */
-  void get() { 
+  void get() {
     assert(ref > 0);
     if (++ref == 2)
-      lru_pin(); 
+      lru_pin();
     //cout << "dentry.get on " << this << " " << name << " now " << ref << std::endl;
   }
-  void put() { 
+  void put() {
     assert(ref > 0);
     if (--ref == 1)
       lru_unpin();
@@ -40,7 +40,7 @@ class Dentry : public LRUObject {
   }
 
   void dump(Formatter *f) const;
-  
+
   Dentry() : dir(0), inode(0), ref(1), offset(0), lease_mds(-1), lease_gen(0), lease_seq(0), cap_shared_gen(0) { }
 private:
   ~Dentry() {
