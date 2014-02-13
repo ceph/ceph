@@ -1,3 +1,11 @@
 v0.78
 ~~~~~
 
+* CephFS recently added support for a new 'backtrace' attribute on
+  file data objects that is used for lookup by inode number (i.e., NFS
+  reexport and hard links), and will later be used by fsck repair.
+  This replaces the existing anchor table mechanism that is used for
+  hard link resolution.  In order to completely phase that out, any
+  inode that has an outdated backtrace attribute will get updated when
+  the inode itself is modified.  This will result in some extra workload
+  after a legacy CephFS file system is upgraded.
