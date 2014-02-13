@@ -3323,8 +3323,14 @@ void Server::do_open_truncate(MDRequest *mdr, int cmode)
   
   mdr->o_trunc = true;
 
-  journal_and_reply(mdr, in, 0, le, new C_MDS_inode_update_finish(mds, mdr, in, old_size > 0,
-								  changed_ranges));
+  CDentry *dn = 0;
+  if (mdr->client_request->get_dentry_wanted()) {
+    assert(mdr->dn[0].size());
+    dn = mdr->dn[0].back();
+  }
+
+  journal_and_reply(mdr, in, dn, le, new C_MDS_inode_update_finish(mds, mdr, in, old_size > 0,
+								   changed_ranges));
 }
 
 
