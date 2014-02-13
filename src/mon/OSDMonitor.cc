@@ -3716,7 +3716,6 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     if (newcrush.rule_exists(name)) {
       ss << "rule " << name << " already exists";
       err = 0;
-      goto reply;
     } else {
       int rule = newcrush.add_simple_ruleset(name, root, type, mode,
 					     pg_pool_t::TYPE_REPLICATED, &ss);
@@ -3760,7 +3759,6 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     if (newcrush.rule_exists(name)) {
       ss << "rule " << name << " already exists";
       err = 0;
-      goto reply;
     } else {
       ErasureCodeInterfaceRef erasure_code;
       err = get_erasure_code(properties_map, &erasure_code, ss);
