@@ -3264,11 +3264,6 @@ void Server::handle_client_setattr(MDRequest *mdr)
 
   // log + wait
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
-
-  // update backtrace for old format inode. (see inode_t::decode)
-  if (pi->backtrace_version == 0)
-    pi->update_backtrace();
-
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
   

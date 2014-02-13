@@ -809,6 +809,12 @@ version_t CInode::pre_dirty()
     assert(is_base());
     pv = get_projected_version() + 1;
   }
+  // force update backtrace for old format inode (see inode_t::decode)
+  if (inode.backtrace_version == 0 && !projected_nodes.empty()) {
+    inode_t *pi = projected_nodes.back()->inode;
+    if (pi->backtrace_version == 0)
+      pi->update_backtrace(pv);
+  }
   return pv;
 }
 

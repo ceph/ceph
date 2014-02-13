@@ -440,8 +440,8 @@ struct inode_t {
   bool is_backtrace_updated() {
     return backtrace_version == version;
   }
-  void update_backtrace() {
-    backtrace_version = version;
+  void update_backtrace(version_t pv=0) {
+    backtrace_version = pv ? pv : version;
   }
 
   void add_old_pool(int64_t l) {
