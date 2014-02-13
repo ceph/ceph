@@ -56,7 +56,9 @@ void usage()
        << "  --debug_mds n\n"
        << "        debug MDS level (e.g. 10)\n"
        << "  --dump-journal rank filename\n"
-       << "        dump the MDS journal for rank.\n"
+       << "        dump the MDS journal (binary) for rank.\n"
+       << "  --dump-journal-entries rank filename\n"
+       << "        dump the MDS journal (JSON) for rank.\n"
        << "  --journal-check rank\n"
        << "        replay the journal for rank, then exit\n"
        << "  --hot-standby rank\n"
@@ -78,6 +80,11 @@ static int do_cmds_special_action(const std::string &action,
     Dumper journal_dumper;
     journal_dumper.init(rank);
     journal_dumper.dump(dump_file.c_str());
+    journal_dumper.shutdown();
+  } else if (action == "dump-journal-entries") {
+    Dumper journal_dumper;
+    journal_dumper.init(rank);
+    journal_dumper.dump_entries();
     journal_dumper.shutdown();
   } else if (action == "undump-journal") {
     dout(0) << "undumping journal for mds." << rank << " from " << dump_file << dendl;
@@ -170,6 +177,10 @@ int main(int argc, const char **argv)
 	usage();
       }
       dump_file = *i++;
+    }
+    else if (ceph_argparse_witharg(args, i, &val, "--dump-journal-entries", (char*)NULL)){
+      set_special_action(action, "dump-journal-entries");
+      rank = parse_rank("dump-journal-entries", val);
     }
     else if (ceph_argparse_witharg(args, i, &val, "--reset-journal", (char*)NULL)) {
       set_special_action(action, "reset-journal");
