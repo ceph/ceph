@@ -27,6 +27,7 @@
 #include "global/global_init.h"
 #include "global/global_context.h"
 #include "include/Context.h"
+#include "osd/osd_types.h"
 
 #include "crush/CrushWrapper.h"
 
@@ -62,11 +63,13 @@ TEST(CrushWrapper, get_immediate_parent) {
   EXPECT_EQ(0, ret);
   EXPECT_EQ("root", loc.first);
   EXPECT_EQ("default", loc.second);
+
+  delete c;
 }
 
 TEST(CrushWrapper, move_bucket) {
   CrushWrapper *c = new CrushWrapper;
-  
+
   const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
   const int HOST_TYPE = 1;
@@ -120,6 +123,8 @@ TEST(CrushWrapper, move_bucket) {
     EXPECT_EQ("root", loc.first);
     EXPECT_EQ("root1", loc.second);
   }
+
+  delete c;
 }
 
 TEST(CrushWrapper, check_item_loc) {
@@ -185,6 +190,8 @@ TEST(CrushWrapper, check_item_loc) {
     EXPECT_TRUE(c->check_item_loc(g_ceph_context, item, loc, &weight));
     EXPECT_EQ(expected_weight, weight);
   }
+
+  delete c;
 }
 
 TEST(CrushWrapper, update_item) {
@@ -279,6 +286,8 @@ TEST(CrushWrapper, update_item) {
   EXPECT_EQ(modified_weight, c->get_item_weightf(item));
   EXPECT_FALSE(c->check_item_loc(g_ceph_context, item, loc, &weight));
   EXPECT_TRUE(c->check_item_loc(g_ceph_context, item, other_loc, &weight));
+
+  delete c;
 }
 
 TEST(CrushWrapper, insert_item) {
@@ -463,6 +472,74 @@ TEST(CrushWrapper, is_valid_crush_loc) {
   }
 }
 
+TEST(CrushWrapper, dump_rules) {
+  CrushWrapper *c = new CrushWrapper;
+
+  const int ROOT_TYPE = 1;
+  c->set_type_name(ROOT_TYPE, "root");
+  const int OSD_TYPE = 0;
+  c->set_type_name(OSD_TYPE, "osd");
+
+  string failure_domain_type("osd");
+  string root_name("default");
+  int rootno;
+  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+		ROOT_TYPE, 0, NULL, NULL, &rootno);
+  c->set_item_name(rootno, root_name);
+
+  int item = 0;
+
+  pair <string,string> loc;
+  int ret;
+  loc = c->get_immediate_parent(item, &ret);
+  EXPECT_EQ(-ENOENT, ret);
+
+  {
+    map<string,string> loc;
+    loc["root"] = root_name;
+
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, item, 1.0,
+				"osd.0", loc));
+  }
+
+  // no ruleset by default
+  {
+    Formatter *f = new_formatter("json-pretty");
+    c->dump_rules(f);
+    stringstream ss;
+    f->flush(ss);
+    delete f;
+    EXPECT_EQ("", ss.str());
+  }
+
+  string name("NAME");
+  int ruleset = c->add_simple_ruleset(name, root_name, failure_domain_type,
+				      "firstn", pg_pool_t::TYPE_ERASURE);
+  EXPECT_EQ(0, ruleset);
+
+  {
+    Formatter *f = new_formatter("xml");
+    c->dump_rules(f);
+    stringstream ss;
+    f->flush(ss);
+    delete f;
+    EXPECT_EQ(0, ss.str().find("<rule><rule_id>0</rule_id><rule_name>NAME</rule_name>"));
+  }
+
+  {
+    Formatter *f = new_formatter("xml");
+    c->dump_rule(ruleset, f);
+    stringstream ss;
+    f->flush(ss);
+    delete f;
+    EXPECT_EQ(0, ss.str().find("<rule><rule_id>0</rule_id><rule_name>NAME</rule_name>"));
+    EXPECT_NE(string::npos,
+	      ss.str().find("<step><op>take</op><item>default</item></step>"));
+  }
+
+  delete c;
+}
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
@@ -477,9 +554,10 @@ int main(int argc, char **argv) {
 
 /*
  * Local Variables:
- * compile-command: "cd ../.. ; make unittest_crush_wrapper && 
+ * compile-command: "cd ../.. ; make -j4 unittest_crush_wrapper && 
  *    valgrind \
  *    --max-stackframe=20000000 --tool=memcheck \
- *    ./unittest_crush_wrapper --log-to-stderr=true --debug-crush=20 # --gtest_filter=CrushWrapper.insert_item"
+ *    ./unittest_crush_wrapper --log-to-stderr=true --debug-crush=20 \
+ *        # --gtest_filter=CrushWrapper.insert_item"
  * End:
  */
