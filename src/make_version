@@ -1,7 +1,14 @@
 #!/bin/sh
 
-cur=`head -1 $1`
-v=`tail -1 $1 | cut -c 2-`
+echo '$1: '$1
+
+if [ "$1" =  "-n" ] ; then
+   cur="no_version"
+   v="Development"
+else
+   cur=`head -1 $1`
+   v=`tail -1 $1 | cut -c 2-`
+fi
 
 print_all() {
 	echo "#ifndef CEPH_VERSION_H"
