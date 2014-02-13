@@ -10,7 +10,7 @@ class Cond;
 
 struct Fh {
   Inode    *inode;
-  loff_t     pos;
+  loff_t    pos;
   int       mds;        // have to talk to mds we opened with (for now)
   int       mode;       // the mode i opened the file with
 
