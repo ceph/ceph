@@ -16,6 +16,7 @@ http://ceph.com/docs/master/rbd/rbd-openstack/
 log = logging.getLogger(__name__)
 
 DEVSTACK_GIT_REPO = 'https://github.com/openstack-dev/devstack.git'
+DS_STABLE_BRANCHES = ("havana", "grizzly")
 
 is_devstack_node = lambda role: role.startswith('devstack')
 is_osd_node = lambda role: role.startswith('osd')
@@ -59,7 +60,8 @@ def install(ctx, config):
     devstack_node = ctx.cluster.only(is_devstack_node).remotes.keys()[0]
     an_osd_node = ctx.cluster.only(is_osd_node).remotes.keys()[0]
 
-    install_devstack(devstack_node)
+    devstack_branch = config.get("branch", "master")
+    install_devstack(devstack_node, devstack_branch)
     try:
         configure_devstack_and_ceph(ctx, config, devstack_node, an_osd_node)
         yield
@@ -67,11 +69,18 @@ def install(ctx, config):
         pass
 
 
-def install_devstack(devstack_node):
+def install_devstack(devstack_node, branch="master"):
     log.info("Cloning DevStack repo...")
 
     args = ['git', 'clone', DEVSTACK_GIT_REPO]
     devstack_node.run(args=args)
+
+    if branch != "master":
+        if branch in DS_STABLE_BRANCHES and not branch.startswith("stable"):
+            branch = "stable/" + branch
+        log.info("Checking out {branch} branch...".format(branch=branch))
+        cmd = "cd devstack && git checkout " + branch
+        devstack_node.run(args=cmd)
 
     log.info("Installing DevStack...")
     args = ['cd', 'devstack', run.Raw('&&'), './stack.sh']
