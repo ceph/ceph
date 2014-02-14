@@ -1,3 +1,6 @@
+"""
+Test Swfit api.
+"""
 from cStringIO import StringIO
 from configobj import ConfigObj
 import base64
@@ -16,6 +19,9 @@ log = logging.getLogger(__name__)
 
 @contextlib.contextmanager
 def download(ctx, config):
+    """
+    Download the Swift API.
+    """
     testdir = teuthology.get_testdir(ctx)
     assert isinstance(config, list)
     log.info('Downloading swift...')
@@ -42,14 +48,24 @@ def download(ctx, config):
                 )
 
 def _config_user(testswift_conf, account, user, suffix):
-    testswift_conf['func_test'].setdefault('account{s}'.format(s=suffix), account);
-    testswift_conf['func_test'].setdefault('username{s}'.format(s=suffix), user);
+    """
+    Configure a swift user
+
+    :param account: Swift account
+    :param user: User name
+    :param suffix: user name and email suffixes.
+    """
+    testswift_conf['func_test'].setdefault('account{s}'.format(s=suffix), account)
+    testswift_conf['func_test'].setdefault('username{s}'.format(s=suffix), user)
     testswift_conf['func_test'].setdefault('email{s}'.format(s=suffix), '{account}+test@test.test'.format(account=account))
     testswift_conf['func_test'].setdefault('display_name{s}'.format(s=suffix), 'Mr. {account} {user}'.format(account=account, user=user))
     testswift_conf['func_test'].setdefault('password{s}'.format(s=suffix), base64.b64encode(os.urandom(40)))
 
 @contextlib.contextmanager
 def create_users(ctx, config):
+    """
+    Create rgw users to interact with the swift interface.
+    """
     assert isinstance(config, dict)
     log.info('Creating rgw users...')
     testdir = teuthology.get_testdir(ctx)
@@ -94,6 +110,9 @@ def create_users(ctx, config):
 
 @contextlib.contextmanager
 def configure(ctx, config):
+    """
+    Configure rgw and Swift
+    """
     assert isinstance(config, dict)
     log.info('Configuring testswift...')
     testdir = teuthology.get_testdir(ctx)
@@ -135,6 +154,9 @@ def configure(ctx, config):
 
 @contextlib.contextmanager
 def run_tests(ctx, config):
+    """
+    Run an individual Swift test.
+    """
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.iteritems():
