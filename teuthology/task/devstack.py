@@ -301,11 +301,13 @@ def exercise(ctx, config):
 
     devstack_node = ctx.cluster.only(is_devstack_node).remotes.keys()[0]
 
-    devstack_archive_dir = create_devstack_archive(ctx, devstack_node)
+    # TODO: save the log *and* preserve failures
+    #devstack_archive_dir = create_devstack_archive(ctx, devstack_node)
 
     try:
-        cmd = "cd devstack && ./exercise.sh 2>&1 | tee {dir}/exercise.log".format(  # noqa
-            dir=devstack_archive_dir)
+        #cmd = "cd devstack && ./exercise.sh 2>&1 | tee {dir}/exercise.log".format(  # noqa
+        #    dir=devstack_archive_dir)
+        cmd = "cd devstack && ./exercise.sh"
         devstack_node.run(args=cmd, wait=True)
         yield
     finally:
