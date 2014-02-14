@@ -453,8 +453,7 @@ def test(ctx, config):
     testhost = ctx.cluster.only(config['server']).remotes.keys()[0].name
     testhost = testhost.split('@')[1]
     mypath = os.path.dirname(__file__)
-    cmd_list = [os.path.join(mypath, 'calamari_testdir',
-                             'test_server_1_0.py')]
+    cmd_list = [os.path.join(mypath, 'calamari', 'servertest_1_0.py')]
     os.environ['CALAMARI_BASE_URI'] = 'http://{0}/api/v1/'.format(testhost)
     log.info("testing %s", testhost)
     return subprocess.call(cmd_list)
