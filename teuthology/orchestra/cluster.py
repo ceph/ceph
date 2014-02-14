@@ -1,3 +1,7 @@
+"""
+Cluster definition
+part of context, Cluster is used to save connection information.
+"""
 import teuthology.misc
 
 class Cluster(object):
@@ -15,9 +19,9 @@ class Cluster(object):
                 self.add(remote, roles)
 
     def __repr__(self):
-        remotes = [(k, v) for k,v in self.remotes.items()]
+        remotes = [(k, v) for k, v in self.remotes.items()]
         remotes.sort(key=lambda tup: tup[0].name)
-        remotes = '{' + ', '.join('{remote!r}: {roles!r}'.format(remote=k, roles=v) for k,v in remotes) + '}'
+        remotes = '{' + ', '.join('{remote!r}: {roles!r}'.format(remote=k, roles=v) for k, v in remotes) + '}'
         return '{classname}(remotes={remotes})'.format(
             classname=self.__class__.__name__,
             remotes=remotes,
@@ -26,11 +30,14 @@ class Cluster(object):
     def __str__(self):
         remotes = list(self.remotes.items())
         remotes.sort(key=lambda tup: tup[0].name)
-        remotes = ((k, ','.join(v)) for k,v in remotes)
-        remotes = ('{k}[{v}]'.format(k=k, v=v) for k,v in remotes)
+        remotes = ((k, ','.join(v)) for k, v in remotes)
+        remotes = ('{k}[{v}]'.format(k=k, v=v) for k, v in remotes)
         return ' '.join(remotes)
 
     def add(self, remote, roles):
+        """
+        Add roles to the list of remotes.
+        """
         if remote in self.remotes:
             raise RuntimeError(
                 'Remote {new!r} already found in remotes: {old!r}'.format(

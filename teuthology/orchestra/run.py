@@ -1,3 +1,6 @@
+"""
+Paramiko run support
+"""
 from cStringIO import StringIO
 
 import gevent
@@ -9,6 +12,9 @@ import shutil
 log = logging.getLogger(__name__)
 
 class RemoteProcess(object):
+    """
+    Remote process object used to keep track of attributes of a process.
+    """
     __slots__ = [
         'command', 'stdin', 'stdout', 'stderr', 'exitstatus', 'exited',
         # for orchestra.remote.Remote to place a backreference
@@ -23,6 +29,9 @@ class RemoteProcess(object):
         self.exited = exited
 
 class Raw(object):
+    """
+    Raw objects are passed to remote objects and are not processed locally.
+    """
     def __init__(self, value):
         self.value = value
 
@@ -33,7 +42,13 @@ class Raw(object):
             )
 
 def quote(args):
+    """
+    Internal quote wrapper.
+    """
     def _quote(args):
+        """
+        Handle quoted string, testing for raw charaters.
+        """
         for a in args:
             if isinstance(a, Raw):
                 yield a.value
@@ -64,13 +79,21 @@ def execute(client, args):
     (in_, out, err) = client.exec_command(cmd)
 
     def get_exitstatus():
+        """
+        Get exit status.
+
+        When -1 on connection loss *and* signals occur, this
+        maps to more pythonic None
+        """
         status = out.channel.recv_exit_status()
-        # -1 on connection loss *and* signals; map to more pythonic None
         if status == -1:
             status = None
         return status
 
     def exitstatus_ready():
+        """
+        out.channel exit wrapper.
+        """
         return out.channel.exit_status_ready()
 
     r = RemoteProcess(
@@ -86,6 +109,9 @@ def execute(client, args):
     return r
 
 def copy_to_log(f, logger, host, loglevel=logging.INFO):
+    """
+    Interface to older xreadlines api.
+    """
     # i can't seem to get fudge to fake an iterable, so using this old
     # api for now
     for line in f.xreadlines():
@@ -93,6 +119,9 @@ def copy_to_log(f, logger, host, loglevel=logging.INFO):
         logger.log(loglevel, '[' + host + ']: ' + line)
 
 def copy_and_close(src, fdst):
+    """
+    copyfileobj call wrapper.
+    """
     if src is not None:
         if isinstance(src, basestring):
             src = StringIO(src)
@@ -100,6 +129,12 @@ def copy_and_close(src, fdst):
     fdst.close()
 
 def copy_file_to(f, dst, host):
+    """
+    Copy file
+    :param f: file to be copied.
+    :param dst: destination
+    :param host: original host location
+    """
     if hasattr(dst, 'log'):
         # looks like a Logger to me; not using isinstance to make life
         # easier for unit tests
@@ -111,6 +146,9 @@ def copy_file_to(f, dst, host):
 
 
 class CommandFailedError(Exception):
+    """
+    Exception thrown on command failure
+    """
     def __init__(self, command, exitstatus, node=None):
         self.command = command
         self.exitstatus = exitstatus
@@ -125,6 +163,9 @@ class CommandFailedError(Exception):
 
 
 class CommandCrashedError(Exception):
+    """
+    Exception thrown on crash
+    """
     def __init__(self, command):
         self.command = command
 
@@ -135,6 +176,9 @@ class CommandCrashedError(Exception):
 
 
 class ConnectionLostError(Exception):
+    """
+    Exception thrown when the connection is lost
+    """
     def __init__(self, command):
         self.command = command
 
@@ -155,6 +199,9 @@ def spawn_asyncresult(fn, *args, **kwargs):
     """
     r = gevent.event.AsyncResult()
     def wrapper():
+        """
+        Internal wrapper.
+        """
         try:
             value = fn(*args, **kwargs)
         except Exception as e:
@@ -166,6 +213,9 @@ def spawn_asyncresult(fn, *args, **kwargs):
     return r
 
 class Sentinel(object):
+    """
+    Sentinel -- used to define PIPE file-like object. 
+    """
     def __init__(self, name):
         self.name = name
 
@@ -186,6 +236,9 @@ class KludgeFile(object):
         return getattr(self._wrapped, name)
 
     def close(self):
+        """
+        Close and shutdown.
+        """
         self._wrapped.close()
         self._wrapped.channel.shutdown_write()
 
@@ -222,7 +275,7 @@ def run(
 
     if logger is None:
         logger = log
-    (host,port) = client.get_transport().getpeername()
+    (host, port) = client.get_transport().getpeername()
     g_err = None
     if stderr is not PIPE:
         if stderr is None:
@@ -242,6 +295,10 @@ def run(
         assert not wait, "Using PIPE for stdout without wait=False would deadlock."
 
     def _check_status(status):
+        """
+        get values needed if uninitialized.  Handle ssh issues when checking
+        the status.
+        """
         if g_err is not None:
             g_err.get()
         if g_out is not None:
@@ -263,7 +320,7 @@ def run(
                 # signal; sadly SSH does not tell us which signal
                 raise CommandCrashedError(command=r.command)
             if status != 0:
-                (host,port) = client.get_transport().getpeername()
+                (host, port) = client.get_transport().getpeername()
                 raise CommandFailedError(command=r.command, exitstatus=status, node=host)
         return status
 
