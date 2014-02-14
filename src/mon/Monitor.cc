@@ -1388,15 +1388,15 @@ void Monitor::handle_probe_reply(MMonProbe *m)
   }
 
   // new initial peer?
-  if (monmap->contains(m->name)) {
-    if (monmap->get_addr(m->name).is_blank_ip()) {
-      dout(1) << " learned initial mon " << m->name << " addr " << m->get_source_addr() << dendl;
-      monmap->set_addr(m->name, m->get_source_addr());
-      m->put();
+  if (monmap->get_epoch() == 0 &&
+      monmap->contains(m->name) &&
+      monmap->get_addr(m->name).is_blank_ip()) {
+    dout(1) << " learned initial mon " << m->name << " addr " << m->get_source_addr() << dendl;
+    monmap->set_addr(m->name, m->get_source_addr());
+    m->put();
 
-      bootstrap();
-      return;
-    }
+    bootstrap();
+    return;
   }
 
   // end discover phase
