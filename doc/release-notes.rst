@@ -943,10 +943,20 @@ Notable Changes
 * rgw: fix S3 auth with response-* query string params (Sylvain Munaut, Yehuda Sadeh)
 * sysvinit: add condrestart command (Dan van der Ster)
 
-v0.67.6 "Dumpling" (pending, not yet released)
+v0.67.6 "Dumpling"
 ------------------
 
-(write me)
+.. note: This release contains a librbd bug that is fixed in v0.67.7.  Please upgrade to v0.67.7 and do not use v0.67.6.
+
+This Dumpling point release contains a number of important fixed for
+the OSD, monitor, and radosgw.  Most significantly, a change that
+forces large object attributes to spill over into leveldb has been
+backported that can prevent objects and the cluster from being damaged
+by large attributes (which can be induced via the radosgw).  There is
+also a set of fixes that improves data safety and RADOS semantics when
+the cluster becomes full and then non-full.
+
+We recommend that all 0.67.x Dumpling users skip this release and upgrade to v0.67.7.
 
 Upgrading
 ~~~~~~~~~
@@ -972,7 +982,34 @@ Upgrading
 Notable changes
 ~~~~~~~~~~~~~~~
 
-(write me)
+* ceph-disk: misc bug fixes, particularly on RHEL (Loic Dachary, Alfredo Deza, various)
+* ceph-fuse, libcephfs: fix crash from read over certain sparseness patterns (Sage Weil)
+* ceph-fuse, libcephfs: fix integer overflow for sync reads racing with appends (Sage Weil)
+* ceph.spec: fix udev rule when building RPM under RHEL (Derek Yarnell)
+* common: fix crash from bad format from admin socket (Loic Dachary)
+* librados: add optional timeouts (Josh Durgin)
+* librados: do not leak budget when resending localized or redirected ops (Josh Durgin)
+* librados, osd: fix and improve full cluster handling (Josh Durgin)
+* librbd: fix use-after-free when updating perfcounters during image close (Josh Durgin)
+* librbd: remove limit on objects in cache (Josh Durgin)
+* mon: avoid on-disk full OSDMap corruption from pg_temp removal (Sage Weil)
+* mon: avoid stray pg_temp entries from pool deletion race (Joao Eduardo Luis)
+* mon: do not generate spurious MDSMaps from laggy daemons (Joao Eduardo Luis)
+* mon: fix error code from 'osd rm|down|out|in ...' commands (Loic Dachary)
+* mon: include all health items in summary output (John Spray)
+* osd: fix occasional race/crash during startup (Sage Weil)
+* osd: ignore stray OSDMap messages during init (Sage Weil)
+* osd: unconditionally let xattrs overflow into leveldb (David Zafman)
+* rados: fix a few error checks for the CLI (Josh Durgin)
+* rgw: convert legacy bucket info objects on demand (Yehuda Sadeh)
+* rgw: fix bug causing system users to lose privileges (Yehuda Sadeh)
+* rgw: fix CORS bugs related to headers and case sensitivity (Robin H. Johnson)
+* rgw: fix multipart object listing (Yehuda Sadeh)
+* rgw: fix racing object creations (Yehuda Sadeh)
+* rgw: fix racing object put and delete (Yehuda Sadeh)
+* rgw: fix S3 auth when using response-* query string params (Sylvain Munaut)
+* rgw: use correct secret key for POST authentication (Robin H. Johnson)
+
 
 
 v0.67.5 "Dumpling"
