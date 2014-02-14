@@ -1,3 +1,7 @@
+"""
+Miscellaneous teuthology functions.
+Used by other modules, but mostly called from tasks.
+"""
 from cStringIO import StringIO
 
 import argparse
@@ -30,6 +34,12 @@ is_arm = lambda x: x.startswith('tala') or x.startswith(
 
 
 def config_file(string):
+    """
+    Create a config file  
+
+    :param string: name of yaml file used for config.
+    :returns: Dictionary of configuration information.
+    """
     config_dict = {}
     try:
         with file(string) as f:
@@ -42,14 +52,23 @@ def config_file(string):
 
 
 class MergeConfig(argparse.Action):
-
+    """
+    Used by scripts to mergeg configurations.   (nuke, run, and
+    schedule, for example)
+    """
     def __call__(self, parser, namespace, values, option_string=None):
+        """
+        Perform merges of all the day in the config dictionaries.
+        """
         config_dict = getattr(namespace, self.dest)
         for new in values:
             deep_merge(config_dict, new)
 
 
 def get_testdir(ctx):
+    """
+    :returns: A test directory
+    """
     if 'test_path' in ctx.teuthology_config:
         return ctx.teuthology_config['test_path']
     test_user = get_test_user(ctx)
@@ -68,11 +87,19 @@ def get_test_user(ctx):
 
 
 def get_archive_dir(ctx):
+    """
+    :returns: archive directory (a subdirectory of the test directory)
+    """
     test_dir = get_testdir(ctx)
     return os.path.normpath(os.path.join(test_dir, 'archive'))
 
 
 def get_http_log_path(archive_dir, job_id=None):
+    """
+    :param archive_dir: directory to be searched
+    :param job_id: id of job that terminates the name of the log path 
+    :returns: http log path
+    """
     http_base = config.archive_server
     if not http_base:
         return None
@@ -91,6 +118,9 @@ def get_http_log_path(archive_dir, job_id=None):
 def get_ceph_binary_url(package=None,
                         branch=None, tag=None, sha1=None, dist=None,
                         flavor=None, format=None, arch=None):
+    """
+    return the url of the ceph binary found on gitbuildder.
+    """
     BASE = 'http://gitbuilder.ceph.com/{package}-{format}-{dist}-{arch}-{flavor}/'.format(
         package=package,
         flavor=flavor,
@@ -130,6 +160,10 @@ def get_ceph_binary_url(package=None,
 
 
 def feed_many_stdins(fp, processes):
+    """
+    :param fp: input file
+    :param processes: list of processes to be written to.
+    """
     while True:
         data = fp.read(8192)
         if not data:
@@ -139,12 +173,21 @@ def feed_many_stdins(fp, processes):
 
 
 def feed_many_stdins_and_close(fp, processes):
+    """
+    Feed many and then close processes.
+
+    :param fp: input file
+    :param processes: list of processes to be written to.
+    """
     feed_many_stdins(fp, processes)
     for proc in processes:
         proc.stdin.close()
 
 
 def get_mons(roles, ips):
+    """
+    Get monitors and their associated ports
+    """
     mons = {}
     mon_ports = {}
     mon_id = 0
@@ -167,6 +210,11 @@ def get_mons(roles, ips):
 
 
 def generate_caps(type_):
+    """
+    Each call will return the next capability for each system type
+    (essentially a subset of possible role values).  Valid types are osd,
+    mds and client.
+    """
     defaults = dict(
         osd=dict(
             mon='allow *',
@@ -191,7 +239,7 @@ def generate_caps(type_):
 
 def skeleton_config(ctx, roles, ips):
     """
-    Returns a ConfigObj that's prefilled with a skeleton config.
+    Returns a ConfigObj that is prefilled with a skeleton config.
 
     Use conf[section][key]=value or conf.merge to change it.
 
@@ -217,6 +265,13 @@ def skeleton_config(ctx, roles, ips):
 
 
 def roles_of_type(roles_for_host, type_):
+    """
+    Generator of roles.
+ 
+    Each call returns the next possible role of the type specified.
+    :param roles_for host: list of roles possible
+    :param type_: type of role
+    """
     prefix = '{type}.'.format(type=type_)
     for name in roles_for_host:
         if not name.startswith(prefix):
@@ -226,12 +281,24 @@ def roles_of_type(roles_for_host, type_):
 
 
 def all_roles(cluster):
+    """
+    Generator of role values.  Each call returns another role.
+
+    :param cluster: Cluster extracted from the ctx.
+    """
     for _, roles_for_host in cluster.remotes.iteritems():
         for name in roles_for_host:
             yield name
 
 
 def all_roles_of_type(cluster, type_):
+    """
+    Generator of role values.  Each call returns another role of the
+    type specified.
+
+    :param cluster: Cluster extracted from the ctx.
+    :type_: role type
+    """
     prefix = '{type}.'.format(type=type_)
     for _, roles_for_host in cluster.remotes.iteritems():
         for name in roles_for_host:
@@ -248,11 +315,21 @@ def is_type(type_):
     prefix = '{type}.'.format(type=type_)
 
     def _is_type(role):
+        """
+        Return type based on the starting role name.  This should
+        probably be improved in the future.
+        """
         return role.startswith(prefix)
     return _is_type
 
 
 def num_instances_of_type(cluster, type_):
+    """
+    Total the number of instances of the role type specified in all remotes.
+    
+    :param cluster: Cluster extracted from ctx.
+    :param type_: role 
+    """
     remotes_and_roles = cluster.remotes.items()
     roles = [roles for (remote, roles) in remotes_and_roles]
     prefix = '{type}.'.format(type=type_)
@@ -272,6 +349,11 @@ def create_simple_monmap(ctx, remote, conf):
     :return the FSID (as a string) of the newly created monmap
     """
     def gen_addresses():
+        """
+        Monitor address generator.
+    
+        Each invocation returns the next monitor address
+        """
         for section, data in conf.iteritems():
             PREFIX = 'mon.'
             if not section.startswith(PREFIX):
@@ -311,6 +393,13 @@ def create_simple_monmap(ctx, remote, conf):
 
 
 def write_file(remote, path, data):
+    """
+    Write data to a remote file
+
+    :param remote: Remote site.
+    :param path: Path on the remote being written to.
+    :param data: Data to be written.
+    """
     remote.run(
         args=[
             'python',
@@ -323,6 +412,14 @@ def write_file(remote, path, data):
 
 
 def sudo_write_file(remote, path, data, perms=None):
+    """
+    Write data to a remote file as super user
+
+    :param remote: Remote site.
+    :param path: Path on the remote being written to.
+    :param data: Data to be written.
+    :param perms: Permissions on the file being written
+    """
     permargs = []
     if perms:
         permargs = [run.Raw('&&'), 'sudo', 'chmod', perms, path]
@@ -339,9 +436,12 @@ def sudo_write_file(remote, path, data, perms=None):
 
 
 def move_file(remote, from_path, to_path, sudo=False):
+    """
+    Move a file from one path to another on a remote site
 
-    # need to stat the file first, to make sure we
-    # maintain the same permissions
+    The file needs to be stat'ed first, to make sure we
+    maintain the same permissions
+    """
     args = []
     if sudo:
         args.append('sudo')
@@ -387,6 +487,9 @@ def move_file(remote, from_path, to_path, sudo=False):
 
 
 def delete_file(remote, path, sudo=False, force=False):
+    """
+    rm a file on a remote site.
+    """
     args = []
     if sudo:
         args.append('sudo')
@@ -405,6 +508,12 @@ def delete_file(remote, path, sudo=False, force=False):
 
 def remove_lines_from_file(remote, path, line_is_valid_test,
                            string_to_test_for):
+    """
+    Remove lines from a file.  This involves reading the file in, removing
+    the appropriate lines, saving the file, and then replacing the original
+    file with the new file.  Intermediate files are used to prevent data loss
+    on when the main site goes up and down.
+    """
     # read in the specified file
     in_data = get_file(remote, path, False)
     out_data = ""
@@ -436,6 +545,12 @@ def remove_lines_from_file(remote, path, line_is_valid_test,
 
 
 def append_lines_to_file(remote, path, lines, sudo=False):
+    """
+    Append lines to a file.
+    An intermediate file is used in the same manner as in
+    Remove_lines_from_list.
+    """
+
     temp_file_path = remote_mktemp(remote)
 
     data = get_file(remote, path, sudo)
@@ -452,6 +567,9 @@ def append_lines_to_file(remote, path, lines, sudo=False):
 
 
 def remote_mktemp(remote, sudo=False):
+    """
+    Make a temporary file on a remote system
+    """
     args = []
     if sudo:
         args.append('sudo')
@@ -583,11 +701,15 @@ def pull_directory_tarball(remote, remotedir, localfile):
         )
     proc.exitstatus.get()
 
-# returns map of devices to device id links:
-# /dev/sdb: /dev/disk/by-id/wwn-0xf00bad
-
 
 def get_wwn_id_map(remote, devs):
+    """
+    Extract ww_id_map information from ls output on the associated devs.
+
+    Sample dev information:    /dev/sdb: /dev/disk/by-id/wwn-0xf00bad
+
+    :returns: map of devices to device id links 
+    """
     stdout = None
     try:
         r = remote.run(
@@ -723,6 +845,10 @@ def wait_until_osds_up(ctx, cluster, remote):
 
 
 def wait_until_fuse_mounted(remote, fuse, mountpoint):
+    """
+    Check to make sure that fuse is mounted on mountpoint.  If not,
+    sleep for 5 seconds and check again.
+    """
     while True:
         proc = remote.run(
             args=[
@@ -795,6 +921,9 @@ def reconnect(ctx, timeout, remotes=None):
 
 
 def write_secret_file(ctx, remote, role, keyring, filename):
+    """
+    Stash the kerying in the filename specified.
+    """
     testdir = get_testdir(ctx)
     remote.run(
         args=[
@@ -812,6 +941,9 @@ def write_secret_file(ctx, remote, role, keyring, filename):
 
 
 def get_clients(ctx, roles):
+    """
+    return all remote roles that are clients.
+    """
     for role in roles:
         assert isinstance(role, basestring)
         PREFIX = 'client.'
@@ -822,10 +954,16 @@ def get_clients(ctx, roles):
 
 
 def get_user():
+    """
+    Return the username in the format user@host.
+    """
     return getpass.getuser() + '@' + socket.gethostname()
 
 
 def read_config(ctx):
+    """
+    read the default teuthology yaml configuration file.
+    """
     ctx.teuthology_config = {}
     filename = os.path.join(os.environ['HOME'], '.teuthology.yaml')
 
@@ -840,6 +978,9 @@ def read_config(ctx):
 
 
 def get_mon_names(ctx):
+    """
+    :returns: a list of monitor names
+    """
     mons = []
     for remote, roles in ctx.cluster.remotes.items():
         for role in roles:
@@ -848,10 +989,11 @@ def get_mon_names(ctx):
             mons.append(role)
     return mons
 
-# return the "first" mon (alphanumerically, for lack of anything better)
-
 
 def get_first_mon(ctx, config):
+    """
+    return the "first" mon (alphanumerically, for lack of anything better)
+    """
     firstmon = sorted(get_mon_names(ctx))[0]
     assert firstmon
     return firstmon
@@ -874,6 +1016,13 @@ def replace_all_with_clients(cluster, config):
 
 
 def deep_merge(a, b):
+    """
+    Deep Merge.  If a and b are both lists, all elements in b are
+    added into a.  If a and b are both dictionaries, elements in b are
+    recursively added to a.
+    :param a: object items will be merged into
+    :param b: object items will be merged from
+    """
     if a is None:
         return b
     if b is None:
@@ -931,6 +1080,9 @@ def get_valgrind_args(testdir, name, preamble, v):
 
 
 def stop_daemons_of_type(ctx, type_):
+    """
+    :param type_: type of daemons to be stopped.
+    """
     log.info('Shutting down %s daemons...' % type_)
     exc_info = (None, None, None)
     for daemon in ctx.daemons.iter_daemons_of_role(type_):
@@ -967,6 +1119,9 @@ def get_system_type(remote, distro=False):
 
 
 def get_distro(ctx):
+    """
+    Get the name of the distro that we are using (usually the os_type).
+    """
     try:
         os_type = ctx.config.get('os_type', ctx.os_type)
     except AttributeError:
@@ -980,6 +1135,9 @@ def get_distro(ctx):
 
 
 def get_distro_version(ctx):
+    """
+    Get the verstion of the distro that we are using (release number).
+    """
     default_os_version = dict(
         ubuntu="12.04",
         fedora="18",
