@@ -523,7 +523,7 @@ TEST(CrushWrapper, dump_rules) {
     stringstream ss;
     f->flush(ss);
     delete f;
-    EXPECT_EQ(0, ss.str().find("<rule><rule_id>0</rule_id><rule_name>NAME</rule_name>"));
+    EXPECT_EQ((unsigned)0, ss.str().find("<rule><rule_id>0</rule_id><rule_name>NAME</rule_name>"));
   }
 
   {
@@ -532,7 +532,7 @@ TEST(CrushWrapper, dump_rules) {
     stringstream ss;
     f->flush(ss);
     delete f;
-    EXPECT_EQ(0, ss.str().find("<rule><rule_id>0</rule_id><rule_name>NAME</rule_name>"));
+    EXPECT_EQ((unsigned)0, ss.str().find("<rule><rule_id>0</rule_id><rule_name>NAME</rule_name>"));
     EXPECT_NE(string::npos,
 	      ss.str().find("<step><op>take</op><item>default</item></step>"));
   }
