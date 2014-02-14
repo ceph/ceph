@@ -22,6 +22,7 @@ import logging
 import os
 import subprocess
 import teuthology.misc as teuthology
+import teuthology.packaging as pkg
 import textwrap
 import time
 from ..orchestra import run
@@ -57,7 +58,7 @@ def _disable_default_nginx(remote):
         service nginx restart
         service {service} restart
     ''')
-    service = _http_service_name(remote)
+    service = pkg.get_service_name('httpd', remote)
     script = script.format(service=service)
     teuthology.sudo_write_file(remote, '/tmp/disable.nginx', script)
     return remote.run(args=['sudo', 'bash', '/tmp/disable.nginx'],
@@ -81,186 +82,6 @@ def _setup_calamari_cluster(remote, restapi_remote):
                             '/opt/calamari/webapp/calamari/db.sqlite3'],
                       stdout=StringIO())
 
-
-RELEASE_MAP = {
-    'Ubuntu precise': dict(flavor='deb', release='ubuntu', version='precise'),
-    'Debian wheezy': dict(flavor='deb', release='debian', version='wheezy'),
-    'CentOS 6.4': dict(flavor='rpm', release='centos', version='6.4'),
-    'RedHatEnterpriseServer 6.4': dict(flavor='rpm', release='rhel',
-                                       version='6.4'),
-}
-
-
-def _get_relmap(rem):
-    relmap = getattr(rem, 'relmap', None)
-    if relmap is not None:
-        return relmap
-    lsb_release_out = StringIO()
-    rem.run(args=['lsb_release', '-ics'], stdout=lsb_release_out)
-    release = lsb_release_out.getvalue().replace('\n', ' ').rstrip()
-    if release in RELEASE_MAP:
-        rem.relmap = RELEASE_MAP[release]
-        return rem.relmap
-    else:
-        lsb_release_out = StringIO()
-        rem.run(args=['lsb_release', '-irs'], stdout=lsb_release_out)
-        release = lsb_release_out.getvalue().replace('\n', ' ').rstrip()
-        if release in RELEASE_MAP:
-            rem.relmap = RELEASE_MAP[release]
-            return rem.relmap
-    raise RuntimeError('Can\'t get release info for {}'.format(rem))
-
-
-def _sqlite_package_name(rem):
-    name = 'sqlite3' if _get_relmap(rem)['flavor'] == 'deb' else None
-    return name
-
-
-def _http_service_name(rem):
-    name = 'httpd' if _get_relmap(rem)['flavor'] == 'rpm' else 'apache2'
-    return name
-
-
-def _install_repo(remote, pkgdir, username, password):
-    # installing repo is assumed to be idempotent
-
-    relmap = _get_relmap(remote)
-    log.info('Installing repo on %s', remote)
-    if relmap['flavor'] == 'deb':
-        contents = 'deb https://{username}:{password}@download.inktank.com/' \
-                   '{pkgdir}/deb {codename} main'
-        contents = contents.format(username=username, password=password,
-                                   pkgdir=pkgdir, codename=relmap['version'],)
-        teuthology.sudo_write_file(remote,
-                                   '/etc/apt/sources.list.d/inktank.list',
-                                   contents)
-        remote.run(args=['sudo',
-                         'apt-get',
-                         'install',
-                         'apt-transport-https',
-                         '-y'])
-        result = remote.run(args=['sudo', 'apt-get', 'update', '-y'],
-                            stdout=StringIO())
-        return result
-
-    elif relmap['flavor'] == 'rpm':
-        baseurl = 'https://{username}:{password}@download.inktank.com/' \
-                  '{pkgdir}/rpm/{release}{version}'
-        contents = textwrap.dedent('''
-            [inktank]
-            name=Inktank Storage, Inc.
-            baseurl={baseurl}
-            gpgcheck=1
-            enabled=1
-            '''.format(baseurl=baseurl))
-        contents = contents.format(username=username,
-                                   password=password,
-                                   pkgdir=pkgdir,
-                                   release=relmap['release'],
-                                   version=relmap['version'])
-        teuthology.sudo_write_file(remote,
-                                   '/etc/yum.repos.d/inktank.repo',
-                                   contents)
-        return remote.run(args=['sudo', 'yum', 'makecache'])
-
-    else:
-        return False
-
-
-def _remove_repo(remote):
-    log.info('Removing repo on %s', remote)
-    flavor = _get_relmap(remote)['flavor']
-    if flavor == 'deb':
-        teuthology.delete_file(remote, '/etc/apt/sources.list.d/inktank.list',
-                               sudo=True, force=True)
-        result = remote.run(args=['sudo', 'apt-get', 'update', '-y'],
-                            stdout=StringIO())
-        return result
-
-    elif flavor == 'rpm':
-        teuthology.delete_file(remote, '/etc/yum.repos.d/inktank.repo',
-                               sudo=True, force=True)
-        return remote.run(args=['sudo', 'yum', 'makecache'])
-
-    else:
-        return False
-
-
-def _install_repokey(remote):
-    # installing keys is assumed to be idempotent
-    log.info('Installing repo key on %s', remote)
-    flavor = _get_relmap(remote)['flavor']
-    if flavor == 'deb':
-        return remote.run(args=['wget',
-                                '-q',
-                                '-O-',
-                                'http://download.inktank.com/keys/release.asc',
-                                run.Raw('|'),
-                                'sudo',
-                                'apt-key',
-                                'add',
-                                '-'])
-    elif flavor == 'rpm':
-        args = ['sudo', 'rpm', '--import',
-                'http://download.inktank.com/keys/release.asc']
-        return remote.run(args=args)
-    else:
-        return False
-
-
-def _install_package(package, remote):
-    """
-    package: name
-    remote: Remote() to install on
-    release: deb only, 'precise' or 'wheezy'
-    pkgdir: may or may not include a branch name, so, say, either
-            packages or packages-staging/master
-    """
-    log.info('Installing package %s on %s', package, remote)
-    flavor = _get_relmap(remote)['flavor']
-    if flavor == 'deb':
-        pkgcmd = ['DEBIAN_FRONTEND=noninteractive',
-                  'sudo',
-                  '-E',
-                  'apt-get',
-                  '-y',
-                  'install',
-                  '{package}'.format(package=package)]
-    elif flavor == 'rpm':
-        pkgcmd = ['sudo',
-                  'yum',
-                  '-y',
-                  'install',
-                  '{package}'.format(package=package)]
-    else:
-        log.error('_install_package: bad flavor ' + flavor + '\n')
-        return False
-    return remote.run(args=pkgcmd)
-
-
-def _remove_package(package, remote):
-    """
-    remove package from remote
-    """
-    flavor = _get_relmap(remote)['flavor']
-    if flavor == 'deb':
-        pkgcmd = ['DEBIAN_FRONTEND=noninteractive',
-                  'sudo',
-                  '-E',
-                  'apt-get',
-                  '-y',
-                  'purge',
-                  '{package}'.format(package=package)]
-    elif flavor == 'rpm':
-        pkgcmd = ['sudo',
-                  'yum',
-                  '-y',
-                  'erase',
-                  '{package}'.format(package=package)]
-    else:
-        log.error('_remove_package: bad flavor ' + flavor + '\n')
-        return False
-    return remote.run(args=pkgcmd)
 
 """
 Tasks
@@ -292,7 +113,7 @@ def agent(ctx, config):
     try:
         for rem in remotes:
             log.info('Installing calamari-agent on %s', rem)
-            _install_package('calamari-agent', rem)
+            pkg.install_package('calamari-agent', rem)
             server_role = config.get('server')
             if not server_role:
                 raise RuntimeError('must supply \'server\' config key')
@@ -307,7 +128,7 @@ def agent(ctx, config):
         yield
     finally:
             for rem in remotes:
-                _remove_package('calamari-agent', rem)
+                pkg.remove_package('calamari-agent', rem)
 
 
 @contextlib.contextmanager
@@ -347,13 +168,15 @@ def reposetup(ctx, config):
     try:
         for rem in remotes:
             log.info(rem)
-            _install_repokey(rem)
-            _install_repo(rem, pkgdir, username, password)
+            keypath = 'http://download.inktank.com/keys/release.asc'
+            pkg.install_repokey(rem, keypath)
+            pkg.install_repo(rem, 'download.inktank.com', pkgdir,
+                             username, password)
         yield
 
     finally:
         for rem in remotes:
-            _remove_repo(rem)
+            pkg.remove_repo(rem)
 
 
 @contextlib.contextmanager
@@ -377,12 +200,12 @@ def restapi(ctx, config):
     try:
         for rem in remotes:
             log.info(rem)
-            _install_package('calamari-restapi', rem)
+            pkg.install_package('calamari-restapi', rem)
         yield
 
     finally:
         for rem in remotes:
-            _remove_package('calamari-restapi', rem)
+            pkg.remove_package('calamari-restapi', rem)
 
 
 @contextlib.contextmanager
@@ -415,12 +238,12 @@ def server(ctx, config):
     try:
         # sqlite3 command is required; on some platforms it's already
         # there and not removable (required for, say yum)
-        sqlite_package = _sqlite_package_name(remote)
-        if sqlite_package and not _install_package(sqlite_package, remote):
+        sqlite_package = pkg.get_package_name('sqlite', remote)
+        if sqlite_package and not pkg.install_package(sqlite_package, remote):
             raise RuntimeError('{} install failed'.format(sqlite_package))
 
-        if not _install_package('calamari-server', remote) or \
-           not _install_package('calamari-clients', remote) or \
+        if not pkg.install_package('calamari-server', remote) or \
+           not pkg.install_package('calamari-clients', remote) or \
            not _disable_default_nginx(remote) or \
            not _setup_calamari_cluster(remote, restapi_remote):
             raise RuntimeError('Server installation failure')
@@ -428,10 +251,10 @@ def server(ctx, config):
         log.info('client/server setup complete')
         yield
     finally:
-        _remove_package('calamari-server', remote)
-        _remove_package('calamari-clients', remote)
+        pkg.remove_package('calamari-server', remote)
+        pkg.remove_package('calamari-clients', remote)
         if sqlite_package:
-            _remove_package(sqlite_package, remote)
+            pkg.remove_package(sqlite_package, remote)
 
 
 def test(ctx, config):
