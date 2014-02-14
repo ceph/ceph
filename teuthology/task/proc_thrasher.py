@@ -1,3 +1,6 @@
+"""
+Process thrasher
+"""
 import logging
 import gevent
 import random
@@ -25,18 +28,32 @@ class ProcThrasher:
         self.run_time = self.config.get("run_time", 1000) # seconds
 
     def log(self, msg):
+        """
+        Local log wrapper
+        """
         self.logger.info(msg)
 
     def start(self):
+        """
+        Start thrasher.  This also makes sure that the greenlet interface
+        is used.
+        """
         if self.greenlet is not None:
             return
         self.greenlet = gevent.Greenlet(self.loop)
         self.greenlet.start()
 
     def join(self):
+        """
+        Local join
+        """
         self.greenlet.join()
 
     def loop(self):
+        """
+        Thrashing loop -- loops at time intervals.  Inside that loop, the
+        code loops through the individual procs, creating new procs.
+        """
         time_started = time.time()
         procs = []
         self.log("Starting")

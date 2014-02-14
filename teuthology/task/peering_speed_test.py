@@ -1,3 +1,6 @@
+"""
+Remotely run peering tests.
+"""
 import logging
 import time
 from teuthology import misc as teuthology
@@ -19,6 +22,9 @@ ARGS = [
     ]
 
 def setup(ctx, config):
+    """
+    Setup peering test on remotes.
+    """
     first_mon = teuthology.get_first_mon(ctx, config)
     (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
     ctx.manager = ceph_manager.CephManager(
@@ -38,6 +44,9 @@ def setup(ctx, config):
     log.info("done populating pool")
 
 def do_run(ctx, config):
+    """
+    Perform the test.
+    """
     start = time.time()
     # mark in osd
     ctx.manager.mark_in_osd(0)
