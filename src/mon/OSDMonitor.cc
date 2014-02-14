@@ -3182,7 +3182,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     if (val == "true" || (interr.empty() && n == 1)) {
       p.flags |= pg_pool_t::FLAG_HASHPSPOOL;
     } else if (val == "false" || (interr.empty() && n == 0)) {
-      p.flags ^= pg_pool_t::FLAG_HASHPSPOOL;
+      p.flags &= ~pg_pool_t::FLAG_HASHPSPOOL;
     } else {
       ss << "expecting value 'true', 'false', '0', or '1'";
       return -EINVAL;
