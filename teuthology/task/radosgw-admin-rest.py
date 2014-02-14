@@ -1,9 +1,12 @@
-# The test cases in this file have been annotated for inventory.
-# To extract the inventory (in csv format) use the command:
-#
-#   grep '^ *# TESTCASE' | sed 's/^ *# TESTCASE //'
-#
+"""
+Run a series of rgw admin commands through the rest interface.
 
+The test cases in this file have been annotated for inventory.
+To extract the inventory (in csv format) use the command:
+
+   grep '^ *# TESTCASE' | sed 's/^ *# TESTCASE //'
+
+"""
 from cStringIO import StringIO
 import logging
 import json
@@ -21,6 +24,10 @@ from teuthology import misc as teuthology
 log = logging.getLogger(__name__)
 
 def successful_ops(out):
+    """
+    Extract successful operations
+    :param out: list  
+    """
     summary = out['summary']
     if len(summary) == 0:
         return 0
@@ -28,6 +35,13 @@ def successful_ops(out):
     return entry['total']['successful_ops']
 
 def rgwadmin(ctx, client, cmd):
+    """
+    Perform rgw admin command
+   
+    :param client: client
+    :param cmd: command to execute.
+    :return: command exit status, json result.
+    """
     log.info('radosgw-admin: %s' % cmd)
     testdir = teuthology.get_testdir(ctx)
     pre = [
@@ -60,6 +74,9 @@ def rgwadmin(ctx, client, cmd):
 
 
 def rgwadmin_rest(connection, cmd, params=None, headers=None, raw=False):
+    """
+    perform a rest command
+    """
     log.info('radosgw-admin-rest: %s %s' % (cmd, params))
     put_cmds = ['create', 'link', 'add']
     post_cmds = ['unlink', 'modify']
@@ -71,6 +88,10 @@ def rgwadmin_rest(connection, cmd, params=None, headers=None, raw=False):
     zone_sub_resources = ['pool', 'log', 'garbage']
 
     def get_cmd_method_and_handler(cmd):
+        """
+        Get the rest command and handler from information in cmd and
+        from the imported requests object.
+        """
         if cmd[1] in put_cmds:
             return 'PUT', requests.put
         elif cmd[1] in delete_cmds:
@@ -81,6 +102,9 @@ def rgwadmin_rest(connection, cmd, params=None, headers=None, raw=False):
             return 'GET', requests.get
 
     def get_resource(cmd):
+        """
+        Get the name of the resource from information in cmd.
+        """
         if cmd[0] == 'bucket' or cmd[0] in bucket_sub_resources:
             if cmd[0] == 'bucket':
                 return 'bucket', ''
@@ -99,11 +123,12 @@ def rgwadmin_rest(connection, cmd, params=None, headers=None, raw=False):
             else:
                 return 'zone', cmd[0]
 
-    """
-        Adapted from the build_request() method of boto.connection
-    """
     def build_admin_request(conn, method, resource = '', headers=None, data='',
             query_args=None, params=None):
+        """
+        Build an administative request adapted from the build_request()
+        method of boto.connection
+        """
 
         path = conn.calling_format.build_path_base('admin', resource)
         auth_path = conn.calling_format.build_auth_path('admin', resource)
