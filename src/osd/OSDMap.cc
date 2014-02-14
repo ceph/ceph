@@ -2143,6 +2143,8 @@ void OSDMap::print(ostream& out) const
       out << (is_up(i) ? " up  ":" down");
       out << (is_in(i) ? " in ":" out");
       out << " weight " << get_weightf(i);
+      if (get_primary_affinity(i) != CEPH_OSD_DEFAULT_PRIMARY_AFFINITY)
+	out << " primary_affinity " << get_primary_affinityf(i);
       const osd_info_t& info(get_info(i));
       out << " " << info;
       out << " " << get_addr(i) << " " << get_cluster_addr(i) << " " << get_hb_back_addr(i)
