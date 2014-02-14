@@ -1,4 +1,7 @@
 #!/usr/bin/python
+"""
+Ssh-key key handlers and associated routines
+"""
 import contextlib
 import logging
 import paramiko
@@ -12,14 +15,19 @@ from ..orchestra import run
 log = logging.getLogger(__name__)
 ssh_keys_user = 'ssh-keys-user'
 
-# generatees a public and private key
 def generate_keys():
+    """
+    Generatees a public and private key
+    """
     key = paramiko.RSAKey.generate(2048)
     privateString = StringIO()
     key.write_private_key(privateString)
     return key.get_base64(), privateString.getvalue()
 
 def particular_ssh_key_test(line_to_test, ssh_key):
+    """
+    Check the validity of the ssh_key
+    """
     match = re.match('[\w-]+ {key} \S+@\S+'.format(key=re.escape(ssh_key)), line_to_test)
 
     if match:
@@ -28,6 +36,9 @@ def particular_ssh_key_test(line_to_test, ssh_key):
         return True
 
 def ssh_keys_user_line_test(line_to_test, username ):
+    """
+    Check the validity of the username
+    """
     match = re.match('[\w-]+ \S+ {username}@\S+'.format(username=username), line_to_test)
 
     if match:
@@ -35,8 +46,10 @@ def ssh_keys_user_line_test(line_to_test, username ):
     else:
         return True
 
-# deletes the keys and removes ~/.ssh/authorized_keys2 entries we added
 def cleanup_added_key(ctx):
+    """
+    Delete the keys and removes ~/.ssh/authorized_keys2 entries we added
+    """
     log.info('cleaning up keys added for testing')
 
     for remote in ctx.cluster.remotes:
@@ -44,14 +57,16 @@ def cleanup_added_key(ctx):
         if "" == username or "" == hostname:
             continue
         else:
-          log.info('  cleaning up keys for user {user} on {host}'.format(host=hostname, user=username))
-
-          misc.delete_file(remote, '/home/{user}/.ssh/id_rsa'.format(user=username))
-          misc.delete_file(remote, '/home/{user}/.ssh/id_rsa.pub'.format(user=username))
-          misc.delete_file(remote, '/home/{user}/.ssh/authorized_keys2'.format(user=username))
+            log.info('  cleaning up keys for user {user} on {host}'.format(host=hostname, user=username))
+            misc.delete_file(remote, '/home/{user}/.ssh/id_rsa'.format(user=username))
+            misc.delete_file(remote, '/home/{user}/.ssh/id_rsa.pub'.format(user=username))
+            misc.delete_file(remote, '/home/{user}/.ssh/authorized_keys2'.format(user=username))
 
 @contextlib.contextmanager
 def tweak_ssh_config(ctx, config):   
+    """ 
+    Turn off StrictHostKeyChecking
+    """
     run.wait(
         ctx.cluster.run(
             args=[
@@ -85,7 +100,9 @@ def tweak_ssh_config(ctx, config):
 
 @contextlib.contextmanager
 def push_keys_to_host(ctx, config, public_key, private_key):   
-
+    """
+    Push keys to all hosts
+    """
     log.info('generated public key {pub_key}'.format(pub_key=public_key))
 
     # add an entry for all hosts in ctx to auth_keys_data
@@ -94,8 +111,8 @@ def push_keys_to_host(ctx, config, public_key, private_key):
     for inner_host in ctx.cluster.remotes.iterkeys():
         inner_username, inner_hostname = str(inner_host).split('@')
         # create a 'user@hostname' string using our fake hostname
-        fake_hostname = '{user}@{host}'.format(user=ssh_keys_user,host=str(inner_hostname))
-        auth_keys_data += '\nssh-rsa {pub_key} {user_host}\n'.format(pub_key=public_key,user_host=fake_hostname)
+        fake_hostname = '{user}@{host}'.format(user=ssh_keys_user, host=str(inner_hostname))
+        auth_keys_data += '\nssh-rsa {pub_key} {user_host}\n'.format(pub_key=public_key, user_host=fake_hostname)
 
     # for each host in ctx, add keys for all other hosts
     for remote in ctx.cluster.remotes:
@@ -114,7 +131,7 @@ def push_keys_to_host(ctx, config, public_key, private_key):
 
             # then a private key
             pub_key_file = '/home/{user}/.ssh/id_rsa.pub'.format(user=username)
-            pub_key_data = 'ssh-rsa {pub_key} {user_host}'.format(pub_key=public_key,user_host=str(remote))
+            pub_key_data = 'ssh-rsa {pub_key} {user_host}'.format(pub_key=public_key, user_host=str(remote))
             misc.delete_file(remote, pub_key_file, force=True)
             misc.create_file(remote, pub_key_file, pub_key_data)
 
