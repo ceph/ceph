@@ -1,3 +1,8 @@
+"""
+Internal tasks are tasks that are started from the teuthology infrastructure.
+Note that there is no corresponding task defined for this module.  All of
+the calls are made from other modules, most notably teuthology/run.py
+"""
 from cStringIO import StringIO
 import contextlib
 import gevent
@@ -18,6 +23,9 @@ log = logging.getLogger(__name__)
 
 @contextlib.contextmanager
 def base(ctx, config):
+    """
+    Create the test directory that we will be using on the remote system
+    """
     log.info('Creating test directory...')
     testdir = teuthology.get_testdir(ctx)
     run.wait(
@@ -49,6 +57,11 @@ def base(ctx, config):
 
 @contextlib.contextmanager
 def lock_machines(ctx, config):
+    """
+    Lock machines.  Called when the teuthology run finds and locks
+    new machines.  This is not called if the one has teuthology-locked
+    machines and placed those keys in the Targets section of a yaml file.
+    """
     log.info('Locking machines...')
     assert isinstance(config[0], int), 'config[0] must be an integer'
     machine_type = config[1]
@@ -139,12 +152,18 @@ def lock_machines(ctx, config):
                 lock.unlock_one(ctx, machine, ctx.owner)
 
 def save_config(ctx, config):
+    """
+    Store the config in a yaml file
+    """
     log.info('Saving configuration')
     if ctx.archive is not None:
         with file(os.path.join(ctx.archive, 'config.yaml'), 'w') as f:
             yaml.safe_dump(ctx.config, f, default_flow_style=False)
 
 def check_lock(ctx, config):
+    """
+    Check lock status of remote machines.
+    """
     if ctx.config.get('check-locks') == False:
         log.info('Lock checking disabled.')
         return
@@ -166,6 +185,9 @@ def check_lock(ctx, config):
 
 @contextlib.contextmanager
 def timer(ctx, config):
+    """
+    Start the timer used by teuthology
+    """
     log.info('Starting timer...')
     start = time.time()
     try:
@@ -176,6 +198,9 @@ def timer(ctx, config):
         ctx.summary['duration'] = duration
 
 def connect(ctx, config):
+    """
+    Open a connection to a remote host.
+    """
     log.info('Opening connections...')
     from ..orchestra import connection, remote
     from ..orchestra import cluster
@@ -211,6 +236,9 @@ def connect(ctx, config):
             ctx.cluster.add(rem, rem.name)
 
 def check_ceph_data(ctx, config):
+    """
+    Check for old /var/lib/ceph directories and detect staleness. 
+    """
     log.info('Checking for old /var/lib/ceph...')
     processes = ctx.cluster.run(
         args=[
@@ -230,6 +258,9 @@ def check_ceph_data(ctx, config):
         raise RuntimeError('Stale /var/lib/ceph detected, aborting.')
 
 def check_conflict(ctx, config):
+    """
+    Note directory use conflicts and stale directories.
+    """
     log.info('Checking for old test directory...')
     testdir = teuthology.get_testdir(ctx)
     processes = ctx.cluster.run(
@@ -251,6 +282,9 @@ def check_conflict(ctx, config):
 
 @contextlib.contextmanager
 def archive(ctx, config):
+    """
+    Handle the creation and deletion of the archive directory.
+    """
     log.info('Creating archive directory...')
     archive_dir = teuthology.get_archive_dir(ctx)
     run.wait(
@@ -295,6 +329,9 @@ def archive(ctx, config):
 
 @contextlib.contextmanager
 def sudo(ctx, config):
+    """
+    Enable use of sudo
+    """
     log.info('Configuring sudo...')
     sudoers_file = '/etc/sudoers'
     backup_ext = '.orig.teuthology'
@@ -323,6 +360,9 @@ def sudo(ctx, config):
 
 @contextlib.contextmanager
 def coredump(ctx, config):
+    """
+    Stash a coredump of this system if an error occurs.
+    """
     log.info('Enabling coredump saving...')
     archive_dir = teuthology.get_archive_dir(ctx)
     run.wait(
@@ -375,6 +415,9 @@ def coredump(ctx, config):
 
 @contextlib.contextmanager
 def syslog(ctx, config):
+    """
+    start syslog / stop syslog on exit.
+    """
     if ctx.archive is None:
         # disable this whole feature if we're not going to archive the data anyway
         yield
@@ -394,10 +437,10 @@ def syslog(ctx, config):
         )
 
     CONF = '/etc/rsyslog.d/80-cephtest.conf'
-    conf_fp = StringIO("""
+    conf_fp = StringIO('''
 kern.* -{adir}/syslog/kern.log;RSYSLOG_FileFormat
 *.*;kern.none -{adir}/syslog/misc.log;RSYSLOG_FileFormat
-""".format(adir=archive_dir))
+'''.format(adir=archive_dir))
     try:
         for rem in ctx.cluster.remotes.iterkeys():
             teuthology.sudo_write_file(
@@ -521,15 +564,18 @@ def vm_setup(ctx, config):
                         check_status=False,)
                 if r.exitstatus != 0:
                     p1 = subprocess.Popen(['cat', editinfo], stdout=subprocess.PIPE)
-                    p2 = subprocess.Popen(['ssh','-t','-t',str(remote), 'sudo', 'sh'],stdin=p1.stdout, stdout=subprocess.PIPE)
-                    _,err = p2.communicate()
+                    p2 = subprocess.Popen(['ssh', '-t', '-t', str(remote), 'sudo', 'sh'], stdin=p1.stdout, stdout=subprocess.PIPE)
+                    _, err = p2.communicate()
                     if err:
-                        log.info("Edit of /etc/sudoers failed: %s",err)
+                        log.info("Edit of /etc/sudoers failed: %s", err)
                     p.spawn(_handle_vm_init, remote)
 
 def _handle_vm_init(remote):
+    """
+    Initialize a remote vm by downloading and running ceph_qa_chef.
+    """
     log.info('Running ceph_qa_chef on %s', remote)
-    remote.run(args=['wget','-q','-O-',
+    remote.run(args=['wget', '-q', '-O-',
             'http://ceph.com/git/?p=ceph-qa-chef.git;a=blob_plain;f=solo/solo-from-scratch;hb=HEAD',
             run.Raw('|'),
             'sh',
