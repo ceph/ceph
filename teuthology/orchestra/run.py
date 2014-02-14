@@ -99,29 +99,31 @@ def copy_and_close(src, fdst):
         shutil.copyfileobj(src, fdst)
     fdst.close()
 
-def copy_file_to(f, dst, host):
-    if hasattr(dst, 'log'):
-        # looks like a Logger to me; not using isinstance to make life
-        # easier for unit tests
-        handler = copy_to_log
-        return handler(f, dst, host)
-    else:
-        handler = shutil.copyfileobj
-        return handler(f, dst)
+
+def copy_file_to(f, destinations, host):
+    for dst in destinations:
+        if hasattr(dst, 'log'):
+            # looks like a Logger to me; not using isinstance to make life
+            # easier for unit tests
+            copy_to_log(f, dst, host)
+        else:
+            shutil.copyfileobj(f, dst)
 
 
 class CommandFailedError(Exception):
-    def __init__(self, command, exitstatus, node=None):
+    def __init__(self, command, exitstatus, node, stderr):
         self.command = command
         self.exitstatus = exitstatus
         self.node = node
+        self.stderr = stderr
 
     def __str__(self):
-        return "Command failed on {node} with status {status}: {command!r}".format(
+        return "Command failed on {node} with status {status}: {command!r}\nstderr output: {stderr}".format(
             node=self.node,
             status=self.exitstatus,
             command=self.command,
-            )
+            stderr=self.stderr
+        )
 
 
 class CommandCrashedError(Exception):
@@ -189,12 +191,14 @@ class KludgeFile(object):
         self._wrapped.close()
         self._wrapped.channel.shutdown_write()
 
+
 def run(
     client, args,
     stdin=None, stdout=None, stderr=None,
     logger=None,
     check_status=True,
     wait=True,
+    name=None
     ):
     """
     Run a command remotely.
@@ -208,6 +212,7 @@ def run(
     :param logger: If logging, write stdout/stderr to "out" and "err" children of this logger. Defaults to logger named after this module.
     :param check_status: Whether to raise CalledProcessError on non-zero exit status, and . Defaults to True. All signals and connection loss are made to look like SIGHUP.
     :param wait: Whether to wait for process to exit. If False, returned ``r.exitstatus`` s a `gevent.event.AsyncResult`, and the actual status is available via ``.get()``.
+    :param name: Human readable name (probably hostname) of the destination host
     """
     r = execute(client, args)
 
@@ -222,12 +227,19 @@ def run(
 
     if logger is None:
         logger = log
-    (host,port) = client.get_transport().getpeername()
+    (host, port) = client.get_transport().getpeername()
+
+    if name is None:
+        name = host
+
+    err_buffer = StringIO()
+
     g_err = None
     if stderr is not PIPE:
-        if stderr is None:
-            stderr = logger.getChild('err')
-        g_err = gevent.spawn(copy_file_to, r.stderr, stderr, host)
+        err_outputs = [err_buffer, logger.getChild('err')]
+        if stderr is not None:
+            err_outputs.append(stderr)
+        g_err = gevent.spawn(copy_file_to, r.stderr, err_outputs, name)
         r.stderr = stderr
     else:
         assert not wait, "Using PIPE for stderr without wait=False would deadlock."
@@ -236,7 +248,7 @@ def run(
     if stdout is not PIPE:
         if stdout is None:
             stdout = logger.getChild('out')
-        g_out = gevent.spawn(copy_file_to, r.stdout, stdout, host)
+        g_out = gevent.spawn(copy_file_to, r.stdout, [stdout], name)
         r.stdout = stdout
     else:
         assert not wait, "Using PIPE for stdout without wait=False would deadlock."
@@ -263,8 +275,7 @@ def run(
                 # signal; sadly SSH does not tell us which signal
                 raise CommandCrashedError(command=r.command)
             if status != 0:
-                (host,port) = client.get_transport().getpeername()
-                raise CommandFailedError(command=r.command, exitstatus=status, node=host)
+                raise CommandFailedError(command=r.command, exitstatus=status, node=name, stderr=err_buffer.getvalue())
         return status
 
     if wait:
