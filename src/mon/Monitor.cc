@@ -1500,8 +1500,17 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features)
 		<< " won leader election with quorum " << quorum << "\n";
 
   paxos->leader_init();
-  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
-    (*p)->election_finished();
+  // NOTE: tell monmap monitor first.  This is important for the
+  // bootstrap case to ensure that the very first paxos proposal
+  // codifies the monmap.  Otherwise any manner of chaos can ensue
+  // when monitors are call elections or participating in a paxos
+  // round without agreeing on who the participants are.
+  monmon()->election_finished();
+  for (vector<PaxosService*>::iterator p = paxos_service.begin();
+       p != paxos_service.end(); ++p) {
+    if (*p != monmon())
+      (*p)->election_finished();
+  }
   health_monitor->start(epoch);
 
   finish_election();
