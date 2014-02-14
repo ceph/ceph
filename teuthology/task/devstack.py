@@ -29,6 +29,7 @@ def task(ctx, config):
     if not isinstance(config, dict):
         raise TypeError("config must be a dict")
     with nested(lambda: install(ctx=ctx, config=config),
+                lambda: smoke(ctx=ctx, config=config),
                 lambda: exercise(ctx=ctx, config=config),
                 ):
         yield
@@ -320,3 +321,50 @@ def create_devstack_archive(ctx, devstack_node):
         test_dir=test_dir)
     devstack_node.run(args="mkdir -p " + devstack_archive_dir)
     return devstack_archive_dir
+
+
+@contextlib.contextmanager
+def smoke(ctx, config):
+    log.info("Running a basic smoketest...")
+
+    devstack_node = ctx.cluster.only(is_devstack_node).remotes.keys()[0]
+    an_osd_node = ctx.cluster.only(is_osd_node).remotes.keys()[0]
+
+    try:
+        create_volume(devstack_node, an_osd_node, 'smoke0', 1)
+        yield
+    finally:
+        pass
+
+
+def create_volume(devstack_node, ceph_node, vol_name, size):
+    """
+    :param size: The size of the volume, in GB
+    """
+    size = str(size)
+    log.info("Creating a {size}GB volume named {name}...".format(
+        name=vol_name,
+        size=size))
+    cmd = "cinder create --display-name {name} {size}".format(name=vol_name,
+                                                              size=size)
+    out_stream = StringIO()
+    devstack_node.run(args=cmd, stdout=out_stream, wait=True)
+    out_stream.seek(0)
+    vol_info = parse_os_table(out_stream.read())
+
+    out_stream = StringIO()
+    ceph_node.run(args="rbd --id cinder ls -l volumes", stdout=out_stream,
+                  wait=True)
+    out_stream.seek(0)
+    assert vol_info['id'] in out_stream.read()
+    assert vol_info['size'] == size
+    return vol_info['id']
+
+
+def parse_os_table(table_str):
+    out_dict = dict()
+    for line in table_str.split('\n'):
+        if line.startswith('|'):
+            items = line.split()
+            out_dict[items[1]] = items[3]
+    return out_dict
