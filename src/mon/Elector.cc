@@ -143,7 +143,10 @@ void Elector::expire()
     victory();
   } else {
     // whoever i deferred to didn't declare victory quickly enough.
-    start();
+    if (mon->has_ever_joined)
+      start();
+    else
+      mon->bootstrap();
   }
 }
 
