@@ -234,6 +234,7 @@ bin_DEBUGPROGRAMS += ceph_bench_log
 
 check_SCRIPTS += \
 	unittest_bufferlist.sh \
+	test/ceph-disk.sh \
 	test/encoding/check-generated.sh
 
 # target to build but not run the unit tests
