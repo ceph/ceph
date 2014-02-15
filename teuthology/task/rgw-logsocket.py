@@ -1,3 +1,6 @@
+"""
+rgw s3tests logging wrappers
+"""
 from cStringIO import StringIO
 from configobj import ConfigObj
 import contextlib
@@ -12,28 +15,42 @@ log = logging.getLogger(__name__)
 
 @contextlib.contextmanager
 def download(ctx, config):
-    return s3tests.do_download(ctx, config)
+    """
+    Run s3tests download function
+    """
+    return s3tests.download(ctx, config)
 
 def _config_user(s3tests_conf, section, user):
+    """
+    Run s3tests user config function
+    """
     return s3tests._config_user(s3tests_conf, section, user)
 
 @contextlib.contextmanager
 def create_users(ctx, config):
-    return s3tests.do_create_users(ctx, config)
+    """
+    Run s3tests user create function
+    """
+    return s3tests.create_users(ctx, config)
 
 @contextlib.contextmanager
 def configure(ctx, config):
-    return s3tests.do_configure(ctx, config)
+    """
+    Run s3tests user configure function
+    """
+    return s3tests.configure(ctx, config)
 
 @contextlib.contextmanager
 def run_tests(ctx, config):
+    """
+    Run remote netcat tests
+    """
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.iteritems():
         client_config['extra_args'] = [
-                                        's3tests.functional.test_s3:test_bucket_list_return_data',
-                                      ]
-
+            's3tests.functional.test_s3:test_bucket_list_return_data',
+        ]
 #        args = [
 #                'S3TEST_CONF={tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
 #                '{tdir}/s3-tests/virtualenv/bin/nosetests'.format(tdir=testdir),
@@ -49,7 +66,7 @@ def run_tests(ctx, config):
 #            args=args,
 #            )
 
-    s3tests.do_run_tests(ctx, config)
+    s3tests.run_tests(ctx, config)
 
     netcat_out = StringIO()
 

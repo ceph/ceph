@@ -1,3 +1,6 @@
+"""
+rgw routines
+"""
 import argparse
 import contextlib
 import json
@@ -16,6 +19,9 @@ log = logging.getLogger(__name__)
 
 @contextlib.contextmanager
 def create_dirs(ctx, config):
+    """
+    Remotely create apache directories.  Delete when finished.
+    """
     log.info('Creating apache directories...')
     testdir = teuthology.get_testdir(ctx)
     for client in config.iterkeys():
@@ -63,6 +69,9 @@ def create_dirs(ctx, config):
 
 @contextlib.contextmanager
 def ship_config(ctx, config, role_endpoints):
+    """
+    Ship apache config and rgw.fgci to all clients.  Clean up on termination
+    """
     assert isinstance(config, dict)
     assert isinstance(role_endpoints, dict)
     testdir = teuthology.get_testdir(ctx)
@@ -133,6 +142,9 @@ exec radosgw -f -n {client} -k /etc/ceph/ceph.{client}.keyring --rgw-socket-path
 
 @contextlib.contextmanager
 def start_rgw(ctx, config):
+    """
+    Start rgw on remote sites.
+    """
     log.info('Starting rgw...')
     testdir = teuthology.get_testdir(ctx)
     for client in config.iterkeys():
@@ -144,7 +156,7 @@ def start_rgw(ctx, config):
         log.info("rgw %s config is %s", client, client_config)
         id_ = client.split('.', 1)[1]
         log.info('client {client} is id {id}'.format(client=client, id=id_))
-        run_cmd=[
+        run_cmd = [
             'sudo',
             'adjust-ulimits',
             'ceph-coverage',
@@ -152,7 +164,7 @@ def start_rgw(ctx, config):
             'daemon-helper',
             'term',
             ]
-        run_cmd_tail=[
+        run_cmd_tail = [
             'radosgw',
             '-n', client,
             '-k', '/etc/ceph/ceph.{client}.keyring'.format(client=client),
@@ -212,6 +224,9 @@ def start_rgw(ctx, config):
 
 @contextlib.contextmanager
 def start_apache(ctx, config):
+    """
+    Start apache on remote sites.
+    """
     log.info('Starting apache...')
     testdir = teuthology.get_testdir(ctx)
     apaches = {}
@@ -249,6 +264,10 @@ def start_apache(ctx, config):
         run.wait(apaches.itervalues())
 
 def extract_user_info(client_config):
+    """
+    Extract user info from the client config specified.  Returns a dict
+    that includes system key information.
+    """
     # test if there isn't a system user or if there isn't a name for that user, return None
     if 'system user' not in client_config or 'name' not in client_config['system user']:
         return None
@@ -262,7 +281,12 @@ def extract_user_info(client_config):
     return user_info
 
 def extract_zone_info(ctx, client, client_config):
-
+    """
+    Get zone information.
+    :param client: dictionary of client information
+    :param client_config: dictionary of client configuration information
+    :returns: zone extracted from client and client_config information
+    """
     ceph_config = ctx.ceph.conf.get('global', {})
     ceph_config.update(ctx.ceph.conf.get('client', {}))
     ceph_config.update(ctx.ceph.conf.get(client, {}))
@@ -276,7 +300,7 @@ def extract_zone_info(ctx, client, client_config):
     for key in ['rgw control pool', 'rgw gc pool', 'rgw log pool', 'rgw intent log pool',
                 'rgw usage log pool', 'rgw user keys pool', 'rgw user email pool',
                 'rgw user swift pool', 'rgw user uid pool', 'rgw domain root']:
-        new_key = key.split(' ',1)[1]
+        new_key = key.split(' ', 1)[1]
         new_key = new_key.replace(' ', '_')
 
         if key in ceph_config:
@@ -303,6 +327,15 @@ def extract_zone_info(ctx, client, client_config):
     return region, zone, zone_info
 
 def extract_region_info(region, region_info):
+    """
+    Extract region information from the region_info parameter, using get
+    to set default values.
+
+    :param region: name of the region
+    :param region_info: region information (in dictionary form).
+    :returns: dictionary of region information set from region_info, using
+            default values for missing fields.
+    """
     assert isinstance(region_info['zones'], list) and region_info['zones'], \
            'zones must be a non-empty list'
     return dict(
@@ -317,6 +350,9 @@ def extract_region_info(region, region_info):
         )
 
 def assign_ports(ctx, config):
+    """
+    Assign port numberst starting with port 7280.
+    """
     port = 7280
     role_endpoints = {}
     for remote, roles_for_host in ctx.cluster.remotes.iteritems():
@@ -328,6 +364,13 @@ def assign_ports(ctx, config):
     return role_endpoints
 
 def fill_in_endpoints(region_info, role_zones, role_endpoints):
+    """
+    Iterate through the list of role_endpoints, filling in zone information
+
+    :param region_info: region data
+    :param role_zones: region and zone information.
+    :param role_endpoints: endpoints being used
+    """
     for role, (host, port) in role_endpoints.iteritems():
         region, zone, zone_info, _ = role_zones[role]
         host, port = role_endpoints[role]
@@ -337,7 +380,7 @@ def fill_in_endpoints(region_info, role_zones, role_endpoints):
         # If not, throw a reasonable error
         if region not in region_info:
             raise Exception('Region: {region} was specified but no corresponding' \
-                            ' entry was round under \'regions\''.format(region=region))
+                            ' entry was found under \'regions\''.format(region=region))
 
         region_conf = region_info[region]
         region_conf.setdefault('endpoints', [])
@@ -351,7 +394,7 @@ def fill_in_endpoints(region_info, role_zones, role_endpoints):
         # Pull the log meta and log data settings out of zone_info, if they exist, then pop them
         # as they don't actually belong in the zone info
         for key in ['rgw log meta', 'rgw log data']:
-            new_key = key.split(' ',1)[1]
+            new_key = key.split(' ', 1)[1]
             new_key = new_key.replace(' ', '_')
 
             if key in zone_info:
@@ -366,6 +409,10 @@ def fill_in_endpoints(region_info, role_zones, role_endpoints):
 
 @contextlib.contextmanager
 def configure_users(ctx, config):
+    """
+    Create users by remotely running rgwadmin commands using extracted
+    user information.
+    """
     log.info('Configuring users...')
 
     # extract the user info and append it to the payload tuple for the given client
@@ -395,6 +442,9 @@ def configure_users(ctx, config):
 
 @contextlib.contextmanager
 def configure_regions_and_zones(ctx, config, regions, role_endpoints):
+    """
+    Configure regions and zones from rados and rgw.
+    """
     if not regions:
         log.debug('In rgw.configure_regions_and_zones() and regions is None. Bailing')
         yield
