@@ -35,7 +35,8 @@ if MYDIR.endswith('src') and \
     if 'LD_LIBRARY_PATH' in os.environ:
         if MYLIBPATH not in os.environ['LD_LIBRARY_PATH']:
             os.environ['LD_LIBRARY_PATH'] += ':' + MYLIBPATH
-            os.environ['PATH'] += ':' + MYDIR
+            if os.environ.has_key('PATH'):
+                os.environ['PATH'] += ':' + MYDIR
             print >> sys.stderr, DEVMODEMSG
             os.execvp('python', ['python'] + sys.argv)
     else:
