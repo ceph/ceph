@@ -92,6 +92,18 @@ class Thrasher:
         self.ceph_manager.mark_in_osd(osd)
         self.log("Added osd %s"%(str(osd),))
 
+    def primary_affinity(self, osd=None):
+        if osd is None:
+            osd = random.choice(self.in_osds)
+        if random.random() >= .5:
+            pa = random.random()
+        elif random.random() >= .5:
+            pa = 1
+        else:
+            pa = 0
+        self.log('Setting osd %s primary_affinity to %f' % (str(osd), pa))
+        self.ceph_manager.raw_cluster_cmd('osd', 'primary-affinity', str(osd), str(pa))
+
     def all_up(self):
         while len(self.dead_osds) > 0:
             self.log("reviving osd")
@@ -254,6 +266,7 @@ class Thrasher:
             actions.append((self.in_osd, 1.7,))
         if len(self.dead_osds) > mindead:
             actions.append((self.revive_osd, 1.0,))
+        actions.append((self.primary_affinity, 1.0,))
         actions.append((self.grow_pool, self.config.get('chance_pgnum_grow', 0),))
         actions.append((self.fix_pgp_num, self.config.get('chance_pgpnum_fix', 0),))
         actions.append((self.test_pool_min_size, chance_test_min_size,))
@@ -547,7 +560,8 @@ class CephManager:
         live_osds = [int(x.id_) for x in
                      filter(lambda x: x.running(), self.ctx.daemons.iter_daemons_of_role('osd'))]
         return { 'in' : in_osds, 'out' : out_osds, 'up' : up_osds,
-                 'down' : down_osds, 'dead' : dead_osds, 'live' : live_osds, 'raw' : osd_lines }
+                 'down' : down_osds, 'dead' : dead_osds, 'live' : live_osds,
+                 'raw' : osd_lines}
 
     def get_num_pgs(self):
         status = self.raw_cluster_status()
