@@ -16,6 +16,7 @@
 
 #include "common/Thread.h"
 #include "common/admin_socket.h"
+#include "common/admin_socket_client.h"
 #include "common/config.h"
 #include "common/cmdparse.h"
 #include "common/dout.h"
@@ -184,15 +185,21 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
 	   sizeof(struct sockaddr_un)) != 0) {
     int err = errno;
     if (err == EADDRINUSE) {
-      // The old UNIX domain socket must still be there.
-      // Let's unlink it and try again.
-      TEMP_FAILURE_RETRY(unlink(sock_path.c_str()));
-      if (bind(sock_fd, (struct sockaddr*)&address,
-	       sizeof(struct sockaddr_un)) == 0) {
-	err = 0;
-      }
-      else {
-	err = errno;
+      AdminSocketClient client(sock_path);
+      bool ok;
+      client.ping(&ok);
+      if (ok) {
+	ldout(m_cct, 20) << "socket " << sock_path << " is in use" << dendl;
+	err = EEXIST;
+      } else {
+	ldout(m_cct, 20) << "unlink stale file " << sock_path << dendl;
+	TEMP_FAILURE_RETRY(unlink(sock_path.c_str()));
+	if (bind(sock_fd, (struct sockaddr*)&address,
+		 sizeof(struct sockaddr_un)) == 0) {
+	  err = 0;
+	} else {
+	  err = errno;
+	}
       }
     }
     if (err != 0) {
