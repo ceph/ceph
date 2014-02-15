@@ -10,6 +10,7 @@ usr/bin/ceph-crush-location
 usr/bin/rados
 usr/bin/rbd
 usr/bin/ceph-post-file
+usr/bin/ceph-brag
 usr/share/man/man8/ceph-authtool.8
 usr/share/man/man8/ceph-conf.8
 usr/share/man/man8/ceph-dencoder.8
