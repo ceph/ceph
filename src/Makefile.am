@@ -8,6 +8,7 @@ DIST_SUBDIRS += gtest ocf libs3 java
 
 include arch/Makefile.am
 include auth/Makefile.am
+include brag/Makefile.am
 include crush/Makefile.am
 include mon/Makefile.am
 include mds/Makefile.am
