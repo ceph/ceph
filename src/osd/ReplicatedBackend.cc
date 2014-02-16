@@ -29,10 +29,11 @@ static ostream& _prefix(std::ostream *_dout, ReplicatedBackend *pgb) {
 }
 
 ReplicatedBackend::ReplicatedBackend(
-  PGBackend::Listener *pg, coll_t coll, OSDService *osd) :
-  PGBackend(pg), temp_created(false),
-  temp_coll(coll_t::make_temp_coll(pg->get_info().pgid)),
-  coll(coll), osd(osd), cct(osd->cct) {}
+  PGBackend::Listener *pg, coll_t coll, ObjectStore *store,
+  CephContext *cct) :
+  PGBackend(pg, store,
+	    coll, coll_t::make_temp_coll(pg->get_info().pgid)),
+  cct(cct) {}
 
 void ReplicatedBackend::run_recovery_op(
   PGBackend::RecoveryHandle *_h,
@@ -204,9 +205,9 @@ void ReplicatedBackend::_on_change(ObjectStore::Transaction *t)
 void ReplicatedBackend::on_flushed()
 {
   if (have_temp_coll() &&
-      !osd->store->collection_empty(get_temp_coll())) {
+      !store->collection_empty(get_temp_coll())) {
     vector<hobject_t> objects;
-    osd->store->collection_list(get_temp_coll(), objects);
+    store->collection_list(get_temp_coll(), objects);
     derr << __func__ << ": found objects in the temp collection: "
 	 << objects << ", crashing now"
 	 << dendl;
@@ -220,7 +221,7 @@ int ReplicatedBackend::objects_read_sync(
   uint64_t len,
   bufferlist *bl)
 {
-  return osd->store->read(coll, hoid, off, len, *bl);
+  return store->read(coll, hoid, off, len, *bl);
 }
 
 struct AsyncReadCallback : public GenContext<ThreadPool::TPHandle&> {
@@ -247,17 +248,17 @@ void ReplicatedBackend::objects_read_async(
 	   to_read.begin();
        i != to_read.end() && r >= 0;
        ++i) {
-    int _r = osd->store->read(coll, hoid, i->first.first,
-			      i->first.second, *(i->second.first));
+    int _r = store->read(coll, hoid, i->first.first,
+			 i->first.second, *(i->second.first));
     if (i->second.second) {
-      osd->gen_wq.queue(
+      get_parent()->schedule_work(
 	get_parent()->bless_gencontext(
 	  new AsyncReadCallback(_r, i->second.second)));
     }
     if (_r < 0)
       r = _r;
   }
-  osd->gen_wq.queue(
+  get_parent()->schedule_work(
     get_parent()->bless_gencontext(
       new AsyncReadCallback(r, on_complete)));
 }
@@ -552,7 +553,7 @@ void ReplicatedBackend::op_applied(
   if (op->op)
     op->op->mark_event("op_applied");
 
-  op->waiting_for_applied.erase(osd->whoami);
+  op->waiting_for_applied.erase(get_parent()->whoami());
   parent->op_applied(op->v);
 
   if (op->waiting_for_applied.empty()) {
@@ -572,7 +573,7 @@ void ReplicatedBackend::op_commit(
   if (op->op)
     op->op->mark_event("op_commit");
 
-  op->waiting_for_commit.erase(osd->whoami);
+  op->waiting_for_commit.erase(get_parent()->whoami());
 
   if (op->waiting_for_commit.empty()) {
     op->on_commit->complete(0);
