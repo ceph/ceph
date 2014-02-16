@@ -673,7 +673,7 @@ protected:
   Messenger   *cluster_messenger;
   Messenger   *client_messenger;
   Messenger   *objecter_messenger;
-  MonClient   *monc;
+  MonClient   *monc; // check the "monc helpers" list before accessing directly
   PerfCounters      *logger;
   PerfCounters      *recoverystate_perf;
   ObjectStore *store;
@@ -825,6 +825,23 @@ public:
   };
 
 private:
+  /**
+   *  @defgroup monc helpers
+   *
+   *  Right now we only have the one
+   */
+
+  /**
+   * Ask the Monitors for a sequence of OSDMaps.
+   *
+   * @param epoch The epoch to start with when replying
+   * @param force_request True if this request forces a new subscription to
+   * the monitors; false if an outstanding request that encompasses it is
+   * sufficient.
+   */
+  void osdmap_subscribe(version_t epoch, bool force_request);
+  /** @} monc helpers */
+
   // -- heartbeat --
   /// information about a heartbeat peer
   struct HeartbeatInfo {
