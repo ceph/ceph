@@ -2829,22 +2829,25 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_READ:
       ++ctx->num_read;
       {
+	uint64_t trim = (uint64_t)-1;
 	__u32 seq = oi.truncate_seq;
 	// are we beyond truncate_size?
 	if ( (seq < op.extent.truncate_seq) &&
 	     (op.extent.offset + op.extent.length > op.extent.truncate_size) ) {
 
 	  // truncated portion of the read
-	  unsigned from = MAX(op.extent.offset, op.extent.truncate_size);  // also end of data
-	  unsigned to = op.extent.offset + op.extent.length;
-	  unsigned trim = to-from;
+	  uint64_t from = MAX(op.extent.offset, op.extent.truncate_size);  // also end of data
+	  uint64_t to = op.extent.offset + op.extent.length;
+	  trim = to - from;
 
 	  op.extent.length = op.extent.length - trim;
 	}
 
 	// read into a buffer
 	bufferlist bl;
-	if (pool.info.ec_pool()) {
+	if (trim != (uint64_t)-1 && op.extent.length == 0) {
+	  // read size was trimmed to zero
+	} else if (pool.info.ec_pool()) {
 	  ctx->pending_async_reads.push_back(
 	    make_pair(
 	      make_pair(op.extent.offset, op.extent.length),
