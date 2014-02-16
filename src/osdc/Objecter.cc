@@ -1374,15 +1374,20 @@ int Objecter::op_cancel(tid_t tid, int r)
   return 0;
 }
 
-bool Objecter::is_pg_changed(vector<int>& o, vector<int>& n, bool any_change)
+bool Objecter::is_pg_changed(
+  int oldprimary,
+  vector<int>& oldacting,
+  int newprimary,
+  vector<int>& newacting,
+  bool any_change)
 {
-  if (o.empty() && n.empty())
+  if (oldacting.empty() && newacting.empty())
     return false;    // both still empty
-  if (o.empty() ^ n.empty())
+  if (oldacting.empty() ^ newacting.empty())
     return true;     // was empty, now not, or vice versa
-  if (o[0] != n[0])
+  if (oldprimary != newprimary)
     return true;     // primary changed
-  if (any_change && o != n)
+  if (any_change && oldacting != newacting)
     return true;
   return false;      // same primary (tho replicas may have changed)
 }
@@ -1466,9 +1471,12 @@ int Objecter::recalc_op_target(Op *op)
     need_resend = true;
   }
 
-  if (op->pgid != pgid || is_pg_changed(op->acting, acting, op->used_replica)) {
+  if (op->pgid != pgid ||
+      is_pg_changed(
+	op->primary, op->acting, primary, acting, op->used_replica)) {
     op->pgid = pgid;
     op->acting = acting;
+    op->primary = primary;
     ldout(cct, 10) << "recalc_op_target tid " << op->tid
 	     << " pgid " << pgid << " acting " << acting << dendl;
 
@@ -1542,9 +1550,12 @@ bool Objecter::recalc_linger_op_target(LingerOp *linger_op)
   }
   osdmap->pg_to_acting_osds(pgid, &acting, &primary);
 
-  if (pgid != linger_op->pgid || is_pg_changed(linger_op->acting, acting, true)) {
+  if (pgid != linger_op->pgid ||
+      is_pg_changed(
+        linger_op->primary, linger_op->acting, primary, acting, true)) {
     linger_op->pgid = pgid;
     linger_op->acting = acting;
+    linger_op->primary = primary;
     ldout(cct, 10) << "recalc_linger_op_target tid " << linger_op->linger_id
 	     << " pgid " << pgid << " acting " << acting << dendl;
     
