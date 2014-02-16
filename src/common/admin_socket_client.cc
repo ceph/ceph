@@ -127,6 +127,14 @@ AdminSocketClient(const std::string &path)
 {
 }
 
+std::string AdminSocketClient::ping(bool *ok)
+{
+  std::string version;
+  std::string result = do_request("{\"prefix\":\"0\"}", &version);
+  *ok = result == "" && version.length() == 1;
+  return result;
+}
+
 std::string AdminSocketClient::do_request(std::string request, std::string *result)
 {
   int socket_fd = 0, res;
