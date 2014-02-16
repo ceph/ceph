@@ -21,14 +21,24 @@ int main(int argc, char **argv)
   OSDMap osdmap;
   osdmap.decode(bl);
 
+  //osdmap.set_primary_affinity(0, 0x8000);
+  //osdmap.set_primary_affinity(3, 0);
+
   int n = osdmap.get_max_osd();
   int count[n];
+  int first_count[n];
+  int primary_count[n];
   for (int i=0; i<n; i++) {
     osdmap.set_state(i, osdmap.get_state(i) | CEPH_OSD_UP);
-    //if (i<8)
+    //if (i<12)
       osdmap.set_weight(i, CEPH_OSD_IN);
     count[i] = 0;
+    first_count[i] = 0;
+    primary_count[i] = 0;
   }
+
+  //pg_pool_t *p = (pg_pool_t *)osdmap.get_pg_pool(0);
+  //p->type = pg_pool_t::TYPE_ERASURE;
 
   int size[4];
   for (int i=0; i<4; i++)
@@ -48,7 +58,7 @@ int main(int argc, char **argv)
       pg_t pgid = pg_t(l.ol_pgid);
       //pgid.u.ps = f * 4 + b;
       int primary;
-      osdmap.pg_to_osds(pgid, &osds, &primary);
+      osdmap.pg_to_acting_osds(pgid, &osds, &primary);
       size[osds.size()]++;
 #if 0
       if (0) {
@@ -66,13 +76,20 @@ int main(int argc, char **argv)
 	//cout << " rep " << i << " on " << osds[i] << std::endl;
 	count[osds[i]]++;
       }
+      if (osds.size())
+	first_count[osds[0]]++;
+      if (primary >= 0)
+	primary_count[primary]++;
     }
   }
   }
 
   uint64_t avg = 0;
   for (int i=0; i<n; i++) {
-    cout << "osd." << i << "\t" << count[i] << std::endl;
+    cout << "osd." << i << "\t" << count[i]
+	 << "\t" << first_count[i]
+	 << "\t" << primary_count[i]
+	 << std::endl;
     avg += count[i];
   }
   avg /= n;
