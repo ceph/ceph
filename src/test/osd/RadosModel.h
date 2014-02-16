@@ -1029,10 +1029,12 @@ public:
       map<string, bufferlist>::iterator iter = xattrs.find("_header");
       bufferlist headerbl;
       if (iter == xattrs.end()) {
-	cerr << num << ": Error: did not find header attr, has_contents: "
-	     << old_value.has_contents()
-	     << std::endl;
-	assert(!old_value.has_contents());
+	if (old_value.has_contents()) {
+	  cerr << num << ": Error: did not find header attr, has_contents: "
+	       << old_value.has_contents()
+	       << std::endl;
+	  assert(!old_value.has_contents());
+	}
       } else {
 	headerbl = iter->second;
 	xattrs.erase(iter);
