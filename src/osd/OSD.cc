@@ -5290,6 +5290,10 @@ void OSD::handle_osd_map(MOSDMap *m)
     if (is_booting()) {
       dout(1) << "state: booting -> active" << dendl;
       state = STATE_ACTIVE;
+
+      // set incarnation so that osd_reqid_t's we generate for our
+      // objecter requests are unique across restarts.
+      service.objecter->set_client_incarnation(osdmap->get_epoch());
     }
   }
 
