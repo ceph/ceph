@@ -10880,16 +10880,19 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
     bv.push_back(p->second.attrs[OI_ATTR]);
     object_info_t oi(bv);
 
-    if (oi.size != p->second.size) {
+    if (pgbackend->be_get_ondisk_size(oi.size) != p->second.size) {
       osd->clog.error() << mode << " " << info.pgid << " " << soid
 			<< " on disk size (" << p->second.size
-			<< ") does not match object info size (" << oi.size << ")";
+			<< ") does not match object info size ("
+			<< oi.size << ") ajusted for ondisk to ("
+			<< pgbackend->be_get_ondisk_size(oi.size)
+			<< ")";
       ++scrubber.shallow_errors;
     }
 
     dout(20) << mode << "  " << soid << " " << oi << dendl;
 
-    stat.num_bytes += p->second.size;
+    stat.num_bytes += oi.size;
 
     if (oi.is_dirty())
       ++stat.num_objects_dirty;
@@ -10926,7 +10929,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 	assert(soid.snap == *curclone);
       }
 
-      assert(p->second.size == snapset.clone_size[*curclone]);
+      assert(oi.size == snapset.clone_size[*curclone]);
 
       // verify overlap?
       // ...
