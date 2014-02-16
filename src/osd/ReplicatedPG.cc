@@ -6771,18 +6771,24 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
   // clone
   dout(20) << "find_object_context  " << soid << " snaps " << obc->obs.oi.snaps
 	   << dendl;
-  snapid_t first = obc->obs.oi.snaps[obc->obs.oi.snaps.size()-1];
-  snapid_t last = obc->obs.oi.snaps[0];
-  if (first <= oid.snap) {
-    dout(20) << "find_object_context  " << soid << " [" << first << "," << last
-	     << "] contains " << oid.snap << " -- HIT " << obc->obs << dendl;
-    *pobc = obc;
-    return 0;
+  ostringstream desc;
+  if (obc->obs.oi.snaps.size() == 0) {
+    desc << "EMPTY";
   } else {
-    dout(20) << "find_object_context  " << soid << " [" << first << "," << last
-	     << "] does not contain " << oid.snap << " -- DNE" << dendl;
-    return -ENOENT;
+    snapid_t first = obc->obs.oi.snaps[obc->obs.oi.snaps.size()-1];
+    snapid_t last = obc->obs.oi.snaps[0];
+    desc << "[" << first << "," << last << "]";
+    if (first <= oid.snap) {
+      dout(20) << "find_object_context  " << soid << " snaps=" << desc.str()
+	     << " contains " << oid.snap << " -- HIT " << obc->obs << dendl;
+      *pobc = obc;
+      return 0;
+    }
   }
+
+  dout(20) << "find_object_context  " << soid << " snaps=" << desc.str()
+	   << " does not contain " << oid.snap << " -- DNE" << dendl;
+  return -ENOENT;
 }
 
 void ReplicatedPG::object_context_destructor_callback(ObjectContext *obc)
