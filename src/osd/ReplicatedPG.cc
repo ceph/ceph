@@ -8761,7 +8761,20 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
 
   if (requeue) {
     requeue_ops(rq);
-    assert(waiting_for_ondisk.empty());
+    if (!waiting_for_ondisk.empty()) {
+      for (map<eversion_t, list<OpRequestRef> >::iterator i =
+	     waiting_for_ondisk.begin();
+	   i != waiting_for_ondisk.end();
+	   ++i) {
+	for (list<OpRequestRef>::iterator j = i->second.begin();
+	     j != i->second.end();
+	     ++j) {
+	  derr << __func__ << ": op " << *((*j)->get_req()) << " waiting on "
+	       << i->first << dendl;
+	}
+      }
+      assert(waiting_for_ondisk.empty());
+    }
   }
 
   waiting_for_ondisk.clear();
