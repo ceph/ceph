@@ -361,6 +361,10 @@ ceph osd reweight 0 0.9
 expect_false ceph osd reweight 0 -1
 ceph osd reweight 0 1
 
+ceph osd primary-affinity osd.0 .9
+expect_false ceph osd primary-affinity osd.0 -2
+ceph osd primary-affinity osd.0 1
+
 for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset; do
 	ceph osd pool get data $s
 done

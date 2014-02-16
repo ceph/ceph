@@ -3967,6 +3967,33 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
 						get_last_committed() + 1));
       return true;
     }
+  } else if (prefix == "osd primary-affinity") {
+    int64_t id;
+    if (!cmd_getval(g_ceph_context, cmdmap, "id", id)) {
+      ss << "invalid osd id";
+      err = -EINVAL;
+      goto reply;
+    }
+    double w;
+    cmd_getval(g_ceph_context, cmdmap, "weight", w);
+    long ww = (int)((double)CEPH_OSD_MAX_PRIMARY_AFFINITY*w);
+    if (ww < 0L) {
+      ss << "weight must be >= 0";
+      err = -EINVAL;
+      goto reply;
+    }
+    if (!g_conf->mon_osd_allow_primary_affinity) {
+      ss << "you must enable 'mon osd allow primary affinity = true' on the mons before you can adjust primary-affinity.  note that older clients will no longer be able to communicate with the cluster.";
+      err = -EPERM;
+      goto reply;
+    }
+    if (osdmap.exists(id)) {
+      pending_inc.new_primary_affinity[id] = ww;
+      ss << "set osd." << id << " primary-affinity to " << w << " (" << ios::hex << ww << ios::dec << ")";
+      getline(ss, rs);
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+      return true;
+    }
   } else if (prefix == "osd reweight") {
     int64_t id;
     cmd_getval(g_ceph_context, cmdmap, "id", id);
@@ -3974,7 +4001,7 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     cmd_getval(g_ceph_context, cmdmap, "weight", w);
     long ww = (int)((double)CEPH_OSD_IN*w);
     if (ww < 0L) {
-      ss << "weight must be > 0";
+      ss << "weight must be >= 0";
       err = -EINVAL;
       goto reply;
     }

@@ -478,6 +478,11 @@ COMMAND("osd reweight " \
 	"name=id,type=CephInt,range=0 " \
 	"type=CephFloat,name=weight,range=0.0|1.0", \
 	"reweight osd to 0.0 < <weight> < 1.0", "osd", "rw", "cli,rest")
+COMMAND("osd primary-affinity " \
+	"name=id,type=CephOsdName " \
+	"type=CephFloat,name=weight,range=0.0|1.0", \
+	"adjust osd primary-affinity from 0.0 <= <weight> <= 1.0", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd lost " \
 	"name=id,type=CephInt,range=0 " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
