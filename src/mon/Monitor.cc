@@ -1474,6 +1474,25 @@ void Monitor::handle_probe_reply(MMonProbe *m)
     }
 
     unsigned need = monmap->size() / 2 + 1;
+
+    /* If we have never joined the cluster and find that mon_initial_members
+     * is set, then we expect to have all specified monitors before we form
+     * a quorum.  If however we have been started prior to an already formed
+     * quorum has been established, we wouldn't be in this branch of the
+     * condition, as we would have hit the above 'if (m->quorum.size())' and
+     * asked to join the quorum.
+     */
+    if (!has_ever_joined) {
+      list<string> initial_members;
+      get_str_list(g_conf->mon_initial_members, initial_members);
+
+      if (!initial_members.empty()) {
+        dout(10) << " we haven't ever joined and got initial_members set"
+                << " -- we need all monitors to form quorum" << dendl;
+        need = monmap->size();
+      }
+    }
+
     dout(10) << " outside_quorum now " << outside_quorum << ", need " << need << dendl;
     if (outside_quorum.size() >= need) {
       if (outside_quorum.count(name)) {
