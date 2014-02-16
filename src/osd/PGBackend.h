@@ -148,6 +148,26 @@
      virtual void update_stats(
        const pg_stat_t &stat) = 0;
 
+     virtual void schedule_work(
+       GenContext<ThreadPool::TPHandle&> *c) = 0;
+
+     virtual int whoami() const = 0;
+
+     virtual void send_message_osd_cluster(
+       int peer, Message *m, epoch_t from_epoch) = 0;
+     virtual void send_message_osd_cluster(
+       Message *m, Connection *con) = 0;
+     virtual void send_message_osd_cluster(
+       Message *m, const ConnectionRef& con) = 0;
+     virtual ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch) = 0;
+     virtual entity_name_t get_cluster_msgr_name() = 0;
+
+     virtual PerfCounters *get_logger() = 0;
+
+     virtual tid_t get_tid() = 0;
+
+     virtual LogClientTemp clog_error() = 0;
+
      virtual ~Listener() {}
    };
    Listener *parent;
@@ -498,5 +518,29 @@
 			    const vector<int> &acting,
 			    ostream &errorstream) { assert(0); }
  };
+
+struct PG_SendMessageOnConn: public Context {
+  PGBackend::Listener *pg;
+  Message *reply;
+  ConnectionRef conn;
+  PG_SendMessageOnConn(
+    PGBackend::Listener *pg,
+    Message *reply,
+    ConnectionRef conn) : pg(pg), reply(reply), conn(conn) {}
+  void finish(int) {
+    pg->send_message_osd_cluster(reply, conn.get());
+  }
+};
+
+struct PG_QueueAsync : public Context {
+  PGBackend::Listener *pg;
+  GenContext<ThreadPool::TPHandle&> *c;
+  PG_QueueAsync(
+    PGBackend::Listener *pg,
+    GenContext<ThreadPool::TPHandle&> *c) : pg(pg), c(c) {}
+  void finish(int) {
+    pg->schedule_work(c);
+  }
+};
 
 #endif
