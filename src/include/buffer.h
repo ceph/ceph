@@ -448,6 +448,7 @@ public:
 
   public:
     hash() : crc(0) { }
+    hash(uint32_t init) : crc(init) { }
 
     void update(buffer::list& bl) {
       crc = bl.crc32c(crc);
