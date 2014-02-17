@@ -88,6 +88,15 @@ public:
     Mutex::Locker l(lock);
     _add(key, value);
   }
+
+  void clear(K key) {
+    Mutex::Locker l(lock);
+    typename map<K, typename list<pair<K, V> >::iterator>::iterator i = contents.find(key);
+    if (i == contents.end())
+      return;
+    lru.erase(i->second);
+    contents.erase(i);
+  }
 };
 
 #endif
