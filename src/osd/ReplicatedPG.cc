@@ -10459,6 +10459,8 @@ void ReplicatedPG::agent_work(int start_max)
 	   << ", evict " << agent_state->get_evict_mode_name()
 	   << ", pos " << agent_state->position
 	   << dendl;
+  assert(is_primary());
+  assert(is_active());
 
   const pg_pool_t *base_pool = get_osdmap()->get_pg_pool(pool.info.tier_of);
   assert(base_pool);
