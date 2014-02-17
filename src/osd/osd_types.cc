@@ -193,40 +193,6 @@ void request_redirect_t::generate_test_instances(list<request_redirect_t*>& o)
   o.push_back(new request_redirect_t(loc));
 }
 
-// -- pow2_hist_t --
-void pow2_hist_t::dump(Formatter *f) const
-{
-  f->open_array_section("histogram");
-  for (vector<int>::const_iterator p = h.begin(); p != h.end(); ++p)
-    f->dump_int("count", *p);
-  f->close_section();
-  f->dump_int("upper_bound", upper_bound());
-}
-
-void pow2_hist_t::encode(bufferlist& bl) const
-{
-  ENCODE_START(1, 1, bl);
-  ::encode(h, bl);
-  ENCODE_FINISH(bl);
-}
-
-void pow2_hist_t::decode(bufferlist::iterator& p)
-{
-  DECODE_START(1, p);
-  ::decode(h, p);
-  DECODE_FINISH(p);
-}
-
-void pow2_hist_t::generate_test_instances(list<pow2_hist_t*>& ls)
-{
-  ls.push_back(new pow2_hist_t);
-  ls.push_back(new pow2_hist_t);
-  ls.back()->h.push_back(1);
-  ls.back()->h.push_back(3);
-  ls.back()->h.push_back(0);
-  ls.back()->h.push_back(2);
-}
-
 void objectstore_perf_stat_t::dump(Formatter *f) const
 {
   f->dump_unsigned("commit_latency_ms", filestore_commit_latency);
@@ -743,6 +709,14 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("read_tier", read_tier);
   f->dump_int("write_tier", write_tier);
   f->dump_string("cache_mode", get_cache_mode_name());
+  f->dump_unsigned("target_max_bytes", target_max_bytes);
+  f->dump_unsigned("target_max_objects", target_max_objects);
+  f->dump_unsigned("cache_target_dirty_ratio_micro",
+		   cache_target_dirty_ratio_micro);
+  f->dump_unsigned("cache_target_full_ratio_micro",
+		   cache_target_full_ratio_micro);
+  f->dump_unsigned("cache_min_flush_age", cache_min_flush_age);
+  f->dump_unsigned("cache_min_evict_age", cache_min_evict_age);
   f->open_object_section("properties");
   for (map<string,string>::const_iterator i = properties.begin();
        i != properties.end();
@@ -774,6 +748,17 @@ void pg_pool_t::calc_pg_masks()
 {
   pg_num_mask = (1 << calc_bits_of(pg_num-1)) - 1;
   pgp_num_mask = (1 << calc_bits_of(pgp_num-1)) - 1;
+}
+
+unsigned pg_pool_t::get_pg_num_divisor(pg_t pgid) const
+{
+  if (pg_num == pg_num_mask + 1)
+    return pg_num;                    // power-of-2 split
+  unsigned mask = pg_num_mask >> 1;
+  if ((pgid.ps() & mask) < (pg_num & mask))
+    return pg_num_mask + 1;           // smaller bin size (already split)
+  else
+    return (pg_num_mask + 1) >> 1;    // bigger bin (not yet split)
 }
 
 /*
@@ -925,6 +910,23 @@ ps_t pg_pool_t::raw_pg_to_pps(pg_t pg) const
   }
 }
 
+uint32_t pg_pool_t::get_random_pg_position(pg_t pg, uint32_t seed) const
+{
+  uint32_t r = crush_hash32_2(CRUSH_HASH_RJENKINS1, seed, 123);
+  if (pg_num == pg_num_mask + 1) {
+    r &= ~pg_num_mask;
+  } else {
+    unsigned smaller_mask = pg_num_mask >> 1;
+    if ((pg.ps() & smaller_mask) < (pg_num & smaller_mask)) {
+      r &= ~pg_num_mask;
+    } else {
+      r &= ~smaller_mask;
+    }
+  }
+  r |= pg.ps();
+  return r;
+}
+
 void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
 {
   if ((features & CEPH_FEATURE_PGPOOL3) == 0) {
@@ -980,7 +982,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   }
 
   __u8 encode_compat = 5;
-  ENCODE_START(12, encode_compat, bl);
+  ENCODE_START(13, encode_compat, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -1014,12 +1016,18 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(hit_set_period, bl);
   ::encode(hit_set_count, bl);
   ::encode(stripe_width, bl);
+  ::encode(target_max_bytes, bl);
+  ::encode(target_max_objects, bl);
+  ::encode(cache_target_dirty_ratio_micro, bl);
+  ::encode(cache_target_full_ratio_micro, bl);
+  ::encode(cache_min_flush_age, bl);
+  ::encode(cache_min_evict_age, bl);
   ENCODE_FINISH_NEW_COMPAT(bl, encode_compat);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(12, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(13, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
@@ -1098,6 +1106,23 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   } else {
     set_stripe_width(0);
   }
+  if (struct_v >= 13) {
+    ::decode(target_max_bytes, bl);
+    ::decode(target_max_objects, bl);
+    ::decode(cache_target_dirty_ratio_micro, bl);
+    ::decode(cache_target_full_ratio_micro, bl);
+    ::decode(cache_min_flush_age, bl);
+    ::decode(cache_min_evict_age, bl);
+  } else {
+    pg_pool_t def;
+    target_max_bytes = def.target_max_bytes;
+    target_max_objects = def.target_max_objects;
+    cache_target_dirty_ratio_micro = def.cache_target_dirty_ratio_micro;
+    cache_target_full_ratio_micro = def.cache_target_full_ratio_micro;
+    cache_min_flush_age = def.cache_min_flush_age;
+    cache_min_evict_age = def.cache_min_evict_age;
+  }
+
   DECODE_FINISH(bl);
   calc_pg_masks();
 }
@@ -1145,6 +1170,12 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.hit_set_period = 3600;
   a.hit_set_count = 8;
   a.set_stripe_width(12345);
+  a.target_max_bytes = 1238132132;
+  a.target_max_objects = 1232132;
+  a.cache_target_dirty_ratio_micro = 187232;
+  a.cache_target_full_ratio_micro = 987222;
+  a.cache_min_flush_age = 231;
+  a.cache_min_evict_age = 2321;
   o.push_back(new pg_pool_t(a));
 }
 
@@ -1177,6 +1208,10 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
     out << " write_tier " << p.write_tier;
   if (p.cache_mode)
     out << " cache_mode " << p.get_cache_mode_name();
+  if (p.target_max_bytes)
+    out << " target_bytes " << p.target_max_bytes;
+  if (p.target_max_objects)
+    out << " target_objects " << p.target_max_objects;
   if (p.hit_set_params.get_type() != HitSet::TYPE_NONE) {
     out << " hit_set " << p.hit_set_params
 	<< " " << p.hit_set_period << "s"

@@ -719,12 +719,12 @@ void ReplicatedBackend::sub_op_modify_reply(OpRequestRef op)
 
     if (m)
       dout(7) << __func__ << ": tid " << ip_op.tid << " op " //<< *m
-	      << " ack_type " << r->ack_type
+	      << " ack_type " << (int)r->ack_type
 	      << " from osd." << fromosd
 	      << dendl;
     else
       dout(7) << __func__ << ": tid " << ip_op.tid << " (no op) "
-	      << " ack_type " << r->ack_type
+	      << " ack_type " << (int)r->ack_type
 	      << " from osd." << fromosd
 	      << dendl;
 

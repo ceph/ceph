@@ -359,6 +359,9 @@ public:
     Mutex::Locker l(pre_publish_lock);
     next_osdmap = map;
   }
+
+  void activate_map();
+
   ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch);
   pair<ConnectionRef,ConnectionRef> get_con_osd_hb(int peer, epoch_t from_epoch);  // (back, front)
   void send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch);
@@ -426,6 +429,104 @@ public:
   void reply_op_error(OpRequestRef op, int err);
   void reply_op_error(OpRequestRef op, int err, eversion_t v, version_t uv);
   void handle_misdirected_op(PG *pg, OpRequestRef op);
+
+
+  // -- agent shared state --
+  Mutex agent_lock;
+  Cond agent_cond;
+  map<uint64_t, set<PGRef> > agent_queue;
+  set<PGRef>::iterator agent_queue_pos;
+  bool agent_valid_iterator;
+  int agent_ops;
+  set<hobject_t> agent_oids;
+  bool agent_active;
+  struct AgentThread : public Thread {
+    OSDService *osd;
+    AgentThread(OSDService *o) : osd(o) {}
+    void *entry() {
+      osd->agent_entry();
+      return NULL;
+    }
+  } agent_thread;
+  bool agent_stop_flag;
+
+  void agent_entry();
+  void agent_stop();
+
+  void _enqueue(PG *pg, uint64_t priority) {
+    if (!agent_queue.empty() &&
+	agent_queue.rbegin()->first < priority)
+      agent_valid_iterator = false;  // inserting higher-priority queue
+    set<PGRef>& nq = agent_queue[priority];
+    if (nq.empty())
+      agent_cond.Signal();
+    nq.insert(pg);
+  }
+
+  void _dequeue(PG *pg, uint64_t old_priority) {
+    set<PGRef>& oq = agent_queue[old_priority];
+    set<PGRef>::iterator p = oq.find(pg);
+    assert(p != oq.end());
+    if (p == agent_queue_pos)
+      ++agent_queue_pos;
+    oq.erase(p);
+    if (oq.empty() && agent_queue.size() > 1) {
+      if (agent_queue.rbegin()->first == old_priority)
+	agent_valid_iterator = false;
+      agent_queue.erase(old_priority);
+    }
+  }
+
+  /// enable agent for a pg
+  void agent_enable_pg(PG *pg, uint64_t priority) {
+    Mutex::Locker l(agent_lock);
+    _enqueue(pg, priority);
+  }
+
+  /// adjust priority for an enagled pg
+  void agent_adjust_pg(PG *pg, uint64_t old_priority, uint64_t new_priority) {
+    Mutex::Locker l(agent_lock);
+    assert(new_priority != old_priority);
+    _enqueue(pg, new_priority);
+    _dequeue(pg, old_priority);
+  }
+
+  /// disable agent for a pg
+  void agent_disable_pg(PG *pg, uint64_t old_priority) {
+    Mutex::Locker l(agent_lock);
+    _dequeue(pg, old_priority);
+  }
+
+  /// note start of an async (flush) op
+  void agent_start_op(const hobject_t& oid) {
+    Mutex::Locker l(agent_lock);
+    ++agent_ops;
+    assert(agent_oids.count(oid) == 0);
+    agent_oids.insert(oid);
+  }
+
+  /// note finish or cancellation of an async (flush) op
+  void agent_finish_op(const hobject_t& oid) {
+    Mutex::Locker l(agent_lock);
+    assert(agent_ops > 0);
+    --agent_ops;
+    assert(agent_oids.count(oid) == 1);
+    agent_oids.erase(oid);
+    agent_cond.Signal();
+  }
+
+  /// check if we are operating on an object
+  bool agent_is_active_oid(const hobject_t& oid) {
+    Mutex::Locker l(agent_lock);
+    return agent_oids.count(oid);
+  }
+
+  /// get count of active agent ops
+  int agent_get_num_ops() {
+    Mutex::Locker l(agent_lock);
+    return agent_ops;
+  }
+
 
   // -- Objecter, for teiring reads/writes from/to other OSDs --
   Mutex objecter_lock;

@@ -10,8 +10,17 @@
  * Copyright 2013 Inktank
  */
 
-#ifndef HISTOGRAM_H_
-#define HISTOGRAM_H_
+#ifndef CEPH_HISTOGRAM_H
+#define CEPH_HISTOGRAM_H
+
+#include <vector>
+#include <list>
+
+#include "include/encoding.h"
+
+namespace ceph {
+  class Formatter;
+}
 
 /**
  * power of 2 histogram
@@ -23,7 +32,7 @@ struct pow2_hist_t { //
    * bin size is 2^index
    * value is count of elements that are <= the current bin but > the previous bin.
    */
-  vector<int32_t> h;
+  std::vector<int32_t> h;
 
 private:
   /// expand to at least another's size
@@ -43,10 +52,51 @@ public:
   void clear() {
     h.clear();
   }
-  void set(int bin, int32_t v) {
+  void set_bin(int bin, int32_t count) {
     _expand_to(bin + 1);
-    h[bin] = v;
+    h[bin] = count;
     _contract();
+  }
+
+  void add(int32_t v) {
+    int bin = calc_bits_of(v);
+    _expand_to(bin + 1);
+    h[bin]++;
+    _contract();
+  }
+
+  static int calc_bits_of(int t) {
+    int b = 0;
+    while (t > 0) {
+      t = t >> 1;
+      b++;
+    }
+    return b;
+  }
+
+  /// get a value's position in the histogram.
+  ///
+  /// positions are represented as values in the range [0..1000000]
+  /// (millionths on the unit interval).
+  ///
+  /// @param v [in] value (non-negative)
+  /// @param lower [out] pointer to lower-bound (0..1000000)
+  /// @param upper [out] pointer to the upper bound (0..1000000)
+  int get_position_micro(int32_t v, uint64_t *lower, uint64_t *upper) {
+    if (v < 0)
+      return -1;
+    unsigned bin = calc_bits_of(v);
+    uint64_t lower_sum = 0, upper_sum = 0, total = 0;
+    for (unsigned i=0; i<h.size(); ++i) {
+      if (i <= bin)
+	upper_sum += h[i];
+      if (i < bin)
+	lower_sum += h[i];
+      total += h[i];
+    }
+    *lower = lower_sum * 1000000 / total;
+    *upper = upper_sum * 1000000 / total;
+    return 0;
   }
 
   void add(const pow2_hist_t& o) {
@@ -66,6 +116,9 @@ public:
     return 1 << h.size();
   }
 
+  /// decay histogram by N bits (default 1, for a halflife)
+  void decay(int bits = 1);
+
   void dump(Formatter *f) const;
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
@@ -73,4 +126,4 @@ public:
 };
 WRITE_CLASS_ENCODER(pow2_hist_t)
 
-#endif /* HISTOGRAM_H_ */
+#endif /* CEPH_HISTOGRAM_H */
