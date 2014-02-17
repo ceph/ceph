@@ -10313,18 +10313,17 @@ void ReplicatedPG::agent_work(int start_max)
     ObjectContextRef obc = get_object_context(*p, false, NULL);
     if (!obc) {
       // we didn't flush; we may miss something here.
-      dout(20) << __func__ << " no obc for " << *p << ", skipping" << dendl;
+      dout(20) << __func__ << " skip (no obc) " << *p << dendl;
       osd->logger->inc(l_osd_agent_skip);
       continue;
     }
     if (!obc->obs.exists) {
-      dout(20) << __func__ << " " << obc->obs.oi.soid << " dne, skipping"
-	       << dendl;
+      dout(20) << __func__ << " skip (dne) " << obc->obs.oi.soid << dendl;
       osd->logger->inc(l_osd_agent_skip);
       continue;
     }
     if (scrubber.write_blocked_by_scrub(obc->obs.oi.soid)) {
-      dout(20) << __func__ << " scrubbing, skipping " << obc->obs.oi << dendl;
+      dout(20) << __func__ << " skip (scrubbing) " << obc->obs.oi << dendl;
       osd->logger->inc(l_osd_agent_skip);
       continue;
     }
