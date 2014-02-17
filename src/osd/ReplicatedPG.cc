@@ -5904,6 +5904,10 @@ int ReplicatedPG::try_flush_mark_clean(FlushOpRef fop)
       kick_object_context_blocked(obc);
     }
     flush_ops.erase(oid);
+    if (fop->blocking)
+      osd->logger->inc(l_osd_tier_flush_fail);
+    else
+      osd->logger->inc(l_osd_tier_try_flush_fail);
     return -EBUSY;
   }
 
@@ -5918,6 +5922,7 @@ int ReplicatedPG::try_flush_mark_clean(FlushOpRef fop)
       return -EINPROGRESS;    // will retry.   this ctx is still alive!
     } else {
       dout(10) << __func__ << " failed write lock, no op; failing" << dendl;
+      osd->logger->inc(l_osd_tier_try_flush_fail);
       cancel_flush(fop, false);
       return -ECANCELED;
     }
@@ -5956,6 +5961,12 @@ int ReplicatedPG::try_flush_mark_clean(FlushOpRef fop)
   simple_repop_submit(repop);
 
   flush_ops.erase(oid);
+
+  if (fop->blocking)
+    osd->logger->inc(l_osd_tier_flush);
+  else
+    osd->logger->inc(l_osd_tier_try_flush);
+
   return -EINPROGRESS;
 }
 
