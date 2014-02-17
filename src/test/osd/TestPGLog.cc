@@ -619,43 +619,6 @@ TEST_F(PGLogTest, merge_old_entry) {
     EXPECT_EQ(oe.soid, divergent_priors[oe.prior_version]);
   }
 
-  // there is no new entry (from the logs) and
-  // the old entry (from the log entry given in argument) is not a CLONE and
-  // the old entry (from the log entry given in argument) is a DELETE and
-  // the old entry prior_version is eversion_t() :
-  //   remove the prior_version of the object from missing, if any and
-  //   return false
-  {
-    clear();
-
-    ObjectStore::Transaction t;
-    pg_log_entry_t oe;
-    oe.mod_desc.mark_unrollbackable();
-    pg_info_t info;
-    list<hobject_t> remove_snap;
-
-    info.log_tail = eversion_t(10,1);
-    oe.soid.hash = 1;
-    oe.op = pg_log_entry_t::DELETE;
-    oe.prior_version = eversion_t();
-
-    missing.add(oe.soid, eversion_t(1,1), eversion_t());
-
-    EXPECT_FALSE(is_dirty());
-    EXPECT_TRUE(remove_snap.empty());
-    EXPECT_TRUE(t.empty());
-    EXPECT_TRUE(missing.is_missing(oe.soid));
-    EXPECT_TRUE(log.empty());
-
-    TestHandler h(remove_snap);
-    EXPECT_FALSE(merge_old_entry(t, oe, info, &h));
-
-    EXPECT_FALSE(is_dirty());
-    EXPECT_TRUE(remove_snap.empty());
-    EXPECT_TRUE(t.empty());
-    EXPECT_FALSE(missing.have_missing());
-    EXPECT_TRUE(log.empty());
-  }
 
   // there is no new entry (from the logs) and
   // the old entry (from the log entry given in argument) is not a CLONE and
