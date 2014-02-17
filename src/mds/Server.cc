@@ -1430,7 +1430,7 @@ void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
       assert(mdr->more()->waiting_on_slave.count(from));
       mdr->more()->waiting_on_slave.erase(from);
       assert(mdr->more()->waiting_on_slave.empty());
-      dispatch_client_request(mdr);
+      mdcache->dispatch_request(mdr);
     }
     break;
     
@@ -1448,7 +1448,7 @@ void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
       assert(mdr->more()->waiting_on_slave.count(from));
       mdr->more()->waiting_on_slave.erase(from);
       assert(mdr->more()->waiting_on_slave.empty());
-      dispatch_client_request(mdr);
+      mdcache->dispatch_request(mdr);
     }
     break;
 
@@ -1611,7 +1611,7 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
   // build list of objects
   list<MDSCacheObject*> objects;
   CInode *auth_pin_freeze = NULL;
-  bool fail = false;
+  bool fail = false, wouldblock = false;
 
   for (vector<MDSCacheObjectInfo>::iterator p = mdr->slave_request->get_authpins().begin();
        p != mdr->slave_request->get_authpins().end();
@@ -1639,6 +1639,12 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
 	break;
       }
       if (!mdr->can_auth_pin(*p)) {
+	if (mdr->slave_request->is_nonblock()) {
+	  dout(10) << " can't auth_pin (freezing?) " << **p << " nonblocking" << dendl;
+	  fail = true;
+	  wouldblock = true;
+	  break;
+	}
 	// wait
 	dout(10) << " waiting for authpinnable on " << **p << dendl;
 	(*p)->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
@@ -1653,12 +1659,15 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
 	} else {
 	  assert(0);
 	}
-	if (dir && dir->is_freezing_tree()) {
-	  while (!dir->is_freezing_tree_root())
-	    dir = dir->get_parent_dir();
-	  mdcache->migrator->export_freeze_inc_num_waiters(dir);
+	if (dir) {
+	  if (dir->is_freezing_dir())
+	    mdcache->fragment_freeze_inc_num_waiters(dir);
+	  if (dir->is_freezing_tree()) {
+	    while (!dir->is_freezing_tree_root())
+	      dir = dir->get_parent_dir();
+	    mdcache->migrator->export_freeze_inc_num_waiters(dir);
+	  }
 	}
-
 	return;
       }
     }
@@ -1707,6 +1716,9 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
   if (auth_pin_freeze)
     auth_pin_freeze->set_object_info(reply->get_authpin_freeze());
 
+  if (wouldblock)
+    reply->mark_error_wouldblock();
+
   mds->send_message_mds(reply, mdr->slave_to_mds);
   
   // clean up this request
@@ -1749,6 +1761,9 @@ void Server::handle_slave_auth_pin_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
       ++p;
     }
   }
+
+  if (ack->is_error_wouldblock())
+    mdr->aborted = true;
   
   // note slave
   mdr->more()->slaves.insert(from);
@@ -1759,7 +1774,7 @@ void Server::handle_slave_auth_pin_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
 
   // go again?
   if (mdr->more()->waiting_on_slave.empty())
-    dispatch_client_request(mdr);
+    mdcache->dispatch_request(mdr);
   else 
     dout(10) << "still waiting on slaves " << mdr->more()->waiting_on_slave << dendl;
 }
@@ -6777,19 +6792,20 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
     mdlog->submit_entry(le, new C_MDS_CommittedSlave(this, mdr));
     mdlog->flush();
   } else {
-    if (srcdn->is_auth() && destdnl->is_primary()) {
-      dout(10) << " reversing inode export of " << *destdnl->get_inode() << dendl;
-      destdnl->get_inode()->abort_export();
-    }
 
     // abort
     //  rollback_bl may be empty if we froze the inode but had to provide an expanded
     // witness list from the master, and they failed before we tried prep again.
     if (mdr->more()->rollback_bl.length()) {
+      if (mdr->more()->is_inode_exporter) {
+	dout(10) << " reversing inode export of " << *destdnl->get_inode() << dendl;
+	destdnl->get_inode()->abort_export();
+      }
       if (mdcache->is_ambiguous_slave_update(mdr->reqid, mdr->slave_to_mds)) {
 	mdcache->remove_ambiguous_slave_update(mdr->reqid, mdr->slave_to_mds);
 	// rollback but preserve the slave request
 	do_rename_rollback(mdr->more()->rollback_bl, mdr->slave_to_mds, mdr, false);
+	mdr->more()->rollback_bl.clear();
       } else
 	do_rename_rollback(mdr->more()->rollback_bl, mdr->slave_to_mds, mdr, true);
     } else {

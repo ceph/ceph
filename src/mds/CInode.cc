@@ -460,13 +460,31 @@ bool CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
   bool all = true;
   list<frag_t> fglist;
   dirfragtree.get_leaves_under(fg, fglist);
-  for (list<frag_t>::iterator p = fglist.begin();
-       p != fglist.end();
-       ++p) 
+  for (list<frag_t>::iterator p = fglist.begin(); p != fglist.end(); ++p)
     if (dirfrags.count(*p))
       ls.push_back(dirfrags[*p]);
     else 
       all = false;
+
+  if (all)
+    return all;
+
+  fragtree_t tmpdft;
+  tmpdft.force_to_leaf(g_ceph_context, fg);
+  for (map<frag_t,CDir*>::iterator p = dirfrags.begin(); p != dirfrags.end(); ++p) {
+    tmpdft.force_to_leaf(g_ceph_context, p->first);
+    if (fg.contains(p->first) && !dirfragtree.is_leaf(p->first))
+      ls.push_back(p->second);
+  }
+
+  all = true;
+  tmpdft.get_leaves_under(fg, fglist);
+  for (list<frag_t>::iterator p = fglist.begin(); p != fglist.end(); ++p)
+    if (!dirfrags.count(*p)) {
+      all = false;
+      break;
+    }
+
   return all;
 }
 
@@ -1231,7 +1249,6 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 	  dout(20) << fg << "           fragstat " << pf->fragstat << dendl;
 	  dout(20) << fg << " accounted_fragstat " << pf->accounted_fragstat << dendl;
 	  ::encode(fg, tmp);
-	  ::encode(dir->mseq, tmp);
 	  ::encode(dir->first, tmp);
 	  ::encode(pf->fragstat, tmp);
 	  ::encode(pf->accounted_fragstat, tmp);
@@ -1267,7 +1284,6 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 	  dout(10) << fg << " " << pf->rstat << dendl;
 	  dout(10) << fg << " " << dir->dirty_old_rstat << dendl;
 	  ::encode(fg, tmp);
-	  ::encode(dir->mseq, tmp);
 	  ::encode(dir->first, tmp);
 	  ::encode(pf->rstat, tmp);
 	  ::encode(pf->accounted_rstat, tmp);
@@ -1384,11 +1400,14 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	dirfragtree.swap(temp);
 	for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	     p != dirfrags.end();
-	     ++p)
+	     ++p) {
 	  if (!dirfragtree.is_leaf(p->first)) {
 	    dout(10) << " forcing open dirfrag " << p->first << " to leaf (racing with split|merge)" << dendl;
 	    dirfragtree.force_to_leaf(g_ceph_context, p->first);
 	  }
+	  if (p->second->is_auth())
+	    p->second->state_clear(CDir::STATE_DIRTYDFT);
+	}
       }
       if (g_conf->mds_debug_frag)
 	verify_dirfrags();
@@ -1426,12 +1445,10 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
       dout(10) << " ...got " << n << " fragstats on " << *this << dendl;
       while (n--) {
 	frag_t fg;
-	ceph_seq_t mseq;
 	snapid_t fgfirst;
 	frag_info_t fragstat;
 	frag_info_t accounted_fragstat;
 	::decode(fg, p);
-	::decode(mseq, p);
 	::decode(fgfirst, p);
 	::decode(fragstat, p);
 	::decode(accounted_fragstat, p);
@@ -1444,12 +1461,6 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	  assert(dir);                // i am auth; i had better have this dir open
 	  dout(10) << fg << " first " << dir->first << " -> " << fgfirst
 		   << " on " << *dir << dendl;
-	  if (dir->fnode.fragstat.version == get_projected_inode()->dirstat.version &&
-	      ceph_seq_cmp(mseq, dir->mseq) < 0) {
-	    dout(10) << " mseq " << mseq << " < " << dir->mseq << ", ignoring" << dendl;
-	    continue;
-	  }
-	  dir->mseq = mseq;
 	  dir->first = fgfirst;
 	  dir->fnode.fragstat = fragstat;
 	  dir->fnode.accounted_fragstat = accounted_fragstat;
@@ -1494,13 +1505,11 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
       ::decode(n, p);
       while (n--) {
 	frag_t fg;
-	ceph_seq_t mseq;
 	snapid_t fgfirst;
 	nest_info_t rstat;
 	nest_info_t accounted_rstat;
 	map<snapid_t,old_rstat_t> dirty_old_rstat;
 	::decode(fg, p);
-	::decode(mseq, p);
 	::decode(fgfirst, p);
 	::decode(rstat, p);
 	::decode(accounted_rstat, p);
@@ -1515,12 +1524,6 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	  assert(dir);                // i am auth; i had better have this dir open
 	  dout(10) << fg << " first " << dir->first << " -> " << fgfirst
 		   << " on " << *dir << dendl;
-	  if (dir->fnode.rstat.version == get_projected_inode()->rstat.version &&
-	      ceph_seq_cmp(mseq, dir->mseq) < 0) {
-	    dout(10) << " mseq " << mseq << " < " << dir->mseq << ", ignoring" << dendl;
-	    continue;
-	  }
-	  dir->mseq = mseq;
 	  dir->first = fgfirst;
 	  dir->fnode.rstat = rstat;
 	  dir->fnode.accounted_rstat = accounted_rstat;
@@ -1646,36 +1649,10 @@ void CInode::start_scatter(ScatterLock *lock)
     case CEPH_LOCK_INEST:
       finish_scatter_update(lock, dir, pi->rstat.version, pf->accounted_rstat.version);
       break;
-    }
-  }
-}
 
-/*
- * set dirfrag_version to inode_version - 1. so that we can use dirfrag version
- * to check if we have gathered scatter state for a given dirfrag.
- */
-void CInode::start_scatter_gather(ScatterLock *lock, int auth)
-{
-  assert(is_auth());
-  inode_t *pi = get_projected_inode();
-
-  for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
-       p != dirfrags.end();
-       ++p) {
-    CDir *dir = p->second;
-
-    if (dir->is_auth())
-      continue;
-    if (auth >= 0 && dir->authority().first != auth)
-      continue;
-
-    switch (lock->get_type()) {
-      case CEPH_LOCK_IFILE:
-	dir->fnode.fragstat.version = pi->dirstat.version - 1;
-	break;
-      case CEPH_LOCK_INEST:
-	dir->fnode.rstat.version = pi->rstat.version - 1;
-	break;
+    case CEPH_LOCK_IDFT:
+      dir->state_clear(CDir::STATE_DIRTYDFT);
+      break;
     }
   }
 }
@@ -2007,6 +1984,30 @@ bool CInode::is_freezing()
   return false;
 }
 
+void CInode::add_dir_waiter(frag_t fg, Context *c)
+{
+  if (waiting_on_dir.empty())
+    get(PIN_DIRWAITER);
+  waiting_on_dir[fg].push_back(c);
+  dout(10) << "add_dir_waiter frag " << fg << " " << c << " on " << *this << dendl;
+}
+
+void CInode::take_dir_waiting(frag_t fg, list<Context*>& ls)
+{
+  if (waiting_on_dir.empty())
+    return;
+
+  map<frag_t, list<Context*> >::iterator p = waiting_on_dir.find(fg);
+  if (p != waiting_on_dir.end()) {
+    dout(10) << "take_dir_waiting frag " << fg << " on " << *this << dendl;
+    ls.splice(ls.end(), p->second);
+    waiting_on_dir.erase(p);
+
+    if (waiting_on_dir.empty())
+      put(PIN_DIRWAITER);
+  }
+}
+
 void CInode::add_waiter(uint64_t tag, Context *c) 
 {
   dout(10) << "add_waiter tag " << std::hex << tag << std::dec << " " << c
@@ -2025,6 +2026,23 @@ void CInode::add_waiter(uint64_t tag, Context *c)
   }
   dout(15) << "taking waiter here" << dendl;
   MDSCacheObject::add_waiter(tag, c);
+}
+
+void CInode::take_waiting(uint64_t mask, list<Context*>& ls)
+{
+  if ((mask & WAIT_DIR) && !waiting_on_dir.empty()) {
+    // take all dentry waiters
+    while (!waiting_on_dir.empty()) {
+      map<frag_t, list<Context*> >::iterator p = waiting_on_dir.begin();
+      dout(10) << "take_waiting dirfrag " << p->first << " on " << *this << dendl;
+      ls.splice(ls.end(), p->second);
+      waiting_on_dir.erase(p);
+    }
+    put(PIN_DIRWAITER);
+  }
+
+  // waiting
+  MDSCacheObject::take_waiting(mask, ls);
 }
 
 bool CInode::freeze_inode(int auth_pin_allowance)
@@ -3140,6 +3158,18 @@ void CInode::_encode_locks_state_for_replica(bufferlist& bl)
   flocklock.encode_state_for_replica(bl);
   policylock.encode_state_for_replica(bl);
 }
+void CInode::_encode_locks_state_for_rejoin(bufferlist& bl, int rep)
+{
+  authlock.encode_state_for_replica(bl);
+  linklock.encode_state_for_replica(bl);
+  dirfragtreelock.encode_state_for_rejoin(bl, rep);
+  filelock.encode_state_for_rejoin(bl, rep);
+  nestlock.encode_state_for_rejoin(bl, rep);
+  xattrlock.encode_state_for_replica(bl);
+  snaplock.encode_state_for_replica(bl);
+  flocklock.encode_state_for_replica(bl);
+  policylock.encode_state_for_replica(bl);
+}
 void CInode::_decode_locks_state(bufferlist::iterator& p, bool is_new)
 {
   authlock.decode_state(p, is_new);
@@ -3152,7 +3182,8 @@ void CInode::_decode_locks_state(bufferlist::iterator& p, bool is_new)
   flocklock.decode_state(p, is_new);
   policylock.decode_state(p, is_new);
 }
-void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waiters)
+void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waiters,
+				  list<SimpleLock*>& eval_locks)
 {
   authlock.decode_state_rejoin(p, waiters);
   linklock.decode_state_rejoin(p, waiters);
@@ -3163,6 +3194,13 @@ void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waite
   snaplock.decode_state_rejoin(p, waiters);
   flocklock.decode_state_rejoin(p, waiters);
   policylock.decode_state_rejoin(p, waiters);
+
+  if (!dirfragtreelock.is_stable() && !dirfragtreelock.is_wrlocked())
+    eval_locks.push_back(&dirfragtreelock);
+  if (!filelock.is_stable() && !filelock.is_wrlocked())
+    eval_locks.push_back(&filelock);
+  if (!nestlock.is_stable() && !nestlock.is_wrlocked())
+    eval_locks.push_back(&nestlock);
 }
 
 
