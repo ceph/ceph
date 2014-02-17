@@ -109,6 +109,7 @@ The ceph-brag server code is a python based web application.
 
 ### How to deploy
 * [Common recipes to deploy](http://pecan.readthedocs.org/en/latest/deployment.html#common-recipes)
+* Modify server/config.py:sqlalchemy['url'] to point the correct database connection
 
 ## URLs
 Following are the REST urls that are implemented with 'url-prefix' being the mount point for the WSGI script
