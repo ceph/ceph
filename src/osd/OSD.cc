@@ -1441,6 +1441,9 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(l_osd_tier_try_flush_fail, "tier_try_flush_fail");
   osd_plb.add_u64_counter(l_osd_tier_evict, "tier_evict");
   osd_plb.add_u64_counter(l_osd_tier_whiteout, "tier_whiteout");
+  osd_plb.add_u64_counter(l_osd_tier_dirty, "tier_dirty");
+  osd_plb.add_u64_counter(l_osd_tier_clean, "tier_clean");
+
   logger = osd_plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
