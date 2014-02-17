@@ -389,7 +389,6 @@ bool ReplicatedPG::is_degraded_object(const hobject_t& soid)
 {
   if (pg_log.get_missing().missing.count(soid))
     return true;
-  assert(actingbackfill.size() > 0);
   for (unsigned i = 1; i < actingbackfill.size(); i++) {
     int peer = actingbackfill[i];
     if (peer_missing.count(peer) &&
