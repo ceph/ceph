@@ -1444,6 +1444,11 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(l_osd_tier_dirty, "tier_dirty");
   osd_plb.add_u64_counter(l_osd_tier_clean, "tier_clean");
 
+  osd_plb.add_u64_counter(l_osd_agent_wake, "agent_wake");
+  osd_plb.add_u64_counter(l_osd_agent_skip, "agent_skip");
+  osd_plb.add_u64_counter(l_osd_agent_flush, "agent_flush");
+  osd_plb.add_u64_counter(l_osd_agent_evict, "agent_evict");
+
   logger = osd_plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
