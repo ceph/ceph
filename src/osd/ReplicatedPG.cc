@@ -5628,6 +5628,8 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
   finish_ctx(tctx, pg_log_entry_t::PROMOTE);
 
   simple_repop_submit(repop);
+
+  osd->logger->inc(l_osd_tier_promote);
 }
 
 void ReplicatedPG::cancel_copy(CopyOpRef cop, bool requeue)
