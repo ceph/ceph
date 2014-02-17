@@ -266,7 +266,8 @@ class Thrasher:
             actions.append((self.in_osd, 1.7,))
         if len(self.dead_osds) > mindead:
             actions.append((self.revive_osd, 1.0,))
-        actions.append((self.primary_affinity, 1.0,))
+        if self.config.get('thrash_primary_affinity', True):
+            actions.append((self.primary_affinity, 1.0,))
         actions.append((self.grow_pool, self.config.get('chance_pgnum_grow', 0),))
         actions.append((self.fix_pgp_num, self.config.get('chance_pgpnum_fix', 0),))
         actions.append((self.test_pool_min_size, chance_test_min_size,))
