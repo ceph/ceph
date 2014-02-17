@@ -1772,6 +1772,27 @@ public:
     can_local_rollback = other.can_local_rollback;
     stashed = other.stashed;
   }
+  void claim_append(ObjectModDesc &other) {
+    if (!can_local_rollback || stashed)
+      return;
+    if (!other.can_local_rollback) {
+      mark_unrollbackable();
+      return;
+    }
+    bl.claim_append(other.bl);
+    stashed = other.stashed;
+  }
+  void swap(ObjectModDesc &other) {
+    bl.swap(other.bl);
+
+    bool temp = other.can_local_rollback;
+    other.can_local_rollback = can_local_rollback;
+    can_local_rollback = temp;
+
+    temp = other.stashed;
+    other.stashed = stashed;
+    stashed = temp;
+  }
   void append_id(ModID id) {
     uint8_t _id(id);
     ::encode(_id, bl);
