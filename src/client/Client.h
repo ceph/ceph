@@ -35,7 +35,7 @@ using std::fstream;
 #include "include/interval_set.h"
 #include "include/lru.h"
 
-#include "barrier.h"
+//#include "barrier.h"
 
 #include "mds/mdstypes.h"
 
@@ -315,7 +315,7 @@ protected:
   ceph::unordered_map<inodeno_t,SnapRealm*> snap_realms;
 
   /* async block write barrier support */
-  map<uint64_t, BarrierContext* > barriers;
+  //map<uint64_t, BarrierContext* > barriers;
 
   SnapRealm *get_snap_realm(inodeno_t r);
   SnapRealm *get_snap_realm_maybe(inodeno_t r);
