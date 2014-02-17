@@ -4574,10 +4574,12 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
       assert(ctx->new_obs.oi.is_dirty());
       ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
       --ctx->delta_stats.num_objects_dirty;
+      osd->logger->inc(l_osd_tier_clean);
     } else if (!ctx->new_obs.oi.test_flag(object_info_t::FLAG_DIRTY)) {
       dout(20) << " setting DIRTY flag" << dendl;
       ctx->new_obs.oi.set_flag(object_info_t::FLAG_DIRTY);
       ++ctx->delta_stats.num_objects_dirty;
+      osd->logger->inc(l_osd_tier_dirty);
     }
   }
 
@@ -5954,6 +5956,8 @@ int ReplicatedPG::try_flush_mark_clean(FlushOpRef fop)
   --ctx->delta_stats.num_objects_dirty;
 
   finish_ctx(ctx, pg_log_entry_t::CLEAN);
+
+  osd->logger->inc(l_osd_tier_clean);
 
   if (!fop->dup_ops.empty()) {
     dout(20) << __func__ << " queueing dups for " << ctx->at_version << dendl;

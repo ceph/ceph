@@ -131,6 +131,9 @@ enum {
   l_osd_tier_try_flush_fail,
   l_osd_tier_evict,
   l_osd_tier_whiteout,
+  l_osd_tier_dirty,
+  l_osd_tier_clean,
+
   l_osd_last,
 };
 
