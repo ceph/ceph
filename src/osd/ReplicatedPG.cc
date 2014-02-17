@@ -10295,6 +10295,10 @@ void ReplicatedPG::agent_work(int start_max)
       dout(20) << __func__ << " skip (hit set) " << obc->obs.oi << dendl;
       continue;
     }
+    if (obc->is_blocked()) {
+      dout(20) << __func__ << " skip (blocked) " << obc->obs.oi << dendl;
+      continue;
+    }
 
     // be careful flushing omap to an EC pool.
     if (base_pool->is_erasure() &&
