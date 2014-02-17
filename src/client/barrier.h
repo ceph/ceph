@@ -121,7 +121,6 @@ private:
 
   // commits in progress, with their claimed writes
   BarrierList active_commits;
-  boost::icl::interval_set<uint64_t> active_commit_interval;
 
 public:
   BarrierContext(Client *c, uint64_t ino);

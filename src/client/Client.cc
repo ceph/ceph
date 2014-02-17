@@ -8222,7 +8222,7 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
   if (length == 0) {
     return -EINVAL;
   }
-  if (sync) {
+  if (true || sync) {
     /* if write is stable, the epilogue is waiting on
      * flock */
     onack = new C_NoopContext;
@@ -8232,8 +8232,9 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
     /* if write is unstable, we just place a barrier for
      * future commits to wait on */
     onack = new C_NoopContext;
-    onsafe = new C_Block_Sync(this, vino.ino,
+    /*onsafe = new C_Block_Sync(this, vino.ino,
 			      barrier_interval(offset, offset + length), &r);
+    */
     done = true;
   }
   object_t oid = file_object_t(vino.ino, blockid);
@@ -8282,6 +8283,7 @@ int Client::ll_commit_blocks(Inode *in,
 			     uint64_t length)
 {
     Mutex::Locker lock(client_lock);
+    /*
     BarrierContext *bctx;
     vinodeno_t vino = ll_get_vino(in);
     uint64_t ino = vino.ino;
@@ -8293,12 +8295,12 @@ int Client::ll_commit_blocks(Inode *in,
       return -EINVAL;
     }
 
-    bctx = this->barriers[ino];
-    if (bctx) {
-      barrier_interval civ(offset, length);
-      bctx->commit_barrier(civ);
+    map<uint64_t, BarrierContext*>::iterator p = barriers.find(ino);
+    if (p != barriers.end()) {
+      barrier_interval civ(offset, offset + length);
+      p->second->commit_barrier(civ);
     }
-
+    */
     return 0;
 }
 
