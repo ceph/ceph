@@ -100,7 +100,8 @@ void MDBalancer::tick()
   }
 
   // hash?
-  if (g_conf->mds_bal_frag && g_conf->mds_bal_fragment_interval > 0 &&
+  if ((g_conf->mds_bal_frag || g_conf->mds_thrash_fragments) &&
+      g_conf->mds_bal_fragment_interval > 0 &&
       now.sec() - last_fragment.sec() > g_conf->mds_bal_fragment_interval) {
     last_fragment = now;
     do_fragmenting();

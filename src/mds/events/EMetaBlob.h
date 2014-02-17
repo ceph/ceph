@@ -225,6 +225,7 @@ public:
     static const int STATE_DIRTY =       (1<<2);  // dirty due to THIS journal item, that is!
     static const int STATE_NEW =         (1<<3);  // new directory
     static const int STATE_IMPORTING =	 (1<<4);  // importing directory
+    static const int STATE_DIRTYDFT =	 (1<<5);  // dirty dirfragtree
 
     //version_t  dirv;
     fnode_t fnode;
@@ -249,6 +250,8 @@ public:
     void mark_new() { state |= STATE_NEW; }
     bool is_importing() { return state & STATE_IMPORTING; }
     void mark_importing() { state |= STATE_IMPORTING; }
+    bool is_dirty_dft() { return state & STATE_DIRTYDFT; }
+    void mark_dirty_dft() { state |= STATE_DIRTYDFT; }
 
     list<ceph::shared_ptr<fullbit> >   &get_dfull()   { return dfull; }
     list<remotebit> &get_dremote() { return dremote; }
@@ -535,10 +538,15 @@ private:
   dirlump& add_import_dir(CDir *dir) {
     // dirty=false would be okay in some cases
     return add_dir(dir->dirfrag(), dir->get_projected_fnode(), dir->get_projected_version(),
-		   dir->is_dirty(), dir->is_complete(), false, true);
+		   dir->is_dirty(), dir->is_complete(), false, true, dir->is_dirty_dft());
+  }
+  dirlump& add_fragmented_dir(CDir *dir, bool dirtydft) {
+    return add_dir(dir->dirfrag(), dir->get_projected_fnode(), dir->get_projected_version(),
+		   false, false, false, false, dirtydft);
   }
   dirlump& add_dir(dirfrag_t df, fnode_t *pf, version_t pv, bool dirty,
-		   bool complete=false, bool isnew=false, bool importing=false) {
+		   bool complete=false, bool isnew=false,
+		   bool importing=false, bool dirty_dft=false) {
     if (lump_map.count(df) == 0)
       lump_order.push_back(df);
 
@@ -549,6 +557,7 @@ private:
     if (dirty) l.mark_dirty();
     if (isnew) l.mark_new();
     if (importing) l.mark_importing();
+    if (dirty_dft) l.mark_dirty_dft();
     return l;
   }
   

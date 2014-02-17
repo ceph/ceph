@@ -189,6 +189,29 @@ public:
       state = LOCK_LOCK;
   }
 
+  void encode_state_for_rejoin(bufferlist& bl, int rep) const {
+    __s16 s = get_replica_state();
+    if (is_gathering(rep)) {
+      // the recovering mds may hold rejoined wrlocks
+      if (state == LOCK_MIX_SYNC)
+	s = LOCK_MIX_SYNC;
+      else
+	s = LOCK_MIX_LOCK;
+    }
+    ::encode(s, bl);
+  }
+
+  bool remove_replica(int from, bool rejoin) {
+    if (rejoin &&
+	(state == LOCK_MIX ||
+	 state == LOCK_MIX_SYNC ||
+	 state == LOCK_MIX_LOCK2 ||
+	 state == LOCK_MIX_TSYN ||
+	 state == LOCK_MIX_EXCL))
+      return false;
+    return SimpleLock::remove_replica(from);
+  }
+
   virtual void print(ostream& out) const {
     out << "(";
     _print(out);

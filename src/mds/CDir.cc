@@ -154,7 +154,6 @@ ostream& CDir::print_db_line_prefix(ostream& out)
 // CDir
 
 CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
-  mseq(0),
   dirty_rstat_inodes(member_offset(CInode, dirty_rstat_item)),
   item_dirty(this), item_new(this),
   pop_me(ceph_clock_now(g_ceph_context)),
@@ -875,7 +874,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   int n = 0;
   for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
     CDir *f = new CDir(inode, *p, cache, is_auth());
-    f->state_set(state & MASK_STATE_FRAGMENT_KEPT);
+    f->state_set(state & (MASK_STATE_FRAGMENT_KEPT | STATE_COMPLETE));
     f->replica_map = replica_map;
     f->dir_auth = dir_auth;
     f->init_fragment_pins();
@@ -897,6 +896,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
     subs.push_back(f);
     inode->add_dirfrag(f);
 
+    f->set_dir_auth(get_dir_auth());
     f->prepare_new_fragment(replay);
   }
   
@@ -938,6 +938,7 @@ void CDir::merge(list<CDir*>& subs, list<Context*>& waiters, bool replay)
 {
   dout(10) << "merge " << subs << dendl;
 
+  set_dir_auth(subs.front()->get_dir_auth());
   prepare_new_fragment(replay);
 
   nest_info_t rstatdiff;
@@ -983,6 +984,9 @@ void CDir::merge(list<CDir*>& subs, list<Context*>& waiters, bool replay)
     dir->finish_old_fragment(waiters, replay);
     inode->close_dirfrag(dir->get_frag());
   }
+
+  if (is_auth() && !replay)
+    mark_complete();
 
   // FIXME: merge dirty old rstat
   fnode.rstat.version = rstat_version;
@@ -1520,6 +1524,8 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     }
   }
 
+  list<CInode*> undef_inodes;
+
   // purge stale snaps?
   // only if we have past_parents open!
   bool purged_any = false;
@@ -1634,10 +1640,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 	if (in) {
 	  dout(12) << "_fetched  had dentry " << *dn << dendl;
 	  if (in->state_test(CInode::STATE_REJOINUNDEF)) {
-	    assert(cache->mds->is_rejoin());
-	    assert(in->vino() == vinodeno_t(inode.ino, last));
-	    in->state_clear(CInode::STATE_REJOINUNDEF);
-	    cache->opened_undef_inode(in);
+	    undef_inodes.push_back(in);
 	    undef_inode = true;
 	  }
 	} else
@@ -1747,6 +1750,15 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   // mark complete, !fetching
   mark_complete();
   state_clear(STATE_FETCHING);
+
+  // open & force frags
+  while (!undef_inodes.empty()) {
+    CInode *in = undef_inodes.front();
+    undef_inodes.pop_front();
+    in->state_clear(CInode::STATE_REJOINUNDEF);
+    cache->opened_undef_inode(in);
+  }
+
   auth_unpin(this);
 
   // kick waiters
@@ -2102,8 +2114,6 @@ void CDir::_committed(version_t v)
 void CDir::encode_export(bufferlist& bl)
 {
   assert(!is_projected());
-  ceph_seq_t seq = mseq + 1;
-  ::encode(seq, bl);
   ::encode(first, bl);
   ::encode(fnode, bl);
   ::encode(dirty_old_rstat, bl);
@@ -2133,7 +2143,6 @@ void CDir::finish_export(utime_t now)
 
 void CDir::decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls)
 {
-  ::decode(mseq, blp);
   ::decode(first, blp);
   ::decode(fnode, blp);
   ::decode(dirty_old_rstat, blp);
@@ -2164,10 +2173,24 @@ void CDir::decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls)
 
   // did we import some dirty scatterlock data?
   if (dirty_old_rstat.size() ||
-      !(fnode.rstat == fnode.accounted_rstat))
+      !(fnode.rstat == fnode.accounted_rstat)) {
     cache->mds->locker->mark_updated_scatterlock(&inode->nestlock);
-  if (!(fnode.fragstat == fnode.accounted_fragstat))
+    ls->dirty_dirfrag_nest.push_back(&inode->item_dirty_dirfrag_nest);
+  }
+  if (!(fnode.fragstat == fnode.accounted_fragstat)) {
     cache->mds->locker->mark_updated_scatterlock(&inode->filelock);
+    ls->dirty_dirfrag_dir.push_back(&inode->item_dirty_dirfrag_dir);
+  }
+  if (is_dirty_dft()) {
+    if (inode->dirfragtreelock.get_state() != LOCK_MIX &&
+	inode->dirfragtreelock.is_stable()) {
+      // clear stale dirtydft
+      state_clear(STATE_DIRTYDFT);
+    } else {
+      cache->mds->locker->mark_updated_scatterlock(&inode->dirfragtreelock);
+      ls->dirty_dirfrag_dirfragtree.push_back(&inode->item_dirty_dirfrag_dirfragtree);
+    }
+  }
 }
 
 

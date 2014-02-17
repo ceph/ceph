@@ -32,9 +32,9 @@ class MMDSFragmentNotify : public Message {
   bufferlist basebl;
 
   MMDSFragmentNotify() : Message(MSG_MDS_FRAGMENTNOTIFY) {}
-  MMDSFragmentNotify(inodeno_t i, frag_t bf, int b) :
+  MMDSFragmentNotify(dirfrag_t df, int b) :
 	Message(MSG_MDS_FRAGMENTNOTIFY),
-    ino(i), basefrag(bf), bits(b) { }
+    ino(df.ino), basefrag(df.frag), bits(b) { }
 private:
   ~MMDSFragmentNotify() {}
 
