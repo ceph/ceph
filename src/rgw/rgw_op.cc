@@ -2878,6 +2878,9 @@ void RGWDeleteMultiObj::execute()
     rgw_obj obj(bucket,(*iter));
     store->set_atomic(s->obj_ctx, obj);
     ret = store->delete_obj(s->obj_ctx, s->bucket_owner.get_id(), obj);
+    if (ret == -ENOENT) {
+      ret = 0;
+    }
     result = make_pair(*iter, ret);
 
     send_partial_response(result);
