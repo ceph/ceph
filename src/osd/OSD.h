@@ -125,6 +125,10 @@ enum {
   l_osd_copyfrom,
 
   l_osd_tier_promote,
+  l_osd_tier_flush,
+  l_osd_tier_flush_fail,
+  l_osd_tier_try_flush,
+  l_osd_tier_try_flush_fail,
   l_osd_last,
 };
 
