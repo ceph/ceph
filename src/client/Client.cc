@@ -8233,7 +8233,7 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
      * future commits to wait on */
     onack = new C_NoopContext;
     onsafe = new C_Block_Sync(this, vino.ino,
-			      barrier_interval(offset, offset + length), &r);
+			      barrier_interval(offset, length), &r);
     done = true;
   }
   object_t oid = file_object_t(vino.ino, blockid);
