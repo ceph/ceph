@@ -10274,6 +10274,8 @@ void ReplicatedPG::agent_work(int start_max)
     return;
   }
 
+  osd->logger->inc(l_osd_agent_wake);
+
   dout(10) << __func__
 	   << " max " << start_max
 	   << ", flush " << agent_state->get_flush_mode_name()
@@ -10305,29 +10307,35 @@ void ReplicatedPG::agent_work(int start_max)
        ++p) {
     if (is_degraded_object(*p)) {
       dout(20) << __func__ << " skip (degraded) " << *p << dendl;
+      osd->logger->inc(l_osd_agent_skip);
       continue;
     }
     ObjectContextRef obc = get_object_context(*p, false, NULL);
     if (!obc) {
       // we didn't flush; we may miss something here.
       dout(20) << __func__ << " no obc for " << *p << ", skipping" << dendl;
+      osd->logger->inc(l_osd_agent_skip);
       continue;
     }
     if (!obc->obs.exists) {
       dout(20) << __func__ << " " << obc->obs.oi.soid << " dne, skipping"
 	       << dendl;
+      osd->logger->inc(l_osd_agent_skip);
       continue;
     }
     if (scrubber.write_blocked_by_scrub(obc->obs.oi.soid)) {
       dout(20) << __func__ << " scrubbing, skipping " << obc->obs.oi << dendl;
+      osd->logger->inc(l_osd_agent_skip);
       continue;
     }
     if (obc->obs.oi.soid.nspace == cct->_conf->osd_hit_set_namespace) {
       dout(20) << __func__ << " skip (hit set) " << obc->obs.oi << dendl;
+      osd->logger->inc(l_osd_agent_skip);
       continue;
     }
     if (obc->is_blocked()) {
       dout(20) << __func__ << " skip (blocked) " << obc->obs.oi << dendl;
+      osd->logger->inc(l_osd_agent_skip);
       continue;
     }
 
@@ -10335,6 +10343,7 @@ void ReplicatedPG::agent_work(int start_max)
     if (base_pool->is_erasure() &&
 	obc->obs.oi.test_flag(object_info_t::FLAG_OMAP)) {
       dout(20) << __func__ << " skip (omap to EC) " << obc->obs.oi << dendl;
+      osd->logger->inc(l_osd_agent_skip);
       continue;
     }
 
@@ -10410,6 +10419,8 @@ bool ReplicatedPG::agent_maybe_flush(ObjectContextRef& obc)
   ctx->on_finish = new C_AgentFlushStartStop(this, obc->obs.oi.soid);
 
   start_flush(ctx, false);
+
+  osd->logger->inc(l_osd_agent_flush);
   return true;
 }
 
@@ -10489,6 +10500,7 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
   finish_ctx(ctx, pg_log_entry_t::DELETE);
   simple_repop_submit(repop);
   osd->logger->inc(l_osd_tier_evict);
+  osd->logger->inc(l_osd_agent_evict);
   return true;
 }
 

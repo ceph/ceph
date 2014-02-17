@@ -134,6 +134,11 @@ enum {
   l_osd_tier_dirty,
   l_osd_tier_clean,
 
+  l_osd_agent_wake,
+  l_osd_agent_skip,
+  l_osd_agent_flush,
+  l_osd_agent_evict,
+
   l_osd_last,
 };
 
