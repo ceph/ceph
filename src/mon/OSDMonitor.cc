@@ -2391,6 +2391,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
         f->dump_int("crash_replay_interval", p->get_crash_replay_interval());
       } else if (var == "crush_ruleset") {
         f->dump_int("crush_ruleset", p->get_crush_ruleset());
+      } else if (var == "no_omap") {
+        f->dump_bool("no_omap", (p->flags & pg_pool_t::FLAG_NO_OMAP) != 0);
       }
 
       f->close_section();
@@ -2408,6 +2410,9 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
         ss << "crash_replay_interval: " << p->get_crash_replay_interval();
       } else if (var == "crush_ruleset") {
         ss << "crush_ruleset: " << p->get_crush_ruleset();
+      } else if (var == "no_omap") {
+        ss << "no_omap: "
+	   << (p->flags & pg_pool_t::FLAG_NO_OMAP ? "true" : "false");
       }
       rdata.append(ss);
       ss.str("");
@@ -2990,6 +2995,8 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_ruleset,
   pi->flags = g_conf->osd_pool_default_flags;
   if (g_conf->osd_pool_default_flag_hashpspool)
     pi->flags |= pg_pool_t::FLAG_HASHPSPOOL;
+  if (pool_type == pg_pool_t::TYPE_ERASURE)
+    pi->flags |= pg_pool_t::FLAG_NO_OMAP;
 
   pi->size = size;
   pi->min_size = g_conf->get_osd_pool_default_min_size();
@@ -3183,6 +3190,19 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       p.flags |= pg_pool_t::FLAG_HASHPSPOOL;
     } else if (val == "false" || (interr.empty() && n == 0)) {
       p.flags &= ~pg_pool_t::FLAG_HASHPSPOOL;
+    } else {
+      ss << "expecting value 'true', 'false', '0', or '1'";
+      return -EINVAL;
+    }
+  } else if (var == "no_omap") {
+    if (val == "true" || (interr.empty() && n == 1)) {
+      p.flags |= pg_pool_t::FLAG_NO_OMAP;
+    } else if (val == "false" || (interr.empty() && n == 0)) {
+      if (p.type == pg_pool_t::TYPE_ERASURE) {
+	ss << "omap operations not implemented on erasure-coded pools";
+	return -ENOTSUP;
+      }
+      p.flags &= ~pg_pool_t::FLAG_NO_OMAP;
     } else {
       ss << "expecting value 'true', 'false', '0', or '1'";
       return -EINVAL;

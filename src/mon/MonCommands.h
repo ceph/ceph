@@ -522,11 +522,11 @@ COMMAND("osd pool rename " \
 	"rename <srcpool> to <destpool>", "osd", "rw", "cli,rest")
 COMMAND("osd pool get " \
 	"name=pool,type=CephPoolname " \
-	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_ruleset", \
+	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_ruleset|no_omap", \
 	"get pool parameter <var>", "osd", "r", "cli,rest")
 COMMAND("osd pool set " \
 	"name=pool,type=CephPoolname " \
-	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_ruleset|hashpspool|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|debug_fake_ec_pool " \
+	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_ruleset|hashpspool|no_omap|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|debug_fake_ec_pool " \
 	"name=val,type=CephString", \
 	"set pool parameter <var> to <val>", "osd", "rw", "cli,rest")
 // 'val' is a CephString because it can include a unit.  Perhaps

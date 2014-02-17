@@ -722,6 +722,7 @@ struct pg_pool_t {
     FLAG_HASHPSPOOL = 1, // hash pg seed and pool together (instead of adding)
     FLAG_FULL       = 2, // pool is full
     FLAG_DEBUG_FAKE_EC_POOL = 1<<2, // require ReplicatedPG to act like an EC pg
+    FLAG_NO_OMAP    = 1<<3, // no support for omap
   };
 
   static const char *get_flag_name(int f) {
@@ -729,6 +730,7 @@ struct pg_pool_t {
     case FLAG_HASHPSPOOL: return "hashpspool";
     case FLAG_FULL: return "full";
     case FLAG_DEBUG_FAKE_EC_POOL: return "require_local_rollback";
+    case FLAG_NO_OMAP: return "no_omap";
     default: return "???";
     }
   }

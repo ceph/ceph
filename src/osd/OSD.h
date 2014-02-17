@@ -1789,7 +1789,6 @@ public:
 
   /// check if we can throw out op from a disconnected client
   static bool op_is_discardable(class MOSDOp *m);
-  /// check if op should be (re)queued for processing
 public:
   void force_remount();
 
