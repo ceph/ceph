@@ -107,6 +107,7 @@ public:
   static const unsigned STATE_STICKY =        (1<<15);  // sticky pin due to inode stickydirs
   static const unsigned STATE_DNPINNEDFRAG =  (1<<16);  // dir is refragmenting
   static const unsigned STATE_ASSIMRSTAT =    (1<<17);  // assimilating inode->frag rstats
+  static const unsigned STATE_DIRTYDFT =      (1<<18);  // dirty dirfragtree
 
   // common states
   static const unsigned STATE_CLEAN =  0;
@@ -115,7 +116,7 @@ public:
   // these state bits are preserved by an import/export
   // ...except if the directory is hashed, in which case none of them are!
   static const unsigned MASK_STATE_EXPORTED = 
-  (STATE_COMPLETE|STATE_DIRTY);
+  (STATE_COMPLETE|STATE_DIRTY|STATE_DIRTYDFT);
   static const unsigned MASK_STATE_IMPORT_KEPT = 
   (						  
    STATE_IMPORTING
@@ -129,10 +130,10 @@ public:
    |STATE_FROZENDIR
    |STATE_STICKY);
   static const unsigned MASK_STATE_FRAGMENT_KEPT = 
-  (STATE_DIRTY |
-   STATE_COMPLETE |
+  (STATE_DIRTY|
    STATE_EXPORTBOUND |
-   STATE_IMPORTBOUND);
+   STATE_IMPORTBOUND |
+   STATE_REJOINUNDEF);
 
   // -- rep spec --
   static const int REP_NONE =     0;
@@ -170,7 +171,6 @@ public:
 
   fnode_t fnode;
   snapid_t first;
-  ceph_seq_t mseq; // migrate sequence
   map<snapid_t,old_rstat_t> dirty_old_rstat;  // [value.first,key]
 
   // my inodes with dirty rstat data
@@ -473,6 +473,7 @@ private:
   bool is_complete() { return state & STATE_COMPLETE; }
   bool is_exporting() { return state & STATE_EXPORTING; }
   bool is_importing() { return state & STATE_IMPORTING; }
+  bool is_dirty_dft() { return state & STATE_DIRTYDFT; }
 
   int get_dir_rep() { return dir_rep; }
   bool is_rep() { 
@@ -532,7 +533,7 @@ protected:
   map< inodeno_t, list<Context*> > waiting_on_ino;
 
 public:
-  bool is_waiting_for_dentry(const char *dname, snapid_t snap) {
+  bool is_waiting_for_dentry(const string& dname, snapid_t snap) {
     return waiting_on_dentry.count(string_snap_t(dname, snap));
   }
   void add_dentry_waiter(const string& dentry, snapid_t snap, Context *c);
@@ -555,7 +556,6 @@ public:
   void encode_export(bufferlist& bl);
   void finish_export(utime_t now);
   void abort_export() {
-    mseq += 2;
     put(PIN_TEMPEXPORTING);
   }
   void decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls);

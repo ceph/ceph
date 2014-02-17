@@ -330,7 +330,8 @@ public:
     } else {
       state = s;
     }
-    take_waiting(SimpleLock::WAIT_ALL, waiters);
+    if (is_stable())
+      take_waiting(SimpleLock::WAIT_ALL, waiters);
   }
 
   bool is_stable() const {
@@ -373,8 +374,10 @@ public:
 	 ++p)
       more()->gather_set.insert(p->first);
   }
-  bool is_gathering() { return have_more() && !more()->gather_set.empty(); }
-  bool is_gathering(int i) {
+  bool is_gathering() const {
+    return have_more() && !more()->gather_set.empty();
+  }
+  bool is_gathering(int i) const {
     return have_more() && more()->gather_set.count(i);
   }
   void clear_gather() {

@@ -413,6 +413,7 @@ protected:
   set<int> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
   map<int,map<inodeno_t,map<client_t,Capability::Import> > > rejoin_imported_caps;
   map<inodeno_t,pair<int,map<client_t,Capability::Export> > > rejoin_slave_exports;
+  map<client_t,entity_inst_t> rejoin_client_map;
 
   map<inodeno_t,map<client_t,ceph_mds_cap_reconnect> > cap_exports; // ino -> client -> capex
   map<inodeno_t,int> cap_export_targets; // ino -> auth mds
@@ -428,6 +429,7 @@ protected:
   map<int, set<CInode*> > rejoin_unlinked_inodes;
 
   vector<CInode*> rejoin_recover_q, rejoin_check_q;
+  list<SimpleLock*> rejoin_eval_locks;
   list<Context*> rejoin_waiters;
 
   void rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin);
@@ -489,7 +491,10 @@ public:
   }
 
   friend class C_MDC_RejoinOpenInoFinish;
+  friend class C_MDC_RejoinSessionsOpened;
   void rejoin_open_ino_finish(inodeno_t ino, int ret);
+  void rejoin_open_sessions_finish(map<client_t,entity_inst_t> client_map,
+				   map<client_t,uint64_t>& sseqmap);
   bool process_imported_caps();
   void choose_lock_states_and_reconnect_caps();
   void prepare_realm_split(SnapRealm *realm, client_t client, inodeno_t ino,
@@ -514,11 +519,9 @@ public:
   void open_snap_parents();
 
   bool open_undef_inodes_dirfrags();
+  void opened_undef_inode(CInode *in);
   void opened_undef_dirfrag(CDir *dir) {
     rejoin_undef_dirfrags.erase(dir);
-  }
-  void opened_undef_inode(CInode *in) {
-    rejoin_undef_inodes.erase(in);
   }
 
   void reissue_all_caps();
@@ -572,7 +575,7 @@ public:
   bool trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap);
   void trim_dirfrag(CDir *dir, CDir *con,
 		    map<int, MCacheExpire*>& expiremap);
-  void trim_inode(CDentry *dn, CInode *in, CDir *con,
+  bool trim_inode(CDentry *dn, CInode *in, CDir *con,
 		  map<int,class MCacheExpire*>& expiremap);
   void send_expire_messages(map<int, MCacheExpire*>& expiremap);
   void trim_non_auth();      // trim out trimmable non-auth items
@@ -663,7 +666,8 @@ public:
   }
 protected:
 
-  void inode_remove_replica(CInode *in, int rep, set<SimpleLock *>& gather_locks);
+  void inode_remove_replica(CInode *in, int rep, bool rejoin,
+			    set<SimpleLock *>& gather_locks);
   void dentry_remove_replica(CDentry *dn, int rep, set<SimpleLock *>& gather_locks);
 
   void rename_file(CDentry *srcdn, CDentry *destdn);
@@ -942,21 +946,28 @@ private:
   struct ufragment {
     int bits;
     bool committed;
+    bool complete;
     LogSegment *ls;
     list<Context*> waiters;
     list<frag_t> old_frags;
     bufferlist rollback;
-    ufragment() : bits(0), committed(false), ls(NULL) {}
+    ufragment() : bits(0), committed(false), complete(false), ls(NULL) {}
   };
   map<dirfrag_t, ufragment> uncommitted_fragments;
 
   struct fragment_info_t {
-    frag_t basefrag;
     int bits;
     list<CDir*> dirs;
     list<CDir*> resultfrags;
+    MDRequest *mdr;
+    // for deadlock detection
+    bool dirs_frozen;
+    utime_t last_cum_auth_pins_change;
+    int last_cum_auth_pins;
+    int num_remote_waiters;	// number of remote authpin waiters
+    fragment_info_t() : last_cum_auth_pins(0), num_remote_waiters(0) {}
   };
-  map<metareqid_t, fragment_info_t> fragment_requests;
+  map<dirfrag_t,fragment_info_t> fragments;
 
   void adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
 			    list<CDir*>& frags, list<Context*>& waiters, bool replay);
@@ -966,13 +977,13 @@ private:
 			    list<CDir*>& resultfrags, 
 			    list<Context*>& waiters,
 			    bool replay);
-  CDir *force_dir_fragment(CInode *diri, frag_t fg);
+  CDir *force_dir_fragment(CInode *diri, frag_t fg, bool replay=true);
   void get_force_dirfrag_bound_set(vector<dirfrag_t>& dfs, set<CDir*>& bounds);
 
   bool can_fragment(CInode *diri, list<CDir*>& dirs);
   void fragment_freeze_dirs(list<CDir*>& dirs, C_GatherBuilder &gather);
   void fragment_mark_and_complete(list<CDir*>& dirs);
-  void fragment_frozen(list<CDir*>& dirs, frag_t basefrag, int bits);
+  void fragment_frozen(dirfrag_t basedirfrag, int r);
   void fragment_unmark_unfreeze_dirs(list<CDir*>& dirs);
   void dispatch_fragment_dir(MDRequest *mdr);
   void _fragment_logged(MDRequest *mdr);
@@ -1002,6 +1013,10 @@ public:
   void split_dir(CDir *dir, int byn);
   void merge_dir(CInode *diri, frag_t fg);
   void rollback_uncommitted_fragments();
+
+  void find_stale_fragment_freeze();
+  void fragment_freeze_inc_num_waiters(CDir *dir);
+  int get_num_fragmenting_dirs() { return fragments.size(); }
 
   // -- updates --
   //int send_inode_updates(CInode *in);
