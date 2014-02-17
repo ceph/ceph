@@ -3165,6 +3165,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    break;
 	}
 	result = _delete_head(ctx, true);
+	osd->logger->inc(l_osd_tier_evict);
       }
       break;
 
@@ -10481,6 +10482,7 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
   assert(r == 0);
   finish_ctx(ctx, pg_log_entry_t::DELETE);
   simple_repop_submit(repop);
+  osd->logger->inc(l_osd_tier_evict);
   return true;
 }
 
