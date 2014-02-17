@@ -530,6 +530,7 @@ protected:
 
   // Ops waiting on backfill_pos to change
   list<OpRequestRef>            waiting_for_active;
+  list<OpRequestRef>            waiting_for_cache_not_full;
   list<OpRequestRef>            waiting_for_all_missing;
   map<hobject_t, list<OpRequestRef> > waiting_for_missing_object,
 			     waiting_for_degraded_object,
@@ -1928,6 +1929,10 @@ public:
   virtual void on_shutdown() = 0;
   virtual void check_blacklisted_watchers() = 0;
   virtual void get_watchers(std::list<obj_watch_item_t>&) = 0;
+
+  virtual void agent_work(int max) = 0;
+  virtual void agent_stop() = 0;
+  virtual void agent_clear() = 0;
 };
 
 ostream& operator<<(ostream& out, const PG& pg);

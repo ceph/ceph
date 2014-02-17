@@ -141,6 +141,7 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSDMAP_NORECOVER (1<<10) /* block osd recovery and backfill */
 #define CEPH_OSDMAP_NOSCRUB  (1<<11) /* block periodic scrub */
 #define CEPH_OSDMAP_NODEEP_SCRUB (1<<12) /* block periodic deep-scrub */
+#define CEPH_OSDMAP_NOTIERAGENT (1<<13) /* disable tiering agent */
 
 /*
  * The error code to return when an OSD can't handle a write

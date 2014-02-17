@@ -271,6 +271,11 @@ unittest_bloom_filter_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_bloom_filter_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_bloom_filter
 
+unittest_histogram_SOURCES = test/common/histogram.cc
+unittest_histogram_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_histogram_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_histogram
+
 unittest_str_map_SOURCES = test/common/test_str_map.cc
 unittest_str_map_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_str_map_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
@@ -356,7 +361,7 @@ unittest_ceph_compatset_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_ceph_compatset_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_ceph_compatset
 
-unittest_osd_types_SOURCES = test/test_osd_types.cc
+unittest_osd_types_SOURCES = test/osd/types.cc
 unittest_osd_types_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_osd_types_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) 
 check_PROGRAMS += unittest_osd_types

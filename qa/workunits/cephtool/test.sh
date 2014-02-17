@@ -106,10 +106,18 @@ ceph osd dump | grep '^epoch'
 ceph --concise osd dump | grep '^epoch'
 
 # df
-ceph df | grep GLOBAL
-ceph df detail | grep CATEGORY
-ceph df --format json | grep 'total_space'
-ceph df detail --format json | grep 'rd_kb'
+ceph df > $TMPFILE
+grep GLOBAL $TMPFILE
+grep -v DIRTY $TMPFILE
+ceph df detail > $TMPFILE
+grep CATEGORY $TMPFILE
+grep DIRTY $TMPFILE
+ceph df --format json > $TMPFILE
+grep 'total_space' $TMPFILE
+grep -v 'dirty' $TMPFILE
+ceph df detail --format json > $TMPFILE
+grep 'rd_kb' $TMPFILE
+grep 'dirty' $TMPFILE
 ceph df --format xml | grep '<total_space>'
 ceph df detail --format xml | grep '<rd_kb>'
 
@@ -221,7 +229,7 @@ ceph osd scrub 0
 ceph osd deep-scrub 0
 ceph osd repair 0
 
-for f in noup nodown noin noout noscrub nodeep-scrub nobackfill norecover
+for f in noup nodown noin noout noscrub nodeep-scrub nobackfill norecover notieragent
 do
     ceph osd set $f
     ceph osd unset $f
@@ -397,6 +405,18 @@ expect_false ceph osd pool set rbd hit_set_type i_dont_exist
 ceph osd pool set rbd hit_set_period 123
 ceph osd pool set rbd hit_set_count 12
 ceph osd pool set rbd hit_set_fpp .01
+
+ceph osd pool set rbd target_max_objects 123
+ceph osd pool set rbd target_max_bytes 123456
+ceph osd pool set rbd cache_target_dirty_ratio .123
+expect_false ceph osd pool set rbd cache_target_dirty_ratio -.2
+expect_false ceph osd pool set rbd cache_target_dirty_ratio 1.1
+ceph osd pool set rbd cache_target_full_ratio .123
+ceph osd pool set rbd cache_target_full_ratio 1.0
+ceph osd pool set rbd cache_target_full_ratio 0
+expect_false ceph osd pool set rbd cache_target_full_ratio 1.1
+ceph osd pool set rbd cache_min_flush_age 123
+ceph osd pool set rbd cache_min_evict_age 234
 
 ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 0'
 

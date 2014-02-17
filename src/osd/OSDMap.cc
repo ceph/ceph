@@ -2089,6 +2089,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",noscrub";
   if (f & CEPH_OSDMAP_NODEEP_SCRUB)
     s += ",nodeep-scrub";
+  if (f & CEPH_OSDMAP_NOTIERAGENT)
+    s += ",notieragent";
   if (s.length())
     s = s.erase(0, 1);
   return s;

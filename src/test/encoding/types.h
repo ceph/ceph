@@ -36,7 +36,7 @@ TYPEWITHSTRAYDATA(OSDMap::Incremental)
 #include "crush/CrushWrapper.h"
 TYPE_NOCOPY(CrushWrapper)
 
-#include "include/histogram.h"
+#include "common/histogram.h"
 TYPE(pow2_hist_t)
 
 #include "osd/osd_types.h"

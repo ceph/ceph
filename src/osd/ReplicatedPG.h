@@ -28,6 +28,7 @@
 #include "PG.h"
 #include "Watch.h"
 #include "OpRequest.h"
+#include "TierAgentState.h"
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
@@ -465,6 +466,8 @@ public:
 
     enum { W_LOCK, R_LOCK, NONE } lock_to_release;
 
+    Context *on_finish;
+
     OpContext(const OpContext& other);
     const OpContext& operator=(const OpContext& other);
 
@@ -483,7 +486,8 @@ public:
       copy_cb(NULL),
       async_read_result(0),
       inflightreads(0),
-      lock_to_release(NONE) {
+      lock_to_release(NONE),
+      on_finish(NULL) {
       if (_ssc) {
 	new_snapset = _ssc->snapset;
 	snapset = &_ssc->snapset;
@@ -507,6 +511,13 @@ public:
 	   i != pending_async_reads.end();
 	   pending_async_reads.erase(i++)) {
 	delete i->second.second;
+      }
+      assert(on_finish == NULL);
+    }
+    void finish(int r) {
+      if (on_finish) {
+	on_finish->complete(r);
+	on_finish = NULL;
       }
     }
   };
@@ -602,10 +613,11 @@ protected:
    *
    * @param ctx [in] ctx to clean up
    */
-  void close_op_ctx(OpContext *ctx) {
+  void close_op_ctx(OpContext *ctx, int r) {
     release_op_ctx_locks(ctx);
     delete ctx->op_t;
     ctx->op_t = NULL;
+    ctx->finish(r);
     delete ctx;
   }
 
@@ -653,7 +665,7 @@ protected:
   void simple_repop_submit(RepGather *repop);
 
   // hot/cold tracking
-  boost::scoped_ptr<HitSet> hit_set;  ///< currently accumulating HitSet
+  HitSetRef hit_set;        ///< currently accumulating HitSet
   utime_t hit_set_start_stamp;    ///< time the current HitSet started recording
 
   void hit_set_clear();     ///< discard any HitSet state
@@ -665,6 +677,32 @@ protected:
 
   hobject_t get_hit_set_current_object(utime_t stamp);
   hobject_t get_hit_set_archive_object(utime_t start, utime_t end);
+
+  // agent
+  boost::scoped_ptr<TierAgentState> agent_state;
+
+  friend class C_AgentFlushStartStop;
+
+  void agent_setup();       ///< initialize agent state
+  void agent_work(int max); ///< entry point to do some agent work
+  bool agent_maybe_flush(ObjectContextRef& obc);  ///< maybe flush
+  bool agent_maybe_evict(ObjectContextRef& obc);  ///< maybe evict
+
+  /// estimate object atime and temperature
+  ///
+  /// @param oid [in] object name
+  /// @param atime [out] seconds since last access (lower bound)
+  /// @param temperature [out] relative temperature (# hitset bins we appear in)
+  void agent_estimate_atime_temp(const hobject_t& oid,
+				 int *atime, int *temperature);
+
+  /// stop the agent
+  void agent_stop();
+
+  /// clear agent state
+  void agent_clear();
+
+  void agent_choose_mode();  ///< choose (new) agent mode(s)
 
   /// true if we can send an ondisk/commit for v
   bool already_complete(eversion_t v) {
@@ -872,9 +910,11 @@ protected:
    * This helper function is called from do_op if the ObjectContext lookup fails.
    * @returns true if the caching code is handling the Op, false otherwise.
    */
-  inline bool maybe_handle_cache(OpRequestRef op, ObjectContextRef obc, int r,
+  inline bool maybe_handle_cache(OpRequestRef op,
+				 bool write_ordered,
+				 ObjectContextRef obc, int r,
 				 const hobject_t& missing_oid,
-				 bool must_promote = false);
+				 bool must_promote);
   /**
    * This helper function tells the client to redirect their request elsewhere.
    */
@@ -1172,6 +1212,8 @@ private:
     boost::statechart::result react(const SnapTrim&);
   };
 
+  int _verify_no_head_clones(const hobject_t& soid,
+			     const SnapSet& ss);
   int _delete_head(OpContext *ctx, bool no_whiteout);
   int _rollback_to(OpContext *ctx, ceph_osd_op& op);
 public:

@@ -40,6 +40,7 @@ libcommon_la_SOURCES = \
 	common/buffer.cc \
 	common/code_environment.cc \
 	common/dout.cc \
+	common/histogram.cc \
 	common/signal.cc \
 	common/simple_spin.cc \
 	common/Thread.cc \
@@ -141,6 +142,7 @@ noinst_HEADERS += \
 	common/fd.h \
 	common/version.h \
 	common/hex.h \
+	common/histogram.h \
 	common/entity_name.h \
 	common/errno.h \
 	common/environment.h \

@@ -27,7 +27,7 @@
 #include "include/types.h"
 #include "include/utime.h"
 #include "include/CompatSet.h"
-#include "include/histogram.h"
+#include "common/histogram.h"
 #include "include/interval_set.h"
 #include "common/Formatter.h"
 #include "common/bloom_filter.hpp"
@@ -811,7 +811,7 @@ public:
    */
   interval_set<snapid_t> removed_snaps;
 
-  int pg_num_mask, pgp_num_mask;
+  unsigned pg_num_mask, pgp_num_mask;
 
   set<uint64_t> tiers;      ///< pools that are tiers of us
   int64_t tier_of;         ///< pool for which we are a tier
@@ -826,6 +826,15 @@ public:
   void clear_read_tier() { read_tier = -1; }
   bool has_write_tier() const { return write_tier >= 0; }
   void clear_write_tier() { write_tier = -1; }
+
+  uint64_t target_max_bytes;   ///< tiering: target max pool size
+  uint64_t target_max_objects; ///< tiering: target max pool size
+
+  uint32_t cache_target_dirty_ratio_micro; ///< cache: fraction of target to leave dirty
+  uint32_t cache_target_full_ratio_micro;  ///< cache: fraction of target to fill before we evict in earnest
+
+  uint32_t cache_min_flush_age;  ///< minimum age (seconds) before we can flush
+  uint32_t cache_min_evict_age;  ///< minimum age (seconds) before we can evict
 
   HitSet::Params hit_set_params; ///< The HitSet params to use on this pool
   uint32_t hit_set_period;      ///< periodicity of HitSet segments (seconds)
@@ -845,6 +854,11 @@ public:
       pg_num_mask(0), pgp_num_mask(0),
       tier_of(-1), read_tier(-1), write_tier(-1),
       cache_mode(CACHEMODE_NONE),
+      target_max_bytes(0), target_max_objects(0),
+      cache_target_dirty_ratio_micro(400000),
+      cache_target_full_ratio_micro(800000),
+      cache_min_flush_age(0),
+      cache_min_evict_age(0),
       hit_set_params(),
       hit_set_period(0),
       hit_set_count(0),
@@ -899,6 +913,11 @@ public:
 
   unsigned get_pg_num_mask() const { return pg_num_mask; }
   unsigned get_pgp_num_mask() const { return pgp_num_mask; }
+
+  // if pg_num is not a multiple of two, pgs are not equally sized.
+  // return, for a given pg, the fraction (denominator) of the total
+  // pool size that it represents.
+  unsigned get_pg_num_divisor(pg_t pgid) const;
 
   void set_pg_num(int p) {
     pg_num = p;
@@ -970,6 +989,9 @@ public:
    * seeds.
    */
   ps_t raw_pg_to_pps(pg_t pg) const;
+
+  /// choose a random hash position within a pg
+  uint32_t get_random_pg_position(pg_t pgid, uint32_t seed) const;
 
   void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
@@ -2308,6 +2330,7 @@ struct object_info_t {
     FLAG_LOST     = 1<<0,
     FLAG_WHITEOUT = 1<<1,  // object logically does not exist
     FLAG_DIRTY    = 1<<2,  // object has been modified since last flushed or undirtied
+    FLAG_OMAP     = 1 << 3,  // has (or may have) some/any omap data
     // ...
     FLAG_USES_TMAP = 1<<8,  // deprecated; no longer used.
   } flag_t;
@@ -2324,6 +2347,8 @@ struct object_info_t {
       s += "|dirty";
     if (flags & FLAG_USES_TMAP)
       s += "|uses_tmap";
+    if (flags & FLAG_OMAP)
+      s += "|omap";
     if (s.length())
       return s.substr(1);
     return s;
@@ -2502,7 +2527,8 @@ public:
       if (get_write_lock()) {
 	return true;
       } // else
-      waiters.push_back(op);
+      if (op)
+	waiters.push_back(op);
       return false;
     }
     bool get_write_lock() {
@@ -2525,6 +2551,14 @@ public:
 	assert(0 == "unhandled case");
 	return false;
       }
+    }
+    /// same as get_write_lock, but ignore starvation
+    bool take_write_lock() {
+      if (state == RWWRITE) {
+	count++;
+	return true;
+      }
+      return get_write_lock();
     }
     void dec(list<OpRequestRef> *requeue) {
       assert(count > 0);

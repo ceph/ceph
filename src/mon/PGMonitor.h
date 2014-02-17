@@ -28,7 +28,7 @@ using namespace std;
 #include "PaxosService.h"
 #include "include/types.h"
 #include "include/utime.h"
-#include "include/histogram.h"
+#include "common/histogram.h"
 #include "msg/Messenger.h"
 #include "common/config.h"
 #include "mon/MonitorDBStore.h"

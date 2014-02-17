@@ -1958,8 +1958,8 @@ string set_pool_str(string pool, string var, string val)
 string set_pool_str(string pool, string var, int val)
 {
   return string("{\"prefix\": \"osd pool set\",\"pool\":\"") + pool
-    + string("\",\"var\": \"") + var + string("\",\"val\": ")
-    + stringify(val) + string("}");
+    + string("\",\"var\": \"") + var + string("\",\"val\": \"")
+    + stringify(val) + string("\"}");
 }
 
 TEST(LibRadosTier, HitSetRead) {

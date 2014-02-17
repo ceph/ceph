@@ -2000,7 +2000,8 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 			 CEPH_OSDMAP_NOBACKFILL |
 			 CEPH_OSDMAP_NORECOVER |
 			 CEPH_OSDMAP_NOSCRUB |
-			 CEPH_OSDMAP_NODEEP_SCRUB)) {
+			 CEPH_OSDMAP_NODEEP_SCRUB |
+			 CEPH_OSDMAP_NOTIERAGENT)) {
       ostringstream ss;
       ss << osdmap.get_flag_string() << " flag(s) set";
       summary.push_back(make_pair(HEALTH_WARN, ss.str()));
@@ -3229,7 +3230,50 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     if (val == "true" || (interr.empty() && n == 1)) {
       p.flags |= pg_pool_t::FLAG_DEBUG_FAKE_EC_POOL;
     }
-    ss << " pool " << pool << " set debug_fake_ec_pool";
+  } else if (var == "target_max_objects") {
+    if (interr.length()) {
+      ss << "error parsing int '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    p.target_max_objects = n;
+  } else if (var == "target_max_bytes") {
+    if (interr.length()) {
+      ss << "error parsing int '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    p.target_max_bytes = n;
+  } else if (var == "cache_target_dirty_ratio") {
+    if (floaterr.length()) {
+      ss << "error parsing float '" << val << "': " << floaterr;
+      return -EINVAL;
+    }
+    if (f < 0 || f > 1.0) {
+      ss << "value must be in the range 0..1";
+      return -ERANGE;
+    }
+    p.cache_target_dirty_ratio_micro = f * 1000000;
+  } else if (var == "cache_target_full_ratio") {
+    if (floaterr.length()) {
+      ss << "error parsing float '" << val << "': " << floaterr;
+      return -EINVAL;
+    }
+    if (f < 0 || f > 1.0) {
+      ss << "value must be in the range 0..1";
+      return -ERANGE;
+    }
+    p.cache_target_full_ratio_micro = n;
+  } else if (var == "cache_min_flush_age") {
+    if (interr.length()) {
+      ss << "error parsing int '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    p.cache_min_flush_age = n;
+  } else if (var == "cache_min_evict_age") {
+    if (interr.length()) {
+      ss << "error parsing int '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    p.cache_min_evict_age = n;
   } else {
     ss << "unrecognized variable '" << var << "'";
     return -EINVAL;
@@ -3871,6 +3915,8 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       return prepare_set_flag(m, CEPH_OSDMAP_NOSCRUB);
     else if (key == "nodeep-scrub")
       return prepare_set_flag(m, CEPH_OSDMAP_NODEEP_SCRUB);
+    else if (key == "notieragent")
+      return prepare_set_flag(m, CEPH_OSDMAP_NOTIERAGENT);
 
   } else if (prefix == "osd unset") {
     string key;
@@ -3893,6 +3939,8 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       return prepare_unset_flag(m, CEPH_OSDMAP_NOSCRUB);
     else if (key == "nodeep-scrub")
       return prepare_unset_flag(m, CEPH_OSDMAP_NODEEP_SCRUB);
+    else if (key == "notieragent")
+      return prepare_unset_flag(m, CEPH_OSDMAP_NOTIERAGENT);
 
   } else if (prefix == "osd cluster_snap") {
     // ** DISABLE THIS FOR NOW **
