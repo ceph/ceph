@@ -1740,6 +1740,7 @@ static void split_replay_queue(
 void PG::split_ops(PG *child, unsigned split_bits) {
   unsigned match = child->info.pgid.m_seed;
   assert(waiting_for_all_missing.empty());
+  assert(waiting_for_cache_not_full.empty());
   assert(waiting_for_missing_object.empty());
   assert(waiting_for_degraded_object.empty());
   assert(waiting_for_ack.empty());
@@ -5940,6 +5941,7 @@ void PG::RecoveryState::Active::exit()
   pg->state_clear(PG_STATE_REPLAY);
   utime_t dur = ceph_clock_now(pg->cct) - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_active_latency, dur);
+  pg->agent_stop();
 }
 
 /*------ReplicaActive-----*/
@@ -5954,6 +5956,8 @@ PG::RecoveryState::ReplicaActive::ReplicaActive(my_context ctx)
     context< RecoveryMachine >().get_cur_transaction(),
     context< RecoveryMachine >().get_on_applied_context_list(),
     context< RecoveryMachine >().get_on_safe_context_list());
+
+  pg->agent_clear();
 }
 
 
