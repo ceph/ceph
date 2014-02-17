@@ -8293,10 +8293,10 @@ int Client::ll_commit_blocks(Inode *in,
       return -EINVAL;
     }
 
-    bctx = this->barriers[ino];
-    if (bctx) {
+    map<uint64_t, BarrierContext*>::iterator p = barriers.find(ino);
+    if (p != barriers.end()) {
       barrier_interval civ(offset, length);
-      bctx->commit_barrier(civ);
+      p->second->commit_barrier(civ);
     }
 
     return 0;
