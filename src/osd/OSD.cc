@@ -1432,6 +1432,8 @@ void OSD::create_logger()
   osd_plb.add_u64(l_osd_stat_bytes_used, "stat_bytes_used");
   osd_plb.add_u64(l_osd_stat_bytes_avail, "stat_bytes_avail");
 
+  osd_plb.add_u64_counter(l_osd_copyfrom, "copyfrom");
+
   osd_plb.add_u64_counter(l_osd_tier_promote, "tier_promote");
   logger = osd_plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
