@@ -88,7 +88,7 @@ void BarrierContext::write_barrier(C_Block_Sync &cbs)
 	 !done && (iter != active_commits.end());
 	 ++iter) {
       Barrier &barrier = *iter;
-      while (boost::icl::intersects(barrier.span, iv)) {
+      while (barrier.span.intersects(iv.first, iv.second)) {
 	/*  wait on this */
 	barrier.cond.Wait(lock);
 	done = true;
@@ -109,8 +109,8 @@ void BarrierContext::commit_barrier(barrier_interval &civ)
     if (outstanding_writes.size() == 0)
       return;
 
-    boost::icl::interval_set<uint64_t> cvs;
-    cvs.insert(civ);
+    interval_set<uint64_t> cvs;
+    cvs.insert(civ.first, civ.second);
 
     Barrier *barrier = NULL;
     BlockSyncList::iterator iter, iter2;
@@ -118,7 +118,7 @@ void BarrierContext::commit_barrier(barrier_interval &civ)
     iter = outstanding_writes.begin();
     while (iter != outstanding_writes.end()) {
       barrier_interval &iv = iter->iv;
-      if (boost::icl::intersects(cvs, iv)) {
+      if (cvs.intersects(iv.first, iv.second)) {
 	C_Block_Sync &a_write = *iter;
 	if (! barrier)
 	  barrier = new Barrier();
@@ -128,7 +128,7 @@ void BarrierContext::commit_barrier(barrier_interval &civ)
 	iter2 = iter++;
 	outstanding_writes.erase(iter2);
 	barrier->write_list.push_back(a_write);
-	barrier->span.insert(iv);
+	barrier->span.insert(iv.first, iv.second);
 	/* avoid iter invalidate */
       } else {
 	iter++;

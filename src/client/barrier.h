@@ -21,8 +21,6 @@
 #include <set>
 #include <map>
 #include <boost/intrusive/list.hpp>
-#define BOOST_ICL_USE_STATIC_BOUNDED_INTERVALS
-#include <boost/icl/interval_set.hpp>
 #include <fstream>
 #include <exception>
 
@@ -33,13 +31,14 @@ using std::fstream;
 
 #include <ext/hash_map>
 
+#include "include/interval_set.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/config.h"
 
 class Client;
 
-typedef boost::icl::interval<uint64_t>::type barrier_interval;
+typedef pair<uint64_t,uint64_t> barrier_interval;
 
 using namespace std;
 
@@ -90,7 +89,7 @@ class Barrier
 {
 private:
   Cond cond;
-  boost::icl::interval_set<uint64_t> span;
+  interval_set<uint64_t> span;
   BlockSyncList write_list;
 
 public:
