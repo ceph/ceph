@@ -8295,7 +8295,7 @@ int Client::ll_commit_blocks(Inode *in,
 
     map<uint64_t, BarrierContext*>::iterator p = barriers.find(ino);
     if (p != barriers.end()) {
-      barrier_interval civ(offset, length);
+      barrier_interval civ(offset, offset + length);
       p->second->commit_barrier(civ);
     }
 
