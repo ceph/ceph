@@ -122,6 +122,8 @@ enum {
   l_osd_stat_bytes_used,
   l_osd_stat_bytes_avail,
 
+  l_osd_copyfrom,
+
   l_osd_tier_promote,
   l_osd_last,
 };
