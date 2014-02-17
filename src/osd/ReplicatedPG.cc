@@ -2204,8 +2204,10 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
     delta.num_objects--;
     if (coi.is_dirty())
       delta.num_objects_dirty--;
-    if (coi.is_whiteout())
+    if (coi.is_whiteout()) {
+      dout(20) << __func__ << " trimming whiteout on " << coid << dendl;
       delta.num_whiteouts--;
+    }
     delta.num_object_clones--;
     delta.num_bytes -= snapset.clone_size[last];
     info.stats.stats.add(delta, obc->obs.oi.category);
@@ -4409,8 +4411,10 @@ inline int ReplicatedPG::_delete_head(OpContext *ctx, bool no_whiteout)
   ctx->delta_stats.num_objects--;
   if (oi.is_dirty())
     ctx->delta_stats.num_objects_dirty--;
-  if (oi.is_whiteout())
+  if (oi.is_whiteout()) {
+    dout(20) << __func__ << " deleting whiteout on " << soid << dendl;
     ctx->delta_stats.num_whiteouts--;
+  }
   snapset.head_exists = false;
   obs.exists = false;
   return 0;
@@ -4621,8 +4625,10 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     ctx->delta_stats.num_objects++;
     if (snap_oi->is_dirty())
       ctx->delta_stats.num_objects_dirty++;
-    if (snap_oi->is_whiteout())
+    if (snap_oi->is_whiteout()) {
+      dout(20) << __func__ << " cloning whiteout on " << soid << " to " << coid << dendl;
       ctx->delta_stats.num_whiteouts++;
+    }
     ctx->delta_stats.num_object_clones++;
     ctx->new_snapset.clones.push_back(coid.snap);
     ctx->new_snapset.clone_size[coid.snap] = ctx->obs->oi.size;
@@ -5565,7 +5571,7 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     tctx->op_t->touch(soid);
     tctx->new_obs.oi.set_flag(object_info_t::FLAG_WHITEOUT);
     ++tctx->delta_stats.num_whiteouts;
-    dout(20) << __func__ << " creating whiteout" << dendl;
+    dout(20) << __func__ << " creating whiteout on " << soid << dendl;
   } else {
     tctx->op_t->append(results->final_tx);
     delete results->final_tx;
@@ -10452,6 +10458,7 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
   RepGather *repop = simple_repop_create(obc);
   OpContext *ctx = repop->ctx;
   ctx->at_version = get_next_version();
+  assert(ctx->new_obs.exists);
   int r = _delete_head(ctx, true);
   assert(r == 0);
   finish_ctx(ctx, pg_log_entry_t::DELETE);
