@@ -539,9 +539,6 @@ private:
     int i		   ///< [in] Index of hashed name to generate.
     ); ///< @return Hashed filename.
 
-  /* other common methods */
-  /// Gets the base path
-  const string &get_base_path(); ///< @return Index base_path
 
   /// Get full path the subdir
   string get_full_path_subdir(
