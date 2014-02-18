@@ -99,31 +99,29 @@ def copy_and_close(src, fdst):
         shutil.copyfileobj(src, fdst)
     fdst.close()
 
-
-def copy_file_to(f, destinations, host):
-    for dst in destinations:
-        if hasattr(dst, 'log'):
-            # looks like a Logger to me; not using isinstance to make life
-            # easier for unit tests
-            copy_to_log(f, dst, host)
-        else:
-            shutil.copyfileobj(f, dst)
+def copy_file_to(f, dst, host):
+    if hasattr(dst, 'log'):
+        # looks like a Logger to me; not using isinstance to make life
+        # easier for unit tests
+        handler = copy_to_log
+        return handler(f, dst, host)
+    else:
+        handler = shutil.copyfileobj
+        return handler(f, dst)
 
 
 class CommandFailedError(Exception):
-    def __init__(self, command, exitstatus, node, stderr):
+    def __init__(self, command, exitstatus, node=None):
         self.command = command
         self.exitstatus = exitstatus
         self.node = node
-        self.stderr = stderr
 
     def __str__(self):
-        return "Command failed on {node} with status {status}: {command!r}\nstderr output: {stderr}".format(
+        return "Command failed on {node} with status {status}: {command!r}".format(
             node=self.node,
             status=self.exitstatus,
             command=self.command,
-            stderr=self.stderr
-        )
+            )
 
 
 class CommandCrashedError(Exception):
@@ -232,14 +230,11 @@ def run(
     if name is None:
         name = host
 
-    err_buffer = StringIO()
-
     g_err = None
     if stderr is not PIPE:
-        err_outputs = [err_buffer, logger.getChild('err')]
-        if stderr is not None:
-            err_outputs.append(stderr)
-        g_err = gevent.spawn(copy_file_to, r.stderr, err_outputs, name)
+        if stderr is None:
+            stderr = logger.getChild('err')
+        g_err = gevent.spawn(copy_file_to, r.stderr, stderr, name)
         r.stderr = stderr
     else:
         assert not wait, "Using PIPE for stderr without wait=False would deadlock."
@@ -248,7 +243,7 @@ def run(
     if stdout is not PIPE:
         if stdout is None:
             stdout = logger.getChild('out')
-        g_out = gevent.spawn(copy_file_to, r.stdout, [stdout], name)
+        g_out = gevent.spawn(copy_file_to, r.stdout, stdout, name)
         r.stdout = stdout
     else:
         assert not wait, "Using PIPE for stdout without wait=False would deadlock."
@@ -275,7 +270,7 @@ def run(
                 # signal; sadly SSH does not tell us which signal
                 raise CommandCrashedError(command=r.command)
             if status != 0:
-                raise CommandFailedError(command=r.command, exitstatus=status, node=name, stderr=err_buffer.getvalue())
+                raise CommandFailedError(command=r.command, exitstatus=status, node=name)
         return status
 
     if wait:
