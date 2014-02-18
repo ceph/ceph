@@ -179,6 +179,9 @@ private:
   int authenticate_err;
 
   list<Message*> waiting_for_session;
+  Context *session_established_context;
+  bool had_a_connection;
+  double reopen_interval_multiplier;
 
   string _pick_random_mon();
   void _finish_hunting();
@@ -296,8 +299,19 @@ public:
     Mutex::Locker l(monc_lock);
     _send_mon_message(m);
   }
-  void reopen_session() {
+  /**
+   * If you specify a callback, you should not call
+   * reopen_session() again until it has been triggered. The MonClient
+   * will behave, but the first callback could be triggered after
+   * the session has been killed and the MonClient has started trying
+   * to reconnect to another monitor.
+   */
+  void reopen_session(Context *cb=NULL) {
     Mutex::Locker l(monc_lock);
+    if (cb) {
+      delete session_established_context;
+      session_established_context = cb;
+    }
     _reopen_session();
   }
 
