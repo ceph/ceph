@@ -95,16 +95,6 @@ void ACLGranteeType::generate_test_instances(list<ACLGranteeType*>& o)
 static string rgw_uri_all_users = RGW_URI_ALL_USERS;
 static string rgw_uri_auth_users = RGW_URI_AUTH_USERS;
 
-ACLGroupTypeEnum ACLGrant_S3::uri_to_group(string& uri)
-{
-  if (uri.compare(rgw_uri_all_users) == 0)
-    return ACL_GROUP_ALL_USERS;
-  else if (uri.compare(rgw_uri_auth_users) == 0)
-    return ACL_GROUP_AUTHENTICATED_USERS;
-
-  return ACL_GROUP_NONE;
-}
-
 void ACLGrant::generate_test_instances(list<ACLGrant*>& o)
 {
   string id, name, email;
