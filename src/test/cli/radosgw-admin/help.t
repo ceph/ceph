@@ -48,7 +48,8 @@
     usage trim                 trim usage (by user, date range)
     temp remove                remove temporary objects that were created up to
                                specified date (and optional time)
-    gc list                    dump expired garbage collection objects
+    gc list                    dump expired garbage collection objects (specify
+                               --include-all to list all entries, including unexpired)
     gc process                 manually process garbage
     metadata get               get metadata info
     metadata put               put metadata info
