@@ -171,12 +171,19 @@ protected:
     const ghobject_t &oid,
     const string &mangled_name
     );
+
   int _lookup(
     const ghobject_t &oid,
     vector<string> *path,
     string *mangled_name,
     int *exists
     );
+
+  int _lookup(
+    const ghobject_t &oid, 
+    string& full_path,
+    string* mangled_name = NULL);
+
   int _collection_list(
     vector<ghobject_t> *ls
     );

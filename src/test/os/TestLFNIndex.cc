@@ -46,7 +46,8 @@ public:
 		     ) { return 0; }
 
   void test_generate_and_parse(const ghobject_t &hoid, const std::string &mangled_expected) {
-    const std::string mangled_name = lfn_generate_object_name(hoid);
+    const std::string mangled_name;
+    lfn_generate_object_name(hoid, mangled_name);
     EXPECT_EQ(mangled_expected, mangled_name);
     ghobject_t hoid_parsed;
     EXPECT_TRUE(lfn_parse_object_name(mangled_name, &hoid_parsed));

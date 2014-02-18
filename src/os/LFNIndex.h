@@ -240,6 +240,11 @@ protected:
     int *exists		  ///< [out] True if the object exists.
     ) = 0;
 
+  virtual int _lookup(
+    const ghobject_t &oid, 
+    string& full_path,
+    string* mangled_name = NULL) = 0;
+
   /**
    * List contents of the collection, must be implemented by derived class.
    *
@@ -414,6 +419,15 @@ protected:
     const string &attr_name	///< [in] attr to remove
     ); ///< @return Error code, 0 on success
 
+  /* other common methods */
+  /// Gets the base path
+  const string &get_base_path(); ///< @return Index base_path
+
+  int lfn_get_name(
+    const ghobject_t &oid,
+    string& full_path, string* mangled_name = NULL );
+
+
 private:
   /* lfn translation functions */
 
@@ -486,10 +500,10 @@ private:
     const ghobject_t &oid ///< [in] Object for which to generate.
     ); ///< @return Generated object name.
 
-  /// Generate object name
-  string lfn_generate_object_name(
-    const ghobject_t &oid ///< [in] Object for which to generate.
-    ); ///< @return Generated object name.
+  int lfn_generate_object_name(
+    const ghobject_t &oid, 
+    string& full_name,
+    bool io_path = false);
 
   /// Parse object name
   bool lfn_parse_object_name_keyless(
