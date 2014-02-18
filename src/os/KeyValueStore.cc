@@ -266,15 +266,15 @@ void KeyValueStore::SubmitManager::op_submit_finish(uint64_t op)
 
 int KeyValueStore::BufferTransaction::check_coll(const coll_t &cid)
 {
-  int r = store->_check_coll(cid);
-  if (r == 0)
-    return r;
-
   StripHeaderMap::iterator it = strip_headers.find(
       make_pair(get_coll_for_coll(), make_ghobject_for_coll(cid)));
   if (it != strip_headers.end() && !it->second.deleted) {
     return 0;
   }
+
+  if (store->_check_coll(cid) == 0)
+    return 0;
+
   return -ENOENT;
 }
 
