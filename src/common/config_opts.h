@@ -385,6 +385,7 @@ OPTION(mds_standby_replay, OPT_BOOL, false)
 // If true, compact leveldb store on mount
 OPTION(osd_compact_leveldb_on_mount, OPT_BOOL, false)
 
+OPTION(rocksdb_compact_on_mount, OPT_BOOL, false)
 // Maximum number of backfills to or from a single osd
 OPTION(osd_max_backfills, OPT_U64, 10)
 
@@ -563,6 +564,15 @@ OPTION(leveldb_compression, OPT_BOOL, true) // leveldb uses compression
 OPTION(leveldb_paranoid, OPT_BOOL, false) // leveldb paranoid flag
 OPTION(leveldb_log, OPT_STR, "/dev/null")  // enable leveldb log file
 OPTION(leveldb_compact_on_mount, OPT_BOOL, false)
+
+OPTION(rocksdb_write_buffer_size, OPT_U64, 0) // rocksdb write buffer size
+OPTION(rocksdb_cache_size, OPT_U64, 0) // rocksdb cache size
+OPTION(rocksdb_block_size, OPT_U64, 0) // rocksdb block size
+OPTION(rocksdb_bloom_size, OPT_INT, 0) // rocksdb bloom bits per entry
+OPTION(rocksdb_max_open_files, OPT_INT, 0) // rocksdb max open files
+OPTION(rocksdb_compression, OPT_STR, "") // rocksdb uses compression : none, snappy, zlib, bzip2
+OPTION(rocksdb_paranoid, OPT_BOOL, false) // rocksdb paranoid flag
+OPTION(rocksdb_log, OPT_STR, "")  // enable rocksdb log file
 
 /**
  * osd_client_op_priority and osd_recovery_op_priority adjust the relative
