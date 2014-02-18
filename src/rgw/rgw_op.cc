@@ -1363,16 +1363,36 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx)
 
   part_num = s->info.args.get("partNumber");
   if (part_num.empty()) {
+    ldout(s->cct, 10) << "part number is empty" << dendl;
     return -EINVAL;
   }
 
-  oid = mp.get_part(part_num);
+  string err;
+  uint64_t num = (uint64_t)strict_strtol(part_num.c_str(), 10, &err);
 
-  head_obj.init_ns(bucket, oid, mp_ns);
-  oid_prefix = oid;
-  oid_prefix.append("_");
+  if (!err.empty()) {
+    ldout(s->cct, 10) << "bad part number: " << part_num << ": " << err << dendl;
+    return -EINVAL;
+  }
+
+  string upload_prefix = oid + "." + upload_id;
+
+  rgw_obj target_obj;
+  target_obj.init(bucket, oid);
+
+  manifest.set_prefix(upload_prefix);
+
+  manifest.set_multipart_part_rule(store->ctx()->_conf->rgw_obj_stripe_size, num);
+
+  int r = manifest_gen.create_begin(store->ctx(), &manifest, bucket, target_obj);
+  if (r < 0) {
+    return r;
+  }
+
+  head_obj = manifest_gen.get_cur_obj();
   cur_obj = head_obj;
-  add_obj(head_obj);
+  add_obj(cur_obj);
+
   return 0;
 }
 
@@ -2606,11 +2626,9 @@ void RGWCompleteMultipart::execute()
       src_obj.init_ns(s->bucket, oid, mp_ns);
 
       if (obj_part.manifest.empty()) {
-        RGWObjManifestPart& part = manifest.objs[ofs];
-
-        part.loc = src_obj;
-        part.loc_ofs = 0;
-        part.size = part_size;
+        ldout(s->cct, 0) << "ERROR: empty manifest for object part: obj=" << src_obj << dendl;
+        ret = -ERR_INVALID_PART;
+        return;
       } else {
         manifest.append(obj_part.manifest);
       }
@@ -2632,8 +2650,6 @@ void RGWCompleteMultipart::execute()
   attrs[RGW_ATTR_ETAG] = etag_bl;
 
   target_obj.init(s->bucket, s->object_str);
-
-  manifest.obj_size = ofs;
 
   store->set_atomic(s->obj_ctx, target_obj);
 
@@ -2713,10 +2729,10 @@ void RGWAbortMultipart::execute()
           return;
       } else {
         RGWObjManifest& manifest = obj_part.manifest;
-        map<uint64_t, RGWObjManifestPart>::iterator oiter;
-        for (oiter = manifest.objs.begin(); oiter != manifest.objs.end(); ++oiter) {
-          RGWObjManifestPart& part = oiter->second;
-          ret = store->delete_obj(s->obj_ctx, owner, part.loc);
+        RGWObjManifest::obj_iterator oiter;
+        for (oiter = manifest.obj_begin(); oiter != manifest.obj_end(); ++oiter) {
+          rgw_obj loc = oiter.get_location();
+          ret = store->delete_obj(s->obj_ctx, owner, loc);
           if (ret < 0 && ret != -ENOENT)
             return;
         }
