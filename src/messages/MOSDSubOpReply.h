@@ -30,12 +30,15 @@
  */
 
 class MOSDSubOpReply : public Message {
+  static const int HEAD_VERSION = 2;
+  static const int COMPAT_VERSION = 1;
 public:
   epoch_t map_epoch;
   
   // subop metadata
   osd_reqid_t reqid;
-  pg_t pgid;
+  pg_shard_t from;
+  spg_t pgid;
   hobject_t poid;
 
   vector<OSDOp> ops;
@@ -54,7 +57,7 @@ public:
     bufferlist::iterator p = payload.begin();
     ::decode(map_epoch, p);
     ::decode(reqid, p);
-    ::decode(pgid, p);
+    ::decode(pgid.pgid, p);
     ::decode(poid, p);
 
     unsigned num_ops;
@@ -71,11 +74,21 @@ public:
 
     if (!poid.is_max() && poid.pool == -1)
       poid.pool = pgid.pool();
+
+    if (header.version >= 2) {
+      ::decode(from, p);
+      ::decode(pgid.shard, p);
+    } else {
+      from = pg_shard_t(
+	get_source().num(),
+	ghobject_t::NO_SHARD);
+      pgid.shard = ghobject_t::NO_SHARD;
+    }
   }
   virtual void encode_payload(uint64_t features) {
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
-    ::encode(pgid, payload);
+    ::encode(pgid.pgid, payload);
     ::encode(poid, payload);
     __u32 num_ops = ops.size();
     ::encode(num_ops, payload);
@@ -87,11 +100,13 @@ public:
     ::encode(last_complete_ondisk, payload);
     ::encode(peer_stat, payload);
     ::encode(attrset, payload);
+    ::encode(from, payload);
+    ::encode(pgid.shard, payload);
   }
 
   epoch_t get_map_epoch() { return map_epoch; }
 
-  pg_t get_pg() { return pgid; }
+  spg_t get_pg() { return pgid; }
   hobject_t get_poid() { return poid; }
 
   int get_ack_type() { return ack_type; }
@@ -110,11 +125,13 @@ public:
   map<string,bufferptr>& get_attrset() { return attrset; } 
 
 public:
-  MOSDSubOpReply(MOSDSubOp *req, int result_, epoch_t e, int at) :
-    Message(MSG_OSD_SUBOPREPLY),
+  MOSDSubOpReply(
+    MOSDSubOp *req, pg_shard_t from, int result_, epoch_t e, int at) :
+    Message(MSG_OSD_SUBOPREPLY, HEAD_VERSION, COMPAT_VERSION),
     map_epoch(e),
     reqid(req->reqid),
-    pgid(req->pgid),
+    from(from),
+    pgid(req->pgid.pgid, req->from.shard),
     poid(req->poid),
     ops(req->ops),
     ack_type(at),

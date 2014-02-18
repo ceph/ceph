@@ -147,6 +147,7 @@ void SimpleMessenger::set_addr_unknowns(entity_addr_t &addr)
     int port = my_inst.addr.get_port();
     my_inst.addr.addr = addr.addr;
     my_inst.addr.set_port(port);
+    init_local_connection();
   }
 }
 
@@ -294,8 +295,10 @@ int SimpleMessenger::start()
   assert(!started);
   started = true;
 
-  if (!did_bind)
+  if (!did_bind) {
     my_inst.addr.nonce = nonce;
+    init_local_connection();
+  }
 
   lock.Unlock();
 

@@ -162,7 +162,7 @@ int main(int argc, char **argv)
 
   vector<coll_t> colls_to_check;
   if (pgidstr.length()) {
-    pg_t pgid;
+    spg_t pgid;
     if (!pgid.parse(pgidstr.c_str())) {
       cout << "Invalid pgid '" << pgidstr << "' specified" << std::endl;
       exit(1);
@@ -178,7 +178,7 @@ int main(int argc, char **argv)
     for (vector<coll_t>::iterator i = candidates.begin();
 	 i != candidates.end();
 	 ++i) {
-      pg_t pgid;
+      spg_t pgid;
       snapid_t snap;
       if (i->is_pg(pgid, snap)) {
 	colls_to_check.push_back(*i);
