@@ -324,13 +324,14 @@ void cls_rgw_gc_defer_entry(ObjectWriteOperation& op, uint32_t expiration_secs, 
   op.exec("rgw", "gc_defer_entry", in);
 }
 
-int cls_rgw_gc_list(IoCtx& io_ctx, string& oid, string& marker, uint32_t max,
+int cls_rgw_gc_list(IoCtx& io_ctx, string& oid, string& marker, uint32_t max, bool expired_only,
                     list<cls_rgw_gc_obj_info>& entries, bool *truncated)
 {
   bufferlist in, out;
   cls_rgw_gc_list_op call;
   call.marker = marker;
   call.max = max;
+  call.expired_only = expired_only;
   ::encode(call, in);
   int r = io_ctx.exec(oid, "rgw", "gc_list", in, out);
   if (r < 0)

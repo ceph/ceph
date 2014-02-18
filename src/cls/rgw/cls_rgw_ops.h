@@ -345,20 +345,25 @@ WRITE_CLASS_ENCODER(cls_rgw_gc_defer_entry_op)
 struct cls_rgw_gc_list_op {
   string marker;
   uint32_t max;
+  bool expired_only;
 
-  cls_rgw_gc_list_op() : max(0) {}
+  cls_rgw_gc_list_op() : max(0), expired_only(true) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(marker, bl);
     ::encode(max, bl);
+    ::encode(expired_only, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(marker, bl);
     ::decode(max, bl);
+    if (struct_v >= 2) {
+      ::decode(expired_only, bl);
+    }
     DECODE_FINISH(bl);
   }
 

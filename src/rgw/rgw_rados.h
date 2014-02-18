@@ -1431,7 +1431,7 @@ public:
   int gc_aio_operate(string& oid, librados::ObjectWriteOperation *op);
   int gc_operate(string& oid, librados::ObjectReadOperation *op, bufferlist *pbl);
 
-  int list_gc_objs(int *index, string& marker, uint32_t max, std::list<cls_rgw_gc_obj_info>& result, bool *truncated);
+  int list_gc_objs(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated);
   int process_gc();
   int defer_gc(void *ctx, rgw_obj& obj);
 
