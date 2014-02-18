@@ -500,6 +500,9 @@ namespace librados
 
     std::string get_pool_name();
 
+    bool pool_requires_alignment();
+    uint64_t pool_required_alignment();
+
     // create an object
     int create(const std::string& oid, bool exclusive);
     int create(const std::string& oid, bool exclusive, const std::string& category);

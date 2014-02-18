@@ -323,8 +323,8 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
 
     case Transaction::OP_COLL_ADD:
       {
-	coll_t ocid = i.get_cid();
 	coll_t ncid = i.get_cid();
+	coll_t ocid = i.get_cid();
 	ghobject_t oid = i.get_oid();
 	f->dump_string("op_name", "collection_add");
 	f->dump_stream("src_collection") << ocid;

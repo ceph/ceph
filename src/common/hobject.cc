@@ -272,7 +272,8 @@ void ghobject_t::generate_test_instances(list<ghobject_t*>& o)
 ostream& operator<<(ostream& out, const ghobject_t& o)
 {
   out << o.hobj;
-  if (o.generation != ghobject_t::NO_GEN) {
+  if (o.generation != ghobject_t::NO_GEN ||
+      o.shard_id != ghobject_t::NO_SHARD) {
     assert(o.shard_id != ghobject_t::NO_SHARD);
     out << "/" << o.generation << "/" << (unsigned)(o.shard_id);
   }

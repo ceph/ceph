@@ -196,7 +196,7 @@ Core changes:
   tuple<hobject_t, gen_t, shard_t>.
 - coll_t needs to include a shard_t.
 - The `OSD pg_map and similar pg mappings need to work in terms of a
-  cpg_t <http://tracker.ceph.com/issues/5863>`_ (essentially
+  spg_t <http://tracker.ceph.com/issues/5863>`_ (essentially
   pair<pg_t, shard_t>).  Similarly, pg->pg messages need to include
   a shard_t
 - For client->PG messages, the OSD will need a way to know which PG

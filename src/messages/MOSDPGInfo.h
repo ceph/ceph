@@ -20,7 +20,7 @@
 #include "osd/osd_types.h"
 
 class MOSDPGInfo : public Message {
-  static const int HEAD_VERSION = 3;
+  static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 1;
 
   epoch_t epoch;
@@ -79,6 +79,14 @@ public:
 	 p++)
       ::encode(pair<epoch_t, epoch_t>(
 		 p->first.epoch_sent, p->first.query_epoch), payload);
+
+    // v4 needs from, to
+    for (vector<pair<pg_notify_t, pg_interval_map_t> >::iterator p = pg_list.begin();
+	 p != pg_list.end();
+	 ++p) {
+      ::encode(p->first.from, payload);
+      ::encode(p->first.to, payload);
+    }
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -111,6 +119,16 @@ public:
       } else {
 	i->first.epoch_sent = epoch;
 	i->first.query_epoch = epoch;
+      }
+    }
+
+    // v4 needs from and to
+    if (header.version >= 4) {
+      for (vector<pair<pg_notify_t, pg_interval_map_t> >::iterator i = pg_list.begin();
+	   i != pg_list.end();
+	   i++) {
+	::decode(i->first.from, p);
+	::decode(i->first.to, p);
       }
     }
   }

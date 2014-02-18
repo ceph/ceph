@@ -320,6 +320,12 @@ inline void decode(boost::optional<T> &p, bufferlist::iterator &bp)
 
 // pair
 template<class A, class B>
+inline void encode(const std::pair<A,B> &p, bufferlist &bl, uint64_t features)
+{
+  encode(p.first, bl, features);
+  encode(p.second, bl, features);
+}
+template<class A, class B>
 inline void encode(const std::pair<A,B> &p, bufferlist &bl)
 {
   encode(p.first, bl);

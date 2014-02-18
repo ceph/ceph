@@ -44,13 +44,15 @@ void AppendGenerator::get_ranges_map(
   uint64_t pos = off;
   uint64_t limit = off + get_append_size(cont);
   while (pos < limit) {
-    uint64_t segment_length = (
-      rand() % (max_append_size - min_append_size)) + min_append_size;
-    assert(segment_length < max_append_size);
+    uint64_t segment_length = round_up(
+      rand() % (max_append_size - min_append_size),
+      alignment) + min_append_size;
     assert(segment_length >= min_append_size);
     if (segment_length + pos > limit) {
       segment_length = limit - pos;
     }
+    if (alignment)
+      assert(segment_length % alignment == 0);
     out.insert(make_pair(pos, segment_length));
     pos += segment_length;
   }

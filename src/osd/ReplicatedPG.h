@@ -38,6 +38,7 @@
 
 #include "PGBackend.h"
 #include "ReplicatedBackend.h"
+#include "ECBackend.h"
 
 class MOSDSubOpReply;
 
@@ -225,17 +226,17 @@ public:
     ObjectStore::Transaction *t
     );
   void on_peer_recover(
-    int peer,
+    pg_shard_t peer,
     const hobject_t &oid,
     const ObjectRecoveryInfo &recovery_info,
     const object_stat_sum_t &stat
     );
   void begin_peer_recover(
-    int peer,
+    pg_shard_t peer,
     const hobject_t oid);
   void on_global_recover(
     const hobject_t &oid);
-  void failed_push(int from, const hobject_t &soid);
+  void failed_push(pg_shard_t from, const hobject_t &soid);
   void cancel_pull(const hobject_t &soid);
 
   template <typename T>
@@ -288,27 +289,34 @@ public:
     tls.push_back(t);
     osd->store->queue_transaction(osr.get(), t, 0, 0, 0, op);
   }
-  epoch_t get_epoch() {
+  epoch_t get_epoch() const {
     return get_osdmap()->get_epoch();
   }
-  const vector<int> &get_actingbackfill() {
+  const set<pg_shard_t> &get_actingbackfill_shards() const {
     return actingbackfill;
   }
+  const set<pg_shard_t> &get_acting_shards() const {
+    return actingset;
+  }
+  const set<pg_shard_t> &get_backfill_shards() const {
+    return backfill_targets;
+  }
+
   std::string gen_dbg_prefix() const { return gen_prefix(); }
   
-  const map<hobject_t, set<int> > &get_missing_loc() {
-    return missing_loc;
+  const map<hobject_t, set<pg_shard_t> > &get_missing_loc_shards() const {
+    return missing_loc.get_missing_locs();
   }
-  const map<int, pg_missing_t> &get_peer_missing() {
+  const map<pg_shard_t, pg_missing_t> &get_shard_missing() const {
     return peer_missing;
   }
-  const map<int, pg_info_t> &get_peer_info() {
+  const map<pg_shard_t, pg_info_t> &get_shard_info() const {
     return peer_info;
   }
-  const pg_missing_t &get_local_missing() {
+  const pg_missing_t &get_local_missing() const {
     return pg_log.get_missing();
   }
-  const PGLog &get_log() {
+  const PGLog &get_log() const {
     return pg_log;
   }
   bool pgb_is_primary() const {
@@ -322,7 +330,7 @@ public:
   }
   ObjectContextRef get_obc(
     const hobject_t &hoid,
-    map<string, bufferptr> &attrs) {
+    map<string, bufferlist> &attrs) {
     return get_object_context(hoid, true, &attrs);
   }
   void log_operation(
@@ -337,8 +345,10 @@ public:
     const eversion_t &applied_version);
 
   bool should_send_op(
-    int peer,
+    pg_shard_t peer,
     const hobject_t &hoid) {
+    if (peer == get_primary())
+      return true;
     assert(peer_info.count(peer));
     bool should_send = hoid.pool != (int64_t)info.pgid.pool() ||
       hoid <= MAX(last_backfill_started, peer_info[peer].last_backfill);
@@ -348,7 +358,7 @@ public:
   }
   
   void update_peer_last_complete_ondisk(
-    int fromosd,
+    pg_shard_t fromosd,
     eversion_t lcod) {
     peer_last_complete_ondisk[fromosd] = lcod;
   }
@@ -362,6 +372,36 @@ public:
     const pg_stat_t &stat) {
     info.stats = stat;
   }
+
+  void schedule_work(
+    GenContext<ThreadPool::TPHandle&> *c);
+
+  pg_shard_t whoami_shard() const {
+    return pg_whoami;
+  }
+  spg_t primary_spg_t() const {
+    return spg_t(info.pgid.pgid, primary.shard);
+  }
+  pg_shard_t primary_shard() const {
+    return primary;
+  }
+
+  void send_message_osd_cluster(
+    int peer, Message *m, epoch_t from_epoch);
+  void send_message_osd_cluster(
+    Message *m, Connection *con);
+  void send_message_osd_cluster(
+    Message *m, const ConnectionRef& con);
+  ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch);
+  entity_name_t get_cluster_msgr_name() {
+    return osd->get_cluster_msgr_name();
+  }
+
+  PerfCounters *get_logger();
+
+  tid_t get_tid() { return osd->get_tid(); }
+
+  LogClientTemp clog_error() { return osd->clog.error(); }
 
   /*
    * Capture all object state associated with an in-progress read or write.
@@ -471,6 +511,8 @@ public:
     OpContext(const OpContext& other);
     const OpContext& operator=(const OpContext& other);
 
+    bool release_snapset_obc;
+
     OpContext(OpRequestRef _op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
 	      ObjectState *_obs, SnapSetContext *_ssc,
 	      ReplicatedPG *_pg) :
@@ -487,7 +529,8 @@ public:
       async_read_result(0),
       inflightreads(0),
       lock_to_release(NONE),
-      on_finish(NULL) {
+      on_finish(NULL),
+      release_snapset_obc(false) {
       if (_ssc) {
 	new_snapset = _ssc->snapset;
 	snapset = &_ssc->snapset;
@@ -629,11 +672,17 @@ protected:
   void release_op_ctx_locks(OpContext *ctx) {
     list<OpRequestRef> to_req;
     bool requeue_recovery = false;
+    bool requeue_recovery_clone = false;
+    bool requeue_recovery_snapset = false;
+    if (ctx->snapset_obc && ctx->release_snapset_obc) {
+      ctx->snapset_obc->put_write(&to_req, &requeue_recovery_snapset);
+      ctx->release_snapset_obc = false;
+    }
     switch (ctx->lock_to_release) {
     case OpContext::W_LOCK:
       ctx->obc->put_write(&to_req, &requeue_recovery);
-      if (requeue_recovery)
-	osd->recovery_wq.queue(this);
+      if (ctx->clone_obc)
+	ctx->clone_obc->put_write(&to_req, &requeue_recovery_clone);
       break;
     case OpContext::R_LOCK:
       ctx->obc->put_read(&to_req);
@@ -644,6 +693,8 @@ protected:
       assert(0);
     };
     ctx->lock_to_release = OpContext::NONE;
+    if (requeue_recovery || requeue_recovery_clone || requeue_recovery_snapset)
+      osd->recovery_wq.queue(this);
     requeue_ops(to_req);
   }
 
@@ -752,7 +803,7 @@ protected:
   ObjectContextRef get_object_context(
     const hobject_t& soid,
     bool can_create,
-    map<string, bufferptr> *attrs = 0
+    map<string, bufferlist> *attrs = 0
     );
 
   void context_registry_on_change();
@@ -780,7 +831,7 @@ protected:
   SnapSetContext *get_snapset_context(
     const object_t& oid, const string &key,
     ps_t seed, bool can_create, const string &nspace,
-    map<string, bufferptr> *attrs = 0
+    map<string, bufferlist> *attrs = 0
     );
   void register_snapset_context(SnapSetContext *ssc) {
     Mutex::Locker l(snapset_contexts_lock);
@@ -817,14 +868,14 @@ protected:
 
   void dump_recovery_info(Formatter *f) const {
     f->open_array_section("backfill_targets");
-    for (vector<int>::const_iterator p = backfill_targets.begin();
+    for (set<pg_shard_t>::const_iterator p = backfill_targets.begin();
         p != backfill_targets.end(); ++p)
-      f->dump_int("osd", *p);
+      f->dump_stream("replica") << *p;
     f->close_section();
     f->open_array_section("waiting_on_backfill");
-    for (set<int>::const_iterator p = waiting_on_backfill.begin();
+    for (set<pg_shard_t>::const_iterator p = waiting_on_backfill.begin();
         p != waiting_on_backfill.end(); ++p)
-      f->dump_int("osd", *p);
+      f->dump_stream("osd") << *p;
     f->close_section();
     f->dump_stream("last_backfill_started") << last_backfill_started;
     {
@@ -834,9 +885,10 @@ protected:
     }
     {
       f->open_array_section("peer_backfill_info");
-      for (map<int, BackfillInterval>::const_iterator pbi = peer_backfill_info.begin();
+      for (map<pg_shard_t, BackfillInterval>::const_iterator pbi =
+	     peer_backfill_info.begin();
           pbi != peer_backfill_info.end(); ++pbi) {
-        f->dump_int("osd", pbi->first);
+        f->dump_stream("osd") << pbi->first;
         f->open_object_section("BackfillInterval");
           pbi->second.dump(f);
         f->close_section();
@@ -976,9 +1028,9 @@ protected:
 
   void prep_backfill_object_push(
     hobject_t oid, eversion_t v, ObjectContextRef obc,
-    vector<int> peer,
+    vector<pg_shard_t> peers,
     PGBackend::RecoveryHandle *h);
-  void send_remove_op(const hobject_t& oid, eversion_t v, int peer);
+  void send_remove_op(const hobject_t& oid, eversion_t v, pg_shard_t peer);
 
 
   struct C_OSD_OndiskWriteUnlock : public Context {
@@ -1105,7 +1157,7 @@ protected:
 
 public:
   ReplicatedPG(OSDService *o, OSDMapRef curmap,
-	       const PGPool &_pool, pg_t p, const hobject_t& oid,
+	       const PGPool &_pool, spg_t p, const hobject_t& oid,
 	       const hobject_t& ioid);
   ~ReplicatedPG() {}
 
@@ -1147,7 +1199,7 @@ public:
     return pgbackend->temp_colls(out);
   }
   void split_colls(
-    pg_t child,
+    spg_t child,
     int split_bits,
     int seed,
     ObjectStore::Transaction *t) {
@@ -1221,8 +1273,12 @@ public:
   bool same_for_modify_since(epoch_t e);
   bool same_for_rep_modify_since(epoch_t e);
 
-  bool is_missing_object(const hobject_t& oid);
-  void wait_for_missing_object(const hobject_t& oid, OpRequestRef op);
+  bool is_missing_object(const hobject_t& oid) const;
+  bool is_unreadable_object(const hobject_t &oid) const {
+    return is_missing_object(oid) ||
+      !missing_loc.readable_with_acting(oid, actingset);
+  }
+  void wait_for_unreadable_object(const hobject_t& oid, OpRequestRef op);
   void wait_for_all_missing(OpRequestRef op);
 
   bool is_degraded_object(const hobject_t& oid);

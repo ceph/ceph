@@ -313,7 +313,7 @@ public:
   void reset_recovery_pointers() { log.reset_recovery_pointers(); }
 
   static void clear_info_log(
-    pg_t pgid,
+    spg_t pgid,
     const hobject_t &infos_oid,
     const hobject_t &log_oid,
     ObjectStore::Transaction *t);
@@ -385,7 +385,7 @@ public:
   }
 
   void proc_replica_log(ObjectStore::Transaction& t, pg_info_t &oinfo, const pg_log_t &olog,
-			pg_missing_t& omissing, int from) const;
+			pg_missing_t& omissing, pg_shard_t from) const;
 
 protected:
   bool _merge_old_entry(
@@ -418,7 +418,8 @@ public:
                             pg_info_t &info, LogEntryHandler *rollbacker,
                             bool &dirty_info, bool &dirty_big_info);
 
-  void merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, int from,
+  void merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
+		 pg_shard_t from,
 		 pg_info_t &info, LogEntryHandler *rollbacker,
 		 bool &dirty_info, bool &dirty_big_info);
 

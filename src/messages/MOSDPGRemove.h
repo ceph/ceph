@@ -16,20 +16,26 @@
 #ifndef CEPH_MOSDPGREMOVE_H
 #define CEPH_MOSDPGREMOVE_H
 
+#include "common/hobject.h"
 #include "msg/Message.h"
 
 
 class MOSDPGRemove : public Message {
+
+  static const int HEAD_VERSION = 2;
+  static const int COMPAT_VERSION = 1;
+
   epoch_t epoch;
 
  public:
-  vector<pg_t> pg_list;
+  vector<spg_t> pg_list;
 
   epoch_t get_epoch() { return epoch; }
 
-  MOSDPGRemove() : Message(MSG_OSD_PG_REMOVE) {}
-  MOSDPGRemove(epoch_t e, vector<pg_t>& l) :
-    Message(MSG_OSD_PG_REMOVE) {
+  MOSDPGRemove() :
+    Message(MSG_OSD_PG_REMOVE, HEAD_VERSION, COMPAT_VERSION) {}
+  MOSDPGRemove(epoch_t e, vector<spg_t>& l) :
+    Message(MSG_OSD_PG_REMOVE, HEAD_VERSION, COMPAT_VERSION) {
     this->epoch = e;
     pg_list.swap(l);
   }
@@ -41,16 +47,38 @@ public:
 
   void encode_payload(uint64_t features) {
     ::encode(epoch, payload);
-    ::encode(pg_list, payload);
+
+    vector<pg_t> _pg_list;
+    _pg_list.reserve(pg_list.size());
+    vector<shard_id_t> _shard_list;
+    _shard_list.reserve(pg_list.size());
+    for (vector<spg_t>::iterator i = pg_list.begin(); i != pg_list.end(); ++i) {
+      _pg_list.push_back(i->pgid);
+      _shard_list.push_back(i->shard);
+    }
+    ::encode(_pg_list, payload);
+    ::encode(_shard_list, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
-    ::decode(pg_list, p);
+    vector<pg_t> _pg_list;
+    ::decode(_pg_list, p);
+
+    vector<shard_id_t> _shard_list(_pg_list.size(), ghobject_t::no_shard());
+    if (header.version >= 2) {
+      _shard_list.clear();
+      ::decode(_shard_list, p);
+    }
+    assert(_shard_list.size() == _pg_list.size());
+    pg_list.reserve(_shard_list.size());
+    for (unsigned i = 0; i < _shard_list.size(); ++i) {
+      pg_list.push_back(spg_t(_pg_list[i], _shard_list[i]));
+    }
   }
   void print(ostream& out) const {
     out << "osd pg remove(" << "epoch " << epoch << "; ";
-    for (vector<pg_t>::const_iterator i = pg_list.begin();
+    for (vector<spg_t>::const_iterator i = pg_list.begin();
          i != pg_list.end();
          ++i) {
       out << "pg" << *i << "; ";
