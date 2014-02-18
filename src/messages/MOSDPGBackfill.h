@@ -19,7 +19,7 @@
 #include "osd/osd_types.h"
 
 class MOSDPGBackfill : public Message {
-  static const int HEAD_VERSION = 2;
+  static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 1;
 public:
   enum {
@@ -38,7 +38,7 @@ public:
 
   __u32 op;
   epoch_t map_epoch, query_epoch;
-  pg_t pgid;
+  spg_t pgid;
   hobject_t last_backfill;
   bool compat_stat_sum;
   pg_stat_t stats;
@@ -48,7 +48,7 @@ public:
     ::decode(op, p);
     ::decode(map_epoch, p);
     ::decode(query_epoch, p);
-    ::decode(pgid, p);
+    ::decode(pgid.pgid, p);
     ::decode(last_backfill, p);
 
     // For compatibility with version 1
@@ -64,25 +64,31 @@ public:
     if (!last_backfill.is_max() &&
 	last_backfill.pool == -1)
       last_backfill.pool = pgid.pool();
+    if (header.version >= 3)
+      ::decode(pgid.shard, p);
+    else
+      pgid.shard = ghobject_t::no_shard();
   }
 
   virtual void encode_payload(uint64_t features) {
     ::encode(op, payload);
     ::encode(map_epoch, payload);
     ::encode(query_epoch, payload);
-    ::encode(pgid, payload);
+    ::encode(pgid.pgid, payload);
     ::encode(last_backfill, payload);
 
     // For compatibility with version 1
     ::encode(stats.stats, payload);
 
     ::encode(stats, payload);
+
+    ::encode(pgid.shard, payload);
   }
 
   MOSDPGBackfill() :
     Message(MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION),
     compat_stat_sum(false) {}
-  MOSDPGBackfill(__u32 o, epoch_t e, epoch_t qe, pg_t p)
+  MOSDPGBackfill(__u32 o, epoch_t e, epoch_t qe, spg_t p)
     : Message(MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION),
       op(o),
       map_epoch(e), query_epoch(e),

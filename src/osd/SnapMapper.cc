@@ -80,7 +80,7 @@ string SnapMapper::get_prefix(snapid_t snap)
 string SnapMapper::to_raw_key(
   const pair<snapid_t, hobject_t> &in)
 {
-  return get_prefix(in.first) + in.second.to_str();
+  return get_prefix(in.first) + shard_prefix + in.second.to_str();
 }
 
 pair<string, bufferlist> SnapMapper::to_raw(
@@ -110,7 +110,7 @@ bool SnapMapper::is_mapping(const string &to_test)
 
 string SnapMapper::to_object_key(const hobject_t &hoid)
 {
-  return OBJECT_PREFIX + hoid.to_str();
+  return OBJECT_PREFIX + shard_prefix + hoid.to_str();
 }
 
 void SnapMapper::object_snaps::encode(bufferlist &bl) const

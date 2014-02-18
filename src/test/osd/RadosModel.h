@@ -708,9 +708,11 @@ public:
 	0;
       cont_gen = new AppendGenerator(
 	prev_length,
+	(context->io_ctx.pool_requires_alignment() ?
+	 context->io_ctx.pool_required_alignment() : 0),
 	context->min_stride_size,
 	context->max_stride_size,
-	3 * context->max_stride_size);
+	3);
     } else {
       cont_gen = new VarLenGenerator(
 	context->max_size, context->min_stride_size, context->max_stride_size);
@@ -1027,10 +1029,12 @@ public:
       map<string, bufferlist>::iterator iter = xattrs.find("_header");
       bufferlist headerbl;
       if (iter == xattrs.end()) {
-	cerr << num << ": Error: did not find header attr, has_contents: "
-	     << old_value.has_contents()
-	     << std::endl;
-	assert(!old_value.has_contents());
+	if (old_value.has_contents()) {
+	  cerr << num << ": Error: did not find header attr, has_contents: "
+	       << old_value.has_contents()
+	       << std::endl;
+	  assert(!old_value.has_contents());
+	}
       } else {
 	headerbl = iter->second;
 	xattrs.erase(iter);

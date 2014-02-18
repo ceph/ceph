@@ -1374,15 +1374,20 @@ int Objecter::op_cancel(tid_t tid, int r)
   return 0;
 }
 
-bool Objecter::is_pg_changed(vector<int>& o, vector<int>& n, bool any_change)
+bool Objecter::is_pg_changed(
+  int oldprimary,
+  vector<int>& oldacting,
+  int newprimary,
+  vector<int>& newacting,
+  bool any_change)
 {
-  if (o.empty() && n.empty())
+  if (oldacting.empty() && newacting.empty())
     return false;    // both still empty
-  if (o.empty() ^ n.empty())
+  if (oldacting.empty() ^ newacting.empty())
     return true;     // was empty, now not, or vice versa
-  if (o[0] != n[0])
+  if (oldprimary != newprimary)
     return true;     // primary changed
-  if (any_change && o != n)
+  if (any_change && oldacting != newacting)
     return true;
   return false;      // same primary (tho replicas may have changed)
 }
@@ -1454,8 +1459,9 @@ int Objecter::recalc_op_target(Op *op)
     if (ret == -ENOENT)
       return RECALC_OP_TARGET_POOL_DNE;
   }
+  int primary;
   vector<int> acting;
-  osdmap->pg_to_acting_osds(pgid, acting);
+  osdmap->pg_to_acting_osds(pgid, &acting, &primary);
 
   bool need_resend = false;
 
@@ -1465,15 +1471,18 @@ int Objecter::recalc_op_target(Op *op)
     need_resend = true;
   }
 
-  if (op->pgid != pgid || is_pg_changed(op->acting, acting, op->used_replica)) {
+  if (op->pgid != pgid ||
+      is_pg_changed(
+	op->primary, op->acting, primary, acting, op->used_replica)) {
     op->pgid = pgid;
     op->acting = acting;
+    op->primary = primary;
     ldout(cct, 10) << "recalc_op_target tid " << op->tid
 	     << " pgid " << pgid << " acting " << acting << dendl;
 
     OSDSession *s = NULL;
     op->used_replica = false;
-    if (!acting.empty()) {
+    if (primary != -1) {
       int osd;
       bool read = is_read && !is_write;
       if (read && (op->flags & CEPH_OSD_FLAG_BALANCE_READS)) {
@@ -1507,7 +1516,7 @@ int Objecter::recalc_op_target(Op *op)
 	assert(best >= 0);
 	osd = acting[best];
       } else {
-	osd = acting[0];
+	osd = primary;
       }
       s = get_session(osd);
     }
@@ -1532,21 +1541,25 @@ int Objecter::recalc_op_target(Op *op)
 
 bool Objecter::recalc_linger_op_target(LingerOp *linger_op)
 {
+  int primary;
   vector<int> acting;
   pg_t pgid;
   int ret = osdmap->object_locator_to_pg(linger_op->oid, linger_op->oloc, pgid);
   if (ret == -ENOENT) {
     return RECALC_OP_TARGET_POOL_DNE;
   }
-  osdmap->pg_to_acting_osds(pgid, acting);
+  osdmap->pg_to_acting_osds(pgid, &acting, &primary);
 
-  if (pgid != linger_op->pgid || is_pg_changed(linger_op->acting, acting, true)) {
+  if (pgid != linger_op->pgid ||
+      is_pg_changed(
+        linger_op->primary, linger_op->acting, primary, acting, true)) {
     linger_op->pgid = pgid;
     linger_op->acting = acting;
+    linger_op->primary = primary;
     ldout(cct, 10) << "recalc_linger_op_target tid " << linger_op->linger_id
 	     << " pgid " << pgid << " acting " << acting << dendl;
     
-    OSDSession *s = acting.size() ? get_session(acting[0]) : NULL;
+    OSDSession *s = primary != -1 ? get_session(primary) : NULL;
     if (linger_op->session != s) {
       linger_op->session_item.remove_myself();
       linger_op->session = s;
@@ -2779,10 +2792,11 @@ int Objecter::recalc_command_target(CommandOp *c)
       c->map_check_error_str = "pool dne";
       return RECALC_OP_TARGET_POOL_DNE;
     }
+    int primary;
     vector<int> acting;
-    osdmap->pg_to_acting_osds(c->target_pg, acting);
-    if (!acting.empty())
-      s = get_session(acting[0]);
+    osdmap->pg_to_acting_osds(c->target_pg, &acting, &primary);
+    if (primary != -1)
+      s = get_session(primary);
   }
   if (c->session != s) {
     ldout(cct, 10) << "recalc_command_target " << c->tid << " now " << c->session << dendl;
