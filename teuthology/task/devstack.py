@@ -175,13 +175,11 @@ def set_libvirt_secret(devstack_node, ceph_node):
     cinder_key_stringio = StringIO()
     ceph_node.run(args=['ceph', 'auth', 'get-key', 'client.cinder'],
                   stdout=cinder_key_stringio)
-    cinder_key_stringio.seek(0)
-    cinder_key = cinder_key_stringio.read().strip()
+    cinder_key = cinder_key_stringio.getvalue().strip()
 
     uuid_stringio = StringIO()
     devstack_node.run(args=['uuidgen'], stdout=uuid_stringio)
-    uuid_stringio.seek(0)
-    uuid = uuid_stringio.read().strip()
+    uuid = uuid_stringio.getvalue().strip()
 
     secret_path = '/tmp/secret.xml'
     secret_template = textwrap.dedent("""
@@ -349,14 +347,12 @@ def create_volume(devstack_node, ceph_node, vol_name, size):
             '--display-name', vol_name, size]
     out_stream = StringIO()
     devstack_node.run(args=args, stdout=out_stream, wait=True)
-    out_stream.seek(0)
-    vol_info = parse_os_table(out_stream.read())
+    vol_info = parse_os_table(out_stream.getvalue())
 
     out_stream = StringIO()
     ceph_node.run(args="rbd --id cinder ls -l volumes", stdout=out_stream,
                   wait=True)
-    out_stream.seek(0)
-    assert vol_info['id'] in out_stream.read()
+    assert vol_info['id'] in out_stream.getvalue()
     assert vol_info['size'] == size
     return vol_info['id']
 
