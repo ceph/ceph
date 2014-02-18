@@ -2050,7 +2050,9 @@ public:
 		    pair<pg_shard_t, pg_info_t> &notify_info);
   void fulfill_log(pg_shard_t from, const pg_query_t &query, epoch_t query_epoch);
   bool is_split(OSDMapRef lastmap, OSDMapRef nextmap);
-  bool acting_up_affected(const vector<int>& newup, const vector<int>& newacting);
+  bool acting_up_affected(
+    int newupprimary, int newactingprimary,
+    const vector<int>& newup, const vector<int>& newacting);
 
   // OpRequest queueing
   bool can_discard_op(OpRequestRef op);
