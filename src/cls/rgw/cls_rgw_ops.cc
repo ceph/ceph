@@ -49,6 +49,7 @@ void cls_rgw_gc_list_op::dump(Formatter *f) const
 {
   f->dump_string("marker", marker);
   f->dump_unsigned("max", max);
+  f->dump_bool("expired_only", expired_only);
 }
 
 void cls_rgw_gc_list_op::generate_test_instances(list<cls_rgw_gc_list_op*>& ls)

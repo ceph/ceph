@@ -409,14 +409,14 @@ TEST(cls_rgw, gc_set)
   string marker;
 
   /* list chains, verify truncated */
-  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 8, entries, &truncated));
+  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 8, true, entries, &truncated));
   ASSERT_EQ(8, (int)entries.size());
   ASSERT_EQ(1, truncated);
 
   entries.clear();
 
   /* list all chains, verify not truncated */
-  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 10, entries, &truncated));
+  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 10, true, entries, &truncated));
   ASSERT_EQ(10, (int)entries.size());
   ASSERT_EQ(0, truncated);
  
@@ -483,7 +483,7 @@ TEST(cls_rgw, gc_defer)
   string marker;
 
   /* list chains, verify num entries as expected */
-  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 1, entries, &truncated));
+  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 1, true, entries, &truncated));
   ASSERT_EQ(1, (int)entries.size());
   ASSERT_EQ(0, truncated);
 
@@ -496,7 +496,7 @@ TEST(cls_rgw, gc_defer)
   entries.clear();
 
   /* verify list doesn't show deferred entry (this may fail if cluster is thrashing) */
-  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 1, entries, &truncated));
+  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 1, true, entries, &truncated));
   ASSERT_EQ(0, (int)entries.size());
   ASSERT_EQ(0, truncated);
 
@@ -504,7 +504,7 @@ TEST(cls_rgw, gc_defer)
   sleep(5);
 
   /* verify list shows deferred entry */
-  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 1, entries, &truncated));
+  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 1, true, entries, &truncated));
   ASSERT_EQ(1, (int)entries.size());
   ASSERT_EQ(0, truncated);
 
@@ -519,7 +519,7 @@ TEST(cls_rgw, gc_defer)
   entries.clear();
 
   /* verify entry was removed */
-  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 1, entries, &truncated));
+  ASSERT_EQ(0, cls_rgw_gc_list(ioctx, oid, marker, 1, true, entries, &truncated));
   ASSERT_EQ(0, (int)entries.size());
   ASSERT_EQ(0, truncated);
 
