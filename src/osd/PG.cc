@@ -4551,10 +4551,17 @@ bool PG::is_split(OSDMapRef lastmap, OSDMapRef nextmap)
     0);
 }
 
-bool PG::acting_up_affected(const vector<int>& newup, const vector<int>& newacting)
+bool PG::acting_up_affected(
+  int newupprimary,
+  int newactingprimary,
+  const vector<int>& newup, const vector<int>& newacting)
 {
-  if (acting != newacting || up != newup) {
-    dout(20) << "acting_up_affected newup " << newup << " newacting " << newacting << dendl;
+  if (newupprimary != up_primary.osd ||
+      newactingprimary != primary.osd ||
+      acting != newacting ||
+      up != newup) {
+    dout(20) << "acting_up_affected newup " << newup
+	     << " newacting " << newacting << dendl;
     return true;
   } else {
     return false;
@@ -4619,7 +4626,8 @@ void PG::start_peering_interval(
   vector<int> oldacting, oldup;
   int oldrole = get_role();
 
-  pg_shard_t oldprimary = get_primary();
+  pg_shard_t old_acting_primary = get_primary();
+  pg_shard_t old_up_primary = up_primary;
   bool was_old_primary = is_primary();
 
   acting.swap(oldacting);
@@ -4658,7 +4666,7 @@ void PG::start_peering_interval(
   } else {
     std::stringstream debug;
     bool new_interval = pg_interval_t::check_new_interval(
-      oldprimary.osd,
+      old_acting_primary.osd,
       new_acting_primary,
       oldacting, newacting,
       oldup, newup,
@@ -4679,18 +4687,25 @@ void PG::start_peering_interval(
     }
   }
 
-  if (oldacting != acting || oldup != up || is_split(lastmap, osdmap)) {
+  if (old_up_primary != up_primary ||
+      old_acting_primary != primary ||
+      oldacting != acting ||
+      oldup != up ||
+      is_split(lastmap, osdmap)) {
     info.history.same_interval_since = osdmap->get_epoch();
   }
-  if (oldup != up) {
+  if (old_up_primary != up_primary ||
+      oldup != up) {
     info.history.same_up_since = osdmap->get_epoch();
   }
-  if (oldprimary != get_primary()) {
+  if (old_acting_primary != get_primary()) {
     info.history.same_primary_since = osdmap->get_epoch();
   }
 
   dout(10) << " up " << oldup << " -> " << up 
 	   << ", acting " << oldacting << " -> " << acting 
+	   << ", acting_primary " << old_acting_primary << " -> " << new_acting_primary
+	   << ", up_primary " << old_up_primary << " -> " << new_up_primary
 	   << ", role " << oldrole << " -> " << role << dendl; 
 
   // deactivate.
@@ -4741,13 +4756,13 @@ void PG::start_peering_interval(
   } else {
     // no role change.
     // did primary change?
-    if (get_primary() != oldprimary) {    
+    if (get_primary() != old_acting_primary) {    
       // we need to announce
       send_notify = true;
         
       dout(10) << *this << " " << oldacting << " -> " << acting 
 	       << ", acting primary " 
-	       << oldprimary << " -> " << get_primary() 
+	       << old_acting_primary << " -> " << get_primary() 
 	       << dendl;
     } else {
       // primary is the same.
@@ -5330,8 +5345,12 @@ boost::statechart::result PG::RecoveryState::Started::react(const AdvMap& advmap
 {
   dout(10) << "Started advmap" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
-  if (pg->acting_up_affected(advmap.newup, advmap.newacting) ||
-    pg->is_split(advmap.lastmap, advmap.osdmap)) {
+  if (pg->acting_up_affected(
+	advmap.up_primary,
+	advmap.acting_primary,
+	advmap.newup,
+	advmap.newacting) ||
+      pg->is_split(advmap.lastmap, advmap.osdmap)) {
     dout(10) << "up or acting affected, transitioning to Reset" << dendl;
     post_event(advmap);
     return transit< Reset >();
@@ -5385,8 +5404,12 @@ boost::statechart::result PG::RecoveryState::Reset::react(const AdvMap& advmap)
   // _before_ we are active.
   pg->generate_past_intervals();
 
-  if (pg->acting_up_affected(advmap.newup, advmap.newacting) ||
-    pg->is_split(advmap.lastmap, advmap.osdmap)) {
+  if (pg->acting_up_affected(
+	advmap.up_primary,
+	advmap.acting_primary,
+	advmap.newup,
+	advmap.newacting) ||
+      pg->is_split(advmap.lastmap, advmap.osdmap)) {
     dout(10) << "up or acting affected, calling start_peering_interval again"
 	     << dendl;
     pg->start_peering_interval(
