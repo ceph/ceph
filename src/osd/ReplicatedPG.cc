@@ -3165,6 +3165,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    break;
 	}
 	result = _delete_head(ctx, true);
+	osd->logger->inc(l_osd_tier_evict);
       }
       break;
 
@@ -4408,6 +4409,7 @@ inline int ReplicatedPG::_delete_head(OpContext *ctx, bool no_whiteout)
     oi.set_flag(object_info_t::FLAG_WHITEOUT);
     ctx->delta_stats.num_whiteouts++;
     t->touch(soid);
+    osd->logger->inc(l_osd_tier_whiteout);
     return 0;
   }
 
@@ -4572,10 +4574,12 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
       assert(ctx->new_obs.oi.is_dirty());
       ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
       --ctx->delta_stats.num_objects_dirty;
+      osd->logger->inc(l_osd_tier_clean);
     } else if (!ctx->new_obs.oi.test_flag(object_info_t::FLAG_DIRTY)) {
       dout(20) << " setting DIRTY flag" << dendl;
       ctx->new_obs.oi.set_flag(object_info_t::FLAG_DIRTY);
       ++ctx->delta_stats.num_objects_dirty;
+      osd->logger->inc(l_osd_tier_dirty);
     }
   }
 
@@ -5515,6 +5519,8 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
   }
   ctx->delta_stats.num_wr++;
   ctx->delta_stats.num_wr_kb += SHIFT_ROUND_UP(obs.oi.size, 10);
+
+  osd->logger->inc(l_osd_copyfrom);
 }
 
 void ReplicatedPG::finish_promote(int r, OpRequestRef op,
@@ -5575,6 +5581,7 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     tctx->new_obs.oi.set_flag(object_info_t::FLAG_WHITEOUT);
     ++tctx->delta_stats.num_whiteouts;
     dout(20) << __func__ << " creating whiteout on " << soid << dendl;
+    osd->logger->inc(l_osd_tier_whiteout);
   } else {
     tctx->op_t->append(results->final_tx);
     delete results->final_tx;
@@ -5628,6 +5635,8 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
   finish_ctx(tctx, pg_log_entry_t::PROMOTE);
 
   simple_repop_submit(repop);
+
+  osd->logger->inc(l_osd_tier_promote);
 }
 
 void ReplicatedPG::cancel_copy(CopyOpRef cop, bool requeue)
@@ -5900,6 +5909,10 @@ int ReplicatedPG::try_flush_mark_clean(FlushOpRef fop)
       kick_object_context_blocked(obc);
     }
     flush_ops.erase(oid);
+    if (fop->blocking)
+      osd->logger->inc(l_osd_tier_flush_fail);
+    else
+      osd->logger->inc(l_osd_tier_try_flush_fail);
     return -EBUSY;
   }
 
@@ -5914,6 +5927,7 @@ int ReplicatedPG::try_flush_mark_clean(FlushOpRef fop)
       return -EINPROGRESS;    // will retry.   this ctx is still alive!
     } else {
       dout(10) << __func__ << " failed write lock, no op; failing" << dendl;
+      osd->logger->inc(l_osd_tier_try_flush_fail);
       cancel_flush(fop, false);
       return -ECANCELED;
     }
@@ -5943,6 +5957,8 @@ int ReplicatedPG::try_flush_mark_clean(FlushOpRef fop)
 
   finish_ctx(ctx, pg_log_entry_t::CLEAN);
 
+  osd->logger->inc(l_osd_tier_clean);
+
   if (!fop->dup_ops.empty()) {
     dout(20) << __func__ << " queueing dups for " << ctx->at_version << dendl;
     list<OpRequestRef>& ls = waiting_for_ondisk[ctx->at_version];
@@ -5952,6 +5968,12 @@ int ReplicatedPG::try_flush_mark_clean(FlushOpRef fop)
   simple_repop_submit(repop);
 
   flush_ops.erase(oid);
+
+  if (fop->blocking)
+    osd->logger->inc(l_osd_tier_flush);
+  else
+    osd->logger->inc(l_osd_tier_try_flush);
+
   return -EINPROGRESS;
 }
 
@@ -10252,6 +10274,8 @@ void ReplicatedPG::agent_work(int start_max)
     return;
   }
 
+  osd->logger->inc(l_osd_agent_wake);
+
   dout(10) << __func__
 	   << " max " << start_max
 	   << ", flush " << agent_state->get_flush_mode_name()
@@ -10283,29 +10307,34 @@ void ReplicatedPG::agent_work(int start_max)
        ++p) {
     if (is_degraded_object(*p)) {
       dout(20) << __func__ << " skip (degraded) " << *p << dendl;
+      osd->logger->inc(l_osd_agent_skip);
       continue;
     }
     ObjectContextRef obc = get_object_context(*p, false, NULL);
     if (!obc) {
       // we didn't flush; we may miss something here.
-      dout(20) << __func__ << " no obc for " << *p << ", skipping" << dendl;
+      dout(20) << __func__ << " skip (no obc) " << *p << dendl;
+      osd->logger->inc(l_osd_agent_skip);
       continue;
     }
     if (!obc->obs.exists) {
-      dout(20) << __func__ << " " << obc->obs.oi.soid << " dne, skipping"
-	       << dendl;
+      dout(20) << __func__ << " skip (dne) " << obc->obs.oi.soid << dendl;
+      osd->logger->inc(l_osd_agent_skip);
       continue;
     }
     if (scrubber.write_blocked_by_scrub(obc->obs.oi.soid)) {
-      dout(20) << __func__ << " scrubbing, skipping " << obc->obs.oi << dendl;
+      dout(20) << __func__ << " skip (scrubbing) " << obc->obs.oi << dendl;
+      osd->logger->inc(l_osd_agent_skip);
       continue;
     }
     if (obc->obs.oi.soid.nspace == cct->_conf->osd_hit_set_namespace) {
       dout(20) << __func__ << " skip (hit set) " << obc->obs.oi << dendl;
+      osd->logger->inc(l_osd_agent_skip);
       continue;
     }
     if (obc->is_blocked()) {
       dout(20) << __func__ << " skip (blocked) " << obc->obs.oi << dendl;
+      osd->logger->inc(l_osd_agent_skip);
       continue;
     }
 
@@ -10313,6 +10342,7 @@ void ReplicatedPG::agent_work(int start_max)
     if (base_pool->is_erasure() &&
 	obc->obs.oi.test_flag(object_info_t::FLAG_OMAP)) {
       dout(20) << __func__ << " skip (omap to EC) " << obc->obs.oi << dendl;
+      osd->logger->inc(l_osd_agent_skip);
       continue;
     }
 
@@ -10388,6 +10418,8 @@ bool ReplicatedPG::agent_maybe_flush(ObjectContextRef& obc)
   ctx->on_finish = new C_AgentFlushStartStop(this, obc->obs.oi.soid);
 
   start_flush(ctx, false);
+
+  osd->logger->inc(l_osd_agent_flush);
   return true;
 }
 
@@ -10466,6 +10498,8 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
   assert(r == 0);
   finish_ctx(ctx, pg_log_entry_t::DELETE);
   simple_repop_submit(repop);
+  osd->logger->inc(l_osd_tier_evict);
+  osd->logger->inc(l_osd_agent_evict);
   return true;
 }
 
