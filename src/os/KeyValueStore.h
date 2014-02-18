@@ -302,6 +302,8 @@ class KeyValueStore : public ObjectStore,
   Sequencer default_osr;
   deque<OpSequencer*> op_queue;
   uint64_t op_queue_len, op_queue_bytes;
+  Cond op_throttle_cond;
+  Mutex op_throttle_lock;
   Finisher op_finisher;
 
   ThreadPool op_tp;
@@ -341,11 +343,13 @@ class KeyValueStore : public ObjectStore,
     }
   } op_wq;
 
-  void _do_op(OpSequencer *osr, ThreadPool::TPHandle &handle);
-  void _finish_op(OpSequencer *osr);
   Op *build_op(list<Transaction*>& tls, Context *ondisk, Context *onreadable,
                Context *onreadable_sync, TrackedOpRef osd_op);
   void queue_op(OpSequencer *osr, Op *o);
+  void op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle = NULL);
+  void _do_op(OpSequencer *osr, ThreadPool::TPHandle &handle);
+  void op_queue_release_throttle(Op *o);
+  void _finish_op(OpSequencer *osr);
 
   PerfCounters *logger;
 
@@ -550,6 +554,8 @@ class KeyValueStore : public ObjectStore,
                                   const std::set <std::string> &changed);
 
   std::string m_osd_rollback_to_cluster_snap;
+  int m_keyvaluestore_queue_max_ops;
+  int m_keyvaluestore_queue_max_bytes;
   bool m_fail_eio;
 
   int do_update;
