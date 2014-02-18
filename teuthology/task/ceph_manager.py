@@ -325,6 +325,7 @@ class CephManager:
         self.config = config
         self.controller = controller
         self.next_pool_id = 0
+        self.created_erasure_pool = False
         if (logger):
             self.log = lambda x: logger.info(x)
         else:
@@ -569,21 +570,28 @@ class CephManager:
         self.log(status)
         return status['pgmap']['num_pgs']
 
-    def create_pool_with_unique_name(self, pg_num=1):
+    def create_pool_with_unique_name(self, pg_num=1, ec_pool=False):
         name = ""
         with self.lock:
             name = "unique_pool_%s"%(str(self.next_pool_id),)
             self.next_pool_id += 1
-            self.create_pool(name, pg_num)
+            self.create_pool(name, pg_num, ec_pool=ec_pool)
         return name
 
-    def create_pool(self, pool_name, pg_num=1):
+    def create_pool(self, pool_name, pg_num=1, ec_pool=False):
         with self.lock:
             assert isinstance(pool_name, str)
             assert isinstance(pg_num, int)
             assert pool_name not in self.pools
             self.log("creating pool_name %s"%(pool_name,))
-            self.raw_cluster_cmd('osd', 'pool', 'create', pool_name, str(pg_num))
+            if ec_pool and not self.created_erasure_pool:
+                self.created_erasure_pool = True
+                self.raw_cluster_cmd('osd', 'crush', 'rule', 'create-erasure', 'erasure2', '--property', 'erasure-code-ruleset-failure-domain=osd', '--property', 'erasure-code-m=2', '--property', 'erasure-code-k=1')
+
+            if ec_pool:
+                self.raw_cluster_cmd('osd', 'pool', 'create', pool_name, str(pg_num), str(pg_num), 'erasure', 'crush_ruleset=erasure2', '--property', 'erasure-code-ruleset-failure-domain=osd', '--property', 'erasure-code-m=2', '--property', 'erasure-code-k=2')
+            else:
+                self.raw_cluster_cmd('osd', 'pool', 'create', pool_name, str(pg_num))
             self.pools[pool_name] = pg_num
 
     def remove_pool(self, pool_name):

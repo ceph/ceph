@@ -28,6 +28,7 @@ def task(ctx, config):
           max_stride_size: <maximum write stride size in bytes>
           op_weights: <dictionary mapping operation type to integer weight>
           runs: <number of times to run> - the pool is remade between runs
+          ec_pool: use an ec pool
 
     For example::
 
@@ -49,6 +50,7 @@ def task(ctx, config):
               snap_create: 3
               rollback: 2
               snap_remove: 0
+            ec_pool: true
             runs: 10
         - interactive:
 
@@ -88,7 +90,10 @@ def task(ctx, config):
         'adjust-ulimits',
         'ceph-coverage',
         '{tdir}/archive/coverage'.format(tdir=testdir),
-        'ceph_test_rados',
+        'ceph_test_rados']
+    if config.get('ec_pool', False):
+        args.extend(['--ec-pool'])
+    args.extend([
         '--op', 'read', str(op_weights.get('read', 100)),
         '--op', 'write', str(op_weights.get('write', 100)),
         '--op', 'delete', str(op_weights.get('delete', 10)),
@@ -98,6 +103,7 @@ def task(ctx, config):
         '--op', 'setattr', str(op_weights.get('setattr', 0)),
         '--op', 'rmattr', str(op_weights.get('rmattr', 0)),
         '--op', 'watch', str(op_weights.get('watch', 0)),
+        '--op', 'append', str(op_weights.get('append', 0)),
         '--max-ops', str(config.get('ops', 10000)),
         '--objects', str(config.get('objects', 500)),
         '--max-in-flight', str(config.get('max_in_flight', 16)),
@@ -105,7 +111,7 @@ def task(ctx, config):
         '--min-stride-size', str(config.get('min_stride_size', object_size / 10)),
         '--max-stride-size', str(config.get('max_stride_size', object_size / 5)),
         '--max-seconds', str(config.get('max_seconds', 0))
-        ]
+        ])
     for field in [
         'copy_from', 'is_dirty', 'undirty', 'cache_flush',
         'cache_try_flush', 'cache_evict',
@@ -143,7 +149,7 @@ def task(ctx, config):
                 if not pool and existing_pools:
                     pool = existing_pools.pop()
                 else:
-                    pool = ctx.manager.create_pool_with_unique_name()
+                    pool = ctx.manager.create_pool_with_unique_name(ec_pool=config.get('ec_pool', False))
                     created_pools.append(pool)
 
                 (remote,) = ctx.cluster.only(role).remotes.iterkeys()
