@@ -1432,6 +1432,23 @@ void OSD::create_logger()
   osd_plb.add_u64(l_osd_stat_bytes_used, "stat_bytes_used");
   osd_plb.add_u64(l_osd_stat_bytes_avail, "stat_bytes_avail");
 
+  osd_plb.add_u64_counter(l_osd_copyfrom, "copyfrom");
+
+  osd_plb.add_u64_counter(l_osd_tier_promote, "tier_promote");
+  osd_plb.add_u64_counter(l_osd_tier_flush, "tier_flush");
+  osd_plb.add_u64_counter(l_osd_tier_flush_fail, "tier_flush_fail");
+  osd_plb.add_u64_counter(l_osd_tier_try_flush, "tier_try_flush");
+  osd_plb.add_u64_counter(l_osd_tier_try_flush_fail, "tier_try_flush_fail");
+  osd_plb.add_u64_counter(l_osd_tier_evict, "tier_evict");
+  osd_plb.add_u64_counter(l_osd_tier_whiteout, "tier_whiteout");
+  osd_plb.add_u64_counter(l_osd_tier_dirty, "tier_dirty");
+  osd_plb.add_u64_counter(l_osd_tier_clean, "tier_clean");
+
+  osd_plb.add_u64_counter(l_osd_agent_wake, "agent_wake");
+  osd_plb.add_u64_counter(l_osd_agent_skip, "agent_skip");
+  osd_plb.add_u64_counter(l_osd_agent_flush, "agent_flush");
+  osd_plb.add_u64_counter(l_osd_agent_evict, "agent_evict");
+
   logger = osd_plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }

@@ -122,6 +122,23 @@ enum {
   l_osd_stat_bytes_used,
   l_osd_stat_bytes_avail,
 
+  l_osd_copyfrom,
+
+  l_osd_tier_promote,
+  l_osd_tier_flush,
+  l_osd_tier_flush_fail,
+  l_osd_tier_try_flush,
+  l_osd_tier_try_flush_fail,
+  l_osd_tier_evict,
+  l_osd_tier_whiteout,
+  l_osd_tier_dirty,
+  l_osd_tier_clean,
+
+  l_osd_agent_wake,
+  l_osd_agent_skip,
+  l_osd_agent_flush,
+  l_osd_agent_evict,
+
   l_osd_last,
 };
 
