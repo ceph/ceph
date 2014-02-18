@@ -345,10 +345,10 @@ def create_volume(devstack_node, ceph_node, vol_name, size):
     log.info("Creating a {size}GB volume named {name}...".format(
         name=vol_name,
         size=size))
-    cmd = "cinder create --display-name {name} {size}".format(name=vol_name,
-                                                              size=size)
+    args = ['source', 'devstack/openrc', run.Raw('&&'), 'cinder', 'create',
+            '--display-name', vol_name, size]
     out_stream = StringIO()
-    devstack_node.run(args=cmd, stdout=out_stream, wait=True)
+    devstack_node.run(args=args, stdout=out_stream, wait=True)
     out_stream.seek(0)
     vol_info = parse_os_table(out_stream.read())
 
