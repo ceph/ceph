@@ -661,8 +661,8 @@ string LFNIndex::lfn_generate_object_name(const ghobject_t &oid)
     t += snprintf(t, end - t, "%llx", (long long unsigned)oid.hobj.pool);
   full_name += string(buf);
 
-  if (oid.generation != ghobject_t::NO_GEN) {
-    assert(oid.shard_id != ghobject_t::NO_SHARD);
+  if (oid.generation != ghobject_t::NO_GEN ||
+      oid.shard_id != ghobject_t::NO_SHARD) {
     full_name.append("_");
 
     t = buf;
@@ -950,9 +950,9 @@ bool LFNIndex::lfn_parse_object_name_keyless(const string &long_name, ghobject_t
 {
   bool r = parse_object(long_name.c_str(), *out);
   int64_t pool = -1;
-  pg_t pg;
+  spg_t pg;
   if (coll().is_pg_prefix(pg))
-    pool = (int64_t)pg.pool();
+    pool = (int64_t)pg.pgid.pool();
   out->hobj.pool = pool;
   if (!r) return r;
   string temp = lfn_generate_object_name(*out);
@@ -1043,9 +1043,9 @@ bool LFNIndex::lfn_parse_object_name_poolless(const string &long_name,
 
 
   int64_t pool = -1;
-  pg_t pg;
+  spg_t pg;
   if (coll().is_pg_prefix(pg))
-    pool = (int64_t)pg.pool();
+    pool = (int64_t)pg.pgid.pool();
   (*out) = ghobject_t(hobject_t(name, key, snap, hash, pool, ""));
   return true;
 }

@@ -1025,6 +1025,7 @@ public:
 
     pg_t pgid;           ///< last pg we mapped to
     vector<int> acting;  ///< acting for last pg we mapped to
+    int primary;         ///< primary for last pg we mapped to
     bool used_replica;
 
     ConnectionRef con;  // for rx buffer only
@@ -1066,6 +1067,7 @@ public:
       session(NULL), session_item(this), incarnation(0),
       base_oid(o), base_oloc(ol),
       precalc_pgid(false),
+      primary(-1),
       used_replica(false), con(NULL),
       snapid(CEPH_NOSNAP),
       outbl(NULL),
@@ -1286,6 +1288,7 @@ public:
 
     pg_t pgid;
     vector<int> acting;
+    int primary;
 
     snapid_t snap;
     SnapContext snapc;
@@ -1306,7 +1309,8 @@ public:
     tid_t register_tid;
     epoch_t map_dne_bound;
 
-    LingerOp() : linger_id(0), snap(CEPH_NOSNAP), flags(0),
+    LingerOp() : linger_id(0), primary(-1),
+		 snap(CEPH_NOSNAP), flags(0),
 		 poutbl(NULL), pobjver(NULL),
 		 registered(false),
 		 on_reg_ack(NULL), on_reg_commit(NULL),
@@ -1395,7 +1399,12 @@ public:
   void send_op(Op *op);
   void cancel_linger_op(Op *op);
   void finish_op(Op *op);
-  bool is_pg_changed(vector<int>& a, vector<int>& b, bool any_change=false);
+  bool is_pg_changed(
+    int oldprimary,
+    vector<int>& oldacting,
+    int newprimary,
+    vector<int>& newacting,
+    bool any_change=false);
   enum recalc_op_target_result {
     RECALC_OP_TARGET_NO_ACTION = 0,
     RECALC_OP_TARGET_NEED_RESEND,

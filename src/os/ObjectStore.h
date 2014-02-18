@@ -468,7 +468,7 @@ public:
       ::encode(attrset, tbl);
       ops++;
     }
-    void setattrs(coll_t cid, const hobject_t& oid, map<string,bufferlist>& attrset) {
+    void setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferlist>& attrset) {
       __u32 op = OP_SETATTRS;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -944,6 +944,14 @@ public:
     int r = getattr(cid, oid, name, bp);
     if (bp.length())
       value.push_back(bp);
+    return r;
+  }
+  int getattr(
+    coll_t cid, const ghobject_t& oid,
+    const string name, bufferlist& value) {
+    bufferptr bp;
+    int r = getattr(cid, oid, name.c_str(), bp);
+    value.push_back(bp);
     return r;
   }
   virtual int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset, bool user_only = false) = 0;

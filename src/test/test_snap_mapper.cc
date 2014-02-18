@@ -453,7 +453,8 @@ public:
     uint32_t mask,
     uint32_t bits)
     : driver(driver),
-      mapper(new SnapMapper(driver, mask, bits, 0)), mask(mask), bits(bits),
+      mapper(new SnapMapper(driver, mask, bits, 0, 1)),
+             mask(mask), bits(bits),
       lock("lock") {}
 
   hobject_t random_hobject() {
