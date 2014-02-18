@@ -14,7 +14,6 @@
 using std::ostringstream;
 using namespace librados;
 using std::pair;
-using std::make_pair;
 
 class AioTestData
 {
@@ -1157,7 +1156,6 @@ TEST(LibRadosAio, OmapPP) {
   {
     boost::scoped_ptr<AioCompletion> my_completion(cluster.aio_create_completion(0, 0, 0));
     ObjectWriteOperation op;
-    string val = "bar";
     to_set["foo"] = header_to_set;
     to_set["foo2"] = header_to_set;
     to_set["qfoo3"] = header_to_set;
@@ -1188,7 +1186,7 @@ TEST(LibRadosAio, OmapPP) {
       TestAlarm alarm;
       ASSERT_EQ(0, my_completion->wait_for_complete());
     }
-    ASSERT_EQ(0, r);
+    ASSERT_EQ(-ECANCELED, r);
   }
 
   {

@@ -344,14 +344,14 @@ TEST_F(LibRadosMiscPP, Operate1PP) {
     o2.cmpxattr("key1", CEPH_OSD_CMPXATTR_OP_EQ, bl);
     o2.rmxattr("key1");
   }
-  ASSERT_EQ(0, ioctx.operate("foo", &o2));
+  ASSERT_EQ(-ECANCELED, ioctx.operate("foo", &o2));
   ObjectWriteOperation o3;
   {
     bufferlist bl;
     bl.append(val1);
     o3.cmpxattr("key1", CEPH_OSD_CMPXATTR_OP_EQ, bl);
   }
-  ASSERT_LT(ioctx.operate("foo", &o3), 0);
+  ASSERT_EQ(-ECANCELED, ioctx.operate("foo", &o3));
 }
 
 TEST_F(LibRadosMiscPP, Operate2PP) {
