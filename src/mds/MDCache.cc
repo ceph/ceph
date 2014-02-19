@@ -3158,15 +3158,12 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
       }
     } else {
       MDRequest *mdr = request_get(*p);
-      if (mdr->more()->slave_commit) {
-	Context *fin = mdr->more()->slave_commit;
-	mdr->more()->slave_commit = 0;
-	fin->complete(-1);
+      mdr->aborted = true;
+      if (mdr->slave_request) {
+	if (mdr->more()->slave_commit) // journaling slave prepare ?
+	  add_rollback(*p, from);
       } else {
-	if (mdr->slave_request) 
-	  mdr->aborted = true;
-	else
-	  request_finish(mdr);
+	request_finish(mdr);
       }
     }
   }
@@ -8880,7 +8877,7 @@ void MDCache::request_finish(MDRequest *mdr)
   if (mdr->has_more() && mdr->more()->slave_commit) {
     Context *fin = mdr->more()->slave_commit;
     mdr->more()->slave_commit = 0;
-    fin->complete(0);   // this must re-call request_finish.
+    fin->complete(mdr->aborted ? -1 : 0);   // this must re-call request_finish.
     return; 
   }
 
