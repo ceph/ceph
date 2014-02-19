@@ -39,7 +39,7 @@ extern "C" {
 #endif
 
 #define LIBRADOS_VER_MAJOR 0
-#define LIBRADOS_VER_MINOR 68
+#define LIBRADOS_VER_MINOR 69
 #define LIBRADOS_VER_EXTRA 0
 
 #define LIBRADOS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
@@ -53,22 +53,57 @@ extern "C" {
  */
 #define LIBRADOS_LOCK_FLAG_RENEW 0x1
 
+/*
+ * Constants for rados_write_op_create().
+ */
 #define LIBRADOS_CREATE_EXCLUSIVE 1
 #define LIBRADOS_CREATE_IDEMPOTENT 0
 
+/*
+ * Flags that can be set on a per-op basis via
+ * rados_read_op_set_flags() and rados_write_op_set_flags().
+ */
+// fail a create operation if the object already exists
+#define LIBRADOS_OP_FLAG_EXCL 1
+// allow the transaction to succeed even if the flagged op fails
+#define LIBRADOS_OP_FLAG_FAILOK 2
+
 /**
  * @defgroup librados_h_xattr_comp xattr comparison operations
+ * Operators for comparing xattrs on objects, and aborting the
+ * rados_read_op or rados_write_op transaction if the comparison
+ * fails.
+ *
  * @{
  */
 /** @cond TODO_enums_not_yet_in_asphyxiate */
 enum {
-	LIBRADOS_CMPXATTR_OP_NOP = 0,
 	LIBRADOS_CMPXATTR_OP_EQ  = 1,
 	LIBRADOS_CMPXATTR_OP_NE  = 2,
 	LIBRADOS_CMPXATTR_OP_GT  = 3,
 	LIBRADOS_CMPXATTR_OP_GTE = 4,
 	LIBRADOS_CMPXATTR_OP_LT  = 5,
 	LIBRADOS_CMPXATTR_OP_LTE = 6
+};
+/** @endcond */
+/** @} */
+
+/**
+ * @defgroup librados_h_operation_flags
+ * Flags for rados_read_op_opeprate(), rados_write_op_operate(),
+ * rados_aio_read_op_operate(), and rados_aio_write_op_operate().
+ * See librados.hpp for details.
+ * @{
+ */
+/** @cond TODO_enums_not_yet_in_asphyxiate */
+enum {
+  LIBRADOS_OPERATION_NOFLAG             = 0,
+  LIBRADOS_OPERATION_BALANCE_READS      = 1,
+  LIBRADOS_OPERATION_LOCALIZE_READS     = 2,
+  LIBRADOS_OPERATION_ORDER_READS_WRITES = 4,
+  LIBRADOS_OPERATION_IGNORE_CACHE       = 8,
+  LIBRADOS_OPERATION_SKIPRWLOCKS        = 16,
+  LIBRADOS_OPERATION_IGNORE_OVERLAY     = 32,
 };
 /** @endcond */
 /** @} */
@@ -146,6 +181,15 @@ typedef uint64_t rados_snap_t;
 typedef void *rados_xattrs_iter_t;
 
 /**
+ * @typedef rados_omap_iter_t
+ * An iterator for listing omap key/value pairs on an object.
+ * Used with rados_read_op_omap_get_keys(), rados_read_op_omap_get_vals(),
+ * rados_read_op_omap_get_vals_by_keys(), rados_omap_get_next(), and
+ * rados_omap_get_end().
+ */
+typedef void *rados_omap_iter_t;
+
+/**
  * @struct rados_pool_stat_t
  * Usage information for a pool.
  */
@@ -190,6 +234,9 @@ struct rados_cluster_stat_t {
  * - Extended attribute manipulation: rados_write_op_cmpxattr()
  *   rados_write_op_cmpxattr(), rados_write_op_setxattr(),
  *   rados_write_op_rmxattr()
+ * - Object map key/value pairs: rados_write_op_omap_set(),
+ *   rados_write_op_omap_rm_keys(), rados_write_op_omap_clear(),
+ *   rados_write_op_omap_cmp()
  * - Creating objects: rados_write_op_create()
  * - IO on objects: rados_write_op_append(), rados_write_op_write(), rados_write_op_zero
  *   rados_write_op_write_full(), rados_write_op_remove, rados_write_op_truncate(),
@@ -197,6 +244,26 @@ struct rados_cluster_stat_t {
  * - Performing the operation: rados_write_op_operate(), rados_aio_write_op_operate()
  */
 typedef void *rados_write_op_t;
+
+/**
+ * @typedef rados_read_op_t
+ *
+ * An object read operation stores a number of operations which can be
+ * executed atomically. For usage, see:
+ * - Creation and deletion: rados_create_read_op() rados_release_read_op()
+ * - Extended attribute manipulation: rados_read_op_cmpxattr(),
+ *   rados_read_op_getxattr(), rados_read_op_getxattrs()
+ * - Object map key/value pairs: rados_read_op_omap_get_vals(),
+ *   rados_read_op_omap_get_keys(), rados_read_op_omap_get_vals_by_keys(),
+ *   rados_read_op_omap_cmp()
+ * - Object properties: rados_read_op_stat(), rados_read_op_assert_exists()
+ * - IO on objects: rados_read_op_read()
+ * - Custom operations: rados_read_op_exec(), rados_read_op_exec_user_buf()
+ * - Request properties: rados_read_op_set_flags()
+ * - Performing the operation: rados_read_op_operate(),
+ *   rados_aio_read_op_operate()
+ */
+typedef void *rados_read_op_t;
 
 /**
  * Get the version of librados.
@@ -1163,6 +1230,37 @@ void rados_getxattrs_end(rados_xattrs_iter_t iter);
 /** @} Xattrs */
 
 /**
+ * Get the next omap key/value pair on the object
+ *
+ * @pre iter is a valid iterator
+ *
+ * @post key and val are the next key/value pair. key is
+ * null-terminated, and val has length len. If the end of the list has
+ * been reached, key and val are NULL, and len is 0. key and val will
+ * not be accessible after rados_omap_get_end() is called on iter, so
+ * if they are needed after that they should be copied.
+ *
+ * @param iter iterator to advance
+ * @param key where to store the key of the next omap entry
+ * @param val where to store the value of the next omap entry
+ * @param len where to store the number of bytes in val
+ * @returns 0 on success, negative error code on failure
+ */
+int rados_omap_get_next(rados_omap_iter_t iter,
+			char **key,
+			char **val,
+			size_t *len);
+
+/**
+ * Close the omap iterator.
+ *
+ * iter should not be used after this is called.
+ *
+ * @param iter the iterator to close
+ */
+void rados_omap_get_end(rados_omap_iter_t iter);
+
+/**
  * Get object stats (size/mtime)
  *
  * TODO: when are these set, and by whom? can they be out of date?
@@ -1683,7 +1781,22 @@ int rados_unwatch(rados_ioctx_t io, const char *o, uint64_t handle);
  */
 int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver, const char *buf, int buf_len);
 
-/** @} Atomic write operations */
+/** @} Watch/Notify */
+
+/**
+ * @defgroup librados_h_obj_op Object Operations
+ *
+ * A single rados operation can do multiple operations on one object
+ * atomicly. The whole operation will suceed or fail, and no partial
+ * results will be visible.
+ *
+ * Operations may be either reads, which can return data, or writes,
+ * which cannot. The effects of writes are applied and visible all at
+ * once, so an operation that sets an xattr and then checks its value
+ * will not see the updated value.
+ *
+ * @{
+ */
 
 /**
  * Create a new rados_write_op_t write operation. This will store all actions
@@ -1699,6 +1812,13 @@ rados_write_op_t rados_create_write_op();
  * @param write_op operation to deallocate, created with rados_create_write_op
  */
 void rados_release_write_op(rados_write_op_t write_op);
+
+/**
+ * Set flags for the last operation added to this write_op.
+ * At least one op must have been added to the write_op.
+ * @param flags see librados.h constants beginning with LIBRADOS_OP_FLAG
+ */
+void rados_write_op_set_flags(rados_write_op_t write_op, int flags);
 
 /**
  * Ensure that the object exists before writing
@@ -1720,6 +1840,26 @@ void rados_write_op_cmpxattr(rados_write_op_t write_op,
                              uint8_t comparison_operator,
                              const char *value,
                              size_t value_len);
+
+/**
+ * Ensure that the an omap value satisfies a comparison,
+ * with the supplied value on the right hand side (i.e.
+ * for OP_LT, the comparison is actual_value < value.
+ *
+ * @param write_op operation to add this action to
+ * @param key which omap value to compare
+ * @param comparison_operator one of LIBRADOS_CMPXATTR_OP_EQ,
+   LIBRADOS_CMPXATTR_OP_LT, or LIBRADOS_CMPXATTR_OP_GT
+ * @param val value to compare with
+ * @param val_len length of value in bytes
+ * @param prval where to store the return value from this action
+ */
+void rados_write_op_omap_cmp(rados_write_op_t write_op,
+			     const char *key,
+			     uint8_t comparison_operator,
+			     const char *val,
+			     size_t val_len,
+			     int *prval);
 
 /**
  * Set an xattr
@@ -1802,19 +1942,73 @@ void rados_write_op_truncate(rados_write_op_t write_op, uint64_t offset);
  * @len length to zero
  */
 void rados_write_op_zero(rados_write_op_t write_op,
-				    uint64_t offset,
-				    uint64_t len);
+			 uint64_t offset,
+			 uint64_t len);
+
+/**
+ * Execute an OSD class method on an object
+ * See rados_exec() for general description.
+ *
+ * @param write_op operation to add this action to
+ * @param cls the name of the class
+ * @param method the name of the method
+ * @param in_buf where to find input
+ * @param in_len length of in_buf in bytes
+ * @param prval where to store the return value from the method
+ */
+void rados_write_op_exec(rados_write_op_t write_op,
+			 const char *cls,
+			 const char *method,
+			 const char *in_buf,
+			 size_t in_len,
+			 int *prval);
+
+/**
+ * Set key/value pairs on an object
+ *
+ * @param write_op operation to add this action to
+ * @param keys array of null-terminated char arrays representing keys to set
+ * @param vals array of pointers to values to set
+ * @param lens array of lengths corresponding to each value
+ * @param num number of key/value pairs to set
+ */
+void rados_write_op_omap_set(rados_write_op_t write_op,
+			     char const* const* keys,
+			     char const* const* vals,
+			     const size_t *lens,
+			     size_t num);
+
+/**
+ * Remove key/value pairs from an object
+ *
+ * @param write_op operation to add this action to
+ * @param keys array of null-terminated char arrays representing keys to remove
+ * @param keys_len number of key/value pairs to remove
+ */
+void rados_write_op_omap_rm_keys(rados_write_op_t write_op,
+				 char const* const* keys,
+				 size_t keys_len);
+
+/**
+ * Remove all key/value pairs from an object
+ *
+ * @param write_op operation to add this action to
+ */
+void rados_write_op_omap_clear(rados_write_op_t write_op);
+
 /**
  * Perform a write operation synchronously
  * @param write_op operation to perform
  * @io the ioctx that the object is in
  * @oid the object id
  * @mtime the time to set the mtime to, NULL for the current time
+ * @flags flags to apply to the entire operation (LIBRADOS_OPERATION_*)
  */
 int rados_write_op_operate(rados_write_op_t write_op,
-                           rados_ioctx_t io,
-                           const char *oid,
-                           time_t *mtime);
+			   rados_ioctx_t io,
+			   const char *oid,
+			   time_t *mtime,
+			   int flags);
 /**
  * Perform a write operation asynchronously
  * @param write_op operation to perform
@@ -1822,15 +2016,258 @@ int rados_write_op_operate(rados_write_op_t write_op,
  * @param completion what to do when operation has been attempted
  * @oid the object id
  * @mtime the time to set the mtime to, NULL for the current time
+ * @flags flags to apply to the entire operation (LIBRADOS_OPERATION_*)
  */
 int rados_aio_write_op_operate(rados_write_op_t write_op,
                                rados_ioctx_t io,
                                rados_completion_t completion,
                                const char *oid,
-                               time_t *mtime);
+                               time_t *mtime,
+			       int flags);
 
+/**
+ * Create a new rados_read_op_t write operation. This will store all
+ * actions to be performed atomically. You must call
+ * rados_release_read_op when you are finished with it (after it
+ * completes, or you decide not to send it in the first place).
+ *
+ * @returns non-NULL on success, NULL on memory allocation error.
+ */
+rados_read_op_t rados_create_read_op();
 
-/** @} Watch/Notify */
+/**
+ * Free a rados_read_op_t, must be called when you're done with it.
+ * @param read_op operation to deallocate, created with rados_create_read_op
+ */
+void rados_release_read_op(rados_read_op_t read_op);
+
+/**
+ * Set flags for the last operation added to this read_op.
+ * At least one op must have been added to the read_op.
+ * @param flags see librados.h constants beginning with LIBRADOS_OP_FLAG
+ */
+void rados_read_op_set_flags(rados_read_op_t read_op, int flags);
+
+/**
+ * Ensure that the object exists before reading
+ * @param read_op operation to add this action to
+ */
+void rados_read_op_assert_exists(rados_read_op_t read_op);
+
+/**
+ * Ensure that the an xattr satisfies a comparison
+ * @param read_op operation to add this action to
+ * @param name name of the xattr to look up
+ * @param comparison_operator currently undocumented, look for
+ * LIBRADOS_CMPXATTR_OP_EQ in librados.h
+ * @param value buffer to compare actual xattr value to
+ * @param value_len length of buffer to compare actual xattr value to
+ */
+void rados_read_op_cmpxattr(rados_read_op_t read_op,
+			    const char *name,
+			    uint8_t comparison_operator,
+			    const char *value,
+			    size_t value_len);
+
+/**
+ * Start iterating over xattrs on an object.
+ *
+ * @param read_op operation to add this action to
+ * @param iter where to store the iterator
+ * @param prval where to store the return value of this action
+ */
+void rados_read_op_getxattrs(rados_read_op_t read_op,
+			     rados_xattrs_iter_t *iter,
+			     int *prval);
+
+/**
+ * Ensure that the an omap value satisfies a comparison,
+ * with the supplied value on the right hand side (i.e.
+ * for OP_LT, the comparison is actual_value < value.
+ *
+ * @param read_op operation to add this action to
+ * @param key which omap value to compare
+ * @param comparison_operator one of LIBRADOS_CMPXATTR_OP_EQ,
+   LIBRADOS_CMPXATTR_OP_LT, or LIBRADOS_CMPXATTR_OP_GT
+ * @param val value to compare with
+ * @param val_len length of value in bytes
+ * @param prval where to store the return value from this action
+ */
+void rados_read_op_omap_cmp(rados_read_op_t read_op,
+			    const char *key,
+			    uint8_t comparison_operator,
+			    const char *val,
+			    size_t val_len,
+			    int *prval);
+
+/**
+ * Get object size and mtime
+ * @param read_op operation to add this action to
+ * @param psize where to store object size
+ * @param pmtime where to store modification time
+ * @param prval where to store the return value of this action
+ */
+void rados_read_op_stat(rados_read_op_t read_op,
+			uint64_t *psize,
+			time_t *pmtime,
+			int *prval);
+
+/**
+ * Read bytes from offset into buffer.
+ *
+ * prlen will be filled with the number of bytes read if successful.
+ * A short read can only occur if the read reaches the end of the
+ * object.
+ *
+ * @param read_op operation to add this action to
+ * @param offset offset to read from
+ * @param buffer where to put the data
+ * @param len length of buffer
+ * @param prval where to store the return value of this action
+ * @param bytes_read where to store the number of bytes read by this action
+ */
+void rados_read_op_read(rados_read_op_t read_op,
+			uint64_t offset,
+			size_t len,
+			char *buf,
+			size_t *bytes_read,
+			int *prval);
+
+/**
+ * Execute an OSD class method on an object
+ * See rados_exec() for general description.
+ *
+ * The output buffer is allocated on the heap; the caller is
+ * expected to release that memory with rados_buffer_free(). The
+ * buffer and length pointers can all be NULL, in which case they are
+ * not filled in.
+ *
+ * @param read_op operation to add this action to
+ * @param cls the name of the class
+ * @param method the name of the method
+ * @param in_buf where to find input
+ * @param in_len length of in_buf in bytes
+ * @param out_buf where to put librados-allocated output buffer
+ * @param out_len length of out_buf in bytes
+ * @param prval where to store the return value from the method
+ */
+void rados_read_op_exec(rados_read_op_t read_op,
+			const char *cls,
+			const char *method,
+			const char *in_buf,
+			size_t in_len,
+			char **out_buf,
+			size_t *out_len,
+			int *prval);
+
+/**
+ * Execute an OSD class method on an object
+ * See rados_exec() for general description.
+ *
+ * If the output buffer is too small, prval will
+ * be set to -ERANGE and used_len will be 0.
+ *
+ * @param read_op operation to add this action to
+ * @param cls the name of the class
+ * @param method the name of the method
+ * @param in_buf where to find input
+ * @param in_len length of in_buf in bytes
+ * @param out_buf user-provided buffer to read into
+ * @param out_len length of out_buf in bytes
+ * @param used_len where to store the number of bytes read into out_buf
+ * @param prval where to store the return value from the method
+ */
+void rados_read_op_exec_user_buf(rados_read_op_t read_op,
+				 const char *cls,
+				 const char *method,
+				 const char *in_buf,
+				 size_t in_len,
+				 char *out_buf,
+				 size_t out_len,
+				 size_t *used_len,
+				 int *prval);
+
+/**
+ * Start iterating over key/value pairs on an object.
+ *
+ * They will be returned sorted by key.
+ *
+ * @param read_op operation to add this action to
+ * @param start_after list keys starting after start_after
+ * @param filter_prefix list only keys beginning with filter_prefix
+ * @parem max_return list no more than max_return key/value pairs
+ * @param iter where to store the iterator
+ * @param prval where to store the return value from this action
+ */
+void rados_read_op_omap_get_vals(rados_read_op_t read_op,
+				 const char *start_after,
+				 const char *filter_prefix,
+				 uint64_t max_return,
+				 rados_omap_iter_t *iter,
+				 int *prval);
+
+/**
+ * Start iterating over keys on an object.
+ *
+ * They will be returned sorted by key, and the iterator
+ * will fill in NULL for all values if specified.
+ *
+ * @param read_op operation to add this action to
+ * @param start_after list keys starting after start_after
+ * @parem max_return list no more than max_return keys
+ * @param iter where to store the iterator
+ * @param prval where to store the return value from this action
+ */
+void rados_read_op_omap_get_keys(rados_read_op_t read_op,
+				 const char *start_after,
+				 uint64_t max_return,
+				 rados_omap_iter_t *iter,
+				 int *prval);
+
+/**
+ * Start iterating over specific key/value pairs
+ *
+ * They will be returned sorted by key.
+ *
+ * @param read_op operation to add this action to
+ * @param keys array of pointers to null-terminated keys to get
+ * @param keys_len the number of strings in keys
+ * @param iter where to store the iterator
+ * @param prval where to store the return value from this action
+ */
+void rados_read_op_omap_get_vals_by_keys(rados_read_op_t read_op,
+					 char const* const* keys,
+					 size_t keys_len,
+					 rados_omap_iter_t *iter,
+					 int *prval);
+
+/**
+ * Perform a write operation synchronously
+ * @param read_op operation to perform
+ * @io the ioctx that the object is in
+ * @oid the object id
+ * @flags flags to apply to the entire operation (LIBRADOS_OPERATION_*)
+ */
+int rados_read_op_operate(rados_read_op_t read_op,
+			  rados_ioctx_t io,
+			  const char *oid,
+			  int flags);
+
+/**
+ * Perform a write operation asynchronously
+ * @param read_op operation to perform
+ * @io the ioctx that the object is in
+ * @param completion what to do when operation has been attempted
+ * @oid the object id
+ * @flags flags to apply to the entire operation (LIBRADOS_OPERATION_*)
+ */
+int rados_aio_read_op_operate(rados_read_op_t read_op,
+			      rados_ioctx_t io,
+			      rados_completion_t completion,
+			      const char *oid,
+			      int flags);
+
+/** @} Object Operations */
 
 /**
  * Take an exclusive lock on an object.

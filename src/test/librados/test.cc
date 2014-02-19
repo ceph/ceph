@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*
+// vim: ts=8 sw=2 smarttab
+
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "test/librados/test.h"
@@ -27,6 +30,39 @@ std::string get_temp_pool_name()
 
 std::string create_one_pool(const std::string &pool_name, rados_t *cluster)
 {
+  std::string err = connect_cluster(cluster);
+  if (err.length())
+    return err;
+  int ret = rados_pool_create(*cluster, pool_name.c_str());
+  if (ret) {
+    rados_shutdown(*cluster);
+    std::ostringstream oss;
+    oss << "rados_pool_create(" << pool_name << ") failed with error " << ret;
+    return oss.str();
+  }
+  return "";
+}
+
+std::string create_one_pool_pp(const std::string &pool_name, Rados &cluster)
+{
+  std::string err = connect_cluster_pp(cluster);
+  if (err.length())
+    return err;
+  int ret = cluster.pool_create(pool_name.c_str());
+  if (ret) {
+    cluster.shutdown();
+    std::ostringstream oss;
+    oss << "cluster.pool_create(" << pool_name << ") failed with error " << ret;
+    return oss.str();
+  }
+  return "";
+}
+
+std::string connect_cluster(rados_t *cluster)
+{
+  char *id = getenv("CEPH_CLIENT_ID");
+  if (id) std::cerr << "Client id is: " << id << std::endl;
+
   int ret;
   ret = rados_create(cluster, NULL);
   if (ret) {
@@ -47,50 +83,6 @@ std::string create_one_pool(const std::string &pool_name, rados_t *cluster)
     rados_shutdown(*cluster);
     std::ostringstream oss;
     oss << "rados_connect failed with error " << ret;
-    return oss.str();
-  }
-  ret = rados_pool_create(*cluster, pool_name.c_str());
-  if (ret) {
-    rados_shutdown(*cluster);
-    std::ostringstream oss;
-    oss << "rados_pool_create(" << pool_name << ") failed with error " << ret;
-    return oss.str();
-  }
-  return "";
-}
-
-std::string create_one_pool_pp(const std::string &pool_name, Rados &cluster)
-{
-  char *id = getenv("CEPH_CLIENT_ID");
-  if (id) std::cerr << "Client id is: " << id << std::endl;
-
-  int ret;
-  ret = cluster.init(id);
-  if (ret) {
-    std::ostringstream oss;
-    oss << "cluster.init failed with error " << ret;
-    return oss.str();
-  }
-  ret = cluster.conf_read_file(NULL);
-  if (ret) {
-    cluster.shutdown();
-    std::ostringstream oss;
-    oss << "cluster.conf_read_file failed with error " << ret;
-    return oss.str();
-  }
-  cluster.conf_parse_env(NULL);
-  ret = cluster.connect();
-  if (ret) {
-    cluster.shutdown();
-    std::ostringstream oss;
-    oss << "cluster.connect failed with error " << ret;
-    return oss.str();
-  }
-  ret = cluster.pool_create(pool_name.c_str());
-  if (ret) {
-    cluster.shutdown();
-    std::ostringstream oss;
-    oss << "cluster.pool_create(" << pool_name << ") failed with error " << ret;
     return oss.str();
   }
   return "";
