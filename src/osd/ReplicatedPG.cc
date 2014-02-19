@@ -5379,7 +5379,7 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
     // it already!
     assert(cop->cursor.is_initial());
   }
-  op.copy_get(&cop->cursor, cct->_conf->osd_copyfrom_max_chunk,
+  op.copy_get(&cop->cursor, get_copy_chunk_size(),
 	      &cop->results.object_size, &cop->results.mtime,
 	      &cop->results.category,
 	      &cop->attrs, &cop->data, &cop->omap_header, &cop->omap,
@@ -5509,6 +5509,27 @@ void ReplicatedPG::_write_copy_chunk(CopyOpRef cop, PGBackend::PGTransaction *t)
     cop->attrs.clear();
   }
   if (!cop->temp_cursor.data_complete) {
+    assert(cop->data.length() + cop->temp_cursor.data_offset ==
+	   cop->cursor.data_offset);
+    if (pool.info.requires_aligned_append() &&
+	!cop->cursor.data_complete) {
+      /**
+       * Trim off the unaligned bit at the end, we'll adjust cursor.data_offset
+       * to pick it up on the next pass.
+       */
+      assert(cop->temp_cursor.data_offset %
+	     pool.info.required_alignment() == 0);
+      if (cop->data.length() % pool.info.required_alignment() != 0) {
+	uint64_t to_trim =
+	  cop->data.length() % pool.info.required_alignment();
+	bufferlist bl;
+	bl.substr_of(cop->data, 0, cop->data.length() - to_trim);
+	cop->data.swap(bl);
+	cop->cursor.data_offset -= to_trim;
+	assert(cop->data.length() + cop->temp_cursor.data_offset ==
+	       cop->cursor.data_offset);
+      }
+    }
     t->append(
       cop->results.temp_oid,
       cop->temp_cursor.data_offset,
