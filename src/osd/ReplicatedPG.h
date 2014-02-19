@@ -1119,6 +1119,16 @@ protected:
 		  bool mirror_snapset);
   void process_copy_chunk(hobject_t oid, tid_t tid, int r);
   void _write_copy_chunk(CopyOpRef cop, PGBackend::PGTransaction *t);
+  uint64_t get_copy_chunk_size() const {
+    uint64_t size = cct->_conf->osd_copyfrom_max_chunk;
+    if (pool.info.requires_aligned_append()) {
+      uint64_t alignment = pool.info.required_alignment();
+      if (size % alignment) {
+	size += alignment - (size % alignment);
+      }
+    }
+    return size;
+  }
   void _copy_some(ObjectContextRef obc, CopyOpRef cop);
   void _build_finish_copy_transaction(CopyOpRef cop,
                                       PGBackend::PGTransaction *t);
