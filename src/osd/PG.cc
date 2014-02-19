@@ -2341,7 +2341,9 @@ void PG::init(
   past_intervals.swap(pi);
 
   info.stats.up = up;
+  info.stats.up_primary = new_up_primary;
   info.stats.acting = acting;
+  info.stats.acting_primary = new_acting_primary;
   info.stats.mapping_epoch = info.history.same_interval_since;
 
   if (backfill) {
@@ -4638,9 +4640,13 @@ void PG::start_peering_interval(
     new_acting_primary);
 
   if (info.stats.up != up ||
-      info.stats.acting != acting) {
+      info.stats.acting != acting ||
+      info.stats.up_primary != new_up_primary ||
+      info.stats.acting_primary != new_acting_primary) {
     info.stats.up = up;
+    info.stats.up_primary = new_up_primary;
     info.stats.acting = acting;
+    info.stats.acting_primary = new_acting_primary;
     info.stats.mapping_epoch = info.history.same_interval_since;
   }
 

@@ -1287,6 +1287,10 @@ struct pg_stat_t {
   /// maintained starting from pool creation)
   bool dirty_stats_invalid;
 
+  /// up, acting primaries
+  int up_primary;
+  int acting_primary;
+
   pg_stat_t()
     : reported_seq(0),
       reported_epoch(0),
@@ -1296,7 +1300,9 @@ struct pg_stat_t {
       stats_invalid(false),
       log_size(0), ondisk_log_size(0),
       mapping_epoch(0),
-      dirty_stats_invalid(false)
+      dirty_stats_invalid(false),
+      up_primary(-1),
+      acting_primary(-1)
   { }
 
   epoch_t get_effective_last_epoch_clean() const {
