@@ -335,8 +335,8 @@ def sudo(ctx, config):
     log.info('Configuring sudo...')
     sudoers_file = '/etc/sudoers'
     backup_ext = '.orig.teuthology'
-    tty_expr = 's/^\([^#]*\) \(requiretty\)/\1 !\2/g'
-    pw_expr = 's/^\([^#]*\) !\(visiblepw\)/\1 \2/g'
+    tty_expr = r's/^\([^#]*\) \(requiretty\)/\1 !\2/g'
+    pw_expr = r's/^\([^#]*\) !\(visiblepw\)/\1 \2/g'
 
     run.wait(
         ctx.cluster.run(
