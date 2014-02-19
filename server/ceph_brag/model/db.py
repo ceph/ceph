@@ -166,7 +166,9 @@ def delete_uuid(uuid):
     Session.query(components_info).filter_by(vid=v.index).delete()
     Session.query(pools_info).filter_by(vid=v.index).delete()
     Session.query(osds_info).filter_by(vid=v.index).delete()
+    Session.flush()
     Session.delete(v)
+    Session.flush()
 
   Session.delete(ci)
   return None
