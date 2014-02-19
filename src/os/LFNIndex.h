@@ -99,7 +99,7 @@ class LFNIndex : public CollectionIndex {
   /// Path to Index base.
   const string base_path;
   /// For reference counting the collection @see Path
-  ceph::weak_ptr<CollectionIndex> self_ref;
+  CollectionIndex* self_ref;
 
 protected:
   const uint32_t index_version;
@@ -155,7 +155,7 @@ public:
   virtual ~LFNIndex() {}
 
   /// @see CollectionIndex
-  void set_ref(ceph::shared_ptr<CollectionIndex> ref);
+  void set_ref(CollectionIndex* ref);
 
   /// @see CollectionIndex
   int init();
