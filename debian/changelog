@@ -1,3 +1,9 @@
+ceph (0.77-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Ken Dreyer <ken.dreyer@inktank.com>  Wed, 19 Feb 2014 22:54:06 +0000
+
 ceph (0.76-1) stable; urgency=low
 
   * New upstream release
