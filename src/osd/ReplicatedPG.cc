@@ -10462,6 +10462,8 @@ void ReplicatedPG::agent_work(int start_max)
   assert(is_primary());
   assert(is_active());
 
+  agent_load_hit_sets();
+
   const pg_pool_t *base_pool = get_osdmap()->get_pg_pool(pool.info.tier_of);
   assert(base_pool);
 
@@ -10549,6 +10551,39 @@ void ReplicatedPG::agent_work(int start_max)
   dout(20) << __func__ << " final position " << agent_state->position << dendl;
   agent_choose_mode();
   unlock();
+}
+
+void ReplicatedPG::agent_load_hit_sets()
+{
+  if (agent_state->evict_mode == TierAgentState::EVICT_MODE_IDLE) {
+    agent_state->discard_hit_sets();
+    return;
+  }
+
+  if (agent_state->hit_set_map.size() < info.hit_set.history.size()) {
+    dout(10) << __func__ << dendl;
+    for (list<pg_hit_set_info_t>::reverse_iterator p =
+	   info.hit_set.history.rbegin();
+	 p != info.hit_set.history.rend(); ++p) {
+      if (agent_state->hit_set_map.count(p->begin.sec()) == 0) {
+	dout(10) << __func__ << " loading " << p->begin << "-"
+		 << p->end << dendl;
+	if (!pool.info.is_replicated()) {
+	  // FIXME: EC not supported here yet
+	  derr << __func__ << " on non-replicated pool" << dendl;
+	  break;
+	}
+	bufferlist bl;
+	hobject_t oid = get_hit_set_archive_object(p->begin, p->end);
+	int r = osd->store->read(coll, oid, 0, 0, bl);
+	assert(r >= 0);
+	HitSetRef hs(new HitSet);
+	bufferlist::iterator pbl = bl.begin();
+	::decode(*hs, pbl);
+	agent_state->add_hit_set(p->begin.sec(), hs);
+      }
+    }
+  }
 }
 
 struct C_AgentFlushStartStop : public Context {
