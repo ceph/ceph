@@ -2159,7 +2159,7 @@ int KeyValueStore::collection_getattrs(coll_t cid,
   set<string> keys;
 
   for (map<string, bufferptr>::iterator it = aset.begin();
-       it != aset.end(); it++) {
+       it != aset.end(); ++it) {
       keys.insert(it->first);
   }
 
@@ -2312,7 +2312,7 @@ int KeyValueStore::_destroy_collection(coll_t c, BufferTransaction &t)
 
   // All modified objects are marked deleted
   for (BufferTransaction::StripHeaderMap::iterator iter = t.strip_headers.begin();
-       iter != t.strip_headers.end(); iter++) {
+       iter != t.strip_headers.end(); ++iter) {
     // sum the total modified object in this PG
     if (iter->first.first != c)
       continue;
