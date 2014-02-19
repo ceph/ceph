@@ -1426,7 +1426,8 @@ void OSDMap::_apply_primary_affinity(ps_t seed,
 
   bool any = false;
   for (vector<int>::const_iterator p = osds->begin(); p != osds->end(); ++p) {
-    if ((*osd_primary_affinity)[*p] != CEPH_OSD_DEFAULT_PRIMARY_AFFINITY) {
+    if (*p != CRUSH_ITEM_NONE &&
+	(*osd_primary_affinity)[*p] != CEPH_OSD_DEFAULT_PRIMARY_AFFINITY) {
       any = true;
     }
   }
