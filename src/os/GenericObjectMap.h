@@ -30,6 +30,8 @@
 #include "osd/osd_types.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "common/simple_cache.hpp"
+
 
 /**
  * Genericobjectmap: Provide with key/value associated to ghobject_t APIs to caller
@@ -73,15 +75,14 @@ class GenericObjectMap {
    */
   Mutex header_lock;
   Cond header_cond;
-  Cond map_header_cond;
 
   /**
    * Set of headers currently in use
    */
   set<uint64_t> in_use;
-  set<ghobject_t> map_header_in_use;
 
-  GenericObjectMap(KeyValueDB *db) : db(db), header_lock("GenericObjectMap") {}
+  GenericObjectMap(KeyValueDB *db) : db(db), header_lock("GenericObjectMap"),
+                                     header_cache(g_ceph_context) {}
 
   int get(
     const coll_t &cid,
@@ -279,6 +280,67 @@ class GenericObjectMap {
   static const char GHOBJECT_KEY_SEP_C;
 
 private:
+
+  class HeaderCache : public md_config_obs_t {
+   public:
+    HeaderCache(CephContext *cct) :
+      cct(cct), registry(cct->_conf->keyvaluestore_header_cache_size),
+      obj_index(cct->_conf->keyvaluestore_header_cache_size) {
+      assert(cct);
+      cct->_conf->add_observer(this);
+    }
+    ~HeaderCache() {
+      cct->_conf->remove_observer(this);
+    }
+
+    uint64_t get_seq(const coll_t &cid, const ghobject_t &obj) {
+      uint64_t ret;
+      if (obj_index.lookup(make_pair(cid, obj), &ret))
+        return ret;
+      return 0;
+    }
+
+    bool lookup(uint64_t seq, _Header &h) {
+      return registry.lookup(seq, &h);
+    }
+
+    void add(uint64_t seq, const _Header &header) {
+      obj_index.add(make_pair(header.cid, header.oid), seq);
+      registry.add(seq, header);
+    }
+
+    void clear(uint64_t seq) {
+      _Header h;
+      if (registry.lookup(seq, &h)) {
+        obj_index.clear(make_pair(h.cid, h.oid));
+        registry.clear(seq);
+      }
+    }
+
+    /// md_config_obs_t
+    const char** get_tracked_conf_keys() const {
+      static const char* KEYS[] = {
+        "keyvaluestore_header_cache_size",
+        NULL
+      };
+      return KEYS;
+    }
+
+    void handle_conf_change(const md_config_t *conf,
+                            const std::set<std::string> &changed) {
+      if (changed.count("keyvaluestore_header_cache_size")) {
+        registry.set_size(conf->keyvaluestore_header_cache_size);
+        obj_index.set_size(conf->keyvaluestore_header_cache_size);
+      }
+    }
+
+   private:
+    CephContext *cct;
+    SimpleLRU<uint64_t, _Header> registry;
+    SimpleLRU<pair<coll_t, ghobject_t>, uint64_t> obj_index;
+
+  } header_cache;
+
   /// Implicit lock on Header->seq
 
   static string header_key(const coll_t &cid);
@@ -424,27 +486,8 @@ private:
                    KeyValueDB::Transaction t);
 
   /** 
-   * Removes map header lock once Header is out of scope
-   * @see lookup_header
-   */
-  class RemoveMapHeaderOnDelete {
-  public:
-    GenericObjectMap *db;
-    coll_t cid;
-    ghobject_t oid;
-    RemoveMapHeaderOnDelete(GenericObjectMap *db, const coll_t &cid,
-        const ghobject_t &oid) :
-      db(db), cid(cid), oid(oid) {}
-    void operator() (_Header *header) {
-      Mutex::Locker l(db->header_lock);
-      db->map_header_in_use.erase(oid);
-      db->map_header_cond.Signal();
-      delete header;
-    }
-  };
-
-  /** 
    * Removes header seq lock once Header is out of scope
+   * @see _lookup_header
    * @see lookup_parent
    * @see generate_new_header
    */
