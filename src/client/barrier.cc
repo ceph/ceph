@@ -80,10 +80,10 @@ void BarrierContext::write_barrier(C_Block_Sync &cbs)
 {
   Mutex::Locker locker(lock);
   barrier_interval &iv = cbs.iv;
-  bool done = false;
 
   { /* find blocking commit--intrusive no help here */
     BarrierList::iterator iter;
+    bool done = false;
     for (iter = active_commits.begin();
 	 !done && (iter != active_commits.end());
 	 ++iter) {
