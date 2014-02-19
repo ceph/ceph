@@ -2272,7 +2272,7 @@ void Client::put_cap_ref(Inode *in, int cap)
   if (last) {
     if (in->snapid == CEPH_NOSNAP) {
       if ((cap & CEPH_CAP_FILE_WR) &&
-	  in->cap_snaps.size() &&
+	  !in->cap_snaps.empty() &&
 	  in->cap_snaps.rbegin()->second->writing) {
 	ldout(cct, 10) << "put_cap_ref finishing pending cap_snap on " << *in << dendl;
 	in->cap_snaps.rbegin()->second->writing = 0;
@@ -2455,7 +2455,7 @@ void Client::check_caps(Inode *in, bool is_delayed)
   if (in->caps.empty())
     return;   // guard if at end of func
 
-  if (in->cap_snaps.size())
+  if (!in->cap_snaps.empty())
     flush_snaps(in);
 
   if (!is_delayed)
@@ -2983,7 +2983,7 @@ void Client::remove_cap(Cap *cap)
 
 void Client::remove_all_caps(Inode *in)
 {
-  while (in->caps.size())
+  while (!in->caps.empty())
     remove_cap(in->caps.begin()->second);
 }
 
