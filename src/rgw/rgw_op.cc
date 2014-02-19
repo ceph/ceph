@@ -358,9 +358,13 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     }
     s->bucket = s->bucket_info.bucket;
 
-    string no_obj;
-    RGWAccessControlPolicy bucket_acl(s->cct);
-    ret = read_policy(store, s, s->bucket_info, s->bucket_attrs, s->bucket_acl, s->bucket, no_obj);
+    if (s->bucket_exists) {
+      string no_obj;
+      ret = read_policy(store, s, s->bucket_info, s->bucket_attrs, s->bucket_acl, s->bucket, no_obj);
+    } else {
+      s->bucket_acl->create_default(s->user.user_id, s->user.display_name);
+      ret = -ERR_NO_SUCH_BUCKET;
+    }
 
     s->bucket_owner = s->bucket_acl->get_owner();
 
