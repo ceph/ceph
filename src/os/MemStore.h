@@ -280,7 +280,7 @@ public:
     bufferlist& bl,
     bool allow_eio = false);
   int fiemap(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
-  int getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr& value);
+  int getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr& value, bool io_path = false);
   int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset, bool user_only = false);
 
   int list_collections(vector<coll_t>& ls);

@@ -938,7 +938,7 @@ public:
 
   virtual int fiemap(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) = 0;
 
-  virtual int getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr& value) = 0;
+  virtual int getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr& value, bool io_path = false) = 0;
   int getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferlist& value) {
     bufferptr bp;
     int r = getattr(cid, oid, name, bp);

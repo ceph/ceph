@@ -803,7 +803,8 @@ protected:
   ObjectContextRef get_object_context(
     const hobject_t& soid,
     bool can_create,
-    map<string, bufferlist> *attrs = 0
+    map<string, bufferlist> *attrs = 0,
+    bool need_snap = true
     );
 
   void context_registry_on_change();
@@ -1163,6 +1164,7 @@ public:
 
   int do_command(cmdmap_t cmdmap, ostream& ss, bufferlist& idata,
 		 bufferlist& odata);
+  // abstract bits
 
   void do_request(
     OpRequestRef op,

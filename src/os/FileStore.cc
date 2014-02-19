@@ -211,35 +211,40 @@ int FileStore::lfn_stat(coll_t cid, const ghobject_t& oid, struct stat *buf)
 }
 
 int FileStore::lfn_open(coll_t cid,
-			const ghobject_t& oid,
-			bool create,
-			FDRef *outfd,
-			IndexedPath *path,
-			Index *index) 
+                        const ghobject_t& oid,
+                        bool create,
+                        FDRef *outfd,
+                        IndexedPath *path,
+                        Index *index)
 {
+
+
   assert(get_allow_sharded_objects() ||
-	 ( oid.shard_id == ghobject_t::NO_SHARD &&
-	   oid.generation == ghobject_t::NO_GEN ));
+         ( oid.shard_id == ghobject_t::NO_SHARD &&
+           oid.generation == ghobject_t::NO_GEN ));
   assert(outfd);
+
+  if (!replaying) {
+    *outfd = fdcache.lookup(oid);
+    if (*outfd)
+      return 0;
+  }
+
   int flags = O_RDWR;
   if (create)
     flags |= O_CREAT;
-  Index index2;
+
+  Index index2 ;
   if (!index) {
     index = &index2;
   }
+
   int r = 0;
   if (!(*index)) {
     r = get_index(cid, index);
   }
 
   int fd, exist;
-  if (!replaying) {
-    Mutex::Locker l(fdcache_lock);
-    *outfd = fdcache.lookup(oid);
-    if (*outfd)
-      return 0;
-  }
 
   {
     IndexedPath path2;
@@ -247,13 +252,12 @@ int FileStore::lfn_open(coll_t cid,
       path = &path2;
     if (r < 0) {
       derr << "error getting collection index for " << cid
-	   << ": " << cpp_strerror(-r) << dendl;
+           << ": " << cpp_strerror(-r) << dendl;
       goto fail;
     }
-    r = (*index)->lookup(oid, path, &exist);
     if (r < 0) {
       derr << "could not find " << oid << " in index: "
-	   << cpp_strerror(-r) << dendl;
+           << cpp_strerror(-r) << dendl;
       goto fail;
     }
 
@@ -261,27 +265,25 @@ int FileStore::lfn_open(coll_t cid,
     if (r < 0) {
       r = -errno;
       dout(10) << "error opening file " << (*path)->path() << " with flags="
-	       << flags << ": " << cpp_strerror(-r) << dendl;
+               << flags << ": " << cpp_strerror(-r) << dendl;
       goto fail;
     }
     fd = r;
 
     if (create && (!exist)) {
-      r = (*index)->created(oid, (*path)->path());
       if (r < 0) {
-	TEMP_FAILURE_RETRY(::close(fd));
-	derr << "error creating " << oid << " (" << (*path)->path()
-	     << ") in index: " << cpp_strerror(-r) << dendl;
-	goto fail;
+        TEMP_FAILURE_RETRY(::close(fd));
+        derr << "error creating " << oid << " (" << (*path)->path()
+             << ") in index: " << cpp_strerror(-r) << dendl;
+        goto fail;
       }
     }
   }
 
   if (!replaying) {
-    Mutex::Locker l(fdcache_lock);
     *outfd = fdcache.lookup(oid);
     if (*outfd) {
-      TEMP_FAILURE_RETRY(::close(fd));
+      TEMP_FAILURE_RETRY(::close(fd)); //Why we are doing this ?
       return 0;
     } else {
       *outfd = fdcache.add(oid, fd);
@@ -289,12 +291,14 @@ int FileStore::lfn_open(coll_t cid,
   } else {
     *outfd = FDRef(new FDCache::FD(fd));
   }
+
   return 0;
 
  fail:
   assert(!m_filestore_fail_eio || r != -EIO);
   return r;
 }
+
 
 void FileStore::lfn_close(FDRef fd)
 {
@@ -2560,8 +2564,10 @@ int FileStore::read(
   uint64_t offset,
   size_t len,
   bufferlist& bl,
-  bool allow_eio)
+  bool allow_eio
+  )
 {
+
   int got;
 
   dout(15) << "read " << cid << "/" << oid << " " << offset << "~" << len << dendl;
@@ -2569,7 +2575,7 @@ int FileStore::read(
   FDRef fd;
   int r = lfn_open(cid, oid, false, &fd);
   if (r < 0) {
-    dout(10) << "FileStore::read(" << cid << "/" << oid << ") open error: "
+    dout(1) << "FileStore::read(" << cid << "/" << oid << ") open error: "
 	     << cpp_strerror(r) << dendl;
     return r;
   }
@@ -2585,8 +2591,7 @@ int FileStore::read(
   bufferptr bptr(len);  // prealloc space for entire read
   got = safe_pread(**fd, bptr.c_str(), len, offset);
   if (got < 0) {
-    dout(10) << "FileStore::read(" << cid << "/" << oid << ") pread error: " << cpp_strerror(got) << dendl;
-    lfn_close(fd);
+    dout(1) << "FileStore::read(" << cid << "/" << oid << ") pread error: " << cpp_strerror(got) << dendl;
     assert(allow_eio || !m_filestore_fail_eio || got != -EIO);
     return got;
   }
@@ -2597,13 +2602,11 @@ int FileStore::read(
     ostringstream ss;
     int errors = backend->_crc_verify_read(**fd, offset, got, bl, &ss);
     if (errors > 0) {
-      dout(0) << "FileStore::read " << cid << "/" << oid << " " << offset << "~"
+      dout(1) << "FileStore::read " << cid << "/" << oid << " " << offset << "~"
 	      << got << " ... BAD CRC:\n" << ss.str() << dendl;
       assert(0 == "bad crc on read");
     }
   }
-
-  lfn_close(fd);
 
   dout(10) << "FileStore::read " << cid << "/" << oid << " " << offset << "~"
 	   << got << "/" << len << dendl;
@@ -3448,18 +3451,26 @@ bool FileStore::debug_mdata_eio(const ghobject_t &oid) {
 
 // objects
 
-int FileStore::getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr &bp)
+int FileStore::getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr &bp, bool io_path)
 {
   dout(15) << "getattr " << cid << "/" << oid << " '" << name << "'" << dendl;
-  FDRef fd;
-  int r = lfn_open(cid, oid, false, &fd);
+  int r;
+  FDRef outfd;
+  r = lfn_open(cid, oid, false, &outfd);
   if (r < 0) {
+    dout(1) << "FileStore::getattr open failed for " << cid << "/" << oid << " '" << name << "'" << dendl;
     goto out;
   }
-  char n[CHAIN_XATTR_MAX_NAME_LEN];
-  get_attrname(name, n, CHAIN_XATTR_MAX_NAME_LEN);
-  r = _fgetattr(**fd, n, bp);
-  lfn_close(fd);
+  
+  if (!io_path){
+    char n[CHAIN_XATTR_MAX_NAME_LEN];
+    get_attrname(name, n, CHAIN_XATTR_MAX_NAME_LEN);
+    r = _fgetattr(**outfd, n, bp);
+
+  }else {
+    r = _fgetattr(**outfd, name, bp);
+    
+  }
   if (r == -ENODATA) {
     map<string, bufferlist> got;
     set<string> to_get;

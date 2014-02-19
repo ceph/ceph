@@ -1040,6 +1040,7 @@ void ReplicatedPG::get_src_oloc(const object_t& oid, const object_locator_t& olo
     src_oloc.key = oid.name;
 }
 
+
 void ReplicatedPG::do_request(
   OpRequestRef op,
   ThreadPool::TPHandle &handle)
@@ -6690,7 +6691,8 @@ ObjectContextRef ReplicatedPG::create_object_context(const object_info_t& oi,
 
 ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
 						  bool can_create,
-						  map<string, bufferlist> *attrs)
+						  map<string, bufferlist> *attrs,
+                                                  bool need_snap)
 {
   assert(
     attrs || !pg_log.get_missing().is_missing(soid) ||
@@ -6698,6 +6700,9 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
     (pg_log.get_log().objects.count(soid) &&
       pg_log.get_log().objects.find(soid)->second->op ==
       pg_log_entry_t::LOST_REVERT));
+
+  int r;
+
   ObjectContextRef obc = object_contexts.lookup(soid);
   if (obc) {
     dout(10) << "get_object_context " << obc << " " << soid
@@ -6710,10 +6715,18 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
       assert(attrs->count(OI_ATTR));
       bv = attrs->find(OI_ATTR)->second;
     } else {
-      int r = pgbackend->objects_get_attr(soid, OI_ATTR, &bv);
+      if (!need_snap){
+        r = pgbackend->objects_get_attr(soid, "user.ceph._", &bv, true);
+      }
+      else {
+        r = pgbackend->objects_get_attr(soid, OI_ATTR, &bv);
+      }
+
       if (r < 0) {
-	if (!can_create)
+	if (!can_create){
+          dout(10) << "objects_get_attr failed for object " << soid << dendl;
 	  return ObjectContextRef();   // -ENOENT!
+        }
 
 	// new object.
 	object_info_t oi(soid);
@@ -6733,11 +6746,13 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
     obc->obs.oi = oi;
     obc->obs.exists = true;
 
-    obc->ssc = get_snapset_context(
-      soid.oid, soid.get_key(), soid.hash,
-      true, soid.get_namespace(),
-      soid.has_snapset() ? attrs : 0);
-    register_snapset_context(obc->ssc);
+    if (need_snap)
+    {
+      obc->ssc = get_snapset_context(
+                soid.oid, soid.get_key(), soid.hash,
+                true, soid.get_namespace(),
+                soid.has_snapset() ? attrs : 0);
+    }
 
     populate_obc_watchers(obc);
 
@@ -6824,7 +6839,13 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
 
   // want the head?
   if (oid.snap == CEPH_NOSNAP) {
-    ObjectContextRef obc = get_object_context(head, can_create);
+    bool need_snap = true;
+
+    if (!can_create){
+      need_snap = false;
+    }
+    
+    ObjectContextRef obc = get_object_context(head, can_create, NULL,  need_snap);
     if (!obc) {
       if (pmissing)
 	*pmissing = head;

@@ -1926,7 +1926,7 @@ int KeyValueStore::_clone_range(coll_t cid, const ghobject_t& oldoid,
 // attrs
 
 int KeyValueStore::getattr(coll_t cid, const ghobject_t& oid, const char *name,
-                           bufferptr &bp)
+                           bufferptr &bp, bool io_path)
 {
   dout(15) << __func__ << " " << cid << "/" << oid << " '" << name << "'"
            << dendl;

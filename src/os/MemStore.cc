@@ -338,7 +338,7 @@ int MemStore::fiemap(coll_t cid, const ghobject_t& oid,
 }
 
 int MemStore::getattr(coll_t cid, const ghobject_t& oid,
-		      const char *name, bufferptr& value)
+		      const char *name, bufferptr& value, bool io_path)
 {
   dout(10) << __func__ << " " << cid << " " << oid << " " << name << dendl;
   CollectionRef c = get_collection(cid);

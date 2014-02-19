@@ -544,7 +544,8 @@
    int objects_get_attr(
      const hobject_t &hoid,
      const string &attr,
-     bufferlist *out);
+     bufferlist *out,
+     bool io_path = false);
 
    virtual int objects_get_attrs(
      const hobject_t &hoid,

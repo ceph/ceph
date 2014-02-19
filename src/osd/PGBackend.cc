@@ -169,14 +169,16 @@ int PGBackend::objects_list_range(
 int PGBackend::objects_get_attr(
   const hobject_t &hoid,
   const string &attr,
-  bufferlist *out)
+  bufferlist *out,
+  bool io_path)
 {
   bufferptr bp;
   int r = store->getattr(
     coll,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     attr.c_str(),
-    bp);
+    bp,
+    io_path);
   if (r >= 0 && out) {
     out->clear();
     out->push_back(bp);
