@@ -1197,7 +1197,8 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     if (is_auth()) {
       ::encode(inode.version, bl);
     } else {
-      bool dirty = dirfragtreelock.is_dirty();
+      // treat flushing as dirty when rejoining cache
+      bool dirty = dirfragtreelock.is_dirty_or_flushing();
       ::encode(dirty, bl);
     }
     {
@@ -1231,7 +1232,8 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 	::encode(inode.inline_version, bl);
       }
     } else {
-      bool dirty = filelock.is_dirty();
+      // treat flushing as dirty when rejoining cache
+      bool dirty = filelock.is_dirty_or_flushing();
       ::encode(dirty, bl);
     }
 
@@ -1266,7 +1268,8 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     if (is_auth()) {
       ::encode(inode.version, bl);
     } else {
-      bool dirty = nestlock.is_dirty();
+      // treat flushing as dirty when rejoining cache
+      bool dirty = nestlock.is_dirty_or_flushing();
       ::encode(dirty, bl);
     }
     {
