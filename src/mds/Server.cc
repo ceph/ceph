@@ -4484,6 +4484,18 @@ public:
   }
 };
 
+class C_MDS_SlaveLinkCommit : public Context {
+  Server *server;
+  MDRequest *mdr;
+  CInode *targeti;
+public:
+  C_MDS_SlaveLinkCommit(Server *s, MDRequest *r, CInode *t) :
+    server(s), mdr(r), targeti(t) { }
+  void finish(int r) {
+    server->_commit_slave_link(mdr, r, targeti);
+  }
+};
+
 /* This function DOES put the mdr->slave_request before returning*/
 void Server::handle_slave_link_prep(MDRequest *mdr)
 {
@@ -4562,21 +4574,12 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->commit, dnl->get_inode(), 0, PREDIRTY_SHALLOW|PREDIRTY_PRIMARY, 0);
   mdcache->journal_dirty_inode(mdr, &le->commit, targeti);
 
+  // set up commit waiter
+  mdr->more()->slave_commit = new C_MDS_SlaveLinkCommit(this, mdr, targeti);
+
   mdlog->submit_entry(le, new C_MDS_SlaveLinkPrep(this, mdr, targeti));
   mdlog->flush();
 }
-
-class C_MDS_SlaveLinkCommit : public Context {
-  Server *server;
-  MDRequest *mdr;
-  CInode *targeti;
-public:
-  C_MDS_SlaveLinkCommit(Server *s, MDRequest *r, CInode *t) :
-    server(s), mdr(r), targeti(t) { }
-  void finish(int r) {
-    server->_commit_slave_link(mdr, r, targeti);
-  }
-};
 
 void Server::_logged_slave_link(MDRequest *mdr, CInode *targeti) 
 {
@@ -4592,17 +4595,19 @@ void Server::_logged_slave_link(MDRequest *mdr, CInode *targeti)
   // hit pop
   mds->balancer->hit_inode(mdr->now, targeti, META_POP_IWR);
 
-  // ack
-  MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
-						 MMDSSlaveRequest::OP_LINKPREPACK);
-  mds->send_message_mds(reply, mdr->slave_to_mds);
-  
-  // set up commit waiter
-  mdr->more()->slave_commit = new C_MDS_SlaveLinkCommit(this, mdr, targeti);
-
   // done.
   mdr->slave_request->put();
   mdr->slave_request = 0;
+
+  // ack
+  if (!mdr->aborted) {
+    MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
+						   MMDSSlaveRequest::OP_LINKPREPACK);
+    mds->send_message_mds(reply, mdr->slave_to_mds);
+  } else {
+    dout(10) << " abort flag set, finishing" << dendl;
+    mdcache->request_finish(mdr);
+  }
 }
 
 
@@ -5132,6 +5137,16 @@ struct C_MDS_SlaveRmdirPrep : public Context {
   }
 };
 
+struct C_MDS_SlaveRmdirCommit : public Context {
+  Server *server;
+  MDRequest *mdr;
+  C_MDS_SlaveRmdirCommit(Server *s, MDRequest *r)
+    : server(s), mdr(r) { }
+  void finish(int r) {
+    server->_commit_slave_rmdir(mdr, r);
+  }
+};
+
 void Server::handle_slave_rmdir_prep(MDRequest *mdr)
 {
   dout(10) << "handle_slave_rmdir_prep " << *mdr 
@@ -5181,19 +5196,12 @@ void Server::handle_slave_rmdir_prep(MDRequest *mdr)
 
   mds->mdcache->project_subtree_rename(in, dn->get_dir(), straydn->get_dir());
 
+  // set up commit waiter
+  mdr->more()->slave_commit = new C_MDS_SlaveRmdirCommit(this, mdr);
+
   mdlog->submit_entry(le, new C_MDS_SlaveRmdirPrep(this, mdr, dn, straydn));
   mdlog->flush();
 }
-
-struct C_MDS_SlaveRmdirCommit : public Context {
-  Server *server;
-  MDRequest *mdr;
-  C_MDS_SlaveRmdirCommit(Server *s, MDRequest *r)
-    : server(s), mdr(r) { }
-  void finish(int r) {
-    server->_commit_slave_rmdir(mdr, r);
-  }
-};
 
 void Server::_logged_slave_rmdir(MDRequest *mdr, CDentry *dn, CDentry *straydn)
 {
@@ -5207,17 +5215,19 @@ void Server::_logged_slave_rmdir(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   dn->pop_projected_linkage();
   mdcache->adjust_subtree_after_rename(in, dn->get_dir(), true);
 
-  MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
-						 MMDSSlaveRequest::OP_RMDIRPREPACK);
-  mds->send_message_mds(reply, mdr->slave_to_mds);
-
-  // set up commit waiter
-  mdr->more()->slave_commit = new C_MDS_SlaveRmdirCommit(this, mdr);
-
   // done.
   mdr->slave_request->put();
   mdr->slave_request = 0;
   mdr->straydn = 0;
+
+  if (!mdr->aborted) {
+    MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
+						   MMDSSlaveRequest::OP_RMDIRPREPACK);
+    mds->send_message_mds(reply, mdr->slave_to_mds);
+  } else {
+    dout(10) << " abort flag set, finishing" << dendl;
+    mdcache->request_finish(mdr);
+  }
 }
 
 void Server::handle_slave_rmdir_prep_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
@@ -6681,9 +6691,10 @@ void Server::_logged_slave_rename(MDRequest *mdr,
   dout(10) << "_logged_slave_rename " << *mdr << dendl;
 
   // prepare ack
-  MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
-						 MMDSSlaveRequest::OP_RENAMEPREPACK);
-  
+  MMDSSlaveRequest *reply = NULL;
+  if (!mdr->aborted)
+    reply= new MMDSSlaveRequest(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_RENAMEPREPACK);
+
   CDentry::linkage_t *srcdnl = srcdn->get_linkage();
   CDentry::linkage_t *destdnl = destdn->get_linkage();
   //CDentry::linkage_t *straydnl = straydn ? straydn->get_linkage() : 0;
@@ -6706,9 +6717,11 @@ void Server::_logged_slave_rename(MDRequest *mdr,
     for (list<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p)
       (*p)->state_clear(CDir::STATE_EXPORTBOUND);
 
-    ::encode(exported_client_map, reply->inode_export);
-    reply->inode_export.claim_append(inodebl);
-    reply->inode_export_v = srcdnl->get_inode()->inode.version;
+    if (reply) {
+      ::encode(exported_client_map, reply->inode_export);
+      reply->inode_export.claim_append(inodebl);
+      reply->inode_export_v = srcdnl->get_inode()->inode.version;
+    }
 
     // remove mdr auth pin
     mdr->auth_unpin(srcdnl->get_inode());
@@ -6725,8 +6738,6 @@ void Server::_logged_slave_rename(MDRequest *mdr,
   
   destdnl = destdn->get_linkage();
 
-  mds->send_message_mds(reply, mdr->slave_to_mds);
-  
   // bump popularity
   mds->balancer->hit_dir(mdr->now, srcdn->get_dir(), META_POP_IWR);
   if (destdnl->get_inode() && destdnl->get_inode()->is_auth())
@@ -6736,6 +6747,14 @@ void Server::_logged_slave_rename(MDRequest *mdr,
   mdr->slave_request->put();
   mdr->slave_request = 0;
   mdr->straydn = 0;
+
+  if (reply) {
+    mds->send_message_mds(reply, mdr->slave_to_mds);
+  } else {
+    assert(mdr->aborted);
+    dout(10) << " abort flag set, finishing" << dendl;
+    mdcache->request_finish(mdr);
+  }
 }
 
 void Server::_commit_slave_rename(MDRequest *mdr, int r,
