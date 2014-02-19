@@ -4,6 +4,7 @@ import logging
 from cStringIO import StringIO
 import textwrap
 from configparser import ConfigParser
+import time
 
 from ..orchestra import run
 from .. import misc
@@ -283,6 +284,13 @@ def start_devstack(devstack_node):
     log.info("Starting devstack...")
     cmd = "cd devstack && ./rejoin-stack.sh"
     devstack_node.run(args=cmd)
+
+    # This was added because I was getting timeouts on Cinder requests - which
+    # were trying to access Keystone on port 5000. A more robust way to handle
+    # this would be to introduce a wait-loop on devstack_node that checks to
+    # see if a service is listening on port 5000.
+    log.info("Waiting 30s for devstack to start...")
+    time.sleep(30)
 
 
 def restart_apache(node):
