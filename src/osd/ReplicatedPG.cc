@@ -10100,7 +10100,10 @@ void ReplicatedPG::check_local()
       dout(10) << " checking " << p->soid
 	       << " at " << p->version << dendl;
       struct stat st;
-      int r = osd->store->stat(coll, p->soid, &st);
+      int r = osd->store->stat(
+	coll,
+	ghobject_t(p->soid, ghobject_t::NO_GEN, pg_whoami.shard),
+	&st);
       if (r != -ENOENT) {
 	derr << __func__ << " " << p->soid << " exists, but should have been "
 	     << "deleted" << dendl;
@@ -10298,7 +10301,10 @@ void ReplicatedPG::hit_set_persist()
     ++ctx->at_version.version;
 
     struct stat st;
-    int r = osd->store->stat(coll, old_obj, &st);
+    int r = osd->store->stat(
+      coll,
+      ghobject_t(old_obj, ghobject_t::NO_GEN, pg_whoami.shard),
+      &st);
     assert(r == 0);
     --ctx->delta_stats.num_objects;
     ctx->delta_stats.num_bytes -= st.st_size;
@@ -10390,7 +10396,10 @@ void ReplicatedPG::hit_set_trim(RepGather *repop, unsigned max)
     info.hit_set.history.pop_front();
 
     struct stat st;
-    int r = osd->store->stat(coll, oid, &st);
+    int r = osd->store->stat(
+      coll,
+      ghobject_t(oid, ghobject_t::NO_GEN, pg_whoami.shard),
+      &st);
     assert(r == 0);
     --repop->ctx->delta_stats.num_objects;
     repop->ctx->delta_stats.num_bytes -= st.st_size;
