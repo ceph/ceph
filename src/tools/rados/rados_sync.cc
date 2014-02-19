@@ -537,7 +537,7 @@ void BackedUpObject::get_xattrs(std::list < std::string > &xattrs_) const
   }
 }
 
-const Xattr* BackedUpObject::get_xattr(const std::string name) const
+const Xattr* BackedUpObject::get_xattr(const std::string &name) const
 {
   std::map < std::string, Xattr* >::const_iterator x = xattrs.find(name);
   if (x == xattrs.end())
