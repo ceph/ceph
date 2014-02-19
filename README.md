@@ -139,8 +139,7 @@ Outputs - On success application/json of the following format is returned
     [
       {
         "version_number": 1, 
-        "version_date": "2014-02-10 10:17:56.283499", 
-        "version_id": 10
+        "version_date": "2014-02-10 10:17:56.283499"
       },
       ...
     ]

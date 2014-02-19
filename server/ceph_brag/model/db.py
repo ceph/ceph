@@ -67,9 +67,9 @@ class osds_info(Base):
   cpu = Column(String(16))
   os = Column(String(16))
   os_version = Column(String(16))
-  os_desc = Column(String(32))
-  distro = Column(String(16))
-  ceph_version = Column(String(32))
+  os_desc = Column(String(64))
+  distro = Column(String(64))
+  ceph_version = Column(String(64))
 
 class brag(object):
   def __init__(self, uuid, version_number):
