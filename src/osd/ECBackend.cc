@@ -1536,7 +1536,7 @@ struct CallClientContexts :
       i->second.first->substr_of(
 	bl,
 	i->first.first - adjusted.first,
-	i->first.second);
+	MIN(i->first.second, bl.length() - (i->first.first - adjusted.first)));
       if (i->second.second) {
 	i->second.second->complete(i->second.first->length());
       }
