@@ -739,6 +739,8 @@ protected:
   bool agent_maybe_flush(ObjectContextRef& obc);  ///< maybe flush
   bool agent_maybe_evict(ObjectContextRef& obc);  ///< maybe evict
 
+  void agent_load_hit_sets();  ///< load HitSets, if needed
+
   /// estimate object atime and temperature
   ///
   /// @param oid [in] object name
