@@ -69,7 +69,7 @@ void env_to_vec(std::vector<const char*>& args, const char *name)
   get_str_vec(p, " ", str_vec);
   for (vector<string>::iterator i = str_vec.begin();
        i != str_vec.end();
-       i++)
+       ++i)
     args.push_back(i->c_str());
 }
 
