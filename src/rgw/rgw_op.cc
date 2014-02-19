@@ -2582,7 +2582,7 @@ void RGWCompleteMultipart::execute()
         return;
       }
 
-      char etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
+      char petag[CEPH_CRYPTO_MD5_DIGESTSIZE];
       if (iter->first != (int)obj_iter->first) {
         ldout(s->cct, 0) << "NOTICE: parts num mismatch: next requested: " << iter->first << " next uploaded: " << obj_iter->first << dendl;
         ret = -ERR_INVALID_PART;
@@ -2595,8 +2595,8 @@ void RGWCompleteMultipart::execute()
         return;
       }
 
-      hex_to_buf(obj_iter->second.etag.c_str(), etag, CEPH_CRYPTO_MD5_DIGESTSIZE);
-      hash.Update((const byte *)etag, sizeof(etag));
+      hex_to_buf(obj_iter->second.etag.c_str(), petag, CEPH_CRYPTO_MD5_DIGESTSIZE);
+      hash.Update((const byte *)petag, sizeof(petag));
 
       RGWUploadPartInfo& obj_part = obj_iter->second;
 
@@ -2625,6 +2625,7 @@ void RGWCompleteMultipart::execute()
   buf_to_hex((unsigned char *)final_etag, sizeof(final_etag), final_etag_str);
   snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],  sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
            "-%lld", (long long)parts->parts.size());
+  etag = final_etag_str;
   ldout(s->cct, 10) << "calculated etag: " << final_etag_str << dendl;
 
   etag_bl.append(final_etag_str, strlen(final_etag_str) + 1);
