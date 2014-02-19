@@ -1322,7 +1322,8 @@ public:
     bufferlist *val);
   int getattrs_maybe_cache(
     ObjectContextRef obc,
-    map<string, bufferlist> *out);
+    map<string, bufferlist> *out,
+    bool user_only = false);
 };
 
 inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)

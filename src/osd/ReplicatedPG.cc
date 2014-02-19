@@ -3260,21 +3260,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
    case CEPH_OSD_OP_GETXATTRS:
       ++ctx->num_read;
       {
-	map<string,bufferlist> attrset;
+	map<string, bufferlist> out;
 	result = getattrs_maybe_cache(
 	  ctx->obc,
-	  &attrset);
-	map<string, bufferlist> out;
-	for (map<string, bufferlist>::iterator i = attrset.begin();
-	     i != attrset.end();
-	     ++i) {
-	  if (i->first[0] != '_')
-	    continue;
-	  if (i->first == "_")
-	    continue;
-	  out[i->first.substr(1, i->first.size())].claim(
-	    i->second);
-	}
+	  &out,
+	  true);
         
         bufferlist bl;
         ::encode(out, bl);
@@ -5233,7 +5223,10 @@ int ReplicatedPG::fill_in_copy_get(
   // attrs
   map<string,bufferlist>& out_attrs = reply_obj.attrs;
   if (!cursor.attr_complete) {
-    result = osd->store->getattrs(coll, soid, out_attrs, true);
+    result = getattrs_maybe_cache(
+      ctx->obc,
+      &out_attrs,
+      true);
     if (result < 0)
       return result;
     cursor.attr_complete = true;
@@ -11319,14 +11312,27 @@ int ReplicatedPG::getattr_maybe_cache(
 
 int ReplicatedPG::getattrs_maybe_cache(
   ObjectContextRef obc,
-  map<string, bufferlist> *out)
+  map<string, bufferlist> *out,
+  bool user_only)
 {
+  int r = 0;
   if (pool.info.require_rollback()) {
     if (out)
       *out = obc->attr_cache;
-    return 0;
+  } else {
+    r = pgbackend->objects_get_attrs(obc->obs.oi.soid, out);
   }
-  return pgbackend->objects_get_attrs(obc->obs.oi.soid, out);
+  if (out && user_only) {
+    map<string, bufferlist> tmp;
+    for (map<string, bufferlist>::iterator i = out->begin();
+	 i != out->end();
+	 ++i) {
+      if (i->first.size() > 1 && i->first[0] == '_')
+	tmp[i->first.substr(1, i->first.size())].claim(i->second);
+    }
+    tmp.swap(*out);
+  }
+  return r;
 }
 
 void intrusive_ptr_add_ref(ReplicatedPG *pg) { pg->get("intptr"); }
