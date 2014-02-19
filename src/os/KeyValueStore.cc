@@ -2621,7 +2621,7 @@ int KeyValueStore::omap_get_header(coll_t c, const ghobject_t &hoid,
     return r;
   }
 
-  if (got.size()) {
+  if (!got.empty()) {
     assert(got.size() == 1);
     bl->swap(got.begin()->second);
   }
