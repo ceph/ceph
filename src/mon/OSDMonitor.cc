@@ -2786,7 +2786,7 @@ int OSDMonitor::check_cluster_features(uint64_t features,
   set<int32_t> up_osds;
   osdmap.get_up_osds(up_osds);
   for (set<int32_t>::iterator it = up_osds.begin();
-       it != up_osds.end(); it ++) {
+       it != up_osds.end(); ++it) {
     const osd_xinfo_t &xi = osdmap.get_xinfo(*it);
     if (!(xi.features & features)) {
       if (unsupported_count > 0)
