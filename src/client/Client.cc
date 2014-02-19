@@ -6818,7 +6818,7 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
   Inode *in;
   int r = 0;
 
-  r = _lookup(parent, dname.c_str(), &in);
+  r = _lookup(parent, dname, &in);
   if (r < 0) {
     attr->st_ino = 0;
     goto out;
