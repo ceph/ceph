@@ -131,7 +131,7 @@ void BarrierContext::commit_barrier(barrier_interval &civ)
 	barrier->span.insert(iv);
 	/* avoid iter invalidate */
       } else {
-	iter++;
+	++iter;
       }
     }
 
