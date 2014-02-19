@@ -76,7 +76,7 @@ public:
   class RPCRecPred : public IsRecoverablePredicate {
   public:
     bool operator()(const set<pg_shard_t> &have) const {
-      return have.size() >= 1;
+      return !have.empty();
     }
   };
   IsRecoverablePredicate *get_is_recoverable_predicate() {
