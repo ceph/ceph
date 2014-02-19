@@ -1352,7 +1352,9 @@ int main(int argc, char **argv)
   case OPT_USER_INFO:
     break;
   case OPT_USER_CREATE:
-    user_op.set_generate_key(); // generate a new key by default
+    if (!user_op.has_existing_user()) {
+      user_op.set_generate_key(); // generate a new key by default
+    }
     ret = user.add(user_op, &err_msg);
     if (ret < 0) {
       cerr << "could not create user: " << err_msg << std::endl;
