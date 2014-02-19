@@ -1,3 +1,6 @@
+"""
+Run blktrace program through teuthology
+"""
 import contextlib
 import logging
 
@@ -11,11 +14,14 @@ daemon_signal = 'term'
 
 @contextlib.contextmanager
 def setup(ctx, config):
+    """
+    Setup all the remotes
+    """
     osds = ctx.cluster.only(teuthology.is_type('osd'))
     log_dir = '{tdir}/archive/performance/blktrace'.format(tdir=teuthology.get_testdir(ctx))
 
     for remote, roles_for_host in osds.remotes.iteritems():
-        log.info('Creating %s on %s' % (log_dir,remote.name))
+        log.info('Creating %s on %s' % (log_dir, remote.name))
         remote.run(
             args=['mkdir', '-p', '-m0755', '--', log_dir],
             wait=False,
@@ -24,8 +30,11 @@ def setup(ctx, config):
 
 @contextlib.contextmanager
 def execute(ctx, config):
+    """
+    Run the blktrace program on remote machines.
+    """
     procs = []
-    testdir=teuthology.get_testdir(ctx)
+    testdir = teuthology.get_testdir(ctx)
     log_dir = '{tdir}/archive/performance/blktrace'.format(tdir=testdir)
 
     osds = ctx.cluster.only(teuthology.is_type('osd'))
@@ -64,6 +73,12 @@ def execute(ctx, config):
 
 @contextlib.contextmanager
 def task(ctx, config):
+    """
+    Usage:
+        blktrace:
+      
+    Runs blktrace on all clients.
+    """
     if config is None:
         config = dict(('client.{id}'.format(id=id_), None)
                   for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client'))

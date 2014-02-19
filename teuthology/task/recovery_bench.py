@@ -1,3 +1,6 @@
+"""
+Recovery system benchmarking
+"""
 from cStringIO import StringIO
 
 import contextlib
@@ -68,6 +71,9 @@ def task(ctx, config):
         bench_proc.do_join()
 
 class RecoveryBencher:
+    """
+    RecoveryBencher
+    """
     def __init__(self, manager, config):
         self.ceph_manager = manager
         self.ceph_manager.wait_for_clean()
@@ -81,6 +87,9 @@ class RecoveryBencher:
 
         else:
             def tmp(x):
+                """
+                Local wrapper to print value.
+                """
                 print x
             self.log = tmp
 
@@ -89,9 +98,16 @@ class RecoveryBencher:
         self.thread = gevent.spawn(self.do_bench)
 
     def do_join(self):
+        """
+        Join the recovery bencher.  This is called after the main
+        task exits.
+        """
         self.thread.get()
 
     def do_bench(self):
+        """
+        Do the benchmarking.
+        """
         duration = self.config.get("duration", 60)
         num_objects = self.config.get("num_objects", 500)
         io_size = self.config.get("io_size", 4096)
@@ -160,6 +176,11 @@ class RecoveryBencher:
         self.ceph_manager.raw_cluster_cmd('osd', 'in', osd)
 
     def process_samples(self, input):
+        """
+        Extract samples from the input and process the results
+
+        :param input: input lines in JSON format
+        """
         lat = {}
         for line in input.split('\n'):
             try:
@@ -167,7 +188,7 @@ class RecoveryBencher:
                 samples = lat.setdefault(sample['type'], [])
                 samples.append(float(sample['latency']))
             except Exception:
-              pass
+                pass
 
         for type in lat:
             samples = lat[type]
