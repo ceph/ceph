@@ -11641,7 +11641,7 @@ void MDCache::_fragment_stored(MDRequest *mdr)
     // freshly replicate new dirs to peers
     for (list<CDir*>::iterator q = info.resultfrags.begin();
 	 q != info.resultfrags.end();
-	 q++)
+	 ++q)
       replicate_dir(*q, p->first, notify->basebl);
 
     mds->send_message_mds(notify, p->first);
