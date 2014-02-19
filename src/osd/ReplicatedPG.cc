@@ -834,8 +834,8 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	  if (mcand == lcand) {
 	    candidate = mcand;
 	    if (!mcand.is_max()) {
-	      ls_iter++;
-	      missing_iter++;
+	      ++ls_iter;
+	      ++missing_iter;
 	    }
 	  } else if (mcand < lcand) {
 	    candidate = mcand;
@@ -5920,7 +5920,7 @@ int ReplicatedPG::start_flush(OpContext *ctx, bool blocking)
     // have been written before that.
     vector<snapid_t>::iterator p = snapset.snaps.begin();
     while (p != snapset.snaps.end() && *p >= oi.snaps.back())
-      p++;
+      ++p;
     snapc.snaps = vector<snapid_t>(p, snapset.snaps.end());
     snapc.seq = oi.snaps.back() - 1;
   }
