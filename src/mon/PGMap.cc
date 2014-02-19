@@ -622,7 +622,7 @@ void PGMap::dump_osd_stats(Formatter *f) const
 void PGMap::dump_pg_stats_plain(ostream& ss,
 				const ceph::unordered_map<pg_t, pg_stat_t>& pg_stats) const
 {
-  ss << "pg_stat\tobjects\tmip\tdegr\tunf\tbytes\tlog\tdisklog\tstate\tstate_stamp\tv\treported\tup\tacting\tlast_scrub\tscrub_stamp\tlast_deep_scrub\tdeep_scrub_stamp" << std::endl;
+  ss << "pg_stat\tobjects\tmip\tdegr\tunf\tbytes\tlog\tdisklog\tstate\tstate_stamp\tv\treported\tup\tup_primary\tacting\tacting_primary\tlast_scrub\tscrub_stamp\tlast_deep_scrub\tdeep_scrub_stamp" << std::endl;
   for (ceph::unordered_map<pg_t, pg_stat_t>::const_iterator i = pg_stats.begin();
        i != pg_stats.end(); ++i) {
     const pg_stat_t &st(i->second);
@@ -640,7 +640,9 @@ void PGMap::dump_pg_stats_plain(ostream& ss,
        << "\t" << st.version
        << "\t" << st.reported_epoch << ":" << st.reported_seq
        << "\t" << st.up
+       << "\t" << st.up_primary
        << "\t" << st.acting
+       << "\t" << st.acting_primary
        << "\t" << st.last_scrub << "\t" << st.last_scrub_stamp
        << "\t" << st.last_deep_scrub << "\t" << st.last_deep_scrub_stamp
        << std::endl;

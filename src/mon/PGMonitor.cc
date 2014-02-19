@@ -1071,15 +1071,25 @@ void PGMonitor::map_pg_creates()
     pg_stat_t& s = pg_map.pg_stat[pgid];
     if (s.parent_split_bits)
       on = s.parent;
-    vector<int> acting;
-    int nrep = osdmap->pg_to_acting_osds(on, acting);
 
-    if (s.acting.size()) {
-      pg_map.creating_pgs_by_osd[s.acting[0]].erase(pgid);
-      if (pg_map.creating_pgs_by_osd[s.acting[0]].size() == 0)
-        pg_map.creating_pgs_by_osd.erase(s.acting[0]);
+    vector<int> up, acting;
+    int up_primary, acting_primary;
+    osdmap->pg_to_up_acting_osds(
+      on,
+      &up,
+      &up_primary,
+      &acting,
+      &acting_primary);
+
+    if (s.acting_primary != -1) {
+      pg_map.creating_pgs_by_osd[s.acting_primary].erase(pgid);
+      if (pg_map.creating_pgs_by_osd[s.acting_primary].size() == 0)
+        pg_map.creating_pgs_by_osd.erase(s.acting_primary);
     }
+    s.up = up;
+    s.up_primary = up_primary;
     s.acting = acting;
+    s.acting_primary = acting_primary;
 
     // don't send creates for localized pgs
     if (pgid.preferred() >= 0)
@@ -1089,8 +1099,8 @@ void PGMonitor::map_pg_creates()
     if (s.parent_split_bits)
       continue;
 
-    if (nrep) {
-      pg_map.creating_pgs_by_osd[acting[0]].insert(pgid);
+    if (acting_primary != -1) {
+      pg_map.creating_pgs_by_osd[acting_primary].insert(pgid);
     } else {
       dout(20) << "map_pg_creates  " << pgid << " -> no osds in epoch "
 	       << mon->osdmon()->osdmap.get_epoch() << ", skipping" << dendl;
@@ -1159,8 +1169,8 @@ bool PGMonitor::check_down_pgs()
        p != pg_map.pg_stat.end();
        ++p) {
     if ((p->second.state & PG_STATE_STALE) == 0 &&
-	p->second.acting.size() &&
-	osdmap->is_down(p->second.acting[0])) {
+	p->second.acting_primary != -1 &&
+	osdmap->is_down(p->second.acting_primary)) {
       dout(10) << " marking pg " << p->first << " stale with acting " << p->second.acting << dendl;
 
       map<pg_t,pg_stat_t>::iterator q = pending_inc.pg_stat_updates.find(p->first);
@@ -1529,12 +1539,12 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       r = -ENOENT;
       goto reply;
     }
-    if (!pg_map.pg_stat[pgid].acting.size()) {
+    if (pg_map.pg_stat[pgid].acting_primary != -1) {
       ss << "pg " << pgid << " has no primary osd";
       r = -EAGAIN;
       goto reply;
     }
-    int osd = pg_map.pg_stat[pgid].acting[0];
+    int osd = pg_map.pg_stat[pgid].acting_primary;
     if (!mon->osdmon()->osdmap.is_up(osd)) {
       ss << "pg " << pgid << " primary osd." << osd << " not up";
       r = -EAGAIN;

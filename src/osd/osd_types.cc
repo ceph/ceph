@@ -1541,6 +1541,8 @@ void pg_stat_t::dump(Formatter *f) const
   f->open_array_section("acting");
   for (vector<int>::const_iterator p = acting.begin(); p != acting.end(); ++p)
     f->dump_int("osd", *p);
+  f->dump_int("up_primary", up_primary);
+  f->dump_int("acting_primary", acting_primary);
   f->close_section();
 }
 
@@ -1554,12 +1556,14 @@ void pg_stat_t::dump_brief(Formatter *f) const
   f->open_array_section("acting");
   for (vector<int>::const_iterator p = acting.begin(); p != acting.end(); ++p)
     f->dump_int("osd", *p);
+  f->dump_int("up_primary", up_primary);
+  f->dump_int("acting_primary", acting_primary);
   f->close_section();
 }
 
 void pg_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(14, 8, bl);
+  ENCODE_START(15, 8, bl);
   ::encode(version, bl);
   ::encode(reported_seq, bl);
   ::encode(reported_epoch, bl);
@@ -1589,12 +1593,14 @@ void pg_stat_t::encode(bufferlist &bl) const
   ::encode(last_clean_scrub_stamp, bl);
   ::encode(last_became_active, bl);
   ::encode(dirty_stats_invalid, bl);
+  ::encode(up_primary, bl);
+  ::encode(acting_primary, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_stat_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(14, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(15, 8, 8, bl);
   ::decode(version, bl);
   ::decode(reported_seq, bl);
   ::decode(reported_epoch, bl);
@@ -1681,6 +1687,13 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
     // encoder may not have supported num_objects_dirty accounting.
     dirty_stats_invalid = true;
   }
+  if (struct_v >= 15) {
+    ::decode(up_primary, bl);
+    ::decode(acting_primary, bl);
+  } else {
+    up_primary = up.size() ? up[0] : -1;
+    acting_primary = acting.size() ? acting[0] : -1;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -1716,7 +1729,15 @@ void pg_stat_t::generate_test_instances(list<pg_stat_t*>& o)
   a.log_size = 99;
   a.ondisk_log_size = 88;
   a.up.push_back(123);
+  a.up_primary = 123;
   a.acting.push_back(456);
+  a.acting_primary = 456;
+  o.push_back(new pg_stat_t(a));
+
+  a.up.push_back(124);
+  a.up_primary = 124;
+  a.acting.push_back(124);
+  a.acting_primary = 124;
   o.push_back(new pg_stat_t(a));
 }
 
