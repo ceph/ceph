@@ -954,6 +954,11 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	    result = -ENOENT;
 	    break;
 	  }
+	  if (!pool.info.is_replicated()) {
+	    // FIXME: EC not supported yet
+	    result = -EOPNOTSUPP;
+	    break;
+	  }
 	  result = osd->store->read(coll, oid, 0, 0, osd_op.outdata);
 	}
       }
