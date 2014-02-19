@@ -1411,7 +1411,7 @@ bool CrushWrapper::is_valid_crush_name(const string& s)
 bool CrushWrapper::is_valid_crush_loc(CephContext *cct,
                                       const map<string,string> loc)
 {
-  for (map<string,string>::const_iterator l = loc.begin(); l != loc.end(); l++) {
+  for (map<string,string>::const_iterator l = loc.begin(); l != loc.end(); ++l) {
     if (!is_valid_crush_name(l->first) ||
         !is_valid_crush_name(l->second)) {
       ldout(cct, 1) << "loc["
