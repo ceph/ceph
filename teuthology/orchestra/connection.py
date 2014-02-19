@@ -1,3 +1,6 @@
+"""
+Connection utilities
+"""
 import base64
 import paramiko
 import os
@@ -5,6 +8,9 @@ from ..config import config
 
 
 def split_user(user_at_host):
+    """
+    break apart user@host fields into user and host.
+    """
     try:
         user, host = user_at_host.rsplit('@', 1)
     except ValueError:
@@ -15,6 +21,9 @@ def split_user(user_at_host):
 
 
 def create_key(keytype, key):
+    """
+    Create an ssh-rsa or ssh-dss key.
+    """
     if keytype == 'ssh-rsa':
         return paramiko.rsakey.RSAKey(data=base64.decodestring(key))
     elif keytype == 'ssh-dss':
@@ -25,6 +34,16 @@ def create_key(keytype, key):
 
 def connect(user_at_host, host_key=None, keep_alive=False,
             _SSHClient=None, _create_key=None):
+    """
+    ssh connection routine.
+
+    :param user_at_host: user@host
+    :param host_key: ssh key
+    :param keep_alive: keep_alive indicator
+    :param _SSHClient: client, default is paramiko ssh client
+    :param _create_key: routine to create a key (defaults to local reate_key)
+    :return: ssh connection.
+    """
     user, host = split_user(user_at_host)
     if _SSHClient is None:
         _SSHClient = paramiko.SSHClient
