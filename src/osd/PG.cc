@@ -296,8 +296,7 @@ bool PG::proc_replica_info(pg_shard_t from, const pg_info_t &oinfo)
   reg_next_scrub();
   
   // stray?
-  if ((!is_active() && !is_acting(from)) ||
-      (is_active() && !is_actingbackfill(from))) {
+  if (!is_up(from) && !is_acting(from)) {
     dout(10) << " osd." << from << " has stray content: " << oinfo << dendl;
     stray_set.insert(from);
     if (is_clean()) {
@@ -1303,7 +1302,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id)
     for (set<pg_shard_t>::iterator i = backfill_targets.begin();
 	 i != backfill_targets.end();
 	 ++i) {
-      stray_set.erase(*i);
+      assert(!stray_set.count(*i));
     }
   } else {
     // Will not change if already set because up would have had to change

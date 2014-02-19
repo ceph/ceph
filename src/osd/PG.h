@@ -688,6 +688,13 @@ public:
       return std::find(acting.begin(), acting.end(), osd.osd) != acting.end();
     }
   }
+  bool is_up(pg_shard_t osd) const {
+    if (pool.info.ec_pool()) {
+      return up.size() > osd.shard && up[osd.shard] == osd.osd;
+    } else {
+      return std::find(up.begin(), up.end(), osd.osd) != up.end();
+    }
+  }
   
   bool needs_recovery() const;
   bool needs_backfill() const;
