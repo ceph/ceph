@@ -90,6 +90,11 @@ struct TierAgentState {
       hit_set_map.erase(hit_set_map.begin());
   }
 
+  /// discard all open hit sets
+  void discard_hit_sets() {
+    hit_set_map.clear();
+  }
+
   void dump(Formatter *f) const {
     f->dump_string("flush_mode", get_flush_mode_name());
     f->dump_string("evict_mode", get_evict_mode_name());
