@@ -1,4 +1,10 @@
+"""
+These routines only appear to be used by the peering_speed tests.
+"""
 def gen_args(name, args):
+    """
+    Called from argify to generate arguments.
+    """
     usage = [""]
     usage += [name + ':']
     usage += \
@@ -13,7 +19,14 @@ def gen_args(name, args):
          for (key, _, default, _) in args]
     usage = '\n'.join('    ' + i for i in usage)
     def ret(config):
-        class Object(object): pass
+        """
+        return an object with attributes set from args. 
+        """
+        class Object(object):
+            """
+            simple object
+            """
+            pass
         obj = Object()
         for (key, usage, default, conv) in args:
             if key in config:
@@ -24,9 +37,19 @@ def gen_args(name, args):
     return usage, ret
 
 def argify(name, args):
+    """
+    Object used as a decorator for the peering speed tests.
+    See peering_spee_test.py
+    """
     (usage, config_func) = gen_args(name, args)
     def ret1(f):
+        """
+        Wrapper to handle doc and usage information
+        """
         def ret2(**kwargs):
+            """
+            Call f (the parameter passed to ret1) 
+            """
             config = kwargs.get('config', {})
             if config is None:
                 config = {}
