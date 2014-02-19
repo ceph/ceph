@@ -973,7 +973,8 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 
   // reply
   MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(),
-				       CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK); 
+				       CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK,
+				       false);
   reply->claim_op_out_data(ops);
   reply->set_result(result);
   reply->set_reply_versions(info.last_update, info.last_user_version);
@@ -1553,7 +1554,7 @@ void ReplicatedPG::do_cache_redirect(OpRequestRef op, ObjectContextRef obc)
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   int flags = m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK);
   MOSDOpReply *reply = new MOSDOpReply(m, -ENOENT,
-                                       get_osdmap()->get_epoch(), flags);
+				       get_osdmap()->get_epoch(), flags, false);
   request_redirect_t redir(m->get_object_locator(), pool.info.tier_of);
   reply->set_redirect(redir);
   dout(10) << "sending redirect to pool " << pool.info.tier_of << " for op "
@@ -1630,7 +1631,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 
 	if (m->wants_ack()) {
 	  if (already_ack(oldv)) {
-	    MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0);
+	    MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, false);
 	    reply->add_flags(CEPH_OSD_FLAG_ACK);
 	    reply->set_reply_versions(oldv, entry->user_version);
 	    osd->send_message_osd_client(reply, m->get_connection());
@@ -1726,8 +1727,10 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
     return;
   }
 
+  bool successful_write = !ctx->op_t->empty() && op->may_write() && result >= 0;
   // prepare the reply
-  ctx->reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0);
+  ctx->reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0,
+			       successful_write);
 
   // Write operations aren't allowed to return a data payload because
   // we can't do so reliably. If the client has to resend the request
@@ -1736,12 +1739,10 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
   // possible to construct an operation that does a read, does a guard
   // check (e.g., CMPXATTR), and then a write.  Then we either succeed
   // with the write, or return a CMPXATTR and the read value.
-  if (!((ctx->op_t->empty() && !ctx->modify) || result < 0)) {
+  if (successful_write) {
     // write.  normalize the result code.
-    if (result > 0) {
-      dout(20) << " zeroing write result code " << result << dendl;
-      result = 0;
-    }
+    dout(20) << " zeroing write result code " << result << dendl;
+    result = 0;
   }
   ctx->reply->set_result(result);
 
@@ -2494,30 +2495,23 @@ int ReplicatedPG::do_xattr_cmp_u64(int op, __u64 v1, bufferlist& xattr)
 
 int ReplicatedPG::do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr)
 {
-  const char *v1, *v2;
-  v1 = v1s.data();
-  string v2s;
-  if (xattr.length()) {
-    v2s = string(xattr.c_str(), xattr.length());
-    v2 = v2s.c_str();
-  } else
-    v2 = "";
+  string v2s(xattr.c_str(), xattr.length());
 
-  dout(20) << "do_xattr_cmp_str '" << v1s << "' vs '" << v2 << "' op " << op << dendl;
+  dout(20) << "do_xattr_cmp_str '" << v1s << "' vs '" << v2s << "' op " << op << dendl;
 
   switch (op) {
   case CEPH_OSD_CMPXATTR_OP_EQ:
-    return (strcmp(v1, v2) == 0);
+    return (v1s.compare(v2s) == 0);
   case CEPH_OSD_CMPXATTR_OP_NE:
-    return (strcmp(v1, v2) != 0);
+    return (v1s.compare(v2s) != 0);
   case CEPH_OSD_CMPXATTR_OP_GT:
-    return (strcmp(v1, v2) > 0);
+    return (v1s.compare(v2s) > 0);
   case CEPH_OSD_CMPXATTR_OP_GTE:
-    return (strcmp(v1, v2) >= 0);
+    return (v1s.compare(v2s) >= 0);
   case CEPH_OSD_CMPXATTR_OP_LT:
-    return (strcmp(v1, v2) < 0);
+    return (v1s.compare(v2s) < 0);
   case CEPH_OSD_CMPXATTR_OP_LTE:
-    return (strcmp(v1, v2) <= 0);
+    return (v1s.compare(v2s) <= 0);
   default:
     return -EINVAL;
   }
@@ -4397,6 +4391,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     ctx->bytes_read += osd_op.outdata.length();
 
   fail:
+    osd_op.rval = result;
     if (result < 0 && (op.flags & CEPH_OSD_OP_FLAG_FAILOK))
       result = 0;
 
@@ -6235,7 +6230,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	if (reply)
 	  repop->ctx->reply = NULL;
 	else {
-	  reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0);
+	  reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, true);
 	  reply->set_reply_versions(repop->ctx->at_version,
 	                            repop->ctx->user_at_version);
 	}
@@ -6259,7 +6254,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	     i != waiting_for_ack[repop->v].end();
 	     ++i) {
 	  MOSDOp *m = (MOSDOp*)(*i)->get_req();
-	  MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0);
+	  MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, true);
 	  reply->set_reply_versions(repop->ctx->at_version,
 	                            repop->ctx->user_at_version);
 	  reply->add_flags(CEPH_OSD_FLAG_ACK);
@@ -6274,7 +6269,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	if (reply)
 	  repop->ctx->reply = NULL;
 	else {
-	  reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0);
+	  reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, true);
 	  reply->set_reply_versions(repop->ctx->at_version,
 	                            repop->ctx->user_at_version);
 	}

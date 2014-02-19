@@ -15,6 +15,7 @@
 #include "common/common_init.h"
 #include "common/Cond.h"
 #include "test/librados/test.h"
+#include "test/librados/TestCase.h"
 #include "json_spirit/json_spirit.h"
 
 #include "osd/HitSet.h"
@@ -30,13 +31,42 @@ using std::map;
 using std::ostringstream;
 using std::string;
 
-TEST(LibRadosTier, Dirty) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
+typedef RadosTestPP LibRadosTierPP;
 
+class LibRadosTwoPoolsPP : public RadosTestPP
+{
+public:
+  LibRadosTwoPoolsPP() {};
+  virtual ~LibRadosTwoPoolsPP() {};
+protected:
+  static void SetUpTestCase() {
+    pool_name = get_temp_pool_name();
+    ASSERT_EQ("", create_one_pool_pp(pool_name, s_cluster));
+    cache_pool_name = get_temp_pool_name();
+    ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
+  }
+  static void TearDownTestCase() {
+    ASSERT_EQ(0, s_cluster.pool_delete(cache_pool_name.c_str()));
+    ASSERT_EQ(0, destroy_one_pool_pp(pool_name, s_cluster));
+  }
+  static std::string cache_pool_name;
+
+  virtual void SetUp() {
+    RadosTestPP::SetUp();
+    ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
+    cache_ioctx.set_namespace(ns);
+  }
+  virtual void TearDown() {
+    RadosTestPP::TearDown();
+    cleanup_default_namespace(cache_ioctx);
+    cache_ioctx.close();
+  }
+  librados::IoCtx cache_ioctx;
+};
+
+std::string LibRadosTwoPoolsPP::cache_pool_name;
+
+TEST_F(LibRadosTierPP, Dirty) {
   {
     ObjectWriteOperation op;
     op.undirty();
@@ -89,29 +119,16 @@ TEST(LibRadosTier, Dirty) {
     ASSERT_TRUE(dirty);
     ASSERT_EQ(0, r);
   }
-
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(LibRadosTier, Overlay) {
-  Rados cluster;
-  std::string base_pool_name = get_temp_pool_name();
-  std::string cache_pool_name = base_pool_name + "-cache";
-  ASSERT_EQ("", create_one_pool_pp(base_pool_name, cluster));
-  ASSERT_EQ(0, cluster.pool_create(cache_pool_name.c_str()));
-  IoCtx cache_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
-  IoCtx base_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(base_pool_name.c_str(), base_ioctx));
-
+TEST_F(LibRadosTwoPoolsPP, Overlay) {
   // create objects
   {
     bufferlist bl;
     bl.append("base");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
   {
     bufferlist bl;
@@ -124,11 +141,11 @@ TEST(LibRadosTier, Overlay) {
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
 
@@ -138,7 +155,7 @@ TEST(LibRadosTier, Overlay) {
   // by default, the overlay sends us to cache pool
   {
     bufferlist bl;
-    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
     ASSERT_EQ('c', bl[0]);
   }
   {
@@ -153,7 +170,7 @@ TEST(LibRadosTier, Overlay) {
     ObjectReadOperation op;
     op.read(0, 1, &bl, NULL);
     librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, base_ioctx.aio_operate(
+    ASSERT_EQ(0, ioctx.aio_operate(
 	"foo", completion, &op,
 	librados::OPERATION_IGNORE_OVERLAY, NULL));
     completion->wait_for_safe();
@@ -164,49 +181,33 @@ TEST(LibRadosTier, Overlay) {
 
   // tear down tiers
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
-
-  base_ioctx.close();
-  cache_ioctx.close();
-
-  cluster.pool_delete(cache_pool_name.c_str());
-  ASSERT_EQ(0, destroy_one_pool_pp(base_pool_name, cluster));
 }
 
-TEST(LibRadosTier, Promote) {
-  Rados cluster;
-  std::string base_pool_name = get_temp_pool_name();
-  std::string cache_pool_name = base_pool_name + "-cache";
-  ASSERT_EQ("", create_one_pool_pp(base_pool_name, cluster));
-  ASSERT_EQ(0, cluster.pool_create(cache_pool_name.c_str()));
-  IoCtx cache_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
-  IoCtx base_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(base_pool_name.c_str(), base_ioctx));
-
+TEST_F(LibRadosTwoPoolsPP, Promote) {
   // create object
   {
     bufferlist bl;
     bl.append("hi there");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
 
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
@@ -220,14 +221,14 @@ TEST(LibRadosTier, Promote) {
   // read, trigger a promote
   {
     bufferlist bl;
-    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
   }
 
   // read, trigger a whiteout
   {
     bufferlist bl;
-    ASSERT_EQ(-ENOENT, base_ioctx.read("bar", bl, 1, 0));
-    ASSERT_EQ(-ENOENT, base_ioctx.read("bar", bl, 1, 0));
+    ASSERT_EQ(-ENOENT, ioctx.read("bar", bl, 1, 0));
+    ASSERT_EQ(-ENOENT, ioctx.read("bar", bl, 1, 0));
   }
 
   // verify the object is present in the cache tier
@@ -243,102 +244,86 @@ TEST(LibRadosTier, Promote) {
 
   // tear down tiers
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
-
-  base_ioctx.close();
-  cache_ioctx.close();
-
-  cluster.pool_delete(cache_pool_name.c_str());
-  ASSERT_EQ(0, destroy_one_pool_pp(base_pool_name, cluster));
 }
 
-TEST(LibRadosTier, PromoteSnap) {
-  Rados cluster;
-  std::string base_pool_name = get_temp_pool_name();
-  std::string cache_pool_name = base_pool_name + "-cache";
-  ASSERT_EQ("", create_one_pool_pp(base_pool_name, cluster));
-  ASSERT_EQ(0, cluster.pool_create(cache_pool_name.c_str()));
-  IoCtx cache_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
-  IoCtx base_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(base_pool_name.c_str(), base_ioctx));
-
+TEST_F(LibRadosTwoPoolsPP, PromoteSnap) {
   // create object
   {
     bufferlist bl;
     bl.append("hi there");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
   {
     bufferlist bl;
     bl.append("hi there");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("bar", &op));
+    ASSERT_EQ(0, ioctx.operate("bar", &op));
   }
   {
     bufferlist bl;
     bl.append("hi there");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("baz", &op));
+    ASSERT_EQ(0, ioctx.operate("baz", &op));
   }
   {
     bufferlist bl;
     bl.append("hi there");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("bam", &op));
+    ASSERT_EQ(0, ioctx.operate("bam", &op));
   }
 
   // create a snapshot, clone
   vector<uint64_t> my_snaps(1);
-  ASSERT_EQ(0, base_ioctx.selfmanaged_snap_create(&my_snaps[0]));
-  ASSERT_EQ(0, base_ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
 							 my_snaps));
   {
     bufferlist bl;
     bl.append("ciao!");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
   {
     bufferlist bl;
     bl.append("ciao!");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("bar", &op));
+    ASSERT_EQ(0, ioctx.operate("bar", &op));
   }
   {
     ObjectWriteOperation op;
     op.remove();
-    ASSERT_EQ(0, base_ioctx.operate("baz", &op));
+    ASSERT_EQ(0, ioctx.operate("baz", &op));
   }
   {
     bufferlist bl;
     bl.append("ciao!");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("bam", &op));
+    ASSERT_EQ(0, ioctx.operate("bam", &op));
   }
 
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
@@ -352,118 +337,102 @@ TEST(LibRadosTier, PromoteSnap) {
   // read, trigger a promote on the head
   {
     bufferlist bl;
-    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
     ASSERT_EQ('c', bl[0]);
   }
   {
     bufferlist bl;
-    ASSERT_EQ(1, base_ioctx.read("bam", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read("bam", bl, 1, 0));
     ASSERT_EQ('c', bl[0]);
   }
 
-  base_ioctx.snap_set_read(my_snaps[0]);
+  ioctx.snap_set_read(my_snaps[0]);
 
   // read foo snap
   {
     bufferlist bl;
-    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
     ASSERT_EQ('h', bl[0]);
   }
 
   // read bar snap
   {
     bufferlist bl;
-    ASSERT_EQ(1, base_ioctx.read("bar", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read("bar", bl, 1, 0));
     ASSERT_EQ('h', bl[0]);
   }
 
   // read baz snap
   {
     bufferlist bl;
-    ASSERT_EQ(1, base_ioctx.read("baz", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read("baz", bl, 1, 0));
     ASSERT_EQ('h', bl[0]);
   }
 
-  base_ioctx.snap_set_read(librados::SNAP_HEAD);
+  ioctx.snap_set_read(librados::SNAP_HEAD);
 
   // read foo
   {
     bufferlist bl;
-    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
     ASSERT_EQ('c', bl[0]);
   }
 
   // read bar
   {
     bufferlist bl;
-    ASSERT_EQ(1, base_ioctx.read("bar", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read("bar", bl, 1, 0));
     ASSERT_EQ('c', bl[0]);
   }
 
   // read baz
   {
     bufferlist bl;
-    ASSERT_EQ(-ENOENT, base_ioctx.read("baz", bl, 1, 0));
+    ASSERT_EQ(-ENOENT, ioctx.read("baz", bl, 1, 0));
   }
 
   // tear down tiers
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
-
-  base_ioctx.close();
-  cache_ioctx.close();
-
-  cluster.pool_delete(cache_pool_name.c_str());
-  ASSERT_EQ(0, destroy_one_pool_pp(base_pool_name, cluster));
 }
 
-TEST(LibRadosTier, PromoteSnapTrimRace) {
-  Rados cluster;
-  std::string base_pool_name = get_temp_pool_name();
-  std::string cache_pool_name = base_pool_name + "-cache";
-  ASSERT_EQ("", create_one_pool_pp(base_pool_name, cluster));
-  ASSERT_EQ(0, cluster.pool_create(cache_pool_name.c_str()));
-  IoCtx cache_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
-  IoCtx base_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(base_pool_name.c_str(), base_ioctx));
-
+TEST_F(LibRadosTwoPoolsPP, PromoteSnapTrimRace) {
   // create object
   {
     bufferlist bl;
     bl.append("hi there");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
 
   // create a snapshot, clone
   vector<uint64_t> my_snaps(1);
-  ASSERT_EQ(0, base_ioctx.selfmanaged_snap_create(&my_snaps[0]));
-  ASSERT_EQ(0, base_ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
 							 my_snaps));
   {
     bufferlist bl;
     bl.append("ciao!");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
 
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
@@ -475,61 +444,45 @@ TEST(LibRadosTier, PromoteSnapTrimRace) {
   cluster.wait_for_latest_osdmap();
 
   // delete the snap
-  ASSERT_EQ(0, base_ioctx.selfmanaged_snap_remove(my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_remove(my_snaps[0]));
 
-  base_ioctx.snap_set_read(my_snaps[0]);
+  ioctx.snap_set_read(my_snaps[0]);
 
   // read foo snap
   {
     bufferlist bl;
-    ASSERT_EQ(-ENOENT, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(-ENOENT, ioctx.read("foo", bl, 1, 0));
   }
 
   // tear down tiers
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
-
-  base_ioctx.close();
-  cache_ioctx.close();
-
-  //  cluster.pool_delete(cache_pool_name.c_str());
-  //ASSERT_EQ(0, destroy_one_pool_pp(base_pool_name, cluster));
 }
 
-TEST(LibRadosTier, Whiteout) {
-  Rados cluster;
-  std::string base_pool_name = get_temp_pool_name();
-  std::string cache_pool_name = base_pool_name + "-cache";
-  ASSERT_EQ("", create_one_pool_pp(base_pool_name, cluster));
-  ASSERT_EQ(0, cluster.pool_create(cache_pool_name.c_str()));
-  IoCtx cache_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
-  IoCtx base_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(base_pool_name.c_str(), base_ioctx));
-
+TEST_F(LibRadosTwoPoolsPP, Whiteout) {
   // create object
   {
     bufferlist bl;
     bl.append("hi there");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
 
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
@@ -541,10 +494,10 @@ TEST(LibRadosTier, Whiteout) {
   cluster.wait_for_latest_osdmap();
 
   // create some whiteouts, verify they behave
-  ASSERT_EQ(0, base_ioctx.remove("foo"));
+  ASSERT_EQ(0, ioctx.remove("foo"));
 
-  ASSERT_EQ(-ENOENT, base_ioctx.remove("bar"));
-  ASSERT_EQ(-ENOENT, base_ioctx.remove("bar"));
+  ASSERT_EQ(-ENOENT, ioctx.remove("bar"));
+  ASSERT_EQ(-ENOENT, ioctx.remove("bar"));
 
   // verify the whiteouts are there in the cache tier
   {
@@ -557,7 +510,7 @@ TEST(LibRadosTier, Whiteout) {
     ASSERT_TRUE(it == cache_ioctx.objects_end());
   }
 
-  ASSERT_EQ(-ENOENT, base_ioctx.remove("foo"));
+  ASSERT_EQ(-ENOENT, ioctx.remove("foo"));
 
   // recreate an object and verify we can read it
   {
@@ -565,59 +518,43 @@ TEST(LibRadosTier, Whiteout) {
     bl.append("hi there");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
   {
     bufferlist bl;
-    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
     ASSERT_EQ('h', bl[0]);
   }
 
   // tear down tiers
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
-
-  base_ioctx.close();
-  cache_ioctx.close();
-
-  cluster.pool_delete(cache_pool_name.c_str());
-  ASSERT_EQ(0, destroy_one_pool_pp(base_pool_name, cluster));
 }
 
-TEST(LibRadosTier, Evict) {
-  Rados cluster;
-  std::string base_pool_name = get_temp_pool_name();
-  std::string cache_pool_name = base_pool_name + "-cache";
-  ASSERT_EQ("", create_one_pool_pp(base_pool_name, cluster));
-  ASSERT_EQ(0, cluster.pool_create(cache_pool_name.c_str()));
-  IoCtx cache_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
-  IoCtx base_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(base_pool_name.c_str(), base_ioctx));
-
+TEST_F(LibRadosTwoPoolsPP, Evict) {
   // create object
   {
     bufferlist bl;
     bl.append("hi there");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
 
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
@@ -631,15 +568,15 @@ TEST(LibRadosTier, Evict) {
   // read, trigger a promote
   {
     bufferlist bl;
-    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
   }
 
   // read, trigger a whiteout, and a dirty object
   {
     bufferlist bl;
-    ASSERT_EQ(-ENOENT, base_ioctx.read("bar", bl, 1, 0));
-    ASSERT_EQ(-ENOENT, base_ioctx.read("bar", bl, 1, 0));
-    ASSERT_EQ(0, base_ioctx.write("bar", bl, bl.length(), 0));
+    ASSERT_EQ(-ENOENT, ioctx.read("bar", bl, 1, 0));
+    ASSERT_EQ(-ENOENT, ioctx.read("bar", bl, 1, 0));
+    ASSERT_EQ(0, ioctx.write("bar", bl, bl.length(), 0));
   }
 
   // verify the object is present in the cache tier
@@ -690,102 +627,86 @@ TEST(LibRadosTier, Evict) {
 
   // tear down tiers
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
-
-  base_ioctx.close();
-  cache_ioctx.close();
-
-  cluster.pool_delete(cache_pool_name.c_str());
-  ASSERT_EQ(0, destroy_one_pool_pp(base_pool_name, cluster));
 }
 
-TEST(LibRadosTier, EvictSnap) {
-  Rados cluster;
-  std::string base_pool_name = get_temp_pool_name();
-  std::string cache_pool_name = base_pool_name + "-cache";
-  ASSERT_EQ("", create_one_pool_pp(base_pool_name, cluster));
-  ASSERT_EQ(0, cluster.pool_create(cache_pool_name.c_str()));
-  IoCtx cache_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
-  IoCtx base_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(base_pool_name.c_str(), base_ioctx));
-
+TEST_F(LibRadosTwoPoolsPP, EvictSnap) {
   // create object
   {
     bufferlist bl;
     bl.append("hi there");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
   {
     bufferlist bl;
     bl.append("hi there");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("bar", &op));
+    ASSERT_EQ(0, ioctx.operate("bar", &op));
   }
   {
     bufferlist bl;
     bl.append("hi there");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("baz", &op));
+    ASSERT_EQ(0, ioctx.operate("baz", &op));
   }
   {
     bufferlist bl;
     bl.append("hi there");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("bam", &op));
+    ASSERT_EQ(0, ioctx.operate("bam", &op));
   }
 
   // create a snapshot, clone
   vector<uint64_t> my_snaps(1);
-  ASSERT_EQ(0, base_ioctx.selfmanaged_snap_create(&my_snaps[0]));
-  ASSERT_EQ(0, base_ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
 							 my_snaps));
   {
     bufferlist bl;
     bl.append("ciao!");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
   {
     bufferlist bl;
     bl.append("ciao!");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("bar", &op));
+    ASSERT_EQ(0, ioctx.operate("bar", &op));
   }
   {
     ObjectWriteOperation op;
     op.remove();
-    ASSERT_EQ(0, base_ioctx.operate("baz", &op));
+    ASSERT_EQ(0, ioctx.operate("baz", &op));
   }
   {
     bufferlist bl;
     bl.append("ciao!");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("bam", &op));
+    ASSERT_EQ(0, ioctx.operate("bam", &op));
   }
 
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
@@ -799,12 +720,12 @@ TEST(LibRadosTier, EvictSnap) {
   // read, trigger a promote on the head
   {
     bufferlist bl;
-    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
     ASSERT_EQ('c', bl[0]);
   }
   {
     bufferlist bl;
-    ASSERT_EQ(1, base_ioctx.read("bam", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read("bam", bl, 1, 0));
     ASSERT_EQ('c', bl[0]);
   }
 
@@ -834,10 +755,10 @@ TEST(LibRadosTier, EvictSnap) {
   }
 
   // read foo snap
-  base_ioctx.snap_set_read(my_snaps[0]);
+  ioctx.snap_set_read(my_snaps[0]);
   {
     bufferlist bl;
-    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
     ASSERT_EQ('h', bl[0]);
   }
 
@@ -846,7 +767,7 @@ TEST(LibRadosTier, EvictSnap) {
     ObjectReadOperation op;
     op.cache_evict();
     librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, base_ioctx.aio_operate(
+    ASSERT_EQ(0, ioctx.aio_operate(
       "foo", completion, &op,
       librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_safe();
@@ -859,7 +780,7 @@ TEST(LibRadosTier, EvictSnap) {
     ObjectReadOperation op;
     op.read(1, 0, &bl, NULL);
     librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, base_ioctx.aio_operate(
+    ASSERT_EQ(0, ioctx.aio_operate(
       "foo", completion, &op,
       librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_safe();
@@ -867,13 +788,13 @@ TEST(LibRadosTier, EvictSnap) {
     completion->release();
   }
   // head is still there...
-  base_ioctx.snap_set_read(librados::SNAP_HEAD);
+  ioctx.snap_set_read(librados::SNAP_HEAD);
   {
     bufferlist bl;
     ObjectReadOperation op;
     op.read(1, 0, &bl, NULL);
     librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, base_ioctx.aio_operate(
+    ASSERT_EQ(0, ioctx.aio_operate(
       "foo", completion, &op,
       librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_safe();
@@ -882,26 +803,26 @@ TEST(LibRadosTier, EvictSnap) {
   }
 
   // promote head + snap of bar
-  base_ioctx.snap_set_read(librados::SNAP_HEAD);
+  ioctx.snap_set_read(librados::SNAP_HEAD);
   {
     bufferlist bl;
-    ASSERT_EQ(1, base_ioctx.read("bar", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read("bar", bl, 1, 0));
     ASSERT_EQ('c', bl[0]);
   }
-  base_ioctx.snap_set_read(my_snaps[0]);
+  ioctx.snap_set_read(my_snaps[0]);
   {
     bufferlist bl;
-    ASSERT_EQ(1, base_ioctx.read("bar", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read("bar", bl, 1, 0));
     ASSERT_EQ('h', bl[0]);
   }
 
   // evict bar head (fail)
-  base_ioctx.snap_set_read(librados::SNAP_HEAD);
+  ioctx.snap_set_read(librados::SNAP_HEAD);
   {
     ObjectReadOperation op;
     op.cache_evict();
     librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, base_ioctx.aio_operate(
+    ASSERT_EQ(0, ioctx.aio_operate(
       "bar", completion, &op,
       librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_safe();
@@ -910,12 +831,12 @@ TEST(LibRadosTier, EvictSnap) {
   }
 
   // evict bar snap
-  base_ioctx.snap_set_read(my_snaps[0]);
+  ioctx.snap_set_read(my_snaps[0]);
   {
     ObjectReadOperation op;
     op.cache_evict();
     librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, base_ioctx.aio_operate(
+    ASSERT_EQ(0, ioctx.aio_operate(
       "bar", completion, &op,
       librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_safe();
@@ -923,13 +844,13 @@ TEST(LibRadosTier, EvictSnap) {
     completion->release();
   }
   // ...and then head
-  base_ioctx.snap_set_read(librados::SNAP_HEAD);
+  ioctx.snap_set_read(librados::SNAP_HEAD);
   {
     bufferlist bl;
     ObjectReadOperation op;
     op.read(1, 0, &bl, NULL);
     librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, base_ioctx.aio_operate(
+    ASSERT_EQ(0, ioctx.aio_operate(
       "bar", completion, &op,
       librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_safe();
@@ -940,7 +861,7 @@ TEST(LibRadosTier, EvictSnap) {
     ObjectReadOperation op;
     op.cache_evict();
     librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, base_ioctx.aio_operate(
+    ASSERT_EQ(0, ioctx.aio_operate(
       "bar", completion, &op,
       librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_safe();
@@ -950,40 +871,24 @@ TEST(LibRadosTier, EvictSnap) {
 
   // tear down tiers
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
-
-  base_ioctx.close();
-  cache_ioctx.close();
-
-  cluster.pool_delete(cache_pool_name.c_str());
-  ASSERT_EQ(0, destroy_one_pool_pp(base_pool_name, cluster));
 }
 
-TEST(LibRadosTier, TryFlush) {
-  Rados cluster;
-  std::string base_pool_name = get_temp_pool_name();
-  std::string cache_pool_name = base_pool_name + "-cache";
-  ASSERT_EQ("", create_one_pool_pp(base_pool_name, cluster));
-  ASSERT_EQ(0, cluster.pool_create(cache_pool_name.c_str()));
-  IoCtx cache_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
-  IoCtx base_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(base_pool_name.c_str(), base_ioctx));
-
+TEST_F(LibRadosTwoPoolsPP, TryFlush) {
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
@@ -1000,7 +905,7 @@ TEST(LibRadosTier, TryFlush) {
     bl.append("hi there");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
 
   // verify the object is present in the cache tier
@@ -1014,8 +919,8 @@ TEST(LibRadosTier, TryFlush) {
 
   // verify the object is NOT present in the base tier
   {
-    ObjectIterator it = base_ioctx.objects_begin();
-    ASSERT_TRUE(it == base_ioctx.objects_end());
+    ObjectIterator it = ioctx.objects_begin();
+    ASSERT_TRUE(it == ioctx.objects_end());
   }
 
   // verify dirty
@@ -1056,11 +961,11 @@ TEST(LibRadosTier, TryFlush) {
 
   // verify in base tier
   {
-    ObjectIterator it = base_ioctx.objects_begin();
-    ASSERT_TRUE(it != base_ioctx.objects_end());
+    ObjectIterator it = ioctx.objects_begin();
+    ASSERT_TRUE(it != ioctx.objects_end());
     ASSERT_TRUE(it->first == string("foo"));
     ++it;
-    ASSERT_TRUE(it == base_ioctx.objects_end());
+    ASSERT_TRUE(it == ioctx.objects_end());
   }
 
   // evict it
@@ -1083,40 +988,24 @@ TEST(LibRadosTier, TryFlush) {
 
   // tear down tiers
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
-
-  base_ioctx.close();
-  cache_ioctx.close();
-
-  cluster.pool_delete(cache_pool_name.c_str());
-  ASSERT_EQ(0, destroy_one_pool_pp(base_pool_name, cluster));
 }
 
-TEST(LibRadosTier, Flush) {
-  Rados cluster;
-  std::string base_pool_name = get_temp_pool_name();
-  std::string cache_pool_name = base_pool_name + "-cache";
-  ASSERT_EQ("", create_one_pool_pp(base_pool_name, cluster));
-  ASSERT_EQ(0, cluster.pool_create(cache_pool_name.c_str()));
-  IoCtx cache_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
-  IoCtx base_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(base_pool_name.c_str(), base_ioctx));
-
+TEST_F(LibRadosTwoPoolsPP, Flush) {
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
@@ -1135,7 +1024,7 @@ TEST(LibRadosTier, Flush) {
     bl.append("hi there");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
 
   // verify the object is present in the cache tier
@@ -1149,8 +1038,8 @@ TEST(LibRadosTier, Flush) {
 
   // verify the object is NOT present in the base tier
   {
-    ObjectIterator it = base_ioctx.objects_begin();
-    ASSERT_TRUE(it == base_ioctx.objects_end());
+    ObjectIterator it = ioctx.objects_begin();
+    ASSERT_TRUE(it == ioctx.objects_end());
   }
 
   // verify dirty
@@ -1191,11 +1080,11 @@ TEST(LibRadosTier, Flush) {
 
   // verify in base tier
   {
-    ObjectIterator it = base_ioctx.objects_begin();
-    ASSERT_TRUE(it != base_ioctx.objects_end());
+    ObjectIterator it = ioctx.objects_begin();
+    ASSERT_TRUE(it != ioctx.objects_end());
     ASSERT_TRUE(it->first == string("foo"));
     ++it;
-    ASSERT_TRUE(it == base_ioctx.objects_end());
+    ASSERT_TRUE(it == ioctx.objects_end());
   }
 
   // evict it
@@ -1227,7 +1116,7 @@ TEST(LibRadosTier, Flush) {
   {
     ObjectWriteOperation op;
     op.remove();
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
 
   // flush whiteout
@@ -1262,46 +1151,30 @@ TEST(LibRadosTier, Flush) {
   }
   // or base tier
   {
-    ObjectIterator it = base_ioctx.objects_begin();
-    ASSERT_TRUE(it == base_ioctx.objects_end());
+    ObjectIterator it = ioctx.objects_begin();
+    ASSERT_TRUE(it == ioctx.objects_end());
   }
 
   // tear down tiers
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
-
-  base_ioctx.close();
-  cache_ioctx.close();
-
-  cluster.pool_delete(cache_pool_name.c_str());
-  ASSERT_EQ(0, destroy_one_pool_pp(base_pool_name, cluster));
 }
 
-TEST(LibRadosTier, FlushSnap) {
-  Rados cluster;
-  std::string base_pool_name = get_temp_pool_name();
-  std::string cache_pool_name = base_pool_name + "-cache";
-  ASSERT_EQ("", create_one_pool_pp(base_pool_name, cluster));
-  ASSERT_EQ(0, cluster.pool_create(cache_pool_name.c_str()));
-  IoCtx cache_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
-  IoCtx base_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(base_pool_name.c_str(), base_ioctx));
-
+TEST_F(LibRadosTwoPoolsPP, FlushSnap) {
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
@@ -1318,34 +1191,34 @@ TEST(LibRadosTier, FlushSnap) {
     bl.append("a");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
 
   // create a snapshot, clone
   vector<uint64_t> my_snaps(1);
-  ASSERT_EQ(0, base_ioctx.selfmanaged_snap_create(&my_snaps[0]));
-  ASSERT_EQ(0, base_ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
 							 my_snaps));
   {
     bufferlist bl;
     bl.append("b");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
 
   // and another
   my_snaps.resize(2);
   my_snaps[1] = my_snaps[0];
-  ASSERT_EQ(0, base_ioctx.selfmanaged_snap_create(&my_snaps[0]));
-  ASSERT_EQ(0, base_ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
 							 my_snaps));
   {
     bufferlist bl;
     bl.append("c");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
 
   // verify the object is present in the cache tier
@@ -1359,17 +1232,17 @@ TEST(LibRadosTier, FlushSnap) {
 
   // verify the object is NOT present in the base tier
   {
-    ObjectIterator it = base_ioctx.objects_begin();
-    ASSERT_TRUE(it == base_ioctx.objects_end());
+    ObjectIterator it = ioctx.objects_begin();
+    ASSERT_TRUE(it == ioctx.objects_end());
   }
 
   // flush on head (should fail)
-  base_ioctx.snap_set_read(librados::SNAP_HEAD);
+  ioctx.snap_set_read(librados::SNAP_HEAD);
   {
     ObjectReadOperation op;
     op.cache_flush();
     librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, base_ioctx.aio_operate(
+    ASSERT_EQ(0, ioctx.aio_operate(
       "foo", completion, &op,
       librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_safe();
@@ -1377,12 +1250,12 @@ TEST(LibRadosTier, FlushSnap) {
     completion->release();
   }
   // flush on recent snap (should fail)
-  base_ioctx.snap_set_read(my_snaps[0]);
+  ioctx.snap_set_read(my_snaps[0]);
   {
     ObjectReadOperation op;
     op.cache_flush();
     librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, base_ioctx.aio_operate(
+    ASSERT_EQ(0, ioctx.aio_operate(
       "foo", completion, &op,
       librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_safe();
@@ -1390,12 +1263,12 @@ TEST(LibRadosTier, FlushSnap) {
     completion->release();
   }
   // flush on oldest snap
-  base_ioctx.snap_set_read(my_snaps[1]);
+  ioctx.snap_set_read(my_snaps[1]);
   {
     ObjectReadOperation op;
     op.cache_flush();
     librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, base_ioctx.aio_operate(
+    ASSERT_EQ(0, ioctx.aio_operate(
       "foo", completion, &op,
       librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_safe();
@@ -1403,12 +1276,12 @@ TEST(LibRadosTier, FlushSnap) {
     completion->release();
   }
   // flush on next oldest snap
-  base_ioctx.snap_set_read(my_snaps[0]);
+  ioctx.snap_set_read(my_snaps[0]);
   {
     ObjectReadOperation op;
     op.cache_flush();
     librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, base_ioctx.aio_operate(
+    ASSERT_EQ(0, ioctx.aio_operate(
       "foo", completion, &op,
       librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_safe();
@@ -1416,12 +1289,12 @@ TEST(LibRadosTier, FlushSnap) {
     completion->release();
   }
   // flush on head
-  base_ioctx.snap_set_read(librados::SNAP_HEAD);
+  ioctx.snap_set_read(librados::SNAP_HEAD);
   {
     ObjectReadOperation op;
     op.cache_flush();
     librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, base_ioctx.aio_operate(
+    ASSERT_EQ(0, ioctx.aio_operate(
       "foo", completion, &op,
       librados::OPERATION_IGNORE_CACHE, NULL));
     completion->wait_for_safe();
@@ -1430,32 +1303,32 @@ TEST(LibRadosTier, FlushSnap) {
   }
 
   // verify i can read the snaps from the cache pool
-  base_ioctx.snap_set_read(librados::SNAP_HEAD);
+  ioctx.snap_set_read(librados::SNAP_HEAD);
   {
     bufferlist bl;
-    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
     ASSERT_EQ('c', bl[0]);
   }
-  base_ioctx.snap_set_read(my_snaps[0]);
+  ioctx.snap_set_read(my_snaps[0]);
   {
     bufferlist bl;
-    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
     ASSERT_EQ('b', bl[0]);
   }
-  base_ioctx.snap_set_read(my_snaps[1]);
+  ioctx.snap_set_read(my_snaps[1]);
   {
     bufferlist bl;
-    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
     ASSERT_EQ('a', bl[0]);
   }
 
   // tear down tiers
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
 
@@ -1463,51 +1336,45 @@ TEST(LibRadosTier, FlushSnap) {
   cluster.wait_for_latest_osdmap();
 
   // verify i can read the snaps from the base pool
-  base_ioctx.snap_set_read(librados::SNAP_HEAD);
+  ioctx.snap_set_read(librados::SNAP_HEAD);
   {
     bufferlist bl;
-    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
     ASSERT_EQ('c', bl[0]);
   }
-  base_ioctx.snap_set_read(my_snaps[0]);
+  ioctx.snap_set_read(my_snaps[0]);
   {
     bufferlist bl;
-    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
     ASSERT_EQ('b', bl[0]);
   }
-  base_ioctx.snap_set_read(my_snaps[1]);
+  ioctx.snap_set_read(my_snaps[1]);
   {
     bufferlist bl;
-    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
     ASSERT_EQ('a', bl[0]);
   }
-
-  base_ioctx.close();
-  cache_ioctx.close();
-
-  cluster.pool_delete(cache_pool_name.c_str());
-  ASSERT_EQ(0, destroy_one_pool_pp(base_pool_name, cluster));
 }
 
-TEST(LibRadosTier, FlushWriteRaces) {
+TEST_F(LibRadosTierPP, FlushWriteRaces) {
   Rados cluster;
-  std::string base_pool_name = get_temp_pool_name();
-  std::string cache_pool_name = base_pool_name + "-cache";
-  ASSERT_EQ("", create_one_pool_pp(base_pool_name, cluster));
+  std::string pool_name = get_temp_pool_name();
+  std::string cache_pool_name = pool_name + "-cache";
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
   ASSERT_EQ(0, cluster.pool_create(cache_pool_name.c_str()));
   IoCtx cache_ioctx;
   ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
-  IoCtx base_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(base_pool_name.c_str(), base_ioctx));
+  IoCtx ioctx;
+  ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
 
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
@@ -1524,7 +1391,7 @@ TEST(LibRadosTier, FlushWriteRaces) {
   {
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
 
   // flush + write
@@ -1539,7 +1406,7 @@ TEST(LibRadosTier, FlushWriteRaces) {
     ObjectWriteOperation op2;
     op2.write_full(bl);
     librados::AioCompletion *completion2 = cluster.aio_create_completion();
-    ASSERT_EQ(0, base_ioctx.aio_operate(
+    ASSERT_EQ(0, ioctx.aio_operate(
       "foo", completion2, &op2, 0));
 
     completion->wait_for_safe();
@@ -1558,7 +1425,7 @@ TEST(LibRadosTier, FlushWriteRaces) {
       bl.append("hi there");
       ObjectWriteOperation op;
       op.write_full(bl);
-      ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+      ASSERT_EQ(0, ioctx.operate("foo", &op));
     }
 
     // try-flush + write
@@ -1574,7 +1441,7 @@ TEST(LibRadosTier, FlushWriteRaces) {
       ObjectWriteOperation op2;
       op2.write_full(bl);
       librados::AioCompletion *completion2 = cluster.aio_create_completion();
-      ASSERT_EQ(0, base_ioctx.aio_operate("foo", completion2, &op2, 0));
+      ASSERT_EQ(0, ioctx.aio_operate("foo", completion2, &op2, 0));
 
       completion->wait_for_safe();
       completion2->wait_for_safe();
@@ -1592,40 +1459,24 @@ TEST(LibRadosTier, FlushWriteRaces) {
 
   // tear down tiers
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
-
-  base_ioctx.close();
-  cache_ioctx.close();
-
-  cluster.pool_delete(cache_pool_name.c_str());
-  ASSERT_EQ(0, destroy_one_pool_pp(base_pool_name, cluster));
 }
 
-TEST(LibRadosTier, FlushTryFlushRaces) {
-  Rados cluster;
-  std::string base_pool_name = get_temp_pool_name();
-  std::string cache_pool_name = base_pool_name + "-cache";
-  ASSERT_EQ("", create_one_pool_pp(base_pool_name, cluster));
-  ASSERT_EQ(0, cluster.pool_create(cache_pool_name.c_str()));
-  IoCtx cache_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
-  IoCtx base_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(base_pool_name.c_str(), base_ioctx));
-
+TEST_F(LibRadosTwoPoolsPP, FlushTryFlushRaces) {
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
@@ -1642,7 +1493,7 @@ TEST(LibRadosTier, FlushTryFlushRaces) {
     bl.append("hi there");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
 
   // flush + flush
@@ -1675,7 +1526,7 @@ TEST(LibRadosTier, FlushTryFlushRaces) {
     bl.append("hi there");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
 
   // flush + try-flush
@@ -1711,7 +1562,7 @@ TEST(LibRadosTier, FlushTryFlushRaces) {
       bl.append("hi there");
       ObjectWriteOperation op;
       op.write_full(bl);
-      ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+      ASSERT_EQ(0, ioctx.operate("foo", &op));
     }
 
     // try-flush + flush
@@ -1752,7 +1603,7 @@ TEST(LibRadosTier, FlushTryFlushRaces) {
     bl.append("hi there");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
 
   // try-flush + try-flush
@@ -1783,19 +1634,13 @@ TEST(LibRadosTier, FlushTryFlushRaces) {
 
   // tear down tiers
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
-
-  base_ioctx.close();
-  cache_ioctx.close();
-
-  cluster.pool_delete(cache_pool_name.c_str());
-  ASSERT_EQ(0, destroy_one_pool_pp(base_pool_name, cluster));
 }
 
 
@@ -1832,25 +1677,15 @@ void flush_read_race_cb(completion_t cb, void *arg)
   test_lock.Unlock();
 }
 
-TEST(LibRadosTier, TryFlushReadRace) {
-  Rados cluster;
-  std::string base_pool_name = get_temp_pool_name();
-  std::string cache_pool_name = base_pool_name + "-cache";
-  ASSERT_EQ("", create_one_pool_pp(base_pool_name, cluster));
-  ASSERT_EQ(0, cluster.pool_create(cache_pool_name.c_str()));
-  IoCtx cache_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
-  IoCtx base_ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(base_pool_name.c_str(), base_ioctx));
-
+TEST_F(LibRadosTwoPoolsPP, TryFlushReadRace) {
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
@@ -1870,11 +1705,11 @@ TEST(LibRadosTier, TryFlushReadRace) {
     bl.append(bp);
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
 
   // start a continuous stream of reads
-  read_ioctx = &base_ioctx;
+  read_ioctx = &ioctx;
   test_lock.Lock();
   for (int i = 0; i < max_reads; ++i) {
     start_flush_read();
@@ -1904,28 +1739,16 @@ TEST(LibRadosTier, TryFlushReadRace) {
 
   // tear down tiers
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + base_pool_name +
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
-
-  base_ioctx.close();
-  cache_ioctx.close();
-
-  cluster.pool_delete(cache_pool_name.c_str());
-  ASSERT_EQ(0, destroy_one_pool_pp(base_pool_name, cluster));
 }
 
-TEST(LibRadosTier, HitSetNone) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
-
+TEST_F(LibRadosTierPP, HitSetNone) {
   {
     list< pair<time_t,time_t> > ls;
     AioCompletion *c = librados::Rados::aio_create_completion();
@@ -1943,9 +1766,6 @@ TEST(LibRadosTier, HitSetNone) {
     ASSERT_EQ(-ENOENT, c->get_return_value());
     c->release();
   }
-
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
 string set_pool_str(string pool, string var, string val)
@@ -1962,13 +1782,7 @@ string set_pool_str(string pool, string var, int val)
     + stringify(val) + string("\"}");
 }
 
-TEST(LibRadosTier, HitSetRead) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
-
+TEST_F(LibRadosTierPP, HitSetRead) {
   // enable hitset tracking for this pool
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(set_pool_str(pool_name, "hit_set_count", 2),
@@ -1981,6 +1795,8 @@ TEST(LibRadosTier, HitSetRead) {
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
+
+  ioctx.set_namespace("");
 
   // keep reading until we see our object appear in the HitSet
   utime_t start = ceph_clock_now(NULL);
@@ -2019,9 +1835,6 @@ TEST(LibRadosTier, HitSetRead) {
 
     sleep(1);
   }
-
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
 static int _get_pg_num(Rados& cluster, string pool_name)
@@ -2053,13 +1866,7 @@ static int _get_pg_num(Rados& cluster, string pool_name)
 }
 
 
-TEST(LibRadosTier, HitSetWrite) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
-
+TEST_F(LibRadosTierPP, HitSetWrite) {
   int num_pg = _get_pg_num(cluster, pool_name);
   assert(num_pg > 0);
 
@@ -2075,6 +1882,8 @@ TEST(LibRadosTier, HitSetWrite) {
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
+
+  ioctx.set_namespace("");
 
   // do a bunch of writes
   for (int i=0; i<1000; ++i) {
@@ -2128,18 +1937,9 @@ TEST(LibRadosTier, HitSetWrite) {
     }
     ASSERT_TRUE(found);
   }
-
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(LibRadosTier, HitSetTrim) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
-
+TEST_F(LibRadosTierPP, HitSetTrim) {
   unsigned count = 3;
   unsigned period = 3;
 
@@ -2156,6 +1956,8 @@ TEST(LibRadosTier, HitSetTrim) {
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
+
+  ioctx.set_namespace("");
 
   // do a bunch of writes and make sure the hitsets rotate
   utime_t start = ceph_clock_now(NULL);
@@ -2196,9 +1998,6 @@ TEST(LibRadosTier, HitSetTrim) {
 
     sleep(1);
   }
-
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
 

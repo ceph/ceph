@@ -140,8 +140,8 @@ struct librados::IoCtxImpl {
   int getxattrs(const object_t& oid, map<string, bufferlist>& attrset);
   int rmxattr(const object_t& oid, const char *name);
 
-  int operate(const object_t& oid, ::ObjectOperation *o, time_t *pmtime);
-  int operate_read(const object_t& oid, ::ObjectOperation *o, bufferlist *pbl);
+  int operate(const object_t& oid, ::ObjectOperation *o, time_t *pmtime, int flags=0);
+  int operate_read(const object_t& oid, ::ObjectOperation *o, bufferlist *pbl, int flags=0);
   int aio_operate(const object_t& oid, ::ObjectOperation *o,
 		  AioCompletionImpl *c, const SnapContext& snap_context,
 		  int flags);

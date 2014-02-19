@@ -75,6 +75,37 @@ struct ObjectOperation {
     ops.rbegin()->op.flags = flags;
   }
 
+  /**
+   * This is a more limited form of C_Contexts, but that requires
+   * a ceph_context which we don't have here.
+   */
+  class C_TwoContexts : public Context {
+    Context *first;
+    Context *second;
+  public:
+    C_TwoContexts(Context *first, Context *second) : first(first),
+						     second(second) {}
+    void finish(int r) {
+      first->complete(r);
+      second->complete(r);
+    }
+  };
+
+  /**
+   * Add a callback to run when this operation completes,
+   * after any other callbacks for it.
+   */
+  void add_handler(Context *extra) {
+    size_t last = out_handler.size() - 1;
+    Context *orig = out_handler[last];
+    if (orig) {
+      Context *wrapper = new C_TwoContexts(orig, extra);
+      out_handler[last] = wrapper;
+    } else {
+      out_handler[last] = extra;
+    }
+  }
+
   OSDOp& add_op(int op) {
     int s = ops.size();
     ops.resize(s+1);
@@ -237,12 +268,14 @@ struct ObjectOperation {
   }
 
   // object data
-  void read(uint64_t off, uint64_t len, bufferlist *pbl, int *prval) {
+  void read(uint64_t off, uint64_t len, bufferlist *pbl, int *prval,
+	    Context* ctx) {
     bufferlist bl;
     add_data(CEPH_OSD_OP_READ, off, len, bl);
     unsigned p = ops.size() - 1;
     out_bl[p] = pbl;
     out_rval[p] = prval;
+    out_handler[p] = ctx;
   }
 
   struct C_ObjectOperation_sparse_read : public Context {
@@ -1605,6 +1638,7 @@ public:
     o->priority = op.priority;
     o->mtime = mtime;
     o->snapc = snapc;
+    o->out_rval.swap(op.out_rval);
     return o;
   }
   tid_t mutate(const object_t& oid, const object_locator_t& oloc, 

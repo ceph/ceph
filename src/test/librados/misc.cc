@@ -13,6 +13,7 @@
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "test/librados/test.h"
+#include "test/librados/TestCase.h"
 
 #include <errno.h>
 #include <map>
@@ -25,37 +26,28 @@ using std::map;
 using std::ostringstream;
 using std::string;
 
-TEST(LibRadosMisc, Version) {
+typedef RadosTest LibRadosMisc;
+typedef RadosTestPP LibRadosMiscPP;
+
+TEST(LibRadosMiscVersion, Version) {
   int major, minor, extra;
   rados_version(&major, &minor, &extra);
 }
 
-TEST(LibRadosMisc, VersionPP) {
+TEST(LibRadosMiscVersion, VersionPP) {
   int major, minor, extra;
   Rados::version(&major, &minor, &extra);
 }
 
-TEST(LibRadosMisc, ClusterFSID) {
-  rados_t cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
-
+TEST_F(LibRadosMisc, ClusterFSID) {
   char fsid[37];
   ASSERT_EQ(-ERANGE, rados_cluster_fsid(cluster, fsid, sizeof(fsid) - 1));
   ASSERT_EQ(sizeof(fsid) - 1,
             (size_t)rados_cluster_fsid(cluster, fsid, sizeof(fsid)));
-
-  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
-TEST(LibRadosMisc, WaitOSDMapPP) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-
+TEST_F(LibRadosMiscPP, WaitOSDMapPP) {
   ASSERT_EQ(0, cluster.wait_for_latest_osdmap());
-
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
 static std::string read_key_from_tmap(IoCtx& ioctx, const std::string &obj,
@@ -119,13 +111,7 @@ static int remove_key_from_tmap(IoCtx &ioctx, const std::string &obj,
   return ret;
 }
 
-TEST(LibRadosMisc, TmapUpdatePP) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_F(LibRadosMiscPP, TmapUpdatePP) {
   // create tmap
   {
     __u8 c = CEPH_OSD_TMAP_CREATE;
@@ -152,18 +138,9 @@ TEST(LibRadosMisc, TmapUpdatePP) {
 
   // key should be removed
   ASSERT_EQ(string(""), read_key_from_tmap(ioctx, "foo", "key1"));
-
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(LibRadosMisc, TmapUpdateMisorderedPP) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_F(LibRadosMiscPP, TmapUpdateMisorderedPP) {
   // create tmap
   {
     __u8 c = CEPH_OSD_TMAP_CREATE;
@@ -229,18 +206,9 @@ TEST(LibRadosMisc, TmapUpdateMisorderedPP) {
 
   ASSERT_EQ(0, remove_key_from_tmap(ioctx, "foo", "b"));
   ASSERT_EQ(string(""), read_key_from_tmap(ioctx, "foo", "a"));
-
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(LibRadosMisc, TmapUpdateMisorderedPutPP) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_F(LibRadosMiscPP, TmapUpdateMisorderedPutPP) {
   // create unsorted tmap
   string h("header");
   bufferlist bl;
@@ -260,18 +228,9 @@ TEST(LibRadosMisc, TmapUpdateMisorderedPutPP) {
   bufferlist newbl;
   ioctx.read("foo", newbl, orig.length(), 0);
   ASSERT_EQ(orig.contents_equal(newbl), false);
-
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(LibRadosMisc, Tmap2OmapPP) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_F(LibRadosMiscPP, Tmap2OmapPP) {
   // create tmap
   bufferlist hdr;
   hdr.append("header");
@@ -325,18 +284,10 @@ TEST(LibRadosMisc, Tmap2OmapPP) {
     }
     ASSERT_TRUE(same);
   }
-
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(LibRadosMisc, Exec) {
+TEST_F(LibRadosMisc, Exec) {
   char buf[128];
-  rados_t cluster;
-  rados_ioctx_t ioctx;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
-  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   char buf2[512];
@@ -349,16 +300,9 @@ TEST(LibRadosMisc, Exec) {
   uint64_t all_features;
   ::decode(all_features, iter);
   ASSERT_EQ(all_features, (uint64_t)RBD_FEATURES_ALL);
-  rados_ioctx_destroy(ioctx);
-  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
-TEST(LibRadosMisc, ExecPP) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
+TEST_F(LibRadosMiscPP, ExecPP) {
   bufferlist bl;
   ASSERT_EQ(0, ioctx.write("foo", bl, 0, 0));
   bufferlist bl2, out;
@@ -368,17 +312,9 @@ TEST(LibRadosMisc, ExecPP) {
   uint64_t all_features;
   ::decode(all_features, iter);
   ASSERT_EQ(all_features, (uint64_t)RBD_FEATURES_ALL);
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(LibRadosMisc, Operate1PP) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_F(LibRadosMiscPP, Operate1PP) {
   ObjectWriteOperation o;
   {
     bufferlist bl;
@@ -408,25 +344,17 @@ TEST(LibRadosMisc, Operate1PP) {
     o2.cmpxattr("key1", CEPH_OSD_CMPXATTR_OP_EQ, bl);
     o2.rmxattr("key1");
   }
-  ASSERT_EQ(0, ioctx.operate("foo", &o2));
+  ASSERT_EQ(-ECANCELED, ioctx.operate("foo", &o2));
   ObjectWriteOperation o3;
   {
     bufferlist bl;
     bl.append(val1);
     o3.cmpxattr("key1", CEPH_OSD_CMPXATTR_OP_EQ, bl);
   }
-  ASSERT_LT(ioctx.operate("foo", &o3), 0);
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+  ASSERT_EQ(-ECANCELED, ioctx.operate("foo", &o3));
 }
 
-TEST(LibRadosMisc, Operate2PP) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_F(LibRadosMiscPP, Operate2PP) {
   ObjectWriteOperation o;
   {
     bufferlist bl;
@@ -445,17 +373,9 @@ TEST(LibRadosMisc, Operate2PP) {
   time_t mtime;
   ASSERT_EQ(0, ioctx.stat("foo", &size, &mtime));
   ASSERT_EQ(0U, size);
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(LibRadosMisc, BigObjectPP) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_F(LibRadosMiscPP, BigObjectPP) {
   bufferlist bl;
   bl.append("abcdefg");
   ASSERT_EQ((int)bl.length(), ioctx.write("foo", bl, bl.length(), 0));
@@ -485,9 +405,6 @@ TEST(LibRadosMisc, BigObjectPP) {
   // this test only works on 64-bit platforms
   ASSERT_EQ(-EFBIG, ioctx.write("foo", bl, bl.length(), 500000000000ull));
 #endif
-
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
 void set_completion_complete(rados_completion_t cb, void *arg)
@@ -496,13 +413,7 @@ void set_completion_complete(rados_completion_t cb, void *arg)
   *my_aio_complete = true;
 }
 
-TEST(LibRadosMisc, AioOperatePP) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
-
+TEST_F(LibRadosMiscPP, AioOperatePP) {
   bool my_aio_complete = false;
   AioCompletion *my_completion = cluster.aio_create_completion(
 	  (void*)&my_aio_complete, set_completion_complete, NULL);
@@ -533,16 +444,9 @@ TEST(LibRadosMisc, AioOperatePP) {
   time_t mtime;
   ASSERT_EQ(0, ioctx.stat("foo", &size, &mtime));
   ASSERT_EQ(1024U, size);
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(LibRadosMisc, CloneRangePP) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
+TEST_F(LibRadosMiscPP, CloneRangePP) {
   char buf[64];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
@@ -553,17 +457,10 @@ TEST(LibRadosMisc, CloneRangePP) {
   bufferlist bl2;
   ASSERT_EQ(sizeof(buf), (size_t)ioctx.read("bar", bl2, sizeof(buf), 0));
   ASSERT_EQ(0, memcmp(buf, bl2.c_str(), sizeof(buf)));
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(LibRadosMisc, CloneRange) {
+TEST_F(LibRadosMisc, CloneRange) {
   char buf[128];
-  rados_t cluster;
-  rados_ioctx_t ioctx;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
-  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "src", buf, sizeof(buf), 0));
   rados_ioctx_locator_set_key(ioctx, "src");
@@ -572,17 +469,9 @@ TEST(LibRadosMisc, CloneRange) {
   memset(buf2, 0, sizeof(buf2));
   ASSERT_EQ((int)sizeof(buf2), rados_read(ioctx, "dst", buf2, sizeof(buf2), 0));
   ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
-  rados_ioctx_destroy(ioctx);
-  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
-TEST(LibRadosMisc, AssertExistsPP) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
-
+TEST_F(LibRadosMiscPP, AssertExistsPP) {
   char buf[64];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
@@ -595,18 +484,9 @@ TEST(LibRadosMisc, AssertExistsPP) {
   ASSERT_EQ(0, ioctx.create("asdffoo", true));
   ASSERT_EQ(0, ioctx.operate("asdffoo", &op));
   ASSERT_EQ(-EEXIST, ioctx.create("asdffoo", true));
-
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(LibRadosMisc, BigAttrPP) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
-
+TEST_F(LibRadosMiscPP, BigAttrPP) {
   char buf[64];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
@@ -641,18 +521,9 @@ TEST(LibRadosMisc, BigAttrPP) {
     ASSERT_EQ((int)bl.length(), ioctx.getxattr("foo", n, got));
     ASSERT_TRUE(bl.contents_equal(got));
   }
-
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(LibRadosMisc, CopyPP) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
-
+TEST_F(LibRadosMiscPP, CopyPP) {
   bufferlist bl, x;
   bl.append("hi there");
   x.append("bar");
@@ -733,9 +604,6 @@ TEST(LibRadosMisc, CopyPP) {
     ASSERT_EQ((int)x.length(), ioctx.getxattr("foo.copy2", "myattr", x2));
     ASSERT_TRUE(x.contents_equal(x2));
   }
-
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
 int main(int argc, char **argv)
