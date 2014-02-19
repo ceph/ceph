@@ -383,13 +383,12 @@ ceph osd pool set data size $new_size
 ceph osd pool get data size | grep "size: $new_size"
 ceph osd pool set data size $old_size
 
-# uncomment when erasure code ready see http://tracker.ceph.com/issues/7360
-#ceph osd crush rule create-erasure ec_ruleset
-#ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=ec_ruleset
-#set +e
-#ceph osd pool set pool_erasure size 4444 2>$TMPFILE
-#check_response $? 38 'can not change the size'
-#set -e
+ceph osd crush rule create-erasure ec_ruleset
+ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=ec_ruleset
+set +e
+ceph osd pool set pool_erasure size 4444 2>$TMPFILE
+check_response 'not change the size'
+set -e
 
 ceph osd pool set data hashpspool true
 ceph osd pool set data hashpspool false
