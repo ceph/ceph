@@ -1998,6 +1998,7 @@ void Client::send_reconnect(MetaSession *session)
 
       in->caps[mds]->seq = 0;  // reset seq.
       in->caps[mds]->issue_seq = 0;  // reset seq.
+      in->caps[mds]->mseq = 0;  // reset seq.
       m->add_cap(p->first.ino, 
 		 in->caps[mds]->cap_id,
 		 path.get_ino(), path.get_path(),   // ino
