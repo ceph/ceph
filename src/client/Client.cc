@@ -2434,6 +2434,7 @@ void Client::check_caps(Inode *in, bool is_delayed)
 {
   unsigned wanted = in->caps_wanted();
   unsigned used = in->caps_used();
+  unsigned cap_used;
 
   int retain = wanted | CEPH_CAP_PIN;
   if (!unmounting) {
@@ -2474,6 +2475,10 @@ void Client::check_caps(Inode *in, bool is_delayed)
     MetaSession *session = mds_sessions[mds];
     assert(session);
 
+    cap_used = used;
+    if (in->auth_cap && cap != in->auth_cap)
+      cap_used &= ~in->auth_cap->issued;
+
     int revoking = cap->implemented & ~cap->issued;
     
     ldout(cct, 10) << " cap mds." << mds
@@ -2497,12 +2502,12 @@ void Client::check_caps(Inode *in, bool is_delayed)
     }
 
     /* completed revocation? */
-    if (revoking && (revoking & used) == 0) {
+    if (revoking && (revoking & cap_used) == 0) {
       ldout(cct, 10) << "completed revocation of " << ccap_string(cap->implemented & ~cap->issued) << dendl;
       goto ack;
     }
 
-    if (!revoking && unmounting && (used == 0))
+    if (!revoking && unmounting && (cap_used == 0))
       goto ack;
 
     if (wanted == cap->wanted &&         // mds knows what we want.
@@ -2522,7 +2527,7 @@ void Client::check_caps(Inode *in, bool is_delayed)
     else
       flushing = 0;
 
-    send_cap(in, session, cap, used, wanted, retain, flushing);
+    send_cap(in, session, cap, cap_used, wanted, retain, flushing);
   }
 }
 
