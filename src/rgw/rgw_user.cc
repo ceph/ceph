@@ -6,6 +6,7 @@
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
+#include "common/RWLock.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
 
@@ -192,24 +193,63 @@ int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_inf
   return ret;
 }
 
+struct user_info_entry {
+  RGWUserInfo info;
+  RGWObjVersionTracker objv_tracker;
+  time_t mtime;
+};
+
+
+static map<string, user_info_entry> uinfo_cache;
+static RWLock uinfo_lock("uinfo_lock");
+
 int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucket, RGWUserInfo& info,
                                  RGWObjVersionTracker *objv_tracker, time_t *pmtime)
 {
   bufferlist bl;
   RGWUID uid;
 
-  int ret = rgw_get_system_obj(store, NULL, bucket, key, bl, NULL, pmtime);
+  uinfo_lock.get_read();
+  map<string, user_info_entry>::iterator uiter = uinfo_cache.find(key);
+  if (uiter != uinfo_cache.end()) {
+    user_info_entry& e = uiter->second;
+    info = e.info;
+    if (objv_tracker)
+      *objv_tracker = e.objv_tracker;
+    if (pmtime)
+      *pmtime = e.mtime;
+    uinfo_lock.unlock();
+    return 0;
+  }
+  uinfo_lock.unlock();
+
+  user_info_entry e;
+
+  int ret = rgw_get_system_obj(store, NULL, bucket, key, bl, NULL, &e.mtime);
   if (ret < 0)
     return ret;
 
   bufferlist::iterator iter = bl.begin();
   try {
     ::decode(uid, iter);
-    return rgw_get_user_info_by_uid(store, uid.user_id, info, objv_tracker);
+    int ret = rgw_get_user_info_by_uid(store, uid.user_id, e.info, &e.objv_tracker);
+    if (ret < 0) {
+      return ret;
+    }
   } catch (buffer::error& err) {
     ldout(store->ctx(), 0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
     return -EIO;
   }
+
+  uinfo_lock.get_write();
+  uinfo_cache[key] = e;
+  uinfo_lock.unlock();
+
+  info = e.info;
+  if (objv_tracker)
+    *objv_tracker = e.objv_tracker;
+  if (pmtime)
+    *pmtime = e.mtime;
 
   return 0;
 }
