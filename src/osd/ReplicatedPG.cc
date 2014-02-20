@@ -5537,15 +5537,20 @@ void ReplicatedPG::_write_copy_chunk(CopyOpRef cop, PGBackend::PGTransaction *t)
       cop->data);
     cop->data.clear();
   }
-  if (!cop->temp_cursor.omap_complete) {
-    if (cop->omap_header.length()) {
-      t->omap_setheader(
-	cop->results.temp_oid,
-	cop->omap_header);
-      cop->omap_header.clear();
+  if (!pool.info.require_rollback()) {
+    if (!cop->temp_cursor.omap_complete) {
+      if (cop->omap_header.length()) {
+	t->omap_setheader(
+	  cop->results.temp_oid,
+	  cop->omap_header);
+	cop->omap_header.clear();
+      }
+      t->omap_setkeys(cop->results.temp_oid, cop->omap);
+      cop->omap.clear();
     }
-    t->omap_setkeys(cop->results.temp_oid, cop->omap);
-    cop->omap.clear();
+  } else {
+    assert(cop->omap_header.length() == 0);
+    assert(cop->omap.empty());
   }
   cop->temp_cursor = cop->cursor;
 }
