@@ -672,8 +672,6 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     }
 
     in->layout = st->layout;
-    in->ctime = st->ctime;
-    in->max_size = st->max_size;  // right?
 
     update_inode_file_bits(in, st->truncate_seq, st->truncate_size, st->size,
 			   st->time_warp_seq, st->ctime, st->mtime, st->atime,
@@ -684,9 +682,11 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
   // move me if/when version reflects fragtree changes.
   in->dirfragtree = st->dirfragtree;
 
-  if (in->snapid == CEPH_NOSNAP)
+  if (in->snapid == CEPH_NOSNAP) {
     add_update_cap(in, session, st->cap.cap_id, st->cap.caps, st->cap.seq, st->cap.mseq, inodeno_t(st->cap.realm), st->cap.flags);
-  else
+    if (in->auth_cap && in->auth_cap->session == session)
+      in->max_size = st->max_size;
+  } else
     in->snap_caps |= st->cap.caps;
 
   // setting I_COMPLETE needs to happen after adding the cap
