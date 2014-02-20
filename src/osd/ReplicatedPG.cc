@@ -301,15 +301,15 @@ void ReplicatedPG::on_global_recover(
   }
   recovering.erase(i);
   finish_recovery_op(soid);
-  if (waiting_for_unreadable_object.count(soid)) {
-    dout(20) << " kicking unreadable waiters on " << soid << dendl;
-    requeue_ops(waiting_for_unreadable_object[soid]);
-    waiting_for_unreadable_object.erase(soid);
-  }
   if (waiting_for_degraded_object.count(soid)) {
     dout(20) << " kicking degraded waiters on " << soid << dendl;
     requeue_ops(waiting_for_degraded_object[soid]);
     waiting_for_degraded_object.erase(soid);
+  }
+  if (waiting_for_unreadable_object.count(soid)) {
+    dout(20) << " kicking unreadable waiters on " << soid << dendl;
+    requeue_ops(waiting_for_unreadable_object[soid]);
+    waiting_for_unreadable_object.erase(soid);
   }
   finish_degraded_object(soid);
 }
