@@ -677,6 +677,28 @@ TEST_P(StoreTest, OMapTest) {
     ++i;
   }
 
+  {
+    bufferlist bl1;
+    bl1.append("omap_header");
+    ObjectStore::Transaction t;
+    t.omap_setheader(cid, hoid, bl1);
+    store->apply_transaction(t);
+
+    bufferlist bl2;
+    bl2.append("value");
+    map<string, bufferlist> to_add;
+    to_add.insert(pair<string, bufferlist>("key", bl2));
+    t.omap_setkeys(cid, hoid, to_add);
+    store->apply_transaction(t);
+
+    bufferlist bl3;
+    map<string, bufferlist> cur_attrs;
+    r = store->omap_get(cid, hoid, &bl3, &cur_attrs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(cur_attrs.size(), 1);
+    ASSERT_TRUE(bl3.contents_equal(bl1));
+  }
+
   ObjectStore::Transaction t;
   t.remove(cid, hoid);
   t.remove_collection(cid);
