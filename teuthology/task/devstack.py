@@ -356,10 +356,17 @@ def create_volume(devstack_node, ceph_node, vol_name, size):
     out_stream = StringIO()
     devstack_node.run(args=args, stdout=out_stream, wait=True)
     vol_info = parse_os_table(out_stream.getvalue())
+    log.debug("Volume info: %s", str(vol_info))
 
     out_stream = StringIO()
-    ceph_node.run(args="rbd --id cinder ls -l volumes", stdout=out_stream,
-                  wait=True)
+    try:
+        ceph_node.run(args="rbd --id cinder ls -l volumes", stdout=out_stream,
+                      wait=True)
+    except run.CommandFailedError:
+        log.debug("Original rbd call failed; retrying without '--id cinder'")
+        ceph_node.run(args="rbd ls -l volumes", stdout=out_stream,
+                      wait=True)
+
     assert vol_info['id'] in out_stream.getvalue()
     assert vol_info['size'] == size
     return vol_info['id']
