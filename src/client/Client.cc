@@ -3441,9 +3441,12 @@ void Client::handle_caps(MClientCaps *m)
   }
 
   switch (m->get_op()) {
-  case CEPH_CAP_OP_IMPORT: return handle_cap_import(session, in, m);
-  case CEPH_CAP_OP_EXPORT: return handle_cap_export(session, in, m);
-  case CEPH_CAP_OP_FLUSHSNAP_ACK: return handle_cap_flushsnap_ack(session, in, m);
+  case CEPH_CAP_OP_EXPORT:
+    return handle_cap_export(session, in, m);
+  case CEPH_CAP_OP_FLUSHSNAP_ACK:
+    return handle_cap_flushsnap_ack(session, in, m);
+  case CEPH_CAP_OP_IMPORT:
+    handle_cap_import(session, in, m);
   }
 
   if (in->caps.count(mds) == 0) {
@@ -3456,6 +3459,7 @@ void Client::handle_caps(MClientCaps *m)
 
   switch (m->get_op()) {
   case CEPH_CAP_OP_TRUNC: return handle_cap_trunc(session, in, m);
+  case CEPH_CAP_OP_IMPORT:
   case CEPH_CAP_OP_REVOKE:
   case CEPH_CAP_OP_GRANT: return handle_cap_grant(session, in, cap, m);
   case CEPH_CAP_OP_FLUSH_ACK: return handle_cap_flush_ack(session, in, cap, m);
@@ -3496,7 +3500,6 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, MClientCaps *m)
 	    << ", keeping exporting_issued " << ccap_string(in->exporting_issued) 
 	    << " mseq " << in->exporting_mseq << " by mds." << in->exporting_mds << dendl;
   }
-  m->put();
 }
 
 void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
