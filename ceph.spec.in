@@ -15,7 +15,7 @@ Summary:	User space components of the Ceph file system
 License:	GPL-2.0
 Group:		System Environment/Base
 URL:		http://ceph.com/
-Source0:	http://ceph.com/download/%{name}-%{version}.tar.bz2
+Source0:	http://ceph.com/download/%{name}-%{version}.tar.gz
 Requires:	librbd1 = %{version}-%{release}
 Requires:	librados2 = %{version}-%{release}
 Requires:	libcephfs1 = %{version}-%{release}
@@ -693,11 +693,15 @@ fi
 %{_bindir}/ceph_test_signal_handlers
 %{_bindir}/ceph_test_snap_mapper
 %{_bindir}/ceph_test_timers
+%{_bindir}/ceph_test_c_headers
+%{_bindir}/ceph_test_get_blkdev_size
 %{_bindir}/ceph_tpbench
 %{_bindir}/ceph_xattr_bench
 %{_bindir}/ceph-monstore-tool
 %{_bindir}/ceph-osdomap-tool
 %{_bindir}/ceph-kvstore-tool
+%{_bindir}/ceph_test_c_headers
+%{_bindir}/ceph_test_get_blkdev_size
 
 %files -n libcephfs_jni1
 %defattr(-,root,root,-)
