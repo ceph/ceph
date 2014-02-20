@@ -8,7 +8,6 @@
 
 int main(int argc, char *argv[])
 {
-        int fd, ret;
         char obuf[32], ibuf[1024];
         int n, max = 0;
 
@@ -20,6 +19,7 @@ int main(int argc, char *argv[])
         memset(obuf, 0xff, sizeof(obuf));
 
         for (n = 1; n <= max; ++n) {
+        	int fd, ret;
                 fd = open(argv[1], O_RDWR | O_CREAT | O_TRUNC, 0644);
                 printf("%d/%d: open fd = %d\n", n, max, fd);
 
