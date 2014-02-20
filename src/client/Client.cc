@@ -2507,6 +2507,10 @@ void Client::check_caps(Inode *in, bool is_delayed)
       goto ack;
     }
 
+    /* want more caps from mds? */
+    if (wanted & ~(cap->wanted | cap->issued))
+      goto ack;
+
     if (!revoking && unmounting && (cap_used == 0))
       goto ack;
 
@@ -3681,6 +3685,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
 {
   int mds = session->mds_num;
   int used = in->caps_used();
+  int wanted = in->caps_wanted();
 
   const int old_caps = cap->issued;
   const int new_caps = m->get_caps();
@@ -3731,6 +3736,10 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     }
   }
 
+  bool check = false;
+  if (m->get_op() == CEPH_CAP_OP_IMPORT && m->get_wanted() != wanted) {
+    check = true;
+
   check_cap_issue(in, cap, issued);
 
   // update caps
@@ -3747,7 +3756,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
       // waitin' for flush
     } else {
       cap->wanted = 0; // don't let check_caps skip sending a response to MDS
-      check_caps(in, true);
+      check = true;
     }
 
   } else if (old_caps == new_caps) {
@@ -3757,6 +3766,9 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     cap->issued = new_caps;
     cap->implemented |= new_caps;
   }
+
+  if (check)
+    check_caps(in, true);
 
   // wake up waiters
   if (new_caps)
