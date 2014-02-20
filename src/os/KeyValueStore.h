@@ -224,21 +224,19 @@ class KeyValueStore : public ObjectStore,
     int lookup_cached_header(const coll_t &cid, const ghobject_t &oid,
                              StripObjectMap::StripObjectHeader **strip_header,
                              bool create_if_missing);
-    int get_buffer_key(StripObjectMap::StripObjectHeader *strip_header,
+    int get_buffer_key(StripObjectMap::StripObjectHeader &strip_header,
                        const string &prefix, const string &key,
                        bufferlist &out);
-    void set_buffer_keys(const string &prefix,
-                         StripObjectMap::StripObjectHeader *strip_header,
-                         map<string, bufferlist> &bl);
-    int remove_buffer_keys(const string &prefix,
-                           StripObjectMap::StripObjectHeader *strip_header,
-                           const set<string> &keys);
-    void clear_buffer_keys(const string &prefix,
-                           StripObjectMap::StripObjectHeader *strip_header);
-    int clear_buffer(StripObjectMap::StripObjectHeader *strip_header);
-    void clone_buffer(StripObjectMap::StripObjectHeader *old_header,
+    void set_buffer_keys(StripObjectMap::StripObjectHeader &strip_header,
+                         const string &prefix, map<string, bufferlist> &bl);
+    int remove_buffer_keys(StripObjectMap::StripObjectHeader &strip_header,
+                           const string &prefix, const set<string> &keys);
+    void clear_buffer_keys(StripObjectMap::StripObjectHeader &strip_header,
+                           const string &prefix);
+    int clear_buffer(StripObjectMap::StripObjectHeader &strip_header);
+    void clone_buffer(StripObjectMap::StripObjectHeader &old_header,
                       const coll_t &cid, const ghobject_t &oid);
-    void rename_buffer(StripObjectMap::StripObjectHeader *old_header,
+    void rename_buffer(StripObjectMap::StripObjectHeader &old_header,
                        const coll_t &cid, const ghobject_t &oid);
     int submit_transaction();
 
@@ -435,9 +433,13 @@ class KeyValueStore : public ObjectStore,
   // operation is done by lookup_cached_header
   int _check_coll(const coll_t &cid);
 
-  int _generic_read(coll_t cid, const ghobject_t& oid, uint64_t offset,
-                    size_t len, bufferlist& bl, bool allow_eio = false,
-                    BufferTransaction *bt = 0);
+  int _generic_read(StripObjectMap::StripObjectHeader &header,
+                    uint64_t offset, size_t len, bufferlist& bl,
+                    bool allow_eio = false, BufferTransaction *bt = 0);
+  int _generic_write(StripObjectMap::StripObjectHeader &header,
+                     uint64_t offset, size_t len, const bufferlist& bl,
+                     BufferTransaction &t, bool replica = false);
+
   bool exists(coll_t cid, const ghobject_t& oid);
   int stat(coll_t cid, const ghobject_t& oid, struct stat *st,
            bool allow_eio = false);
