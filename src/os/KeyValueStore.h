@@ -119,7 +119,24 @@ class StripObjectMap: public GenericObjectMap {
                    KeyValueDB::Transaction t,
                    const SequencerPosition &spos,
                    StripObjectHeader *header);
+  // Already hold header to avoid lock header seq again
+  int get_with_header(
+    const StripObjectHeader &header,
+    const string &prefix,
+    map<string, bufferlist> *out
+    );
 
+  int get_values_with_header(
+    const StripObjectHeader &header,
+    const string &prefix,
+    const set<string> &keys,
+    map<string, bufferlist> *out
+    );
+  int get_keys_with_header(
+    const StripObjectHeader &header,
+    const string &prefix,
+    set<string> *keys
+    );
 
   StripObjectMap(KeyValueDB *db): GenericObjectMap(db) {}
 
