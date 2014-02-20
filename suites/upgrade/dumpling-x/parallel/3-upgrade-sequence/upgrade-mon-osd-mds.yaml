@@ -2,19 +2,6 @@ upgrade-sequence:
    sequential:
    - install.upgrade:
       all:
-         branch: next
-   - ceph.restart: [osd.0]
-   - sleep:
-       duration: 60
-   - ceph.restart: [osd.1]
-   - sleep:
-       duration: 60
-   - ceph.restart: [osd.2]
-   - sleep:
-       duration: 60
-   - ceph.restart: [osd.3]
-   - sleep:
-       duration: 60
    - ceph.restart:
        daemons: [mon.a]
        wait-for-healthy: false
@@ -33,3 +20,13 @@ upgrade-sequence:
    - ceph.restart: [mds.a]
    - sleep:
        duration: 60
+   - ceph.restart: [osd.0]
+   - sleep:
+       duration: 60
+   - ceph.restart: [osd.1]
+   - sleep:
+       duration: 60
+   - ceph.restart: [osd.2]
+   - sleep:
+       duration: 60
+   - ceph.restart: [osd.3]
