@@ -943,6 +943,32 @@ Notable Changes
 * rgw: fix S3 auth with response-* query string params (Sylvain Munaut, Yehuda Sadeh)
 * sysvinit: add condrestart command (Dan van der Ster)
 
+
+v0.67.7 "Dumpling"
+------------------
+
+This Dumpling point release fixes a few critical issues in v0.67.6.
+
+All v0.67.6 users are urgently encouraged to upgrade.  We also
+recommend that all v0.67.5 (or older) users upgrade.
+
+Upgrading
+~~~~~~~~~
+
+* Once you have upgraded a radosgw instance or OSD to v0.67.7, you should not
+  downgrade to a previous version.
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* ceph-disk: additional unit tests
+* librbd: revert caching behavior change in v0.67.6
+* osd: fix problem reading xattrs due to incomplete backport in v0.67.6
+* radosgw-admin: fix reading object policy
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.67.7.txt>`.
+
+
 v0.67.6 "Dumpling"
 ------------------
 
@@ -1010,6 +1036,7 @@ Notable changes
 * rgw: fix S3 auth when using response-* query string params (Sylvain Munaut)
 * rgw: use correct secret key for POST authentication (Robin H. Johnson)
 
+For more detailed information, see :download:`the complete changelog <changelog/v0.67.6.txt>`.
 
 
 v0.67.5 "Dumpling"
