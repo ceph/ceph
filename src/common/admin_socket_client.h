@@ -26,6 +26,7 @@ class AdminSocketClient
 public:
   AdminSocketClient(const std::string &path);
   std::string do_request(std::string request, std::string *result);
+  std::string ping(bool *ok);
 private:
   std::string m_path;
 };
