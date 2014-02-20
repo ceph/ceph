@@ -2944,6 +2944,18 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
 	   << " on " << *in
 	   << dendl;
 
+  if ((issued & ~old_caps) && in->auth_cap == cap) {
+    // non-auth MDS is revoking the newly grant caps ?
+    for (map<int,Cap*>::iterator it = in->caps.begin(); it != in->caps.end(); ++it) {
+      if (it->second == cap)
+	continue;
+      if (it->second->implemented & ~it->second->issued & issued) {
+	check_caps(in, true);
+	break;
+      }
+    }
+  }
+
   if (issued & ~old_caps)
     signal_cond_list(in->waitfor_caps);
 }
@@ -3765,6 +3777,18 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     ldout(cct, 10) << "  grant, new caps are " << ccap_string(new_caps & ~old_caps) << dendl;
     cap->issued = new_caps;
     cap->implemented |= new_caps;
+
+    if (cap == in->auth_cap) {
+      // non-auth MDS is revoking the newly grant caps ?
+      for (map<int,Cap*>::iterator it = in->caps.begin(); it != in->caps.end(); ++it) {
+	if (it->second == cap)
+	  continue;
+	if (it->second->implemented & ~it->second->issued & new_caps) {
+	  check = true;
+	  break;
+	}
+      }
+    }
   }
 
   if (check)
