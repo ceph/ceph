@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #include <stdio.h>
@@ -270,6 +270,7 @@ TEST_P(StoreTest, ManyObjectTest) {
   }
 }
 
+
 class ObjectGenerator {
 public:
   virtual ghobject_t create_object(gen_type *gen) = 0;
@@ -304,10 +305,12 @@ class SyntheticWorkloadState {
 public:
   static const unsigned max_in_flight = 16;
   static const unsigned max_objects = 3000;
+  static const unsigned max_object_len = 1024 * 20;
   coll_t cid;
   unsigned in_flight;
+  map<ghobject_t, bufferlist> contents;
   set<ghobject_t> available_objects;
-  set<ghobject_t> in_use_objects;
+  set<ghobject_t> in_flight_objects;
   ObjectGenerator *object_gen;
   gen_type *rng;
   ObjectStore *store;
@@ -322,25 +325,39 @@ public:
     ObjectStore::Transaction *t;
     ghobject_t hoid;
     C_SyntheticOnReadable(SyntheticWorkloadState *state,
-			  ObjectStore::Transaction *t, ghobject_t hoid)
+                          ObjectStore::Transaction *t, ghobject_t hoid)
       : state(state), t(t), hoid(hoid) {}
 
     void finish(int r) {
-      ASSERT_TRUE(r >= 0);
       Mutex::Locker locker(state->lock);
-      if (state->in_use_objects.count(hoid)) {
-	state->available_objects.insert(hoid);
-	state->in_use_objects.erase(hoid);
-      }
+      ASSERT_TRUE(state->in_flight_objects.count(hoid));
+      ASSERT_EQ(r, 0);
+      state->in_flight_objects.erase(hoid);
+      if (state->contents.count(hoid))
+        state->available_objects.insert(hoid);
       --(state->in_flight);
       state->cond.Signal();
     }
   };
-    
-  
-  SyntheticWorkloadState(ObjectStore *store, 
-			 ObjectGenerator *gen, 
-			 gen_type *rng, 
+
+  static void filled_byte_array(bufferlist& bl, size_t size)
+  {
+    static const char alphanum[] = "0123456789"
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      "abcdefghijklmnopqrstuvwxyz";
+
+    bufferptr bp(size);
+    for (unsigned int i = 0; i < size - 1; i++) {
+      bp[i] = alphanum[rand() % sizeof(alphanum)];
+    }
+    bp[size - 1] = '\0';
+
+    bl.append(bp);
+  }
+
+  SyntheticWorkloadState(ObjectStore *store,
+			 ObjectGenerator *gen,
+			 gen_type *rng,
 			 ObjectStore::Sequencer *osr,
 			 coll_t cid)
     : cid(cid), in_flight(0), object_gen(gen), rng(rng), store(store), osr(osr),
@@ -360,7 +377,6 @@ public:
     set<ghobject_t>::iterator i = available_objects.begin();
     for ( ; index > 0; --index, ++i) ;
     ghobject_t ret = *i;
-    available_objects.erase(i);
     return ret;
   }
 
@@ -374,13 +390,13 @@ public:
     while (in_flight)
       cond.Wait(lock);
   }
-  
+
   bool can_create() {
-    return (available_objects.size() + in_use_objects.size()) < max_objects;
+    return (available_objects.size() + in_flight_objects.size()) < max_objects;
   }
 
   bool can_unlink() {
-    return (available_objects.size() + in_use_objects.size()) > 0;
+    return (available_objects.size() + in_flight_objects.size()) > 0;
   }
 
   int touch() {
@@ -389,12 +405,112 @@ public:
       return -ENOSPC;
     wait_for_ready();
     ghobject_t new_obj = object_gen->create_object(rng);
-    in_use_objects.insert(new_obj);
     available_objects.erase(new_obj);
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     t->touch(cid, new_obj);
     ++in_flight;
+    in_flight_objects.insert(new_obj);
+    if (!contents.count(new_obj))
+      contents[new_obj] = bufferlist();
     return store->queue_transaction(osr, t, new C_SyntheticOnReadable(this, t, new_obj));
+  }
+
+  int write() {
+    Mutex::Locker locker(lock);
+    if (!can_unlink())
+      return -ENOENT;
+    wait_for_ready();
+
+    ghobject_t new_obj = get_uniform_random_object();
+    available_objects.erase(new_obj);
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+
+    boost::uniform_int<> u1(0, max_object_len/2);
+    boost::uniform_int<> u2(0, max_object_len);
+    uint64_t offset = u1(*rng);
+    size_t len = u2(*rng);
+    bufferlist bl;
+    if (offset > len)
+      swap(offset, len);
+
+    filled_byte_array(bl, len);
+
+    if (contents[new_obj].length() <= offset) {
+      contents[new_obj].append_zero(offset-contents[new_obj].length());
+      contents[new_obj].append(bl);
+    } else {
+      bufferlist value;
+      contents[new_obj].copy(0, offset, value);
+      value.append(bl);
+      if (value.length() < contents[new_obj].length())
+        contents[new_obj].copy(value.length(), contents[new_obj].length()-value.length(), value);
+      value.swap(contents[new_obj]);
+    }
+
+    t->write(cid, new_obj, offset, len, bl);
+    ++in_flight;
+    in_flight_objects.insert(new_obj);
+    return store->queue_transaction(osr, t, new C_SyntheticOnReadable(this, t, new_obj));
+  }
+
+  void read() {
+    boost::uniform_int<> u1(0, max_object_len/2);
+    boost::uniform_int<> u2(0, max_object_len);
+    uint64_t offset = u1(*rng);
+    size_t len = u2(*rng);
+    if (offset > len)
+      swap(offset, len);
+
+    ghobject_t obj;
+    int r;
+    {
+      Mutex::Locker locker(lock);
+      if (!can_unlink())
+        return ;
+      wait_for_ready();
+
+      obj = get_uniform_random_object();
+    }
+    bufferlist bl, result;
+    r = store->read(cid, obj, offset, len, result);
+    if (offset >= contents[obj].length()) {
+      ASSERT_EQ(r, 0);
+    } else {
+      size_t max_len = contents[obj].length() - offset;
+      if (len > max_len)
+        len = max_len;
+      ASSERT_EQ(len, result.length());
+      contents[obj].copy(offset, len, bl);
+      ASSERT_EQ(r, len);
+      ASSERT_TRUE(result.contents_equal(bl));
+    }
+  }
+
+  int truncate() {
+    Mutex::Locker locker(lock);
+    if (!can_unlink())
+      return -ENOENT;
+    wait_for_ready();
+
+    ghobject_t obj = get_uniform_random_object();
+    available_objects.erase(obj);
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+
+    boost::uniform_int<> choose(0, max_object_len);
+    size_t len = choose(*rng);
+    bufferlist bl;
+
+    t->truncate(cid, obj, len);
+    ++in_flight;
+    in_flight_objects.insert(obj);
+    if (contents[obj].length() <= len)
+      contents[obj].append_zero(len - contents[obj].length());
+    else {
+      contents[obj].copy(0, len, bl);
+      bl.swap(contents[obj]);
+    }
+
+    return store->queue_transaction(osr, t, new C_SyntheticOnReadable(this, t, obj));
   }
 
   void scan() {
@@ -406,7 +522,7 @@ public:
     ghobject_t next, current;
     while (1) {
       cerr << "scanning..." << std::endl;
-      int r = store->collection_list_partial(cid, current, 50, 100, 
+      int r = store->collection_list_partial(cid, current, 50, 100,
 					     0, &objects, &next);
       ASSERT_EQ(r, 0);
       ASSERT_TRUE(sorted(objects));
@@ -433,26 +549,27 @@ public:
     }
   }
 
-  int stat() {
+  void stat() {
     ghobject_t hoid;
     {
       Mutex::Locker locker(lock);
       if (!can_unlink())
-	return -ENOENT;
+        return ;
       hoid = get_uniform_random_object();
-      in_use_objects.insert(hoid);
+      in_flight_objects.insert(hoid);
+      available_objects.erase(hoid);
       ++in_flight;
     }
     struct stat buf;
-    int r = store->stat(cid, hoid, &buf);
+    store->stat(cid, hoid, &buf);
+    ASSERT_TRUE(buf.st_size == contents[hoid].length());
     {
       Mutex::Locker locker(lock);
       --in_flight;
       cond.Signal();
-      in_use_objects.erase(hoid);
+      in_flight_objects.erase(hoid);
       available_objects.insert(hoid);
     }
-    return r;
   }
 
   int unlink() {
@@ -463,14 +580,17 @@ public:
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     t->remove(cid, to_remove);
     ++in_flight;
+    available_objects.erase(to_remove);
+    in_flight_objects.insert(to_remove);
+    contents.erase(to_remove);
     return store->queue_transaction(osr, t, new C_SyntheticOnReadable(this, t, to_remove));
   }
 
   void print_internal_state() {
     Mutex::Locker locker(lock);
     cerr << "available_objects: " << available_objects.size()
-	 << " in_use_objects: " << in_use_objects.size()
-	 << " total objects: " << in_use_objects.size() + available_objects.size()
+	 << " in_flight_objects: " << in_flight_objects.size()
+	 << " total objects: " << in_flight_objects.size() + available_objects.size()
 	 << " in_flight " << in_flight << std::endl;
   }
 };
@@ -480,7 +600,7 @@ TEST_P(StoreTest, Synthetic) {
   MixedGenerator gen;
   gen_type rng(time(NULL));
   coll_t cid("synthetic_1");
-  
+
   SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid);
   test_obj.init();
   for (int i = 0; i < 1000; ++i) {
@@ -496,12 +616,16 @@ TEST_P(StoreTest, Synthetic) {
     int val = true_false(rng);
     if (val > 97) {
       test_obj.scan();
-    } else if (val > 50) {
+    } else if (val > 90) {
       test_obj.stat();
-    } else if (val > 30) {
+    } else if (val > 85) {
       test_obj.unlink();
+    } else if (val > 50) {
+      test_obj.write();
+    } else if (val > 10) {
+      test_obj.read();
     } else {
-      test_obj.touch();
+      test_obj.truncate();
     }
   }
   test_obj.wait_for_done();
@@ -695,7 +819,7 @@ TEST_P(StoreTest, OMapTest) {
     map<string, bufferlist> cur_attrs;
     r = store->omap_get(cid, hoid, &bl3, &cur_attrs);
     ASSERT_EQ(r, 0);
-    ASSERT_EQ(cur_attrs.size(), 1);
+    ASSERT_EQ(cur_attrs.size(), size_t(1));
     ASSERT_TRUE(bl3.contents_equal(bl1));
   }
 
