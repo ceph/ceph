@@ -238,7 +238,39 @@ void StripObjectMap::rename_wrap(const coll_t &cid, const ghobject_t &oid,
   }
 }
 
+int StripObjectMap::get_values_with_header(const StripObjectHeader &header,
+                                           const string &prefix,
+                                           const set<string> &keys,
+                                           map<string, bufferlist> *out)
+{
+  return scan(header.header, prefix, keys, 0, out);
+}
 
+int StripObjectMap::get_keys_with_header(const StripObjectHeader &header,
+                                         const string &prefix,
+                                         set<string> *keys)
+{
+  ObjectMap::ObjectMapIterator iter = _get_iterator(header.header, prefix);
+  for (; iter->valid(); iter->next()) {
+    if (iter->status())
+      return iter->status();
+    keys->insert(iter->key());
+  }
+  return 0;
+}
+
+int StripObjectMap::get_with_header(const StripObjectHeader &header,
+                        const string &prefix, map<string, bufferlist> *out)
+{
+  ObjectMap::ObjectMapIterator iter = _get_iterator(header.header, prefix);
+  for (iter->seek_to_first(); iter->valid(); iter->next()) {
+    if (iter->status())
+      return iter->status();
+    out->insert(make_pair(iter->key(), iter->value()));
+  }
+
+  return 0;
+}
 // =========== KeyValueStore::SubmitManager Implementation ==============
 
 uint64_t KeyValueStore::SubmitManager::op_submit_start()
@@ -328,8 +360,8 @@ int KeyValueStore::BufferTransaction::get_buffer_key(
   set<string> keys;
   map<string, bufferlist> out;
   keys.insert(key);
-  int r = store->backend->get_values(strip_header->cid, strip_header->oid,
-                                     prefix, keys, &out);
+  int r = store->backend->get_values_with_header(*strip_header, prefix,
+                                                 keys, &out);
   if (r < 0) {
     dout(10) << __func__  << " " << strip_header->cid << "/"
              << strip_header->oid << " " << " r = " << r << dendl;
@@ -1653,7 +1685,7 @@ int KeyValueStore::_generic_read(coll_t cid, const ghobject_t& oid,
     }
   }
 
-  r = backend->get_values(cid, oid, OBJECT_STRIP_PREFIX, keys, &out);
+  r = backend->get_values_with_header(header, OBJECT_STRIP_PREFIX, keys, &out);
   if (r < 0) {
     dout(10) << __func__ << " " << cid << "/" << oid << " " << offset << "~"
              << len << " = " << r << dendl;
@@ -2138,7 +2170,7 @@ int KeyValueStore::_rmattrs(coll_t cid, const ghobject_t& oid,
     return r;
   }
 
-  r = backend->get_keys(cid, oid, OBJECT_XATTR, &attrs);
+  r = backend->get_keys_with_header(*header, OBJECT_XATTR, &attrs);
   if (r < 0 && r != -ENOENT) {
     dout(10) << __func__ << " could not get attrs r = " << r << dendl;
     assert(!m_fail_eio || r != -EIO);
@@ -2648,22 +2680,46 @@ int KeyValueStore::collection_version_current(coll_t c, uint32_t *version)
 // omap
 
 int KeyValueStore::omap_get(coll_t c, const ghobject_t &hoid,
-                            bufferlist *header, map<string, bufferlist> *out)
+                            bufferlist *bl, map<string, bufferlist> *out)
 {
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
+
+  StripObjectMap::StripObjectHeader header;
 
   int r = _check_coll(c);
   if (r < 0) {
     return r;
   }
 
-  r = backend->get(c, hoid, OBJECT_OMAP, out);
+  r = backend->lookup_strip_header(c, hoid, header);
+  if (r < 0) {
+    dout(10) << __func__ << " lookup_strip_header failed: r =" << r << dendl;
+    return r;
+  }
+
+
+  r = backend->get_with_header(header, OBJECT_OMAP, out);
   if (r < 0 && r != -ENOENT) {
     dout(10) << __func__ << " err r =" << r << dendl;
     return r;
   }
 
-  return omap_get_header(c, hoid, header, false);
+  set<string> keys;
+  map<string, bufferlist> got;
+
+  keys.insert(OBJECT_OMAP_HEADER_KEY);
+  r = backend->get_values_with_header(header, OBJECT_OMAP_HEADER, keys, &got);
+  if (r < 0 && r != -ENOENT) {
+    dout(10) << __func__ << " err r =" << r << dendl;
+    return r;
+  }
+
+  if (got.size()) {
+    assert(got.size() == 1);
+    bl->swap(got.begin()->second);
+  }
+
+  return 0;
 }
 
 int KeyValueStore::omap_get_header(coll_t c, const ghobject_t &hoid,
@@ -2771,7 +2827,7 @@ int KeyValueStore::_omap_clear(coll_t cid, const ghobject_t &hoid,
   }
 
   set<string> keys;
-  r = backend->get_keys(cid, hoid, OBJECT_OMAP, &keys);
+  r = backend->get_keys_with_header(*header, OBJECT_OMAP, &keys);
   if (r < 0 && r != -ENOENT) {
     dout(10) << __func__ << " could not get omap_keys r = " << r << dendl;
     assert(!m_fail_eio || r != -EIO);

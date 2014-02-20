@@ -365,11 +365,17 @@ private:
     int adjust();
   };
 
+ protected:
   typedef ceph::shared_ptr<GenericObjectMapIteratorImpl> GenericObjectMapIterator;
   GenericObjectMapIterator _get_iterator(Header header, string prefix) {
     return GenericObjectMapIterator(new GenericObjectMapIteratorImpl(this, header, prefix));
   }
 
+  // Scan keys in header into out_keys and out_values (if nonnull)
+  int scan(Header header, const string &prefix, const set<string> &in_keys,
+           set<string> *out_keys, map<string, bufferlist> *out_values);
+
+ private:
   /// Removes node corresponding to header
   void clear_header(Header header, KeyValueDB::Transaction t);
 
@@ -398,10 +404,6 @@ private:
 
   // Lookup header node for input
   Header lookup_parent(Header input);
-
-  // Scan keys in header into out_keys and out_values (if nonnull)
-  int scan(Header header, const string &prefix, const set<string> &in_keys,
-           set<string> *out_keys, map<string, bufferlist> *out_values);
 
   // Remove header and all related prefixes
   int _clear(Header header, KeyValueDB::Transaction t);
