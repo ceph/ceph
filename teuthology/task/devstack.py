@@ -27,7 +27,6 @@ def task(ctx, config):
         raise TypeError("config must be a dict")
     with nested(lambda: install(ctx=ctx, config=config),
                 lambda: smoke(ctx=ctx, config=config),
-                lambda: exercise(ctx=ctx, config=config),
                 ):
         yield
 
