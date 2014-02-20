@@ -1043,6 +1043,7 @@ void GenericObjectMap::set_header(const coll_t &cid, const ghobject_t &oid,
 int GenericObjectMap::list_objects(const coll_t &cid, ghobject_t start, int max,
                                    vector<ghobject_t> *out, ghobject_t *next)
 {
+  // FIXME
   Mutex::Locker l(header_lock);
 
   if (start.is_max())
