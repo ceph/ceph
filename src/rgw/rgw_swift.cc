@@ -254,8 +254,8 @@ int	RGWSwift::get_keystone_admin_token(std::string& token)
     RGWGetKeystoneAdminToken token_req(cct, &token_bl);
     token_req.append_header("Content-Type", "application/json");
     JSONFormatter jf;
+    jf.open_object_section("token_request");
     jf.open_object_section("auth");
-    jf.open_object_section("auth"); // XXX: Workaround to have right Json object.
     jf.open_object_section("passwordCredentials");
     encode_json("username", cct->_conf->rgw_keystone_admin_user, &jf);
     encode_json("password", cct->_conf->rgw_keystone_admin_password, &jf);
