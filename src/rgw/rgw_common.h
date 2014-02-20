@@ -846,6 +846,7 @@ struct req_info {
   string request_uri;
   string effective_uri;
   string request_params;
+  string domain;
 
   req_info(CephContext *cct, RGWEnv *_env);
   void rebuild_from(req_info& src);

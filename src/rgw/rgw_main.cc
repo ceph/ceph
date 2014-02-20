@@ -1015,7 +1015,6 @@ int main(int argc, const char **argv)
   rgw_tools_init(g_ceph_context);
 
   rgw_init_resolver();
-  rgw_rest_init(g_ceph_context);
   
   curl_global_init(CURL_GLOBAL_ALL);
   
@@ -1029,6 +1028,8 @@ int main(int argc, const char **argv)
   }
   if (!r)
     r = rgw_perf_start(g_ceph_context);
+
+  rgw_rest_init(g_ceph_context, store->region);
 
   mutex.Lock();
   init_timer.cancel_all_events();
