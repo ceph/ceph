@@ -10,10 +10,6 @@ from ..orchestra import run
 from .. import misc
 from ..contextutil import nested
 
-"""
-https://github.com/openstack-dev/devstack/blob/master/README.md
-http://ceph.com/docs/master/rbd/rbd-openstack/
-"""
 log = logging.getLogger(__name__)
 
 DEVSTACK_GIT_REPO = 'https://github.com/openstack-dev/devstack.git'
@@ -53,6 +49,10 @@ def install(ctx, config):
 
     downburst:
         ram: 4G
+
+    This was created using documentation found here:
+        https://github.com/openstack-dev/devstack/blob/master/README.md
+        http://ceph.com/docs/master/rbd/rbd-openstack/
     """
     if config is None:
         config = {}
