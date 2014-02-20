@@ -2,10 +2,44 @@
  Release Notes
 ===============
 
-v0.77 (frozen, pending release)
--------------------------------
+v0.78 Firefly (frozen, pending release)
+-----
 
-This promises to be the final release before the firefly feature freeze.
+Upgrading
+~~~~~~~~~
+
+* CephFS recently added support for a new 'backtrace' attribute on
+  file data objects that is used for lookup by inode number (i.e., NFS
+  reexport and hard links), and will later be used by fsck repair.
+  This replaces the existing anchor table mechanism that is used for
+  hard link resolution.  In order to completely phase that out, any
+  inode that has an outdated backtrace attribute will get updated when
+  the inode itself is modified.  This will result in some extra workload
+  after a legacy CephFS file system is upgraded.
+
+* The per-op return code in librados' ObjectWriteOperation interface
+  is now filled in.
+
+* The librados cmpxattr operation now handles xattrs containing null bytes as
+  data rather than null-terminated strings.
+
+Notable changes
+~~~~~~~~~~~~~~~
+
+TBD
+
+
+v0.77
+-----
+
+This is the final development release before the Firefly feature
+freeze.  The main items in this release include some additional
+refactoring work in the OSD IO path (include some locking
+improvements), per-user quotas for the radosgw, a switch to civetweb
+from mongoose for the prototype radosgw standalone mode, and a
+prototype leveldb-based backend for the OSD.  The C librados API also
+got support for atomic write operations (read side transactions will
+appear in v0.78).
 
 Upgrading
 ~~~~~~~~~
@@ -18,6 +52,8 @@ Upgrading
   The 'unset' command has been removed; instead, set the value to
   'false'.
 
+* The syntax for allowing snapshots is now 'mds set allow_new_snaps
+  <true|false>' instead of 'mds <set,unset> allow_new_snaps'.
 
 Notable Changes
 ~~~~~~~~~~~~~~~
@@ -42,8 +78,14 @@ Notable Changes
 * rgw: several doc fixes (Alexandre Marangone)
 * librados: add C API coverage for atomic write operations (Christian Marie)
 * rgw: improve swift temp URL support (Yehuda Sadeh)
-
-thru  2c504ea
+* rest-api: do not fail when no OSDs yet exist (Dan Mick)
+* common: check preexisting admin socket for active daemon before removing (Loic Dachary)
+* osd: handle more whitespace (newline, tab) in osd capabilities (Sage Weil)
+* mon: handle more whitespace (newline, tab) in mon capabilities (Sage Weil)
+* rgw: make multi-object delete idempotent (Yehuda Sadeh)
+* crush: fix off-by-one error in recent refactor (Sage Weil)
+* rgw: fix read_user_buckets 'max' behavior (Yehuda Sadeh)
+* mon: change mds allow_new_snaps syntax to be more consistent (Sage Weil)
 
 
 v0.76
