@@ -1383,9 +1383,7 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
         coll_t ocid = i.get_cid();
         coll_t ncid = i.get_cid();
         ghobject_t oid = i.get_oid();
-        r = _collection_add(ocid, ncid, oid, t);
-        if (r == 0)
-          r = _remove(ocid, oid, t);
+        r = _collection_move_rename(ocid, oid, ncid, oid, t);
       }
       break;
 
@@ -2977,10 +2975,9 @@ int KeyValueStore::_split_collection(coll_t cid, uint32_t bits, uint32_t rem,
       for (vector<ghobject_t>::iterator i = objects.begin();
           i != objects.end(); ++i) {
         if (i->match(bits, rem)) {
-          if (_collection_add(dest, cid, *i, t) < 0) {
+          if (_collection_move_rename(cid, *i, dest, *i, t) < 0) {
             return -1;
           }
-          _remove(cid, *i, t);
           move_size++;
         }
       }
