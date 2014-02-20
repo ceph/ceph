@@ -45,7 +45,7 @@ Pod::Usage::pod2usage(-verbose => 1) && exit if ($help);
 my $s3;
 my $domain   = "front.sepia.ceph.com";
 my $host     = get_hostname();
-our $hostname = "$host.$domain";
+our $hostname = "$host.$domain:7280";
 my $testfileloc;
 my $sec;
 my $min;
@@ -59,7 +59,6 @@ my $isdst;
 my $PASS_CNT = 0;
 my $FAIL_CNT = 0;
 my $mytestfilename;
-my $testfileloc;
 
 # function to get the current time stamp from the test set up
 sub get_timestamp {
@@ -262,15 +261,6 @@ sub delete_bucket {
    ($bucket->delete_bucket) and (print "bucket delete succeeded \n") or die $s3->err . "delete bucket failed\n" . $s3->errstr;
 }
 
-# check if rgw service is already running
-sub check
-{
-    my $state = get_status();
-    if ($state) {
-        exit 1;
-    }
-}
-
 # Function to perform multipart upload of given file size to the user bucket via s3 interface
 sub multipart_upload
 {
@@ -346,7 +336,6 @@ sub compare_cksum
 
 #== Main starts here===
 ceph_os_info();
-check();
 # The following test runs multi part upload of file size 1Gb in 10 parts
 multipart_upload('1048576000', 10);
 # The following test runs multipart upload of 1 Gb file in 100 parts
