@@ -56,7 +56,7 @@ def find_up_osd(app):
         raise EnvironmentError(errno.EINVAL, 'Invalid JSON back from osd dump')
     osds = [osd['osd'] for osd in osddump['osds'] if osd['up']]
     if not osds:
-        raise EnvironmentError(errno.ENOENT, 'No up OSDs found')
+        return None
     return int(osds[-1])
 
 
@@ -139,7 +139,7 @@ def api_setup(app, conf, cluster, clientname, clientid, args):
     app.ceph_sigdict = get_command_descriptions(app.ceph_cluster)
 
     osdid = find_up_osd(app)
-    if osdid:
+    if osdid is not None:
         osd_sigdict = get_command_descriptions(app.ceph_cluster,
                                                target=('osd', int(osdid)))
 
