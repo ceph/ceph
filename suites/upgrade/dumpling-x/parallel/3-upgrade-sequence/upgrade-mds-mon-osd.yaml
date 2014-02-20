@@ -2,7 +2,6 @@ upgrade-sequence:
    sequential:
    - install.upgrade:
       all:
-         branch: next
    - ceph.restart: [mds.a]
    - sleep:
        duration: 60
