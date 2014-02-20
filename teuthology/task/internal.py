@@ -202,7 +202,7 @@ def connect(ctx, config):
     Open a connection to a remote host.
     """
     log.info('Opening connections...')
-    from ..orchestra import connection, remote
+    from ..orchestra import remote
     from ..orchestra import cluster
     remotes = []
     machs = []
@@ -233,7 +233,7 @@ def connect(ctx, config):
 
 def check_ceph_data(ctx, config):
     """
-    Check for old /var/lib/ceph directories and detect staleness. 
+    Check for old /var/lib/ceph directories and detect staleness.
     """
     log.info('Checking for old /var/lib/ceph...')
     processes = ctx.cluster.run(
