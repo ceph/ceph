@@ -36,6 +36,7 @@ int main(int argc, char *argv[])
 
                 if (memcmp(obuf, ibuf, sizeof(obuf))) {
                         printf("mismatch\n");
+                	close(fd);
                         break;
                 }
                 close(fd);
