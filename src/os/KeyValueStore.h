@@ -466,16 +466,6 @@ class KeyValueStore : public ObjectStore,
   void set_fsid(uuid_d u) { fsid = u; }
   uuid_d get_fsid() { return fsid; }
 
-  // DEBUG read error injection, an object is removed from both on delete()
-  Mutex read_error_lock;
-  set<ghobject_t> data_error_set; // read() will return -EIO
-  set<ghobject_t> mdata_error_set; // getattr(),stat() will return -EIO
-  void inject_data_error(const ghobject_t &oid);
-  void inject_mdata_error(const ghobject_t &oid);
-  void debug_obj_on_delete(const ghobject_t &oid);
-  bool debug_data_eio(const ghobject_t &oid);
-  bool debug_mdata_eio(const ghobject_t &oid);
-
   // attrs
   int getattr(coll_t cid, const ghobject_t& oid, const char *name,
               bufferptr &bp);
