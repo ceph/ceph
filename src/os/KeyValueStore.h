@@ -570,7 +570,6 @@ class KeyValueStore : public ObjectStore,
   std::string m_osd_rollback_to_cluster_snap;
   int m_keyvaluestore_queue_max_ops;
   int m_keyvaluestore_queue_max_bytes;
-  bool m_fail_eio;
 
   int do_update;
 
