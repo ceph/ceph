@@ -509,7 +509,6 @@ KeyValueStore::KeyValueStore(const std::string &base,
   read_error_lock("KeyValueStore::read_error_lock"),
   m_keyvaluestore_queue_max_ops(g_conf->keyvaluestore_queue_max_ops),
   m_keyvaluestore_queue_max_bytes(g_conf->keyvaluestore_queue_max_bytes),
-  m_fail_eio(g_conf->filestore_fail_eio),
   do_update(do_update)
 {
   ostringstream oss;
@@ -550,7 +549,6 @@ int KeyValueStore::statfs(struct statfs *buf)
 {
   if (::statfs(basedir.c_str(), buf) < 0) {
     int r = -errno;
-    assert(!m_fail_eio || r != -EIO);
     return r;
   }
   return 0;
@@ -891,7 +889,6 @@ close_fsid_fd:
   TEMP_FAILURE_RETRY(::close(fsid_fd));
   fsid_fd = -1;
 done:
-  assert(!m_fail_eio || ret != -EIO);
   return ret;
 }
 
@@ -2128,7 +2125,6 @@ int KeyValueStore::_rmattrs(coll_t cid, const ghobject_t& oid,
   r = backend->get_keys_with_header(*header, OBJECT_XATTR, &attrs);
   if (r < 0 && r != -ENOENT) {
     dout(10) << __func__ << " could not get attrs r = " << r << dendl;
-    assert(!m_fail_eio || r != -EIO);
     return r;
   }
 
@@ -2707,7 +2703,6 @@ int KeyValueStore::omap_get_header(coll_t c, const ghobject_t &hoid,
   keys.insert(OBJECT_OMAP_HEADER_KEY);
   int r = backend->get_values(c, hoid, OBJECT_OMAP_HEADER, keys, &got);
   if (r < 0 && r != -ENOENT) {
-    assert(allow_eio || !m_fail_eio || r != -EIO);
     dout(10) << __func__ << " err r =" << r << dendl;
     return r;
   }
@@ -2726,7 +2721,6 @@ int KeyValueStore::omap_get_keys(coll_t c, const ghobject_t &hoid, set<string> *
 
   int r = backend->get_keys(c, hoid, OBJECT_OMAP, keys);
   if (r < 0 && r != -ENOENT) {
-    assert(!m_fail_eio || r != -EIO);
     return r;
   }
   return 0;
@@ -2740,7 +2734,6 @@ int KeyValueStore::omap_get_values(coll_t c, const ghobject_t &hoid,
 
   int r = backend->get_values(c, hoid, OBJECT_OMAP, keys, out);
   if (r < 0 && r != -ENOENT) {
-    assert(!m_fail_eio || r != -EIO);
     return r;
   }
   return 0;
@@ -2753,7 +2746,6 @@ int KeyValueStore::omap_check_keys(coll_t c, const ghobject_t &hoid,
 
   int r = backend->check_keys(c, hoid, OBJECT_OMAP, keys, out);
   if (r < 0 && r != -ENOENT) {
-    assert(!m_fail_eio || r != -EIO);
     return r;
   }
   return 0;
@@ -2784,7 +2776,6 @@ int KeyValueStore::_omap_clear(coll_t cid, const ghobject_t &hoid,
   r = backend->get_keys_with_header(*header, OBJECT_OMAP, &keys);
   if (r < 0 && r != -ENOENT) {
     dout(10) << __func__ << " could not get omap_keys r = " << r << dendl;
-    assert(!m_fail_eio || r != -EIO);
     return r;
   }
 
