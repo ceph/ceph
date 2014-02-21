@@ -452,15 +452,12 @@ def create_if_vm(ctx, machine_name):
                 if lcnfg.keys() == ['downburst']:
                     lcnfg = lcnfg['downburst']
         except (TypeError, AttributeError):
-            try:
-                lcnfg = {}
-                for tdict in ctx.config['downburst']:
-                    for key in tdict:
-                        lcnfg[key] = tdict[key]
-            except (KeyError, AttributeError):
+            if hasattr(ctx, 'config') and ctx.config is not None:
+                lcnfg = ctx.config.get('downburst', dict())
+            else:
                 lcnfg = {}
         except IOError:
-            print "Error reading %s" % lfile 
+            print "Error reading %s" % lfile
             return False
 
         distro = lcnfg.get('distro', os_type.lower())

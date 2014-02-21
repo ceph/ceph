@@ -35,7 +35,7 @@ is_arm = lambda x: x.startswith('tala') or x.startswith(
 
 def config_file(string):
     """
-    Create a config file  
+    Create a config file
 
     :param string: name of yaml file used for config.
     :returns: Dictionary of configuration information.
@@ -97,7 +97,7 @@ def get_archive_dir(ctx):
 def get_http_log_path(archive_dir, job_id=None):
     """
     :param archive_dir: directory to be searched
-    :param job_id: id of job that terminates the name of the log path 
+    :param job_id: id of job that terminates the name of the log path
     :returns: http log path
     """
     http_base = config.archive_server
@@ -267,7 +267,7 @@ def skeleton_config(ctx, roles, ips):
 def roles_of_type(roles_for_host, type_):
     """
     Generator of roles.
- 
+
     Each call returns the next possible role of the type specified.
     :param roles_for host: list of roles possible
     :param type_: type of role
@@ -326,9 +326,9 @@ def is_type(type_):
 def num_instances_of_type(cluster, type_):
     """
     Total the number of instances of the role type specified in all remotes.
-    
+
     :param cluster: Cluster extracted from ctx.
-    :param type_: role 
+    :param type_: role
     """
     remotes_and_roles = cluster.remotes.items()
     roles = [roles for (remote, roles) in remotes_and_roles]
@@ -351,7 +351,7 @@ def create_simple_monmap(ctx, remote, conf):
     def gen_addresses():
         """
         Monitor address generator.
-    
+
         Each invocation returns the next monitor address
         """
         for section, data in conf.iteritems():
@@ -411,7 +411,7 @@ def write_file(remote, path, data):
         )
 
 
-def sudo_write_file(remote, path, data, perms=None):
+def sudo_write_file(remote, path, data, perms=None, owner=None):
     """
     Write data to a remote file as super user
 
@@ -419,10 +419,16 @@ def sudo_write_file(remote, path, data, perms=None):
     :param path: Path on the remote being written to.
     :param data: Data to be written.
     :param perms: Permissions on the file being written
+    :param owner: Owner for the file being written
+
+    Both perms and owner are passed directly to chmod.
     """
     permargs = []
     if perms:
         permargs = [run.Raw('&&'), 'sudo', 'chmod', perms, path]
+    owner_args = []
+    if owner:
+        owner_args = [run.Raw('&&'), 'sudo', 'chown', owner, path]
     remote.run(
         args=[
             'sudo',
@@ -430,9 +436,21 @@ def sudo_write_file(remote, path, data, perms=None):
             '-c',
             'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
             path,
-            ] + permargs,
+            ] + owner_args + permargs,
         stdin=data,
         )
+
+
+def copy_file(from_remote, from_path, to_remote, to_path=None):
+    """
+    Copies a file from one remote to another.
+    """
+    if to_path is None:
+        to_path = from_path
+    from_remote.run(args=[
+        'sudo', 'scp', '-v', from_path, "{host}:{file}".format(
+            host=to_remote.name, file=to_path)
+    ])
 
 
 def move_file(remote, from_path, to_path, sudo=False):
@@ -708,7 +726,7 @@ def get_wwn_id_map(remote, devs):
 
     Sample dev information:    /dev/sdb: /dev/disk/by-id/wwn-0xf00bad
 
-    :returns: map of devices to device id links 
+    :returns: map of devices to device id links
     """
     stdout = None
     try:
@@ -873,6 +891,31 @@ def wait_until_fuse_mounted(remote, fuse, mountpoint):
     log.info('ceph-fuse is mounted on %s', mountpoint)
 
 
+def reboot(node, timeout=300, interval=30):
+    """
+    Reboots a given system, then waits for it to come back up and
+    re-establishes the ssh connection.
+
+    :param node: The teuthology.orchestra.remote.Remote object of the node
+    :param timeout: The amount of time, in seconds, after which to give up
+                    waiting for the node to return
+    :param interval: The amount of time, in seconds, to wait between attempts
+                     to re-establish with the node. This should not be set to
+                     less than maybe 10, to make sure the node actually goes
+                     down first.
+    """
+    log.info("Rebooting {host}...".format(host=node.hostname))
+    node.run(args=['sudo', 'shutdown', '-r', 'now'])
+    reboot_start_time = time.time()
+    while time.time() - reboot_start_time < timeout:
+        time.sleep(interval)
+        if node.is_online or node.reconnect():
+            return
+    raise RuntimeError(
+        "{host} did not come up after reboot within {time}s".format(
+            host=node.hostname, time=timeout))
+
+
 def reconnect(ctx, timeout, remotes=None):
     """
     Connect to all the machines in ctx.cluster.
@@ -895,23 +938,14 @@ def reconnect(ctx, timeout, remotes=None):
     else:
         need_reconnect = ctx.cluster.remotes.keys()
 
-    for r in need_reconnect:
-        r.ssh.close()
-
     while need_reconnect:
         for remote in need_reconnect:
-            try:
-                log.info('trying to connect to %s', remote.name)
-                key = ctx.config['targets'][remote.name]
-                from .orchestra import connection
-                remote.ssh = connection.connect(
-                    user_at_host=remote.name,
-                    host_key=key,
-                    keep_alive=True,
-                    )
-            except Exception:
+            log.info('trying to connect to %s', remote.name)
+            success = remote.reconnect()
+            if not success:
                 if time.time() - starttime > timeout:
-                    raise
+                    raise RuntimeError("Could not reconnect to %s" %
+                                       remote.name)
             else:
                 need_reconnect.remove(remote)
 

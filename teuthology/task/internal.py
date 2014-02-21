@@ -202,7 +202,7 @@ def connect(ctx, config):
     Open a connection to a remote host.
     """
     log.info('Opening connections...')
-    from ..orchestra import connection, remote
+    from ..orchestra import remote
     from ..orchestra import cluster
     remotes = []
     machs = []
@@ -219,11 +219,7 @@ def connect(ctx, config):
             if teuthology.is_vm(t):
                 key = None
         remotes.append(
-            remote.Remote(name=t,
-                          ssh=connection.connect(user_at_host=t,
-                                                 host_key=key,
-                                                 keep_alive=True),
-                          console=None))
+            remote.Remote(name=t, host_key=key, keep_alive=True, console=None))
     ctx.cluster = cluster.Cluster()
     if 'roles' in ctx.config:
         for rem, roles in zip(remotes, ctx.config['roles']):
@@ -237,7 +233,7 @@ def connect(ctx, config):
 
 def check_ceph_data(ctx, config):
     """
-    Check for old /var/lib/ceph directories and detect staleness. 
+    Check for old /var/lib/ceph directories and detect staleness.
     """
     log.info('Checking for old /var/lib/ceph...')
     processes = ctx.cluster.run(
