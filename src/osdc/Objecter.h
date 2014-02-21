@@ -197,6 +197,13 @@ struct ObjectOperation {
     ::encode(cookie, osd_op.indata);
     osd_op.indata.append(filter);
   }
+  void add_alloc_hint(int op, uint64_t expected_object_size,
+                      uint64_t expected_write_size) {
+    OSDOp& osd_op = add_op(op);
+    osd_op.op.op = op;
+    osd_op.op.alloc_hint.expected_object_size = expected_object_size;
+    osd_op.op.alloc_hint.expected_write_size = expected_write_size;
+  }
 
   // ------
 
@@ -971,6 +978,17 @@ struct ObjectOperation {
    */
   void cache_evict() {
     add_op(CEPH_OSD_OP_CACHE_EVICT);
+  }
+
+  void set_alloc_hint(uint64_t expected_object_size,
+                      uint64_t expected_write_size ) {
+    add_alloc_hint(CEPH_OSD_OP_SETALLOCHINT, expected_object_size,
+                   expected_write_size);
+
+    // CEPH_OSD_OP_SETALLOCHINT op is advisory and therefore deemed
+    // not worth a feature bit.  Set FAILOK per-op flag to make
+    // sure older osds don't trip over an unsupported opcode.
+    set_last_op_flags(CEPH_OSD_OP_FLAG_FAILOK);
   }
 };
 

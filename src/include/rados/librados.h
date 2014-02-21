@@ -241,6 +241,7 @@ struct rados_cluster_stat_t {
  * - IO on objects: rados_write_op_append(), rados_write_op_write(), rados_write_op_zero
  *   rados_write_op_write_full(), rados_write_op_remove, rados_write_op_truncate(),
  *   rados_write_op_zero()
+ * - Hints: rados_write_op_set_alloc_hint()
  * - Performing the operation: rados_write_op_operate(), rados_aio_write_op_operate()
  */
 typedef void *rados_write_op_t;
@@ -1784,6 +1785,31 @@ int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver, const char *buf,
 /** @} Watch/Notify */
 
 /**
+ * @defgroup librados_h_hints Hints
+ *
+ * @{
+ */
+
+/**
+ * Set allocation hint for an object
+ *
+ * This is an advisory operation, it will always succeed (as if it was
+ * submitted with a LIBRADOS_OP_FLAG_FAILOK flag set) and is not
+ * guaranteed to do anything on the backend.
+ *
+ * @param io the pool the object is in
+ * @param o the name of the object
+ * @param expected_object_size expected size of the object, in bytes
+ * @param expected_write_size expected size of writes to the object, in bytes
+ * @returns 0 on success, negative error code on failure
+ */
+int rados_set_alloc_hint(rados_ioctx_t io, const char *o,
+                         uint64_t expected_object_size,
+                         uint64_t expected_write_size);
+
+/** @} Hints */
+
+/**
  * @defgroup librados_h_obj_op Object Operations
  *
  * A single rados operation can do multiple operations on one object
@@ -1995,6 +2021,17 @@ void rados_write_op_omap_rm_keys(rados_write_op_t write_op,
  * @param write_op operation to add this action to
  */
 void rados_write_op_omap_clear(rados_write_op_t write_op);
+
+/**
+ * Set allocation hint for an object
+ *
+ * @param write_op operation to add this action to
+ * @param expected_object_size expected size of the object, in bytes
+ * @param expected_write_size expected size of writes to the object, in bytes
+ */
+void rados_write_op_set_alloc_hint(rados_write_op_t write_op,
+                                   uint64_t expected_object_size,
+                                   uint64_t expected_write_size);
 
 /**
  * Perform a write operation synchronously

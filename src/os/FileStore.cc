@@ -2432,6 +2432,18 @@ unsigned FileStore::_do_transaction(
       }
       break;
 
+    case Transaction::OP_SETALLOCHINT:
+      {
+        coll_t cid = i.get_cid();
+        ghobject_t oid = i.get_oid();
+        uint64_t expected_object_size = i.get_length();
+        uint64_t expected_write_size = i.get_length();
+        if (_check_replay_guard(cid, oid, spos) > 0)
+          r = _set_alloc_hint(cid, oid, expected_object_size,
+                              expected_write_size);
+      }
+      break;
+
     default:
       derr << "bad op " << op << dendl;
       assert(0);
@@ -2453,6 +2465,14 @@ unsigned FileStore::_do_transaction(
 	ok = true; // Hack for upgrade from snapcolls to snapmapper
       if (r == -ENODATA)
 	ok = true;
+
+      if (op == Transaction::OP_SETALLOCHINT)
+        // Either EOPNOTSUPP or EINVAL most probably.  EINVAL in most
+        // cases means invalid hint size (e.g. too big, not a multiple
+        // of block size, etc) or, at least on xfs, an attempt to set
+        // or change it when the file is not empty.  However,
+        // OP_SETALLOCHINT is advisory, so ignore all errors.
+        ok = true;
 
       if (replaying && !backend->can_checkpoint()) {
 	if (r == -EEXIST && op == Transaction::OP_MKCOLL) {
@@ -4680,6 +4700,34 @@ int FileStore::_split_collection_create(coll_t cid,
   _close_replay_guard(cid, spos);
   _close_replay_guard(dest, spos);
   return r;
+}
+
+int FileStore::_set_alloc_hint(coll_t cid, const ghobject_t& oid,
+                               uint64_t expected_object_size,
+                               uint64_t expected_write_size)
+{
+  dout(15) << "set_alloc_hint " << cid << "/" << oid << " object_size " << expected_object_size << " write_size " << expected_write_size << dendl;
+
+  FDRef fd;
+  int ret;
+
+  ret = lfn_open(cid, oid, false, &fd);
+  if (ret < 0)
+    goto out;
+
+  {
+    // TODO: a more elaborate hint calculation
+    uint64_t hint = expected_write_size;
+
+    ret = backend->set_alloc_hint(**fd, hint);
+    dout(20) << "set_alloc_hint hint " << hint << " ret " << ret << dendl;
+  }
+
+  lfn_close(fd);
+out:
+  dout(10) << "set_alloc_hint " << cid << "/" << oid << " object_size " << expected_object_size << " write_size " << expected_write_size << " = " << ret << dendl;
+  assert(!m_filestore_fail_eio || ret != -EIO);
+  return ret;
 }
 
 const char** FileStore::get_tracked_conf_keys() const
