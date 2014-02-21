@@ -226,7 +226,6 @@ int FileStore::lfn_stat(coll_t cid, const hobject_t& oid, struct stat *buf)
     r = -errno;
   return r;
 }
-
 int FileStore::lfn_open(coll_t cid,
 			const hobject_t& oid,
 			bool create,
@@ -246,50 +245,82 @@ int FileStore::lfn_open(coll_t cid,
   if (!(*index)) {
     r = get_index(cid, index);
   }
-  Mutex::Locker l(fdcache_lock);
-  if (!replaying)
-    *outfd = fdcache.lookup(oid);
-  if (*outfd) {
-    return 0;
-  }
-  IndexedPath path2;
-  if (!path)
-    path = &path2;
+
   int fd, exist;
-  if (r < 0) {
-    derr << "error getting collection index for " << cid
-	 << ": " << cpp_strerror(-r) << dendl;
-    goto fail;
-  }
-  r = (*index)->lookup(oid, path, &exist);
-  if (r < 0) {
-    derr << "could not find " << oid << " in index: "
-	 << cpp_strerror(-r) << dendl;
-    goto fail;
+  utime_t before, after;
+  if (!replaying) {
+    before = ceph_clock_now(g_ceph_context);
+    Mutex::Locker l(fdcache_lock);
+    *outfd = fdcache.lookup(oid);
+    after = ceph_clock_now(g_ceph_context);
+    after -= before;
+    dout(10) << "FileStore::lfn_open##fd_cache_lookup, took " << after << " seconds." << dendl;
+    if (*outfd)
+      return 0;
   }
 
-  r = ::open((*path)->path(), flags, 0644);
-  if (r < 0) {
-    r = -errno;
-    dout(10) << "error opening file " << (*path)->path() << " with flags="
-	     << flags << ": " << cpp_strerror(-r) << dendl;
-    goto fail;
-  }
-  fd = r;
-
-  if (create && (!exist)) {
-    r = (*index)->created(oid, (*path)->path());
+  {
+    IndexedPath path2;
+    if (!path)
+      path = &path2;
     if (r < 0) {
-      TEMP_FAILURE_RETRY(::close(fd));
-      derr << "error creating " << oid << " (" << (*path)->path()
-	   << ") in index: " << cpp_strerror(-r) << dendl;
+      derr << "error getting collection index for " << cid
+	   << ": " << cpp_strerror(-r) << dendl;
       goto fail;
     }
+
+    before = ceph_clock_now(g_ceph_context);
+    r = (*index)->lookup(oid, path, &exist);
+    after = ceph_clock_now(g_ceph_context);
+    after -= before;
+    dout(10) << "FileStore::lfn_open##path_lookup, took " << after << " seconds." << dendl;
+    if (r < 0) {
+      derr << "could not find " << oid << " in index: "
+	   << cpp_strerror(-r) << dendl;
+      goto fail;
+    }
+
+    before = ceph_clock_now(g_ceph_context);
+    r = ::open((*path)->path(), flags, 0644);
+    after = ceph_clock_now(g_ceph_context);
+    after -= before;
+    dout(10) << "FileStore::lfn_open##file_open, took " << after << " seconds." << dendl;
+    if (r < 0) {
+      r = -errno;
+      dout(10) << "error opening file " << (*path)->path() << " with flags="
+	       << flags << ": " << cpp_strerror(-r) << dendl;
+      goto fail;
+    }
+    fd = r;
+
+    if (create && (!exist)) {
+      r = (*index)->created(oid, (*path)->path());
+      if (r < 0) {
+	TEMP_FAILURE_RETRY(::close(fd));
+	derr << "error creating " << oid << " (" << (*path)->path()
+	     << ") in index: " << cpp_strerror(-r) << dendl;
+	goto fail;
+      }
+    }
   }
-  if (!replaying)
-    *outfd = fdcache.add(oid, fd);
-  else
+
+  if (!replaying) {
+
+    before = ceph_clock_now(g_ceph_context);
+    Mutex::Locker l(fdcache_lock);
+    *outfd = fdcache.lookup(oid);
+    if (*outfd) {
+      TEMP_FAILURE_RETRY(::close(fd));
+      return 0;
+    } else {
+      *outfd = fdcache.add(oid, fd);
+    }
+    after = ceph_clock_now(g_ceph_context);
+    after -= before;
+    dout(10) << "FileStore::lfn_open##fd_cache_add, took " << after << " seconds" << dendl;
+  } else {
     *outfd = FDRef(new FDCache::FD(fd));
+  }
   return 0;
 
  fail:
@@ -2985,7 +3016,12 @@ int FileStore::read(
   }
 
   bufferptr bptr(len);  // prealloc space for entire read
+  utime_t before = ceph_clock_now(g_ceph_context);
   got = safe_pread(**fd, bptr.c_str(), len, offset);
+  utime_t after = ceph_clock_now(g_ceph_context);
+  after -= before;
+  dout(10) << "FileStore::read##read_data, took " << after << " seconds. Lenght is " << len << " bytes." << dendl;
+
   if (got < 0) {
     dout(10) << "FileStore::read(" << cid << "/" << oid << ") pread error: " << cpp_strerror(got) << dendl;
     lfn_close(fd);
@@ -3954,6 +3990,7 @@ int FileStore::getattr(coll_t cid, const hobject_t& oid, const char *name, buffe
 {
   dout(15) << "getattr " << cid << "/" << oid << " '" << name << "'" << dendl;
   FDRef fd;
+  utime_t before = ceph_clock_now(g_ceph_context);
   int r = lfn_open(cid, oid, false, &fd);
   if (r < 0) {
     goto out;
@@ -3984,6 +4021,12 @@ int FileStore::getattr(coll_t cid, const hobject_t& oid, const char *name, buffe
     bp = bufferptr(got.begin()->second.c_str(),
 		   got.begin()->second.length());
     r = 0;
+  } else if (strncmp(name, "_", 1) == 0) {
+    // For each read op (or getattr), it will first need to read the xattr '_',
+    // this is usually a cold read
+    utime_t after = ceph_clock_now(g_ceph_context);
+    after -= before;
+    dout(10) << "FileStore::getattr##get_oi_attr, took" << after << " seconds." << dendl;
   }
  out:
   dout(10) << "getattr " << cid << "/" << oid << " '" << name << "' = " << r << dendl;
