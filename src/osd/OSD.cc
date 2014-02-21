@@ -5903,7 +5903,11 @@ OSDMapRef OSDService::_add_map(OSDMap *o)
       OSDMap::dedup(for_dedup.get(), o);
     }
   }
-  OSDMapRef l = map_cache.add(e, o);
+  bool existed;
+  OSDMapRef l = map_cache.add(e, o, &existed);
+  if (existed) {
+    delete o;
+  }
   return l;
 }
 

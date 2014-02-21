@@ -289,13 +289,12 @@ int FileStore::lfn_open(coll_t cid,
   }
 
   if (!replaying) {
-    *outfd = fdcache.lookup(oid);
-    if (*outfd) {
-      TEMP_FAILURE_RETRY(::close(fd)); //Why we are doing this ?
+    bool existed;
+    *outfd = fdcache.add(oid, fd, &existed);
+    if (existed) {
+      //TEMP_FAILURE_RETRY(::close(fd)); //Why we are doing this ?
       return 0;
-    } else {
-      *outfd = fdcache.add(oid, fd);
-    }
+    } 
   } else {
     *outfd = FDRef(new FDCache::FD(fd));
   }
