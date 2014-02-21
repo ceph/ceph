@@ -2012,18 +2012,6 @@ void Client::send_reconnect(MetaSession *session)
 	did_snaprealm.insert(in->snaprealm->ino);
       }	
     }
-    if (in->exporting_mds == mds) {
-      ldout(cct, 10) << " clearing exporting_caps on " << p->first << dendl;
-      in->exporting_mds = -1;
-      in->exporting_issued = 0;
-      in->exporting_mseq = 0;
-      if (!in->is_any_caps()) {
-	ldout(cct, 10) << "  removing last cap, closing snaprealm" << dendl;
-	in->snaprealm_item.remove_myself();
-	put_snap_realm(in->snaprealm);
-	in->snaprealm = 0;
-      }
-    }
   }
   
   // reset my cap seq number
@@ -2898,6 +2886,24 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
   int mds = mds_session->mds_num;
   if (in->caps.count(mds)) {
     cap = in->caps[mds];
+
+    /*
+     * auth mds of the inode changed. we received the cap export
+     * message, but still haven't received the cap import message.
+     * handle_cap_export() updated the new auth MDS' cap.
+     *
+     * "ceph_seq_cmp(seq, cap->seq) <= 0" means we are processing
+     * a message that was send before the cap import message. So
+     * don't remove caps.
+     */
+    if (ceph_seq_cmp(seq, cap->seq) <= 0) {
+      assert(cap == in->auth_cap);
+      assert(cap->cap_id == cap_id);
+      seq = cap->seq;
+      mseq = cap->mseq;
+      issued |= cap->issued;
+      flags |= CEPH_CAP_FLAG_AUTH;
+    }
   } else {
     mds_session->num_caps++;
     if (!in->is_any_caps()) {
@@ -2905,12 +2911,6 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
       in->snaprealm = get_snap_realm(realm);
       in->snaprealm->inodes_with_caps.push_back(&in->snaprealm_item);
       ldout(cct, 15) << "add_update_cap first one, opened snaprealm " << in->snaprealm << dendl;
-    }
-    if (in->exporting_mds == mds) {
-      ldout(cct, 10) << "add_update_cap clearing exporting_caps on " << mds << dendl;
-      in->exporting_mds = -1;
-      in->exporting_issued = 0;
-      in->exporting_mseq = 0;
     }
     in->caps[mds] = cap = new Cap;
     mds_session->caps.push_back(&cap->cap_item);
@@ -3505,12 +3505,10 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, MClientCaps *m)
 		 m->get_caps(), m->get_seq(), m->get_mseq(), m->get_realm(),
 		 CEPH_CAP_FLAG_AUTH);
 
-  if (m->peer.cap_id) {
+  if (m->peer.cap_id && in->caps.count(m->peer.mds)) {
     Cap *cap = in->caps[m->peer.mds];
-    if (cap && cap->cap_id == m->peer.cap_id) {
-      in->exporting_issued = cap->issued;
+    if (cap && cap->cap_id == m->peer.cap_id)
       remove_cap(cap, (m->peer.flags & CEPH_CAP_FLAG_RELEASE));
-    }
   }
   
   if (in->auth_cap && in->auth_cap->session->mds_num == mds) {
@@ -3525,44 +3523,39 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, MClientCaps *m)
 void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
 {
   int mds = session->mds_num;
-  Cap *cap = NULL;
 
-  // note?
-  bool found_higher_mseq = false;
-  for (map<int,Cap*>::iterator p = in->caps.begin();
-       p != in->caps.end();
-       ++p) {
-    if (p->first == mds)
-      cap = p->second;
-    if (ceph_seq_cmp(p->second->mseq, m->get_mseq()) > 0) {
-      found_higher_mseq = true;
-      ldout(cct, 5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq() 
-	      << " EXPORT from mds." << mds
-	      << ", but mds." << p->first << " has higher mseq " << p->second->mseq << dendl;
+  ldout(cct, 5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq()
+		<< " EXPORT from mds." << mds << dendl;
+
+  if (in->caps.count(mds)) {
+    Cap *cap = in->caps[mds];
+
+    if (m->peer.cap_id) {
+      MetaSession *tsession = _get_or_open_mds_session(m->peer.mds);
+      if (in->caps.count(m->peer.mds)) {
+	Cap *tcap = in->caps[m->peer.mds];
+	if (tcap->cap_id != m->peer.cap_id ||
+	    ceph_seq_cmp(tcap->seq, m->peer.seq) < 0) {
+	  tcap->cap_id = m->peer.cap_id;
+	  tcap->seq = m->peer.seq - 1;
+	  tcap->issue_seq = tcap->seq;
+	  tcap->mseq = m->peer.mseq;
+	  tcap->issued |= cap->issued;
+	  tcap->implemented |= cap->issued;
+	  if (cap == in->auth_cap)
+	    in->auth_cap = tcap;
+	  if (in->auth_cap == tcap && in->flushing_cap_item.is_on_list())
+	    tsession->flushing_caps.push_back(&in->flushing_cap_item);
+	}
+      } else {
+	add_update_cap(in, tsession, m->peer.cap_id, cap->issued,
+		       m->peer.seq - 1, m->peer.mseq, (uint64_t)-1,
+		       cap == in->auth_cap ? CEPH_CAP_FLAG_AUTH : 0);
+      }
     }
-  }
-
-  if (cap) {
-    if (!found_higher_mseq) {
-      ldout(cct, 5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq() 
-	      << " EXPORT from mds." << mds
-	      << ", setting exporting_issued " << ccap_string(cap->issued) << dendl;
-      in->exporting_issued = cap->issued;
-      in->exporting_mseq = m->get_mseq();
-      in->exporting_mds = mds;
-    } else 
-      ldout(cct, 5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq() 
-	      << " EXPORT from mds." << mds
-	      << ", just removing old cap" << dendl;
 
     remove_cap(cap, false);
   }
-  // else we already released it
-
-  // open export targets, so we'll get the matching IMPORT, even if we
-  // have seen a newer import (or have released the cap entirely), as there
-  // may be an intervening revocation that will otherwise get blocked up.
-  connect_mds_targets(mds);
 
   m->put();
 }
@@ -3748,7 +3741,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
   }
 
   bool check = false;
-  if (m->get_op() == CEPH_CAP_OP_IMPORT && m->get_wanted() != wanted) {
+  if (m->get_op() == CEPH_CAP_OP_IMPORT && m->get_wanted() != wanted)
     check = true;
 
   check_cap_issue(in, cap, issued);
