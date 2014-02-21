@@ -506,7 +506,6 @@ KeyValueStore::KeyValueStore(const std::string &base,
   op_wq(this, g_conf->filestore_op_thread_timeout,
         g_conf->filestore_op_thread_suicide_timeout, &op_tp),
   logger(NULL),
-  read_error_lock("KeyValueStore::read_error_lock"),
   m_keyvaluestore_queue_max_ops(g_conf->keyvaluestore_queue_max_ops),
   m_keyvaluestore_queue_max_bytes(g_conf->keyvaluestore_queue_max_bytes),
   do_update(do_update)
@@ -2984,45 +2983,4 @@ void KeyValueStore::handle_conf_change(const struct md_config_t *conf,
 
 void KeyValueStore::dump_transactions(list<ObjectStore::Transaction*>& ls, uint64_t seq, OpSequencer *osr)
 {
-}
-
-// ============== KeyValueStore Debug EIO Injection =================
-
-void KeyValueStore::inject_data_error(const ghobject_t &oid) {
-  Mutex::Locker l(read_error_lock);
-  dout(10) << __func__ << ": init error on " << oid << dendl;
-  data_error_set.insert(oid);
-}
-
-void KeyValueStore::inject_mdata_error(const ghobject_t &oid) {
-  Mutex::Locker l(read_error_lock);
-  dout(10) << __func__ << ": init error on " << oid << dendl;
-  mdata_error_set.insert(oid);
-}
-
-void KeyValueStore::debug_obj_on_delete(const ghobject_t &oid) {
-  Mutex::Locker l(read_error_lock);
-  dout(10) << __func__ << ": clear error on " << oid << dendl;
-  data_error_set.erase(oid);
-  mdata_error_set.erase(oid);
-}
-
-bool KeyValueStore::debug_data_eio(const ghobject_t &oid) {
-  Mutex::Locker l(read_error_lock);
-  if (data_error_set.count(oid)) {
-    dout(10) << __func__ << ": inject error on " << oid << dendl;
-    return true;
-  } else {
-    return false;
-  }
-}
-
-bool KeyValueStore::debug_mdata_eio(const ghobject_t &oid) {
-  Mutex::Locker l(read_error_lock);
-  if (mdata_error_set.count(oid)) {
-    dout(10) << __func__ << ": inject error on " << oid << dendl;
-    return true;
-  } else {
-    return false;
-  }
 }
