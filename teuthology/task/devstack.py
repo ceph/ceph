@@ -366,8 +366,10 @@ def create_volume(devstack_node, ceph_node, vol_name, size):
         ceph_node.run(args="rbd ls -l volumes", stdout=out_stream,
                       wait=True)
 
-    assert vol_info['id'] in out_stream.getvalue()
-    assert vol_info['size'] == size
+    assert vol_info['id'] in out_stream.getvalue(), \
+        "Volume not found on Ceph cluster"
+    assert vol_info['size'] == size, \
+        "Volume size on Ceph cluster is different than specified"
     return vol_info['id']
 
 
