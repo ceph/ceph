@@ -348,28 +348,33 @@ int KeyValueStore::BufferTransaction::lookup_cached_header(
   return r;
 }
 
-int KeyValueStore::BufferTransaction::get_buffer_key(
-    StripObjectMap::StripObjectHeader &strip_header,
-    const string &prefix, const string &key, bufferlist &bl)
+int KeyValueStore::BufferTransaction::get_buffer_keys(
+    StripObjectMap::StripObjectHeader &strip_header, const string &prefix,
+    const set<string> &keys, map<string, bufferlist> *out)
 {
-  if (strip_header.buffers.count(make_pair(prefix, key))) {
-    bl.swap(strip_header.buffers[make_pair(prefix, key)]);
-    return 0;
+  set<string> need_lookup;
+
+  for (set<string>::iterator it = keys.begin(); it != keys.end(); ++it) {
+    map<pair<string, string>, bufferlist>::iterator i =
+        strip_header.buffers.find(make_pair(prefix, *it));
+
+    if (i != strip_header.buffers.end()) {
+      (*out)[*it].swap(i->second);
+    } else {
+      need_lookup.insert(*it);
+    }
   }
 
-  set<string> keys;
-  map<string, bufferlist> out;
-  keys.insert(key);
-  int r = store->backend->get_values_with_header(strip_header, prefix,
-                                                 keys, &out);
-  if (r < 0) {
-    dout(10) << __func__  << " " << strip_header.cid << "/"
-             << strip_header.oid << " " << " r = " << r << dendl;
-    return r;
+  if (need_lookup.size()) {
+    int r = store->backend->get_values_with_header(strip_header, prefix,
+                                                   need_lookup, out);
+    if (r < 0) {
+      dout(10) << __func__  << " " << strip_header.cid << "/"
+               << strip_header.oid << " " << " r = " << r << dendl;
+      return r;
+    }
   }
 
-  assert(out.size() == 1);
-  bl.swap(out.begin()->second);
   return 0;
 }
 
@@ -1662,13 +1667,11 @@ int KeyValueStore::_generic_read(StripObjectMap::StripObjectHeader &header,
     dout(10) << __func__ << " " << header.cid << "/" << header.oid << " "
              << offset << "~" << len << " = " << r << dendl;
     return r;
-  }
-  if (out.size() != keys.size()) {
-    r = -EINVAL;
-    dout(5) << __func__ << " " << header.cid << "/" << header.oid << " "
-            << offset << "~" << len << " get incorrect key/value pairs "
-            << dendl;
-    return r;
+  } else if (out.size() != keys.size()) {
+    dout(0) << __func__ << " broken header or missing data in backend "
+            << header.cid << "/" << header.oid << " " << offset << "~"
+            << len << " = " << r << dendl;
+    return -EBADF;
   }
 
   for (vector<StripObjectMap::StripExtent>::iterator iter = extents.begin();
@@ -1800,21 +1803,29 @@ int KeyValueStore::_truncate(coll_t cid, const ghobject_t& oid, uint64_t size,
     vector<StripObjectMap::StripExtent>::iterator iter = extents.begin();
     if (header->bits[iter->no] && iter->offset != 0) {
       bufferlist value;
-      bufferlist old;
       map<string, bufferlist> values;
-      r = t.get_buffer_key(*header, OBJECT_STRIP_PREFIX,
-                           strip_object_key(iter->no), old);
+      set<string> lookup_keys;
+      string key = strip_object_key(iter->no);
+
+      lookup_keys.insert(key);
+      r = t.get_buffer_keys(*header, OBJECT_STRIP_PREFIX,
+                            lookup_keys, &values);
       if (r < 0) {
         dout(10) << __func__ << " " << cid << "/" << oid << " "
                  << size << " = " << r << dendl;
         return r;
+      } else if (values.size() != lookup_keys.size()) {
+        dout(0) << __func__ << " broken header or missing data in backend "
+                << header->cid << "/" << header->oid << " size " << size
+                <<  " r = " << r << dendl;
+        return -EBADF;
       }
 
-      old.copy(0, iter->offset, value);
+      values[key].copy(0, iter->offset, value);
       value.append_zero(header->strip_size-iter->offset);
       assert(value.length() == header->strip_size);
+      value.swap(values[key]);
 
-      values[strip_object_key(iter->no)].swap(value);
       t.set_buffer_keys(*header, OBJECT_STRIP_PREFIX, values);
       ++iter;
     }
@@ -1867,8 +1878,6 @@ int KeyValueStore::_generic_write(StripObjectMap::StripObjectHeader &header,
                                   const bufferlist& bl, BufferTransaction &t,
                                   bool replica)
 {
-  int r;
-
   if (len > bl.length())
     len = bl.length();
 
@@ -1880,6 +1889,30 @@ int KeyValueStore::_generic_write(StripObjectMap::StripObjectHeader &header,
   vector<StripObjectMap::StripExtent> extents;
   StripObjectMap::file_to_extents(offset, len, header.strip_size,
                                   extents);
+
+  map<string, bufferlist> out;
+  set<string> keys;
+  for (vector<StripObjectMap::StripExtent>::iterator iter = extents.begin();
+       iter != extents.end(); ++iter) {
+    if (header.bits[iter->no] && !(iter->offset == 0 &&
+                                   iter->len == header.strip_size))
+      keys.insert(strip_object_key(iter->no));
+  }
+
+  int r = t.get_buffer_keys(header, OBJECT_STRIP_PREFIX, keys, &out);
+  if (r < 0) {
+    dout(10) << __func__ << " failed to get value " << header.cid << "/"
+              << header.oid << " " << offset << "~" << len << " = " << r
+              << dendl;
+    return r;
+  } else if (keys.size() != out.size()) {
+    // Error on header.bits or the corresponding key/value pair is missing
+    dout(0) << __func__ << " broken header or missing data in backend "
+            << header.cid << "/" << header.oid << " " << offset << "~"
+            << len << " = " << r << dendl;
+    return -EBADF;
+  }
+
   uint64_t bl_offset = 0;
   map<string, bufferlist> values;
   for (vector<StripObjectMap::StripExtent>::iterator iter = extents.begin();
@@ -1891,21 +1924,15 @@ int KeyValueStore::_generic_write(StripObjectMap::StripObjectHeader &header,
         bl.copy(bl_offset, iter->len, value);
         bl_offset += iter->len;
       } else {
-        bufferlist old;
-        r = t.get_buffer_key(header, OBJECT_STRIP_PREFIX, key, old);
-        if (r < 0) {
-          dout(10) << __func__ << " failed to get value " << header.cid << "/"
-                   << header.oid << " " << offset << "~" << len << " = " << r
-                   << dendl;
-          return r;
-        }
+        assert(out[key].length() == header.strip_size);
 
-        old.copy(0, iter->offset, value);
+        out[key].copy(0, iter->offset, value);
         bl.copy(bl_offset, iter->len, value);
         bl_offset += iter->len;
 
         if (value.length() != header.strip_size)
-          old.copy(value.length(), header.strip_size-value.length(), value);
+          out[key].copy(value.length(), header.strip_size-value.length(),
+                        value);
       }
     } else {
       if (iter->offset)
