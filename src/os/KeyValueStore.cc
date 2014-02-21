@@ -1626,10 +1626,9 @@ int KeyValueStore::_generic_read(StripObjectMap::StripObjectHeader &header,
   int r;
 
   if (header.max_size < offset) {
-    r = -EINVAL;
     dout(10) << __func__ << " " << header.cid << "/" << header.oid << ")"
              << " offset exceed the length of bl"<< dendl;
-    return r;
+    return 0;
   }
 
   if (len == 0)
