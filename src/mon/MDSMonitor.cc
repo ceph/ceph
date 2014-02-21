@@ -721,8 +721,17 @@ void MDSMonitor::fail_mds_gid(uint64_t gid)
   pending_mdsmap.last_failure_osd_epoch = mon->osdmon()->blacklist(info.addr, until);
 
   if (info.rank >= 0) {
+    if (info.state == MDSMap::STATE_CREATING) {
+      // If this gid didn't make it past CREATING, then forget
+      // the rank ever existed so that next time it's handed out
+      // to a gid it'll go back into CREATING.
+      pending_mdsmap.in.erase(info.rank);
+    } else {
+      // Put this rank into the failed list so that the next available STANDBY will
+      // pick it up.
+      pending_mdsmap.failed.insert(info.rank);
+    }
     pending_mdsmap.up.erase(info.rank);
-    pending_mdsmap.failed.insert(info.rank);
   }
 
   pending_mdsmap.mds_info.erase(gid);
