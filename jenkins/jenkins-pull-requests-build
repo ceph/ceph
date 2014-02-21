@@ -4,6 +4,7 @@
 # http://jenkins.ceph.com/job/teuthology-pull-requests/
 
 set -x
+set -e
 
 virtualenv --version
 virtualenv --system-site-packages --distribute venv
