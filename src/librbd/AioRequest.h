@@ -160,16 +160,17 @@ namespace librbd {
 		      completion, false),
 	m_write_data(data) {
       guard_write();
-      m_write.write(m_object_off, data);
+      add_write_ops(m_write);
     }
     virtual ~AioWrite() {}
 
   protected:
     virtual void add_copyup_ops() {
-      m_copyup.write(m_object_off, m_write_data);
+      add_write_ops(m_copyup);
     }
 
   private:
+    void add_write_ops(librados::ObjectWriteOperation &wr);
     ceph::bufferlist m_write_data;
   };
 
