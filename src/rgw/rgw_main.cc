@@ -93,13 +93,8 @@ struct RGWRequest
   RGWRequest() : id(0), s(NULL), op(NULL) {
   }
 
-  ~RGWRequest() {
-    delete s;
-  }
- 
-  req_state *init_state(CephContext *cct, RGWEnv *env) { 
-    s = new req_state(cct, env);
-    return s;
+  void init_state(req_state *_s) {
+    s = _s;
   }
 
   void log_format(struct req_state *s, const char *fmt, ...)
@@ -516,7 +511,9 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
 
   RGWEnv& rgw_env = client_io->get_env();
 
-  struct req_state *s = req->init_state(g_ceph_context, &rgw_env);
+  struct req_state rstate(g_ceph_context, &rgw_env);
+
+  struct req_state *s = &rstate;
 
   RGWRadosCtx rados_ctx(store, s);
   s->obj_ctx = &rados_ctx;
