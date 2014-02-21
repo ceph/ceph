@@ -1227,7 +1227,6 @@ librados::ObjectIterator librados::IoCtx::objects_begin(uint32_t pos)
   rados_objects_list_open(io_ctx_impl, &listh);
   ObjectIterator iter((ObjListCtx*)listh);
   iter.seek(pos);
-  iter.get_next();
   return iter;
 }
 
