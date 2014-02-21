@@ -154,6 +154,7 @@ overrides:
       osd:
         debug ms: 1
         debug osd: 20
+        debug filestore: 20
     log-whitelist:
     - slow request
   ceph-deploy:
