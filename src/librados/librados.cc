@@ -481,11 +481,15 @@ librados::ObjectIterator::~ObjectIterator()
 }
 
 bool librados::ObjectIterator::operator==(const librados::ObjectIterator& rhs) const {
-  return (ctx.get() == rhs.ctx.get());
+  if (ctx.get() == NULL)
+    return rhs.ctx.get() == NULL || rhs.ctx->lc->at_end();
+  if (rhs.ctx.get() == NULL)
+    return ctx.get() == NULL || ctx->lc->at_end();
+  return ctx.get() == rhs.ctx.get();
 }
 
 bool librados::ObjectIterator::operator!=(const librados::ObjectIterator& rhs) const {
-  return (ctx.get() != rhs.ctx.get());
+  return !(*this == rhs);
 }
 
 const pair<std::string, std::string>& librados::ObjectIterator::operator*() const {
@@ -519,10 +523,10 @@ uint32_t librados::ObjectIterator::seek(uint32_t pos)
 void librados::ObjectIterator::get_next()
 {
   const char *entry, *key;
+  if (ctx->lc->at_end())
+    return;
   int ret = rados_objects_list_next(ctx.get(), &entry, &key);
   if (ret == -ENOENT) {
-    ctx.reset();
-    *this = __EndObjectIterator;
     return;
   }
   else if (ret) {
