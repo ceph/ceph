@@ -795,6 +795,11 @@ void ECBackend::handle_sub_write(
   if (!get_parent()->pgb_is_primary())
     get_parent()->update_stats(op.stats);
   ObjectStore::Transaction *localt = new ObjectStore::Transaction;
+  if (op.temp_added.size()) {
+    get_temp_coll(localt);
+    add_temp_objs(op.temp_added);
+  }
+  clear_temp_objs(op.temp_removed);
   get_parent()->log_operation(
     op.log_entries,
     op.trim_to,
@@ -1536,7 +1541,7 @@ struct CallClientContexts :
       i->second.first->substr_of(
 	bl,
 	i->first.first - adjusted.first,
-	i->first.second);
+	MIN(i->first.second, bl.length() - (i->first.first - adjusted.first)));
       if (i->second.second) {
 	i->second.second->complete(i->second.first->length());
       }
