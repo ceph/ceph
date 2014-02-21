@@ -3496,11 +3496,22 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, MClientCaps *m)
 {
   int mds = session->mds_num;
 
+  ldout(cct, 5) << "handle_cap_import ino " << m->get_ino() << " mseq " << m->get_mseq()
+		<< " IMPORT from mds." << mds << dendl;
+
   // add/update it
   update_snap_trace(m->snapbl);
   add_update_cap(in, session, m->get_cap_id(),
 		 m->get_caps(), m->get_seq(), m->get_mseq(), m->get_realm(),
 		 CEPH_CAP_FLAG_AUTH);
+
+  if (m->peer.cap_id) {
+    Cap *cap = in->caps[m->peer.mds];
+    if (cap && cap->cap_id == m->peer.cap_id) {
+      in->exporting_issued = cap->issued;
+      remove_cap(cap, (m->peer.flags & CEPH_CAP_FLAG_RELEASE));
+    }
+  }
   
   if (in->auth_cap && in->auth_cap->session->mds_num == mds) {
     // reflush any/all caps (if we are now the auth_cap)
@@ -3508,21 +3519,6 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, MClientCaps *m)
       flush_snaps(in, true);
     if (in->flushing_caps)
       flush_caps(in, session);
-  }
-
-  if (m->get_mseq() > in->exporting_mseq) {
-    ldout(cct, 5) << "handle_cap_import ino " << m->get_ino() << " mseq " << m->get_mseq()
-	    << " IMPORT from mds." << mds
-	    << ", clearing exporting_issued " << ccap_string(in->exporting_issued) 
-	    << " mseq " << in->exporting_mseq << dendl;
-    in->exporting_issued = 0;
-    in->exporting_mseq = 0;
-    in->exporting_mds = -1;
-  } else {
-    ldout(cct, 5) << "handle_cap_import ino " << m->get_ino() << " mseq " << m->get_mseq()
-	    << " IMPORT from mds." << mds 
-	    << ", keeping exporting_issued " << ccap_string(in->exporting_issued) 
-	    << " mseq " << in->exporting_mseq << " by mds." << in->exporting_mds << dendl;
   }
 }
 
