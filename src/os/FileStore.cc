@@ -461,6 +461,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   m_filestore_dump_fmt(true),
   m_filestore_sloppy_crc(g_conf->filestore_sloppy_crc),
   m_filestore_sloppy_crc_block_size(g_conf->filestore_sloppy_crc_block_size),
+  m_filestore_max_alloc_hint_size(g_conf->filestore_max_alloc_hint_size),
   m_fs_type(FS_TYPE_NONE),
   m_filestore_max_inline_xattr_size(0),
   m_filestore_max_inline_xattrs(0)
@@ -4727,7 +4728,7 @@ int FileStore::_set_alloc_hint(coll_t cid, const ghobject_t& oid,
 
   {
     // TODO: a more elaborate hint calculation
-    uint64_t hint = expected_write_size;
+    uint64_t hint = MIN(expected_write_size, m_filestore_max_alloc_hint_size);
 
     ret = backend->set_alloc_hint(**fd, hint);
     dout(20) << "set_alloc_hint hint " << hint << " ret " << ret << dendl;
@@ -4756,6 +4757,7 @@ const char** FileStore::get_tracked_conf_keys() const
     "filestore_replica_fadvise",
     "filestore_sloppy_crc",
     "filestore_sloppy_crc_block_size",
+    "filestore_max_alloc_hint_size",
     NULL
   };
   return KEYS;
@@ -4785,6 +4787,7 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
       changed.count("filestore_fail_eio") ||
       changed.count("filestore_sloppy_crc") ||
       changed.count("filestore_sloppy_crc_block_size") ||
+      changed.count("filestore_max_alloc_hint_size") ||
       changed.count("filestore_replica_fadvise")) {
     Mutex::Locker l(lock);
     m_filestore_min_sync_interval = conf->filestore_min_sync_interval;
@@ -4798,6 +4801,7 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
     m_filestore_replica_fadvise = conf->filestore_replica_fadvise;
     m_filestore_sloppy_crc = conf->filestore_sloppy_crc;
     m_filestore_sloppy_crc_block_size = conf->filestore_sloppy_crc_block_size;
+    m_filestore_max_alloc_hint_size = conf->filestore_max_alloc_hint_size;
   }
   if (changed.count("filestore_commit_timeout")) {
     Mutex::Locker l(sync_entry_timeo_lock);
