@@ -1065,16 +1065,6 @@ void KeyValueStore::op_queue_release_throttle(Op *o)
 
 void KeyValueStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
 {
-  // inject a stall?
-  if (g_conf->filestore_inject_stall) {
-    int orig = g_conf->filestore_inject_stall;
-    dout(5) << "_do_op filestore_inject_stall " << orig << ", sleeping" << dendl;
-    for (int n = 0; n < g_conf->filestore_inject_stall; n++)
-      sleep(1);
-    g_conf->set_val("filestore_inject_stall", "0");
-    dout(5) << "_do_op done stalling" << dendl;
-  }
-
   // FIXME: Suppose the collection of transaction only affect objects in the
   // one PG, so this lock will ensure no other concurrent write operation
   osr->apply_lock.Lock();
