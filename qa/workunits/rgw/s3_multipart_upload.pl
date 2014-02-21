@@ -45,7 +45,7 @@ Pod::Usage::pod2usage(-verbose => 1) && exit if ($help);
 my $s3;
 my $domain   = "front.sepia.ceph.com";
 my $host     = get_hostname();
-our $hostname = "$host.$domain";
+our $hostname = "$host.$domain:7280";
 my $testfileloc;
 my $sec;
 my $min;
@@ -77,7 +77,7 @@ sub get_status {
     my $service = "radosgw";
     my $cmd = "ps -ef | grep $service | grep -v grep";
     my $status = get_cmd_op($cmd);
-    if ($status =~ /client.radosgw/ ){
+    if ($status =~ m/client.radosgw/ ){
         return 0;
     }
     return 1;
