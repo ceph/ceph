@@ -1387,6 +1387,9 @@ bool Objecter::is_pg_changed(
     return true;     // was empty, now not, or vice versa
   if (oldprimary != newprimary)
     return true;     // primary changed
+  if (OSDMap::calc_pg_rank(oldprimary, oldacting) !=
+      OSDMap::calc_pg_rank(newprimary, newacting))
+    return true;
   if (any_change && oldacting != newacting)
     return true;
   return false;      // same primary (tho replicas may have changed)
