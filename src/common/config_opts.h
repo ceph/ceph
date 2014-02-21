@@ -652,6 +652,7 @@ OPTION(journal_force_aio, OPT_BOOL, false)
 
 OPTION(keyvaluestore_queue_max_ops, OPT_INT, 50)
 OPTION(keyvaluestore_queue_max_bytes, OPT_INT, 100 << 20)
+OPTION(keyvaluestore_check_backend, OPT_BOOL, 0) // Expensive debugging check on sync
 
 // max bytes to search ahead in journal searching for corruption
 OPTION(journal_max_corrupt_search, OPT_U64, 10<<20)

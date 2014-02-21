@@ -865,7 +865,7 @@ int KeyValueStore::mount()
     }
     stringstream err2;
 
-    if (g_conf->filestore_debug_omap_check && !dbomap->check(err2)) {
+    if (g_conf->keyvaluestore_check_backend && !dbomap->check(err2)) {
       derr << err2.str() << dendl;;
       delete dbomap;
       ret = -EINVAL;
@@ -2517,12 +2517,10 @@ int KeyValueStore::_collection_rename(const coll_t &cid, const coll_t &ncid,
 
     for (vector<ghobject_t>::iterator i = objects.begin();
         i != objects.end(); ++i) {
-      if (i->match(bits, rem)) {
-        if (_collection_move_rename(cid, *i, ncid, *i, t) < 0) {
-          return -1;
-        }
-        move_size++;
+      if (_collection_move_rename(cid, *i, ncid, *i, t) < 0) {
+        return -1;
       }
+      move_size++;
     }
 
     objects.clear();
