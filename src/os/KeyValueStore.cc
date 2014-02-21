@@ -296,28 +296,11 @@ void KeyValueStore::SubmitManager::op_submit_finish(uint64_t op)
 
 // ========= KeyValueStore::BufferTransaction Implementation ============
 
-int KeyValueStore::BufferTransaction::check_coll(const coll_t &cid)
-{
-  StripHeaderMap::iterator it = strip_headers.find(
-      make_pair(get_coll_for_coll(), make_ghobject_for_coll(cid)));
-  if (it != strip_headers.end() && !it->second.deleted) {
-    return 0;
-  }
-
-  if (store->_check_coll(cid) == 0)
-    return 0;
-
-  return -ENOENT;
-}
-
 int KeyValueStore::BufferTransaction::lookup_cached_header(
     const coll_t &cid, const ghobject_t &oid,
     StripObjectMap::StripObjectHeader **strip_header,
     bool create_if_missing)
 {
-  if (check_coll(cid) < 0)
-    return -ENOENT;
-
   StripObjectMap::StripObjectHeader header;
   int r = 0;
 
@@ -1560,33 +1543,12 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
 // =========== KeyValueStore Op Implementation ==============
 // objects
 
-int KeyValueStore::_check_coll(const coll_t &cid)
-{
-  if (is_coll_obj(cid))
-    return 0;
-
-  StripObjectMap::StripObjectHeader header;
-  int r = backend->lookup_strip_header(get_coll_for_coll(),
-                                       make_ghobject_for_coll(cid), header);
-  if (r < 0) {
-    dout(10) << __func__ << " could not find header r = " << r << dendl;
-    return -ENOENT;
-  }
-
-  return 0;
-}
-
 bool KeyValueStore::exists(coll_t cid, const ghobject_t& oid)
 {
   dout(10) << __func__ << "collection: " << cid << " object: " << oid
            << dendl;
   int r;
   StripObjectMap::StripObjectHeader header;
-
-  r = _check_coll(cid);
-  if (r < 0) {
-    return r;
-  }
 
   r = backend->lookup_strip_header(cid, oid, header);
   if (r < 0) {
@@ -1603,12 +1565,7 @@ int KeyValueStore::stat(coll_t cid, const ghobject_t& oid,
 
   StripObjectMap::StripObjectHeader header;
 
-  int r = _check_coll(cid);
-  if (r < 0) {
-    return r;
-  }
-
-  r = backend->lookup_strip_header(cid, oid, header);
+  int r = backend->lookup_strip_header(cid, oid, header);
   if (r < 0) {
     dout(10) << "stat " << cid << "/" << oid << "=" << r << dendl;
     return -ENOENT;
@@ -1628,8 +1585,6 @@ int KeyValueStore::_generic_read(StripObjectMap::StripObjectHeader &header,
                                  uint64_t offset, size_t len, bufferlist& bl,
                                  bool allow_eio, BufferTransaction *bt)
 {
-  int r;
-
   if (header.max_size < offset) {
     dout(10) << __func__ << " " << header.cid << "/" << header.oid << ")"
              << " offset exceed the length of bl"<< dendl;
@@ -1662,7 +1617,7 @@ int KeyValueStore::_generic_read(StripObjectMap::StripObjectHeader &header,
     }
   }
 
-  r = backend->get_values_with_header(header, OBJECT_STRIP_PREFIX, keys, &out);
+  int r = backend->get_values_with_header(header, OBJECT_STRIP_PREFIX, keys, &out);
   if (r < 0) {
     dout(10) << __func__ << " " << header.cid << "/" << header.oid << " "
              << offset << "~" << len << " = " << r << dendl;
@@ -1705,12 +1660,7 @@ int KeyValueStore::read(coll_t cid, const ghobject_t& oid, uint64_t offset,
 
   StripObjectMap::StripObjectHeader header;
 
-  int r = _check_coll(cid);
-  if (r < 0) {
-    return r;
-  }
-
-  r = backend->lookup_strip_header(cid, oid, header);
+  int r = backend->lookup_strip_header(cid, oid, header);
 
   if (r < 0) {
     dout(10) << __func__ << " " << cid << "/" << oid << " " << offset << "~"
@@ -1728,11 +1678,6 @@ int KeyValueStore::fiemap(coll_t cid, const ghobject_t& oid,
            << len << dendl;
   int r;
   StripObjectMap::StripObjectHeader header;
-
-  r = _check_coll(cid);
-  if (r < 0) {
-    return r;
-  }
 
   r = backend->lookup_strip_header(cid, oid, header);
   if (r < 0) {
@@ -2074,11 +2019,6 @@ int KeyValueStore::getattr(coll_t cid, const ghobject_t& oid, const char *name,
   map<string, bufferlist> got;
   set<string> to_get;
 
-  r = _check_coll(cid);
-  if (r < 0) {
-    return r;
-  }
-
   to_get.insert(string(name));
   r = backend->get_values(cid, oid, OBJECT_XATTR, to_get, &got);
   if (r < 0 && r != -ENOENT) {
@@ -2104,11 +2044,6 @@ int KeyValueStore::getattrs(coll_t cid, const ghobject_t& oid,
 {
   int r;
   map<string, bufferlist> attr_aset;
-
-  r = _check_coll(cid);
-  if (r < 0) {
-    return r;
-  }
 
   r = backend->get(cid, oid, OBJECT_XATTR, &attr_aset);
   if (r < 0 && r != -ENOENT) {
@@ -2260,17 +2195,12 @@ int KeyValueStore::collection_getattr(coll_t c, const char *name,
   dout(15) << __func__ << " " << c.to_str() << " '" << name
            << "'" << dendl;
 
-  int r = _check_coll(c);
-  if (r < 0) {
-    return r;
-  }
-
   set<string> keys;
   map<string, bufferlist> out;
   keys.insert(string(name));
 
-  r = backend->get_values(get_coll_for_coll(), make_ghobject_for_coll(c),
-                          COLLECTION_ATTR, keys, &out);
+  int r = backend->get_values(get_coll_for_coll(), make_ghobject_for_coll(c),
+                              COLLECTION_ATTR, keys, &out);
   if (r < 0) {
     dout(10) << __func__ << " could not get key" << string(name) << dendl;
     r = -EINVAL;
@@ -2289,11 +2219,6 @@ int KeyValueStore::collection_getattrs(coll_t cid,
 {
   dout(10) << __func__ << " " << cid.to_str() << dendl;
 
-  int r = _check_coll(cid);
-  if (r < 0) {
-    return r;
-  }
-
   map<string, bufferlist> out;
   set<string> keys;
 
@@ -2302,8 +2227,8 @@ int KeyValueStore::collection_getattrs(coll_t cid,
       keys.insert(it->first);
   }
 
-  r = backend->get_values(get_coll_for_coll(), make_ghobject_for_coll(cid),
-                          COLLECTION_ATTR, keys, &out);
+  int r = backend->get_values(get_coll_for_coll(), make_ghobject_for_coll(cid),
+                              COLLECTION_ATTR, keys, &out);
   if (r < 0) {
     dout(10) << __func__ << " could not get keys" << dendl;
     r = -EINVAL;
@@ -2356,18 +2281,12 @@ int KeyValueStore::_collection_rmattr(coll_t c, const char *name,
 {
   dout(15) << __func__ << " " << c << dendl;
 
-  int r = _check_coll(c);
-  if (r < 0) {
-    return r;
-  }
-
   bufferlist bl;
   set<string> out;
   StripObjectMap::StripObjectHeader *header;
 
-  r = t.lookup_cached_header(get_coll_for_coll(),
-                             make_ghobject_for_coll(c),
-                             &header, false);
+  int r = t.lookup_cached_header(get_coll_for_coll(),
+                                 make_ghobject_for_coll(c), &header, false);
   if (r < 0) {
     dout(10) << __func__ << " could not find header r = " << r << dendl;
     return r;
@@ -2624,8 +2543,8 @@ bool KeyValueStore::collection_exists(coll_t c)
   dout(10) << __func__ << " " << dendl;
 
   StripObjectMap::StripObjectHeader header;
-
-  int r = _check_coll(c);
+  int r = backend->lookup_strip_header(get_coll_for_coll(),
+                                       make_ghobject_for_coll(c), header);
   if (r < 0) {
     return false;
   }
@@ -2635,11 +2554,6 @@ bool KeyValueStore::collection_exists(coll_t c)
 bool KeyValueStore::collection_empty(coll_t c)
 {
   dout(10) << __func__ << " " << dendl;
-
-  int r = _check_coll(c);
-  if (r < 0) {
-    return false;
-  }
 
   vector<ghobject_t> oids;
   backend->list_objects(c, ghobject_t(), 1, &oids, 0);
@@ -2654,16 +2568,11 @@ int KeyValueStore::collection_list_range(coll_t c, ghobject_t start,
   bool done = false;
   ghobject_t next = start;
 
-  int r = _check_coll(c);
-  if (r < 0) {
-    return r;
-  }
-
   while (!done) {
     vector<ghobject_t> next_objects;
-    r = collection_list_partial(c, next, get_ideal_list_min(),
-                                get_ideal_list_max(), seq,
-                                &next_objects, &next);
+    int r = collection_list_partial(c, next, get_ideal_list_min(),
+                                    get_ideal_list_max(), seq,
+                                    &next_objects, &next);
     if (r < 0)
       return r;
 
@@ -2727,12 +2636,7 @@ int KeyValueStore::omap_get(coll_t c, const ghobject_t &hoid,
 
   StripObjectMap::StripObjectHeader header;
 
-  int r = _check_coll(c);
-  if (r < 0) {
-    return r;
-  }
-
-  r = backend->lookup_strip_header(c, hoid, header);
+  int r = backend->lookup_strip_header(c, hoid, header);
   if (r < 0) {
     dout(10) << __func__ << " lookup_strip_header failed: r =" << r << dendl;
     return r;
@@ -2768,16 +2672,11 @@ int KeyValueStore::omap_get_header(coll_t c, const ghobject_t &hoid,
 {
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
 
-  int r = _check_coll(c);
-  if (r < 0) {
-    return r;
-  }
-
   set<string> keys;
   map<string, bufferlist> got;
 
   keys.insert(OBJECT_OMAP_HEADER_KEY);
-  r = backend->get_values(c, hoid, OBJECT_OMAP_HEADER, keys, &got);
+  int r = backend->get_values(c, hoid, OBJECT_OMAP_HEADER, keys, &got);
   if (r < 0 && r != -ENOENT) {
     assert(allow_eio || !m_fail_eio || r != -EIO);
     dout(10) << __func__ << " err r =" << r << dendl;
@@ -2796,12 +2695,7 @@ int KeyValueStore::omap_get_keys(coll_t c, const ghobject_t &hoid, set<string> *
 {
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
 
-  int r = _check_coll(c);
-  if (r < 0) {
-    return r;
-  }
-
-  r = backend->get_keys(c, hoid, OBJECT_OMAP, keys);
+  int r = backend->get_keys(c, hoid, OBJECT_OMAP, keys);
   if (r < 0 && r != -ENOENT) {
     assert(!m_fail_eio || r != -EIO);
     return r;
@@ -2815,12 +2709,7 @@ int KeyValueStore::omap_get_values(coll_t c, const ghobject_t &hoid,
 {
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
 
-  int r = _check_coll(c);
-  if (r < 0) {
-    return r;
-  }
-
-  r = backend->get_values(c, hoid, OBJECT_OMAP, keys, out);
+  int r = backend->get_values(c, hoid, OBJECT_OMAP, keys, out);
   if (r < 0 && r != -ENOENT) {
     assert(!m_fail_eio || r != -EIO);
     return r;
@@ -2833,12 +2722,7 @@ int KeyValueStore::omap_check_keys(coll_t c, const ghobject_t &hoid,
 {
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
 
-  int r = _check_coll(c);
-  if (r < 0) {
-    return r;
-  }
-
-  r = backend->check_keys(c, hoid, OBJECT_OMAP, keys, out);
+  int r = backend->check_keys(c, hoid, OBJECT_OMAP, keys, out);
   if (r < 0 && r != -ENOENT) {
     assert(!m_fail_eio || r != -EIO);
     return r;
