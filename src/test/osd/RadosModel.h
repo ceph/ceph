@@ -378,6 +378,7 @@ public:
   {
     pool_obj_cont[current_snap].erase(oid);
     pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, contents));
+    pool_obj_cont[current_snap][oid].dirty = true;
   }
 
   void update_object_undirty(const string &oid)

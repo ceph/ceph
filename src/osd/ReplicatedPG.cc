@@ -301,15 +301,15 @@ void ReplicatedPG::on_global_recover(
   }
   recovering.erase(i);
   finish_recovery_op(soid);
-  if (waiting_for_unreadable_object.count(soid)) {
-    dout(20) << " kicking unreadable waiters on " << soid << dendl;
-    requeue_ops(waiting_for_unreadable_object[soid]);
-    waiting_for_unreadable_object.erase(soid);
-  }
   if (waiting_for_degraded_object.count(soid)) {
     dout(20) << " kicking degraded waiters on " << soid << dendl;
     requeue_ops(waiting_for_degraded_object[soid]);
     waiting_for_degraded_object.erase(soid);
+  }
+  if (waiting_for_unreadable_object.count(soid)) {
+    dout(20) << " kicking unreadable waiters on " << soid << dendl;
+    requeue_ops(waiting_for_unreadable_object[soid]);
+    waiting_for_unreadable_object.erase(soid);
   }
   finish_degraded_object(soid);
 }
@@ -3260,21 +3260,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
    case CEPH_OSD_OP_GETXATTRS:
       ++ctx->num_read;
       {
-	map<string,bufferlist> attrset;
+	map<string, bufferlist> out;
 	result = getattrs_maybe_cache(
 	  ctx->obc,
-	  &attrset);
-	map<string, bufferlist> out;
-	for (map<string, bufferlist>::iterator i = attrset.begin();
-	     i != attrset.end();
-	     ++i) {
-	  if (i->first[0] != '_')
-	    continue;
-	  if (i->first == "_")
-	    continue;
-	  out[i->first.substr(1, i->first.size())].claim(
-	    i->second);
-	}
+	  &out,
+	  true);
         
         bufferlist bl;
         ::encode(out, bl);
@@ -5233,7 +5223,10 @@ int ReplicatedPG::fill_in_copy_get(
   // attrs
   map<string,bufferlist>& out_attrs = reply_obj.attrs;
   if (!cursor.attr_complete) {
-    result = osd->store->getattrs(coll, soid, out_attrs, true);
+    result = getattrs_maybe_cache(
+      ctx->obc,
+      &out_attrs,
+      true);
     if (result < 0)
       return result;
     cursor.attr_complete = true;
@@ -5386,7 +5379,7 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
     // it already!
     assert(cop->cursor.is_initial());
   }
-  op.copy_get(&cop->cursor, cct->_conf->osd_copyfrom_max_chunk,
+  op.copy_get(&cop->cursor, get_copy_chunk_size(),
 	      &cop->results.object_size, &cop->results.mtime,
 	      &cop->results.category,
 	      &cop->attrs, &cop->data, &cop->omap_header, &cop->omap,
@@ -5516,6 +5509,27 @@ void ReplicatedPG::_write_copy_chunk(CopyOpRef cop, PGBackend::PGTransaction *t)
     cop->attrs.clear();
   }
   if (!cop->temp_cursor.data_complete) {
+    assert(cop->data.length() + cop->temp_cursor.data_offset ==
+	   cop->cursor.data_offset);
+    if (pool.info.requires_aligned_append() &&
+	!cop->cursor.data_complete) {
+      /**
+       * Trim off the unaligned bit at the end, we'll adjust cursor.data_offset
+       * to pick it up on the next pass.
+       */
+      assert(cop->temp_cursor.data_offset %
+	     pool.info.required_alignment() == 0);
+      if (cop->data.length() % pool.info.required_alignment() != 0) {
+	uint64_t to_trim =
+	  cop->data.length() % pool.info.required_alignment();
+	bufferlist bl;
+	bl.substr_of(cop->data, 0, cop->data.length() - to_trim);
+	cop->data.swap(bl);
+	cop->cursor.data_offset -= to_trim;
+	assert(cop->data.length() + cop->temp_cursor.data_offset ==
+	       cop->cursor.data_offset);
+      }
+    }
     t->append(
       cop->results.temp_oid,
       cop->temp_cursor.data_offset,
@@ -5523,15 +5537,20 @@ void ReplicatedPG::_write_copy_chunk(CopyOpRef cop, PGBackend::PGTransaction *t)
       cop->data);
     cop->data.clear();
   }
-  if (!cop->temp_cursor.omap_complete) {
-    if (cop->omap_header.length()) {
-      t->omap_setheader(
-	cop->results.temp_oid,
-	cop->omap_header);
-      cop->omap_header.clear();
+  if (!pool.info.require_rollback()) {
+    if (!cop->temp_cursor.omap_complete) {
+      if (cop->omap_header.length()) {
+	t->omap_setheader(
+	  cop->results.temp_oid,
+	  cop->omap_header);
+	cop->omap_header.clear();
+      }
+      t->omap_setkeys(cop->results.temp_oid, cop->omap);
+      cop->omap.clear();
     }
-    t->omap_setkeys(cop->results.temp_oid, cop->omap);
-    cop->omap.clear();
+  } else {
+    assert(cop->omap_header.length() == 0);
+    assert(cop->omap.empty());
   }
   cop->temp_cursor = cop->cursor;
 }
@@ -10100,7 +10119,10 @@ void ReplicatedPG::check_local()
       dout(10) << " checking " << p->soid
 	       << " at " << p->version << dendl;
       struct stat st;
-      int r = osd->store->stat(coll, p->soid, &st);
+      int r = osd->store->stat(
+	coll,
+	ghobject_t(p->soid, ghobject_t::NO_GEN, pg_whoami.shard),
+	&st);
       if (r != -ENOENT) {
 	derr << __func__ << " " << p->soid << " exists, but should have been "
 	     << "deleted" << dendl;
@@ -10298,7 +10320,10 @@ void ReplicatedPG::hit_set_persist()
     ++ctx->at_version.version;
 
     struct stat st;
-    int r = osd->store->stat(coll, old_obj, &st);
+    int r = osd->store->stat(
+      coll,
+      ghobject_t(old_obj, ghobject_t::NO_GEN, pg_whoami.shard),
+      &st);
     assert(r == 0);
     --ctx->delta_stats.num_objects;
     ctx->delta_stats.num_bytes -= st.st_size;
@@ -10390,7 +10415,10 @@ void ReplicatedPG::hit_set_trim(RepGather *repop, unsigned max)
     info.hit_set.history.pop_front();
 
     struct stat st;
-    int r = osd->store->stat(coll, oid, &st);
+    int r = osd->store->stat(
+      coll,
+      ghobject_t(oid, ghobject_t::NO_GEN, pg_whoami.shard),
+      &st);
     assert(r == 0);
     --repop->ctx->delta_stats.num_objects;
     repop->ctx->delta_stats.num_bytes -= st.st_size;
@@ -11310,14 +11338,27 @@ int ReplicatedPG::getattr_maybe_cache(
 
 int ReplicatedPG::getattrs_maybe_cache(
   ObjectContextRef obc,
-  map<string, bufferlist> *out)
+  map<string, bufferlist> *out,
+  bool user_only)
 {
+  int r = 0;
   if (pool.info.require_rollback()) {
     if (out)
       *out = obc->attr_cache;
-    return 0;
+  } else {
+    r = pgbackend->objects_get_attrs(obc->obs.oi.soid, out);
   }
-  return pgbackend->objects_get_attrs(obc->obs.oi.soid, out);
+  if (out && user_only) {
+    map<string, bufferlist> tmp;
+    for (map<string, bufferlist>::iterator i = out->begin();
+	 i != out->end();
+	 ++i) {
+      if (i->first.size() > 1 && i->first[0] == '_')
+	tmp[i->first.substr(1, i->first.size())].claim(i->second);
+    }
+    tmp.swap(*out);
+  }
+  return r;
 }
 
 void intrusive_ptr_add_ref(ReplicatedPG *pg) { pg->get("intptr"); }

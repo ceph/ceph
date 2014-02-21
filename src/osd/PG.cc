@@ -1355,7 +1355,7 @@ void PG::build_might_have_unfound()
     std::vector<int>::const_iterator a = interval.acting.begin();
     std::vector<int>::const_iterator a_end = interval.acting.end();
     for (; a != a_end; ++a, ++i) {
-      if (*a != osd->whoami)
+      if (*a != CRUSH_ITEM_NONE && *a != osd->whoami)
 	might_have_unfound.insert(
 	  pg_shard_t(
 	    *a,
@@ -3592,7 +3592,9 @@ void PG::scrub(ThreadPool::TPHandle &handle)
     OSDMapRef curmap = osd->get_osdmap();
     scrubber.is_chunky = true;
     assert(backfill_targets.empty());
-    for (unsigned i=1; i<acting.size(); i++) {
+    for (unsigned i=0; i<acting.size(); i++) {
+      if (acting[i] == pg_whoami.shard)
+	continue;
       if (acting[i] == CRUSH_ITEM_NONE)
 	continue;
       ConnectionRef con = osd->get_con_osd_cluster(acting[i], get_osdmap()->get_epoch());
