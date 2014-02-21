@@ -1355,7 +1355,7 @@ void PG::build_might_have_unfound()
     std::vector<int>::const_iterator a = interval.acting.begin();
     std::vector<int>::const_iterator a_end = interval.acting.end();
     for (; a != a_end; ++a, ++i) {
-      if (*a != osd->whoami)
+      if (*a != CRUSH_ITEM_NONE && *a != osd->whoami)
 	might_have_unfound.insert(
 	  pg_shard_t(
 	    *a,
