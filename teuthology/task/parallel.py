@@ -37,10 +37,9 @@ def task(ctx, config):
     log.info('starting parallel...')
     with parallel.parallel() as p:
         for entry in config:
-            if not isinstance(entry, dict):
-                entry = ctx.config.get(entry, {})
-            ((taskname, confg),) = entry.iteritems()
-            p.spawn(_run_spawned, ctx, confg, taskname)
+            if isinstance(entry, dict):
+                ((taskname, confg),) = entry.iteritems()
+                p.spawn(_run_spawned, ctx, confg, taskname)
 
 def _run_spawned(ctx,config,taskname):
     """Run one of the tasks (this runs in parallel with others)"""
