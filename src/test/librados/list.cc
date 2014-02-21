@@ -73,6 +73,38 @@ TEST_F(LibRadosListPP, ListObjectsTwicePP) {
   ASSERT_TRUE(foundit);
 }
 
+TEST_F(LibRadosListPP, ListObjectsCopyIterPP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+
+  // make sure this is still valid after the original iterators are gone
+  ObjectIterator iter3;
+  {
+    ObjectIterator iter(ioctx.objects_begin());
+    ObjectIterator iter2(iter);
+    iter3 = iter2;
+    ASSERT_EQ((*iter).first, "foo");
+    ++iter;
+    ASSERT_TRUE(iter == ioctx.objects_end());
+    ++iter;
+    ASSERT_TRUE(iter == ioctx.objects_end());
+
+    ASSERT_EQ(iter2->first, "foo");
+    ASSERT_EQ(iter3->first, "foo");
+    ++iter2;
+    ASSERT_TRUE(iter2 == ioctx.objects_end());
+  }
+
+  ASSERT_EQ(iter3->first, "foo");
+  iter3 = iter3;
+  ASSERT_EQ(iter3->first, "foo");
+  ++iter3;
+  ASSERT_TRUE(iter3 == ioctx.objects_end());
+}
+
 static void check_list(std::set<std::string>& myset, rados_list_ctx_t& ctx)
 {
   const char *entry;

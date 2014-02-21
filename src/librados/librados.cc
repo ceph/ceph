@@ -480,6 +480,21 @@ librados::ObjectIterator::~ObjectIterator()
   ctx.reset();
 }
 
+librados::ObjectIterator::ObjectIterator(const ObjectIterator &rhs)
+{
+  *this = rhs;
+}
+
+librados::ObjectIterator& librados::ObjectIterator::operator=(const librados::ObjectIterator &rhs)
+{
+  if (&rhs == this)
+    return *this;
+  Objecter::ListContext *list_ctx = new Objecter::ListContext(*rhs.ctx->lc);
+  ctx.reset(new ObjListCtx(rhs.ctx->ctx, list_ctx));
+  cur_obj = rhs.cur_obj;
+  return *this;
+}
+
 bool librados::ObjectIterator::operator==(const librados::ObjectIterator& rhs) const {
   if (ctx.get() == NULL)
     return rhs.ctx.get() == NULL || rhs.ctx->lc->at_end();
