@@ -342,7 +342,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     }
   }
 
-  if (s->bucket_name_str.size()) {
+  if (!s->bucket_name_str.empty()) {
     s->bucket_exists = true;
     if (s->bucket_instance_id.empty()) {
       ret = store->get_bucket_info(s->obj_ctx, s->bucket_name_str, s->bucket_info, NULL, &s->bucket_attrs);
@@ -358,9 +358,13 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     }
     s->bucket = s->bucket_info.bucket;
 
-    string no_obj;
-    RGWAccessControlPolicy bucket_acl(s->cct);
-    ret = read_policy(store, s, s->bucket_info, s->bucket_attrs, s->bucket_acl, s->bucket, no_obj);
+    if (s->bucket_exists) {
+      string no_obj;
+      ret = read_policy(store, s, s->bucket_info, s->bucket_attrs, s->bucket_acl, s->bucket, no_obj);
+    } else {
+      s->bucket_acl->create_default(s->user.user_id, s->user.display_name);
+      ret = -ERR_NO_SUCH_BUCKET;
+    }
 
     s->bucket_owner = s->bucket_acl->get_owner();
 
@@ -382,7 +386,10 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
 
   /* we're passed only_bucket = true when we specifically need the bucket's
      acls, that happens on write operations */
-  if (!only_bucket) {
+  if (!only_bucket && !s->object_str.empty()) {
+    if (!s->bucket_exists) {
+      return -ERR_NO_SUCH_BUCKET;
+    }
     s->object_acl = new RGWAccessControlPolicy(s->cct);
 
     obj_str = s->object_str;
