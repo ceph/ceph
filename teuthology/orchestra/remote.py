@@ -29,17 +29,14 @@ class Remote(object):
     # for unit tests to hook into
     _runner = staticmethod(run.run)
 
-    def __init__(self, name, ssh=None, shortname=None, console=None, host_key=None,
-                 keep_alive=True):
+    def __init__(self, name, ssh=None, shortname=None, console=None,
+                 host_key=None, keep_alive=True):
         self.name = name
         self._shortname = shortname
         self.host_key = host_key
         self.keep_alive = keep_alive
         self.console = console
-        if ssh is None:
-            ssh = self.connect()
-        else:
-            self.ssh = ssh
+        self.ssh = ssh or self.connect()
 
     def connect(self):
         self.ssh = connection.connect(user_at_host=self.name,
@@ -56,7 +53,8 @@ class Remote(object):
         try:
             self.ssh = self.connect()
             return self.is_online
-        except Exception:
+        except Exception as e:
+            log.debug(e)
             return False
 
     @property
