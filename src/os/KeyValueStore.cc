@@ -84,28 +84,26 @@ void StripObjectMap::sync_wrap(StripObjectHeader &strip_header,
 }
 
 bool StripObjectMap::check_spos(const StripObjectHeader &header,
-                                const SequencerPosition *spos)
+                                const SequencerPosition &spos)
 {
-  if (!spos || *spos > header.spos) {
+  if (spos > header.spos) {
     stringstream out;
-    if (spos)
-      dout(10) << "cid: " << "oid: " << header.oid
-               << " not skipping op, *spos " << *spos << dendl;
-    else
-      dout(10) << "cid: " << "oid: " << header.oid
-               << " not skipping op, *spos " << "empty" << dendl;
+    dout(10) << "cid: " << "oid: " << header.oid
+             << " not skipping op, *spos " << spos << dendl;
     dout(10) << " > header.spos " << header.spos << dendl;
     return false;
   } else {
-    dout(10) << "cid: " << "oid: " << header.oid << " skipping op, *spos "
-             << *spos << " <= header.spos " << header.spos << dendl;
+    dout(10) << "cid: " << "oid: " << header.oid << " skipping op, spos "
+             << spos << " <= header.spos " << header.spos << dendl;
     return true;
   }
 }
 
 int StripObjectMap::save_strip_header(StripObjectHeader &strip_header,
+                                      const SequencerPosition &spos,
                                       KeyValueDB::Transaction t)
 {
+  strip_header.spos = spos;
   strip_header.header->data.clear();
   ::encode(strip_header, strip_header.header->data);
 
@@ -199,7 +197,6 @@ int StripObjectMap::file_to_extents(uint64_t offset, size_t len,
 void StripObjectMap::clone_wrap(StripObjectHeader &old_header,
                                 const coll_t &cid, const ghobject_t &oid,
                                 KeyValueDB::Transaction t,
-                                const SequencerPosition &spos,
                                 StripObjectHeader *origin_header,
                                 StripObjectHeader *target_header)
 {
@@ -213,19 +210,14 @@ void StripObjectMap::clone_wrap(StripObjectHeader &old_header,
 
   old_header.header = new_origin_header;
 
-  if (origin_header)
-    origin_header->spos = spos;
-
   if (target_header) {
     target_header->oid = oid;
     target_header->cid = cid;
-    target_header->spos = spos;
   }
 }
 
 void StripObjectMap::rename_wrap(const coll_t &cid, const ghobject_t &oid,
                                  KeyValueDB::Transaction t,
-                                 const SequencerPosition &spos,
                                  StripObjectHeader *header)
 {
   assert(header);
@@ -234,7 +226,6 @@ void StripObjectMap::rename_wrap(const coll_t &cid, const ghobject_t &oid,
   if (header) {
     header->oid = oid;
     header->cid = cid;
-    header->spos = spos;
   }
 }
 
@@ -365,9 +356,6 @@ void KeyValueStore::BufferTransaction::set_buffer_keys(
      StripObjectMap::StripObjectHeader &strip_header,
      const string &prefix, map<string, bufferlist> &values)
 {
-  if (store->backend->check_spos(strip_header, &spos))
-    return ;
-
   store->backend->set_keys(strip_header.header, prefix, values, t);
 
   for (map<string, bufferlist>::iterator iter = values.begin();
@@ -380,9 +368,6 @@ int KeyValueStore::BufferTransaction::remove_buffer_keys(
      StripObjectMap::StripObjectHeader &strip_header, const string &prefix,
      const set<string> &keys)
 {
-  if (store->backend->check_spos(strip_header, &spos))
-    return 0;
-
   for (set<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
     strip_header.buffers[make_pair(prefix, *iter)] = bufferlist();
   }
@@ -403,9 +388,6 @@ void KeyValueStore::BufferTransaction::clear_buffer_keys(
 int KeyValueStore::BufferTransaction::clear_buffer(
      StripObjectMap::StripObjectHeader &strip_header)
 {
-  if (store->backend->check_spos(strip_header, &spos))
-    return 0;
-
   strip_header.deleted = true;
 
   return store->backend->clear(strip_header.header, t);
@@ -415,15 +397,12 @@ void KeyValueStore::BufferTransaction::clone_buffer(
     StripObjectMap::StripObjectHeader &old_header,
     const coll_t &cid, const ghobject_t &oid)
 {
-  if (store->backend->check_spos(old_header, &spos))
-    return ;
-
   // Remove target ahead to avoid dead lock
   strip_headers.erase(make_pair(cid, oid));
 
   StripObjectMap::StripObjectHeader new_origin_header, new_target_header;
 
-  store->backend->clone_wrap(old_header, cid, oid, t, spos,
+  store->backend->clone_wrap(old_header, cid, oid, t,
                              &new_origin_header, &new_target_header);
 
   // FIXME: Lacking of lock for origin header(now become parent), it will
@@ -437,12 +416,12 @@ void KeyValueStore::BufferTransaction::rename_buffer(
     StripObjectMap::StripObjectHeader &old_header,
     const coll_t &cid, const ghobject_t &oid)
 {
-  if (store->backend->check_spos(old_header, &spos))
+  if (store->backend->check_spos(old_header, spos))
     return ;
 
   // FIXME: Lacking of lock for origin header, it will cause other operation
   // can get the origin header while submitting transactions
-  store->backend->rename_wrap(cid, oid, t, spos, &old_header);
+  store->backend->rename_wrap(cid, oid, t, &old_header);
 
   strip_headers.erase(make_pair(old_header.cid, old_header.oid));
   strip_headers[make_pair(cid, oid)] = old_header;
@@ -456,13 +435,13 @@ int KeyValueStore::BufferTransaction::submit_transaction()
        header_iter != strip_headers.end(); ++header_iter) {
     StripObjectMap::StripObjectHeader header = header_iter->second;
 
-    if (store->backend->check_spos(header, &spos))
+    if (store->backend->check_spos(header, spos))
       continue;
 
     if (header.deleted)
       continue;
 
-    r = store->backend->save_strip_header(header, t);
+    r = store->backend->save_strip_header(header, spos, t);
     if (r < 0) {
       dout(10) << __func__ << " save strip header failed " << dendl;
       goto out;

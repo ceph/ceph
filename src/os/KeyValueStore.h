@@ -97,7 +97,7 @@ class StripObjectMap: public GenericObjectMap {
   };
 
   bool check_spos(const StripObjectHeader &header,
-                  const SequencerPosition *spos);
+                  const SequencerPosition &spos);
   void sync_wrap(StripObjectHeader &strip_header, KeyValueDB::Transaction t,
                  const SequencerPosition &spos);
 
@@ -105,19 +105,19 @@ class StripObjectMap: public GenericObjectMap {
                              vector<StripExtent> &extents);
   int lookup_strip_header(const coll_t & cid, const ghobject_t &oid,
                           StripObjectHeader &header);
-  int save_strip_header(StripObjectHeader &header, KeyValueDB::Transaction t);
+  int save_strip_header(StripObjectHeader &header,
+                        const SequencerPosition &spos,
+                        KeyValueDB::Transaction t);
   int create_strip_header(const coll_t &cid, const ghobject_t &oid,
                           StripObjectHeader &strip_header,
                           KeyValueDB::Transaction t);
   void clone_wrap(StripObjectHeader &old_header,
                   const coll_t &cid, const ghobject_t &oid,
                   KeyValueDB::Transaction t,
-                  const SequencerPosition &spos,
                   StripObjectHeader *origin_header,
                   StripObjectHeader *target_header);
   void rename_wrap(const coll_t &cid, const ghobject_t &oid,
                    KeyValueDB::Transaction t,
-                   const SequencerPosition &spos,
                    StripObjectHeader *header);
   // Already hold header to avoid lock header seq again
   int get_with_header(
