@@ -206,9 +206,6 @@ static RWLock uinfo_lock("uinfo_lock");
 int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucket, RGWUserInfo& info,
                                  RGWObjVersionTracker *objv_tracker, time_t *pmtime)
 {
-  bufferlist bl;
-  RGWUID uid;
-
   uinfo_lock.get_read();
   map<string, user_info_entry>::iterator uiter = uinfo_cache.find(key);
   if (uiter != uinfo_cache.end()) {
@@ -222,6 +219,9 @@ int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucke
     return 0;
   }
   uinfo_lock.unlock();
+
+  bufferlist bl;
+  RGWUID uid;
 
   user_info_entry e;
 
