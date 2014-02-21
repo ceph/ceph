@@ -4154,30 +4154,34 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
 	     << " seq " << dn->lease_seq
 	     << dendl;
 
-    // is dn lease valid?
-    utime_t now = ceph_clock_now(cct);
-    if (dn->lease_mds >= 0 &&
-	dn->lease_ttl > now &&
-	mds_sessions.count(dn->lease_mds)) {
-      MetaSession *s = mds_sessions[dn->lease_mds];
-      if (s->cap_ttl > now &&
-	  s->cap_gen == dn->lease_gen) {
+    if (!dn->inode || dn->inode->is_any_caps()) {
+      // is dn lease valid?
+      utime_t now = ceph_clock_now(cct);
+      if (dn->lease_mds >= 0 &&
+	  dn->lease_ttl > now &&
+	  mds_sessions.count(dn->lease_mds)) {
+	MetaSession *s = mds_sessions[dn->lease_mds];
+	if (s->cap_ttl > now &&
+	    s->cap_gen == dn->lease_gen) {
+	  *target = dn->inode;
+	  // touch this mds's dir cap too, even though we don't _explicitly_ use it here, to
+	  // make trim_caps() behave.
+	  dir->try_touch_cap(dn->lease_mds);
+	  touch_dn(dn);
+	  goto done;
+	}
+	ldout(cct, 20) << " bad lease, cap_ttl " << s->cap_ttl << ", cap_gen " << s->cap_gen
+		       << " vs lease_gen " << dn->lease_gen << dendl;
+      }
+      // dir lease?
+      if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED) &&
+	  dn->cap_shared_gen == dir->shared_gen) {
 	*target = dn->inode;
-	// touch this mds's dir cap too, even though we don't _explicitly_ use it here, to
-	// make trim_caps() behave.
-	dir->try_touch_cap(dn->lease_mds);
 	touch_dn(dn);
 	goto done;
       }
-      ldout(cct, 20) << " bad lease, cap_ttl " << s->cap_ttl << ", cap_gen " << s->cap_gen
-	       << " vs lease_gen " << dn->lease_gen << dendl;
-    }
-    // dir lease?
-    if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED) &&
-	dn->cap_shared_gen == dir->shared_gen) {
-      *target = dn->inode;
-      touch_dn(dn);
-      goto done;
+    } else {
+      ldout(cct, 20) << " no cap on " << dn->inode->vino() << dendl;
     }
   } else {
     // can we conclude ENOENT locally?
