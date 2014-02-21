@@ -47,6 +47,32 @@ TEST_F(LibRadosListPP, ListObjectsPP) {
   ASSERT_TRUE(foundit);
 }
 
+TEST_F(LibRadosListPP, ListObjectsTwicePP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  ObjectIterator iter(ioctx.objects_begin());
+  bool foundit = false;
+  while (iter != ioctx.objects_end()) {
+    foundit = true;
+    ASSERT_EQ((*iter).first, "foo");
+    ++iter;
+  }
+  ASSERT_TRUE(foundit);
+  ++iter;
+  ASSERT_TRUE(iter == ioctx.objects_end());
+  foundit = false;
+  iter.seek(0);
+  while (iter != ioctx.objects_end()) {
+    foundit = true;
+    ASSERT_EQ((*iter).first, "foo");
+    ++iter;
+  }
+  ASSERT_TRUE(foundit);
+}
+
 static void check_list(std::set<std::string>& myset, rados_list_ctx_t& ctx)
 {
   const char *entry;
