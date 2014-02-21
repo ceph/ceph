@@ -656,6 +656,21 @@ AC_EGREP_CPP([yes_have_f_setpipe_sz], [
   AC_MSG_NOTICE([F_SETPIPE_SZ not found, zero-copy may be less efficent])
 ])
 
+# XFS_XFLAG_EXTSIZE in xfs/xfs.h on Linux
+AS_IF([test "x$linux" = "xyes"], [
+  AC_CHECK_HEADER([xfs/xfs.h], [], AC_MSG_ERROR([xfs/xfs.h not found]))
+  AC_MSG_CHECKING([for XFS_XFLAG_EXTSIZE in xfs/xfs.h])
+  AC_EGREP_CPP([yes_have_xfs_xflag_extsize], [
+     #include <xfs/xfs.h>
+     #ifdef XFS_XFLAG_EXTSIZE
+     yes_have_xfs_xflag_extsize
+     #endif
+  ], AC_MSG_RESULT([yes]), [
+     AC_MSG_RESULT([no])
+     AC_MSG_ERROR([XFS_XFLAG_EXTSIZE not found])
+  ])
+])
+
 AC_CHECK_FUNCS([posix_fallocate])
 AC_CHECK_HEADERS([sys/prctl.h])
 AC_CHECK_FUNCS([prctl])
