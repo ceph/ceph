@@ -2924,7 +2924,7 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
 
   if (flags & CEPH_CAP_FLAG_AUTH) {
     if (in->auth_cap != cap &&
-        (!in->auth_cap || in->auth_cap->mseq < mseq)) {
+        (!in->auth_cap || ceph_seq_cmp(in->auth_cap->mseq, mseq) < 0)) {
       if (in->auth_cap && in->flushing_cap_item.is_on_list()) {
 	ldout(cct, 10) << "add_update_cap changing auth cap: removing myself from flush_caps list" << dendl;
 	in->flushing_cap_item.remove_myself();
@@ -3538,7 +3538,7 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
        ++p) {
     if (p->first == mds)
       cap = p->second;
-    if (p->second->mseq > m->get_mseq()) {
+    if (ceph_seq_cmp(p->second->mseq, m->get_mseq()) > 0) {
       found_higher_mseq = true;
       ldout(cct, 5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq() 
 	      << " EXPORT from mds." << mds
