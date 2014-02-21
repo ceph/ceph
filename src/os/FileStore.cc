@@ -866,30 +866,34 @@ int FileStore::_detect_fs()
   blk_size = st.f_bsize;
 
   m_fs_type = FS_TYPE_OTHER;
-#if defined(__linux__)
   if (st.f_type == BTRFS_SUPER_MAGIC) {
+#if defined(__linux__)
     dout(0) << "mount detected btrfs" << dendl;
     backend = new BtrfsFileStoreBackend(this);
+    m_fs_type = FS_TYPE_BTRFS;
 
     wbthrottle.set_fs(WBThrottle::BTRFS);
-    m_fs_type = FS_TYPE_BTRFS;
+#endif
   } else if (st.f_type == XFS_SUPER_MAGIC) {
-    dout(1) << "mount detected xfs" << dendl;
+#if defined(__linux__)
+    dout(0) << "mount detected xfs" << dendl;
     m_fs_type = FS_TYPE_XFS;
+
+    // wbthrottle is constructed with fs(WBThrottle::XFS)
     if (m_filestore_replica_fadvise) {
       dout(1) << " disabling 'filestore replica fadvise' due to known issues with fadvise(DONTNEED) on xfs" << dendl;
       g_conf->set_val("filestore_replica_fadvise", "false");
       g_conf->apply_changes(NULL);
       assert(m_filestore_replica_fadvise == false);
     }
-  }
 #endif
+  } else if (st.f_type == ZFS_SUPER_MAGIC) {
 #ifdef HAVE_LIBZFS
-  if (st.f_type == ZFS_SUPER_MAGIC) {
+    dout(0) << "mount detected zfs (libzfs)" << dendl;
     backend = new ZFSFileStoreBackend(this);
     m_fs_type = FS_TYPE_ZFS;
-  }
 #endif
+  }
 
   set_xattr_limits_via_conf();
 
