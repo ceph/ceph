@@ -5447,9 +5447,32 @@ int RGWRados::convert_old_bucket_info(void *ctx, string& bucket_name)
   return 0;
 }
 
+struct bucket_info_entry {
+  RGWBucketInfo info;
+  time_t mtime;
+  map<string, bufferlist> attrs;
+};
+
+static map<string, bucket_info_entry> binfo_cache;
+static RWLock binfo_lock("binfo_lock");
+
 int RGWRados::get_bucket_info(void *ctx, const string& bucket_name, RGWBucketInfo& info,
                               time_t *pmtime, map<string, bufferlist> *pattrs)
 {
+  binfo_lock.get_read();
+  map<string, bucket_info_entry>::iterator uiter = binfo_cache.find(bucket_name);
+  if (uiter != binfo_cache.end()) {
+    bucket_info_entry& e = uiter->second;
+    info = e.info;
+    if (pattrs)
+      *pattrs = e.attrs;
+    if (pmtime)
+      *pmtime = e.mtime;
+    binfo_lock.unlock();
+    return 0;
+  }
+  binfo_lock.unlock();
+
   bufferlist bl;
 
   RGWBucketEntryPoint entry_point;
@@ -5486,12 +5509,25 @@ int RGWRados::get_bucket_info(void *ctx, const string& bucket_name, RGWBucketInf
   string oid;
   get_bucket_meta_oid(entry_point.bucket, oid);
 
-  ret = get_bucket_instance_from_oid(ctx, oid, info, pmtime, pattrs);
-  info.ep_objv = ot.read_version;
+  bucket_info_entry e;
+
+  ret = get_bucket_instance_from_oid(ctx, oid, e.info, &e.mtime, &e.attrs);
+  e.info.ep_objv = ot.read_version;
+  info = e.info;
   if (ret < 0) {
     info.bucket.name = bucket_name;
     return ret;
   }
+
+  if (pmtime)
+    *pmtime = e.mtime;
+  if (pattrs)
+    *pattrs = e.attrs;
+
+  binfo_lock.get_write();
+  binfo_cache[bucket_name] = e;
+  binfo_lock.unlock();
+
   return 0;
 }
 
