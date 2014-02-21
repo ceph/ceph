@@ -382,18 +382,8 @@ sub test_user_quota_max_size{
     purge_data($usr);
 }
 
-# check if rgw service is already running
-sub check
-{
-    my $state = get_status();
-    if ($state) {
-        exit 1;
-    }
-   }
-
 #== Main starts here===
 ceph_os_info();
-check();
 quota_set_max_obj_per_user('0', '10Mb', 'usr1');
 quota_set_max_obj_per_user('1', '10Mb', 'usr2');
 quota_set_max_size_per_user(0, '10Mb', 'usr1');
