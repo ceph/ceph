@@ -224,9 +224,9 @@ class KeyValueStore : public ObjectStore,
     int lookup_cached_header(const coll_t &cid, const ghobject_t &oid,
                              StripObjectMap::StripObjectHeader **strip_header,
                              bool create_if_missing);
-    int get_buffer_key(StripObjectMap::StripObjectHeader &strip_header,
-                       const string &prefix, const string &key,
-                       bufferlist &out);
+    int get_buffer_keys(StripObjectMap::StripObjectHeader &strip_header,
+                        const string &prefix, const set<string> &keys,
+                        map<string, bufferlist> *out);
     void set_buffer_keys(StripObjectMap::StripObjectHeader &strip_header,
                          const string &prefix, map<string, bufferlist> &bl);
     int remove_buffer_keys(StripObjectMap::StripObjectHeader &strip_header,
