@@ -1150,6 +1150,7 @@ void RGWCreateBucket::execute()
   RGWAccessControlPolicy old_policy(s->cct);
   map<string, bufferlist> attrs;
   bufferlist aclbl;
+  bufferlist corsbl;
   bool existed;
   int r;
   rgw_obj obj(store->zone.domain_root, s->bucket_name_str);
@@ -1223,6 +1224,10 @@ void RGWCreateBucket::execute()
 
   attrs[RGW_ATTR_ACL] = aclbl;
 
+  if (has_cors) {
+    cors_config.encode(corsbl);
+    attrs[RGW_ATTR_CORS] = corsbl;
+  }
   s->bucket.name = s->bucket_name_str;
   ret = store->create_bucket(s->user, s->bucket, region_name, placement_rule, attrs, info, pobjv,
                              &ep_objv, creation_time, pmaster_bucket, true);
