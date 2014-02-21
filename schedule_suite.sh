@@ -153,7 +153,7 @@ overrides:
         debug paxos: 20
       osd:
         debug ms: 1
-        debug osd: 5
+        debug osd: 20
     log-whitelist:
     - slow request
   ceph-deploy:
