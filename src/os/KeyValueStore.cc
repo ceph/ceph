@@ -502,9 +502,9 @@ KeyValueStore::KeyValueStore(const std::string &base,
   op_throttle_lock("KeyValueStore::op_throttle_lock"),
   op_finisher(g_ceph_context),
   op_tp(g_ceph_context, "KeyValueStore::op_tp",
-        g_conf->filestore_op_threads, "keyvaluestore_op_threads"),
-  op_wq(this, g_conf->filestore_op_thread_timeout,
-        g_conf->filestore_op_thread_suicide_timeout, &op_tp),
+        g_conf->keyvaluestore_op_threads, "keyvaluestore_op_threads"),
+  op_wq(this, g_conf->keyvaluestore_op_thread_timeout,
+        g_conf->keyvaluestore_op_thread_suicide_timeout, &op_tp),
   logger(NULL),
   m_keyvaluestore_queue_max_ops(g_conf->keyvaluestore_queue_max_ops),
   m_keyvaluestore_queue_max_bytes(g_conf->keyvaluestore_queue_max_bytes),
@@ -2493,9 +2493,8 @@ int KeyValueStore::_collection_rename(const coll_t &cid, const coll_t &ncid,
     return -EEXIST;
   }
 
-  int r = t.lookup_cached_header(get_coll_for_coll(),
-                                 make_ghobject_for_coll(cid),
-                                 &header, false);
+  r = t.lookup_cached_header(get_coll_for_coll(), make_ghobject_for_coll(cid),
+                             &header, false);
   if (r < 0) {
     dout(2) << __func__ << ": " << cid << " DNE" << dendl;
     return 0;
