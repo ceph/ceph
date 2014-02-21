@@ -421,6 +421,15 @@ public:
     t->zero(get_coll(hoid), hoid, off, len);
   }
 
+  void set_alloc_hint(
+    const hobject_t &hoid,
+    uint64_t expected_object_size,
+    uint64_t expected_write_size
+    ) {
+    t->set_alloc_hint(get_coll(hoid), hoid, expected_object_size,
+                      expected_write_size);
+  }
+
   void append(
     PGTransaction *_to_append
     ) {
