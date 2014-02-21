@@ -1671,27 +1671,19 @@ int KeyValueStore::_generic_read(StripObjectMap::StripObjectHeader &header,
     return r;
   }
 
-  uint64_t readed = 0;
-
   for (vector<StripObjectMap::StripExtent>::iterator iter = extents.begin();
        iter != extents.end(); ++iter) {
     string key = strip_object_key(iter->no);
-    if (readed + header.strip_size > header.max_size) {
-      if (header.bits[iter->no]) {
-        out[key].copy(0, iter->len, bl);
-      } else {
-        bl.append_zero(iter->len);
-      }
-
-      break;
-    }
 
     if (header.bits[iter->no]) {
-      bl.append(out[key]);
+      if (iter->len == header.strip_size) {
+        bl.claim_append(out[key]);
+      } else {
+        out[key].copy(iter->offset, iter->len, bl);
+      }
     } else {
-      bl.append_zero(header.strip_size);
+      bl.append_zero(iter->len);
     }
-    readed += header.strip_size;
   }
 
   dout(10) << __func__ << " " << header.cid << "/" << header.oid << " "
@@ -1801,12 +1793,12 @@ int KeyValueStore::_truncate(coll_t cid, const ghobject_t& oid, uint64_t size,
 
   if (header->max_size > size) {
     vector<StripObjectMap::StripExtent> extents;
-    StripObjectMap::file_to_extents(size, header->max_size,
+    StripObjectMap::file_to_extents(size, header->max_size-size,
                                     header->strip_size, extents);
     assert(extents.size());
 
     vector<StripObjectMap::StripExtent>::iterator iter = extents.begin();
-    if (iter->offset != 0) {
+    if (header->bits[iter->no] && iter->offset != 0) {
       bufferlist value;
       bufferlist old;
       map<string, bufferlist> values;
@@ -1821,10 +1813,10 @@ int KeyValueStore::_truncate(coll_t cid, const ghobject_t& oid, uint64_t size,
       old.copy(0, iter->offset, value);
       value.append_zero(header->strip_size-iter->offset);
       assert(value.length() == header->strip_size);
-      ++iter;
 
-      values[strip_object_key(iter->no)] = value;
+      values[strip_object_key(iter->no)].swap(value);
       t.set_buffer_keys(*header, OBJECT_STRIP_PREFIX, values);
+      ++iter;
     }
 
     set<string> keys;
