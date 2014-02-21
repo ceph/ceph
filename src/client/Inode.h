@@ -140,9 +140,6 @@ class Inode {
   __u16 flushing_cap_tid[CEPH_CAP_BITS];
   int shared_gen, cache_gen;
   int snap_caps, snap_cap_refs;
-  unsigned exporting_issued;
-  int exporting_mds;
-  ceph_seq_t exporting_mseq;
   utime_t hold_caps_until;
   xlist<Inode*>::item cap_item, flushing_cap_item;
   tid_t last_flush_tid;
@@ -216,7 +213,6 @@ class Inode {
       dir_hashed(false), dir_replicated(false), auth_cap(NULL),
       dirty_caps(0), flushing_caps(0), flushing_cap_seq(0), shared_gen(0), cache_gen(0),
       snap_caps(0), snap_cap_refs(0),
-      exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
       cap_item(this), flushing_cap_item(this), last_flush_tid(0),
       snaprealm(0), snaprealm_item(this), snapdir_parent(0),
       oset((void *)this, newlayout->fl_pg_pool, ino),
