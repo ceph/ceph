@@ -555,6 +555,11 @@ public:
   int _collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,
 			      coll_t c, const ghobject_t& o,
 			      const SequencerPosition& spos);
+
+  int _set_alloc_hint(coll_t cid, const ghobject_t& oid,
+                      uint64_t expected_object_size,
+                      uint64_t expected_write_size);
+
   void dump_start(const std::string& file);
   void dump_stop();
   void dump_transactions(list<ObjectStore::Transaction*>& ls, uint64_t seq, OpSequencer *osr);
@@ -684,6 +689,7 @@ public:
   virtual bool has_fiemap() = 0;
   virtual int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap) = 0;
   virtual int clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) = 0;
+  virtual int set_alloc_hint(int fd, uint64_t hint) = 0;
 
   // hooks for (sloppy) crc tracking
   virtual int _crc_update_write(int fd, loff_t off, size_t len, const bufferlist& bl) = 0;

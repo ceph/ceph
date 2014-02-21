@@ -949,6 +949,10 @@ void MemStore::_do_transaction(Transaction& t)
       }
       break;
 
+    case Transaction::OP_SETALLOCHINT:
+      // nop
+      break;
+
     default:
       derr << "bad op " << op << dendl;
       assert(0);
