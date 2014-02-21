@@ -48,6 +48,7 @@
 #include "FileStore.h"
 #include "GenericFileStoreBackend.h"
 #include "BtrfsFileStoreBackend.h"
+#include "XfsFileStoreBackend.h"
 #include "ZFSFileStoreBackend.h"
 #include "common/BackTrace.h"
 #include "include/types.h"
@@ -679,6 +680,10 @@ int FileStore::mkfs()
 #if defined(__linux__)
     backend = new BtrfsFileStoreBackend(this);
 #endif
+  } else if (basefs.f_type == XFS_SUPER_MAGIC) {
+#if defined(__linux__)
+    backend = new XfsFileStoreBackend(this);
+#endif
   } else if (basefs.f_type == ZFS_SUPER_MAGIC) {
 #ifdef HAVE_LIBZFS
     backend = new ZFSFileStoreBackend(this);
@@ -876,7 +881,8 @@ int FileStore::_detect_fs()
 #endif
   } else if (st.f_type == XFS_SUPER_MAGIC) {
 #if defined(__linux__)
-    dout(0) << "mount detected xfs" << dendl;
+    dout(0) << "mount detected xfs (libxfs)" << dendl;
+    backend = new XfsFileStoreBackend(this);
     m_fs_type = FS_TYPE_XFS;
 
     // wbthrottle is constructed with fs(WBThrottle::XFS)

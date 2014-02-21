@@ -46,6 +46,7 @@ BuildRequires:  libxml2-devel
 BuildRequires:  libuuid-devel
 BuildRequires:  libblkid-devel >= 2.17
 BuildRequires:  leveldb-devel > 1.2
+BuildRequires:  xfsprogs-devel
 BuildRequires:  yasm
 %if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
 BuildRequires:  snappy-devel
