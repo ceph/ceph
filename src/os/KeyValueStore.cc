@@ -2518,7 +2518,57 @@ int KeyValueStore::_collection_rename(const coll_t &cid, const coll_t &ncid,
 {
   dout(10) << __func__ << " origin cid " << cid << " new cid " << ncid
            << dendl;
-  return -EOPNOTSUPP;
+
+  StripObjectMap::StripObjectHeader *header;
+
+  r = t.lookup_cached_header(get_coll_for_coll(),
+                             make_ghobject_for_coll(ncid),
+                             &header, false);
+  if (r == 0) {
+    dout(2) << __func__ << ": " << ncid << " DNE" << dendl;
+    return -EEXIST;
+  }
+
+  int r = t.lookup_cached_header(get_coll_for_coll(),
+                                 make_ghobject_for_coll(cid),
+                                 &header, false);
+  if (r < 0) {
+    dout(2) << __func__ << ": " << cid << " DNE" << dendl;
+    return 0;
+  }
+
+  vector<ghobject_t> objects;
+  ghobject_t next, current;
+  int move_size = 0;
+  while (1) {
+    collection_list_partial(cid, current, get_ideal_list_min(),
+                            get_ideal_list_max(), 0, &objects, &next);
+
+    dout(20) << __func__ << cid << "objects size: " << objects.size()
+             << dendl;
+
+    if (objects.empty())
+      break;
+
+    for (vector<ghobject_t>::iterator i = objects.begin();
+        i != objects.end(); ++i) {
+      if (i->match(bits, rem)) {
+        if (_collection_move_rename(cid, *i, ncid, *i, t) < 0) {
+          return -1;
+        }
+        move_size++;
+      }
+    }
+
+    objects.clear();
+    current = next;
+  }
+
+  t.rename_buffer(*header, get_coll_for_coll(), make_ghobject_for_coll(ncid));
+
+  dout(10) << __func__ << " origin cid " << cid << " new cid " << ncid
+           << dendl;
+  return 0;
 }
 
 int KeyValueStore::list_collections(vector<coll_t>& ls)
