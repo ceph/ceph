@@ -2486,9 +2486,9 @@ int KeyValueStore::_collection_rename(const coll_t &cid, const coll_t &ncid,
 
   StripObjectMap::StripObjectHeader *header;
 
-  r = t.lookup_cached_header(get_coll_for_coll(),
-                             make_ghobject_for_coll(ncid),
-                             &header, false);
+  int r = t.lookup_cached_header(get_coll_for_coll(),
+                                 make_ghobject_for_coll(ncid),
+                                 &header, false);
   if (r == 0) {
     dout(2) << __func__ << ": " << ncid << " DNE" << dendl;
     return -EEXIST;
@@ -2965,19 +2965,8 @@ int KeyValueStore::_split_collection(coll_t cid, uint32_t bits, uint32_t rem,
 const char** KeyValueStore::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {
-    "filestore_min_sync_interval",
-    "filestore_max_sync_interval",
-    "filestore_queue_max_ops",
-    "filestore_queue_max_bytes",
-    "filestore_queue_committing_max_ops",
-    "filestore_queue_committing_max_bytes",
-    "filestore_commit_timeout",
-    "filestore_dump_file",
-    "filestore_kill_at",
-    "filestore_fail_eio",
-    "filestore_replica_fadvise",
-    "filestore_sloppy_crc",
-    "filestore_sloppy_crc_block_size",
+    "keyvaluestore_queue_max_ops",
+    "keyvaluestore_queue_max_bytes",
     NULL
   };
   return KEYS;
@@ -2986,6 +2975,11 @@ const char** KeyValueStore::get_tracked_conf_keys() const
 void KeyValueStore::handle_conf_change(const struct md_config_t *conf,
                                        const std::set <std::string> &changed)
 {
+  if (changed.count("keyvaluestore_queue_max_ops") ||
+      changed.count("keyvaluestore_queue_max_bytes")) {
+    m_keyvaluestore_queue_max_ops = conf->keyvaluestore_queue_max_ops;
+    m_keyvaluestore_queue_max_bytes = conf->keyvaluestore_queue_max_bytes;
+  }
 }
 
 void KeyValueStore::dump_transactions(list<ObjectStore::Transaction*>& ls, uint64_t seq, OpSequencer *osr)
