@@ -2961,7 +2961,7 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
     signal_cond_list(in->waitfor_caps);
 }
 
-void Client::remove_cap(Cap *cap)
+void Client::remove_cap(Cap *cap, bool queue_release)
 {
   Inode *in = cap->inode;
   MetaSession *session = cap->session;
@@ -2969,14 +2969,16 @@ void Client::remove_cap(Cap *cap)
 
   ldout(cct, 10) << "remove_cap mds." << mds << " on " << *in << dendl;
   
-  if (!session->release)
-    session->release = new MClientCapRelease;
-  ceph_mds_cap_item i;
-  i.ino = in->ino;
-  i.cap_id = cap->cap_id;
-  i.seq = cap->issue_seq;
-  i.migrate_seq = cap->mseq;
-  session->release->caps.push_back(i);
+  if (queue_release) {
+    if (!session->release)
+      session->release = new MClientCapRelease;
+    ceph_mds_cap_item i;
+    i.ino = in->ino;
+    i.cap_id = cap->cap_id;
+    i.seq = cap->issue_seq;
+    i.migrate_seq = cap->mseq;
+    session->release->caps.push_back(i);
+  }
 
   if (in->auth_cap == cap) {
     if (in->flushing_cap_item.is_on_list()) {
@@ -3006,14 +3008,14 @@ void Client::remove_cap(Cap *cap)
 void Client::remove_all_caps(Inode *in)
 {
   while (!in->caps.empty())
-    remove_cap(in->caps.begin()->second);
+    remove_cap(in->caps.begin()->second, true);
 }
 
 void Client::remove_session_caps(MetaSession *mds) 
 {
   while (mds->caps.size()) {
     Cap *cap = *mds->caps.begin();
-    remove_cap(cap);
+    remove_cap(cap, false);
   }
 }
 
@@ -3036,7 +3038,7 @@ void Client::trim_caps(MetaSession *s, int max)
 	continue;
       }
       ldout(cct, 20) << " removing unused, unneeded non-auth cap on " << *in << dendl;
-      remove_cap(cap);
+      remove_cap(cap, true);
       trimmed++;
     } else {
       ldout(cct, 20) << " trying to trim dentries for " << *in << dendl;
@@ -3557,7 +3559,7 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
 	      << " EXPORT from mds." << mds
 	      << ", just removing old cap" << dendl;
 
-    remove_cap(cap);
+    remove_cap(cap, false);
   }
   // else we already released it
 
