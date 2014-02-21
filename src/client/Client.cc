@@ -877,8 +877,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
       // remove any skipped names
       while (pd != dir->dentry_map.end() && pd->first < dname) {
 	if (pd->first < dname &&
-	    diri->dirfragtree[ceph_str_hash_linux(pd->first.c_str(),
-						  pd->first.length())] == fg) {  // do not remove items in earlier frags
+	    fg.contains(diri->hash_dentry_name(pd->first))) {  // do not remove items in earlier frags
 	  ldout(cct, 15) << "insert_trace  unlink '" << pd->first << "'" << dendl;
 	  Dentry *dn = pd->second;
 	  ++pd;
@@ -927,8 +926,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
     // remove trailing names
     if (end) {
       while (pd != dir->dentry_map.end()) {
-	if (diri->dirfragtree[ceph_str_hash_linux(pd->first.c_str(),
-						  pd->first.length())] == fg) {
+	if (fg.contains(diri->hash_dentry_name(pd->first))) {
 	  ldout(cct, 15) << "insert_trace  unlink '" << pd->first << "'" << dendl;
 	  Dentry *dn = pd->second;
 	  ++pd;
@@ -1081,9 +1079,7 @@ int Client::choose_target_mds(MetaRequest *req)
   if (in) {
     ldout(cct, 20) << "choose_target_mds starting with req->inode " << *in << dendl;
     if (req->path.depth()) {
-      hash = ceph_str_hash(in->dir_layout.dl_dir_hash,
-			   req->path[0].data(),
-			   req->path[0].length());
+      hash = in->hash_dentry_name(req->path[0]);
       ldout(cct, 20) << "choose_target_mds inode dir hash is " << (int)in->dir_layout.dl_dir_hash
 	       << " on " << req->path[0]
 	       << " => " << hash << dendl;
@@ -1095,9 +1091,7 @@ int Client::choose_target_mds(MetaRequest *req)
       ldout(cct, 20) << "choose_target_mds starting with req->dentry inode " << *in << dendl;
     } else {
       in = de->dir->parent_inode;
-      hash = ceph_str_hash(in->dir_layout.dl_dir_hash,
-			   de->name.data(),
-			   de->name.length());
+      hash = in->hash_dentry_name(de->name);
       ldout(cct, 20) << "choose_target_mds dentry dir hash is " << (int)in->dir_layout.dl_dir_hash
 	       << " on " << de->name
 	       << " => " << hash << dendl;

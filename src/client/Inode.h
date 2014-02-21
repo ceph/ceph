@@ -126,6 +126,13 @@ class Inode {
     return false;
   }
 
+  __u32 hash_dentry_name(const string &dn) {
+    int which = dir_layout.dl_dir_hash;
+    if (!which)
+      which = CEPH_STR_HASH_LINUX;
+    return ceph_str_hash(which, dn.data(), dn.length());
+  }
+
   unsigned flags;
 
   // about the dir (if this is one!)
