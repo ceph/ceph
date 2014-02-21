@@ -1445,6 +1445,10 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
       }
       break;
 
+    case Transaction::OP_SETALLOCHINT:
+      // TODO: can kvstore make use of the hint?
+      break;
+
     default:
       derr << "bad op " << op << dendl;
       assert(0);
