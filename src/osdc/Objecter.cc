@@ -1376,9 +1376,9 @@ int Objecter::op_cancel(tid_t tid, int r)
 
 bool Objecter::is_pg_changed(
   int oldprimary,
-  vector<int>& oldacting,
+  const vector<int>& oldacting,
   int newprimary,
-  vector<int>& newacting,
+  const vector<int>& newacting,
   bool any_change)
 {
   if (oldacting.empty() && newacting.empty())
