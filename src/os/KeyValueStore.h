@@ -220,7 +220,6 @@ class KeyValueStore : public ObjectStore,
     SequencerPosition spos;
     KeyValueDB::Transaction t;
 
-    int check_coll(const coll_t &cid);
     int lookup_cached_header(const coll_t &cid, const ghobject_t &oid,
                              StripObjectMap::StripObjectHeader **strip_header,
                              bool create_if_missing);
@@ -428,10 +427,6 @@ class KeyValueStore : public ObjectStore,
 
   // ------------------
   // objects
-
-  // Read operation need call "check_coll", checking "coll_t" in write
-  // operation is done by lookup_cached_header
-  int _check_coll(const coll_t &cid);
 
   int _generic_read(StripObjectMap::StripObjectHeader &header,
                     uint64_t offset, size_t len, bufferlist& bl,
