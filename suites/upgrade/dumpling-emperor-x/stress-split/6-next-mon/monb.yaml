@@ -1,5 +1,0 @@
-tasks:
-- ceph.restart:
-    daemons: [mon.b]
-    wait-for-healthy: false
-    wait-for-osds-up: true

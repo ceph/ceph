@@ -1,8 +1,0 @@
-tasks:
-- install.upgrade:
-    mon.c:
-- ceph.restart:
-    daemons: [mon.c]
-    wait-for-healthy: false
-    wait-for-osds-up: true
-- ceph.wait_for_mon_quorum: [a, b, c]
