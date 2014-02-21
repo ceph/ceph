@@ -560,7 +560,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
     goto send_data;
 
   if (range_str)
-    dump_range(s, ofs, start, s->obj_size);
+    dump_range(s, ofs, end, s->obj_size);
 
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
