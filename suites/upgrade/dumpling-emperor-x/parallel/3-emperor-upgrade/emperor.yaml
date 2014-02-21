@@ -1,0 +1,9 @@
+tasks:
+- install.upgrade:
+   branch: emperor
+- ceph:
+   fs: xfs
+- ceph.restart:
+- parallel:
+   - workload
+   - upgrade-sequence
