@@ -2926,8 +2926,9 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
     if (in->auth_cap != cap &&
         (!in->auth_cap || ceph_seq_cmp(in->auth_cap->mseq, mseq) < 0)) {
       if (in->auth_cap && in->flushing_cap_item.is_on_list()) {
-	ldout(cct, 10) << "add_update_cap changing auth cap: removing myself from flush_caps list" << dendl;
-	in->flushing_cap_item.remove_myself();
+	ldout(cct, 10) << "add_update_cap changing auth cap: "
+		       << "add myself to new auth MDS' flushing caps list" << dendl;
+	mds_session->flushing_caps.push_back(&in->flushing_cap_item);
       }
       in->auth_cap = cap;
     }
