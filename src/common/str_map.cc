@@ -52,7 +52,7 @@ int get_str_map(const string &str,
 
     list<string> pairs;
     get_str_list(str, "\t\n ", pairs);
-    for (list<string>::iterator i = pairs.begin(); i != pairs.end(); i++) {
+    for (list<string>::iterator i = pairs.begin(); i != pairs.end(); ++i) {
       size_t equal = i->find('=');
       if (equal == string::npos)
 	(*str_map)[*i] = string();
