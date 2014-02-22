@@ -360,7 +360,7 @@ public:
 	  break;
 	if (info.last_complete < log.complete_to->version)
 	  info.last_complete = log.complete_to->version;
-	log.complete_to++;
+	++log.complete_to;
       }
     }
 
@@ -372,14 +372,14 @@ public:
     log.complete_to = log.log.begin();
     while (log.complete_to->version <
 	   missing.missing[missing.rmissing.begin()->second].need)
-      log.complete_to++;
+      ++log.complete_to;
     assert(log.complete_to != log.log.end());
     if (log.complete_to == log.log.begin()) {
       info.last_complete = eversion_t();
     } else {
-      log.complete_to--;
+      ++log.complete_to;
       info.last_complete = log.complete_to->version;
-      log.complete_to++;
+      ++log.complete_to;
     }
     log.last_requested = 0;
   }

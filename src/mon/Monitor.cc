@@ -2021,7 +2021,7 @@ const MonCommand *Monitor::_get_moncommand(const string &cmd_prefix,
 
 bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
                                const map<string,cmd_vartype>& cmdmap,
-                               const map<string,string> param_str_map,
+                               const map<string,string>& param_str_map,
                                const MonCommand *this_cmd) {
 
   bool cmd_r = (this_cmd->req_perms.find('r') != string::npos);
