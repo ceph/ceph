@@ -962,7 +962,7 @@ int MonClient::start_mon_command(const vector<string>& cmd,
   return 0;
 }
 
-int MonClient::start_mon_command(string name,
+int MonClient::start_mon_command(const string &mon_name,
 				 const vector<string>& cmd,
 				 const bufferlist& inbl,
 				 bufferlist *outbl, string *outs,
@@ -970,7 +970,7 @@ int MonClient::start_mon_command(string name,
 {
   Mutex::Locker l(monc_lock);
   MonCommand *r = new MonCommand(++last_mon_command_tid);
-  r->target_name = name;
+  r->target_name = mon_name;
   r->cmd = cmd;
   r->inbl = inbl;
   r->poutbl = outbl;

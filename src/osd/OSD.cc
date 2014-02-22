@@ -6261,7 +6261,7 @@ bool OSD::compat_must_dispatch_immediately(PG *pg)
 {
   assert(pg->is_locked());
   set<pg_shard_t> tmpacting;
-  if (pg->actingbackfill.size() > 0) {
+  if (!pg->actingbackfill.empty()) {
     tmpacting = pg->actingbackfill;
   } else {
     for (unsigned i = 0; i < pg->acting.size(); ++i) {

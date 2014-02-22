@@ -995,7 +995,7 @@ bool md_config_t::expand_meta(std::string &origval,
 	*oss << "expansion stack: " << std::endl;
 	for (list<config_option *>::iterator j = stack.begin();
 	     j != stack.end();
-	     j++) {
+	     ++j) {
 	  *oss << (*j)->name << "=" << *(string *)(*j)->conf_ptr(this) << std::endl;
 	}
 	return false;
