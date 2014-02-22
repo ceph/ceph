@@ -30,54 +30,54 @@ TEST(pgmap, min_last_epoch_clean)
   inc.version = 1;
   inc.update_stat(0, 123, os);
   pg_map.apply_incremental(g_ceph_context, inc);
-  ASSERT_EQ(123, pg_map.calc_min_last_epoch_clean());
+  ASSERT_EQ(123u, pg_map.get_min_last_epoch_clean());
 
   inc = PGMap::Incremental();
   inc.version = 2;
   inc.update_stat(1, 222, os);
   pg_map.apply_incremental(g_ceph_context, inc);
-  ASSERT_EQ(123, pg_map.calc_min_last_epoch_clean());
+  ASSERT_EQ(123u, pg_map.get_min_last_epoch_clean());
 
   inc = PGMap::Incremental();
   inc.version = 3;
   inc.update_stat(0, 222, os);
   pg_map.apply_incremental(g_ceph_context, inc);
-  ASSERT_EQ(222, pg_map.calc_min_last_epoch_clean());
+  ASSERT_EQ(222u, pg_map.get_min_last_epoch_clean());
 
   inc = PGMap::Incremental();
   inc.version = 4;
   inc.update_stat(0, 333, os);
   inc.update_stat(1, 333, os);
   pg_map.apply_incremental(g_ceph_context, inc);
-  ASSERT_EQ(333, pg_map.calc_min_last_epoch_clean());
+  ASSERT_EQ(333u, pg_map.get_min_last_epoch_clean());
 
   ps.last_epoch_clean = 222;
   inc = PGMap::Incremental();
   inc.version = 5;
   inc.pg_stat_updates[pg_t(1,1)] = ps;
   pg_map.apply_incremental(g_ceph_context, inc);
-  ASSERT_EQ(222, pg_map.calc_min_last_epoch_clean());
+  ASSERT_EQ(222u, pg_map.get_min_last_epoch_clean());
 
   ps.last_epoch_clean = 223;
   inc = PGMap::Incremental();
   inc.version = 6;
   inc.pg_stat_updates[pg_t(1,1)] = ps;
   pg_map.apply_incremental(g_ceph_context, inc);
-  ASSERT_EQ(223, pg_map.calc_min_last_epoch_clean());
+  ASSERT_EQ(223u, pg_map.get_min_last_epoch_clean());
 
   ps.last_epoch_clean = 224;
   inc = PGMap::Incremental();
   inc.version = 7;
   inc.pg_stat_updates[pg_t(2,2)] = ps;
   pg_map.apply_incremental(g_ceph_context, inc);
-  ASSERT_EQ(223, pg_map.calc_min_last_epoch_clean());
+  ASSERT_EQ(223u, pg_map.get_min_last_epoch_clean());
 
   ps.last_epoch_clean = 225;
   inc = PGMap::Incremental();
   inc.version = 8;
   inc.pg_stat_updates[pg_t(1,1)] = ps;
   pg_map.apply_incremental(g_ceph_context, inc);
-  ASSERT_EQ(224, pg_map.calc_min_last_epoch_clean());
+  ASSERT_EQ(224u, pg_map.get_min_last_epoch_clean());
 
 }
 
