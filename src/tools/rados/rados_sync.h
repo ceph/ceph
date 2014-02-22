@@ -177,7 +177,7 @@ public:
 
   void get_xattrs(std::list < std::string > &xattrs_) const;
 
-  const Xattr* get_xattr(const std::string name) const;
+  const Xattr* get_xattr(const std::string &name) const;
 
   const char *get_rados_name() const;
 
