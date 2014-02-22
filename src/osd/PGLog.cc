@@ -782,7 +782,11 @@ bool PGLog::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
       if (i->is_delete()) continue;
       
       bufferlist bv;
-      int r = store->getattr(coll, i->soid, OI_ATTR, bv);
+      int r = store->getattr(
+	coll,
+	ghobject_t(i->soid, ghobject_t::NO_GEN, info.pgid.shard),
+	OI_ATTR,
+	bv);
       if (r >= 0) {
 	object_info_t oi(bv);
 	if (oi.version < i->version) {
@@ -803,7 +807,11 @@ bool PGLog::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
       if (did.count(i->second)) continue;
       did.insert(i->second);
       bufferlist bv;
-      int r = store->getattr(coll, i->second, OI_ATTR, bv);
+      int r = store->getattr(
+	coll, 
+	ghobject_t(i->second, ghobject_t::NO_GEN, info.pgid.shard),
+	OI_ATTR,
+	bv);
       if (r >= 0) {
 	object_info_t oi(bv);
 	/**

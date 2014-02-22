@@ -3632,7 +3632,7 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
     inline_to_set.insert(*p);
   }
 
-  if (spill_out != 1 && omap_set.size()) {
+  if (spill_out != 1 && !omap_set.empty()) {
     chain_fsetxattr(**fd, XATTR_SPILL_OUT_NAME, XATTR_SPILL_OUT,
 		    sizeof(XATTR_SPILL_OUT));
   }

@@ -540,7 +540,7 @@ bool PG::needs_recovery() const
     ret = true;
   }
 
-  assert(actingbackfill.size() > 0);
+  assert(!actingbackfill.empty());
   set<pg_shard_t>::const_iterator end = actingbackfill.end();
   set<pg_shard_t>::const_iterator a = actingbackfill.begin();
   assert(a != end);
@@ -1477,7 +1477,7 @@ void PG::activate(ObjectStore::Transaction& t,
     assert(ctx);
     // start up replicas
 
-    assert(actingbackfill.size() > 0);
+    assert(!actingbackfill.empty());
     for (set<pg_shard_t>::iterator i = actingbackfill.begin();
 	 i != actingbackfill.end();
 	 ++i) {
@@ -1771,7 +1771,7 @@ void PG::_activate_committed(epoch_t e)
     dout(10) << "_activate_committed " << e << " peer_activated now " << peer_activated 
 	     << " last_epoch_started " << info.history.last_epoch_started
 	     << " same_interval_since " << info.history.same_interval_since << dendl;
-    assert(actingbackfill.size() > 0);
+    assert(!actingbackfill.empty());
     if (peer_activated.size() == actingbackfill.size())
       all_activated_and_committed();
   } else {
@@ -1807,7 +1807,7 @@ void PG::all_activated_and_committed()
   dout(10) << "all_activated_and_committed" << dendl;
   assert(is_primary());
   assert(peer_activated.size() == actingbackfill.size());
-  assert(actingbackfill.size() > 0);
+  assert(!actingbackfill.empty());
 
   // info.last_epoch_started is set during activate()
   info.history.last_epoch_started = info.last_epoch_started;
@@ -2226,7 +2226,7 @@ void PG::_update_calc_stats()
       pg_log.get_missing().num_missing();
     degraded += pg_log.get_missing().num_missing();
 
-    assert(actingbackfill.size() > 0);
+    assert(!actingbackfill.empty());
     for (set<pg_shard_t>::iterator i = actingbackfill.begin();
 	 i != actingbackfill.end();
 	 ++i) {
@@ -2598,7 +2598,7 @@ void PG::trim_peers()
   calc_trim_to();
   dout(10) << "trim_peers " << pg_trim_to << dendl;
   if (pg_trim_to != eversion_t()) {
-    assert(actingbackfill.size() > 0);
+    assert(!actingbackfill.empty());
     for (set<pg_shard_t>::iterator i = actingbackfill.begin();
 	 i != actingbackfill.end();
 	 ++i) {
@@ -4346,7 +4346,7 @@ void PG::share_pg_info()
   dout(10) << "share_pg_info" << dendl;
 
   // share new pg_info_t with replicas
-  assert(actingbackfill.size() > 0);
+  assert(!actingbackfill.empty());
   for (set<pg_shard_t>::iterator i = actingbackfill.begin();
        i != actingbackfill.end();
        ++i) {
@@ -6072,7 +6072,7 @@ PG::RecoveryState::Recovered::Recovered(my_context ctx)
 
   // if we finished backfill, all acting are active; recheck if
   // DEGRADED is appropriate.
-  assert(pg->actingbackfill.size() > 0);
+  assert(!pg->actingbackfill.empty());
   if (pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid) <=
       pg->actingbackfill.size())
     pg->state_clear(PG_STATE_DEGRADED);
@@ -6269,7 +6269,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const MInfoRec& infoe
   assert(pg->is_active());
   assert(pg->is_primary());
 
-  assert(pg->actingbackfill.size() > 0);
+  assert(!pg->actingbackfill.empty());
   // don't update history (yet) if we are active and primary; the replica
   // may be telling us they have activated (and committed) but we can't
   // share that until _everyone_ does the same.
@@ -6812,7 +6812,7 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx)
 
   // how much log to request?
   eversion_t request_log_from = pg->info.last_update;
-  assert(pg->actingbackfill.size() > 0);
+  assert(!pg->actingbackfill.empty());
   for (set<pg_shard_t>::iterator p = pg->actingbackfill.begin();
        p != pg->actingbackfill.end();
        ++p) {
@@ -7019,7 +7019,7 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
   context< RecoveryMachine >().log_enter(state_name);
 
   PG *pg = context< RecoveryMachine >().pg;
-  assert(pg->actingbackfill.size() > 0);
+  assert(!pg->actingbackfill.empty());
   for (set<pg_shard_t>::iterator i = pg->actingbackfill.begin();
        i != pg->actingbackfill.end();
        ++i) {

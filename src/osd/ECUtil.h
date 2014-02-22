@@ -18,7 +18,7 @@
 #include <map>
 #include <set>
 
-#include <memory>
+#include "include/memory.h"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "include/buffer.h"
 #include "include/assert.h"
@@ -130,7 +130,7 @@ public:
     total_chunk_size = 0;
     cumulative_shard_hashes = vector<uint32_t>(
       cumulative_shard_hashes.size(),
-      0);
+      -1);
   }
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
@@ -144,7 +144,7 @@ public:
     return total_chunk_size;
   }
 };
-typedef std::tr1::shared_ptr<HashInfo> HashInfoRef;
+typedef ceph::shared_ptr<HashInfo> HashInfoRef;
 
 bool is_hinfo_key_string(const string &key);
 const string &get_hinfo_key();
