@@ -652,7 +652,7 @@ OPTION(journal_force_aio, OPT_BOOL, false)
 
 OPTION(keyvaluestore_queue_max_ops, OPT_INT, 50)
 OPTION(keyvaluestore_queue_max_bytes, OPT_INT, 100 << 20)
-OPTION(keyvaluestore_check_backend, OPT_BOOL, 0) // Expensive debugging check on sync
+OPTION(keyvaluestore_debug_check_backend, OPT_BOOL, 0) // Expensive debugging check on sync
 OPTION(keyvaluestore_op_threads, OPT_INT, 2)
 OPTION(keyvaluestore_op_thread_timeout, OPT_INT, 60)
 OPTION(keyvaluestore_op_thread_suicide_timeout, OPT_INT, 180)
