@@ -183,6 +183,7 @@ fi
 for name in $what; do
     type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $item is 'mon1'
     id=`echo $name | cut -c 4- | sed 's/^\\.//'`
+    cluster=`echo $conf | awk -F'/' '{print $(NF)}' | cut -d'.' -f 1`
     num=$id
     name="$type.$id"
 
@@ -269,7 +270,7 @@ for name in $what; do
 	    [ -n "$wrap" ] && runmode="-f &" && runarg="-f"
 	    [ -n "$max_open_files" ] && files="ulimit -n $max_open_files;"
 
-	    cmd="$files $wrap $cmd $runmode"
+	    cmd="$files $wrap $cmd --cluster $cluster $runmode"
 
 	    if [ $dofsmount -eq 1 ] && [ -n "$fs_devs" ]; then
 		get_conf pre_mount "true" "pre mount command"
