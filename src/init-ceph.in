@@ -183,6 +183,7 @@ fi
 for name in $what; do
     type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $item is 'mon1'
     id=`echo $name | cut -c 4- | sed 's/^\\.//'`
+    cluster=`echo $conf | awk -F'/' '{print $(NF)}' | cut -d'.' -f 1`
     num=$id
     name="$type.$id"
 
@@ -269,7 +270,7 @@ for name in $what; do
 	    [ -n "$wrap" ] && runmode="-f &" && runarg="-f"
 	    [ -n "$max_open_files" ] && files="ulimit -n $max_open_files;"
 
-	    cmd="$files $wrap $cmd $runmode"
+	    cmd="$files $wrap $cmd --cluster $cluster $runmode"
 
 	    if [ $dofsmount -eq 1 ] && [ -n "$fs_devs" ]; then
 		get_conf pre_mount "true" "pre mount command"
@@ -322,17 +323,9 @@ for name in $what; do
 		    get_conf osd_location_hook "$BINDIR/ceph-crush-location" "osd crush location hook"
 		    osd_location=`$osd_location_hook --cluster ceph --id $id --type osd`
 		    get_conf osd_weight "" "osd crush initial weight"
-		    defaultweight="$(do_cmd "df -P -k $osd_data/. | tail -1 | awk '{ d= \$2/1073741824 ; r = sprintf(\"%.2f\", d); print r }'")"
+		    defaultweight="$(df -P -k $osd_data/. | tail -1 | awk '{ d=$2/1073741824 ; r = sprintf(\"%.2f\", d); print r }')"
 		    get_conf osd_keyring "$osd_data/keyring" "keyring"
-		    do_cmd "timeout 10 $BINDIR/ceph \
-                        -c $conf \
-			--name=osd.$id \
-			--keyring=$osd_keyring \
-			osd crush create-or-move \
-			-- \
-			$id \
-			${osd_weight:-${defaultweight:-1}} \
-			$osd_location"
+		    do_cmd "timeout 10 $BINDIR/ceph -c $conf --name=osd.$id --keyring=$osd_keyring osd crush create-or-move -- $id ${osd_weight:-${defaultweight:-1}} $osd_location"
 		fi
 	    fi
 
