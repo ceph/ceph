@@ -1338,7 +1338,10 @@ protected:
   /// project pg history from from to now
   bool project_pg_history(
     spg_t pgid, pg_history_t& h, epoch_t from,
-    const vector<int>& lastup, const vector<int>& lastacting
+    const vector<int>& lastup,
+    int lastupprimary,
+    const vector<int>& lastacting,
+    int lastactingprimary
     ); ///< @return false if there was a map gap between from and now
 
   void wake_pg_waiters(spg_t pgid) {
