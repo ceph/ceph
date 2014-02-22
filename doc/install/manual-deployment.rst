@@ -369,7 +369,8 @@ OSDs with the long form procedure, execute the following on ``node2`` and
 	sudo ceph-osd -i {osd-num} --mkfs --mkkey
 	
    The directory must be empty before you can run ``ceph-osd`` with the 
-   ``--mkkey`` option.
+   ``--mkkey`` option. In addition, the ceph-osd tool requires specification
+   of custom cluster names with the ``--cluster`` option.
 
 
 #. Register the OSD authentication key. The value of ``ceph`` for 
