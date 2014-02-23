@@ -201,11 +201,8 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   request_pins = 0;
 
   nested_anchors = 0;
-
-  //hack_num_accessed = -1;
   
   dir_rep = REP_NONE;
-  //dir_rep = REP_ALL;      // hack: to wring out some bugs! FIXME FIXME
 }
 
 /**
@@ -1742,7 +1739,6 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   }
 
   //cache->mds->logger->inc("newin", num_new_inodes_loaded);
-  //hack_num_accessed = 0;
 
   if (purged_any)
     log_mark_dirty();
