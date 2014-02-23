@@ -9018,7 +9018,8 @@ void ReplicatedPG::cancel_pull(const hobject_t &soid)
   assert(recovering.count(soid));
   recovering.erase(soid);
   finish_recovery_op(soid);
-  pg_log.set_last_requested(0); // get recover_primary to start over
+  if (is_missing_object(soid))
+    pg_log.set_last_requested(0); // get recover_primary to start over
 }
 
 void ReplicatedPG::check_recovery_sources(const OSDMapRef osdmap)

@@ -1432,11 +1432,11 @@ public:
   void send_op(Op *op);
   void cancel_linger_op(Op *op);
   void finish_op(Op *op);
-  bool is_pg_changed(
+  static bool is_pg_changed(
     int oldprimary,
-    vector<int>& oldacting,
+    const vector<int>& oldacting,
     int newprimary,
-    vector<int>& newacting,
+    const vector<int>& newacting,
     bool any_change=false);
   enum recalc_op_target_result {
     RECALC_OP_TARGET_NO_ACTION = 0,

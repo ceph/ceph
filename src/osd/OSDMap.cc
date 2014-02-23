@@ -1569,7 +1569,7 @@ void OSDMap::_pg_to_up_acting_osds(pg_t pg, vector<int> *up, int *up_primary,
     *acting_primary = _acting_primary;
 }
 
-int OSDMap::calc_pg_rank(int osd, vector<int>& acting, int nrep)
+int OSDMap::calc_pg_rank(int osd, const vector<int>& acting, int nrep)
 {
   if (!nrep)
     nrep = acting.size();
@@ -1579,7 +1579,7 @@ int OSDMap::calc_pg_rank(int osd, vector<int>& acting, int nrep)
   return -1;
 }
 
-int OSDMap::calc_pg_role(int osd, vector<int>& acting, int nrep)
+int OSDMap::calc_pg_role(int osd, const vector<int>& acting, int nrep)
 {
   if (!nrep)
     nrep = acting.size();
