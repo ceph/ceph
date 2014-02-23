@@ -714,6 +714,11 @@ public:
   /* what replica # is a given osd? 0 primary, -1 for none. */
   static int calc_pg_rank(int osd, const vector<int>& acting, int nrep=0);
   static int calc_pg_role(int osd, const vector<int>& acting, int nrep=0);
+  static bool primary_changed(
+    int oldprimary,
+    const vector<int> &oldacting,
+    int newprimary,
+    const vector<int> &newacting);
   
   /* rank is -1 (stray), 0 (primary), 1,2,3,... (replica) */
   int get_pg_acting_rank(pg_t pg, int osd) const {

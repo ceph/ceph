@@ -1381,14 +1381,11 @@ bool Objecter::is_pg_changed(
   const vector<int>& newacting,
   bool any_change)
 {
-  if (oldacting.empty() && newacting.empty())
-    return false;    // both still empty
-  if (oldacting.empty() ^ newacting.empty())
-    return true;     // was empty, now not, or vice versa
-  if (oldprimary != newprimary)
-    return true;     // primary changed
-  if (OSDMap::calc_pg_rank(oldprimary, oldacting) !=
-      OSDMap::calc_pg_rank(newprimary, newacting))
+  if (OSDMap::primary_changed(
+	oldprimary,
+	oldacting,
+	newprimary,
+	newacting))
     return true;
   if (any_change && oldacting != newacting)
     return true;
