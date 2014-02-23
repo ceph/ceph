@@ -8138,7 +8138,8 @@ out:
 
   // passing an Inode in outp requires an additional ref
   if (outp) {
-    _ll_get(in);
+    if (in)
+      _ll_get(in);
     *outp = in;
   }
 
