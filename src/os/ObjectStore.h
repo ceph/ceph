@@ -720,7 +720,7 @@ public:
       ops++;
     }
     /// Set multiple xattrs of an object
-    void setattrs(coll_t cid, const hobject_t& oid, map<string,bufferlist>& attrset) {
+    void setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferlist>& attrset) {
       __u32 op = OP_SETATTRS;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -1308,6 +1308,15 @@ public:
       value.push_back(bp);
     return r;
   }
+  int getattr(
+    coll_t cid, const ghobject_t& oid,
+    const string name, bufferlist& value) {
+    bufferptr bp;
+    int r = getattr(cid, oid, name.c_str(), bp);
+    value.push_back(bp);
+    return r;
+  }
+
   /**
    * getattrs -- get all of the xattrs of an object
    *
