@@ -2270,7 +2270,7 @@ void OSD::handle_pg_peering_evt(
 
     pg_history_t history = info.history;
     bool valid_history = project_pg_history(
-      pgid, history, epoch, up, acting);
+      pgid, history, epoch, up, up_primary, acting, acting_primary);
 
     if (!valid_history || epoch < history.same_interval_since) {
       dout(10) << "get_or_create_pg " << pgid << " acting changed in "
@@ -2472,7 +2472,9 @@ void OSD::calc_priors_during(
  */
 bool OSD::project_pg_history(spg_t pgid, pg_history_t& h, epoch_t from,
 			     const vector<int>& currentup,
-			     const vector<int>& currentacting)
+			     int currentupprimary,
+			     const vector<int>& currentacting,
+			     int currentactingprimary)
 {
   dout(15) << "project_pg_history " << pgid
            << " from " << from << " to " << osdmap->get_epoch()
@@ -2491,14 +2493,25 @@ bool OSD::project_pg_history(spg_t pgid, pg_history_t& h, epoch_t from,
     }
     assert(oldmap->have_pg_pool(pgid.pool()));
 
+    int upprimary, actingprimary;
     vector<int> up, acting;
-    oldmap->pg_to_up_acting_osds(pgid.pgid, up, acting);
+    oldmap->pg_to_up_acting_osds(
+      pgid.pgid,
+      &up,
+      &upprimary,
+      &acting,
+      &actingprimary);
 
     // acting set change?
-    if ((acting != currentacting || up != currentup) && e > h.same_interval_since) {
+    if ((actingprimary != currentactingprimary ||
+	 upprimary != currentupprimary ||
+	 acting != currentacting ||
+	 up != currentup) && e > h.same_interval_since) {
       dout(15) << "project_pg_history " << pgid << " acting|up changed in " << e 
 	       << " from " << acting << "/" << up
+	       << " " << actingprimary << "/" << upprimary
 	       << " -> " << currentacting << "/" << currentup
+	       << " " << currentactingprimary << "/" << currentupprimary 
 	       << dendl;
       h.same_interval_since = e;
     }
@@ -2509,14 +2522,20 @@ bool OSD::project_pg_history(spg_t pgid, pg_history_t& h, epoch_t from,
       h.same_interval_since = e;
     }
     // up set change?
-    if (up != currentup && e > h.same_up_since) {
+    if ((up != currentup || upprimary != currentupprimary)
+	&& e > h.same_up_since) {
       dout(15) << "project_pg_history " << pgid << " up changed in " << e 
-                << " from " << up << " -> " << currentup << dendl;
+	       << " from " << up << " " << upprimary
+	       << " -> " << currentup << " " << currentupprimary << dendl;
       h.same_up_since = e;
     }
 
     // primary change?
-    if (!(!acting.empty() && !currentacting.empty() && acting[0] == currentacting[0]) &&
+    if (OSDMap::primary_changed(
+	  actingprimary,
+	  acting,
+	  currentactingprimary,
+	  currentacting) &&
         e > h.same_primary_since) {
       dout(15) << "project_pg_history " << pgid << " primary changed in " << e << dendl;
       h.same_primary_since = e;
@@ -6170,8 +6189,8 @@ void OSD::handle_pg_create(OpRequestRef op)
     utime_t now = ceph_clock_now(NULL);
     history.last_scrub_stamp = now;
     history.last_deep_scrub_stamp = now;
-    bool valid_history =
-      project_pg_history(pgid, history, created, up, acting);
+    bool valid_history = project_pg_history(
+      pgid, history, created, up, up_primary, acting, acting_primary);
     /* the pg creation message must have come from a mon and therefore
      * cannot be on the other side of a map gap
      */
@@ -6818,13 +6837,16 @@ void OSD::handle_pg_query(OpRequestRef op)
       continue;
 
     // get active crush mapping
+    int up_primary, acting_primary;
     vector<int> up, acting;
-    osdmap->pg_to_up_acting_osds(pgid.pgid, up, acting);
+    osdmap->pg_to_up_acting_osds(
+      pgid.pgid, &up, &up_primary, &acting, &acting_primary);
 
     // same primary?
     pg_history_t history = it->second.history;
-    bool valid_history =
-      project_pg_history(pgid, history, it->second.epoch_sent, up, acting);
+    bool valid_history = project_pg_history(
+      pgid, history, it->second.epoch_sent,
+      up, up_primary, acting, acting_primary);
 
     if (!valid_history ||
         it->second.epoch_sent < history.same_interval_since) {
@@ -6894,11 +6916,13 @@ void OSD::handle_pg_remove(OpRequestRef op)
     dout(5) << "queue_pg_for_deletion: " << pgid << dendl;
     PG *pg = _lookup_lock_pg(pgid);
     pg_history_t history = pg->info.history;
+    int up_primary, acting_primary;
     vector<int> up, acting;
-    osdmap->pg_to_up_acting_osds(pgid.pgid, up, acting);
-    bool valid_history =
-      project_pg_history(pg->info.pgid, history, pg->get_osdmap()->get_epoch(),
-	up, acting);
+    osdmap->pg_to_up_acting_osds(
+      pgid.pgid, &up, &up_primary, &acting, &acting_primary);
+    bool valid_history = project_pg_history(
+      pg->info.pgid, history, pg->get_osdmap()->get_epoch(),
+      up, up_primary, acting, acting_primary);
     if (valid_history &&
         history.same_interval_since <= m->get_epoch()) {
       assert(pg->get_primary().osd == m->get_source().num());
