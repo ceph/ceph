@@ -377,7 +377,7 @@ public:
     if (log.complete_to == log.log.begin()) {
       info.last_complete = eversion_t();
     } else {
-      ++log.complete_to;
+      --log.complete_to;
       info.last_complete = log.complete_to->version;
       ++log.complete_to;
     }
