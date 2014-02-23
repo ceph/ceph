@@ -727,7 +727,7 @@ bool OSDMonitor::should_propose(double& delay)
     return true;
 
   // adjust osd weights?
-  if (osd_weight.size() > 0 &&
+  if (!osd_weight.empty() &&
       osd_weight.size() == (unsigned)osdmap.get_max_osd()) {
     dout(0) << " adjusting osd weights based on " << osd_weight << dendl;
     osdmap.adjust_osd_weights(osd_weight, pending_inc);
@@ -2786,7 +2786,7 @@ int OSDMonitor::check_cluster_features(uint64_t features,
   set<int32_t> up_osds;
   osdmap.get_up_osds(up_osds);
   for (set<int32_t>::iterator it = up_osds.begin();
-       it != up_osds.end(); it ++) {
+       it != up_osds.end(); ++it) {
     const osd_xinfo_t &xi = osdmap.get_xinfo(*it);
     if (!(xi.features & features)) {
       if (unsupported_count > 0)

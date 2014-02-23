@@ -30,6 +30,8 @@
 #include "osd/osd_types.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "common/simple_cache.hpp"
+
 
 /**
  * Genericobjectmap: Provide with key/value associated to ghobject_t APIs to caller
@@ -73,13 +75,11 @@ class GenericObjectMap {
    */
   Mutex header_lock;
   Cond header_cond;
-  Cond map_header_cond;
 
   /**
    * Set of headers currently in use
    */
   set<uint64_t> in_use;
-  set<ghobject_t> map_header_in_use;
 
   GenericObjectMap(KeyValueDB *db) : db(db), header_lock("GenericObjectMap") {}
 
@@ -365,10 +365,17 @@ private:
     int adjust();
   };
 
+protected:
   typedef ceph::shared_ptr<GenericObjectMapIteratorImpl> GenericObjectMapIterator;
   GenericObjectMapIterator _get_iterator(Header header, string prefix) {
     return GenericObjectMapIterator(new GenericObjectMapIteratorImpl(this, header, prefix));
   }
+
+  // Scan keys in header into out_keys and out_values (if nonnull)
+  int scan(Header header, const string &prefix, const set<string> &in_keys,
+           set<string> *out_keys, map<string, bufferlist> *out_values);
+
+ private:
 
   /// Removes node corresponding to header
   void clear_header(Header header, KeyValueDB::Transaction t);
@@ -399,10 +406,6 @@ private:
   // Lookup header node for input
   Header lookup_parent(Header input);
 
-  // Scan keys in header into out_keys and out_values (if nonnull)
-  int scan(Header header, const string &prefix, const set<string> &in_keys,
-           set<string> *out_keys, map<string, bufferlist> *out_values);
-
   // Remove header and all related prefixes
   int _clear(Header header, KeyValueDB::Transaction t);
 
@@ -424,27 +427,8 @@ private:
                    KeyValueDB::Transaction t);
 
   /** 
-   * Removes map header lock once Header is out of scope
-   * @see lookup_header
-   */
-  class RemoveMapHeaderOnDelete {
-  public:
-    GenericObjectMap *db;
-    coll_t cid;
-    ghobject_t oid;
-    RemoveMapHeaderOnDelete(GenericObjectMap *db, const coll_t &cid,
-        const ghobject_t &oid) :
-      db(db), cid(cid), oid(oid) {}
-    void operator() (_Header *header) {
-      Mutex::Locker l(db->header_lock);
-      db->map_header_in_use.erase(oid);
-      db->map_header_cond.Signal();
-      delete header;
-    }
-  };
-
-  /** 
    * Removes header seq lock once Header is out of scope
+   * @see _lookup_header
    * @see lookup_parent
    * @see generate_new_header
    */

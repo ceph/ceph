@@ -624,6 +624,7 @@ int GenericObjectMap::get_keys(const coll_t &cid, const ghobject_t &oid,
   }
   return 0;
 }
+
 int GenericObjectMap::get_values(const coll_t &cid, const ghobject_t &oid,
                                  const string &prefix,
                                  const set<string> &keys,
@@ -916,25 +917,44 @@ int GenericObjectMap::write_state(KeyValueDB::Transaction t)
   return 0;
 }
 
+// NOTE(haomai): It may occur dead lock if thread A hold header A try to header
+// B and thread hold header B try to get header A
 GenericObjectMap::Header GenericObjectMap::_lookup_header(
     const coll_t &cid, const ghobject_t &oid)
 {
-  // FIXME
-  while (map_header_in_use.count(oid))
-    header_cond.Wait(header_lock);
-
-  map<string, bufferlist> out;
   set<string> to_get;
   to_get.insert(header_key(cid, oid));
-  int r = db->get(GHOBJECT_TO_SEQ_PREFIX, to_get, &out);
-  if (r < 0)
-    return Header();
-  if (out.empty())
-    return Header();
+  _Header header;
 
-  Header ret(new _Header(), RemoveMapHeaderOnDelete(this, cid, oid));
-  bufferlist::iterator iter = out.begin()->second.begin();
-  ret->decode(iter);
+  while (1) {
+    map<string, bufferlist> out;
+    bool try_again = false;
+
+    int r = db->get(GHOBJECT_TO_SEQ_PREFIX, to_get, &out);
+    if (r < 0)
+      return Header();
+    if (out.empty())
+      return Header();
+
+    bufferlist::iterator iter = out.begin()->second.begin();
+    header.decode(iter);
+
+    while (in_use.count(header.seq)) {
+      header_cond.Wait(header_lock);
+
+      // Another thread is hold this header, wait for it.
+      // Because the seq of this object may change, such as clone
+      // and rename operation, here need to look up "seq" again
+      try_again = true;
+    }
+
+    if (!try_again) {
+      break;
+    }
+  }
+
+  Header ret = Header(new _Header(header), RemoveOnDelete(this));
+  in_use.insert(ret->seq);
   return ret;
 }
 
@@ -968,6 +988,7 @@ GenericObjectMap::Header GenericObjectMap::lookup_parent(Header input)
 
   dout(20) << "lookup_parent: parent " << input->parent
        << " for seq " << input->seq << dendl;
+
   int r = db->get(parent_seq_prefix(input->parent), keys, &out);
   if (r < 0) {
     assert(0);
@@ -983,7 +1004,7 @@ GenericObjectMap::Header GenericObjectMap::lookup_parent(Header input)
   bufferlist::iterator iter = out.begin()->second.begin();
   header->decode(iter);
   dout(20) << "lookup_parent: parent seq is " << header->seq << " with parent "
-       << header->parent << dendl;
+           << header->parent << dendl;
   in_use.insert(header->seq);
   return header;
 }
@@ -1018,6 +1039,7 @@ void GenericObjectMap::clear_header(Header header, KeyValueDB::Transaction t)
   t->rmkeys(parent_seq_prefix(header->seq), keys);
 }
 
+// only remove GHOBJECT_TO_SEQ
 void GenericObjectMap::remove_header(const coll_t &cid,
                                      const ghobject_t &oid, Header header,
                                      KeyValueDB::Transaction t)
@@ -1043,6 +1065,7 @@ void GenericObjectMap::set_header(const coll_t &cid, const ghobject_t &oid,
 int GenericObjectMap::list_objects(const coll_t &cid, ghobject_t start, int max,
                                    vector<ghobject_t> *out, ghobject_t *next)
 {
+  // FIXME
   Mutex::Locker l(header_lock);
 
   if (start.is_max())

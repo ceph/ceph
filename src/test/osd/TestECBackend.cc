@@ -27,17 +27,17 @@ TEST(ECUtil, stripe_info_t)
   ECUtil::stripe_info_t s(ssize, swidth);
   ASSERT_EQ(s.get_stripe_width(), swidth);
 
-  ASSERT_EQ(s.logical_to_next_chunk_offset(0), 0);
+  ASSERT_EQ(s.logical_to_next_chunk_offset(0), 0u);
   ASSERT_EQ(s.logical_to_next_chunk_offset(1), s.get_chunk_size());
   ASSERT_EQ(s.logical_to_next_chunk_offset(swidth - 1),
 	    s.get_chunk_size());
 
-  ASSERT_EQ(s.logical_to_prev_chunk_offset(0), 0);
+  ASSERT_EQ(s.logical_to_prev_chunk_offset(0), 0u);
   ASSERT_EQ(s.logical_to_prev_chunk_offset(swidth), s.get_chunk_size());
   ASSERT_EQ(s.logical_to_prev_chunk_offset((swidth * 2) - 1),
 	    s.get_chunk_size());
 
-  ASSERT_EQ(s.logical_to_next_stripe_offset(0), 0);
+  ASSERT_EQ(s.logical_to_next_stripe_offset(0), 0u);
   ASSERT_EQ(s.logical_to_next_stripe_offset(swidth - 1),
 	    s.get_stripe_width());
 

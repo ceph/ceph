@@ -87,7 +87,7 @@ int ErasureCodeBench::setup(int argc, char** argv) {
     const vector<string> &p = vm["parameter"].as< vector<string> >();
     for (vector<string>::const_iterator i = p.begin();
 	 i != p.end();
-	 i++) {
+	 ++i) {
       std::vector<std::string> strs;
       boost::split(strs, *i, boost::is_any_of("="));
       if (strs.size() != 2) {
