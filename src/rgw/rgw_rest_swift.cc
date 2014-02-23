@@ -284,9 +284,68 @@ void RGWStatBucket_ObjStore_SWIFT::send_response()
   dump_start(s);
 }
 
+static int get_swift_container_settings(req_state *s, RGWRados *store, RGWAccessControlPolicy *policy, bool *has_policy,
+                                        RGWCORSConfiguration *cors_config, bool *has_cors)
+{
+  string read_list, write_list;
+
+  const char *read_attr = s->info.env->get("HTTP_X_CONTAINER_READ");
+  if (read_attr) {
+    read_list = read_attr;
+  }
+  const char *write_attr = s->info.env->get("HTTP_X_CONTAINER_WRITE");
+  if (write_attr) {
+    write_list = write_attr;
+  }
+
+  *has_policy = false;
+
+  if (read_attr || write_attr) {
+    RGWAccessControlPolicy_SWIFT swift_policy(s->cct);
+    int r = swift_policy.create(store, s->user.user_id, s->user.display_name, read_list, write_list);
+    if (r < 0)
+      return r;
+
+    *policy = swift_policy;
+    *has_policy = true;
+  }
+
+  *has_cors = false;
+
+  /*Check and update CORS configuration*/
+  const char *allow_origins = s->info.env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_ALLOW_ORIGIN");
+  const char *allow_headers = s->info.env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_ALLOW_HEADERS");
+  const char *expose_headers = s->info.env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_EXPOSE_HEADERS");
+  const char *max_age = s->info.env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_MAX_AGE");
+  if (allow_origins) {
+    RGWCORSConfiguration_SWIFT *swift_cors = new RGWCORSConfiguration_SWIFT;
+    int r = swift_cors->create_update(allow_origins, allow_headers, expose_headers, max_age);
+    if (r < 0) {
+      dout(0) << "Error creating/updating the cors configuration" << dendl;
+      delete swift_cors;
+      return r;
+    }
+    *has_cors = true;
+    *cors_config = *swift_cors;
+    cors_config->dump();
+    delete swift_cors;
+  }
+
+  return 0;
+}
+
 int RGWCreateBucket_ObjStore_SWIFT::get_params()
 {
-  policy.create_default(s->user.user_id, s->user.display_name);
+  bool has_policy;
+
+  int r = get_swift_container_settings(s, store, &policy, &has_policy, &cors_config, &has_cors);
+  if (r < 0) {
+    return r;
+  }
+
+  if (!has_policy) {
+    policy.create_default(s->user.user_id, s->user.display_name);
+  }
 
   location_constraint = store->region.api_name;
 
@@ -371,44 +430,9 @@ int RGWPutMetadata_ObjStore_SWIFT::get_params()
     return -EINVAL;
 
   if (!s->object) {
-    string read_list, write_list;
-
-    const char *read_attr = s->info.env->get("HTTP_X_CONTAINER_READ");
-    if (read_attr) {
-      read_list = read_attr;
-    }
-    const char *write_attr = s->info.env->get("HTTP_X_CONTAINER_WRITE");
-    if (write_attr) {
-      write_list = write_attr;
-    }
-
-    if (read_attr || write_attr) {
-      RGWAccessControlPolicy_SWIFT swift_policy(s->cct);
-      int r = swift_policy.create(store, s->user.user_id, s->user.display_name, read_list, write_list);
-      if (r < 0)
-        return r;
-
-      policy = swift_policy;
-      has_policy = true;
-    }
-
-    /*Check and update CORS configuration*/
-    const char *allow_origins = s->info.env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_ALLOW_ORIGIN");
-    const char *allow_headers = s->info.env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_ALLOW_HEADERS");
-    const char *expose_headers = s->info.env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_EXPOSE_HEADERS");
-    const char *max_age = s->info.env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_MAX_AGE");
-    if (allow_origins) {
-      RGWCORSConfiguration_SWIFT *swift_cors = new RGWCORSConfiguration_SWIFT;
-      int r = swift_cors->create_update(allow_origins, allow_headers, expose_headers, max_age);
-      if (r < 0) {
-        dout(0) << "Error creating/updating the cors configuration" << dendl;
-        delete swift_cors;
-        return r;
-      }
-      has_cors = true;
-      cors_config = *swift_cors;
-      cors_config.dump();
-      delete swift_cors;
+    int r = get_swift_container_settings(s, store, &policy, &has_policy, &cors_config, &has_cors);
+    if (r < 0) {
+      return r;
     }
   }
 
@@ -536,7 +560,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
     goto send_data;
 
   if (range_str)
-    dump_range(s, ofs, start, s->obj_size);
+    dump_range(s, ofs, end, s->obj_size);
 
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);

@@ -834,8 +834,8 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	  if (mcand == lcand) {
 	    candidate = mcand;
 	    if (!mcand.is_max()) {
-	      ls_iter++;
-	      missing_iter++;
+	      ++ls_iter;
+	      ++missing_iter;
 	    }
 	  } else if (mcand < lcand) {
 	    candidate = mcand;
@@ -5934,7 +5934,7 @@ int ReplicatedPG::start_flush(OpContext *ctx, bool blocking)
     // have been written before that.
     vector<snapid_t>::iterator p = snapset.snaps.begin();
     while (p != snapset.snaps.end() && *p >= oi.snaps.back())
-      p++;
+      ++p;
     snapc.snaps = vector<snapid_t>(p, snapset.snaps.end());
     snapc.seq = oi.snaps.back() - 1;
   }
@@ -9018,7 +9018,8 @@ void ReplicatedPG::cancel_pull(const hobject_t &soid)
   assert(recovering.count(soid));
   recovering.erase(soid);
   finish_recovery_op(soid);
-  pg_log.set_last_requested(0); // get recover_primary to start over
+  if (is_missing_object(soid))
+    pg_log.set_last_requested(0); // get recover_primary to start over
 }
 
 void ReplicatedPG::check_recovery_sources(const OSDMapRef osdmap)
@@ -9886,16 +9887,6 @@ int ReplicatedPG::recover_backfill(
     new_last_backfill = i->first;
   }
   dout(10) << "possible new_last_backfill at " << new_last_backfill << dendl;
-
-  /* If last_backfill is snapdir, we know that head necessarily cannot exist,
-   * therefore it's safe to bump the snap up to NOSNAP.  This is necessary
-   * since we need avoid having SNAPDIR backfilled and HEAD not backfilled
-   * since a transaction on HEAD might change SNAPDIR
-   */
-  if (new_last_backfill.is_snapdir())
-    new_last_backfill = new_last_backfill.get_head();
-  if (last_backfill_started.is_snapdir())
-    last_backfill_started = last_backfill_started.get_head();
 
   assert(!pending_backfill_updates.empty() ||
 	 new_last_backfill == last_backfill_started);

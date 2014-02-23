@@ -616,7 +616,7 @@ public:
                                            MonCommand *cmds, int cmds_size);
   bool _allowed_command(MonSession *s, string &module, string &prefix,
                         const map<string,cmd_vartype>& cmdmap,
-                        const map<string,string> param_str_map,
+                        const map<string,string>& param_str_map,
                         const MonCommand *this_cmd);
   void _mon_status(Formatter *f, ostream& ss);
   void _quorum_status(Formatter *f, ostream& ss);

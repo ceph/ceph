@@ -38,8 +38,12 @@ struct AppendObjectsGenerator: public boost::static_visitor<void> {
     out->insert(op.source);
     out->insert(op.destination);
   }
-  void operator()(const ECTransaction::StashOp &op) {}
-  void operator()(const ECTransaction::RemoveOp &op) {}
+  void operator()(const ECTransaction::StashOp &op) {
+    out->insert(op.oid);
+  }
+  void operator()(const ECTransaction::RemoveOp &op) {
+    out->insert(op.oid);
+  }
   void operator()(const ECTransaction::SetAttrsOp &op) {}
   void operator()(const ECTransaction::RmAttrOp &op) {}
   void operator()(const ECTransaction::NoOp &op) {}
@@ -189,8 +193,8 @@ struct TransGenerator : public boost::static_visitor<void> {
     }
   }
   void operator()(const ECTransaction::StashOp &op) {
-    if (hash_infos.count(op.oid))
-      hash_infos[op.oid]->clear();
+    assert(hash_infos.count(op.oid));
+    hash_infos[op.oid]->clear();
     for (map<shard_id_t, ObjectStore::Transaction>::iterator i = trans->begin();
 	 i != trans->end();
 	 ++i) {
@@ -203,8 +207,8 @@ struct TransGenerator : public boost::static_visitor<void> {
     }
   }
   void operator()(const ECTransaction::RemoveOp &op) {
-    if (hash_infos.count(op.oid))
-      hash_infos[op.oid]->clear();
+    assert(hash_infos.count(op.oid));
+    hash_infos[op.oid]->clear();
     for (map<shard_id_t, ObjectStore::Transaction>::iterator i = trans->begin();
 	 i != trans->end();
 	 ++i) {

@@ -268,11 +268,13 @@ protected:
   string placement_rule;
   RGWBucketInfo info;
   obj_version ep_objv;
+  bool has_cors;
+  RGWCORSConfiguration cors_config;
 
   bufferlist in_data;
 
 public:
-  RGWCreateBucket() : ret(0) {}
+  RGWCreateBucket() : ret(0), has_cors(false) {}
 
   int verify_permission();
   void pre_exec();

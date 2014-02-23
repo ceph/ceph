@@ -95,11 +95,6 @@ public:
     return ret;
   }
 
-  /// @return true if object is snapdir
-  bool is_snapdir() const {
-    return snap == CEPH_SNAPDIR;
-  }
-
   /// @return snapdir version of this hobject_t
   hobject_t get_snapdir() const {
     hobject_t ret(*this);

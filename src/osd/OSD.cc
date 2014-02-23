@@ -3576,7 +3576,7 @@ void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
   
   // get all the latest maps
   if (osdmap->get_epoch() > oldest)
-    osdmap_subscribe(osdmap->get_epoch(), true);
+    osdmap_subscribe(osdmap->get_epoch() + 1, true);
   else
     osdmap_subscribe(oldest - 1, true);
 }
@@ -4211,7 +4211,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
 	      prefix == "mark_unfound_lost" ||
 	      prefix == "list_missing")
 	   )) {
-    spg_t pgid;
+    pg_t pgid;
 
     if (!cmd_getval(cct, cmdmap, "pgid", pgidstr)) {
       ss << "no pgid specified";
@@ -4220,16 +4220,19 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
       ss << "couldn't parse pgid '" << pgidstr << "'";
       r = -EINVAL;
     } else {
-      PG *pg = _lookup_lock_pg(pgid);
-      if (!pg) {
-	ss << "i don't have pgid " << pgid;
-	r = -ENOENT;
-      } else {
+      spg_t pcand;
+      if (osdmap->get_primary_shard(pgid, &pcand) &&
+	  _have_pg(pcand)) {
+	PG *pg = _lookup_lock_pg(pcand);
+	assert(pg);
 	// simulate pg <pgid> cmd= for pg->do-command
 	if (prefix != "pg")
 	  cmd_putval(cct, cmdmap, "cmd", prefix);
 	r = pg->do_command(cmdmap, ss, data, odata);
 	pg->unlock();
+      } else {
+	ss << "i don't have pgid " << pgid;
+	r = -ENOENT;
       }
     }
   }
@@ -6261,7 +6264,7 @@ bool OSD::compat_must_dispatch_immediately(PG *pg)
 {
   assert(pg->is_locked());
   set<pg_shard_t> tmpacting;
-  if (pg->actingbackfill.size() > 0) {
+  if (!pg->actingbackfill.empty()) {
     tmpacting = pg->actingbackfill;
   } else {
     for (unsigned i = 0; i < pg->acting.size(); ++i) {

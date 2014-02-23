@@ -64,6 +64,9 @@ namespace librados
     ObjectIterator() {}
     ObjectIterator(ObjListCtx *ctx_);
     ~ObjectIterator();
+    ObjectIterator(const ObjectIterator &rhs);
+    ObjectIterator& operator=(const ObjectIterator& rhs);
+
     bool operator==(const ObjectIterator& rhs) const;
     bool operator!=(const ObjectIterator& rhs) const;
     const std::pair<std::string, std::string>& operator*() const;
