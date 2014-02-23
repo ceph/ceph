@@ -97,7 +97,7 @@ class StripObjectMap: public GenericObjectMap {
   };
 
   bool check_spos(const StripObjectHeader &header,
-                  const SequencerPosition *spos);
+                  const SequencerPosition &spos);
   void sync_wrap(StripObjectHeader &strip_header, KeyValueDB::Transaction t,
                  const SequencerPosition &spos);
 
@@ -105,21 +105,38 @@ class StripObjectMap: public GenericObjectMap {
                              vector<StripExtent> &extents);
   int lookup_strip_header(const coll_t & cid, const ghobject_t &oid,
                           StripObjectHeader &header);
-  int save_strip_header(StripObjectHeader &header, KeyValueDB::Transaction t);
+  int save_strip_header(StripObjectHeader &header,
+                        const SequencerPosition &spos,
+                        KeyValueDB::Transaction t);
   int create_strip_header(const coll_t &cid, const ghobject_t &oid,
                           StripObjectHeader &strip_header,
                           KeyValueDB::Transaction t);
   void clone_wrap(StripObjectHeader &old_header,
                   const coll_t &cid, const ghobject_t &oid,
                   KeyValueDB::Transaction t,
-                  const SequencerPosition &spos,
                   StripObjectHeader *origin_header,
                   StripObjectHeader *target_header);
   void rename_wrap(const coll_t &cid, const ghobject_t &oid,
                    KeyValueDB::Transaction t,
-                   const SequencerPosition &spos,
                    StripObjectHeader *header);
+  // Already hold header to avoid lock header seq again
+  int get_with_header(
+    const StripObjectHeader &header,
+    const string &prefix,
+    map<string, bufferlist> *out
+    );
 
+  int get_values_with_header(
+    const StripObjectHeader &header,
+    const string &prefix,
+    const set<string> &keys,
+    map<string, bufferlist> *out
+    );
+  int get_keys_with_header(
+    const StripObjectHeader &header,
+    const string &prefix,
+    set<string> *keys
+    );
 
   StripObjectMap(KeyValueDB *db): GenericObjectMap(db) {}
 
@@ -203,25 +220,22 @@ class KeyValueStore : public ObjectStore,
     SequencerPosition spos;
     KeyValueDB::Transaction t;
 
-    int check_coll(const coll_t &cid);
     int lookup_cached_header(const coll_t &cid, const ghobject_t &oid,
                              StripObjectMap::StripObjectHeader **strip_header,
                              bool create_if_missing);
-    int get_buffer_key(StripObjectMap::StripObjectHeader *strip_header,
-                       const string &prefix, const string &key,
-                       bufferlist &out);
-    void set_buffer_keys(const string &prefix,
-                         StripObjectMap::StripObjectHeader *strip_header,
-                         map<string, bufferlist> &bl);
-    int remove_buffer_keys(const string &prefix,
-                           StripObjectMap::StripObjectHeader *strip_header,
-                           const set<string> &keys);
-    void clear_buffer_keys(const string &prefix,
-                           StripObjectMap::StripObjectHeader *strip_header);
-    int clear_buffer(StripObjectMap::StripObjectHeader *strip_header);
-    void clone_buffer(StripObjectMap::StripObjectHeader *old_header,
+    int get_buffer_keys(StripObjectMap::StripObjectHeader &strip_header,
+                        const string &prefix, const set<string> &keys,
+                        map<string, bufferlist> *out);
+    void set_buffer_keys(StripObjectMap::StripObjectHeader &strip_header,
+                         const string &prefix, map<string, bufferlist> &bl);
+    int remove_buffer_keys(StripObjectMap::StripObjectHeader &strip_header,
+                           const string &prefix, const set<string> &keys);
+    void clear_buffer_keys(StripObjectMap::StripObjectHeader &strip_header,
+                           const string &prefix);
+    int clear_buffer(StripObjectMap::StripObjectHeader &strip_header);
+    void clone_buffer(StripObjectMap::StripObjectHeader &old_header,
                       const coll_t &cid, const ghobject_t &oid);
-    void rename_buffer(StripObjectMap::StripObjectHeader *old_header,
+    void rename_buffer(StripObjectMap::StripObjectHeader &old_header,
                        const coll_t &cid, const ghobject_t &oid);
     int submit_transaction();
 
@@ -302,6 +316,8 @@ class KeyValueStore : public ObjectStore,
   Sequencer default_osr;
   deque<OpSequencer*> op_queue;
   uint64_t op_queue_len, op_queue_bytes;
+  Cond op_throttle_cond;
+  Mutex op_throttle_lock;
   Finisher op_finisher;
 
   ThreadPool op_tp;
@@ -341,11 +357,13 @@ class KeyValueStore : public ObjectStore,
     }
   } op_wq;
 
-  void _do_op(OpSequencer *osr, ThreadPool::TPHandle &handle);
-  void _finish_op(OpSequencer *osr);
   Op *build_op(list<Transaction*>& tls, Context *ondisk, Context *onreadable,
                Context *onreadable_sync, TrackedOpRef osd_op);
   void queue_op(OpSequencer *osr, Op *o);
+  void op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle = NULL);
+  void _do_op(OpSequencer *osr, ThreadPool::TPHandle &handle);
+  void op_queue_release_throttle(Op *o);
+  void _finish_op(OpSequencer *osr);
 
   PerfCounters *logger;
 
@@ -410,13 +428,13 @@ class KeyValueStore : public ObjectStore,
   // ------------------
   // objects
 
-  // Read operation need call "check_coll", checking "coll_t" in write
-  // operation is done by lookup_cached_header
-  int _check_coll(const coll_t &cid);
+  int _generic_read(StripObjectMap::StripObjectHeader &header,
+                    uint64_t offset, size_t len, bufferlist& bl,
+                    bool allow_eio = false, BufferTransaction *bt = 0);
+  int _generic_write(StripObjectMap::StripObjectHeader &header,
+                     uint64_t offset, size_t len, const bufferlist& bl,
+                     BufferTransaction &t, bool replica = false);
 
-  int _generic_read(coll_t cid, const ghobject_t& oid, uint64_t offset,
-                    size_t len, bufferlist& bl, bool allow_eio = false,
-                    BufferTransaction *bt = 0);
   bool exists(coll_t cid, const ghobject_t& oid);
   int stat(coll_t cid, const ghobject_t& oid, struct stat *st,
            bool allow_eio = false);
@@ -447,16 +465,6 @@ class KeyValueStore : public ObjectStore,
 
   void set_fsid(uuid_d u) { fsid = u; }
   uuid_d get_fsid() { return fsid; }
-
-  // DEBUG read error injection, an object is removed from both on delete()
-  Mutex read_error_lock;
-  set<ghobject_t> data_error_set; // read() will return -EIO
-  set<ghobject_t> mdata_error_set; // getattr(),stat() will return -EIO
-  void inject_data_error(const ghobject_t &oid);
-  void inject_mdata_error(const ghobject_t &oid);
-  void debug_obj_on_delete(const ghobject_t &oid);
-  bool debug_data_eio(const ghobject_t &oid);
-  bool debug_mdata_eio(const ghobject_t &oid);
 
   // attrs
   int getattr(coll_t cid, const ghobject_t& oid, const char *name,
@@ -550,7 +558,8 @@ class KeyValueStore : public ObjectStore,
                                   const std::set <std::string> &changed);
 
   std::string m_osd_rollback_to_cluster_snap;
-  bool m_fail_eio;
+  int m_keyvaluestore_queue_max_ops;
+  int m_keyvaluestore_queue_max_bytes;
 
   int do_update;
 
