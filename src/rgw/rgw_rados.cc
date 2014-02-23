@@ -533,7 +533,7 @@ void RGWObjManifest::obj_iterator::update_explicit_pos()
   stripe_ofs = ofs;
 
   map<uint64_t, RGWObjManifestPart>::iterator next_iter = explicit_iter;
-  next_iter++;
+  ++next_iter;
   if (next_iter != manifest->objs.end()) {
     stripe_size = next_iter->first - ofs;
   } else {
@@ -547,7 +547,7 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
   if (manifest->explicit_objs) {
     explicit_iter = manifest->objs.upper_bound(ofs);
     if (explicit_iter != manifest->objs.begin()) {
-      explicit_iter--;
+      --explicit_iter;
     }
     if (ofs >= manifest->obj_size) {
       ofs = manifest->obj_size;
@@ -569,7 +569,7 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
   rule_iter = manifest->rules.upper_bound(ofs);
   next_rule_iter = rule_iter;
   if (rule_iter != manifest->rules.begin()) {
-    rule_iter--;
+    --rule_iter;
   }
 
   RGWObjManifestRule& rule = rule_iter->second;
@@ -624,7 +624,7 @@ void RGWObjManifest::obj_iterator::update_location()
 void RGWObjManifest::obj_iterator::operator++()
 {
   if (manifest->explicit_objs) {
-    explicit_iter++;
+    ++explicit_iter;
 
     if (explicit_iter == manifest->objs.end()) {
       ofs = manifest->obj_size;
@@ -685,7 +685,7 @@ void RGWObjManifest::obj_iterator::operator++()
         rule_iter = next_rule_iter;
         bool last_rule = (next_rule_iter == manifest->rules.end());
         if (!last_rule) {
-          next_rule_iter++;
+          ++next_rule_iter;
         }
         cur_part_id = rule_iter->second.start_part_num;
       } else {
@@ -2357,6 +2357,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     ret = put_linked_bucket_info(info, exclusive, 0, pep_objv, &attrs, true);
     if (ret == -EEXIST) {
        /* we need to reread the info and return it, caller will have a use for it */
+      info.objv_tracker.clear();
       r = get_bucket_info(NULL, bucket.name, info, NULL, NULL);
       if (r < 0) {
         if (r == -ENOENT) {

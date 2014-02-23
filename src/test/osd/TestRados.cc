@@ -281,7 +281,7 @@ int main(int argc, char **argv)
     else if (strcmp(argv[i], "--max-stride-size") == 0)
       max_stride_size = atoi(argv[++i]);
     else if (strcmp(argv[i], "--ec-pool") == 0) {
-      if (op_weights.size()) {
+      if (!op_weights.empty()) {
 	cerr << "--ec-pool must be specified prior to any ops" << std::endl;
 	exit(1);
       }

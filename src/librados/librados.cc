@@ -480,12 +480,31 @@ librados::ObjectIterator::~ObjectIterator()
   ctx.reset();
 }
 
+librados::ObjectIterator::ObjectIterator(const ObjectIterator &rhs)
+{
+  *this = rhs;
+}
+
+librados::ObjectIterator& librados::ObjectIterator::operator=(const librados::ObjectIterator &rhs)
+{
+  if (&rhs == this)
+    return *this;
+  Objecter::ListContext *list_ctx = new Objecter::ListContext(*rhs.ctx->lc);
+  ctx.reset(new ObjListCtx(rhs.ctx->ctx, list_ctx));
+  cur_obj = rhs.cur_obj;
+  return *this;
+}
+
 bool librados::ObjectIterator::operator==(const librados::ObjectIterator& rhs) const {
-  return (ctx.get() == rhs.ctx.get());
+  if (ctx.get() == NULL)
+    return rhs.ctx.get() == NULL || rhs.ctx->lc->at_end();
+  if (rhs.ctx.get() == NULL)
+    return ctx.get() == NULL || ctx->lc->at_end();
+  return ctx.get() == rhs.ctx.get();
 }
 
 bool librados::ObjectIterator::operator!=(const librados::ObjectIterator& rhs) const {
-  return (ctx.get() != rhs.ctx.get());
+  return !(*this == rhs);
 }
 
 const pair<std::string, std::string>& librados::ObjectIterator::operator*() const {
@@ -519,10 +538,10 @@ uint32_t librados::ObjectIterator::seek(uint32_t pos)
 void librados::ObjectIterator::get_next()
 {
   const char *entry, *key;
+  if (ctx->lc->at_end())
+    return;
   int ret = rados_objects_list_next(ctx.get(), &entry, &key);
   if (ret == -ENOENT) {
-    ctx.reset();
-    *this = __EndObjectIterator;
     return;
   }
   else if (ret) {
@@ -1227,7 +1246,6 @@ librados::ObjectIterator librados::IoCtx::objects_begin(uint32_t pos)
   rados_objects_list_open(io_ctx_impl, &listh);
   ObjectIterator iter((ObjListCtx*)listh);
   iter.seek(pos);
-  iter.get_next();
   return iter;
 }
 
