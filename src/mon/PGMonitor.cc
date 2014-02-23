@@ -1539,7 +1539,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       r = -ENOENT;
       goto reply;
     }
-    if (pg_map.pg_stat[pgid].acting_primary != -1) {
+    if (pg_map.pg_stat[pgid].acting_primary == -1) {
       ss << "pg " << pgid << " has no primary osd";
       r = -EAGAIN;
       goto reply;
