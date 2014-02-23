@@ -45,10 +45,10 @@ using namespace std;
 #define NUM_STRAY                 10
 
 #define MDS_INO_ROOT              1
+
+// No longer created but recognised in existing filesystems
+// so that we don't try to fragment it.
 #define MDS_INO_CEPH              2
-#define MDS_INO_PGTABLE           3
-#define MDS_INO_ANCHORTABLE       4
-#define MDS_INO_SNAPTABLE         5
 
 #define MDS_INO_MDSDIR_OFFSET     (1*MAX_MDS)
 #define MDS_INO_LOG_OFFSET        (2*MAX_MDS)
