@@ -481,7 +481,7 @@ public:
         len = max_len;
       ASSERT_EQ(len, result.length());
       contents[obj].copy(offset, len, bl);
-      ASSERT_EQ(r, len);
+      ASSERT_EQ(r, (int)len);
       ASSERT_TRUE(result.contents_equal(bl));
     }
   }
