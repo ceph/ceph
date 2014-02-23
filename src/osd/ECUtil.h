@@ -130,7 +130,7 @@ public:
     total_chunk_size = 0;
     cumulative_shard_hashes = vector<uint32_t>(
       cumulative_shard_hashes.size(),
-      0);
+      -1);
   }
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
