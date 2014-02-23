@@ -57,7 +57,7 @@ int pidfile_write(const md_config_t *conf)
   if (ret < 0) {
     derr << "write_pid_file: failed to write to pid file '"
 	 << pid_file << "': " << cpp_strerror(ret) << dendl;
-    TEMP_FAILURE_RETRY(::close(fd));
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
     return ret;
   }
   if (TEMP_FAILURE_RETRY(::close(fd))) {
@@ -82,7 +82,7 @@ int pidfile_remove(void)
   char buf[32];
   memset(buf, 0, sizeof(buf));
   ssize_t res = safe_read(fd, buf, sizeof(buf));
-  TEMP_FAILURE_RETRY(::close(fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
   if (res < 0)
     return res;
   int a = atoi(buf);

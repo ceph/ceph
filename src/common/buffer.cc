@@ -399,9 +399,9 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
 
     void close_pipe(int *fds) {
       if (fds[0] >= 0)
-	TEMP_FAILURE_RETRY(::close(fds[0]));
+	VOID_TEMP_FAILURE_RETRY(::close(fds[0]));
       if (fds[1] >= 0)
-	TEMP_FAILURE_RETRY(::close(fds[1]));
+	VOID_TEMP_FAILURE_RETRY(::close(fds[1]));
     }
     char *copy_pipe(int *fds) {
       /* preserve original pipe contents by copying into a temporary
@@ -1496,7 +1496,7 @@ int buffer::list::read_file(const char *fn, std::string *error)
     oss << "bufferlist::read_file(" << fn << "): read error:"
 	<< cpp_strerror(ret);
     *error = oss.str();
-    TEMP_FAILURE_RETRY(::close(fd));
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
     return ret;
   }
   else if (ret != st.st_size) {
@@ -1507,7 +1507,7 @@ int buffer::list::read_file(const char *fn, std::string *error)
     *error = oss.str();
     // not actually an error, but weird
   }
-  TEMP_FAILURE_RETRY(::close(fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
   return 0;
 }
 
@@ -1559,7 +1559,7 @@ int buffer::list::write_file(const char *fn, int mode)
   if (ret) {
     cerr << "bufferlist::write_fd(" << fn << "): write_fd error: "
 	 << cpp_strerror(ret) << std::endl;
-    TEMP_FAILURE_RETRY(::close(fd));
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
     return ret;
   }
   if (TEMP_FAILURE_RETRY(::close(fd))) {
