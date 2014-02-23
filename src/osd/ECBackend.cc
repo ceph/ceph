@@ -942,7 +942,10 @@ void ECBackend::handle_sub_read_reply(
        i != op.attrs_read.end();
        ++i) {
     assert(!op.errors.count(i->first));
-    assert(rop.to_read.count(i->first));
+    if (!rop.to_read.count(i->first)) {
+      // We canceled this read! @see filter_read_op
+      continue;
+    }
     rop.complete[i->first].attrs = map<string, bufferlist>();
     (*(rop.complete[i->first].attrs)).swap(i->second);
   }

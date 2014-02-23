@@ -1586,6 +1586,24 @@ int OSDMap::calc_pg_role(int osd, const vector<int>& acting, int nrep)
   return calc_pg_rank(osd, acting, nrep);
 }
 
+bool OSDMap::primary_changed(
+  int oldprimary,
+  const vector<int> &oldacting,
+  int newprimary,
+  const vector<int> &newacting)
+{
+  if (oldacting.empty() && newacting.empty())
+    return false;    // both still empty
+  if (oldacting.empty() ^ newacting.empty())
+    return true;     // was empty, now not, or vice versa
+  if (oldprimary != newprimary)
+    return true;     // primary changed
+  if (calc_pg_rank(oldprimary, oldacting) !=
+      calc_pg_rank(newprimary, newacting))
+    return true;
+  return false;      // same primary (tho replicas may have changed)
+}
+
 
 // serialize, unserialize
 void OSDMap::encode_client_old(bufferlist& bl) const
