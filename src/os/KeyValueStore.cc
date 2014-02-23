@@ -662,7 +662,7 @@ int KeyValueStore::mkfs()
   ret = 0;
 
  close_fsid_fd:
-  TEMP_FAILURE_RETRY(::close(fsid_fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fsid_fd));
   fsid_fd = -1;
   return ret;
 }
@@ -718,7 +718,7 @@ bool KeyValueStore::test_mount_in_use()
   if (fsid_fd < 0)
     return 0;   // no fsid, ok.
   bool inuse = lock_fsid() < 0;
-  TEMP_FAILURE_RETRY(::close(fsid_fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fsid_fd));
   fsid_fd = -1;
   return inuse;
 }
@@ -882,10 +882,10 @@ int KeyValueStore::mount()
   return 0;
 
 close_current_fd:
-  TEMP_FAILURE_RETRY(::close(current_fd));
+  VOID_TEMP_FAILURE_RETRY(::close(current_fd));
   current_fd = -1;
 close_fsid_fd:
-  TEMP_FAILURE_RETRY(::close(fsid_fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fsid_fd));
   fsid_fd = -1;
 done:
   return ret;
@@ -900,15 +900,15 @@ int KeyValueStore::umount()
   ondisk_finisher.stop();
 
   if (fsid_fd >= 0) {
-    TEMP_FAILURE_RETRY(::close(fsid_fd));
+    VOID_TEMP_FAILURE_RETRY(::close(fsid_fd));
     fsid_fd = -1;
   }
   if (op_fd >= 0) {
-    TEMP_FAILURE_RETRY(::close(op_fd));
+    VOID_TEMP_FAILURE_RETRY(::close(op_fd));
     op_fd = -1;
   }
   if (current_fd >= 0) {
-    TEMP_FAILURE_RETRY(::close(current_fd));
+    VOID_TEMP_FAILURE_RETRY(::close(current_fd));
     current_fd = -1;
   }
 

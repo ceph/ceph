@@ -42,7 +42,7 @@ int get_random_bytes(char *buf, int len)
   if (fd < 0)
     return -errno;
   int ret = safe_read_exact(fd, buf, len);
-  TEMP_FAILURE_RETRY(::close(fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
   return ret;
 }
 

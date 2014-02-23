@@ -163,7 +163,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
 	dout(1) << "error writing to " << g_conf->mon_cluster_log_file
 		<< ": " << cpp_strerror(err) << dendl;
       }
-      TEMP_FAILURE_RETRY(::close(fd));
+      VOID_TEMP_FAILURE_RETRY(::close(fd));
     }
   }
 
