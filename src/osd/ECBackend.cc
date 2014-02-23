@@ -916,7 +916,10 @@ void ECBackend::handle_sub_read_reply(
        i != op.buffers_read.end();
        ++i) {
     assert(!op.errors.count(i->first));
-    assert(rop.to_read.count(i->first));
+    if (!rop.to_read.count(i->first)) {
+      // We canceled this read! @see filter_read_op
+      continue;
+    }
     list<pair<uint64_t, uint64_t> >::const_iterator req_iter =
       rop.to_read.find(i->first)->second.to_read.begin();
     list<
@@ -1004,36 +1007,61 @@ void ECBackend::filter_read_op(
   const OSDMapRef osdmap,
   ReadOp &op)
 {
+  set<hobject_t> to_cancel;
+  for (map<pg_shard_t, set<hobject_t> >::iterator i = op.source_to_obj.begin();
+       i != op.source_to_obj.end();
+       ++i) {
+    if (osdmap->is_down(i->first.osd)) {
+      to_cancel.insert(i->second.begin(), i->second.end());
+      op.in_progress.erase(i->first);
+      continue;
+    }
+  }
+
+  if (to_cancel.empty())
+    return;
+
   for (map<pg_shard_t, set<hobject_t> >::iterator i = op.source_to_obj.begin();
        i != op.source_to_obj.end();
        ) {
-    if (!osdmap->is_down(i->first.osd)) {
-      ++i;
-      continue;
-    }
     for (set<hobject_t>::iterator j = i->second.begin();
 	 j != i->second.end();
-	 ++j) {
-      get_parent()->cancel_pull(*j);
-
-      assert(op.to_read.count(*j));
-      read_request_t &req = op.to_read.find(*j)->second;
-      assert(req.cb);
-      delete req.cb;
-      req.cb = NULL;
-
-      op.to_read.erase(*j);
-      op.complete.erase(*j);
-      op.obj_to_source.erase(*j);
-      op.in_progress.erase(i->first);
-      recovery_ops.erase(*j);
-      if (op.in_progress.empty()) {
-	get_parent()->schedule_work(
-	  get_parent()->bless_gencontext(
-	    new FinishReadOp(this, op.tid)));
-      }
+	 ) {
+      if (to_cancel.count(*j))
+	i->second.erase(j++);
+      else
+	++j;
     }
-    op.source_to_obj.erase(i++);
+    if (i->second.empty()) {
+      op.source_to_obj.erase(i++);
+    } else {
+      assert(!osdmap->is_down(i->first.osd));
+      ++i;
+    }
+  }
+
+  for (set<hobject_t>::iterator i = to_cancel.begin();
+       i != to_cancel.end();
+       ++i) {
+    get_parent()->cancel_pull(*i);
+
+    assert(op.to_read.count(*i));
+    read_request_t &req = op.to_read.find(*i)->second;
+    dout(10) << __func__ << ": canceling " << req
+	     << "  for obj " << *i << dendl;
+    assert(req.cb);
+    delete req.cb;
+    req.cb = NULL;
+
+    op.to_read.erase(*i);
+    op.complete.erase(*i);
+    recovery_ops.erase(*i);
+  }
+
+  if (op.in_progress.empty()) {
+    get_parent()->schedule_work(
+      get_parent()->bless_gencontext(
+	new FinishReadOp(this, op.tid)));
   }
 };
 

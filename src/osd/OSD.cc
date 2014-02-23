@@ -4211,7 +4211,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
 	      prefix == "mark_unfound_lost" ||
 	      prefix == "list_missing")
 	   )) {
-    spg_t pgid;
+    pg_t pgid;
 
     if (!cmd_getval(cct, cmdmap, "pgid", pgidstr)) {
       ss << "no pgid specified";
@@ -4220,16 +4220,19 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
       ss << "couldn't parse pgid '" << pgidstr << "'";
       r = -EINVAL;
     } else {
-      PG *pg = _lookup_lock_pg(pgid);
-      if (!pg) {
-	ss << "i don't have pgid " << pgid;
-	r = -ENOENT;
-      } else {
+      spg_t pcand;
+      if (osdmap->get_primary_shard(pgid, &pcand) &&
+	  _have_pg(pcand)) {
+	PG *pg = _lookup_lock_pg(pcand);
+	assert(pg);
 	// simulate pg <pgid> cmd= for pg->do-command
 	if (prefix != "pg")
 	  cmd_putval(cct, cmdmap, "cmd", prefix);
 	r = pg->do_command(cmdmap, ss, data, odata);
 	pg->unlock();
+      } else {
+	ss << "i don't have pgid " << pgid;
+	r = -ENOENT;
       }
     }
   }
