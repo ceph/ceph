@@ -269,7 +269,7 @@ int FileStore::lfn_open(coll_t cid,
     if (create && (!exist)) {
       r = (*index)->created(oid, (*path)->path());
       if (r < 0) {
-	TEMP_FAILURE_RETRY(::close(fd));
+	VOID_TEMP_FAILURE_RETRY(::close(fd));
 	derr << "error creating " << oid << " (" << (*path)->path()
 	     << ") in index: " << cpp_strerror(-r) << dendl;
 	goto fail;
@@ -281,7 +281,7 @@ int FileStore::lfn_open(coll_t cid,
     Mutex::Locker l(fdcache_lock);
     *outfd = fdcache.lookup(oid);
     if (*outfd) {
-      TEMP_FAILURE_RETRY(::close(fd));
+      VOID_TEMP_FAILURE_RETRY(::close(fd));
       return 0;
     } else {
       *outfd = fdcache.add(oid, fd);
@@ -703,7 +703,7 @@ int FileStore::mkfs()
     if (initial_seq == 0) {
       int err = write_op_seq(fd, 1);
       if (err < 0) {
-	TEMP_FAILURE_RETRY(::close(fd));
+	VOID_TEMP_FAILURE_RETRY(::close(fd));
 	derr << "mkfs: failed to write to " << current_op_seq_fn << ": "
 	     << cpp_strerror(err) << dendl;
 	goto close_fsid_fd;
@@ -716,15 +716,15 @@ int FileStore::mkfs()
 	char s[NAME_MAX];
 	snprintf(s, sizeof(s), COMMIT_SNAP_ITEM, 1ull);
 	ret = backend->create_checkpoint(s, NULL);
-	TEMP_FAILURE_RETRY(::close(current_fd));
+	VOID_TEMP_FAILURE_RETRY(::close(current_fd));
 	if (ret < 0 && ret != -EEXIST) {
-	  TEMP_FAILURE_RETRY(::close(fd));  
+	  VOID_TEMP_FAILURE_RETRY(::close(fd));  
 	  derr << "mkfs: failed to create snap_1: " << cpp_strerror(ret) << dendl;
 	  goto close_fsid_fd;
 	}
       }
     }
-    TEMP_FAILURE_RETRY(::close(fd));  
+    VOID_TEMP_FAILURE_RETRY(::close(fd));  
   }
 
   {
@@ -751,10 +751,10 @@ int FileStore::mkfs()
   ret = 0;
 
  close_fsid_fd:
-  TEMP_FAILURE_RETRY(::close(fsid_fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fsid_fd));
   fsid_fd = -1;
  close_basedir_fd:
-  TEMP_FAILURE_RETRY(::close(basedir_fd));
+  VOID_TEMP_FAILURE_RETRY(::close(basedir_fd));
   if (backend != generic_backend) {
     delete backend;
     backend = generic_backend;
@@ -777,10 +777,10 @@ int FileStore::mkjournal()
   ret = read_fsid(fd, &fsid);
   if (ret < 0) {
     derr << "FileStore::mkjournal: read error: " << cpp_strerror(ret) << dendl;
-    TEMP_FAILURE_RETRY(::close(fd));
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
     return ret;
   }
-  TEMP_FAILURE_RETRY(::close(fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
 
   ret = 0;
 
@@ -851,7 +851,7 @@ bool FileStore::test_mount_in_use()
   if (fsid_fd < 0)
     return 0;   // no fsid, ok.
   bool inuse = lock_fsid() < 0;
-  TEMP_FAILURE_RETRY(::close(fsid_fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fsid_fd));
   fsid_fd = -1;
   return inuse;
 }
@@ -921,7 +921,7 @@ int FileStore::_detect_fs()
     *_dout << "If you are using ext3 or ext4, be sure to mount the underlying "
 	   << "file system with the 'user_xattr' option." << dendl;
     ::unlink(fn);
-    TEMP_FAILURE_RETRY(::close(tmpfd));
+    VOID_TEMP_FAILURE_RETRY(::close(tmpfd));
     return -ENOTSUP;
   }
 
@@ -942,7 +942,7 @@ int FileStore::_detect_fs()
   chain_fremovexattr(tmpfd, "user.test5");
 
   ::unlink(fn);
-  TEMP_FAILURE_RETRY(::close(tmpfd));
+  VOID_TEMP_FAILURE_RETRY(::close(tmpfd));
 
   return 0;
 }
@@ -1081,7 +1081,7 @@ int FileStore::read_op_seq(uint64_t *seq)
   int ret = safe_read(op_fd, s, sizeof(s) - 1);
   if (ret < 0) {
     derr << "error reading " << current_op_seq_fn << ": " << cpp_strerror(ret) << dendl;
-    TEMP_FAILURE_RETRY(::close(op_fd));
+    VOID_TEMP_FAILURE_RETRY(::close(op_fd));
     assert(!m_filestore_fail_eio || ret != -EIO);
     return ret;
   }
@@ -1248,7 +1248,7 @@ int FileStore::mount()
 	{
 	  int fd = read_op_seq(&curr_seq);
 	  if (fd >= 0) {
-	    TEMP_FAILURE_RETRY(::close(fd));
+	    VOID_TEMP_FAILURE_RETRY(::close(fd));
 	  }
 	}
 	if (curr_seq)
@@ -1323,7 +1323,7 @@ int FileStore::mount()
       derr << "FileStore::mount: failed to create current/nosnap" << dendl;
       goto close_current_fd;
     }
-    TEMP_FAILURE_RETRY(::close(r));
+    VOID_TEMP_FAILURE_RETRY(::close(r));
   } else {
     // clear nosnap marker, if present.
     ::unlink(nosnapfn);
@@ -1482,13 +1482,13 @@ int FileStore::mount()
   return 0;
 
 close_current_fd:
-  TEMP_FAILURE_RETRY(::close(current_fd));
+  VOID_TEMP_FAILURE_RETRY(::close(current_fd));
   current_fd = -1;
 close_basedir_fd:
-  TEMP_FAILURE_RETRY(::close(basedir_fd));
+  VOID_TEMP_FAILURE_RETRY(::close(basedir_fd));
   basedir_fd = -1;
 close_fsid_fd:
-  TEMP_FAILURE_RETRY(::close(fsid_fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fsid_fd));
   fsid_fd = -1;
 done:
   assert(!m_filestore_fail_eio || ret != -EIO);
@@ -1516,19 +1516,19 @@ int FileStore::umount()
   ondisk_finisher.stop();
 
   if (fsid_fd >= 0) {
-    TEMP_FAILURE_RETRY(::close(fsid_fd));
+    VOID_TEMP_FAILURE_RETRY(::close(fsid_fd));
     fsid_fd = -1;
   }
   if (op_fd >= 0) {
-    TEMP_FAILURE_RETRY(::close(op_fd));
+    VOID_TEMP_FAILURE_RETRY(::close(op_fd));
     op_fd = -1;
   }
   if (current_fd >= 0) {
-    TEMP_FAILURE_RETRY(::close(current_fd));
+    VOID_TEMP_FAILURE_RETRY(::close(current_fd));
     current_fd = -1;
   }
   if (basedir_fd >= 0) {
-    TEMP_FAILURE_RETRY(::close(basedir_fd));
+    VOID_TEMP_FAILURE_RETRY(::close(basedir_fd));
     basedir_fd = -1;
   }
 
@@ -1894,7 +1894,7 @@ void FileStore::_set_global_replay_guard(coll_t cid,
 
   _inject_failure();
 
-  TEMP_FAILURE_RETRY(::close(fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
   dout(10) << __func__ << ": " << spos << " done" << dendl;
 }
 
@@ -1917,7 +1917,7 @@ int FileStore::_check_global_replay_guard(coll_t cid,
   if (r < 0) {
     dout(20) << __func__ << " no xattr" << dendl;
     assert(!m_filestore_fail_eio || r != -EIO);
-    TEMP_FAILURE_RETRY(::close(fd));
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
     return 1;  // no xattr
   }
   bufferlist bl;
@@ -1927,7 +1927,7 @@ int FileStore::_check_global_replay_guard(coll_t cid,
   bufferlist::iterator p = bl.begin();
   ::decode(opos, p);
 
-  TEMP_FAILURE_RETRY(::close(fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
   return spos >= opos ? 1 : -1;
 }
 
@@ -2065,7 +2065,7 @@ int FileStore::_check_replay_guard(coll_t cid, const SequencerPosition& spos)
     return 1;  // if collection does not exist, there is no guard, and we can replay.
   }
   int ret = _check_replay_guard(fd, spos);
-  TEMP_FAILURE_RETRY(::close(fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
   return ret;
 }
 
@@ -3799,7 +3799,7 @@ int FileStore::collection_getattr(coll_t c, const char *name,
   char n[PATH_MAX];
   get_attrname(name, n, PATH_MAX);
   r = chain_fgetxattr(fd, n, value, size);
-  TEMP_FAILURE_RETRY(::close(fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
  out:
   dout(10) << "collection_getattr " << fn << " '" << name << "' len " << size << " = " << r << dendl;
   assert(!m_filestore_fail_eio || r != -EIO);
@@ -3822,7 +3822,7 @@ int FileStore::collection_getattr(coll_t c, const char *name, bufferlist& bl)
   }
   r = _fgetattr(fd, n, bp);
   bl.push_back(bp);
-  TEMP_FAILURE_RETRY(::close(fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
  out:
   dout(10) << "collection_getattr " << fn << " '" << name << "' = " << r << dendl;
   assert(!m_filestore_fail_eio || r != -EIO);
@@ -3841,7 +3841,7 @@ int FileStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset)
     goto out;
   }
   r = _fgetattrs(fd, aset, true);
-  TEMP_FAILURE_RETRY(::close(fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
  out:
   dout(10) << "collection_getattrs " << fn << " = " << r << dendl;
   assert(!m_filestore_fail_eio || r != -EIO);
@@ -3864,7 +3864,7 @@ int FileStore::_collection_setattr(coll_t c, const char *name,
   }
   get_attrname(name, n, PATH_MAX);
   r = chain_fsetxattr(fd, n, value, size);
-  TEMP_FAILURE_RETRY(::close(fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
  out:
   dout(10) << "collection_setattr " << fn << " '" << name << "' len " << size << " = " << r << dendl;
   return r;
@@ -3884,7 +3884,7 @@ int FileStore::_collection_rmattr(coll_t c, const char *name)
     goto out;
   }
   r = chain_fremovexattr(fd, n);
-  TEMP_FAILURE_RETRY(::close(fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
  out:
   dout(10) << "collection_rmattr " << fn << " = " << r << dendl;
   return r;
@@ -3911,7 +3911,7 @@ int FileStore::_collection_setattrs(coll_t cid, map<string,bufferptr>& aset)
     if (r < 0)
       break;
   }
-  TEMP_FAILURE_RETRY(::close(fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
  out:
   dout(10) << "collection_setattrs " << fn << " = " << r << dendl;
   return r;
@@ -3989,7 +3989,7 @@ int FileStore::_collection_rename(const coll_t &cid, const coll_t &ncid,
     int fd = ::open(new_coll, O_RDONLY);
     assert(fd >= 0);
     _set_replay_guard(fd, spos);
-    TEMP_FAILURE_RETRY(::close(fd));
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
   }
 
   dout(10) << "collection_rename '" << cid << "' to '" << ncid << "'"

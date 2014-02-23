@@ -183,7 +183,7 @@ static void parse_cmd_args(vector<const char*> &args,
 
 static int get_indata(const char *in_file, bufferlist &indata)
 {
-  int fd = TEMP_FAILURE_RETRY(::open(in_file, O_RDONLY));
+  int fd = VOID_TEMP_FAILURE_RETRY(::open(in_file, O_RDONLY));
   if (fd < 0) {
     int err = errno;
     derr << "error opening in_file '" << in_file << "': "
@@ -195,7 +195,7 @@ static int get_indata(const char *in_file, bufferlist &indata)
     int err = errno;
     derr << "error getting size of in_file '" << in_file << "': "
 	 << cpp_strerror(err) << dendl;
-    TEMP_FAILURE_RETRY(::close(fd));
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
     return 1;
   }
 
@@ -205,11 +205,11 @@ static int get_indata(const char *in_file, bufferlist &indata)
   if (ret) {
     derr << "error reading in_file '" << in_file << "': "
 	 << cpp_strerror(ret) << dendl;
-    TEMP_FAILURE_RETRY(::close(fd));
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
     return 1;
   }
 
-  TEMP_FAILURE_RETRY(::close(fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
   derr << "read " << st.st_size << " bytes from " << in_file << dendl;
   return 0;
 }
@@ -378,7 +378,7 @@ int main(int argc, const char **argv)
     if (out_file.empty() || out_file == "-") {
       err = outbl.write_fd(STDOUT_FILENO);
     } else {
-      int out_fd = TEMP_FAILURE_RETRY(::open(out_file.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0644));
+      int out_fd = VOID_TEMP_FAILURE_RETRY(::open(out_file.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0644));
       if (out_fd < 0) {
 	int ret = errno;
 	derr << " failed to create file '" << out_file << "': "

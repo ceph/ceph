@@ -224,7 +224,7 @@ static int do_get(IoCtx& io_ctx, const char *objname, const char *outfile, unsig
 
  out:
   if (fd != 1)
-    TEMP_FAILURE_RETRY(::close(fd));
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
   return ret;
 }
 
@@ -426,7 +426,7 @@ static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op
   }
   ret = 0;
  out:
-  TEMP_FAILURE_RETRY(close(fd));
+  VOID_TEMP_FAILURE_RETRY(close(fd));
   delete[] buf;
   return ret;
 }

@@ -162,7 +162,7 @@ int LFNIndex::fsync_dir(const vector<string> &path)
     return -errno;
   maybe_inject_failure();
   int r = ::fsync(fd);
-  TEMP_FAILURE_RETRY(::close(fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
   maybe_inject_failure();
   if (r < 0)
     return -errno;
