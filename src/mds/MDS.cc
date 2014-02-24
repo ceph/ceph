@@ -1187,7 +1187,7 @@ void MDS::boot_create()
 
   // write empty sessionmap
   sessionmap.save(fin.new_sub());
-  
+
   // initialize tables
   if (mdsmap->get_tableserver() == whoami) {
     dout(10) << "boot_create creating fresh anchortable" << dendl;
@@ -1200,6 +1200,8 @@ void MDS::boot_create()
     snapserver->save(fin.new_sub());
     snapserver->handle_mds_recovery(whoami);
   }
+
+  assert(g_conf->mds_kill_create_at != 1);
 
   // ok now journal it
   mdlog->journal_segment_subtree_map();
