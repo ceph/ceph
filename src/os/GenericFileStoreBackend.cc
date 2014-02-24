@@ -98,13 +98,13 @@ int GenericFileStoreBackend::detect_features()
     if (r < 0) {
       r = -errno;
       derr << "detect_features: failed to lseek " << fn << ": " << cpp_strerror(r) << dendl;
-      TEMP_FAILURE_RETRY(::close(fd));
+      VOID_TEMP_FAILURE_RETRY(::close(fd));
       return r;
     }
     r = write(fd, buf, sizeof(buf));
     if (r < 0) {
       derr << "detect_features: failed to write to " << fn << ": " << cpp_strerror(r) << dendl;
-      TEMP_FAILURE_RETRY(::close(fd));
+      VOID_TEMP_FAILURE_RETRY(::close(fd));
       return r;
     }
   }
@@ -132,7 +132,7 @@ int GenericFileStoreBackend::detect_features()
   }
 
   ::unlink(fn);
-  TEMP_FAILURE_RETRY(::close(fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
 
 
   bool have_syncfs = false;

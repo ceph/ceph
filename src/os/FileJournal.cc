@@ -124,7 +124,7 @@ int FileJournal::_open(bool forwrite, bool create)
   return 0;
 
  out_fd:
-  TEMP_FAILURE_RETRY(::close(fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
   return ret;
 }
 
@@ -344,7 +344,7 @@ int FileJournal::check()
   ret = 0;
 
  done:
-  TEMP_FAILURE_RETRY(::close(fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
   fd = -1;
   return ret;
 }
@@ -545,7 +545,7 @@ void FileJournal::close()
   // close
   assert(writeq_empty());
   assert(fd >= 0);
-  TEMP_FAILURE_RETRY(::close(fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
   fd = -1;
 }
 

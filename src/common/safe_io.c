@@ -175,13 +175,13 @@ int safe_write_file(const char *base, const char *file,
   }
   ret = safe_write(fd, val, vallen);
   if (ret) {
-    TEMP_FAILURE_RETRY(close(fd));
+    VOID_TEMP_FAILURE_RETRY(close(fd));
     return ret;
   }
 
   ret = fsync(fd);
   if (ret < 0) ret = -errno;
-  TEMP_FAILURE_RETRY(close(fd));
+  VOID_TEMP_FAILURE_RETRY(close(fd));
   if (ret < 0) {
     unlink(tmp);
     return ret;
@@ -200,7 +200,7 @@ int safe_write_file(const char *base, const char *file,
   }
   ret = fsync(fd);
   if (ret < 0) ret = -errno;
-  TEMP_FAILURE_RETRY(close(fd));
+  VOID_TEMP_FAILURE_RETRY(close(fd));
 
   return ret;
 }
@@ -218,11 +218,11 @@ int safe_read_file(const char *base, const char *file,
   }
   len = safe_read(fd, val, vallen - 1);
   if (len < 0) {
-    TEMP_FAILURE_RETRY(close(fd));
+    VOID_TEMP_FAILURE_RETRY(close(fd));
     return len;
   }
   // close sometimes returns errors, but only after write()
-  TEMP_FAILURE_RETRY(close(fd));
+  VOID_TEMP_FAILURE_RETRY(close(fd));
 
   val[len] = 0;
   return len;

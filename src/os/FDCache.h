@@ -44,7 +44,7 @@ public:
       return fd;
     }
     ~FD() {
-      TEMP_FAILURE_RETRY(::close(fd));
+      VOID_TEMP_FAILURE_RETRY(::close(fd));
     }
   };
 
