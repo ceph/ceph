@@ -2023,13 +2023,14 @@ void OSD::load_pgs()
 
     service.init_splits_between(pg->info.pgid, pg->get_osdmap(), osdmap);
 
-    pg->reg_next_scrub();
-
     // generate state for PG's current mapping
     pg->get_osdmap()->pg_to_up_acting_osds(pgid, pg->up, pg->acting);
     int role = pg->get_osdmap()->calc_pg_role(whoami, pg->acting);
     pg->set_role(role);
 
+    // Add the pg to scrub if it is primary
+    pg->reg_next_scrub();
+    
     PG::RecoveryCtx rctx(0, 0, 0, 0, 0, 0);
     pg->handle_loaded(&rctx);
 
