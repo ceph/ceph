@@ -2683,7 +2683,9 @@ void PG::reg_next_scrub()
 
 void PG::unreg_next_scrub()
 {
-  osd->unreg_last_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
+  if (is_primary()) {
+    osd->unreg_last_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
+  }
 }
 
 void PG::sub_op_scrub_map(OpRequestRef op)
