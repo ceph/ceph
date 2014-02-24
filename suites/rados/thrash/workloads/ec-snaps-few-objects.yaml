@@ -12,4 +12,4 @@ tasks:
       snap_create: 50
       snap_remove: 50
       rollback: 50
-      #copy_from: 50
+      copy_from: 50
