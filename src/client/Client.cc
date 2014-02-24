@@ -598,6 +598,15 @@ void Client::update_inode_file_bits(Inode *in,
   }
 }
 
+void Client::_fragmap_remove_non_leaves(Inode *in)
+{
+  for (map<frag_t,int>::iterator p = in->fragmap.begin(); p != in->fragmap.end(); )
+    if (!in->dirfragtree.is_leaf(p->first))
+      in->fragmap.erase(p++);
+    else
+      ++p;
+}
+
 Inode * Client::add_update_inode(InodeStat *st, utime_t from,
 				 MetaSession *session)
 {
@@ -680,7 +689,10 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
   }
 
   // move me if/when version reflects fragtree changes.
-  in->dirfragtree = st->dirfragtree;
+  if (in->dirfragtree != st->dirfragtree) {
+    in->dirfragtree = st->dirfragtree;
+    _fragmap_remove_non_leaves(in);
+  }
 
   if (in->snapid == CEPH_NOSNAP) {
     add_update_cap(in, session, st->cap.cap_id, st->cap.caps, st->cap.seq, st->cap.mseq, inodeno_t(st->cap.realm), st->cap.flags);
@@ -790,7 +802,10 @@ void Client::update_dir_dist(Inode *in, DirStat *dst)
   } else {
     in->fragmap.erase(dst->frag);
   }
-  assert(in->dirfragtree.is_leaf(dst->frag));
+  if (!in->dirfragtree.is_leaf(dst->frag)) {
+    in->dirfragtree.force_to_leaf(cct, dst->frag);
+    _fragmap_remove_non_leaves(in);
+  }
 
   // replicated
   in->dir_replicated = !dst->dist.empty();  // FIXME that's just one frag!
