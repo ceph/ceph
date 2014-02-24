@@ -3041,15 +3041,14 @@ void Client::trim_caps(MetaSession *s, int max)
     s->s_cap_iterator = cap;
     Inode *in = cap->inode;
     if (in->caps.size() > 1 && cap != in->auth_cap) {
+      int mine = cap->issued | cap->implemented;
+      int oissued = in->auth_cap ? in->auth_cap->issued : 0;
       // disposable non-auth cap
-      if (in->caps_used() || in->caps_dirty()) {
-	ldout(cct, 20) << " keeping cap on " << *in << " used " << ccap_string(in->caps_used())
-		       << " dirty " << ccap_string(in->caps_dirty()) << dendl;
-	continue;
+      if (!(in->caps_used() & ~oissued & mine)) {
+	ldout(cct, 20) << " removing unused, unneeded non-auth cap on " << *in << dendl;
+	remove_cap(cap, true);
+	trimmed++;
       }
-      ldout(cct, 20) << " removing unused, unneeded non-auth cap on " << *in << dendl;
-      remove_cap(cap, true);
-      trimmed++;
     } else {
       ldout(cct, 20) << " trying to trim dentries for " << *in << dendl;
       bool all = true;
