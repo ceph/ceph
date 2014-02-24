@@ -3595,7 +3595,7 @@ void PG::scrub(ThreadPool::TPHandle &handle)
     scrubber.is_chunky = true;
     assert(backfill_targets.empty());
     for (unsigned i=0; i<acting.size(); i++) {
-      if (acting[i] == pg_whoami.shard)
+      if (acting[i] == pg_whoami.osd)
 	continue;
       if (acting[i] == CRUSH_ITEM_NONE)
 	continue;
