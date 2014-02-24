@@ -123,8 +123,10 @@ class DaemonState(object):
         clear remote run command value after waiting for exit.
         """
         if self.proc:
-            run.wait([self.proc])
-            self.proc = None
+            try:
+                run.wait([self.proc])
+            finally:
+                self.proc = None
 
 class CephState(object):
     """
