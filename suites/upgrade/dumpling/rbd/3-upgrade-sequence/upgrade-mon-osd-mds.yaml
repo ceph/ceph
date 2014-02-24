@@ -2,7 +2,7 @@ upgrade-sequence:
    sequential:
    - install.upgrade:
       all:
-         branch: emperor
+         branch: dumpling
    - ceph.restart: [mon.a]
    - sleep:
        duration: 60
