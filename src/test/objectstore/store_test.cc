@@ -457,7 +457,7 @@ public:
     boost::uniform_int<> u1(0, max_object_len/2);
     boost::uniform_int<> u2(0, max_object_len);
     uint64_t offset = u1(*rng);
-    size_t len = u2(*rng);
+    uint64_t len = u2(*rng);
     if (offset > len)
       swap(offset, len);
 
