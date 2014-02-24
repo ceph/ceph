@@ -2670,12 +2670,15 @@ bool PG::sched_scrub()
 
 void PG::reg_next_scrub()
 {
-  if (scrubber.must_scrub) {
-    scrubber.scrub_reg_stamp = utime_t();
-  } else {
-    scrubber.scrub_reg_stamp = info.history.last_scrub_stamp;
+  // It is up to primary PG to trigger scrubbing
+  if (is_primary()) {
+    if (scrubber.must_scrub) {
+      scrubber.scrub_reg_stamp = utime_t();
+    } else {
+      scrubber.scrub_reg_stamp = info.history.last_scrub_stamp;
+    }
+    osd->reg_last_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
   }
-  osd->reg_last_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
 }
 
 void PG::unreg_next_scrub()
