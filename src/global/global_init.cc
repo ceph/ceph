@@ -201,14 +201,14 @@ void global_init_postfork(CephContext *cct, int flags)
    * guarantee that nobody ever writes to stdout, even though they're not
    * supposed to.
    */
-  TEMP_FAILURE_RETRY(close(STDIN_FILENO));
+  VOID_TEMP_FAILURE_RETRY(close(STDIN_FILENO));
   if (open("/dev/null", O_RDONLY) < 0) {
     int err = errno;
     derr << "global_init_daemonize: open(/dev/null) failed: error "
 	 << err << dendl;
     exit(1);
   }
-  TEMP_FAILURE_RETRY(close(STDOUT_FILENO));
+  VOID_TEMP_FAILURE_RETRY(close(STDOUT_FILENO));
   if (open("/dev/null", O_RDONLY) < 0) {
     int err = errno;
     derr << "global_init_daemonize: open(/dev/null) failed: error "
@@ -245,7 +245,7 @@ void global_init_chdir(const CephContext *cct)
  */
 int global_init_shutdown_stderr(CephContext *cct)
 {
-  TEMP_FAILURE_RETRY(close(STDERR_FILENO));
+  VOID_TEMP_FAILURE_RETRY(close(STDERR_FILENO));
   if (open("/dev/null", O_RDONLY) < 0) {
     int err = errno;
     derr << "global_init_shutdown_stderr: open(/dev/null) failed: error "
