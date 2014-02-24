@@ -346,8 +346,9 @@ public:
     Mutex::Locker l(sched_scrub_lock);
     pair<utime_t,pg_t> p(t, pgid);
     set<pair<utime_t,pg_t> >::iterator it = last_scrub_pg.find(p);
-    assert(it != last_scrub_pg.end());
-    last_scrub_pg.erase(it);
+    if (it != last_scrub_pg.end()) {
+      last_scrub_pg.erase(it);
+    }
   }
   bool first_scrub_stamp(pair<utime_t, pg_t> *out) {
     Mutex::Locker l(sched_scrub_lock);

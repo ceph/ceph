@@ -2683,9 +2683,10 @@ void PG::reg_next_scrub()
 
 void PG::unreg_next_scrub()
 {
-  if (is_primary()) {
-    osd->unreg_last_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
-  }
+  // We restrict the scrub list only having primary PGs, so that
+  // when state change, we will need to unregister those PGs changing
+  // to replica from primary and register those new primary
+  osd->unreg_last_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
 }
 
 void PG::sub_op_scrub_map(OpRequestRef op)
@@ -4638,6 +4639,10 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
     }
 
     on_role_change();
+
+    // Refresh next scrub list based on role change
+    unreg_next_scrub();
+    reg_next_scrub();
 
     // take active waiters
     requeue_ops(waiting_for_active);
