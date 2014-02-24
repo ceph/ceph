@@ -184,7 +184,7 @@ void Dumper::undump(const char *dump_file)
   char buf[200];
   int r = safe_read(fd, buf, sizeof(buf));
   if (r < 0) {
-    TEMP_FAILURE_RETRY(::close(fd));
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
     return;
   }
 
@@ -247,7 +247,7 @@ void Dumper::undump(const char *dump_file)
     left -= l;
   }
 
-  TEMP_FAILURE_RETRY(::close(fd));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
   cout << "done." << std::endl;
 }
 
