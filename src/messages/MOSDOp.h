@@ -58,10 +58,10 @@ public:
   friend class MOSDOpReply;
 
   // read
-  snapid_t get_snapid() { return snapid; }
+  const snapid_t& get_snapid() { return snapid; }
   void set_snapid(snapid_t s) { snapid = s; }
   // writ
-  snapid_t get_snap_seq() const { return snap_seq; }
+  const snapid_t& get_snap_seq() const { return snap_seq; }
   const vector<snapid_t> &get_snaps() const { return snaps; }
   void set_snaps(const vector<snapid_t>& i) {
     snaps = i;
@@ -78,15 +78,15 @@ public:
   
   object_t& get_oid() { return oid; }
 
-  pg_t     get_pg() const { return pgid; }
+  const pg_t&     get_pg() const { return pgid; }
 
-  object_locator_t get_object_locator() const {
+  const object_locator_t& get_object_locator() const {
     return oloc;
   }
 
   epoch_t  get_map_epoch() { return osdmap_epoch; }
 
-  eversion_t get_version() { return reassert_version; }
+  const eversion_t& get_version() { return reassert_version; }
   
   utime_t get_mtime() { return mtime; }
 

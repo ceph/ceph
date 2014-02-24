@@ -47,16 +47,16 @@ class MOSDOpReply : public Message {
   request_redirect_t redirect;
 
 public:
-  object_t get_oid() const { return oid; }
-  pg_t     get_pg() const { return pgid; }
+  const object_t& get_oid() const { return oid; }
+  const pg_t&     get_pg() const { return pgid; }
   int      get_flags() const { return flags; }
 
   bool     is_ondisk() const { return get_flags() & CEPH_OSD_FLAG_ONDISK; }
   bool     is_onnvram() const { return get_flags() & CEPH_OSD_FLAG_ONNVRAM; }
   
   int get_result() const { return result; }
-  eversion_t get_replay_version() const { return replay_version; }
-  version_t get_user_version() const { return user_version; }
+  const eversion_t& get_replay_version() const { return replay_version; }
+  const version_t& get_user_version() const { return user_version; }
   
   void set_result(int r) { result = r; }
 
