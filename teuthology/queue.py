@@ -236,8 +236,8 @@ def run_with_watchdog(process, job_config):
         time.sleep(teuth_config.watchdog_interval)
 
     # The job finished. Let's make sure paddles knows.
-    branches_with_reporting = ('master', 'next', 'last', 'emperor')
-    if job_config.get('teuthology_branch') not in branches_with_reporting:
+    branches_sans_reporting = ('argonaut', 'bobtail', 'cuttlefish', 'dumpling')
+    if job_config.get('teuthology_branch') in branches_sans_reporting:
         # The job ran with a teuthology branch that may not have the reporting
         # feature. Let's call teuthology-report (which will be from the master
         # branch) to report the job manually.
