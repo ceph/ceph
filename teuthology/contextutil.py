@@ -2,6 +2,7 @@ import contextlib
 import sys
 import logging
 import time
+import itertools
 
 log = logging.getLogger(__name__)
 
@@ -78,12 +79,13 @@ class safe_while(object):
 
     """
 
-    def __init__(self, sleep=5, increment=5, tries=5):
+    def __init__(self, sleep=5, increment=5, tries=5, _sleeper=None):
         self.sleep = sleep
         self.increment = increment
         self.tries = tries
         self.counter = 0
         self.sleep_current = sleep
+        self.sleeper = _sleeper or time.sleep
 
     def _make_error_msg(self):
         """
@@ -91,9 +93,9 @@ class safe_while(object):
         of tries we attempted
         """
         total_seconds_waiting = sum(
-            map(
-                lambda x: x * self.increment,
-                range(1, self.tries+1)
+            itertools.islice(
+                itertools.count(self.sleep, self.increment),
+                self.tries
             )
         )
         return 'reached maximum tries (%s) after waiting for %s seconds' % (
@@ -105,7 +107,7 @@ class safe_while(object):
         if self.counter > self.tries:
             error_msg = self._make_error_msg()
             raise MaxWhileTries(error_msg)
-        time.sleep(self.sleep_current)
+        self.sleeper(self.sleep_current)
         self.sleep_current += self.increment
 
     def __enter__(self):
