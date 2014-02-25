@@ -4262,7 +4262,7 @@ void PG::scrub_finish()
 
   {
     stringstream oss;
-    oss << info.pgid << " " << mode << " ";
+    oss << info.pgid.pgid << " " << mode << " ";
     int total_errors = scrubber.shallow_errors + scrubber.deep_errors;
     if (total_errors)
       oss << total_errors << " errors";
