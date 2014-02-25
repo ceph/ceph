@@ -938,6 +938,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   debug_drop_pg_create_duration(g_conf->osd_debug_drop_pg_create_duration),
   debug_drop_pg_create_left(-1),
   outstanding_pg_stats(false),
+  timeout_mon_on_pg_stats(true),
   up_thru_wanted(0), up_thru_pending(0),
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
   osd_stat_updated(false),
@@ -3060,11 +3061,12 @@ void OSD::tick()
 
     // mon report?
     utime_t now = ceph_clock_now(g_ceph_context);
-    if (outstanding_pg_stats &&
+    if (outstanding_pg_stats && timeout_mon_on_pg_stats &&
 	(now - g_conf->osd_mon_ack_timeout) > last_pg_stats_ack) {
       dout(1) << "mon hasn't acked PGStats in " << now - last_pg_stats_ack
 	      << " seconds, reconnecting elsewhere" << dendl;
-      monc->reopen_session();
+      monc->reopen_session(new C_MonStatsAckTimer(this));
+      timeout_mon_on_pg_stats = false;
       last_pg_stats_ack = ceph_clock_now(g_ceph_context);  // reset clock
       last_pg_stats_sent = utime_t();
     }
