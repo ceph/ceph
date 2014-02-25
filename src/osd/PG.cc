@@ -4293,7 +4293,7 @@ void PG::scrub_finish()
   // when every one has been fixed.
   if (repair) {
     if (scrubber.fixed == scrubber.shallow_errors + scrubber.deep_errors) {
-      assert(deep_scrub || scrubber.deep_errors == 0);
+      assert(deep_scrub);
       scrubber.shallow_errors = scrubber.deep_errors = 0;
     } else {
       // Deep scrub in order to get corrected error counts
