@@ -3608,8 +3608,17 @@ done:
 	pending_inc.new_pools[pool].crash_replay_interval = n;
 	ss << "set pool " << pool << " to crash_replay_interval to " << n;
       } else if (var == "pg_num") {
+	int expected_osds = MIN(p->get_pg_num(), osdmap.get_num_osds());
+	int64_t new_pgs = n - p->get_pg_num();
+	int64_t pgs_per_osd = new_pgs / expected_osds;
 	if (n <= p->get_pg_num()) {
 	  ss << "specified pg_num " << n << " <= current " << p->get_pg_num();
+	} else if (pgs_per_osd > g_conf->mon_osd_max_split_count) {
+	  ss << "specified pg_num " << n << " is too large (creating "
+	     << new_pgs << " new PGs on ~" << expected_osds
+	     << " OSDs exceeds per-OSD max of" << g_conf->mon_osd_max_split_count
+	     << ')';
+	  err = -E2BIG;
 	} else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
 	  ss << "currently creating pgs, wait";
 	  err = -EAGAIN;
