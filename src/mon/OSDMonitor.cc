@@ -353,18 +353,30 @@ bool OSDMonitor::thrash()
   while (n--)
     ++p;
   for (int i=0; i<50; i++) {
+    unsigned size = osdmap.get_pg_size(p->first);
     vector<int> v;
-    for (int j=0; j<3; j++) {
+    bool have_real_osd = false;
+    for (int j=0; j < (int)size; j++) {
       o = rand() % osdmap.get_num_osds();
-      if (osdmap.exists(o) && std::find(v.begin(), v.end(), o) == v.end())
+      if (osdmap.exists(o) && std::find(v.begin(), v.end(), o) == v.end()) {
+	have_real_osd = true;
 	v.push_back(o);
+      }
     }
-    if (v.size() < 3) {
-      for (vector<int>::iterator q = p->second.acting.begin(); q != p->second.acting.end(); ++q)
-	if (std::find(v.begin(), v.end(), *q) == v.end())
-	  v.push_back(*q);
+    for (vector<int>::iterator q = p->second.acting.begin();
+	 q != p->second.acting.end() && v.size() < size;
+	 ++q) {
+      if (std::find(v.begin(), v.end(), *q) == v.end()) {
+	if (*q != CRUSH_ITEM_NONE)
+	  have_real_osd = true;
+	v.push_back(*q);
+      }
     }
-    if (!v.empty())
+    if (osdmap.pg_is_ec(p->first)) {
+      while (v.size() < size)
+	v.push_back(CRUSH_ITEM_NONE);
+    }
+    if (!v.empty() && have_real_osd)
       pending_inc.new_pg_temp[p->first] = v;
     dout(5) << "thrash_map pg " << p->first << " pg_temp remapped to " << v << dendl;
 
