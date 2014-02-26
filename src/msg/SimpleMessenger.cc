@@ -509,10 +509,12 @@ void SimpleMessenger::wait()
   }
   lock.Unlock();
 
-  ldout(cct,10) << "wait: waiting for dispatch queue" << dendl;
-  dispatch_queue.wait();
-  ldout(cct,10) << "wait: dispatch queue is stopped" << dendl;
-  
+  if(dispatch_queue.is_started()) {
+    ldout(cct,10) << "wait: waiting for dispatch queue" << dendl;
+    dispatch_queue.wait();
+    ldout(cct,10) << "wait: dispatch queue is stopped" << dendl;
+  }
+
   // done!  clean up.
   if (did_bind) {
     ldout(cct,20) << "wait: stopping accepter thread" << dendl;
