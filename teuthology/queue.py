@@ -104,7 +104,7 @@ def fetch_teuthology_branch(path, branch='master'):
             shutil.rmtree(path)
             raise
 
-        log.info("Bootstrapping %s", path)
+        log.debug("Bootstrapping %s", path)
         # This magic makes the bootstrap script not attempt to clobber an
         # existing virtualenv. But the branch's bootstrap needs to actually
         # check for the NO_CLOBBER variable.
@@ -114,10 +114,11 @@ def fetch_teuthology_branch(path, branch='master'):
         boot_proc = subprocess.Popen(cmd, shell=True, cwd=path, env=env,
                                      stdout=subprocess.PIPE,
                                      stderr=subprocess.STDOUT)
-        while boot_proc.poll() is None:
+        returncode = boot_proc.wait()
+        if returncode != 0:
             for line in boot_proc.stdout.readlines():
-                log.info(line.strip())
-        log.info("Bootstrap exited with status %s", boot_proc.returncode)
+                log.warn(line.strip())
+        log.info("Bootstrap exited with status %s", returncode)
 
     finally:
         lock.release()
@@ -162,8 +163,8 @@ def worker(ctx):
 
         # bury the job so it won't be re-run if it fails
         job.bury()
-        log.debug('Reserved job %d', job.jid)
-        log.debug('Config is: %s', job.body)
+        log.info('Reserved job %d', job.jid)
+        log.info('Config is: %s', job.body)
         job_config = yaml.safe_load(job.body)
 
         job_config['job_id'] = str(job.jid)
@@ -189,7 +190,7 @@ def worker(ctx):
                                (teuthology_branch, teuth_bin_path))
 
         if job_config.get('last_in_suite'):
-            log.debug('Generating coverage for %s', job_config['name'])
+            log.info('Generating coverage for %s', job_config['name'])
             args = [
                 os.path.join(teuth_bin_path, 'teuthology-results'),
                 '--timeout',
@@ -203,7 +204,7 @@ def worker(ctx):
             ]
             subprocess.Popen(args=args).wait()
         else:
-            log.debug('Creating archive dir %s', archive_path_full)
+            log.info('Creating archive dir %s', archive_path_full)
             safepath.makedirs(ctx.archive_dir, safe_archive)
             log.info('Running job %d', job.jid)
             run_job(job_config, teuth_bin_path)
@@ -246,7 +247,7 @@ def run_with_watchdog(process, job_config):
             run_name=job_info['name'],
             job_id=job_info['job_id'])
         try:
-            log.debug("Executing %s" % cmd)
+            log.info("Executing %s" % cmd)
             report_proc = subprocess.Popen(cmd, shell=True,
                                            stdout=subprocess.PIPE,
                                            stderr=subprocess.STDOUT)
@@ -276,8 +277,8 @@ def run_job(job_config, teuth_bin_path):
     if 'config' in job_config:
         inner_config = job_config.pop('config')
         if not isinstance(inner_config, dict):
-            log.debug("run_job: job_config['config'] isn't a dict, it's a %s",
-                      str(type(inner_config)))
+            log.warn("run_job: job_config['config'] isn't a dict, it's a %s",
+                     str(type(inner_config)))
         else:
             job_config.update(inner_config)
 
