@@ -793,7 +793,7 @@ string rgw_trim_whitespace(const string& src)
   }
 
   int end = src.size() - 1;
-  if (end <= start) {
+  if (end < start) {
     return string();
   }
 
