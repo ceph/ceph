@@ -1557,7 +1557,9 @@ void OSDMap::_pg_to_up_acting_osds(pg_t pg, vector<int> *up, int *up_primary,
   _get_temp_osds(*pool, pg, &_acting, &_acting_primary);
   if (_acting.empty()) {
     _acting = _up;
-    _acting_primary = _up_primary;
+    if (_acting_primary == -1) {
+      _acting_primary = _up_primary;
+    }
   }
   if (up)
     up->swap(_up);
