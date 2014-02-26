@@ -33,10 +33,9 @@ def main(args):
     dead = args['--dead']
     if dead and not job:
         for run_name in run:
-            report_run_dead(run_name, reporter)
+            reporter.report_run(run[0], dead=True)
     elif dead and len(run) == 1 and job:
-        for job_id in job:
-            try_push_job_info(dict(name=run[0], job_id=job_id, status='dead'))
+        reporter.report_jobs(run[0], job, dead=True)
     elif len(run) == 1 and job:
         reporter.report_jobs(run[0], job)
     elif run and len(run) > 1:
@@ -196,7 +195,7 @@ class ResultsReporter(object):
         del self.last_run
         log.info("Total: %s jobs in %s runs", num_jobs, len(run_names))
 
-    def report_run(self, run_name):
+    def report_run(self, run_name, dead=False):
         """
         Report a single run to the results server.
 
@@ -204,9 +203,10 @@ class ResultsReporter(object):
         :returns:        The number of jobs reported.
         """
         jobs = self.serializer.jobs_for_run(run_name)
-        log.info("{name} {jobs} jobs".format(
+        log.info("{name} {jobs} jobs dead={dead}".format(
             name=run_name,
             jobs=len(jobs),
+            dead=str(dead),
         ))
         if jobs:
             if not self.refresh:
@@ -215,12 +215,12 @@ class ResultsReporter(object):
                 if response.status_code == 200:
                     log.info("    already present; skipped")
                     return 0
-            self.report_jobs(run_name, jobs.keys())
+            self.report_jobs(run_name, jobs.keys(), dead=dead)
         elif not jobs:
             log.debug("    no jobs; skipped")
         return len(jobs)
 
-    def report_jobs(self, run_name, job_ids):
+    def report_jobs(self, run_name, job_ids, dead=False):
         """
         Report several jobs to the results server.
 
@@ -228,9 +228,9 @@ class ResultsReporter(object):
         :param job_ids:  The jobs' ids
         """
         for job_id in job_ids:
-            self.report_job(run_name, job_id)
+            self.report_job(run_name, job_id, dead=dead)
 
-    def report_job(self, run_name, job_id, job_info=None):
+    def report_job(self, run_name, job_id, job_info=None, dead=False):
         """
         Report a single job to the results server.
 
@@ -245,6 +245,8 @@ class ResultsReporter(object):
             base=self.base_uri, name=run_name,)
         if job_info is None:
             job_info = self.serializer.job_info(run_name, job_id)
+        if dead and job_info.get('success') is None:
+            job_info['status'] = 'dead'
         job_json = json.dumps(job_info)
         headers = {'content-type': 'application/json'}
         response = requests.post(run_uri, data=job_json, headers=headers)
@@ -346,12 +348,3 @@ def try_push_job_info(job_config, extra_info=None):
     except (requests.exceptions.RequestException, socket.error):
         log.exception("Could not report results to %s" %
                       config.results_server)
-
-
-def report_run_dead(run_name, reporter):
-    jobs = reporter.serializer.jobs_for_run(run_name).keys()
-    log.info("Reporting {run} as dead: {count} jobs".format(run=run_name,
-                                                            count=len(jobs)))
-    for job in sorted(jobs):
-        reporter.report_job(run_name, job, dict(name=run_name, job_id=job,
-                                                status='dead'))
