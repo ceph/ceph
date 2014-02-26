@@ -276,6 +276,9 @@ public:
   bool dirty_info, dirty_big_info;
 
 public:
+  bool is_ec_pg() const {
+    return pool.info.ec_pool();
+  }
   // pg state
   pg_info_t        info;
   __u8 info_struct_v;
