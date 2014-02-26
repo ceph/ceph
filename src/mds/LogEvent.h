@@ -83,6 +83,7 @@ protected:
   virtual void encode(bufferlist& bl) const = 0;
   virtual void decode(bufferlist::iterator &bl) = 0;
   static LogEvent *decode(bufferlist &bl);
+  virtual void dump(Formatter *f) const = 0;
 
   void encode_with_header(bufferlist& bl) {
     ::encode(EVENT_NEW_ENCODING, bl);
