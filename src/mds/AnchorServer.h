@@ -33,7 +33,7 @@ class AnchorServer : public MDSTableServer {
   map<inodeno_t, list<pair<version_t, Context*> > > pending_ops;
 
   void reset_state();
-  void encode_server_state(bufferlist& bl) {
+  void encode_server_state(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
     ::encode(anchor_map, bl);
     ::encode(pending_create, bl);
@@ -70,10 +70,11 @@ class AnchorServer : public MDSTableServer {
   // for the dencoder
   AnchorServer() : MDSTableServer(NULL, TABLE_ANCHOR) {}
   void encode(bufferlist& bl) const {
-    AnchorServer *me = const_cast<AnchorServer*>(this);
-    me->encode_server_state(bl);
+    encode_server_state(bl);
   }
-  void decode(bufferlist::iterator& bl) { decode_server_state(bl); }
+  void decode(bufferlist::iterator& bl) {
+    decode_server_state(bl);
+  }
 
   // server bits
   void _prepare(bufferlist &bl, uint64_t reqid, int bymds);

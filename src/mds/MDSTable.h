@@ -79,7 +79,7 @@ public:
   // child must overload these
   virtual void reset_state() = 0;
   virtual void decode_state(bufferlist::iterator& p) = 0;
-  virtual void encode_state(bufferlist& bl) = 0;
+  virtual void encode_state(bufferlist& bl) const = 0;
 };
 
 #endif
