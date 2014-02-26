@@ -257,3 +257,84 @@ void SnapServer::check_osd_map(bool force)
 
   last_checked_osdmap = version;
 }
+
+
+void SnapServer::dump(Formatter *f) const
+{
+  f->open_object_section("snapserver");
+
+  f->dump_int("last_snap", last_snap.val);
+
+  f->open_array_section("pending_noop");
+  for(set<version_t>::const_iterator i = pending_noop.begin(); i != pending_noop.end(); ++i) {
+    f->dump_unsigned("version", *i);
+  }
+  f->close_section();
+
+  f->open_array_section("snaps");
+  for (map<snapid_t, SnapInfo>::const_iterator i = snaps.begin(); i != snaps.end(); ++i) {
+    f->open_object_section("snap");
+    i->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_object_section("need_to_purge");
+  for (map<int, set<snapid_t> >::const_iterator i = need_to_purge.begin(); i != need_to_purge.end(); ++i) {
+    stringstream pool_id;
+    pool_id << i->first;
+    f->open_array_section(pool_id.str().c_str());
+    for (set<snapid_t>::const_iterator s = i->second.begin(); s != i->second.end(); ++s) {
+      f->dump_unsigned("snapid", s->val);
+    }
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_array_section("pending_create");
+  for(map<version_t, SnapInfo>::const_iterator i = pending_create.begin(); i != pending_create.end(); ++i) {
+    f->open_object_section("snap");
+    f->dump_unsigned("version", i->first);
+    f->open_object_section("snapinfo");
+    i->second.dump(f);
+    f->close_section();
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_array_section("pending_destroy");
+  for(map<version_t, pair<snapid_t, snapid_t> >::const_iterator i = pending_destroy.begin(); i != pending_destroy.end(); ++i) {
+    f->open_object_section("snap");
+    f->dump_unsigned("version", i->first);
+    f->dump_unsigned("removed_snap", i->second.first);
+    f->dump_unsigned("seq", i->second.second);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->close_section();
+}
+
+void SnapServer::generate_test_instances(list<SnapServer*>& ls)
+{
+  list<SnapInfo*> snapinfo_instances;
+  SnapInfo::generate_test_instances(snapinfo_instances);
+  SnapInfo populated_snapinfo = *(snapinfo_instances.back());
+  for (list<SnapInfo*>::iterator i = snapinfo_instances.begin(); i != snapinfo_instances.end(); ++i) {
+    delete *i;
+  }
+
+  SnapServer *blank = new SnapServer();
+  ls.push_back(blank);
+  SnapServer *populated = new SnapServer();
+  populated->last_snap = 123;
+  populated->snaps[456] = populated_snapinfo;
+  populated->need_to_purge[2].insert(012);
+  populated->pending_create[234] = populated_snapinfo;
+  populated->pending_destroy[345].first = 567;
+  populated->pending_destroy[345].second = 768;
+  populated->pending_noop.insert(890);
+
+  ls.push_back(populated);
+
+}
