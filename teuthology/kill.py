@@ -87,6 +87,11 @@ def find_job_info(job_archive_dir):
     conf_file = os.path.join(job_archive_dir, 'config.yaml')
     if os.path.isfile(conf_file):
         job_info.update(yaml.safe_load(open(conf_file, 'r')))
+    else:
+        conf_file = os.path.join(job_archive_dir, 'orig.config.yaml')
+        if os.path.isfile(conf_file):
+            log.debug("config.yaml not found but orig.config.yaml found")
+            job_info.update(yaml.safe_load(open(conf_file, 'r')))
 
     return job_info
 
