@@ -1555,10 +1555,10 @@ void OSDMap::_pg_to_up_acting_osds(pg_t pg, vector<int> *up, int *up_primary,
   _raw_to_up_osds(*pool, raw, &_up, &_up_primary);
   _apply_primary_affinity(pps, *pool, &_up, &_up_primary);
   _get_temp_osds(*pool, pg, &_acting, &_acting_primary);
-  if (_acting.empty())
+  if (_acting.empty()) {
     _acting = _up;
-  if (_acting_primary == -1)
     _acting_primary = _up_primary;
+  }
   if (up)
     up->swap(_up);
   if (up_primary)
