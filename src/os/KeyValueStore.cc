@@ -84,7 +84,7 @@ int StripObjectMap::create_strip_header(const coll_t &cid,
                                         StripObjectHeader &strip_header,
                                         KeyValueDB::Transaction t)
 {
-  Header header = lookup_create_header(cid, oid, t);
+  Header header = generate_new_header(cid, oid, Header(), t);
   if (!header)
     return -EINVAL;
 
@@ -246,16 +246,22 @@ int KeyValueStore::BufferTransaction::lookup_cached_header(
 
   StripHeaderMap::iterator it = strip_headers.find(make_pair(cid, oid));
   if (it != strip_headers.end()) {
-    if (it->second.deleted)
-      return -ENOENT;
 
-    if (strip_header)
-      *strip_header = &it->second;
-    return 0;
+    if (!it->second.deleted) {
+      if (strip_header)
+        *strip_header = &it->second;
+      return 0;
+    } else if (!create_if_missing) {
+      return -ENOENT;
+    }
+
+    // If (it->second.deleted && create_if_missing) go down
+    r = -ENOENT;
+  } else {
+    r = store->backend->lookup_strip_header(cid, oid, header);
   }
 
-  r = store->backend->lookup_strip_header(cid, oid, header);
-  if (r < 0 && create_if_missing) {
+  if (r == -ENOENT && create_if_missing) {
     r = store->backend->create_strip_header(cid, oid, header, t);
   }
 
@@ -385,6 +391,7 @@ int KeyValueStore::BufferTransaction::submit_transaction()
       continue;
 
     r = store->backend->save_strip_header(header, t);
+
     if (r < 0) {
       dout(10) << __func__ << " save strip header failed " << dendl;
       goto out;
@@ -1615,6 +1622,8 @@ int KeyValueStore::_remove(coll_t cid, const ghobject_t& oid,
     return r;
   }
 
+  header->max_size = 0;
+  header->bits.clear();
   r = t.clear_buffer(*header);
 
   dout(10) << __func__ << " " << cid << "/" << oid << " = " << r << dendl;
