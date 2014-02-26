@@ -18,6 +18,10 @@ log = logging.getLogger(__name__)
 
 
 def main(args):
+    run = args['--run']
+    job = args['--job']
+    dead = args['--dead']
+    refresh = dead or args['--refresh']
     server = args['--server']
     if server:
         config.results_server = server
@@ -26,11 +30,7 @@ def main(args):
 
     archive_base = os.path.abspath(os.path.expanduser(args['--archive']))
     save = not args['--no-save']
-    reporter = ResultsReporter(archive_base, save=save,
-                               refresh=args['--refresh'])
-    run = args['--run']
-    job = args['--job']
-    dead = args['--dead']
+    reporter = ResultsReporter(archive_base, save=save, refresh=refresh)
     if dead and not job:
         for run_name in run:
             reporter.report_run(run[0], dead=True)

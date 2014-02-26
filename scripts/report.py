@@ -31,7 +31,8 @@ optional arguments:
                         last successful submission in a file called
                         'last_successful_run'. Pass this flag to disable that
                         behavior.
-  -D, --dead            Mark all given jobs (or entire runs) with status 'dead'
+  -D, --dead            Mark all given jobs (or entire runs) with status
+                        'dead'. Implies --refresh.
   -v, --verbose         be more verbose
 """.format(archive_base=teuthology.config.config.archive_base)
 
