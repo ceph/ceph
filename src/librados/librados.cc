@@ -489,6 +489,10 @@ librados::ObjectIterator& librados::ObjectIterator::operator=(const librados::Ob
 {
   if (&rhs == this)
     return *this;
+  if (rhs.ctx.get() == NULL) {
+    ctx.reset();
+    return *this;
+  }
   Objecter::ListContext *list_ctx = new Objecter::ListContext(*rhs.ctx->lc);
   ctx.reset(new ObjListCtx(rhs.ctx->ctx, list_ctx));
   cur_obj = rhs.cur_obj;
