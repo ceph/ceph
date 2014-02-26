@@ -8,7 +8,7 @@ usage: teuthology-queue [-h] -m MACHINE_TYPE
        teuthology-queue [-h] -m MACHINE_TYPE -d JOB
 
 List Jobs in queue:
-  If -d then jobs with JOB in the job name are delete from the queue.
+  If -d then jobs with JOB in the job name are deleted from the queue.
 
 Arguments:
   -m, --machine_type MACHINE_TYPE
@@ -17,7 +17,7 @@ Arguments:
 optional arguments:
   -h, --help            show this help message and exit
 
-  -d, --delete JOB      Delete Jobs with JOB in jobname.
+  -d, --delete JOB      Delete Jobs JOB in their name.
 
 """.format(archive_base=teuthology.config.config.archive_base)
 
