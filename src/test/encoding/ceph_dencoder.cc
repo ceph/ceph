@@ -47,7 +47,7 @@ void usage(ostream &out)
 }
 struct Dencoder {
   virtual ~Dencoder() {}
-  virtual string decode(bufferlist bl) = 0;
+  virtual string decode(bufferlist bl, uint64_t seek) = 0;
   virtual void encode(bufferlist& out, uint64_t features) = 0;
   virtual void dump(ceph::Formatter *f) = 0;
   virtual void copy() {
@@ -75,8 +75,9 @@ public:
     delete m_object;
   }
 
-  string decode(bufferlist bl) {
+  string decode(bufferlist bl, uint64_t seek) {
     bufferlist::iterator p = bl.begin();
+    p.seek(seek);
     try {
       m_object->decode(p);
     }
@@ -168,8 +169,9 @@ public:
     m_object->put();
   }
 
-  string decode(bufferlist bl) {
+  string decode(bufferlist bl, uint64_t seek) {
     bufferlist::iterator p = bl.begin();
+    p.seek(seek);
     try {
       Message *n = decode_message(g_ceph_context, p);
       if (!n)
@@ -253,6 +255,7 @@ int main(int argc, const char **argv)
   Dencoder *den = NULL;
   uint64_t features = CEPH_FEATURES_SUPPORTED_DEFAULT;
   bufferlist encbl;
+  uint64_t skip = 0;
 
   if (args.empty()) {
     usage(cerr);
@@ -285,6 +288,13 @@ int main(int argc, const char **argv)
       }
       den = dencoders[cname];
       den->generate();
+    } else if (*i == string("skip")) {
+      ++i;
+      if (i == args.end()) {
+	usage(cerr);
+	exit(1);
+      }
+      skip = atoi(*i);
     } else if (*i == string("get_features")) {
       cout << CEPH_FEATURES_SUPPORTED_DEFAULT << std::endl;
       exit(0);
@@ -309,7 +319,7 @@ int main(int argc, const char **argv)
 	usage(cerr);
 	exit(1);
       }
-      err = den->decode(encbl);
+      err = den->decode(encbl, skip);
     } else if (*i == string("copy_ctor")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
@@ -348,6 +358,7 @@ int main(int argc, const char **argv)
         cerr << "error reading " << *i << ": " << err << std::endl;
         exit(1);
       }
+
     } else if (*i == string("export")) {
       ++i;
       if (i == args.end()) {
