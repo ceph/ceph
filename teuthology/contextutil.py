@@ -51,7 +51,7 @@ class MaxWhileTries(Exception):
 
 class safe_while(object):
     """
-    A contect manager to remove boiler plate code that deals with `while` loops
+    A context manager to remove boiler plate code that deals with `while` loops
     that need a given number of tries and some seconds to sleep between each
     one of those tries.
 
