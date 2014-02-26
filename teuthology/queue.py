@@ -222,6 +222,7 @@ def run_with_watchdog(process, job_config):
 
     # Sleep once outside of the loop to avoid double-posting jobs
     time.sleep(teuth_config.watchdog_interval)
+    symlink_worker_log(job_config['worker_log'], job_config['archive_path'])
     while process.poll() is None:
         # Kill jobs that have been running longer than the global max
         job_run_time = datetime.utcnow() - job_start_time
@@ -301,12 +302,6 @@ def run_job(job_config, teuth_bin_path):
         arg.append(tmp.name)
         p = subprocess.Popen(args=arg)
         log.info("Job archive: %s", job_config['archive_path'])
-        try:
-            log.debug("Worker log: %s", job_config['worker_log'])
-            os.symlink(job_config['worker_log'],
-                       os.path.join(job_config['archive_path'], 'worker.log'))
-        except Exception:
-            log.exception("Failed to symlink worker log")
 
         if teuth_config.results_server:
             log.info("Running with watchdog")
@@ -317,9 +312,22 @@ def run_job(job_config, teuth_bin_path):
                 raise
         else:
             log.info("Running without watchdog")
+            # This sleep() is to give the child time to start up and create the
+            # archive dir.
+            time.sleep(5)
+            symlink_worker_log(job_config['worker_log'],
+                               job_config['archive_path'])
             p.wait()
 
         if p.returncode != 0:
             log.error('Child exited with code %d', p.returncode)
         else:
             log.info('Success!')
+
+
+def symlink_worker_log(worker_log_path, archive_dir):
+    try:
+        log.debug("Worker log: %s", worker_log_path)
+        os.symlink(worker_log_path, os.path.join(archive_dir, 'worker.log'))
+    except Exception:
+        log.exception("Failed to symlink worker log")
