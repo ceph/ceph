@@ -69,40 +69,9 @@ const string KeyValueStore::COLLECTION_ATTR = "__COLL_ATTR__";
 
 // ============== StripObjectMap Implementation =================
 
-void StripObjectMap::sync_wrap(StripObjectHeader &strip_header,
-                               KeyValueDB::Transaction t,
-                               const SequencerPosition &spos)
-{
-  dout(10) << __func__ << " cid: " << strip_header.cid << "oid: "
-           << strip_header.oid << " setting spos to " << strip_header.spos
-           << dendl;
-  strip_header.spos = spos;
-  strip_header.header->data.clear();
-  ::encode(strip_header, strip_header.header->data);
-
-  sync(strip_header.header, t);
-}
-
-bool StripObjectMap::check_spos(const StripObjectHeader &header,
-                                const SequencerPosition &spos)
-{
-  if (spos > header.spos) {
-    dout(10) << "cid: " << "oid: " << header.oid
-             << " not skipping op, *spos " << spos << dendl;
-    dout(10) << " > header.spos " << header.spos << dendl;
-    return false;
-  } else {
-    dout(10) << "cid: " << "oid: " << header.oid << " skipping op, spos "
-             << spos << " <= header.spos " << header.spos << dendl;
-    return true;
-  }
-}
-
 int StripObjectMap::save_strip_header(StripObjectHeader &strip_header,
-                                      const SequencerPosition &spos,
                                       KeyValueDB::Transaction t)
 {
-  strip_header.spos = spos;
   strip_header.header->data.clear();
   ::encode(strip_header, strip_header.header->data);
 
@@ -263,28 +232,6 @@ int StripObjectMap::get_with_header(const StripObjectHeader &header,
 
   return 0;
 }
-// =========== KeyValueStore::SubmitManager Implementation ==============
-
-uint64_t KeyValueStore::SubmitManager::op_submit_start()
-{
-  lock.Lock();
-  uint64_t op = ++op_seq;
-  dout(10) << "op_submit_start " << op << dendl;
-  return op;
-}
-
-void KeyValueStore::SubmitManager::op_submit_finish(uint64_t op)
-{
-  dout(10) << "op_submit_finish " << op << dendl;
-  if (op != op_submitted + 1) {
-      dout(0) << "op_submit_finish " << op << " expected " << (op_submitted + 1)
-          << ", OUT OF ORDER" << dendl;
-      assert(0 == "out of order op_submit_finish");
-  }
-  op_submitted = op;
-  lock.Unlock();
-}
-
 
 // ========= KeyValueStore::BufferTransaction Implementation ============
 
@@ -417,9 +364,6 @@ void KeyValueStore::BufferTransaction::rename_buffer(
     StripObjectMap::StripObjectHeader &old_header,
     const coll_t &cid, const ghobject_t &oid)
 {
-  if (store->backend->check_spos(old_header, spos))
-    return ;
-
   // FIXME: Lacking of lock for origin header, it will cause other operation
   // can get the origin header while submitting transactions
   store->backend->rename_wrap(cid, oid, t, &old_header);
@@ -436,13 +380,10 @@ int KeyValueStore::BufferTransaction::submit_transaction()
        header_iter != strip_headers.end(); ++header_iter) {
     StripObjectMap::StripObjectHeader header = header_iter->second;
 
-    if (store->backend->check_spos(header, spos))
-      continue;
-
     if (header.deleted)
       continue;
 
-    r = store->backend->save_strip_header(header, spos, t);
+    r = store->backend->save_strip_header(header, t);
     if (r < 0) {
       dout(10) << __func__ << " save strip header failed " << dendl;
       goto out;
@@ -493,7 +434,7 @@ KeyValueStore::KeyValueStore(const std::string &base,
   ObjectStore(base),
   internal_name(name),
   basedir(base),
-  fsid_fd(-1), op_fd(-1), current_fd(-1),
+  fsid_fd(-1), current_fd(-1),
   kv_type(KV_TYPE_NONE),
   backend(NULL),
   ondisk_finisher(g_ceph_context),
@@ -905,10 +846,6 @@ int KeyValueStore::umount()
     VOID_TEMP_FAILURE_RETRY(::close(fsid_fd));
     fsid_fd = -1;
   }
-  if (op_fd >= 0) {
-    VOID_TEMP_FAILURE_RETRY(::close(op_fd));
-    op_fd = -1;
-  }
   if (current_fd >= 0) {
     VOID_TEMP_FAILURE_RETRY(::close(current_fd));
     current_fd = -1;
@@ -962,13 +899,8 @@ int KeyValueStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 
   Op *o = build_op(tls, ondisk, onreadable, onreadable_sync, osd_op);
   op_queue_reserve_throttle(o, handle);
-  uint64_t op = submit_manager.op_submit_start();
-  o->op = op;
-  dout(5) << "queue_transactions (trailing journal) " << op << " "
-          << tls <<dendl;
+  dout(5) << "queue_transactions (trailing journal) " << " " << tls <<dendl;
   queue_op(osr, o);
-
-  submit_manager.op_submit_finish(op);
 
   return 0;
 }
@@ -1126,13 +1058,12 @@ int KeyValueStore::_do_transactions(list<Transaction*> &tls, uint64_t op_seq,
   }
 
   int trans_num = 0;
-  SequencerPosition spos(op_seq, trans_num, 0);
-  BufferTransaction bt(this, spos);
+  BufferTransaction bt(this);
 
   for (list<Transaction*>::iterator p = tls.begin();
        p != tls.end();
        ++p, trans_num++) {
-    r = _do_transaction(**p, bt, spos, handle);
+    r = _do_transaction(**p, bt, handle);
     if (r < 0)
       break;
     if (handle)
@@ -1149,12 +1080,12 @@ int KeyValueStore::_do_transactions(list<Transaction*> &tls, uint64_t op_seq,
 
 unsigned KeyValueStore::_do_transaction(Transaction& transaction,
                                         BufferTransaction &t,
-                                        SequencerPosition& spos,
                                         ThreadPool::TPHandle *handle)
 {
   dout(10) << "_do_transaction on " << &transaction << dendl;
 
   Transaction::iterator i = transaction.begin();
+  uint64_t op_num = 0;
 
   while (i.have_op()) {
     if (handle)
@@ -1493,8 +1424,7 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
         }
 
         dout(0) << " error " << cpp_strerror(r) << " not handled on operation "
-                << op << " (" << spos << ", or op " << spos.op
-                << ", counting from 0)" << dendl;
+                << op << " op " << op_num << ", counting from 0)" << dendl;
         dout(0) << msg << dendl;
         dout(0) << " transaction dump:\n";
         JSONFormatter f(true);
@@ -1511,7 +1441,7 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
       }
     }
 
-    spos.op++;
+    op_num++;
   }
 
   return 0;  // FIXME count errors
