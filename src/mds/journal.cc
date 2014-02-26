@@ -1078,14 +1078,14 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	if (p->is_dirty()) in->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *in << dendl;
       } else {
+	if (in->get_parent_dn() && in->inode.anchored != p->inode.anchored)
+	  in->get_parent_dn()->adjust_nested_anchors((int)p->inode.anchored - (int)in->inode.anchored);
 	p->update_inode(mds, in);
 	if (dn->get_linkage()->get_inode() != in && in->get_parent_dn()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *in << dendl;
 	  unlinked[in] = in->get_parent_dir();
 	  in->get_parent_dir()->unlink_inode(in->get_parent_dn());
 	}
-	if (in->get_parent_dn() && in->inode.anchored != p->inode.anchored)
-	  in->get_parent_dn()->adjust_nested_anchors( (int)p->inode.anchored - (int)in->inode.anchored );
 	if (dn->get_linkage()->get_inode() != in) {
 	  if (!dn->get_linkage()->is_null()) { // note: might be remote.  as with stray reintegration.
 	    if (dn->get_linkage()->is_primary()) {
