@@ -147,7 +147,7 @@ class MDSThrasher(Greenlet):
 
             # find the active mds in the failure group
             statuses = [self.manager.get_mds_status(m) for m in self.failure_group]
-            actives = filter(lambda s: s['state'] == 'up:active', statuses)
+            actives = filter(lambda s: s and s['state'] == 'up:active', statuses)
             assert len(actives) == 1, 'Can only have one active in a failure group'
 
             active_mds = actives[0]['name']
