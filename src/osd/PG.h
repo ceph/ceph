@@ -675,7 +675,7 @@ protected:
   void clear_publish_stats();
 
 public:
-  void clear_primary_state();
+  void clear_primary_state(bool stay_primary);
 
  public:
   bool is_actingbackfill(pg_shard_t osd) const {
