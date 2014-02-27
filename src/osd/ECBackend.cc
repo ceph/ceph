@@ -445,6 +445,8 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
 	get_parent(),
 	get_parent()->get_epoch(),
 	replies)));
+  m.t->register_on_applied(
+    new ObjectStore::C_DeleteTransaction(m.t));
   get_parent()->queue_transaction(m.t);
   m.t = NULL;
   if (m.reads.empty())
@@ -819,6 +821,8 @@ void ECBackend::handle_sub_write(
   localt->register_on_applied(
     get_parent()->bless_context(
       new SubWriteApplied(this, msg, op.tid, op.at_version)));
+  localt->register_on_applied(
+    new ObjectStore::C_DeleteTransaction(localt));
   get_parent()->queue_transaction(localt, msg);
 }
 
