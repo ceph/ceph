@@ -428,7 +428,7 @@ public:
     boost::uniform_int<> u1(0, max_object_len/2);
     boost::uniform_int<> u2(0, max_object_len);
     uint64_t offset = u1(*rng);
-    size_t len = u2(*rng);
+    uint64_t len = u2(*rng);
     bufferlist bl;
     if (offset > len)
       swap(offset, len);
@@ -457,7 +457,7 @@ public:
     boost::uniform_int<> u1(0, max_object_len/2);
     boost::uniform_int<> u2(0, max_object_len);
     uint64_t offset = u1(*rng);
-    size_t len = u2(*rng);
+    uint64_t len = u2(*rng);
     if (offset > len)
       swap(offset, len);
 
@@ -481,7 +481,7 @@ public:
         len = max_len;
       ASSERT_EQ(len, result.length());
       contents[obj].copy(offset, len, bl);
-      ASSERT_EQ(r, len);
+      ASSERT_EQ(r, (int)len);
       ASSERT_TRUE(result.contents_equal(bl));
     }
   }

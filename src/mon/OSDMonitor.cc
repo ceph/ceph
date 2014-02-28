@@ -203,9 +203,17 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     if (t == NULL)
       t = new MonitorDBStore::Transaction;
 
-    // write out the full map for all past epochs
+    // Write out the full map for all past epochs.  Encode the full
+    // map with the same features as the incremental.  If we don't
+    // know, use the quorum features.  If we don't know those either,
+    // encode with all features.
+    uint64_t f = inc.encode_features;
+    if (!f)
+      f = mon->quorum_features;
+    if (!f)
+      f = -1;
     bufferlist full_bl;
-    osdmap.encode(full_bl, inc.encode_features);
+    osdmap.encode(full_bl, f);
     tx_size += full_bl.length();
 
     put_version_full(t, osdmap.epoch, full_bl);
@@ -345,18 +353,30 @@ bool OSDMonitor::thrash()
   while (n--)
     ++p;
   for (int i=0; i<50; i++) {
+    unsigned size = osdmap.get_pg_size(p->first);
     vector<int> v;
-    for (int j=0; j<3; j++) {
+    bool have_real_osd = false;
+    for (int j=0; j < (int)size; j++) {
       o = rand() % osdmap.get_num_osds();
-      if (osdmap.exists(o) && std::find(v.begin(), v.end(), o) == v.end())
+      if (osdmap.exists(o) && std::find(v.begin(), v.end(), o) == v.end()) {
+	have_real_osd = true;
 	v.push_back(o);
+      }
     }
-    if (v.size() < 3) {
-      for (vector<int>::iterator q = p->second.acting.begin(); q != p->second.acting.end(); ++q)
-	if (std::find(v.begin(), v.end(), *q) == v.end())
-	  v.push_back(*q);
+    for (vector<int>::iterator q = p->second.acting.begin();
+	 q != p->second.acting.end() && v.size() < size;
+	 ++q) {
+      if (std::find(v.begin(), v.end(), *q) == v.end()) {
+	if (*q != CRUSH_ITEM_NONE)
+	  have_real_osd = true;
+	v.push_back(*q);
+      }
     }
-    if (!v.empty())
+    if (osdmap.pg_is_ec(p->first)) {
+      while (v.size() < size)
+	v.push_back(CRUSH_ITEM_NONE);
+    }
+    if (!v.empty() && have_real_osd)
       pending_inc.new_pg_temp[p->first] = v;
     dout(5) << "thrash_map pg " << p->first << " pg_temp remapped to " << v << dendl;
 
@@ -3133,7 +3153,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     if (pgs_per_osd > g_conf->mon_osd_max_split_count) {
       ss << "specified pg_num " << n << " is too large (creating "
 	 << new_pgs << " new PGs on ~" << expected_osds
-	 << " OSDs exceeds per-OSD max of" << g_conf->mon_osd_max_split_count
+	 << " OSDs exceeds per-OSD max of " << g_conf->mon_osd_max_split_count
 	 << ')';
       return -E2BIG;
     }

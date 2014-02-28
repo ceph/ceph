@@ -2054,6 +2054,8 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
     up_primary,
     primary);
   child->role = OSDMap::calc_pg_role(osd->whoami, child->acting);
+
+  // this comparison includes primary rank via pg_shard_t
   if (get_primary() != child->get_primary())
     child->info.history.same_primary_since = get_osdmap()->get_epoch();
 
@@ -3593,7 +3595,7 @@ void PG::scrub(ThreadPool::TPHandle &handle)
     scrubber.is_chunky = true;
     assert(backfill_targets.empty());
     for (unsigned i=0; i<acting.size(); i++) {
-      if (acting[i] == pg_whoami.shard)
+      if (acting[i] == pg_whoami.osd)
 	continue;
       if (acting[i] == CRUSH_ITEM_NONE)
 	continue;
@@ -4260,7 +4262,7 @@ void PG::scrub_finish()
 
   {
     stringstream oss;
-    oss << info.pgid << " " << mode << " ";
+    oss << info.pgid.pgid << " " << mode << " ";
     int total_errors = scrubber.shallow_errors + scrubber.deep_errors;
     if (total_errors)
       oss << total_errors << " errors";
@@ -4291,7 +4293,7 @@ void PG::scrub_finish()
   // when every one has been fixed.
   if (repair) {
     if (scrubber.fixed == scrubber.shallow_errors + scrubber.deep_errors) {
-      assert(deep_scrub || scrubber.deep_errors == 0);
+      assert(deep_scrub);
       scrubber.shallow_errors = scrubber.deep_errors = 0;
     } else {
       // Deep scrub in order to get corrected error counts
@@ -4705,6 +4707,7 @@ void PG::start_peering_interval(
       oldup != up) {
     info.history.same_up_since = osdmap->get_epoch();
   }
+  // this comparison includes primary rank via pg_shard_t
   if (old_acting_primary != get_primary()) {
     info.history.same_primary_since = osdmap->get_epoch();
   }
