@@ -37,7 +37,8 @@ def main(args):
         (os.path.join(args.base, collection), collection)
         for collection in args.collections
     ]
-
+    
+    count = 1
     num_jobs = 0
     for collection, collection_name in sorted(collections):
         log.debug('Collection %s in %s' % (collection_name, collection))
@@ -50,6 +51,12 @@ def main(args):
         arch = get_arch(args.config)
         machine_type = get_machine_type(args.config)
         for description, config in configs:
+            if args.limit > 0:
+                if count > args.limit:
+                    log.info('Stopped after {limit} jobs due to --limit={limit}'.format(
+                    limit=args.limit))
+
+                    break
             raw_yaml = '\n'.join([file(a, 'r').read() for a in config])
 
             parsed_yaml = yaml.load(raw_yaml)
@@ -95,6 +102,7 @@ def main(args):
                 subprocess.check_call(
                     args=arg,
                 )
+            count += 1
 
     if num_jobs:
         arg = copy.deepcopy(base_arg)
