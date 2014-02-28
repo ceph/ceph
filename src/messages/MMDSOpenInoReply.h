@@ -24,7 +24,7 @@ struct MMDSOpenInoReply : public Message {
   int32_t error;
 
   MMDSOpenInoReply() : Message(MSG_MDS_OPENINOREPLY) {}
-  MMDSOpenInoReply(tid_t t, inodeno_t i, int h=-1, int e=0) :
+  MMDSOpenInoReply(ceph_tid_t t, inodeno_t i, int h=-1, int e=0) :
     Message(MSG_MDS_OPENINOREPLY), ino(i), hint(h), error(e) {
     header.tid = t;
   }

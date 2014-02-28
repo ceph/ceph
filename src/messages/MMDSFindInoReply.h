@@ -19,11 +19,11 @@
 #include "include/filepath.h"
 
 struct MMDSFindInoReply : public Message {
-  tid_t tid;
+  ceph_tid_t tid;
   filepath path;
 
   MMDSFindInoReply() : Message(MSG_MDS_FINDINOREPLY) {}
-  MMDSFindInoReply(tid_t t) : Message(MSG_MDS_FINDINOREPLY), tid(t) {}
+  MMDSFindInoReply(ceph_tid_t t) : Message(MSG_MDS_FINDINOREPLY), tid(t) {}
 
   const char *get_type_name() const { return "findinoreply"; }
   void print(ostream &out) const {

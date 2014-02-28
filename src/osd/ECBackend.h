@@ -55,9 +55,9 @@ public:
   friend struct SubWriteApplied;
   friend struct SubWriteCommitted;
   void sub_write_applied(
-    tid_t tid, eversion_t version);
+    ceph_tid_t tid, eversion_t version);
   void sub_write_committed(
-    tid_t tid, eversion_t version, eversion_t last_complete);
+    ceph_tid_t tid, eversion_t version, eversion_t last_complete);
   void handle_sub_write(
     pg_shard_t from,
     OpRequestRef msg,
@@ -101,7 +101,7 @@ public:
     Context *on_local_applied_sync,
     Context *on_all_applied,
     Context *on_all_commit,
-    tid_t tid,
+    ceph_tid_t tid,
     osd_reqid_t reqid,
     OpRequestRef op
     );
@@ -281,7 +281,7 @@ public:
 
   struct ReadOp {
     int priority;
-    tid_t tid;
+    ceph_tid_t tid;
     OpRequestRef op; // may be null if not on behalf of a client
 
     map<hobject_t, read_request_t> to_read;
@@ -300,8 +300,8 @@ public:
     ReadOp &op);
   void complete_read_op(ReadOp &rop, RecoveryMessages *m);
   friend ostream &operator<<(ostream &lhs, const ReadOp &rhs);
-  map<tid_t, ReadOp> tid_to_read_map;
-  map<pg_shard_t, set<tid_t> > shard_to_read_map;
+  map<ceph_tid_t, ReadOp> tid_to_read_map;
+  map<pg_shard_t, set<ceph_tid_t> > shard_to_read_map;
   void start_read_op(
     int priority,
     map<hobject_t, read_request_t> &to_read,
@@ -329,7 +329,7 @@ public:
     Context *on_local_applied_sync;
     Context *on_all_applied;
     Context *on_all_commit;
-    tid_t tid;
+    ceph_tid_t tid;
     osd_reqid_t reqid;
     OpRequestRef client_op;
 
@@ -370,7 +370,7 @@ public:
     pg_shard_t from,
     RecoveryMessages *m);
 
-  map<tid_t, Op> tid_to_op_map; /// lists below point into here
+  map<ceph_tid_t, Op> tid_to_op_map; /// lists below point into here
   list<Op*> writing;
 
   CephContext *cct;

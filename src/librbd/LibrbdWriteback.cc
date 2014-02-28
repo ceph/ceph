@@ -131,7 +131,7 @@ namespace librbd {
     return may;
   }
 
-  tid_t LibrbdWriteback::write(const object_t& oid,
+  ceph_tid_t LibrbdWriteback::write(const object_t& oid,
 			       const object_locator_t& oloc,
 			       uint64_t off, uint64_t len,
 			       const SnapContext& snapc,

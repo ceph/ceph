@@ -555,7 +555,7 @@ void session_info_t::decode(bufferlist::iterator& p)
   DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, p);
   ::decode(inst, p);
   if (struct_v <= 2) {
-    set<tid_t> s;
+    set<ceph_tid_t> s;
     ::decode(s, p);
     while (!s.empty()) {
       completed_requests[*s.begin()] = inodeno_t();
@@ -576,7 +576,7 @@ void session_info_t::dump(Formatter *f) const
   f->dump_stream("inst") << inst;
 
   f->open_array_section("completed_requests");
-  for (map<tid_t,inodeno_t>::const_iterator p = completed_requests.begin();
+  for (map<ceph_tid_t,inodeno_t>::const_iterator p = completed_requests.begin();
        p != completed_requests.end();
        ++p) {
     f->open_object_section("request");
