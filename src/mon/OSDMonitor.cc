@@ -3213,7 +3213,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       p.hit_set_params = HitSet::Params();
     else if (val == "bloom") {
       BloomHitSet::Params *bsp = new BloomHitSet::Params;
-      bsp->set_fpp(.01);
+      bsp->set_fpp(.05);
       p.hit_set_params = HitSet::Params(bsp);
     } else if (val == "explicit_hash")
       p.hit_set_params = HitSet::Params(new ExplicitHashHitSet::Params);
