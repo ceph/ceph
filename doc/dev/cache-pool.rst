@@ -40,17 +40,22 @@ Set up a read/write cache pool foo-hot for pool foo::
 
  ceph osd tier add foo foo-hot
  ceph osd tier cache-mode foo-hot writeback
- ceph osd tier cache-target-size foo-hot 10G
- ceph osd tier cache-target-dirty foo-hot 1G
 
 Direct all traffic for foo to foo-hot::
 
  ceph osd tier set-overlay foo foo-hot
 
+Set the target size and enable the tiering agent for foo-hit::
+
+ ceph osd pool set foo-hot hit_set_type bloom
+ ceph osd pool set foo-hot hit_set_count 1
+ ceph osd pool set foo-hot hit_set_period 3600   # 1 hour
+ ceph osd pool set foo-hot target_max_bytes 1000000000000  # 1 TB
+
 Drain the cache in preparation for turning it off::
 
- ceph osd tier cache-mode foo-hot invalidate+forward
- ceph osd tier cache-target-size foo-hot 0   # do not cache any new items
+ ceph osd tier cache-mode foo-hot forward
+ rados -p foo-hot cache-flush-evict-all
 
 When cache pool is finally empty, disable it::
 
@@ -64,7 +69,4 @@ Read-only pools with lazy consistency::
  ceph osd tier add foo foo-west
  ceph osd tier cache-mode foo-west readonly
 
-Set up a cold storage tier::
-
- ceph osd tier add foo foo-cold
 
