@@ -8738,6 +8738,8 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
   dirty_info = true;
   write_if_dirty(*t);
 
+  t->register_on_complete(new ObjectStore::C_DeleteTransaction(t));
+
   osd->store->queue_transaction(osr.get(), t, c, NULL, new C_OSD_OndiskWriteUnlockList(&c->obcs));
 	      
   // Send out the PG log to all replicas
