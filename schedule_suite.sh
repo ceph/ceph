@@ -9,6 +9,14 @@ teuthology_branch=$6
 mtype=$7
 template=$8
 distro=$9
+limit=${10}
+
+if [ -z "$limit" ]
+then
+    limitline=''
+else
+    limitline="--limit $limit"
+fi
 
 if [ -z "$kernel" ]; then
     echo "usage: $0 <suite> <ceph branch> <kernel branch> [email] [flavor] [teuthology-branch] [machinetype] [template] [distro]"
@@ -190,5 +198,6 @@ echo "name $name"
     --collections $suite \
     --email $email \
     --timeout 36000 \
+    $limitline \
     --name $name \
     --worker $tube

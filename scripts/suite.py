@@ -70,6 +70,12 @@ combination, and will override anything in the suite.
         help='number of times to run/queue each job'
     )
     parser.add_argument(
+        '-l', '--limit',
+        default=0,
+        type=int,
+        help='limit number of jobs in loop to N'
+    )
+    parser.add_argument(
         '-w', '--worker',
         default='plana',
         help='which worker to use (type of machine)',
