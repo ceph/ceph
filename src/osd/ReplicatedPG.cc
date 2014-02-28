@@ -2915,24 +2915,28 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_READ:
       ++ctx->num_read;
       {
-	uint64_t trim = (uint64_t)-1;
 	__u32 seq = oi.truncate_seq;
+	uint64_t size = oi.size;
+	bool trimmed_read = false;
 	// are we beyond truncate_size?
 	if ( (seq < op.extent.truncate_seq) &&
-	     (op.extent.offset + op.extent.length > op.extent.truncate_size) ) {
+	     (op.extent.offset + op.extent.length > op.extent.truncate_size) )
+	  size = op.extent.truncate_size;
 
-	  // truncated portion of the read
-	  uint64_t from = MAX(op.extent.offset, op.extent.truncate_size);  // also end of data
-	  uint64_t to = op.extent.offset + op.extent.length;
-	  trim = to - from;
-
-	  op.extent.length = op.extent.length - trim;
+	if (op.extent.offset >= size) {
+	  op.extent.length = 0;
+	  trimmed_read = true;
+	} else if (op.extent.offset + op.extent.length > size) {
+	  op.extent.length = size - op.extent.offset;
+	  trimmed_read = true;
 	}
 
 	// read into a buffer
 	bufferlist bl;
-	if (trim != (uint64_t)-1 && op.extent.length == 0) {
-	  // read size was trimmed to zero
+	if (trimmed_read && op.extent.length == 0) {
+	  // read size was trimmed to zero and it is expected to do nothing
+	  // a read operation of 0 bytes does *not* do nothing, this is why
+	  // the trimmed_read boolean is needed
 	} else if (pool.info.require_rollback()) {
 	  ctx->pending_async_reads.push_back(
 	    make_pair(
