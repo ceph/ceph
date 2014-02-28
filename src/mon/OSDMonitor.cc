@@ -3153,7 +3153,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     if (pgs_per_osd > g_conf->mon_osd_max_split_count) {
       ss << "specified pg_num " << n << " is too large (creating "
 	 << new_pgs << " new PGs on ~" << expected_osds
-	 << " OSDs exceeds per-OSD max of" << g_conf->mon_osd_max_split_count
+	 << " OSDs exceeds per-OSD max of " << g_conf->mon_osd_max_split_count
 	 << ')';
       return -E2BIG;
     }
