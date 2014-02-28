@@ -94,8 +94,10 @@ public:
 	lower_sum += h[i];
       total += h[i];
     }
-    *lower = lower_sum * 1000000 / total;
-    *upper = upper_sum * 1000000 / total;
+    if (total > 0) {
+      *lower = lower_sum * 1000000 / total;
+      *upper = upper_sum * 1000000 / total;
+    }
     return 0;
   }
 
