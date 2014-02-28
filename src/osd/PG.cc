@@ -2054,6 +2054,8 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
     up_primary,
     primary);
   child->role = OSDMap::calc_pg_role(osd->whoami, child->acting);
+
+  // this comparison includes primary rank via pg_shard_t
   if (get_primary() != child->get_primary())
     child->info.history.same_primary_since = get_osdmap()->get_epoch();
 
@@ -3593,7 +3595,7 @@ void PG::scrub(ThreadPool::TPHandle &handle)
     scrubber.is_chunky = true;
     assert(backfill_targets.empty());
     for (unsigned i=0; i<acting.size(); i++) {
-      if (acting[i] == pg_whoami.shard)
+      if (acting[i] == pg_whoami.osd)
 	continue;
       if (acting[i] == CRUSH_ITEM_NONE)
 	continue;
@@ -4705,6 +4707,7 @@ void PG::start_peering_interval(
       oldup != up) {
     info.history.same_up_since = osdmap->get_epoch();
   }
+  // this comparison includes primary rank via pg_shard_t
   if (old_acting_primary != get_primary()) {
     info.history.same_primary_since = osdmap->get_epoch();
   }

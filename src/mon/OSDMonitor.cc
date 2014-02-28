@@ -203,9 +203,17 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     if (t == NULL)
       t = new MonitorDBStore::Transaction;
 
-    // write out the full map for all past epochs
+    // Write out the full map for all past epochs.  Encode the full
+    // map with the same features as the incremental.  If we don't
+    // know, use the quorum features.  If we don't know those either,
+    // encode with all features.
+    uint64_t f = inc.encode_features;
+    if (!f)
+      f = mon->quorum_features;
+    if (!f)
+      f = -1;
     bufferlist full_bl;
-    osdmap.encode(full_bl, inc.encode_features);
+    osdmap.encode(full_bl, f);
     tx_size += full_bl.length();
 
     put_version_full(t, osdmap.epoch, full_bl);
@@ -620,7 +628,7 @@ version_t OSDMonitor::get_trim_to()
 {
   if (mon->pgmon()->is_readable() &&
       mon->pgmon()->pg_map.creating_pgs.empty()) {
-    epoch_t floor = mon->pgmon()->pg_map.calc_min_last_epoch_clean();
+    epoch_t floor = mon->pgmon()->pg_map.get_min_last_epoch_clean();
     dout(10) << " min_last_epoch_clean " << floor << dendl;
     if (g_conf->mon_osd_force_trim_to > 0 &&
 	g_conf->mon_osd_force_trim_to < (int)get_last_committed()) {
