@@ -8667,7 +8667,7 @@ void MDCache::find_ino_peers(inodeno_t ino, Context *c, int hint)
   dout(5) << "find_ino_peers " << ino << " hint " << hint << dendl;
   assert(!have_inode(ino));
   
-  tid_t tid = ++find_ino_peer_last_tid;
+  ceph_tid_t tid = ++find_ino_peer_last_tid;
   find_ino_peer_info_t& fip = find_ino_peer[tid];
   fip.ino = ino;
   fip.tid = tid;
@@ -8731,7 +8731,7 @@ void MDCache::handle_find_ino(MMDSFindIno *m)
 
 void MDCache::handle_find_ino_reply(MMDSFindInoReply *m)
 {
-  map<tid_t, find_ino_peer_info_t>::iterator p = find_ino_peer.find(m->tid);
+  map<ceph_tid_t, find_ino_peer_info_t>::iterator p = find_ino_peer.find(m->tid);
   if (p != find_ino_peer.end()) {
     dout(10) << "handle_find_ino_reply " << *m << dendl;
     find_ino_peer_info_t& fip = p->second;
@@ -8773,7 +8773,7 @@ void MDCache::handle_find_ino_reply(MMDSFindInoReply *m)
 void MDCache::kick_find_ino_peers(int who)
 {
   // find_ino_peers requests we should move on from
-  for (map<tid_t,find_ino_peer_info_t>::iterator p = find_ino_peer.begin();
+  for (map<ceph_tid_t,find_ino_peer_info_t>::iterator p = find_ino_peer.begin();
        p != find_ino_peer.end();
        ++p) {
     find_ino_peer_info_t& fip = p->second;
@@ -10053,7 +10053,7 @@ void MDCache::discover_ino(CDir *base,
 
 void MDCache::kick_discovers(int who)
 {
-  for (map<tid_t,discover_info_t>::iterator p = discovers.begin();
+  for (map<ceph_tid_t,discover_info_t>::iterator p = discovers.begin();
        p != discovers.end();
        ++p) {
     if (p->second.mds != who)
@@ -10387,7 +10387,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 
   // decrement discover counters
   if (m->get_tid()) {
-    map<tid_t,discover_info_t>::iterator p = discovers.find(m->get_tid());
+    map<ceph_tid_t,discover_info_t>::iterator p = discovers.find(m->get_tid());
     if (p != discovers.end()) {
       dout(10) << " found tid " << m->get_tid() << dendl;
       discovers.erase(p);

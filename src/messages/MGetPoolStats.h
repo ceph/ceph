@@ -26,7 +26,7 @@ public:
   list<string> pools;
 
   MGetPoolStats() : PaxosServiceMessage(MSG_GETPOOLSTATS, 0) {}
-  MGetPoolStats(const uuid_d& f, tid_t t, list<string>& ls, version_t l) :
+  MGetPoolStats(const uuid_d& f, ceph_tid_t t, list<string>& ls, version_t l) :
     PaxosServiceMessage(MSG_GETPOOLSTATS, l),
     fsid(f), pools(ls) {
     set_tid(t);

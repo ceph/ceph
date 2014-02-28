@@ -48,7 +48,7 @@ public:
     ::decode(what, p);
   }
 
-  tid_t handle;
+  ceph_tid_t handle;
   string what;
 
 private:

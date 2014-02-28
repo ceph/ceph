@@ -255,8 +255,8 @@ public:
   void resend_unsafe_requests(MetaSession *s);
 
   // mds requests
-  tid_t last_tid, last_flush_seq;
-  map<tid_t, MetaRequest*> mds_requests;
+  ceph_tid_t last_tid, last_flush_seq;
+  map<ceph_tid_t, MetaRequest*> mds_requests;
   set<int>                 failed_mds;
 
   void dump_mds_requests(Formatter *f);

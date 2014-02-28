@@ -31,12 +31,12 @@
  */
 struct osd_reqid_t {
   entity_name_t name; // who
-  tid_t         tid;
+  ceph_tid_t         tid;
   int32_t       inc;  // incarnation
 
   osd_reqid_t()
     : tid(0), inc(0) {}
-  osd_reqid_t(const entity_name_t& a, int i, tid_t t)
+  osd_reqid_t(const entity_name_t& a, int i, ceph_tid_t t)
     : name(a), tid(t), inc(i) {}
 
   void encode(bufferlist &bl) const;
