@@ -487,23 +487,29 @@ def enable_disable_kdb(ctx, config):
             serialdev = "ttyS1"
         if enable:
             log.info('Enabling kdb on {role}...'.format(role=role))
-            role_remote.run(
-                args=[
-                    'echo', serialdev,
-                    run.Raw('|'),
-                    'sudo', 'tee', '/sys/module/kgdboc/parameters/kgdboc'
-                    ])
+            try:
+                role_remote.run(
+                    args=[
+                        'echo', serialdev,
+                        run.Raw('|'),
+                        'sudo', 'tee', '/sys/module/kgdboc/parameters/kgdboc'
+                        ])
+            except run.CommandFailedError:
+                log.warn('Kernel does not support kdb')
         else:
             log.info('Disabling kdb on {role}...'.format(role=role))
             # Add true pipe so command doesn't fail on kernel without kdb support.
-            role_remote.run(
-                args=[
-                    'echo', '',
-                    run.Raw('|'),
-                    'sudo', 'tee', '/sys/module/kgdboc/parameters/kgdboc',
-                    run.Raw('|'),
-                    'true',
-                    ])
+            try:
+                role_remote.run(
+                    args=[
+                        'echo', '',
+                        run.Raw('|'),
+                        'sudo', 'tee', '/sys/module/kgdboc/parameters/kgdboc',
+                        run.Raw('|'),
+                        'true',
+                        ])
+            except run.CommandFailedError:
+                log.warn('Kernel does not support kdb')
 
 def wait_for_reboot(ctx, need_install, timeout, distro=False):
     """
