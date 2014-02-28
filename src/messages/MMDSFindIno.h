@@ -19,11 +19,11 @@
 #include "include/filepath.h"
 
 struct MMDSFindIno : public Message {
-  tid_t tid;
+  ceph_tid_t tid;
   inodeno_t ino;
 
   MMDSFindIno() : Message(MSG_MDS_FINDINO) {}
-  MMDSFindIno(tid_t t, inodeno_t i) : Message(MSG_MDS_FINDINO), tid(t), ino(i) {}
+  MMDSFindIno(ceph_tid_t t, inodeno_t i) : Message(MSG_MDS_FINDINO), tid(t), ino(i) {}
 
   const char *get_type_name() const { return "findino"; }
   void print(ostream &out) const {

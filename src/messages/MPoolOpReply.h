@@ -26,14 +26,14 @@ public:
 
   MPoolOpReply() : PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, 0)
   {}
-  MPoolOpReply( uuid_d& f, tid_t t, int rc, int e, version_t v) :
+  MPoolOpReply( uuid_d& f, ceph_tid_t t, int rc, int e, version_t v) :
     PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, v),
     fsid(f),
     replyCode(rc),
     epoch(e) {
     set_tid(t);
   }
-  MPoolOpReply( uuid_d& f, tid_t t, int rc, int e, version_t v,
+  MPoolOpReply( uuid_d& f, ceph_tid_t t, int rc, int e, version_t v,
 		bufferlist *blp) :
     PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, v),
     fsid(f),

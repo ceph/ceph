@@ -434,8 +434,8 @@ private:
     version_req_d(Context *con, version_t *n, version_t *o) : context(con),newest(n), oldest(o) {}
   };
 
-  map<tid_t, version_req_d*> version_requests;
-  tid_t version_req_id;
+  map<ceph_tid_t, version_req_d*> version_requests;
+  ceph_tid_t version_req_id;
   void handle_get_version_reply(MMonGetVersionReply* m);
 
 
