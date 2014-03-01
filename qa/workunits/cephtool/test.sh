@@ -399,12 +399,18 @@ expect_false ceph osd pool set data hashpspool asdf
 expect_false ceph osd pool set data hashpspool 2
 
 ceph osd pool set rbd hit_set_type explicit_hash
+ceph osd pool get rbd hit_set_type | grep "hit_set_type: explicit_hash"
 ceph osd pool set rbd hit_set_type explicit_object
+ceph osd pool get rbd hit_set_type | grep "hit_set_type: explicit_object"
 ceph osd pool set rbd hit_set_type bloom
+ceph osd pool get rbd hit_set_type | grep "hit_set_type: bloom"
 expect_false ceph osd pool set rbd hit_set_type i_dont_exist
 ceph osd pool set rbd hit_set_period 123
+ceph osd pool get rbd hit_set_period | grep "hit_set_period: 123"
 ceph osd pool set rbd hit_set_count 12
+ceph osd pool get rbd hit_set_count | grep "hit_set_count: 12"
 ceph osd pool set rbd hit_set_fpp .01
+ceph osd pool get rbd hit_set_fpp | grep "hit_set_fpp: 0.01"
 
 ceph osd pool set rbd target_max_objects 123
 ceph osd pool set rbd target_max_bytes 123456
