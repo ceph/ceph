@@ -10112,6 +10112,7 @@ void MDCache::handle_discover(MDiscover *dis)
 	    << dendl;
 
     cur = get_inode(dis->get_base_ino());
+    assert(cur);
 
     // add root
     reply->starts_with = MDiscoverReply::INODE;
