@@ -7186,6 +7186,41 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
     return;
   }
 
+  if (pg->is_ec_pg()) {
+    /**
+       * OSD recomputes op target based on current OSDMap. With an EC pg, we
+       * can get this result:
+       * 1) client at map 512 sends an op to osd 3, pg_t 3.9 based on mapping
+       *    [CRUSH_ITEM_NONE, 2, 3]/3
+       * 2) OSD 3 at map 513 remaps op to osd 3, spg_t 3.9s0 based on mapping
+       *    [3, 2, 3]/3
+       * 3) PG 3.9s0 dequeues the op at epoch 512 and notices that it isn't primary
+       *    -- misdirected op
+       * 4) client resends and this time PG 3.9s0 having caught up to 513 gets
+       *    it and fulfils it
+       *
+       * We can't compute the op target based on the sending map epoch due to
+       * splitting.  The simplest thing is to detect such cases here and drop
+       * them without an error (the client will resend anyway).
+       */
+    OSDMapRef opmap = try_get_map(m->get_map_epoch());
+    if (!opmap) {
+      dout(7) << __func__ << ": " << *pg << " no longer have map for "
+	      << m->get_map_epoch() << ", dropping" << dendl;
+      return;
+    }
+    pg_t _pgid = m->get_pg();
+    spg_t pgid;
+    if ((m->get_flags() & CEPH_OSD_FLAG_PGOP) == 0)
+      _pgid = opmap->raw_pg_to_pg(_pgid);
+    if (opmap->get_primary_shard(_pgid, &pgid) &&
+	pgid.shard != pg->info.pgid.shard) {
+      dout(7) << __func__ << ": " << *pg << " primary changed since "
+	      << m->get_map_epoch() << ", dropping" << dendl;
+      return;
+    }
+  }
+
   dout(7) << *pg << " misdirected op in " << m->get_map_epoch() << dendl;
   clog.warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
 	      << " pg " << m->get_pg()
