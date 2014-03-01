@@ -250,40 +250,6 @@ TEST_F(PGLogTest, merge_old_entry) {
     EXPECT_TRUE(log.empty());
   }
 
-  // a clone with no non-divergent log entry is deleted
-  {
-    clear();
-
-    ObjectStore::Transaction t;
-    pg_log_entry_t oe;
-    oe.mod_desc.mark_unrollbackable();
-    pg_info_t info;
-    list<hobject_t> remove_snap;
-
-    oe.op = pg_log_entry_t::CLONE;
-
-    oe.soid.snap = CEPH_NOSNAP;
-    TestHandler h(remove_snap);
-    EXPECT_THROW(merge_old_entry(t, oe, info, &h), FailedAssertion);
-    oe.soid.snap = 1U;
-    missing.add(oe.soid, eversion_t(), eversion_t());
-
-    EXPECT_FALSE(is_dirty());
-    EXPECT_TRUE(remove_snap.empty());
-    EXPECT_TRUE(t.empty());
-    EXPECT_TRUE(missing.have_missing());
-    EXPECT_TRUE(missing.is_missing(oe.soid));
-    EXPECT_TRUE(log.empty());
-
-    EXPECT_FALSE(merge_old_entry(t, oe, info, &h));
-
-    EXPECT_FALSE(is_dirty());
-    EXPECT_EQ(oe.soid, remove_snap.front());
-    EXPECT_TRUE(t.empty());
-    EXPECT_FALSE(missing.have_missing());
-    EXPECT_TRUE(log.empty());
-  }
-
   // the new entry (from the logs) old entry (from the log entry
   // given in argument) have the same version : do nothing and return true.
   {
