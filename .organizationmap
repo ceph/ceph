@@ -139,6 +139,9 @@ Kedacom <contact@kedacom.com> Ma Jianpeng <majianpeng@gmail.com>
 Hostplex Hosting <contact@hostplex.net> Andras Elso <elso.andras@gmail.com>
 CCM Benchmark <contact@ccmbenchmark.com> Laurent Barbe <laurent@ksperis.com>
 ArtiBit <contact@artibit.com> Rutger ter Borg <rutger@terborg.net>
+The Linux Box <contact@linuxbox.com> Matt Benjamin <matt@linuxbox.com>
+The Linux Box <contact@linuxbox.com> Adam C. Emerson <aemerson@linuxbox.com>
+The Linux Box <contact@linuxbox.com> Casey Bodley <casey@linuxbox.com>
 #
 # Local Variables:
 # compile-command: "git log --pretty='%aN <%aE>' | \
