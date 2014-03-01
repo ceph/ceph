@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -60,50 +60,6 @@ TEST(ErasureCodeExample, minimum_to_decode)
                                            &minimum));
     EXPECT_EQ(1u, minimum.size());
     EXPECT_EQ(1u, minimum.count(1));
-  }
-}
-
-TEST(ErasureCodeExample, minimum_to_decode_with_cost)
-{
-  ErasureCodeExample example;
-  map<int,int> available;
-  set<int> want_to_read;
-  want_to_read.insert(1);
-  {
-    set<int> minimum;
-    EXPECT_EQ(-EIO, example.minimum_to_decode_with_cost(want_to_read,
-							available,
-							&minimum));
-  }
-  available[0] = 1;
-  available[2] = 1;
-  {
-    set<int> minimum;
-    EXPECT_EQ(0, example.minimum_to_decode_with_cost(want_to_read,
-						     available,
-						     &minimum));
-    EXPECT_EQ(2u, minimum.size());
-    EXPECT_EQ(1u, minimum.count(0));
-    EXPECT_EQ(1u, minimum.count(2));
-  }
-  {
-    set<int> minimum;
-    available[1] = 1;
-    EXPECT_EQ(0, example.minimum_to_decode_with_cost(want_to_read,
-						     available,
-						     &minimum));
-    EXPECT_EQ(1u, minimum.size());
-    EXPECT_EQ(1u, minimum.count(1));
-  }
-  {
-    set<int> minimum;
-    available[1] = 2;
-    EXPECT_EQ(0, example.minimum_to_decode_with_cost(want_to_read,
-						     available,
-						     &minimum));
-    EXPECT_EQ(2u, minimum.size());
-    EXPECT_EQ(1u, minimum.count(0));
-    EXPECT_EQ(1u, minimum.count(2));
   }
 }
 
