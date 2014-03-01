@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -85,18 +85,6 @@ int ErasureCodeJerasure::minimum_to_decode(const set<int> &want_to_read,
       minimum->insert(*i);
   }
   return 0;
-}
-
-int ErasureCodeJerasure::minimum_to_decode_with_cost(const set<int> &want_to_read,
-                                                     const map<int, int> &available,
-                                                     set<int> *minimum)
-{
-  set <int> available_chunks;
-  for (map<int, int>::const_iterator i = available.begin();
-       i != available.end();
-       ++i)
-    available_chunks.insert(i->first);
-  return minimum_to_decode(want_to_read, available_chunks, minimum);
 }
 
 int ErasureCodeJerasure::encode(const set<int> &want_to_encode,
