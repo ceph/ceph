@@ -403,10 +403,13 @@ public:
     payload.clear();
     middle.clear();
   }
+
+  virtual void clear_buffers() {}
   void clear_data() {
     if (byte_throttler)
       byte_throttler->put(data.length());
     data.clear();
+    clear_buffers(); // let subclass drop buffers as well
   }
 
   bool empty_payload() { return payload.length() == 0; }
