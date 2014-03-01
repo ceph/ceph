@@ -339,7 +339,7 @@ int KeyValueStore::BufferTransaction::get_buffer_keys(
     }
   }
 
-  if (need_lookup.size()) {
+  if (!need_lookup.empty()) {
     int r = store->backend->get_values_with_header(strip_header, prefix,
                                                    need_lookup, out);
     if (r < 0) {
@@ -2674,7 +2674,7 @@ int KeyValueStore::omap_get(coll_t c, const ghobject_t &hoid,
     return r;
   }
 
-  if (got.size()) {
+  if (!got.empty()) {
     assert(got.size() == 1);
     bl->swap(got.begin()->second);
   }
