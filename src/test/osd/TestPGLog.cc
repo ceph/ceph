@@ -241,7 +241,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     EXPECT_TRUE(log.empty());
 
     TestHandler h(remove_snap);
-    EXPECT_FALSE(merge_old_entry(t, oe, info, &h));
+    merge_old_entry(t, oe, info, &h);
 
     EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
@@ -271,7 +271,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     EXPECT_EQ(1U, log.log.size());
 
     TestHandler h(remove_snap);
-    EXPECT_TRUE(merge_old_entry(t, oe, info, &h));
+    merge_old_entry(t, oe, info, &h);
 
     EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
@@ -310,7 +310,7 @@ TEST_F(PGLogTest, merge_old_entry) {
       oe.version = eversion_t(1,1);
 
       TestHandler h(remove_snap);
-      EXPECT_FALSE(merge_old_entry(t, oe, info, &h));
+      merge_old_entry(t, oe, info, &h);
     }
 
     // if the newer entry is not DELETE, the object must be in missing
@@ -323,7 +323,7 @@ TEST_F(PGLogTest, merge_old_entry) {
       oe.version = eversion_t(1,1);
 
       TestHandler h(remove_snap);
-      EXPECT_FALSE(merge_old_entry(t, oe, info, &h));
+      merge_old_entry(t, oe, info, &h);
 
       missing.rm(ne.soid, ne.version);
     }
@@ -365,7 +365,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     EXPECT_EQ(1U, log.log.size());
 
     TestHandler h(remove_snap);
-    EXPECT_FALSE(merge_old_entry(t, oe, info, &h));
+    merge_old_entry(t, oe, info, &h);
 
     EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
@@ -412,7 +412,7 @@ TEST_F(PGLogTest, merge_old_entry) {
       // if the object is not already in missing, add it
       {
 	TestHandler h(remove_snap);
-        EXPECT_FALSE(merge_old_entry(t, oe, info, &h));
+        merge_old_entry(t, oe, info, &h);
 
         EXPECT_TRUE(missing.is_missing(ne.soid, ne.version));
         EXPECT_FALSE(missing.is_missing(ne.soid, old_version));
@@ -423,7 +423,7 @@ TEST_F(PGLogTest, merge_old_entry) {
         EXPECT_TRUE(missing.is_missing(ne.soid, old_version));
 
 	TestHandler h(remove_snap);
-        EXPECT_FALSE(merge_old_entry(t, oe, info, &h));
+        merge_old_entry(t, oe, info, &h);
 
         EXPECT_TRUE(missing.is_missing(ne.soid, ne.version));
         EXPECT_FALSE(missing.is_missing(ne.soid, old_version));
@@ -467,7 +467,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     EXPECT_EQ(1U, log.log.size());
 
     TestHandler h(remove_snap);
-    EXPECT_FALSE(merge_old_entry(t, oe, info, &h));
+    merge_old_entry(t, oe, info, &h);
 
     EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.size() > 0);
@@ -500,7 +500,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     EXPECT_TRUE(log.empty());
 
     TestHandler h(remove_snap);
-    EXPECT_FALSE(merge_old_entry(t, oe, info, &h));
+    merge_old_entry(t, oe, info, &h);
 
     EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
@@ -537,7 +537,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     EXPECT_TRUE(log.empty());
 
     TestHandler h(remove_snap);
-    EXPECT_FALSE(merge_old_entry(t, oe, info, &h));
+    merge_old_entry(t, oe, info, &h);
 
     EXPECT_TRUE(is_dirty());
     EXPECT_EQ(oe.soid, remove_snap.front());
@@ -575,7 +575,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     EXPECT_TRUE(log.empty());
 
     TestHandler h(remove_snap);
-    EXPECT_FALSE(merge_old_entry(t, oe, info, &h));
+    merge_old_entry(t, oe, info, &h);
 
     EXPECT_TRUE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
@@ -616,7 +616,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     EXPECT_TRUE(log.empty());
 
     TestHandler h(remove_snap);
-    EXPECT_FALSE(merge_old_entry(t, oe, info, &h));
+    merge_old_entry(t, oe, info, &h);
 
     EXPECT_FALSE(is_dirty());
     EXPECT_EQ(oe.soid, remove_snap.front());
