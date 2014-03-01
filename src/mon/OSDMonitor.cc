@@ -2392,6 +2392,22 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
         f->dump_int("crash_replay_interval", p->get_crash_replay_interval());
       } else if (var == "crush_ruleset") {
         f->dump_int("crush_ruleset", p->get_crush_ruleset());
+      } else if (var == "hit_set_period") {
+	f->dump_int("hit_set_period", p->hit_set_period);
+      } else if (var == "hit_set_count") {
+	f->dump_int("hit_set_count", p->hit_set_count);
+      } else if (var == "hit_set_type") {
+	f->dump_string("hit_set_type", HitSet::get_type_name(p->hit_set_params.get_type()));
+      } else if (var == "hit_set_fpp") {
+	if (p->hit_set_params.get_type() != HitSet::TYPE_BLOOM) {
+	  f->close_section();
+	  ss << "hit set is no of type Bloom; invalid to get a false positive rate!";
+	  r = -EINVAL;
+	  goto reply;
+	} else {
+	  BloomHitSet::Params *bloomp = static_cast<BloomHitSet::Params*>(p->hit_set_params.impl.get());
+	  f->dump_float("hit_set_fpp", bloomp->get_fpp());
+	}
       }
 
       f->close_section();
@@ -2409,6 +2425,20 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
         ss << "crash_replay_interval: " << p->get_crash_replay_interval();
       } else if (var == "crush_ruleset") {
         ss << "crush_ruleset: " << p->get_crush_ruleset();
+      } else if (var == "hit_set_period") {
+	ss << "hit_set_period: " << p->hit_set_period;
+      } else if (var == "hit_set_count") {
+	ss << "hit_set_count: " << p->hit_set_count;
+      } else if (var == "hit_set_type") {
+	ss << "hit_set_type: " <<  HitSet::get_type_name(p->hit_set_params.get_type());
+      } else if (var == "hit_set_fpp") {
+	if (p->hit_set_params.get_type() != HitSet::TYPE_BLOOM) {
+	  ss << "hit set is no of type Bloom; invalid to get a false positive rate!";
+	  r = -EINVAL;
+	  goto reply;
+	}
+	BloomHitSet::Params *bloomp = static_cast<BloomHitSet::Params*>(p->hit_set_params.impl.get());
+	ss << "hit_set_fpp: " << bloomp->get_fpp();
       }
       rdata.append(ss);
       ss.str("");
