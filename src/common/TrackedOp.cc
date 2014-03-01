@@ -120,8 +120,9 @@ void OpTracker::unregister_inflight_op(TrackedOp *i)
 {
   // caller checks;
   assert(tracking_enabled);
-  i->request->clear_data();
 
+  i->request->clear_data();
+  i->request->clear_payload();
 
   Mutex::Locker locker(ops_in_flight_lock);
   assert(i->xitem.get_list() == &ops_in_flight);
