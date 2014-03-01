@@ -133,7 +133,7 @@ def configure(ctx, config):
             testswift_conf['func_test']['auth_host'] = 'localhost'
 
         log.info(client)
-        (remote,) = ctx.cluster.only(client).remotes.keys()
+        remote = teuthology.get_single_remote_value(ctx, client)
         remote.run(
             args=[
                 'cd',
