@@ -10753,7 +10753,7 @@ void ReplicatedPG::agent_choose_mode()
   // get dirty, full ratios
   uint64_t dirty_micro = 0;
   uint64_t full_micro = 0;
-  if (pool.info.target_max_bytes) {
+  if (pool.info.target_max_bytes && info.stats.stats.sum.num_objects) {
     uint64_t avg_size = info.stats.stats.sum.num_bytes /
       info.stats.stats.sum.num_objects;
     dirty_micro =
