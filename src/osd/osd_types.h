@@ -1856,6 +1856,16 @@ public:
   bool empty() const {
     return can_local_rollback && (bl.length() == 0);
   }
+
+  /**
+   * Create fresh copy of bl bytes to avoid keeping large buffers around
+   * in the case that bl contains ptrs which point into a much larger
+   * message buffer
+   */
+  void trim_bl() {
+    if (bl.length() > 0)
+      bl.rebuild();
+  }
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;
