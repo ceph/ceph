@@ -144,6 +144,7 @@ The Linux Box <contact@linuxbox.com> Matt Benjamin <matt@linuxbox.com>
 The Linux Box <contact@linuxbox.com> Adam C. Emerson <aemerson@linuxbox.com>
 The Linux Box <contact@linuxbox.com> Casey Bodley <casey@linuxbox.com>
 EPAM <contact@epam.com> Andrey Kuznetsov <Andrey_Kuznetsov@epam.com>
+X-ION <contact@x-ion.de> Mouad Benchchaoui <m.benchchaoui@x-ion.de>
 #
 # Local Variables:
 # compile-command: "git log --pretty='%aN <%aE>' | \
