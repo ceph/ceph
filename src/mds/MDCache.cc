@@ -6973,8 +6973,12 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	  dn = dir->lookup(p->first.first, p->first.second);
 	}
 
-	if (!dn) 
-	  dout(0) << "  missing dentry for " << p->first.first << " snap " << p->first.second << " in " << *dir << dendl;
+	if (!dn) { 
+	  if (dir)
+	    dout(0) << "  missing dentry for " << p->first.first << " snap " << p->first.second << " in " << *dir << dendl;
+	  else
+	    dout(0) << "  missing dentry for " << p->first.first << " snap " << p->first.second << dendl;
+	}
 	assert(dn);
 	
 	if (nonce == dn->get_replica_nonce(from)) {
