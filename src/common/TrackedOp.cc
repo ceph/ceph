@@ -118,10 +118,10 @@ void OpTracker::register_inflight_op(xlist<TrackedOp*>::item *i)
 
 void OpTracker::unregister_inflight_op(TrackedOp *i)
 {
+  // caller checks;
+  assert(tracking_enabled);
   i->request->clear_data();
 
-  if (!tracking_enabled)
-    return;
 
   Mutex::Locker locker(ops_in_flight_lock);
   assert(i->xitem.get_list() == &ops_in_flight);
