@@ -98,7 +98,7 @@ def task(ctx, config):
         assert 'exec' in config, "config requires exec key with <role>: <command> entries"
         for role, task in config['exec'].iteritems():
             log.info('restart for role {r}'.format(r=role))
-            (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+            remote = teuthology.get_single_remote_value(ctx, role)
             srcdir, restarts = get_tests(ctx, config, role, remote, testdir)
             log.info('Running command on role %s host %s', role, remote.name)
             spec = '{spec}'.format(spec=task[0])

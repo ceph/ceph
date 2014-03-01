@@ -127,7 +127,7 @@ def _delete_dir(ctx, role):
     PREFIX = 'client.'
     testdir = teuthology.get_testdir(ctx)
     id_ = role[len(PREFIX):]
-    (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+    remote = teuthology.get_single_remote_value(ctx, role)
     mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
     # Is there any reason why this is not: join(mnt, role) ?
     client = os.path.join(mnt, 'client.{id}'.format(id=id_))
@@ -169,7 +169,7 @@ def _make_scratch_dir(ctx, role, subdir):
     PREFIX = 'client.'
     id_ = role[len(PREFIX):]
     log.debug("getting remote for {id} role {role_}".format(id=id_, role_=role))
-    (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+    remote = teuthology.get_single_remote_value(ctx, role)
     dir_owner = remote.shortname.split('@', 1)[0]
     mnt = os.path.join(teuthology.get_testdir(ctx), 'mnt.{id}'.format(id=id_))
     # if neither kclient nor ceph-fuse are required for a workunit,
@@ -240,7 +240,8 @@ def _spawn_on_all_clients(ctx, refspec, tests, env, subdir, timeout=None):
     client_generator = teuthology.all_roles_of_type(ctx.cluster, 'client')
     client_remotes = list()
     for client in client_generator:
-        (client_remote,) = ctx.cluster.only('client.{id}'.format(id=client)).remotes.iterkeys()
+        client_remote = teuthology.get_single_remote_value(ctx, 
+                'client.{id}'.format(id=client))
         client_remotes.append((client_remote, 'client.{id}'.format(id=client)))
         _make_scratch_dir(ctx, "client.{id}".format(id=client), subdir)
 
@@ -279,7 +280,7 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
     PREFIX = 'client.'
     assert role.startswith(PREFIX)
     id_ = role[len(PREFIX):]
-    (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+    remote = teuthology.get_single_remote_value(ctx, role)
     mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
     # subdir so we can remove and recreate this a lot without sudo
     if subdir is None:

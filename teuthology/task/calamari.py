@@ -108,7 +108,7 @@ def _setup_calamari_cluster(remote, restapi_remote):
 
 
 def _remotes(ctx, selector):
-    return ctx.cluster.only(selector).remotes.keys()
+    return teuthology.get_single_remote_value(ctx, selector)
 
 """
 Tasks

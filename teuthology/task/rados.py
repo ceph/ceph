@@ -120,7 +120,7 @@ def task(ctx, config):
         """Thread spawned by gevent"""
         if not hasattr(ctx, 'manager'):
             first_mon = teuthology.get_first_mon(ctx, config)
-            (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+            mon = teuthology.get_single_remote_value(ctx, first_mon)
             ctx.manager = CephManager(
                 mon,
                 ctx=ctx,
@@ -147,7 +147,7 @@ def task(ctx, config):
                     pool = ctx.manager.create_pool_with_unique_name(ec_pool=config.get('ec_pool', False))
                     created_pools.append(pool)
 
-                (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+                remote = teuthology.get_single_remote_value(ctx, role)
                 proc = remote.run(
                     args=["CEPH_CLIENT_ID={id_}".format(id_=id_)] + args +
                     ["--pool", pool],

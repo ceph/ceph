@@ -189,7 +189,7 @@ def install_firmware(ctx, config):
         if config[role].find('distro') >= 0:
             log.info('Skipping firmware on distro kernel');
             return
-        (role_remote,) = ctx.cluster.only(role).remotes.keys()
+        role_remote = teuthology.get_single_remote_value(ctx, role)
         log.info('Installing linux-firmware on {role}...'.format(role=role))
         role_remote.run(
             args=[
@@ -239,7 +239,7 @@ def download_deb(ctx, config):
     procs = {}
     #Don't need to download distro kernels
     for role, src in config.iteritems():
-        (role_remote,) = ctx.cluster.only(role).remotes.keys()
+        role_remote = teuthology.get_single_remote_value(ctx, role)
 	if src.find('distro') >= 0:
             log.info('Installing newest kernel distro');
             return
@@ -331,7 +331,7 @@ def install_and_reboot(ctx, config):
     procs = {}
     kernel_title = ''
     for role, src in config.iteritems():
-        (role_remote,) = ctx.cluster.only(role).remotes.keys()
+        role_remote = teuthology.get_single_remote_value(ctx, role)
         if src.find('distro') >= 0:
             log.info('Installing distro kernel on {role}...'.format(role=role))
             install_distro_kernel(role_remote)
@@ -480,7 +480,7 @@ def enable_disable_kdb(ctx, config):
     :param config: Configuration
     """
     for role, enable in config.iteritems():
-        (role_remote,) = ctx.cluster.only(role).remotes.keys()
+        role_remote = teuthology.get_single_remote_value(ctx, role)
         if "mira" in role_remote.name:
             serialdev = "ttyS2"
         else:
@@ -552,7 +552,7 @@ def need_to_install_distro(ctx, role):
     and compares against current (uname -r) and returns true if newest != current.
     Similar check for deb.
     """
-    (role_remote,) = ctx.cluster.only(role).remotes.keys()
+    role_remote = teuthology.get_single_remote_value(ctx, role)
     system_type = teuthology.get_system_type(role_remote)
     output, err_mess = StringIO(), StringIO()
     role_remote.run(args=['uname', '-r' ], stdout=output, stderr=err_mess )

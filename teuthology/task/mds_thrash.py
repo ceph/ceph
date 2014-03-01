@@ -276,7 +276,8 @@ def task(ctx, config):
     max_thrashers = config.get('max_thrash', 1)
     thrashers = {}
 
-    (first,) = ctx.cluster.only('mds.{_id}'.format(_id=mdslist[0])).remotes.iterkeys()
+    first = teuthology.get_single_remote_value(ctx,
+            'mds.{_id}'.format(_id=mdslist[0]))
     manager = ceph_manager.CephManager(
         first, ctx=ctx, logger=log.getChild('ceph_manager'),
     )

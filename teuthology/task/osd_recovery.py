@@ -38,7 +38,7 @@ def task(ctx, config):
         'task only accepts a dict for configuration'
     testdir = teuthology.get_testdir(ctx)
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    mon = teuthology.get_single_remote_value(ctx, first_mon)
     
     num_osds = teuthology.num_instances_of_type(ctx.cluster, 'osd')
     log.info('num_osds is %s' % num_osds)
@@ -119,7 +119,7 @@ def test_incomplete_pgs(ctx, config):
     assert isinstance(config, dict), \
         'task only accepts a dict for configuration'
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    mon = teuthology.get_single_remote_value(ctx, first_mon)
 
     num_osds = teuthology.num_instances_of_type(ctx.cluster, 'osd')
     log.info('num_osds is %s' % num_osds)

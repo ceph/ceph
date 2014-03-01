@@ -987,7 +987,7 @@ def get_clients(ctx, roles):
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
-        (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+        remote = get_single_remote_value(ctx, role)
         yield (id_, remote)
 
 
@@ -1211,3 +1211,21 @@ def get_multi_machine_types(machinetype):
     if not machinetypes:
         machinetypes.append(machinetype)
     return machinetypes
+
+
+def get_single_remote_value(ctx, role):
+    """
+    Return the first (and hopefully only) remotes value for this role.
+    Added log.errors so that error conditions are not as confusing as
+    they used to be.  This code still throws a value error so that the
+    stack is dumped and the location of the fault can be found easily.
+    """
+    keyz = ctx.cluster.only(role).remotes.keys()
+    if len(keyz) == 0:
+        log.error("Role list for %s is empty" % role)
+    if len(keyz) > 1:
+        bad_keys = ", ".join(keyz)
+        log.error("Only one remote value should exist for %s -- %s found" %
+                role, bad_keys)
+    (remote,) = keyz
+    return remote

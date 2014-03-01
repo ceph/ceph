@@ -53,7 +53,7 @@ def create_image(ctx, config):
         name = properties.get('image_name', default_image_name(role))
         size = properties.get('image_size', 10240)
         fmt = properties.get('image_format', 1)
-        (remote,) = ctx.cluster.only(role).remotes.keys()
+        remote = teuthology.get_single_remote_value(ctx, role)
         log.info('Creating image {name} with size {size}'.format(name=name,
                                                                  size=size))
         args = [
@@ -79,7 +79,7 @@ def create_image(ctx, config):
             if properties is None:
                 properties = {}
             name = properties.get('image_name', default_image_name(role))
-            (remote,) = ctx.cluster.only(role).remotes.keys()
+            remote = teuthology.get_single_remote_value(ctx, role)
             remote.run(
                 args=[
                     'adjust-ulimits',
@@ -106,7 +106,7 @@ def modprobe(ctx, config):
     """
     log.info('Loading rbd kernel module...')
     for role in config:
-        (remote,) = ctx.cluster.only(role).remotes.keys()
+        remote = teuthology.get_single_remote_value(ctx, role)
         remote.run(
             args=[
                 'sudo',
@@ -119,7 +119,7 @@ def modprobe(ctx, config):
     finally:
         log.info('Unloading rbd kernel module...')
         for role in config:
-            (remote,) = ctx.cluster.only(role).remotes.keys()
+            remote = teuthology.get_single_remote_value(ctx, role)
             remote.run(
                 args=[
                     'sudo',
@@ -164,7 +164,7 @@ def dev_create(ctx, config):
     for role, image in role_images:
         if image is None:
             image = default_image_name(role)
-        (remote,) = ctx.cluster.only(role).remotes.keys()
+        remote = teuthology.get_single_remote_value(ctx, role)
 
         remote.run(
             args=[
@@ -191,7 +191,7 @@ def dev_create(ctx, config):
         for role, image in role_images:
             if image is None:
                 image = default_image_name(role)
-            (remote,) = ctx.cluster.only(role).remotes.keys()
+            remote = teuthology.get_single_remote_value(ctx, role)
             remote.run(
                 args=[
                     'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
@@ -287,7 +287,7 @@ def run_xfstests_one_client(ctx, role, properties):
         fs_type = properties.get('fs_type')
         tests = properties.get('tests')
 
-        (remote,) = ctx.cluster.only(role).remotes.keys()
+        remote = teuthology.get_single_remote_value(ctx, role)
 
         # Fetch the test script
         test_root = teuthology.get_testdir(ctx)

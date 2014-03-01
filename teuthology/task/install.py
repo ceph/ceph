@@ -1049,7 +1049,7 @@ def upgrade(ctx, config):
             remotes[remote] = config.get('all')
     else:
         for role in config.keys():
-            (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+            remote = teuthology.get_single_remote_value(ctx, role)
             if remote in remotes:
                 log.warn('remote %s came up twice (role %s)', remote, role)
                 continue

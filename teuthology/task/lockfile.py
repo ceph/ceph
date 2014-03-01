@@ -78,7 +78,7 @@ def task(ctx, config):
         files = set(files)
         lock_procs = list()
         for client in clients:
-            (client_remote,) = ctx.cluster.only(client).remotes.iterkeys()
+            client_remote = teuthology.get_single_remote_value(ctx, client)
             log.info("got a client remote")
             (_, _, client_id) = client.partition('.')
             filepath = os.path.join(testdir, 'mnt.{id}'.format(id=client_id), op["lockfile"])
@@ -111,7 +111,7 @@ def task(ctx, config):
         # create the files to run these locks on
         client = clients.pop()
         clients.add(client)
-        (client_remote,) = ctx.cluster.only(client).remotes.iterkeys()
+        client_remote = teuthology.get_single_remote_value(ctx, client)
         (_, _, client_id) = client.partition('.')
         file_procs = list()
         for lockfile in files:
@@ -168,7 +168,7 @@ def task(ctx, config):
                 greenlet.kill(block=True)
 
         for client in clients:
-            (client_remote,)  = ctx.cluster.only(client).remotes.iterkeys()
+            client_remote  = teuthology.get_single_remote_value(ctx, client)
             (_, _, client_id) = client.partition('.')
             filepath = os.path.join(testdir, 'mnt.{id}'.format(id=client_id), op["lockfile"])
             proc = client_remote.run(
@@ -190,7 +190,7 @@ def lock_one(op, ctx):
     timeout = None
     proc = None
     result = None
-    (client_remote,)  = ctx.cluster.only(op['client']).remotes.iterkeys()
+    client_remote  = teuthology.get_single_remote_value(ctx, op['client'])
     (_, _, client_id) = op['client'].partition('.')
     testdir = teuthology.get_testdir(ctx)
     filepath = os.path.join(testdir, 'mnt.{id}'.format(id=client_id), op["lockfile"])

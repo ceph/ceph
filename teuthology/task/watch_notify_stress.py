@@ -6,6 +6,7 @@ import logging
 import proc_thrasher
 
 from ..orchestra import run
+from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ def task(ctx, config):
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
-        (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+        remote = teuthology.get_single_remote_value(ctx, role)
         remotes.append(remote)
 
         args =['CEPH_CLIENT_ID={id_}'.format(id_=id_),

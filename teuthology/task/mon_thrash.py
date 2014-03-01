@@ -324,7 +324,7 @@ def task(ctx, config):
         'mon_thrash task requires at least 3 monitors'
     log.info('Beginning mon_thrash...')
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    mon = teuthology.get_single_remote_value(ctx, first_mon)
     manager = ceph_manager.CephManager(
         mon,
         ctx=ctx,

@@ -98,7 +98,7 @@ def gen_repair_test_2(chooser):
         log.info("starting repair test type 2")
         victim_osd = chooser(pool, 0)
         first_mon = teuthology.get_first_mon(ctx, config)
-        (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+        mon = teuthology.get_single_remote_value(ctx, first_mon)
 
         # create object
         log.info("doing put and setomapval")
@@ -191,7 +191,7 @@ def task(ctx, config):
 
     if not hasattr(ctx, 'manager'):
         first_mon = teuthology.get_first_mon(ctx, config)
-        (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+        mon = teuthology.get_single_remote_value(ctx, first_mon)
         ctx.manager = ceph_manager.CephManager(
             mon,
             ctx=ctx,

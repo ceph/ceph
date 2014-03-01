@@ -19,7 +19,7 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         'peer task only accepts a dict for configuration'
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    mon = teuthology.get_single_remote_value(ctx, first_mon)
 
     manager = ceph_manager.CephManager(
         mon,

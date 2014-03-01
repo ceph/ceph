@@ -33,7 +33,7 @@ def run_radosgw_agent(ctx, config):
         log.info("dest is %s", dest_zone)
 
         testdir = teuthology.get_testdir(ctx)
-        (remote,) = ctx.cluster.only(client).remotes.keys()
+        remote = teuthology.get_single_remote_value(ctx, client)
         # figure out which branch to pull from
         branch = cconf.get('force-branch', None)
         if not branch:

@@ -44,7 +44,7 @@ def task(ctx, config):
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
-        (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+        remote = teuthology.get_single_remote_value(ctx, role)
 
         pool = 'data'
         if config.get('pool'):

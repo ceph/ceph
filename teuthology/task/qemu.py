@@ -26,7 +26,7 @@ def create_dirs(ctx, config):
     testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.iteritems():
         assert 'test' in client_config, 'You must specify a test to run'
-        (remote,) = ctx.cluster.only(client).remotes.keys()
+        remote = teuthology.get_single_remote_value(ctx, client)
         remote.run(
             args=[
                 'install', '-d', '-m0755', '--',
@@ -39,7 +39,7 @@ def create_dirs(ctx, config):
     finally:
         for client, client_config in config.iteritems():
             assert 'test' in client_config, 'You must specify a test to run'
-            (remote,) = ctx.cluster.only(client).remotes.keys()
+            remote = teuthology.get_single_remote_value(ctx, client)
             remote.run(
                 args=[
                     'rmdir', '{tdir}/qemu'.format(tdir=testdir), run.Raw('||'), 'true',
@@ -84,7 +84,7 @@ def generate_iso(ctx, config):
   /mnt/cdrom/test.sh > /mnt/log/test.log 2>&1 && touch /mnt/log/success
 """ + test_teardown
 
-        (remote,) = ctx.cluster.only(client).remotes.keys()
+        remote = teuthology.get_single_remote_value(ctx, client)
         teuthology.write_file(remote, userdata_path, StringIO(user_data))
 
         with file(os.path.join(src_dir, 'metadata.yaml'), 'rb') as f:
@@ -114,7 +114,7 @@ def generate_iso(ctx, config):
         yield
     finally:
         for client in config.iterkeys():
-            (remote,) = ctx.cluster.only(client).remotes.keys()
+            remote = teuthology.get_single_remote_value(ctx, client)
             remote.run(
                 args=[
                     'rm', '-f',
@@ -131,7 +131,7 @@ def download_image(ctx, config):
     log.info('downloading base image')
     testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.iteritems():
-        (remote,) = ctx.cluster.only(client).remotes.keys()
+        remote = teuthology.get_single_remote_value(ctx, client)
         base_file = '{tdir}/qemu/base.{client}.qcow2'.format(tdir=testdir, client=client)
         remote.run(
             args=[
@@ -147,7 +147,7 @@ def download_image(ctx, config):
                 tdir=testdir,
                 client=client,
                 )
-            (remote,) = ctx.cluster.only(client).remotes.keys()
+            remote = teuthology.get_single_remote_value(ctx, client)
             remote.run(
                 args=[
                     'rm', '-f', base_file,
@@ -160,7 +160,7 @@ def run_qemu(ctx, config):
     procs = []
     testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.iteritems():
-        (remote,) = ctx.cluster.only(client).remotes.keys()
+        remote = teuthology.get_single_remote_value(ctx, client)
         log_dir = '{tdir}/archive/qemu/{client}'.format(tdir=testdir, client=client)
         remote.run(
             args=[
@@ -228,7 +228,7 @@ def run_qemu(ctx, config):
 
         log.debug('checking that qemu tests succeeded...')
         for client in config.iterkeys():
-            (remote,) = ctx.cluster.only(client).remotes.keys()
+            remote = teuthology.get_single_remote_value(ctx, client)
             remote.run(
                 args=[
                     'test', '-f',
