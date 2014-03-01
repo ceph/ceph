@@ -1541,9 +1541,9 @@ void pg_stat_t::dump(Formatter *f) const
   f->open_array_section("acting");
   for (vector<int>::const_iterator p = acting.begin(); p != acting.end(); ++p)
     f->dump_int("osd", *p);
+  f->close_section();
   f->dump_int("up_primary", up_primary);
   f->dump_int("acting_primary", acting_primary);
-  f->close_section();
 }
 
 void pg_stat_t::dump_brief(Formatter *f) const
@@ -1556,9 +1556,9 @@ void pg_stat_t::dump_brief(Formatter *f) const
   f->open_array_section("acting");
   for (vector<int>::const_iterator p = acting.begin(); p != acting.end(); ++p)
     f->dump_int("osd", *p);
+  f->close_section();
   f->dump_int("up_primary", up_primary);
   f->dump_int("acting_primary", acting_primary);
-  f->close_section();
 }
 
 void pg_stat_t::encode(bufferlist &bl) const
