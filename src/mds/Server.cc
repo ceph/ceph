@@ -1190,7 +1190,10 @@ void Server::dispatch_client_request(MDRequest *mdr)
   switch (req->get_op()) {
   case CEPH_MDS_OP_LOOKUPHASH:
   case CEPH_MDS_OP_LOOKUPINO:
-    handle_client_lookup_ino(mdr);
+    handle_client_lookup_ino(mdr, false);
+    break;
+  case CEPH_MDS_OP_LOOKUPPARENT:
+    handle_client_lookup_ino(mdr, true);
     break;
 
     // inodes ops.
@@ -1202,10 +1205,6 @@ void Server::dispatch_client_request(MDRequest *mdr)
     // lookupsnap does not reference a CDentry; treat it as a getattr
   case CEPH_MDS_OP_GETATTR:
     handle_client_getattr(mdr, false);
-    break;
-
-  case CEPH_MDS_OP_LOOKUPPARENT:
-    handle_client_lookup_parent(mdr);
     break;
 
   case CEPH_MDS_OP_SETATTR:
@@ -2360,31 +2359,6 @@ void Server::handle_client_getattr(MDRequest *mdr, bool is_lookup)
 		is_lookup ? mdr->dn[0].back() : 0);
 }
 
-/* This function will clean up the passed mdr*/
-void Server::handle_client_lookup_parent(MDRequest *mdr)
-{
-  MClientRequest *req = mdr->client_request;
-
-  CInode *in = mdcache->get_inode(req->get_filepath().get_ino());
-  if (!in) {
-    reply_request(mdr, -ESTALE);
-    return;
-  }
-  if (in->is_base()) {
-    reply_request(mdr, -EINVAL);
-    return;
-  }
-
-  CDentry *dn = in->get_projected_parent_dn();
-
-  set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  rdlocks.insert(&dn->lock);
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
-    return;
-
-  reply_request(mdr, 0, in, dn);  // reply
-}
-
 struct C_MDS_LookupIno2 : public Context {
   Server *server;
   MDRequest *mdr;
@@ -2398,7 +2372,7 @@ struct C_MDS_LookupIno2 : public Context {
 /*
  * filepath:  ino
  */
-void Server::handle_client_lookup_ino(MDRequest *mdr)
+void Server::handle_client_lookup_ino(MDRequest *mdr, bool want_parent)
 {
   MClientRequest *req = mdr->client_request;
 
@@ -2413,9 +2387,17 @@ void Server::handle_client_lookup_ino(MDRequest *mdr)
     return;
   }
 
-  dout(10) << "reply to lookup_ino " << *in << dendl;
-  MClientReply *reply = new MClientReply(req, 0);
-  reply_request(mdr, reply, in, NULL);
+  if (want_parent) {
+    CInode *pin = in->get_parent_inode();
+    if (pin && !pin->is_stray()) {
+      dout(10) << "reply to lookup_parent " << *in << dendl;
+      reply_request(mdr, 0, pin);
+    } else
+      reply_request(mdr, -ESTALE);
+  } else {
+    dout(10) << "reply to lookup_ino " << *in << dendl;
+    reply_request(mdr, 0, in);
+  }
 }
 
 void Server::_lookup_ino_2(MDRequest *mdr, int r)
