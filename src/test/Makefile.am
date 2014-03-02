@@ -241,6 +241,9 @@ check_SCRIPTS += \
 	test/mon/mon-handle-forward.sh \
 	test/vstart_wrapped_tests.sh
 
+EXTRA_DIST += \
+	$(srcdir)/test/mon/mon-test-helpers.sh
+
 # target to build but not run the unit tests
 unittests:: $(check_PROGRAMS)
 
