@@ -1169,6 +1169,7 @@ TEST_F(PGLogTest, proc_replica_log) {
 	log.log.push_back(e);
 
 	e.soid = divergent_object;
+	e.prior_version = eversion_t(1, 1);
 	e.version = eversion_t(1, 2);
 	log.tail = e.version;
 	log.log.push_back(e);
@@ -1205,9 +1206,11 @@ TEST_F(PGLogTest, proc_replica_log) {
 	olog.log.push_back(e);
 
 	e.soid = divergent_object;
+	e.prior_version = eversion_t(1, 1);
 	e.version = eversion_t(1, 2);
 	olog.log.push_back(e);
 
+	e.prior_version = eversion_t(0, 0);
 	e.soid.hash = 0x3;
 	e.version = eversion_t(1, 4);
 	olog.log.push_back(e);
