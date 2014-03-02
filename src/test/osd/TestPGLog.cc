@@ -115,6 +115,7 @@ TEST_F(PGLogTest, rewind_divergent_log) {
       e.op = pg_log_entry_t::MODIFY;
       log.log.push_back(e);
       e.version = divergent_version = eversion_t(1, 5);
+      e.prior_version = eversion_t(1, 4);
       e.soid = divergent;
       divergent_object = e.soid;
       e.op = pg_log_entry_t::DELETE;
