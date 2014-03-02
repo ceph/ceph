@@ -183,6 +183,7 @@ void PGLog::proc_replica_log(
 
     // don't continue past the tail of our log.
     if (oe.version <= log.tail) {
+      ++pp;
       break;
     }
 
@@ -192,24 +193,25 @@ void PGLog::proc_replica_log(
       dout(10) << " had " << oe << " new " << *(i->second)
 	       << " : match, stopping" << dendl;
       lu = pp->version;
+      ++pp;
       break;
     }
 
     divergent.push_front(oe);
   }    
 
-  for (list<pg_log_entry_t>::iterator i = divergent.begin();
-       i != divergent.end();
-       ++i) {
-    _merge_old_entry(
-      t,
-      *i,
-      oinfo,
-      omissing,
-      olog.can_rollback_to,
-      0,
-      0);
-  }
+
+  IndexedLog folog;
+  folog.log.insert(folog.log.begin(), olog.log.begin(), pp);
+  folog.index();
+  _merge_divergent_entries(
+    folog,
+    divergent,
+    oinfo,
+    olog.can_rollback_to,
+    omissing,
+    0,
+    0);
 
   if (lu < oinfo.last_update) {
     dout(10) << " peer osd." << from << " last_update now " << lu << dendl;
