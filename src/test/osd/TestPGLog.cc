@@ -1223,12 +1223,12 @@ TEST_F(PGLogTest, proc_replica_log) {
 	e.version = eversion_t(1, 6);
 	olog.log.push_back(e);
 
-	e.soid.hash = 0x9; // should be ignored, matches above
-	e.op = pg_log_entry_t::DELETE;
+	e.soid.hash = 0x9; // should not be added to missing, create
+	e.op = pg_log_entry_t::MODIFY;
 	e.version = eversion_t(1, 7);
 	olog.log.push_back(e);
 
-	e.soid = divergent_object; // should be marked missing at version 1'2
+	e.soid = divergent_object; // should be added to missing at 1,2
 	e.op = pg_log_entry_t::MODIFY;
 	e.version = eversion_t(1, 8);
 	e.prior_version = eversion_t(1, 2);
