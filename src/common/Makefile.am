@@ -180,6 +180,7 @@ noinst_HEADERS += \
 	common/map_cacher.hpp \
 	common/MemoryModel.h \
 	common/Mutex.h \
+	common/QueueRing.h \
 	common/PrebufferedStreambuf.h \
 	common/RWLock.h \
 	common/Semaphore.h \
