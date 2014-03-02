@@ -425,6 +425,7 @@ public:
     PGTransaction *_to_append
     ) {
     RPGTransaction *to_append = dynamic_cast<RPGTransaction*>(_to_append);
+    assert(to_append);
     t->append(*(to_append->t));
     for (set<hobject_t>::iterator i = to_append->temp_added.begin();
 	 i != to_append->temp_added.end();
@@ -492,6 +493,7 @@ void ReplicatedBackend::submit_transaction(
   OpRequestRef orig_op)
 {
   RPGTransaction *t = dynamic_cast<RPGTransaction*>(_t);
+  assert(t);
   ObjectStore::Transaction *op_t = t->get_transaction();
 
   assert(t->get_temp_added().size() <= 1);

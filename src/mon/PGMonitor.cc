@@ -1978,12 +1978,17 @@ int PGMonitor::dump_stuck_pg_stats(stringstream &ds,
 {
   PGMap::StuckPG stuck_type;
   string type = args[0];
+
   if (type == "inactive")
     stuck_type = PGMap::STUCK_INACTIVE;
-  if (type == "unclean")
+  else if (type == "unclean")
     stuck_type = PGMap::STUCK_UNCLEAN;
-  if (type == "stale")
+  else if (type == "stale")
     stuck_type = PGMap::STUCK_STALE;
+  else {
+    ds << "Unknown type: " << type << std::endl;
+    return 0;
+  }
 
   utime_t now(ceph_clock_now(g_ceph_context));
   utime_t cutoff = now - utime_t(threshold, 0);
