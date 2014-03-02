@@ -1495,7 +1495,7 @@ int Objecter::recalc_op_target(Op *op)
 		 acting.size() > 1) {
 	// look for a local replica.  prefer the primary if the
 	// distance is the same.
-	int best;
+	int best = -1;
 	int best_locality;
 	for (unsigned i = 0; i < acting.size(); ++i) {
 	  int locality = osdmap->crush->get_common_ancestor_distance(

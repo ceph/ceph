@@ -365,6 +365,7 @@ TEST_F(CReadOpsTest, ExecUserBuf) {
 
   // buffer too short
   bytes_read = 1024;
+  rados_release_read_op(op);
   op = rados_create_read_op();
   rados_read_op_exec_user_buf(op, "rbd", "get_all_features", NULL, 0, out,
 			      sizeof(features) - 1, &bytes_read, &rval);
