@@ -251,36 +251,6 @@ TEST_F(PGLogTest, merge_old_entry) {
     EXPECT_TRUE(log.empty());
   }
 
-  // the new entry (from the logs) old entry (from the log entry
-  // given in argument) have the same version : do nothing and return true.
-  {
-    clear();
-
-    ObjectStore::Transaction t;
-    pg_log_entry_t oe;
-    oe.mod_desc.mark_unrollbackable();
-    pg_info_t info;
-    list<hobject_t> remove_snap;
-
-    oe.version = eversion_t(1,1);
-    log.add(oe);
-
-    EXPECT_FALSE(is_dirty());
-    EXPECT_TRUE(remove_snap.empty());
-    EXPECT_TRUE(t.empty());
-    EXPECT_FALSE(missing.have_missing());
-    EXPECT_EQ(1U, log.log.size());
-
-    TestHandler h(remove_snap);
-    merge_old_entry(t, oe, info, &h);
-
-    EXPECT_FALSE(is_dirty());
-    EXPECT_TRUE(remove_snap.empty());
-    EXPECT_TRUE(t.empty());
-    EXPECT_FALSE(missing.have_missing());
-    EXPECT_EQ(1U, log.log.size());
-  }
-
   // the new entry (from the logs) has a version that is higher than
   // the old entry (from the log entry given in argument) : do
   // nothing and return false
