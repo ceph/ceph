@@ -776,8 +776,7 @@ public:
   };
 
   struct PGLogEntryHandler : public PGLog::LogEntryHandler {
-    map<hobject_t, list<pg_log_entry_t> > to_rollback;
-    set<hobject_t> cannot_rollback;
+    list<pg_log_entry_t> to_rollback;
     set<hobject_t> to_remove;
     list<pg_log_entry_t> to_trim;
     
@@ -786,35 +785,20 @@ public:
       to_remove.insert(hoid);
     }
     void rollback(const pg_log_entry_t &entry) {
-      if (cannot_rollback.count(entry.soid)) {
-	/* we already failed to rollback a previous item
-         * and made the appropriate adjustments to the
-         * missing set and/or store */
-	return;
-      }
-      to_rollback[entry.soid].push_back(entry);
-    }
-    void cant_rollback(const pg_log_entry_t &entry) {
-      to_rollback.erase(entry.soid);
-      cannot_rollback.insert(entry.soid);
+      to_rollback.push_back(entry);
     }
     void trim(const pg_log_entry_t &entry) {
       to_trim.push_back(entry);
     }
 
     void apply(PG *pg, ObjectStore::Transaction *t) {
-      for (map<hobject_t, list<pg_log_entry_t> >::iterator i =
-	     to_rollback.begin();
-	   i != to_rollback.end();
-	   ++i) {
-	for (list<pg_log_entry_t>::reverse_iterator j = i->second.rbegin();
-	     j != i->second.rend();
-	     ++j) {
-	  assert(j->mod_desc.can_rollback());
-	  pg->get_pgbackend()->rollback(j->soid, j->mod_desc, t);
-	  SnapRollBacker rollbacker(j->soid, pg, t);
-	  j->mod_desc.visit(&rollbacker);
-	}
+      for (list<pg_log_entry_t>::iterator j = to_rollback.begin();
+	   j != to_rollback.end();
+	   ++j) {
+	assert(j->mod_desc.can_rollback());
+	pg->get_pgbackend()->rollback(j->soid, j->mod_desc, t);
+	SnapRollBacker rollbacker(j->soid, pg, t);
+	j->mod_desc.visit(&rollbacker);
       }
       for (set<hobject_t>::iterator i = to_remove.begin();
 	   i != to_remove.end();
