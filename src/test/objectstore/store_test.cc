@@ -561,7 +561,8 @@ public:
       ++in_flight;
     }
     struct stat buf;
-    store->stat(cid, hoid, &buf);
+    int r = store->stat(cid, hoid, &buf);
+    ASSERT_EQ(0, r);
     ASSERT_TRUE(buf.st_size == contents[hoid].length());
     {
       Mutex::Locker locker(lock);
