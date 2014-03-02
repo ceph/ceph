@@ -377,69 +377,6 @@ TEST_F(PGLogTest, merge_old_entry) {
 
   // the new entry (from the logs) has a version that is lower than
   // the old entry (from the log entry given in argument) and
-  // new is update :
-  // if the object is not already in missing, add it
-  // if the object is already in missing, revise the version it needs
-  // return false
-  {
-    __s32 ops[2] = { pg_log_entry_t::MODIFY, pg_log_entry_t::DELETE };
-    for (int i = 0; i < 2; i++) {
-      __s32 oe_op = ops[i];
-
-      clear();
-
-      ObjectStore::Transaction t;
-      pg_log_entry_t oe;
-      oe.mod_desc.mark_unrollbackable();
-      pg_info_t info;
-      list<hobject_t> remove_snap;
-
-      pg_log_entry_t ne;
-      ne.mod_desc.mark_unrollbackable();
-      ne.version = eversion_t(1,1);
-      ne.op = pg_log_entry_t::MODIFY;
-      log.add(ne);
-
-      oe.version = eversion_t(2,1);
-      oe.op = oe_op;
-
-      EXPECT_FALSE(is_dirty());
-      EXPECT_TRUE(remove_snap.empty());
-      EXPECT_TRUE(t.empty());
-      EXPECT_FALSE(missing.have_missing());
-      EXPECT_EQ(1U, log.log.size());
-
-      eversion_t old_version(0, 0);
-      // if the object is not already in missing, add it
-      {
-	TestHandler h(remove_snap);
-        merge_old_entry(t, oe, info, &h);
-
-        EXPECT_TRUE(missing.is_missing(ne.soid, ne.version));
-        EXPECT_FALSE(missing.is_missing(ne.soid, old_version));
-      }
-      // if the object is already in missing, revise the version it needs
-      {
-        missing.revise_need(ne.soid, old_version);
-        EXPECT_TRUE(missing.is_missing(ne.soid, old_version));
-
-	TestHandler h(remove_snap);
-        merge_old_entry(t, oe, info, &h);
-
-        EXPECT_TRUE(missing.is_missing(ne.soid, ne.version));
-        EXPECT_FALSE(missing.is_missing(ne.soid, old_version));
-      }
-
-      EXPECT_FALSE(is_dirty());
-      EXPECT_TRUE(remove_snap.empty());
-      EXPECT_TRUE(t.empty());
-      EXPECT_TRUE(missing.is_missing(ne.soid));
-      EXPECT_EQ(1U, log.log.size());
-    }
-  }
-
-  // the new entry (from the logs) has a version that is lower than
-  // the old entry (from the log entry given in argument) and
   // old is update and new is DELETE :
   // if the object is in missing, it is removed
   {
