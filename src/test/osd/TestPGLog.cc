@@ -300,7 +300,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     }
 
     EXPECT_FALSE(is_dirty());
-    EXPECT_TRUE(remove_snap.empty());
+    EXPECT_FALSE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(1U, log.log.size());
@@ -1431,23 +1431,24 @@ TEST_F(PGLogTest, proc_replica_log) {
             |        |object |         |
             |version | hash  | version |
             |        |       |         |
-       tail > (1,1)  |  x5   |  (1,1)  < tail
+       tail > (1,1)  |  x9   |  (1,1)  < tail
             |        |       |         |
             |        |       |         |
             | (1,2)  |  x3   |  (1,2)  |
             |        |       |         |
             |        |       |         |
-       head > (1,3)  |  x9   |         |
-            | MODIFY |       |         |
-            |        |       |         |
-            |        |  x9   |  (2,3)  < head
+            |        |  x9   |  (1,3)  < head
             |        |       |  MODIFY |
+            |        |       |         |
+       head > (2,3)  |  x9   |         |
+            | DELETE |       |         |
             |        |       |         |
             +--------+-------+---------+
 
-      The log entry (1,3) deletes the object x9 but the olog entry
-      (2,3) modifies it : remove it from omissing.
-
+      The log entry (2,3) deletes the object x9 but the olog entry
+      (1,3) modifies it : proc_replica_log should adjust missing to
+      1,1 for that object until add_next_event in PG::activate processes
+      the delete.
   */
   {
     clear();
@@ -1460,35 +1461,38 @@ TEST_F(PGLogTest, proc_replica_log) {
 
     eversion_t last_update(1, 2);
     hobject_t divergent_object;
-    eversion_t new_version(1, 3);
-    eversion_t divergent_version(2, 3);
+    eversion_t new_version(2, 3);
+    eversion_t divergent_version(1, 3);
 
     {
       pg_log_entry_t e;
       e.mod_desc.mark_unrollbackable();
 
       e.version = eversion_t(1, 1);
-      e.soid.hash = 0x5;
+      e.soid.hash = 0x9;
       log.tail = e.version;
       log.log.push_back(e);
       e.version = last_update;
       e.soid.hash = 0x3;
       log.log.push_back(e);
       e.version = new_version;
+      e.prior_version = eversion_t(1, 1);
       e.soid.hash = 0x9;
-      e.op = pg_log_entry_t::MODIFY;
+      e.op = pg_log_entry_t::DELETE;
       log.log.push_back(e);
       log.head = e.version;
       log.index();
 
+      e.op = pg_log_entry_t::MODIFY;
       e.version = eversion_t(1, 1);
-      e.soid.hash = 0x5;
+      e.soid.hash = 0x9;
       olog.tail = e.version;
       olog.log.push_back(e);
       e.version = last_update;
       e.soid.hash = 0x3;
       olog.log.push_back(e);
       e.version = divergent_version;
+      e.prior_version = eversion_t(1, 1);
       e.soid.hash = 0x9;
       divergent_object = e.soid;
       omissing.add(divergent_object, e.version, eversion_t());
@@ -1511,10 +1515,9 @@ TEST_F(PGLogTest, proc_replica_log) {
 
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(omissing.have_missing());
-    EXPECT_TRUE(omissing.is_missing(divergent_object));
-    EXPECT_EQ(new_version, omissing.missing[divergent_object].need);
+    EXPECT_TRUE(omissing.missing.begin()->second.need == eversion_t(1, 1));
     EXPECT_EQ(last_update, oinfo.last_update);
-    EXPECT_EQ(last_update, oinfo.last_complete);
+    EXPECT_EQ(eversion_t(0, 0), oinfo.last_complete);
   }
 
 }
