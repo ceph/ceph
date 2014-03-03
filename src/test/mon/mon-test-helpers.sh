@@ -69,6 +69,8 @@ function kill_daemons() {
 function main() {
     local dir=$1
 
+    export PATH=:$PATH # make sure program from sources are prefered
+
     PS4='${FUNCNAME[0]}: $LINENO: '
     export CEPH_CONF=/dev/null
     unset CEPH_ARGS
