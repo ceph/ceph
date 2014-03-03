@@ -2270,7 +2270,7 @@ void OSD::handle_pg_peering_evt(
 
     pg_history_t history = info.history;
     bool valid_history = project_pg_history(
-      pgid, history, epoch, up, acting);
+      pgid, history, epoch, up, up_primary, acting, acting_primary);
 
     if (!valid_history || epoch < history.same_interval_since) {
       dout(10) << "get_or_create_pg " << pgid << " acting changed in "
@@ -2472,7 +2472,9 @@ void OSD::calc_priors_during(
  */
 bool OSD::project_pg_history(spg_t pgid, pg_history_t& h, epoch_t from,
 			     const vector<int>& currentup,
-			     const vector<int>& currentacting)
+			     int currentupprimary,
+			     const vector<int>& currentacting,
+			     int currentactingprimary)
 {
   dout(15) << "project_pg_history " << pgid
            << " from " << from << " to " << osdmap->get_epoch()
@@ -2491,14 +2493,25 @@ bool OSD::project_pg_history(spg_t pgid, pg_history_t& h, epoch_t from,
     }
     assert(oldmap->have_pg_pool(pgid.pool()));
 
+    int upprimary, actingprimary;
     vector<int> up, acting;
-    oldmap->pg_to_up_acting_osds(pgid.pgid, up, acting);
+    oldmap->pg_to_up_acting_osds(
+      pgid.pgid,
+      &up,
+      &upprimary,
+      &acting,
+      &actingprimary);
 
     // acting set change?
-    if ((acting != currentacting || up != currentup) && e > h.same_interval_since) {
+    if ((actingprimary != currentactingprimary ||
+	 upprimary != currentupprimary ||
+	 acting != currentacting ||
+	 up != currentup) && e > h.same_interval_since) {
       dout(15) << "project_pg_history " << pgid << " acting|up changed in " << e 
 	       << " from " << acting << "/" << up
+	       << " " << actingprimary << "/" << upprimary
 	       << " -> " << currentacting << "/" << currentup
+	       << " " << currentactingprimary << "/" << currentupprimary 
 	       << dendl;
       h.same_interval_since = e;
     }
@@ -2509,14 +2522,20 @@ bool OSD::project_pg_history(spg_t pgid, pg_history_t& h, epoch_t from,
       h.same_interval_since = e;
     }
     // up set change?
-    if (up != currentup && e > h.same_up_since) {
+    if ((up != currentup || upprimary != currentupprimary)
+	&& e > h.same_up_since) {
       dout(15) << "project_pg_history " << pgid << " up changed in " << e 
-                << " from " << up << " -> " << currentup << dendl;
+	       << " from " << up << " " << upprimary
+	       << " -> " << currentup << " " << currentupprimary << dendl;
       h.same_up_since = e;
     }
 
     // primary change?
-    if (!(!acting.empty() && !currentacting.empty() && acting[0] == currentacting[0]) &&
+    if (OSDMap::primary_changed(
+	  actingprimary,
+	  acting,
+	  currentactingprimary,
+	  currentacting) &&
         e > h.same_primary_since) {
       dout(15) << "project_pg_history " << pgid << " primary changed in " << e << dendl;
       h.same_primary_since = e;
@@ -4243,6 +4262,59 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     // default count 1G, size 4MB
     cmd_getval(cct, cmdmap, "count", count, (int64_t)1 << 30);
     cmd_getval(cct, cmdmap, "size", bsize, (int64_t)4 << 20);
+
+    uint32_t duration = g_conf->osd_bench_duration;
+
+    if (bsize > (int64_t) g_conf->osd_bench_max_block_size) {
+      // let us limit the block size because the next checks rely on it
+      // having a sane value.  If we allow any block size to be set things
+      // can still go sideways.
+      ss << "block 'size' values are capped at "
+         << prettybyte_t(g_conf->osd_bench_max_block_size) << ". If you wish to use"
+         << " a higher value, please adjust 'osd_bench_max_block_size'";
+      r = -EINVAL;
+      goto out;
+    } else if (bsize < (int64_t) (1 << 20)) {
+      // entering the realm of small block sizes.
+      // limit the count to a sane value, assuming a configurable amount of
+      // IOPS and duration, so that the OSD doesn't get hung up on this,
+      // preventing timeouts from going off
+      int64_t max_count =
+        bsize * duration * g_conf->osd_bench_small_size_max_iops;
+      if (count > max_count) {
+        ss << "'count' values greater than " << max_count
+           << " for a block size of " << prettybyte_t(bsize) << ", assuming "
+           << g_conf->osd_bench_small_size_max_iops << " IOPS,"
+           << " for " << duration << " seconds,"
+           << " can cause ill effects on osd. "
+           << " Please adjust 'osd_bench_small_size_max_iops' with a higher"
+           << " value if you wish to use a higher 'count'.";
+        r = -EINVAL;
+        goto out;
+      }
+    } else {
+      // 1MB block sizes are big enough so that we get more stuff done.
+      // However, to avoid the osd from getting hung on this and having
+      // timers being triggered, we are going to limit the count assuming
+      // a configurable throughput and duration.
+      int64_t total_throughput =
+        g_conf->osd_bench_large_size_max_throughput * duration;
+      int64_t max_count = (int64_t) (total_throughput / bsize);
+      if (count > max_count) {
+        ss << "'count' values greater than " << max_count
+           << " for a block size of " << prettybyte_t(bsize) << ", assuming "
+           << prettybyte_t(g_conf->osd_bench_large_size_max_throughput) << "/s,"
+           << " for " << duration << " seconds,"
+           << " can cause ill effects on osd. "
+           << " Please adjust 'osd_bench_large_size_max_throughput'"
+           << " with a higher value if you wish to use a higher 'count'.";
+        r = -EINVAL;
+        goto out;
+      }
+    }
+
+    dout(1) << " bench count " << count
+            << " bsize " << prettybyte_t(bsize) << dendl;
 
     bufferlist bl;
     bufferptr bp(bsize);
@@ -6170,8 +6242,8 @@ void OSD::handle_pg_create(OpRequestRef op)
     utime_t now = ceph_clock_now(NULL);
     history.last_scrub_stamp = now;
     history.last_deep_scrub_stamp = now;
-    bool valid_history =
-      project_pg_history(pgid, history, created, up, acting);
+    bool valid_history = project_pg_history(
+      pgid, history, created, up, up_primary, acting, acting_primary);
     /* the pg creation message must have come from a mon and therefore
      * cannot be on the other side of a map gap
      */
@@ -6818,13 +6890,16 @@ void OSD::handle_pg_query(OpRequestRef op)
       continue;
 
     // get active crush mapping
+    int up_primary, acting_primary;
     vector<int> up, acting;
-    osdmap->pg_to_up_acting_osds(pgid.pgid, up, acting);
+    osdmap->pg_to_up_acting_osds(
+      pgid.pgid, &up, &up_primary, &acting, &acting_primary);
 
     // same primary?
     pg_history_t history = it->second.history;
-    bool valid_history =
-      project_pg_history(pgid, history, it->second.epoch_sent, up, acting);
+    bool valid_history = project_pg_history(
+      pgid, history, it->second.epoch_sent,
+      up, up_primary, acting, acting_primary);
 
     if (!valid_history ||
         it->second.epoch_sent < history.same_interval_since) {
@@ -6894,11 +6969,13 @@ void OSD::handle_pg_remove(OpRequestRef op)
     dout(5) << "queue_pg_for_deletion: " << pgid << dendl;
     PG *pg = _lookup_lock_pg(pgid);
     pg_history_t history = pg->info.history;
+    int up_primary, acting_primary;
     vector<int> up, acting;
-    osdmap->pg_to_up_acting_osds(pgid.pgid, up, acting);
-    bool valid_history =
-      project_pg_history(pg->info.pgid, history, pg->get_osdmap()->get_epoch(),
-	up, acting);
+    osdmap->pg_to_up_acting_osds(
+      pgid.pgid, &up, &up_primary, &acting, &acting_primary);
+    bool valid_history = project_pg_history(
+      pg->info.pgid, history, pg->get_osdmap()->get_epoch(),
+      up, up_primary, acting, acting_primary);
     if (valid_history &&
         history.same_interval_since <= m->get_epoch()) {
       assert(pg->get_primary().osd == m->get_source().num());
@@ -7160,6 +7237,41 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
   if (m->get_map_epoch() < pg->info.history.same_primary_since) {
     dout(7) << *pg << " changed after " << m->get_map_epoch() << ", dropping" << dendl;
     return;
+  }
+
+  if (pg->is_ec_pg()) {
+    /**
+       * OSD recomputes op target based on current OSDMap. With an EC pg, we
+       * can get this result:
+       * 1) client at map 512 sends an op to osd 3, pg_t 3.9 based on mapping
+       *    [CRUSH_ITEM_NONE, 2, 3]/3
+       * 2) OSD 3 at map 513 remaps op to osd 3, spg_t 3.9s0 based on mapping
+       *    [3, 2, 3]/3
+       * 3) PG 3.9s0 dequeues the op at epoch 512 and notices that it isn't primary
+       *    -- misdirected op
+       * 4) client resends and this time PG 3.9s0 having caught up to 513 gets
+       *    it and fulfils it
+       *
+       * We can't compute the op target based on the sending map epoch due to
+       * splitting.  The simplest thing is to detect such cases here and drop
+       * them without an error (the client will resend anyway).
+       */
+    OSDMapRef opmap = try_get_map(m->get_map_epoch());
+    if (!opmap) {
+      dout(7) << __func__ << ": " << *pg << " no longer have map for "
+	      << m->get_map_epoch() << ", dropping" << dendl;
+      return;
+    }
+    pg_t _pgid = m->get_pg();
+    spg_t pgid;
+    if ((m->get_flags() & CEPH_OSD_FLAG_PGOP) == 0)
+      _pgid = opmap->raw_pg_to_pg(_pgid);
+    if (opmap->get_primary_shard(_pgid, &pgid) &&
+	pgid.shard != pg->info.pgid.shard) {
+      dout(7) << __func__ << ": " << *pg << " primary changed since "
+	      << m->get_map_epoch() << ", dropping" << dendl;
+      return;
+    }
   }
 
   dout(7) << *pg << " misdirected op in " << m->get_map_epoch() << dendl;

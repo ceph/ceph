@@ -5227,8 +5227,12 @@ int ReplicatedPG::fill_in_copy_get(
       ctx->obc,
       &out_attrs,
       true);
-    if (result < 0)
+    if (result < 0) {
+      if (cb) {
+        delete cb;
+      }
       return result;
+    }
     cursor.attr_complete = true;
     dout(20) << " got attrs" << dendl;
   }
@@ -5250,6 +5254,9 @@ int ReplicatedPG::fill_in_copy_get(
 	result = pgbackend->objects_read_sync(
 	  oi.soid, cursor.data_offset, left, &bl);
 	if (result < 0)
+	  if (cb) {
+	    delete cb;
+	  }
 	  return result;
       }
       assert(result <= left);
@@ -8737,6 +8744,8 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
 
   dirty_info = true;
   write_if_dirty(*t);
+
+  t->register_on_complete(new ObjectStore::C_DeleteTransaction(t));
 
   osd->store->queue_transaction(osr.get(), t, c, NULL, new C_OSD_OndiskWriteUnlockList(&c->obcs));
 	      

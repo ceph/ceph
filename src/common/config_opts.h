@@ -538,8 +538,8 @@ OPTION(osd_leveldb_log, OPT_STR, "")  // enable OSD leveldb log file
 // determines whether PGLog::check() compares written out log to stored log
 OPTION(osd_debug_pg_log_writeout, OPT_BOOL, false)
 
-OPTION(leveldb_write_buffer_size, OPT_U64, 0) // leveldb write buffer size
-OPTION(leveldb_cache_size, OPT_U64, 0) // leveldb cache size
+OPTION(leveldb_write_buffer_size, OPT_U64, 8 *1024*1024) // leveldb write buffer size
+OPTION(leveldb_cache_size, OPT_U64, 128 *1024*1024) // leveldb cache size
 OPTION(leveldb_block_size, OPT_U64, 0) // leveldb block size
 OPTION(leveldb_bloom_size, OPT_INT, 0) // leveldb bloom bits per entry
 OPTION(leveldb_max_open_files, OPT_INT, 0) // leveldb max open files
@@ -573,6 +573,11 @@ OPTION(osd_objectstore, OPT_STR, "filestore")  // ObjectStore backend type
 // Override maintaining compatibility with older OSDs
 // Set to true for testing.  Users should NOT set this.
 OPTION(osd_debug_override_acting_compat, OPT_BOOL, false)
+
+OPTION(osd_bench_small_size_max_iops, OPT_U32, 100) // 100 IOPS
+OPTION(osd_bench_large_size_max_throughput, OPT_U64, 100 << 20) // 100 MB/s
+OPTION(osd_bench_max_block_size, OPT_U64, 64 << 20) // cap the block size at 64MB
+OPTION(osd_bench_duration, OPT_U32, 30) // duration of 'osd bench', capped at 30s to avoid triggering timeouts
 
 OPTION(filestore_debug_disable_sharded_check, OPT_BOOL, false)
 

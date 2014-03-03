@@ -445,6 +445,8 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
 	get_parent(),
 	get_parent()->get_epoch(),
 	replies)));
+  m.t->register_on_applied(
+    new ObjectStore::C_DeleteTransaction(m.t));
   get_parent()->queue_transaction(m.t);
   m.t = NULL;
   if (m.reads.empty())
@@ -819,6 +821,8 @@ void ECBackend::handle_sub_write(
   localt->register_on_applied(
     get_parent()->bless_context(
       new SubWriteApplied(this, msg, op.tid, op.at_version)));
+  localt->register_on_applied(
+    new ObjectStore::C_DeleteTransaction(localt));
   get_parent()->queue_transaction(localt, msg);
 }
 
@@ -942,7 +946,10 @@ void ECBackend::handle_sub_read_reply(
        i != op.attrs_read.end();
        ++i) {
     assert(!op.errors.count(i->first));
-    assert(rop.to_read.count(i->first));
+    if (!rop.to_read.count(i->first)) {
+      // We canceled this read! @see filter_read_op
+      continue;
+    }
     rop.complete[i->first].attrs = map<string, bufferlist>();
     (*(rop.complete[i->first].attrs)).swap(i->second);
   }
