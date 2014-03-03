@@ -511,12 +511,16 @@ void OSDService::agent_stop()
 {
   {
     Mutex::Locker l(agent_lock);
+
+    // By this time all ops should be cancelled
+    assert(agent_ops == 0);
+    // By this time all PGs are shutdown and dequeued
+    assert(agent_queue.empty());
+
     agent_stop_flag = true;
     agent_cond.Signal();
   }
   agent_thread.join();
-
-  agent_queue.clear();
 }
 
 
