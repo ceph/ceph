@@ -4555,8 +4555,16 @@ done:
       goto reply;
     }
     // go
-    pending_inc.get_new_pool(pool_id, p)->tiers.erase(tierpool_id);
-    pending_inc.get_new_pool(tierpool_id, tp)->clear_tier();
+    pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
+    pg_pool_t *ntp = pending_inc.get_new_pool(tierpool_id, tp);
+    if (np->tiers.count(tierpool_id) == 0 ||
+	ntp->tier_of != pool_id ||
+	np->read_tier == tierpool_id) {
+      wait_for_finished_proposal(new C_RetryMessage(this, m));
+      return true;
+    }
+    np->tiers.erase(tierpool_id);
+    ntp->clear_tier();
     ss << "pool '" << tierpoolstr << "' is now (or already was) not a tier of '" << poolstr << "'";
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
 					      get_last_committed() + 1));
