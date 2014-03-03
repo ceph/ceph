@@ -4810,11 +4810,11 @@ done:
     ss << "will thrash map for " << thrash_map << " epochs";
     ret = thrash();
     err = 0;
- } else {
-  err = -EINVAL;
- }
+  } else {
+    err = -EINVAL;
+  }
 
-reply:
+ reply:
   getline(ss, rs);
   if (err < 0 && rs.length() == 0)
     rs = cpp_strerror(err);
