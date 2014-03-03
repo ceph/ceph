@@ -33,6 +33,218 @@ public:
   virtual void TearDown() {
     clear();
   }
+
+  static hobject_t mk_obj(unsigned id) {
+    hobject_t hoid;
+    stringstream ss;
+    ss << "obj_" << id;
+    hoid.oid = ss.str();
+    hoid.hash = id;
+    return hoid;
+  }
+  static eversion_t mk_evt(unsigned ep, unsigned v) {
+    return eversion_t(ep, v);
+  }
+  static pg_log_entry_t mk_ple_mod(
+    const hobject_t &hoid, eversion_t v, eversion_t pv) {
+    pg_log_entry_t e;
+    e.mod_desc.mark_unrollbackable();
+    e.op = pg_log_entry_t::MODIFY;
+    e.soid = hoid;
+    e.version = v;
+    e.prior_version = pv;
+    return e;
+  }
+  static pg_log_entry_t mk_ple_dt(
+    const hobject_t &hoid, eversion_t v, eversion_t pv) {
+    pg_log_entry_t e;
+    e.mod_desc.mark_unrollbackable();
+    e.op = pg_log_entry_t::DELETE;
+    e.soid = hoid;
+    e.version = v;
+    e.prior_version = pv;
+    return e;
+  }
+  static pg_log_entry_t mk_ple_mod_rb(
+    const hobject_t &hoid, eversion_t v, eversion_t pv) {
+    pg_log_entry_t e;
+    e.op = pg_log_entry_t::MODIFY;
+    e.soid = hoid;
+    e.version = v;
+    e.prior_version = pv;
+    return e;
+  }
+  static pg_log_entry_t mk_ple_dt_rb(
+    const hobject_t &hoid, eversion_t v, eversion_t pv) {
+    pg_log_entry_t e;
+    e.op = pg_log_entry_t::DELETE;
+    e.soid = hoid;
+    e.version = v;
+    e.prior_version = pv;
+    return e;
+  }
+
+  struct TestCase {
+    list<pg_log_entry_t> base;
+    list<pg_log_entry_t> auth;
+    list<pg_log_entry_t> div;
+
+    pg_missing_t init;
+    pg_missing_t final;
+
+    set<hobject_t> toremove;
+    list<pg_log_entry_t> torollback;
+
+  private:
+    IndexedLog fullauth;
+    IndexedLog fulldiv;
+    pg_info_t authinfo;
+    pg_info_t divinfo;
+  public:
+    void setup() {
+      fullauth.log.insert(fullauth.log.end(), base.begin(), base.end());
+      fullauth.log.insert(fullauth.log.end(), auth.begin(), auth.end());
+      fulldiv.log.insert(fulldiv.log.end(), base.begin(), base.end());
+      fulldiv.log.insert(fulldiv.log.end(), div.begin(), div.end());
+
+      fullauth.head = authinfo.last_update = fullauth.log.rbegin()->version;
+      authinfo.last_complete = fullauth.log.rbegin()->version;
+      authinfo.log_tail = fullauth.log.begin()->version;
+      authinfo.log_tail.version--;
+      fullauth.tail = authinfo.log_tail;
+      authinfo.last_backfill = hobject_t::get_max();
+
+      fulldiv.head = divinfo.last_update = fulldiv.log.rbegin()->version;
+      divinfo.last_complete = eversion_t();
+      divinfo.log_tail = fulldiv.log.begin()->version;
+      divinfo.log_tail.version--;
+      fulldiv.tail = divinfo.log_tail;
+      divinfo.last_backfill = hobject_t::get_max();
+
+      if (init.missing.empty()) {
+	divinfo.last_complete = divinfo.last_update;
+      } else {
+	eversion_t fmissing = init.missing[init.rmissing.begin()->second].need;
+	for (list<pg_log_entry_t>::const_iterator i = fulldiv.log.begin();
+	     i != fulldiv.log.end();
+	     ++i) {
+	  if (i->version < fmissing)
+	    divinfo.last_complete = i->version;
+	  else
+	    break;
+	}
+      }
+
+      fullauth.index();
+      fulldiv.index();
+    }
+    const IndexedLog &get_fullauth() const { return fullauth; }
+    const IndexedLog &get_fulldiv() const { return fulldiv; }
+    const pg_info_t &get_authinfo() const { return authinfo; }
+    const pg_info_t &get_divinfo() const { return divinfo; }
+  };
+
+  struct LogHandler : public PGLog::LogEntryHandler {
+    set<hobject_t> removed;
+    list<pg_log_entry_t> rolledback;
+    
+    void rollback(
+      const pg_log_entry_t &entry) {
+      rolledback.push_back(entry);
+    }
+    void remove(
+      const hobject_t &hoid) {
+      removed.insert(hoid);
+    }
+    void trim(
+      const pg_log_entry_t &entry) {}
+  };
+
+  void verify_missing(
+    const TestCase &tcase,
+    const pg_missing_t &missing) {
+    ASSERT_EQ(tcase.final.missing.size(), missing.missing.size());
+    for (map<hobject_t, pg_missing_t::item>::const_iterator i =
+	   missing.missing.begin();
+	 i != missing.missing.end();
+	 ++i) {
+      EXPECT_TRUE(tcase.final.missing.count(i->first));
+      EXPECT_EQ(tcase.final.missing.find(i->first)->second.need, i->second.need);
+      EXPECT_EQ(tcase.final.missing.find(i->first)->second.have, i->second.have);
+    }
+  }
+
+  void verify_sideeffects(
+    const TestCase &tcase,
+    const LogHandler &handler) {
+    ASSERT_EQ(tcase.toremove.size(), handler.removed.size());
+    ASSERT_EQ(tcase.torollback.size(), handler.rolledback.size());
+
+    {
+      list<pg_log_entry_t>::const_iterator titer = tcase.torollback.begin();
+      list<pg_log_entry_t>::const_iterator hiter = handler.rolledback.begin();
+      for (; titer != tcase.torollback.end(); ++titer, ++hiter) {
+	EXPECT_EQ(titer->version, hiter->version);
+      }
+    }
+
+    {
+      set<hobject_t>::const_iterator titer = tcase.toremove.begin();
+      set<hobject_t>::const_iterator hiter = handler.removed.begin();
+      for (; titer != tcase.toremove.end(); ++titer, ++hiter) {
+	EXPECT_EQ(*titer, *hiter);
+      }
+    }
+  }
+
+  void test_merge_log(const TestCase &tcase) {
+    clear();
+    ObjectStore::Transaction t;
+    log = tcase.get_fulldiv();
+    pg_info_t info = tcase.get_divinfo();
+
+    missing = tcase.init;
+
+    IndexedLog olog;
+    olog = tcase.get_fullauth();
+    pg_info_t oinfo = tcase.get_authinfo();
+
+    LogHandler h;
+    bool dirty_info = false;
+    bool dirty_big_info = false;
+    merge_log(
+      t, oinfo, olog, pg_shard_t(1, 0), info,
+      &h, dirty_info, dirty_big_info);
+
+    verify_missing(tcase, missing);
+    verify_sideeffects(tcase, h);
+  };
+  void test_proc_replica_log(const TestCase &tcase) {
+    clear();
+    ObjectStore::Transaction t;
+    log = tcase.get_fullauth();
+    pg_info_t info = tcase.get_authinfo();
+
+    pg_missing_t omissing = tcase.init;
+
+    IndexedLog olog;
+    olog = tcase.get_fulldiv();
+    pg_info_t oinfo = tcase.get_divinfo();
+
+    proc_replica_log(
+      t, oinfo, olog, omissing, pg_shard_t(1, 0));
+
+    for (list<pg_log_entry_t>::const_iterator i = tcase.auth.begin();
+	 i != tcase.auth.end();
+	 ++i) {
+      omissing.add_next_event(*i);
+    }
+    verify_missing(tcase, omissing);
+  }
+  void run_test_case(const TestCase &tcase) {
+    test_merge_log(tcase);
+    test_proc_replica_log(tcase);
+  }
 };
 
 struct TestHandler : public PGLog::LogEntryHandler {
@@ -1520,6 +1732,119 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_EQ(eversion_t(0, 0), oinfo.last_complete);
   }
 
+}
+
+TEST_F(PGLogTest, merge_log_1) {
+  TestCase t;
+  t.base.push_back(mk_ple_mod(mk_obj(1), mk_evt(10, 100), mk_evt(8, 80)));
+
+  t.div.push_back(mk_ple_mod(mk_obj(1), mk_evt(10, 101), mk_evt(10, 100)));
+
+  t.final.add(mk_obj(1), mk_evt(10, 100), mk_evt(0, 0));
+
+  t.toremove.insert(mk_obj(1));
+
+  t.setup();
+  run_test_case(t);
+}
+
+TEST_F(PGLogTest, merge_log_2) {
+  TestCase t;
+  t.base.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(10, 100), mk_evt(8, 80)));
+
+  t.div.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(10, 101), mk_evt(10, 100)));
+  t.div.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(10, 102), mk_evt(10, 101)));
+
+  t.torollback.insert(
+    t.torollback.begin(), t.div.rbegin(), t.div.rend());
+
+  t.setup();
+  run_test_case(t);
+}
+
+TEST_F(PGLogTest, merge_log_3) {
+  TestCase t;
+  t.base.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(10, 100), mk_evt(8, 80)));
+
+  t.div.push_back(mk_ple_mod(mk_obj(1), mk_evt(10, 101), mk_evt(10, 100)));
+  t.div.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(10, 102), mk_evt(10, 101)));
+
+  t.final.add(mk_obj(1), mk_evt(10, 100), mk_evt(0, 0));
+
+  t.toremove.insert(mk_obj(1));
+
+  t.setup();
+  run_test_case(t);
+}
+
+TEST_F(PGLogTest, merge_log_4) {
+  TestCase t;
+  t.base.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(10, 100), mk_evt(8, 80)));
+
+  t.div.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(10, 101), mk_evt(10, 100)));
+  t.div.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(10, 102), mk_evt(10, 101)));
+
+  t.init.add(mk_obj(1), mk_evt(10, 102), mk_evt(0, 0));
+  t.final.add(mk_obj(1), mk_evt(10, 100), mk_evt(0, 0));
+
+  t.setup();
+  run_test_case(t);
+}
+
+TEST_F(PGLogTest, merge_log_5) {
+  TestCase t;
+  t.base.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(10, 100), mk_evt(8, 80)));
+
+  t.div.push_back(mk_ple_mod(mk_obj(1), mk_evt(10, 101), mk_evt(10, 100)));
+  t.div.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(10, 102), mk_evt(10, 101)));
+
+  t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(11, 101), mk_evt(10, 100)));
+
+  t.final.add(mk_obj(1), mk_evt(11, 101), mk_evt(0, 0));
+
+  t.toremove.insert(mk_obj(1));
+
+  t.setup();
+  run_test_case(t);
+}
+
+TEST_F(PGLogTest, merge_log_6) {
+  TestCase t;
+  t.base.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(10, 100), mk_evt(8, 80)));
+
+  t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(11, 101), mk_evt(10, 100)));
+
+  t.final.add(mk_obj(1), mk_evt(11, 101), mk_evt(10, 100));
+
+  t.setup();
+  run_test_case(t);
+}
+
+TEST_F(PGLogTest, merge_log_7) {
+  TestCase t;
+  t.base.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(10, 100), mk_evt(8, 80)));
+
+  t.auth.push_back(mk_ple_mod(mk_obj(1), mk_evt(11, 101), mk_evt(10, 100)));
+
+  t.init.add(mk_obj(1), mk_evt(10, 100), mk_evt(8, 80));
+  t.final.add(mk_obj(1), mk_evt(11, 101), mk_evt(8, 80));
+
+  t.setup();
+  run_test_case(t);
+}
+
+TEST_F(PGLogTest, merge_log_8) {
+  TestCase t;
+  t.base.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(10, 100), mk_evt(8, 80)));
+
+  t.auth.push_back(mk_ple_dt(mk_obj(1), mk_evt(11, 101), mk_evt(10, 100)));
+
+  t.init.add(mk_obj(1), mk_evt(10, 100), mk_evt(8, 80));
+
+  t.toremove.insert(mk_obj(1));
+
+  t.setup();
+  run_test_case(t);
 }
 
 int main(int argc, char **argv) {
