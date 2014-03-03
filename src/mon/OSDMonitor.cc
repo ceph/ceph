@@ -2812,34 +2812,33 @@ int OSDMonitor::crush_ruleset_create_erasure(const string &name,
 					     int *ruleset,
 					     stringstream &ss)
 {
-    *ruleset = osdmap.crush->get_rule_id(name);
-    if (*ruleset != -ENOENT)
-      return -EEXIST;
+  *ruleset = osdmap.crush->get_rule_id(name);
+  if (*ruleset != -ENOENT)
+    return -EEXIST;
 
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
+  CrushWrapper newcrush;
+  _get_pending_crush(newcrush);
 
-    *ruleset = newcrush.get_rule_id(name);
-    if (*ruleset != -ENOENT) {
-      return -EALREADY;
-    } else {
-      ErasureCodeInterfaceRef erasure_code;
-      int err = get_erasure_code(properties_map, &erasure_code, ss);
-      if (err) {
-	ss << "failed to load plugin using properties " << properties_map;
-	return err;
-      }
-
-      err = erasure_code->create_ruleset(name, newcrush, &ss);
-      erasure_code.reset();
-      if (err < 0)
-	return err;
-      *ruleset = err;
-      pending_inc.crush.clear();
-      newcrush.encode(pending_inc.crush);
-      return 0;
+  *ruleset = newcrush.get_rule_id(name);
+  if (*ruleset != -ENOENT) {
+    return -EALREADY;
+  } else {
+    ErasureCodeInterfaceRef erasure_code;
+    int err = get_erasure_code(properties_map, &erasure_code, ss);
+    if (err) {
+      ss << "failed to load plugin using properties " << properties_map;
+      return err;
     }
 
+    err = erasure_code->create_ruleset(name, newcrush, &ss);
+    erasure_code.reset();
+    if (err < 0)
+      return err;
+    *ruleset = err;
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush);
+    return 0;
+  }
 }
 
 int OSDMonitor::get_erasure_code(const map<string,string> &properties,
