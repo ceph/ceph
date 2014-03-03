@@ -705,6 +705,17 @@ public:
   static const int STATE_STOPPING = 4;
   static const int STATE_WAITING_FOR_HEALTHY = 5;
 
+  static const char *get_state_name(int s) {
+    switch (s) {
+    case STATE_INITIALIZING: return "initializing";
+    case STATE_BOOTING: return "booting";
+    case STATE_ACTIVE: return "active";
+    case STATE_STOPPING: return "stopping";
+    case STATE_WAITING_FOR_HEALTHY: return "waiting_for_healthy";
+    default: return "???";
+    }
+  }
+
 private:
   int state;
   epoch_t boot_epoch;  // _first_ epoch we were marked up (after this process started)

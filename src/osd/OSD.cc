@@ -1022,7 +1022,19 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
   Formatter *f = new_formatter(format);
   if (!f)
     f = new_formatter("json-pretty");
-  if (command == "dump_ops_in_flight") {
+  if (command == "status") {
+    f->open_object_section("status");
+    f->dump_stream("cluster_fsid") << superblock.cluster_fsid;
+    f->dump_stream("osd_fsid") << superblock.osd_fsid;
+    f->dump_unsigned("whoami", superblock.whoami);
+    f->dump_string("state", get_state_name(state));
+    f->dump_unsigned("oldest_map", superblock.oldest_map);
+    f->dump_unsigned("newest_map", superblock.newest_map);
+    osd_lock.Lock();
+    f->dump_unsigned("num_pgs", pg_map.size());
+    osd_lock.Unlock();
+    f->close_section();
+  } else if (command == "dump_ops_in_flight") {
     op_tracker.dump_ops_in_flight(f);
   } else if (command == "dump_historic_ops") {
     op_tracker.dump_historic_ops(f);
@@ -1276,6 +1288,9 @@ void OSD::final_init()
   int r;
   AdminSocket *admin_socket = cct->get_admin_socket();
   asok_hook = new OSDSocketHook(this);
+  r = admin_socket->register_command("status", "status", asok_hook,
+				     "high-level status of OSD");
+  assert(r == 0);
   r = admin_socket->register_command("dump_ops_in_flight",
 				     "dump_ops_in_flight", asok_hook,
 				     "show the ops currently in flight");
@@ -1505,6 +1520,7 @@ int OSD::shutdown()
   }
 
   // unregister commands
+  cct->get_admin_socket()->unregister_command("status");
   cct->get_admin_socket()->unregister_command("dump_ops_in_flight");
   cct->get_admin_socket()->unregister_command("dump_historic_ops");
   cct->get_admin_socket()->unregister_command("dump_op_pq_state");
