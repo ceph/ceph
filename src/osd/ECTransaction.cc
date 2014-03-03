@@ -46,6 +46,7 @@ struct AppendObjectsGenerator: public boost::static_visitor<void> {
   }
   void operator()(const ECTransaction::SetAttrsOp &op) {}
   void operator()(const ECTransaction::RmAttrOp &op) {}
+  void operator()(const ECTransaction::AllocHintOp &op) {}
   void operator()(const ECTransaction::NoOp &op) {}
 };
 void ECTransaction::get_append_objects(
@@ -236,6 +237,23 @@ struct TransGenerator : public boost::static_visitor<void> {
 	get_coll_ct(i->first, op.oid),
 	ghobject_t(op.oid, ghobject_t::NO_GEN, i->first),
 	op.key);
+    }
+  }
+  void operator()(const ECTransaction::AllocHintOp &op) {
+    // logical_to_next_chunk_offset() scales down both aligned and
+    // unaligned offsets
+    uint64_t object_size = sinfo.logical_to_next_chunk_offset(
+                                                    op.expected_object_size);
+    uint64_t write_size = sinfo.logical_to_next_chunk_offset(
+                                                   op.expected_write_size);
+
+    for (map<shard_id_t, ObjectStore::Transaction>::iterator i = trans->begin();
+         i != trans->end();
+         ++i) {
+      i->second.set_alloc_hint(
+        get_coll_ct(i->first, op.oid),
+        ghobject_t(op.oid, ghobject_t::NO_GEN, i->first),
+        object_size, write_size);
     }
   }
   void operator()(const ECTransaction::NoOp &op) {}

@@ -4283,6 +4283,10 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     case CEPH_OSD_OP_COPY_FROM:
       out << " ver " << op.op.copy_from.src_version;
       break;
+    case CEPH_OSD_OP_SETALLOCHINT:
+      out << " object_size " << op.op.alloc_hint.expected_object_size
+          << " write_size " << op.op.alloc_hint.expected_write_size;
+      break;
     default:
       out << " " << op.op.extent.offset << "~" << op.op.extent.length;
       if (op.op.extent.truncate_seq)

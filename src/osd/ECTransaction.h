@@ -74,6 +74,16 @@ public:
     string key;
     RmAttrOp(const hobject_t &oid, const string &key) : oid(oid), key(key) {}
   };
+  struct AllocHintOp {
+    hobject_t oid;
+    uint64_t expected_object_size;
+    uint64_t expected_write_size;
+    AllocHintOp(const hobject_t &oid,
+                uint64_t expected_object_size,
+                uint64_t expected_write_size)
+      : oid(oid), expected_object_size(expected_object_size),
+        expected_write_size(expected_write_size) {}
+  };
   struct NoOp {};
   typedef boost::variant<
     AppendOp,
@@ -84,6 +94,7 @@ public:
     RemoveOp,
     SetAttrsOp,
     RmAttrOp,
+    AllocHintOp,
     NoOp> Op;
   list<Op> ops;
   uint64_t written;
@@ -142,6 +153,12 @@ public:
     const hobject_t &from,
     const hobject_t &to) {
     ops.push_back(RenameOp(from, to));
+  }
+  void set_alloc_hint(
+    const hobject_t &hoid,
+    uint64_t expected_object_size,
+    uint64_t expected_write_size) {
+    ops.push_back(AllocHintOp(hoid, expected_object_size, expected_write_size));
   }
 
   void append(PGTransaction *_to_append) {

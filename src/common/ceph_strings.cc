@@ -101,7 +101,10 @@ const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_OMAPSETHEADER: return "omap-set-header";
 	case CEPH_OSD_OP_OMAPCLEAR: return "omap-clear";
 	case CEPH_OSD_OP_OMAPRMKEYS: return "omap-rm-keys";
+
+	case CEPH_OSD_OP_SETALLOCHINT: return "set-alloc-hint";
 	}
+
 	return "???";
 }
 

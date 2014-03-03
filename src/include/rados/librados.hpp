@@ -313,6 +313,15 @@ namespace librados
      */
     void undirty();
 
+    /**
+     * Set allocation hint for an object
+     *
+     * @param expected_object_size expected size of the object, in bytes
+     * @param expected_write_size expected size of writes to the object, in bytes
+     */
+    void set_alloc_hint(uint64_t expected_object_size,
+                        uint64_t expected_write_size);
+
     friend class IoCtx;
   };
 
@@ -802,6 +811,22 @@ namespace librados
     int list_watchers(const std::string& o, std::list<obj_watch_t> *out_watchers);
     int list_snaps(const std::string& o, snap_set_t *out_snaps);
     void set_notify_timeout(uint32_t timeout);
+
+    /**
+     * Set allocation hint for an object
+     *
+     * This is an advisory operation, it will always succeed (as if it
+     * was submitted with a OP_FAILOK flag set) and is not guaranteed
+     * to do anything on the backend.
+     *
+     * @param o the name of the object
+     * @param expected_object_size expected size of the object, in bytes
+     * @param expected_write_size expected size of writes to the object, in bytes
+     * @returns 0 on success, negative error code on failure
+     */
+    int set_alloc_hint(const std::string& o,
+                       uint64_t expected_object_size,
+                       uint64_t expected_write_size);
 
     // assert version for next sync operations
     void set_assert_version(uint64_t ver);

@@ -3526,6 +3526,22 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       break;
 
+    case CEPH_OSD_OP_SETALLOCHINT:
+      ++ctx->num_write;
+      {
+        if (!obs.exists) {
+          ctx->mod_desc.create();
+          t->touch(soid);
+          ctx->delta_stats.num_objects++;
+          obs.exists = true;
+        }
+        t->set_alloc_hint(soid, op.alloc_hint.expected_object_size,
+                          op.alloc_hint.expected_write_size);
+        ctx->delta_stats.num_wr++;
+        result = 0;
+      }
+      break;
+
 
       // --- WRITES ---
 
