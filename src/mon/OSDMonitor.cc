@@ -2782,32 +2782,29 @@ int OSDMonitor::crush_ruleset_create_erasure(const string &name,
 					     int *ruleset,
 					     stringstream &ss)
 {
-    if (osdmap.crush->rule_exists(name)) {
-      err = 0;
-      goto reply;
-    }
+    if (osdmap.crush->rule_exists(name))
+      return -EEXIST;
 
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
 
     if (newcrush.rule_exists(name)) {
-      err = 0;
+      return -EALREADY;
     } else {
       ErasureCodeInterfaceRef erasure_code;
       err = get_erasure_code(properties_map, &erasure_code, ss);
       if (err) {
 	ss << "failed to load plugin using properties " << properties_map;
-	goto reply;
+	return err;
       }
 
       int rule = erasure_code->create_ruleset(name, newcrush, &ss);
       erasure_code.reset();
-      if (rule < 0) {
-	err = rule;
-	goto reply;
-      }
+      if (rule < 0)
+	return rule;
       pending_inc.crush.clear();
       newcrush.encode(pending_inc.crush);
+      return 0;
     }
 
 }
