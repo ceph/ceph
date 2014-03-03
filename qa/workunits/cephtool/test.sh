@@ -88,6 +88,13 @@ ceph osd tier remove data cache2
 ceph osd pool delete cache cache --yes-i-really-really-mean-it
 ceph osd pool delete cache2 cache2 --yes-i-really-really-mean-it
 
+# convenient add-cache command
+ceph osd pool create cache3 2
+ceph osd tier add-cache data cache3 1024000
+ceph osd dump | grep cache3 | grep bloom | grep 'false_positive_probability: 0.05' | grep 'target_bytes 1024000' | grep '1200s x4'
+ceph osd tier remove data cache3
+ceph osd pool delete cache3 cache3 --yes-i-really-really-mean-it
+
 # Assumes there are at least 3 MDSes and two OSDs
 #
 
