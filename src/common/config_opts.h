@@ -431,6 +431,12 @@ OPTION(osd_pool_default_flag_hashpspool, OPT_BOOL, true)   // use new pg hashing
 OPTION(osd_pool_default_hit_set_bloom_fpp, OPT_FLOAT, .05)
 OPTION(osd_hit_set_min_size, OPT_INT, 1000)  // min target size for a HitSet
 OPTION(osd_hit_set_namespace, OPT_STR, ".ceph-internal") // rados namespace for hit_set tracking
+
+OPTION(osd_tier_default_cache_mode, OPT_STR, "writeback")
+OPTION(osd_tier_default_cache_hit_set_count, OPT_INT, 4)
+OPTION(osd_tier_default_cache_hit_set_period, OPT_INT, 1200)
+OPTION(osd_tier_default_cache_hit_set_type, OPT_STR, "bloom")
+
 OPTION(osd_map_dedup, OPT_BOOL, true)
 OPTION(osd_map_cache_size, OPT_INT, 500)
 OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
