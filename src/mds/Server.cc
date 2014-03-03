@@ -2838,6 +2838,8 @@ void Server::handle_client_readdir(MDRequest *mdr)
   if (!dir->is_complete()) {
     if (dir->is_frozen()) {
       dout(7) << "dir is frozen " << *dir << dendl;
+      mds->locker->drop_locks(mdr);
+      mdr->drop_local_auth_pins();
       dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
       return;
     }
