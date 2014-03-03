@@ -3870,6 +3870,27 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     if (err)
       goto reply;
 
+    int ruleset;
+    err = crush_ruleset_create_erasure(name, properties_map, &ruleset, ss);
+    if (err < 0) {
+      switch(err) {
+      case -EEXIST: // return immediately
+	ss << "rule " << name << " already exists";
+	err = 0;
+	goto reply;
+	break;
+      case -EALREADY: // wait for pending to be proposed
+	ss << "rule " << name << " already exists";
+	err = 0;
+	break;
+      default: // non recoverable error
+ 	goto reply;
+	break;
+      }
+    } else {
+      ss << "created ruleset " << name << " at " << ruleset;
+    }
+
     getline(ss, rs);
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
                                                       get_last_committed() + 1));
