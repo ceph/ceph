@@ -1254,7 +1254,7 @@ int OSD::init()
   consume_map();
   peering_wq.drain();
 
-  dout(1) << "done with init, starting boot process" << dendl;
+  dout(0) << "done with init, starting boot process" << dendl;
   state = STATE_BOOTING;
   start_boot();
 
@@ -1975,7 +1975,7 @@ PG *OSD::_lookup_lock_pg_with_map_lock_held(spg_t pgid)
 void OSD::load_pgs()
 {
   assert(osd_lock.is_locked());
-  dout(1) << "load_pgs" << dendl;
+  dout(0) << "load_pgs" << dendl;
   assert(pg_map.empty());
 
   vector<coll_t> ls;
@@ -2104,7 +2104,7 @@ void OSD::load_pgs()
     dout(10) << "load_pgs loaded " << *pg << " " << pg->pg_log.get_log() << dendl;
     pg->unlock();
   }
-  dout(1) << "load_pgs opened " << pg_map.size() << " pgs" << dendl;
+  dout(0) << "load_pgs opened " << pg_map.size() << " pgs" << dendl;
   
   build_past_intervals_parallel();
 }
@@ -3538,7 +3538,7 @@ void OSD::ms_handle_connect(Connection *con)
 bool OSD::ms_handle_reset(Connection *con)
 {
   OSD::Session *session = (OSD::Session *)con->get_priv();
-  dout(2) << "ms_handle_reset con " << con << " session " << session << dendl;
+  dout(1) << "ms_handle_reset con " << con << " session " << session << dendl;
   if (!session)
     return false;
   session->wstate.reset();
@@ -5112,7 +5112,7 @@ bool OSDService::prepare_to_stop()
 
   OSDMapRef osdmap = get_osdmap();
   if (osdmap && osdmap->is_up(whoami)) {
-    dout(1) << __func__ << " telling mon we are shutting down" << dendl;
+    dout(0) << __func__ << " telling mon we are shutting down" << dendl;
     state = PREPARING_TO_STOP;
     monc->send_mon_message(new MOSDMarkMeDown(monc->get_fsid(),
 					      osdmap->get_inst(whoami),
@@ -5127,7 +5127,7 @@ bool OSDService::prepare_to_stop()
       is_stopping_cond.WaitUntil(is_stopping_lock, timeout);
     }
   }
-  dout(1) << __func__ << " starting shutdown" << dendl;
+  dout(0) << __func__ << " starting shutdown" << dendl;
   state = STOPPING;
   return true;
 }
@@ -5135,7 +5135,7 @@ bool OSDService::prepare_to_stop()
 void OSDService::got_stop_ack()
 {
   Mutex::Locker l(is_stopping_lock);
-  dout(1) << __func__ << " starting shutdown" << dendl;
+  dout(0) << __func__ << " starting shutdown" << dendl;
   state = STOPPING;
   is_stopping_cond.Signal();
 }
