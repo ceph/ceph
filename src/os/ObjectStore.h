@@ -178,6 +178,8 @@ public:
 				    doesn't create the destination */
       OP_OMAP_RMKEYRANGE = 37,  // cid, oid, firstkey, lastkey
       OP_COLL_MOVE_RENAME = 38,   // oldcid, oldoid, newcid, newoid
+
+      OP_SETALLOCHINT = 39,  // cid, oid, object_size, write_size
     };
 
   private:
@@ -712,6 +714,21 @@ public:
       ::encode(bits, tbl);
       ::encode(rem, tbl);
       ::encode(destination, tbl);
+      ++ops;
+    }
+
+    void set_alloc_hint(
+      coll_t cid,
+      const ghobject_t &oid,
+      uint64_t expected_object_size,
+      uint64_t expected_write_size
+    ) {
+      __u32 op = OP_SETALLOCHINT;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(oid, tbl);
+      ::encode(expected_object_size, tbl);
+      ::encode(expected_write_size, tbl);
       ++ops;
     }
 

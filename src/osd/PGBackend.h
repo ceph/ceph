@@ -414,6 +414,11 @@
        const hobject_t &from,
        const hobject_t &to
        ) = 0;
+     virtual void set_alloc_hint(
+       const hobject_t &hoid,
+       uint64_t expected_object_size,
+       uint64_t expected_write_size
+       ) = 0;
 
      /// Optional, not supported on ec-pool
      virtual void write(
