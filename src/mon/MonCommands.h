@@ -571,6 +571,13 @@ COMMAND("osd tier remove-overlay " \
 	"name=pool,type=CephPoolname ", \
 	"remove the overlay pool for base pool <pool>", "osd", "rw", "cli,rest")
 
+COMMAND("osd tier add-cache " \
+	"name=pool,type=CephPoolname " \
+	"name=tierpool,type=CephPoolname " \
+	"name=size,type=CephInt,range=0", \
+	"add a cache <tierpool> of size <size> to existing pool <pool>", \
+	"osd", "rw", "cli,rest")
+
 /*
  * mon/ConfigKeyService.cc
  */
