@@ -60,6 +60,11 @@ public:
 	<< " " << op;
     out << ")";
   }
+
+  void clear_buffers() {
+    op.t = ObjectStore::Transaction();
+    op.log_entries.clear();
+  }
 };
 
 #endif
