@@ -2824,9 +2824,9 @@ int OSDMonitor::crush_ruleset_create_erasure(const string &name,
     return -EALREADY;
   } else {
     ErasureCodeInterfaceRef erasure_code;
-    int err = get_erasure_code(properties_map, &erasure_code, ss);
+    int err = get_erasure_code(properties, &erasure_code, ss);
     if (err) {
-      ss << "failed to load plugin using properties " << properties_map;
+      ss << "failed to load plugin using properties " << properties;
       return err;
     }
 
