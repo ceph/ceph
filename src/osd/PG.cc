@@ -794,7 +794,7 @@ void PG::build_prior(std::auto_ptr<PriorSet> &prior_set)
   set_probe_targets(prior_set->probe);
 }
 
-void PG::clear_primary_state()
+void PG::clear_primary_state(bool staying_primary)
 {
   dout(10) << "clear_primary_state" << dendl;
 
@@ -827,6 +827,9 @@ void PG::clear_primary_state()
 
   osd->recovery_wq.dequeue(this);
   osd->snap_trim_wq.dequeue(this);
+
+  if (!staying_primary)
+    agent_clear();
 }
 
 /**
@@ -4736,7 +4739,7 @@ void PG::start_peering_interval(
 
   // reset primary state?
   if (was_old_primary || is_primary())
-    clear_primary_state();
+    clear_primary_state(was_old_primary && is_primary());
 
     
   // pg->on_*
@@ -6409,8 +6412,6 @@ PG::RecoveryState::ReplicaActive::ReplicaActive(my_context ctx)
     context< RecoveryMachine >().get_cur_transaction(),
     context< RecoveryMachine >().get_on_applied_context_list(),
     context< RecoveryMachine >().get_on_safe_context_list());
-
-  pg->agent_clear();
 }
 
 
