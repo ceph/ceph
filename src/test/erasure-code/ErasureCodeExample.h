@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -59,36 +59,6 @@ public:
     } else {
       return -EIO;
     }
-  }
-
-  virtual int minimum_to_decode_with_cost(const set<int> &want_to_read,
-                                          const map<int, int> &available,
-                                          set<int> *minimum) {
-    //
-    // If one chunk is more expensive to fetch than the others,
-    // recover it instead. For instance, if the cost reflects the
-    // time it takes for a chunk to be retrieved from a remote
-    // OSD and if CPU is cheap, it could make sense to recover
-    // instead of fetching the chunk.
-    //
-    map<int, int> c2c(available);
-    if (c2c.size() > DATA_CHUNKS) {
-      if (c2c[FIRST_DATA_CHUNK] > c2c[SECOND_DATA_CHUNK] &&
-	  c2c[FIRST_DATA_CHUNK] > c2c[CODING_CHUNK])
-	c2c.erase(FIRST_DATA_CHUNK);
-      else if(c2c[SECOND_DATA_CHUNK] > c2c[FIRST_DATA_CHUNK] &&
-	      c2c[SECOND_DATA_CHUNK] > c2c[CODING_CHUNK])
-	c2c.erase(SECOND_DATA_CHUNK);
-      else if(c2c[CODING_CHUNK] > c2c[FIRST_DATA_CHUNK] &&
-	      c2c[CODING_CHUNK] > c2c[SECOND_DATA_CHUNK])
-	c2c.erase(CODING_CHUNK);
-    }
-    set <int> available_chunks;
-    for (map<int, int>::const_iterator i = c2c.begin();
-	 i != c2c.end();
-	 ++i)
-      available_chunks.insert(i->first);
-    return minimum_to_decode(want_to_read, available_chunks, minimum);
   }
 
   virtual unsigned int get_chunk_count() const {

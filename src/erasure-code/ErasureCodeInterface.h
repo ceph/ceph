@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -95,9 +95,9 @@
     encoded[4]         // coding chunk 1
     ~~~~~~~~~~~~~~~~
 
-    The **minimum_to_decode_with_cost** method can be used to minimize
-    the cost of fetching the chunks necessary to retrieve a given
-    content. For instance, if encoded[2] (contained **EF**) is missing
+    The **minimum_to_decode** method can be used to minimize
+    the number of chunks necessary to retrieve a given
+    content. For instance, if encoded[2] (containing **EF**) is missing
     and accessing encoded[3] (the first coding chunk) is more
     expensive than accessing encoded[4] (the second coding chunk),
     **minimum_to_decode_with_cost** is expected to chose the first
@@ -220,31 +220,8 @@ namespace ceph {
      * to be retrieved in order to successfully decode
      * **want_to_read** chunks.
      *
-     * It is strictly equivalent to calling
-     * **minimum_to_decode_with_cost** where each **available** chunk
-     * has the same cost.
-     *
-     * @see minimum_to_decode_with_cost 
-     *
-     * @param [in] want_to_read chunk indexes to be decoded
-     * @param [in] available chunk indexes containing valid data
-     * @param [out] minimum chunk indexes to retrieve 
-     * @return **0** on success or a negative errno on error.
-     */
-    virtual int minimum_to_decode(const set<int> &want_to_read,
-                                  const set<int> &available,
-                                  set<int> *minimum) = 0;
-
-    /**
-     * Compute the smallest subset of **available** chunks that needs
-     * to be retrieved in order to successfully decode
-     * **want_to_read** chunks. If there are more than one possible
-     * subset, select the subset that minimizes the overall retrieval
-     * cost.
-     *
-     * The **available** parameter maps chunk indexes to their
-     * retrieval cost. The higher the cost value, the more costly it
-     * is to retrieve the chunk content. 
+     * The **available** list contains chunk indexes in the range
+     * [0,get_chunk_count()[
      *
      * Returns -EIO if there are not enough chunk indexes in
      * **available** to decode **want_to_read**.
@@ -254,14 +231,13 @@ namespace ceph {
      * The **minimum** argument must be a pointer to an empty set.
      *
      * @param [in] want_to_read chunk indexes to be decoded
-     * @param [in] available map chunk indexes containing valid data 
-     *             to their retrieval cost
+     * @param [in] available chunk indexes containing valid data
      * @param [out] minimum chunk indexes to retrieve 
      * @return **0** on success or a negative errno on error.
      */
-    virtual int minimum_to_decode_with_cost(const set<int> &want_to_read,
-                                            const map<int, int> &available,
-                                            set<int> *minimum) = 0;
+    virtual int minimum_to_decode(const set<int> &want_to_read,
+                                  const set<int> &available,
+                                  set<int> *minimum) = 0;
 
     /**
      * Encode the content of **in** and store the result in

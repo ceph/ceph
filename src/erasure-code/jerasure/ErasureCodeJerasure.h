@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -53,10 +53,6 @@ public:
   virtual int minimum_to_decode(const set<int> &want_to_read,
                                 const set<int> &available_chunks,
                                 set<int> *minimum);
-
-  virtual int minimum_to_decode_with_cost(const set<int> &want_to_read,
-                                          const map<int, int> &available,
-                                          set<int> *minimum);
 
   virtual int encode(const set<int> &want_to_encode,
                      const bufferlist &in,
