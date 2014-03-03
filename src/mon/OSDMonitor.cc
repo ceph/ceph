@@ -2783,7 +2783,6 @@ int OSDMonitor::crush_ruleset_create_erasure(const string &name,
 					     stringstream &ss)
 {
     if (osdmap.crush->rule_exists(name)) {
-      ss << "rule " << name << " already exists";
       err = 0;
       goto reply;
     }
@@ -2792,7 +2791,6 @@ int OSDMonitor::crush_ruleset_create_erasure(const string &name,
     _get_pending_crush(newcrush);
 
     if (newcrush.rule_exists(name)) {
-      ss << "rule " << name << " already exists";
       err = 0;
     } else {
       ErasureCodeInterfaceRef erasure_code;
@@ -2808,7 +2806,6 @@ int OSDMonitor::crush_ruleset_create_erasure(const string &name,
 	err = rule;
 	goto reply;
       }
-      ss << "created rule " << name << " at " << rule;
       pending_inc.crush.clear();
       newcrush.encode(pending_inc.crush);
     }
