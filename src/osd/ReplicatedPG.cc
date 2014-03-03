@@ -7167,6 +7167,9 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
     vector<pg_log_entry_t> log;
 
     bufferlist::iterator p = m->get_data().begin();
+    ::decode(rm->opt, p);
+    if (!(m->get_connection()->get_features() & CEPH_FEATURE_OSD_SNAPMAPPER))
+      rm->opt.set_tolerate_collection_add_enoent();
 
     if (m->new_temp_oid != hobject_t()) {
       dout(20) << __func__ << " start tracking temp " << m->new_temp_oid << dendl;
@@ -7175,12 +7178,14 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
     }
     if (m->discard_temp_oid != hobject_t()) {
       dout(20) << __func__ << " stop tracking temp " << m->discard_temp_oid << dendl;
+      if (rm->opt.empty()) {
+	dout(10) << __func__ << ": removing object " << m->discard_temp_oid
+		 << " since we won't get the transaction" << dendl;
+	rm->localt.remove(temp_coll, m->discard_temp_oid);
+      }
       clear_temp_obj(m->discard_temp_oid);
     }
 
-    ::decode(rm->opt, p);
-    if (!(m->get_connection()->get_features() & CEPH_FEATURE_OSD_SNAPMAPPER))
-      rm->opt.set_tolerate_collection_add_enoent();
     p = m->logbl.begin();
     ::decode(log, p);
     if (m->hobject_incorrect_pool) {

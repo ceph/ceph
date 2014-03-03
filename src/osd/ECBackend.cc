@@ -801,6 +801,15 @@ void ECBackend::handle_sub_write(
     get_temp_coll(localt);
     add_temp_objs(op.temp_added);
   }
+  if (op.t.empty()) {
+    for (set<hobject_t>::iterator i = op.temp_removed.begin();
+	 i != op.temp_removed.end();
+	 ++i) {
+      dout(10) << __func__ << ": removing object " << *i
+	       << " since we won't get the transaction" << dendl;
+      localt->remove(temp_coll, *i);
+    }
+  }
   clear_temp_objs(op.temp_removed);
   get_parent()->log_operation(
     op.log_entries,
