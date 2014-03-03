@@ -2988,7 +2988,8 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
   return err;
 }
 
-int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
+int OSDMonitor::prepare_pool_crush_ruleset(const string &poolstr,
+					   const unsigned pool_type,
 					   const map<string,string> &properties,
 					   int *crush_ruleset,
 					   stringstream &ss)
@@ -3059,7 +3060,8 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_ruleset,
   int r = prepare_pool_properties(pool_type, properties, &properties_map, ss);
   if (r)
     return r;
-  r = prepare_pool_crush_ruleset(pool_type, properties_map, &crush_ruleset, ss);
+  r = prepare_pool_crush_ruleset(name, pool_type, properties_map,
+				 &crush_ruleset, ss);
   if (r)
     return r;
   unsigned size;
