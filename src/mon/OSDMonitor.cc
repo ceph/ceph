@@ -2794,17 +2794,17 @@ int OSDMonitor::crush_ruleset_create_erasure(const string &name,
       return -EALREADY;
     } else {
       ErasureCodeInterfaceRef erasure_code;
-      err = get_erasure_code(properties_map, &erasure_code, ss);
+      int err = get_erasure_code(properties_map, &erasure_code, ss);
       if (err) {
 	ss << "failed to load plugin using properties " << properties_map;
 	return err;
       }
 
-      int rule = erasure_code->create_ruleset(name, newcrush, &ss);
+      err = erasure_code->create_ruleset(name, newcrush, &ss);
       erasure_code.reset();
-      if (rule < 0)
-	return rule;
-      *ruleset = rule;
+      if (err < 0)
+	return err;
+      *ruleset = err;
       pending_inc.crush.clear();
       newcrush.encode(pending_inc.crush);
       return 0;
