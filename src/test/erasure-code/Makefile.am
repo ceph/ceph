@@ -1,3 +1,6 @@
+check_SCRIPTS += \
+	test/erasure-code/test-erasure-code.sh
+
 ceph_erasure_code_benchmark_SOURCES = \
 	test/erasure-code/ceph_erasure_code_benchmark.cc
 ceph_erasure_code_benchmark_LDADD = $(LIBOSD) $(LIBCOMMON) $(BOOST_PROGRAM_OPTIONS_LIBS) $(CEPH_GLOBAL)
