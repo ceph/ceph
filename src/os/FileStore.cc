@@ -48,6 +48,7 @@
 #include "FileStore.h"
 #include "GenericFileStoreBackend.h"
 #include "BtrfsFileStoreBackend.h"
+#include "XfsFileStoreBackend.h"
 #include "ZFSFileStoreBackend.h"
 #include "common/BackTrace.h"
 #include "include/types.h"
@@ -460,6 +461,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   m_filestore_dump_fmt(true),
   m_filestore_sloppy_crc(g_conf->filestore_sloppy_crc),
   m_filestore_sloppy_crc_block_size(g_conf->filestore_sloppy_crc_block_size),
+  m_filestore_max_alloc_hint_size(g_conf->filestore_max_alloc_hint_size),
   m_fs_type(FS_TYPE_NONE),
   m_filestore_max_inline_xattr_size(0),
   m_filestore_max_inline_xattrs(0)
@@ -679,6 +681,10 @@ int FileStore::mkfs()
 #if defined(__linux__)
     backend = new BtrfsFileStoreBackend(this);
 #endif
+  } else if (basefs.f_type == XFS_SUPER_MAGIC) {
+#if defined(__linux__)
+    backend = new XfsFileStoreBackend(this);
+#endif
   } else if (basefs.f_type == ZFS_SUPER_MAGIC) {
 #ifdef HAVE_LIBZFS
     backend = new ZFSFileStoreBackend(this);
@@ -866,30 +872,35 @@ int FileStore::_detect_fs()
   blk_size = st.f_bsize;
 
   m_fs_type = FS_TYPE_OTHER;
-#if defined(__linux__)
   if (st.f_type == BTRFS_SUPER_MAGIC) {
+#if defined(__linux__)
     dout(0) << "mount detected btrfs" << dendl;
     backend = new BtrfsFileStoreBackend(this);
+    m_fs_type = FS_TYPE_BTRFS;
 
     wbthrottle.set_fs(WBThrottle::BTRFS);
-    m_fs_type = FS_TYPE_BTRFS;
+#endif
   } else if (st.f_type == XFS_SUPER_MAGIC) {
-    dout(1) << "mount detected xfs" << dendl;
+#if defined(__linux__)
+    dout(0) << "mount detected xfs (libxfs)" << dendl;
+    backend = new XfsFileStoreBackend(this);
     m_fs_type = FS_TYPE_XFS;
+
+    // wbthrottle is constructed with fs(WBThrottle::XFS)
     if (m_filestore_replica_fadvise) {
       dout(1) << " disabling 'filestore replica fadvise' due to known issues with fadvise(DONTNEED) on xfs" << dendl;
       g_conf->set_val("filestore_replica_fadvise", "false");
       g_conf->apply_changes(NULL);
       assert(m_filestore_replica_fadvise == false);
     }
-  }
 #endif
+  } else if (st.f_type == ZFS_SUPER_MAGIC) {
 #ifdef HAVE_LIBZFS
-  if (st.f_type == ZFS_SUPER_MAGIC) {
+    dout(0) << "mount detected zfs (libzfs)" << dendl;
     backend = new ZFSFileStoreBackend(this);
     m_fs_type = FS_TYPE_ZFS;
-  }
 #endif
+  }
 
   set_xattr_limits_via_conf();
 
@@ -2429,6 +2440,18 @@ unsigned FileStore::_do_transaction(
       }
       break;
 
+    case Transaction::OP_SETALLOCHINT:
+      {
+        coll_t cid = i.get_cid();
+        ghobject_t oid = i.get_oid();
+        uint64_t expected_object_size = i.get_length();
+        uint64_t expected_write_size = i.get_length();
+        if (_check_replay_guard(cid, oid, spos) > 0)
+          r = _set_alloc_hint(cid, oid, expected_object_size,
+                              expected_write_size);
+      }
+      break;
+
     default:
       derr << "bad op " << op << dendl;
       assert(0);
@@ -2450,6 +2473,14 @@ unsigned FileStore::_do_transaction(
 	ok = true; // Hack for upgrade from snapcolls to snapmapper
       if (r == -ENODATA)
 	ok = true;
+
+      if (op == Transaction::OP_SETALLOCHINT)
+        // Either EOPNOTSUPP or EINVAL most probably.  EINVAL in most
+        // cases means invalid hint size (e.g. too big, not a multiple
+        // of block size, etc) or, at least on xfs, an attempt to set
+        // or change it when the file is not empty.  However,
+        // OP_SETALLOCHINT is advisory, so ignore all errors.
+        ok = true;
 
       if (replaying && !backend->can_checkpoint()) {
 	if (r == -EEXIST && op == Transaction::OP_MKCOLL) {
@@ -4679,6 +4710,34 @@ int FileStore::_split_collection_create(coll_t cid,
   return r;
 }
 
+int FileStore::_set_alloc_hint(coll_t cid, const ghobject_t& oid,
+                               uint64_t expected_object_size,
+                               uint64_t expected_write_size)
+{
+  dout(15) << "set_alloc_hint " << cid << "/" << oid << " object_size " << expected_object_size << " write_size " << expected_write_size << dendl;
+
+  FDRef fd;
+  int ret;
+
+  ret = lfn_open(cid, oid, false, &fd);
+  if (ret < 0)
+    goto out;
+
+  {
+    // TODO: a more elaborate hint calculation
+    uint64_t hint = MIN(expected_write_size, m_filestore_max_alloc_hint_size);
+
+    ret = backend->set_alloc_hint(**fd, hint);
+    dout(20) << "set_alloc_hint hint " << hint << " ret " << ret << dendl;
+  }
+
+  lfn_close(fd);
+out:
+  dout(10) << "set_alloc_hint " << cid << "/" << oid << " object_size " << expected_object_size << " write_size " << expected_write_size << " = " << ret << dendl;
+  assert(!m_filestore_fail_eio || ret != -EIO);
+  return ret;
+}
+
 const char** FileStore::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {
@@ -4695,6 +4754,7 @@ const char** FileStore::get_tracked_conf_keys() const
     "filestore_replica_fadvise",
     "filestore_sloppy_crc",
     "filestore_sloppy_crc_block_size",
+    "filestore_max_alloc_hint_size",
     NULL
   };
   return KEYS;
@@ -4724,6 +4784,7 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
       changed.count("filestore_fail_eio") ||
       changed.count("filestore_sloppy_crc") ||
       changed.count("filestore_sloppy_crc_block_size") ||
+      changed.count("filestore_max_alloc_hint_size") ||
       changed.count("filestore_replica_fadvise")) {
     Mutex::Locker l(lock);
     m_filestore_min_sync_interval = conf->filestore_min_sync_interval;
@@ -4737,6 +4798,7 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
     m_filestore_replica_fadvise = conf->filestore_replica_fadvise;
     m_filestore_sloppy_crc = conf->filestore_sloppy_crc;
     m_filestore_sloppy_crc_block_size = conf->filestore_sloppy_crc_block_size;
+    m_filestore_max_alloc_hint_size = conf->filestore_max_alloc_hint_size;
   }
   if (changed.count("filestore_commit_timeout")) {
     Mutex::Locker l(sync_entry_timeo_lock);

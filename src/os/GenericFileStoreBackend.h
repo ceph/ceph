@@ -42,6 +42,7 @@ public:
   virtual int clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) {
     return _copy_range(from, to, srcoff, len, dstoff);
   }
+  virtual int set_alloc_hint(int fd, uint64_t hint) { return -EOPNOTSUPP; }
 
 private:
   int _crc_load_or_init(int fd, SloppyCRCMap *cm);
