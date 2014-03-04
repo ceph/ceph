@@ -247,7 +247,9 @@ void Accepter::stop()
 
   // wait for thread to stop before closing the socket, to avoid
   // racing against fd re-use.
-  join();
+  if (is_started()) {
+    join();
+  }
 
   if (listen_sd >= 0) {
     ::close(listen_sd);
