@@ -708,12 +708,13 @@ int RGWPutObj_ObjStore::get_params()
 int RGWPutObj_ObjStore::get_data(bufferlist& bl)
 {
   size_t cl;
+  uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
   if (s->length) {
     cl = atoll(s->length) - ofs;
-    if (cl > RGW_MAX_CHUNK_SIZE)
-      cl = RGW_MAX_CHUNK_SIZE;
+    if (cl > chunk_size)
+      cl = chunk_size;
   } else {
-    cl = RGW_MAX_CHUNK_SIZE;
+    cl = chunk_size;
   }
 
   int len = 0;
