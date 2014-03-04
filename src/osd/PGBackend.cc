@@ -173,7 +173,7 @@ int PGBackend::objects_get_attr(
 {
   bufferptr bp;
   int r = store->getattr(
-    coll,
+    hoid.is_temp() ? temp_coll : coll,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     attr.c_str(),
     bp);
@@ -189,7 +189,7 @@ int PGBackend::objects_get_attrs(
   map<string, bufferlist> *out)
 {
   return store->getattrs(
-    coll,
+    hoid.is_temp() ? temp_coll : coll,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     *out);
 }
@@ -200,6 +200,7 @@ void PGBackend::rollback_setattrs(
   ObjectStore::Transaction *t) {
   map<string, bufferlist> to_set;
   set<string> to_remove;
+  assert(!hoid.is_temp());
   for (map<string, boost::optional<bufferlist> >::iterator i = old_attrs.begin();
        i != old_attrs.end();
        ++i) {
@@ -222,6 +223,7 @@ void PGBackend::rollback_append(
   const hobject_t &hoid,
   uint64_t old_size,
   ObjectStore::Transaction *t) {
+  assert(!hoid.is_temp());
   t->truncate(
     coll,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
@@ -232,6 +234,7 @@ void PGBackend::rollback_stash(
   const hobject_t &hoid,
   version_t old_version,
   ObjectStore::Transaction *t) {
+  assert(!hoid.is_temp());
   t->remove(coll, hoid);
   t->collection_move_rename(
     coll,
@@ -243,6 +246,7 @@ void PGBackend::rollback_stash(
 void PGBackend::rollback_create(
   const hobject_t &hoid,
   ObjectStore::Transaction *t) {
+  assert(!hoid.is_temp());
   t->remove(
     coll,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
@@ -252,6 +256,7 @@ void PGBackend::trim_stashed_object(
   const hobject_t &hoid,
   version_t old_version,
   ObjectStore::Transaction *t) {
+  assert(!hoid.is_temp());
   t->remove(
     coll, ghobject_t(hoid, old_version, get_parent()->whoami_shard().shard));
 }

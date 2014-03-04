@@ -1409,7 +1409,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
     dout(10) << __func__ << ": not in cache " << hoid << dendl;
     struct stat st;
     int r = store->stat(
-      coll,
+      hoid.is_temp() ? temp_coll : coll,
       ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       &st);
     ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
@@ -1417,7 +1417,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
       dout(10) << __func__ << ": found on disk, size " << st.st_size << dendl;
       bufferlist bl;
       r = store->getattr(
-	coll,
+	hoid.is_temp() ? temp_coll : coll,
 	ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
 	ECUtil::get_hinfo_key(),
 	bl);
