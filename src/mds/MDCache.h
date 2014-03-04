@@ -961,11 +961,11 @@ private:
     list<CDir*> resultfrags;
     MDRequest *mdr;
     // for deadlock detection
-    bool dirs_frozen;
+    bool has_frozen;
     utime_t last_cum_auth_pins_change;
     int last_cum_auth_pins;
     int num_remote_waiters;	// number of remote authpin waiters
-    fragment_info_t() : last_cum_auth_pins(0), num_remote_waiters(0) {}
+    fragment_info_t() : has_frozen(false), last_cum_auth_pins(0), num_remote_waiters(0) {}
   };
   map<dirfrag_t,fragment_info_t> fragments;
 

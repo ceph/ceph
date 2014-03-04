@@ -11379,7 +11379,7 @@ void MDCache::find_stale_fragment_freeze()
     dirfrag_t df = p->first;
     fragment_info_t& info = p->second;
     ++p;
-    if (info.dirs_frozen)
+    if (info.has_frozen)
       continue;
     CDir *dir;
     int total_auth_pins = 0;
@@ -11479,7 +11479,7 @@ void MDCache::fragment_frozen(dirfrag_t basedirfrag, int r)
   dout(10) << "fragment_frozen " << basedirfrag.frag << " by " << info.bits
 	   << " on " << info.dirs.front()->get_inode() << dendl;
 
-  info.dirs_frozen = true;
+  info.has_frozen = true;
 
   MDRequest *mdr = request_start_internal(CEPH_MDS_OP_FRAGMENTDIR);
   mdr->more()->fragment_base = basedirfrag;
