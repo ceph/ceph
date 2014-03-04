@@ -4,7 +4,6 @@ from ceph_brag.model import db
 @jsonify.register(db.version_info)
 def jsonify_version(vi):
     return dict(
-            version_id=vi.index,
             version_number=vi.version_number,
             version_date=str(vi.version_date)
             )
