@@ -74,6 +74,17 @@ ceph osd tier set-overlay metadata cache
 ceph osd tier remove-overlay metadata
 ceph osd tier remove metadata cache
 ceph osd tier remove data cache2
+
+# make sure a non-empty pool fails
+rados -p cache2 put /etc/passwd /etc/passwd
+while ! ceph df | grep cache2 | grep ' 1 ' ; do
+    echo waiting for pg stats to flush
+    sleep 2
+done
+expect_false ceph osd tier add data cache2
+ceph osd tier add data cache2 --force-nonempty
+ceph osd tier remove data cache2
+
 ceph osd pool delete cache cache --yes-i-really-really-mean-it
 ceph osd pool delete cache2 cache2 --yes-i-really-really-mean-it
 
