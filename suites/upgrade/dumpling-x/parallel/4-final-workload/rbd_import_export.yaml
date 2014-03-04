@@ -1,7 +1,7 @@
-tasks:
-- workunit:
-     clients:
+final-workload:
+    - workunit:
+    clients:
         client.1:
-           - rbd/import_export.sh
-     env:
+          - rbd/import_export.sh
+    env:
         RBD_CREATE_ARGS: --new-format
