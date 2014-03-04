@@ -4979,7 +4979,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type)
 	  ctx->release_snapset_obc = true;
 	  ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::DELETE, snapoid,
 	      ctx->at_version,
-	      ctx->obs->oi.version,
+	      ctx->snapset_obc->obs.oi.version,
 	      0, osd_reqid_t(), ctx->mtime));
 	  if (pool.info.require_rollback()) {
 	    if (ctx->log.back().mod_desc.rmobject(ctx->at_version.version)) {
@@ -5006,7 +5006,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type)
 	       << " in " << snapoid << dendl;
       ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, snapoid,
 					ctx->at_version,
-					ctx->obs->oi.version,
+	                                eversion_t(),
 					0, osd_reqid_t(), ctx->mtime));
 
       ctx->snapset_obc = get_object_context(snapoid, true);
