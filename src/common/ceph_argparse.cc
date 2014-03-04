@@ -62,7 +62,7 @@ bool split_dashdash(const std::vector<const char*>& args,
   bool dashdash = false;
   for (std::vector<const char*>::const_iterator i = args.begin();
        i != args.end();
-       i++) {
+       ++i) {
     if (dashdash) {
       arguments.push_back(*i);
     } else {
