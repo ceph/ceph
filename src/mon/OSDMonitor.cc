@@ -3213,7 +3213,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       p.hit_set_params = HitSet::Params();
     else if (val == "bloom") {
       BloomHitSet::Params *bsp = new BloomHitSet::Params;
-      bsp->set_fpp(.05);
+      bsp->set_fpp(g_conf->osd_pool_default_hit_set_bloom_fpp);
       p.hit_set_params = HitSet::Params(bsp);
     } else if (val == "explicit_hash")
       p.hit_set_params = HitSet::Params(new ExplicitHashHitSet::Params);
@@ -4506,8 +4506,14 @@ done:
       goto reply;
     }
     // go
-    pending_inc.get_new_pool(pool_id, p)->tiers.insert(tierpool_id);
-    pending_inc.get_new_pool(tierpool_id, tp)->tier_of = pool_id;
+    pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
+    pg_pool_t *ntp = pending_inc.get_new_pool(tierpool_id, tp);
+    if (np->tiers.count(tierpool_id) || ntp->is_tier()) {
+      wait_for_finished_proposal(new C_RetryMessage(this, m));
+      return true;
+    }
+    np->tiers.insert(tierpool_id);
+    ntp->tier_of = pool_id;
     ss << "pool '" << tierpoolstr << "' is now (or already was) a tier of '" << poolstr << "'";
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
 					      get_last_committed() + 1));
@@ -4549,8 +4555,16 @@ done:
       goto reply;
     }
     // go
-    pending_inc.get_new_pool(pool_id, p)->tiers.erase(tierpool_id);
-    pending_inc.get_new_pool(tierpool_id, tp)->clear_tier();
+    pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
+    pg_pool_t *ntp = pending_inc.get_new_pool(tierpool_id, tp);
+    if (np->tiers.count(tierpool_id) == 0 ||
+	ntp->tier_of != pool_id ||
+	np->read_tier == tierpool_id) {
+      wait_for_finished_proposal(new C_RetryMessage(this, m));
+      return true;
+    }
+    np->tiers.erase(tierpool_id);
+    ntp->clear_tier();
     ss << "pool '" << tierpoolstr << "' is now (or already was) not a tier of '" << poolstr << "'";
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
 					      get_last_committed() + 1));
@@ -4652,6 +4666,90 @@ done:
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
 					      get_last_committed() + 1));
     return true;
+  } else if (prefix == "osd tier add-cache") {
+    string poolstr;
+    cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
+    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
+    if (pool_id < 0) {
+      ss << "unrecognized pool '" << poolstr << "'";
+      err = -ENOENT;
+      goto reply;
+    }
+    string tierpoolstr;
+    cmd_getval(g_ceph_context, cmdmap, "tierpool", tierpoolstr);
+    int64_t tierpool_id = osdmap.lookup_pg_pool_name(tierpoolstr);
+    if (tierpool_id < 0) {
+      ss << "unrecognized pool '" << tierpoolstr << "'";
+      err = -ENOENT;
+      goto reply;
+    }
+    const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
+    assert(p);
+    const pg_pool_t *tp = osdmap.get_pg_pool(tierpool_id);
+    assert(tp);
+    if (p->tiers.count(tierpool_id)) {
+      assert(tp->tier_of == pool_id);
+      err = 0;
+      ss << "pool '" << tierpoolstr << "' is now (or already was) a tier of '" << poolstr << "'";
+      goto reply;
+    }
+    if (tp->is_tier()) {
+      ss << "tier pool '" << tierpoolstr << "' is already a tier of '"
+	 << osdmap.get_pool_name(tp->tier_of) << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    int64_t size = 0;
+    cmd_getval(g_ceph_context, cmdmap, "size", size);
+    // make sure new tier is empty
+    const pool_stat_t& tier_stats =
+      mon->pgmon()->pg_map.get_pg_pool_sum_stat(tierpool_id);
+    if (tier_stats.stats.sum.num_objects != 0) {
+      ss << "tier pool '" << tierpoolstr << "' is not empty";
+      err = -ENOTEMPTY;
+      goto reply;
+    }
+    string modestr = g_conf->osd_tier_default_cache_mode;
+    pg_pool_t::cache_mode_t mode = pg_pool_t::get_cache_mode_from_str(modestr);
+    if (mode < 0) {
+      ss << "osd tier cache default mode '" << modestr << "' is not a valid cache mode";
+      err = -EINVAL;
+      goto reply;
+    }
+    HitSet::Params hsp;
+    if (g_conf->osd_tier_default_cache_hit_set_type == "bloom") {
+      BloomHitSet::Params *bsp = new BloomHitSet::Params;
+      bsp->set_fpp(g_conf->osd_pool_default_hit_set_bloom_fpp);
+      hsp = HitSet::Params(bsp);
+    } else if (g_conf->osd_tier_default_cache_hit_set_type == "explicit_hash") {
+      hsp = HitSet::Params(new ExplicitHashHitSet::Params);
+    }
+    else if (g_conf->osd_tier_default_cache_hit_set_type == "explicit_object") {
+      hsp = HitSet::Params(new ExplicitObjectHitSet::Params);
+    } else {
+      ss << "osd tier cache default hit set type '" <<
+	g_conf->osd_tier_default_cache_hit_set_type << "' is not a known type";
+      err = -EINVAL;
+      goto reply;
+    }
+    // go
+    pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
+    pg_pool_t *ntp = pending_inc.get_new_pool(tierpool_id, tp);
+    if (np->tiers.count(tierpool_id) || ntp->is_tier()) {
+      wait_for_finished_proposal(new C_RetryMessage(this, m));
+      return true;
+    }
+    np->tiers.insert(tierpool_id);
+    ntp->tier_of = pool_id;
+    ntp->cache_mode = mode;
+    ntp->hit_set_count = g_conf->osd_tier_default_cache_hit_set_count;
+    ntp->hit_set_period = g_conf->osd_tier_default_cache_hit_set_period;
+    ntp->hit_set_params = hsp;
+    ntp->target_max_bytes = size;
+    ss << "pool '" << tierpoolstr << "' is now (or already was) a cache tier of '" << poolstr << "'";
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
+					      get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd pool set-quota") {
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
@@ -4720,11 +4818,11 @@ done:
     ss << "will thrash map for " << thrash_map << " epochs";
     ret = thrash();
     err = 0;
- } else {
-  err = -EINVAL;
- }
+  } else {
+    err = -EINVAL;
+  }
 
-reply:
+ reply:
   getline(ss, rs);
   if (err < 0 && rs.length() == 0)
     rs = cpp_strerror(err);
