@@ -3785,12 +3785,13 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  if ((flags & CEPH_XATTR_CREATE) && cur->xattrs.count(name)) {
+  map<string, bufferptr> *pxattrs = cur->get_projected_xattrs();
+  if ((flags & CEPH_XATTR_CREATE) && pxattrs->count(name)) {
     dout(10) << "setxattr '" << name << "' XATTR_CREATE and EEXIST on " << *cur << dendl;
     reply_request(mdr, -EEXIST);
     return;
   }
-  if ((flags & CEPH_XATTR_REPLACE) && !cur->xattrs.count(name)) {
+  if ((flags & CEPH_XATTR_REPLACE) && !pxattrs->count(name)) {
     dout(10) << "setxattr '" << name << "' XATTR_REPLACE and ENODATA on " << *cur << dendl;
     reply_request(mdr, -ENODATA);
     return;
