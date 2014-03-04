@@ -34,8 +34,6 @@ struct PGLog {
       const hobject_t &hoid) = 0;
     virtual void trim(
       const pg_log_entry_t &entry) = 0;
-    virtual void cant_rollback(
-      const pg_log_entry_t &entry) = 0;
     virtual ~LogEntryHandler() {}
   };
 
@@ -388,30 +386,87 @@ public:
 			pg_missing_t& omissing, pg_shard_t from) const;
 
 protected:
-  bool _merge_old_entry(
-    ObjectStore::Transaction& t,
-    const pg_log_entry_t &oe,
-    const pg_info_t& info,
-    pg_missing_t &missing,
-    eversion_t olog_can_rollback_to,
+  static void split_by_object(
+    list<pg_log_entry_t> &entries,
+    map<hobject_t, list<pg_log_entry_t> > *out_entries) {
+    while (!entries.empty()) {
+      list<pg_log_entry_t> &out_list = (*out_entries)[entries.front().soid];
+      out_list.splice(out_list.end(), entries, entries.begin());
+    }
+  }
+
+  /**
+   * Merge complete list of divergent entries for an object
+   *
+   * @param new_divergent_prior [out] filled out for a new divergent prior
+   */
+  static void _merge_object_divergent_entries(
+    const IndexedLog &log,               ///< [in] log to merge against
+    const hobject_t &hoid,               ///< [in] object we are merging
+    const list<pg_log_entry_t> &entries, ///< [in] entries for hoid to merge
+    const pg_info_t &oinfo,              ///< [in] info for merging entries
+    eversion_t olog_can_rollback_to,     ///< [in] rollback boundary
+    pg_missing_t &omissing,              ///< [in,out] missing to adjust, use
     boost::optional<pair<eversion_t, hobject_t> > *new_divergent_prior,
-    LogEntryHandler *rollbacker) const;
-  bool merge_old_entry(
+    LogEntryHandler *rollbacker          ///< [in] optional rollbacker object
+    );
+
+  /// Merge all entries using above
+  static void _merge_divergent_entries(
+    const IndexedLog &log,               ///< [in] log to merge against
+    list<pg_log_entry_t> &entries,       ///< [in] entries to merge
+    const pg_info_t &oinfo,              ///< [in] info for merging entries
+    eversion_t olog_can_rollback_to,     ///< [in] rollback boundary
+    pg_missing_t &omissing,              ///< [in,out] missing to adjust, use
+    map<eversion_t, hobject_t> *priors,  ///< [out] target for new priors
+    LogEntryHandler *rollbacker          ///< [in] optional rollbacker object
+    ) {
+    map<hobject_t, list<pg_log_entry_t> > split;
+    split_by_object(entries, &split);
+    for (map<hobject_t, list<pg_log_entry_t> >::iterator i = split.begin();
+	 i != split.end();
+	 ++i) {
+      boost::optional<pair<eversion_t, hobject_t> > new_divergent_prior;
+      _merge_object_divergent_entries(
+	log,
+	i->first,
+	i->second,
+	oinfo,
+	olog_can_rollback_to,
+	omissing,
+	&new_divergent_prior,
+	rollbacker);
+      if (priors && new_divergent_prior) {
+	(*priors)[new_divergent_prior->first] = new_divergent_prior->second;
+      }
+    }
+  }
+
+  /**
+   * Exists for use in TestPGLog for simply testing single divergent log
+   * cases
+   */
+  void merge_old_entry(
     ObjectStore::Transaction& t,
     const pg_log_entry_t& oe,
     const pg_info_t& info,
     LogEntryHandler *rollbacker) {
     boost::optional<pair<eversion_t, hobject_t> > new_divergent_prior;
-    bool merged = _merge_old_entry(
-      t, oe, info, missing,
+    list<pg_log_entry_t> entries;
+    entries.push_back(oe);
+    _merge_object_divergent_entries(
+      log,
+      oe.soid,
+      entries,
+      info,
       log.can_rollback_to,
+      missing,
       &new_divergent_prior,
       rollbacker);
     if (new_divergent_prior)
       add_divergent_prior(
 	(*new_divergent_prior).first,
 	(*new_divergent_prior).second);
-    return merged;
   }
 public:
   void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead,
