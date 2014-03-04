@@ -552,7 +552,8 @@ COMMAND("osd thrash " \
 // tiering
 COMMAND("osd tier add " \
 	"name=pool,type=CephPoolname " \
-	"name=tierpool,type=CephPoolname",
+	"name=tierpool,type=CephPoolname " \
+	"name=force_nonempty,type=CephChoices,strings=--force-nonempty,req=false",
 	"add the tier <tierpool> to base pool <pool>", "osd", "rw", "cli,rest")
 COMMAND("osd tier remove " \
 	"name=pool,type=CephPoolname " \
