@@ -311,7 +311,7 @@ public:
 	issue(newpending);
       last_issue_stamp = other.last_issue_stamp;
     } else {
-      inc_last_seq();
+      issue(CEPH_CAP_PIN);
     }
 
     client_follows = other.client_follows;
@@ -330,7 +330,7 @@ public:
       else
 	issue(newpending);
     } else {
-      inc_last_seq();
+      issue(CEPH_CAP_PIN);
     }
 
     // wanted
