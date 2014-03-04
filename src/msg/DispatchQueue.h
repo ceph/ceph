@@ -168,6 +168,7 @@ class DispatchQueue {
   void entry();
   void wait();
   void shutdown();
+  bool is_started() {return dispatch_thread.is_started();}
 
   DispatchQueue(CephContext *cct, SimpleMessenger *msgr)
     : cct(cct), msgr(msgr),
