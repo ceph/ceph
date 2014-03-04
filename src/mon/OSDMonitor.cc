@@ -4494,6 +4494,17 @@ done:
       err = -EINVAL;
       goto reply;
     }
+    // make sure new tier is empty
+    string force_nonempty;
+    cmd_getval(g_ceph_context, cmdmap, "force_nonempty", force_nonempty);
+    const pool_stat_t& tier_stats =
+      mon->pgmon()->pg_map.get_pg_pool_sum_stat(tierpool_id);
+    if (tier_stats.stats.sum.num_objects != 0 &&
+	force_nonempty != "--force-nonempty") {
+      ss << "tier pool '" << tierpoolstr << "' is not empty; --force-nonempty to force";
+      err = -ENOTEMPTY;
+      goto reply;
+    }
     // go
     pending_inc.get_new_pool(pool_id, p)->tiers.insert(tierpool_id);
     pending_inc.get_new_pool(tierpool_id, tp)->tier_of = pool_id;
