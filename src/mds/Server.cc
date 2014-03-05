@@ -5890,10 +5890,13 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
   _rename_apply(mdr, srcdn, destdn, straydn);
 
   CDentry::linkage_t *destdnl = destdn->get_linkage();
+  CInode *in = destdnl->get_inode();
+  bool need_eval = mdr->more()->cap_imports.count(in);
+
   // test hack: test slave commit
-  if (!mdr->more()->slaves.empty() && !destdnl->get_inode()->is_dir())
+  if (!mdr->more()->slaves.empty() && !in->is_dir())
     assert(g_conf->mds_kill_rename_at != 5);
-  if (!mdr->more()->slaves.empty() && destdnl->get_inode()->is_dir())
+  if (!mdr->more()->slaves.empty() && in->is_dir())
     assert(g_conf->mds_kill_rename_at != 6);
   
   // commit anchor updates?
@@ -5904,9 +5907,8 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
 
   // bump popularity
   mds->balancer->hit_dir(mdr->now, srcdn->get_dir(), META_POP_IWR);
-  if (destdnl->is_remote() &&
-      destdnl->get_inode()->is_auth())
-    mds->balancer->hit_inode(mdr->now, destdnl->get_inode(), META_POP_IWR);
+  if (destdnl->is_remote() && in->is_auth())
+    mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);
 
   // did we import srci?  if so, explicitly ack that import that, before we unlock and reply.
 
@@ -5915,7 +5917,10 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
   reply_request(mdr, reply);
-  
+
+  if (need_eval)
+    mds->locker->eval(in, CEPH_CAP_LOCKS, true);
+
   // clean up?
   if (straydn) 
     mdcache->eval_stray(straydn);
