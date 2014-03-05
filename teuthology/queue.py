@@ -303,6 +303,7 @@ def run_job(job_config, teuth_bin_path):
         arg.append(tmp.name)
         p = subprocess.Popen(args=arg)
         log.info("Job archive: %s", job_config['archive_path'])
+        log.info("Job PID: %s", str(p.pid))
 
         if teuth_config.results_server:
             log.info("Running with watchdog")
