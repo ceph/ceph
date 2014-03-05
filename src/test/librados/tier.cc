@@ -142,7 +142,8 @@ TEST_F(LibRadosTwoPoolsPP, Overlay) {
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
@@ -204,7 +205,8 @@ TEST_F(LibRadosTwoPoolsPP, Promote) {
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
@@ -320,7 +322,8 @@ TEST_F(LibRadosTwoPoolsPP, PromoteSnap) {
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
@@ -429,7 +432,8 @@ TEST_F(LibRadosTwoPoolsPP, PromoteSnapTrimRace) {
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
@@ -479,7 +483,8 @@ TEST_F(LibRadosTwoPoolsPP, Whiteout) {
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
@@ -551,7 +556,8 @@ TEST_F(LibRadosTwoPoolsPP, Evict) {
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
@@ -703,7 +709,8 @@ TEST_F(LibRadosTwoPoolsPP, EvictSnap) {
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
@@ -885,7 +892,8 @@ TEST_F(LibRadosTwoPoolsPP, TryFlush) {
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
@@ -1002,7 +1010,8 @@ TEST_F(LibRadosTwoPoolsPP, Flush) {
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
@@ -1171,7 +1180,8 @@ TEST_F(LibRadosTwoPoolsPP, FlushSnap) {
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
@@ -1473,7 +1483,8 @@ TEST_F(LibRadosTwoPoolsPP, FlushTryFlushRaces) {
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
@@ -1682,7 +1693,8 @@ TEST_F(LibRadosTwoPoolsPP, TryFlushReadRace) {
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
