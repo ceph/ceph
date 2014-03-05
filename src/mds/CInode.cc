@@ -3281,7 +3281,7 @@ void CInode::finish_export(utime_t now)
 void CInode::decode_import(bufferlist::iterator& p,
 			   LogSegment *ls)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, p);
+  DECODE_START(5, p);
 
   _decode_base(p);
 
@@ -3303,49 +3303,47 @@ void CInode::decode_import(bufferlist::iterator& p,
   if (!replica_map.empty())
     get(PIN_REPLICATED);
 
-  if (struct_v >= 2) {
-    // decode fragstat info on bounding cdirs
-    bufferlist bounding;
-    ::decode(bounding, p);
-    bufferlist::iterator q = bounding.begin();
-    while (!q.end()) {
-      frag_t fg;
-      ::decode(fg, q);
-      CDir *dir = get_dirfrag(fg);
-      assert(dir);  // we should have all bounds open
+  // decode fragstat info on bounding cdirs
+  bufferlist bounding;
+  ::decode(bounding, p);
+  bufferlist::iterator q = bounding.begin();
+  while (!q.end()) {
+    frag_t fg;
+    ::decode(fg, q);
+    CDir *dir = get_dirfrag(fg);
+    assert(dir);  // we should have all bounds open
 
-      // Only take the remote's fragstat/rstat if we are non-auth for
-      // this dirfrag AND the lock is NOT in a scattered (MIX) state.
-      // We know lock is stable, and MIX is the only state in which
-      // the inode auth (who sent us this data) may not have the best
-      // info.
+    // Only take the remote's fragstat/rstat if we are non-auth for
+    // this dirfrag AND the lock is NOT in a scattered (MIX) state.
+    // We know lock is stable, and MIX is the only state in which
+    // the inode auth (who sent us this data) may not have the best
+    // info.
 
-      // HMM: Are there cases where dir->is_auth() is an insufficient
-      // check because the dirfrag is under migration?  That implies
-      // it is frozen (and in a SYNC or LOCK state).  FIXME.
+    // HMM: Are there cases where dir->is_auth() is an insufficient
+    // check because the dirfrag is under migration?  That implies
+    // it is frozen (and in a SYNC or LOCK state).  FIXME.
 
-      if (dir->is_auth() ||
-	  filelock.get_state() == LOCK_MIX) {
-	dout(10) << " skipped fragstat info for " << *dir << dendl;
-	frag_info_t f;
-	::decode(f, q);
-	::decode(f, q);
-      } else {
-	::decode(dir->fnode.fragstat, q);
-	::decode(dir->fnode.accounted_fragstat, q);
-	dout(10) << " took fragstat info for " << *dir << dendl;
-      }
-      if (dir->is_auth() ||
-	  nestlock.get_state() == LOCK_MIX) {
-	dout(10) << " skipped rstat info for " << *dir << dendl;
-	nest_info_t n;
-	::decode(n, q);
-	::decode(n, q);
-      } else {
-	::decode(dir->fnode.rstat, q);
-	::decode(dir->fnode.accounted_rstat, q);
-	dout(10) << " took rstat info for " << *dir << dendl;
-      }
+    if (dir->is_auth() ||
+        filelock.get_state() == LOCK_MIX) {
+      dout(10) << " skipped fragstat info for " << *dir << dendl;
+      frag_info_t f;
+      ::decode(f, q);
+      ::decode(f, q);
+    } else {
+      ::decode(dir->fnode.fragstat, q);
+      ::decode(dir->fnode.accounted_fragstat, q);
+      dout(10) << " took fragstat info for " << *dir << dendl;
+    }
+    if (dir->is_auth() ||
+        nestlock.get_state() == LOCK_MIX) {
+      dout(10) << " skipped rstat info for " << *dir << dendl;
+      nest_info_t n;
+      ::decode(n, q);
+      ::decode(n, q);
+    } else {
+      ::decode(dir->fnode.rstat, q);
+      ::decode(dir->fnode.accounted_rstat, q);
+      dout(10) << " took rstat info for " << *dir << dendl;
     }
   }
 
