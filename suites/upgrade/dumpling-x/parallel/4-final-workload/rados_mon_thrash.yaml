@@ -5,4 +5,4 @@ final-workload:
     - workunit:
         clients:
           client.1:
-            - rados/test.sh
+            - rados/test-upgrade-firefly.sh
