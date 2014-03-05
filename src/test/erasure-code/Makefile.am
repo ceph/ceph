@@ -63,7 +63,14 @@ check_PROGRAMS += unittest_erasure_code_plugin
 unittest_erasure_code_jerasure_SOURCES = \
 	test/erasure-code/TestErasureCodeJerasure.cc \
 	$(libec_jerasure_la_SOURCES)
-unittest_erasure_code_jerasure_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_erasure_code_jerasure_CFLAGS = $(AM_CFLAGS) \
+	${SIMD_FLAGS} \
+	-Ierasure-code/jerasure/gf-complete/include \
+	-Ierasure-code/jerasure/jerasure/include
+unittest_erasure_code_jerasure_CXXFLAGS = $(UNITTEST_CXXFLAGS) \
+	${SIMD_FLAGS} \
+	-Ierasure-code/jerasure/gf-complete/include \
+	-Ierasure-code/jerasure/jerasure/include
 unittest_erasure_code_jerasure_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 if LINUX
 unittest_erasure_code_jerasure_LDADD += -ldl
