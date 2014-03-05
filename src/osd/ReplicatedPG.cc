@@ -5301,9 +5301,11 @@ int ReplicatedPG::fill_in_copy_get(
 	osd->store->get_omap_iterator(coll, oi.soid);
       assert(iter);
       iter->upper_bound(cursor.omap_offset);
-      for (; left > 0 && iter->valid(); iter->next()) {
+      for (; iter->valid(); iter->next()) {
 	out_omap.insert(make_pair(iter->key(), iter->value()));
 	left -= iter->key().length() + 4 + iter->value().length() + 4;
+	if (left <= 0)
+	  break;
       }
       if (iter->valid()) {
 	cursor.omap_offset = iter->key();
