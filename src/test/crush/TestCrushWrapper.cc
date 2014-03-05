@@ -402,8 +402,9 @@ TEST(CrushWrapper, insert_item) {
   {
     // create an OSD bucket
     int osdno;
-    c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
-		  OSD_TYPE, 0, NULL, NULL, &osdno);
+    int r = c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+			  10, 0, NULL, NULL, &osdno);
+    ASSERT_EQ(0, r);
     c->set_item_name(osdno, "myosd");
     map<string,string> loc;
     loc["root"] = "default";
