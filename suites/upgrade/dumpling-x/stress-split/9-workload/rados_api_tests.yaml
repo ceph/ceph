@@ -2,4 +2,4 @@ tasks:
 - workunit:
     clients:
       client.0:
-        - rados/test.sh
+        - rados/test-upgrade-firefly.sh
