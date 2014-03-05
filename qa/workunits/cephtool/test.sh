@@ -95,6 +95,22 @@ ceph osd dump | grep cache3 | grep bloom | grep 'false_positive_probability: 0.0
 ceph osd tier remove data cache3
 ceph osd pool delete cache3 cache3 --yes-i-really-really-mean-it
 
+# check health check
+ceph osd pool create cache4 2
+ceph osd pool set cache4 target_max_objects 5
+ceph osd pool set cache4 target_max_bytes 1000
+for f in `seq 1 5` ; do
+    rados -p cache4 put foo$f /etc/passwd
+done
+while ! ceph df | grep cache4 | grep ' 5 ' ; do
+    echo waiting for pg stats to flush
+    sleep 2
+done
+ceph health | grep WARN | grep cache4
+ceph health detail | grep cache4 | grep 'target max' | grep objects
+ceph health detail | grep cache4 | grep 'target max' | grep 'B'
+ceph osd pool delete cache4 cache4 --yes-i-really-really-mean-it
+
 # Assumes there are at least 3 MDSes and two OSDs
 #
 

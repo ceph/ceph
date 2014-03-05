@@ -166,6 +166,7 @@ OPTION(mon_pg_warn_min_per_osd, OPT_INT, 20)  // min # pgs per (in) osd before w
 OPTION(mon_pg_warn_max_object_skew, OPT_FLOAT, 10.0) // max skew few average in objects per pg
 OPTION(mon_pg_warn_min_objects, OPT_INT, 10000)  // do not warn below this object #
 OPTION(mon_pg_warn_min_pool_objects, OPT_INT, 1000)  // do not warn on pools below this object #
+OPTION(mon_cache_target_full_warn_ratio, OPT_FLOAT, .66) // position between pool cache_target_full and max where we start warning
 OPTION(mon_osd_full_ratio, OPT_FLOAT, .95) // what % full makes an OSD "full"
 OPTION(mon_osd_nearfull_ratio, OPT_FLOAT, .85) // what % full makes an OSD near full
 OPTION(mon_globalid_prealloc, OPT_INT, 100)   // how many globalids to prealloc
