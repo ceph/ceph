@@ -534,7 +534,7 @@ TEST(CrushWrapper, dump_rules) {
     delete f;
     EXPECT_EQ((unsigned)0, ss.str().find("<rule><rule_id>0</rule_id><rule_name>NAME</rule_name>"));
     EXPECT_NE(string::npos,
-	      ss.str().find("<step><op>take</op><item>default</item></step>"));
+	      ss.str().find("<item_name>default</item_name></step>"));
   }
 
   delete c;
