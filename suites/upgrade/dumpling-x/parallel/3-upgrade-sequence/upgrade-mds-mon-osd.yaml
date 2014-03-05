@@ -1,7 +1,8 @@
 upgrade-sequence:
    sequential:
    - install.upgrade:
-      all:
+       mon.a:
+       mon.b:
    - ceph.restart: [mds.a]
    - sleep:
        duration: 60
