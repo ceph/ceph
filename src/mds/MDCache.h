@@ -1016,6 +1016,7 @@ public:
 
   void find_stale_fragment_freeze();
   void fragment_freeze_inc_num_waiters(CDir *dir);
+  bool fragment_are_all_frozen(CDir *dir);
   int get_num_fragmenting_dirs() { return fragments.size(); }
 
   // -- updates --
