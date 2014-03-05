@@ -439,6 +439,8 @@ ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 0'
 
 ceph osd thrash 10
 
+
+
 set +e
 
 # expect error about missing 'pool' argument
@@ -459,5 +461,44 @@ ceph heap start_profiler
 ceph heap dump
 ceph heap stop_profiler
 ceph heap release
+
+
+# test osd bench limits
+# As we should not rely on defaults (as they may change over time),
+# lets inject some values and perform some simple tests
+# max iops: 10              # 100 IOPS
+# max throughput: 10485760  # 10MB/s
+# max block size: 2097152   # 2MB
+# duration: 10              # 10 seconds
+
+ceph tell osd.0 injectargs "\
+  --osd-bench-duration 10 \
+  --osd-bench-max-block-size 2097152 \
+  --osd-bench-large-size-max-throughput 10485760 \
+  --osd-bench-small-size-max-iops 10"
+
+# anything with a bs larger than 2097152  must fail
+expect_false ceph tell osd.0 bench 1 2097153
+# but using 'osd_bench_max_bs' must succeed
+ceph tell osd.0 bench 1 2097152
+
+# we assume 1MB as a large bs; anything lower is a small bs
+# for a 4096 bytes bs, for 10 seconds, we are limited by IOPS
+# max count: 409600
+
+# more than max count must not be allowed
+expect_false ceph tell osd.0 bench 409601 4096
+# but 409600 must be succeed
+ceph tell osd.0 bench 409600 4096
+
+# for a large bs, we are limited by throughput.
+# for a 2MB block size for 10 seconds, out max count is 50
+# max count: 50
+
+# more than max count must not be allowed
+expect_false ceph tell osd.0 bench 51 2097152
+# but 50 must succeed
+ceph tell osd.0 bench 50 2097152
+
 
 echo OK

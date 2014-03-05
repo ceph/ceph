@@ -4283,6 +4283,59 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     cmd_getval(cct, cmdmap, "count", count, (int64_t)1 << 30);
     cmd_getval(cct, cmdmap, "size", bsize, (int64_t)4 << 20);
 
+    uint32_t duration = g_conf->osd_bench_duration;
+
+    if (bsize > (int64_t) g_conf->osd_bench_max_block_size) {
+      // let us limit the block size because the next checks rely on it
+      // having a sane value.  If we allow any block size to be set things
+      // can still go sideways.
+      ss << "block 'size' values are capped at "
+         << prettybyte_t(g_conf->osd_bench_max_block_size) << ". If you wish to use"
+         << " a higher value, please adjust 'osd_bench_max_block_size'";
+      r = -EINVAL;
+      goto out;
+    } else if (bsize < (int64_t) (1 << 20)) {
+      // entering the realm of small block sizes.
+      // limit the count to a sane value, assuming a configurable amount of
+      // IOPS and duration, so that the OSD doesn't get hung up on this,
+      // preventing timeouts from going off
+      int64_t max_count =
+        bsize * duration * g_conf->osd_bench_small_size_max_iops;
+      if (count > max_count) {
+        ss << "'count' values greater than " << max_count
+           << " for a block size of " << prettybyte_t(bsize) << ", assuming "
+           << g_conf->osd_bench_small_size_max_iops << " IOPS,"
+           << " for " << duration << " seconds,"
+           << " can cause ill effects on osd. "
+           << " Please adjust 'osd_bench_small_size_max_iops' with a higher"
+           << " value if you wish to use a higher 'count'.";
+        r = -EINVAL;
+        goto out;
+      }
+    } else {
+      // 1MB block sizes are big enough so that we get more stuff done.
+      // However, to avoid the osd from getting hung on this and having
+      // timers being triggered, we are going to limit the count assuming
+      // a configurable throughput and duration.
+      int64_t total_throughput =
+        g_conf->osd_bench_large_size_max_throughput * duration;
+      int64_t max_count = (int64_t) (total_throughput / bsize);
+      if (count > max_count) {
+        ss << "'count' values greater than " << max_count
+           << " for a block size of " << prettybyte_t(bsize) << ", assuming "
+           << prettybyte_t(g_conf->osd_bench_large_size_max_throughput) << "/s,"
+           << " for " << duration << " seconds,"
+           << " can cause ill effects on osd. "
+           << " Please adjust 'osd_bench_large_size_max_throughput'"
+           << " with a higher value if you wish to use a higher 'count'.";
+        r = -EINVAL;
+        goto out;
+      }
+    }
+
+    dout(1) << " bench count " << count
+            << " bsize " << prettybyte_t(bsize) << dendl;
+
     bufferlist bl;
     bufferptr bp(bsize);
     bp.zero();

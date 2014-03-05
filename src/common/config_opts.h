@@ -580,6 +580,11 @@ OPTION(osd_objectstore, OPT_STR, "filestore")  // ObjectStore backend type
 // Set to true for testing.  Users should NOT set this.
 OPTION(osd_debug_override_acting_compat, OPT_BOOL, false)
 
+OPTION(osd_bench_small_size_max_iops, OPT_U32, 100) // 100 IOPS
+OPTION(osd_bench_large_size_max_throughput, OPT_U64, 100 << 20) // 100 MB/s
+OPTION(osd_bench_max_block_size, OPT_U64, 64 << 20) // cap the block size at 64MB
+OPTION(osd_bench_duration, OPT_U32, 30) // duration of 'osd bench', capped at 30s to avoid triggering timeouts
+
 OPTION(filestore_debug_disable_sharded_check, OPT_BOOL, false)
 
 /// filestore wb throttle limits
