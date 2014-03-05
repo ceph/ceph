@@ -14,6 +14,12 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
+
+
+export CEPH_DIR="$PWD/"
+export CEPH_DEV_DIR="$CEPH_DIR/test_dev"
+export CEPH_OUT_DIR="$CEPH_DIR/test_out"
+
 function vstart_teardown()
 {
     ./stop.sh
@@ -21,8 +27,8 @@ function vstart_teardown()
 
 function vstart_setup()
 {
-    rm -fr dev out
-    mkdir -p dev
+    rm -fr $CEPH_DEV_DIR $CEPH_OUT_DIR
+    mkdir -p $CEPH_DEV_DIR
     trap "vstart_teardown ; rm -f $TMPFILE" EXIT
     export LC_ALL=C # some tests are vulnerable to i18n
     MON=1 OSD=3 ./vstart.sh \
