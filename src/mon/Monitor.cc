@@ -1717,9 +1717,9 @@ void Monitor::_quorum_status(Formatter *f, ostream& ss)
     f->dump_int("mon", *p);
   f->close_section(); // quorum
 
-  set<string> quorum_names = get_quorum_names();
+  list<string> quorum_names = get_quorum_names();
   f->open_array_section("quorum_names");
-  for (set<string>::iterator p = quorum_names.begin(); p != quorum_names.end(); ++p)
+  for (list<string>::iterator p = quorum_names.begin(); p != quorum_names.end(); ++p)
     f->dump_string("mon", *p);
   f->close_section(); // quorum_names
 
@@ -1975,7 +1975,7 @@ void Monitor::get_status(stringstream &ss, Formatter *f)
     ss << "    cluster " << monmap->get_fsid() << "\n";
     ss << "     health " << health << "\n";
     ss << "     monmap " << *monmap << ", election epoch " << get_epoch()
-      << ", quorum " << get_quorum() << " " << get_quorum_names() << "\n";
+       << ", quorum " << get_quorum() << " " << get_quorum_names() << "\n";
     if (mdsmon()->mdsmap.get_epoch() > 1)
       ss << "     mdsmap " << mdsmon()->mdsmap << "\n";
     osdmon()->osdmap.print_summary(NULL, ss);
