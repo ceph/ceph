@@ -355,6 +355,7 @@ public:
   void close_dirfrag(frag_t fg);
   void close_dirfrags();
   bool has_subtree_root_dirfrag(int auth=-1);
+  bool has_subtree_or_exporting_dirfrag();
 
   void force_dirfrags();
   void verify_dirfrags();

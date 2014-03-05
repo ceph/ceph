@@ -642,6 +642,16 @@ bool CInode::has_subtree_root_dirfrag(int auth)
   return false;
 }
 
+bool CInode::has_subtree_or_exporting_dirfrag()
+{
+  for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
+       p != dirfrags.end();
+       ++p)
+    if (p->second->is_subtree_root() ||
+	p->second->state_test(CDir::STATE_EXPORTING))
+      return true;
+  return false;
+}
 
 void CInode::get_stickydirs()
 {
