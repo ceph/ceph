@@ -149,6 +149,7 @@ EPAM <contact@epam.com> Andrey Kuznetsov <Andrey_Kuznetsov@epam.com>
 X-ION <contact@x-ion.de> Mouad Benchchaoui <m.benchchaoui@x-ion.de>
 Piston Cloud Computing <info@pistoncloud.com> Mike Lundy <mike@fluffypenguin.org>
 SendFaster <contact@sendfaster.com> Christopher O'Connell <jwriteclub@gmail.com>
+iNic <contact@inic.no> Bjørnar Ness <bjornar.ness@gmail.com>
 #
 # Local Variables:
 # compile-command: "git log --pretty='%aN <%aE>' | \
