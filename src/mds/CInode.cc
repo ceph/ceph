@@ -3228,7 +3228,7 @@ void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waite
 
 void CInode::encode_export(bufferlist& bl)
 {
-  ENCODE_START(4, 4, bl)
+  ENCODE_START(5, 4, bl)
   _encode_base(bl);
 
   ::encode(state, bl);
@@ -3256,8 +3256,12 @@ void CInode::encode_export(bufferlist& bl)
   ::encode(bounding, bl);
 
   _encode_locks_full(bl);
-  get(PIN_TEMPEXPORTING);
+
+  ::encode(fcntl_locks, bl);
+  ::encode(flock_locks, bl);
   ENCODE_FINISH(bl);
+
+  get(PIN_TEMPEXPORTING);
 }
 
 void CInode::finish_export(utime_t now)
@@ -3277,7 +3281,7 @@ void CInode::finish_export(utime_t now)
 void CInode::decode_import(bufferlist::iterator& p,
 			   LogSegment *ls)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, p);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, p);
 
   _decode_base(p);
 
@@ -3346,5 +3350,11 @@ void CInode::decode_import(bufferlist::iterator& p,
   }
 
   _decode_locks_full(p);
+
+  if (struct_v >= 5) {
+    ::decode(fcntl_locks, p);
+    ::decode(flock_locks, p);
+  }
+
   DECODE_FINISH(p);
 }

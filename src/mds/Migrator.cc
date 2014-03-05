@@ -1346,6 +1346,8 @@ void Migrator::finish_export_inode(CInode *in, utime_t now, int peer,
 
   in->clear_dirty_parent();
 
+  in->clear_file_locks();
+
   // waiters
   in->take_waiting(CInode::WAIT_ANY_MASK, finished);
 
@@ -2360,6 +2362,8 @@ void Migrator::import_reverse(CDir *dir)
 	in->linklock.clear_gather();
 	in->dirfragtreelock.clear_gather();
 	in->filelock.clear_gather();
+
+	in->clear_file_locks();
 
 	// non-bounding dir?
 	list<CDir*> dfs;
