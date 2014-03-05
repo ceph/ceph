@@ -583,6 +583,8 @@ fi
 
 %post -n librbd1
 /sbin/ldconfig
+mkdir -p /usr/lib64/qemu/ 
+ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 
 %postun -n librbd1
 /sbin/ldconfig
