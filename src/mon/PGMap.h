@@ -205,8 +205,9 @@ public:
     stamp = s;
   }
 
-  pool_stat_t get_pg_pool_sum_stat(int64_t pool) {
-    ceph::unordered_map<int,pool_stat_t>::iterator p = pg_pool_sum.find(pool);
+  pool_stat_t get_pg_pool_sum_stat(int64_t pool) const {
+    ceph::unordered_map<int,pool_stat_t>::const_iterator p =
+      pg_pool_sum.find(pool);
     if (p != pg_pool_sum.end())
       return p->second;
     return pool_stat_t();
