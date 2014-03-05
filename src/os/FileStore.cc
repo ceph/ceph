@@ -4465,10 +4465,12 @@ int FileStore::_collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,
 
     _inject_failure();
 
-    // the name changed; link the omap content
-    r = object_map->clone(oldoid, o, &spos);
-    if (r == -ENOENT)
-      r = 0;
+    if (r == 0) {
+      // the name changed; link the omap content
+      r = object_map->clone(oldoid, o, &spos);
+      if (r == -ENOENT)
+	r = 0;
+    }
 
     _inject_failure();
 
