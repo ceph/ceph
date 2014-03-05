@@ -9557,11 +9557,13 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
 	continue;
       }
 
+      if (missing_loc.is_unfound(soid)) {
+	dout(10) << __func__ << ": " << soid << " still unfound" << dendl;
+	continue;
+      }
+
       if (pg_log.get_missing().is_missing(soid)) {
-	if (missing_loc.is_unfound(soid))
-	  dout(10) << __func__ << ": " << soid << " still unfound" << dendl;
-	else
-	  dout(10) << __func__ << ": " << soid << " still missing on primary" << dendl;
+	dout(10) << __func__ << ": " << soid << " still missing on primary" << dendl;
 	continue;
       }
 
