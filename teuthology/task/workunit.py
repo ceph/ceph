@@ -11,6 +11,7 @@ from ..orchestra import run
 
 log = logging.getLogger(__name__)
 
+
 def task(ctx, config):
     """
     Run ceph on all workunits found under the specified path.
@@ -39,7 +40,8 @@ def task(ctx, config):
     on each client simultaneously, AFTER running any workunits specified
     for individual clients. (This prevents unintended simultaneous runs.)
 
-    To customize tests, you can specify environment variables as a dict::
+    To customize tests, you can specify environment variables as a dict. You
+    can also specify a time limit for each work unit (defaults to 6h):
 
         tasks:
         - ceph:
@@ -51,6 +53,7 @@ def task(ctx, config):
             env:
               FOO: bar
               BAZ: quux
+            timeout: 6h
 
     :param ctx: Context
     :param config: Configuration
@@ -69,6 +72,8 @@ def task(ctx, config):
         refspec = config.get('tag')
     if refspec is None:
         refspec = 'HEAD'
+
+    timeout = config.get('timeout', '6h')
 
     log.info('Pulling workunits from ref %s', refspec)
 
@@ -91,13 +96,15 @@ def task(ctx, config):
     with parallel() as p:
         for role, tests in clients.iteritems():
             if role != "all":
-                p.spawn(_run_tests, ctx, refspec, role, tests, config.get('env'))
+                p.spawn(_run_tests, ctx, refspec, role, tests,
+                        config.get('env'), timeout=timeout)
             else:
                 all_spec = True
 
     if all_spec:
         all_tasks = clients["all"]
-        _spawn_on_all_clients(ctx, refspec, all_tasks, config.get('env'), config.get('subdir'))
+        _spawn_on_all_clients(ctx, refspec, all_tasks, config.get('env'),
+                              config.get('subdir'))
 
     for role in clients.iterkeys():
         assert isinstance(role, basestring)
@@ -107,6 +114,7 @@ def task(ctx, config):
         assert role.startswith(PREFIX)
         if created_dir_dict[role]:
             _delete_dir(ctx, role)
+
 
 def _delete_dir(ctx, role):
     """
@@ -221,17 +229,13 @@ def _make_scratch_dir(ctx, role, subdir):
 
     return retVal
 
-def _spawn_on_all_clients(ctx, refspec, tests, env, subdir):
+
+def _spawn_on_all_clients(ctx, refspec, tests, env, subdir, timeout=None):
     """
     Make a scratch directory for each client in the cluster, and then for each
-    test spawn _run_tests for each role.    
+    test spawn _run_tests() for each role.
 
-    :param ctx: Context
-    :param refspec: branch, sha1, or version tag used to identify this
-                    build 
-    :param tests: specific tests specified.
-    :param env: evnironment set in yaml file.  Could be None.
-    :param subdir: subdirectory set in yaml file.  Could be None
+    See run_tests() for parameter documentation.
     """
     client_generator = teuthology.all_roles_of_type(ctx.cluster, 'client')
     client_remotes = list()
@@ -243,25 +247,32 @@ def _spawn_on_all_clients(ctx, refspec, tests, env, subdir):
     for unit in tests:
         with parallel() as p:
             for remote, role in client_remotes:
-                p.spawn(_run_tests, ctx, refspec, role, [unit], env, subdir)
+                p.spawn(_run_tests, ctx, refspec, role, [unit], env, subdir,
+                        timeout=timeout)
 
     # cleanup the generated client directories
     client_generator = teuthology.all_roles_of_type(ctx.cluster, 'client')
     for client in client_generator:
         _delete_dir(ctx, 'client.{id}'.format(id=client))
 
-def _run_tests(ctx, refspec, role, tests, env, subdir=None):
+
+def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
     """
-    Run the individual test.  Create a scratch directory and then extract the workunits
-    from the git-hub.  Make the executables, and then run the tests.
+    Run the individual test. Create a scratch directory and then extract the
+    workunits from git. Make the executables, and then run the tests.
     Clean up (remove files created) after the tests are finished.
 
-    :param ctx: Context
+    :param ctx:     Context
     :param refspec: branch, sha1, or version tag used to identify this
-                    build 
-    :param tests: specific tests specified.
-    :param env: evnironment set in yaml file.  Could be None.
-    :param subdir: subdirectory set in yaml file.  Could be None
+                    build
+    :param tests:   specific tests specified.
+    :param env:     environment set in yaml file.  Could be None.
+    :param subdir:  subdirectory set in yaml file.  Could be None
+    :param timeout: If present, use the 'timeout' command on the remote host
+                    to limit execution time. Must be specified by a number
+                    followed by 's' for seconds, 'm' for minutes, 'h' for
+                    hours, or 'd' for days. If '0' or anything that evaluates
+                    to False is passed, the 'timeout' command is not used.
     """
     testdir = teuthology.get_testdir(ctx)
     assert isinstance(role, basestring)
@@ -332,14 +343,17 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None):
                         env_arg = '{var}={val}'.format(var=var, val=quoted_val)
                         args.append(run.Raw(env_arg))
                 args.extend([
-                        'adjust-ulimits',
-                        'ceph-coverage',
-                        '{tdir}/archive/coverage'.format(tdir=testdir),
-                        '{srcdir}/{workunit}'.format(
-                            srcdir=srcdir,
-                            workunit=workunit,
-                            ),
-                        ])
+                    'adjust-ulimits',
+                    'ceph-coverage',
+                    '{tdir}/archive/coverage'.format(tdir=testdir)])
+                if timeout and timeout != '0':
+                    args.extend(['timeout', timeout])
+                args.extend([
+                    '{srcdir}/{workunit}'.format(
+                        srcdir=srcdir,
+                        workunit=workunit,
+                        ),
+                    ])
                 remote.run(
                     logger=log.getChild(role),
                     args=args,
