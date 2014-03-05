@@ -29,6 +29,7 @@ ceph osd crush rule rm bar
 expect_false ceph osd crush rule rm replicated_ruleset
 
 # build a simple map
+expect_false ceph osd crush add-bucket foo osd
 ceph osd crush add-bucket foo root
 o1=`ceph osd create`
 o2=`ceph osd create`
