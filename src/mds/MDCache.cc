@@ -10214,14 +10214,20 @@ void MDCache::handle_discover(MDiscover *dis)
       break;
     }
 
-    // open dir?
-    if (!curdir) 
+    if (!curdir) { // open dir?
+      if (cur->is_frozen()) {
+	if (!reply->is_empty()) {
+	  dout(7) << *cur << " is frozen, non-empty reply, stopping" << dendl;
+	  break;
+	}
+	dout(7) << *cur << " is frozen, empty reply, waiting" << dendl;
+	cur->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, dis));
+	reply->put();
+	return;
+      }
       curdir = cur->get_or_open_dirfrag(this, fg);
-    assert(curdir);
-    assert(curdir->is_auth());
-    
-    // is dir frozen?
-    if (curdir->is_frozen()) {
+    } else if (curdir->is_frozen_tree() ||
+	       (curdir->is_frozen_dir() && fragment_are_all_frozen(curdir))) {
       if (dis->wants_base_dir() && dis->get_base_dir_frag() != curdir->get_frag()) {
 	dout(7) << *curdir << " is frozen, dirfrag mismatch, stopping" << dendl;
 	reply->set_flag_error_dir();
@@ -10282,7 +10288,8 @@ void MDCache::handle_discover(MDiscover *dis)
 	dout(7) << "incomplete dir contents for " << *curdir << ", fetching" << dendl;
 	if (reply->is_empty()) {
 	  // fetch and wait
-	  curdir->fetch(new C_MDS_RetryMessage(mds, dis));
+	  curdir->fetch(new C_MDS_RetryMessage(mds, dis),
+			dis->wants_base_dir() && curdir->get_version() == 0);
 	  reply->put();
 	  return;
 	} else {
@@ -11350,6 +11357,20 @@ void MDCache::fragment_unmark_unfreeze_dirs(list<CDir*>& dirs)
 
     dir->unfreeze_dir();
   }
+}
+
+bool MDCache::fragment_are_all_frozen(CDir *dir)
+{
+  assert(dir->is_frozen_dir());
+  map<dirfrag_t,fragment_info_t>::iterator p;
+  for (p = fragments.lower_bound(dirfrag_t(dir->ino(), 0));
+       p != fragments.end() && p->first.ino == dir->ino();
+       ++p) {
+    if (p->first.frag.contains(dir->get_frag()))
+      return p->second.has_frozen;
+  }
+  assert(0);
+  return false;
 }
 
 void MDCache::fragment_freeze_inc_num_waiters(CDir *dir)
