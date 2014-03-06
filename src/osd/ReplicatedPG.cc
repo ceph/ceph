@@ -4510,8 +4510,6 @@ inline int ReplicatedPG::_delete_head(OpContext *ctx, bool no_whiteout)
   }
 
   ctx->delta_stats.num_objects--;
-  if (oi.is_dirty())
-    ctx->delta_stats.num_objects_dirty--;
   if (oi.is_whiteout()) {
     dout(20) << __func__ << " deleting whiteout on " << soid << dendl;
     ctx->delta_stats.num_whiteouts--;
@@ -4625,7 +4623,6 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       if (!obs.exists) {
 	obs.exists = true; //we're about to recreate it
 	ctx->delta_stats.num_objects++;
-	ctx->delta_stats.num_objects_dirty++;
       }
       ctx->delta_stats.num_bytes -= obs.oi.size;
       ctx->delta_stats.num_bytes += rollback_to->obs.oi.size;
@@ -4662,21 +4659,26 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   dout(20) << "make_writeable " << soid << " snapset=" << ctx->snapset
 	   << "  snapc=" << snapc << dendl;;
   
-  bool was_dirty = ctx->new_obs.oi.is_dirty();
-
+  bool was_dirty = ctx->obc->obs.oi.is_dirty();
   if (ctx->new_obs.exists) {
     // we will mark the object dirty
-    if (ctx->undirty) {
+    if (ctx->undirty && was_dirty) {
       dout(20) << " clearing DIRTY flag" << dendl;
       assert(ctx->new_obs.oi.is_dirty());
       ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
       --ctx->delta_stats.num_objects_dirty;
       osd->logger->inc(l_osd_tier_clean);
-    } else if (!ctx->new_obs.oi.test_flag(object_info_t::FLAG_DIRTY)) {
+    } else if (!was_dirty && !ctx->undirty) {
       dout(20) << " setting DIRTY flag" << dendl;
       ctx->new_obs.oi.set_flag(object_info_t::FLAG_DIRTY);
       ++ctx->delta_stats.num_objects_dirty;
       osd->logger->inc(l_osd_tier_dirty);
+    }
+  } else {
+    if (was_dirty) {
+      dout(20) << " deletion, decrementing num_dirty and clearing flag" << dendl;
+      ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
+      --ctx->delta_stats.num_objects_dirty;
     }
   }
 
