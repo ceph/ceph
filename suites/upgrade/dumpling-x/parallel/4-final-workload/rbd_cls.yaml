@@ -1,6 +1,6 @@
 final-workunit:
-    - workunit:
-        clients:
-          client.1:
-            - cls/test_cls_rbd.sh
+  - workunit:
+      clients:
+        client.1:
+          - cls/test_cls_rbd.sh
 
