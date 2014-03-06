@@ -231,7 +231,8 @@ private:
   bool preprocess_pgtemp(class MOSDPGTemp *m);
   bool prepare_pgtemp(class MOSDPGTemp *m);
 
-  int _prepare_remove_pool(uint64_t pool);
+  int _check_remove_pool(int64_t pool, const pg_pool_t *pi, ostream *ss);
+  int _prepare_remove_pool(int64_t pool, ostream *ss);
   int _prepare_rename_pool(int64_t pool, string newname);
 
   bool preprocess_pool_op ( class MPoolOp *m);

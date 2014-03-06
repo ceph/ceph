@@ -4388,14 +4388,6 @@ done:
       goto reply;
     }
 
-    // If the Pool is in use by CephFS, refuse to delete it
-    MDSMap const &pending_mdsmap = mon->mdsmon()->pending_mdsmap;
-    if (pending_mdsmap.is_data_pool(pool) || pending_mdsmap.get_metadata_pool() == pool) {
-      ss << "Cannot delete pool '" << poolstr << "' because it is in use by CephFS";
-      err = -EBUSY;
-      goto reply;
-    }
-
     if (poolstr2 != poolstr || sure != "--yes-i-really-really-mean-it") {
       ss << "WARNING: this will *PERMANENTLY DESTROY* all data stored in pool " << poolstr
 	 << ".  If you are *ABSOLUTELY CERTAIN* that is what you want, pass the pool name *twice*, "
@@ -4403,13 +4395,14 @@ done:
       err = -EPERM;
       goto reply;
     }
-    int ret = _prepare_remove_pool(pool);
-    if (ret == 0)
-      ss << "pool '" << poolstr << "' deleted";
-    getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, ret, rs,
-					      get_last_committed() + 1));
-    return true;
+    err = _prepare_remove_pool(pool, &ss);
+    if (err == -EAGAIN) {
+      wait_for_finished_proposal(new C_RetryMessage(this, m));
+      return true;
+    }
+    if (err < 0)
+      goto reply;
+    goto update;
   } else if (prefix == "osd pool rename") {
     string srcpoolstr, destpoolstr;
     cmd_getval(g_ceph_context, cmdmap, "srcpool", srcpoolstr);
@@ -5065,20 +5058,64 @@ bool OSDMonitor::prepare_pool_op_create(MPoolOp *m)
   return true;
 }
 
-int OSDMonitor::_prepare_remove_pool(uint64_t pool)
+int OSDMonitor::_check_remove_pool(int64_t pool, const pg_pool_t *p,
+				   ostream *ss)
+{
+  string poolstr = osdmap.get_pool_name(pool);
+
+  // If the Pool is in use by CephFS, refuse to delete it
+  MDSMap const &pending_mdsmap = mon->mdsmon()->pending_mdsmap;
+  if (pending_mdsmap.is_data_pool(pool) ||
+      pending_mdsmap.get_metadata_pool() == pool) {
+    *ss << "pool '" << poolstr << "' is in use by CephFS";
+    return -EBUSY;
+  }
+
+  if (p->tier_of >= 0) {
+    *ss << "pool '" << poolstr << "' is a tier of '"
+	<< osdmap.get_pool_name(p->tier_of) << "'";
+    return -EBUSY;
+  }
+  if (!p->tiers.empty()) {
+    *ss << "pool '" << poolstr << "' includes tiers "
+	<< p->tiers;
+    return -EBUSY;
+  }
+  *ss << "pool '" << poolstr << "' removed";
+  return 0;
+}
+
+int OSDMonitor::_prepare_remove_pool(int64_t pool, ostream *ss)
 {
   dout(10) << "_prepare_remove_pool " << pool << dendl;
-  if (pending_inc.old_pools.count(pool)) {
-    dout(10) << "_prepare_remove_pool " << pool << " pending removal" << dendl;    
-    return 0;  // already removed
+  const pg_pool_t *p = osdmap.get_pg_pool(pool);
+  int r = _check_remove_pool(pool, p, ss);
+  if (r < 0)
+    return r;
+
+  if (pending_inc.new_pools.count(pool)) {
+    // if there is a problem with the pending info, wait and retry
+    // this op.
+    pg_pool_t *p = &pending_inc.new_pools[pool];
+    int r = _check_remove_pool(pool, p, ss);
+    if (r < 0)
+      return -EAGAIN;
   }
+
+  if (pending_inc.old_pools.count(pool)) {
+    dout(10) << "_prepare_remove_pool " << pool << " already pending removal"
+	     << dendl;
+    return 0;
+  }
+
+  // remove
   pending_inc.old_pools.insert(pool);
 
   // remove any pg_temp mappings for this pool too
   for (map<pg_t,vector<int32_t> >::iterator p = osdmap.pg_temp->begin();
        p != osdmap.pg_temp->end();
        ++p) {
-    if (p->first.pool() == pool) {
+    if (p->first.pool() == (uint64_t)pool) {
       dout(10) << "_prepare_remove_pool " << pool << " removing obsolete pg_temp "
 	       << p->first << dendl;
       pending_inc.new_pg_temp[p->first].clear();
@@ -5087,7 +5124,7 @@ int OSDMonitor::_prepare_remove_pool(uint64_t pool)
   for (map<pg_t,int>::iterator p = osdmap.primary_temp->begin();
       p != osdmap.primary_temp->end();
       ++p) {
-    if (p->first.pool() == pool) {
+    if (p->first.pool() == (uint64_t)pool) {
       dout(10) << "_prepare_remove_pool " << pool
                << " removing obsolete primary_temp" << p->first << dendl;
       pending_inc.new_primary_temp[p->first] = -1;
@@ -5117,8 +5154,16 @@ int OSDMonitor::_prepare_rename_pool(int64_t pool, string newname)
 
 bool OSDMonitor::prepare_pool_op_delete(MPoolOp *m)
 {
-  int ret = _prepare_remove_pool(m->pool);
-  wait_for_finished_proposal(new OSDMonitor::C_PoolOp(this, m, ret, pending_inc.epoch));
+  ostringstream ss;
+  int ret = _prepare_remove_pool(m->pool, &ss);
+  if (ret == -EAGAIN) {
+    wait_for_finished_proposal(new C_RetryMessage(this, m));
+    return true;
+  }
+  if (ret < 0)
+    dout(10) << __func__ << " got " << ret << " " << ss.str() << dendl;
+  wait_for_finished_proposal(new OSDMonitor::C_PoolOp(this, m, ret,
+						      pending_inc.epoch));
   return true;
 }
 
