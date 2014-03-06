@@ -3017,12 +3017,14 @@ void PG::reg_next_scrub()
   } else {
     scrubber.scrub_reg_stamp = info.history.last_scrub_stamp;
   }
-  osd->reg_last_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
+  if (is_primary())
+    osd->reg_last_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
 }
 
 void PG::unreg_next_scrub()
 {
-  osd->unreg_last_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
+  if (is_primary())
+    osd->unreg_last_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
 }
 
 void PG::sub_op_scrub_map(OpRequestRef op)
