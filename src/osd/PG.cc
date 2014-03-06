@@ -4640,6 +4640,8 @@ void PG::start_peering_interval(
   vector<int> oldacting, oldup;
   int oldrole = get_role();
 
+  unreg_next_scrub();
+
   pg_shard_t old_acting_primary = get_primary();
   pg_shard_t old_up_primary = up_primary;
   bool was_old_primary = is_primary();
@@ -4675,6 +4677,8 @@ void PG::start_peering_interval(
     set_role(role);
   else
     set_role(-1);
+
+  reg_next_scrub();
 
   // did acting, up, primary|acker change?
   if (!lastmap) {
