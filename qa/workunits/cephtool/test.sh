@@ -283,6 +283,17 @@ for ((i=0; i < 100; i++)); do
 		break
 	fi
 done
+
+ceph osd thrash 10
+for ((i=0; i < 100; i++)); do
+	if ceph osd dump | grep 'down in'; then
+		echo "waiting for osd(s) to come back up"
+		sleep 10
+	else
+		break
+	fi
+done
+
 ceph osd dump | grep 'osd.0 up'
 ceph osd find 1
 ceph osd metadata 1 | grep 'distro'
@@ -452,8 +463,6 @@ ceph osd pool set rbd cache_min_flush_age 123
 ceph osd pool set rbd cache_min_evict_age 234
 
 ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 0'
-
-ceph osd thrash 10
 
 
 
