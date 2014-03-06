@@ -1251,6 +1251,11 @@ void ReplicatedPG::do_op(OpRequestRef op)
       wait_for_unreadable_object(missing_oid, op);
       return;
     }
+  } else if (r == 0 && is_unreadable_object(obc->obs.oi.soid)) {
+    dout(10) << __func__ << ": clone " << obc->obs.oi.soid
+	     << " is unreadable, waiting" << dendl;
+    wait_for_unreadable_object(obc->obs.oi.soid, op);
+    return;
   }
 
   if (hit_set) {
