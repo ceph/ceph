@@ -1,7 +1,9 @@
 import json
 from datetime import datetime
+import re
 from sqlalchemy.orm import sessionmaker, scoped_session
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, \
+     DateTime, ForeignKey, BigInteger
 from sqlalchemy import PrimaryKeyConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.declarative import declared_attr
@@ -34,8 +36,7 @@ class components_info(Base):
 
   index = Column(Integer, primary_key=True)
   vid = Column(ForeignKey('version_info.index'))
-  byte_count = Column(Integer)
-  byte_scale = Column(String(8))
+  num_bytes = Column(BigInteger)
   num_osds = Column(Integer)
   num_objects = Column(Integer)
   num_pgs = Column(Integer)
@@ -82,6 +83,46 @@ class brag(object):
       self.pools = Session.query(pools_info).filter_by(vid=self.vi.index).all()
       self.osds = Session.query(osds_info).filter_by(vid=self.vi.index).all()
 
+def bytes_pretty_to_raw(pretty):
+  mo = re.search("(\d+)\ (\S+)", pretty)
+  if not mo:
+    raise ValueError()
+
+  byte_count = int(mo.group(1))
+  byte_scale = mo.group(2)
+  if byte_scale == 'kB':
+    return byte_count >> 10
+  if byte_scale == 'MB':
+    return byte_count >> 20
+  if byte_scale == 'GB':
+    return byte_count >> 30
+  if byte_scale == 'TB':
+    return byte_count >> 40
+  if byte_scale == 'PB':
+    return byte_count >> 50
+  if byte_scale == 'EB':
+    return byte_count >> 60
+  
+  return byte_count
+
+def bytes_raw_to_pretty(num_bytes):
+  shift_limit = 100
+
+  if num_bytes > shift_limit << 60:
+    return str(num_bytes >> 60) + " EB"
+  if num_bytes > shift_limit << 50:
+    return str(num_bytes >> 50) + " PB"
+  if num_bytes > shift_limit << 40:
+    return str(num_bytes >> 40) + " TB"
+  if num_bytes > shift_limit << 30:
+    return str(num_bytes >> 30) + " GB"
+  if num_bytes > shift_limit << 20:
+    return str(num_bytes >> 20) + " MB"
+  if num_bytes > shift_limit << 10:
+    return str(num_bytes >> 10) + " kB"
+
+  return str(num_bytes) + " bytes"
+
 def put_new_version(data):
   info = json.loads(data)
   def add_cluster_info():
@@ -111,15 +152,15 @@ def put_new_version(data):
 
   def add_components_info(vi):
     comps_count= info['components_count']
+    nbytes = comps_count['num_bytes']
     comps_info = components_info(vid=vi.index,
-                         byte_count=comps_count['bytes']['count'],
-                         byte_scale=comps_count['bytes']['scale'],
-                         num_osds=comps_count['osds'],
-                         num_objects=comps_count['objects'],
-                         num_pgs=comps_count['pgs'],
-                         num_pools=comps_count['pools'],
-                         num_mdss=comps_count['mdss'],
-                         num_mons=comps_count['mons'],
+                         num_bytes=bytes_pretty_to_raw(nbytes),
+                         num_osds=comps_count['num_osds'],
+                         num_objects=comps_count['num_objects'],
+                         num_pgs=comps_count['num_pgs'],
+                         num_pools=comps_count['num_pools'],
+                         num_mdss=comps_count['num_mdss'],
+                         num_mons=comps_count['num_mons'],
                          crush_types=','.join(info['crush_types']))
     Session.add(comps_info)
 

@@ -22,13 +22,13 @@ def jsonify_cluster_info(ci):
 @jsonify.register(db.components_info)
 def jsonify_components_info(comps):
     return dict(
-            bytes={'count':comps.byte_count, 'scale':comps.byte_scale},
-            osds=comps.num_osds,
-            objects=comps.num_objects,
-            pgs=comps.num_pgs,
-            pools=comps.num_pools,
-            mdss=comps.num_mdss,
-            mons=comps.num_mons
+            num_bytes=db.bytes_raw_to_pretty(comps.num_bytes),
+            num_osds=comps.num_osds,
+            num_objects=comps.num_objects,
+            num_pgs=comps.num_pgs,
+            num_pools=comps.num_pools,
+            num_mdss=comps.num_mdss,
+            num_mons=comps.num_mons
             )
 
 @jsonify.register(db.pools_info)

@@ -24,16 +24,13 @@ Run 'ceph-brag -h' to get the usage information of this tool.
       "cluster_creation_date": "2014-01-16 13:38:41.928551",
       "uuid": "20679d0e-04b1-4004-8ee9-45ac271510e9",
       "components_count": {
-        "bytes": {
-          "count": 0,
-          "scale": "bytes"
-        },
-        "osds": 1,
-        "objects": 0,
-        "pgs": 192,
-        "pools": 3,
-        "mdss": 1,
-        "mons": 1
+        "num_bytes": '0 bytes',
+        "num_osds": 1,
+        "num_objects": 0,
+        "num_pgs": 192,
+        "num_pools": 3,
+        "num_mdss": 1,
+        "num_mons": 1
       },
       "crush_types": [
         "osd",

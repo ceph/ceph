@@ -86,16 +86,16 @@ def get_nums():
   else:
     num_pgs = int(mo.group(1))
     num_pools = int(mo.group(2))
-    byte_count = int(mo.group(3))
+    byte_count = mo.group(3)
     byte_scale = mo.group(4)
     num_objs = int(mo.group(5))
-  nums = {'mons':num_mons,
-          'osds':num_osds,
-          'mdss':num_mdss,
-          'pgs':num_pgs,
-          'pools':num_pools,
-          'bytes': {'count':byte_count, 'scale':byte_scale},
-          'objects':num_objs}
+  nums = {'num_mons':num_mons,
+          'num_osds':num_osds,
+          'num_mdss':num_mdss,
+          'num_pgs':num_pgs,
+          'num_pools':num_pools,
+          'num_bytes': byte_count + " " + byte_scale,
+          'num_objects':num_objs}
   return nums
 
 def get_crush_types():
@@ -221,7 +221,7 @@ def output_json():
   out['uuid'] = get_uuid()
   out['cluster_creation_date'] = get_cluster_creation_date()
   nums = get_nums()
-  num_osds = int(nums['osds'])
+  num_osds = int(nums['num_osds'])
   out['components_count'] = nums
   out['crush_types'] = get_crush_types()
   out['pool_metadata'] = get_pool_metadata()
