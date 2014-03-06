@@ -1,6 +1,12 @@
-#!/bin/sh -x
+#!/bin/bash -x
 
 set -e
+
+function expect_false()
+{
+	set -x
+	if "$@"; then return 1; else return 0; fi
+}
 
 ceph osd crush dump
 
@@ -20,9 +26,10 @@ ceph osd crush rule rm foo  # idempotent
 ceph osd crush rule rm bar
 
 # can't delete in-use rules, tho:
-ceph osd crush rule rm replicated_ruleset && exit 1 || true
+expect_false ceph osd crush rule rm replicated_ruleset
 
 # build a simple map
+expect_false ceph osd crush add-bucket foo osd
 ceph osd crush add-bucket foo root
 o1=`ceph osd create`
 o2=`ceph osd create`
@@ -41,20 +48,20 @@ ceph osd tree | grep -c osd.$o1 | grep -q 2
 ceph osd tree | grep -c host1 | grep -q 2
 ceph osd tree | grep -c osd.$o2 | grep -q 2
 ceph osd tree | grep -c host2 | grep -q 2
-ceph osd crush rm host1 foo && exit 1 || true   # not empty
+expect_false ceph osd crush rm host1 foo   # not empty
 ceph osd crush unlink host1 foo
 ceph osd crush unlink host1 foo
 ceph osd tree | grep -c host1 | grep -q 1
 
-ceph osd crush rm foo  && exit 1 || true  # not empty
-ceph osd crush rm bar  && exit 1 || true  # not empty
+expect_false ceph osd crush rm foo  # not empty
+expect_false ceph osd crush rm bar  # not empty
 ceph osd crush unlink host1 bar
 ceph osd tree | grep -c host1 | grep -q 1   # now an orphan
 ceph osd crush rm osd.$o1 host1
 ceph osd crush rm host1
 ceph osd tree | grep -c host1 | grep -q 0
 
-ceph osd crush rm bar && exit 1 || true   # not empty
+expect_false ceph osd crush rm bar   # not empty
 ceph osd crush unlink host2
 ceph osd crush rm bar
 ceph osd crush rm foo

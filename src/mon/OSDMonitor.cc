@@ -3428,6 +3428,11 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       err = -EINVAL;
       goto reply;
     }
+    if (type == 0) {
+      ss << "type '" << typestr << "' is for devices, not buckets";
+      err = -EINVAL;
+      goto reply;
+    }
     int bucketno;
     err = newcrush.add_bucket(0, CRUSH_BUCKET_STRAW,
 				       CRUSH_HASH_DEFAULT, type, 0, NULL,
