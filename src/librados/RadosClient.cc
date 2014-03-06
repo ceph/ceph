@@ -347,7 +347,6 @@ int librados::RadosClient::create_ioctx(const char *name, IoCtxImpl **io)
 
 bool librados::RadosClient::ms_dispatch(Message *m)
 {
-  Mutex::Locker l(lock);
   bool ret;
 
   if (state == DISCONNECTED) {
@@ -362,20 +361,17 @@ bool librados::RadosClient::ms_dispatch(Message *m)
 
 void librados::RadosClient::ms_handle_connect(Connection *con)
 {
-  Mutex::Locker l(lock);
   objecter->ms_handle_connect(con);
 }
 
 bool librados::RadosClient::ms_handle_reset(Connection *con)
 {
-  Mutex::Locker l(lock);
   objecter->ms_handle_reset(con);
   return false;
 }
 
 void librados::RadosClient::ms_handle_remote_reset(Connection *con)
 {
-  Mutex::Locker l(lock);
   objecter->ms_handle_remote_reset(con);
 }
 
@@ -389,10 +385,12 @@ bool librados::RadosClient::_dispatch(Message *m)
     break;
   case CEPH_MSG_OSD_MAP:
     objecter->handle_osd_map(static_cast<MOSDMap*>(m));
+    lock.Lock();
     pool_cache_rwl.get_write();
     osdmap_epoch = osdmap.get_epoch();
     pool_cache_rwl.unlock();
     cond.Signal();
+    lock.Unlock();
     break;
   case MSG_GETPOOLSTATSREPLY:
     objecter->handle_get_pool_stats_reply(static_cast<MGetPoolStatsReply*>(m));
@@ -678,7 +676,7 @@ public:
 
 void librados::RadosClient::watch_notify(MWatchNotify *m)
 {
-  assert(lock.is_locked());
+  Mutex::Locker l(lock);
   map<uint64_t, WatchContext *>::iterator iter = watchers.find(m->cookie);
   if (iter != watchers.end()) {
     WatchContext *wc = iter->second;
@@ -838,6 +836,7 @@ int librados::RadosClient::monitor_log(const string& level, rados_log_callback_t
 
 void librados::RadosClient::handle_log(MLog *m)
 {
+  Mutex::Locker l(lock);
   ldout(cct, 10) << __func__ << " version " << m->version << dendl;
 
   if (log_last_version < m->version) {
