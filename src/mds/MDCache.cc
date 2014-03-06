@@ -1086,12 +1086,10 @@ void MDCache::get_force_dirfrag_bound_set(vector<dirfrag_t>& dfs, set<CDir*>& bo
 	    all = false;
 	  }
 	}
-	if (all) {
+	if (all)
 	  fgls.push_back(approx_fg);
-	} else {
+	else
 	  diri->dirfragtree.get_leaves_under(fg, fgls);
-	  assert(!fgls.empty());
-	}
       }
       dout(10) << "  frag " << fg << " contains " << fgls << dendl;
       for (list<frag_t>::iterator r = fgls.begin(); r != fgls.end(); ++r) {
