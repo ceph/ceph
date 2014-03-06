@@ -295,7 +295,7 @@ public:
       int nb = get_split(t);
       if (nb) 
 	t.split(nb, q);   // queue up children
-      else 
+      else if (x.contains(t))
 	ls.push_back(t);  // not spit, it's a leaf.
     }
   }
