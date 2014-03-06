@@ -490,6 +490,20 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
       }
       break;
 
+    case Transaction::OP_COLL_MOVE_RENAME:
+      {
+	coll_t old_cid(i.get_cid());
+	ghobject_t old_oid = i.get_oid();
+	coll_t new_cid(i.get_cid());
+	ghobject_t new_oid = i.get_oid();
+	f->dump_string("op_name", "op_coll_move_rename");
+	f->dump_stream("old_collection") << old_cid;
+	f->dump_stream("old_oid") << old_oid;
+	f->dump_stream("new_collection") << new_cid;
+	f->dump_stream("new_oid") << new_oid;
+      }
+      break;
+
     case Transaction::OP_SETALLOCHINT:
       {
         coll_t cid = i.get_cid();
