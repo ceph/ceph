@@ -54,8 +54,8 @@ bin_PROGRAMS += ceph-mds
 
 # user tools
 
-mount_ceph_SOURCES = mount/mount.ceph.c
-mount_ceph_LDADD = $(LIBCOMMON)
+mount_ceph_SOURCES = mount/mount.ceph.c common/secret.c
+mount_ceph_LDADD = $(LIBCOMMON) $(KEYUTILS_LIB)
 if LINUX
 su_sbin_PROGRAMS += mount.ceph
 endif # LINUX
@@ -74,8 +74,8 @@ ceph_syn_SOURCES += client/SyntheticClient.cc # uses g_conf.. needs cleanup
 ceph_syn_LDADD = $(LIBCLIENT) $(CEPH_GLOBAL)
 bin_PROGRAMS += ceph-syn
 
-rbd_SOURCES = rbd.cc
-rbd_LDADD = $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL) -lblkid
+rbd_SOURCES = rbd.cc common/secret.c
+rbd_LDADD = $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL) -lblkid $(KEYUTILS_LIB)
 if LINUX
 bin_PROGRAMS += rbd
 endif #LINUX
