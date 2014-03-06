@@ -1,5 +1,5 @@
 final-workload:
-   - workunit:
-     clients:
-       client.1:
-         - rados/load-gen-mix.sh
+  - workunit:
+      clients:
+        client.1:
+          - rados/load-gen-mix.sh

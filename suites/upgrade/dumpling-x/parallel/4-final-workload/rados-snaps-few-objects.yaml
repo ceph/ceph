@@ -1,6 +1,6 @@
 final-workload:
-    - rados:
-        clients: [client.1]
+  - rados:
+      clients: [client.1]
         ops: 4000
         objects: 50
         op_weights:
