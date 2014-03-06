@@ -3644,8 +3644,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	if (pool.info.require_rollback()) {
 	  if (obs.exists) {
-	    if (ctx->mod_desc.rmobject(oi.version.version)) {
-	      t->stash(soid, oi.version.version);
+	    if (ctx->mod_desc.rmobject(ctx->at_version.version)) {
+	      t->stash(soid, ctx->at_version.version);
 	    } else {
 	      t->remove(soid);
 	    }
@@ -4478,8 +4478,8 @@ inline int ReplicatedPG::_delete_head(OpContext *ctx, bool no_whiteout)
     return -ENOENT;
 
   if (pool.info.require_rollback()) {
-    if (ctx->mod_desc.rmobject(oi.version.version)) {
-      t->stash(soid, oi.version.version);
+    if (ctx->mod_desc.rmobject(ctx->at_version.version)) {
+      t->stash(soid, ctx->at_version.version);
     } else {
       t->remove(soid);
     }
@@ -4587,8 +4587,8 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 
       if (pool.info.require_rollback()) {
 	if (obs.exists) {
-	  if (ctx->mod_desc.rmobject(oi.version.version)) {
-	    t->stash(soid, oi.version.version);
+	  if (ctx->mod_desc.rmobject(ctx->at_version.version)) {
+	    t->stash(soid, ctx->at_version.version);
 	  } else {
 	    t->remove(soid);
 	  }
