@@ -1190,10 +1190,13 @@ void Server::dispatch_client_request(MDRequest *mdr)
   switch (req->get_op()) {
   case CEPH_MDS_OP_LOOKUPHASH:
   case CEPH_MDS_OP_LOOKUPINO:
-    handle_client_lookup_ino(mdr, false);
+    handle_client_lookup_ino(mdr, false, false);
     break;
   case CEPH_MDS_OP_LOOKUPPARENT:
-    handle_client_lookup_ino(mdr, true);
+    handle_client_lookup_ino(mdr, true, false);
+    break;
+  case CEPH_MDS_OP_LOOKUPNAME:
+    handle_client_lookup_ino(mdr, false, true);
     break;
 
     // inodes ops.
@@ -2372,7 +2375,7 @@ struct C_MDS_LookupIno2 : public Context {
 /*
  * filepath:  ino
  */
-void Server::handle_client_lookup_ino(MDRequest *mdr, bool want_parent)
+void Server::handle_client_lookup_ino(MDRequest *mdr, bool want_parent, bool want_dentry)
 {
   MClientRequest *req = mdr->client_request;
 
@@ -2387,16 +2390,35 @@ void Server::handle_client_lookup_ino(MDRequest *mdr, bool want_parent)
     return;
   }
 
+  CDentry *dn = in->get_projected_parent_dn();
+  CInode *diri = dn ? dn->get_dir()->inode : NULL;
+  if (dn && (want_parent || want_dentry)) {
+    mdr->pin(dn);
+    set<SimpleLock*> rdlocks, wrlocks, xlocks;
+    rdlocks.insert(&dn->lock);
+    if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+      return;
+  }
+
   if (want_parent) {
-    CInode *pin = in->get_parent_inode();
-    if (pin && !pin->is_stray()) {
-      dout(10) << "reply to lookup_parent " << *in << dendl;
-      reply_request(mdr, 0, pin);
-    } else
+    if (!diri || diri->is_stray()) {
       reply_request(mdr, -ESTALE);
+      return;
+    }
+    dout(10) << "reply to lookup_parent " << *in << dendl;
+    reply_request(mdr, 0, diri);
   } else {
-    dout(10) << "reply to lookup_ino " << *in << dendl;
-    reply_request(mdr, 0, in);
+    if (want_dentry) {
+      inodeno_t dirino = req->get_filepath2().get_ino();
+      if (!diri || (dirino != inodeno_t() && diri->ino() != dirino)) {
+	reply_request(mdr, -ENOENT);
+	return;
+      }
+      dout(10) << "reply to lookup_name " << *in << dendl;
+    } else
+      dout(10) << "reply to lookup_ino " << *in << dendl;
+
+    reply_request(mdr, 0, in, want_dentry ? dn : NULL);
   }
 }
 
