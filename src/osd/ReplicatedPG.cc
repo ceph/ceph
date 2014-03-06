@@ -8917,6 +8917,8 @@ void ReplicatedPG::on_shutdown()
   osd->remote_reserver.cancel_reservation(info.pgid);
   osd->local_reserver.cancel_reservation(info.pgid);
 
+  agent_stop();
+
   clear_primary_state(false);  // Not staying primary
   osd->remove_want_pg_temp(info.pgid.pgid);
   cancel_recovery();
