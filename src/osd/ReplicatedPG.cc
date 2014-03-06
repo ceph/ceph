@@ -2356,7 +2356,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
       set<snapid_t> snaps(
 	ctx->obc->obs.oi.snaps.begin(),
 	ctx->obc->obs.oi.snaps.end());
-      ctx->log.back().mod_desc.update_snaps(snaps);
+      ctx->log.back().mod_desc.update_snaps(old_snaps);
     } else {
       ctx->log.back().mod_desc.mark_unrollbackable();
     }
