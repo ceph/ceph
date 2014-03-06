@@ -459,6 +459,11 @@ void ReplicatedPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef 
 	    << soid 
 	    << ", already recovering"
 	    << dendl;
+  } else if (missing_loc.is_unfound(soid)) {
+    dout(7) << "degraded "
+	    << soid
+	    << ", still unfound, waiting"
+	    << dendl;
   } else {
     dout(7) << "degraded " 
 	    << soid 
