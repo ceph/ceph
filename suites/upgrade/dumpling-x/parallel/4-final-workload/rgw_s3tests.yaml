@@ -1,5 +1,5 @@
 final-workload:
-    - rgw: [client.1]
+  - rgw: [client.1]
     - s3tests:
         client.1:
           rgw_server: client.1
