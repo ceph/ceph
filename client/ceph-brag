@@ -118,15 +118,12 @@ def get_pool_metadata():
   if rc is not 0:
     raise RuntimeError("\'ceph osd dump\' failed - " + e)
 
-  result = re.findall("pool\ (\d+)\ '(\S+)'\ rep\ size\ (\d+)", o)
+  result = re.findall("pool\ (\d+)\ '(\S+)'\ (\S+)\ size\ (\d+)", o)
   if len(result) is 0:
-    #Check with replicated size
-    result = re.findall("pool\ (\d+)\ '(\S+)'\ replicated\ size\ (\d+)", o)
-    if len(result) is 0:
-      raise RuntimeError("Unmatched pattern for \'pool\' in \'ceph osd dump\'")
+    raise RuntimeError("Unmatched pattern for \'pool\' in \'ceph osd dump\'")
 
   pool_meta = []
-  proc = lambda x: {'id':x[0], 'name':x[1], 'rep_size':int(x[2])}
+  proc = lambda x: {'id':x[0], 'type':x[2], 'size':int(x[3])}
   for r in result:
     pool_meta.append(proc(r))
 

@@ -33,8 +33,8 @@ def jsonify_components_info(comps):
 
 @jsonify.register(db.pools_info)
 def jsonify_pools_info(pool):
-    return dict(rep_size=pool.pool_rep_size,
-                name=pool.pool_name,
+    return dict(size=pool.pool_rep_size,
+                type=pool.pool_type,
                 id=pool.pool_id
                )
 

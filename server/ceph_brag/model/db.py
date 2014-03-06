@@ -51,7 +51,7 @@ class pools_info(Base):
   index = Column(Integer, primary_key=True)
   vid = Column(ForeignKey('version_info.index'))
   pool_id = Column(String(8))
-  pool_name = Column(String(16))
+  pool_type = Column(String(16))
   pool_rep_size = Column(Integer)
 
 class osds_info(Base):
@@ -169,8 +169,8 @@ def put_new_version(data):
     for p in pools:
       Session.add(pools_info(vid=vi.index,
                              pool_id=p['id'],
-                             pool_name=p['name'],
-                             pool_rep_size=p['rep_size']))
+                             pool_type=p['type'],
+                             pool_rep_size=p['size']))
 
   def add_osds_info(vi):
     osds = info['sysinfo']
