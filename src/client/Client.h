@@ -547,7 +547,7 @@ private:
   void _closedir(dir_result_t *dirp);
 
   // other helpers
-  void _fragmap_remove_non_leaves(Inode *in)
+  void _fragmap_remove_non_leaves(Inode *in);
 
   void _ll_get(Inode *in);
   int _ll_put(Inode *in, int num);
