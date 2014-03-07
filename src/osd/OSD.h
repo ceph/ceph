@@ -487,7 +487,7 @@ public:
     if (p == agent_queue_pos)
       ++agent_queue_pos;
     oq.erase(p);
-    if (oq.empty() && agent_queue.size() > 1) {
+    if (oq.empty()) {
       if (agent_queue.rbegin()->first == old_priority)
 	agent_valid_iterator = false;
       agent_queue.erase(old_priority);
