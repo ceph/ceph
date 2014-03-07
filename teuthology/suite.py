@@ -160,13 +160,14 @@ def build_matrix(path):
         if '+' in files:
             # concatenate items
             files.remove('+')
-            out = []
+            raw = []
             for fn in files:
-                out.extend(build_matrix(os.path.join(path, fn)))
-            return [(
-                    '+',
-                    [a[1] for a in out]
-                    )]
+                raw.extend(build_matrix(os.path.join(path, fn)))
+            out = [(
+                '{' + ' '.join(files) + '}',
+                [a[1][0] for a in raw]
+            )]
+            return out
         elif '%' in files:
             # convolve items
             files.remove('%')
