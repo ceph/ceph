@@ -343,7 +343,7 @@ def wait(processes, timeout=None):
     Optionally, timeout after 'timeout' seconds.
     """
     if timeout and timeout > 0:
-        with safe_while(sleep=5, increment=0, tries=(timeout/5)) as check_time:
+        with safe_while(tries=(timeout / 6)) as check_time:
             not_ready = list(processes)
             while len(not_ready) > 0:
                 check_time()
