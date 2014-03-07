@@ -2808,7 +2808,7 @@ int OSDMonitor::check_cluster_features(uint64_t features,
   for (set<int32_t>::iterator it = up_osds.begin();
        it != up_osds.end(); ++it) {
     const osd_xinfo_t &xi = osdmap.get_xinfo(*it);
-    if (!(xi.features & features)) {
+    if ((xi.features & features) != features) {
       if (unsupported_count > 0)
 	unsupported_ss << ", ";
       unsupported_ss << "osd." << *it;
@@ -2827,7 +2827,7 @@ int OSDMonitor::check_cluster_features(uint64_t features,
 	 pending_inc.new_xinfo.begin();
        p != pending_inc.new_xinfo.end(); ++p) {
     const osd_xinfo_t &xi = p->second;
-    if (!(xi.features & features)) {
+    if ((xi.features & features) != features) {
       dout(10) << __func__ << " pending osd." << p->first
 	       << " features are insufficient; retry" << dendl;
       return -EAGAIN;
