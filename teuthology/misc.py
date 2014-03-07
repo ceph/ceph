@@ -821,7 +821,7 @@ def wait_until_healthy(ctx, remote):
     Wait until a Ceph cluster is healthy. Give up after 15min.
     """
     testdir = get_testdir(ctx)
-    with safe_while(tries=(900 / 6)) as timeout:
+    with safe_while(tries=(900 / 6), action="wait_until_healthy") as timeout:
         while True:  # finite
             timeout()
             r = remote.run(
