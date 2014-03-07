@@ -2820,9 +2820,21 @@ int OSDMonitor::check_cluster_features(uint64_t features,
     ss << "features " << features << " unsupported by: "
        << unsupported_ss.str();
     return -ENOTSUP;
-  } else {
-    return 0;
   }
+
+  // check pending osd state, too!
+  for (map<int32_t,osd_xinfo_t>::const_iterator p =
+	 pending_inc.new_xinfo.begin();
+       p != pending_inc.new_xinfo.end(); ++p) {
+    const osd_xinfo_t &xi = p->second;
+    if (!(xi.features & features)) {
+      dout(10) << __func__ << " pending osd." << p->first
+	       << " features are insufficient; retry" << dendl;
+      return -EAGAIN;
+    }
+  }
+
+  return 0;
 }
 
 int OSDMonitor::prepare_pool_properties(const unsigned pool_type,
@@ -3803,6 +3815,8 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
 
   } else if (prefix == "osd crush rule create-erasure") {
     err = check_cluster_features(CEPH_FEATURE_CRUSH_V2, ss);
+    if (err == -EAGAIN)
+      goto wait;
     if (err)
       goto reply;
     string name, poolstr;
@@ -4061,6 +4075,8 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       goto reply;
     }
     err = check_cluster_features(CEPH_FEATURE_OSD_PRIMARY_AFFINITY, ss);
+    if (err == -EAGAIN)
+      goto wait;
     if (err < 0)
       goto reply;
     if (osdmap.exists(id)) {
@@ -4349,6 +4365,8 @@ done:
       err = check_cluster_features(CEPH_FEATURE_CRUSH_V2 |
 				   CEPH_FEATURE_OSD_ERASURE_CODES,
 				   ss);
+      if (err == -EAGAIN)
+	goto wait;
       if (err)
 	goto reply;
       pool_type = pg_pool_t::TYPE_ERASURE;
@@ -4834,6 +4852,10 @@ done:
   getline(ss, rs);
   wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
 					    get_last_committed() + 1));
+  return true;
+
+ wait:
+  wait_for_finished_proposal(new C_RetryMessage(this, m));
   return true;
 }
 
