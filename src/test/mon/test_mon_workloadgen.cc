@@ -226,8 +226,7 @@ class ClientStub : public TestStub
 
   virtual int _shutdown() {
     if (objecter) {
-      objecter->shutdown_locked();
-      objecter->shutdown_unlocked();
+      objecter->shutdown();
     }
     return 0;
   }
@@ -282,12 +281,11 @@ class ClientStub : public TestStub
     }
     monc.wait_auth_rotating(30.0);
 
-    objecter->init_unlocked();
+    objecter->set_client_incarnation(0);
+    objecter->init();
 
     lock.Lock();
     timer.init();
-    objecter->set_client_incarnation(0);
-    objecter->init_locked();
     monc.renew_subs();
 
     while (osdmap.get_epoch() == 0) {
