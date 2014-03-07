@@ -241,6 +241,10 @@ check_SCRIPTS += \
 	test/mon/mon-handle-forward.sh \
 	test/vstart_wrapped_tests.sh
 
+EXTRA_DIST += \
+	$(srcdir)/test/mon/mon-test-helpers.sh \
+	$(srcdir)/test/osd/osd-test-helpers.sh
+
 # target to build but not run the unit tests
 unittests:: $(check_PROGRAMS)
 
@@ -277,11 +281,6 @@ unittest_str_map_SOURCES = test/common/test_str_map.cc
 unittest_str_map_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_str_map_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_str_map
-
-unittest_crushwrapper_SOURCES = test/test_crushwrapper.cc
-unittest_crushwrapper_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-unittest_crushwrapper_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCRUSH)
-check_PROGRAMS += unittest_crushwrapper
 
 unittest_sharedptr_registry_SOURCES = test/common/test_sharedptr_registry.cc
 unittest_sharedptr_registry_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -535,6 +534,11 @@ unittest_mon_moncap_SOURCES = test/mon/moncap.cc
 unittest_mon_moncap_LDADD = $(LIBMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_mon_moncap_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_mon_moncap
+
+unittest_mon_pgmap_SOURCES = test/mon/PGMap.cc
+unittest_mon_pgmap_LDADD = $(LIBMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_mon_pgmap_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_PROGRAMS += unittest_mon_pgmap
 
 #if WITH_RADOSGW
 #unittest_librgw_SOURCES = test/librgw.cc

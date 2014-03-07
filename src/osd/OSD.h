@@ -487,7 +487,7 @@ public:
     if (p == agent_queue_pos)
       ++agent_queue_pos;
     oq.erase(p);
-    if (oq.empty() && agent_queue.size() > 1) {
+    if (oq.empty()) {
       if (agent_queue.rbegin()->first == old_priority)
 	agent_valid_iterator = false;
       agent_queue.erase(old_priority);
@@ -906,6 +906,17 @@ public:
   static const int STATE_ACTIVE = 3;
   static const int STATE_STOPPING = 4;
   static const int STATE_WAITING_FOR_HEALTHY = 5;
+
+  static const char *get_state_name(int s) {
+    switch (s) {
+    case STATE_INITIALIZING: return "initializing";
+    case STATE_BOOTING: return "booting";
+    case STATE_ACTIVE: return "active";
+    case STATE_STOPPING: return "stopping";
+    case STATE_WAITING_FOR_HEALTHY: return "waiting_for_healthy";
+    default: return "???";
+    }
+  }
 
 private:
   int state;
@@ -1338,7 +1349,10 @@ protected:
   /// project pg history from from to now
   bool project_pg_history(
     spg_t pgid, pg_history_t& h, epoch_t from,
-    const vector<int>& lastup, const vector<int>& lastacting
+    const vector<int>& lastup,
+    int lastupprimary,
+    const vector<int>& lastacting,
+    int lastactingprimary
     ); ///< @return false if there was a map gap between from and now
 
   void wake_pg_waiters(spg_t pgid) {

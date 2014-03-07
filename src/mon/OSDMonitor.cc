@@ -203,9 +203,17 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     if (t == NULL)
       t = new MonitorDBStore::Transaction;
 
-    // write out the full map for all past epochs
+    // Write out the full map for all past epochs.  Encode the full
+    // map with the same features as the incremental.  If we don't
+    // know, use the quorum features.  If we don't know those either,
+    // encode with all features.
+    uint64_t f = inc.encode_features;
+    if (!f)
+      f = mon->quorum_features;
+    if (!f)
+      f = -1;
     bufferlist full_bl;
-    osdmap.encode(full_bl, inc.encode_features);
+    osdmap.encode(full_bl, f);
     tx_size += full_bl.length();
 
     put_version_full(t, osdmap.epoch, full_bl);
@@ -345,18 +353,30 @@ bool OSDMonitor::thrash()
   while (n--)
     ++p;
   for (int i=0; i<50; i++) {
+    unsigned size = osdmap.get_pg_size(p->first);
     vector<int> v;
-    for (int j=0; j<3; j++) {
+    bool have_real_osd = false;
+    for (int j=0; j < (int)size; j++) {
       o = rand() % osdmap.get_num_osds();
-      if (osdmap.exists(o) && std::find(v.begin(), v.end(), o) == v.end())
+      if (osdmap.exists(o) && std::find(v.begin(), v.end(), o) == v.end()) {
+	have_real_osd = true;
 	v.push_back(o);
+      }
     }
-    if (v.size() < 3) {
-      for (vector<int>::iterator q = p->second.acting.begin(); q != p->second.acting.end(); ++q)
-	if (std::find(v.begin(), v.end(), *q) == v.end())
-	  v.push_back(*q);
+    for (vector<int>::iterator q = p->second.acting.begin();
+	 q != p->second.acting.end() && v.size() < size;
+	 ++q) {
+      if (std::find(v.begin(), v.end(), *q) == v.end()) {
+	if (*q != CRUSH_ITEM_NONE)
+	  have_real_osd = true;
+	v.push_back(*q);
+      }
     }
-    if (!v.empty())
+    if (osdmap.pg_is_ec(p->first)) {
+      while (v.size() < size)
+	v.push_back(CRUSH_ITEM_NONE);
+    }
+    if (!v.empty() && have_real_osd)
       pending_inc.new_pg_temp[p->first] = v;
     dout(5) << "thrash_map pg " << p->first << " pg_temp remapped to " << v << dendl;
 
@@ -3163,7 +3183,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     if (pgs_per_osd > g_conf->mon_osd_max_split_count) {
       ss << "specified pg_num " << n << " is too large (creating "
 	 << new_pgs << " new PGs on ~" << expected_osds
-	 << " OSDs exceeds per-OSD max of" << g_conf->mon_osd_max_split_count
+	 << " OSDs exceeds per-OSD max of " << g_conf->mon_osd_max_split_count
 	 << ')';
       return -E2BIG;
     }
@@ -3223,7 +3243,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       p.hit_set_params = HitSet::Params();
     else if (val == "bloom") {
       BloomHitSet::Params *bsp = new BloomHitSet::Params;
-      bsp->set_fpp(.01);
+      bsp->set_fpp(g_conf->osd_pool_default_hit_set_bloom_fpp);
       p.hit_set_params = HitSet::Params(bsp);
     } else if (val == "explicit_hash")
       p.hit_set_params = HitSet::Params(new ExplicitHashHitSet::Params);
@@ -3435,6 +3455,11 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     int type = newcrush.get_type_id(typestr);
     if (type < 0) {
       ss << "type '" << typestr << "' does not exist";
+      err = -EINVAL;
+      goto reply;
+    }
+    if (type == 0) {
+      ss << "type '" << typestr << "' is for devices, not buckets";
       err = -EINVAL;
       goto reply;
     }
@@ -4398,14 +4423,6 @@ done:
       goto reply;
     }
 
-    // If the Pool is in use by CephFS, refuse to delete it
-    MDSMap const &pending_mdsmap = mon->mdsmon()->pending_mdsmap;
-    if (pending_mdsmap.is_data_pool(pool) || pending_mdsmap.get_metadata_pool() == pool) {
-      ss << "Cannot delete pool '" << poolstr << "' because it is in use by CephFS";
-      err = -EBUSY;
-      goto reply;
-    }
-
     if (poolstr2 != poolstr || sure != "--yes-i-really-really-mean-it") {
       ss << "WARNING: this will *PERMANENTLY DESTROY* all data stored in pool " << poolstr
 	 << ".  If you are *ABSOLUTELY CERTAIN* that is what you want, pass the pool name *twice*, "
@@ -4413,13 +4430,14 @@ done:
       err = -EPERM;
       goto reply;
     }
-    int ret = _prepare_remove_pool(pool);
-    if (ret == 0)
-      ss << "pool '" << poolstr << "' deleted";
-    getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, ret, rs,
-					      get_last_committed() + 1));
-    return true;
+    err = _prepare_remove_pool(pool, &ss);
+    if (err == -EAGAIN) {
+      wait_for_finished_proposal(new C_RetryMessage(this, m));
+      return true;
+    }
+    if (err < 0)
+      goto reply;
+    goto update;
   } else if (prefix == "osd pool rename") {
     string srcpoolstr, destpoolstr;
     cmd_getval(g_ceph_context, cmdmap, "srcpool", srcpoolstr);
@@ -4504,9 +4522,26 @@ done:
       err = -EINVAL;
       goto reply;
     }
+    // make sure new tier is empty
+    string force_nonempty;
+    cmd_getval(g_ceph_context, cmdmap, "force_nonempty", force_nonempty);
+    const pool_stat_t& tier_stats =
+      mon->pgmon()->pg_map.get_pg_pool_sum_stat(tierpool_id);
+    if (tier_stats.stats.sum.num_objects != 0 &&
+	force_nonempty != "--force-nonempty") {
+      ss << "tier pool '" << tierpoolstr << "' is not empty; --force-nonempty to force";
+      err = -ENOTEMPTY;
+      goto reply;
+    }
     // go
-    pending_inc.get_new_pool(pool_id, p)->tiers.insert(tierpool_id);
-    pending_inc.get_new_pool(tierpool_id, tp)->tier_of = pool_id;
+    pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
+    pg_pool_t *ntp = pending_inc.get_new_pool(tierpool_id, tp);
+    if (np->tiers.count(tierpool_id) || ntp->is_tier()) {
+      wait_for_finished_proposal(new C_RetryMessage(this, m));
+      return true;
+    }
+    np->tiers.insert(tierpool_id);
+    ntp->tier_of = pool_id;
     ss << "pool '" << tierpoolstr << "' is now (or already was) a tier of '" << poolstr << "'";
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
 					      get_last_committed() + 1));
@@ -4548,8 +4583,16 @@ done:
       goto reply;
     }
     // go
-    pending_inc.get_new_pool(pool_id, p)->tiers.erase(tierpool_id);
-    pending_inc.get_new_pool(tierpool_id, tp)->clear_tier();
+    pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
+    pg_pool_t *ntp = pending_inc.get_new_pool(tierpool_id, tp);
+    if (np->tiers.count(tierpool_id) == 0 ||
+	ntp->tier_of != pool_id ||
+	np->read_tier == tierpool_id) {
+      wait_for_finished_proposal(new C_RetryMessage(this, m));
+      return true;
+    }
+    np->tiers.erase(tierpool_id);
+    ntp->clear_tier();
     ss << "pool '" << tierpoolstr << "' is now (or already was) not a tier of '" << poolstr << "'";
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
 					      get_last_committed() + 1));
@@ -4651,6 +4694,90 @@ done:
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
 					      get_last_committed() + 1));
     return true;
+  } else if (prefix == "osd tier add-cache") {
+    string poolstr;
+    cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
+    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
+    if (pool_id < 0) {
+      ss << "unrecognized pool '" << poolstr << "'";
+      err = -ENOENT;
+      goto reply;
+    }
+    string tierpoolstr;
+    cmd_getval(g_ceph_context, cmdmap, "tierpool", tierpoolstr);
+    int64_t tierpool_id = osdmap.lookup_pg_pool_name(tierpoolstr);
+    if (tierpool_id < 0) {
+      ss << "unrecognized pool '" << tierpoolstr << "'";
+      err = -ENOENT;
+      goto reply;
+    }
+    const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
+    assert(p);
+    const pg_pool_t *tp = osdmap.get_pg_pool(tierpool_id);
+    assert(tp);
+    if (p->tiers.count(tierpool_id)) {
+      assert(tp->tier_of == pool_id);
+      err = 0;
+      ss << "pool '" << tierpoolstr << "' is now (or already was) a tier of '" << poolstr << "'";
+      goto reply;
+    }
+    if (tp->is_tier()) {
+      ss << "tier pool '" << tierpoolstr << "' is already a tier of '"
+	 << osdmap.get_pool_name(tp->tier_of) << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    int64_t size = 0;
+    cmd_getval(g_ceph_context, cmdmap, "size", size);
+    // make sure new tier is empty
+    const pool_stat_t& tier_stats =
+      mon->pgmon()->pg_map.get_pg_pool_sum_stat(tierpool_id);
+    if (tier_stats.stats.sum.num_objects != 0) {
+      ss << "tier pool '" << tierpoolstr << "' is not empty";
+      err = -ENOTEMPTY;
+      goto reply;
+    }
+    string modestr = g_conf->osd_tier_default_cache_mode;
+    pg_pool_t::cache_mode_t mode = pg_pool_t::get_cache_mode_from_str(modestr);
+    if (mode < 0) {
+      ss << "osd tier cache default mode '" << modestr << "' is not a valid cache mode";
+      err = -EINVAL;
+      goto reply;
+    }
+    HitSet::Params hsp;
+    if (g_conf->osd_tier_default_cache_hit_set_type == "bloom") {
+      BloomHitSet::Params *bsp = new BloomHitSet::Params;
+      bsp->set_fpp(g_conf->osd_pool_default_hit_set_bloom_fpp);
+      hsp = HitSet::Params(bsp);
+    } else if (g_conf->osd_tier_default_cache_hit_set_type == "explicit_hash") {
+      hsp = HitSet::Params(new ExplicitHashHitSet::Params);
+    }
+    else if (g_conf->osd_tier_default_cache_hit_set_type == "explicit_object") {
+      hsp = HitSet::Params(new ExplicitObjectHitSet::Params);
+    } else {
+      ss << "osd tier cache default hit set type '" <<
+	g_conf->osd_tier_default_cache_hit_set_type << "' is not a known type";
+      err = -EINVAL;
+      goto reply;
+    }
+    // go
+    pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
+    pg_pool_t *ntp = pending_inc.get_new_pool(tierpool_id, tp);
+    if (np->tiers.count(tierpool_id) || ntp->is_tier()) {
+      wait_for_finished_proposal(new C_RetryMessage(this, m));
+      return true;
+    }
+    np->tiers.insert(tierpool_id);
+    ntp->tier_of = pool_id;
+    ntp->cache_mode = mode;
+    ntp->hit_set_count = g_conf->osd_tier_default_cache_hit_set_count;
+    ntp->hit_set_period = g_conf->osd_tier_default_cache_hit_set_period;
+    ntp->hit_set_params = hsp;
+    ntp->target_max_bytes = size;
+    ss << "pool '" << tierpoolstr << "' is now (or already was) a cache tier of '" << poolstr << "'";
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
+					      get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd pool set-quota") {
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
@@ -4719,11 +4846,11 @@ done:
     ss << "will thrash map for " << thrash_map << " epochs";
     ret = thrash();
     err = 0;
- } else {
-  err = -EINVAL;
- }
+  } else {
+    err = -EINVAL;
+  }
 
-reply:
+ reply:
   getline(ss, rs);
   if (err < 0 && rs.length() == 0)
     rs = cpp_strerror(err);
@@ -4966,20 +5093,64 @@ bool OSDMonitor::prepare_pool_op_create(MPoolOp *m)
   return true;
 }
 
-int OSDMonitor::_prepare_remove_pool(uint64_t pool)
+int OSDMonitor::_check_remove_pool(int64_t pool, const pg_pool_t *p,
+				   ostream *ss)
+{
+  string poolstr = osdmap.get_pool_name(pool);
+
+  // If the Pool is in use by CephFS, refuse to delete it
+  MDSMap const &pending_mdsmap = mon->mdsmon()->pending_mdsmap;
+  if (pending_mdsmap.is_data_pool(pool) ||
+      pending_mdsmap.get_metadata_pool() == pool) {
+    *ss << "pool '" << poolstr << "' is in use by CephFS";
+    return -EBUSY;
+  }
+
+  if (p->tier_of >= 0) {
+    *ss << "pool '" << poolstr << "' is a tier of '"
+	<< osdmap.get_pool_name(p->tier_of) << "'";
+    return -EBUSY;
+  }
+  if (!p->tiers.empty()) {
+    *ss << "pool '" << poolstr << "' includes tiers "
+	<< p->tiers;
+    return -EBUSY;
+  }
+  *ss << "pool '" << poolstr << "' removed";
+  return 0;
+}
+
+int OSDMonitor::_prepare_remove_pool(int64_t pool, ostream *ss)
 {
   dout(10) << "_prepare_remove_pool " << pool << dendl;
-  if (pending_inc.old_pools.count(pool)) {
-    dout(10) << "_prepare_remove_pool " << pool << " pending removal" << dendl;    
-    return 0;  // already removed
+  const pg_pool_t *p = osdmap.get_pg_pool(pool);
+  int r = _check_remove_pool(pool, p, ss);
+  if (r < 0)
+    return r;
+
+  if (pending_inc.new_pools.count(pool)) {
+    // if there is a problem with the pending info, wait and retry
+    // this op.
+    pg_pool_t *p = &pending_inc.new_pools[pool];
+    int r = _check_remove_pool(pool, p, ss);
+    if (r < 0)
+      return -EAGAIN;
   }
+
+  if (pending_inc.old_pools.count(pool)) {
+    dout(10) << "_prepare_remove_pool " << pool << " already pending removal"
+	     << dendl;
+    return 0;
+  }
+
+  // remove
   pending_inc.old_pools.insert(pool);
 
   // remove any pg_temp mappings for this pool too
   for (map<pg_t,vector<int32_t> >::iterator p = osdmap.pg_temp->begin();
        p != osdmap.pg_temp->end();
        ++p) {
-    if (p->first.pool() == pool) {
+    if (p->first.pool() == (uint64_t)pool) {
       dout(10) << "_prepare_remove_pool " << pool << " removing obsolete pg_temp "
 	       << p->first << dendl;
       pending_inc.new_pg_temp[p->first].clear();
@@ -4988,7 +5159,7 @@ int OSDMonitor::_prepare_remove_pool(uint64_t pool)
   for (map<pg_t,int>::iterator p = osdmap.primary_temp->begin();
       p != osdmap.primary_temp->end();
       ++p) {
-    if (p->first.pool() == pool) {
+    if (p->first.pool() == (uint64_t)pool) {
       dout(10) << "_prepare_remove_pool " << pool
                << " removing obsolete primary_temp" << p->first << dendl;
       pending_inc.new_primary_temp[p->first] = -1;
@@ -5018,8 +5189,16 @@ int OSDMonitor::_prepare_rename_pool(int64_t pool, string newname)
 
 bool OSDMonitor::prepare_pool_op_delete(MPoolOp *m)
 {
-  int ret = _prepare_remove_pool(m->pool);
-  wait_for_finished_proposal(new OSDMonitor::C_PoolOp(this, m, ret, pending_inc.epoch));
+  ostringstream ss;
+  int ret = _prepare_remove_pool(m->pool, &ss);
+  if (ret == -EAGAIN) {
+    wait_for_finished_proposal(new C_RetryMessage(this, m));
+    return true;
+  }
+  if (ret < 0)
+    dout(10) << __func__ << " got " << ret << " " << ss.str() << dendl;
+  wait_for_finished_proposal(new OSDMonitor::C_PoolOp(this, m, ret,
+						      pending_inc.epoch));
   return true;
 }
 

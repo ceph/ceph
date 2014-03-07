@@ -205,6 +205,14 @@ public:
     stamp = s;
   }
 
+  pool_stat_t get_pg_pool_sum_stat(int64_t pool) const {
+    ceph::unordered_map<int,pool_stat_t>::const_iterator p =
+      pg_pool_sum.find(pool);
+    if (p != pg_pool_sum.end())
+      return p->second;
+    return pool_stat_t();
+  }
+
   void update_pg(pg_t pgid, bufferlist& bl);
   void remove_pg(pg_t pgid);
   void update_osd(int osd, bufferlist& bl);

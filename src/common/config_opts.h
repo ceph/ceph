@@ -166,6 +166,7 @@ OPTION(mon_pg_warn_min_per_osd, OPT_INT, 20)  // min # pgs per (in) osd before w
 OPTION(mon_pg_warn_max_object_skew, OPT_FLOAT, 10.0) // max skew few average in objects per pg
 OPTION(mon_pg_warn_min_objects, OPT_INT, 10000)  // do not warn below this object #
 OPTION(mon_pg_warn_min_pool_objects, OPT_INT, 1000)  // do not warn on pools below this object #
+OPTION(mon_cache_target_full_warn_ratio, OPT_FLOAT, .66) // position between pool cache_target_full and max where we start warning
 OPTION(mon_osd_full_ratio, OPT_FLOAT, .95) // what % full makes an OSD "full"
 OPTION(mon_osd_nearfull_ratio, OPT_FLOAT, .85) // what % full makes an OSD near full
 OPTION(mon_globalid_prealloc, OPT_INT, 100)   // how many globalids to prealloc
@@ -429,8 +430,15 @@ OPTION(osd_pool_default_erasure_code_properties,
        ) // default properties of osd pool create
 OPTION(osd_pool_default_flags, OPT_INT, 0)   // default flags for new pools
 OPTION(osd_pool_default_flag_hashpspool, OPT_BOOL, true)   // use new pg hashing to prevent pool/pg overlap
+OPTION(osd_pool_default_hit_set_bloom_fpp, OPT_FLOAT, .05)
 OPTION(osd_hit_set_min_size, OPT_INT, 1000)  // min target size for a HitSet
 OPTION(osd_hit_set_namespace, OPT_STR, ".ceph-internal") // rados namespace for hit_set tracking
+
+OPTION(osd_tier_default_cache_mode, OPT_STR, "writeback")
+OPTION(osd_tier_default_cache_hit_set_count, OPT_INT, 4)
+OPTION(osd_tier_default_cache_hit_set_period, OPT_INT, 1200)
+OPTION(osd_tier_default_cache_hit_set_type, OPT_STR, "bloom")
+
 OPTION(osd_map_dedup, OPT_BOOL, true)
 OPTION(osd_map_cache_size, OPT_INT, 500)
 OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
@@ -538,8 +546,8 @@ OPTION(osd_leveldb_log, OPT_STR, "")  // enable OSD leveldb log file
 // determines whether PGLog::check() compares written out log to stored log
 OPTION(osd_debug_pg_log_writeout, OPT_BOOL, false)
 
-OPTION(leveldb_write_buffer_size, OPT_U64, 0) // leveldb write buffer size
-OPTION(leveldb_cache_size, OPT_U64, 0) // leveldb cache size
+OPTION(leveldb_write_buffer_size, OPT_U64, 8 *1024*1024) // leveldb write buffer size
+OPTION(leveldb_cache_size, OPT_U64, 128 *1024*1024) // leveldb cache size
 OPTION(leveldb_block_size, OPT_U64, 0) // leveldb block size
 OPTION(leveldb_bloom_size, OPT_INT, 0) // leveldb bloom bits per entry
 OPTION(leveldb_max_open_files, OPT_INT, 0) // leveldb max open files
@@ -573,6 +581,11 @@ OPTION(osd_objectstore, OPT_STR, "filestore")  // ObjectStore backend type
 // Override maintaining compatibility with older OSDs
 // Set to true for testing.  Users should NOT set this.
 OPTION(osd_debug_override_acting_compat, OPT_BOOL, false)
+
+OPTION(osd_bench_small_size_max_iops, OPT_U32, 100) // 100 IOPS
+OPTION(osd_bench_large_size_max_throughput, OPT_U64, 100 << 20) // 100 MB/s
+OPTION(osd_bench_max_block_size, OPT_U64, 64 << 20) // cap the block size at 64MB
+OPTION(osd_bench_duration, OPT_U32, 30) // duration of 'osd bench', capped at 30s to avoid triggering timeouts
 
 OPTION(filestore_debug_disable_sharded_check, OPT_BOOL, false)
 
@@ -616,6 +629,8 @@ OPTION(filestore_max_inline_xattrs_other, OPT_U32, 2)
 
 OPTION(filestore_sloppy_crc, OPT_BOOL, false)         // track sloppy crcs
 OPTION(filestore_sloppy_crc_block_size, OPT_INT, 65536)
+
+OPTION(filestore_max_alloc_hint_size, OPT_U64, 1ULL << 20) // bytes
 
 OPTION(filestore_max_sync_interval, OPT_DOUBLE, 5)    // seconds
 OPTION(filestore_min_sync_interval, OPT_DOUBLE, .01)  // seconds

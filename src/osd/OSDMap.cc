@@ -1555,10 +1555,12 @@ void OSDMap::_pg_to_up_acting_osds(pg_t pg, vector<int> *up, int *up_primary,
   _raw_to_up_osds(*pool, raw, &_up, &_up_primary);
   _apply_primary_affinity(pps, *pool, &_up, &_up_primary);
   _get_temp_osds(*pool, pg, &_acting, &_acting_primary);
-  if (_acting.empty())
+  if (_acting.empty()) {
     _acting = _up;
-  if (_acting_primary == -1)
-    _acting_primary = _up_primary;
+    if (_acting_primary == -1) {
+      _acting_primary = _up_primary;
+    }
+  }
   if (up)
     up->swap(_up);
   if (up_primary)
@@ -1584,6 +1586,24 @@ int OSDMap::calc_pg_role(int osd, const vector<int>& acting, int nrep)
   if (!nrep)
     nrep = acting.size();
   return calc_pg_rank(osd, acting, nrep);
+}
+
+bool OSDMap::primary_changed(
+  int oldprimary,
+  const vector<int> &oldacting,
+  int newprimary,
+  const vector<int> &newacting)
+{
+  if (oldacting.empty() && newacting.empty())
+    return false;    // both still empty
+  if (oldacting.empty() ^ newacting.empty())
+    return true;     // was empty, now not, or vice versa
+  if (oldprimary != newprimary)
+    return true;     // primary changed
+  if (calc_pg_rank(oldprimary, oldacting) !=
+      calc_pg_rank(newprimary, newacting))
+    return true;
+  return false;      // same primary (tho replicas may have changed)
 }
 
 
