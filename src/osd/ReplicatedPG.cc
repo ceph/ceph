@@ -6168,6 +6168,10 @@ void ReplicatedPG::repop_all_applied(RepGather *repop)
   repop->all_applied = true;
   if (!repop->rep_aborted) {
     eval_repop(repop);
+    if (repop->on_applied) {
+     repop->on_applied->complete(0);
+     repop->on_applied = NULL;
+    }
   }
 }
 
@@ -8821,6 +8825,10 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
     repop_queue.pop_front();
     dout(10) << " applying repop tid " << repop->rep_tid << dendl;
     repop->rep_aborted = true;
+    if (repop->on_applied) {
+      delete repop->on_applied;
+      repop->on_applied = NULL;
+    }
 
     if (requeue) {
       if (repop->ctx->op) {
@@ -10200,6 +10208,7 @@ void ReplicatedPG::hit_set_clear()
   dout(20) << __func__ << dendl;
   hit_set.reset();
   hit_set_start_stamp = utime_t();
+  hit_set_flushing.clear();
 }
 
 void ReplicatedPG::hit_set_setup()
@@ -10289,6 +10298,15 @@ bool ReplicatedPG::hit_set_apply_log()
   return true;
 }
 
+struct C_HitSetFlushing : public Context {
+  ReplicatedPGRef pg;
+  time_t hit_set_name;
+  C_HitSetFlushing(ReplicatedPG *p, time_t n) : pg(p), hit_set_name(n) { }
+  void finish(int r) {
+    pg->hit_set_flushing.erase(hit_set_name);
+  }
+};
+
 void ReplicatedPG::hit_set_persist()
 {
   dout(10) << __func__  << dendl;
@@ -10298,6 +10316,7 @@ void ReplicatedPG::hit_set_persist()
   RepGather *repop;
   hobject_t oid;
   bool reset = false;
+  time_t flush_time = 0;
 
   if (!info.hit_set.current_info.begin)
     info.hit_set.current_info.begin = hit_set_start_stamp;
@@ -10315,6 +10334,9 @@ void ReplicatedPG::hit_set_persist()
     if (agent_state)
       agent_state->add_hit_set(info.hit_set.current_info.begin, hit_set);
 
+    // hold a ref until it is flushed to disk
+    hit_set_flushing[info.hit_set.current_info.begin] = hit_set;
+    flush_time = info.hit_set.current_info.begin;
   } else {
     // persist snapshot of current hitset
     ::encode(*hit_set, bl);
@@ -10324,6 +10346,8 @@ void ReplicatedPG::hit_set_persist()
 
   ObjectContextRef obc = get_object_context(oid, true);
   repop = simple_repop_create(obc);
+  if (flush_time != 0)
+    repop->on_applied = new C_HitSetFlushing(this, flush_time);
   OpContext *ctx = repop->ctx;
   ctx->at_version = get_next_version();
 
@@ -10637,14 +10661,20 @@ void ReplicatedPG::agent_load_hit_sets()
 	  derr << __func__ << " on non-replicated pool" << dendl;
 	  break;
 	}
-	bufferlist bl;
-	hobject_t oid = get_hit_set_archive_object(p->begin, p->end);
-	int r = osd->store->read(coll, oid, 0, 0, bl);
-	assert(r >= 0);
-	HitSetRef hs(new HitSet);
-	bufferlist::iterator pbl = bl.begin();
-	::decode(*hs, pbl);
-	agent_state->add_hit_set(p->begin.sec(), hs);
+
+	// check if it's still in flight
+	if (hit_set_flushing.count(p->begin)) {
+	  agent_state->add_hit_set(p->begin.sec(), hit_set_flushing[p->begin]);
+	} else {
+	  bufferlist bl;
+	  hobject_t oid = get_hit_set_archive_object(p->begin, p->end);
+	  int r = osd->store->read(coll, oid, 0, 0, bl);
+	  assert(r >= 0);
+	  HitSetRef hs(new HitSet);
+	  bufferlist::iterator pbl = bl.begin();
+	  ::decode(*hs, pbl);
+	  agent_state->add_hit_set(p->begin.sec(), hs);
+	}
       }
     }
   }
