@@ -116,7 +116,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   mdsmap = new MDSMap;
   osdmap = new OSDMap;
 
-  objecter = new Objecter(m->cct, messenger, monc, osdmap, mds_lock, timer,
+  objecter = new Objecter(m->cct, messenger, monc, osdmap,
 			  0, 0);
   objecter->unset_honor_osdmap_full();
 
@@ -562,15 +562,13 @@ int MDS::init(int wanted_state)
   while (monc->wait_auth_rotating(30.0) < 0) {
     derr << "unable to obtain rotating service keys; retrying" << dendl;
   }
-  objecter->init_unlocked();
+  objecter->init();
 
   mds_lock.Lock();
   if (want_state == CEPH_MDS_STATE_DNE) {
     mds_lock.Unlock();
     return 0;
   }
-
-  objecter->init_locked();
 
   monc->sub_want("mdsmap", 0, 0);
   monc->renew_subs();
@@ -1772,8 +1770,8 @@ void MDS::suicide()
   // shut down cache
   mdcache->shutdown();
 
-  if (objecter->initialized)
-    objecter->shutdown_locked();
+  if (objecter->initialized.read())
+    objecter->shutdown();
 
   monc->shutdown();
 
