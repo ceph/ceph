@@ -202,6 +202,9 @@ protected:
       perfcounter->inc(l_rgw_qactive, -1);
     }
     void _dump_queue() {
+      if (!g_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+        return;
+      }
       deque<RGWRequest *>::iterator iter;
       if (process->m_req_queue.empty()) {
         dout(20) << "RGWWQ: empty" << dendl;
