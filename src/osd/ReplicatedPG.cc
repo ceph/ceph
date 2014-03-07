@@ -5092,6 +5092,8 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type)
     } else {
       dout(10) << " no snapset (this is a clone)" << dendl;
     }
+  } else {
+    ctx->new_obs.oi = object_info_t(ctx->obc->obs.oi.soid);
   }
 
   // append to log
