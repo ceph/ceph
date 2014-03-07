@@ -4964,8 +4964,16 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
       _pool_op_reply(m, ret, osdmap.get_epoch());
       return false;
 
-    case POOL_OP_CREATE_UNMANAGED_SNAP:
     case POOL_OP_DELETE_UNMANAGED_SNAP:
+      // we won't allow removal of an unmanaged snapshot from a pool
+      // not in unmanaged snaps mode.
+      if (!pool->is_unmanaged_snaps_mode()) {
+        _pool_op_reply(m, -ENOTSUP, osdmap.get_epoch());
+        return false;
+      }
+    case POOL_OP_CREATE_UNMANAGED_SNAP:
+      // but we will allow creating an unmanaged snapshot on any pool
+      // as long as it is not in 'pool' snaps mode.
       if (pool->is_pool_snaps_mode()) {
         _pool_op_reply(m, -EINVAL, osdmap.get_epoch());
         return false;
