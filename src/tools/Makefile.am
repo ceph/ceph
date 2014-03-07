@@ -58,6 +58,10 @@ ceph_radosacl_SOURCES = tools/radosacl.cc
 ceph_radosacl_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_radosacl
 
+ceph_client_debug_SOURCES = tools/ceph-client-debug.cc
+ceph_client_debug_LDADD = $(LIBCEPHFS) $(CEPH_GLOBAL) $(LIBCOMMON)
+bin_DEBUGPROGRAMS += ceph-client-debug
+
 rados_SOURCES = \
 	tools/rados/rados.cc \
 	tools/rados/rados_import.cc \

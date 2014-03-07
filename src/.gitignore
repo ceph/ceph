@@ -9,6 +9,7 @@ Makefile
 /cephfs
 /crushtool
 /ceph-authtool
+/ceph-client-debug
 /ceph-conf
 /ceph-coverage
 /ceph-crush-location
