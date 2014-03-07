@@ -786,7 +786,8 @@ protected:
 
   // projected object info
   SharedPtrRegistry<hobject_t, ObjectContext> object_contexts;
-  map<object_t, SnapSetContext*> snapset_contexts;
+  // map from oid.snapdir() to SnapSetContext *
+  map<hobject_t, SnapSetContext*> snapset_contexts;
   Mutex snapset_contexts_lock;
 
   // debug order that client ops are applied
@@ -829,10 +830,10 @@ protected:
 
   void get_src_oloc(const object_t& oid, const object_locator_t& oloc, object_locator_t& src_oloc);
 
-  SnapSetContext *create_snapset_context(const object_t& oid);
+  SnapSetContext *create_snapset_context(const hobject_t& oid);
   SnapSetContext *get_snapset_context(
-    const object_t& oid, const string &key,
-    ps_t seed, bool can_create, const string &nspace,
+    const hobject_t& oid,
+    bool can_create,
     map<string, bufferlist> *attrs = 0
     );
   void register_snapset_context(SnapSetContext *ssc) {

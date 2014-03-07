@@ -1889,6 +1889,50 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
   check_full_osd_health(summary, detail, pg_map.full_osds, "full", HEALTH_ERR);
   check_full_osd_health(summary, detail, pg_map.nearfull_osds, "near full", HEALTH_WARN);
 
+  // near-target max pools
+  const map<int64_t,pg_pool_t>& pools = mon->osdmon()->osdmap.get_pools();
+  for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin();
+       p != pools.end(); ++p) {
+    if ((!p->second.target_max_objects && !p->second.target_max_bytes) ||
+	!pg_map.pg_pool_sum.count(p->first))
+      continue;
+    bool nearfull = false;
+    const char *name = mon->osdmon()->osdmap.get_pool_name(p->first);
+    const pool_stat_t& st = pg_map.get_pg_pool_sum_stat(p->first);
+    uint64_t ratio = p->second.cache_target_full_ratio_micro +
+      ((1000000 - p->second.cache_target_full_ratio_micro) *
+       g_conf->mon_cache_target_full_warn_ratio);
+    if (p->second.target_max_objects && (uint64_t)st.stats.sum.num_objects >
+	p->second.target_max_objects * ratio / 1000000) {
+      nearfull = true;
+      if (detail) {
+	ostringstream ss;
+	ss << "cache pool '" << name << "' with "
+	   << si_t(st.stats.sum.num_objects)
+	   << " objects at/near target max "
+	   << si_t(p->second.target_max_objects) << " objects";
+	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
+    }
+    if (p->second.target_max_bytes && (uint64_t)st.stats.sum.num_bytes >
+	p->second.target_max_bytes * ratio / 1000000) {
+      nearfull = true;
+      if (detail) {
+	ostringstream ss;
+	ss << "cache pool '" << mon->osdmon()->osdmap.get_pool_name(p->first)
+	   << "' with " << si_t(st.stats.sum.num_bytes)
+	   << "B at/near target max "
+	   << si_t(p->second.target_max_bytes) << "B";
+	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
+    }
+    if (nearfull) {
+      ostringstream ss;
+      ss << "'" << name << "' at/near target max";
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+    }
+  }
+
   // scrub
   if (pg_map.pg_sum.stats.sum.num_scrub_errors) {
     ostringstream ss;
@@ -1978,12 +2022,17 @@ int PGMonitor::dump_stuck_pg_stats(stringstream &ds,
 {
   PGMap::StuckPG stuck_type;
   string type = args[0];
+
   if (type == "inactive")
     stuck_type = PGMap::STUCK_INACTIVE;
-  if (type == "unclean")
+  else if (type == "unclean")
     stuck_type = PGMap::STUCK_UNCLEAN;
-  if (type == "stale")
+  else if (type == "stale")
     stuck_type = PGMap::STUCK_STALE;
+  else {
+    ds << "Unknown type: " << type << std::endl;
+    return 0;
+  }
 
   utime_t now(ceph_clock_now(g_ceph_context));
   utime_t cutoff = now - utime_t(threshold, 0);

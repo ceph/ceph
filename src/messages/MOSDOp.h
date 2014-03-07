@@ -337,6 +337,9 @@ struct ceph_osd_request_head {
     OSDOp::split_osd_op_vector_in_data(ops, data);
   }
 
+  void clear_buffers() {
+    ops.clear();
+  }
 
   const char *get_type_name() const { return "osd_op"; }
   void print(ostream& out) const {

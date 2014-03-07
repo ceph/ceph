@@ -421,10 +421,20 @@ public:
     t->zero(get_coll(hoid), hoid, off, len);
   }
 
+  void set_alloc_hint(
+    const hobject_t &hoid,
+    uint64_t expected_object_size,
+    uint64_t expected_write_size
+    ) {
+    t->set_alloc_hint(get_coll(hoid), hoid, expected_object_size,
+                      expected_write_size);
+  }
+
   void append(
     PGTransaction *_to_append
     ) {
     RPGTransaction *to_append = dynamic_cast<RPGTransaction*>(_to_append);
+    assert(to_append);
     t->append(*(to_append->t));
     for (set<hobject_t>::iterator i = to_append->temp_added.begin();
 	 i != to_append->temp_added.end();
@@ -492,6 +502,7 @@ void ReplicatedBackend::submit_transaction(
   OpRequestRef orig_op)
 {
   RPGTransaction *t = dynamic_cast<RPGTransaction*>(_t);
+  assert(t);
   ObjectStore::Transaction *op_t = t->get_transaction();
 
   assert(t->get_temp_added().size() <= 1);

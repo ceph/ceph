@@ -516,10 +516,10 @@ public:
   epoch_t get_epoch();
   int get_leader() { return leader; }
   const set<int>& get_quorum() { return quorum; }
-  set<string> get_quorum_names() {
-    set<string> q;
+  list<string> get_quorum_names() {
+    list<string> q;
     for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
-      q.insert(monmap->get_name(*p));
+      q.push_back(monmap->get_name(*p));
     return q;
   }
   uint64_t get_quorum_features() const {

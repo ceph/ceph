@@ -445,6 +445,8 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
 	get_parent(),
 	get_parent()->get_epoch(),
 	replies)));
+  m.t->register_on_applied(
+    new ObjectStore::C_DeleteTransaction(m.t));
   get_parent()->queue_transaction(m.t);
   m.t = NULL;
   if (m.reads.empty())
@@ -799,6 +801,15 @@ void ECBackend::handle_sub_write(
     get_temp_coll(localt);
     add_temp_objs(op.temp_added);
   }
+  if (op.t.empty()) {
+    for (set<hobject_t>::iterator i = op.temp_removed.begin();
+	 i != op.temp_removed.end();
+	 ++i) {
+      dout(10) << __func__ << ": removing object " << *i
+	       << " since we won't get the transaction" << dendl;
+      localt->remove(temp_coll, *i);
+    }
+  }
   clear_temp_objs(op.temp_removed);
   get_parent()->log_operation(
     op.log_entries,
@@ -819,6 +830,8 @@ void ECBackend::handle_sub_write(
   localt->register_on_applied(
     get_parent()->bless_context(
       new SubWriteApplied(this, msg, op.tid, op.at_version)));
+  localt->register_on_applied(
+    new ObjectStore::C_DeleteTransaction(localt));
   get_parent()->queue_transaction(localt, msg);
 }
 
@@ -942,7 +955,10 @@ void ECBackend::handle_sub_read_reply(
        i != op.attrs_read.end();
        ++i) {
     assert(!op.errors.count(i->first));
-    assert(rop.to_read.count(i->first));
+    if (!rop.to_read.count(i->first)) {
+      // We canceled this read! @see filter_read_op
+      continue;
+    }
     rop.complete[i->first].attrs = map<string, bufferlist>();
     (*(rop.complete[i->first].attrs)).swap(i->second);
   }
@@ -1402,7 +1418,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
     dout(10) << __func__ << ": not in cache " << hoid << dendl;
     struct stat st;
     int r = store->stat(
-      coll,
+      hoid.is_temp() ? temp_coll : coll,
       ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       &st);
     ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
@@ -1410,7 +1426,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
       dout(10) << __func__ << ": found on disk, size " << st.st_size << dendl;
       bufferlist bl;
       r = store->getattr(
-	coll,
+	hoid.is_temp() ? temp_coll : coll,
 	ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
 	ECUtil::get_hinfo_key(),
 	bl);

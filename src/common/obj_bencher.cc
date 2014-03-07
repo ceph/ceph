@@ -170,7 +170,6 @@ int ObjBencher::aio_bench(
   int concurrentios, int op_size, bool cleanup) {
   int object_size = op_size;
   int num_objects = 0;
-  char* contentsChars = new char[op_size];
   int r = 0;
   int prevPid = 0;
 
@@ -178,7 +177,6 @@ int ObjBencher::aio_bench(
   if (operation != OP_WRITE) {
     r = fetch_bench_metadata(BENCH_LASTRUN_METADATA, &object_size, &num_objects, &prevPid);
     if (r < 0) {
-      delete[] contentsChars;
       if (r == -ENOENT)
 	cerr << "Must write data before running a read benchmark!" << std::endl;
       return r;
@@ -187,6 +185,7 @@ int ObjBencher::aio_bench(
     object_size = op_size;
   }
 
+  char* contentsChars = new char[object_size];
   lock.Lock();
   data.done = false;
   data.object_size = object_size;

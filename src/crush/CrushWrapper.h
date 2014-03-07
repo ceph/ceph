@@ -823,6 +823,8 @@ public:
   /* modifiers */
   int add_bucket(int bucketno, int alg, int hash, int type, int size,
 		 int *items, int *weights, int *idout) {
+    if (type == 0)
+      return -EINVAL;
     crush_bucket *b = crush_make_bucket(alg, hash, type, size, items, weights);
     assert(b);
     return crush_add_bucket(crush, bucketno, b, idout);

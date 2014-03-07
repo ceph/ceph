@@ -38,7 +38,7 @@ function run() {
 function TEST_crush_rule_create_simple() {
     local dir=$1
     ./ceph --format xml osd crush rule dump replicated_ruleset | \
-        grep '<op>take</op><item>default</item>' | \
+        egrep '<op>take</op><item>[^<]+</item><item_name>default</item_name>' | \
         grep '<op>chooseleaf_firstn</op><num>0</num><type>host</type>' || return 1
     local ruleset=ruleset0
     local root=host1
@@ -48,7 +48,7 @@ function TEST_crush_rule_create_simple() {
     ./ceph osd crush rule create-simple $ruleset $root $failure_domain 2>&1 | \
         grep "$ruleset already exists" || return 1
     ./ceph --format xml osd crush rule dump $ruleset | \
-        grep '<op>take</op><item>'$root'</item>' | \
+        egrep '<op>take</op><item>[^<]+</item><item_name>'$root'</item_name>' | \
         grep '<op>choose_firstn</op><num>0</num><type>'$failure_domain'</type>' || return 1
     ./ceph osd crush rule rm $ruleset || return 1
 }
