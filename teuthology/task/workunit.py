@@ -41,7 +41,7 @@ def task(ctx, config):
     for individual clients. (This prevents unintended simultaneous runs.)
 
     To customize tests, you can specify environment variables as a dict. You
-    can also specify a time limit for each work unit (defaults to 6h):
+    can also specify a time limit for each work unit (defaults to 1h):
 
         tasks:
         - ceph:
@@ -53,7 +53,7 @@ def task(ctx, config):
             env:
               FOO: bar
               BAZ: quux
-            timeout: 6h
+            timeout: 1h
 
     :param ctx: Context
     :param config: Configuration
@@ -73,7 +73,7 @@ def task(ctx, config):
     if refspec is None:
         refspec = 'HEAD'
 
-    timeout = config.get('timeout', '6h')
+    timeout = config.get('timeout', '1h')
 
     log.info('Pulling workunits from ref %s', refspec)
 
