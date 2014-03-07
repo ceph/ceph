@@ -845,7 +845,7 @@ protected:
     return io_ctx.read(oid, bl, len, 0);
   }
   int sync_write(const std::string& oid, bufferlist& bl, size_t len) {
-    return io_ctx.write(oid, bl, len, 0);
+    return io_ctx.write_full(oid, bl);
   }
 
   int sync_remove(const std::string& oid) {
