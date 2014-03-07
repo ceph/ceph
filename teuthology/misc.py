@@ -822,7 +822,7 @@ def wait_until_healthy(ctx, remote):
     """
     testdir = get_testdir(ctx)
     with safe_while(sleep=5, increment=0, tries=180) as timeout:
-        while True:
+        while True:  # finite
             timeout()
             r = remote.run(
                 args=[
