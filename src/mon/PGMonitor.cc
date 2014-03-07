@@ -434,9 +434,10 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
   while (!p.end()) {
     pg_t pgid;
     ::decode(pgid, p);
-    dout(20) << " refreshing pg " << pgid << dendl;
     bufferlist bl;
     int r = mon->store->get(pgmap_pg_prefix, stringify(pgid), bl);
+    dout(20) << " refreshing pg " << pgid << " got " << r << " len "
+	     << bl.length() << dendl;
 
     if (pg_pool_sum_old.count(pgid.pool()) == 0)
       pg_pool_sum_old[pgid.pool()] = pg_map.pg_pool_sum[pgid.pool()];
