@@ -76,14 +76,18 @@ class safe_while(object):
     Setting the increment value will cause the sleep time to increase by that
     value at each step.
 
+    You may also optionally pass in an "action" string to be used in the raised
+    exception's error message to aid in log readability.
     """
 
-    def __init__(self, sleep=6, increment=0, tries=10, _sleeper=None):
+    def __init__(self, sleep=6, increment=0, tries=10, action=None,
+                 _sleeper=None):
         self.sleep = sleep
         self.increment = increment
         self.tries = tries
         self.counter = 0
         self.sleep_current = sleep
+        self.action = action
         self.sleeper = _sleeper or time.sleep
 
     def _make_error_msg(self):
@@ -97,9 +101,17 @@ class safe_while(object):
                 self.tries
             )
         )
-        return 'reached maximum tries (%s) after waiting for %s seconds' % (
-            self.tries, total_seconds_waiting
+        msg = 'reached maximum tries ({tries})' + \
+            'after waiting for {total} seconds'
+        if self.action:
+            msg = "'{action}'" + msg
+
+        msg = msg.format(
+            action=self.action,
+            tries=self.tries,
+            total=total_seconds_waiting,
         )
+        return msg
 
     def __call__(self):
         self.counter += 1

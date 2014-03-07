@@ -49,3 +49,15 @@ class TestSafeWhile(object):
 
         msg = error.value[0]
         assert 'waiting for 105 seconds' in msg
+
+    def test_action(self):
+        with raises(contextutil.MaxWhileTries) as error:
+            with self.s_while(
+                action='doing the thing',
+                _sleeper=self.fake_sleep
+            ) as bomb:
+                while 1:
+                    bomb()
+
+        msg = error.value[0]
+        assert "'doing the thing'" in msg
