@@ -4,5 +4,5 @@ tasks:
 - ceph:
     fs: xfs
 - parallel:
-    - workload:
-    - upgrade-sequence:
+    - workload
+    - upgrade-sequence
