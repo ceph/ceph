@@ -471,11 +471,12 @@ void OSDService::agent_entry()
   dout(10) << __func__ << " start" << dendl;
   agent_lock.Lock();
 
-  // stick at least one level in there to simplify other paths
-  if (agent_queue.empty())
-    agent_queue[0];
-
   while (!agent_stop_flag) {
+    if (agent_queue.empty()) {
+      dout(20) << __func__ << " empty queue" << dendl;
+      agent_cond.Wait(agent_lock);
+      continue;
+    }
     uint64_t level = agent_queue.rbegin()->first;
     set<PGRef>& top = agent_queue.rbegin()->second;
     dout(10) << __func__
@@ -515,7 +516,11 @@ void OSDService::agent_stop()
     // By this time all ops should be cancelled
     assert(agent_ops == 0);
     // By this time all PGs are shutdown and dequeued
-    assert(agent_queue.empty());
+    if (!agent_queue.empty()) {
+      set<PGRef>& top = agent_queue.rbegin()->second;
+      derr << "agent queue not empty, for example " << (*top.begin())->info.pgid << dendl;
+      assert(0 == "agent queue not empty");
+    }
 
     agent_stop_flag = true;
     agent_cond.Signal();
