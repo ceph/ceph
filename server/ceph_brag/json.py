@@ -31,6 +31,11 @@ def jsonify_components_info(comps):
             num_mons=comps.num_mons
             )
 
+@jsonify.register(db.crush_types)
+def jsonify_crush_types(crush):
+    return dict(type=crush.crush_type,
+                count=crush.crush_count)
+
 @jsonify.register(db.pools_info)
 def jsonify_pools_info(pool):
     return dict(size=pool.pool_rep_size,
@@ -56,11 +61,10 @@ def jsonify_brag(b):
                  'email':b.ci.contact_email,
                  'name':b.ci.cluster_name
                 } 
-    crush_types=b.comps.crush_types.split(',')
     return dict(uuid=b.ci.uuid,
                 cluster_creation_date=str(b.ci.cluster_creation_date),
                 components_count=b.comps,
-                crush_types=crush_types,
+                crush_types=b.crush,
                 ownership=ownership,
                 pool_metadata=b.pools,
                 sysinfo=b.osds

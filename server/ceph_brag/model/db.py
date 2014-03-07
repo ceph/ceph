@@ -43,7 +43,14 @@ class components_info(Base):
   num_pools = Column(Integer)
   num_mdss = Column(Integer)
   num_mons = Column(Integer)
-  crush_types = Column(String(256))
+
+class crush_types(Base):
+  __tablename__ = 'crush_types'
+
+  index = Column(Integer, primary_key=True)
+  vid = Column(ForeignKey('version_info.index'))
+  crush_type = Column(String(16))
+  crush_count = Column(Integer)
 
 class pools_info(Base):
   __tablename__ = 'pools_info'
@@ -80,6 +87,7 @@ class brag(object):
     
     if self.ci is not None and self.vi is not None:
       self.comps = Session.query(components_info).filter_by(vid=self.vi.index).first()
+      self.crush = Session.query(crush_types).filter_by(vid=self.vi.index).all()
       self.pools = Session.query(pools_info).filter_by(vid=self.vi.index).all()
       self.osds = Session.query(osds_info).filter_by(vid=self.vi.index).all()
 
@@ -160,9 +168,14 @@ def put_new_version(data):
                          num_pgs=comps_count['num_pgs'],
                          num_pools=comps_count['num_pools'],
                          num_mdss=comps_count['num_mdss'],
-                         num_mons=comps_count['num_mons'],
-                         crush_types=','.join(info['crush_types']))
+                         num_mons=comps_count['num_mons'])
     Session.add(comps_info)
+
+  def add_crush_types(vi):
+    for c in info['crush_types']:
+      Session.add(crush_types(vid=vi.index, 
+                            crush_type=c['type'],
+                            crush_count=c['count']))
 
   def add_pools_info(vi):
     pools = info['pool_metadata']
@@ -195,6 +208,7 @@ def put_new_version(data):
   vi = Session.query(version_info).filter_by(cluster_id=ci.index, 
                                              version_number=ci.num_versions).first()
   add_components_info(vi)
+  add_crush_types(vi)
   add_pools_info(vi)
   add_osds_info(vi)
  
@@ -205,6 +219,7 @@ def delete_uuid(uuid):
 
   for v in Session.query(version_info).filter_by(cluster_id=ci.index).all():
     Session.query(components_info).filter_by(vid=v.index).delete()
+    Session.query(crush_types).filter_by(vid=v.index).delete()
     Session.query(pools_info).filter_by(vid=v.index).delete()
     Session.query(osds_info).filter_by(vid=v.index).delete()
     Session.flush()

@@ -33,17 +33,22 @@ Run 'ceph-brag -h' to get the usage information of this tool.
         "num_mons": 1
       },
       "crush_types": [
-        "osd",
-        "host",
-        "chassis",
-        "rack",
-        "row",
-        "pdu",
-        "pod",
-        "room",
-        "datacenter",
-        "region",
-        "root"
+        {
+          "type": "osd"
+          "count": 2,
+        },
+        {
+          "type": "rack"
+          "count": 1,
+        },
+        {
+          "type": "host"
+          "count": 1,
+        },
+        {
+          "type": "root"
+          "count": 1,
+        }
       ],
       "ownership": {
         "organization": "eNovance",
