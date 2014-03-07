@@ -155,10 +155,10 @@ inline ostream& operator<<(ostream& out, Mutation &mut)
  * mostly information about locks held, so that we can drop them all
  * the request is finished or forwarded.  see request_*().
  */
-struct MDRequest : public Mutation {
-  int ref;
+struct MDRequestImpl : public Mutation {
+  ceph::weak_ptr<MDRequestImpl> self_ref;
   Session *session;
-  elist<MDRequest*>::item item_session_request;  // if not on list, op is aborted.
+  elist<MDRequestImpl*>::item item_session_request;  // if not on list, op is aborted.
 
   // -- i am a client (master) request
   MClientRequest *client_request; // client request (if any)
@@ -251,8 +251,8 @@ struct MDRequest : public Mutation {
 
 
   // ---------------------------------------------------
-  MDRequest() : 
-    ref(1),
+  MDRequestImpl() :
+    self_ref(),
     session(0), item_session_request(this),
     client_request(0), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
@@ -265,9 +265,9 @@ struct MDRequest : public Mutation {
     _more(0) {
     in[0] = in[1] = 0; 
   }
-  MDRequest(metareqid_t ri, __u32 attempt, MClientRequest *req) : 
+  MDRequestImpl(metareqid_t ri, __u32 attempt, MClientRequest *req) :
+    self_ref(),
     Mutation(ri, attempt),
-    ref(1),
     session(0), item_session_request(this),
     client_request(req), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
@@ -280,9 +280,9 @@ struct MDRequest : public Mutation {
     _more(0) {
     in[0] = in[1] = 0; 
   }
-  MDRequest(metareqid_t ri, __u32 attempt, int by) : 
+  MDRequestImpl(metareqid_t ri, __u32 attempt, int by) :
+    self_ref(),
     Mutation(ri, attempt, by),
-    ref(1),
     session(0), item_session_request(this),
     client_request(0), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
@@ -295,16 +295,7 @@ struct MDRequest : public Mutation {
     _more(0) {
     in[0] = in[1] = 0; 
   }
-  ~MDRequest();
-
-  MDRequest *get() {
-    ++ref;
-    return this;
-  }
-  void put() {
-    if (--ref == 0)
-      delete this;
-  }
+  ~MDRequestImpl();
   
   More* more();
   bool has_more();
@@ -320,7 +311,12 @@ struct MDRequest : public Mutation {
   void clear_ambiguous_auth();
 
   void print(ostream &out);
+  void set_self_ref(ceph::shared_ptr<MDRequestImpl>& ref) {
+    self_ref = ref;
+  }
 };
+
+typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
 
 
 struct MDSlaveUpdate {
