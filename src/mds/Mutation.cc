@@ -174,9 +174,9 @@ void Mutation::cleanup()
 }
 
 
-// MDRequest
+// MDRequestImpl
 
-MDRequest::~MDRequest()
+MDRequestImpl::~MDRequestImpl()
 {
   if (client_request)
     client_request->put();
@@ -185,34 +185,34 @@ MDRequest::~MDRequest()
   delete _more;
 }
 
-MDRequest::More* MDRequest::more()
+MDRequestImpl::More* MDRequestImpl::more()
 { 
   if (!_more)
     _more = new More();
   return _more;
 }
 
-bool MDRequest::has_more()
+bool MDRequestImpl::has_more()
 {
   return _more;
 }
 
-bool MDRequest::are_slaves()
+bool MDRequestImpl::are_slaves()
 {
   return _more && !_more->slaves.empty();
 }
 
-bool MDRequest::slave_did_prepare()
+bool MDRequestImpl::slave_did_prepare()
 {
   return more()->slave_commit;
 }
 
-bool MDRequest::did_ino_allocation()
+bool MDRequestImpl::did_ino_allocation()
 {
   return alloc_ino || used_prealloc_ino || prealloc_inos.size();
 }      
 
-bool MDRequest::freeze_auth_pin(CInode *inode)
+bool MDRequestImpl::freeze_auth_pin(CInode *inode)
 {
   assert(!more()->rename_inode || more()->rename_inode == inode);
   more()->rename_inode = inode;
@@ -226,7 +226,7 @@ bool MDRequest::freeze_auth_pin(CInode *inode)
   return true;
 }
 
-void MDRequest::unfreeze_auth_pin(bool clear_inode)
+void MDRequestImpl::unfreeze_auth_pin(bool clear_inode)
 {
   assert(more()->is_freeze_authpin);
   CInode *inode = more()->rename_inode;
@@ -239,14 +239,14 @@ void MDRequest::unfreeze_auth_pin(bool clear_inode)
     more()->rename_inode = NULL;
 }
 
-void MDRequest::set_remote_frozen_auth_pin(CInode *inode)
+void MDRequestImpl::set_remote_frozen_auth_pin(CInode *inode)
 {
   assert(!more()->rename_inode || more()->rename_inode == inode);
   more()->rename_inode = inode;
   more()->is_remote_frozen_authpin = true;
 }
 
-void MDRequest::set_ambiguous_auth(CInode *inode)
+void MDRequestImpl::set_ambiguous_auth(CInode *inode)
 {
   assert(!more()->rename_inode || more()->rename_inode == inode);
   assert(!more()->is_ambiguous_auth);
@@ -256,7 +256,7 @@ void MDRequest::set_ambiguous_auth(CInode *inode)
   more()->is_ambiguous_auth = true;
 }
 
-void MDRequest::clear_ambiguous_auth()
+void MDRequestImpl::clear_ambiguous_auth()
 {
   CInode *inode = more()->rename_inode;
   assert(inode && more()->is_ambiguous_auth);
@@ -264,7 +264,7 @@ void MDRequest::clear_ambiguous_auth()
   more()->is_ambiguous_auth = false;
 }
 
-bool MDRequest::can_auth_pin(MDSCacheObject *object)
+bool MDRequestImpl::can_auth_pin(MDSCacheObject *object)
 {
   return object->can_auth_pin() ||
          (is_auth_pinned(object) && has_more() &&
@@ -272,14 +272,14 @@ bool MDRequest::can_auth_pin(MDSCacheObject *object)
 	  more()->rename_inode == object);
 }
 
-void MDRequest::drop_local_auth_pins()
+void MDRequestImpl::drop_local_auth_pins()
 {
   if (has_more() && more()->is_freeze_authpin)
     unfreeze_auth_pin(true);
   Mutation::drop_local_auth_pins();
 }
 
-void MDRequest::print(ostream &out)
+void MDRequestImpl::print(ostream &out)
 {
   out << "request(" << reqid;
   //if (request) out << " " << *request;
