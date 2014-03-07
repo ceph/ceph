@@ -55,8 +55,7 @@ class safe_while(object):
     that need a given number of tries and some seconds to sleep between each
     one of those tries.
 
-    The most simple example possible will try 5 times sleeping for 5 seconds
-    and increasing the sleep time by 5 each time::
+    The most simple example possible will try 10 times sleeping for 6 seconds:
 
         >>> from teuthology.contexutil import safe_while
         >>> with safe_while() as bomb:
@@ -73,13 +72,13 @@ class safe_while(object):
     indentation level and one extra call. Everything else stays the same,
     code-wise. So adding this helper to existing code is simpler.
 
-    The defaults are to start the sleeping time in seconds at 5s and to add
-    5 more seconds at every point in the loop. Setting the increment value to
-    0 makes the sleep time in seconds stay the same throughout the calls.
+    The defaults are to start the sleeping time at 6 seconds and try 10 times.
+    Setting the increment value will cause the sleep time to increase by that
+    value at each step.
 
     """
 
-    def __init__(self, sleep=5, increment=5, tries=5, _sleeper=None):
+    def __init__(self, sleep=6, increment=0, tries=10, _sleeper=None):
         self.sleep = sleep
         self.increment = increment
         self.tries = tries
