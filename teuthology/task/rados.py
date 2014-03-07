@@ -97,13 +97,6 @@ def task(ctx, config):
         '--op', 'read', str(op_weights.get('read', 100)),
         '--op', 'write', str(op_weights.get('write', 100)),
         '--op', 'delete', str(op_weights.get('delete', 10)),
-        '--op', 'snap_create', str(op_weights.get('snap_create', 0)),
-        '--op', 'snap_remove', str(op_weights.get('snap_remove', 0)),
-        '--op', 'rollback', str(op_weights.get('rollback', 0)),
-        '--op', 'setattr', str(op_weights.get('setattr', 0)),
-        '--op', 'rmattr', str(op_weights.get('rmattr', 0)),
-        '--op', 'watch', str(op_weights.get('watch', 0)),
-        '--op', 'append', str(op_weights.get('append', 0)),
         '--max-ops', str(config.get('ops', 10000)),
         '--objects', str(config.get('objects', 500)),
         '--max-in-flight', str(config.get('max_in_flight', 16)),
@@ -115,10 +108,12 @@ def task(ctx, config):
     for field in [
         'copy_from', 'is_dirty', 'undirty', 'cache_flush',
         'cache_try_flush', 'cache_evict',
+        'snap_create', 'snap_remove', 'rollback', 'setattr', 'rmattr',
+        'watch', 'append',
         ]:
         if field in op_weights:
             args.extend([
-                    '--op', field, str(op_weights.get(field, 0))
+                    '--op', field, str(op_weights[field]),
                     ])
 
     def thread():
