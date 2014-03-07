@@ -165,7 +165,6 @@ def get_sysinfo(max_osds):
         osd_metadata_available = True
       os_info = {}
       hw_info = {}
-      nw_info = {}
 
       jmeta = json.loads(o)
 
@@ -194,11 +193,6 @@ def get_sysinfo(max_osds):
       hw_info['swap_kb'] = int(jmeta['mem_swap_kb'])
       meta['hw_info'] = hw_info
   
-    (ip, hname) = get_osd_host(count)
-    nw_info['address'] = ip
-    nw_info['hostname'] = hname
-    meta['nw_info'] = nw_info
-
     sysinfo.append(meta)
     count = count + 1
 
@@ -206,25 +200,6 @@ def get_sysinfo(max_osds):
     print >> sys.stderr, "'ceph osd metadata' is not available at all"
 
   return sysinfo
-
-def get_osd_host(osd_id):
-  loc = {}
-
-  (rc, o, e) = run_command(['ceph', 'osd', 'find', str(osd_id)])
-  if rc is not 0:
-    raise RuntimeError("\'ceph osd find\' failed - " + e)
-
-  jloc = json.loads(o)
-
-  mo = re.search("(\d+.\d+.\d+.\d+).*", jloc['ip'])
-  if mo is None:
-    #Might be in ipv6 format, TODO: Verify
-    return None;
-
-  ip = mo.group(1)
-  host = jloc['crush_location']['host']
-
-  return (ip, host)
 
 def get_ownership_info():
   (rc, o, e) = run_command(['ceph', 'config-key', 'get',

@@ -75,10 +75,6 @@ Run 'ceph-brag -h' to get the usage information of this tool.
       ],
       "sysinfo": [
         {
-          "nw_info": {
-            "hostname": "ceph-brag",
-            "address": "127.0.0.1"
-          },
           "hw_info": {
             "swap_kb": 0,
             "arch": "x86_64",

@@ -67,8 +67,6 @@ class osds_info(Base):
   index = Column(Integer, primary_key=True)
   vid = Column(ForeignKey('version_info.index'))
   osd_id = Column(String(8))
-  nw_address = Column(String(16))
-  hostname = Column(String(16))
   swap_kb = Column(Integer)
   mem_kb = Column(Integer)
   arch = Column(String(16))
@@ -190,8 +188,6 @@ def put_new_version(data):
     for o in osds:
       osd = osds_info(vid=vi.index,
                       osd_id=o['id'],
-                      nw_address=o['nw_info']['address'],
-                      hostname=o['nw_info']['hostname'],
                       swap_kb=o['hw_info']['swap_kb'],
                       mem_kb=o['hw_info']['mem_kb'],
                       arch=o['hw_info']['arch'],

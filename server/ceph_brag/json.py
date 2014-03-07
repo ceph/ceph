@@ -45,8 +45,7 @@ def jsonify_pools_info(pool):
 
 @jsonify.register(db.osds_info)
 def jsonify_osds_info(osd):
-    return dict(nw_info={'address':osd.nw_address,'hostname':osd.hostname},
-                hw_info={'swap_kb':osd.swap_kb,'mem_kb':osd.mem_kb,
+    return dict(hw_info={'swap_kb':osd.swap_kb,'mem_kb':osd.mem_kb,
                          'arch':osd.arch, 'cpu':osd.cpu},
                 id=osd.osd_id,
                 os_info={'os':osd.os,'version':osd.os_version,
