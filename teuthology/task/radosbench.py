@@ -76,7 +76,8 @@ def task(ctx, config):
         yield
     finally:
         log.info('joining radosbench')
-        run.wait(radosbench.itervalues())
+        timeout = config.get('time', 360) * 2
+        run.wait(radosbench.itervalues(), timeout=timeout)
 
         if pool is not 'data':
             ctx.manager.remove_pool(pool)
