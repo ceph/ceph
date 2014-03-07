@@ -285,13 +285,17 @@ for ((i=0; i < 100; i++)); do
 done
 
 ceph osd thrash 10
+# make sure everything gets back up+in
 for ((i=0; i < 100; i++)); do
-	if ceph osd dump | grep 'down in'; then
+	if ceph osd dump | grep ' down '; then
 		echo "waiting for osd(s) to come back up"
 		sleep 10
 	else
 		break
 	fi
+done
+for f in `seq 0 10`; do
+    ceph osd in $f || true
 done
 
 ceph osd dump | grep 'osd.0 up'
