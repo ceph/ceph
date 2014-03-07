@@ -2587,12 +2587,12 @@ struct ObjectState {
 
 
 struct SnapSetContext {
-  object_t oid;
+  hobject_t oid;
   int ref;
   bool registered;
   SnapSet snapset;
 
-  SnapSetContext(const object_t& o) : oid(o), ref(0), registered(false) { }
+  SnapSetContext(const hobject_t& o) : oid(o), ref(0), registered(false) { }
 };
 
 
