@@ -234,7 +234,7 @@ int librados::RadosClient::connect()
   ldout(cct, 1) << "starting objecter" << dendl;
 
   err = -ENOMEM;
-  objecter = new Objecter(cct, messenger, &monclient, &osdmap, lock, timer,
+  objecter = new Objecter(cct, messenger, &monclient, &osdmap,
 			  cct->_conf->rados_mon_op_timeout,
 			  cct->_conf->rados_osd_op_timeout);
   if (!objecter)
@@ -265,13 +265,12 @@ int librados::RadosClient::connect()
   }
   messenger->set_myname(entity_name_t::CLIENT(monclient.get_global_id()));
 
-  objecter->init_unlocked();
+  objecter->set_client_incarnation(0);
+  objecter->init();
   lock.Lock();
 
   timer.init();
 
-  objecter->set_client_incarnation(0);
-  objecter->init_locked();
   monclient.renew_subs();
 
   finisher.start();
@@ -303,7 +302,6 @@ void librados::RadosClient::shutdown()
   bool need_objecter = false;
   if (objecter && state == CONNECTED) {
     need_objecter = true;
-    objecter->shutdown_locked();
   }
   state = DISCONNECTED;
   instance_id = 0;
@@ -311,7 +309,7 @@ void librados::RadosClient::shutdown()
   lock.Unlock();
   monclient.shutdown();
   if (need_objecter)
-    objecter->shutdown_unlocked();
+    objecter->shutdown();
   if (messenger) {
     messenger->shutdown();
     messenger->wait();
