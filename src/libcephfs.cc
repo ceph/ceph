@@ -1169,6 +1169,51 @@ extern "C" struct Inode *ceph_ll_get_inode(class ceph_mount_info *cmount,
   return (cmount->get_client())->ll_get_inode(vino);
 }
 
+
+/**
+ * Populates the client cache with the requested inode, and its
+ * parent dentry.
+ */
+extern "C" int ceph_ll_lookup_inode(
+    struct ceph_mount_info *cmount,
+    struct inodeno_t ino,
+    Inode **inode)
+{
+  int r = (cmount->get_client())->lookup_ino(ino, inode);
+  if (r) {
+    return r;
+  }
+  if (inode) {
+    assert(*inode != NULL);
+  }
+
+  // Request the parent inode, so that we can look up the name
+  Inode *parent;
+  r = (cmount->get_client())->lookup_parent(*inode, &parent);
+  if (r && r != -EINVAL) {
+    // Unexpected error
+    (cmount->get_client())->ll_forget(*inode, 1);
+    return r;
+  } else if (r == -EINVAL) {
+    // EINVAL indicates node without parents (root), drop out now
+    // and don't try to look up the non-existent dentry.
+    return 0;
+  }
+  assert(parent != NULL);
+
+  // Finally, get the name (dentry) of the requested inode
+  r = (cmount->get_client())->lookup_name(*inode, parent);
+  if (r) {
+    // Unexpected error
+    (cmount->get_client())->ll_forget(parent, 1);
+    (cmount->get_client())->ll_forget(*inode, 1);
+    return r;
+  }
+
+  (cmount->get_client())->ll_forget(parent, 1);
+  return 0;
+}
+
 extern "C" int ceph_ll_lookup(class ceph_mount_info *cmount,
 			      struct Inode *parent, const char *name,
 			      struct stat *attr, Inode **out,
