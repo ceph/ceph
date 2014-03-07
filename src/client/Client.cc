@@ -188,7 +188,7 @@ Client::Client(Messenger *m, MonClient *mc)
   // osd interfaces
   osdmap = new OSDMap;     // initially blank.. see mount()
   mdsmap = new MDSMap;
-  objecter = new Objecter(cct, messenger, monclient, osdmap, client_lock, timer,
+  objecter = new Objecter(cct, messenger, monclient, osdmap,
 			  0, 0);
   objecter->set_client_incarnation(0);  // client always 0, for now.
   writeback_handler = new ObjecterWriteback(objecter);
@@ -359,10 +359,8 @@ int Client::init()
   }
 
   client_lock.Unlock();
-  objecter->init_unlocked();
+  objecter->init();
   client_lock.Lock();
-
-  objecter->init_locked();
 
   monclient->set_want_keys(CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_OSD);
   monclient->sub_want("mdsmap", 0, 0);
@@ -449,9 +447,8 @@ void Client::shutdown()
   assert(initialized);
   initialized = false;
   timer.shutdown();
-  objecter->shutdown_locked();
+  objecter->shutdown();
   client_lock.Unlock();
-  objecter->shutdown_unlocked();
   monclient->shutdown();
 
   if (logger) {
