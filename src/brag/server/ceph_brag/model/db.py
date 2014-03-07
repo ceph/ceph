@@ -14,11 +14,11 @@ class cluster_info(Base):
 
   index = Column(Integer, primary_key=True)
   uuid = Column(String(36), unique=True)
-  organization = Column(String)
-  contact_email = Column(String)
-  cluster_name = Column(String)
+  organization = Column(String(64))
+  contact_email = Column(String(32))
+  cluster_name = Column(String(32))
   cluster_creation_date = Column(DateTime)
-  description = Column(String)
+  description = Column(String(32))
   num_versions = Column(Integer)
 
 class version_info(Base):
@@ -42,15 +42,15 @@ class components_info(Base):
   num_pools = Column(Integer)
   num_mdss = Column(Integer)
   num_mons = Column(Integer)
-  crush_types = Column(String)
+  crush_types = Column(String(256))
 
 class pools_info(Base):
   __tablename__ = 'pools_info'
 
   index = Column(Integer, primary_key=True)
   vid = Column(ForeignKey('version_info.index'))
-  pool_id = Column(String)
-  pool_name = Column(String)
+  pool_id = Column(String(8))
+  pool_name = Column(String(16))
   pool_rep_size = Column(Integer)
 
 class osds_info(Base):
@@ -58,18 +58,18 @@ class osds_info(Base):
 
   index = Column(Integer, primary_key=True)
   vid = Column(ForeignKey('version_info.index'))
-  osd_id = Column(String)
+  osd_id = Column(String(8))
   nw_address = Column(String(16))
-  hostname = Column(String)
+  hostname = Column(String(16))
   swap_kb = Column(Integer)
   mem_kb = Column(Integer)
-  arch = Column(String)
-  cpu = Column(String)
-  os = Column(String)
-  os_version = Column(String)
-  os_desc = Column(String)
-  distro = Column(String)
-  ceph_version = Column(String)
+  arch = Column(String(16))
+  cpu = Column(String(16))
+  os = Column(String(16))
+  os_version = Column(String(16))
+  os_desc = Column(String(64))
+  distro = Column(String(64))
+  ceph_version = Column(String(64))
 
 class brag(object):
   def __init__(self, uuid, version_number):
@@ -166,7 +166,9 @@ def delete_uuid(uuid):
     Session.query(components_info).filter_by(vid=v.index).delete()
     Session.query(pools_info).filter_by(vid=v.index).delete()
     Session.query(osds_info).filter_by(vid=v.index).delete()
+    Session.flush()
     Session.delete(v)
+    Session.flush()
 
   Session.delete(ci)
   return None

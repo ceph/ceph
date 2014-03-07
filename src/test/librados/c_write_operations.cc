@@ -73,6 +73,7 @@ TEST(LibRadosCWriteOps, Xattrs) {
   ASSERT_EQ(-125, rados_write_op_operate(op, ioctx, "test", NULL, 0));
 
   rados_release_write_op(op);
+  rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
@@ -113,6 +114,7 @@ TEST(LibRadosCWriteOps, Write) {
   ASSERT_EQ(-2, rados_read(ioctx, "test", hi, 4, 0));
   rados_release_write_op(op);
 
+  rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
@@ -135,5 +137,6 @@ TEST(LibRadosCWriteOps, Exec) {
   hi[12] = '\0';
   ASSERT_EQ(0, strcmp("Hello, test!", hi));
 
+  rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }

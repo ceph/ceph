@@ -29,8 +29,8 @@ struct ECSubWrite {
  eversion_t at_version;
   eversion_t trim_to;
   vector<pg_log_entry_t> log_entries;
-  set<hobject_t> temp_removed;
   set<hobject_t> temp_added;
+  set<hobject_t> temp_removed;
   ECSubWrite() {}
   ECSubWrite(
     pg_shard_t from,
@@ -42,14 +42,14 @@ struct ECSubWrite {
     eversion_t at_version,
     eversion_t trim_to,
     vector<pg_log_entry_t> log_entries,
-    const set<hobject_t> &temp_removed,
-    const set<hobject_t> &temp_added)
+    const set<hobject_t> &temp_added,
+    const set<hobject_t> &temp_removed)
     : from(from), tid(tid), reqid(reqid),
       soid(soid), stats(stats), t(t),
       at_version(at_version),
       trim_to(trim_to), log_entries(log_entries),
-      temp_removed(temp_removed),
-      temp_added(temp_added) {}
+      temp_added(temp_added),
+      temp_removed(temp_removed) {}
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;

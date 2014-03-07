@@ -1856,6 +1856,16 @@ public:
   bool empty() const {
     return can_local_rollback && (bl.length() == 0);
   }
+
+  /**
+   * Create fresh copy of bl bytes to avoid keeping large buffers around
+   * in the case that bl contains ptrs which point into a much larger
+   * message buffer
+   */
+  void trim_bl() {
+    if (bl.length() > 0)
+      bl.rebuild();
+  }
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;
@@ -2577,12 +2587,12 @@ struct ObjectState {
 
 
 struct SnapSetContext {
-  object_t oid;
+  hobject_t oid;
   int ref;
   bool registered;
   SnapSet snapset;
 
-  SnapSetContext(const object_t& o) : oid(o), ref(0), registered(false) { }
+  SnapSetContext(const hobject_t& o) : oid(o), ref(0), registered(false) { }
 };
 
 

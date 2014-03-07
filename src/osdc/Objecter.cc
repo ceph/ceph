@@ -1381,14 +1381,11 @@ bool Objecter::is_pg_changed(
   const vector<int>& newacting,
   bool any_change)
 {
-  if (oldacting.empty() && newacting.empty())
-    return false;    // both still empty
-  if (oldacting.empty() ^ newacting.empty())
-    return true;     // was empty, now not, or vice versa
-  if (oldprimary != newprimary)
-    return true;     // primary changed
-  if (OSDMap::calc_pg_rank(oldprimary, oldacting) !=
-      OSDMap::calc_pg_rank(newprimary, newacting))
+  if (OSDMap::primary_changed(
+	oldprimary,
+	oldacting,
+	newprimary,
+	newacting))
     return true;
   if (any_change && oldacting != newacting)
     return true;
@@ -1498,7 +1495,7 @@ int Objecter::recalc_op_target(Op *op)
 		 acting.size() > 1) {
 	// look for a local replica.  prefer the primary if the
 	// distance is the same.
-	int best;
+	int best = -1;
 	int best_locality;
 	for (unsigned i = 0; i < acting.size(); ++i) {
 	  int locality = osdmap->crush->get_common_ancestor_distance(

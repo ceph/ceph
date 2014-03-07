@@ -74,8 +74,42 @@ ceph osd tier set-overlay metadata cache
 ceph osd tier remove-overlay metadata
 ceph osd tier remove metadata cache
 ceph osd tier remove data cache2
+
+# make sure a non-empty pool fails
+rados -p cache2 put /etc/passwd /etc/passwd
+while ! ceph df | grep cache2 | grep ' 1 ' ; do
+    echo waiting for pg stats to flush
+    sleep 2
+done
+expect_false ceph osd tier add data cache2
+ceph osd tier add data cache2 --force-nonempty
+ceph osd tier remove data cache2
+
 ceph osd pool delete cache cache --yes-i-really-really-mean-it
 ceph osd pool delete cache2 cache2 --yes-i-really-really-mean-it
+
+# convenient add-cache command
+ceph osd pool create cache3 2
+ceph osd tier add-cache data cache3 1024000
+ceph osd dump | grep cache3 | grep bloom | grep 'false_positive_probability: 0.05' | grep 'target_bytes 1024000' | grep '1200s x4'
+ceph osd tier remove data cache3
+ceph osd pool delete cache3 cache3 --yes-i-really-really-mean-it
+
+# check health check
+ceph osd pool create cache4 2
+ceph osd pool set cache4 target_max_objects 5
+ceph osd pool set cache4 target_max_bytes 1000
+for f in `seq 1 5` ; do
+    rados -p cache4 put foo$f /etc/passwd
+done
+while ! ceph df | grep cache4 | grep ' 5 ' ; do
+    echo waiting for pg stats to flush
+    sleep 2
+done
+ceph health | grep WARN | grep cache4
+ceph health detail | grep cache4 | grep 'target max' | grep objects
+ceph health detail | grep cache4 | grep 'target max' | grep 'B'
+ceph osd pool delete cache4 cache4 --yes-i-really-really-mean-it
 
 # Assumes there are at least 3 MDSes and two OSDs
 #
@@ -249,6 +283,17 @@ for ((i=0; i < 100; i++)); do
 		break
 	fi
 done
+
+ceph osd thrash 10
+for ((i=0; i < 100; i++)); do
+	if ceph osd dump | grep 'down in'; then
+		echo "waiting for osd(s) to come back up"
+		sleep 10
+	else
+		break
+	fi
+done
+
 ceph osd dump | grep 'osd.0 up'
 ceph osd find 1
 ceph osd metadata 1 | grep 'distro'
@@ -383,13 +428,12 @@ ceph osd pool set data size $new_size
 ceph osd pool get data size | grep "size: $new_size"
 ceph osd pool set data size $old_size
 
-# uncomment when erasure code ready see http://tracker.ceph.com/issues/7360
-#ceph osd crush rule create-erasure ec_ruleset
-#ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=ec_ruleset
-#set +e
-#ceph osd pool set pool_erasure size 4444 2>$TMPFILE
-#check_response $? 38 'can not change the size'
-#set -e
+ceph osd crush rule create-erasure ec_ruleset
+ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=ec_ruleset
+set +e
+ceph osd pool set pool_erasure size 4444 2>$TMPFILE
+check_response 'not change the size'
+set -e
 
 ceph osd pool set data hashpspool true
 ceph osd pool set data hashpspool false
@@ -426,7 +470,7 @@ ceph osd pool set rbd cache_min_evict_age 234
 
 ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 0'
 
-ceph osd thrash 10
+
 
 set +e
 
@@ -448,5 +492,44 @@ ceph heap start_profiler
 ceph heap dump
 ceph heap stop_profiler
 ceph heap release
+
+
+# test osd bench limits
+# As we should not rely on defaults (as they may change over time),
+# lets inject some values and perform some simple tests
+# max iops: 10              # 100 IOPS
+# max throughput: 10485760  # 10MB/s
+# max block size: 2097152   # 2MB
+# duration: 10              # 10 seconds
+
+ceph tell osd.0 injectargs "\
+  --osd-bench-duration 10 \
+  --osd-bench-max-block-size 2097152 \
+  --osd-bench-large-size-max-throughput 10485760 \
+  --osd-bench-small-size-max-iops 10"
+
+# anything with a bs larger than 2097152  must fail
+expect_false ceph tell osd.0 bench 1 2097153
+# but using 'osd_bench_max_bs' must succeed
+ceph tell osd.0 bench 1 2097152
+
+# we assume 1MB as a large bs; anything lower is a small bs
+# for a 4096 bytes bs, for 10 seconds, we are limited by IOPS
+# max count: 409600
+
+# more than max count must not be allowed
+expect_false ceph tell osd.0 bench 409601 4096
+# but 409600 must be succeed
+ceph tell osd.0 bench 409600 4096
+
+# for a large bs, we are limited by throughput.
+# for a 2MB block size for 10 seconds, out max count is 50
+# max count: 50
+
+# more than max count must not be allowed
+expect_false ceph tell osd.0 bench 51 2097152
+# but 50 must succeed
+ceph tell osd.0 bench 50 2097152
+
 
 echo OK

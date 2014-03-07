@@ -794,7 +794,7 @@ void PG::build_prior(std::auto_ptr<PriorSet> &prior_set)
   set_probe_targets(prior_set->probe);
 }
 
-void PG::clear_primary_state()
+void PG::clear_primary_state(bool staying_primary)
 {
   dout(10) << "clear_primary_state" << dendl;
 
@@ -827,6 +827,9 @@ void PG::clear_primary_state()
 
   osd->recovery_wq.dequeue(this);
   osd->snap_trim_wq.dequeue(this);
+
+  if (!staying_primary)
+    agent_clear();
 }
 
 /**
@@ -2054,6 +2057,8 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
     up_primary,
     primary);
   child->role = OSDMap::calc_pg_role(osd->whoami, child->acting);
+
+  // this comparison includes primary rank via pg_shard_t
   if (get_primary() != child->get_primary())
     child->info.history.same_primary_since = get_osdmap()->get_epoch();
 
@@ -2628,6 +2633,12 @@ void PG::add_log_entry(pg_log_entry_t& e, bufferlist& log_bl)
   // by all logged updates)
   if (e.user_version > info.last_user_version)
     info.last_user_version = e.user_version;
+
+  /**
+   * Make sure we don't keep around more than we need to in the
+   * in-memory log
+   */
+  e.mod_desc.trim_bl();
 
   // log mutation
   pg_log.add(e);
@@ -3593,7 +3604,7 @@ void PG::scrub(ThreadPool::TPHandle &handle)
     scrubber.is_chunky = true;
     assert(backfill_targets.empty());
     for (unsigned i=0; i<acting.size(); i++) {
-      if (acting[i] == pg_whoami.shard)
+      if (acting[i] == pg_whoami.osd)
 	continue;
       if (acting[i] == CRUSH_ITEM_NONE)
 	continue;
@@ -4260,7 +4271,7 @@ void PG::scrub_finish()
 
   {
     stringstream oss;
-    oss << info.pgid << " " << mode << " ";
+    oss << info.pgid.pgid << " " << mode << " ";
     int total_errors = scrubber.shallow_errors + scrubber.deep_errors;
     if (total_errors)
       oss << total_errors << " errors";
@@ -4291,7 +4302,7 @@ void PG::scrub_finish()
   // when every one has been fixed.
   if (repair) {
     if (scrubber.fixed == scrubber.shallow_errors + scrubber.deep_errors) {
-      assert(deep_scrub || scrubber.deep_errors == 0);
+      assert(deep_scrub);
       scrubber.shallow_errors = scrubber.deep_errors = 0;
     } else {
       // Deep scrub in order to get corrected error counts
@@ -4705,6 +4716,7 @@ void PG::start_peering_interval(
       oldup != up) {
     info.history.same_up_since = osdmap->get_epoch();
   }
+  // this comparison includes primary rank via pg_shard_t
   if (old_acting_primary != get_primary()) {
     info.history.same_primary_since = osdmap->get_epoch();
   }
@@ -4727,7 +4739,7 @@ void PG::start_peering_interval(
 
   // reset primary state?
   if (was_old_primary || is_primary())
-    clear_primary_state();
+    clear_primary_state(was_old_primary && is_primary());
 
     
   // pg->on_*
@@ -6400,8 +6412,6 @@ PG::RecoveryState::ReplicaActive::ReplicaActive(my_context ctx)
     context< RecoveryMachine >().get_cur_transaction(),
     context< RecoveryMachine >().get_on_applied_context_list(),
     context< RecoveryMachine >().get_on_safe_context_list());
-
-  pg->agent_clear();
 }
 
 

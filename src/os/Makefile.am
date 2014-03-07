@@ -19,6 +19,7 @@ libos_la_SOURCES = \
 
 if LINUX
 libos_la_SOURCES += os/BtrfsFileStoreBackend.cc
+libos_la_SOURCES += os/XfsFileStoreBackend.cc
 endif
 
 if WITH_LIBZFS
@@ -52,6 +53,7 @@ noinst_HEADERS += \
 	os/ObjectStore.h \
 	os/SequencerPosition.h \
 	os/WBThrottle.h \
+	os/XfsFileStoreBackend.h \
 	os/ZFSFileStoreBackend.h
 
 if WITH_LIBZFS

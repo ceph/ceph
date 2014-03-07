@@ -229,8 +229,9 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
       stat_osd_sub(t->second);
       t->second = new_stats;
     }
-    assert(inc.get_osd_epochs().find(osd) != inc.get_osd_epochs().end());
-    osd_epochs.insert(*(inc.get_osd_epochs().find(osd)));
+    map<int32_t,epoch_t>::const_iterator j = inc.get_osd_epochs().find(osd);
+    assert(j != inc.get_osd_epochs().end());
+    osd_epochs[j->first] = j->second;
 
     stat_osd_add(new_stats);
 

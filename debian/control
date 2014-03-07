@@ -39,6 +39,7 @@ Build-Depends: autoconf,
                python-nose,
                uuid-dev,
                uuid-runtime,
+               xfslibs-dev,
                yasm
 Standards-Version: 3.9.3
 

@@ -552,7 +552,8 @@ COMMAND("osd thrash " \
 // tiering
 COMMAND("osd tier add " \
 	"name=pool,type=CephPoolname " \
-	"name=tierpool,type=CephPoolname",
+	"name=tierpool,type=CephPoolname " \
+	"name=force_nonempty,type=CephChoices,strings=--force-nonempty,req=false",
 	"add the tier <tierpool> to base pool <pool>", "osd", "rw", "cli,rest")
 COMMAND("osd tier remove " \
 	"name=pool,type=CephPoolname " \
@@ -569,6 +570,13 @@ COMMAND("osd tier set-overlay " \
 COMMAND("osd tier remove-overlay " \
 	"name=pool,type=CephPoolname ", \
 	"remove the overlay pool for base pool <pool>", "osd", "rw", "cli,rest")
+
+COMMAND("osd tier add-cache " \
+	"name=pool,type=CephPoolname " \
+	"name=tierpool,type=CephPoolname " \
+	"name=size,type=CephInt,range=0", \
+	"add a cache <tierpool> of size <size> to existing pool <pool>", \
+	"osd", "rw", "cli,rest")
 
 /*
  * mon/ConfigKeyService.cc

@@ -151,6 +151,7 @@ req_state::req_state(CephContext *_cct, class RGWEnv *e) : cct(_cct), cio(NULL),
   perm_mask = 0;
   content_length = 0;
   object = NULL;
+  bucket_exists = false;
   has_bad_meta = false;
   length = NULL;
   copy_source = NULL;
@@ -792,7 +793,7 @@ string rgw_trim_whitespace(const string& src)
   }
 
   int end = src.size() - 1;
-  if (end <= start) {
+  if (end < start) {
     return string();
   }
 

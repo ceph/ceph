@@ -202,6 +202,10 @@ struct librados::IoCtxImpl {
     const object_t& oid, uint64_t notify_id, uint64_t ver,
     uint64_t cookie);
 
+  int set_alloc_hint(const object_t& oid,
+                     uint64_t expected_object_size,
+                     uint64_t expected_write_size);
+
   version_t last_version();
   void set_assert_version(uint64_t ver);
   void set_assert_src_version(const object_t& oid, uint64_t ver);
