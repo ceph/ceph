@@ -22,6 +22,7 @@ import re
 from teuthology import safepath
 from .orchestra import run
 from .config import config
+from .contextutil import safe_while
 
 log = logging.getLogger(__name__)
 
@@ -816,25 +817,29 @@ def get_scratch_devices(remote):
 
 
 def wait_until_healthy(ctx, remote):
-    """Wait until a Ceph cluster is healthy."""
+    """
+    Wait until a Ceph cluster is healthy. Give up after 15min.
+    """
     testdir = get_testdir(ctx)
-    while True:
-        r = remote.run(
-            args=[
-                'adjust-ulimits',
-                'ceph-coverage',
-                '{tdir}/archive/coverage'.format(tdir=testdir),
-                'ceph',
-                'health',
-                ],
-            stdout=StringIO(),
-            logger=log.getChild('health'),
-            )
-        out = r.stdout.getvalue()
-        log.debug('Ceph health: %s', out.rstrip('\n'))
-        if out.split(None, 1)[0] == 'HEALTH_OK':
-            break
-        time.sleep(1)
+    with safe_while(sleep=5, increment=0, tries=180) as timeout:
+        while True:
+            timeout()
+            r = remote.run(
+                args=[
+                    'adjust-ulimits',
+                    'ceph-coverage',
+                    '{tdir}/archive/coverage'.format(tdir=testdir),
+                    'ceph',
+                    'health',
+                    ],
+                stdout=StringIO(),
+                logger=log.getChild('health'),
+                )
+            out = r.stdout.getvalue()
+            log.debug('Ceph health: %s', out.rstrip('\n'))
+            if out.split(None, 1)[0] == 'HEALTH_OK':
+                break
+            time.sleep(1)
 
 
 def wait_until_osds_up(ctx, cluster, remote):
