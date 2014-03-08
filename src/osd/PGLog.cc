@@ -348,14 +348,26 @@ void PGLog::_merge_object_divergent_entries(
   if (missing.is_missing(hoid)) {
     /// Case 3)
     dout(10) << __func__ << ": hoid " << hoid
-	     << " missing, adjusting missing version" << dendl;
-    missing.revise_need(hoid, prior_version);
-    if (prior_version <= info.log_tail) {
+	     << " missing, " << missing.missing[hoid]
+	     << " adjusting" << dendl;
+
+    if (missing.missing[hoid].have == prior_version) {
       dout(10) << __func__ << ": hoid " << hoid
-	       << " prior_version " << prior_version << " <= info.log_tail "
-	       << info.log_tail << dendl;
-      if (new_divergent_prior)
-	*new_divergent_prior = make_pair(prior_version, hoid);
+	       << " missing.have is prior_version " << prior_version
+	       << " removing from missing" << dendl;
+      missing.rm(missing.missing.find(hoid));
+    } else {
+      dout(10) << __func__ << ": hoid " << hoid
+	       << " missing.have is " << missing.missing[hoid].have
+	       << ", adjusting" << dendl;
+      missing.revise_need(hoid, prior_version);
+      if (prior_version <= info.log_tail) {
+	dout(10) << __func__ << ": hoid " << hoid
+		 << " prior_version " << prior_version << " <= info.log_tail "
+		 << info.log_tail << dendl;
+	if (new_divergent_prior)
+	  *new_divergent_prior = make_pair(prior_version, hoid);
+      }
     }
     return;
   }
