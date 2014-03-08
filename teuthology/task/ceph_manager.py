@@ -374,7 +374,7 @@ class Thrasher:
 
 class CephManager:
     """
-    Ceph manager object. 
+    Ceph manager object.
     Contains several local functions that form a bulk of this module.
     """
     def __init__(self, controller, ctx=None, config=None, logger=None):
@@ -602,7 +602,7 @@ class CephManager:
 
     def wait_run_admin_socket(self, osdnum, args=['version'], timeout=75):
         """
-        If osd_admin_socket call suceeds, return.  Otherwise wait 
+        If osd_admin_socket call suceeds, return.  Otherwise wait
         five seconds and try again.
         """
         tries = 0
@@ -684,7 +684,7 @@ class CephManager:
     def create_pool_with_unique_name(self, pg_num=1, ec_pool=False):
         """
         Create a pool named unique_pool_X where X is unique.
-        """ 
+        """
         name = ""
         with self.lock:
             name = "unique_pool_%s" % (str(self.next_pool_id),)
@@ -721,7 +721,7 @@ class CephManager:
         with self.lock:
             assert isinstance(pool_name, str)
             assert pool_name in self.pools
-            self.log("creating pool_name %s"%(pool_name,))
+            self.log("removing pool_name %s" % (pool_name,))
             del self.pools[pool_name]
             self.do_rados(
                 self.controller,
@@ -919,8 +919,8 @@ class CephManager:
     def get_osd_dump(self):
         """
         Dump osds
-        :returns: all osds 
-        """ 
+        :returns: all osds
+        """
         out = self.raw_cluster_cmd('osd', 'dump', '--format=json')
         j = json.loads('\n'.join(out.split('\n')[1:]))
         return j['osds']
@@ -928,7 +928,7 @@ class CephManager:
     def get_stuck_pgs(self, type_, threshold):
         """
         :returns: stuck pg information from the cluster
-        """ 
+        """
         out = self.raw_cluster_cmd('pg', 'dump_stuck', type_, str(threshold),
                                    '--format=json')
         return json.loads(out)
@@ -936,7 +936,7 @@ class CephManager:
     def get_num_unfound_objects(self):
         """
         Check cluster status to get the number of unfound objects
-        """ 
+        """
         status = self.raw_cluster_status()
         self.log(status)
         return status['pgmap'].get('unfound_objects', 0)
@@ -985,7 +985,7 @@ class CephManager:
                 num += 1
         return num
 
-    def get_num_down(self): 
+    def get_num_down(self):
         """
         Find the number of pgs that are down.
         """
@@ -1183,7 +1183,7 @@ class CephManager:
 
     def blackhole_kill_osd(self, osd):
         """
-        Stop osd if nothing else works.  
+        Stop osd if nothing else works.
         """
         self.raw_cluster_cmd('--', 'tell', 'osd.%d' % osd,
                              'injectargs', '--filestore-blackhole')
