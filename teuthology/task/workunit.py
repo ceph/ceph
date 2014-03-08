@@ -104,7 +104,7 @@ def task(ctx, config):
     if all_spec:
         all_tasks = clients["all"]
         _spawn_on_all_clients(ctx, refspec, all_tasks, config.get('env'),
-                              config.get('subdir'))
+                              config.get('subdir'), timeout=timeout)
 
     for role in clients.iterkeys():
         assert isinstance(role, basestring)
