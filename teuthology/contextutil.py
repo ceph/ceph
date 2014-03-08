@@ -72,22 +72,26 @@ class safe_while(object):
     indentation level and one extra call. Everything else stays the same,
     code-wise. So adding this helper to existing code is simpler.
 
-    The defaults are to start the sleeping time at 6 seconds and try 10 times.
-    Setting the increment value will cause the sleep time to increase by that
-    value at each step.
-
-    You may also optionally pass in an "action" string to be used in the raised
-    exception's error message to aid in log readability.
+    :param sleep:     The amount of time to sleep between tries. Default 6
+    :param increment: The amount to add to the sleep value on each try.
+                      Default 0.
+    :param tries:     The amount of tries before giving up. Default 10.
+    :param action:    The name of the action being attempted. Default none.
+    :param _raise:    Whether to raise an exception (or log a warning).
+                      Default True.
+    :param _sleeper:  The function to use to sleep. Only used for testing.
+                      Default time.sleep
     """
 
     def __init__(self, sleep=6, increment=0, tries=10, action=None,
-                 _sleeper=None):
+                 _raise=True, _sleeper=None):
         self.sleep = sleep
         self.increment = increment
         self.tries = tries
         self.counter = 0
         self.sleep_current = sleep
         self.action = action
+        self._raise = _raise
         self.sleeper = _sleeper or time.sleep
 
     def _make_error_msg(self):
@@ -117,7 +121,10 @@ class safe_while(object):
         self.counter += 1
         if self.counter > self.tries:
             error_msg = self._make_error_msg()
-            raise MaxWhileTries(error_msg)
+            if self._raise:
+                raise MaxWhileTries(error_msg)
+            else:
+                log.warning(error_msg)
         self.sleeper(self.sleep_current)
         self.sleep_current += self.increment
 
