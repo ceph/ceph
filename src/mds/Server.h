@@ -19,12 +19,15 @@
 
 class PerfCounters;
 class LogEvent;
-struct MDRequest;
-struct Mutation;
 class EMetaBlob;
 class EUpdate;
 class MMDSSlaveRequest;
 struct SnapInfo;
+
+struct MutationImpl;
+struct MDRequestImpl;
+typedef ceph::shared_ptr<MutationImpl> MutationRef;
+typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
 
 enum {
   l_mdss_first = 1000,
@@ -98,16 +101,16 @@ public:
   // -- requests --
   void handle_client_request(MClientRequest *m);
 
-  void journal_and_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn, 
+  void journal_and_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn,
 			 LogEvent *le, Context *fin);
-  void dispatch_client_request(MDRequest *mdr);
-  void early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn);
-  void reply_request(MDRequest *mdr, int r = 0, CInode *tracei = 0, CDentry *tracedn = 0);
-  void reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei = 0, CDentry *tracedn = 0);
+  void dispatch_client_request(MDRequestRef& mdr);
+  void early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);
+  void reply_request(MDRequestRef& mdr, int r = 0, CInode *tracei = 0, CDentry *tracedn = 0);
+  void reply_request(MDRequestRef& mdr, MClientReply *reply, CInode *tracei = 0, CDentry *tracedn = 0);
   void set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn,
 		      snapid_t snapid,
 		      int num_dentries_wanted,
-		      MDRequest *mdr);
+		      MDRequestRef& mdr);
 
   void encode_empty_dirstat(bufferlist& bl);
   void encode_infinite_lease(bufferlist& bl);
@@ -115,136 +118,140 @@ public:
 
   void handle_slave_request(MMDSSlaveRequest *m);
   void handle_slave_request_reply(MMDSSlaveRequest *m);
-  void dispatch_slave_request(MDRequest *mdr);
-  void handle_slave_auth_pin(MDRequest *mdr);
-  void handle_slave_auth_pin_ack(MDRequest *mdr, MMDSSlaveRequest *ack);
+  void dispatch_slave_request(MDRequestRef& mdr);
+  void handle_slave_auth_pin(MDRequestRef& mdr);
+  void handle_slave_auth_pin_ack(MDRequestRef& mdr, MMDSSlaveRequest *ack);
 
   // some helpers
-  CDir *validate_dentry_dir(MDRequest *mdr, CInode *diri, const string& dname);
-  CDir *traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, filepath refpath);
-  CDentry *prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dname, bool okexist=false);
-  CDentry *prepare_stray_dentry(MDRequest *mdr, CInode *in);
-  CInode* prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino, unsigned mode,
+  CDir *validate_dentry_dir(MDRequestRef& mdr, CInode *diri, const string& dname);
+  CDir *traverse_to_auth_dir(MDRequestRef& mdr, vector<CDentry*> &trace, filepath refpath);
+  CDentry *prepare_null_dentry(MDRequestRef& mdr, CDir *dir, const string& dname, bool okexist=false);
+  CDentry *prepare_stray_dentry(MDRequestRef& mdr, CInode *in);
+  CInode* prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
 			    ceph_file_layout *layout=NULL);
-  void journal_allocated_inos(MDRequest *mdr, EMetaBlob *blob);
-  void apply_allocated_inos(MDRequest *mdr);
+  void journal_allocated_inos(MDRequestRef& mdr, EMetaBlob *blob);
+  void apply_allocated_inos(MDRequestRef& mdr);
 
-  CInode* rdlock_path_pin_ref(MDRequest *mdr, int n, set<SimpleLock*>& rdlocks, bool want_auth,
+  CInode* rdlock_path_pin_ref(MDRequestRef& mdr, int n, set<SimpleLock*>& rdlocks, bool want_auth,
 			      bool no_want_auth=false,
 			      ceph_file_layout **layout=NULL,
 			      bool no_lookup=false);
-  CDentry* rdlock_path_xlock_dentry(MDRequest *mdr, int n, set<SimpleLock*>& rdlocks, set<SimpleLock*>& wrlocks, 
-				    set<SimpleLock*>& xlocks, bool okexist, bool mustexist, bool alwaysxlock,
+  CDentry* rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
+                                    set<SimpleLock*>& rdlocks,
+                                    set<SimpleLock*>& wrlocks,
+				    set<SimpleLock*>& xlocks, bool okexist,
+				    bool mustexist, bool alwaysxlock,
 				    ceph_file_layout **layout=NULL);
 
-  CDir* try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequest *mdr);
+  CDir* try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr);
 
 
   // requests on existing inodes.
-  void handle_client_getattr(MDRequest *mdr, bool is_lookup);
-  void handle_client_lookup_ino(MDRequest *mdr, bool want_parent, bool want_dentry);
-  void _lookup_ino_2(MDRequest *mdr, int r);
-  void handle_client_readdir(MDRequest *mdr);
-  void handle_client_file_setlock(MDRequest *mdr);
-  void handle_client_file_readlock(MDRequest *mdr);
+  void handle_client_getattr(MDRequestRef& mdr, bool is_lookup);
+  void handle_client_lookup_ino(MDRequestRef& mdr,
+				bool want_parent, bool want_dentry);
+  void _lookup_ino_2(MDRequestRef& mdr, int r);
+  void handle_client_readdir(MDRequestRef& mdr);
+  void handle_client_file_setlock(MDRequestRef& mdr);
+  void handle_client_file_readlock(MDRequestRef& mdr);
 
-  void handle_client_setattr(MDRequest *mdr);
-  void handle_client_setlayout(MDRequest *mdr);
-  void handle_client_setdirlayout(MDRequest *mdr);
+  void handle_client_setattr(MDRequestRef& mdr);
+  void handle_client_setlayout(MDRequestRef& mdr);
+  void handle_client_setdirlayout(MDRequestRef& mdr);
 
   int parse_layout_vxattr(string name, string value, ceph_file_layout *layout);
-  void handle_set_vxattr(MDRequest *mdr, CInode *cur,
+  void handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 			 ceph_file_layout *dir_layout,
 			 set<SimpleLock*> rdlocks,
 			 set<SimpleLock*> wrlocks,
 			 set<SimpleLock*> xlocks);
-  void handle_remove_vxattr(MDRequest *mdr, CInode *cur,
+  void handle_remove_vxattr(MDRequestRef& mdr, CInode *cur,
 			    set<SimpleLock*> rdlocks,
 			    set<SimpleLock*> wrlocks,
 			    set<SimpleLock*> xlocks);
-  void handle_client_setxattr(MDRequest *mdr);
-  void handle_client_removexattr(MDRequest *mdr);
+  void handle_client_setxattr(MDRequestRef& mdr);
+  void handle_client_removexattr(MDRequestRef& mdr);
 
-  void handle_client_fsync(MDRequest *mdr);
+  void handle_client_fsync(MDRequestRef& mdr);
 
   // open
-  void handle_client_open(MDRequest *mdr);
-  void handle_client_openc(MDRequest *mdr);  // O_CREAT variant.
-  void do_open_truncate(MDRequest *mdr, int cmode);  // O_TRUNC variant.
+  void handle_client_open(MDRequestRef& mdr);
+  void handle_client_openc(MDRequestRef& mdr);  // O_CREAT variant.
+  void do_open_truncate(MDRequestRef& mdr, int cmode);  // O_TRUNC variant.
 
   // namespace changes
-  void handle_client_mknod(MDRequest *mdr);
-  void handle_client_mkdir(MDRequest *mdr);
-  void handle_client_symlink(MDRequest *mdr);
+  void handle_client_mknod(MDRequestRef& mdr);
+  void handle_client_mkdir(MDRequestRef& mdr);
+  void handle_client_symlink(MDRequestRef& mdr);
 
   // link
-  void handle_client_link(MDRequest *mdr);
-  void _link_local(MDRequest *mdr, CDentry *dn, CInode *targeti);
-  void _link_local_finish(MDRequest *mdr,
+  void handle_client_link(MDRequestRef& mdr);
+  void _link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti);
+  void _link_local_finish(MDRequestRef& mdr,
 			  CDentry *dn, CInode *targeti,
 			  version_t, version_t);
 
-  void _link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti);
-  void _link_remote_finish(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti,
+  void _link_remote(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti);
+  void _link_remote_finish(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti,
 			   version_t);
 
-  void handle_slave_link_prep(MDRequest *mdr);
-  void _logged_slave_link(MDRequest *mdr, CInode *targeti);
-  void _commit_slave_link(MDRequest *mdr, int r, CInode *targeti);
-  void _committed_slave(MDRequest *mdr);  // use for rename, too
-  void handle_slave_link_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
-  void do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr);
-  void _link_rollback_finish(Mutation *mut, MDRequest *mdr);
+  void handle_slave_link_prep(MDRequestRef& mdr);
+  void _logged_slave_link(MDRequestRef& mdr, CInode *targeti);
+  void _commit_slave_link(MDRequestRef& mdr, int r, CInode *targeti);
+  void _committed_slave(MDRequestRef& mdr);  // use for rename, too
+  void handle_slave_link_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *m);
+  void do_link_rollback(bufferlist &rbl, int master, MDRequestRef& mdr);
+  void _link_rollback_finish(Mutation *mut, MDRequestRef& mdr);
 
   // unlink
-  void handle_client_unlink(MDRequest *mdr);
-  bool _dir_is_nonempty_unlocked(MDRequest *mdr, CInode *rmdiri);
-  bool _dir_is_nonempty(MDRequest *mdr, CInode *rmdiri);
-  void _unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn);
-  void _unlink_local_finish(MDRequest *mdr, 
+  void handle_client_unlink(MDRequestRef& mdr);
+  bool _dir_is_nonempty_unlocked(MDRequestRef& mdr, CInode *rmdiri);
+  bool _dir_is_nonempty(MDRequestRef& mdr, CInode *rmdiri);
+  void _unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn);
+  void _unlink_local_finish(MDRequestRef& mdr,
 			    CDentry *dn, CDentry *straydn,
 			    version_t);
-  bool _rmdir_prepare_witness(MDRequest *mdr, int who, CDentry *dn, CDentry *straydn);
-  void handle_slave_rmdir_prep(MDRequest *mdr);
-  void _logged_slave_rmdir(MDRequest *mdr, CDentry *srcdn, CDentry *straydn);
-  void _commit_slave_rmdir(MDRequest *mdr, int r);
-  void handle_slave_rmdir_prep_ack(MDRequest *mdr, MMDSSlaveRequest *ack);
-  void do_rmdir_rollback(bufferlist &rbl, int master, MDRequest *mdr);
-  void _rmdir_rollback_finish(MDRequest *mdr, metareqid_t reqid, CDentry *dn, CDentry *straydn);
+  bool _rmdir_prepare_witness(MDRequestRef& mdr, int who, CDentry *dn, CDentry *straydn);
+  void handle_slave_rmdir_prep(MDRequestRef& mdr);
+  void _logged_slave_rmdir(MDRequestRef& mdr, CDentry *srcdn, CDentry *straydn);
+  void _commit_slave_rmdir(MDRequestRef& mdr, int r);
+  void handle_slave_rmdir_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *ack);
+  void do_rmdir_rollback(bufferlist &rbl, int master, MDRequestRef& mdr);
+  void _rmdir_rollback_finish(MDRequestRef& mdr, metareqid_t reqid, CDentry *dn, CDentry *straydn);
 
   // rename
-  void handle_client_rename(MDRequest *mdr);
-  void _rename_finish(MDRequest *mdr,
+  void handle_client_rename(MDRequestRef& mdr);
+  void _rename_finish(MDRequestRef& mdr,
 		      CDentry *srcdn, CDentry *destdn, CDentry *straydn);
 
-  void handle_client_lssnap(MDRequest *mdr);
-  void handle_client_mksnap(MDRequest *mdr);
-  void _mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info);
-  void handle_client_rmsnap(MDRequest *mdr);
-  void _rmsnap_finish(MDRequest *mdr, CInode *diri, snapid_t snapid);
+  void handle_client_lssnap(MDRequestRef& mdr);
+  void handle_client_mksnap(MDRequestRef& mdr);
+  void _mksnap_finish(MDRequestRef& mdr, CInode *diri, SnapInfo &info);
+  void handle_client_rmsnap(MDRequestRef& mdr);
+  void _rmsnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid);
 
   // helpers
-  bool _rename_prepare_witness(MDRequest *mdr, int who, set<int> &witnesse,
+  bool _rename_prepare_witness(MDRequestRef& mdr, int who, set<int> &witnesse,
 			       CDentry *srcdn, CDentry *destdn, CDentry *straydn);
-  version_t _rename_prepare_import(MDRequest *mdr, CDentry *srcdn, bufferlist *client_map_bl);
+  version_t _rename_prepare_import(MDRequestRef& mdr, CDentry *srcdn, bufferlist *client_map_bl);
   bool _need_force_journal(CInode *diri, bool empty);
-  void _rename_prepare(MDRequest *mdr,
+  void _rename_prepare(MDRequestRef& mdr,
 		       EMetaBlob *metablob, bufferlist *client_map_bl,
 		       CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   /* set not_journaling=true if you're going to discard the results --
    * this bypasses the asserts to make sure we're journaling the right
    * things on the right nodes */
-  void _rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn); 
+  void _rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
 
   // slaving
-  void handle_slave_rename_prep(MDRequest *mdr);
-  void handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
-  void handle_slave_rename_notify_ack(MDRequest *mdr, MMDSSlaveRequest *m);
-  void _slave_rename_sessions_flushed(MDRequest *mdr);
-  void _logged_slave_rename(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
-  void _commit_slave_rename(MDRequest *mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
-  void do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr, bool finish_mdr=false);
-  void _rename_rollback_finish(Mutation *mut, MDRequest *mdr, CDentry *srcdn, version_t srcdnpv,
+  void handle_slave_rename_prep(MDRequestRef& mdr);
+  void handle_slave_rename_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *m);
+  void handle_slave_rename_notify_ack(MDRequestRef& mdr, MMDSSlaveRequest *m);
+  void _slave_rename_sessions_flushed(MDRequestRef& mdr);
+  void _logged_slave_rename(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+  void _commit_slave_rename(MDRequestRef& mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+  void do_rename_rollback(bufferlist &rbl, int master, MDRequestRef& mdr, bool finish_mdr=false);
+  void _rename_rollback_finish(Mutation *mut, MDRequestRef& mdr, CDentry *srcdn, version_t srcdnpv,
 			       CDentry *destdn, CDentry *staydn, bool finish_mdr);
 
 };
