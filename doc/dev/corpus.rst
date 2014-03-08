@@ -11,7 +11,7 @@ You can also mark known or deliber incompatibilities between versions with::
 
  archive/$version/forward_incompat/$type
 
-The presense of a file indicates that new versions of code cannot
+The presence of a file indicates that new versions of code cannot
 decode old objects across that $version (this is normally the case).
 
 
