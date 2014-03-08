@@ -153,52 +153,71 @@ def get_pool_metadata():
   return pool_meta
 
 def get_sysinfo(max_osds):
-  sysinfo = []
   count = 0
   osd_metadata_available = False
+  
+  os = {}
+  kern_version = {}
+  kern_description = {}
+  distro = {}
+  cpu = {}
+  arch = {}
+  ceph_version = {}
 
+  incr = lambda a,k: 1 if k not in a else a[k]+1
   while count < max_osds:
     meta = {'id':count}
     (rc, o, e) = run_command(['ceph', 'osd', 'metadata', str(count)])
     if rc is 0:
       if osd_metadata_available is False:
         osd_metadata_available = True
-      os_info = {}
-      hw_info = {}
 
       jmeta = json.loads(o)
 
       version = jmeta['ceph_version'].split()
-      meta['ceph_version'] = version[2]
+      cv = version[2]
       if (len(version) > 3):
-        meta['ceph_version'] += version[3]
+        cv += version[3]
 
-      os_info['os'] = jmeta['os']
-      os_info['version'] = jmeta['kernel_version']
-      os_info['description'] = jmeta['kernel_description']
+      ceph_version[cv] = incr(ceph_version, cv)
+      os[jmeta['os']] = incr(os, jmeta['os'])
+      kern_version[jmeta['kernel_version']] = \
+            incr(kern_version, jmeta['kernel_version'])
+      kern_description[jmeta['kernel_description']] = \
+            incr(kern_description, jmeta['kernel_description'])
 
       try:
-        distro = jmeta['distro'] + ' '
-        distro += jmeta['distro_version'] + ' '
-        distro += jmeta['distro_codename'] + ' ('
-        distro += jmeta['distro_description'] + ')'
-        os_info['distro'] = distro
+        dstr = jmeta['distro'] + ' '
+        dstr += jmeta['distro_version'] + ' '
+        dstr += jmeta['distro_codename'] + ' ('
+        dstr += jmeta['distro_description'] + ')'
+        distro[dstr] = incr(distro, dstr)
       except KeyError as ke:
         pass
-      meta['os_info'] = os_info
   
-      hw_info['cpu'] = jmeta['cpu']
-      hw_info['arch'] = jmeta['arch']
-      hw_info['mem_kb'] = int(jmeta['mem_total_kb'])
-      hw_info['swap_kb'] = int(jmeta['mem_swap_kb'])
-      meta['hw_info'] = hw_info
+      cpu[jmeta['cpu']] = incr(cpu, jmeta['cpu'])
+      arch[jmeta['arch']] = incr(arch, jmeta['arch'])
   
-    sysinfo.append(meta)
     count = count + 1
 
+  sysinfo = {}
   if osd_metadata_available is False:
     print >> sys.stderr, "'ceph osd metadata' is not available at all"
+    return sysinfo
 
+  def jsonify(type_count, name, type_name):
+    tmp = []
+    for k, v in type_count.items():
+      tmp.append({type_name:k, 'count':v})
+    sysinfo[name] = tmp
+
+  jsonify(os, 'os_info', 'os')
+  jsonify(kern_version, 'kernel_versions', 'version')
+  jsonify(kern_description, 'kernel_types', 'type')
+  jsonify(distro, 'distros', 'distro')
+  jsonify(cpu, 'cpus', 'cpu')
+  jsonify(arch, 'cpu_archs', 'arch')
+  jsonify(ceph_version, 'ceph_versions', 'version')
   return sysinfo
 
 def get_ownership_info():

@@ -61,21 +61,71 @@ class pools_info(Base):
   pool_type = Column(String(16))
   pool_rep_size = Column(Integer)
 
-class osds_info(Base):
-  __tablename__ = 'osds_info'
+class os_info(Base):
+  __tablename__ = 'os_info'
 
   index = Column(Integer, primary_key=True)
   vid = Column(ForeignKey('version_info.index'))
-  osd_id = Column(String(8))
-  swap_kb = Column(Integer)
-  mem_kb = Column(Integer)
-  arch = Column(String(16))
-  cpu = Column(String(16))
   os = Column(String(16))
-  os_version = Column(String(16))
-  os_desc = Column(String(64))
+  count = Column(Integer)
+
+class kernel_versions(Base):
+  __tablename__ = 'kernel_versions'
+
+  index = Column(Integer, primary_key=True)
+  vid = Column(ForeignKey('version_info.index'))
+  version = Column(String(16))
+  count = Column(Integer)
+
+class kernel_types(Base):
+  __tablename__ = 'kernel_types'
+
+  index = Column(Integer, primary_key=True)
+  vid = Column(ForeignKey('version_info.index'))
+  type = Column(String(64))
+  count = Column(Integer)
+
+class distros(Base):
+  __tablename__ = 'distros'
+
+  index = Column(Integer, primary_key=True)
+  vid = Column(ForeignKey('version_info.index'))
   distro = Column(String(64))
-  ceph_version = Column(String(64))
+  count = Column(Integer)
+
+class cpus(Base):
+  __tablename__ = 'cpus'
+
+  index = Column(Integer, primary_key=True)
+  vid = Column(ForeignKey('version_info.index'))
+  cpu = Column(String(16))
+  count = Column(Integer)
+
+class cpu_archs(Base):
+  __tablename__ = 'cpu_archs'
+
+  index = Column(Integer, primary_key=True)
+  vid = Column(ForeignKey('version_info.index'))
+  arch = Column(String(16))
+  count = Column(Integer)
+
+class ceph_versions(Base):
+  __tablename__ = 'ceph_versions'
+
+  index = Column(Integer, primary_key=True)
+  vid = Column(ForeignKey('version_info.index'))
+  version = Column(String(16))
+  count = Column(Integer)
+
+class sysinfo(object):
+  def __init__(self, vindex):
+    self.os = Session.query(os_info).filter_by(vid=vindex).all()
+    self.kern_vers = Session.query(kernel_versions).filter_by(vid=vindex).all()
+    self.kern_types = Session.query(kernel_types).filter_by(vid=vindex).all()
+    self.distros = Session.query(distros).filter_by(vid=vindex).all()
+    self.cpus = Session.query(cpus).filter_by(vid=vindex).all()
+    self.cpu_archs = Session.query(cpu_archs).filter_by(vid=vindex).all()
+    self.ceph_vers = Session.query(ceph_versions).filter_by(vid=vindex).all()
 
 class brag(object):
   def __init__(self, uuid, version_number):
@@ -87,7 +137,7 @@ class brag(object):
       self.comps = Session.query(components_info).filter_by(vid=self.vi.index).first()
       self.crush = Session.query(crush_types).filter_by(vid=self.vi.index).all()
       self.pools = Session.query(pools_info).filter_by(vid=self.vi.index).all()
-      self.osds = Session.query(osds_info).filter_by(vid=self.vi.index).all()
+      self.sysinfo = sysinfo(self.vi.index)
 
 def bytes_pretty_to_raw(pretty):
   mo = re.search("(\d+)\ (\S+)", pretty)
@@ -183,22 +233,46 @@ def put_new_version(data):
                              pool_type=p['type'],
                              pool_rep_size=p['size']))
 
-  def add_osds_info(vi):
-    osds = info['sysinfo']
-    for o in osds:
-      osd = osds_info(vid=vi.index,
-                      osd_id=o['id'],
-                      swap_kb=o['hw_info']['swap_kb'],
-                      mem_kb=o['hw_info']['mem_kb'],
-                      arch=o['hw_info']['arch'],
-                      cpu=o['hw_info']['cpu'],
-                      os=o['os_info']['os'],
-                      os_version=o['os_info']['version'],
-                      os_desc=o['os_info']['description'],
-                      distro=o['os_info']['distro'],
-                      ceph_version=o['ceph_version'])
-      Session.add(osd)
-                    
+  def add_sys_info(vi):
+    si = info['sysinfo']
+    while si:
+      k,v = si.popitem()
+      if k == 'os_info':
+        for o in v:
+          Session.add(os_info(vid=vi.index, 
+                              os=o['os'],
+                              count=o['count']))
+      elif k == 'kernel_versions':
+        for k in v:
+          Session.add(kernel_versions(vid=vi.index,
+                                      version=k['version'],
+                                      count=k['count']))
+      elif k == 'kernel_types':
+        for k in v:
+          Session.add(kernel_types(vid=vi.index,
+                                   type=k['type'],
+                                   count=k['count']))
+      elif k == 'distros':
+        for d in v:
+          Session.add(distros(vid=vi.index,
+                              distro=d['distro'],
+                              count=d['count']))
+      elif k == 'cpus':
+        for c in v:
+          Session.add(cpus(vid=vi.index,
+                           cpu=c['cpu'],
+                           count=c['count']))
+      elif k == 'cpu_archs':
+        for c in v:
+          Session.add(cpu_archs(vid=vi.index,
+                                arch=c['arch'],
+                                count=c['count']))
+      elif k == 'ceph_versions':
+        for c in v:
+          Session.add(ceph_versions(vid=vi.index,
+                                    version=c['version'],
+                                    count=c['count']))
+
   ci = add_cluster_info()
   add_version_info(ci)
   vi = Session.query(version_info).filter_by(cluster_id=ci.index, 
@@ -206,7 +280,7 @@ def put_new_version(data):
   add_components_info(vi)
   add_crush_types(vi)
   add_pools_info(vi)
-  add_osds_info(vi)
+  add_sys_info(vi)
  
 def delete_uuid(uuid):
   ci = Session.query(cluster_info).filter_by(uuid=uuid).first()
@@ -217,7 +291,14 @@ def delete_uuid(uuid):
     Session.query(components_info).filter_by(vid=v.index).delete()
     Session.query(crush_types).filter_by(vid=v.index).delete()
     Session.query(pools_info).filter_by(vid=v.index).delete()
-    Session.query(osds_info).filter_by(vid=v.index).delete()
+    Session.query(os_info).filter_by(vid=v.index).delete()
+    Session.query(kernel_versions).filter_by(vid=v.index).delete()
+    Session.query(kernel_types).filter_by(vid=v.index).delete()
+    Session.query(distros).filter_by(vid=v.index).delete()
+    Session.query(cpus).filter_by(vid=v.index).delete()
+    Session.query(cpu_archs).filter_by(vid=v.index).delete()
+    Session.query(ceph_versions).filter_by(vid=v.index).delete()
+
     Session.flush()
     Session.delete(v)
     Session.flush()

@@ -51,22 +51,48 @@
       "size": 3
     }
   ],
-  "sysinfo": [
-    {
-      "hw_info": {
-        "swap_kb": 0,
-        "arch": "x86_64",
-        "cpu": "Intel Xeon E312xx (Sandy Bridge)",
-        "mem_kb": 2051648
-      },
-      "id": 0,
-      "os_info": {
-        "version": "3.2.0-23-virtual",
-        "os": "Linux",
-        "description": "#36-Ubuntu SMP Tue Apr 10 22:29:03 UTC 2012",
+  "sysinfo": {
+    "kernel_types": [
+      {
+        "count": 1,
+        "type": "#36-Ubuntu SMP Tue Apr 10 22:29:03 UTC 2012"
+      }
+    ],
+    "cpu_archs": [
+      {
+        "count": 1,
+        "arch": "x86_64"
+      }
+    ],
+    "cpus": [
+      {
+        "count": 1,
+        "cpu": "Intel Xeon E312xx (Sandy Bridge)"
+      }
+    ],
+    "kernel_versions": [
+      {
+        "count": 1,
+        "version": "3.2.0-23-virtual"
+      }
+    ],
+    "ceph_versions": [
+      {
+        "count": 1,
+        "version": "0.75-229-g4050eae(4050eae32cd77a1c210ca11d0f12c74daecb1bd3)"
+      }
+    ],
+    "os_info": [
+      {
+        "count": 1,
+        "os": "Linux"
+      }
+    ],
+    "distros": [
+      {
+        "count": 1,
         "distro": "Ubuntu 12.04 precise (Ubuntu 12.04 LTS)"
-      },
-      "ceph_version": "0.75-229-g4050eae(4050eae32cd77a1c210ca11d0f12c74daecb1bd3)"
-    }
-  ]
+      }
+    ]
+  }
 }

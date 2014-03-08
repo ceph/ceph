@@ -28,8 +28,7 @@ def jsonify_components_info(comps):
             num_pgs=comps.num_pgs,
             num_pools=comps.num_pools,
             num_mdss=comps.num_mdss,
-            num_mons=comps.num_mons
-            )
+            num_mons=comps.num_mons)
 
 @jsonify.register(db.crush_types)
 def jsonify_crush_types(crush):
@@ -40,18 +39,63 @@ def jsonify_crush_types(crush):
 def jsonify_pools_info(pool):
     return dict(size=pool.pool_rep_size,
                 type=pool.pool_type,
-                id=pool.pool_id
-               )
+                id=pool.pool_id)
 
-@jsonify.register(db.osds_info)
-def jsonify_osds_info(osd):
-    return dict(hw_info={'swap_kb':osd.swap_kb,'mem_kb':osd.mem_kb,
-                         'arch':osd.arch, 'cpu':osd.cpu},
-                id=osd.osd_id,
-                os_info={'os':osd.os,'version':osd.os_version,
-                         'description':osd.os_desc, 'distro':osd.distro},
-                ceph_version=osd.ceph_version
-               )
+@jsonify.register(db.os_info)
+def jsonify_os_info(value):
+    return dict(os=value.os,
+                count=value.count)
+
+@jsonify.register(db.kernel_versions)
+def jsonify_kernel_versions(value):
+    return dict(version=value.version,
+                count=value.count)
+
+@jsonify.register(db.kernel_types)
+def jsonify_kernel_types(value):
+    return dict(type=value.type,
+                count=value.count)
+
+@jsonify.register(db.distros)
+def jsonify_distros(value):
+    return dict(distro=value.distro,
+                count=value.count)
+
+@jsonify.register(db.cpus)
+def jsonify_cpus(value):
+    return dict(cpu=value.cpu,
+                count=value.count)
+
+@jsonify.register(db.cpu_archs)
+def jsonify_cpu_archs(value):
+    return dict(arch=value.arch,
+                count=value.count)
+
+@jsonify.register(db.ceph_versions)
+def jsonify_ceph_versions(value):
+    return dict(version=value.version,
+                count=value.count)
+
+@jsonify.register(db.sysinfo)
+def jsonify_sysinfo(value):
+    retval = {}
+    
+    if value.os:
+      retval['os_info'] = value.os
+    if value.kern_vers:
+      retval['kernel_versions'] = value.kern_vers
+    if value.kern_types:
+      retval['kernel_types'] = value.kern_types
+    if value.distros:
+      retval['distros'] = value.distros
+    if value.cpus:
+      retval['cpus'] = value.cpus
+    if value.cpu_archs:
+      retval['cpu_archs'] = value.cpu_archs
+    if value.ceph_vers:
+      retval['ceph_versions'] = value.ceph_vers
+
+    return retval
 
 @jsonify.register(db.brag)
 def jsonify_brag(b):
@@ -66,5 +110,5 @@ def jsonify_brag(b):
                 crush_types=b.crush,
                 ownership=ownership,
                 pool_metadata=b.pools,
-                sysinfo=b.osds
+                sysinfo=b.sysinfo
                 )
