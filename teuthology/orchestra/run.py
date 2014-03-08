@@ -347,7 +347,7 @@ def wait(processes, timeout=None):
             not_ready = list(processes)
             while len(not_ready) > 0:
                 check_time()
-                for proc in not_ready:
+                for proc in list(not_ready):
                     if proc.exitstatus.ready():
                         not_ready.remove(proc)
 
