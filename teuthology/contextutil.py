@@ -58,10 +58,10 @@ class safe_while(object):
     The most simple example possible will try 10 times sleeping for 6 seconds:
 
         >>> from teuthology.contexutil import safe_while
-        >>> with safe_while() as bomb:
-        ...    while 1:
-        ...        bomb()
+        >>> with safe_while() as proceed:
+        ...    while proceed():
         ...        # repetitive code here
+        ...        print "hello world"
         ...
         Traceback (most recent call last):
         ...
@@ -125,8 +125,10 @@ class safe_while(object):
                 raise MaxWhileTries(error_msg)
             else:
                 log.warning(error_msg)
+                return False
         self.sleeper(self.sleep_current)
         self.sleep_current += self.increment
+        return True
 
     def __enter__(self):
         return self
