@@ -7,7 +7,8 @@ import logging
 import socket
 
 import teuthology
-from teuthology.config import config
+from .config import config
+from .contextutil import safe_while
 
 
 # Don't need to see connection pool INFO messages
@@ -342,9 +343,12 @@ def try_push_job_info(job_config, extra_info=None):
     else:
         job_info = job_config
 
-    try:
-        log.info("Pushing job info to %s", config.results_server)
-        push_job_info(run_name, job_id, job_info)
-    except (requests.exceptions.RequestException, socket.error):
-        log.exception("Could not report results to %s" %
-                      config.results_server)
+    with safe_while(_raise=False) as proceed:
+        while proceed():
+            try:
+                log.info("Pushing job info to %s", config.results_server)
+                push_job_info(run_name, job_id, job_info)
+                return
+            except (requests.exceptions.RequestException, socket.error):
+                log.exception("Could not report results to %s" %
+                              config.results_server)
