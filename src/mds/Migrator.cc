@@ -745,7 +745,7 @@ void Migrator::export_dir(CDir *dir, int dest)
   dir->auth_pin(this);
   dir->state_set(CDir::STATE_EXPORTING);
 
-  MDRequest *mdr = mds->mdcache->request_start_internal(CEPH_MDS_OP_EXPORTDIR);
+  MDRequestRef mdr = mds->mdcache->request_start_internal(CEPH_MDS_OP_EXPORTDIR);
   mdr->more()->export_dir = dir;
 
   assert(export_state.count(dir) == 0);
@@ -753,7 +753,7 @@ void Migrator::export_dir(CDir *dir, int dest)
   stat.state = EXPORT_LOCKING;
   stat.peer = dest;
   stat.tid = mdr->reqid.tid;
-  stat.mut = mdr;
+  stat.mut = mdr.get();
 
   dispatch_export_dir(mdr);
 }

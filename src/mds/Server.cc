@@ -1152,8 +1152,8 @@ void Server::handle_client_request(MClientRequest *req)
   }
 
   // register + dispatch
-  MDRequest *mdr = mdcache->request_start(req);
-  if (mdr) {
+  MDRequestRef mdr = mdcache->request_start(req);
+  if (mdr.get()) {
     if (session) {
       mdr->session = session;
       session->requests.push_back(&mdr->item_session_request);
@@ -1171,7 +1171,7 @@ void Server::handle_client_request(MClientRequest *req)
     req->releases.clear();
   }
 
-  if (mdr)
+  if (mdr.get())
     dispatch_client_request(mdr);
   return;
 }
@@ -1327,7 +1327,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
   }
 
   // am i a new slave?
-  MDRequest *mdr = NULL;
+  MDRequestRef mdr;
   if (mdcache->have_request(m->get_reqid())) {
     // existing?
     mdr = mdcache->request_get(m->get_reqid());
@@ -1346,14 +1346,14 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       dout(10) << "local request " << *mdr << " attempt " << mdr->attempt << " < " << m->get_attempt()
 	       << ", closing out" << dendl;
       mdcache->request_finish(mdr);
-      mdr = NULL;
+      mdr.reset();
     } else if (mdr->slave_to_mds != from) {
       dout(10) << "local request " << *mdr << " not slave to mds." << from << dendl;
       m->put();
       return;
     }
   }
-  if (!mdr) {
+  if (!mdr.get()) {
     // new?
     if (m->get_op() == MMDSSlaveRequest::OP_FINISH) {
       dout(10) << "missing slave request for " << m->get_reqid() 
