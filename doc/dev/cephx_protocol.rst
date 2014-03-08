@@ -50,7 +50,7 @@ is being done via messages, the client must also prove that the message proving 
 is fresh, and is not being replayed by an attacker.
 
 2.  The authenticator A must prove to client C that he really is the authenticator.  Again,
-proof that replay is not occuring is also required.
+proof that replay is not occurring is also required.
 
 3.  A and C must securely share a session key to be used for distribution of later
 authorization material between them.  Again, no replay is allowable, and the key must be
