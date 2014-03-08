@@ -216,6 +216,7 @@ public:
       t, oinfo, olog, pg_shard_t(1, 0), info,
       &h, dirty_info, dirty_big_info);
 
+    ASSERT_EQ(info.last_update, oinfo.last_update);
     verify_missing(tcase, missing);
     verify_sideeffects(tcase, h);
   };
@@ -233,6 +234,10 @@ public:
 
     proc_replica_log(
       t, oinfo, olog, omissing, pg_shard_t(1, 0));
+
+    if (!tcase.base.empty()) {
+      ASSERT_EQ(tcase.base.rbegin()->version, oinfo.last_update);
+    }
 
     for (list<pg_log_entry_t>::const_iterator i = tcase.auth.begin();
 	 i != tcase.auth.end();
