@@ -1850,6 +1850,18 @@ TEST_F(PGLogTest, merge_log_8) {
   run_test_case(t);
 }
 
+TEST_F(PGLogTest, merge_log_prior_version_have) {
+  TestCase t;
+  t.base.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(10, 100), mk_evt(8, 80)));
+
+  t.div.push_back(mk_ple_mod(mk_obj(1), mk_evt(10, 101), mk_evt(10, 100)));
+
+  t.init.add(mk_obj(1), mk_evt(10, 101), mk_evt(10, 100));
+
+  t.setup();
+  run_test_case(t);
+}
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
