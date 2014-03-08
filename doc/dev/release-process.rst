@@ -5,7 +5,7 @@
 1. Build environment
 ====================
 
-There are multiple build envrionments, debian based packages are built via pbuilder for multiple distributions.  The build hosts are listed in the ``deb_hosts`` file, and the list of distributions are in ``deb_dist``.  All distributions are build on each of the build hosts.  Currently there is 1 64 bit and 1 32 bit build host.
+There are multiple build environments, debian based packages are built via pbuilder for multiple distributions.  The build hosts are listed in the ``deb_hosts`` file, and the list of distributions are in ``deb_dist``.  All distributions are build on each of the build hosts.  Currently there is 1 64 bit and 1 32 bit build host.
 
 The RPM based packages are built natively, so one distribution per build host.  The list of hosts is found in ``rpm_hosts``.
 
@@ -83,7 +83,7 @@ need to create a Makefile.::
 
 This creates tarballs and copies them, with other needed files to
 the build hosts listed in deb_hosts and rpm_hosts, runs a local build
-script, then rsyncs the results back tot the specified release directory.::
+script, then rsyncs the results back to the specified release directory.::
 
 	../ceph-build/do_release.sh /tmp/release
 
