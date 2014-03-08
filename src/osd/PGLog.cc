@@ -169,6 +169,22 @@ void PGLog::proc_replica_log(
 	     << " have " << i->second.have << dendl;
   }
 
+  list<pg_log_entry_t>::const_iterator toiter = log.log.end();
+  list<pg_log_entry_t>::const_iterator fromiter = log.log.end();
+  eversion_t lower_bound = log.tail;
+  while (1) {
+    if (fromiter == log.log.begin())
+      break;
+    --fromiter;
+    if (fromiter->version <= olog.head) {
+      dout(20) << "merge_log cut point (usually last shared) is "
+	       << *fromiter << dendl;
+      lower_bound = fromiter->version;
+      ++fromiter;
+      break;
+    }
+  }
+
   list<pg_log_entry_t> divergent;
   list<pg_log_entry_t>::const_iterator pp = olog.log.end();
   eversion_t lu(oinfo.last_update);
@@ -183,16 +199,13 @@ void PGLog::proc_replica_log(
 
     // don't continue past the tail of our log.
     if (oe.version <= log.tail) {
+      lu = oe.version;
       ++pp;
       break;
     }
 
-    ceph::unordered_map<hobject_t, pg_log_entry_t*>::const_iterator i =
-      log.objects.find(oe.soid);
-    if (i != log.objects.end() && i->second->version == oe.version) {
-      dout(10) << " had " << oe << " new " << *(i->second)
-	       << " : match, stopping" << dendl;
-      lu = pp->version;
+    if (oe.version <= lower_bound) {
+      lu = oe.version;
       ++pp;
       break;
     }
