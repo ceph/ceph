@@ -106,7 +106,7 @@ class safe_while(object):
             )
         )
         msg = 'reached maximum tries ({tries})' + \
-            'after waiting for {total} seconds'
+            ' after waiting for {total} seconds'
         if self.action:
             msg = "'{action}'" + msg
 
