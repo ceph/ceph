@@ -4474,7 +4474,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	  dout(10) << " dn authpin by " << *r << " on " << *dn << dendl;
 
 	  // get/create slave mdrequest
-	  MDRequest *mdr;
+	  MDRequestRef mdr;
 	  if (have_request(r->reqid))
 	    mdr = request_get(r->reqid);
 	  else
@@ -4569,7 +4569,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	dout(10) << " inode authpin by " << *r << " on " << *in << dendl;
 
 	// get/create slave mdrequest
-	MDRequest *mdr;
+	MDRequestRef mdr;
 	if (have_request(r->reqid))
 	  mdr = request_get(r->reqid);
 	else
@@ -8838,11 +8838,11 @@ int MDCache::get_num_client_requests()
 }
 
 /* This function takes over the reference to the passed Message */
-MDRequest *MDCache::request_start(MClientRequest *req)
+MDRequestRef MDCache::request_start(MClientRequest *req)
 {
   // did we win a forward race against a slave?
   if (active_requests.count(req->get_reqid())) {
-    MDRequest *mdr = active_requests[req->get_reqid()];
+    MDRequestRef mdr = active_requests[req->get_reqid()];
     if (mdr->is_slave()) {
       dout(10) << "request_start already had " << *mdr << ", waiting for finish" << dendl;
       mdr->more()->waiting_for_finish.push_back(new C_MDS_RetryMessage(mds, req));
@@ -8850,28 +8850,29 @@ MDRequest *MDCache::request_start(MClientRequest *req)
       dout(10) << "request_start already processing " << *mdr << ", dropping new msg" << dendl;
       req->put();
     }
-    return 0;
+    return MDRequestRef();
   }
 
   // register new client request
-  MDRequest *mdr = new MDRequest(req->get_reqid(), req->get_num_fwd(), req);
+  MDRequestRef mdr(new MDRequestImpl(req->get_reqid(),
+                                     req->get_num_fwd(), req));
   active_requests[req->get_reqid()] = mdr;
   dout(7) << "request_start " << *mdr << dendl;
   return mdr;
 }
 
-MDRequest *MDCache::request_start_slave(metareqid_t ri, __u32 attempt, int by)
+MDRequestRef MDCache::request_start_slave(metareqid_t ri, __u32 attempt, int by)
 {
-  MDRequest *mdr = new MDRequest(ri, attempt, by);
+  MDRequestRef mdr(new MDRequestImpl(ri, attempt, by));
   assert(active_requests.count(mdr->reqid) == 0);
   active_requests[mdr->reqid] = mdr;
   dout(7) << "request_start_slave " << *mdr << " by mds." << by << dendl;
   return mdr;
 }
 
-MDRequest *MDCache::request_start_internal(int op)
+MDRequestRef MDCache::request_start_internal(int op)
 {
-  MDRequest *mdr = new MDRequest;
+  MDRequestRef mdr(new MDRequestImpl);
   mdr->reqid.name = entity_name_t::MDS(mds->get_nodeid());
   mdr->reqid.tid = mds->issue_tid();
   mdr->internal_op = op;
@@ -8883,14 +8884,14 @@ MDRequest *MDCache::request_start_internal(int op)
 }
 
 
-MDRequest *MDCache::request_get(metareqid_t rid)
+MDRequestRef MDCache::request_get(metareqid_t rid)
 {
   assert(active_requests.count(rid));
   dout(7) << "request_get " << rid << " " << *active_requests[rid] << dendl;
-  return active_requests[rid];
+  return active_requests[rid].lock();
 }
 
-void MDCache::request_finish(MDRequest *mdr)
+void MDCache::request_finish(MDRequestRef mdr)
 {
   dout(7) << "request_finish " << *mdr << dendl;
 
@@ -9045,7 +9046,6 @@ void MDCache::request_cleanup(MDRequest *mdr)
 
   // remove from map
   active_requests.erase(mdr->reqid);
-  mdr->put();
 
   // fail-safe!
   if (was_replay && active_requests.empty()) {
@@ -11517,7 +11517,7 @@ void MDCache::fragment_frozen(dirfrag_t basedirfrag, int r)
 
   info.has_frozen = true;
 
-  MDRequest *mdr = request_start_internal(CEPH_MDS_OP_FRAGMENTDIR);
+  MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_FRAGMENTDIR);
   mdr->more()->fragment_base = basedirfrag;
   dispatch_fragment_dir(mdr);
 }
