@@ -118,7 +118,7 @@ Ceph configuration file, the default value will be set automatically.
 ``rgw op thread suicide timeout``
 	
 :Description: The time ``timeout`` in seconds before a Ceph Object Gateway 
-              process dies. Disbled if set to ``0``.
+              process dies. Disabled if set to ``0``.
 
 :Type: Integer 
 :Default: ``0``
