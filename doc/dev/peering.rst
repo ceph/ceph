@@ -35,7 +35,7 @@ Concepts
    to [3,1,2] and osd.3 becomes the primary.
 
 *current interval* or *past interval*
-   a sequence of osd map epochs during which the *acting set* and *up
+   a sequence of OSD map epochs during which the *acting set* and *up
    set* for particular PG do not change
 
 *primary*
@@ -95,7 +95,7 @@ Concepts
 *up_thru*
    before a primary can successfully complete the *peering* process,
    it must inform a monitor that is alive through the current
-   osd map epoch by having the monitor set its *up_thru* in the osd
+   OSD map epoch by having the monitor set its *up_thru* in the osd
    map.  This helps peering ignore previous *acting sets* for which
    peering never completed after certain sequences of failures, such as
    the second interval below:
@@ -135,7 +135,7 @@ process:
    of many placement groups.
 
    Before a primary successfully completes the *peering*
-   process, the osd map must reflect that the OSD was alive
+   process, the OSD map must reflect that the OSD was alive
    and well as of the first epoch in the *current interval*.
 
    Changes can only be made after successful *peering*.
@@ -157,11 +157,11 @@ The high level process is for the current PG primary to:
 
   2. generate a list of *past intervals* since *last epoch started*.
      Consider the subset of those for which *up_thru* was greater than
-     the first interval epoch by the last interval epoch's osd map; that is,
+     the first interval epoch by the last interval epoch's OSD map; that is,
      the subset for which *peering* could have completed before the *acting
      set* changed to another set of OSDs.
 
-     Successfull *peering* will require that we be able to contact at
+     Successful *peering* will require that we be able to contact at
      least one OSD from each of *past interval*'s *acting set*.
 
   3. ask every node in that list for its *PG info*, which includes the most
@@ -213,7 +213,7 @@ The high level process is for the current PG primary to:
 	my own (*authoritative history*) ... which may involve deciding
 	to delete divergent objects.
 
-     b) await acknowledgement that they have persisted the PG log entries.
+     b) await acknowledgment that they have persisted the PG log entries.
 
   9. at this point all OSDs in the *acting set* agree on all of the meta-data,
      and would (in any future *peering*) return identical accounts of all

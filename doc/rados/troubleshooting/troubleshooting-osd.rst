@@ -412,8 +412,8 @@ on the monitor, while marking themselves ``up``. We call this scenario
 If something is causing OSDs to 'flap' (repeatedly getting marked ``down`` and
 then ``up`` again), you can force the monitors to stop the flapping with::
 
-	ceph osd set noup      # prevent osds from getting marked up
-	ceph osd set nodown    # prevent osds from getting marked down
+	ceph osd set noup      # prevent OSDs from getting marked up
+	ceph osd set nodown    # prevent OSDs from getting marked down
 
 These flags are recorded in the osdmap structure::
 
@@ -426,9 +426,9 @@ You can clear the flags with::
 	ceph osd unset nodown
 
 Two other flags are supported, ``noin`` and ``noout``, which prevent
-booting OSDs from being marked ``in`` (allocated data) or down
-ceph-osds from eventually being marked ``out`` (regardless of what the
-current value for ``mon osd down out interval`` is).
+booting OSDs from being marked ``in`` (allocated data) or protect OSDs
+from eventually being marked ``out`` (regardless of what the current value for 
+``mon osd down out interval`` is).
 
 .. note:: ``noup``, ``noout``, and ``nodown`` are temporary in the
    sense that once the flags are cleared, the action they were blocking

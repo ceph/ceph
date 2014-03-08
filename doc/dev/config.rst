@@ -28,7 +28,7 @@ How do we find the configuration file? Well, in order, we check:
 Each stanza of the configuration file describes the key-value pairs that will be in
 effect for a particular subset of the daemons. The "global" stanza applies to
 everything. The "mon", "osd", and "mds" stanzas specify settings to take effect
-for all monitors, all osds, and all mds servers, respectively.  A stanza of the
+for all monitors, all OSDs, and all mds servers, respectively.  A stanza of the
 form mon.$name, osd.$name, or mds.$name gives settings for the monitor, OSD, or
 MDS of that name, respectively. Configuration values that appear later in the
 file win over earlier ones.
