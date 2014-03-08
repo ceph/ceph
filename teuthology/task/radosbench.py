@@ -75,8 +75,8 @@ def task(ctx, config):
     try:
         yield
     finally:
-        log.info('joining radosbench')
         timeout = config.get('time', 360) * 2
+        log.info('joining radosbench (timing out after %ss)', timeout)
         run.wait(radosbench.itervalues(), timeout=timeout)
 
         if pool is not 'data':
