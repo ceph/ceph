@@ -91,18 +91,18 @@ or delete them if they were just created. ::
 OSD Subsystem
 =============
 
-Query osd subsystem status. ::
+Query OSD subsystem status. ::
 
 	ceph osd stat
 
-Write a copy of the most recent osd map to a file. See
+Write a copy of the most recent OSD map to a file. See
 `osdmaptool`_. ::
 
 	ceph osd getmap -o file
 
 .. _osdmaptool: ../../man/8/osdmaptool
 
-Write a copy of the crush map from the most recent osd map to
+Write a copy of the crush map from the most recent OSD map to
 file. ::
 
 	ceph osd getcrushmap -o file
@@ -160,7 +160,7 @@ Remove the given OSD(s). ::
 
 	ceph osd rm [{id}...]
 
-Query the current max_osd parameter in the osd map. ::
+Query the current max_osd parameter in the OSD map. ::
 
 	ceph osd getmaxosd
 
@@ -269,11 +269,11 @@ Sends a scrub command to OSD ``{osd-num}``. To send the command to all OSDs, use
 
 	ceph osd scrub {osd-num}
 
-Sends a repair command to osdN. To send the command to all osds, use ``*``. ::
+Sends a repair command to OSD.N. To send the command to all OSDs, use ``*``. ::
 
 	ceph osd repair N
 
-Runs a simple throughput benchmark against osdN, writing ``TOTAL_BYTES``
+Runs a simple throughput benchmark against OSD.N, writing ``TOTAL_BYTES``
 in write requests of ``BYTES_PER_WRITE`` each. By default, the test
 writes 1 GB in total in 4-MB increments. ::
 
