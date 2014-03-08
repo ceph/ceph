@@ -71,7 +71,7 @@ Of particular interest::
 
 will dump information about current in-progress requests with the
 RADOS cluster.  This allows one to identify if any requests are blocked
-by a non-responsive ceph-osd.  For example, one might see::
+by a non-responsive OSD.  For example, one might see::
 
   { "ops": [
         { "tid": 1858,
