@@ -299,7 +299,7 @@ Displays the status of all metadata servers.
 
 	ceph mds fail 0
 
-Marks the active MDS as failed, triggering failover to a stadnby if present.
+Marks the active MDS as failed, triggering failover to a standby if present.
 
 .. todo:: ``ceph mds`` subcommands missing docs: set, dump, getmap, stop, setmap
 
