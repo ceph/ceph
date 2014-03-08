@@ -1354,8 +1354,6 @@ TEST_F(PGLogTest, proc_replica_log) {
 
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(omissing.have_missing());
-    EXPECT_EQ(olog.head, oinfo.last_update);
-    EXPECT_EQ(olog.head, oinfo.last_complete);
   }
 
  {
