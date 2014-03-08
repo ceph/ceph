@@ -203,7 +203,7 @@ data, but it is ``down``.  The full range of possible states include::
 
  * already probed
  * querying
- * osd is down
+ * OSD is down
  * not queried (yet)
 
 Sometimes it simply takes some time for the cluster to query possible
