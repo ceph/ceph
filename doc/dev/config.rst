@@ -51,7 +51,7 @@ A few additional special metavariables are also defined:
  - $name: expands to $type.$id
 
 
-Readin configuration values
+Reading configuration values
 ====================================================
 
 There are two ways for Ceph code to get configuration values. One way is to
