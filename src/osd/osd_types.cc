@@ -4280,6 +4280,7 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     case CEPH_OSD_OP_COPY_GET:
     case CEPH_OSD_OP_COPY_GET_CLASSIC:
       out << " max " << op.op.copy_get.max;
+      break;
     case CEPH_OSD_OP_COPY_FROM:
       out << " ver " << op.op.copy_from.src_version;
       break;
