@@ -122,6 +122,7 @@ public:
     snapid_t snap_seq;       ///< src's snap_seq (if head)
     librados::snap_set_t snapset; ///< src snapset (if head)
     bool mirror_snapset;
+    map<string, bufferlist> attrs; ///< src user attrs
     CopyResults() : object_size(0), started_temp_obj(false),
 		    user_version(0), should_requeue(false),
 		    mirror_snapset(false) {}
