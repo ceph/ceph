@@ -24,7 +24,7 @@ Unfortunately, the performance of debug logging is relatively low. This is
 because there is a single, process-wide mutex which every debug output
 statement takes, and every debug output statement leads to a write() system
 call or a call to syslog(). There is also a computational overhead to using C++
-streams to consider. So you will need to be parsimonius in your logging to get
+streams to consider. So you will need to be parsimonious in your logging to get
 the best performance.
 
 Sometimes, enabling logging can hide race conditions and other bugs by changing
@@ -35,7 +35,7 @@ Performance counters
 
 Ceph daemons use performance counters to track key statistics like number of
 inodes pinned. Performance counters are essentially sets of integers and floats
-which can be set, incremented, and read using the PerfCounters api.
+which can be set, incremented, and read using the PerfCounters API.
 
 A PerfCounters object is usually associated with a single subsystem.  It
 contains multiple counters. This object is thread-safe because it is protected
@@ -52,6 +52,6 @@ long-run average value.
 
 Performance counter information can be read in JSON format from the
 administrative socket (admin_sock). This is implemented as a UNIX domain
-socket. The Ceph peformance counter plugin for collectd shows an example of how
+socket. The Ceph performance counter plugin for collectd shows an example of how
 to access this information. Another example can be found in the unit tests for
 the administrative sockets.
