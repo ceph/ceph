@@ -4479,7 +4479,8 @@ inline int ReplicatedPG::_delete_head(OpContext *ctx, bool no_whiteout)
     } else {
       t->remove(soid);
     }
-    ctx->obc->attr_cache.clear();
+    map<string, bufferlist> new_attrs;
+    replace_cached_attrs(ctx, ctx->obc, new_attrs);
   } else {
     ctx->mod_desc.mark_unrollbackable();
     t->remove(soid);
