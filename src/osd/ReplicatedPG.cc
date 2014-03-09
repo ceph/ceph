@@ -5537,10 +5537,12 @@ void ReplicatedPG::_write_copy_chunk(CopyOpRef cop, PGBackend::PGTransaction *t)
     t->touch(cop->results.temp_oid);
     for (map<string,bufferlist>::iterator p = cop->attrs.begin();
 	 p != cop->attrs.end();
-	 ++p)
+	 ++p) {
+      cop->results.attrs[string("_") + p->first] = p->second;
       t->setattr(
 	cop->results.temp_oid,
 	string("_") + p->first, p->second);
+    }
     cop->attrs.clear();
   }
   if (!cop->temp_cursor.data_complete) {
@@ -5620,6 +5622,7 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
       }
     }
     ctx->mod_desc.create();
+    replace_cached_attrs(ctx, ctx->obc, cb->results->attrs);
   } else {
     if (obs.exists) {
       ctx->op_t->remove(obs.oi.soid);
