@@ -3050,8 +3050,8 @@ void Server::handle_client_file_setlock(MDRequest *mdr)
   set_lock.start = req->head.args.filelock_change.start;
   set_lock.length = req->head.args.filelock_change.length;
   set_lock.client = req->get_orig_source().num();
+  set_lock.owner = req->head.args.filelock_change.owner;
   set_lock.pid = req->head.args.filelock_change.pid;
-  set_lock.pid_namespace = req->head.args.filelock_change.pid_namespace;
   set_lock.type = req->head.args.filelock_change.type;
   bool will_wait = req->head.args.filelock_change.wait;
 
@@ -3141,8 +3141,8 @@ void Server::handle_client_file_readlock(MDRequest *mdr)
   checking_lock.start = req->head.args.filelock_change.start;
   checking_lock.length = req->head.args.filelock_change.length;
   checking_lock.client = req->get_orig_source().num();
+  checking_lock.owner = req->head.args.filelock_change.owner;
   checking_lock.pid = req->head.args.filelock_change.pid;
-  checking_lock.pid_namespace = req->head.args.filelock_change.pid_namespace;
   checking_lock.type = req->head.args.filelock_change.type;
 
   // get the appropriate lock state
