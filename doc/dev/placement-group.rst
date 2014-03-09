@@ -58,12 +58,12 @@ something like this in pseudocode::
 	locator = object_name
 	obj_hash = hash(locator)
 	pg = obj_hash % num_pg
-	osds_for_pg = crush(pg)  # returns a list of osds
+	OSDs_for_pg = crush(pg)  # returns a list of OSDs
 	primary = osds_for_pg[0]
 	replicas = osds_for_pg[1:]
 
 If you want to understand the crush() part in the above, imagine a
-perfectly spherical datacenter in a vacuum ;) that is, if all osds
+perfectly spherical datacenter in a vacuum ;) that is, if all OSDs
 have weight 1.0, and there is no topology to the data center (all OSDs
 are on the top level), and you use defaults, etc, it simplifies to
 consistent hashing; you can think of it as::
@@ -76,7 +76,7 @@ consistent hashing; you can think of it as::
 	       r = hash(pg)
 	       chosen = all_osds[ r % len(all_osds) ]
 	       if chosen in result:
-	           # osd can be picked only once
+	           # OSD can be picked only once
 	           continue
 	       result.append(chosen)
 	   return result

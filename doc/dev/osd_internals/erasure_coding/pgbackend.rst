@@ -12,7 +12,7 @@ coding as failure recovery mechanisms.
 
 Much of the existing PG logic, particularly that for dealing with
 peering, will be common to each.  With both schemes, a log of recent
-operations will be used to direct recovery in the event that an osd is
+operations will be used to direct recovery in the event that an OSD is
 down or disconnected for a brief period of time.  Similarly, in both
 cases it will be necessary to scan a recovered copy of the PG in order
 to recover an empty OSD.  The PGBackend abstraction must be
@@ -35,7 +35,7 @@ and erasure coding which PGBackend must abstract over:
    acting set positions.
 5. Selection of a pgtemp for backfill may differ between replicated
    and erasure coded backends.
-6. The set of necessary osds from a particular interval required to
+6. The set of necessary OSDs from a particular interval required to
    to continue peering may differ between replicated and erasure
    coded backends.
 7. The selection of the authoritative log may differ between replicated
@@ -115,7 +115,7 @@ the last interval which went active in order to minimize the number of
 divergent objects.
 
 The difficulty is that the current code assumes that as long as it has
-an info from at least 1 osd from the prior interval, it can complete
+an info from at least 1 OSD from the prior interval, it can complete
 peering.  In order to ensure that we do not end up with an
 unrecoverably divergent object, a K+M erasure coded PG must hear from at
 least K of the replicas of the last interval to serve writes.  This ensures
@@ -140,8 +140,8 @@ PGBackend interfaces:
 PGTemp
 ------
 
-Currently, an osd is able to request a temp acting set mapping in
-order to allow an up-to-date osd to serve requests while a new primary
+Currently, an OSD is able to request a temp acting set mapping in
+order to allow an up-to-date OSD to serve requests while a new primary
 is backfilled (and for other reasons).  An erasure coded pg needs to
 be able to designate a primary for these reasons without putting it
 in the first position of the acting set.  It also needs to be able
@@ -161,7 +161,7 @@ Client Reads
 ------------
 
 Reads with the replicated strategy can always be satisfied
-synchronously out of the primary osd.  With an erasure coded strategy,
+synchronously out of the primary OSD.  With an erasure coded strategy,
 the primary will need to request data from some number of replicas in
 order to satisfy a read.  The perform_read() interface for PGBackend
 therefore will be async.
@@ -179,7 +179,7 @@ With the replicated strategy, all replicas of a PG are
 interchangeable.  With erasure coding, different positions in the
 acting set have different pieces of the erasure coding scheme and are
 not interchangeable.  Worse, crush might cause chunk 2 to be written
-to an osd which happens already to contain an (old) copy of chunk 4.
+to an OSD which happens already to contain an (old) copy of chunk 4.
 This means that the OSD and PG messages need to work in terms of a
 type like pair<shard_t, pg_t> in order to distinguish different pg
 chunks on a single OSD.
@@ -293,7 +293,7 @@ Backfill
 See `Issue #5856`_. For the most part, backfill itself should behave similarly between
 replicated and erasure coded pools with a few exceptions:
 
-1. We probably want to be able to backfill multiple osds concurrently
+1. We probably want to be able to backfill multiple OSDs concurrently
    with an erasure coded pool in order to cut down on the read
    overhead.
 2. We probably want to avoid having to place the backfill peers in the
@@ -302,7 +302,7 @@ replicated and erasure coded pools with a few exceptions:
 
 For 2, we don't really need to place the backfill peer in the acting
 set for replicated PGs anyway.
-For 1, PGBackend::choose_backfill() should determine which osds are
+For 1, PGBackend::choose_backfill() should determine which OSDs are
 backfilled in a particular interval.
 
 Core changes:
@@ -315,7 +315,7 @@ Core changes:
 
 PGBackend interfaces:
 
-- choose_backfill(): allows the implementation to determine which osds
+- choose_backfill(): allows the implementation to determine which OSDs
   should be backfilled in a particular interval.
 
 .. _Issue #5856: http://tracker.ceph.com/issues/5856
