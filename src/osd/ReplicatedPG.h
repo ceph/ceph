@@ -1323,6 +1323,10 @@ public:
   void on_shutdown();
 
   // attr cache handling
+  void replace_cached_attrs(
+    OpContext *ctx,
+    ObjectContextRef obc,
+    const map<string, bufferlist> &new_attrs);
   void setattr_maybe_cache(
     ObjectContextRef obc,
     OpContext *op,

@@ -4587,7 +4587,7 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 	    t->remove(soid);
 	  }
 	}
-	ctx->obc->attr_cache = rollback_to->attr_cache;
+	replace_cached_attrs(ctx, ctx->obc, rollback_to->attr_cache);
       } else {
 	if (obs.exists) {
 	  ctx->mod_desc.mark_unrollbackable();
@@ -11344,6 +11344,24 @@ boost::statechart::result ReplicatedPG::WaitingOnReplicas::react(const SnapTrim&
   // Back to the start
   post_event(SnapTrim());
   return transit< NotTrimming >();
+}
+
+void ReplicatedPG::replace_cached_attrs(
+  OpContext *ctx,
+  ObjectContextRef obc,
+  const map<string, bufferlist> &new_attrs)
+{
+  ctx->pending_attrs[obc].clear();
+  for (map<string, bufferlist>::iterator i = obc->attr_cache.begin();
+       i != obc->attr_cache.end();
+       ++i) {
+    ctx->pending_attrs[obc][i->first] = boost::optional<bufferlist>();
+  }
+  for (map<string, bufferlist>::const_iterator i = new_attrs.begin();
+       i != new_attrs.end();
+       ++i) {
+    ctx->pending_attrs[obc][i->first] = i->second;
+  }
 }
 
 void ReplicatedPG::setattr_maybe_cache(
