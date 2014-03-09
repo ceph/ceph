@@ -477,14 +477,18 @@ public:
 	     pending_attrs.begin();
 	   i != pending_attrs.end();
 	   ++i) {
-	for (map<string, boost::optional<bufferlist> >::iterator j =
-	       i->second.begin();
-	     j != i->second.end();
-	     ++j) {
-	  if (j->second)
-	    i->first->attr_cache[j->first] = j->second.get();
-	  else
-	    i->first->attr_cache.erase(j->first);
+	if (i->first->obs.exists) {
+	  for (map<string, boost::optional<bufferlist> >::iterator j =
+		 i->second.begin();
+	       j != i->second.end();
+	       ++j) {
+	    if (j->second)
+	      i->first->attr_cache[j->first] = j->second.get();
+	    else
+	      i->first->attr_cache.erase(j->first);
+	  }
+	} else {
+	  i->first->attr_cache.clear();
 	}
       }
       pending_attrs.clear();
