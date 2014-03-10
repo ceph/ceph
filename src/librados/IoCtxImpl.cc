@@ -26,8 +26,8 @@
 #define dout_prefix *_dout << "librados: "
 
 librados::IoCtxImpl::IoCtxImpl() :
-  ref_cnt(0), client(NULL), poolid(0), assert_ver(0), notify_timeout(30),
-  aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"),
+  ref_cnt(0), client(NULL), poolid(0), assert_ver(0), last_objver(0),
+  notify_timeout(30), aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"),
   aio_write_seq(0), lock(NULL), objecter(NULL)
 {
 }
