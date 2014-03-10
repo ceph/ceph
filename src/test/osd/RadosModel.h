@@ -1397,7 +1397,8 @@ public:
 	     TestOpStat *stat)
     : TestOp(n, context, stat),
       oid(oid), oid_src(oid_src),
-      comp(NULL), done(0), version(0), r(0)
+      comp(NULL), snap(-1), done(0), 
+      version(0), r(0)
   {}
 
   void _begin()
