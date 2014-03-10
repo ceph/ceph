@@ -1270,11 +1270,13 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id)
   boost::scoped_ptr<PGBackend::IsRecoverablePredicate> recoverable_predicate(
     get_pgbackend()->get_is_recoverable_predicate());
   set<pg_shard_t> have;
-  for (int i = 0; i < (int)want.size(); ++i)
-    have.insert(
-      pg_shard_t(
-	want[i],
-	pool.info.ec_pool() ? i : ghobject_t::NO_SHARD));
+  for (int i = 0; i < (int)want.size(); ++i) {
+    if (want[i] != CRUSH_ITEM_NONE)
+      have.insert(
+	pg_shard_t(
+	  want[i],
+	  pool.info.ec_pool() ? i : ghobject_t::NO_SHARD));
+  }
   if (!(*recoverable_predicate)(have)) {
     want_acting.clear();
     return false;
