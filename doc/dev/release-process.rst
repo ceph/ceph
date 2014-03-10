@@ -91,7 +91,7 @@ script, then rsyncs the results back tot the specified release directory.::
 7. Create RPM Repo
 ==================
 
-Copy the rpms to the destination repo
+Copy the rpms to the destination repo::
 
        mkdir /tmp/rpm-repo
        ../ceph-build/push_to_rpm_repo.sh /tmp/release /tmp/rpm-repo 0.xx
@@ -99,7 +99,7 @@ Copy the rpms to the destination repo
 Next add any additional rpms to the repo that are needed such as leveldb and
 and ceph-deploy.  See RPM Backports section
 
-Finally, sign the rpms and build the repo indexes
+Finally, sign the rpms and build the repo indexes::
 
   ../ceph-build/sign_and_index_rpm_repo.sh /tmp/release /tmp/rpm-repo 0.xx
 
@@ -147,7 +147,7 @@ Point release
 -------------
 
 For point releases just push the version number update to the
-branch and the new tag:
+branch and the new tag::
 
     git push origin {codename}
     git push origin v0.xx
