@@ -228,8 +228,8 @@ Ceph documentation commits are simple, but follow a strict convention:
 - The comment summary MUST be one line only. (strict)
 - Additional comments MAY follow a blank line after the summary, 
   but should be terse.
-- A commit MAY include ``fixes: #{bug number}``.
-- Commits MUST include ``signed-off-by: Firstname Lastname <email>``. (strict)
+- A commit MAY include ``Fixes: #{bug number}``.
+- Commits MUST include ``Signed-off-by: Firstname Lastname <email>``. (strict)
 
 .. tip:: Follow the foregoing convention particularly where it says 
    ``(strict)`` or you will be asked to modify your commit to comply with 
@@ -239,16 +239,16 @@ The following is a common commit comment (preferred)::
 
 	doc: Fixes a spelling error and a broken hyperlink.
 	
-	signed-off-by: John Doe <john.doe@gmail.com>
+	Signed-off-by: John Doe <john.doe@gmail.com>
 
 
 The following comment includes a reference to a bug. :: 
 
 	doc: Fixes a spelling error and a broken hyperlink.
 
-	fixes: #1234
+	Fixes: #1234
 	
-	signed-off-by: John Doe <john.doe@gmail.com>
+	Signed-off-by: John Doe <john.doe@gmail.com>
 
 
 The following comment includes a terse sentence following the comment summary.
@@ -259,7 +259,7 @@ There is a carriage return between the summary line and the description::
 	Describes 'mon setting', which is a new setting added
 	to config_opts.h.
 	
-	signed-off-by: John Doe <john.doe@gmail.com>
+	Signed-off-by: John Doe <john.doe@gmail.com>
 
 
 To commit changes, execute the following:: 
