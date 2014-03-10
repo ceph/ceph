@@ -52,6 +52,22 @@ def get_cluster_creation_date():
 
   return mo.group(2)
 
+def bytes_pretty_to_raw(byte_count, byte_scale):
+  if byte_scale == 'kB':
+    return byte_count >> 10
+  if byte_scale == 'MB':
+    return byte_count >> 20
+  if byte_scale == 'GB':
+    return byte_count >> 30
+  if byte_scale == 'TB':
+    return byte_count >> 40
+  if byte_scale == 'PB':
+    return byte_count >> 50
+  if byte_scale == 'EB':
+    return byte_count >> 60
+  
+  return byte_count
+
 def get_nums():
   (rc, o, e) = run_command(['ceph', '-s'])
   if rc is not 0:
@@ -87,7 +103,7 @@ def get_nums():
   else:
     num_pgs = int(mo.group(1))
     num_pools = int(mo.group(2))
-    byte_count = mo.group(3)
+    byte_count = int(mo.group(3))
     byte_scale = mo.group(4)
     num_objs = int(mo.group(5))
   nums = {'num_mons':num_mons,
@@ -95,7 +111,7 @@ def get_nums():
           'num_mdss':num_mdss,
           'num_pgs':num_pgs,
           'num_pools':num_pools,
-          'num_bytes': byte_count + " " + byte_scale,
+          'num_bytes': bytes_pretty_to_raw(byte_count, byte_scale),
           'num_objects':num_objs}
   return nums
 
