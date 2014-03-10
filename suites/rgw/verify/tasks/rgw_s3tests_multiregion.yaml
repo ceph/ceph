@@ -38,8 +38,8 @@ tasks:
       valgrind: [--tool=memcheck]
       system user:
         name: client0-system-user
-        access key: 0te6NH5mcdcq0Tc5i8i2
-        secret key: Oy4IOauQoL18Gp2zM7lC1vLmoawgqcYPbYGcWfXv
+        access key: 1te6NH5mcdcq0Tc5i8i2
+        secret key: 1y4IOauQoL18Gp2zM7lC1vLmoawgqcYPbYGcWfXv
     client.1:
       valgrind: [--tool=memcheck]
       system user:
