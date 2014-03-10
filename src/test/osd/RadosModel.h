@@ -1304,8 +1304,8 @@ public:
 	     const string &_oid,
 	     TestOpStat *stat = 0)
     : TestOp(n, context, stat),
-      oid(_oid),
-      roll_back_to(-1), done(false)
+      oid(_oid), roll_back_to(-1), 
+      done(false), comp(NULL)
   {}
 
   void _begin()
