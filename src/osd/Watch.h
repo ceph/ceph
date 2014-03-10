@@ -167,7 +167,7 @@ class Watch {
     ReplicatedPG *pg, OSDService *osd,
     ceph::shared_ptr<ObjectContext> obc, uint32_t timeout,
     uint64_t cookie, entity_name_t entity,
-    entity_addr_t addr);
+    const entity_addr_t& addr);
 
   /// Registers the timeout callback with watch_timer
   void register_cb();
@@ -187,7 +187,7 @@ public:
   string gen_dbg_prefix();
   static WatchRef makeWatchRef(
     ReplicatedPG *pg, OSDService *osd,
-    ceph::shared_ptr<ObjectContext> obc, uint32_t timeout, uint64_t cookie, entity_name_t entity, entity_addr_t addr);
+    ceph::shared_ptr<ObjectContext> obc, uint32_t timeout, uint64_t cookie, entity_name_t entity, const entity_addr_t &addr);
   void set_self(WatchRef _self) {
     self = _self;
   }
