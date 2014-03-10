@@ -8894,7 +8894,7 @@ MDRequestRef MDCache::request_get(metareqid_t rid)
   return active_requests[rid].lock();
 }
 
-void MDCache::request_finish(MDRequestRef mdr)
+void MDCache::request_finish(MDRequestRef& mdr)
 {
   dout(7) << "request_finish " << *mdr << dendl;
 

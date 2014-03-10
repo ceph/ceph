@@ -169,7 +169,7 @@ void Locker::include_snap_rdlocks_wlayout(set<SimpleLock*>& rdlocks, CInode *in,
 
 /* If this function returns false, the mdr has been placed
  * on the appropriate wait list */
-bool Locker::acquire_locks(MDRequest *mdr,
+bool Locker::acquire_locks(MDRequestRef& mdr,
 			   set<SimpleLock*> &rdlocks,
 			   set<SimpleLock*> &wrlocks,
 			   set<SimpleLock*> &xlocks,
@@ -1149,7 +1149,7 @@ bool Locker::rdlock_try(SimpleLock *lock, client_t client, Context *con)
   return false;
 }
 
-bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mut, bool as_anon)
+bool Locker::rdlock_start(SimpleLock *lock, MDRequestRef& mut, bool as_anon)
 {
   dout(7) << "rdlock_start  on " << *lock << " on " << *lock->get_parent() << dendl;  
 
@@ -1287,7 +1287,7 @@ void Locker::wrlock_force(SimpleLock *lock, Mutation *mut)
   mut->locks.insert(lock);
 }
 
-bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
+bool Locker::wrlock_start(SimpleLock *lock, MDRequestRef& mut, bool nowait)
 {
   if (lock->get_type() == CEPH_LOCK_IVERSION ||
       lock->get_type() == CEPH_LOCK_DVERSION)
@@ -1376,7 +1376,7 @@ void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
 
 // remote wrlock
 
-void Locker::remote_wrlock_start(SimpleLock *lock, int target, MDRequest *mut)
+void Locker::remote_wrlock_start(SimpleLock *lock, int target, MDRequestRef& mut)
 {
   dout(7) << "remote_wrlock_start mds." << target << " on " << *lock << " on " << *lock->get_parent() << dendl;
 
@@ -1423,7 +1423,7 @@ void Locker::remote_wrlock_finish(SimpleLock *lock, int target, Mutation *mut)
 // ------------------
 // xlock
 
-bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
+bool Locker::xlock_start(SimpleLock *lock, MDRequestRef& mut)
 {
   if (lock->get_type() == CEPH_LOCK_IVERSION ||
       lock->get_type() == CEPH_LOCK_DVERSION)
@@ -2542,7 +2542,7 @@ public:
   }
 };
 
-void Locker::process_request_cap_release(MDRequest *mdr, client_t client, const ceph_mds_request_release& item,
+void Locker::process_request_cap_release(MDRequestRef& mdr, client_t client, const ceph_mds_request_release& item,
 					 const string &dname)
 {
   inodeno_t ino = (uint64_t)item.ino;
@@ -2652,7 +2652,7 @@ void Locker::kick_issue_caps(CInode *in, client_t client, ceph_seq_t seq)
   issue_caps(in, cap);
 }
 
-void Locker::kick_cap_releases(MDRequest *mdr)
+void Locker::kick_cap_releases(MDRequestRef& mdr)
 {
   client_t client = mdr->get_client();
   for (map<vinodeno_t,ceph_seq_t>::iterator p = mdr->cap_releases.begin();
@@ -4161,7 +4161,7 @@ void Locker::local_wrlock_grab(LocalLock *lock, Mutation *mut)
   mut->locks.insert(lock);
 }
 
-bool Locker::local_wrlock_start(LocalLock *lock, MDRequest *mut)
+bool Locker::local_wrlock_start(LocalLock *lock, MDRequestRef& mut)
 {
   dout(7) << "local_wrlock_start  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
@@ -4193,7 +4193,7 @@ void Locker::local_wrlock_finish(LocalLock *lock, Mutation *mut)
   }
 }
 
-bool Locker::local_xlock_start(LocalLock *lock, MDRequest *mut)
+bool Locker::local_xlock_start(LocalLock *lock, MDRequestRef& mut)
 {
   dout(7) << "local_xlock_start  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
