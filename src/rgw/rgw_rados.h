@@ -918,7 +918,7 @@ struct RGWRegion {
   CephContext *cct;
   RGWRados *store;
 
-  RGWRegion() : is_master(false) {}
+  RGWRegion() : is_master(false), cct(NULL), store(NULL) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
