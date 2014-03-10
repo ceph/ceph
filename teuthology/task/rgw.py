@@ -419,7 +419,7 @@ def fill_in_endpoints(region_info, role_zones, role_endpoints):
         region_conf['zones'].append(zone_payload)
 
 @contextlib.contextmanager
-def configure_users(ctx, config):
+def configure_users(ctx, config, everywhere=False):
     """
     Create users by remotely running rgwadmin commands using extracted
     user information.
@@ -431,14 +431,21 @@ def configure_users(ctx, config):
         if not c_config:
             continue
         user_info = extract_user_info(c_config)
+        if not user_info:
+            continue
 
-        # if user_info was successfully parsed, use it to create a user
-        if user_info is not None:
+        # For data sync the master zones and regions must have the
+        # system users of the secondary zones. To keep this simple,
+        # just create the system users on every client if regions are
+        # configured.
+        clients_to_create_as = [client]
+        if everywhere:
+            clients_to_create_as = config.keys()
+        for client_name in clients_to_create_as:
             log.debug('Creating user {user} on {client}'.format(
                       user=user_info['system_key']['user'],client=client))
-            rgwadmin(ctx, client,
+            rgwadmin(ctx, client_name,
                     cmd=[
-                        '-n', client,
                         'user', 'create',
                         '--uid', user_info['system_key']['user'],
                         '--access-key', user_info['system_key']['access_key'],
@@ -665,6 +672,7 @@ def task(ctx, config):
         lambda: configure_users(
             ctx=ctx,
             config=config,
+            everywhere=bool(regions),
             ),
         lambda: ship_config(ctx=ctx, config=config,
                             role_endpoints=role_endpoints),
