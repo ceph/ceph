@@ -405,12 +405,12 @@ To upgrade a Ceph OSD Daemon, perform the following steps:
    manually. For Debian/Ubuntu hosts, perform the following steps on each
    host. :: 
 
-	ssh {mon-host}
+	ssh {osd-host}
 	sudo apt-get update && sudo apt-get install ceph
 
    For CentOS/Red Hat hosts, perform the following steps::
 
-	ssh {mon-host}
+	ssh {osd-host}
 	sudo yum update && sudo yum install ceph
 
 
