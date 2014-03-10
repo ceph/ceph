@@ -68,6 +68,7 @@ class ESubtreeMap;
 
 struct Mutation;
 struct MDRequestImpl;
+typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
 struct MDSlaveUpdate;
 
 
@@ -251,17 +252,17 @@ public:
   bool have_request(metareqid_t rid) {
     return active_requests.count(rid);
   }
-  MDRequest* request_get(metareqid_t rid);
-  void request_pin_ref(MDRequest *r, CInode *ref, vector<CDentry*>& trace);
-  void request_finish(MDRequest *mdr);
-  void request_forward(MDRequest *mdr, int mds, int port=0);
-  void dispatch_request(MDRequest *mdr);
-  void request_drop_foreign_locks(MDRequest *mdr);
-  void request_drop_non_rdlocks(MDRequest *r);
-  void request_drop_locks(MDRequest *r);
-  void request_cleanup(MDRequest *r);
+  MDRequestRef request_get(metareqid_t rid);
+  void request_pin_ref(MDRequestRef& r, CInode *ref, vector<CDentry*>& trace);
+  void request_finish(MDRequestRef& mdr);
+  void request_forward(MDRequestRef& mdr, int mds, int port=0);
+  void dispatch_request(MDRequestRef& mdr);
+  void request_drop_foreign_locks(MDRequestRef& mdr);
+  void request_drop_non_rdlocks(MDRequestRef& r);
+  void request_drop_locks(MDRequestRef& r);
+  void request_cleanup(MDRequestRef& r);
   
-  void request_kill(MDRequest *r);  // called when session closes
+  void request_kill(MDRequestRef& r);  // called when session closes
 
   // journal/snap helpers
   CInode *pick_inode_snap(CInode *in, snapid_t follows);
@@ -730,7 +731,7 @@ public:
   void open_foreign_mdsdir(inodeno_t ino, Context *c);
   CDentry *get_or_create_stray_dentry(CInode *in);
 
-  Context *_get_waiter(MDRequest *mdr, Message *req, Context *fin);
+  Context *_get_waiter(MDRequestRef& mdr, Message *req, Context *fin);
 
   /**
    * Find the given dentry (and whether it exists or not), its ancestors,
@@ -766,7 +767,7 @@ public:
    * If it returns 2 the request has been forwarded, and again the requester
    * should unwind itself and back out.
    */
-  int path_traverse(MDRequest *mdr, Message *req, Context *fin, const filepath& path,
+  int path_traverse(MDRequestRef& mdr, Message *req, Context *fin, const filepath& path,
 		    vector<CDentry*> *pdnvec, CInode **pin, int onfail);
   bool path_is_mine(filepath& path);
   bool path_is_mine(string& p) {
@@ -777,7 +778,7 @@ public:
   CInode *cache_traverse(const filepath& path);
 
   void open_remote_dirfrag(CInode *diri, frag_t fg, Context *fin);
-  CInode *get_dentry_inode(CDentry *dn, MDRequest *mdr, bool projected=false);
+  CInode *get_dentry_inode(CDentry *dn, MDRequestRef& mdr, bool projected=false);
   void open_remote_ino(inodeno_t ino, Context *fin, bool want_xlocked=false,
 		       inodeno_t hadino=0, version_t hadv=0);
   void open_remote_ino_2(inodeno_t ino,
@@ -861,9 +862,9 @@ public:
 
   // -- anchors --
 public:
-  void anchor_create_prep_locks(MDRequest *mdr, CInode *in, set<SimpleLock*>& rdlocks,
+  void anchor_create_prep_locks(MDRequestRef& mdr, CInode *in, set<SimpleLock*>& rdlocks,
 				set<SimpleLock*>& xlocks);
-  void anchor_create(MDRequest *mdr, CInode *in, Context *onfinish);
+  void anchor_create(MDRequestRef& mdr, CInode *in, Context *onfinish);
   void anchor_destroy(CInode *in, Context *onfinish);
 protected:
   void _anchor_prepared(CInode *in, version_t atid, bool add);
@@ -873,8 +874,8 @@ protected:
 
   // -- snaprealms --
 public:
-  void snaprealm_create(MDRequest *mdr, CInode *in);
-  void _snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in);
+  void snaprealm_create(MDRequestRef& mdr, CInode *in);
+  void _snaprealm_create_finish(MDRequestRef& mdr, Mutation *mut, CInode *in);
 
   // -- stray --
 public:
@@ -946,7 +947,7 @@ public:
   // -- namespace --
 public:
   void send_dentry_link(CDentry *dn);
-  void send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequest *mdr);
+  void send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& mdr);
 protected:
   void handle_dentry_link(MDentryLink *m);
   void handle_dentry_unlink(MDentryUnlink *m);
@@ -969,7 +970,7 @@ private:
     int bits;
     list<CDir*> dirs;
     list<CDir*> resultfrags;
-    MDRequest *mdr;
+    MDRequestRef mdr;
     // for deadlock detection
     bool has_frozen;
     utime_t last_cum_auth_pins_change;
@@ -995,9 +996,9 @@ private:
   void fragment_mark_and_complete(list<CDir*>& dirs);
   void fragment_frozen(dirfrag_t basedirfrag, int r);
   void fragment_unmark_unfreeze_dirs(list<CDir*>& dirs);
-  void dispatch_fragment_dir(MDRequest *mdr);
-  void _fragment_logged(MDRequest *mdr);
-  void _fragment_stored(MDRequest *mdr);
+  void dispatch_fragment_dir(MDRequestRef& mdr);
+  void _fragment_logged(MDRequestRef& mdr);
+  void _fragment_stored(MDRequestRef& mdr);
   void _fragment_committed(dirfrag_t f, list<CDir*>& resultfrags);
   void _fragment_finish(dirfrag_t f, list<CDir*>& resultfrags);
 
@@ -1060,9 +1061,9 @@ public:
 
 class C_MDS_RetryRequest : public Context {
   MDCache *cache;
-  MDRequest *mdr;
+  MDRequestRef mdr;
  public:
-  C_MDS_RetryRequest(MDCache *c, MDRequest *r);
+  C_MDS_RetryRequest(MDCache *c, MDRequestRef& r);
   virtual void finish(int r);
 };
 
