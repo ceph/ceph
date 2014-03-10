@@ -3034,6 +3034,10 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_ruleset,
   pi->auid = auid;
   pi->properties = properties_map;
   pi->stripe_width = stripe_width;
+  pi->cache_target_dirty_ratio_micro =
+    g_conf->osd_pool_default_cache_target_dirty_ratio * 1000000;
+  pi->cache_target_full_ratio_micro =
+    g_conf->osd_pool_default_cache_target_full_ratio * 1000000;
   pending_inc.new_pool_names[pool] = name;
   return 0;
 }
