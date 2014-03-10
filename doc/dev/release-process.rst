@@ -171,27 +171,3 @@ Similarly, for a development release, for both ``teuthology.git`` and ``ceph-qa-
     git branch -f last origin/next
     git push -f origin last
     git push -f origin master:next
-
-Stable release
---------------
-
-Also, for ``ceph.git``:
-
-Just push the new tag::
-
-	git push origin v0.xx
-
-=============================
-  Ceph-deploy Release Process
-=============================
-
-1. Build environment
-====================
-
-=============================
-  Backports
-=============================
-
-1. Build environment
-====================
-
