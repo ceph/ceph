@@ -445,6 +445,15 @@ def task(ctx, config):
             dest_k = dest_connection.get_bucket(bucket_name + 'data').get_key('tiny_file')
             assert k.get_contents_as_string() == dest_k.get_contents_as_string()
 
+            # check that deleting it removes it from the dest zone
+            k.delete()
+            time.sleep(rgw_utils.radosgw_data_log_window(ctx, source_client))
+            rgw_utils.radosgw_agent_sync_all(ctx, data=True)
+
+            dest_bucket = dest_connection.get_bucket(bucket_name + 'data')
+            dest_k = dest_bucket.get_key('tiny_file')
+            assert dest_k == None, 'object not deleted from destination zone'
+
         # finally we delete the bucket
         bucket.delete()
 
