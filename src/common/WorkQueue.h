@@ -41,13 +41,13 @@ public:
     heartbeat_handle_d *hb;
     time_t grace;
     time_t suicide_grace;
+  public:
     TPHandle(
       CephContext *cct,
       heartbeat_handle_d *hb,
       time_t grace,
       time_t suicide_grace)
       : cct(cct), hb(hb), grace(grace), suicide_grace(suicide_grace) {}
-  public:
     void reset_tp_timeout();
     void suspend_tp_timeout();
   };
