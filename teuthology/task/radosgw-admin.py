@@ -426,23 +426,24 @@ def task(ctx, config):
 
         # Create a tiny file and check if in sync
         for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
-           source_client = c_config['src']
-           dest_client = c_config['dest']
-           k = boto.s3.key.Key(bucket)
-           k.Key = 'tiny_file'
-           k.set_contents_from_string("123456789")
-           rgw_utils.radosgw_agent_sync_all(ctx, data=True)
-           (dest_host, dest_port) = ctx.rgw.role_endpoints[dest_client]
-           dest_connection = boto.s3.connection.S3Connection(
-             aws_access_key_id=access_key,
-             aws_secret_access_key=secret_key,
-             is_secure=False,
-             port=dest_port,
-             host=dest_host,
-             calling_format=boto.s3.connection.OrdinaryCallingFormat(),
-             )
-           dest_k = dest_connection.get_bucket(bucket_name + 'data').lookup('tiny_file')
-           assert k.get_contents() == dest_k.get_contents()
+            source_client = c_config['src']
+            dest_client = c_config['dest']
+            k = boto.s3.key.Key(bucket)
+            k.key = 'tiny_file'
+            k.set_contents_from_string("123456789")
+            time.sleep(rgw_utils.radosgw_data_log_window(ctx, source_client))
+            rgw_utils.radosgw_agent_sync_all(ctx, data=True)
+            (dest_host, dest_port) = ctx.rgw.role_endpoints[dest_client]
+            dest_connection = boto.s3.connection.S3Connection(
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                is_secure=False,
+                port=dest_port,
+                host=dest_host,
+                calling_format=boto.s3.connection.OrdinaryCallingFormat(),
+                )
+            dest_k = dest_connection.get_bucket(bucket_name + 'data').get_key('tiny_file')
+            assert k.get_contents_as_string() == dest_k.get_contents_as_string()
 
         # finally we delete the bucket
         bucket.delete()
