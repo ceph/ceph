@@ -123,8 +123,8 @@ public:
     librados::snap_set_t snapset; ///< src snapset (if head)
     bool mirror_snapset;
     CopyResults() : object_size(0), started_temp_obj(false),
-		    user_version(0), should_requeue(false),
-		    mirror_snapset(false) {}
+		    final_tx(NULL), user_version(0), 
+		    should_requeue(false), mirror_snapset(false) {}
   };
 
   struct CopyOp {
