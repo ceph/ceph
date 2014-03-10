@@ -111,6 +111,11 @@ def region_for_client(ctx, client):
     ceph_config.update(ctx.ceph.conf.get(client, {}))
     return ceph_config.get('rgw region')
 
+def radosgw_data_log_window(ctx, client):
+    ceph_config = ctx.ceph.conf.get('global', {})
+    ceph_config.update(ctx.ceph.conf.get('client', {}))
+    ceph_config.update(ctx.ceph.conf.get(client, {}))
+    return ceph_config.get('rgw data log window', 30)
 
 def radosgw_agent_sync_data(ctx, agent_host, agent_port, full=False):
     log.info('sync agent {h}:{p}'.format(h=agent_host, p=agent_port))
