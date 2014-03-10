@@ -3085,7 +3085,7 @@ struct watch_item_t {
 
   watch_item_t() : cookie(0), timeout_seconds(0) { }
   watch_item_t(entity_name_t name, uint64_t cookie, uint32_t timeout,
-     entity_addr_t addr)
+     const entity_addr_t& addr)
     : name(name), cookie(cookie), timeout_seconds(timeout),
     addr(addr) { }
 
