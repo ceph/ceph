@@ -84,7 +84,7 @@ public:
   void include_snap_rdlocks_wlayout(set<SimpleLock*>& rdlocks, CInode *in,
                                     ceph_file_layout **layout);
 
-  bool acquire_locks(MDRequest *mdr,
+  bool acquire_locks(MDRequestRef& mdr,
 		     set<SimpleLock*> &rdlocks,
 		     set<SimpleLock*> &wrlocks,
 		     set<SimpleLock*> &xlocks,
@@ -129,20 +129,20 @@ public:
 
   bool _rdlock_kick(SimpleLock *lock, bool as_anon);
   bool rdlock_try(SimpleLock *lock, client_t client, Context *c);
-  bool rdlock_start(SimpleLock *lock, MDRequest *mut, bool as_anon=false);
+  bool rdlock_start(SimpleLock *lock, MDRequestRef& mut, bool as_anon=false);
   void rdlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue);
   bool can_rdlock_set(set<SimpleLock*>& locks);
   bool rdlock_try_set(set<SimpleLock*>& locks);
   void rdlock_take_set(set<SimpleLock*>& locks, Mutation *mut);
 
   void wrlock_force(SimpleLock *lock, Mutation *mut);
-  bool wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait=false);
+  bool wrlock_start(SimpleLock *lock, MDRequestRef& mut, bool nowait=false);
   void wrlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue);
 
-  void remote_wrlock_start(SimpleLock *lock, int target, MDRequest *mut);
+  void remote_wrlock_start(SimpleLock *lock, int target, MDRequestRef& mut);
   void remote_wrlock_finish(SimpleLock *lock, int target, Mutation *mut);
 
-  bool xlock_start(SimpleLock *lock, MDRequest *mut);
+  bool xlock_start(SimpleLock *lock, MDRequestRef& mut);
   void _finish_xlock(SimpleLock *lock, client_t xlocker, bool *pneed_issue);
   void xlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue);
 
@@ -209,10 +209,10 @@ public:
   // process_request_cap_release to preserve ordering.
   bool should_defer_client_cap_frozen(CInode *in);
 
-  void process_request_cap_release(MDRequest *mdr, client_t client, const ceph_mds_request_release& r,
+  void process_request_cap_release(MDRequestRef& mdr, client_t client, const ceph_mds_request_release& r,
 				   const string &dname);
 
-  void kick_cap_releases(MDRequest *mdr);
+  void kick_cap_releases(MDRequestRef& mdr);
   void kick_issue_caps(CInode *in, client_t client, ceph_seq_t seq);
 
   void remove_client_cap(CInode *in, client_t client);
@@ -233,9 +233,9 @@ public:
 public:
   void local_wrlock_grab(LocalLock *lock, Mutation *mut);
 protected:
-  bool local_wrlock_start(LocalLock *lock, MDRequest *mut);
+  bool local_wrlock_start(LocalLock *lock, MDRequestRef& mut);
   void local_wrlock_finish(LocalLock *lock, Mutation *mut);
-  bool local_xlock_start(LocalLock *lock, MDRequest *mut);
+  bool local_xlock_start(LocalLock *lock, MDRequestRef& mut);
   void local_xlock_finish(LocalLock *lock, Mutation *mut);
 
 
