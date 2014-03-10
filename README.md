@@ -59,18 +59,18 @@ Run 'ceph-brag -h' to get the usage information of this tool.
       "pool_metadata": [
         {
           "size": 3,
-          "id": "0",
-          "type": "replicated"
+          "id": 0,
+          "type": 1
         },
         {
           "size": 3,
-          "id": "1",
-          "name": "erasure"
+          "id": 1,
+          "type": 1
         },
         {
           "size": 3,
-          "id": "2",
-          "name": "replicated"
+          "id": 2,
+          "name": 1
         }
       ],
       "sysinfo": {

@@ -31,26 +31,12 @@ def get_uuid():
   return uid
 
 def get_cluster_creation_date():
-  (rc, o, e) = run_command(['ceph', 'mon', 'dump'])
+  (rc, o, e) = run_command(['ceph', 'mon', 'dump', '-f', 'json'])
   if rc is not 0:
     raise RuntimeError("\'ceph mon dump\' failed - " + e)
 
-  rec = re.compile('(.*created\ )(.*)(\n.*)')
-
-  mo = rec.search(o);
-  if mo and mo.group(2) != '0.000000':
-    return mo.group(2)
-
-  # Try and get the date from osd dump
-  (rc, o, e) = run_command(['ceph', 'osd', 'dump'])
-  if rc is not 0:
-    raise RuntimeError("\'ceph osd dump\' failed - " + e)
-
-  mo = rec.search(o);
-  if not mo or mo.group(2) == '0.000000':
-    print >> sys.stderr, "Unable to get cluster creation date"
-
-  return mo.group(2)
+  oj = json.loads(o)
+  return oj['created']
 
 def bytes_pretty_to_raw(byte_count, byte_scale):
   if byte_scale == 'kB':
@@ -69,49 +55,35 @@ def bytes_pretty_to_raw(byte_count, byte_scale):
   return byte_count
 
 def get_nums():
-  (rc, o, e) = run_command(['ceph', '-s'])
+  (rc, o, e) = run_command(['ceph', '-s', '-f', 'json'])
   if rc is not 0:
     raise RuntimeError("\'ceph -s\' failed - " + e)
 
-  num_mons = 0
+  oj = json.loads(o)
+  num_mons = len(oj['monmap']['mons'])
+  num_osds = int(oj['osdmap']['osdmap']['num_in_osds'])
+  num_mdss = oj['mdsmap']['in']
 
-  mo = re.search('(.*monmap\ .*:\ )(\d+)(.*)', o)
-  if not mo:
-    raise RuntimeError("Unmatched pattern for monmap in \'ceph status\'")
-  else:
-    num_mons = int(mo.group(2))
+  pgmap = oj['pgmap']
+  num_pgs = pgmap['num_pgs']
+  num_bytes = pgmap['data_bytes']
 
-  num_osds = 0
-  mo = re.search('.*osdmap.*(\d+).*(\d+).*(\d+).*', o)
-  if not mo:
-    raise RuntimeError("Unmatched pattern for osdmap in \'ceph status\'")
-  else:
-    num_osds = int(mo.group(1))
-
-  num_mdss = 0
-  mo = re.search('.*mdsmap\ e\d+.*(\d+)/(\d+)/(\d+).*', o)
-  if mo:
-    num_mdss = int(mo.group(2));
-
-  num_pgs = 0
-  num_pools = 0
-  num_bytes = 0
+  (rc, o, e) = run_command(['ceph', 'pg', 'dump', 'pools', '-f', 'json-pretty'])
+  if rc is not 0:
+    raise RuntimeError("\'ceph pg dump pools\' failed - " + e)
+ 
+  pools = json.loads(o)
+  num_pools = len(pools)
   num_objs = 0
-  mo = re.search('.*pgmap\ v\d+:\ (\d+).*,\ (\d+).*,\ (\d+)\ (\S+)\ data,\ (\d+).*', o)
-  if not mo:
-    raise RuntimeError("Unmatched pattern for pgmap in \'ceph status\'")
-  else:
-    num_pgs = int(mo.group(1))
-    num_pools = int(mo.group(2))
-    byte_count = int(mo.group(3))
-    byte_scale = mo.group(4)
-    num_objs = int(mo.group(5))
+  for p in pools:
+    num_objs += p['stat_sum']['num_objects']
+
   nums = {'num_mons':num_mons,
           'num_osds':num_osds,
           'num_mdss':num_mdss,
           'num_pgs':num_pgs,
+          'num_bytes':num_bytes,
           'num_pools':num_pools,
-          'num_bytes': bytes_pretty_to_raw(byte_count, byte_scale),
           'num_objects':num_objs}
   return nums
 
@@ -153,18 +125,15 @@ def get_crush_types():
   return crush_map
 
 def get_pool_metadata():
-  (rc, o, e) = run_command(['ceph', 'osd', 'dump'])
+  (rc, o, e) = run_command(['ceph', 'osd', 'dump', '-f', 'json'])
   if rc is not 0:
     raise RuntimeError("\'ceph osd dump\' failed - " + e)
 
-  result = re.findall("pool\ (\d+)\ '(\S+)'\ (\S+)\ size\ (\d+)", o)
-  if len(result) is 0:
-    raise RuntimeError("Unmatched pattern for \'pool\' in \'ceph osd dump\'")
-
   pool_meta = []
-  proc = lambda x: {'id':x[0], 'type':x[2], 'size':int(x[3])}
-  for r in result:
-    pool_meta.append(proc(r))
+  oj = json.loads(o)
+  proc = lambda x: {'id':x['pool'], 'type':x['type'], 'size':x['size']}
+  for p in oj['pools']:
+    pool_meta.append(proc(p))
 
   return pool_meta
 

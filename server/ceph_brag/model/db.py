@@ -56,8 +56,8 @@ class pools_info(Base):
 
   index = Column(Integer, primary_key=True)
   vid = Column(ForeignKey('version_info.index'))
-  pool_id = Column(String(8))
-  pool_type = Column(String(16))
+  pool_id = Column(Integer)
+  pool_type = Column(Integer)
   pool_rep_size = Column(Integer)
 
 class os_info(Base):

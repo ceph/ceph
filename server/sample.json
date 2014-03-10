@@ -36,18 +36,18 @@
   },
   "pool_metadata": [
     {
-      "type": "replicated",
-      "id": "0",
+      "type": 1,
+      "id": 0,
       "size": 3
     },
     {
-      "type": "replicated",
-      "id": "1",
+      "type": 1,
+      "id": 1,
       "size": 3
     },
     {
-      "type": "replicated",
-      "id": "2",
+      "type": 1,
+      "id": 2,
       "size": 3
     }
   ],
