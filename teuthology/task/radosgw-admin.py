@@ -249,9 +249,19 @@ def task(ctx, config):
             del out2['data']['bucket_info']['bucket']['index_pool']
             assert out1 == out2
 
+        same_region = 0
         for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
             source_client = c_config['src']
             dest_client = c_config['dest']
+
+            source_region = rgw_utils.region_for_client(ctx, source_client)
+            dest_region = rgw_utils.region_for_client(ctx, dest_client)
+
+            # 301 is only returned for requests to something in a different region
+            if source_region == dest_region:
+                log.debug('301 is only returned for requests to something in a different region')
+                same_region += 1
+                continue
 
             # Attempt to create a new connection with user1 to the destination RGW
             log.debug('Attempt to create a new connection with user1 to the destination RGW')
@@ -279,6 +289,10 @@ def task(ctx, config):
 
             # now delete the bucket on the source RGW and do another sync
             log.debug('now delete the bucket on the source RGW and do another sync')
+            bucket.delete()
+            rgw_utils.radosgw_agent_sync_all(ctx)
+
+        if same_region == len(ctx.radosgw_agent.config):
             bucket.delete()
             rgw_utils.radosgw_agent_sync_all(ctx)
 
@@ -386,6 +400,9 @@ def task(ctx, config):
         # now we delete the bucket
         log.debug('now we delete the bucket')
         bucket.delete()
+
+        log.debug('sync to propagate the deleted bucket')
+        rgw_utils.radosgw_agent_sync_all(ctx)
 
         # Delete user2 as later tests do not expect it to exist.
         # Verify that it is gone on both regions
