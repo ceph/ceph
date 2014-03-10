@@ -10302,34 +10302,24 @@ void ReplicatedPG::hit_set_persist()
   utime_t now = ceph_clock_now(cct);
   RepGather *repop;
   hobject_t oid;
-  bool reset = false;
   time_t flush_time = 0;
 
   if (!info.hit_set.current_info.begin)
     info.hit_set.current_info.begin = hit_set_start_stamp;
-  if (hit_set->is_full() ||
-      hit_set_start_stamp + pool.info.hit_set_period <= now) {
-    // archive
-    hit_set->seal();
-    ::encode(*hit_set, bl);
-    info.hit_set.current_info.end = now;
-    oid = get_hit_set_archive_object(info.hit_set.current_info.begin,
-				     info.hit_set.current_info.end);
-    dout(20) << __func__ << " archive " << oid << dendl;
-    reset = true;
 
-    if (agent_state)
-      agent_state->add_hit_set(info.hit_set.current_info.begin, hit_set);
+  hit_set->seal();
+  ::encode(*hit_set, bl);
+  info.hit_set.current_info.end = now;
+  oid = get_hit_set_archive_object(info.hit_set.current_info.begin,
+				   info.hit_set.current_info.end);
+  dout(20) << __func__ << " archive " << oid << dendl;
 
-    // hold a ref until it is flushed to disk
-    hit_set_flushing[info.hit_set.current_info.begin] = hit_set;
-    flush_time = info.hit_set.current_info.begin;
-  } else {
-    // persist snapshot of current hitset
-    ::encode(*hit_set, bl);
-    oid = get_hit_set_current_object(now);
-    dout(20) << __func__ << " checkpoint " << oid << dendl;
-  }
+  if (agent_state)
+    agent_state->add_hit_set(info.hit_set.current_info.begin, hit_set);
+
+  // hold a ref until it is flushed to disk
+  hit_set_flushing[info.hit_set.current_info.begin] = hit_set;
+  flush_time = info.hit_set.current_info.begin;
 
   ObjectContextRef obc = get_object_context(oid, true);
   repop = simple_repop_create(obc);
@@ -10376,14 +10366,11 @@ void ReplicatedPG::hit_set_persist()
 
   info.hit_set.current_last_update = info.last_update; // *after* above remove!
   info.hit_set.current_info.version = ctx->at_version;
-  if (reset) {
-    info.hit_set.history.push_back(info.hit_set.current_info);
-    hit_set_create();
-    info.hit_set.current_info = pg_hit_set_info_t();
-    info.hit_set.current_last_stamp = utime_t();
-  } else {
-    info.hit_set.current_last_stamp = now;
-  }
+
+  info.hit_set.history.push_back(info.hit_set.current_info);
+  hit_set_create();
+  info.hit_set.current_info = pg_hit_set_info_t();
+  info.hit_set.current_last_stamp = utime_t();
 
   // fabricate an object_info_t and SnapSet
   obc->obs.oi.version = ctx->at_version;
