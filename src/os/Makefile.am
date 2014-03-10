@@ -19,6 +19,9 @@ libos_la_SOURCES = \
 
 if LINUX
 libos_la_SOURCES += os/BtrfsFileStoreBackend.cc
+endif
+
+if WITH_LIBXFS
 libos_la_SOURCES += os/XfsFileStoreBackend.cc
 endif
 
