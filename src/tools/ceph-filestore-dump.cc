@@ -167,7 +167,7 @@ struct pg_begin {
   pg_t pgid;
   OSDSuperblock superblock;
 
-  pg_begin(pg_t pg, OSDSuperblock sb):
+  pg_begin(pg_t pg, const OSDSuperblock& sb):
     pgid(pg), superblock(sb) { }
   pg_begin() { }
 
@@ -702,7 +702,7 @@ void write_super()
 }
 
 int do_export(ObjectStore *fs, coll_t coll, pg_t pgid, pg_info_t &info,
-    epoch_t map_epoch, __u8 struct_ver, OSDSuperblock superblock)
+    epoch_t map_epoch, __u8 struct_ver, const OSDSuperblock& superblock)
 {
   PGLog::IndexedLog log;
   pg_missing_t missing;
@@ -949,7 +949,7 @@ int get_pg_metadata(ObjectStore *store, coll_t coll, bufferlist &bl)
   return 0;
 }
 
-int do_import(ObjectStore *store, OSDSuperblock sb)
+int do_import(ObjectStore *store, OSDSuperblock& sb)
 {
   bufferlist ebl;
   pg_info_t info;
