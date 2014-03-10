@@ -87,6 +87,7 @@ def run_radosgw_agent(ctx, config):
             '--source', "http://{addr}:{port}".format(addr=src_host, port=src_port),
             '--dest-access-key', dest_access,
             '--dest-secret-key', dest_secret,
+            '--max-entries', '10',
             '--log-file', '{tdir}/archive/rgw_sync_agent.{client}.log'.format(
                 tdir=testdir,
                 client=client),

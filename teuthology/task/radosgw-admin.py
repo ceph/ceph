@@ -457,6 +457,44 @@ def task(ctx, config):
         # finally we delete the bucket
         bucket.delete()
 
+        bucket = connection.create_bucket(bucket_name + 'data2')
+        for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
+            source_client = c_config['src']
+            dest_client = c_config['dest']
+            (dest_host, dest_port) = ctx.rgw.role_endpoints[dest_client]
+            dest_connection = boto.s3.connection.S3Connection(
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                is_secure=False,
+                port=dest_port,
+                host=dest_host,
+                calling_format=boto.s3.connection.OrdinaryCallingFormat(),
+                )
+            for i in range(20):
+                k = boto.s3.key.Key(bucket)
+                k.key = 'tiny_file_' + str(i)
+                k.set_contents_from_string(str(i) * 100)
+
+            time.sleep(rgw_utils.radosgw_data_log_window(ctx, source_client))
+            rgw_utils.radosgw_agent_sync_all(ctx, data=True)
+
+            for i in range(20):
+                dest_k = dest_connection.get_bucket(bucket_name + 'data2').get_key('tiny_file_' + str(i))
+                assert (str(i) * 100) == dest_k.get_contents_as_string()
+                k = boto.s3.key.Key(bucket)
+                k.key = 'tiny_file_' + str(i)
+                k.delete()
+
+            # check that deleting removes the objects from the dest zone
+            time.sleep(rgw_utils.radosgw_data_log_window(ctx, source_client))
+            rgw_utils.radosgw_agent_sync_all(ctx, data=True)
+
+            for i in range(20):
+                dest_bucket = dest_connection.get_bucket(bucket_name + 'data2')
+                dest_k = dest_bucket.get_key('tiny_file_' + str(i))
+                assert dest_k == None, 'object %d not deleted from destination zone' % i
+        bucket.delete()
+
     # end of 'if multi_region_run:'
 
     # TESTCASE 'suspend-ok','user','suspend','active user','succeeds'
