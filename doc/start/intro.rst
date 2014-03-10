@@ -62,8 +62,10 @@ recommendations and operating system recommendations.
    code or bugs by getting involved in the Ceph community.
 
 .. toctree::
+   :maxdepth: 2
 
    get-involved
+   documenting-ceph
 
 .. raw:: html
 
