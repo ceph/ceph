@@ -370,7 +370,7 @@ public:
   }
 
   bool is_down(int osd) const {
-    return !exists(osd) || !is_up(osd);
+    return !is_up(osd);
   }
 
   bool is_out(int osd) const {
@@ -378,7 +378,7 @@ public:
   }
 
   bool is_in(int osd) const {
-    return exists(osd) && !is_out(osd);
+    return !is_out(osd);
   }
 
   /**
