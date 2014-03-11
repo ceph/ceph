@@ -723,19 +723,30 @@ struct RGWRegion;
 struct RGWZonePlacementInfo {
   string index_pool;
   string data_pool;
+  string data_extra_pool; /* if not set we should use data_pool */
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     ::encode(index_pool, bl);
     ::encode(data_pool, bl);
+    ::encode(data_extra_pool, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(4, bl);
     ::decode(index_pool, bl);
     ::decode(data_pool, bl);
+    if (struct_v >= 4) {
+      ::decode(data_extra_pool, bl);
+    }
     DECODE_FINISH(bl);
+  }
+  const string& get_data_extra_pool() {
+    if (data_extra_pool.empty()) {
+      return data_pool;
+    }
+    return data_extra_pool;
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
