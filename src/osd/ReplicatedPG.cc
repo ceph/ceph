@@ -10298,11 +10298,33 @@ void ReplicatedPG::hit_set_persist()
 {
   dout(10) << __func__  << dendl;
   bufferlist bl;
+  unsigned max = pool.info.hit_set_count;
 
   utime_t now = ceph_clock_now(cct);
   RepGather *repop;
   hobject_t oid;
   time_t flush_time = 0;
+
+  // See what start is going to be used later
+  utime_t start = info.hit_set.current_info.begin;
+  if (!start)
+     start = hit_set_start_stamp;
+
+  // If any archives are degraded we skip this persist request
+  // account for the additional entry being added below
+  for (unsigned num = info.hit_set.history.size() + 1; num > max; --num) {
+    list<pg_hit_set_info_t>::iterator p = info.hit_set.history.begin();
+    assert(p != info.hit_set.history.end());
+    hobject_t aoid = get_hit_set_archive_object(p->begin, p->end);
+
+    // Once we hit a degraded object just skip further trim
+    if (is_degraded_object(aoid))
+      return;
+  }
+  oid = get_hit_set_archive_object(start, now);
+  // If the current object is degraded we skip this persist request
+  if (is_degraded_object(oid))
+    return;
 
   if (!info.hit_set.current_info.begin)
     info.hit_set.current_info.begin = hit_set_start_stamp;
@@ -10310,8 +10332,6 @@ void ReplicatedPG::hit_set_persist()
   hit_set->seal();
   ::encode(*hit_set, bl);
   info.hit_set.current_info.end = now;
-  oid = get_hit_set_archive_object(info.hit_set.current_info.begin,
-				   info.hit_set.current_info.end);
   dout(20) << __func__ << " archive " << oid << dendl;
 
   if (agent_state)
@@ -10408,7 +10428,7 @@ void ReplicatedPG::hit_set_persist()
     ctx->log.back().mod_desc.mark_unrollbackable();
   }
 
-  hit_set_trim(repop, pool.info.hit_set_count);
+  hit_set_trim(repop, max);
 
   info.stats.stats.add(ctx->delta_stats, string());
 
@@ -10421,6 +10441,9 @@ void ReplicatedPG::hit_set_trim(RepGather *repop, unsigned max)
     list<pg_hit_set_info_t>::iterator p = info.hit_set.history.begin();
     assert(p != info.hit_set.history.end());
     hobject_t oid = get_hit_set_archive_object(p->begin, p->end);
+
+    assert(!is_degraded_object(oid));
+
     dout(20) << __func__ << " removing " << oid << dendl;
     ++repop->ctx->at_version.version;
     repop->ctx->log.push_back(
