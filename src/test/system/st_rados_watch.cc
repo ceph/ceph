@@ -28,6 +28,7 @@ StRadosWatch::StRadosWatch(int argc, const char **argv,
 			   CrossProcessSem *watch_sem,
 			   CrossProcessSem *notify_sem,
 			   int num_notifies,
+			   int watch_retcode,
 			   const std::string &pool_name,
 			   const std::string &obj_name)
   : SysTestRunnable(argc, argv),
@@ -35,6 +36,7 @@ StRadosWatch::StRadosWatch(int argc, const char **argv,
     m_watch_sem(watch_sem),
     m_notify_sem(notify_sem),
     m_num_notifies(num_notifies),
+    m_watch_retcode(watch_retcode),
     m_pool_name(pool_name),
     m_obj_name(obj_name)
 {
@@ -65,9 +67,13 @@ run()
   RETURN1_IF_NONZERO(rados_connect(cl));
   RETURN1_IF_NONZERO(rados_ioctx_create(cl, m_pool_name.c_str(), &io_ctx));
   printf("%s: watching object %s\n", get_id_str(), m_obj_name.c_str());
-  RETURN1_IF_NONZERO(rados_watch(io_ctx, m_obj_name.c_str(), 0, &handle,
-				 reinterpret_cast<rados_watchcb_t>(notify_cb),
-				 reinterpret_cast<void*>(&num_notifies)));
+
+  RETURN1_IF_NOT_VAL(
+    rados_watch(io_ctx, m_obj_name.c_str(), 0, &handle,
+		reinterpret_cast<rados_watchcb_t>(notify_cb),
+		reinterpret_cast<void*>(&num_notifies)),
+    m_watch_retcode
+    );
   if (m_watch_sem) {
     m_watch_sem->post();
   }
