@@ -10825,7 +10825,7 @@ void ReplicatedPG::agent_choose_mode()
   // adjust (effective) user objects down based on the (max) number
   // of HitSet objects, which should not count toward our total since
   // they cannot be flushed.
-  uint64_t num_user_objects = info.stats.stats.sum.num_objects_dirty;
+  uint64_t num_user_objects = info.stats.stats.sum.num_objects;
   if (num_user_objects > pool.info.hit_set_count)
     num_user_objects -= pool.info.hit_set_count;
   else
