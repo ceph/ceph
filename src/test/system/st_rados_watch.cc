@@ -65,6 +65,9 @@ run()
   RETURN1_IF_NONZERO(rados_connect(cl));
   RETURN1_IF_NONZERO(rados_ioctx_create(cl, m_pool_name.c_str(), &io_ctx));
   printf("%s: watching object %s\n", get_id_str(), m_obj_name.c_str());
+  const char buf[] = "asdf";
+  RETURN1_IF_NONZERO(
+    rados_write(io_ctx, m_obj_name.c_str(), buf, sizeof(buf), 0));
   RETURN1_IF_NONZERO(rados_watch(io_ctx, m_obj_name.c_str(), 0, &handle,
 				 reinterpret_cast<rados_watchcb_t>(notify_cb),
 				 reinterpret_cast<void*>(&num_notifies)));
