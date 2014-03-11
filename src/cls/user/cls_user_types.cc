@@ -21,6 +21,7 @@ void cls_user_bucket::dump(Formatter *f) const
 {
   encode_json("name", name, f);
   encode_json("data_pool", data_pool,f);
+  encode_json("data_extra_pool", data_extra_pool,f);
   encode_json("index_pool", index_pool,f);
   encode_json("marker", marker,f);
   encode_json("bucket_id", bucket_id,f);

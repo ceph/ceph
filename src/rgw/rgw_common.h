@@ -565,6 +565,7 @@ WRITE_CLASS_ENCODER(RGWUserInfo)
 struct rgw_bucket {
   std::string name;
   std::string data_pool;
+  std::string data_extra_pool; /* if not set, then we should use data_pool instead */
   std::string index_pool;
   std::string marker;
   std::string bucket_id;
@@ -577,6 +578,7 @@ struct rgw_bucket {
   rgw_bucket(const cls_user_bucket& b) {
     name = b.name;
     data_pool = b.data_pool;
+    data_extra_pool = b.data_extra_pool;
     index_pool = b.index_pool;
     marker = b.marker;
     bucket_id = b.bucket_id;
@@ -592,30 +594,24 @@ struct rgw_bucket {
   void convert(cls_user_bucket *b) {
     b->name = name;
     b->data_pool = data_pool;
+    b->data_extra_pool = data_extra_pool;
     b->index_pool = index_pool;
     b->marker = marker;
     b->bucket_id = bucket_id;
   }
 
-  void clear() {
-    name = "";
-    data_pool = "";
-    index_pool = "";
-    marker = "";
-    bucket_id = "";
-  }
-
   void encode(bufferlist& bl) const {
-     ENCODE_START(6, 3, bl);
+     ENCODE_START(7, 3, bl);
     ::encode(name, bl);
     ::encode(data_pool, bl);
     ::encode(marker, bl);
     ::encode(bucket_id, bl);
     ::encode(index_pool, bl);
+    ::encode(data_extra_pool, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(7, 3, 3, bl);
     ::decode(name, bl);
     ::decode(data_pool, bl);
     if (struct_v >= 2) {
@@ -635,8 +631,19 @@ struct rgw_bucket {
     } else {
       index_pool = data_pool;
     }
+    if (struct_v >= 7) {
+      ::decode(data_extra_pool, bl);
+    }
     DECODE_FINISH(bl);
   }
+
+  const string& get_data_extra_pool() {
+    if (data_extra_pool.empty()) {
+      return data_pool;
+    }
+    return data_extra_pool;
+  }
+
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
   static void generate_test_instances(list<rgw_bucket*>& o);
@@ -651,8 +658,19 @@ inline ostream& operator<<(ostream& out, const rgw_bucket &b) {
   out << b.name;
   if (b.name.compare(b.data_pool)) {
     out << "(@";
+    string s;
     if (!b.index_pool.empty() && b.data_pool.compare(b.index_pool))
-      out << "{i=" << b.index_pool << "}";
+      s = "i=" + b.index_pool;
+    if (!b.data_extra_pool.empty() && b.data_pool.compare(b.data_extra_pool)) {
+      if (!s.empty()) {
+        s += ",";
+      }
+      s += "e=" + b.data_extra_pool;
+    }
+    if (!s.empty()) {
+      out << "{"  << s << "}";
+    }
+
     out << b.data_pool << "[" << b.marker << "])";
   }
   return out;
