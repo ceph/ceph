@@ -10822,6 +10822,15 @@ void ReplicatedPG::agent_choose_mode()
 {
   uint64_t divisor = pool.info.get_pg_num_divisor(info.pgid.pgid);
 
+  // adjust (effective) user objects down based on the (max) number
+  // of HitSet objects, which should not count toward our total since
+  // they cannot be flushed.
+  uint64_t num_user_objects = info.stats.stats.sum.num_objects_dirty;
+  if (num_user_objects > pool.info.hit_set_count)
+    num_user_objects -= pool.info.hit_set_count;
+  else
+    num_user_objects = 0;
+
   // get dirty, full ratios
   uint64_t dirty_micro = 0;
   uint64_t full_micro = 0;
@@ -10842,8 +10851,7 @@ void ReplicatedPG::agent_choose_mode()
     if (dirty_objects_micro > dirty_micro)
       dirty_micro = dirty_objects_micro;
     uint64_t full_objects_micro =
-      info.stats.stats.sum.num_objects * 1000000 /
-      (pool.info.target_max_objects / divisor);
+      num_user_objects * 1000000 / (pool.info.target_max_objects / divisor);
     if (full_objects_micro > full_micro)
       full_micro = full_objects_micro;
   }
