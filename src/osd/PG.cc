@@ -7070,7 +7070,7 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
     }
 
     // all good!
-    post_event(CheckRepops());
+    post_event(Activate(pg->get_osdmap()->get_epoch()));
   }
 }
 
@@ -7089,7 +7089,7 @@ boost::statechart::result PG::RecoveryState::GetMissing::react(const MLogRec& lo
     } else {
       dout(10) << "Got last missing, don't need missing "
 	       << "posting CheckRepops" << dendl;
-      post_event(CheckRepops());
+      post_event(Activate(pg->get_osdmap()->get_epoch()));
     }
   }
   return discard_event();
@@ -7129,35 +7129,6 @@ void PG::RecoveryState::GetMissing::exit()
   pg->osd->recoverystate_perf->tinc(rs_getmissing_latency, dur);
 }
 
-/*---WaitFlushedPeering---*/
-PG::RecoveryState::WaitFlushedPeering::WaitFlushedPeering(my_context ctx)
-  : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Peering/WaitFlushedPeering")
-{
-  PG *pg = context< RecoveryMachine >().pg;
-  context< RecoveryMachine >().log_enter(state_name);
-  if (context< RecoveryMachine >().pg->flushes_in_progress == 0)
-    post_event(Activate(pg->get_osdmap()->get_epoch()));
-}
-
-boost::statechart::result
-PG::RecoveryState::WaitFlushedPeering::react(const FlushedEvt &evt)
-{
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->on_flushed();
-  return transit< WaitFlushedPeering >();
-}
-
-boost::statechart::result
-PG::RecoveryState::WaitFlushedPeering::react(const QueryState &q)
-{
-  q.f->open_object_section("state");
-  q.f->dump_string("name", state_name);
-  q.f->dump_stream("enter_time") << enter_time;
-  q.f->dump_string("comment", "waiting for flush");
-  return forward_event();
-}
-
 /*------WaitUpThru--------*/
 PG::RecoveryState::WaitUpThru::WaitUpThru(my_context ctx)
   : my_base(ctx),
@@ -7170,7 +7141,7 @@ boost::statechart::result PG::RecoveryState::WaitUpThru::react(const ActMap& am)
 {
   PG *pg = context< RecoveryMachine >().pg;
   if (!pg->need_up_thru) {
-    post_event(CheckRepops());
+    post_event(Activate(pg->get_osdmap()->get_epoch()));
   }
   return forward_event();
 }
