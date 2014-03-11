@@ -1417,7 +1417,6 @@ void PG::activate(ObjectStore::Transaction& t,
   }
 
   // twiddle pg state
-  state_set(PG_STATE_ACTIVE);
   state_clear(PG_STATE_DOWN);
 
   send_notify = false;
@@ -1440,12 +1439,8 @@ void PG::activate(ObjectStore::Transaction& t,
   dirty_info = true;
   dirty_big_info = true; // maybe
 
-  // verify that there are no stray objects
-  if (is_primary())
-    check_local();
-
   // find out when we commit
-  tfin.push_back(new C_PG_ActivateCommitted(this, query_epoch));
+  t.register_on_complete(new C_PG_ActivateCommitted(this, query_epoch));
   
   // initialize snap_trimq
   if (is_primary()) {
@@ -1628,42 +1623,7 @@ void PG::activate(ObjectStore::Transaction& t,
     if (get_osdmap()->get_pg_size(info.pgid.pgid) > acting.size())
       state_set(PG_STATE_DEGRADED);
 
-    // all clean?
-    if (needs_recovery()) {
-      dout(10) << "activate not all replicas are up-to-date, queueing recovery" << dendl;
-      queue_peering_event(
-        CephPeeringEvtRef(
-          new CephPeeringEvt(
-            get_osdmap()->get_epoch(),
-            get_osdmap()->get_epoch(),
-            DoRecovery())));
-    } else if (needs_backfill()) {
-      dout(10) << "activate queueing backfill" << dendl;
-      queue_peering_event(
-        CephPeeringEvtRef(
-          new CephPeeringEvt(
-            get_osdmap()->get_epoch(),
-            get_osdmap()->get_epoch(),
-            RequestBackfill())));
-    } else {
-      dout(10) << "activate all replicas clean, no recovery" << dendl;
-      queue_peering_event(
-        CephPeeringEvtRef(
-          new CephPeeringEvt(
-            get_osdmap()->get_epoch(),
-            get_osdmap()->get_epoch(),
-            AllReplicasRecovered())));
-    }
-
-    publish_stats_to_osd();
   }
-
-  // waiters
-  if (!is_replay() && flushes_in_progress == 0) {
-    requeue_ops(waiting_for_active);
-  }
-
-  on_activate();
 }
 
 bool PG::op_has_sufficient_caps(OpRequestRef op)
@@ -1737,7 +1697,7 @@ void PG::queue_op(OpRequestRef op)
 
 void PG::replay_queued_ops()
 {
-  assert(is_replay() && is_active());
+  assert(is_replay());
   eversion_t c = info.last_update;
   list<OpRequestRef> replay;
   dout(10) << "replay_queued_ops" << dendl;
@@ -1788,6 +1748,12 @@ void PG::_activate_committed(epoch_t e)
     i.info.history.last_epoch_started = e;
     m->pg_list.push_back(make_pair(i, pg_interval_map_t()));
     osd->send_message_osd_cluster(get_primary().osd, m, get_osdmap()->get_epoch());
+
+    state_set(PG_STATE_ACTIVE);
+    // waiters
+    if (flushes_in_progress == 0) {
+      requeue_ops(waiting_for_active);
+    }
   }
 
   if (dirty_info) {
@@ -6165,7 +6131,6 @@ PG::RecoveryState::Active::Active(my_context ctx)
 	       *context< RecoveryMachine >().get_query_map(),
 	       context< RecoveryMachine >().get_info_map(),
 	       context< RecoveryMachine >().get_recovery_ctx());
-  assert(pg->is_active());
   dout(10) << "Activate Finished" << dendl;
 }
 
@@ -6215,7 +6180,6 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
 {
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "Active: handling ActMap" << dendl;
-  assert(pg->is_active());
   assert(pg->is_primary());
 
   if (pg->have_unfound()) {
@@ -6253,7 +6217,6 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
 boost::statechart::result PG::RecoveryState::Active::react(const MNotifyRec& notevt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  assert(pg->is_active());
   assert(pg->is_primary());
   if (pg->peer_info.count(notevt.from)) {
     dout(10) << "Active: got notify from " << notevt.from 
@@ -6278,7 +6241,6 @@ boost::statechart::result PG::RecoveryState::Active::react(const MNotifyRec& not
 boost::statechart::result PG::RecoveryState::Active::react(const MInfoRec& infoevt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  assert(pg->is_active());
   assert(pg->is_primary());
 
   assert(!pg->actingbackfill.empty());
@@ -6293,10 +6255,10 @@ boost::statechart::result PG::RecoveryState::Active::react(const MInfoRec& infoe
     dout(10) << " peer osd." << infoevt.from << " activated and committed" 
 	     << dendl;
     pg->peer_activated.insert(infoevt.from);
-  }
 
-  if (pg->peer_activated.size() == pg->actingbackfill.size()) {
-    pg->all_activated_and_committed();
+    if (pg->peer_activated.size() == pg->actingbackfill.size()) {
+      pg->all_activated_and_committed();
+    }
   }
   return discard_event();
 }
@@ -6378,7 +6340,20 @@ boost::statechart::result PG::RecoveryState::Active::react(const QueryState& q)
 
 boost::statechart::result PG::RecoveryState::Active::react(const AllReplicasActivated &evt)
 {
+  PG *pg = context< RecoveryMachine >().pg;
   all_replicas_activated = true;
+
+  pg->state_set(PG_STATE_ACTIVE);
+
+  pg->check_local();
+
+  // waiters
+  if (!pg->is_replay() && pg->flushes_in_progress == 0) {
+    pg->requeue_ops(pg->waiting_for_active);
+  }
+
+  pg->on_activate();
+
   return discard_event();
 }
 
