@@ -280,6 +280,7 @@ static int read_policy(RGWRados *store, struct req_state *s,
     RGWMPObj mp(oid, upload_id);
     oid = mp.get_meta();
     obj.init_ns(bucket, oid, mp_ns);
+    obj.set_in_extra_data(true);
   } else {
     obj.init(bucket, oid);
   }
@@ -1457,6 +1458,7 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_
 
   rgw_obj meta_obj;
   meta_obj.init_ns(bucket, multipart_meta_obj, mp_ns);
+  meta_obj.set_in_extra_data(true);
 
   r = store->omap_set(meta_obj, p, bl);
 
@@ -2387,6 +2389,7 @@ void RGWInitMultipart::execute()
 
     obj.init_ns(s->bucket, tmp_obj_name, mp_ns);
     // the meta object will be indexed with 0 size, we c
+    obj.set_in_extra_data(true);
     ret = store->put_obj_meta(s->obj_ctx, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, PUT_OBJ_CREATE_EXCL, s->owner.get_id());
   } while (ret == -EEXIST);
 }
@@ -2400,6 +2403,7 @@ static int get_multipart_info(RGWRados *store, struct req_state *s, string& meta
 
   rgw_obj obj;
   obj.init_ns(s->bucket, meta_oid, mp_ns);
+  obj.set_in_extra_data(true);
 
   int ret = get_obj_attrs(store, s, obj, attrs, NULL, NULL);
   if (ret < 0)
@@ -2438,6 +2442,7 @@ static int list_multipart_parts(RGWRados *store, struct req_state *s,
 
   rgw_obj obj;
   obj.init_ns(s->bucket, meta_oid, mp_ns);
+  obj.set_in_extra_data(true);
 
   bool sorted_omap = is_v2_upload_id(upload_id) && !assume_unsorted;
 
@@ -2682,6 +2687,7 @@ void RGWCompleteMultipart::execute()
 
   // remove the upload obj
   meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
+  meta_obj.set_in_extra_data(true);
   store->delete_obj(s->obj_ctx, s->bucket_owner.get_id(), meta_obj);
 }
 
@@ -2755,6 +2761,7 @@ void RGWAbortMultipart::execute()
 
   // and also remove the metadata obj
   meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
+  meta_obj.set_in_extra_data(true);
   ret = store->delete_obj(s->obj_ctx, owner, meta_obj);
   if (ret == -ENOENT) {
     ret = -ERR_NO_SUCH_BUCKET;
