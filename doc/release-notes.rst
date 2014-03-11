@@ -5,8 +5,33 @@
 v0.78 Firefly (frozen, pending release)
 -----
 
-Upgrading
-~~~~~~~~~
+Upgrade Sequencing
+~~~~~~~~~~~~~~~~~~
+
+* If your existing cluster is running a version older than v0.67
+  Dumpling, please first upgrade to the latest Dumpling release before
+  upgrading to v0.78 Firefly.  Please refer to the Dumpling upgrade
+  documentation.
+
+FIXME make that a hyperlink
+
+* Upgrade daemons in the following order:
+
+    #. Monitors
+    #. OSDs
+    #. MDSs and/or radosgw
+
+  If the ceph-mds daemon is restarted first, it will wait until all
+  OSDs have been upgraded before finishing its startup sequence.  If
+  the ceph-mon daemons are not restarted prior to the ceph-osd
+  daemons, they will not correctly register their new capabilities
+  with the cluster and new features may not be usable until they are
+  restarted a second time.
+
+TBD
+
+Upgrading from v0.77
+~~~~~~~~~~~~~~~~~~~~
 
 * CephFS recently added support for a new 'backtrace' attribute on
   file data objects that is used for lookup by inode number (i.e., NFS
@@ -23,10 +48,24 @@ Upgrading
 * The librados cmpxattr operation now handles xattrs containing null bytes as
   data rather than null-terminated strings.
 
-Notable changes
-~~~~~~~~~~~~~~~
+Upgrading from v0.72 Emperor
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-TBD
+Upgrading from v0.67 Dumpling
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+Notable changes since v0.77
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+Notable changes since v0.72 Emperor
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Notable changes since v0.67 Dumpling
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 v0.77
