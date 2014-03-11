@@ -2479,6 +2479,7 @@ int RGWRados::set_bucket_location_by_rule(const string& location_rule, const std
   RGWZonePlacementInfo& placement_info = piter->second;
 
   bucket.data_pool = placement_info.data_pool;
+  bucket.data_extra_pool = placement_info.data_extra_pool;
   bucket.index_pool = placement_info.index_pool;
 
   return 0;
