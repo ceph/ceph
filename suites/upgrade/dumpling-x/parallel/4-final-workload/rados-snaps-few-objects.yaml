@@ -1,4 +1,4 @@
-final-workload:
+tasks:
   - rados:
       clients: [client.1]
       ops: 4000

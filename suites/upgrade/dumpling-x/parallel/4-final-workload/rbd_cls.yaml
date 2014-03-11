@@ -1,4 +1,4 @@
-final-workload:
+tasks:
   - workunit:
       clients:
         client.1:
