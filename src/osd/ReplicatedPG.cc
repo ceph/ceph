@@ -10298,38 +10298,48 @@ void ReplicatedPG::hit_set_persist()
 {
   dout(10) << __func__  << dendl;
   bufferlist bl;
+  unsigned max = pool.info.hit_set_count;
 
   utime_t now = ceph_clock_now(cct);
   RepGather *repop;
   hobject_t oid;
-  bool reset = false;
   time_t flush_time = 0;
+
+  // See what start is going to be used later
+  utime_t start = info.hit_set.current_info.begin;
+  if (!start)
+     start = hit_set_start_stamp;
+
+  // If any archives are degraded we skip this persist request
+  // account for the additional entry being added below
+  for (unsigned num = info.hit_set.history.size() + 1; num > max; --num) {
+    list<pg_hit_set_info_t>::iterator p = info.hit_set.history.begin();
+    assert(p != info.hit_set.history.end());
+    hobject_t aoid = get_hit_set_archive_object(p->begin, p->end);
+
+    // Once we hit a degraded object just skip further trim
+    if (is_degraded_object(aoid))
+      return;
+  }
+  oid = get_hit_set_archive_object(start, now);
+  // If the current object is degraded we skip this persist request
+  if (is_degraded_object(oid))
+    return;
 
   if (!info.hit_set.current_info.begin)
     info.hit_set.current_info.begin = hit_set_start_stamp;
-  if (hit_set->is_full() ||
-      hit_set_start_stamp + pool.info.hit_set_period <= now) {
-    // archive
-    hit_set->seal();
-    ::encode(*hit_set, bl);
-    info.hit_set.current_info.end = now;
-    oid = get_hit_set_archive_object(info.hit_set.current_info.begin,
-				     info.hit_set.current_info.end);
-    dout(20) << __func__ << " archive " << oid << dendl;
-    reset = true;
 
-    if (agent_state)
-      agent_state->add_hit_set(info.hit_set.current_info.begin, hit_set);
+  hit_set->seal();
+  ::encode(*hit_set, bl);
+  info.hit_set.current_info.end = now;
+  dout(20) << __func__ << " archive " << oid << dendl;
 
-    // hold a ref until it is flushed to disk
-    hit_set_flushing[info.hit_set.current_info.begin] = hit_set;
-    flush_time = info.hit_set.current_info.begin;
-  } else {
-    // persist snapshot of current hitset
-    ::encode(*hit_set, bl);
-    oid = get_hit_set_current_object(now);
-    dout(20) << __func__ << " checkpoint " << oid << dendl;
-  }
+  if (agent_state)
+    agent_state->add_hit_set(info.hit_set.current_info.begin, hit_set);
+
+  // hold a ref until it is flushed to disk
+  hit_set_flushing[info.hit_set.current_info.begin] = hit_set;
+  flush_time = info.hit_set.current_info.begin;
 
   ObjectContextRef obc = get_object_context(oid, true);
   repop = simple_repop_create(obc);
@@ -10376,14 +10386,11 @@ void ReplicatedPG::hit_set_persist()
 
   info.hit_set.current_last_update = info.last_update; // *after* above remove!
   info.hit_set.current_info.version = ctx->at_version;
-  if (reset) {
-    info.hit_set.history.push_back(info.hit_set.current_info);
-    hit_set_create();
-    info.hit_set.current_info = pg_hit_set_info_t();
-    info.hit_set.current_last_stamp = utime_t();
-  } else {
-    info.hit_set.current_last_stamp = now;
-  }
+
+  info.hit_set.history.push_back(info.hit_set.current_info);
+  hit_set_create();
+  info.hit_set.current_info = pg_hit_set_info_t();
+  info.hit_set.current_last_stamp = utime_t();
 
   // fabricate an object_info_t and SnapSet
   obc->obs.oi.version = ctx->at_version;
@@ -10421,7 +10428,7 @@ void ReplicatedPG::hit_set_persist()
     ctx->log.back().mod_desc.mark_unrollbackable();
   }
 
-  hit_set_trim(repop, pool.info.hit_set_count);
+  hit_set_trim(repop, max);
 
   info.stats.stats.add(ctx->delta_stats, string());
 
@@ -10434,6 +10441,9 @@ void ReplicatedPG::hit_set_trim(RepGather *repop, unsigned max)
     list<pg_hit_set_info_t>::iterator p = info.hit_set.history.begin();
     assert(p != info.hit_set.history.end());
     hobject_t oid = get_hit_set_archive_object(p->begin, p->end);
+
+    assert(!is_degraded_object(oid));
+
     dout(20) << __func__ << " removing " << oid << dendl;
     ++repop->ctx->at_version.version;
     repop->ctx->log.push_back(
