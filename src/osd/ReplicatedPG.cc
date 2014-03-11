@@ -8919,6 +8919,35 @@ void ReplicatedPG::on_shutdown()
 
 void ReplicatedPG::on_activate()
 {
+  // all clean?
+  if (needs_recovery()) {
+    dout(10) << "activate not all replicas are up-to-date, queueing recovery" << dendl;
+    queue_peering_event(
+      CephPeeringEvtRef(
+	new CephPeeringEvt(
+	  get_osdmap()->get_epoch(),
+	  get_osdmap()->get_epoch(),
+	  DoRecovery())));
+  } else if (needs_backfill()) {
+    dout(10) << "activate queueing backfill" << dendl;
+    queue_peering_event(
+      CephPeeringEvtRef(
+	new CephPeeringEvt(
+	  get_osdmap()->get_epoch(),
+	  get_osdmap()->get_epoch(),
+	  RequestBackfill())));
+  } else {
+    dout(10) << "activate all replicas clean, no recovery" << dendl;
+    queue_peering_event(
+      CephPeeringEvtRef(
+	new CephPeeringEvt(
+	  get_osdmap()->get_epoch(),
+	  get_osdmap()->get_epoch(),
+	  AllReplicasRecovered())));
+  }
+
+  publish_stats_to_osd();
+
   if (!backfill_targets.empty()) {
     last_backfill_started = earliest_backfill();
     new_backfill = true;
