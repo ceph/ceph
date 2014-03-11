@@ -2006,6 +2006,11 @@ void Monitor::handle_command(MMonCommand *m)
   _generate_command_map(cmdmap, param_str_map);
   const MonCommand *mon_cmd = _get_moncommand(prefix, mon_commands,
                                               ARRAY_SIZE(mon_commands));
+  if (!mon_cmd) {
+    reply_command(m, -EINVAL, "unknown command", 0);
+    return;
+  }
+
   if (!_allowed_command(session, module, prefix, cmdmap,
                         param_str_map, mon_cmd)) {
     dout(1) << __func__ << " access denied" << dendl;
