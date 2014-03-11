@@ -6784,8 +6784,20 @@ void MDCache::try_trim_non_auth_subtree(CDir *dir)
     // can we trim this subtree (and possibly our ancestors) too?
     while (true) {
       CInode *diri = dir->get_inode();
-      if (diri->is_base())
+      if (diri->is_base()) {
+	if (diri->authority().first != mds->whoami) {
+	  dout(10) << " closing empty non-auth subtree " << *dir << dendl;
+	  remove_subtree(dir);
+	  dir->mark_clean();
+	  diri->close_dirfrag(dir->get_frag());
+
+	  dout(10) << " removing " << *diri << dendl;
+	  assert(!diri->get_parent_dn());
+	  assert(diri->get_num_ref() == 0);
+	  remove_inode(diri);
+	}
 	break;
+      }
 
       CDir *psub = get_subtree_root(diri->get_parent_dir());
       dout(10) << " parent subtree is " << *psub << dendl;
