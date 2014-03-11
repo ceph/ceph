@@ -11,19 +11,29 @@
 
 inline ostream& operator<<(ostream& out, ceph_filelock& l) {
   out << "start: " << l.start << ", length: " << l.length
-      << ", client: " << l.client << ", pid: " << l.pid
-      << ", pid_ns: " << l.pid_namespace << ", type: " << (int)l.type
+      << ", client: " << l.client << ", owner: " << l.owner
+      << ", pid: " << l.pid << ", type: " << (int)l.type
       << std::endl;
   return out;
+}
+
+inline bool ceph_filelock_owner_equal(ceph_filelock& l, ceph_filelock& r)
+{
+  if (l.client != r.client || l.owner != r.owner)
+    return false;
+  // The file lock is from old client if the most significant bit of
+  // 'owner' is not set. Old clients use both 'owner' and 'pid' to
+  // identify the owner of lock.
+  if (l.owner & (1ULL << 63))
+    return true;
+  return l.pid == r.pid;
 }
 
 inline bool operator==(ceph_filelock& l, ceph_filelock& r) {
   return
     l.length == r.length &&
-    l.client == r.client &&
-    l.pid == r.pid &&
-    l.pid_namespace == r.pid_namespace &&
-    l.type == r.type;
+    l.type == r.type &&
+    ceph_filelock_owner_equal(l, r);
 }
 
 class ceph_lock_state_t {
