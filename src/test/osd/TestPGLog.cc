@@ -216,6 +216,7 @@ public:
       t, oinfo, olog, pg_shard_t(1, 0), info,
       &h, dirty_info, dirty_big_info);
 
+    ASSERT_EQ(info.last_update, oinfo.last_update);
     verify_missing(tcase, missing);
     verify_sideeffects(tcase, h);
   };
@@ -233,6 +234,10 @@ public:
 
     proc_replica_log(
       t, oinfo, olog, omissing, pg_shard_t(1, 0));
+
+    if (!tcase.base.empty()) {
+      ASSERT_EQ(tcase.base.rbegin()->version, oinfo.last_update);
+    }
 
     for (list<pg_log_entry_t>::const_iterator i = tcase.auth.begin();
 	 i != tcase.auth.end();
@@ -1354,8 +1359,6 @@ TEST_F(PGLogTest, proc_replica_log) {
 
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(omissing.have_missing());
-    EXPECT_EQ(olog.head, oinfo.last_update);
-    EXPECT_EQ(olog.head, oinfo.last_complete);
   }
 
  {
@@ -1842,6 +1845,18 @@ TEST_F(PGLogTest, merge_log_8) {
   t.init.add(mk_obj(1), mk_evt(10, 100), mk_evt(8, 80));
 
   t.toremove.insert(mk_obj(1));
+
+  t.setup();
+  run_test_case(t);
+}
+
+TEST_F(PGLogTest, merge_log_prior_version_have) {
+  TestCase t;
+  t.base.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(10, 100), mk_evt(8, 80)));
+
+  t.div.push_back(mk_ple_mod(mk_obj(1), mk_evt(10, 101), mk_evt(10, 100)));
+
+  t.init.add(mk_obj(1), mk_evt(10, 101), mk_evt(10, 100));
 
   t.setup();
   run_test_case(t);
