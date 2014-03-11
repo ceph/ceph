@@ -156,7 +156,8 @@ def main(ctx):
             or ctx.update, \
             'machines cannot be specified with that operation'
     else:
-        assert ctx.num_to_lock or ctx.list or ctx.list_targets or ctx.summary,\
+        assert ctx.num_to_lock or ctx.list or ctx.list_targets or \
+            ctx.summary or ctx.brief, \
             'machines must be specified for that operation'
     if ctx.all:
         assert ctx.list or ctx.list_targets, \
@@ -169,11 +170,8 @@ def main(ctx):
         assert ctx.machine_type, \
             'must specify machine type to lock'
 
-    if ctx.brief:
-        assert ctx.list, '--brief only applies to --list'
-
-    if ctx.list or ctx.list_targets:
-        assert ctx.desc is None, '--desc does nothing with --list'
+    if ctx.brief or ctx.list or ctx.list_targets:
+        assert ctx.desc is None, '--desc does nothing with --list/--brief'
 
         if machines:
             statuses = []
@@ -224,16 +222,17 @@ def main(ctx):
                             if status['description'] is not None and
                             status['description'].find(ctx.desc_pattern) >= 0]
             if ctx.list:
-                if ctx.brief:
-                    for s in statuses:
-                        locked = "un" if s['locked'] == 0 else "  "
-                        mo = re.match('\w+@(\w+?)\..*', s['name'])
-                        host = mo.group(1) if mo else s['name']
-                        print '{host} {locked}locked {owner} "{desc}"'.format(
-                            locked=locked, host=host,
-                            owner=s['locked_by'], desc=s['description'])
-                else:
                     print json.dumps(statuses, indent=4)
+
+            elif ctx.brief:
+                for s in statuses:
+                    locked = "un" if s['locked'] == 0 else "  "
+                    mo = re.match('\w+@(\w+?)\..*', s['name'])
+                    host = mo.group(1) if mo else s['name']
+                    print '{host} {locked}locked {owner} "{desc}"'.format(
+                        locked=locked, host=host,
+                        owner=s['locked_by'], desc=s['description'])
+
             else:
                 frag = {'targets': {}}
                 for f in statuses:

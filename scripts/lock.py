@@ -26,6 +26,7 @@ def parse_args():
             teuthology-lock --lock -t target.yaml
             teuthology-lock --list-targets plana01
             teuthology-lock --list --brief --owner user@host
+            teuthology-lock --brief
             teuthology-lock --update --status down --desc testing plana01
         '''),
         formatter_class=argparse.RawTextHelpFormatter)
@@ -42,6 +43,12 @@ def parse_args():
         default=False,
         help='Show lock info for machines owned by you, or only machines ' +
         'specified. Can be restricted by --owner, --status, and --locked.',
+    )
+    group.add_argument(
+        '--brief',
+        action='store_true',
+        default=False,
+        help='Like --list, but with summary instead of detail',
     )
     group.add_argument(
         '--list-targets',
@@ -126,12 +133,6 @@ def parse_args():
         default=None,
         choices=['true', 'false'],
         help='whether a machine is locked',
-    )
-    parser.add_argument(
-        '--brief',
-        action='store_true',
-        default=False,
-        help='Shorten information reported from --list',
     )
     parser.add_argument(
         '-t', '--targets',
