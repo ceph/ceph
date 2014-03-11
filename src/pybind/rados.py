@@ -1238,7 +1238,7 @@ written." % (self.name, ret, length))
 
     def read(self, key, length=8192, offset=0):
         """
-        Write data to an object synchronously
+        Read data from an object synchronously
 
         :param key: name of the object
         :type key: str
