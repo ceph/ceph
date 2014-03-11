@@ -1016,23 +1016,25 @@ public:
   std::string ns;
   std::string object;
 
-  rgw_obj() {}
-  rgw_obj(const char *b, const char *o) {
+  bool in_extra_data; /* in-memory only member, does not serialize */
+
+  rgw_obj() : in_extra_data(false) {}
+  rgw_obj(const char *b, const char *o) : in_extra_data(false) {
     rgw_bucket _b(b);
     std::string _o(o);
     init(_b, _o);
   }
-  rgw_obj(rgw_bucket& b, const char *o) {
+  rgw_obj(rgw_bucket& b, const char *o) : in_extra_data(false) {
     std::string _o(o);
     init(b, _o);
   }
-  rgw_obj(rgw_bucket& b, const std::string& o) {
+  rgw_obj(rgw_bucket& b, const std::string& o) : in_extra_data(false) {
     init(b, o);
   }
-  rgw_obj(rgw_bucket& b, const std::string& o, const std::string& k) {
+  rgw_obj(rgw_bucket& b, const std::string& o, const std::string& k) : in_extra_data(false) {
     init(b, o, k);
   }
-  rgw_obj(rgw_bucket& b, const std::string& o, const std::string& k, const std::string& n) {
+  rgw_obj(rgw_bucket& b, const std::string& o, const std::string& k, const std::string& n) : in_extra_data(false) {
     init(b, o, k, n);
   }
   void init(rgw_bucket& b, const std::string& o, const std::string& k, const std::string& n) {
@@ -1174,6 +1176,14 @@ public:
     ns = obj.substr(1, pos-1);
     obj = obj.substr(pos+1, string::npos);
     return true;
+  }
+
+  void set_in_extra_data(bool val) {
+    in_extra_data = val;
+  }
+
+  bool is_in_extra_data() const {
+    return in_extra_data;
   }
 
   void encode(bufferlist& bl) const {

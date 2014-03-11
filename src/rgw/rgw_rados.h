@@ -44,6 +44,10 @@ static inline void get_obj_bucket_and_oid_key(const rgw_obj& obj, rgw_bucket& bu
   bucket = obj.bucket;
   prepend_bucket_marker(bucket, obj.object, oid);
   prepend_bucket_marker(bucket, obj.key, key);
+
+  if (obj.is_in_extra_data() && !bucket.data_extra_pool.empty()) {
+    bucket.data_pool = bucket.data_extra_pool;
+  }
 }
 
 int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, RGWAccessControlPolicy *policy);
