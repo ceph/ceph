@@ -6558,7 +6558,7 @@ void Client::getcwd(string& dir)
     if (!dn) {
       // look it up
       ldout(cct, 10) << "getcwd looking up parent for " << *in << dendl;
-      MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPPARENT);
+      MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPNAME);
       filepath path(in->ino);
       req->set_filepath(path);
       req->set_inode(in);
