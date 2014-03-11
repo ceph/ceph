@@ -44,10 +44,6 @@ static inline void get_obj_bucket_and_oid_key(const rgw_obj& obj, rgw_bucket& bu
   bucket = obj.bucket;
   prepend_bucket_marker(bucket, obj.object, oid);
   prepend_bucket_marker(bucket, obj.key, key);
-
-  if (obj.is_in_extra_data() && !bucket.data_extra_pool.empty()) {
-    bucket.data_pool = bucket.data_extra_pool;
-  }
 }
 
 int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, RGWAccessControlPolicy *policy);
@@ -1161,6 +1157,12 @@ public:
 class RGWGetDirHeader_CB;
 class RGWGetUserHeader_CB;
 
+struct rgw_rados_ref {
+  string oid;
+  string key;
+  librados::IoCtx ioctx;
+};
+
 
 class RGWRados
 {
@@ -1175,6 +1177,7 @@ class RGWRados
   int open_bucket_pool_ctx(const string& bucket_name, const string& pool, librados::IoCtx&  io_ctx);
   int open_bucket_index_ctx(rgw_bucket& bucket, librados::IoCtx&  index_ctx);
   int open_bucket_data_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx);
+  int open_bucket_data_extra_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx);
   int open_bucket_index(rgw_bucket& bucket, librados::IoCtx&  index_ctx, string& bucket_oid);
 
   struct GetObjState {
@@ -1208,6 +1211,9 @@ class RGWRados
   bool watch_initialized;
 
   Mutex bucket_id_lock;
+
+  int get_obj_ioctx(const rgw_obj& obj, librados::IoCtx *ioctx);
+  int get_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref, rgw_bucket *bucket, bool ref_system_obj = false);
   uint64_t max_bucket_id;
 
   int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker);
