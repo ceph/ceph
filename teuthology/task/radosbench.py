@@ -75,7 +75,7 @@ def task(ctx, config):
     try:
         yield
     finally:
-        timeout = config.get('time', 360) * 2
+        timeout = config.get('time', 360) * 5
         log.info('joining radosbench (timing out after %ss)', timeout)
         run.wait(radosbench.itervalues(), timeout=timeout)
 
