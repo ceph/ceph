@@ -1385,7 +1385,7 @@ int RGWPutCORS_ObjStore_S3::get_params()
     goto done_err;
   }
 
-  if (!parser.parse(data, len, 1)) {
+  if (!data || !parser.parse(data, len, 1)) {
     r = -EINVAL;
     goto done_err;
   }
