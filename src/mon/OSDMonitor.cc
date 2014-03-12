@@ -4996,6 +4996,7 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
         _pool_op_reply(m, -ENOTSUP, osdmap.get_epoch());
         return false;
       }
+      break;
     case POOL_OP_CREATE_UNMANAGED_SNAP:
       // but we will allow creating an unmanaged snapshot on any pool
       // as long as it is not in 'pool' snaps mode.
