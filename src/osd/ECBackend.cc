@@ -807,7 +807,12 @@ void ECBackend::handle_sub_write(
 	 ++i) {
       dout(10) << __func__ << ": removing object " << *i
 	       << " since we won't get the transaction" << dendl;
-      localt->remove(temp_coll, *i);
+      localt->remove(
+	temp_coll,
+	ghobject_t(
+	  *i,
+	  ghobject_t::NO_GEN,
+	  get_parent()->whoami_shard().shard));
     }
   }
   clear_temp_objs(op.temp_removed);
