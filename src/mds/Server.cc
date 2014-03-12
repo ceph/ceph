@@ -6043,7 +6043,7 @@ void Server::_rename_prepare(MDRequest *mdr,
   }
 
   bool force_journal_stray = false;
-  if (oldin && oldin->is_dir() && !straydn->is_auth())
+  if (oldin && oldin->is_dir() && straydn && !straydn->is_auth())
     force_journal_stray = _need_force_journal(oldin, true);
 
   if (linkmerge)
