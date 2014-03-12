@@ -332,7 +332,7 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
 	mds->mdcache->request_finish(mdr);
     } else if (it->second.mut) {
       MutationRef& mut = it->second.mut;
-      mds->locker->drop_locks(mut);
+      mds->locker->drop_locks(mut.get());
       mut->cleanup();
     }
 
@@ -1803,7 +1803,7 @@ void Migrator::export_finish(CDir *dir)
   // unpin path
   MutationRef& mut = it->second.mut;
   if (mut) {
-    mds->locker->drop_locks(mut);
+    mds->locker->drop_locks(mut.get());
     mut->cleanup();
   }
 
@@ -2473,7 +2473,7 @@ void Migrator::import_reverse_final(CDir *dir)
   // clean up
   map<dirfrag_t, import_state_t>::iterator it = import_state.find(dir->dirfrag());
   if (it->second.mut) {
-    mds->locker->drop_locks(it->second.mut);
+    mds->locker->drop_locks(it->second.mut.get());
     it->second.mut->cleanup();
   }
   import_state.erase(it);
@@ -2636,7 +2636,7 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
   //audit();  // this fails, bc we munge up the subtree map during handle_import_map (resolve phase)
 
   if (mut) {
-    mds->locker->drop_locks(mut);
+    mds->locker->drop_locks(mut.get());
     mut->cleanup();
   }
 

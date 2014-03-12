@@ -807,7 +807,7 @@ void Server::journal_and_reply(MDRequestRef& mdr, CInode *in, CDentry *dn, LogEv
       mdlog->flush();
     }
   } else if (mdr->did_early_reply)
-    mds->locker->drop_rdlocks(mdr);
+    mds->locker->drop_rdlocks(mdr.get());
   else
     mdlog->flush();
 }
@@ -856,7 +856,7 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
   //_rename_finish() does not send dentry link/unlink message to replicas.
   // so do not set xlocks on dentries "done", the xlocks prevent dentries
   // that have projected linkages from getting new replica.
-  mds->locker->set_xlocks_done(mdr, mdr->client_request->get_op() == CEPH_MDS_OP_RENAME);
+  mds->locker->set_xlocks_done(mdr.get(), mdr->client_request->get_op() == CEPH_MDS_OP_RENAME);
 
   char buf[80];
   dout(10) << "early_reply " << reply->get_result() 
@@ -1552,10 +1552,10 @@ void Server::dispatch_slave_request(MDRequestRef& mdr)
       bool need_issue = false;
       switch (op) {
       case MMDSSlaveRequest::OP_UNXLOCK:
-	mds->locker->xlock_finish(lock, mdr, &need_issue);
+	mds->locker->xlock_finish(lock, mdr.get(), &need_issue);
 	break;
       case MMDSSlaveRequest::OP_UNWRLOCK:
-	mds->locker->wrlock_finish(lock, mdr, &need_issue);
+	mds->locker->wrlock_finish(lock, mdr.get(), &need_issue);
 	break;
       }
       if (need_issue)
@@ -1568,7 +1568,7 @@ void Server::dispatch_slave_request(MDRequestRef& mdr)
     break;
 
   case MMDSSlaveRequest::OP_DROPLOCKS:
-    mds->locker->drop_locks(mdr);
+    mds->locker->drop_locks(mdr.get());
     mdr->slave_request->put();
     mdr->slave_request = 0;
     break;
@@ -2139,7 +2139,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
        * a single MDS request; otherwise we'd be in
        * rdlock_path_xlock_dentry.
        */
-      mds->locker->drop_locks(mdr, NULL);
+      mds->locker->drop_locks(mdr.get(), NULL);
       mdr->drop_local_auth_pins();
       return 0;
     }
@@ -2843,7 +2843,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   if (!dir->is_complete()) {
     if (dir->is_frozen()) {
       dout(7) << "dir is frozen " << *dir << dendl;
-      mds->locker->drop_locks(mdr);
+      mds->locker->drop_locks(mdr.get());
       mdr->drop_local_auth_pins();
       dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
       return;
@@ -2948,7 +2948,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
 	  break;
 	}
 
-	mds->locker->drop_locks(mdr);
+	mds->locker->drop_locks(mdr.get());
 	mdr->drop_local_auth_pins();
 	mdcache->open_remote_dentry(dn, dnp, new C_MDS_RetryRequest(mdcache, mdr));
 	return;
@@ -3136,7 +3136,7 @@ void Server::handle_client_file_setlock(MDRequestRef& mdr)
 	dout(10) << " added to waiting list" << dendl;
 	assert(lock_state->is_waiting(set_lock));
 	mdr->more()->flock_was_waiting = true;
-	mds->locker->drop_locks(mdr);
+	mds->locker->drop_locks(mdr.get());
 	mdr->drop_local_auth_pins();
 	cur->add_waiter(CInode::WAIT_FLOCK, new C_MDS_RetryRequest(mdcache, mdr));
       }
@@ -6803,7 +6803,7 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
 	// we only care about xlocks on the exported inode
 	if (lock->get_parent() == in &&
 	    !lock->is_locallock())
-	  mds->locker->xlock_export(lock, mdr);
+	  mds->locker->xlock_export(lock, mdr.get());
       }
 
       map<client_t,Capability::Import> peer_imported;
