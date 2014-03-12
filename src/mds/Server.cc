@@ -4455,8 +4455,10 @@ void Server::_link_remote_finish(MDRequestRef& mdr, bool inc,
 
   if (inc)
     mds->mdcache->send_dentry_link(dn);
-  else
-    mds->mdcache->send_dentry_unlink(dn, NULL, NULL);
+  else {
+    MDRequestRef null_ref;
+    mds->mdcache->send_dentry_unlink(dn, NULL, null_ref);
+  }
   
   // commit anchor update?
   if (mdr->more()->dst_reanchor_atid) 
