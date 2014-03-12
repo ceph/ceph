@@ -20,9 +20,9 @@
 #include "messages/MMDSSlaveRequest.h"
 
 
-// Mutation
+// MutationImpl
 
-void Mutation::pin(MDSCacheObject *o)
+void MutationImpl::pin(MDSCacheObject *o)
 {
   if (pins.count(o) == 0) {
     o->get(MDSCacheObject::PIN_REQUEST);
@@ -30,14 +30,14 @@ void Mutation::pin(MDSCacheObject *o)
   }      
 }
 
-void Mutation::unpin(MDSCacheObject *o)
+void MutationImpl::unpin(MDSCacheObject *o)
 {
   assert(pins.count(o));
   o->put(MDSCacheObject::PIN_REQUEST);
   pins.erase(o);
 }
 
-void Mutation::set_stickydirs(CInode *in)
+void MutationImpl::set_stickydirs(CInode *in)
 {
   if (stickydirs.count(in) == 0) {
     in->get_stickydirs();
@@ -45,7 +45,7 @@ void Mutation::set_stickydirs(CInode *in)
   }
 }
 
-void Mutation::drop_pins()
+void MutationImpl::drop_pins()
 {
   for (set<MDSCacheObject*>::iterator it = pins.begin();
        it != pins.end();
@@ -54,7 +54,7 @@ void Mutation::drop_pins()
   pins.clear();
 }
 
-void Mutation::start_locking(SimpleLock *lock, int target)
+void MutationImpl::start_locking(SimpleLock *lock, int target)
 {
   assert(locking == NULL);
   pin(lock->get_parent());
@@ -62,7 +62,7 @@ void Mutation::start_locking(SimpleLock *lock, int target)
   locking_target_mds = target;
 }
 
-void Mutation::finish_locking(SimpleLock *lock)
+void MutationImpl::finish_locking(SimpleLock *lock)
 {
   assert(locking == lock);
   locking = NULL;
@@ -71,12 +71,12 @@ void Mutation::finish_locking(SimpleLock *lock)
 
 
 // auth pins
-bool Mutation::is_auth_pinned(MDSCacheObject *object)
+bool MutationImpl::is_auth_pinned(MDSCacheObject *object)
 { 
   return auth_pins.count(object) || remote_auth_pins.count(object); 
 }
 
-void Mutation::auth_pin(MDSCacheObject *object)
+void MutationImpl::auth_pin(MDSCacheObject *object)
 {
   if (!is_auth_pinned(object)) {
     object->auth_pin(this);
@@ -84,14 +84,14 @@ void Mutation::auth_pin(MDSCacheObject *object)
   }
 }
 
-void Mutation::auth_unpin(MDSCacheObject *object)
+void MutationImpl::auth_unpin(MDSCacheObject *object)
 {
   assert(auth_pins.count(object));
   object->auth_unpin(this);
   auth_pins.erase(object);
 }
 
-void Mutation::drop_local_auth_pins()
+void MutationImpl::drop_local_auth_pins()
 {
   for (set<MDSCacheObject*>::iterator it = auth_pins.begin();
        it != auth_pins.end();
@@ -102,12 +102,12 @@ void Mutation::drop_local_auth_pins()
   auth_pins.clear();
 }
 
-void Mutation::add_projected_inode(CInode *in)
+void MutationImpl::add_projected_inode(CInode *in)
 {
   projected_inodes.push_back(in);
 }
 
-void Mutation::pop_and_dirty_projected_inodes()
+void MutationImpl::pop_and_dirty_projected_inodes()
 {
   while (!projected_inodes.empty()) {
     CInode *in = projected_inodes.front();
@@ -116,12 +116,12 @@ void Mutation::pop_and_dirty_projected_inodes()
   }
 }
 
-void Mutation::add_projected_fnode(CDir *dir)
+void MutationImpl::add_projected_fnode(CDir *dir)
 {
   projected_fnodes.push_back(dir);
 }
 
-void Mutation::pop_and_dirty_projected_fnodes()
+void MutationImpl::pop_and_dirty_projected_fnodes()
 {
   while (!projected_fnodes.empty()) {
     CDir *dir = projected_fnodes.front();
@@ -130,24 +130,24 @@ void Mutation::pop_and_dirty_projected_fnodes()
   }
 }
 
-void Mutation::add_updated_lock(ScatterLock *lock)
+void MutationImpl::add_updated_lock(ScatterLock *lock)
 {
   updated_locks.push_back(lock);
 }
 
-void Mutation::add_cow_inode(CInode *in)
+void MutationImpl::add_cow_inode(CInode *in)
 {
   pin(in);
   dirty_cow_inodes.push_back(in);
 }
 
-void Mutation::add_cow_dentry(CDentry *dn)
+void MutationImpl::add_cow_dentry(CDentry *dn)
 {
   pin(dn);
   dirty_cow_dentries.push_back(pair<CDentry*,version_t>(dn, dn->get_projected_version()));
 }
 
-void Mutation::apply()
+void MutationImpl::apply()
 {
   pop_and_dirty_projected_inodes();
   pop_and_dirty_projected_fnodes();
@@ -167,7 +167,7 @@ void Mutation::apply()
     (*p)->mark_dirty();
 }
 
-void Mutation::cleanup()
+void MutationImpl::cleanup()
 {
   drop_local_auth_pins();
   drop_pins();
@@ -276,7 +276,7 @@ void MDRequestImpl::drop_local_auth_pins()
 {
   if (has_more() && more()->is_freeze_authpin)
     unfreeze_auth_pin(true);
-  Mutation::drop_local_auth_pins();
+  MutationImpl::drop_local_auth_pins();
 }
 
 void MDRequestImpl::print(ostream &out)
