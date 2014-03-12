@@ -29,8 +29,6 @@ class Session;
 class CDir;
 class CInode;
 class CDentry;
-struct Mutation;
-struct MDRequest;
 class EMetaBlob;
 struct SnapRealm;
 
@@ -77,8 +75,8 @@ protected:
   void send_lock_message(SimpleLock *lock, int msg, const bufferlist &data);
 
   // -- locks --
-  void _drop_rdlocks(Mutation *mut, set<CInode*> *pneed_issue);
-  void _drop_non_rdlocks(Mutation *mut, set<CInode*> *pneed_issue);
+  void _drop_rdlocks(MutationRef& mut, set<CInode*> *pneed_issue);
+  void _drop_non_rdlocks(MutationRef& mut, set<CInode*> *pneed_issue);
 public:
   void include_snap_rdlocks(set<SimpleLock*>& rdlocks, CInode *in);
   void include_snap_rdlocks_wlayout(set<SimpleLock*>& rdlocks, CInode *in,
@@ -92,11 +90,11 @@ public:
 		     CInode *auth_pin_freeze=NULL,
 		     bool auth_pin_nonblock=false);
 
-  void cancel_locking(Mutation *mut, set<CInode*> *pneed_issue);
-  void drop_locks(Mutation *mut, set<CInode*> *pneed_issue=0);
-  void set_xlocks_done(Mutation *mut, bool skip_dentry=false);
-  void drop_non_rdlocks(Mutation *mut, set<CInode*> *pneed_issue=0);
-  void drop_rdlocks(Mutation *mut, set<CInode*> *pneed_issue=0);
+  void cancel_locking(MutationRef& mut, set<CInode*> *pneed_issue);
+  void drop_locks(MutationRef& mut, set<CInode*> *pneed_issue=0);
+  void set_xlocks_done(MutationRef& mut, bool skip_dentry=false);
+  void drop_non_rdlocks(MutationRef& mut, set<CInode*> *pneed_issue=0);
+  void drop_rdlocks(MutationRef& mut, set<CInode*> *pneed_issue=0);
 
   void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0, list<Context*> *pfinishers=0);
   void eval(SimpleLock *lock, bool *need_issue);
@@ -130,23 +128,23 @@ public:
   bool _rdlock_kick(SimpleLock *lock, bool as_anon);
   bool rdlock_try(SimpleLock *lock, client_t client, Context *c);
   bool rdlock_start(SimpleLock *lock, MDRequestRef& mut, bool as_anon=false);
-  void rdlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue);
+  void rdlock_finish(SimpleLock *lock, MutationRef& mut, bool *pneed_issue);
   bool can_rdlock_set(set<SimpleLock*>& locks);
   bool rdlock_try_set(set<SimpleLock*>& locks);
-  void rdlock_take_set(set<SimpleLock*>& locks, Mutation *mut);
+  void rdlock_take_set(set<SimpleLock*>& locks, MutationRef& mut);
 
-  void wrlock_force(SimpleLock *lock, Mutation *mut);
+  void wrlock_force(SimpleLock *lock, MutationRef& mut);
   bool wrlock_start(SimpleLock *lock, MDRequestRef& mut, bool nowait=false);
-  void wrlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue);
+  void wrlock_finish(SimpleLock *lock, MutationRef& mut, bool *pneed_issue);
 
   void remote_wrlock_start(SimpleLock *lock, int target, MDRequestRef& mut);
-  void remote_wrlock_finish(SimpleLock *lock, int target, Mutation *mut);
+  void remote_wrlock_finish(SimpleLock *lock, int target, MutationRef& mut);
 
   bool xlock_start(SimpleLock *lock, MDRequestRef& mut);
   void _finish_xlock(SimpleLock *lock, client_t xlocker, bool *pneed_issue);
-  void xlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue);
+  void xlock_finish(SimpleLock *lock, MutationRef& mut, bool *pneed_issue);
 
-  void xlock_export(SimpleLock *lock, Mutation *mut);
+  void xlock_export(SimpleLock *lock, MutationRef& mut);
   void xlock_import(SimpleLock *lock);
 
 
@@ -184,14 +182,15 @@ protected:
   class C_Locker_ScatterWB : public Context {
     Locker *locker;
     ScatterLock *lock;
-    Mutation *mut;
+    MutationRef mut;
   public:
-    C_Locker_ScatterWB(Locker *l, ScatterLock *sl, Mutation *m) : locker(l), lock(sl), mut(m) {}
+    C_Locker_ScatterWB(Locker *l, ScatterLock *sl, MutationRef& m) :
+      locker(l), lock(sl), mut(m) {}
     void finish(int r) { 
       locker->scatter_writebehind_finish(lock, mut); 
     }
   };
-  void scatter_writebehind_finish(ScatterLock *lock, Mutation *mut);
+  void scatter_writebehind_finish(ScatterLock *lock, MutationRef& mut);
 
   xlist<ScatterLock*> updated_scatterlocks;
 public:
@@ -231,12 +230,12 @@ public:
 
   // local
 public:
-  void local_wrlock_grab(LocalLock *lock, Mutation *mut);
+  void local_wrlock_grab(LocalLock *lock, MutationRef& mut);
 protected:
   bool local_wrlock_start(LocalLock *lock, MDRequestRef& mut);
-  void local_wrlock_finish(LocalLock *lock, Mutation *mut);
+  void local_wrlock_finish(LocalLock *lock, MutationRef& mut);
   bool local_xlock_start(LocalLock *lock, MDRequestRef& mut);
-  void local_xlock_finish(LocalLock *lock, Mutation *mut);
+  void local_xlock_finish(LocalLock *lock, MutationRef& mut);
 
 
   // file
@@ -272,7 +271,7 @@ public:
 protected:
   void handle_inode_file_caps(class MInodeFileCaps *m);
 
-  void file_update_finish(CInode *in, Mutation *mut, bool share, client_t client, Capability *cap,
+  void file_update_finish(CInode *in, MutationRef& mut, bool share, client_t client, Capability *cap,
 			  MClientCaps *ack);
 public:
   void calc_new_client_ranges(CInode *in, uint64_t size, map<client_t, client_writeable_range_t>& new_ranges);
