@@ -478,7 +478,7 @@ public:
   }
 
   // xlock
-  void get_xlock(MutationRef& who, client_t client) { 
+  void get_xlock(MutationRef who, client_t client) { 
     assert(get_xlock_by() == 0);
     assert(state == LOCK_XLOCK || is_locallock() ||
 	   state == LOCK_LOCK /* if we are a slave */);
