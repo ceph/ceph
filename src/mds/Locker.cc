@@ -510,7 +510,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 }
 
 
-void Locker::set_xlocks_done(Mutation *mut, bool skip_dentry)
+void Locker::set_xlocks_done(MutationRef& mut, bool skip_dentry)
 {
   for (set<SimpleLock*>::iterator p = mut->xlocks.begin();
        p != mut->xlocks.end();
@@ -523,7 +523,7 @@ void Locker::set_xlocks_done(Mutation *mut, bool skip_dentry)
   }
 }
 
-void Locker::_drop_rdlocks(Mutation *mut, set<CInode*> *pneed_issue)
+void Locker::_drop_rdlocks(MutationRef& mut, set<CInode*> *pneed_issue)
 {
   while (!mut->rdlocks.empty()) {
     bool ni = false;
@@ -534,7 +534,7 @@ void Locker::_drop_rdlocks(Mutation *mut, set<CInode*> *pneed_issue)
   }
 }
 
-void Locker::_drop_non_rdlocks(Mutation *mut, set<CInode*> *pneed_issue)
+void Locker::_drop_non_rdlocks(MutationRef& mut, set<CInode*> *pneed_issue)
 {
   set<int> slaves;
 
@@ -581,7 +581,7 @@ void Locker::_drop_non_rdlocks(Mutation *mut, set<CInode*> *pneed_issue)
   }
 }
 
-void Locker::cancel_locking(Mutation *mut, set<CInode*> *pneed_issue)
+void Locker::cancel_locking(MutationRef& mut, set<CInode*> *pneed_issue)
 {
   SimpleLock *lock = mut->locking;
   assert(lock);
@@ -602,7 +602,7 @@ void Locker::cancel_locking(Mutation *mut, set<CInode*> *pneed_issue)
   mut->finish_locking(lock);
 }
 
-void Locker::drop_locks(Mutation *mut, set<CInode*> *pneed_issue)
+void Locker::drop_locks(MutationRef& mut, set<CInode*> *pneed_issue)
 {
   // leftover locks
   set<CInode*> my_need_issue;
@@ -619,7 +619,7 @@ void Locker::drop_locks(Mutation *mut, set<CInode*> *pneed_issue)
   mut->done_locking = false;
 }
 
-void Locker::drop_non_rdlocks(Mutation *mut, set<CInode*> *pneed_issue)
+void Locker::drop_non_rdlocks(MutationRef& mut, set<CInode*> *pneed_issue)
 {
   set<CInode*> my_need_issue;
   if (!pneed_issue)
@@ -631,7 +631,7 @@ void Locker::drop_non_rdlocks(Mutation *mut, set<CInode*> *pneed_issue)
     issue_caps_set(*pneed_issue);
 }
 
-void Locker::drop_rdlocks(Mutation *mut, set<CInode*> *pneed_issue)
+void Locker::drop_rdlocks(MutationRef& mut, set<CInode*> *pneed_issue)
 {
   set<CInode*> my_need_issue;
   if (!pneed_issue)
@@ -1218,7 +1218,7 @@ void Locker::nudge_log(SimpleLock *lock)
     mds->mdlog->flush();
 }
 
-void Locker::rdlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
+void Locker::rdlock_finish(SimpleLock *lock, MutationRef& mut, bool *pneed_issue)
 {
   // drop ref
   lock->put_rdlock();
@@ -1261,7 +1261,7 @@ bool Locker::rdlock_try_set(set<SimpleLock*>& locks)
   return true;
 }
 
-void Locker::rdlock_take_set(set<SimpleLock*>& locks, Mutation *mut)
+void Locker::rdlock_take_set(set<SimpleLock*>& locks, MutationRef& mut)
 {
   dout(10) << "rdlock_take_set " << locks << dendl;
   for (set<SimpleLock*>::iterator p = locks.begin(); p != locks.end(); ++p) {
@@ -1274,7 +1274,7 @@ void Locker::rdlock_take_set(set<SimpleLock*>& locks, Mutation *mut)
 // ------------------
 // wrlock
 
-void Locker::wrlock_force(SimpleLock *lock, Mutation *mut)
+void Locker::wrlock_force(SimpleLock *lock, MutationRef& mut)
 {
   if (lock->get_type() == CEPH_LOCK_IVERSION ||
       lock->get_type() == CEPH_LOCK_DVERSION)
@@ -1351,7 +1351,7 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequestRef& mut, bool nowait)
   return false;
 }
 
-void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
+void Locker::wrlock_finish(SimpleLock *lock, MutationRef& mut, bool *pneed_issue)
 {
   if (lock->get_type() == CEPH_LOCK_IVERSION ||
       lock->get_type() == CEPH_LOCK_DVERSION)
@@ -1401,7 +1401,8 @@ void Locker::remote_wrlock_start(SimpleLock *lock, int target, MDRequestRef& mut
   mut->more()->waiting_on_slave.insert(target);
 }
 
-void Locker::remote_wrlock_finish(SimpleLock *lock, int target, Mutation *mut)
+void Locker::remote_wrlock_finish(SimpleLock *lock, int target,
+                                  MutationRef& mut)
 {
   // drop ref
   mut->remote_wrlocks.erase(lock);
@@ -1522,7 +1523,7 @@ void Locker::_finish_xlock(SimpleLock *lock, client_t xlocker, bool *pneed_issue
   eval_gather(lock, true, pneed_issue);
 }
 
-void Locker::xlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
+void Locker::xlock_finish(SimpleLock *lock, MutationRef& mut, bool *pneed_issue)
 {
   if (lock->get_type() == CEPH_LOCK_IVERSION ||
       lock->get_type() == CEPH_LOCK_DVERSION)
@@ -1577,7 +1578,7 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
   }
 }
 
-void Locker::xlock_export(SimpleLock *lock, Mutation *mut)
+void Locker::xlock_export(SimpleLock *lock, MutationRef& mut)
 {
   dout(10) << "xlock_export on " << *lock << " " << *lock->get_parent() << dendl;
 
@@ -1613,12 +1614,13 @@ version_t Locker::issue_file_data_version(CInode *in)
 struct C_Locker_FileUpdate_finish : public Context {
   Locker *locker;
   CInode *in;
-  Mutation *mut;
+  MutationRef mut;
   bool share;
   client_t client;
   Capability *cap;
   MClientCaps *ack;
-  C_Locker_FileUpdate_finish(Locker *l, CInode *i, Mutation *m, bool e=false, client_t c=-1,
+  C_Locker_FileUpdate_finish(Locker *l, CInode *i, MutationRef& m,
+                             bool e=false, client_t c=-1,
 			     Capability *cp = 0,
 			     MClientCaps *ac = 0) : 
     locker(l), in(i), mut(m), share(e), client(c), cap(cp),
@@ -1630,7 +1632,7 @@ struct C_Locker_FileUpdate_finish : public Context {
   }
 };
 
-void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, client_t client, 
+void Locker::file_update_finish(CInode *in, MutationRef& mut, bool share, client_t client,
 				Capability *cap, MClientCaps *ack)
 {
   dout(10) << "file_update_finish on " << *in << dendl;
@@ -1679,7 +1681,6 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, client_t 
 
   // auth unpin after issuing caps
   mut->cleanup();
-  delete mut;
 }
 
 Capability* Locker::issue_new_caps(CInode *in,
@@ -2143,7 +2144,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
     }
   }
 
-  Mutation *mut = new Mutation;
+  MutationRef mut(new MutationImpl);
   mut->ls = mds->mdlog->get_current_segment();
     
   inode_t *pi = in->project_inode();
@@ -2693,7 +2694,7 @@ void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t foll
 
   EUpdate *le = new EUpdate(mds->mdlog, "snap flush");
   mds->mdlog->start_entry(le);
-  Mutation *mut = new Mutation;
+  MutationRef mut(new MutationImpl);
   mut->ls = mds->mdlog->get_current_segment();
 
   // normal metadata updates that we can apply to the head as well.
@@ -2949,7 +2950,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   inode_t *pi = in->project_inode(px);
   pi->version = in->pre_dirty();
 
-  Mutation *mut = new Mutation;
+  MutationRef mut(new MutationImpl);
   mut->ls = mds->mdlog->get_current_segment();
 
   _update_cap_fields(in, dirty, m, pi);
@@ -3827,7 +3828,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   dout(10) << "scatter_writebehind " << in->inode.mtime << " on " << *lock << " on " << *in << dendl;
 
   // journal
-  Mutation *mut = new Mutation;
+  MutationRef mut(new MutationImpl);
   mut->ls = mds->mdlog->get_current_segment();
 
   // forcefully take a wrlock
@@ -3855,7 +3856,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   mds->mdlog->wait_for_safe(new C_Locker_ScatterWB(this, lock, mut));
 }
 
-void Locker::scatter_writebehind_finish(ScatterLock *lock, Mutation *mut)
+void Locker::scatter_writebehind_finish(ScatterLock *lock, MutationRef& mut)
 {
   CInode *in = static_cast<CInode*>(lock->get_parent());
   dout(10) << "scatter_writebehind_finish on " << *lock << " on " << *in << dendl;
@@ -3878,7 +3879,6 @@ void Locker::scatter_writebehind_finish(ScatterLock *lock, Mutation *mut)
   mut->apply();
   drop_locks(mut);
   mut->cleanup();
-  delete mut;
 
   if (lock->is_stable())
     lock->finish_waiters(ScatterLock::WAIT_STABLE);
@@ -4148,7 +4148,7 @@ void Locker::scatter_tempsync(ScatterLock *lock, bool *need_issue)
 // ==========================================================================
 // local lock
 
-void Locker::local_wrlock_grab(LocalLock *lock, Mutation *mut)
+void Locker::local_wrlock_grab(LocalLock *lock, MutationRef& mut)
 {
   dout(7) << "local_wrlock_grab  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
@@ -4179,7 +4179,7 @@ bool Locker::local_wrlock_start(LocalLock *lock, MDRequestRef& mut)
   }
 }
 
-void Locker::local_wrlock_finish(LocalLock *lock, Mutation *mut)
+void Locker::local_wrlock_finish(LocalLock *lock, MutationRef& mut)
 {
   dout(7) << "local_wrlock_finish  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
@@ -4210,7 +4210,7 @@ bool Locker::local_xlock_start(LocalLock *lock, MDRequestRef& mut)
   return true;
 }
 
-void Locker::local_xlock_finish(LocalLock *lock, Mutation *mut)
+void Locker::local_xlock_finish(LocalLock *lock, MutationRef& mut)
 {
   dout(7) << "local_xlock_finish  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
