@@ -122,6 +122,7 @@ public:
     snapid_t snap_seq;       ///< src's snap_seq (if head)
     librados::snap_set_t snapset; ///< src snapset (if head)
     bool mirror_snapset;
+    map<string, bufferlist> attrs; ///< src user attrs
     CopyResults() : object_size(0), started_temp_obj(false),
 		    user_version(0), should_requeue(false),
 		    mirror_snapset(false) {}
@@ -477,14 +478,18 @@ public:
 	     pending_attrs.begin();
 	   i != pending_attrs.end();
 	   ++i) {
-	for (map<string, boost::optional<bufferlist> >::iterator j =
-	       i->second.begin();
-	     j != i->second.end();
-	     ++j) {
-	  if (j->second)
-	    i->first->attr_cache[j->first] = j->second.get();
-	  else
-	    i->first->attr_cache.erase(j->first);
+	if (i->first->obs.exists) {
+	  for (map<string, boost::optional<bufferlist> >::iterator j =
+		 i->second.begin();
+	       j != i->second.end();
+	       ++j) {
+	    if (j->second)
+	      i->first->attr_cache[j->first] = j->second.get();
+	    else
+	      i->first->attr_cache.erase(j->first);
+	  }
+	} else {
+	  i->first->attr_cache.clear();
 	}
       }
       pending_attrs.clear();
@@ -595,6 +600,8 @@ public:
     eversion_t          pg_local_last_complete;
 
     bool queue_snap_trimmer;
+
+    Context *on_applied;
     
     RepGather(OpContext *c, ObjectContextRef pi, tid_t rt, 
 	      eversion_t lc) :
@@ -607,7 +614,8 @@ public:
       //sent_nvram(false),
       sent_disk(false),
       pg_local_last_complete(lc),
-      queue_snap_trimmer(false) { }
+      queue_snap_trimmer(false),
+      on_applied(NULL) { }
 
     RepGather *get() {
       nref++;
@@ -617,6 +625,7 @@ public:
       assert(nref > 0);
       if (--nref == 0) {
 	delete ctx; // must already be unlocked
+	assert(on_applied == NULL);
 	delete this;
 	//generic_dout(0) << "deleting " << this << dendl;
       }
@@ -719,6 +728,8 @@ protected:
   HitSetRef hit_set;        ///< currently accumulating HitSet
   utime_t hit_set_start_stamp;    ///< time the current HitSet started recording
 
+  map<time_t,HitSetRef> hit_set_flushing; ///< currently being written, not yet readable
+
   void hit_set_clear();     ///< discard any HitSet state
   void hit_set_setup();     ///< initialize HitSet state
   void hit_set_create();    ///< create a new HitSet
@@ -733,6 +744,7 @@ protected:
   boost::scoped_ptr<TierAgentState> agent_state;
 
   friend class C_AgentFlushStartStop;
+  friend class C_HitSetFlushing;
 
   void agent_setup();       ///< initialize agent state
   void agent_work(int max); ///< entry point to do some agent work
@@ -1316,6 +1328,10 @@ public:
   void on_shutdown();
 
   // attr cache handling
+  void replace_cached_attrs(
+    OpContext *ctx,
+    ObjectContextRef obc,
+    const map<string, bufferlist> &new_attrs);
   void setattr_maybe_cache(
     ObjectContextRef obc,
     OpContext *op,
