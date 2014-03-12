@@ -66,7 +66,6 @@ class MMDSFragmentNotify;
 
 class ESubtreeMap;
 
-struct Mutation;
 struct MDRequestImpl;
 typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
 struct MDSlaveUpdate;
@@ -205,7 +204,7 @@ public:
   void map_dirfrag_set(list<dirfrag_t>& dfs, set<CDir*>& result);
   void try_subtree_merge(CDir *root);
   void try_subtree_merge_at(CDir *root, bool do_eval=true);
-  void subtree_merge_writebehind_finish(CInode *in, Mutation *mut);
+  void subtree_merge_writebehind_finish(CInode *in, MutationRef& mut);
   void eval_subtree_root(CInode *diri);
   CDir *get_subtree_root(CDir *dir);
   CDir *get_projected_subtree_root(CDir *dir);
@@ -267,11 +266,12 @@ public:
   // journal/snap helpers
   CInode *pick_inode_snap(CInode *in, snapid_t follows);
   CInode *cow_inode(CInode *in, snapid_t last);
-  void journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn, snapid_t follows=CEPH_NOSNAP,
+  void journal_cow_dentry(MutationRef& mut, EMetaBlob *metablob, CDentry *dn,
+                          snapid_t follows=CEPH_NOSNAP,
 			  CInode **pcow_inode=0, CDentry::linkage_t *dnl=0);
-  void journal_cow_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP,
+  void journal_cow_inode(MutationRef& mut, EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP,
 			  CInode **pcow_inode=0);
-  void journal_dirty_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
+  void journal_dirty_inode(MutationRef& mut, EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
 
   void project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t first, int linkunlink);
   void _project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapid_t last,
@@ -279,7 +279,7 @@ public:
   void project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accounted_rstat,
 				   snapid_t ofirst, snapid_t last, 
 				   CInode *pin, bool cow_head);
-  void predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
+  void predirty_journal_parents(MutationRef& mut, EMetaBlob *blob,
 				CInode *in, CDir *parent,
 				int flags, int linkunlink=0,
 				snapid_t follows=CEPH_NOSNAP);
@@ -539,7 +539,7 @@ public:
 
   void queue_file_recover(CInode *in);
   void unqueue_file_recover(CInode *in);
-  void _queued_file_recover_cow(CInode *in, Mutation *mut);
+  void _queued_file_recover_cow(CInode *in, MutationRef& mut);
   void _queue_file_recover(CInode *in);
   void identify_files_to_recover(vector<CInode*>& recover_q, vector<CInode*>& check_q);
   void start_files_to_recover(vector<CInode*>& recover_q, vector<CInode*>& check_q);
@@ -689,7 +689,7 @@ protected:
   void truncate_inode(CInode *in, LogSegment *ls);
   void _truncate_inode(CInode *in, LogSegment *ls);
   void truncate_inode_finish(CInode *in, LogSegment *ls);
-  void truncate_inode_logged(CInode *in, Mutation *mut);
+  void truncate_inode_logged(CInode *in, MutationRef& mut);
 
   void add_recovered_truncate(CInode *in, LogSegment *ls);
   void remove_recovered_truncate(CInode *in, LogSegment *ls);
@@ -726,7 +726,8 @@ public:
   void populate_mydir();
 
   void _create_system_file(CDir *dir, const char *name, CInode *in, Context *fin);
-  void _create_system_file_finish(Mutation *mut, CDentry *dn, version_t dpv, Context *fin);
+  void _create_system_file_finish(MutationRef& mut, CDentry *dn,
+                                  version_t dpv, Context *fin);
 
   void open_foreign_mdsdir(inodeno_t ino, Context *c);
   CDentry *get_or_create_stray_dentry(CInode *in);
@@ -868,14 +869,14 @@ public:
   void anchor_destroy(CInode *in, Context *onfinish);
 protected:
   void _anchor_prepared(CInode *in, version_t atid, bool add);
-  void _anchor_logged(CInode *in, version_t atid, Mutation *mut);
+  void _anchor_logged(CInode *in, version_t atid, MutationRef& mut);
   friend class C_MDC_AnchorPrepared;
   friend class C_MDC_AnchorLogged;
 
   // -- snaprealms --
 public:
   void snaprealm_create(MDRequestRef& mdr, CInode *in);
-  void _snaprealm_create_finish(MDRequestRef& mdr, Mutation *mut, CInode *in);
+  void _snaprealm_create_finish(MDRequestRef& mdr, MutationRef& mut, CInode *in);
 
   // -- stray --
 public:

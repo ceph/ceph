@@ -411,11 +411,11 @@ void MDCache::create_mydir_hierarchy(C_Gather *gather)
 
 struct C_MDC_CreateSystemFile : public Context {
   MDCache *cache;
-  Mutation *mut;
+  MutationRef mut;
   CDentry *dn;
   version_t dpv;
   Context *fin;
-  C_MDC_CreateSystemFile(MDCache *c, Mutation *mu, CDentry *d, version_t v, Context *f) :
+  C_MDC_CreateSystemFile(MDCache *c, MutationRef& mu, CDentry *d, version_t v, Context *f) :
     cache(c), mut(mu), dn(d), dpv(v), fin(f) {}
   void finish(int r) {
     cache->_create_system_file_finish(mut, dn, dpv, fin);
@@ -444,7 +444,7 @@ void MDCache::_create_system_file(CDir *dir, const char *name, CInode *in, Conte
   SnapRealm *realm = dir->get_inode()->find_snaprealm();
   dn->first = in->first = realm->get_newest_seq() + 1;
 
-  Mutation *mut = new Mutation;
+  MutationRef mut(new MutationImpl);
 
   // force some locks.  hacky.
   mds->locker->wrlock_force(&dir->inode->filelock, mut);
@@ -472,7 +472,7 @@ void MDCache::_create_system_file(CDir *dir, const char *name, CInode *in, Conte
   mds->mdlog->flush();
 }
 
-void MDCache::_create_system_file_finish(Mutation *mut, CDentry *dn, version_t dpv, Context *fin)
+void MDCache::_create_system_file_finish(MutationRef& mut, CDentry *dn, version_t dpv, Context *fin)
 {
   dout(10) << "_create_system_file_finish " << *dn << dendl;
   
@@ -493,7 +493,6 @@ void MDCache::_create_system_file_finish(Mutation *mut, CDentry *dn, version_t d
   mut->apply();
   mds->locker->drop_locks(mut);
   mut->cleanup();
-  delete mut;
 
   fin->complete(0);
 
@@ -799,9 +798,9 @@ void MDCache::try_subtree_merge(CDir *dir)
 class C_MDC_SubtreeMergeWB : public Context {
   MDCache *mdcache;
   CInode *in;
-  Mutation *mut;
+  MutationRef mut;
 public:
-  C_MDC_SubtreeMergeWB(MDCache *mdc, CInode *i, Mutation *m) : mdcache(mdc), in(i), mut(m) {}
+  C_MDC_SubtreeMergeWB(MDCache *mdc, CInode *i, MutationRef& m) : mdcache(mdc), in(i), mut(m) {}
   void finish(int r) { 
     mdcache->subtree_merge_writebehind_finish(in, mut);
   }
@@ -868,7 +867,7 @@ void MDCache::try_subtree_merge_at(CDir *dir, bool do_eval)
       inode_t *pi = in->project_inode();
       pi->version = in->pre_dirty();
       
-      Mutation *mut = new Mutation;
+      MutationRef mut(new MutationImpl);
       mut->ls = mds->mdlog->get_current_segment();
       EUpdate *le = new EUpdate(mds->mdlog, "subtree merge writebehind");
       mds->mdlog->start_entry(le);
@@ -885,7 +884,7 @@ void MDCache::try_subtree_merge_at(CDir *dir, bool do_eval)
   show_subtrees(15);
 }
 
-void MDCache::subtree_merge_writebehind_finish(CInode *in, Mutation *mut)
+void MDCache::subtree_merge_writebehind_finish(CInode *in, MutationRef& mut)
 {
   dout(10) << "subtree_merge_writebehind_finish on " << in << dendl;
   in->pop_and_dirty_projected_inode(mut->ls);
@@ -893,7 +892,6 @@ void MDCache::subtree_merge_writebehind_finish(CInode *in, Mutation *mut)
   mut->apply();
   mds->locker->drop_locks(mut);
   mut->cleanup();
-  delete mut;
 
   in->auth_unpin(this);
 }
@@ -1486,7 +1484,8 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
   return oldin;
 }
 
-void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn, snapid_t follows,
+void MDCache::journal_cow_dentry(MutationRef& mut, EMetaBlob *metablob,
+                                 CDentry *dn, snapid_t follows,
 				 CInode **pcow_inode, CDentry::linkage_t *dnl)
 {
   if (!dn) {
@@ -1569,7 +1568,8 @@ void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn
 }
 
 
-void MDCache::journal_cow_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows,
+void MDCache::journal_cow_inode(MutationRef& mut, EMetaBlob *metablob,
+                                CInode *in, snapid_t follows,
 				CInode **pcow_inode)
 {
   dout(10) << "journal_cow_inode follows " << follows << " on " << *in << dendl;
@@ -1577,7 +1577,7 @@ void MDCache::journal_cow_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, 
   journal_cow_dentry(mut, metablob, dn, follows, pcow_inode);
 }
 
-void MDCache::journal_dirty_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows)
+void MDCache::journal_dirty_inode(MutationRef& mut, EMetaBlob *metablob, CInode *in, snapid_t follows)
 {
   if (in->is_base()) {
     metablob->add_root(true, in, in->get_projected_inode());
@@ -1848,7 +1848,7 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
  * accounted_rstat on scatterlock sync may not match our current
  * rstat.  this is normal and expected.
  */
-void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
+void MDCache::predirty_journal_parents(MutationRef& mut, EMetaBlob *blob,
 				       CInode *in, CDir *parent,
 				       int flags, int linkunlink,
 				       snapid_t cfollows)
@@ -1996,11 +1996,14 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       }
     }
 
+    // can cast only because i'm passing nowait=true in the sole user
+    MDRequestRef mdmut =
+      ceph::static_pointer_cast<MDRequestImpl,MutationImpl>(mut);
     if (!stop &&
 	mut->wrlocks.count(&pin->nestlock) == 0 &&
 	(!pin->versionlock.can_wrlock() ||                   // make sure we can take versionlock, too
 	 //true
-	 !mds->locker->wrlock_start(&pin->nestlock, static_cast<MDRequest*>(mut), true) // can cast only because i'm passing nowait=true
+	 !mds->locker->wrlock_start(&pin->nestlock, mdmut, true)
 	 )) {  // ** do not initiate.. see above comment **
       dout(10) << "predirty_journal_parents can't wrlock one of " << pin->versionlock << " or " << pin->nestlock
 	       << " on " << *pin << dendl;
@@ -5857,8 +5860,9 @@ void MDCache::reissue_all_caps()
 struct C_MDC_QueuedCow : public Context {
   MDCache *mdcache;
   CInode *in;
-  Mutation *mut;
-  C_MDC_QueuedCow(MDCache *mdc, CInode *i, Mutation *m) : mdcache(mdc), in(i), mut(m) {}
+  MutationRef mut;
+  C_MDC_QueuedCow(MDCache *mdc, CInode *i, MutationRef& m) :
+    mdcache(mdc), in(i), mut(m) {}
   void finish(int r) {
     mdcache->_queued_file_recover_cow(in, mut);
   }
@@ -5881,7 +5885,7 @@ void MDCache::queue_file_recover(CInode *in)
     inode_t *pi = in->project_inode();
     pi->version = in->pre_dirty();
 
-    Mutation *mut = new Mutation;
+    MutationRef mut(new MutationImpl);
     mut->ls = mds->mdlog->get_current_segment();
     EUpdate *le = new EUpdate(mds->mdlog, "queue_file_recover cow");
     mds->mdlog->start_entry(le);
@@ -5906,13 +5910,12 @@ void MDCache::queue_file_recover(CInode *in)
   _queue_file_recover(in);
 }
 
-void MDCache::_queued_file_recover_cow(CInode *in, Mutation *mut)
+void MDCache::_queued_file_recover_cow(CInode *in, MutationRef& mut)
 {
   in->pop_and_dirty_projected_inode(mut->ls);
   mut->apply();
   mds->locker->drop_locks(mut);
   mut->cleanup();
-  delete mut;
 }
 
 void MDCache::_queue_file_recover(CInode *in)
@@ -6146,8 +6149,9 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
 struct C_MDC_TruncateLogged : public Context {
   MDCache *mdc;
   CInode *in;
-  Mutation *mut;
-  C_MDC_TruncateLogged(MDCache *m, CInode *i, Mutation *mu) : mdc(m), in(i), mut(mu) {}
+  MutationRef mut;
+  C_MDC_TruncateLogged(MDCache *m, CInode *i, MutationRef& mu) :
+    mdc(m), in(i), mut(mu) {}
   void finish(int r) {
     mdc->truncate_inode_logged(in, mut);
   }
@@ -6167,7 +6171,7 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
   pi->truncate_from = 0;
   pi->truncate_pending--;
 
-  Mutation *mut = new Mutation;
+  MutationRef mut(new MutationImpl);
   mut->ls = mds->mdlog->get_current_segment();
   mut->add_projected_inode(in);
 
@@ -6186,13 +6190,12 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
     mds->mdlog->flush();
 }
 
-void MDCache::truncate_inode_logged(CInode *in, Mutation *mut)
+void MDCache::truncate_inode_logged(CInode *in, MutationRef& mut)
 {
   dout(10) << "truncate_inode_logged " << *in << dendl;
   mut->apply();
   mds->locker->drop_locks(mut);
   mut->cleanup();
-  delete mut;
 
   in->put(CInode::PIN_TRUNCATING);
   in->auth_unpin(this);
@@ -9188,9 +9191,9 @@ class C_MDC_AnchorLogged : public Context {
   MDCache *cache;
   CInode *in;
   version_t atid;
-  Mutation *mut;
+  MutationRef mut;
 public:
-  C_MDC_AnchorLogged(MDCache *c, CInode *i, version_t t, Mutation *m) : 
+  C_MDC_AnchorLogged(MDCache *c, CInode *i, version_t t, MutationRef& m) :
     cache(c), in(i), atid(t), mut(m) {}
   void finish(int r) {
     cache->_anchor_logged(in, atid, mut);
@@ -9214,7 +9217,7 @@ void MDCache::_anchor_prepared(CInode *in, version_t atid, bool add)
   }
   pi->version = in->pre_dirty();
 
-  Mutation *mut = new Mutation;
+  MutationRef mut(new MutationImpl);
   mut->ls = mds->mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mds->mdlog, add ? "anchor_create":"anchor_destroy");
   mds->mdlog->start_entry(le);
@@ -9226,7 +9229,7 @@ void MDCache::_anchor_prepared(CInode *in, version_t atid, bool add)
 }
 
 
-void MDCache::_anchor_logged(CInode *in, version_t atid, Mutation *mut)
+void MDCache::_anchor_logged(CInode *in, version_t atid, MutationRef& mut)
 {
   dout(10) << "_anchor_logged on " << *in << dendl;
 
@@ -9254,7 +9257,6 @@ void MDCache::_anchor_logged(CInode *in, version_t atid, Mutation *mut)
   // drop locks and finish
   mds->locker->drop_locks(mut);
   mut->cleanup();
-  delete mut;
 
   // trigger waiters
   in->finish_waiting(CInode::WAIT_ANCHORED|CInode::WAIT_UNANCHORED, 0);
@@ -9267,9 +9269,10 @@ void MDCache::_anchor_logged(CInode *in, version_t atid, Mutation *mut)
 struct C_MDC_snaprealm_create_finish : public Context {
   MDCache *cache;
   MDRequestRef mdr;
-  Mutation *mut;
+  MutationRef mut;
   CInode *in;
-  C_MDC_snaprealm_create_finish(MDCache *c, MDRequestRef& m, Mutation *mu, CInode *i) :
+  C_MDC_snaprealm_create_finish(MDCache *c, MDRequestRef& m,
+                                MutationRef& mu, CInode *i) :
     cache(c), mdr(m), mut(mu), in(i) {}
   void finish(int r) {
     cache->_snaprealm_create_finish(mdr, mut, in);
@@ -9293,7 +9296,7 @@ void MDCache::snaprealm_create(MDRequestRef& mdr, CInode *in)
     return;
   }
 
-  Mutation *mut = new Mutation;
+  MutationRef mut(new MutationImpl);
   mut->ls = mds->mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mds->mdlog, "snaprealm_create");
   mds->mdlog->start_entry(le);
@@ -9379,7 +9382,7 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
     send_snaps(updates);
 }
 
-void MDCache::_snaprealm_create_finish(MDRequestRef& mdr, Mutation *mut, CInode *in)
+void MDCache::_snaprealm_create_finish(MDRequestRef& mdr, MutationRef& mut, CInode *in)
 {
   dout(10) << "_snaprealm_create_finish " << *in << dendl;
 
@@ -9391,8 +9394,6 @@ void MDCache::_snaprealm_create_finish(MDRequestRef& mdr, Mutation *mut, CInode 
 
   // tell table we've committed
   mds->snapclient->commit(mdr->more()->stid, mut->ls);
-
-  delete mut;
 
   // create
   bufferlist::iterator p = mdr->more()->snapidbl.begin();
