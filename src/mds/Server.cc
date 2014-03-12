@@ -4663,9 +4663,9 @@ void Server::_committed_slave(MDRequestRef& mdr)
 
 struct C_MDS_LoggedLinkRollback : public Context {
   Server *server;
-  Mutation *mut;
+  MutationRef mut;
   MDRequestRef mdr;
-  C_MDS_LoggedLinkRollback(Server *s, Mutation *m, MDRequestRef& r) : server(s), mut(m), mdr(r) {}
+  C_MDS_LoggedLinkRollback(Server *s, MutationRef& m, MDRequestRef& r) : server(s), mut(m), mdr(r) {}
   void finish(int r) {
     server->_link_rollback_finish(mut, mdr);
   }
@@ -4687,7 +4687,7 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequestRef& mdr)
   mds->mdcache->add_rollback(rollback.reqid, master); // need to finish this update before resolve finishes
   assert(mdr || mds->is_resolve());
 
-  Mutation *mut = new Mutation(rollback.reqid);
+  MutationRef mut(new MutationImpl(rollback.reqid));
   mut->ls = mds->mdlog->get_current_segment();
 
   CInode *in = mds->mdcache->get_inode(rollback.ino);
@@ -4731,7 +4731,7 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequestRef& mdr)
   mdlog->flush();
 }
 
-void Server::_link_rollback_finish(Mutation *mut, MDRequestRef& mdr)
+void Server::_link_rollback_finish(MutationRef& mut, MDRequestRef& mdr)
 {
   dout(10) << "_link_rollback_finish" << dendl;
 
@@ -4744,7 +4744,6 @@ void Server::_link_rollback_finish(Mutation *mut, MDRequestRef& mdr)
   mds->mdcache->finish_rollback(mut->reqid);
 
   mut->cleanup();
-  delete mut;
 }
 
 
@@ -6863,7 +6862,7 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
   }
 }
 
-void _rollback_repair_dir(Mutation *mut, CDir *dir, rename_rollback::drec &r, utime_t ctime, 
+void _rollback_repair_dir(MutationRef& mut, CDir *dir, rename_rollback::drec &r, utime_t ctime,
 			  bool isdir, int linkunlink, nest_info_t &rstat)
 {
   fnode_t *pf;
@@ -6896,14 +6895,14 @@ void _rollback_repair_dir(Mutation *mut, CDir *dir, rename_rollback::drec &r, ut
 
 struct C_MDS_LoggedRenameRollback : public Context {
   Server *server;
-  Mutation *mut;
+  MutationRef mut;
   MDRequestRef mdr;
   CDentry *srcdn;
   version_t srcdnpv;
   CDentry *destdn;
   CDentry *straydn;
   bool finish_mdr;
-  C_MDS_LoggedRenameRollback(Server *s, Mutation *m, MDRequestRef& r,
+  C_MDS_LoggedRenameRollback(Server *s, MutationRef& m, MDRequestRef& r,
 			     CDentry *sd, version_t pv, CDentry *dd,
 			    CDentry *st, bool f) :
     server(s), mut(m), mdr(r), srcdn(sd), srcdnpv(pv), destdn(dd),
@@ -6925,7 +6924,7 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequestRef& mdr,
   // need to finish this update before sending resolve to claim the subtree
   mds->mdcache->add_rollback(rollback.reqid, master);
 
-  Mutation *mut = new Mutation(rollback.reqid);
+  MutationRef mut(new MutationImpl(rollback.reqid));
   mut->ls = mds->mdlog->get_current_segment();
 
   CDentry *srcdn = NULL;
@@ -7130,7 +7129,7 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequestRef& mdr,
   mdlog->flush();
 }
 
-void Server::_rename_rollback_finish(Mutation *mut, MDRequestRef& mdr, CDentry *srcdn,
+void Server::_rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentry *srcdn,
 				     version_t srcdnpv, CDentry *destdn,
 				     CDentry *straydn, bool finish_mdr)
 {
@@ -7197,7 +7196,6 @@ void Server::_rename_rollback_finish(Mutation *mut, MDRequestRef& mdr, CDentry *
   mds->mdcache->finish_rollback(mut->reqid);
 
   mut->cleanup();
-  delete mut;
 }
 
 /* This function DOES put the passed message before returning*/
