@@ -4479,7 +4479,8 @@ inline int ReplicatedPG::_delete_head(OpContext *ctx, bool no_whiteout)
     } else {
       t->remove(soid);
     }
-    ctx->obc->attr_cache.clear();
+    map<string, bufferlist> new_attrs;
+    replace_cached_attrs(ctx, ctx->obc, new_attrs);
   } else {
     ctx->mod_desc.mark_unrollbackable();
     t->remove(soid);
@@ -4587,7 +4588,7 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 	    t->remove(soid);
 	  }
 	}
-	ctx->obc->attr_cache = rollback_to->attr_cache;
+	replace_cached_attrs(ctx, ctx->obc, rollback_to->attr_cache);
       } else {
 	if (obs.exists) {
 	  ctx->mod_desc.mark_unrollbackable();
@@ -5092,6 +5093,8 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type)
     } else {
       dout(10) << " no snapset (this is a clone)" << dendl;
     }
+  } else {
+    ctx->new_obs.oi = object_info_t(ctx->obc->obs.oi.soid);
   }
 
   // append to log
@@ -5534,10 +5537,12 @@ void ReplicatedPG::_write_copy_chunk(CopyOpRef cop, PGBackend::PGTransaction *t)
     t->touch(cop->results.temp_oid);
     for (map<string,bufferlist>::iterator p = cop->attrs.begin();
 	 p != cop->attrs.end();
-	 ++p)
+	 ++p) {
+      cop->results.attrs[string("_") + p->first] = p->second;
       t->setattr(
 	cop->results.temp_oid,
 	string("_") + p->first, p->second);
+    }
     cop->attrs.clear();
   }
   if (!cop->temp_cursor.data_complete) {
@@ -5617,6 +5622,7 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
       }
     }
     ctx->mod_desc.create();
+    replace_cached_attrs(ctx, ctx->obc, cb->results->attrs);
   } else {
     if (obs.exists) {
       ctx->op_t->remove(obs.oi.soid);
@@ -6166,6 +6172,10 @@ void ReplicatedPG::repop_all_applied(RepGather *repop)
   repop->all_applied = true;
   if (!repop->rep_aborted) {
     eval_repop(repop);
+    if (repop->on_applied) {
+     repop->on_applied->complete(0);
+     repop->on_applied = NULL;
+    }
   }
 }
 
@@ -8806,6 +8816,10 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
     repop_queue.pop_front();
     dout(10) << " applying repop tid " << repop->rep_tid << dendl;
     repop->rep_aborted = true;
+    if (repop->on_applied) {
+      delete repop->on_applied;
+      repop->on_applied = NULL;
+    }
 
     if (requeue) {
       if (repop->ctx->op) {
@@ -10185,6 +10199,7 @@ void ReplicatedPG::hit_set_clear()
   dout(20) << __func__ << dendl;
   hit_set.reset();
   hit_set_start_stamp = utime_t();
+  hit_set_flushing.clear();
 }
 
 void ReplicatedPG::hit_set_setup()
@@ -10274,41 +10289,66 @@ bool ReplicatedPG::hit_set_apply_log()
   return true;
 }
 
+struct C_HitSetFlushing : public Context {
+  ReplicatedPGRef pg;
+  time_t hit_set_name;
+  C_HitSetFlushing(ReplicatedPG *p, time_t n) : pg(p), hit_set_name(n) { }
+  void finish(int r) {
+    pg->hit_set_flushing.erase(hit_set_name);
+  }
+};
+
 void ReplicatedPG::hit_set_persist()
 {
   dout(10) << __func__  << dendl;
   bufferlist bl;
+  unsigned max = pool.info.hit_set_count;
 
   utime_t now = ceph_clock_now(cct);
   RepGather *repop;
   hobject_t oid;
-  bool reset = false;
+  time_t flush_time = 0;
+
+  // See what start is going to be used later
+  utime_t start = info.hit_set.current_info.begin;
+  if (!start)
+     start = hit_set_start_stamp;
+
+  // If any archives are degraded we skip this persist request
+  // account for the additional entry being added below
+  for (unsigned num = info.hit_set.history.size() + 1; num > max; --num) {
+    list<pg_hit_set_info_t>::iterator p = info.hit_set.history.begin();
+    assert(p != info.hit_set.history.end());
+    hobject_t aoid = get_hit_set_archive_object(p->begin, p->end);
+
+    // Once we hit a degraded object just skip further trim
+    if (is_degraded_object(aoid))
+      return;
+  }
+  oid = get_hit_set_archive_object(start, now);
+  // If the current object is degraded we skip this persist request
+  if (is_degraded_object(oid))
+    return;
 
   if (!info.hit_set.current_info.begin)
     info.hit_set.current_info.begin = hit_set_start_stamp;
-  if (hit_set->is_full() ||
-      hit_set_start_stamp + pool.info.hit_set_period <= now) {
-    // archive
-    hit_set->seal();
-    ::encode(*hit_set, bl);
-    info.hit_set.current_info.end = now;
-    oid = get_hit_set_archive_object(info.hit_set.current_info.begin,
-				     info.hit_set.current_info.end);
-    dout(20) << __func__ << " archive " << oid << dendl;
-    reset = true;
 
-    if (agent_state)
-      agent_state->add_hit_set(info.hit_set.current_info.begin, hit_set);
+  hit_set->seal();
+  ::encode(*hit_set, bl);
+  info.hit_set.current_info.end = now;
+  dout(20) << __func__ << " archive " << oid << dendl;
 
-  } else {
-    // persist snapshot of current hitset
-    ::encode(*hit_set, bl);
-    oid = get_hit_set_current_object(now);
-    dout(20) << __func__ << " checkpoint " << oid << dendl;
-  }
+  if (agent_state)
+    agent_state->add_hit_set(info.hit_set.current_info.begin, hit_set);
+
+  // hold a ref until it is flushed to disk
+  hit_set_flushing[info.hit_set.current_info.begin] = hit_set;
+  flush_time = info.hit_set.current_info.begin;
 
   ObjectContextRef obc = get_object_context(oid, true);
   repop = simple_repop_create(obc);
+  if (flush_time != 0)
+    repop->on_applied = new C_HitSetFlushing(this, flush_time);
   OpContext *ctx = repop->ctx;
   ctx->at_version = get_next_version();
 
@@ -10350,14 +10390,11 @@ void ReplicatedPG::hit_set_persist()
 
   info.hit_set.current_last_update = info.last_update; // *after* above remove!
   info.hit_set.current_info.version = ctx->at_version;
-  if (reset) {
-    info.hit_set.history.push_back(info.hit_set.current_info);
-    hit_set_create();
-    info.hit_set.current_info = pg_hit_set_info_t();
-    info.hit_set.current_last_stamp = utime_t();
-  } else {
-    info.hit_set.current_last_stamp = now;
-  }
+
+  info.hit_set.history.push_back(info.hit_set.current_info);
+  hit_set_create();
+  info.hit_set.current_info = pg_hit_set_info_t();
+  info.hit_set.current_last_stamp = utime_t();
 
   // fabricate an object_info_t and SnapSet
   obc->obs.oi.version = ctx->at_version;
@@ -10395,7 +10432,7 @@ void ReplicatedPG::hit_set_persist()
     ctx->log.back().mod_desc.mark_unrollbackable();
   }
 
-  hit_set_trim(repop, pool.info.hit_set_count);
+  hit_set_trim(repop, max);
 
   info.stats.stats.add(ctx->delta_stats, string());
 
@@ -10408,6 +10445,9 @@ void ReplicatedPG::hit_set_trim(RepGather *repop, unsigned max)
     list<pg_hit_set_info_t>::iterator p = info.hit_set.history.begin();
     assert(p != info.hit_set.history.end());
     hobject_t oid = get_hit_set_archive_object(p->begin, p->end);
+
+    assert(!is_degraded_object(oid));
+
     dout(20) << __func__ << " removing " << oid << dendl;
     ++repop->ctx->at_version.version;
     repop->ctx->log.push_back(
@@ -10622,14 +10662,20 @@ void ReplicatedPG::agent_load_hit_sets()
 	  derr << __func__ << " on non-replicated pool" << dendl;
 	  break;
 	}
-	bufferlist bl;
-	hobject_t oid = get_hit_set_archive_object(p->begin, p->end);
-	int r = osd->store->read(coll, oid, 0, 0, bl);
-	assert(r >= 0);
-	HitSetRef hs(new HitSet);
-	bufferlist::iterator pbl = bl.begin();
-	::decode(*hs, pbl);
-	agent_state->add_hit_set(p->begin.sec(), hs);
+
+	// check if it's still in flight
+	if (hit_set_flushing.count(p->begin)) {
+	  agent_state->add_hit_set(p->begin.sec(), hit_set_flushing[p->begin]);
+	} else {
+	  bufferlist bl;
+	  hobject_t oid = get_hit_set_archive_object(p->begin, p->end);
+	  int r = osd->store->read(coll, oid, 0, 0, bl);
+	  assert(r >= 0);
+	  HitSetRef hs(new HitSet);
+	  bufferlist::iterator pbl = bl.begin();
+	  ::decode(*hs, pbl);
+	  agent_state->add_hit_set(p->begin.sec(), hs);
+	}
       }
     }
   }
@@ -10780,6 +10826,15 @@ void ReplicatedPG::agent_choose_mode()
 {
   uint64_t divisor = pool.info.get_pg_num_divisor(info.pgid.pgid);
 
+  // adjust (effective) user objects down based on the (max) number
+  // of HitSet objects, which should not count toward our total since
+  // they cannot be flushed.
+  uint64_t num_user_objects = info.stats.stats.sum.num_objects;
+  if (num_user_objects > pool.info.hit_set_count)
+    num_user_objects -= pool.info.hit_set_count;
+  else
+    num_user_objects = 0;
+
   // get dirty, full ratios
   uint64_t dirty_micro = 0;
   uint64_t full_micro = 0;
@@ -10800,8 +10855,7 @@ void ReplicatedPG::agent_choose_mode()
     if (dirty_objects_micro > dirty_micro)
       dirty_micro = dirty_objects_micro;
     uint64_t full_objects_micro =
-      info.stats.stats.sum.num_objects * 1000000 /
-      (pool.info.target_max_objects / divisor);
+      num_user_objects * 1000000 / (pool.info.target_max_objects / divisor);
     if (full_objects_micro > full_micro)
       full_micro = full_objects_micro;
   }
@@ -11312,6 +11366,24 @@ boost::statechart::result ReplicatedPG::WaitingOnReplicas::react(const SnapTrim&
   // Back to the start
   post_event(SnapTrim());
   return transit< NotTrimming >();
+}
+
+void ReplicatedPG::replace_cached_attrs(
+  OpContext *ctx,
+  ObjectContextRef obc,
+  const map<string, bufferlist> &new_attrs)
+{
+  ctx->pending_attrs[obc].clear();
+  for (map<string, bufferlist>::iterator i = obc->attr_cache.begin();
+       i != obc->attr_cache.end();
+       ++i) {
+    ctx->pending_attrs[obc][i->first] = boost::optional<bufferlist>();
+  }
+  for (map<string, bufferlist>::const_iterator i = new_attrs.begin();
+       i != new_attrs.end();
+       ++i) {
+    ctx->pending_attrs[obc][i->first] = i->second;
+  }
 }
 
 void ReplicatedPG::setattr_maybe_cache(

@@ -186,7 +186,7 @@ so that a centralized interface knows which nodes it can access. Then the
 centralized interface provides services to the client through a double
 dispatch--which is a **huge** bottleneck at the petabyte-to-exabyte scale.
 
-Ceph elminates the bottleneck: Ceph's OSD Daemons AND Ceph Clients are cluster
+Ceph eliminates the bottleneck: Ceph's OSD Daemons AND Ceph Clients are cluster
 aware. Like Ceph clients, each Ceph OSD Daemon knows about other Ceph OSD
 Daemons in the cluster.  This enables Ceph OSD Daemons to interact directly with
 other Ceph OSD Daemons and Ceph monitors. Additionally, it enables Ceph Clients
@@ -400,7 +400,7 @@ objects.
 Peering and Sets
 ~~~~~~~~~~~~~~~~
 
-In previous sections, we noted that Ceph OSD Daemons check each other's
+In previous sections, we noted that Ceph OSD Daemons check each others
 heartbeats and report back to the Ceph Monitor. Another thing Ceph OSD daemons
 do is called 'peering', which is the process of bringing all of the OSDs that
 store a Placement Group (PG) into agreement about the state of all of the
@@ -870,7 +870,7 @@ a RESTful_ HTTP API to store objects and metadata. It layers on top of the Ceph
 Storage Cluster with its own data formats, and maintains its own user database,
 authentication, and access control. The RADOS Gateway uses a unified namespace,
 which means you can use either the OpenStack Swift-compatible API or the Amazon
-S3-compatible API. For example, you can write data using the S3-comptable API
+S3-compatible API. For example, you can write data using the S3-compatible API
 with one application and then read data using the Swift-compatible API with
 another application.
 

@@ -114,6 +114,13 @@ static void dec_header_stats(cls_user_stats *stats, cls_user_bucket_entry& entry
   stats->total_entries -= entry.count;
 }
 
+static void apply_entry_stats(const cls_user_bucket_entry& src_entry, cls_user_bucket_entry *target_entry)
+{
+  target_entry->size = src_entry.size;
+  target_entry->size_rounded = src_entry.size_rounded;
+  target_entry->count = src_entry.count;
+}
+
 static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   bufferlist::iterator in_iter = in->begin();
@@ -135,18 +142,20 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
 
   for (list<cls_user_bucket_entry>::iterator iter = op.entries.begin();
        iter != op.entries.end(); ++iter) {
-    cls_user_bucket_entry& entry = *iter;
+    cls_user_bucket_entry& update_entry = *iter;
 
     string key;
 
-    get_key_by_bucket_name(entry.bucket.name, &key);
+    get_key_by_bucket_name(update_entry.bucket.name, &key);
 
-    cls_user_bucket_entry old_entry;
-    ret = get_existing_bucket_entry(hctx, key, old_entry);
+    cls_user_bucket_entry entry;
+    ret = get_existing_bucket_entry(hctx, key, entry);
 
     if (ret == -ENOENT) {
      if (!op.add)
       continue; /* racing bucket removal */
+
+     entry = update_entry;
 
      ret = 0;
     }
@@ -154,13 +163,14 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     if (ret < 0) {
       CLS_LOG(0, "ERROR: get_existing_bucket_entry() key=%s returned %d", key.c_str(), ret);
       return ret;
-    } else if (ret >= 0 && old_entry.user_stats_sync) {
-      dec_header_stats(&header.stats, old_entry);
+    } else if (ret >= 0 && entry.user_stats_sync) {
+      dec_header_stats(&header.stats, entry);
     }
 
     CLS_LOG(20, "storing entry for key=%s size=%lld count=%lld",
-            key.c_str(), (long long)entry.size, (long long)entry.count);
+            key.c_str(), (long long)update_entry.size, (long long)update_entry.count);
 
+    apply_entry_stats(update_entry, &entry);
     entry.user_stats_sync = true;
 
     ret = write_entry(hctx, key, entry);
