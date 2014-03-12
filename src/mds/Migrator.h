@@ -48,8 +48,6 @@ class MExportCapsAck;
 
 class EImportStart;
 
-struct Mutation;
-
 class Migrator {
 private:
   MDS *mds;
@@ -91,12 +89,12 @@ protected:
     set<int> notify_ack_waiting;
     map<inodeno_t,map<client_t,Capability::Import> > peer_imported;
     list<Context*> waiting_for_finish;
-    Mutation *mut;
+    MutationRef mut;
     // for freeze tree deadlock detection
     utime_t last_cum_auth_pins_change;
     int last_cum_auth_pins;
     int num_remote_waiters; // number of remote authpin waiters
-    export_state_t() : state(0), peer(0), tid(0), mut(NULL), 
+    export_state_t() : state(0), peer(0), tid(0), mut(), 
 		       last_cum_auth_pins(0), num_remote_waiters(0) {}
   };
 
@@ -140,8 +138,8 @@ protected:
     list<ScatterLock*> updated_scatterlocks;
     map<client_t,entity_inst_t> client_map;
     map<CInode*, map<client_t,Capability::Export> > peer_exports;
-    Mutation *mut;
-    import_state_t() : state(0), peer(0), tid(0), mut(NULL) {}
+    MutationRef mut;
+    import_state_t() : state(0), peer(0), tid(0), mut() {}
   };
 
   map<dirfrag_t, import_state_t>  import_state;
@@ -228,7 +226,7 @@ public:
   // -- import/export --
   // exporter
  public:
-  void dispatch_export_dir(MDRequest *mdr);
+  void dispatch_export_dir(MDRequestRef& mdr);
   void export_dir(CDir *dir, int dest);
   void export_empty_import(CDir *dir);
 
