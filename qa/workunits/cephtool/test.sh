@@ -285,6 +285,7 @@ for ((i=0; i < 100; i++)); do
 done
 
 ceph osd thrash 10
+ceph osd down `seq 0 31`  # force everything down so that we can trust up
 # make sure everything gets back up+in.
 for ((i=0; i < 100; i++)); do
 	if ceph osd dump | grep ' down '; then
