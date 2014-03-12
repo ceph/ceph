@@ -288,7 +288,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
     
     if (!object->is_auth()) {
       if (!mdr->locks.empty())
-	mds->locker->drop_locks(mdr);
+	mds->locker->drop_locks(mdr.get());
       if (object->is_ambiguous_auth()) {
 	// wait
 	dout(10) << " ambiguous auth, waiting to authpin " << *object << dendl;
@@ -301,7 +301,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
     }
     if (!object->can_auth_pin()) {
       // wait
-      mds->locker->drop_locks(mdr);
+      mds->locker->drop_locks(mdr.get());
       mdr->drop_local_auth_pins();
       if (auth_pin_nonblock) {
 	dout(10) << " can't auth_pin (freezing?) " << *object << ", nonblocking" << dendl;
@@ -393,7 +393,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	    mdr->remote_wrlocks[have] != (*remote_wrlocks)[have]) {
 	  dout(10) << " unlocking remote_wrlock on wrong mds." << mdr->remote_wrlocks[have]
 		   << " " << *have << " " << *have->get_parent() << dendl;
-	  remote_wrlock_finish(have, mdr->remote_wrlocks[have], mdr);
+	  remote_wrlock_finish(have, mdr->remote_wrlocks[have], mdr.get());
 	}
       }
       if (need_wrlock || need_remote_wrlock) {
@@ -422,7 +422,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	else if (need_remote_wrlock) // acquire remote_wrlock first
 	  dout(10) << " unlocking out-of-order " << *lock << " " << *lock->get_parent() << dendl;
 	bool need_issue = false;
-	wrlock_finish(lock, mdr, &need_issue);
+	wrlock_finish(lock, mdr.get(), &need_issue);
 	if (need_issue)
 	  issue_set.insert(static_cast<CInode*>(lock->get_parent()));
       }
@@ -434,15 +434,15 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       dout(10) << " unlocking out-of-order " << *stray << " " << *stray->get_parent() << dendl;
       bool need_issue = false;
       if (mdr->xlocks.count(stray)) {
-	xlock_finish(stray, mdr, &need_issue);
+	xlock_finish(stray, mdr.get(), &need_issue);
       } else if (mdr->rdlocks.count(stray)) {
-	rdlock_finish(stray, mdr, &need_issue);
+	rdlock_finish(stray, mdr.get(), &need_issue);
       } else {
 	// may have acquired both wrlock and remore wrlock
 	if (mdr->wrlocks.count(stray))
-	  wrlock_finish(stray, mdr, &need_issue);
+	  wrlock_finish(stray, mdr.get(), &need_issue);
 	if (mdr->remote_wrlocks.count(stray))
-	  remote_wrlock_finish(stray, mdr->remote_wrlocks[stray], mdr);
+	  remote_wrlock_finish(stray, mdr->remote_wrlocks[stray], mdr.get());
       }
       if (need_issue)
 	issue_set.insert(static_cast<CInode*>(stray->get_parent()));
@@ -450,7 +450,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 
     // lock
     if (mdr->locking && *p != mdr->locking) {
-      cancel_locking(mdr, &issue_set);
+      cancel_locking(mdr.get(), &issue_set);
     }
     if (xlocks.count(*p)) {
       if (!xlock_start(*p, mdr)) 
@@ -465,7 +465,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	if (need_remote_wrlock && !(*p)->can_wrlock(mdr->get_client())) {
 	  // can't take the wrlock because the scatter lock is gathering. need to
 	  // release the remote wrlock, so that the gathering process can finish.
-	  remote_wrlock_finish(*p, mdr->remote_wrlocks[*p], mdr);
+	  remote_wrlock_finish(*p, mdr->remote_wrlocks[*p], mdr.get());
 	  remote_wrlock_start(*p, (*remote_wrlocks)[*p], mdr);
 	  goto out;
 	}
@@ -487,15 +487,15 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
     dout(10) << " unlocking extra " << *stray << " " << *stray->get_parent() << dendl;
     bool need_issue = false;
     if (mdr->xlocks.count(stray)) {
-      xlock_finish(stray, mdr, &need_issue);
+      xlock_finish(stray, mdr.get(), &need_issue);
     } else if (mdr->rdlocks.count(stray)) {
-      rdlock_finish(stray, mdr, &need_issue);
+      rdlock_finish(stray, mdr.get(), &need_issue);
     } else {
       // may have acquired both wrlock and remore wrlock
       if (mdr->wrlocks.count(stray))
-	wrlock_finish(stray, mdr, &need_issue);
+	wrlock_finish(stray, mdr.get(), &need_issue);
       if (mdr->remote_wrlocks.count(stray))
-	remote_wrlock_finish(stray, mdr->remote_wrlocks[stray], mdr);
+	remote_wrlock_finish(stray, mdr->remote_wrlocks[stray], mdr.get());
     }
     if (need_issue)
       issue_set.insert(static_cast<CInode*>(stray->get_parent()));
@@ -510,7 +510,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 }
 
 
-void Locker::set_xlocks_done(MutationRef& mut, bool skip_dentry)
+void Locker::set_xlocks_done(MutationImpl *mut, bool skip_dentry)
 {
   for (set<SimpleLock*>::iterator p = mut->xlocks.begin();
        p != mut->xlocks.end();
@@ -523,7 +523,7 @@ void Locker::set_xlocks_done(MutationRef& mut, bool skip_dentry)
   }
 }
 
-void Locker::_drop_rdlocks(MutationRef& mut, set<CInode*> *pneed_issue)
+void Locker::_drop_rdlocks(MutationImpl *mut, set<CInode*> *pneed_issue)
 {
   while (!mut->rdlocks.empty()) {
     bool ni = false;
@@ -534,7 +534,7 @@ void Locker::_drop_rdlocks(MutationRef& mut, set<CInode*> *pneed_issue)
   }
 }
 
-void Locker::_drop_non_rdlocks(MutationRef& mut, set<CInode*> *pneed_issue)
+void Locker::_drop_non_rdlocks(MutationImpl *mut, set<CInode*> *pneed_issue)
 {
   set<int> slaves;
 
@@ -581,7 +581,7 @@ void Locker::_drop_non_rdlocks(MutationRef& mut, set<CInode*> *pneed_issue)
   }
 }
 
-void Locker::cancel_locking(MutationRef& mut, set<CInode*> *pneed_issue)
+void Locker::cancel_locking(MutationImpl *mut, set<CInode*> *pneed_issue)
 {
   SimpleLock *lock = mut->locking;
   assert(lock);
@@ -602,7 +602,7 @@ void Locker::cancel_locking(MutationRef& mut, set<CInode*> *pneed_issue)
   mut->finish_locking(lock);
 }
 
-void Locker::drop_locks(MutationRef& mut, set<CInode*> *pneed_issue)
+void Locker::drop_locks(MutationImpl *mut, set<CInode*> *pneed_issue)
 {
   // leftover locks
   set<CInode*> my_need_issue;
@@ -619,7 +619,7 @@ void Locker::drop_locks(MutationRef& mut, set<CInode*> *pneed_issue)
   mut->done_locking = false;
 }
 
-void Locker::drop_non_rdlocks(MutationRef& mut, set<CInode*> *pneed_issue)
+void Locker::drop_non_rdlocks(MutationImpl *mut, set<CInode*> *pneed_issue)
 {
   set<CInode*> my_need_issue;
   if (!pneed_issue)
@@ -631,7 +631,7 @@ void Locker::drop_non_rdlocks(MutationRef& mut, set<CInode*> *pneed_issue)
     issue_caps_set(*pneed_issue);
 }
 
-void Locker::drop_rdlocks(MutationRef& mut, set<CInode*> *pneed_issue)
+void Locker::drop_rdlocks(MutationImpl *mut, set<CInode*> *pneed_issue)
 {
   set<CInode*> my_need_issue;
   if (!pneed_issue)
@@ -1218,7 +1218,7 @@ void Locker::nudge_log(SimpleLock *lock)
     mds->mdlog->flush();
 }
 
-void Locker::rdlock_finish(SimpleLock *lock, MutationRef& mut, bool *pneed_issue)
+void Locker::rdlock_finish(SimpleLock *lock, MutationImpl *mut, bool *pneed_issue)
 {
   // drop ref
   lock->put_rdlock();
@@ -1351,7 +1351,7 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequestRef& mut, bool nowait)
   return false;
 }
 
-void Locker::wrlock_finish(SimpleLock *lock, MutationRef& mut, bool *pneed_issue)
+void Locker::wrlock_finish(SimpleLock *lock, MutationImpl *mut, bool *pneed_issue)
 {
   if (lock->get_type() == CEPH_LOCK_IVERSION ||
       lock->get_type() == CEPH_LOCK_DVERSION)
@@ -1402,7 +1402,7 @@ void Locker::remote_wrlock_start(SimpleLock *lock, int target, MDRequestRef& mut
 }
 
 void Locker::remote_wrlock_finish(SimpleLock *lock, int target,
-                                  MutationRef& mut)
+                                  MutationImpl *mut)
 {
   // drop ref
   mut->remote_wrlocks.erase(lock);
@@ -1523,7 +1523,7 @@ void Locker::_finish_xlock(SimpleLock *lock, client_t xlocker, bool *pneed_issue
   eval_gather(lock, true, pneed_issue);
 }
 
-void Locker::xlock_finish(SimpleLock *lock, MutationRef& mut, bool *pneed_issue)
+void Locker::xlock_finish(SimpleLock *lock, MutationImpl *mut, bool *pneed_issue)
 {
   if (lock->get_type() == CEPH_LOCK_IVERSION ||
       lock->get_type() == CEPH_LOCK_DVERSION)
@@ -1578,7 +1578,7 @@ void Locker::xlock_finish(SimpleLock *lock, MutationRef& mut, bool *pneed_issue)
   }
 }
 
-void Locker::xlock_export(SimpleLock *lock, MutationRef& mut)
+void Locker::xlock_export(SimpleLock *lock, MutationImpl *mut)
 {
   dout(10) << "xlock_export on " << *lock << " " << *lock->get_parent() << dendl;
 
@@ -1645,7 +1645,7 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, bool share, client
     mds->send_message_client_counted(ack, client);
 
   set<CInode*> need_issue;
-  drop_locks(mut, &need_issue);
+  drop_locks(mut.get(), &need_issue);
 
   if (!in->is_head() && !in->client_snap_caps.empty()) {
     dout(10) << " client_snap_caps " << in->client_snap_caps << dendl;
@@ -3878,7 +3878,7 @@ void Locker::scatter_writebehind_finish(ScatterLock *lock, MutationRef& mut)
   }
 
   mut->apply();
-  drop_locks(mut);
+  drop_locks(mut.get());
   mut->cleanup();
 
   if (lock->is_stable())
@@ -4180,7 +4180,7 @@ bool Locker::local_wrlock_start(LocalLock *lock, MDRequestRef& mut)
   }
 }
 
-void Locker::local_wrlock_finish(LocalLock *lock, MutationRef& mut)
+void Locker::local_wrlock_finish(LocalLock *lock, MutationImpl *mut)
 {
   dout(7) << "local_wrlock_finish  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
@@ -4211,7 +4211,7 @@ bool Locker::local_xlock_start(LocalLock *lock, MDRequestRef& mut)
   return true;
 }
 
-void Locker::local_xlock_finish(LocalLock *lock, MutationRef& mut)
+void Locker::local_xlock_finish(LocalLock *lock, MutationImpl *mut)
 {
   dout(7) << "local_xlock_finish  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
