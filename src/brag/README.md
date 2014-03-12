@@ -24,29 +24,31 @@ Run 'ceph-brag -h' to get the usage information of this tool.
       "cluster_creation_date": "2014-01-16 13:38:41.928551",
       "uuid": "20679d0e-04b1-4004-8ee9-45ac271510e9",
       "components_count": {
-        "bytes": {
-          "count": 0,
-          "scale": "bytes"
-        },
-        "osds": 1,
-        "objects": 0,
-        "pgs": 192,
-        "pools": 3,
-        "mdss": 1,
-        "mons": 1
+        "num_bytes": 0,
+        "num_osds": 1,
+        "num_objects": 0,
+        "num_pgs": 192,
+        "num_pools": 3,
+        "num_mdss": 1,
+        "num_mons": 1
       },
       "crush_types": [
-        "osd",
-        "host",
-        "chassis",
-        "rack",
-        "row",
-        "pdu",
-        "pod",
-        "room",
-        "datacenter",
-        "region",
-        "root"
+        {
+          "type": "osd"
+          "count": 2,
+        },
+        {
+          "type": "rack"
+          "count": 1,
+        },
+        {
+          "type": "host"
+          "count": 1,
+        },
+        {
+          "type": "root"
+          "count": 1,
+        }
       ],
       "ownership": {
         "organization": "eNovance",
@@ -56,43 +58,65 @@ Run 'ceph-brag -h' to get the usage information of this tool.
       },
       "pool_metadata": [
         {
-          "rep_size": 3,
-          "id": "0",
-          "name": "data"
+          "size": 3,
+          "id": 0,
+          "type": 1
         },
         {
-          "rep_size": 3,
-          "id": "1",
-          "name": "metadata"
+          "size": 3,
+          "id": 1,
+          "type": 1
         },
         {
-          "rep_size": 3,
-          "id": "2",
-          "name": "rbd"
+          "size": 3,
+          "id": 2,
+          "name": 1
         }
       ],
-      "sysinfo": [
-        {
-          "nw_info": {
-            "hostname": "ceph-brag",
-            "address": "127.0.0.1"
-          },
-          "hw_info": {
-            "swap_kb": 0,
-            "arch": "x86_64",
-            "cpu": "Intel Xeon E312xx (Sandy Bridge)",
-            "mem_kb": 2051648
-          },
-          "id": 0,
-          "os_info": {
-            "version": "3.2.0-23-virtual",
-            "os": "Linux",
-            "description": "#36-Ubuntu SMP Tue Apr 10 22:29:03 UTC 2012",
+      "sysinfo": {
+        "kernel_types": [
+          {
+            "count": 1,
+            "type": "#36-Ubuntu SMP Tue Apr 10 22:29:03 UTC 2012"
+          }
+        ],
+        "cpu_archs": [
+          {
+            "count": 1,
+            "arch": "x86_64"
+          }
+        ],
+        "cpus": [
+          {
+            "count": 1,
+            "cpu": "Intel Xeon E312xx (Sandy Bridge)"
+          }
+        ],
+        "kernel_versions": [
+          {
+            "count": 1,
+            "version": "3.2.0-23-virtual"
+          }
+        ],
+        "ceph_versions": [
+          {
+            "count": 1,
+            "version": "0.75-229-g4050eae(4050eae32cd77a1c210ca11d0f12c74daecb1bd3)"
+          }
+        ],
+        "os_info": [
+          {
+            "count": 1,
+            "os": "Linux"
+          }
+        ],
+        "distros": [
+          {
+            "count": 1,
             "distro": "Ubuntu 12.04 precise (Ubuntu 12.04 LTS)"
-          },
-          "ceph_version": "ceph version 0.75-229-g4050eae (4050eae32cd77a1c210ca11d0f12c74daecb1bd3)"
-        }
-      ]
+          }
+        ]
+      }
     }
 
 
