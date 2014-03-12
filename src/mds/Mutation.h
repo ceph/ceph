@@ -34,6 +34,7 @@ class MClientRequest;
 class MMDSSlaveRequest;
 
 struct MutationImpl {
+  ceph::weak_ptr<MutationImpl> self_ref;
   metareqid_t reqid;
   __u32 attempt;      // which attempt for this request
   LogSegment *ls;  // the log segment i'm committing to
@@ -79,14 +80,16 @@ struct MutationImpl {
   list<pair<CDentry*,version_t> > dirty_cow_dentries;
 
   MutationImpl()
-    : attempt(0),
+    : self_ref(),
+      attempt(0),
       ls(0),
       slave_to_mds(-1),
       locking(NULL),
       locking_target_mds(-1),
       done_locking(false), committing(false), aborted(false), killed(false) { }
   MutationImpl(metareqid_t ri, __u32 att=0, int slave_to=-1)
-    : reqid(ri), attempt(att),
+    : self_ref(),
+      reqid(ri), attempt(att),
       ls(0),
       slave_to_mds(slave_to), 
       locking(NULL),
@@ -138,6 +141,10 @@ struct MutationImpl {
   virtual void print(ostream &out) {
     out << "mutation(" << this << ")";
   }
+
+  void set_self_ref(ceph::shared_ptr<MutationImpl>& ref) {
+    self_ref = ref;
+  }
 };
 
 inline ostream& operator<<(ostream& out, MutationImpl &mut)
@@ -156,7 +163,6 @@ typedef ceph::shared_ptr<MutationImpl> MutationRef;
  * the request is finished or forwarded.  see request_*().
  */
 struct MDRequestImpl : public MutationImpl {
-  ceph::weak_ptr<MDRequestImpl> self_ref;
   Session *session;
   elist<MDRequestImpl*>::item item_session_request;  // if not on list, op is aborted.
 
@@ -252,7 +258,6 @@ struct MDRequestImpl : public MutationImpl {
 
   // ---------------------------------------------------
   MDRequestImpl() :
-    self_ref(),
     session(0), item_session_request(this),
     client_request(0), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
@@ -266,7 +271,6 @@ struct MDRequestImpl : public MutationImpl {
     in[0] = in[1] = 0; 
   }
   MDRequestImpl(metareqid_t ri, __u32 attempt, MClientRequest *req) :
-    self_ref(),
     MutationImpl(ri, attempt),
     session(0), item_session_request(this),
     client_request(req), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
@@ -281,7 +285,6 @@ struct MDRequestImpl : public MutationImpl {
     in[0] = in[1] = 0; 
   }
   MDRequestImpl(metareqid_t ri, __u32 attempt, int by) :
-    self_ref(),
     MutationImpl(ri, attempt, by),
     session(0), item_session_request(this),
     client_request(0), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
@@ -312,7 +315,7 @@ struct MDRequestImpl : public MutationImpl {
 
   void print(ostream &out);
   void set_self_ref(ceph::shared_ptr<MDRequestImpl>& ref) {
-    self_ref = ref;
+    self_ref = ceph::static_pointer_cast<MutationImpl,MDRequestImpl>(ref);
   }
 };
 
