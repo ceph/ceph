@@ -1,0 +1,14 @@
+roles:
+- [mon.a, mds.a, osd.0, osd.1, osd.2, client.0]
+
+overrides:
+  ceph:
+    fs: xfs
+
+tasks:
+- install:
+- ceph:
+- workunit:
+    clients:
+      all:
+        - rados/test_alloc_hint.sh
