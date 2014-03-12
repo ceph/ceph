@@ -491,7 +491,7 @@ void MDCache::_create_system_file_finish(MutationRef& mut, CDentry *dn, version_
   }
 
   mut->apply();
-  mds->locker->drop_locks(mut);
+  mds->locker->drop_locks(mut.get());
   mut->cleanup();
 
   fin->complete(0);
@@ -890,7 +890,7 @@ void MDCache::subtree_merge_writebehind_finish(CInode *in, MutationRef& mut)
   in->pop_and_dirty_projected_inode(mut->ls);
 
   mut->apply();
-  mds->locker->drop_locks(mut);
+  mds->locker->drop_locks(mut.get());
   mut->cleanup();
 
   in->auth_unpin(this);
@@ -5921,7 +5921,7 @@ void MDCache::_queued_file_recover_cow(CInode *in, MutationRef& mut)
 {
   in->pop_and_dirty_projected_inode(mut->ls);
   mut->apply();
-  mds->locker->drop_locks(mut);
+  mds->locker->drop_locks(mut.get());
   mut->cleanup();
 }
 
@@ -6201,7 +6201,7 @@ void MDCache::truncate_inode_logged(CInode *in, MutationRef& mut)
 {
   dout(10) << "truncate_inode_logged " << *in << dendl;
   mut->apply();
-  mds->locker->drop_locks(mut);
+  mds->locker->drop_locks(mut.get());
   mut->cleanup();
 
   in->put(CInode::PIN_TRUNCATING);
@@ -9021,13 +9021,13 @@ void MDCache::request_drop_foreign_locks(MDRequestRef& mdr)
 void MDCache::request_drop_non_rdlocks(MDRequestRef& mdr)
 {
   request_drop_foreign_locks(mdr);
-  mds->locker->drop_non_rdlocks(mdr);
+  mds->locker->drop_non_rdlocks(mdr.get());
 }
 
 void MDCache::request_drop_locks(MDRequestRef& mdr)
 {
   request_drop_foreign_locks(mdr);
-  mds->locker->drop_locks(mdr);
+  mds->locker->drop_locks(mdr.get());
 }
 
 void MDCache::request_cleanup(MDRequestRef& mdr)
@@ -9267,7 +9267,7 @@ void MDCache::_anchor_logged(CInode *in, version_t atid, MutationRef& mut)
   mds->anchorclient->commit(atid, mut->ls);
 
   // drop locks and finish
-  mds->locker->drop_locks(mut);
+  mds->locker->drop_locks(mut.get());
   mut->cleanup();
 
   // trigger waiters
@@ -9401,7 +9401,7 @@ void MDCache::_snaprealm_create_finish(MDRequestRef& mdr, MutationRef& mut, CIno
   // apply
   in->pop_and_dirty_projected_inode(mut->ls);
   mut->apply();
-  mds->locker->drop_locks(mut);
+  mds->locker->drop_locks(mut.get());
   mut->cleanup();
 
   // tell table we've committed
@@ -11707,7 +11707,7 @@ void MDCache::_fragment_stored(MDRequestRef& mdr)
   mds->mdlog->start_submit_entry(le, new C_MDC_FragmentCommit(this, basedirfrag,
 							      info.resultfrags));
 
-  mds->locker->drop_locks(mdr);
+  mds->locker->drop_locks(mdr.get());
 
   // unfreeze resulting frags
   for (list<CDir*>::iterator p = info.resultfrags.begin();
