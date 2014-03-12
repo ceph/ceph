@@ -201,7 +201,7 @@ public:
   void _committed_slave(MDRequestRef& mdr);  // use for rename, too
   void handle_slave_link_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *m);
   void do_link_rollback(bufferlist &rbl, int master, MDRequestRef& mdr);
-  void _link_rollback_finish(Mutation *mut, MDRequestRef& mdr);
+  void _link_rollback_finish(MutationRef& mut, MDRequestRef& mdr);
 
   // unlink
   void handle_client_unlink(MDRequestRef& mdr);
@@ -251,7 +251,7 @@ public:
   void _logged_slave_rename(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void _commit_slave_rename(MDRequestRef& mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void do_rename_rollback(bufferlist &rbl, int master, MDRequestRef& mdr, bool finish_mdr=false);
-  void _rename_rollback_finish(Mutation *mut, MDRequestRef& mdr, CDentry *srcdn, version_t srcdnpv,
+  void _rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentry *srcdn, version_t srcdnpv,
 			       CDentry *destdn, CDentry *staydn, bool finish_mdr);
 
 };
