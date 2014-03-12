@@ -1050,7 +1050,7 @@ void CDir::assimilate_dirty_rstat_inodes()
   dout(10) << "assimilate_dirty_rstat_inodes done" << dendl;
 }
 
-void CDir::assimilate_dirty_rstat_inodes_finish(Mutation *mut, EMetaBlob *blob)
+void CDir::assimilate_dirty_rstat_inodes_finish(MutationRef& mut, EMetaBlob *blob)
 {
   if (!state_test(STATE_ASSIMRSTAT))
     return;
