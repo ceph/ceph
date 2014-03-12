@@ -160,8 +160,8 @@ def main(ctx):
             ctx.summary or ctx.brief, \
             'machines must be specified for that operation'
     if ctx.all:
-        assert ctx.list or ctx.list_targets, \
-            '--all can only be used with --list and --list-targets'
+        assert ctx.list or ctx.list_targets or ctx.brief, \
+            '--all can only be used with --list, --list-targets, and --brief'
         assert ctx.owner is None, \
             '--all and --owner are mutually exclusive'
         assert not machines, \
