@@ -2838,7 +2838,7 @@ int OSDMonitor::check_cluster_features(uint64_t features,
   for (set<int32_t>::iterator it = up_osds.begin();
        it != up_osds.end(); ++it) {
     const osd_xinfo_t &xi = osdmap.get_xinfo(*it);
-    if (!(xi.features & features)) {
+    if ((xi.features & features) != features) {
       if (unsupported_count > 0)
 	unsupported_ss << ", ";
       unsupported_ss << "osd." << *it;
@@ -2850,9 +2850,21 @@ int OSDMonitor::check_cluster_features(uint64_t features,
     ss << "features " << features << " unsupported by: "
        << unsupported_ss.str();
     return -ENOTSUP;
-  } else {
-    return 0;
   }
+
+  // check pending osd state, too!
+  for (map<int32_t,osd_xinfo_t>::const_iterator p =
+	 pending_inc.new_xinfo.begin();
+       p != pending_inc.new_xinfo.end(); ++p) {
+    const osd_xinfo_t &xi = p->second;
+    if ((xi.features & features) != features) {
+      dout(10) << __func__ << " pending osd." << p->first
+	       << " features are insufficient; retry" << dendl;
+      return -EAGAIN;
+    }
+  }
+
+  return 0;
 }
 
 int OSDMonitor::prepare_pool_properties(const unsigned pool_type,
@@ -3833,6 +3845,8 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
 
   } else if (prefix == "osd crush rule create-erasure") {
     err = check_cluster_features(CEPH_FEATURE_CRUSH_V2, ss);
+    if (err == -EAGAIN)
+      goto wait;
     if (err)
       goto reply;
     string name, poolstr;
@@ -4090,6 +4104,11 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       err = -EPERM;
       goto reply;
     }
+    err = check_cluster_features(CEPH_FEATURE_OSD_PRIMARY_AFFINITY, ss);
+    if (err == -EAGAIN)
+      goto wait;
+    if (err < 0)
+      goto reply;
     if (osdmap.exists(id)) {
       pending_inc.new_primary_affinity[id] = ww;
       ss << "set osd." << id << " primary-affinity to " << w << " (" << ios::hex << ww << ios::dec << ")";
@@ -4376,6 +4395,8 @@ done:
       err = check_cluster_features(CEPH_FEATURE_CRUSH_V2 |
 				   CEPH_FEATURE_OSD_ERASURE_CODES,
 				   ss);
+      if (err == -EAGAIN)
+	goto wait;
       if (err)
 	goto reply;
       pool_type = pg_pool_t::TYPE_ERASURE;
@@ -4862,6 +4883,10 @@ done:
   wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
 					    get_last_committed() + 1));
   return true;
+
+ wait:
+  wait_for_finished_proposal(new C_RetryMessage(this, m));
+  return true;
 }
 
 bool OSDMonitor::preprocess_pool_op(MPoolOp *m) 
@@ -4994,8 +5019,16 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
       _pool_op_reply(m, ret, osdmap.get_epoch());
       return false;
 
-    case POOL_OP_CREATE_UNMANAGED_SNAP:
     case POOL_OP_DELETE_UNMANAGED_SNAP:
+      // we won't allow removal of an unmanaged snapshot from a pool
+      // not in unmanaged snaps mode.
+      if (!pool->is_unmanaged_snaps_mode()) {
+        _pool_op_reply(m, -ENOTSUP, osdmap.get_epoch());
+        return false;
+      }
+    case POOL_OP_CREATE_UNMANAGED_SNAP:
+      // but we will allow creating an unmanaged snapshot on any pool
+      // as long as it is not in 'pool' snaps mode.
       if (pool->is_pool_snaps_mode()) {
         _pool_op_reply(m, -EINVAL, osdmap.get_epoch());
         return false;

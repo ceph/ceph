@@ -277,5 +277,5 @@ A new clone method will be added, which takes the same arguments as
 create except size (size of the parent image is used).
 
 Instead of expanding the rbd_info struct, we will break the metadata
-retrieval into several api calls.  Right now, the only users of
+retrieval into several API calls.  Right now, the only users of
 rbd_stat() other than 'rbd info' only use it to retrieve image size.

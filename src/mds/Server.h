@@ -142,7 +142,7 @@ public:
 
   // requests on existing inodes.
   void handle_client_getattr(MDRequest *mdr, bool is_lookup);
-  void handle_client_lookup_ino(MDRequest *mdr, bool want_parent);
+  void handle_client_lookup_ino(MDRequest *mdr, bool want_parent, bool want_dentry);
   void _lookup_ino_2(MDRequest *mdr, int r);
   void handle_client_readdir(MDRequest *mdr);
   void handle_client_file_setlock(MDRequest *mdr);
