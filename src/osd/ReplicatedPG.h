@@ -774,6 +774,9 @@ protected:
     for (xlist<RepGather*>::iterator i = repop_queue.begin();
 	 !i.end();
 	 ++i) {
+      // skip copy from temp object ops
+      if ((*i)->v == eversion_t())
+	continue;
       if ((*i)->v > v)
         break;
       if (!(*i)->all_committed)
@@ -786,6 +789,9 @@ protected:
     for (xlist<RepGather*>::iterator i = repop_queue.begin();
 	 !i.end();
 	 ++i) {
+      // skip copy from temp object ops
+      if ((*i)->v == eversion_t())
+	continue;
       if ((*i)->v > v)
         break;
       if (!(*i)->all_applied)
