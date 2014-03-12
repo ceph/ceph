@@ -663,7 +663,7 @@ public:
   void encode_lock_state(int type, bufferlist& bl);
   void decode_lock_state(int type, bufferlist& bl);
 
-  void _finish_frag_update(CDir *dir, Mutation *mut);
+  void _finish_frag_update(CDir *dir, MutationRef& mut);
 
   void clear_dirty_scattered(int type);
   bool is_dirty_scattered();
@@ -673,7 +673,7 @@ public:
   void finish_scatter_update(ScatterLock *lock, CDir *dir,
 			     version_t inode_version, version_t dir_accounted_version);
   void finish_scatter_gather_update(int type);
-  void finish_scatter_gather_update_accounted(int type, Mutation *mut, EMetaBlob *metablob);
+  void finish_scatter_gather_update_accounted(int type, MutationRef& mut, EMetaBlob *metablob);
 
   // -- snap --
   void open_snaprealm(bool no_split=false);
