@@ -179,7 +179,7 @@ public:
   void resync_accounted_fragstat();
   void resync_accounted_rstat();
   void assimilate_dirty_rstat_inodes();
-  void assimilate_dirty_rstat_inodes_finish(Mutation *mut, EMetaBlob *blob);
+  void assimilate_dirty_rstat_inodes_finish(MutationRef& mut, EMetaBlob *blob);
 
 protected:
   version_t projected_version;
