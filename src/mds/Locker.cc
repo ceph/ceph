@@ -2187,7 +2187,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
     metablob->add_primary_dentry(parent, in, true);
   } else {
     metablob->add_dir_context(in->get_projected_parent_dn()->get_dir());
-    mdcache->journal_dirty_inode(mut, metablob, in);
+    mdcache->journal_dirty_inode(mut.get(), metablob, in);
   }
   mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, true));
   wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
@@ -2748,7 +2748,7 @@ void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t foll
 
   mut->auth_pin(in);
   mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, 0, follows);
-  mdcache->journal_dirty_inode(mut, &le->metablob, in, follows);
+  mdcache->journal_dirty_inode(mut.get(), &le->metablob, in, follows);
 
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_safe(new C_Locker_FileUpdate_finish(this, in, mut, false,
@@ -2986,7 +2986,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   
   mut->auth_pin(in);
   mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, 0, follows);
-  mdcache->journal_dirty_inode(mut, &le->metablob, in, follows);
+  mdcache->journal_dirty_inode(mut.get(), &le->metablob, in, follows);
 
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_safe(new C_Locker_FileUpdate_finish(this, in, mut, change_max, 
@@ -3849,7 +3849,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   mds->mdlog->start_entry(le);
 
   mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(mut, &le->metablob, in);
+  mdcache->journal_dirty_inode(mut.get(), &le->metablob, in);
   
   in->finish_scatter_gather_update_accounted(lock->get_type(), mut, &le->metablob);
 

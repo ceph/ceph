@@ -3295,7 +3295,7 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
   // log + wait
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
+  mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
   
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur,
 								   truncating_smaller, changed_ranges));
@@ -3340,7 +3340,7 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
   le->metablob.add_client_req(mdr->reqid, mdr->client_request->get_oldest_client_tid());
 
   mdcache->predirty_journal_parents(mdr, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(mdr, &le->metablob, in);
+  mdcache->journal_dirty_inode(mdr.get(), &le->metablob, in);
   
   // do the open
   SnapRealm *realm = in->find_snaprealm();
@@ -3439,7 +3439,7 @@ void Server::handle_client_setlayout(MDRequestRef& mdr)
   mdlog->start_entry(le);
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
+  mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
   
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
@@ -3515,7 +3515,7 @@ void Server::handle_client_setdirlayout(MDRequestRef& mdr)
   mdlog->start_entry(le);
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
+  mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
 
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
@@ -3704,7 +3704,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     mdlog->start_entry(le);
     le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
     mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-    mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
+    mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
 
     journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
     return;
@@ -3751,7 +3751,7 @@ void Server::handle_remove_vxattr(MDRequestRef& mdr, CInode *cur,
     mdlog->start_entry(le);
     le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
     mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-    mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
+    mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
 
     journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
     return;
@@ -3848,7 +3848,7 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
   mdlog->start_entry(le);
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
+  mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
 
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
@@ -3904,7 +3904,7 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
   mdlog->start_entry(le);
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
+  mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
 
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
@@ -4310,7 +4310,7 @@ void Server::_link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti)
   mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, 1);      // new dn
   mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, 0, PREDIRTY_PRIMARY);           // targeti
   le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type());  // new remote
-  mdcache->journal_dirty_inode(mdr, &le->metablob, targeti);
+  mdcache->journal_dirty_inode(mdr.get(), &le->metablob, targeti);
 
   // do this after predirty_*, to avoid funky extra dnl arg
   dn->push_projected_linkage(targeti->ino(), targeti->d_type());
@@ -4418,7 +4418,7 @@ void Server::_link_remote(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targ
   } else {
     dn->pre_dirty();
     mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, -1);
-    mdcache->journal_cow_dentry(mdr, &le->metablob, dn);
+    mdcache->journal_cow_dentry(mdr.get(), &le->metablob, dn);
     le->metablob.add_null_dentry(dn, true);
   }
 
@@ -4581,7 +4581,7 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
 
   // commit case
   mdcache->predirty_journal_parents(mdr, &le->commit, dnl->get_inode(), 0, PREDIRTY_SHALLOW|PREDIRTY_PRIMARY, 0);
-  mdcache->journal_dirty_inode(mdr, &le->commit, targeti);
+  mdcache->journal_dirty_inode(mdr.get(), &le->commit, targeti);
 
   // set up commit waiter
   mdr->more()->slave_commit = new C_MDS_SlaveLinkCommit(this, mdr, targeti);
@@ -5029,10 +5029,10 @@ void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
     // remote link.  update remote inode.
     mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->get_dir(), PREDIRTY_DIR, -1);
     mdcache->predirty_journal_parents(mdr, &le->metablob, in, 0, PREDIRTY_PRIMARY);
-    mdcache->journal_dirty_inode(mdr, &le->metablob, in);
+    mdcache->journal_dirty_inode(mdr.get(), &le->metablob, in);
   }
 
-  mdcache->journal_cow_dentry(mdr, &le->metablob, dn);
+  mdcache->journal_cow_dentry(mdr.get(), &le->metablob, dn);
   le->metablob.add_null_dentry(dn, true);
 
   if (in->is_dir()) {
@@ -6236,7 +6236,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
       if (oldin->is_auth()) {
 	// auth for targeti
 	metablob->add_dir_context(oldin->get_projected_parent_dir());
-	mdcache->journal_cow_dentry(mdr, metablob, oldin->get_projected_parent_dn(),
+	mdcache->journal_cow_dentry(mdr.get(), metablob, oldin->get_projected_parent_dn(),
 				    CEPH_NOSNAP, 0, destdnl);
 	metablob->add_primary_dentry(oldin->get_projected_parent_dn(), oldin, true);
       }
@@ -6247,7 +6247,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
   if (srcdnl->is_remote()) {
     if (!linkmerge) {
       if (destdn->is_auth() && !destdnl->is_null())
-	mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
+	mdcache->journal_cow_dentry(mdr.get(), metablob, destdn, CEPH_NOSNAP, 0, destdnl);
       else
 	destdn->first = MAX(destdn->first, next_dest_snap);
 
@@ -6255,12 +6255,12 @@ void Server::_rename_prepare(MDRequestRef& mdr,
         metablob->add_remote_dentry(destdn, true, srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
       if (srci->get_projected_parent_dn()->is_auth()) { // it's remote
 	metablob->add_dir_context(srci->get_projected_parent_dir());
-        mdcache->journal_cow_dentry(mdr, metablob, srci->get_projected_parent_dn(), CEPH_NOSNAP, 0, srcdnl);
+        mdcache->journal_cow_dentry(mdr.get(), metablob, srci->get_projected_parent_dn(), CEPH_NOSNAP, 0, srcdnl);
 	metablob->add_primary_dentry(srci->get_projected_parent_dn(), srci, true);
       }
     } else {
       if (destdn->is_auth() && !destdnl->is_null())
-	mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
+	mdcache->journal_cow_dentry(mdr.get(), metablob, destdn, CEPH_NOSNAP, 0, destdnl);
       else
 	destdn->first = MAX(destdn->first, next_dest_snap);
 
@@ -6274,7 +6274,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
       srci->project_past_snaprealm_parent(dest_realm);
     
     if (destdn->is_auth() && !destdnl->is_null())
-      mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
+      mdcache->journal_cow_dentry(mdr.get(), metablob, destdn, CEPH_NOSNAP, 0, destdnl);
     else
       destdn->first = MAX(destdn->first, next_dest_snap);
 
@@ -6300,7 +6300,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
   // src
   if (srcdn->is_auth()) {
     dout(10) << " journaling srcdn " << *srcdn << dendl;
-    mdcache->journal_cow_dentry(mdr, metablob, srcdn, CEPH_NOSNAP, 0, srcdnl);
+    mdcache->journal_cow_dentry(mdr.get(), metablob, srcdn, CEPH_NOSNAP, 0, srcdnl);
     // also journal the inode in case we need do slave rename rollback. It is Ok to add
     // both primary and NULL dentries. Because during journal replay, null dentry is
     // processed after primary dentry.
@@ -7459,7 +7459,7 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   le->metablob.add_table_transaction(TABLE_SNAP, stid);
   mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(mdr, &le->metablob, diri);
+  mdcache->journal_dirty_inode(mdr.get(), &le->metablob, diri);
 
   // journal the snaprealm changes
   mdlog->submit_entry(le, new C_MDS_mksnap_finish(mds, mdr, diri, info));
@@ -7578,7 +7578,7 @@ void Server::handle_client_rmsnap(MDRequestRef& mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   le->metablob.add_table_transaction(TABLE_SNAP, stid);
   mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(mdr, &le->metablob, diri);
+  mdcache->journal_dirty_inode(mdr.get(), &le->metablob, diri);
 
   mdlog->submit_entry(le, new C_MDS_rmsnap_finish(mds, mdr, diri, snapid));
   mdlog->flush();
