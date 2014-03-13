@@ -524,8 +524,8 @@ public:
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
-    comp = context->rados.aio_create_completion((void*) cb_arg, &write_callback,
-						NULL);
+    comp = context->rados.aio_create_completion((void*) cb_arg, NULL,
+						&write_callback);
     context->io_ctx.aio_operate(context->prefix+oid, comp, &op);
   }
 
@@ -611,8 +611,8 @@ public:
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
-    comp = context->rados.aio_create_completion((void*) cb_arg, &write_callback,
-						NULL);
+    comp = context->rados.aio_create_completion((void*) cb_arg, NULL,
+						&write_callback);
     context->io_ctx.aio_operate(context->prefix+oid, comp, &op);
   }
 
@@ -701,8 +701,8 @@ public:
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
-    comp = context->rados.aio_create_completion((void*) cb_arg, &write_callback,
-						NULL);
+    comp = context->rados.aio_create_completion((void*) cb_arg, NULL,
+						&write_callback);
     context->io_ctx.aio_operate(context->prefix+oid, comp, &op);
   }
 
@@ -801,7 +801,8 @@ public:
 	new pair<TestOp*, TestOp::CallbackInfo*>(this,
 						 new TestOp::CallbackInfo(tid));
       librados::AioCompletion *completion =
-	context->rados.aio_create_completion((void*) cb_arg, &write_callback, NULL);
+	context->rados.aio_create_completion((void*) cb_arg, NULL,
+					     &write_callback);
       waiting.insert(completion);
       context->io_ctx.aio_write(context->prefix+oid, completion,
 				to_write, i.get_len(), i.get_start());
