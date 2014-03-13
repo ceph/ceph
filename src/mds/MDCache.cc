@@ -2497,16 +2497,18 @@ void MDCache::send_slave_resolves()
     for (ceph::unordered_map<metareqid_t, ceph::weak_ptr<MDRequestImpl> >::iterator p = active_requests.begin();
 	 p != active_requests.end();
 	 ++p) {
-      if (!p->second->is_slave() || !p->second->slave_did_prepare())
+      MDRequestRef amdr(p->second.lock());
+      assert(amdr);
+      if (!amdr->is_slave() || !amdr->slave_did_prepare())
 	continue;
-      int master = p->second->slave_to_mds;
+      int master = amdr->slave_to_mds;
       if (resolve_set.count(master) || is_ambiguous_slave_update(p->first, master)) {
-	dout(10) << " including uncommitted " << *p->second << dendl;
+	dout(10) << " including uncommitted " << *amdr << dendl;
 	if (!resolves.count(master))
 	  resolves[master] = new MMDSResolve;
-	if (p->second->has_more() && p->second->more()->is_inode_exporter) {
+	if (amdr->has_more() && amdr->more()->is_inode_exporter) {
 	  // re-send cap exports
-	  CInode *in = p->second->more()->rename_inode;
+	  CInode *in = amdr->more()->rename_inode;
 	  map<client_t, Capability::Export> cap_map;
 	  in->export_client_caps(cap_map);
 	  bufferlist bl;
@@ -2651,90 +2653,92 @@ void MDCache::handle_mds_failure(int who)
   for (ceph::unordered_map<metareqid_t, ceph::weak_ptr<MDRequestImpl> >::iterator p = active_requests.begin();
        p != active_requests.end();
        ++p) {
+    MDRequestRef amdr(p->second.lock());
+    assert(amdr);
     // slave to the failed node?
-    if (p->second->slave_to_mds == who) {
-      if (p->second->slave_did_prepare()) {
-	dout(10) << " slave request " << *p->second << " uncommitted, will resolve shortly" << dendl;
-	if (!p->second->more()->waiting_on_slave.empty()) {
-	  assert(p->second->more()->srcdn_auth_mds == mds->get_nodeid());
+    if (amdr->slave_to_mds == who) {
+      if (amdr->slave_did_prepare()) {
+	dout(10) << " slave request " << *amdr << " uncommitted, will resolve shortly" << dendl;
+	if (!amdr->more()->waiting_on_slave.empty()) {
+	  assert(amdr->more()->srcdn_auth_mds == mds->get_nodeid());
 	  // will rollback, no need to wait
-	  if (p->second->slave_request) {
-	    p->second->slave_request->put();
-	    p->second->slave_request = 0;
+	  if (amdr->slave_request) {
+	    amdr->slave_request->put();
+	    amdr->slave_request = 0;
 	  }
-	  p->second->more()->waiting_on_slave.clear();
+	  amdr->more()->waiting_on_slave.clear();
 	}
       } else {
-	dout(10) << " slave request " << *p->second << " has no prepare, finishing up" << dendl;
-	if (p->second->slave_request)
-	  p->second->aborted = true;
+	dout(10) << " slave request " << *amdr << " has no prepare, finishing up" << dendl;
+	if (amdr->slave_request)
+	  amdr->aborted = true;
 	else
-	  finish.push_back(p->second.lock());
+	  finish.push_back(amdr);
       }
     }
 
-    if (p->second->is_slave() && p->second->slave_did_prepare()) {
-      if (p->second->more()->waiting_on_slave.count(who)) {
-	assert(p->second->more()->srcdn_auth_mds == mds->get_nodeid());
-	dout(10) << " slave request " << *p->second << " no longer need rename notity ack from mds."
+    if (amdr->is_slave() && amdr->slave_did_prepare()) {
+      if (amdr->more()->waiting_on_slave.count(who)) {
+	assert(amdr->more()->srcdn_auth_mds == mds->get_nodeid());
+	dout(10) << " slave request " << *amdr << " no longer need rename notity ack from mds."
 		 << who << dendl;
-	p->second->more()->waiting_on_slave.erase(who);
-	if (p->second->more()->waiting_on_slave.empty() && p->second->slave_request)
-	  mds->queue_waiter(new C_MDS_RetryRequest(this, p->second));
+	amdr->more()->waiting_on_slave.erase(who);
+	if (amdr->more()->waiting_on_slave.empty() && amdr->slave_request)
+	  mds->queue_waiter(new C_MDS_RetryRequest(this, amdr));
       }
 
-      if (p->second->more()->srcdn_auth_mds == who &&
-	  mds->mdsmap->is_clientreplay_or_active_or_stopping(p->second->slave_to_mds)) {
+      if (amdr->more()->srcdn_auth_mds == who &&
+	  mds->mdsmap->is_clientreplay_or_active_or_stopping(amdr->slave_to_mds)) {
 	// rename srcdn's auth mds failed, resolve even I'm a survivor.
-	dout(10) << " slave request " << *p->second << " uncommitted, will resolve shortly" << dendl;
-	add_ambiguous_slave_update(p->first, p->second->slave_to_mds);
+	dout(10) << " slave request " << *amdr << " uncommitted, will resolve shortly" << dendl;
+	add_ambiguous_slave_update(p->first, amdr->slave_to_mds);
       }
     }
     
     // failed node is slave?
-    if (p->second->is_master() && !p->second->committing) {
-      if (p->second->more()->srcdn_auth_mds == who) {
-	dout(10) << " master request " << *p->second << " waiting for rename srcdn's auth mds."
+    if (amdr->is_master() && !amdr->committing) {
+      if (amdr->more()->srcdn_auth_mds == who) {
+	dout(10) << " master request " << *amdr << " waiting for rename srcdn's auth mds."
 		 << who << " to recover" << dendl;
-	assert(p->second->more()->witnessed.count(who) == 0);
-	if (p->second->more()->is_ambiguous_auth)
-	  p->second->clear_ambiguous_auth();
+	assert(amdr->more()->witnessed.count(who) == 0);
+	if (amdr->more()->is_ambiguous_auth)
+	  amdr->clear_ambiguous_auth();
 	// rename srcdn's auth mds failed, all witnesses will rollback
-	p->second->more()->witnessed.clear();
+	amdr->more()->witnessed.clear();
 	pending_masters.erase(p->first);
       }
 
-      if (p->second->more()->witnessed.count(who)) {
-	int srcdn_auth = p->second->more()->srcdn_auth_mds;
-	if (srcdn_auth >= 0 && p->second->more()->waiting_on_slave.count(srcdn_auth)) {
-	  dout(10) << " master request " << *p->second << " waiting for rename srcdn's auth mds."
-		   << p->second->more()->srcdn_auth_mds << " to reply" << dendl;
+      if (amdr->more()->witnessed.count(who)) {
+	int srcdn_auth = amdr->more()->srcdn_auth_mds;
+	if (srcdn_auth >= 0 && amdr->more()->waiting_on_slave.count(srcdn_auth)) {
+	  dout(10) << " master request " << *amdr << " waiting for rename srcdn's auth mds."
+		   << amdr->more()->srcdn_auth_mds << " to reply" << dendl;
 	  // waiting for the slave (rename srcdn's auth mds), delay sending resolve ack
 	  // until either the request is committing or the slave also fails.
-	  assert(p->second->more()->waiting_on_slave.size() == 1);
+	  assert(amdr->more()->waiting_on_slave.size() == 1);
 	  pending_masters.insert(p->first);
 	} else {
-	  dout(10) << " master request " << *p->second << " no longer witnessed by slave mds."
+	  dout(10) << " master request " << *amdr << " no longer witnessed by slave mds."
 		   << who << " to recover" << dendl;
 	  if (srcdn_auth >= 0)
-	    assert(p->second->more()->witnessed.count(srcdn_auth) == 0);
+	    assert(amdr->more()->witnessed.count(srcdn_auth) == 0);
 
 	  // discard this peer's prepare (if any)
-	  p->second->more()->witnessed.erase(who);
+	  amdr->more()->witnessed.erase(who);
 	}
       }
       
-      if (p->second->more()->waiting_on_slave.count(who)) {
-	dout(10) << " master request " << *p->second << " waiting for slave mds." << who
+      if (amdr->more()->waiting_on_slave.count(who)) {
+	dout(10) << " master request " << *amdr << " waiting for slave mds." << who
 		 << " to recover" << dendl;
 	// retry request when peer recovers
-	p->second->more()->waiting_on_slave.erase(who);
-	if (p->second->more()->waiting_on_slave.empty())
-	  mds->wait_for_active_peer(who, new C_MDS_RetryRequest(this, p->second));
+	amdr->more()->waiting_on_slave.erase(who);
+	if (amdr->more()->waiting_on_slave.empty())
+	  mds->wait_for_active_peer(who, new C_MDS_RetryRequest(this, amdr));
       }
 
-      if (p->second->locking && p->second->locking_target_mds == who)
-	p->second->finish_locking(p->second->locking);
+      if (amdr->locking && amdr->locking_target_mds == who)
+	amdr->finish_locking(amdr->locking);
     }
   }
 
@@ -3701,66 +3705,68 @@ void MDCache::rejoin_send_rejoins()
     for (ceph::unordered_map<metareqid_t, ceph::weak_ptr<MDRequestImpl> >::iterator p = active_requests.begin();
 	 p != active_requests.end();
 	 ++p) {
-      if ( p->second->is_slave())
+      MDRequestRef amdr(p->second.lock());
+      assert(amdr);
+      if (amdr->is_slave())
 	continue;
       // auth pins
-      for (set<MDSCacheObject*>::iterator q = p->second->remote_auth_pins.begin();
-	   q != p->second->remote_auth_pins.end();
+      for (set<MDSCacheObject*>::iterator q = amdr->remote_auth_pins.begin();
+	   q != amdr->remote_auth_pins.end();
 	   ++q) {
 	if (!(*q)->is_auth()) {
 	  int who = (*q)->authority().first;
 	  if (rejoins.count(who) == 0) continue;
 	  MMDSCacheRejoin *rejoin = rejoins[who];
 	  
-	  dout(15) << " " << *p->second << " authpin on " << **q << dendl;
+	  dout(15) << " " << *amdr << " authpin on " << **q << dendl;
 	  MDSCacheObjectInfo i;
 	  (*q)->set_object_info(i);
 	  if (i.ino)
-	    rejoin->add_inode_authpin(vinodeno_t(i.ino, i.snapid), p->second->reqid, p->second->attempt);
+	    rejoin->add_inode_authpin(vinodeno_t(i.ino, i.snapid), amdr->reqid, amdr->attempt);
 	  else
-	    rejoin->add_dentry_authpin(i.dirfrag, i.dname, i.snapid, p->second->reqid, p->second->attempt);
+	    rejoin->add_dentry_authpin(i.dirfrag, i.dname, i.snapid, amdr->reqid, amdr->attempt);
 
-	  if (p->second->has_more() && p->second->more()->is_remote_frozen_authpin &&
-	      p->second->more()->rename_inode == (*q))
+	  if (amdr->has_more() && amdr->more()->is_remote_frozen_authpin &&
+	      amdr->more()->rename_inode == (*q))
 	    rejoin->add_inode_frozen_authpin(vinodeno_t(i.ino, i.snapid),
-					     p->second->reqid, p->second->attempt);
+					     amdr->reqid, amdr->attempt);
 	}
       }
       // xlocks
-      for (set<SimpleLock*>::iterator q = p->second->xlocks.begin();
-	   q != p->second->xlocks.end();
+      for (set<SimpleLock*>::iterator q = amdr->xlocks.begin();
+	   q != amdr->xlocks.end();
 	   ++q) {
 	if (!(*q)->get_parent()->is_auth()) {
 	  int who = (*q)->get_parent()->authority().first;
 	  if (rejoins.count(who) == 0) continue;
 	  MMDSCacheRejoin *rejoin = rejoins[who];
 	  
-	  dout(15) << " " << *p->second << " xlock on " << **q << " " << *(*q)->get_parent() << dendl;
+	  dout(15) << " " << *amdr << " xlock on " << **q << " " << *(*q)->get_parent() << dendl;
 	  MDSCacheObjectInfo i;
 	  (*q)->get_parent()->set_object_info(i);
 	  if (i.ino)
 	    rejoin->add_inode_xlock(vinodeno_t(i.ino, i.snapid), (*q)->get_type(),
-				    p->second->reqid, p->second->attempt);
+				    amdr->reqid, amdr->attempt);
 	  else
 	    rejoin->add_dentry_xlock(i.dirfrag, i.dname, i.snapid,
-				     p->second->reqid, p->second->attempt);
+				     amdr->reqid, amdr->attempt);
 	}
       }
       // remote wrlocks
-      for (map<SimpleLock*, int>::iterator q = p->second->remote_wrlocks.begin();
-	   q != p->second->remote_wrlocks.end();
+      for (map<SimpleLock*, int>::iterator q = amdr->remote_wrlocks.begin();
+	   q != amdr->remote_wrlocks.end();
 	   ++q) {
 	int who = q->second;
 	if (rejoins.count(who) == 0) continue;
 	MMDSCacheRejoin *rejoin = rejoins[who];
 
-	dout(15) << " " << *p->second << " wrlock on " << q->second
+	dout(15) << " " << *amdr << " wrlock on " << q->second
 		 << " " << q->first->get_parent() << dendl;
 	MDSCacheObjectInfo i;
 	q->first->get_parent()->set_object_info(i);
 	assert(i.ino);
 	rejoin->add_inode_wrlock(vinodeno_t(i.ino, i.snapid), q->first->get_type(),
-				 p->second->reqid, p->second->attempt);
+				 amdr->reqid, amdr->attempt);
       }
     }
   }
@@ -8836,7 +8842,9 @@ int MDCache::get_num_client_requests()
   for (ceph::unordered_map<metareqid_t, ceph::weak_ptr<MDRequestImpl> >::iterator p = active_requests.begin();
       p != active_requests.end();
       ++p) {
-    if (p->second->reqid.name.is_client() && !p->second->is_slave())
+    MDRequestRef amdr(p->second.lock());
+    assert(amdr);
+    if (amdr->reqid.name.is_client() && !amdr->is_slave())
       count++;
   }
   return count;
@@ -8847,7 +8855,8 @@ MDRequestRef MDCache::request_start(MClientRequest *req)
 {
   // did we win a forward race against a slave?
   if (active_requests.count(req->get_reqid())) {
-    MDRequestRef mdr = active_requests[req->get_reqid()];
+    MDRequestRef mdr = active_requests[req->get_reqid()].lock();
+    assert(mdr);
     if (mdr->is_slave()) {
       dout(10) << "request_start already had " << *mdr << ", waiting for finish" << dendl;
       mdr->more()->waiting_for_finish.push_back(new C_MDS_RetryMessage(mds, req));
@@ -8895,8 +8904,9 @@ MDRequestRef MDCache::request_start_internal(int op)
 MDRequestRef MDCache::request_get(metareqid_t rid)
 {
   assert(active_requests.count(rid));
-  dout(7) << "request_get " << rid << " " << *active_requests[rid] << dendl;
-  return active_requests[rid].lock();
+  MDRequestRef amdr(active_requests[rid]);
+  dout(7) << "request_get " << rid << " " << *amdr << dendl;
+  return amdr;
 }
 
 void MDCache::request_finish(MDRequestRef& mdr)
