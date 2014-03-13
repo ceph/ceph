@@ -1282,8 +1282,10 @@ void Objecter::tick()
   if (!toping.empty()) {
     // send a ping to these osds, to ensure we detect any session resets
     // (osd reply message policy is lossy)
-    rwlock.unlock();
-    rwlock.get_write();
+    if (!rwlock.is_wlocked()) {
+      rwlock.unlock();
+      rwlock.get_write();
+    }
     for (set<OSDSession*>::iterator i = toping.begin();
 	 i != toping.end();
 	 ++i) {
@@ -2486,8 +2488,10 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m)
       op->onfinish->complete(m->replyCode);
     }
     op->onfinish = NULL;
-    rwlock.unlock();
-    rwlock.get_write();
+    if (!rwlock.is_wlocked()) {
+      rwlock.unlock();
+      rwlock.get_write();
+    }
     iter = pool_ops.find(tid);
     if (iter != pool_ops.end()) {
       _finish_pool_op(op);
