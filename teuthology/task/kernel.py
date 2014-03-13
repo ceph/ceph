@@ -603,7 +603,13 @@ def install_distro_kernel(remote):
             menuentry = ''
             for line in grub2conf.split('\n'):
                 if 'submenu' in line:
-                    submenu = line.split('"')[1]
+                    submenu = line.split('submenu ')[1]
+                    # Ubuntu likes to be sneaky and change formatting of
+                    # grub.cfg between quotes/doublequotes between versions
+                    if submenu.startswith("'"):
+                        submenu = submenu.split("'")[1]
+                    if submenu.startswith('"'):
+                        submenu = submenu.split('"')[1]
                 if 'menuentry' in line:
                     if newversion in line and 'recovery' not in line:
                         menuentry = line.split('\'')[1]
@@ -747,12 +753,18 @@ def get_version_from_pkg(remote, ostype):
                 return newest
      #Ubuntu is a depend in a depend.
     if 'ubuntu' in ostype:
-        remote.run(args=['sudo', 'apt-get', '-y', 'install', 'linux-image-current-generic' ], stdout=output, stderr=err_mess )
-        remote.run(args=['dpkg', '-s', 'linux-image-current-generic' ], stdout=output, stderr=err_mess )
-        for line in output.getvalue().split('\n'):
-            if 'Depends:' in line:
-                depends = line.split('Depends: ')[1]
-        remote.run(args=['dpkg', '-s', depends ], stdout=output, stderr=err_mess )
+        try:
+            remote.run(args=['sudo', 'apt-get', '-y', 'install', 'linux-image-current-generic' ], stdout=output, stderr=err_mess )
+            remote.run(args=['dpkg', '-s', 'linux-image-current-generic' ], stdout=output, stderr=err_mess )
+            for line in output.getvalue().split('\n'):
+                if 'Depends:' in line:
+                    depends = line.split('Depends: ')[1]
+            remote.run(args=['dpkg', '-s', depends ], stdout=output, stderr=err_mess )
+        except run.CommandFailedError:
+            # Non precise ubuntu machines (like trusty) don't have
+            # linux-image-current-generic so use linux-image-generic instead.
+            remote.run(args=['sudo', 'apt-get', '-y', 'install', 'linux-image-generic' ], stdout=output, stderr=err_mess )
+            remote.run(args=['dpkg', '-s', 'linux-image-generic' ], stdout=output, stderr=err_mess )
         for line in output.getvalue().split('\n'):
             if 'Depends:' in line:
                 newest = line.split('linux-image-')[1]
