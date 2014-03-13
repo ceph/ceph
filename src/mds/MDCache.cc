@@ -344,7 +344,6 @@ void MDCache::create_empty_hierarchy(C_Gather *gather)
   adjust_subtree_auth(rootdir, mds->whoami);   
   rootdir->dir_rep = CDir::REP_ALL;   //NONE;
 
-  rootdir->fnode.fragstat.nsubdirs = 1;
   rootdir->fnode.accounted_fragstat = rootdir->fnode.fragstat;
   rootdir->fnode.accounted_rstat = rootdir->fnode.rstat;
 
