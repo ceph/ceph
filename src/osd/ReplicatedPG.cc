@@ -3837,6 +3837,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_WATCH:
       ++ctx->num_write;
       {
+	if (!obs.exists) {
+	  result = -ENOENT;
+	  break;
+	}
         uint64_t cookie = op.watch.cookie;
 	bool do_watch = op.watch.flag & 1;
         entity_name_t entity = ctx->reqid.name;
@@ -8923,6 +8927,35 @@ void ReplicatedPG::on_shutdown()
 
 void ReplicatedPG::on_activate()
 {
+  // all clean?
+  if (needs_recovery()) {
+    dout(10) << "activate not all replicas are up-to-date, queueing recovery" << dendl;
+    queue_peering_event(
+      CephPeeringEvtRef(
+	new CephPeeringEvt(
+	  get_osdmap()->get_epoch(),
+	  get_osdmap()->get_epoch(),
+	  DoRecovery())));
+  } else if (needs_backfill()) {
+    dout(10) << "activate queueing backfill" << dendl;
+    queue_peering_event(
+      CephPeeringEvtRef(
+	new CephPeeringEvt(
+	  get_osdmap()->get_epoch(),
+	  get_osdmap()->get_epoch(),
+	  RequestBackfill())));
+  } else {
+    dout(10) << "activate all replicas clean, no recovery" << dendl;
+    queue_peering_event(
+      CephPeeringEvtRef(
+	new CephPeeringEvt(
+	  get_osdmap()->get_epoch(),
+	  get_osdmap()->get_epoch(),
+	  AllReplicasRecovered())));
+  }
+
+  publish_stats_to_osd();
+
   if (!backfill_targets.empty()) {
     last_backfill_started = earliest_backfill();
     new_backfill = true;

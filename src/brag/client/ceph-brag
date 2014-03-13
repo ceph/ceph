@@ -7,6 +7,7 @@ import json
 import sys
 import ast
 import requests
+from collections import Counter
 
 CLUSTER_UUID_NAME='cluster-uuid'
 CLUSTER_OWNERSHIP_NAME='cluster-ownership'
@@ -30,72 +31,60 @@ def get_uuid():
   return uid
 
 def get_cluster_creation_date():
-  (rc, o, e) = run_command(['ceph', 'mon', 'dump'])
+  (rc, o, e) = run_command(['ceph', 'mon', 'dump', '-f', 'json'])
   if rc is not 0:
     raise RuntimeError("\'ceph mon dump\' failed - " + e)
 
-  rec = re.compile('(.*created\ )(.*)(\n.*)')
+  oj = json.loads(o)
+  return oj['created']
 
-  mo = rec.search(o);
-  if mo and mo.group(2) != '0.000000':
-    return mo.group(2)
-
-  # Try and get the date from osd dump
-  (rc, o, e) = run_command(['ceph', 'osd', 'dump'])
-  if rc is not 0:
-    raise RuntimeError("\'ceph osd dump\' failed - " + e)
-
-  mo = rec.search(o);
-  if not mo or mo.group(2) == '0.000000':
-    print >> sys.stderr, "Unable to get cluster creation date"
-
-  return mo.group(2)
+def bytes_pretty_to_raw(byte_count, byte_scale):
+  if byte_scale == 'kB':
+    return byte_count >> 10
+  if byte_scale == 'MB':
+    return byte_count >> 20
+  if byte_scale == 'GB':
+    return byte_count >> 30
+  if byte_scale == 'TB':
+    return byte_count >> 40
+  if byte_scale == 'PB':
+    return byte_count >> 50
+  if byte_scale == 'EB':
+    return byte_count >> 60
+  
+  return byte_count
 
 def get_nums():
-  (rc, o, e) = run_command(['ceph', '-s'])
+  (rc, o, e) = run_command(['ceph', '-s', '-f', 'json'])
   if rc is not 0:
     raise RuntimeError("\'ceph -s\' failed - " + e)
 
-  num_mons = 0
+  oj = json.loads(o)
+  num_mons = len(oj['monmap']['mons'])
+  num_osds = int(oj['osdmap']['osdmap']['num_in_osds'])
+  num_mdss = oj['mdsmap']['in']
 
-  mo = re.search('(.*monmap\ .*:\ )(\d+)(.*)', o)
-  if not mo:
-    raise RuntimeError("Unmatched pattern for monmap in \'ceph status\'")
-  else:
-    num_mons = int(mo.group(2))
+  pgmap = oj['pgmap']
+  num_pgs = pgmap['num_pgs']
+  num_bytes = pgmap['data_bytes']
 
-  num_osds = 0
-  mo = re.search('.*osdmap.*(\d+).*(\d+).*(\d+).*', o)
-  if not mo:
-    raise RuntimeError("Unmatched pattern for osdmap in \'ceph status\'")
-  else:
-    num_osds = int(mo.group(1))
-
-  num_mdss = 0
-  mo = re.search('.*mdsmap\ e\d+.*(\d+)/(\d+)/(\d+).*', o)
-  if mo:
-    num_mdss = int(mo.group(2));
-
-  num_pgs = 0
-  num_pools = 0
-  num_bytes = 0
+  (rc, o, e) = run_command(['ceph', 'pg', 'dump', 'pools', '-f', 'json-pretty'])
+  if rc is not 0:
+    raise RuntimeError("\'ceph pg dump pools\' failed - " + e)
+ 
+  pools = json.loads(o)
+  num_pools = len(pools)
   num_objs = 0
-  mo = re.search('.*pgmap\ v\d+:\ (\d+).*,\ (\d+).*,\ (\d+)\ (\S+)\ data,\ (\d+).*', o)
-  if not mo:
-    raise RuntimeError("Unmatched pattern for pgmap in \'ceph status\'")
-  else:
-    num_pgs = int(mo.group(1))
-    num_pools = int(mo.group(2))
-    byte_count = int(mo.group(3))
-    byte_scale = mo.group(4)
-    num_objs = int(mo.group(5))
-  nums = {'mons':num_mons,
-          'osds':num_osds,
-          'mdss':num_mdss,
-          'pgs':num_pgs,
-          'pools':num_pools,
-          'bytes': {'count':byte_count, 'scale':byte_scale},
-          'objects':num_objs}
+  for p in pools:
+    num_objs += p['stat_sum']['num_objects']
+
+  nums = {'num_mons':num_mons,
+          'num_osds':num_osds,
+          'num_mdss':num_mdss,
+          'num_pgs':num_pgs,
+          'num_bytes':num_bytes,
+          'num_pools':num_pools,
+          'num_objects':num_objs}
   return nums
 
 def get_crush_types():
@@ -107,104 +96,114 @@ def get_crush_types():
   if crush_dump['types'] is None:
     raise RuntimeError("\'types\' item missing in \'ceph osd crush dump\'")
 
-  crush_types = []
+  crush_types = {}
   for t in crush_dump['types']:
-    crush_types.append(t['name'])
+    crush_types[t['type_id']] = t['name']
 
-  return crush_types
+  buckets = {}
+  items_list = []
+  for bucket in crush_dump['buckets']:
+    buckets[bucket['id']] = bucket['type_id']
+    for item in bucket['items']:
+      items_list.append(item['id'])
+
+  crush_map = []
+  counter = Counter(items_list)
+  append = lambda t,c: crush_map.append({'type':t, 'count':c})
+  for id,count in counter.items():
+    if id in buckets:
+      append(crush_types[buckets[id]],
+             count)
+      del buckets[id]
+    else:
+      append(crush_types[id], count)
+
+  #the root item
+  for id,type_id in buckets.items():
+    append(crush_types[type_id], 1)
+
+  return crush_map
 
 def get_pool_metadata():
-  (rc, o, e) = run_command(['ceph', 'osd', 'dump'])
+  (rc, o, e) = run_command(['ceph', 'osd', 'dump', '-f', 'json'])
   if rc is not 0:
     raise RuntimeError("\'ceph osd dump\' failed - " + e)
 
-  result = re.findall("pool\ (\d+)\ '(\S+)'\ rep\ size\ (\d+)", o)
-  if len(result) is 0:
-    #Check with replicated size
-    result = re.findall("pool\ (\d+)\ '(\S+)'\ replicated\ size\ (\d+)", o)
-    if len(result) is 0:
-      raise RuntimeError("Unmatched pattern for \'pool\' in \'ceph osd dump\'")
-
   pool_meta = []
-  proc = lambda x: {'id':x[0], 'name':x[1], 'rep_size':int(x[2])}
-  for r in result:
-    pool_meta.append(proc(r))
+  oj = json.loads(o)
+  proc = lambda x: {'id':x['pool'], 'type':x['type'], 'size':x['size']}
+  for p in oj['pools']:
+    pool_meta.append(proc(p))
 
   return pool_meta
 
 def get_sysinfo(max_osds):
-  sysinfo = []
   count = 0
   osd_metadata_available = False
+  
+  os = {}
+  kern_version = {}
+  kern_description = {}
+  distro = {}
+  cpu = {}
+  arch = {}
+  ceph_version = {}
 
+  incr = lambda a,k: 1 if k not in a else a[k]+1
   while count < max_osds:
     meta = {'id':count}
     (rc, o, e) = run_command(['ceph', 'osd', 'metadata', str(count)])
     if rc is 0:
       if osd_metadata_available is False:
         osd_metadata_available = True
-      os_info = {}
-      hw_info = {}
-      nw_info = {}
 
       jmeta = json.loads(o)
 
       version = jmeta['ceph_version'].split()
-      meta['ceph_version'] = version[2]
+      cv = version[2]
       if (len(version) > 3):
-        meta['ceph_version'] += version[3]
+        cv += version[3]
 
-      os_info['os'] = jmeta['os']
-      os_info['version'] = jmeta['kernel_version']
-      os_info['description'] = jmeta['kernel_description']
+      ceph_version[cv] = incr(ceph_version, cv)
+      os[jmeta['os']] = incr(os, jmeta['os'])
+      kern_version[jmeta['kernel_version']] = \
+            incr(kern_version, jmeta['kernel_version'])
+      kern_description[jmeta['kernel_description']] = \
+            incr(kern_description, jmeta['kernel_description'])
 
       try:
-        distro = jmeta['distro'] + ' '
-        distro += jmeta['distro_version'] + ' '
-        distro += jmeta['distro_codename'] + ' ('
-        distro += jmeta['distro_description'] + ')'
-        os_info['distro'] = distro
+        dstr = jmeta['distro'] + ' '
+        dstr += jmeta['distro_version'] + ' '
+        dstr += jmeta['distro_codename'] + ' ('
+        dstr += jmeta['distro_description'] + ')'
+        distro[dstr] = incr(distro, dstr)
       except KeyError as ke:
         pass
-      meta['os_info'] = os_info
   
-      hw_info['cpu'] = jmeta['cpu']
-      hw_info['arch'] = jmeta['arch']
-      hw_info['mem_kb'] = int(jmeta['mem_total_kb'])
-      hw_info['swap_kb'] = int(jmeta['mem_swap_kb'])
-      meta['hw_info'] = hw_info
+      cpu[jmeta['cpu']] = incr(cpu, jmeta['cpu'])
+      arch[jmeta['arch']] = incr(arch, jmeta['arch'])
   
-    (ip, hname) = get_osd_host(count)
-    nw_info['address'] = ip
-    nw_info['hostname'] = hname
-    meta['nw_info'] = nw_info
-
-    sysinfo.append(meta)
     count = count + 1
 
+  sysinfo = {}
   if osd_metadata_available is False:
     print >> sys.stderr, "'ceph osd metadata' is not available at all"
+    return sysinfo
 
+  def jsonify(type_count, name, type_name):
+    tmp = []
+    for k, v in type_count.items():
+      tmp.append({type_name:k, 'count':v})
+    sysinfo[name] = tmp
+
+  jsonify(os, 'os_info', 'os')
+  jsonify(kern_version, 'kernel_versions', 'version')
+  jsonify(kern_description, 'kernel_types', 'type')
+  jsonify(distro, 'distros', 'distro')
+  jsonify(cpu, 'cpus', 'cpu')
+  jsonify(arch, 'cpu_archs', 'arch')
+  jsonify(ceph_version, 'ceph_versions', 'version')
   return sysinfo
-
-def get_osd_host(osd_id):
-  loc = {}
-
-  (rc, o, e) = run_command(['ceph', 'osd', 'find', str(osd_id)])
-  if rc is not 0:
-    raise RuntimeError("\'ceph osd find\' failed - " + e)
-
-  jloc = json.loads(o)
-
-  mo = re.search("(\d+.\d+.\d+.\d+).*", jloc['ip'])
-  if mo is None:
-    #Might be in ipv6 format, TODO: Verify
-    return None;
-
-  ip = mo.group(1)
-  host = jloc['crush_location']['host']
-
-  return (ip, host)
 
 def get_ownership_info():
   (rc, o, e) = run_command(['ceph', 'config-key', 'get',
@@ -221,7 +220,7 @@ def output_json():
   out['uuid'] = get_uuid()
   out['cluster_creation_date'] = get_cluster_creation_date()
   nums = get_nums()
-  num_osds = int(nums['osds'])
+  num_osds = int(nums['num_osds'])
   out['components_count'] = nums
   out['crush_types'] = get_crush_types()
   out['pool_metadata'] = get_pool_metadata()

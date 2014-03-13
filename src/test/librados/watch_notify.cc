@@ -70,6 +70,13 @@ TEST_F(LibRadosWatchNotifyPP, WatchNotifyTimeoutTestPP) {
   ioctx.set_notify_timeout(1);
   uint64_t handle;
   WatchNotifyTestCtx ctx;
+
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+
   ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
   sem_destroy(&sem);
 }
