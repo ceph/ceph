@@ -848,6 +848,8 @@ TEST(LibCephFS, BadFileDesc) {
   ASSERT_EQ(ceph_get_file_stripe_unit(cmount, -1), -EBADF);
   ASSERT_EQ(ceph_get_file_pool(cmount, -1), -EBADF);
   ASSERT_EQ(ceph_get_file_replication(cmount, -1), -EBADF);
+
+  ceph_shutdown(cmount);
 }
 
 TEST(LibCephFS, ReadEmptyFile) {
