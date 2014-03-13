@@ -19,6 +19,9 @@ ceph_test_rados_api_cmd
 ceph_test_rados_list_parallel
 ceph_test_rados_open_pools_parallel
 ceph_test_rados_delete_pools_parallel
-ceph_test_rados_watch_notify
+
+# skip this watch/notify test due to the change in firefly to return ENOENT for
+# a watch on a non-existent object
+# ceph_test_rados_watch_notify
 
 exit 0
