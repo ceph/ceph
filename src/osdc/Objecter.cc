@@ -252,13 +252,13 @@ void Objecter::init()
 	       << cpp_strerror(-ret) << dendl;
   }
 
-  osdmap_lock.get_read();
+  rwlock.get_read();
 
   schedule_tick();
   if (osdmap->get_epoch() == 0)
     _maybe_request_map();
 
-  osdmap_lock.unlock();
+  rwlock.unlock();
 
   initialized.set(1);
 }
@@ -511,7 +511,6 @@ void Objecter::_scan_requests(OSDSession *s,
 			     map<tid_t, CommandOp*>& need_resend_command)
 {
   assert(rwlock.is_wlocked());
-  assert(osdmap_lock.is_wlocked());
 
   RWLock::WLocker wl(s->lock);
 
@@ -591,7 +590,6 @@ void Objecter::handle_osd_map(MOSDMap *m)
   assert(initialized.read());
 
   RWLock::WLocker wl(rwlock);
-  RWLock::WLocker ol(osdmap_lock);
 
   assert(osdmap); 
 
@@ -1104,7 +1102,7 @@ void Objecter::get_latest_version(epoch_t oldest, epoch_t newest, Context *fin)
 
 void Objecter::_get_latest_version(epoch_t oldest, epoch_t newest, Context *fin)
 {
-  assert(osdmap_lock.is_wlocked());
+  assert(rwlock.is_wlocked());
   if (osdmap->get_epoch() >= newest) {
   ldout(cct, 10) << __func__ << " latest " << newest << ", have it" << dendl;
     if (fin)
@@ -1118,13 +1116,13 @@ void Objecter::_get_latest_version(epoch_t oldest, epoch_t newest, Context *fin)
 
 void Objecter::maybe_request_map()
 {
-  RWLock::RLocker rl(osdmap_lock);
+  RWLock::RLocker rl(rwlock);
   _maybe_request_map();
 }
 
 void Objecter::_maybe_request_map()
 {
-  assert(osdmap_lock.is_locked());
+  assert(rwlock.is_locked());
   int flag = 0;
   if (osdmap->test_flag(CEPH_OSDMAP_FULL)) {
     ldout(cct, 10) << "_maybe_request_map subscribing (continuous) to next osd map (FULL flag is set)" << dendl;
@@ -1134,26 +1132,27 @@ void Objecter::_maybe_request_map()
   }
   epoch_t epoch = osdmap->get_epoch() ? osdmap->get_epoch()+1 : 0;
   if (monc->sub_want("osdmap", epoch, flag)) {
-    if (!osdmap_lock.is_wlocked()) {
-      osdmap_lock.unlock();
-      osdmap_lock.get_write();
+    if (!rwlock.is_wlocked()) {
+      rwlock.unlock();
+      rwlock.get_write();
     }
+    epoch = osdmap->get_epoch() ? osdmap->get_epoch()+1 : 0;
     if (monc->sub_want("osdmap", epoch, flag))
       monc->renew_subs();
   }
 }
 
-void Objecter::wait_for_new_map(Context *c, epoch_t epoch, int err)
-{
-  RWLock::WLocker wl(osdmap_lock);
-  _wait_for_new_map(c, epoch, err);
-}
-
 void Objecter::_wait_for_new_map(Context *c, epoch_t epoch, int err)
 {
-  assert(osdmap_lock.is_wlocked());
+  assert(rwlock.is_wlocked());
   waiting_for_map[epoch].push_back(pair<Context *, int>(c, err));
   _maybe_request_map();
+}
+
+void Objecter::wait_for_new_map(Context *c, epoch_t epoch, int err)
+{
+  RWLock::WLocker wl(rwlock);
+  _wait_for_new_map(c, epoch, err);
 }
 
 void Objecter::kick_requests(OSDSession *session)
@@ -1270,7 +1269,7 @@ void Objecter::tick()
   logger->set(l_osdc_osd_laggy, toping.size());
 
   if (num_homeless_ops.read() || !toping.empty())
-    maybe_request_map();
+    _maybe_request_map();
 
   if (!toping.empty()) {
     // send a ping to these osds, to ensure we detect any session resets
@@ -1462,21 +1461,21 @@ tid_t Objecter::_op_submit(Op *op)
       osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) {
     ldout(cct, 10) << " paused modify " << op << " tid " << last_tid << dendl;
     op->paused = true;
-    maybe_request_map();
+    _maybe_request_map();
   } else if ((op->flags & CEPH_OSD_FLAG_READ) &&
 	     osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) {
     ldout(cct, 10) << " paused read " << op << " tid " << last_tid << dendl;
     op->paused = true;
-    maybe_request_map();
+    _maybe_request_map();
   } else if ((op->flags & CEPH_OSD_FLAG_WRITE) &&
 	     osdmap->test_flag(CEPH_OSDMAP_FULL)) {
     ldout(cct, 0) << " FULL, paused modify " << op << " tid " << last_tid << dendl;
     op->paused = true;
-    maybe_request_map();
+    _maybe_request_map();
   } else if (op->session) {
     _send_op(op);
   } else {
-    maybe_request_map();
+    _maybe_request_map();
   }
 
   if (check_for_latest_map) {
@@ -1568,9 +1567,6 @@ int64_t Objecter::get_object_pg_hash_position(int64_t pool, const string& key,
 int Objecter::_recalc_op_target(Op *op)
 {
   assert(rwlock.is_locked());
-
-  RWLock::RLocker ol(osdmap_lock);
-  
 
   bool is_read = op->flags & CEPH_OSD_FLAG_READ;
   bool is_write = op->flags & CEPH_OSD_FLAG_WRITE;
@@ -1669,9 +1665,7 @@ int Objecter::_recalc_op_target(Op *op)
       } else {
 	osd = primary;
       }
-      osdmap_lock.unlock();
       s = _get_session(osd);
-      osdmap_lock.get_read();
     }
 
     if (op->session != s) {
@@ -2104,7 +2098,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 uint32_t Objecter::list_objects_seek(ListContext *list_context,
 				     uint32_t pos)
 {
-  RWLock::RLocker rl(osdmap_lock);
+  RWLock::RLocker rl(rwlock);
   pg_t actual = osdmap->raw_pg_to_pg(pg_t(pos, list_context->pool_id));
   ldout(cct, 10) << "list_objects_seek " << list_context
 		 << " pos " << pos << " -> " << actual << dendl;
@@ -2144,10 +2138,10 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish)
     return;
   }
 
-  osdmap_lock.get_read();
+  rwlock.get_read();
   const pg_pool_t *pool = osdmap->get_pg_pool(list_context->pool_id);
   int pg_num = pool->get_pg_num();
-  osdmap_lock.unlock();
+  rwlock.unlock();
 
   if (list_context->starting_pg_num == 0) {     // there can't be zero pgs!
     list_context->starting_pg_num = pg_num;
@@ -2460,8 +2454,12 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m)
     if (m->version > last_seen_osdmap_version)
       last_seen_osdmap_version = m->version;
     if (osdmap->get_epoch() < m->epoch) {
-      ldout(cct, 20) << "waiting for client to reach epoch " << m->epoch << " before calling back" << dendl;
-      wait_for_new_map(op->onfinish, m->epoch, m->replyCode);
+      rwlock.unlock();
+      rwlock.get_write();
+      if (osdmap->get_epoch() < m->epoch) {
+        ldout(cct, 20) << "waiting for client to reach epoch " << m->epoch << " before calling back" << dendl;
+        _wait_for_new_map(op->onfinish, m->epoch, m->replyCode);
+      }
     }
     else {
       op->onfinish->complete(m->replyCode);
@@ -3126,7 +3124,7 @@ int Objecter::_submit_command(CommandOp *c, tid_t *ptid)
   if (!c->session->is_homeless())
     _send_command(c);
   else
-    maybe_request_map();
+    _maybe_request_map();
   if (c->map_check_error)
     _send_command_map_check(c);
   *ptid = tid;
