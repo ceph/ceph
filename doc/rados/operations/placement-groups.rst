@@ -44,14 +44,15 @@ to balance out memory and CPU requirements and per-OSD load. For a single pool
 of objects, you can use the following formula::
 
                (OSDs * 100)
-   Total PGs = ------------ *(rounded up to the nearest power of 2)*
+   Total PGs = ------------
                  Replicas
 
-The rounding to the nearest power of two is optional, but recommended
-if you want to ensure that all placement groups are roughly the same size.
+The result should be **rounded up to the nearest power of two.**
+Rounding up is optional, but recommended if you want to ensure that
+all placement groups are roughly the same size.
 
 As an example, for a cluster with 200 OSDs and a pool size of 3
-replicas, you would estimate your number of PGs as follows:
+replicas, you would estimate your number of PGs as follows::
 
    (200 * 100)
    ----------- = 6667. Nearest power of 2: 8192
