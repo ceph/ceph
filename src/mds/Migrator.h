@@ -141,7 +141,7 @@ protected:
     map<client_t,entity_inst_t> client_map;
     map<CInode*, map<client_t,Capability::Export> > peer_exports;
     Mutation *mut;
-    import_state_t() : mut(NULL) {}
+    import_state_t() : state(0), peer(0), tid(0), mut(NULL) {}
   };
 
   map<dirfrag_t, import_state_t>  import_state;
