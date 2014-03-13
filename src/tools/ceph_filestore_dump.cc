@@ -567,16 +567,14 @@ int export_file(ObjectStore *store, coll_t cid, hobject_t &obj)
 {
   struct stat st;
   mysize_t total;
-  ostringstream objname;
   footer ft;
 
   int ret = store->stat(cid, obj, &st);
   if (ret < 0)
     return ret;
 
-  objname << obj;
-  if (debug && file_fd != STDOUT_FILENO)
-    cout << "objname=" << objname.str() << std::endl;
+  if (file_fd != STDOUT_FILENO)
+    cout << "read " << obj << std::endl;
 
   total = st.st_size;
   if (debug && file_fd != STDOUT_FILENO)
@@ -707,6 +705,9 @@ int do_export(ObjectStore *fs, coll_t coll, pg_t pgid, pg_info_t &info,
   PGLog::IndexedLog log;
   pg_missing_t missing;
 
+  if (file_fd != STDOUT_FILENO)
+    cout << "Exporting " << pgid << std::endl;
+
   int ret = get_log(fs, coll, pgid, info, log, missing);
   if (ret > 0)
       return ret;
@@ -718,7 +719,12 @@ int do_export(ObjectStore *fs, coll_t coll, pg_t pgid, pg_info_t &info,
   if (ret)
     return ret;
 
-  export_files(fs, coll);
+  ret = export_files(fs, coll);
+  if (ret) {
+    if (file_fd != STDOUT_FILENO)
+      cout << "export_files error " << ret << std::endl;
+    return ret;
+  }
 
   metadata_section ms(struct_ver, map_epoch, info, log);
   ret = write_section(TYPE_PG_METADATA, ms, file_fd);
@@ -865,11 +871,7 @@ int get_object(ObjectStore *store, coll_t coll, bufferlist &bl)
 
   t->touch(coll, ob.hoid);
 
-  if (debug) {
-    ostringstream objname;
-    objname << ob.hoid.oid;
-    cout << "name " << objname.str() << " snap " << ob.hoid.snap << std::endl;
-  }
+  cout << "Write " << ob.hoid << std::endl;
 
   bufferlist ebl;
   bool done = false;
@@ -975,6 +977,8 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   //First section must be TYPE_PG_BEGIN
   sectiontype_t type;
   ret = read_section(file_fd, &type, &ebl);
+  if (ret)
+    return ret;
   if (type != TYPE_PG_BEGIN) {
     return EFAULT;
   }
@@ -1065,9 +1069,9 @@ int main(int argc, char **argv)
     ("journal-path", po::value<string>(&jpath),
      "path to journal, mandatory")
     ("pgid", po::value<string>(&pgidstr),
-     "PG id, mandatory")
+     "PG id, mandatory except for import")
     ("type", po::value<string>(&type),
-     "Type one of info, log, remove, export, or import, mandatory")
+     "Arg is one of [info, log, remove, export, or import], mandatory")
     ("file", po::value<string>(&file),
      "path of file to export or import")
     ("debug", "Enable diagnostic output to stderr")
@@ -1236,8 +1240,8 @@ int main(int argc, char **argv)
   bufferlist bl;
   OSDSuperblock superblock;
   bufferlist::iterator p;
-  ret = fs->read(coll_t::META_COLL, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
-  if (ret < 0) {
+  r = fs->read(coll_t::META_COLL, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
+  if (r < 0) {
     cout << "Failure to read OSD superblock error= " << r << std::endl;
     goto out;
   }
@@ -1289,6 +1293,8 @@ int main(int argc, char **argv)
     if (ret == EFAULT) {
       cout << "Corrupt input for import" << std::endl;
     }
+    if (ret == 0)
+      cout << "Import successful" << std::endl;
     goto out;
   }
 
@@ -1365,6 +1371,8 @@ int main(int argc, char **argv)
 
     if (type == "export") {
       ret = do_export(fs, coll, pgid, info, map_epoch, struct_ver, superblock);
+      if (ret == 0 && file_fd != STDOUT_FILENO)
+        cout << "Export successful" << std::endl;
     } else if (type == "info") {
       formatter->open_object_section("info");
       info.dump(formatter);
