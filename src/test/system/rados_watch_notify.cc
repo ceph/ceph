@@ -70,7 +70,7 @@ int main(int argc, const char **argv)
   {
     StRadosCreatePool r1(argc, argv, NULL, setup_sem, NULL, pool, 1, ".obj");
     StRadosWatch r2(argc, argv, setup_sem, watch_sem, notify_sem,
-		    1, pool, "0.obj");
+		    1, 0, pool, "0.obj");
     StRadosNotify r3(argc, argv, setup_sem, watch_sem, notify_sem,
 		     0, pool, "0.obj");
     vector<SysTestRunnable*> vec;
@@ -94,7 +94,7 @@ int main(int argc, const char **argv)
   {
     StRadosCreatePool r1(argc, argv, NULL, setup_sem, NULL, pool, 0, ".obj");
     StRadosWatch r2(argc, argv, setup_sem, watch_sem, notify_sem,
-		    0, pool, "0.obj");
+		    0, -ENOENT, pool, "0.obj");
     StRadosNotify r3(argc, argv, setup_sem, watch_sem, notify_sem,
 		     -ENOENT, pool, "0.obj");
     vector<SysTestRunnable*> vec;
@@ -127,7 +127,7 @@ int main(int argc, const char **argv)
   {
     StRadosCreatePool r1(argc, argv, NULL, setup_sem, NULL, pool, 1, ".obj");
     StRadosWatch r2(argc, argv, setup_sem, watch_sem, finished_notifies_sem,
-		    1, pool, "0.obj");
+		    1, 0, pool, "0.obj");
     StRadosNotify r3(argc, argv, setup_sem, watch_sem, notify_sem,
 		     0, pool, "0.obj");
     StRadosDeletePool r4(argc, argv, notify_sem, deleted_sem, pool);
@@ -165,7 +165,7 @@ int main(int argc, const char **argv)
   {
     StRadosCreatePool r1(argc, argv, NULL, setup_sem, NULL, pool, 1, ".obj");
     StRadosWatch r2(argc, argv, setup_sem, watch_sem, finished_notifies_sem,
-		    1, pool, "0.obj");
+		    1, 0, pool, "0.obj");
     StRadosNotify r3(argc, argv, setup_sem, watch_sem, notify_sem,
 		     0, pool, "0.obj");
     StRadosDeleteObjs r4(argc, argv, notify_sem, deleted_sem, 1, pool, ".obj");

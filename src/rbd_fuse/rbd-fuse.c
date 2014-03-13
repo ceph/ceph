@@ -17,6 +17,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <getopt.h>
+#include <assert.h>
 
 #include "include/rbd/librbd.h"
 
@@ -75,11 +76,11 @@ void simple_err(const char *msg, int err);
 void
 enumerate_images(struct rbd_image **head)
 {
-	char *ibuf;
-	size_t ibuf_len;
+	char *ibuf = NULL;
+	size_t ibuf_len = 0;
 	struct rbd_image *im, *next;
 	char *ip;
-	int actual_len;
+	int ret;
 
 	if (*head != NULL) {
 		for (im = *head; im != NULL;) {
@@ -90,17 +91,29 @@ enumerate_images(struct rbd_image **head)
 		*head = NULL;
 	}
 
-	ibuf_len = 1024;
-	ibuf = malloc(ibuf_len);
-	actual_len = rbd_list(ioctx, ibuf, &ibuf_len);
-	if (actual_len < 0) {
-		simple_err("rbd_list: error %d\n", actual_len);
+	ret = rbd_list(ioctx, ibuf, &ibuf_len);
+	if (ret == -ERANGE) {
+		assert(ibuf_len > 0);
+		ibuf = malloc(ibuf_len);
+		if (!ibuf) {
+			simple_err("Failed to get ibuf", -ENOMEM);
+			return;
+		}
+	} else if (ret < 0) {
+		simple_err("Failed to get ibuf_len", ret);
 		return;
 	}
 
+	ret = rbd_list(ioctx, ibuf, &ibuf_len);
+	if (ret < 0) {
+		simple_err("Failed to populate ibuf", ret);
+		free(ibuf);
+		return;
+	}
+	assert(ret == (int)ibuf_len);
+
 	fprintf(stderr, "pool %s: ", pool_name);
-	for (ip = ibuf; *ip != '\0' && ip < &ibuf[actual_len];
-	     ip += strlen(ip) + 1)  {
+	for (ip = ibuf; ip < &ibuf[ibuf_len]; ip += strlen(ip) + 1)  {
 		fprintf(stderr, "%s, ", ip);
 		im = malloc(sizeof(*im));
 		im->image_name = ip;
@@ -108,7 +121,6 @@ enumerate_images(struct rbd_image **head)
 		*head = im;
 	}
 	fprintf(stderr, "\n");
-	return;
 }
 
 int
