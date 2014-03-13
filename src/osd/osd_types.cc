@@ -1178,13 +1178,12 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
     ::decode(cache_min_flush_age, bl);
     ::decode(cache_min_evict_age, bl);
   } else {
-    pg_pool_t def;
-    target_max_bytes = def.target_max_bytes;
-    target_max_objects = def.target_max_objects;
-    cache_target_dirty_ratio_micro = def.cache_target_dirty_ratio_micro;
-    cache_target_full_ratio_micro = def.cache_target_full_ratio_micro;
-    cache_min_flush_age = def.cache_min_flush_age;
-    cache_min_evict_age = def.cache_min_evict_age;
+    target_max_bytes = 0;
+    target_max_objects = 0;
+    cache_target_dirty_ratio_micro = 0;
+    cache_target_full_ratio_micro = 0;
+    cache_min_flush_age = 0;
+    cache_min_evict_age = 0;
   }
 
   DECODE_FINISH(bl);
