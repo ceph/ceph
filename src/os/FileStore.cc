@@ -682,7 +682,7 @@ int FileStore::mkfs()
     backend = new BtrfsFileStoreBackend(this);
 #endif
   } else if (basefs.f_type == XFS_SUPER_MAGIC) {
-#if defined(__linux__)
+#ifdef HAVE_LIBXFS
     backend = new XfsFileStoreBackend(this);
 #endif
   } else if (basefs.f_type == ZFS_SUPER_MAGIC) {
@@ -881,9 +881,12 @@ int FileStore::_detect_fs()
     wbthrottle.set_fs(WBThrottle::BTRFS);
 #endif
   } else if (st.f_type == XFS_SUPER_MAGIC) {
-#if defined(__linux__)
+#ifdef HAVE_LIBXFS
     dout(0) << "mount detected xfs (libxfs)" << dendl;
     backend = new XfsFileStoreBackend(this);
+#else
+    dout(0) << "mount detected xfs" << dendl;
+#endif
     m_fs_type = FS_TYPE_XFS;
 
     // wbthrottle is constructed with fs(WBThrottle::XFS)
@@ -893,7 +896,6 @@ int FileStore::_detect_fs()
       g_conf->apply_changes(NULL);
       assert(m_filestore_replica_fadvise == false);
     }
-#endif
   } else if (st.f_type == ZFS_SUPER_MAGIC) {
 #ifdef HAVE_LIBZFS
     dout(0) << "mount detected zfs (libzfs)" << dendl;
