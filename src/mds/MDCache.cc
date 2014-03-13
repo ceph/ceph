@@ -459,7 +459,7 @@ void MDCache::_create_system_file(CDir *dir, const char *name, CInode *in, Conte
     le->metablob.add_primary_dentry(dn, in, true);
   } else {
     predirty_journal_parents(mut, &le->metablob, in, dir, PREDIRTY_DIR, 1);
-    journal_dirty_inode(mut, &le->metablob, in);
+    journal_dirty_inode(mut.get(), &le->metablob, in);
     dn->push_projected_linkage(in->ino(), in->d_type());
     le->metablob.add_remote_dentry(dn, true, in->ino(), in->d_type());
     le->metablob.add_root(true, in);
@@ -873,7 +873,7 @@ void MDCache::try_subtree_merge_at(CDir *dir, bool do_eval)
       mds->mdlog->start_entry(le);
 
       le->metablob.add_dir_context(in->get_parent_dn()->get_dir());
-      journal_dirty_inode(mut, &le->metablob, in);
+      journal_dirty_inode(mut.get(), &le->metablob, in);
       
       mds->mdlog->submit_entry(le);
       mds->mdlog->wait_for_safe(new C_MDC_SubtreeMergeWB(this, in, mut));
@@ -1484,7 +1484,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
   return oldin;
 }
 
-void MDCache::journal_cow_dentry(MutationRef& mut, EMetaBlob *metablob,
+void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
                                  CDentry *dn, snapid_t follows,
 				 CInode **pcow_inode, CDentry::linkage_t *dnl)
 {
@@ -1574,10 +1574,10 @@ void MDCache::journal_cow_inode(MutationRef& mut, EMetaBlob *metablob,
 {
   dout(10) << "journal_cow_inode follows " << follows << " on " << *in << dendl;
   CDentry *dn = in->get_projected_parent_dn();
-  journal_cow_dentry(mut, metablob, dn, follows, pcow_inode);
+  journal_cow_dentry(mut.get(), metablob, dn, follows, pcow_inode);
 }
 
-void MDCache::journal_dirty_inode(MutationRef& mut, EMetaBlob *metablob, CInode *in, snapid_t follows)
+void MDCache::journal_dirty_inode(MutationImpl *mut, EMetaBlob *metablob, CInode *in, snapid_t follows)
 {
   if (in->is_base()) {
     metablob->add_root(true, in, in->get_projected_inode());
@@ -1848,7 +1848,7 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
  * accounted_rstat on scatterlock sync may not match our current
  * rstat.  this is normal and expected.
  */
-void MDCache::predirty_journal_parents(MutationRef& mut, EMetaBlob *blob,
+void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 				       CInode *in, CDir *parent,
 				       int flags, int linkunlink,
 				       snapid_t cfollows)
@@ -2132,7 +2132,7 @@ void MDCache::predirty_journal_parents(MutationRef& mut, EMetaBlob *blob,
        p != lsi.end();
        ++p) {
     CInode *cur = *p;
-    journal_dirty_inode(mut, blob, cur);
+    journal_dirty_inode(mut.get(), blob, cur);
   }
  
 }
@@ -6189,7 +6189,7 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
   le->metablob.add_primary_dentry(dn, in, true);
   le->metablob.add_truncate_finish(in->ino(), ls->offset);
 
-  journal_dirty_inode(mut, &le->metablob, in);
+  journal_dirty_inode(mut.get(), &le->metablob, in);
   mds->mdlog->submit_entry(le, new C_MDC_TruncateLogged(this, in, mut));
 
   // flush immediately if there are readers/writers waiting
@@ -9234,7 +9234,7 @@ void MDCache::_anchor_prepared(CInode *in, version_t atid, bool add)
   EUpdate *le = new EUpdate(mds->mdlog, add ? "anchor_create":"anchor_destroy");
   mds->mdlog->start_entry(le);
   predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
-  journal_dirty_inode(mut, &le->metablob, in);
+  journal_dirty_inode(mut.get(), &le->metablob, in);
   le->metablob.add_table_transaction(TABLE_ANCHOR, atid);
   mds->mdlog->submit_entry(le, new C_MDC_AnchorLogged(this, in, atid, mut));
   mds->mdlog->flush();
@@ -11612,7 +11612,7 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
     // journal dirfragtree
     inode_t *pi = diri->project_inode();
     pi->version = diri->pre_dirty();
-    journal_dirty_inode(mdr, &le->metablob, diri);
+    journal_dirty_inode(mdr.get(), &le->metablob, diri);
   } else {
     mds->locker->mark_updated_scatterlock(&diri->dirfragtreelock);
     mdr->ls->dirty_dirfrag_dirfragtree.push_back(&diri->item_dirty_dirfrag_dirfragtree);
