@@ -48,6 +48,9 @@ Upgrading from v0.77
 * The librados cmpxattr operation now handles xattrs containing null bytes as
   data rather than null-terminated strings.
 
+* A librados WATCH operation on a non-existent object now returns ENOENT;
+  previously it did not.
+
 Upgrading from v0.72 Emperor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
