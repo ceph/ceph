@@ -1475,8 +1475,8 @@ public:
 
   void kick_requests(OSDSession *session);
 
-  OSDSession *get_session(int osd);
-  OSDSession *_get_session(int osd);
+  int get_session(int osd, OSDSession **session);
+  int _get_session(int osd, OSDSession **session);
   void put_session(OSDSession *s);
   void reopen_session(OSDSession *session);
   void close_session(OSDSession *session);

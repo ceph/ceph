@@ -978,7 +978,7 @@ void Objecter::_command_cancel_map_check(CommandOp *c)
 
 
 
-Objecter::OSDSession *Objecter::_get_session(int osd)
+int Objecter::_get_session(int osd, OSDSession **session)
 {
   assert(rwlock.is_locked());
 
@@ -986,16 +986,23 @@ Objecter::OSDSession *Objecter::_get_session(int osd)
   if (p != osd_sessions.end()) {
     OSDSession *s = p->second;
     s->get();
-    return s;
+    *session = s;
+    return 0;
   }
   if (!rwlock.is_wlocked()) {
+    epoch_t epoch = osdmap->get_epoch();
     rwlock.unlock();
     rwlock.get_write();
+    if (epoch != osdmap->get_epoch()) {
+      /* lost in a race! */
+      return -EAGAIN;
+    }
     p = osd_sessions.find(osd);
     if (p != osd_sessions.end()) {
       OSDSession *s = p->second;
       s->get();
-      return s;
+      *session = s;
+      return 0;
     }
   }
   OSDSession *s = new OSDSession(osd);
@@ -1004,15 +1011,16 @@ Objecter::OSDSession *Objecter::_get_session(int osd)
   logger->inc(l_osdc_osd_session_open);
   logger->inc(l_osdc_osd_sessions, osd_sessions.size());
   s->get();
-  return s;
+  *session = s;
+  return 0;
 }
 
-Objecter::OSDSession *Objecter::get_session(int osd)
+int Objecter::get_session(int osd, OSDSession **session)
 {
   rwlock.get_read();
-  OSDSession *session = _get_session(osd);
+  int r = _get_session(osd, session);
   rwlock.unlock();
-  return session;
+  return r;
 };
 
 void Objecter::put_session(Objecter::OSDSession *s)
@@ -1665,7 +1673,11 @@ int Objecter::_recalc_op_target(Op *op)
       } else {
 	osd = primary;
       }
-      s = _get_session(osd);
+      int r = _get_session(osd, &s);
+      if (r == -EAGAIN) {
+        assert(rwlock.is_wlocked());
+        return _recalc_op_target(op);
+      }
     }
 
     if (op->session != s) {
@@ -1712,7 +1724,16 @@ bool Objecter::_recalc_linger_op_target(LingerOp *linger_op)
     ldout(cct, 10) << "_recalc_linger_op_target tid " << linger_op->linger_id
 	     << " pgid " << pgid << " acting " << acting << dendl;
     
-    OSDSession *s = primary != -1 ? _get_session(primary) : &homeless_session;
+    OSDSession *s;
+    if (primary != -1) {
+      ret = _get_session(primary, &s);
+      if (ret == -EAGAIN) {
+        assert(rwlock.is_wlocked());
+        return _recalc_linger_op_target(linger_op);
+      }
+    } else {
+      s = &homeless_session;
+    }
     s->lock.get_write();
     if (linger_op->session != s) {
       linger_op->session = s;
@@ -3153,7 +3174,8 @@ int Objecter::_recalc_command_target(CommandOp *c)
       c->map_check_error_str = "osd down";
       return RECALC_OP_TARGET_OSD_DOWN;
     }
-    s = _get_session(c->target_osd);
+    int r = _get_session(c->target_osd, &s);
+    assert(r != -EAGAIN); /* shouldn't happen as we're holding the write lock */
   } else {
     if (!osdmap->have_pg_pool(c->target_pg.pool())) {
       c->map_check_error = -ENOENT;
@@ -3163,8 +3185,10 @@ int Objecter::_recalc_command_target(CommandOp *c)
     int primary;
     vector<int> acting;
     osdmap->pg_to_acting_osds(c->target_pg, &acting, &primary);
-    if (primary != -1)
-      s = _get_session(primary);
+    if (primary != -1) {
+      int r = _get_session(primary, &s);
+      assert(r != -EAGAIN); /* shouldn't happen as we're holding the write lock */
+    }
   }
   if (c->session != s) {
     s->lock.get_read();
