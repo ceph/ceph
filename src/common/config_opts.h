@@ -118,7 +118,7 @@ OPTION(ms_bind_port_min, OPT_INT, 6800)
 OPTION(ms_bind_port_max, OPT_INT, 7300)
 OPTION(ms_rwthread_stack_bytes, OPT_U64, 1024 << 10)
 OPTION(ms_tcp_read_timeout, OPT_U64, 900)
-OPTION(ms_pq_max_tokens_per_priority, OPT_U64, 4194304)
+OPTION(ms_pq_max_tokens_per_priority, OPT_U64, 16777216)
 OPTION(ms_pq_min_cost, OPT_U64, 65536)
 OPTION(ms_inject_socket_failures, OPT_U64, 0)
 OPTION(ms_inject_delay_type, OPT_STR, "")          // "osd mds mon client" allowed
