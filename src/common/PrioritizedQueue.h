@@ -311,12 +311,16 @@ public:
   void enqueue(K cl, unsigned priority, unsigned cost, T item) {
     if (cost < min_cost)
       cost = min_cost;
+    if (cost > max_tokens_per_subqueue)
+      cost = max_tokens_per_subqueue;
     create_queue(priority)->enqueue(cl, cost, item);
   }
 
   void enqueue_front(K cl, unsigned priority, unsigned cost, T item) {
     if (cost < min_cost)
       cost = min_cost;
+    if (cost > max_tokens_per_subqueue)
+      cost = max_tokens_per_subqueue;
     create_queue(priority)->enqueue_front(cl, cost, item);
   }
 
