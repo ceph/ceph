@@ -426,6 +426,11 @@ unittest_crypto_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_crypto_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_crypto
 
+unittest_crypto_init_SOURCES = test/crypto_init.cc
+unittest_crypto_init_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_crypto_init_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_PROGRAMS += unittest_crypto_init
+
 unittest_perf_counters_SOURCES = test/perf_counters.cc
 unittest_perf_counters_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_perf_counters_CXXFLAGS = $(UNITTEST_CXXFLAGS)

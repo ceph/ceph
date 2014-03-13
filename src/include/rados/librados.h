@@ -355,9 +355,6 @@ int rados_ping_monitor(rados_t cluster, const char *mon_id,
  *
  * @post If this succeeds, any function in librados may be used
  *
- * @warning This function is not thread-safe if using libnss (built with
- * --with-nss); callers must implement their own locking mechanisms.
- *
  * @param cluster The cluster to connect to.
  * @returns 0 on sucess, negative error code on failure
  */
