@@ -5656,6 +5656,8 @@ void Server::handle_client_rename(MDRequest *mdr)
     dout(10) << " will remote_wrlock srcdir scatterlocks on mds." << srcdirauth << dendl;
     remote_wrlocks[&srcdn->get_dir()->inode->filelock] = srcdirauth;
     remote_wrlocks[&srcdn->get_dir()->inode->nestlock] = srcdirauth;
+    if (srci->is_dir())
+      rdlocks.insert(&srci->dirfragtreelock);
   } else {
     wrlocks.insert(&srcdn->get_dir()->inode->filelock);
     wrlocks.insert(&srcdn->get_dir()->inode->nestlock);
