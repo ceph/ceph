@@ -110,7 +110,7 @@ enumerate_images(struct rbd_image **head)
 		free(ibuf);
 		return;
 	}
-	assert(ret == ibuf_len);
+	assert(ret == (int)ibuf_len);
 
 	fprintf(stderr, "pool %s: ", pool_name);
 	for (ip = ibuf; ip < &ibuf[ibuf_len]; ip += strlen(ip) + 1)  {
