@@ -714,6 +714,7 @@ int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m
   manifest = _m;
 
   bucket = _b;
+  manifest->set_tail_bucket(_b);
   manifest->set_head(_h);
   last_ofs = 0;
 
@@ -823,9 +824,15 @@ void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_st
     }
   }
 
-  rgw_bucket bucket = head_obj.bucket;
+  rgw_bucket *bucket;
 
-  location->init_ns(bucket, oid, ns);
+  if (!tail_bucket.name.empty()) {
+    bucket = &tail_bucket;
+  } else {
+    bucket = &head_obj.bucket;
+  }
+
+  location->init_ns(*bucket, oid, ns);
 }
 
 RGWObjManifest::obj_iterator RGWObjManifest::obj_find(uint64_t ofs)
@@ -3245,6 +3252,10 @@ set_err_state:
 
   if (!copy_itself) {
     manifest = astate->manifest;
+    rgw_bucket& tail_bucket = manifest.get_tail_bucket();
+    if (tail_bucket.name.empty()) {
+      manifest.set_tail_bucket(src_obj.bucket);
+    }
     for (; miter != astate->manifest.obj_end(); ++miter) {
       ObjectWriteOperation op;
       cls_refcount_get(op, tag, true);
