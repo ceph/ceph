@@ -7530,13 +7530,11 @@ void OSD::OpWQ::_enqueue(pair<PGRef, OpRequestRef> item)
 
 void OSD::OpWQ::_enqueue_front(pair<PGRef, OpRequestRef> item)
 {
-  {
-    Mutex::Locker l(qlock);
-    if (pg_for_processing.count(&*(item.first))) {
-      pg_for_processing[&*(item.first)].push_front(item.second);
-      item.second = pg_for_processing[&*(item.first)].back();
-      pg_for_processing[&*(item.first)].pop_back();
-    }
+  Mutex::Locker l(qlock);
+  if (pg_for_processing.count(&*(item.first))) {
+    pg_for_processing[&*(item.first)].push_front(item.second);
+    item.second = pg_for_processing[&*(item.first)].back();
+    pg_for_processing[&*(item.first)].pop_back();
   }
   unsigned priority = item.second->get_req()->get_priority();
   unsigned cost = item.second->get_req()->get_cost();
