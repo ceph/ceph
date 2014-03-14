@@ -1148,19 +1148,9 @@ int Objecter::_maybe_request_map()
     ldout(cct, 10) << "_maybe_request_map subscribing (onetime) to next osd map" << dendl;
     flag = CEPH_SUBSCRIBE_ONETIME;
   }
-  epoch_t osdmap_epoch = osdmap->get_epoch();
-  epoch_t epoch = osdmap_epoch ? osdmap_epoch+1 : 0;
+  epoch_t epoch = osdmap->get_epoch() ? osdmap->get_epoch()+1 : 0;
   if (monc->sub_want("osdmap", epoch, flag)) {
-    if (!rwlock.is_wlocked()) {
-      rwlock.unlock();
-      rwlock.get_write();
-    }
-    if (osdmap_epoch != osdmap->get_epoch()) {
-      /* lost in a race, we should notify callers about that */
-      return -EAGAIN;
-    }
-    if (monc->sub_want("osdmap", epoch, flag))
-      monc->renew_subs();
+    monc->renew_subs();
   }
   return 0;
 }
