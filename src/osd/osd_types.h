@@ -1592,9 +1592,9 @@ inline ostream& operator<<(ostream& out, const pg_info_t& pgi)
     if (pgi.last_complete != pgi.last_update)
       out << " lc " << pgi.last_complete;
     out << " (" << pgi.log_tail << "," << pgi.last_update << "]";
-    if (pgi.is_incomplete())
-      out << " lb " << pgi.last_backfill;
   }
+  if (pgi.is_incomplete())
+    out << " lb " << pgi.last_backfill;
   //out << " c " << pgi.epoch_created;
   out << " local-les=" << pgi.last_epoch_started;
   out << " n=" << pgi.stats.stats.sum.num_objects;
