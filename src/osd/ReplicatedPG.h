@@ -124,8 +124,8 @@ public:
     bool mirror_snapset;
     map<string, bufferlist> attrs; ///< src user attrs
     CopyResults() : object_size(0), started_temp_obj(false),
-		    user_version(0), should_requeue(false),
-		    mirror_snapset(false) {}
+		    final_tx(NULL), user_version(0), 
+		    should_requeue(false), mirror_snapset(false) {}
   };
 
   struct CopyOp {

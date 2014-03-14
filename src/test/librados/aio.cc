@@ -20,6 +20,7 @@ class AioTestData
 public:
   AioTestData()
     : m_cluster(NULL),
+      m_ioctx(NULL),
       m_init(false),
       m_complete(false),
       m_safe(false)

@@ -41,8 +41,12 @@ public:
 
 void testradospp_milestone(void)
 {
+  int c;
   cout << "*** press enter to continue ***" << std::endl;
-  getchar();
+  while ((c = getchar()) != EOF) {
+    if (c == '\n')
+      break;
+  }
 }
 
 int main(int argc, const char **argv) 

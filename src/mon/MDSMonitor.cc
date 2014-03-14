@@ -837,8 +837,10 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
     ss << "max_mds = " << pending_mdsmap.max_mds;
   } else if (prefix == "mds set") {
     string var;
-    if (!cmd_getval(g_ceph_context, cmdmap, "var", var) < 0)
+    if (!cmd_getval(g_ceph_context, cmdmap, "var", var) || var.empty()) {
+      ss << "Invalid variable";
       goto out;
+    }
     string val;
     string interr;
     int64_t n = 0;
