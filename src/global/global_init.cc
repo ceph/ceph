@@ -180,10 +180,11 @@ void global_init_daemonize(CephContext *cct, int flags)
     exit(1);
   }
 
-  global_init_postfork(cct, flags);
+  global_init_postfork_start(cct);
+  global_init_postfork_finish(cct, flags);
 }
 
-void global_init_postfork(CephContext *cct, int flags)
+void global_init_postfork_start(CephContext *cct)
 {
   // restart log thread
   g_ceph_context->_log->start();
@@ -215,6 +216,16 @@ void global_init_postfork(CephContext *cct, int flags)
 	 << err << dendl;
     exit(1);
   }
+
+  pidfile_write(g_conf);
+}
+
+void global_init_postfork_finish(CephContext *cct, int flags)
+{
+  /* We only close stderr once the caller decides the daemonization
+   * process is finished.  This way we can allow error messages to be
+   * propagated in a manner that the user is able to see.
+   */
   if (!(flags & CINIT_FLAG_NO_CLOSE_STDERR)) {
     int ret = global_init_shutdown_stderr(cct);
     if (ret) {
@@ -223,9 +234,9 @@ void global_init_postfork(CephContext *cct, int flags)
       exit(1);
     }
   }
-  pidfile_write(g_conf);
   ldout(cct, 1) << "finished global_init_daemonize" << dendl;
 }
+
 
 void global_init_chdir(const CephContext *cct)
 {
