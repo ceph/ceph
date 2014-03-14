@@ -1,15 +1,9 @@
-tasks:
-- install:
-- ceph:
+overrides:
+  ceph:
     conf:
       osd:
         filestore flush min: 0
-- kclient: [client.0]
-- knfsd: [client.0]
-- nfs:
-    client.1:
-        server: client.0
-        options: [rw,hard,intr,nfsvers=3]
+tasks:
 - workunit:
     clients:
         client.1:
