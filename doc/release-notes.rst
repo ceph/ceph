@@ -2,7 +2,7 @@
  Release Notes
 ===============
 
-v0.78 Firefly (frozen, pending release)
+v0.79 Firefly (frozen, pending release)
 -----
 
 Upgrade Sequencing
@@ -10,10 +10,8 @@ Upgrade Sequencing
 
 * If your existing cluster is running a version older than v0.67
   Dumpling, please first upgrade to the latest Dumpling release before
-  upgrading to v0.78 Firefly.  Please refer to the Dumpling upgrade
+  upgrading to v0.78 Firefly.  Please refer to the :ref:`Dumpling upgrade`
   documentation.
-
-FIXME make that a hyperlink
 
 * Upgrade daemons in the following order:
 
@@ -28,25 +26,11 @@ FIXME make that a hyperlink
   with the cluster and new features may not be usable until they are
   restarted a second time.
 
-TBD
-
-Upgrading from v0.77
+Upgrading from v0.78
 ~~~~~~~~~~~~~~~~~~~~
 
-* CephFS recently added support for a new 'backtrace' attribute on
-  file data objects that is used for lookup by inode number (i.e., NFS
-  reexport and hard links), and will later be used by fsck repair.
-  This replaces the existing anchor table mechanism that is used for
-  hard link resolution.  In order to completely phase that out, any
-  inode that has an outdated backtrace attribute will get updated when
-  the inode itself is modified.  This will result in some extra workload
-  after a legacy CephFS file system is upgraded.
+TBD
 
-* The per-op return code in librados' ObjectWriteOperation interface
-  is now filled in.
-
-* The librados cmpxattr operation now handles xattrs containing null bytes as
-  data rather than null-terminated strings.
 
 * A librados WATCH operation on a non-existent object now returns ENOENT;
   previously it did not.
@@ -194,7 +178,7 @@ Upgrading from v0.67 Dumpling
   value that is truncated from 64 to to 32 bits.
 
 
-Notable changes since v0.77
+Notable changes since v0.78
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 TBD
@@ -205,7 +189,7 @@ Notable changes since v0.72 Emperor
 
 * buffer: some zero-copy groundwork (Josh Durgin)
 * build: misc improvements (Ken Dreyer)
-* ceph-crush-location: new hook for setting CRUSH location of osd daemons on start
+* ceph-crush-location: new hook for setting CRUSH location of osd daemons on start)
 * ceph-disk: avoid fd0 (Loic Dachary)
 * ceph-disk: generalize path names, add tests (Loic Dachary)
 * ceph-disk: misc improvements for puppet (Loic Dachary)
@@ -490,6 +474,122 @@ Notable changes since v0.67 Dumpling
 * sysvinit rbdmap: fix error 'service rbdmap stop' (Laurent Barbe)
 * sysvinit: add condrestart command (Dan van der Ster)
 * sysvinit: fix shutdown order (mons last) (Alfredo Deza)
+
+
+v0.78
+-----
+
+This release includes two key features for firefly: erasure coding and
+cache tiering.  A huge amount of code was merged for this release and
+several additional weeks were spent stabilizing the code base, and it
+is now in a state where it is ready to be tested by a broader user
+base.
+
+The Firefly release will be delayed for at least another sprint so
+that we can get some operational experience with the new code and
+do some additional testing before committing to long term support.
+
+Upgrading
+~~~~~~~~~
+
+* CephFS recently added support for a new 'backtrace' attribute on
+  file data objects that is used for lookup by inode number (i.e., NFS
+  reexport and hard links), and will later be used by fsck repair.
+  This replaces the existing anchor table mechanism that is used for
+  hard link resolution.  In order to completely phase that out, any
+  inode that has an outdated backtrace attribute will get updated when
+  the inode itself is modified.  This will result in some extra workload
+  after a legacy CephFS file system is upgraded.
+
+* The per-op return code in librados' ObjectWriteOperation interface
+  is now filled in.
+
+* The librados cmpxattr operation now handles xattrs containing null bytes as
+  data rather than null-terminated strings.
+
+* Upgrade daemons in the following order:
+
+    #. Monitors
+    #. OSDs
+    #. MDSs and/or radosgw
+
+  If the ceph-mds daemon is restarted first, it will wait until all
+  OSDs have been upgraded before finishing its startup sequence.  If
+  the ceph-mon daemons are not restarted prior to the ceph-osd
+  daemons, they will not correctly register their new capabilities
+  with the cluster and new features may not be usable until they are
+  restarted a second time.
+
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* rgw: support non-standard MultipartUpload command (Yehuda Sadeh)
+* librados: API documentation improvements (John Wilkins, Josh Durgin)
+* ceph-brag: new client and server tools (Sebastien Han, Babu Shanmugam)
+* common: throtller, shared_cache performance improvements, TrackedOp (Greg Farnum, Samuel Just)
+* librados: support for osd and mon command timeouts (Josh Durgin)
+* mon: erasure code plugin support (Loic Dachary)
+* mon: erasure code crush rule creation (Loic Dachary)
+* mds: avoid duplicated discovers during recovery (Zheng Yan)
+* mon: prevent deletion of CephFS pools (John Spray)
+* keyvaluestore: portability improvements (Noah Watkins)
+* mon: encode erasure stripe width in pool metadata (Loic Dachary)
+* osdmaptool: new --test-map-pgs mode (Sage Weil, Ilya Dryomov)
+* libcephfs: API changes to better support NFS reexport via Ganesha (Matt Benjamin, Adam Emerson, Andrey Kuznetsov, Casey Bodley, David Zafman)
+* mds: fix xattrs in getattr replies (Sage Weil)
+* osd: tests for objectstore backends (Haomai Wang)
+* crush: new vary_r tunable (Sage Weil)
+* ceph-disk: use partx on RHEL or CentOS instead of partprobe (Alfredo Deza)
+* common: fall back to json-pretty for admin socket (Loic Dachary)
+* mds: force backtrace updates for old inodes on update (Zheng Yan)
+* mon: fix legacy CRUSH tunables warning (Sage Weil)
+* osd, mon: add primary-affinity to adjust selection of primaries (Sage Weil)
+* crush: misc cleanups, tests (Loic Dachary)
+* osd: fix impolite mon session backoff, reconnect behavior (Greg Farnum)
+* mon: fix bugs in initial post-mkfs quorum creation (Sage Weil)
+* mon: include dirty stats in 'ceph df detail' (Sage Weil)
+* osd: simple tiering agent (Sage Weil)
+* mds: several multi-mds and dirfrag bug fixes (Zheng Yan)
+* osd: erasure coded pool support (Samuel Just)
+* librados: streamline tests (Josh Durgin)
+* librados: support for atomic read and omap operations for C API (Josh Durgin)
+* rgw: improve scalability for manifest objects (Yehuda Sadeh)
+* common: misc coverity fixes (Danny Al-Gaaf)
+* rgw: misc fixes for multipart objects, policies (Yehuda Sadeh)
+* rgw: fix Swift range reponse (Yehuda Sadeh)
+* librados: fix object enumeration bugs; allow iterator assignment (Josh Durgin)
+* keyvaluestore: add perfcounters, misc bug fixes (Haomai Wang)
+* osd: store checksums for erasure coded object stripes (Samuel Just)
+* osd: increase default leveldb cache size and write buffer (Sage Weil, Dmitry Smirnov)
+* mon: fix osd_epochs lower bound tracking for map trimming (Sage Weil)
+* mon: fix OSDMap encoding features (Sage Weil, Aaron Ten Clay)
+* mds: fix LOOKUPPARENT, new LOOKUPNAME ops for reliable NFS reexport (Zheng Yan)
+* mon: fix 'pg dump' JSON output (John Spray)
+* osd: fix/clarify end-of-object handling on read (Loic Dachary)
+* osd: limit size of 'osd bench ...' arguments (Joao Eduardo Luis)
+* osd: new 'status' admin socket command (Sage Weil)
+* osd: allocation hint, with XFS support (Ilya Dryomov)
+* librbd: pass allocation hints to OSD (Ilya Dryomov)
+* osd: various refactoring and bug fixes (Samuel Just, David Zafman)
+* mds: fix xattr handling on setxattr (Zheng Yan)
+* mon: prevent addition of non-empty cache tier (Sage Weil)
+* crush: fix JSON schema for dump (John Spray)
+* mon: warn when cache tier approaches 'full' (Sage Weil)
+* crush: prevent invalid buckets of type 0 (Sage Weil)
+* mon: list quorum member names in quorum order (Sage Weil)
+* osd: fix SnapContext cache id bug (Samuel Just)
+* logrotate: fix bug that prevented rotation for some daemons (Loic Dachary)
+* client: fix getcwd() to use new LOOKUPPARENT operation (Zheng Yan)
+* osd: fix bugs in log merging (Samuel Just)
+* rados: add 'set-alloc-hint' command (Ilya Dryomov)
+* common: fix 'config dump' debug_ prefix (Danny Al-Gaaf)
+* rbdmap: fix upstart script (Stephan Renatus)
+* mds: fix file lock owner checks (Zheng Yan)
+* rbd-fuse: fix enumerate_images overflow, memory leak (Ilya Dryomov)
+* rgw: avoid logging system events to usage log (Yehuda Sadeh)
+
+thru b5d2df4a9247cbf7831dd82369fa4e04b3db1b9c
 
 
 v0.77
@@ -1713,6 +1813,8 @@ headline features for this release include:
 
 Upgrade Sequencing
 ~~~~~~~~~~~~~~~~~~
+
+.. _Dumpling upgrade:
 
 It is possible to do a rolling upgrade from Cuttlefish to Dumpling.
 
