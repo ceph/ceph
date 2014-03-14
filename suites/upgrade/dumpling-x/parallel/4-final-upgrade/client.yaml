@@ -1,3 +1,4 @@
 tasks:
   - install.upgrade:
       client.0:
+  - print: "**** done install.upgrade"
