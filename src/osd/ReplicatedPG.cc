@@ -6310,8 +6310,6 @@ void ReplicatedPG::eval_repop(RepGather *repop)
     // applied?
     if (repop->all_applied) {
 
-      release_op_ctx_locks(repop->ctx);
-
       // send dup acks, in order
       if (waiting_for_ack.count(repop->v)) {
 	assert(waiting_for_ack.begin()->first == repop->v);
@@ -6357,6 +6355,8 @@ void ReplicatedPG::eval_repop(RepGather *repop)
   // done.
   if (repop->all_applied && repop->all_committed) {
     repop->rep_done = true;
+
+    release_op_ctx_locks(repop->ctx);
 
     calc_min_last_complete_ondisk();
 
