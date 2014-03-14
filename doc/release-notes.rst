@@ -3,7 +3,7 @@
 ===============
 
 v0.79 Firefly (frozen, pending release)
------
+---------------------------------------
 
 Upgrade Sequencing
 ~~~~~~~~~~~~~~~~~~
@@ -364,7 +364,7 @@ Notable changes since v0.67 Dumpling
 * common: bloom_filter improvements, cleanups
 * common: cache crc32c values where possible
 * common: correct SI is kB not KB (Dan Mick)
-* common: fix looping on *BSD (Alan Somers)
+* common: fix looping on BSD (Alan Somers)
 * common: migrate SharedPtrRegistry to use boost::shared_ptr<> (Loic Dachary)
 * common: misc portability fixes (Noah Watkins)
 * crc32c: fix optimized crc32c code (it now detects arch support properly)
@@ -1149,7 +1149,7 @@ Notable Changes since v0.71
 * ceph-fuse, radosgw: enable admin socket and logging by default
 * ceph: make -h behave when monitors are down
 * common: cache crc32c values where possible
-* common: fix looping on *BSD (Alan Somers)
+* common: fix looping on BSD (Alan Somers)
 * librados, mon: ability to query/ping out-of-quorum monitor status (Joao Luis)
 * librbd python bindings: fix parent image name limit (Josh Durgin)
 * mds: avoid leaking objects when deleting truncated files (Yan, Zheng)
@@ -1187,7 +1187,7 @@ Notable Changes since v0.67 Dumpling
 * common: bloom_filter improvements, cleanups
 * common: cache crc32c values where possible
 * common: correct SI is kB not KB (Dan Mick)
-* common: fix looping on *BSD (Alan Somers)
+* common: fix looping on BSD (Alan Somers)
 * common: migrate SharedPtrRegistry to use boost::shared_ptr<> (Loic Dachary)
 * common: misc portability fixes (Noah Watkins)
 * crc32c: fix optimized crc32c code (it now detects arch support properly)
