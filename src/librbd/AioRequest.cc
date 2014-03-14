@@ -109,7 +109,8 @@ namespace librbd {
 
   AbstractWrite::AbstractWrite()
     : m_state(LIBRBD_AIO_WRITE_FLAT),
-      m_parent_overlap(0) {}
+      m_parent_overlap(0),
+      m_snap_seq(0) {}
   AbstractWrite::AbstractWrite(ImageCtx *ictx, const std::string &oid,
 			       uint64_t object_no, uint64_t object_off, uint64_t len,
 			       vector<pair<uint64_t,uint64_t> >& objectx,
