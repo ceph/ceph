@@ -341,18 +341,18 @@ TEST(CephArgParse, env_to_vec) {
     unsetenv("CEPH_ARGS");
     unsetenv("WHATEVER");
     env_to_vec(args);
-    EXPECT_EQ(0, args.size());
+    EXPECT_EQ(0u, args.size());
     env_to_vec(args, "WHATEVER");
-    EXPECT_EQ(0, args.size());
+    EXPECT_EQ(0u, args.size());
     args.push_back("a");
     setenv("CEPH_ARGS", "b c", 0);
     env_to_vec(args);
-    EXPECT_EQ(3, args.size());
+    EXPECT_EQ(3u, args.size());
     EXPECT_EQ(string("b"), args[1]);
     EXPECT_EQ(string("c"), args[2]);
     setenv("WHATEVER", "d e", 0);
     env_to_vec(args, "WHATEVER");
-    EXPECT_EQ(5, args.size());
+    EXPECT_EQ(5u, args.size());
     EXPECT_EQ(string("d"), args[3]);
     EXPECT_EQ(string("e"), args[4]);
   }
@@ -364,7 +364,7 @@ TEST(CephArgParse, env_to_vec) {
     args.push_back("c");
     setenv("CEPH_ARGS", "b -- d", 0);
     env_to_vec(args);
-    EXPECT_EQ(5, args.size());
+    EXPECT_EQ(5u, args.size());
     EXPECT_EQ(string("a"), args[0]);
     EXPECT_EQ(string("b"), args[1]);
     EXPECT_EQ(string("--"), args[2]);
@@ -378,7 +378,7 @@ TEST(CephArgParse, env_to_vec) {
     args.push_back("--");
     setenv("CEPH_ARGS", "b -- c", 0);
     env_to_vec(args);
-    EXPECT_EQ(4, args.size());
+    EXPECT_EQ(4u, args.size());
     EXPECT_EQ(string("a"), args[0]);
     EXPECT_EQ(string("b"), args[1]);
     EXPECT_EQ(string("--"), args[2]);
@@ -391,7 +391,7 @@ TEST(CephArgParse, env_to_vec) {
     args.push_back("c");
     setenv("CEPH_ARGS", "b -- d", 0);
     env_to_vec(args);
-    EXPECT_EQ(4, args.size());
+    EXPECT_EQ(4u, args.size());
     EXPECT_EQ(string("b"), args[0]);
     EXPECT_EQ(string("--"), args[1]);
     EXPECT_EQ(string("c"), args[2]);
@@ -403,7 +403,7 @@ TEST(CephArgParse, env_to_vec) {
     args.push_back("b");
     setenv("CEPH_ARGS", "c -- d", 0);
     env_to_vec(args);
-    EXPECT_EQ(4, args.size());
+    EXPECT_EQ(4u, args.size());
     EXPECT_EQ(string("b"), args[0]);
     EXPECT_EQ(string("c"), args[1]);
     EXPECT_EQ(string("--"), args[2]);
@@ -417,7 +417,7 @@ TEST(CephArgParse, env_to_vec) {
     args.push_back("c");
     setenv("CEPH_ARGS", "-- d", 0);
     env_to_vec(args);
-    EXPECT_EQ(4, args.size());
+    EXPECT_EQ(4u, args.size());
     EXPECT_EQ(string("a"), args[0]);
     EXPECT_EQ(string("--"), args[1]);
     EXPECT_EQ(string("c"), args[2]);
@@ -431,7 +431,7 @@ TEST(CephArgParse, env_to_vec) {
     args.push_back("c");
     setenv("CEPH_ARGS", "d", 0);
     env_to_vec(args);
-    EXPECT_EQ(4, args.size());
+    EXPECT_EQ(4u, args.size());
     EXPECT_EQ(string("a"), args[0]);
     EXPECT_EQ(string("d"), args[1]);
     EXPECT_EQ(string("--"), args[2]);
