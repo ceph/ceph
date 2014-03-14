@@ -1022,14 +1022,6 @@ int Objecter::_get_session(int osd, OSDSession **session)
   return 0;
 }
 
-int Objecter::get_session(int osd, OSDSession **session)
-{
-  rwlock.get_read();
-  int r = _get_session(osd, session);
-  rwlock.unlock();
-  return r;
-};
-
 void Objecter::put_session(Objecter::OSDSession *s)
 {
   if (s && !s->is_homeless()) {
