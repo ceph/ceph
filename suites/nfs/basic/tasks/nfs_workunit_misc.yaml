@@ -10,10 +10,10 @@ tasks:
 - workunit:
     clients:
         client.1:
-            - misc/chmod.sh
-            - misc/i_complete_vs_rename.sh
-            - misc/trivial_sync.sh
-            #- misc/multiple_rsync.sh
-            #- misc/xattrs.sh
+            - fs/misc/chmod.sh
+            - fs/misc/i_complete_vs_rename.sh
+            - fs/misc/trivial_sync.sh
+            #- fs/misc/multiple_rsync.sh
+            #- fs/misc/xattrs.sh
 # Once we can run multiple_rsync.sh and xattrs.sh we can change to this
 #    - misc
