@@ -651,8 +651,10 @@ int main(int argc, const char **argv)
   }
 
   err = mon->preinit();
-  if (err < 0)
+  if (err < 0) {
+    derr << "failed to initialize" << dendl;
     prefork.exit(1);
+  }
 
   if (compact || g_conf->mon_compact_on_start) {
     derr << "compacting monitor store ..." << dendl;

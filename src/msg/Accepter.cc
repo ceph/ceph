@@ -77,7 +77,7 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
     int on = 1;
     rc = ::setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
     if (rc < 0) {
-      ldout(msgr->cct,0) << "accepter.bind unable to setsockopt: "
+      lderr(msgr->cct) << "accepter.bind unable to setsockopt: "
 			 << cpp_strerror(errno) << dendl;
       return -errno;
     }
