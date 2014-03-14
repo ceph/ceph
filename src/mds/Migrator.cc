@@ -2389,6 +2389,7 @@ void Migrator::import_reverse(CDir *dir)
 	if (cap->is_new())
 	  in->remove_client_cap(q->first);
       }
+      in->put(CInode::PIN_IMPORTINGCAPS);
     }
     for (map<client_t,entity_inst_t>::iterator p = stat.client_map.begin();
 	 p != stat.client_map.end();
@@ -2579,6 +2580,7 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
 				    q->second.mseq - 1, it->second.peer, CEPH_CAP_FLAG_AUTH);
       }
       p->second.clear();
+      in->replica_caps_wanted = 0;
     }
     for (map<client_t,entity_inst_t>::iterator p = it->second.client_map.begin();
 	 p != it->second.client_map.end();
@@ -2642,9 +2644,11 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
   // re-eval imported caps
   for (map<CInode*, map<client_t,Capability::Export> >::iterator p = peer_exports.begin();
        p != peer_exports.end();
-       ++p)
+       ++p) {
     if (p->first->is_auth())
       mds->locker->eval(p->first, CEPH_CAP_LOCKS, true);
+    p->first->put(CInode::PIN_IMPORTINGCAPS);
+  }
 
   // send pending import_maps?
   mds->mdcache->maybe_send_pending_resolves();
@@ -2775,8 +2779,10 @@ void Migrator::finish_import_inode_caps(CInode *in, int peer, bool auth_cap,
     }
   }
 
-  in->replica_caps_wanted = 0;
-  in->put(CInode::PIN_IMPORTINGCAPS);
+  if (peer >= 0) {
+    in->replica_caps_wanted = 0;
+    in->put(CInode::PIN_IMPORTINGCAPS);
+  }
 }
 
 int Migrator::decode_import_dir(bufferlist::iterator& blp,
