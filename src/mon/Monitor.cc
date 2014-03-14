@@ -1601,7 +1601,8 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   health_monitor->start(epoch);
 
   finish_election();
-  if (monmap->size() > 1)
+  if (monmap->size() > 1 &&
+      monmap->get_epoch() > 0)
     timecheck_start();
 }
 
