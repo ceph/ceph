@@ -69,6 +69,7 @@ TEST(LibCephFS, MountNonExist) {
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
   ASSERT_NE(0, ceph_mount(cmount, "/non-exist"));
+  ceph_shutdown(cmount);
 }
 
 TEST(LibCephFS, MountDouble) {
@@ -848,6 +849,8 @@ TEST(LibCephFS, BadFileDesc) {
   ASSERT_EQ(ceph_get_file_stripe_unit(cmount, -1), -EBADF);
   ASSERT_EQ(ceph_get_file_pool(cmount, -1), -EBADF);
   ASSERT_EQ(ceph_get_file_replication(cmount, -1), -EBADF);
+
+  ceph_shutdown(cmount);
 }
 
 TEST(LibCephFS, ReadEmptyFile) {

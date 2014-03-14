@@ -72,7 +72,9 @@ int main(int argc, char **argv) {
   finisher = new Finisher(g_ceph_context);
   
   if (!args.empty()) {
-    strcpy(path, args[0]);
+    size_t copy_len = std::min(sizeof(path)-1, strlen(args[0]));
+    strncpy(path, args[0], copy_len);
+    path[copy_len] = '\0';
   } else {
     srand(getpid()+time(0));
     snprintf(path, sizeof(path), "/tmp/ceph_test_filejournal.tmp.%d", rand());
