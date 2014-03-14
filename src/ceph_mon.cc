@@ -636,8 +636,10 @@ int main(int argc, const char **argv)
        << dendl;
 
   err = messenger->bind(ipaddr);
-  if (err < 0)
+  if (err < 0) {
+    derr << "unable to bind monitor to " << ipaddr << dendl;
     prefork.exit(1);
+  }
 
   // start monitor
   mon = new Monitor(g_ceph_context, g_conf->name.get_id(), store, 
