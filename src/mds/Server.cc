@@ -1356,7 +1356,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       m->put();
       return;
     }
-    mdr = mdcache->request_start_slave(m->get_reqid(), m->get_attempt(), from);
+    mdr = mdcache->request_start_slave(m->get_reqid(), m->get_attempt(), m);
   }
   assert(mdr->slave_request == 0);     // only one at a time, please!  
 

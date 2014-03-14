@@ -246,7 +246,7 @@ public:
   int get_num_client_requests();
 
   MDRequestRef request_start(MClientRequest *req);
-  MDRequestRef request_start_slave(metareqid_t rid, __u32 attempt, int by);
+  MDRequestRef request_start_slave(metareqid_t rid, __u32 attempt, Message *m);
   MDRequestRef request_start_internal(int op);
   bool have_request(metareqid_t rid) {
     return active_requests.count(rid);
