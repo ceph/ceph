@@ -255,8 +255,10 @@ void Objecter::init()
   rwlock.get_read();
 
   schedule_tick();
-  if (osdmap->get_epoch() == 0)
-    _maybe_request_map();
+  if (osdmap->get_epoch() == 0) {
+    int r = _maybe_request_map();
+    assert (r == 0 || osdmap->get_epoch() > 0);
+  }
 
   rwlock.unlock();
 
@@ -640,7 +642,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	else {
 	  if (e && e > m->get_oldest()) {
 	    ldout(cct, 3) << "handle_osd_map requesting missing epoch " << osdmap->get_epoch()+1 << dendl;
-	    _maybe_request_map();
+	    int r = _maybe_request_map();
+            assert(r == 0);
 	    break;
 	  }
 	  ldout(cct, 3) << "handle_osd_map missing epoch " << osdmap->get_epoch()+1
@@ -700,8 +703,10 @@ void Objecter::handle_osd_map(MOSDMap *m)
   bool pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || osdmap->test_flag(CEPH_OSDMAP_FULL);
 
   // was/is paused?
-  if (was_pauserd || was_pausewr || pauserd || pausewr)
-    _maybe_request_map();
+  if (was_pauserd || was_pausewr || pauserd || pausewr) {
+    int r = _maybe_request_map();
+    assert(r == 0);
+  }
 
   // resend requests
   for (map<tid_t, Op*>::iterator p = need_resend.begin(); p != need_resend.end(); ++p) {
@@ -749,8 +754,10 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
   monc->sub_got("osdmap", osdmap->get_epoch());
 
-  if (!waiting_for_map.empty())
-    _maybe_request_map();
+  if (!waiting_for_map.empty()) {
+    int r = _maybe_request_map();
+    assert(r == 0);
+  }
 }
 
 // op pool check
@@ -1125,10 +1132,13 @@ void Objecter::_get_latest_version(epoch_t oldest, epoch_t newest, Context *fin)
 void Objecter::maybe_request_map()
 {
   RWLock::RLocker rl(rwlock);
-  _maybe_request_map();
+  int r;
+  do {
+    r = _maybe_request_map();
+  } while (r == -EAGAIN);
 }
 
-void Objecter::_maybe_request_map()
+int Objecter::_maybe_request_map()
 {
   assert(rwlock.is_locked());
   int flag = 0;
@@ -1138,23 +1148,29 @@ void Objecter::_maybe_request_map()
     ldout(cct, 10) << "_maybe_request_map subscribing (onetime) to next osd map" << dendl;
     flag = CEPH_SUBSCRIBE_ONETIME;
   }
-  epoch_t epoch = osdmap->get_epoch() ? osdmap->get_epoch()+1 : 0;
+  epoch_t osdmap_epoch = osdmap->get_epoch();
+  epoch_t epoch = osdmap_epoch ? osdmap_epoch+1 : 0;
   if (monc->sub_want("osdmap", epoch, flag)) {
     if (!rwlock.is_wlocked()) {
       rwlock.unlock();
       rwlock.get_write();
     }
-    epoch = osdmap->get_epoch() ? osdmap->get_epoch()+1 : 0;
+    if (osdmap_epoch != osdmap->get_epoch()) {
+      /* lost in a race, we should notify callers about that */
+      return -EAGAIN;
+    }
     if (monc->sub_want("osdmap", epoch, flag))
       monc->renew_subs();
   }
+  return 0;
 }
 
 void Objecter::_wait_for_new_map(Context *c, epoch_t epoch, int err)
 {
   assert(rwlock.is_wlocked());
   waiting_for_map[epoch].push_back(pair<Context *, int>(c, err));
-  _maybe_request_map();
+  int r = _maybe_request_map();
+  assert(r == 0);
 }
 
 void Objecter::wait_for_new_map(Context *c, epoch_t epoch, int err)
@@ -1238,46 +1254,56 @@ void Objecter::tick()
 
   set<OSDSession*> toping;
 
+  int r = 0;
+
   // look for laggy requests
   utime_t cutoff = ceph_clock_now(cct);
   cutoff -= cct->_conf->objecter_timeout;  // timeout
 
-  unsigned laggy_ops = 0;
-  for (map<int,OSDSession*>::iterator siter = osd_sessions.begin(); siter != osd_sessions.end(); ++siter) {
-    OSDSession *s = siter->second;
-    for (map<tid_t,Op*>::iterator p = s->ops.begin();
-         p != s->ops.end();
-         ++p) {
-      Op *op = p->second;
-      assert(op->session);
-      if (op->stamp < cutoff) {
-        ldout(cct, 2) << " tid " << p->first << " on osd." << op->session->osd << " is laggy" << dendl;
+  unsigned laggy_ops;
+
+  do {
+    laggy_ops = 0;
+    for (map<int,OSDSession*>::iterator siter = osd_sessions.begin(); siter != osd_sessions.end(); ++siter) {
+      OSDSession *s = siter->second;
+      for (map<tid_t,Op*>::iterator p = s->ops.begin();
+           p != s->ops.end();
+           ++p) {
+        Op *op = p->second;
+        assert(op->session);
+        if (op->stamp < cutoff) {
+          ldout(cct, 2) << " tid " << p->first << " on osd." << op->session->osd << " is laggy" << dendl;
+          toping.insert(op->session);
+          ++laggy_ops;
+        }
+      }
+      for (map<uint64_t,LingerOp*>::iterator p = s->linger_ops.begin();
+           p != s->linger_ops.end();
+           ++p) {
+        LingerOp *op = p->second;
+        assert(op->session);
+        ldout(cct, 10) << " pinging osd that serves lingering tid " << p->first << " (osd." << op->session->osd << ")" << dendl;
         toping.insert(op->session);
-        ++laggy_ops;
+      }
+      for (map<uint64_t,CommandOp*>::iterator p = s->command_ops.begin();
+           p != s->command_ops.end();
+           ++p) {
+        CommandOp *op = p->second;
+        assert(op->session);
+        ldout(cct, 10) << " pinging osd that serves command tid " << p->first << " (osd." << op->session->osd << ")" << dendl;
+        toping.insert(op->session);
       }
     }
-    for (map<uint64_t,LingerOp*>::iterator p = s->linger_ops.begin();
-         p != s->linger_ops.end();
-         ++p) {
-      LingerOp *op = p->second;
-      assert(op->session);
-      ldout(cct, 10) << " pinging osd that serves lingering tid " << p->first << " (osd." << op->session->osd << ")" << dendl;
-      toping.insert(op->session);
+    if (num_homeless_ops.read() || !toping.empty()) {
+      r = _maybe_request_map();
+      if (r == -EAGAIN) {
+        toping.clear();
+      }
     }
-    for (map<uint64_t,CommandOp*>::iterator p = s->command_ops.begin();
-         p != s->command_ops.end();
-         ++p) {
-      CommandOp *op = p->second;
-      assert(op->session);
-      ldout(cct, 10) << " pinging osd that serves command tid " << p->first << " (osd." << op->session->osd << ")" << dendl;
-      toping.insert(op->session);
-    }
-  }
+  } while (r == -EAGAIN);
+
   logger->set(l_osdc_op_laggy, laggy_ops);
   logger->set(l_osdc_osd_laggy, toping.size());
-
-  if (num_homeless_ops.read() || !toping.empty())
-    _maybe_request_map();
 
   if (!toping.empty()) {
     // send a ping to these osds, to ensure we detect any session resets
@@ -1414,6 +1440,17 @@ tid_t Objecter::_op_submit(Op *op)
 #if 0
   logger->set(l_osdc_op_active, ops.size());
 #endif
+  logger->inc(l_osdc_op);
+  if ((op->flags & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE)) == (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE))
+    logger->inc(l_osdc_op_rmw);
+  else if (op->flags & CEPH_OSD_FLAG_WRITE)
+    logger->inc(l_osdc_op_w);
+  else if (op->flags & CEPH_OSD_FLAG_READ)
+    logger->inc(l_osdc_op_r);
+
+  if (op->flags & CEPH_OSD_FLAG_PGOP)
+    logger->inc(l_osdc_op_pg);
+
 
   logger->inc(l_osdc_op);
   if ((op->flags & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE)) == (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE))
@@ -1462,31 +1499,40 @@ tid_t Objecter::_op_submit(Op *op)
   ldout(cct, 10) << "_op_submit oid " << op->base_oid
            << " " << op->base_oloc << " " << op->target_oloc
 	   << " " << op->ops << " tid " << op->tid
-           << " osd." << (op->session ? op->session->osd : -1)
+           << " osd." << (!op->session->is_homeless() ? op->session->osd : -1)
            << dendl;
 
   assert(op->flags & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE));
 
-  if ((op->flags & CEPH_OSD_FLAG_WRITE) &&
-      osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) {
-    ldout(cct, 10) << " paused modify " << op << " tid " << last_tid << dendl;
-    op->paused = true;
-    _maybe_request_map();
-  } else if ((op->flags & CEPH_OSD_FLAG_READ) &&
-	     osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) {
-    ldout(cct, 10) << " paused read " << op << " tid " << last_tid << dendl;
-    op->paused = true;
-    _maybe_request_map();
-  } else if ((op->flags & CEPH_OSD_FLAG_WRITE) &&
-	     osdmap->test_flag(CEPH_OSDMAP_FULL)) {
-    ldout(cct, 0) << " FULL, paused modify " << op << " tid " << last_tid << dendl;
-    op->paused = true;
-    _maybe_request_map();
-  } else if (op->session) {
-    _send_op(op);
-  } else {
-    _maybe_request_map();
-  }
+  do {
+    r = 0;
+
+    if ((op->flags & CEPH_OSD_FLAG_WRITE) &&
+        osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) {
+      ldout(cct, 10) << " paused modify " << op << " tid " << last_tid << dendl;
+      op->paused = true;
+      r = _maybe_request_map();
+    } else if ((op->flags & CEPH_OSD_FLAG_READ) &&
+	       osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) {
+      ldout(cct, 10) << " paused read " << op << " tid " << last_tid << dendl;
+      op->paused = true;
+      r = _maybe_request_map();
+    } else if ((op->flags & CEPH_OSD_FLAG_WRITE) &&
+	       osdmap->test_flag(CEPH_OSDMAP_FULL)) {
+      ldout(cct, 0) << " FULL, paused modify " << op << " tid " << last_tid << dendl;
+      op->paused = true;
+      r = _maybe_request_map();
+    } else if (op->session) {
+      _send_op(op);
+    } else {
+      r = _maybe_request_map();
+    }
+
+    while (r == -EAGAIN) {
+      ldout(cct, 10) << "_maybe_request_map() returned -EAGAIN, recalculating op target" << dendl;
+      check_for_latest_map = (_recalc_op_target(op) == RECALC_OP_TARGET_POOL_DNE);
+    }
+  } while (r == -EAGAIN);
 
   if (check_for_latest_map) {
     _send_op_map_check(op);
@@ -3146,10 +3192,12 @@ int Objecter::_submit_command(CommandOp *c, tid_t *ptid)
     timer.add_event_after(osd_timeout, c->ontimeout);
   }
 
-  if (!c->session->is_homeless())
+  if (!c->session->is_homeless()) {
     _send_command(c);
-  else
-    _maybe_request_map();
+  } else {
+    int r = _maybe_request_map();
+    assert(r != -EAGAIN); /* because rwlock is already write-locked */
+  }
   if (c->map_check_error)
     _send_command_map_check(c);
   *ptid = tid;

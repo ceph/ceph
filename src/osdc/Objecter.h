@@ -1008,7 +1008,7 @@ public:
   void maybe_request_map();
 private:
 
-  void _maybe_request_map();
+  int _maybe_request_map();
 
   version_t last_seen_osdmap_version;
   version_t last_seen_pgmap_version;
