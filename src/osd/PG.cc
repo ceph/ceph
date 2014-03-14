@@ -625,7 +625,6 @@ void PG::generate_past_intervals()
 
   OSDMapRef last_map, cur_map;
   int primary = -1;
-  int old_primary = -1;
   vector<int> acting, up, old_acting, old_up;
 
   cur_map = osd->get_map(cur_epoch);
@@ -636,10 +635,10 @@ void PG::generate_past_intervals()
 	   << end_epoch << dendl;
   ++cur_epoch;
   for (; cur_epoch <= end_epoch; ++cur_epoch) {
+    int old_primary = primary;
     last_map.swap(cur_map);
     old_up.swap(up);
     old_acting.swap(acting);
-    old_primary = primary;
 
     cur_map = osd->get_map(cur_epoch);
     cur_map->pg_to_up_acting_osds(

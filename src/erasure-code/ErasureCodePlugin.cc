@@ -78,9 +78,9 @@ int ErasureCodePluginRegistry::factory(const std::string &plugin_name,
 				       ErasureCodeInterfaceRef *erasure_code)
 {
   Mutex::Locker l(lock);
-  int r = 0;
   ErasureCodePlugin *plugin = get(plugin_name);
   if (plugin == 0) {
+    int r = 0;
     loading = true;
     r = load(plugin_name, parameters, &plugin);
     loading = false;

@@ -3162,7 +3162,6 @@ extern "C" void rados_write_op_create(rados_write_op_t write_op,
 {
   ::ObjectOperation *oo = (::ObjectOperation *) write_op;
   if(category) {
-    std::string cpp_category = category;
     oo->create(exclusive, category);
   } else {
     oo->create(!!exclusive);
