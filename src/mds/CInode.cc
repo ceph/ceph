@@ -2880,7 +2880,9 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   // inline data
   version_t inline_version = 0;
   bufferlist inline_data;
-  if (!cap || (cap->client_inline_version < i->inline_version)) {
+  if (i->inline_version == CEPH_INLINE_NONE) {
+    inline_version = CEPH_INLINE_NONE;
+  } else if (!cap || (cap->client_inline_version < i->inline_version)) {
     inline_version = i->inline_version;
     inline_data = i->inline_data;
     if (cap)
