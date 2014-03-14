@@ -314,6 +314,8 @@ int test_ls_pp(librbd::RBD& rbd, librados::IoCtx& io_ctx, size_t num_expected, .
     assert(listed_name != names.end());
     names.erase(listed_name);
   }
+  va_end(ap);
+
   assert(names.empty());
 
   return num;
