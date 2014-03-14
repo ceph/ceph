@@ -169,7 +169,6 @@ void PGLog::proc_replica_log(
 	     << " have " << i->second.have << dendl;
   }
 
-  list<pg_log_entry_t>::const_iterator toiter = log.log.end();
   list<pg_log_entry_t>::const_iterator fromiter = log.log.end();
   eversion_t lower_bound = log.tail;
   while (1) {
