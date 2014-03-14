@@ -433,6 +433,7 @@ unsigned pg_t::get_split_bits(unsigned pg_num) const {
 
   // Find unique p such that pg_num \in [2^(p-1), 2^p)
   unsigned p = pg_pool_t::calc_bits_of(pg_num);
+  assert(p); // silence coverity #751330 
 
   if ((m_seed % (1<<(p-1))) < (pg_num % (1<<(p-1))))
     return p;
@@ -4279,6 +4280,7 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     case CEPH_OSD_OP_COPY_GET:
     case CEPH_OSD_OP_COPY_GET_CLASSIC:
       out << " max " << op.op.copy_get.max;
+      break;
     case CEPH_OSD_OP_COPY_FROM:
       out << " ver " << op.op.copy_from.src_version;
       break;

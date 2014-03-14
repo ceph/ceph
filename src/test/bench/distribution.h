@@ -45,7 +45,7 @@ class RandomDist : public Distribution<T> {
   rngen_t rng;
   std::map<uint64_t, T> contents;
 public:
-  RandomDist(rngen_t rng, std::set<T> &initial) : rng(rng) {
+  RandomDist(const rngen_t &rng, std::set<T> &initial) : rng(rng) {
     uint64_t count = 0;
     for (typename std::set<T>::iterator i = initial.begin();
 	 i != initial.end();
@@ -66,7 +66,7 @@ class WeightedDist : public Distribution<T> {
   double total;
   std::map<double, T> contents;
 public:
-  WeightedDist(rngen_t rng, const std::set<std::pair<double, T> > &initial)
+  WeightedDist(const rngen_t &rng, const std::set<std::pair<double, T> > &initial)
     : rng(rng), total(0) {
     for (typename std::set<std::pair<double, T> >::const_iterator i =
 	   initial.begin();
@@ -105,7 +105,7 @@ class UniformRandom : public Distribution<uint64_t> {
   uint64_t min;
   uint64_t max;
 public:
-  UniformRandom(rngen_t rng, uint64_t min, uint64_t max) :
+  UniformRandom(const rngen_t &rng, uint64_t min, uint64_t max) :
     rng(rng), min(min), max(max) {}
   virtual uint64_t operator()() {
     return boost::uniform_int<uint64_t>(min, max)(rng);
