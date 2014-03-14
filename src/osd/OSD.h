@@ -1335,7 +1335,8 @@ private:
 
 protected:
   // -- placement groups --
-  ceph::unordered_map<spg_t, PG*> pg_map;
+  RWLock pg_map_lock;
+  ceph::unordered_map<spg_t, PG*> pg_map; // protected by pg_map lock
   map<spg_t, list<OpRequestRef> > waiting_for_pg;
   map<spg_t, list<PG::CephPeeringEvtRef> > peering_wait_for_split;
   PGRecoveryStats pg_recovery_stats;
