@@ -46,7 +46,7 @@ Standards-Version: 3.9.3
 Package: ceph
 Architecture: linux-any
 Depends: binutils,
-         ceph-common,
+         ceph-common (>= 0.67),
          cryptsetup-bin | cryptsetup,
          gdisk,
          parted,

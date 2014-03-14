@@ -144,8 +144,6 @@ struct RGWObjManifestRule {
   RGWObjManifestRule(uint32_t _start_part_num, uint64_t _start_ofs, uint64_t _part_size, uint64_t _stripe_max_size) :
                        start_part_num(_start_part_num), start_ofs(_start_ofs), part_size(_part_size), stripe_max_size(_stripe_max_size) {}
 
-  void get_obj_name(const string& prefix, uint64_t ofs, string *name);
-
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(start_part_num, bl);
@@ -179,6 +177,8 @@ protected:
 
   uint64_t max_head_size;
   string prefix;
+  rgw_bucket tail_bucket; /* might be different than the original bucket,
+                             as object might have been copied across buckets */
   map<uint64_t, RGWObjManifestRule> rules;
 
   void convert_to_explicit();
@@ -204,6 +204,7 @@ public:
     head_size = rhs.head_size;
     max_head_size = rhs.max_head_size;
     prefix = rhs.prefix;
+    tail_bucket = rhs.tail_bucket;
     rules = rhs.rules;
 
     begin_iter.set_manifest(this);
@@ -238,7 +239,7 @@ public:
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 3, bl);
+    ENCODE_START(4, 3, bl);
     ::encode(obj_size, bl);
     ::encode(objs, bl);
     ::encode(explicit_objs, bl);
@@ -247,11 +248,12 @@ public:
     ::encode(max_head_size, bl);
     ::encode(prefix, bl);
     ::encode(rules, bl);
+    ::encode(tail_bucket, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(3, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(4, 2, 2, bl);
     ::decode(obj_size, bl);
     ::decode(objs, bl);
     if (struct_v >= 3) {
@@ -263,6 +265,10 @@ public:
       ::decode(rules, bl);
     } else {
       explicit_objs = true;
+    }
+
+    if (struct_v >= 4) {
+      ::decode(tail_bucket, bl);
     }
 
     update_iterators();
@@ -299,6 +305,14 @@ public:
 
   const rgw_obj& get_head() {
     return head_obj;
+  }
+
+  void set_tail_bucket(const rgw_bucket& _b) {
+    tail_bucket = _b;
+  }
+
+  rgw_bucket& get_tail_bucket() {
+    return tail_bucket;
   }
 
   void set_prefix(const string& _p) {

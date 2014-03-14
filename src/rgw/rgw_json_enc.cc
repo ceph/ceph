@@ -65,6 +65,7 @@ void RGWObjManifest::dump(Formatter *f) const
   ::encode_json("head_size", head_size, f);
   ::encode_json("max_head_size", max_head_size, f);
   ::encode_json("prefix", prefix, f);
+  ::encode_json("tail_bucket", tail_bucket, f);
   ::encode_json("rules", rules, f);
 }
 

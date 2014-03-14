@@ -118,7 +118,7 @@ OPTION(ms_bind_port_min, OPT_INT, 6800)
 OPTION(ms_bind_port_max, OPT_INT, 7300)
 OPTION(ms_rwthread_stack_bytes, OPT_U64, 1024 << 10)
 OPTION(ms_tcp_read_timeout, OPT_U64, 900)
-OPTION(ms_pq_max_tokens_per_priority, OPT_U64, 4194304)
+OPTION(ms_pq_max_tokens_per_priority, OPT_U64, 16777216)
 OPTION(ms_pq_min_cost, OPT_U64, 65536)
 OPTION(ms_inject_socket_failures, OPT_U64, 0)
 OPTION(ms_inject_delay_type, OPT_STR, "")          // "osd mds mon client" allowed
@@ -431,6 +431,10 @@ OPTION(osd_pool_default_erasure_code_properties,
 OPTION(osd_pool_default_flags, OPT_INT, 0)   // default flags for new pools
 OPTION(osd_pool_default_flag_hashpspool, OPT_BOOL, true)   // use new pg hashing to prevent pool/pg overlap
 OPTION(osd_pool_default_hit_set_bloom_fpp, OPT_FLOAT, .05)
+OPTION(osd_pool_default_cache_target_dirty_ratio, OPT_FLOAT, .4)
+OPTION(osd_pool_default_cache_target_full_ratio, OPT_FLOAT, .8)
+OPTION(osd_pool_default_cache_min_flush_age, OPT_INT, 0)  // seconds
+OPTION(osd_pool_default_cache_min_evict_age, OPT_INT, 0)  // seconds
 OPTION(osd_hit_set_min_size, OPT_INT, 1000)  // min target size for a HitSet
 OPTION(osd_hit_set_namespace, OPT_STR, ".ceph-internal") // rados namespace for hit_set tracking
 
