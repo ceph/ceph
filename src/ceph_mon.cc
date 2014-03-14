@@ -412,7 +412,7 @@ int main(int argc, const char **argv)
       if (prefork.is_parent()) {
 	return prefork.parent_wait();
       }
-      global_init_postfork(g_ceph_context, 0);
+      global_init_postfork_start(g_ceph_context);
     }
     common_init_finish(g_ceph_context);
     global_init_chdir(g_ceph_context);
@@ -655,8 +655,10 @@ int main(int argc, const char **argv)
     derr << "done compacting" << dendl;
   }
 
-  if (g_conf->daemonize)
+  if (g_conf->daemonize) {
+    global_init_postfork_finish(g_ceph_context, 0);
     prefork.daemonize();
+  }
 
   messenger->start();
 
