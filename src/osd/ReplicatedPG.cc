@@ -6393,16 +6393,17 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now)
           << dendl;
 
   repop->v = ctx->at_version;
-
-  for (set<pg_shard_t>::iterator i = actingbackfill.begin();
-       i != actingbackfill.end();
-       ++i) {
-    if (*i == get_primary()) continue;
-    pg_info_t &pinfo = peer_info[*i];
-    // keep peer_info up to date
-    if (pinfo.last_complete == pinfo.last_update)
-      pinfo.last_complete = ctx->at_version;
-    pinfo.last_update = ctx->at_version;
+  if (ctx->at_version > eversion_t()) {
+    for (set<pg_shard_t>::iterator i = actingbackfill.begin();
+	 i != actingbackfill.end();
+	 ++i) {
+      if (*i == get_primary()) continue;
+      pg_info_t &pinfo = peer_info[*i];
+      // keep peer_info up to date
+      if (pinfo.last_complete == pinfo.last_update)
+	pinfo.last_complete = ctx->at_version;
+      pinfo.last_update = ctx->at_version;
+    }
   }
 
   repop->obc->ondisk_write_lock();
