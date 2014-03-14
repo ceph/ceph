@@ -3031,10 +3031,11 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
 void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
 {
+  assert(cap);
+
   client_t client = cap->get_client();
 
-  bool pfile = filelock.is_xlocked_by_client(client) ||
-    (cap && (cap->issued() & CEPH_CAP_FILE_EXCL));
+  bool pfile = filelock.is_xlocked_by_client(client) || (cap->issued() & CEPH_CAP_FILE_EXCL);
   bool pauth = authlock.is_xlocked_by_client(client);
   bool plink = linklock.is_xlocked_by_client(client);
   bool pxattr = xattrlock.is_xlocked_by_client(client);

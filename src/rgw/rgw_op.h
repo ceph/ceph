@@ -1,3 +1,5 @@
+// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 /**
  * All operations via the rados gateway are carried out by
  * small classes known as RGWOps. This class contains a req_state
@@ -828,8 +830,10 @@ protected:
 
 public:
   RGWListBucketMultiparts() {
+    max_uploads = 0;
     ret = 0;
     is_truncated = false;
+    default_max = 0;
   }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
