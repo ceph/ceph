@@ -86,10 +86,10 @@ void usage(ostream& out)
 "   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n"
 "\n"
 "   listsnaps <obj-name>             list the snapshots of this object\n"
-"   bench <seconds> write|seq|rand [-t concurrent_operations] [--no-cleanup]\n"
+"   bench <seconds> write|seq|rand [-t concurrent_operations] [--no-cleanup] [--meta-object metadata_object\n"
 "                                    default is 16 concurrent IOs and 4 MB ops\n"
 "                                    default is to clean up after write benchmark\n"
-"   cleanup <prefix>                 clean up a previous benchmark operation\n"
+"   cleanup [<prefix> | --meta-object metadata_object]  lean up a previous benchmark operation\n"
 "   load-gen [options]               generate load on the cluster\n"
 "   listomapkeys <obj-name>          list the keys in the object map\n"
 "   listomapvals <obj-name>          list the keys and vals in the object map \n"
@@ -167,6 +167,9 @@ void usage(ostream& out)
 "   -t N\n"
 "   --concurrent-ios=N\n"
 "        Set number of concurrent I/O operations\n"
+"   --meta-object  <metadata_object>\n"
+"        Specify the metadata object, when launching multiple rados bench instance\n"
+"        for write, this option should be speficied to distinguish one from the other\n"
 "   --show-time\n"
 "        prefix output with date/time\n"
 "\n"
@@ -1173,6 +1176,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
   bool show_time = false;
 
+  const char* meta_obj = NULL;
+
   Formatter *formatter = NULL;
   bool pretty_format = false;
 
@@ -1206,6 +1211,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("concurrent-ios");
   if (i != opts.end()) {
     concurrent_ios = strtol(i->second.c_str(), NULL, 10);
+  }
+  i = opts.find("meta-object");
+  if (i != opts.end()) {
+     meta_obj = i->second.c_str();
   }
   i = opts.find("block-size");
   if (i != opts.end()) {
@@ -2162,16 +2171,17 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     RadosBencher bencher(g_ceph_context, rados, io_ctx);
     bencher.set_show_time(show_time);
     ret = bencher.aio_bench(operation, seconds, num_objs,
-			    concurrent_ios, op_size, cleanup);
+			    concurrent_ios, op_size, cleanup, meta_obj);
     if (ret != 0)
       cerr << "error during benchmark: " << ret << std::endl;
   }
   else if (strcmp(nargs[0], "cleanup") == 0) {
-    if (!pool_name || nargs.size() < 2)
+    if (!pool_name || (nargs.size() < 2 && meta_obj == NULL))
       usage_exit();
-    const char *prefix = nargs[1];
+    // prefix is only used when meta_obj is not provided
+    const char *prefix = (meta_obj == NULL ? nargs[1] : NULL);
     RadosBencher bencher(g_ceph_context, rados, io_ctx);
-    ret = bencher.clean_up(prefix, concurrent_ios);
+    ret = bencher.clean_up(prefix, meta_obj, concurrent_ios);
     if (ret != 0)
       cerr << "error during cleanup: " << ret << std::endl;
   }
@@ -2519,6 +2529,8 @@ int main(int argc, const char **argv)
       opts["show-time"] = "true";
     } else if (ceph_argparse_flag(args, i, "--no-cleanup", (char*)NULL)) {
       opts["no-cleanup"] = "true";
+    } else if (ceph_argparse_witharg(args, i, &val, "--meta-object", (char*)NULL)) {
+      opts["meta-object"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       opts["pool"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--target-pool", (char*)NULL)) {
