@@ -62,7 +62,7 @@ static bool cleanup_atexit = false;
 static void remove_cleanup_file(const char *file)
 {
   pthread_mutex_lock(&cleanup_lock);
-  TEMP_FAILURE_RETRY(unlink(file));
+  VOID_TEMP_FAILURE_RETRY(unlink(file));
   for (std::vector <const char*>::iterator i = cleanup_files.begin();
        i != cleanup_files.end(); ++i) {
     if (strcmp(file, *i) == 0) {
@@ -79,7 +79,7 @@ static void remove_all_cleanup_files()
   pthread_mutex_lock(&cleanup_lock);
   for (std::vector <const char*>::iterator i = cleanup_files.begin();
        i != cleanup_files.end(); ++i) {
-    TEMP_FAILURE_RETRY(unlink(*i));
+    VOID_TEMP_FAILURE_RETRY(unlink(*i));
     free((void*)*i);
   }
   cleanup_files.clear();
@@ -170,7 +170,7 @@ std::string OutputDataSocket::bind_and_listen(const std::string &sock_path, int 
   int r = fcntl(sock_fd, F_SETFD, FD_CLOEXEC);
   if (r < 0) {
     r = errno;
-    TEMP_FAILURE_RETRY(::close(sock_fd));
+    VOID_TEMP_FAILURE_RETRY(::close(sock_fd));
     ostringstream oss;
     oss << "OutputDataSocket::bind_and_listen: failed to fcntl on socket: " << cpp_strerror(r);
     return oss.str();
@@ -185,7 +185,7 @@ std::string OutputDataSocket::bind_and_listen(const std::string &sock_path, int 
     if (err == EADDRINUSE) {
       // The old UNIX domain socket must still be there.
       // Let's unlink it and try again.
-      TEMP_FAILURE_RETRY(unlink(sock_path.c_str()));
+      VOID_TEMP_FAILURE_RETRY(unlink(sock_path.c_str()));
       if (bind(sock_fd, (struct sockaddr*)&address,
 	       sizeof(struct sockaddr_un)) == 0) {
 	err = 0;
@@ -209,7 +209,7 @@ std::string OutputDataSocket::bind_and_listen(const std::string &sock_path, int 
     oss << "OutputDataSocket::bind_and_listen: "
 	  << "failed to listen to socket: " << cpp_strerror(err);
     close(sock_fd);
-    TEMP_FAILURE_RETRY(unlink(sock_path.c_str()));
+    VOID_TEMP_FAILURE_RETRY(unlink(sock_path.c_str()));
     return oss.str();
   }
   *fd = sock_fd;
@@ -342,7 +342,7 @@ int OutputDataSocket::dump_data(int fd)
 
 void OutputDataSocket::close_connection(int fd)
 {
-  TEMP_FAILURE_RETRY(close(fd));
+  VOID_TEMP_FAILURE_RETRY(close(fd));
 }
 
 bool OutputDataSocket::init(const std::string &path)
@@ -391,7 +391,7 @@ void OutputDataSocket::shutdown()
   // Send a byte to the shutdown pipe that the thread is listening to
   char buf[1] = { 0x0 };
   int ret = safe_write(m_shutdown_wr_fd, buf, sizeof(buf));
-  TEMP_FAILURE_RETRY(close(m_shutdown_wr_fd));
+  VOID_TEMP_FAILURE_RETRY(close(m_shutdown_wr_fd));
   m_shutdown_wr_fd = -1;
 
   if (ret == 0) {

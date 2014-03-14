@@ -126,6 +126,7 @@ To build the source code, you must install the following:
 - libblkid-dev
 - libatomic-ops-dev
 - libboost-program-options-dev
+- libboost-system-dev
 - libboost-thread-dev
 - libexpat1-dev
 - libleveldb-dev
@@ -136,7 +137,9 @@ To build the source code, you must install the following:
 
 For example:
 
-	$ apt-get install automake autoconf pkg-config gcc g++ make libboost-dev libedit-dev libssl-dev libtool libfcgi libfcgi-dev xfslibs-dev libfuse-dev linux-kernel-headers libcrypto++-dev libaio-dev libgoogle-perftools-dev libkeyutils-dev uuid-dev libblkid-dev libatomic-ops-dev libboost-program-options-dev libboost-thread-dev libexpat1-dev libleveldb-dev libsnappy-dev libcurl4-gnutls-dev python-argparse python-flask
+	$ apt-get install automake autoconf pkg-config gcc g++ make libboost-dev libedit-dev libssl-dev libtool libfcgi libfcgi-dev xfslibs-dev libfuse-dev linux-kernel-headers libcrypto++-dev libaio-dev libgoogle-perftools-dev libkeyutils-dev uuid-dev libblkid-dev libatomic-ops-dev libboost-program-options-dev libboost-system-dev libboost-thread-dev libexpat1-dev libleveldb-dev libsnappy-dev libcurl4-gnutls-dev python-argparse python-flask python-nose
+
+Note: libsnappy-dev and libleveldb-dev are not available upstream for natty, oneiric, and squeeze.  Backports for Ceph can be found at ceph.com/debian-leveldb.
 
 rpm-based
 ---------
@@ -170,5 +173,5 @@ These are the rpm packages needed to install in an rpm-based OS:
 
 For example:
 
-	$ yum install autoconf automake gcc gcc-c++ make libtool python-argparse python-flask libuuid-devel libblkid-devel keyutils-libs-devel cryptopp-devel nss-devel fcgi-devel expat-devel libcurl-devel xfsprogs-devel fuse-devel gperftools-devel libedit-devel libatomic_ops-devel snappy-devel leveldb-devel libaio-devel boost-devel
+	$ yum install autoconf automake gcc gcc-c++ make libtool python-argparse python-flask libuuid-devel libblkid-devel keyutils-libs-devel cryptopp-devel nss-devel fcgi-devel expat-devel libcurl-devel xfsprogs-devel fuse-devel gperftools-devel libedit-devel libatomic_ops-devel snappy-devel leveldb-devel libaio-devel boost-devel python-nose
 

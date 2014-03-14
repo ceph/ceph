@@ -77,10 +77,10 @@ private:
   void handle_request(MMDSTableRequest *m);
   void do_server_update(bufferlist& bl);
 
-  virtual void encode_server_state(bufferlist& bl) = 0;
+  virtual void encode_server_state(bufferlist& bl) const = 0;
   virtual void decode_server_state(bufferlist::iterator& bl) = 0;
 
-  void encode_state(bufferlist& bl) {
+  void encode_state(bufferlist& bl) const {
     encode_server_state(bl);
     ::encode(pending_for_mds, bl);
   }

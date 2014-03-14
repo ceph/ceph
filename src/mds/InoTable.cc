@@ -156,3 +156,34 @@ void InoTable::skip_inos(inodeno_t i)
   projected_version = ++version;
   dout(10) << "skip_inos now " << free << dendl;
 }
+
+void InoTable::dump(Formatter *f) const
+{
+  f->open_object_section("inotable");
+
+  f->open_array_section("projected_free");
+  for (interval_set<inodeno_t>::const_iterator i = projected_free.begin(); i != projected_free.end(); ++i) {
+    f->open_object_section("range");
+    f->dump_int("start", (*i).first);
+    f->dump_int("len", (*i).second);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_array_section("free");
+  for (interval_set<inodeno_t>::const_iterator i = free.begin(); i != free.end(); ++i) {
+    f->open_object_section("range");
+    f->dump_int("start", (*i).first);
+    f->dump_int("len", (*i).second);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->close_section();
+}
+
+
+void InoTable::generate_test_instances(list<InoTable*>& ls)
+{
+  ls.push_back(new InoTable());
+}

@@ -246,7 +246,7 @@ struct MDRequest : public Mutation {
       src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
       rename_inode(0), is_freeze_authpin(false), is_ambiguous_auth(false),
       is_remote_frozen_authpin(false), is_inode_exporter(false),
-      flock_was_waiting(false), stid(0), slave_commit(0) { }
+      flock_was_waiting(false), stid(0), slave_commit(0), export_dir(NULL)  { }
   } *_more;
 
 

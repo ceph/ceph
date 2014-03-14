@@ -211,7 +211,7 @@ the convenience of the 'pull request' feature.
 1) Github pull request
 
 The preferred way to submit code is by publishing your patches in a branch
-in your github clone of the ceph repository and then submitting a github
+in your github fork of the ceph repository and then submitting a github
 pull request.
 
 For example, prepare your changes:

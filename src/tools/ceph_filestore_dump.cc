@@ -164,43 +164,64 @@ struct footer {
 };
 
 struct pg_begin {
-  pg_t pgid;
+  spg_t pgid;
   OSDSuperblock superblock;
 
-  pg_begin(pg_t pg, OSDSuperblock sb):
+  pg_begin(spg_t pg, const OSDSuperblock& sb):
     pgid(pg), superblock(sb) { }
   pg_begin() { }
 
   void encode(bufferlist& bl) const {
-    // New super_ver prevents decode from ver 1
-    ENCODE_START(2, 2, bl);
-    ::encode(pgid, bl);
+    // If superblock doesn't include CEPH_FS_FEATURE_INCOMPAT_SHARDS then
+    // shard will be NO_SHARD for a replicated pool.  This means
+    // that we allow the decode by struct_v 2.
+    ENCODE_START(3, 2, bl);
+    ::encode(pgid.pgid, bl);
     ::encode(superblock, bl);
+    ::encode(pgid.shard, bl);
     ENCODE_FINISH(bl);
   }
+  // NOTE: New super_ver prevents decode from ver 1
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(2, bl);
-    ::decode(pgid, bl);
+    DECODE_START(3, bl);
+    ::decode(pgid.pgid, bl);
     if (struct_v > 1) {
       ::decode(superblock, bl);
+    }
+    if (struct_v > 2) {
+      ::decode(pgid.shard, bl);
+    } else {
+      pgid.shard = ghobject_t::NO_SHARD;
     }
     DECODE_FINISH(bl);
   }
 };
 
 struct object_begin {
-  hobject_t hoid;
-  object_begin(const hobject_t &hoid): hoid(hoid) { }
+  ghobject_t hoid;
+  object_begin(const ghobject_t &hoid): hoid(hoid) { }
   object_begin() { }
 
+  // If superblock doesn't include CEPH_FS_FEATURE_INCOMPAT_SHARDS then
+  // generation will be NO_GEN, shard_id will be NO_SHARD for a replicated
+  // pool.  This means we will allow the decode by struct_v 1.
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    ::encode(hoid, bl);
+    ENCODE_START(2, 1, bl);
+    ::encode(hoid.hobj, bl);
+    ::encode(hoid.generation, bl);
+    ::encode(hoid.shard_id, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
-    ::decode(hoid, bl);
+    DECODE_START(2, bl);
+    ::decode(hoid.hobj, bl);
+    if (struct_v > 1) {
+      ::decode(hoid.generation, bl);
+      ::decode(hoid.shard_id, bl);
+    } else {
+      hoid.generation = ghobject_t::NO_GEN;
+      hoid.shard_id = ghobject_t::NO_SHARD;
+    }
     DECODE_FINISH(bl);
   }
 };
@@ -354,7 +375,7 @@ static void invalid_path(string &path)
   exit(1);
 }
 
-int get_log(ObjectStore *fs, coll_t coll, pg_t pgid, const pg_info_t &info,
+int get_log(ObjectStore *fs, coll_t coll, spg_t pgid, const pg_info_t &info,
    PGLog::IndexedLog &log, pg_missing_t &missing)
 { 
   map<eversion_t, hobject_t> divergent_priors;
@@ -397,7 +418,6 @@ void remove_coll(ObjectStore *store, const coll_t &coll)
 	 i != objects.end();
 	 ++i, ++num) {
 
-      assert(i->generation == ghobject_t::NO_GEN);
       OSDriver::OSTransaction _t(driver.get_transaction(t));
       cout << "remove " << *i << std::endl;
       int r = mapper.remove_oid(i->hobj, &_t);
@@ -462,18 +482,17 @@ int finish_remove_pgs(ObjectStore *store, uint64_t *next_removal_seq)
   return 0;
 }
 
-int initiate_new_remove_pg(ObjectStore *store, pg_t r_pgid,
+int initiate_new_remove_pg(ObjectStore *store, spg_t r_pgid,
     uint64_t *next_removal_seq)
 {
   ObjectStore::Transaction *rmt = new ObjectStore::Transaction;
 
-  if (store->collection_exists(coll_t(spg_t(r_pgid, ghobject_t::no_shard())))) {
-      coll_t to_remove = coll_t::make_removal_coll((*next_removal_seq)++,
-        spg_t(r_pgid, ghobject_t::no_shard()));
-      cout << "collection rename " << coll_t(spg_t(r_pgid, ghobject_t::no_shard()))
+  if (store->collection_exists(coll_t(r_pgid))) {
+      coll_t to_remove = coll_t::make_removal_coll((*next_removal_seq)++, r_pgid);
+      cout << "collection rename " << coll_t(r_pgid)
 	   << " to " << to_remove
         << std::endl;
-      rmt->collection_rename(coll_t(spg_t(r_pgid, ghobject_t::no_shard())), to_remove);
+      rmt->collection_rename(coll_t(r_pgid), to_remove);
   } else {
     delete rmt;
     return ENOENT;
@@ -563,20 +582,18 @@ int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
   return 0;
 }
 
-int export_file(ObjectStore *store, coll_t cid, hobject_t &obj)
+int export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
 {
   struct stat st;
   mysize_t total;
-  ostringstream objname;
   footer ft;
 
   int ret = store->stat(cid, obj, &st);
   if (ret < 0)
     return ret;
 
-  objname << obj;
-  if (debug && file_fd != STDOUT_FILENO)
-    cout << "objname=" << objname.str() << std::endl;
+  if (file_fd != STDOUT_FILENO)
+    cout << "read " << obj << std::endl;
 
   total = st.st_size;
   if (debug && file_fd != STDOUT_FILENO)
@@ -669,8 +686,7 @@ int export_files(ObjectStore *store, coll_t coll)
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
-      assert(i->generation == ghobject_t::NO_GEN);
-      r = export_file(store, coll, i->hobj);
+      r = export_file(store, coll, *i);
       if (r < 0)
         return r;
     }
@@ -701,11 +717,14 @@ void write_super()
   superbl.write_fd(file_fd);
 }
 
-int do_export(ObjectStore *fs, coll_t coll, pg_t pgid, pg_info_t &info,
-    epoch_t map_epoch, __u8 struct_ver, OSDSuperblock superblock)
+int do_export(ObjectStore *fs, coll_t coll, spg_t pgid, pg_info_t &info,
+    epoch_t map_epoch, __u8 struct_ver, const OSDSuperblock& superblock)
 {
   PGLog::IndexedLog log;
   pg_missing_t missing;
+
+  if (file_fd != STDOUT_FILENO)
+    cout << "Exporting " << pgid << std::endl;
 
   int ret = get_log(fs, coll, pgid, info, log, missing);
   if (ret > 0)
@@ -718,7 +737,12 @@ int do_export(ObjectStore *fs, coll_t coll, pg_t pgid, pg_info_t &info,
   if (ret)
     return ret;
 
-  export_files(fs, coll);
+  ret = export_files(fs, coll);
+  if (ret) {
+    if (file_fd != STDOUT_FILENO)
+      cout << "export_files error " << ret << std::endl;
+    return ret;
+  }
 
   metadata_section ms(struct_ver, map_epoch, info, log);
   ret = write_section(TYPE_PG_METADATA, ms, file_fd);
@@ -777,7 +801,7 @@ int read_section(int fd, sectiontype_t *type, bufferlist *bl)
   return 0;
 }
 
-int get_data(ObjectStore *store, coll_t coll, hobject_t hoid,
+int get_data(ObjectStore *store, coll_t coll, ghobject_t hoid,
     ObjectStore::Transaction *t, bufferlist &bl)
 {
   bufferlist::iterator ebliter = bl.begin();
@@ -790,7 +814,7 @@ int get_data(ObjectStore *store, coll_t coll, hobject_t hoid,
   return 0;
 }
 
-int get_attrs(ObjectStore *store, coll_t coll, hobject_t hoid,
+int get_attrs(ObjectStore *store, coll_t coll, ghobject_t hoid,
     ObjectStore::Transaction *t, bufferlist &bl,
     OSDriver &driver, SnapMapper &snap_mapper)
 {
@@ -802,7 +826,7 @@ int get_attrs(ObjectStore *store, coll_t coll, hobject_t hoid,
     cout << "\tattrs: len " << as.data.size() << std::endl;
   t->setattrs(coll, hoid, as.data);
 
-  if (hoid.snap < CEPH_MAXSNAP) {
+  if (hoid.hobj.snap < CEPH_MAXSNAP && hoid.generation == ghobject_t::NO_GEN) {
     map<string,bufferptr>::iterator mi = as.data.find(OI_ATTR);
     if (mi != as.data.end()) {
       bufferlist attr_bl;
@@ -814,14 +838,14 @@ int get_attrs(ObjectStore *store, coll_t coll, hobject_t hoid,
   
       OSDriver::OSTransaction _t(driver.get_transaction(t));
       set<snapid_t> oi_snaps(oi.snaps.begin(), oi.snaps.end());
-      snap_mapper.add_oid(hoid, oi_snaps, &_t);
+      snap_mapper.add_oid(hoid.hobj, oi_snaps, &_t);
     }
   }
 
   return 0;
 }
 
-int get_omap_hdr(ObjectStore *store, coll_t coll, hobject_t hoid,
+int get_omap_hdr(ObjectStore *store, coll_t coll, ghobject_t hoid,
     ObjectStore::Transaction *t, bufferlist &bl)
 {
   bufferlist::iterator ebliter = bl.begin();
@@ -835,7 +859,7 @@ int get_omap_hdr(ObjectStore *store, coll_t coll, hobject_t hoid,
   return 0;
 }
 
-int get_omap(ObjectStore *store, coll_t coll, hobject_t hoid,
+int get_omap(ObjectStore *store, coll_t coll, ghobject_t hoid,
     ObjectStore::Transaction *t, bufferlist &bl)
 {
   bufferlist::iterator ebliter = bl.begin();
@@ -865,11 +889,7 @@ int get_object(ObjectStore *store, coll_t coll, bufferlist &bl)
 
   t->touch(coll, ob.hoid);
 
-  if (debug) {
-    ostringstream objname;
-    objname << ob.hoid.oid;
-    cout << "name " << objname.str() << " snap " << ob.hoid.snap << std::endl;
-  }
+  cout << "Write " << ob.hoid << std::endl;
 
   bufferlist ebl;
   bool done = false;
@@ -949,7 +969,7 @@ int get_pg_metadata(ObjectStore *store, coll_t coll, bufferlist &bl)
   return 0;
 }
 
-int do_import(ObjectStore *store, OSDSuperblock sb)
+int do_import(ObjectStore *store, OSDSuperblock& sb)
 {
   bufferlist ebl;
   pg_info_t info;
@@ -975,6 +995,8 @@ int do_import(ObjectStore *store, OSDSuperblock sb)
   //First section must be TYPE_PG_BEGIN
   sectiontype_t type;
   ret = read_section(file_fd, &type, &ebl);
+  if (ret)
+    return ret;
   if (type != TYPE_PG_BEGIN) {
     return EFAULT;
   }
@@ -982,7 +1004,7 @@ int do_import(ObjectStore *store, OSDSuperblock sb)
   bufferlist::iterator ebliter = ebl.begin();
   pg_begin pgb;
   pgb.decode(ebliter);
-  pg_t pgid = pgb.pgid;
+  spg_t pgid = pgb.pgid;
 
   if (debug) {
     cout << "Exported features: " << pgb.superblock.compat_features << std::endl;
@@ -993,11 +1015,11 @@ int do_import(ObjectStore *store, OSDSuperblock sb)
     return 1;
   }
 
-  log_oid = OSD::make_pg_log_oid(spg_t(pgid, ghobject_t::no_shard()));
-  biginfo_oid = OSD::make_pg_biginfo_oid(spg_t(pgid, ghobject_t::no_shard()));
+  log_oid = OSD::make_pg_log_oid(pgid);
+  biginfo_oid = OSD::make_pg_biginfo_oid(pgid);
 
   //Check for PG already present.
-  coll_t coll(spg_t(pgid, ghobject_t::no_shard()));
+  coll_t coll(pgid);
   if (store->collection_exists(coll)) {
     cout << "pgid " << pgid << " already exists" << std::endl;
     return 1;
@@ -1005,8 +1027,7 @@ int do_import(ObjectStore *store, OSDSuperblock sb)
 
   //Switch to collection which will be removed automatically if
   //this program is interupted.
-  coll_t rmcoll = coll_t::make_removal_coll(
-    next_removal_seq, spg_t(pgid, ghobject_t::no_shard()));
+  coll_t rmcoll = coll_t::make_removal_coll(next_removal_seq, pgid);
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   t->create_collection(rmcoll);
   store->apply_transaction(*t);
@@ -1065,9 +1086,9 @@ int main(int argc, char **argv)
     ("journal-path", po::value<string>(&jpath),
      "path to journal, mandatory")
     ("pgid", po::value<string>(&pgidstr),
-     "PG id, mandatory")
+     "PG id, mandatory except for import")
     ("type", po::value<string>(&type),
-     "Type one of info, log, remove, export, or import, mandatory")
+     "Arg is one of [info, log, remove, export, or import], mandatory")
     ("file", po::value<string>(&file),
      "path of file to export or import")
     ("debug", "Enable diagnostic output to stderr")
@@ -1202,7 +1223,7 @@ int main(int argc, char **argv)
     invalid_path(fspath);
   }
 
-  pg_t pgid;
+  spg_t pgid;
   if (pgidstr.length() && !pgid.parse(pgidstr.c_str())) {
     cout << "Invalid pgid '" << pgidstr << "' specified" << std::endl;
     exit(1);
@@ -1236,8 +1257,8 @@ int main(int argc, char **argv)
   bufferlist bl;
   OSDSuperblock superblock;
   bufferlist::iterator p;
-  ret = fs->read(coll_t::META_COLL, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
-  if (ret < 0) {
+  r = fs->read(coll_t::META_COLL, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
+  if (r < 0) {
     cout << "Failure to read OSD superblock error= " << r << std::endl;
     goto out;
   }
@@ -1289,11 +1310,13 @@ int main(int argc, char **argv)
     if (ret == EFAULT) {
       cout << "Corrupt input for import" << std::endl;
     }
+    if (ret == 0)
+      cout << "Import successful" << std::endl;
     goto out;
   }
 
-  log_oid = OSD::make_pg_log_oid(spg_t(pgid, ghobject_t::no_shard()));
-  biginfo_oid = OSD::make_pg_biginfo_oid(spg_t(pgid, ghobject_t::no_shard()));
+  log_oid = OSD::make_pg_log_oid(pgid);
+  biginfo_oid = OSD::make_pg_biginfo_oid(pgid);
 
   if (type == "remove") {
     uint64_t next_removal_seq = 0;	//My local seq
@@ -1323,7 +1346,7 @@ int main(int argc, char **argv)
       continue;
     }
 
-    if (tmppgid.pgid != pgid) {
+    if (tmppgid != pgid) {
       continue;
     }
     if (snap != CEPH_NOSNAP && debug) {
@@ -1346,10 +1369,9 @@ int main(int argc, char **argv)
     if (debug)
       cerr << "map_epoch " << map_epoch << std::endl;
 
-    pg_info_t info(spg_t(pgid, ghobject_t::no_shard()));
+    pg_info_t info(pgid);
     map<epoch_t,pg_interval_t> past_intervals;
-    hobject_t biginfo_oid = OSD::make_pg_biginfo_oid(
-      spg_t(pgid, ghobject_t::no_shard()));
+    hobject_t biginfo_oid = OSD::make_pg_biginfo_oid(pgid);
     interval_set<snapid_t> snap_collections;
   
     __u8 struct_ver;
@@ -1365,6 +1387,8 @@ int main(int argc, char **argv)
 
     if (type == "export") {
       ret = do_export(fs, coll, pgid, info, map_epoch, struct_ver, superblock);
+      if (ret == 0 && file_fd != STDOUT_FILENO)
+        cout << "Export successful" << std::endl;
     } else if (type == "info") {
       formatter->open_object_section("info");
       info.dump(formatter);
