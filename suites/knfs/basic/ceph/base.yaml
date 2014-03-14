@@ -1,0 +1,9 @@
+tasks:
+- install:
+- ceph:
+- kclient: [client.0]
+- knfsd: [client.0]
+- nfs:
+    client.1:
+        server: client.0
+        options: [rw,hard,intr,nfsvers=3]
