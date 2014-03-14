@@ -1298,11 +1298,7 @@ void Objecter::tick()
   if (!toping.empty()) {
     // send a ping to these osds, to ensure we detect any session resets
     // (osd reply message policy is lossy)
-    if (!rwlock.is_wlocked()) {
-      rwlock.unlock();
-      rwlock.get_write();
-    }
-    for (set<OSDSession*>::iterator i = toping.begin();
+    for (set<OSDSession*>::const_iterator i = toping.begin();
 	 i != toping.end();
 	 ++i) {
       messenger->send_message(new MPing, (*i)->con);
