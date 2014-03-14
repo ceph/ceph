@@ -163,6 +163,7 @@ overrides:
         debug ms: 1
         debug osd: 20
         debug filestore: 20
+        debug journal: 20
     log-whitelist:
     - slow request
   ceph-deploy:
