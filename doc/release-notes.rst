@@ -26,6 +26,10 @@ Upgrade Sequencing
   with the cluster and new features may not be usable until they are
   restarted a second time.
 
+* Upgrade radosgw daemons together.  There is a subtle change in behavior
+  for multipart uploads that prevents a multipart request that was initiated
+  with a new radosgw from being completed by an old radosgw.
+
 Upgrading from v0.78
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -519,6 +523,10 @@ Upgrading
   daemons, they will not correctly register their new capabilities
   with the cluster and new features may not be usable until they are
   restarted a second time.
+
+* Upgrade radosgw daemons together.  There is a subtle change in behavior
+  for multipart uploads that prevents a multipart request that was initiated
+  with a new radosgw from being completed by an old radosgw.
 
 
 Notable Changes
