@@ -393,6 +393,11 @@ def build_ceph_cluster(ctx, config):
                 teuthology.pull_directory(remote, '/var/log/ceph',
                                           os.path.join(sub, 'log'))
 
+        # Prevent these from being undefined if the try block fails
+        all_nodes = get_all_nodes(ctx, config)
+        purge_nodes = './ceph-deploy purge'+" "+all_nodes
+        purgedata_nodes = './ceph-deploy purgedata'+" "+all_nodes
+
         log.info('Purging package...')
         execute_ceph_deploy(ctx, config, purge_nodes)
         log.info('Purging data...')
