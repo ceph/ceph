@@ -1514,7 +1514,17 @@ void PG::activate(ObjectStore::Transaction& t,
 	    i->shard, pg_whoami.shard,
 	    get_osdmap()->get_epoch(), info);
 	}
-      } else if (pg_log.get_tail() > pi.last_update || pi.last_backfill == hobject_t()) {
+      } else if (
+	pg_log.get_tail() > pi.last_update ||
+	pi.last_backfill == hobject_t() ||
+	(backfill_targets.count(*i) && pi.last_backfill.is_max())) {
+	/* This last case covers a situation where a replica is not contiguous
+	 * with the auth_log, but is contiguous with this replica.  Reshuffling
+	 * the active set to handle this would be tricky, so instead we just go
+	 * ahead and backfill it anyway.  This is probably preferrable in any
+	 * case since the replica in question would have to be significantly
+	 * behind.
+	 */
 	// backfill
 	osd->clog.info() << info.pgid << " restarting backfill on osd." << peer
 			 << " from (" << pi.log_tail << "," << pi.last_update << "] " << pi.last_backfill
