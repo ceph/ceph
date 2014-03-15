@@ -171,11 +171,8 @@ class PrioritizedQueue {
       if (i == q.end())
 	return;
       size -= i->second.size();
-      if (i == cur) {
+      if (i == cur)
 	++cur;
-	if (cur == q.end())
-	  cur = q.begin();
-      }
       if (out) {
 	for (typename list<pair<unsigned, T> >::reverse_iterator j =
 	       i->second.rbegin();
@@ -185,6 +182,8 @@ class PrioritizedQueue {
 	}
       }
       q.erase(i);
+      if (cur == q.end())
+	cur = q.begin();
     }
 
     void dump(Formatter *f) const {
