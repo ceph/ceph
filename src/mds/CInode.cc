@@ -2880,11 +2880,13 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   // inline data
   version_t inline_version = 0;
   bufferlist inline_data;
-  if (!cap || (cap->client_inline_version < i->inline_version)) {
+  if (i->inline_version == CEPH_INLINE_NONE) {
+    inline_version = CEPH_INLINE_NONE;
+  } else if ((!cap && !no_caps) ||
+	     (cap->client_inline_version < i->inline_version) ||
+	     (getattr_caps & CEPH_CAP_FILE_RD)) { // client requests inline data
     inline_version = i->inline_version;
     inline_data = i->inline_data;
-    if (cap)
-      cap->client_inline_version = i->inline_version;
   }
 
   // nest (do same as file... :/)
@@ -2994,6 +2996,17 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 	   << " seq " << e.cap.seq << " mseq " << e.cap.mseq
 	   << " xattrv " << e.xattr_version << " len " << xbl.length()
 	   << dendl;
+
+  if (inline_data.length() && cap) {
+    if ((cap->pending() | getattr_caps) & CEPH_CAP_FILE_SHARED) {
+      dout(10) << "including inline version " << inline_version << dendl;
+      cap->client_inline_version = inline_version;
+    } else {
+      dout(10) << "dropping inline version " << inline_version << dendl;
+      inline_version = 0;
+      inline_data.clear();
+    }
+  }
 
   // include those xattrs?
   if (xbl.length() && cap) {
