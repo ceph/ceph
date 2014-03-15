@@ -1227,6 +1227,8 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 	::encode(inode.layout, bl);
 	::encode(inode.size, bl);
 	::encode(inode.client_ranges, bl);
+	::encode(inode.inline_data, bl);
+	::encode(inode.inline_version, bl);
       }
     } else {
       bool dirty = filelock.is_dirty();
@@ -1424,6 +1426,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	::decode(inode.layout, p);
 	::decode(inode.size, p);
 	::decode(inode.client_ranges, p);
+	::decode(inode.inline_data, p);
+	::decode(inode.inline_version, p);
       }
     } else {
       bool replica_dirty;
