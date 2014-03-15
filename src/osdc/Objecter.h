@@ -1456,8 +1456,8 @@ public:
     RECALC_OP_TARGET_OSD_DOWN,
   };
   bool op_should_be_paused(Op *op);
-  int _recalc_op_target(Op *op);
-  bool _recalc_linger_op_target(LingerOp *op);
+  int _recalc_op_target(Op *op, RWLock::Context& lc);
+  bool _recalc_linger_op_target(LingerOp *op, RWLock::Context& lc);
 
   void _send_linger(LingerOp *info);
   void _linger_ack(LingerOp *info, int r);
@@ -1475,7 +1475,7 @@ public:
 
   void kick_requests(OSDSession *session);
 
-  int _get_session(int osd, OSDSession **session);
+  int _get_session(int osd, OSDSession **session, RWLock::Context& lc);
   void put_session(OSDSession *s);
   void reopen_session(OSDSession *session);
   void close_session(OSDSession *session);
@@ -1577,13 +1577,13 @@ public:
 
 private:
   // low-level
-  tid_t _op_submit(Op *op);
+  tid_t _op_submit(Op *op, RWLock::Context& lc);
+  tid_t _op_submit_with_budget(Op *op, RWLock::Context& lc);
   inline void unregister_op(Op *op);
 
   // public interface
 public:
   tid_t op_submit(Op *op);
-  tid_t _op_submit_with_budget(Op *op);
   bool is_active();
 #warning FIXME
 #if 0
