@@ -1360,11 +1360,9 @@ void PG::build_might_have_unfound()
     std::vector<int>::const_iterator a = interval.acting.begin();
     std::vector<int>::const_iterator a_end = interval.acting.end();
     for (; a != a_end; ++a, ++i) {
-      if (*a != CRUSH_ITEM_NONE && *a != osd->whoami)
-	might_have_unfound.insert(
-	  pg_shard_t(
-	    *a,
-	    pool.info.ec_pool() ? i : ghobject_t::NO_SHARD));
+      pg_shard_t shard(*a, pool.info.ec_pool() ? i : ghobject_t::NO_SHARD);
+      if (*a != CRUSH_ITEM_NONE && shard != pg_whoami)
+	might_have_unfound.insert(shard);
     }
   }
 
