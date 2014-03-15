@@ -470,7 +470,8 @@ public:
     RGWObjManifestRule rule;
 
   public:
-    generator() : last_ofs(0), cur_part_ofs(0), cur_part_id(0), cur_stripe(0), cur_stripe_size(0) {}
+    generator() : manifest(NULL), last_ofs(0), cur_part_ofs(0), cur_part_id(0), 
+		  cur_stripe(0), cur_stripe_size(0) {}
     int create_begin(CephContext *cct, RGWObjManifest *manifest, rgw_bucket& bucket, rgw_obj& head);
 
     int create_next(uint64_t ofs);
@@ -931,7 +932,7 @@ struct RGWRegion {
   CephContext *cct;
   RGWRados *store;
 
-  RGWRegion() : is_master(false) {}
+  RGWRegion() : is_master(false), cct(NULL), store(NULL) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);

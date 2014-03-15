@@ -42,7 +42,7 @@ Prepare:
  - triggered by administrator or ceph-deploy, e.g.  'ceph-disk <data disk> [journal disk]
 
 Activate:
- - mount the volume in a temp loation
+ - mount the volume in a temp location
  - allocate an osd id (if needed)
  - remount in the correct location /var/lib/ceph/osd/$cluster-$id
  - start ceph-osd

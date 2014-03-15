@@ -72,7 +72,7 @@ Log::~Log()
 
   assert(!is_started());
   if (m_fd >= 0)
-    TEMP_FAILURE_RETRY(::close(m_fd));
+    VOID_TEMP_FAILURE_RETRY(::close(m_fd));
 
   pthread_mutex_destroy(&m_queue_mutex);
   pthread_mutex_destroy(&m_flush_mutex);
@@ -113,7 +113,7 @@ void Log::set_log_file(string fn)
 void Log::reopen_log_file()
 {
   if (m_fd >= 0)
-    TEMP_FAILURE_RETRY(::close(m_fd));
+    VOID_TEMP_FAILURE_RETRY(::close(m_fd));
   if (m_log_file.length()) {
     m_fd = ::open(m_log_file.c_str(), O_CREAT|O_WRONLY|O_APPEND, 0644);
   } else {

@@ -27,7 +27,7 @@
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
-#define dout_prefix *_dout << "mds." << mds->get_nodeid() << "." << table_name << ": "
+#define dout_prefix *_dout << "mds." << (mds ? mds->get_nodeid() : -1) << "." << table_name << ": "
 
 
 class C_MT_Save : public Context {
@@ -148,7 +148,7 @@ void MDSTable::load_2(int r, bufferlist& bl, Context *onfinish)
     return;
   }
   if (r < 0) {
-    dout(10) << "load_2 could not read table: " << r << dendl;
+    derr << "load_2 could not read table: " << r << dendl;
     assert(r >= 0);
   }
 

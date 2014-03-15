@@ -463,4 +463,4 @@ To add (or remove) additional Ceph OSD Daemons, see `Add/Remove OSDs`_.
 .. _Add/Remove Monitors: ../../rados/operations/add-or-rm-mons
 .. _Add/Remove OSDs: ../../rados/operations/add-or-rm-osds
 .. _Network Configuration Reference: ../../rados/configuration/network-config-ref
-.. _Monitor Config Reference - Data: ../../rados/configuration/monitor-config-ref#data
+.. _Monitor Config Reference - Data: ../../rados/configuration/mon-config-ref#data

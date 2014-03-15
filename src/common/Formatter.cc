@@ -63,7 +63,7 @@ Formatter::~Formatter()
 }
 
 Formatter *
-new_formatter(const std::string type)
+new_formatter(const std::string &type)
 {
     std::string mytype = type;
     if (mytype == "")
