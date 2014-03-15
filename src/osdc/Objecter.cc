@@ -1977,7 +1977,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   int osd_num = (int)m->get_source().num();
 
-  rwlock.get_read();
+  RWLock::RLocker l(rwlock);
 
   RWLock::Context lc(rwlock, RWLock::Context::TakenForRead);
 
@@ -1987,7 +1987,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     ldout(cct, 7) << "handle_osd_op_reply " << tid
 	    << (m->is_ondisk() ? " ondisk":(m->is_onnvram() ? " onnvram":" ack"))
 	    << " ... unknown osd" << dendl;
-    rwlock.unlock();
     m->put();
     return;
   }
@@ -2004,7 +2003,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 	    << (m->is_ondisk() ? " ondisk":(m->is_onnvram() ? " onnvram":" ack"))
 	    << " ... stray" << dendl;
     s->lock.unlock();
-    rwlock.unlock();
     s->put();
     m->put();
     return;
@@ -2029,7 +2027,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       m->put();
       s->put();
       op->lock.Unlock();
-      rwlock.unlock();
       return;
     }
   } else {
@@ -2051,7 +2048,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     m->put();
     s->put();
     op->lock.Unlock();
-    rwlock.unlock();
     return;
   }
 
@@ -2061,11 +2057,11 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     _op_submit(op, lc);
     m->put();
     op->lock.Unlock();
-    rwlock.unlock();
     return;
   }
 
-  rwlock.unlock();
+  l.unlock();
+  lc.set_state(RWLock::Context::Untaken);
 
   if (op->objver)
     *op->objver = m->get_user_version();
