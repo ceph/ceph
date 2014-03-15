@@ -111,24 +111,44 @@ public:
   class RLocker {
     RWLock &m_lock;
 
+    bool locked;
+
   public:
     RLocker(RWLock& lock) : m_lock(lock) {
       m_lock.get_read();
+      locked = true;
+    }
+    void unlock() {
+      assert(locked);
+      m_lock.unlock();
+      locked = false;
     }
     ~RLocker() {
-      m_lock.unlock();
+      if (locked) {
+        m_lock.unlock();
+      }
     }
   };
 
   class WLocker {
     RWLock &m_lock;
 
+    bool locked;
+
   public:
     WLocker(RWLock& lock) : m_lock(lock) {
       m_lock.get_write();
+      locked = true;
+    }
+    void unlock() {
+      assert(locked);
+      m_lock.unlock();
+      locked = false;
     }
     ~WLocker() {
-      m_lock.unlock();
+      if (locked) {
+        m_lock.unlock();
+      }
     }
   };
 
@@ -170,6 +190,9 @@ public:
     }
 
     LockState get_state() { return state; }
+    void set_state(LockState s) {
+      state = s;
+    }
   };
 };
 
