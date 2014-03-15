@@ -131,6 +131,46 @@ public:
       m_lock.unlock();
     }
   };
+
+  class Context {
+    RWLock& lock;
+
+  public:
+    enum LockState {
+      Untaken = 0,
+      TakenForRead = 1,
+      TakenForWrite = 2,
+    };
+
+  private:
+    LockState state;
+
+  public:
+    Context(RWLock& l) : lock(l) {}
+    Context(RWLock& l, LockState s) : lock(l), state(s) {}
+
+    void get_write() {
+      assert(state == Untaken);
+
+      lock.get_write();
+      state = TakenForWrite;
+    }
+
+    void get_read() {
+      assert(state == Untaken);
+
+      lock.get_read();
+      state = TakenForRead;
+    }
+
+    void unlock() {
+      assert(state != Untaken);
+      lock.unlock();
+      state = Untaken;
+    }
+
+    LockState get_state() { return state; }
+  };
 };
 
 #endif // !_Mutex_Posix_
