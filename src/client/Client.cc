@@ -5891,7 +5891,7 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
   //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
 
   if (in->inline_version == 0) {
-    int r = _getattr(in, CEPH_STAT_CAP_INLINE_DATA);
+    int r = _getattr(in, CEPH_STAT_CAP_INLINE_DATA, -1, -1, true);
     if (r < 0)
       return r;
     assert(in->inline_version > 0);
@@ -6256,7 +6256,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   utime_t start = ceph_clock_now(cct);
 
   if (in->inline_version == 0) {
-    int r = _getattr(in, CEPH_STAT_CAP_INLINE_DATA);
+    int r = _getattr(in, CEPH_STAT_CAP_INLINE_DATA, -1, -1, true);
     if (r < 0)
       return r;
     assert(in->inline_version > 0);
