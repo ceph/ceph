@@ -132,6 +132,8 @@ public:
     map<int64_t,pg_pool_t> new_pools;
     map<int64_t,string> new_pool_names;
     set<int64_t> old_pools;
+    map<string,map<string,string> > new_erasure_code_profiles;
+    vector<string> old_erasure_code_profiles;
     map<int32_t,entity_addr_t> new_up_client;
     map<int32_t,entity_addr_t> new_up_cluster;
     map<int32_t,uint8_t> new_state;             // XORed onto previous state.
@@ -216,6 +218,7 @@ private:
 
   map<int64_t,pg_pool_t> pools;
   map<int64_t,string> pool_name;
+  map<string,map<string,string> > erasure_code_profiles;
   map<string,int64_t> name_pool;
 
   ceph::shared_ptr< vector<uuid_d> > osd_uuid;
@@ -781,6 +784,8 @@ public:
 
   string get_flag_string() const;
   static string get_flag_string(unsigned flags);
+  static void dump_erasure_code_profiles(const map<string,map<string,string> > &profiles,
+					 Formatter *f);
   void dump_json(ostream& out) const;
   void dump(Formatter *f) const;
   static void generate_test_instances(list<OSDMap*>& o);
