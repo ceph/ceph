@@ -2636,6 +2636,52 @@ stats_out:
     f->flush(rs);
     rs << "\n";
     rdata.append(rs.str());
+  } else if (prefix == "osd erasure-code-profile ls") {
+    const map<string,map<string,string> > &profiles =
+      osdmap.get_erasure_code_profiles();
+    if (f)
+      f->open_array_section("erasure-code-profiles");
+    for(map<string,map<string,string> >::const_iterator i = profiles.begin();
+	i != profiles.end();
+	i++) {
+      if (f)
+        f->dump_string("profile", i->first.c_str());
+      else
+	rdata.append(i->first + "\n");
+    }
+    if (f) {
+      f->close_section();
+      ostringstream rs;
+      f->flush(rs);
+      rs << "\n";
+      rdata.append(rs.str());
+    }
+  } else if (prefix == "osd erasure-code-profile get") {
+    string name;
+    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    if (!osdmap.has_erasure_code_profile(name)) {
+      ss << "unknown erasure code profile '" << name << "'";
+      r = -ENOENT;
+      goto reply;
+    }
+    const map<string,string> &profile = osdmap.get_erasure_code_profile(name);
+    if (f)
+      f->open_object_section("profile");
+    for (map<string,string>::const_iterator i = profile.begin();
+	 i != profile.end();
+	 i++) {
+      if (f)
+        f->dump_string(i->first.c_str(), i->second.c_str());
+      else
+	rdata.append(i->first + "=" + i->second + "\n");
+    }
+    if (f) {
+      f->close_section();
+      ostringstream rs;
+      f->flush(rs);
+      rs << "\n";
+      rdata.append(rs.str());
+    }
   } else {
     // try prepare update
     return false;
@@ -2904,10 +2950,28 @@ int OSDMonitor::check_cluster_features(uint64_t features,
   return 0;
 }
 
-int OSDMonitor::prepare_pool_properties(const unsigned pool_type,
-					const vector<string> &properties,
-					map<string,string> *properties_map,
-					stringstream &ss)
+bool OSDMonitor::erasure_code_profile_in_use(const map<int64_t, pg_pool_t> &pools,
+					     const string &profile,
+					     ostream &ss)
+{
+  bool found = false;
+  for (map<int64_t, pg_pool_t>::const_iterator p = pools.begin();
+       p != pools.end();
+       ++p) {
+    if (p->second.erasure_code_profile == profile) {
+      ss << osdmap.pool_name[p->first] << " ";
+      found = true;
+    }
+  }
+  if (found) {
+    ss << "pool(s) are using the erasure code profile '" << profile << "'";
+  }
+  return found;
+}
+
+int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_profile,
+					   map<string,string> *erasure_code_profile_map,
+					   stringstream &ss)
 {
   if (pool_type == pg_pool_t::TYPE_ERASURE) {
     int r = get_str_map(g_conf->osd_pool_default_erasure_code_properties,
@@ -3887,6 +3951,73 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     getline(ss, rs);
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
 					      get_last_committed() + 1));
+    return true;
+
+  } else if (prefix == "osd erasure-code-profile rm") {
+    string name;
+    cmd_getval(g_ceph_context, cmdmap, "name", name);
+
+    if (erasure_code_profile_in_use(pending_inc.new_pools, name, ss))
+      goto wait;
+
+    if (erasure_code_profile_in_use(osdmap.pools, name, ss)) {
+      err = -EBUSY;
+      goto reply;
+    }
+
+    if (osdmap.has_erasure_code_profile(name) ||
+	pending_inc.new_erasure_code_profiles.count(name)) {
+      if (osdmap.has_erasure_code_profile(name)) {
+	pending_inc.old_erasure_code_profiles.push_back(name);
+      } else {
+	dout(20) << "erasure code profile rm " << name << ": creation canceled" << dendl;
+	pending_inc.new_erasure_code_profiles.erase(name);
+      }
+
+      getline(ss, rs);
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+							get_last_committed() + 1));
+      return true;
+    } else {
+      ss << "erasure-code-profile " << name << " does not exist";
+      err = 0;
+      goto reply;
+    }
+
+  } else if (prefix == "osd erasure-code-profile set") {
+    string name;
+    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    vector<string> profile;
+    cmd_getval(g_ceph_context, cmdmap, "profile", profile);
+    bool force;
+    if (profile.size() > 0 && profile.back() == "--force") {
+      profile.pop_back();
+      force = true;
+    } else {
+      force = false;
+    }
+    map<string,string> profile_map;
+    err = parse_erasure_code_profile(profile, &profile_map, ss);
+    if (err)
+      goto reply;
+
+    if (osdmap.has_erasure_code_profile(name) && !force) {
+      err = -EPERM;
+      ss << "will not override erasure code profile " << name;
+      goto reply;
+    }
+
+    if (pending_inc.has_erasure_code_profile(name)) {
+      dout(20) << "erasure code profile " << name << " try again" << dendl;
+      goto wait;
+    } else {
+      dout(20) << "erasure code profile " << name << " set" << dendl;
+      pending_inc.set_erasure_code_profile(name, profile_map);
+    }
+
+    getline(ss, rs);
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+                                                      get_last_committed() + 1));
     return true;
 
   } else if (prefix == "osd crush rule create-erasure") {
