@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+# Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #

@@ -3,7 +3,10 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2013 Inktank Storage, Inc.
+ * Copyright (C) 2013,2014 Inktank Storage, Inc.
+ * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ *
+ * Author: Loic Dachary <loic@dachary.org>
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
