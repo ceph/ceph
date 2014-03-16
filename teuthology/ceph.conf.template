@@ -18,7 +18,7 @@
 
 	mon osd allow primary affinity = true
 
-        osd pool default erasure code properties = "erasure-code-plugin=jerasure erasure-code-technique=reed_sol_van erasure-code-k=2 erasure-code-m=1 erasure-code-ruleset-failure-domain=osd"
+        osd pool default erasure code profile = "plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd"
 
 [osd]
         osd journal size = 100

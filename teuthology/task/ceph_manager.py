@@ -705,10 +705,10 @@ class CephManager:
             self.log("creating pool_name %s"%(pool_name,))
             if ec_pool and not self.created_erasure_pool:
                 self.created_erasure_pool = True
-                self.raw_cluster_cmd('osd', 'crush', 'rule', 'create-erasure', 'erasure2', 'erasure-code-ruleset-failure-domain=osd', 'erasure-code-m=1', 'erasure-code-k=2')
+                self.raw_cluster_cmd('osd', 'erasure-code-profile', 'set', 'teuthologyprofile', 'ruleset-failure-domain=osd', 'm=1', 'k=2')
 
             if ec_pool:
-                self.raw_cluster_cmd('osd', 'pool', 'create', pool_name, str(pg_num), str(pg_num), 'erasure', 'crush_ruleset=erasure2', 'erasure-code-m=1', 'erasure-code-k=2')
+                self.raw_cluster_cmd('osd', 'pool', 'create', pool_name, str(pg_num), str(pg_num), 'erasure', 'teuthologyprofile')
             else:
                 self.raw_cluster_cmd('osd', 'pool', 'create', pool_name, str(pg_num))
             self.pools[pool_name] = pg_num
