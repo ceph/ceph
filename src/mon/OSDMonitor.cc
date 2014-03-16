@@ -2848,14 +2848,17 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
     return -EPERM;
   string erasure_code_profile;
   stringstream ss;
+  string ruleset_name;
   if (m->auid)
-    return prepare_new_pool(m->name, m->auid, m->crush_rule, 0, 0,
-                            properties, pg_pool_t::TYPE_REPLICATED, ss);
+    return prepare_new_pool(m->name, m->auid, m->crush_rule, ruleset_name,
+			    0, 0,
                             erasure_code_profile,
+			    pg_pool_t::TYPE_REPLICATED, ss);
   else
-    return prepare_new_pool(m->name, session->auid, m->crush_rule, 0, 0,
-                            properties, pg_pool_t::TYPE_REPLICATED, ss);
+    return prepare_new_pool(m->name, session->auid, m->crush_rule, ruleset_name,
+			    0, 0,
                             erasure_code_profile,
+			    pg_pool_t::TYPE_REPLICATED, ss);
 }
 
 int OSDMonitor::crush_ruleset_create_erasure(const string &name,
@@ -3062,6 +3065,7 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
 int OSDMonitor::prepare_pool_crush_ruleset(const string &poolstr,
 					   const unsigned pool_type,
 					   const string &erasure_code_profile,
+					   const string &ruleset_name,
 					   int *crush_ruleset,
 					   stringstream &ss)
 {
@@ -3073,23 +3077,13 @@ int OSDMonitor::prepare_pool_crush_ruleset(const string &poolstr,
       break;
     case pg_pool_t::TYPE_ERASURE:
       {
-	string ruleset;
-	map<string,string>::const_iterator i = properties.find("crush_ruleset");
-	if (i == properties.end()) {
-	  dout(1) << "prepare_pool_crush_ruleset: implicitly use ruleset "
-		  << "named after the pool: " << poolstr << dendl;
-	  ruleset = poolstr;
-	} else {
-	  ruleset = i->second;
- 	}
- 
 	int err = crush_ruleset_create_erasure(ruleset_name,
 					       erasure_code_profile,
 					       crush_ruleset, ss);
 	switch (err) {
 	case -EALREADY:
 	  dout(20) << "prepare_pool_crush_ruleset: ruleset "
-		   << ruleset << " try again" << dendl;
+		   << ruleset_name << " try again" << dendl;
 	case 0:
 	  // need to wait for the crush rule to be proposed before proceeding
 	  err = -EAGAIN;
@@ -3114,7 +3108,8 @@ int OSDMonitor::prepare_pool_crush_ruleset(const string &poolstr,
 /**
  * @param name The name of the new pool
  * @param auid The auid of the pool owner. Can be -1
- * @param crush_rule The crush rule to use. If <0, will use the system default
+ * @param crush_ruleset The crush rule to use. If <0, will use the system default
+ * @param crush_ruleset_name The crush rule to use, if crush_rulset <0
  * @param pg_num The pg_num to use. If set to 0, will use the system default
  * @param pgp_num The pgp_num to use. If set to 0, will use the system default
  * @param erasure_code_profile The profile name in OSDMap to be used for erasure code
@@ -3123,7 +3118,9 @@ int OSDMonitor::prepare_pool_crush_ruleset(const string &poolstr,
  *
  * @return 0 on success, negative errno on failure.
  */
-int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_ruleset,
+int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
+				 int crush_ruleset,
+				 const string &crush_ruleset_name,
                                  unsigned pg_num, unsigned pgp_num,
 				 const string &erasure_code_profile,
                                  const unsigned pool_type,
@@ -3131,6 +3128,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_ruleset,
 {
   int r;
   r = prepare_pool_crush_ruleset(pool_type, erasure_code_profile,
+				 crush_ruleset_name, &crush_ruleset, ss);
   if (r)
     return r;
   unsigned size;
@@ -4567,8 +4565,12 @@ done:
       goto reply;
     }
 
+    string ruleset_name;
+    cmd_getval(g_ceph_context, cmdmap, "ruleset", ruleset_name);
+
     err = prepare_new_pool(poolstr, 0, // auid=0 for admin created pool
-			   -1,         // default crush rule
+			   -1, // default crush rule
+			   ruleset_name,
 			   pg_num, pgp_num,
 			   erasure_code_profile, pool_type,
 			   ss);
