@@ -95,8 +95,8 @@ int ErasureCodePluginRegistry::load(const std::string &plugin_name,
 				    const map<std::string,std::string> &parameters,
 				    ErasureCodePlugin **plugin)
 {
-  assert(parameters.count("erasure-code-directory") != 0);
-  std::string fname = parameters.find("erasure-code-directory")->second
+  assert(parameters.count("directory") != 0);
+  std::string fname = parameters.find("directory")->second
     + "/" PLUGIN_PREFIX
     + plugin_name + PLUGIN_SUFFIX;
   dout(10) << "load " << plugin_name << " from " << fname << dendl;

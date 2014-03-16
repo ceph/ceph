@@ -25,7 +25,7 @@ TEST(ErasureCodePlugin, factory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   map<std::string,std::string> parameters;
-  parameters["erasure-code-directory"] = ".libs";
+  parameters["directory"] = ".libs";
   {
     ErasureCodeInterfaceRef erasure_code;
     EXPECT_FALSE(erasure_code);
@@ -44,7 +44,7 @@ TEST(ErasureCodePlugin, factory)
   };
   for(const char **technique = techniques; *technique; technique++) {
     ErasureCodeInterfaceRef erasure_code;
-    parameters["erasure-code-technique"] = *technique;
+    parameters["technique"] = *technique;
     EXPECT_FALSE(erasure_code);
     EXPECT_EQ(0, instance.factory("jerasure", parameters, &erasure_code));
     EXPECT_TRUE(erasure_code);

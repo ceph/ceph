@@ -33,8 +33,8 @@ public:
 		      ErasureCodeInterfaceRef *erasure_code) {
     ErasureCodeJerasure *interface;
     std::string t;
-    if (parameters.find("erasure-code-technique") != parameters.end())
-      t = parameters.find("erasure-code-technique")->second;
+    if (parameters.find("technique") != parameters.end())
+      t = parameters.find("technique")->second;
     if (t == "reed_sol_van") {
       interface = new ErasureCodeJerasureReedSolomonVandermonde();
     } else if (t == "reed_sol_r6_op") {
