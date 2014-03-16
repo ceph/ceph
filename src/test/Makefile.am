@@ -236,6 +236,7 @@ check_SCRIPTS += \
 	test/mon/osd-pool-create.sh \
 	test/mon/misc.sh \
 	test/mon/osd-crush.sh \
+	test/mon/osd-erasure-code-profile.sh \
 	test/mon/mkfs.sh \
 	test/ceph-disk.sh \
 	test/mon/mon-handle-forward.sh \

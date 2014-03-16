@@ -770,6 +770,55 @@ class TestOSD(TestArgparse):
     def test_unpause(self):
         self.check_no_arg('osd', 'unpause')
 
+    def test_erasure_code_profile_set(self):
+        self.assert_valid_command(['osd', 'erasure-code-profile', 'set',
+                                   'name'])
+        self.assert_valid_command(['osd', 'erasure-code-profile', 'set',
+                                   'name', 'A=B'])
+        self.assert_valid_command(['osd', 'erasure-code-profile', 'set',
+                                   'name', 'A=B', 'C=D'])
+        assert_equal({}, validate_command(sigdict, ['osd',
+                                                    'erasure-code-profile',
+                                                    'set']))
+        assert_equal({}, validate_command(sigdict, ['osd',
+                                                    'erasure-code-profile',
+                                                    'set',
+                                                    '!!!!']))
+        assert_equal({}, validate_command(sigdict, ['osd',
+                                                    'erasure-code-profile',
+                                                    'set',
+                                                    'name',
+                                                    '!!!!']))
+
+    def test_erasure_code_profile_get(self):
+        self.assert_valid_command(['osd', 'erasure-code-profile', 'get',
+                                   'name'])
+        assert_equal({}, validate_command(sigdict, ['osd',
+                                                    'erasure-code-profile',
+                                                    'get']))
+        assert_equal({}, validate_command(sigdict, ['osd',
+                                                    'erasure-code-profile',
+                                                    'get',
+                                                    '!!!!']))
+
+    def test_erasure_code_profile_rm(self):
+        self.assert_valid_command(['osd', 'erasure-code-profile', 'rm',
+                                   'name'])
+        assert_equal({}, validate_command(sigdict, ['osd',
+                                                    'erasure-code-profile',
+                                                    'rm']))
+        assert_equal({}, validate_command(sigdict, ['osd',
+                                                    'erasure-code-profile',
+                                                    'rm',
+                                                    '!!!!']))
+
+    def test_erasure_code_profile_ls(self):
+        self.assert_valid_command(['osd', 'erasure-code-profile', 'ls'])
+        assert_equal({}, validate_command(sigdict, ['osd',
+                                                    'erasure-code-profile',
+                                                    'ls',
+                                                    'toomany']))
+
     def test_set_unset(self):
         for action in ('set', 'unset'):
             for flag in ('pause', 'noup', 'nodown', 'noout', 'noin',

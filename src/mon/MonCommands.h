@@ -455,6 +455,22 @@ COMMAND("osd setmaxosd " \
 	"set new maximum osd value", "osd", "rw", "cli,rest")
 COMMAND("osd pause", "pause osd", "osd", "rw", "cli,rest")
 COMMAND("osd unpause", "unpause osd", "osd", "rw", "cli,rest")
+COMMAND("osd erasure-code-profile set " \
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
+	"name=profile,type=CephString,n=N,req=false,goodchars=[A-Za-z0-9-_.=]", \
+	"create erasure code profile <name> with [<key[=value]> ...] pairs. Add a --force at the end to override an existing profile (VERY DANGEROUS)", \
+	"osd", "rw", "cli,rest")
+COMMAND("osd erasure-code-profile get " \
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.]", \
+	"get erasure code profile <name>", \
+	"osd", "r", "cli,rest")
+COMMAND("osd erasure-code-profile rm " \
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.]", \
+	"remove erasure code profile <name>", \
+	"osd", "rw", "cli,rest")
+COMMAND("osd erasure-code-profile ls", \
+	"list all erasure code profiles", \
+	"osd", "r", "cli,rest")
 COMMAND("osd set " \
 	"name=key,type=CephChoices,strings=pause|noup|nodown|noout|noin|nobackfill|norecover|noscrub|nodeep-scrub|notieragent", \
 	"set <key>", "osd", "rw", "cli,rest")
