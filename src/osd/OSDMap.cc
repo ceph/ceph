@@ -20,7 +20,8 @@
 #include "common/config.h"
 #include "common/Formatter.h"
 #include "include/ceph_features.h"
-
+#include "include/str_map.h"
+#include "erasure-code/ErasureCodePlugin.h"
 #include "common/code_environment.h"
 
 #define dout_subsys ceph_subsys_osd
@@ -2515,6 +2516,26 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
   erasure_code_profile_map["directory"] =
     cct->_conf->osd_pool_default_erasure_code_directory;
   set_erasure_code_profile("default", erasure_code_profile_map);
+
+  map<string,string>::const_iterator plugin =
+    erasure_code_profile_map.find("plugin");
+  if (plugin == erasure_code_profile_map.end()) {
+    ss << "cannot determine the erasure code plugin"
+       << " because there is no 'plugin' entry in the erasure_code_profile "
+       << erasure_code_profile_map;
+    return -EINVAL;
+  }
+  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  ErasureCodeInterfaceRef erasure_code;
+  r = instance.factory(plugin->second, erasure_code_profile_map,
+		       &erasure_code, ss);
+  if (r)
+    return r;
+
+  r = erasure_code->create_ruleset("erasure-code", *crush, &ss);
+  if (r < 0)
+    return r;
+
   return r;
 }
 
