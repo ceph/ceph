@@ -184,6 +184,15 @@ public:
 	new_pools[pool] = *orig;
       return &new_pools[pool];
     }
+    bool has_erasure_code_profile(const string &name) const {
+      map<string,map<string,string> >::const_iterator i =
+	new_erasure_code_profiles.find(name);
+      return i != new_erasure_code_profiles.end();
+    }
+    void set_erasure_code_profile(const string &name,
+				  const map<string,string> &profile) {
+      new_erasure_code_profiles[name] = profile;
+    }
 
     /// propage update pools' snap metadata to any of their tiers
     int propagate_snaps_to_tiers(CephContext *cct, const OSDMap &base);
@@ -364,6 +373,31 @@ public:
   }
   float get_primary_affinityf(int o) const {
     return (float)get_primary_affinity(o) / (float)CEPH_OSD_MAX_PRIMARY_AFFINITY;
+  }
+
+  bool has_erasure_code_profile(const string &name) const {
+    map<string,map<string,string> >::const_iterator i =
+      erasure_code_profiles.find(name);
+    return i != erasure_code_profiles.end();
+  }
+  void set_erasure_code_profile(const string &name,
+				const map<string,string> &profile) {
+    erasure_code_profiles[name] = profile;
+  }
+  const map<string,string> &get_erasure_code_profile(const string &name) const {
+    map<string,map<string,string> >::const_iterator i =
+      erasure_code_profiles.find(name);
+    static map<string,string> empty;
+    if (i == erasure_code_profiles.end())
+      return empty;
+    else
+      return i->second;
+  }
+  map<string,string> &get_erasure_code_profile(const string &name) {
+    return erasure_code_profiles[name];
+  }
+  const map<string,map<string,string> > &get_erasure_code_profiles() const {
+    return erasure_code_profiles;
   }
 
   bool exists(int osd) const {
