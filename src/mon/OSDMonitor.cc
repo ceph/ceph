@@ -2993,8 +2993,7 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
   return err;
 }
 
-int OSDMonitor::prepare_pool_crush_ruleset(const string &poolstr,
-					   const unsigned pool_type,
+int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
 					   const string &erasure_code_profile,
 					   const string &ruleset_name,
 					   int *crush_ruleset,
@@ -4449,6 +4448,22 @@ done:
       ss << "unknown pool type '" << pool_type_str << "'";
       err = -EINVAL;
       goto reply;
+    }
+
+    string erasure_code_profile;
+    cmd_getval(g_ceph_context, cmdmap, "erasure_code_profile", erasure_code_profile);
+    if (erasure_code_profile == "")
+      erasure_code_profile = "default";
+    string ruleset_name;
+    cmd_getval(g_ceph_context, cmdmap, "ruleset", ruleset_name);
+    if (ruleset_name == "") {
+      if (erasure_code_profile == "default") {
+	ruleset_name = "erasure-code";
+      } else {
+	dout(1) << "implicitly use ruleset named after the pool: "
+		<< poolstr << dendl;
+	ruleset_name = poolstr;
+      }
     }
 
     err = prepare_new_pool(poolstr, 0, // auid=0 for admin created pool
