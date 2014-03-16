@@ -455,6 +455,15 @@ COMMAND("osd setmaxosd " \
 	"set new maximum osd value", "osd", "rw", "cli,rest")
 COMMAND("osd pause", "pause osd", "osd", "rw", "cli,rest")
 COMMAND("osd unpause", "unpause osd", "osd", "rw", "cli,rest")
+COMMAND("osd set erasure_code_profile " \
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
+	"name=profile,type=CephString,n=N,req=false,goodchars=[A-Za-z0-9-_.=]", \
+	"create erasure code profile <name> with [<key[=value]> ...] pairs", \
+	"osd", "rw", "cli,rest")
+COMMAND("osd get erasure_code_profile " \
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.]", \
+	"get erasure code profile <name>", \
+	"osd", "r", "cli,rest")
 COMMAND("osd set " \
 	"name=key,type=CephChoices,strings=pause|noup|nodown|noout|noin|nobackfill|norecover|noscrub|nodeep-scrub|notieragent", \
 	"set <key>", "osd", "rw", "cli,rest")

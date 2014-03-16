@@ -2606,6 +2606,32 @@ stats_out:
     f->flush(rs);
     rs << "\n";
     rdata.append(rs.str());
+  } else if (prefix == "osd get erasure_code_profile") {
+    string name;
+    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    if (!osdmap.has_erasure_code_profile(name)) {
+      ss << "unknown erasure code profile '" << name << "'";
+      r = -ENOENT;
+      goto reply;
+    }
+    const map<string,string> &profile = osdmap.get_erasure_code_profile(name);
+    if (f)
+      f->open_object_section("profile");
+    for (map<string,string>::const_iterator i = profile.begin();
+	 i != profile.end();
+	 i++) {
+      if (f)
+        f->dump_string(i->first.c_str(), i->second.c_str());
+      else
+	rdata.append(i->first + "=" + i->second + "\n");
+    }
+    if (f) {
+      f->close_section();
+      ostringstream rs;
+      f->flush(rs);
+      rs << "\n";
+      rdata.append(rs.str());
+    }
   } else {
     // try prepare update
     return false;
@@ -3857,6 +3883,28 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     getline(ss, rs);
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
 					      get_last_committed() + 1));
+    return true;
+
+  } else if (prefix == "osd set erasure_code_profile") {
+    string name;
+    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    vector<string> profile;
+    cmd_getval(g_ceph_context, cmdmap, "profile", profile);
+    map<string,string> profile_map;
+    err = prepare_erasure_code_profile(profile, &profile_map, ss);
+    if (err)
+      goto reply;
+    if (pending_inc.has_erasure_code_profile(name)) {
+      dout(20) << "erasure code profile " << name << " try again" << dendl;
+      goto wait;
+    } else {
+      dout(20) << "erasure code profile " << name << " set" << dendl;
+      pending_inc.set_erasure_code_profile(name, profile_map);
+    }
+
+    getline(ss, rs);
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+                                                      get_last_committed() + 1));
     return true;
 
   } else if (prefix == "osd crush rule create-erasure") {

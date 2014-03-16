@@ -770,6 +770,32 @@ class TestOSD(TestArgparse):
     def test_unpause(self):
         self.check_no_arg('osd', 'unpause')
 
+	def test_set_erasure_code_profile(self):
+        self.assert_valid_command(['osd', 'set', 'erasure_code_profile',
+								   'name'])
+        self.assert_valid_command(['osd', 'set', 'erasure_code_profile',
+								   'name', 'A=B'])
+        self.assert_valid_command(['osd', 'set', 'erasure_code_profile',
+								   'name', 'A=B', 'C=D'])
+		assert_equal({}, validate_command(sigdict, ['osd', 'set',
+													'erasure_code_profile']))
+		assert_equal({}, validate_command(sigdict, ['osd', 'set',
+													'erasure_code_profile',
+													'!!!!']))
+		assert_equal({}, validate_command(sigdict, ['osd', 'set',
+													'erasure_code_profile',
+													'name',
+													'!!!!']))
+
+	def test_get_erasure_code_profile(self):
+        self.assert_valid_command(['osd', 'get', 'erasure_code_profile',
+								   'name'])
+		assert_equal({}, validate_command(sigdict, ['osd', 'get',
+													'erasure_code_profile']))
+		assert_equal({}, validate_command(sigdict, ['osd', 'get',
+													'erasure_code_profile',
+													'!!!!']))
+
     def test_set_unset(self):
         for action in ('set', 'unset'):
             for flag in ('pause', 'noup', 'nodown', 'noout', 'noin',
