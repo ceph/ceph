@@ -14,20 +14,10 @@
  * 
  */
 
-#include "common/debug.h"
-
+#include <errno.h>
 #include <dlfcn.h>
 
 #include "ErasureCodePlugin.h"
-
-#define dout_subsys ceph_subsys_osd
-#undef dout_prefix
-#define dout_prefix _prefix(_dout)
-
-static ostream& _prefix(std::ostream* _dout)
-{
-  return *_dout << "ErasureCodePlugin: ";
-}
 
 #define PLUGIN_PREFIX "libec_"
 #define PLUGIN_SUFFIX ".so"
@@ -75,14 +65,15 @@ ErasureCodePlugin *ErasureCodePluginRegistry::get(const std::string &name)
 
 int ErasureCodePluginRegistry::factory(const std::string &plugin_name,
 				       const map<std::string,std::string> &parameters,
-				       ErasureCodeInterfaceRef *erasure_code)
+				       ErasureCodeInterfaceRef *erasure_code,
+				       ostream &ss)
 {
   Mutex::Locker l(lock);
   ErasureCodePlugin *plugin = get(plugin_name);
   if (plugin == 0) {
     int r = 0;
     loading = true;
-    r = load(plugin_name, parameters, &plugin);
+    r = load(plugin_name, parameters, &plugin, ss);
     loading = false;
     if (r != 0)
       return r;
@@ -93,18 +84,16 @@ int ErasureCodePluginRegistry::factory(const std::string &plugin_name,
 
 int ErasureCodePluginRegistry::load(const std::string &plugin_name,
 				    const map<std::string,std::string> &parameters,
-				    ErasureCodePlugin **plugin)
+				    ErasureCodePlugin **plugin,
+				    ostream &ss)
 {
   assert(parameters.count("directory") != 0);
   std::string fname = parameters.find("directory")->second
     + "/" PLUGIN_PREFIX
     + plugin_name + PLUGIN_SUFFIX;
-  dout(10) << "load " << plugin_name << " from " << fname << dendl;
-
   void *library = dlopen(fname.c_str(), RTLD_NOW);
   if (!library) {
-    derr << "load dlopen(" << fname
-	 << "): " << dlerror() << dendl;
+    ss << "load dlopen(" << fname << "): " << dlerror();
     return -EIO;
   }
 
@@ -114,23 +103,23 @@ int ErasureCodePluginRegistry::load(const std::string &plugin_name,
     std::string name = plugin_name;
     int r = erasure_code_init(name.c_str());
     if (r != 0) {
-      derr << "erasure_code_init(" << plugin_name
-           << "): " << strerror(-r) << dendl;
+      ss << "erasure_code_init(" << plugin_name
+	 << "): " << strerror(-r);
       dlclose(library);
       return r;
     }
   } else {
-    derr << "load dlsym(" << fname
-	 << ", " << PLUGIN_INIT_FUNCTION
-	 << "): " << dlerror() << dendl;
+    ss << "load dlsym(" << fname
+       << ", " << PLUGIN_INIT_FUNCTION
+       << "): " << dlerror();
     dlclose(library);
     return -ENOENT;
   }
 
   *plugin = get(plugin_name);
   if (*plugin == 0) {
-    derr << "load " << PLUGIN_INIT_FUNCTION << "()"
-         << "did not register " << plugin_name << dendl;
+    ss << "load " << PLUGIN_INIT_FUNCTION << "()"
+       << "did not register " << plugin_name;
     dlclose(library);
     return -EBADF;
   }
