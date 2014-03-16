@@ -745,9 +745,17 @@ class TestOSD(TestArgparse):
 
     def test_crush_rule_create_erasure(self):
         self.assert_valid_command(['osd', 'crush', 'rule', 'create-erasure',
+                                   'AZaz09-_.'])
+        self.assert_valid_command(['osd', 'crush', 'rule', 'create-erasure',
                                    'AZaz09-_.', 'whatever'])
         assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
                                                     'create-erasure']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
+                                                    'create-erasure',
+													'!!!']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
+                                                    'create-erasure',
+													'name', '!!!']))
 
     def test_crush_rule_rm(self):
         self.assert_valid_command(['osd', 'crush', 'rule', 'rm', 'AZaz09-_.'])
