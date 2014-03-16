@@ -600,6 +600,7 @@
 
    static PGBackend *build_pg_backend(
      const pg_pool_t &pool,
+     const OSDMapRef curmap,
      Listener *l,
      coll_t coll,
      coll_t temp_coll,
