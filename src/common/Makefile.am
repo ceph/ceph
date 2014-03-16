@@ -112,9 +112,10 @@ noinst_HEADERS += \
 
 # important; libmsg before libauth!
 LIBCOMMON_DEPS += \
+	$(LIBERASURE_CODE) \
 	$(LIBMSG) $(LIBAUTH) \
 	$(LIBCRUSH) $(LIBJSON_SPIRIT) $(LIBLOG) $(LIBARCH) \
-	$(KEYUTILS_LIB)
+	$(KEYUTILS_LIB) 
 
 if LINUX
 LIBCOMMON_DEPS += -lrt
