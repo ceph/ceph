@@ -131,6 +131,7 @@ public:
     int32_t new_max_osd;
     map<int64_t,pg_pool_t> new_pools;
     map<int64_t,string> new_pool_names;
+    map<string,map<string,string> > new_erasure_code_profiles;
     set<int64_t> old_pools;
     map<int32_t,entity_addr_t> new_up_client;
     map<int32_t,entity_addr_t> new_up_cluster;
@@ -216,6 +217,7 @@ private:
 
   map<int64_t,pg_pool_t> pools;
   map<int64_t,string> pool_name;
+  map<string,map<string,string> > erasure_code_profiles;
   map<string,int64_t> name_pool;
 
   ceph::shared_ptr< vector<uuid_d> > osd_uuid;
