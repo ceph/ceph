@@ -4,6 +4,9 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ *
+ * Author: Loic Dachary <loic@dachary.org>
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -17,7 +20,8 @@
 #include "common/config.h"
 #include "common/Formatter.h"
 #include "include/ceph_features.h"
-
+#include "include/str_map.h"
+#include "erasure-code/ErasureCodePlugin.h"
 #include "common/code_environment.h"
 
 #define dout_subsys ceph_subsys_osd
@@ -388,7 +392,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   ENCODE_START(7, 7, bl);
 
   {
-    ENCODE_START(2, 1, bl); // client-usable data
+    ENCODE_START(3, 1, bl); // client-usable data
     ::encode(fsid, bl);
     ::encode(epoch, bl);
     ::encode(modified, bl);
@@ -407,6 +411,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
     ::encode(new_pg_temp, bl);
     ::encode(new_primary_temp, bl);
     ::encode(new_primary_affinity, bl);
+    ::encode(new_erasure_code_profiles, bl);
     ENCODE_FINISH(bl); // client-usable data
   }
 
@@ -542,7 +547,7 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     return;
   }
   {
-    DECODE_START(2, bl); // client-usable data
+    DECODE_START(3, bl); // client-usable data
     ::decode(fsid, bl);
     ::decode(epoch, bl);
     ::decode(modified, bl);
@@ -564,6 +569,10 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
       ::decode(new_primary_affinity, bl);
     else
       new_primary_affinity.clear();
+    if (struct_v >= 3)
+      ::decode(new_erasure_code_profiles, bl);
+    else
+      new_erasure_code_profiles.clear();
     DECODE_FINISH(bl); // client-usable data
   }
 
@@ -1191,6 +1200,13 @@ int OSDMap::apply_incremental(const Incremental &inc)
     set_primary_affinity(i->first, i->second);
   }
 
+  for (map<string,map<string,string> >::const_iterator i =
+	 inc.new_erasure_code_profiles.begin();
+       i != inc.new_erasure_code_profiles.end();
+       i++) {
+    set_erasure_code_profile(i->first, i->second);
+  }
+  
   // up/down
   for (map<int32_t,uint8_t>::const_iterator i = inc.new_state.begin();
        i != inc.new_state.end();
@@ -1725,7 +1741,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   ENCODE_START(7, 7, bl);
 
   {
-    ENCODE_START(2, 1, bl); // client-usable data
+    ENCODE_START(3, 1, bl); // client-usable data
     // base
     ::encode(fsid, bl);
     ::encode(epoch, bl);
@@ -1756,6 +1772,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     bufferlist cbl;
     crush->encode(cbl);
     ::encode(cbl, bl);
+    ::encode(erasure_code_profiles, bl);
     ENCODE_FINISH(bl); // client-usable data
   }
 
@@ -1913,7 +1930,7 @@ void OSDMap::decode(bufferlist::iterator& bl)
    * Since we made it past that hurdle, we can use our normal paths.
    */
   {
-    DECODE_START(2, bl); // client-usable data
+    DECODE_START(3, bl); // client-usable data
     // base
     ::decode(fsid, bl);
     ::decode(epoch, bl);
@@ -1947,6 +1964,11 @@ void OSDMap::decode(bufferlist::iterator& bl)
     ::decode(cbl, bl);
     bufferlist::iterator cblp = cbl.begin();
     crush->decode(cblp);
+    if (struct_v >= 3) {
+      ::decode(erasure_code_profiles, bl);
+    } else {
+      erasure_code_profiles.clear();
+    }
     DECODE_FINISH(bl); // client-usable data
   }
 
@@ -2486,6 +2508,33 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     set_state(i, 0);
     set_weight(i, CEPH_OSD_OUT);
   }
+
+  map<string,string> erasure_code_profile_map;
+  r = get_str_map(cct->_conf->osd_pool_default_erasure_code_profile,
+		  ss,
+		  &erasure_code_profile_map);
+  erasure_code_profile_map["directory"] =
+    cct->_conf->osd_pool_default_erasure_code_directory;
+  set_erasure_code_profile("default", erasure_code_profile_map);
+
+  map<string,string>::const_iterator plugin =
+    erasure_code_profile_map.find("plugin");
+  if (plugin == erasure_code_profile_map.end()) {
+    ss << "cannot determine the erasure code plugin"
+       << " because there is no 'plugin' entry in the erasure_code_profile "
+       << erasure_code_profile_map;
+    return -EINVAL;
+  }
+  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  ErasureCodeInterfaceRef erasure_code;
+  r = instance.factory(plugin->second, erasure_code_profile_map,
+		       &erasure_code, ss);
+  if (r)
+    return r;
+
+  r = erasure_code->create_ruleset("erasure-code", *crush, &ss);
+  if (r < 0)
+    return r;
 
   return r;
 }

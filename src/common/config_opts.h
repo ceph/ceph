@@ -420,12 +420,12 @@ OPTION(osd_pool_default_min_size, OPT_INT, 0)  // 0 means no specific default; c
 OPTION(osd_pool_default_pg_num, OPT_INT, 8) // number of PGs for new pools. Configure in global or mon section of ceph.conf
 OPTION(osd_pool_default_pgp_num, OPT_INT, 8) // number of PGs for placement purposes. Should be equal to pg_num
 OPTION(osd_pool_default_erasure_code_directory, OPT_STR, CEPH_PKGLIBDIR"/erasure-code") // default for the erasure-code-directory=XXX property of osd pool create
-OPTION(osd_pool_default_erasure_code_properties,
+OPTION(osd_pool_default_erasure_code_profile,
        OPT_STR,
-       "erasure-code-plugin=jerasure "
-       "erasure-code-technique=reed_sol_van "
-       "erasure-code-k=4 "
-       "erasure-code-m=2 "
+       "plugin=jerasure "
+       "technique=reed_sol_van "
+       "k=2 "
+       "m=1 "
        ) // default properties of osd pool create
 OPTION(osd_pool_default_flags, OPT_INT, 0)   // default flags for new pools
 OPTION(osd_pool_default_flag_hashpspool, OPT_BOOL, true)   // use new pg hashing to prevent pool/pg overlap

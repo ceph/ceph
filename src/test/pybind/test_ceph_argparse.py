@@ -745,9 +745,17 @@ class TestOSD(TestArgparse):
 
     def test_crush_rule_create_erasure(self):
         self.assert_valid_command(['osd', 'crush', 'rule', 'create-erasure',
+                                   'AZaz09-_.'])
+        self.assert_valid_command(['osd', 'crush', 'rule', 'create-erasure',
                                    'AZaz09-_.', 'whatever'])
         assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
                                                     'create-erasure']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
+                                                    'create-erasure',
+													'!!!']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule',
+                                                    'create-erasure',
+													'name', '!!!']))
 
     def test_crush_rule_rm(self):
         self.assert_valid_command(['osd', 'crush', 'rule', 'rm', 'AZaz09-_.'])
@@ -769,6 +777,32 @@ class TestOSD(TestArgparse):
 
     def test_unpause(self):
         self.check_no_arg('osd', 'unpause')
+
+	def test_set_erasure_code_profile(self):
+        self.assert_valid_command(['osd', 'set', 'erasure_code_profile',
+								   'name'])
+        self.assert_valid_command(['osd', 'set', 'erasure_code_profile',
+								   'name', 'A=B'])
+        self.assert_valid_command(['osd', 'set', 'erasure_code_profile',
+								   'name', 'A=B', 'C=D'])
+		assert_equal({}, validate_command(sigdict, ['osd', 'set',
+													'erasure_code_profile']))
+		assert_equal({}, validate_command(sigdict, ['osd', 'set',
+													'erasure_code_profile',
+													'!!!!']))
+		assert_equal({}, validate_command(sigdict, ['osd', 'set',
+													'erasure_code_profile',
+													'name',
+													'!!!!']))
+
+	def test_get_erasure_code_profile(self):
+        self.assert_valid_command(['osd', 'get', 'erasure_code_profile',
+								   'name'])
+		assert_equal({}, validate_command(sigdict, ['osd', 'get',
+													'erasure_code_profile']))
+		assert_equal({}, validate_command(sigdict, ['osd', 'get',
+													'erasure_code_profile',
+													'!!!!']))
 
     def test_set_unset(self):
         for action in ('set', 'unset'):
@@ -887,12 +921,29 @@ class TestOSD(TestArgparse):
                                    'poolname', '128', '128'])
         self.assert_valid_command(['osd', 'pool', 'create',
                                    'poolname', '128', '128',
-                                   'whatever'])
+                                   'replicated'])
+        self.assert_valid_command(['osd', 'pool', 'create',
+                                   'poolname', '128', '128',
+                                   'erasure', 'profile', 'ruleset'])
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname', '-1']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
+                                                    'poolname',
+													'128', '128',
+													'erasure', '!!!']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
+                                                    'poolname',
+													'128', '128',
+													'erasure', 'profile',
+													'!!!']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
+                                                    'poolname',
+													'128', '128',
+													'INVALID', 'profile',
+													'ruleset']))
 
     def test_pool_delete(self):
         self.assert_valid_command(['osd', 'pool', 'delete',

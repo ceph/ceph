@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+# Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -63,6 +63,31 @@ function kill_daemons() {
             kill -9 $(cat $pidfile 2> /dev/null) 2> /dev/null || break
             sleep $try
         done
+    done
+}
+
+function call_TEST_functions() {
+    local dir=$1
+    shift
+    local id=$2
+    shift
+
+    setup $dir || return 1
+    run_mon $dir $id "$@"
+    SHARE_MON_FUNCTIONS=${SHARE_MON_FUNCTIONS:-$(set | sed -n -e 's/^\(SHARE_MON_TEST_[0-9a-z_]*\) .*/\1/p')}
+    for TEST_function in $SHARE_MON_FUNCTIONS ; do
+        if ! $TEST_function $dir $id ; then
+            cat $dir/$id/log
+            return 1
+        fi
+    done
+    teardown $dir || return 1
+
+    FUNCTIONS=${FUNCTIONS:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
+    for TEST_function in $FUNCTIONS ; do
+        setup $dir || return 1
+        $TEST_function $dir || return 1
+        teardown $dir || return 1
     done
 }
 

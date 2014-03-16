@@ -55,20 +55,25 @@ Set up an erasure coded pool and the associated crush ruleset::
 
  ceph osd crush rule create-erasure ecruleset
  ceph osd pool create ecpool 12 12 erasure \
-   crush_ruleset=ecruleset
+   default ecruleset
 
 Set the ruleset failure domain to osd instead of the host which is the default::
 
- ceph osd pool create ecpool 12 12 erasure \
-   erasure-code-ruleset-failure-domain=osd
+ ceph osd set erasure_code_profile myprofile \
+   ruleset-failure-domain=osd
+ ceph osd pool create ecpool 12 12 erasure myprofile
 
 Control the parameters of the erasure code plugin::
 
+ ceph osd set erasure_code_profile myprofile \
+   k=3 m=1
  ceph osd pool create ecpool 12 12 erasure \
-   erasure-code-k=2 erasure-code-m=1
+   myprofile
 
 Choose an alternate erasure code plugin::
 
+ ceph osd set erasure_code_profile myprofile \
+   plugin=example
  ceph osd create ecpool 12 12 erasure \
-   erasure-code-plugin=example
+   myprofile
 
