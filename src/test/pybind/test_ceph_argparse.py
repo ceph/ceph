@@ -944,12 +944,29 @@ class TestOSD(TestArgparse):
                                    'poolname', '128', '128'])
         self.assert_valid_command(['osd', 'pool', 'create',
                                    'poolname', '128', '128',
-                                   'whatever'])
+                                   'replicated'])
+        self.assert_valid_command(['osd', 'pool', 'create',
+                                   'poolname', '128', '128',
+                                   'erasure', 'profile', 'ruleset'])
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname', '-1']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
+                                                    'poolname',
+                                                    '128', '128',
+                                                    'erasure', '!!!']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
+                                                    'poolname',
+                                                    '128', '128',
+                                                    'erasure', 'profile',
+                                                    '!!!']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
+                                                    'poolname',
+                                                    '128', '128',
+                                                    'INVALID', 'profile',
+                                                    'ruleset']))
 
     def test_pool_delete(self):
         self.assert_valid_command(['osd', 'pool', 'delete',
