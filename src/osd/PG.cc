@@ -829,6 +829,8 @@ void PG::clear_primary_state(bool staying_primary)
 
   if (!staying_primary)
     agent_clear();
+
+  osd->remove_want_pg_temp(info.pgid.pgid);
 }
 
 /**
@@ -4771,8 +4773,6 @@ void PG::start_peering_interval(
       }
     }
   }
-  // make sure we clear out any pg_temp change requests
-  osd->remove_want_pg_temp(info.pgid.pgid);
   cancel_recovery();
 
   if (acting.empty() && !up.empty() && up_primary == pg_whoami) {
