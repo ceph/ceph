@@ -281,10 +281,12 @@ PGBackend *PGBackend::build_pg_backend(
   case pg_pool_t::TYPE_ERASURE: {
     ErasureCodeInterfaceRef ec_impl;
     assert(pool.properties.count("erasure-code-plugin"));
+    stringstream ss;
     ceph::ErasureCodePluginRegistry::instance().factory(
       pool.properties.find("erasure-code-plugin")->second,
       pool.properties,
-      &ec_impl);
+      &ec_impl,
+      ss);
     assert(ec_impl);
     return new ECBackend(
       l,

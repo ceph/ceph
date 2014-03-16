@@ -119,7 +119,7 @@ int ErasureCodeCommand::run() {
   ErasureCodeInterfaceRef erasure_code;
   int code = instance.factory(parameters["plugin"],
 			      parameters,
-			      &erasure_code);
+			      &erasure_code, cerr);
   if (code)
     return code;
 
