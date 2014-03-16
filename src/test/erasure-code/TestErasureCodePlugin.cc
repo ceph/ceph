@@ -30,7 +30,7 @@ protected:
   public:
     virtual void *entry() {
       map<std::string,std::string> parameters;
-      parameters["erasure-code-directory"] = ".libs";
+      parameters["directory"] = ".libs";
       ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
       ErasureCodeInterfaceRef erasure_code;
       instance.factory("hangs", parameters, &erasure_code);
@@ -71,7 +71,7 @@ TEST_F(ErasureCodePluginRegistryTest, factory_mutex) {
 TEST_F(ErasureCodePluginRegistryTest, all)
 {
   map<std::string,std::string> parameters;
-  parameters["erasure-code-directory"] = ".libs";
+  parameters["directory"] = ".libs";
   ErasureCodeInterfaceRef erasure_code;
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   EXPECT_FALSE(erasure_code);
