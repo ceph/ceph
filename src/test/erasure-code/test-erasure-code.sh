@@ -42,12 +42,10 @@ function run() {
 }
 
 function create_erasure_coded_pool() {
-    local plugin_parameters="erasure-code-k=2 erasure-code-m=1"
-    ./ceph osd crush rule create-erasure ecruleset \
-        $plugin_parameters \
-        erasure-code-ruleset-failure-domain=osd || return 1
-    ./ceph osd pool create ecpool 12 12 erasure crush_ruleset=ecruleset \
-        $plugin_parameters || return 1
+    ./ceph osd set erasure_code_profile myprofile \
+        ruleset-failure-domain=osd || return 1
+    ./ceph osd pool create ecpool 12 12 erasure myprofile \
+        || return 1
 }
 
 function TEST_rados_put() {
