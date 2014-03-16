@@ -19,7 +19,7 @@ libosd_la_SOURCES = \
 	osd/osd_types.cc \
 	osd/ECUtil.cc \
 	objclass/class_api.cc
-libosd_la_LIBADD = $(LIBOSDC) $(LIBOS) $(LIBERASURE_CODE)
+libosd_la_LIBADD = $(LIBOSDC) $(LIBOS)
 noinst_LTLIBRARIES += libosd.la
 
 noinst_HEADERS += \
