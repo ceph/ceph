@@ -2819,8 +2819,8 @@ int OSDMonitor::get_erasure_code(const map<string,string> &properties,
 				 stringstream &ss)
 {
   map<string,string>::const_iterator plugin =
-    properties.find("erasure-code-plugin");
-  if (plugin == properties.end()) {
+    profile.find("plugin");
+  if (plugin == profile.end()) {
     ss << "cannot determine the erasure code plugin"
        << " because erasure-code-plugin is not in the properties "
        << properties;

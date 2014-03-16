@@ -141,11 +141,11 @@ function TEST_erasure_crush_stripe_width_padded() {
     local dir=$1
     # setting osd_pool_erasure_code_stripe_width modifies the stripe_width
     # and it is padded as required by the default plugin
-    properties+=" erasure-code-plugin=jerasure"
-    properties+=" erasure-code-technique=reed_sol_van"
+    profile+=" plugin=jerasure"
+    profile+=" technique=reed_sol_van"
     k=4
-    properties+=" erasure-code-k=$k"
-    properties+=" erasure-code-m=2"
+    profile+=" k=$k"
+    profile+=" m=2"
     expected_chunk_size=2048
     actual_stripe_width=$(($expected_chunk_size * $k))
     desired_stripe_width=$(($actual_stripe_width - 1))
