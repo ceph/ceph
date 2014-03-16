@@ -259,6 +259,12 @@ private:
 				 const map<string,string> &properties,
 				 int *crush_ruleset,
 				 stringstream &ss);
+  bool erasure_code_profile_in_use(const map<int64_t, pg_pool_t> &pools,
+				   const string &profile,
+				   ostream &ss);
+  int parse_erasure_code_profile(const vector<string> &erasure_code_profile,
+				 map<string,string> *erasure_code_profile_map,
+				 stringstream &ss);
   int prepare_pool_size(const unsigned pool_type,
 			const map<string,string> &properties,
 			unsigned *size,
