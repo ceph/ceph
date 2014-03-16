@@ -2827,7 +2827,7 @@ int OSDMonitor::get_erasure_code(const map<string,string> &properties,
     return -EINVAL;
   }
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-  return instance.factory(plugin->second, properties, erasure_code);
+  return instance.factory(plugin->second, profile, erasure_code, ss);
 }
 
 int OSDMonitor::check_cluster_features(uint64_t features,
