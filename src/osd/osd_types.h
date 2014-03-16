@@ -878,7 +878,8 @@ private:
 
 
 public:
-  map<string,string> properties;  ///< interpreted according to the pool type
+  map<string,string> properties;  ///< OBSOLETE
+  string erasure_code_profile; ///< name of the erasure code profile in OSDMap
   epoch_t last_change;      ///< most recent epoch changed, exclusing snapshot changes
   snapid_t snap_seq;        ///< seq for per-pool snapshot
   epoch_t snap_epoch;       ///< osdmap epoch of last snap
