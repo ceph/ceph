@@ -521,6 +521,7 @@ COMMAND("osd pool create " \
 	"name=pgp_num,type=CephInt,range=0,req=false " \
         "name=pool_type,type=CephChoices,strings=replicated|erasure,req=false " \
 	"name=erasure_code_profile,type=CephString,req=false,goodchars=[A-Za-z0-9-_.=] " \
+	"name=ruleset,type=CephString,req=false,goodchars=[A-Za-z0-9-_.=]", \
 	"create pool", "osd", "rw", "cli,rest")
 COMMAND("osd pool delete " \
 	"name=pool,type=CephPoolname " \

@@ -253,6 +253,7 @@ private:
   int prepare_pool_crush_ruleset(const string &poolstr,
 				 const unsigned pool_type,
 				 const string &erasure_code_profile,
+				 const string &ruleset_name,
 				 int *crush_ruleset,
 				 stringstream &ss);
   int prepare_erasure_code_profile(const vector<string> &erasure_code_profile,
@@ -266,7 +267,9 @@ private:
 				const string &erasure_code_profile,
 				unsigned *stripe_width,
 				stringstream &ss);
-  int prepare_new_pool(string& name, uint64_t auid, int crush_ruleset,
+  int prepare_new_pool(string& name, uint64_t auid,
+		       int crush_ruleset,
+		       const string &crush_ruleset_name,
                        unsigned pg_num, unsigned pgp_num,
 		       const string &erasure_code_profile,
                        const unsigned pool_type,
