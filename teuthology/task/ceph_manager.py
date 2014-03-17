@@ -974,6 +974,17 @@ class CephManager:
                 num += 1
         return num
 
+    def get_is_making_recovery_progress(self):
+        """
+        Return whether there is recovery progress discernable in the
+        raw cluster status
+        """
+        status = self.raw_cluster_status()
+        kps = status['pgmap'].get('recovering_keys_per_sec', 0)
+        bps = status['pgmap'].get('recovering_bytes_per_sec', 0)
+        ops = status['pgmap'].get('recovering_objects_per_sec', 0)
+        return kps > 0 or bps > 0 or ops > 0
+
     def get_num_active(self):
         """
         Find the number of active pgs.
@@ -1037,8 +1048,13 @@ class CephManager:
         num_active_clean = self.get_num_active_clean()
         while not self.is_clean():
             if timeout is not None:
-                assert time.time() - start < timeout, \
-                    'failed to become clean before timeout expired'
+                if self.get_is_making_recovery_progress():
+                    self.log("making progress, resetting timeout")
+                    start = time.time()
+                else:
+                    self.log("no progress seen, keeping timeout for now")
+                    assert time.time() - start < timeout, \
+                        'failed to become clean before timeout expired'
             cur_active_clean = self.get_num_active_clean()
             if cur_active_clean != num_active_clean:
                 start = time.time()
