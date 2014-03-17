@@ -4944,6 +4944,12 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     return result;
   }
 
+  if (!ctx->new_obs.exists && !ctx->obs->exists) {
+    // We can't really represent in the log an operation which atomically
+    // creates and removes an object
+    return -EINVAL;
+  }
+
   // cache: clear whiteout?
   if (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK) {
     if (ctx->user_modify &&
@@ -5012,6 +5018,9 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type)
 	}
       }
     } else if (ctx->new_snapset.clones.size()) {
+      // see do_op, if !new_obs.exist && !obs->exists, we returned EINVAL already
+      assert(ctx->obs->exists);
+
       // save snapset on _snap
       hobject_t snapoid(soid.oid, soid.get_key(), CEPH_SNAPDIR, soid.hash,
 			info.pgid.pool(), soid.get_namespace());
