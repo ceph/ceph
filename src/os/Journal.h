@@ -56,7 +56,7 @@ public:
 
   // writes
   virtual bool is_writeable() = 0;
-  virtual void make_writeable() = 0;
+  virtual int make_writeable() = 0;
   virtual void submit_entry(uint64_t seq, bufferlist& e, int alignment,
 			    Context *oncommit,
 			    TrackedOpRef osd_op = TrackedOpRef()) = 0;
