@@ -226,13 +226,13 @@ def run_with_watchdog(process, job_config):
     symlink_worker_log(job_config['worker_log'], job_config['archive_path'])
     while process.poll() is None:
         # Kill jobs that have been running longer than the global max
-        job_run_time = datetime.utcnow() - job_start_time
-        if job_run_time.seconds > teuth_config.max_job_time:
+        run_time = datetime.utcnow() - job_start_time
+        total_seconds = run_time.days * 60 * 60 * 24 + run_time.seconds
+        if total_seconds > teuth_config.max_job_time:
             log.warning("Job ran longer than {max}s. Killing...".format(
                 max=teuth_config.max_job_time))
             kill_job(job_info['name'], job_info['job_id'],
                      teuth_config.archive_base)
-            break
 
         report.try_push_job_info(job_info, dict(status='running'))
         time.sleep(teuth_config.watchdog_interval)
