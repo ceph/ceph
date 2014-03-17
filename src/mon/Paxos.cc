@@ -691,22 +691,21 @@ void Paxos::handle_accept(MMonPaxos *accept)
 
   assert(g_conf->paxos_kill_at != 6);
 
-  // new majority?
-  if (accepted.size() == (unsigned)mon->monmap->size()/2+1) {
+  // only commit (and expose committed state) when we get *all* quorum
+  // members to accept.  otherwise, they may still be sharing the now
+  // stale state.
+  // FIXME: we can improve this with an additional lease revocation message
+  // that doesn't block for the persist.
+  if (accepted == mon->get_quorum()) {
     // yay, commit!
-    // note: this may happen before the lease is reextended (below)
-    dout(10) << " got majority, committing" << dendl;
+    dout(10) << " got majority, committing, done with update" << dendl;
     commit();
     if (!do_refresh())
       goto out;
     if (is_updating())
       commit_proposal();
     finish_contexts(g_ceph_context, waiting_for_commit);
-  }
 
-  // done?
-  if (accepted == mon->get_quorum()) {
-    dout(10) << " got quorum, done with update" << dendl;
     // cancel timeout event
     mon->timer.cancel_event(accept_timeout_event);
     accept_timeout_event = 0;
