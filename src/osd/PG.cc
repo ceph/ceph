@@ -829,6 +829,8 @@ void PG::clear_primary_state(bool staying_primary)
 
   if (!staying_primary)
     agent_clear();
+
+  osd->remove_want_pg_temp(info.pgid.pgid);
 }
 
 /**
@@ -1359,11 +1361,9 @@ void PG::build_might_have_unfound()
     std::vector<int>::const_iterator a = interval.acting.begin();
     std::vector<int>::const_iterator a_end = interval.acting.end();
     for (; a != a_end; ++a, ++i) {
-      if (*a != CRUSH_ITEM_NONE && *a != osd->whoami)
-	might_have_unfound.insert(
-	  pg_shard_t(
-	    *a,
-	    pool.info.ec_pool() ? i : ghobject_t::NO_SHARD));
+      pg_shard_t shard(*a, pool.info.ec_pool() ? i : ghobject_t::NO_SHARD);
+      if (*a != CRUSH_ITEM_NONE && shard != pg_whoami)
+	might_have_unfound.insert(shard);
     }
   }
 
@@ -4771,8 +4771,6 @@ void PG::start_peering_interval(
       }
     }
   }
-  // make sure we clear out any pg_temp change requests
-  osd->remove_want_pg_temp(info.pgid.pgid);
   cancel_recovery();
 
   if (acting.empty() && !up.empty() && up_primary == pg_whoami) {

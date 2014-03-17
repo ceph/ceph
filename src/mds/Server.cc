@@ -2350,7 +2350,7 @@ void Server::handle_client_getattr(MDRequest *mdr, bool is_lookup)
     return;
 
   // note which caps are requested, so we return at least a snapshot
-  // value for them.  (currently this only matters for xattrs)
+  // value for them.  (currently this matters for xattrs and inline data)
   mdr->getattr_caps = mask;
 
   mds->balancer->hit_inode(ceph_clock_now(g_ceph_context), ref, META_POP_IRD,
