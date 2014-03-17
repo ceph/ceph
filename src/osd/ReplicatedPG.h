@@ -643,11 +643,30 @@ protected:
    */
   bool get_rw_locks(OpContext *ctx) {
     if (ctx->op->may_write() || ctx->op->may_cache()) {
-      if (ctx->obc->get_write(ctx->op)) {
-	ctx->lock_to_release = OpContext::W_LOCK;
+      /* If snapset_obc, !obc->obs->exists and we need to
+       * get a write lock on the snapdir as well as the
+       * head.  Fortunately, we are guarranteed to get a
+       * write lock on the head if !obc->obs->exists
+       */
+      if (ctx->snapset_obc) {
+	assert(!ctx->obc->obs.exists);
+	if (ctx->snapset_obc->get_write(ctx->op)) {
+	  ctx->release_snapset_obc = true;
+	  ctx->lock_to_release = OpContext::W_LOCK;
+	} else {
+	  return false;
+	}
+	// we are creating it and have the only ref
+	bool got = ctx->obc->get_write(ctx->op);
+	assert(got);
 	return true;
       } else {
-	return false;
+	if (ctx->obc->get_write(ctx->op)) {
+	  ctx->lock_to_release = OpContext::W_LOCK;
+	  return true;
+	} else {
+	  return false;
+	}
       }
     } else {
       assert(ctx->op->may_read());
