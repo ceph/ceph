@@ -49,26 +49,77 @@ Interface
 
 Set up an erasure coded pool::
 
- ceph osd create ecpool 12 12 erasure
+ $ ceph osd create ecpool 12 12 erasure
 
 Set up an erasure coded pool and the associated crush ruleset::
 
- ceph osd crush rule create-erasure ecruleset
- ceph osd pool create ecpool 12 12 erasure \
-   crush_ruleset=ecruleset
+ $ ceph osd crush rule create-erasure ecruleset
+ $ ceph osd pool create ecpool 12 12 erasure \
+     default ecruleset
 
 Set the ruleset failure domain to osd instead of the host which is the default::
 
- ceph osd pool create ecpool 12 12 erasure \
-   erasure-code-ruleset-failure-domain=osd
+ $ ceph osd erasure-code-profile set myprofile \
+     ruleset-failure-domain=osd
+ $ ceph osd erasure-code-profile get myprofile
+ k=2
+ m=1
+ plugin=jerasure
+ technique=reed_sol_van
+ ruleset-failure-domain=osd
+ $ ceph osd pool create ecpool 12 12 erasure myprofile
 
 Control the parameters of the erasure code plugin::
 
- ceph osd pool create ecpool 12 12 erasure \
-   erasure-code-k=2 erasure-code-m=1
+ $ ceph osd erasure-code-profile set myprofile \
+     k=3 m=1
+ $ ceph osd erasure-code-profile get myprofile
+ k=3
+ m=1
+ plugin=jerasure
+ technique=reed_sol_van
+ $ ceph osd pool create ecpool 12 12 erasure \
+     myprofile
 
 Choose an alternate erasure code plugin::
 
- ceph osd create ecpool 12 12 erasure \
-   erasure-code-plugin=example
+ $ ceph osd erasure-code-profile set myprofile \
+     plugin=example technique=xor
+ $ ceph osd erasure-code-profile get myprofile
+ k=2
+ m=1
+ plugin=example
+ technique=xor
+ $ ceph osd create ecpool 12 12 erasure \
+     myprofile
 
+Display the default erasure code profile::
+
+  $ ceph osd erasure-code-profile ls
+  default
+  $ ceph osd erasure-code-profile get default
+  k=2
+  m=1
+  plugin=jerasure
+  technique=reed_sol_van
+
+Create a profile to set the data to be distributed on six OSDs (k+m=6) and sustain the loss of three OSDs (m=3) without loosing data::
+
+  $ ceph osd erasure-code-profile set myprofile k=3 m=3
+  $ ceph osd erasure-code-profile get myprofile
+  k=3
+  m=3
+  plugin=jerasure
+  technique=reed_sol_van
+  $ ceph osd erasure-code-profile ls
+  default
+  myprofile
+
+Remove a profile that is no longer in use (otherwise it will fail with EBUSY)::
+
+  $ ceph osd erasure-code-profile ls
+  default
+  myprofile
+  $ ceph osd erasure-code-profile rm myprofile
+  $ ceph osd erasure-code-profile ls
+  default

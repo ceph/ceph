@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -56,14 +56,16 @@ namespace ceph {
 
     int factory(const std::string &plugin,
 		const map<std::string,std::string> &parameters,
-		ErasureCodeInterfaceRef *erasure_code);
+		ErasureCodeInterfaceRef *erasure_code,
+		ostream &ss);
 
     int add(const std::string &name, ErasureCodePlugin *plugin);
     ErasureCodePlugin *get(const std::string &name);
 
     int load(const std::string &plugin_name,
 	     const map<std::string,std::string> &parameters,
-	     ErasureCodePlugin **plugin);
+	     ErasureCodePlugin **plugin,
+	     ostream &ss);
 
   };
 }
