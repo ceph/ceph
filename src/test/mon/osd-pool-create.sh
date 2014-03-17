@@ -65,17 +65,17 @@ function TEST_default_deprectated_2() {
 function TEST_erasure_crush_rule() {
     local dir=$1
     run_mon $dir a --public-addr 127.0.0.1
-    crush_ruleset=erasure_ruleset
+    local crush_ruleset=erasure_ruleset
     ./ceph osd crush rule create-erasure $crush_ruleset
     ./ceph osd crush rule ls | grep $crush_ruleset
-    ./ceph osd pool create pool_erasure 12 12 erasure 2>&1 | \
-        grep 'crush_ruleset is missing' || return 1
-    ! ./ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=WRONG > $dir/out 2>&1
-    grep 'WRONG does not exist' $dir/out || return 1
-    grep 'EINVAL' $dir/out || return 1
     ! ./ceph --format json osd dump | grep '"crush_ruleset":1' || return 1
-    ./ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=$crush_ruleset
+    local poolname
+    poolname=pool_erasure1
+    ./ceph osd pool create $poolname 12 12 erasure crush_ruleset=$crush_ruleset
     ./ceph --format json osd dump | grep '"crush_ruleset":1' || return 1
+    poolname=pool_erasure2
+    ./ceph osd pool create $poolname 12 12 erasure 
+    ./ceph osd crush rule ls | grep $poolname
 }
 
 function TEST_erasure_crush_rule_pending() {

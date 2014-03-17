@@ -240,6 +240,10 @@ private:
   bool prepare_pool_op (MPoolOp *m);
   bool prepare_pool_op_create (MPoolOp *m);
   bool prepare_pool_op_delete(MPoolOp *m);
+  int crush_ruleset_create_erasure(const string &name,
+				   const map<string,string> &properties,
+				   int *ruleset,
+				   stringstream &ss);
   int get_erasure_code(const map<string,string> &properties,
 		       ErasureCodeInterfaceRef *erasure_code,
 		       stringstream &ss);
@@ -247,7 +251,8 @@ private:
 			      const vector<string> &properties,
 			      map<string,string> *properties_map,
 			      stringstream &ss);
-  int prepare_pool_crush_ruleset(const unsigned pool_type,
+  int prepare_pool_crush_ruleset(const string &poolstr,
+				 const unsigned pool_type,
 				 const map<string,string> &properties,
 				 int *crush_ruleset,
 				 stringstream &ss);

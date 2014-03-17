@@ -2777,6 +2777,40 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
                             properties, pg_pool_t::TYPE_REPLICATED, ss);
 }
 
+int OSDMonitor::crush_ruleset_create_erasure(const string &name,
+					     const map<string,string> &properties,
+					     int *ruleset,
+					     stringstream &ss)
+{
+  *ruleset = osdmap.crush->get_rule_id(name);
+  if (*ruleset != -ENOENT)
+    return -EEXIST;
+
+  CrushWrapper newcrush;
+  _get_pending_crush(newcrush);
+
+  *ruleset = newcrush.get_rule_id(name);
+  if (*ruleset != -ENOENT) {
+    return -EALREADY;
+  } else {
+    ErasureCodeInterfaceRef erasure_code;
+    int err = get_erasure_code(properties, &erasure_code, ss);
+    if (err) {
+      ss << "failed to load plugin using properties " << properties;
+      return err;
+    }
+
+    err = erasure_code->create_ruleset(name, newcrush, &ss);
+    erasure_code.reset();
+    if (err < 0)
+      return err;
+    *ruleset = err;
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush);
+    return 0;
+  }
+}
+
 int OSDMonitor::get_erasure_code(const map<string,string> &properties,
 				 ErasureCodeInterfaceRef *erasure_code,
 				 stringstream &ss)
@@ -2924,7 +2958,8 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
   return err;
 }
 
-int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
+int OSDMonitor::prepare_pool_crush_ruleset(const string &poolstr,
+					   const unsigned pool_type,
 					   const map<string,string> &properties,
 					   int *crush_ruleset,
 					   stringstream &ss)
@@ -2937,30 +2972,31 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
       break;
     case pg_pool_t::TYPE_ERASURE:
       {
-	map<string,string>::const_iterator ruleset =
-	  properties.find("crush_ruleset");
-	if (ruleset == properties.end()) {
-	  ss << "prepare_pool_crush_ruleset: crush_ruleset is missing from "
-	     << properties;
-	  return -EINVAL;
-	}
-
-	*crush_ruleset = osdmap.crush->get_rule_id(ruleset->second);
-	if (*crush_ruleset < 0) {
-	  CrushWrapper newcrush;
-	  _get_pending_crush(newcrush);
-
-	  int rule = newcrush.get_rule_id(ruleset->second);
-	  if (rule < 0) {
-	    ss << "prepare_pool_crush_ruleset: ruleset " << ruleset->second
-	       << " does not exist";
-	    return -EINVAL;
-	  } else {
-	    dout(20) << "prepare_pool_crush_ruleset: ruleset "
-		     << ruleset->second << " try again" << dendl;
-	    return -EAGAIN;
-	  }
-	}
+	string ruleset;
+	map<string,string>::const_iterator i = properties.find("crush_ruleset");
+	if (i == properties.end()) {
+	  dout(1) << "prepare_pool_crush_ruleset: implicitly use ruleset "
+		  << "named after the pool: " << poolstr << dendl;
+	  ruleset = poolstr;
+	} else {
+	  ruleset = i->second;
+ 	}
+ 
+	int err = crush_ruleset_create_erasure(ruleset, properties,
+					       crush_ruleset, ss);
+	switch (err) {
+	case -EALREADY:
+	  dout(20) << "prepare_pool_crush_ruleset: ruleset "
+		   << ruleset << " try again" << dendl;
+	case 0:
+	  // need to wait for the crush rule to be proposed before proceeding
+	  err = -EAGAIN;
+	  break;
+	case -EEXIST:
+	  err = 0;
+	  break;
+ 	}
+	return err;
       }
       break;
     default:
@@ -2995,7 +3031,8 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_ruleset,
   int r = prepare_pool_properties(pool_type, properties, &properties_map, ss);
   if (r)
     return r;
-  r = prepare_pool_crush_ruleset(pool_type, properties_map, &crush_ruleset, ss);
+  r = prepare_pool_crush_ruleset(name, pool_type, properties_map,
+				 &crush_ruleset, ss);
   if (r)
     return r;
   unsigned size;
@@ -3830,41 +3867,31 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     vector<string> properties;
     cmd_getval(g_ceph_context, cmdmap, "properties", properties);
 
-    if (osdmap.crush->rule_exists(name)) {
-      ss << "rule " << name << " already exists";
-      err = 0;
-      goto reply;
-    }
-
     map<string,string> properties_map;
     err = prepare_pool_properties(pg_pool_t::TYPE_ERASURE,
 				  properties, &properties_map, ss);
     if (err)
       goto reply;
 
-    CrushWrapper newcrush;
-    _get_pending_crush(newcrush);
-
-    if (newcrush.rule_exists(name)) {
-      ss << "rule " << name << " already exists";
-      err = 0;
+    int ruleset;
+    err = crush_ruleset_create_erasure(name, properties_map, &ruleset, ss);
+    if (err < 0) {
+      switch(err) {
+      case -EEXIST: // return immediately
+	ss << "rule " << name << " already exists";
+	err = 0;
+	goto reply;
+	break;
+      case -EALREADY: // wait for pending to be proposed
+	ss << "rule " << name << " already exists";
+	err = 0;
+	break;
+      default: // non recoverable error
+ 	goto reply;
+	break;
+      }
     } else {
-      ErasureCodeInterfaceRef erasure_code;
-      err = get_erasure_code(properties_map, &erasure_code, ss);
-      if (err) {
-	ss << "failed to load plugin using properties " << properties_map;
-	goto reply;
-      }
-
-      int rule = erasure_code->create_ruleset(name, newcrush, &ss);
-      erasure_code.reset();
-      if (rule < 0) {
-	err = rule;
-	goto reply;
-      }
-      ss << "created rule " << name << " at " << rule;
-      pending_inc.crush.clear();
-      newcrush.encode(pending_inc.crush);
+      ss << "created ruleset " << name << " at " << ruleset;
     }
 
     getline(ss, rs);
