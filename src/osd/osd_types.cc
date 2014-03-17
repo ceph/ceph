@@ -82,7 +82,11 @@ void pg_shard_t::decode(bufferlist::iterator &bl)
 
 ostream &operator<<(ostream &lhs, const pg_shard_t &rhs)
 {
-  return lhs << '(' << rhs.osd << ',' << (unsigned)(rhs.shard) << ')';
+  if (rhs.is_undefined())
+    return lhs << "?";
+  if (rhs.shard == ghobject_t::NO_SHARD)
+    return lhs << rhs.osd;
+  return lhs << rhs.osd << '(' << (unsigned)(rhs.shard) << ')';
 }
 
 // -- osd_reqid_t --
