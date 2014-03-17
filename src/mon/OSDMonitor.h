@@ -4,6 +4,9 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ *
+ * Author: Loic Dachary <loic@dachary.org>
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -240,28 +243,37 @@ private:
   bool prepare_pool_op (MPoolOp *m);
   bool prepare_pool_op_create (MPoolOp *m);
   bool prepare_pool_op_delete(MPoolOp *m);
-  int get_erasure_code(const map<string,string> &properties,
+  int crush_ruleset_create_erasure(const string &name,
+				   const string &profile,
+				   int *ruleset,
+				   stringstream &ss);
+  int get_erasure_code(const string &erasure_code_profile,
 		       ErasureCodeInterfaceRef *erasure_code,
 		       stringstream &ss);
-  int prepare_pool_properties(const unsigned pool_type,
-			      const vector<string> &properties,
-			      map<string,string> *properties_map,
-			      stringstream &ss);
   int prepare_pool_crush_ruleset(const unsigned pool_type,
-				 const map<string,string> &properties,
+				 const string &erasure_code_profile,
+				 const string &ruleset_name,
 				 int *crush_ruleset,
 				 stringstream &ss);
+  bool erasure_code_profile_in_use(const map<int64_t, pg_pool_t> &pools,
+				   const string &profile,
+				   ostream &ss);
+  int parse_erasure_code_profile(const vector<string> &erasure_code_profile,
+				 map<string,string> *erasure_code_profile_map,
+				 stringstream &ss);
   int prepare_pool_size(const unsigned pool_type,
-			const map<string,string> &properties,
+			const string &erasure_code_profile,
 			unsigned *size,
 			stringstream &ss);
   int prepare_pool_stripe_width(const unsigned pool_type,
-				const map<string,string> &properties,
+				const string &erasure_code_profile,
 				unsigned *stripe_width,
 				stringstream &ss);
-  int prepare_new_pool(string& name, uint64_t auid, int crush_ruleset,
+  int prepare_new_pool(string& name, uint64_t auid,
+		       int crush_ruleset,
+		       const string &crush_ruleset_name,
                        unsigned pg_num, unsigned pgp_num,
-		       const vector<string> &properties,
+		       const string &erasure_code_profile,
                        const unsigned pool_type,
 		       stringstream &ss);
   int prepare_new_pool(MPoolOp *m);
