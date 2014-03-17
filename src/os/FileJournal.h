@@ -400,7 +400,7 @@ private:
   bool is_writeable() {
     return read_pos == 0;
   }
-  void make_writeable();
+  int make_writeable();
 
   // writes
   void commit_start(uint64_t seq);

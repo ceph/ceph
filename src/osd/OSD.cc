@@ -6938,6 +6938,11 @@ void OSD::handle_pg_query(OpRequestRef op)
 
     dout(10) << " pg " << pgid << " dne" << dendl;
     pg_info_t empty(spg_t(pgid.pgid, it->second.to));
+    /* This is racy, but that should be ok: if we complete the deletion
+     * before the pg is recreated, we'll just start it off backfilling
+     * instead of just empty */
+    if (service.deleting_pgs.lookup(pgid))
+      empty.last_backfill = hobject_t();
     if (it->second.type == pg_query_t::LOG ||
 	it->second.type == pg_query_t::FULLLOG) {
       ConnectionRef con = service.get_con_osd_cluster(from, osdmap->get_epoch());
@@ -7530,13 +7535,11 @@ void OSD::OpWQ::_enqueue(pair<PGRef, OpRequestRef> item)
 
 void OSD::OpWQ::_enqueue_front(pair<PGRef, OpRequestRef> item)
 {
-  {
-    Mutex::Locker l(qlock);
-    if (pg_for_processing.count(&*(item.first))) {
-      pg_for_processing[&*(item.first)].push_front(item.second);
-      item.second = pg_for_processing[&*(item.first)].back();
-      pg_for_processing[&*(item.first)].pop_back();
-    }
+  Mutex::Locker l(qlock);
+  if (pg_for_processing.count(&*(item.first))) {
+    pg_for_processing[&*(item.first)].push_front(item.second);
+    item.second = pg_for_processing[&*(item.first)].back();
+    pg_for_processing[&*(item.first)].pop_back();
   }
   unsigned priority = item.second->get_req()->get_priority();
   unsigned cost = item.second->get_req()->get_cost();
