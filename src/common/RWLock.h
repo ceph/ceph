@@ -189,6 +189,12 @@ public:
       state = Untaken;
     }
 
+    void promote() {
+      assert(state == TakenForRead);
+      unlock();
+      get_write();
+    }
+
     LockState get_state() { return state; }
     void set_state(LockState s) {
       state = s;
