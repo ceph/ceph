@@ -98,8 +98,8 @@ int ErasureCodeBench::setup(int argc, char** argv) {
     }
   }
 
-  if (parameters.count("erasure-code-directory") == 0)
-    parameters["erasure-code-directory"] = ".libs";
+  if (parameters.count("directory") == 0)
+    parameters["directory"] = ".libs";
 
   in_size = vm["size"].as<int>();
   max_iterations = vm["iterations"].as<int>();
@@ -124,11 +124,11 @@ int ErasureCodeBench::encode()
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   ErasureCodeInterfaceRef erasure_code;
-  int code = instance.factory(plugin, parameters, &erasure_code);
+  int code = instance.factory(plugin, parameters, &erasure_code, cerr);
   if (code)
     return code;
-  int k = atoi(parameters["erasure-code-k"].c_str());
-  int m = atoi(parameters["erasure-code-m"].c_str());
+  int k = atoi(parameters["k"].c_str());
+  int m = atoi(parameters["m"].c_str());
 
   bufferlist in;
   in.append(string(in_size, 'X'));
@@ -152,11 +152,11 @@ int ErasureCodeBench::decode()
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   ErasureCodeInterfaceRef erasure_code;
-  int code = instance.factory(plugin, parameters, &erasure_code);
+  int code = instance.factory(plugin, parameters, &erasure_code, cerr);
   if (code)
     return code;
-  int k = atoi(parameters["erasure-code-k"].c_str());
-  int m = atoi(parameters["erasure-code-m"].c_str());
+  int k = atoi(parameters["k"].c_str());
+  int m = atoi(parameters["m"].c_str());
 
   bufferlist in;
   in.append(string(in_size, 'X'));
@@ -208,10 +208,10 @@ int main(int argc, char** argv) {
  *   valgrind --tool=memcheck --leak-check=full \
  *      ./ceph_erasure_code_benchmark \
  *      --plugin jerasure \
- *      --parameter erasure-code-directory=.libs \
- *      --parameter erasure-code-technique=reed_sol_van \
- *      --parameter erasure-code-k=2 \
- *      --parameter erasure-code-m=2 \
+ *      --parameter directory=.libs \
+ *      --parameter technique=reed_sol_van \
+ *      --parameter k=2 \
+ *      --parameter m=2 \
  *      --iterations 1
  * "
  * End:

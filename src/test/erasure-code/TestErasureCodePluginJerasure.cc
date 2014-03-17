@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -25,11 +25,12 @@ TEST(ErasureCodePlugin, factory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   map<std::string,std::string> parameters;
-  parameters["erasure-code-directory"] = ".libs";
+  parameters["directory"] = ".libs";
   {
     ErasureCodeInterfaceRef erasure_code;
     EXPECT_FALSE(erasure_code);
-    EXPECT_EQ(-ENOENT, instance.factory("jerasure", parameters, &erasure_code));
+    EXPECT_EQ(-ENOENT, instance.factory("jerasure", parameters,
+					&erasure_code, cerr));
     EXPECT_FALSE(erasure_code);
   }
   const char *techniques[] = {
@@ -44,9 +45,10 @@ TEST(ErasureCodePlugin, factory)
   };
   for(const char **technique = techniques; *technique; technique++) {
     ErasureCodeInterfaceRef erasure_code;
-    parameters["erasure-code-technique"] = *technique;
+    parameters["technique"] = *technique;
     EXPECT_FALSE(erasure_code);
-    EXPECT_EQ(0, instance.factory("jerasure", parameters, &erasure_code));
+    EXPECT_EQ(0, instance.factory("jerasure", parameters,
+				  &erasure_code, cerr));
     EXPECT_TRUE(erasure_code);
   }
 }

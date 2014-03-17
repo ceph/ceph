@@ -103,10 +103,10 @@ int ErasureCodeCommand::setup(int argc, char** argv) {
     }
   }
 
-  if (parameters.count("erasure-code-directory") == 0)
-    parameters["erasure-code-directory"] = ".libs";
-  if (parameters.count("erasure-code-plugin") == 0) {
-    cerr << "--parameter erasure-code-plugin=<plugin> is mandatory" << endl;
+  if (parameters.count("directory") == 0)
+    parameters["directory"] = ".libs";
+  if (parameters.count("plugin") == 0) {
+    cerr << "--parameter plugin=<plugin> is mandatory" << endl;
     return 1;
   }
 
@@ -117,9 +117,9 @@ int ErasureCodeCommand::run() {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   instance.disable_dlclose = true;
   ErasureCodeInterfaceRef erasure_code;
-  int code = instance.factory(parameters["erasure-code-plugin"],
+  int code = instance.factory(parameters["plugin"],
 			      parameters,
-			      &erasure_code);
+			      &erasure_code, cerr);
   if (code)
     return code;
 
@@ -153,11 +153,11 @@ int main(int argc, char** argv) {
  *   make -j4 ceph_erasure_code &&
  *   valgrind --tool=memcheck --leak-check=full \
  *      ./ceph_erasure_code \
- *      --parameter erasure-code-plugin=jerasure \
- *      --parameter erasure-code-directory=.libs \
- *      --parameter erasure-code-technique=reed_sol_van \
- *      --parameter erasure-code-k=2 \
- *      --parameter erasure-code-m=2 \
+ *      --parameter plugin=jerasure \
+ *      --parameter directory=.libs \
+ *      --parameter technique=reed_sol_van \
+ *      --parameter k=2 \
+ *      --parameter m=2 \
  *      --get_chunk_size 1024 \
  *      --get_data_chunk_count \
  *      --get_chunk_count \

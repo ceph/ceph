@@ -4,6 +4,9 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2013 Inktank Storage, Inc. 
+ * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ *
+ * Author: Loic Dachary <loic@dachary.org>
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -441,8 +444,8 @@ COMMAND("osd crush rule create-simple " \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush rule create-erasure " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
-	"name=properties,type=CephString,n=N,req=false,goodchars=[A-Za-z0-9-_.=]", \
-	"create crush rule <name> suitable for erasure coded pool created with <properties>", \
+	"name=profile,type=CephString,req=false,goodchars=[A-Za-z0-9-_.=]", \
+	"create crush rule <name> for erasure coded pool created with <profile> (default default)", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush rule rm " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] ",	\
@@ -452,6 +455,22 @@ COMMAND("osd setmaxosd " \
 	"set new maximum osd value", "osd", "rw", "cli,rest")
 COMMAND("osd pause", "pause osd", "osd", "rw", "cli,rest")
 COMMAND("osd unpause", "unpause osd", "osd", "rw", "cli,rest")
+COMMAND("osd erasure-code-profile set " \
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
+	"name=profile,type=CephString,n=N,req=false,goodchars=[A-Za-z0-9-_.=]", \
+	"create erasure code profile <name> with [<key[=value]> ...] pairs. Add a --force at the end to override an existing profile (VERY DANGEROUS)", \
+	"osd", "rw", "cli,rest")
+COMMAND("osd erasure-code-profile get " \
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.]", \
+	"get erasure code profile <name>", \
+	"osd", "r", "cli,rest")
+COMMAND("osd erasure-code-profile rm " \
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.]", \
+	"remove erasure code profile <name>", \
+	"osd", "rw", "cli,rest")
+COMMAND("osd erasure-code-profile ls", \
+	"list all erasure code profiles", \
+	"osd", "r", "cli,rest")
 COMMAND("osd set " \
 	"name=key,type=CephChoices,strings=pause|noup|nodown|noout|noin|nobackfill|norecover|noscrub|nodeep-scrub|notieragent", \
 	"set <key>", "osd", "rw", "cli,rest")
@@ -508,7 +527,8 @@ COMMAND("osd pool create " \
 	"name=pg_num,type=CephInt,range=0 " \
 	"name=pgp_num,type=CephInt,range=0,req=false " \
         "name=pool_type,type=CephChoices,strings=replicated|erasure,req=false " \
-	"name=properties,type=CephString,n=N,req=false,goodchars=[A-Za-z0-9-_.=]", \
+	"name=erasure_code_profile,type=CephString,req=false,goodchars=[A-Za-z0-9-_.=] " \
+	"name=ruleset,type=CephString,req=false,goodchars=[A-Za-z0-9-_.=]", \
 	"create pool", "osd", "rw", "cli,rest")
 COMMAND("osd pool delete " \
 	"name=pool,type=CephPoolname " \
