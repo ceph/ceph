@@ -98,7 +98,9 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
   submit_manager.set_op_seq(op_seq);
 
   // done reading, make writeable.
-  journal->make_writeable();
+  err = journal->make_writeable();
+  if (err < 0)
+    return err;
 
   return count;
 }

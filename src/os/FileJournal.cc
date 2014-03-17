@@ -75,8 +75,8 @@ int FileJournal::_open(bool forwrite, bool create)
   fd = TEMP_FAILURE_RETRY(::open(fn.c_str(), flags, 0644));
   if (fd < 0) {
     int err = errno;
-    dout(2) << "FileJournal::_open: unable to open journal: open() failed: "
-	    << cpp_strerror(err) << dendl;
+    dout(2) << "FileJournal::_open unable to open journal "
+	    << fn << ": " << cpp_strerror(err) << dendl;
     return -err;
   }
 
@@ -1576,9 +1576,12 @@ void FileJournal::put_throttle(uint64_t ops, uint64_t bytes)
   }
 }
 
-void FileJournal::make_writeable()
+int FileJournal::make_writeable()
 {
-  _open(true);
+  dout(10) << __func__ << dendl;
+  int r = _open(true);
+  if (r < 0)
+    return r;
 
   if (read_pos > 0)
     write_pos = read_pos;
@@ -1588,6 +1591,7 @@ void FileJournal::make_writeable()
 
   must_write_header = true;
   start_writer();
+  return 0;
 }
 
 void FileJournal::wrap_read_bl(
