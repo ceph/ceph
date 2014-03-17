@@ -681,7 +681,7 @@ class CephManager:
         self.log(status)
         return status['pgmap']['num_pgs']
 
-    def create_pool_with_unique_name(self, pg_num=1, ec_pool=False):
+    def create_pool_with_unique_name(self, pg_num=16, ec_pool=False):
         """
         Create a pool named unique_pool_X where X is unique.
         """
@@ -692,7 +692,7 @@ class CephManager:
             self.create_pool(name, pg_num, ec_pool=ec_pool)
         return name
 
-    def create_pool(self, pool_name, pg_num=1, ec_pool=False):
+    def create_pool(self, pool_name, pg_num=16, ec_pool=False):
         """
         Create a pool named from the pool_name parameter.
         :param pool_name: name of the pool being created.
