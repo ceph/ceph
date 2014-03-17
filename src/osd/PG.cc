@@ -536,7 +536,9 @@ bool PG::needs_recovery() const
   const pg_missing_t &missing = pg_log.get_missing();
 
   if (missing.num_missing()) {
-    dout(10) << __func__ << " primary has " << missing.num_missing() << dendl;
+    dout(10) << __func__ << " primary has " << missing.num_missing()
+      << " missing" << dendl;
+
     ret = true;
   }
 
@@ -549,12 +551,14 @@ bool PG::needs_recovery() const
     pg_shard_t peer = *a;
     map<pg_shard_t, pg_missing_t>::const_iterator pm = peer_missing.find(peer);
     if (pm == peer_missing.end()) {
-      dout(10) << __func__ << " osd." << peer << " don't have missing set" << dendl;
+      dout(10) << __func__ << " osd." << peer << " doesn't have missing set"
+        << dendl;
       ret = true;
       continue;
     }
     if (pm->second.num_missing()) {
-      dout(10) << __func__ << " osd." << peer << " has " << pm->second.num_missing() << " missing" << dendl;
+      dout(10) << __func__ << " osd." << peer << " has "
+        << pm->second.num_missing() << " missing" << dendl;
       ret = true;
     }
   }
