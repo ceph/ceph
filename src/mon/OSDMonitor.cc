@@ -2846,18 +2846,20 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
   MonSession *session = m->get_session();
   if (!session)
     return -EPERM;
-  vector<string> properties;
+  string erasure_code_profile;
   stringstream ss;
   if (m->auid)
     return prepare_new_pool(m->name, m->auid, m->crush_rule, 0, 0,
                             properties, pg_pool_t::TYPE_REPLICATED, ss);
+                            erasure_code_profile,
   else
     return prepare_new_pool(m->name, session->auid, m->crush_rule, 0, 0,
                             properties, pg_pool_t::TYPE_REPLICATED, ss);
+                            erasure_code_profile,
 }
 
 int OSDMonitor::crush_ruleset_create_erasure(const string &name,
-					     const map<string,string> &properties,
+					     const string &profile,
 					     int *ruleset,
 					     stringstream &ss)
 {
@@ -2873,9 +2875,9 @@ int OSDMonitor::crush_ruleset_create_erasure(const string &name,
     return -EALREADY;
   } else {
     ErasureCodeInterfaceRef erasure_code;
-    int err = get_erasure_code(properties, &erasure_code, ss);
+    int err = get_erasure_code(profile, &erasure_code, ss);
     if (err) {
-      ss << "failed to load plugin using properties " << properties;
+      ss << "failed to load plugin using profile " << profile;
       return err;
     }
 
@@ -2890,16 +2892,20 @@ int OSDMonitor::crush_ruleset_create_erasure(const string &name,
   }
 }
 
-int OSDMonitor::get_erasure_code(const map<string,string> &properties,
+int OSDMonitor::get_erasure_code(const string &erasure_code_profile,
 				 ErasureCodeInterfaceRef *erasure_code,
 				 stringstream &ss)
 {
+  if (pending_inc.has_erasure_code_profile(erasure_code_profile))
+    return -EAGAIN;
+  const map<string,string> &profile =
+    osdmap.get_erasure_code_profile(erasure_code_profile);
   map<string,string>::const_iterator plugin =
     profile.find("plugin");
   if (plugin == profile.end()) {
     ss << "cannot determine the erasure code plugin"
-       << " because erasure-code-plugin is not in the properties "
-       << properties;
+       << " because there is no 'plugin' entry in the erasure_code_profile "
+       << profile;
     return -EINVAL;
   }
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
@@ -2973,27 +2979,25 @@ int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_pr
 					   map<string,string> *erasure_code_profile_map,
 					   stringstream &ss)
 {
-  if (pool_type == pg_pool_t::TYPE_ERASURE) {
-    int r = get_str_map(g_conf->osd_pool_default_erasure_code_properties,
-			ss,
-			properties_map);
-    if (r)
-      return r;
-    (*properties_map)["erasure-code-directory"] =
-      g_conf->osd_pool_default_erasure_code_directory;
-  }
+  int r = get_str_map(g_conf->osd_pool_default_erasure_code_profile,
+		      ss,
+		      erasure_code_profile_map);
+  if (r)
+    return r;
+  (*erasure_code_profile_map)["directory"] =
+    g_conf->osd_pool_default_erasure_code_directory;
 
-  for (vector<string>::const_iterator i = properties.begin();
-       i != properties.end();
+  for (vector<string>::const_iterator i = erasure_code_profile.begin();
+       i != erasure_code_profile.end();
        ++i) {
     size_t equal = i->find('=');
     if (equal == string::npos)
-      (*properties_map)[*i] = string();
+      (*erasure_code_profile_map)[*i] = string();
     else {
       const string key = i->substr(0, equal);
       equal++;
       const string value = i->substr(equal);
-      (*properties_map)[key] = value;
+      (*erasure_code_profile_map)[key] = value;
     }
   }
 
@@ -3001,7 +3005,7 @@ int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_pr
 }
 
 int OSDMonitor::prepare_pool_size(const unsigned pool_type,
-				  const map<string,string> &properties,
+				  const string &erasure_code_profile,
 				  unsigned *size,
 				  stringstream &ss)
 {
@@ -3013,7 +3017,7 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
   case pg_pool_t::TYPE_ERASURE:
     {
       ErasureCodeInterfaceRef erasure_code;
-      err = get_erasure_code(properties, &erasure_code, ss);
+      err = get_erasure_code(erasure_code_profile, &erasure_code, ss);
       if (err == 0)
 	*size = erasure_code->get_chunk_count();
     }
@@ -3027,7 +3031,7 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
 }
 
 int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
-					  const map<string,string> &properties,
+					  const string &erasure_code_profile,
 					  uint32_t *stripe_width,
 					  stringstream &ss)
 {
@@ -3039,7 +3043,7 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
   case pg_pool_t::TYPE_ERASURE:
     {
       ErasureCodeInterfaceRef erasure_code;
-      err = get_erasure_code(properties, &erasure_code, ss);
+      err = get_erasure_code(erasure_code_profile, &erasure_code, ss);
       uint32_t desired_stripe_width = g_conf->osd_pool_erasure_code_stripe_width;
       if (err == 0)
 	*stripe_width = erasure_code->get_data_chunk_count() *
@@ -3057,7 +3061,7 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
 
 int OSDMonitor::prepare_pool_crush_ruleset(const string &poolstr,
 					   const unsigned pool_type,
-					   const map<string,string> &properties,
+					   const string &erasure_code_profile,
 					   int *crush_ruleset,
 					   stringstream &ss)
 {
@@ -3079,7 +3083,8 @@ int OSDMonitor::prepare_pool_crush_ruleset(const string &poolstr,
 	  ruleset = i->second;
  	}
  
-	int err = crush_ruleset_create_erasure(ruleset, properties,
+	int err = crush_ruleset_create_erasure(ruleset_name,
+					       erasure_code_profile,
 					       crush_ruleset, ss);
 	switch (err) {
 	case -EALREADY:
@@ -3112,7 +3117,7 @@ int OSDMonitor::prepare_pool_crush_ruleset(const string &poolstr,
  * @param crush_rule The crush rule to use. If <0, will use the system default
  * @param pg_num The pg_num to use. If set to 0, will use the system default
  * @param pgp_num The pgp_num to use. If set to 0, will use the system default
- * @param properties An opaque list of key[=value] pairs for pool configuration
+ * @param erasure_code_profile The profile name in OSDMap to be used for erasure code
  * @param pool_type TYPE_ERASURE, TYPE_REP or TYPE_RAID4
  * @param ss human readable error message, if any.
  *
@@ -3120,24 +3125,20 @@ int OSDMonitor::prepare_pool_crush_ruleset(const string &poolstr,
  */
 int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_ruleset,
                                  unsigned pg_num, unsigned pgp_num,
-				 const vector<string> &properties,
+				 const string &erasure_code_profile,
                                  const unsigned pool_type,
 				 stringstream &ss)
 {
-  map<string,string> properties_map;
-  int r = prepare_pool_properties(pool_type, properties, &properties_map, ss);
-  if (r)
-    return r;
-  r = prepare_pool_crush_ruleset(name, pool_type, properties_map,
-				 &crush_ruleset, ss);
+  int r;
+  r = prepare_pool_crush_ruleset(pool_type, erasure_code_profile,
   if (r)
     return r;
   unsigned size;
-  r = prepare_pool_size(pool_type, properties_map, &size, ss);
+  r = prepare_pool_size(pool_type, erasure_code_profile, &size, ss);
   if (r)
     return r;
   uint32_t stripe_width = 0;
-  r = prepare_pool_stripe_width(pool_type, properties_map, &stripe_width, ss);
+  r = prepare_pool_stripe_width(pool_type, erasure_code_profile, &stripe_width, ss);
   if (r)
     return r;
 
@@ -3166,7 +3167,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_ruleset,
   pi->set_pgp_num(pgp_num ? pgp_num : g_conf->osd_pool_default_pgp_num);
   pi->last_change = pending_inc.epoch;
   pi->auid = auid;
-  pi->properties = properties_map;
+  pi->erasure_code_profile = erasure_code_profile;
   pi->stripe_width = stripe_width;
   pi->cache_target_dirty_ratio_micro =
     g_conf->osd_pool_default_cache_target_dirty_ratio * 1000000;
@@ -4028,17 +4029,13 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       goto reply;
     string name, poolstr;
     cmd_getval(g_ceph_context, cmdmap, "name", name);
-    vector<string> properties;
-    cmd_getval(g_ceph_context, cmdmap, "properties", properties);
-
-    map<string,string> properties_map;
-    err = prepare_pool_properties(pg_pool_t::TYPE_ERASURE,
-				  properties, &properties_map, ss);
-    if (err)
-      goto reply;
+    string profile;
+    cmd_getval(g_ceph_context, cmdmap, "profile", profile);
+    if (profile == "")
+      profile = "default";
 
     int ruleset;
-    err = crush_ruleset_create_erasure(name, properties_map, &ruleset, ss);
+    err = crush_ruleset_create_erasure(name, profile, &ruleset, ss);
     if (err < 0) {
       switch(err) {
       case -EEXIST: // return immediately
@@ -4552,9 +4549,6 @@ done:
       goto reply;
     }
 
-    vector<string> properties;
-    cmd_getval(g_ceph_context, cmdmap, "properties", properties);
-
     int pool_type;
     if (pool_type_str == "replicated") {
       pool_type = pg_pool_t::TYPE_REPLICATED;
@@ -4576,7 +4570,7 @@ done:
     err = prepare_new_pool(poolstr, 0, // auid=0 for admin created pool
 			   -1,         // default crush rule
 			   pg_num, pgp_num,
-			   properties, pool_type,
+			   erasure_code_profile, pool_type,
 			   ss);
     if (err < 0) {
       switch(err) {
