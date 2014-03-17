@@ -1000,21 +1000,8 @@ int Objecter::_get_session(int osd, OSDSession **session, RWLock::Context& lc)
     *session = s;
     return 0;
   }
-  if (!rwlock.is_wlocked()) {
-    epoch_t epoch = osdmap->get_epoch();
-    rwlock.unlock();
-    rwlock.get_write();
-    if (epoch != osdmap->get_epoch()) {
-      /* lost in a race! */
-      return -EAGAIN;
-    }
-    p = osd_sessions.find(osd);
-    if (p != osd_sessions.end()) {
-      OSDSession *s = p->second;
-      s->get();
-      *session = s;
-      return 0;
-    }
+  if (!lc.get_state() == RWLock::Context::TakenForWrite) {
+    return -EAGAIN;
   }
   OSDSession *s = new OSDSession(osd);
   osd_sessions[osd] = s;
@@ -1511,9 +1498,15 @@ tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
       r = _maybe_request_map();
     }
 
-    while (r == -EAGAIN) {
-      ldout(cct, 10) << "_maybe_request_map() returned -EAGAIN, recalculating op target" << dendl;
-      check_for_latest_map = (_recalc_op_target(op, lc) == RECALC_OP_TARGET_POOL_DNE);
+    if (r == -EAGAIN) {
+      assert(lc.get_state() != RWLock::Context::TakenForWrite);
+
+      if (!_promote_lock_check_race(lc)) {
+        ldout(cct, 10) << "_maybe_request_map() returned -EAGAIN, lost race, recalculating op target" << dendl;
+        check_for_latest_map = (_recalc_op_target(op, lc) == RECALC_OP_TARGET_POOL_DNE);
+      } else {
+        r = 0;
+      }
     }
   } while (r == -EAGAIN);
 
@@ -1705,9 +1698,8 @@ int Objecter::_recalc_op_target(Op *op, RWLock::Context& lc)
 	osd = primary;
       }
       int r = _get_session(osd, &s, lc);
-      if (r == -EAGAIN) {
-        assert(rwlock.is_wlocked());
-        return _recalc_op_target(op, lc);
+      if (r < 0) {
+        return r;
       }
     }
 
@@ -1733,7 +1725,14 @@ int Objecter::_recalc_op_target(Op *op, RWLock::Context& lc)
   return RECALC_OP_TARGET_NO_ACTION;
 }
 
-bool Objecter::_recalc_linger_op_target(LingerOp *linger_op, RWLock::Context& lc)
+bool Objecter::_promote_lock_check_race(RWLock::Context& lc)
+{
+  epoch_t epoch = osdmap->get_epoch();
+  lc.promote();
+  return (epoch == osdmap->get_epoch());
+}
+
+int Objecter::_recalc_linger_op_target(LingerOp *linger_op, RWLock::Context& lc)
 {
   assert(rwlock.is_locked());
 
@@ -1759,9 +1758,14 @@ bool Objecter::_recalc_linger_op_target(LingerOp *linger_op, RWLock::Context& lc
     if (primary != -1) {
       ret = _get_session(primary, &s, lc);
       if (ret == -EAGAIN) {
-        assert(rwlock.is_wlocked());
-        return _recalc_linger_op_target(linger_op, lc);
+        assert(lc.get_state() != RWLock::Context::TakenForWrite);
+
+        if (!_promote_lock_check_race(lc)) {
+          return ret;
+        }
+        ret = _get_session(primary, &s, lc);
       }
+      assert(ret == 0);
     } else {
       s = &homeless_session;
     }
