@@ -102,6 +102,12 @@ function main() {
 
     set -x
     setup $dir || return 1
-    run $dir || return 1
+    local code
+    if run $dir ; then
+        code=0
+    else
+        code=1
+    fi
     teardown $dir || return 1
+    return $code
 }
