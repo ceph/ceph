@@ -191,6 +191,8 @@ class PrioritizedQueue {
       f->dump_int("max_tokens", max_tokens);
       f->dump_int("size", size);
       f->dump_int("num_keys", q.size());
+      if (!empty())
+	f->dump_int("first_item_cost", front().first);
     }
   };
   map<unsigned, SubQueue> high_queue;
