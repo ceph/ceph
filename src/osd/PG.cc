@@ -4725,6 +4725,9 @@ void PG::start_peering_interval(
 
   assert(!deleting);
 
+  // should we tell the primary we are here?
+  send_notify = !is_primary();
+
   if (role != oldrole ||
       was_old_primary != is_primary()) {
     // did primary change?
@@ -4747,16 +4750,10 @@ void PG::start_peering_interval(
     // take active waiters
     requeue_ops(waiting_for_active);
 
-    // should we tell the primary we are here?
-    send_notify = !is_primary();
-      
   } else {
     // no role change.
     // did primary change?
     if (get_primary() != old_acting_primary) {    
-      // we need to announce
-      send_notify = true;
-        
       dout(10) << *this << " " << oldacting << " -> " << acting 
 	       << ", acting primary " 
 	       << old_acting_primary << " -> " << get_primary() 
