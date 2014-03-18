@@ -62,7 +62,8 @@ check_PROGRAMS += unittest_erasure_code_plugin
 
 unittest_erasure_code_jerasure_SOURCES = \
 	test/erasure-code/TestErasureCodeJerasure.cc \
-	$(libec_jerasure_la_SOURCES)
+	$(libec_jerasure_la_SOURCES) \
+	$(nodist_libec_jerasure_la_SOURCES)
 unittest_erasure_code_jerasure_CFLAGS = $(AM_CFLAGS) \
 	${SIMD_FLAGS} \
 	-Ierasure-code/jerasure/gf-complete/include \
