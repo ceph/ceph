@@ -20,7 +20,6 @@
 #include "ErasureCodeJerasure.h"
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
-#include "vectorop.h"
 extern "C" {
 #include "jerasure.h"
 #include "reed_sol.h"
@@ -28,6 +27,9 @@ extern "C" {
 #include "cauchy.h"
 #include "liberation.h"
 }
+
+// FIXME(loic) this may be too conservative, check back with feedback from Andreas 
+#define LARGEST_VECTOR_WORDSIZE 16
 
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
