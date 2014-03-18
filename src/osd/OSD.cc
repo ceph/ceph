@@ -7583,6 +7583,16 @@ void OSD::OpWQ::_process(PGRef pg, ThreadPool::TPHandle &handle)
     if (!(pg_for_processing[&*pg].size()))
       pg_for_processing.erase(&*pg);
   }
+
+  lgeneric_subdout(osd->cct, osd, 30) << "dequeue status: ";
+  Formatter *f = new_formatter("json");
+  f->open_object_section("q");
+  dump(f);
+  f->close_section();
+  f->flush(*_dout);
+  delete f;
+  *_dout << dendl;
+
   osd->dequeue_op(pg, op, handle);
   pg->unlock();
 }
