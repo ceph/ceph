@@ -54,6 +54,11 @@ function expect_alloc_hint_eq() {
     local expected_extsize="$1"
 
     for (( i = 0 ; i < "${NUM_OSDS}" ; i++ )); do
+        # Make sure that stuff is flushed from the journal to the store
+        # by the time we get to it, as we prod the actual files and not
+        # the journal.
+        sudo ceph daemon "osd.${i}" "flush_journal"
+
         # e.g., .../25.6_head/foo__head_7FC1F406__19
         #       .../26.bs1_head/bar__head_EFE6384B__1a_ffffffffffffffff_1
         local fns=(${OSD_DATA[i]}/current/${PGID}*_head/${OBJ}_*)
