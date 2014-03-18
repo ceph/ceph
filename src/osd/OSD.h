@@ -962,6 +962,7 @@ public:
 
 private:
   int state;
+  Spinlock epoch_lock; // protects access to boot_epoch, up_epoch, bind_epoch
   epoch_t boot_epoch;  // _first_ epoch we were marked up (after this process started)
   epoch_t up_epoch;    // _most_recent_ epoch we were marked up
   epoch_t bind_epoch;  // epoch we last did a bind to new ip:ports
