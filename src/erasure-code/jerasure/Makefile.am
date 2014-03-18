@@ -7,15 +7,12 @@ libec_jerasure_la_SOURCES = \
   erasure-code/jerasure/jerasure/src/reed_sol.c \
   erasure-code/jerasure/gf-complete/src/gf_wgen.c \
   erasure-code/jerasure/gf-complete/src/gf_method.c \
-  erasure-code/jerasure/gf-complete/src/gf_int.h \
   erasure-code/jerasure/gf-complete/src/gf_w16.c \
   erasure-code/jerasure/gf-complete/src/gf.c \
-  erasure-code/jerasure/gf-complete/src/gf_rand.h \
   erasure-code/jerasure/gf-complete/src/gf_w32.c \
   erasure-code/jerasure/gf-complete/src/gf_w64.c \
   erasure-code/jerasure/gf-complete/src/gf_w128.c \
   erasure-code/jerasure/gf-complete/src/gf_general.c \
-  erasure-code/jerasure/gf-complete/src/gf_general.h \
   erasure-code/jerasure/gf-complete/src/gf_w4.c \
   erasure-code/jerasure/gf-complete/src/gf_rand.c \
   erasure-code/jerasure/gf-complete/src/gf_w8.c \
