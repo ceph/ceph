@@ -230,15 +230,15 @@ public:
       min_cost(min_c)
   {}
 
-  unsigned length() {
+  unsigned length() const {
     unsigned total = 0;
-    for (typename map<unsigned, SubQueue>::iterator i = queue.begin();
+    for (typename map<unsigned, SubQueue>::const_iterator i = queue.begin();
 	 i != queue.end();
 	 ++i) {
       assert(i->second.length());
       total += i->second.length();
     }
-    for (typename map<unsigned, SubQueue>::iterator i = high_queue.begin();
+    for (typename map<unsigned, SubQueue>::const_iterator i = high_queue.begin();
 	 i != high_queue.end();
 	 ++i) {
       assert(i->second.length());
@@ -323,7 +323,7 @@ public:
     create_queue(priority)->enqueue_front(cl, cost, item);
   }
 
-  bool empty() {
+  bool empty() const {
     assert(total_priority >= 0);
     assert((total_priority == 0) || !(queue.empty()));
     return queue.empty() && high_queue.empty();
