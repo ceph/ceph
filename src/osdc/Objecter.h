@@ -1014,8 +1014,7 @@ private:
   version_t last_seen_pgmap_version;
 
   RWLock rwlock;
-  Mutex timer_lock;
-  SafeTimer timer;
+  RWTimer timer;
 
   PerfCounters *logger;
   
@@ -1525,8 +1524,7 @@ public:
     last_seen_osdmap_version(0),
     last_seen_pgmap_version(0),
     rwlock("Objecter::rwlock"),
-    timer_lock("Objecter::timer_lock"),
-    timer(cct, timer_lock),
+    timer(cct, rwlock),
     logger(NULL), tick_event(NULL),
     m_request_state_hook(NULL),
     num_homeless_ops(0),
@@ -2094,7 +2092,7 @@ public:
   // ---------------------------
   // df stats
 private:
-  void fs_stats_submit(StatfsOp *op);
+  void _fs_stats_submit(StatfsOp *op);
 public:
   void handle_fs_stats_reply(MStatfsReply *m);
   void get_fs_stats(struct ceph_statfs& result, Context *onfinish);

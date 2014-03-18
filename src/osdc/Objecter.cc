@@ -279,7 +279,6 @@ void Objecter::shutdown()
   }
 
   if (tick_event) {
-    Mutex::Locker l(timer_lock);
     timer.cancel_event(tick_event);
     tick_event = NULL;
   }
@@ -1205,7 +1204,6 @@ void Objecter::schedule_tick()
 {
   assert(tick_event == NULL);
   tick_event = new C_Tick(this);
-  Mutex::Locker l(timer_lock);
   timer.add_event_after(cct->_conf->objecter_tick_interval, tick_event);
 }
 
@@ -1214,12 +1212,10 @@ void Objecter::tick()
   if (!initialized.read())
     return;
 
-  timer_lock.Unlock();
+  assert(rwlock.is_locked());
 
   ldout(cct, 10) << "tick" << dendl;
   assert(initialized.read());
-
-  rwlock.get_read();
 
   // we are only called by C_Tick
   assert(tick_event);
@@ -1288,8 +1284,6 @@ void Objecter::tick()
     }
   }
 
-  rwlock.unlock();
-    
   // reschedule
   schedule_tick();
 }
@@ -1306,7 +1300,7 @@ void Objecter::resend_mon_ops()
   }
 
   for (map<tid_t,StatfsOp*>::iterator p = statfs_ops.begin(); p!=statfs_ops.end(); ++p) {
-    fs_stats_submit(p->second);
+    _fs_stats_submit(p->second);
     logger->inc(l_osdc_statfs_resend);
   }
 
@@ -1370,7 +1364,6 @@ tid_t Objecter::_op_submit_with_budget(Op *op, RWLock::Context& lc)
 
   if (osd_timeout > 0) {
     op->ontimeout = new C_CancelOp(op, this);
-    Mutex::Locker l(timer_lock);
     timer.add_event_after(osd_timeout, op->ontimeout);
   }
 
@@ -1813,7 +1806,6 @@ void Objecter::_finish_op(Op *op)
   assert(check_latest_map_ops.find(op->tid) == check_latest_map_ops.end());
 
   if (op->ontimeout) {
-    Mutex::Locker l(timer_lock);
     timer.cancel_event(op->ontimeout);
   }
 
@@ -2471,7 +2463,6 @@ void Objecter::pool_op_submit(PoolOp *op)
 {
   if (mon_timeout > 0) {
     op->ontimeout = new C_CancelPoolOp(op->tid, this);
-    Mutex::Locker l(timer_lock);
     timer.add_event_after(mon_timeout, op->ontimeout);
   }
   _pool_op_submit(op);
@@ -2572,7 +2563,6 @@ void Objecter::_finish_pool_op(PoolOp *op)
   logger->set(l_osdc_poolop_active, pool_ops.size());
 
   if (op->ontimeout) {
-    Mutex::Locker l(timer_lock);
     timer.cancel_event(op->ontimeout);
   }
 
@@ -2607,7 +2597,6 @@ void Objecter::get_pool_stats(list<string>& pools, map<string,pool_stat_t> *resu
   op->ontimeout = NULL;
   if (mon_timeout > 0) {
     op->ontimeout = new C_CancelPoolStatOp(op->tid, this);
-    Mutex::Locker l(timer_lock);
     timer.add_event_after(mon_timeout, op->ontimeout);
   }
   poolstat_ops[op->tid] = op;
@@ -2679,7 +2668,6 @@ void Objecter::_finish_pool_stat_op(PoolStatOp *op)
   logger->set(l_osdc_poolstat_active, poolstat_ops.size());
 
   if (op->ontimeout) {
-    Mutex::Locker l(timer_lock);
     timer.cancel_event(op->ontimeout);
   }
 
@@ -2701,6 +2689,7 @@ public:
 void Objecter::get_fs_stats(ceph_statfs& result, Context *onfinish)
 {
   ldout(cct, 10) << "get_fs_stats" << dendl;
+  RWLock::WLocker l(rwlock);
 
   StatfsOp *op = new StatfsOp;
   op->tid = ++last_tid;
@@ -2709,17 +2698,16 @@ void Objecter::get_fs_stats(ceph_statfs& result, Context *onfinish)
   op->ontimeout = NULL;
   if (mon_timeout > 0) {
     op->ontimeout = new C_CancelStatfsOp(op->tid, this);
-    Mutex::Locker l(timer_lock);
     timer.add_event_after(mon_timeout, op->ontimeout);
   }
   statfs_ops[op->tid] = op;
 
   logger->set(l_osdc_statfs_active, statfs_ops.size());
 
-  fs_stats_submit(op);
+  _fs_stats_submit(op);
 }
 
-void Objecter::fs_stats_submit(StatfsOp *op)
+void Objecter::_fs_stats_submit(StatfsOp *op)
 {
   ldout(cct, 10) << "fs_stats_submit" << op->tid << dendl;
   monc->send_mon_message(new MStatfs(monc->get_fsid(), op->tid, last_seen_pgmap_version));
@@ -2775,11 +2763,12 @@ int Objecter::statfs_op_cancel(tid_t tid, int r)
 
 void Objecter::_finish_statfs_op(StatfsOp *op)
 {
+  assert(rwlock.is_wlocked());
+
   statfs_ops.erase(op->tid);
   logger->set(l_osdc_statfs_active, statfs_ops.size());
 
   if (op->ontimeout) {
-    Mutex::Locker l(timer_lock);
     timer.cancel_event(op->ontimeout);
   }
 
@@ -3180,7 +3169,6 @@ int Objecter::_submit_command(CommandOp *c, tid_t *ptid)
   (void)_recalc_command_target(c);
   if (osd_timeout > 0) {
     c->ontimeout = new C_CancelCommandOp(c->session, tid, this);
-    Mutex::Locker l(timer_lock);
     timer.add_event_after(osd_timeout, c->ontimeout);
   }
 
@@ -3292,6 +3280,8 @@ int Objecter::command_op_cancel(OSDSession *s, tid_t tid, int r)
 
 void Objecter::_finish_command(CommandOp *c, int r, string rs)
 {
+  assert(rwlock.is_wlocked());
+
   ldout(cct, 10) << "_finish_command " << c->tid << " = " << r << " " << rs << dendl;
   if (c->prs)
     *c->prs = rs;
@@ -3301,7 +3291,6 @@ void Objecter::_finish_command(CommandOp *c, int r, string rs)
   c->session->command_ops.erase(c->tid);
   c->session->lock.unlock();
   if (c->ontimeout) {
-    Mutex::Locker l(timer_lock);
     timer.cancel_event(c->ontimeout);
   }
   c->put();
