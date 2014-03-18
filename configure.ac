@@ -498,6 +498,9 @@ AC_LANG_PUSH([C++])
 AC_CHECK_HEADER([leveldb/filter_policy.h], [AC_DEFINE([HAVE_LEVELDB_FILTER_POLICY], [1], [Defined if LevelDB supports bloom filters ])])
 AC_LANG_POP([C++])
 
+# Find supported SIMD / SSE extensions by requesting cpuid
+AX_EXT()
+
 # use system libs3?
 AC_ARG_WITH([system-libs3],
 	[AS_HELP_STRING([--with-system-libs3], [use system libs3])],
