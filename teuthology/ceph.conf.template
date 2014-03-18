@@ -5,7 +5,7 @@
 
 	filestore xattr use omap = true
 
-	mon clock drift allowed = .250
+	mon clock drift allowed = .500
 
 	osd crush chooseleaf type = 0
         auth debug = true
