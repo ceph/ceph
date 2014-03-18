@@ -895,24 +895,15 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
 	continue;
       }
     }
-    // Prefer longer tail if it brings another peer into contiguity
-    for (map<pg_shard_t, pg_info_t>::const_iterator q = infos.begin();
-	 q != infos.end();
-	 ++q) {
-      if (q->second.is_incomplete())
-	continue;  // don't care about log contiguity
-      if (q->second.last_update < best->second.log_tail &&
-	  q->second.last_update >= p->second.log_tail) {
-	dout(10) << "calc_acting prefer osd." << p->first
-		 << " because it brings osd." << q->first << " into log contiguity" << dendl;
-	best = p;
-	continue;
-      }
-      if (q->second.last_update < p->second.log_tail &&
-	  q->second.last_update >= best->second.log_tail) {
-	continue;
-      }
+
+    // Prefer longer tail
+    if (p->second.log_tail > best->second.log_tail) {
+      continue;
+    } else if (p->second.log_tail < best->second.log_tail) {
+      best = p;
+      continue;
     }
+
     // prefer current primary (usually the caller), all things being equal
     if (p->first == pg_whoami) {
       dout(10) << "calc_acting prefer osd." << p->first
