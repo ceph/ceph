@@ -499,7 +499,7 @@ AC_CHECK_HEADER([leveldb/filter_policy.h], [AC_DEFINE([HAVE_LEVELDB_FILTER_POLIC
 AC_LANG_POP([C++])
 
 # Find supported SIMD / SSE extensions by requesting cpuid
-AX_EXT()
+#AX_EXT()
 
 # use system libs3?
 AC_ARG_WITH([system-libs3],
