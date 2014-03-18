@@ -726,7 +726,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
   }
   for (list<LingerOp*>::iterator p = need_resend_linger.begin(); p != need_resend_linger.end(); ++p) {
     LingerOp *op = *p;
-    if (op->session) {
+    if (!op->session->is_homeless()) {
       logger->inc(l_osdc_linger_resend);
       _send_linger(op);
     }
@@ -1485,7 +1485,7 @@ tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
       ldout(cct, 0) << " FULL, paused modify " << op << " tid " << last_tid << dendl;
       op->paused = true;
       r = _maybe_request_map();
-    } else if (op->session) {
+    } else if (!op->session->is_homeless()) {
       _send_op(op);
     } else {
       r = _maybe_request_map();
@@ -1703,7 +1703,9 @@ int Objecter::_recalc_op_target(Op *op, RWLock::Context& lc)
       put_session(op->session);
       op->session = s;
       s->lock.get_write();
-      s->ops[op->tid] = op;
+      if (op->tid) {
+        s->ops[op->tid] = op;
+      }
       if (s->is_homeless())
 	num_homeless_ops.inc();
       s->lock.unlock();
