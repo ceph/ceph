@@ -2,4 +2,6 @@ tasks:
 - install:
 - ceph:
 - kclient: [client.0]
-- knfsd: [client.0]
+- knfsd:
+    client.0:
+      options: rw,no_root_squash,async
