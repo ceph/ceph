@@ -603,6 +603,14 @@ void EMetaBlob::remotebit::dump(Formatter *f) const
     type_string = "symlink"; break;
   case S_IFDIR:
     type_string = "directory"; break;
+  case S_IFIFO:
+    type_string = "fifo"; break;
+  case S_IFCHR:
+    type_string = "chr"; break;
+  case S_IFBLK:
+    type_string = "blk"; break;
+  case S_IFSOCK:
+    type_string = "sock"; break;
   default:
     assert (0 == "unknown d_type!");
   }
