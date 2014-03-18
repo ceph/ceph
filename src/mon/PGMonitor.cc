@@ -1660,7 +1660,12 @@ bool PGMonitor::prepare_command(MMonCommand *m)
   } else if (prefix == "pg set_full_ratio" ||
 	     prefix == "pg set_nearfull_ratio") {
     double n;
-    cmd_getval(g_ceph_context, cmdmap, "ratio", n);
+    if (!cmd_getval(g_ceph_context, cmdmap, "ratio", n)) {
+      ss << "unable to parse 'ratio' value '"
+         << cmd_vartype_stringify(cmdmap["who"]) << "'";
+      r = -EINVAL;
+      goto reply;
+    }
     string op = prefix.substr(3, string::npos);
     if (op == "set_full_ratio")
       pending_inc.full_ratio = n;
