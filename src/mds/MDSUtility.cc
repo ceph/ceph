@@ -28,7 +28,7 @@ MDSUtility::MDSUtility() :
   messenger = Messenger::create(g_ceph_context, entity_name_t::CLIENT(), "mds", getpid());
   mdsmap = new MDSMap();
   osdmap = new OSDMap();
-  objecter = new Objecter(g_ceph_context, messenger, monc, osdmap, lock, timer, 0, 0);
+  objecter = new Objecter(g_ceph_context, messenger, monc, osdmap, 0, 0);
 }
 
 
@@ -71,10 +71,7 @@ int MDSUtility::init()
 
   // Initialize Objecter and wait for OSD map
   objecter->set_client_incarnation(0);
-  objecter->init_unlocked();
-  lock.Lock();
-  objecter->init_locked();
-  lock.Unlock();
+  objecter->init();
   objecter->wait_for_osd_map();
   timer.init();
 
@@ -105,9 +102,8 @@ void MDSUtility::shutdown()
 {
   lock.Lock();
   timer.shutdown();
-  objecter->shutdown_locked();
+  objecter->shutdown();
   lock.Unlock();
-  objecter->shutdown_unlocked();
   monc->shutdown();
   messenger->shutdown();
   messenger->wait();

@@ -19,20 +19,30 @@
 
 #include <pthread.h>
 #include "lockdep.h"
+#include "include/atomic.h"
 
 class RWLock
 {
   mutable pthread_rwlock_t L;
   const char *name;
   int id;
+  atomic_t nrlock, nwlock;
 
 public:
   RWLock(const RWLock& other);
   const RWLock& operator=(const RWLock& other);
 
-  RWLock(const char *n) : name(n), id(-1) {
+  RWLock(const char *n) : name(n), id(-1), nrlock(0), nwlock(0) {
     pthread_rwlock_init(&L, NULL);
     if (g_lockdep) id = lockdep_register(name);
+  }
+
+  bool is_locked() const {
+    return (nrlock.read() > 0) || (nwlock.read() > 0);
+  }
+
+  bool is_wlocked() const {
+    return (nwlock.read() > 0);
   }
 
   virtual ~RWLock() {
@@ -41,6 +51,11 @@ public:
   }
 
   void unlock() {
+    if (nwlock.read() > 0) {
+      nwlock.dec();
+    } else {
+      nrlock.dec();
+    }
     if (g_lockdep) id = lockdep_will_unlock(name, id);
     pthread_rwlock_unlock(&L);
   }
@@ -50,9 +65,11 @@ public:
     if (g_lockdep) id = lockdep_will_lock(name, id);
     pthread_rwlock_rdlock(&L);
     if (g_lockdep) id = lockdep_locked(name, id);
+    nrlock.inc();
   }
   bool try_get_read() {
     if (pthread_rwlock_tryrdlock(&L) == 0) {
+      nrlock.inc();
       if (g_lockdep) id = lockdep_locked(name, id);
       return true;
     }
@@ -67,10 +84,13 @@ public:
     if (g_lockdep) id = lockdep_will_lock(name, id);
     pthread_rwlock_wrlock(&L);
     if (g_lockdep) id = lockdep_locked(name, id);
+    nwlock.inc();
+
   }
   bool try_get_write() {
     if (pthread_rwlock_trywrlock(&L) == 0) {
       if (g_lockdep) id = lockdep_locked(name, id);
+      nwlock.inc();
       return true;
     }
     return false;
@@ -79,28 +99,105 @@ public:
     unlock();
   }
 
+  void get(bool for_write) {
+    if (for_write) {
+      get_write();
+    } else {
+      get_read();
+    }
+  }
+
 public:
   class RLocker {
     RWLock &m_lock;
 
+    bool locked;
+
   public:
     RLocker(RWLock& lock) : m_lock(lock) {
       m_lock.get_read();
+      locked = true;
+    }
+    void unlock() {
+      assert(locked);
+      m_lock.unlock();
+      locked = false;
     }
     ~RLocker() {
-      m_lock.put_read();
+      if (locked) {
+        m_lock.unlock();
+      }
     }
   };
 
   class WLocker {
     RWLock &m_lock;
 
+    bool locked;
+
   public:
     WLocker(RWLock& lock) : m_lock(lock) {
       m_lock.get_write();
+      locked = true;
+    }
+    void unlock() {
+      assert(locked);
+      m_lock.unlock();
+      locked = false;
     }
     ~WLocker() {
-      m_lock.put_write();
+      if (locked) {
+        m_lock.unlock();
+      }
+    }
+  };
+
+  class Context {
+    RWLock& lock;
+
+  public:
+    enum LockState {
+      Untaken = 0,
+      TakenForRead = 1,
+      TakenForWrite = 2,
+    };
+
+  private:
+    LockState state;
+
+  public:
+    Context(RWLock& l) : lock(l) {}
+    Context(RWLock& l, LockState s) : lock(l), state(s) {}
+
+    void get_write() {
+      assert(state == Untaken);
+
+      lock.get_write();
+      state = TakenForWrite;
+    }
+
+    void get_read() {
+      assert(state == Untaken);
+
+      lock.get_read();
+      state = TakenForRead;
+    }
+
+    void unlock() {
+      assert(state != Untaken);
+      lock.unlock();
+      state = Untaken;
+    }
+
+    void promote() {
+      assert(state == TakenForRead);
+      unlock();
+      get_write();
+    }
+
+    LockState get_state() { return state; }
+    void set_state(LockState s) {
+      state = s;
     }
   };
 };
