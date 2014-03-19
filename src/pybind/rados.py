@@ -1100,6 +1100,30 @@ class Ioctx(object):
             raise make_ex(ret, "error reading %s" % object_name)
         return completion
 
+    def aio_remove(self, object_name, oncomplete=None, onsafe=None):
+        """
+        Asychronously remove an object
+
+        :param object_name: name of the object to remove
+        :type object_name: str
+        :param oncomplete: what to do when the remove is safe and complete in memory
+            on all replicas
+        :type oncomplete: completion
+        :param onsafe:  what to do when the remove is safe and complete on storage
+            on all replicas
+        :type onsafe: completion
+
+        :raises: :class:`Error`
+        :returns: completion object
+        """
+        completion = self.__get_completion(oncomplete, onsafe)
+        ret = run_in_thread(self.librados.rados_aio_remove,
+                            (self.io, c_char_p(object_name),
+                            completion.rados_comp))
+        if ret < 0:
+            raise make_ex(ret, "error removing %s" % object_name)
+        return completion
+
     def require_ioctx_open(self):
         """
         Checks if the rados.Ioctx object state is 'open'
