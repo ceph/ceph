@@ -317,7 +317,7 @@ protected:
   map<int, map<dirfrag_t, vector<dirfrag_t> > > other_ambiguous_imports;  
 
   map<int, map<metareqid_t, MDSlaveUpdate*> > uncommitted_slave_updates;  // slave: for replay.
-  map<CDir*, int> uncommitted_slave_rename_olddir;  // slave: preserve the non-auth dir until seeing commit.
+  map<CInode*, int> uncommitted_slave_rename_olddir;  // slave: preserve the non-auth dir until seeing commit.
   map<CInode*, int> uncommitted_slave_unlink;  // slave: preserve the unlinked inode until seeing commit.
 
   // track master requests whose slaves haven't acknowledged commit
@@ -616,6 +616,13 @@ public:
     if (!in)
       return NULL;
     return in->get_dirfrag(df.frag);
+  }
+  CDir* get_dirfrag(inodeno_t ino, const string& dn) {
+    CInode *in = get_inode(ino);
+    if (!in)
+      return NULL;
+    frag_t fg = in->pick_dirfrag(dn);
+    return in->get_dirfrag(fg);
   }
   CDir* get_force_dirfrag(dirfrag_t df) {
     CInode *diri = get_inode(df.ino);

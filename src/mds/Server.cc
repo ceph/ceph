@@ -5304,6 +5304,8 @@ void Server::do_rmdir_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   assert(mdr || mds->is_resolve());
 
   CDir *dir = mds->mdcache->get_dirfrag(rollback.src_dir);
+  if (!dir)
+    dir = mds->mdcache->get_dirfrag(rollback.src_dir.ino, rollback.src_dname);
   assert(dir);
   CDentry *dn = dir->lookup(rollback.src_dname);
   assert(dn);
@@ -6928,6 +6930,8 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr,
 
   CDentry *srcdn = NULL;
   CDir *srcdir = mds->mdcache->get_dirfrag(rollback.orig_src.dirfrag);
+  if (!srcdir)
+    srcdir = mds->mdcache->get_dirfrag(rollback.orig_src.dirfrag.ino, rollback.orig_src.dname);
   if (srcdir) {
     dout(10) << "  srcdir " << *srcdir << dendl;
     srcdn = srcdir->lookup(rollback.orig_src.dname);
@@ -6941,6 +6945,8 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr,
 
   CDentry *destdn = NULL;
   CDir *destdir = mds->mdcache->get_dirfrag(rollback.orig_dest.dirfrag);
+  if (!destdir)
+    destdir = mds->mdcache->get_dirfrag(rollback.orig_dest.dirfrag.ino, rollback.orig_dest.dname);
   if (destdir) {
     dout(10) << " destdir " << *destdir << dendl;
     destdn = destdir->lookup(rollback.orig_dest.dname);
