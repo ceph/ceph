@@ -3163,7 +3163,7 @@ void MDCache::add_uncommitted_slave_update(metareqid_t reqid, int master, MDSlav
 {
   assert(uncommitted_slave_updates[master].count(reqid) == 0);
   uncommitted_slave_updates[master][reqid] = su;
-  for(set<CDir*>::iterator p = su->olddirs.begin(); p != su->olddirs.end(); ++p)
+  for(set<CInode*>::iterator p = su->olddirs.begin(); p != su->olddirs.end(); ++p)
     uncommitted_slave_rename_olddir[*p]++;
   for(set<CInode*>::iterator p = su->unlinked.begin(); p != su->unlinked.end(); ++p)
     uncommitted_slave_unlink[*p]++;
@@ -3178,25 +3178,38 @@ void MDCache::finish_uncommitted_slave_update(metareqid_t reqid, int master)
   if (uncommitted_slave_updates[master].empty())
     uncommitted_slave_updates.erase(master);
   // discard the non-auth subtree we renamed out of
-  for(set<CDir*>::iterator p = su->olddirs.begin(); p != su->olddirs.end(); ++p) {
-    CDir *dir = *p;
-    uncommitted_slave_rename_olddir[dir]--;
-    if (uncommitted_slave_rename_olddir[dir] == 0) {
-      uncommitted_slave_rename_olddir.erase(dir);
-      CDir *root = get_subtree_root(dir);
-      if (root->get_dir_auth() == CDIR_AUTH_UNDEF)
-	try_trim_non_auth_subtree(root);
-    }
+  for(set<CInode*>::iterator p = su->olddirs.begin(); p != su->olddirs.end(); ++p) {
+    CInode *diri = *p;
+    map<CInode*, int>::iterator it = uncommitted_slave_rename_olddir.find(diri);
+    assert(it != uncommitted_slave_rename_olddir.end());
+    it->second--;
+    if (it->second == 0) {
+      uncommitted_slave_rename_olddir.erase(it);
+      list<CDir*> ls;
+      diri->get_dirfrags(ls);
+      for (list<CDir*>::iterator q = ls.begin(); q != ls.end(); ++q) {
+	CDir *root = get_subtree_root(*q);
+	if (root->get_dir_auth() == CDIR_AUTH_UNDEF) {
+	  try_trim_non_auth_subtree(root);
+	  if (*q != root)
+	    break;
+	}
+      }
+    } else
+      assert(it->second > 0);
   }
   // removed the inodes that were unlinked by slave update
   for(set<CInode*>::iterator p = su->unlinked.begin(); p != su->unlinked.end(); ++p) {
     CInode *in = *p;
-    uncommitted_slave_unlink[in]--;
-    if (uncommitted_slave_unlink[in] == 0) {
-      uncommitted_slave_unlink.erase(in);
+    map<CInode*, int>::iterator it = uncommitted_slave_unlink.find(in);
+    assert(it != uncommitted_slave_unlink.end());
+    it->second--;
+    if (it->second == 0) {
+      uncommitted_slave_unlink.erase(it);
       if (!in->get_projected_parent_dn())
 	mds->mdcache->remove_inode_recursive(in);
-    }
+    } else
+      assert(it->second > 0);
   }
   delete su;
 }
@@ -6673,7 +6686,7 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
 {
   dout(10) << "trim_non_auth_subtree(" << dir << ") " << *dir << dendl;
 
-  if (uncommitted_slave_rename_olddir.count(dir) || // preserve the dir for rollback
+  if (uncommitted_slave_rename_olddir.count(dir->inode) || // preserve the dir for rollback
       my_ambiguous_imports.count(dir->dirfrag()))
     return true;
 
@@ -6694,7 +6707,7 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
         for (list<CDir*>::iterator subdir = subdirs.begin();
             subdir != subdirs.end();
             ++subdir) {
-          if (uncommitted_slave_rename_olddir.count(*subdir) || // preserve the dir for rollback
+          if (uncommitted_slave_rename_olddir.count((*subdir)->inode) || // preserve the dir for rollback
 	      my_ambiguous_imports.count((*subdir)->dirfrag()) ||
 	      (*subdir)->is_subtree_root()) {
             keep_inode = true;
