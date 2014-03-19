@@ -2994,12 +2994,14 @@ void PG::reg_next_scrub()
   } else {
     scrubber.scrub_reg_stamp = info.history.last_scrub_stamp;
   }
-  osd->reg_last_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
+  if (is_primary())
+    osd->reg_last_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
 }
 
 void PG::unreg_next_scrub()
 {
-  osd->unreg_last_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
+  if (is_primary())
+    osd->unreg_last_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
 }
 
 void PG::sub_op_scrub_map(OpRequestRef op)
@@ -4617,6 +4619,8 @@ void PG::start_peering_interval(
   vector<int> oldacting, oldup;
   int oldrole = get_role();
 
+  unreg_next_scrub();
+
   pg_shard_t old_acting_primary = get_primary();
   pg_shard_t old_up_primary = up_primary;
   bool was_old_primary = is_primary();
@@ -4652,6 +4656,8 @@ void PG::start_peering_interval(
     set_role(role);
   else
     set_role(-1);
+
+  reg_next_scrub();
 
   // did acting, up, primary|acker change?
   if (!lastmap) {
