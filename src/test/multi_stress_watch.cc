@@ -75,7 +75,31 @@ test_replicated(Rados &cluster, std::string pool_name, std::string obj_name)
 void
 test_erasure(Rados &cluster, std::string pool_name, std::string obj_name)
 {
-  std::cout << "Skip erasure test" << std::endl;
+  string outs;
+  bufferlist inbl;
+  int ret;
+  ret = cluster.mon_command(
+    "{\"prefix\": \"osd erasure-code-profile set\", \"name\": \"testprofile\", \"profile\": [ \"k=2\", \"m=1\", \"ruleset-failure-domain=osd\"]}",
+    inbl, NULL, &outs);
+  if (ret < 0) {
+    std::cerr << "mon_command erasure-code-profile set failed with " << ret << std::endl;
+    exit(1);
+  }
+  //std::cout << outs << std::endl;
+
+  outs.clear();
+  ret = cluster.mon_command(
+    "{\"prefix\": \"osd pool create\", \"pool\": \"" + pool_name + "\", \"pool_type\":\"erasure\", \"pg_num\":12, \"pgp_num\":12, \"erasure_code_profile\":\"testprofile\"}",
+    inbl, NULL, &outs);
+  if (ret < 0) {
+    std::cerr << outs << std::endl;
+    std::cerr << "mon_command create pool failed with " << ret << std::endl;
+    exit(1);
+  }
+  //std::cout << outs << std::endl;
+
+  cluster.wait_for_latest_osdmap();
+  test_loop(cluster, pool_name, obj_name);
   return;
 }
 
