@@ -1208,7 +1208,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	  assert(dir);
 	  // preserve subtree bound until slave commit
 	  if (dir->get_dir_auth() == CDIR_AUTH_UNDEF)
-	    slaveup->olddirs.insert(dir);
+	    slaveup->olddirs.insert(dir->inode);
 	}
       }
 
@@ -1218,7 +1218,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       CDir *root = mds->mdcache->get_subtree_root(olddir);
       if (root->get_dir_auth() == CDIR_AUTH_UNDEF) {
 	if (slaveup) // preserve the old dir until slave commit
-	  slaveup->olddirs.insert(olddir);
+	  slaveup->olddirs.insert(olddir->inode);
 	else
 	  mds->mdcache->try_trim_non_auth_subtree(root);
       }
