@@ -1001,8 +1001,6 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 
     if (lump.is_dirty()) {
       dir->_mark_dirty(logseg);
-      dir->get_inode()->filelock.mark_dirty();
-      dir->get_inode()->nestlock.mark_dirty();
 
       if (!(dir->fnode.rstat == dir->fnode.accounted_rstat)) {
 	dout(10) << "EMetaBlob.replay      dirty nestinfo on " << *dir << dendl;
