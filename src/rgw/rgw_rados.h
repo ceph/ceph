@@ -4,6 +4,7 @@
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
 #include "common/RefCountedObj.h"
+#include "common/RWLock.h"
 #include "rgw_common.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/version/cls_version_types.h"
@@ -1166,6 +1167,21 @@ struct rgw_rados_ref {
   librados::IoCtx ioctx;
 };
 
+class RGWChainedCache {
+public:
+  virtual ~RGWChainedCache() {}
+  virtual void chain_cb(const string& key, void *data) = 0;
+  virtual void invalidate(const string& key) = 0;
+
+  struct Entry {
+    RGWChainedCache *cache;
+    const string& key;
+    void *data;
+
+    Entry(RGWChainedCache *_c, const string& _k, void *_d) : cache(_c), key(_k), data(_d) {}
+  };
+};
+
 
 class RGWRados
 {
@@ -1647,9 +1663,11 @@ public:
             struct rgw_err *err);
 
   virtual int get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **handle, rgw_obj& obj,
-                      bufferlist& bl, off_t ofs, off_t end);
+                      bufferlist& bl, off_t ofs, off_t end, rgw_cache_entry_info *cache_info);
 
   virtual void finish_get_obj(void **handle);
+
+  virtual bool chain_cache_entry(rgw_cache_entry_info& cache_info, RGWChainedCache::Entry *chained_entry) { return false; }
 
   int iterate_obj(void *ctx, rgw_obj& obj,
                   off_t ofs, off_t end,
@@ -1918,6 +1936,44 @@ public:
 
 };
 
+template <class T>
+class RGWChainedCacheImpl : public RGWChainedCache {
+  RWLock lock;
+
+  map<string, T> entries;
+
+public:
+  RGWChainedCacheImpl() : lock("RGWChainedCacheImpl::lock") {}
+
+  bool find(const string& key, T *entry) {
+    RWLock::RLocker rl(lock);
+    typename map<string, T>::iterator iter = entries.find(key);
+    if (iter == entries.end()) {
+      return false;
+    }
+
+    *entry = iter->second;
+    return true;
+  }
+
+  bool put(RGWRados *store, const string& key, T *entry, rgw_cache_entry_info& cache_info) {
+    Entry chain_entry(this, key, entry);
+
+    /* we need the store cache to call us under its lock to maintain lock ordering */
+    return store->chain_cache_entry(cache_info, &chain_entry);
+  }
+
+  void chain_cb(const string& key, void *data) {
+    T *entry = (T *)data;
+    RWLock::WLocker wl(lock);
+    entries[key] = *entry;
+  }
+
+  void invalidate(const string& key) {
+    RWLock::WLocker wl(lock);
+    entries.erase(key);
+  }
+};
 
 
 #endif

@@ -3389,7 +3389,7 @@ set_err_state:
   }
 
   if (copy_first) {
-    ret = get_obj(ctx, NULL, &handle, src_obj, first_chunk, 0, max_chunk_size);
+    ret = get_obj(ctx, NULL, &handle, src_obj, first_chunk, 0, max_chunk_size, NULL);
     if (ret < 0)
       goto done_ret;
 
@@ -3462,7 +3462,7 @@ int RGWRados::copy_obj_data(void *ctx,
 
   do {
     bufferlist bl;
-    ret = get_obj(ctx, NULL, handle, src_obj, bl, ofs, end);
+    ret = get_obj(ctx, NULL, handle, src_obj, bl, ofs, end, NULL);
     if (ret < 0)
       return ret;
 
@@ -4552,7 +4552,7 @@ int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
 
 
 int RGWRados::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **handle, rgw_obj& obj,
-                      bufferlist& bl, off_t ofs, off_t end)
+                      bufferlist& bl, off_t ofs, off_t end, rgw_cache_entry_info *cache_info)
 {
   rgw_bucket bucket;
   std::string oid, key;
