@@ -64,6 +64,8 @@ public:
   };
   typedef ceph::shared_ptr< TransactionImpl > Transaction;
 
+  static KeyValueDB * create(CephContext *cct, const string& type, const string& dir);
+  static bool pre_init(const string& type, const string& dir);
   virtual int init() = 0;
   virtual int open(ostream &out) = 0;
   virtual int create_and_open(ostream &out) = 0;
