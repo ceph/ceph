@@ -1,0 +1,14 @@
+tasks:
+- install:
+    branch: cuttlefish
+- print: "**** done cuttlefish install"
+- ceph:
+    fs: xfs
+- print: "**** done ceph"
+- install.upgrade:
+    all:
+      branch: dumpling
+- parallel:
+    - workload
+    - upgrade-sequence
+- print: "**** done parallel"
