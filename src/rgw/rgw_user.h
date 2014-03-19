@@ -59,7 +59,8 @@ extern int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 extern int rgw_get_user_info_by_uid(RGWRados *store, string& user_id, RGWUserInfo& info,
-                                    RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL);
+                                    RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL,
+                                    rgw_cache_entry_info *cache_info = NULL);
 /**
  * Given an swift username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
