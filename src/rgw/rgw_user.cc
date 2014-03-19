@@ -199,40 +199,34 @@ struct user_info_entry {
   time_t mtime;
 };
 
-
-static map<string, user_info_entry> uinfo_cache;
-static RWLock uinfo_lock("uinfo_lock");
+static RGWChainedCacheImpl<user_info_entry> uinfo_cache;
 
 int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucket, RGWUserInfo& info,
                                  RGWObjVersionTracker *objv_tracker, time_t *pmtime)
 {
-  uinfo_lock.get_read();
-  map<string, user_info_entry>::iterator uiter = uinfo_cache.find(key);
-  if (uiter != uinfo_cache.end()) {
-    user_info_entry& e = uiter->second;
+  user_info_entry e;
+  if (uinfo_cache.find(key, &e)) {
     info = e.info;
     if (objv_tracker)
       *objv_tracker = e.objv_tracker;
     if (pmtime)
       *pmtime = e.mtime;
-    uinfo_lock.unlock();
     return 0;
   }
-  uinfo_lock.unlock();
 
   bufferlist bl;
   RGWUID uid;
-
-  user_info_entry e;
 
   int ret = rgw_get_system_obj(store, NULL, bucket, key, bl, NULL, &e.mtime);
   if (ret < 0)
     return ret;
 
+  rgw_cache_entry_info cache_info;
+
   bufferlist::iterator iter = bl.begin();
   try {
     ::decode(uid, iter);
-    int ret = rgw_get_user_info_by_uid(store, uid.user_id, e.info, &e.objv_tracker);
+    int ret = rgw_get_user_info_by_uid(store, uid.user_id, e.info, &e.objv_tracker, NULL, &cache_info);
     if (ret < 0) {
       return ret;
     }
@@ -241,9 +235,7 @@ int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucke
     return -EIO;
   }
 
-  uinfo_lock.get_write();
-  uinfo_cache[key] = e;
-  uinfo_lock.unlock();
+  uinfo_cache.put(store, key, &e, cache_info);
 
   info = e.info;
   if (objv_tracker)
@@ -259,12 +251,13 @@ int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucke
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 int rgw_get_user_info_by_uid(RGWRados *store, string& uid, RGWUserInfo& info,
-                             RGWObjVersionTracker *objv_tracker, time_t *pmtime)
+                             RGWObjVersionTracker *objv_tracker, time_t *pmtime,
+                             rgw_cache_entry_info *cache_info)
 {
   bufferlist bl;
   RGWUID user_id;
 
-  int ret = rgw_get_system_obj(store, NULL, store->zone.user_uid_pool, uid, bl, objv_tracker, pmtime);
+  int ret = rgw_get_system_obj(store, NULL, store->zone.user_uid_pool, uid, bl, objv_tracker, pmtime, NULL, cache_info);
   if (ret < 0)
     return ret;
 
