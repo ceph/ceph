@@ -276,8 +276,19 @@ base: core-daemons admin-tools \
 FORCE:
 .git_version: FORCE
 	$(srcdir)/check_version $(srcdir)/.git_version
+
+# if NO_VERSION is set, only generate a new ceph_ver.h if there currently 
+# is none, and call "make_version -n" to fill it with a fixed string.
+# Otherwise, set it from the contents of .git_version.
+
 ceph_ver.h: .git_version
-	$(srcdir)/make_version $(srcdir)/.git_version ./ceph_ver.h
+	if [ -n "$$NO_VERSION" ] ; then \
+	    if [ ! -f ./ceph_ver.h ] ; then \
+	        $(srcdir)/make_version -n ./ceph_ver.h ; \
+	    fi; \
+        else \
+	    $(srcdir)/make_version $(srcdir)/.git_version ./ceph_ver.h ; \
+	fi
 
 ceph_ver.c: ./ceph_ver.h
 common/version.cc: ./ceph_ver.h
