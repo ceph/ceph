@@ -43,7 +43,7 @@
  * would be located in (root)/2/D/0/
  * 
  * Subdirectories are created when the number of objects in a directory
- * exceed 32*merge_threshhold.  The number of objects in a directory 
+ * exceed (abs(merge_threshhold)) * 16 * split_multiplier.  The number of objects in a directory 
  * is encoded as subdir_info_s in an xattr on the directory.
  */
 class HashIndex : public LFNIndex {
@@ -60,7 +60,8 @@ private:
   /**
    * Merges occur when the number of object drops below
    * merge_threshold and splits occur when the number of objects
-   * exceeds 16 * merge_threshold * split_multiplier.
+   * exceeds 16 * abs(merge_threshold) * split_multiplier.
+   * Please note if merge_threshold is less than zero, it will never do merging
    */
   int merge_threshold;
   int split_multiplier;
