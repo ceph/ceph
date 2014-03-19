@@ -4440,7 +4440,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
       for (list<frag_t>::iterator q = ls.begin(); q != ls.end(); ++q) {
 	CDir *dir = diri->get_dirfrag(*q);
 	if (!dir)
-	  dir = rejoin_invent_dirfrag(p->first);
+	  dir = rejoin_invent_dirfrag(dirfrag_t(diri->ino(), *q));
 	else
 	  dout(10) << " have(approx) " << *dir << dendl;
 	dir->add_replica(from, p->second.nonce);
