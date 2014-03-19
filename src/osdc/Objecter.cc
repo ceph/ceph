@@ -567,7 +567,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
   }
 
   bool was_pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
-  bool was_full = osdmap->test_flag(CEPH_OSDMAP_FULL);
+  bool was_full = osdmap_full_flag();
   bool was_pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || was_full;
 
   list<LingerOp*> need_resend_linger;
@@ -618,7 +618,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	}
 	logger->set(l_osdc_map_epoch, osdmap->get_epoch());
 
-	was_full = was_full || osdmap->test_flag(CEPH_OSDMAP_FULL);
+	was_full = was_full || osdmap_full_flag();
 	scan_requests(skipped_map, was_full, need_resend, need_resend_linger,
 		      need_resend_command);
 
@@ -655,7 +655,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
   }
 
   bool pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
-  bool pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || osdmap->test_flag(CEPH_OSDMAP_FULL);
+  bool pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || osdmap_full_flag();
 
   // was/is paused?
   if (was_pauserd || was_pausewr || pauserd || pausewr)
@@ -1021,7 +1021,7 @@ void Objecter::_get_latest_version(epoch_t oldest, epoch_t newest, Context *fin)
 void Objecter::maybe_request_map()
 {
   int flag = 0;
-  if (osdmap->test_flag(CEPH_OSDMAP_FULL)) {
+  if (osdmap_full_flag()) {
     ldout(cct, 10) << "maybe_request_map subscribing (continuous) to next osd map (FULL flag is set)" << dendl;
   } else {
     ldout(cct, 10) << "maybe_request_map subscribing (onetime) to next osd map" << dendl;
@@ -1328,8 +1328,7 @@ tid_t Objecter::_op_submit(Op *op)
     ldout(cct, 10) << " paused read " << op << " tid " << last_tid << dendl;
     op->paused = true;
     maybe_request_map();
-  } else if ((op->flags & CEPH_OSD_FLAG_WRITE) &&
-	     osdmap->test_flag(CEPH_OSDMAP_FULL)) {
+  } else if ((op->flags & CEPH_OSD_FLAG_WRITE) && osdmap_full_flag()) {
     ldout(cct, 0) << " FULL, paused modify " << op << " tid " << last_tid << dendl;
     op->paused = true;
     maybe_request_map();
@@ -1395,11 +1394,23 @@ bool Objecter::is_pg_changed(
 bool Objecter::op_should_be_paused(Op *op)
 {
   bool pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
-  bool pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || osdmap->test_flag(CEPH_OSDMAP_FULL);
+  bool pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || osdmap_full_flag();
 
   return (op->flags & CEPH_OSD_FLAG_READ && pauserd) ||
          (op->flags & CEPH_OSD_FLAG_WRITE && pausewr);
 }
+
+
+/**
+ * Wrapper around osdmap->test_flag for special handling of the FULL flag.
+ */
+bool Objecter::osdmap_full_flag() const
+{
+  // Ignore the FULL flag if we are working on behalf of an MDS, in order to permit
+  // MDS journal writes for file deletions.
+  return osdmap->test_flag(CEPH_OSDMAP_FULL) && (messenger->get_myname().type() != entity_name_t::TYPE_MDS);
+}
+
 
 int64_t Objecter::get_object_hash_position(int64_t pool, const string& key,
 					   const string& ns)
