@@ -8754,32 +8754,44 @@ void ReplicatedPG::sub_op_remove(OpRequestRef op)
 }
 
 
-eversion_t ReplicatedPG::pick_newest_available(const hobject_t& oid)
+eversion_t ReplicatedPG::pick_newest_available(
+  eversion_t current,
+  const hobject_t& oid) const
 {
-  eversion_t v;
-
-  assert(pg_log.get_missing().is_missing(oid));
-  v = pg_log.get_missing().missing.find(oid)->second.have;
-  dout(10) << "pick_newest_available " << oid << " " << v << " on osd." << osd->whoami << " (local)" << dendl;
+  map<eversion_t, set<pg_shard_t> > versions;
 
   assert(actingbackfill.size() > 0);
   for (set<pg_shard_t>::iterator i = actingbackfill.begin();
        i != actingbackfill.end();
        ++i) {
-    if (*i == get_primary()) continue;
-    pg_shard_t peer = *i;
-    if (!peer_missing[peer].is_missing(oid)) {
-      assert(is_backfill_targets(peer));
+    assert(*i == pg_whoami || peer_missing.count(*i));
+    const pg_missing_t &missing =
+      (*i == pg_whoami) ?
+      pg_log.get_missing() :
+      peer_missing.find(*i)->second;
+    if (!missing.is_missing(oid)) {
+      versions[current].insert(*i);
       continue;
     }
-    eversion_t h = peer_missing[peer].missing[oid].have;
-    dout(10) << "pick_newest_available " << oid << " " << h << " on osd." << peer << dendl;
-    if (h > v)
-      v = h;
+    assert(missing.missing.count(oid));
+    eversion_t h = missing.missing.find(oid)->second.have;
+    dout(10) << "pick_newest_available " << oid << " " << h
+	     << " on osd." << *i << dendl;
+    versions[h].insert(*i);
   }
 
-  dout(10) << "pick_newest_available " << oid << " " << v << " (newest)" << dendl;
-  return v;
+  eversion_t newest_recoverable;
+  for (map<eversion_t, set<pg_shard_t> >::reverse_iterator i = versions.rbegin();
+       i != versions.rend();
+       ++i) {
+    if ((*missing_loc.is_recoverable)(i->second)) {
+      newest_recoverable = i->first;
+      break;
+    }
+  }
+  dout(10) << "pick_newest_available " << oid << " "
+	   << newest_recoverable << " (newest)" << dendl;
+  return newest_recoverable;
 }
 
 
@@ -8842,8 +8854,10 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
   utime_t mtime = ceph_clock_now(cct);
   info.last_update.epoch = get_osdmap()->get_epoch();
   const pg_missing_t &missing = pg_log.get_missing();
-  map<hobject_t, pg_missing_t::item>::const_iterator m = missing.missing.begin();
-  map<hobject_t, pg_missing_t::item>::const_iterator mend = missing.missing.end();
+  map<hobject_t, pg_missing_t::item>::const_iterator m =
+    missing_loc.get_all_missing().begin();
+  map<hobject_t, pg_missing_t::item>::const_iterator mend =
+    missing_loc.get_all_missing().end();
   while (m != mend) {
     const hobject_t &oid(m->first);
     if (!missing_loc.is_unfound(oid)) {
@@ -8864,7 +8878,7 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
       break;
 
     case pg_log_entry_t::LOST_REVERT:
-      prev = pick_newest_available(oid);
+      prev = pick_newest_available(m->second.need, oid);
       if (prev > eversion_t()) {
 	// log it
 	++info.last_update.version;
@@ -8895,7 +8909,7 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
 	t->remove(
 	  coll,
 	  ghobject_t(oid, ghobject_t::NO_GEN, pg_whoami.shard));
-	pg_log.missing_rm(m++);
+	pg_log.missing_add_event(e);
 	missing_loc.recovered(oid);
       }
       break;

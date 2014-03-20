@@ -1354,7 +1354,9 @@ public:
   void kick_object_context_blocked(ObjectContextRef obc);
 
   void mark_all_unfound_lost(int what);
-  eversion_t pick_newest_available(const hobject_t& oid);
+  eversion_t pick_newest_available(
+    eversion_t current,
+    const hobject_t& oid) const;
   ObjectContextRef mark_object_lost(ObjectStore::Transaction *t,
 				  const hobject_t& oid, eversion_t version,
 				  utime_t mtime, int what);
