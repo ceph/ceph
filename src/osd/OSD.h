@@ -1384,8 +1384,9 @@ private:
     return service.get_inc_map_bl(e, bl);
   }
 
-  MOSDMap *build_incremental_map_msg(epoch_t from, epoch_t to);
-  void send_incremental_map(epoch_t since, Connection *con);
+  MOSDMap *build_incremental_map_msg(epoch_t from, epoch_t to,
+                                     OSDSuperblock& superblock);
+  void send_incremental_map(epoch_t since, Connection *con, OSDMapRef& osdmap);
   void send_map(MOSDMap *m, Connection *con);
 
 protected:
