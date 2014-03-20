@@ -37,6 +37,7 @@ using namespace std;
 #include "common/Mutex.h"
 #include "GenericObjectMap.h"
 #include "KeyValueDB.h"
+#include "common/shared_cache.hpp"
 
 #include "include/uuid.h"
 
@@ -59,7 +60,7 @@ class StripObjectMap: public GenericObjectMap {
   };
 
   // -- strip object --
-  struct StripObjectHeader {
+  struct _StripObjectHeader {
     // Persistent state
     uint64_t strip_size;
     uint64_t max_size;
@@ -73,7 +74,7 @@ class StripObjectMap: public GenericObjectMap {
     bool deleted;
     map<pair<string, string>, bufferlist> buffers;  // pair(prefix, key)
 
-    StripObjectHeader(): strip_size(default_strip_size), max_size(0), deleted(false) {}
+    _StripObjectHeader(): strip_size(default_strip_size), max_size(0), deleted(false) {}
 
     void encode(bufferlist &bl) const {
       ENCODE_START(1, 1, bl);
@@ -91,43 +92,51 @@ class StripObjectMap: public GenericObjectMap {
       DECODE_FINISH(bl);
     }
   };
+  typedef ceph::shared_ptr<_StripObjectHeader> StripObjectHeader;
 
   static int file_to_extents(uint64_t offset, size_t len, uint64_t strip_size,
                              vector<StripExtent> &extents);
   int lookup_strip_header(const coll_t & cid, const ghobject_t &oid,
-                          StripObjectHeader &header);
-  int save_strip_header(StripObjectHeader &header, KeyValueDB::Transaction t);
+                          StripObjectHeader *header);
+  int save_strip_header(StripObjectHeader header, KeyValueDB::Transaction t);
   int create_strip_header(const coll_t &cid, const ghobject_t &oid,
-                          StripObjectHeader &strip_header,
+                          StripObjectHeader *strip_header,
                           KeyValueDB::Transaction t);
-  void clone_wrap(StripObjectHeader &old_header,
+  void clone_wrap(StripObjectHeader old_header,
                   const coll_t &cid, const ghobject_t &oid,
                   KeyValueDB::Transaction t,
-                  StripObjectHeader *origin_header,
                   StripObjectHeader *target_header);
   void rename_wrap(const coll_t &cid, const ghobject_t &oid,
                    KeyValueDB::Transaction t,
-                   StripObjectHeader *header);
+                   StripObjectHeader header);
   // Already hold header to avoid lock header seq again
   int get_with_header(
-    const StripObjectHeader &header,
+    const StripObjectHeader header,
     const string &prefix,
     map<string, bufferlist> *out
     );
 
   int get_values_with_header(
-    const StripObjectHeader &header,
+    const StripObjectHeader header,
     const string &prefix,
     const set<string> &keys,
     map<string, bufferlist> *out
     );
   int get_keys_with_header(
-    const StripObjectHeader &header,
+    const StripObjectHeader header,
     const string &prefix,
     set<string> *keys
     );
 
-  StripObjectMap(KeyValueDB *db): GenericObjectMap(db) {}
+  Mutex lock;
+  void invalidate_cache(const ghobject_t &oid) {
+    Mutex::Locker l(lock);
+    caches.clear(oid);
+  }
+
+  SharedLRU<ghobject_t, _StripObjectHeader> caches;
+  StripObjectMap(KeyValueDB *db): GenericObjectMap(db), lock("StripObjectMap::lock"),
+                                  caches(4096){}
 
   static const uint64_t default_strip_size = 1024;
 };
@@ -203,32 +212,44 @@ class KeyValueStore : public ObjectStore,
 
     //Dirty records
     StripHeaderMap strip_headers;
+    list<Context*> finishes;
 
     KeyValueStore *store;
 
     KeyValueDB::Transaction t;
 
     int lookup_cached_header(const coll_t &cid, const ghobject_t &oid,
-                             StripObjectMap::StripObjectHeader **strip_header,
+                             StripObjectMap::StripObjectHeader *strip_header,
                              bool create_if_missing);
-    int get_buffer_keys(StripObjectMap::StripObjectHeader &strip_header,
+    int get_buffer_keys(StripObjectMap::StripObjectHeader strip_header,
                         const string &prefix, const set<string> &keys,
                         map<string, bufferlist> *out);
-    void set_buffer_keys(StripObjectMap::StripObjectHeader &strip_header,
+    void set_buffer_keys(StripObjectMap::StripObjectHeader strip_header,
                          const string &prefix, map<string, bufferlist> &bl);
-    int remove_buffer_keys(StripObjectMap::StripObjectHeader &strip_header,
+    int remove_buffer_keys(StripObjectMap::StripObjectHeader strip_header,
                            const string &prefix, const set<string> &keys);
-    void clear_buffer_keys(StripObjectMap::StripObjectHeader &strip_header,
+    void clear_buffer_keys(StripObjectMap::StripObjectHeader strip_header,
                            const string &prefix);
-    int clear_buffer(StripObjectMap::StripObjectHeader &strip_header);
-    void clone_buffer(StripObjectMap::StripObjectHeader &old_header,
+    int clear_buffer(StripObjectMap::StripObjectHeader strip_header);
+    void clone_buffer(StripObjectMap::StripObjectHeader old_header,
                       const coll_t &cid, const ghobject_t &oid);
-    void rename_buffer(StripObjectMap::StripObjectHeader &old_header,
+    void rename_buffer(StripObjectMap::StripObjectHeader old_header,
                        const coll_t &cid, const ghobject_t &oid);
     int submit_transaction();
 
     BufferTransaction(KeyValueStore *store): store(store) {
       t = store->backend->get_transaction();
+    }
+  };
+
+  struct InvalidCacheContext : public Context {
+    KeyValueStore *store;
+    const ghobject_t object;
+    InvalidCacheContext(KeyValueStore *s,
+                        const ghobject_t &oid) : store(s), object(oid) {}
+    void finish(int r) {
+      if (r >= 0)
+        store->backend->invalidate_cache(object);
     }
   };
 
@@ -413,10 +434,10 @@ class KeyValueStore : public ObjectStore,
   // ------------------
   // objects
 
-  int _generic_read(StripObjectMap::StripObjectHeader &header,
+  int _generic_read(StripObjectMap::StripObjectHeader header,
                     uint64_t offset, size_t len, bufferlist& bl,
                     bool allow_eio = false, BufferTransaction *bt = 0);
-  int _generic_write(StripObjectMap::StripObjectHeader &header,
+  int _generic_write(StripObjectMap::StripObjectHeader header,
                      uint64_t offset, size_t len, const bufferlist& bl,
                      BufferTransaction &t, bool replica = false);
 
@@ -559,6 +580,6 @@ class KeyValueStore : public ObjectStore,
   static const uint32_t COLLECTION_VERSION = 1;
 };
 
-WRITE_CLASS_ENCODER(StripObjectMap::StripObjectHeader)
+WRITE_CLASS_ENCODER(StripObjectMap::_StripObjectHeader)
 
 #endif
