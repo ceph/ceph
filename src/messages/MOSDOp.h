@@ -74,7 +74,7 @@ public:
 		       header.tid);
   }
   int get_client_inc() { return client_inc; }
-  tid_t get_client_tid() { return header.tid; }
+  ceph_tid_t get_client_tid() { return header.tid; }
   
   object_t& get_oid() { return oid; }
 

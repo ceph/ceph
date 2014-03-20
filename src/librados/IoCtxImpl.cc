@@ -95,7 +95,7 @@ void librados::IoCtxImpl::complete_aio_write(AioCompletionImpl *c)
   assert(c->io == this);
   c->aio_write_list_item.remove_myself();
 
-  map<tid_t, std::list<AioCompletionImpl*> >::iterator waiters = aio_write_waiters.begin();
+  map<ceph_tid_t, std::list<AioCompletionImpl*> >::iterator waiters = aio_write_waiters.begin();
   while (waiters != aio_write_waiters.end()) {
     if (!aio_write_list.empty() &&
 	aio_write_list.front()->aio_write_seq <= waiters->first) {
@@ -123,7 +123,7 @@ void librados::IoCtxImpl::flush_aio_writes_async(AioCompletionImpl *c)
   ldout(client->cct, 20) << "flush_aio_writes_async " << this
 			 << " completion " << c << dendl;
   Mutex::Locker l(aio_write_list_lock);
-  tid_t seq = aio_write_seq;
+  ceph_tid_t seq = aio_write_seq;
   if (aio_write_list.empty()) {
     ldout(client->cct, 20) << "flush_aio_writes_async no writes. (tid "
 			   << seq << ")" << dendl;
@@ -140,7 +140,7 @@ void librados::IoCtxImpl::flush_aio_writes()
 {
   ldout(client->cct, 20) << "flush_aio_writes" << dendl;
   aio_write_list_lock.Lock();
-  tid_t seq = aio_write_seq;
+  ceph_tid_t seq = aio_write_seq;
   while (!aio_write_list.empty() &&
 	 aio_write_list.front()->aio_write_seq <= seq)
     aio_write_cond.Wait(aio_write_list_lock);

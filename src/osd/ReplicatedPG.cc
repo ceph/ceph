@@ -1776,10 +1776,10 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 
   // verify that we are doing this in order?
   if (cct->_conf->osd_debug_op_order && m->get_source().is_client()) {
-    map<client_t,tid_t>& cm = debug_op_order[obc->obs.oi.soid];
-    tid_t t = m->get_tid();
+    map<client_t,ceph_tid_t>& cm = debug_op_order[obc->obs.oi.soid];
+    ceph_tid_t t = m->get_tid();
     client_t n = m->get_source().num();
-    map<client_t,tid_t>::iterator p = cm.find(n);
+    map<client_t,ceph_tid_t>::iterator p = cm.find(n);
     if (p == cm.end()) {
       dout(20) << " op order client." << n << " tid " << t << " (first)" << dendl;
       cm[n] = t;
@@ -1794,7 +1794,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
   }
 
   // issue replica writes
-  tid_t rep_tid = osd->get_tid();
+  ceph_tid_t rep_tid = osd->get_tid();
   RepGather *repop = new_repop(ctx, obc, rep_tid);  // new repop claims our obc, src_obc refs
   // note: repop now owns ctx AND ctx->op
 
@@ -5185,7 +5185,7 @@ struct C_Copyfrom : public Context {
   ReplicatedPGRef pg;
   hobject_t oid;
   epoch_t last_peering_reset;
-  tid_t tid;
+  ceph_tid_t tid;
   C_Copyfrom(ReplicatedPG *p, hobject_t o, epoch_t lpr)
     : pg(p), oid(o), last_peering_reset(lpr),
       tid(0)
@@ -5403,7 +5403,7 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
     ObjectOperation op;
     op.list_snaps(&cop->results.snapset, NULL);
     osd->objecter_lock.Lock();
-    tid_t tid = osd->objecter->read(cop->src.oid, cop->oloc, op,
+    ceph_tid_t tid = osd->objecter->read(cop->src.oid, cop->oloc, op,
 				    CEPH_SNAPDIR, NULL,
 				    flags, gather.new_sub(), NULL);
     cop->objecter_tid2 = tid;
@@ -5431,7 +5431,7 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 				       &osd->objecter_finisher));
 
   osd->objecter_lock.Lock();
-  tid_t tid = osd->objecter->read(cop->src.oid, cop->oloc, op,
+  ceph_tid_t tid = osd->objecter->read(cop->src.oid, cop->oloc, op,
 				  cop->src.snap, NULL,
 				  flags,
 				  gather.new_sub(),
@@ -5443,7 +5443,7 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
   osd->objecter_lock.Unlock();
 }
 
-void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
+void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
 {
   dout(10) << __func__ << " " << oid << " tid " << tid
 	   << " " << cpp_strerror(r) << dendl;
@@ -5855,7 +5855,7 @@ struct C_Flush : public Context {
   ReplicatedPGRef pg;
   hobject_t oid;
   epoch_t last_peering_reset;
-  tid_t tid;
+  ceph_tid_t tid;
   C_Flush(ReplicatedPG *p, hobject_t o, epoch_t lpr)
     : pg(p), oid(o), last_peering_reset(lpr),
       tid(0)
@@ -5982,7 +5982,7 @@ int ReplicatedPG::start_flush(OpContext *ctx, bool blocking)
   }
 
   osd->objecter_lock.Lock();
-  tid_t tid = osd->objecter->mutate(soid.oid, base_oloc, o, snapc, oi.mtime,
+  ceph_tid_t tid = osd->objecter->mutate(soid.oid, base_oloc, o, snapc, oi.mtime,
 				    CEPH_OSD_FLAG_IGNORE_OVERLAY,
 				    NULL,
 				    new C_OnFinisher(fin,
@@ -5995,7 +5995,7 @@ int ReplicatedPG::start_flush(OpContext *ctx, bool blocking)
   return -EINPROGRESS;
 }
 
-void ReplicatedPG::finish_flush(hobject_t oid, tid_t tid, int r)
+void ReplicatedPG::finish_flush(hobject_t oid, ceph_tid_t tid, int r)
 {
   dout(10) << __func__ << " " << oid << " tid " << tid
 	   << " " << cpp_strerror(r) << dendl;
@@ -6091,7 +6091,7 @@ int ReplicatedPG::try_flush_mark_clean(FlushOpRef fop)
   }
 
   dout(10) << __func__ << " clearing DIRTY flag for " << oid << dendl;
-  tid_t rep_tid = osd->get_tid();
+  ceph_tid_t rep_tid = osd->get_tid();
   RepGather *repop = new_repop(fop->ctx, obc, rep_tid);
   OpContext *ctx = fop->ctx;
   if (!fop->blocking) {
@@ -6452,7 +6452,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now)
 void ReplicatedBackend::issue_op(
   const hobject_t &soid,
   const eversion_t &at_version,
-  tid_t tid,
+  ceph_tid_t tid,
   osd_reqid_t reqid,
   eversion_t pg_trim_to,
   hobject_t new_temp_oid,
@@ -6519,7 +6519,7 @@ void ReplicatedBackend::issue_op(
 }
 
 ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContextRef obc,
-						 tid_t rep_tid)
+						 ceph_tid_t rep_tid)
 {
   if (ctx->op)
     dout(10) << "new_repop rep_tid " << rep_tid << " on " << *ctx->op->get_req() << dendl;
@@ -6554,7 +6554,7 @@ ReplicatedPG::RepGather *ReplicatedPG::simple_repop_create(ObjectContextRef obc)
 {
   dout(20) << __func__ << " " << obc->obs.oi.soid << dendl;
   vector<OSDOp> ops;
-  tid_t rep_tid = osd->get_tid();
+  ceph_tid_t rep_tid = osd->get_tid();
   osd_reqid_t reqid(osd->get_cluster_msgr_name(), 0, rep_tid);
   OpContext *ctx = new OpContext(OpRequestRef(), reqid, ops,
 				 &obc->obs, obc->ssc, this);
@@ -6698,7 +6698,7 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
   watch->remove();
 
   vector<OSDOp> ops;
-  tid_t rep_tid = osd->get_tid();
+  ceph_tid_t rep_tid = osd->get_tid();
   osd_reqid_t reqid(osd->get_cluster_msgr_name(), 0, rep_tid);
   OpContext *ctx = new OpContext(OpRequestRef(), reqid, ops,
 				 &obc->obs, obc->ssc, this);
@@ -7609,7 +7609,7 @@ int ReplicatedPG::recover_missing(
 void ReplicatedPG::send_remove_op(
   const hobject_t& oid, eversion_t v, pg_shard_t peer)
 {
-  tid_t tid = osd->get_tid();
+  ceph_tid_t tid = osd->get_tid();
   osd_reqid_t rid(osd->get_cluster_msgr_name(), 0, tid);
 
   dout(10) << "send_remove_op " << oid << " from osd." << peer
@@ -7742,7 +7742,7 @@ int ReplicatedBackend::send_pull_legacy(int prio, pg_shard_t peer,
 					ObjectRecoveryProgress progress)
 {
   // send op
-  tid_t tid = get_parent()->get_tid();
+  ceph_tid_t tid = get_parent()->get_tid();
   osd_reqid_t rid(get_parent()->get_cluster_msgr_name(), 0, tid);
 
   dout(10) << "send_pull_op " << recovery_info.soid << " "
@@ -8194,7 +8194,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 
 int ReplicatedBackend::send_push_op_legacy(int prio, pg_shard_t peer, PushOp &pop)
 {
-  tid_t tid = get_parent()->get_tid();
+  ceph_tid_t tid = get_parent()->get_tid();
   osd_reqid_t rid(get_parent()->get_cluster_msgr_name(), 0, tid);
   MOSDSubOp *subop = new MOSDSubOp(
     rid, parent->whoami_shard(),
@@ -10750,7 +10750,7 @@ bool ReplicatedPG::agent_maybe_flush(ObjectContextRef& obc)
   // ages we expect.
 
   vector<OSDOp> ops;
-  tid_t rep_tid = osd->get_tid();
+  ceph_tid_t rep_tid = osd->get_tid();
   osd_reqid_t reqid(osd->get_cluster_msgr_name(), 0, rep_tid);
   OpContext *ctx = new OpContext(OpRequestRef(), reqid, ops,
 				 &obc->obs, obc->ssc, this);

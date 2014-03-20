@@ -131,7 +131,7 @@ public:
 
   // -- discover --
   struct discover_info_t {
-    tid_t tid;
+    ceph_tid_t tid;
     int mds;
     inodeno_t ino;
     frag_t frag;
@@ -144,12 +144,12 @@ public:
     discover_info_t() : tid(0), mds(-1), snap(CEPH_NOSNAP), want_base_dir(false), want_xlocked(false) {}
   };
 
-  map<tid_t, discover_info_t> discovers;
-  tid_t discover_last_tid;
+  map<ceph_tid_t, discover_info_t> discovers;
+  ceph_tid_t discover_last_tid;
 
   void _send_discover(discover_info_t& dis);
   discover_info_t& _create_discover(int mds) {
-    tid_t t = ++discover_last_tid;
+    ceph_tid_t t = ++discover_last_tid;
     discover_info_t& d = discovers[t];
     d.tid = t;
     d.mds = mds;
@@ -802,7 +802,7 @@ protected:
     open_ino_info_t() : checking(-1), auth_hint(-1),
       check_peers(true), fetch_backtrace(true), discover(false) {}
   };
-  tid_t open_ino_last_tid;
+  ceph_tid_t open_ino_last_tid;
   map<inodeno_t,open_ino_info_t> opening_inodes;
 
   void _open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err);
@@ -830,7 +830,7 @@ public:
   // -- find_ino_peer --
   struct find_ino_peer_info_t {
     inodeno_t ino;
-    tid_t tid;
+    ceph_tid_t tid;
     Context *fin;
     int hint;
     int checking;
@@ -839,8 +839,8 @@ public:
     find_ino_peer_info_t() : tid(0), fin(NULL), hint(-1), checking(-1) {}
   };
 
-  map<tid_t, find_ino_peer_info_t> find_ino_peer;
-  tid_t find_ino_peer_last_tid;
+  map<ceph_tid_t, find_ino_peer_info_t> find_ino_peer;
+  ceph_tid_t find_ino_peer_last_tid;
 
   void find_ino_peers(inodeno_t ino, Context *c, int hint=-1);
   void _do_find_ino_peer(find_ino_peer_info_t& fip);

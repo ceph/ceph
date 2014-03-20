@@ -1202,7 +1202,7 @@ void Client::dump_mds_sessions(Formatter *f)
 }
 void Client::dump_mds_requests(Formatter *f)
 {
-  for (map<tid_t, MetaRequest*>::iterator p = mds_requests.begin();
+  for (map<ceph_tid_t, MetaRequest*>::iterator p = mds_requests.begin();
        p != mds_requests.end();
        ++p) {
     f->open_object_section("request");
@@ -1315,7 +1315,7 @@ int Client::make_request(MetaRequest *request,
   int r = 0;
 
   // assign a unique tid
-  tid_t tid = ++last_tid;
+  ceph_tid_t tid = ++last_tid;
   request->set_tid(tid);
   // make note
   mds_requests[tid] = request->get();
@@ -1726,7 +1726,7 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
     fwd->put();
     return;
   }
-  tid_t tid = fwd->get_tid();
+  ceph_tid_t tid = fwd->get_tid();
 
   if (mds_requests.count(tid) == 0) {
     ldout(cct, 10) << "handle_client_request_forward no pending request on tid " << tid << dendl;
@@ -1765,7 +1765,7 @@ void Client::handle_client_reply(MClientReply *reply)
     return;
   }
 
-  tid_t tid = reply->get_tid();
+  ceph_tid_t tid = reply->get_tid();
   bool is_safe = reply->is_safe();
 
   if (mds_requests.count(tid) == 0) {
@@ -2043,7 +2043,7 @@ void Client::send_reconnect(MetaSession *session)
 void Client::kick_requests(MetaSession *session)
 {
   ldout(cct, 10) << "kick_requests for mds." << session->mds_num << dendl;
-  for (map<tid_t, MetaRequest*>::iterator p = mds_requests.begin();
+  for (map<ceph_tid_t, MetaRequest*>::iterator p = mds_requests.begin();
        p != mds_requests.end();
        ++p) {
     if (p->second->mds == session->mds_num) {
@@ -2063,7 +2063,7 @@ void Client::resend_unsafe_requests(MetaSession *session)
 void Client::kick_requests_closed(MetaSession *session)
 {
   ldout(cct, 10) << "kick_requests_closed for mds." << session->mds_num << dendl;
-  for (map<tid_t, MetaRequest*>::iterator p = mds_requests.begin();
+  for (map<ceph_tid_t, MetaRequest*>::iterator p = mds_requests.begin();
        p != mds_requests.end();
        ++p) {
     if (p->second->mds == session->mds_num) {
@@ -6513,7 +6513,7 @@ int Client::_fsync(Fh *f, bool syncdataonly)
   int r = 0;
 
   Inode *in = f->inode;
-  tid_t wait_on_flush = 0;
+  ceph_tid_t wait_on_flush = 0;
   bool flushed_metadata = false;
   Mutex lock("Client::_fsync::lock");
   Cond cond;

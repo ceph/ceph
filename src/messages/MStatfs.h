@@ -24,7 +24,7 @@ public:
   uuid_d fsid;
 
   MStatfs() : PaxosServiceMessage(CEPH_MSG_STATFS, 0) {}
-  MStatfs(const uuid_d& f, tid_t t, version_t v) :
+  MStatfs(const uuid_d& f, ceph_tid_t t, version_t v) :
     PaxosServiceMessage(CEPH_MSG_STATFS, v), fsid(f) {
     set_tid(t);
   }

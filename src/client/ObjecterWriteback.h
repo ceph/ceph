@@ -23,7 +23,7 @@ class ObjecterWriteback : public WritebackHandler {
     return false;
   }
 
-  virtual tid_t write(const object_t& oid, const object_locator_t& oloc,
+  virtual ceph_tid_t write(const object_t& oid, const object_locator_t& oloc,
 		      uint64_t off, uint64_t len, const SnapContext& snapc,
 		      const bufferlist &bl, utime_t mtime, uint64_t trunc_size,
 		      __u32 trunc_seq, Context *oncommit) {
@@ -31,7 +31,7 @@ class ObjecterWriteback : public WritebackHandler {
 				   trunc_size, trunc_seq, NULL, oncommit);
   }
 
-  virtual tid_t lock(const object_t& oid, const object_locator_t& oloc, int op,
+  virtual ceph_tid_t lock(const object_t& oid, const object_locator_t& oloc, int op,
 		     int flags, Context *onack, Context *oncommit) {
     return m_objecter->lock(oid, oloc, op, flags, onack, oncommit);
   }

@@ -4175,7 +4175,7 @@ COMMAND("reset_pg_recovery_stats", "reset pg recovery statistics",
 	"osd", "rw", "cli,rest")
 };
 
-void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist& data)
+void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, bufferlist& data)
 {
   int r = 0;
   stringstream ss, ds;

@@ -43,7 +43,7 @@ struct librados::AioCompletionImpl {
   unsigned maxlen;
 
   IoCtxImpl *io;
-  tid_t aio_write_seq;
+  ceph_tid_t aio_write_seq;
   xlist<AioCompletionImpl*>::item aio_write_list_item;
 
   AioCompletionImpl() : lock("AioCompletionImpl lock", false, false),

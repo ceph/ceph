@@ -1827,7 +1827,7 @@ int Pipe::read_message(Message **pm)
 
       // get a buffer
       connection_state->lock.Lock();
-      map<tid_t,pair<bufferlist,int> >::iterator p = connection_state->rx_buffers.find(header.tid);
+      map<ceph_tid_t,pair<bufferlist,int> >::iterator p = connection_state->rx_buffers.find(header.tid);
       if (p != connection_state->rx_buffers.end()) {
 	if (rxbuf.length() == 0 || p->second.second != rxbuf_version) {
 	  ldout(msgr->cct,10) << "reader seleting rx buffer v " << p->second.second

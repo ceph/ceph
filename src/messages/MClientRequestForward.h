@@ -25,7 +25,7 @@ class MClientRequestForward : public Message {
   MClientRequestForward()
     : Message(CEPH_MSG_CLIENT_REQUEST_FORWARD),
       dest_mds(-1), num_fwd(-1), client_must_resend(false) {}
-  MClientRequestForward(tid_t t, int dm, int nf, bool cmr) : 
+  MClientRequestForward(ceph_tid_t t, int dm, int nf, bool cmr) :
     Message(CEPH_MSG_CLIENT_REQUEST_FORWARD),
     dest_mds(dm), num_fwd(nf), client_must_resend(cmr) {
     assert(client_must_resend);

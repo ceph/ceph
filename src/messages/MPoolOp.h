@@ -34,13 +34,13 @@ public:
 
   MPoolOp()
     : PaxosServiceMessage(CEPH_MSG_POOLOP, 0, HEAD_VERSION, COMPAT_VERSION) { }
-  MPoolOp(const uuid_d& f, tid_t t, int p, string& n, int o, version_t v)
+  MPoolOp(const uuid_d& f, ceph_tid_t t, int p, string& n, int o, version_t v)
     : PaxosServiceMessage(CEPH_MSG_POOLOP, v, HEAD_VERSION, COMPAT_VERSION),
       fsid(f), pool(p), name(n), op(o),
       auid(0), snapid(0), crush_rule(0) {
     set_tid(t);
   }
-  MPoolOp(const uuid_d& f, tid_t t, int p, string& n,
+  MPoolOp(const uuid_d& f, ceph_tid_t t, int p, string& n,
 	  int o, uint64_t uid, version_t v)
     : PaxosServiceMessage(CEPH_MSG_POOLOP, v, HEAD_VERSION, COMPAT_VERSION),
       fsid(f), pool(p), name(n), op(o),

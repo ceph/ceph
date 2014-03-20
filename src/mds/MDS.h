@@ -204,7 +204,7 @@ class MDS : public Dispatcher {
 
   map<int,version_t> peer_mdsmap_epoch;
 
-  tid_t last_tid;    // for mds-initiated requests (e.g. stray rename)
+  ceph_tid_t last_tid;    // for mds-initiated requests (e.g. stray rename)
 
  public:
   void wait_for_active(Context *c) { 
@@ -251,7 +251,7 @@ class MDS : public Dispatcher {
 
   void request_state(int s);
 
-  tid_t issue_tid() { return ++last_tid; }
+  ceph_tid_t issue_tid() { return ++last_tid; }
     
 
   // -- waiters --

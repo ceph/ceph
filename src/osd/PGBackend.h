@@ -213,7 +213,7 @@
 
      virtual PerfCounters *get_logger() = 0;
 
-     virtual tid_t get_tid() = 0;
+     virtual ceph_tid_t get_tid() = 0;
 
      virtual LogClientTemp clog_error() = 0;
 
@@ -492,9 +492,9 @@
      const eversion_t &trim_to,           ///< [in] trim log to here
      vector<pg_log_entry_t> &log_entries, ///< [in] log entries for t
      Context *on_local_applied_sync,      ///< [in] called when applied locally
-     Context *on_all_applied,               ///< [in] called when all acked
+     Context *on_all_applied,             ///< [in] called when all acked
      Context *on_all_commit,              ///< [in] called when all commit
-     tid_t tid,                           ///< [in] tid
+     ceph_tid_t tid,                      ///< [in] tid
      osd_reqid_t reqid,                   ///< [in] reqid
      OpRequestRef op                      ///< [in] op
      ) = 0;

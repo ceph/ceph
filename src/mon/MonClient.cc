@@ -914,7 +914,7 @@ int MonClient::_cancel_mon_command(uint64_t tid, int r)
 {
   assert(monc_lock.is_locked());
 
-  map<tid_t, MonCommand*>::iterator it = mon_commands.find(tid);
+  map<ceph_tid_t, MonCommand*>::iterator it = mon_commands.find(tid);
   if (it == mon_commands.end()) {
     ldout(cct, 10) << __func__ << " tid " << tid << " dne" << dendl;
     return -ENOENT;
@@ -1018,7 +1018,7 @@ void MonClient::get_version(string map, version_t *newest, version_t *oldest, Co
 void MonClient::handle_get_version_reply(MMonGetVersionReply* m)
 {
   assert(monc_lock.is_locked());
-  map<tid_t, version_req_d*>::iterator iter = version_requests.find(m->handle);
+  map<ceph_tid_t, version_req_d*>::iterator iter = version_requests.find(m->handle);
   if (iter == version_requests.end()) {
     ldout(cct, 0) << __func__ << " version request with handle " << m->handle
 		  << " not found" << dendl;
