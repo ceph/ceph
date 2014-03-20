@@ -1421,6 +1421,10 @@ void ReplicatedPG::do_op(OpRequestRef op)
 				 this);
   ctx->op_t = pgbackend->get_transaction();
   ctx->obc = obc;
+
+  if (!obc->obs.exists)
+    ctx->snapset_obc = get_object_context(obc->obs.oi.soid.get_snapdir(), false);
+
   if (m->get_flags() & CEPH_OSD_FLAG_SKIPRWLOCKS) {
     dout(20) << __func__ << ": skipping rw locks" << dendl;
   } else if (m->get_flags() & CEPH_OSD_FLAG_FLUSH) {
@@ -4944,6 +4948,12 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     return result;
   }
 
+  if (!ctx->new_obs.exists && !ctx->obs->exists) {
+    // We can't really represent in the log an operation which atomically
+    // creates and removes an object
+    return -EINVAL;
+  }
+
   // cache: clear whiteout?
   if (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK) {
     if (ctx->user_modify &&
@@ -4981,15 +4991,8 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type)
 
     if (ctx->new_obs.exists) {
       if (!ctx->obs->exists) {
-	// if we logically recreated the head, remove old _snapdir object
-	hobject_t snapoid(soid.oid, soid.get_key(), CEPH_SNAPDIR, soid.hash,
-			  info.pgid.pool(), soid.get_namespace());
-
-	ctx->snapset_obc = get_object_context(snapoid, false);
 	if (ctx->snapset_obc && ctx->snapset_obc->obs.exists) {
-	  bool got = ctx->snapset_obc->get_write(ctx->op);
-	  assert(got);
-	  ctx->release_snapset_obc = true;
+	  hobject_t snapoid = soid.get_snapdir();
 	  ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::DELETE, snapoid,
 	      ctx->at_version,
 	      ctx->snapset_obc->obs.oi.version,
@@ -5012,6 +5015,9 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type)
 	}
       }
     } else if (ctx->new_snapset.clones.size()) {
+      // see do_op, if !new_obs.exist && !obs->exists, we returned EINVAL already
+      assert(ctx->obs->exists);
+
       // save snapset on _snap
       hobject_t snapoid(soid.oid, soid.get_key(), CEPH_SNAPDIR, soid.hash,
 			info.pgid.pool(), soid.get_namespace());
