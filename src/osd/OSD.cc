@@ -1009,6 +1009,8 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     f->dump_unsigned("num_pgs", pg_map.size());
     osd_lock.Unlock();
     f->close_section();
+  } else if (command == "flush_journal") {
+    store->sync_and_flush();
   } else if (command == "dump_ops_in_flight") {
     op_tracker.dump_ops_in_flight(f);
   } else if (command == "dump_historic_ops") {
@@ -1296,6 +1298,10 @@ void OSD::final_init()
   asok_hook = new OSDSocketHook(this);
   r = admin_socket->register_command("status", "status", asok_hook,
 				     "high-level status of OSD");
+  assert(r == 0);
+  r = admin_socket->register_command("flush_journal", "flush_journal",
+                                     asok_hook,
+                                     "flush the journal to permanent store");
   assert(r == 0);
   r = admin_socket->register_command("dump_ops_in_flight",
 				     "dump_ops_in_flight", asok_hook,
@@ -1590,6 +1596,7 @@ int OSD::shutdown()
 
   // unregister commands
   cct->get_admin_socket()->unregister_command("status");
+  cct->get_admin_socket()->unregister_command("flush_journal");
   cct->get_admin_socket()->unregister_command("dump_ops_in_flight");
   cct->get_admin_socket()->unregister_command("dump_historic_ops");
   cct->get_admin_socket()->unregister_command("dump_op_pq_state");
