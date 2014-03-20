@@ -37,7 +37,7 @@ using namespace std;
 #include "common/Mutex.h"
 #include "GenericObjectMap.h"
 #include "KeyValueDB.h"
-#include "common/shared_cache.hpp"
+#include "common/random_cache.hpp"
 
 #include "include/uuid.h"
 
@@ -106,9 +106,9 @@ class StripObjectMap: public GenericObjectMap {
                   const coll_t &cid, const ghobject_t &oid,
                   KeyValueDB::Transaction t,
                   StripObjectHeader *target_header);
-  void rename_wrap(const coll_t &cid, const ghobject_t &oid,
+  void rename_wrap(StripObjectHeader old_header, const coll_t &cid, const ghobject_t &oid,
                    KeyValueDB::Transaction t,
-                   StripObjectHeader header);
+                   StripObjectHeader *new_header);
   // Already hold header to avoid lock header seq again
   int get_with_header(
     const StripObjectHeader header,
@@ -129,14 +129,16 @@ class StripObjectMap: public GenericObjectMap {
     );
 
   Mutex lock;
-  void invalidate_cache(const ghobject_t &oid) {
+  void invalidate_cache(const coll_t &c, const ghobject_t &oid) {
     Mutex::Locker l(lock);
     caches.clear(oid);
   }
 
-  SharedLRU<ghobject_t, _StripObjectHeader> caches;
-  StripObjectMap(KeyValueDB *db): GenericObjectMap(db), lock("StripObjectMap::lock"),
-                                  caches(4096){}
+  RandomCache<ghobject_t, pair<coll_t, StripObjectHeader> > caches;
+  StripObjectMap(KeyValueDB *db): GenericObjectMap(db),
+                                  lock("StripObjectMap::lock"),
+                                  caches(g_conf->keyvaluestore_header_cache_size)
+  {}
 
   static const uint64_t default_strip_size = 1024;
 };
@@ -240,17 +242,17 @@ class KeyValueStore : public ObjectStore,
     BufferTransaction(KeyValueStore *store): store(store) {
       t = store->backend->get_transaction();
     }
-  };
 
-  struct InvalidCacheContext : public Context {
-    KeyValueStore *store;
-    const ghobject_t object;
-    InvalidCacheContext(KeyValueStore *s,
-                        const ghobject_t &oid) : store(s), object(oid) {}
-    void finish(int r) {
-      if (r >= 0)
-        store->backend->invalidate_cache(object);
-    }
+    struct InvalidateCacheContext : public Context {
+      KeyValueStore *store;
+      const coll_t cid;
+      const ghobject_t oid;
+      InvalidateCacheContext(KeyValueStore *s, const coll_t &c, const ghobject_t &oid): store(s), cid(c), oid(oid) {}
+      void finish(int r) {
+      if (r == 0)
+        store->backend->invalidate_cache(cid, oid);
+      }
+    };
   };
 
   // -- op workqueue --

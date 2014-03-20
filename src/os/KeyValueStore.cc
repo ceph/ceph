@@ -88,15 +88,13 @@ int StripObjectMap::create_strip_header(const coll_t &cid,
   if (!header)
     return -EINVAL;
 
-  _StripObjectHeader *tmp = new _StripObjectHeader();
+  StripObjectHeader tmp = StripObjectHeader(new _StripObjectHeader());
   tmp->oid = oid;
   tmp->cid = cid;
   tmp->header = header;
+  if (strip_header)
+    *strip_header = tmp;
 
-  {
-    Mutex::Locker l(lock);
-    *strip_header = caches.add(oid, tmp);
-  }
   return 0;
 }
 
@@ -106,9 +104,12 @@ int StripObjectMap::lookup_strip_header(const coll_t &cid,
 {
   if (cid != coll_t()) {
     Mutex::Locker l(lock);
-    *strip_header = caches.lookup(oid);
-    if (*strip_header) {
-      return 0;
+    pair<coll_t, StripObjectHeader> p;
+    if (caches.lookup(oid, &p)) {
+      if (p.first == cid) {
+        *strip_header = p.second;
+        return 0;
+      }
     }
   }
   Header header = lookup_header(cid, oid);
@@ -120,7 +121,7 @@ int StripObjectMap::lookup_strip_header(const coll_t &cid,
   }
 
 
-  _StripObjectHeader *tmp = new _StripObjectHeader();
+  StripObjectHeader tmp = StripObjectHeader(new _StripObjectHeader());
   if (header->data.length()) {
     bufferlist::iterator bliter = header->data.begin();
     ::decode(*tmp, bliter);
@@ -135,8 +136,9 @@ int StripObjectMap::lookup_strip_header(const coll_t &cid,
 
   {
     Mutex::Locker l(lock);
-    *strip_header = caches.add(oid, tmp);
+    caches.add(oid, make_pair(cid, tmp));
   }
+  *strip_header = tmp;
   dout(10) << "lookup_strip_header done " << " cid " << cid << " oid "
            << oid << dendl;
   return 0;
@@ -193,21 +195,34 @@ void StripObjectMap::clone_wrap(StripObjectHeader old_header,
 
   tmp->oid = oid;
   tmp->cid = cid;
+  tmp->strip_size = old_header->strip_size;
+  tmp->max_size = old_header->max_size;
+  tmp->bits = old_header->bits;
   old_header->header = new_origin_header;
 
   if (target_header)
     *target_header = tmp;
 }
 
-void StripObjectMap::rename_wrap(const coll_t &cid, const ghobject_t &oid,
+void StripObjectMap::rename_wrap(StripObjectHeader old_header, const coll_t &cid, const ghobject_t &oid,
                                  KeyValueDB::Transaction t,
-                                 StripObjectHeader header)
+                                 StripObjectHeader *new_header)
 {
-  rename(header->header, cid, oid, t);
+  rename(old_header->header, cid, oid, t);
 
+  StripObjectHeader tmp = StripObjectHeader(new _StripObjectHeader());
+  tmp->strip_size = old_header->strip_size;
+  tmp->max_size = old_header->max_size;
+  tmp->bits = old_header->bits;
+  tmp->header = old_header->header;
+  tmp->oid = oid;
+  tmp->cid = cid;
 
-  header->oid = oid;
-  header->cid = cid;
+  if (new_header)
+    *new_header = tmp;
+
+  old_header->header = Header();
+  old_header->deleted = true;
 }
 
 int StripObjectMap::get_values_with_header(const StripObjectHeader header,
@@ -355,9 +370,8 @@ int KeyValueStore::BufferTransaction::clear_buffer(
 {
   strip_header->deleted = true;
 
-  InvalidCacheContext *c = new InvalidCacheContext(store, strip_header->oid);
+  InvalidateCacheContext *c = new InvalidateCacheContext(store, strip_header->cid, strip_header->oid);
   finishes.push_back(c);
-
   return store->backend->clear(strip_header->header, t);
 }
 
@@ -384,13 +398,12 @@ void KeyValueStore::BufferTransaction::rename_buffer(
 {
   // FIXME: Lacking of lock for origin header, it will cause other operation
   // can get the origin header while submitting transactions
-  store->backend->rename_wrap(cid, oid, t, old_header);
+  StripObjectMap::StripObjectHeader new_header;
+  store->backend->rename_wrap(old_header, cid, oid, t, &new_header);
 
-  InvalidCacheContext *c = new InvalidCacheContext(store, oid);
+  InvalidateCacheContext *c = new InvalidateCacheContext(store, old_header->cid, old_header->oid);
   finishes.push_back(c);
-
-  strip_headers.erase(make_pair(old_header->cid, old_header->oid));
-  strip_headers[make_pair(cid, oid)] = old_header;
+  strip_headers[make_pair(cid, oid)] = new_header;
 }
 
 int KeyValueStore::BufferTransaction::submit_transaction()
@@ -412,14 +425,14 @@ int KeyValueStore::BufferTransaction::submit_transaction()
     }
   }
 
-out:
-  for (list<Context*>::iterator it = finishes.begin();
-       it != finishes.end(); ++it) {
+  r = store->backend->submit_transaction(t);
+  for (list<Context*>::iterator it = finishes.begin(); it != finishes.end(); ++it) {
     (*it)->complete(r);
   }
 
+out:
   dout(5) << __func__ << " r = " << r << dendl;
-  return store->backend->submit_transaction(t);
+  return r;
 }
 
 // =========== KeyValueStore Intern Helper Implementation ==============
