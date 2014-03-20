@@ -776,7 +776,11 @@ void Monitor::_osdmonitor_prepare_command(cmdmap_t& cmdmap, ostream& ss)
 void Monitor::_add_bootstrap_peer_hint(string cmd, cmdmap_t& cmdmap, ostream& ss)
 {
   string addrstr;
-  cmd_getval(g_ceph_context, cmdmap, "addr", addrstr);
+  if (!cmd_getval(g_ceph_context, cmdmap, "addr", addrstr)) {
+    ss << "unable to parse address string value '"
+         << cmd_vartype_stringify(cmdmap["addr"]) << "'";
+    return;
+  }
   dout(10) << "_add_bootstrap_peer_hint '" << cmd << "' '"
            << addrstr << "'" << dendl;
 
@@ -2419,6 +2423,9 @@ void Monitor::handle_command(MMonCommand *m)
       start_election();
       rs = "started responding to quorum, initiated new election";
       r = 0;
+    } else {
+      rs = "needs a valid 'quorum' command";
+      r = -EINVAL;
     }
   }
 
