@@ -24,7 +24,7 @@ public:
   map<string,pool_stat_t> pool_stats;
 
   MGetPoolStatsReply() : PaxosServiceMessage(MSG_GETPOOLSTATSREPLY, 0) {}
-  MGetPoolStatsReply(uuid_d& f, tid_t t, version_t v) :
+  MGetPoolStatsReply(uuid_d& f, ceph_tid_t t, version_t v) :
     PaxosServiceMessage(MSG_GETPOOLSTATSREPLY, v),
     fsid(f) {
     set_tid(t);

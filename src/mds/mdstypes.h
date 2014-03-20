@@ -513,7 +513,7 @@ inline ostream& operator<<(ostream& out, const old_rstat_t& o) {
 
 struct session_info_t {
   entity_inst_t inst;
-  map<tid_t,inodeno_t> completed_requests;
+  map<ceph_tid_t,inodeno_t> completed_requests;
   interval_set<inodeno_t> prealloc_inos;   // preallocated, ready to use.
   interval_set<inodeno_t> used_inos;       // journaling use
 
@@ -651,7 +651,7 @@ struct metareqid_t {
   entity_name_t name;
   uint64_t tid;
   metareqid_t() : tid(0) {}
-  metareqid_t(entity_name_t n, tid_t t) : name(n), tid(t) {}
+  metareqid_t(entity_name_t n, ceph_tid_t t) : name(n), tid(t) {}
   void encode(bufferlist& bl) const {
     ::encode(name, bl);
     ::encode(tid, bl);

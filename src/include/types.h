@@ -235,7 +235,7 @@ WRITE_RAW_ENCODER(ceph_mon_statfs_reply)
 // some basic types
 
 // NOTE: these must match ceph_fs.h typedefs
-typedef uint64_t tid_t;         // transaction id
+typedef uint64_t ceph_tid_t; // transaction id
 typedef uint64_t version_t;
 typedef __u32 epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 years)
 

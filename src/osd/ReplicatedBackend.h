@@ -315,7 +315,7 @@ private:
    * Client IO
    */
   struct InProgressOp {
-    tid_t tid;
+    ceph_tid_t tid;
     set<pg_shard_t> waiting_for_commit;
     set<pg_shard_t> waiting_for_applied;
     Context *on_commit;
@@ -323,7 +323,7 @@ private:
     OpRequestRef op;
     eversion_t v;
     InProgressOp(
-      tid_t tid, Context *on_commit, Context *on_applied,
+      ceph_tid_t tid, Context *on_commit, Context *on_applied,
       OpRequestRef op, eversion_t v)
       : tid(tid), on_commit(on_commit), on_applied(on_applied),
 	op(op), v(v) {}
@@ -332,7 +332,7 @@ private:
 	waiting_for_applied.empty();
     }
   };
-  map<tid_t, InProgressOp> in_progress_ops;
+  map<ceph_tid_t, InProgressOp> in_progress_ops;
 public:
   PGTransaction *get_transaction();
   friend class C_OSD_OnOpCommit;
@@ -346,7 +346,7 @@ public:
     Context *on_local_applied_sync,
     Context *on_all_applied,
     Context *on_all_commit,
-    tid_t tid,
+    ceph_tid_t tid,
     osd_reqid_t reqid,
     OpRequestRef op
     );
@@ -355,7 +355,7 @@ private:
   void issue_op(
     const hobject_t &soid,
     const eversion_t &at_version,
-    tid_t tid,
+    ceph_tid_t tid,
     osd_reqid_t reqid,
     eversion_t pg_trim_to,
     hobject_t new_temp_oid,
