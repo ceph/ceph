@@ -591,7 +591,7 @@ Notable Changes
 * client: fix getcwd() to use new LOOKUPPARENT operation (Zheng Yan)
 * osd: fix bugs in log merging (Samuel Just)
 * rados: add 'set-alloc-hint' command (Ilya Dryomov)
-* common: fix 'config dump' debug_ prefix (Danny Al-Gaaf)
+* common: fix 'config dump' debug prefix (Danny Al-Gaaf)
 * rbdmap: fix upstart script (Stephan Renatus)
 * mds: fix file lock owner checks (Zheng Yan)
 * rbd-fuse: fix enumerate_images overflow, memory leak (Ilya Dryomov)
