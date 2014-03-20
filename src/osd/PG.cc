@@ -894,24 +894,15 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
 	continue;
       }
     }
-    // Prefer longer tail if it brings another peer into contiguity
-    for (map<pg_shard_t, pg_info_t>::const_iterator q = infos.begin();
-	 q != infos.end();
-	 ++q) {
-      if (q->second.is_incomplete())
-	continue;  // don't care about log contiguity
-      if (q->second.last_update < best->second.log_tail &&
-	  q->second.last_update >= p->second.log_tail) {
-	dout(10) << "calc_acting prefer osd." << p->first
-		 << " because it brings osd." << q->first << " into log contiguity" << dendl;
-	best = p;
-	continue;
-      }
-      if (q->second.last_update < p->second.log_tail &&
-	  q->second.last_update >= best->second.log_tail) {
-	continue;
-      }
+
+    // Prefer longer tail
+    if (p->second.log_tail > best->second.log_tail) {
+      continue;
+    } else if (p->second.log_tail < best->second.log_tail) {
+      best = p;
+      continue;
     }
+
     // prefer current primary (usually the caller), all things being equal
     if (p->first == pg_whoami) {
       dout(10) << "calc_acting prefer osd." << p->first
@@ -4730,6 +4721,9 @@ void PG::start_peering_interval(
 
   assert(!deleting);
 
+  // should we tell the primary we are here?
+  send_notify = !is_primary();
+
   if (role != oldrole ||
       was_old_primary != is_primary()) {
     // did primary change?
@@ -4752,16 +4746,10 @@ void PG::start_peering_interval(
     // take active waiters
     requeue_ops(waiting_for_active);
 
-    // should we tell the primary we are here?
-    send_notify = !is_primary();
-      
   } else {
     // no role change.
     // did primary change?
     if (get_primary() != old_acting_primary) {    
-      // we need to announce
-      send_notify = true;
-        
       dout(10) << *this << " " << oldacting << " -> " << acting 
 	       << ", acting primary " 
 	       << old_acting_primary << " -> " << get_primary() 

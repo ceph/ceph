@@ -1216,7 +1216,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
   hobject_t snapdir(m->get_oid(), m->get_object_locator().key,
 		    CEPH_SNAPDIR, m->get_pg().ps(), info.pgid.pool(),
 		    m->get_object_locator().nspace);
-  if (is_missing_object(snapdir)) {
+  if (is_unreadable_object(snapdir)) {
     wait_for_unreadable_object(snapdir, op);
     return;
   }
