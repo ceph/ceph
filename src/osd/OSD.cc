@@ -4637,6 +4637,45 @@ void OSD::forget_peer_epoch(int peer, epoch_t as_of)
   }
 }
 
+bool OSD::_should_share_map(entity_name_t name, Connection *con,
+                            epoch_t epoch, OSDMapRef& osdmap, Session *session)
+{
+  bool should_send = false;
+  dout(20) << "_should_share_map "
+           << name << " " << con->get_peer_addr()
+           << " " << epoch << dendl;
+
+  // does client have old map?
+  if (name.is_client()) {
+    bool message_sendmap = epoch < osdmap->get_epoch();
+    if (message_sendmap && session) {
+      dout(20) << "client session last_sent_epoch: "
+               << session->last_sent_epoch
+               << " versus osdmap epoch " << osdmap->get_epoch() << dendl;
+      if (session->last_sent_epoch < osdmap->get_epoch()) {
+        should_send = true;
+      } // else we don't need to send it out again
+    }
+  }
+
+  if (con->get_messenger() == cluster_messenger &&
+      osdmap->is_up(name.num()) &&
+      (osdmap->get_cluster_addr(name.num()) == con->get_peer_addr() ||
+       osdmap->get_hb_back_addr(name.num()) == con->get_peer_addr())) {
+    // remember
+    epoch_t has = get_peer_epoch(name.num());
+
+    // share?
+    if (has < osdmap->get_epoch()) {
+      dout(10) << name << " " << con->get_peer_addr()
+               << " has old map " << epoch << " < "
+               << osdmap->get_epoch() << dendl;
+      should_send = true;
+    }
+  }
+
+  return should_send;
+}
 
 bool OSD::_share_map_incoming(
   entity_name_t name,
