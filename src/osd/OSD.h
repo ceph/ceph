@@ -1339,7 +1339,7 @@ private:
 
   bool _should_share_map(entity_name_t name, Connection *con, epoch_t epoch,
                          OSDMapRef& osdmap, Session *session);
-  bool _share_map_incoming(entity_name_t name, Connection *con, epoch_t epoch,
+  void _share_map_incoming(entity_name_t name, Connection *con, epoch_t epoch,
 			   OSDMapRef& osdmap, Session *session);
   void _share_map_outgoing(int peer, Connection *con,
 			   OSDMapRef map = OSDMapRef());
