@@ -53,7 +53,7 @@ public:
       ::decode(oldest_version, p);
   }
 
-  tid_t handle;
+  ceph_tid_t handle;
   version_t version;
   version_t oldest_version;
 

@@ -703,13 +703,13 @@ bool ECBackend::handle_message(
 struct SubWriteCommitted : public Context {
   ECBackend *pg;
   OpRequestRef msg;
-  tid_t tid;
+  ceph_tid_t tid;
   eversion_t version;
   eversion_t last_complete;
   SubWriteCommitted(
     ECBackend *pg,
     OpRequestRef msg,
-    tid_t tid,
+    ceph_tid_t tid,
     eversion_t version,
     eversion_t last_complete)
     : pg(pg), msg(msg), tid(tid),
@@ -721,7 +721,7 @@ struct SubWriteCommitted : public Context {
   }
 };
 void ECBackend::sub_write_committed(
-  tid_t tid, eversion_t version, eversion_t last_complete) {
+  ceph_tid_t tid, eversion_t version, eversion_t last_complete) {
   if (get_parent()->pgb_is_primary()) {
     ECSubWriteReply reply;
     reply.tid = tid;
@@ -748,12 +748,12 @@ void ECBackend::sub_write_committed(
 struct SubWriteApplied : public Context {
   ECBackend *pg;
   OpRequestRef msg;
-  tid_t tid;
+  ceph_tid_t tid;
   eversion_t version;
   SubWriteApplied(
     ECBackend *pg,
     OpRequestRef msg,
-    tid_t tid,
+    ceph_tid_t tid,
     eversion_t version)
     : pg(pg), msg(msg), tid(tid), version(version) {}
   void finish(int) {
@@ -763,7 +763,7 @@ struct SubWriteApplied : public Context {
   }
 };
 void ECBackend::sub_write_applied(
-  tid_t tid, eversion_t version) {
+  ceph_tid_t tid, eversion_t version) {
   parent->op_applied(version);
   if (get_parent()->pgb_is_primary()) {
     ECSubWriteReply reply;
@@ -901,7 +901,7 @@ void ECBackend::handle_sub_write_reply(
   pg_shard_t from,
   ECSubWriteReply &op)
 {
-  map<tid_t, Op>::iterator i = tid_to_op_map.find(op.tid);
+  map<ceph_tid_t, Op>::iterator i = tid_to_op_map.find(op.tid);
   assert(i != tid_to_op_map.end());
   if (op.committed) {
     assert(i->second.pending_commit.count(from));
@@ -923,7 +923,7 @@ void ECBackend::handle_sub_read_reply(
   RecoveryMessages *m)
 {
   dout(10) << __func__ << ": reply " << op << dendl;
-  map<tid_t, ReadOp>::iterator iter = tid_to_read_map.find(op.tid);
+  map<ceph_tid_t, ReadOp>::iterator iter = tid_to_read_map.find(op.tid);
   if (iter == tid_to_read_map.end()) {
     //canceled
     return;
@@ -978,7 +978,8 @@ void ECBackend::handle_sub_read_reply(
       rop.complete[i->first].r = i->second;
   }
 
-  map<pg_shard_t, set<tid_t> >::iterator siter = shard_to_read_map.find(from);
+  map<pg_shard_t, set<ceph_tid_t> >::iterator siter =
+shard_to_read_map.find(from);
   assert(siter != shard_to_read_map.end());
   assert(siter->second.count(op.tid));
   siter->second.erase(op.tid);
@@ -1013,8 +1014,8 @@ void ECBackend::complete_read_op(ReadOp &rop, RecoveryMessages *m)
 
 struct FinishReadOp : public GenContext<ThreadPool::TPHandle&>  {
   ECBackend *ec;
-  tid_t tid;
-  FinishReadOp(ECBackend *ec, tid_t tid) : ec(ec), tid(tid) {}
+  ceph_tid_t tid;
+  FinishReadOp(ECBackend *ec, ceph_tid_t tid) : ec(ec), tid(tid) {}
   void finish(ThreadPool::TPHandle &handle) {
     assert(ec->tid_to_read_map.count(tid));
     int priority = ec->tid_to_read_map[tid].priority;
@@ -1088,8 +1089,9 @@ void ECBackend::filter_read_op(
 
 void ECBackend::check_recovery_sources(const OSDMapRef osdmap)
 {
-  set<tid_t> tids_to_filter;
-  for (map<pg_shard_t, set<tid_t> >::iterator i = shard_to_read_map.begin();
+  set<ceph_tid_t> tids_to_filter;
+  for (map<pg_shard_t, set<ceph_tid_t> >::iterator 
+       i = shard_to_read_map.begin();
        i != shard_to_read_map.end();
        ) {
     if (osdmap->is_down(i->first.osd)) {
@@ -1099,10 +1101,10 @@ void ECBackend::check_recovery_sources(const OSDMapRef osdmap)
       ++i;
     }
   }
-  for (set<tid_t>::iterator i = tids_to_filter.begin();
+  for (set<ceph_tid_t>::iterator i = tids_to_filter.begin();
        i != tids_to_filter.end();
        ++i) {
-    map<tid_t, ReadOp>::iterator j = tid_to_read_map.find(*i);
+    map<ceph_tid_t, ReadOp>::iterator j = tid_to_read_map.find(*i);
     assert(j != tid_to_read_map.end());
     filter_read_op(osdmap, j->second);
   }
@@ -1112,7 +1114,7 @@ void ECBackend::_on_change(ObjectStore::Transaction *t)
 {
   writing.clear();
   tid_to_op_map.clear();
-  for (map<tid_t, ReadOp>::iterator i = tid_to_read_map.begin();
+  for (map<ceph_tid_t, ReadOp>::iterator i = tid_to_read_map.begin();
        i != tid_to_read_map.end();
        ++i) {
     dout(10) << __func__ << ": cancelling " << i->second << dendl;
@@ -1157,7 +1159,7 @@ void ECBackend::dump_recovery_info(Formatter *f) const
   }
   f->close_section();
   f->open_array_section("read_ops");
-  for (map<tid_t, ReadOp>::const_iterator i = tid_to_read_map.begin();
+  for (map<ceph_tid_t, ReadOp>::const_iterator i = tid_to_read_map.begin();
        i != tid_to_read_map.end();
        ++i) {
     f->open_object_section("read_op");
@@ -1202,7 +1204,7 @@ void ECBackend::submit_transaction(
   Context *on_local_applied_sync,
   Context *on_all_applied,
   Context *on_all_commit,
-  tid_t tid,
+  ceph_tid_t tid,
   osd_reqid_t reqid,
   OpRequestRef client_op
   )
@@ -1343,7 +1345,7 @@ void ECBackend::start_read_op(
   map<hobject_t, read_request_t> &to_read,
   OpRequestRef _op)
 {
-  tid_t tid = get_parent()->get_tid();
+  ceph_tid_t tid = get_parent()->get_tid();
   assert(!tid_to_read_map.count(tid));
   ReadOp &op(tid_to_read_map[tid]);
   op.priority = priority;
@@ -1467,7 +1469,7 @@ void ECBackend::check_op(Op *op)
     writing.pop_front();
     tid_to_op_map.erase(op->tid);
   }
-  for (map<tid_t, Op>::iterator i = tid_to_op_map.begin();
+  for (map<ceph_tid_t, Op>::iterator i = tid_to_op_map.begin();
        i != tid_to_op_map.end();
        ++i) {
     dout(20) << __func__ << " tid " << i->first <<": " << i->second << dendl;

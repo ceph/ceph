@@ -140,8 +140,8 @@ public:
   }
 
   // normal fields
-  void set_tid(tid_t t) { tid = t; }
-  void set_oldest_client_tid(tid_t t) { head.oldest_client_tid = t; }
+  void set_tid(ceph_tid_t t) { tid = t; }
+  void set_oldest_client_tid(ceph_tid_t t) { head.oldest_client_tid = t; }
   void inc_num_fwd() { head.num_fwd = head.num_fwd + 1; }
   void set_retry_attempt(int a) { head.num_retry = a; }
   void set_filepath(const filepath& fp) { path = fp; }
@@ -154,7 +154,7 @@ public:
     head.flags = head.flags | CEPH_MDS_FLAG_WANT_DENTRY;
   }
   int get_op() { return head.op; }
-  tid_t get_tid() { return tid; }
+  ceph_tid_t get_tid() { return tid; }
   filepath& get_filepath() { return path; }
   filepath& get_filepath2() { return path2; }
 
