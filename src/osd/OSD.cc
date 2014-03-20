@@ -4677,62 +4677,41 @@ bool OSD::_should_share_map(entity_name_t name, Connection *con,
   return should_send;
 }
 
-bool OSD::_share_map_incoming(
+void OSD::_share_map_incoming(
   entity_name_t name,
   Connection *con,
   epoch_t epoch,
   OSDMapRef& osdmap,
   Session* session)
 {
-  bool shared = false;
   dout(20) << "_share_map_incoming "
 	   << name << " " << con->get_peer_addr()
 	   << " " << epoch << dendl;
 
   assert(is_active());
 
-  // does client have old map?
-  if (name.is_client()) {
-    bool sendmap = epoch < osdmap->get_epoch();
-    if (sendmap && session) {
-      if (session->last_sent_epoch < osdmap->get_epoch()) {
-	session->last_sent_epoch = osdmap->get_epoch();
-      } else {
-	sendmap = false; //we don't need to send it out again
-	dout(15) << name << " already sent incremental to update from epoch "
-		 << epoch << dendl;
-      }
-    }
-    if (sendmap) {
+  bool want_shared = _should_share_map(name, con, epoch, osdmap, session);
+
+  if (want_shared){
+    if (name.is_client()) {
       dout(10) << name << " has old map " << epoch
-	       << " < " << osdmap->get_epoch() << dendl;
+          << " < " << osdmap->get_epoch() << dendl;
+      // we know the Session is valid or we wouldn't be sending
+      session->last_sent_epoch = osdmap->get_epoch();
       send_incremental_map(epoch, con, osdmap);
-      shared = true;
-    }
-  }
-
-  // does peer have old map?
-  if (con->get_messenger() == cluster_messenger &&
-      osdmap->is_up(name.num()) &&
-      (osdmap->get_cluster_addr(name.num()) == con->get_peer_addr() ||
-       osdmap->get_hb_back_addr(name.num()) == con->get_peer_addr())) {
-    // remember
-    epoch_t has = note_peer_epoch(name.num(), epoch);
-
-    // share?
-    if (has < osdmap->get_epoch()) {
+    } else if (con->get_messenger() == cluster_messenger &&
+        osdmap->is_up(name.num()) &&
+        (osdmap->get_cluster_addr(name.num()) == con->get_peer_addr() ||
+            osdmap->get_hb_back_addr(name.num()) == con->get_peer_addr())) {
       dout(10) << name << " " << con->get_peer_addr()
-	       << " has old map " << epoch << " < "
-	       << osdmap->get_epoch() << dendl;
+	               << " has old map " << epoch << " < "
+	               << osdmap->get_epoch() << dendl;
       note_peer_epoch(name.num(), osdmap->get_epoch());
       send_incremental_map(epoch, con, osdmap);
-      shared = true;
     }
   }
-
   if (session)
     session->put();
-  return shared;
 }
 
 
