@@ -2838,6 +2838,8 @@ void Server::handle_client_readdir(MDRequest *mdr)
   if (!dir->is_complete()) {
     if (dir->is_frozen()) {
       dout(7) << "dir is frozen " << *dir << dendl;
+      mds->locker->drop_locks(mdr);
+      mdr->drop_local_auth_pins();
       dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
       return;
     }
@@ -4484,6 +4486,18 @@ public:
   }
 };
 
+class C_MDS_SlaveLinkCommit : public Context {
+  Server *server;
+  MDRequest *mdr;
+  CInode *targeti;
+public:
+  C_MDS_SlaveLinkCommit(Server *s, MDRequest *r, CInode *t) :
+    server(s), mdr(r), targeti(t) { }
+  void finish(int r) {
+    server->_commit_slave_link(mdr, r, targeti);
+  }
+};
+
 /* This function DOES put the mdr->slave_request before returning*/
 void Server::handle_slave_link_prep(MDRequest *mdr)
 {
@@ -4562,21 +4576,12 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->commit, dnl->get_inode(), 0, PREDIRTY_SHALLOW|PREDIRTY_PRIMARY, 0);
   mdcache->journal_dirty_inode(mdr, &le->commit, targeti);
 
+  // set up commit waiter
+  mdr->more()->slave_commit = new C_MDS_SlaveLinkCommit(this, mdr, targeti);
+
   mdlog->submit_entry(le, new C_MDS_SlaveLinkPrep(this, mdr, targeti));
   mdlog->flush();
 }
-
-class C_MDS_SlaveLinkCommit : public Context {
-  Server *server;
-  MDRequest *mdr;
-  CInode *targeti;
-public:
-  C_MDS_SlaveLinkCommit(Server *s, MDRequest *r, CInode *t) :
-    server(s), mdr(r), targeti(t) { }
-  void finish(int r) {
-    server->_commit_slave_link(mdr, r, targeti);
-  }
-};
 
 void Server::_logged_slave_link(MDRequest *mdr, CInode *targeti) 
 {
@@ -4592,17 +4597,19 @@ void Server::_logged_slave_link(MDRequest *mdr, CInode *targeti)
   // hit pop
   mds->balancer->hit_inode(mdr->now, targeti, META_POP_IWR);
 
-  // ack
-  MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
-						 MMDSSlaveRequest::OP_LINKPREPACK);
-  mds->send_message_mds(reply, mdr->slave_to_mds);
-  
-  // set up commit waiter
-  mdr->more()->slave_commit = new C_MDS_SlaveLinkCommit(this, mdr, targeti);
-
   // done.
   mdr->slave_request->put();
   mdr->slave_request = 0;
+
+  // ack
+  if (!mdr->aborted) {
+    MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
+						   MMDSSlaveRequest::OP_LINKPREPACK);
+    mds->send_message_mds(reply, mdr->slave_to_mds);
+  } else {
+    dout(10) << " abort flag set, finishing" << dendl;
+    mdcache->request_finish(mdr);
+  }
 }
 
 
@@ -5132,6 +5139,16 @@ struct C_MDS_SlaveRmdirPrep : public Context {
   }
 };
 
+struct C_MDS_SlaveRmdirCommit : public Context {
+  Server *server;
+  MDRequest *mdr;
+  C_MDS_SlaveRmdirCommit(Server *s, MDRequest *r)
+    : server(s), mdr(r) { }
+  void finish(int r) {
+    server->_commit_slave_rmdir(mdr, r);
+  }
+};
+
 void Server::handle_slave_rmdir_prep(MDRequest *mdr)
 {
   dout(10) << "handle_slave_rmdir_prep " << *mdr 
@@ -5181,19 +5198,12 @@ void Server::handle_slave_rmdir_prep(MDRequest *mdr)
 
   mds->mdcache->project_subtree_rename(in, dn->get_dir(), straydn->get_dir());
 
+  // set up commit waiter
+  mdr->more()->slave_commit = new C_MDS_SlaveRmdirCommit(this, mdr);
+
   mdlog->submit_entry(le, new C_MDS_SlaveRmdirPrep(this, mdr, dn, straydn));
   mdlog->flush();
 }
-
-struct C_MDS_SlaveRmdirCommit : public Context {
-  Server *server;
-  MDRequest *mdr;
-  C_MDS_SlaveRmdirCommit(Server *s, MDRequest *r)
-    : server(s), mdr(r) { }
-  void finish(int r) {
-    server->_commit_slave_rmdir(mdr, r);
-  }
-};
 
 void Server::_logged_slave_rmdir(MDRequest *mdr, CDentry *dn, CDentry *straydn)
 {
@@ -5207,17 +5217,19 @@ void Server::_logged_slave_rmdir(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   dn->pop_projected_linkage();
   mdcache->adjust_subtree_after_rename(in, dn->get_dir(), true);
 
-  MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
-						 MMDSSlaveRequest::OP_RMDIRPREPACK);
-  mds->send_message_mds(reply, mdr->slave_to_mds);
-
-  // set up commit waiter
-  mdr->more()->slave_commit = new C_MDS_SlaveRmdirCommit(this, mdr);
-
   // done.
   mdr->slave_request->put();
   mdr->slave_request = 0;
   mdr->straydn = 0;
+
+  if (!mdr->aborted) {
+    MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
+						   MMDSSlaveRequest::OP_RMDIRPREPACK);
+    mds->send_message_mds(reply, mdr->slave_to_mds);
+  } else {
+    dout(10) << " abort flag set, finishing" << dendl;
+    mdcache->request_finish(mdr);
+  }
 }
 
 void Server::handle_slave_rmdir_prep_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
@@ -5644,6 +5656,8 @@ void Server::handle_client_rename(MDRequest *mdr)
     dout(10) << " will remote_wrlock srcdir scatterlocks on mds." << srcdirauth << dendl;
     remote_wrlocks[&srcdn->get_dir()->inode->filelock] = srcdirauth;
     remote_wrlocks[&srcdn->get_dir()->inode->nestlock] = srcdirauth;
+    if (srci->is_dir())
+      rdlocks.insert(&srci->dirfragtreelock);
   } else {
     wrlocks.insert(&srcdn->get_dir()->inode->filelock);
     wrlocks.insert(&srcdn->get_dir()->inode->nestlock);
@@ -5675,9 +5689,9 @@ void Server::handle_client_rename(MDRequest *mdr)
     // open_remote_ino() with 'want_locked=true' when the srcdn or destdn
     // is traversed.
     if (srcdnl->is_remote())
-      xlocks.insert(&srci->get_parent_dn()->lock);
+      xlocks.insert(&srci->get_projected_parent_dn()->lock);
     if (destdnl->is_remote())
-      xlocks.insert(&oldin->get_parent_dn()->lock);
+      xlocks.insert(&oldin->get_projected_parent_dn()->lock);
   }
 
   // we need to update srci's ctime.  xlock its least contended lock to do that...
@@ -5878,10 +5892,13 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
   _rename_apply(mdr, srcdn, destdn, straydn);
 
   CDentry::linkage_t *destdnl = destdn->get_linkage();
+  CInode *in = destdnl->get_inode();
+  bool need_eval = mdr->more()->cap_imports.count(in);
+
   // test hack: test slave commit
-  if (!mdr->more()->slaves.empty() && !destdnl->get_inode()->is_dir())
+  if (!mdr->more()->slaves.empty() && !in->is_dir())
     assert(g_conf->mds_kill_rename_at != 5);
-  if (!mdr->more()->slaves.empty() && destdnl->get_inode()->is_dir())
+  if (!mdr->more()->slaves.empty() && in->is_dir())
     assert(g_conf->mds_kill_rename_at != 6);
   
   // commit anchor updates?
@@ -5892,9 +5909,8 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
 
   // bump popularity
   mds->balancer->hit_dir(mdr->now, srcdn->get_dir(), META_POP_IWR);
-  if (destdnl->is_remote() &&
-      destdnl->get_inode()->is_auth())
-    mds->balancer->hit_inode(mdr->now, destdnl->get_inode(), META_POP_IWR);
+  if (destdnl->is_remote() && in->is_auth())
+    mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);
 
   // did we import srci?  if so, explicitly ack that import that, before we unlock and reply.
 
@@ -5903,7 +5919,10 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
   reply_request(mdr, reply);
-  
+
+  if (need_eval)
+    mds->locker->eval(in, CEPH_CAP_LOCKS, true);
+
   // clean up?
   if (straydn) 
     mdcache->eval_stray(straydn);
@@ -6681,9 +6700,10 @@ void Server::_logged_slave_rename(MDRequest *mdr,
   dout(10) << "_logged_slave_rename " << *mdr << dendl;
 
   // prepare ack
-  MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
-						 MMDSSlaveRequest::OP_RENAMEPREPACK);
-  
+  MMDSSlaveRequest *reply = NULL;
+  if (!mdr->aborted)
+    reply= new MMDSSlaveRequest(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_RENAMEPREPACK);
+
   CDentry::linkage_t *srcdnl = srcdn->get_linkage();
   CDentry::linkage_t *destdnl = destdn->get_linkage();
   //CDentry::linkage_t *straydnl = straydn ? straydn->get_linkage() : 0;
@@ -6706,9 +6726,11 @@ void Server::_logged_slave_rename(MDRequest *mdr,
     for (list<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p)
       (*p)->state_clear(CDir::STATE_EXPORTBOUND);
 
-    ::encode(exported_client_map, reply->inode_export);
-    reply->inode_export.claim_append(inodebl);
-    reply->inode_export_v = srcdnl->get_inode()->inode.version;
+    if (reply) {
+      ::encode(exported_client_map, reply->inode_export);
+      reply->inode_export.claim_append(inodebl);
+      reply->inode_export_v = srcdnl->get_inode()->inode.version;
+    }
 
     // remove mdr auth pin
     mdr->auth_unpin(srcdnl->get_inode());
@@ -6725,8 +6747,6 @@ void Server::_logged_slave_rename(MDRequest *mdr,
   
   destdnl = destdn->get_linkage();
 
-  mds->send_message_mds(reply, mdr->slave_to_mds);
-  
   // bump popularity
   mds->balancer->hit_dir(mdr->now, srcdn->get_dir(), META_POP_IWR);
   if (destdnl->get_inode() && destdnl->get_inode()->is_auth())
@@ -6736,6 +6756,14 @@ void Server::_logged_slave_rename(MDRequest *mdr,
   mdr->slave_request->put();
   mdr->slave_request = 0;
   mdr->straydn = 0;
+
+  if (reply) {
+    mds->send_message_mds(reply, mdr->slave_to_mds);
+  } else {
+    assert(mdr->aborted);
+    dout(10) << " abort flag set, finishing" << dendl;
+    mdcache->request_finish(mdr);
+  }
 }
 
 void Server::_commit_slave_rename(MDRequest *mdr, int r,

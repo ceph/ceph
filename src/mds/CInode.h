@@ -355,6 +355,7 @@ public:
   void close_dirfrag(frag_t fg);
   void close_dirfrags();
   bool has_subtree_root_dirfrag(int auth=-1);
+  bool has_subtree_or_exporting_dirfrag();
 
   void force_dirfrags();
   void verify_dirfrags();
@@ -389,6 +390,11 @@ protected:
 
   ceph_lock_state_t fcntl_locks;
   ceph_lock_state_t flock_locks;
+
+  void clear_file_locks() {
+    fcntl_locks.clear();
+    flock_locks.clear();
+  }
 
   // LogSegment dlists i (may) belong to
 public:
