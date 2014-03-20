@@ -4710,8 +4710,6 @@ void OSD::_share_map_incoming(
       send_incremental_map(epoch, con, osdmap);
     }
   }
-  if (session)
-    session->put();
 }
 
 
@@ -7429,12 +7427,21 @@ void OSD::handle_op(OpRequestRef op, OSDMapRef osdmap)
   }
 
   // share our map with sender, if they're old
+  Session *client_session = static_cast<Session *>(m->get_connection()->get_priv());
+  if (client_session) {
+    client_session->sent_epoch_lock.Lock();
+  }
   _share_map_incoming(
-    m->get_source(),
-    m->get_connection().get(),
-    m->get_map_epoch(),
-    osdmap,
-    static_cast<Session *>(m->get_connection()->get_priv()));
+      m->get_source(),
+      m->get_connection().get(),
+      m->get_map_epoch(),
+      osdmap,
+      client_session
+  );
+  if (client_session) {
+    client_session->sent_epoch_lock.Unlock();
+    client_session->put();
+  }
 
   if (op->rmw_flags == 0) {
     int r = init_op_flags(op);
@@ -7567,10 +7574,19 @@ void OSD::handle_replica_op(OpRequestRef op, OSDMapRef osdmap)
     return;
 
   // share our map with sender, if they're old
+  Session *peer_session =
+      static_cast<Session*>(m->get_connection()->get_priv());
+  if (peer_session) {
+    peer_session->sent_epoch_lock.Lock();
+  }
   _share_map_incoming(
     m->get_source(), m->get_connection().get(), m->map_epoch,
     osdmap,
-    static_cast<Session*>(m->get_connection()->get_priv()));
+    peer_session);
+  if (peer_session) {
+    peer_session->sent_epoch_lock.Unlock();
+    peer_session->put();
+  }
 
   // make sure we have the pg
   const spg_t pgid = m->pgid;
