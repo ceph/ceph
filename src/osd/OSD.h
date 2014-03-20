@@ -1007,16 +1007,20 @@ public:
     EntityName entity_name;
     OSDCap caps;
     int64_t auid;
-    epoch_t last_sent_epoch;
     ConnectionRef con;
     WatchConState wstate;
 
     Mutex session_dispatch_lock;
     list<OpRequestRef> waiting_on_map;
 
+    Mutex sent_epoch_lock;
+    epoch_t last_sent_epoch;
+
     Session() :
-      auid(-1), last_sent_epoch(0), con(0),
-      session_dispatch_lock("Session::session_dispatch_lock")
+      auid(-1), con(0),
+      session_dispatch_lock("Session::session_dispatch_lock"),
+      sent_epoch_lock("Session::sent_epoch_lock"),
+      last_sent_epoch(0)
     {}
   };
   Mutex session_waiting_for_map_lock;
