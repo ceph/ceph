@@ -6301,6 +6301,11 @@ bool MDCache::trim(int max)
     CDir *dir = p->first;
     ++p;
     if (!dir->is_auth() && !dir->get_inode()->is_auth()) {
+      // don't trim subtree root if its auth MDS is recovering.
+      // This simplify the cache rejoin code.
+      if (dir->is_subtree_root() &&
+	  rejoin_ack_gather.count(dir->get_dir_auth().first))
+	continue;
       if (dir->get_num_ref() == 1)  // subtree pin
 	trim_dirfrag(dir, 0, expiremap);
     }
@@ -6494,8 +6499,11 @@ bool MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<int, MCacheExpi
     // DIR
     list<CDir*> dfls;
     in->get_dirfrags(dfls);
-    for (list<CDir*>::iterator p = dfls.begin(); p != dfls.end(); ++p)
-      trim_dirfrag(*p, con ? con:*p, expiremap);  // if no container (e.g. root dirfrag), use *p
+    for (list<CDir*>::iterator p = dfls.begin(); p != dfls.end(); ++p) {
+      CDir *dir = *p;
+      assert(!dir->is_subtree_root());
+      trim_dirfrag(dir, con ? con:dir, expiremap);  // if no container (e.g. root dirfrag), use *p
+    }
   }
   
   // INODE
@@ -6916,6 +6924,22 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
       if (!dir) {
 	CInode *diri = get_inode(it->first.ino);
 	if (diri) {
+	  if (mds->is_rejoin() &&
+	      rejoin_ack_gather.count(mds->whoami) && // haven't sent rejoin ack yet
+	      !diri->is_replica(from)) {
+	    list<CDir*> ls;
+	    diri->get_nested_dirfrags(ls);
+	    dout(7) << " dir expire on dirfrag " << it->first << " from mds." << from
+		    << " while rejoining, inode isn't replicated" << dendl;
+	    for (list<CDir*>::iterator q = ls.begin(); q != ls.end(); ++q) {
+	      dir = *q;
+	      if (dir->is_replica(from)) {
+		dout(7) << " dir expire on " << *dir << " from mds." << from << dendl;
+		dir->remove_replica(from);
+	      }
+	    }
+	    continue;
+	  }
 	  CDir *other = diri->get_approx_dirfrag(it->first.frag);
 	  if (other) {
 	    dout(7) << " dir expire on dirfrag " << it->first << " from mds." << from
