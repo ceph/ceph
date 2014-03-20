@@ -4642,7 +4642,7 @@ bool OSD::_share_map_incoming(
   entity_name_t name,
   Connection *con,
   epoch_t epoch,
-  OSDMapRef osdmap,
+  OSDMapRef& osdmap,
   Session* session)
 {
   bool shared = false;

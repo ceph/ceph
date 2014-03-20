@@ -1338,8 +1338,7 @@ private:
   void forget_peer_epoch(int p, epoch_t e);
 
   bool _share_map_incoming(entity_name_t name, Connection *con, epoch_t epoch,
-			   OSDMapRef osdmap,
-			   Session *session = 0);
+			   OSDMapRef& osdmap, Session *session);
   void _share_map_outgoing(int peer, Connection *con,
 			   OSDMapRef map = OSDMapRef());
 
