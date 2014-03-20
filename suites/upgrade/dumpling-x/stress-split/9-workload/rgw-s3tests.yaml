@@ -1,5 +1,7 @@
 tasks:
-- rgw: [client.0]
+- rgw:
+    client.0:
+      idle_timeout: 120
 - swift:
     client.0:
       rgw_server: client.0
