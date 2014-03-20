@@ -22,6 +22,7 @@ PidFile {testdir}/apache/tmp.{client}/apache.pid
 DocumentRoot {testdir}/apache/htdocs.{client}
 FastCgiIPCDir {testdir}/apache/tmp.{client}/fastcgi_sock
 FastCgiExternalServer {testdir}/apache/htdocs.{client}/rgw.fcgi -socket rgw_sock
+FastCgiConfig -idle-timeout {idle_timeout}
 RewriteEngine On
 
 RewriteRule ^/([a-zA-Z0-9-_.]*)([/]?.*) /rgw.fcgi?page=$1&params=$2&%{{QUERY_STRING}} [E=HTTP_AUTHORIZATION:%{{HTTP:Authorization}},L]
