@@ -8892,10 +8892,9 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
 	pg_log.add(e);
 	dout(10) << e << dendl;
 
-	// delete local copy?  NOT YET!  FIXME
-	if (m->second.have != eversion_t()) {
-	  assert(0 == "not implemented.. tho i'm not sure how useful it really would be.");
-	}
+	t->remove(
+	  coll,
+	  ghobject_t(oid, ghobject_t::NO_GEN, pg_whoami.shard));
 	pg_log.missing_rm(m++);
 	missing_loc.recovered(oid);
       }
