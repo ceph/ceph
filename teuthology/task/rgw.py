@@ -77,9 +77,10 @@ def ship_config(ctx, config, role_endpoints):
     testdir = teuthology.get_testdir(ctx)
     log.info('Shipping apache config and rgw.fcgi...')
     src = os.path.join(os.path.dirname(__file__), 'apache.conf.template')
-    for client in config.iterkeys():
+    for client, conf in config.iteritems():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         system_type = teuthology.get_system_type(remote)
+        idle_timeout = conf.get('idle_timeout', 30)
         if system_type == 'deb':
             mod_path = '/usr/lib/apache2/modules'
             print_continue = 'on'
@@ -95,6 +96,7 @@ def ship_config(ctx, config, role_endpoints):
                 host=host,
                 port=port,
                 client=client,
+                idle_timeout=idle_timeout,
                 )
             teuthology.write_file(
                 remote=remote,
@@ -564,6 +566,14 @@ def task(ctx, config):
         - rgw:
             client.0:
             client.3:
+
+    You can adjust the idle timeout for fastcgi (default is 30 seconds):
+
+        tasks:
+        - ceph:
+        - rgw:
+            client.0:
+              idle_timeout: 90
 
     To run radosgw through valgrind:
 
