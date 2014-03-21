@@ -93,13 +93,8 @@ struct RGWRequest
   RGWRequest() : id(0), s(NULL), op(NULL) {
   }
 
-  ~RGWRequest() {
-    delete s;
-  }
- 
-  req_state *init_state(CephContext *cct, RGWEnv *env) { 
-    s = new req_state(cct, env);
-    return s;
+  void init_state(req_state *_s) {
+    s = _s;
   }
 
   void log_format(struct req_state *s, const char *fmt, ...)
@@ -516,8 +511,12 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
 
   RGWEnv& rgw_env = client_io->get_env();
 
-  struct req_state *s = req->init_state(g_ceph_context, &rgw_env);
-  s->obj_ctx = store->create_context(s);
+  struct req_state rstate(g_ceph_context, &rgw_env);
+
+  struct req_state *s = &rstate;
+
+  RGWRadosCtx rados_ctx(store, s);
+  s->obj_ctx = &rados_ctx;
   store->set_intent_cb(s->obj_ctx, call_log_intent);
 
   s->req_id = store->unique_id(req->id);
@@ -616,7 +615,6 @@ done:
   if (handler)
     handler->put_op(op);
   rest->put_handler(handler);
-  store->destroy_context(s->obj_ctx);
 
   dout(1) << "====== req done req=" << hex << req << dec << " http_status=" << http_ret << " ======" << dendl;
 
