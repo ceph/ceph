@@ -534,11 +534,12 @@ CDir *CInode::get_approx_dirfrag(frag_t fg)
     return ls.front();
 
   // try parents?
-  while (1) {
+  while (fg.bits() > 0) {
     fg = fg.parent();
     dir = get_dirfrag(fg);
     if (dir) return dir;
   }
+  return NULL;
 }	
 
 void CInode::get_dirfrags(list<CDir*>& ls) 
