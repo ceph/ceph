@@ -483,17 +483,22 @@ Notable changes since v0.67 Dumpling
 v0.78
 -----
 
-This release includes two key features for firefly: erasure coding and
+This development release includes two key features: erasure coding and
 cache tiering.  A huge amount of code was merged for this release and
 several additional weeks were spent stabilizing the code base, and it
 is now in a state where it is ready to be tested by a broader user
 base.
 
-The Firefly release will be delayed for at least another sprint so
-that we can get some operational experience with the new code and
-do some additional testing before committing to long term support.
+This is *not* the firefly release.  Firefly will be delayed for at
+least another sprint so that we can get some operational experience
+with the new code and do some additional testing before committing to
+long term support.
 
-.. note: Please note that while it is possible to create and test erasure coded pools in this release, the pools will not be usable when you upgrade to v0.79 as the OSDMap encoding will subtlely change.  Please do not populate your test pools with important data that can't be reloaded.
+.. note:: Please note that while it is possible to create and test
+          erasure coded pools in this release, the pools will not be
+          usable when you upgrade to v0.79 as the OSDMap encoding will
+          subtlely change.  Please do not populate your test pools
+          with important data that can't be reloaded.
 
 Upgrading
 ~~~~~~~~~
