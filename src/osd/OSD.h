@@ -1114,8 +1114,9 @@ private:
     {}
 
     void dump(Formatter *f) {
-      Mutex::Locker l(qlock);
+      lock();
       pqueue.dump(f);
+      unlock();
     }
 
     void _enqueue_front(pair<PGRef, OpRequestRef> item);
