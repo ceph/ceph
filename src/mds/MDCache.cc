@@ -1069,12 +1069,10 @@ void MDCache::get_force_dirfrag_bound_set(vector<dirfrag_t>& dfs, set<CDir*>& bo
 	    all = false;
 	  }
 	}
-	if (all) {
+	if (all)
 	  fgls.push_back(approx_fg);
-	} else {
+	else
 	  diri->dirfragtree.get_leaves_under(fg, fgls);
-	  assert(!fgls.empty());
-	}
       }
       dout(10) << "  frag " << fg << " contains " << fgls << dendl;
       for (list<frag_t>::iterator r = fgls.begin(); r != fgls.end(); ++r) {
@@ -3141,15 +3139,12 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
       }
     } else {
       MDRequest *mdr = request_get(*p);
-      if (mdr->more()->slave_commit) {
-	Context *fin = mdr->more()->slave_commit;
-	mdr->more()->slave_commit = 0;
-	fin->complete(-1);
+      mdr->aborted = true;
+      if (mdr->slave_request) {
+	if (mdr->more()->slave_commit) // journaling slave prepare ?
+	  add_rollback(*p, from);
       } else {
-	if (mdr->slave_request) 
-	  mdr->aborted = true;
-	else
-	  request_finish(mdr);
+	request_finish(mdr);
       }
     }
   }
@@ -4428,7 +4423,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
       for (list<frag_t>::iterator q = ls.begin(); q != ls.end(); ++q) {
 	CDir *dir = diri->get_dirfrag(*q);
 	if (!dir)
-	  dir = rejoin_invent_dirfrag(p->first);
+	  dir = rejoin_invent_dirfrag(dirfrag_t(diri->ino(), *q));
 	else
 	  dout(10) << " have(approx) " << *dir << dendl;
 	dir->add_replica(from, p->second.nonce);
@@ -6772,8 +6767,20 @@ void MDCache::try_trim_non_auth_subtree(CDir *dir)
     // can we trim this subtree (and possibly our ancestors) too?
     while (true) {
       CInode *diri = dir->get_inode();
-      if (diri->is_base())
+      if (diri->is_base()) {
+	if (diri->authority().first != mds->whoami) {
+	  dout(10) << " closing empty non-auth subtree " << *dir << dendl;
+	  remove_subtree(dir);
+	  dir->mark_clean();
+	  diri->close_dirfrag(dir->get_frag());
+
+	  dout(10) << " removing " << *diri << dendl;
+	  assert(!diri->get_parent_dn());
+	  assert(diri->get_num_ref() == 0);
+	  remove_inode(diri);
+	}
 	break;
+      }
 
       CDir *psub = get_subtree_root(diri->get_parent_dir());
       dout(10) << " parent subtree is " << *psub << dendl;
@@ -8863,7 +8870,7 @@ void MDCache::request_finish(MDRequest *mdr)
   if (mdr->has_more() && mdr->more()->slave_commit) {
     Context *fin = mdr->more()->slave_commit;
     mdr->more()->slave_commit = 0;
-    fin->complete(0);   // this must re-call request_finish.
+    fin->complete(mdr->aborted ? -1 : 0);   // this must re-call request_finish.
     return; 
   }
 
@@ -10200,14 +10207,20 @@ void MDCache::handle_discover(MDiscover *dis)
       break;
     }
 
-    // open dir?
-    if (!curdir) 
+    if (!curdir) { // open dir?
+      if (cur->is_frozen()) {
+	if (!reply->is_empty()) {
+	  dout(7) << *cur << " is frozen, non-empty reply, stopping" << dendl;
+	  break;
+	}
+	dout(7) << *cur << " is frozen, empty reply, waiting" << dendl;
+	cur->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, dis));
+	reply->put();
+	return;
+      }
       curdir = cur->get_or_open_dirfrag(this, fg);
-    assert(curdir);
-    assert(curdir->is_auth());
-    
-    // is dir frozen?
-    if (curdir->is_frozen()) {
+    } else if (curdir->is_frozen_tree() ||
+	       (curdir->is_frozen_dir() && fragment_are_all_frozen(curdir))) {
       if (dis->wants_base_dir() && dis->get_base_dir_frag() != curdir->get_frag()) {
 	dout(7) << *curdir << " is frozen, dirfrag mismatch, stopping" << dendl;
 	reply->set_flag_error_dir();
@@ -10268,7 +10281,8 @@ void MDCache::handle_discover(MDiscover *dis)
 	dout(7) << "incomplete dir contents for " << *curdir << ", fetching" << dendl;
 	if (reply->is_empty()) {
 	  // fetch and wait
-	  curdir->fetch(new C_MDS_RetryMessage(mds, dis));
+	  curdir->fetch(new C_MDS_RetryMessage(mds, dis),
+			dis->wants_base_dir() && curdir->get_version() == 0);
 	  reply->put();
 	  return;
 	} else {
@@ -11322,6 +11336,20 @@ void MDCache::fragment_unmark_unfreeze_dirs(list<CDir*>& dirs)
   }
 }
 
+bool MDCache::fragment_are_all_frozen(CDir *dir)
+{
+  assert(dir->is_frozen_dir());
+  map<dirfrag_t,fragment_info_t>::iterator p;
+  for (p = fragments.lower_bound(dirfrag_t(dir->ino(), 0));
+       p != fragments.end() && p->first.ino == dir->ino();
+       ++p) {
+    if (p->first.frag.contains(dir->get_frag()))
+      return p->second.has_frozen;
+  }
+  assert(0);
+  return false;
+}
+
 void MDCache::fragment_freeze_inc_num_waiters(CDir *dir)
 {
   map<dirfrag_t,fragment_info_t>::iterator p;
@@ -11349,7 +11377,7 @@ void MDCache::find_stale_fragment_freeze()
     dirfrag_t df = p->first;
     fragment_info_t& info = p->second;
     ++p;
-    if (info.dirs_frozen)
+    if (info.has_frozen)
       continue;
     CDir *dir;
     int total_auth_pins = 0;
@@ -11449,7 +11477,7 @@ void MDCache::fragment_frozen(dirfrag_t basedirfrag, int r)
   dout(10) << "fragment_frozen " << basedirfrag.frag << " by " << info.bits
 	   << " on " << info.dirs.front()->get_inode() << dendl;
 
-  info.dirs_frozen = true;
+  info.has_frozen = true;
 
   MDRequest *mdr = request_start_internal(CEPH_MDS_OP_FRAGMENTDIR);
   mdr->more()->fragment_base = basedirfrag;

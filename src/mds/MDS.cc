@@ -136,6 +136,8 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   server = new Server(this);
   locker = new Locker(this, mdcache);
 
+  dispatch_depth = 0;
+
   // clients
   last_client_mdsmap_bcast = 0;
   
@@ -1717,7 +1719,9 @@ bool MDS::ms_dispatch(Message *m)
     m->put();
     ret = true;
   } else {
+    inc_dispatch_depth();
     ret = _dispatch(m);
+    dec_dispatch_depth();
   }
   mds_lock.Unlock();
   return ret;
@@ -1935,6 +1939,9 @@ bool MDS::_dispatch(Message *m)
       mds_lock.Lock();
     }
   }
+
+  if (dispatch_depth > 1)
+    return true;
 
   while (!waiting_for_nolaggy.empty()) {
 
