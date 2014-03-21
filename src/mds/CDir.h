@@ -151,7 +151,7 @@ public:
 
   static const int WAIT_DNLOCK_OFFSET = 4;
 
-  static const uint64_t WAIT_ANY_MASK  = (0xffffffff);
+  static const uint64_t WAIT_ANY_MASK = (uint64_t)(-1);
   static const uint64_t WAIT_ATFREEZEROOT = (WAIT_UNFREEZE);
   static const uint64_t WAIT_ATSUBTREEROOT = (WAIT_SINGLEAUTH);
 
