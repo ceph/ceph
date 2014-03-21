@@ -2,7 +2,7 @@
  Release Notes
 ===============
 
-v0.79 Firefly (frozen, pending release)
+v0.80 Firefly (upcoming release, draft notes)
 ---------------------------------------
 
 Upgrade Sequencing
@@ -10,7 +10,7 @@ Upgrade Sequencing
 
 * If your existing cluster is running a version older than v0.67
   Dumpling, please first upgrade to the latest Dumpling release before
-  upgrading to v0.78 Firefly.  Please refer to the :ref:`Dumpling upgrade`
+  upgrading to v0.80 Firefly.  Please refer to the :ref:`Dumpling upgrade`
   documentation.
 
 * Upgrade daemons in the following order:
@@ -30,7 +30,7 @@ Upgrade Sequencing
   for multipart uploads that prevents a multipart request that was initiated
   with a new radosgw from being completed by an old radosgw.
 
-Upgrading from v0.78
+Upgrading from v0.79
 ~~~~~~~~~~~~~~~~~~~~
 
 TBD
@@ -182,7 +182,7 @@ Upgrading from v0.67 Dumpling
   value that is truncated from 64 to to 32 bits.
 
 
-Notable changes since v0.78
+Notable changes since v0.79
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 TBD
@@ -493,23 +493,10 @@ The Firefly release will be delayed for at least another sprint so
 that we can get some operational experience with the new code and
 do some additional testing before committing to long term support.
 
+.. note: Please note that while it is possible to create and test erasure coded pools in this release, the pools will not be usable when you upgrade to v0.79 as the OSDMap encoding will subtlely change.  Please do not populate your test pools with important data that can't be reloaded.
+
 Upgrading
 ~~~~~~~~~
-
-* CephFS recently added support for a new 'backtrace' attribute on
-  file data objects that is used for lookup by inode number (i.e., NFS
-  reexport and hard links), and will later be used by fsck repair.
-  This replaces the existing anchor table mechanism that is used for
-  hard link resolution.  In order to completely phase that out, any
-  inode that has an outdated backtrace attribute will get updated when
-  the inode itself is modified.  This will result in some extra workload
-  after a legacy CephFS file system is upgraded.
-
-* The per-op return code in librados' ObjectWriteOperation interface
-  is now filled in.
-
-* The librados cmpxattr operation now handles xattrs containing null bytes as
-  data rather than null-terminated strings.
 
 * Upgrade daemons in the following order:
 
@@ -527,6 +514,21 @@ Upgrading
 * Upgrade radosgw daemons together.  There is a subtle change in behavior
   for multipart uploads that prevents a multipart request that was initiated
   with a new radosgw from being completed by an old radosgw.
+
+* CephFS recently added support for a new 'backtrace' attribute on
+  file data objects that is used for lookup by inode number (i.e., NFS
+  reexport and hard links), and will later be used by fsck repair.
+  This replaces the existing anchor table mechanism that is used for
+  hard link resolution.  In order to completely phase that out, any
+  inode that has an outdated backtrace attribute will get updated when
+  the inode itself is modified.  This will result in some extra workload
+  after a legacy CephFS file system is upgraded.
+
+* The per-op return code in librados' ObjectWriteOperation interface
+  is now filled in.
+
+* The librados cmpxattr operation now handles xattrs containing null bytes as
+  data rather than null-terminated strings.
 
 
 Notable Changes
