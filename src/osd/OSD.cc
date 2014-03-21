@@ -7466,6 +7466,39 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
   reply_op_error(op, -ENXIO);
 }
 
+struct send_map_on_destruct {
+  OSD *osd;
+  Message *m;
+  ConnectionRef con;
+  OSDMapRef osdmap;
+  epoch_t map_epoch;
+  bool should_send;
+  send_map_on_destruct(OSD *osd, Message *m,
+                       OSDMapRef& osdmap, epoch_t map_epoch) :
+                         osd(osd), m(m), con(m->get_connection()),
+                         osdmap(osdmap), map_epoch(map_epoch),
+                         should_send(true) {}
+  ~send_map_on_destruct() {
+    if (!should_send)
+      return;
+    OSD::Session *client_session = static_cast<OSD::Session *>(
+        con->get_priv());
+    if (client_session) {
+      client_session->sent_epoch_lock.Lock();
+    }
+    osd->_share_map_incoming(
+        m->get_source(),
+        con.get(),
+        map_epoch,
+        osdmap,
+        client_session);
+    if (client_session) {
+      client_session->sent_epoch_lock.Unlock();
+      client_session->put();
+    }
+  }
+};
+
 void OSD::handle_op(OpRequestRef op, OSDMapRef osdmap)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
@@ -7493,22 +7526,8 @@ void OSD::handle_op(OpRequestRef op, OSDMapRef osdmap)
     return;
   }
 
-  // share our map with sender, if they're old
-  Session *client_session = static_cast<Session *>(m->get_connection()->get_priv());
-  if (client_session) {
-    client_session->sent_epoch_lock.Lock();
-  }
-  _share_map_incoming(
-      m->get_source(),
-      m->get_connection().get(),
-      m->get_map_epoch(),
-      osdmap,
-      client_session
-  );
-  if (client_session) {
-    client_session->sent_epoch_lock.Unlock();
-    client_session->put();
-  }
+  // set up a map send if the Op gets blocked for some reason
+  send_map_on_destruct share_map(this, m, osdmap, m->get_map_epoch());
 
   if (op->rmw_flags == 0) {
     int r = init_op_flags(op);
@@ -7599,8 +7618,12 @@ void OSD::handle_op(OpRequestRef op, OSDMapRef osdmap)
   }
 
   PG *pg = get_pg_or_queue_for_pg(pgid, op);
-  if (pg)
+  if (pg) {
+    op->send_map_update = true;
+    op->sent_epoch = m->get_map_epoch();
     enqueue_op(pg, op);
+    share_map.should_send = false;
+  }
 }
 
 template<typename T, int MSGTYPE>
@@ -7768,6 +7791,27 @@ void OSD::dequeue_op(
 	   << " latency " << latency
 	   << " " << *(op->get_req())
 	   << " pg " << *pg << dendl;
+
+  // share our map with sender, if they're old
+  if (op->send_map_update) {
+    Message *m = op->get_req();
+    Session *session = static_cast<Session *>(m->get_connection()->get_priv());
+    if (session) {
+      session->sent_epoch_lock.Lock();
+    }
+    _share_map_incoming(
+        m->get_source(),
+        m->get_connection().get(),
+        op->sent_epoch,
+        osdmap,
+        session
+    );
+    if (session) {
+      session->sent_epoch_lock.Unlock();
+      session->put();
+    }
+  }
+
   if (pg->deleting)
     return;
 
