@@ -419,6 +419,11 @@ public:
     }
   }
 
+  bool should_share_map(entity_name_t name, Connection *con, epoch_t epoch,
+                        OSDMapRef& osdmap, const epoch_t *sent_epoch_p);
+  void share_map_incoming(entity_name_t name, Connection *con, epoch_t epoch,
+                          OSDMapRef& osdmap, epoch_t *sent_epoch_p);
+
   ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch);
   pair<ConnectionRef,ConnectionRef> get_con_osd_hb(int peer, epoch_t from_epoch);  // (back, front)
   void send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch);
@@ -1342,10 +1347,7 @@ private:
   void forget_peer_epoch(int p, epoch_t e);
 
   friend struct send_map_on_destruct;
-  bool _should_share_map(entity_name_t name, Connection *con, epoch_t epoch,
-                         OSDMapRef& osdmap, const epoch_t *sent_epoch_p);
-  void _share_map_incoming(entity_name_t name, Connection *con, epoch_t epoch,
-			   OSDMapRef& osdmap, epoch_t *sent_epoch_p);
+
   void _share_map_outgoing(int peer, Connection *con,
 			   OSDMapRef map = OSDMapRef());
 
