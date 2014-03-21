@@ -11582,10 +11582,10 @@ void MDCache::dispatch_fragment_dir(MDRequest *mdr)
        p != info.resultfrags.end();
        ++p) {
     if (diri->is_auth()) {
-      le->metablob.add_fragmented_dir(*p, false);
+      le->metablob.add_fragmented_dir(*p, false, false);
     } else {
       (*p)->state_set(CDir::STATE_DIRTYDFT);
-      le->metablob.add_fragmented_dir(*p, true);
+      le->metablob.add_fragmented_dir(*p, false, true);
     }
   }
 
@@ -11898,6 +11898,7 @@ void MDCache::rollback_uncommitted_fragments()
     LogSegment *ls = mds->mdlog->get_current_segment();
     EFragment *le = new EFragment(mds->mdlog, EFragment::OP_ROLLBACK, p->first, uf.bits);
     mds->mdlog->start_entry(le);
+    bool diri_auth = (diri->authority() != CDIR_AUTH_UNDEF);
 
     list<frag_t> old_frags;
     diri->dirfragtree.get_leaves_under(p->first.frag, old_frags);
@@ -11927,19 +11928,32 @@ void MDCache::rollback_uncommitted_fragments()
 	  dout(10) << "    dirty nestinfo on " << *dir << dendl;
 	  mds->locker->mark_updated_scatterlock(&dir->inode->nestlock);
 	  ls->dirty_dirfrag_nest.push_back(&dir->inode->item_dirty_dirfrag_nest);
-	  dir->get_inode()->nestlock.mark_dirty();
 	}
 	if (!(dir->fnode.fragstat == dir->fnode.accounted_fragstat)) {
 	  dout(10) << "    dirty fragstat on " << *dir << dendl;
 	  mds->locker->mark_updated_scatterlock(&dir->inode->filelock);
 	  ls->dirty_dirfrag_dir.push_back(&dir->inode->item_dirty_dirfrag_dir);
-	  dir->get_inode()->filelock.mark_dirty();
 	}
 
 	le->add_orig_frag(dir->get_frag());
 	le->metablob.add_dir_context(dir);
-	le->metablob.add_dir(dir, true, uf.complete);
+	if (diri_auth) {
+	  le->metablob.add_fragmented_dir(dir, true, false);
+	} else {
+	  dout(10) << "    dirty dirfragtree on " << *dir << dendl;
+	  dir->state_set(CDir::STATE_DIRTYDFT);
+	  le->metablob.add_fragmented_dir(dir, true, true);
+	}
       }
+    }
+
+    if (diri_auth) {
+      diri->project_inode()->version = diri->pre_dirty();
+      diri->pop_and_dirty_projected_inode(ls); // hacky
+      le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), diri, true);
+    } else {
+      mds->locker->mark_updated_scatterlock(&diri->dirfragtreelock);
+      ls->dirty_dirfrag_dirfragtree.push_back(&diri->item_dirty_dirfrag_dirfragtree);
     }
 
     if (g_conf->mds_debug_frag)
