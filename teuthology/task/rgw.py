@@ -80,6 +80,8 @@ def ship_config(ctx, config, role_endpoints):
     for client, conf in config.iteritems():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         system_type = teuthology.get_system_type(remote)
+        if not conf:
+            conf = {}
         idle_timeout = conf.get('idle_timeout', 30)
         if system_type == 'deb':
             mod_path = '/usr/lib/apache2/modules'
