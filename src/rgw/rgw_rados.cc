@@ -5367,13 +5367,14 @@ int RGWRados::get_bucket_instance_info(void *ctx, rgw_bucket& bucket, RGWBucketI
 }
 
 int RGWRados::get_bucket_instance_from_oid(void *ctx, string& oid, RGWBucketInfo& info,
-                                           time_t *pmtime, map<string, bufferlist> *pattrs)
+                                           time_t *pmtime, map<string, bufferlist> *pattrs,
+                                           rgw_cache_entry_info *cache_info)
 {
   ldout(cct, 20) << "reading from " << zone.domain_root << ":" << oid << dendl;
 
   bufferlist epbl;
 
-  int ret = rgw_get_system_obj(this, ctx, zone.domain_root, oid, epbl, &info.objv_tracker, pmtime, pattrs);
+  int ret = rgw_get_system_obj(this, ctx, zone.domain_root, oid, epbl, &info.objv_tracker, pmtime, pattrs, cache_info);
   if (ret < 0) {
     return ret;
   }
@@ -5453,25 +5454,20 @@ struct bucket_info_entry {
   map<string, bufferlist> attrs;
 };
 
-static map<string, bucket_info_entry> binfo_cache;
-static RWLock binfo_lock("binfo_lock");
+static RGWChainedCacheImpl<bucket_info_entry> binfo_cache;
 
 int RGWRados::get_bucket_info(void *ctx, const string& bucket_name, RGWBucketInfo& info,
                               time_t *pmtime, map<string, bufferlist> *pattrs)
 {
-  binfo_lock.get_read();
-  map<string, bucket_info_entry>::iterator uiter = binfo_cache.find(bucket_name);
-  if (uiter != binfo_cache.end()) {
-    bucket_info_entry& e = uiter->second;
+  bucket_info_entry e;
+  if (binfo_cache.find(bucket_name, &e)) {
     info = e.info;
     if (pattrs)
       *pattrs = e.attrs;
     if (pmtime)
       *pmtime = e.mtime;
-    binfo_lock.unlock();
     return 0;
   }
-  binfo_lock.unlock();
 
   bufferlist bl;
 
@@ -5509,9 +5505,9 @@ int RGWRados::get_bucket_info(void *ctx, const string& bucket_name, RGWBucketInf
   string oid;
   get_bucket_meta_oid(entry_point.bucket, oid);
 
-  bucket_info_entry e;
+  rgw_cache_entry_info cache_info;
 
-  ret = get_bucket_instance_from_oid(ctx, oid, e.info, &e.mtime, &e.attrs);
+  ret = get_bucket_instance_from_oid(ctx, oid, e.info, &e.mtime, &e.attrs, &cache_info);
   e.info.ep_objv = ot.read_version;
   info = e.info;
   if (ret < 0) {
@@ -5524,9 +5520,7 @@ int RGWRados::get_bucket_info(void *ctx, const string& bucket_name, RGWBucketInf
   if (pattrs)
     *pattrs = e.attrs;
 
-  binfo_lock.get_write();
-  binfo_cache[bucket_name] = e;
-  binfo_lock.unlock();
+  binfo_cache.put(this, bucket_name, &e, cache_info);
 
   return 0;
 }
