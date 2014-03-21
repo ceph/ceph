@@ -1343,9 +1343,9 @@ private:
 
   friend struct send_map_on_destruct;
   bool _should_share_map(entity_name_t name, Connection *con, epoch_t epoch,
-                         OSDMapRef& osdmap, Session *session);
+                         OSDMapRef& osdmap, const epoch_t *sent_epoch_p);
   void _share_map_incoming(entity_name_t name, Connection *con, epoch_t epoch,
-			   OSDMapRef& osdmap, Session *session);
+			   OSDMapRef& osdmap, epoch_t *sent_epoch_p);
   void _share_map_outgoing(int peer, Connection *con,
 			   OSDMapRef map = OSDMapRef());
 
