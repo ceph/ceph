@@ -540,9 +540,9 @@ private:
     return add_dir(dir->dirfrag(), dir->get_projected_fnode(), dir->get_projected_version(),
 		   dir->is_dirty(), dir->is_complete(), false, true, dir->is_dirty_dft());
   }
-  dirlump& add_fragmented_dir(CDir *dir, bool dirtydft) {
+  dirlump& add_fragmented_dir(CDir *dir, bool dirty, bool dirtydft) {
     return add_dir(dir->dirfrag(), dir->get_projected_fnode(), dir->get_projected_version(),
-		   false, false, false, false, dirtydft);
+		   dirty, false, false, false, dirtydft);
   }
   dirlump& add_dir(dirfrag_t df, fnode_t *pf, version_t pv, bool dirty,
 		   bool complete=false, bool isnew=false,
