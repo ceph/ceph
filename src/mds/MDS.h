@@ -321,6 +321,7 @@ class MDS : public Dispatcher {
   }
 
  private:
+  int dispatch_depth;
   bool ms_dispatch(Message *m);
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
   bool ms_verify_authorizer(Connection *con, int peer_type,
@@ -409,6 +410,9 @@ class MDS : public Dispatcher {
 
   void request_osdmap(Context *c);
 
+  void inc_dispatch_depth() { ++dispatch_depth; }
+  void dec_dispatch_depth() { --dispatch_depth; }
+
   // messages
   bool _dispatch(Message *m);
 
@@ -436,7 +440,9 @@ public:
     this->mds = mds;
   }
   virtual void finish(int r) {
+    mds->inc_dispatch_depth();
     mds->_dispatch(m);
+    mds->dec_dispatch_depth();
   }
 };
 
