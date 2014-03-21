@@ -4653,7 +4653,8 @@ void OSD::forget_peer_epoch(int peer, epoch_t as_of)
 }
 
 bool OSD::_should_share_map(entity_name_t name, Connection *con,
-                            epoch_t epoch, OSDMapRef& osdmap, Session *session)
+                            epoch_t epoch, OSDMapRef& osdmap,
+                            const epoch_t *sent_epoch_p)
 {
   bool should_send = false;
   dout(20) << "_should_share_map "
@@ -4663,11 +4664,11 @@ bool OSD::_should_share_map(entity_name_t name, Connection *con,
   // does client have old map?
   if (name.is_client()) {
     bool message_sendmap = epoch < osdmap->get_epoch();
-    if (message_sendmap && session) {
+    if (message_sendmap && sent_epoch_p) {
       dout(20) << "client session last_sent_epoch: "
-               << session->last_sent_epoch
+               << *sent_epoch_p
                << " versus osdmap epoch " << osdmap->get_epoch() << dendl;
-      if (session->last_sent_epoch < osdmap->get_epoch()) {
+      if (*sent_epoch_p < osdmap->get_epoch()) {
         should_send = true;
       } // else we don't need to send it out again
     }
@@ -4697,7 +4698,7 @@ void OSD::_share_map_incoming(
   Connection *con,
   epoch_t epoch,
   OSDMapRef& osdmap,
-  Session* session)
+  epoch_t *sent_epoch_p)
 {
   dout(20) << "_share_map_incoming "
 	   << name << " " << con->get_peer_addr()
@@ -4705,14 +4706,15 @@ void OSD::_share_map_incoming(
 
   assert(is_active());
 
-  bool want_shared = _should_share_map(name, con, epoch, osdmap, session);
+  bool want_shared = _should_share_map(name, con, epoch,
+                                       osdmap, sent_epoch_p);
 
   if (want_shared){
     if (name.is_client()) {
       dout(10) << name << " has old map " << epoch
           << " < " << osdmap->get_epoch() << dendl;
       // we know the Session is valid or we wouldn't be sending
-      session->last_sent_epoch = osdmap->get_epoch();
+      *sent_epoch_p = osdmap->get_epoch();
       send_incremental_map(epoch, con, osdmap);
     } else if (con->get_messenger() == cluster_messenger &&
         osdmap->is_up(name.num()) &&
@@ -7491,7 +7493,7 @@ struct send_map_on_destruct {
         con.get(),
         map_epoch,
         osdmap,
-        client_session);
+        client_session ? &client_session->last_sent_epoch : NULL);
     if (client_session) {
       client_session->sent_epoch_lock.Unlock();
       client_session->put();
@@ -7656,7 +7658,7 @@ void OSD::handle_replica_op(OpRequestRef op, OSDMapRef osdmap)
   _share_map_incoming(
     m->get_source(), m->get_connection().get(), m->map_epoch,
     osdmap,
-    peer_session);
+    NULL);
   if (peer_session) {
     peer_session->sent_epoch_lock.Unlock();
     peer_session->put();
@@ -7804,8 +7806,7 @@ void OSD::dequeue_op(
         m->get_connection().get(),
         op->sent_epoch,
         osdmap,
-        session
-    );
+        session ? &session->last_sent_epoch : NULL);
     if (session) {
       session->sent_epoch_lock.Unlock();
       session->put();
