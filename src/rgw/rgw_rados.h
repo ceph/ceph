@@ -1753,7 +1753,8 @@ public:
                                  map<string, bufferlist> *pattrs);
   int get_bucket_instance_info(void *ctx, const string& meta_key, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs);
   int get_bucket_instance_info(void *ctx, rgw_bucket& bucket, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs);
-  int get_bucket_instance_from_oid(void *ctx, string& oid, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs);
+  int get_bucket_instance_from_oid(void *ctx, string& oid, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs,
+                                   rgw_cache_entry_info *cache_info = NULL);
 
   int convert_old_bucket_info(void *ctx, string& bucket_name);
   virtual int get_bucket_info(void *ctx, const string& bucket_name, RGWBucketInfo& info,
