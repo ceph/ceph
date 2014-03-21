@@ -29,9 +29,9 @@ REPID=`./ceph osd pool stats $REP_POOL  2> /dev/null | grep ^pool | awk '{ print
 
 echo "Created replicated pool #" $REPID
 
-parameters="erasure-code-k=2 erasure-code-m=1"
-./ceph osd crush rule create-erasure ecruleset   $parameters   erasure-code-ruleset-failure-domain=osd  2> /dev/null
-./ceph osd pool create $EC_POOL 12 12 erasure crush_ruleset=ecruleset $parameters  2> /dev/null
+./ceph osd erasure-code-profile set testprofile ruleset-failure-domain=osd || return 1
+./ceph osd erasure-code-profile get testprofile
+./ceph osd pool create $EC_POOL 12 12 erasure testprofile || return 1
 ECID=`./ceph osd pool stats $EC_POOL  2> /dev/null | grep ^pool | awk '{ print $4 }'`
 
 echo "Created Erasure coded pool #" $ECID
