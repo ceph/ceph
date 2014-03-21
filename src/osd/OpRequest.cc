@@ -17,7 +17,8 @@
 OpRequest::OpRequest(Message *req, OpTracker *tracker) :
   TrackedOp(req, tracker),
   rmw_flags(0),
-  hit_flag_points(0), latest_flag_point(0) {
+  hit_flag_points(0), latest_flag_point(0),
+  send_map_update(false), sent_epoch(0) {
   if (req->get_priority() < tracker->cct->_conf->osd_client_op_priority) {
     // don't warn as quickly for low priority ops
     warn_interval_multiplier = tracker->cct->_conf->osd_recovery_op_warn_multiple;
