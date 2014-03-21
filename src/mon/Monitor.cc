@@ -1341,15 +1341,15 @@ void Monitor::handle_probe_reply(MMonProbe *m)
   }
 
   // new initial peer?
-  if (monmap->contains(m->name)) {
-    if (monmap->get_addr(m->name).is_blank_ip()) {
-      dout(1) << " learned initial mon " << m->name << " addr " << m->get_source_addr() << dendl;
-      monmap->set_addr(m->name, m->get_source_addr());
-      m->put();
+  if (monmap->get_epoch() == 0 &&
+      monmap->contains(m->name) &&
+      monmap->get_addr(m->name).is_blank_ip()) {
+    dout(1) << " learned initial mon " << m->name << " addr " << m->get_source_addr() << dendl;
+    monmap->set_addr(m->name, m->get_source_addr());
+    m->put();
 
-      bootstrap();
-      return;
-    }
+    bootstrap();
+    return;
   }
 
   // end discover phase
@@ -1503,8 +1503,17 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features)
 		<< " won leader election with quorum " << quorum << "\n";
 
   paxos->leader_init();
-  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
-    (*p)->election_finished();
+  // NOTE: tell monmap monitor first.  This is important for the
+  // bootstrap case to ensure that the very first paxos proposal
+  // codifies the monmap.  Otherwise any manner of chaos can ensue
+  // when monitors are call elections or participating in a paxos
+  // round without agreeing on who the participants are.
+  monmon()->election_finished();
+  for (vector<PaxosService*>::iterator p = paxos_service.begin();
+       p != paxos_service.end(); ++p) {
+    if (*p != monmon())
+      (*p)->election_finished();
+  }
   health_monitor->start(epoch);
 
   finish_election();
