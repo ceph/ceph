@@ -6598,6 +6598,9 @@ void MDCache::trim_non_auth()
       // add back into lru (at the top)
       lru.lru_insert_top(dn);
 
+      if (dnl->is_remote() && dnl->get_inode() && !dnl->get_inode()->is_auth())
+	dn->unlink_remote(dnl);
+
       if (dn->get_dir()->get_inode()->is_stray()) {
 	dn->state_set(CDentry::STATE_STRAY);
 	if (dnl->is_primary() && dnl->get_inode()->inode.nlink == 0)
