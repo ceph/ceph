@@ -1000,7 +1000,15 @@ bool PG::choose_acting(int& newest_update_osd)
     return false;
   }
 
-  if (want.size() < pool.info.min_size) {
+  unsigned complete = 0;
+  for (vector<int>::iterator i = want.begin();
+       i != want.end();
+       ++i) {
+    assert(peer_info.count(*i));
+    if (!peer_info[*i].is_incomplete())
+      complete++;
+  }
+  if (complete < pool.info.min_size) {
     want_acting.clear();
     return false;
   }
