@@ -11487,9 +11487,7 @@ class C_MDC_FragmentCommit : public Context {
   list<CDir*> resultfrags;
 public:
   C_MDC_FragmentCommit(MDCache *m, dirfrag_t df, list<CDir*>& l) :
-    mdcache(m), basedirfrag(df) {
-    resultfrags.swap(l);
-  }
+    mdcache(m), basedirfrag(df), resultfrags(l) {}
   virtual void finish(int r) {
     mdcache->_fragment_committed(basedirfrag, resultfrags);
   }
@@ -11693,7 +11691,12 @@ void MDCache::_fragment_stored(MDRequest *mdr)
 
     mds->send_message_mds(notify, p->first);
   }
-  
+
+  // journal commit
+  EFragment *le = new EFragment(mds->mdlog, EFragment::OP_COMMIT, basedirfrag, info.bits);
+  mds->mdlog->start_submit_entry(le, new C_MDC_FragmentCommit(this, basedirfrag,
+							      info.resultfrags));
+
   mds->locker->drop_locks(mdr);
 
   // unfreeze resulting frags
@@ -11715,11 +11718,6 @@ void MDCache::_fragment_stored(MDRequest *mdr)
     // unfreeze
     dir->unfreeze_dir();
   }
-
-  // journal commit
-  EFragment *le = new EFragment(mds->mdlog, EFragment::OP_COMMIT, basedirfrag, info.bits);
-  mds->mdlog->start_submit_entry(le, new C_MDC_FragmentCommit(this, basedirfrag,
-							      info.resultfrags));
 
   fragments.erase(it);
   request_finish(mdr);
