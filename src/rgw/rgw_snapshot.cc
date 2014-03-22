@@ -40,6 +40,88 @@ RGWSnapshot::RGWSnapshot( CephContext *_cct, RGWRados *_store, const string& _sn
 int RGWSnapshot::get_snapshots( CephContext *cct, RGWRados *store,
     list<string> pools, list<RGWSnapshot>& snaps)
 {
+  map<string, RGWSnapshot> pool_snaps_map;
+
+  bool firstpass = true;
+  string first_pool_name;
+  for( list<string>::iterator pool_name = pools.begin();
+       pool_name != pools.end(); ++pool_name) {
+    vector<librados::snap_t> pool_snaps_vec;
+    map<string, int> missing_snaps;
+    librados::IoCtx io_ctx;
+
+    // Used to remove snapshots that don't exist on all pools
+    if( !firstpass) {
+      for( map<string, RGWSnapshot>::iterator mi = pool_snaps_map.begin();
+           mi != pool_snaps_map.end(); ++mi) {
+        missing_snaps[mi->first] = 0;
+      }
+    }
+
+    int r = store->rados->ioctx_create(pool_name->c_str(), io_ctx);
+    if (r < 0) {
+      cerr << "can't create IoCtx for pool " << *pool_name << std::endl;
+      return r;
+    }
+
+    io_ctx.snap_list(&pool_snaps_vec);
+    for (vector<librados::snap_t>::iterator i = pool_snaps_vec.begin();
+         i != pool_snaps_vec.end();
+         ++i) {
+      string s;
+      time_t t;
+
+      if (io_ctx.snap_get_name(*i, &s) < 0)
+        continue;
+      if (io_ctx.snap_get_stamp(*i, &t) < 0)
+        continue;
+
+      // We want to maintain a list of snapshots that exist on all
+      // pools.  Initialize the map on the first pool, 
+      if( firstpass) {
+        RGWSnapshot pool_snap( cct, store, s);
+        pool_snap.snap_created = t;
+        pool_snap.snap_num = *i;
+
+        pool_snaps_map.insert( std::pair<string,RGWSnapshot>(s,pool_snap));
+
+        first_pool_name = *pool_name;
+      } else {
+        try {
+          RGWSnapshot pool_snap = pool_snaps_map.at(s);
+          long long time_delta = abs( (long long)pool_snap.snap_created - (long long)t);
+          if( time_delta > 60) {
+            cerr << "rados snapshot creation time on " << *i << " is more than 60s offset from the .rgw root pool.  Ingoring snapshot." << std::endl;
+            pool_snaps_map.erase( s);
+            
+          }
+           
+          missing_snaps.erase(s);
+        } catch( out_of_range e) {
+          cerr << "Found rados snapshots that aren't RGW snapshots.  It's a bad idea to mix radosgw-admin mksnap and rados mksnap on the RGW pools." << std::endl;
+          cerr << "To clean up this warning, manually remove snapshot " << s << " on pool " << *pool_name << std::endl;
+          // If it's not in the pool_snaps_map, then ignore it.
+        }
+      }
+    }
+
+    if( !missing_snaps.empty()) {
+      cerr << "Found rados snapshots that aren't RGW snapshots.  It's a bad idea to mix radosgw-admin mksnap and rados mksnap on the RGW pools." << std::endl;
+      for( map<string, int>::iterator mi = missing_snaps.begin();
+           mi != missing_snaps.end(); ++mi) {
+        cerr << "To clean up this warning, manually remove snapshot " << mi->first << " on pool " << first_pool_name << std::endl;
+        pool_snaps_map.erase( mi->first);
+      }
+    }
+
+    firstpass = false;
+  }
+
+  for( map<string, RGWSnapshot>::iterator mi = pool_snaps_map.begin();
+       mi != pool_snaps_map.end(); ++mi) {
+    snaps.push_back( mi->second);
+  }
+
   return( 0);
 }
 
@@ -136,17 +218,8 @@ int RGWSnapshot::make()
     }
   }
 
-  formatter->open_object_section("mksnap");
-  encode_json("snap_pools", snap_pools, formatter);
-  encode_json("snaps", snaps, formatter);
-  formatter->close_section();
-  formatter->flush(cout);
-  cout << std::endl;
-
   for( list<string>::iterator snap_pool = snap_pools.begin();
        snap_pool != snap_pools.end(); ++snap_pool) {
-    cerr << "snapshot " << *snap_pool << std::endl;
-
     librados::IoCtx io_ctx;
 
     int r = store->rados->ioctx_create(snap_pool->c_str(), io_ctx);
@@ -158,6 +231,9 @@ int RGWSnapshot::make()
     r = io_ctx.snap_create(snap_name.c_str());
     if (r < 0) {
       cerr << "can't mksnap for pool " << *snap_pool << std::endl;
+      if( r == -EEXIST) {
+        cerr << "This probably means your using radosgw-admin mksnap and rados mksnap on RGW pools.  Don't do that." << std::endl;
+      }
       return r;
     }
   }
