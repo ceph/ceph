@@ -28,6 +28,8 @@ using namespace std;
 #include "rgw_formats.h"
 #include "rgw_usage.h"
 #include "rgw_replica_log.h"
+#include "rgw_snapshot.h"
+#include "auth/Crypto.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -107,6 +109,7 @@ void _usage()
   cerr << "  opstate rm                 remove entry (use client_id, op_id, object)\n";
   cerr << "  replicalog get             get replica metadata log entry\n";
   cerr << "  replicalog delete          delete replica metadata log entry\n";
+  cerr << "  mksnap                     create a RGW snapshot\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
   cerr << "   --subuser=<name>          subuser name\n";
@@ -167,6 +170,7 @@ void _usage()
   cerr << "   --max-objects             specify max objects (negative value to disable)\n";
   cerr << "   --max-size                specify max size (in bytes, negative value to disable)\n";
   cerr << "   --quota-scope             scope of quota (bucket, user)\n";
+  cerr << "   --snap                    name of snapshot\n";
   cerr << "\n";
   generic_client_usage();
 }
@@ -252,6 +256,7 @@ enum {
   OPT_OPSTATE_RM,
   OPT_REPLICALOG_GET,
   OPT_REPLICALOG_DELETE,
+  OPT_MKSNAP,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
@@ -287,8 +292,11 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
     return 0;
   }
 
-  if (strcmp(cmd, "policy") == 0)
+  if (strcmp(cmd, "policy") == 0) {
     return OPT_POLICY;
+  } else if (strcmp(cmd, "mksnap") == 0) {
+    return OPT_MKSNAP;
+  }
 
   if (!prev_cmd)
     return -EINVAL;
@@ -772,6 +780,7 @@ int main(int argc, char **argv)
   std::string date, subuser, access, format;
   std::string start_date, end_date;
   std::string key_type_str;
+  std::string snap_name;
   int key_type = KEY_TYPE_UNDEFINED;
   rgw_bucket bucket;
   uint32_t perm_mask = 0;
@@ -997,6 +1006,8 @@ int main(int argc, char **argv)
         cerr << "ERROR: invalid replica log type" << std::endl;
         return EINVAL;
       }
+    } else if (ceph_argparse_witharg(args, i, &val, "--snap", (char*)NULL)) {
+      snap_name = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -1064,7 +1075,8 @@ int main(int argc, char **argv)
                          opt_cmd == OPT_REGIONMAP_GET || opt_cmd == OPT_REGIONMAP_SET ||
                          opt_cmd == OPT_REGIONMAP_UPDATE ||
                          opt_cmd == OPT_ZONE_GET || opt_cmd == OPT_ZONE_SET ||
-                         opt_cmd == OPT_ZONE_LIST);
+                         opt_cmd == OPT_ZONE_LIST ||
+                         opt_cmd == OPT_MKSNAP);
 
 
   if (raw_storage_op) {
@@ -1276,6 +1288,20 @@ int main(int argc, char **argv)
       formatter->close_section();
       formatter->flush(cout);
       cout << std::endl;
+    }
+    if (opt_cmd == OPT_MKSNAP) {
+      if (snap_name.empty()) {
+        cerr << "need to specify snapshot to create!" << std::endl;
+        return usage();
+      }
+
+      RGWSnapshot snap( g_ceph_context, store, snap_name);
+      snap.set_formatter( formatter);
+      int ret = snap.make();
+      if( ret < 0) {
+        cerr << "ERROR: could not create snapshot: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
     }
     return 0;
   }
