@@ -257,6 +257,7 @@ enum {
   OPT_REPLICALOG_GET,
   OPT_REPLICALOG_DELETE,
   OPT_MKSNAP,
+  OPT_LSSNAP,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
@@ -296,6 +297,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
     return OPT_POLICY;
   } else if (strcmp(cmd, "mksnap") == 0) {
     return OPT_MKSNAP;
+  } else if (strcmp(cmd, "lssnap") == 0) {
+    return OPT_LSSNAP;
   }
 
   if (!prev_cmd)
@@ -1076,7 +1079,7 @@ int main(int argc, char **argv)
                          opt_cmd == OPT_REGIONMAP_UPDATE ||
                          opt_cmd == OPT_ZONE_GET || opt_cmd == OPT_ZONE_SET ||
                          opt_cmd == OPT_ZONE_LIST ||
-                         opt_cmd == OPT_MKSNAP);
+                         opt_cmd == OPT_MKSNAP || opt_cmd == OPT_LSSNAP);
 
 
   if (raw_storage_op) {
@@ -1303,6 +1306,43 @@ int main(int argc, char **argv)
         return -ret;
       }
     }
+    if (opt_cmd == OPT_LSSNAP) {
+      list<string> rgw_pools;
+      list<RGWSnapshot> snaps;
+      int ret = RGWSnapshot::get_rgw_pools( g_ceph_context, store, rgw_pools);
+      if( ret < 0) {
+        cerr << "ERROR: could not retrieve list RGW pools: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      ret = RGWSnapshot::get_snapshots( g_ceph_context, store, rgw_pools, snaps);
+      if( ret < 0) {
+        cerr << "ERROR: could not retrieve list of snapshots: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      for (list<RGWSnapshot>::iterator i = snaps.begin();
+           i != snaps.end();
+           ++i) {
+        struct tm bdt;
+        localtime_r(&(i->snap_created), &bdt);
+        cout << i->snap_num << "\t" << i->snap_name << "\t";
+
+        cout.setf(std::ios::right);
+        cout.fill('0');
+        cout << std::setw(4) << (bdt.tm_year+1900)
+             << '.' << std::setw(2) << (bdt.tm_mon+1)
+             << '.' << std::setw(2) << bdt.tm_mday
+             << ' '
+             << std::setw(2) << bdt.tm_hour
+             << ':' << std::setw(2) << bdt.tm_min
+             << ':' << std::setw(2) << bdt.tm_sec
+             << std::endl;
+        cout.unsetf(std::ios::right);
+      }
+      cout << snaps.size() << " snaps" << std::endl;
+    }
+
     return 0;
   }
 

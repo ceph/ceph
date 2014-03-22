@@ -39,15 +39,17 @@ protected:
   Formatter *formatter;  // Temporary
   
   static
-  int get_snapshots( CephContext *cct, RGWRados *store, 
-                     list<string> pools, list<RGWSnapshot>& snaps);
-  static
   int get_rados_pools( CephContext *cct, RGWRados *store, list<string>& pools);
-  static
-  int get_rgw_pools( CephContext *cct, RGWRados *store, list<string>& pools);
 
 public:
   RGWSnapshot( CephContext *_cct, RGWRados *_store, const string& _snap_name);
+
+  static
+  int get_snapshots( CephContext *cct, RGWRados *store, 
+                     list<string> pools, list<RGWSnapshot>& snaps);
+  static
+  int get_rgw_pools( CephContext *cct, RGWRados *store, list<string>& pools);
+
 
   int snap_num;
   string snap_name;
