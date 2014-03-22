@@ -5202,9 +5202,15 @@ struct C_CopyFrom_AsyncReadCb : public Context {
   OSDOp *osd_op;
   object_copy_data_t reply_obj;
   bool classic;
+  size_t len;
   C_CopyFrom_AsyncReadCb(OSDOp *osd_op, bool classic) :
-    osd_op(osd_op), classic(classic) {}
+    osd_op(osd_op), classic(classic), len(0) {}
   void finish(int r) {
+    assert(len > 0);
+    assert(len <= reply_obj.data.length());
+    bufferlist bl;
+    bl.substr_of(reply_obj.data, 0, len);
+    reply_obj.data.swap(bl);
     if (classic) {
       reply_obj.encode_classic(osd_op->outdata);
     } else {
@@ -5282,6 +5288,7 @@ int ReplicatedPG::fill_in_copy_get(
 	    make_pair(cursor.data_offset, left),
 	    make_pair(&bl, cb)));
 	result = MIN(oi.size - cursor.data_offset, (uint64_t)left);
+	cb->len = result;
       } else {
 	result = pgbackend->objects_read_sync(
 	  oi.soid, cursor.data_offset, left, &bl);
