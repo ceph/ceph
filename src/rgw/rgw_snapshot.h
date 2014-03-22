@@ -34,19 +34,21 @@ using namespace std;
 
 class RGWSnapshot {
 protected:
-  int snap_num;
-  string snap_name;
-  utime_t snap_created;
   CephContext *cct;
   RGWRados *store;
   Formatter *formatter;  // Temporary
   
-  int get_snapshots( CephContext *cct, RGWRados *store, list<RGWSnapshot>& snapshots);
+  int get_snapshots( CephContext *cct, RGWRados *store, 
+                     list<string> pools, list<RGWSnapshot>& snaps);
   int get_rados_pools( CephContext *cct, RGWRados *store, list<string>& pools);
   int get_rgw_pools( CephContext *cct, RGWRados *store, list<string>& pools);
 
 public:
   RGWSnapshot( CephContext *_cct, RGWRados *_store, const string& _snap_name);
+
+  int snap_num;
+  string snap_name;
+  time_t snap_created;
 
   int make();
   bool exists();
@@ -54,6 +56,15 @@ public:
   void dump(Formatter *f) const;
 
   void set_formatter( Formatter *_formatter);
+
+  void set_snap_name( string _snap_name);
+  void set_snap_created( time_t _snap_created);
+  void set_snap_num( int _snap_num);
+
+  string get_snap_name();
+  time_t get_snap_created();
+  int get_snap_num();
+
 };
 
-#endif /* RGW_SNAPSHOT_H_ */
+#endif /* RGW_SNAPSHOT_H */

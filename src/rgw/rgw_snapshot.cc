@@ -38,14 +38,15 @@ RGWSnapshot::RGWSnapshot( CephContext *_cct, RGWRados *_store, const string& _sn
 }
 
 int RGWSnapshot::get_snapshots( CephContext *cct, RGWRados *store,
-    list<RGWSnapshot>& snaps)
+    list<string> pools, list<RGWSnapshot>& snaps)
 {
-  cout << "get_snapshots" << std::endl;
   return( 0);
 }
 
 // Return a list of RADOS Pools used by RGW.
 // The list is in order for creating snapshots.
+// The pools listed here are not guarenteed to exist.  
+// You probably want get_rgw_pools()
 int RGWSnapshot::get_rados_pools( CephContext *cct, RGWRados *store, list<string>& pools)
 {
   RGWRegion region;
@@ -80,26 +81,16 @@ int RGWSnapshot::get_rados_pools( CephContext *cct, RGWRados *store, list<string
   return 0;
 }
 
+// Return a list of RADOS Pools used by RGW.
+// The list is in order for creating snapshots.
+// The pools returned all exist.
 int RGWSnapshot::get_rgw_pools( CephContext *cct, RGWRados *store, list<string>& pools)
 {
   list<string> rgw_pools;
-  list<RGWSnapshot> snaps;
   list<string> all_pools;
   librados::Rados rados;
 
-  int ret = RGWSnapshot::get_snapshots( cct, store, snaps);
-  if (ret < 0)
-    return ret;
-
-  for( list<RGWSnapshot>::iterator siter = snaps.begin();
-       siter != snaps.end(); ++siter) {
-    if( snap_name == siter->snap_name) {
-      cerr << "snapshot " << snap_name << " already exists" << std::endl;
-      return -EEXIST;
-    }
-  }
-
-  ret = RGWSnapshot::get_rados_pools( cct, store, rgw_pools);
+  int ret = RGWSnapshot::get_rados_pools( cct, store, rgw_pools);
   if (ret < 0)
     return ret;
 
@@ -127,16 +118,49 @@ int RGWSnapshot::get_rgw_pools( CephContext *cct, RGWRados *store, list<string>&
 int RGWSnapshot::make()
 {
   list<string> snap_pools;
+  list<RGWSnapshot> snaps;
 
   int ret = RGWSnapshot::get_rgw_pools( cct, store, snap_pools);
   if (ret < 0)
     return ret;
 
+  ret = RGWSnapshot::get_snapshots( cct, store, snap_pools, snaps);
+  if (ret < 0)
+    return ret;
+
+  for( list<RGWSnapshot>::iterator siter = snaps.begin();
+       siter != snaps.end(); ++siter) {
+    if( snap_name == siter->snap_name) {
+      cerr << "snapshot " << snap_name << " already exists" << std::endl;
+      return -EEXIST;
+    }
+  }
+
   formatter->open_object_section("mksnap");
   encode_json("snap_pools", snap_pools, formatter);
+  encode_json("snaps", snaps, formatter);
   formatter->close_section();
   formatter->flush(cout);
   cout << std::endl;
+
+  for( list<string>::iterator snap_pool = snap_pools.begin();
+       snap_pool != snap_pools.end(); ++snap_pool) {
+    cerr << "snapshot " << *snap_pool << std::endl;
+
+    librados::IoCtx io_ctx;
+
+    int r = store->rados->ioctx_create(snap_pool->c_str(), io_ctx);
+    if (r < 0) {
+      cerr << "can't create IoCtx for pool " << *snap_pool << std::endl;
+      return r;
+    }
+
+    r = io_ctx.snap_create(snap_name.c_str());
+    if (r < 0) {
+      cerr << "can't mksnap for pool " << *snap_pool << std::endl;
+      return r;
+    }
+  }
 
   return( 0);
 }
