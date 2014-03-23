@@ -581,6 +581,10 @@ public:
   void trim_non_auth();      // trim out trimmable non-auth items
   bool trim_non_auth_subtree(CDir *directory);
   void try_trim_non_auth_subtree(CDir *dir);
+  bool can_trim_non_auth_dirfrag(CDir *dir) {
+    return my_ambiguous_imports.count((dir)->dirfrag()) == 0 &&
+	   uncommitted_slave_rename_olddir.count(dir->inode) == 0;
+  }
 
   void trim_client_leases();
   void check_memory_usage();
