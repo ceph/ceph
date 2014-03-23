@@ -6705,8 +6705,7 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
 {
   dout(10) << "trim_non_auth_subtree(" << dir << ") " << *dir << dendl;
 
-  if (uncommitted_slave_rename_olddir.count(dir->inode) || // preserve the dir for rollback
-      my_ambiguous_imports.count(dir->dirfrag()))
+  if (!can_trim_non_auth_dirfrag(dir))
     return true;
 
   bool keep_dir = false;
@@ -6726,9 +6725,8 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
         for (list<CDir*>::iterator subdir = subdirs.begin();
             subdir != subdirs.end();
             ++subdir) {
-          if (uncommitted_slave_rename_olddir.count((*subdir)->inode) || // preserve the dir for rollback
-	      my_ambiguous_imports.count((*subdir)->dirfrag()) ||
-	      (*subdir)->is_subtree_root()) {
+          if ((*subdir)->is_subtree_root() ||
+	      !can_trim_non_auth_dirfrag(*subdir)) {
             keep_inode = true;
             dout(10) << "trim_non_auth_subtree(" << dir << ") subdir " << *subdir << "is kept!" << dendl;
           }
@@ -6783,7 +6781,8 @@ void MDCache::try_trim_non_auth_subtree(CDir *dir)
   for (set<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p) {
     CDir *bd = *p;
     if (bd->get_dir_auth().first != mds->whoami &&  // we are not auth
-	bd->get_num_any() == 0) {                   // and empty
+	bd->get_num_any() == 0 && // and empty
+	can_trim_non_auth_dirfrag(bd)) {
       CInode *bi = bd->get_inode();
       dout(10) << " closing empty non-auth child subtree " << *bd << dendl;
       remove_subtree(bd);
