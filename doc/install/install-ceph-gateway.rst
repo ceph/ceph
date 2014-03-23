@@ -58,6 +58,9 @@ builds of Apache and FastCGI packages modified for Ceph at `gitbuilder.ceph.com`
 Debian Packages
 ---------------
 
+#. Add the development key:
+        wget -q -O- https://raw.github.com/ceph/ceph/master/keys/autobuild.asc | sudo apt-key add -
+
 #. Add a ``ceph-apache.list`` file to your APT sources. :: 
 
 	echo deb http://gitbuilder.ceph.com/apache2-deb-$(lsb_release -sc)-x86_64-basic/ref/master $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph-apache.list
