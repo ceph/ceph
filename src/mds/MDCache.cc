@@ -3460,9 +3460,14 @@ void MDCache::recalc_auth_bits()
       dfq.pop_front();
 
       // dir
-      if (auth) 
+      if (auth) {
 	dir->state_set(CDir::STATE_AUTH);
-      else {
+      } else {
+	// close empty non-auth dirfrag
+	if (!dir->is_subtree_root() && dir->get_num_any() == 0) {
+	  dir->inode->close_dirfrag(dir->get_frag());
+	  continue;
+	}
 	dir->state_set(CDir::STATE_REJOINING);
 	dir->state_clear(CDir::STATE_AUTH);
 	dir->state_clear(CDir::STATE_COMPLETE);
@@ -6644,6 +6649,9 @@ void MDCache::trim_non_auth()
       dir->remove_dentry(dn);
       // adjust the dir state
       dir->state_clear(CDir::STATE_COMPLETE);  // dir incomplete!
+      // close empty non-auth dirfrag
+      if (!dir->is_subtree_root() && dir->get_num_any() == 0)
+	dir->inode->close_dirfrag(dir->get_frag());
     }
   }
 
