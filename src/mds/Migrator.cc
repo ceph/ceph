@@ -2813,7 +2813,7 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
 
   // adjust replica list
   //assert(!dir->is_replica(oldauth));    // not true on failed export
-  dir->add_replica(oldauth);
+  dir->add_replica(oldauth, CDir::EXPORT_NONCE);
   if (dir->is_replica(mds->get_nodeid()))
     dir->remove_replica(mds->get_nodeid());
 
