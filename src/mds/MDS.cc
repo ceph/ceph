@@ -2110,6 +2110,7 @@ bool MDS::ms_handle_reset(Connection *con)
       if (session->is_closed()) {
 	dout(3) << "ms_handle_reset closing connection for session " << session->info.inst << dendl;
 	messenger->mark_down(con);
+	con->set_priv(NULL);
 	sessionmap.remove_session(session);
       }
       session->put();
@@ -2138,6 +2139,7 @@ void MDS::ms_handle_remote_reset(Connection *con)
       if (session->is_closed()) {
 	dout(3) << "ms_handle_remote_reset closing connection for session " << session->info.inst << dendl;
 	messenger->mark_down(con);
+	con->set_priv(NULL);
 	sessionmap.remove_session(session);
       }
       session->put();
