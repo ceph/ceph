@@ -1129,6 +1129,10 @@ def run_daemon(ctx, config, type_):
     log.info('Starting %s daemons...' % type_)
     testdir = teuthology.get_testdir(ctx)
     daemons = ctx.cluster.only(teuthology.is_type(type_))
+
+    # check whether any daemons if this type are configured
+    if daemons is None:
+        return
     coverage_dir = '{tdir}/archive/coverage'.format(tdir=testdir)
 
     daemon_signal = 'kill'
