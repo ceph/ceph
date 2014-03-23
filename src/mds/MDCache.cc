@@ -3616,6 +3616,8 @@ void MDCache::rejoin_send_rejoins()
 	 ++p) {
       assert(cap_export_targets.count(p->first));
       int target = cap_export_targets[p->first];
+      if (rejoins.count(target) == 0)
+	continue;
       rejoins[target]->cap_exports[p->first] = p->second;
       for (map<client_t,ceph_mds_cap_reconnect>::iterator q = p->second.begin();
 	   q != p->second.end();
