@@ -1941,7 +1941,7 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
     f->close_section();
 }
 
-void Monitor::get_status(stringstream &ss, Formatter *f)
+void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
 {
   if (f)
     f->open_object_section("status");
@@ -2283,8 +2283,8 @@ void Monitor::handle_command(MMonCommand *m)
     cmd_getval(g_ceph_context, cmdmap, "detail", detail);
 
     if (prefix == "status") {
-      // get_status handles f == NULL
-      get_status(ds, f.get());
+      // get_cluster_status handles f == NULL
+      get_cluster_status(ds, f.get());
 
       if (f) {
         f->flush(ds);
