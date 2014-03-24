@@ -39,6 +39,8 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
   return out;
 }
 
+std::string dout_format(const std::string, ...);
+
 // generic macros
 #define dout_prefix *_dout
 
