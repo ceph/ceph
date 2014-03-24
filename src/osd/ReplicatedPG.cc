@@ -4719,6 +4719,8 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
       ctx->clone_obc->destructor_callback = new C_PG_ObjectContext(this, ctx->clone_obc.get());
       ctx->clone_obc->obs.oi = static_snap_oi;
       ctx->clone_obc->obs.exists = true;
+      ctx->clone_obc->ssc = ctx->obc->ssc;
+      ctx->clone_obc->ssc->ref++;
       if (pool.info.require_rollback())
 	ctx->clone_obc->attr_cache = ctx->obc->attr_cache;
       snap_oi = &ctx->clone_obc->obs.oi;
