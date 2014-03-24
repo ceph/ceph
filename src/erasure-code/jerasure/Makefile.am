@@ -8,7 +8,6 @@ libec_jerasure_la_SOURCES = \
   erasure-code/jerasure/gf-complete/src/gf_wgen.c \
   erasure-code/jerasure/gf-complete/src/gf_method.c \
   erasure-code/jerasure/gf-complete/src/gf_w16.c \
-  erasure-code/jerasure/gf-complete/src/gf_intel.c \
   erasure-code/jerasure/gf-complete/src/gf.c \
   erasure-code/jerasure/gf-complete/src/gf_w32.c \
   erasure-code/jerasure/gf-complete/src/gf_w64.c \
@@ -27,7 +26,6 @@ noinst_HEADERS += \
   erasure-code/jerasure/jerasure/include/liberation.h \
   erasure-code/jerasure/jerasure/include/reed_sol.h \
   erasure-code/jerasure/gf-complete/include/gf_int.h \
-  erasure-code/jerasure/gf-complete/include/gf_intel.h \
   erasure-code/jerasure/gf-complete/include/gf_complete.h \
   erasure-code/jerasure/gf-complete/include/gf_rand.h \
   erasure-code/jerasure/gf-complete/include/gf_method.h \
