@@ -262,6 +262,7 @@ int main(int argc, char **argv)
   map<TestOpType, unsigned int> op_weights;
   string pool_name = "data";
   bool ec_pool = false;
+  bool no_omap = false;
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--max-ops") == 0)
@@ -280,12 +281,15 @@ int main(int argc, char **argv)
       min_stride_size = atoi(argv[++i]);
     else if (strcmp(argv[i], "--max-stride-size") == 0)
       max_stride_size = atoi(argv[++i]);
+    else if (strcmp(argv[i], "--no-omap") == 0)
+      no_omap = true;
     else if (strcmp(argv[i], "--ec-pool") == 0) {
       if (!op_weights.empty()) {
 	cerr << "--ec-pool must be specified prior to any ops" << std::endl;
 	exit(1);
       }
       ec_pool = true;
+      no_omap = true;
     } else if (strcmp(argv[i], "--op") == 0) {
       i++;
       int j;
@@ -363,7 +367,7 @@ int main(int argc, char **argv)
     size,
     min_stride_size,
     max_stride_size,
-    ec_pool,
+    no_omap,
     id);
 
   TestOpStat stats;
