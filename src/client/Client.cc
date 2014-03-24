@@ -7242,17 +7242,10 @@ int Client::_listxattr(Inode *in, char *name, size_t size, int uid, int gid)
 {
   int r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid);
   if (r == 0) {
-    const char file_vxattrs[] = "ceph.file.layout";
-    const char dir_vxattrs[] = "ceph.dir.layout";
     for (map<string,bufferptr>::iterator p = in->xattrs.begin();
 	 p != in->xattrs.end();
 	 ++p)
       r += p->first.length() + 1;
-
-    if (in->is_file())
-      r += sizeof(file_vxattrs);
-    else if (in->is_dir() && in->has_dir_layout())
-      r += sizeof(dir_vxattrs);
 
     if (size != 0) {
       if (size >= (unsigned)r) {
@@ -7263,13 +7256,6 @@ int Client::_listxattr(Inode *in, char *name, size_t size, int uid, int gid)
 	  name += p->first.length();
 	  *name = '\0';
 	  name++;
-	}
-	if (in->is_file()) {
-	  memcpy(name, file_vxattrs, sizeof(file_vxattrs));
-	  name += sizeof(file_vxattrs);
-	} else if (in->is_dir() && in->has_dir_layout()) {
-	  memcpy(name, dir_vxattrs, sizeof(dir_vxattrs));
-	  name += sizeof(dir_vxattrs);
 	}
       } else
 	r = -ERANGE;
