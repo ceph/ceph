@@ -260,7 +260,7 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
   boost::scoped_ptr<Formatter> f(new_formatter(format));
 
   if (command == "mon_status") {
-    _mon_status(f.get(), ss);
+    get_mon_status(f.get(), ss);
     if (f)
       f->flush(ss);
   } else if (command == "quorum_status")
@@ -1740,7 +1740,7 @@ void Monitor::_quorum_status(Formatter *f, ostream& ss)
     delete f;
 }
 
-void Monitor::_mon_status(Formatter *f, ostream& ss)
+void Monitor::get_mon_status(Formatter *f, ostream& ss)
 {
   bool free_formatter = false;
 
@@ -2375,7 +2375,7 @@ void Monitor::handle_command(MMonCommand *m)
     rs = "";
     r = 0;
   } else if (prefix == "mon_status") {
-    _mon_status(f.get(), ds);
+    get_mon_status(f.get(), ds);
     if (f)
       f->flush(ds);
     rdata.append(ds);
@@ -3042,7 +3042,7 @@ void Monitor::handle_ping(MPing *m)
   get_health(health_str, NULL, f);
   {
     stringstream ss;
-    _mon_status(f, ss);
+    get_mon_status(f, ss);
   }
 
   f->close_section();
