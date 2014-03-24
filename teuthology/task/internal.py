@@ -488,9 +488,13 @@ kern.* -{adir}/syslog/kern.log;RSYSLOG_FileFormat
             log.debug('Checking %s', remote.name)
             r = remote.run(
                 args=[
+                    'cat',
+                    run.Raw('{adir}/syslog/*.log'.format(adir=archive_dir)),
+                    run.Raw('|'),
+                    'tr', '[\\000-\\011\\013-\\037\\177-\\377]', '.',
+                    run.Raw('|'),
                     'egrep',
                     '\\bBUG\\b|\\bINFO\\b|\\bDEADLOCK\\b',
-                    run.Raw('{adir}/syslog/*.log'.format(adir=archive_dir)),
                     run.Raw('|'),
                     'grep', '-v', 'task .* blocked for more than .* seconds',
                     run.Raw('|'),
