@@ -110,6 +110,7 @@ void _usage()
   cerr << "  replicalog get             get replica metadata log entry\n";
   cerr << "  replicalog delete          delete replica metadata log entry\n";
   cerr << "  mksnap                     create a RGW snapshot\n";
+  cerr << "  lssnap                     list all RGW snapshots\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
   cerr << "   --subuser=<name>          subuser name\n";
@@ -1294,7 +1295,7 @@ int main(int argc, char **argv)
     }
     if (opt_cmd == OPT_MKSNAP) {
       if (snap_name.empty()) {
-        cerr << "need to specify snapshot to create!" << std::endl;
+        cerr << "need to specify a snapshot to create!" << std::endl;
         return usage();
       }
 
