@@ -4063,10 +4063,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
       // OMAP Read ops
     case CEPH_OSD_OP_OMAPGETKEYS:
-      if (pool.info.require_rollback()) {
-	result = -EOPNOTSUPP;
-	break;
-      }
       ++ctx->num_read;
       {
 	string start_after;
@@ -4081,7 +4077,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	set<string> out_set;
 
-	{
+	if (!pool.info.require_rollback()) {
 	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
 	    coll, soid
 	    );
@@ -4092,7 +4088,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	       ++i, iter->next()) {
 	    out_set.insert(iter->key());
 	  }
-	}
+	} // else return empty out_set
 	::encode(out_set, osd_op.outdata);
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
 	ctx->delta_stats.num_rd++;
@@ -4100,10 +4096,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_OMAPGETVALS:
-      if (pool.info.require_rollback()) {
-	result = -EOPNOTSUPP;
-	break;
-      }
       ++ctx->num_read;
       {
 	string start_after;
@@ -4120,7 +4112,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	map<string, bufferlist> out_set;
 
-	{
+	if (!pool.info.require_rollback()) {
 	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
 	    coll, soid
 	    );
@@ -4137,7 +4129,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    dout(20) << "Found key " << iter->key() << dendl;
 	    out_set.insert(make_pair(iter->key(), iter->value()));
 	  }
-	}
+	} // else return empty out_set
 	::encode(out_set, osd_op.outdata);
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
 	ctx->delta_stats.num_rd++;
@@ -4146,7 +4138,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_OMAPGETHEADER:
       if (pool.info.require_rollback()) {
-	result = -EOPNOTSUPP;
+	// return empty header
 	break;
       }
       ++ctx->num_read;
@@ -4158,10 +4150,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_OMAPGETVALSBYKEYS:
-      if (pool.info.require_rollback()) {
-	result = -EOPNOTSUPP;
-	break;
-      }
       ++ctx->num_read;
       {
 	set<string> keys_to_get;
@@ -4173,7 +4161,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  goto fail;
 	}
 	map<string, bufferlist> out;
-	osd->store->omap_get_values(coll, soid, keys_to_get, &out);
+	if (!pool.info.require_rollback()) {
+	  osd->store->omap_get_values(coll, soid, keys_to_get, &out);
+	} // else return empty omap entries
 	::encode(out, osd_op.outdata);
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
 	ctx->delta_stats.num_rd++;
@@ -4181,10 +4171,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_OMAP_CMP:
-      if (pool.info.require_rollback()) {
-	result = -EOPNOTSUPP;
-	break;
-      }
       ++ctx->num_read;
       {
 	if (!obs.exists || oi.is_whiteout()) {
@@ -4201,20 +4187,24 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	
 	map<string, bufferlist> out;
-	set<string> to_get;
-	for (map<string, pair<bufferlist, int> >::iterator i = assertions.begin();
-	     i != assertions.end();
-	     ++i)
-	  to_get.insert(i->first);
-	int r = osd->store->omap_get_values(coll, soid, to_get, &out);
-	if (r < 0) {
-	  result = r;
-	  break;
-	}
+
+	if (!pool.info.require_rollback()) {
+	  set<string> to_get;
+	  for (map<string, pair<bufferlist, int> >::iterator i = assertions.begin();
+	       i != assertions.end();
+	       ++i)
+	    to_get.insert(i->first);
+	  int r = osd->store->omap_get_values(coll, soid, to_get, &out);
+	  if (r < 0) {
+	    result = r;
+	    break;
+	  }
+	} // else leave out empty
+
 	//Should set num_rd_kb based on encode length of map
 	ctx->delta_stats.num_rd++;
 
-	r = 0;
+	int r = 0;
 	bufferlist empty;
 	for (map<string, pair<bufferlist, int> >::iterator i = assertions.begin();
 	     i != assertions.end();
