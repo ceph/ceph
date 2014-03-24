@@ -328,7 +328,6 @@ public:
   ThreadPool::WorkQueue<PG> &scrub_wq;
   ThreadPool::WorkQueue<PG> &scrub_finalize_wq;
   ThreadPool::WorkQueue<MOSDRepScrub> &rep_scrub_wq;
-  GenContextWQ push_wq;
   GenContextWQ gen_wq;
   ClassHandler  *&class_handler;
 
