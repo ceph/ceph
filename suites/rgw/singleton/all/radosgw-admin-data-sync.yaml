@@ -50,6 +50,7 @@ tasks:
         secret key: Py4IOauQoL18Gp2zM7lC1vLmoawgqcYPbYGcWfXw
 - radosgw-agent:
     client.0:
+      max-entries: 10
       src: client.0
       dest: client.1
 - radosgw-admin:
