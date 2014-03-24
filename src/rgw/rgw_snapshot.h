@@ -36,7 +36,6 @@ class RGWSnapshot {
 protected:
   CephContext *cct;
   RGWRados *store;
-  Formatter *formatter;  // Temporary
   
   static
   int get_rados_pools( CephContext *cct, RGWRados *store, list<string>& pools);
@@ -56,20 +55,8 @@ public:
   time_t snap_created;
 
   int make();
-  bool exists();
 
   void dump(Formatter *f) const;
-
-  void set_formatter( Formatter *_formatter);
-
-  void set_snap_name( string _snap_name);
-  void set_snap_created( time_t _snap_created);
-  void set_snap_num( int _snap_num);
-
-  string get_snap_name();
-  time_t get_snap_created();
-  int get_snap_num();
-
 };
 
 #endif /* RGW_SNAPSHOT_H */

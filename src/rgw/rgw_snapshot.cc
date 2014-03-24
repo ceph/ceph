@@ -28,6 +28,20 @@
 #include "cls/user/cls_user_types.h"
 
 
+/*
+  RGW Snapshots are implemented using rados snapshots on all pools used
+  by the zone.  This is easy to implement, but has a few complications:
+  * RGW snapshots are not atomic.  It takes 10+ seconds to snapshot the zone
+    pools sequentially.  I believe that by taking snapshots in the proper 
+    order, we can avoid problems, but this needs some stress testing.
+  * Mixing RGW snapshots and rados snapshots on the RGW pools is confusing.
+    It's not recommended.
+  * Because we're snapshotting all pools in a zone, some end user operations
+    may not be intuitive.  For example, a user given access to a bucket will
+    only be able to access snapshots created after access was granted.
+
+*/
+
 
 
 RGWSnapshot::RGWSnapshot( CephContext *_cct, RGWRados *_store, const string& _snap_name)
@@ -93,7 +107,6 @@ int RGWSnapshot::get_snapshots( CephContext *cct, RGWRados *store,
           if( time_delta > 60) {
             cerr << "rados snapshot creation time on " << *i << " is more than 60s offset from the .rgw root pool.  Ingoring snapshot." << std::endl;
             pool_snaps_map.erase( s);
-            
           }
            
           missing_snaps.erase(s);
@@ -239,14 +252,4 @@ int RGWSnapshot::make()
   }
 
   return( 0);
-}
-
-bool RGWSnapshot::exists()
-{
-  return( false);
-}
-
-void RGWSnapshot::set_formatter( Formatter *_formatter)
-{
-  formatter = _formatter;
 }
