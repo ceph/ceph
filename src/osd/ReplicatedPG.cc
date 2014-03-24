@@ -333,10 +333,10 @@ void ReplicatedPG::begin_peer_recover(
   peer_missing[peer].revise_have(soid, eversion_t());
 }
 
-void ReplicatedPG::schedule_work(
+void ReplicatedPG::schedule_recovery_work(
   GenContext<ThreadPool::TPHandle&> *c)
 {
-  osd->gen_wq.queue(c);
+  osd->recovery_gen_wq.queue(c);
 }
 
 void ReplicatedPG::send_message_osd_cluster(
@@ -2158,7 +2158,7 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
 	m->get_priority());
     c->to_continue.swap(to_continue);
     t->register_on_complete(
-      new PG_QueueAsync(
+      new PG_RecoveryQueueAsync(
 	get_parent(),
 	get_parent()->bless_gencontext(c)));
   }
@@ -8938,7 +8938,7 @@ void ReplicatedBackend::sub_op_push(OpRequestRef op)
 	  op->get_req()->get_priority());
       c->to_continue.swap(to_continue);
       t->register_on_complete(
-	new PG_QueueAsync(
+	new PG_RecoveryQueueAsync(
 	  get_parent(),
 	  get_parent()->bless_gencontext(c)));
     }
