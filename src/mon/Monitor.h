@@ -618,7 +618,7 @@ public:
                         const map<string,cmd_vartype>& cmdmap,
                         const map<string,string>& param_str_map,
                         const MonCommand *this_cmd);
-  void _mon_status(Formatter *f, ostream& ss);
+  void get_mon_status(Formatter *f, ostream& ss);
   void _quorum_status(Formatter *f, ostream& ss);
   void _osdmonitor_prepare_command(cmdmap_t& cmdmap, ostream& ss);
   void _add_bootstrap_peer_hint(string cmd, cmdmap_t& cmdmap, ostream& ss);
@@ -632,7 +632,7 @@ public:
    * @param detailbl optional bufferlist* to fill with a detailed report
    */
   void get_health(string& status, bufferlist *detailbl, Formatter *f);
-  void get_status(stringstream &ss, Formatter *f);
+  void get_cluster_status(stringstream &ss, Formatter *f);
 
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
   void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version);
