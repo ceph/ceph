@@ -60,6 +60,39 @@ class CephContext;
 class Context;
 class PerfCounters;
 
+typedef __u8 stream_format_t;
+#define JOURNAL_FORMAT_LEGACY 0
+#define JOURNAL_FORMAT_RESILIENT 1
+
+
+/**
+ * Represents a collection of entries serialized in a byte stream.
+ *
+ * Each entry consists of:
+ *  - a blob (used by the next level up as a serialized LogEvent)
+ *  - a uint64_t (used by the next level up as a pointer to the start of the entry
+ *    in the collection bytestream)
+ */
+class JournalStream
+{
+  stream_format_t format;
+
+  public:
+  JournalStream() : format(JOURNAL_FORMAT_RESILIENT) {}
+  JournalStream(stream_format_t format_) : format(format_) {}
+
+  void set_format(stream_format_t format_) {format = format_;}
+
+  bool readable(bufferlist &bl, uint64_t &need);
+  size_t read(bufferlist &from, bufferlist &to, uint64_t &start_ptr);
+  size_t write(bufferlist &entry, bufferlist &to, uint64_t const &start_ptr);
+
+  // A magic number for the start of journal entries, so that we can
+  // identify them in damaged journals.
+  static const uint64_t sentinel = 0x3141592653589793;
+};
+
+
 class Journaler {
 public:
   CephContext *cct;
@@ -70,16 +103,18 @@ public:
     uint64_t unused_field;
     uint64_t write_pos;
     string magic;
-    ceph_file_layout layout;
+    ceph_file_layout layout; //< The mapping from byte stream offsets to RADOS objects
+    stream_format_t stream_format; //< The encoding of LogEvents within the journal byte stream
 
     Header(const char *m="") :
       trimmed_pos(0), expire_pos(0), unused_field(0), write_pos(0),
-      magic(m) {
+      magic(m),
+      stream_format(JOURNAL_FORMAT_RESILIENT) {
       memset(&layout, 0, sizeof(layout));
     }
 
     void encode(bufferlist &bl) const {
-      __u8 struct_v = 1;
+      __u8 struct_v = 2;
       ::encode(struct_v, bl);
       ::encode(magic, bl);
       ::encode(trimmed_pos, bl);
@@ -87,6 +122,7 @@ public:
       ::encode(unused_field, bl);
       ::encode(write_pos, bl);
       ::encode(layout, bl);
+      ::encode(stream_format, bl);
     }
     void decode(bufferlist::iterator &bl) {
       __u8 struct_v;
@@ -97,6 +133,11 @@ public:
       ::decode(unused_field, bl);
       ::decode(write_pos, bl);
       ::decode(layout, bl);
+      if (struct_v > 1) {
+        ::decode(stream_format, bl);
+      } else {
+        stream_format = JOURNAL_FORMAT_LEGACY;
+      }
     }
 
     void dump(Formatter *f) const {
@@ -123,12 +164,16 @@ public:
     static void generate_test_instances(list<Header*> &ls)
     {
       ls.push_back(new Header());
+
       ls.push_back(new Header());
       ls.back()->trimmed_pos = 1;
       ls.back()->expire_pos = 2;
       ls.back()->unused_field = 3;
       ls.back()->write_pos = 4;
       ls.back()->magic = "magique";
+
+      ls.push_back(new Header());
+      ls.back()->stream_format = JOURNAL_FORMAT_RESILIENT;
     }
   } last_written, last_committed;
   WRITE_CLASS_ENCODER(Header)
@@ -139,6 +184,9 @@ private:
   int64_t pg_pool;
   bool readonly;
   ceph_file_layout layout;
+  uint32_t stream_format;
+  JournalStream journal_stream;
+
 
   const char *magic;
   Objecter *objecter;
