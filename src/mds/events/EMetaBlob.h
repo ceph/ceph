@@ -279,12 +279,11 @@ public:
   };
   WRITE_CLASS_ENCODER(dirlump)
 
-private:
   // my lumps.  preserve the order we added them in a list.
   list<dirfrag_t>         lump_order;
   map<dirfrag_t, dirlump> lump_map;
   list<ceph::shared_ptr<fullbit> > roots;
-
+public:
   list<pair<__u8,version_t> > table_tids;  // tableclient transactions
 
   inodeno_t opened_ino;
@@ -304,7 +303,9 @@ private:
   list<inodeno_t> truncate_start;        // start truncate 
   map<inodeno_t,uint64_t> truncate_finish;  // finished truncate (started in segment blah)
 
+public:
   vector<inodeno_t> destroyed_inodes;
+private:
 
   // idempotent op(s)
   list<pair<metareqid_t,uint64_t> > client_reqs;
