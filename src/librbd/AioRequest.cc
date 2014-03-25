@@ -107,6 +107,7 @@ namespace librbd {
     ldout(m_ictx->cct, 20) << "should_complete " << this << " " << m_oid << " " << m_object_off << "~" << m_object_len
 			   << " r = " << r << dendl;
 
+    bool COR = m_ictx->cct->_conf->rbd_clone_cor;
     if (!m_tried_parent && r == -ENOENT) {
       RWLock::RLocker l(m_ictx->snap_lock);
       RWLock::RLocker l2(m_ictx->parent_lock);
@@ -125,6 +126,8 @@ namespace librbd {
       uint64_t object_overlap = m_ictx->prune_parent_extents(image_extents, image_overlap);
       if (object_overlap) {
 	m_tried_parent = true;
+	if(COR)//copy-on-read option
+	{
 	    vector<pair<uint64_t,uint64_t> > extend_image_extents;
 	    //extend range to entire object
 	    Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
@@ -132,9 +135,14 @@ namespace librbd {
 			    extend_image_extents);
 	    //read entire object from parent , and put it in m_entire_object
 	    read_from_parent_COR(extend_image_extents);
+	}
+	else
+	    read_from_parent(image_extents);
 	return false;
       }
     }
+    if(COR) //copy-on-read option
+    {
       //if read entire object from parent success
       if(m_tried_parent && r>0)
 	{
@@ -144,6 +152,7 @@ namespace librbd {
 	  if(ret < 0)
 	  	return false;
 	}
+    }
     return true;
   }
 
