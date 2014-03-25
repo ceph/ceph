@@ -66,6 +66,41 @@ namespace librbd {
   }
 
   /** read **/
+  //copy-on-read: after read entire object, just write it into child
+  ssize_t AioRead::write_COR()
+  {
+    ldout(m_ictx->cct, 20) << "write_COR" << dendl;
+    int ret = 0;
+	
+    m_ictx->snap_lock.get_read();
+    ::SnapContext snapc = m_ictx->snapc;
+    m_ictx->snap_lock.put_read();
+
+    librados::ObjectWriteOperation copyup_cor;
+    copyup_cor.exec("rbd","copyup",m_entire_object);
+
+    std::vector<librados::snap_t> m_snaps;
+    for (std::vector<snapid_t>::const_iterator it = snapc.snaps.begin();
+        	it != snapc.snaps.end(); ++it) {
+      m_snaps.push_back(it->val);
+    }
+	
+    librados::AioCompletion *rados_completion =
+       	librados::Rados::aio_create_completion(NULL, NULL, NULL);
+    m_ictx->md_ctx.aio_operate(m_oid, rados_completion, &copyup_cor,
+			       snapc.seq.val, m_snaps);
+    rados_completion->wait_for_complete();
+    ret = rados_completion->get_return_value();
+    ldout(m_ictx->cct, 20) << "ret = " << ret <<dendl;
+    rados_completion->release();
+	
+    if (ret < 0) {
+      ldout(m_ictx->cct, 20) << "couldn't write object! error " << ret << dendl;
+      ret = -EIO;
+    } 
+    return ret;
+  }
+
 
   bool AioRead::should_complete(int r)
   {
@@ -100,6 +135,15 @@ namespace librbd {
 	return false;
       }
     }
+      //if read entire object from parent success
+      if(m_tried_parent && r>0)
+	{
+	  // copy the read range to m_read_data
+	  m_read_data.substr_of(m_entire_object, m_object_off, m_object_len);
+	  int ret = write_COR();
+	  if(ret < 0)
+	  	return false;
+	}
     return true;
   }
 
