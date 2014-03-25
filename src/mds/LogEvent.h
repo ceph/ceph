@@ -67,6 +67,7 @@ protected:
     : _type(t), _start_off(0), _segment(0) { }
   virtual ~LogEvent() { }
 
+  string get_type_str() const;
   int get_type() const { return _type; }
   void set_type(int t) { _type = t; }
 
