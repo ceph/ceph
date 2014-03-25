@@ -34,6 +34,8 @@ use IO::File;
 use Getopt::Long;
 use Digest::MD5;
 use Pod::Usage();
+use FindBin;
+use lib $FindBin::Bin;
 use s3_utilities;
 
 my $help;
