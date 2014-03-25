@@ -62,6 +62,34 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   return event;
 }
 
+
+std::string LogEvent::get_type_str() const
+{
+  switch(_type) {
+  case EVENT_SUBTREEMAP: return "SUBTREEMAP";
+  case EVENT_SUBTREEMAP_TEST: return "SUBTREEMAP_TEST";
+  case EVENT_EXPORT: return "EXPORT";
+  case EVENT_IMPORTSTART: return "IMPORTSTART";
+  case EVENT_IMPORTFINISH: return "IMPORTFINISH";
+  case EVENT_FRAGMENT: return "FRAGMENT";
+  case EVENT_RESETJOURNAL: return "RESETJOURNAL";
+  case EVENT_SESSION: return "SESSION";
+  case EVENT_SESSIONS_OLD: return "SESSIONS_OLD";
+  case EVENT_SESSIONS: return "SESSIONS";
+  case EVENT_UPDATE: return "UPDATE";
+  case EVENT_SLAVEUPDATE: return "SLAVEUPDATE";
+  case EVENT_OPEN: return "OPEN";
+  case EVENT_COMMITTED: return "COMMITTED";
+  case EVENT_TABLECLIENT: return "TABLECLIENT";
+  case EVENT_TABLESERVER: return "TABLESERVER";
+
+  default:
+    generic_dout(0) << "get_type_str: unknown type " << _type << dendl;
+    return "UNKNOWN";
+  }
+}
+
+
 LogEvent *LogEvent::decode_event(bufferlist& bl, bufferlist::iterator& p, __u32 type)
 {
   int length = bl.length() - p.get_off();
