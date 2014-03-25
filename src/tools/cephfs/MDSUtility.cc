@@ -11,7 +11,7 @@
  * Foundation.  See file COPYING.
  */
 
-#include "mds/MDSUtility.h"
+#include "MDSUtility.h"
 #include "mon/MonClient.h"
 
 #define dout_subsys ceph_subsys_mds

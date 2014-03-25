@@ -20,10 +20,11 @@
 #include "common/entity_name.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
-#include "mds/Dumper.h"
 #include "mds/mdstypes.h"
 #include "mds/LogEvent.h"
 #include "osdc/Journaler.h"
+
+#include "Dumper.h"
 
 #define dout_subsys ceph_subsys_mds
 
@@ -219,60 +220,3 @@ void Dumper::undump(const char *dump_file)
   cout << "done." << std::endl;
 }
 
-
-/**
- * Write JSON-formatted log entries to standard out.
- */
-void Dumper::dump_entries()
-{
-  Mutex localLock("dump_entries");
-  JSONFormatter jf(true);
-
-  if (recover_journal()) {
-    return;
-  }
-
-  jf.open_array_section("log");
-  lock.Lock();
-  // Until the journal is empty, pop an event or wait for one to
-  // be available.
-  dout(10) << "Journaler read/write/size: "
-      << journaler->get_read_pos() << "/" << journaler->get_write_pos()
-      << "/" << journaler->get_write_pos() - journaler->get_read_pos() << dendl;
-  while (journaler->get_read_pos() != journaler->get_write_pos()) {
-    bufferlist entry_bl;
-    bool got_data = journaler->try_read_entry(entry_bl);
-    dout(10) << "try_read_entry: " << got_data << dendl;
-    if (got_data) {
-      LogEvent *le = LogEvent::decode(entry_bl);
-      if (!le) {
-	dout(0) << "Error decoding LogEvent" << dendl;
-	break;
-      } else {
-	jf.open_object_section("log_event");
-	jf.dump_unsigned("type", le->get_type());
-	jf.dump_unsigned("start_off", le->get_start_off());
-	jf.dump_unsigned("stamp_sec", le->get_stamp().tv.tv_sec);
-	jf.dump_unsigned("stamp_nsec", le->get_stamp().tv.tv_nsec);
-	le->dump(&jf);
-	jf.close_section();
-	delete le;
-      }
-    } else {
-      bool done = false;
-      Cond cond;
-
-      journaler->wait_for_readable(new C_SafeCond(&localLock, &cond, &done));
-      lock.Unlock();
-      localLock.Lock();
-      while (!done)
-        cond.Wait(localLock);
-      localLock.Unlock();
-      lock.Lock();
-    }
-  }
-  lock.Unlock();
-  jf.close_section();
-  jf.flush(cout);
-  return;
-}
