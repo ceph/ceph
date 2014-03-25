@@ -93,6 +93,11 @@ case "$1" in
 	do_unmap
 	;;
 
+  restart|force-reload)
+	$0 stop
+	$0 start
+	;;
+
   reload)
 	do_map
 	;;
@@ -102,7 +107,7 @@ case "$1" in
 	;;
 
   *)
-	log_success_msg "Usage: rbdmap {start|stop|reload|status}"
+	log_success_msg "Usage: rbdmap {start|stop|restart|force-reload|reload|status}"
 	exit 1
 	;;
 esac
