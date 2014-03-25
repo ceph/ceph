@@ -49,6 +49,7 @@ public:
 
   void update_segment();
   void replay(MDS *mds);
+  EMetaBlob *get_metablob() {return &metablob;}
 };
 
 #endif
