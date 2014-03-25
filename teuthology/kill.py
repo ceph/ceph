@@ -61,6 +61,7 @@ def kill_job(run_name, job_id, archive_base=None, owner=None,
 
 
 def find_run_info(run_archive_dir):
+    log.info("Assembling run information...")
     run_info_fields = [
         'machine_type',
         'owner',
