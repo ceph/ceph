@@ -19,15 +19,18 @@ def main(args):
     archive_base = args['--archive']
     owner = args['--owner']
     machine_type = args['--machine_type']
+    preserve_queue = args['--preserve-queue']
 
     if job:
         for job_id in job:
             kill_job(run_name, job_id, archive_base, owner, machine_type)
     else:
-        kill_run(run_name, archive_base, owner, machine_type)
+        kill_run(run_name, archive_base, owner, machine_type,
+                 preserve_queue=preserve_queue)
 
 
-def kill_run(run_name, archive_base=None, owner=None, machine_type=None):
+def kill_run(run_name, archive_base=None, owner=None, machine_type=None,
+             preserve_queue=False):
     run_info = {}
     if archive_base:
         run_archive_dir = os.path.join(archive_base, run_name)
@@ -39,7 +42,8 @@ def kill_run(run_name, archive_base=None, owner=None, machine_type=None):
             raise RuntimeError("The run is still entirely enqueued; " +
                                "you must also pass --machine-type")
 
-    remove_beanstalk_jobs(run_name, machine_type)
+    if not preserve_queue:
+        remove_beanstalk_jobs(run_name, machine_type)
     kill_processes(run_name, run_info.get('pids'))
     if owner is not None:
         targets = find_targets(run_name, owner)
