@@ -377,20 +377,25 @@ Architecture: linux-any
 Section: debug
 Priority: extra
 Depends: ceph-common, curl, xml2, ${misc:Depends}, ${shlibs:Depends}
-Description: RESTful bencher that can be used to benchmark
+Description: debugging symbols for rest-bench
  radosgw performance.
+ .
+ This package contains the debugging symbols for rest-bench.
 
 Package: ceph-test
 Architecture: linux-any
 Depends: ceph-common, curl, xml2, ${misc:Depends}, ${shlibs:Depends}
-Description: Ceph test and benchmarking tools.
+Description: Ceph test and benchmarking tools
+ This package contains tools for testing and benchmarking Ceph.
 
 Package: ceph-test-dbg
 Architecture: linux-any
 Section: debug
 Priority: extra
 Depends: ceph-common, curl, xml2, ${misc:Depends}, ${shlibs:Depends}
-Description: Ceph test and benchmarking tools.
+Description: Ceph test and benchmarking tools
+ .
+ This package contains the debugging symbols for ceph-test.
 
 Package: python-ceph
 Architecture: linux-any
@@ -408,10 +413,10 @@ Package: libcephfs-java
 Section: java
 Architecture: all
 Depends: libcephfs-jni, ${java:Depends}, ${misc:Depends}
-Description: Java libraries for the Ceph File System.
+Description: Java libraries for the Ceph File System
 
 Package: libcephfs-jni
 Architecture: linux-any
 Section: libs
 Depends: libcephfs1, ${java:Depends}, ${misc:Depends}, ${shlibs:Depends}
-Description: Java Native Interface library for CephFS Java bindings.
+Description: Java Native Interface library for CephFS Java bindings
