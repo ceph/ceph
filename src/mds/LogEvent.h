@@ -48,6 +48,7 @@
 
 class MDS;
 class LogSegment;
+class EMetaBlob;
 
 // generic log event
 class LogEvent {
@@ -106,7 +107,11 @@ protected:
    */
   virtual void replay(MDS *m) { assert(0); }
 
-
+  /**
+   * If the subclass embeds a MetaBlob, return it here so that
+   * tools can examine metablobs while traversing lists of LogEvent.
+   */
+  virtual EMetaBlob *get_metablob() {return NULL;}
 };
 
 inline ostream& operator<<(ostream& out, LogEvent& le) {
