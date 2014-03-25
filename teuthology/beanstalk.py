@@ -21,7 +21,7 @@ def beanstalk_connect(machine_type):
     return beanstalk
 
 
-def walk_jobs(beanstalk, machine_type, delete=None):
+def walk_jobs(beanstalk, machine_type, show_desc=False, delete=None):
     job_count = beanstalk.stats_tube(machine_type)['current-jobs-ready']
     if job_count == 0:
         log.info('No jobs in Beanstalk Queue')
@@ -48,14 +48,14 @@ def walk_jobs(beanstalk, machine_type, delete=None):
                         x=x, count=job_count)
                     print m,
             else:
-                m = 'Job: {x}/{count} ID: {job_id} Name: {job_name}'.format(
+                m = 'Job: {x}/{count} {job_name}/{job_id}'.format(
                     x=x,
                     count=job_count,
                     job_id=job_id,
                     job_name=job_name,
                     )
                 print m
-                if job_description:
+                if job_description and show_desc:
                     for desc in job_description.split():
                         print '\t {desc}'.format(desc=desc)
     log.info("Finished checking Beanstalk Queue.")
@@ -64,6 +64,7 @@ def walk_jobs(beanstalk, machine_type, delete=None):
 def main(args):
     machine_type = args['--machine_type']
     delete = args['--delete']
+    show_desc = args['--description']
     beanstalk = beanstalk_connect(machine_type)
-    walk_jobs(beanstalk, machine_type, delete)
+    walk_jobs(beanstalk, machine_type, show_desc=show_desc, delete=delete)
     beanstalk.close()
