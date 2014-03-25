@@ -1,4 +1,3 @@
-  $ export CEPH_ARGS="--osd-pool-default-erasure-code-directory=.libs"
   $ osdmaptool --createsimple 3 myosdmap
   osdmaptool: osdmap file 'myosdmap'
   osdmaptool: writing epoch 1 to myosdmap
