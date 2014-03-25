@@ -54,6 +54,7 @@ public:
   time_t snap_created;
 
   int create();
+  int remove();
 
   void dump(Formatter *f) const;
 };

@@ -259,6 +259,7 @@ enum {
   OPT_REPLICALOG_DELETE,
   OPT_MKSNAP,
   OPT_LSSNAP,
+  OPT_RMSNAP,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
@@ -300,6 +301,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
     return OPT_MKSNAP;
   } else if (strcmp(cmd, "lssnap") == 0) {
     return OPT_LSSNAP;
+  } else if (strcmp(cmd, "rmsnap") == 0) {
+    return OPT_RMSNAP;
   }
 
   if (!prev_cmd)
@@ -1080,7 +1083,8 @@ int main(int argc, char **argv)
                          opt_cmd == OPT_REGIONMAP_UPDATE ||
                          opt_cmd == OPT_ZONE_GET || opt_cmd == OPT_ZONE_SET ||
                          opt_cmd == OPT_ZONE_LIST ||
-                         opt_cmd == OPT_MKSNAP || opt_cmd == OPT_LSSNAP);
+                         opt_cmd == OPT_MKSNAP || opt_cmd == OPT_LSSNAP || 
+                         opt_cmd == OPT_RMSNAP);
 
 
   if (raw_storage_op) {
@@ -1306,6 +1310,7 @@ int main(int argc, char **argv)
         return -ret;
       }
     }
+
     if (opt_cmd == OPT_LSSNAP) {
       list<string> rgw_pools;
       list<RGWSnapshot> snaps;
@@ -1343,6 +1348,43 @@ int main(int argc, char **argv)
       cout << snaps.size() << " snaps" << std::endl;
     }
 
+    if (opt_cmd == OPT_RMSNAP) {
+      list<string> rgw_pools;
+      list<RGWSnapshot> snaps;
+      bool found_snap = false;
+
+      if (snap_name.empty()) {
+        cerr << "need to specify a snapshot to create!" << std::endl;
+        return usage();
+      }
+
+      int ret = RGWSnapshot::get_rgw_pools( g_ceph_context, store, rgw_pools);
+      if( ret < 0) {
+        cerr << "ERROR: could not retrieve list RGW pools: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      ret = RGWSnapshot::get_snapshots( g_ceph_context, store, rgw_pools, snaps);
+      if( ret < 0) {
+        cerr << "ERROR: could not retrieve list of snapshots: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      for (list<RGWSnapshot>::iterator i = snaps.begin();
+           i != snaps.end();
+           ++i) {
+        if( i->snap_name == snap_name) {
+          found_snap = true;
+          i->remove();
+          continue;
+        }
+      }
+
+      if( !found_snap) {
+        cerr << "ERROR: snapshot " << snap_name << " not found" << std::endl;
+        return ENOENT;
+      }
+    }
     return 0;
   }
 

@@ -253,3 +253,34 @@ int RGWSnapshot::create()
 
   return( 0);
 }
+
+int RGWSnapshot::remove()
+{
+  list<string> snap_pools;
+
+  int ret = RGWSnapshot::get_rgw_pools( cct, store, snap_pools);
+  if (ret < 0)
+    return ret;
+
+  for( list<string>::iterator snap_pool = snap_pools.begin();
+       snap_pool != snap_pools.end(); ++snap_pool) {
+    librados::IoCtx io_ctx;
+
+    int r = store->rados->ioctx_create(snap_pool->c_str(), io_ctx);
+    if (r < 0) {
+      cerr << "can't create IoCtx for pool " << *snap_pool << std::endl;
+      return r;
+    }
+
+    r = io_ctx.snap_remove(snap_name.c_str());
+    if (r < 0) {
+      cerr << "can't rmsnap for pool " << *snap_pool << std::endl;
+      if( r == -EEXIST) {
+        cerr << "This probably means your using radosgw-admin rmsnap and rados rmsnap on RGW pools.  Don't do that." << std::endl;
+      }
+      return r;
+    }
+  }
+
+  return( 0);
+}
