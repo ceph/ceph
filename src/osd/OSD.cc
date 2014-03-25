@@ -6092,7 +6092,9 @@ MOSDMap *OSD::build_incremental_map_msg(epoch_t since, epoch_t to,
       derr << "since " << since << " to " << to
 	   << " oldest " << m->oldest_map << " newest " << m->newest_map
 	   << dendl;
-      assert(0 == "missing an osdmap on disk");  // we should have all maps.
+      m->put();
+      m = NULL;
+      break;
     }
   }
   return m;
@@ -6113,26 +6115,29 @@ void OSD::send_incremental_map(epoch_t since, Connection *con,
   dout(10) << "send_incremental_map " << since << " -> " << to
            << " to " << con << " " << con->get_peer_addr() << dendl;
 
-  OSDSuperblock superblock(service.get_superblock());
-  if (since < superblock.oldest_map) {
-    // just send latest full map
-    MOSDMap *m = new MOSDMap(monc->get_fsid());
-    m->oldest_map = superblock.oldest_map;
-    m->newest_map = superblock.newest_map;
-    get_map_bl(to, m->maps[to]);
-    send_map(m, con);
-    return;
+  MOSDMap *m = NULL;
+  while (!m) {
+    OSDSuperblock superblock(service.get_superblock());
+    if (since < superblock.oldest_map) {
+      // just send latest full map
+      MOSDMap *m = new MOSDMap(monc->get_fsid());
+      m->oldest_map = superblock.oldest_map;
+      m->newest_map = superblock.newest_map;
+      get_map_bl(to, m->maps[to]);
+      send_map(m, con);
+      return;
+    }
+    
+    if (to > since && (int64_t)(to - since) > cct->_conf->osd_map_share_max_epochs) {
+      dout(10) << "  " << (to - since) << " > max " << cct->_conf->osd_map_share_max_epochs
+	       << ", only sending most recent" << dendl;
+      since = to - cct->_conf->osd_map_share_max_epochs;
+    }
+    
+    if (to - since > (epoch_t)cct->_conf->osd_map_message_max)
+      to = since + cct->_conf->osd_map_message_max;
+    m = build_incremental_map_msg(since, to, superblock);
   }
-
-  if (to > since && (int64_t)(to - since) > cct->_conf->osd_map_share_max_epochs) {
-    dout(10) << "  " << (to - since) << " > max " << cct->_conf->osd_map_share_max_epochs
-	     << ", only sending most recent" << dendl;
-    since = to - cct->_conf->osd_map_share_max_epochs;
-  }
-
-  if (to - since > (epoch_t)cct->_conf->osd_map_message_max)
-    to = since + cct->_conf->osd_map_message_max;
-  MOSDMap *m = build_incremental_map_msg(since, to, superblock);
   send_map(m, con);
 }
 
