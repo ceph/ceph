@@ -23,3 +23,19 @@ def rados(ctx, remote, cmd, wait=True, check_status=False):
         return proc.exitstatus
     else:
         return proc
+
+def create_ec_pool(remote, name, profile_name, pgnum, m=1, k=2):
+    remote.run(args=[
+        'ceph', 'osd', 'erasure-code-profile', 'set',
+        profile_name, 'm=' + str(m), 'k=' + str(k),
+        'ruleset-failure-domain=osd',
+        ])
+    remote.run(args=[
+        'ceph', 'osd', 'pool', 'create', name,
+        str(pgnum), str(pgnum), 'erasure', profile_name,
+        ])
+
+def create_replicated_pool(remote, name, pgnum):
+    remote.run(args=[
+        'ceph', 'osd', 'pool', 'create', name, str(pgnum), str(pgnum),
+        ])

@@ -13,7 +13,7 @@ from ..orchestra import run
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.task_util.rgw import rgwadmin
-from teuthology.task_util.rados import rados
+from teuthology.task_util.rados import rados, create_ec_pool, create_replicated_pool
 
 log = logging.getLogger(__name__)
 
@@ -463,6 +463,23 @@ def configure_users(ctx, config, everywhere=False):
     yield
 
 @contextlib.contextmanager
+def create_nonregion_pools(ctx, config, regions):
+    """Create replicated or erasure coded data pools for rgw."""
+    if regions:
+        yield
+        return
+
+    log.info('creating data pools')
+    for client in config.keys():
+        (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+        data_pool = '.rgw.buckets'
+        if ctx.rgw.ec_data_pool:
+            create_ec_pool(remote, data_pool, client, 64)
+        else:
+            create_replicated_pool(remote, data_pool, 64)
+    yield
+
+@contextlib.contextmanager
 def configure_regions_and_zones(ctx, config, regions, role_endpoints):
     """
     Configure regions and zones from rados and rgw.
@@ -515,12 +532,18 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints):
             rados(ctx, mon,
                   cmd=['-p', zone_info['domain_root'],
                        'rm', 'zone_info.default'])
+
             (remote,) = ctx.cluster.only(role).remotes.keys()
             for pool_info in zone_info['placement_pools']:
                 remote.run(args=['ceph', 'osd', 'pool', 'create',
                                  pool_info['val']['index_pool'], '64', '64'])
-                remote.run(args=['ceph', 'osd', 'pool', 'create',
-                                 pool_info['val']['data_pool'], '64', '64'])
+                if ctx.get('ec-data-pool'):
+                    create_ec_pool(remote, pool_info['val']['data_pool'],
+                                   zone, 64)
+                else:
+                    create_replicated_pool(remote, pool_info['val']['data_pool'],
+                                           64)
+
             rgwadmin(ctx, client,
                      cmd=['-n', client, 'zone', 'set', '--rgw-zone', zone],
                      stdin=StringIO(json.dumps(dict(zone_info.items() + user_info.items()))),
@@ -626,6 +649,7 @@ def task(ctx, config):
                 rgw region root pool: .rgw.rroot.bar
                 rgw zone root pool: .rgw.zroot.bar-secondary 
         - rgw:
+            ec-data-pool: true
             regions:
               foo:
                 api name: api_name # default: region name
@@ -673,6 +697,11 @@ def task(ctx, config):
     # stash the region info for later, since it was deleted from the config structure
     ctx.rgw.regions = regions
 
+    ctx.rgw.ec_data_pool = False
+    if 'ec-data-pool' in config:
+        ctx.rgw.ec_data_pool = bool(config['ec-data-pool'])
+        del config['ec-data-pool']
+
     with contextutil.nested(
         lambda: create_dirs(ctx=ctx, config=config),
         lambda: configure_regions_and_zones(
@@ -686,6 +715,7 @@ def task(ctx, config):
             config=config,
             everywhere=bool(regions),
             ),
+        lambda: create_nonregion_pools(ctx=ctx, config=config, regions=regions),
         lambda: ship_config(ctx=ctx, config=config,
                             role_endpoints=role_endpoints),
         lambda: start_rgw(ctx=ctx, config=config),
