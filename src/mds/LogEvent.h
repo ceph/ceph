@@ -39,6 +39,7 @@
 #define EVENT_TABLESERVER  43
 
 #define EVENT_SUBTREEMAP_TEST   50
+#define EVENT_NOOP        51
 
 
 #include "include/buffer.h"
