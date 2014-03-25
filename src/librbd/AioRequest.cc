@@ -52,6 +52,19 @@ namespace librbd {
 	     m_parent_completion);
   }
 
+  //copy-on-read : read the entire object from parent, using bufferlist m_entire_object
+  void AioRequest::read_from_parent_COR(vector<pair<uint64_t,uint64_t> >& image_extents)
+  {
+    assert(!m_parent_completion);
+    m_parent_completion = aio_create_completion_internal(this, rbd_req_cb);
+    ldout(m_ictx->cct, 20) << "read_from_parent_COR this = " << this
+			   << " parent completion " << m_parent_completion
+			   << " extents " << image_extents
+			   << dendl;
+    aio_read(m_ictx->parent, image_extents, NULL, &m_entire_object,
+	     m_parent_completion);
+  }
+
   /** read **/
 
   bool AioRead::should_complete(int r)
@@ -77,11 +90,16 @@ namespace librbd {
       uint64_t object_overlap = m_ictx->prune_parent_extents(image_extents, image_overlap);
       if (object_overlap) {
 	m_tried_parent = true;
-	read_from_parent(image_extents);
+	    vector<pair<uint64_t,uint64_t> > extend_image_extents;
+	    //extend range to entire object
+	    Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
+			    m_object_no, 0, m_ictx->layout.fl_object_size,
+			    extend_image_extents);
+	    //read entire object from parent , and put it in m_entire_object
+	    read_from_parent_COR(extend_image_extents);
 	return false;
       }
     }
-
     return true;
   }
 
