@@ -6,10 +6,10 @@ import teuthology.beanstalk
 doc = """
 usage: teuthology-queue -h
        teuthology-queue -m MACHINE_TYPE
-       teuthology-queue -m MACHINE_TYPE -d JOB
+       teuthology-queue -m MACHINE_TYPE -d PATTERN
 
 List Jobs in queue:
-  If -d then jobs with JOB in the job name are deleted from the queue.
+  If -d then jobs with PATTERN in the job name are deleted from the queue.
 
 Arguments:
   -m, --machine_type MACHINE_TYPE
@@ -18,7 +18,7 @@ Arguments:
 optional arguments:
   -h, --help            show this help message and exit
 
-  -d, --delete JOB      Delete Jobs with JOB in their name.
+  -d, --delete PATTERN      Delete Jobs with PATTERN in their name.
 
 """.format(archive_base=teuthology.config.config.archive_base)
 
