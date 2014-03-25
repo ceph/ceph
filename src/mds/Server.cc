@@ -2401,6 +2401,10 @@ void Server::handle_client_lookup_ino(MDRequest *mdr, bool want_parent, bool wan
   }
 
   if (want_parent) {
+    if (in->is_base()) {
+      reply_request(mdr, -EINVAL);
+      return;
+    }
     if (!diri || diri->is_stray()) {
       reply_request(mdr, -ESTALE);
       return;
