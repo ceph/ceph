@@ -17,7 +17,7 @@ Arguments:
 optional arguments:
   -h, --help            show this help message and exit
 
-  -d, --delete JOB      Delete Jobs JOB in their name.
+  -d, --delete JOB      Delete Jobs with JOB in their name.
 
 """.format(archive_base=teuthology.config.config.archive_base)
 
