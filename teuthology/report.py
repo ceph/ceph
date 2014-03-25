@@ -11,11 +11,18 @@ from .config import config
 from .contextutil import safe_while
 
 
-# Don't need to see connection pool INFO messages
-logging.getLogger("requests.packages.urllib3.connectionpool").setLevel(
-    logging.WARNING)
+def init_logging():
+    """
+    Set up logging for the module
 
-log = logging.getLogger(__name__)
+    :returns: a logger
+    """
+    # Don't need to see connection pool INFO messages
+    logging.getLogger("requests.packages.urllib3.connectionpool").setLevel(
+        logging.WARNING)
+
+    log = logging.getLogger(__name__)
+    return log
 
 
 def main(args):
@@ -31,7 +38,10 @@ def main(args):
 
     archive_base = os.path.abspath(os.path.expanduser(args['--archive']))
     save = not args['--no-save']
-    reporter = ResultsReporter(archive_base, save=save, refresh=refresh)
+
+    log = init_logging()
+    reporter = ResultsReporter(archive_base, save=save, refresh=refresh,
+                               log=log)
     if dead and not job:
         for run_name in run:
             reporter.report_run(run[0], dead=True)
@@ -55,8 +65,9 @@ class ResultsSerializer(object):
     """
     yamls = ('orig.config.yaml', 'config.yaml', 'info.yaml', 'summary.yaml')
 
-    def __init__(self, archive_base):
+    def __init__(self, archive_base, log=None):
         self.archive_base = archive_base
+        self.log = log or init_logging()
 
     def job_info(self, run_name, job_id, pretty=False):
         """
@@ -156,12 +167,13 @@ class ResultsReporter(object):
     last_run_file = 'last_successful_run'
 
     def __init__(self, archive_base, base_uri=None, save=False, refresh=False,
-                 timeout=20):
+                 timeout=20, log=None):
+        self.log = log or init_logging()
         self.archive_base = archive_base
         self.base_uri = base_uri or config.results_server
         if self.base_uri:
             self.base_uri = self.base_uri.rstrip('/')
-        self.serializer = ResultsSerializer(archive_base)
+        self.serializer = ResultsSerializer(archive_base, log=self.log)
         self.save_last_run = save
         self.refresh = refresh
         self.timeout = timeout
@@ -187,14 +199,14 @@ class ResultsReporter(object):
         """
         num_runs = len(run_names)
         num_jobs = 0
-        log.info("Posting %s runs", num_runs)
+        self.log.info("Posting %s runs", num_runs)
         for run in run_names:
             job_count = self.report_run(run)
             num_jobs += job_count
             if self.save_last_run:
                 self.last_run = run
         del self.last_run
-        log.info("Total: %s jobs in %s runs", num_jobs, len(run_names))
+        self.log.info("Total: %s jobs in %s runs", num_jobs, len(run_names))
 
     def report_run(self, run_name, dead=False):
         """
@@ -204,7 +216,7 @@ class ResultsReporter(object):
         :returns:        The number of jobs reported.
         """
         jobs = self.serializer.jobs_for_run(run_name)
-        log.info("{name} {jobs} jobs dead={dead}".format(
+        self.log.info("{name} {jobs} jobs dead={dead}".format(
             name=run_name,
             jobs=len(jobs),
             dead=str(dead),
@@ -214,11 +226,11 @@ class ResultsReporter(object):
                 response = requests.head("{base}/runs/{name}/".format(
                     base=self.base_uri, name=run_name))
                 if response.status_code == 200:
-                    log.info("    already present; skipped")
+                    self.log.info("    already present; skipped")
                     return 0
             self.report_jobs(run_name, jobs.keys(), dead=dead)
         elif not jobs:
-            log.debug("    no jobs; skipped")
+            self.log.debug("    no jobs; skipped")
         return len(jobs)
 
     def report_jobs(self, run_name, job_ids, dead=False):
@@ -264,7 +276,7 @@ class ResultsReporter(object):
             job_uri = os.path.join(run_uri, job_id, '')
             response = requests.put(job_uri, data=job_json, headers=headers)
         elif msg:
-            log.error(
+            self.log.error(
                 "POST to {uri} failed with status {status}: {msg}".format(
                     uri=run_uri,
                     status=response.status_code,
@@ -326,6 +338,8 @@ def try_push_job_info(job_config, extra_info=None):
     :param job_config: The ctx.config object to push
     :param extra_info: Optional second dict to push
     """
+    log = init_logging()
+
     if not config.results_server:
         msg = "No results_server set in {yaml}; not attempting to push results"
         log.debug(msg.format(yaml=config.teuthology_yaml))
@@ -350,5 +364,5 @@ def try_push_job_info(job_config, extra_info=None):
                 push_job_info(run_name, job_id, job_info)
                 return
             except (requests.exceptions.RequestException, socket.error):
-                log.exception("Could not report results to %s" %
+                log.exception("Could not report results to %s",
                               config.results_server)
