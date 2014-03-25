@@ -857,9 +857,8 @@ void EMetaBlob::get_inodes(
 void EMetaBlob::get_dentries(std::map<dirfrag_t, std::set<std::string> > &dentries)
 {
   for (std::map<dirfrag_t, dirlump>::iterator i = lump_map.begin(); i != lump_map.end(); ++i) {
-    inodeno_t const dir_ino = i->first.ino;
     dirlump &dl = i->second;
-    dirfrag_t &df = i->first;
+    dirfrag_t const &df = i->first;
 
     // Get all bits
     dl._decode_bits();
@@ -2996,27 +2995,32 @@ void EResetJournal::replay(MDS *mds)
 
 void ENoOp::encode(bufferlist &bl) const
 {
-  ::encode(size, bl);
-  uint32_t const pad_bytes = size - sizeof(size);
-  uint32_t const pad = 0xdeadbeef;
-  for (unsigned int i = 0; i < pad_bytes / sizeof(uint32_t); ++i) {
+  ENCODE_START(2, 2, bl);
+  ::encode(pad_size, bl);
+  uint8_t const pad = 0xff;
+  for (unsigned int i = 0; i < pad_size; ++i) {
     ::encode(pad, bl);
   }
+  ENCODE_FINISH(bl);
 }
 
 
 void ENoOp::decode(bufferlist::iterator &bl)
 {
-  ::decode(size, bl);
-  if (bl.get_remaining() != (size - sizeof(size))) {
+  DECODE_START(2, bl);
+  ::decode(pad_size, bl);
+  if (bl.get_remaining() != pad_size) {
     // This is spiritually an assertion, but expressing in a way that will let
     // journal debug tools catch it and recognise a malformed entry.
     throw buffer::end_of_buffer();
+  } else {
+    bl.advance(pad_size);
   }
+  DECODE_FINISH(bl);
 }
 
 
 void ENoOp::replay(MDS *mds)
 {
-  dout(4) << "ENoOp::replay, " << size << " bytes skipped in journal" << dendl;
+  dout(4) << "ENoOp::replay, " << pad_size << " bytes skipped in journal" << dendl;
 }

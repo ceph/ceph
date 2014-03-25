@@ -12,11 +12,12 @@
  * 
  */
 
-#include "mds/Resetter.h"
 #include "osdc/Journaler.h"
 #include "mds/mdstypes.h"
 #include "mon/MonClient.h"
 #include "mds/events/EResetJournal.h"
+
+#include "Resetter.h"
 
 
 int Resetter::init(int rank)

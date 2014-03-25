@@ -16,7 +16,7 @@
 
 
 #include "osdc/Journaler.h"
-#include "mds/MDSUtility.h"
+#include "MDSUtility.h"
 
 /**
  * This class lets you reset an mds journal for troubleshooting or whatever.
