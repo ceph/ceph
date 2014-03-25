@@ -49,12 +49,11 @@ public:
   static
   int get_rgw_pools( CephContext *cct, RGWRados *store, list<string>& pools);
 
-
   int snap_num;
   string snap_name;
   time_t snap_created;
 
-  int make();
+  int create();
 
   void dump(Formatter *f) const;
 };

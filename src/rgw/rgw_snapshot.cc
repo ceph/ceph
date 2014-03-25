@@ -210,7 +210,7 @@ int RGWSnapshot::get_rgw_pools( CephContext *cct, RGWRados *store, list<string>&
 }
 
 
-int RGWSnapshot::make()
+int RGWSnapshot::create()
 {
   list<string> snap_pools;
   list<RGWSnapshot> snaps;

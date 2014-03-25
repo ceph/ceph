@@ -1300,7 +1300,7 @@ int main(int argc, char **argv)
       }
 
       RGWSnapshot snap( g_ceph_context, store, snap_name);
-      int ret = snap.make();
+      int ret = snap.create();
       if( ret < 0) {
         cerr << "ERROR: could not create snapshot: " << cpp_strerror(-ret) << std::endl;
         return -ret;
