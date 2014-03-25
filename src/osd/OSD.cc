@@ -5991,13 +5991,10 @@ void OSD::send_incremental_map(epoch_t since, Connection *con)
     since = to - cct->_conf->osd_map_share_max_epochs;
   }
 
-  while (since < to) {
-    if (to - since > (epoch_t)cct->_conf->osd_map_message_max)
-      to = since + cct->_conf->osd_map_message_max;
-    MOSDMap *m = build_incremental_map_msg(since, to);
-    send_map(m, con);
-    since = to;
-  }
+  if (to - since > (epoch_t)cct->_conf->osd_map_message_max)
+    to = since + cct->_conf->osd_map_message_max;
+  MOSDMap *m = build_incremental_map_msg(since, to);
+  send_map(m, con);
 }
 
 bool OSDService::_get_map_bl(epoch_t e, bufferlist& bl)
