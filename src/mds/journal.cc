@@ -814,6 +814,123 @@ void EMetaBlob::decode(bufferlist::iterator &bl)
   DECODE_FINISH(bl);
 }
 
+
+/**
+ *
+ * This is not const because the contained dirlump and 'bit' objects
+ * are modified by being decoded.
+ */
+int EMetaBlob::get_paths(
+    std::vector<std::string> &paths)
+{
+  // Each dentry has a 'location' which is a 2-tuple of parent inode and dentry name
+  typedef std::pair<inodeno_t, std::string> Location;
+
+  // Whenever we see a dentry within a dirlump, we remember it as a child of
+  // the dirlump's inode
+  std::map<inodeno_t, std::list<std::string> > children;
+
+  // Whenever we see a location for an inode, remember it: this allows us to
+  // build a path given an inode
+  std::map<inodeno_t, Location> ino_locations;
+
+  // Special case: operations on root inode populate roots but not dirlumps
+  if (lump_map.empty() && !roots.empty()) {
+    paths.push_back("/");
+    return 0;
+  }
+
+  // First pass
+  // ==========
+  // Build a tiny local metadata cache for the path structure in this metablob
+  for (std::map<dirfrag_t, dirlump>::iterator i = lump_map.begin(); i != lump_map.end(); ++i) {
+    inodeno_t const dir_ino = i->first.ino;
+    dirlump &dl = i->second;
+    dl._decode_bits();
+
+    list<ceph::shared_ptr<fullbit> > &fb_list = dl.get_dfull();
+    list<nullbit> &nb_list = dl.get_dnull();
+    list<remotebit> &rb_list = dl.get_dremote();
+
+    for (list<ceph::shared_ptr<fullbit> >::const_iterator
+        iter = fb_list.begin(); iter != fb_list.end(); ++iter) {
+      std::string const &dentry = (*iter)->dn;
+      children[dir_ino].push_back(dentry);
+      ino_locations[(*iter)->inode.ino] = Location(dir_ino, dentry);
+    }
+
+    for (list<nullbit>::const_iterator
+	iter = nb_list.begin(); iter != nb_list.end(); ++iter) {
+      std::string const &dentry = iter->dn;
+      children[dir_ino].push_back(dentry);
+    }
+
+    for (list<remotebit>::const_iterator
+	iter = rb_list.begin(); iter != rb_list.end(); ++iter) {
+      std::string const &dentry = iter->dn;
+      children[dir_ino].push_back(dentry);
+    }
+  }
+
+  std::vector<Location> leaf_locations;
+
+  // Second pass
+  // ===========
+  // Output paths for all childless nodes in the metablob
+  for (std::map<dirfrag_t, dirlump>::iterator i = lump_map.begin(); i != lump_map.end(); ++i) {
+    inodeno_t const dir_ino = i->first.ino;
+    dirlump &dl = i->second;
+    dl._decode_bits();
+
+    list<ceph::shared_ptr<fullbit> > &fb_list = dl.get_dfull();
+    for (list<ceph::shared_ptr<fullbit> >::const_iterator
+        iter = fb_list.begin(); iter != fb_list.end(); ++iter) {
+      std::string const &dentry = (*iter)->dn;
+      children[dir_ino].push_back(dentry);
+      ino_locations[(*iter)->inode.ino] = Location(dir_ino, dentry);
+      if (children.find((*iter)->inode.ino) == children.end()) {
+        leaf_locations.push_back(Location(dir_ino, dentry));
+
+      }
+    }
+
+    list<nullbit> &nb_list = dl.get_dnull();
+    for (list<nullbit>::const_iterator
+	iter = nb_list.begin(); iter != nb_list.end(); ++iter) {
+      std::string const &dentry = iter->dn;
+      leaf_locations.push_back(Location(dir_ino, dentry));
+    }
+
+    list<remotebit> &rb_list = dl.get_dremote();
+    for (list<remotebit>::const_iterator
+	iter = rb_list.begin(); iter != rb_list.end(); ++iter) {
+      std::string const &dentry = iter->dn;
+      leaf_locations.push_back(Location(dir_ino, dentry));
+    }
+  }
+
+  // For all the leaf locations identified, generate paths
+  for (std::vector<Location>::iterator i = leaf_locations.begin(); i != leaf_locations.end(); ++i) {
+    Location const &loc = *i;
+    std::string path = loc.second;
+    inodeno_t ino = loc.first;
+    while(ino_locations.find(ino) != ino_locations.end()) {
+      Location const &loc = ino_locations[ino];
+      if (!path.empty()) {
+        path = loc.second + "/" + path;
+      } else {
+        path = loc.second + path;
+      }
+      ino = loc.first;
+    }
+
+    paths.push_back(path);
+  }
+
+  return 0;
+}
+
+
 void EMetaBlob::dump(Formatter *f) const
 {
   f->open_array_section("lumps");
