@@ -537,7 +537,7 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints):
             for pool_info in zone_info['placement_pools']:
                 remote.run(args=['ceph', 'osd', 'pool', 'create',
                                  pool_info['val']['index_pool'], '64', '64'])
-                if ctx.get('ec-data-pool'):
+                if ctx.rgw.ec_data_pool:
                     create_ec_pool(remote, pool_info['val']['data_pool'],
                                    zone, 64)
                 else:
