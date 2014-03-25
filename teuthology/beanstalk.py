@@ -65,6 +65,10 @@ def main(args):
     machine_type = args['--machine_type']
     delete = args['--delete']
     show_desc = args['--description']
-    beanstalk = beanstalk_connect(machine_type)
-    walk_jobs(beanstalk, machine_type, show_desc=show_desc, delete=delete)
-    beanstalk.close()
+    try:
+        beanstalk = beanstalk_connect(machine_type)
+        walk_jobs(beanstalk, machine_type, show_desc=show_desc, delete=delete)
+    except KeyboardInterrupt:
+        log.info("Interrupted.")
+    finally:
+        beanstalk.close()
