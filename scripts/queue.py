@@ -4,8 +4,9 @@ import teuthology.config
 import teuthology.beanstalk
 
 doc = """
-usage: teuthology-queue [-h] -m MACHINE_TYPE
-       teuthology-queue [-h] -m MACHINE_TYPE -d JOB
+usage: teuthology-queue -h
+       teuthology-queue -m MACHINE_TYPE
+       teuthology-queue -m MACHINE_TYPE -d JOB
 
 List Jobs in queue:
   If -d then jobs with JOB in the job name are deleted from the queue.
