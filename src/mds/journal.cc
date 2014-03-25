@@ -859,7 +859,7 @@ void EMetaBlob::dump(Formatter *f) const
   f->close_section(); // renamed directory fragments
 
   f->dump_int("inotable version", inotablev);
-  f->dump_int("SesionMap version", sessionmapv);
+  f->dump_int("SessionMap version", sessionmapv);
   f->dump_int("allocated ino", allocated_ino);
   
   f->dump_stream("preallocated inos") << preallocated_inos;
