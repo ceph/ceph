@@ -426,6 +426,9 @@ def task(ctx, config):
 
         # Create a tiny file and check if in sync
         for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
+            if c_config.get('metadata-only'):
+                continue
+
             source_client = c_config['src']
             dest_client = c_config['dest']
             k = boto.s3.key.Key(bucket)
@@ -459,6 +462,9 @@ def task(ctx, config):
 
         bucket = connection.create_bucket(bucket_name + 'data2')
         for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
+            if c_config.get('metadata-only'):
+                continue
+
             source_client = c_config['src']
             dest_client = c_config['dest']
             (dest_host, dest_port) = ctx.rgw.role_endpoints[dest_client]
