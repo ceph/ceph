@@ -6,6 +6,7 @@
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
 # Short-Description: radosgw RESTful rados gateway
+# Description: radosgw RESTful rados gateway
 ### END INIT INFO
 
 PATH=/sbin:/bin:/usr/bin
