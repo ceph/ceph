@@ -76,6 +76,7 @@ noinst_HEADERS += \
 	mds/events/EImportFinish.h \
 	mds/events/EImportStart.h \
 	mds/events/EMetaBlob.h \
+	mds/events/ENoOp.h \
 	mds/events/EOpen.h \
 	mds/events/EResetJournal.h \
 	mds/events/ESession.h \

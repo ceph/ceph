@@ -20,6 +20,7 @@
 
 #include "events/EMetaBlob.h"
 #include "events/EResetJournal.h"
+#include "events/ENoOp.h"
 
 #include "events/EUpdate.h"
 #include "events/ESlaveUpdate.h"
@@ -2921,3 +2922,30 @@ void EResetJournal::replay(MDS *mds)
   mds->mdcache->show_subtrees();
 }
 
+
+void ENoOp::encode(bufferlist &bl) const
+{
+  ::encode(size, bl);
+  uint32_t const pad_bytes = size - sizeof(size);
+  uint32_t const pad = 0xdeadbeef;
+  for (unsigned int i = 0; i < pad_bytes / sizeof(uint32_t); ++i) {
+    ::encode(pad, bl);
+  }
+}
+
+
+void ENoOp::decode(bufferlist::iterator &bl)
+{
+  ::decode(size, bl);
+  if (bl.get_remaining() != (size - sizeof(size))) {
+    // This is spiritually an assertion, but expressing in a way that will let
+    // journal debug tools catch it and recognise a malformed entry.
+    throw buffer::end_of_buffer();
+  }
+}
+
+
+void ENoOp::replay(MDS *mds)
+{
+  dout(4) << "ENoOp::replay, " << size << " bytes skipped in journal" << dendl;
+}
