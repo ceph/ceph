@@ -1,3 +1,6 @@
+import sys
+import os
+
 project = u'Ceph'
 copyright = u'2010-2014, Inktank Storage, Inc. and contributors. Licensed under Creative Commons BY-SA'
 version = 'dev'
@@ -67,3 +70,13 @@ def _get_manpages():
 man_pages = list(_get_manpages())
 
 asphyxiate_doxygen_xml = 'doxygen'
+
+top_level = os.path.dirname(
+    os.path.dirname(
+        os.path.abspath(__file__)
+    )
+)
+
+pybind = os.path.join(top_level, 'src/pybind')
+if pybind not in sys.path:
+    sys.path.insert(0, pybind)
