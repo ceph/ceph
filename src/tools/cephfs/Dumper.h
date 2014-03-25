@@ -15,7 +15,7 @@
 #define JOURNAL_DUMPER_H_
 
 
-#include "mds/MDSUtility.h"
+#include "MDSUtility.h"
 #include "osdc/Journaler.h"
 
 /**
@@ -41,7 +41,6 @@ public:
   int recover_journal();
   void dump(const char *dumpfile);
   void undump(const char *dumpfile);
-  void dump_entries();
 };
 
 #endif /* JOURNAL_DUMPER_H_ */
