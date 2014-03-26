@@ -685,6 +685,9 @@ def task(ctx, config):
     elif isinstance(config, list):
         config = dict((name, None) for name in config)
 
+    overrides = ctx.config.get('overrides', {})
+    teuthology.deep_merge(config, overrides.get('rgw', {}))
+
     regions = {}
     if 'regions' in config:
         # separate region info so only clients are keys in config
