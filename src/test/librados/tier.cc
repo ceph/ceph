@@ -189,6 +189,9 @@ TEST_F(LibRadosTwoPoolsPP, Overlay) {
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
 }
 
 TEST_F(LibRadosTwoPoolsPP, Promote) {
@@ -253,6 +256,9 @@ TEST_F(LibRadosTwoPoolsPP, Promote) {
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
 }
 
 TEST_F(LibRadosTwoPoolsPP, PromoteSnap) {
@@ -403,6 +409,9 @@ TEST_F(LibRadosTwoPoolsPP, PromoteSnap) {
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
 }
 
 TEST_F(LibRadosTwoPoolsPP, PromoteSnapTrimRace) {
@@ -467,6 +476,9 @@ TEST_F(LibRadosTwoPoolsPP, PromoteSnapTrimRace) {
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
 }
 
 TEST_F(LibRadosTwoPoolsPP, Whiteout) {
@@ -540,6 +552,9 @@ TEST_F(LibRadosTwoPoolsPP, Whiteout) {
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
 }
 
 TEST_F(LibRadosTwoPoolsPP, Evict) {
@@ -640,6 +655,9 @@ TEST_F(LibRadosTwoPoolsPP, Evict) {
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
 }
 
 TEST_F(LibRadosTwoPoolsPP, EvictSnap) {
@@ -885,6 +903,9 @@ TEST_F(LibRadosTwoPoolsPP, EvictSnap) {
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
 }
 
 TEST_F(LibRadosTwoPoolsPP, TryFlush) {
@@ -1003,6 +1024,9 @@ TEST_F(LibRadosTwoPoolsPP, TryFlush) {
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
 }
 
 TEST_F(LibRadosTwoPoolsPP, Flush) {
@@ -1173,6 +1197,9 @@ TEST_F(LibRadosTwoPoolsPP, Flush) {
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
 }
 
 TEST_F(LibRadosTwoPoolsPP, FlushSnap) {
@@ -1476,6 +1503,9 @@ TEST_F(LibRadosTierPP, FlushWriteRaces) {
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
 }
 
 TEST_F(LibRadosTwoPoolsPP, FlushTryFlushRaces) {
@@ -1652,6 +1682,9 @@ TEST_F(LibRadosTwoPoolsPP, FlushTryFlushRaces) {
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
 }
 
 
@@ -1758,6 +1791,9 @@ TEST_F(LibRadosTwoPoolsPP, TryFlushReadRace) {
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
 }
 
 TEST_F(LibRadosTierPP, HitSetNone) {
