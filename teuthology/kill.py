@@ -119,6 +119,8 @@ def remove_beanstalk_jobs(run_name, tube_name):
         while x != curjobs:
             x += 1
             job = beanstalk.reserve(timeout=20)
+            if job is None:
+                continue
             job_config = yaml.safe_load(job.body)
             if run_name == job_config['name']:
                 job_id = job.stats()['id']
