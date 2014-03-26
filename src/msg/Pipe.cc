@@ -86,7 +86,7 @@ Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
     reader_running(false), reader_needs_join(false),
     writer_running(false),
     in_q(&(r->dispatch_queue)),
-    keepalive(false),
+    send_keepalive(false),
     close_on_empty(false),
     connect_seq(0), peer_global_seq(0),
     out_seq(0), in_seq(0), in_seq_acked(0) {
@@ -1569,7 +1569,7 @@ void Pipe::writer()
 	(is_queued() || in_seq > in_seq_acked)) {
 
       // keepalive?
-      if (keepalive) {
+      if (send_keepalive) {
 	pipe_lock.Unlock();
 	int rc = write_keepalive();
 	pipe_lock.Lock();
@@ -1578,7 +1578,7 @@ void Pipe::writer()
 	  fault();
  	  continue;
 	}
-	keepalive = false;
+	send_keepalive = false;
       }
 
       // send ack?
