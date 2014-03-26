@@ -1876,7 +1876,9 @@ void rados_write_op_set_flags(rados_write_op_t write_op, int flags);
 void rados_write_op_assert_exists(rados_write_op_t write_op);
 
 /**
- * Ensure that given xattr satisfies comparison
+ * Ensure that given xattr satisfies comparison.
+ * If the comparison is not satisfied, the return code of the
+ * operation will be -ECANCELED
  * @param write_op operation to add this action to
  * @param name name of the xattr to look up
  * @param comparison_operator currently undocumented, look for
@@ -2116,6 +2118,8 @@ void rados_read_op_assert_exists(rados_read_op_t read_op);
 
 /**
  * Ensure that the an xattr satisfies a comparison
+ * If the comparison is not satisfied, the return code of the
+ * operation will be -ECANCELED
  * @param read_op operation to add this action to
  * @param name name of the xattr to look up
  * @param comparison_operator currently undocumented, look for
