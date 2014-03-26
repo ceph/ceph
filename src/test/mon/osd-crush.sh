@@ -89,9 +89,6 @@ function TEST_crush_rule_create_simple_exists() {
 
 function TEST_crush_rule_create_erasure() {
     local dir=$1
-    ./ceph --format xml osd crush rule dump erasure-code | \
-        egrep '<op>take</op><item>[^<]+</item><item_name>default</item_name>' | \
-        grep '<op>chooseleaf_indep</op><num>0</num><type>host</type>' || return 1
     local ruleset=ruleset3
     ./ceph osd crush rule create-erasure $ruleset || return 1
     ./ceph osd crush rule create-erasure $ruleset 2>&1 | \

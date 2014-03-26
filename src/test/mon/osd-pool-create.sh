@@ -75,9 +75,9 @@ function TEST_erasure_crush_rule() {
     ./ceph osd crush rule ls | grep $crush_ruleset
     local poolname
     poolname=pool_erasure1
-    ! ./ceph --format json osd dump | grep '"crush_ruleset":2' || return 1
+    ! ./ceph --format json osd dump | grep '"crush_ruleset":1' || return 1
     ./ceph osd pool create $poolname 12 12 erasure default $crush_ruleset
-    ./ceph --format json osd dump | grep '"crush_ruleset":2' || return 1
+    ./ceph --format json osd dump | grep '"crush_ruleset":1' || return 1
     #
     # a crush ruleset by the name of the pool is implicitly created
     #
