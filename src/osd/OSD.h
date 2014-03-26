@@ -1399,11 +1399,13 @@ protected:
   RWLock pg_map_lock; // this lock orders *above* individual PG _locks
   ceph::unordered_map<spg_t, PG*> pg_map; // protected by pg_map lock
   map<spg_t, list<OpRequestRef> > waiting_for_pg; // protected by pg_map lock
+
   map<spg_t, list<PG::CephPeeringEvtRef> > peering_wait_for_split;
   PGRecoveryStats pg_recovery_stats;
 
   PGPool _get_pool(int id, OSDMapRef createmap);
 
+  PG *get_pg_or_queue_for_pg(spg_t pgid, OpRequestRef op);
   bool  _have_pg(spg_t pgid);
   PG   *_lookup_lock_pg_with_map_lock_held(spg_t pgid);
   PG   *_lookup_lock_pg(spg_t pgid);
