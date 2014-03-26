@@ -27,7 +27,7 @@
 
 
 void Striper::file_to_extents(CephContext *cct, const char *object_format,
-			    ceph_file_layout *layout,
+			    const ceph_file_layout *layout,
 			    uint64_t offset, uint64_t len, uint64_t trunc_size,
 			    vector<ObjectExtent>& extents,
 			    uint64_t buffer_offset)
@@ -39,7 +39,7 @@ void Striper::file_to_extents(CephContext *cct, const char *object_format,
 }
 
 void Striper::file_to_extents(CephContext *cct, const char *object_format,
-			      ceph_file_layout *layout,
+			      const ceph_file_layout *layout,
 			      uint64_t offset, uint64_t len, uint64_t trunc_size,
 			      map<object_t,vector<ObjectExtent> >& object_extents,
 			      uint64_t buffer_offset)
@@ -177,7 +177,7 @@ void Striper::extent_to_file(CephContext *cct, ceph_file_layout *layout,
   }
 }
 
-uint64_t Striper::object_truncate_size(CephContext *cct, ceph_file_layout *layout,
+uint64_t Striper::object_truncate_size(CephContext *cct, const ceph_file_layout *layout,
 				       uint64_t objectno, uint64_t trunc_size)
 {
   uint64_t obj_trunc_size;
