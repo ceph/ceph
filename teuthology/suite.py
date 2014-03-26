@@ -28,6 +28,8 @@ def main(args):
         '--num', str(args.num),
         '--worker', args.worker,
     ]
+    if args.priority:
+        base_arg.extend(['--priority', str(args.priority)])
     if args.verbose:
         base_arg.append('-v')
     if args.owner:

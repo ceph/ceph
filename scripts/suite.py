@@ -70,6 +70,12 @@ combination, and will override anything in the suite.
         help='number of times to run/queue each job'
     )
     parser.add_argument(
+        '-p', '--priority',
+        default=1000,
+        type=int,
+        help='queue priority (lower value is higher priority)'
+    )
+    parser.add_argument(
         '-l', '--limit',
         default=0,
         type=int,
