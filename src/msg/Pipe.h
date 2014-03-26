@@ -161,7 +161,7 @@ class DispatchQueue;
     DispatchQueue *in_q;
     list<Message*> sent;
     Cond cond;
-    bool keepalive;
+    bool send_keepalive;
     bool halt_delivery; //if a pipe's queue is destroyed, stop adding to it
     bool close_on_empty;
     
@@ -218,7 +218,7 @@ class DispatchQueue;
 
     __u32 get_out_seq() { return out_seq; }
 
-    bool is_queued() { return !out_q.empty() || keepalive; }
+    bool is_queued() { return !out_q.empty() || send_keepalive; }
 
     entity_addr_t& get_peer_addr() { return peer_addr; }
 
@@ -244,7 +244,7 @@ class DispatchQueue;
     }
     void _send_keepalive() {
       assert(pipe_lock.is_locked());
-      keepalive = true;
+      send_keepalive = true;
       cond.Signal();
     }
     Message *_get_next_outgoing() {
