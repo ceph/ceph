@@ -8735,8 +8735,7 @@ void MDCache::_do_find_ino_peer(find_ino_peer_info_t& fip)
 {
   set<int> all, active;
   mds->mdsmap->get_mds_set(all);
-  mds->mdsmap->get_active_mds_set(active);
-  mds->mdsmap->get_mds_set(active, MDSMap::STATE_STOPPING);
+  mds->mdsmap->get_clientreplay_or_active_or_stopping_mds_set(active);
 
   dout(10) << "_do_find_ino_peer " << fip.tid << " " << fip.ino
 	   << " active " << active << " all " << all
