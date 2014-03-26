@@ -1306,11 +1306,12 @@ void object_stat_sum_t::dump(Formatter *f) const
   f->dump_int("num_objects_recovered", num_objects_recovered);
   f->dump_int("num_bytes_recovered", num_bytes_recovered);
   f->dump_int("num_keys_recovered", num_keys_recovered);
+  f->dump_int("num_objects_omap", num_objects_omap);
 }
 
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(7, 3, bl);
+  ENCODE_START(8, 3, bl);
   ::encode(num_bytes, bl);
   ::encode(num_objects, bl);
   ::encode(num_object_clones, bl);
@@ -1330,6 +1331,7 @@ void object_stat_sum_t::encode(bufferlist& bl) const
   ::encode(num_deep_scrub_errors, bl);
   ::encode(num_objects_dirty, bl);
   ::encode(num_whiteouts, bl);
+  ::encode(num_objects_omap, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1378,6 +1380,11 @@ void object_stat_sum_t::decode(bufferlist::iterator& bl)
   } else {
     num_objects_dirty = 0;
     num_whiteouts = 0;
+  }
+  if (struct_v >= 8) {
+    ::decode(num_objects_omap, bl);
+  } else {
+    num_objects_omap = 0;
   }
   DECODE_FINISH(bl);
 }
@@ -1592,12 +1599,13 @@ void pg_stat_t::encode(bufferlist &bl) const
   ::encode(dirty_stats_invalid, bl);
   ::encode(up_primary, bl);
   ::encode(acting_primary, bl);
+  ::encode(omap_stats_invalid, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_stat_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(15, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(16, 8, 8, bl);
   ::decode(version, bl);
   ::decode(reported_seq, bl);
   ::decode(reported_epoch, bl);
@@ -1690,6 +1698,13 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
   } else {
     up_primary = up.size() ? up[0] : -1;
     acting_primary = acting.size() ? acting[0] : -1;
+  }
+  if (struct_v >= 16) {
+    ::decode(omap_stats_invalid, bl);
+  } else {
+    // if we are decoding an old encoding of this object, then the
+    // encoder may not have supported num_objects_omap accounting.
+    omap_stats_invalid = true;
   }
   DECODE_FINISH(bl);
 }
