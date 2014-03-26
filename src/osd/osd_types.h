@@ -1124,6 +1124,7 @@ struct object_stat_sum_t {
   int64_t num_keys_recovered;
   int64_t num_objects_dirty;
   int64_t num_whiteouts;
+  int64_t num_objects_omap;
 
   object_stat_sum_t()
     : num_bytes(0),
@@ -1136,7 +1137,8 @@ struct object_stat_sum_t {
       num_bytes_recovered(0),
       num_keys_recovered(0),
       num_objects_dirty(0),
-      num_whiteouts(0)
+      num_whiteouts(0),
+      num_objects_omap(0)
   {}
 
   void floor(int64_t f) {
@@ -1290,6 +1292,7 @@ struct pg_stat_t {
   /// true if num_objects_dirty is not accurate (because it was not
   /// maintained starting from pool creation)
   bool dirty_stats_invalid;
+  bool omap_stats_invalid;
 
   /// up, acting primaries
   int up_primary;
@@ -1305,6 +1308,7 @@ struct pg_stat_t {
       log_size(0), ondisk_log_size(0),
       mapping_epoch(0),
       dirty_stats_invalid(false),
+      omap_stats_invalid(false),
       up_primary(-1),
       acting_primary(-1)
   { }
@@ -2552,6 +2556,9 @@ struct object_info_t {
   }
   bool is_dirty() const {
     return test_flag(FLAG_DIRTY);
+  }
+  bool is_omap() const {
+    return test_flag(FLAG_OMAP);
   }
 
   void encode(bufferlist& bl) const;
