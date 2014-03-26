@@ -515,6 +515,9 @@ static int do_show_info(const char *imgname, librbd::Image& image,
     f->dump_string("block_name_prefix", info.block_name_prefix);
     f->dump_int("format", (old_format ? 1 : 2));
   } else {
+    char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
+    strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
+    prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
     cout << "rbd image '" << imgname << "':\n"
 	 << "\tsize " << prettybyte_t(info.size) << " in "
 	 << info.num_objs << " objects"
@@ -522,7 +525,7 @@ static int do_show_info(const char *imgname, librbd::Image& image,
 	 << "\torder " << info.order
 	 << " (" << prettybyte_t(info.obj_size) << " objects)"
 	 << std::endl
-	 << "\tblock_name_prefix: " << info.block_name_prefix
+	 << "\tblock_name_prefix: " << prefix
 	 << std::endl
 	 << "\tformat: " << (old_format ? "1" : "2")
 	 << std::endl;
