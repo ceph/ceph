@@ -7061,7 +7061,14 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr,
       ti = target->get_projected_inode();
     if (ti->ctime == rollback.ctime)
       ti->ctime = rollback.orig_dest.old_ctime;
-    ti->nlink++;
+    if (MDS_INO_IS_STRAY(rollback.orig_src.dirfrag.ino)) {
+      if (MDS_INO_IS_STRAY(rollback.orig_dest.dirfrag.ino))
+	assert(!rollback.orig_dest.ino && !rollback.orig_dest.remote_ino);
+      else
+	assert(rollback.orig_dest.remote_ino &&
+	       rollback.orig_dest.remote_ino == rollback.orig_src.ino);
+    } else
+      ti->nlink++;
   }
 
   if (srcdn)
