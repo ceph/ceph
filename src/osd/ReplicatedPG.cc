@@ -2290,6 +2290,8 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
     delta.num_objects--;
     if (coi.is_dirty())
       delta.num_objects_dirty--;
+    if (coi.is_omap())
+      delta.num_objects_omap--;
     if (coi.is_whiteout()) {
       dout(20) << __func__ << " trimming whiteout on " << coid << dendl;
       delta.num_whiteouts--;
@@ -4691,6 +4693,19 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     }
   }
 
+  if ((ctx->new_obs.exists &&
+       ctx->new_obs.oi.is_omap()) &&
+      (!ctx->obc->obs.exists ||
+       !ctx->obc->obs.oi.is_omap())) {
+    ++ctx->delta_stats.num_objects_omap;
+  }
+  if ((!ctx->new_obs.exists ||
+       !ctx->new_obs.oi.is_omap()) &&
+      (ctx->obc->obs.exists &&
+       ctx->obc->obs.oi.is_omap())) {
+    --ctx->delta_stats.num_objects_omap;
+  }
+
   // use newer snapc?
   if (ctx->new_snapset.seq > snapc.seq) {
     snapc.seq = ctx->new_snapset.seq;
@@ -4748,6 +4763,8 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
       dout(20) << __func__ << " cloning whiteout on " << soid << " to " << coid << dendl;
       ctx->delta_stats.num_whiteouts++;
     }
+    if (snap_oi->is_omap())
+      ctx->delta_stats.num_objects_omap++;
     ctx->delta_stats.num_object_clones++;
     ctx->new_snapset.clones.push_back(coid.snap);
     ctx->new_snapset.clone_size[coid.snap] = ctx->obs->oi.size;
@@ -5758,6 +5775,7 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     if (results->has_omap) {
       dout(10) << __func__ << " setting omap flag on " << soid << dendl;
       tctx->new_obs.oi.set_flag(object_info_t::FLAG_OMAP);
+      ++tctx->delta_stats.num_objects_omap;
     }
 
     tctx->op_t->append(results->final_tx);
@@ -7056,6 +7074,8 @@ void ReplicatedPG::add_object_context_to_pg_stat(ObjectContextRef obc, pg_stat_t
     stat.num_objects_dirty++;
   if (oi.is_whiteout())
     stat.num_whiteouts++;
+  if (oi.is_omap())
+    stat.num_objects_omap++;
 
   if (oi.soid.snap && oi.soid.snap != CEPH_NOSNAP && oi.soid.snap != CEPH_SNAPDIR) {
     stat.num_object_clones++;
@@ -11161,6 +11181,8 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 	++stat.num_objects_dirty;
       if (oi.is_whiteout())
 	++stat.num_whiteouts;
+      if (oi.is_omap())
+	++stat.num_objects_omap;
     }
 
     //bufferlist data;
@@ -11286,6 +11308,7 @@ void ReplicatedPG::_scrub_finish()
 	   << scrub_cstat.sum.num_objects << "/" << info.stats.stats.sum.num_objects << " objects, "
 	   << scrub_cstat.sum.num_object_clones << "/" << info.stats.stats.sum.num_object_clones << " clones, "
 	   << scrub_cstat.sum.num_objects_dirty << "/" << info.stats.stats.sum.num_objects_dirty << " dirty, "
+	   << scrub_cstat.sum.num_objects_omap << "/" << info.stats.stats.sum.num_objects_omap << " omap, "
 	   << scrub_cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes."
 	   << dendl;
 
@@ -11293,6 +11316,8 @@ void ReplicatedPG::_scrub_finish()
       scrub_cstat.sum.num_object_clones != info.stats.stats.sum.num_object_clones ||
       (scrub_cstat.sum.num_objects_dirty != info.stats.stats.sum.num_objects_dirty &&
        !info.stats.dirty_stats_invalid) ||
+      (scrub_cstat.sum.num_objects_omap != info.stats.stats.sum.num_objects_omap &&
+       !info.stats.omap_stats_invalid) ||
       scrub_cstat.sum.num_whiteouts != info.stats.stats.sum.num_whiteouts ||
       scrub_cstat.sum.num_bytes != info.stats.stats.sum.num_bytes) {
     osd->clog.error() << info.pgid << " " << mode
@@ -11300,6 +11325,7 @@ void ReplicatedPG::_scrub_finish()
 		      << scrub_cstat.sum.num_objects << "/" << info.stats.stats.sum.num_objects << " objects, "
 		      << scrub_cstat.sum.num_object_clones << "/" << info.stats.stats.sum.num_object_clones << " clones, "
 		      << scrub_cstat.sum.num_objects_dirty << "/" << info.stats.stats.sum.num_objects_dirty << " dirty, "
+		      << scrub_cstat.sum.num_objects_omap << "/" << info.stats.stats.sum.num_objects_omap << " omap, "
 		      << scrub_cstat.sum.num_whiteouts << "/" << info.stats.stats.sum.num_whiteouts << " whiteouts, "
 		      << scrub_cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes.\n";
     ++scrubber.shallow_errors;
@@ -11308,6 +11334,7 @@ void ReplicatedPG::_scrub_finish()
       ++scrubber.fixed;
       info.stats.stats = scrub_cstat;
       info.stats.dirty_stats_invalid = false;
+      info.stats.omap_stats_invalid = false;
       publish_stats_to_osd();
       share_pg_info();
     }
