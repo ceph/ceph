@@ -2058,9 +2058,9 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	pi->mtime = pi->ctime = pi->dirstat.mtime;
       dout(20) << "predirty_journal_parents     gives " << pi->dirstat << " on " << *pin << dendl;
 
-      if (pi->dirstat.size() < 0)
-	assert(!"negative dirstat size" == g_conf->mds_verify_scatter);
       if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
+	if (pi->dirstat.size() < 0)
+	  assert(!"negative dirstat size" == g_conf->mds_verify_scatter);
 	if (pi->dirstat.size() != pf->fragstat.size()) {
 	  mds->clog.error() << "unmatched fragstat size on single dirfrag "
 	     << parent->dirfrag() << ", inode has " << pi->dirstat
