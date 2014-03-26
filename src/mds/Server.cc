@@ -5647,6 +5647,8 @@ void Server::handle_client_rename(MDRequest *mdr)
   else
     witnesses.insert(srcdn->authority().first);
   destdn->list_replicas(witnesses);
+  if (destdnl->is_remote() && !oldin->is_auth())
+    witnesses.insert(oldin->authority().first);
   dout(10) << " witnesses " << witnesses << ", have " << mdr->more()->witnessed << dendl;
 
 
