@@ -10,6 +10,7 @@ mtype=$7
 template=$8
 distro=$9
 limit=${10}
+extra_args=""
 
 if [ -z "$limit" ]
 then
@@ -21,6 +22,7 @@ fi
 if [ -z "$kernel" ]; then
     echo "usage: $0 <suite> <ceph branch> <kernel branch> [email] [flavor] [teuthology-branch] [machinetype] [template] [distro]"
     echo "  flavor can be 'basic', 'gcov', 'notcmalloc'."
+    echo "  PRIO=123 in the environment sets priority (default 1000, smaller=higher)"
     exit 1
 fi
 
@@ -41,6 +43,11 @@ then
     tube=multi
 else
     tube=$mtype
+fi
+
+
+if [ "$PRIO" != "" ]; then
+    extra_args="$extra_args --priority $PRIO"
 fi
 
 stamp=`date +%Y-%m-%d_%H:%M:%S`
@@ -201,4 +208,5 @@ echo "name $name"
     --timeout 36000 \
     $limitline \
     --name $name \
-    --worker $tube
+    --worker $tube \
+    $extra_args
