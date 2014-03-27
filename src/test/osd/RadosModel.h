@@ -174,14 +174,14 @@ public:
   const uint64_t min_stride_size;
   const uint64_t max_stride_size;
   AttrGenerator attr_gen;
-  const bool ec_pool;
+  const bool no_omap;
 	
   RadosTestContext(const string &pool_name, 
 		   int max_in_flight,
 		   uint64_t max_size,
 		   uint64_t min_stride_size,
 		   uint64_t max_stride_size,
-		   bool ec_pool,
+		   bool no_omap,
 		   const char *id = 0) :
     state_lock("Context Lock"),
     pool_obj_cont(),
@@ -195,7 +195,7 @@ public:
     max_size(max_size), 
     min_stride_size(min_stride_size), max_stride_size(max_stride_size),
     attr_gen(2000),
-    ec_pool(ec_pool)
+    no_omap(no_omap)
   {
   }
 
@@ -523,11 +523,11 @@ public:
 	  done = true;
 	  return;
 	}
-	if (!context->ec_pool) {
+	if (!context->no_omap) {
 	  op.omap_rm_keys(to_remove);
 	}
       } else {
-	if (!context->ec_pool) {
+	if (!context->no_omap) {
 	  op.omap_clear();
 	}
 	for (map<string, ContDesc>::iterator i = obj.attrs.begin();
@@ -621,7 +621,7 @@ public:
       omap_contents[key] = val_buffer;
       op.setxattr(key.c_str(), val_buffer);
     }
-    if (!context->ec_pool) {
+    if (!context->no_omap) {
       op.omap_set_header(header);
       op.omap_set(omap_contents);
     }
@@ -999,7 +999,7 @@ public:
 	omap_requested_keys.insert(key);
       }
     }
-    if (!context->ec_pool) {
+    if (!context->no_omap) {
       op.omap_get_vals_by_keys(omap_requested_keys, &omap_returned_values, 0);
 
       op.omap_get_keys("", -1, &omap_keys, 0);
@@ -1060,7 +1060,7 @@ public:
       }
 
       // Attributes
-      if (!context->ec_pool) {
+      if (!context->no_omap) {
 	if (!(old_value.header == header)) {
 	  cerr << num << ": oid " << oid << " header does not match, old size: "
 	       << old_value.header.length() << " new size " << header.length()
@@ -1093,7 +1093,7 @@ public:
 	   ++iter) {
 	bufferlist bl = context->attr_gen.gen_bl(
 	  iter->second);
-	if (!context->ec_pool) {
+	if (!context->no_omap) {
 	  map<string, bufferlist>::iterator omap_iter = omap.find(iter->first);
 	  assert(omap_iter != omap.end());
 	  assert(bl.length() == omap_iter->second.length());
@@ -1114,7 +1114,7 @@ public:
 	  assert(*j == *k);
 	}
       }
-      if (!context->ec_pool) {
+      if (!context->no_omap) {
 	for (set<string>::iterator i = omap_requested_keys.begin();
 	     i != omap_requested_keys.end();
 	     ++i) {
