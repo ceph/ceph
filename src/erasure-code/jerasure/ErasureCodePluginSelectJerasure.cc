@@ -36,6 +36,9 @@ public:
     stringstream ss;
     int ret;
     ceph_arch_probe();
+    string name = "jerasure";
+    if (parameters.count("jerasure-name"))
+      name = parameters.find("jerasure-name")->second;
     if (ceph_arch_intel_pclmul &&
 	ceph_arch_intel_sse42 &&
 	ceph_arch_intel_sse41 &&
@@ -43,15 +46,15 @@ public:
 	ceph_arch_intel_sse3 &&
 	ceph_arch_intel_sse2) {
       dout(10) << "SSE4 plugin" << dendl;
-      ret = instance.factory("jerasure_sse4", parameters, erasure_code, ss);
+      ret = instance.factory(name + "_sse4", parameters, erasure_code, ss);
     } else if (ceph_arch_intel_ssse3 &&
 	       ceph_arch_intel_sse3 &&
 	       ceph_arch_intel_sse2) {
       dout(10) << "SSE3 plugin" << dendl;
-      ret = instance.factory("jerasure_sse3", parameters, erasure_code, ss);
+      ret = instance.factory(name + "_sse3", parameters, erasure_code, ss);
     } else {
       dout(10) << "generic plugin" << dendl;
-      ret = instance.factory("jerasure_generic", parameters, erasure_code, ss);
+      ret = instance.factory(name + "_generic", parameters, erasure_code, ss);
     }
     if (ret)
       derr << ss.str() << dendl;
