@@ -784,7 +784,7 @@ void RGWOp_Quota_Set::execute()
 
   bool use_http_params;
 
-  if (s->length > 0) {
+  if (s->content_length > 0) {
     use_http_params = false;
   } else {
     const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
