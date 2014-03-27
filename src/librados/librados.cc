@@ -2021,6 +2021,12 @@ extern "C" int rados_cluster_fsid(rados_t cluster, char *buf,
   return fsid.length();
 }
 
+extern "C" int rados_wait_for_latest_osdmap(rados_t cluster)
+{
+  librados::RadosClient *radosp = (librados::RadosClient *)cluster;
+  return radosp->wait_for_latest_osdmap();
+}
+
 extern "C" int rados_pool_list(rados_t cluster, char *buf, size_t len)
 {
   librados::RadosClient *client = (librados::RadosClient *)cluster;
