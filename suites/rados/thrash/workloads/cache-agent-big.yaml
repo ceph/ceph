@@ -1,7 +1,9 @@
 tasks:
 - exec:
     client.0:
-      - ceph osd pool create base 4
+      - ceph osd erasure-code-profile set teuthologyprofile ruleset-failure-domain=osd
+        m=1 k=2
+      - ceph osd pool create base 4 erasure teuthologyprofile
       - ceph osd pool create cache 4
       - ceph osd tier add base cache
       - ceph osd tier cache-mode cache writeback
