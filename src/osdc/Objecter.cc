@@ -1383,7 +1383,15 @@ tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
 
   // pick target
   num_homeless_ops.inc();  // initially; recalc_op_target() will decrement if it finds a target
-  int r = _recalc_op_target(op, lc);
+  int r;
+
+  do {
+    r = _recalc_op_target(op, lc);
+    if (r == -EAGAIN) {
+      assert(!lc.is_wlocked());
+      lc.promote();
+    }
+  } while (r == -EAGAIN);
   assert(op->session);
   bool check_for_latest_map = (r == RECALC_OP_TARGET_POOL_DNE);
 
@@ -1655,12 +1663,6 @@ int Objecter::_recalc_op_target(Op *op, RWLock::Context& lc)
   if (op->pgid != pgid ||
       is_pg_changed(
 	op->primary, op->acting, primary, acting, op->used_replica)) {
-    op->pgid = pgid;
-    op->acting = acting;
-    op->primary = primary;
-    ldout(cct, 10) << "recalc_op_target tid " << op->tid
-	     << " pgid " << pgid << " acting " << acting << dendl;
-
     OSDSession *s = &homeless_session;
     op->used_replica = false;
     if (primary != -1) {
@@ -1704,6 +1706,11 @@ int Objecter::_recalc_op_target(Op *op, RWLock::Context& lc)
         return r;
       }
     }
+    op->pgid = pgid;
+    op->acting = acting;
+    op->primary = primary;
+    ldout(cct, 10) << "recalc_op_target tid " << op->tid
+	     << " pgid " << pgid << " acting " << acting << dendl;
 
     if (op->session != s) {
       if (!op->session || op->session->is_homeless()) {
@@ -1757,12 +1764,6 @@ int Objecter::_recalc_linger_op_target(LingerOp *linger_op, RWLock::Context& lc)
   if (pgid != linger_op->pgid ||
       is_pg_changed(
         linger_op->primary, linger_op->acting, primary, acting, true)) {
-    linger_op->pgid = pgid;
-    linger_op->acting = acting;
-    linger_op->primary = primary;
-    ldout(cct, 10) << "_recalc_linger_op_target tid " << linger_op->linger_id
-	     << " pgid " << pgid << " acting " << acting << dendl;
-    
     OSDSession *s;
     if (primary != -1) {
       ret = _get_session(primary, &s, lc);
@@ -1778,6 +1779,13 @@ int Objecter::_recalc_linger_op_target(LingerOp *linger_op, RWLock::Context& lc)
     } else {
       s = &homeless_session;
     }
+
+    linger_op->pgid = pgid;
+    linger_op->acting = acting;
+    linger_op->primary = primary;
+    ldout(cct, 10) << "_recalc_linger_op_target tid " << linger_op->linger_id
+	     << " pgid " << pgid << " acting " << acting << dendl;
+
     s->lock.get_write();
     if (linger_op->session != s) {
       linger_op->session = s;
