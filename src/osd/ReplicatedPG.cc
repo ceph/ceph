@@ -11123,6 +11123,26 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
     //assert(data.length() == p->size);
     //
 
+    if (!next_clone.is_min() && next_clone != soid &&
+	pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE) {
+      // it is okay to be missing one or more clones in a cache tier.
+      // skip higher-numbered clones in the list.
+      while (curclone != snapset.clones.rend() &&
+	     soid.snap < *curclone)
+	++curclone;
+      if (curclone != snapset.clones.rend() &&
+	  soid.snap == *curclone) {
+	dout(20) << __func__ << " skipped some clones in cache tier" << dendl;
+	next_clone.snap = *curclone;
+      }
+      if (curclone == snapset.clones.rend() ||
+	  soid.snap == CEPH_NOSNAP) {
+	dout(20) << __func__ << " skipped remaining clones in cache tier"
+		 << dendl;
+	next_clone = hobject_t();
+	head = hobject_t();
+      }
+    }
     if (!next_clone.is_min() && next_clone != soid) {
       osd->clog.error() << mode << " " << info.pgid << " " << soid
 			<< " expected clone " << next_clone;
@@ -11187,7 +11207,8 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
     scrub_cstat.add(stat, cat);
   }
 
-  if (!next_clone.is_min()) {
+  if (!next_clone.is_min() &&
+      pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE) {
     osd->clog.error() << mode << " " << info.pgid
 		      << " expected clone " << next_clone;
     ++scrubber.shallow_errors;
