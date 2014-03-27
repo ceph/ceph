@@ -71,7 +71,6 @@ using ceph::crypto::MD5;
 
 #define RGW_BUCKETS_OBJ_SUFFIX ".buckets"
 
-#define RGW_MAX_CHUNK_SIZE	(512*1024)
 #define RGW_MAX_PENDING_CHUNKS  16
 #define RGW_MAX_PUT_SIZE        (5ULL*1024*1024*1024)
 #define RGW_MIN_MULTIPART_SIZE (5ULL*1024*1024)

@@ -730,6 +730,9 @@ OPTION(rbd_default_features, OPT_INT, 3) // 1 for layering, 3 for layering+strip
 
 OPTION(nss_db_path, OPT_STR, "") // path to nss db
 
+
+OPTION(rgw_max_chunk_size, OPT_INT, 512 * 1024)
+
 OPTION(rgw_data, OPT_STR, "/var/lib/ceph/radosgw/$cluster-$id")
 OPTION(rgw_enable_apis, OPT_STR, "s3, swift, swift_auth, admin")
 OPTION(rgw_cache_enabled, OPT_BOOL, true)   // rgw cache enabled
