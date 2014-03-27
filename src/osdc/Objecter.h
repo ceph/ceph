@@ -1456,6 +1456,7 @@ public:
     RECALC_OP_TARGET_OSD_DOWN,
   };
   bool op_should_be_paused(Op *op);
+  void set_homeless_op(Op *op);
   int _recalc_op_target(Op *op, RWLock::Context& lc);
   int _recalc_linger_op_target(LingerOp *op, RWLock::Context& lc);
 

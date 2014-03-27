@@ -1392,7 +1392,7 @@ tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
       lc.promote();
     }
   } while (r == -EAGAIN);
-  assert(op->session);
+  assert(op->session); /* session can be homeless session too */
   bool check_for_latest_map = (r == RECALC_OP_TARGET_POOL_DNE);
 
   // add to gather set(s)
@@ -1606,6 +1606,22 @@ int64_t Objecter::get_object_pg_hash_position(int64_t pool, const string& key,
   return p->raw_hash_to_pg(p->hash_key(key, ns));
 }
 
+void Objecter::set_homeless_op(Op *op)
+{
+  if (op->session && !op->session->is_homeless()) {
+    num_homeless_ops.inc();
+  }
+
+  OSDSession *s = &homeless_session;
+  op->session = &homeless_session;
+  s->lock.get_write();
+  if (!op->tid) {
+    op->tid = last_tid.inc();
+  }
+  s->ops[op->tid] = op;
+  s->lock.unlock();
+}
+
 int Objecter::_recalc_op_target(Op *op, RWLock::Context& lc)
 {
   assert(rwlock.is_locked());
@@ -1639,14 +1655,18 @@ int Objecter::_recalc_op_target(Op *op, RWLock::Context& lc)
     assert(op->base_oid.name.empty()); // make sure this is a listing op
     ldout(cct, 10) << "recalc_op_target have " << op->base_pgid << " pool "
 		   << osdmap->have_pg_pool(op->base_pgid.pool()) << dendl;
-    if (!osdmap->have_pg_pool(op->base_pgid.pool()))
+    if (!osdmap->have_pg_pool(op->base_pgid.pool())) {
+      set_homeless_op(op);
       return RECALC_OP_TARGET_POOL_DNE;
+    }
     pgid = osdmap->raw_pg_to_pg(op->base_pgid);
   } else {
     int ret = osdmap->object_locator_to_pg(op->target_oid, op->target_oloc,
 					   pgid);
-    if (ret == -ENOENT)
+    if (ret == -ENOENT) {
+      set_homeless_op(op);
       return RECALC_OP_TARGET_POOL_DNE;
+    }
   }
   int primary;
   vector<int> acting;
