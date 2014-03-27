@@ -11146,7 +11146,12 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 	assert(soid.snap == *curclone);
       }
 
-      assert(oi.size == snapset.clone_size[*curclone]);
+      if (oi.size != snapset.clone_size[*curclone]) {
+	osd->clog.error() << mode << " " << info.pgid << " " << soid
+			  << " size " << oi.size << " != clone_size "
+			  << snapset.cloen_size[*curclone];
+	++scrubber.shallow_errors;
+      }
 
       // verify overlap?
       // ...
