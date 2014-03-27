@@ -127,7 +127,89 @@ TEST(ErasureCodePlugin, select)
   ceph_arch_intel_sse2   = arch_intel_sse2;
 }
 
+TEST(ErasureCodePlugin, sse)
+{
+  ceph_arch_probe();
+  bool sse4 = ceph_arch_intel_pclmul &&
+    ceph_arch_intel_sse42 && ceph_arch_intel_sse41 &&
+    ceph_arch_intel_ssse3 && ceph_arch_intel_sse3 &&
+    ceph_arch_intel_sse2;
+  bool sse3 = ceph_arch_intel_ssse3 && ceph_arch_intel_sse3 &&
+    ceph_arch_intel_sse2;
+  vector<string> sse_variants;
+  sse_variants.push_back("generic");
+  if (!sse3)
+    cerr << "SKIP sse3 plugin testing because CPU does not support it\n";
+  else
+    sse_variants.push_back("sse3");
+  if (!sse4)
+    cerr << "SKIP sse4 plugin testing because CPU does not support it\n";
+  else
+    sse_variants.push_back("sse4");
+
+#define LARGE_ENOUGH 2048
+  bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
+  in_ptr.zero();
+  in_ptr.set_length(0);
+  const char *payload =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  in_ptr.append(payload, strlen(payload));
+  bufferlist in;
+  in.push_front(in_ptr);
+
+  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  map<std::string,std::string> parameters;
+  parameters["directory"] = ".libs";
+  parameters["technique"] = "reed_sol_van";
+  parameters["k"] = "2";
+  parameters["m"] = "1";
+  for (vector<string>::iterator sse_variant = sse_variants.begin();
+       sse_variant != sse_variants.end();
+       sse_variant++) {
+    //
+    // load the plugin variant
+    //
+    ErasureCodeInterfaceRef erasure_code;
+    EXPECT_FALSE(erasure_code);
+    EXPECT_EQ(0, instance.factory("jerasure_" + *sse_variant, parameters,
+                                  &erasure_code, cerr));
     EXPECT_TRUE(erasure_code);
+
+    //
+    // encode
+    //
+    int want_to_encode[] = { 0, 1, 2 };
+    map<int, bufferlist> encoded;
+    EXPECT_EQ(0, erasure_code->encode(set<int>(want_to_encode, want_to_encode+3),
+                                      in,
+                                      &encoded));
+    EXPECT_EQ(3u, encoded.size());
+    unsigned length =  encoded[0].length();
+    EXPECT_EQ(0, strncmp(encoded[0].c_str(), in.c_str(), length));
+    EXPECT_EQ(0, strncmp(encoded[1].c_str(), in.c_str() + length,
+                         in.length() - length));
+
+    //
+    // decode with reconstruction
+    //
+    map<int, bufferlist> degraded = encoded;
+    degraded.erase(1);
+    EXPECT_EQ(2u, degraded.size());
+    int want_to_decode[] = { 0, 1 };
+    map<int, bufferlist> decoded;
+    EXPECT_EQ(0, erasure_code->decode(set<int>(want_to_decode, want_to_decode+2),
+                                      degraded,
+                                      &decoded));
+    EXPECT_EQ(3u, decoded.size());
+    EXPECT_EQ(length, decoded[0].length());
+    EXPECT_EQ(0, strncmp(decoded[0].c_str(), in.c_str(), length));
+    EXPECT_EQ(0, strncmp(decoded[1].c_str(), in.c_str() + length,
+                         in.length() - length));
+
   }
 }
 
