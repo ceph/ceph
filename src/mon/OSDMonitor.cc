@@ -3371,17 +3371,22 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
   } else if (var == "hit_set_type") {
     if (val == "none")
       p.hit_set_params = HitSet::Params();
-    else if (val == "bloom") {
-      BloomHitSet::Params *bsp = new BloomHitSet::Params;
-      bsp->set_fpp(g_conf->osd_pool_default_hit_set_bloom_fpp);
-      p.hit_set_params = HitSet::Params(bsp);
-    } else if (val == "explicit_hash")
-      p.hit_set_params = HitSet::Params(new ExplicitHashHitSet::Params);
-    else if (val == "explicit_object")
-      p.hit_set_params = HitSet::Params(new ExplicitObjectHitSet::Params);
     else {
-      ss << "unrecognized hit_set type '" << val << "'";
-      return -EINVAL;
+      int err = check_cluster_features(CEPH_FEATURE_OSD_CACHEPOOL, ss);
+      if (err)
+	return err;
+      if (val == "bloom") {
+	BloomHitSet::Params *bsp = new BloomHitSet::Params;
+	bsp->set_fpp(g_conf->osd_pool_default_hit_set_bloom_fpp);
+	p.hit_set_params = HitSet::Params(bsp);
+      } else if (val == "explicit_hash")
+	p.hit_set_params = HitSet::Params(new ExplicitHashHitSet::Params);
+      else if (val == "explicit_object")
+	p.hit_set_params = HitSet::Params(new ExplicitObjectHitSet::Params);
+      else {
+	ss << "unrecognized hit_set type '" << val << "'";
+	return -EINVAL;
+      }
     }
   } else if (var == "hit_set_period") {
     if (interr.length()) {
@@ -4741,6 +4746,8 @@ done:
 
   } else if (prefix == "osd pool set") {
     err = prepare_command_pool_set(cmdmap, ss);
+    if (err == -EAGAIN)
+      goto wait;
     if (err < 0)
       goto reply;
 
