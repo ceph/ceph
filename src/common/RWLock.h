@@ -199,6 +199,18 @@ public:
     void set_state(LockState s) {
       state = s;
     }
+
+    bool is_locked() {
+      return (state != Untaken);
+    }
+
+    bool is_rlocked() {
+      return (state == TakenForRead);
+    }
+
+    bool is_wlocked() {
+      return (state == TakenForWrite);
+    }
   };
 };
 
