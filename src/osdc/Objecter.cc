@@ -999,7 +999,7 @@ int Objecter::_get_session(int osd, OSDSession **session, RWLock::Context& lc)
     *session = s;
     return 0;
   }
-  if (!lc.get_state() == RWLock::Context::TakenForWrite) {
+  if (!lc.is_wlocked()) {
     return -EAGAIN;
   }
   OSDSession *s = new OSDSession(osd);
@@ -1494,7 +1494,7 @@ tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
     }
 
     if (r == -EAGAIN) {
-      assert(lc.get_state() != RWLock::Context::TakenForWrite);
+      assert(!lc.is_wlocked());
 
       if (!_promote_lock_check_race(lc)) {
         ldout(cct, 10) << "_maybe_request_map() returned -EAGAIN, lost race, recalculating op target" << dendl;
@@ -1767,7 +1767,7 @@ int Objecter::_recalc_linger_op_target(LingerOp *linger_op, RWLock::Context& lc)
     if (primary != -1) {
       ret = _get_session(primary, &s, lc);
       if (ret == -EAGAIN) {
-        assert(lc.get_state() != RWLock::Context::TakenForWrite);
+        assert(!lc.is_wlocked());
 
         if (!_promote_lock_check_race(lc)) {
           return ret;
