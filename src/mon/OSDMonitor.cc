@@ -4756,6 +4756,11 @@ done:
 						   get_last_committed() + 1));
     return true;
   } else if (prefix == "osd tier add") {
+    err = check_cluster_features(CEPH_FEATURE_OSD_CACHEPOOL, ss);
+    if (err == -EAGAIN)
+      goto wait;
+    if (err)
+      goto reply;
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
@@ -4864,6 +4869,11 @@ done:
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd tier set-overlay") {
+    err = check_cluster_features(CEPH_FEATURE_OSD_CACHEPOOL, ss);
+    if (err == -EAGAIN)
+      goto wait;
+    if (err)
+      goto reply;
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
@@ -4930,6 +4940,11 @@ done:
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd tier cache-mode") {
+    err = check_cluster_features(CEPH_FEATURE_OSD_CACHEPOOL, ss);
+    if (err == -EAGAIN)
+      goto wait;
+    if (err)
+      goto reply;
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
@@ -4961,6 +4976,11 @@ done:
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd tier add-cache") {
+    err = check_cluster_features(CEPH_FEATURE_OSD_CACHEPOOL, ss);
+    if (err == -EAGAIN)
+      goto wait;
+    if (err)
+      goto reply;
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
