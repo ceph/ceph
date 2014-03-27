@@ -3653,7 +3653,20 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  ctx->mod_desc.create();
 	  t->append(soid, op.extent.offset, op.extent.length, osd_op.indata);
 	  if (obs.exists) {
-	    t->setattrs(soid, ctx->obc->attr_cache);
+	    map<string, bufferlist> to_set = ctx->obc->attr_cache;
+	    map<string, boost::optional<bufferlist> > &overlay =
+	      ctx->pending_attrs[ctx->obc];
+	    for (map<string, boost::optional<bufferlist> >::iterator i =
+		   overlay.begin();
+		 i != overlay.end();
+		 ++i) {
+	      if (i->second) {
+		to_set[i->first] = *(i->second);
+	      } else {
+		to_set.erase(i->first);
+	      }
+	    }
+	    t->setattrs(soid, to_set);
 	  }
 	} else {
 	  ctx->mod_desc.mark_unrollbackable();
