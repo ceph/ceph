@@ -11028,6 +11028,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
   hobject_t head;
   SnapSet snapset;
   vector<snapid_t>::reverse_iterator curclone;
+  hobject_t next_clone;
 
   bufferlist last_data;
 
@@ -11066,6 +11067,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       else {
 	curclone = snapset.clones.rbegin();
 	head = p->first;
+	next_clone = hobject_t();
 	dout(20) << "  snapset " << snapset << dendl;
       }
 
@@ -11121,12 +11123,24 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
     //assert(data.length() == p->size);
     //
 
+    if (!next_clone.is_min() && next_clone != soid) {
+      osd->clog.error() << mode << " " << info.pgid << " " << soid
+			<< " expected clone " << next_clone;
+      ++scrubber.shallow_errors;
+    }
+
     if (soid.snap == CEPH_NOSNAP) {
       if (!snapset.head_exists) {
 	osd->clog.error() << mode << " " << info.pgid << " " << soid
 			  << " snapset.head_exists=false, but object exists";
         ++scrubber.shallow_errors;
 	continue;
+      }
+      if (curclone == snapset.clones.rend()) {
+	next_clone = hobject_t();
+      } else {
+	next_clone = soid;
+	next_clone.snap = *curclone;
       }
     } else if (soid.snap) {
       // it's a clone
@@ -11140,16 +11154,13 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       }
 
       if (soid.snap != *curclone) {
-	osd->clog.error() << mode << " " << info.pgid << " " << soid
-			  << " expected clone " << *curclone;
-        ++scrubber.shallow_errors;
-	assert(soid.snap == *curclone);
+	continue; // we warn above.  we could do better here...
       }
 
       if (oi.size != snapset.clone_size[*curclone]) {
 	osd->clog.error() << mode << " " << info.pgid << " " << soid
 			  << " size " << oi.size << " != clone_size "
-			  << snapset.cloen_size[*curclone];
+			  << snapset.clone_size[*curclone];
 	++scrubber.shallow_errors;
       }
 
@@ -11157,18 +11168,29 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       // ...
 
       // what's next?
-      if (curclone != snapset.clones.rend())
+      if (curclone != snapset.clones.rend()) {
 	++curclone;
-
-      if (curclone == snapset.clones.rend())
+      }
+      if (curclone == snapset.clones.rend()) {
 	head = hobject_t();
+	next_clone = hobject_t();
+      } else {
+	next_clone.snap = *curclone;
+      }
 
     } else {
       // it's unversioned.
+      next_clone = hobject_t();
     }
 
     string cat; // fixme
     scrub_cstat.add(stat, cat);
+  }
+
+  if (!next_clone.is_min()) {
+    osd->clog.error() << mode << " " << info.pgid
+		      << " expected clone " << next_clone;
+    ++scrubber.shallow_errors;
   }
   
   dout(10) << "_scrub (" << mode << ") finish" << dendl;
