@@ -3371,17 +3371,22 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
   } else if (var == "hit_set_type") {
     if (val == "none")
       p.hit_set_params = HitSet::Params();
-    else if (val == "bloom") {
-      BloomHitSet::Params *bsp = new BloomHitSet::Params;
-      bsp->set_fpp(g_conf->osd_pool_default_hit_set_bloom_fpp);
-      p.hit_set_params = HitSet::Params(bsp);
-    } else if (val == "explicit_hash")
-      p.hit_set_params = HitSet::Params(new ExplicitHashHitSet::Params);
-    else if (val == "explicit_object")
-      p.hit_set_params = HitSet::Params(new ExplicitObjectHitSet::Params);
     else {
-      ss << "unrecognized hit_set type '" << val << "'";
-      return -EINVAL;
+      int err = check_cluster_features(CEPH_FEATURE_OSD_CACHEPOOL, ss);
+      if (err)
+	return err;
+      if (val == "bloom") {
+	BloomHitSet::Params *bsp = new BloomHitSet::Params;
+	bsp->set_fpp(g_conf->osd_pool_default_hit_set_bloom_fpp);
+	p.hit_set_params = HitSet::Params(bsp);
+      } else if (val == "explicit_hash")
+	p.hit_set_params = HitSet::Params(new ExplicitHashHitSet::Params);
+      else if (val == "explicit_object")
+	p.hit_set_params = HitSet::Params(new ExplicitObjectHitSet::Params);
+      else {
+	ss << "unrecognized hit_set type '" << val << "'";
+	return -EINVAL;
+      }
     }
   } else if (var == "hit_set_period") {
     if (interr.length()) {
@@ -4741,6 +4746,8 @@ done:
 
   } else if (prefix == "osd pool set") {
     err = prepare_command_pool_set(cmdmap, ss);
+    if (err == -EAGAIN)
+      goto wait;
     if (err < 0)
       goto reply;
 
@@ -4749,6 +4756,11 @@ done:
 						   get_last_committed() + 1));
     return true;
   } else if (prefix == "osd tier add") {
+    err = check_cluster_features(CEPH_FEATURE_OSD_CACHEPOOL, ss);
+    if (err == -EAGAIN)
+      goto wait;
+    if (err)
+      goto reply;
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
@@ -4857,6 +4869,11 @@ done:
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd tier set-overlay") {
+    err = check_cluster_features(CEPH_FEATURE_OSD_CACHEPOOL, ss);
+    if (err == -EAGAIN)
+      goto wait;
+    if (err)
+      goto reply;
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
@@ -4923,6 +4940,11 @@ done:
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd tier cache-mode") {
+    err = check_cluster_features(CEPH_FEATURE_OSD_CACHEPOOL, ss);
+    if (err == -EAGAIN)
+      goto wait;
+    if (err)
+      goto reply;
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
@@ -4954,6 +4976,11 @@ done:
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd tier add-cache") {
+    err = check_cluster_features(CEPH_FEATURE_OSD_CACHEPOOL, ss);
+    if (err == -EAGAIN)
+      goto wait;
+    if (err)
+      goto reply;
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);

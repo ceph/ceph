@@ -1071,8 +1071,6 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(read_tier, bl);
   ::encode(write_tier, bl);
   ::encode(properties, bl);
-  if (hit_set_params.get_type() != HitSet::TYPE_NONE)
-    encode_compat = MAX(encode_compat, 11); // need to be able to understand all the data!
   ::encode(hit_set_params, bl);
   ::encode(hit_set_period, bl);
   ::encode(hit_set_count, bl);
@@ -1084,7 +1082,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(cache_min_flush_age, bl);
   ::encode(cache_min_evict_age, bl);
   ::encode(erasure_code_profile, bl);
-  ENCODE_FINISH_NEW_COMPAT(bl, encode_compat);
+  ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
