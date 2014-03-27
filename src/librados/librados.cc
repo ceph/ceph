@@ -2427,6 +2427,18 @@ extern "C" int rados_ioctx_pool_get_auid(rados_ioctx_t io, uint64_t *auid)
   return ctx->client->pool_get_auid(ctx->get_id(), (unsigned long long *)auid);
 }
 
+extern "C" int rados_ioctx_pool_requires_alignment(rados_ioctx_t io)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  return ctx->client->pool_requires_alignment(ctx->get_id());
+}
+
+extern "C" uint64_t rados_ioctx_pool_required_alignment(rados_ioctx_t io)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  return ctx->client->pool_required_alignment(ctx->get_id());
+}
+
 extern "C" void rados_ioctx_locator_set_key(rados_ioctx_t io, const char *key)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;

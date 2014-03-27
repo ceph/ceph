@@ -742,6 +742,9 @@ int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid);
  */
 int rados_ioctx_pool_get_auid(rados_ioctx_t io, uint64_t *auid);
 
+int rados_ioctx_pool_requires_alignment(rados_ioctx_t io);
+uint64_t rados_ioctx_pool_required_alignment(rados_ioctx_t io);
+
 /**
  * Get the pool id of the io context
  *
