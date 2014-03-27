@@ -2595,8 +2595,10 @@ struct SnapSetContext {
   int ref;
   bool registered;
   SnapSet snapset;
+  bool exists;
 
-  SnapSetContext(const hobject_t& o) : oid(o), ref(0), registered(false) { }
+  SnapSetContext(const hobject_t& o) :
+    oid(o), ref(0), registered(false), exists(true) { }
 };
 
 
