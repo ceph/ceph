@@ -556,6 +556,19 @@ private:
   Fh *_create_fh(Inode *in, int flags, int cmode);
   int _release_fh(Fh *fh);
 
+
+  struct C_Readahead : public Context {
+    Client *client;
+    Inode *inode;
+    C_Readahead(Client *c, Inode *i)
+      : client(c),
+	inode(i) { }
+    void finish(int r) {
+      lsubdout(client->cct, client, 20) << "C_Readahead on " << inode << dendl;
+      client->put_inode(inode, 1);
+    }
+  };
+
   int _read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl);
   int _read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl);
 
