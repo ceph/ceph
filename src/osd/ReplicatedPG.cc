@@ -4975,7 +4975,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   return result;
 }
 
-void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type)
+void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc)
 {
   const hobject_t& soid = ctx->obs->oi.soid;
   dout(20) << __func__ << " " << soid << " " << ctx
@@ -4985,7 +4985,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type)
   // snapset
   bufferlist bss;
 
-  if (soid.snap == CEPH_NOSNAP) {
+  if (soid.snap == CEPH_NOSNAP && maintain_ssc) {
     ::encode(ctx->new_snapset, bss);
     assert(ctx->new_obs.exists == ctx->new_snapset.head_exists);
 
@@ -5136,7 +5136,15 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type)
 
   // apply new object state.
   ctx->obc->obs = ctx->new_obs;
-  ctx->obc->ssc->snapset = ctx->new_snapset;
+
+  if (!maintain_ssc && soid.is_head()) {
+    ctx->obc->ssc->exists = false;
+    ctx->obc->ssc->snapset = SnapSet();
+  } else {
+    ctx->obc->ssc->exists = true;
+    ctx->obc->ssc->snapset = ctx->new_snapset;
+  }
+
   info.stats.stats.add(ctx->delta_stats, ctx->obs->oi.category);
 
   for (set<pg_shard_t>::iterator i = backfill_targets.begin();
@@ -7102,7 +7110,12 @@ SnapSetContext *ReplicatedPG::get_snapset_context(
   map<hobject_t, SnapSetContext*>::iterator p = snapset_contexts.find(
     oid.get_snapdir());
   if (p != snapset_contexts.end()) {
-    ssc = p->second;
+    if (can_create || p->second->exists) {
+      ssc = p->second;
+      ssc->exists = true;
+    } else {
+      return NULL;
+    }
   } else {
     bufferlist bv;
     if (!attrs) {
@@ -10862,7 +10875,7 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
   assert(ctx->new_obs.exists);
   int r = _delete_oid(ctx, true);
   assert(r == 0);
-  finish_ctx(ctx, pg_log_entry_t::DELETE);
+  finish_ctx(ctx, pg_log_entry_t::DELETE, false);
   simple_repop_submit(repop);
   osd->logger->inc(l_osd_tier_evict);
   osd->logger->inc(l_osd_agent_evict);
