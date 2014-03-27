@@ -1147,11 +1147,13 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **pha
     }
   }
 
+  uint64_t max_chunk_size = store->get_max_chunk_size();
+
   pending_data_bl.claim_append(bl);
-  if (pending_data_bl.length() < RGW_MAX_CHUNK_SIZE)
+  if (pending_data_bl.length() < max_chunk_size)
     return 0;
 
-  pending_data_bl.splice(0, RGW_MAX_CHUNK_SIZE, &bl);
+  pending_data_bl.splice(0, max_chunk_size, &bl);
 
   if (!data_ofs && !immutable_head()) {
     first_chunk.claim(bl);
@@ -1174,7 +1176,9 @@ int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, void *obj_ctx)
 
   head_obj.init(bucket, obj_str);
 
-  manifest.set_trivial_rule(RGW_MAX_CHUNK_SIZE, store->ctx()->_conf->rgw_obj_stripe_size);
+  uint64_t max_chunk_size = store->get_max_chunk_size();
+
+  manifest.set_trivial_rule(max_chunk_size, store->ctx()->_conf->rgw_obj_stripe_size);
 
   int r = manifest_gen.create_begin(store->ctx(), &manifest, bucket, head_obj);
   if (r < 0) {
@@ -1445,6 +1449,8 @@ int RGWRados::init_complete()
 int RGWRados::initialize()
 {
   int ret;
+
+  max_chunk_size = cct->_conf->rgw_max_chunk_size;
 
   ret = init_rados();
   if (ret < 0)
@@ -3233,8 +3239,9 @@ set_err_state:
       copy_data = true;
     } else {
       uint64_t head_size = astate->manifest.get_head_size();
+
       if (head_size > 0) {
-	if (head_size > RGW_MAX_CHUNK_SIZE)  // should never happen
+	if (head_size > max_chunk_size)  // should never happen
 	  copy_data = true;
 	else
           copy_first = true;
@@ -3325,7 +3332,7 @@ set_err_state:
   }
 
   if (copy_first) {
-    ret = get_obj(ctx, NULL, &handle, src_obj, first_chunk, 0, RGW_MAX_CHUNK_SIZE);
+    ret = get_obj(ctx, NULL, &handle, src_obj, first_chunk, 0, max_chunk_size);
     if (ret < 0)
       goto done_ret;
 
@@ -3404,8 +3411,8 @@ int RGWRados::copy_obj_data(void *ctx,
 
     const char *data = bl.c_str();
 
-    if (ofs < RGW_MAX_CHUNK_SIZE) {
-      off_t len = min(RGW_MAX_CHUNK_SIZE - ofs, (off_t)ret);
+    if ((uint64_t)ofs < max_chunk_size) {
+      uint64_t len = min(max_chunk_size - ofs, (uint64_t)ret);
       first_chunk.append(data, len);
       ofs += len;
       ret -= len;
@@ -3429,11 +3436,11 @@ int RGWRados::copy_obj_data(void *ctx,
   first_part->loc_ofs = 0;
   first_part->size = first_chunk.length();
 
-  if (ofs > RGW_MAX_CHUNK_SIZE) {
-    RGWObjManifestPart& tail = objs[RGW_MAX_CHUNK_SIZE];
+  if ((uint64_t)ofs > max_chunk_size) {
+    RGWObjManifestPart& tail = objs[max_chunk_size];
     tail.loc = shadow_obj;
-    tail.loc_ofs = RGW_MAX_CHUNK_SIZE;
-    tail.size = ofs - RGW_MAX_CHUNK_SIZE;
+    tail.loc_ofs = max_chunk_size;
+    tail.size = ofs - max_chunk_size;
   }
 
   manifest.set_explicit(ofs, objs);
@@ -4538,8 +4545,8 @@ int RGWRados::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **hand
     }
   }
 
-  if (len > RGW_MAX_CHUNK_SIZE)
-    len = RGW_MAX_CHUNK_SIZE;
+  if (len > max_chunk_size)
+    len = max_chunk_size;
 
 
   state->io_ctx.locator_set_key(key);
@@ -5110,7 +5117,7 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
   op.getxattrs(&unfiltered_attrset, NULL);
   op.stat(&size, &mtime, NULL);
   if (first_chunk) {
-    op.read(0, RGW_MAX_CHUNK_SIZE, first_chunk, NULL);
+    op.read(0, cct->_conf->rgw_max_chunk_size, first_chunk, NULL);
   }
   bufferlist outbl;
   r = ref.ioctx.operate(ref.oid, &op, &outbl);
