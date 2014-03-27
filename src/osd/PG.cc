@@ -442,6 +442,13 @@ void PG::discover_all_missing(map< int, map<pg_t,pg_query_t> > &query_map)
       continue;
     }
 
+    map<int, pg_info_t>::const_iterator iter = peer_info.find(peer);
+    if (iter != peer_info.end() &&
+        (iter->second.is_empty() || iter->second.dne())) {
+      // ignore empty peers
+      continue;
+    }
+
     // If we've requested any of this stuff, the pg_missing_t information
     // should be on its way.
     // TODO: coalsce requested_* into a single data structure
@@ -673,6 +680,10 @@ bool PG::all_unfound_are_queried_or_lost(const OSDMapRef osdmap) const
   set<int>::const_iterator mend = might_have_unfound.end();
   for (; peer != mend; ++peer) {
     if (peer_missing.count(*peer))
+      continue;
+    map<int, pg_info_t>::const_iterator iter = peer_info.find(*peer);
+    if (iter != peer_info.end() &&
+        (iter->second.is_empty() || iter->second.dne()))
       continue;
     const osd_info_t &osd_info(osdmap->get_info(*peer));
     if (osd_info.lost_at <= osd_info.up_from) {
