@@ -68,16 +68,15 @@ def _generate_remotes(ctx, config):
     elif 'clients' in config:
         ls = config['clients']
         for role in teuthology.all_roles_of_type(ctx.cluster, 'client'):
-            remote = teuthology.get_single_remote_value(ctx,
-                    'client.{r}'.format(r=role))
+            (remote,) = ctx.cluster.only('client.{r}'.format(r=role)).remotes.iterkeys()
             yield (remote, ls)
         del config['clients']
         for role, ls in config.iteritems():
-            remote = teuthology.get_single_remote_value(ctx, role)
+            (remote,) = ctx.cluster.only(role).remotes.iterkeys()
             yield (remote, ls)
     else:
         for role, ls in config.iteritems():
-            remote = teuthology.get_single_remote_value(ctx, role)
+            (remote,) = ctx.cluster.only(role).remotes.iterkeys()
             yield (remote, ls)
 
 def task(ctx, config):

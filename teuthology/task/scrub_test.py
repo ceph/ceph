@@ -33,7 +33,7 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         'scrub_test task only accepts a dict for configuration'
     first_mon = teuthology.get_first_mon(ctx, config)
-    mon = teuthology.get_single_remote_value(ctx, first_mon)
+    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
     
     num_osds = teuthology.num_instances_of_type(ctx.cluster, 'osd')
     log.info('num_osds is %s' % num_osds)
@@ -73,7 +73,7 @@ def task(ctx, config):
 
     log.info('messing with PG %s on osd %d' % (victim, osd))
 
-    osd_remote = teuthology.get_single_remote_value(ctx, 'osd.%d' % osd)
+    (osd_remote,) = ctx.cluster.only('osd.%d' % osd).remotes.iterkeys()
     data_path = os.path.join(
         '/var/lib/ceph/osd',
         'ceph-{id}'.format(id=osd),

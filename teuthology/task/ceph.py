@@ -565,7 +565,7 @@ def cluster(ctx, config):
             keyring_path,
             ],
         )
-    mon0_remote = teuthology.get_single_remote_value(ctx, firstmon)
+    (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
     fsid = teuthology.create_simple_monmap(
         ctx,
         remote=mon0_remote,
@@ -904,7 +904,7 @@ def cluster(ctx, config):
         ctx.summary['success'] = False
         raise
     finally:
-        mon0_remote = teuthology.get_single_remote_value(ctx, firstmon)
+        (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
 
         log.info('Checking cluster log for badness...')
         def first_in_ceph_log(pattern, excludes):
@@ -1185,7 +1185,7 @@ def run_daemon(ctx, config, type_):
 
     if type_ == 'mds':
         firstmon = teuthology.get_first_mon(ctx, config)
-        mon0_remote = teuthology.get_single_remote_value(ctx, firstmon)
+        (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
 
         mon0_remote.run(args=[
             'adjust-ulimits',
@@ -1208,7 +1208,7 @@ def healthy(ctx, config):
     """
     log.info('Waiting until ceph is healthy...')
     firstmon = teuthology.get_first_mon(ctx, config)
-    mon0_remote = teuthology.get_single_remote_value(ctx, firstmon)
+    (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
     teuthology.wait_until_osds_up(
         ctx,
         cluster=ctx.cluster,
@@ -1228,7 +1228,7 @@ def wait_for_osds_up(ctx, config):
     """
     log.info('Waiting until ceph osds are all up...')
     firstmon = teuthology.get_first_mon(ctx, config)
-    mon0_remote = teuthology.get_single_remote_value(ctx, firstmon)
+    (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
     teuthology.wait_until_osds_up(
         ctx,
         cluster=ctx.cluster,
@@ -1245,7 +1245,7 @@ def wait_for_mon_quorum(ctx, config):
 
     assert isinstance(config, list)
     firstmon = teuthology.get_first_mon(ctx, config)
-    remote = teuthology.get_single_remote_value(ctx, firstmon)
+    (remote,) = ctx.cluster.only(firstmon).remotes.keys()
     while True:
         r = remote.run(
             args=[

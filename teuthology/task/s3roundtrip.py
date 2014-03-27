@@ -147,7 +147,7 @@ def configure(ctx, config):
         s3tests_conf['s3'].setdefault('port', def_conf['port'])
         s3tests_conf['s3'].setdefault('is_secure', def_conf['is_secure'])
 
-        remote = teuthology.get_single_remote_value(ctx, client)
+        (remote,) = ctx.cluster.only(client).remotes.keys()
         remote.run(
             args=[
                 'cd',
@@ -181,7 +181,7 @@ def run_tests(ctx, config):
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.iteritems():
-        remote = teuthology.get_single_remote_value(ctx, client)
+        (remote,) = ctx.cluster.only(client).remotes.keys()
         conf = teuthology.get_file(remote, '{tdir}/archive/s3roundtrip.{client}.config.yaml'.format(tdir=testdir, client=client))
         args = [
                 '{tdir}/s3-tests/virtualenv/bin/s3tests-test-roundtrip'.format(tdir=testdir),

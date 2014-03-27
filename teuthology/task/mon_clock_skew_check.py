@@ -240,7 +240,7 @@ def task(ctx, config):
         'mon_clock_skew_check task only accepts a dict for configuration'
     log.info('Beginning mon_clock_skew_check...')
     first_mon = teuthology.get_first_mon(ctx, config)
-    mon = teuthology.get_single_remote_value(ctx, first_mon)
+    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
     manager = ceph_manager.CephManager(
         mon,
         ctx=ctx,

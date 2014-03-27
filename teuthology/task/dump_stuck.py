@@ -57,7 +57,7 @@ def task(ctx, config):
 
     timeout = 60
     first_mon = teuthology.get_first_mon(ctx, config)
-    mon = teuthology.get_single_remote_value(ctx, first_mon)
+    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
 
     manager = ceph_manager.CephManager(
         mon,

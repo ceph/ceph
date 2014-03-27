@@ -40,7 +40,7 @@ def generic_mkfs(ctx, config, devname_rtn):
     for role, properties in images:
         if properties is None:
             properties = {}
-        remote = teuthology.get_single_remote_value(ctx, role)
+        (remote,) = ctx.cluster.only(role).remotes.keys()
         image = properties.get('image_name', default_image_name(role))
         fs_type = properties.get('fs_type', 'ext3')
         remote.run(
@@ -90,7 +90,7 @@ def generic_mount(ctx, config, devname_rtn):
     for role, image in role_images:
         if image is None:
             image = default_image_name(role)
-        remote = teuthology.get_single_remote_value(ctx, role)
+        (remote,) = ctx.cluster.only(role).remotes.keys()
         id_ = strip_client_prefix(role)
         mnt = mnt_template.format(tdir=testdir, id=id_)
         mounted.append((remote, mnt))

@@ -43,7 +43,7 @@ def task(ctx, config):
     testdir = teuthology.get_testdir(ctx)
     with parallel() as p:
         for role in config.iterkeys():
-            remote = teuthology.get_single_remote_value(ctx, role)
+            (remote,) = ctx.cluster.only(role).remotes.keys()
             p.spawn(_download, testdir, remote)
 
     log.info('Making a separate scratch dir for every client...')
@@ -52,7 +52,7 @@ def task(ctx, config):
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
-        remote = teuthology.get_single_remote_value(ctx, role)
+        (remote,) = ctx.cluster.only(role).remotes.iterkeys()
         mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
         scratch = os.path.join(mnt, 'client.{id}'.format(id=id_))
         remote.run(
@@ -69,7 +69,7 @@ def task(ctx, config):
 
     with parallel() as p:
         for role, tests in config.iteritems():
-            remote = teuthology.get_single_remote_value(ctx, role)
+            (remote,) = ctx.cluster.only(role).remotes.keys()
             p.spawn(_run_tests, testdir, remote, role, tests)
 
 def _download(testdir, remote):

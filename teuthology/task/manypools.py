@@ -39,8 +39,7 @@ def task(ctx, config):
     log.info('got client_roles={client_roles_}'.format(client_roles_=client_roles))
     for role in client_roles:
         log.info('role={role_}'.format(role_=role))
-        creator_remote = teuthology.get_single_remote_value(ctx,
-                'client.{id}'.format(id=role))
+        (creator_remote, ) = ctx.cluster.only('client.{id}'.format(id=role)).remotes.iterkeys()
         creator_remotes.append((creator_remote, 'client.{id}'.format(id=role)))
 
     remaining_pools = poolnum

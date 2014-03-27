@@ -246,7 +246,7 @@ def configure(ctx, config):
         else:
             s3tests_conf['DEFAULT']['host'] = 'localhost'
 
-        remote = teuthology.get_single_remote_value(ctx, client)
+        (remote,) = ctx.cluster.only(client).remotes.keys()
         remote.run(
             args=[
                 'cd',

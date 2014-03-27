@@ -38,7 +38,7 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         'thrashosds task only accepts a dict for configuration'
     first_mon = teuthology.get_first_mon(ctx, config)
-    mon = teuthology.get_single_remote_value(ctx, first_mon)
+    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
     
     num_osds = teuthology.num_instances_of_type(ctx.cluster, 'osd')
     log.info('num_osds is %s' % num_osds)

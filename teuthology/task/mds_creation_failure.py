@@ -23,8 +23,7 @@ def task(ctx, config):
         raise RuntimeError("This task requires exactly one MDS")
 
     mds_id = mdslist[0]
-    mds_remote = misc.get_single_remote_value(ctx,
-            'mds.{_id}'.format(_id=mds_id))
+    (mds_remote,) = ctx.cluster.only('mds.{_id}'.format(_id=mds_id)).remotes.iterkeys()
     manager = ceph_manager.CephManager(
         mds_remote, ctx=ctx, logger=log.getChild('ceph_manager'),
     )

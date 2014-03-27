@@ -70,25 +70,23 @@ def task(ctx, config):
     if 'nodes' in config:
         if isinstance(config['nodes'], basestring) and config['nodes'] == 'all':
             for role in  teuthology.all_roles(ctx.cluster):
-                remote = teuthology.get_single_remote_value(ctx,role)
+                (remote,) = ctx.cluster.only(role).remotes.iterkeys()
                 ip,port = remote.ssh.get_transport().getpeername()
                 hosts.append(ip)
                 remotes.append(remote)
-            master_remote = teuthology.get_single_remote_value(ctx,
-                    config['nodes'][0])
+            (master_remote,) = ctx.cluster.only(config['nodes'][0]).remotes.iterkeys()
         elif isinstance(config['nodes'], list):
             for role in config['nodes']:
-                remote = teuthology.get_single_remote_value(ctx, role)
+                (remote,) = ctx.cluster.only(role).remotes.iterkeys()
                 ip,port = remote.ssh.get_transport().getpeername()
                 hosts.append(ip)
                 remotes.append(remote)
-            master_remote = teuthology.get_single_remote_value(ctx,
-                    config['nodes'][0])
+            (master_remote,) = ctx.cluster.only(config['nodes'][0]).remotes.iterkeys()
     else:
         roles = ['client.{id}'.format(id=id_) for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
-        master_remote = teuthology.get_single_remote_value(ctx, roles[0])
+        (master_remote,) = ctx.cluster.only(roles[0]).remotes.iterkeys()
         for role in roles:
-            remote = teuthology.get_single_remote_value(ctx, role)
+            (remote,) = ctx.cluster.only(role).remotes.iterkeys()
             ip,port = remote.ssh.get_transport().getpeername()
             hosts.append(ip)
             remotes.append(remote)

@@ -29,7 +29,7 @@ def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False):
         ]
     pre.extend(cmd)
     log.info('rgwadmin: cmd=%s' % pre)
-    remote = teuthology.get_single_remote_value(ctx, client)
+    (remote,) = ctx.cluster.only(client).remotes.iterkeys()
     proc = remote.run(
         args=pre,
         check_status=check_status,

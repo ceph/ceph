@@ -34,7 +34,7 @@ def task(ctx, config):
         config = dict((id_, a) for id_ in roles)
 
     for role, ls in config.iteritems():
-        remote = teuthology.get_single_remote_value(ctx, role)
+        (remote,) = ctx.cluster.only(role).remotes.iterkeys()
         log.info('Running commands on role %s host %s', role, remote.name)
         for c in ls:
             c.replace('$TESTDIR', testdir)

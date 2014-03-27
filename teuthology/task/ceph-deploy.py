@@ -65,7 +65,7 @@ def is_healthy(ctx, config):
     """Wait until a Ceph cluster is healthy."""
     testdir = teuthology.get_testdir(ctx)
     ceph_admin = teuthology.get_first_mon(ctx, config)
-    remote = teuthology.get_single_remote_value(ctx, ceph_admin)
+    (remote,) = ctx.cluster.only(ceph_admin).remotes.keys()
     max_tries = 90  # 90 tries * 10 secs --> 15 minutes
     tries = 0
     while True:
@@ -135,7 +135,7 @@ def execute_ceph_deploy(ctx, config, cmd):
     testdir = teuthology.get_testdir(ctx)
     ceph_admin = teuthology.get_first_mon(ctx, config)
     exec_cmd = cmd
-    remote = teuthology.get_single_remote_value(ctx, ceph_admin)
+    (remote,) = ctx.cluster.only(ceph_admin).remotes.iterkeys()
     proc = remote.run(
         args = [
             'cd',
@@ -190,7 +190,7 @@ def build_ceph_cluster(ctx, config):
         testdir = teuthology.get_testdir(ctx)
         conf_path = '{tdir}/ceph-deploy/ceph.conf'.format(tdir=testdir)
         first_mon = teuthology.get_first_mon(ctx, config)
-        remote = teuthology.get_single_remote_value(ctx, first_mon)
+        (remote,) = ctx.cluster.only(first_mon).remotes.keys()
 
         lines = None
         if config.get('conf') is not None:
@@ -279,7 +279,7 @@ def build_ceph_cluster(ctx, config):
             conf_path = '/etc/ceph/ceph.conf'
             admin_keyring_path = '/etc/ceph/ceph.client.admin.keyring'
             first_mon = teuthology.get_first_mon(ctx, config)
-            mon0_remote = teuthology.get_single_remote_value(ctx, first_mon)
+            (mon0_remote,) = ctx.cluster.only(first_mon).remotes.keys()
             conf_data = teuthology.get_file(
                 remote=mon0_remote,
                 path=conf_path,
