@@ -160,6 +160,7 @@
      virtual bool pgb_is_primary() const = 0;
      virtual OSDMapRef pgb_get_osdmap() const = 0;
      virtual const pg_info_t &get_info() const = 0;
+     virtual const pg_pool_t &get_pool() const = 0;
 
      virtual ObjectContextRef get_obc(
        const hobject_t &hoid,
