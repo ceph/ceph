@@ -6799,7 +6799,7 @@ void MDCache::try_trim_non_auth_subtree(CDir *dir)
     while (true) {
       CInode *diri = dir->get_inode();
       if (diri->is_base()) {
-	if (diri->authority().first != mds->whoami) {
+	if (!diri->is_root() && diri->authority().first != mds->whoami) {
 	  dout(10) << " closing empty non-auth subtree " << *dir << dendl;
 	  remove_subtree(dir);
 	  dir->mark_clean();
