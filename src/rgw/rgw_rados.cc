@@ -1336,6 +1336,8 @@ int RGWRados::init_rados()
 {
   int ret;
 
+  max_chunk_size = cct->_conf->rgw_max_chunk_size;
+
   rados = new Rados();
   if (!rados)
     return -ENOMEM;
@@ -1449,8 +1451,6 @@ int RGWRados::init_complete()
 int RGWRados::initialize()
 {
   int ret;
-
-  max_chunk_size = cct->_conf->rgw_max_chunk_size;
 
   ret = init_rados();
   if (ret < 0)
