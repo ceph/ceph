@@ -947,7 +947,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     CInode *in = mds->mdcache->get_inode((*p)->inode.ino);
     bool isnew = in ? false:true;
     if (!in)
-      in = new CInode(mds->mdcache, true);
+      in = new CInode(mds->mdcache, false);
     (*p)->update_inode(mds, in);
 
     if (isnew)
@@ -993,8 +993,10 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       // hmm.  do i have the inode?
       CInode *diri = mds->mdcache->get_inode((*lp).ino);
       if (!diri) {
-	if (MDS_INO_IS_BASE(lp->ino)) {
+	if (MDS_INO_IS_MDSDIR(lp->ino)) {
+	  assert(MDS_INO_MDSDIR(mds->get_nodeid()) != lp->ino);
 	  diri = mds->mdcache->create_system_inode(lp->ino, S_IFDIR|0755);
+	  diri->state_clear(CInode::STATE_AUTH);
 	  dout(10) << "EMetaBlob.replay created base " << *diri << dendl;
 	} else {
 	  dout(0) << "EMetaBlob.replay missing dir ino  " << (*lp).ino << dendl;
@@ -1006,13 +1008,17 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       dir = diri->get_or_open_dirfrag(mds->mdcache, (*lp).frag);
 
       if (MDS_INO_IS_BASE(lp->ino))
-	mds->mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNKNOWN);
+	mds->mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNDEF);
 
       dout(10) << "EMetaBlob.replay added dir " << *dir << dendl;  
     }
     dir->set_version( lump.fnode.version );
     dir->fnode = lump.fnode;
 
+    if (lump.is_importing()) {
+      dir->state_set(CDir::STATE_AUTH);
+      dir->state_clear(CDir::STATE_COMPLETE);
+    }
     if (lump.is_dirty()) {
       dir->_mark_dirty(logseg);
 
@@ -1041,8 +1047,6 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       dir->mark_new(logseg);
     if (lump.is_complete())
       dir->mark_complete();
-    else if (lump.is_importing())
-      dir->state_clear(CDir::STATE_COMPLETE);
     
     dout(10) << "EMetaBlob.replay updated dir " << *dir << dendl;  
 
@@ -1067,10 +1071,12 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	dn->first = p->dnfirst;
 	assert(dn->last == p->dnlast);
       }
+      if (lump.is_importing())
+	dn->state_set(CDentry::STATE_AUTH);
 
       CInode *in = mds->mdcache->get_inode(p->inode.ino, p->dnlast);
       if (!in) {
-	in = new CInode(mds->mdcache, true, p->dnfirst, p->dnlast);
+	in = new CInode(mds->mdcache, dn->is_auth(), p->dnfirst, p->dnlast);
 	p->update_inode(mds, in);
 	mds->mdcache->add_inode(in);
 	if (!dn->get_linkage()->is_null()) {
@@ -1087,7 +1093,6 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	if (unlinked.count(in))
 	  linked.insert(in);
 	dir->link_primary_inode(dn, in);
-	if (p->is_dirty()) in->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *in << dendl;
       } else {
 	p->update_inode(mds, in);
@@ -1115,12 +1120,17 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	} else {
 	  dout(10) << "EMetaBlob.replay for [" << p->dnfirst << "," << p->dnlast << "] had " << *in << dendl;
 	}
-	if (p->is_dirty()) in->_mark_dirty(logseg);
 	assert(in->first == p->dnfirst ||
 	       (in->is_multiversion() && in->first > p->dnfirst));
       }
+      if (p->is_dirty())
+	in->_mark_dirty(logseg);
       if (p->is_dirty_parent())
 	in->_mark_dirty_parent(logseg, p->is_dirty_pool());
+      if (dn->is_auth())
+	in->state_set(CInode::STATE_AUTH);
+      else
+	in->state_clear(CInode::STATE_AUTH);
       assert(g_conf->mds_kill_journal_replay_at != 2);
     }
 
@@ -1153,6 +1163,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	dn->first = p->dnfirst;
 	assert(dn->last == p->dnlast);
       }
+      if (lump.is_importing())
+	dn->state_set(CDentry::STATE_AUTH);
     }
 
     // null dentries
@@ -1185,6 +1197,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	assert(dn->last == p->dnlast);
       }
       olddir = dir;
+      if (lump.is_importing())
+	dn->state_set(CDentry::STATE_AUTH);
     }
   }
 
@@ -1210,9 +1224,11 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	for (list<frag_t>::iterator p = leaves.begin(); p != leaves.end(); ++p) {
 	  CDir *dir = renamed_diri->get_dirfrag(*p);
 	  assert(dir);
-	  // preserve subtree bound until slave commit
 	  if (dir->get_dir_auth() == CDIR_AUTH_UNDEF)
+	    // preserve subtree bound until slave commit
 	    slaveup->olddirs.insert(dir->inode);
+	  else
+	    dir->state_set(CDir::STATE_AUTH);
 	}
       }
 
@@ -1240,6 +1256,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	}
 	dir = renamed_diri->get_or_open_dirfrag(mds->mdcache, *p);
 	dout(10) << " creating new rename import bound " << *dir << dendl;
+	dir->state_clear(CDir::STATE_AUTH);
 	mds->mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNDEF, false);
       }
     }
@@ -2405,7 +2422,9 @@ void ESubtreeMap::replay(MDS *mds)
       mds->mdcache->adjust_bounded_subtree_auth(dir, p->second, mds->get_nodeid());
     }
   }
-  
+
+  mds->mdcache->recalc_auth_bits(true);
+
   mds->mdcache->show_subtrees();
 }
 
@@ -2623,7 +2642,20 @@ void EImportStart::replay(MDS *mds)
   // set auth partially to us so we don't trim it
   CDir *dir = mds->mdcache->get_dirfrag(base);
   assert(dir);
-  mds->mdcache->adjust_bounded_subtree_auth(dir, bounds, pair<int,int>(mds->get_nodeid(), mds->get_nodeid()));
+
+  set<CDir*> realbounds;
+  for (vector<dirfrag_t>::iterator p = bounds.begin();
+       p != bounds.end();
+       ++p) {
+    CDir *bd = mds->mdcache->get_dirfrag(*p);
+    assert(bd);
+    if (!bd->is_subtree_root())
+      bd->state_clear(CDir::STATE_AUTH);
+    realbounds.insert(bd);
+  }
+
+  mds->mdcache->adjust_bounded_subtree_auth(dir, realbounds,
+					    pair<int,int>(mds->get_nodeid(), mds->get_nodeid()));
 
   // open client sessions?
   if (mds->sessionmap.version >= cmapv) {
@@ -2780,6 +2812,8 @@ void EResetJournal::replay(MDS *mds)
 
   CDir *mydir = mds->mdcache->get_myin()->get_or_open_dirfrag(mds->mdcache, frag_t());
   mds->mdcache->adjust_subtree_auth(mydir, mds->whoami);   
+
+  mds->mdcache->recalc_auth_bits(true);
 
   mds->mdcache->show_subtrees();
 }
