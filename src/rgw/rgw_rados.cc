@@ -4559,7 +4559,7 @@ int RGWRados::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **hand
     if (r < 0)
       goto done_ret;
 
-    if (astate) {
+    if (astate && astate->prefetch_data) {
       if (!ofs && astate->data.length() >= len) {
         bl = astate->data;
         goto done;
