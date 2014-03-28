@@ -219,6 +219,7 @@ public:
   void log_mark_dirty();
   void mark_clean();
 
+  bool is_new() { return item_new.is_on_list(); }
   void mark_new(LogSegment *ls);
 
 public:
