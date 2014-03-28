@@ -1336,6 +1336,8 @@ int RGWRados::init_rados()
 {
   int ret;
 
+  max_chunk_size = cct->_conf->rgw_max_chunk_size;
+
   rados = new Rados();
   if (!rados)
     return -ENOMEM;
@@ -1449,8 +1451,6 @@ int RGWRados::init_complete()
 int RGWRados::initialize()
 {
   int ret;
-
-  max_chunk_size = cct->_conf->rgw_max_chunk_size;
 
   ret = init_rados();
   if (ret < 0)
@@ -4559,7 +4559,7 @@ int RGWRados::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **hand
     if (r < 0)
       goto done_ret;
 
-    if (astate) {
+    if (astate && astate->prefetch_data) {
       if (!ofs && astate->data.length() >= len) {
         bl = astate->data;
         goto done;
