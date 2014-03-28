@@ -155,7 +155,7 @@ relative to a 'target size' of the pool.  For example::
  ceph osd pool set foo-hot cache_target_dirty_ratio .4
  ceph osd pool set foo-hot cache_target_full_ratio .8
 
-will being flushing dirty objects when 40% of the pool is dirty and begin
+will begin flushing dirty objects when 40% of the pool is dirty and begin
 evicting clean objects when we reach 80% of the target size.
 
 The target size can be specified either in terms of objects or bytes::
@@ -163,7 +163,7 @@ The target size can be specified either in terms of objects or bytes::
  ceph osd pool set foo-hot target_max_bytes 1000000000000  # 1 TB
  ceph osd pool set foo-hot target_max_objets 1000000       # 1 million objects
 
-Note that if both limits are specified, Ceph will being flushing or
+Note that if both limits are specified, Ceph will begin flushing or
 evicting when either threshold is triggered.
 
 Other tunables
