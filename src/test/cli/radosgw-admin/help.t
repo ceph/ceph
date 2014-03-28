@@ -68,6 +68,9 @@
     opstate rm                 remove entry (use client_id, op_id, object)
     replicalog get             get replica metadata log entry
     replicalog delete          delete replica metadata log entry
+    mksnap                     create a RGW snapshot
+    lssnap                     list all RGW snapshots
+    rmsnap                     remote a RGW snapshots
   options:
      --uid=<id>                user id
      --subuser=<name>          subuser name
@@ -108,6 +111,7 @@
                                subuser keys
      --purge-objects           remove a bucket's objects before deleting it
                                (NOTE: required to delete a non-empty bucket)
+     --snap                    name of snapshot, required for --mksnap or --rmsnap
      --sync-stats              option to 'user stats', update user stats with current
                                stats reported by user's buckets indexes
      --show-log-entries=<flag> enable/disable dump of log entries on log show
