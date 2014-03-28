@@ -111,6 +111,7 @@ void _usage()
   cerr << "  replicalog delete          delete replica metadata log entry\n";
   cerr << "  mksnap                     create a RGW snapshot\n";
   cerr << "  lssnap                     list all RGW snapshots\n";
+  cerr << "  rmsnap                     remote a RGW snapshots\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
   cerr << "   --subuser=<name>          subuser name\n";
@@ -151,6 +152,7 @@ void _usage()
   cerr << "                             subuser keys\n";
   cerr << "   --purge-objects           remove a bucket's objects before deleting it\n";
   cerr << "                             (NOTE: required to delete a non-empty bucket)\n";
+  cerr << "   --snap                    name of snapshot, required for --mksnap or --rmsnap\n";
   cerr << "   --sync-stats              option to 'user stats', update user stats with current\n";
   cerr << "                             stats reported by user's buckets indexes\n";
   cerr << "   --show-log-entries=<flag> enable/disable dump of log entries on log show\n";
@@ -171,7 +173,6 @@ void _usage()
   cerr << "   --max-objects             specify max objects (negative value to disable)\n";
   cerr << "   --max-size                specify max size (in bytes, negative value to disable)\n";
   cerr << "   --quota-scope             scope of quota (bucket, user)\n";
-  cerr << "   --snap                    name of snapshot\n";
   cerr << "\n";
   generic_client_usage();
 }
