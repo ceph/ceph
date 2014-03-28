@@ -177,6 +177,7 @@ struct Connection : private RefCountedObject {
   RefCountedObject *priv;
   int peer_type;
   entity_addr_t peer_addr;
+  utime_t last_keepalive_ack;
 private:
   uint64_t features;
 public:
@@ -292,6 +293,10 @@ public:
   void revoke_rx_buffer(ceph_tid_t tid) {
     Mutex::Locker l(lock);
     rx_buffers.erase(tid);
+  }
+
+  utime_t get_last_keepalive_ack() const {
+    return last_keepalive_ack;
   }
 };
 typedef boost::intrusive_ptr<Connection> ConnectionRef;
