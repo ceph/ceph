@@ -500,6 +500,11 @@ COMMAND("osd pg-temp " \
 	"name=id,type=CephString,n=N,req=false", \
 	"set pg_temp mapping pgid:[<id> [<id>...]] (developers only)", \
         "osd", "rw", "cli,rest")
+COMMAND("osd primary-temp " \
+	"name=pgid,type=CephPgid " \
+	"name=id,type=CephString", \
+        "set primary_temp mapping pgid:<id>|-1 (developers only)", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd primary-affinity " \
 	"name=id,type=CephOsdName " \
 	"type=CephFloat,name=weight,range=0.0|1.0", \
