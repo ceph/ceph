@@ -392,10 +392,8 @@ void Objecter::unregister_linger(uint64_t linger_id)
     info->session->lock.unlock();
     linger_ops.erase(iter);
     info->put();
-#warning need per-session logger
-#if 0
-    logger->set(l_osdc_linger_active, linger_ops.size());
-#endif
+
+    logger->dec(l_osdc_linger_active);
   }
 }
 
@@ -430,10 +428,7 @@ tid_t Objecter::linger_mutate(const object_t& oid, const object_locator_t& oloc,
   homeless_session.linger_ops[info->linger_id] = info;
   homeless_session.lock.unlock();
 
-#warning per-session logger
-#if 0
-  logger->set(l_osdc_linger_active, linger_ops.size());
-#endif
+  logger->inc(l_osdc_linger_active);
 
   _send_linger(info);
 
@@ -463,10 +458,7 @@ tid_t Objecter::linger_read(const object_t& oid, const object_locator_t& oloc,
 
   info->linger_id = ++max_linger_id;
 
-#warning send_linger should update the per-session logger
-#if 0
-  logger->set(l_osdc_linger_active, linger_ops.size());
-#endif
+  logger->inc(l_osdc_linger_active);
 
   _send_linger(info);
 
@@ -1407,10 +1399,8 @@ tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
     ldout(cct, 20) << " note: not requesting commit" << dendl;
   }
 
-#warning FIXME
-#if 0
-  logger->set(l_osdc_op_active, ops.size());
-#endif
+  logger->inc(l_osdc_op_active);
+
   logger->inc(l_osdc_op);
   if ((op->flags & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE)) == (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE))
     logger->inc(l_osdc_op_rmw);
@@ -1843,10 +1833,8 @@ void Objecter::_finish_op(Op *op)
 
   op->session->ops.erase(op->tid);
 
-#warning FIXME
-#if 0
-  logger->set(l_osdc_op_active, ops.size());
-#endif
+  logger->dec(l_osdc_op_active);
+
   assert(check_latest_map_ops.find(op->tid) == check_latest_map_ops.end());
 
   if (op->ontimeout) {
@@ -3221,10 +3209,8 @@ int Objecter::_submit_command(CommandOp *c, tid_t *ptid)
     _send_command_map_check(c);
   *ptid = tid;
 
-#warning FIXME
-#if 0
-  logger->set(l_osdc_command_active, command_ops.size());
-#endif
+  logger->inc(l_osdc_command_active);
+
   return 0;
 }
 

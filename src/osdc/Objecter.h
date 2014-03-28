@@ -1586,13 +1586,9 @@ private:
   // public interface
 public:
   tid_t op_submit(Op *op);
-  bool is_active();
-#warning FIXME
-#if 0
-  {
+  bool is_active() {
     return !(ops.empty() && linger_ops.empty() && poolstat_ops.empty() && statfs_ops.empty());
   }
-#endif
 
   /**
    * Output in-flight requests
