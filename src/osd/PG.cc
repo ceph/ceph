@@ -1163,12 +1163,13 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id)
       dout(10) << "choose_acting no suitable info found (incomplete backfills?),"
 	       << " reverting to up" << dendl;
       want_acting = up;
-      return true;
+      vector<int> empty;
+      osd->queue_want_pg_temp(info.pgid.pgid, empty);
     } else {
       dout(10) << "choose_acting failed" << dendl;
       assert(want_acting.empty());
-      return false;
     }
+    return false;
   }
 
   if ((up.size() &&
