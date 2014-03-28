@@ -382,8 +382,8 @@ bool librados::RadosClient::_dispatch(Message *m)
     objecter->handle_osd_op_reply(static_cast<MOSDOpReply*>(m));
     break;
   case CEPH_MSG_OSD_MAP:
-    objecter->handle_osd_map(static_cast<MOSDMap*>(m));
     lock.Lock();
+    objecter->handle_osd_map(static_cast<MOSDMap*>(m));
     pool_cache_rwl.get_write();
     osdmap_epoch = osdmap.get_epoch();
     pool_cache_rwl.unlock();
