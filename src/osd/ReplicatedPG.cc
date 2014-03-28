@@ -3247,7 +3247,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  if (result < 0)
 	    break;
 	}
-	result = _delete_head(ctx, true);
+	result = _delete_oid(ctx, true);
 	osd->logger->inc(l_osd_tier_evict);
       }
       break;
@@ -3803,7 +3803,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	// Cannot delete an object with watchers
 	result = -EBUSY;
       } else {
-	result = _delete_head(ctx, false);
+	result = _delete_oid(ctx, false);
       }
       break;
 
@@ -4460,7 +4460,7 @@ int ReplicatedPG::_verify_no_head_clones(const hobject_t& soid,
   return 0;
 }
 
-inline int ReplicatedPG::_delete_head(OpContext *ctx, bool no_whiteout)
+inline int ReplicatedPG::_delete_oid(OpContext *ctx, bool no_whiteout)
 {
   SnapSet& snapset = ctx->new_snapset;
   ObjectState& obs = ctx->new_obs;
@@ -4509,7 +4509,8 @@ inline int ReplicatedPG::_delete_head(OpContext *ctx, bool no_whiteout)
     dout(20) << __func__ << " deleting whiteout on " << soid << dendl;
     ctx->delta_stats.num_whiteouts--;
   }
-  snapset.head_exists = false;
+  if (soid.is_head())
+    snapset.head_exists = false;
   obs.exists = false;
   return 0;
 }
@@ -4554,7 +4555,7 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       // Cannot delete an object with watchers
       ret = -EBUSY;
     } else {
-      _delete_head(ctx, false);
+      _delete_oid(ctx, false);
       ret = 0;
     }
   } else if (ret) {
@@ -10833,7 +10834,7 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
   OpContext *ctx = repop->ctx;
   ctx->at_version = get_next_version();
   assert(ctx->new_obs.exists);
-  int r = _delete_head(ctx, true);
+  int r = _delete_oid(ctx, true);
   assert(r == 0);
   finish_ctx(ctx, pg_log_entry_t::DELETE);
   simple_repop_submit(repop);
