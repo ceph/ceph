@@ -572,8 +572,8 @@ CDir *CInode::get_or_open_dirfrag(MDCache *mdcache, frag_t fg)
   CDir *dir = get_dirfrag(fg);
   if (!dir) {
     // create it.
-    assert(is_auth());
-    dir = new CDir(this, fg, mdcache, true);
+    assert(is_auth() || mdcache->mds->is_any_replay());
+    dir = new CDir(this, fg, mdcache, is_auth());
     add_dirfrag(dir);
   }
   return dir;

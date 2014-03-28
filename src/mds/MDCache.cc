@@ -3045,7 +3045,7 @@ void MDCache::maybe_resolve_finish()
   finish_committed_masters();
   if (mds->is_resolve()) {
     trim_unlinked_inodes();
-    recalc_auth_bits();
+    recalc_auth_bits(false);
     mds->resolve_done();
   } else {
     maybe_send_pending_rejoins();
@@ -3409,15 +3409,19 @@ void MDCache::trim_unlinked_inodes()
  * once subtree auth is disambiguated, we need to adjust all the 
  * auth and dirty bits in our cache before moving on.
  */
-void MDCache::recalc_auth_bits()
+void MDCache::recalc_auth_bits(bool replay)
 {
-  dout(7) << "recalc_auth_bits" << dendl;
+  dout(7) << "recalc_auth_bits " << (replay ? "(replay)" : "") <<  dendl;
 
   if (root) {
     root->inode_auth.first = mds->mdsmap->get_root();
-    if (mds->whoami != root->inode_auth.first) {
+    bool auth = mds->whoami == root->inode_auth.first;
+    if (auth) {
+      root->state_set(CInode::STATE_AUTH);
+    } else {
       root->state_clear(CInode::STATE_AUTH);
-      root->state_set(CInode::STATE_REJOINING);
+      if (!replay)
+	root->state_set(CInode::STATE_REJOINING);
     }
   }
 
@@ -3432,11 +3436,16 @@ void MDCache::recalc_auth_bits()
   for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
        p != subtrees.end();
        ++p) {
-
-    CInode *inode = p->first->get_inode();
-    if (inode->is_mdsdir() && inode->ino() != MDS_INO_MDSDIR(mds->get_nodeid())) {
-      inode->state_clear(CInode::STATE_AUTH);
-      inode->state_set(CInode::STATE_REJOINING);
+    if (p->first->inode->is_mdsdir()) {
+      CInode *in = p->first->inode;
+      bool auth = in->ino() == MDS_INO_MDSDIR(mds->get_nodeid());
+      if (auth) {
+	in->state_set(CInode::STATE_AUTH);
+      } else {
+	in->state_clear(CInode::STATE_AUTH);
+	if (!replay)
+	  in->state_set(CInode::STATE_REJOINING);
+      }
     }
 
     list<CDir*> dfq;  // dirfrag queue
@@ -3453,16 +3462,18 @@ void MDCache::recalc_auth_bits()
       if (auth) {
 	dir->state_set(CDir::STATE_AUTH);
       } else {
-	// close empty non-auth dirfrag
-	if (!dir->is_subtree_root() && dir->get_num_any() == 0) {
-	  dir->inode->close_dirfrag(dir->get_frag());
-	  continue;
-	}
-	dir->state_set(CDir::STATE_REJOINING);
 	dir->state_clear(CDir::STATE_AUTH);
-	dir->state_clear(CDir::STATE_COMPLETE);
-	if (dir->is_dirty()) 
-	  dir->mark_clean();
+	if (!replay) {
+	  // close empty non-auth dirfrag
+	  if (!dir->is_subtree_root() && dir->get_num_any() == 0) {
+	    dir->inode->close_dirfrag(dir->get_frag());
+	    continue;
+	  }
+	  dir->state_set(CDir::STATE_REJOINING);
+	  dir->state_clear(CDir::STATE_COMPLETE);
+	  if (dir->is_dirty())
+	    dir->mark_clean();
+	}
       }
 
       // dentries in this dir
@@ -3472,34 +3483,38 @@ void MDCache::recalc_auth_bits()
 	// dn
 	CDentry *dn = q->second;
 	CDentry::linkage_t *dnl = dn->get_linkage();
-	if (auth)
+	if (auth) {
 	  dn->state_set(CDentry::STATE_AUTH);
-	else {
-	  dn->state_set(CDentry::STATE_REJOINING);
+	} else {
 	  dn->state_clear(CDentry::STATE_AUTH);
-	  if (dn->is_dirty()) 
-	    dn->mark_clean();
+	  if (!replay) {
+	    dn->state_set(CDentry::STATE_REJOINING);
+	    if (dn->is_dirty())
+	      dn->mark_clean();
+	  }
 	}
 
 	if (dnl->is_primary()) {
 	  // inode
-	  if (auth) 
-	    dnl->get_inode()->state_set(CInode::STATE_AUTH);
-	  else {
-	    dnl->get_inode()->state_set(CInode::STATE_REJOINING);
-	    dnl->get_inode()->state_clear(CInode::STATE_AUTH);
-	    if (dnl->get_inode()->is_dirty())
-	      dnl->get_inode()->mark_clean();
-	    if (dnl->get_inode()->is_dirty_parent())
-	      dnl->get_inode()->clear_dirty_parent();
-	    // avoid touching scatterlocks for our subtree roots!
-	    if (subtree_inodes.count(dnl->get_inode()) == 0)
-	      dnl->get_inode()->clear_scatter_dirty();
+	  CInode *in = dnl->get_inode();
+	  if (auth) {
+	    in->state_set(CInode::STATE_AUTH);
+	  } else {
+	    in->state_clear(CInode::STATE_AUTH);
+	    if (!replay) {
+	      in->state_set(CInode::STATE_REJOINING);
+	      if (in->is_dirty())
+		in->mark_clean();
+	      if (in->is_dirty_parent())
+		in->clear_dirty_parent();
+	      // avoid touching scatterlocks for our subtree roots!
+	      if (subtree_inodes.count(in) == 0)
+		in->clear_scatter_dirty();
+	    }
 	  }
-
 	  // recurse?
-	  if (dnl->get_inode()->is_dir()) 
-	    dnl->get_inode()->get_nested_dirfrags(dfq);
+	  if (in->is_dir())
+	    in->get_nested_dirfrags(dfq);
 	}
       }
     }
@@ -6738,6 +6753,8 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
         dir->remove_dentry(dn);
       } else {
         dout(20) << "trim_non_auth_subtree(" << dir << ") keeping inode " << in << " with dentry " << dn <<dendl;
+	dn->state_clear(CDentry::STATE_AUTH);
+	in->state_clear(CInode::STATE_AUTH);
       }
     } else if (keep_dir && dnl->is_null()) { // keep null dentry for slave rollback
       dout(20) << "trim_non_auth_subtree(" << dir << ") keeping dentry " << dn <<dendl;
@@ -6748,6 +6765,7 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
       dir->remove_dentry(dn);
     }
   }
+  dir->state_clear(CDir::STATE_AUTH);
   /**
    * We've now checked all our children and deleted those that need it.
    * Now return to caller, and tell them if *we're* a keeper.

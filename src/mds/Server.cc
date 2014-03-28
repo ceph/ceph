@@ -7016,8 +7016,10 @@ void Server::_rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentr
 
   mut->apply();
 
-  if (srcdn) {
+  if (srcdn && srcdn->get_linkage()->is_primary()) {
     CInode *in = srcdn->get_linkage()->get_inode();
+    if (srcdn->authority().first == mds->get_nodeid())
+      in->state_set(CInode::STATE_AUTH);
     // update subtree map?
     if (in && in->is_dir()) {
       assert(destdn);
