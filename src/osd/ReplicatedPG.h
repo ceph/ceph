@@ -329,6 +329,9 @@ public:
   const pg_info_t &get_info() const {
     return info;
   }
+  const pg_pool_t &get_pool() const {
+    return pool.info;
+  }
   ObjectContextRef get_obc(
     const hobject_t &hoid,
     map<string, bufferlist> &attrs) {
