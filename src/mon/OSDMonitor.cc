@@ -4339,6 +4339,59 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     pending_inc.new_pg_temp[pgid] = new_pg_temp;
     ss << "set " << pgid << " pg_temp mapping to " << new_pg_temp;
     goto update;
+  } else if (prefix == "osd primary-temp") {
+    string pgidstr;
+    if (!cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr)) {
+      ss << "unable to parse 'pgid' value '"
+         << cmd_vartype_stringify(cmdmap["pgid"]) << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    pg_t pgid;
+    if (!pgid.parse(pgidstr.c_str())) {
+      ss << "invalid pgid '" << pgidstr << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    PGMap& pg_map = mon->pgmon()->pg_map;
+    if (!pg_map.pg_stat.count(pgid)) {
+      ss << "pg " << pgid << " does not exist";
+      err = -ENOENT;
+      goto reply;
+    }
+
+    string id;
+    int32_t osd;
+    if (!cmd_getval(g_ceph_context, cmdmap, "id", id)) {
+      ss << "unable to parse 'id' value '"
+         << cmd_vartype_stringify(cmdmap["id"]) << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    if (strcmp(id.c_str(), "-1")) {
+      osd = parse_osd_id(id.c_str(), &ss);
+      if (osd < 0) {
+        err = -EINVAL;
+        goto reply;
+      }
+      if (!osdmap.exists(osd)) {
+        ss << "osd." << osd << " does not exist";
+        err = -ENOENT;
+        goto reply;
+      }
+    } else {
+      osd = -1;
+    }
+
+    if (!g_conf->mon_osd_allow_primary_temp) {
+      ss << "you must enable 'mon osd allow primary temp = true' on the mons before you can set primary_temp mappings.  note that this is for developers only: older clients/OSDs will break and there is no feature bit infrastructure in place.";
+      err = -EPERM;
+      goto reply;
+    }
+
+    pending_inc.new_primary_temp[pgid] = osd;
+    ss << "set " << pgid << " primary_temp mapping to " << osd;
+    goto update;
   } else if (prefix == "osd primary-affinity") {
     int64_t id;
     if (!cmd_getval(g_ceph_context, cmdmap, "id", id)) {
