@@ -4298,6 +4298,53 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
 						get_last_committed() + 1));
       return true;
     }
+  } else if (prefix == "osd pg-temp") {
+    string pgidstr;
+    if (!cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr)) {
+      ss << "unable to parse 'pgid' value '"
+         << cmd_vartype_stringify(cmdmap["pgid"]) << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    pg_t pgid;
+    if (!pgid.parse(pgidstr.c_str())) {
+      ss << "invalid pgid '" << pgidstr << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    PGMap& pg_map = mon->pgmon()->pg_map;
+    if (!pg_map.pg_stat.count(pgid)) {
+      ss << "pg " << pgid << " does not exist";
+      err = -ENOENT;
+      goto reply;
+    }
+
+    vector<string> id_vec;
+    vector<int32_t> new_pg_temp;
+    if (!cmd_getval(g_ceph_context, cmdmap, "id", id_vec)) {
+      ss << "unable to parse 'id' value(s) '"
+         << cmd_vartype_stringify(cmdmap["id"]) << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    for (unsigned i = 0; i < id_vec.size(); i++) {
+      int32_t osd = parse_osd_id(id_vec[i].c_str(), &ss);
+      if (osd < 0) {
+        err = -EINVAL;
+        goto reply;
+      }
+      if (!osdmap.exists(osd)) {
+        ss << "osd." << osd << " does not exist";
+        err = -ENOENT;
+        goto reply;
+      }
+
+      new_pg_temp.push_back(osd);
+    }
+
+    pending_inc.new_pg_temp[pgid] = new_pg_temp;
+    ss << "set " << pgid << " pg_temp mapping to " << new_pg_temp;
+    goto update;
   } else if (prefix == "osd primary-affinity") {
     int64_t id;
     if (!cmd_getval(g_ceph_context, cmdmap, "id", id)) {

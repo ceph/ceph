@@ -495,6 +495,11 @@ COMMAND("osd reweight " \
 	"name=id,type=CephInt,range=0 " \
 	"type=CephFloat,name=weight,range=0.0|1.0", \
 	"reweight osd to 0.0 < <weight> < 1.0", "osd", "rw", "cli,rest")
+COMMAND("osd pg-temp " \
+	"name=pgid,type=CephPgid " \
+	"name=id,type=CephString,n=N,req=false", \
+	"set pg_temp mapping pgid:[<id> [<id>...]] (developers only)", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd primary-affinity " \
 	"name=id,type=CephOsdName " \
 	"type=CephFloat,name=weight,range=0.0|1.0", \
