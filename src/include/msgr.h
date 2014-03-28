@@ -90,6 +90,8 @@ struct ceph_entity_inst {
 #define CEPH_MSGR_TAG_BADAUTHORIZER 11 /* bad authorizer */
 #define CEPH_MSGR_TAG_FEATURES      12 /* insufficient features */
 #define CEPH_MSGR_TAG_SEQ           13 /* 64-bit int follows with seen seq number */
+#define CEPH_MSGR_TAG_KEEPALIVE2     14
+#define CEPH_MSGR_TAG_KEEPALIVE2_ACK 15  /* keepalive reply */
 
 
 /*
