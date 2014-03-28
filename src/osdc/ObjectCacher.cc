@@ -1245,6 +1245,8 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
     ldout(cct, 10) << "readx  result is " << rd->bl->length() << dendl;
   } else {
     ldout(cct, 10) << "readx  no bufferlist ptr (readahead?), done." << dendl;
+    map<uint64_t,bufferlist>::reverse_iterator i = stripe_map.rbegin();
+    pos = i->first + i->second.length();
   }
 
   // done with read.
