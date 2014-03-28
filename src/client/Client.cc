@@ -6190,8 +6190,17 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
       if (objectcacher->file_is_cached(&in->oset, &in->layout, in->snapid, off, min))
 	ldout(cct, 20) << "readahead already have min" << dendl;
       else {
-	objectcacher->file_read(&in->oset, &in->layout, in->snapid, off, l, NULL, 0, 0);
-	ldout(cct, 20) << "readahead initiated" << dendl;
+	Context *onfinish = new C_Readahead(this, in);
+	int r = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
+					off, l,
+					NULL, 0, onfinish);
+	if (r == 0) {
+	  ldout(cct, 20) << "readahead initiated, c " << onfinish << dendl;
+	  in->get();
+	} else {
+	  ldout(cct, 20) << "readahead was no-op, already cached" << dendl;
+	  delete onfinish;
+	}
       }
     }
   }
