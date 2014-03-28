@@ -1983,8 +1983,8 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
     }
 
     bool stop = false;
-    if (!pin->can_auth_pin() || pin->is_ambiguous_auth()) {
-      dout(10) << "predirty_journal_parents can't auth pin or ambig on " << *pin << dendl;
+    if (!pin->is_auth() || (!mut->is_auth_pinned(pin) && !pin->can_auth_pin())) {
+      dout(10) << "predirty_journal_parents !auth or ambig or can't authpin on " << *pin << dendl;
       stop = true;
     }
 
