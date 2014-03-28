@@ -263,7 +263,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 
   /** we don't have any of the feature bit infrastructure in place for
    * supporting primary_temp mappings without breaking old clients/OSDs.*/
-  assert(osdmap.primary_temp->empty());
+  assert(g_conf->mon_osd_allow_primary_temp || osdmap.primary_temp->empty());
 
   if (mon->is_leader()) {
     // kick pgmon, make sure it's seen the latest map
