@@ -8,6 +8,7 @@ tasks:
 - install.upgrade:
     all:
       branch: dumpling
+- ceph.restart:
 - parallel:
     - workload
     - upgrade-sequence
