@@ -7310,6 +7310,11 @@ void ReplicatedBackend::calc_head_subsets(
   if (size)
     data_subset.insert(0, size);
 
+  if (get_parent()->get_pool().cache_mode != pg_pool_t::CACHEMODE_NONE) {
+    dout(10) << __func__ << ": caching enabled, skipping clone subsets" << dendl;
+    return;
+  }
+
   if (!cct->_conf->osd_recover_clone_overlap) {
     dout(10) << "calc_head_subsets " << head << " -- osd_recover_clone_overlap disabled" << dendl;
     return;
@@ -7364,6 +7369,11 @@ void ReplicatedBackend::calc_clone_subsets(
   uint64_t size = snapset.clone_size[soid.snap];
   if (size)
     data_subset.insert(0, size);
+
+  if (get_parent()->get_pool().cache_mode != pg_pool_t::CACHEMODE_NONE) {
+    dout(10) << __func__ << ": caching enabled, skipping clone subsets" << dendl;
+    return;
+  }
 
   if (!cct->_conf->osd_recover_clone_overlap) {
     dout(10) << "calc_clone_subsets " << soid << " -- osd_recover_clone_overlap disabled" << dendl;
