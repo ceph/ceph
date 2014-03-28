@@ -11325,12 +11325,25 @@ void MDCache::fragment_mark_and_complete(list<CDir*>& dirs)
        ++p) {
     CDir *dir = *p;
 
+    bool ready = true;
     if (!dir->is_complete()) {
       dout(15) << " fetching incomplete " << *dir << dendl;
-      dir->fetch(gather.new_sub(),
-		 true);  // ignore authpinnability
-    } 
-    else if (!dir->state_test(CDir::STATE_DNPINNEDFRAG)) {
+      dir->fetch(gather.new_sub(), true);  // ignore authpinnability
+      ready = false;
+    }
+    if (dir->get_frag() == frag_t() && dir->is_new()) {
+      // The COMPLETE flag gets lost if we fragment a new dirfrag, then rollback
+      // the operation. To avoid CDir::fetch() complaining about missing object,
+      // we commit new dirfrag first.
+      dout(15) << " committing new " << *dir << dendl;
+      assert(dir->is_dirty());
+      dir->commit(0, gather.new_sub(), true);
+      ready = false;
+    }
+    if (!ready)
+      continue;
+
+    if (!dir->state_test(CDir::STATE_DNPINNEDFRAG)) {
       dout(15) << " marking " << *dir << dendl;
       for (CDir::map_t::iterator p = dir->items.begin();
 	   p != dir->items.end();
@@ -11342,8 +11355,7 @@ void MDCache::fragment_mark_and_complete(list<CDir*>& dirs)
       }
       dir->state_set(CDir::STATE_DNPINNEDFRAG);
       dir->auth_unpin(dir);
-    }
-    else {
+    } else {
       dout(15) << " already marked " << *dir << dendl;
     }
   }
@@ -11833,15 +11845,8 @@ void MDCache::add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, list<fra
   uf.bits = bits;
   uf.ls = ls;
   ls->uncommitted_fragments.insert(basedirfrag);
-  if (rollback) {
+  if (rollback)
     uf.rollback.swap(*rollback);
-    // preserve COMPLETE flag for newly created dirfrag
-    if (bits > 0 && basedirfrag.frag == frag_t()) {
-      CDir *dir = get_dirfrag(basedirfrag);
-      if (dir && dir->is_complete())
-	uf.complete = true;
-    }
-  }
 }
 
 void MDCache::finish_uncommitted_fragment(dirfrag_t basedirfrag, int op)
@@ -11927,8 +11932,6 @@ void MDCache::rollback_uncommitted_fragments()
 	dir->set_version(rollback.fnode.version);
 	dir->fnode = rollback.fnode;
 
-	if (uf.complete)
-	  dir->mark_complete();
 	dir->_mark_dirty(ls);
 
 	if (!(dir->fnode.rstat == dir->fnode.accounted_rstat)) {
