@@ -826,7 +826,6 @@ public class CephMountTest {
 
     /* list xattrs */
     String[] xattrs = mount.listxattr(path);
-    /* the ceph.file.layout xattr exists for all files automatically */
     assertTrue(xattrs.length == 3);
     int found = 0;
     for (String xattr : xattrs) {
@@ -838,13 +837,9 @@ public class CephMountTest {
         found++;
         continue;
       }
-      if (xattr.compareTo("ceph.file.layout") == 0) {
-        found++;
-        continue;
-      }
       System.out.println("found unwanted xattr: " + xattr);
     }
-    assertTrue(found == 3);
+    assertTrue(found == 2);
 
     /* get first xattr by looking up length */
     long attr1_len = mount.getxattr(path, "user.attr1", null);
