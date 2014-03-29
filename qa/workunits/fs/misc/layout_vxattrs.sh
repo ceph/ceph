@@ -6,9 +6,6 @@ set -e
 rm -f file file2
 touch file file2
 
-getfattr -d -m - file | grep -q ceph.file.layout
-getfattr -d -m - file | grep -q ceph.file.layout.pool   && exit 1 || true
-
 getfattr -n ceph.file.layout file
 getfattr -n ceph.file.layout file | grep -q object_size=
 getfattr -n ceph.file.layout file | grep -q stripe_count=
