@@ -11081,7 +11081,8 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       ::decode(snapset, blp);
 
       // did we finish the last oid?
-      if (head != hobject_t()) {
+      if (head != hobject_t() &&
+	  pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE) {
 	osd->clog.error() << mode << " " << info.pgid << " " << head
 			  << " missing clones";
         ++scrubber.shallow_errors;
