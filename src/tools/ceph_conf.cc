@@ -162,8 +162,6 @@ int main(int argc, const char **argv)
   args.push_back("");
   args.push_back("--no-log-to-stderr");
   args.push_back("--no-log-to-syslog");
-  args.push_back("--admin-socket");
-  args.push_back("");
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
 	      CINIT_FLAG_NO_DAEMON_ACTIONS);
