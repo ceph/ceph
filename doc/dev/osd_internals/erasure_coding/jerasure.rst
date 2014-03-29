@@ -9,14 +9,25 @@ The parameters interpreted by the jerasure plugin are:
 
 ::
  
-  ceph osd pool create <pool> \
-     erasure-code-directory=<dir>         \ # plugin directory absolute path
-     erasure-code-plugin=jerasure         \ # plugin name (only jerasure)
-     erasure-code-k=<k>                   \ # data chunks (default 2)
-     erasure-code-m=<m>                   \ # coding chunks (default 2)
-     erasure-code-technique=<technique>   \ # coding technique
+  ceph osd erasure-code-profile set myprofile \
+     directory=<dir>         \ # plugin directory absolute path
+     plugin=jerasure         \ # plugin name (only jerasure)
+     k=<k>                   \ # data chunks (default 2)
+     m=<m>                   \ # coding chunks (default 2)
+     technique=<technique>   \ # coding technique
 
 The coding techniques can be chosen among *reed_sol_van*,
 *reed_sol_r6_op*, *cauchy_orig*, *cauchy_good*, *liberation*,
 *blaum_roth* and *liber8tion*.
 
+The *src/erasure-code/jerasure* directory contains the
+implementation. It is a wrapper around the code found at
+`https://github.com/ceph/jerasure <https://github.com/ceph/jerasure>`_
+and `https://github.com/ceph/gf-complete
+<https://github.com/ceph/gf-complete>`_ , pinned to the latest stable
+version in *.gitmodules*. These repositories are copies of the
+upstream repositories `https://bitbucket.org/jimplank/jerasure
+<https://bitbucket.org/jimplank/jerasure>`_ and
+`https://bitbucket.org/jimplank/gf-complete
+<https://bitbucket.org/jimplank/gf-complete>`_ . The difference
+between the two, if any, should match pull requests against upstream.
