@@ -1616,6 +1616,9 @@ TEST_F(LibRadosTierPP, FlushWriteRaces) {
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
+
+  ASSERT_EQ(0, cluster.pool_delete(cache_pool_name.c_str()));
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
 TEST_F(LibRadosTwoPoolsPP, FlushTryFlushRaces) {
