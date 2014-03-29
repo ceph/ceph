@@ -357,24 +357,6 @@ TEST_F(LibRadosTwoPoolsPP, PromoteSnap) {
 
   ioctx.snap_set_read(my_snaps[0]);
 
-  // stop and scrub this pg (to make sure scrub can handle missing
-  // clones in the cache tier)
-  {
-    IoCtx cache_ioctx;
-    ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
-    ostringstream ss;
-    ss << "{\"prefix\": \"pg scrub\", \"pgid\": \""
-       << cache_ioctx.get_id() << "."
-       << ioctx.get_object_pg_hash_position("foo")
-       << "\"}";
-    ASSERT_EQ(0, cluster.mon_command(ss.str(), inbl, NULL, NULL));
-
-    // give it a few seconds to go.  this is sloppy but is usually enough time
-    cout << "waiting for scrub..." << std::endl;
-    sleep(15);
-    cout << "done waiting" << std::endl;
-  }
-
   // read foo snap
   {
     bufferlist bl;
@@ -431,6 +413,98 @@ TEST_F(LibRadosTwoPoolsPP, PromoteSnap) {
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
 }
+
+TEST_F(LibRadosTwoPoolsPP, PromoteSnapScrub) {
+  int num = 100;
+
+  // create objects
+  for (int i=0; i<num; ++i) {
+    bufferlist bl;
+    bl.append("hi there");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate(string("foo") + stringify(i), &op));
+  }
+
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+							 my_snaps));
+  for (int i=0; i<num; ++i) {
+    bufferlist bl;
+    bl.append("ciao!");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate(string("foo") + stringify(i), &op));
+  }
+
+  // configure cache
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+    "\", \"mode\": \"writeback\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // read, trigger a promote on _some_ heads to make sure we handle cases
+  // where snaps are present and where they are not.
+  for (int i=0; i<num; ++i) {
+    if (i % 5 == 0 || i > num - 3) {
+      bufferlist bl;
+      ASSERT_EQ(1, ioctx.read(string("foo") + stringify(i), bl, 1, 0));
+      ASSERT_EQ('c', bl[0]);
+    }
+  }
+
+  ioctx.snap_set_read(my_snaps[0]);
+
+  // stop and scrub this pool (to make sure scrub can handle missing
+  // clones in the cache tier).
+  {
+    IoCtx cache_ioctx;
+    ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
+    for (int i=0; i<10; ++i) {
+      ostringstream ss;
+      ss << "{\"prefix\": \"pg scrub\", \"pgid\": \""
+	 << cache_ioctx.get_id() << "." << i
+	 << "\"}";
+      cluster.mon_command(ss.str(), inbl, NULL, NULL);
+    }
+
+    // give it a few seconds to go.  this is sloppy but is usually enough time
+    cout << "waiting for scrubs..." << std::endl;
+    sleep(30);
+    cout << "done waiting" << std::endl;
+  }
+
+  ioctx.snap_set_read(librados::SNAP_HEAD);
+
+  // tear down tiers
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
+    "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
+}
+
 
 TEST_F(LibRadosTwoPoolsPP, PromoteSnapTrimRace) {
   // create object
