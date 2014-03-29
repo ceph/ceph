@@ -1084,24 +1084,13 @@ void MDCache::get_force_dirfrag_bound_set(vector<dirfrag_t>& dfs, set<CDir*>& bo
   }
 }
 
-
 void MDCache::adjust_bounded_subtree_auth(CDir *dir, vector<dirfrag_t>& bound_dfs, pair<int,int> auth)
 {
   dout(7) << "adjust_bounded_subtree_auth " << dir->get_dir_auth() << " -> " << auth
-	  << " on " << *dir 
-	  << " bound_dfs " << bound_dfs
-	  << dendl;
-  
-  // make bounds list
+	  << " on " << *dir << " bound_dfs " << bound_dfs << dendl;
+
   set<CDir*> bounds;
-  for (vector<dirfrag_t>::iterator p = bound_dfs.begin();
-       p != bound_dfs.end();
-       ++p) {
-    CDir *bd = get_dirfrag(*p);
-    if (bd) 
-      bounds.insert(bd);
-  }
-  
+  get_force_dirfrag_bound_set(bound_dfs, bounds);
   adjust_bounded_subtree_auth(dir, bounds, auth);
 }
 
@@ -2997,11 +2986,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
     CDir *dir = get_force_dirfrag(pi->first);
     if (!dir)
       continue;
-
-    set<CDir*> bounds;
-    get_force_dirfrag_bound_set(pi->second, bounds);
-
-    adjust_bounded_subtree_auth(dir, bounds, from);
+    adjust_bounded_subtree_auth(dir, pi->second, from);
     try_subtree_merge(dir);
   }
 
