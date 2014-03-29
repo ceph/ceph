@@ -643,6 +643,11 @@ struct RGWObjVersionTracker {
     write_version = obj_version();
   }
 
+  void clear() {
+    read_version = obj_version();
+    write_version = obj_version();
+  }
+
   void generate_new_write_ver(CephContext *cct);
 };
 
