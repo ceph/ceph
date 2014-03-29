@@ -52,13 +52,9 @@ void PGLog::IndexedLog::split_into(
 
   if (log.empty())
     tail = head;
-  else
-    head = log.rbegin()->version;
 
   if (olog->empty())
     olog->tail = olog->head;
-  else
-    olog->head = olog->log.rbegin()->version;
 
   olog->index();
   index();
@@ -426,8 +422,6 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
       log.index(*to);
       dout(15) << *to << dendl;
     }
-    assert(to != olog.log.end() ||
-	   (olog.head == info.last_update));
       
     // splice into our log.
     log.log.splice(log.log.begin(),
