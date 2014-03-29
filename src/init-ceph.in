@@ -327,7 +327,7 @@ for name in $what; do
 		    get_conf osd_weight "" "osd crush initial weight"
 		    defaultweight="$(df -P -k $osd_data/. | tail -1 | awk '{ print sprintf("%.2f",$2/1073741824) }')"
 		    get_conf osd_keyring "$osd_data/keyring" "keyring"
-		    do_cmd "timeout 10 $BINDIR/ceph -c $conf --name=osd.$id --keyring=$osd_keyring osd crush create-or-move -- $id ${osd_weight:-${defaultweight:-1}} $osd_location"
+		    do_cmd "timeout 30 $BINDIR/ceph -c $conf --name=osd.$id --keyring=$osd_keyring osd crush create-or-move -- $id ${osd_weight:-${defaultweight:-1}} $osd_location"
 		fi
 	    fi
 
