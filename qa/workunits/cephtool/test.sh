@@ -424,6 +424,14 @@ ceph osd primary-affinity osd.0 .9
 expect_false ceph osd primary-affinity osd.0 -2
 ceph osd primary-affinity osd.0 1
 
+ceph osd pg-temp 0.0 0 1 2
+ceph osd pg-temp 0.0 1 0 2
+expect_false ceph osd pg-temp asdf qwer
+expect_false ceph osd pg-temp 0.0 asdf
+expect_false ceph osd pg-temp 0.0
+
+# don't test ceph osd primary-temp for now
+
 for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset; do
 	ceph osd pool get data $s
 done
