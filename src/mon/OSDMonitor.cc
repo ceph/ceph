@@ -1475,11 +1475,15 @@ bool OSDMonitor::preprocess_pgtemp(MOSDPGTemp *m)
     }
 
     // removal?
-    if (p->second.empty() && osdmap.pg_temp->count(p->first))
+    if (p->second.empty() && (osdmap.pg_temp->count(p->first) ||
+			      osdmap.primary_temp->count(p->first)))
       return false;
     // change?
+    //  NOTE: we assume that this will clear pg_primary, so consider
+    //        an existing pg_primary field to imply a change
     if (p->second.size() && (osdmap.pg_temp->count(p->first) == 0 ||
-			     (*osdmap.pg_temp)[p->first] != p->second))
+			     (*osdmap.pg_temp)[p->first] != p->second ||
+			     osdmap.primary_temp->count(p->first)))
       return false;
   }
 
@@ -1513,6 +1517,13 @@ bool OSDMonitor::prepare_pgtemp(MOSDPGTemp *m)
       continue;
     }
     pending_inc.new_pg_temp[p->first] = p->second;
+
+    // unconditionally clear pg_primary (until this message can encode
+    // a change for that, too.. at which point we need to also fix
+    // preprocess_pg_temp)
+    if (osdmap.primary_temp->count(p->first) ||
+	pending_inc.new_primary_temp.count(p->first))
+      pending_inc.new_primary_temp[p->first] = -1;
   }
   pending_inc.new_up_thru[from] = m->map_epoch;   // set up_thru too, so the osd doesn't have to ask again
   wait_for_finished_proposal(new C_ReplyMap(this, m, m->map_epoch));
