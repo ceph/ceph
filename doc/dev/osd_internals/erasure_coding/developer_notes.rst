@@ -7,10 +7,7 @@ Introduction
 
 Each chapter of this document explains an aspect of the implementation
 of the erasure code within Ceph. It is mostly based on examples being
-explained to demonstrate how things work. It is written as if the
-implementation is complete although it may not be the case. For
-instance the plugin system and the jerasure plugin are implemented but
-the erasure coded pool is not.
+explained to demonstrate how things work. 
 
 Reading and writing encoded chunks from and to OSDs
 ---------------------------------------------------
@@ -18,10 +15,9 @@ Reading and writing encoded chunks from and to OSDs
 An erasure coded pool stores each object as K+M chunks. It is divided
 into K data chunks and M coding chunks. The pool is configured to have
 a size of K+M so that each chunk is stored in an OSD in the acting
-set. The rank of the chunk is stored as `an attribute of the object
-<http://tracker.ceph.com/issues/5862>`_.
+set. The rank of the chunk is stored as an attribute of the object.
 
-For instance an erasure coded pool is created to use five OSDs ( K+M =
+Let's say an erasure coded pool is created to use five OSDs ( K+M =
 5 ) and sustain the loss of two of them ( M = 2 ).
 
 When the object *NYAN* containing *ABCDEFGHI* is written to it, the
@@ -87,9 +83,11 @@ chunk *3* containing *GHI* and chunk *4* containing *YXY* and rebuild
 the original content of the object *ABCDEFGHI*. The decoding function
 is informed that the chunks *2* and *5* are missing ( they are called
 *erasures* ). The chunk *5* could not be read because the *OSD4* is
-*out*. The decoding function can be called as soon as three chunks are
-read : *OSD2* was the slowest and its chunk was not taken into
-account.  
+*out*. 
+
+The decoding function could be called as soon as three chunks are
+read : *OSD2* was the slowest and its chunk does not need to be taken into
+account. This optimization is not implemented in Firefly.
 
 ::
  
@@ -134,307 +132,6 @@ account.
                +------------------| OSD5 |
                                   +------+
 
-Interrupted full writes
------------------------
-
-In an erasure coded pool the primary OSD in the up set receives all
-write operations. It is responsible for encoding the payload into K+M
-chunks and sends them to the other OSDs. It is also responsible
-for maintaining an authoritative version of the placement group logs.
-
-::
- 
-     primary
-   +---OSD 1---+
-   |       log |
-   |           |
-   |+----+     |
-   ||D1v1| 1,1 |
-   |+----+     |
-   +-----------+
-               +---OSD 2---+
-               |+----+ log |
-               ||D2v1| 1,1 |
-               |+----+     |
-               +-----------+
-               +---OSD 3---+
-               |       log |
-               |           |
-               |+----+     |
-               ||C1v1| 1,1 |
-               |+----+     |
-               +-----------+
-
-An erasure coded placement group has been created with K = 2 + M = 1
-and is supported by three OSDs, two for K and one for M. The acting
-set of the placement group is made of *OSD 1*, *OSD 2* and *OSD 3*. An
-object has been encoded and stored in the OSDs : the chunk D1v1
-(i.e. Data chunk number 1 version 1) is on *OSD 1*, D2v1 on *OSD 2*
-and C1v1 (i.e. Coding chunk number 1 version 1) on *OSD 3*. The
-placement group logs on each OSD are identical (i.e. 1,1).  
-
-::
- 
-     primary
-   +---OSD 1---+
-   |+----+ log |
-   ||D1v2| 1,2 |<----------------- WRITE FULL
-   |+----+     |
-   |+----+     |
-   ||D1v1| 1,1 |
-   |+----+     |
-   +++---------+
-    ||         +---OSD 2---+
-    ||  +----+ |+----+ log |
-    |+-->D2v2| ||D2v1| 1,1 |
-    |   +----+ |+----+     |
-    |          +-----------+
-    |          +---OSD 3---+
-    |          |+----+ log |
-    +---------->|C1v2| 1,2 |
-               |+----+     |
-               |+----+     |
-               ||C1v1| 1,1 |
-               |+----+     |
-               +-----------+
-
-*OSD 1* is the primary and receives a WRITE FULL from a client, which
-means the payload is to replace the object entirely instead of
-overwriting a portion of it. Version two of the object is created to
-override version one. *OSD 1* encodes the payload into three chunks :
-D1v2 (i.e. Data chunk number 1 version 2) will be on *OSD 1*, D2v2 on
-*OSD 2* and C1v2 (i.e. Coding chunk number 1 version 2) on *OSD
-3*. Each chunk is sent to the target OSD, including the primary OSD
-which is responsible for storing chunks in addition to handling write
-operations and maintaining an authoritative version of the placement
-group logs. When an OSD receives the message instructing it to write
-the chunk, it also creates a new entry in the placement group logs to
-reflect the change. For instance, as soon as *OSD 3* stores *C1v2*, it
-adds the entry 1,2 ( i.e. epoch 1, version 2 ) to its logs. Because
-the OSDs work asynchronously, some chunks may still be in flight (
-such as *D2v2* ) while others are acknowledged and on disk ( such as
-*C1v1* and *D1v1* ).
-
-::
- 
-     primary
-   +---OSD 1---+
-   |+----+ log |
-   ||D1v2| 1,2 |<----------------- WRITE FULL
-   |+----+     |
-   |+----+     |
-   ||D1v1| 1,1 |
-   |+----+     |
-   +++---------+
-    ||         +---OSD 2---+
-    ||         |+----+ log |
-    |+--------->|D2v2| 1,2 |
-    |          |+----+     |
-    |          |+----+     |
-    |          ||D2v1| 1,1 |
-    |          |+----+     |
-    |          +-----------+
-    |          +---OSD 3---+
-    |          |+----+ log |
-    +---------->|C1v2| 1,2 |
-               |+----+     |
-               |+----+     |
-               ||C1v1| 1,1 |
-               |+----+     |
-               +-----------+
-
-If all goes well, the chunks are acknowledged on each OSD in the
-acting set and the logs' *last_complete* pointer can move from
-*1,1* to *1,2* and the files used to store the chunks of the previous
-version of the object can be removed : *D1v1* on *OSD 1*, *D2v1* on
-*OSD 2* and *C1v1* on *OSD 3*.
-
-::
- 
-               +---OSD 1---+
-               |           |
-               |   DOWN    |
-               |           |
-               +-----------+
-               +---OSD 2---+
-               |+----+ log |
-               ||D2v1| 1,1 |
-               |+----+     |
-               +-----------+
-               +---OSD 3---+
-               |+----+ log |
-               ||C1v2| 1,2 |
-               |+----+     |
-               |+----+     |
-               ||C1V1| 1,1 |
-               |+----+     |
-    primary    +-----------+
-  +---OSD 4---+
-  |       log |
-  |       1,1 |
-  |           |
-  +-----------+
-
-But accidents happen. If *OSD 1* goes down while *D2v2* is still in
-flight, the object's version 2 is partially written : *OSD 3* has
-one chunk but that is no not enough to recover. It lost two chunks :
-*D1v2* and *D2v2* and the erasure coding parameters K = 2 + M = 1
-require that at least two chunks are available to rebuild the
-third. *OSD 4* becomes the new primary and finds that the
-*last_complete* log entry ( i.e. all objects before this entry were
-known to be available on all OSDs in the previous acting set ) is
-*1,1* and that will be the head of the new authoritative log.
-
-::
- 
-               +---OSD 2---+
-               |+----+ log |
-               ||D2v1| 1,1 |
-               |+----+     |
-               +-----------+
-               +---OSD 3---+
-               |+----+ log |
-               ||C1V1| 1,1 |
-               |+----+     |
-    primary    +-----------+
-  +---OSD 4---+
-  |       log |
-  |       1,1 |
-  |           |
-  +-----------+
-
-The log entry *1,2* found on *OSD 3* is divergent from the new
-authoritative log provided by *OSD 4* : it is discarded and the file
-containing the *C1v2* chunk is removed.
-
-::
- 
-               +---OSD 2---+
-               |+----+ log |
-               ||D2v1| 1,1 |
-               |+----+     |
-               +-----------+
-               +---OSD 3---+
-               |+----+ log |
-               ||C1V1| 1,1 |
-               |+----+     |
-    primary    +-----------+
-  +---OSD 4---+
-  |+----+ log |
-  ||D1v1| 1,1 |
-  |+----+     |
-  +-----------+
-
-The *D1v1* chunk is rebuilt with the *decode* function of the erasure
-coding library during scrubbing and stored on the new primary *OSD 4*.
-
-Interrupted append
-------------------
-
-An object is coded in stripes, either because it is too big or because
-it is created with multiple write operations instead of a single full
-write. When appending to an existing object, the stripe size is
-retrieved from the attributes of the object. It applies, for instance,
-when *rgw* writes an object with a sequence of appends instead of a
-single full write.
-
-::
- 
-     primary
-   +---OSD 1---+
-   |+-s1-+ log |
-   ||S1D1| 1,2 |<----------------- APPEND
-   ||----|     |
-   ||S2D1| 1,1 |
-   |+----+     |
-   +++---------+
-    ||         +---OSD 2---+
-    ||  +-s2-+ |+-s2-+ log |
-    |+-->S2D2| ||S1D2| 1,1 |
-    |   +----+ |+----+     |
-    |          +-----------+
-    |          +---OSD 3---+
-    |          |+-s3-+ log |
-    +---------->|S1C1| 1,2 |
-               ||----|     |
-               ||S2C1| 1,1 |
-               |+----+     |
-               +-----------+
-
-*OSD 1* is the primary and receives an APPEND from a client, meaning
-the payload is to be appended to the end of the object. *OSD 1*
-encodes the payload into three chunks : S2D1 (i.e. Stripe two data
-chunk number 1 ) will be in s1 ( shard 1 ) on *OSD 1*, S2D2 in s2 on
-*OSD 2* and S2C1 (i.e. Stripe two coding chunk number 1 ) in s3 on
-*OSD 3*. Each chunk is sent to the target OSD, including the primary
-OSD which is responsible for storing chunks in addition to handling
-write operations and maintaining an authoritative version of the
-placement group logs. When an OSD receives the message instructing it
-to write the chunk, it also creates a new entry in the placement group
-logs to reflect the change. For instance, as soon as *OSD 3* stores
-*S2C1*, it adds the entry 1,2 ( i.e. epoch 1, version 2 ) to its
-logs. The log entry also carries the nature of the operation: in this
-case 1,2 is an APPEND where 1,1 was a CREATE. Because the OSDs work
-asynchronously, some chunks may still be in flight ( such as *S2D2* )
-while others are acknowledged and on disk (such as *S2D1* and *S2C1*).
-
-::
- 
-               +---OSD 1---+
-               |           |
-               |   DOWN    |
-               |           |
-               +-----------+
-               +---OSD 2---+
-               |+-s2-+ log |
-               ||S1D2| 1,1 |
-               |+----+     |
-               +-----------+
-               +---OSD 3---+
-               |+-s3-+ log |
-               ||S1C1| 1,2 |
-               ||----|     |
-               ||S2C1| 1,1 |
-               |+----+     |
-    primary    +-----------+
-  +---OSD 4---+
-  |       log |
-  |       1,1 |
-  |           |
-  +-----------+
-
-If *OSD 1* goes down while *S2D2* is still in flight, the payload is
-partially appended : s3 (shard 3) in *OSD 3* has one chunk but does
-not have enough to recover. Two chunks were lost (*S2D1* and S2D2) but
-the erasure coding parameters K = 2 + M = 1 requires that at least two
-chunks are available to rebuild the third. *OSD 4* becomes the new
-primary and finds that the *last_complete* log entry ( i.e. all
-objects before this entry were known to be available on all OSDs in
-the previous acting set ) is *1,1* and will be the head of the new
-authoritative log.
-
-::
- 
-               +---OSD 2---+
-               |+-s2-+ log |
-               ||S1D2| 1,1 |
-               |+----+     |
-               +-----------+
-               +---OSD 3---+
-               |+-s3-+ log |
-               ||S1C1| 1,1 |
-               |+----+     |
-    primary    +-----------+
-  +---OSD 4---+
-  |       log |
-  |       1,1 |
-  |           |
-  +-----------+
-
-The log entry *1,2* found on *OSD 3* is divergent from the new
-authoritative log provided by *OSD 4* : it is discarded and the file
-containing the *S2C1* chunk is truncated to the nearest multiple of
-the stripe size.
 
 Erasure code library
 --------------------
@@ -447,22 +144,12 @@ object.  If data chunk O2 or coding chunk P2 are lost, they can be
 repaired using any K chunks out of the K+M chunks. If more than M
 chunks are lost, it is not possible to recover the object.
 
-Reading the original content of object O could be a simple
+Reading the original content of object O can be a simple
 concatenation of O1, O2, ... OM, because the plugins are using
 `systematic codes
 <http://en.wikipedia.org/wiki/Systematic_code>`_. Otherwise the chunks
 must be given to the erasure code library *decode* method to retrieve
 the content of the object.
-
-Reed-Solomon is significantly more expensive to encode than fountain
-codes with the current `jerasure implementation
-<http://web.eecs.utk.edu/~plank/plank/papers/CS-08-627.html>`_. However
-`gf-complete
-<http://web.eecs.utk.edu/~plank/plank/papers/CS-13-703.html>`_ that
-will be used in the upcoming version of jerasure is twice faster and
-the difference becomes negligible. The difference is even more
-important when an object is divided in hundreds or more chunks, but
-Ceph will typically be used with less than 32 chunks.
 
 Performance depend on the parameters to the encoding functions and
 is also influenced by the packet sizes used when calling the encoding
@@ -470,22 +157,29 @@ functions ( for Cauchy or Liberation for instance ): smaller packets
 means more calls and more overhead.
 
 Although Reed-Solomon is provided as a default, Ceph uses it via an
-`abstract API <https://github.com/ceph/ceph/blob/08a97ae45f4df58a6a8ea8a6400934d860cf5eb4/src/osd/ErasureCodeInterface.h>`_ designed to
+`abstract API <https://github.com/ceph/ceph/blob/v0.78/src/erasure-code/ErasureCodeInterface.h>`_ designed to
 allow each pool to choose the plugin that implements it using
-`key=value pairs when creating the pool
-<https://github.com/ceph/ceph/blob/08a97ae45f4df58a6a8ea8a6400934d860cf5eb4/src/mon/MonCommands.h#L483>`_.
+key=value pairs stored in an `erasure code profile`_. 
+
+.. _erasure code profile: ../../erasure-coded-pool
 
 ::
  
-  ceph osd pool create <pool> \
-     erasure-code-directory=<dir> \
-     erasure-code-plugin=<plugin>
+ $ ceph osd erasure-code-profile set myprofile \
+     ruleset-failure-domain=osd
+ $ ceph osd erasure-code-profile get myprofile
+ directory=/usr/lib/ceph/erasure-code
+ k=2
+ m=1
+ plugin=jerasure
+ technique=reed_sol_van
+ ruleset-failure-domain=osd
+ $ ceph osd pool create ecpool 12 12 erasure myprofile
 
-The *<plugin>* is dynamically loaded from *<dir>* (defaults to
-*/usr/lib/ceph/erasure-code* ) and expected to implement the *int
-__erasure_code_init(char *plugin_name)* function which is responsible
-for registering an object derived from *ErasureCodePlugin* in the
-registry. The `ErasureCodePluginExample <https://github.com/ceph/ceph/blob/08a97ae45f4df58a6a8ea8a6400934d860cf5eb4/src/test/osd/ErasureCodePluginExample.cc#L32>`_ plugin reads:
+The *plugin* is dynamically loaded from *directory*  and expected to
+implement the *int __erasure_code_init(char *plugin_name)* function 
+which is responsible for registering an object derived from *ErasureCodePlugin* 
+in the registry. The `ErasureCodePluginExample <https://github.com/ceph/ceph/blob/v0.78/src/test/erasure-code/ErasureCodePluginExample.cc>`_ plugin reads:
 
 ::
  
@@ -495,7 +189,7 @@ registry. The `ErasureCodePluginExample <https://github.com/ceph/ceph/blob/08a97
 
 The *ErasureCodePlugin* derived object must provide a factory method
 from which the concrete implementation of the *ErasureCodeInterface*
-object can be generated. The `ErasureCodePluginExample plugin <https://github.com/ceph/ceph/blob/08a97ae45f4df58a6a8ea8a6400934d860cf5eb4/src/test/osd/ErasureCodePluginExample.cc#L22>`_ reads:
+object can be generated. The `ErasureCodePluginExample plugin <https://github.com/ceph/ceph/blob/v0.78/src/test/osd/ErasureCodePluginExample.cc>`_ reads:
 
 ::
  
@@ -506,39 +200,16 @@ object can be generated. The `ErasureCodePluginExample plugin <https://github.co
   } 
 
 The *parameters* argument is the list of *key=value* pairs that were
-set when the pool was created. Each *key* must be prefixed with
-*erasure-code* to avoid name collisions:
+set in the erasure code profile, before the pool was created.
 
 ::
  
-  ceph osd pool create poolname 123 \
-     erasure-code-directory=<dir>         \ # mandatory
-     erasure-code-plugin=jerasure         \ # mandatory
-     erasure-code-m=10                    \ # optional and plugin dependant
-     erasure-code-k=3                     \ # optional and plugin dependant
-     erasure-code-technique=reed_sol_van  \ # optional and plugin dependant
-
-Scrubbing
----------
-
-See also `Refactor scrub to use PGBackend methods <http://tracker.ceph.com/issues/5861>`_
-The simplest form of scrubbing is to check with each OSDs holding a
-chunk if it exists locally. If more thank M chunks are missing the
-object is marked as lost. If up to M chunks are missing they are
-repaired and written to the relevant OSDs.
-
-From time to time it may make sense to attempt to read an object,
-using all of its chunks. If the decode function fails, the object is
-lost.
-
-Bit flips happen. Not often, but it is possible. Here is `an article
-from 2011 <http://www.linux-mag.com/id/8794/>`_ also search for "bit
-rot" and "bit error rate". To detect corrupted chunks, a checksum
-(CRC23C for instance) must be added as an attribute of the file
-containing the chunk ( or shard ) so that deep scrubbing can check
-that the chunk is valid by recomputing the content of the chunk and
-compare it with the signature. BTRFS and ZFS have a CRC32C check
-built-in on a per block basis.
+  ceph osd erasure-code-profile set myprofile \
+     directory=<dir>         \ # mandatory
+     plugin=jerasure         \ # mandatory
+     m=10                    \ # optional and plugin dependant
+     k=3                     \ # optional and plugin dependant
+     technique=reed_sol_van  \ # optional and plugin dependant
 
 Notes
 -----
