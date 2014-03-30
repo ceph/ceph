@@ -11151,7 +11151,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
     //
 
     if (!next_clone.is_min() && next_clone != soid &&
-	pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE) {
+	pool.info.cache_mode != pg_pool_t::CACHEMODE_NONE) {
       // it is okay to be missing one or more clones in a cache tier.
       // skip higher-numbered clones in the list.
       while (curclone != snapset.clones.rend() &&
