@@ -426,17 +426,23 @@ TEST_F(LibRadosTwoPoolsPP, PromoteSnapScrub) {
     ASSERT_EQ(0, ioctx.operate(string("foo") + stringify(i), &op));
   }
 
-  // create a snapshot, clone
-  vector<uint64_t> my_snaps(1);
-  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
-  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
-							 my_snaps));
-  for (int i=0; i<num; ++i) {
-    bufferlist bl;
-    bl.append("ciao!");
-    ObjectWriteOperation op;
-    op.write_full(bl);
-    ASSERT_EQ(0, ioctx.operate(string("foo") + stringify(i), &op));
+  vector<uint64_t> my_snaps;
+  for (int snap=0; snap<4; ++snap) {
+    // create a snapshot, clone
+    vector<uint64_t> ns(1);
+    ns.insert(ns.end(), my_snaps.begin(), my_snaps.end());
+    my_snaps.swap(ns);
+    ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+    cout << "my_snaps " << my_snaps << std::endl;
+    ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+						      my_snaps));
+    for (int i=0; i<num; ++i) {
+      bufferlist bl;
+      bl.append(string("ciao! snap") + stringify(snap));
+      ObjectWriteOperation op;
+      op.write_full(bl);
+      ASSERT_EQ(0, ioctx.operate(string("foo") + stringify(i), &op));
+    }
   }
 
   // configure cache
@@ -460,6 +466,7 @@ TEST_F(LibRadosTwoPoolsPP, PromoteSnapScrub) {
 
   // read, trigger a promote on _some_ heads to make sure we handle cases
   // where snaps are present and where they are not.
+  cout << "promoting some heads" << std::endl;
   for (int i=0; i<num; ++i) {
     if (i % 5 == 0 || i > num - 3) {
       bufferlist bl;
@@ -468,10 +475,21 @@ TEST_F(LibRadosTwoPoolsPP, PromoteSnapScrub) {
     }
   }
 
-  ioctx.snap_set_read(my_snaps[0]);
+  for (unsigned snap = 0; snap < my_snaps.size(); ++snap) {
+    cout << "promoting from clones for snap " << my_snaps[snap] << std::endl;
+    ioctx.snap_set_read(my_snaps[snap]);
 
-  // stop and scrub this pool (to make sure scrub can handle missing
-  // clones in the cache tier).
+    // read some snaps, semi-randomly
+    for (int i=0; i<50; ++i) {
+      bufferlist bl;
+      string o = string("foo") + stringify((snap * i * 137) % 80);
+      //cout << o << std::endl;
+      ASSERT_EQ(1, ioctx.read(o, bl, 1, 0));
+    }
+  }
+
+  // ok, stop and scrub this pool (to make sure scrub can handle
+  // missing clones in the cache tier).
   {
     IoCtx cache_ioctx;
     ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
