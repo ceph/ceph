@@ -30,8 +30,16 @@ class CephContext;
  * daemons and utility programs need to call. It takes care of a lot of
  * initialization, including setting up g_ceph_context.
  */
-void global_init(std::vector < const char * > *alt_def_args, std::vector < const char* >& args,
-	       uint32_t module_type, code_environment_t code_env, int flags);
+void global_init(std::vector < const char * > *alt_def_args,
+		 std::vector < const char* >& args,
+		 uint32_t module_type, code_environment_t code_env, int flags);
+
+// just the first half; enough to get config parsed but doesn't start up the
+// cct or log.
+void global_pre_init(std::vector < const char * > *alt_def_args,
+		     std::vector < const char* >& args,
+		     uint32_t module_type, code_environment_t code_env,
+		     int flags);
 
 /*
  * perform all of the steps that global_init_daemonize performs just prior
