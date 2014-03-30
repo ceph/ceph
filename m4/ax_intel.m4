@@ -22,7 +22,7 @@ AC_DEFUN([AX_INTEL_FEATURES],
     
       AX_CHECK_COMPILE_FLAG(-msse3, ax_cv_support_sse3_ext=yes, [])
       if test x"$ax_cv_support_sse3_ext" = x"yes"; then
-        INTEL_SSE3_FLAGS="-mssse3 -DINTEL_SSE3"
+        INTEL_SSE3_FLAGS="-msse3 -DINTEL_SSE3"
         AC_SUBST(INTEL_SSE3_FLAGS)
         INTEL_FLAGS="$INTEL_FLAGS $INTEL_SSE3_FLAGS"
         AC_DEFINE(HAVE_SSE3,,[Support SSE3 (Streaming SIMD Extensions 3) instructions])
