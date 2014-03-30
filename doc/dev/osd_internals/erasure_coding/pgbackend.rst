@@ -2,11 +2,14 @@
 PG Backend Proposal
 ===================
 
+NOTE: the last update of this page is dated 2013, before the Firefly
+release. The details of the implementation may be different.
+
 Motivation
 ----------
 
 The purpose of the `PG Backend interface
-<https://github.com/ceph/ceph/blob/a287167cf8625165249b7636540591aefc0a693d/src/osd/PGBackend.h>`_
+<https://github.com/ceph/ceph/blob/firefly/src/osd/PGBackend.h>`_
 is to abstract over the differences between replication and erasure
 coding as failure recovery mechanisms.
 
@@ -78,7 +81,7 @@ Core Changes:
   APPEND, DELETE, (SET|RM)ATTR log entries.
 - The filestore needs to be able to deal with multiply versioned
   hobjects.  This means adapting the filestore internally to
-  use a `ghobject <https://github.com/ceph/ceph/blob/aba6efda13eb6ab4b96930e9cc2dbddebbe03f26/src/common/hobject.h#L193>`_ 
+  use a `ghobject <https://github.com/ceph/ceph/blob/firefly/src/common/hobject.h#L238>`_ 
   which is basically a tuple<hobject_t, gen_t,
   shard_t>.  The gen_t + shard_t need to be included in the on-disk
   filename.  gen_t is a unique object identifier to make sure there
@@ -125,12 +128,11 @@ we will be able to provide at least K chunks of any divergent object.
 
 Core Changes:
 
-- `PG::choose_acting(), etc. need to be generalized to use PGBackend
-  <http://tracker.ceph.com/issues/5860>`_ to determine the
-  authoritative log.
-- `PG::RecoveryState::GetInfo needs to use PGBackend
-  <http://tracker.ceph.com/issues/5859>`_ to determine whether it has
-  enough infos to continue with authoritative log selection.
+- PG::choose_acting(), etc. need to be generalized to use PGBackend to
+  determine the authoritative log.
+- PG::RecoveryState::GetInfo needs to use PGBackend to determine
+  whether it has enough infos to continue with authoritative log
+  selection.
 
 PGBackend interfaces:
 
@@ -192,11 +194,11 @@ include the chunk id in the object key.
 Core changes:
 
 - The filestore `ghobject_t needs to also include a chunk id
-  <https://github.com/ceph/ceph/blob/aba6efda13eb6ab4b96930e9cc2dbddebbe03f26/src/common/hobject.h#L193>`_ making it more like
+  <https://github.com/ceph/ceph/blob/firefly/src/common/hobject.h#L241>`_ making it more like
   tuple<hobject_t, gen_t, shard_t>.
 - coll_t needs to include a shard_t.
-- The `OSD pg_map and similar pg mappings need to work in terms of a
-  spg_t <http://tracker.ceph.com/issues/5863>`_ (essentially
+- The OSD pg_map and similar pg mappings need to work in terms of a
+  spg_t (essentially
   pair<pg_t, shard_t>).  Similarly, pg->pg messages need to include
   a shard_t
 - For client->PG messages, the OSD will need a way to know which PG
@@ -240,7 +242,7 @@ Thus, each replica instead simply computes a crc32 of its own stored
 chunk and compares it with the locally stored checksum.  The replica
 then reports to the primary whether the checksums match.
 
-`PGBackend interfaces <http://tracker.ceph.com/issues/5861>`_:
+PGBackend interfaces:
 
 - scan()
 - scrub()
@@ -255,7 +257,7 @@ than shifting the other elements of the acting set out of position.
 
 Core changes:
 
-- Ensure that crush `behaves as above for INDEP <http://tracker.ceph.com/issues/6900>`_.
+- Ensure that crush behaves as above for INDEP.
 
 Recovery
 --------
@@ -281,16 +283,16 @@ Core changes:
 
 PGBackend interfaces:
 
-- `on_local_recover_start <https://github.com/ceph/ceph/blob/a287167cf8625165249b7636540591aefc0a693d/src/osd/PGBackend.h#L46>`_
-- `on_local_recover <https://github.com/ceph/ceph/blob/a287167cf8625165249b7636540591aefc0a693d/src/osd/PGBackend.h#L52>`_
-- `on_global_recover <https://github.com/ceph/ceph/blob/a287167cf8625165249b7636540591aefc0a693d/src/osd/PGBackend.h#L64>`_
-- `on_peer_recover <https://github.com/ceph/ceph/blob/a287167cf8625165249b7636540591aefc0a693d/src/osd/PGBackend.h#L69>`_
-- `begin_peer_recover <https://github.com/ceph/ceph/blob/a287167cf8625165249b7636540591aefc0a693d/src/osd/PGBackend.h#L76>`_
+- `on_local_recover_start <https://github.com/ceph/ceph/blob/firefly/src/osd/PGBackend.h#L60>`_
+- `on_local_recover <https://github.com/ceph/ceph/blob/firefly/src/osd/PGBackend.h#L66>`_
+- `on_global_recover <https://github.com/ceph/ceph/blob/firefly/src/osd/PGBackend.h#L78>`_
+- `on_peer_recover <https://github.com/ceph/ceph/blob/firefly/src/osd/PGBackend.h#L83>`_
+- `begin_peer_recover <https://github.com/ceph/ceph/blob/firefly/src/osd/PGBackend.h#L90>`_
 
 Backfill
 --------
 
-See `Issue #5856`_. For the most part, backfill itself should behave similarly between
+For the most part, backfill itself should behave similarly between
 replicated and erasure coded pools with a few exceptions:
 
 1. We probably want to be able to backfill multiple OSDs concurrently
@@ -307,15 +309,12 @@ backfilled in a particular interval.
 
 Core changes:
 
-- Backfill should be capable of `handling multiple backfill peers
-  concurrently <http://tracker.ceph.com/issues/5858>`_ even for
+- Backfill should be capable of handling multiple backfill peers
+  concurrently even for
   replicated pgs (easier to test for now)
-- `Backfill peers should not be placed in the acting set
-  <http://tracker.ceph.com/issues/5855>`_.
+- Backfill peers should not be placed in the acting set.
 
 PGBackend interfaces:
 
 - choose_backfill(): allows the implementation to determine which OSDs
   should be backfilled in a particular interval.
-
-.. _Issue #5856: http://tracker.ceph.com/issues/5856
