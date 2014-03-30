@@ -591,6 +591,11 @@ static void fuse_ll_releasedir(fuse_req_t req, fuse_ino_t ino,
   fuse_reply_err(req, 0);
 }
 
+static void fuse_ll_access(fuse_req_t req, fuse_ino_t ino, int mask)
+{
+  fuse_reply_err(req, 0);
+}
+
 static void fuse_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 			   mode_t mode, struct fuse_file_info *fi)
 {
@@ -733,7 +738,7 @@ const static struct fuse_lowlevel_ops fuse_ll_oper = {
  getxattr: fuse_ll_getxattr,
  listxattr: fuse_ll_listxattr,
  removexattr: fuse_ll_removexattr,
- access: 0,
+ access: fuse_ll_access,
  create: fuse_ll_create,
  getlk: 0,
  setlk: 0,
