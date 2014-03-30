@@ -317,7 +317,7 @@ protected:
   map<int, map<dirfrag_t, vector<dirfrag_t> > > other_ambiguous_imports;  
 
   map<int, map<metareqid_t, MDSlaveUpdate*> > uncommitted_slave_updates;  // slave: for replay.
-  map<CDir*, int> uncommitted_slave_rename_olddir;  // slave: preserve the non-auth dir until seeing commit.
+  map<CInode*, int> uncommitted_slave_rename_olddir;  // slave: preserve the non-auth dir until seeing commit.
   map<CInode*, int> uncommitted_slave_unlink;  // slave: preserve the unlinked inode until seeing commit.
 
   // track master requests whose slaves haven't acknowledged commit
@@ -581,6 +581,10 @@ public:
   void trim_non_auth();      // trim out trimmable non-auth items
   bool trim_non_auth_subtree(CDir *directory);
   void try_trim_non_auth_subtree(CDir *dir);
+  bool can_trim_non_auth_dirfrag(CDir *dir) {
+    return my_ambiguous_imports.count((dir)->dirfrag()) == 0 &&
+	   uncommitted_slave_rename_olddir.count(dir->inode) == 0;
+  }
 
   void trim_client_leases();
   void check_memory_usage();
@@ -616,6 +620,13 @@ public:
     if (!in)
       return NULL;
     return in->get_dirfrag(df.frag);
+  }
+  CDir* get_dirfrag(inodeno_t ino, const string& dn) {
+    CInode *in = get_inode(ino);
+    if (!in)
+      return NULL;
+    frag_t fg = in->pick_dirfrag(dn);
+    return in->get_dirfrag(fg);
   }
   CDir* get_force_dirfrag(dirfrag_t df) {
     CInode *diri = get_inode(df.ino);
@@ -946,12 +957,11 @@ private:
   struct ufragment {
     int bits;
     bool committed;
-    bool complete;
     LogSegment *ls;
     list<Context*> waiters;
     list<frag_t> old_frags;
     bufferlist rollback;
-    ufragment() : bits(0), committed(false), complete(false), ls(NULL) {}
+    ufragment() : bits(0), committed(false), ls(NULL) {}
   };
   map<dirfrag_t, ufragment> uncommitted_fragments;
 

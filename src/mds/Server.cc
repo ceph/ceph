@@ -271,7 +271,7 @@ void Server::flush_client_sessions(set<client_t>& client_set, C_GatherBuilder& g
   for (set<client_t>::iterator p = client_set.begin(); p != client_set.end(); ++p) {
     Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
     assert(session);
-    if (session->is_stale() ||
+    if (!session->is_open() ||
 	!session->connection.get() ||
 	!session->connection->has_feature(CEPH_FEATURE_EXPORT_PEER))
       continue;
@@ -5304,6 +5304,8 @@ void Server::do_rmdir_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   assert(mdr || mds->is_resolve());
 
   CDir *dir = mds->mdcache->get_dirfrag(rollback.src_dir);
+  if (!dir)
+    dir = mds->mdcache->get_dirfrag(rollback.src_dir.ino, rollback.src_dname);
   assert(dir);
   CDentry *dn = dir->lookup(rollback.src_dname);
   assert(dn);
@@ -5645,6 +5647,8 @@ void Server::handle_client_rename(MDRequest *mdr)
   else
     witnesses.insert(srcdn->authority().first);
   destdn->list_replicas(witnesses);
+  if (destdnl->is_remote() && !oldin->is_auth())
+    witnesses.insert(oldin->authority().first);
   dout(10) << " witnesses " << witnesses << ", have " << mdr->more()->witnessed << dendl;
 
 
@@ -6928,6 +6932,8 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr,
 
   CDentry *srcdn = NULL;
   CDir *srcdir = mds->mdcache->get_dirfrag(rollback.orig_src.dirfrag);
+  if (!srcdir)
+    srcdir = mds->mdcache->get_dirfrag(rollback.orig_src.dirfrag.ino, rollback.orig_src.dname);
   if (srcdir) {
     dout(10) << "  srcdir " << *srcdir << dendl;
     srcdn = srcdir->lookup(rollback.orig_src.dname);
@@ -6941,6 +6947,8 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr,
 
   CDentry *destdn = NULL;
   CDir *destdir = mds->mdcache->get_dirfrag(rollback.orig_dest.dirfrag);
+  if (!destdir)
+    destdir = mds->mdcache->get_dirfrag(rollback.orig_dest.dirfrag.ino, rollback.orig_dest.dname);
   if (destdir) {
     dout(10) << " destdir " << *destdir << dendl;
     destdn = destdir->lookup(rollback.orig_dest.dname);
@@ -7055,7 +7063,14 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr,
       ti = target->get_projected_inode();
     if (ti->ctime == rollback.ctime)
       ti->ctime = rollback.orig_dest.old_ctime;
-    ti->nlink++;
+    if (MDS_INO_IS_STRAY(rollback.orig_src.dirfrag.ino)) {
+      if (MDS_INO_IS_STRAY(rollback.orig_dest.dirfrag.ino))
+	assert(!rollback.orig_dest.ino && !rollback.orig_dest.remote_ino);
+      else
+	assert(rollback.orig_dest.remote_ino &&
+	       rollback.orig_dest.remote_ino == rollback.orig_src.ino);
+    } else
+      ti->nlink++;
   }
 
   if (srcdn)

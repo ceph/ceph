@@ -1923,6 +1923,9 @@ bool MDS::_dispatch(Message *m)
     }
   }
 
+  if (dispatch_depth > 1)
+    return true;
+
   // finish any triggered contexts
   while (!finished_queue.empty()) {
     dout(7) << "mds has " << finished_queue.size() << " queued contexts" << dendl;
@@ -1939,9 +1942,6 @@ bool MDS::_dispatch(Message *m)
       mds_lock.Lock();
     }
   }
-
-  if (dispatch_depth > 1)
-    return true;
 
   while (!waiting_for_nolaggy.empty()) {
 
