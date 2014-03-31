@@ -56,8 +56,10 @@ static const char* c_str_or_null(const std::string &str)
   return str.c_str();
 }
 
-void global_init(std::vector < const char * > *alt_def_args, std::vector < const char* >& args,
-	       uint32_t module_type, code_environment_t code_env, int flags)
+void global_pre_init(std::vector < const char * > *alt_def_args,
+		     std::vector < const char* >& args,
+		     uint32_t module_type, code_environment_t code_env,
+		     int flags)
 {
   // You can only call global_init once.
   assert(!g_ceph_context);
@@ -104,10 +106,17 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
   // Expand metavariables. Invoke configuration observers.
   conf->apply_changes(NULL);
 
-  g_lockdep = cct->_conf->lockdep;
-
   // Now we're ready to complain about config file parse errors
   complain_about_parse_errors(cct, &parse_errors);
+}
+
+void global_init(std::vector < const char * > *alt_def_args,
+		 std::vector < const char* >& args,
+		 uint32_t module_type, code_environment_t code_env, int flags)
+{
+  global_pre_init(alt_def_args, args, module_type, code_env, flags);
+
+  g_lockdep = g_ceph_context->_conf->lockdep;
 
   // signal stuff
   int siglist[] = { SIGPIPE, 0 };
@@ -131,13 +140,13 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
 
   if (g_lockdep) {
     dout(1) << "lockdep is enabled" << dendl;
-    lockdep_register_ceph_context(cct);
+    lockdep_register_ceph_context(g_ceph_context);
   }
-  register_assert_context(cct);
+  register_assert_context(g_ceph_context);
 
   // call all observers now.  this has the side-effect of configuring
   // and opening the log file immediately.
-  conf->call_all_observers();
+  g_conf->call_all_observers();
 
   if (code_env == CODE_ENVIRONMENT_DAEMON && !(flags & CINIT_FLAG_NO_DAEMON_ACTIONS))
     output_ceph_version();
