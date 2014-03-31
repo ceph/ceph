@@ -826,7 +826,7 @@ public class CephMountTest {
 
     /* list xattrs */
     String[] xattrs = mount.listxattr(path);
-    assertTrue(xattrs.length == 3);
+    assertTrue(xattrs.length == 2);
     int found = 0;
     for (String xattr : xattrs) {
       if (xattr.compareTo("user.attr1") == 0) {
