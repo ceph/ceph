@@ -14,8 +14,16 @@ def run_one_task(taskname, **kwargs):
     if '.' in taskname:
         (submod, subtask) = taskname.rsplit('.', 1)
     parent = __import__('teuthology.task', globals(), locals(), [submod], 0)
-    mod = getattr(parent, submod)
-    fn = getattr(mod, subtask)
+    try:
+        mod = getattr(parent, submod)
+    except AttributeError:
+        log.error("No task named %s was found", submod)
+        raise
+    try:
+        fn = getattr(mod, subtask)
+    except AttributeError:
+        log.error("No subtask of %s named %s was found", mod, subtask)
+        raise
     return fn(**kwargs)
 
 
