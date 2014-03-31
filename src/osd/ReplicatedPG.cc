@@ -5363,12 +5363,10 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
     assert(cop->src.snap == CEPH_NOSNAP);
     ObjectOperation op;
     op.list_snaps(&cop->results.snapset, NULL);
-    osd->objecter_lock.Lock();
     tid_t tid = osd->objecter->read(cop->src.oid, cop->oloc, op,
 				    CEPH_SNAPDIR, NULL,
 				    flags, gather.new_sub(), NULL);
     cop->objecter_tid2 = tid;
-    osd->objecter_lock.Unlock();
   }
 
   ObjectOperation op;
@@ -5391,7 +5389,6 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
   gather.set_finisher(new C_OnFinisher(fin,
 				       &osd->objecter_finisher));
 
-  osd->objecter_lock.Lock();
   tid_t tid = osd->objecter->read(cop->src.oid, cop->oloc, op,
 				  cop->src.snap, NULL,
 				  flags,
@@ -5401,7 +5398,6 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
   fin->tid = tid;
   cop->objecter_tid = tid;
   gather.activate();
-  osd->objecter_lock.Unlock();
 }
 
 void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
@@ -5753,7 +5749,6 @@ void ReplicatedPG::cancel_copy(CopyOpRef cop, bool requeue)
 
   // cancel objecter op, if we can
   if (cop->objecter_tid) {
-    Mutex::Locker l(osd->objecter_lock);
     osd->objecter->op_cancel(cop->objecter_tid, -ECANCELED);
     if (cop->objecter_tid2) {
       osd->objecter->op_cancel(cop->objecter_tid2, -ECANCELED);
@@ -5939,15 +5934,15 @@ int ReplicatedPG::start_flush(OpContext *ctx, bool blocking)
     snapc.seq = oi.snaps.back() - 1;
   }
 
-  osd->objecter_lock.Lock();
   tid_t tid = osd->objecter->mutate(soid.oid, base_oloc, o, snapc, oi.mtime,
 				    CEPH_OSD_FLAG_IGNORE_OVERLAY,
 				    NULL,
 				    new C_OnFinisher(fin,
 						     &osd->objecter_finisher));
+
+  /* we're under the pg lock and fin->finish() is grabbing that */
   fin->tid = tid;
   fop->objecter_tid = tid;
-  osd->objecter_lock.Unlock();
 
   flush_ops[soid] = fop;
   return -EINPROGRESS;
@@ -6088,7 +6083,6 @@ void ReplicatedPG::cancel_flush(FlushOpRef fop, bool requeue)
   dout(10) << __func__ << " " << fop->ctx->obc->obs.oi.soid << " tid "
 	   << fop->objecter_tid << dendl;
   if (fop->objecter_tid) {
-    Mutex::Locker l(osd->objecter_lock);
     osd->objecter->op_cancel(fop->objecter_tid, -ECANCELED);
   }
   if (fop->ctx->op && requeue) {

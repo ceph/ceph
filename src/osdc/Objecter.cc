@@ -1550,6 +1550,38 @@ int Objecter::op_cancel(OSDSession *s, tid_t tid, int r)
   return 0;
 }
 
+int Objecter::op_cancel(tid_t tid, int r)
+{
+  int ret = 0;
+
+  rwlock.get_read();
+
+start:
+
+  for (map<int, OSDSession *>::iterator siter = osd_sessions.begin(); siter != osd_sessions.end(); ++siter) {
+    OSDSession *s = siter->second;
+    s->lock.get_read();
+    if (s->ops.find(tid) != s->ops.end()) {
+      s->lock.unlock();
+      ret = op_cancel(s, tid, r);
+      if (ret == -ENOENT) {
+        /* oh no! raced, maybe tid moved to another session, restarting */
+        goto start;
+      }
+      rwlock.unlock();
+      return ret;
+    }
+    s->lock.unlock();
+  }
+
+  if (homeless_session.ops.find(tid) != homeless_session.ops.end()) {
+    ret = op_cancel(&homeless_session, tid, r);
+  }
+  rwlock.unlock();
+
+  return ret;
+}
+
 bool Objecter::is_pg_changed(
   int oldprimary,
   const vector<int>& oldacting,

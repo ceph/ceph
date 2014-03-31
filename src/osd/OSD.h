@@ -546,8 +546,6 @@ public:
 
 
   // -- Objecter, for teiring reads/writes from/to other OSDs --
-  Mutex objecter_lock;
-  SafeTimer objecter_timer;
   OSDMap objecter_osdmap;
   Objecter *objecter;
   Finisher objecter_finisher;
