@@ -995,8 +995,7 @@ public:
   atomic_t initialized;
 
 private:
-#warning need atomic64_t here
-  atomic_t last_tid;
+  atomic64_t last_tid;
   atomic_t inflight_ops;
   atomic_t client_inc;
   uint64_t max_linger_id;
