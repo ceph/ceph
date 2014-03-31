@@ -406,6 +406,7 @@ fi
 %{_bindir}/librados-config
 %{_bindir}/rados
 %{_bindir}/rbd
+%{_bindir}/ceph-client-debug
 %{_bindir}/ceph-debugpack
 %{_bindir}/ceph-coverage
 %{_bindir}/ceph_mon_store_converter
@@ -437,7 +438,8 @@ fi
 %{_libdir}/ceph/erasure-code/libec_fail_to_initialize.so*
 %{_libdir}/ceph/erasure-code/libec_fail_to_register.so*
 %{_libdir}/ceph/erasure-code/libec_hangs.so*
-%{_libdir}/ceph/erasure-code/libec_jerasure.so*
+%{_libdir}/ceph/erasure-code/libec_jerasure*.so*
+%{_libdir}/ceph/erasure-code/libec_test_jerasure*.so*
 %{_libdir}/ceph/erasure-code/libec_missing_entry_point.so*
 /lib/udev/rules.d/50-rbd.rules
 /lib/udev/rules.d/60-ceph-partuuid-workaround.rules
