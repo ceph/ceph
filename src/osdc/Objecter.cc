@@ -1340,7 +1340,7 @@ void Objecter::resend_mon_ops()
   ldout(cct, 10) << "resend_mon_ops" << dendl;
 
   for (map<tid_t,PoolStatOp*>::iterator p = poolstat_ops.begin(); p!=poolstat_ops.end(); ++p) {
-    poolstat_submit(p->second);
+    _poolstat_submit(p->second);
     logger->inc(l_osdc_poolstat_resend);
   }
 
@@ -2580,6 +2580,8 @@ public:
 
 void Objecter::pool_op_submit(PoolOp *op)
 {
+  RWLock::WLocker wl(rwlock);
+
   if (mon_timeout > 0) {
     op->ontimeout = new C_CancelPoolOp(op->tid, this);
     timer.add_event_after(mon_timeout, op->ontimeout);
@@ -2589,6 +2591,8 @@ void Objecter::pool_op_submit(PoolOp *op)
 
 void Objecter::_pool_op_submit(PoolOp *op)
 {
+  assert(rwlock.is_wlocked());
+
   ldout(cct, 10) << "pool_op_submit " << op->tid << dendl;
   MPoolOp *m = new MPoolOp(monc->get_fsid(), op->tid, op->pool,
 			   op->name, op->pool_op,
@@ -2718,16 +2722,19 @@ void Objecter::get_pool_stats(list<string>& pools, map<string,pool_stat_t> *resu
     op->ontimeout = new C_CancelPoolStatOp(op->tid, this);
     timer.add_event_after(mon_timeout, op->ontimeout);
   }
+
+  RWLock::WLocker wl(rwlock);
+
   poolstat_ops[op->tid] = op;
 
   logger->set(l_osdc_poolstat_active, poolstat_ops.size());
 
-  poolstat_submit(op);
+  _poolstat_submit(op);
 }
 
-void Objecter::poolstat_submit(PoolStatOp *op)
+void Objecter::_poolstat_submit(PoolStatOp *op)
 {
-  ldout(cct, 10) << "poolstat_submit " << op->tid << dendl;
+  ldout(cct, 10) << "_poolstat_submit " << op->tid << dendl;
   monc->send_mon_message(new MGetPoolStats(monc->get_fsid(), op->tid, op->pools, last_seen_pgmap_version));
   op->last_submit = ceph_clock_now(cct);
 
@@ -2828,6 +2835,8 @@ void Objecter::get_fs_stats(ceph_statfs& result, Context *onfinish)
 
 void Objecter::_fs_stats_submit(StatfsOp *op)
 {
+  assert(rwlock.is_wlocked());
+
   ldout(cct, 10) << "fs_stats_submit" << op->tid << dendl;
   monc->send_mon_message(new MStatfs(monc->get_fsid(), op->tid, last_seen_pgmap_version));
   op->last_submit = ceph_clock_now(cct);
@@ -3276,9 +3285,9 @@ public:
   }
 };
 
-int Objecter::_submit_command(CommandOp *c, tid_t *ptid)
+int Objecter::submit_command(CommandOp *c, tid_t *ptid)
 {
-  assert(rwlock.is_wlocked());
+  RWLock::WLocker wl(rwlock);
 
   tid_t tid = last_tid.inc();
   ldout(cct, 10) << "_submit_command " << tid << " " << c->cmd << dendl;
