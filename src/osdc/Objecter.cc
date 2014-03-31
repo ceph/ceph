@@ -785,6 +785,59 @@ void Objecter::C_Op_Map_Latest::finish(int r)
   objecter->_check_op_pool_dne(op);
 }
 
+int Objecter::pool_snap_by_name(int64_t poolid, const char *snap_name, snapid_t *snap)
+{
+  RWLock::RLocker rl(rwlock);
+
+  const map<int64_t, pg_pool_t>& pools = osdmap->get_pools();
+  map<int64_t, pg_pool_t>::const_iterator iter = pools.find(poolid);
+  if (iter == pools.end()) {
+    return -ENOENT;
+  }
+  const pg_pool_t& pg_pool = iter->second;
+  map<snapid_t, pool_snap_info_t>::const_iterator p;
+  for (p = pg_pool.snaps.begin();
+       p != pg_pool.snaps.end();
+       ++p) {
+    if (p->second.name == snap_name) {
+      *snap = p->first;
+      return 0;
+    }
+  }
+  return -ENOENT;
+}
+
+int Objecter::pool_snap_get_info(int64_t poolid, snapid_t snap, pool_snap_info_t *info)
+{
+  RWLock::RLocker rl(rwlock);
+
+  const map<int64_t, pg_pool_t>& pools = osdmap->get_pools();
+  map<int64_t, pg_pool_t>::const_iterator iter = pools.find(poolid);
+  if (iter == pools.end()) {
+    return -ENOENT;
+  }
+  const pg_pool_t& pg_pool = iter->second;
+  map<snapid_t,pool_snap_info_t>::const_iterator p = pg_pool.snaps.find(snap);
+  if (p == pg_pool.snaps.end())
+    return -ENOENT;
+  *info = p->second;
+
+  return 0;
+}
+
+int Objecter::pool_snap_list(int64_t poolid, vector<uint64_t> *snaps)
+{
+  RWLock::RLocker rl(rwlock);
+
+  const pg_pool_t *pi = osdmap->get_pg_pool(poolid);
+  for (map<snapid_t,pool_snap_info_t>::const_iterator p = pi->snaps.begin();
+       p != pi->snaps.end();
+       ++p) {
+    snaps->push_back(p->first);
+  }
+  return 0;
+}
+
 void Objecter::_check_op_pool_dne(Op *op)
 {
   assert(rwlock.is_wlocked());
