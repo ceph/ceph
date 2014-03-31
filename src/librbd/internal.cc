@@ -1955,6 +1955,13 @@ reprotect_and_return_err:
 	return;
       }
       assert(m_bl->length() == (size_t)r);
+
+      if (m_bl->is_zero()) {
+	delete m_bl;
+	m_throttle->end_op(r);
+	return;
+      }
+
       Context *ctx = new C_CopyWrite(m_throttle, m_bl);
       AioCompletion *comp = aio_create_completion_internal(ctx, rbd_ctx_cb);
       r = aio_write(m_dest, m_offset, m_bl->length(), m_bl->c_str(), comp);
