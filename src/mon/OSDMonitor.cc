@@ -4033,10 +4033,16 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     if (err)
       goto reply;
 
-    if (osdmap.has_erasure_code_profile(name) && !force) {
-      err = -EPERM;
-      ss << "will not override erasure code profile " << name;
-      goto reply;
+    if (osdmap.has_erasure_code_profile(name)) {
+      if (osdmap.get_erasure_code_profile(name) == profile_map) {
+	err = 0;
+	goto reply;
+      }
+      if (!force) {
+	err = -EPERM;
+	ss << "will not override erasure code profile " << name;
+	goto reply;
+      }
     }
 
     if (pending_inc.has_erasure_code_profile(name)) {
