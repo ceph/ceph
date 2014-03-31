@@ -139,6 +139,13 @@ public:
                           const ceph::unordered_map<uint64_t, pool_stat_t>& pg_pool_sum_old);
   void clear_delta();
 
+  void deleted_pool(int64_t pool) {
+    pg_pool_sum.erase(pool);
+    per_pool_sum_deltas.erase(pool);
+    per_pool_sum_deltas_stamps.erase(pool);
+    per_pool_sum_delta.erase(pool);
+  }
+
  private:
   void update_delta(CephContext *cct,
                     const utime_t ts,
