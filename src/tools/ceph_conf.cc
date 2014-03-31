@@ -158,8 +158,8 @@ int main(int argc, const char **argv)
   env_to_vec(args);
   vector<const char*> orig_args = args;
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
-	      CINIT_FLAG_NO_DAEMON_ACTIONS);
+  global_pre_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
+		  CINIT_FLAG_NO_DAEMON_ACTIONS);
 
   // do not common_init_finish(); do not start threads; do not do any of thing
   // wonky things the daemon whose conf we are examining would do (like initialize
