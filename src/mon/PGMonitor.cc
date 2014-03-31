@@ -430,6 +430,7 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
   ceph::unordered_map<uint64_t, pool_stat_t> pg_pool_sum_old;
 
   // pgs
+  set<int64_t> deleted_pools;
   bufferlist::iterator p = dirty_pgs.begin();
   while (!p.end()) {
     pg_t pgid;
@@ -446,6 +447,8 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
       pg_map.update_pg(pgid, bl);
     } else {
       pg_map.remove_pg(pgid);
+      if (pgid.ps() == 0)
+	deleted_pools.insert(pgid.pool());
     }
   }
 
@@ -466,6 +469,14 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
 
   pg_map.update_global_delta(g_ceph_context, inc_stamp, pg_sum_old);
   pg_map.update_pool_deltas(g_ceph_context, inc_stamp, pg_pool_sum_old);
+
+  // clean up deleted pools after updating the deltas
+  for (set<int64_t>::iterator p = deleted_pools.begin();
+       p != deleted_pools.end();
+       ++p) {
+    dout(20) << " deleted pool " << *p << dendl;
+    pg_map.deleted_pool(*p);
+  }
 
   // ok, we're now on the new version
   pg_map.version = v;
