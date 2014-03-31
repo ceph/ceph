@@ -141,6 +141,15 @@ void PGPool::update(OSDMapRef map)
   } else {
     newly_removed_snaps.clear();
   }
+  lgeneric_subdout(g_ceph_context, osd, 20)
+    << "PGPool::update cached_removed_snaps "
+    << cached_removed_snaps
+    << " newly_removed_snaps "
+    << newly_removed_snaps
+    << " snapc " << snapc
+    << (pi->get_snap_epoch() == map->get_epoch() ?
+	" (updated)":" (no change)")
+    << dendl;
 }
 
 PG::PG(OSDService *o, OSDMapRef curmap,
@@ -1437,6 +1446,8 @@ void PG::activate(ObjectStore::Transaction& t,
   
   // initialize snap_trimq
   if (is_primary()) {
+    dout(20) << "activate - purged_snaps " << info.purged_snaps
+	     << " cached_removed_snaps " << pool.cached_removed_snaps << dendl;
     snap_trimq = pool.cached_removed_snaps;
     snap_trimq.subtract(info.purged_snaps);
     dout(10) << "activate - snap_trimq " << snap_trimq << dendl;
