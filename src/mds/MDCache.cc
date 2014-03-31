@@ -6690,10 +6690,8 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
 {
   dout(10) << "trim_non_auth_subtree(" << dir << ") " << *dir << dendl;
 
-  if (!can_trim_non_auth_dirfrag(dir))
-    return true;
+  bool keep_dir = !can_trim_non_auth_dirfrag(dir);
 
-  bool keep_dir = false;
   CDir::map_t::iterator j = dir->begin();
   CDir::map_t::iterator i = j;
   while (j != dir->end()) {
@@ -6710,12 +6708,10 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
         for (list<CDir*>::iterator subdir = subdirs.begin();
             subdir != subdirs.end();
             ++subdir) {
-          if ((*subdir)->is_subtree_root() ||
-	      !can_trim_non_auth_dirfrag(*subdir)) {
+          if ((*subdir)->is_subtree_root()) {
             keep_inode = true;
-            dout(10) << "trim_non_auth_subtree(" << dir << ") subdir " << *subdir << "is kept!" << dendl;
-          }
-          else {
+            dout(10) << "trim_non_auth_subtree(" << dir << ") keeping " << **subdir << dendl;
+          } else {
             if (trim_non_auth_subtree(*subdir))
               keep_inode = true;
             else {
@@ -6734,8 +6730,9 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
         dir->remove_dentry(dn);
       } else {
         dout(20) << "trim_non_auth_subtree(" << dir << ") keeping inode " << in << " with dentry " << dn <<dendl;
-        keep_dir = true;
       }
+    } else if (keep_dir && dnl->is_null()) { // keep null dentry for slave rollback
+      dout(20) << "trim_non_auth_subtree(" << dir << ") keeping dentry " << dn <<dendl;
     } else { // just remove it
       dout(20) << "trim_non_auth_subtree(" << dir << ") removing dentry " << dn << dendl;
       if (dnl->is_remote())
@@ -6747,7 +6744,7 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
    * We've now checked all our children and deleted those that need it.
    * Now return to caller, and tell them if *we're* a keeper.
    */
-  return keep_dir;
+  return keep_dir || dir->get_num_any();
 }
 
 /*
