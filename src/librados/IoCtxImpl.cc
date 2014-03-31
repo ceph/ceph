@@ -1014,8 +1014,6 @@ int librados::IoCtxImpl::watch(const object_t& oid, uint64_t ver,
 
   lock->Lock();
 
-#warning watch related locking?
-
   WatchContext *wc = new WatchContext(this, oid, ctx);
   client->register_watcher(wc, cookie);
   prepare_assert_ops(&wr);
