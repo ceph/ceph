@@ -264,6 +264,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     // adjust [near]full status
     register_nearfull_status(osd, new_stats);
   }
+  set<int64_t> deleted_pools;
   for (set<pg_t>::const_iterator p = inc.pg_remove.begin();
        p != inc.pg_remove.end();
        ++p) {
@@ -273,6 +274,14 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
       stat_pg_sub(removed_pg, s->second);
       pg_stat.erase(s);
     }
+    if (removed_pg.ps() == 0)
+      deleted_pools.insert(removed_pg.pool());
+  }
+  for (set<int64_t>::iterator p = deleted_pools.begin();
+       p != deleted_pools.end();
+       ++p) {
+    dout(20) << " deleted pool " << *p << dendl;
+    deleted_pool(*p);
   }
 
   for (set<int>::iterator p = inc.get_osd_stat_rm().begin();
