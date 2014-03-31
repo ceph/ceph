@@ -153,8 +153,8 @@ ceph osd pool delete "${POOL}" "${POOL}" --yes-i-really-really-mean-it
 
 POOL="alloc_hint-ec"
 RULE="ecruleset"
-ceph osd crush rule create-erasure "${RULE}" erasure-code-k="${EC_K}" erasure-code-m="${EC_M}" erasure-code-ruleset-failure-domain=osd
-ceph osd pool create "${POOL}" "${NUM_PG}" "${NUM_PGP}" erasure crush_ruleset="${RULE}" erasure-code-k="${EC_K}" erasure-code-m="${EC_M}" erasure-code-ruleset-failure-domain=osd
+ceph osd crush rule create-erasure "${RULE}" default
+ceph osd pool create "${POOL}" "${NUM_PG}" "${NUM_PGP}" erasure default "${RULE}"
 
 OBJ="baz"
 setup_pgid "${POOL}" "${OBJ}"
