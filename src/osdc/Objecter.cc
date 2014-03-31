@@ -1387,6 +1387,8 @@ tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
   assert(op->session); /* session can be homeless session too */
   bool check_for_latest_map = (r == RECALC_OP_TARGET_POOL_DNE);
 
+  inflight_ops.inc();
+
   // add to gather set(s)
   if (op->onack) {
     num_unacked.inc();
@@ -1604,8 +1606,9 @@ void Objecter::set_homeless_op(Op *op)
 
   OSDSession *s = &homeless_session;
   op->session = &homeless_session;
+  bool new_op = !op->tid;
   s->lock.get_write();
-  if (!op->tid) {
+  if (new_op) {
     op->tid = last_tid.inc();
   }
   s->ops[op->tid] = op;
@@ -1845,6 +1848,8 @@ void Objecter::_finish_op(Op *op)
 
   op->lock.Unlock();
 
+  inflight_ops.dec();
+
   delete op;
 }
 
@@ -1987,6 +1992,8 @@ void Objecter::unregister_op(Op *op)
   op->session->lock.unlock();
   op->session->put();
   op->session = NULL;
+
+  inflight_ops.dec();
 }
 
 /* This function DOES put the passed message before returning */

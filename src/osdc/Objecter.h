@@ -997,6 +997,7 @@ public:
 private:
 #warning need atomic64_t here
   atomic_t last_tid;
+  atomic_t inflight_ops;
   atomic_t client_inc;
   uint64_t max_linger_id;
   atomic_t num_unacked;
@@ -1587,7 +1588,7 @@ private:
 public:
   tid_t op_submit(Op *op);
   bool is_active() {
-    return !(ops.empty() && linger_ops.empty() && poolstat_ops.empty() && statfs_ops.empty());
+    return !((!inflight_ops.read()) && linger_ops.empty() && poolstat_ops.empty() && statfs_ops.empty());
   }
 
   /**
