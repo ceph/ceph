@@ -476,6 +476,13 @@ ceph osd pool set rbd cache_min_evict_age 234
 ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 0'
 
 
+ceph osd erasure-code-profile set fooprofile a=b c=d
+ceph osd erasure-code-profile set fooprofile a=b c=d
+expect_false ceph osd erasure-code-profile set fooprofile a=b c=d e=f
+ceph osd erasure-code-profile set fooprofile a=b c=d e=f --force
+ceph osd erasure-code-profile set fooprofile a=b c=d e=f
+expect_false ceph osd erasure-code-profile set fooprofile a=b c=d e=f g=h
+
 
 set +e
 
