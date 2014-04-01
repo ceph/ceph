@@ -477,12 +477,14 @@ public:
     return in.size() >= max_mds;
   }
   bool is_degraded() const {   // degraded = some recovery in process.  fixes active membership and recovery_set.
-    return 
-      get_num_mds(STATE_REPLAY) + 
-      get_num_mds(STATE_RESOLVE) + 
-      get_num_mds(STATE_RECONNECT) + 
-      get_num_mds(STATE_REJOIN) + 
-      failed.size();
+    if (!failed.empty())
+      return true;
+    for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
+	 p != mds_info.end();
+	 ++p)
+      if (p->second.state >= STATE_REPLAY && p->second.state <= STATE_CLIENTREPLAY)
+	return true;
+    return false;
   }
   bool is_any_failed() {
     return failed.size();
