@@ -326,6 +326,15 @@ int main(int argc, const char **argv)
     }
   }
 
+  rados_t cl;
+  rados_create(&cl, NULL);
+  rados_conf_parse_argv(cl, argc, argv);
+  rados_conf_parse_argv(cl, argc, argv);
+  rados_conf_read_file(cl, NULL);
+  rados_conf_parse_env(cl, NULL);
+  rados_connect(cl);
+  rados_pool_delete(cl, pool.c_str());
+
   printf("******* SUCCESS **********\n"); 
   return EXIT_SUCCESS;
 }
