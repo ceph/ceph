@@ -56,7 +56,7 @@ def kill_job(run_name, job_id, archive_base=None, owner=None,
     job_info = find_job_info(job_archive_dir)
     owner = job_info['owner']
     kill_processes(run_name, [job_info.get('pid')])
-    targets = dict(targets=job_info['targets'])
+    targets = dict(targets=job_info.get('targets', {}))
     nuke_targets(targets, owner)
 
 
