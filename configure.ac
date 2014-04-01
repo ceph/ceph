@@ -514,11 +514,14 @@ AM_CONDITIONAL(WITH_LIBROCKSDB, [ test "$with_librocksdb" = "yes" ])
 
 #add rocksdb support
 # check libz
-AC_CHECK_LIB([z], [gzread], [], [AC_MSG_FAILURE([libz not found])])
+AS_IF([test "x$with_librocksdb" = "xyes"],
+            [AC_CHECK_LIB([z], [gzread], [], [AC_MSG_FAILURE([libz not found])])])
 # check libbz2
-AC_CHECK_LIB([bz2], [BZ2_bzCompressInit], [], [AC_MSG_FAILURE([libbz2 not found])])
+AS_IF([test "x$with_librocksdb" = "xyes"],
+            [AC_CHECK_LIB([bz2], [BZ2_bzCompressInit], [], [AC_MSG_FAILURE([libbz2 not found])])])
 # check librt
-AC_CHECK_LIB([rt], [clock_gettime], [], [AC_MSG_FAILURE([librt not found])])
+AS_IF([test "x$with_librocksdb" = "xyes"],
+            [AC_CHECK_LIB([rt], [clock_gettime], [], [AC_MSG_FAILURE([librt not found])])])
 # use system rocksdb
 #AC_CHECK_LIB([rocksdb], [rocksdb_open], [], [AC_MSG_FAILURE([librocks not found])],[-lsnappy -lpthread -lrt -lbz2 -lz])
 #AC_CHECK_LIB([rocksdb], [open], [], [AC_MSG_FAILURE([librocks not found])],[-lsnappy -lpthread -lrt -lbz2 -lz])
