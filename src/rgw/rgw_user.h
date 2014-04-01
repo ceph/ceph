@@ -233,7 +233,6 @@ struct RGWUserAdminOpState {
     }
 
     subuser_specified = true;
-    gen_access = true;
   }
   void set_caps(std::string& _caps) {
     if (_caps.empty())
