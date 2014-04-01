@@ -1183,12 +1183,6 @@ int RGWSubUserPool::execute_add(RGWUserAdminOpState& op_state,
 
   subuser_pair.first = subuser_str;
 
-  // no duplicates
-  if (op_state.has_existing_subuser()) {
-    set_err_msg(err_msg, "subuser exists");
-    return -EEXIST;
-  }
-
   // assumes key should be created
   if (op_state.has_key_op()) {
     ret = user->keys.add(op_state, &subprocess_msg, true);
