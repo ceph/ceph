@@ -12,6 +12,8 @@ using namespace librados;
 
 typedef RadosTest LibRadosWatchNotify;
 typedef RadosTestPP LibRadosWatchNotifyPP;
+typedef RadosTestEC LibRadosWatchNotifyEC;
+typedef RadosTestECPP LibRadosWatchNotifyECPP;
 
 static sem_t sem;
 
@@ -66,6 +68,58 @@ TEST_F(LibRadosWatchNotifyPP, WatchNotifyTestPP) {
 }
 
 TEST_F(LibRadosWatchNotifyPP, WatchNotifyTimeoutTestPP) {
+  ASSERT_EQ(0, sem_init(&sem, 0, 0));
+  ioctx.set_notify_timeout(1);
+  uint64_t handle;
+  WatchNotifyTestCtx ctx;
+
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+
+  ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
+  sem_destroy(&sem);
+}
+
+TEST_F(LibRadosWatchNotifyEC, WatchNotifyTest) {
+  ASSERT_EQ(0, sem_init(&sem, 0, 0));
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  uint64_t handle;
+  ASSERT_EQ(0,
+      rados_watch(ioctx, "foo", 0, &handle, watch_notify_test_cb, NULL));
+  ASSERT_EQ(0, rados_notify(ioctx, "foo", 0, NULL, 0));
+  TestAlarm alarm;
+  sem_wait(&sem);
+  rados_unwatch(ioctx, "foo", handle);
+  sem_destroy(&sem);
+}
+
+TEST_F(LibRadosWatchNotifyECPP, WatchNotifyTestPP) {
+  ASSERT_EQ(0, sem_init(&sem, 0, 0));
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  uint64_t handle;
+  WatchNotifyTestCtx ctx;
+  ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
+  std::list<obj_watch_t> watches;
+  ASSERT_EQ(0, ioctx.list_watchers("foo", &watches));
+  ASSERT_EQ(watches.size(), 1u);
+  bufferlist bl2;
+  ASSERT_EQ(0, ioctx.notify("foo", 0, bl2));
+  TestAlarm alarm;
+  sem_wait(&sem);
+  ioctx.unwatch("foo", handle);
+  sem_destroy(&sem);
+}
+
+TEST_F(LibRadosWatchNotifyECPP, WatchNotifyTimeoutTestPP) {
   ASSERT_EQ(0, sem_init(&sem, 0, 0));
   ioctx.set_notify_timeout(1);
   uint64_t handle;

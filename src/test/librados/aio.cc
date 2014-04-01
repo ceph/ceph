@@ -177,16 +177,17 @@ TEST(LibRadosAio, SimpleWrite) {
 }
 
 TEST(LibRadosAio, SimpleWritePP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  {
   AioTestDataPP test_data;
   ASSERT_EQ("", test_data.init());
   AioCompletion *my_completion = test_data.m_cluster.aio_create_completion(
 	  (void*)&test_data, set_completion_complete, set_completion_safe);
   AioCompletion *my_completion_null = NULL;
   ASSERT_NE(my_completion, my_completion_null);
-  char buf[128];
-  memset(buf, 0xcc, sizeof(buf));
-  bufferlist bl1;
-  bl1.append(buf, sizeof(buf));
   ASSERT_EQ(0, test_data.m_ioctx.aio_write("foo",
 			       my_completion, bl1, sizeof(buf), 0));
   {
@@ -195,10 +196,13 @@ TEST(LibRadosAio, SimpleWritePP) {
     sem_wait(&test_data.m_sem);
   }
   delete my_completion;
+  }
 
+  {
+  AioTestDataPP test_data;
   ASSERT_EQ("", test_data.init());
   test_data.m_ioctx.set_namespace("nspace");
-  my_completion = test_data.m_cluster.aio_create_completion(
+  AioCompletion *my_completion = test_data.m_cluster.aio_create_completion(
 	  (void*)&test_data, set_completion_complete, set_completion_safe);
   ASSERT_EQ(0, test_data.m_ioctx.aio_write("foo",
 			       my_completion, bl1, sizeof(buf), 0));
@@ -208,6 +212,7 @@ TEST(LibRadosAio, SimpleWritePP) {
     sem_wait(&test_data.m_sem);
   }
   delete my_completion;
+  }
 }
 
 TEST(LibRadosAio, WaitForSafe) {
@@ -1286,4 +1291,5 @@ TEST(LibRadosAio, OmapPP) {
   }
 
   ioctx.remove("test_obj");
+  destroy_one_pool_pp(pool_name, cluster);
 }
