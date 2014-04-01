@@ -154,6 +154,7 @@ public:
 
   ~LevelDBStore();
 
+  static bool _test_init(const string& dir);
   int init();
 
   /// Opens underlying db
