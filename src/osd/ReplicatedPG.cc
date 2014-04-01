@@ -5096,6 +5096,9 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type)
 	changing.insert(OI_ATTR);
 	changing.insert(SS_ATTR);
 	ctx->obc->fill_in_setattrs(changing, &(ctx->mod_desc));
+      } else {
+	// replicated pools are never rollbackable in this case
+	ctx->mod_desc.mark_unrollbackable();
       }
     } else {
       dout(10) << " no snapset (this is a clone)" << dendl;
