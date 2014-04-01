@@ -1716,7 +1716,8 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
     op->mark_started();
 
     // snap
-    if (pool.info.is_pool_snaps_mode()) {
+    if (!(m->get_flags() & CEPH_OSD_FLAG_ENFORCE_SNAPC) &&
+	pool.info.is_pool_snaps_mode()) {
       // use pool's snapc
       ctx->snapc = pool.snapc;
     } else {
@@ -6202,7 +6203,9 @@ int ReplicatedPG::start_flush(OpContext *ctx, bool blocking, hobject_t *pmissing
       o,
       dsnapc,
       oi.mtime,
-      CEPH_OSD_FLAG_IGNORE_OVERLAY | CEPH_OSD_FLAG_ORDERSNAP,
+      (CEPH_OSD_FLAG_IGNORE_OVERLAY |
+       CEPH_OSD_FLAG_ORDERSNAP |
+       CEPH_OSD_FLAG_ENFORCE_SNAPC),
       NULL,
       NULL /* no callback, we'll rely on the ordering w.r.t the next op */);
     osd->objecter_lock.Unlock();
@@ -6228,11 +6231,12 @@ int ReplicatedPG::start_flush(OpContext *ctx, bool blocking, hobject_t *pmissing
   C_Flush *fin = new C_Flush(this, soid, get_last_peering_reset());
 
   osd->objecter_lock.Lock();
-  ceph_tid_t tid = osd->objecter->mutate(soid.oid, base_oloc, o, snapc, oi.mtime,
-				    CEPH_OSD_FLAG_IGNORE_OVERLAY,
-				    NULL,
-				    new C_OnFinisher(fin,
-						     &osd->objecter_finisher));
+  ceph_tid_t tid = osd->objecter->mutate(
+    soid.oid, base_oloc, o, snapc, oi.mtime,
+    CEPH_OSD_FLAG_IGNORE_OVERLAY | CEPH_OSD_FLAG_ENFORCE_SNAPC,
+    NULL,
+    new C_OnFinisher(fin,
+		     &osd->objecter_finisher));
   fin->tid = tid;
   fop->objecter_tid = tid;
   osd->objecter_lock.Unlock();
