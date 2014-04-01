@@ -2290,7 +2290,7 @@ void rados_read_op_omap_get_vals_by_keys(rados_read_op_t read_op,
 					 int *prval);
 
 /**
- * Perform a write operation synchronously
+ * Perform a read operation synchronously
  * @param read_op operation to perform
  * @io the ioctx that the object is in
  * @oid the object id
@@ -2302,7 +2302,7 @@ int rados_read_op_operate(rados_read_op_t read_op,
 			  int flags);
 
 /**
- * Perform a write operation asynchronously
+ * Perform a read operation asynchronously
  * @param read_op operation to perform
  * @io the ioctx that the object is in
  * @param completion what to do when operation has been attempted
