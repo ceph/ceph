@@ -1,10 +1,12 @@
 import os
+from os.path import getmtime
 import yaml
 import json
 import re
 import requests
 import logging
 import socket
+from datetime import datetime
 
 import teuthology
 from .config import config
@@ -89,6 +91,12 @@ class ResultsSerializer(object):
                 partial_info = yaml.safe_load(yaml_file)
                 if partial_info is not None:
                     job_info.update(partial_info)
+
+        log_path = os.path.join(job_archive_dir, 'teuthology.log')
+        if os.path.exists(log_path):
+            mtime = int(os.path.getmtime(log_path))
+            mtime_dt = datetime.fromtimestamp(mtime)
+            job_info['updated'] = str(mtime_dt)
 
         if 'job_id' not in job_info:
             job_info['job_id'] = job_id
