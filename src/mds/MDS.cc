@@ -1649,10 +1649,15 @@ void MDS::handle_signal(int signum)
   mds_lock.Unlock();
 }
 
+/**
+ * Initiate shutdown.  This does not terminate the process synchronously,
+ * rather it initiates a process which leads to messenger completion so that
+ * we fall out of our dispatch loop.
+ */
 void MDS::suicide()
 {
   assert(mds_lock.is_locked());
-  want_state = CEPH_MDS_STATE_DNE; // whatever.
+  want_state = CEPH_MDS_STATE_DNE;
 
   dout(1) << "suicide.  wanted " << ceph_mds_state_name(want_state)
 	  << ", now " << ceph_mds_state_name(state) << dendl;
@@ -1926,6 +1931,12 @@ bool MDS::_dispatch(Message *m)
   if (dispatch_depth > 1)
     return true;
 
+  // handle_core_message may relinquish and re-acquire mds_lock
+  // to handle config setting message, so we must re-check state
+  if (want_state == CEPH_MDS_STATE_DNE) {
+	return false;
+  }
+
   // finish any triggered contexts
   while (!finished_queue.empty()) {
     dout(7) << "mds has " << finished_queue.size() << " queued contexts" << dendl;
@@ -1940,6 +1951,9 @@ bool MDS::_dispatch(Message *m)
       // give other threads (beacon!) a chance
       mds_lock.Unlock();
       mds_lock.Lock();
+      if (want_state == CEPH_MDS_STATE_DNE) {
+	return false;
+      }
     }
   }
 
@@ -1962,6 +1976,9 @@ bool MDS::_dispatch(Message *m)
     // give other threads (beacon!) a chance
     mds_lock.Unlock();
     mds_lock.Lock();
+    if (want_state == CEPH_MDS_STATE_DNE) {
+	return false;
+    }
   }
 
   // done with all client replayed requests?
@@ -2225,6 +2242,9 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
 void MDS::ms_handle_accept(Connection *con)
 {
   Mutex::Locker l(mds_lock);
+  if (want_state == CEPH_MDS_STATE_DNE)
+    return;
+
   Session *s = static_cast<Session *>(con->get_priv());
   dout(10) << "ms_handle_accept " << con->get_peer_addr() << " con " << con << " session " << s << dendl;
   if (s) {
