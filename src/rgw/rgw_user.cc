@@ -1228,6 +1228,10 @@ int RGWSubUserPool::add(RGWUserAdminOpState& op_state, std::string *err_msg, boo
     return ret;
   }
 
+  if (op_state.get_secret_key().empty()) {
+    op_state.set_gen_access();
+  }
+
   ret = execute_add(op_state, &subprocess_msg, defer_user_update);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to create subuser, " + subprocess_msg);
