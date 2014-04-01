@@ -522,6 +522,14 @@ int rados_cluster_stat(rados_t cluster, struct rados_cluster_stat_t *result);
 int rados_cluster_fsid(rados_t cluster, char *buf, size_t len);
 
 /**
+ * Get/wait for the most recent osdmap
+ * 
+ * @param cluster the cluster to shutdown
+ * @returns 0 on sucess, negative error code on failure
+ */
+int rados_wait_for_latest_osdmap(rados_t cluster);
+
+/**
  * @defgroup librados_h_pools Pools
  *
  * RADOS pools are separate namespaces for objects. Pools may have
@@ -733,6 +741,9 @@ int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid);
  * @returns 0 on success, negative error code on failure
  */
 int rados_ioctx_pool_get_auid(rados_ioctx_t io, uint64_t *auid);
+
+int rados_ioctx_pool_requires_alignment(rados_ioctx_t io);
+uint64_t rados_ioctx_pool_required_alignment(rados_ioctx_t io);
 
 /**
  * Get the pool id of the io context
