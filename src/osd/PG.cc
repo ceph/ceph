@@ -4644,7 +4644,7 @@ void PG::start_peering_interval(
     state_clear(PG_STATE_REMAPPED);
 
   int role = osdmap->calc_pg_role(osd->whoami, acting, acting.size());
-  if (role == pg_whoami.shard)
+  if (pool.info.is_replicated() || role == pg_whoami.shard)
     set_role(role);
   else
     set_role(-1);
