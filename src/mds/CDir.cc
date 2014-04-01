@@ -1540,10 +1540,10 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 
   bool stray = inode->is_stray();
 
-  unsigned pos = 0;
-  for (map<string, bufferlist>::iterator p = omap.begin();
-       p != omap.end();
-       ++p, ++pos) {
+  unsigned pos = omap.size() - 1;
+  for (map<string, bufferlist>::reverse_iterator p = omap.rbegin();
+       p != omap.rend();
+       ++p, --pos) {
     // dname
     string dname;
     snapid_t first, last;
