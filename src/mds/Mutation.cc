@@ -226,7 +226,7 @@ bool MDRequest::freeze_auth_pin(CInode *inode)
   return true;
 }
 
-void MDRequest::unfreeze_auth_pin()
+void MDRequest::unfreeze_auth_pin(bool clear_inode)
 {
   assert(more()->is_freeze_authpin);
   CInode *inode = more()->rename_inode;
@@ -235,6 +235,8 @@ void MDRequest::unfreeze_auth_pin()
   else
     inode->unfreeze_inode();
   more()->is_freeze_authpin = false;
+  if (clear_inode)
+    more()->rename_inode = NULL;
 }
 
 void MDRequest::set_remote_frozen_auth_pin(CInode *inode)
@@ -273,7 +275,7 @@ bool MDRequest::can_auth_pin(MDSCacheObject *object)
 void MDRequest::drop_local_auth_pins()
 {
   if (has_more() && more()->is_freeze_authpin)
-    unfreeze_auth_pin();
+    unfreeze_auth_pin(true);
   Mutation::drop_local_auth_pins();
 }
 
