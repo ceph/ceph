@@ -68,7 +68,7 @@ public:
   static KeyValueDB *create(CephContext *cct, const string& type,
 			    const string& dir);
 
-  /// test whether we can successfully initialize
+  /// test whether we can successfully initialize; may have side effects (e.g., create)
   static bool test_init(const string& type, const string& dir);
   virtual int init() = 0;
   virtual int open(ostream &out) = 0;
@@ -178,6 +178,18 @@ public:
   virtual uint64_t get_estimated_size(map<string,uint64_t> &extra) = 0;
 
   virtual ~KeyValueDB() {}
+
+  /// compact the underlying store
+  virtual void compact() {}
+
+  /// compact db for all keys with a given prefix
+  virtual void compact_prefix(const string& prefix) {}
+  /// compact db for all keys with a given prefix, async
+  virtual void compact_prefix_async(const string& prefix) {}
+  virtual void compact_range(const string& prefix,
+			     const string& start, const string& end) {}
+  virtual void compact_range_async(const string& prefix,
+				   const string& start, const string& end) {}
 
 protected:
   virtual WholeSpaceIterator _get_iterator() = 0;
