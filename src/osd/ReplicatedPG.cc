@@ -11176,10 +11176,16 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       ++scrubber.shallow_errors;
     }
 
-    if (soid.snap == CEPH_NOSNAP) {
-      if (!snapset.head_exists) {
+    if (soid.snap == CEPH_NOSNAP || soid.snap == CEPH_SNAPDIR) {
+      if (soid.snap == CEPH_NOSNAP && !snapset.head_exists) {
 	osd->clog.error() << mode << " " << info.pgid << " " << soid
-			  << " snapset.head_exists=false, but object exists";
+			  << " snapset.head_exists=false, but head exists";
+        ++scrubber.shallow_errors;
+	continue;
+      }
+      if (soid.snap == CEPH_SNAPDIR && snapset.head_exists) {
+	osd->clog.error() << mode << " " << info.pgid << " " << soid
+			  << " snapset.head_exists=true, but snapdir exists";
         ++scrubber.shallow_errors;
 	continue;
       }
