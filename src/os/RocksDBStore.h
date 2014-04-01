@@ -80,7 +80,7 @@ public:
   /// compact the underlying rocksdb store
   void compact();
 
-  static bool _pre_init(const string& dir);
+  static bool _test_init(const string& dir);
   int init();
   /// compact rocksdb for all keys with a given prefix
   void compact_prefix(const string& prefix) {

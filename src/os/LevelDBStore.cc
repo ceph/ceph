@@ -92,7 +92,7 @@ int LevelDBStore::do_open(ostream &out, bool create_if_missing)
   return 0;
 }
 
-bool LevelDBStore::_tespre_init(const string& dir)
+bool LevelDBStore::_test_init(const string& dir)
 {
   leveldb::Options options;
   options.create_if_missing = true;

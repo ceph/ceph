@@ -101,7 +101,7 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   return 0;
 }
 
-bool RocksDBStore::_pre_init(const string& dir)
+bool RocksDBStore::_test_init(const string& dir)
 {
   rocksdb::Options options;
   options.create_if_missing = true;
