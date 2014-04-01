@@ -17,6 +17,7 @@ libos_la_SOURCES = \
 	os/LevelDBStore.cc \
 	os/LFNIndex.cc \
 	os/MemStore.cc \
+	os/KeyValueDB.cc \
 	os/KeyValueStore.cc \
 	os/ObjectStore.cc \
 	os/WBThrottle.cc \
