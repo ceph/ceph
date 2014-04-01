@@ -681,7 +681,7 @@ void RGWObjManifest::obj_iterator::operator++()
       stripe_ofs = part_ofs;
 
       /* move to the next rule? */
-      if (next_rule_iter->second.start_ofs >= stripe_ofs) {
+      if (stripe_ofs >= next_rule_iter->second.start_ofs) {
         rule_iter = next_rule_iter;
         bool last_rule = (next_rule_iter == manifest->rules.end());
         if (!last_rule) {
