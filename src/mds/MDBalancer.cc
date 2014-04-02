@@ -1000,11 +1000,11 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
       dir->is_auth()) {
 
     dout(20) << "hit_dir " << type << " pop is " << v << ", frag " << dir->get_frag()
-	     << " size " << dir->get_num_head_items() << dendl;
+	     << " size " << dir->get_frag_size() << dendl;
 
     // split
     if (g_conf->mds_bal_split_size > 0 &&
-	((dir->get_num_head_items() > (unsigned)g_conf->mds_bal_split_size) ||
+	(dir->should_split() ||
 	 (v > g_conf->mds_bal_split_rd && type == META_POP_IRD) ||
 	 (v > g_conf->mds_bal_split_wr && type == META_POP_IWR)) &&
 	split_queue.count(dir->dirfrag()) == 0) {
@@ -1013,8 +1013,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
     }
 
     // merge?
-    if (dir->get_frag() != frag_t() &&
-	(dir->get_num_head_items() < (unsigned)g_conf->mds_bal_merge_size) &&
+    if (dir->get_frag() != frag_t() && dir->should_merge() &&
 	merge_queue.count(dir->dirfrag()) == 0) {
       dout(10) << "hit_dir " << type << " pop is " << v << ", putting in merge_queue: " << *dir << dendl;
       merge_queue.insert(dir->dirfrag());
