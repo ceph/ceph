@@ -628,6 +628,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 
   c->is_read = true;
   c->io = this;
+  c->blp = pbl;
 
   Mutex::Locker l(*lock);
   objecter->read(oid, oloc,
@@ -649,6 +650,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
   c->io = this;
   c->bl.clear();
   c->bl.push_back(buffer::create_static(len, buf));
+  c->blp = &c->bl;
 
   Mutex::Locker l(*lock);
   objecter->read(oid, oloc,
@@ -1241,8 +1243,8 @@ void librados::IoCtxImpl::C_aio_Ack::finish(int r)
     c->safe = true;
   c->cond.Signal();
 
-  if (c->bl.length() > 0) {
-    c->rval = c->bl.length();
+  if (r == 0 && c->blp && c->blp->length() > 0) {
+    c->rval = c->blp->length();
   }
 
   if (c->callback_complete) {
