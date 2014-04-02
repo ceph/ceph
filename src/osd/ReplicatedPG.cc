@@ -10959,7 +10959,7 @@ void ReplicatedPG::agent_choose_mode()
       num_dirty * avg_size * 1000000 /
       (pool.info.target_max_bytes / divisor);
     full_micro =
-      info.stats.stats.sum.num_bytes * 1000000 /
+      num_user_objects * avg_size * 1000000 /
       (pool.info.target_max_bytes / divisor);
   }
   if (pool.info.target_max_objects) {
