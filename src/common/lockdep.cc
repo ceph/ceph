@@ -76,6 +76,15 @@ void lockdep_unregister_ceph_context(CephContext *cct)
     // this cct is going away; shut it down!
     g_lockdep = false;
     g_lockdep_ceph_ctx = NULL;
+
+    // blow away all of our state, too, in case it starts up again.
+    held.clear();
+    for (unsigned i = 0; i < MAX_LOCKS; ++i)
+      for (unsigned j = 0; j < MAX_LOCKS; ++j)
+	follows[i][j] = NULL;
+    lock_names.clear();
+    lock_ids.clear();
+    last_id = 0;
   }
   pthread_mutex_unlock(&lockdep_mutex);
 }
