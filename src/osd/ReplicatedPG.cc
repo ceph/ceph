@@ -11109,11 +11109,6 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 	}	  
       }
     }
-    if (soid.snap == CEPH_SNAPDIR) {
-      string cat;
-      scrub_cstat.add(stat, cat);
-      continue;
-    }
 
     // basic checks.
     if (p->second.attrs.count(OI_ATTR) == 0) {
@@ -11140,10 +11135,12 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 
     stat.num_bytes += oi.size;
 
-    if (oi.is_dirty())
-      ++stat.num_objects_dirty;
-    if (oi.is_whiteout())
-      ++stat.num_whiteouts;
+    if (!soid.is_snapdir()) {
+      if (oi.is_dirty())
+	++stat.num_objects_dirty;
+      if (oi.is_whiteout())
+	++stat.num_whiteouts;
+    }
 
     //bufferlist data;
     //osd->store->read(c, poid, 0, 0, data);
