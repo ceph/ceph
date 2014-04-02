@@ -4929,6 +4929,7 @@ done:
       return true;
     }
     np->tiers.insert(tierpool_id);
+    np->set_snap_epoch(pending_inc.epoch); // tier will update to our snap info
     ntp->tier_of = pool_id;
     ss << "pool '" << tierpoolstr << "' is now (or already was) a tier of '" << poolstr << "'";
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
@@ -5176,6 +5177,7 @@ done:
       return true;
     }
     np->tiers.insert(tierpool_id);
+    np->set_snap_epoch(pending_inc.epoch); // tier will update to our snap info
     ntp->tier_of = pool_id;
     ntp->cache_mode = mode;
     ntp->hit_set_count = g_conf->osd_tier_default_cache_hit_set_count;
