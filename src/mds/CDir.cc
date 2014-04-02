@@ -616,7 +616,9 @@ void CDir::add_to_bloom(CDentry *dn)
     /* not create bloom filter for incomplete dir that was added by log replay */
     if (!is_complete())
       return;
-    bloom = new bloom_filter(100, 0.05, 0);
+    unsigned size = get_num_head_items() + get_num_snap_items();
+    if (size < 100) size = 100;
+    bloom = new bloom_filter(size, 1.0 / size, 0);
   }
   /* This size and false positive probability is completely random.*/
   bloom->insert(dn->name.c_str(), dn->name.size());
