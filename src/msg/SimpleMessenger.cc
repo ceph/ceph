@@ -399,6 +399,19 @@ ConnectionRef SimpleMessenger::get_loopback_connection()
 void SimpleMessenger::submit_message(Message *m, Connection *con,
 				     const entity_addr_t& dest_addr, int dest_type, bool lazy)
 {
+
+  if (cct->_conf->ms_dump_on_send) {
+    m->encode(-1, true);
+    ldout(cct, 0) << "submit_message " << *m << "\n";
+    m->get_payload().hexdump(*_dout);
+    if (m->get_data().length() > 0) {
+      *_dout << " data:\n";
+      m->get_data().hexdump(*_dout);
+    }
+    *_dout << dendl;
+    m->clear_payload();
+  }
+
   // existing connection?
   if (con) {
     Pipe *pipe = NULL;
