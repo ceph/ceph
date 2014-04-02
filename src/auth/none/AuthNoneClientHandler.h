@@ -36,6 +36,7 @@ public:
   void tick() {}
 
   AuthAuthorizer *build_authorizer(uint32_t service_id) {
+    RWLock::RLocker l(lock);
     AuthNoneAuthorizer *auth = new AuthNoneAuthorizer();
     if (auth) {
       auth->build_authorizer(cct->_conf->name, global_id);
@@ -46,7 +47,10 @@ public:
   void validate_tickets() { }
   bool need_tickets() { return false; }
 
-  void set_global_id(uint64_t id) { global_id = id; }
+  void set_global_id(uint64_t id) {
+    RWLock::WLocker l(lock);
+    global_id = id;
+  }
 };
 
 #endif

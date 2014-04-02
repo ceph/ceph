@@ -32,8 +32,12 @@ int CephxClientHandler::build_request(bufferlist& bl)
   ldout(cct, 10) << "build_request" << dendl;
 
   ldout(cct, 10) << "validate_tickets: want=" << want << " need=" << need << " have=" << have << dendl;
-  validate_tickets();
 
+  lock.get_write();
+  validate_tickets();
+  lock.put_write();
+
+  RWLock::RLocker l(lock);
   ldout(cct, 10) << "want=" << want << " need=" << need << " have=" << have << dendl;
 
   CephXTicketHandler& ticket_handler = tickets.get_handler(CEPH_ENTITY_TYPE_AUTH);
@@ -94,6 +98,7 @@ int CephxClientHandler::build_request(bufferlist& bl)
 int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 {
   ldout(cct, 10) << "handle_response ret = " << ret << dendl;
+  RWLock::WLocker l(lock);
   
   if (ret < 0)
     return ret; // hrm!
@@ -178,6 +183,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 
 AuthAuthorizer *CephxClientHandler::build_authorizer(uint32_t service_id)
 {
+  RWLock::RLocker l(lock);
   ldout(cct, 10) << "build_authorizer for service " << ceph_entity_type_name(service_id) << dendl;
   return tickets.build_authorizer(service_id);
 }
@@ -194,11 +200,13 @@ bool CephxClientHandler::build_rotating_request(bufferlist& bl)
 
 void CephxClientHandler::validate_tickets()
 {
+  // lock should be held for write
   tickets.validate_tickets(want, have, need);
 }
 
 bool CephxClientHandler::need_tickets()
 {
+  RWLock::WLocker l(lock);
   validate_tickets();
 
   ldout(cct, 20) << "need_tickets: want=" << want << " need=" << need << " have=" << have << dendl;

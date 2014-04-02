@@ -44,6 +44,7 @@ public:
   }
 
   void reset() {
+    RWLock::WLocker l(lock);
     starting = true;
     server_challenge = 0;
   }
@@ -61,6 +62,7 @@ public:
   bool need_tickets();
 
   void set_global_id(uint64_t id) {
+    RWLock::WLocker l(lock);
     global_id = id;
     tickets.global_id = id;
   }
