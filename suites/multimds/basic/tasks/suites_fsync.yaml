@@ -1,7 +1,5 @@
 tasks:
-- ceph-fuse:
 - workunit:
     clients:
       all:
-        - suites/iogen.sh
-
+        - suites/fsync-tester.sh

@@ -1,6 +1,5 @@
 tasks:
-- ceph-fuse:
 - workunit:
     clients:
       all:
-        - suites/fsstress.sh
+        - suites/blogbench.sh

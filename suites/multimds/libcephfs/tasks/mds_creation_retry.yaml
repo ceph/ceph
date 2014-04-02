@@ -1,5 +1,6 @@
 tasks:
-- ceph-fuse:
+-mds_creation_failure:
+-ceph-fuse:
 - workunit:
     clients:
       all: [fs/misc/trivial_sync.sh]

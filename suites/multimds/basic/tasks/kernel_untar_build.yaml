@@ -4,7 +4,6 @@ overrides:
       client:
         fuse_default_permissions: 0
 tasks:
-- ceph-fuse:
 - workunit:
     clients:
       all:

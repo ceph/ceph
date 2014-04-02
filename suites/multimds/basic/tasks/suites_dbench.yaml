@@ -1,6 +1,5 @@
 tasks:
-- ceph-fuse:
 - workunit:
     clients:
       all:
-        - suites/blogbench.sh
+        - suites/dbench.sh
