@@ -212,6 +212,9 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
  */
 bool CDir::check_rstats()
 {
+  if (!g_conf->mds_debug_scatterstat)
+    return true;
+
   dout(25) << "check_rstats on " << this << dendl;
   if (!is_complete() || !is_auth() || is_frozen()) {
     dout(10) << "check_rstats bailing out -- incomplete or non-auth or frozen dir!" << dendl;
@@ -229,9 +232,7 @@ bool CDir::check_rstats()
       //if (i->second->get_linkage()->is_primary())
         dout(1) << *(i->second) << dendl;
     }
-    assert(!g_conf->mds_debug_scatterstat ||
-           (get_num_head_items() ==
-            (fnode.fragstat.nfiles + fnode.fragstat.nsubdirs)));
+    assert(get_num_head_items() == (fnode.fragstat.nfiles + fnode.fragstat.nsubdirs));
   } else {
     dout(20) << "get_num_head_items() = " << get_num_head_items()
              << "; fnode.fragstat.nfiles=" << fnode.fragstat.nfiles
@@ -265,9 +266,9 @@ bool CDir::check_rstats()
     dout(25) << "my rstats:              " << fnode.rstat << dendl;
   }
 
-  assert(!g_conf->mds_debug_scatterstat || sub_info.rbytes == fnode.rstat.rbytes);
-  assert(!g_conf->mds_debug_scatterstat || sub_info.rfiles == fnode.rstat.rfiles);
-  assert(!g_conf->mds_debug_scatterstat || sub_info.rsubdirs == fnode.rstat.rsubdirs);
+  assert(sub_info.rbytes == fnode.rstat.rbytes);
+  assert(sub_info.rfiles == fnode.rstat.rfiles);
+  assert(sub_info.rsubdirs == fnode.rstat.rsubdirs);
   dout(10) << "check_rstats complete on " << this << dendl;
   return true;
 }
@@ -616,7 +617,9 @@ void CDir::add_to_bloom(CDentry *dn)
     /* not create bloom filter for incomplete dir that was added by log replay */
     if (!is_complete())
       return;
-    bloom = new bloom_filter(100, 0.05, 0);
+    unsigned size = get_num_head_items() + get_num_snap_items();
+    if (size < 100) size = 100;
+    bloom = new bloom_filter(size, 1.0 / size, 0);
   }
   /* This size and false positive probability is completely random.*/
   bloom->insert(dn->name.c_str(), dn->name.size());
@@ -1540,10 +1543,10 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 
   bool stray = inode->is_stray();
 
-  unsigned pos = 0;
-  for (map<string, bufferlist>::iterator p = omap.begin();
-       p != omap.end();
-       ++p, ++pos) {
+  unsigned pos = omap.size() - 1;
+  for (map<string, bufferlist>::reverse_iterator p = omap.rbegin();
+       p != omap.rend();
+       ++p, --pos) {
     // dname
     string dname;
     snapid_t first, last;
