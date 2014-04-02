@@ -10949,6 +10949,17 @@ void ReplicatedPG::agent_choose_mode()
       num_dirty = 0;
   }
 
+  dout(10) << __func__ << ": "
+	   << " num_objects: " << info.stats.stats.sum.num_objects
+	   << " num_bytes: " << info.stats.stats.sum.num_bytes
+	   << " num_objects_dirty: " << info.stats.stats.sum.num_objects_dirty
+	   << " num_objects_omap: " << info.stats.stats.sum.num_objects_omap
+	   << " num_dirty: " << num_dirty
+	   << " num_user_objects: " << num_user_objects
+	   << " pool.info.target_max_bytes: " << pool.info.target_max_bytes
+	   << " pool.info.target_max_objects: " << pool.info.target_max_objects
+	   << dendl;
+
   // get dirty, full ratios
   uint64_t dirty_micro = 0;
   uint64_t full_micro = 0;
