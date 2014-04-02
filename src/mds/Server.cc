@@ -1679,6 +1679,11 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
   if (fail) {
     mdr->drop_local_auth_pins();  // just in case
   } else {
+    /* freeze authpin wrong inode */
+    if (mdr->has_more() && mdr->more()->is_freeze_authpin &&
+	mdr->more()->rename_inode != auth_pin_freeze)
+      mdr->unfreeze_auth_pin(true);
+
     /* handle_slave_rename_prep() call freeze_inode() to wait for all other operations
      * on the source inode to complete. This happens after all locks for the rename
      * operation are acquired. But to acquire locks, we need auth pin locks' parent
