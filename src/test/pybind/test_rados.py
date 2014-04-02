@@ -249,6 +249,7 @@ class TestIoctx(object):
             while count[0] < 4:
                 lock.wait()
         eq(comp.get_return_value(), 0)
+        eq(comp2.get_return_value(), 0)
         [i.remove() for i in self.ioctx.list_objects()]
 
     def test_aio_write_full(self):

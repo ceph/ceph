@@ -1064,8 +1064,7 @@ uint64_t rados_get_last_version(rados_ioctx_t io);
  * @param buf data to write
  * @param len length of the data, in bytes
  * @param off byte offset in the object to begin writing at
- * @returns number of bytes written on success, negative error code on
- * failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_write(rados_ioctx_t io, const char *oid, const char *buf, size_t len, uint64_t off);
 
@@ -1111,8 +1110,7 @@ int rados_clone_range(rados_ioctx_t io, const char *dst, uint64_t dst_off,
  * @param oid the name of the object
  * @param buf the data to append
  * @param len length of buf (in bytes)
- * @returns number of bytes written on success, negative error code on
- * failure
+ * @returns 0 on success, negative error code on failure
  */
 int rados_append(rados_ioctx_t io, const char *oid, const char *buf, size_t len);
 

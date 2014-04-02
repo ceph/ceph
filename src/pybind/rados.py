@@ -1205,7 +1205,6 @@ class Ioctx(object):
         :type offset: int
 
         :raises: :class:`TypeError`
-        :raises: :class:`IncompleteWriteError`
         :raises: :class:`LogicError`
         :returns: int - number of bytes written 
         """
@@ -1216,18 +1215,14 @@ class Ioctx(object):
         ret = run_in_thread(self.librados.rados_write,
                             (self.io, c_char_p(key), c_char_p(data),
                             c_size_t(length), c_uint64(offset)))
-        if ret == length:
+        if ret == 0:
             return ret
         elif ret < 0:
             raise make_ex(ret, "Ioctx.write(%s): failed to write %s" % \
                 (self.name, key))
-        elif ret < length:
-            raise IncompleteWriteError("Wrote only %d out of %d bytes" % \
-                (ret, length))
         else:
             raise LogicError("Ioctx.write(%s): rados_write \
-returned %d, but %d was the maximum number of bytes it could have \
-written." % (self.name, ret, length))
+returned %d, but should return zero on success." % (self.name, ret))
 
     def write_full(self, key, data):
         """
@@ -1256,9 +1251,12 @@ written." % (self.name, ret, length))
                             c_size_t(length)))
         if ret == 0:
             return ret
-        else:
-            raise make_ex(ret, "Ioctx.write(%s): failed to write_full %s" % \
+        elif ret < 0:
+            raise make_ex(ret, "Ioctx.write_full(%s): failed to write %s" % \
                 (self.name, key))
+        else:
+            raise LogicError("Ioctx.write_full(%s): rados_write_full \
+returned %d, but should return zero on success." % (self.name, ret))
 
     def read(self, key, length=8192, offset=0):
         """
