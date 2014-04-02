@@ -139,7 +139,6 @@ void global_init(std::vector < const char * > *alt_def_args,
   }
 
   if (g_lockdep) {
-    dout(1) << "lockdep is enabled" << dendl;
     lockdep_register_ceph_context(g_ceph_context);
   }
   register_assert_context(g_ceph_context);
