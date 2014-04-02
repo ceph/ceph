@@ -191,6 +191,7 @@ OSDService::OSDService(OSD *osd) :
   push_wq("push_wq", cct->_conf->osd_recovery_thread_timeout, &osd->recovery_tp),
   gen_wq("gen_wq", cct->_conf->osd_recovery_thread_timeout, &osd->recovery_tp),
   class_handler(osd->class_handler),
+  pg_epoch_lock("OSDService::pg_epoch_lock"),
   publish_lock("OSDService::publish_lock"),
   pre_publish_lock("OSDService::pre_publish_lock"),
   sched_scrub_lock("OSDService::sched_scrub_lock"), scrubs_pending(0),
@@ -1854,6 +1855,8 @@ PG *OSD::_open_lock_pg(
 
   pg_map[pgid] = pg;
 
+  service.pg_add_epoch(pg->info.pgid, createmap->get_epoch());
+
   pg->lock(no_lockdep_check);
   pg->get("PGMap");  // because it's in pg_map
   return pg;
@@ -1885,6 +1888,7 @@ void OSD::add_newly_split_pg(PG *pg, PG::RecoveryCtx *rctx)
   epoch_t e(service.get_osdmap()->get_epoch());
   pg->get("PGMap");  // For pg_map
   pg_map[pg->info.pgid] = pg;
+  service.pg_add_epoch(pg->info.pgid, pg->get_osdmap()->get_epoch());
   dout(10) << "Adding newly split pg " << *pg << dendl;
   vector<int> up, acting;
   pg->get_osdmap()->pg_to_up_acting_osds(pg->info.pgid.pgid, up, acting);
@@ -5795,6 +5799,7 @@ void OSD::advance_pg(
     lastmap = nextmap;
     handle.reset_tp_timeout();
   }
+  service.pg_update_epoch(pg->info.pgid, lastmap->get_epoch());
   pg->handle_activate_map(rctx);
 }
 
@@ -7177,6 +7182,8 @@ void OSD::_remove_pg(PG *pg)
       PGRef(pg))
     );
   remove_wq.queue(make_pair(PGRef(pg), deleting));
+
+  service.pg_remove_epoch(pg->info.pgid);
 
   // remove from map
   pg_map.erase(pg->info.pgid);
