@@ -61,7 +61,10 @@ static BackTrace *follows[MAX_LOCKS][MAX_LOCKS];       // follows[a][b] means b 
 void lockdep_register_ceph_context(CephContext *cct)
 {
   pthread_mutex_lock(&lockdep_mutex);
-  g_lockdep_ceph_ctx = cct;
+  if (g_lockdep_ceph_ctx == NULL) {
+    g_lockdep_ceph_ctx = cct;
+    lockdep_dout(0) << "lockdep start" << dendl;
+  }
   pthread_mutex_unlock(&lockdep_mutex);
 }
 
@@ -69,6 +72,7 @@ void lockdep_unregister_ceph_context(CephContext *cct)
 {
   pthread_mutex_lock(&lockdep_mutex);
   if (cct == g_lockdep_ceph_ctx) {
+    lockdep_dout(0) << "lockdep stop" << dendl;
     // this cct is going away; shut it down!
     g_lockdep = false;
     g_lockdep_ceph_ctx = NULL;
@@ -104,7 +108,6 @@ int lockdep_register(const char *name)
   int id;
 
   pthread_mutex_lock(&lockdep_mutex);
-
   if (last_id == 0)
     for (int i=0; i<MAX_LOCKS; i++)
       for (int j=0; j<MAX_LOCKS; j++)
