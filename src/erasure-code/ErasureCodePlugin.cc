@@ -34,6 +34,8 @@ ErasureCodePluginRegistry::ErasureCodePluginRegistry() :
 
 ErasureCodePluginRegistry::~ErasureCodePluginRegistry()
 {
+  Mutex::Locker l(lock);
+
   if (disable_dlclose)
     return;
 
