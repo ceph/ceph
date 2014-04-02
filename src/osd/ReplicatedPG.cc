@@ -11112,11 +11112,6 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 	}	  
       }
     }
-    if (soid.snap == CEPH_SNAPDIR) {
-      string cat;
-      scrub_cstat.add(stat, cat);
-      continue;
-    }
 
     // basic checks.
     if (p->second.attrs.count(OI_ATTR) == 0) {
@@ -11143,10 +11138,12 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 
     stat.num_bytes += oi.size;
 
-    if (oi.is_dirty())
-      ++stat.num_objects_dirty;
-    if (oi.is_whiteout())
-      ++stat.num_whiteouts;
+    if (!soid.is_snapdir()) {
+      if (oi.is_dirty())
+	++stat.num_objects_dirty;
+      if (oi.is_whiteout())
+	++stat.num_whiteouts;
+    }
 
     //bufferlist data;
     //osd->store->read(c, poid, 0, 0, data);
@@ -11179,12 +11176,16 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       ++scrubber.shallow_errors;
     }
 
-    if (soid.snap == CEPH_NOSNAP) {
-      if (!snapset.head_exists) {
+    if (soid.snap == CEPH_NOSNAP || soid.snap == CEPH_SNAPDIR) {
+      if (soid.snap == CEPH_NOSNAP && !snapset.head_exists) {
 	osd->clog.error() << mode << " " << info.pgid << " " << soid
-			  << " snapset.head_exists=false, but object exists";
+			  << " snapset.head_exists=false, but head exists";
         ++scrubber.shallow_errors;
-	continue;
+      }
+      if (soid.snap == CEPH_SNAPDIR && snapset.head_exists) {
+	osd->clog.error() << mode << " " << info.pgid << " " << soid
+			  << " snapset.head_exists=true, but snapdir exists";
+        ++scrubber.shallow_errors;
       }
       if (curclone == snapset.clones.rend()) {
 	next_clone = hobject_t();
