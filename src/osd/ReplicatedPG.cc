@@ -4469,6 +4469,8 @@ int ReplicatedPG::_verify_no_head_clones(const hobject_t& soid,
        ++p) {
     hobject_t clone_oid = soid;
     clone_oid.snap = *p;
+    if (is_missing_object(clone_oid))
+      return -EBUSY;
     ObjectContextRef clone_obc = get_object_context(clone_oid, false);
     if (clone_obc && clone_obc->obs.exists) {
       dout(10) << __func__ << " cannot evict head before clone "
