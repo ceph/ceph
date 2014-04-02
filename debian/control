@@ -46,7 +46,7 @@ Standards-Version: 3.9.3
 Package: ceph
 Architecture: linux-any
 Depends: binutils,
-         ceph-common (>= 0.67),
+         ceph-common (>= 0.78-500),
          cryptsetup-bin | cryptsetup,
          gdisk,
          parted,
@@ -58,6 +58,7 @@ Depends: binutils,
          ${misc:Depends},
          ${shlibs:Depends}
 Recommends: btrfs-tools, ceph-mds, librados2, librbd1
+Replaces: ceph-common (<< 0.78-500)
 X-Python-Version: >= 2.6
 Description: distributed storage and file system
  Ceph is a distributed storage system designed to provide excellent
@@ -160,7 +161,8 @@ Architecture: linux-any
 Depends: librbd1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends},
          python-ceph (= ${binary:Version}), python-requests
 Conflicts: ceph-client-tools
-Replaces: ceph-client-tools
+Replaces: ceph-client-tools, ceph (<< 0.78-500)
+Breaks: ceph (<< 0.78-500)
 Suggests: ceph, ceph-mds
 Description: common utilities to mount and interact with a ceph storage cluster
  Ceph is a distributed storage and file system designed to provide
