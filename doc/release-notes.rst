@@ -30,6 +30,11 @@ Upgrade Sequencing
   for multipart uploads that prevents a multipart request that was initiated
   with a new radosgw from being completed by an old radosgw.
 
+* Librados interface change:  As there are no partial writes, the rados_write()
+  and rados_append() operations now return 0 on success like rados_write_full()
+  always has.  This includes the C++ interface equivalents and AIO return
+  values for the aio variants.
+
 Upgrading from v0.79
 --------------------
 
