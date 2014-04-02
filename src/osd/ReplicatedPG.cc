@@ -10921,14 +10921,33 @@ void ReplicatedPG::agent_choose_mode()
 {
   uint64_t divisor = pool.info.get_pg_num_divisor(info.pgid.pgid);
 
+  uint64_t num_user_objects = info.stats.stats.sum.num_objects;
+
   // adjust (effective) user objects down based on the (max) number
   // of HitSet objects, which should not count toward our total since
   // they cannot be flushed.
-  uint64_t num_user_objects = info.stats.stats.sum.num_objects;
-  if (num_user_objects > pool.info.hit_set_count)
-    num_user_objects -= pool.info.hit_set_count;
+  uint64_t unflushable = pool.info.hit_set_count;
+
+  // also exclude omap objects if ec backing pool
+  const pg_pool_t *base_pool = get_osdmap()->get_pg_pool(pool.info.tier_of);
+  assert(base_pool);
+  if (base_pool->is_erasure())
+    unflushable += info.stats.stats.sum.num_objects_omap;
+
+
+  if (num_user_objects > unflushable)
+    num_user_objects -= unflushable;
   else
     num_user_objects = 0;
+
+  // also reduce the num_dirty by num_objects_omap
+  int64_t num_dirty = info.stats.stats.sum.num_objects_dirty;
+  if (base_pool->is_erasure()) {
+    if (num_dirty > info.stats.stats.sum.num_objects_omap)
+      num_dirty -= info.stats.stats.sum.num_objects_omap;
+    else
+      num_dirty = 0;
+  }
 
   // get dirty, full ratios
   uint64_t dirty_micro = 0;
@@ -10937,7 +10956,7 @@ void ReplicatedPG::agent_choose_mode()
     uint64_t avg_size = info.stats.stats.sum.num_bytes /
       info.stats.stats.sum.num_objects;
     dirty_micro =
-      info.stats.stats.sum.num_objects_dirty * avg_size * 1000000 /
+      num_dirty * avg_size * 1000000 /
       (pool.info.target_max_bytes / divisor);
     full_micro =
       info.stats.stats.sum.num_bytes * 1000000 /
@@ -10945,7 +10964,7 @@ void ReplicatedPG::agent_choose_mode()
   }
   if (pool.info.target_max_objects) {
     uint64_t dirty_objects_micro =
-      info.stats.stats.sum.num_objects_dirty * 1000000 /
+      num_dirty * 1000000 /
       (pool.info.target_max_objects / divisor);
     if (dirty_objects_micro > dirty_micro)
       dirty_micro = dirty_objects_micro;
