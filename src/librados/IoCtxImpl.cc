@@ -460,11 +460,7 @@ int librados::IoCtxImpl::write(const object_t& oid, bufferlist& bl,
   bufferlist mybl;
   mybl.substr_of(bl, 0, len);
   op.write(off, mybl);
-  int r =  operate(oid, &op, NULL);
-  if (r < 0)
-    return r;
-
-  return len;
+  return operate(oid, &op, NULL);
 }
 
 int librados::IoCtxImpl::append(const object_t& oid, bufferlist& bl, size_t len)
@@ -474,11 +470,7 @@ int librados::IoCtxImpl::append(const object_t& oid, bufferlist& bl, size_t len)
   bufferlist mybl;
   mybl.substr_of(bl, 0, len);
   op.append(mybl);
-  int r = operate(oid, &op, NULL);
-  if (r < 0)
-    return r;
-
-  return len;
+  return operate(oid, &op, NULL);
 }
 
 int librados::IoCtxImpl::write_full(const object_t& oid, bufferlist& bl)
@@ -655,7 +647,6 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 
   c->is_read = true;
   c->io = this;
-  c->maxlen = len;
   c->bl.clear();
   c->bl.push_back(buffer::create_static(len, buf));
 
