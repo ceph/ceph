@@ -2407,7 +2407,7 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
 				   in->ino,
 				   0,
 				   cap->cap_id, cap->seq,
-				   cap->issued,
+				   cap->implemented,
 				   want,
 				   flush,
 				   cap->mseq);
