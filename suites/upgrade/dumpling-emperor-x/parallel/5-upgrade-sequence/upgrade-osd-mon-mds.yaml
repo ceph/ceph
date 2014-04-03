@@ -1,7 +1,10 @@
 upgrade-sequence:
    sequential:
    - install.upgrade:
-      all:
+      mon.a:
+        branch: emperor
+      mon.b:
+        branch: emperor
    - ceph.restart: [osd.0]
    - sleep:
        duration: 60
