@@ -11,6 +11,7 @@ usr/bin/ceph-debugpack
 usr/bin/ceph-mon
 usr/bin/ceph-osd
 usr/bin/ceph-run
+usr/bin/ceph-rest-api
 usr/bin/ceph_mon_store_converter
 usr/bin/crushtool
 usr/bin/monmaptool
@@ -25,9 +26,8 @@ usr/share/man/man8/ceph-debugpack.8
 usr/share/man/man8/ceph-mon.8
 usr/share/man/man8/ceph-osd.8
 usr/share/man/man8/ceph-run.8
+usr/share/man/man8/ceph-rest-api.8
 usr/share/man/man8/crushtool.8
 usr/share/man/man8/mkcephfs.8
 usr/share/man/man8/monmaptool.8
 usr/share/man/man8/osdmaptool.8
-etc/ceph/rbdmap
-etc/init.d/rbdmap
