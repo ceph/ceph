@@ -5472,6 +5472,9 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
     return;
   }
 
+  if (cop->omap.size())
+    cop->results.has_omap = true;
+
   if (r >= 0 && pool.info.require_rollback() && cop->omap.size()) {
     r = -EOPNOTSUPP;
   }
@@ -5668,6 +5671,14 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
     --ctx->delta_stats.num_whiteouts;
   }
 
+  if (cb->results->has_omap) {
+    dout(10) << __func__ << " setting omap flag on " << obs.oi.soid << dendl;
+    obs.oi.set_flag(object_info_t::FLAG_OMAP);
+  } else {
+    dout(10) << __func__ << " clearing omap flag on " << obs.oi.soid << dendl;
+    obs.oi.clear_flag(object_info_t::FLAG_OMAP);
+  }
+
   interval_set<uint64_t> ch;
   if (obs.oi.size > 0)
     ch.insert(0, obs.oi.size);
@@ -5744,6 +5755,11 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     dout(20) << __func__ << " creating whiteout on " << soid << dendl;
     osd->logger->inc(l_osd_tier_whiteout);
   } else {
+    if (results->has_omap) {
+      dout(10) << __func__ << " setting omap flag on " << soid << dendl;
+      tctx->new_obs.oi.set_flag(object_info_t::FLAG_OMAP);
+    }
+
     tctx->op_t->append(results->final_tx);
     delete results->final_tx;
     results->final_tx = NULL;
@@ -10861,6 +10877,8 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
   ctx->at_version = get_next_version();
   assert(ctx->new_obs.exists);
   int r = _delete_oid(ctx, true);
+  if (obc->obs.oi.is_omap())
+    ctx->delta_stats.num_objects_omap--;
   assert(r == 0);
   finish_ctx(ctx, pg_log_entry_t::DELETE);
   simple_repop_submit(repop);
