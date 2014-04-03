@@ -5245,9 +5245,13 @@ bool OSDService::prepare_to_stop()
 void OSDService::got_stop_ack()
 {
   Mutex::Locker l(is_stopping_lock);
-  dout(0) << __func__ << " starting shutdown" << dendl;
-  state = STOPPING;
-  is_stopping_cond.Signal();
+  if (state == PREPARING_TO_STOP) {
+    dout(0) << __func__ << " starting shutdown" << dendl;
+    state = STOPPING;
+    is_stopping_cond.Signal();
+  } else {
+    dout(10) << __func__ << " ignoring msg" << dendl;
+  }
 }
 
 
