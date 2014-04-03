@@ -1,5 +1,8 @@
 overrides:
   ceph:
+    conf:
+      mon:
+        mon warn on legacy crush tunables: false
     log-whitelist:
       - scrub mismatch
       - ScrubResult
