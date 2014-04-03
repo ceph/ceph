@@ -903,8 +903,10 @@ bool OSDMonitor::preprocess_mark_me_down(MOSDMarkMeDown *m)
   return false;
 
  reply:
-  Context *c(new C_AckMarkedDown(this, m));
-  c->complete(0);
+  if (m->request_ack) {
+    Context *c(new C_AckMarkedDown(this, m));
+    c->complete(0);
+  }
   return true;
 }
 
@@ -917,7 +919,8 @@ bool OSDMonitor::prepare_mark_me_down(MOSDMarkMeDown *m)
 
   mon->clog.info() << "osd." << target_osd << " marked itself down\n";
   pending_inc.new_state[target_osd] = CEPH_OSD_UP;
-  wait_for_finished_proposal(new C_AckMarkedDown(this, m));
+  if (m->request_ack)
+    wait_for_finished_proposal(new C_AckMarkedDown(this, m));
   return true;
 }
 
