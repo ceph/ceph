@@ -443,6 +443,7 @@ void ObjectCacher::Object::truncate(loff_t s)
 
     // remove bh entirely
     assert(bh->start() >= s);
+    assert(bh->waitfor_read.empty());
     oc->bh_remove(this, bh);
     delete bh;
   }
@@ -482,6 +483,7 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len)
 
     ++p;
     ldout(oc->cct, 10) << "discard " << *this << " bh " << *bh << dendl;
+    assert(bh->waitfor_read.empty());
     oc->bh_remove(this, bh);
     delete bh;
   }
