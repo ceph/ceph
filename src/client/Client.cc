@@ -6206,7 +6206,7 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
 					NULL, 0, onfinish);
 	if (r == 0) {
 	  ldout(cct, 20) << "readahead initiated, c " << onfinish << dendl;
-	  in->get();
+	  get_cap_ref(in, CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
 	} else {
 	  ldout(cct, 20) << "readahead was no-op, already cached" << dendl;
 	  delete onfinish;
@@ -6224,12 +6224,14 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
   r = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
 			      off, len, bl, 0, onfinish);
   if (r == 0) {
+    get_cap_ref(in, CEPH_CAP_FILE_CACHE);
     client_lock.Unlock();
     flock.Lock();
     while (!done)
       cond.Wait(flock);
     flock.Unlock();
     client_lock.Lock();
+    put_cap_ref(in, CEPH_CAP_FILE_CACHE);
     r = rvalue;
   } else {
     // it was cached.
