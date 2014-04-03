@@ -5827,9 +5827,13 @@ boost::statechart::result
 PG::RecoveryState::RepNotRecovering::react(const RequestBackfillPrio &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-
   double ratio, max_ratio;
-  if (pg->osd->too_full_for_backfill(&ratio, &max_ratio) &&
+
+  if (g_conf->osd_debug_reject_backfill_probability > 0 &&
+      (rand()%1000 < (g_conf->osd_debug_reject_backfill_probability*1000.0))) {
+    dout(10) << "backfill reservation rejected: failure injection" << dendl;
+    post_event(RemoteReservationRejected());
+  } else if (pg->osd->too_full_for_backfill(&ratio, &max_ratio) &&
       !pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation) {
     dout(10) << "backfill reservation rejected: full ratio is "
 	     << ratio << ", which is greater than max allowed ratio "
