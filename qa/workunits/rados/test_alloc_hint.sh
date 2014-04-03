@@ -108,7 +108,7 @@ setup_osd_data
 
 POOL="alloc_hint-rep"
 ceph osd pool create "${POOL}" "${NUM_PG}"
-ceph osd pool set "${POOL}" size "${NUM_OSDS}" # just in case
+ceph osd pool set "${POOL}" size "${NUM_OSDS}"
 
 OBJ="foo"
 setup_pgid "${POOL}" "${OBJ}"
@@ -151,10 +151,11 @@ ceph osd pool delete "${POOL}" "${POOL}" --yes-i-really-really-mean-it
 # ECBackend tests
 #
 
+PROFILE="alloc_hint-ecprofile"
 POOL="alloc_hint-ec"
-RULE="ecruleset"
-ceph osd crush rule create-erasure "${RULE}" default
-ceph osd pool create "${POOL}" "${NUM_PG}" "${NUM_PGP}" erasure default "${RULE}"
+ceph osd erasure-code-profile set "${PROFILE}" k=2 m=1 ruleset-failure-domain=osd
+ceph osd erasure-code-profile get "${PROFILE}" # just so it's logged
+ceph osd pool create "${POOL}" "${NUM_PG}" "${NUM_PGP}" erasure "${PROFILE}"
 
 OBJ="baz"
 setup_pgid "${POOL}" "${OBJ}"
