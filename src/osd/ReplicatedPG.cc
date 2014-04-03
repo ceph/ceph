@@ -4520,6 +4520,8 @@ inline int ReplicatedPG::_delete_oid(OpContext *ctx, bool no_whiteout)
   }
 
   ctx->delta_stats.num_objects--;
+  if (soid.is_snap())
+    ctx->delta_stats.num_object_clones--;
   if (oi.is_whiteout()) {
     dout(20) << __func__ << " deleting whiteout on " << soid << dendl;
     ctx->delta_stats.num_whiteouts--;
