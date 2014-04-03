@@ -1,7 +1,7 @@
 workload:
    sequential:
-    -  workunit:
+   - workunit:
        branch: dumpling
        clients:
-          client.0:
-             - rados/load-gen-big.sh
+         client.0:
+         - rados/load-gen-big.sh
