@@ -1487,6 +1487,18 @@ void ObjectCacher::flusher_entry()
 
 // -------------------------------------------------
 
+bool ObjectCacher::set_is_empty(ObjectSet *oset)
+{
+  assert(lock.is_locked());
+  if (oset->objects.empty())
+    return true;
+
+  for (xlist<Object*>::iterator p = oset->objects.begin(); !p.end(); ++p)
+    if (!(*p)->is_empty())
+      return false;
+
+  return true;
+}
 
 bool ObjectCacher::set_is_cached(ObjectSet *oset)
 {
