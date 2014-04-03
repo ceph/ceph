@@ -328,6 +328,7 @@ if [ "$start_mon" -eq 1 ]; then
         osd crush chooseleaf type = 0
         osd pool default min size = 1
         osd pool default erasure code directory = .libs
+        osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd
         run dir = $CEPH_OUT_DIR
 EOF
 if [ "$cephx" -eq 1 ] ; then
