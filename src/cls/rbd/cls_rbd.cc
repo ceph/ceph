@@ -115,7 +115,11 @@ static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
     if (rc < 0)
       return rc;
 
+    if (bl.length() < sizeof(*header))
+      return -EINVAL;
+
     header = (struct rbd_obj_header_ondisk *)bl.c_str();
+    assert(header);
 
     if ((snap_count != header->snap_count) ||
         (snap_names_len != header->snap_names_len)) {
