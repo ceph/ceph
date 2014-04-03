@@ -866,7 +866,7 @@ public:
 	m->fsid,
 	m->get_target(),
 	m->get_epoch(),
-	m->ack));
+	false));   // ACK itself does not request an ack
   }
   ~C_AckMarkedDown() {
     m->put();

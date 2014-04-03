@@ -5227,7 +5227,7 @@ bool OSDService::prepare_to_stop()
     monc->send_mon_message(new MOSDMarkMeDown(monc->get_fsid(),
 					      osdmap->get_inst(whoami),
 					      osdmap->get_epoch(),
-					      false
+					      true  // request ack
 					      ));
     utime_t now = ceph_clock_now(cct);
     utime_t timeout;
