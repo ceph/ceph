@@ -12,5 +12,15 @@ v0.78 firefly
 
   to your ceph.conf to get back the (leveldb) defaults.
 
+* monitor 'auth' read-only commands now expect the user to have 'rx' caps.
+  the affected commands are::
+
+    ceph auth export
+    ceph auth get
+    ceph auth get-key
+    ceph auth print-key
+    ceph auth list
+
+
 v0.79
 -----
