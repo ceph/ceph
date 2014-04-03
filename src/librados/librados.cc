@@ -2035,7 +2035,7 @@ extern "C" int rados_pool_list(rados_t cluster, char *buf, size_t len)
   if (r < 0)
     return r;
 
-  if (!buf)
+  if (len > 0 && !buf)
     return -EINVAL;
 
   char *b = buf;
