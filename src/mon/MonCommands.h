@@ -152,16 +152,16 @@ COMMAND("pg set_nearfull_ratio name=ratio,type=CephFloat,range=0.0|1.0", \
 
 COMMAND("auth export name=entity,type=CephString,req=false", \
        	"write keyring for requested entity, or master keyring if none given", \
-	"auth", "r", "cli,rest")
+	"auth", "rx", "cli,rest")
 COMMAND("auth get name=entity,type=CephString", \
-	"write keyring file with requested key", "auth", "r", "cli,rest")
+	"write keyring file with requested key", "auth", "rx", "cli,rest")
 COMMAND("auth get-key name=entity,type=CephString", "display requested key", \
-	"auth", "r", "cli,rest")
+	"auth", "rx", "cli,rest")
 COMMAND("auth print-key name=entity,type=CephString", "display requested key", \
-	"auth", "r", "cli,rest")
+	"auth", "rx", "cli,rest")
 COMMAND("auth print_key name=entity,type=CephString", "display requested key", \
-	"auth", "r", "cli,rest")
-COMMAND("auth list", "list authentication state", "auth", "r", "cli,rest")
+	"auth", "rx", "cli,rest")
+COMMAND("auth list", "list authentication state", "auth", "rx", "cli,rest")
 COMMAND("auth import", "auth import: read keyring file from -i <file>", \
 	"auth", "rw", "cli,rest")
 COMMAND("auth add " \

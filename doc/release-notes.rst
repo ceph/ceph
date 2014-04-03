@@ -512,6 +512,17 @@ Upgrading
   no longer included in the listxattr(2) results to prevent problems with
   'cp -a' and similar tools.
 
+* Monitor 'auth' read-only commands now expect the user to have 'rx' caps.
+  This is the same behavior that was present in dumpling, but in emperor
+  and more recent development releases the 'r' cap was sufficient.  The
+  affected commands are::
+
+    ceph auth export
+    ceph auth get
+    ceph auth get-key
+    ceph auth print-key
+    ceph auth list
+
 Notable Changes
 ---------------
 * ceph-conf: stop creating bogus log files (Josh Durgin, Sage Weil)
