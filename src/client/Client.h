@@ -566,7 +566,7 @@ private:
 	inode(i) { }
     void finish(int r) {
       lsubdout(client->cct, client, 20) << "C_Readahead on " << inode << dendl;
-      client->put_inode(inode, 1);
+      client->put_cap_ref(inode, CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
     }
   };
 
