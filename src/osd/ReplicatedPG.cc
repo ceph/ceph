@@ -1389,27 +1389,25 @@ void ReplicatedPG::do_op(OpRequestRef op)
     for (vector<snapid_t>::iterator p = obc->ssc->snapset.clones.begin();
 	 p != obc->ssc->snapset.clones.end();
 	 ++p) {
-      object_locator_t src_oloc;
-      get_src_oloc(m->get_oid(), m->get_object_locator(), src_oloc);
       hobject_t clone_oid = obc->obs.oi.soid;
       clone_oid.snap = *p;
       if (!src_obc.count(clone_oid)) {
-	ObjectContextRef sobc;
-	hobject_t wait_oid;
+	if (is_unreadable_object(clone_oid)) {
+	  wait_for_unreadable_object(clone_oid, op);
+	  return;
+	}
 
-	int r = find_object_context(clone_oid, &sobc, false, &wait_oid);
-	if (r == -EAGAIN) {
-	  // missing the specific snap we need; requeue and wait.
-	  wait_for_unreadable_object(wait_oid, op);
-	} else if (r) {
-	  if (!maybe_handle_cache(op, write_ordered, sobc, r, wait_oid, true))
-	    osd->reply_op_error(op, r);
+	ObjectContextRef sobc = get_object_context(clone_oid, false);
+	if (!sobc) {
+	  if (!maybe_handle_cache(op, write_ordered, sobc, -ENOENT, clone_oid, true))
+	    osd->reply_op_error(op, -ENOENT);
+	  return;
 	} else {
 	  dout(10) << " clone_oid " << clone_oid << " obc " << sobc << dendl;
 	  src_obc[clone_oid] = sobc;
 	  continue;
 	}
-	return;
+	assert(0); // unreachable
       } else {
 	continue;
       }
