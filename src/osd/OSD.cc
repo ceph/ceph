@@ -5369,6 +5369,8 @@ void OSD::handle_osd_map(MOSDMap *m)
   Session *session = static_cast<Session *>(m->get_connection()->get_priv());
   if (session && !(session->entity_name.is_mon() || session->entity_name.is_osd())) {
     //not enough perms!
+    dout(10) << "got osd map from Session " << session
+             << " which we can't take maps from (not a mon or osd)" << dendl;
     m->put();
     session->put();
     return;
