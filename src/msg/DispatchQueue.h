@@ -106,12 +106,27 @@ class DispatchQueue {
     }
   } dispatch_thread;
 
+  Mutex local_delivery_lock;
+  Cond local_delivery_cond;
+  bool stop_local_delivery;
+  list<pair<Message *, int> > local_messages;
+  class LocalDeliveryThread : public Thread {
+    DispatchQueue *dq;
+  public:
+    LocalDeliveryThread(DispatchQueue *dq) : dq(dq) {}
+    void *entry() {
+      dq->run_local_delivery();
+      return 0;
+    }
+  } local_delivery_thread;
+
   uint64_t pre_dispatch(Message *m);
   void post_dispatch(Message *m, uint64_t msize);
 
   public:
   bool stop;
   void local_delivery(Message *m, int priority);
+  void run_local_delivery();
 
   double get_max_age(utime_t now);
 
@@ -183,6 +198,9 @@ class DispatchQueue {
 	     cct->_conf->ms_pq_min_cost),
       next_pipe_id(1),
       dispatch_thread(this),
+      local_delivery_lock("SimpleMessenger::DispatchQueue::local_delivery_lock"),
+      stop_local_delivery(false),
+      local_delivery_thread(this),
       stop(false)
     {}
 };
