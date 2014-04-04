@@ -1445,31 +1445,31 @@ int Client::encode_inode_release(Inode *in, MetaRequest *req,
 	   << " mds:" << mds << ", drop:" << drop << ", unless:" << unless
 	   << ", have:" << ", force:" << force << ")" << dendl;
   int released = 0;
-  Cap *caps = NULL;
-  if (in->caps.count(mds))
-    caps = in->caps[mds];
-  if (caps &&
-      (drop & caps->issued) &&
-      !(unless & caps->issued)) {
-    ldout(cct, 25) << "Dropping caps. Initial " << ccap_string(caps->issued) << dendl;
-    caps->issued &= ~drop;
-    caps->implemented &= ~drop;
-    released = 1;
-    force = 1;
-    ldout(cct, 25) << "Now have: " << ccap_string(caps->issued) << dendl;
-  }
-  if (force && caps) {
-    ceph_mds_request_release rel;
-    rel.ino = in->ino;
-    rel.cap_id = caps->cap_id;
-    rel.seq = caps->seq;
-    rel.issue_seq = caps->issue_seq;
-    rel.mseq = caps->mseq;
-    rel.caps = caps->issued;
-    rel.wanted = caps->wanted;
-    rel.dname_len = 0;
-    rel.dname_seq = 0;
-    req->cap_releases.push_back(MClientRequest::Release(rel,""));
+  if (in->caps.count(mds)) {
+    Cap *caps = in->caps[mds];
+    drop &= ~(in->dirty_caps | get_caps_used(in));
+    if ((drop & caps->issued) &&
+	!(unless & caps->issued)) {
+      ldout(cct, 25) << "Dropping caps. Initial " << ccap_string(caps->issued) << dendl;
+      caps->issued &= ~drop;
+      caps->implemented &= ~drop;
+      released = 1;
+      force = 1;
+      ldout(cct, 25) << "Now have: " << ccap_string(caps->issued) << dendl;
+    }
+    if (force) {
+      ceph_mds_request_release rel;
+      rel.ino = in->ino;
+      rel.cap_id = caps->cap_id;
+      rel.seq = caps->seq;
+      rel.issue_seq = caps->issue_seq;
+      rel.mseq = caps->mseq;
+      rel.caps = caps->issued;
+      rel.wanted = caps->wanted;
+      rel.dname_len = 0;
+      rel.dname_seq = 0;
+      req->cap_releases.push_back(MClientRequest::Release(rel,""));
+    }
   }
   ldout(cct, 25) << "encode_inode_release exit(in:" << *in << ") released:"
 	   << released << dendl;
@@ -2458,7 +2458,7 @@ void Client::check_caps(Inode *in, bool is_delayed)
   unsigned used = get_caps_used(in);
   unsigned cap_used;
 
-  int retain = wanted | CEPH_CAP_PIN;
+  int retain = wanted | used | CEPH_CAP_PIN;
   if (!unmounting) {
     if (wanted)
       retain |= CEPH_CAP_ANY;
@@ -3149,10 +3149,8 @@ void Client::flush_caps(Inode *in, MetaSession *session)
   Cap *cap = in->auth_cap;
   assert(cap->session == session);
 
-  int wanted = in->caps_wanted();
-  int retain = wanted | CEPH_CAP_PIN;
-
-  send_cap(in, session, cap, get_caps_used(in), wanted, retain, in->flushing_caps);
+  send_cap(in, session, cap, get_caps_used(in), in->caps_wanted(),
+	   (cap->issued | cap->implemented), in->flushing_caps);
 }
 
 void Client::wait_sync_caps(uint64_t want)
