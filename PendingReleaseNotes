@@ -1,16 +1,3 @@
-v0.78 firefly
--------------
 
-* The default leveldb cache size for the ceph-osd daemon has been
-  increased from 4 MB to 128 MB.  This will increase the memory
-  footprint of that process but tends to increase performance of omap
-  (key/value) objects (used for CephFS and the radosgw).  If memory in your
-  deployment is tight, you can preserve the old behavio by adding::
-
-    leveldb write buffer size = 0
-    leveldb cache size = 0
-
-  to your ceph.conf to get back the (leveldb) defaults.
-
-v0.79
+v0.80
 -----
