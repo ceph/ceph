@@ -10390,6 +10390,26 @@ void ReplicatedPG::hit_set_persist()
   if (is_degraded_object(oid))
     return;
 
+  // If backfill is in progress and we could possibly overlap with the
+  // hit_set_* objects, back off.  Since these all have
+  // hobject_t::hash set to pgid.ps(), and those sort first, we can
+  // look just at that.  This is necessary because our transactions
+  // may include a modify of the new hit_set *and* a delete of the
+  // old one, and this may span the backfill boundary.
+  for (set<pg_shard_t>::iterator p = backfill_targets.begin();
+       p != backfill_targets.end();
+       ++p) {
+    assert(peer_info.count(*p));
+    const pg_info_t& pi = peer_info[*p];
+    if (pi.last_backfill == hobject_t() ||
+	pi.last_backfill.hash == info.pgid.ps()) {
+      dout(10) << __func__ << " backfill target osd." << *p
+	       << " last_backfill has not progressed past pgid ps"
+	       << dendl;
+      return;
+    }
+  }
+
   if (!info.hit_set.current_info.begin)
     info.hit_set.current_info.begin = hit_set_start_stamp;
 
