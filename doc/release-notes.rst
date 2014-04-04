@@ -3,10 +3,10 @@
 ===============
 
 v0.80 Firefly (upcoming release, draft notes)
----------------------------------------
+=============================================
 
 Upgrade Sequencing
-~~~~~~~~~~~~~~~~~~
+------------------
 
 * If your existing cluster is running a version older than v0.67
   Dumpling, please first upgrade to the latest Dumpling release before
@@ -31,7 +31,7 @@ Upgrade Sequencing
   with a new radosgw from being completed by an old radosgw.
 
 Upgrading from v0.79
-~~~~~~~~~~~~~~~~~~~~
+--------------------
 
 TBD
 
@@ -40,7 +40,7 @@ TBD
   previously it did not.
 
 Upgrading from v0.72 Emperor
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+----------------------------
 
 * See notes above.
 
@@ -119,7 +119,7 @@ Upgrading from v0.72 Emperor
 
 
 Upgrading from v0.67 Dumpling
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-----------------------------
 
 * See notes above.
 
@@ -183,13 +183,13 @@ Upgrading from v0.67 Dumpling
 
 
 Notable changes since v0.79
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+---------------------------
 
 TBD
 
 
 Notable changes since v0.72 Emperor
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-----------------------------------
 
 * buffer: some zero-copy groundwork (Josh Durgin)
 * build: misc improvements (Ken Dreyer)
@@ -346,7 +346,7 @@ Notable changes since v0.72 Emperor
 
 
 Notable changes since v0.67 Dumpling
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+------------------------------------
 
 * build cleanly under clang (Christophe Courtaut)
 * build: Makefile refactor (Roald J. van Loon)
@@ -480,8 +480,67 @@ Notable changes since v0.67 Dumpling
 * sysvinit: fix shutdown order (mons last) (Alfredo Deza)
 
 
+v0.79
+=====
+
+This release is intended to serve as a release candidate for firefly,
+which will hopefully be v0.80.  No changes are being made to the code
+base at this point except those that fix bugs.  Please test this
+release if you intend to make use of the new erasure-coded pools or
+cache tiers in firefly.
+
+This release fixes a range of bugs found in v0.78 and streamlines the
+user experience when creating erasure-coded pools.  There is also a
+raft of fixes for the MDS (multi-mds, directory fragmentation, and
+large directories).  The main notable new piece of functionality is a
+small change to allow radosgw to use an erasure-coded pool for object
+data.
+
+
+Upgrading
+---------
+* Erasure pools created with v0.78 will no longer function with v0.79.  You
+  will need to delete the old pool and create a new one.
+
+* A bug was fixed in the authentication handshake with big-endian
+  architectures that prevent authentication between big- and
+  little-endian machines in the same cluster.  If you have a cluster
+  that consists entirely of big-endian machines, you will need to
+  upgrade all daemons and clients and restart.
+
+* The 'ceph.file.layout' and 'ceph.dir.layout' extended attributes are
+  no longer included in the listxattr(2) results to prevent problems with
+  'cp -a' and similar tools.
+
+Notable Changes
+---------------
+* ceph-conf: stop creating bogus log files (Josh Durgin, Sage Weil)
+* common: fix authentication on big-endian architectures (Dan Mick)
+* debian: change directory ownership between ceph and ceph-common (Sage Weil)
+* init: fix startup ordering/timeout problem with OSDs (Dmitry Smirnov)
+* librbd: skip zeroes/holes when copying sparse images (Josh Durgin)
+* mds: cope with MDS failure during creation (John Spray)
+* mds: fix crash from client sleep/resume (Zheng Yan)
+* mds: misc fixes for directory fragments (Zheng Yan)
+* mds: misc fixes for larger directories (Zheng Yan)
+* mds: misc fixes for multiple MDSs (Zheng Yan)
+* mds: remove .ceph directory (John Spray)
+* misc coverity fixes, cleanups (Danny Al-Gaaf)
+* mon: add erasure profiles and improve erasure pool creation (Loic Dachary)
+* mon: 'ceph osd pg-temp ...' and primary-temp commands (Ilya Dryomov)
+* mon: fix pool count in 'ceph -s' output (Sage Weil)
+* msgr: improve connection error detection between clients and monitors (Greg Farnum, Sage Weil)
+* osd: add/fix CPU feature detection for jerasure (Loic Dachary)
+* osd: improved scrub checks on clones (Sage Weil, Sam Just)
+* osd: many erasure fixes (Sam Just)
+* osd: move to jerasure2 library (Loic Dachary)
+* osd: new tests for erasure pools (David Zafman)
+* osd: reduce scrub lock contention (Guang Yang)
+* rgw: allow use of an erasure data pool (Yehuda Sadeh)
+
+
 v0.78
------
+=====
 
 This development release includes two key features: erasure coding and
 cache tiering.  A huge amount of code was merged for this release and
@@ -501,7 +560,7 @@ long term support.
           with important data that can't be reloaded.
 
 Upgrading
-~~~~~~~~~
+---------
 
 * Upgrade daemons in the following order:
 
@@ -538,8 +597,19 @@ Upgrading
 * Compound operations in librados that create and then delete the same object
   are now explicitly disallowed (they fail with -EINVAL).
 
+* The default leveldb cache size for the ceph-osd daemon has been
+  increased from 4 MB to 128 MB.  This will increase the memory
+  footprint of that process but tends to increase performance of omap
+  (key/value) objects (used for CephFS and the radosgw).  If memory in your
+  deployment is tight, you can preserve the old behavio by adding::
+
+    leveldb write buffer size = 0
+    leveldb cache size = 0
+
+  to your ceph.conf to get back the (leveldb) defaults.
+
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 * ceph-brag: new client and server tools (Sebastien Han, Babu Shanmugam)
 * ceph-disk: use partx on RHEL or CentOS instead of partprobe (Alfredo Deza)
 * ceph: fix combination of 'tell' and interactive mode (Joao Eduardo Luis)
@@ -612,7 +682,7 @@ Notable Changes
 
 
 v0.77
------
+=====
 
 This is the final development release before the Firefly feature
 freeze.  The main items in this release include some additional
@@ -624,7 +694,7 @@ got support for atomic write operations (read side transactions will
 appear in v0.78).
 
 Upgrading
-~~~~~~~~~
+---------
 
 * The 'ceph -s' or 'ceph status' command's 'num_in_osds' field in the
   JSON and XML output has been changed from a string to an int.
@@ -638,7 +708,7 @@ Upgrading
   <true|false>' instead of 'mds <set,unset> allow_new_snaps'.
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * osd: client IO path changes for EC (Samuel Just)
 * common: portability changes to support libc++ (Noah Watkins)
@@ -671,7 +741,7 @@ Notable Changes
 
 
 v0.76
------
+=====
 
 This release includes another batch of updates for firefly
 functionality.  Most notably, the cache pool infrastructure now
@@ -684,7 +754,7 @@ objects.  There continue to be many other fixes and improvements for
 usability and code portability across the tree.
 
 Upgrading
-~~~~~~~~~
+---------
 
 * 'rbd ls' on a pool which never held rbd images now exits with code
   0. It outputs nothing in plain format, or an empty list in
@@ -701,7 +771,7 @@ Upgrading
   'ceph mds set max_mds N'.
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * build: misc improvements (Ken Dreyer)
 * ceph-disk: generalize path names, add tests (Loic Dachary)
@@ -739,7 +809,7 @@ Notable Changes
 
 
 v0.75
------
+=====
 
 This is a big release, with lots of infrastructure going in for
 firefly.  The big items include a prototype standalone frontend for
@@ -756,7 +826,7 @@ For comparison, here are the diff stats for the last few versions::
  v0.73 148 files changed, 4464 insertions(+), 2129 deletions(-)
 
 Upgrading
-~~~~~~~~~
+---------
 
 - The 'osd pool create ...' syntax has changed for erasure pools.
 
@@ -767,7 +837,7 @@ Upgrading
 
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * common: bloom filter improvements (Sage Weil)
 * common: fix config variable substitution (Loic Dachary)
@@ -820,7 +890,7 @@ Notable Changes
 
 
 v0.74
------
+=====
 
 This release includes a few substantial pieces for Firefly, including
 a long-overdue switch to 3x replication by default and a switch to the
@@ -829,7 +899,7 @@ also a fix for a long-standing radosgw bug (stalled GET) that has
 already been backported to emperor and dumpling.
 
 Upgrading
-~~~~~~~~~
+---------
 
 * We now default to the 'bobtail' CRUSH tunable values that are first supported
   by Ceph clients in bobtail (v0.56) and Linux kernel version v3.9.  If you
@@ -856,7 +926,7 @@ Upgrading
   and a deprecation warning is displayed when it is used.
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * buffer: some zero-copy groundwork (Josh Durgin)
 * ceph-disk: avoid fd0 (Loic Dachary)
@@ -884,7 +954,7 @@ Notable Changes
 
 
 v0.73
------
+=====
 
 This release, the first development release after emperor, includes
 many bug fixes and a few additional pieces of functionality.  The
@@ -892,7 +962,7 @@ first batch of larger changes will be landing in the next version,
 v0.74.
 
 Upgrading
-~~~~~~~~~
+---------
 
 - As part of fix for #6796, 'ceph osd pool set <pool> <var> <arg>' now
   receives <arg> as an integer instead of a string.  This affects how
@@ -913,7 +983,7 @@ Upgrading
 
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * ceph-crush-location: new hook for setting CRUSH location of osd daemons on start
 * ceph-kvstore-tool: expanded command set and capabilities (Joao Eduardo Luis)
@@ -939,7 +1009,7 @@ Notable Changes
 
 
 v0.72.2 Emperor
----------------
+===============
 
 This is the second bugfix release for the v0.72.x Emperor series.  We
 have fixed a hang in radosgw, and fixed (again) a problem with monitor
@@ -947,7 +1017,7 @@ CLI compatiblity with mixed version monitors.  (In the future this
 will no longer be a problem.)
 
 Upgrading
-~~~~~~~~~
+---------
 
 * The JSON schema for the 'osd pool set ...' command changed slightly.  Please
   avoid issuing this particular command via the CLI while there is a mix of
@@ -960,7 +1030,7 @@ Upgrading
 
 
 Changes
-~~~~~~~
+-------
 
 * mon: 'osd pool set ...' syntax change
 * osd: added test for missing on-disk HEAD object
@@ -974,10 +1044,10 @@ Changes
 For more detailed information, see :download:`the complete changelog <changelog/v0.72.2.txt>`.
 
 v0.72.1 Emperor
----------------
+===============
 
 Important Note
-~~~~~~~~~~~~~~
+--------------
 
 When you are upgrading from Dumpling to Emperor, do not run any of the
 "ceph osd pool set" commands while your monitors are running separate versions.
@@ -985,7 +1055,7 @@ Doing so could result in inadvertently changing cluster configuration settings
 that exhaust compute resources in your OSDs.
 
 Changes
-~~~~~~~
+-------
 
 * osd: fix upgrade bug #6761
 * ceph_filestore_tool: introduced tool to repair errors caused by #6761
@@ -1018,7 +1088,7 @@ osd and may take some time.
 
 
 v0.72 Emperor
--------------
+=============
 
 This is the fifth major release of Ceph, the fourth since adopting a
 3-month development cycle.  This release brings several new features,
@@ -1027,7 +1097,7 @@ usability, and lands a lot of incremental performance and internal
 refactoring work to support upcoming features in Firefly.
 
 Important Note
-~~~~~~~~~~~~~~
+--------------
 
 When you are upgrading from Dumpling to Emperor, do not run any of the
 "ceph osd pool set" commands while your monitors are running separate versions.
@@ -1035,7 +1105,7 @@ Doing so could result in inadvertently changing cluster configuration settings
 that exhaust compute resources in your OSDs.
 
 Highlights
-~~~~~~~~~~
+----------
 
 * common: improved crc32c performance
 * librados: new example client and class code
@@ -1058,7 +1128,7 @@ Coincident with core Ceph, the Emperor release also brings:
 Packages for both are available on ceph.com.
 
 Upgrade sequencing
-~~~~~~~~~~~~~~~~~~
+------------------
 
 There are no specific upgrade restrictions on the order or sequence of
 upgrading from 0.67.x Dumpling. However, you cannot run any of the
@@ -1083,7 +1153,7 @@ restrictions for Cuttlefish to Dumpling.)
 
 
 Upgrading from v0.71
-~~~~~~~~~~~~~~~~~~~~
+--------------------
 
 * ceph-fuse and radosgw now use the same default values for the admin
   socket and log file paths that the other daemons (ceph-osd,
@@ -1092,7 +1162,7 @@ Upgrading from v0.71
   the permissions on /var/run/ceph and /var/log/ceph.
 
 Upgrading from v0.67 Dumpling
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-----------------------------
 
 * ceph-fuse and radosgw now use the same default values for the admin
   socket and log file paths that the other daemons (ceph-osd,
@@ -1154,7 +1224,7 @@ Upgrading from v0.67 Dumpling
 
 
 Notable Changes since v0.71
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+---------------------------
 
 * build: fix [/usr]/sbin locations (Alan Somers)
 * ceph-fuse, radosgw: enable admin socket and logging by default
@@ -1180,7 +1250,7 @@ Notable Changes since v0.71
 * rpm: fix junit dependencies (Alan Grosskurth)
 
 Notable Changes since v0.67 Dumpling
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+------------------------------------
 
 * build cleanly under clang (Christophe Courtaut)
 * build: Makefile refactor (Roald J. van Loon)
@@ -1316,7 +1386,7 @@ Notable Changes since v0.67 Dumpling
 
 
 v0.71
------
+=====
 
 This development release includes a significant amount of new code and
 refactoring, as well as a lot of preliminary functionality that will be needed
@@ -1324,7 +1394,7 @@ for erasure coding and tiering support.  There are also several significant
 patch sets improving this with the MDS.
 
 Upgrading
-~~~~~~~~~
+---------
 
 * The MDS now disallows snapshots by default as they are not
   considered stable.  The command 'ceph mds set allow_snaps' will
@@ -1348,7 +1418,7 @@ Upgrading
   parse output and check for an upper-case K will need to be modified.
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * build: Makefile refactor (Roald J. van Loon)
 * ceph-disk: fix journal preallocation
@@ -1392,10 +1462,10 @@ Notable Changes
 * sysvinit: fix shutdown order (mons last) (Alfredo Deza)
 
 v0.70
------
+=====
 
 Upgrading
-~~~~~~~~~
+---------
 
 * librados::Rados::pool_create_async() and librados::Rados::pool_delete_async()
   don't drop a reference to the completion object on error, caller needs to take
@@ -1408,7 +1478,7 @@ Upgrading
   in the crush map.
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * mon: a few 'ceph mon add' races fixed (command is now idempotent) (Joao Luis)
 * crush: fix name caching
@@ -1423,10 +1493,10 @@ Notable Changes
 
 
 v0.69
------
+=====
 
 Upgrading
-~~~~~~~~~
+---------
 
 * The sysvinit /etc/init.d/ceph script will, by default, update the
   CRUSH location of an OSD when it starts.  Previously, if the
@@ -1468,7 +1538,7 @@ Upgrading
 
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * build cleanly under clang (Christophe Courtaut)
 * common: migrate SharedPtrRegistry to use boost::shared_ptr<> (Loic Dachary)
@@ -1501,10 +1571,10 @@ Notable Changes
 * sysvinit rbdmap: fix error 'service rbdmap stop' (Laurent Barbe)
 
 v0.68
------
+=====
 
 Upgrading
-~~~~~~~~~
+---------
 
 * 'ceph osd crush set <id> <weight> <loc..>' no longer adds the osd to the
   specified location, as that's a job for 'ceph osd crush add'.  It will
@@ -1535,7 +1605,7 @@ Upgrading
 
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * ceph-fuse: fix problem with readahead vs truncate race (Yan, Zheng)
 * ceph-post-file: new command to easily share logs or other files with ceph devs
@@ -1569,7 +1639,7 @@ Notable Changes
 
 
 v0.67.7 "Dumpling"
-------------------
+==================
 
 This Dumpling point release fixes a few critical issues in v0.67.6.
 
@@ -1577,13 +1647,13 @@ All v0.67.6 users are urgently encouraged to upgrade.  We also
 recommend that all v0.67.5 (or older) users upgrade.
 
 Upgrading
-~~~~~~~~~
+---------
 
 * Once you have upgraded a radosgw instance or OSD to v0.67.7, you should not
   downgrade to a previous version.
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * ceph-disk: additional unit tests
 * librbd: revert caching behavior change in v0.67.6
@@ -1594,7 +1664,7 @@ For more detailed information, see :download:`the complete changelog <changelog/
 
 
 v0.67.6 "Dumpling"
-------------------
+==================
 
 .. note: This release contains a librbd bug that is fixed in v0.67.7.  Please upgrade to v0.67.7 and do not use v0.67.6.
 
@@ -1609,7 +1679,7 @@ the cluster becomes full and then non-full.
 We recommend that all 0.67.x Dumpling users skip this release and upgrade to v0.67.7.
 
 Upgrading
-~~~~~~~~~
+---------
 
 * The OSD has long contained a feature that allows large xattrs to
   spill over into the leveldb backing store in situations where not
@@ -1630,7 +1700,7 @@ Upgrading
   can cause undefined behavior.
 
 Notable changes
-~~~~~~~~~~~~~~~
+---------------
 
 * ceph-disk: misc bug fixes, particularly on RHEL (Loic Dachary, Alfredo Deza, various)
 * ceph-fuse, libcephfs: fix crash from read over certain sparseness patterns (Sage Weil)
@@ -1664,7 +1734,7 @@ For more detailed information, see :download:`the complete changelog <changelog/
 
 
 v0.67.5 "Dumpling"
-------------------
+==================
 
 This release includes a few critical bug fixes for the radosgw, 
 including a fix for hanging operations on large objects.  There are also
@@ -1675,7 +1745,7 @@ recent performance information about active OSDs) has been backported.
 We recommend that all 0.67.x Dumpling users upgrade.
 
 Notable changes
-~~~~~~~~~~~~~~~
+---------------
 
 * ceph-fuse: fix crash in caching code
 * mds: fix looping in populate_mydir()
@@ -1700,14 +1770,14 @@ For more detailed information, see :download:`the complete changelog <changelog/
 
 
 v0.67.4 "Dumpling"
-------------------
+==================
 
 This point release fixes an important performance issue with radosgw,
 keystone authentication token caching, and CORS.  All users
 (especially those of rgw) are encouraged to upgrade.
 
 Notable changes
-~~~~~~~~~~~~~~~
+---------------
 
 * crush: fix invalidation of cached names
 * crushtool: do not crash on non-unique bucket ids
@@ -1733,7 +1803,7 @@ For more detailed information, see :download:`the complete changelog <changelog/
 
 
 v0.67.3 "Dumpling"
-------------------
+==================
 
 This point release fixes a few important performance regressions with
 the OSD (both with CPU and disk utilization), as well as several other
@@ -1741,7 +1811,7 @@ important but less common problems.  We recommend that all production users
 upgrade.
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * ceph-disk: partprobe after creation journal partition
 * ceph-disk: specify fs type when mounting
@@ -1768,7 +1838,7 @@ For more detailed information, see :download:`the complete changelog <changelog/
 
 
 v0.67.2 "Dumpling"
-------------------
+==================
 
 This is an imporant point release for Dumpling.  Most notably, it
 fixes a problem when upgrading directly from v0.56.x Bobtail to
@@ -1778,7 +1848,7 @@ environment variable, high CPU utilization by the ceph-osd daemons,
 and cleans up the radosgw shutdown sequence.
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * objecter: resend linger requests when cluster goes from full to non-full
 * ceph: parse CEPH_ARGS environment variable
@@ -1792,13 +1862,13 @@ For more detailed information, see :download:`the complete changelog <changelog/
 
 
 v0.67.1 "Dumpling"
-------------------
+==================
 
 This is a minor point release for Dumpling that fixes problems with
 OpenStack and librbd hangs when caching is disabled.
 
 Notable changes
-~~~~~~~~~~~~~~~
+---------------
 
 * librados, librbd: fix constructor for python bindings with certain
   usages (in particular, that used by OpenStack)
@@ -1811,7 +1881,7 @@ Notable changes
 For more detailed information, see :download:`the complete changelog <changelog/v0.67.1.txt>`.
 
 v0.67 "Dumpling"
-----------------
+================
 
 This is the fourth major release of Ceph, code-named "Dumpling."  The
 headline features for this release include:
@@ -1831,7 +1901,7 @@ headline features for this release include:
 * Object namespaces in librados.
 
 Upgrade Sequencing
-~~~~~~~~~~~~~~~~~~
+------------------
 
 .. _Dumpling upgrade:
 
@@ -1851,7 +1921,7 @@ It is possible to do a rolling upgrade from Cuttlefish to Dumpling.
 
 
 Upgrading from v0.66
-~~~~~~~~~~~~~~~~~~~~
+--------------------
 
 * There is monitor internal protocol change, which means that v0.67
   ceph-mon daemons cannot talk to v0.66 or older daemons.  We
@@ -1915,7 +1985,7 @@ Upgrading from v0.66
   in ceph.conf it should likely be adjusted upwards.
 
 Upgrading from v0.61 "Cuttlefish"
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+---------------------------------
 
 In addition to the above notes about upgrading from v0.66:
 
@@ -1966,7 +2036,7 @@ In addition to the above notes about upgrading from v0.66:
 
 
 Notable changes since v0.66
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+---------------------------
 
 * mon: sync improvements (performance and robustness)
 * mon: many bug fixes (paxos and services)
@@ -1999,7 +2069,7 @@ Notable changes since v0.66
 
 
 Notable changes since v0.61 "Cuttlefish"
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+----------------------------------------
 
 * add 'config get' admin socket command
 * ceph-conf: --show-config-value now reflects daemon defaults
@@ -2113,17 +2183,17 @@ Notable changes since v0.61 "Cuttlefish"
 
 
 v0.66
------
+=====
 
 Upgrading
-~~~~~~~~~
+---------
 
 * There is now a configurable maximum rados object size, defaulting to 100 GB.  If you
   are using librados and storing objects larger than that, you will need to adjust
   'osd max object size', and should consider using smaller objects instead.
 
 Notable changes
-~~~~~~~~~~~~~~~
+---------------
 
 * osd: pg log (re)writes are now vastly more efficient (faster peering) (Sam Just)
 * osd: fixed problem with front-side heartbeats and mixed clusters (David Zafman)
@@ -2147,10 +2217,10 @@ Notable changes
 
 
 v0.65
------
+=====
 
 Upgrading
-~~~~~~~~~
+---------
 
 * Huge revamp of the 'ceph' command-line interface implementation.
   The ``ceph-common`` client library needs to be upgrade before
@@ -2189,7 +2259,7 @@ Upgrading
 
 
 Notable changes
-~~~~~~~~~~~~~~~
+---------------
 
 * mon, ceph: huge revamp of CLI and internal admin API. (Dan Mick)
 * mon: new capability syntax
@@ -2215,10 +2285,10 @@ Notable changes
 
 
 v0.64
------
+=====
 
 Upgrading
-~~~~~~~~~
+---------
 
 * New pools now have the HASHPSPOOL flag set by default to provide
   better distribution over OSDs.  Support for this feature was
@@ -2230,7 +2300,7 @@ Upgrading
   support from all clients.
 
 Notable changes
-~~~~~~~~~~~~~~~
+---------------
 
 * osd: monitor both front and back interfaces
 * osd: verify both front and back network are working before rejoining cluster
@@ -2254,10 +2324,10 @@ Notable changes
 
 
 v0.63
------
+=====
 
 Upgrading
-~~~~~~~~~
+---------
 
 * The 'osd min down {reporters|reports}' config options have been
   renamed to 'mon osd min down {reporters|reports}', and the
@@ -2267,7 +2337,7 @@ Upgrading
   accordingly.
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * librbd: parallelize delete, rollback, flatten, copy, resize
 * librbd: ability to read from local replicas
@@ -2290,10 +2360,10 @@ Notable Changes
 
 
 v0.62
------
+=====
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * mon: fix validation of mds ids from CLI commands
 * osd: fix for an op ordering bug
@@ -2308,14 +2378,14 @@ Notable Changes
 
 
 v0.61.9 "Cuttlefish"
---------------------
+====================
 
 This point release resolves several low to medium-impact bugs across
 the code base, and fixes a performance problem (CPU utilization) with
 radosgw.  We recommend that all production cuttlefish users upgrade.
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * ceph, ceph-authtool: fix help (Danny Al-Gaaf)
 * ceph-disk: partprobe after creating journal partition
@@ -2342,7 +2412,7 @@ Notable Changes
 For more detailed information, see :download:`the complete changelog <changelog/v0.61.9.txt>`.
 
 v0.61.8 "Cuttlefish"
---------------------
+====================
 
 This release includes a number of important issues, including rare
 race conditions in the OSD, a few monitor bugs, and fixes for RBD
@@ -2350,7 +2420,7 @@ flush behavior.  We recommend that production users upgrade at their
 convenience.
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * librados: fix async aio completion wakeup
 * librados: fix aio completion locking
@@ -2373,14 +2443,14 @@ For more detailed information, see :download:`the complete changelog <changelog/
 
 
 v0.61.7 "Cuttlefish"
---------------------
+====================
 
 This release fixes another regression preventing monitors to start after
 undergoing certain upgrade sequences, as well as some corner cases with
 Paxos and support for unusual device names in ceph-disk/ceph-deploy.
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * mon: fix regression in latest full osdmap retrieval
 * mon: fix a long-standing bug in a paxos corner case
@@ -2390,7 +2460,7 @@ For more detailed information, see :download:`the complete changelog <changelog/
 
 
 v0.61.6 "Cuttlefish"
---------------------
+====================
 
 This release fixes a regression in v0.61.5 that could prevent monitors
 from restarting.  This affects any cluster that was upgraded from a
@@ -2399,7 +2469,7 @@ previous version of Ceph (and not freshly created with v0.61.5).
 All users are strongly recommended to upgrade.
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * mon: record latest full osdmap
 * mon: work around previous bug in which latest full osdmap is not recorded
@@ -2409,14 +2479,14 @@ For more detailed information, see :download:`the complete changelog <changelog/
 
 
 v0.61.5 "Cuttlefish"
---------------------
+====================
 
 This release most improves stability of the monitor and fixes a few
 bugs with the ceph-disk utility (used by ceph-deploy).  We recommand
 that all v0.61.x users upgrade.
 
 Upgrading
-~~~~~~~~~
+---------
 
 * This release fixes a 32-bit vs 64-bit arithmetic bug with the
   feature bits.  An unfortunate consequence of the fix is that 0.61.4
@@ -2425,7 +2495,7 @@ Upgrading
   recommend you upgrade all monitors at once.
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * mon: misc sync improvements (faster, more reliable, better tuning)
 * mon: enable leveldb cache by default (big performance improvement)
@@ -2454,7 +2524,7 @@ For more detailed information, see :download:`the complete changelog <changelog/
 
 
 v0.61.4 "Cuttlefish"
---------------------
+====================
 
 This release resolves a possible data corruption on power-cycle when
 using XFS, a few outstanding problems with monitor sync, several
@@ -2462,12 +2532,12 @@ problems with ceph-disk and ceph-deploy operation, and a problem with
 OSD memory usage during scrub.
 
 Upgrading
-~~~~~~~~~
+---------
 
 * No issues.
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * mon: fix daemon exit behavior when error is encountered on startup
 * mon: more robust sync behavior
@@ -2494,13 +2564,13 @@ For more detailed information, see :download:`the complete changelog <changelog/
 
 
 v0.61.3 "Cuttlefish"
---------------------
+====================
 
 This release resolves a number of problems with the monitors and leveldb that users have
 been seeing.  Please upgrade.
 
 Upgrading
-~~~~~~~~~
+---------
 
 * There is one known problem with mon upgrades from bobtail.  If the
   ceph-mon conversion on startup is aborted or fails for some reason, we
@@ -2512,7 +2582,7 @@ Upgrading
 
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * mon: paxos state trimming fix (resolves runaway disk usage)
 * mon: finer-grained compaction on trim
@@ -2541,13 +2611,13 @@ For more detailed information, see :download:`the complete changelog <changelog/
 
 
 v0.61.2 "Cuttlefish"
---------------------
+====================
 
 This release disables a monitor debug log that consumes disk space and
 fixes a bug when upgrade some monitors from bobtail to cuttlefish.
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * mon: fix conversion of stores with duplicated GV values
 * mon: disable 'mon debug dump transactions' by default
@@ -2556,13 +2626,13 @@ For more detailed information, see :download:`the complete changelog <changelog/
 
 
 v0.61.1 "Cuttlefish"
---------------------
+====================
 
 This release fixes a problem when upgrading a bobtail cluster that had
 snapshots to cuttlefish.
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * osd: handle upgrade when legacy snap collections are present; repair from previous failed restart
 * ceph-create-keys: fix race with ceph-mon startup (which broke 'ceph-deploy gatherkeys ...')
@@ -2575,10 +2645,10 @@ Notable Changes
 For more detailed information, see :download:`the complete changelog <changelog/v0.61.1.txt>`.
 
 v0.61 "Cuttlefish"
-------------------
+==================
 
 Upgrading from v0.60
-~~~~~~~~~~~~~~~~~~~~
+--------------------
 
 * The ceph-deploy tool is now the preferred method of provisioning
   new clusters.  For existing clusters created via mkcephfs that
@@ -2621,7 +2691,7 @@ Upgrading from v0.60
 
 
 Upgrading from v0.56.4 "Bobtail"
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--------------------------------
 
 Please see `Upgrading from Bobtail to Cuttlefish`_ for details.
 
@@ -2696,7 +2766,7 @@ Please see `Upgrading from Bobtail to Cuttlefish`_ for details.
 
 
 Notable Changes from v0.60
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+--------------------------
 
 * rbd: incremental backups
 * rbd: only set STRIPINGV2 feature if striping parameters are incompatible with old versions
@@ -2739,7 +2809,7 @@ Notable Changes from v0.60
 * fix daemon logging during initial startup
 
 Notable changes from v0.56 "Bobtail"
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+------------------------------------
 * always use installed system leveldb (Gary Lowell)
 * auth: ability to require new cephx signatures on messages (still off by default)
 * buffer unit testing (Loic Dachary)
@@ -2860,17 +2930,17 @@ Notable changes from v0.56 "Bobtail"
 
 
 v0.60
------
+=====
 
 Upgrading
-~~~~~~~~~
+---------
 
 * Please note that the recently added librados 'list_snaps' function
   call is in a state of flux and is changing slightly in v0.61.  You
   are advised not to make use of it in v0.59 or v0.60.
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * osd: make tracking of object snapshot metadata more efficient (Sam Just)
 * osd: misc fixes to PG split (Sam Just)
@@ -2898,10 +2968,10 @@ Notable Changes
 
 
 v0.59
------
+=====
 
 Upgrading
-~~~~~~~~~
+---------
 
 * The monitor is using a completely new storage strategy and
   intra-cluster protocol.  This means that v0.59 and pre-v0.59
@@ -2919,7 +2989,7 @@ Upgrading
 
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
  * mon: rearchitected to utilize single instance of paxos and a key/value store (Joao Luis)
  * mon: new 'ceph df [detail]' command
@@ -2945,10 +3015,10 @@ Notable Changes
 
 
 v0.58
------
+=====
 
 Upgrading
-~~~~~~~~~
+---------
 
 * The monitor now enforces that MDS names be unique.  If you have
   multiple daemons start with with the same id (e.g., ``mds.a``) the
@@ -2959,7 +3029,7 @@ Upgrading
   daemons unique names.
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
  * librbd: fixed some locking issues with flatten (Josh Durgin)
  * rbd: udevadm settle on map/unmap to avoid various races (Dan Mick)
@@ -2982,7 +3052,7 @@ Notable Changes
  * fixed log rotation (Gary Lowell)
 
 v0.57
------
+=====
 
 This development release has a lot of additional functionality
 accumulated over the last couple months.  Most of the bug fixes (with
@@ -2990,7 +3060,7 @@ the notable exception of the MDS related work) has already been
 backported to v0.56.x, and is not mentioned here.
 
 Upgrading
-~~~~~~~~~
+---------
 
 * The 'ceph osd pool delete <poolname>' and 'rados rmpool <poolname>'
   now have safety interlocks with loud warnings that make you confirm
@@ -2998,7 +3068,7 @@ Upgrading
   data without confirmation need to be adjusted accordingly.
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * osd: default to libaio for the journal (some performance boost)
 * osd: validate snap collections on startup
@@ -3023,7 +3093,7 @@ Notable Changes
 
 
 v0.56.7 "bobtail"
------------------
+=================
 
 This bobtail update fixes a range of radosgw bugs (including an easily
 triggered crash from multi-delete), a possible data corruption issue
@@ -3031,7 +3101,7 @@ with power failure on XFS, and several OSD problems, including a
 memory "leak" that will affect aged clusters.
 
 Notable changes
-~~~~~~~~~~~~~~~
+---------------
 
 * ceph-fuse: create finisher flags after fork()
 * debian: fix prerm/postinst hooks; do not restart daemons on upgrade
@@ -3057,10 +3127,10 @@ For more detailed information, see :download:`the complete changelog <changelog/
 
 
 v0.56.6 "bobtail"
------------------
+=================
 
 Notable changes
-~~~~~~~~~~~~~~~
+---------------
 
 * rgw: fix garbage collection
 * rpm: fix package dependencies
@@ -3069,17 +3139,17 @@ For more detailed information, see :download:`the complete changelog <changelog/
 
 
 v0.56.5 "bobtail"
------------------
+=================
 
 Upgrading
-~~~~~~~~~
+---------
 
 * ceph-disk[-prepare,-activate] behavior has changed in various ways.
   There should not be any compatibility issues, but chef users should
   be aware.
 
 Notable changes
-~~~~~~~~~~~~~~~
+---------------
 
 * mon: fix recording of quorum feature set (important for argonaut -> bobtail -> cuttlefish mon upgrades)
 * osd: minor peering bug fixes
@@ -3100,10 +3170,10 @@ Notable changes
 For more detailed information, see :download:`the complete changelog <changelog/v0.56.5.txt>`.
 
 v0.56.4 "bobtail"
------------------
+=================
 
 Upgrading
-~~~~~~~~~
+---------
 
 * There is a fix in the syntax for the output of 'ceph osd tree --format=json'.
 
@@ -3112,7 +3182,7 @@ Upgrading
   the MDS for CephFS; you must upgrade directly to v0.58 (or later) instead.
 
 Notable changes
-~~~~~~~~~~~~~~~
+---------------
 
 * mon: fix bug in bringup with IPv6
 * reduce default memory utilization by internal logging (all daemons)
@@ -3139,7 +3209,7 @@ Notable changes
 For more detailed information, see :download:`the complete changelog <changelog/v0.56.4.txt>`.
 
 v0.56.3 "bobtail"
------------------
+=================
 
 This release has several bug fixes surrounding OSD stability.  Most
 significantly, an issue with OSDs being unresponsive shortly after
@@ -3147,7 +3217,7 @@ startup (and occasionally crashing due to an internal heartbeat check)
 is resolved.  Please upgrade.
 
 Upgrading
-~~~~~~~~~
+---------
 
 * A bug was fixed in which the OSDMap epoch for PGs without any IO
   requests was not recorded.  If there are pools in the cluster that
@@ -3166,7 +3236,7 @@ Upgrading
   temporary objects it creates.
 
 Notable changes
-~~~~~~~~~~~~~~~
+---------------
 
 * osd: flush peering work queue prior to start
 * osd: persist osdmap epoch for idle PGs
@@ -3185,12 +3255,12 @@ For more detailed information, see :download:`the complete changelog <changelog/
 
 
 v0.56.2 "bobtail"
------------------
+=================
 
 This release has a wide range of bug fixes, stability improvements, and some performance improvements.  Please upgrade.
 
 Upgrading
-~~~~~~~~~
+---------
 
 * The meaning of the 'osd scrub min interval' and 'osd scrub max
   interval' has changed slightly.  The min interval used to be
@@ -3211,7 +3281,7 @@ Upgrading
   inferred by the number of hosts and/or racks in the initial ceph.conf.
 
 Notable changes
-~~~~~~~~~~~~~~~
+---------------
 
 * osd: snapshot trimming fixes
 * osd: scrub snapshot metadata
@@ -3239,12 +3309,12 @@ For more detailed information, see :download:`the complete changelog <changelog/
 
 
 v0.56.1 "bobtail"
------------------
+=================
 
 This release has two critical fixes.  Please upgrade.
 
 Upgrading
-~~~~~~~~~
+---------
 
 * There is a protocol compatibility problem between v0.56 and any
   other version that is now fixed.  If your radosgw or RBD clients are
@@ -3252,7 +3322,7 @@ Upgrading
   running a version prior to v0.56, they can be left as is.
 
 Notable changes
-~~~~~~~~~~~~~~~
+---------------
 * osd: fix commit sequence for XFS, ext4 (or any other non-btrfs) to prevent data loss on power cycle or kernel panic
 * osd: fix compatibility for CALL operation
 * osd: process old osdmaps prior to joining cluster (fixes slow startup)
@@ -3263,13 +3333,13 @@ Notable changes
 For more detailed information, see :download:`the complete changelog <changelog/v0.56.1.txt>`.
 
 v0.56 "bobtail"
----------------
+===============
 
 Bobtail is the second stable release of Ceph, named in honor of the
 `Bobtail Squid`: http://en.wikipedia.org/wiki/Bobtail_squid.
 
 Key features since v0.48 "argonaut"
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-----------------------------------
 
 * Object Storage Daemon (OSD): improved threading, small-io performance, and performance during recovery
 * Object Storage Daemon (OSD): regular "deep" scrubbing of all stored data to detect latent disk errors
@@ -3284,7 +3354,7 @@ Key features since v0.48 "argonaut"
 * mkcephfs: support for automatically formatting and mounting XFS and ext4 (in addition to btrfs)
 
 Upgrading
-~~~~~~~~~
+---------
 
 Please refer to the document `Upgrading from Argonaut to Bobtail`_ for details.
 
@@ -3345,7 +3415,7 @@ Please refer to the document `Upgrading from Argonaut to Bobtail`_ for details.
 
 
 Compatibility changes
-~~~~~~~~~~~~~~~~~~~~~
+---------------------
 
 * The 'ceph osd create [<uuid>]' command now rejects an argument that
   is not a UUID.  (Previously it would take take an optional integer
@@ -3422,7 +3492,7 @@ Compatibility changes
   * ceph pg <pgid> revert
 
 Notable changes
-~~~~~~~~~~~~~~~
+---------------
 
 * auth: enable cephx by default
 * auth: expanded authentication settings for greater flexibility
@@ -3535,10 +3605,10 @@ Notable changes
 
 
 v0.54
------
+=====
 
 Upgrading
-~~~~~~~~~
+---------
 
 * The osd capabilities associated with a rados user have changed
   syntax since 0.48 argonaut. The new format is mostly backwards
@@ -3564,14 +3634,14 @@ Upgrading
 
 
 v0.48.3 "argonaut"
-------------------
+==================
 
 This release contains a critical fix that can prevent data loss or
 corruption after a power loss or kernel panic event.  Please upgrade
 immediately.
 
 Upgrading
-~~~~~~~~~
+---------
 
 * If you are using the undocumented ``ceph-disk-prepare`` and
   ``ceph-disk-activate`` tools, they have several new features and
@@ -3580,7 +3650,7 @@ Upgrading
 * The .deb packages now require xfsprogs.
 
 Notable changes
-~~~~~~~~~~~~~~~
+---------------
 
 * filestore: fix op_seq write order (fixes journal replay after power loss)
 * osd: fix occasional indefinitely hung "slow" request
@@ -3615,10 +3685,10 @@ Notable changes
 For more detailed information, see :download:`the complete changelog <changelog/v0.48.3argonaut.txt>`.
 
 v0.48.2 "argonaut"
-------------------
+==================
 
 Upgrading
-~~~~~~~~~
+---------
 
 * The default search path for keyring files now includes /etc/ceph/ceph.$name.keyring.  If such files are present on your cluster, be aware that by default they may now be used.
 
@@ -3627,7 +3697,7 @@ Upgrading
 * The ceph-disk-prepare and ceph-disk-active scripts have been updated significantly.  These have not been previously documented or recommended.  Any existing users should review the changes before upgrading.
 
 Notable changes
-~~~~~~~~~~~~~~~
+---------------
 
 * mkcephfs: fix keyring generation for mds, osd when default paths are used
 * radosgw: fix bug causing occasional corruption of per-bucket stats
@@ -3653,10 +3723,10 @@ Notable changes
 For more detailed information, see :download:`the complete changelog <changelog/v0.48.2argonaut.txt>`.
 
 v0.48.1 "argonaut"
-------------------
+==================
 
 Upgrading
-~~~~~~~~~
+---------
 
 * The radosgw usage trim function was effectively broken in v0.48.  Earlier it would remove more usage data than what was requested.  This is fixed in v0.48.1, but the fix is incompatible.  The v0.48 radosgw-admin tool cannot be used to initiate the trimming; please use the v0.48.1 version.
 
@@ -3665,7 +3735,7 @@ Upgrading
 * There are no other compatibility changes between v0.48.1 and v0.48.
 
 Notable changes
-~~~~~~~~~~~~~~~
+---------------
 
 * mkcephfs: use default 'keyring', 'osd data', 'osd journal' paths when not specified in conf
 * msgr: various fixes to socket error handling
@@ -3694,10 +3764,10 @@ Notable changes
 For more detailed information, see :download:`the complete changelog <changelog/v0.48.1argonaut.txt>`.
 
 v0.48 "argonaut"
-----------------
+================
 
 Upgrading
-~~~~~~~~~
+---------
 
 * This release includes a disk format upgrade.  Each ceph-osd daemon, upon startup, will migrate its locally stored data to the new format.  This process can take a while (for large object counts, even hours), especially on non-btrfs file systems.  
 
@@ -3716,7 +3786,7 @@ Upgrading
 * It is not possible to downgrade from v0.48 to a previous version.
 
 Notable changes
-~~~~~~~~~~~~~~~
+---------------
 
 * osd: stability improvements
 * osd: capability model simplification
