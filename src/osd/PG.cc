@@ -5714,6 +5714,29 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationReje
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
+
+  // Send REJECT to all previously acquired reservations
+  set<pg_shard_t>::const_iterator it, begin, end, next;
+  begin = context< Active >().sorted_backfill_set.begin();
+  end = context< Active >().sorted_backfill_set.end();
+  assert(begin != end);
+  for (next = it = begin, ++next ; next != backfill_osd_it; ++it, ++next) {
+    //The primary never backfills itself
+    assert(*it != pg->pg_whoami);
+    ConnectionRef con = pg->osd->get_con_osd_cluster(
+      it->osd, pg->get_osdmap()->get_epoch());
+    if (con) {
+      if (con->has_feature(CEPH_FEATURE_BACKFILL_RESERVATION)) {
+        pg->osd->send_message_osd_cluster(
+          new MBackfillReserve(
+	  MBackfillReserve::REJECT,
+	  spg_t(pg->info.pgid.pgid, it->shard),
+	  pg->get_osdmap()->get_epoch()),
+	con.get());
+      }
+    }
+  }
+
   pg->state_clear(PG_STATE_BACKFILL_WAIT);
   pg->state_set(PG_STATE_BACKFILL_TOOFULL);
 
