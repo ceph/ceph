@@ -5714,6 +5714,29 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationReje
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
+
+  // Send REJECT to all previously acquired reservations
+  set<pg_shard_t>::const_iterator it, begin, end, next;
+  begin = context< Active >().sorted_backfill_set.begin();
+  end = context< Active >().sorted_backfill_set.end();
+  assert(begin != end);
+  for (next = it = begin, ++next ; next != backfill_osd_it; ++it, ++next) {
+    //The primary never backfills itself
+    assert(*it != pg->pg_whoami);
+    ConnectionRef con = pg->osd->get_con_osd_cluster(
+      it->osd, pg->get_osdmap()->get_epoch());
+    if (con) {
+      if (con->has_feature(CEPH_FEATURE_BACKFILL_RESERVATION)) {
+        pg->osd->send_message_osd_cluster(
+          new MBackfillReserve(
+	  MBackfillReserve::REJECT,
+	  spg_t(pg->info.pgid.pgid, it->shard),
+	  pg->get_osdmap()->get_epoch()),
+	con.get());
+      }
+    }
+  }
+
   pg->state_clear(PG_STATE_BACKFILL_WAIT);
   pg->state_set(PG_STATE_BACKFILL_TOOFULL);
 
@@ -5827,9 +5850,13 @@ boost::statechart::result
 PG::RecoveryState::RepNotRecovering::react(const RequestBackfillPrio &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-
   double ratio, max_ratio;
-  if (pg->osd->too_full_for_backfill(&ratio, &max_ratio) &&
+
+  if (g_conf->osd_debug_reject_backfill_probability > 0 &&
+      (rand()%1000 < (g_conf->osd_debug_reject_backfill_probability*1000.0))) {
+    dout(10) << "backfill reservation rejected: failure injection" << dendl;
+    post_event(RemoteReservationRejected());
+  } else if (pg->osd->too_full_for_backfill(&ratio, &max_ratio) &&
       !pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation) {
     dout(10) << "backfill reservation rejected: full ratio is "
 	     << ratio << ", which is greater than max allowed ratio "
