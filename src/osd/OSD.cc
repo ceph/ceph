@@ -7687,23 +7687,31 @@ void OSD::handle_replica_op(OpRequestRef op, OSDMapRef osdmap)
   assert(m->get_source().is_osd());
   
   // share our map with sender, if they're old
+  bool should_share_map = false;
   Session *peer_session =
       static_cast<Session*>(m->get_connection()->get_priv());
   if (peer_session) {
     peer_session->sent_epoch_lock.Lock();
   }
-  service.share_map_incoming(
-    m->get_source(), m->get_connection().get(), m->map_epoch,
-    osdmap,
-    NULL);
+  should_share_map = service.should_share_map(
+      m->get_source(), m->get_connection().get(), m->map_epoch,
+      osdmap,
+      peer_session ? &peer_session->last_sent_epoch : NULL);
   if (peer_session) {
     peer_session->sent_epoch_lock.Unlock();
     peer_session->put();
   }
 
   PG *pg = get_pg_or_queue_for_pg(m->pgid, op);
-  if (pg)
+  if (pg) {
+    op->send_map_update = should_share_map;
+    op->sent_epoch = m->map_epoch;
     enqueue_op(pg, op);
+  } else if (should_share_map) {
+    C_SendMap *send_map = new C_SendMap(this, m, m->get_connection(),
+                                        osdmap, m->map_epoch);
+    service.op_gen_wq.queue(send_map);
+  }
 }
 
 bool OSD::op_is_discardable(MOSDOp *op)
