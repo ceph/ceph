@@ -485,8 +485,8 @@ protected:
   void _invalidate_inode_parents(Inode *in);
 
   void _schedule_invalidate_callback(Inode *in, int64_t off, int64_t len, bool keep_caps);
-  void _invalidate_inode_cache(Inode *in, bool keep_caps);
-  void _invalidate_inode_cache(Inode *in, int64_t off, int64_t len, bool keep_caps);
+  void _invalidate_inode_cache(Inode *in);
+  void _invalidate_inode_cache(Inode *in, int64_t off, int64_t len);
   void _async_invalidate(Inode *in, int64_t off, int64_t len, bool keep_caps);
   void _release(Inode *in);
   
