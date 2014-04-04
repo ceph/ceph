@@ -2300,6 +2300,9 @@ void Client::put_cap_ref(Inode *in, int cap)
     if (last & CEPH_CAP_FILE_CACHE) {
       ldout(cct, 5) << "put_cap_ref dropped last FILE_CACHE ref on " << *in << dendl;
       ++put_nref;
+      // release clean pages too, if we dont want RDCACHE
+      if (!(in->caps_wanted() & CEPH_CAP_FILE_CACHE))
+	drop |= CEPH_CAP_FILE_CACHE;
     }
     if (drop) {
       if (drop & CEPH_CAP_FILE_CACHE)
@@ -5801,7 +5804,13 @@ int Client::_release_fh(Fh *f)
   if (in->snapid == CEPH_NOSNAP) {
     if (in->put_open_ref(f->mode)) {
       _flush(in);
-      check_caps(in, false);
+      // release clean pages too, if we dont want RDCACHE
+      if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0 &&
+	  !(in->caps_wanted() & CEPH_CAP_FILE_CACHE) &&
+	  !objectcacher->set_is_empty(&in->oset))
+	_invalidate_inode_cache(in);
+      else
+	check_caps(in, false);
     }
   } else {
     assert(in->snap_cap_refs > 0);
