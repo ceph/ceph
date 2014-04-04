@@ -570,7 +570,7 @@ private:
     }
   };
 
-  int _read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl);
+  int _read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl, bool *checkeof);
   int _read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl);
 
   // internal interface
