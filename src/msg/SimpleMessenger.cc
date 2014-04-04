@@ -731,4 +731,5 @@ void SimpleMessenger::init_local_connection()
 {
   local_connection->peer_addr = my_inst.addr;
   local_connection->peer_type = my_type;
+  ms_deliver_handle_fast_connect(local_connection.get());
 }
