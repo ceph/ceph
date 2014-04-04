@@ -3966,51 +3966,55 @@ void OSD::send_alive()
 
 void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch)
 {
-  Mutex::Locker l(pre_publish_lock);
-
+  OSDMapRef next_map = get_nextmap_reserved();
   // service map is always newer/newest
-  assert(from_epoch <= next_osdmap->get_epoch());
+  assert(from_epoch <= next_map->get_epoch());
 
-  if (next_osdmap->is_down(peer) ||
-      next_osdmap->get_info(peer).up_from > from_epoch) {
+  if (next_map->is_down(peer) ||
+      next_map->get_info(peer).up_from > from_epoch) {
     m->put();
+    release_map(next_map);
     return;
   }
-  const entity_inst_t& peer_inst = next_osdmap->get_cluster_inst(peer);
+  const entity_inst_t& peer_inst = next_map->get_cluster_inst(peer);
   Connection *peer_con = osd->cluster_messenger->get_connection(peer_inst).get();
-  osd->_share_map_outgoing(peer, peer_con, next_osdmap);
+  osd->_share_map_outgoing(peer, peer_con, next_map);
   osd->cluster_messenger->send_message(m, peer_inst);
+  release_map(next_map);
 }
 
 ConnectionRef OSDService::get_con_osd_cluster(int peer, epoch_t from_epoch)
 {
-  Mutex::Locker l(pre_publish_lock);
-
+  OSDMapRef next_map = get_nextmap_reserved();
   // service map is always newer/newest
-  assert(from_epoch <= next_osdmap->get_epoch());
+  assert(from_epoch <= next_map->get_epoch());
 
-  if (next_osdmap->is_down(peer) ||
-      next_osdmap->get_info(peer).up_from > from_epoch) {
+  if (next_map->is_down(peer) ||
+      next_map->get_info(peer).up_from > from_epoch) {
+    release_map(next_map);
     return NULL;
   }
-  return osd->cluster_messenger->get_connection(next_osdmap->get_cluster_inst(peer));
+  ConnectionRef con = osd->cluster_messenger->get_connection(next_map->get_cluster_inst(peer));
+  release_map(next_map);
+  return con;
 }
 
 pair<ConnectionRef,ConnectionRef> OSDService::get_con_osd_hb(int peer, epoch_t from_epoch)
 {
-  Mutex::Locker l(pre_publish_lock);
-
+  OSDMapRef next_map = get_nextmap_reserved();
   // service map is always newer/newest
-  assert(from_epoch <= next_osdmap->get_epoch());
+  assert(from_epoch <= next_map->get_epoch());
 
   pair<ConnectionRef,ConnectionRef> ret;
-  if (next_osdmap->is_down(peer) ||
-      next_osdmap->get_info(peer).up_from > from_epoch) {
+  if (next_map->is_down(peer) ||
+      next_map->get_info(peer).up_from > from_epoch) {
+    release_map(next_map);
     return ret;
   }
-  ret.first = osd->hbclient_messenger->get_connection(next_osdmap->get_hb_back_inst(peer));
-  if (next_osdmap->get_hb_front_addr(peer) != entity_addr_t())
-    ret.second = osd->hbclient_messenger->get_connection(next_osdmap->get_hb_front_inst(peer));
+  ret.first = osd->hbclient_messenger->get_connection(next_map->get_hb_back_inst(peer));
+  if (next_map->get_hb_front_addr(peer) != entity_addr_t())
+    ret.second = osd->hbclient_messenger->get_connection(next_map->get_hb_front_inst(peer));
+  release_map(next_map);
   return ret;
 }
 
