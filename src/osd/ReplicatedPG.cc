@@ -5782,6 +5782,9 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
       }
       dout(20) << __func__ << " snaps " << tctx->new_obs.oi.snaps << dendl;
       assert(!tctx->new_obs.oi.snaps.empty());
+      assert(obc->ssc->snapset.clone_size.count(soid.snap));
+      assert(obc->ssc->snapset.clone_size[soid.snap] ==
+	     results->object_size);
     }
   }
 
