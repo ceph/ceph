@@ -532,7 +532,7 @@ void Client::update_inode_file_bits(Inode *in,
 
       // truncate cached file data
       if (prior_size > size) {
-	_invalidate_inode_cache(in, truncate_size, prior_size - truncate_size, true);
+	_invalidate_inode_cache(in, truncate_size, prior_size - truncate_size);
       }
     }
 
@@ -2303,7 +2303,7 @@ void Client::put_cap_ref(Inode *in, int cap)
     }
     if (drop) {
       if (drop & CEPH_CAP_FILE_CACHE)
-	_invalidate_inode_cache(in, false);
+	_invalidate_inode_cache(in);
       else
 	check_caps(in, false);
     }
@@ -2778,7 +2778,7 @@ void Client::_schedule_invalidate_callback(Inode *in, int64_t off, int64_t len, 
     check_caps(in, false);
 }
 
-void Client::_invalidate_inode_cache(Inode *in, bool keep_caps)
+void Client::_invalidate_inode_cache(Inode *in)
 {
   ldout(cct, 10) << "_invalidate_inode_cache " << *in << dendl;
 
@@ -2786,10 +2786,10 @@ void Client::_invalidate_inode_cache(Inode *in, bool keep_caps)
   if (cct->_conf->client_oc)
     objectcacher->release_set(&in->oset);
 
-  _schedule_invalidate_callback(in, 0, 0, keep_caps);
+  _schedule_invalidate_callback(in, 0, 0, false);
 }
 
-void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len, bool keep_caps)
+void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len)
 {
   ldout(cct, 10) << "_invalidate_inode_cache " << *in << " " << off << "~" << len << dendl;
 
@@ -2800,14 +2800,14 @@ void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len, bool k
     objectcacher->discard_set(&in->oset, ls);
   }
 
-  _schedule_invalidate_callback(in, off, len, keep_caps);
+  _schedule_invalidate_callback(in, off, len, true);
 }
 
 void Client::_release(Inode *in)
 {
   ldout(cct, 20) << "_release " << *in << dendl;
   if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0) {
-    _invalidate_inode_cache(in, false);
+    _invalidate_inode_cache(in);
   }
 }
 
@@ -8572,7 +8572,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
       unsafe_sync_write++;
       get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
-      _invalidate_inode_cache(in, offset, length, true);
+      _invalidate_inode_cache(in, offset, length);
       r = filer->zero(in->ino, &in->layout,
                       in->snaprealm->get_snap_context(),
                       offset, length,
