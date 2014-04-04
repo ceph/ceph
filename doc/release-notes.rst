@@ -1018,6 +1018,24 @@ Notable Changes
 * rgw: support for password (instead of admin token) for keystone authentication (Christophe Courtaut)
 * sysvinit, upstart: prevent both init systems from starting the same daemons (Josh Durgin)
 
+v0.72.3 Emperor (pending release)
+=================================
+
+Upgrading
+---------
+
+* Monitor 'auth' read-only commands now expect the user to have 'rx' caps.
+  This is the same behavior that was present in dumpling, but in emperor
+  and more recent development releases the 'r' cap was sufficient.  Note that
+  this backported security fix will break mon keys that are using the following
+  commands but do not have the 'x' bit in the mon capability::
+
+    ceph auth export
+    ceph auth get
+    ceph auth get-key
+    ceph auth print-key
+    ceph auth list
+
 
 v0.72.2 Emperor
 ===============
