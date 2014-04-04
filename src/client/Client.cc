@@ -6026,6 +6026,14 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
 
   //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
 
+  bool movepos = false;
+  if (offset < 0) {
+    lock_fh_pos(f);
+    offset = f->pos;
+    movepos = true;
+  }
+  loff_t start_pos = offset;
+
   if (in->inline_version == 0) {
     int r = _getattr(in, CEPH_STAT_CAP_INLINE_DATA, -1, -1, true);
     if (r < 0)
@@ -6033,17 +6041,11 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
     assert(in->inline_version > 0);
   }
 
+retry:
   int have;
   int r = get_caps(in, CEPH_CAP_FILE_RD, CEPH_CAP_FILE_CACHE, &have, -1);
   if (r < 0)
     return r;
-
-  bool movepos = false;
-  if (offset < 0) {
-    lock_fh_pos(f);
-    offset = f->pos;
-    movepos = true;
-  }
 
   Mutex uninline_flock("Clinet::_read_uninline_data flock");
   Cond uninline_cond;
@@ -6087,25 +6089,33 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
       _flush_range(in, offset, size);
     }
     r = _read_async(f, offset, size, bl);
+    if (r < 0)
+      goto done;
   } else {
-    r = _read_sync(f, offset, size, bl);
-  }
+    bool checkeof = false;
+    r = _read_sync(f, offset, size, bl, &checkeof);
+    if (r < 0)
+      goto done;
+    if (checkeof) {
+      offset += r;
+      size -= r;
 
-  // don't move pointer if the read failed
-  if (r < 0) {
-    goto done;
+      put_cap_ref(in, CEPH_CAP_FILE_RD);
+      have = 0;
+      // reverify size
+      r = _getattr(in, CEPH_STAT_CAP_SIZE);
+      if (r < 0)
+	goto done;
+
+      // eof?  short read.
+      if ((uint64_t)offset < in->size)
+	goto retry;
+    }
   }
 
 success:
-
-  if (movepos) {
-    // adjust fd pos
-    f->pos = offset+bl->length();
-    unlock_fh_pos(f);
-  }
-
   // adjust readahead state
-  if (f->last_pos != offset) {
+  if (f->last_pos != start_pos) {
     f->nr_consec_read = f->consec_read_bytes = 0;
   } else {
     f->nr_consec_read++;
@@ -6113,9 +6123,15 @@ success:
   f->consec_read_bytes += bl->length();
   ldout(cct, 10) << "readahead nr_consec_read " << f->nr_consec_read
 	   << " for " << f->consec_read_bytes << " bytes" 
-	   << " .. last_pos " << f->last_pos << " .. offset " << offset
-	   << dendl;
-  f->last_pos = offset+bl->length();
+	   << " .. last_pos " << f->last_pos << " .. offset "
+	   << start_pos << dendl;
+
+  f->last_pos = start_pos + bl->length();
+  if (movepos) {
+    // adjust fd pos
+    f->pos = f->last_pos;
+    unlock_fh_pos(f);
+  }
 
 done:
   // done!
@@ -6137,8 +6153,9 @@ done:
       r = uninline_ret;
   }
 
-  put_cap_ref(in, CEPH_CAP_FILE_RD);
-  return r;
+  if (have)
+    put_cap_ref(in, CEPH_CAP_FILE_RD);
+  return r < 0 ? r : bl->length();
 }
 
 int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
@@ -6238,7 +6255,8 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
   return r;
 }
 
-int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
+int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
+		       bool *checkeof)
 {
   Inode *in = f->inode;
   uint64_t pos = off;
@@ -6297,14 +6315,8 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
 	  return read;
       }
 
-      // reverify size
-      r = _getattr(in, CEPH_STAT_CAP_SIZE);
-      if (r < 0)
-	return r;
-
-      // eof?  short read.
-      if (pos >= in->size)
-	return read;
+      *checkeof = true;
+      return read;
     }
   }
   return read;
