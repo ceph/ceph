@@ -3748,12 +3748,15 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      }
 	    }
 	  }
-	  if (result >= 0 && !obs.exists) {
-	    ctx->mod_desc.create();
-	    t->touch(soid);
-	    ctx->delta_stats.num_objects++;
-	    obs.exists = true;
-	  }
+          if (result >= 0) {
+            if (!obs.exists)
+              ctx->mod_desc.create();
+            t->touch(soid);
+            if (!obs.exists) {
+              ctx->delta_stats.num_objects++;
+              obs.exists = true;
+            }
+          }
 	}
       }
       break;
