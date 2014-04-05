@@ -3074,6 +3074,17 @@ void Client::trim_caps(MetaSession *s, int max)
     }
   }
   s->s_cap_iterator = NULL;
+
+  // notify kernel to invalidate top level directory entries. As a side effect,
+  // unused inodes underneath these entries get pruned.
+  if (dentry_invalidate_cb && s->caps.size() > max) {
+    for (ceph::unordered_map<string, Dentry*>::iterator p = root->dir->dentries.begin();
+	 p != root->dir->dentries.end();
+	 ++p) {
+      if (p->second->inode)
+	_schedule_invalidate_dentry_callback(p->second, false);
+    }
+  }
 }
 
 void Client::mark_caps_dirty(Inode *in, int caps)
@@ -3664,9 +3675,14 @@ private:
   vinodeno_t ino;
   string name;
 public:
-  C_Client_DentryInvalidate(Client *c, Dentry *dn) :
-			    client(c), dirino(dn->dir->parent_inode->vino()),
-			    ino(dn->inode->vino()), name(dn->name) { }
+  C_Client_DentryInvalidate(Client *c, Dentry *dn, bool del) :
+    client(c), name(dn->name) {
+      dirino = dn->dir->parent_inode->vino();
+      if (del)
+	ino = dn->inode->vino();
+      else
+	ino.ino = inodeno_t();
+  }
   void finish(int r) {
     client->_async_dentry_invalidate(dirino, ino, name);
   }
@@ -3679,10 +3695,10 @@ void Client::_async_dentry_invalidate(vinodeno_t dirino, vinodeno_t ino, string&
   dentry_invalidate_cb(dentry_invalidate_cb_handle, dirino, ino, name);
 }
 
-void Client::_schedule_invalidate_dentry_callback(Dentry *dn)
+void Client::_schedule_invalidate_dentry_callback(Dentry *dn, bool del)
 {
   if (dentry_invalidate_cb && dn->inode->ll_ref > 0)
-    async_dentry_invalidator.queue(new C_Client_DentryInvalidate(this, dn));
+    async_dentry_invalidator.queue(new C_Client_DentryInvalidate(this, dn, del));
 }
 
 void Client::_invalidate_inode_parents(Inode *in)
@@ -3692,7 +3708,7 @@ void Client::_invalidate_inode_parents(Inode *in)
     Dentry *dn = *q++;
     // FIXME: we play lots of unlink/link tricks when handling MDS replies,
     //        so in->dn_set doesn't always reflect the state of kernel's dcache.
-    _schedule_invalidate_dentry_callback(dn);
+    _schedule_invalidate_dentry_callback(dn, true);
     unlink(dn, false);
   }
 }
@@ -3724,7 +3740,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     in->gid = m->head.gid;
   }
   bool deleted_inode = false;
-  if ((issued & CEPH_CAP_LINK_EXCL) == 0) {
+  if ((issued & CEPH_CAP_LINK_EXCL) == 0 && in->nlink != (int32_t)m->head.nlink) {
     in->nlink = m->head.nlink;
     if (in->nlink == 0 &&
 	(new_caps & (CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL)))
