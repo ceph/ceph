@@ -697,9 +697,15 @@ TEST_F(LibRadosIoEC, AppendRoundTrip) {
   ASSERT_EQ(0, memcmp(buf3, buf, alignment));
   ASSERT_EQ(0, memcmp(buf3 + alignment, buf2, alignment));
 
+  int uasize = alignment/2;
+  char *unalignedbuf = (char *)new char[uasize];
+  ASSERT_EQ(0, rados_append(ioctx, "foo", unalignedbuf, uasize));
+  ASSERT_EQ(-EOPNOTSUPP, rados_append(ioctx, "foo", unalignedbuf, uasize));
+
   delete[] buf;
   delete[] buf2;
   delete[] buf3;
+  delete[] unalignedbuf;
 }
 
 TEST_F(LibRadosIoECPP, AppendRoundTripPP) {
