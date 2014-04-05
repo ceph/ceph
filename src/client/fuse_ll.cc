@@ -680,7 +680,9 @@ static void dentry_invalidate_cb(void *handle, vinodeno_t dirino,
   CephFuse::Handle *cfuse = (CephFuse::Handle *)handle;
   fuse_ino_t fdirino = cfuse->make_fake_ino(dirino.ino, dirino.snapid);
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
-  fuse_ino_t fino = cfuse->make_fake_ino(ino.ino, ino.snapid);
+  fuse_ino_t fino = 0;
+  if (ino.ino != inodeno_t())
+    fino = cfuse->make_fake_ino(ino.ino, ino.snapid);
   fuse_lowlevel_notify_delete(cfuse->ch, fdirino, fino, name.c_str(), name.length());
 #elif FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
   fuse_lowlevel_notify_inval_entry(cfuse->ch, fdirino, name.c_str(), name.length());
