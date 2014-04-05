@@ -10931,8 +10931,13 @@ void ReplicatedPG::agent_choose_mode()
     flush_target += flush_slop;
   else
     flush_target -= MIN(flush_target, flush_slop);
-  if (dirty_micro > flush_target)
+
+  if (info.stats.stats_invalid) {
+    // idle; stats can't be trusted until we scrub.
+    dout(20) << __func__ << " stats invalid (post-split), idle" << dendl;
+  } else if (dirty_micro > flush_target) {
     flush_mode = TierAgentState::FLUSH_MODE_ACTIVE;
+  }
 
   // evict mode
   TierAgentState::evict_mode_t evict_mode = TierAgentState::EVICT_MODE_IDLE;
@@ -10944,7 +10949,9 @@ void ReplicatedPG::agent_choose_mode()
   else
     evict_target -= MIN(evict_target, evict_slop);
 
-  if (full_micro > 1000000) {
+  if (info.stats.stats_invalid) {
+    // idle; stats can't be trusted until we scrub.
+  } else if (full_micro > 1000000) {
     // evict anything clean
     evict_mode = TierAgentState::EVICT_MODE_FULL;
     evict_effort = 1000000;
