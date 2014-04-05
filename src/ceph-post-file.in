@@ -30,17 +30,17 @@ WARNING:
   directories that contain Ceph secrets).
 
 Options:
-  -d <description>  Description for this post
-                      [Default: none]
-  -u <user>         User identifier
-                      [Default: \`whoami\`@\`hostname -f\`]
-  -r <user@host>    Remote to upload to
-                      [Default: postfile@drop.ceph.com]
-  -k <path>         known_hosts file
-                      [Default: /usr/share/ceph/known_hosts_drop.ceph.com]
+  -d|--description <desc>    Description for this post
+                               [Default: none]
+  -u|--user <user>           User identifier
+                               [Default: \`whoami\`@\`hostname -f\`]
+  -r|--remote <user@host>    Remote to upload to
+                               [Default: postfile@drop.ceph.com]
+  -k|--known_hosts <path>    known_hosts file
+                               [Default: /usr/share/ceph/known_hosts_drop.ceph.com]
   -i <path>         Ssh identity file
                       [Default: /usr/share/ceph/id_dsa_drop.ceph.com]
-  -h                Show this usage information
+  -h|--help         Show this usage information
 "
 }
 
@@ -52,37 +52,48 @@ fi
 description=""
 user="`whoami`@`hostname -f`"
 remote="postfile@drop.ceph.com"
-case $1 in
-    -d | --description)
-	description="$2"
-	shift
-	shift
-	;;
-    -u | --user)
-	user="$2"
-	shift
-	shift
-	;;
-    -h | --help)
-	usage
-	exit 0
-	;;
-    -k | --known-hosts)
-	known_hosts="$1"
-	shift
-	shift
-	;;
-    -i)
-	ssh_key="$1"
-	shift
-	shift
-	;;
-    -r | --remote)
-	remote="$1"
-	shift
-	shift
-	;;
-esac
+
+ARGS=$(getopt -n "ceph-post-file" -o 'd:u:hk:i:r:' -l "description:,user:,help,known-hosts:,remote:" -- "$@")
+eval set -- $ARGS
+
+while true; do
+	echo "args: $@"
+	case $1 in
+	    -d | --description)
+		description="$2"
+		shift
+		shift
+		;;
+	    -u | --user)
+		user="$2"
+		shift
+		shift
+		;;
+	    -h | --help)
+		usage
+		exit 0
+		;;
+	    -k | --known-hosts)
+		known_hosts="$2"
+		shift
+		shift
+		;;
+	    -i)
+		ssh_key="$2"
+		shift
+		shift
+		;;
+	    -r | --remote)
+		remote="$2"
+		shift
+		shift
+		;;
+	    --)
+		shift
+		break
+		;;
+	esac
+done
 
 # this id should be shared
 id=`uuidgen`
