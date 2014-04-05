@@ -2203,8 +2203,12 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
   if (in) {    // link to inode
     dn->inode = in;
     in->get();
-    if (in->dir)
-      dn->get();  // dir -> dn pin
+    if (in->is_dir()) {
+      if (in->dir)
+	dn->get(); // dir -> dn pin
+      if (in->ll_ref)
+	dn->get(); // ll_ref -> dn pin
+    }
 
     assert(in->dn_set.count(dn) == 0);
 
@@ -2231,8 +2235,12 @@ void Client::unlink(Dentry *dn, bool keepdir)
 
   // unlink from inode
   if (in) {
-    if (in->dir)
-      dn->put();        // dir -> dn pin
+    if (in->is_dir()) {
+      if (in->dir)
+	dn->put(); // dir -> dn pin
+      if (in->ll_ref)
+	dn->put(); // ll_ref -> dn pin
+    }
     dn->inode = 0;
     assert(in->dn_set.count(dn));
     in->dn_set.erase(dn);
@@ -7031,8 +7039,13 @@ int Client::ll_walk(const char* name, Inode **i, struct stat *attr)
 
 void Client::_ll_get(Inode *in)
 {
-  if (in->ll_ref == 0)
+  if (in->ll_ref == 0) {
     in->get();
+    if (in->is_dir() && !in->dn_set.empty()) {
+      assert(in->dn_set.size() == 1); // dirs can't be hard-linked
+      in->get_first_parent()->get(); // pin dentry
+    }
+  }
   in->ll_get();
   ldout(cct, 20) << "_ll_get " << in << " " << in->ino << " -> " << in->ll_ref << dendl;
 }
@@ -7042,6 +7055,10 @@ int Client::_ll_put(Inode *in, int num)
   in->ll_put(num);
   ldout(cct, 20) << "_ll_put " << in << " " << in->ino << " " << num << " -> " << in->ll_ref << dendl;
   if (in->ll_ref == 0) {
+    if (in->is_dir() && !in->dn_set.empty()) {
+      assert(in->dn_set.size() == 1); // dirs can't be hard-linked
+      in->get_first_parent()->put(); // unpin dentry
+    }
     put_inode(in);
     return 0;
   } else {
@@ -7081,8 +7098,8 @@ bool Client::ll_forget(Inode *in, int count)
     ldout(cct, 1) << "WARNING: ll_forget on " << ino << " " << count
 		  << ", which only has ll_ref=" << in->ll_ref << dendl;
     _ll_put(in, in->ll_ref);
-      last = true;
-    } else {
+    last = true;
+  } else {
     if (_ll_put(in, count) == 0)
       last = true;
   }
