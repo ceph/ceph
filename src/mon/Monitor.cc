@@ -3312,6 +3312,12 @@ void Monitor::handle_get_version(MMonGetVersion *m)
     return;
   }
 
+  if (!is_leader() && !is_peon()) {
+    dout(10) << " waiting for quorum" << dendl;
+    waitfor_quorum.push_back(new C_RetryMessage(this, m));
+    return;
+  }
+
   MMonGetVersionReply *reply = new MMonGetVersionReply();
   reply->handle = m->handle;
   if (m->what == "mdsmap") {
