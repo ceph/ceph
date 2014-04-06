@@ -4469,6 +4469,11 @@ int ReplicatedPG::_verify_no_head_clones(const hobject_t& soid,
 	       << clone_oid << dendl;
       return -EBUSY;
     }
+    if (copy_ops.count(clone_oid)) {
+      dout(10) << __func__ << " cannot evict head, pending promote on clone "
+	       << clone_oid << dendl;
+      return -EBUSY;
+    }
   }
   return 0;
 }
