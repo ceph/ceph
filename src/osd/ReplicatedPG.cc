@@ -4777,11 +4777,17 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
 
   // update most recent clone_overlap and usage stats
   if (ctx->new_snapset.clones.size() > 0) {
-    interval_set<uint64_t> &newest_overlap = ctx->new_snapset.clone_overlap.rbegin()->second;
-    ctx->modified_ranges.intersection_of(newest_overlap);
-    // modified_ranges is still in use by the clone
-    add_interval_usage(ctx->modified_ranges, ctx->delta_stats);
-    newest_overlap.subtract(ctx->modified_ranges);
+    /* we need to check whether the most recent clone exists, if it's been evicted,
+     * it's not included in the stats */
+    hobject_t last_clone_oid = soid;
+    last_clone_oid.snap = ctx->new_snapset.clone_overlap.rbegin()->first;
+    if (is_present_clone(last_clone_oid)) {
+      interval_set<uint64_t> &newest_overlap = ctx->new_snapset.clone_overlap.rbegin()->second;
+      ctx->modified_ranges.intersection_of(newest_overlap);
+      // modified_ranges is still in use by the clone
+      add_interval_usage(ctx->modified_ranges, ctx->delta_stats);
+      newest_overlap.subtract(ctx->modified_ranges);
+    }
   }
   
   // prepend transaction to op_t
@@ -6183,6 +6189,16 @@ void ReplicatedPG::cancel_flush_ops(bool requeue)
   while (p != flush_ops.end()) {
     cancel_flush((p++)->second, requeue);
   }
+}
+
+bool ReplicatedPG::is_present_clone(hobject_t coid)
+{
+  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE)
+    return true;
+  if (is_missing_object(coid))
+    return true;
+  ObjectContextRef obc = get_object_context(coid, false);
+  return obc && obc->obs.exists;
 }
 
 // ========================================================================
