@@ -11114,17 +11114,6 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 	next_clone = hobject_t();
 	dout(20) << "  snapset " << snapset << dendl;
       }
-
-      // subtract off any clone overlap
-      for (map<snapid_t,interval_set<uint64_t> >::iterator q = snapset.clone_overlap.begin();
-	   q != snapset.clone_overlap.end();
-	   ++q) {
-	for (interval_set<uint64_t>::const_iterator r = q->second.begin();
-	     r != q->second.end();
-	     ++r) {
-	  stat.num_bytes -= r.get_len();
-	}	  
-      }
     }
 
     // basic checks.
@@ -11150,7 +11139,11 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 
     dout(20) << mode << "  " << soid << " " << oi << dendl;
 
-    stat.num_bytes += oi.size;
+    if (soid.is_snap()) {
+      stat.num_bytes += snapset.get_clone_bytes(soid.snap);
+    } else {
+      stat.num_bytes += oi.size;
+    }
 
     if (!soid.is_snapdir()) {
       if (oi.is_dirty())
