@@ -6995,7 +6995,7 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
   }
 
   ObjectContextRef obc = get_object_context(soid, false);
-  if (!obc) {
+  if (!obc || !obc->obs.exists) {
     dout(20) << __func__ << " missing clone " << soid << dendl;
     if (pmissing)
       *pmissing = soid;
