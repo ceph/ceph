@@ -4502,7 +4502,12 @@ inline int ReplicatedPG::_delete_oid(OpContext *ctx, bool no_whiteout)
   }
 
   ctx->delta_stats.num_wr++;
-  ctx->delta_stats.num_bytes -= oi.size;
+  if (soid.is_snap()) {
+    assert(ctx->obc->ssc->snapset.clone_overlap.count(soid.snap));
+    ctx->delta_stats.num_bytes -= ctx->obc->ssc->snapset.get_clone_bytes(soid.snap);
+  } else {
+    ctx->delta_stats.num_bytes -= oi.size;
+  }
   oi.size = 0;
 
   // cache: writeback: set whiteout on delete?
@@ -5757,7 +5762,6 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
       tctx->discard_temp_oid = results->temp_oid;
     }
     tctx->new_obs.oi.size = results->object_size;
-    tctx->delta_stats.num_bytes += results->object_size;
     tctx->new_obs.oi.category = results->category;
     tctx->new_obs.oi.user_version = results->user_version;
 
@@ -5785,6 +5789,11 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
       assert(obc->ssc->snapset.clone_size.count(soid.snap));
       assert(obc->ssc->snapset.clone_size[soid.snap] ==
 	     results->object_size);
+      assert(obc->ssc->snapset.clone_overlap.count(soid.snap));
+
+      tctx->delta_stats.num_bytes += obc->ssc->snapset.get_clone_bytes(soid.snap);
+    } else {
+      tctx->delta_stats.num_bytes += results->object_size;
     }
   }
 
