@@ -2428,6 +2428,9 @@ struct SnapSet {
 
   /// populate SnapSet from a librados::snap_set_t
   void from_snap_set(const librados::snap_set_t& ss);
+
+  /// get space accounted to clone
+  uint64_t get_clone_bytes(snapid_t clone) const;
     
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
