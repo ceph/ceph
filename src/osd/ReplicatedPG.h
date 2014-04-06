@@ -1190,6 +1190,9 @@ protected:
   void cancel_flush(FlushOpRef fop, bool requeue);
   void cancel_flush_ops(bool requeue);
 
+  /// @return false if clone is has been evicted
+  bool is_present_clone(hobject_t coid);
+
   friend struct C_Flush;
 
   // -- scrub --
