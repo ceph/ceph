@@ -3012,9 +3012,9 @@ void OSD::handle_osd_ping(MOSDPing *m)
     break;
 
   case MOSDPing::YOU_DIED:
-    dout(10) << "handle_osd_ping " << m->get_source_inst() << " says i am down in " << m->map_epoch
-	     << dendl;
-    osdmap_subscribe(m->map_epoch, false);
+    dout(10) << "handle_osd_ping " << m->get_source_inst()
+	     << " says i am down in " << m->map_epoch << dendl;
+    osdmap_subscribe(curmap->get_epoch()+1, false);
     break;
   }
 
