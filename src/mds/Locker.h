@@ -147,7 +147,7 @@ public:
   void xlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue);
 
   void xlock_export(SimpleLock *lock, Mutation *mut);
-  void xlock_import(SimpleLock *lock, Mutation *mut);
+  void xlock_import(SimpleLock *lock);
 
 
   // simple
