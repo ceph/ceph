@@ -10579,6 +10579,10 @@ void ReplicatedPG::agent_setup()
     dout(10) << __func__ << " keeping existing state" << dendl;
   }
 
+  if (info.stats.stats_invalid) {
+    osd->clog.warn() << "pg " << info.pgid << " has invalid (post-split) stats; must scrub before tier agent can activate";
+  }
+
   agent_choose_mode();
 }
 
