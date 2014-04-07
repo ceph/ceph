@@ -496,6 +496,7 @@ TEST_F(LibRadosMiscPP, BigAttrPP) {
 
   bufferlist got;
 
+  cout << "osd_max_attr_size = " << g_conf->osd_max_attr_size << std::endl;
   if (g_conf->osd_max_attr_size) {
     bl.clear();
     got.clear();
