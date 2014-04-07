@@ -334,7 +334,7 @@ public:
   void dequeue_pg(PG *pg, list<OpRequestRef> *dequeued);
 
   // -- superblock --
-  Mutex publish_lock, pre_publish_lock;
+  Mutex publish_lock, pre_publish_lock; // pre-publish orders before publish
   OSDSuperblock superblock;
   OSDSuperblock get_superblock() {
     Mutex::Locker l(publish_lock);
