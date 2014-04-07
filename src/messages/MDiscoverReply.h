@@ -127,7 +127,10 @@ class MDiscoverReply : public Message {
     flag_error_dn(false),
     flag_error_ino(false),
     flag_error_dir(false),
-    dir_auth_hint(CDIR_AUTH_UNKNOWN) {
+    unsolicited(false),
+    dir_auth_hint(CDIR_AUTH_UNKNOWN),
+    starts_with(DIR)
+  {
     header.tid = dis->get_tid();
   }
   MDiscoverReply(dirfrag_t df) :
@@ -141,7 +144,10 @@ class MDiscoverReply : public Message {
     flag_error_dn(false),
     flag_error_ino(false),
     flag_error_dir(false),
-    dir_auth_hint(CDIR_AUTH_UNKNOWN) {
+    unsolicited(false),
+    dir_auth_hint(CDIR_AUTH_UNKNOWN),
+    starts_with(DIR)
+  {
     header.tid = 0;
   }
 private:
