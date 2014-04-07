@@ -1341,7 +1341,7 @@ void object_stat_sum_t::encode(bufferlist& bl) const
 
 void object_stat_sum_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(7, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(8, 3, 3, bl);
   ::decode(num_bytes, bl);
   if (struct_v < 3) {
     uint64_t num_kb;
@@ -1571,7 +1571,7 @@ void pg_stat_t::dump_brief(Formatter *f) const
 
 void pg_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(15, 8, bl);
+  ENCODE_START(16, 8, bl);
   ::encode(version, bl);
   ::encode(reported_seq, bl);
   ::encode(reported_epoch, bl);
