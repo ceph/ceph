@@ -141,7 +141,8 @@ public:
   MMDSSlaveRequest() : Message(MSG_MDS_SLAVE_REQUEST) { }
   MMDSSlaveRequest(metareqid_t ri, __u32 att, int o) : 
     Message(MSG_MDS_SLAVE_REQUEST),
-    reqid(ri), attempt(att), op(o), flags(0), lock_type(0) { }
+    reqid(ri), attempt(att), op(o), flags(0), lock_type(0),
+    inode_export_v(0) { }
 private:
   ~MMDSSlaveRequest() {}
 
