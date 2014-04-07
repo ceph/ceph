@@ -11272,6 +11272,9 @@ void ReplicatedPG::_scrub_finish()
   if (info.stats.stats_invalid) {
     info.stats.stats = scrub_cstat;
     info.stats.stats_invalid = false;
+
+    if (agent_state)
+      agent_choose_mode();
   }
 
   dout(10) << mode << " got "
