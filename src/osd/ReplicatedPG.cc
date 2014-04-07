@@ -634,6 +634,11 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
     handle_query_state(f.get());
     f->close_section();
 
+    f->open_object_section("agent_state");
+    if (agent_state)
+      agent_state->dump(f.get());
+    f->close_section();
+
     f->close_section();
     f->flush(odata);
     return 0;
@@ -10666,6 +10671,10 @@ void ReplicatedPG::agent_setup()
     dout(10) << __func__ << " keeping existing state" << dendl;
   }
 
+  if (info.stats.stats_invalid) {
+    osd->clog.warn() << "pg " << info.pgid << " has invalid (post-split) stats; must scrub before tier agent can activate";
+  }
+
   agent_choose_mode();
 }
 
@@ -11066,8 +11075,13 @@ void ReplicatedPG::agent_choose_mode()
     flush_target += flush_slop;
   else
     flush_target -= MIN(flush_target, flush_slop);
-  if (dirty_micro > flush_target)
+
+  if (info.stats.stats_invalid) {
+    // idle; stats can't be trusted until we scrub.
+    dout(20) << __func__ << " stats invalid (post-split), idle" << dendl;
+  } else if (dirty_micro > flush_target) {
     flush_mode = TierAgentState::FLUSH_MODE_ACTIVE;
+  }
 
   // evict mode
   TierAgentState::evict_mode_t evict_mode = TierAgentState::EVICT_MODE_IDLE;
@@ -11079,7 +11093,9 @@ void ReplicatedPG::agent_choose_mode()
   else
     evict_target -= MIN(evict_target, evict_slop);
 
-  if (full_micro > 1000000) {
+  if (info.stats.stats_invalid) {
+    // idle; stats can't be trusted until we scrub.
+  } else if (full_micro > 1000000) {
     // evict anything clean
     evict_mode = TierAgentState::EVICT_MODE_FULL;
     evict_effort = 1000000;
@@ -11402,6 +11418,9 @@ void ReplicatedPG::_scrub_finish()
   if (info.stats.stats_invalid) {
     info.stats.stats = scrub_cstat;
     info.stats.stats_invalid = false;
+
+    if (agent_state)
+      agent_choose_mode();
   }
 
   dout(10) << mode << " got "
