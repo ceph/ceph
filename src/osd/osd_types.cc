@@ -3463,6 +3463,21 @@ void SnapSet::from_snap_set(const librados::snap_set_t& ss)
     snaps.push_back(*p);
 }
 
+uint64_t SnapSet::get_clone_bytes(snapid_t clone) const
+{
+  assert(clone_size.count(clone));
+  uint64_t size = clone_size.find(clone)->second;
+  assert(clone_overlap.count(clone));
+  const interval_set<uint64_t> &overlap = clone_overlap.find(clone)->second;
+  for (interval_set<uint64_t>::const_iterator i = overlap.begin();
+       i != overlap.end();
+       ++i) {
+    assert(size >= i.get_len());
+    size -= i.get_len();
+  }
+  return size;
+}
+
 // -- watch_info_t --
 
 void watch_info_t::encode(bufferlist& bl) const
