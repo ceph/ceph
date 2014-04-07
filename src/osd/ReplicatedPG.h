@@ -1186,7 +1186,7 @@ protected:
   // -- flush --
   map<hobject_t, FlushOpRef> flush_ops;
 
-  int start_flush(OpContext *ctx, bool blocking);
+  int start_flush(OpContext *ctx, bool blocking, hobject_t *pmissing);
   void finish_flush(hobject_t oid, ceph_tid_t tid, int r);
   int try_flush_mark_clean(FlushOpRef fop);
   void cancel_flush(FlushOpRef fop, bool requeue);
