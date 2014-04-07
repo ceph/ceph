@@ -992,7 +992,7 @@ protected:
     const hobject_t& head, const hobject_t& coid,
     object_info_t *poi);
   void execute_ctx(OpContext *ctx);
-  void finish_ctx(OpContext *ctx, int log_op_type);
+  void finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc=true);
   void reply_ctx(OpContext *ctx, int err);
   void reply_ctx(OpContext *ctx, int err, eversion_t v, version_t uv);
   void make_writeable(OpContext *ctx);
@@ -1191,6 +1191,9 @@ protected:
   int try_flush_mark_clean(FlushOpRef fop);
   void cancel_flush(FlushOpRef fop, bool requeue);
   void cancel_flush_ops(bool requeue);
+
+  /// @return false if clone is has been evicted
+  bool is_present_clone(hobject_t coid);
 
   friend struct C_Flush;
 
