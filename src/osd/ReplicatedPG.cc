@@ -6782,9 +6782,8 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
       pg_log_entry_t::LOST_REVERT));
   ObjectContextRef obc = object_contexts.lookup(soid);
   if (obc) {
-    dout(10) << "get_object_context " << obc << " " << soid
-	     << " " << obc->rwstate
-	     << " oi:" << obc->obs.oi << dendl;
+    dout(10) << __func__ << ": found obc in cache: " << obc
+	     << dendl;
   } else {
     // check disk
     bufferlist bv;
@@ -6794,15 +6793,28 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
     } else {
       int r = pgbackend->objects_get_attr(soid, OI_ATTR, &bv);
       if (r < 0) {
-	if (!can_create)
+	if (!can_create) {
+	  dout(10) << __func__ << ": no obc for soid "
+		   << soid << " and !can_create"
+		   << dendl;
 	  return ObjectContextRef();   // -ENOENT!
+	}
 
+	dout(10) << __func__ << ": no obc for soid "
+		 << soid << " but can_create"
+		 << dendl;
 	// new object.
 	object_info_t oi(soid);
 	SnapSetContext *ssc = get_snapset_context(
 	  soid, true,
 	  soid.has_snapset() ? attrs : 0);
-	return create_object_context(oi, ssc);
+	obc = create_object_context(oi, ssc);
+	dout(10) << __func__ << ": " << obc << " " << soid
+		 << " " << obc->rwstate
+		 << " oi: " << obc->obs.oi
+		 << " ssc: " << obc->ssc
+		 << " snapset: " << obc->ssc->snapset << dendl;
+	return obc;
       }
     }
 
@@ -6833,11 +6845,15 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
       }
     }
 
-    dout(10) << "get_object_context " << obc << " " << soid
-	     << " " << obc->rwstate
-	     << " oi:" << obc->obs.oi
-	     << " 0 -> 1 read " << obc->obs.oi << dendl;
+    dout(10) << __func__ << ": creating obc from disk: " << obc
+	     << dendl;
   }
+  assert(obc->ssc);
+  dout(10) << __func__ << ": " << obc << " " << soid
+	   << " " << obc->rwstate
+	   << " oi: " << obc->obs.oi
+	   << " ssc: " << obc->ssc
+	   << " snapset: " << obc->ssc->snapset << dendl;
   return obc;
 }
 
