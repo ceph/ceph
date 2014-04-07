@@ -2270,20 +2270,23 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
 	break;
     assert(p != snapset.clones.end());
     object_stat_sum_t delta;
+    delta.num_bytes -= snapset.get_clone_bytes(last);
+
     if (p != snapset.clones.begin()) {
       // not the oldest... merge overlap into next older clone
       vector<snapid_t>::iterator n = p - 1;
-      interval_set<uint64_t> keep;
-      keep.union_of(
-	snapset.clone_overlap[*n],
-	snapset.clone_overlap[*p]);
-      add_interval_usage(keep, delta);  // not deallocated
+      hobject_t prev_coid = coid;
+      prev_coid.snap = *n;
+      bool adjust_prev_bytes = is_present_clone(prev_coid);
+
+      if (adjust_prev_bytes)
+	delta.num_bytes -= snapset.get_clone_bytes(*n);
+
       snapset.clone_overlap[*n].intersection_of(
 	snapset.clone_overlap[*p]);
-    } else {
-      add_interval_usage(
-	snapset.clone_overlap[last],
-	delta);  // not deallocated
+
+      if (adjust_prev_bytes)
+	delta.num_bytes += snapset.get_clone_bytes(*n);
     }
     delta.num_objects--;
     if (coi.is_dirty())
@@ -2293,7 +2296,6 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
       delta.num_whiteouts--;
     }
     delta.num_object_clones--;
-    delta.num_bytes -= snapset.clone_size[last];
     info.stats.stats.add(delta, obc->obs.oi.category);
     obc->obs.exists = false;
 
