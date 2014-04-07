@@ -123,9 +123,11 @@ public:
     librados::snap_set_t snapset; ///< src snapset (if head)
     bool mirror_snapset;
     map<string, bufferlist> attrs; ///< src user attrs
+    bool has_omap;
     CopyResults() : object_size(0), started_temp_obj(false),
 		    final_tx(NULL), user_version(0), 
-		    should_requeue(false), mirror_snapset(false) {}
+		    should_requeue(false), mirror_snapset(false),
+		    has_omap(false) {}
   };
 
   struct CopyOp {
