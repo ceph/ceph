@@ -6427,7 +6427,7 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
 	  ++i)
 	if ((*i)->get_parent() == destdnl->get_inode() &&
 	    !(*i)->is_locallock())
-	  mds->locker->xlock_import(*i, mdr);
+	  mds->locker->xlock_import(*i);
       
       // hack: fix auth bit
       in->state_set(CInode::STATE_AUTH);
