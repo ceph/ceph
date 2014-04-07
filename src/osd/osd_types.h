@@ -2432,6 +2432,9 @@ struct SnapSet {
 
   /// populate SnapSet from a librados::snap_set_t
   void from_snap_set(const librados::snap_set_t& ss);
+
+  /// get space accounted to clone
+  uint64_t get_clone_bytes(snapid_t clone) const;
     
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
@@ -2602,8 +2605,10 @@ struct SnapSetContext {
   int ref;
   bool registered;
   SnapSet snapset;
+  bool exists;
 
-  SnapSetContext(const hobject_t& o) : oid(o), ref(0), registered(false) { }
+  SnapSetContext(const hobject_t& o) :
+    oid(o), ref(0), registered(false), exists(true) { }
 };
 
 
