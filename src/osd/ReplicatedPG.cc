@@ -3198,7 +3198,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  break;
 	}
 	if (oi.is_dirty()) {
-	  result = start_flush(ctx, false);
+	  result = start_flush(ctx, false, NULL);
 	} else {
 	  result = 0;
 	}
@@ -3221,10 +3221,19 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = 0;
 	  break;
 	}
+	hobject_t missing;
 	if (oi.is_dirty()) {
-	  result = start_flush(ctx, true);
+	  result = start_flush(ctx, true, &missing);
 	} else {
 	  result = 0;
+	}
+	// Check special return value which has set missing_return
+        if (result == -ENOENT) {
+          dout(10) << __func__ << " CEPH_OSD_OP_CACHE_FLUSH got ENOENT" << dendl;
+	  assert(!missing.is_min());
+	  wait_for_unreadable_object(missing, ctx->op);
+	  // Error code which is used elsewhere when wait_for_unreadable_object() is used
+	  result = -EAGAIN;
 	}
       }
       break;
@@ -4468,6 +4477,8 @@ int ReplicatedPG::_verify_no_head_clones(const hobject_t& soid,
        ++p) {
     hobject_t clone_oid = soid;
     clone_oid.snap = *p;
+    if (is_missing_object(clone_oid))
+      return -EBUSY;
     ObjectContextRef clone_obc = get_object_context(clone_oid, false);
     if (clone_obc && clone_obc->obs.exists) {
       dout(10) << __func__ << " cannot evict head before clone "
@@ -5923,7 +5934,7 @@ struct C_Flush : public Context {
   }
 };
 
-int ReplicatedPG::start_flush(OpContext *ctx, bool blocking)
+int ReplicatedPG::start_flush(OpContext *ctx, bool blocking, hobject_t *pmissing)
 {
   const object_info_t& oi = ctx->obc->obs.oi;
   const hobject_t& soid = oi.soid;
@@ -5944,6 +5955,12 @@ int ReplicatedPG::start_flush(OpContext *ctx, bool blocking)
       hobject_t next = soid;
       next.snap = *p;
       assert(next.snap < soid.snap);
+      if (pg_log.get_missing().is_missing(next)) {
+	dout(10) << __func__ << " missing clone is " << next << dendl;
+	if (pmissing)
+	  *pmissing = next;
+	return -ENOENT;
+      }
       ObjectContextRef older_obc = get_object_context(next, false);
       if (older_obc) {
 	dout(20) << __func__ << " next oldest clone is " << older_obc->obs.oi
@@ -10831,17 +10848,20 @@ bool ReplicatedPG::agent_maybe_flush(ObjectContextRef& obc)
 {
   if (!obc->obs.oi.is_dirty()) {
     dout(20) << __func__ << " skip (clean) " << obc->obs.oi << dendl;
+    osd->logger->inc(l_osd_agent_skip);
     return false;
   }
 
   utime_t now = ceph_clock_now(NULL);
   if (obc->obs.oi.mtime + utime_t(pool.info.cache_min_flush_age, 0) > now) {
     dout(20) << __func__ << " skip (too young) " << obc->obs.oi << dendl;
+    osd->logger->inc(l_osd_agent_skip);
     return false;
   }
 
   if (osd->agent_is_active_oid(obc->obs.oi.soid)) {
     dout(20) << __func__ << " skip (flushing) " << obc->obs.oi << dendl;
+    osd->logger->inc(l_osd_agent_skip);
     return false;
   }
 
@@ -10861,7 +10881,15 @@ bool ReplicatedPG::agent_maybe_flush(ObjectContextRef& obc)
   ctx->at_version = get_next_version();
   ctx->on_finish = new C_AgentFlushStartStop(this, obc->obs.oi.soid);
 
-  start_flush(ctx, false);
+  int result = start_flush(ctx, false, NULL);
+  if (result != -EINPROGRESS) {
+    dout(10) << __func__ << " start_flush() failed " << obc->obs.oi
+      << " with " << result << dendl;
+    osd->logger->inc(l_osd_agent_skip);
+    if (result != -ECANCELED)
+      close_op_ctx(ctx, result);
+    return false;
+  }
 
   osd->logger->inc(l_osd_agent_flush);
   return true;
