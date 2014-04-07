@@ -634,6 +634,11 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
     handle_query_state(f.get());
     f->close_section();
 
+    f->open_object_section("agent_state");
+    if (agent_state)
+      agent_state->dump(f.get());
+    f->close_section();
+
     f->close_section();
     f->flush(odata);
     return 0;
