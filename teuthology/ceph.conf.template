@@ -43,7 +43,6 @@
 	mon data avail warn = 10
 
 [mds]
-        lockdep = 1
         mds debug scatterstat = true
         mds verify scatter = true
         mds debug frag = true
