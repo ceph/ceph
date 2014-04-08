@@ -443,6 +443,7 @@ void ObjectCacher::Object::truncate(loff_t s)
 
     // remove bh entirely
     assert(bh->start() >= s);
+    assert(bh->waitfor_read.empty());
     oc->bh_remove(this, bh);
     delete bh;
   }
@@ -482,6 +483,7 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len)
 
     ++p;
     ldout(oc->cct, 10) << "discard " << *this << " bh " << *bh << dendl;
+    assert(bh->waitfor_read.empty());
     oc->bh_remove(this, bh);
     delete bh;
   }
@@ -1487,6 +1489,18 @@ void ObjectCacher::flusher_entry()
 
 // -------------------------------------------------
 
+bool ObjectCacher::set_is_empty(ObjectSet *oset)
+{
+  assert(lock.is_locked());
+  if (oset->objects.empty())
+    return true;
+
+  for (xlist<Object*>::iterator p = oset->objects.begin(); !p.end(); ++p)
+    if (!(*p)->is_empty())
+      return false;
+
+  return true;
+}
 
 bool ObjectCacher::set_is_cached(ObjectSet *oset)
 {

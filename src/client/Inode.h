@@ -251,7 +251,7 @@ class Inode {
   bool put_open_ref(int mode);
 
   void get_cap_ref(int cap);
-  bool put_cap_ref(int cap);
+  int put_cap_ref(int cap);
   bool is_any_caps();
   bool cap_is_valid(Cap* cap);
   int caps_issued(int *implemented = 0);

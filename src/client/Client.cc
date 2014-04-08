@@ -532,7 +532,7 @@ void Client::update_inode_file_bits(Inode *in,
 
       // truncate cached file data
       if (prior_size > size) {
-	_invalidate_inode_cache(in, truncate_size, prior_size - truncate_size, true);
+	_invalidate_inode_cache(in, truncate_size, prior_size - truncate_size);
       }
     }
 
@@ -758,7 +758,7 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
   
   if (!dn || dn->inode == 0) {
     in->get();
-    if (old_dentry)
+    if (old_dentry && old_dentry->dir)
       unlink(old_dentry, dir == old_dentry->dir);  // keep dir open if its the same dir
     dn = link(dir, dname, in, dn);
     put_inode(in);
@@ -1445,31 +1445,31 @@ int Client::encode_inode_release(Inode *in, MetaRequest *req,
 	   << " mds:" << mds << ", drop:" << drop << ", unless:" << unless
 	   << ", have:" << ", force:" << force << ")" << dendl;
   int released = 0;
-  Cap *caps = NULL;
-  if (in->caps.count(mds))
-    caps = in->caps[mds];
-  if (caps &&
-      (drop & caps->issued) &&
-      !(unless & caps->issued)) {
-    ldout(cct, 25) << "Dropping caps. Initial " << ccap_string(caps->issued) << dendl;
-    caps->issued &= ~drop;
-    caps->implemented &= ~drop;
-    released = 1;
-    force = 1;
-    ldout(cct, 25) << "Now have: " << ccap_string(caps->issued) << dendl;
-  }
-  if (force && caps) {
-    ceph_mds_request_release rel;
-    rel.ino = in->ino;
-    rel.cap_id = caps->cap_id;
-    rel.seq = caps->seq;
-    rel.issue_seq = caps->issue_seq;
-    rel.mseq = caps->mseq;
-    rel.caps = caps->issued;
-    rel.wanted = caps->wanted;
-    rel.dname_len = 0;
-    rel.dname_seq = 0;
-    req->cap_releases.push_back(MClientRequest::Release(rel,""));
+  if (in->caps.count(mds)) {
+    Cap *caps = in->caps[mds];
+    drop &= ~(in->dirty_caps | get_caps_used(in));
+    if ((drop & caps->issued) &&
+	!(unless & caps->issued)) {
+      ldout(cct, 25) << "Dropping caps. Initial " << ccap_string(caps->issued) << dendl;
+      caps->issued &= ~drop;
+      caps->implemented &= ~drop;
+      released = 1;
+      force = 1;
+      ldout(cct, 25) << "Now have: " << ccap_string(caps->issued) << dendl;
+    }
+    if (force) {
+      ceph_mds_request_release rel;
+      rel.ino = in->ino;
+      rel.cap_id = caps->cap_id;
+      rel.seq = caps->seq;
+      rel.issue_seq = caps->issue_seq;
+      rel.mseq = caps->mseq;
+      rel.caps = caps->issued;
+      rel.wanted = caps->wanted;
+      rel.dname_len = 0;
+      rel.dname_seq = 0;
+      req->cap_releases.push_back(MClientRequest::Release(rel,""));
+    }
   }
   ldout(cct, 25) << "encode_inode_release exit(in:" << *in << ") released:"
 	   << released << dendl;
@@ -2264,40 +2264,56 @@ void Client::get_cap_ref(Inode *in, int cap)
     ldout(cct, 5) << "get_cap_ref got first FILE_BUFFER ref on " << *in << dendl;
     in->get();
   }
+  if ((cap & CEPH_CAP_FILE_CACHE) &&
+      in->cap_refs[CEPH_CAP_FILE_CACHE] == 0) {
+    ldout(cct, 5) << "get_cap_ref got first FILE_CACHE ref on " << *in << dendl;
+    in->get();
+  }
   in->get_cap_ref(cap);
 }
 
 void Client::put_cap_ref(Inode *in, int cap)
 {
-  bool last = in->put_cap_ref(cap);
+  int last = in->put_cap_ref(cap);
   if (last) {
+    int put_nref = 0;
+    int drop = last & ~in->caps_issued();
     if (in->snapid == CEPH_NOSNAP) {
-      if ((cap & CEPH_CAP_FILE_WR) &&
+      if ((last & CEPH_CAP_FILE_WR) &&
 	  !in->cap_snaps.empty() &&
 	  in->cap_snaps.rbegin()->second->writing) {
 	ldout(cct, 10) << "put_cap_ref finishing pending cap_snap on " << *in << dendl;
 	in->cap_snaps.rbegin()->second->writing = 0;
-	finish_cap_snap(in, in->cap_snaps.rbegin()->second, in->caps_used());
+	finish_cap_snap(in, in->cap_snaps.rbegin()->second, get_caps_used(in));
 	signal_cond_list(in->waitfor_caps);  // wake up blocked sync writers
       }
-      if (cap & CEPH_CAP_FILE_BUFFER) {
+      if (last & CEPH_CAP_FILE_BUFFER) {
 	for (map<snapid_t,CapSnap*>::iterator p = in->cap_snaps.begin();
 	    p != in->cap_snaps.end();
 	    ++p)
 	  p->second->dirty_data = 0;
-	check_caps(in, false);
 	signal_cond_list(in->waitfor_commit);
 	ldout(cct, 5) << "put_cap_ref dropped last FILE_BUFFER ref on " << *in << dendl;
-	put_inode(in);
+	++put_nref;
       }
     }
-    if (cap & CEPH_CAP_FILE_CACHE) {
-      check_caps(in, false);
+    if (last & CEPH_CAP_FILE_CACHE) {
       ldout(cct, 5) << "put_cap_ref dropped last FILE_CACHE ref on " << *in << dendl;
+      ++put_nref;
+      // release clean pages too, if we dont want RDCACHE
+      if (!(in->caps_wanted() & CEPH_CAP_FILE_CACHE))
+	drop |= CEPH_CAP_FILE_CACHE;
     }
+    if (drop) {
+      if (drop & CEPH_CAP_FILE_CACHE)
+	_invalidate_inode_cache(in);
+      else
+	check_caps(in, false);
+    }
+    if (put_nref)
+      put_inode(in, put_nref);
   }
 }
-
 
 int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
 {
@@ -2338,6 +2354,14 @@ int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
   }
 }
 
+int Client::get_caps_used(Inode *in)
+{
+  unsigned used = in->caps_used();
+  if (!(used & CEPH_CAP_FILE_CACHE) &&
+      !objectcacher->set_is_empty(&in->oset))
+    used |= CEPH_CAP_FILE_CACHE;
+  return used;
+}
 
 void Client::cap_delay_requeue(Inode *in)
 {
@@ -2386,7 +2410,7 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
 				   in->ino,
 				   0,
 				   cap->cap_id, cap->seq,
-				   cap->issued,
+				   cap->implemented,
 				   want,
 				   flush,
 				   cap->mseq);
@@ -2434,10 +2458,10 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
 void Client::check_caps(Inode *in, bool is_delayed)
 {
   unsigned wanted = in->caps_wanted();
-  unsigned used = in->caps_used();
+  unsigned used = get_caps_used(in);
   unsigned cap_used;
 
-  int retain = wanted | CEPH_CAP_PIN;
+  int retain = wanted | used | CEPH_CAP_PIN;
   if (!unmounting) {
     if (wanted)
       retain |= CEPH_CAP_ANY;
@@ -2548,7 +2572,7 @@ struct C_SnapFlush : public Context {
 
 void Client::queue_cap_snap(Inode *in, snapid_t seq)
 {
-  int used = in->caps_used();
+  int used = get_caps_used(in);
   int dirty = in->caps_dirty();
   ldout(cct, 10) << "queue_cap_snap " << *in << " seq " << seq << " used " << ccap_string(used) << dendl;
 
@@ -2741,9 +2765,8 @@ void Client::_async_invalidate(Inode *in, int64_t off, int64_t len, bool keep_ca
   ino_invalidate_cb(ino_invalidate_cb_handle, in->vino(), off, len);
 
   client_lock.Lock();
-  if (!keep_caps) {
-    put_cap_ref(in, CEPH_CAP_FILE_CACHE);
-  }
+  if (!keep_caps)
+    check_caps(in, false);
   put_inode(in);
   client_lock.Unlock();
   ldout(cct, 10) << "_async_invalidate " << off << "~" << len << (keep_caps ? " keep_caps" : "") << " done" << dendl;
@@ -2755,11 +2778,10 @@ void Client::_schedule_invalidate_callback(Inode *in, int64_t off, int64_t len, 
     // we queue the invalidate, which calls the callback and decrements the ref
     async_ino_invalidator.queue(new C_Client_CacheInvalidate(this, in, off, len, keep_caps));
   else if (!keep_caps)
-    // if not set, we just decrement the cap ref here
-    in->put_cap_ref(CEPH_CAP_FILE_CACHE);
+    check_caps(in, false);
 }
 
-void Client::_invalidate_inode_cache(Inode *in, bool keep_caps)
+void Client::_invalidate_inode_cache(Inode *in)
 {
   ldout(cct, 10) << "_invalidate_inode_cache " << *in << dendl;
 
@@ -2767,10 +2789,10 @@ void Client::_invalidate_inode_cache(Inode *in, bool keep_caps)
   if (cct->_conf->client_oc)
     objectcacher->release_set(&in->oset);
 
-  _schedule_invalidate_callback(in, 0, 0, keep_caps);
+  _schedule_invalidate_callback(in, 0, 0, false);
 }
 
-void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len, bool keep_caps)
+void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len)
 {
   ldout(cct, 10) << "_invalidate_inode_cache " << *in << " " << off << "~" << len << dendl;
 
@@ -2781,14 +2803,14 @@ void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len, bool k
     objectcacher->discard_set(&in->oset, ls);
   }
 
-  _schedule_invalidate_callback(in, off, len, keep_caps);
+  _schedule_invalidate_callback(in, off, len, true);
 }
 
 void Client::_release(Inode *in)
 {
   ldout(cct, 20) << "_release " << *in << dendl;
-  if (in->cap_refs[CEPH_CAP_FILE_CACHE]) {
-    _invalidate_inode_cache(in, false);
+  if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0) {
+    _invalidate_inode_cache(in);
   }
 }
 
@@ -2860,12 +2882,7 @@ void Client::_flushed(Inode *in)
 {
   ldout(cct, 10) << "_flushed " << *in << dendl;
 
-  // release clean pages too, if we dont hold RDCACHE reference
-  if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0) {
-    _invalidate_inode_cache(in, true);
-  }
-
-  put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+  put_cap_ref(in, CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_BUFFER);
 }
 
 
@@ -3047,7 +3064,7 @@ void Client::trim_caps(MetaSession *s, int max)
       int mine = cap->issued | cap->implemented;
       int oissued = in->auth_cap ? in->auth_cap->issued : 0;
       // disposable non-auth cap
-      if (!(in->caps_used() & ~oissued & mine)) {
+      if (!(get_caps_used(in) & ~oissued & mine)) {
 	ldout(cct, 20) << " removing unused, unneeded non-auth cap on " << *in << dendl;
 	remove_cap(cap, true);
 	trimmed++;
@@ -3135,10 +3152,8 @@ void Client::flush_caps(Inode *in, MetaSession *session)
   Cap *cap = in->auth_cap;
   assert(cap->session == session);
 
-  int wanted = in->caps_wanted();
-  int retain = wanted | CEPH_CAP_PIN;
-
-  send_cap(in, session, cap, in->caps_used(), wanted, retain, in->flushing_caps);
+  send_cap(in, session, cap, get_caps_used(in), in->caps_wanted(),
+	   (cap->issued | cap->implemented), in->flushing_caps);
 }
 
 void Client::wait_sync_caps(uint64_t want)
@@ -3700,7 +3715,7 @@ void Client::_invalidate_inode_parents(Inode *in)
 void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClientCaps *m)
 {
   int mds = session->mds_num;
-  int used = in->caps_used();
+  int used = get_caps_used(in);
   int wanted = in->caps_wanted();
 
   const int old_caps = cap->issued;
@@ -3764,12 +3779,12 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     cap->issued = new_caps;
     cap->implemented |= new_caps;
 
-    if ((~cap->issued & old_caps) & CEPH_CAP_FILE_CACHE)
-      _release(in);
     
     if (((used & ~new_caps) & CEPH_CAP_FILE_BUFFER) &&
 	!_flush(in)) {
       // waitin' for flush
+    } else if ((old_caps & ~new_caps) & CEPH_CAP_FILE_CACHE) {
+      _release(in);
     } else {
       cap->wanted = 0; // don't let check_caps skip sending a response to MDS
       check = true;
@@ -3796,7 +3811,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
   }
 
   if (check)
-    check_caps(in, true);
+    check_caps(in, false);
 
   // wake up waiters
   if (new_caps)
@@ -5789,7 +5804,13 @@ int Client::_release_fh(Fh *f)
   if (in->snapid == CEPH_NOSNAP) {
     if (in->put_open_ref(f->mode)) {
       _flush(in);
-      check_caps(in, false);
+      // release clean pages too, if we dont want RDCACHE
+      if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0 &&
+	  !(in->caps_wanted() & CEPH_CAP_FILE_CACHE) &&
+	  !objectcacher->set_is_empty(&in->oset))
+	_invalidate_inode_cache(in);
+      else
+	check_caps(in, false);
     }
   } else {
     assert(in->snap_cap_refs > 0);
@@ -6014,6 +6035,14 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
 
   //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
 
+  bool movepos = false;
+  if (offset < 0) {
+    lock_fh_pos(f);
+    offset = f->pos;
+    movepos = true;
+  }
+  loff_t start_pos = offset;
+
   if (in->inline_version == 0) {
     int r = _getattr(in, CEPH_STAT_CAP_INLINE_DATA, -1, -1, true);
     if (r < 0)
@@ -6021,17 +6050,11 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
     assert(in->inline_version > 0);
   }
 
+retry:
   int have;
   int r = get_caps(in, CEPH_CAP_FILE_RD, CEPH_CAP_FILE_CACHE, &have, -1);
   if (r < 0)
     return r;
-
-  bool movepos = false;
-  if (offset < 0) {
-    lock_fh_pos(f);
-    offset = f->pos;
-    movepos = true;
-  }
 
   Mutex uninline_flock("Clinet::_read_uninline_data flock");
   Cond uninline_cond;
@@ -6075,25 +6098,33 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
       _flush_range(in, offset, size);
     }
     r = _read_async(f, offset, size, bl);
+    if (r < 0)
+      goto done;
   } else {
-    r = _read_sync(f, offset, size, bl);
-  }
+    bool checkeof = false;
+    r = _read_sync(f, offset, size, bl, &checkeof);
+    if (r < 0)
+      goto done;
+    if (checkeof) {
+      offset += r;
+      size -= r;
 
-  // don't move pointer if the read failed
-  if (r < 0) {
-    goto done;
+      put_cap_ref(in, CEPH_CAP_FILE_RD);
+      have = 0;
+      // reverify size
+      r = _getattr(in, CEPH_STAT_CAP_SIZE);
+      if (r < 0)
+	goto done;
+
+      // eof?  short read.
+      if ((uint64_t)offset < in->size)
+	goto retry;
+    }
   }
 
 success:
-
-  if (movepos) {
-    // adjust fd pos
-    f->pos = offset+bl->length();
-    unlock_fh_pos(f);
-  }
-
   // adjust readahead state
-  if (f->last_pos != offset) {
+  if (f->last_pos != start_pos) {
     f->nr_consec_read = f->consec_read_bytes = 0;
   } else {
     f->nr_consec_read++;
@@ -6101,9 +6132,15 @@ success:
   f->consec_read_bytes += bl->length();
   ldout(cct, 10) << "readahead nr_consec_read " << f->nr_consec_read
 	   << " for " << f->consec_read_bytes << " bytes" 
-	   << " .. last_pos " << f->last_pos << " .. offset " << offset
-	   << dendl;
-  f->last_pos = offset+bl->length();
+	   << " .. last_pos " << f->last_pos << " .. offset "
+	   << start_pos << dendl;
+
+  f->last_pos = start_pos + bl->length();
+  if (movepos) {
+    // adjust fd pos
+    f->pos = f->last_pos;
+    unlock_fh_pos(f);
+  }
 
 done:
   // done!
@@ -6125,8 +6162,9 @@ done:
       r = uninline_ret;
   }
 
-  put_cap_ref(in, CEPH_CAP_FILE_RD);
-  return r;
+  if (have)
+    put_cap_ref(in, CEPH_CAP_FILE_RD);
+  return r < 0 ? r : bl->length();
 }
 
 int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
@@ -6145,10 +6183,6 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
     readahead = false;
   }
 
-  // we will populate the cache here
-  if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0)
-    in->get_cap_ref(CEPH_CAP_FILE_CACHE);
-  
   ldout(cct, 10) << "readahead=" << readahead << " nr_consec=" << f->nr_consec_read
 	   << " max_byes=" << conf->client_readahead_max_bytes
 	   << " max_periods=" << conf->client_readahead_max_periods << dendl;
@@ -6196,7 +6230,7 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
 					NULL, 0, onfinish);
 	if (r == 0) {
 	  ldout(cct, 20) << "readahead initiated, c " << onfinish << dendl;
-	  in->get();
+	  get_cap_ref(in, CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
 	} else {
 	  ldout(cct, 20) << "readahead was no-op, already cached" << dendl;
 	  delete onfinish;
@@ -6214,12 +6248,14 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
   r = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
 			      off, len, bl, 0, onfinish);
   if (r == 0) {
+    get_cap_ref(in, CEPH_CAP_FILE_CACHE);
     client_lock.Unlock();
     flock.Lock();
     while (!done)
       cond.Wait(flock);
     flock.Unlock();
     client_lock.Lock();
+    put_cap_ref(in, CEPH_CAP_FILE_CACHE);
     r = rvalue;
   } else {
     // it was cached.
@@ -6228,7 +6264,8 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
   return r;
 }
 
-int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
+int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
+		       bool *checkeof)
 {
   Inode *in = f->inode;
   uint64_t pos = off;
@@ -6287,14 +6324,8 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
 	  return read;
       }
 
-      // reverify size
-      r = _getattr(in, CEPH_STAT_CAP_SIZE);
-      if (r < 0)
-	return r;
-
-      // eof?  short read.
-      if (pos >= in->size)
-	return read;
+      *checkeof = true;
+      return read;
     }
   }
   return read;
@@ -6451,7 +6482,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   if (cct->_conf->client_oc && (have & CEPH_CAP_FILE_BUFFER)) {
     // do buffered write
     if (!in->oset.dirty_or_tx)
-      get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+      get_cap_ref(in, CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_BUFFER);
 
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
@@ -8550,7 +8581,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
       unsafe_sync_write++;
       get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
-      _invalidate_inode_cache(in, offset, length, true);
+      _invalidate_inode_cache(in, offset, length);
       r = filer->zero(in->ino, &in->layout,
                       in->snaprealm->get_snap_context(),
                       offset, length,
