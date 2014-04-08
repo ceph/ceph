@@ -75,8 +75,8 @@ following steps:
 
 	sudo vim /etc/yum.repos.d/ceph.repo
 
-   Paste the following example code. Replace ``{ceph-stable-release}`` with 
-   the recent stable release of Ceph (e.g., ``dumpling``). Replace ``{distro}``
+   Paste the following example code. Replace ``{ceph-release}`` with 
+   the recent major release of Ceph (e.g., ``firefly``). Replace ``{distro}``
    with your Linux distribution (e.g., ``el6`` for CentOS 6, ``rhel6`` for 
    Red Hat 6, ``fc18`` or ``fc19`` for Fedora 18 or Fedora 19, and ``sles11`` 
    for SLES 11). Finally, save the contents to the 
@@ -84,7 +84,7 @@ following steps:
 
 	[ceph-noarch]
 	name=Ceph noarch packages
-	baseurl=http://ceph.com/rpm-{ceph-stable-release}/{distro}/noarch
+	baseurl=http://ceph.com/rpm-{ceph-release}/{distro}/noarch
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
@@ -95,6 +95,11 @@ following steps:
 
 	sudo yum update && sudo yum install ceph-deploy
 
+
+.. note:: Some distributions (e.g., RHEL) require you to comment out 
+   ``Default requiretty`` in the ``/etc/sudoers`` file for ``ceph-deploy`` to 
+   work properly. If editing, ``/etc/sudoers``, ensure that you use 
+   ``sudo visudo`` rather than a text editor.
 
 
 Ceph Node Setup
