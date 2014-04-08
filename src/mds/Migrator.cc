@@ -2618,7 +2618,7 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
   it->second.peer_exports.swap(peer_exports);
 
   // clear import state (we're done!)
-  MutationRef& mut = it->second.mut;
+  MutationRef mut = it->second.mut;
   import_state.erase(it);
 
   mds->mdlog->start_submit_entry(new EImportFinish(dir, true));
