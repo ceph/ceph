@@ -1797,6 +1797,7 @@ void PG::all_activated_and_committed()
 
   // info.last_epoch_started is set during activate()
   info.history.last_epoch_started = info.last_epoch_started;
+  state_clear(PG_STATE_CREATING);
 
   share_pg_info();
   publish_stats_to_osd();
@@ -4664,6 +4665,12 @@ void PG::start_peering_interval(
     set_role(-1);
 
   reg_next_scrub();
+
+  // set CREATING bit until we have peered for the first time.
+  if (is_primary() && info.history.last_epoch_started == 0)
+    state_set(PG_STATE_CREATING);
+  else
+    state_clear(PG_STATE_CREATING);
 
   // did acting, up, primary|acker change?
   if (!lastmap) {
