@@ -87,8 +87,10 @@ BuildRequires:  gperftools-devel
 %endif
 
 %description
-Ceph is a distributed network file system designed to provide excellent
-performance, reliability, and scalability.
+Ceph is a massively scalable, open-source, distributed
+storage system that runs on commodity hardware and delivers object,
+block and file system storage.
+
 
 #################################################################################
 # packages
