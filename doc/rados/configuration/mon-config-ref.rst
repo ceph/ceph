@@ -152,15 +152,15 @@ Bootstrapping Monitors
 
 In most configuration and deployment cases, tools that deploy Ceph may help
 bootstrap the Ceph Monitors by generating a monitor map for you (e.g.,
-``mkcephfs``, ``ceph-deploy``, etc). A Ceph Monitor requires a few explicit
+``ceph-deploy``, etc). A Ceph Monitor requires a few explicit
 settings:
 
-- **Filesystem ID**: The ``fsid`` is the unique identifier for your object
-  store. Since you can run multiple clusters on the same hardware, you must 
-  specify the unique ID of the object store when bootstrapping a monitor. 
-  Deployment tools usually do this for you (e.g., ``mkcephfs`` or 
-  ``ceph-deploy`` can call a tool like ``uuidgen``), but you may specify the 
-  ``fsid`` manually too.
+- **Filesystem ID**: The ``fsid`` is the unique identifier for your
+  object store. Since you can run multiple clusters on the same
+  hardware, you must specify the unique ID of the object store when
+  bootstrapping a monitor.  Deployment tools usually do this for you
+  (e.g., ``ceph-deploy`` can call a tool like ``uuidgen``), but you
+  may specify the ``fsid`` manually too.
   
 - **Monitor ID**: A monitor ID is a unique ID assigned to each monitor within 
   the cluster. It is an alphanumeric value, and by convention the identifier 
@@ -169,7 +169,7 @@ settings:
   by a deployment tool, or using the ``ceph`` commandline.
 
 - **Keys**: The monitor must have secret keys. A deployment tool such as 
-  ``mkcephfs`` or ``ceph-deploy`` usually does this for you, but you may
+  ``ceph-deploy`` usually does this for you, but you may
   perform this step manually too. See `Monitor Keyrings`_ for details.
 
 For additional details on bootstrapping, see `Bootstrapping a Monitor`_.
