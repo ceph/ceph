@@ -591,6 +591,7 @@ private:
   bool _flush_set_finish(C_GatherBuilder *gather, Context *onfinish);
 
 public:
+  bool set_is_empty(ObjectSet *oset);
   bool set_is_cached(ObjectSet *oset);
   bool set_is_dirty_or_committing(ObjectSet *oset);
 
