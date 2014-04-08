@@ -500,6 +500,11 @@ void MDLog::_replay_thread()
 	   !journaler->get_error()) {
       journaler->wait_for_readable(new C_MDL_Replay(this));
       replay_cond.Wait(mds->mds_lock);
+      if (mds->get_want_state() == CEPH_MDS_STATE_DNE) {
+        dout(0) << "_replay_thread aborting due to DNE state" << dendl;
+        mds->mds_lock.Unlock();
+        return;
+      }
     }
     if (journaler->get_error()) {
       r = journaler->get_error();
@@ -533,9 +538,21 @@ void MDLog::_replay_thread()
           if (err) { // well, crap
             dout(0) << "got error while reading head: " << cpp_strerror(err)
                     << dendl;
-            mds->suicide();
+            mds->mds_lock.Lock();
+            if (mds->get_want_state() != CEPH_MDS_STATE_DNE) {
+              mds->suicide();
+            }
+            mds->mds_lock.Unlock();
+            // Now that we've suicided, it's time to return so that we
+            // don't try to read/do anything after the loop.
+            return;
           }
           mds->mds_lock.Lock();
+          if (mds->get_want_state() == CEPH_MDS_STATE_DNE) {
+            dout(0) << "_replay_thread aborting due to DNE state" << dendl;
+            mds->mds_lock.Unlock();
+            return;
+          }
 	  standby_trim_segments();
           if (journaler->get_read_pos() < journaler->get_expire_pos()) {
             dout(0) << "expire_pos is higher than read_pos, returning EAGAIN" << dendl;
@@ -602,6 +619,11 @@ void MDLog::_replay_thread()
     // drop lock for a second, so other events/messages (e.g. beacon timer!) can go off
     mds->mds_lock.Unlock();
     mds->mds_lock.Lock();
+    if (mds->get_want_state() == CEPH_MDS_STATE_DNE) {
+      dout(0) << "_replay_thread aborting due to DNE state" << dendl;
+      mds->mds_lock.Unlock();
+      return;
+    }
   }
 
   // done!
