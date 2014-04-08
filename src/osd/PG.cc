@@ -4911,20 +4911,25 @@ bool PG::can_discard_op(OpRequestRef op)
     dout(20) << " discard " << *m << dendl;
     return true;
   }
+
+  if (m->get_map_epoch() < info.history.same_primary_since) {
+    dout(7) << " changed after " << m->get_map_epoch()
+	    << ", dropping " << *m << dendl;
+    return true;
+  }
+
   if ((m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
 			 CEPH_OSD_FLAG_LOCALIZE_READS)) &&
       op->may_read() &&
       !(op->may_write() || op->may_cache())) {
     // balanced reads; any replica will do
-    if (!((is_primary() || is_replica()) &&
-	  same_for_read_since(m->get_map_epoch()))) {
+    if (!(is_primary() || is_replica())) {
       osd->handle_misdirected_op(this, op);
       return true;
     }
   } else {
     // normal case; must be primary
-    if (!(is_primary() &&
-	  same_for_modify_since(m->get_map_epoch()))) {
+    if (!is_primary()) {
       osd->handle_misdirected_op(this, op);
       return true;
     }
