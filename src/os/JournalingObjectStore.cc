@@ -25,6 +25,7 @@ void JournalingObjectStore::journal_stop()
     delete journal;
     journal = 0;
   }
+  apply_manager.reset();
 }
 
 int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
