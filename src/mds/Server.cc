@@ -548,8 +548,7 @@ void Server::journal_close_session(Session *session, int state)
     session->requests.begin(member_offset(MDRequestImpl,
 					  item_session_request));
   while (!p.end()) {
-    MDRequestRef mdr = ceph::static_pointer_cast<MDRequestImpl,MutationImpl>((*p)->self_ref.lock());
-    assert(mdr);
+    MDRequestRef mdr = mdcache->request_get((*p)->reqid);
     ++p;
     mdcache->request_kill(mdr);
   }
