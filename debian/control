@@ -61,8 +61,9 @@ Recommends: btrfs-tools, ceph-mds, librados2, librbd1
 Replaces: ceph-common (<< 0.78-500)
 X-Python-Version: >= 2.6
 Description: distributed storage and file system
- Ceph is a distributed storage system designed to provide excellent
- performance, reliability, and scalability.
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
  .
  This package contains all server daemons and management tools for creating,
  running, and administering a Ceph storage cluster, with the exception of the
@@ -87,8 +88,9 @@ Recommends: ceph-fs-common, ceph-fuse, libcephfs1
 Replaces: ceph (<< 0.58-1)
 Breaks: ceph (<< 0.58-1)
 Description: metadata server for the ceph distributed file system
- Ceph is a distributed storage and network file system designed to
- provide excellent performance, reliability, and scalability.
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
  .
  This package contains the metadata server daemon, which is used to
  create a distributed file system on top of the ceph storage cluster.
@@ -99,8 +101,9 @@ Section: debug
 Priority: extra
 Depends: ceph-mds (= ${binary:Version}), ${misc:Depends}
 Description: debugging symbols for ceph-mds
- Ceph is a distributed storage and network file system designed to provide
- excellent performance, reliability, and scalability.
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
  .
  This package contains the debugging symbols for ceph-mds.
 
@@ -109,8 +112,9 @@ Architecture: linux-any
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Recommends: fuse
 Description: FUSE-based client for the Ceph distributed file system
- Ceph is a distributed network file system designed to provide
- excellent performance, reliability, and scalability.  This is a
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is a
  FUSE-based client that allows one to mount a Ceph file system without
  root privileges.
  .
@@ -126,8 +130,9 @@ Section: debug
 Priority: extra
 Depends: ceph-fuse (= ${binary:Version}), ${misc:Depends}
 Description: debugging symbols for ceph-fuse
- Ceph is a distributed network file system designed to provide
- excellent performance, reliability, and scalability.  This is a
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is a
  FUSE-based client that allows one to mount a Ceph file system without
  root privileges.
  .
@@ -138,8 +143,9 @@ Architecture: linux-any
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Recommends: fuse
 Description: FUSE-based rbd client for the Ceph distributed file system
- Ceph is a distributed network file system designed to provide
- excellent performance, reliability, and scalability.  This is a
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is a
  FUSE-based client that allows one to map Ceph rbd images as files.
  .
  FUSE base client that allows one to map Ceph rbd images as files.
@@ -150,8 +156,9 @@ Section: debug
 Priority: extra
 Depends: rbd-fuse (= ${binary:Version}), ${misc:Depends}
 Description: debugging symbols for rbd-fuse
- Ceph is a distributed network file system designed to provide
- excellent performance, reliability, and scalability.  This is a
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is a
  FUSE-based client that allows one to map Ceph rbd images as files.
  .
  This package contains the debugging symbols for rbd-fuse.
@@ -165,8 +172,9 @@ Replaces: ceph-client-tools, ceph (<< 0.78-500)
 Breaks: ceph (<< 0.78-500)
 Suggests: ceph, ceph-mds
 Description: common utilities to mount and interact with a ceph storage cluster
- Ceph is a distributed storage and file system designed to provide
- excellent performance, reliability, and scalability.  This is a collection
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is a collection
  of common tools that allow one to interact with and administer a Ceph cluster.
 
 Package: ceph-common-dbg
@@ -177,8 +185,9 @@ Replaces: ceph-client-tools-dbg
 Section: debug
 Priority: extra
 Description: debugging symbols for ceph-common
- Ceph is a distributed storage and file system designed to provide
- excellent performance, reliability, and scalability.  This is a collection
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is a collection
  of common tools that allow one to interact with and administer a Ceph cluster.
  .
  This package contains the debugging symbols for ceph-common.
@@ -189,8 +198,9 @@ Depends: ${misc:Depends}, ${shlibs:Depends}
 Conflicts: ceph-client-tools
 Suggests: ceph-mds
 Description: common utilities to mount and interact with a ceph file system
- Ceph is a distributed network file system designed to provide
- excellent performance, reliability, and scalability.  This is a collection
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is a collection
  of common tools, including the mount utility, that allows one to mount the
  Ceph file system with the kernel client.
 
@@ -202,8 +212,9 @@ Replaces: ceph-client-tools-dbg
 Section: debug
 Priority: extra
 Description: debugging symbols for ceph-fs-common
- Ceph is a distributed network file system designed to provide
- excellent performance, reliability, and scalability.  This is a collection
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is a collection
  of common tools, including the mount utility, that allows one to mount the
  Ceph file system with the kernel client.
  .
@@ -215,8 +226,9 @@ Recommends: pacemaker
 Priority: extra
 Depends: ceph (= ${binary:Version}), resource-agents, ${misc:Depends}
 Description: OCF-compliant resource agents for Ceph
- Ceph is a distributed storage and network file system designed to provide
- excellent performance, reliability, and scalability.
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
  .
  This package contains the resource agents (RAs) which integrate
  Ceph with OCF-compliant cluster resource managers,
@@ -309,8 +321,9 @@ Architecture: linux-any
 Section: libs
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Description: Ceph distributed file system client library
- Ceph is a distributed network file system designed to provide
- excellent performance, reliability, and scalability.  This is a
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is a
  shared library allowing applications to access a Ceph distributed
  file system via a POSIX-like interface.
 
@@ -322,8 +335,9 @@ Depends: libcephfs1 (= ${binary:Version}), ${misc:Depends}
 Conflicts: libceph1-dbg
 Replaces: libceph1-dbg
 Description: debugging symbols for libcephfs1
- Ceph is a distributed network file system designed to provide
- excellent performance, reliability, and scalability.  This is a
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is a
  shared library allowing applications to access a Ceph distributed
  file system via a POSIX-like interface.
  .
@@ -336,8 +350,9 @@ Depends: libcephfs1 (= ${binary:Version}), ${misc:Depends}
 Conflicts: libceph-dev, libceph1-dev, libcephfs1-dev
 Replaces: libceph-dev, libceph1-dev, libcephfs1-dev
 Description: Ceph distributed file system client library (development files)
- Ceph is a distributed network file system designed to provide
- excellent performance, reliability, and scalability.  This is a
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is a
  shared library allowing applications to access a Ceph distributed
  file system via a POSIX-like interface.
  .
@@ -405,8 +420,9 @@ Section: python
 Depends: librados2, librbd1, python-flask, ${misc:Depends}, ${python:Depends}
 X-Python-Version: >= 2.6
 Description: Python libraries for the Ceph distributed filesystem
- Ceph is a distributed storage and network file system designed to provide
- excellent performance, reliability, and scalability.
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
  .
  This package contains Python libraries for interacting with Ceph's
  RADOS object storage, and RBD (RADOS block device).
