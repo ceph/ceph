@@ -4910,16 +4910,26 @@ bool PG::can_discard_op(OpRequestRef op)
   if (OSD::op_is_discardable(m)) {
     dout(20) << " discard " << *m << dendl;
     return true;
-  } else if ((op->may_write() || op->may_cache()) &&
-	     (!is_primary() ||
-	      !same_for_modify_since(m->get_map_epoch()))) {
-    osd->handle_misdirected_op(this, op);
-    return true;
-  } else if (op->may_read() &&
-	     !same_for_read_since(m->get_map_epoch())) {
-    osd->handle_misdirected_op(this, op);
-    return true;
-  } else if (is_replay()) {
+  }
+  if ((m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
+			 CEPH_OSD_FLAG_LOCALIZE_READS)) &&
+      op->may_read() &&
+      !(op->may_write() || op->may_cache())) {
+    // balanced reads; any replica will do
+    if (!((is_primary() || is_replica()) &&
+	  same_for_read_since(m->get_map_epoch()))) {
+      osd->handle_misdirected_op(this, op);
+      return true;
+    }
+  } else {
+    // normal case; must be primary
+    if (!(is_primary() &&
+	  same_for_modify_since(m->get_map_epoch()))) {
+      osd->handle_misdirected_op(this, op);
+      return true;
+    }
+  }
+  if (is_replay()) {
     if (m->get_version().version > 0) {
       dout(7) << " queueing replay at " << m->get_version()
 	      << " for " << *m << dendl;
