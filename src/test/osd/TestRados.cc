@@ -292,6 +292,10 @@ int main(int argc, char **argv)
       no_omap = true;
     } else if (strcmp(argv[i], "--op") == 0) {
       i++;
+      if (i == argc) {
+        cerr << "Missing op after --op" << std::endl;
+        return 1;
+      }
       int j;
       for (j = 0; op_types[j].name; ++j) {
 	if (strcmp(op_types[j].name, argv[i]) == 0) {
@@ -302,7 +306,12 @@ int main(int argc, char **argv)
 	cerr << "unknown op " << argv[i] << std::endl;
 	exit(1);
       }
-      int weight = atoi(argv[++i]);
+      i++;
+      if (i == argc) {
+	cerr << "Weight unspecified." << std::endl;
+	return 1;
+      }
+      int weight = atoi(argv[i]);
       if (weight < 0) {
 	cerr << "Weights must be nonnegative." << std::endl;
 	return 1;
