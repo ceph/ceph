@@ -2107,10 +2107,6 @@ public:
   virtual int do_command(cmdmap_t cmdmap, ostream& ss,
 			 bufferlist& idata, bufferlist& odata) = 0;
 
-  virtual bool same_for_read_since(epoch_t e) = 0;
-  virtual bool same_for_modify_since(epoch_t e) = 0;
-  virtual bool same_for_rep_modify_since(epoch_t e) = 0;
-
   virtual void on_role_change() = 0;
   virtual void on_pool_change() = 0;
   virtual void on_change(ObjectStore::Transaction *t) = 0;
