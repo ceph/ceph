@@ -241,9 +241,8 @@ bin_SCRIPTS += \
 	ceph-crush-location
 
 BUILT_SOURCES += init-ceph
-su_sbin_SCRIPTS += mkcephfs
 
-shell_scripts += init-ceph mkcephfs
+shell_scripts += init-ceph
 
 
 
@@ -268,7 +267,7 @@ admin-tools: monmaptool osdmaptool crushtool ceph-authtool
 base: core-daemons admin-tools \
 	cephfs ceph-syn ceph-conf \
 	rados librados-config \
-	init-ceph mkcephfs ceph_mon_store_converter ceph-post-file
+	init-ceph ceph_mon_store_converter ceph-post-file
 
 
 # version stuff

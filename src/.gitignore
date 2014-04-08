@@ -55,7 +55,6 @@ Makefile
 /keyring
 /librados-config
 /massif.out.*
-/mkcephfs
 /mnt
 /monmaptool
 /mount.ceph

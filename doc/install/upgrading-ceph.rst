@@ -207,7 +207,7 @@ ceph-deploy
 -----------
 
 The ``ceph-deploy`` tool is now the preferred method of provisioning new clusters.
-For existing clusters created via ``mkcephfs`` that would like to transition to the
+For existing clusters created via the obsolete ``mkcephfs`` tool that would like to transition to the
 new tool, there is a migration path, documented at `Transitioning to ceph-deploy`_.
 
 Cuttlefish to Dumpling
