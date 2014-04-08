@@ -14,7 +14,7 @@
 
 . /lib/lsb/init-functions
 
-# if we start up as ./mkcephfs, assume everything else is in the
+# if we start up as ./init-ceph, assume everything else is in the
 # current directory too.
 if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
     BINDIR=.
@@ -348,7 +348,7 @@ for name in $what; do
 		# for the mon data and admin socket.  if so, run
 		# ceph-create-keys.  this is the case for (normal)
 		# chef and ceph-deploy clusters, which is who needs
-		# these keys.  it's also true for default installs
+		# these keys.  it's also true for legacy installs
 		# via mkcephfs, which is fine too; there is no harm
 		# in creating these keys.
 		get_conf mon_data "/var/lib/ceph/mon/ceph-$id" "mon data"

@@ -27,7 +27,7 @@ possibility of concurrent failures, it may be desirable to ensure that data
 replicas are on devices using different shelves, racks, power supplies,
 controllers, and/or physical locations.
 
-When you create a configuration file and deploy Ceph with ``mkcephfs``, Ceph
+When you create a configuration file and deploy Ceph with `ceph-deploy``, Ceph
 generates a default CRUSH map for your configuration. The default CRUSH map is
 fine for your Ceph sandbox environment. However, when you deploy a large-scale
 data cluster, you should give significant consideration to developing a custom
