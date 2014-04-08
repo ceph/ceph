@@ -159,6 +159,7 @@ X-ION <contact@x-ion.de> Stephan Renatus <s.renatus@x-ion.de>
 Piston Cloud Computing <info@pistoncloud.com> Mike Lundy <mike@fluffypenguin.org>
 SendFaster <contact@sendfaster.com> Christopher O'Connell <jwriteclub@gmail.com>
 iNic <contact@inic.no> Bjørnar Ness <bjornar.ness@gmail.com>
+Pogoapp <contact@pogoapp.com> Paul Meserve <paul@pogodan.com>
 #
 # Local Variables:
 # compile-command: "git log --pretty='%aN <%aE>' | \
