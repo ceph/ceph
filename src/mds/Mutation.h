@@ -34,7 +34,6 @@ class MClientRequest;
 class MMDSSlaveRequest;
 
 struct MutationImpl {
-  ceph::weak_ptr<MutationImpl> self_ref;
   metareqid_t reqid;
   __u32 attempt;      // which attempt for this request
   LogSegment *ls;  // the log segment i'm committing to
@@ -80,16 +79,14 @@ struct MutationImpl {
   list<pair<CDentry*,version_t> > dirty_cow_dentries;
 
   MutationImpl()
-    : self_ref(),
-      attempt(0),
+    : attempt(0),
       ls(0),
       slave_to_mds(-1),
       locking(NULL),
       locking_target_mds(-1),
       done_locking(false), committing(false), aborted(false), killed(false) { }
   MutationImpl(metareqid_t ri, __u32 att=0, int slave_to=-1)
-    : self_ref(),
-      reqid(ri), attempt(att),
+    : reqid(ri), attempt(att),
       ls(0),
       slave_to_mds(slave_to), 
       locking(NULL),
@@ -140,10 +137,6 @@ struct MutationImpl {
 
   virtual void print(ostream &out) {
     out << "mutation(" << this << ")";
-  }
-
-  void set_self_ref(ceph::shared_ptr<MutationImpl>& ref) {
-    self_ref = ref;
   }
 };
 
@@ -314,9 +307,6 @@ struct MDRequestImpl : public MutationImpl {
   void clear_ambiguous_auth();
 
   void print(ostream &out);
-  void set_self_ref(ceph::shared_ptr<MDRequestImpl>& ref) {
-    self_ref = ceph::static_pointer_cast<MutationImpl,MDRequestImpl>(ref);
-  }
 };
 
 typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
