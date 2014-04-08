@@ -33,7 +33,8 @@ class ScatterLock;
 class MClientRequest;
 class MMDSSlaveRequest;
 
-struct Mutation {
+struct MutationImpl {
+  ceph::weak_ptr<MutationImpl> self_ref;
   metareqid_t reqid;
   __u32 attempt;      // which attempt for this request
   LogSegment *ls;  // the log segment i'm committing to
@@ -78,21 +79,23 @@ struct Mutation {
   list<CInode*> dirty_cow_inodes;
   list<pair<CDentry*,version_t> > dirty_cow_dentries;
 
-  Mutation()
-    : attempt(0),
+  MutationImpl()
+    : self_ref(),
+      attempt(0),
       ls(0),
       slave_to_mds(-1),
       locking(NULL),
       locking_target_mds(-1),
       done_locking(false), committing(false), aborted(false), killed(false) { }
-  Mutation(metareqid_t ri, __u32 att=0, int slave_to=-1)
-    : reqid(ri), attempt(att),
+  MutationImpl(metareqid_t ri, __u32 att=0, int slave_to=-1)
+    : self_ref(),
+      reqid(ri), attempt(att),
       ls(0),
       slave_to_mds(slave_to), 
       locking(NULL),
       locking_target_mds(-1),
       done_locking(false), committing(false), aborted(false), killed(false) { }
-  virtual ~Mutation() {
+  virtual ~MutationImpl() {
     assert(locking == NULL);
     assert(pins.empty());
     assert(auth_pins.empty());
@@ -138,15 +141,19 @@ struct Mutation {
   virtual void print(ostream &out) {
     out << "mutation(" << this << ")";
   }
+
+  void set_self_ref(ceph::shared_ptr<MutationImpl>& ref) {
+    self_ref = ref;
+  }
 };
 
-inline ostream& operator<<(ostream& out, Mutation &mut)
+inline ostream& operator<<(ostream& out, MutationImpl &mut)
 {
   mut.print(out);
   return out;
 }
 
-
+typedef ceph::shared_ptr<MutationImpl> MutationRef;
 
 
 
@@ -155,10 +162,9 @@ inline ostream& operator<<(ostream& out, Mutation &mut)
  * mostly information about locks held, so that we can drop them all
  * the request is finished or forwarded.  see request_*().
  */
-struct MDRequest : public Mutation {
-  int ref;
+struct MDRequestImpl : public MutationImpl {
   Session *session;
-  elist<MDRequest*>::item item_session_request;  // if not on list, op is aborted.
+  elist<MDRequestImpl*>::item item_session_request;  // if not on list, op is aborted.
 
   // -- i am a client (master) request
   MClientRequest *client_request; // client request (if any)
@@ -251,8 +257,7 @@ struct MDRequest : public Mutation {
 
 
   // ---------------------------------------------------
-  MDRequest() : 
-    ref(1),
+  MDRequestImpl() :
     session(0), item_session_request(this),
     client_request(0), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
@@ -265,9 +270,8 @@ struct MDRequest : public Mutation {
     _more(0) {
     in[0] = in[1] = 0; 
   }
-  MDRequest(metareqid_t ri, __u32 attempt, MClientRequest *req) : 
-    Mutation(ri, attempt),
-    ref(1),
+  MDRequestImpl(metareqid_t ri, __u32 attempt, MClientRequest *req) :
+    MutationImpl(ri, attempt),
     session(0), item_session_request(this),
     client_request(req), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
@@ -280,9 +284,8 @@ struct MDRequest : public Mutation {
     _more(0) {
     in[0] = in[1] = 0; 
   }
-  MDRequest(metareqid_t ri, __u32 attempt, int by) : 
-    Mutation(ri, attempt, by),
-    ref(1),
+  MDRequestImpl(metareqid_t ri, __u32 attempt, int by) :
+    MutationImpl(ri, attempt, by),
     session(0), item_session_request(this),
     client_request(0), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
@@ -295,16 +298,7 @@ struct MDRequest : public Mutation {
     _more(0) {
     in[0] = in[1] = 0; 
   }
-  ~MDRequest();
-
-  MDRequest *get() {
-    ++ref;
-    return this;
-  }
-  void put() {
-    if (--ref == 0)
-      delete this;
-  }
+  ~MDRequestImpl();
   
   More* more();
   bool has_more();
@@ -320,7 +314,12 @@ struct MDRequest : public Mutation {
   void clear_ambiguous_auth();
 
   void print(ostream &out);
+  void set_self_ref(ceph::shared_ptr<MDRequestImpl>& ref) {
+    self_ref = ceph::static_pointer_cast<MutationImpl,MDRequestImpl>(ref);
+  }
 };
+
+typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
 
 
 struct MDSlaveUpdate {
