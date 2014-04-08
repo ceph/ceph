@@ -817,11 +817,46 @@ void EMetaBlob::decode(bufferlist::iterator &bl)
 
 
 /**
+ * Get all inodes touched by this metablob.  Includes the 'bits' within
+ * dirlumps, and the inodes of the dirs themselves.
+ */
+void EMetaBlob::get_inodes(
+    std::set<inodeno_t> &inodes)
+{
+  // For all dirlumps in this metablob
+  for (std::map<dirfrag_t, dirlump>::iterator i = lump_map.begin(); i != lump_map.end(); ++i) {
+    // Record inode of dirlump
+    inodeno_t const dir_ino = i->first.ino;
+    inodes.insert(dir_ino);
+
+    // Decode dirlump bits
+    dirlump &dl = i->second;
+    dl._decode_bits();
+
+    // Record inodes of fullbits
+    list<ceph::shared_ptr<fullbit> > &fb_list = dl.get_dfull();
+    for (list<ceph::shared_ptr<fullbit> >::const_iterator
+        iter = fb_list.begin(); iter != fb_list.end(); ++iter) {
+      inodes.insert((*iter)->inode.ino);
+    }
+
+    // Record inodes of remotebits
+    list<remotebit> &rb_list = dl.get_dremote();
+    for (list<remotebit>::const_iterator
+	iter = rb_list.begin(); iter != rb_list.end(); ++iter) {
+      inodes.insert(iter->ino);
+    }
+  }
+}
+
+
+
+/**
  *
  * This is not const because the contained dirlump and 'bit' objects
  * are modified by being decoded.
  */
-int EMetaBlob::get_paths(
+void EMetaBlob::get_paths(
     std::vector<std::string> &paths)
 {
   // Each dentry has a 'location' which is a 2-tuple of parent inode and dentry name
@@ -838,7 +873,7 @@ int EMetaBlob::get_paths(
   // Special case: operations on root inode populate roots but not dirlumps
   if (lump_map.empty() && !roots.empty()) {
     paths.push_back("/");
-    return 0;
+    return;
   }
 
   // First pass
@@ -927,8 +962,6 @@ int EMetaBlob::get_paths(
 
     paths.push_back(path);
   }
-
-  return 0;
 }
 
 

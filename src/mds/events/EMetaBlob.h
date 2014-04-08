@@ -313,7 +313,8 @@ private:
  public:
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
-  int get_paths(std::vector<std::string> &paths);
+  void get_inodes(std::set<inodeno_t> &inodes);
+  void get_paths(std::vector<std::string> &paths);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<EMetaBlob*>& ls);
   // soft stateadd
