@@ -43,7 +43,7 @@ LogEvent *LogEvent::decode(bufferlist& bl)
 {
   // parse type, length
   bufferlist::iterator p = bl.begin();
-  __u32 type;
+  EventType type;
   LogEvent *event = NULL;
   ::decode(type, p);
 
