@@ -5533,7 +5533,7 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
 
   assert(cop->rval >= 0);
 
-  if (oid.snap < CEPH_NOSNAP) {
+  if (oid.snap < CEPH_NOSNAP && !cop->results.snaps.empty()) {
     // verify snap hasn't been deleted
     vector<snapid_t>::iterator p = cop->results.snaps.begin();
     while (p != cop->results.snaps.end()) {
