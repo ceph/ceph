@@ -10,6 +10,7 @@
 namespace ceph {
   using std::shared_ptr;
   using std::weak_ptr;
+  using std::static_pointer_cast;
 }
 
 #else
@@ -19,6 +20,7 @@ namespace ceph {
 namespace ceph {
   using std::tr1::shared_ptr;
   using std::tr1::weak_ptr;
+  using std::tr1::static_pointer_cast;
 }
 
 #endif

@@ -411,11 +411,11 @@ void MDCache::create_mydir_hierarchy(C_Gather *gather)
 
 struct C_MDC_CreateSystemFile : public Context {
   MDCache *cache;
-  Mutation *mut;
+  MutationRef mut;
   CDentry *dn;
   version_t dpv;
   Context *fin;
-  C_MDC_CreateSystemFile(MDCache *c, Mutation *mu, CDentry *d, version_t v, Context *f) :
+  C_MDC_CreateSystemFile(MDCache *c, MutationRef& mu, CDentry *d, version_t v, Context *f) :
     cache(c), mut(mu), dn(d), dpv(v), fin(f) {}
   void finish(int r) {
     cache->_create_system_file_finish(mut, dn, dpv, fin);
@@ -444,7 +444,7 @@ void MDCache::_create_system_file(CDir *dir, const char *name, CInode *in, Conte
   SnapRealm *realm = dir->get_inode()->find_snaprealm();
   dn->first = in->first = realm->get_newest_seq() + 1;
 
-  Mutation *mut = new Mutation;
+  MutationRef mut(new MutationImpl);
 
   // force some locks.  hacky.
   mds->locker->wrlock_force(&dir->inode->filelock, mut);
@@ -459,7 +459,7 @@ void MDCache::_create_system_file(CDir *dir, const char *name, CInode *in, Conte
     le->metablob.add_primary_dentry(dn, in, true);
   } else {
     predirty_journal_parents(mut, &le->metablob, in, dir, PREDIRTY_DIR, 1);
-    journal_dirty_inode(mut, &le->metablob, in);
+    journal_dirty_inode(mut.get(), &le->metablob, in);
     dn->push_projected_linkage(in->ino(), in->d_type());
     le->metablob.add_remote_dentry(dn, true, in->ino(), in->d_type());
     le->metablob.add_root(true, in);
@@ -472,7 +472,7 @@ void MDCache::_create_system_file(CDir *dir, const char *name, CInode *in, Conte
   mds->mdlog->flush();
 }
 
-void MDCache::_create_system_file_finish(Mutation *mut, CDentry *dn, version_t dpv, Context *fin)
+void MDCache::_create_system_file_finish(MutationRef& mut, CDentry *dn, version_t dpv, Context *fin)
 {
   dout(10) << "_create_system_file_finish " << *dn << dendl;
   
@@ -491,9 +491,8 @@ void MDCache::_create_system_file_finish(Mutation *mut, CDentry *dn, version_t d
   }
 
   mut->apply();
-  mds->locker->drop_locks(mut);
+  mds->locker->drop_locks(mut.get());
   mut->cleanup();
-  delete mut;
 
   fin->complete(0);
 
@@ -799,9 +798,9 @@ void MDCache::try_subtree_merge(CDir *dir)
 class C_MDC_SubtreeMergeWB : public Context {
   MDCache *mdcache;
   CInode *in;
-  Mutation *mut;
+  MutationRef mut;
 public:
-  C_MDC_SubtreeMergeWB(MDCache *mdc, CInode *i, Mutation *m) : mdcache(mdc), in(i), mut(m) {}
+  C_MDC_SubtreeMergeWB(MDCache *mdc, CInode *i, MutationRef& m) : mdcache(mdc), in(i), mut(m) {}
   void finish(int r) { 
     mdcache->subtree_merge_writebehind_finish(in, mut);
   }
@@ -868,13 +867,13 @@ void MDCache::try_subtree_merge_at(CDir *dir, bool do_eval)
       inode_t *pi = in->project_inode();
       pi->version = in->pre_dirty();
       
-      Mutation *mut = new Mutation;
+      MutationRef mut(new MutationImpl);
       mut->ls = mds->mdlog->get_current_segment();
       EUpdate *le = new EUpdate(mds->mdlog, "subtree merge writebehind");
       mds->mdlog->start_entry(le);
 
       le->metablob.add_dir_context(in->get_parent_dn()->get_dir());
-      journal_dirty_inode(mut, &le->metablob, in);
+      journal_dirty_inode(mut.get(), &le->metablob, in);
       
       mds->mdlog->submit_entry(le);
       mds->mdlog->wait_for_safe(new C_MDC_SubtreeMergeWB(this, in, mut));
@@ -885,15 +884,14 @@ void MDCache::try_subtree_merge_at(CDir *dir, bool do_eval)
   show_subtrees(15);
 }
 
-void MDCache::subtree_merge_writebehind_finish(CInode *in, Mutation *mut)
+void MDCache::subtree_merge_writebehind_finish(CInode *in, MutationRef& mut)
 {
   dout(10) << "subtree_merge_writebehind_finish on " << in << dendl;
   in->pop_and_dirty_projected_inode(mut->ls);
 
   mut->apply();
-  mds->locker->drop_locks(mut);
+  mds->locker->drop_locks(mut.get());
   mut->cleanup();
-  delete mut;
 
   in->auth_unpin(this);
 }
@@ -1486,7 +1484,8 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
   return oldin;
 }
 
-void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn, snapid_t follows,
+void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
+                                 CDentry *dn, snapid_t follows,
 				 CInode **pcow_inode, CDentry::linkage_t *dnl)
 {
   if (!dn) {
@@ -1569,15 +1568,16 @@ void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn
 }
 
 
-void MDCache::journal_cow_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows,
+void MDCache::journal_cow_inode(MutationRef& mut, EMetaBlob *metablob,
+                                CInode *in, snapid_t follows,
 				CInode **pcow_inode)
 {
   dout(10) << "journal_cow_inode follows " << follows << " on " << *in << dendl;
   CDentry *dn = in->get_projected_parent_dn();
-  journal_cow_dentry(mut, metablob, dn, follows, pcow_inode);
+  journal_cow_dentry(mut.get(), metablob, dn, follows, pcow_inode);
 }
 
-void MDCache::journal_dirty_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows)
+void MDCache::journal_dirty_inode(MutationImpl *mut, EMetaBlob *metablob, CInode *in, snapid_t follows)
 {
   if (in->is_base()) {
     metablob->add_root(true, in, in->get_projected_inode());
@@ -1848,7 +1848,7 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
  * accounted_rstat on scatterlock sync may not match our current
  * rstat.  this is normal and expected.
  */
-void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
+void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 				       CInode *in, CDir *parent,
 				       int flags, int linkunlink,
 				       snapid_t cfollows)
@@ -1996,11 +1996,14 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       }
     }
 
+    // can cast only because i'm passing nowait=true in the sole user
+    MDRequestRef mdmut =
+      ceph::static_pointer_cast<MDRequestImpl,MutationImpl>(mut);
     if (!stop &&
 	mut->wrlocks.count(&pin->nestlock) == 0 &&
 	(!pin->versionlock.can_wrlock() ||                   // make sure we can take versionlock, too
 	 //true
-	 !mds->locker->wrlock_start(&pin->nestlock, static_cast<MDRequest*>(mut), true) // can cast only because i'm passing nowait=true
+	 !mds->locker->wrlock_start(&pin->nestlock, mdmut, true)
 	 )) {  // ** do not initiate.. see above comment **
       dout(10) << "predirty_journal_parents can't wrlock one of " << pin->versionlock << " or " << pin->nestlock
 	       << " on " << *pin << dendl;
@@ -2129,7 +2132,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
        p != lsi.end();
        ++p) {
     CInode *cur = *p;
-    journal_dirty_inode(mut, blob, cur);
+    journal_dirty_inode(mut.get(), blob, cur);
   }
  
 }
@@ -2491,19 +2494,21 @@ void MDCache::send_slave_resolves()
   } else {
     set<int> resolve_set;
     mds->mdsmap->get_mds_set(resolve_set, MDSMap::STATE_RESOLVE);
-    for (ceph::unordered_map<metareqid_t, MDRequest*>::iterator p = active_requests.begin();
+    for (ceph::unordered_map<metareqid_t, ceph::weak_ptr<MDRequestImpl> >::iterator p = active_requests.begin();
 	 p != active_requests.end();
 	 ++p) {
-      if (!p->second->is_slave() || !p->second->slave_did_prepare())
+      MDRequestRef amdr(p->second.lock());
+      assert(amdr);
+      if (!amdr->is_slave() || !amdr->slave_did_prepare())
 	continue;
-      int master = p->second->slave_to_mds;
+      int master = amdr->slave_to_mds;
       if (resolve_set.count(master) || is_ambiguous_slave_update(p->first, master)) {
-	dout(10) << " including uncommitted " << *p->second << dendl;
+	dout(10) << " including uncommitted " << *amdr << dendl;
 	if (!resolves.count(master))
 	  resolves[master] = new MMDSResolve;
-	if (p->second->has_more() && p->second->more()->is_inode_exporter) {
+	if (amdr->has_more() && amdr->more()->is_inode_exporter) {
 	  // re-send cap exports
-	  CInode *in = p->second->more()->rename_inode;
+	  CInode *in = amdr->more()->rename_inode;
 	  map<client_t, Capability::Export> cap_map;
 	  in->export_client_caps(cap_map);
 	  bufferlist bl;
@@ -2644,94 +2649,96 @@ void MDCache::handle_mds_failure(int who)
   migrator->handle_mds_failure_or_stop(who);
 
   // clean up any requests slave to/from this node
-  list<MDRequest*> finish;
-  for (ceph::unordered_map<metareqid_t, MDRequest*>::iterator p = active_requests.begin();
+  list<MDRequestRef> finish;
+  for (ceph::unordered_map<metareqid_t, ceph::weak_ptr<MDRequestImpl> >::iterator p = active_requests.begin();
        p != active_requests.end();
        ++p) {
+    MDRequestRef amdr(p->second.lock());
+    assert(amdr);
     // slave to the failed node?
-    if (p->second->slave_to_mds == who) {
-      if (p->second->slave_did_prepare()) {
-	dout(10) << " slave request " << *p->second << " uncommitted, will resolve shortly" << dendl;
-	if (!p->second->more()->waiting_on_slave.empty()) {
-	  assert(p->second->more()->srcdn_auth_mds == mds->get_nodeid());
+    if (amdr->slave_to_mds == who) {
+      if (amdr->slave_did_prepare()) {
+	dout(10) << " slave request " << *amdr << " uncommitted, will resolve shortly" << dendl;
+	if (!amdr->more()->waiting_on_slave.empty()) {
+	  assert(amdr->more()->srcdn_auth_mds == mds->get_nodeid());
 	  // will rollback, no need to wait
-	  if (p->second->slave_request) {
-	    p->second->slave_request->put();
-	    p->second->slave_request = 0;
+	  if (amdr->slave_request) {
+	    amdr->slave_request->put();
+	    amdr->slave_request = 0;
 	  }
-	  p->second->more()->waiting_on_slave.clear();
+	  amdr->more()->waiting_on_slave.clear();
 	}
       } else {
-	dout(10) << " slave request " << *p->second << " has no prepare, finishing up" << dendl;
-	if (p->second->slave_request)
-	  p->second->aborted = true;
+	dout(10) << " slave request " << *amdr << " has no prepare, finishing up" << dendl;
+	if (amdr->slave_request)
+	  amdr->aborted = true;
 	else
-	  finish.push_back(p->second);
+	  finish.push_back(amdr);
       }
     }
 
-    if (p->second->is_slave() && p->second->slave_did_prepare()) {
-      if (p->second->more()->waiting_on_slave.count(who)) {
-	assert(p->second->more()->srcdn_auth_mds == mds->get_nodeid());
-	dout(10) << " slave request " << *p->second << " no longer need rename notity ack from mds."
+    if (amdr->is_slave() && amdr->slave_did_prepare()) {
+      if (amdr->more()->waiting_on_slave.count(who)) {
+	assert(amdr->more()->srcdn_auth_mds == mds->get_nodeid());
+	dout(10) << " slave request " << *amdr << " no longer need rename notity ack from mds."
 		 << who << dendl;
-	p->second->more()->waiting_on_slave.erase(who);
-	if (p->second->more()->waiting_on_slave.empty() && p->second->slave_request)
-	  mds->queue_waiter(new C_MDS_RetryRequest(this, p->second));
+	amdr->more()->waiting_on_slave.erase(who);
+	if (amdr->more()->waiting_on_slave.empty() && amdr->slave_request)
+	  mds->queue_waiter(new C_MDS_RetryRequest(this, amdr));
       }
 
-      if (p->second->more()->srcdn_auth_mds == who &&
-	  mds->mdsmap->is_clientreplay_or_active_or_stopping(p->second->slave_to_mds)) {
+      if (amdr->more()->srcdn_auth_mds == who &&
+	  mds->mdsmap->is_clientreplay_or_active_or_stopping(amdr->slave_to_mds)) {
 	// rename srcdn's auth mds failed, resolve even I'm a survivor.
-	dout(10) << " slave request " << *p->second << " uncommitted, will resolve shortly" << dendl;
-	add_ambiguous_slave_update(p->first, p->second->slave_to_mds);
+	dout(10) << " slave request " << *amdr << " uncommitted, will resolve shortly" << dendl;
+	add_ambiguous_slave_update(p->first, amdr->slave_to_mds);
       }
     }
     
     // failed node is slave?
-    if (p->second->is_master() && !p->second->committing) {
-      if (p->second->more()->srcdn_auth_mds == who) {
-	dout(10) << " master request " << *p->second << " waiting for rename srcdn's auth mds."
+    if (amdr->is_master() && !amdr->committing) {
+      if (amdr->more()->srcdn_auth_mds == who) {
+	dout(10) << " master request " << *amdr << " waiting for rename srcdn's auth mds."
 		 << who << " to recover" << dendl;
-	assert(p->second->more()->witnessed.count(who) == 0);
-	if (p->second->more()->is_ambiguous_auth)
-	  p->second->clear_ambiguous_auth();
+	assert(amdr->more()->witnessed.count(who) == 0);
+	if (amdr->more()->is_ambiguous_auth)
+	  amdr->clear_ambiguous_auth();
 	// rename srcdn's auth mds failed, all witnesses will rollback
-	p->second->more()->witnessed.clear();
+	amdr->more()->witnessed.clear();
 	pending_masters.erase(p->first);
       }
 
-      if (p->second->more()->witnessed.count(who)) {
-	int srcdn_auth = p->second->more()->srcdn_auth_mds;
-	if (srcdn_auth >= 0 && p->second->more()->waiting_on_slave.count(srcdn_auth)) {
-	  dout(10) << " master request " << *p->second << " waiting for rename srcdn's auth mds."
-		   << p->second->more()->srcdn_auth_mds << " to reply" << dendl;
+      if (amdr->more()->witnessed.count(who)) {
+	int srcdn_auth = amdr->more()->srcdn_auth_mds;
+	if (srcdn_auth >= 0 && amdr->more()->waiting_on_slave.count(srcdn_auth)) {
+	  dout(10) << " master request " << *amdr << " waiting for rename srcdn's auth mds."
+		   << amdr->more()->srcdn_auth_mds << " to reply" << dendl;
 	  // waiting for the slave (rename srcdn's auth mds), delay sending resolve ack
 	  // until either the request is committing or the slave also fails.
-	  assert(p->second->more()->waiting_on_slave.size() == 1);
+	  assert(amdr->more()->waiting_on_slave.size() == 1);
 	  pending_masters.insert(p->first);
 	} else {
-	  dout(10) << " master request " << *p->second << " no longer witnessed by slave mds."
+	  dout(10) << " master request " << *amdr << " no longer witnessed by slave mds."
 		   << who << " to recover" << dendl;
 	  if (srcdn_auth >= 0)
-	    assert(p->second->more()->witnessed.count(srcdn_auth) == 0);
+	    assert(amdr->more()->witnessed.count(srcdn_auth) == 0);
 
 	  // discard this peer's prepare (if any)
-	  p->second->more()->witnessed.erase(who);
+	  amdr->more()->witnessed.erase(who);
 	}
       }
       
-      if (p->second->more()->waiting_on_slave.count(who)) {
-	dout(10) << " master request " << *p->second << " waiting for slave mds." << who
+      if (amdr->more()->waiting_on_slave.count(who)) {
+	dout(10) << " master request " << *amdr << " waiting for slave mds." << who
 		 << " to recover" << dendl;
 	// retry request when peer recovers
-	p->second->more()->waiting_on_slave.erase(who);
-	if (p->second->more()->waiting_on_slave.empty())
-	  mds->wait_for_active_peer(who, new C_MDS_RetryRequest(this, p->second));
+	amdr->more()->waiting_on_slave.erase(who);
+	if (amdr->more()->waiting_on_slave.empty())
+	  mds->wait_for_active_peer(who, new C_MDS_RetryRequest(this, amdr));
       }
 
-      if (p->second->locking && p->second->locking_target_mds == who)
-	p->second->finish_locking(p->second->locking);
+      if (amdr->locking && amdr->locking_target_mds == who)
+	amdr->finish_locking(amdr->locking);
     }
   }
 
@@ -3088,7 +3095,7 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
 
       finish_uncommitted_slave_update(p->first, from);
     } else {
-      MDRequest *mdr = request_get(p->first);
+      MDRequestRef mdr = request_get(p->first);
       // information about master imported caps
       if (p->second.length() > 0)
 	mdr->more()->inode_import.claim(p->second);
@@ -3109,21 +3116,22 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
 
       // perform rollback (and journal a rollback entry)
       // note: this will hold up the resolve a bit, until the rollback entries journal.
+      MDRequestRef null_ref;
       switch (su->origop) {
       case ESlaveUpdate::LINK:
-	mds->server->do_link_rollback(su->rollback, from, 0);
+	mds->server->do_link_rollback(su->rollback, from, null_ref);
 	break;
       case ESlaveUpdate::RENAME:
-	mds->server->do_rename_rollback(su->rollback, from, 0);
+	mds->server->do_rename_rollback(su->rollback, from, null_ref);
 	break;
       case ESlaveUpdate::RMDIR:
-	mds->server->do_rmdir_rollback(su->rollback, from, 0);
+	mds->server->do_rmdir_rollback(su->rollback, from, null_ref);
 	break;
       default:
 	assert(0);
       }
     } else {
-      MDRequest *mdr = request_get(*p);
+      MDRequestRef mdr = request_get(*p);
       mdr->aborted = true;
       if (mdr->slave_request) {
 	if (mdr->more()->slave_commit) // journaling slave prepare ?
@@ -3694,69 +3702,71 @@ void MDCache::rejoin_send_rejoins()
   if (!mds->is_rejoin()) {
     // i am survivor.  send strong rejoin.
     // note request remote_auth_pins, xlocks
-    for (ceph::unordered_map<metareqid_t, MDRequest*>::iterator p = active_requests.begin();
+    for (ceph::unordered_map<metareqid_t, ceph::weak_ptr<MDRequestImpl> >::iterator p = active_requests.begin();
 	 p != active_requests.end();
 	 ++p) {
-      if ( p->second->is_slave())
+      MDRequestRef amdr(p->second.lock());
+      assert(amdr);
+      if (amdr->is_slave())
 	continue;
       // auth pins
-      for (set<MDSCacheObject*>::iterator q = p->second->remote_auth_pins.begin();
-	   q != p->second->remote_auth_pins.end();
+      for (set<MDSCacheObject*>::iterator q = amdr->remote_auth_pins.begin();
+	   q != amdr->remote_auth_pins.end();
 	   ++q) {
 	if (!(*q)->is_auth()) {
 	  int who = (*q)->authority().first;
 	  if (rejoins.count(who) == 0) continue;
 	  MMDSCacheRejoin *rejoin = rejoins[who];
 	  
-	  dout(15) << " " << *p->second << " authpin on " << **q << dendl;
+	  dout(15) << " " << *amdr << " authpin on " << **q << dendl;
 	  MDSCacheObjectInfo i;
 	  (*q)->set_object_info(i);
 	  if (i.ino)
-	    rejoin->add_inode_authpin(vinodeno_t(i.ino, i.snapid), p->second->reqid, p->second->attempt);
+	    rejoin->add_inode_authpin(vinodeno_t(i.ino, i.snapid), amdr->reqid, amdr->attempt);
 	  else
-	    rejoin->add_dentry_authpin(i.dirfrag, i.dname, i.snapid, p->second->reqid, p->second->attempt);
+	    rejoin->add_dentry_authpin(i.dirfrag, i.dname, i.snapid, amdr->reqid, amdr->attempt);
 
-	  if (p->second->has_more() && p->second->more()->is_remote_frozen_authpin &&
-	      p->second->more()->rename_inode == (*q))
+	  if (amdr->has_more() && amdr->more()->is_remote_frozen_authpin &&
+	      amdr->more()->rename_inode == (*q))
 	    rejoin->add_inode_frozen_authpin(vinodeno_t(i.ino, i.snapid),
-					     p->second->reqid, p->second->attempt);
+					     amdr->reqid, amdr->attempt);
 	}
       }
       // xlocks
-      for (set<SimpleLock*>::iterator q = p->second->xlocks.begin();
-	   q != p->second->xlocks.end();
+      for (set<SimpleLock*>::iterator q = amdr->xlocks.begin();
+	   q != amdr->xlocks.end();
 	   ++q) {
 	if (!(*q)->get_parent()->is_auth()) {
 	  int who = (*q)->get_parent()->authority().first;
 	  if (rejoins.count(who) == 0) continue;
 	  MMDSCacheRejoin *rejoin = rejoins[who];
 	  
-	  dout(15) << " " << *p->second << " xlock on " << **q << " " << *(*q)->get_parent() << dendl;
+	  dout(15) << " " << *amdr << " xlock on " << **q << " " << *(*q)->get_parent() << dendl;
 	  MDSCacheObjectInfo i;
 	  (*q)->get_parent()->set_object_info(i);
 	  if (i.ino)
 	    rejoin->add_inode_xlock(vinodeno_t(i.ino, i.snapid), (*q)->get_type(),
-				    p->second->reqid, p->second->attempt);
+				    amdr->reqid, amdr->attempt);
 	  else
 	    rejoin->add_dentry_xlock(i.dirfrag, i.dname, i.snapid,
-				     p->second->reqid, p->second->attempt);
+				     amdr->reqid, amdr->attempt);
 	}
       }
       // remote wrlocks
-      for (map<SimpleLock*, int>::iterator q = p->second->remote_wrlocks.begin();
-	   q != p->second->remote_wrlocks.end();
+      for (map<SimpleLock*, int>::iterator q = amdr->remote_wrlocks.begin();
+	   q != amdr->remote_wrlocks.end();
 	   ++q) {
 	int who = q->second;
 	if (rejoins.count(who) == 0) continue;
 	MMDSCacheRejoin *rejoin = rejoins[who];
 
-	dout(15) << " " << *p->second << " wrlock on " << q->second
+	dout(15) << " " << *amdr << " wrlock on " << q->second
 		 << " " << q->first->get_parent() << dendl;
 	MDSCacheObjectInfo i;
 	q->first->get_parent()->set_object_info(i);
 	assert(i.ino);
 	rejoin->add_inode_wrlock(vinodeno_t(i.ino, i.snapid), q->first->get_type(),
-				 p->second->reqid, p->second->attempt);
+				 amdr->reqid, amdr->attempt);
       }
     }
   }
@@ -4474,7 +4484,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	  dout(10) << " dn authpin by " << *r << " on " << *dn << dendl;
 
 	  // get/create slave mdrequest
-	  MDRequest *mdr;
+	  MDRequestRef mdr;
 	  if (have_request(r->reqid))
 	    mdr = request_get(r->reqid);
 	  else
@@ -4488,7 +4498,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	  strong->xlocked_dentries[p->first].count(q->first)) {
 	MMDSCacheRejoin::slave_reqid r = strong->xlocked_dentries[p->first][q->first];
 	dout(10) << " dn xlock by " << r << " on " << *dn << dendl;
-	MDRequest *mdr = request_get(r.reqid);  // should have this from auth_pin above.
+	MDRequestRef mdr = request_get(r.reqid);  // should have this from auth_pin above.
 	assert(mdr->is_auth_pinned(dn));
 	if (!mdr->xlocks.count(&dn->versionlock)) {
 	  assert(dn->versionlock.can_xlock_local());
@@ -4569,7 +4579,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	dout(10) << " inode authpin by " << *r << " on " << *in << dendl;
 
 	// get/create slave mdrequest
-	MDRequest *mdr;
+	MDRequestRef mdr;
 	if (have_request(r->reqid))
 	  mdr = request_get(r->reqid);
 	else
@@ -4590,7 +4600,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	   ++q) {
 	SimpleLock *lock = in->get_lock(q->first);
 	dout(10) << " inode xlock by " << q->second << " on " << *lock << " on " << *in << dendl;
-	MDRequest *mdr = request_get(q->second.reqid);  // should have this from auth_pin above.
+	MDRequestRef mdr = request_get(q->second.reqid);  // should have this from auth_pin above.
 	assert(mdr->is_auth_pinned(in));
 	if (!mdr->xlocks.count(&in->versionlock)) {
 	  assert(in->versionlock.can_xlock_local());
@@ -4622,7 +4632,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	  r != q->second.end();
 	  ++r) {
 	dout(10) << " inode wrlock by " << *r << " on " << *lock << " on " << *in << dendl;
-	MDRequest *mdr = request_get(r->reqid);  // should have this from auth_pin above.
+	MDRequestRef mdr = request_get(r->reqid);  // should have this from auth_pin above.
 	if (in->is_auth())
 	  assert(mdr->is_auth_pinned(in));
 	lock->set_state(LOCK_MIX);
@@ -5857,8 +5867,9 @@ void MDCache::reissue_all_caps()
 struct C_MDC_QueuedCow : public Context {
   MDCache *mdcache;
   CInode *in;
-  Mutation *mut;
-  C_MDC_QueuedCow(MDCache *mdc, CInode *i, Mutation *m) : mdcache(mdc), in(i), mut(m) {}
+  MutationRef mut;
+  C_MDC_QueuedCow(MDCache *mdc, CInode *i, MutationRef& m) :
+    mdcache(mdc), in(i), mut(m) {}
   void finish(int r) {
     mdcache->_queued_file_recover_cow(in, mut);
   }
@@ -5881,7 +5892,7 @@ void MDCache::queue_file_recover(CInode *in)
     inode_t *pi = in->project_inode();
     pi->version = in->pre_dirty();
 
-    Mutation *mut = new Mutation;
+    MutationRef mut(new MutationImpl);
     mut->ls = mds->mdlog->get_current_segment();
     EUpdate *le = new EUpdate(mds->mdlog, "queue_file_recover cow");
     mds->mdlog->start_entry(le);
@@ -5906,13 +5917,12 @@ void MDCache::queue_file_recover(CInode *in)
   _queue_file_recover(in);
 }
 
-void MDCache::_queued_file_recover_cow(CInode *in, Mutation *mut)
+void MDCache::_queued_file_recover_cow(CInode *in, MutationRef& mut)
 {
   in->pop_and_dirty_projected_inode(mut->ls);
   mut->apply();
-  mds->locker->drop_locks(mut);
+  mds->locker->drop_locks(mut.get());
   mut->cleanup();
-  delete mut;
 }
 
 void MDCache::_queue_file_recover(CInode *in)
@@ -6146,8 +6156,9 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
 struct C_MDC_TruncateLogged : public Context {
   MDCache *mdc;
   CInode *in;
-  Mutation *mut;
-  C_MDC_TruncateLogged(MDCache *m, CInode *i, Mutation *mu) : mdc(m), in(i), mut(mu) {}
+  MutationRef mut;
+  C_MDC_TruncateLogged(MDCache *m, CInode *i, MutationRef& mu) :
+    mdc(m), in(i), mut(mu) {}
   void finish(int r) {
     mdc->truncate_inode_logged(in, mut);
   }
@@ -6167,7 +6178,7 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
   pi->truncate_from = 0;
   pi->truncate_pending--;
 
-  Mutation *mut = new Mutation;
+  MutationRef mut(new MutationImpl);
   mut->ls = mds->mdlog->get_current_segment();
   mut->add_projected_inode(in);
 
@@ -6178,7 +6189,7 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
   le->metablob.add_primary_dentry(dn, in, true);
   le->metablob.add_truncate_finish(in->ino(), ls->offset);
 
-  journal_dirty_inode(mut, &le->metablob, in);
+  journal_dirty_inode(mut.get(), &le->metablob, in);
   mds->mdlog->submit_entry(le, new C_MDC_TruncateLogged(this, in, mut));
 
   // flush immediately if there are readers/writers waiting
@@ -6186,13 +6197,12 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
     mds->mdlog->flush();
 }
 
-void MDCache::truncate_inode_logged(CInode *in, Mutation *mut)
+void MDCache::truncate_inode_logged(CInode *in, MutationRef& mut)
 {
   dout(10) << "truncate_inode_logged " << *in << dendl;
   mut->apply();
-  mds->locker->drop_locks(mut);
+  mds->locker->drop_locks(mut.get());
   mut->cleanup();
-  delete mut;
 
   in->put(CInode::PIN_TRUNCATING);
   in->auth_unpin(this);
@@ -7509,7 +7519,7 @@ void MDCache::dispatch(Message *m)
   }
 }
 
-Context *MDCache::_get_waiter(MDRequest *mdr, Message *req, Context *fin)
+Context *MDCache::_get_waiter(MDRequestRef& mdr, Message *req, Context *fin)
 {
   if (mdr) {
     dout(20) << "_get_waiter retryrequest" << dendl;
@@ -7522,7 +7532,7 @@ Context *MDCache::_get_waiter(MDRequest *mdr, Message *req, Context *fin)
   }
 }
 
-int MDCache::path_traverse(MDRequest *mdr, Message *req, Context *fin,     // who
+int MDCache::path_traverse(MDRequestRef& mdr, Message *req, Context *fin,     // who
 			   const filepath& path,                   // what
                            vector<CDentry*> *pdnvec,         // result
 			   CInode **pin,
@@ -7969,7 +7979,7 @@ void MDCache::open_remote_dirfrag(CInode *diri, frag_t approxfg, Context *fin)
  * will return inode for primary, or link up/open up remote link's inode as necessary.
  * If it's not available right now, puts mdr on wait list and returns null.
  */
-CInode *MDCache::get_dentry_inode(CDentry *dn, MDRequest *mdr, bool projected)
+CInode *MDCache::get_dentry_inode(CDentry *dn, MDRequestRef& mdr, bool projected)
 {
   CDentry::linkage_t *dnl;
   if (projected)
@@ -8788,7 +8798,8 @@ void MDCache::handle_find_ino_reply(MMDSFindInoReply *m)
     if (!m->path.empty()) {
       // we got a path!
       vector<CDentry*> trace;
-      int r = path_traverse(NULL, m, NULL, m->path, &trace, NULL, MDS_TRAVERSE_DISCOVER);
+      MDRequestRef null_ref;
+      int r = path_traverse(null_ref, m, NULL, m->path, &trace, NULL, MDS_TRAVERSE_DISCOVER);
       if (r > 0)
 	return; 
       dout(0) << "handle_find_ino_reply failed with " << r << " on " << m->path 
@@ -8828,21 +8839,24 @@ void MDCache::kick_find_ino_peers(int who)
 int MDCache::get_num_client_requests()
 {
   int count = 0;
-  for (ceph::unordered_map<metareqid_t, MDRequest*>::iterator p = active_requests.begin();
+  for (ceph::unordered_map<metareqid_t, ceph::weak_ptr<MDRequestImpl> >::iterator p = active_requests.begin();
       p != active_requests.end();
       ++p) {
-    if (p->second->reqid.name.is_client() && !p->second->is_slave())
+    MDRequestRef amdr(p->second.lock());
+    assert(amdr);
+    if (amdr->reqid.name.is_client() && !amdr->is_slave())
       count++;
   }
   return count;
 }
 
 /* This function takes over the reference to the passed Message */
-MDRequest *MDCache::request_start(MClientRequest *req)
+MDRequestRef MDCache::request_start(MClientRequest *req)
 {
   // did we win a forward race against a slave?
   if (active_requests.count(req->get_reqid())) {
-    MDRequest *mdr = active_requests[req->get_reqid()];
+    MDRequestRef mdr = active_requests[req->get_reqid()].lock();
+    assert(mdr);
     if (mdr->is_slave()) {
       dout(10) << "request_start already had " << *mdr << ", waiting for finish" << dendl;
       mdr->more()->waiting_for_finish.push_back(new C_MDS_RetryMessage(mds, req));
@@ -8850,28 +8864,32 @@ MDRequest *MDCache::request_start(MClientRequest *req)
       dout(10) << "request_start already processing " << *mdr << ", dropping new msg" << dendl;
       req->put();
     }
-    return 0;
+    return MDRequestRef();
   }
 
   // register new client request
-  MDRequest *mdr = new MDRequest(req->get_reqid(), req->get_num_fwd(), req);
+  MDRequestRef mdr(new MDRequestImpl(req->get_reqid(),
+                                     req->get_num_fwd(), req));
+  mdr->set_self_ref(mdr);
   active_requests[req->get_reqid()] = mdr;
   dout(7) << "request_start " << *mdr << dendl;
   return mdr;
 }
 
-MDRequest *MDCache::request_start_slave(metareqid_t ri, __u32 attempt, int by)
+MDRequestRef MDCache::request_start_slave(metareqid_t ri, __u32 attempt, int by)
 {
-  MDRequest *mdr = new MDRequest(ri, attempt, by);
+  MDRequestRef mdr(new MDRequestImpl(ri, attempt, by));
+  mdr->set_self_ref(mdr);
   assert(active_requests.count(mdr->reqid) == 0);
   active_requests[mdr->reqid] = mdr;
   dout(7) << "request_start_slave " << *mdr << " by mds." << by << dendl;
   return mdr;
 }
 
-MDRequest *MDCache::request_start_internal(int op)
+MDRequestRef MDCache::request_start_internal(int op)
 {
-  MDRequest *mdr = new MDRequest;
+  MDRequestRef mdr(new MDRequestImpl);
+  mdr->set_self_ref(mdr);
   mdr->reqid.name = entity_name_t::MDS(mds->get_nodeid());
   mdr->reqid.tid = mds->issue_tid();
   mdr->internal_op = op;
@@ -8883,14 +8901,15 @@ MDRequest *MDCache::request_start_internal(int op)
 }
 
 
-MDRequest *MDCache::request_get(metareqid_t rid)
+MDRequestRef MDCache::request_get(metareqid_t rid)
 {
   assert(active_requests.count(rid));
-  dout(7) << "request_get " << rid << " " << *active_requests[rid] << dendl;
-  return active_requests[rid];
+  MDRequestRef amdr(active_requests[rid]);
+  dout(7) << "request_get " << rid << " " << *amdr << dendl;
+  return amdr;
 }
 
-void MDCache::request_finish(MDRequest *mdr)
+void MDCache::request_finish(MDRequestRef& mdr)
 {
   dout(7) << "request_finish " << *mdr << dendl;
 
@@ -8906,7 +8925,7 @@ void MDCache::request_finish(MDRequest *mdr)
 }
 
 
-void MDCache::request_forward(MDRequest *mdr, int who, int port)
+void MDCache::request_forward(MDRequestRef& mdr, int who, int port)
 {
   if (mdr->client_request->get_source().is_client()) {
     dout(7) << "request_forward " << *mdr << " to mds." << who << " req "
@@ -8922,7 +8941,7 @@ void MDCache::request_forward(MDRequest *mdr, int who, int port)
 }
 
 
-void MDCache::dispatch_request(MDRequest *mdr)
+void MDCache::dispatch_request(MDRequestRef& mdr)
 {
   if (mdr->killed) {
     dout(10) << "request " << *mdr << " was killed" << dendl;
@@ -8947,7 +8966,7 @@ void MDCache::dispatch_request(MDRequest *mdr)
 }
 
 
-void MDCache::request_drop_foreign_locks(MDRequest *mdr)
+void MDCache::request_drop_foreign_locks(MDRequestRef& mdr)
 {
   if (!mdr->has_more())
     return;
@@ -8999,19 +9018,19 @@ void MDCache::request_drop_foreign_locks(MDRequest *mdr)
                                 * this function can get called more than once */
 }
 
-void MDCache::request_drop_non_rdlocks(MDRequest *mdr)
+void MDCache::request_drop_non_rdlocks(MDRequestRef& mdr)
 {
   request_drop_foreign_locks(mdr);
-  mds->locker->drop_non_rdlocks(mdr);
+  mds->locker->drop_non_rdlocks(mdr.get());
 }
 
-void MDCache::request_drop_locks(MDRequest *mdr)
+void MDCache::request_drop_locks(MDRequestRef& mdr)
 {
   request_drop_foreign_locks(mdr);
-  mds->locker->drop_locks(mdr);
+  mds->locker->drop_locks(mdr.get());
 }
 
-void MDCache::request_cleanup(MDRequest *mdr)
+void MDCache::request_cleanup(MDRequestRef& mdr)
 {
   dout(15) << "request_cleanup " << *mdr << dendl;
 
@@ -9045,7 +9064,6 @@ void MDCache::request_cleanup(MDRequest *mdr)
 
   // remove from map
   active_requests.erase(mdr->reqid);
-  mdr->put();
 
   // fail-safe!
   if (was_replay && active_requests.empty()) {
@@ -9057,7 +9075,7 @@ void MDCache::request_cleanup(MDRequest *mdr)
     log_stat();
 }
 
-void MDCache::request_kill(MDRequest *mdr)
+void MDCache::request_kill(MDRequestRef& mdr)
 {
   mdr->killed = true;
   if (!mdr->committing) {
@@ -9084,7 +9102,7 @@ public:
   }
 };
 
-void MDCache::anchor_create_prep_locks(MDRequest *mdr, CInode *in,
+void MDCache::anchor_create_prep_locks(MDRequestRef& mdr, CInode *in,
 				       set<SimpleLock*>& rdlocks, set<SimpleLock*>& xlocks)
 {
   dout(10) << "anchor_create_prep_locks " << *in << dendl;
@@ -9105,7 +9123,7 @@ void MDCache::anchor_create_prep_locks(MDRequest *mdr, CInode *in,
   }
 }
 
-void MDCache::anchor_create(MDRequest *mdr, CInode *in, Context *onfinish)
+void MDCache::anchor_create(MDRequestRef& mdr, CInode *in, Context *onfinish)
 {
   assert(in->is_auth());
   dout(10) << "anchor_create " << *in << dendl;
@@ -9185,9 +9203,9 @@ class C_MDC_AnchorLogged : public Context {
   MDCache *cache;
   CInode *in;
   version_t atid;
-  Mutation *mut;
+  MutationRef mut;
 public:
-  C_MDC_AnchorLogged(MDCache *c, CInode *i, version_t t, Mutation *m) : 
+  C_MDC_AnchorLogged(MDCache *c, CInode *i, version_t t, MutationRef& m) :
     cache(c), in(i), atid(t), mut(m) {}
   void finish(int r) {
     cache->_anchor_logged(in, atid, mut);
@@ -9211,19 +9229,19 @@ void MDCache::_anchor_prepared(CInode *in, version_t atid, bool add)
   }
   pi->version = in->pre_dirty();
 
-  Mutation *mut = new Mutation;
+  MutationRef mut(new MutationImpl);
   mut->ls = mds->mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mds->mdlog, add ? "anchor_create":"anchor_destroy");
   mds->mdlog->start_entry(le);
   predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
-  journal_dirty_inode(mut, &le->metablob, in);
+  journal_dirty_inode(mut.get(), &le->metablob, in);
   le->metablob.add_table_transaction(TABLE_ANCHOR, atid);
   mds->mdlog->submit_entry(le, new C_MDC_AnchorLogged(this, in, atid, mut));
   mds->mdlog->flush();
 }
 
 
-void MDCache::_anchor_logged(CInode *in, version_t atid, Mutation *mut)
+void MDCache::_anchor_logged(CInode *in, version_t atid, MutationRef& mut)
 {
   dout(10) << "_anchor_logged on " << *in << dendl;
 
@@ -9249,9 +9267,8 @@ void MDCache::_anchor_logged(CInode *in, version_t atid, Mutation *mut)
   mds->anchorclient->commit(atid, mut->ls);
 
   // drop locks and finish
-  mds->locker->drop_locks(mut);
+  mds->locker->drop_locks(mut.get());
   mut->cleanup();
-  delete mut;
 
   // trigger waiters
   in->finish_waiting(CInode::WAIT_ANCHORED|CInode::WAIT_UNANCHORED, 0);
@@ -9263,17 +9280,18 @@ void MDCache::_anchor_logged(CInode *in, version_t atid, Mutation *mut)
 
 struct C_MDC_snaprealm_create_finish : public Context {
   MDCache *cache;
-  MDRequest *mdr;
-  Mutation *mut;
+  MDRequestRef mdr;
+  MutationRef mut;
   CInode *in;
-  C_MDC_snaprealm_create_finish(MDCache *c, MDRequest *m, Mutation *mu, CInode *i) : 
+  C_MDC_snaprealm_create_finish(MDCache *c, MDRequestRef& m,
+                                MutationRef& mu, CInode *i) :
     cache(c), mdr(m), mut(mu), in(i) {}
   void finish(int r) {
     cache->_snaprealm_create_finish(mdr, mut, in);
   }
 };
 
-void MDCache::snaprealm_create(MDRequest *mdr, CInode *in)
+void MDCache::snaprealm_create(MDRequestRef& mdr, CInode *in)
 {
   dout(10) << "snaprealm_create " << *in << dendl;
   assert(!in->snaprealm);
@@ -9290,7 +9308,7 @@ void MDCache::snaprealm_create(MDRequest *mdr, CInode *in)
     return;
   }
 
-  Mutation *mut = new Mutation;
+  MutationRef mut(new MutationImpl);
   mut->ls = mds->mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mds->mdlog, "snaprealm_create");
   mds->mdlog->start_entry(le);
@@ -9376,20 +9394,18 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
     send_snaps(updates);
 }
 
-void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in)
+void MDCache::_snaprealm_create_finish(MDRequestRef& mdr, MutationRef& mut, CInode *in)
 {
   dout(10) << "_snaprealm_create_finish " << *in << dendl;
 
   // apply
   in->pop_and_dirty_projected_inode(mut->ls);
   mut->apply();
-  mds->locker->drop_locks(mut);
+  mds->locker->drop_locks(mut.get());
   mut->cleanup();
 
   // tell table we've committed
   mds->snapclient->commit(mdr->more()->stid, mut->ls);
-
-  delete mut;
 
   // create
   bufferlist::iterator p = mdr->more()->snapidbl.begin();
@@ -10769,7 +10785,8 @@ void MDCache::handle_dir_update(MDirUpdate *m)
       CInode *in;
       filepath path = m->get_path();
       dout(5) << "trying discover on dir_update for " << path << dendl;
-      int r = path_traverse(NULL, m, NULL, path, &trace, &in, MDS_TRAVERSE_DISCOVER);
+      MDRequestRef null_ref;
+      int r = path_traverse(null_ref, m, NULL, path, &trace, &in, MDS_TRAVERSE_DISCOVER);
       if (r > 0)
         return;
       assert(r == 0);
@@ -10876,7 +10893,7 @@ void MDCache::handle_dentry_link(MDentryLink *m)
 
 // UNLINK
 
-void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequest *mdr)
+void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& mdr)
 {
   dout(10) << "send_dentry_unlink " << *dn << dendl;
   // share unlink news with replicas
@@ -11456,9 +11473,9 @@ void MDCache::find_stale_fragment_freeze()
 
 class C_MDC_FragmentPrep : public Context {
   MDCache *mdcache;
-  MDRequest *mdr;
+  MDRequestRef mdr;
 public:
-  C_MDC_FragmentPrep(MDCache *m, MDRequest *r) : mdcache(m), mdr(r) {}
+  C_MDC_FragmentPrep(MDCache *m, MDRequestRef& r) : mdcache(m), mdr(r) {}
   virtual void finish(int r) {
     mdcache->_fragment_logged(mdr);
   }
@@ -11466,9 +11483,9 @@ public:
 
 class C_MDC_FragmentStore : public Context {
   MDCache *mdcache;
-  MDRequest *mdr;
+  MDRequestRef mdr;
 public:
-  C_MDC_FragmentStore(MDCache *m, MDRequest *r) : mdcache(m), mdr(r) {}
+  C_MDC_FragmentStore(MDCache *m, MDRequestRef& r) : mdcache(m), mdr(r) {}
   virtual void finish(int r) {
     mdcache->_fragment_stored(mdr);
   }
@@ -11517,12 +11534,12 @@ void MDCache::fragment_frozen(dirfrag_t basedirfrag, int r)
 
   info.has_frozen = true;
 
-  MDRequest *mdr = request_start_internal(CEPH_MDS_OP_FRAGMENTDIR);
+  MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_FRAGMENTDIR);
   mdr->more()->fragment_base = basedirfrag;
   dispatch_fragment_dir(mdr);
 }
 
-void MDCache::dispatch_fragment_dir(MDRequest *mdr)
+void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
 {
   dirfrag_t basedirfrag = mdr->more()->fragment_base;
   map<dirfrag_t,fragment_info_t>::iterator it = fragments.find(basedirfrag);
@@ -11595,7 +11612,7 @@ void MDCache::dispatch_fragment_dir(MDRequest *mdr)
     // journal dirfragtree
     inode_t *pi = diri->project_inode();
     pi->version = diri->pre_dirty();
-    journal_dirty_inode(mdr, &le->metablob, diri);
+    journal_dirty_inode(mdr.get(), &le->metablob, diri);
   } else {
     mds->locker->mark_updated_scatterlock(&diri->dirfragtreelock);
     mdr->ls->dirty_dirfrag_dirfragtree.push_back(&diri->item_dirty_dirfrag_dirfragtree);
@@ -11619,7 +11636,7 @@ void MDCache::dispatch_fragment_dir(MDRequest *mdr)
   mds->mdlog->flush();
 }
 
-void MDCache::_fragment_logged(MDRequest *mdr)
+void MDCache::_fragment_logged(MDRequestRef& mdr)
 {
   dirfrag_t basedirfrag = mdr->more()->fragment_base;
   map<dirfrag_t,fragment_info_t>::iterator it = fragments.find(basedirfrag);
@@ -11653,7 +11670,7 @@ void MDCache::_fragment_logged(MDRequest *mdr)
   gather.activate();
 }
 
-void MDCache::_fragment_stored(MDRequest *mdr)
+void MDCache::_fragment_stored(MDRequestRef& mdr)
 {
   dirfrag_t basedirfrag = mdr->more()->fragment_base;
   map<dirfrag_t,fragment_info_t>::iterator it = fragments.find(basedirfrag);
@@ -11690,7 +11707,7 @@ void MDCache::_fragment_stored(MDRequest *mdr)
   mds->mdlog->start_submit_entry(le, new C_MDC_FragmentCommit(this, basedirfrag,
 							      info.resultfrags));
 
-  mds->locker->drop_locks(mdr);
+  mds->locker->drop_locks(mdr.get());
 
   // unfreeze resulting frags
   for (list<CDir*>::iterator p = info.resultfrags.begin();
@@ -12198,15 +12215,12 @@ void MDCache::dump_cache(const char *fn)
 
 
 
-C_MDS_RetryRequest::C_MDS_RetryRequest(MDCache *c, MDRequest *r)
+C_MDS_RetryRequest::C_MDS_RetryRequest(MDCache *c, MDRequestRef& r)
   : cache(c), mdr(r)
-{
-  mdr->get();
-}
+{}
 
 void C_MDS_RetryRequest::finish(int r)
 {
   mdr->retry++;
   cache->dispatch_request(mdr);
-  mdr->put();
 }
