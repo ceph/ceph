@@ -460,7 +460,7 @@ EOF
 	    uuid=`uuidgen`
 	    echo "add osd$osd $uuid"
 	    $SUDO $CEPH_ADM osd create $uuid
-	    $SUDO $CEPH_ADM osd crush add osd.$osd 1.0 host=localhost rack=localrack root=default
+	    $SUDO $CEPH_ADM osd crush add osd.$osd 1.0 host=$HOSTNAME root=default
 	    $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --mkkey --osd-uuid $uuid
 
 	    key_fn=$CEPH_DEV_DIR/osd$osd/keyring
