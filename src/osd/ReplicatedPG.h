@@ -1322,10 +1322,6 @@ private:
   int _delete_oid(OpContext *ctx, bool no_whiteout);
   int _rollback_to(OpContext *ctx, ceph_osd_op& op);
 public:
-  bool same_for_read_since(epoch_t e);
-  bool same_for_modify_since(epoch_t e);
-  bool same_for_rep_modify_since(epoch_t e);
-
   bool is_missing_object(const hobject_t& oid) const;
   bool is_unreadable_object(const hobject_t &oid) const {
     return is_missing_object(oid) ||
