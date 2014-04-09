@@ -27,7 +27,8 @@ class CephxClientHandler : public AuthClientHandler {
   uint64_t server_challenge;
   
   CephXTicketManager tickets;
-  
+  CephXTicketHandler* ticket_handler;
+
   RotatingKeyRing *rotating_secrets;
   KeyRing *keyring;
 
@@ -37,6 +38,7 @@ public:
       starting(false),
       server_challenge(0),
       tickets(cct_),
+      ticket_handler(NULL),
       rotating_secrets(rsecrets),
       keyring(rsecrets->get_keyring())
   {
@@ -48,6 +50,7 @@ public:
     starting = true;
     server_challenge = 0;
   }
+  void prepare_build_request();
   int build_request(bufferlist& bl);
   int handle_response(int ret, bufferlist::iterator& iter);
   bool build_rotating_request(bufferlist& bl);
