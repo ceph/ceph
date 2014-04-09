@@ -45,6 +45,7 @@
 #include "common/config.h"
 #include "common/perf_counters.h"
 #include "include/str_list.h"
+#include "common/errno.h"
 
 
 #define dout_subsys ceph_subsys_objecter
@@ -249,7 +250,7 @@ void Objecter::init_unlocked()
 					   "show in-progress osd requests");
   if (ret < 0) {
     lderr(cct) << "error registering admin socket command: "
-	       << cpp_strerror(-ret) << dendl;
+	       << cpp_strerror(ret) << dendl;
   }
 }
 

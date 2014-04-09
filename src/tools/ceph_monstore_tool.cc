@@ -34,6 +34,7 @@
 #include "mon/Paxos.h"
 #include "common/Formatter.h"
 #include "include/stringify.h"
+#include "common/errno.h"
 
 namespace po = boost::program_options;
 using namespace std;

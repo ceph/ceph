@@ -3620,8 +3620,7 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
 				       CRUSH_HASH_DEFAULT, type, 0, NULL,
 				       NULL, &bucketno);
     if (err < 0) {
-      char buf[128];
-      ss << "add_bucket error: '" << strerror_r(-err, buf, sizeof(buf)) << "'";
+      ss << "add_bucket error: '" << cpp_strerror(err) << "'";
       goto reply;
     }
     err = newcrush.set_item_name(bucketno, name);
