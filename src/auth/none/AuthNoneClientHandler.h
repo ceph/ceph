@@ -28,13 +28,13 @@ public:
   void reset() { }
 
   void prepare_build_request() {}
-  int build_request(bufferlist& bl) { return 0; }
+  int build_request(bufferlist& bl) const { return 0; }
   int handle_response(int ret, bufferlist::iterator& iter) { return 0; }
-  bool build_rotating_request(bufferlist& bl) { return false; }
+  bool build_rotating_request(bufferlist& bl) const { return false; }
 
-  int get_protocol() { return CEPH_AUTH_NONE; }
+  int get_protocol() const { return CEPH_AUTH_NONE; }
   
-  AuthAuthorizer *build_authorizer(uint32_t service_id) {
+  AuthAuthorizer *build_authorizer(uint32_t service_id) const {
     RWLock::RLocker l(lock);
     AuthNoneAuthorizer *auth = new AuthNoneAuthorizer();
     if (auth) {

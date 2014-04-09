@@ -22,10 +22,10 @@ class CephContext;
 
 class CephxClientHandler : public AuthClientHandler {
   bool starting;
-  
+
   /* envelope protocol parameters */
   uint64_t server_challenge;
-  
+
   CephXTicketManager tickets;
   CephXTicketHandler* ticket_handler;
 
@@ -51,13 +51,13 @@ public:
     server_challenge = 0;
   }
   void prepare_build_request();
-  int build_request(bufferlist& bl);
+  int build_request(bufferlist& bl) const;
   int handle_response(int ret, bufferlist::iterator& iter);
-  bool build_rotating_request(bufferlist& bl);
+  bool build_rotating_request(bufferlist& bl) const;
 
-  int get_protocol() { return CEPH_AUTH_CEPHX; }
+  int get_protocol() const { return CEPH_AUTH_CEPHX; }
 
-  AuthAuthorizer *build_authorizer(uint32_t service_id);
+  AuthAuthorizer *build_authorizer(uint32_t service_id) const;
 
   void validate_tickets();
   bool need_tickets();

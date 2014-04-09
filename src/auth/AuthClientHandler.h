@@ -58,16 +58,16 @@ public:
     validate_tickets();
   }   
 
-  virtual int get_protocol() = 0;
+  virtual int get_protocol() const = 0;
 
   virtual void reset() = 0;
   virtual void prepare_build_request() = 0;
-  virtual int build_request(bufferlist& bl) = 0;
+  virtual int build_request(bufferlist& bl) const = 0;
   virtual int handle_response(int ret, bufferlist::iterator& iter) = 0;
-  virtual bool build_rotating_request(bufferlist& bl) = 0;
+  virtual bool build_rotating_request(bufferlist& bl) const = 0;
 
+  virtual AuthAuthorizer *build_authorizer(uint32_t service_id) const = 0;
 
-  virtual AuthAuthorizer *build_authorizer(uint32_t service_id) = 0;
 
   virtual void validate_tickets() = 0;
   virtual bool need_tickets() = 0;
