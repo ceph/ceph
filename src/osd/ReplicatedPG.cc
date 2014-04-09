@@ -5830,7 +5830,7 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
 	vector<snapid_t>::iterator p = snapset.snaps.begin();
 	while (p != snapset.snaps.end() && *p > soid.snap)
 	  ++p;
-	assert(p != snapset.snaps.end() && *p == soid.snap);
+	assert(p != snapset.snaps.end());
 	do {
 	  tctx->new_obs.oi.snaps.push_back(*p);
 	  ++p;
