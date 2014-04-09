@@ -278,6 +278,12 @@ void Elector::handle_ack(MMonElection *m)
     return;
   }
   assert(m->epoch == epoch);
+  if ((required_features ^ m->get_connection()->get_features()) &
+      required_features) {
+    dout(5) << " ignoring ack from mon" << from
+	    << " without required features" << dendl;
+    return;
+  }
   
   if (electing_me) {
     // thanks
