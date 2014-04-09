@@ -1209,6 +1209,8 @@ class Ioctx(object):
         :returns: int - number of bytes written 
         """
         self.require_ioctx_open()
+        if not isinstance(key, str):
+            raise TypeError('key must be a string')
         if not isinstance(data, str):
             raise TypeError('data must be a string')
         length = len(data)
