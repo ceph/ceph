@@ -586,7 +586,7 @@ int main(int argc, const char **argv)
 	int id;
 	int r = crush_add_bucket(crush.crush, 0, b, &id);
 	if (r < 0) {
-	  dout(2) << "Couldn't add bucket: " << strerror(-r) << dendl;
+	  dout(2) << "Couldn't add bucket: " << cpp_strerror(r) << dendl;
 	}
 
 	char format[20];
@@ -722,8 +722,7 @@ int main(int argc, const char **argv)
       crush.encode(bl);
       int r = bl.write_file(outfn.c_str());
       if (r < 0) {
-	char buf[80];
-	cerr << me << ": error writing '" << outfn << "': " << strerror_r(-r, buf, sizeof(buf)) << std::endl;
+	cerr << me << ": error writing '" << outfn << "': " << cpp_strerror(r) << std::endl;
 	exit(1);
       }
       if (verbose)

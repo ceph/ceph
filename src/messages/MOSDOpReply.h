@@ -20,6 +20,7 @@
 
 #include "MOSDOp.h"
 #include "os/ObjectStore.h"
+#include "common/errno.h"
 
 /*
  * OSD op reply
@@ -262,8 +263,7 @@ public:
       out << " ack";
     out << " = " << get_result();
     if (get_result() < 0) {
-      char buf[80];
-      out << " (" << strerror_r(-get_result(), buf, sizeof(buf)) << ")";
+      out << " (" << cpp_strerror(get_result()) << ")";
     }
     if (is_redirect_reply()) {
       out << " redirect: { " << redirect << " }";

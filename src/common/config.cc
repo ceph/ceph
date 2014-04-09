@@ -25,6 +25,7 @@
 #include "include/stringify.h"
 #include "msg/msg_types.h"
 #include "osd/osd_types.h"
+#include "common/errno.h"
 
 #include "include/assert.h"
 
@@ -439,7 +440,7 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
 	  show_config_value_arg << "': option not found" << std::endl;
       else
 	std::cerr << "failed to get config option '" <<
-	  show_config_value_arg << "': " << strerror(-r) << std::endl;
+	  show_config_value_arg << "': " << cpp_strerror(r) << std::endl;
       _exit(1);
     }
     string s = buf;

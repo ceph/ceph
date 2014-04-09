@@ -278,8 +278,7 @@ int Pipe::accept()
   len = sizeof(socket_addr.ss_addr());
   r = ::getpeername(sd, (sockaddr*)&socket_addr.ss_addr(), &len);
   if (r < 0) {
-    char buf[80];
-    ldout(msgr->cct,0) << "accept failed to getpeername " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    ldout(msgr->cct,0) << "accept failed to getpeername " << cpp_strerror(errno) << dendl;
     goto fail_unlocked;
   }
   ::encode(socket_addr, addrs);
@@ -817,12 +816,10 @@ int Pipe::connect()
   if (sd >= 0)
     ::close(sd);
 
-  char buf[80];
-
   // create socket?
   sd = ::socket(peer_addr.get_family(), SOCK_STREAM, 0);
   if (sd < 0) {
-    lderr(msgr->cct) << "connect couldn't created socket " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    lderr(msgr->cct) << "connect couldn't created socket " << cpp_strerror(errno) << dendl;
     goto fail;
   }
 
@@ -831,7 +828,7 @@ int Pipe::connect()
   rc = ::connect(sd, (sockaddr*)&peer_addr.addr, peer_addr.addr_size());
   if (rc < 0) {
     ldout(msgr->cct,2) << "connect error " << peer_addr
-	     << ", " << errno << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+	     << ", " << cpp_strerror(errno) << dendl;
     goto fail;
   }
 
@@ -840,7 +837,7 @@ int Pipe::connect()
   // verify banner
   // FIXME: this should be non-blocking, or in some other way verify the banner as we get it.
   if (tcp_read((char*)&banner, strlen(CEPH_BANNER)) < 0) {
-    ldout(msgr->cct,2) << "connect couldn't read banner, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    ldout(msgr->cct,2) << "connect couldn't read banner, " << cpp_strerror(errno) << dendl;
     goto fail;
   }
   if (memcmp(banner, CEPH_BANNER, strlen(CEPH_BANNER))) {
@@ -855,7 +852,7 @@ int Pipe::connect()
   msg.msg_iovlen = 1;
   msglen = msgvec[0].iov_len;
   if (do_sendmsg(&msg, msglen)) {
-    ldout(msgr->cct,2) << "connect couldn't write my banner, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    ldout(msgr->cct,2) << "connect couldn't write my banner, " << cpp_strerror(errno) << dendl;
     goto fail;
   }
 
@@ -865,7 +862,7 @@ int Pipe::connect()
     addrbl.push_back(p);
   }
   if (tcp_read(addrbl.c_str(), addrbl.length()) < 0) {
-    ldout(msgr->cct,2) << "connect couldn't read peer addrs, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    ldout(msgr->cct,2) << "connect couldn't read peer addrs, " << cpp_strerror(errno) << dendl;
     goto fail;
   }
   {
@@ -902,7 +899,7 @@ int Pipe::connect()
   msg.msg_iovlen = 1;
   msglen = msgvec[0].iov_len;
   if (do_sendmsg(&msg, msglen)) {
-    ldout(msgr->cct,2) << "connect couldn't write my addr, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    ldout(msgr->cct,2) << "connect couldn't write my addr, " << cpp_strerror(errno) << dendl;
     goto fail;
   }
   ldout(msgr->cct,10) << "connect sent my addr " << msgr->my_inst.addr << dendl;
@@ -943,14 +940,14 @@ int Pipe::connect()
     ldout(msgr->cct,10) << "connect sending gseq=" << gseq << " cseq=" << cseq
 	     << " proto=" << connect.protocol_version << dendl;
     if (do_sendmsg(&msg, msglen)) {
-      ldout(msgr->cct,2) << "connect couldn't write gseq, cseq, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+      ldout(msgr->cct,2) << "connect couldn't write gseq, cseq, " << cpp_strerror(errno) << dendl;
       goto fail;
     }
 
     ldout(msgr->cct,20) << "connect wrote (self +) cseq, waiting for reply" << dendl;
     ceph_msg_connect_reply reply;
     if (tcp_read((char*)&reply, sizeof(reply)) < 0) {
-      ldout(msgr->cct,2) << "connect read reply " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+      ldout(msgr->cct,2) << "connect read reply " << cpp_strerror(errno) << dendl;
       goto fail;
     }
 
@@ -1250,8 +1247,7 @@ void Pipe::fault(bool onread)
     return;
   }
   
-  char buf[80];
-  ldout(msgr->cct,2) << "fault " << errno << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+  ldout(msgr->cct,2) << "fault " << cpp_strerror(errno) << dendl;
 
   if (state == STATE_CLOSED ||
       state == STATE_CLOSING) {
@@ -1410,12 +1406,11 @@ void Pipe::reader()
 
     pipe_lock.Unlock();
 
-    char buf[80];
     char tag = -1;
     ldout(msgr->cct,20) << "reader reading tag..." << dendl;
     if (tcp_read((char*)&tag, 1) < 0) {
       pipe_lock.Lock();
-      ldout(msgr->cct,2) << "reader couldn't read tag, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+      ldout(msgr->cct,2) << "reader couldn't read tag, " << cpp_strerror(errno) << dendl;
       fault(true);
       continue;
     }
@@ -1464,7 +1459,7 @@ void Pipe::reader()
       int rc = tcp_read((char*)&seq, sizeof(seq));
       pipe_lock.Lock();
       if (rc < 0) {
-	ldout(msgr->cct,2) << "reader couldn't read ack seq, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+	ldout(msgr->cct,2) << "reader couldn't read ack seq, " << cpp_strerror(errno) << dendl;
 	fault(true);
       } else if (state != STATE_CLOSED) {
         handle_ack(seq);
@@ -1565,8 +1560,6 @@ void Pipe::reader()
  */
 void Pipe::writer()
 {
-  char buf[80];
-
   pipe_lock.Lock();
   while (state != STATE_CLOSED) {// && state != STATE_WAIT) {
     ldout(msgr->cct,10) << "writer: state = " << get_state_name()
@@ -1618,7 +1611,7 @@ void Pipe::writer()
 	pipe_lock.Lock();
 	if (rc < 0) {
 	  ldout(msgr->cct,2) << "writer couldn't write keepalive[2], "
-			     << strerror_r(errno, buf, sizeof(buf)) << dendl;
+			     << cpp_strerror(errno) << dendl;
 	  fault();
  	  continue;
 	}
@@ -1630,7 +1623,7 @@ void Pipe::writer()
 	int rc = write_keepalive2(CEPH_MSGR_TAG_KEEPALIVE2_ACK, t);
 	pipe_lock.Lock();
 	if (rc < 0) {
-	  ldout(msgr->cct,2) << "writer couldn't write keepalive_ack, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+	  ldout(msgr->cct,2) << "writer couldn't write keepalive_ack, " << cpp_strerror(errno) << dendl;
 	  fault();
 	  continue;
 	}
@@ -1644,7 +1637,7 @@ void Pipe::writer()
 	int rc = write_ack(send_seq);
 	pipe_lock.Lock();
 	if (rc < 0) {
-	  ldout(msgr->cct,2) << "writer couldn't write ack, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+	  ldout(msgr->cct,2) << "writer couldn't write ack, " << cpp_strerror(errno) << dendl;
 	  fault();
  	  continue;
 	}
@@ -1708,7 +1701,7 @@ void Pipe::writer()
 	pipe_lock.Lock();
 	if (rc < 0) {
           ldout(msgr->cct,1) << "writer error sending " << m << ", "
-		  << errno << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+		  << cpp_strerror(errno) << dendl;
 	  fault();
         }
 	m->put();
@@ -2005,8 +1998,6 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 
 int Pipe::do_sendmsg(struct msghdr *msg, int len, bool more)
 {
-  char buf[80];
-
   while (len > 0) {
     if (0) { // sanity
       int l = 0;
@@ -2019,7 +2010,7 @@ int Pipe::do_sendmsg(struct msghdr *msg, int len, bool more)
     if (r == 0) 
       ldout(msgr->cct,10) << "do_sendmsg hmm do_sendmsg got r==0!" << dendl;
     if (r < 0) { 
-      ldout(msgr->cct,1) << "do_sendmsg error " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+      ldout(msgr->cct,1) << "do_sendmsg error " << cpp_strerror(errno) << dendl;
       return -1;
     }
     if (state == STATE_CLOSED) {
@@ -2303,7 +2294,7 @@ again:
       goto again;
     } else {
       ldout(msgr->cct, 10) << "tcp_read_nonblocking socket " << sd << " returned "
-		     << got << " errno " << errno << " " << cpp_strerror(errno) << dendl;
+		     << got << " " << cpp_strerror(errno) << dendl;
       return -1;
     }
   } else if (got == 0) {
@@ -2345,8 +2336,8 @@ int Pipe::tcp_write(const char *buf, int len)
   while (len > 0) {
     int did = ::send( sd, buf, len, MSG_NOSIGNAL );
     if (did < 0) {
-      //lgeneric_dout(cct, 1) << "tcp_write error did = " << did << "  errno " << errno << " " << strerror(errno) << dendl;
-      //lgeneric_derr(cct, 1) << "tcp_write error did = " << did << "  errno " << errno << " " << strerror(errno) << dendl;
+      //lgeneric_dout(cct, 1) << "tcp_write error did = " << did << " " << cpp_strerror(errno) << dendl;
+      //lgeneric_derr(cct, 1) << "tcp_write error did = " << did << " " << cpp_strerror(errno) << dendl;
       return did;
     }
     len -= did;

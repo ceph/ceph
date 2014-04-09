@@ -108,7 +108,7 @@ int mon_data_exists(bool *r)
     if (errno == ENOENT) {
       *r = false;
     } else {
-      cerr << "stat(" << mon_data << ") " << strerror(errno) << std::endl;
+      cerr << "stat(" << mon_data << ") " << cpp_strerror(errno) << std::endl;
       return -errno;
     }
   } else {
@@ -123,7 +123,7 @@ int mon_data_empty(bool *r)
 
   DIR *dir = ::opendir(mon_data.c_str());
   if (!dir) {
-    cerr << "opendir(" << mon_data << ") " << strerror(errno) << std::endl;
+    cerr << "opendir(" << mon_data << ") " << cpp_strerror(errno) << std::endl;
     return -errno;
   }
   char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
@@ -135,7 +135,7 @@ int mon_data_empty(bool *r)
   while (!::readdir_r(dir, reinterpret_cast<struct dirent*>(buf), &de)) {
     if (!de) {
       if (errno) {
-	cerr << "readdir(" << mon_data << ") " << strerror(errno) << std::endl;
+	cerr << "readdir(" << mon_data << ") " << cpp_strerror(errno) << std::endl;
 	code = -errno;
       }
       break;
@@ -285,7 +285,7 @@ int main(int argc, const char **argv)
     if (!exists) {
       if (::mkdir(g_conf->mon_data.c_str(), 0755)) {
 	cerr << "mkdir(" << g_conf->mon_data << ") : "
-	     << strerror(errno) << std::endl;
+	     << cpp_strerror(errno) << std::endl;
 	exit(1);
       }
     }
