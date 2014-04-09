@@ -1666,6 +1666,8 @@ void Monitor::apply_quorum_to_compatset_features()
     MonitorDBStore::Transaction t;
     write_features(t);
     store->apply_transaction(t);
+
+    elector.refresh_required_features();
   }
 }
 
