@@ -718,9 +718,6 @@ void MonClient::tick()
     }
   }
 
-  if (auth)
-    auth->tick();
-
   schedule_tick();
 }
 

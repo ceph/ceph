@@ -33,8 +33,6 @@ public:
 
   int get_protocol() { return CEPH_AUTH_UNKNOWN; }
   
-  void tick() {}
-
   AuthAuthorizer *build_authorizer(uint32_t service_id) {
     RWLock::RLocker l(lock);
     AuthUnknownAuthorizer *auth = new AuthUnknownAuthorizer();

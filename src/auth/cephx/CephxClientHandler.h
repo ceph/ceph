@@ -53,8 +53,6 @@ public:
   bool build_rotating_request(bufferlist& bl);
 
   int get_protocol() { return CEPH_AUTH_CEPHX; }
-  
-  void tick() {}
 
   AuthAuthorizer *build_authorizer(uint32_t service_id);
 
