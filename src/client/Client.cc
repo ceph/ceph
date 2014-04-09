@@ -1610,9 +1610,10 @@ void Client::handle_client_session(MClientSession *m)
   case CEPH_SESSION_OPEN:
     renew_caps(session);
     session->state = MetaSession::STATE_OPEN;
-    if (!unmounting) {
+    if (unmounting)
+      mount_cond.Signal();
+    else
       connect_mds_targets(from);
-    }
     signal_context_list(session->waiting_for_open);
     break;
 
