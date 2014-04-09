@@ -61,6 +61,7 @@ public:
   virtual int get_protocol() = 0;
 
   virtual void reset() = 0;
+  virtual void prepare_build_request() = 0;
   virtual int build_request(bufferlist& bl) = 0;
   virtual int handle_response(int ret, bufferlist::iterator& iter) = 0;
   virtual bool build_rotating_request(bufferlist& bl) = 0;

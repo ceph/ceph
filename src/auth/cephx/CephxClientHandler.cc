@@ -31,16 +31,7 @@ int CephxClientHandler::build_request(bufferlist& bl)
 {
   ldout(cct, 10) << "build_request" << dendl;
 
-  ldout(cct, 10) << "validate_tickets: want=" << want << " need=" << need << " have=" << have << dendl;
-
-  lock.get_write();
-  validate_tickets();
-  lock.put_write();
-
   RWLock::RLocker l(lock);
-  ldout(cct, 10) << "want=" << want << " need=" << need << " have=" << have << dendl;
-
-  CephXTicketHandler& ticket_handler = tickets.get_handler(CEPH_ENTITY_TYPE_AUTH);
 
   if (need & CEPH_ENTITY_TYPE_AUTH) {
     /* authenticate */
@@ -61,7 +52,7 @@ int CephxClientHandler::build_request(bufferlist& bl)
       return -EIO;
     }
 
-    req.old_ticket = ticket_handler.ticket;
+    req.old_ticket = ticket_handler->ticket;
 
     if (req.old_ticket.blob.length()) {
       ldout(cct, 20) << "old ticket len=" << req.old_ticket.blob.length() << dendl;
@@ -81,7 +72,7 @@ int CephxClientHandler::build_request(bufferlist& bl)
     header.request_type = CEPHX_GET_PRINCIPAL_SESSION_KEY;
     ::encode(header, bl);
 
-    CephXAuthorizer *authorizer = ticket_handler.build_authorizer(global_id);
+    CephXAuthorizer *authorizer = ticket_handler->build_authorizer(global_id);
     if (!authorizer)
       return -EINVAL;
     bl.claim_append(authorizer->bl);
@@ -196,6 +187,18 @@ bool CephxClientHandler::build_rotating_request(bufferlist& bl)
   header.request_type = CEPHX_GET_ROTATING_KEY;
   ::encode(header, bl);
   return true;
+}
+
+void CephxClientHandler::prepare_build_request()
+{
+  RWLock::WLocker l(lock);
+  ldout(cct, 10) << "validate_tickets: want=" << want << " need=" << need
+		 << " have=" << have << dendl;
+  validate_tickets();
+  ldout(cct, 10) << "want=" << want << " need=" << need << " have=" << have
+		 << dendl;
+
+  ticket_handler = &(tickets.get_handler(CEPH_ENTITY_TYPE_AUTH));
 }
 
 void CephxClientHandler::validate_tickets()
