@@ -33,8 +33,6 @@ public:
 
   int get_protocol() { return CEPH_AUTH_NONE; }
   
-  void tick() {}
-
   AuthAuthorizer *build_authorizer(uint32_t service_id) {
     RWLock::RLocker l(lock);
     AuthNoneAuthorizer *auth = new AuthNoneAuthorizer();
