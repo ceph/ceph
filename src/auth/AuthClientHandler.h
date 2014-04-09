@@ -65,7 +65,6 @@ public:
   virtual int handle_response(int ret, bufferlist::iterator& iter) = 0;
   virtual bool build_rotating_request(bufferlist& bl) = 0;
 
-  virtual void tick() = 0;
 
   virtual AuthAuthorizer *build_authorizer(uint32_t service_id) = 0;
 
