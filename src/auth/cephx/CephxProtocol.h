@@ -303,10 +303,10 @@ struct CephXTicketHandler {
   bool verify_service_ticket_reply(CryptoKey& principal_secret,
 				 bufferlist::iterator& indata);
   // to access the service
-  CephXAuthorizer *build_authorizer(uint64_t global_id);
+  CephXAuthorizer *build_authorizer(uint64_t global_id) const;
 
   bool have_key();
-  bool need_key();
+  bool need_key() const;
 
   void invalidate_ticket() {
     have_key_flag = 0;
@@ -335,9 +335,9 @@ struct CephXTicketManager {
     assert(res.second);
     return res.first->second;
   }
-  CephXAuthorizer *build_authorizer(uint32_t service_id);
+  CephXAuthorizer *build_authorizer(uint32_t service_id) const;
   bool have_key(uint32_t service_id);
-  bool need_key(uint32_t service_id);
+  bool need_key(uint32_t service_id) const;
   void set_have_need_key(uint32_t service_id, uint32_t& have, uint32_t& need);
   void validate_tickets(uint32_t mask, uint32_t& have, uint32_t& need);
   void invalidate_ticket(uint32_t service_id);
