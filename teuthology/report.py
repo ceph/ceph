@@ -1,5 +1,4 @@
 import os
-from os.path import getmtime
 import yaml
 import json
 import re
