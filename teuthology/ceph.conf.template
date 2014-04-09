@@ -40,7 +40,7 @@
 	debug ms = 1
 	debug mon = 20
 	debug paxos = 20
-	mon data avail warn = 10
+	mon data avail warn = 5
 
 [mds]
         mds debug scatterstat = true
