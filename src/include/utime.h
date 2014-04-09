@@ -36,7 +36,7 @@ public:
   friend class Clock;
  
  public:
-  bool is_zero() {
+  bool is_zero() const {
     return (tv.tv_sec == 0) && (tv.tv_nsec == 0);
   }
   void normalize() {
@@ -130,14 +130,14 @@ public:
   operator double() const {
     return (double)sec() + ((double)nsec() / 1000000000.0L);
   }
-  operator ceph_timespec() {
+  operator ceph_timespec() const {
     ceph_timespec ts;
     ts.tv_sec = sec();
     ts.tv_nsec = nsec();
     return ts;
   }
 
-  void sleep() {
+  void sleep() const {
     struct timespec ts;
     to_timespec(&ts);
     nanosleep(&ts, NULL);

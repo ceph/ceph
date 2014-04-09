@@ -81,7 +81,6 @@ Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
     peer_type(-1),
     pipe_lock("SimpleMessenger::Pipe::pipe_lock"),
     state(st),
-    session_security(NULL),
     connection_state(NULL),
     reader_running(false), reader_needs_join(false),
     writer_running(false),
@@ -113,7 +112,6 @@ Pipe::~Pipe()
 {
   assert(out_q.empty());
   assert(sent.empty());
-  delete session_security;
   delete delay_thread;
 }
 
@@ -419,8 +417,7 @@ int Pipe::accept()
       if (state != STATE_ACCEPTING)
 	goto shutting_down_msgr_unlocked;
       reply.tag = CEPH_MSGR_TAG_BADAUTHORIZER;
-      delete session_security;
-      session_security = NULL;
+      session_security.reset();
       goto reply;
     } 
 
@@ -658,9 +655,11 @@ int Pipe::accept()
   connection_state->set_features((uint64_t)reply.features & (uint64_t)connect.features);
   ldout(msgr->cct,10) << "accept features " << connection_state->get_features() << dendl;
 
-  delete session_security;
-  session_security = get_auth_session_handler(msgr->cct, connect.authorizer_protocol, session_key,
-					      connection_state->get_features());
+  session_security.reset(
+      get_auth_session_handler(msgr->cct,
+			       connect.authorizer_protocol,
+			       session_key,
+			       connection_state->get_features()));
 
   // notify
   msgr->dispatch_queue.queue_accept(connection_state.get());
@@ -1099,13 +1098,15 @@ int Pipe::connect()
       // If we have an authorizer, get a new AuthSessionHandler to deal with ongoing security of the
       // connection.  PLR
 
-      delete session_security;
       if (authorizer != NULL) {
-        session_security = get_auth_session_handler(msgr->cct, authorizer->protocol, authorizer->session_key,
-						    connection_state->get_features());
+	session_security.reset(
+            get_auth_session_handler(msgr->cct,
+				     authorizer->protocol,
+				     authorizer->session_key,
+				     connection_state->get_features()));
       }  else {
         // We have no authorizer, so we shouldn't be applying security to messages in this pipe.  PLR
-	session_security = NULL;
+	session_security.reset();
       }
 
       msgr->dispatch_queue.queue_connect(connection_state.get());
@@ -1404,6 +1405,9 @@ void Pipe::reader()
       continue;
     }
 
+    // get a reference to the AuthSessionHandler while we have the pipe_lock
+    ceph::shared_ptr<AuthSessionHandler> auth_handler = session_security;
+
     pipe_lock.Unlock();
 
     char buf[80];
@@ -1471,7 +1475,7 @@ void Pipe::reader()
     else if (tag == CEPH_MSGR_TAG_MSG) {
       ldout(msgr->cct,20) << "reader got MSG" << dendl;
       Message *m = 0;
-      int r = read_message(&m);
+      int r = read_message(&m, auth_handler.get());
 
       pipe_lock.Lock();
       
@@ -1680,7 +1684,7 @@ void Pipe::writer()
 	// security set up.  Some session security options do not
 	// actually calculate and check the signature, but they should
 	// handle the calls to sign_message and check_signature.  PLR
-	if (session_security == NULL) {
+	if (session_security.get() == NULL) {
 	  ldout(msgr->cct, 20) << "writer no session security" << dendl;
 	} else {
 	  if (session_security->sign_message(m)) {
@@ -1766,7 +1770,7 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
   }
 }
 
-int Pipe::read_message(Message **pm)
+int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 {
   int ret = -1;
   // envelope
@@ -1954,10 +1958,10 @@ int Pipe::read_message(Message **pm)
   //  Check the signature if one should be present.  A zero return indicates success. PLR
   //
 
-  if (session_security == NULL) {
+  if (auth_handler == NULL) {
     ldout(msgr->cct, 10) << "No session security set" << dendl;
   } else {
-    if (session_security->check_message_signature(message)) {
+    if (auth_handler->check_message_signature(message)) {
       ldout(msgr->cct, 0) << "Signature check failed" << dendl;
       ret = -EINVAL;
       goto out_dethrottle;

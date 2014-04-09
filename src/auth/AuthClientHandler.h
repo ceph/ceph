@@ -20,6 +20,7 @@
 
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "common/RWLock.h"
 
 #include "common/Timer.h"
 
@@ -36,49 +37,42 @@ protected:
   uint32_t want;
   uint32_t have;
   uint32_t need;
+  RWLock lock;
 
 public:
   AuthClientHandler(CephContext *cct_) 
-    : cct(cct_), global_id(0), want(CEPH_ENTITY_TYPE_AUTH), have(0), need(0) {}
+    : cct(cct_), global_id(0), want(CEPH_ENTITY_TYPE_AUTH), have(0), need(0),
+      lock("AuthClientHandler::lock") {}
   virtual ~AuthClientHandler() {}
 
   void init(EntityName& n) { name = n; }
   
   void set_want_keys(__u32 keys) {
+    RWLock::WLocker l(lock);
     want = keys | CEPH_ENTITY_TYPE_AUTH;
     validate_tickets();
   }
   void add_want_keys(__u32 keys) {
+    RWLock::WLocker l(lock);
     want |= keys;
     validate_tickets();
   }   
 
-  bool have_keys(__u32 k) {
-    validate_tickets();
-    return (k & have) == have;
-  }
-  bool have_keys() {
-    validate_tickets();
-    return (want & have) == have;
-  }
-
-
-  virtual int get_protocol() = 0;
+  virtual int get_protocol() const = 0;
 
   virtual void reset() = 0;
-  virtual int build_request(bufferlist& bl) = 0;
+  virtual void prepare_build_request() = 0;
+  virtual int build_request(bufferlist& bl) const = 0;
   virtual int handle_response(int ret, bufferlist::iterator& iter) = 0;
-  virtual bool build_rotating_request(bufferlist& bl) = 0;
+  virtual bool build_rotating_request(bufferlist& bl) const = 0;
 
-  virtual void tick() = 0;
+  virtual AuthAuthorizer *build_authorizer(uint32_t service_id) const = 0;
 
-  virtual AuthAuthorizer *build_authorizer(uint32_t service_id) = 0;
-
-  virtual void validate_tickets() = 0;
   virtual bool need_tickets() = 0;
 
   virtual void set_global_id(uint64_t id) = 0;
-  uint64_t get_global_id() { return global_id; }
+protected:
+  virtual void validate_tickets() = 0;
 };
 
 
