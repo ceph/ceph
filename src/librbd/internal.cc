@@ -2884,9 +2884,6 @@ reprotect_and_return_err:
     ldout(cct, 20) << "aio_write " << ictx << " off = " << off << " len = "
 		   << len << " buf = " << (void*)buf << dendl;
 
-    if (!len)
-      return 0;
-
     int r = ictx_check(ictx);
     if (r < 0)
       return r;
@@ -2912,14 +2909,16 @@ reprotect_and_return_err:
 
     // map
     vector<ObjectExtent> extents;
-    Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, off, mylen, 0, extents);
+    if (len > 0) {
+      Striper::file_to_extents(ictx->cct, ictx->format_string,
+			       &ictx->layout, off, mylen, 0, extents);
+    }
 
     c->get();
     c->init_time(ictx, AIO_TYPE_WRITE);
     for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
       ldout(cct, 20) << " oid " << p->oid << " " << p->offset << "~" << p->length
 		     << " from " << p->buffer_extents << dendl;
-
       // assemble extent
       bufferlist bl;
       for (vector<pair<uint64_t,uint64_t> >::iterator q = p->buffer_extents.begin();
@@ -2966,9 +2965,6 @@ reprotect_and_return_err:
     ldout(cct, 20) << "aio_discard " << ictx << " off = " << off << " len = "
 		   << len << dendl;
 
-    if (!len)
-      return 0;
-
     int r = ictx_check(ictx);
     if (r < 0)
       return r;
@@ -2992,7 +2988,10 @@ reprotect_and_return_err:
 
     // map
     vector<ObjectExtent> extents;
-    Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, off, len, 0, extents);
+    if (len > 0) {
+      Striper::file_to_extents(ictx->cct, ictx->format_string,
+			       &ictx->layout, off, len, 0, extents);
+    }
 
     c->get();
     c->init_time(ictx, AIO_TYPE_DISCARD);
@@ -3086,6 +3085,8 @@ reprotect_and_return_err:
       r = clip_io(ictx, p->first, &len);
       if (r < 0)
 	return r;
+      if (len == 0)
+	continue;
 
       Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout,
 			       p->first, len, 0, object_extents, buffer_ofs);
