@@ -480,7 +480,7 @@ protected:
   void finish_cap_snap(Inode *in, CapSnap *capsnap, int used);
   void _flushed_cap_snap(Inode *in, snapid_t seq);
 
-  void _schedule_invalidate_dentry_callback(Dentry *dn);
+  void _schedule_invalidate_dentry_callback(Dentry *dn, bool del);
   void _async_dentry_invalidate(vinodeno_t dirino, vinodeno_t ino, string& name);
   void _invalidate_inode_parents(Inode *in);
 

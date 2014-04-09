@@ -2204,8 +2204,12 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
   if (in) {    // link to inode
     dn->inode = in;
     in->get();
-    if (in->dir)
-      dn->get();  // dir -> dn pin
+    if (in->is_dir()) {
+      if (in->dir)
+	dn->get(); // dir -> dn pin
+      if (in->ll_ref)
+	dn->get(); // ll_ref -> dn pin
+    }
 
     assert(in->dn_set.count(dn) == 0);
 
@@ -2232,8 +2236,12 @@ void Client::unlink(Dentry *dn, bool keepdir)
 
   // unlink from inode
   if (in) {
-    if (in->dir)
-      dn->put();        // dir -> dn pin
+    if (in->is_dir()) {
+      if (in->dir)
+	dn->put(); // dir -> dn pin
+      if (in->ll_ref)
+	dn->put(); // ll_ref -> dn pin
+    }
     dn->inode = 0;
     assert(in->dn_set.count(dn));
     in->dn_set.erase(dn);
@@ -3092,6 +3100,17 @@ void Client::trim_caps(MetaSession *s, int max)
     }
   }
   s->s_cap_iterator = NULL;
+
+  // notify kernel to invalidate top level directory entries. As a side effect,
+  // unused inodes underneath these entries get pruned.
+  if (dentry_invalidate_cb && s->caps.size() > max) {
+    for (ceph::unordered_map<string, Dentry*>::iterator p = root->dir->dentries.begin();
+	 p != root->dir->dentries.end();
+	 ++p) {
+      if (p->second->inode)
+	_schedule_invalidate_dentry_callback(p->second, false);
+    }
+  }
 }
 
 void Client::mark_caps_dirty(Inode *in, int caps)
@@ -3680,9 +3699,14 @@ private:
   vinodeno_t ino;
   string name;
 public:
-  C_Client_DentryInvalidate(Client *c, Dentry *dn) :
-			    client(c), dirino(dn->dir->parent_inode->vino()),
-			    ino(dn->inode->vino()), name(dn->name) { }
+  C_Client_DentryInvalidate(Client *c, Dentry *dn, bool del) :
+    client(c), name(dn->name) {
+      dirino = dn->dir->parent_inode->vino();
+      if (del)
+	ino = dn->inode->vino();
+      else
+	ino.ino = inodeno_t();
+  }
   void finish(int r) {
     client->_async_dentry_invalidate(dirino, ino, name);
   }
@@ -3695,10 +3719,10 @@ void Client::_async_dentry_invalidate(vinodeno_t dirino, vinodeno_t ino, string&
   dentry_invalidate_cb(dentry_invalidate_cb_handle, dirino, ino, name);
 }
 
-void Client::_schedule_invalidate_dentry_callback(Dentry *dn)
+void Client::_schedule_invalidate_dentry_callback(Dentry *dn, bool del)
 {
   if (dentry_invalidate_cb && dn->inode->ll_ref > 0)
-    async_dentry_invalidator.queue(new C_Client_DentryInvalidate(this, dn));
+    async_dentry_invalidator.queue(new C_Client_DentryInvalidate(this, dn, del));
 }
 
 void Client::_invalidate_inode_parents(Inode *in)
@@ -3708,7 +3732,7 @@ void Client::_invalidate_inode_parents(Inode *in)
     Dentry *dn = *q++;
     // FIXME: we play lots of unlink/link tricks when handling MDS replies,
     //        so in->dn_set doesn't always reflect the state of kernel's dcache.
-    _schedule_invalidate_dentry_callback(dn);
+    _schedule_invalidate_dentry_callback(dn, true);
     unlink(dn, false);
   }
 }
@@ -3740,7 +3764,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     in->gid = m->head.gid;
   }
   bool deleted_inode = false;
-  if ((issued & CEPH_CAP_LINK_EXCL) == 0) {
+  if ((issued & CEPH_CAP_LINK_EXCL) == 0 && in->nlink != (int32_t)m->head.nlink) {
     in->nlink = m->head.nlink;
     if (in->nlink == 0 &&
 	(new_caps & (CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL)))
@@ -7047,8 +7071,13 @@ int Client::ll_walk(const char* name, Inode **i, struct stat *attr)
 
 void Client::_ll_get(Inode *in)
 {
-  if (in->ll_ref == 0)
+  if (in->ll_ref == 0) {
     in->get();
+    if (in->is_dir() && !in->dn_set.empty()) {
+      assert(in->dn_set.size() == 1); // dirs can't be hard-linked
+      in->get_first_parent()->get(); // pin dentry
+    }
+  }
   in->ll_get();
   ldout(cct, 20) << "_ll_get " << in << " " << in->ino << " -> " << in->ll_ref << dendl;
 }
@@ -7058,6 +7087,10 @@ int Client::_ll_put(Inode *in, int num)
   in->ll_put(num);
   ldout(cct, 20) << "_ll_put " << in << " " << in->ino << " " << num << " -> " << in->ll_ref << dendl;
   if (in->ll_ref == 0) {
+    if (in->is_dir() && !in->dn_set.empty()) {
+      assert(in->dn_set.size() == 1); // dirs can't be hard-linked
+      in->get_first_parent()->put(); // unpin dentry
+    }
     put_inode(in);
     return 0;
   } else {
@@ -7097,8 +7130,8 @@ bool Client::ll_forget(Inode *in, int count)
     ldout(cct, 1) << "WARNING: ll_forget on " << ino << " " << count
 		  << ", which only has ll_ref=" << in->ll_ref << dendl;
     _ll_put(in, in->ll_ref);
-      last = true;
-    } else {
+    last = true;
+  } else {
     if (_ll_put(in, count) == 0)
       last = true;
   }
