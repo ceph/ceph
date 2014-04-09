@@ -850,8 +850,46 @@ void EMetaBlob::get_inodes(
 }
 
 
+/**
+ * Get a map of dirfrag to set of dentries in that dirfrag which are
+ * touched in this operation.
+ */
+void EMetaBlob::get_dentries(std::map<dirfrag_t, std::set<std::string> > &dentries)
+{
+  for (std::map<dirfrag_t, dirlump>::iterator i = lump_map.begin(); i != lump_map.end(); ++i) {
+    inodeno_t const dir_ino = i->first.ino;
+    dirlump &dl = i->second;
+    dirfrag_t &df = i->first;
+
+    // Get all bits
+    dl._decode_bits();
+    list<ceph::shared_ptr<fullbit> > &fb_list = dl.get_dfull();
+    list<nullbit> &nb_list = dl.get_dnull();
+    list<remotebit> &rb_list = dl.get_dremote();
+
+    // For all bits, store dentry
+    for (list<ceph::shared_ptr<fullbit> >::const_iterator
+        iter = fb_list.begin(); iter != fb_list.end(); ++iter) {
+      dentries[df].insert((*iter)->dn);
+
+    }
+    for (list<nullbit>::const_iterator
+	iter = nb_list.begin(); iter != nb_list.end(); ++iter) {
+      dentries[df].insert(iter->dn);
+    }
+    for (list<remotebit>::const_iterator
+	iter = rb_list.begin(); iter != rb_list.end(); ++iter) {
+      dentries[df].insert(iter->dn);
+    }
+  }
+}
+
+
 
 /**
+ * Calculate all paths that we can infer are touched by this metablob.  Only uses
+ * information local to this metablob so it may only be the path within the
+ * subtree.
  *
  * This is not const because the contained dirlump and 'bit' objects
  * are modified by being decoded.
