@@ -28,6 +28,7 @@ Requires:	cryptsetup
 Requires:	parted
 Requires:	util-linux
 Requires:	hdparm
+Requires:       redhat-lsb-core
 Requires(post):	binutils
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 BuildRequires:	make
