@@ -392,6 +392,14 @@ class Elector {
   }
 
   /**
+   * Refresh required features
+   *
+   * Force a refresh of the features we require for others to join in
+   * on an election.
+   */
+  void refresh_required_features();
+
+  /**
    * Handle received messages.
    *
    * We will ignore all messages that are not of type @p MSG_MON_ELECTION

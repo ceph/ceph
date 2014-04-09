@@ -65,6 +65,11 @@ void Elector::bump_epoch(epoch_t e)
 }
 
 
+void Elector::refresh_required_features()
+{
+  required_features = mon->apply_compatset_features_to_quorum_requirements();
+}
+
 void Elector::start()
 {
   if (!participating) {
