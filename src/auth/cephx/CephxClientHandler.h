@@ -59,7 +59,6 @@ public:
 
   AuthAuthorizer *build_authorizer(uint32_t service_id) const;
 
-  void validate_tickets();
   bool need_tickets();
 
   void set_global_id(uint64_t id) {
@@ -67,6 +66,8 @@ public:
     global_id = id;
     tickets.global_id = id;
   }
+private:
+  void validate_tickets();
 };
 
 #endif
