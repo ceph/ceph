@@ -5667,9 +5667,9 @@ void OSD::check_osdmap_features(ObjectStore *fs)
 	!fs->get_allow_sharded_objects()) {
     dout(0) << __func__ << " enabling on-disk ERASURE CODES compat feature" << dendl;
     superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
-    ObjectStore::Transaction t;
-    write_superblock(t);
-    int err = store->apply_transaction(t);
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    write_superblock(*t);
+    int err = store->queue_transaction_and_cleanup(NULL, t);
     assert(err == 0);
     fs->set_allow_sharded_objects();
   }
