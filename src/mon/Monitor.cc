@@ -1085,6 +1085,16 @@ void Monitor::handle_sync_get_cookie(MMonSync *m)
 
   assert(g_conf->mon_sync_provider_kill_at != 1);
 
+  // make sure they can understand us.
+  uint64_t required = apply_compatset_features_to_quorum_requirements();
+  if ((required ^ m->get_connection()->get_features()) & required) {
+    dout(5) << " ignoring peer mon." << m->get_source().num()
+	    << " has features " << std::hex
+	    << m->get_connection()->get_features()
+	    << " but we require " << required << std::dec << dendl;
+    return;
+  }
+
   // make up a unique cookie.  include election epoch (which persists
   // across restarts for the whole cluster) and a counter for this
   // process instance.  there is no need to be unique *across*
