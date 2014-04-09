@@ -195,6 +195,9 @@ private:
   Paxos *paxos;
   Elector elector;
   friend class Elector;
+
+  /// features we require of peers (based on on-disk compatset)
+  uint64_t required_features;
   
   int leader;            // current leader (to best of knowledge)
   set<int> quorum;       // current active set of monitors (if !starting)
@@ -525,8 +528,11 @@ public:
   uint64_t get_quorum_features() const {
     return quorum_features;
   }
+  uint64_t get_required_features() const {
+    return quorum_features;
+  }
   void apply_quorum_to_compatset_features();
-  uint64_t apply_compatset_features_to_quorum_requirements();
+  void apply_compatset_features_to_quorum_requirements();
 
 private:
   void _reset();   ///< called from bootstrap, start_, or join_election

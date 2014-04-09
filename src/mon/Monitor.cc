@@ -156,6 +156,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   state(STATE_PROBING),
   
   elector(this),
+  required_features(0),
   leader(0),
   quorum_features(0),
   scrub_version(0),
@@ -364,6 +365,9 @@ void Monitor::read_features()
 {
   read_features_off_disk(store, &features);
   dout(10) << "features " << features << dendl;
+
+  apply_compatset_features_to_quorum_requirements();
+  dout(10) << "required_features " << required_features << dendl;
 }
 
 void Monitor::write_features(MonitorDBStore::Transaction &t)
@@ -1086,12 +1090,12 @@ void Monitor::handle_sync_get_cookie(MMonSync *m)
   assert(g_conf->mon_sync_provider_kill_at != 1);
 
   // make sure they can understand us.
-  uint64_t required = apply_compatset_features_to_quorum_requirements();
-  if ((required ^ m->get_connection()->get_features()) & required) {
+  if ((required_features ^ m->get_connection()->get_features()) &
+      required_features) {
     dout(5) << " ignoring peer mon." << m->get_source().num()
 	    << " has features " << std::hex
 	    << m->get_connection()->get_features()
-	    << " but we require " << required << std::dec << dendl;
+	    << " but we require " << required_features << std::dec << dendl;
     return;
   }
 
@@ -1671,26 +1675,27 @@ void Monitor::apply_quorum_to_compatset_features()
 
   if (new_features.compare(features) != 0) {
     CompatSet diff = features.unsupported(new_features);
-    dout(1) << "Enabling new quorum features: " << diff << dendl;
+    dout(1) << __func__ << " enabling new quorum features: " << diff << dendl;
     features = new_features;
+
     MonitorDBStore::Transaction t;
     write_features(t);
     store->apply_transaction(t);
 
-    elector.refresh_required_features();
+    apply_compatset_features_to_quorum_requirements();
   }
 }
 
-uint64_t Monitor::apply_compatset_features_to_quorum_requirements()
+void Monitor::apply_compatset_features_to_quorum_requirements()
 {
-  uint64_t required_features = 0;
+  required_features = 0;
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES)) {
     required_features |= CEPH_FEATURE_OSD_ERASURE_CODES;
   }
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC)) {
     required_features |= CEPH_FEATURE_OSDMAP_ENC;
   }
-  return required_features;
+  dout(10) << __func__ << " required_features " << required_features << dendl;
 }
 
 void Monitor::sync_force(Formatter *f, ostream& ss)
