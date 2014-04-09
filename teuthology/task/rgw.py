@@ -390,7 +390,7 @@ def fill_in_endpoints(region_info, role_zones, role_endpoints):
         region, zone, zone_info, _ = role_zones[role]
         host, port = role_endpoints[role]
         endpoint = 'http://{host}:{port}/'.format(host=host, port=port)
-        # check if the region specified under client actually exists 
+        # check if the region specified under client actually exists
         # in region_info (it should, if properly configured).
         # If not, throw a reasonable error
         if region not in region_info:
@@ -499,7 +499,8 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints):
                        for client, c_config in config.iteritems()])
     log.debug('roles_zones = %r', role_zones)
 
-    # extract the user info and append it to the payload tuple for the given client
+    # extract the user info and append it to the payload tuple for the given
+    # client
     for client, c_config in config.iteritems():
         if not c_config:
             user_info = None
@@ -509,8 +510,9 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints):
         (region, zone, zone_info) = role_zones[client]
         role_zones[client] = (region, zone, zone_info, user_info)
 
-    region_info = dict([(region, extract_region_info(region, r_config))
-                        for region, r_config in regions.iteritems()])
+    region_info = dict([
+        (region_name, extract_region_info(region_name, r_config))
+        for region_name, r_config in regions.iteritems()])
 
     fill_in_endpoints(region_info, role_zones, role_endpoints)
 
@@ -647,7 +649,7 @@ def task(ctx, config):
                 rgw region: bar
                 rgw zone: bar-secondary
                 rgw region root pool: .rgw.rroot.bar
-                rgw zone root pool: .rgw.zroot.bar-secondary 
+                rgw zone root pool: .rgw.zroot.bar-secondary
         - rgw:
             ec-data-pool: true
             regions:
