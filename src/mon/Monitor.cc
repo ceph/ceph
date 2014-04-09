@@ -1355,6 +1355,13 @@ void Monitor::handle_probe(MMonProbe *m)
     handle_probe_reply(m);
     break;
 
+  case MMonProbe::OP_MISSING_FEATURES:
+    derr << __func__ << " missing features, have " << CEPH_FEATURES_ALL
+	 << ", required " << required_features
+	 << ", missing " << (required_features & ~CEPH_FEATURES_ALL)
+	 << dendl;
+    break;
+
   default:
     m->put();
   }
@@ -1365,8 +1372,24 @@ void Monitor::handle_probe(MMonProbe *m)
  */
 void Monitor::handle_probe_probe(MMonProbe *m)
 {
-  dout(10) << "handle_probe_probe " << m->get_source_inst() << *m << dendl;
-  MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_REPLY, name, has_ever_joined);
+  dout(10) << "handle_probe_probe " << m->get_source_inst() << *m
+	   << " features " << m->get_connection()->get_features() << dendl;
+  uint64_t missing = required_features & ~m->get_connection()->get_features();
+  if (missing) {
+    dout(1) << " peer " << m->get_source_addr() << " missing features "
+	    << missing << dendl;
+    if (m->get_connection()->has_feature(CEPH_FEATURE_OSD_PRIMARY_AFFINITY)) {
+      MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_MISSING_FEATURES,
+				   name, has_ever_joined);
+      m->required_features = required_features;
+      messenger->send_message(r, m->get_connection());
+    }
+    m->put();
+    return;
+  }
+
+  MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_REPLY,
+			       name, has_ever_joined);
   r->name = name;
   r->quorum = quorum;
   monmap->encode(r->monmap_bl, m->get_connection()->get_features());
@@ -1376,9 +1399,11 @@ void Monitor::handle_probe_probe(MMonProbe *m)
 
   // did we discover a peer here?
   if (!monmap->contains(m->get_source_addr())) {
-    dout(1) << " adding peer " << m->get_source_addr() << " to list of hints" << dendl;
+    dout(1) << " adding peer " << m->get_source_addr()
+	    << " to list of hints" << dendl;
     extra_probe_peers.insert(m->get_source_addr());
   }
+
   m->put();
 }
 
