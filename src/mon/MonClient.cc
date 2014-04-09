@@ -504,6 +504,7 @@ void MonClient::handle_auth(MAuthReply *m)
   if (ret == -EAGAIN) {
     MAuth *ma = new MAuth;
     ma->protocol = auth->get_protocol();
+    auth->prepare_build_request();
     ret = auth->build_request(ma->auth_payload);
     _send_mon_message(ma, true);
     return;
@@ -718,9 +719,6 @@ void MonClient::tick()
     }
   }
 
-  if (auth)
-    auth->tick();
-
   schedule_tick();
 }
 
@@ -780,6 +778,7 @@ int MonClient::_check_auth_tickets()
       ldout(cct, 10) << "_check_auth_tickets getting new tickets!" << dendl;
       MAuth *m = new MAuth;
       m->protocol = auth->get_protocol();
+      auth->prepare_build_request();
       auth->build_request(m->auth_payload);
       _send_mon_message(m);
     }

@@ -22,12 +22,13 @@ class CephContext;
 
 class CephxClientHandler : public AuthClientHandler {
   bool starting;
-  
+
   /* envelope protocol parameters */
   uint64_t server_challenge;
-  
+
   CephXTicketManager tickets;
-  
+  CephXTicketHandler* ticket_handler;
+
   RotatingKeyRing *rotating_secrets;
   KeyRing *keyring;
 
@@ -37,6 +38,7 @@ public:
       starting(false),
       server_challenge(0),
       tickets(cct_),
+      ticket_handler(NULL),
       rotating_secrets(rsecrets),
       keyring(rsecrets->get_keyring())
   {
@@ -44,26 +46,28 @@ public:
   }
 
   void reset() {
+    RWLock::WLocker l(lock);
     starting = true;
     server_challenge = 0;
   }
-  int build_request(bufferlist& bl);
+  void prepare_build_request();
+  int build_request(bufferlist& bl) const;
   int handle_response(int ret, bufferlist::iterator& iter);
-  bool build_rotating_request(bufferlist& bl);
+  bool build_rotating_request(bufferlist& bl) const;
 
-  int get_protocol() { return CEPH_AUTH_CEPHX; }
-  
-  void tick() {}
+  int get_protocol() const { return CEPH_AUTH_CEPHX; }
 
-  AuthAuthorizer *build_authorizer(uint32_t service_id);
+  AuthAuthorizer *build_authorizer(uint32_t service_id) const;
 
-  void validate_tickets();
   bool need_tickets();
 
   void set_global_id(uint64_t id) {
+    RWLock::WLocker l(lock);
     global_id = id;
     tickets.global_id = id;
   }
+private:
+  void validate_tickets();
 };
 
 #endif
