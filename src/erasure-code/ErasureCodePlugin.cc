@@ -18,6 +18,7 @@
 #include <dlfcn.h>
 
 #include "ErasureCodePlugin.h"
+#include "common/errno.h"
 
 #define PLUGIN_PREFIX "libec_"
 #define PLUGIN_SUFFIX ".so"
@@ -107,7 +108,7 @@ int ErasureCodePluginRegistry::load(const std::string &plugin_name,
     int r = erasure_code_init(name.c_str());
     if (r != 0) {
       ss << "erasure_code_init(" << plugin_name
-	 << "): " << strerror(-r);
+	 << "): " << cpp_strerror(r);
       dlclose(library);
       return r;
     }
