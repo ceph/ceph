@@ -7276,10 +7276,7 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
 
-  if (m->get_map_epoch() < pg->info.history.same_primary_since) {
-    dout(7) << *pg << " changed after " << m->get_map_epoch() << ", dropping" << dendl;
-    return;
-  }
+  assert(m->get_map_epoch() >= pg->info.history.same_primary_since);
 
   if (pg->is_ec_pg()) {
     /**
