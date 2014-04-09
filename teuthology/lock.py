@@ -201,8 +201,8 @@ def main(ctx):
                 statuses = list_locks()
         if statuses:
             if ctx.machine_type:
-                statuses = [status for status in statuses
-                            if status['type'] == ctx.machine_type]
+                statuses = [_status for _status in statuses
+                            if _status['type'] == ctx.machine_type]
             if not machines and ctx.owner is None and not ctx.all:
                 ctx.owner = misc.get_user()
             if ctx.owner is not None:
