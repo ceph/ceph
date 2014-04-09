@@ -65,8 +65,7 @@ int main (int argc, char **argv) {
     memset(&layout, 0, sizeof(layout));
     err = ioctl(fd, CEPH_IOC_GET_LAYOUT, (unsigned long)&layout);
     if (err) {
-      cerr << "Error getting layout: "
-	   << (err == -1 ? strerror(errno) : strerror(-err)) << endl;
+      cerr << "Error getting layout: " << cpp_strerror(errno) << endl;
       return 1;
     }
     if (layout.stripe_unit == 0) {
@@ -82,8 +81,7 @@ int main (int argc, char **argv) {
     location.file_offset = file_offset;
     err = ioctl(fd, CEPH_IOC_GET_DATALOC, (unsigned long)&location);
     if (err) {
-      cerr << "Error getting location: "
-	   << (err == -1 ? strerror(errno) : strerror(-err)) << endl;
+      cerr << "Error getting location: " << cpp_strerror(err) << endl;
       return 1;
     }
     cout << "location.file_offset:  " << location.file_offset << endl;
@@ -106,16 +104,14 @@ int main (int argc, char **argv) {
     layout.unused = -1;   /* used to be preferred_osd */
     err = ioctl(fd, ioctl_num, (unsigned long)&layout);
     if (err) {
-      cerr << "Error setting layout: " 
-	   << (err == -1 ? strerror(errno) : strerror(-err)) << endl;
+      cerr << "Error setting layout: " << cpp_strerror(errno) << endl;
       return 1;
     }
   } else if (CMD_MAP == cmd) {
     struct stat st;
     err = ::fstat(fd, &st);
     if (err < 0) {
-      cerr << "error statting file: "
-	   << (err == -1 ? strerror(errno) : strerror(-err)) << endl;
+      cerr << "error statting file: " << cpp_strerror(errno) << endl;
       return 1;
     }
 
@@ -123,8 +119,7 @@ int main (int argc, char **argv) {
     memset(&layout, 0, sizeof(layout));
     err = ioctl(fd, CEPH_IOC_GET_LAYOUT, (unsigned long)&layout);
     if (err) {
-      cerr << "Error getting layout: "
-	   << (err == -1 ? strerror(errno) : strerror(-err)) << endl;
+      cerr << "Error getting layout: " << cpp_strerror(errno) << endl;
       return 1;
     }
 
@@ -136,8 +131,7 @@ int main (int argc, char **argv) {
       location.file_offset = off;
       err = ioctl(fd, CEPH_IOC_GET_DATALOC, (unsigned long)&location);
       if (err) {
-	cerr << "Error getting location: "
-	     << (err == -1 ? strerror(errno) : strerror(-err)) << endl;
+	cerr << "Error getting location: " << cpp_strerror(errno) << endl;
 	return 1;
       }
       printf("%15lld  %24s  %12lld  %12lld  %d\n",
@@ -193,7 +187,7 @@ int init_options(int argc, char **argv, int *fd, char **path, int *cmd,
 
   *fd = open(argv[1], O_RDONLY);
   if (*fd < 0) {
-    cerr << "error opening path: " << strerror(*fd) << endl;
+    cerr << "error opening path: " << cpp_strerror(*fd) << endl;
     return 1;
   }
 

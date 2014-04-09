@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include "common/safe_io.h"
+#include "common/errno.h"
 
 /**
  * pre-fork fork/daemonize helper class
@@ -68,7 +69,7 @@ public:
       ::close(2);
       r = 0;
     } else if (err) {
-      cerr << "[" << getpid() << "]: " << cpp_strerror(-err) << std::endl;
+      cerr << "[" << getpid() << "]: " << cpp_strerror(err) << std::endl;
     } else {
       // wait for child to exit
       waitpid(childpid, NULL, 0);

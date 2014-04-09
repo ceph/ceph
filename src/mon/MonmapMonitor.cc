@@ -21,6 +21,7 @@
 
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
+#include "common/errno.h"
 #include "mon/MDSMonitor.h"
 #include "mon/OSDMonitor.h"
 #include "mon/PGMonitor.h"

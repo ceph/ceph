@@ -33,6 +33,7 @@ using namespace std;
 #include <math.h>
 #include <sys/statvfs.h>
 
+#include "common/errno.h"
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_client
@@ -318,16 +319,14 @@ int SyntheticClient::run()
   dout(15) << "initing" << dendl;
   int err = client->init();
   if (err < 0) {
-    char buf[80];
-    dout(0) << "failed to initialize: " << strerror_r(-err, buf, sizeof(buf)) << dendl;
+    dout(0) << "failed to initialize: " << cpp_strerror(err) << dendl;
     return -1;
   }
 
   dout(15) << "mounting" << dendl;
   err = client->mount("");
   if (err < 0) {
-    char buf[80];
-    dout(0) << "failed to mount: " << strerror_r(-err, buf, sizeof(buf)) << dendl;
+    dout(0) << "failed to mount: " << cpp_strerror(err) << dendl;
     client->shutdown();
     return -1;
   }
