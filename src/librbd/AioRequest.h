@@ -47,6 +47,7 @@ namespace librbd {
 
   protected:
     void read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents);
+    void read_from_parent_COR(vector<pair<uint64_t,uint64_t> >& image_extents);
 
     ImageCtx *m_ictx;
     librados::IoCtx *m_ioctx;
@@ -57,6 +58,7 @@ namespace librbd {
     AioCompletion *m_parent_completion;
     ceph::bufferlist m_read_data;
     bool m_hide_enoent;
+    ceph::bufferlist m_entire_object;
   };
 
   class AioRead : public AioRequest {
