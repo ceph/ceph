@@ -53,3 +53,6 @@
 	rgw enable usage log = true
 	log file = /var/log/ceph/ceph-$name.$pid.log
 	admin socket = /var/run/ceph/ceph-$name.$pid.asok
+
+
+	client mount timeout = 600
