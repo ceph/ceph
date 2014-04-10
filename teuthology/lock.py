@@ -207,20 +207,20 @@ def main(ctx):
                 ctx.owner = misc.get_user()
             if ctx.owner is not None:
                 statuses = [_status for _status in statuses
-                            if status['locked_by'] == ctx.owner]
+                            if _status['locked_by'] == ctx.owner]
             if ctx.status is not None:
                 statuses = [_status for _status in statuses
-                            if status['up'] == (ctx.status == 'up')]
+                            if _status['up'] == (ctx.status == 'up')]
             if ctx.locked is not None:
                 statuses = [_status for _status in statuses
-                            if status['locked'] == (ctx.locked == 'true')]
+                            if _status['locked'] == (ctx.locked == 'true')]
             if ctx.desc is not None:
                 statuses = [_status for _status in statuses
-                            if status['description'] == ctx.desc]
+                            if _status['description'] == ctx.desc]
             if ctx.desc_pattern is not None:
                 statuses = [_status for _status in statuses
-                            if status['description'] is not None and
-                            status['description'].find(ctx.desc_pattern) >= 0]
+                            if _status['description'] is not None and
+                            _status['description'].find(ctx.desc_pattern) >= 0]
             if ctx.list:
                     print json.dumps(statuses, indent=4)
 
