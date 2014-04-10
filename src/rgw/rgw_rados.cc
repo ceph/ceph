@@ -3064,7 +3064,7 @@ public:
     }
 };
 
-int RGWRados::rewrite_obj(rgw_obj& obj)
+int RGWRados::rewrite_obj(const string& bucket_owner, rgw_obj& obj)
 {
   map<string, bufferlist> attrset;
   off_t ofs = 0;
@@ -3083,7 +3083,7 @@ int RGWRados::rewrite_obj(rgw_obj& obj)
 
   attrset.erase(RGW_ATTR_ID_TAG);
 
-  return copy_obj_data((void *)&rctx, &handle, end, obj, obj, &mtime, attrset, RGW_OBJ_CATEGORY_MAIN, NULL, NULL);
+  return copy_obj_data((void *)&rctx, bucket_owner, &handle, end, obj, obj, &mtime, attrset, RGW_OBJ_CATEGORY_MAIN, NULL, NULL);
 }
 
 /**
