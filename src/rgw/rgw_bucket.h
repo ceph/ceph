@@ -158,6 +158,11 @@ struct RGWBucketAdminOpState {
     bucket_stored = true;
   }
 
+  void set_bucket_id(const string& bi) {
+    bucket_id = bi;
+  }
+  const string& get_bucket_id() { return bucket_id; };
+
   bool will_fetch_stats() { return stat_buckets; };
   bool will_fix_index() { return fix_index; };
   bool will_delete_children() { return delete_child_objects; };
@@ -226,7 +231,7 @@ public:
 
 
   static int unlink(RGWRados *store, RGWBucketAdminOpState& op_state);
-  static int link(RGWRados *store, RGWBucketAdminOpState& op_state);
+  static int link(RGWRados *store, RGWBucketAdminOpState& op_state, string *err_msg = NULL);
 
   static int check_index(RGWRados *store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher);
