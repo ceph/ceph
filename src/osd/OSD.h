@@ -1074,6 +1074,7 @@ private:
   map<int, int> debug_heartbeat_drops_remaining;
   Cond heartbeat_cond;
   bool heartbeat_stop;
+  Mutex heartbeat_update_lock; // orders under heartbeat_lock
   bool heartbeat_need_update;   ///< true if we need to refresh our heartbeat peers
   epoch_t heartbeat_epoch;      ///< last epoch we updated our heartbeat peers
   map<int,HeartbeatInfo> heartbeat_peers;  ///< map of osd id to HeartbeatInfo
@@ -1088,6 +1089,14 @@ private:
   bool heartbeat_reset(Connection *con);
   void maybe_update_heartbeat_peers();
   void reset_heartbeat_peers();
+  bool heartbeat_peers_need_update() {
+    Mutex::Locker l(heartbeat_update_lock);
+    return heartbeat_need_update;
+  }
+  void heartbeat_set_peers_need_update() {
+    Mutex::Locker l(heartbeat_update_lock);
+    heartbeat_need_update = true;
+  }
   void heartbeat();
   void heartbeat_check();
   void heartbeat_entry();
