@@ -1842,14 +1842,16 @@ next:
       cerr << "ERROR: object not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(bucket_name, bucket);
+
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(bucket_name, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
 
     rgw_obj obj(bucket, object);
-    ret = store->rewrite_obj(obj);
+    ret = store->rewrite_obj(bucket_info.owner, obj);
 
     if (ret < 0) {
       cerr << "ERROR: object rewrite returned: " << cpp_strerror(-ret) << std::endl;
@@ -1863,7 +1865,8 @@ next:
       return EINVAL;
     }
 
-    int ret = init_bucket(bucket_name, bucket);
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(bucket_name, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -1927,7 +1930,7 @@ next:
           formatter->dump_string("status", "Skipped");
         } else {
           rgw_obj obj(bucket, name);
-          r = store->rewrite_obj(obj);
+          r = store->rewrite_obj(bucket_info.owner, obj);
           if (r == 0) {
             formatter->dump_string("status", "Success");
           } else {
