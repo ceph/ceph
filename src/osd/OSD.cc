@@ -923,7 +923,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   paused_recovery(false),
   session_waiting_for_map_lock("OSD::session_waiting_for_map_lock"),
   heartbeat_lock("OSD::heartbeat_lock"),
-  heartbeat_stop(false), heartbeat_need_update(true), heartbeat_epoch(0),
+  heartbeat_stop(false), heartbeat_update_lock("OSD::heartbeat_update_lock"),
+  heartbeat_need_update(true), heartbeat_epoch(0),
   hbclient_messenger(hb_clientm),
   hb_front_server_messenger(hb_front_serverm),
   hb_back_server_messenger(hb_back_serverm),
@@ -2798,11 +2799,10 @@ void OSD::_remove_heartbeat_peer(int n)
 
 void OSD::need_heartbeat_peer_update()
 {
-  Mutex::Locker l(heartbeat_lock);
   if (is_stopping())
     return;
   dout(20) << "need_heartbeat_peer_update" << dendl;
-  heartbeat_need_update = true;
+  heartbeat_set_peers_need_update();
 }
 
 void OSD::maybe_update_heartbeat_peers()
@@ -2813,12 +2813,12 @@ void OSD::maybe_update_heartbeat_peers()
     utime_t now = ceph_clock_now(cct);
     if (last_heartbeat_resample == utime_t()) {
       last_heartbeat_resample = now;
-      heartbeat_need_update = true;
-    } else if (!heartbeat_need_update) {
+      heartbeat_set_peers_need_update();
+    } else if (!heartbeat_peers_need_update()) {
       utime_t dur = now - last_heartbeat_resample;
       if (dur > cct->_conf->osd_heartbeat_grace) {
 	dout(10) << "maybe_update_heartbeat_peers forcing update after " << dur << " seconds" << dendl;
-	heartbeat_need_update = true;
+	heartbeat_set_peers_need_update();
 	last_heartbeat_resample = now;
 	reset_heartbeat_peers();   // we want *new* peers!
       }
@@ -2826,7 +2826,7 @@ void OSD::maybe_update_heartbeat_peers()
   }
 
   Mutex::Locker l(heartbeat_lock);
-  if (!heartbeat_need_update)
+  if (!heartbeat_peers_need_update())
     return;
   heartbeat_need_update = false;
 
