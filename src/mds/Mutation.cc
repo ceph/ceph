@@ -241,7 +241,6 @@ void MDRequestImpl::unfreeze_auth_pin(bool clear_inode)
 
 void MDRequestImpl::set_remote_frozen_auth_pin(CInode *inode)
 {
-  assert(!more()->rename_inode || more()->rename_inode == inode);
   more()->rename_inode = inode;
   more()->is_remote_frozen_authpin = true;
 }
