@@ -75,7 +75,6 @@ void Elector::start()
 
   acked_me.clear();
   classic_mons.clear();
-  required_features = mon->apply_compatset_features_to_quorum_requirements();
   init();
   
   // start by trying to elect me
@@ -214,6 +213,7 @@ void Elector::handle_propose(MMonElection *m)
   int from = m->get_source().num();
 
   assert(m->epoch % 2 == 1); // election
+  uint64_t required_features = mon->get_required_features();
   if ((required_features ^ m->get_connection()->get_features()) &
       required_features) {
     dout(5) << " ignoring propose from mon" << from
@@ -278,6 +278,13 @@ void Elector::handle_ack(MMonElection *m)
     return;
   }
   assert(m->epoch == epoch);
+  uint64_t required_features = mon->get_required_features();
+  if ((required_features ^ m->get_connection()->get_features()) &
+      required_features) {
+    dout(5) << " ignoring ack from mon" << from
+	    << " without required features" << dendl;
+    return;
+  }
   
   if (electing_me) {
     // thanks
@@ -349,7 +356,7 @@ void Elector::nak_old_peer(MMonElection *m)
   uint64_t supported_features = m->get_connection()->get_features();
 
   if (supported_features & CEPH_FEATURE_OSDMAP_ENC) {
-    uint64_t required_features = mon->apply_compatset_features_to_quorum_requirements();
+    uint64_t required_features = mon->get_required_features();
     dout(10) << "sending nak to peer " << m->get_source()
 	     << " that only supports " << supported_features
 	     << " of the required " << required_features << dendl;
