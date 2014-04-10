@@ -22,7 +22,7 @@
 
 class MMonProbe : public Message {
 public:
-  static const int HEAD_VERSION = 5;
+  static const int HEAD_VERSION = 6;
   static const int COMPAT_VERSION = 5;
 
   enum {
@@ -31,6 +31,7 @@ public:
     OP_SLURP = 3,
     OP_SLURP_LATEST = 4,
     OP_DATA = 5,
+    OP_MISSING_FEATURES = 6,
   };
 
   static const char *get_opname(int o) {
@@ -40,6 +41,7 @@ public:
     case OP_SLURP: return "slurp";
     case OP_SLURP_LATEST: return "slurp_latest";
     case OP_DATA: return "data";
+    case OP_MISSING_FEATURES: return "missing_features";
     default: assert(0); return 0;
     }
   }
@@ -52,6 +54,7 @@ public:
   version_t paxos_first_version;
   version_t paxos_last_version;
   bool has_ever_joined;
+  uint64_t required_features;
 
   MMonProbe()
     : Message(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION) {}
@@ -62,7 +65,8 @@ public:
       name(n),
       paxos_first_version(0),
       paxos_last_version(0),
-      has_ever_joined(hej) {}
+      has_ever_joined(hej),
+      required_features(0) {}
 private:
   ~MMonProbe() {}
 
@@ -80,6 +84,8 @@ public:
     }
     if (!has_ever_joined)
       out << " new";
+    if (required_features)
+      out << " required_features " << required_features;
     out << ")";
   }
   
@@ -100,6 +106,7 @@ public:
     ::encode(has_ever_joined, payload);
     ::encode(paxos_first_version, payload);
     ::encode(paxos_last_version, payload);
+    ::encode(required_features, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -111,6 +118,10 @@ public:
     ::decode(has_ever_joined, p);
     ::decode(paxos_first_version, p);
     ::decode(paxos_last_version, p);
+    if (header.version >= 6)
+      ::decode(required_features, p);
+    else
+      required_features = 0;
   }
 };
 
