@@ -115,8 +115,6 @@ class Elector {
    */
   map<int, uint64_t> acked_me;
   set<int> classic_mons;
-  /// features which a monitor must hold for us to defer to them
-  uint64_t required_features;
   /**
    * @}
    */
@@ -354,7 +352,6 @@ class Elector {
 			epoch(0),
 			participating(true),
 			electing_me(false),
-			required_features(0),
 			leader_acked(-1) { }
 
   /**

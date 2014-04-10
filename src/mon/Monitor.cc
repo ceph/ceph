@@ -156,6 +156,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   state(STATE_PROBING),
   
   elector(this),
+  required_features(0),
   leader(0),
   quorum_features(0),
   scrub_version(0),
@@ -364,6 +365,9 @@ void Monitor::read_features()
 {
   read_features_off_disk(store, &features);
   dout(10) << "features " << features << dendl;
+
+  apply_compatset_features_to_quorum_requirements();
+  dout(10) << "required_features " << required_features << dendl;
 }
 
 void Monitor::write_features(MonitorDBStore::Transaction &t)
@@ -1085,6 +1089,16 @@ void Monitor::handle_sync_get_cookie(MMonSync *m)
 
   assert(g_conf->mon_sync_provider_kill_at != 1);
 
+  // make sure they can understand us.
+  if ((required_features ^ m->get_connection()->get_features()) &
+      required_features) {
+    dout(5) << " ignoring peer mon." << m->get_source().num()
+	    << " has features " << std::hex
+	    << m->get_connection()->get_features()
+	    << " but we require " << required_features << std::dec << dendl;
+    return;
+  }
+
   // make up a unique cookie.  include election epoch (which persists
   // across restarts for the whole cluster) and a counter for this
   // process instance.  there is no need to be unique *across*
@@ -1341,6 +1355,13 @@ void Monitor::handle_probe(MMonProbe *m)
     handle_probe_reply(m);
     break;
 
+  case MMonProbe::OP_MISSING_FEATURES:
+    derr << __func__ << " missing features, have " << CEPH_FEATURES_ALL
+	 << ", required " << required_features
+	 << ", missing " << (required_features & ~CEPH_FEATURES_ALL)
+	 << dendl;
+    break;
+
   default:
     m->put();
   }
@@ -1351,8 +1372,24 @@ void Monitor::handle_probe(MMonProbe *m)
  */
 void Monitor::handle_probe_probe(MMonProbe *m)
 {
-  dout(10) << "handle_probe_probe " << m->get_source_inst() << *m << dendl;
-  MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_REPLY, name, has_ever_joined);
+  dout(10) << "handle_probe_probe " << m->get_source_inst() << *m
+	   << " features " << m->get_connection()->get_features() << dendl;
+  uint64_t missing = required_features & ~m->get_connection()->get_features();
+  if (missing) {
+    dout(1) << " peer " << m->get_source_addr() << " missing features "
+	    << missing << dendl;
+    if (m->get_connection()->has_feature(CEPH_FEATURE_OSD_PRIMARY_AFFINITY)) {
+      MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_MISSING_FEATURES,
+				   name, has_ever_joined);
+      m->required_features = required_features;
+      messenger->send_message(r, m->get_connection());
+    }
+    m->put();
+    return;
+  }
+
+  MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_REPLY,
+			       name, has_ever_joined);
   r->name = name;
   r->quorum = quorum;
   monmap->encode(r->monmap_bl, m->get_connection()->get_features());
@@ -1362,9 +1399,11 @@ void Monitor::handle_probe_probe(MMonProbe *m)
 
   // did we discover a peer here?
   if (!monmap->contains(m->get_source_addr())) {
-    dout(1) << " adding peer " << m->get_source_addr() << " to list of hints" << dendl;
+    dout(1) << " adding peer " << m->get_source_addr()
+	    << " to list of hints" << dendl;
     extra_probe_peers.insert(m->get_source_addr());
   }
+
   m->put();
 }
 
@@ -1661,24 +1700,27 @@ void Monitor::apply_quorum_to_compatset_features()
 
   if (new_features.compare(features) != 0) {
     CompatSet diff = features.unsupported(new_features);
-    dout(1) << "Enabling new quorum features: " << diff << dendl;
+    dout(1) << __func__ << " enabling new quorum features: " << diff << dendl;
     features = new_features;
+
     MonitorDBStore::Transaction t;
     write_features(t);
     store->apply_transaction(t);
+
+    apply_compatset_features_to_quorum_requirements();
   }
 }
 
-uint64_t Monitor::apply_compatset_features_to_quorum_requirements()
+void Monitor::apply_compatset_features_to_quorum_requirements()
 {
-  uint64_t required_features = 0;
+  required_features = 0;
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES)) {
     required_features |= CEPH_FEATURE_OSD_ERASURE_CODES;
   }
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC)) {
     required_features |= CEPH_FEATURE_OSDMAP_ENC;
   }
-  return required_features;
+  dout(10) << __func__ << " required_features " << required_features << dendl;
 }
 
 void Monitor::sync_force(Formatter *f, ostream& ss)
