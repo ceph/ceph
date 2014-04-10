@@ -203,6 +203,7 @@ OPTION(mon_leveldb_max_open_files, OPT_INT, 0) // monitor's leveldb max open fil
 OPTION(mon_leveldb_compression, OPT_BOOL, false) // monitor's leveldb uses compression
 OPTION(mon_leveldb_paranoid, OPT_BOOL, false)   // monitor's leveldb paranoid flag
 OPTION(mon_leveldb_log, OPT_STR, "")
+OPTION(mon_force_quorum_join, OPT_BOOL, false) // force monitor to join quorum even if it has been previously removed from the map
 OPTION(paxos_stash_full_interval, OPT_INT, 25)   // how often (in commits) to stash a full copy of the PaxosService state
 OPTION(paxos_max_join_drift, OPT_INT, 10) // max paxos iterations before we must first sync the monitor stores
 OPTION(paxos_propose_interval, OPT_DOUBLE, 1.0)  // gather updates for this long before proposing a map update

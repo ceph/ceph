@@ -415,6 +415,16 @@ int Monitor::preinit()
       dout(10) << " monmap is " << *monmap << dendl;
       dout(10) << " extra probe peers " << extra_probe_peers << dendl;
     }
+  } else if (!monmap->contains(name)) {
+    derr << "not in monmap and have been in a quorum before; "
+         << "must have been removed" << dendl;
+    if (g_conf->mon_force_quorum_join) {
+      dout(0) << "we should have died but "
+              << "'mon_force_quorum_join' is set -- allowing boot" << dendl;
+    } else {
+      derr << "commit suicide!" << dendl;
+      return -ENOENT;
+    }
   }
 
   {
