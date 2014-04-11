@@ -237,9 +237,7 @@ CephContext::CephContext(uint32_t module_type_)
     _admin_socket(NULL),
     _perf_counters_collection(NULL),
     _perf_counters_conf_obs(NULL),
-    _heartbeat_map(NULL),
-    _crypto_none(NULL),
-    _crypto_aes(NULL)
+    _heartbeat_map(NULL)
 {
   pthread_spin_init(&_service_thread_lock, PTHREAD_PROCESS_SHARED);
 
