@@ -45,7 +45,12 @@ setup for CloudStack Primary Storage.
 
 .. note:: Make sure the /tmp partition on your hypervisors is at least 25GB.
    When deploying from a template from the first time /tmp will be used for
-   converting the template from QCOW2 to RAW for storage on RBD.
+   converting the template from QCOW2 to RAW for storage on RBD. This is no
+   longer valid starting from CloudStack version 4.4.0
+
+.. note:: To use RBD with CloudStack 4.4.0 you require at least librbd version
+   0.67.7 (Ceph Dumpling). Otherwise template deployments and template backups
+   will fail. In case you use Ubuntu we recommend at least LTS version 14.04
    
 Installing and configuring QEMU for use with CloudStack doesn't require any
 special handling. Ensure that you have a running Ceph Storage Cluster. Install
