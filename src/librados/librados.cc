@@ -1144,9 +1144,15 @@ int librados::IoCtx::snap_list(std::vector<snap_t> *snaps)
   return io_ctx_impl->snap_list(snaps);
 }
 
-int librados::IoCtx::rollback(const std::string& oid, const char *snapname)
+int librados::IoCtx::snap_rollback(const std::string& oid, const char *snapname)
 {
   return io_ctx_impl->rollback(oid, snapname);
+}
+
+// Deprecated name kept for backward compatibility
+int librados::IoCtx::rollback(const std::string& oid, const char *snapname)
+{
+  return snap_rollback(oid, snapname);
 }
 
 int librados::IoCtx::selfmanaged_snap_create(uint64_t *snapid)
@@ -2492,11 +2498,18 @@ extern "C" int rados_ioctx_snap_remove(rados_ioctx_t io, const char *snapname)
   return ctx->snap_remove(snapname);
 }
 
-extern "C" int rados_rollback(rados_ioctx_t io, const char *oid,
+extern "C" int rados_ioctx_snap_rollback(rados_ioctx_t io, const char *oid,
 			      const char *snapname)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   return ctx->rollback(oid, snapname);
+}
+
+// Deprecated name kept for backward compatibility
+extern "C" int rados_rollback(rados_ioctx_t io, const char *oid,
+			      const char *snapname)
+{
+  return rados_ioctx_snap_rollback(io, oid, snapname);
 }
 
 extern "C" int rados_ioctx_selfmanaged_snap_create(rados_ioctx_t io,
