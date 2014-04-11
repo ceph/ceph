@@ -233,6 +233,7 @@ int main(int argc, char **argv)
   int64_t size = 4000000; // 4 MB
   int64_t min_stride_size = -1, max_stride_size = -1;
   int max_seconds = 0;
+  bool pool_snaps = false;
 
   struct {
     TestOpType op;
@@ -283,6 +284,8 @@ int main(int argc, char **argv)
       max_stride_size = atoi(argv[++i]);
     else if (strcmp(argv[i], "--no-omap") == 0)
       no_omap = true;
+    else if (strcmp(argv[i], "--pool-snaps") == 0)
+      pool_snaps = true;
     else if (strcmp(argv[i], "--ec-pool") == 0) {
       if (!op_weights.empty()) {
 	cerr << "--ec-pool must be specified prior to any ops" << std::endl;
@@ -377,6 +380,7 @@ int main(int argc, char **argv)
     min_stride_size,
     max_stride_size,
     no_omap,
+    pool_snaps,
     id);
 
   TestOpStat stats;
