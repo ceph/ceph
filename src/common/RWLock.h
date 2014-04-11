@@ -24,7 +24,7 @@ class RWLock
 {
   mutable pthread_rwlock_t L;
   const char *name;
-  int id;
+  mutable int id;
 
 public:
   RWLock(const RWLock& other);
