@@ -3313,6 +3313,9 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
 
   dout(10) << "do_open_truncate " << *in << dendl;
 
+  SnapRealm *realm = in->find_snaprealm();
+  mds->locker->issue_new_caps(in, cmode, mdr->session, realm, mdr->client_request->is_replay());
+
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "open_truncate");
   mdlog->start_entry(le);
@@ -3341,10 +3344,6 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
   mdcache->predirty_journal_parents(mdr, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, in);
   
-  // do the open
-  SnapRealm *realm = in->find_snaprealm();
-  mds->locker->issue_new_caps(in, cmode, mdr->session, realm, mdr->client_request->is_replay());
-
   // make sure ino gets into the journal
   le->metablob.add_opened_ino(in->ino());
   LogSegment *ls = mds->mdlog->get_current_segment();
