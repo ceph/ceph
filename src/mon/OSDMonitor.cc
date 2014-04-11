@@ -1208,7 +1208,7 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
   }
 
   if (osdmap.exists(from) &&
-      osdmap.get_info(from).up_from > m->boot_epoch) {
+      osdmap.get_info(from).up_from > m->version) {
     dout(7) << "prepare_boot msg from before last up_from, ignoring" << dendl;
     goto ignore;
   }
