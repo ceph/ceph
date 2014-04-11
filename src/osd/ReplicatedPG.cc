@@ -3964,7 +3964,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
       // -- fancy writers --
     case CEPH_OSD_OP_APPEND:
-      ++ctx->num_write;
       {
 	// just do it inline; this works because we are happy to execute
 	// fancy op on replicas as well.
@@ -3975,7 +3974,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	newop.op.extent.length = op.extent.length;
 	newop.op.extent.truncate_seq = oi.truncate_seq;
         newop.indata = osd_op.indata;
-	do_osd_ops(ctx, nops);
+	result = do_osd_ops(ctx, nops);
 	osd_op.outdata.claim(newop.outdata);
       }
       break;
