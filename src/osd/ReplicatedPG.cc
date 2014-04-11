@@ -6222,8 +6222,9 @@ void ReplicatedPG::cancel_flush(FlushOpRef fop, bool requeue)
     Mutex::Locker l(osd->objecter_lock);
     osd->objecter->op_cancel(fop->objecter_tid, -ECANCELED);
   }
-  if (fop->ctx->op && requeue) {
-    requeue_op(fop->ctx->op);
+  if (requeue) {
+    if (fop->ctx->op)
+      requeue_op(fop->ctx->op);
     requeue_ops(fop->dup_ops);
   }
   if (fop->blocking) {
