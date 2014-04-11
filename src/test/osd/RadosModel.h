@@ -728,7 +728,6 @@ public:
     cont_gen->get_ranges_map(cont, ranges);
     std::cout << num << ":  seq_num " << context->seq_num << " ranges " << ranges << std::endl;
     context->seq_num++;
-    context->state_lock.Unlock();
 
     waiting_on = ranges.size();
     //cout << " waiting_on = " << waiting_on << std::endl;
@@ -795,6 +794,7 @@ public:
       &read_op,
       librados::OPERATION_ORDER_READS_WRITES,  // order wrt previous write/update
       0);
+    context->state_lock.Unlock();
   }
 
   void _finish(CallbackInfo *info)
