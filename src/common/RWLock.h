@@ -41,19 +41,19 @@ public:
   }
 
   void unlock() const {
-    if (g_lockdep) lockdep_will_unlock(name, id);
+    if (g_lockdep) id = lockdep_will_unlock(name, id);
     pthread_rwlock_unlock(&L);
   }
 
   // read
   void get_read() const {
-    if (g_lockdep) lockdep_will_lock(name, id);
+    if (g_lockdep) id = lockdep_will_lock(name, id);
     pthread_rwlock_rdlock(&L);
-    if (g_lockdep) lockdep_locked(name, id);
+    if (g_lockdep) id = lockdep_locked(name, id);
   }
   bool try_get_read() const {
     if (pthread_rwlock_tryrdlock(&L) == 0) {
-      if (g_lockdep) lockdep_locked(name, id);
+      if (g_lockdep) id = lockdep_locked(name, id);
       return true;
     }
     return false;
@@ -64,13 +64,13 @@ public:
 
   // write
   void get_write() {
-    if (g_lockdep) lockdep_will_lock(name, id);
+    if (g_lockdep) id = lockdep_will_lock(name, id);
     pthread_rwlock_wrlock(&L);
-    if (g_lockdep) lockdep_locked(name, id);
+    if (g_lockdep) id = lockdep_locked(name, id);
   }
   bool try_get_write() {
     if (pthread_rwlock_trywrlock(&L) == 0) {
-      if (g_lockdep) lockdep_locked(name, id);
+      if (g_lockdep) id = lockdep_locked(name, id);
       return true;
     }
     return false;
