@@ -250,6 +250,7 @@ public:
   MetaSession *_open_mds_session(int mds);
   void _close_mds_session(MetaSession *s);
   void _closed_mds_session(MetaSession *s);
+  void _kick_stale_sessions();
   void handle_client_session(MClientSession *m);
   void send_reconnect(MetaSession *s);
   void resend_unsafe_requests(MetaSession *s);
