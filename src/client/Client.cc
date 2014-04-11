@@ -2090,15 +2090,21 @@ void Client::kick_requests_closed(MetaSession *session)
 {
   ldout(cct, 10) << "kick_requests_closed for mds." << session->mds_num << dendl;
   for (map<ceph_tid_t, MetaRequest*>::iterator p = mds_requests.begin();
-       p != mds_requests.end();
-       ++p) {
-    if (p->second->mds == session->mds_num) {
-      if (p->second->caller_cond) {
-	p->second->kick = true;
-	p->second->caller_cond->Signal();
+       p != mds_requests.end(); ) {
+    MetaRequest *req = p->second;
+    ++p;
+    if (req->mds == session->mds_num) {
+      if (req->caller_cond) {
+	req->kick = true;
+	req->caller_cond->Signal();
       }
-      p->second->item.remove_myself();
-      p->second->unsafe_item.remove_myself();
+      req->item.remove_myself();
+      if (req->got_unsafe) {
+	lderr(cct) << "kick_requests_closed removing unsafe request " << req->get_tid() << dendl;
+	req->unsafe_item.remove_myself();
+	mds_requests.erase(req->get_tid());
+	put_request(req);
+      }
     }
   }
   assert(session->requests.empty());
