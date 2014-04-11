@@ -135,9 +135,8 @@ private:
 
   ceph::HeartbeatMap *_heartbeat_map;
 
-  // crypto
-  CryptoNone *_crypto_none;
-  CryptoAES *_crypto_aes;
+  //crypto handler
+  CryptoHandler *_crypto_handler;
 };
 
 #endif
