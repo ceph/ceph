@@ -21,6 +21,7 @@
 
 #include "msg/Message.h"
 #include "include/ceph_features.h"
+#include "common/errno.h"
 
 #include <vector>
 using namespace std;
@@ -229,8 +230,7 @@ public:
     o << "client_reply(???:" << get_tid();
     o << " = " << get_result();
     if (get_result() <= 0) {
-      char buf[80];
-      o << " " << strerror_r(-get_result(), buf, sizeof(buf));
+      o << " " << cpp_strerror(get_result());
     }
     if (head.op & CEPH_MDS_OP_WRITE) {
       if (head.safe)
