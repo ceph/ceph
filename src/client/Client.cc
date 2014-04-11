@@ -116,6 +116,8 @@ bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
     m_client->dump_mds_sessions(f);
   else if (command == "dump_cache")
     m_client->dump_cache(f);
+  else if (command == "kick_stale_sessions")
+    m_client->_kick_stale_sessions();
   else
     assert(0 == "bad command registered");
   m_client->client_lock.Unlock();
@@ -390,6 +392,14 @@ int Client::init()
     lderr(cct) << "error registering admin socket command: "
 	       << cpp_strerror(-ret) << dendl;
   }
+  ret = admin_socket->register_command("kick_stale_sessions",
+				       "kick_stale_sessions",
+				       &m_command_hook,
+				       "kick sessions that were remote reset");
+  if (ret < 0) {
+    lderr(cct) << "error registering admin socket command: "
+	       << cpp_strerror(-ret) << dendl;
+  }
 
   client_lock.Lock();
   initialized = true;
@@ -405,6 +415,7 @@ void Client::shutdown()
   admin_socket->unregister_command("mds_requests");
   admin_socket->unregister_command("mds_sessions");
   admin_socket->unregister_command("dump_cache");
+  admin_socket->unregister_command("kick_stale_sessions");
 
   if (ino_invalidate_cb) {
     ldout(cct, 10) << "shutdown stopping invalidator finisher" << dendl;
@@ -1478,7 +1489,8 @@ bool Client::have_open_session(int mds)
 {
   return
     mds_sessions.count(mds) &&
-    mds_sessions[mds]->state == MetaSession::STATE_OPEN;
+    (mds_sessions[mds]->state == MetaSession::STATE_OPEN ||
+     mds_sessions[mds]->state == MetaSession::STATE_STALE);
 }
 
 MetaSession *Client::_get_mds_session(int mds, Connection *con)
@@ -1581,6 +1593,19 @@ void Client::handle_client_session(MClientSession *m)
   }
 
   m->put();
+}
+
+void Client::_kick_stale_sessions()
+{
+  ldout(cct, 1) << "kick_stale_sessions" << dendl;
+
+  for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
+       p != mds_sessions.end(); ) {
+    MetaSession *s = p->second;
+    ++p;
+    if (s->state == MetaSession::STATE_STALE)
+      _closed_mds_session(s);
+  }
 }
 
 void Client::send_request(MetaRequest *request, MetaSession *session)
@@ -7955,6 +7980,10 @@ void Client::ms_handle_remote_reset(Connection *con)
 	  break;
 
 	case MetaSession::STATE_OPEN:
+	  ldout(cct, 1) << "reset from mds we were open; mark session as stale" << dendl;
+	  s->state = MetaSession::STATE_STALE;
+	  break;
+
 	case MetaSession::STATE_NEW:
 	case MetaSession::STATE_CLOSED:
 	default:
