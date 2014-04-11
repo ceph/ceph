@@ -3075,12 +3075,27 @@ void Client::remove_all_caps(Inode *in)
     remove_cap(in->caps.begin()->second, true);
 }
 
-void Client::remove_session_caps(MetaSession *mds) 
+void Client::remove_session_caps(MetaSession *s)
 {
-  while (mds->caps.size()) {
-    Cap *cap = *mds->caps.begin();
+  ldout(cct, 10) << "remove_session_caps mds." << s->mds_num << dendl;
+
+  while (s->caps.size()) {
+    Cap *cap = *s->caps.begin();
+    Inode *in = cap->inode;
+    int dirty_caps = 0;
+    if (in->auth_cap == cap)
+      dirty_caps = in->dirty_caps | in->flushing_caps;
     remove_cap(cap, false);
+    if (dirty_caps) {
+      lderr(cct) << "remove_session_caps still has dirty|flushing caps on " << *in << dendl;
+      if (in->flushing_caps)
+	num_flushing_caps--;
+      in->flushing_caps = 0;
+      in->dirty_caps = 0;
+      put_inode(in);
+    }
   }
+  sync_cond.Signal();
 }
 
 void Client::trim_caps(MetaSession *s, int max)
