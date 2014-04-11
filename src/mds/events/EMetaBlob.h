@@ -316,6 +316,7 @@ private:
   void get_inodes(std::set<inodeno_t> &inodes);
   void get_paths(std::vector<std::string> &paths);
   void get_dentries(std::map<dirfrag_t, std::set<std::string> > &dentries);
+  entity_name_t get_client_name() const {return client_name;}
 
   void dump(Formatter *f) const;
   static void generate_test_instances(list<EMetaBlob*>& ls);
