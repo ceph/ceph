@@ -123,3 +123,15 @@ Remove a profile that is no longer in use (otherwise it will fail with EBUSY)::
   $ ceph osd erasure-code-profile rm myprofile
   $ ceph osd erasure-code-profile ls
   default
+
+Set the ruleset to take ssd (instead of default)::
+
+ $ ceph osd erasure-code-profile set myprofile \
+     ruleset-root=ssd
+ $ ceph osd erasure-code-profile get myprofile
+ k=2
+ m=1
+ plugin=jerasure
+ technique=reed_sol_van
+ ruleset-root=ssd
+
