@@ -35,7 +35,8 @@ class components_info(Base):
 
   index = Column(Integer, primary_key=True)
   vid = Column(ForeignKey('version_info.index'))
-  num_bytes = Column(BigInteger)
+  num_data_bytes = Column(BigInteger)
+  num_bytes_total = Column(BigInteger)
   num_osds = Column(Integer)
   num_objects = Column(Integer)
   num_pgs = Column(Integer)
@@ -168,7 +169,8 @@ def put_new_version(data):
   def add_components_info(vi):
     comps_count= info['components_count']
     comps_info = components_info(vid=vi.index,
-                         num_bytes=comps_count['num_bytes'],
+                         num_data_bytes=comps_count['num_data_bytes'],
+                         num_bytes_total=comps_count['num_bytes_total'],
                          num_osds=comps_count['num_osds'],
                          num_objects=comps_count['num_objects'],
                          num_pgs=comps_count['num_pgs'],
