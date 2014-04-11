@@ -2352,6 +2352,9 @@ void Client::put_cap_ref(Inode *in, int cap)
 int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
 {
   while (1) {
+    if (!in->is_any_caps())
+      return -ESTALE;
+
     if (endoff > 0 &&
 	(endoff >= (loff_t)in->max_size ||
 	 endoff > (loff_t)(in->size << 1)) &&
@@ -3083,9 +3086,13 @@ void Client::remove_session_caps(MetaSession *s)
     Cap *cap = *s->caps.begin();
     Inode *in = cap->inode;
     int dirty_caps = 0;
-    if (in->auth_cap == cap)
+    if (in->auth_cap == cap) {
       dirty_caps = in->dirty_caps | in->flushing_caps;
+      in->wanted_max_size = 0;
+      in->requested_max_size = 0;
+    }
     remove_cap(cap, false);
+    signal_cond_list(in->waitfor_caps);
     if (dirty_caps) {
       lderr(cct) << "remove_session_caps still has dirty|flushing caps on " << *in << dendl;
       if (in->flushing_caps)
