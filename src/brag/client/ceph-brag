@@ -30,14 +30,6 @@ def get_uuid():
 
   return uid
 
-def get_cluster_creation_date():
-  (rc, o, e) = run_command(['ceph', 'mon', 'dump', '-f', 'json'])
-  if rc is not 0:
-    raise RuntimeError("\'ceph mon dump\' failed - " + e)
-
-  oj = json.loads(o)
-  return oj['created']
-
 def bytes_pretty_to_raw(byte_count, byte_scale):
   if byte_scale == 'kB':
     return byte_count >> 10
@@ -66,7 +58,8 @@ def get_nums():
 
   pgmap = oj['pgmap']
   num_pgs = pgmap['num_pgs']
-  num_bytes = pgmap['data_bytes']
+  num_data_bytes = pgmap['data_bytes']
+  num_bytes_total = pgmap['bytes_total']
 
   (rc, o, e) = run_command(['ceph', 'pg', 'dump', 'pools', '-f', 'json-pretty'])
   if rc is not 0:
@@ -82,7 +75,8 @@ def get_nums():
           'num_osds':num_osds,
           'num_mdss':num_mdss,
           'num_pgs':num_pgs,
-          'num_bytes':num_bytes,
+          'num_data_bytes':num_data_bytes,
+          'num_bytes_total':num_bytes_total,
           'num_pools':num_pools,
           'num_objects':num_objs}
   return nums
@@ -100,31 +94,23 @@ def get_crush_types():
   for t in crush_dump['types']:
     crush_types[t['type_id']] = t['name']
 
-  buckets = {}
-  items_list = []
+  types_list = []
   for bucket in crush_dump['buckets']:
-    buckets[bucket['id']] = bucket['type_id']
-    for item in bucket['items']:
-      items_list.append(item['id'])
+    types_list.append(bucket['type_id'])
 
   crush_map = []
-  counter = Counter(items_list)
+  types_counter = Counter(types_list)
   append = lambda t,c: crush_map.append({'type':t, 'count':c})
-  for id,count in counter.items():
-    if id in buckets:
-      append(crush_types[buckets[id]],
+  for id,count in types_counter.items():
+      append(crush_types[id],
              count)
-      del buckets[id]
-    else:
-      append(crush_types[id], count)
 
-  #the root item
-  for id,type_id in buckets.items():
-    append(crush_types[type_id], 1)
+  if 'devices' in crush_dump:
+    append('devices', len(crush_dump['devices']))
 
   return crush_map
 
-def get_pool_metadata():
+def get_osd_dump_info():
   (rc, o, e) = run_command(['ceph', 'osd', 'dump', '-f', 'json'])
   if rc is not 0:
     raise RuntimeError("\'ceph osd dump\' failed - " + e)
@@ -135,7 +121,7 @@ def get_pool_metadata():
   for p in oj['pools']:
     pool_meta.append(proc(p))
 
-  return pool_meta
+  return oj['created'], pool_meta
 
 def get_sysinfo(max_osds):
   count = 0
@@ -218,12 +204,11 @@ def output_json():
   url = None
   
   out['uuid'] = get_uuid()
-  out['cluster_creation_date'] = get_cluster_creation_date()
   nums = get_nums()
   num_osds = int(nums['num_osds'])
   out['components_count'] = nums
   out['crush_types'] = get_crush_types()
-  out['pool_metadata'] = get_pool_metadata()
+  out['cluster_creation_date'], out['pool_metadata'] = get_osd_dump_info()
   out['sysinfo'] = get_sysinfo(num_osds)
 
   owner = get_ownership_info()
