@@ -381,12 +381,20 @@ AdminSocket *CephContext::get_admin_socket()
 
 CryptoHandler *CephContext::get_crypto_handler(int type)
 {
-  switch (type) {
-  case CEPH_CRYPTO_NONE:
-    return _crypto_none;
-  case CEPH_CRYPTO_AES:
-    return _crypto_aes;
-  default:
-    return NULL;
-  }
+    CryptoHandler *handler = NULL;
+    switch(type)
+    {
+    case CEPH_CRYPTO_NONE:
+        handler = CryptoNone::instance();
+        break;
+
+    case CEPH_CRYPTO_AES:
+        handler = CryptoAES::instance();
+        break;
+
+    default:
+        break;
+    }
+
+    return handler;
 }
