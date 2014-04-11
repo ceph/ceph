@@ -389,7 +389,7 @@ class MDS : public Dispatcher {
   void rejoin_joint_start();
   void rejoin_start();
   void rejoin_done();
-  void recovery_done(int oldstate);
+  void recovery_done();
   void clientreplay_start();
   void clientreplay_done();
   void active_start();

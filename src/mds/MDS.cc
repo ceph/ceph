@@ -994,10 +994,9 @@ void MDS::handle_mds_map(MMDSMap *m)
     } else {
       // did i just recover?
       if ((is_active() || is_clientreplay()) &&
-          (oldstate == MDSMap::STATE_CREATING ||
-	   oldstate == MDSMap::STATE_REJOIN ||
+          (oldstate == MDSMap::STATE_REJOIN ||
 	   oldstate == MDSMap::STATE_RECONNECT))
-        recovery_done(oldstate);
+        recovery_done();
 
       if (is_active()) {
         active_start();
@@ -1565,7 +1564,7 @@ void MDS::active_start()
   finish_contexts(g_ceph_context, waiting_for_active);  // kick waiters
 }
 
-void MDS::recovery_done(int oldstate)
+void MDS::recovery_done()
 {
   dout(1) << "recovery_done -- successful recovery!" << dendl;
   assert(is_clientreplay() || is_active());
@@ -1579,9 +1578,6 @@ void MDS::recovery_done(int oldstate)
     anchorserver->finish_recovery(active);
     snapserver->finish_recovery(active);
   }
-
-  if (oldstate == MDSMap::STATE_CREATING)
-    return;
 
   mdcache->start_recovered_truncates();
   mdcache->do_file_recover();
