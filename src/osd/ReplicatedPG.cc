@@ -10772,6 +10772,11 @@ void ReplicatedPG::agent_work(int start_max)
       osd->logger->inc(l_osd_agent_skip);
       continue;
     }
+    if (is_missing_object(p->get_head())) {
+      dout(20) << __func__ << " skip (missing head) " << *p << dendl;
+      osd->logger->inc(l_osd_agent_skip);
+      continue;
+    }
     ObjectContextRef obc = get_object_context(*p, false, NULL);
     if (!obc) {
       // we didn't flush; we may miss something here.
