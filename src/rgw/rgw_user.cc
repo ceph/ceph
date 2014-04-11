@@ -740,8 +740,16 @@ int RGWAccessKeyPool::check_op(RGWUserAdminOpState& op_state,
   std::string access_key = op_state.get_access_key();
   std::string secret_key = op_state.get_secret_key();
 
+  int32_t key_type = op_state.get_key_type();
+
+  // if a key type wasn't specified set it to s3
+  if (key_type < 0)
+    key_type = KEY_TYPE_S3;
+
+  op_state.set_key_type(key_type);
+
   /* see if the access key or secret key was specified */
-  if (!op_state.will_gen_access() && access_key.empty()) {
+  if (key_type == KEY_TYPE_S3 && !op_state.will_gen_access() && access_key.empty()) {
     set_err_msg(err_msg, "empty access key");
     return -EINVAL;
   }
@@ -749,10 +757,6 @@ int RGWAccessKeyPool::check_op(RGWUserAdminOpState& op_state,
   // don't check for secret key because we may be doing a removal
 
   check_existing_key(op_state);
-
-  // if a key type wasn't specified set it to s3
-  if (op_state.get_key_type() < 0)
-    op_state.set_key_type(KEY_TYPE_S3);
 
   return 0;
 }
@@ -874,7 +878,7 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
 // modify an existing key
 int RGWAccessKeyPool::modify_key(RGWUserAdminOpState& op_state, std::string *err_msg)
 {
-  std::string id = op_state.get_access_key();
+  std::string id;
   std::string key = op_state.get_secret_key();
   int key_type = op_state.get_key_type();
 
@@ -883,8 +887,23 @@ int RGWAccessKeyPool::modify_key(RGWUserAdminOpState& op_state, std::string *err
   pair<string, RGWAccessKey> key_pair;
   map<std::string, RGWAccessKey>::iterator kiter;
 
-  if (id.empty()) {
-    set_err_msg(err_msg, "no access key specified");
+  switch (key_type) {
+  case KEY_TYPE_S3:
+    id = op_state.get_access_key();
+    if (id.empty()) {
+      set_err_msg(err_msg, "no access key specified");
+      return -EINVAL;
+    }
+    break;
+  case KEY_TYPE_SWIFT:
+    id = op_state.build_default_swift_kid();
+    if (id.empty()) {
+      set_err_msg(err_msg, "no subuser specified");
+      return -EINVAL;
+    }
+    break;
+  default:
+    set_err_msg(err_msg, "invalid key type");
     return -EINVAL;
   }
 
@@ -896,14 +915,13 @@ int RGWAccessKeyPool::modify_key(RGWUserAdminOpState& op_state, std::string *err
   key_pair.first = id;
 
   if (key_type == KEY_TYPE_SWIFT) {
-    kiter = swift_keys->find(id);
-    modify_key = kiter->second;
+    modify_key.id = id;
+    modify_key.subuser = op_state.get_subuser();
   } else if (key_type == KEY_TYPE_S3) {
     kiter = access_keys->find(id);
-    modify_key = kiter->second;
-  } else {
-    set_err_msg(err_msg, "invalid key type");
-    return -EINVAL;
+    if (kiter != access_keys->end()) {
+      modify_key = kiter->second;
+    }
   }
 
   if (op_state.will_gen_secret()) {
@@ -961,8 +979,10 @@ int RGWAccessKeyPool::execute_add(RGWUserAdminOpState& op_state,
     break;
   }
 
-  if (ret < 0)
+  if (ret < 0) {
+    set_err_msg(err_msg, subprocess_msg);
     return ret;
+  }
 
   // store the updated info
   if (!defer_user_update)
@@ -1163,12 +1183,6 @@ int RGWSubUserPool::execute_add(RGWUserAdminOpState& op_state,
 
   subuser_pair.first = subuser_str;
 
-  // no duplicates
-  if (op_state.has_existing_subuser()) {
-    set_err_msg(err_msg, "subuser exists");
-    return -EEXIST;
-  }
-
   // assumes key should be created
   if (op_state.has_key_op()) {
     ret = user->keys.add(op_state, &subprocess_msg, true);
@@ -1212,6 +1226,10 @@ int RGWSubUserPool::add(RGWUserAdminOpState& op_state, std::string *err_msg, boo
   if (ret < 0) {
     set_err_msg(err_msg, "unable to parse request, " + subprocess_msg);
     return ret;
+  }
+
+  if (op_state.get_secret_key().empty()) {
+    op_state.set_gen_access();
   }
 
   ret = execute_add(op_state, &subprocess_msg, defer_user_update);
