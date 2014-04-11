@@ -58,7 +58,8 @@ def get_nums():
 
   pgmap = oj['pgmap']
   num_pgs = pgmap['num_pgs']
-  num_bytes = pgmap['data_bytes']
+  num_data_bytes = pgmap['data_bytes']
+  num_bytes_total = pgmap['bytes_total']
 
   (rc, o, e) = run_command(['ceph', 'pg', 'dump', 'pools', '-f', 'json-pretty'])
   if rc is not 0:
@@ -74,7 +75,8 @@ def get_nums():
           'num_osds':num_osds,
           'num_mdss':num_mdss,
           'num_pgs':num_pgs,
-          'num_bytes':num_bytes,
+          'num_data_bytes':num_data_bytes,
+          'num_bytes_total':num_bytes_total,
           'num_pools':num_pools,
           'num_objects':num_objs}
   return nums
