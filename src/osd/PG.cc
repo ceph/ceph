@@ -3449,6 +3449,7 @@ void PG::repair_object(
     assert(waiting_for_unreadable_object.empty());
 
     pg_log.missing_add(soid, oi.version, eversion_t());
+    missing_loc.add_missing(soid, oi.version, eversion_t());
     missing_loc.add_location(soid, ok_peer);
 
     pg_log.set_last_requested(0);
