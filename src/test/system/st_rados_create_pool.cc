@@ -91,7 +91,7 @@ run()
     snprintf(oid, sizeof(oid), "%d%s", i, m_suffix.c_str());
     std::string buf(get_random_buf(256));
     int ret = rados_write(io_ctx, oid, buf.c_str(), buf.size(), 0);
-    if (ret < static_cast<int>(buf.size())) {
+    if (ret != 0) {
       printf("%s: rados_write error %d\n", get_id_str(), ret);
       return ret;
     }
