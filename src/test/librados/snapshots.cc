@@ -84,7 +84,7 @@ TEST_F(LibRadosSnapshots, Rollback) {
   char buf2[sizeof(buf)];
   memset(buf2, 0xdd, sizeof(buf2));
   EXPECT_EQ(0, rados_write_full(ioctx, "foo", buf2, sizeof(buf2)));
-  EXPECT_EQ(0, rados_rollback(ioctx, "foo", "snap1"));
+  EXPECT_EQ(0, rados_ioctx_snap_rollback(ioctx, "foo", "snap1"));
   char buf3[sizeof(buf)];
   EXPECT_EQ((int)sizeof(buf3), rados_read(ioctx, "foo", buf3, sizeof(buf3), 0));
   EXPECT_EQ(0, memcmp(buf, buf3, sizeof(buf)));
@@ -103,7 +103,7 @@ TEST_F(LibRadosSnapshotsPP, RollbackPP) {
   bufferlist bl2;
   bl2.append(buf2, sizeof(buf2));
   EXPECT_EQ(0, ioctx.write_full("foo", bl2));
-  EXPECT_EQ(0, ioctx.rollback("foo", "snap1"));
+  EXPECT_EQ(0, ioctx.snap_rollback("foo", "snap1"));
   bufferlist bl3;
   EXPECT_EQ((int)sizeof(buf), ioctx.read("foo", bl3, sizeof(buf), 0));
   EXPECT_EQ(0, memcmp(buf, bl3.c_str(), sizeof(buf)));
@@ -529,7 +529,7 @@ TEST_F(LibRadosSnapshotsEC, Rollback) {
   char buf2[sizeof(buf)];
   memset(buf2, 0xdd, sizeof(buf2));
   EXPECT_EQ(0, rados_write_full(ioctx, "foo", buf2, sizeof(buf2)));
-  EXPECT_EQ(0, rados_rollback(ioctx, "foo", "snap1"));
+  EXPECT_EQ(0, rados_ioctx_snap_rollback(ioctx, "foo", "snap1"));
   char buf3[sizeof(buf)];
   EXPECT_EQ((int)sizeof(buf3), rados_read(ioctx, "foo", buf3, sizeof(buf3), 0));
   EXPECT_EQ(0, memcmp(buf, buf3, sizeof(buf)));
@@ -548,7 +548,7 @@ TEST_F(LibRadosSnapshotsECPP, RollbackPP) {
   bufferlist bl2;
   bl2.append(buf2, sizeof(buf2));
   EXPECT_EQ(0, ioctx.write_full("foo", bl2));
-  EXPECT_EQ(0, ioctx.rollback("foo", "snap1"));
+  EXPECT_EQ(0, ioctx.snap_rollback("foo", "snap1"));
   bufferlist bl3;
   EXPECT_EQ((int)sizeof(buf), ioctx.read("foo", bl3, sizeof(buf), 0));
   EXPECT_EQ(0, memcmp(buf, bl3.c_str(), sizeof(buf)));
