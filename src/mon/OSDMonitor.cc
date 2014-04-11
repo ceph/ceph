@@ -1207,6 +1207,12 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
     goto ignore;
   }
 
+  if (osdmap.exists(from) &&
+      osdmap.get_info(from).up_from > m->boot_epoch) {
+    dout(7) << "prepare_boot msg from before last up_from, ignoring" << dendl;
+    goto ignore;
+  }
+
   // noup?
   if (!can_mark_up(from)) {
     dout(7) << "preprocess_boot ignoring boot from " << m->get_orig_source_inst() << dendl;
