@@ -100,26 +100,16 @@ def get_crush_types():
   for t in crush_dump['types']:
     crush_types[t['type_id']] = t['name']
 
-  buckets = {}
-  items_list = []
+  types_list = []
   for bucket in crush_dump['buckets']:
-    buckets[bucket['id']] = bucket['type_id']
-    for item in bucket['items']:
-      if item['id'] < 0:
-        items_list.append(item['id'])
+    types_list.append(bucket['type_id'])
 
   crush_map = []
-  counter = Counter(items_list)
+  types_counter = Counter(types_list)
   append = lambda t,c: crush_map.append({'type':t, 'count':c})
-  for id,count in counter.items():
-    if id in buckets:
-      append(crush_types[buckets[id]],
+  for id,count in types_counter.items():
+      append(crush_types[id],
              count)
-      del buckets[id]
-
-  #the root item
-  for id,type_id in buckets.items():
-    append(crush_types[type_id], 1)
 
   if 'devices' in crush_dump:
     append('devices', len(crush_dump['devices']))
