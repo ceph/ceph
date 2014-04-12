@@ -53,6 +53,25 @@ protected:
   std::string ns;
 };
 
+class RadosTestParamPP : public ::testing::TestWithParam<const char*> {
+public:
+  RadosTestParamPP() : cluster(s_cluster) {}
+  virtual ~RadosTestParamPP() {}
+  static void SetUpTestCase();
+  static void TearDownTestCase();
+protected:
+  static void cleanup_default_namespace(librados::IoCtx ioctx);
+  static librados::Rados s_cluster;
+  static std::string pool_name;
+  static std::string cache_pool_name;
+
+  virtual void SetUp();
+  virtual void TearDown();
+  librados::Rados &cluster;
+  librados::IoCtx ioctx;
+  std::string ns;
+};
+
 class RadosTestEC : public ::testing::Test {
 public:
   RadosTestEC() {}
