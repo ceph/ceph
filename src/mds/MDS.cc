@@ -994,9 +994,10 @@ void MDS::handle_mds_map(MMDSMap *m)
     } else {
       // did i just recover?
       if ((is_active() || is_clientreplay()) &&
-          (oldstate == MDSMap::STATE_REJOIN ||
+          (oldstate == MDSMap::STATE_CREATING ||
+	   oldstate == MDSMap::STATE_REJOIN ||
 	   oldstate == MDSMap::STATE_RECONNECT))
-        recovery_done();
+        recovery_done(oldstate);
 
       if (is_active()) {
         active_start();
@@ -1199,12 +1200,10 @@ void MDS::boot_create()
     dout(10) << "boot_create creating fresh anchortable" << dendl;
     anchorserver->reset();
     anchorserver->save(fin.new_sub());
-    anchorserver->handle_mds_recovery(whoami);
 
     dout(10) << "boot_create creating fresh snaptable" << dendl;
     snapserver->reset();
     snapserver->save(fin.new_sub());
-    snapserver->handle_mds_recovery(whoami);
   }
 
   assert(g_conf->mds_kill_create_at != 1);
@@ -1564,7 +1563,7 @@ void MDS::active_start()
   finish_contexts(g_ceph_context, waiting_for_active);  // kick waiters
 }
 
-void MDS::recovery_done()
+void MDS::recovery_done(int oldstate)
 {
   dout(1) << "recovery_done -- successful recovery!" << dendl;
   assert(is_clientreplay() || is_active());
@@ -1578,6 +1577,9 @@ void MDS::recovery_done()
     anchorserver->finish_recovery(active);
     snapserver->finish_recovery(active);
   }
+
+  if (oldstate == MDSMap::STATE_CREATING)
+    return;
 
   mdcache->start_recovered_truncates();
   mdcache->do_file_recover();
