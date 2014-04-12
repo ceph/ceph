@@ -10839,9 +10839,8 @@ void ReplicatedPG::agent_load_hit_sets()
 
   if (agent_state->hit_set_map.size() < info.hit_set.history.size()) {
     dout(10) << __func__ << dendl;
-    for (list<pg_hit_set_info_t>::reverse_iterator p =
-	   info.hit_set.history.rbegin();
-	 p != info.hit_set.history.rend(); ++p) {
+    for (list<pg_hit_set_info_t>::iterator p = info.hit_set.history.begin();
+	 p != info.hit_set.history.end(); ++p) {
       if (agent_state->hit_set_map.count(p->begin.sec()) == 0) {
 	dout(10) << __func__ << " loading " << p->begin << "-"
 		 << p->end << dendl;
@@ -10854,16 +10853,22 @@ void ReplicatedPG::agent_load_hit_sets()
 	// check if it's still in flight
 	if (hit_set_flushing.count(p->begin)) {
 	  agent_state->add_hit_set(p->begin.sec(), hit_set_flushing[p->begin]);
-	} else {
-	  bufferlist bl;
-	  hobject_t oid = get_hit_set_archive_object(p->begin, p->end);
-	  int r = osd->store->read(coll, oid, 0, 0, bl);
-	  assert(r >= 0);
-	  HitSetRef hs(new HitSet);
-	  bufferlist::iterator pbl = bl.begin();
-	  ::decode(*hs, pbl);
-	  agent_state->add_hit_set(p->begin.sec(), hs);
+	  continue;
 	}
+
+	hobject_t oid = get_hit_set_archive_object(p->begin, p->end);
+	if (is_unreadable_object(oid)) {
+	  dout(10) << __func__ << " unreadable " << oid << ", waiting" << dendl;
+	  break;
+	}
+
+	bufferlist bl;
+	int r = osd->store->read(coll, oid, 0, 0, bl);
+	assert(r >= 0);
+	HitSetRef hs(new HitSet);
+	bufferlist::iterator pbl = bl.begin();
+	::decode(*hs, pbl);
+	agent_state->add_hit_set(p->begin.sec(), hs);
       }
     }
   }
