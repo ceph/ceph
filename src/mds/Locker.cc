@@ -1709,6 +1709,7 @@ Capability* Locker::issue_new_caps(CInode *in,
     // new cap
     cap = in->add_client_cap(my_client, session, realm);
     cap->set_wanted(my_want);
+    cap->mark_new();
     cap->inc_suppress(); // suppress file cap messages for new cap (we'll bundle with the open() reply)
     is_new = true;
   } else {
@@ -1842,7 +1843,11 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
 	seq = cap->issue((wanted|likes) & allowed);
       int after = cap->pending();
 
-      if (seq > 0) {
+      if (cap->is_new()) {
+	// haven't send caps to client yet
+	if (before & ~after)
+	  cap->confirm_receipt(seq, after);
+      } else {
         dout(7) << "   sending MClientCaps to client." << it->first
 		<< " seq " << cap->get_last_seq()
 		<< " new pending " << ccap_string(after) << " was " << ccap_string(before) 

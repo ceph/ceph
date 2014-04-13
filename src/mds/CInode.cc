@@ -2996,6 +2996,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       issue = cap->pending();
       cap->set_last_issue();
       cap->set_last_issue_stamp(ceph_clock_now(g_ceph_context));
+      cap->clear_new();
       e.cap.caps = issue;
       e.cap.wanted = cap->wanted();
       e.cap.cap_id = cap->get_cap_id();
