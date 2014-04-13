@@ -2312,9 +2312,9 @@ void PG::clear_publish_stats()
  */
 void PG::init(
   int role,
-  vector<int>& newup, int new_up_primary,
-  vector<int>& newacting, int new_acting_primary,
-  pg_history_t& history,
+  const vector<int>& newup, int new_up_primary,
+  const vector<int>& newacting, int new_acting_primary,
+  const pg_history_t& history,
   pg_interval_map_t& pi,
   bool backfill,
   ObjectStore::Transaction *t)
