@@ -2449,21 +2449,29 @@ void OSD::handle_pg_peering_evt(
     }
     case RES_SELF: {
       old_pg_state->lock();
+      OSDMapRef old_osd_map = old_pg_state->get_osdmap();
+      int old_role = old_pg_state->role;
+      vector<int> old_up = old_pg_state->up;
+      int old_up_primary = old_pg_state->up_primary.osd;
+      vector<int> old_acting = old_pg_state->acting;
+      int old_primary = old_pg_state->primary.osd;
+      pg_history_t old_history = old_pg_state->info.history;
+      pg_interval_map_t old_past_intervals = old_pg_state->past_intervals;
+      old_pg_state->unlock();
       PG *pg = _create_lock_pg(
-	old_pg_state->get_osdmap(),
+	old_osd_map,
 	resurrected,
 	false,
 	false,
 	true,
-	old_pg_state->role,
-	old_pg_state->up,
-	old_pg_state->up_primary.osd,
-	old_pg_state->acting,
-	old_pg_state->primary.osd,
-	old_pg_state->info.history,
-	old_pg_state->past_intervals,
+	old_role,
+	old_up,
+	old_up_primary,
+	old_acting,
+	old_primary,
+	old_history,
+	old_past_intervals,
 	*rctx.transaction);
-      old_pg_state->unlock();
       pg->handle_create(&rctx);
       pg->write_if_dirty(*rctx.transaction);
       dispatch_context(rctx, pg, osdmap);
@@ -2477,22 +2485,30 @@ void OSD::handle_pg_peering_evt(
     case RES_PARENT: {
       assert(old_pg_state);
       old_pg_state->lock();
+      OSDMapRef old_osd_map = old_pg_state->get_osdmap();
+      int old_role = old_pg_state->role;
+      vector<int> old_up = old_pg_state->up;
+      int old_up_primary = old_pg_state->up_primary.osd;
+      vector<int> old_acting = old_pg_state->acting;
+      int old_primary = old_pg_state->primary.osd;
+      pg_history_t old_history = old_pg_state->info.history;
+      pg_interval_map_t old_past_intervals = old_pg_state->past_intervals;
+      old_pg_state->unlock();
       PG *parent = _create_lock_pg(
-	old_pg_state->get_osdmap(),
+	old_osd_map,
 	resurrected,
 	false,
 	false,
 	true,
-	old_pg_state->role,
-	old_pg_state->up,
-	old_pg_state->up_primary.osd,
-	old_pg_state->acting,
-	old_pg_state->primary.osd,
-	old_pg_state->info.history,
-	old_pg_state->past_intervals,
+	old_role,
+	old_up,
+	old_up_primary,
+	old_acting,
+	old_primary,
+	old_history,
+	old_past_intervals,
 	*rctx.transaction
 	);
-      old_pg_state->unlock();
       parent->handle_create(&rctx);
       parent->write_if_dirty(*rctx.transaction);
       dispatch_context(rctx, parent, osdmap);
