@@ -3559,11 +3559,12 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
       }
     }
     
+    bool need_recover = false;
     if (lock->get_type() == CEPH_LOCK_IFILE) {
       assert(in);
       if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
         mds->mdcache->queue_file_recover(in);
-        mds->mdcache->do_file_recover();
+	need_recover = true;
         gather++;
       }
     }
@@ -3577,6 +3578,8 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
 
     if (gather) {
       lock->get_parent()->auth_pin(lock);
+      if (need_recover)
+	mds->mdcache->do_file_recover();
       return false;
     }
   }
@@ -3697,11 +3700,12 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
     }
   }
 
+  bool need_recover = false;
   if (lock->get_type() == CEPH_LOCK_IFILE) {
     assert(in);
     if(in->state_test(CInode::STATE_NEEDSRECOVER)) {
       mds->mdcache->queue_file_recover(in);
-      mds->mdcache->do_file_recover();
+      need_recover = true;
       gather++;
     }
   }
@@ -3732,6 +3736,8 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
 
   if (gather) {
     lock->get_parent()->auth_pin(lock);
+    if (need_recover)
+      mds->mdcache->do_file_recover();
   } else {
     lock->set_state(LOCK_LOCK);
     lock->finish_waiters(ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
@@ -4391,15 +4397,18 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
 	issue_caps(in);
       gather++;
     }
+    bool need_recover = false;
     if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
       mds->mdcache->queue_file_recover(in);
-      mds->mdcache->do_file_recover();
+      need_recover = true;
       gather++;
     }
 
-    if (gather)
+    if (gather) {
       lock->get_parent()->auth_pin(lock);
-    else {
+      if (need_recover)
+	mds->mdcache->do_file_recover();
+    } else {
       in->start_scatter(lock);
       lock->set_state(LOCK_MIX);
       lock->clear_scatter_wanted();
@@ -4463,14 +4472,17 @@ void Locker::file_excl(ScatterLock *lock, bool *need_issue)
       issue_caps(in);
     gather++;
   }
+  bool need_recover = false;
   if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
     mds->mdcache->queue_file_recover(in);
-    mds->mdcache->do_file_recover();
+    need_recover = true;
     gather++;
   }
   
   if (gather) {
     lock->get_parent()->auth_pin(lock);
+    if (need_recover)
+      mds->mdcache->do_file_recover();
   } else {
     lock->set_state(LOCK_EXCL);
     if (need_issue)
