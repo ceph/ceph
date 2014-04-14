@@ -19,6 +19,7 @@
 #include <ostream>
 
 #include <boost/intrusive_ptr.hpp>
+#include <boost/intrusive/list.hpp>
 // Because intusive_ptr clobbers our assert...
 #include "include/assert.h"
 
@@ -28,6 +29,7 @@
 #include "msg_types.h"
 
 #include "common/RefCountedObj.h"
+#include "msg/Connection.h"
 
 #include "common/debug.h"
 #include "common/config.h"
@@ -163,145 +165,7 @@
 #define MSG_MON_HEALTH            0x601
 
 
-
-
 // ======================================================
-
-// abstract Connection, for keeping per-connection state
-
-class Messenger;
-
-struct Connection : private RefCountedObject {
-  Mutex lock;
-  Messenger *msgr;
-  RefCountedObject *priv;
-  int peer_type;
-  entity_addr_t peer_addr;
-  utime_t last_keepalive_ack;
-private:
-  uint64_t features;
-public:
-  RefCountedObject *pipe;
-  bool failed;              /// true if we are a lossy connection that has failed.
-
-  int rx_buffers_version;
-  map<ceph_tid_t,pair<bufferlist,int> > rx_buffers;
-
-  friend class boost::intrusive_ptr<Connection>;
-
-public:
-  Connection(Messenger *m)
-    : lock("Connection::lock"),
-      msgr(m),
-      priv(NULL),
-      peer_type(-1),
-      features(0),
-      pipe(NULL),
-      failed(false),
-      rx_buffers_version(0) {
-    // we are managed exlusively by ConnectionRef; make it so you can
-    //   ConnectionRef foo = new Connection;
-    nref.set(0);
-  }
-  ~Connection() {
-    //generic_dout(0) << "~Connection " << this << dendl;
-    if (priv) {
-      //generic_dout(0) << "~Connection " << this << " dropping priv " << priv << dendl;
-      priv->put();
-    }
-    if (pipe)
-      pipe->put();
-  }
-
-  void set_priv(RefCountedObject *o) {
-    Mutex::Locker l(lock);
-    if (priv)
-      priv->put();
-    priv = o;
-  }
-  RefCountedObject *get_priv() {
-    Mutex::Locker l(lock);
-    if (priv)
-      return priv->get();
-    return NULL;
-  }
-
-  RefCountedObject *get_pipe() {
-    Mutex::Locker l(lock);
-    if (pipe)
-      return pipe->get();
-    return NULL;
-  }
-  bool try_get_pipe(RefCountedObject **p) {
-    Mutex::Locker l(lock);
-    if (failed) {
-      *p = NULL;
-    } else {
-      if (pipe)
-	*p = pipe->get();
-      else
-	*p = NULL;
-    }
-    return !failed;
-  }
-  bool clear_pipe(RefCountedObject *old_p) {
-    if (old_p == pipe) {
-      Mutex::Locker l(lock);
-      pipe->put();
-      pipe = NULL;
-      failed = true;
-      return true;
-    }
-    return false;
-  }
-  void reset_pipe(RefCountedObject *p) {
-    Mutex::Locker l(lock);
-    if (pipe)
-      pipe->put();
-    pipe = p->get();
-  }
-  bool is_connected() {
-    Mutex::Locker l(lock);
-    return pipe != NULL;
-  }
-
-  Messenger *get_messenger() {
-    return msgr;
-  }
-
-  int get_peer_type() { return peer_type; }
-  void set_peer_type(int t) { peer_type = t; }
-  
-  bool peer_is_mon() { return peer_type == CEPH_ENTITY_TYPE_MON; }
-  bool peer_is_mds() { return peer_type == CEPH_ENTITY_TYPE_MDS; }
-  bool peer_is_osd() { return peer_type == CEPH_ENTITY_TYPE_OSD; }
-  bool peer_is_client() { return peer_type == CEPH_ENTITY_TYPE_CLIENT; }
-
-  const entity_addr_t& get_peer_addr() { return peer_addr; }
-  void set_peer_addr(const entity_addr_t& a) { peer_addr = a; }
-
-  uint64_t get_features() const { return features; }
-  bool has_feature(uint64_t f) const { return features & f; }
-  void set_features(uint64_t f) { features = f; }
-  void set_feature(uint64_t f) { features |= f; }
-
-  void post_rx_buffer(ceph_tid_t tid, bufferlist& bl) {
-    Mutex::Locker l(lock);
-    ++rx_buffers_version;
-    rx_buffers[tid] = pair<bufferlist,int>(bl, rx_buffers_version);
-  }
-  void revoke_rx_buffer(ceph_tid_t tid) {
-    Mutex::Locker l(lock);
-    rx_buffers.erase(tid);
-  }
-
-  utime_t get_last_keepalive_ack() const {
-    return last_keepalive_ack;
-  }
-};
-typedef boost::intrusive_ptr<Connection> ConnectionRef;
-
-
 
 // abstract Message class
 
@@ -312,7 +176,7 @@ protected:
   bufferlist       payload;  // "front" unaligned blob
   bufferlist       middle;   // "middle" unaligned blob
   bufferlist       data;     // data payload (page-alignment will be preserved where possible)
-  
+
   /* recv_stamp is set when the Messenger starts reading the
    * Message off the wire */
   utime_t recv_stamp;
@@ -325,6 +189,23 @@ protected:
   utime_t recv_complete_stamp;
 
   ConnectionRef connection;
+
+  uint32_t magic;
+
+public:
+  class CompletionHook : public Context {
+  protected:
+    Message *m;
+    friend class Message;
+  public:
+    CompletionHook(Message *_m) : m(_m) {}
+    virtual void set_message(Message *_m) { m = _m; }
+    virtual void finish(int r) = 0;
+    virtual ~CompletionHook() {}
+  };
+
+protected:
+  CompletionHook* completion_hook; // owned by Messenger
 
   // release our size in bytes back to this throttler when our payload
   // is adjusted or when we are destroyed.
@@ -345,6 +226,8 @@ protected:
 public:
   Message()
     : connection(NULL),
+      magic(0),
+      completion_hook(NULL),
       byte_throttler(NULL),
       msg_throttler(NULL),
       dispatch_throttle_size(0) {
@@ -353,6 +236,8 @@ public:
   }
   Message(int t, int version=1, int compat_version=0)
     : connection(NULL),
+      magic(0),
+      completion_hook(NULL),
       byte_throttler(NULL),
       msg_throttler(NULL),
       dispatch_throttle_size(0) {
@@ -370,23 +255,28 @@ public:
   }
 
 protected:
-  virtual ~Message() { 
+  virtual ~Message() {
     assert(nref.read() == 0);
     if (byte_throttler)
       byte_throttler->put(payload.length() + middle.length() + data.length());
     if (msg_throttler)
       msg_throttler->put();
+    /* call completion hooks (if any) */
+    if (completion_hook)
+      completion_hook->complete(0);
   }
 public:
-  const ConnectionRef& get_connection() { return connection; }
+  inline const ConnectionRef& get_connection() { return connection; }
   void set_connection(const ConnectionRef& c) {
     connection = c;
   }
+  CompletionHook* get_completion_hook() { return completion_hook; }
+  void set_completion_hook(CompletionHook *hook) { completion_hook = hook; }
   void set_byte_throttler(Throttle *t) { byte_throttler = t; }
   Throttle *get_byte_throttler() { return byte_throttler; }
   void set_message_throttler(Throttle *t) { msg_throttler = t; }
   Throttle *get_message_throttler() { return msg_throttler; }
- 
+
   void set_dispatch_throttle_size(uint64_t s) { dispatch_throttle_size = s; }
   uint64_t get_dispatch_throttle_size() { return dispatch_throttle_size; }
 
@@ -394,6 +284,9 @@ public:
   void set_header(const ceph_msg_header &e) { header = e; }
   void set_footer(const ceph_msg_footer &e) { footer = e; }
   ceph_msg_footer &get_footer() { return footer; }
+
+  uint32_t get_magic() { return magic; }
+  void set_magic(int _magic) { magic = _magic; }
 
   /*
    * If you use get_[data, middle, payload] you shouldn't
@@ -519,7 +412,7 @@ public:
   virtual void encode_payload(uint64_t features) = 0;
   virtual const char *get_type_name() const = 0;
   virtual void print(ostream& out) const {
-    out << get_type_name();
+    out << get_type_name() << " magic: " << magic;
   }
 
   virtual void dump(Formatter *f) const;

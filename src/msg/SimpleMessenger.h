@@ -160,6 +160,19 @@ public:
     return _send_message(m, con, false);
   }
 
+  /**
+   * Lazily queue the given Message for the given entity. Unlike with
+   * send_message(), lazy_send_message() will not establish a
+   * Connection if none exists, re-establish the connection if it
+   * has broken, or queue the Message if the connection is broken.
+   *
+   * @param m The Message to send. The Messenger consumes a single reference
+   * when you pass it in.
+   * @param dest The entity to send the Message to.
+   *
+   * @return 0 on success, or -EINVAL if the dest's address is empty.
+   */
+
   virtual int lazy_send_message(Message *m, const entity_inst_t& dest) {
     return _send_message(m, dest, true);
   }
@@ -250,7 +263,8 @@ private:
    * @return a pointer to the newly-created Pipe. Caller does not own a
    * reference; take one if you need it.
    */
-  Pipe *connect_rank(const entity_addr_t& addr, int type, Connection *con, Message *first);
+  Pipe *connect_rank(const entity_addr_t& addr, int type, PipeConnection *con,
+		     Message *first);
   /**
    * Send a message, lazily or not.
    * This just glues [lazy_]send_message together and passes
@@ -290,8 +304,6 @@ private:
    */
 
   // SimpleMessenger stuff
-  /// the peer type of our endpoint
-  int my_type;
   /// approximately unique ID set by the Constructor for use in entity_addr_t
   uint64_t nonce;
   /// overall lock used for SimpleMessenger data structures
@@ -474,4 +486,4 @@ public:
    */
 } ;
 
-#endif
+#endif /* CEPH_SIMPLEMESSENGER_H */
