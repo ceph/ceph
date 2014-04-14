@@ -915,7 +915,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   dispatch_running(false),
   asok_hook(NULL),
   osd_compat(get_osd_compat_set()),
-  state(STATE_INITIALIZING), epoch_lock(), boot_epoch(0), up_epoch(0), bind_epoch(0),
+  state_lock(), state(STATE_INITIALIZING),
+  epoch_lock(), boot_epoch(0), up_epoch(0), bind_epoch(0),
   op_tp(cct, "OSD::op_tp", cct->_conf->osd_op_threads, "osd_op_threads"),
   recovery_tp(cct, "OSD::recovery_tp", cct->_conf->osd_recovery_threads, "osd_recovery_threads"),
   disk_tp(cct, "OSD::disk_tp", cct->_conf->osd_disk_threads, "osd_disk_threads"),
@@ -1031,7 +1032,7 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     f->dump_stream("cluster_fsid") << superblock.cluster_fsid;
     f->dump_stream("osd_fsid") << superblock.osd_fsid;
     f->dump_unsigned("whoami", superblock.whoami);
-    f->dump_string("state", get_state_name(state));
+    f->dump_string("state", get_state_name(get_state()));
     f->dump_unsigned("oldest_map", superblock.oldest_map);
     f->dump_unsigned("newest_map", superblock.newest_map);
     {
@@ -1312,7 +1313,7 @@ int OSD::init()
   peering_wq.drain();
 
   dout(0) << "done with init, starting boot process" << dendl;
-  state = STATE_BOOTING;
+  set_state(STATE_BOOTING);
   start_boot();
 
   return 0;
@@ -1600,9 +1601,7 @@ int OSD::shutdown()
   }
   derr << "shutdown" << dendl;
 
-  heartbeat_lock.Lock();
-  state = STATE_STOPPING;
-  heartbeat_lock.Unlock();
+  set_state(STATE_STOPPING);
 
   // Debugging
   cct->_conf->set_val("debug_osd", "100");
@@ -3289,7 +3288,7 @@ void OSD::tick()
   if (is_waiting_for_healthy()) {
     if (_is_healthy()) {
       dout(1) << "healthy again, booting" << dendl;
-      state = STATE_BOOTING;
+      set_state(STATE_BOOTING);
       start_boot();
     }
   }
@@ -3689,7 +3688,7 @@ void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
 void OSD::start_waiting_for_healthy()
 {
   dout(1) << "start_waiting_for_healthy" << dendl;
-  state = STATE_WAITING_FOR_HEALTHY;
+  set_state(STATE_WAITING_FOR_HEALTHY);
   last_heartbeat_resample = utime_t();
 }
 
@@ -5585,7 +5584,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
     if (is_booting()) {
       dout(1) << "state: booting -> active" << dendl;
-      state = STATE_ACTIVE;
+      set_state(STATE_ACTIVE);
 
       // set incarnation so that osd_reqid_t's we generate for our
       // objecter requests are unique across restarts.
@@ -5596,7 +5595,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   bool do_shutdown = false;
   bool do_restart = false;
   if (osdmap->get_epoch() > 0 &&
-      state == STATE_ACTIVE) {
+      is_active()) {
     if (!osdmap->exists(whoami)) {
       dout(0) << "map says i do not exist.  shutting down." << dendl;
       do_shutdown = true;   // don't call shutdown() while we have everything paused
