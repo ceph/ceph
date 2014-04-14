@@ -2571,7 +2571,7 @@ void Monitor::handle_forward(MForward *m)
     dout(0) << "forward from entity with insufficient caps! " 
 	    << session->caps << dendl;
   } else {
-    Connection *c = new Connection(NULL);  // msgr must be null; see PaxosService::dispatch()
+    Connection *c = new PipeConnection(NULL);  // msgr must be null; see PaxosService::dispatch()
     MonSession *s = new MonSession(m->msg->get_source_inst(), c);
     c->set_priv(s);
     c->set_peer_addr(m->client.addr);

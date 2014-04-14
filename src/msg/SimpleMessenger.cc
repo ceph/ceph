@@ -43,16 +43,16 @@ SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
     accepter(this, _nonce),
     dispatch_queue(cct, this),
     reaper_thread(this),
-    my_type(name.type()),
     nonce(_nonce),
     lock("SimpleMessenger::lock"), need_addr(true), did_bind(false),
     global_seq(0),
     cluster_protocol(0),
     policy_lock("SimpleMessenger::policy_lock"),
-    dispatch_throttler(cct, string("msgr_dispatch_throttler-") + mname, cct->_conf->ms_dispatch_throttle_bytes),
+    dispatch_throttler(cct, string("msgr_dispatch_throttler-") + mname,
+		       cct->_conf->ms_dispatch_throttle_bytes),
     reaper_started(false), reaper_stop(false),
     timeout(0),
-    local_connection(new Connection(this))
+    local_connection(new PipeConnection(this))
 {
   ceph_spin_init(&global_seq_lock);
   init_local_connection();
@@ -153,6 +153,8 @@ void SimpleMessenger::set_addr_unknowns(entity_addr_t &addr)
 
 int SimpleMessenger::get_proto_version(int peer_type, bool connect)
 {
+  int my_type = my_inst.name.type();
+
   // set reply protocol version
   if (peer_type == my_type) {
     // internal
@@ -221,7 +223,8 @@ void SimpleMessenger::reaper()
   while (!pipe_reap_queue.empty()) {
     Pipe *p = pipe_reap_queue.front();
     pipe_reap_queue.pop_front();
-    ldout(cct,10) << "reaper reaping pipe " << p << " " << p->get_peer_addr() << dendl;
+    ldout(cct,10) << "reaper reaping pipe " << p << " " <<
+      p->get_peer_addr() << dendl;
     p->pipe_lock.Lock();
     p->discard_out_queue();
     if (p->connection_state) {
@@ -290,7 +293,7 @@ int SimpleMessenger::start()
   ldout(cct,1) << "messenger.start" << dendl;
 
   // register at least one entity, first!
-  assert(my_type >= 0);
+  assert(my_inst.name.type() >= 0);
 
   assert(!started);
   started = true;
@@ -326,7 +329,7 @@ Pipe *SimpleMessenger::add_accept_pipe(int sd)
  */
 Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr,
 				    int type,
-				    Connection *con,
+				    PipeConnection *con,
 				    Message *first)
 {
   assert(lock.is_locked());
@@ -335,7 +338,8 @@ Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr,
   ldout(cct,10) << "connect_rank to " << addr << ", creating pipe and registering" << dendl;
   
   // create pipe
-  Pipe *pipe = new Pipe(this, Pipe::STATE_CONNECTING, con);
+  Pipe *pipe = new Pipe(this, Pipe::STATE_CONNECTING,
+			static_cast<PipeConnection*>(con));
   pipe->pipe_lock.Lock();
   pipe->set_peer_type(type);
   pipe->set_peer_addr(addr);
@@ -415,7 +419,7 @@ void SimpleMessenger::submit_message(Message *m, Connection *con,
   // existing connection?
   if (con) {
     Pipe *pipe = NULL;
-    bool ok = con->try_get_pipe((RefCountedObject**)&pipe);
+    bool ok = static_cast<PipeConnection*>(con)->try_get_pipe(&pipe);
     if (!ok) {
       ldout(cct,0) << "submit_message " << *m << " remote, " << dest_addr
 		   << ", failed lossy con, dropping message " << m << dendl;
@@ -459,7 +463,7 @@ void SimpleMessenger::submit_message(Message *m, Connection *con,
     m->put();
   } else {
     ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
-    connect_rank(dest_addr, dest_type, con, m);
+    connect_rank(dest_addr, dest_type, static_cast<PipeConnection*>(con), m);
   }
 }
 
@@ -496,7 +500,8 @@ int SimpleMessenger::send_keepalive(const entity_inst_t& dest)
 int SimpleMessenger::send_keepalive(Connection *con)
 {
   int ret = 0;
-  Pipe *pipe = static_cast<Pipe *>(con->get_pipe());
+  Pipe *pipe = static_cast<Pipe *>(
+    static_cast<PipeConnection*>(con)->get_pipe());
   if (pipe) {
     ldout(cct,20) << "send_keepalive con " << con << ", have pipe." << dendl;
     assert(pipe->msgr == this);
@@ -572,7 +577,6 @@ void SimpleMessenger::wait()
   ldout(cct,10) << "wait: done." << dendl;
   ldout(cct,1) << "shutdown complete." << dendl;
   started = false;
-  my_type = -1;
 }
 
 
@@ -585,7 +589,7 @@ void SimpleMessenger::mark_down_all()
     ldout(cct,5) << "mark_down_all accepting_pipe " << p << dendl;
     p->pipe_lock.Lock();
     p->stop();
-    ConnectionRef con = p->connection_state;
+    PipeConnectionRef con = p->connection_state;
     if (con && con->clear_pipe(p))
       dispatch_queue.queue_reset(con.get());
     p->pipe_lock.Unlock();
@@ -600,7 +604,7 @@ void SimpleMessenger::mark_down_all()
     p->unregister_pipe();
     p->pipe_lock.Lock();
     p->stop();
-    ConnectionRef con = p->connection_state;
+    PipeConnectionRef con = p->connection_state;
     if (con && con->clear_pipe(p))
       dispatch_queue.queue_reset(con.get());
     p->pipe_lock.Unlock();
@@ -621,7 +625,7 @@ void SimpleMessenger::mark_down(const entity_addr_t& addr)
       // generate a reset event for the caller in this case, even
       // though they asked for it, since this is the addr-based (and
       // not Connection* based) interface
-      ConnectionRef con = p->connection_state;
+      PipeConnectionRef con = p->connection_state;
       if (con && con->clear_pipe(p))
 	dispatch_queue.queue_reset(con.get());
     }
@@ -637,7 +641,7 @@ void SimpleMessenger::mark_down(Connection *con)
   if (con == NULL)
     return;
   lock.Lock();
-  Pipe *p = static_cast<Pipe *>(con->get_pipe());
+  Pipe *p = static_cast<Pipe *>(static_cast<PipeConnection*>(con)->get_pipe());
   if (p) {
     ldout(cct,1) << "mark_down " << con << " -- " << p << dendl;
     assert(p->msgr == this);
@@ -660,7 +664,7 @@ void SimpleMessenger::mark_down(Connection *con)
 void SimpleMessenger::mark_down_on_empty(Connection *con)
 {
   lock.Lock();
-  Pipe *p = static_cast<Pipe *>(con->get_pipe());
+  Pipe *p = static_cast<Pipe *>(static_cast<PipeConnection*>(con)->get_pipe());
   if (p) {
     assert(p->msgr == this);
     p->pipe_lock.Lock();
@@ -683,7 +687,7 @@ void SimpleMessenger::mark_down_on_empty(Connection *con)
 void SimpleMessenger::mark_disposable(Connection *con)
 {
   lock.Lock();
-  Pipe *p = static_cast<Pipe *>(con->get_pipe());
+  Pipe *p = static_cast<Pipe *>(static_cast<PipeConnection*>(con)->get_pipe());
   if (p) {
     ldout(cct,1) << "mark_disposable " << con << " -- " << p << dendl;
     assert(p->msgr == this);
@@ -730,5 +734,5 @@ void SimpleMessenger::unlearn_addr()
 void SimpleMessenger::init_local_connection()
 {
   local_connection->peer_addr = my_inst.addr;
-  local_connection->peer_type = my_type;
+  local_connection->peer_type = my_inst.name.type();
 }

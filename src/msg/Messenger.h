@@ -584,6 +584,10 @@ public:
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
 	 ++p) {
+      /* XXXX kill me */
+      if (m->get_type() == 41) {
+	cout << "ms_deliver_dispatch: " << *m << " on " << *p << std::endl;
+      }
       if ((*p)->ms_dispatch(m))
 	return;
     }
