@@ -621,9 +621,9 @@ TEST_F(LibRadosIoEC, OverlappingWriteRoundTrip) {
   char *buf3 = (char *)new char[dbsize];
   memset(buf, 0xcc, dbsize);
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, dbsize, 0));
-  memset(buf2, 0xdd, sizeof(buf2));
+  memset(buf2, 0xdd, bsize);
   ASSERT_EQ(-EOPNOTSUPP, rados_write(ioctx, "foo", buf2, bsize, 0));
-  memset(buf3, 0xdd, sizeof(buf3));
+  memset(buf3, 0xdd, dbsize);
   ASSERT_EQ(dbsize, rados_read(ioctx, "foo", buf3, dbsize, 0));
   // Read the same as first write
   ASSERT_EQ(0, memcmp(buf3, buf, dbsize));

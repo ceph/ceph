@@ -451,7 +451,7 @@ TEST_F(LibRadosMiscPP, CloneRangePP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  ASSERT_EQ(0, (size_t)ioctx.write("foo", bl, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
   ioctx.locator_set_key("foo");
   ASSERT_EQ(0, ioctx.clone_range("bar", 0, "foo", 0, sizeof(buf)));
   bufferlist bl2;
