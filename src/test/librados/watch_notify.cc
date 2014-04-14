@@ -11,7 +11,7 @@
 using namespace librados;
 
 typedef RadosTest LibRadosWatchNotify;
-typedef RadosTestPP LibRadosWatchNotifyPP;
+typedef RadosTestParamPP LibRadosWatchNotifyPP;
 typedef RadosTestEC LibRadosWatchNotifyEC;
 typedef RadosTestECPP LibRadosWatchNotifyECPP;
 
@@ -46,7 +46,7 @@ TEST_F(LibRadosWatchNotify, WatchNotifyTest) {
   sem_destroy(&sem);
 }
 
-TEST_F(LibRadosWatchNotifyPP, WatchNotifyTestPP) {
+TEST_P(LibRadosWatchNotifyPP, WatchNotifyTestPP) {
   ASSERT_EQ(0, sem_init(&sem, 0, 0));
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -66,8 +66,7 @@ TEST_F(LibRadosWatchNotifyPP, WatchNotifyTestPP) {
   ioctx.unwatch("foo", handle);
   sem_destroy(&sem);
 }
-
-TEST_F(LibRadosWatchNotifyPP, WatchNotifyTimeoutTestPP) {
+TEST_P(LibRadosWatchNotifyPP, WatchNotifyTimeoutTestPP) {
   ASSERT_EQ(0, sem_init(&sem, 0, 0));
   ioctx.set_notify_timeout(1);
   uint64_t handle;
@@ -134,3 +133,7 @@ TEST_F(LibRadosWatchNotifyECPP, WatchNotifyTimeoutTestPP) {
   ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
   sem_destroy(&sem);
 }
+
+
+INSTANTIATE_TEST_CASE_P(LibRadosWatchNotifyPPTests, LibRadosWatchNotifyPP,
+			::testing::Values("", "cache"));

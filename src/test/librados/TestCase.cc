@@ -94,6 +94,87 @@ void RadosTestPP::cleanup_default_namespace(librados::IoCtx ioctx)
   }
 }
 
+std::string RadosTestParamPP::pool_name;
+std::string RadosTestParamPP::cache_pool_name;
+Rados RadosTestParamPP::s_cluster;
+
+void RadosTestParamPP::SetUpTestCase()
+{
+  pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, s_cluster));
+}
+
+void RadosTestParamPP::TearDownTestCase()
+{
+  if (cache_pool_name.length()) {
+    // tear down tiers
+    bufferlist inbl;
+    ASSERT_EQ(0, s_cluster.mon_command(
+      "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
+      "\"}",
+      inbl, NULL, NULL));
+    ASSERT_EQ(0, s_cluster.mon_command(
+      "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
+      "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+      inbl, NULL, NULL));
+    ASSERT_EQ(0, s_cluster.mon_command(
+      "{\"prefix\": \"osd pool delete\", \"pool\": \"" + cache_pool_name +
+      "\", \"pool2\": \"" + cache_pool_name + "\", \"sure\": \"--yes-i-really-really-mean-it\"}",
+      inbl, NULL, NULL));
+    cache_pool_name = "";
+  }
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, s_cluster));
+}
+
+void RadosTestParamPP::SetUp()
+{
+  if (strcmp(GetParam(), "cache") == 0 && cache_pool_name.empty()) {
+    cache_pool_name = get_temp_pool_name();
+    bufferlist inbl;
+    ASSERT_EQ(0, cluster.mon_command(
+      "{\"prefix\": \"osd pool create\", \"pool\": \"" + cache_pool_name +
+      "\", \"pg_num\": 4}",
+      inbl, NULL, NULL));
+    ASSERT_EQ(0, cluster.mon_command(
+      "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
+      "\", \"tierpool\": \"" + cache_pool_name +
+      "\", \"force_nonempty\": \"--force-nonempty\" }",
+      inbl, NULL, NULL));
+    ASSERT_EQ(0, cluster.mon_command(
+      "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+      "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+      inbl, NULL, NULL));
+    ASSERT_EQ(0, cluster.mon_command(
+      "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+      "\", \"mode\": \"writeback\"}",
+      inbl, NULL, NULL));
+    cluster.wait_for_latest_osdmap();
+  }
+
+  ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
+  ns = get_temp_pool_name();
+  ioctx.set_namespace(ns);
+  ASSERT_FALSE(ioctx.pool_requires_alignment());
+}
+
+void RadosTestParamPP::TearDown()
+{
+  cleanup_default_namespace(ioctx);
+  ioctx.close();
+}
+
+void RadosTestParamPP::cleanup_default_namespace(librados::IoCtx ioctx)
+{
+  // remove all objects from the default namespace to avoid polluting
+  // other tests
+  ioctx.set_namespace("");
+  for (ObjectIterator it = ioctx.objects_begin();
+       it != ioctx.objects_end(); ++it) {
+    ioctx.locator_set_key(it->second);
+    ASSERT_EQ(0, ioctx.remove(it->first));
+  }
+}
+
 std::string RadosTestEC::pool_name;
 rados_t RadosTestEC::s_cluster = NULL;
 
