@@ -23,6 +23,7 @@
 
 #include "common/config.h"
 #include "common/cmdparse.h"
+#include "common/errno.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
