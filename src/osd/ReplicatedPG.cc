@@ -9724,7 +9724,7 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
       }
 
       if (recovering.count(soid)) {
-	dout(10) << __func__ << ": already recovering" << soid << dendl;
+	dout(10) << __func__ << ": already recovering " << soid << dendl;
 	continue;
       }
 
