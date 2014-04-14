@@ -705,7 +705,7 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
     m->put();
     return 0;
   }
-  
+
   m->set_header(header);
   m->set_footer(footer);
   m->set_payload(front);
