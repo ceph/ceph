@@ -3537,6 +3537,8 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
 void Monitor::handle_get_version(MMonGetVersion *m)
 {
   dout(10) << "handle_get_version " << *m << dendl;
+  PaxosService *svc = NULL;
+  MMonGetVersionReply *reply = NULL;
 
   MonSession *s = static_cast<MonSession *>(m->get_connection()->get_priv());
   if (!s) {
@@ -3548,7 +3550,7 @@ void Monitor::handle_get_version(MMonGetVersion *m)
   if (!is_leader() && !is_peon()) {
     dout(10) << " waiting for quorum" << dendl;
     waitfor_quorum.push_back(new C_RetryMessage(this, m));
-    return;
+    goto out;
   }
 
   MMonGetVersionReply *reply = new MMonGetVersionReply();
@@ -3568,8 +3570,10 @@ void Monitor::handle_get_version(MMonGetVersion *m)
 
   messenger->send_message(reply, m->get_source_inst());
 
-  s->put();
   m->put();
+
+ out:
+  s->put();
 }
 
 bool Monitor::ms_handle_reset(Connection *con)
