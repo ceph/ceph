@@ -10763,6 +10763,11 @@ void ReplicatedPG::agent_work(int start_max)
   for (vector<hobject_t>::iterator p = ls.begin();
        p != ls.end();
        ++p) {
+    if (p->nspace == cct->_conf->osd_hit_set_namespace) {
+      dout(20) << __func__ << " skip (hit set) " << *p << dendl;
+      osd->logger->inc(l_osd_agent_skip);
+      continue;
+    }
     if (is_degraded_object(*p)) {
       dout(20) << __func__ << " skip (degraded) " << *p << dendl;
       osd->logger->inc(l_osd_agent_skip);
@@ -10782,11 +10787,6 @@ void ReplicatedPG::agent_work(int start_max)
     }
     if (scrubber.write_blocked_by_scrub(obc->obs.oi.soid)) {
       dout(20) << __func__ << " skip (scrubbing) " << obc->obs.oi << dendl;
-      osd->logger->inc(l_osd_agent_skip);
-      continue;
-    }
-    if (obc->obs.oi.soid.nspace == cct->_conf->osd_hit_set_namespace) {
-      dout(20) << __func__ << " skip (hit set) " << obc->obs.oi << dendl;
       osd->logger->inc(l_osd_agent_skip);
       continue;
     }
