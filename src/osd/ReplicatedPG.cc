@@ -951,6 +951,10 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	    result = -EOPNOTSUPP;
 	    break;
 	  }
+	  if (is_unreadable_object(oid)) {
+	    wait_for_unreadable_object(oid, op);
+	    return;
+	  }
 	  result = osd->store->read(coll, oid, 0, 0, osd_op.outdata);
 	}
       }
