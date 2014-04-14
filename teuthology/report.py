@@ -317,6 +317,46 @@ class ResultsReporter(object):
         if os.path.exists(self.last_run_file):
             os.remove(self.last_run_file)
 
+    def get_jobs(self, run_name, fields=None):
+        """
+        Query the results server for jobs in a run
+
+        :param run_name: The name of the run
+        :param fields:   Optional. A list of fields to include in the result.
+                         Defaults to returning all fields.
+        """
+        uri = "{base}/runs/{name}/jobs/".format(base=self.base_uri,
+                                                name=run_name)
+        if fields:
+            if not 'job_id' in fields:
+                fields.append('job_id')
+            uri += "?fields=" + ','.join(fields)
+        response = requests.get(uri)
+        response.raise_for_status()
+        return response.json
+
+    def delete_job(self, run_name, job_id):
+        """
+        Delete a job from the results server.
+
+        :param run_name: The name of the run
+        :param job_id:   The job's id
+        """
+        uri = "{base}/runs/{name}/jobs/{job_id}/".format(
+            base=self.base_uri, name=run_name, job_id=job_id)
+        response = requests.delete(uri)
+        response.raise_for_status()
+
+    def delete_jobs(self, run_name, job_ids):
+        """
+        Delete multiple jobs from the results server.
+
+        :param run_name: The name of the run
+        :param job_ids:  A list of job ids
+        """
+        for job_id in job_ids:
+            self.delete_job(self, run_name, job_id)
+
 
 def push_job_info(run_name, job_id, job_info, base_uri=None):
     """
@@ -373,3 +413,38 @@ def try_push_job_info(job_config, extra_info=None):
             except (requests.exceptions.RequestException, socket.error):
                 log.exception("Could not report results to %s",
                               config.results_server)
+
+
+def try_delete_jobs(run_name, job_ids):
+    """
+    Using the same error checking and retry mechanism as try_push_job_info(),
+    delete one or more jobs
+
+    :param run_name: The name of the run.
+    :param job_ids:  Either a single job_id, or a list of job_ids
+    """
+    log = init_logging()
+
+    if not config.results_server:
+        msg = "No results_server set in {yaml}; not attempting to delete job"
+        log.debug(msg.format(yaml=config.teuthology_yaml))
+        return
+
+    if isinstance(job_ids, int):
+        job_ids = [str(job_ids)]
+    elif isinstance(job_ids, basestring):
+        job_ids = [job_ids]
+
+    # We are using archive_base='' here because we KNOW the serializer isn't
+    # needed for this codepath.
+    reporter = ResultsReporter(archive_base='')
+    for job_id in job_ids:
+        with safe_while(_raise=False) as proceed:
+            while proceed():
+                try:
+                    log.info("Pushing job info to %s", config.results_server)
+                    reporter.delete_job(run_name, job_id)
+                    return
+                except (requests.exceptions.RequestException, socket.error):
+                    log.exception("Could not report results to %s",
+                                  config.results_server)
