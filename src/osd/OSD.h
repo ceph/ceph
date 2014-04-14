@@ -961,6 +961,7 @@ public:
   }
 
 private:
+  Spinlock state_lock; // protects access to state
   int state;
   Spinlock epoch_lock; // protects access to boot_epoch, up_epoch, bind_epoch
   epoch_t boot_epoch;  // _first_ epoch we were marked up (after this process started)
@@ -968,11 +969,28 @@ private:
   epoch_t bind_epoch;  // epoch we last did a bind to new ip:ports
 
 public:
-  bool is_initializing() { return state == STATE_INITIALIZING; }
-  bool is_booting() { return state == STATE_BOOTING; }
-  bool is_active() { return state == STATE_ACTIVE; }
-  bool is_stopping() { return state == STATE_STOPPING; }
-  bool is_waiting_for_healthy() { return state == STATE_WAITING_FOR_HEALTHY; }
+  int get_state() { Spinlock::Locker l(state_lock); return state; }
+  void set_state(int s) { Spinlock::Locker l(state_lock); state = s; }
+  bool is_initializing() {
+    Spinlock::Locker l(state_lock);
+    return state == STATE_INITIALIZING;
+  }
+  bool is_booting() {
+    Spinlock::Locker l(state_lock);
+    return state == STATE_BOOTING;
+  }
+  bool is_active() {
+    Spinlock::Locker l(state_lock);
+    return state == STATE_ACTIVE;
+  }
+  bool is_stopping() {
+    Spinlock::Locker l(state_lock);
+    return state == STATE_STOPPING;
+  }
+  bool is_waiting_for_healthy() {
+    Spinlock::Locker l(state_lock);
+    return state == STATE_WAITING_FOR_HEALTHY;
+  }
 
 private:
 
