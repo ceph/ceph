@@ -246,7 +246,7 @@ bool MonitorStore::exists_bl_ss(const char *a, const char *b)
   struct stat st;
   int r = ::stat(fn, &st);
   //char buf[80];
-  //dout(15) << "exists_bl stat " << fn << " r=" << r << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+  //dout(15) << "exists_bl stat " << fn << " r=" << r << " " << cpp_strerror(errno) << dendl;
   if (r) {
     assert (errno == ENOENT);
   }
@@ -282,11 +282,10 @@ int MonitorStore::get_bl_ss(bufferlist& bl, const char *a, const char *b)
   
   int fd = ::open(fn, O_RDONLY);
   if (fd < 0) {
-    char buf[80];
     if (b) {
-      dout(15) << "get_bl " << a << "/" << b << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+      dout(15) << "get_bl " << a << "/" << b << " " << cpp_strerror(errno) << dendl;
     } else {
-      dout(15) << "get_bl " << a << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+      dout(15) << "get_bl " << a << " " << cpp_strerror(errno) << dendl;
     }
     return -errno;
   }
@@ -304,10 +303,8 @@ int MonitorStore::get_bl_ss(bufferlist& bl, const char *a, const char *b)
   while (off < len) {
     dout(20) << "reading at off " << off << " of " << len << dendl;
     int r = ::read(fd, bp.c_str()+off, len-off);
-    if (r < 0) {
-      char buf[80];
-      dout(0) << "errno on read " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    }
+    if (r < 0)
+      dout(0) << "errno on read " << cpp_strerror(errno) << dendl;
     assert(r>0);
     off += r;
   }

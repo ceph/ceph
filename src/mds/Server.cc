@@ -53,6 +53,7 @@
 #include "events/ECommitted.h"
 
 #include "include/filepath.h"
+#include "common/errno.h"
 #include "common/Timer.h"
 #include "common/perf_counters.h"
 #include "include/compat.h"
@@ -857,9 +858,8 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
   // that have projected linkages from getting new replica.
   mds->locker->set_xlocks_done(mdr.get(), mdr->client_request->get_op() == CEPH_MDS_OP_RENAME);
 
-  char buf[80];
   dout(10) << "early_reply " << reply->get_result() 
-	   << " (" << strerror_r(-reply->get_result(), buf, sizeof(buf))
+	   << " (" << cpp_strerror(reply->get_result())
 	   << ") " << *req << dendl;
 
   if (tracei || tracedn) {
@@ -894,9 +894,8 @@ void Server::reply_request(MDRequestRef& mdr, MClientReply *reply, CInode *trace
   assert(mdr.get());
   MClientRequest *req = mdr->client_request;
   
-  char buf[80];
   dout(10) << "reply_request " << reply->get_result() 
-	   << " (" << strerror_r(-reply->get_result(), buf, sizeof(buf))
+	   << " (" << cpp_strerror(reply->get_result())
 	   << ") " << *req << dendl;
 
   // note successful request in session map?

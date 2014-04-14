@@ -14,6 +14,7 @@
 #include <cctype>
 
 #include <typeinfo>
+#include "common/errno.h"
 
 // -------------
 
@@ -563,7 +564,7 @@ int CrushCompiler::parse_bucket(iter_t const& i)
     if (r == -EEXIST)
       err << "Duplicate bucket id " << id << std::endl;
     else
-      err << "add_bucket failed " << strerror(-r) << std::endl;
+      err << "add_bucket failed " << cpp_strerror(r) << std::endl;
     return r;
   }
   r = crush.set_item_name(id, name.c_str());
