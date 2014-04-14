@@ -915,6 +915,20 @@ int rados_ioctx_snap_remove(rados_ioctx_t io, const char *snapname);
  * @param snapname which snapshot to rollback to
  * @returns 0 on success, negative error code on failure
  */
+int rados_ioctx_snap_rollback(rados_ioctx_t io, const char *oid,
+		   const char *snapname);
+
+/**
+ * Rollback an object to a pool snapshot *DEPRECATED*
+ *
+ * Deprecated interface which is not rados_ioctx_snap_rollback()
+ * This function could go away in the future
+ *
+ * @param io the pool in which the object is stored
+ * @param oid the name of the object to rollback
+ * @param snapname which snapshot to rollback to
+ * @returns 0 on success, negative error code on failure
+ */
 int rados_rollback(rados_ioctx_t io, const char *oid,
 		   const char *snapname);
 
