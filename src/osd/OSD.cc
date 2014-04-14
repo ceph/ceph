@@ -4279,10 +4279,23 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
 	  _have_pg(pcand)) {
 	PG *pg = _lookup_lock_pg(pcand);
 	assert(pg);
-	// simulate pg <pgid> cmd= for pg->do-command
-	if (prefix != "pg")
-	  cmd_putval(cct, cmdmap, "cmd", prefix);
-	r = pg->do_command(cmdmap, ss, data, odata);
+	if (pg->is_primary()) {
+	  // simulate pg <pgid> cmd= for pg->do-command
+	  if (prefix != "pg")
+	    cmd_putval(cct, cmdmap, "cmd", prefix);
+	  r = pg->do_command(cmdmap, ss, data, odata);
+	} else {
+	  ss << "not primary for pgid " << pgid;
+
+	  // send them the latest diff to ensure they realize the mapping
+	  // has changed.
+	  send_incremental_map(osdmap->get_epoch() - 1, con);
+
+	  // do not reply; they will get newer maps and realize they
+	  // need to resend.
+	  pg->unlock();
+	  return;
+	}
 	pg->unlock();
       } else {
 	ss << "i don't have pgid " << pgid;
