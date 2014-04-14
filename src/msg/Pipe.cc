@@ -72,8 +72,10 @@ ostream& Pipe::_pipe_prefix(std::ostream *_dout) {
  * Pipe
  */
 
-Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
-  : RefCountedObject(r->cct), reader_thread(this), writer_thread(this),
+Pipe::Pipe(SimpleMessenger *r, int st, PipeConnection *con)
+  : RefCountedObject(r->cct),
+    reader_thread(this),
+    writer_thread(this),
     delay_thread(NULL),
     msgr(r),
     conn_id(r->dispatch_queue.get_id()),
@@ -95,7 +97,7 @@ Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
     connection_state = con;
     connection_state->reset_pipe(this);
   } else {
-    connection_state = new Connection(msgr->cct, msgr);
+    connection_state = new PipeConnection(msgr->cct, msgr);
     connection_state->pipe = get();
   }
 
@@ -937,7 +939,7 @@ int Pipe::connect()
 
     ceph_msg_connect connect;
     connect.features = policy.features_supported;
-    connect.host_type = msgr->my_type;
+    connect.host_type = msgr->get_myinst().name.type();
     connect.global_seq = gseq;
     connect.connect_seq = cseq;
     connect.protocol_version = msgr->get_proto_version(peer_type, true);
