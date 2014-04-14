@@ -2671,6 +2671,9 @@ public:
     /// if set, restart backfill when we can get a read lock
     bool backfill_read_marker;
 
+    /// if set, requeue snaptrim on lock release
+    bool snaptrimmer_write_marker;
+
     RWState() : state(RWNONE), count(0), backfill_read_marker(false) {}
     bool get_read(OpRequestRef op) {
       if (get_read_lock()) {
@@ -2764,6 +2767,14 @@ public:
   bool get_write(OpRequestRef op) {
     return rwstate.get_write(op);
   }
+  bool get_snaptrimmer_write() {
+    if (rwstate.get_write_lock()) {
+      return true;
+    } else {
+      rwstate.snaptrimmer_write_marker = true;
+      return false;
+    }
+  }
   bool get_backfill_read() {
     rwstate.backfill_read_marker = true;
     if (rwstate.get_read_lock()) {
@@ -2780,11 +2791,16 @@ public:
     rwstate.put_read(to_wake);
   }
   void put_write(list<OpRequestRef> *to_wake,
-		 bool *requeue_recovery) {
+		 bool *requeue_recovery,
+		 bool *requeue_snaptrimmer) {
     rwstate.put_write(to_wake);
     if (rwstate.empty() && rwstate.backfill_read_marker) {
       rwstate.backfill_read_marker = false;
       *requeue_recovery = true;
+    }
+    if (rwstate.empty() && rwstate.snaptrimmer_write_marker) {
+      rwstate.snaptrimmer_write_marker = false;
+      *requeue_snaptrimmer = true;
     }
   }
 
