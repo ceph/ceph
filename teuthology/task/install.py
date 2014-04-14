@@ -713,6 +713,8 @@ def remove_sources(ctx, config):
             system_type = teuthology.get_system_type(remote)
             p.spawn(remove_sources_pkgs[
                     system_type], remote, config.get('project', 'ceph'))
+            p.spawn(remove_sources_pkgs[
+                    system_type], remote, 'calamari')
 
 deb_packages = {'ceph': [
     'ceph',
@@ -730,6 +732,8 @@ deb_packages = {'ceph': [
     'python-ceph',
     'libcephfs1',
     'libcephfs1-dbg',
+    'salt-common',
+    'salt-minion',
 ]}
 
 rpm_packages = {'ceph': [
