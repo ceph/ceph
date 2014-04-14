@@ -267,6 +267,15 @@ namespace librados
     void selfmanaged_snap_rollback(uint64_t snapid);
 
     /**
+     * Rollback an object to the specified snapshot id
+     *
+     * Used with pool snapshots
+     *
+     * @param snapid [in] snopshot id specified
+     */
+    void snap_rollback(uint64_t snapid);
+
+    /**
      * set keys and values according to map
      *
      * @param map [in] keys and values to set
@@ -614,6 +623,8 @@ namespace librados
 
     int snap_list(std::vector<snap_t> *snaps);
 
+    int snap_rollback(const std::string& oid, const char *snapname);
+    // Deprecated name kept for backward compatibility - same as snap_rollback()
     int rollback(const std::string& oid, const char *snapname);
 
     int selfmanaged_snap_create(uint64_t *snapid);
