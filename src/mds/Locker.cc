@@ -2071,7 +2071,6 @@ void Locker::calc_new_client_ranges(CInode *in, uint64_t size, map<client_t,clie
     if ((p->second->issued() | p->second->wanted()) & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
       client_writeable_range_t& nr = new_ranges[p->first];
       nr.range.first = 0;
-      nr.follows = latest->client_ranges[p->first].follows;
       if (latest->client_ranges.count(p->first)) {
 	client_writeable_range_t& oldr = latest->client_ranges[p->first];
 	nr.range.last = MAX(ms, oldr.range.last);
