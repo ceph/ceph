@@ -282,6 +282,7 @@ TEST(AdminSocket, bind_and_listen) {
     int fd = 0;
     string message;
     message = asoct.bind_and_listen(path, &fd);
+    std::cout << "message: " << message << std::endl;
     EXPECT_NE(std::string::npos, message.find("File exists"));
     ASSERT_TRUE(asoct.shutdown());
   }

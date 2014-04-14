@@ -21,6 +21,7 @@
 #include "include/utime.h"
 #include "objclass/objclass.h"
 
+#include "common/errno.h"
 #include "common/Clock.h"
 
 #include "cls/lock/cls_lock_types.h"
@@ -175,7 +176,7 @@ static int lock_obj(cls_method_context_t hctx,
   // see if there's already a locker
   int r = read_lock(hctx, name, &linfo);
   if (r < 0 && r != -ENOENT) {
-    CLS_ERR("Could not read lock info: %s", strerror(r));
+    CLS_ERR("Could not read lock info: %s", cpp_strerror(r).c_str());
     return r;
   }
   map<locker_id_t, locker_info_t>& lockers = linfo.lockers;
@@ -282,7 +283,7 @@ static int remove_lock(cls_method_context_t hctx,
   lock_info_t linfo;
   int r = read_lock(hctx, name, &linfo);
   if (r < 0) {
-    CLS_ERR("Could not read list of current lockers off disk: %s", strerror(r));
+    CLS_ERR("Could not read list of current lockers off disk: %s", cpp_strerror(r).c_str());
     return r;
   }
 
@@ -381,7 +382,7 @@ static int get_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   lock_info_t linfo;
   int r = read_lock(hctx, op.name, &linfo);
   if (r < 0) {
-    CLS_ERR("Could not read lock info: %s", strerror(r));
+    CLS_ERR("Could not read lock info: %s", cpp_strerror(r).c_str());
     return r;
   }
 
