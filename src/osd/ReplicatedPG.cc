@@ -2223,18 +2223,34 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
     derr << __func__ << "could not find coid " << coid << dendl;
     assert(0);
   }
+  assert(obc->ssc);
+
+  if (!obc->get_snaptrimmer_write()) {
+    dout(10) << __func__ << ": Unable to get a wlock on " << coid << dendl;
+    return NULL;
+  }
+
+  hobject_t snapoid(
+    coid.oid, coid.get_key(),
+    obc->ssc->snapset.head_exists ? CEPH_NOSNAP:CEPH_SNAPDIR, coid.hash,
+    info.pgid.pool(), coid.get_namespace());
+  ObjectContextRef snapset_obc = get_object_context(snapoid, false);
+
+  if (!snapset_obc->get_snaptrimmer_write()) {
+    dout(10) << __func__ << ": Unable to get a wlock on " << snapoid << dendl;
+    list<OpRequestRef> to_wake;
+    bool requeue_recovery = false;
+    bool requeue_snaptrimmer = false;
+    obc->put_write(&to_wake, &requeue_recovery, &requeue_snaptrimmer);
+    assert(to_wake.empty());
+    assert(!requeue_recovery);
+    return NULL;
+  }
 
   object_info_t &coi = obc->obs.oi;
   set<snapid_t> old_snaps(coi.snaps.begin(), coi.snaps.end());
   assert(old_snaps.size());
 
-  // get snap set context
-  if (!obc->ssc)
-    obc->ssc = get_snapset_context(
-      coid,
-      false);
-
-  assert(obc->ssc);
   SnapSet& snapset = obc->ssc->snapset;
 
   dout(10) << coid << " old_snaps " << old_snaps
@@ -2243,6 +2259,9 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
 
   RepGather *repop = simple_repop_create(obc);
   OpContext *ctx = repop->ctx;
+  ctx->snapset_obc = snapset_obc;
+  ctx->lock_to_release = OpContext::W_LOCK;
+  ctx->release_snapset_obc = true;
   ctx->at_version = get_next_version();
 
   PGBackend::PGTransaction *t = ctx->op_t;
@@ -2367,12 +2386,6 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
 
   // save head snapset
   dout(10) << coid << " new snapset " << snapset << dendl;
-
-  hobject_t snapoid(
-    coid.oid, coid.get_key(),
-    snapset.head_exists ? CEPH_NOSNAP:CEPH_SNAPDIR, coid.hash,
-    info.pgid.pool(), coid.get_namespace());
-  ctx->snapset_obc = get_object_context(snapoid, false);
 
   if (snapset.clones.empty() && !snapset.head_exists) {
     dout(10) << coid << " removing " << snapoid << dendl;
@@ -11740,6 +11753,7 @@ boost::statechart::result ReplicatedPG::TrimmingObjects::react(const SnapTrim&)
   dout(10) << "TrimmingObjects: trimming snap " << snap_to_trim << dendl;
 
   // Get next
+  hobject_t old_pos = pos;
   int r = pg->snap_mapper.get_next_object_to_trim(snap_to_trim, &pos);
   if (r != 0 && r != -ENOENT) {
     derr << __func__ << ": get_next returned " << cpp_strerror(r) << dendl;
@@ -11753,6 +11767,12 @@ boost::statechart::result ReplicatedPG::TrimmingObjects::react(const SnapTrim&)
 
   dout(10) << "TrimmingObjects react trimming " << pos << dendl;
   RepGather *repop = pg->trim_object(pos);
+  if (!repop) {
+    dout(10) << __func__ << " could not get write lock on obj "
+	     << pos << dendl;
+    pos = old_pos;
+    return discard_event();
+  }
   assert(repop);
   repop->queue_snap_trimmer = true;
 

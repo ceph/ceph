@@ -714,15 +714,27 @@ protected:
     bool requeue_recovery = false;
     bool requeue_recovery_clone = false;
     bool requeue_recovery_snapset = false;
+    bool requeue_snaptrimmer = false;
+    bool requeue_snaptrimmer_clone = false;
+    bool requeue_snaptrimmer_snapset = false;
     switch (ctx->lock_to_release) {
     case OpContext::W_LOCK:
       if (ctx->snapset_obc && ctx->release_snapset_obc) {
-	ctx->snapset_obc->put_write(&to_req, &requeue_recovery_snapset);
+	ctx->snapset_obc->put_write(
+	  &to_req,
+	  &requeue_recovery_snapset,
+	  &requeue_snaptrimmer_snapset);
 	ctx->release_snapset_obc = false;
       }
-      ctx->obc->put_write(&to_req, &requeue_recovery);
+      ctx->obc->put_write(
+	&to_req,
+	&requeue_recovery,
+	&requeue_snaptrimmer);
       if (ctx->clone_obc)
-	ctx->clone_obc->put_write(&to_req, &requeue_recovery_clone);
+	ctx->clone_obc->put_write(
+	  &to_req,
+	  &requeue_recovery_clone,
+	  &requeue_snaptrimmer_clone);
       break;
     case OpContext::R_LOCK:
       if (ctx->snapset_obc && ctx->release_snapset_obc) {
@@ -740,6 +752,10 @@ protected:
     ctx->lock_to_release = OpContext::NONE;
     if (requeue_recovery || requeue_recovery_clone || requeue_recovery_snapset)
       osd->recovery_wq.queue(this);
+    if (requeue_snaptrimmer ||
+	requeue_snaptrimmer_clone ||
+	requeue_snaptrimmer_snapset)
+      queue_snap_trim();
     requeue_ops(to_req);
   }
 
