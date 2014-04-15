@@ -188,8 +188,6 @@ def start_rgw(ctx, config):
             '--rgw_ops_log_socket_path',
             '{tdir}/rgw.opslog.{client}.sock'.format(tdir=testdir,
                                                      client=client),
-            '{tdir}/apache/apache.{client}.conf'.format(tdir=testdir,
-                                                        client=client),
             '--foreground',
             run.Raw('|'),
             'sudo',
