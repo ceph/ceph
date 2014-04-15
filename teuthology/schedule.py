@@ -34,6 +34,9 @@ def main(ctx):
                 print 'job {jid} is not in the queue'.format(jid=job_id)
             else:
                 job.delete()
+                name = yaml.safe_load(job.body).get('name')
+                if name:
+                    report.try_delete_jobs(name, job_id)
         return
 
     # strip out targets; the worker will allocate new ones when we run
