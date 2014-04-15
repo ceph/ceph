@@ -1,3 +1,7 @@
 
 v0.80
 -----
+
+* OSDMap's json-formatted dump changed for keys 'full' and 'nearfull'.
+  What was previously being outputted as 'true' or 'false' strings are
+  now being outputted 'true' and 'false' booleans according to json syntax.
