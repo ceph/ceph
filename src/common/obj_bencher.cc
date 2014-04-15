@@ -167,15 +167,16 @@ void *ObjBencher::status_printer(void *_bencher) {
 int ObjBencher::aio_bench(
   int operation, int secondsToRun,
   int maxObjectsToCreate,
-  int concurrentios, int op_size, bool cleanup) {
+  int concurrentios, int op_size, bool cleanup, const char *meta_obj) {
   int object_size = op_size;
   int num_objects = 0;
   int r = 0;
   int prevPid = 0;
+  const std::string bench_meta_obj = (meta_obj == NULL? BENCH_LASTRUN_METADATA : std::string(meta_obj));
 
   //get data from previous write run, if available
   if (operation != OP_WRITE) {
-    r = fetch_bench_metadata(BENCH_LASTRUN_METADATA, &object_size, &num_objects, &prevPid);
+    r = fetch_bench_metadata(bench_meta_obj, &object_size, &num_objects, &prevPid);
     if (r < 0) {
       if (r == -ENOENT)
 	cerr << "Must write data before running a read benchmark!" << std::endl;
@@ -205,7 +206,7 @@ int ObjBencher::aio_bench(
   sanitize_object_contents(&data, data.object_size);
 
   if (OP_WRITE == operation) {
-    r = write_bench(secondsToRun, maxObjectsToCreate, concurrentios);
+    r = write_bench(secondsToRun, maxObjectsToCreate, concurrentios, meta_obj);
     if (r != 0) goto out;
   }
   else if (OP_SEQ_READ == operation) {
@@ -218,7 +219,7 @@ int ObjBencher::aio_bench(
   }
 
   if (OP_WRITE == operation && cleanup) {
-    r = fetch_bench_metadata(BENCH_LASTRUN_METADATA, &object_size, &num_objects, &prevPid);
+    r = fetch_bench_metadata(bench_meta_obj, &object_size, &num_objects, &prevPid);
     if (r < 0) {
       if (r == -ENOENT)
 	cerr << "Should never happen: bench metadata missing for current run!" << std::endl;
@@ -229,11 +230,13 @@ int ObjBencher::aio_bench(
     if (r != 0) goto out;
 
     // lastrun file
-    r = sync_remove(BENCH_LASTRUN_METADATA);
+    r = sync_remove(bench_meta_obj);
     if (r != 0) goto out;
 
-    // prefix-based file
-    r = sync_remove(generate_metadata_name());
+    // prefix-based file, it is only used when user does not specify one meta file
+    if (meta_obj == NULL) {
+      r = sync_remove(generate_metadata_name());
+    }
   }
 
  out:
@@ -299,7 +302,7 @@ int ObjBencher::fetch_bench_metadata(const std::string& metadata_file, int* obje
 }
 
 int ObjBencher::write_bench(int secondsToRun, int maxObjectsToCreate,
-			    int concurrentios) {
+			    int concurrentios, const char *meta_obj) {
   if (maxObjectsToCreate > 0 && concurrentios > maxObjectsToCreate)
     concurrentios = maxObjectsToCreate;
   out(cout) << "Maintaining " << concurrentios << " concurrent writes of "
@@ -311,6 +314,10 @@ int ObjBencher::write_bench(int secondsToRun, int maxObjectsToCreate,
 
   std::string prefix = generate_object_prefix();
   out(cout) << "Object prefix: " << prefix << std::endl;
+  
+  // The meta object
+  const std::string bench_meta_obj = (meta_obj == NULL? BENCH_LASTRUN_METADATA : std::string(meta_obj));
+
 
   std::vector<string> name(concurrentios);
   std::string newName;
@@ -480,11 +487,15 @@ int ObjBencher::write_bench(int secondsToRun, int maxObjectsToCreate,
   ::encode(data.finished, b_write);
   ::encode(getpid(), b_write);
 
-  // lastrun file
-  sync_write(BENCH_LASTRUN_METADATA, b_write, sizeof(int)*3);
+  // update the meta object
+  sync_write(bench_meta_obj, b_write, sizeof(int)*3);
 
-  // PID-specific run
-  sync_write(generate_metadata_name(), b_write, sizeof(int)*3);
+  // PID-specific run, this is only used when user does not specify one meta object,
+  // and it can be used for cleanup. Or else user should use the specified meta object
+  // for cleanup
+  if (meta_obj == NULL) {
+    sync_write(generate_metadata_name(), b_write, sizeof(int)*3);
+  }
 
   completions_done();
 
@@ -869,14 +880,13 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
   return -5;
 }
 
-int ObjBencher::clean_up(const std::string& prefix, int concurrentios) {
+int ObjBencher::clean_up(const std::string& prefix, const char *meta_obj, int concurrentios) {
   int r = 0;
   int object_size;
   int num_objects;
   int prevPid;
 
-  std::string metadata_name = prefix;
-  metadata_name.append("_metadata");
+  std::string metadata_name = (meta_obj == NULL ? prefix + "_metadata" : std::string(meta_obj));
 
   r = fetch_bench_metadata(metadata_name, &object_size, &num_objects, &prevPid);
   if (r < 0) {
