@@ -5478,6 +5478,8 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap,
     if (cap->get_last_seq() == 0) // reconnected cap
       cap->inc_last_seq();
     cap->set_last_issue();
+    cap->set_last_issue_stamp(ceph_clock_now(g_ceph_context));
+    cap->clear_new();
     MClientCaps *reap = new MClientCaps(CEPH_CAP_OP_IMPORT,
 					in->ino(),
 					realm->inode->ino(),
