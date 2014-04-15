@@ -1,6 +1,6 @@
 import yaml
 
-import teuthology.queue
+import teuthology.beanstalk
 from teuthology.misc import get_user
 from teuthology.misc import read_config
 
@@ -10,7 +10,7 @@ def main(ctx):
         ctx.owner = 'scheduled_{user}'.format(user=get_user())
     read_config(ctx)
 
-    beanstalk = teuthology.queue.connect(ctx)
+    beanstalk = teuthology.beanstalk.connect()
 
     tube = ctx.worker
     beanstalk.use(tube)

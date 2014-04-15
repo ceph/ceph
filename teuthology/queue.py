@@ -7,10 +7,10 @@ import sys
 import tempfile
 import time
 import yaml
-import beanstalkc
 
 from datetime import datetime
 
+from . import beanstalk
 from . import report
 from . import safepath
 from .config import config as teuth_config
@@ -54,12 +54,6 @@ class filelock(object):
         assert self.fd
         fcntl.lockf(self.fd, fcntl.LOCK_UN)
         self.fd = None
-
-
-def connect(ctx):
-    host = ctx.teuthology_config['queue_host']
-    port = ctx.teuthology_config['queue_port']
-    return beanstalkc.Connection(host=host, port=port)
 
 
 def fetch_teuthology_branch(path, branch='master'):
@@ -149,15 +143,14 @@ def worker(ctx):
 
     read_config(ctx)
 
-    beanstalk = connect(ctx)
-    beanstalk.watch(ctx.tube)
-    beanstalk.ignore('default')
+    connection = beanstalk.connect()
+    connection.watch_tube(ctx.tube)
 
     while True:
         if need_restart():
             restart()
 
-        job = beanstalk.reserve(timeout=60)
+        job = connection.reserve(timeout=60)
         if job is None:
             continue
 
