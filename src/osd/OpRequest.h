@@ -163,8 +163,6 @@ public:
     return reqid;
   }
 
-  void init_from_message();
-
   typedef ceph::shared_ptr<OpRequest> Ref;
 };
 
