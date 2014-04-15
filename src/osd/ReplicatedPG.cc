@@ -9742,6 +9742,18 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
 	continue;
       }
 
+      if (soid.is_snap() && pg_log.get_missing().is_missing(soid.get_head())) {
+	dout(10) << __func__ << ": " << soid.get_head()
+		 << " still missing on primary" << dendl;
+	continue;
+      }
+
+      if (soid.is_snap() && pg_log.get_missing().is_missing(soid.get_snapdir())) {
+	dout(10) << __func__ << ": " << soid.get_snapdir()
+		 << " still missing on primary" << dendl;
+	continue;
+      }
+
       if (pg_log.get_missing().is_missing(soid)) {
 	dout(10) << __func__ << ": " << soid << " still missing on primary" << dendl;
 	continue;
