@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 
 
 @contextlib.contextmanager
-def create_dirs(ctx, config):
+def create_apache_dirs(ctx, config):
     """
     Remotely create apache directories.  Delete when finished.
     """
@@ -71,7 +71,7 @@ def create_dirs(ctx, config):
 
 
 @contextlib.contextmanager
-def ship_config(ctx, config, role_endpoints):
+def ship_apache_configs(ctx, config, role_endpoints):
     """
     Ship apache config and rgw.fgci to all clients.  Clean up on termination
     """
@@ -166,7 +166,7 @@ def start_rgw(ctx, config):
         log.info("rgw %s config is %s", client, client_config)
         id_ = client.split('.', 1)[1]
         log.info('client {client} is id {id}'.format(client=client, id=id_))
-        run_cmd = [
+        cmd_prefix = [
             'sudo',
             'adjust-ulimits',
             'ceph-coverage',
@@ -174,7 +174,7 @@ def start_rgw(ctx, config):
             'daemon-helper',
             'term',
             ]
-        run_cmd_tail = [
+        rgw_cmd = [
             'radosgw',
             '-n', client,
             '-k', '/etc/ceph/ceph.{client}.keyring'.format(client=client),
@@ -200,14 +200,15 @@ def start_rgw(ctx, config):
             ]
 
         if client_config.get('valgrind'):
-            run_cmd = teuthology.get_valgrind_args(
+            cmd_prefix = teuthology.get_valgrind_args(
                 testdir,
                 client,
-                run_cmd,
+                cmd_prefix,
                 client_config.get('valgrind')
                 )
 
-        run_cmd.extend(run_cmd_tail)
+        run_cmd = list(cmd_prefix)
+        run_cmd.extend(rgw_cmd)
 
         ctx.daemons.add_daemon(
             remote, 'rgw', client,
@@ -597,7 +598,8 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints):
 @contextlib.contextmanager
 def task(ctx, config):
     """
-    Spin up apache configured to run a rados gateway.
+    Either use configure apache to run a rados gateway, or use the built-in
+    civetweb server.
     Only one should be run per machine, since it uses a hard-coded port for
     now.
 
@@ -736,8 +738,10 @@ def task(ctx, config):
         ctx.rgw.ec_data_pool = bool(config['ec-data-pool'])
         del config['ec-data-pool']
 
+    ctx.rgw.frontend = config.get('frontend', 'apache')
+
     with contextutil.nested(
-        lambda: create_dirs(ctx=ctx, config=config),
+        lambda: create_apache_dirs(ctx=ctx, config=config),
         lambda: configure_regions_and_zones(
             ctx=ctx,
             config=config,
@@ -751,8 +755,8 @@ def task(ctx, config):
             ),
         lambda: create_nonregion_pools(
             ctx=ctx, config=config, regions=regions),
-        lambda: ship_config(ctx=ctx, config=config,
-                            role_endpoints=role_endpoints),
+        lambda: ship_apache_configs(ctx=ctx, config=config,
+                                    role_endpoints=role_endpoints),
         lambda: start_rgw(ctx=ctx, config=config),
         lambda: start_apache(ctx=ctx, config=config),
             ):
