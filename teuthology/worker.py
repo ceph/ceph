@@ -118,7 +118,7 @@ def fetch_teuthology_branch(path, branch='master'):
         lock.release()
 
 
-def worker(ctx):
+def main(ctx):
     loglevel = logging.INFO
     if ctx.verbose:
         loglevel = logging.DEBUG
