@@ -174,15 +174,27 @@ def start_rgw(ctx, config):
             'daemon-helper',
             'term',
             ]
-        rgw_cmd = [
-            'radosgw',
+
+        rgw_cmd = ['radosgw']
+
+        if ctx.rgw.frontend == 'apache':
+            rgw_cmd.extend([
+                '--rgw-socket-path',
+                '{tdir}/apache/tmp.{client}/fastcgi_sock/rgw_sock'.format(
+                    tdir=testdir,
+                    client=client,
+                    ),
+            ])
+        elif ctx.rgw.frontend == 'civetweb':
+            host, port = ctx.rgw.role_endpoints[client]
+            rgw_cmd.extend([
+                '--rgw-frontends',
+                'civetweb port={port}'.format(port=port),
+            ])
+
+        rgw_cmd.extend([
             '-n', client,
             '-k', '/etc/ceph/ceph.{client}.keyring'.format(client=client),
-            '--rgw-socket-path',
-            '{tdir}/apache/tmp.{client}/fastcgi_sock/rgw_sock'.format(
-                tdir=testdir,
-                client=client,
-                ),
             '--log-file',
             '/var/log/ceph/rgw.{client}.log'.format(client=client),
             '--rgw_ops_log_socket_path',
@@ -195,7 +207,7 @@ def start_rgw(ctx, config):
             '/var/log/ceph/rgw.{client}.stdout'.format(tdir=testdir,
                                                        client=client),
             run.Raw('2>&1'),
-            ]
+            ])
 
         if client_config.get('valgrind'):
             cmd_prefix = teuthology.get_valgrind_args(
@@ -639,6 +651,16 @@ def task(ctx, config):
             client.3:
               valgrind: [--tool=memcheck]
 
+    To use civetweb instead of apache:
+
+        tasks:
+        - ceph:
+        - rgw:
+          - client.0
+        overrides:
+          rgw:
+            frontend: civetweb
+
     Note that without a modified fastcgi module e.g. with the default
     one on CentOS, you must have rgw print continue = false in ceph.conf::
 
@@ -736,7 +758,11 @@ def task(ctx, config):
         ctx.rgw.ec_data_pool = bool(config['ec-data-pool'])
         del config['ec-data-pool']
 
-    ctx.rgw.frontend = config.get('frontend', 'apache')
+    ctx.rgw.frontend = 'apache'
+    if 'frontend' in config:
+        ctx.rgw.frontend = config['frontend']
+        del config['frontend']
+    log.info("Using %s as radosgw frontend", ctx.rgw.frontend)
 
     with contextutil.nested(
         lambda: create_apache_dirs(ctx=ctx, config=config),
