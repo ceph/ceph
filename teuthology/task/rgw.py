@@ -764,24 +764,45 @@ def task(ctx, config):
         del config['frontend']
     log.info("Using %s as radosgw frontend", ctx.rgw.frontend)
 
-    with contextutil.nested(
-        lambda: create_apache_dirs(ctx=ctx, config=config),
-        lambda: configure_regions_and_zones(
-            ctx=ctx,
-            config=config,
-            regions=regions,
-            role_endpoints=role_endpoints,
-            ),
-        lambda: configure_users(
-            ctx=ctx,
-            config=config,
-            everywhere=bool(regions),
-            ),
-        lambda: create_nonregion_pools(
-            ctx=ctx, config=config, regions=regions),
-        lambda: ship_apache_configs(ctx=ctx, config=config,
-                                    role_endpoints=role_endpoints),
-        lambda: start_rgw(ctx=ctx, config=config),
-        lambda: start_apache(ctx=ctx, config=config),
-            ):
-        yield
+    if ctx.rgw.frontend == 'apache':
+        with contextutil.nested(
+            lambda: create_apache_dirs(ctx=ctx, config=config),
+            lambda: configure_regions_and_zones(
+                ctx=ctx,
+                config=config,
+                regions=regions,
+                role_endpoints=role_endpoints,
+                ),
+            lambda: configure_users(
+                ctx=ctx,
+                config=config,
+                everywhere=bool(regions),
+                ),
+            lambda: create_nonregion_pools(
+                ctx=ctx, config=config, regions=regions),
+            lambda: ship_apache_configs(ctx=ctx, config=config,
+                                        role_endpoints=role_endpoints),
+            lambda: start_rgw(ctx=ctx, config=config),
+            lambda: start_apache(ctx=ctx, config=config),
+                ):
+            yield
+    elif ctx.rgw.frontend == 'civetweb':
+        with contextutil.nested(
+            lambda: configure_regions_and_zones(
+                ctx=ctx,
+                config=config,
+                regions=regions,
+                role_endpoints=role_endpoints,
+                ),
+            lambda: configure_users(
+                ctx=ctx,
+                config=config,
+                everywhere=bool(regions),
+                ),
+            lambda: create_nonregion_pools(
+                ctx=ctx, config=config, regions=regions),
+            lambda: start_rgw(ctx=ctx, config=config),
+                ):
+            yield
+    else:
+        raise ValueError("frontend must be 'apache' or 'civetweb'")
