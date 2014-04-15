@@ -2574,7 +2574,6 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
 	assert(session);
 	Capability *cap = in->get_client_cap(q->first);
 	assert(cap);
-	cap->clear_new();
 	cap->merge(q->second, true);
 	mds->mdcache->do_cap_import(session, in, cap, q->second.cap_id, q->second.seq,
 				    q->second.mseq - 1, it->second.peer, CEPH_CAP_FLAG_AUTH);

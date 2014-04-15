@@ -7115,7 +7115,7 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequestRef& mdr,
   
   if (target && target->is_dir()) {
     assert(destdn);
-    mdcache->project_subtree_rename(in, straydir, destdir);
+    mdcache->project_subtree_rename(target, straydir, destdir);
   }
 
   if (in && in->is_dir()) {
