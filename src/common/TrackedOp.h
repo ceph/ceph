@@ -117,8 +117,6 @@ public:
     _mark_event(retval.get(), "all_read", ref->get_recv_complete_stamp());
     _mark_event(retval.get(), "dispatched", ref->get_dispatch_stamp());
     
-    retval->init_from_message();
-    
     return retval;
   }
 };
@@ -150,7 +148,6 @@ protected:
     tracker->register_inflight_op(&xitem);
   }
 
-  virtual void init_from_message() {}
   /// output any type-specific data you want to get when dump() is called
   virtual void _dump(utime_t now, Formatter *f) const {}
   /// if you want something else to happen when events are marked, implement

@@ -22,6 +22,11 @@ OpRequest::OpRequest(Message *req, OpTracker *tracker) :
     // don't warn as quickly for low priority ops
     warn_interval_multiplier = tracker->cct->_conf->osd_recovery_op_warn_multiple;
   }
+  if (req->get_type() == CEPH_MSG_OSD_OP) {
+    reqid = static_cast<MOSDOp*>(req)->get_reqid();
+  } else if (req->get_type() == MSG_OSD_SUBOP) {
+    reqid = static_cast<MOSDSubOp*>(req)->reqid;
+  }
 }
 
 void OpRequest::_dump(utime_t now, Formatter *f) const
@@ -47,15 +52,6 @@ void OpRequest::_dump(utime_t now, Formatter *f) const
       f->close_section();
     }
     f->close_section();
-  }
-}
-
-void OpRequest::init_from_message()
-{
-  if (request->get_type() == CEPH_MSG_OSD_OP) {
-    reqid = static_cast<MOSDOp*>(request)->get_reqid();
-  } else if (request->get_type() == MSG_OSD_SUBOP) {
-    reqid = static_cast<MOSDSubOp*>(request)->reqid;
   }
 }
 
