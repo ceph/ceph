@@ -1243,9 +1243,11 @@ ceph_tid_t Objecter::op_submit(Op *op)
 
 ceph_tid_t Objecter::_op_submit(Op *op)
 {
-  // pick tid
-  ceph_tid_t mytid = ++last_tid;
-  op->tid = mytid;
+  // pick tid if we haven't got one yet
+  if (op->tid == ceph_tid_t(0)) {
+    ceph_tid_t mytid = ++last_tid;
+    op->tid = mytid;
+  }
   assert(client_inc >= 0);
 
   // pick target
