@@ -1674,7 +1674,8 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, bool share, client
       issue_caps(in, cap);
     }
   
-    if (share && in->is_auth() && in->filelock.is_stable())
+    if (share && in->is_auth() &&
+	(in->filelock.gcaps_allowed(CAP_LONER) & (CEPH_CAP_GWR|CEPH_CAP_GBUFFER)))
       share_inode_max_size(in);
   }
   issue_caps_set(need_issue);
