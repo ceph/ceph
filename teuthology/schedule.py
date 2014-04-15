@@ -3,6 +3,7 @@ import yaml
 import teuthology.beanstalk
 from teuthology.misc import get_user
 from teuthology.misc import read_config
+from teuthology import report
 
 
 def main(ctx):
@@ -64,4 +65,7 @@ def main(ctx):
         )
         print 'Job scheduled with name {name} and ID {jid}'.format(
             name=ctx.name, jid=jid)
+        job_config['job_id'] = str(jid)
+        # Let paddles know the job is queued
+        report.try_push_job_info(job_config, dict(status='queued'))
         num -= 1
