@@ -762,47 +762,37 @@ def task(ctx, config):
     if 'frontend' in config:
         ctx.rgw.frontend = config['frontend']
         del config['frontend']
-    log.info("Using %s as radosgw frontend", ctx.rgw.frontend)
 
+    subtasks = [
+        lambda: configure_regions_and_zones(
+            ctx=ctx,
+            config=config,
+            regions=regions,
+            role_endpoints=role_endpoints,
+            ),
+        lambda: configure_users(
+            ctx=ctx,
+            config=config,
+            everywhere=bool(regions),
+            ),
+        lambda: create_nonregion_pools(
+            ctx=ctx, config=config, regions=regions),
+    ]
     if ctx.rgw.frontend == 'apache':
-        with contextutil.nested(
-            lambda: create_apache_dirs(ctx=ctx, config=config),
-            lambda: configure_regions_and_zones(
-                ctx=ctx,
-                config=config,
-                regions=regions,
-                role_endpoints=role_endpoints,
-                ),
-            lambda: configure_users(
-                ctx=ctx,
-                config=config,
-                everywhere=bool(regions),
-                ),
-            lambda: create_nonregion_pools(
-                ctx=ctx, config=config, regions=regions),
+        subtasks.insert(0, lambda: create_apache_dirs(ctx=ctx, config=config))
+        subtasks.extend([
             lambda: ship_apache_configs(ctx=ctx, config=config,
                                         role_endpoints=role_endpoints),
             lambda: start_rgw(ctx=ctx, config=config),
             lambda: start_apache(ctx=ctx, config=config),
-                ):
-            yield
+        ])
     elif ctx.rgw.frontend == 'civetweb':
-        with contextutil.nested(
-            lambda: configure_regions_and_zones(
-                ctx=ctx,
-                config=config,
-                regions=regions,
-                role_endpoints=role_endpoints,
-                ),
-            lambda: configure_users(
-                ctx=ctx,
-                config=config,
-                everywhere=bool(regions),
-                ),
-            lambda: create_nonregion_pools(
-                ctx=ctx, config=config, regions=regions),
+        subtasks.extend([
             lambda: start_rgw(ctx=ctx, config=config),
-                ):
-            yield
+        ])
     else:
         raise ValueError("frontend must be 'apache' or 'civetweb'")
+
+    log.info("Using %s as radosgw frontend", ctx.rgw.frontend)
+    with contextutil.nested(*subtasks):
+        yield
