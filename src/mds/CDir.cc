@@ -1775,7 +1775,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
  * @param want - min version i want committed
  * @param c - callback for completion
  */
-void CDir::commit(version_t want, Context *c, bool ignore_authpinnability)
+void CDir::commit(version_t want, Context *c, bool ignore_authpinnability, int op_prio)
 {
   dout(10) << "commit want " << want << " on " << *this << dendl;
   if (want == 0) want = get_version();
@@ -1797,7 +1797,7 @@ void CDir::commit(version_t want, Context *c, bool ignore_authpinnability)
   waiting_for_commit[want].push_back(c);
   
   // ok.
-  _commit(want);
+  _commit(want, op_prio);
 }
 
 class C_Dir_Committed : public Context {
@@ -1815,12 +1815,15 @@ public:
  * Flush out the modified dentries in this dir. Keep the bufferlist
  * below max_write_size;
  */
-void CDir::_omap_commit()
+void CDir::_omap_commit(int op_prio)
 {
   dout(10) << "_omap_commit" << dendl;
 
   unsigned max_write_size = cache->max_dir_commit_size;
   unsigned write_size = 0;
+
+  if (op_prio < 0)
+    op_prio = CEPH_MSG_PRIO_DEFAULT;
 
   // snap purge?
   const set<snapid_t> *snaps = NULL;
@@ -1877,7 +1880,7 @@ void CDir::_omap_commit()
 
     if (write_size >= max_write_size) {
       ObjectOperation op;
-      op.priority = CEPH_MSG_PRIO_LOW; // set priority lower than journal!
+      op.priority = op_prio;
       op.tmap_to_omap(true); // convert tmap to omap
 
       if (!to_set.empty())
@@ -1895,7 +1898,7 @@ void CDir::_omap_commit()
   }
 
   ObjectOperation op;
-  op.priority = CEPH_MSG_PRIO_LOW; // set priority lower than journal!
+  op.priority = op_prio;
   op.tmap_to_omap(true); // convert tmap to omap
 
   /*
@@ -1968,7 +1971,7 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
   }
 }
 
-void CDir::_commit(version_t want)
+void CDir::_commit(version_t want, int op_prio)
 {
   dout(10) << "_commit want " << want << " on " << *this << dendl;
 
@@ -2008,7 +2011,7 @@ void CDir::_commit(version_t want)
   
   if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_c);
 
-   _omap_commit();
+   _omap_commit(op_prio);
 }
 
 
@@ -2090,7 +2093,7 @@ void CDir::_committed(version_t v)
     ++n;
     if (p->first > committed_version) {
       dout(10) << " there are waiters for " << p->first << ", committing again" << dendl;
-      _commit(p->first);
+      _commit(p->first, -1);
       break;
     }
     cache->mds->queue_waiters(p->second);
