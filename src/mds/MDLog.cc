@@ -333,8 +333,13 @@ void MDLog::trim(int m)
     if (stop < ceph_clock_now(g_ceph_context))
       break;
 
-    if ((int)expiring_segments.size() >= g_conf->mds_log_max_expiring)
+    int num_expiring_segments = (int)expiring_segments.size();
+    if (num_expiring_segments >= g_conf->mds_log_max_expiring)
       break;
+
+    int op_prio = CEPH_MSG_PRIO_LOW +
+		  (CEPH_MSG_PRIO_HIGH - CEPH_MSG_PRIO_LOW) *
+		  num_expiring_segments / g_conf->mds_log_max_expiring;
 
     // look at first segment
     LogSegment *ls = p->second;
@@ -351,7 +356,7 @@ void MDLog::trim(int m)
     } else if (expired_segments.count(ls)) {
       dout(5) << "trim already expired segment " << ls->offset << ", " << ls->num_events << " events" << dendl;
     } else {
-      try_expire(ls);
+      try_expire(ls, op_prio);
     }
   }
 
@@ -360,16 +365,16 @@ void MDLog::trim(int m)
 }
 
 
-void MDLog::try_expire(LogSegment *ls)
+void MDLog::try_expire(LogSegment *ls, int op_prio)
 {
   C_GatherBuilder gather_bld(g_ceph_context);
-  ls->try_to_expire(mds, gather_bld);
+  ls->try_to_expire(mds, gather_bld, op_prio);
   if (gather_bld.has_subs()) {
     assert(expiring_segments.count(ls) == 0);
     expiring_segments.insert(ls);
     expiring_events += ls->num_events;
     dout(5) << "try_expire expiring segment " << ls->offset << dendl;
-    gather_bld.set_finisher(new C_MaybeExpiredSegment(this, ls));
+    gather_bld.set_finisher(new C_MaybeExpiredSegment(this, ls, op_prio));
     gather_bld.activate();
   } else {
     dout(10) << "try_expire expired segment " << ls->offset << dendl;
@@ -380,13 +385,13 @@ void MDLog::try_expire(LogSegment *ls)
   logger->set(l_mdl_evexg, expiring_events);
 }
 
-void MDLog::_maybe_expired(LogSegment *ls) 
+void MDLog::_maybe_expired(LogSegment *ls, int op_prio)
 {
   dout(10) << "_maybe_expired segment " << ls->offset << " " << ls->num_events << " events" << dendl;
   assert(expiring_segments.count(ls));
   expiring_segments.erase(ls);
   expiring_events -= ls->num_events;
-  try_expire(ls);
+  try_expire(ls, op_prio);
 }
 
 void MDLog::_trim_expired_segments()
