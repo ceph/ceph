@@ -139,7 +139,7 @@ def remove_beanstalk_jobs(run_name, tube_name):
 
 def kill_processes(run_name, pids=None):
     if pids:
-        to_kill = set(pids).intersection(psutil.get_pid_list())
+        to_kill = set(pids).intersection(psutil.pids())
     else:
         to_kill = find_pids(run_name)
 
@@ -154,7 +154,8 @@ def kill_processes(run_name, pids=None):
 def process_matches_run(pid, run_name):
     try:
         p = psutil.Process(pid)
-        if run_name in p.cmdline and sys.argv[0] not in p.cmdline:
+        cmd = p.cmdline()
+        if run_name in cmd and sys.argv[0] not in cmd:
             return True
     except psutil.NoSuchProcess:
         pass
@@ -163,7 +164,7 @@ def process_matches_run(pid, run_name):
 
 def find_pids(run_name):
     run_pids = []
-    for pid in psutil.get_pid_list():
+    for pid in psutil.pids():
         if process_matches_run(pid, run_name):
             run_pids.append(pid)
     return run_pids
