@@ -7604,7 +7604,7 @@ void ReplicatedBackend::prepare_pull(
   pg_shard_t fromshard = *p;
 
   dout(7) << "pull " << soid
-	  << "v " << v
+	  << " v " << v
 	  << " on osds " << *p
 	  << " from osd." << fromshard
 	  << dendl;
