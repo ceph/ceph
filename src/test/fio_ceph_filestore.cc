@@ -9,8 +9,8 @@
 #include "os/FileStore.h"
 #include "global/global_init.h"
 
-#include "../../fio/fio.h"
-//#include <fio.h>
+//#include "../../fio/fio.h"
+#include "fio.h"
 
 struct fio_ceph_filestore_iou {
 	struct io_u *io_u;
