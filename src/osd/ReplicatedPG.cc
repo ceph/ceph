@@ -472,6 +472,30 @@ void ReplicatedPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef 
   op->mark_delayed("waiting for degraded object");
 }
 
+bool ReplicatedPG::maybe_await_blocked_snapset(
+  const hobject_t &hoid,
+  OpRequestRef op)
+{
+  ObjectContextRef obc;
+  if (obc = object_contexts.lookup(hoid.get_head())) {
+    if (obc->is_blocked()) {
+      wait_for_blocked_object(obc->obs.oi.soid, op);
+      return true;
+    } else {
+      return false;
+    }
+  }
+  if (obc = object_contexts.lookup(hoid.get_snapdir())) {
+    if (obc->is_blocked()) {
+      wait_for_blocked_object(obc->obs.oi.soid, op);
+      return true;
+    } else {
+      return false;
+    }
+  }
+  return false;
+}
+
 void ReplicatedPG::wait_for_blocked_object(const hobject_t& soid, OpRequestRef op)
 {
   dout(10) << __func__ << " " << soid << " " << op << dendl;
@@ -1262,6 +1286,13 @@ void ReplicatedPG::do_op(OpRequestRef op)
 		m->get_pg().ps(),
 		m->get_object_locator().get_pool(),
 		m->get_object_locator().nspace);
+
+  // io blocked on obc?
+  if (((m->get_flags() & CEPH_OSD_FLAG_FLUSH) == 0) &&
+      maybe_await_blocked_snapset(oid, op)) {
+    return;
+  }
+
   int r = find_object_context(
     oid, &obc, can_create,
     m->get_flags() & CEPH_OSD_FLAG_MAP_SNAP_CLONE,
@@ -7130,10 +7161,12 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
   }
 
   SnapSetContext *ssc = get_snapset_context(oid, can_create);
-  if (!ssc) {
+  if (!ssc || !(ssc->exists)) {
     dout(20) << __func__ << " " << oid << " no snapset" << dendl;
     if (pmissing)
       *pmissing = head;  // start by getting the head
+    if (ssc)
+      put_snapset_context(ssc);
     return -ENOENT;
   }
 
