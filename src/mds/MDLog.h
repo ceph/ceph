@@ -219,15 +219,16 @@ private:
   class C_MaybeExpiredSegment : public Context {
     MDLog *mdlog;
     LogSegment *ls;
+    int op_prio;
   public:
-    C_MaybeExpiredSegment(MDLog *mdl, LogSegment *s) : mdlog(mdl), ls(s) {}
+    C_MaybeExpiredSegment(MDLog *mdl, LogSegment *s, int p) : mdlog(mdl), ls(s), op_prio(p) {}
     void finish(int res) {
-      mdlog->_maybe_expired(ls);
+      mdlog->_maybe_expired(ls, op_prio);
     }
   };
 
-  void try_expire(LogSegment *ls);
-  void _maybe_expired(LogSegment *ls);
+  void try_expire(LogSegment *ls, int op_prio);
+  void _maybe_expired(LogSegment *ls, int op_prio);
   void _expired(LogSegment *ls);
   void _trim_expired_segments();
 

@@ -498,14 +498,15 @@ protected:
 
   // -- commit --
   map<version_t, list<Context*> > waiting_for_commit;
-  void _commit(version_t want);
-  void _omap_commit();
+  void _commit(version_t want, int op_prio);
+  void _omap_commit(int op_prio);
   void _encode_dentry(CDentry *dn, bufferlist& bl, const set<snapid_t> *snaps);
   void _committed(version_t v);
 public:
   void wait_for_commit(Context *c, version_t v=0);
   void commit_to(version_t want);
-  void commit(version_t want, Context *c, bool ignore_authpinnability=false);
+  void commit(version_t want, Context *c,
+	      bool ignore_authpinnability=false, int op_prio=-1);
 
   // -- dirtyness --
   version_t get_committing_version() { return committing_version; }
