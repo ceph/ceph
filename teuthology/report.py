@@ -173,10 +173,10 @@ class ResultsSerializer(object):
 class ResultsReporter(object):
     last_run_file = 'last_successful_run'
 
-    def __init__(self, archive_base, base_uri=None, save=False, refresh=False,
-                 timeout=20, log=None):
+    def __init__(self, archive_base=None, base_uri=None, save=False,
+                 refresh=False, timeout=20, log=None):
         self.log = log or init_logging()
-        self.archive_base = archive_base
+        self.archive_base = archive_base or config.archive_base
         self.base_uri = base_uri or config.results_server
         if self.base_uri:
             self.base_uri = self.base_uri.rstrip('/')
@@ -368,9 +368,7 @@ def push_job_info(run_name, job_id, job_info, base_uri=None):
     :param base_uri: The endpoint of the results server. If you leave it out
                      ResultsReporter will ask teuthology.config.
     """
-    # We are using archive_base='' here because we KNOW the serializer isn't
-    # needed for this codepath.
-    reporter = ResultsReporter(archive_base='')
+    reporter = ResultsReporter()
     reporter.report_job(run_name, job_id, job_info)
 
 
@@ -435,9 +433,7 @@ def try_delete_jobs(run_name, job_ids):
     elif isinstance(job_ids, basestring):
         job_ids = [job_ids]
 
-    # We are using archive_base='' here because we KNOW the serializer isn't
-    # needed for this codepath.
-    reporter = ResultsReporter(archive_base='')
+    reporter = ResultsReporter()
     for job_id in job_ids:
         with safe_while(_raise=False) as proceed:
             while proceed():
