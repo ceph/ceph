@@ -2092,9 +2092,7 @@ static string map_option_uuid_cb(const char *value_char)
   if (!u.parse(value_char))
     return "";
 
-  ostringstream oss;
-  oss << u;
-  return oss.str();
+  return stringify(u);
 }
 
 static string map_option_ip_cb(const char *value_char)
@@ -2106,9 +2104,7 @@ static string map_option_ip_cb(const char *value_char)
     return "";
   }
 
-  ostringstream oss;
-  oss << a.addr;
-  return oss.str();
+  return stringify(a.addr);
 }
 
 static string map_option_int_cb(const char *value_char)
@@ -2118,9 +2114,7 @@ static string map_option_int_cb(const char *value_char)
   if (!err.empty() || d < 0)
     return "";
 
-  ostringstream oss;
-  oss << d;
-  return oss.str();
+  return stringify(d);
 }
 
 static void put_map_option(const string key, string val)
