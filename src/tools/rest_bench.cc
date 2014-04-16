@@ -678,8 +678,8 @@ int main(int argc, const char **argv)
 
   bool show_time = false;
   bool cleanup = true;
-  const char* run_name = NULL;
-  const char* prefix = NULL;
+  std::string run_name;
+  std::string prefix;
 
 
   for (i = args.begin(); i != args.end(); ) {
@@ -725,9 +725,9 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "-t", "--concurrent-ios", (char*)NULL)) {
       concurrent_ios = strtol(val.c_str(), NULL, 10);
     } else if (ceph_argparse_witharg(args, i, &val, "--run-name", (char*)NULL)) {
-      run_name = val.c_str();
+      run_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--prefix", (char*)NULL)) {
-      prefix = val.c_str();
+      prefix = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--seconds", (char*)NULL)) {
       seconds = strtol(val.c_str(), NULL, 10);
     } else if (ceph_argparse_witharg(args, i, &val, "-b", "--block-size", (char*)NULL)) {
@@ -786,12 +786,12 @@ int main(int argc, const char **argv)
   }
 
   if (operation == OP_CLEANUP) {
-    ret = bencher.clean_up(prefix, concurrent_ios, run_name);
+    ret = bencher.clean_up(prefix.c_str(), concurrent_ios, run_name.c_str());
     if (ret != 0)
       cerr << "error during cleanup: " << ret << std::endl;
   } else {
     ret = bencher.aio_bench(operation, seconds, 0,
-			    concurrent_ios, op_size, cleanup, run_name);
+			    concurrent_ios, op_size, cleanup, run_name.c_str());
     if (ret != 0) {
         cerr << "error during benchmark: " << ret << std::endl;
     }
