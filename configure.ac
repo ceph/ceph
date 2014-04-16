@@ -959,6 +959,18 @@ BOOST_PROGRAM_OPTIONS_LIBS="${LIBS}"
 LIBS="${saved_LIBS}"
 AC_SUBST(BOOST_PROGRAM_OPTIONS_LIBS)
 
+# fio header required for src/test/fio_ceph_filestore.cc
+AC_ARG_WITH(fio-dir,
+    AC_HELP_STRING([--with-fio-dir(=DIR)], [Path to fio source directory]))
+
+if test "x$with_fio_dir" != "no"; then
+	AS_IF([test -n "$with_fio_dir"], [
+		   AS_IF([test -r "$with_fio_dir/fio.h"], [
+				  FIO_INC_DIR=`readlink -f $with_fio_dir`])])
+fi
+AM_CONDITIONAL(WITH_FIO_DIR, [ test -n "$FIO_INC_DIR" ])
+AC_SUBST(FIO_INC_DIR)
+
 AC_LANG([C])
 
 AC_CHECK_MEMBER([struct fiemap_extent.fe_logical],
