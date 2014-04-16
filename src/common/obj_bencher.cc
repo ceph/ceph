@@ -584,7 +584,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     completion_wait(slot);
     lock.Lock();
     r = completion_ret(slot);
-    if (r != 0) {
+    if (r < 0) {
       cerr << "read got " << r << std::endl;
       lock.Unlock();
       goto ERR;
@@ -627,7 +627,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     completion_wait(slot);
     lock.Lock();
     r = completion_ret(slot);
-    if (r != 0) {
+    if (r < 0) {
       cerr << "read got " << r << std::endl;
       lock.Unlock();
       goto ERR;
@@ -771,7 +771,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     completion_wait(slot);
     lock.Lock();
     r = completion_ret(slot);
-    if (r != 0) {
+    if (r < 0) {
       cerr << "read got " << r << std::endl;
       lock.Unlock();
       goto ERR;
@@ -814,7 +814,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     completion_wait(slot);
     lock.Lock();
     r = completion_ret(slot);
-    if (r != 0) {
+    if (r < 0) {
       cerr << "read got " << r << std::endl;
       lock.Unlock();
       goto ERR;
