@@ -383,7 +383,7 @@ Rados object in state %s." % (self.state))
       Ping a monitor to assess liveness
 
       May be used as a simply way to assess liveness, or to obtain
-      informations about the monitor in a simple way even in the
+      information about the monitor in a simple way even in the
       absence of quorum.
 
       :param mon_id: the ID portion of the monitor's name (i.e., mon.<ID>)
