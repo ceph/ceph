@@ -131,6 +131,7 @@ endif # PROFILER
 
 LIBGLOBAL = libglobal.la
 LIBCOMMON = libcommon.la
+LIBSECRET = libsecret.la
 LIBARCH = libarch.la
 LIBPERFGLUE = libperfglue.la
 LIBAUTH = libauth.la
