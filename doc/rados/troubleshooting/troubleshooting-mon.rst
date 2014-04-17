@@ -100,7 +100,7 @@ Understanding mon_status
 
 ``mon_status`` can be obtained through the ``ceph`` tool when you have
 a formed quorum, or via the admin socket if you don't. This command will
-output a multitude of informations about the monitor, including the same
+output a multitude of information about the monitor, including the same
 output you would get with ``quorum_status``.
 
 Take the following example of ``mon_status``::
@@ -282,7 +282,7 @@ In this sort of situations, you have two possible solutions:
 Scrap the monitor and create a new one
 
   You should only take this route if you are positive that you won't
-  lose the informations kept by that monitor; that you have other monitors
+  lose the information kept by that monitor; that you have other monitors
   and that they are running just fine so that your new monitor is able
   to synchronize from the remaining monitors. Keep in mind that destroying
   a monitor, if there are no other copies of its contents, may lead to

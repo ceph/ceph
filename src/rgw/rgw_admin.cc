@@ -45,7 +45,7 @@ void _usage()
   cerr << "  user info                  get user info\n";
   cerr << "  user rm                    remove user\n";
   cerr << "  user suspend               suspend a user\n";
-  cerr << "  user enable                reenable user after suspension\n";
+  cerr << "  user enable                re-enable user after suspension\n";
   cerr << "  user check                 check user info\n";
   cerr << "  user stats                 show user stats as accounted by quota subsystem\n";
   cerr << "  caps add                   add user capabilities\n";
