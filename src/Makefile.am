@@ -74,12 +74,18 @@ ceph_syn_SOURCES += client/SyntheticClient.cc # uses g_conf.. needs cleanup
 ceph_syn_LDADD = $(LIBCLIENT) $(CEPH_GLOBAL)
 bin_PROGRAMS += ceph-syn
 
+
+libkrbd_la_SOURCES = krbd.cc
+libkrbd_la_LIBADD = $(LIBSECRET) -lblkid -ludev
+if LINUX
+noinst_LTLIBRARIES += libkrbd.la
+endif LINUX
+
 rbd_SOURCES = rbd.cc
 rbd_LDADD = $(LIBSECRET) $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL) -lblkid
 if LINUX
 bin_PROGRAMS += rbd
 endif #LINUX
-
 
 
 # Fuse targets
