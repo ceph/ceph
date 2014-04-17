@@ -243,7 +243,7 @@ def run_with_watchdog(process, job_config):
         # The job ran with a teuthology branch that may not have the reporting
         # feature. Let's call teuthology-report (which will be from the master
         # branch) to report the job manually.
-        cmd = "teuthology-report -v -r {run_name} -j {job_id}".format(
+        cmd = "teuthology-report -v -D -r {run_name} -j {job_id}".format(
             run_name=job_info['name'],
             job_id=job_info['job_id'])
         try:
@@ -258,7 +258,6 @@ def run_with_watchdog(process, job_config):
             log.info("Reported results via the teuthology-report command")
         except Exception:
             log.exception("teuthology-report failed")
-            #log.warn("Tried to run teuthology-report but it wasn't in $PATH")
     else:
         # Let's make sure that paddles knows the job is finished. We don't know
         # the status, but if it was a pass or fail it will have already been
