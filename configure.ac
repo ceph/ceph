@@ -141,6 +141,12 @@ if test x"$linux" = x"yes"; then
     AC_MSG_ERROR([blkid/blkid.h not found (libblkid-dev, libblkid-devel)]))
   AC_CHECK_LIB([blkid], [blkid_devno_to_wholedisk], [],
     AC_MSG_FAILURE([libblkid not found]))
+
+  # libudev
+  AC_CHECK_HEADER([libudev.h], [],
+    AC_MSG_ERROR([libudev.h not found (libudev-dev, libudev-devel)]))
+  AC_CHECK_LIB([udev], [udev_monitor_receive_device], [],
+    AC_MSG_FAILURE([libudev not found]))
 fi
 
 #
