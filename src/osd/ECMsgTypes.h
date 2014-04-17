@@ -26,7 +26,7 @@ struct ECSubWrite {
   hobject_t soid;
   pg_stat_t stats;
   ObjectStore::Transaction t;
- eversion_t at_version;
+  eversion_t at_version;
   eversion_t trim_to;
   vector<pg_log_entry_t> log_entries;
   set<hobject_t> temp_added;
