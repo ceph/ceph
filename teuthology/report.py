@@ -436,12 +436,15 @@ def try_delete_jobs(run_name, job_ids):
     reporter = ResultsReporter()
     log.debug("Deleting jobs from {server}: {jobs}".format(
         server=config.results_server, jobs=str(job_ids)))
-    for job_id in job_ids:
+
+    def try_delete_job(job_id):
         with safe_while(_raise=False) as proceed:
             while proceed():
                 try:
                     reporter.delete_job(run_name, job_id)
                     return
                 except (requests.exceptions.RequestException, socket.error):
-                    log.exception("Could not report results to %s",
-                                  config.results_server)
+                    log.exception("Job deletion failed")
+
+    for job_id in job_ids:
+        try_delete_job(job_id)
