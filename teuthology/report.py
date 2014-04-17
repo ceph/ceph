@@ -405,7 +405,7 @@ def try_push_job_info(job_config, extra_info=None):
     with safe_while(_raise=False) as proceed:
         while proceed():
             try:
-                log.info("Pushing job info to %s", config.results_server)
+                log.debug("Pushing job info to %s", config.results_server)
                 push_job_info(run_name, job_id, job_info)
                 return
             except (requests.exceptions.RequestException, socket.error):
@@ -434,11 +434,12 @@ def try_delete_jobs(run_name, job_ids):
         job_ids = [job_ids]
 
     reporter = ResultsReporter()
+    log.debug("Deleting jobs from {server}: {jobs}".format(
+        server=config.results_server, jobs=str(job_ids)))
     for job_id in job_ids:
         with safe_while(_raise=False) as proceed:
             while proceed():
                 try:
-                    log.info("Pushing job info to %s", config.results_server)
                     reporter.delete_job(run_name, job_id)
                     return
                 except (requests.exceptions.RequestException, socket.error):
