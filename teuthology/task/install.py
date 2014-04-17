@@ -447,7 +447,7 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
         if ldir:
             pkg = "{ldir}/{cpack}-{trailer}".format(ldir=ldir, cpack=cpack, trailer=tmp_vers)
             remote.run(
-                args = ['if', 'test', '-e', 
+                args = ['if', 'test', '-e',
                         run.Raw(pkg), run.Raw(';'), 'then',
                         'sudo', 'yum', 'remove', pkg, '-y', run.Raw(';'),
                         'sudo', 'yum', 'install', pkg, '-y',
@@ -458,7 +458,7 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
                     stderr=pk_err_mess)
         else:
             remote.run(
-                args = ['if', 'test', run.Raw('!'), '-e', 
+                args = ['if', 'test', run.Raw('!'), '-e',
                         run.Raw(pkg), run.Raw(';'), 'then',
                         'sudo', 'yum', 'install', pkg2add, '-y',
                         run.Raw(';'), 'fi'])
@@ -1152,7 +1152,7 @@ def task(ctx, config):
             flavor=flavor,
             extra_packages=config.get('extra_packages', []),
             extras=config.get('extras', None),
-            wait_for_package=ctx.config.get('wait-for-package', False),
+            wait_for_package=ctx.config.get('wait_for_package', False),
             project=project,
         )),
     ):
