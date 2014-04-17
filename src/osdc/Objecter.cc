@@ -1461,7 +1461,7 @@ int Objecter::calc_target(op_target_t *t)
   pg_t pgid;
   if (t->precalc_pgid) {
     assert(t->base_oid.name.empty()); // make sure this is a listing op
-    ldout(cct, 10) << "recalc_op_target have " << t->base_pgid << " pool "
+    ldout(cct, 10) << __func__ << " have " << t->base_pgid << " pool "
 		   << osdmap->have_pg_pool(t->base_pgid.pool()) << dendl;
     if (!osdmap->have_pg_pool(t->base_pgid.pool()))
       return RECALC_OP_TARGET_POOL_DNE;
@@ -1489,10 +1489,12 @@ int Objecter::calc_target(op_target_t *t)
     t->pgid = pgid;
     t->acting = acting;
     t->primary = primary;
-    ldout(cct, 10) << "calc_op_target "
-		   << " pgid " << pgid << " acting " << acting << dendl;
+    ldout(cct, 10) << __func__ << " pgid " << pgid
+		   << " acting " << acting << dendl;
     t->used_replica = false;
-    if (primary != -1) {
+    if (primary == -1) {
+      t->osd = -1;
+    } else {
       int osd;
       bool read = is_read && !is_write;
       if (read && (t->flags & CEPH_OSD_FLAG_BALANCE_READS)) {
