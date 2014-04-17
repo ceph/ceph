@@ -3324,6 +3324,13 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
 	return -EEXIST;
       return 0;
     }
+    string force;
+    cmd_getval(g_ceph_context,cmdmap, "force", force);
+    if (p.cache_mode != pg_pool_t::CACHEMODE_NONE &&
+	force != "--yes-i-really-mean-it") {
+      ss << "splits in cache pools must be followed by scrubs and leave sufficient free space to avoid overfilling.  use --yes-i-really-mean-it to force.";
+      return -EPERM;
+    }
     int expected_osds = MIN(p.get_pg_num(), osdmap.get_num_osds());
     int64_t new_pgs = n - p.get_pg_num();
     int64_t pgs_per_osd = new_pgs / expected_osds;
