@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 def successful_ops(out):
     """
     Extract successful operations
-    :param out: list  
+    :param out: list
     """
     summary = out['summary']
     if len(summary) == 0:
@@ -37,7 +37,7 @@ def successful_ops(out):
 def rgwadmin(ctx, client, cmd):
     """
     Perform rgw admin command
-   
+
     :param client: client
     :param cmd: command to execute.
     :return: command exit status, json result.
@@ -156,8 +156,8 @@ def rgwadmin_rest(connection, cmd, params=None, headers=None, raw=False):
         log.info(' text result: %s' % result.txt)
         return result.status_code, result.txt
     else:
-        log.info(' json result: %s' % result.json)
-        return result.status_code, result.json
+        log.info(' json result: %s' % result.json())
+        return result.status_code, result.json()
 
 
 def task(ctx, config):

@@ -274,8 +274,9 @@ class ResultsReporter(object):
         if response.status_code == 200:
             return job_id
 
-        if response.json:
-            msg = response.json.get('message', '')
+        resp_json = response.json()
+        if resp_json:
+            msg = resp_json.get('message', '')
         else:
             msg = response.text
 
@@ -333,7 +334,7 @@ class ResultsReporter(object):
             uri += "?fields=" + ','.join(fields)
         response = requests.get(uri)
         response.raise_for_status()
-        return response.json
+        return response.json()
 
     def delete_job(self, run_name, job_id):
         """
