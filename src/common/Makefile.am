@@ -191,7 +191,6 @@ noinst_HEADERS += \
 	common/utf8.h \
 	common/mime.h \
 	common/pick_address.h \
-	common/secret.h \
 	common/strtol.h \
 	common/static_assert.h \
 	common/AsyncReserver.h \
@@ -203,3 +202,10 @@ noinst_HEADERS += \
 noinst_LTLIBRARIES += libcommon.la
 
 
+libsecret_la_SOURCES = common/secret.c
+libsecret_la_LIBADD = $(KEYUTILS_LIB)
+if LINUX
+noinst_LTLIBRARIES += libsecret.la
+endif
+
+noinst_HEADERS += common/secret.h
