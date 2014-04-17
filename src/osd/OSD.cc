@@ -6477,7 +6477,7 @@ void OSD::do_notifies(
       cluster_messenger->send_message(m, con.get());
     } else {
       dout(7) << "do_notify osd " << it->first
-	      << " sending seperate messages" << dendl;
+	      << " sending separate messages" << dendl;
       for (vector<pair<pg_notify_t, pg_interval_map_t> >::iterator i =
 	     it->second.begin();
 	   i != it->second.end();
@@ -6516,7 +6516,7 @@ void OSD::do_queries(map<int, map<spg_t,pg_query_t> >& query_map,
       cluster_messenger->send_message(m, con.get());
     } else {
       dout(7) << "do_queries querying osd." << who
-	      << " sending seperate messages "
+	      << " sending saperate messages "
 	      << " on " << pit->second.size() << " PGs" << dendl;
       for (map<spg_t, pg_query_t>::iterator i = pit->second.begin();
 	   i != pit->second.end();

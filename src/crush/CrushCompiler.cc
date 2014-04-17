@@ -375,7 +375,7 @@ int CrushCompiler::parse_tunable(iter_t const& i)
 
   /*
 
-    current crop of tunables are all now "safe".  reenable this when we
+    current crop of tunables are all now "safe".  re-enable this when we
     add new ones that are ... new.
 
   if (!unsafe_tunables) {
