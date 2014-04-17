@@ -612,6 +612,17 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
     }
     f->close_section();
 
+    f->open_array_section("peer_missing");
+    for (map<pg_shard_t, pg_missing_t>::iterator p = peer_missing.begin();
+	 p != peer_missing.end();
+	 ++p) {
+      f->open_object_section("missing");
+      f->dump_stream("peer") << p->first;
+      p->second.dump(f.get());
+      f->close_section();
+    }
+    f->close_section();
+
     f->open_array_section("recovery_state");
     handle_query_state(f.get());
     f->close_section();
