@@ -144,7 +144,7 @@ def main(ctx):
     read_config(ctx)
 
     connection = beanstalk.connect()
-    connection.watch_tube(ctx.tube)
+    beanstalk.watch_tube(connection, ctx.tube)
 
     while True:
         if need_restart():
