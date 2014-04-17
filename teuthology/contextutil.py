@@ -119,6 +119,8 @@ class safe_while(object):
 
     def __call__(self):
         self.counter += 1
+        if self.counter == 1:
+            return True
         if self.counter > self.tries:
             error_msg = self._make_error_msg()
             if self._raise:
