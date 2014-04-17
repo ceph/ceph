@@ -7215,6 +7215,10 @@ SnapSetContext *ReplicatedPG::get_snapset_context(
   bool can_create,
   map<string, bufferlist> *attrs)
 {
+  // ensure that snap obj is not missing
+  assert(attrs ||
+	 (!pg_log.get_missing().is_missing(oid.get_head()) &&
+	  !pg_log.get_missing().is_missing(oid.get_snapdir())));
   Mutex::Locker l(snapset_contexts_lock);
   SnapSetContext *ssc;
   map<hobject_t, SnapSetContext*>::iterator p = snapset_contexts.find(
@@ -9747,6 +9751,18 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
 
       if (missing_loc.is_unfound(soid)) {
 	dout(10) << __func__ << ": " << soid << " still unfound" << dendl;
+	continue;
+      }
+
+      if (soid.is_snap() && pg_log.get_missing().is_missing(soid.get_head())) {
+	dout(10) << __func__ << ": " << soid.get_head()
+		 << " still missing on primary" << dendl;
+	continue;
+      }
+
+      if (soid.is_snap() && pg_log.get_missing().is_missing(soid.get_snapdir())) {
+	dout(10) << __func__ << ": " << soid.get_snapdir()
+		 << " still missing on primary" << dendl;
 	continue;
       }
 
