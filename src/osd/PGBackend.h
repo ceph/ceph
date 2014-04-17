@@ -175,6 +175,7 @@
 
      virtual void log_operation(
        vector<pg_log_entry_t> &logv,
+       boost::optional<pg_hit_set_history_t> &hset_history,
        const eversion_t &trim_to,
        bool transaction_applied,
        ObjectStore::Transaction *t) = 0;
@@ -492,6 +493,8 @@
      PGTransaction *t,                    ///< [in] trans to execute
      const eversion_t &trim_to,           ///< [in] trim log to here
      vector<pg_log_entry_t> &log_entries, ///< [in] log entries for t
+     /// [in] hitset history (if updated with this transaction)
+     boost::optional<pg_hit_set_history_t> &hset_history,
      Context *on_local_applied_sync,      ///< [in] called when applied locally
      Context *on_all_applied,             ///< [in] called when all acked
      Context *on_all_commit,              ///< [in] called when all commit
