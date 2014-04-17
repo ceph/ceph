@@ -1162,6 +1162,7 @@ struct object_stat_sum_t {
     FLOOR(num_keys_recovered);
     FLOOR(num_objects_dirty);
     FLOOR(num_whiteouts);
+    FLOOR(num_objects_omap);
 #undef FLOOR
   }
 
