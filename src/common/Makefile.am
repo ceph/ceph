@@ -69,7 +69,8 @@ libcommon_la_SOURCES = \
 	common/addr_parsing.c \
 	common/hobject.cc \
 	common/bloom_filter.cc \
-	common/linux_version.c
+	common/linux_version.c \
+	common/module.c
 
 # these should go out of libcommon
 libcommon_la_SOURCES += \
@@ -197,7 +198,8 @@ noinst_HEADERS += \
 	common/sync_filesystem.h \
 	common/cmdparse.h \
 	common/hobject.h \
-	common/linux_version.h
+	common/linux_version.h \
+	common/module.h
 
 noinst_LTLIBRARIES += libcommon.la
 
