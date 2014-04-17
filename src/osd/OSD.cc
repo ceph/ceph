@@ -6160,9 +6160,15 @@ void OSD::split_pgs(
   parent->update_snap_mapper_bits(
     parent->info.pgid.get_split_bits(pg_num)
     );
+
+  vector<object_stat_sum_t> updated_stats(childpgids.size() + 1);
+  parent->info.stats.stats.sum.split(updated_stats);
+
+  vector<object_stat_sum_t>::iterator stat_iter = updated_stats.begin();
   for (set<spg_t>::const_iterator i = childpgids.begin();
        i != childpgids.end();
-       ++i) {
+       ++i, ++stat_iter) {
+    assert(stat_iter != updated_stats.end());
     dout(10) << "Splitting " << *parent << " into " << *i << dendl;
     assert(service.splitting(*i));
     PG* child = _make_pg(nextmap, *i);
@@ -6183,10 +6189,13 @@ void OSD::split_pgs(
       i->pgid,
       child,
       split_bits);
+    child->info.stats.stats.sum = *stat_iter;
 
     child->write_if_dirty(*(rctx->transaction));
     child->unlock();
   }
+  assert(stat_iter != updated_stats.end());
+  parent->info.stats.stats.sum = *stat_iter;
   parent->write_if_dirty(*(rctx->transaction));
 }
   
