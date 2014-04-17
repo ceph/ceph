@@ -3346,7 +3346,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
 	++i) {
       if (i->m_pool == static_cast<uint64_t>(pool)) {
 	ss << "currently creating pgs, wait";
-	return -EAGAIN;
+	return -EBUSY;
       }
     }
     p.set_pg_num(n);
@@ -3368,7 +3368,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
 	++i) {
       if (i->m_pool == static_cast<uint64_t>(pool)) {
 	ss << "currently creating pgs, wait";
-	return -EAGAIN;
+	return -EBUSY;
       }
     }
     p.set_pgp_num(n);
