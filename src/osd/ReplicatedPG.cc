@@ -1276,11 +1276,23 @@ void ReplicatedPG::do_op(OpRequestRef op)
       wait_for_unreadable_object(missing_oid, op);
       return;
     }
-  } else if (r == 0 && is_unreadable_object(obc->obs.oi.soid)) {
-    dout(10) << __func__ << ": clone " << obc->obs.oi.soid
-	     << " is unreadable, waiting" << dendl;
-    wait_for_unreadable_object(obc->obs.oi.soid, op);
-    return;
+  } else if (r == 0) {
+    if (is_unreadable_object(obc->obs.oi.soid)) {
+      dout(10) << __func__ << ": clone " << obc->obs.oi.soid
+	       << " is unreadable, waiting" << dendl;
+      wait_for_unreadable_object(obc->obs.oi.soid, op);
+      return;
+    }
+
+    // degraded object?  (the check above was for head; this could be a clone)
+    if (write_ordered &&
+	obc->obs.oi.soid.snap != CEPH_NOSNAP &&
+	is_degraded_object(obc->obs.oi.soid)) {
+      dout(10) << __func__ << ": clone " << obc->obs.oi.soid
+	       << " is degraded, waiting" << dendl;
+      wait_for_degraded_object(obc->obs.oi.soid, op);
+      return;
+    }
   }
 
   if (hit_set) {
