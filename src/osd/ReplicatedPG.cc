@@ -10508,15 +10508,16 @@ void ReplicatedPG::hit_set_persist()
 
   // If any archives are degraded we skip this persist request
   // account for the additional entry being added below
-  for (unsigned num = info.hit_set.history.size() + 1; num > max; --num) {
-    list<pg_hit_set_info_t>::iterator p = info.hit_set.history.begin();
-    assert(p != info.hit_set.history.end());
+  for (list<pg_hit_set_info_t>::iterator p = info.hit_set.history.begin();
+       p != info.hit_set.history.end();
+       ++p) {
     hobject_t aoid = get_hit_set_archive_object(p->begin, p->end);
 
     // Once we hit a degraded object just skip further trim
     if (is_degraded_object(aoid))
       return;
   }
+
   oid = get_hit_set_archive_object(start, now);
   // If the current object is degraded we skip this persist request
   if (is_degraded_object(oid))
