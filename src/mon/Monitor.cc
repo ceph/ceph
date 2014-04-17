@@ -198,6 +198,15 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   assert(r);
 
   exited_quorum = ceph_clock_now(g_ceph_context);
+
+  // assume our commands until we have an election.  this only means
+  // we won't reply with EINVAL before the election; any command that
+  // actually matters will wait until we have quorum etc and then
+  // retry (and revalidate).
+  const MonCommand *cmds;
+  int cmdsize;
+  get_locally_supported_monitor_commands(&cmds, &cmdsize);
+  set_leader_supported_commands(cmds, cmdsize);
 }
 
 PaxosService *Monitor::get_paxos_service_by_name(const string& name)
