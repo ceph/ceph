@@ -343,6 +343,7 @@ public:
     PGTransaction *t,
     const eversion_t &trim_to,
     vector<pg_log_entry_t> &log_entries,
+    boost::optional<pg_hit_set_history_t> &hset_history,
     Context *on_local_applied_sync,
     Context *on_all_applied,
     Context *on_all_commit,
@@ -361,6 +362,7 @@ private:
     hobject_t new_temp_oid,
     hobject_t discard_temp_oid,
     vector<pg_log_entry_t> &log_entries,
+    boost::optional<pg_hit_set_history_t> &hset_history,
     InProgressOp *op,
     ObjectStore::Transaction *op_t);
   void op_applied(InProgressOp *op);
