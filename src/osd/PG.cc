@@ -6910,7 +6910,7 @@ boost::statechart::result PG::RecoveryState::GetLog::react(const MLogRec& logevt
 	     << "non-auth_log_shard osd." << logevt.from << dendl;
     return discard_event();
   }
-  dout(10) << "GetLog: recieved master log from osd" 
+  dout(10) << "GetLog: received master log from osd"
 	   << logevt.from << dendl;
   msg = logevt.msg;
   post_event(GotLog());
