@@ -1,8 +1,9 @@
 import yaml
 
-import teuthology.queue
+import teuthology.beanstalk
 from teuthology.misc import get_user
 from teuthology.misc import read_config
+from teuthology import report
 
 
 def main(ctx):
@@ -10,7 +11,7 @@ def main(ctx):
         ctx.owner = 'scheduled_{user}'.format(user=get_user())
     read_config(ctx)
 
-    beanstalk = teuthology.queue.connect(ctx)
+    beanstalk = teuthology.beanstalk.connect()
 
     tube = ctx.worker
     beanstalk.use(tube)
@@ -33,6 +34,9 @@ def main(ctx):
                 print 'job {jid} is not in the queue'.format(jid=job_id)
             else:
                 job.delete()
+                name = yaml.safe_load(job.body).get('name')
+                if name:
+                    report.try_delete_jobs(name, job_id)
         return
 
     # strip out targets; the worker will allocate new ones when we run
@@ -64,4 +68,7 @@ def main(ctx):
         )
         print 'Job scheduled with name {name} and ID {jid}'.format(
             name=ctx.name, jid=jid)
+        job_config['job_id'] = str(jid)
+        # Let paddles know the job is queued
+        report.try_push_job_info(job_config, dict(status='queued'))
         num -= 1

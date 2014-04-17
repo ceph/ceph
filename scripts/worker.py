@@ -1,10 +1,10 @@
 import argparse
 
-import teuthology.queue
+import teuthology.worker
 
 
 def main():
-    teuthology.queue.worker(parse_args())
+    teuthology.worker.main(parse_args())
 
 
 def parse_args():

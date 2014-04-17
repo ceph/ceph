@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import logging
 
+from . import report
 from .config import config
 
 log = logging.getLogger(__name__)
@@ -44,6 +45,7 @@ def kill_run(run_name, archive_base=None, owner=None, machine_type=None,
 
     if not preserve_queue:
         remove_beanstalk_jobs(run_name, machine_type)
+        remove_paddles_jobs(run_name)
     kill_processes(run_name, run_info.get('pids'))
     if owner is not None:
         targets = find_targets(run_name, owner)
@@ -99,6 +101,14 @@ def find_job_info(job_archive_dir):
             job_info.update(yaml.safe_load(open(conf_file, 'r')))
 
     return job_info
+
+
+def remove_paddles_jobs(run_name):
+    jobs = report.ResultsReporter().get_jobs(run_name, fields=['status'])
+    job_ids = [job['job_id'] for job in jobs if job['status'] == 'queued']
+    if job_ids:
+        log.info("Deleting jobs from paddles: %s", str(job_ids))
+        report.try_delete_jobs(run_name, job_ids)
 
 
 def remove_beanstalk_jobs(run_name, tube_name):
