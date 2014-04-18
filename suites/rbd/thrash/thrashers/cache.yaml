@@ -1,9 +1,9 @@
-tasks:
-- install:
-- ceph:
+overrides:
+  ceph:
     log-whitelist:
     - wrongly marked me down
     - objects unfound and apparently lost
+tasks:
 - exec:
     client.0:
       - ceph osd pool create cache 4
