@@ -5,3 +5,8 @@ v0.80
 * OSDMap's json-formatted dump changed for keys 'full' and 'nearfull'.
   What was previously being outputted as 'true' or 'false' strings are
   now being outputted 'true' and 'false' booleans according to json syntax.
+
+* HEALTH_WARN on 'mon osd down out interval == 0'. Having this option set
+  to zero on the leader acts much like having the 'noout' flag set.  This
+  warning will only be reported if the monitor getting the 'health' or
+  'status' request has this option set to zero.
