@@ -3546,6 +3546,7 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
 void Monitor::handle_get_version(MMonGetVersion *m)
 {
   dout(10) << "handle_get_version " << *m << dendl;
+  PaxosService *svc = NULL;
 
   MonSession *s = static_cast<MonSession *>(m->get_connection()->get_priv());
   if (!s) {
@@ -3557,28 +3558,35 @@ void Monitor::handle_get_version(MMonGetVersion *m)
   if (!is_leader() && !is_peon()) {
     dout(10) << " waiting for quorum" << dendl;
     waitfor_quorum.push_back(new C_RetryMessage(this, m));
-    return;
+    goto out;
   }
 
-  MMonGetVersionReply *reply = new MMonGetVersionReply();
-  reply->handle = m->handle;
   if (m->what == "mdsmap") {
-    reply->version = mdsmon()->mdsmap.get_epoch();
-    reply->oldest_version = mdsmon()->get_first_committed();
+    svc = mdsmon();
   } else if (m->what == "osdmap") {
-    reply->version = osdmon()->osdmap.get_epoch();
-    reply->oldest_version = osdmon()->get_first_committed();
+    svc = osdmon();
   } else if (m->what == "monmap") {
-    reply->version = monmap->get_epoch();
-    reply->oldest_version = monmon()->get_first_committed();
+    svc = monmon();
   } else {
     derr << "invalid map type " << m->what << dendl;
   }
 
-  messenger->send_message(reply, m->get_source_inst());
+  if (svc) {
+    if (!svc->is_readable()) {
+      svc->wait_for_readable(new C_RetryMessage(this, m));
+      goto out;
+    }
+    MMonGetVersionReply *reply = new MMonGetVersionReply();
+    reply->handle = m->handle;
+    reply->version = svc->get_last_committed();
+    reply->oldest_version = svc->get_first_committed();
+    messenger->send_message(reply, m->get_source_inst());
+  }
 
-  s->put();
   m->put();
+
+ out:
+  s->put();
 }
 
 bool Monitor::ms_handle_reset(Connection *con)
