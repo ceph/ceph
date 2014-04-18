@@ -1439,6 +1439,7 @@ void object_stat_sum_t::add(const object_stat_sum_t& o)
   num_keys_recovered += o.num_keys_recovered;
   num_objects_dirty += o.num_objects_dirty;
   num_whiteouts += o.num_whiteouts;
+  num_objects_omap += o.num_objects_omap;
 }
 
 void object_stat_sum_t::sub(const object_stat_sum_t& o)
@@ -1462,6 +1463,7 @@ void object_stat_sum_t::sub(const object_stat_sum_t& o)
   num_keys_recovered -= o.num_keys_recovered;
   num_objects_dirty -= o.num_objects_dirty;
   num_whiteouts -= o.num_whiteouts;
+  num_objects_omap -= o.num_objects_omap;
 }
 
 
