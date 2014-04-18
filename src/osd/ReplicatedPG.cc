@@ -4734,7 +4734,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   }
 
   if (ctx->obs->exists)
-    filter_snapc(snapc);
+    filter_snapc(snapc.snaps);
   
   if ((ctx->obs->exists && !ctx->obs->oi.is_whiteout()) && // head exist(ed)
       snapc.snaps.size() &&                 // there are snaps
@@ -5766,6 +5766,42 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     repop->ctx->op_t->remove(results->temp_oid);
     simple_repop_submit(repop);
     results->started_temp_obj = false;
+  }
+
+  if (r == -ENOENT && soid.is_snap()) {
+    dout(10) << __func__
+	     << ": enoent while trying to promote clone, " << soid
+	     << " must have been trimmed, removing from snapset"
+	     << dendl;
+    hobject_t head(soid.get_head());
+    ObjectContextRef obc = get_object_context(head, false);
+    assert(obc);
+    RepGather *repop = simple_repop_create(obc);
+    OpContext *tctx = repop->ctx;
+    tctx->at_version = get_next_version();
+    filter_snapc(tctx->new_snapset.snaps);
+    vector<snapid_t> new_clones(tctx->new_snapset.clones.size());
+    for (vector<snapid_t>::iterator i = tctx->new_snapset.clones.begin();
+	 i != tctx->new_snapset.clones.end();
+	 ++i) {
+      if (*i != soid.snap)
+	new_clones.push_back(*i);
+    }
+    tctx->new_snapset.clones.swap(new_clones);
+    tctx->new_snapset.clone_overlap.erase(soid.snap);
+    tctx->new_snapset.clone_size.erase(soid.snap);
+
+    // take RWWRITE lock for duration of our local write.  ignore starvation.
+    if (!obc->rwstate.take_write_lock()) {
+      assert(0 == "problem!");
+    }
+    tctx->lock_to_release = OpContext::W_LOCK;
+    dout(20) << __func__ << " took lock on obc, " << obc->rwstate << dendl;
+
+    finish_ctx(tctx, pg_log_entry_t::PROMOTE);
+
+    simple_repop_submit(repop);
+    return;
   }
 
   bool whiteout = false;
