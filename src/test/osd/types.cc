@@ -558,6 +558,18 @@ TEST(pg_interval_t, check_new_interval)
   }
 }
 
+TEST(pg_t, get_ancestor)
+{
+  ASSERT_EQ(pg_t(0, 0, -1), pg_t(16, 0, -1).get_ancestor(16));
+  ASSERT_EQ(pg_t(1, 0, -1), pg_t(17, 0, -1).get_ancestor(16));
+  ASSERT_EQ(pg_t(0, 0, -1), pg_t(16, 0, -1).get_ancestor(8));
+  ASSERT_EQ(pg_t(16, 0, -1), pg_t(16, 0, -1).get_ancestor(80));
+  ASSERT_EQ(pg_t(16, 0, -1), pg_t(16, 0, -1).get_ancestor(83));
+  ASSERT_EQ(pg_t(1, 0, -1), pg_t(1321, 0, -1).get_ancestor(123).get_ancestor(8));
+  ASSERT_EQ(pg_t(3, 0, -1), pg_t(1323, 0, -1).get_ancestor(123).get_ancestor(8));
+  ASSERT_EQ(pg_t(3, 0, -1), pg_t(1323, 0, -1).get_ancestor(8));
+}
+
 TEST(pg_t, split)
 {
   pg_t pgid(0, 0, -1);

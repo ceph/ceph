@@ -311,6 +311,7 @@ struct pg_t {
   }
 
   pg_t get_parent() const;
+  pg_t get_ancestor(unsigned old_pg_num) const;
 
   int print(char *o, int maxlen) const;
   bool parse(const char *s);
