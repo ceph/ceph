@@ -3880,6 +3880,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         scrubber.received_maps.clear();
 
         {
+	  hobject_t end;
 
           // get the start and end of our scrub chunk
           //
@@ -3898,11 +3899,11 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	      cct->_conf->osd_scrub_chunk_max,
 	      0,
 	      &objects,
-	      &scrubber.end);
+	      &end);
             assert(ret >= 0);
 
             // in case we don't find a boundary: start again at the end
-            start = scrubber.end;
+            start = end;
 
             // special case: reached end of file store, implicitly a boundary
             if (objects.empty()) {
@@ -3910,19 +3911,25 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
             }
 
             // search backward from the end looking for a boundary
-            objects.push_back(scrubber.end);
+            objects.push_back(end);
             while (!boundary_found && objects.size() > 1) {
               hobject_t end = objects.back().get_boundary();
               objects.pop_back();
 
               if (objects.back().get_filestore_key() != end.get_filestore_key()) {
-                scrubber.end = end;
+                end = end;
                 boundary_found = true;
               }
             }
           }
-        }
 
+	  if (!_range_available_for_scrub(scrubber.start, end)) {
+	    // we'll be requeued by whatever made us unavailable for scrub
+	    done = true;
+	    break;
+	  }
+	  scrubber.end = end;
+        }
         scrubber.block_writes = true;
 
         // walk the log to find the latest update that affects our chunk
