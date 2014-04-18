@@ -6,13 +6,6 @@
 
 .. important:: To use kernel module operations, you must have a running Ceph cluster.
 
-Load the Ceph RBD Module
-========================
-
-To map a block device image to a kernel module, first load the Ceph RBD module:: 
-
-	modprobe rbd
-
 Get a List of Images
 ====================
 
@@ -24,7 +17,8 @@ Map a Block Device
 ==================
 
 Use ``rbd`` to map an image name to a kernel module. You must specify the 
-image name, the pool name, and the user name. ::
+image name, the pool name, and the user name. ``rbd`` will load RBD kernel
+module on your behalf if it's not already loaded. ::
 
   sudo rbd map {image-name} --pool {pool-name} --id {user-name}
 

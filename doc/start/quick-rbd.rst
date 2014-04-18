@@ -51,10 +51,6 @@ Configure a Block Device
 
 	rbd create foo --size 4096 [-m {mon-IP}] [-k /path/to/ceph.client.admin.keyring]
 
-#. On the ``ceph-client`` node, load the ``rbd`` client module. ::
-
-	sudo modprobe rbd
-
 #. On the ``ceph-client`` node, map the image to a block device. :: 
 
 	sudo rbd map foo --pool rbd --name client.admin [-m {mon-IP}] [-k /path/to/ceph.client.admin.keyring]
