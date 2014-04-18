@@ -1,6 +1,4 @@
 tasks:
-- install:
-- ceph:
 - workunit:
     clients:
       client.0:
