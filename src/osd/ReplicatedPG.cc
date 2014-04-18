@@ -7215,10 +7215,6 @@ SnapSetContext *ReplicatedPG::get_snapset_context(
   bool can_create,
   map<string, bufferlist> *attrs)
 {
-  // ensure that snap obj is not missing
-  assert(attrs ||
-	 (!pg_log.get_missing().is_missing(oid.get_head()) &&
-	  !pg_log.get_missing().is_missing(oid.get_snapdir())));
   Mutex::Locker l(snapset_contexts_lock);
   SnapSetContext *ssc;
   map<hobject_t, SnapSetContext*>::iterator p = snapset_contexts.find(
