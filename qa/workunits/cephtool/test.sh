@@ -61,7 +61,9 @@ expect_false ceph osd tier add metadata cache
 ceph osd tier cache-mode cache writeback
 ceph osd tier cache-mode cache readonly
 expect_false ceph osd pool set cache pg_num 3
-ceph osd pool set cache pg_num 3 --yes-i-really-mean-it
+set +e
+ceph osd pool set cache pg_num 3 --yes-i-really-mean-it 2>$TMPFILE ; check_response 'currently creating pgs' $? 16
+set -e
 ceph osd tier cache-mode cache none
 ceph osd tier set-overlay data cache
 expect_false ceph osd tier set-overlay data cache2
