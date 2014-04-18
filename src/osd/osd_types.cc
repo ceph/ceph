@@ -393,6 +393,15 @@ ostream& operator<<(ostream& out, const spg_t &pg)
   return out;
 }
 
+pg_t pg_t::get_ancestor(unsigned old_pg_num) const
+{
+  int old_bits = pg_pool_t::calc_bits_of(old_pg_num);
+  int old_mask = (1 << old_bits) - 1;
+  pg_t ret = *this;
+  ret.m_seed = ceph_stable_mod(m_seed, old_pg_num, old_mask);
+  return ret;
+}
+
 bool pg_t::is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *children) const
 {
   assert(m_seed < old_pg_num);
