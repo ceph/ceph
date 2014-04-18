@@ -39,13 +39,13 @@ Show Mapped Block Devices
 To show block device images mapped to kernel modules with the ``rbd`` command,
 specify the ``showmapped`` option. ::
 
-	sudo rbd showmapped
+	rbd showmapped
 
 
 Unmapping a Block Device
 ========================	
 
-To unmap a block device image with the ``rbd`` command, specify the ``rm``
+To unmap a block device image with the ``rbd`` command, specify the ``unmap``
 option  and the device name (i.e., by convention the same as the block device
 image name). :: 
 
