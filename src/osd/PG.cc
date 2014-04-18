@@ -654,8 +654,10 @@ void PG::generate_past_intervals()
     old_acting.swap(acting);
 
     cur_map = osd->get_map(cur_epoch);
-    cur_map->pg_to_up_acting_osds(
-      get_pgid().pgid, &up, 0, &acting, &primary);
+    pg_t pgid = get_pgid().pgid;
+    if (cur_map->get_pools().count(pgid.pool()))
+      pgid = pgid.get_ancestor(cur_map->get_pg_num(pgid.pool()));
+    cur_map->pg_to_up_acting_osds(pgid, &up, 0, &acting, &primary);
 
     std::stringstream debug;
     bool new_interval = pg_interval_t::check_new_interval(
@@ -669,8 +671,8 @@ void PG::generate_past_intervals()
       info.history.last_epoch_clean,
       cur_map,
       last_map,
-      info.pgid.pool(),
-      info.pgid.pgid,
+      pgid.pool(),
+      pgid,
       &past_intervals,
       &debug);
     if (new_interval) {
