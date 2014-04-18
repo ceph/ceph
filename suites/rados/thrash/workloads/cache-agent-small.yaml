@@ -1,3 +1,7 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - must scrub before tier agent can activate
 tasks:
 - exec:
     client.0:
