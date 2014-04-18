@@ -2860,18 +2860,18 @@ void PG::update_snap_map(
 /**
  * filter trimming|trimmed snaps out of snapcontext
  */
-void PG::filter_snapc(SnapContext& snapc)
+void PG::filter_snapc(vector<snapid_t> &snaps)
 {
   bool filtering = false;
   vector<snapid_t> newsnaps;
-  for (vector<snapid_t>::iterator p = snapc.snaps.begin();
-       p != snapc.snaps.end();
+  for (vector<snapid_t>::iterator p = snaps.begin();
+       p != snaps.end();
        ++p) {
     if (snap_trimq.contains(*p) || info.purged_snaps.contains(*p)) {
       if (!filtering) {
 	// start building a new vector with what we've seen so far
-	dout(10) << "filter_snapc filtering " << snapc << dendl;
-	newsnaps.insert(newsnaps.begin(), snapc.snaps.begin(), p);
+	dout(10) << "filter_snapc filtering " << snaps << dendl;
+	newsnaps.insert(newsnaps.begin(), snaps.begin(), p);
 	filtering = true;
       }
       dout(20) << "filter_snapc  removing trimq|purged snap " << *p << dendl;
@@ -2881,8 +2881,8 @@ void PG::filter_snapc(SnapContext& snapc)
     }
   }
   if (filtering) {
-    snapc.snaps.swap(newsnaps);
-    dout(10) << "filter_snapc  result " << snapc << dendl;
+    snaps.swap(newsnaps);
+    dout(10) << "filter_snapc  result " << snaps << dendl;
   }
 }
 
