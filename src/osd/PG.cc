@@ -1536,6 +1536,7 @@ void PG::activate(ObjectStore::Transaction& t,
 	pi.last_complete = info.last_update;
 	pi.last_backfill = hobject_t();
 	pi.history = info.history;
+	pi.hit_set = info.hit_set;
 	pi.stats.stats.clear();
 
 	m = new MOSDPGLog(
@@ -6591,6 +6592,7 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MInfoRec& infoev
     ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
     pg->rewind_divergent_log(*t, infoevt.info.last_update);
     pg->info.stats = infoevt.info.stats;
+    pg->info.hit_set = infoevt.info.hit_set;
   }
   
   assert(infoevt.info.last_update == pg->info.last_update);
