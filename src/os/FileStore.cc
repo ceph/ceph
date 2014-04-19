@@ -1420,6 +1420,8 @@ int FileStore::mount()
     }
     if (m_filestore_journal_writeahead)
       journal->set_wait_on_full(true);
+  } else {
+    dout(0) << "mount: no journal" << dendl;
   }
 
   ret = _sanity_check_fs();
@@ -1797,6 +1799,26 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     } else {
       assert(0);
     }
+    submit_manager.op_submit_finish(op_num);
+    return 0;
+  }
+
+  if (!journal) {
+    Op *o = build_op(tls, onreadable, onreadable_sync, osd_op);
+    dout(5) << __func__ << " (no journal) " << o << " " << tls << dendl;
+
+    op_queue_reserve_throttle(o, handle);
+
+    uint64_t op_num = submit_manager.op_submit_start();
+    o->op = op_num;
+
+    if (m_filestore_do_dump)
+      dump_transactions(o->tls, o->op, osr);
+
+    queue_op(osr, o);
+
+    if (ondisk)
+      apply_manager.add_waiter(op_num, ondisk);
     submit_manager.op_submit_finish(op_num);
     return 0;
   }
