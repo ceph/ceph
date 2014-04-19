@@ -20,9 +20,9 @@
 #include "common/simple_spin.h"
 #include "common/strtol.h"
 #include "include/atomic.h"
+#include "common/Mutex.h"
 #include "include/types.h"
 #include "include/compat.h"
-#include "common/Mutex.h"
 
 #include <errno.h>
 #include <fstream>
