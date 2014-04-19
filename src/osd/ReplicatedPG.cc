@@ -10903,9 +10903,19 @@ void ReplicatedPG::agent_load_hit_sets()
 	  break;
 	}
 
+	ObjectContextRef obc = get_object_context(oid, false);
+	if (!obc) {
+	  derr << __func__ << ": could not load hitset " << oid << dendl;
+	  break;
+	}
+
 	bufferlist bl;
-	int r = osd->store->read(coll, oid, 0, 0, bl);
-	assert(r >= 0);
+	{
+	  obc->ondisk_read_lock();
+	  int r = osd->store->read(coll, oid, 0, 0, bl);
+	  assert(r >= 0);
+	  obc->ondisk_read_unlock();
+	}
 	HitSetRef hs(new HitSet);
 	bufferlist::iterator pbl = bl.begin();
 	::decode(*hs, pbl);
