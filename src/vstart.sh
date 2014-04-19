@@ -40,6 +40,7 @@ overwrite_conf=1
 cephx=1 #turn cephx on by default
 cache=""
 memstore=0
+journal=1
 
 MON_ADDR=""
 
@@ -66,6 +67,8 @@ usage=$usage"\t-x enable cephx (on by default)\n"
 usage=$usage"\t-X disable cephx\n"
 usage=$usage"\t--hitset <pool> <hit_set_type>: enable hitset tracking\n"
 usage=$usage"\t-o config\t\t add extra config parameters to mds section\n"
+usage=$usage"\t-J no journal\t\tdisable filestore journal\n"
+
 
 usage_exit() {
 	printf "$usage"
@@ -142,6 +145,9 @@ case $1 in
 	    ;;
     -X )
 	    cephx=0
+	    ;;
+    -J )
+	    journal=0
 	    ;;
     -k )
 	    overwrite_conf=0
@@ -342,6 +348,11 @@ cat <<EOF >> $conf
 	auth client required = none
 EOF
 fi
+                        if [ $journal -eq 1 ]; then
+			    journal_path="$CEPH_DEV_DIR/osd\$id.journal"
+			else
+			    journal_path=""
+			fi
 			cat <<EOF >> $conf
 
 [client]
@@ -360,7 +371,7 @@ $extra_conf
 [osd]
 $DAEMONOPTS
         osd data = $CEPH_DEV_DIR/osd\$id
-        osd journal = $CEPH_DEV_DIR/osd\$id.journal
+        osd journal = $journal_path
         osd journal size = 100
         osd class tmp = out
         osd class dir = .libs
