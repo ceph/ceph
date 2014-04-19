@@ -167,7 +167,7 @@ class LibCephFS(object):
 
     def shutdown(self):
         """
-        Unmount and destroy the ceph mount handle. 
+        Unmount and destroy the ceph mount handle.
         """
         if self.state != "shutdown":
             self.libcephfs.ceph_shutdown(self.cluster)
