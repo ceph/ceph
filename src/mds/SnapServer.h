@@ -39,7 +39,7 @@ public:
 		       last_checked_osdmap(0) { }
     
   void reset_state();
-  void encode_server_state(bufferlist& bl) {
+  void encode_server_state(bufferlist& bl) const {
     ENCODE_START(3, 3, bl);
     ::encode(last_snap, bl);
     ::encode(snaps, bl);
@@ -66,6 +66,17 @@ public:
     ::decode(pending_noop, bl);
     DECODE_FINISH(bl);
   }
+
+  // To permit enc/decoding in isolation in dencoder
+  SnapServer() : MDSTableServer(NULL, TABLE_SNAP), last_checked_osdmap(0) {}
+  void encode(bufferlist& bl) const {
+    encode_server_state(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    decode_server_state(bl);
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<SnapServer*>& ls);
 
   // server bits
   void _prepare(bufferlist &bl, uint64_t reqid, int bymds);

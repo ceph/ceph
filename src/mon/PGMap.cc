@@ -207,7 +207,20 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     if (t == pg_stat.end()) {
       ceph::unordered_map<pg_t,pg_stat_t>::value_type v(update_pg, update_stat);
       pg_stat.insert(v);
+      // did we affect the min?
+      if (min_last_epoch_clean &&
+	  update_stat.get_effective_last_epoch_clean() < min_last_epoch_clean)
+	min_last_epoch_clean = 0;
     } else {
+      // did we (or might we) affect the min?
+      epoch_t lec = update_stat.get_effective_last_epoch_clean();
+      if (min_last_epoch_clean &&
+	  (lec < min_last_epoch_clean ||  // we did
+	   (lec > min_last_epoch_clean && // we might
+	    t->second.get_effective_last_epoch_clean() == min_last_epoch_clean)
+	   ))
+	min_last_epoch_clean = 0;
+
       stat_pg_sub(update_pg, t->second);
       t->second = update_stat;
     }
@@ -229,14 +242,29 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
       stat_osd_sub(t->second);
       t->second = new_stats;
     }
-    assert(inc.get_osd_epochs().find(osd) != inc.get_osd_epochs().end());
-    osd_epochs.insert(*(inc.get_osd_epochs().find(osd)));
+    ceph::unordered_map<int32_t,epoch_t>::iterator i = osd_epochs.find(osd);
+    map<int32_t,epoch_t>::const_iterator j = inc.get_osd_epochs().find(osd);
+    assert(j != inc.get_osd_epochs().end());
+
+    // will we potentially affect the min?
+    if (min_last_epoch_clean &&
+	(i == osd_epochs.end() ||
+	 j->second < min_last_epoch_clean ||
+	 (j->second > min_last_epoch_clean &&
+	  i->second == min_last_epoch_clean)))
+      min_last_epoch_clean = 0;
+
+    if (i == osd_epochs.end())
+      osd_epochs.insert(*j);
+    else
+      i->second = j->second;
 
     stat_osd_add(new_stats);
 
     // adjust [near]full status
     register_nearfull_status(osd, new_stats);
   }
+  set<int64_t> deleted_pools;
   for (set<pg_t>::const_iterator p = inc.pg_remove.begin();
        p != inc.pg_remove.end();
        ++p) {
@@ -246,6 +274,14 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
       stat_pg_sub(removed_pg, s->second);
       pg_stat.erase(s);
     }
+    if (removed_pg.ps() == 0)
+      deleted_pools.insert(removed_pg.pool());
+  }
+  for (set<int64_t>::iterator p = deleted_pools.begin();
+       p != deleted_pools.end();
+       ++p) {
+    dout(20) << " deleted pool " << *p << dendl;
+    deleted_pool(*p);
   }
 
   for (set<int>::iterator p = inc.get_osd_stat_rm().begin();
@@ -281,6 +317,8 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     last_osdmap_epoch = inc.osdmap_epoch;
   if (inc.pg_scan)
     last_pg_scan = inc.pg_scan;
+
+  min_last_epoch_clean = 0;  // invalidate
 }
 
 void PGMap::redo_full_sets()
@@ -333,6 +371,8 @@ void PGMap::calc_stats()
     stat_osd_add(p->second);
 
   redo_full_sets();
+
+  calc_min_last_epoch_clean();
 }
 
 void PGMap::update_pg(pg_t pgid, bufferlist& bl)
@@ -390,8 +430,8 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s)
   pg_sum.add(s);
   if (s.state & PG_STATE_CREATING) {
     creating_pgs.insert(pgid);
-    if (s.acting.size())
-      creating_pgs_by_osd[s.acting[0]].insert(pgid);
+    if (s.acting_primary >= 0)
+      creating_pgs_by_osd[s.acting_primary].insert(pgid);
   }
 }
 
@@ -409,10 +449,10 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s)
   pg_sum.sub(s);
   if (s.state & PG_STATE_CREATING) {
     creating_pgs.erase(pgid);
-    if (s.acting.size()) {
-      creating_pgs_by_osd[s.acting[0]].erase(pgid);
-      if (creating_pgs_by_osd[s.acting[0]].size() == 0)
-        creating_pgs_by_osd.erase(s.acting[0]);
+    if (s.acting_primary >= 0) {
+      creating_pgs_by_osd[s.acting_primary].erase(pgid);
+      if (creating_pgs_by_osd[s.acting_primary].size() == 0)
+        creating_pgs_by_osd.erase(s.acting_primary);
     }
   }
 }
@@ -622,7 +662,7 @@ void PGMap::dump_osd_stats(Formatter *f) const
 void PGMap::dump_pg_stats_plain(ostream& ss,
 				const ceph::unordered_map<pg_t, pg_stat_t>& pg_stats) const
 {
-  ss << "pg_stat\tobjects\tmip\tdegr\tunf\tbytes\tlog\tdisklog\tstate\tstate_stamp\tv\treported\tup\tacting\tlast_scrub\tscrub_stamp\tlast_deep_scrub\tdeep_scrub_stamp" << std::endl;
+  ss << "pg_stat\tobjects\tmip\tdegr\tunf\tbytes\tlog\tdisklog\tstate\tstate_stamp\tv\treported\tup\tup_primary\tacting\tacting_primary\tlast_scrub\tscrub_stamp\tlast_deep_scrub\tdeep_scrub_stamp" << std::endl;
   for (ceph::unordered_map<pg_t, pg_stat_t>::const_iterator i = pg_stats.begin();
        i != pg_stats.end(); ++i) {
     const pg_stat_t &st(i->second);
@@ -640,7 +680,9 @@ void PGMap::dump_pg_stats_plain(ostream& ss,
        << "\t" << st.version
        << "\t" << st.reported_epoch << ":" << st.reported_seq
        << "\t" << st.up
+       << "\t" << st.up_primary
        << "\t" << st.acting
+       << "\t" << st.acting_primary
        << "\t" << st.last_scrub << "\t" << st.last_scrub_stamp
        << "\t" << st.last_deep_scrub << "\t" << st.last_deep_scrub_stamp
        << std::endl;

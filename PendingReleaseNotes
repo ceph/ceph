@@ -1,11 +1,12 @@
-v0.78
-~~~~~
 
-* CephFS recently added support for a new 'backtrace' attribute on
-  file data objects that is used for lookup by inode number (i.e., NFS
-  reexport and hard links), and will later be used by fsck repair.
-  This replaces the existing anchor table mechanism that is used for
-  hard link resolution.  In order to completely phase that out, any
-  inode that has an outdated backtrace attribute will get updated when
-  the inode itself is modified.  This will result in some extra workload
-  after a legacy CephFS file system is upgraded.
+v0.80
+-----
+
+* OSDMap's json-formatted dump changed for keys 'full' and 'nearfull'.
+  What was previously being outputted as 'true' or 'false' strings are
+  now being outputted 'true' and 'false' booleans according to json syntax.
+
+* HEALTH_WARN on 'mon osd down out interval == 0'. Having this option set
+  to zero on the leader acts much like having the 'noout' flag set.  This
+  warning will only be reported if the monitor getting the 'health' or
+  'status' request has this option set to zero.

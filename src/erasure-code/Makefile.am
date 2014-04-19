@@ -6,9 +6,8 @@ include erasure-code/jerasure/Makefile.am
 
 liberasure_code_la_SOURCES = \
 	erasure-code/ErasureCodePlugin.cc
-liberasure_code_la_LIBADD = $(LIBOSDC) $(LIBOS)
 if LINUX
-liberasure_code_la_LIBADD += -ldl
+liberasure_code_la_LIBADD = -ldl
 endif # LINUX
 noinst_LTLIBRARIES += liberasure_code.la
 

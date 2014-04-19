@@ -33,6 +33,7 @@ using namespace std;
 #include <math.h>
 #include <sys/statvfs.h>
 
+#include "common/errno.h"
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_client
@@ -318,16 +319,14 @@ int SyntheticClient::run()
   dout(15) << "initing" << dendl;
   int err = client->init();
   if (err < 0) {
-    char buf[80];
-    dout(0) << "failed to initialize: " << strerror_r(-err, buf, sizeof(buf)) << dendl;
+    dout(0) << "failed to initialize: " << cpp_strerror(err) << dendl;
     return -1;
   }
 
   dout(15) << "mounting" << dendl;
   err = client->mount("");
   if (err < 0) {
-    char buf[80];
-    dout(0) << "failed to mount: " << strerror_r(-err, buf, sizeof(buf)) << dendl;
+    dout(0) << "failed to mount: " << cpp_strerror(err) << dendl;
     client->shutdown();
     return -1;
   }
@@ -1269,8 +1268,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       }
     } else if (strcmp(op, "ll_readlink") == 0) {
       int64_t i = t.get_int();
-      char buf[PATH_MAX];
       if (ll_inos.count(i)) {
+        char buf[PATH_MAX];
 	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
 	client->ll_readlink(i1, buf, sizeof(buf));
 	client->ll_put(i1);

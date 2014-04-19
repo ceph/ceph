@@ -7,3 +7,11 @@
 [submodule "src/civetweb"]
 	path = src/civetweb
 	url = git://github.com/ceph/civetweb
+[submodule "src/erasure-code/jerasure/jerasure"]
+	path = src/erasure-code/jerasure/jerasure
+	url = https://github.com/ceph/jerasure.git
+	branch = v2-ceph
+[submodule "src/erasure-code/jerasure/gf-complete"]
+	path = src/erasure-code/jerasure/gf-complete
+	url = https://github.com/ceph/gf-complete.git
+	branch = v1-ceph

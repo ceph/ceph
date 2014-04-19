@@ -14,7 +14,7 @@ ostream& operator<<(ostream &out, Inode &in)
       << " cap_refs=" << in.cap_refs
       << " open=" << in.open_by_mode
       << " mode=" << oct << in.mode << dec
-      << " size=" << in.size
+      << " size=" << in.size << "/" << in.max_size
       << " mtime=" << in.mtime
       << " caps=" << ccap_string(in.caps_issued());
   if (!in.caps.empty()) {
@@ -111,12 +111,12 @@ void Inode::get_cap_ref(int cap)
   }
 }
 
-bool Inode::put_cap_ref(int cap)
+int Inode::put_cap_ref(int cap)
 {
   // if cap is always a single bit (which it seems to be)
   // all this logic is equivalent to:
   // if (--cap_refs[c]) return false; else return true;
-  bool last = false;
+  int last = 0;
   int n = 0;
   while (cap) {
     if (cap & 1) {
@@ -126,7 +126,7 @@ bool Inode::put_cap_ref(int cap)
 	assert(cap_refs[c] > 0);
       }
       if (--cap_refs[c] == 0)
-        last = true;
+        last |= c;
       //cout << "inode " << *this << " put " << cap_string(c) << " " << (cap_refs[c]+1) << " -> " << cap_refs[c] << std::endl;
     }
     cap >>= 1;
@@ -137,7 +137,7 @@ bool Inode::put_cap_ref(int cap)
 
 bool Inode::is_any_caps()
 {
-  return caps.size() || exporting_mds >= 0;
+  return caps.size();
 }
 
 bool Inode::cap_is_valid(Cap* cap)
@@ -155,7 +155,7 @@ bool Inode::cap_is_valid(Cap* cap)
 
 int Inode::caps_issued(int *implemented)
 {
-  int c = exporting_issued | snap_caps;
+  int c = snap_caps;
   int i = 0;
   for (map<int,Cap*>::iterator it = caps.begin();
        it != caps.end();
@@ -183,7 +183,7 @@ void Inode::try_touch_cap(int mds)
 
 bool Inode::caps_issued_mask(unsigned mask)
 {
-  int c = exporting_issued | snap_caps;
+  int c = snap_caps;
   if ((c & mask) == mask)
     return true;
   // prefer auth cap
@@ -389,10 +389,6 @@ void Inode::dump(Formatter *f) const
   if (snap_caps) {
     f->dump_int("snap_caps", snap_caps);
     f->dump_int("snap_cap_refs", snap_cap_refs);
-  }
-  if (exporting_issued || exporting_mseq) {
-    f->dump_stream("exporting_issued") << ccap_string(exporting_issued);
-    f->dump_int("exporting_mseq", exporting_mds);
   }
 
   f->dump_stream("hold_caps_until") << hold_caps_until;

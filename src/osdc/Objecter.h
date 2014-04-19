@@ -75,6 +75,37 @@ struct ObjectOperation {
     ops.rbegin()->op.flags = flags;
   }
 
+  /**
+   * This is a more limited form of C_Contexts, but that requires
+   * a ceph_context which we don't have here.
+   */
+  class C_TwoContexts : public Context {
+    Context *first;
+    Context *second;
+  public:
+    C_TwoContexts(Context *first, Context *second) : first(first),
+						     second(second) {}
+    void finish(int r) {
+      first->complete(r);
+      second->complete(r);
+    }
+  };
+
+  /**
+   * Add a callback to run when this operation completes,
+   * after any other callbacks for it.
+   */
+  void add_handler(Context *extra) {
+    size_t last = out_handler.size() - 1;
+    Context *orig = out_handler[last];
+    if (orig) {
+      Context *wrapper = new C_TwoContexts(orig, extra);
+      out_handler[last] = wrapper;
+    } else {
+      out_handler[last] = extra;
+    }
+  }
+
   OSDOp& add_op(int op) {
     int s = ops.size();
     ops.resize(s+1);
@@ -166,6 +197,13 @@ struct ObjectOperation {
     ::encode(cookie, osd_op.indata);
     osd_op.indata.append(filter);
   }
+  void add_alloc_hint(int op, uint64_t expected_object_size,
+                      uint64_t expected_write_size) {
+    OSDOp& osd_op = add_op(op);
+    osd_op.op.op = op;
+    osd_op.op.alloc_hint.expected_object_size = expected_object_size;
+    osd_op.op.alloc_hint.expected_write_size = expected_write_size;
+  }
 
   // ------
 
@@ -237,12 +275,14 @@ struct ObjectOperation {
   }
 
   // object data
-  void read(uint64_t off, uint64_t len, bufferlist *pbl, int *prval) {
+  void read(uint64_t off, uint64_t len, bufferlist *pbl, int *prval,
+	    Context* ctx) {
     bufferlist bl;
     add_data(CEPH_OSD_OP_READ, off, len, bl);
     unsigned p = ops.size() - 1;
     out_bl[p] = pbl;
     out_rval[p] = prval;
+    out_handler[p] = ctx;
   }
 
   struct C_ObjectOperation_sparse_read : public Context {
@@ -939,6 +979,17 @@ struct ObjectOperation {
   void cache_evict() {
     add_op(CEPH_OSD_OP_CACHE_EVICT);
   }
+
+  void set_alloc_hint(uint64_t expected_object_size,
+                      uint64_t expected_write_size ) {
+    add_alloc_hint(CEPH_OSD_OP_SETALLOCHINT, expected_object_size,
+                   expected_write_size);
+
+    // CEPH_OSD_OP_SETALLOCHINT op is advisory and therefore deemed
+    // not worth a feature bit.  Set FAILOK per-op flag to make
+    // sure older osds don't trip over an unsupported opcode.
+    set_last_op_flags(CEPH_OSD_OP_FLAG_FAILOK);
+  }
 };
 
 
@@ -962,7 +1013,7 @@ public:
   bool initialized;
 
 private:
-  tid_t last_tid;
+  ceph_tid_t last_tid;
   int client_inc;
   uint64_t max_linger_id;
   int num_unacked;
@@ -1010,11 +1061,8 @@ public:
 
   struct OSDSession;
 
-  struct Op {
-    OSDSession *session;
-    xlist<Op*>::item session_item;
-    int incarnation;
-    
+  struct op_target_t {
+    int flags;
     object_t base_oid;
     object_locator_t base_oloc;
     object_t target_oid;
@@ -1025,6 +1073,33 @@ public:
 
     pg_t pgid;           ///< last pg we mapped to
     vector<int> acting;  ///< acting for last pg we mapped to
+    int primary;         ///< primary for last pg we mapped to
+
+    bool used_replica;
+    bool paused;
+
+    int osd;      ///< the final target osd, or -1
+
+    op_target_t(object_t oid, object_locator_t oloc, int flags)
+      : flags(flags),
+	base_oid(oid),
+	base_oloc(oloc),
+	precalc_pgid(false),
+	primary(-1),
+	used_replica(false),
+	paused(false),
+	osd(-1)
+    {}
+
+    void dump(Formatter *f) const;
+  };
+
+  struct Op {
+    OSDSession *session;
+    xlist<Op*>::item session_item;
+    int incarnation;
+
+    op_target_t target;
     bool used_replica;
 
     ConnectionRef con;  // for rx buffer only
@@ -1040,14 +1115,12 @@ public:
     vector<Context*> out_handler;
     vector<int*> out_rval;
 
-    int flags, priority;
+    int priority;
     Context *onack, *oncommit, *ontimeout;
 
-    tid_t tid;
+    ceph_tid_t tid;
     eversion_t replay_version;        // for op replay
     int attempts;
-
-    bool paused;
 
     version_t *objver;
     epoch_t *reply_epoch;
@@ -1064,15 +1137,14 @@ public:
     Op(const object_t& o, const object_locator_t& ol, vector<OSDOp>& op,
        int f, Context *ac, Context *co, version_t *ov) :
       session(NULL), session_item(this), incarnation(0),
-      base_oid(o), base_oloc(ol),
-      precalc_pgid(false),
-      used_replica(false), con(NULL),
+      target(o, ol, f),
+      con(NULL),
       snapid(CEPH_NOSNAP),
       outbl(NULL),
-      flags(f), priority(0), onack(ac), oncommit(co),
+      priority(0), onack(ac), oncommit(co),
       ontimeout(NULL),
       tid(0), attempts(0),
-      paused(false), objver(ov), reply_epoch(NULL),
+      objver(ov), reply_epoch(NULL),
       map_dne_bound(0),
       budgeted(false),
       should_resend(true) {
@@ -1088,8 +1160,8 @@ public:
 	out_rval[i] = NULL;
       }
 
-      if (base_oloc.key == o)
-	base_oloc.key.clear();
+      if (target.base_oloc.key == o)
+	target.base_oloc.key.clear();
     }
     ~Op() {
       while (!out_handler.empty()) {
@@ -1105,9 +1177,9 @@ public:
 
   struct C_Op_Map_Latest : public Context {
     Objecter *objecter;
-    tid_t tid;
+    ceph_tid_t tid;
     version_t latest;
-    C_Op_Map_Latest(Objecter *o, tid_t t) : objecter(o), tid(t), latest(0) {}
+    C_Op_Map_Latest(Objecter *o, ceph_tid_t t) : objecter(o), tid(t), latest(0) {}
     void finish(int r);
   };
 
@@ -1115,7 +1187,7 @@ public:
     Objecter *objecter;
     uint64_t tid;
     version_t latest;
-    C_Command_Map_Latest(Objecter *o, tid_t t) :  objecter(o), tid(t), latest(0) {}
+    C_Command_Map_Latest(Objecter *o, ceph_tid_t t) :  objecter(o), tid(t), latest(0) {}
     void finish(int r);
   };
 
@@ -1210,7 +1282,7 @@ public:
   };
   
   struct PoolStatOp {
-    tid_t tid;
+    ceph_tid_t tid;
     list<string> pools;
 
     map<string,pool_stat_t> *pool_stats;
@@ -1220,7 +1292,7 @@ public:
   };
 
   struct StatfsOp {
-    tid_t tid;
+    ceph_tid_t tid;
     struct ceph_statfs *stats;
     Context *onfinish, *ontimeout;
 
@@ -1228,7 +1300,7 @@ public:
   };
 
   struct PoolOp {
-    tid_t tid;
+    ceph_tid_t tid;
     int64_t pool;
     string name;
     Context *onfinish, *ontimeout;
@@ -1247,7 +1319,7 @@ public:
   struct CommandOp : public RefCountedObject {
     xlist<CommandOp*>::item session_item;
     OSDSession *session;
-    tid_t tid;
+    ceph_tid_t tid;
     vector<string> cmd;
     bufferlist inbl;
     bufferlist *poutbl;
@@ -1269,10 +1341,10 @@ public:
 	onfinish(NULL), ontimeout(NULL) {}
   };
 
-  int _submit_command(CommandOp *c, tid_t *ptid);
+  int _submit_command(CommandOp *c, ceph_tid_t *ptid);
   int recalc_command_target(CommandOp *c);
   void _send_command(CommandOp *c);
-  int command_op_cancel(tid_t tid, int r);
+  int command_op_cancel(ceph_tid_t tid, int r);
   void _finish_command(CommandOp *c, int r, string rs);
   void handle_command_reply(MCommandReply *m);
 
@@ -1281,17 +1353,13 @@ public:
 
   struct LingerOp : public RefCountedObject {
     uint64_t linger_id;
-    object_t oid;
-    object_locator_t oloc;
 
-    pg_t pgid;
-    vector<int> acting;
+    op_target_t target;
 
     snapid_t snap;
     SnapContext snapc;
     utime_t mtime;
 
-    int flags;
     vector<OSDOp> ops;
     bufferlist inbl;
     bufferlist *poutbl;
@@ -1303,10 +1371,12 @@ public:
     OSDSession *session;
     xlist<LingerOp*>::item session_item;
 
-    tid_t register_tid;
+    ceph_tid_t register_tid;
     epoch_t map_dne_bound;
 
-    LingerOp() : linger_id(0), snap(CEPH_NOSNAP), flags(0),
+    LingerOp() : linger_id(0),
+		 target(object_t(), object_locator_t(), 0),
+		 snap(CEPH_NOSNAP),
 		 poutbl(NULL), pobjver(NULL),
 		 registered(false),
 		 on_reg_ack(NULL), on_reg_commit(NULL),
@@ -1374,19 +1444,19 @@ public:
 
  private:
   // pending ops
-  map<tid_t,Op*>            ops;
+  map<ceph_tid_t,Op*>       ops;
   int                       num_homeless_ops;
   map<uint64_t, LingerOp*>  linger_ops;
-  map<tid_t,PoolStatOp*>    poolstat_ops;
-  map<tid_t,StatfsOp*>      statfs_ops;
-  map<tid_t,PoolOp*>        pool_ops;
-  map<tid_t,CommandOp*>     command_ops;
+  map<ceph_tid_t,PoolStatOp*>    poolstat_ops;
+  map<ceph_tid_t,StatfsOp*>      statfs_ops;
+  map<ceph_tid_t,PoolOp*>        pool_ops;
+  map<ceph_tid_t,CommandOp*>     command_ops;
 
   // ops waiting for an osdmap with a new pool or confirmation that
   // the pool does not exist (may be expanded to other uses later)
-  map<uint64_t, LingerOp*>  check_latest_map_lingers;
-  map<tid_t, Op*>           check_latest_map_ops;
-  map<tid_t, CommandOp*>    check_latest_map_commands;
+  map<uint64_t, LingerOp*>       check_latest_map_lingers;
+  map<ceph_tid_t, Op*>           check_latest_map_ops;
+  map<ceph_tid_t, CommandOp*>    check_latest_map_commands;
 
   map<epoch_t,list< pair<Context*, int> > > waiting_for_map;
 
@@ -1395,7 +1465,12 @@ public:
   void send_op(Op *op);
   void cancel_linger_op(Op *op);
   void finish_op(Op *op);
-  bool is_pg_changed(vector<int>& a, vector<int>& b, bool any_change=false);
+  static bool is_pg_changed(
+    int oldprimary,
+    const vector<int>& oldacting,
+    int newprimary,
+    const vector<int>& newacting,
+    bool any_change=false);
   enum recalc_op_target_result {
     RECALC_OP_TARGET_NO_ACTION = 0,
     RECALC_OP_TARGET_NEED_RESEND,
@@ -1403,7 +1478,10 @@ public:
     RECALC_OP_TARGET_OSD_DNE,
     RECALC_OP_TARGET_OSD_DOWN,
   };
-  bool op_should_be_paused(Op *op);
+  bool osdmap_full_flag() const;
+  bool target_should_be_paused(op_target_t *op);
+
+  int calc_target(op_target_t *t);
   int recalc_op_target(Op *op);
   bool recalc_linger_op_target(LingerOp *op);
 
@@ -1505,9 +1583,9 @@ public:
 
   void scan_requests(bool force_resend,
 		     bool force_resend_writes,
-		     map<tid_t, Op*>& need_resend,
+		     map<ceph_tid_t, Op*>& need_resend,
 		     list<LingerOp*>& need_resend_linger,
-		     map<tid_t, CommandOp*>& need_resend_command);
+		     map<ceph_tid_t, CommandOp*>& need_resend_command);
 
   int64_t get_object_hash_position(int64_t pool, const string& key, const string& ns);
   int64_t get_object_pg_hash_position(int64_t pool, const string& key, const string& ns);
@@ -1521,12 +1599,12 @@ public:
 
 private:
   // low-level
-  tid_t _op_submit(Op *op);
+  ceph_tid_t _op_submit(Op *op);
   inline void unregister_op(Op *op);
 
   // public interface
 public:
-  tid_t op_submit(Op *op);
+  ceph_tid_t op_submit(Op *op);
   bool is_active() {
     return !(ops.empty() && linger_ops.empty() && poolstat_ops.empty() && statfs_ops.empty());
   }
@@ -1558,11 +1636,11 @@ public:
   void clear_global_op_flag(int flags) { global_op_flags &= ~flags; }
 
   /// cancel an in-progress request with the given return code
-  int op_cancel(tid_t tid, int r);
+  int op_cancel(ceph_tid_t tid, int r);
 
   // commands
   int osd_command(int osd, vector<string>& cmd,
-		  const bufferlist& inbl, tid_t *ptid,
+		  const bufferlist& inbl, ceph_tid_t *ptid,
 		  bufferlist *poutbl, string *prs, Context *onfinish) {
     assert(osd >= 0);
     CommandOp *c = new CommandOp;
@@ -1575,7 +1653,7 @@ public:
     return _submit_command(c, ptid);
   }
   int pg_command(pg_t pgid, vector<string>& cmd,
-		 const bufferlist& inbl, tid_t *ptid,
+		 const bufferlist& inbl, ceph_tid_t *ptid,
 		 bufferlist *poutbl, string *prs, Context *onfinish) {
     CommandOp *c = new CommandOp;
     c->cmd = cmd;
@@ -1588,7 +1666,7 @@ public:
   }
 
   // mid-level helpers
-  Op *prepare_mutate_op(const object_t& oid, const object_locator_t& oloc, 
+  Op *prepare_mutate_op(const object_t& oid, const object_locator_t& oloc,
 	       ObjectOperation& op,
 	       const SnapContext& snapc, utime_t mtime, int flags,
 	       Context *onack, Context *oncommit, version_t *objver = NULL) {
@@ -1596,9 +1674,10 @@ public:
     o->priority = op.priority;
     o->mtime = mtime;
     o->snapc = snapc;
+    o->out_rval.swap(op.out_rval);
     return o;
   }
-  tid_t mutate(const object_t& oid, const object_locator_t& oloc, 
+  ceph_tid_t mutate(const object_t& oid, const object_locator_t& oloc,
 	       ObjectOperation& op,
 	       const SnapContext& snapc, utime_t mtime, int flags,
 	       Context *onack, Context *oncommit, version_t *objver = NULL) {
@@ -1618,14 +1697,14 @@ public:
     o->out_rval.swap(op.out_rval);
     return o;
   }
-  tid_t read(const object_t& oid, const object_locator_t& oloc,
+  ceph_tid_t read(const object_t& oid, const object_locator_t& oloc,
 	     ObjectOperation& op,
 	     snapid_t snapid, bufferlist *pbl, int flags,
 	     Context *onack, version_t *objver = NULL) {
     Op *o = prepare_read_op(oid, oloc, op, snapid, pbl, flags, onack, objver);
     return op_submit(o);
   }
-  tid_t pg_read(uint32_t hash, object_locator_t oloc,
+  ceph_tid_t pg_read(uint32_t hash, object_locator_t oloc,
 		ObjectOperation& op,
 		bufferlist *pbl, int flags,
 		Context *onack,
@@ -1633,8 +1712,8 @@ public:
     Op *o = new Op(object_t(), oloc,
 		   op.ops, flags | global_op_flags | CEPH_OSD_FLAG_READ,
 		   onack, NULL, NULL);
-    o->precalc_pgid = true;
-    o->base_pgid = pg_t(hash, oloc.pool);
+    o->target.precalc_pgid = true;
+    o->target.base_pgid = pg_t(hash, oloc.pool);
     o->priority = op.priority;
     o->snapid = CEPH_NOSNAP;
     o->outbl = pbl;
@@ -1644,13 +1723,13 @@ public:
     o->reply_epoch = reply_epoch;
     return op_submit(o);
   }
-  tid_t linger_mutate(const object_t& oid, const object_locator_t& oloc,
+  ceph_tid_t linger_mutate(const object_t& oid, const object_locator_t& oloc,
 		      ObjectOperation& op,
 		      const SnapContext& snapc, utime_t mtime,
 		      bufferlist& inbl, int flags,
 		      Context *onack, Context *onfinish,
 		      version_t *objver);
-  tid_t linger_read(const object_t& oid, const object_locator_t& oloc,
+  ceph_tid_t linger_read(const object_t& oid, const object_locator_t& oloc,
 		    ObjectOperation& op,
 		    snapid_t snap, bufferlist& inbl, bufferlist *poutbl, int flags,
 		    Context *onack,
@@ -1685,7 +1764,7 @@ public:
 
 
   // high-level helpers
-  tid_t stat(const object_t& oid, const object_locator_t& oloc, snapid_t snap,
+  ceph_tid_t stat(const object_t& oid, const object_locator_t& oloc, snapid_t snap,
 	     uint64_t *psize, utime_t *pmtime, int flags, 
 	     Context *onfinish,
 	     version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
@@ -1699,7 +1778,7 @@ public:
     return op_submit(o);
   }
 
-  tid_t read(const object_t& oid, const object_locator_t& oloc, 
+  ceph_tid_t read(const object_t& oid, const object_locator_t& oloc,
 	     uint64_t off, uint64_t len, snapid_t snap, bufferlist *pbl, int flags,
 	     Context *onfinish,
 	     version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
@@ -1716,7 +1795,7 @@ public:
     return op_submit(o);
   }
 
-  tid_t read_trunc(const object_t& oid, const object_locator_t& oloc, 
+  ceph_tid_t read_trunc(const object_t& oid, const object_locator_t& oloc,
 	     uint64_t off, uint64_t len, snapid_t snap, bufferlist *pbl, int flags,
 	     uint64_t trunc_size, __u32 trunc_seq,
 	     Context *onfinish,
@@ -1733,7 +1812,7 @@ public:
     o->outbl = pbl;
     return op_submit(o);
   }
-  tid_t mapext(const object_t& oid, const object_locator_t& oloc,
+  ceph_tid_t mapext(const object_t& oid, const object_locator_t& oloc,
 	     uint64_t off, uint64_t len, snapid_t snap, bufferlist *pbl, int flags,
 	     Context *onfinish,
 	     version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
@@ -1749,7 +1828,7 @@ public:
     o->outbl = pbl;
     return op_submit(o);
   }
-  tid_t getxattr(const object_t& oid, const object_locator_t& oloc,
+  ceph_tid_t getxattr(const object_t& oid, const object_locator_t& oloc,
 	     const char *name, snapid_t snap, bufferlist *pbl, int flags,
 	     Context *onfinish,
 	     version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
@@ -1766,7 +1845,7 @@ public:
     return op_submit(o);
   }
 
-  tid_t getxattrs(const object_t& oid, const object_locator_t& oloc, snapid_t snap,
+  ceph_tid_t getxattrs(const object_t& oid, const object_locator_t& oloc, snapid_t snap,
 		  map<string,bufferlist>& attrset,
 		  int flags, Context *onfinish,
 		  version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
@@ -1780,7 +1859,7 @@ public:
     return op_submit(o);
   }
 
-  tid_t read_full(const object_t& oid, const object_locator_t& oloc,
+  ceph_tid_t read_full(const object_t& oid, const object_locator_t& oloc,
 		  snapid_t snap, bufferlist *pbl, int flags,
 		  Context *onfinish,
 	          version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
@@ -1789,7 +1868,7 @@ public:
 
      
   // writes
-  tid_t _modify(const object_t& oid, const object_locator_t& oloc,
+  ceph_tid_t _modify(const object_t& oid, const object_locator_t& oloc,
 		vector<OSDOp>& ops, utime_t mtime,
 		const SnapContext& snapc, int flags,
 	        Context *onack, Context *oncommit,
@@ -1799,7 +1878,7 @@ public:
     o->snapc = snapc;
     return op_submit(o);
   }
-  tid_t write(const object_t& oid, const object_locator_t& oloc,
+  ceph_tid_t write(const object_t& oid, const object_locator_t& oloc,
 	      uint64_t off, uint64_t len, const SnapContext& snapc, const bufferlist &bl,
 	      utime_t mtime, int flags,
 	      Context *onack, Context *oncommit,
@@ -1817,7 +1896,7 @@ public:
     o->snapc = snapc;
     return op_submit(o);
   }
-  tid_t append(const object_t& oid, const object_locator_t& oloc,
+  ceph_tid_t append(const object_t& oid, const object_locator_t& oloc,
 	       uint64_t len, const SnapContext& snapc, const bufferlist &bl,
 	       utime_t mtime, int flags,
 	       Context *onack, Context *oncommit,
@@ -1835,7 +1914,7 @@ public:
     o->snapc = snapc;
     return op_submit(o);
   }
-  tid_t write_trunc(const object_t& oid, const object_locator_t& oloc,
+  ceph_tid_t write_trunc(const object_t& oid, const object_locator_t& oloc,
 	      uint64_t off, uint64_t len, const SnapContext& snapc, const bufferlist &bl,
 	      utime_t mtime, int flags,
 	      uint64_t trunc_size, __u32 trunc_seq,
@@ -1854,7 +1933,7 @@ public:
     o->snapc = snapc;
     return op_submit(o);
   }
-  tid_t write_full(const object_t& oid, const object_locator_t& oloc,
+  ceph_tid_t write_full(const object_t& oid, const object_locator_t& oloc,
 		   const SnapContext& snapc, const bufferlist &bl, utime_t mtime, int flags,
 		   Context *onack, Context *oncommit,
 		   version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
@@ -1869,7 +1948,7 @@ public:
     o->snapc = snapc;
     return op_submit(o);
   }
-  tid_t trunc(const object_t& oid, const object_locator_t& oloc,
+  ceph_tid_t trunc(const object_t& oid, const object_locator_t& oloc,
 	      const SnapContext& snapc,
 	      utime_t mtime, int flags,
 	      uint64_t trunc_size, __u32 trunc_seq,
@@ -1886,7 +1965,7 @@ public:
     o->snapc = snapc;
     return op_submit(o);
   }
-  tid_t zero(const object_t& oid, const object_locator_t& oloc, 
+  ceph_tid_t zero(const object_t& oid, const object_locator_t& oloc,
 	     uint64_t off, uint64_t len, const SnapContext& snapc, utime_t mtime, int flags,
              Context *onack, Context *oncommit,
 	     version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
@@ -1900,7 +1979,7 @@ public:
     o->snapc = snapc;
     return op_submit(o);
   }
-  tid_t rollback_object(const object_t& oid, const object_locator_t& oloc,
+  ceph_tid_t rollback_object(const object_t& oid, const object_locator_t& oloc,
 		 const SnapContext& snapc, snapid_t snapid,
 		 utime_t mtime, Context *onack, Context *oncommit,
 		 version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
@@ -1913,7 +1992,7 @@ public:
     o->snapc = snapc;
     return op_submit(o);
   }
-  tid_t create(const object_t& oid, const object_locator_t& oloc, 
+  ceph_tid_t create(const object_t& oid, const object_locator_t& oloc,
 	     const SnapContext& snapc, utime_t mtime,
              int global_flags, int create_flags,
              Context *onack, Context *oncommit,
@@ -1927,7 +2006,7 @@ public:
     o->snapc = snapc;
     return op_submit(o);
   }
-  tid_t remove(const object_t& oid, const object_locator_t& oloc, 
+  ceph_tid_t remove(const object_t& oid, const object_locator_t& oloc,
 	       const SnapContext& snapc, utime_t mtime, int flags,
 	       Context *onack, Context *oncommit,
 	       version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
@@ -1940,7 +2019,7 @@ public:
     return op_submit(o);
   }
 
-  tid_t lock(const object_t& oid, const object_locator_t& oloc, int op, int flags,
+  ceph_tid_t lock(const object_t& oid, const object_locator_t& oloc, int op, int flags,
 	     Context *onack, Context *oncommit, version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
     SnapContext snapc;  // no snapc for lock ops
     vector<OSDOp> ops;
@@ -1950,7 +2029,7 @@ public:
     o->snapc = snapc;
     return op_submit(o);
   }
-  tid_t setxattr(const object_t& oid, const object_locator_t& oloc,
+  ceph_tid_t setxattr(const object_t& oid, const object_locator_t& oloc,
 	      const char *name, const SnapContext& snapc, const bufferlist &bl,
 	      utime_t mtime, int flags,
 	      Context *onack, Context *oncommit,
@@ -1968,7 +2047,7 @@ public:
     o->snapc = snapc;
     return op_submit(o);
   }
-  tid_t removexattr(const object_t& oid, const object_locator_t& oloc,
+  ceph_tid_t removexattr(const object_t& oid, const object_locator_t& oloc,
 	      const char *name, const SnapContext& snapc,
 	      utime_t mtime, int flags,
 	      Context *onack, Context *oncommit,
@@ -2006,7 +2085,7 @@ public:
   int change_pool_auid(int64_t pool, Context *onfinish, uint64_t auid);
 
   void handle_pool_op_reply(MPoolOpReply *m);
-  int pool_op_cancel(tid_t tid, int r);
+  int pool_op_cancel(ceph_tid_t tid, int r);
   void finish_pool_op(PoolOp *op);
 
   // --------------------------
@@ -2017,7 +2096,7 @@ public:
   void handle_get_pool_stats_reply(MGetPoolStatsReply *m);
   void get_pool_stats(list<string>& pools, map<string,pool_stat_t> *result,
 		      Context *onfinish);
-  int pool_stat_op_cancel(tid_t tid, int r);
+  int pool_stat_op_cancel(ceph_tid_t tid, int r);
   void finish_pool_stat_op(PoolStatOp *op);
 
   // ---------------------------
@@ -2027,7 +2106,7 @@ private:
 public:
   void handle_fs_stats_reply(MStatfsReply *m);
   void get_fs_stats(struct ceph_statfs& result, Context *onfinish);
-  int statfs_op_cancel(tid_t tid, int r);
+  int statfs_op_cancel(ceph_tid_t tid, int r);
   void finish_statfs_op(StatfsOp *op);
 
   // ---------------------------

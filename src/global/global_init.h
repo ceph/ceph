@@ -30,8 +30,16 @@ class CephContext;
  * daemons and utility programs need to call. It takes care of a lot of
  * initialization, including setting up g_ceph_context.
  */
-void global_init(std::vector < const char * > *alt_def_args, std::vector < const char* >& args,
-	       uint32_t module_type, code_environment_t code_env, int flags);
+void global_init(std::vector < const char * > *alt_def_args,
+		 std::vector < const char* >& args,
+		 uint32_t module_type, code_environment_t code_env, int flags);
+
+// just the first half; enough to get config parsed but doesn't start up the
+// cct or log.
+void global_pre_init(std::vector < const char * > *alt_def_args,
+		     std::vector < const char* >& args,
+		     uint32_t module_type, code_environment_t code_env,
+		     int flags);
 
 /*
  * perform all of the steps that global_init_daemonize performs just prior
@@ -41,10 +49,16 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
 int global_init_prefork(CephContext *cct, int flags);
 
 /*
- * perform all of the steps that global_init_daemonize performs just after
- * the fork.
+ * perform all the steps that global_init_daemonize performs just after
+ * the fork, except closing stderr, which we'll do later on.
  */
-void global_init_postfork(CephContext *cct, int flags);
+void global_init_postfork_start(CephContext *cct);
+
+/*
+ * close stderr, thus completing the postfork.
+ */
+void global_init_postfork_finish(CephContext *cct, int flags);
+
 
 /*
  * global_init_daemonize handles daemonizing a process. 

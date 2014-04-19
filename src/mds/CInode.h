@@ -110,6 +110,7 @@ public:
   static const int PIN_DIRTYRSTAT =       21;
   static const int PIN_EXPORTINGCAPS =    22;
   static const int PIN_DIRTYPARENT =      23;
+  static const int PIN_DIRWAITER =        24;
 
   const char *pin_name(int p) {
     switch (p) {
@@ -135,6 +136,7 @@ public:
     case PIN_NEEDSNAPFLUSH: return "needsnapflush";
     case PIN_DIRTYRSTAT: return "dirtyrstat";
     case PIN_DIRTYPARENT: return "dirtyparent";
+    case PIN_DIRWAITER: return "dirwaiter";
     default: return generic_pin_name(p);
     }
   }
@@ -353,6 +355,7 @@ public:
   void close_dirfrag(frag_t fg);
   void close_dirfrags();
   bool has_subtree_root_dirfrag(int auth=-1);
+  bool has_subtree_or_exporting_dirfrag();
 
   void force_dirfrags();
   void verify_dirfrags();
@@ -387,6 +390,11 @@ protected:
 
   ceph_lock_state_t fcntl_locks;
   ceph_lock_state_t flock_locks;
+
+  void clear_file_locks() {
+    fcntl_locks.clear();
+    flock_locks.clear();
+  }
 
   // LogSegment dlists i (may) belong to
 public:
@@ -570,10 +578,17 @@ private:
     _decode_locks_state(p, is_new);
   }
 
-
   // -- waiting --
+protected:
+  map<frag_t, list<Context*> > waiting_on_dir;
+public:
+  void add_dir_waiter(frag_t fg, Context *c);
+  void take_dir_waiting(frag_t fg, list<Context*>& ls);
+  bool is_waiting_for_dir(frag_t fg) {
+    return waiting_on_dir.count(fg);
+  }
   void add_waiter(uint64_t tag, Context *c);
-
+  void take_waiting(uint64_t tag, list<Context*>& ls);
 
   // -- encode/decode helpers --
   void _encode_base(bufferlist& bl);
@@ -581,9 +596,10 @@ private:
   void _encode_locks_full(bufferlist& bl);
   void _decode_locks_full(bufferlist::iterator& p);
   void _encode_locks_state_for_replica(bufferlist& bl);
+  void _encode_locks_state_for_rejoin(bufferlist& bl, int rep);
   void _decode_locks_state(bufferlist::iterator& p, bool is_new);
-  void _decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waiters);
-
+  void _decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waiters,
+			    list<SimpleLock*>& eval_locks);
 
   // -- import/export --
   void encode_export(bufferlist& bl);
@@ -647,18 +663,17 @@ public:
   void encode_lock_state(int type, bufferlist& bl);
   void decode_lock_state(int type, bufferlist& bl);
 
-  void _finish_frag_update(CDir *dir, Mutation *mut);
+  void _finish_frag_update(CDir *dir, MutationRef& mut);
 
   void clear_dirty_scattered(int type);
   bool is_dirty_scattered();
   void clear_scatter_dirty();  // on rejoin ack
 
   void start_scatter(ScatterLock *lock);
-  void start_scatter_gather(ScatterLock *lock, int auth=-1);
   void finish_scatter_update(ScatterLock *lock, CDir *dir,
 			     version_t inode_version, version_t dir_accounted_version);
   void finish_scatter_gather_update(int type);
-  void finish_scatter_gather_update_accounted(int type, Mutation *mut, EMetaBlob *metablob);
+  void finish_scatter_gather_update_accounted(int type, MutationRef& mut, EMetaBlob *metablob);
 
   // -- snap --
   void open_snaprealm(bool no_split=false);

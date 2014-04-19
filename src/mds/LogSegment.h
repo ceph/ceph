@@ -59,7 +59,7 @@ class LogSegment {
   set<dirfrag_t> uncommitted_fragments;
 
   // client request ids
-  map<int, tid_t> last_client_tids;
+  map<int, ceph_tid_t> last_client_tids;
 
   // table version
   version_t inotablev;
@@ -67,7 +67,7 @@ class LogSegment {
   map<int,version_t> tablev;
 
   // try to expire
-  void try_to_expire(MDS *mds, C_GatherBuilder &gather_bld);
+  void try_to_expire(MDS *mds, C_GatherBuilder &gather_bld, int op_prio);
 
   // cons
   LogSegment(loff_t off) :

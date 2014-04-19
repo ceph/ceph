@@ -37,14 +37,20 @@ ceph::crypto::HMACSHA1::~HMACSHA1()
 
 #elif USE_NSS
 
+// Initialization of NSS requires a mutex due to a race condition in
+// NSS_NoDB_Init.
+static pthread_mutex_t crypto_init_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 void ceph::crypto::init(CephContext *cct)
 {
   SECStatus s;
+  pthread_mutex_lock(&crypto_init_mutex);
   if (cct->_conf->nss_db_path.empty()) {
     s = NSS_NoDB_Init(NULL);
   } else {
     s = NSS_Init(cct->_conf->nss_db_path.c_str());
   }
+  pthread_mutex_unlock(&crypto_init_mutex);
   assert(s == SECSuccess);
 }
 

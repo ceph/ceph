@@ -63,33 +63,6 @@ static const __SWORD_TYPE XFS_SUPER_MAGIC(0x58465342);
 static const __SWORD_TYPE ZFS_SUPER_MAGIC(0x2fc12fc1);
 #endif
 
-enum {
-  l_os_first = 84000,
-  l_os_jq_max_ops,
-  l_os_jq_ops,
-  l_os_j_ops,
-  l_os_jq_max_bytes,
-  l_os_jq_bytes,
-  l_os_j_bytes,
-  l_os_j_lat,
-  l_os_j_wr,
-  l_os_j_wr_bytes,
-  l_os_oq_max_ops,
-  l_os_oq_ops,
-  l_os_ops,
-  l_os_oq_max_bytes,
-  l_os_oq_bytes,
-  l_os_bytes,
-  l_os_apply_lat,
-  l_os_committing,
-  l_os_commit,
-  l_os_commit_len,
-  l_os_commit_lat,
-  l_os_j_full,
-  l_os_queue_lat,
-  l_os_last,
-};
-
 
 enum fs_types {
   FS_TYPE_NONE = 0,
@@ -582,6 +555,11 @@ public:
   int _collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,
 			      coll_t c, const ghobject_t& o,
 			      const SequencerPosition& spos);
+
+  int _set_alloc_hint(coll_t cid, const ghobject_t& oid,
+                      uint64_t expected_object_size,
+                      uint64_t expected_write_size);
+
   void dump_start(const std::string& file);
   void dump_stop();
   void dump_transactions(list<ObjectStore::Transaction*>& ls, uint64_t seq, OpSequencer *osr);
@@ -634,6 +612,7 @@ private:
   atomic_t m_filestore_kill_at;
   bool m_filestore_sloppy_crc;
   int m_filestore_sloppy_crc_block_size;
+  uint64_t m_filestore_max_alloc_hint_size;
   enum fs_types m_fs_type;
 
   //Determined xattr handling based on fs type
@@ -711,6 +690,7 @@ public:
   virtual bool has_fiemap() = 0;
   virtual int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap) = 0;
   virtual int clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) = 0;
+  virtual int set_alloc_hint(int fd, uint64_t hint) = 0;
 
   // hooks for (sloppy) crc tracking
   virtual int _crc_update_write(int fd, loff_t off, size_t len, const bufferlist& bl) = 0;

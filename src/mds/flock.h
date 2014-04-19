@@ -11,19 +11,29 @@
 
 inline ostream& operator<<(ostream& out, ceph_filelock& l) {
   out << "start: " << l.start << ", length: " << l.length
-      << ", client: " << l.client << ", pid: " << l.pid
-      << ", pid_ns: " << l.pid_namespace << ", type: " << (int)l.type
+      << ", client: " << l.client << ", owner: " << l.owner
+      << ", pid: " << l.pid << ", type: " << (int)l.type
       << std::endl;
   return out;
+}
+
+inline bool ceph_filelock_owner_equal(ceph_filelock& l, ceph_filelock& r)
+{
+  if (l.client != r.client || l.owner != r.owner)
+    return false;
+  // The file lock is from old client if the most significant bit of
+  // 'owner' is not set. Old clients use both 'owner' and 'pid' to
+  // identify the owner of lock.
+  if (l.owner & (1ULL << 63))
+    return true;
+  return l.pid == r.pid;
 }
 
 inline bool operator==(ceph_filelock& l, ceph_filelock& r) {
   return
     l.length == r.length &&
-    l.client == r.client &&
-    l.pid == r.pid &&
-    l.pid_namespace == r.pid_namespace &&
-    l.type == r.type;
+    l.type == r.type &&
+    ceph_filelock_owner_equal(l, r);
 }
 
 class ceph_lock_state_t {
@@ -188,10 +198,20 @@ public:
   void encode(bufferlist& bl) const {
     ::encode(held_locks, bl);
     ::encode(waiting_locks, bl);
+    ::encode(client_held_lock_counts, bl);
+    ::encode(client_waiting_lock_counts, bl);
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(held_locks, bl);
     ::decode(waiting_locks, bl);
+    ::decode(client_held_lock_counts, bl);
+    ::decode(client_waiting_lock_counts, bl);
+  }
+  void clear() {
+    held_locks.clear();
+    waiting_locks.clear();
+    client_held_lock_counts.clear();
+    client_waiting_lock_counts.clear();
   }
 };
 WRITE_CLASS_ENCODER(ceph_lock_state_t)

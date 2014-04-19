@@ -4,6 +4,9 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ *
+ * Author: Loic Dachary <loic@dachary.org>
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -17,6 +20,7 @@
 #include "common/config.h"
 #include "common/Formatter.h"
 #include "include/ceph_features.h"
+#include "include/str_map.h"
 
 #include "common/code_environment.h"
 
@@ -388,7 +392,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   ENCODE_START(7, 7, bl);
 
   {
-    ENCODE_START(1, 1, bl); // client-usable data
+    ENCODE_START(3, 1, bl); // client-usable data
     ::encode(fsid, bl);
     ::encode(epoch, bl);
     ::encode(modified, bl);
@@ -406,6 +410,9 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
     ::encode(new_weight, bl);
     ::encode(new_pg_temp, bl);
     ::encode(new_primary_temp, bl);
+    ::encode(new_primary_affinity, bl);
+    ::encode(new_erasure_code_profiles, bl);
+    ::encode(old_erasure_code_profiles, bl);
     ENCODE_FINISH(bl); // client-usable data
   }
 
@@ -541,7 +548,7 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     return;
   }
   {
-    DECODE_START(1, bl); // client-usable data
+    DECODE_START(3, bl); // client-usable data
     ::decode(fsid, bl);
     ::decode(epoch, bl);
     ::decode(modified, bl);
@@ -559,6 +566,17 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     ::decode(new_weight, bl);
     ::decode(new_pg_temp, bl);
     ::decode(new_primary_temp, bl);
+    if (struct_v >= 2)
+      ::decode(new_primary_affinity, bl);
+    else
+      new_primary_affinity.clear();
+    if (struct_v >= 3) {
+      ::decode(new_erasure_code_profiles, bl);
+      ::decode(old_erasure_code_profiles, bl);
+    } else {
+      new_erasure_code_profiles.clear();
+      old_erasure_code_profiles.clear();
+    }
     DECODE_FINISH(bl); // client-usable data
   }
 
@@ -758,6 +776,15 @@ void OSDMap::Incremental::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+
+  OSDMap::dump_erasure_code_profiles(new_erasure_code_profiles, f);
+  f->open_array_section("old_erasure_code_profiles");
+  for (vector<string>::const_iterator p = old_erasure_code_profiles.begin();
+       p != old_erasure_code_profiles.end();
+       p++) {
+    f->dump_string("old", p->c_str());
+  }
+  f->close_section();
 }
 
 void OSDMap::Incremental::generate_test_instances(list<Incremental*>& o)
@@ -824,6 +851,8 @@ void OSDMap::set_max_osd(int m)
   osd_addrs->hb_back_addr.resize(m);
   osd_addrs->hb_front_addr.resize(m);
   osd_uuid->resize(m);
+  if (osd_primary_affinity)
+    osd_primary_affinity->resize(m, CEPH_OSD_DEFAULT_PRIMARY_AFFINITY);
 
   calc_num_osds();
 }
@@ -951,6 +980,16 @@ uint64_t OSDMap::get_features(uint64_t *pmask) const
   }
   mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL |
           CEPH_FEATURE_OSD_ERASURE_CODES;
+
+  if (osd_primary_affinity) {
+    for (int i = 0; i < max_osd; ++i) {
+      if ((*osd_primary_affinity)[i] != CEPH_OSD_DEFAULT_PRIMARY_AFFINITY) {
+	features |= CEPH_FEATURE_OSD_PRIMARY_AFFINITY;
+	break;
+      }
+    }
+  }
+  mask |= CEPH_FEATURE_OSD_PRIMARY_AFFINITY;
 
   if (pmask)
     *pmask = mask;
@@ -1168,6 +1207,25 @@ int OSDMap::apply_incremental(const Incremental &inc)
       osd_state[i->first] &= ~(CEPH_OSD_AUTOOUT | CEPH_OSD_NEW);
   }
 
+  for (map<int32_t,uint32_t>::const_iterator i = inc.new_primary_affinity.begin();
+       i != inc.new_primary_affinity.end();
+       ++i) {
+    set_primary_affinity(i->first, i->second);
+  }
+
+  // erasure_code_profiles
+  for (map<string,map<string,string> >::const_iterator i =
+	 inc.new_erasure_code_profiles.begin();
+       i != inc.new_erasure_code_profiles.end();
+       i++) {
+    set_erasure_code_profile(i->first, i->second);
+  }
+  
+  for (vector<string>::const_iterator i = inc.old_erasure_code_profiles.begin();
+       i != inc.old_erasure_code_profiles.end();
+       i++)
+    erasure_code_profiles.erase(*i);
+  
   // up/down
   for (map<int32_t,uint8_t>::const_iterator i = inc.new_state.begin();
        i != inc.new_state.end();
@@ -1338,7 +1396,8 @@ void OSDMap::_remove_nonexistent_osds(const pg_pool_t& pool,
 }
 
 int OSDMap::_pg_to_osds(const pg_pool_t& pool, pg_t pg,
-                        vector<int> *osds, int *primary) const
+                        vector<int> *osds, int *primary,
+			ps_t *ppps) const
 {
   // map to osds[]
   ps_t pps = pool.raw_pg_to_pps(pg);  // placement ps
@@ -1351,24 +1410,100 @@ int OSDMap::_pg_to_osds(const pg_pool_t& pool, pg_t pg,
 
   _remove_nonexistent_osds(pool, *osds);
 
-  *primary = (osds->empty() ? -1 : osds->front());
+  *primary = -1;
+  for (unsigned i = 0; i < osds->size(); ++i) {
+    if ((*osds)[i] != CRUSH_ITEM_NONE) {
+      *primary = (*osds)[i];
+      break;
+    }
+  }
+  if (ppps)
+    *ppps = pps;
 
   return osds->size();
 }
 
 // pg -> (up osd list)
-void OSDMap::_raw_to_up_osds(pg_t pg, const vector<int>& raw,
+void OSDMap::_raw_to_up_osds(const pg_pool_t& pool, const vector<int>& raw,
                              vector<int> *up, int *primary) const
 {
-  up->clear();
-  for (unsigned i=0; i<raw.size(); i++) {
-    if (!exists(raw[i]) || is_down(raw[i]))
-      continue;
-    up->push_back(raw[i]);
+  if (pool.can_shift_osds()) {
+    // shift left
+    up->clear();
+    for (unsigned i=0; i<raw.size(); i++) {
+      if (!exists(raw[i]) || is_down(raw[i]))
+	continue;
+      up->push_back(raw[i]);
+    }
+    *primary = (up->empty() ? -1 : up->front());
+  } else {
+    // set down/dne devices to NONE
+    *primary = -1;
+    up->resize(raw.size());
+    for (int i = raw.size() - 1; i >= 0; --i) {
+      if (!exists(raw[i]) || is_down(raw[i])) {
+	(*up)[i] = CRUSH_ITEM_NONE;
+      } else {
+	*primary = (*up)[i] = raw[i];
+      }
+    }
   }
-  *primary = (up->empty() ? -1 : up->front());
 }
-  
+
+void OSDMap::_apply_primary_affinity(ps_t seed,
+				     const pg_pool_t& pool,
+				     vector<int> *osds,
+				     int *primary) const
+{
+  // do we have any non-default primary_affinity values for these osds?
+  if (!osd_primary_affinity)
+    return;
+
+  bool any = false;
+  for (vector<int>::const_iterator p = osds->begin(); p != osds->end(); ++p) {
+    if (*p != CRUSH_ITEM_NONE &&
+	(*osd_primary_affinity)[*p] != CEPH_OSD_DEFAULT_PRIMARY_AFFINITY) {
+      any = true;
+    }
+  }
+  if (!any)
+    return;
+
+  // pick the primary.  feed both the seed (for the pg) and the osd
+  // into the hash/rng so that a proportional fraction of an osd's pgs
+  // get rejected as primary.
+  int pos = -1;
+  for (unsigned i = 0; i < osds->size(); ++i) {
+    int o = (*osds)[i];
+    if (o == CRUSH_ITEM_NONE)
+      continue;
+    unsigned a = (*osd_primary_affinity)[o];
+    if (a < CEPH_OSD_MAX_PRIMARY_AFFINITY &&
+	(crush_hash32_2(CRUSH_HASH_RJENKINS1,
+			seed, o) >> 16) >= a) {
+      // we chose not to use this primary.  note it anyway as a
+      // fallback in case we don't pick anyone else, but keep looking.
+      if (pos < 0)
+	pos = i;
+    } else {
+      pos = i;
+      break;
+    }
+  }
+  if (pos < 0)
+    return;
+
+  *primary = (*osds)[pos];
+
+  if (pool.can_shift_osds() && pos > 0) {
+    // move the new primary to the front.
+    for (int i = pos; i > 0; --i) {
+      (*osds)[i] = (*osds)[i-1];
+    }
+    (*osds)[0] = *primary;
+  }
+}
+
 void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
                             vector<int> *temp_pg, int *temp_primary) const
 {
@@ -1377,17 +1512,29 @@ void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
   temp_pg->clear();
   if (p != pg_temp->end()) {
     for (unsigned i=0; i<p->second.size(); i++) {
-      if (!exists(p->second[i]) || is_down(p->second[i]))
-	continue;
-      temp_pg->push_back(p->second[i]);
+      if (!exists(p->second[i]) || is_down(p->second[i])) {
+	if (pool.can_shift_osds()) {
+	  continue;
+	} else {
+	  temp_pg->push_back(CRUSH_ITEM_NONE);
+	}
+      } else {
+	temp_pg->push_back(p->second[i]);
+      }
     }
   }
   map<pg_t,int>::const_iterator pp = primary_temp->find(pg);
   *temp_primary = -1;
-  if (pp != primary_temp->end())
+  if (pp != primary_temp->end()) {
     *temp_primary = pp->second;
-  else if (!temp_pg->empty()) // apply pg_temp's primary
-    *temp_primary = temp_pg->front();
+  } else if (!temp_pg->empty()) { // apply pg_temp's primary
+    for (unsigned i = 0; i < temp_pg->size(); ++i) {
+      if ((*temp_pg)[i] != CRUSH_ITEM_NONE) {
+	*temp_primary = (*temp_pg)[i];
+	break;
+      }
+    }
+  }
 }
 
 int OSDMap::pg_to_osds(pg_t pg, vector<int> *raw, int *primary) const
@@ -1397,7 +1544,7 @@ int OSDMap::pg_to_osds(pg_t pg, vector<int> *raw, int *primary) const
   const pg_pool_t *pool = get_pg_pool(pg.pool());
   if (!pool)
     return 0;
-  int r = _pg_to_osds(*pool, pg, raw, primary);
+  int r = _pg_to_osds(*pool, pg, raw, primary, NULL);
   return r;
 }
 
@@ -1412,8 +1559,10 @@ void OSDMap::pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const
     return;
   }
   vector<int> raw;
-  _pg_to_osds(*pool, pg, &raw, primary);
-  _raw_to_up_osds(pg, raw, up, primary);
+  ps_t pps;
+  _pg_to_osds(*pool, pg, &raw, primary, &pps);
+  _raw_to_up_osds(*pool, raw, up, primary);
+  _apply_primary_affinity(pps, *pool, up, primary);
 }
   
 void OSDMap::_pg_to_up_acting_osds(pg_t pg, vector<int> *up, int *up_primary,
@@ -1436,13 +1585,17 @@ void OSDMap::_pg_to_up_acting_osds(pg_t pg, vector<int> *up, int *up_primary,
   vector<int> _acting;
   int _up_primary;
   int _acting_primary;
-  _pg_to_osds(*pool, pg, &raw, &_up_primary);
-  _raw_to_up_osds(pg, raw, &_up, &_up_primary);
+  ps_t pps;
+  _pg_to_osds(*pool, pg, &raw, &_up_primary, &pps);
+  _raw_to_up_osds(*pool, raw, &_up, &_up_primary);
+  _apply_primary_affinity(pps, *pool, &_up, &_up_primary);
   _get_temp_osds(*pool, pg, &_acting, &_acting_primary);
-  if (_acting.empty())
+  if (_acting.empty()) {
     _acting = _up;
-  if (_acting_primary == -1)
-    _acting_primary = _up_primary;
+    if (_acting_primary == -1) {
+      _acting_primary = _up_primary;
+    }
+  }
   if (up)
     up->swap(_up);
   if (up_primary)
@@ -1453,7 +1606,7 @@ void OSDMap::_pg_to_up_acting_osds(pg_t pg, vector<int> *up, int *up_primary,
     *acting_primary = _acting_primary;
 }
 
-int OSDMap::calc_pg_rank(int osd, vector<int>& acting, int nrep)
+int OSDMap::calc_pg_rank(int osd, const vector<int>& acting, int nrep)
 {
   if (!nrep)
     nrep = acting.size();
@@ -1463,11 +1616,29 @@ int OSDMap::calc_pg_rank(int osd, vector<int>& acting, int nrep)
   return -1;
 }
 
-int OSDMap::calc_pg_role(int osd, vector<int>& acting, int nrep)
+int OSDMap::calc_pg_role(int osd, const vector<int>& acting, int nrep)
 {
   if (!nrep)
     nrep = acting.size();
   return calc_pg_rank(osd, acting, nrep);
+}
+
+bool OSDMap::primary_changed(
+  int oldprimary,
+  const vector<int> &oldacting,
+  int newprimary,
+  const vector<int> &newacting)
+{
+  if (oldacting.empty() && newacting.empty())
+    return false;    // both still empty
+  if (oldacting.empty() ^ newacting.empty())
+    return true;     // was empty, now not, or vice versa
+  if (oldprimary != newprimary)
+    return true;     // primary changed
+  if (calc_pg_rank(oldprimary, oldacting) !=
+      calc_pg_rank(newprimary, newacting))
+    return true;
+  return false;      // same primary (tho replicas may have changed)
 }
 
 
@@ -1589,7 +1760,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   ENCODE_START(7, 7, bl);
 
   {
-    ENCODE_START(1, 1, bl); // client-usable data
+    ENCODE_START(3, 1, bl); // client-usable data
     // base
     ::encode(fsid, bl);
     ::encode(epoch, bl);
@@ -1609,11 +1780,18 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
 
     ::encode(*pg_temp, bl);
     ::encode(*primary_temp, bl);
+    if (osd_primary_affinity) {
+      ::encode(*osd_primary_affinity, bl);
+    } else {
+      vector<__u32> v;
+      ::encode(v, bl);
+    }
 
     // crush
     bufferlist cbl;
     crush->encode(cbl);
     ::encode(cbl, bl);
+    ::encode(erasure_code_profiles, bl);
     ENCODE_FINISH(bl); // client-usable data
   }
 
@@ -1746,6 +1924,8 @@ void OSDMap::decode_classic(bufferlist::iterator& p)
   else
     osd_addrs->hb_front_addr.resize(osd_addrs->hb_back_addr.size());
 
+  osd_primary_affinity.reset();
+
   post_decode();
 }
 
@@ -1769,7 +1949,7 @@ void OSDMap::decode(bufferlist::iterator& bl)
    * Since we made it past that hurdle, we can use our normal paths.
    */
   {
-    DECODE_START(1, bl); // client-usable data
+    DECODE_START(3, bl); // client-usable data
     // base
     ::decode(fsid, bl);
     ::decode(epoch, bl);
@@ -1789,12 +1969,25 @@ void OSDMap::decode(bufferlist::iterator& bl)
 
     ::decode(*pg_temp, bl);
     ::decode(*primary_temp, bl);
+    if (struct_v >= 2) {
+      osd_primary_affinity.reset(new vector<__u32>);
+      ::decode(*osd_primary_affinity, bl);
+      if (osd_primary_affinity->empty())
+	osd_primary_affinity.reset();
+    } else {
+      osd_primary_affinity.reset();
+    }
 
     // crush
     bufferlist cbl;
     ::decode(cbl, bl);
     bufferlist::iterator cblp = cbl.begin();
     crush->decode(cblp);
+    if (struct_v >= 3) {
+      ::decode(erasure_code_profiles, bl);
+    } else {
+      erasure_code_profiles.clear();
+    }
     DECODE_FINISH(bl); // client-usable data
   }
 
@@ -1827,6 +2020,24 @@ void OSDMap::post_decode()
   }
 
   calc_num_osds();
+}
+
+void OSDMap::dump_erasure_code_profiles(const map<string,map<string,string> > &profiles,
+					Formatter *f)
+{
+  f->open_object_section("erasure_code_profiles");
+  for (map<string,map<string,string> >::const_iterator i = profiles.begin();
+       i != profiles.end();
+       i++) {
+    f->open_object_section(i->first.c_str());
+    for (map<string,string>::const_iterator j = i->second.begin();
+	 j != i->second.end();
+	 j++) {
+      f->dump_string(j->first.c_str(), j->second.c_str());
+    }
+    f->close_section();
+  }
+  f->close_section();
 }
 
 void OSDMap::dump_json(ostream& out) const
@@ -1871,6 +2082,8 @@ void OSDMap::dump(Formatter *f) const
       f->dump_stream("uuid") << get_uuid(i);
       f->dump_int("up", is_up(i));
       f->dump_int("in", is_in(i));
+      f->dump_float("weight", get_weightf(i));
+      f->dump_float("primary_affinity", get_primary_affinityf(i));
       get_info(i).dump(f);
       f->dump_stream("public_addr") << get_addr(i);
       f->dump_stream("cluster_addr") << get_cluster_addr(i);
@@ -1931,6 +2144,8 @@ void OSDMap::dump(Formatter *f) const
     f->dump_stream(ss.str().c_str()) << p->second;
   }
   f->close_section();
+
+  dump_erasure_code_profiles(erasure_code_profiles, f);
 }
 
 void OSDMap::generate_test_instances(list<OSDMap*>& o)
@@ -1974,6 +2189,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",noscrub";
   if (f & CEPH_OSDMAP_NODEEP_SCRUB)
     s += ",nodeep-scrub";
+  if (f & CEPH_OSDMAP_NOTIERAGENT)
+    s += ",notieragent";
   if (s.length())
     s = s.erase(0, 1);
   return s;
@@ -2028,6 +2245,8 @@ void OSDMap::print(ostream& out) const
       out << (is_up(i) ? " up  ":" down");
       out << (is_in(i) ? " in ":" out");
       out << " weight " << get_weightf(i);
+      if (get_primary_affinity(i) != CEPH_OSD_DEFAULT_PRIMARY_AFFINITY)
+	out << " primary_affinity " << get_primary_affinityf(i);
       const osd_info_t& info(get_info(i));
       out << " " << info;
       out << " " << get_addr(i) << " " << get_cluster_addr(i) << " " << get_hb_back_addr(i)
@@ -2207,9 +2426,8 @@ void OSDMap::print_summary(Formatter *f, ostream& out) const
     f->dump_int("num_osds", get_num_osds());
     f->dump_int("num_up_osds", get_num_up_osds());
     f->dump_int("num_in_osds", get_num_in_osds());
-    f->dump_string("full", test_flag(CEPH_OSDMAP_FULL) ? "true" : "false");
-    f->dump_string("nearfull", test_flag(CEPH_OSDMAP_NEARFULL) ?
-		   "true" : "false");
+    f->dump_bool("full", test_flag(CEPH_OSDMAP_FULL) ? true : false);
+    f->dump_bool("nearfull", test_flag(CEPH_OSDMAP_NEARFULL) ? true : false);
     f->close_section();
   } else {
     out << "     osdmap e" << get_epoch() << ": "
@@ -2329,6 +2547,13 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     set_weight(i, CEPH_OSD_OUT);
   }
 
+  map<string,string> erasure_code_profile_map;
+  r = get_str_map(cct->_conf->osd_pool_default_erasure_code_profile,
+		  ss,
+		  &erasure_code_profile_map);
+  erasure_code_profile_map["directory"] =
+    cct->_conf->osd_pool_default_erasure_code_directory;
+  set_erasure_code_profile("default", erasure_code_profile_map);
   return r;
 }
 

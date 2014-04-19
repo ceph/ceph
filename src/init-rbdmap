@@ -7,8 +7,11 @@
 
 ### BEGIN INIT INFO
 # Provides:          rbdmap
-# Required-Start:    $network
-# Required-Stop:     $network
+# Required-Start:    $network $remote_fs
+# Required-Stop:     $network $remote_fs
+# Should-Start:      ceph
+# Should-Stop:       ceph
+# X-Start-Before:    $x-display-manager
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
 # Short-Description: Ceph RBD Mapping
@@ -93,6 +96,11 @@ case "$1" in
 	do_unmap
 	;;
 
+  restart|force-reload)
+	$0 stop
+	$0 start
+	;;
+
   reload)
 	do_map
 	;;
@@ -102,7 +110,7 @@ case "$1" in
 	;;
 
   *)
-	log_success_msg "Usage: rbdmap {start|stop|reload|status}"
+	log_success_msg "Usage: rbdmap {start|stop|restart|force-reload|reload|status}"
 	exit 1
 	;;
 esac

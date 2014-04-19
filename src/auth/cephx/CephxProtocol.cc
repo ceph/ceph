@@ -39,7 +39,7 @@ void cephx_calc_client_server_challenge(CephContext *cct, CryptoKey& secret, uin
   uint64_t k = 0;
   const uint64_t *p = (const uint64_t *)enc.c_str();
   for (int pos = 0; pos + sizeof(k) <= enc.length(); pos+=sizeof(k), p++)
-    k ^= *p;
+    k ^= mswab64(*p);
   *key = k;
 }
 
@@ -197,7 +197,7 @@ bool CephXTicketHandler::have_key()
   return have_key_flag;
 }
 
-bool CephXTicketHandler::need_key()
+bool CephXTicketHandler::need_key() const
 {
   if (have_key_flag) {
     return (!expires.is_zero()) && (ceph_clock_now(cct) >= renew_after);
@@ -214,9 +214,9 @@ bool CephXTicketManager::have_key(uint32_t service_id)
   return iter->second.have_key();
 }
 
-bool CephXTicketManager::need_key(uint32_t service_id)
+bool CephXTicketManager::need_key(uint32_t service_id) const
 {
-  map<uint32_t, CephXTicketHandler>::iterator iter = tickets_map.find(service_id);
+  map<uint32_t, CephXTicketHandler>::const_iterator iter = tickets_map.find(service_id);
   if (iter == tickets_map.end())
     return true;
   return iter->second.need_key();
@@ -290,7 +290,7 @@ bool CephXTicketManager::verify_service_ticket_reply(CryptoKey& secret,
  *
  * ticket, {timestamp}^session_key
  */
-CephXAuthorizer *CephXTicketHandler::build_authorizer(uint64_t global_id)
+CephXAuthorizer *CephXTicketHandler::build_authorizer(uint64_t global_id) const
 {
   CephXAuthorizer *a = new CephXAuthorizer(cct);
   a->session_key = session_key;
@@ -320,16 +320,16 @@ CephXAuthorizer *CephXTicketHandler::build_authorizer(uint64_t global_id)
  *
  * ticket, {timestamp}^session_key
  */
-CephXAuthorizer *CephXTicketManager::build_authorizer(uint32_t service_id)
+CephXAuthorizer *CephXTicketManager::build_authorizer(uint32_t service_id) const
 {
-  map<uint32_t, CephXTicketHandler>::iterator iter = tickets_map.find(service_id);
+  map<uint32_t, CephXTicketHandler>::const_iterator iter = tickets_map.find(service_id);
   if (iter == tickets_map.end()) {
     ldout(cct, 0) << "no TicketHandler for service "
 		  << ceph_entity_type_name(service_id) << dendl;
     return NULL;
   }
 
-  CephXTicketHandler& handler = iter->second;
+  const CephXTicketHandler& handler = iter->second;
   return handler.build_authorizer(global_id);
 }
 

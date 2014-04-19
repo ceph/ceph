@@ -1,0 +1,349 @@
+#!/usr/bin/env python
+
+import subprocess
+import uuid
+import re
+import json
+import sys
+import ast
+import requests
+from collections import Counter
+
+CLUSTER_UUID_NAME='cluster-uuid'
+CLUSTER_OWNERSHIP_NAME='cluster-ownership'
+
+def run_command(cmd):
+  child = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                       stderr=subprocess.PIPE)
+  (o, e) = child.communicate()
+  return (child.returncode, o, e)
+
+def get_uuid():
+  (rc,uid,e) = run_command(['ceph', 'config-key', 'get', CLUSTER_UUID_NAME])
+  if rc is not 0:
+    #uuid is not yet set.
+    uid = str(uuid.uuid4())
+    (rc, o, e) = run_command(['ceph', 'config-key', 'put',
+                             CLUSTER_UUID_NAME, uid])
+    if rc is not 0:
+      raise RuntimeError("\'ceph config-key put\' failed -" + e)
+
+  return uid
+
+def get_cluster_creation_date():
+  (rc, o, e) = run_command(['ceph', 'mon', 'dump', '-f', 'json'])
+  if rc is not 0:
+    raise RuntimeError("\'ceph mon dump\' failed - " + e)
+
+  oj = json.loads(o)
+  return oj['created']
+
+def bytes_pretty_to_raw(byte_count, byte_scale):
+  if byte_scale == 'kB':
+    return byte_count >> 10
+  if byte_scale == 'MB':
+    return byte_count >> 20
+  if byte_scale == 'GB':
+    return byte_count >> 30
+  if byte_scale == 'TB':
+    return byte_count >> 40
+  if byte_scale == 'PB':
+    return byte_count >> 50
+  if byte_scale == 'EB':
+    return byte_count >> 60
+  
+  return byte_count
+
+def get_nums():
+  (rc, o, e) = run_command(['ceph', '-s', '-f', 'json'])
+  if rc is not 0:
+    raise RuntimeError("\'ceph -s\' failed - " + e)
+
+  oj = json.loads(o)
+  num_mons = len(oj['monmap']['mons'])
+  num_osds = int(oj['osdmap']['osdmap']['num_in_osds'])
+  num_mdss = oj['mdsmap']['in']
+
+  pgmap = oj['pgmap']
+  num_pgs = pgmap['num_pgs']
+  num_bytes = pgmap['data_bytes']
+
+  (rc, o, e) = run_command(['ceph', 'pg', 'dump', 'pools', '-f', 'json-pretty'])
+  if rc is not 0:
+    raise RuntimeError("\'ceph pg dump pools\' failed - " + e)
+ 
+  pools = json.loads(o)
+  num_pools = len(pools)
+  num_objs = 0
+  for p in pools:
+    num_objs += p['stat_sum']['num_objects']
+
+  nums = {'num_mons':num_mons,
+          'num_osds':num_osds,
+          'num_mdss':num_mdss,
+          'num_pgs':num_pgs,
+          'num_bytes':num_bytes,
+          'num_pools':num_pools,
+          'num_objects':num_objs}
+  return nums
+
+def get_crush_types():
+  (rc, o, e) = run_command(['ceph', 'osd', 'crush', 'dump'])
+  if rc is not 0:
+    raise RuntimeError("\'ceph osd crush dump\' failed - " + e)
+
+  crush_dump = json.loads(o)
+  if crush_dump['types'] is None:
+    raise RuntimeError("\'types\' item missing in \'ceph osd crush dump\'")
+
+  crush_types = {}
+  for t in crush_dump['types']:
+    crush_types[t['type_id']] = t['name']
+
+  buckets = {}
+  items_list = []
+  for bucket in crush_dump['buckets']:
+    buckets[bucket['id']] = bucket['type_id']
+    for item in bucket['items']:
+      items_list.append(item['id'])
+
+  crush_map = []
+  counter = Counter(items_list)
+  append = lambda t,c: crush_map.append({'type':t, 'count':c})
+  for id,count in counter.items():
+    if id in buckets:
+      append(crush_types[buckets[id]],
+             count)
+      del buckets[id]
+    else:
+      append(crush_types[id], count)
+
+  #the root item
+  for id,type_id in buckets.items():
+    append(crush_types[type_id], 1)
+
+  return crush_map
+
+def get_pool_metadata():
+  (rc, o, e) = run_command(['ceph', 'osd', 'dump', '-f', 'json'])
+  if rc is not 0:
+    raise RuntimeError("\'ceph osd dump\' failed - " + e)
+
+  pool_meta = []
+  oj = json.loads(o)
+  proc = lambda x: {'id':x['pool'], 'type':x['type'], 'size':x['size']}
+  for p in oj['pools']:
+    pool_meta.append(proc(p))
+
+  return pool_meta
+
+def get_sysinfo(max_osds):
+  count = 0
+  osd_metadata_available = False
+  
+  os = {}
+  kern_version = {}
+  kern_description = {}
+  distro = {}
+  cpu = {}
+  arch = {}
+  ceph_version = {}
+
+  incr = lambda a,k: 1 if k not in a else a[k]+1
+  while count < max_osds:
+    meta = {'id':count}
+    (rc, o, e) = run_command(['ceph', 'osd', 'metadata', str(count)])
+    if rc is 0:
+      if osd_metadata_available is False:
+        osd_metadata_available = True
+
+      jmeta = json.loads(o)
+
+      version = jmeta['ceph_version'].split()
+      cv = version[2]
+      if (len(version) > 3):
+        cv += version[3]
+
+      ceph_version[cv] = incr(ceph_version, cv)
+      os[jmeta['os']] = incr(os, jmeta['os'])
+      kern_version[jmeta['kernel_version']] = \
+            incr(kern_version, jmeta['kernel_version'])
+      kern_description[jmeta['kernel_description']] = \
+            incr(kern_description, jmeta['kernel_description'])
+
+      try:
+        dstr = jmeta['distro'] + ' '
+        dstr += jmeta['distro_version'] + ' '
+        dstr += jmeta['distro_codename'] + ' ('
+        dstr += jmeta['distro_description'] + ')'
+        distro[dstr] = incr(distro, dstr)
+      except KeyError as ke:
+        pass
+  
+      cpu[jmeta['cpu']] = incr(cpu, jmeta['cpu'])
+      arch[jmeta['arch']] = incr(arch, jmeta['arch'])
+  
+    count = count + 1
+
+  sysinfo = {}
+  if osd_metadata_available is False:
+    print >> sys.stderr, "'ceph osd metadata' is not available at all"
+    return sysinfo
+
+  def jsonify(type_count, name, type_name):
+    tmp = []
+    for k, v in type_count.items():
+      tmp.append({type_name:k, 'count':v})
+    sysinfo[name] = tmp
+
+  jsonify(os, 'os_info', 'os')
+  jsonify(kern_version, 'kernel_versions', 'version')
+  jsonify(kern_description, 'kernel_types', 'type')
+  jsonify(distro, 'distros', 'distro')
+  jsonify(cpu, 'cpus', 'cpu')
+  jsonify(arch, 'cpu_archs', 'arch')
+  jsonify(ceph_version, 'ceph_versions', 'version')
+  return sysinfo
+
+def get_ownership_info():
+  (rc, o, e) = run_command(['ceph', 'config-key', 'get',
+                            CLUSTER_OWNERSHIP_NAME])
+  if rc is not 0:
+    return {}
+
+  return ast.literal_eval(o)
+
+def output_json():
+  out = {}
+  url = None
+  
+  out['uuid'] = get_uuid()
+  out['cluster_creation_date'] = get_cluster_creation_date()
+  nums = get_nums()
+  num_osds = int(nums['num_osds'])
+  out['components_count'] = nums
+  out['crush_types'] = get_crush_types()
+  out['pool_metadata'] = get_pool_metadata()
+  out['sysinfo'] = get_sysinfo(num_osds)
+
+  owner = get_ownership_info()
+  if owner is not None:
+    out['ownership'] = owner
+    if 'url' in owner:
+      url = owner.pop('url')
+
+  return json.dumps(out, indent=2, separators=(',', ': ')), url
+
+def describe_usage():
+  print >> sys.stderr, "Usage:"
+  print >> sys.stderr, "======\n"
+
+  print >> sys.stderr, sys.argv[0] + " <commands> [command-options]\n"
+  print >> sys.stderr, "commands:"
+  print >> sys.stderr, "publish - publish the brag report to the server"
+  print >> sys.stderr, "update-metadata <update-metadata-options> - Update"
+  print >> sys.stderr, "         ownership information for bragging"
+  print >> sys.stderr, "clear-metadata - Clear information set by update-metadata"
+  print >> sys.stderr, "unpublish --yes-i-am-shy - delete the brag report from the server"
+  print >> sys.stderr, ""
+
+  print >> sys.stderr, "update-metadata options:"
+  print >> sys.stderr, "--name=  - Name of the cluster"
+  print >> sys.stderr, "--organization= - Name of the organization"
+  print >> sys.stderr, "--email= - Email contact address"
+  print >> sys.stderr, "--description= - Reporting use-case"
+  print >> sys.stderr, "--url= - The URL that is used to publish and unpublish"
+  print >> sys.stderr, ""
+
+def update_metadata():
+  info = {}
+  possibles = ['name', 'organization', 'email', 'description', 'url']
+
+  #get the existing values
+  info = get_ownership_info();
+
+  for index in range(2, len(sys.argv)):
+    mo = re.search("--(\S+)=(.*)", sys.argv[index])
+    if not mo:
+      describe_usage()
+      return 22
+
+    k = mo.group(1)
+    v = mo.group(2)
+
+    if k in possibles:
+      info[k] = v
+    else:
+      print >> sys.stderr, "Unexpect option --" + k
+      describe_usage()
+      return 22
+
+  (rc, o, e) = run_command(['ceph', 'config-key', 'put',
+                            CLUSTER_OWNERSHIP_NAME, str(info)])
+  return rc
+
+def clear_metadata():
+  (rc, o, e) = run_command(['ceph', 'config-key', 'del',
+                            CLUSTER_OWNERSHIP_NAME])
+  return rc
+
+def publish():
+  data, url = output_json()
+  if url is None:
+    print >> sys.stderr, "Cannot publish until a URL is set using update-metadata"
+    return 1
+
+  req = requests.put(url, data=data)
+  if req.status_code is not 201:
+    print >> sys.stderr, "Failed to publish, server responded with code " + str(req.status_code)
+    print >> sys.stderr, req.text
+    return 1
+
+  return 0
+
+def unpublish():
+  if len(sys.argv) <= 2 or sys.argv[2] != '--yes-i-am-shy':
+    print >> sys.stderr, "unpublish should be followed by --yes-i-am-shy"
+    return 22
+
+  fail = False
+  owner = get_ownership_info()
+  if owner is None:
+    fail = True
+  try:
+    url = owner['url']
+  except KeyError as e:
+    fail = True
+
+  if fail:
+    print >> sys.stderr, "URL is not updated yet"
+    return 1
+
+  uuid = get_uuid()
+  
+  params = {'uuid':uuid}
+  req = requests.delete(url, params=params)
+  if req.status_code is not 200:
+    print >> sys.stderr, "Failed to unpublish, server responsed with code " + str(req.status_code)
+    return 1 
+
+  return 0
+
+def main():
+  if len(sys.argv) is 1:
+    print output_json()[0]
+    return 0
+  elif sys.argv[1] == 'update-metadata':
+    return update_metadata()
+  elif sys.argv[1] == 'clear-metadata':
+    return clear_metadata()
+  elif sys.argv[1] == 'publish':
+    return publish()
+  elif sys.argv[1] == 'unpublish':
+    return unpublish()
+  else:
+    describe_usage()
+    return 22
+
+if __name__ == '__main__':
+  sys.exit(main())

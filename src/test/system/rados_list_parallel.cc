@@ -178,7 +178,7 @@ public:
 
       std::string buf(StRadosCreatePool::get_random_buf(256));
       int ret = rados_write(io_ctx, oid.c_str(), buf.c_str(), buf.size(), 0);
-      if (ret != (int)buf.size()) {
+      if (ret != 0) {
 	printf("%s: rados_write(%s) failed with error %d\n",
 	       get_id_str(), oid.c_str(), ret);
 	return ret;
@@ -325,6 +325,15 @@ int main(int argc, const char **argv)
       return EXIT_FAILURE;
     }
   }
+
+  rados_t cl;
+  rados_create(&cl, NULL);
+  rados_conf_parse_argv(cl, argc, argv);
+  rados_conf_parse_argv(cl, argc, argv);
+  rados_conf_read_file(cl, NULL);
+  rados_conf_parse_env(cl, NULL);
+  rados_connect(cl);
+  rados_pool_delete(cl, pool.c_str());
 
   printf("******* SUCCESS **********\n"); 
   return EXIT_SUCCESS;

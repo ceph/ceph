@@ -25,6 +25,7 @@
 #include "include/stringify.h"
 #include "msg/msg_types.h"
 #include "osd/osd_types.h"
+#include "common/errno.h"
 
 #include "include/assert.h"
 
@@ -334,9 +335,11 @@ void md_config_t::_show_config(std::ostream *out, Formatter *f)
 	   << "/" << subsys.get_gather_level(o) << std::endl;
     if (f) {
       ostringstream ss;
+      std::string debug_name = "debug_";
+      debug_name += subsys.get_name(o);
       ss << subsys.get_log_level(o)
 	 << "/" << subsys.get_gather_level(o);
-      f->dump_string(subsys.get_name(o).c_str(), ss.str());
+      f->dump_string(debug_name.c_str(), ss.str());
     }
   }
   for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
@@ -437,7 +440,7 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
 	  show_config_value_arg << "': option not found" << std::endl;
       else
 	std::cerr << "failed to get config option '" <<
-	  show_config_value_arg << "': " << strerror(-r) << std::endl;
+	  show_config_value_arg << "': " << cpp_strerror(r) << std::endl;
       _exit(1);
     }
     string s = buf;
@@ -995,7 +998,7 @@ bool md_config_t::expand_meta(std::string &origval,
 	*oss << "expansion stack: " << std::endl;
 	for (list<config_option *>::iterator j = stack.begin();
 	     j != stack.end();
-	     j++) {
+	     ++j) {
 	  *oss << (*j)->name << "=" << *(string *)(*j)->conf_ptr(this) << std::endl;
 	}
 	return false;

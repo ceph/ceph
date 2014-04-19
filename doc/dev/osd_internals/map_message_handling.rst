@@ -55,7 +55,7 @@ OSD::require_same_or_newer map checks that the current OSDMap is at least
 as new as the map epoch indicated on the message.  If not, the message is
 queued in OSD::waiting_for_osdmap via OSD::wait_for_new_map.  Note, this
 cannot violate the above conditions since any two messages will be queued
-in order of receipt and if a message is recieved with epoch e0, a later message
+in order of receipt and if a message is received with epoch e0, a later message
 from the same source must be at epoch at least e0.  Note that two PGs from
 the same OSD count for these purposes as different sources for single PG
 messages.  That is, messages from different PGs may be reordered.

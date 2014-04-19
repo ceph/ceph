@@ -15,6 +15,8 @@
 #ifndef CEPH_MSGR_PIPE_H
 #define CEPH_MSGR_PIPE_H
 
+#include "include/memory.h"
+
 #include "msg_types.h"
 #include "Messenger.h"
 #include "auth/AuthSessionHandler.h"
@@ -146,7 +148,7 @@ class DispatchQueue;
 
     // session_security handles any signatures or encryptions required for this pipe's msgs. PLR
 
-    AuthSessionHandler *session_security;
+    ceph::shared_ptr<AuthSessionHandler> session_security;
 
   protected:
     friend class SimpleMessenger;
@@ -161,7 +163,9 @@ class DispatchQueue;
     DispatchQueue *in_q;
     list<Message*> sent;
     Cond cond;
-    bool keepalive;
+    bool send_keepalive;
+    bool send_keepalive_ack;
+    utime_t keepalive_ack_stamp;
     bool halt_delivery; //if a pipe's queue is destroyed, stop adding to it
     bool close_on_empty;
     
@@ -179,7 +183,8 @@ class DispatchQueue;
 
     int randomize_out_seq();
 
-    int read_message(Message **pm);
+    int read_message(Message **pm,
+		     AuthSessionHandler *session_security_copy);
     int write_message(ceph_msg_header& h, ceph_msg_footer& f, bufferlist& body);
     /**
      * Write the given data (of length len) to the Pipe's socket. This function
@@ -195,6 +200,7 @@ class DispatchQueue;
     int do_sendmsg(struct msghdr *msg, int len, bool more=false);
     int write_ack(uint64_t s);
     int write_keepalive();
+    int write_keepalive2(char tag, const utime_t &t);
 
     void fault(bool reader=false);
 
@@ -218,7 +224,7 @@ class DispatchQueue;
 
     __u32 get_out_seq() { return out_seq; }
 
-    bool is_queued() { return !out_q.empty() || keepalive; }
+    bool is_queued() { return !out_q.empty() || send_keepalive || send_keepalive_ack; }
 
     entity_addr_t& get_peer_addr() { return peer_addr; }
 
@@ -244,7 +250,7 @@ class DispatchQueue;
     }
     void _send_keepalive() {
       assert(pipe_lock.is_locked());
-      keepalive = true;
+      send_keepalive = true;
       cond.Signal();
     }
     Message *_get_next_outgoing() {

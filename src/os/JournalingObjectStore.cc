@@ -2,6 +2,7 @@
 
 #include "JournalingObjectStore.h"
 
+#include "common/errno.h"
 #include "common/debug.h"
 
 #define dout_subsys ceph_subsys_journal
@@ -25,6 +26,7 @@ void JournalingObjectStore::journal_stop()
     delete journal;
     journal = 0;
   }
+  apply_manager.reset();
 }
 
 int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
@@ -46,9 +48,8 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
 
   int err = journal->open(op_seq);
   if (err < 0) {
-    char buf[80];
     dout(3) << "journal_replay open failed with " 
-	    << strerror_r(-err, buf, sizeof(buf)) << dendl;
+	    << cpp_strerror(err) << dendl;
     delete journal;
     journal = 0;
     return err;
@@ -98,7 +99,9 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
   submit_manager.set_op_seq(op_seq);
 
   // done reading, make writeable.
-  journal->make_writeable();
+  err = journal->make_writeable();
+  if (err < 0)
+    return err;
 
   return count;
 }

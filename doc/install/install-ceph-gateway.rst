@@ -36,8 +36,8 @@ RPM Packages
 
 To install Apache and FastCGI RPMs, execute the following::
 
-	rpm -ivh fcgi-2.4.0-10.el6.x86_64.rpm 
-	rpm -ivh mod_fastcgi-2.4.6-2.el6.rf.x86_64.rpm
+	sudo rpm -ivh fcgi-2.4.0-10.el6.x86_64.rpm 
+	sudo rpm -ivh mod_fastcgi-2.4.6-2.el6.rf.x86_64.rpm
 
 Or::
 
@@ -57,6 +57,10 @@ builds of Apache and FastCGI packages modified for Ceph at `gitbuilder.ceph.com`
 
 Debian Packages
 ---------------
+
+#. Add the development key::
+
+	wget -q -O- https://raw.github.com/ceph/ceph/master/keys/autobuild.asc | sudo apt-key add -
 
 #. Add a ``ceph-apache.list`` file to your APT sources. :: 
 
@@ -141,6 +145,9 @@ To install Apache with 100-continue, execute the following steps:
 	type=rpm-md
 	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
 
+   If the repository doesn't have a ``noarch`` section, you may remove the
+   ``noarch`` entry above.
+
 
 #. Update your repo and install Apache and FastCGI. :: 
 
@@ -209,7 +216,7 @@ RPM-based Packages
 
 #. Restart Apache so that the foregoing changes take effect.. :: 
 
-	/etc/init.d/httpd restart
+	sudo /etc/init.d/httpd restart
 
 .. _RFC 2616, Section 8: http://www.w3.org/Protocols/rfc2616/rfc2616-sec8.html
 .. _gitbuilder.ceph.com: http://gitbuilder.ceph.com
@@ -247,7 +254,7 @@ To enable SSL for Debian/Ubuntu systems, execute the following steps:
 
 #. Restart Apache. ::
 
-	service apache2 restart
+	sudo service apache2 restart
 
 
 See the `Ubuntu Server Guide`_ for additional details.
@@ -273,7 +280,7 @@ To enable SSL for RPM-based systems, execute the following steps:
 
 #. Restart Apache. ::
 
-	/etc/init.d/httpd restart
+	sudo /etc/init.d/httpd restart
 
 See `Setting up an SSL secured Webserver with CentOS`_ for additional details.
 
@@ -346,13 +353,13 @@ RPM Packages
 To install the Ceph Object Gateway daemon, execute the
 following:: 
 
-	yum install ceph-radosgw ceph
+	sudo yum install ceph-radosgw ceph
 
 
 To install the Ceph Object Gateway synchronization agent, execute the
 following::
 
-	yum install radosgw-agent
+	sudo yum install radosgw-agent
 	
 
 .. _Get Packages: ../get-packages

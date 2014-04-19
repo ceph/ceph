@@ -36,7 +36,7 @@ TYPEWITHSTRAYDATA(OSDMap::Incremental)
 #include "crush/CrushWrapper.h"
 TYPE_NOCOPY(CrushWrapper)
 
-#include "include/histogram.h"
+#include "common/histogram.h"
 TYPE(pow2_hist_t)
 
 #include "osd/osd_types.h"
@@ -82,6 +82,15 @@ TYPE(PullOp)
 TYPE(PushOp)
 TYPE(PushReplyOp)
 
+#include "osd/ECUtil.h"
+TYPE(ECUtil::HashInfo)
+
+#include "osd/ECMsgTypes.h"
+TYPE(ECSubWrite)
+TYPE(ECSubWriteReply)
+TYPE(ECSubRead)
+TYPE(ECSubReadReply)
+
 #include "osd/HitSet.h"
 TYPE(ExplicitHashHitSet)
 TYPE(ExplicitObjectHitSet)
@@ -120,6 +129,9 @@ TYPE(MonCap)
 TYPE(DBObjectMap::_Header)
 TYPE(DBObjectMap::State)
 
+#include "osdc/Journaler.h"
+TYPE(Journaler::Header)
+
 #include "mds/Anchor.h"
 TYPE(Anchor)
 
@@ -155,7 +167,13 @@ TYPE_FEATUREFUL(MDSMap::mds_info_t)
 TYPE_NOCOPY(Capability)
 
 #include "mds/AnchorServer.h"
-TYPE(AnchorServer)
+TYPEWITHSTRAYDATA(AnchorServer)
+
+#include "mds/InoTable.h"
+TYPE(InoTable)
+
+#include "mds/SnapServer.h"
+TYPEWITHSTRAYDATA(SnapServer)
 
 #include "mds/SessionMap.h"
 TYPE(SessionMap)

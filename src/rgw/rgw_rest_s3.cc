@@ -711,7 +711,8 @@ int RGWPostObj_ObjStore_S3::read_form_part_header(struct post_form_part *part,
 {
   bufferlist bl;
   bool reached_boundary;
-  int r = read_line(bl, RGW_MAX_CHUNK_SIZE, &reached_boundary, done);
+  uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
+  int r = read_line(bl, chunk_size, &reached_boundary, done);
   if (r < 0)
     return r;
 
@@ -720,7 +721,7 @@ int RGWPostObj_ObjStore_S3::read_form_part_header(struct post_form_part *part,
   }
 
   if (reached_boundary) { // skip the first boundary
-    r = read_line(bl, RGW_MAX_CHUNK_SIZE, &reached_boundary, done);
+    r = read_line(bl, chunk_size, &reached_boundary, done);
     if (r < 0)
       return r;
     if (*done)
@@ -752,7 +753,7 @@ int RGWPostObj_ObjStore_S3::read_form_part_header(struct post_form_part *part,
     if (reached_boundary)
       break;
 
-    r = read_line(bl, RGW_MAX_CHUNK_SIZE, &reached_boundary, done);
+    r = read_line(bl, chunk_size, &reached_boundary, done);
   }
 
   return 0;
@@ -877,7 +878,8 @@ int RGWPostObj_ObjStore_S3::get_params()
     }
 
     bool boundary;
-    r = read_data(part.data, RGW_MAX_CHUNK_SIZE, &boundary, &done);
+    uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
+    r = read_data(part.data, chunk_size, &boundary, &done);
     if (!boundary) {
       err_msg = "Couldn't find boundary";
       return -EINVAL;
@@ -1059,7 +1061,8 @@ int RGWPostObj_ObjStore_S3::complete_get_params()
     
     bufferlist part_data;
     bool boundary;
-    r = read_data(part.data, RGW_MAX_CHUNK_SIZE, &boundary, &done);
+    uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
+    r = read_data(part.data, chunk_size, &boundary, &done);
     if (!boundary) {
       return -EINVAL;
     }
@@ -1075,7 +1078,8 @@ int RGWPostObj_ObjStore_S3::get_data(bufferlist& bl)
   bool boundary;
   bool done;
 
-  int r = read_data(bl, RGW_MAX_CHUNK_SIZE, &boundary, &done);
+  uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
+  int r = read_data(bl, chunk_size, &boundary, &done);
   if (r < 0)
     return r;
 
@@ -1385,7 +1389,7 @@ int RGWPutCORS_ObjStore_S3::get_params()
     goto done_err;
   }
 
-  if (!parser.parse(data, len, 1)) {
+  if (!data || !parser.parse(data, len, 1)) {
     r = -EINVAL;
     goto done_err;
   }

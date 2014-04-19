@@ -16,6 +16,7 @@
 #ifndef CEPH_MOSDPGQUERY_H
 #define CEPH_MOSDPGQUERY_H
 
+#include "common/hobject.h"
 #include "msg/Message.h"
 
 /*
@@ -23,18 +24,18 @@
  */
 
 class MOSDPGQuery : public Message {
-  static const int HEAD_VERSION = 2;
+  static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 1;
   version_t       epoch;
 
  public:
   version_t get_epoch() { return epoch; }
-  map<pg_t,pg_query_t>  pg_list;
+  map<spg_t, pg_query_t>  pg_list;
 
   MOSDPGQuery() : Message(MSG_OSD_PG_QUERY,
 			  HEAD_VERSION,
 			  COMPAT_VERSION) {}
-  MOSDPGQuery(epoch_t e, map<pg_t,pg_query_t>& ls) :
+  MOSDPGQuery(epoch_t e, map<spg_t,pg_query_t>& ls) :
     Message(MSG_OSD_PG_QUERY,
 	    HEAD_VERSION,
 	    COMPAT_VERSION),
@@ -48,7 +49,8 @@ public:
   const char *get_type_name() const { return "pg_query"; }
   void print(ostream& out) const {
     out << "pg_query(";
-    for (map<pg_t,pg_query_t>::const_iterator p = pg_list.begin(); p != pg_list.end(); ++p) {
+    for (map<spg_t,pg_query_t>::const_iterator p = pg_list.begin();
+	 p != pg_list.end(); ++p) {
       if (p != pg_list.begin())
 	out << ",";
       out << p->first;
@@ -58,15 +60,38 @@ public:
 
   void encode_payload(uint64_t features) {
     ::encode(epoch, payload);
-    ::encode(pg_list, payload, features);
+    vector<pair<pg_t, pg_query_t> > _pg_list;
+    _pg_list.reserve(pg_list.size());
+    vector<shard_id_t> _shard_list;
+    _shard_list.reserve(pg_list.size());
+    for (map<spg_t, pg_query_t>::iterator i = pg_list.begin();
+	 i != pg_list.end();
+	 ++i) {
+      _pg_list.push_back(make_pair(i->first.pgid, i->second));
+      _shard_list.push_back(i->first.shard);
+    }
+    ::encode(_pg_list, payload, features);
+    ::encode(_shard_list, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
-    ::decode(pg_list, p);
+    vector<pair<pg_t, pg_query_t> > _pg_list;
+    ::decode(_pg_list, p);
+    vector<shard_id_t> _shard_list(_pg_list.size(), ghobject_t::no_shard());
+    if (header.version >= 3) {
+      _shard_list.clear();
+      ::decode(_shard_list, p);
+    }
+    assert(_pg_list.size() == _shard_list.size());
+    for (unsigned i = 0; i < _pg_list.size(); ++i) {
+      pg_list.insert(
+	make_pair(
+	  spg_t(_pg_list[i].first, _shard_list[i]), _pg_list[i].second));
+    }
 
     if (header.version < 2) {
-      for (map<pg_t, pg_query_t>::iterator i = pg_list.begin();
+      for (map<spg_t, pg_query_t>::iterator i = pg_list.begin();
 	   i != pg_list.end();
 	   ++i) {
 	i->second.epoch_sent = epoch;

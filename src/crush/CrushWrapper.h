@@ -823,6 +823,8 @@ public:
   /* modifiers */
   int add_bucket(int bucketno, int alg, int hash, int type, int size,
 		 int *items, int *weights, int *idout) {
+    if (type == 0)
+      return -EINVAL;
     crush_bucket *b = crush_make_bucket(alg, hash, type, size, items, weights);
     assert(b);
     return crush_add_bucket(crush, bucketno, b, idout);
@@ -904,7 +906,7 @@ public:
 
   static bool is_valid_crush_name(const string& s);
   static bool is_valid_crush_loc(CephContext *cct,
-				 const map<string,string> loc);
+				 const map<string,string>& loc);
 };
 WRITE_CLASS_ENCODER(CrushWrapper)
 

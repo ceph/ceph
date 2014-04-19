@@ -62,7 +62,7 @@
 // -----------------------
 // LogSegment
 
-void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
+void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld, int op_prio)
 {
   set<CDir*> commit;
 
@@ -103,7 +103,7 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
       assert(dir->is_auth());
       if (dir->can_auth_pin()) {
 	dout(15) << "try_to_expire committing " << *dir << dendl;
-	dir->commit(0, gather_bld.new_sub());
+	dir->commit(0, gather_bld.new_sub(), false, op_prio);
       } else {
 	dout(15) << "try_to_expire waiting for unfreeze on " << *dir << dendl;
 	dir->add_waiter(CDir::WAIT_UNFREEZE, gather_bld.new_sub());
@@ -157,7 +157,7 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
       CInode *in = *p;
       assert(in->last == CEPH_NOSNAP);
       ++p;
-      if (in->is_auth() && in->is_any_caps()) {
+      if (in->is_auth() && !in->is_ambiguous_auth() && in->is_any_caps()) {
 	if (in->is_any_caps_wanted()) {
 	  dout(20) << "try_to_expire requeueing open file " << *in << dendl;
 	  if (!le) {
@@ -533,6 +533,18 @@ void EMetaBlob::fullbit::update_inode(MDS *mds, CInode *in)
 	       << dirfragtree << " on " << *in << dendl;
       in->dirfragtree = dirfragtree;
       in->force_dirfrags();
+      if (in->has_dirfrags() && in->authority() == CDIR_AUTH_UNDEF) {
+	list<CDir*> ls;
+	in->get_nested_dirfrags(ls);
+	for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
+	  CDir *dir = *p;
+	  if (dir->get_num_any() == 0 &&
+	      mds->mdcache->can_trim_non_auth_dirfrag(dir)) {
+	    dout(10) << " closing empty non-auth dirfrag " << *dir << dendl;
+	    in->close_dirfrag(dir->get_frag());
+	  }
+	}
+      }
     }
 
     /*
@@ -603,6 +615,14 @@ void EMetaBlob::remotebit::dump(Formatter *f) const
     type_string = "symlink"; break;
   case S_IFDIR:
     type_string = "directory"; break;
+  case S_IFIFO:
+    type_string = "fifo"; break;
+  case S_IFCHR:
+    type_string = "chr"; break;
+  case S_IFBLK:
+    type_string = "blk"; break;
+  case S_IFSOCK:
+    type_string = "sock"; break;
   default:
     assert (0 == "unknown d_type!");
   }
@@ -1001,8 +1021,6 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 
     if (lump.is_dirty()) {
       dir->_mark_dirty(logseg);
-      dir->get_inode()->filelock.mark_dirty();
-      dir->get_inode()->nestlock.mark_dirty();
 
       if (!(dir->fnode.rstat == dir->fnode.accounted_rstat)) {
 	dout(10) << "EMetaBlob.replay      dirty nestinfo on " << *dir << dendl;
@@ -1018,6 +1036,12 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       } else {
 	dout(10) << "EMetaBlob.replay      clean fragstat on " << *dir << dendl;
       }
+    }
+    if (lump.is_dirty_dft()) {
+      dout(10) << "EMetaBlob.replay      dirty dirfragtree on " << *dir << dendl;
+      dir->state_set(CDir::STATE_DIRTYDFT);
+      mds->locker->mark_updated_scatterlock(&dir->inode->dirfragtreelock);
+      logseg->dirty_dirfrag_dirfragtree.push_back(&dir->inode->item_dirty_dirfrag_dirfragtree);
     }
     if (lump.is_new())
       dir->mark_new(logseg);
@@ -1072,15 +1096,14 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	if (p->is_dirty()) in->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *in << dendl;
       } else {
+	if (in->get_parent_dn() && in->inode.anchored != p->inode.anchored)
+	  in->get_parent_dn()->adjust_nested_anchors((int)p->inode.anchored - (int)in->inode.anchored);
+	p->update_inode(mds, in);
 	if (dn->get_linkage()->get_inode() != in && in->get_parent_dn()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *in << dendl;
 	  unlinked[in] = in->get_parent_dir();
 	  in->get_parent_dir()->unlink_inode(in->get_parent_dn());
 	}
-	if (in->get_parent_dn() && in->inode.anchored != p->inode.anchored)
-	  in->get_parent_dn()->adjust_nested_anchors( (int)p->inode.anchored - (int)in->inode.anchored );
-	p->update_inode(mds, in);
-	if (p->is_dirty()) in->_mark_dirty(logseg);
 	if (dn->get_linkage()->get_inode() != in) {
 	  if (!dn->get_linkage()->is_null()) { // note: might be remote.  as with stray reintegration.
 	    if (dn->get_linkage()->is_primary()) {
@@ -1100,13 +1123,13 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	} else {
 	  dout(10) << "EMetaBlob.replay for [" << p->dnfirst << "," << p->dnlast << "] had " << *in << dendl;
 	}
+	if (p->is_dirty()) in->_mark_dirty(logseg);
 	assert(in->first == p->dnfirst ||
 	       (in->is_multiversion() && in->first > p->dnfirst));
       }
-
-      assert(g_conf->mds_kill_journal_replay_at != 2);
       if (p->is_dirty_parent())
 	in->_mark_dirty_parent(logseg, p->is_dirty_pool());
+      assert(g_conf->mds_kill_journal_replay_at != 2);
     }
 
     // remote dentries
@@ -1154,9 +1177,15 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	dn->first = p->dnfirst;
 	if (!dn->get_linkage()->is_null()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
-	  if (dn->get_linkage()->is_primary())
-	    unlinked[dn->get_linkage()->get_inode()] = dir;
-	  dir->unlink_inode(dn);
+	  CInode *in = dn->get_linkage()->get_inode();
+	  // For renamed inode, We may call CInode::force_dirfrag() later.
+	  // CInode::force_dirfrag() doesn't work well when inode is detached
+	  // from the hierarchy.
+	  if (!renamed_diri || renamed_diri != in) {
+	    if (dn->get_linkage()->is_primary())
+	      unlinked[in] = dir;
+	    dir->unlink_inode(dn);
+	  }
 	}
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
@@ -1191,7 +1220,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	  assert(dir);
 	  // preserve subtree bound until slave commit
 	  if (dir->get_dir_auth() == CDIR_AUTH_UNDEF)
-	    slaveup->olddirs.insert(dir);
+	    slaveup->olddirs.insert(dir->inode);
 	}
       }
 
@@ -1201,7 +1230,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       CDir *root = mds->mdcache->get_subtree_root(olddir);
       if (root->get_dir_auth() == CDIR_AUTH_UNDEF) {
 	if (slaveup) // preserve the old dir until slave commit
-	  slaveup->olddirs.insert(olddir);
+	  slaveup->olddirs.insert(olddir->inode);
 	else
 	  mds->mdcache->try_trim_non_auth_subtree(root);
       }
@@ -2290,6 +2319,9 @@ void ESubtreeMap::replay(MDS *mds)
 	++errors;
 	continue;
       }
+
+      for (vector<dirfrag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q)
+	mds->mdcache->get_force_dirfrag(*q);
 
       set<CDir*> bounds;
       mds->mdcache->get_subtree_bounds(dir, bounds);

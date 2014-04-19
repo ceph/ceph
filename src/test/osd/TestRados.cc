@@ -233,6 +233,7 @@ int main(int argc, char **argv)
   int64_t size = 4000000; // 4 MB
   int64_t min_stride_size = -1, max_stride_size = -1;
   int max_seconds = 0;
+  bool pool_snaps = false;
 
   struct {
     TestOpType op;
@@ -262,6 +263,7 @@ int main(int argc, char **argv)
   map<TestOpType, unsigned int> op_weights;
   string pool_name = "data";
   bool ec_pool = false;
+  bool no_omap = false;
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--max-ops") == 0)
@@ -280,14 +282,23 @@ int main(int argc, char **argv)
       min_stride_size = atoi(argv[++i]);
     else if (strcmp(argv[i], "--max-stride-size") == 0)
       max_stride_size = atoi(argv[++i]);
+    else if (strcmp(argv[i], "--no-omap") == 0)
+      no_omap = true;
+    else if (strcmp(argv[i], "--pool-snaps") == 0)
+      pool_snaps = true;
     else if (strcmp(argv[i], "--ec-pool") == 0) {
-      if (op_weights.size()) {
+      if (!op_weights.empty()) {
 	cerr << "--ec-pool must be specified prior to any ops" << std::endl;
 	exit(1);
       }
       ec_pool = true;
+      no_omap = true;
     } else if (strcmp(argv[i], "--op") == 0) {
       i++;
+      if (i == argc) {
+        cerr << "Missing op after --op" << std::endl;
+        return 1;
+      }
       int j;
       for (j = 0; op_types[j].name; ++j) {
 	if (strcmp(op_types[j].name, argv[i]) == 0) {
@@ -298,7 +309,12 @@ int main(int argc, char **argv)
 	cerr << "unknown op " << argv[i] << std::endl;
 	exit(1);
       }
-      int weight = atoi(argv[++i]);
+      i++;
+      if (i == argc) {
+	cerr << "Weight unspecified." << std::endl;
+	return 1;
+      }
+      int weight = atoi(argv[i]);
       if (weight < 0) {
 	cerr << "Weights must be nonnegative." << std::endl;
 	return 1;
@@ -363,7 +379,8 @@ int main(int argc, char **argv)
     size,
     min_stride_size,
     max_stride_size,
-    ec_pool,
+    no_omap,
+    pool_snaps,
     id);
 
   TestOpStat stats;

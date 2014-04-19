@@ -20,6 +20,7 @@
 
 #include "MOSDOp.h"
 #include "os/ObjectStore.h"
+#include "common/errno.h"
 
 /*
  * OSD op reply
@@ -124,7 +125,7 @@ public:
 public:
   MOSDOpReply()
     : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION) { }
-  MOSDOpReply(MOSDOp *req, int r, epoch_t e, int acktype)
+  MOSDOpReply(MOSDOp *req, int r, epoch_t e, int acktype, bool ignore_out_data)
     : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION) {
     set_tid(req->get_tid());
     ops = req->ops;
@@ -137,9 +138,12 @@ public:
     user_version = 0;
     retry_attempt = req->get_retry_attempt();
 
-    // zero out ops payload_len
-    for (unsigned i = 0; i < ops.size(); i++)
+    // zero out ops payload_len and possibly out data
+    for (unsigned i = 0; i < ops.size(); i++) {
       ops[i].op.payload_len = 0;
+      if (ignore_out_data)
+	ops[i].outdata.clear();
+    }
   }
 private:
   ~MOSDOpReply() {}
@@ -259,8 +263,7 @@ public:
       out << " ack";
     out << " = " << get_result();
     if (get_result() < 0) {
-      char buf[80];
-      out << " (" << strerror_r(-get_result(), buf, sizeof(buf)) << ")";
+      out << " (" << cpp_strerror(get_result()) << ")";
     }
     if (is_redirect_reply()) {
       out << " redirect: { " << redirect << " }";

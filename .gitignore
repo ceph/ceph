@@ -76,3 +76,5 @@ GPATH
 GRTAGS
 GSYMS
 GTAGS
+/examples/librados/.libs/
+/examples/librados/librados_hello_world

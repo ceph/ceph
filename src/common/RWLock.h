@@ -24,7 +24,7 @@ class RWLock
 {
   mutable pthread_rwlock_t L;
   const char *name;
-  int id;
+  mutable int id;
 
 public:
   RWLock(const RWLock& other);
@@ -40,25 +40,25 @@ public:
     pthread_rwlock_destroy(&L);
   }
 
-  void unlock() {
+  void unlock() const {
     if (g_lockdep) id = lockdep_will_unlock(name, id);
     pthread_rwlock_unlock(&L);
   }
 
   // read
-  void get_read() {
+  void get_read() const {
     if (g_lockdep) id = lockdep_will_lock(name, id);
     pthread_rwlock_rdlock(&L);
     if (g_lockdep) id = lockdep_locked(name, id);
   }
-  bool try_get_read() {
+  bool try_get_read() const {
     if (pthread_rwlock_tryrdlock(&L) == 0) {
       if (g_lockdep) id = lockdep_locked(name, id);
       return true;
     }
     return false;
   }
-  void put_read() {
+  void put_read() const {
     unlock();
   }
 
@@ -81,10 +81,10 @@ public:
 
 public:
   class RLocker {
-    RWLock &m_lock;
+    const RWLock &m_lock;
 
   public:
-    RLocker(RWLock& lock) : m_lock(lock) {
+    RLocker(const RWLock& lock) : m_lock(lock) {
       m_lock.get_read();
     }
     ~RLocker() {

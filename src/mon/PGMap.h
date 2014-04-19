@@ -105,6 +105,7 @@ public:
   ceph::unordered_map<int,pool_stat_t> pg_pool_sum;
   pool_stat_t pg_sum;
   osd_stat_t osd_sum;
+  mutable epoch_t min_last_epoch_clean;
 
   utime_t stamp;
 
@@ -138,6 +139,13 @@ public:
                           const ceph::unordered_map<uint64_t, pool_stat_t>& pg_pool_sum_old);
   void clear_delta();
 
+  void deleted_pool(int64_t pool) {
+    pg_pool_sum.erase(pool);
+    per_pool_sum_deltas.erase(pool);
+    per_pool_sum_deltas_stamps.erase(pool);
+    per_pool_sum_delta.erase(pool);
+  }
+
  private:
   void update_delta(CephContext *cct,
                     const utime_t ts,
@@ -152,6 +160,9 @@ public:
                              const utime_t ts,
                              const uint64_t pool,
                              const pool_stat_t& old_pool_sum);
+
+  epoch_t calc_min_last_epoch_clean() const;
+
  public:
 
   set<pg_t> creating_pgs;   // lru: front = new additions, back = recently pinged
@@ -169,7 +180,8 @@ public:
       last_osdmap_epoch(0), last_pg_scan(0),
       full_ratio(0), nearfull_ratio(0),
       num_pg(0),
-      num_osd(0)
+      num_osd(0),
+      min_last_epoch_clean(0)
   {}
 
   void set_full_ratios(float full, float nearfull) {
@@ -203,6 +215,14 @@ public:
   }
   void set_stamp(utime_t s) {
     stamp = s;
+  }
+
+  pool_stat_t get_pg_pool_sum_stat(int64_t pool) const {
+    ceph::unordered_map<int,pool_stat_t>::const_iterator p =
+      pg_pool_sum.find(pool);
+    if (p != pg_pool_sum.end())
+      return p->second;
+    return pool_stat_t();
   }
 
   void update_pg(pg_t pgid, bufferlist& bl);
@@ -277,7 +297,11 @@ public:
   void print_summary(Formatter *f, ostream *out) const;
   void print_oneline_summary(ostream *out) const;
 
-  epoch_t calc_min_last_epoch_clean() const;
+  epoch_t get_min_last_epoch_clean() const {
+    if (!min_last_epoch_clean)
+      min_last_epoch_clean = calc_min_last_epoch_clean();
+    return min_last_epoch_clean;
+  }
 
   static void generate_test_instances(list<PGMap*>& o);
 };

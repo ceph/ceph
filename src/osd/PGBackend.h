@@ -3,7 +3,10 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2013 Inktank Storage, Inc.
+ * Copyright (C) 2013,2014 Inktank Storage, Inc.
+ * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ *
+ * Author: Loic Dachary <loic@dachary.org>
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -22,6 +25,7 @@
 #include "osd_types.h"
 #include "include/Context.h"
 #include "os/ObjectStore.h"
+#include "common/LogClient.h"
 #include <string>
 
  /**
@@ -37,6 +41,10 @@
   * 4) Handling scrub, deep-scrub, repair
   */
  class PGBackend {
+ protected:
+   ObjectStore *store;
+   const coll_t coll;
+   const coll_t temp_coll;
  public:	
    /**
     * Provides interfaces for PGBackend callbacks
@@ -73,18 +81,17 @@
       * Called when peer is recovered
       */
      virtual void on_peer_recover(
-       int peer,
+       pg_shard_t peer,
        const hobject_t &oid,
        const ObjectRecoveryInfo &recovery_info,
        const object_stat_sum_t &stat
        ) = 0;
 
      virtual void begin_peer_recover(
-       int peer,
+       pg_shard_t peer,
        const hobject_t oid) = 0;
 
-     virtual void failed_push(int from, const hobject_t &soid) = 0;
-
+     virtual void failed_push(pg_shard_t from, const hobject_t &soid) = 0;
      
      virtual void cancel_pull(const hobject_t &soid) = 0;
 
@@ -103,28 +110,67 @@
        ObjectStore::Transaction *t,
        OpRequestRef op = OpRequestRef()
        ) = 0;
-     virtual epoch_t get_epoch() = 0;
-     virtual const vector<int> &get_actingbackfill() = 0;
+     virtual epoch_t get_epoch() const = 0;
+
+     virtual const set<pg_shard_t> &get_actingbackfill_shards() const = 0;
+     virtual const set<pg_shard_t> &get_acting_shards() const = 0;
+     virtual const set<pg_shard_t> &get_backfill_shards() const = 0;
+
      virtual std::string gen_dbg_prefix() const = 0;
 
-     virtual const map<hobject_t, set<int> > &get_missing_loc() = 0;
-     virtual const map<int, pg_missing_t> &get_peer_missing() = 0;
-     virtual const map<int, pg_info_t> &get_peer_info() = 0;
-     virtual const pg_missing_t &get_local_missing() = 0;
-     virtual const PGLog &get_log() = 0;
+     virtual const map<hobject_t, set<pg_shard_t> > &get_missing_loc_shards()
+       const = 0;
+
+     virtual const pg_missing_t &get_local_missing() const = 0;
+     virtual const map<pg_shard_t, pg_missing_t> &get_shard_missing()
+       const = 0;
+     virtual boost::optional<const pg_missing_t &> maybe_get_shard_missing(
+       pg_shard_t peer) const {
+       if (peer == primary_shard()) {
+	 return get_local_missing();
+       } else {
+	 map<pg_shard_t, pg_missing_t>::const_iterator i =
+	   get_shard_missing().find(peer);
+	 if (i == get_shard_missing().end()) {
+	   return boost::optional<const pg_missing_t &>();
+	 } else {
+	   return i->second;
+	 }
+       }
+     }
+     virtual const pg_missing_t &get_shard_missing(pg_shard_t peer) const {
+       boost::optional<const pg_missing_t &> m = maybe_get_shard_missing(peer);
+       assert(m);
+       return *m;
+     }
+
+     virtual const map<pg_shard_t, pg_info_t> &get_shard_info() const = 0;
+     virtual const pg_info_t &get_shard_info(pg_shard_t peer) const {
+       if (peer == primary_shard()) {
+	 return get_info();
+       } else {
+	 map<pg_shard_t, pg_info_t>::const_iterator i =
+	   get_shard_info().find(peer);
+	 assert(i != get_shard_info().end());
+	 return i->second;
+       }
+     }
+
+     virtual const PGLog &get_log() const = 0;
      virtual bool pgb_is_primary() const = 0;
      virtual OSDMapRef pgb_get_osdmap() const = 0;
      virtual const pg_info_t &get_info() const = 0;
+     virtual const pg_pool_t &get_pool() const = 0;
 
      virtual ObjectContextRef get_obc(
        const hobject_t &hoid,
-       map<string, bufferptr> &attrs) = 0;
+       map<string, bufferlist> &attrs) = 0;
 
      virtual void op_applied(
        const eversion_t &applied_version) = 0;
 
      virtual bool should_send_op(
-       int peer,
+       pg_shard_t peer,
        const hobject_t &hoid) = 0;
 
      virtual void log_operation(
@@ -134,7 +180,7 @@
        ObjectStore::Transaction *t) = 0;
 
      virtual void update_peer_last_complete_ondisk(
-       int fromosd,
+       pg_shard_t fromosd,
        eversion_t lcod) = 0;
 
      virtual void update_last_complete_ondisk(
@@ -143,11 +189,44 @@
      virtual void update_stats(
        const pg_stat_t &stat) = 0;
 
+     virtual void schedule_work(
+       GenContext<ThreadPool::TPHandle&> *c) = 0;
+
+     virtual pg_shard_t whoami_shard() const = 0;
+     int whoami() const {
+       return whoami_shard().osd;
+     }
+     spg_t whoami_spg_t() const {
+       return get_info().pgid;
+     }
+
+     virtual spg_t primary_spg_t() const = 0;
+     virtual pg_shard_t primary_shard() const = 0;
+
+     virtual void send_message_osd_cluster(
+       int peer, Message *m, epoch_t from_epoch) = 0;
+     virtual void send_message_osd_cluster(
+       Message *m, Connection *con) = 0;
+     virtual void send_message_osd_cluster(
+       Message *m, const ConnectionRef& con) = 0;
+     virtual ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch) = 0;
+     virtual entity_name_t get_cluster_msgr_name() = 0;
+
+     virtual PerfCounters *get_logger() = 0;
+
+     virtual ceph_tid_t get_tid() = 0;
+
+     virtual LogClientTemp clog_error() = 0;
+
      virtual ~Listener() {}
    };
    Listener *parent;
    Listener *get_parent() const { return parent; }
-   PGBackend(Listener *l) : parent(l) {}
+   PGBackend(Listener *l, ObjectStore *store, coll_t coll, coll_t temp_coll) :
+     store(store),
+     coll(coll),
+     temp_coll(temp_coll),
+     parent(l), temp_created(false) {}
    bool is_primary() const { return get_parent()->pgb_is_primary(); }
    OSDMapRef get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
    const pg_info_t &get_info() { return get_parent()->get_info(); }
@@ -200,6 +279,7 @@
     */
    virtual void recover_object(
      const hobject_t &hoid, ///< [in] object to recover
+     eversion_t v,          ///< [in] version to recover
      ObjectContextRef head,  ///< [in] context of the head/snapdir object
      ObjectContextRef obc,  ///< [in] context of the object
      RecoveryHandle *h      ///< [in,out] handle to attach recovery op to
@@ -223,25 +303,81 @@
     * implementation should clear itself, contexts blessed prior to on_change
     * won't be called after on_change()
     */
-   virtual void on_change(ObjectStore::Transaction *t) = 0;
+   void on_change(ObjectStore::Transaction *t);
+   virtual void _on_change(ObjectStore::Transaction *t) = 0;
    virtual void clear_state() = 0;
 
    virtual void on_flushed() = 0;
 
+   class IsRecoverablePredicate {
+   public:
+     /**
+      * have encodes the shards available
+      */
+     virtual bool operator()(const set<pg_shard_t> &have) const = 0;
+     virtual ~IsRecoverablePredicate() {}
+   };
+   virtual IsRecoverablePredicate *get_is_recoverable_predicate() = 0;
 
-   virtual void split_colls(
-     pg_t child,
+   class IsReadablePredicate {
+   public:
+     /**
+      * have encodes the shards available
+      */
+     virtual bool operator()(const set<pg_shard_t> &have) const = 0;
+     virtual ~IsReadablePredicate() {}
+   };
+   virtual IsReadablePredicate *get_is_readable_predicate() = 0;
+
+   void temp_colls(list<coll_t> *out) {
+     if (temp_created)
+       out->push_back(temp_coll);
+   }
+   void split_colls(
+     spg_t child,
      int split_bits,
      int seed,
-     ObjectStore::Transaction *t) = 0;
-
-   virtual void temp_colls(list<coll_t> *out) = 0;
+     ObjectStore::Transaction *t) {
+     coll_t target = coll_t::make_temp_coll(child);
+     if (!temp_created)
+       return;
+     t->create_collection(target);
+     t->split_collection(
+       temp_coll,
+       split_bits,
+       seed,
+       target);
+   }
 
    virtual void dump_recovery_info(Formatter *f) const = 0;
 
-   virtual coll_t get_temp_coll(ObjectStore::Transaction *t) = 0;
-   virtual void add_temp_obj(const hobject_t &oid) = 0;
-   virtual void clear_temp_obj(const hobject_t &oid) = 0;
+ private:
+   bool temp_created;
+   set<hobject_t> temp_contents;
+ public:
+   coll_t get_temp_coll(ObjectStore::Transaction *t);
+   coll_t get_temp_coll() const {
+    return temp_coll;
+   }
+   bool have_temp_coll() const { return temp_created; }
+
+   // Track contents of temp collection, clear on reset
+   void add_temp_obj(const hobject_t &oid) {
+     temp_contents.insert(oid);
+   }
+   void add_temp_objs(const set<hobject_t> &oids) {
+     temp_contents.insert(oids.begin(), oids.end());
+   }
+   void clear_temp_obj(const hobject_t &oid) {
+     temp_contents.erase(oid);
+   }
+   void clear_temp_objs(const set<hobject_t> &oids) {
+     for (set<hobject_t>::const_iterator i = oids.begin();
+	  i != oids.end();
+	  ++i) {
+       temp_contents.erase(*i);
+     }
+   }
 
    virtual ~PGBackend() {}
 
@@ -281,6 +417,11 @@
      virtual void rename(
        const hobject_t &from,
        const hobject_t &to
+       ) = 0;
+     virtual void set_alloc_hint(
+       const hobject_t &hoid,
+       uint64_t expected_object_size,
+       uint64_t expected_write_size
        ) = 0;
 
      /// Optional, not supported on ec-pool
@@ -352,9 +493,9 @@
      const eversion_t &trim_to,           ///< [in] trim log to here
      vector<pg_log_entry_t> &log_entries, ///< [in] log entries for t
      Context *on_local_applied_sync,      ///< [in] called when applied locally
-     Context *on_all_applied,               ///< [in] called when all acked
+     Context *on_all_applied,             ///< [in] called when all acked
      Context *on_all_commit,              ///< [in] called when all commit
-     tid_t tid,                           ///< [in] tid
+     ceph_tid_t tid,                      ///< [in] tid
      osd_reqid_t reqid,                   ///< [in] reqid
      OpRequestRef op                      ///< [in] op
      ) = 0;
@@ -366,57 +507,57 @@
      ObjectStore::Transaction *t);
 
    /// Reapply old attributes
-   virtual void rollback_setattrs(
+   void rollback_setattrs(
      const hobject_t &hoid,
      map<string, boost::optional<bufferlist> > &old_attrs,
-     ObjectStore::Transaction *t) = 0;
+     ObjectStore::Transaction *t);
 
    /// Truncate object to rollback append
    virtual void rollback_append(
      const hobject_t &hoid,
      uint64_t old_size,
-     ObjectStore::Transaction *t) = 0;
+     ObjectStore::Transaction *t);
 
    /// Unstash object to rollback stash
-   virtual void rollback_stash(
+   void rollback_stash(
      const hobject_t &hoid,
      version_t old_version,
-     ObjectStore::Transaction *t) = 0;
+     ObjectStore::Transaction *t);
 
    /// Delete object to rollback create
-   virtual void rollback_create(
+   void rollback_create(
      const hobject_t &hoid,
-     ObjectStore::Transaction *t) = 0;
+     ObjectStore::Transaction *t);
 
    /// Trim object stashed at stashed_version
-   virtual void trim_stashed_object(
+   void trim_stashed_object(
      const hobject_t &hoid,
      version_t stashed_version,
-     ObjectStore::Transaction *t) = 0;
+     ObjectStore::Transaction *t);
 
    /// List objects in collection
-   virtual int objects_list_partial(
+   int objects_list_partial(
      const hobject_t &begin,
      int min,
      int max,
      snapid_t seq,
      vector<hobject_t> *ls,
-     hobject_t *next) = 0;
+     hobject_t *next);
 
-   virtual int objects_list_range(
+   int objects_list_range(
      const hobject_t &start,
      const hobject_t &end,
      snapid_t seq,
-     vector<hobject_t> *ls) = 0;
+     vector<hobject_t> *ls);
 
-   virtual int objects_get_attr(
+   int objects_get_attr(
      const hobject_t &hoid,
      const string &attr,
-     bufferlist *out) = 0;
+     bufferlist *out);
 
    virtual int objects_get_attrs(
      const hobject_t &hoid,
-     map<string, bufferlist> *out) = 0;
+     map<string, bufferlist> *out);
 
    virtual int objects_read_sync(
      const hobject_t &hoid,
@@ -431,24 +572,65 @@
      Context *on_complete) = 0;
 
    virtual bool scrub_supported() { return false; }
-   virtual void be_scan_list(ScrubMap &map, const vector<hobject_t> &ls, bool deep,
-     ThreadPool::TPHandle &handle) { assert(0); }
-   virtual enum scrub_error_type be_compare_scrub_objects(
-				const ScrubMap::object &auth,
-				const ScrubMap::object &candidate,
-				ostream &errorstream) { assert(0); }
-   virtual map<int, ScrubMap *>::const_iterator be_select_auth_object(
+   void be_scan_list(
+     ScrubMap &map, const vector<hobject_t> &ls, bool deep,
+     ThreadPool::TPHandle &handle);
+   enum scrub_error_type be_compare_scrub_objects(
+     const ScrubMap::object &auth,
+     const ScrubMap::object &candidate,
+     ostream &errorstream);
+   map<pg_shard_t, ScrubMap *>::const_iterator be_select_auth_object(
      const hobject_t &obj,
-     const map<int,ScrubMap*> &maps) { assert(0); }
-   virtual void be_compare_scrubmaps(const map<int,ScrubMap*> &maps,
-			    map<hobject_t, set<int> > &missing,
-			    map<hobject_t, set<int> > &inconsistent,
-			    map<hobject_t, int> &authoritative,
-			    map<hobject_t, set<int> > &invalid_snapcolls,
-			    int &shallow_errors, int &deep_errors,
-			    const pg_t pgid,
-			    const vector<int> &acting,
-			    ostream &errorstream) { assert(0); }
+     const map<pg_shard_t,ScrubMap*> &maps);
+   void be_compare_scrubmaps(
+     const map<pg_shard_t,ScrubMap*> &maps,
+     map<hobject_t, set<pg_shard_t> > &missing,
+     map<hobject_t, set<pg_shard_t> > &inconsistent,
+     map<hobject_t, pg_shard_t> &authoritative,
+     map<hobject_t, set<pg_shard_t> > &invalid_snapcolls,
+     int &shallow_errors, int &deep_errors,
+     const spg_t pgid,
+     const vector<int> &acting,
+     ostream &errorstream);
+   virtual uint64_t be_get_ondisk_size(
+     uint64_t logical_size) { assert(0); return 0; }
+   virtual void be_deep_scrub(
+     const hobject_t &poid,
+     ScrubMap::object &o,
+     ThreadPool::TPHandle &handle) { assert(0); }
+
+   static PGBackend *build_pg_backend(
+     const pg_pool_t &pool,
+     const OSDMapRef curmap,
+     Listener *l,
+     coll_t coll,
+     coll_t temp_coll,
+     ObjectStore *store,
+     CephContext *cct);
  };
+
+struct PG_SendMessageOnConn: public Context {
+  PGBackend::Listener *pg;
+  Message *reply;
+  ConnectionRef conn;
+  PG_SendMessageOnConn(
+    PGBackend::Listener *pg,
+    Message *reply,
+    ConnectionRef conn) : pg(pg), reply(reply), conn(conn) {}
+  void finish(int) {
+    pg->send_message_osd_cluster(reply, conn.get());
+  }
+};
+
+struct PG_QueueAsync : public Context {
+  PGBackend::Listener *pg;
+  GenContext<ThreadPool::TPHandle&> *c;
+  PG_QueueAsync(
+    PGBackend::Listener *pg,
+    GenContext<ThreadPool::TPHandle&> *c) : pg(pg), c(c) {}
+  void finish(int) {
+    pg->schedule_work(c);
+  }
+};
 
 #endif

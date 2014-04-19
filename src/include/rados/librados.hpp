@@ -64,6 +64,9 @@ namespace librados
     ObjectIterator() {}
     ObjectIterator(ObjListCtx *ctx_);
     ~ObjectIterator();
+    ObjectIterator(const ObjectIterator &rhs);
+    ObjectIterator& operator=(const ObjectIterator& rhs);
+
     bool operator==(const ObjectIterator& rhs) const;
     bool operator!=(const ObjectIterator& rhs) const;
     const std::pair<std::string, std::string>& operator*() const;
@@ -124,8 +127,8 @@ namespace librados
    * ops added to an ObjectOperation.
    */
   enum ObjectOperationFlags {
-    OP_EXCL =   1,
-    OP_FAILOK = 2,
+    OP_EXCL =   LIBRADOS_OP_FLAG_EXCL,
+    OP_FAILOK = LIBRADOS_OP_FLAG_FAILOK,
   };
 
   class ObjectOperationCompletion {
@@ -264,6 +267,15 @@ namespace librados
     void selfmanaged_snap_rollback(uint64_t snapid);
 
     /**
+     * Rollback an object to the specified snapshot id
+     *
+     * Used with pool snapshots
+     *
+     * @param snapid [in] snopshot id specified
+     */
+    void snap_rollback(uint64_t snapid);
+
+    /**
      * set keys and values according to map
      *
      * @param map [in] keys and values to set
@@ -309,6 +321,15 @@ namespace librados
      * Clear an objects dirty flag
      */
     void undirty();
+
+    /**
+     * Set allocation hint for an object
+     *
+     * @param expected_object_size expected size of the object, in bytes
+     * @param expected_write_size expected size of writes to the object, in bytes
+     */
+    void set_alloc_hint(uint64_t expected_object_size,
+                        uint64_t expected_write_size);
 
     friend class IoCtx;
   };
@@ -500,6 +521,9 @@ namespace librados
 
     std::string get_pool_name();
 
+    bool pool_requires_alignment();
+    uint64_t pool_required_alignment();
+
     // create an object
     int create(const std::string& oid, bool exclusive);
     int create(const std::string& oid, bool exclusive, const std::string& category);
@@ -599,6 +623,8 @@ namespace librados
 
     int snap_list(std::vector<snap_t> *snaps);
 
+    int snap_rollback(const std::string& oid, const char *snapname);
+    // Deprecated name kept for backward compatibility - same as snap_rollback()
     int rollback(const std::string& oid, const char *snapname);
 
     int selfmanaged_snap_create(uint64_t *snapid);
@@ -796,6 +822,22 @@ namespace librados
     int list_watchers(const std::string& o, std::list<obj_watch_t> *out_watchers);
     int list_snaps(const std::string& o, snap_set_t *out_snaps);
     void set_notify_timeout(uint32_t timeout);
+
+    /**
+     * Set allocation hint for an object
+     *
+     * This is an advisory operation, it will always succeed (as if it
+     * was submitted with a OP_FAILOK flag set) and is not guaranteed
+     * to do anything on the backend.
+     *
+     * @param o the name of the object
+     * @param expected_object_size expected size of the object, in bytes
+     * @param expected_write_size expected size of writes to the object, in bytes
+     * @returns 0 on success, negative error code on failure
+     */
+    int set_alloc_hint(const std::string& o,
+                       uint64_t expected_object_size,
+                       uint64_t expected_write_size);
 
     // assert version for next sync operations
     void set_assert_version(uint64_t ver);

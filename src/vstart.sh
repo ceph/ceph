@@ -261,9 +261,9 @@ if [ "$start_all" -eq 1 ]; then
 fi
 $SUDO rm -f core*
 
-test -d out || mkdir out
-test -d dev || mkdir dev
-$SUDO rm -rf out/*
+test -d $CEPH_OUT_DIR || mkdir $CEPH_OUT_DIR
+test -d $CEPH_DEV_DIR || mkdir $CEPH_DEV_DIR
+$SUDO rm -rf $CEPH_OUT_DIR/*
 test -d gmon && $SUDO rm -rf gmon/*
 
 [ "$cephx" -eq 1 ] && [ "$new" -eq 1 ] && test -e $keyring_fn && rm $keyring_fn
@@ -328,6 +328,7 @@ if [ "$start_mon" -eq 1 ]; then
         osd crush chooseleaf type = 0
         osd pool default min size = 1
         osd pool default erasure code directory = .libs
+        osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd
         run dir = $CEPH_OUT_DIR
 EOF
 if [ "$cephx" -eq 1 ] ; then
@@ -369,6 +370,7 @@ $COSDMEMSTORE
 $extra_conf
 [mon]
         mon pg warn min per osd = 10
+        mon osd allow primary affinity = true
 $DAEMONOPTS
 $CMONDEBUG
 $extra_conf
@@ -458,7 +460,7 @@ EOF
 	    uuid=`uuidgen`
 	    echo "add osd$osd $uuid"
 	    $SUDO $CEPH_ADM osd create $uuid
-	    $SUDO $CEPH_ADM osd crush add osd.$osd 1.0 host=localhost rack=localrack root=default
+	    $SUDO $CEPH_ADM osd crush add osd.$osd 1.0 host=$HOSTNAME root=default
 	    $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --mkkey --osd-uuid $uuid
 
 	    key_fn=$CEPH_DEV_DIR/osd$osd/keyring

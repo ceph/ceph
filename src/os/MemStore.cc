@@ -949,6 +949,10 @@ void MemStore::_do_transaction(Transaction& t)
       }
       break;
 
+    case Transaction::OP_SETALLOCHINT:
+      // nop
+      break;
+
     default:
       derr << "bad op " << op << dendl;
       assert(0);
@@ -1012,8 +1016,9 @@ int MemStore::_touch(coll_t cid, const ghobject_t& oid)
 
   ObjectRef o = c->get_object(oid);
   if (!o) {
-    c->object_map[oid].reset(new Object);
-    c->object_hash[oid].reset(new Object);
+    o.reset(new Object);
+    c->object_map[oid] = o;
+    c->object_hash[oid] = o;
   }
   return 0;
 }

@@ -55,6 +55,9 @@ ceph_dencoder_SOURCES = \
 ceph_dencoder_LDADD = \
 	$(LIBOSD) $(LIBMDS) $(LIBMON) \
 	$(DENCODER_DEPS) $(CEPH_GLOBAL)
+if WITH_RADOSGW
+ceph_dencoder_LDADD += $(LIBRGW) $(LIBRGW_DEPS)
+endif
 
 # These should always use explicit _CFLAGS/_CXXFLAGS so avoid basename conflicts
 ceph_dencoder_CFLAGS = ${AM_CFLAGS}
@@ -177,12 +180,6 @@ ceph_kvstorebench_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_kvstorebench
 endif
 
-ceph_multi_stress_watch_SOURCES = \
-	test/multi_stress_watch.cc \
-	test/librados/test.cc
-ceph_multi_stress_watch_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
-bin_DEBUGPROGRAMS += ceph_multi_stress_watch 
-
 ## System tests
 
 if LINUX
@@ -237,11 +234,17 @@ check_SCRIPTS += \
 	unittest_bufferlist.sh \
 	test/encoding/check-generated.sh \
 	test/mon/osd-pool-create.sh \
+	test/mon/misc.sh \
 	test/mon/osd-crush.sh \
+	test/mon/osd-erasure-code-profile.sh \
 	test/mon/mkfs.sh \
 	test/ceph-disk.sh \
 	test/mon/mon-handle-forward.sh \
 	test/vstart_wrapped_tests.sh
+
+EXTRA_DIST += \
+	$(srcdir)/test/mon/mon-test-helpers.sh \
+	$(srcdir)/test/osd/osd-test-helpers.sh
 
 # target to build but not run the unit tests
 unittests:: $(check_PROGRAMS)
@@ -270,15 +273,15 @@ unittest_bloom_filter_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_bloom_filter_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_bloom_filter
 
+unittest_histogram_SOURCES = test/common/histogram.cc
+unittest_histogram_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_histogram_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_histogram
+
 unittest_str_map_SOURCES = test/common/test_str_map.cc
 unittest_str_map_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_str_map_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_str_map
-
-unittest_crushwrapper_SOURCES = test/test_crushwrapper.cc
-unittest_crushwrapper_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-unittest_crushwrapper_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCRUSH)
-check_PROGRAMS += unittest_crushwrapper
 
 unittest_sharedptr_registry_SOURCES = test/common/test_sharedptr_registry.cc
 unittest_sharedptr_registry_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -355,7 +358,7 @@ unittest_ceph_compatset_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_ceph_compatset_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_ceph_compatset
 
-unittest_osd_types_SOURCES = test/test_osd_types.cc
+unittest_osd_types_SOURCES = test/osd/types.cc
 unittest_osd_types_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_osd_types_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) 
 check_PROGRAMS += unittest_osd_types
@@ -364,6 +367,11 @@ unittest_pglog_SOURCES = test/osd/TestPGLog.cc
 unittest_pglog_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_pglog_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_pglog
+
+unittest_ecbackend_SOURCES = test/osd/TestECBackend.cc
+unittest_ecbackend_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_ecbackend_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_ecbackend
 
 unittest_hitset_SOURCES = test/osd/hitset.cc
 unittest_hitset_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -418,6 +426,11 @@ unittest_crypto_SOURCES = test/crypto.cc
 unittest_crypto_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_crypto_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_crypto
+
+unittest_crypto_init_SOURCES = test/crypto_init.cc
+unittest_crypto_init_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_crypto_init_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_PROGRAMS += unittest_crypto_init
 
 unittest_perf_counters_SOURCES = test/perf_counters.cc
 unittest_perf_counters_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
@@ -528,6 +541,11 @@ unittest_mon_moncap_LDADD = $(LIBMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_mon_moncap_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_mon_moncap
 
+unittest_mon_pgmap_SOURCES = test/mon/PGMap.cc
+unittest_mon_pgmap_LDADD = $(LIBMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_mon_pgmap_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_PROGRAMS += unittest_mon_pgmap
+
 #if WITH_RADOSGW
 #unittest_librgw_SOURCES = test/librgw.cc
 #unittest_librgw_LDFLAGS = -lrt $(PTHREAD_CFLAGS) -lcurl ${AM_LDFLAGS}
@@ -560,6 +578,15 @@ ceph_test_cors_LDADD = \
 	-lcurl -luuid -lexpat
 ceph_test_cors_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cors
+
+ceph_test_rgw_manifest_SOURCES = test/rgw/test_rgw_manifest.cc
+ceph_test_rgw_manifest_LDADD = \
+	$(LIBRADOS) $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL) \
+	$(UNITTEST_LDADD) $(CRYPTO_LIBS) \
+	-lcurl -luuid -lexpat
+
+ceph_test_rgw_manifest_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_rgw_manifest
 
 ceph_test_cls_rgw_meta_SOURCES = test/test_rgw_admin_meta.cc
 ceph_test_cls_rgw_meta_LDADD = \
@@ -595,10 +622,19 @@ ceph_test_cls_rgw_opstate_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_rgw_opstate
 endif # WITH_RADOSGW
 
-ceph_test_librbd_SOURCES = \
-	test/librbd/test_librbd.cc \
-	test/librados/test.cc
-ceph_test_librbd_LDADD = $(LIBRBD) $(LIBRADOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+libradostest_la_SOURCES = \
+	test/librados/test.cc \
+	test/librados/TestCase.cc
+noinst_LTLIBRARIES += libradostest.la
+libradostest_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+RADOS_TEST_LDADD = libradostest.la
+
+ceph_multi_stress_watch_SOURCES = test/multi_stress_watch.cc
+ceph_multi_stress_watch_LDADD = $(LIBRADOS) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
+bin_DEBUGPROGRAMS += ceph_multi_stress_watch
+
+ceph_test_librbd_SOURCES = test/librbd/test_librbd.cc
+ceph_test_librbd_LDADD = $(LIBRBD) $(LIBRADOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 ceph_test_librbd_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_librbd
 
@@ -609,71 +645,53 @@ ceph_test_librbd_fsx_CFLAGS = ${AM_CFLAGS} -Wno-format
 bin_DEBUGPROGRAMS += ceph_test_librbd_fsx
 endif
 
-ceph_test_cls_rbd_SOURCES = \
-	test/cls_rbd/test_cls_rbd.cc \
-	test/librados/test.cc
-ceph_test_cls_rbd_LDADD = $(LIBRADOS) libcls_rbd_client.la libcls_lock_client.la $(UNITTEST_LDADD)
+ceph_test_cls_rbd_SOURCES = test/cls_rbd/test_cls_rbd.cc
+ceph_test_cls_rbd_LDADD = $(LIBRADOS) libcls_rbd_client.la libcls_lock_client.la $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_cls_rbd_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_rbd
 
-ceph_test_cls_refcount_SOURCES = \
-	test/cls_refcount/test_cls_refcount.cc \
-	test/librados/test.cc
-ceph_test_cls_refcount_LDADD = $(LIBRADOS) libcls_refcount_client.la $(UNITTEST_LDADD)
+ceph_test_cls_refcount_SOURCES = test/cls_refcount/test_cls_refcount.cc
+ceph_test_cls_refcount_LDADD = $(LIBRADOS) libcls_refcount_client.la $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_cls_refcount_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_refcount
 
-ceph_test_cls_version_SOURCES = \
-	test/cls_version/test_cls_version.cc \
-	test/librados/test.cc
-ceph_test_cls_version_LDADD = $(LIBRADOS) libcls_version_client.a $(UNITTEST_LDADD)
+ceph_test_cls_version_SOURCES = test/cls_version/test_cls_version.cc
+ceph_test_cls_version_LDADD = $(LIBRADOS) libcls_version_client.a $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_cls_version_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_version
 
-ceph_test_cls_log_SOURCES = \
-	test/cls_log/test_cls_log.cc \
-	test/librados/test.cc
-ceph_test_cls_log_LDADD = $(LIBRADOS) libcls_log_client.a $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_cls_log_SOURCES = test/cls_log/test_cls_log.cc
+ceph_test_cls_log_LDADD = $(LIBRADOS) libcls_log_client.a $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 ceph_test_cls_log_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_log
 
-ceph_test_cls_statelog_SOURCES = \
-	test/cls_statelog/test_cls_statelog.cc \
-	test/librados/test.cc
-ceph_test_cls_statelog_LDADD = $(LIBRADOS) libcls_statelog_client.a $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_cls_statelog_SOURCES = test/cls_statelog/test_cls_statelog.cc
+ceph_test_cls_statelog_LDADD = $(LIBRADOS) libcls_statelog_client.a $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 ceph_test_cls_statelog_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_statelog
 
-ceph_test_cls_replica_log_SOURCES = \
-	test/cls_replica_log/test_cls_replica_log.cc \
-	test/librados/test.cc
+ceph_test_cls_replica_log_SOURCES = test/cls_replica_log/test_cls_replica_log.cc
 ceph_test_cls_replica_log_LDADD = \
 	$(LIBRADOS) libcls_replica_log_client.a \
-	$(UNITTEST_LDADD) $(CEPH_GLOBAL)
+	$(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 ceph_test_cls_replica_log_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_replica_log
 
-ceph_test_cls_lock_SOURCES = \
-	test/cls_lock/test_cls_lock.cc \
-	test/librados/test.cc
-ceph_test_cls_lock_LDADD = $(LIBRADOS) libcls_lock_client.la $(UNITTEST_LDADD)
+ceph_test_cls_lock_SOURCES = test/cls_lock/test_cls_lock.cc
+ceph_test_cls_lock_LDADD = $(LIBRADOS) libcls_lock_client.la $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_cls_lock_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_lock
 
-ceph_test_cls_hello_SOURCES = \
-	test/cls_hello/test_cls_hello.cc \
-	test/librados/test.cc
+ceph_test_cls_hello_SOURCES = test/cls_hello/test_cls_hello.cc
 ceph_test_cls_hello_LDADD = \
 	$(LIBRADOS) $(CRYPTO_LIBS) \
-	$(UNITTEST_LDADD) $(CEPH_GLOBAL)
+	$(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 ceph_test_cls_hello_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_hello
 
 if WITH_RADOSGW
-ceph_test_cls_rgw_SOURCES = \
-	test/cls_rgw/test_cls_rgw.cc \
-	test/librados/test.cc
-ceph_test_cls_rgw_LDADD = $(LIBRADOS) libcls_rgw_client.la $(UNITTEST_LDADD)
+ceph_test_cls_rgw_SOURCES = test/cls_rgw/test_cls_rgw.cc
+ceph_test_cls_rgw_LDADD = $(LIBRADOS) libcls_rgw_client.la $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_cls_rgw_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_rgw
 endif # WITH_RADOSGW
@@ -682,95 +700,77 @@ ceph_test_mon_workloadgen_SOURCES = test/mon/test_mon_workloadgen.cc
 ceph_test_mon_workloadgen_LDADD = $(LIBOS) $(LIBOSDC) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_test_mon_workloadgen
 
-ceph_test_rados_api_cmd_SOURCES = \
-	test/librados/cmd.cc \
-	test/librados/test.cc
-ceph_test_rados_api_cmd_LDADD = $(LIBRADOS) $(UNITTEST_LDADD)
+ceph_test_rados_api_cmd_SOURCES = test/librados/cmd.cc
+ceph_test_rados_api_cmd_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_rados_api_cmd_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_cmd
 
-ceph_test_rados_api_io_SOURCES = \
-	test/librados/io.cc \
-	test/librados/test.cc
-ceph_test_rados_api_io_LDADD = $(LIBRADOS) $(UNITTEST_LDADD)
+ceph_test_rados_api_io_SOURCES = test/librados/io.cc
+ceph_test_rados_api_io_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_rados_api_io_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_io
 
 ceph_test_rados_api_c_write_operations_SOURCES = \
-	test/librados/c_write_operations.cc \
-	test/librados/test.cc
-ceph_test_rados_api_c_write_operations_LDADD = $(LIBRADOS) $(UNITTEST_LDADD)
+	test/librados/c_write_operations.cc
+ceph_test_rados_api_c_write_operations_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_rados_api_c_write_operations_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_c_write_operations
 
-ceph_test_rados_api_aio_SOURCES = \
-	test/librados/aio.cc \
-	test/librados/test.cc
-ceph_test_rados_api_aio_LDADD = $(LIBRADOS) $(UNITTEST_LDADD)
+ceph_test_rados_api_c_read_operations_SOURCES = \
+	test/librados/c_read_operations.cc
+ceph_test_rados_api_c_read_operations_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
+ceph_test_rados_api_c_read_operations_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_rados_api_c_read_operations
+
+ceph_test_rados_api_aio_SOURCES = test/librados/aio.cc
+ceph_test_rados_api_aio_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_rados_api_aio_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_aio
 
-ceph_test_rados_api_list_SOURCES = \
-	test/librados/list.cc \
-	test/librados/test.cc
-ceph_test_rados_api_list_LDADD = $(LIBRADOS) $(UNITTEST_LDADD)
+ceph_test_rados_api_list_SOURCES = test/librados/list.cc
+ceph_test_rados_api_list_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_rados_api_list_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_list
 
-ceph_test_rados_api_pool_SOURCES = \
-	test/librados/pool.cc \
-	test/librados/test.cc
-ceph_test_rados_api_pool_LDADD = $(LIBRADOS) $(UNITTEST_LDADD)
+ceph_test_rados_api_pool_SOURCES = test/librados/pool.cc
+ceph_test_rados_api_pool_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_rados_api_pool_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_pool
 
-ceph_test_rados_api_stat_SOURCES = \
-	test/librados/stat.cc \
-	test/librados/test.cc
-ceph_test_rados_api_stat_LDADD = $(LIBRADOS) $(UNITTEST_LDADD)
+ceph_test_rados_api_stat_SOURCES = test/librados/stat.cc
+ceph_test_rados_api_stat_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_rados_api_stat_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_stat
 
-ceph_test_rados_api_watch_notify_SOURCES = \
-	test/librados/watch_notify.cc \
-	test/librados/test.cc
-ceph_test_rados_api_watch_notify_LDADD = $(LIBRADOS) $(UNITTEST_LDADD)
+ceph_test_rados_api_watch_notify_SOURCES = test/librados/watch_notify.cc
+ceph_test_rados_api_watch_notify_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_rados_api_watch_notify_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_watch_notify
 
-ceph_test_rados_api_snapshots_SOURCES = \
-	test/librados/snapshots.cc \
-	test/librados/test.cc
-ceph_test_rados_api_snapshots_LDADD = $(LIBRADOS) $(UNITTEST_LDADD)
+ceph_test_rados_api_snapshots_SOURCES = test/librados/snapshots.cc
+ceph_test_rados_api_snapshots_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_rados_api_snapshots_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_snapshots
 
-ceph_test_rados_api_cls_SOURCES = \
-	test/librados/cls.cc \
-	test/librados/test.cc
-ceph_test_rados_api_cls_LDADD = $(LIBRADOS) $(UNITTEST_LDADD)
+ceph_test_rados_api_cls_SOURCES = test/librados/cls.cc
+ceph_test_rados_api_cls_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_rados_api_cls_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_cls
 
-ceph_test_rados_api_misc_SOURCES = \
-	test/librados/misc.cc \
-	test/librados/test.cc
-ceph_test_rados_api_misc_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_rados_api_misc_SOURCES = test/librados/misc.cc
+ceph_test_rados_api_misc_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 ceph_test_rados_api_misc_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_misc
 
 ceph_test_rados_api_tier_SOURCES = \
 	test/librados/tier.cc \
-	test/librados/test.cc \
 	osd/HitSet.cc
-ceph_test_rados_api_tier_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_rados_api_tier_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 ceph_test_rados_api_tier_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_tier
 
-ceph_test_rados_api_lock_SOURCES = \
-	test/librados/lock.cc \
-	test/librados/test.cc
-ceph_test_rados_api_lock_LDADD = $(LIBRADOS) $(UNITTEST_LDADD)
+ceph_test_rados_api_lock_SOURCES = test/librados/lock.cc
+ceph_test_rados_api_lock_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_rados_api_lock_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_lock
 
@@ -821,10 +821,8 @@ ceph_test_filejournal_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_filejournal_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_filejournal
 
-ceph_test_stress_watch_SOURCES = \
-	test/test_stress_watch.cc \
-	test/librados/test.cc
-ceph_test_stress_watch_LDADD = $(LIBRADOS) $(UNITTEST_LDADD)
+ceph_test_stress_watch_SOURCES = test/test_stress_watch.cc
+ceph_test_stress_watch_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_stress_watch_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_stress_watch
 
@@ -888,6 +886,7 @@ noinst_HEADERS += \
 	test/objectstore/workload_generator.h \
 	test/kv_store_bench.h \
 	test/librados/test.h \
+	test/librados/TestCase.h \
 	test/ObjectMap/KeyValueDBMemory.h \
 	test/omap_bench.h \
 	test/osdc/FakeWriteback.h \

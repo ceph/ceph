@@ -171,11 +171,8 @@ class PrioritizedQueue {
       if (i == q.end())
 	return;
       size -= i->second.size();
-      if (i == cur) {
+      if (i == cur)
 	++cur;
-	if (cur == q.end())
-	  cur = q.begin();
-      }
       if (out) {
 	for (typename list<pair<unsigned, T> >::reverse_iterator j =
 	       i->second.rbegin();
@@ -185,6 +182,8 @@ class PrioritizedQueue {
 	}
       }
       q.erase(i);
+      if (cur == q.end())
+	cur = q.begin();
     }
 
     void dump(Formatter *f) const {
@@ -192,6 +191,8 @@ class PrioritizedQueue {
       f->dump_int("max_tokens", max_tokens);
       f->dump_int("size", size);
       f->dump_int("num_keys", q.size());
+      if (!empty())
+	f->dump_int("first_item_cost", front().first);
     }
   };
   map<unsigned, SubQueue> high_queue;
@@ -231,15 +232,15 @@ public:
       min_cost(min_c)
   {}
 
-  unsigned length() {
+  unsigned length() const {
     unsigned total = 0;
-    for (typename map<unsigned, SubQueue>::iterator i = queue.begin();
+    for (typename map<unsigned, SubQueue>::const_iterator i = queue.begin();
 	 i != queue.end();
 	 ++i) {
       assert(i->second.length());
       total += i->second.length();
     }
-    for (typename map<unsigned, SubQueue>::iterator i = high_queue.begin();
+    for (typename map<unsigned, SubQueue>::const_iterator i = high_queue.begin();
 	 i != high_queue.end();
 	 ++i) {
       assert(i->second.length());
@@ -311,16 +312,20 @@ public:
   void enqueue(K cl, unsigned priority, unsigned cost, T item) {
     if (cost < min_cost)
       cost = min_cost;
+    if (cost > max_tokens_per_subqueue)
+      cost = max_tokens_per_subqueue;
     create_queue(priority)->enqueue(cl, cost, item);
   }
 
   void enqueue_front(K cl, unsigned priority, unsigned cost, T item) {
     if (cost < min_cost)
       cost = min_cost;
+    if (cost > max_tokens_per_subqueue)
+      cost = max_tokens_per_subqueue;
     create_queue(priority)->enqueue_front(cl, cost, item);
   }
 
-  bool empty() {
+  bool empty() const {
     assert(total_priority >= 0);
     assert((total_priority == 0) || !(queue.empty()));
     return queue.empty() && high_queue.empty();

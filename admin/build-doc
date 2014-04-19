@@ -1,5 +1,4 @@
 #!/bin/sh
-set -e
 cd "$(dirname "$0")"
 cd ..
 TOPDIR=`pwd`
@@ -19,10 +18,12 @@ if command -v dpkg >/dev/null; then
 	exit 1
     fi
 else
-    for command in virtualenv doxygen ditaa ant; do
-	if ! command -v "$command" >/dev/null; then
+    for command in virtualenv doxygen ant ditaa; do
+	command -v "$command" > /dev/null;
+	ret_code=$?
+	if [ $ret_code -ne 0 ]; then
             # add a space after old values
-	    missing="${missing:+$missing }$package"
+	    missing="${missing:+$missing }$command"
 	fi
     done
     if [ -n "$missing" ]; then
@@ -50,7 +51,7 @@ $vdir/bin/pip install --quiet -r ../admin/doc-requirements.txt
 install -d -m0755 \
     output/html \
     output/man
-PYTHONPATH=`pwd`/../src/pybind $vdir/bin/sphinx-build -a -b dirhtml -d doctrees ../doc output/html
+PYTHONPATH=`pwd`/../src/pybind $vdir/bin/sphinx-build -a -n -b dirhtml -d doctrees ../doc output/html
 $vdir/bin/sphinx-build -a -b man -d doctrees ../doc output/man
 
 #

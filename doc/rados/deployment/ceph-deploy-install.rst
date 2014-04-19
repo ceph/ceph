@@ -11,20 +11,19 @@ client machine and type the following::
 	ceph-deploy install {hostname [hostname] ...}
 
 Without additional arguments, ``ceph-deploy`` will install the most recent
-stable Ceph package to the cluster host(s). To specify a particular package, 
+major release of Ceph to the cluster host(s). To specify a particular package, 
 you may select from the following:
 
-- ``--stable <code-name>`` 
+- ``--release <code-name>`` 
 - ``--testing`` 
 - ``--dev <branch-or-tag>`` 
 
 For example:: 
 
-	ceph-deploy install --stable cuttlefish hostname1
+	ceph-deploy install --release cuttlefish hostname1
 	ceph-deploy install --testing hostname2
 	ceph-deploy install --dev wip-some-branch hostname{1,2,3,4,5}
 	
-For additional details, see `Installing Debian/Ubuntu Packages`_.
 For additional usage, execute:: 
 
 	ceph-deploy install -h
@@ -44,7 +43,4 @@ On a Debian or Ubuntu system, you may also::
 
 The tool will unininstall ``ceph`` packages from the specified hosts.  Purge
 additionally removes configuration files.
-
-.. _Installing Debian/Ubuntu Packages:  ../../../install/debian
-
 

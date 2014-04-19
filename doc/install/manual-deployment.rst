@@ -369,7 +369,8 @@ OSDs with the long form procedure, execute the following on ``node2`` and
 	sudo ceph-osd -i {osd-num} --mkfs --mkkey
 	
    The directory must be empty before you can run ``ceph-osd`` with the 
-   ``--mkkey`` option.
+   ``--mkkey`` option. In addition, the ceph-osd tool requires specification
+   of custom cluster names with the ``--cluster`` option.
 
 
 #. Register the OSD authentication key. The value of ``ceph`` for 
@@ -462,4 +463,4 @@ To add (or remove) additional Ceph OSD Daemons, see `Add/Remove OSDs`_.
 .. _Add/Remove Monitors: ../../rados/operations/add-or-rm-mons
 .. _Add/Remove OSDs: ../../rados/operations/add-or-rm-osds
 .. _Network Configuration Reference: ../../rados/configuration/network-config-ref
-.. _Monitor Config Reference - Data: ../../rados/configuration/monitor-config-ref#data
+.. _Monitor Config Reference - Data: ../../rados/configuration/mon-config-ref#data

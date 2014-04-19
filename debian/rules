@@ -119,7 +119,8 @@ binary-arch: build install
 	# per package, so do this ourselves
 	install -d -m0755 debian/ceph/etc/init
 	install -m0644 src/upstart/ceph*.conf debian/ceph/etc/init
-	install -m0644 src/upstart/rbdmap.conf debian/ceph/etc/init
+	install -d -m0755 debian/ceph-common/etc/init
+	install -m0644 src/upstart/rbdmap.conf debian/ceph-common/etc/init
 	install -d -m0755 debian/ceph-mds/etc/init
 	mv debian/ceph/etc/init/ceph-mds* debian/ceph-mds/etc/init
 	install -d -m0755 debian/radosgw/etc/init

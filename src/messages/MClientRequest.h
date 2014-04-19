@@ -110,7 +110,7 @@ public:
   }
 
   // normal fields
-  void set_oldest_client_tid(tid_t t) { head.oldest_client_tid = t; }
+  void set_oldest_client_tid(ceph_tid_t t) { head.oldest_client_tid = t; }
   void inc_num_fwd() { head.num_fwd = head.num_fwd + 1; }
   void set_retry_attempt(int a) { head.num_retry = a; }
   void set_filepath(const filepath& fp) { path = fp; }
@@ -125,7 +125,7 @@ public:
     head.flags = head.flags | CEPH_MDS_FLAG_REPLAY;
   }
     
-  tid_t get_oldest_client_tid() const { return head.oldest_client_tid; }
+  ceph_tid_t get_oldest_client_tid() const { return head.oldest_client_tid; }
   int get_num_fwd() const { return head.num_fwd; }
   int get_retry_attempt() const { return head.num_retry; }
   int get_op() const { return head.op; }
@@ -180,8 +180,8 @@ public:
 	head.op == CEPH_MDS_OP_GETFILELOCK) {
       out << "rule " << (int)head.args.filelock_change.rule
 	  << ", type " << (int)head.args.filelock_change.type
+	  << ", owner " << head.args.filelock_change.owner
 	  << ", pid " << head.args.filelock_change.pid
-	  << ", pid_ns " << head.args.filelock_change.pid_namespace
 	  << ", start " << head.args.filelock_change.start
 	  << ", length " << head.args.filelock_change.length
 	  << ", wait " << (int)head.args.filelock_change.wait;

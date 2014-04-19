@@ -35,7 +35,7 @@ using std::fstream;
 #include "include/interval_set.h"
 #include "include/lru.h"
 
-#include "barrier.h"
+//#include "barrier.h"
 
 #include "mds/mdstypes.h"
 
@@ -255,8 +255,8 @@ public:
   void resend_unsafe_requests(MetaSession *s);
 
   // mds requests
-  tid_t last_tid, last_flush_seq;
-  map<tid_t, MetaRequest*> mds_requests;
+  ceph_tid_t last_tid, last_flush_seq;
+  map<ceph_tid_t, MetaRequest*> mds_requests;
   set<int>                 failed_mds;
 
   void dump_mds_requests(Formatter *f);
@@ -315,7 +315,7 @@ protected:
   ceph::unordered_map<inodeno_t,SnapRealm*> snap_realms;
 
   /* async block write barrier support */
-  map<uint64_t, BarrierContext* > barriers;
+  //map<uint64_t, BarrierContext* > barriers;
 
   SnapRealm *get_snap_realm(inodeno_t r);
   SnapRealm *get_snap_realm_maybe(inodeno_t r);
@@ -445,7 +445,7 @@ protected:
   void add_update_cap(Inode *in, MetaSession *session, uint64_t cap_id,
 		      unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
 		      int flags);
-  void remove_cap(Cap *cap);
+  void remove_cap(Cap *cap, bool queue_release);
   void remove_all_caps(Inode *in);
   void remove_session_caps(MetaSession *session);
   void mark_caps_dirty(Inode *in, int caps);
@@ -455,6 +455,7 @@ protected:
   void kick_flushing_caps(MetaSession *session);
   void kick_maxsize_requests(MetaSession *session);
   int get_caps(Inode *in, int need, int want, int *have, loff_t endoff);
+  int get_caps_used(Inode *in);
 
   void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater, 
 			      vector<snapid_t>& snaps);
@@ -479,13 +480,13 @@ protected:
   void finish_cap_snap(Inode *in, CapSnap *capsnap, int used);
   void _flushed_cap_snap(Inode *in, snapid_t seq);
 
-  void _schedule_invalidate_dentry_callback(Dentry *dn);
+  void _schedule_invalidate_dentry_callback(Dentry *dn, bool del);
   void _async_dentry_invalidate(vinodeno_t dirino, vinodeno_t ino, string& name);
   void _invalidate_inode_parents(Inode *in);
 
   void _schedule_invalidate_callback(Inode *in, int64_t off, int64_t len, bool keep_caps);
-  void _invalidate_inode_cache(Inode *in, bool keep_caps);
-  void _invalidate_inode_cache(Inode *in, int64_t off, int64_t len, bool keep_caps);
+  void _invalidate_inode_cache(Inode *in);
+  void _invalidate_inode_cache(Inode *in, int64_t off, int64_t len);
   void _async_invalidate(Inode *in, int64_t off, int64_t len, bool keep_caps);
   void _release(Inode *in);
   
@@ -547,6 +548,8 @@ private:
   void _closedir(dir_result_t *dirp);
 
   // other helpers
+  void _fragmap_remove_non_leaves(Inode *in);
+
   void _ll_get(Inode *in);
   int _ll_put(Inode *in, int num);
   void _ll_drop_pins();
@@ -554,7 +557,20 @@ private:
   Fh *_create_fh(Inode *in, int flags, int cmode);
   int _release_fh(Fh *fh);
 
-  int _read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl);
+
+  struct C_Readahead : public Context {
+    Client *client;
+    Inode *inode;
+    C_Readahead(Client *c, Inode *i)
+      : client(c),
+	inode(i) { }
+    void finish(int r) {
+      lsubdout(client->cct, client, 20) << "C_Readahead on " << inode << dendl;
+      client->put_cap_ref(inode, CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
+    }
+  };
+
+  int _read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl, bool *checkeof);
   int _read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl);
 
   // internal interface
@@ -680,7 +696,9 @@ public:
   int open(const char *path, int flags, mode_t mode=0);
   int open(const char *path, int flags, mode_t mode, int stripe_unit, int stripe_count, int object_size, const char *data_pool);
   int lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name);
-  int lookup_ino(inodeno_t ino);
+  int lookup_ino(inodeno_t ino, Inode **inode=NULL);
+  int lookup_parent(Inode *in, Inode **parent=NULL);
+  int lookup_name(Inode *in, Inode *parent);
   int close(int fd);
   loff_t lseek(int fd, loff_t offset, int whence);
   int read(int fd, char *buf, loff_t size, loff_t offset=-1);

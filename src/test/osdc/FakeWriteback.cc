@@ -68,7 +68,7 @@ void FakeWriteback::read(const object_t& oid,
   m_finisher->queue(wrapper, len);
 }
 
-tid_t FakeWriteback::write(const object_t& oid,
+ceph_tid_t FakeWriteback::write(const object_t& oid,
 			   const object_locator_t& oloc,
 			   uint64_t off, uint64_t len,
 			   const SnapContext& snapc,

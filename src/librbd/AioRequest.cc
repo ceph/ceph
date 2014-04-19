@@ -105,11 +105,12 @@ namespace librbd {
     return r;
   }
 
-  /** read **/
+  /** write **/
 
   AbstractWrite::AbstractWrite()
     : m_state(LIBRBD_AIO_WRITE_FLAT),
-      m_parent_overlap(0) {}
+      m_parent_overlap(0),
+      m_snap_seq(0) {}
   AbstractWrite::AbstractWrite(ImageCtx *ictx, const std::string &oid,
 			       uint64_t object_no, uint64_t object_off, uint64_t len,
 			       vector<pair<uint64_t,uint64_t> >& objectx,
@@ -236,6 +237,7 @@ namespace librbd {
   }
 
   void AbstractWrite::send_copyup() {
+    ldout(m_ictx->cct, 20) << "send_copyup " << this << " " << m_oid << " " << m_object_off << "~" << m_object_len << dendl;
     if (!m_read_data.is_zero())
       m_copyup.exec("rbd", "copyup", m_read_data);
     add_copyup_ops();
@@ -245,5 +247,10 @@ namespace librbd {
     m_ictx->md_ctx.aio_operate(m_oid, rados_completion, &m_copyup,
 			       m_snap_seq, m_snaps);
     rados_completion->release();
+  }
+
+  void AioWrite::add_write_ops(librados::ObjectWriteOperation &wr) {
+    wr.set_alloc_hint(m_ictx->get_object_size(), m_ictx->get_object_size());
+    wr.write(m_object_off, m_write_data);
   }
 }

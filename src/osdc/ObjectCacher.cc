@@ -443,6 +443,7 @@ void ObjectCacher::Object::truncate(loff_t s)
 
     // remove bh entirely
     assert(bh->start() >= s);
+    assert(bh->waitfor_read.empty());
     oc->bh_remove(this, bh);
     delete bh;
   }
@@ -482,6 +483,7 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len)
 
     ++p;
     ldout(oc->cct, 10) << "discard " << *this << " bh " << *bh << dendl;
+    assert(bh->waitfor_read.empty());
     oc->bh_remove(this, bh);
     delete bh;
   }
@@ -625,7 +627,7 @@ void ObjectCacher::bh_read(BufferHead *bh)
   ++reads_outstanding;
 }
 
-void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, tid_t tid,
+void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, ceph_tid_t tid,
 				  loff_t start, uint64_t length,
 				  bufferlist &bl, int r,
 				  bool trust_enoent)
@@ -810,7 +812,7 @@ void ObjectCacher::bh_write(BufferHead *bh)
   C_WriteCommit *oncommit = new C_WriteCommit(this, bh->ob->oloc.pool,
                                               bh->ob->get_soid(), bh->start(), bh->length());
   // go
-  tid_t tid = writeback_handler.write(bh->ob->get_oid(), bh->ob->get_oloc(),
+  ceph_tid_t tid = writeback_handler.write(bh->ob->get_oid(), bh->ob->get_oloc(),
 				      bh->start(), bh->length(),
 				      bh->snapc, bh->bl, bh->last_write,
 				      bh->ob->truncate_size, bh->ob->truncate_seq,
@@ -830,7 +832,7 @@ void ObjectCacher::bh_write(BufferHead *bh)
 }
 
 void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
-				   uint64_t length, tid_t tid, int r)
+				   uint64_t length, ceph_tid_t tid, int r)
 {
   assert(lock.is_locked());
   ldout(cct, 7) << "bh_write_commit " 
@@ -1245,6 +1247,8 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
     ldout(cct, 10) << "readx  result is " << rd->bl->length() << dendl;
   } else {
     ldout(cct, 10) << "readx  no bufferlist ptr (readahead?), done." << dendl;
+    map<uint64_t,bufferlist>::reverse_iterator i = stripe_map.rbegin();
+    pos = i->first + i->second.length();
   }
 
   // done with read.
@@ -1485,6 +1489,18 @@ void ObjectCacher::flusher_entry()
 
 // -------------------------------------------------
 
+bool ObjectCacher::set_is_empty(ObjectSet *oset)
+{
+  assert(lock.is_locked());
+  if (oset->objects.empty())
+    return true;
+
+  for (xlist<Object*>::iterator p = oset->objects.begin(); !p.end(); ++p)
+    if (!(*p)->is_empty())
+      return false;
+
+  return true;
+}
 
 bool ObjectCacher::set_is_cached(ObjectSet *oset)
 {

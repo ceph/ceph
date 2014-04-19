@@ -56,8 +56,10 @@ static const char* c_str_or_null(const std::string &str)
   return str.c_str();
 }
 
-void global_init(std::vector < const char * > *alt_def_args, std::vector < const char* >& args,
-	       uint32_t module_type, code_environment_t code_env, int flags)
+void global_pre_init(std::vector < const char * > *alt_def_args,
+		     std::vector < const char* >& args,
+		     uint32_t module_type, code_environment_t code_env,
+		     int flags)
 {
   // You can only call global_init once.
   assert(!g_ceph_context);
@@ -104,10 +106,17 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
   // Expand metavariables. Invoke configuration observers.
   conf->apply_changes(NULL);
 
-  g_lockdep = cct->_conf->lockdep;
-
   // Now we're ready to complain about config file parse errors
   complain_about_parse_errors(cct, &parse_errors);
+}
+
+void global_init(std::vector < const char * > *alt_def_args,
+		 std::vector < const char* >& args,
+		 uint32_t module_type, code_environment_t code_env, int flags)
+{
+  global_pre_init(alt_def_args, args, module_type, code_env, flags);
+
+  g_lockdep = g_ceph_context->_conf->lockdep;
 
   // signal stuff
   int siglist[] = { SIGPIPE, 0 };
@@ -130,14 +139,13 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
   }
 
   if (g_lockdep) {
-    dout(1) << "lockdep is enabled" << dendl;
-    lockdep_register_ceph_context(cct);
+    lockdep_register_ceph_context(g_ceph_context);
   }
-  register_assert_context(cct);
+  register_assert_context(g_ceph_context);
 
   // call all observers now.  this has the side-effect of configuring
   // and opening the log file immediately.
-  conf->call_all_observers();
+  g_conf->call_all_observers();
 
   if (code_env == CODE_ENVIRONMENT_DAEMON && !(flags & CINIT_FLAG_NO_DAEMON_ACTIONS))
     output_ceph_version();
@@ -180,10 +188,11 @@ void global_init_daemonize(CephContext *cct, int flags)
     exit(1);
   }
 
-  global_init_postfork(cct, flags);
+  global_init_postfork_start(cct);
+  global_init_postfork_finish(cct, flags);
 }
 
-void global_init_postfork(CephContext *cct, int flags)
+void global_init_postfork_start(CephContext *cct)
 {
   // restart log thread
   g_ceph_context->_log->start();
@@ -201,20 +210,30 @@ void global_init_postfork(CephContext *cct, int flags)
    * guarantee that nobody ever writes to stdout, even though they're not
    * supposed to.
    */
-  TEMP_FAILURE_RETRY(close(STDIN_FILENO));
+  VOID_TEMP_FAILURE_RETRY(close(STDIN_FILENO));
   if (open("/dev/null", O_RDONLY) < 0) {
     int err = errno;
     derr << "global_init_daemonize: open(/dev/null) failed: error "
 	 << err << dendl;
     exit(1);
   }
-  TEMP_FAILURE_RETRY(close(STDOUT_FILENO));
+  VOID_TEMP_FAILURE_RETRY(close(STDOUT_FILENO));
   if (open("/dev/null", O_RDONLY) < 0) {
     int err = errno;
     derr << "global_init_daemonize: open(/dev/null) failed: error "
 	 << err << dendl;
     exit(1);
   }
+
+  pidfile_write(g_conf);
+}
+
+void global_init_postfork_finish(CephContext *cct, int flags)
+{
+  /* We only close stderr once the caller decides the daemonization
+   * process is finished.  This way we can allow error messages to be
+   * propagated in a manner that the user is able to see.
+   */
   if (!(flags & CINIT_FLAG_NO_CLOSE_STDERR)) {
     int ret = global_init_shutdown_stderr(cct);
     if (ret) {
@@ -223,9 +242,9 @@ void global_init_postfork(CephContext *cct, int flags)
       exit(1);
     }
   }
-  pidfile_write(g_conf);
   ldout(cct, 1) << "finished global_init_daemonize" << dendl;
 }
+
 
 void global_init_chdir(const CephContext *cct)
 {
@@ -245,7 +264,7 @@ void global_init_chdir(const CephContext *cct)
  */
 int global_init_shutdown_stderr(CephContext *cct)
 {
-  TEMP_FAILURE_RETRY(close(STDERR_FILENO));
+  VOID_TEMP_FAILURE_RETRY(close(STDERR_FILENO));
   if (open("/dev/null", O_RDONLY) < 0) {
     int err = errno;
     derr << "global_init_shutdown_stderr: open(/dev/null) failed: error "

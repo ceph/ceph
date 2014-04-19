@@ -16,6 +16,7 @@
 
 #include "common/Thread.h"
 #include "common/admin_socket.h"
+#include "common/admin_socket_client.h"
 #include "common/config.h"
 #include "common/cmdparse.h"
 #include "common/dout.h"
@@ -64,7 +65,7 @@ static bool cleanup_atexit = false;
 static void remove_cleanup_file(const char *file)
 {
   pthread_mutex_lock(&cleanup_lock);
-  TEMP_FAILURE_RETRY(unlink(file));
+  VOID_TEMP_FAILURE_RETRY(unlink(file));
   for (std::vector <const char*>::iterator i = cleanup_files.begin();
        i != cleanup_files.end(); ++i) {
     if (strcmp(file, *i) == 0) {
@@ -81,7 +82,7 @@ static void remove_all_cleanup_files()
   pthread_mutex_lock(&cleanup_lock);
   for (std::vector <const char*>::iterator i = cleanup_files.begin();
        i != cleanup_files.end(); ++i) {
-    TEMP_FAILURE_RETRY(unlink(*i));
+    VOID_TEMP_FAILURE_RETRY(unlink(*i));
     free((void*)*i);
   }
   cleanup_files.clear();
@@ -110,7 +111,8 @@ AdminSocket::AdminSocket(CephContext *cct)
     m_shutdown_wr_fd(-1),
     m_lock("AdminSocket::m_lock"),
     m_version_hook(NULL),
-    m_help_hook(NULL)
+    m_help_hook(NULL),
+    m_getdescs_hook(NULL)
 {
 }
 
@@ -171,7 +173,7 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
   int r = fcntl(sock_fd, F_SETFD, FD_CLOEXEC);
   if (r < 0) {
     r = errno;
-    TEMP_FAILURE_RETRY(::close(sock_fd));
+    VOID_TEMP_FAILURE_RETRY(::close(sock_fd));
     ostringstream oss;
     oss << "AdminSocket::bind_and_listen: failed to fcntl on socket: " << cpp_strerror(r);
     return oss.str();
@@ -184,15 +186,21 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
 	   sizeof(struct sockaddr_un)) != 0) {
     int err = errno;
     if (err == EADDRINUSE) {
-      // The old UNIX domain socket must still be there.
-      // Let's unlink it and try again.
-      TEMP_FAILURE_RETRY(unlink(sock_path.c_str()));
-      if (bind(sock_fd, (struct sockaddr*)&address,
-	       sizeof(struct sockaddr_un)) == 0) {
-	err = 0;
-      }
-      else {
-	err = errno;
+      AdminSocketClient client(sock_path);
+      bool ok;
+      client.ping(&ok);
+      if (ok) {
+	ldout(m_cct, 20) << "socket " << sock_path << " is in use" << dendl;
+	err = EEXIST;
+      } else {
+	ldout(m_cct, 20) << "unlink stale file " << sock_path << dendl;
+	VOID_TEMP_FAILURE_RETRY(unlink(sock_path.c_str()));
+	if (bind(sock_fd, (struct sockaddr*)&address,
+		 sizeof(struct sockaddr_un)) == 0) {
+	  err = 0;
+	} else {
+	  err = errno;
+	}
       }
     }
     if (err != 0) {
@@ -210,7 +218,7 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
     oss << "AdminSocket::bind_and_listen: "
 	  << "failed to listen to socket: " << cpp_strerror(err);
     close(sock_fd);
-    TEMP_FAILURE_RETRY(unlink(sock_path.c_str()));
+    VOID_TEMP_FAILURE_RETRY(unlink(sock_path.c_str()));
     return oss.str();
   }
   *fd = sock_fd;
@@ -379,7 +387,7 @@ bool AdminSocket::do_accept()
   }
   m_lock.Unlock();
 
-  TEMP_FAILURE_RETRY(close(connection_fd));
+  VOID_TEMP_FAILURE_RETRY(close(connection_fd));
   return rval;
 }
 
@@ -544,7 +552,7 @@ void AdminSocket::shutdown()
   // Send a byte to the shutdown pipe that the thread is listening to
   char buf[1] = { 0x0 };
   int ret = safe_write(m_shutdown_wr_fd, buf, sizeof(buf));
-  TEMP_FAILURE_RETRY(close(m_shutdown_wr_fd));
+  VOID_TEMP_FAILURE_RETRY(close(m_shutdown_wr_fd));
   m_shutdown_wr_fd = -1;
 
   if (ret == 0) {

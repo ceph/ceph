@@ -122,6 +122,20 @@ int64_t librados::RadosClient::lookup_pool(const char *name)
   return ret;
 }
 
+bool librados::RadosClient::pool_requires_alignment(int64_t pool_id)
+{
+  Mutex::Locker l(lock);
+  return osdmap.have_pg_pool(pool_id) &&
+    osdmap.get_pg_pool(pool_id)->requires_aligned_append();
+}
+
+uint64_t librados::RadosClient::pool_required_alignment(int64_t pool_id)
+{
+  Mutex::Locker l(lock);
+  return osdmap.have_pg_pool(pool_id) ?
+    osdmap.get_pg_pool(pool_id)->required_alignment() : 0;
+}
+
 const char *librados::RadosClient::get_pool_name(int64_t pool_id)
 {
   Mutex::Locker l(lock);
@@ -740,7 +754,7 @@ int librados::RadosClient::osd_command(int osd, vector<string>& cmd,
   Cond cond;
   bool done;
   int ret;
-  tid_t tid;
+  ceph_tid_t tid;
 
   if (osd < 0)
     return -EINVAL;
@@ -767,7 +781,7 @@ int librados::RadosClient::pg_command(pg_t pgid, vector<string>& cmd,
   Cond cond;
   bool done;
   int ret;
-  tid_t tid;
+  ceph_tid_t tid;
   lock.Lock();
   int r = objecter->pg_command(pgid, cmd, inbl, &tid, poutbl, prs,
 		        new C_SafeCond(&mylock, &cond, &done, &ret));

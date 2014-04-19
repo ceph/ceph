@@ -323,8 +323,8 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
 
     case Transaction::OP_COLL_ADD:
       {
-	coll_t ocid = i.get_cid();
 	coll_t ncid = i.get_cid();
+	coll_t ocid = i.get_cid();
 	ghobject_t oid = i.get_oid();
 	f->dump_string("op_name", "collection_add");
 	f->dump_stream("src_collection") << ocid;
@@ -487,6 +487,34 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
 	f->dump_stream("oid") << oid;
 	f->dump_string("first", first);
 	f->dump_string("last", last);
+      }
+      break;
+
+    case Transaction::OP_COLL_MOVE_RENAME:
+      {
+	coll_t old_cid(i.get_cid());
+	ghobject_t old_oid = i.get_oid();
+	coll_t new_cid(i.get_cid());
+	ghobject_t new_oid = i.get_oid();
+	f->dump_string("op_name", "op_coll_move_rename");
+	f->dump_stream("old_collection") << old_cid;
+	f->dump_stream("old_oid") << old_oid;
+	f->dump_stream("new_collection") << new_cid;
+	f->dump_stream("new_oid") << new_oid;
+      }
+      break;
+
+    case Transaction::OP_SETALLOCHINT:
+      {
+        coll_t cid = i.get_cid();
+        ghobject_t oid = i.get_oid();
+        uint64_t expected_object_size = i.get_length();
+        uint64_t expected_write_size = i.get_length();
+        f->dump_string("op_name", "op_setallochint");
+        f->dump_stream("collection") << cid;
+        f->dump_stream("oid") << oid;
+        f->dump_stream("expected_object_size") << expected_object_size;
+        f->dump_stream("expected_write_size") << expected_write_size;
       }
       break;
 

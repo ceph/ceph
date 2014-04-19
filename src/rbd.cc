@@ -511,6 +511,10 @@ static int do_show_info(const char *imgname, librbd::Image& image,
       return r;
   }
 
+  char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
+  strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
+  prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
+
   if (f) {
     f->open_object_section("image");
     f->dump_string("name", imgname);
@@ -518,7 +522,7 @@ static int do_show_info(const char *imgname, librbd::Image& image,
     f->dump_unsigned("objects", info.num_objs);
     f->dump_int("order", info.order);
     f->dump_unsigned("object_size", info.obj_size);
-    f->dump_string("block_name_prefix", info.block_name_prefix);
+    f->dump_string("block_name_prefix", prefix);
     f->dump_int("format", (old_format ? 1 : 2));
   } else {
     cout << "rbd image '" << imgname << "':\n"
@@ -528,7 +532,7 @@ static int do_show_info(const char *imgname, librbd::Image& image,
 	 << "\torder " << info.order
 	 << " (" << prettybyte_t(info.obj_size) << " objects)"
 	 << std::endl
-	 << "\tblock_name_prefix: " << info.block_name_prefix
+	 << "\tblock_name_prefix: " << prefix
 	 << std::endl
 	 << "\tformat: " << (old_format ? "1" : "2")
 	 << std::endl;

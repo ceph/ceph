@@ -38,6 +38,7 @@
 #include "include/Context.h"
 #include "include/assert.h"
 #include "common/Formatter.h"
+#include "common/errno.h"
 
 #include "mon/Monitor.h"
 #include "mon/QuorumService.h"

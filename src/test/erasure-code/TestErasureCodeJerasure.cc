@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -44,10 +44,10 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
 {
   TypeParam jerasure;
   map<std::string,std::string> parameters;
-  parameters["erasure-code-k"] = "2";
-  parameters["erasure-code-m"] = "2";
-  parameters["erasure-code-w"] = "7";
-  parameters["erasure-code-packetsize"] = "8";
+  parameters["k"] = "2";
+  parameters["m"] = "2";
+  parameters["w"] = "7";
+  parameters["packetsize"] = "8";
   jerasure.init(parameters);
 
 #define LARGE_ENOUGH 2048
@@ -82,8 +82,7 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
     EXPECT_EQ(0, jerasure.decode(set<int>(want_to_decode, want_to_decode+2),
                                 encoded,
                                 &decoded));
-    // always decode all, regardless of want_to_decode
-    EXPECT_EQ(4u, decoded.size()); 
+    EXPECT_EQ(2u, decoded.size()); 
     EXPECT_EQ(length, decoded[0].length());
     EXPECT_EQ(0, strncmp(decoded[0].c_str(), in.c_str(), length));
     EXPECT_EQ(0, strncmp(decoded[1].c_str(), in.c_str() + length,
@@ -114,10 +113,10 @@ TYPED_TEST(ErasureCodeTest, minimum_to_decode)
 {
   TypeParam jerasure;
   map<std::string,std::string> parameters;
-  parameters["erasure-code-k"] = "2";
-  parameters["erasure-code-m"] = "2";
-  parameters["erasure-code-w"] = "7";
-  parameters["erasure-code-packetsize"] = "8";
+  parameters["k"] = "2";
+  parameters["m"] = "2";
+  parameters["w"] = "7";
+  parameters["packetsize"] = "8";
   jerasure.init(parameters);
 
   //
@@ -212,9 +211,9 @@ TEST(ErasureCodeTest, encode)
 {
   ErasureCodeJerasureReedSolomonVandermonde jerasure;
   map<std::string,std::string> parameters;
-  parameters["erasure-code-k"] = "2";
-  parameters["erasure-code-m"] = "2";
-  parameters["erasure-code-w"] = "8";
+  parameters["k"] = "2";
+  parameters["m"] = "2";
+  parameters["w"] = "8";
   jerasure.init(parameters);
 
   unsigned alignment = jerasure.get_alignment();
@@ -293,9 +292,9 @@ TEST(ErasureCodeTest, create_ruleset)
     stringstream ss;
     ErasureCodeJerasureReedSolomonVandermonde jerasure;
     map<std::string,std::string> parameters;
-    parameters["erasure-code-k"] = "2";
-    parameters["erasure-code-m"] = "2";
-    parameters["erasure-code-w"] = "8";
+    parameters["k"] = "2";
+    parameters["m"] = "2";
+    parameters["w"] = "8";
     jerasure.init(parameters);
     int ruleset = jerasure.create_ruleset("myrule", *c, &ss);
     EXPECT_EQ(0, ruleset);
@@ -317,10 +316,10 @@ TEST(ErasureCodeTest, create_ruleset)
     stringstream ss;
     ErasureCodeJerasureReedSolomonVandermonde jerasure;
     map<std::string,std::string> parameters;
-    parameters["erasure-code-k"] = "2";
-    parameters["erasure-code-m"] = "2";
-    parameters["erasure-code-w"] = "8";
-    parameters["erasure-code-ruleset-root"] = "BAD";
+    parameters["k"] = "2";
+    parameters["m"] = "2";
+    parameters["w"] = "8";
+    parameters["ruleset-root"] = "BAD";
     jerasure.init(parameters);
     EXPECT_EQ(-ENOENT, jerasure.create_ruleset("otherrule", *c, &ss));
     EXPECT_EQ("root item BAD does not exist", ss.str());
@@ -329,10 +328,10 @@ TEST(ErasureCodeTest, create_ruleset)
     stringstream ss;
     ErasureCodeJerasureReedSolomonVandermonde jerasure;
     map<std::string,std::string> parameters;
-    parameters["erasure-code-k"] = "2";
-    parameters["erasure-code-m"] = "2";
-    parameters["erasure-code-w"] = "8";
-    parameters["erasure-code-ruleset-failure-domain"] = "WORSE";
+    parameters["k"] = "2";
+    parameters["m"] = "2";
+    parameters["w"] = "8";
+    parameters["ruleset-failure-domain"] = "WORSE";
     jerasure.init(parameters);
     EXPECT_EQ(-EINVAL, jerasure.create_ruleset("otherrule", *c, &ss));
     EXPECT_EQ("unknown type WORSE", ss.str());

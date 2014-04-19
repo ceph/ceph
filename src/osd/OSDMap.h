@@ -4,6 +4,9 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ *
+ * Author: Loic Dachary <loic@dachary.org>
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -129,12 +132,15 @@ public:
     map<int64_t,pg_pool_t> new_pools;
     map<int64_t,string> new_pool_names;
     set<int64_t> old_pools;
+    map<string,map<string,string> > new_erasure_code_profiles;
+    vector<string> old_erasure_code_profiles;
     map<int32_t,entity_addr_t> new_up_client;
     map<int32_t,entity_addr_t> new_up_cluster;
     map<int32_t,uint8_t> new_state;             // XORed onto previous state.
     map<int32_t,uint32_t> new_weight;
     map<pg_t,vector<int32_t> > new_pg_temp;     // [] to remove
     map<pg_t, int> new_primary_temp;            // [-1] to remove
+    map<int32_t,uint32_t> new_primary_affinity;
     map<int32_t,epoch_t> new_up_thru;
     map<int32_t,pair<epoch_t,epoch_t> > new_last_clean_interval;
     map<int32_t,epoch_t> new_lost;
@@ -178,6 +184,15 @@ public:
 	new_pools[pool] = *orig;
       return &new_pools[pool];
     }
+    bool has_erasure_code_profile(const string &name) const {
+      map<string,map<string,string> >::const_iterator i =
+	new_erasure_code_profiles.find(name);
+      return i != new_erasure_code_profiles.end();
+    }
+    void set_erasure_code_profile(const string &name,
+				  const map<string,string> &profile) {
+      new_erasure_code_profiles[name] = profile;
+    }
 
     /// propage update pools' snap metadata to any of their tiers
     int propagate_snaps_to_tiers(CephContext *cct, const OSDMap &base);
@@ -208,9 +223,11 @@ private:
   vector<osd_info_t> osd_info;
   ceph::shared_ptr< map<pg_t,vector<int> > > pg_temp;  // temp pg mapping (e.g. while we rebuild)
   ceph::shared_ptr< map<pg_t,int > > primary_temp;  // temp primary mapping (e.g. while we rebuild)
+  ceph::shared_ptr< vector<__u32> > osd_primary_affinity; ///< 16.16 fixed point, 0x10000 = baseline
 
   map<int64_t,pg_pool_t> pools;
   map<int64_t,string> pool_name;
+  map<string,map<string,string> > erasure_code_profiles;
   map<string,int64_t> name_pool;
 
   ceph::shared_ptr< vector<uuid_d> > osd_uuid;
@@ -341,6 +358,48 @@ public:
   }
   void adjust_osd_weights(const map<int,double>& weights, Incremental& inc) const;
 
+  void set_primary_affinity(int o, int w) {
+    assert(o < max_osd);
+    if (!osd_primary_affinity)
+      osd_primary_affinity.reset(new vector<__u32>(max_osd,
+						   CEPH_OSD_DEFAULT_PRIMARY_AFFINITY));
+    (*osd_primary_affinity)[o] = w;
+  }
+  unsigned get_primary_affinity(int o) const {
+    assert(o < max_osd);
+    if (!osd_primary_affinity)
+      return CEPH_OSD_DEFAULT_PRIMARY_AFFINITY;
+    return (*osd_primary_affinity)[o];
+  }
+  float get_primary_affinityf(int o) const {
+    return (float)get_primary_affinity(o) / (float)CEPH_OSD_MAX_PRIMARY_AFFINITY;
+  }
+
+  bool has_erasure_code_profile(const string &name) const {
+    map<string,map<string,string> >::const_iterator i =
+      erasure_code_profiles.find(name);
+    return i != erasure_code_profiles.end();
+  }
+  void set_erasure_code_profile(const string &name,
+				const map<string,string> &profile) {
+    erasure_code_profiles[name] = profile;
+  }
+  const map<string,string> &get_erasure_code_profile(const string &name) const {
+    map<string,map<string,string> >::const_iterator i =
+      erasure_code_profiles.find(name);
+    static map<string,string> empty;
+    if (i == erasure_code_profiles.end())
+      return empty;
+    else
+      return i->second;
+  }
+  map<string,string> &get_erasure_code_profile(const string &name) {
+    return erasure_code_profiles[name];
+  }
+  const map<string,map<string,string> > &get_erasure_code_profiles() const {
+    return erasure_code_profiles;
+  }
+
   bool exists(int osd) const {
     //assert(osd >= 0);
     return osd >= 0 && osd < max_osd && (osd_state[osd] & CEPH_OSD_EXISTS);
@@ -351,7 +410,7 @@ public:
   }
 
   bool is_down(int osd) const {
-    return !exists(osd) || !is_up(osd);
+    return !is_up(osd);
   }
 
   bool is_out(int osd) const {
@@ -359,7 +418,7 @@ public:
   }
 
   bool is_in(int osd) const {
-    return exists(osd) && !is_out(osd);
+    return !is_out(osd);
   }
 
   /**
@@ -536,11 +595,15 @@ public:
 private:
   /// pg -> (raw osd list)
   int _pg_to_osds(const pg_pool_t& pool, pg_t pg,
-                  vector<int> *osds, int *primary) const;
+                  vector<int> *osds, int *primary,
+		  ps_t *ppps) const;
   void _remove_nonexistent_osds(const pg_pool_t& pool, vector<int>& osds) const;
 
+  void _apply_primary_affinity(ps_t seed, const pg_pool_t& pool,
+			       vector<int> *osds, int *primary) const;
+
   /// pg -> (up osd list)
-  void _raw_to_up_osds(pg_t pg, const vector<int>& raw,
+  void _raw_to_up_osds(const pg_pool_t& pool, const vector<int>& raw,
                        vector<int> *up, int *primary) const;
 
   /**
@@ -575,7 +638,6 @@ public:
   int pg_to_acting_osds(pg_t pg, vector<int>& acting) const {
     int primary;
     int r = pg_to_acting_osds(pg, &acting, &primary);
-    assert(acting.empty() || primary == acting.front());
     return r;
   }
   /**
@@ -597,8 +659,32 @@ public:
   void pg_to_up_acting_osds(pg_t pg, vector<int>& up, vector<int>& acting) const {
     int up_primary, acting_primary;
     pg_to_up_acting_osds(pg, &up, &up_primary, &acting, &acting_primary);
-    assert(up.empty() || up_primary == up.front());
-    assert(acting.empty() || acting_primary == acting.front());
+  }
+  bool pg_is_ec(pg_t pg) const {
+    map<int64_t, pg_pool_t>::const_iterator i = pools.find(pg.pool());
+    assert(i != pools.end());
+    return i->second.ec_pool();
+  }
+  bool get_primary_shard(pg_t pgid, spg_t *out) const {
+    map<int64_t, pg_pool_t>::const_iterator i = get_pools().find(pgid.pool());
+    if (i == get_pools().end()) {
+      return false;
+    }
+    int primary;
+    vector<int> acting;
+    pg_to_acting_osds(pgid, &acting, &primary);
+    if (i->second.ec_pool()) {
+      for (shard_id_t i = 0; i < acting.size(); ++i) {
+	if (acting[i] == primary) {
+	  *out = spg_t(pgid, i);
+	  return true;
+	}
+      }
+    } else {
+      *out = spg_t(pgid);
+      return true;
+    }
+    return false;
   }
 
   int64_t lookup_pg_pool_name(const string& name) {
@@ -666,8 +752,13 @@ public:
 
 
   /* what replica # is a given osd? 0 primary, -1 for none. */
-  static int calc_pg_rank(int osd, vector<int>& acting, int nrep=0);
-  static int calc_pg_role(int osd, vector<int>& acting, int nrep=0);
+  static int calc_pg_rank(int osd, const vector<int>& acting, int nrep=0);
+  static int calc_pg_role(int osd, const vector<int>& acting, int nrep=0);
+  static bool primary_changed(
+    int oldprimary,
+    const vector<int> &oldacting,
+    int newprimary,
+    const vector<int> &newacting);
   
   /* rank is -1 (stray), 0 (primary), 1,2,3,... (replica) */
   int get_pg_acting_rank(pg_t pg, int osd) const {
@@ -727,6 +818,8 @@ public:
 
   string get_flag_string() const;
   static string get_flag_string(unsigned flags);
+  static void dump_erasure_code_profiles(const map<string,map<string,string> > &profiles,
+					 Formatter *f);
   void dump_json(ostream& out) const;
   void dump(Formatter *f) const;
   static void generate_test_instances(list<OSDMap*>& o);

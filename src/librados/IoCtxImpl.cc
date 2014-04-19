@@ -26,8 +26,8 @@
 #define dout_prefix *_dout << "librados: "
 
 librados::IoCtxImpl::IoCtxImpl() :
-  ref_cnt(0), client(NULL), poolid(0), assert_ver(0), notify_timeout(30),
-  aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"),
+  ref_cnt(0), client(NULL), poolid(0), assert_ver(0), last_objver(0),
+  notify_timeout(30), aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"),
   aio_write_seq(0), lock(NULL), objecter(NULL)
 {
 }
@@ -95,7 +95,7 @@ void librados::IoCtxImpl::complete_aio_write(AioCompletionImpl *c)
   assert(c->io == this);
   c->aio_write_list_item.remove_myself();
 
-  map<tid_t, std::list<AioCompletionImpl*> >::iterator waiters = aio_write_waiters.begin();
+  map<ceph_tid_t, std::list<AioCompletionImpl*> >::iterator waiters = aio_write_waiters.begin();
   while (waiters != aio_write_waiters.end()) {
     if (!aio_write_list.empty() &&
 	aio_write_list.front()->aio_write_seq <= waiters->first) {
@@ -123,7 +123,7 @@ void librados::IoCtxImpl::flush_aio_writes_async(AioCompletionImpl *c)
   ldout(client->cct, 20) << "flush_aio_writes_async " << this
 			 << " completion " << c << dendl;
   Mutex::Locker l(aio_write_list_lock);
-  tid_t seq = aio_write_seq;
+  ceph_tid_t seq = aio_write_seq;
   if (aio_write_list.empty()) {
     ldout(client->cct, 20) << "flush_aio_writes_async no writes. (tid "
 			   << seq << ")" << dendl;
@@ -140,7 +140,7 @@ void librados::IoCtxImpl::flush_aio_writes()
 {
   ldout(client->cct, 20) << "flush_aio_writes" << dendl;
   aio_write_list_lock.Lock();
-  tid_t seq = aio_write_seq;
+  ceph_tid_t seq = aio_write_seq;
   while (!aio_write_list.empty() &&
 	 aio_write_list.front()->aio_write_seq <= seq)
     aio_write_cond.Wait(aio_write_list_lock);
@@ -460,11 +460,7 @@ int librados::IoCtxImpl::write(const object_t& oid, bufferlist& bl,
   bufferlist mybl;
   mybl.substr_of(bl, 0, len);
   op.write(off, mybl);
-  int r =  operate(oid, &op, NULL);
-  if (r < 0)
-    return r;
-
-  return len;
+  return operate(oid, &op, NULL);
 }
 
 int librados::IoCtxImpl::append(const object_t& oid, bufferlist& bl, size_t len)
@@ -474,11 +470,7 @@ int librados::IoCtxImpl::append(const object_t& oid, bufferlist& bl, size_t len)
   bufferlist mybl;
   mybl.substr_of(bl, 0, len);
   op.append(mybl);
-  int r = operate(oid, &op, NULL);
-  if (r < 0)
-    return r;
-
-  return len;
+  return operate(oid, &op, NULL);
 }
 
 int librados::IoCtxImpl::write_full(const object_t& oid, bufferlist& bl)
@@ -502,7 +494,7 @@ int librados::IoCtxImpl::clone_range(const object_t& dst_oid,
 }
 
 int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
-				 time_t *pmtime)
+				 time_t *pmtime, int flags)
 {
   utime_t ut;
   if (pmtime) {
@@ -529,7 +521,7 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
   int op = o->ops[0].op.op;
   ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid << " nspace=" << oloc.nspace << dendl;
   Objecter::Op *objecter_op = objecter->prepare_mutate_op(oid, oloc,
-	                                                  *o, snapc, ut, 0,
+	                                                  *o, snapc, ut, flags,
 	                                                  NULL, oncommit, &ver);
   lock->Lock();
   objecter->op_submit(objecter_op);
@@ -548,7 +540,9 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
 }
 
 int librados::IoCtxImpl::operate_read(const object_t& oid,
-				      ::ObjectOperation *o, bufferlist *pbl)
+				      ::ObjectOperation *o,
+				      bufferlist *pbl,
+				      int flags)
 {
   if (!o->size())
     return 0;
@@ -564,7 +558,7 @@ int librados::IoCtxImpl::operate_read(const object_t& oid,
   int op = o->ops[0].op.op;
   ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid << " nspace=" << oloc.nspace << dendl;
   Objecter::Op *objecter_op = objecter->prepare_read_op(oid, oloc,
-	                                      *o, snap_seq, pbl, 0,
+	                                      *o, snap_seq, pbl, flags,
 	                                      onack, &ver);
   lock->Lock();
   objecter->op_submit(objecter_op);
@@ -634,6 +628,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 
   c->is_read = true;
   c->io = this;
+  c->blp = pbl;
 
   Mutex::Locker l(*lock);
   objecter->read(oid, oloc,
@@ -653,9 +648,9 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 
   c->is_read = true;
   c->io = this;
-  c->maxlen = len;
   c->bl.clear();
   c->bl.push_back(buffer::create_static(len, buf));
+  c->blp = &c->bl;
 
   Mutex::Locker l(*lock);
   objecter->read(oid, oloc,
@@ -924,7 +919,7 @@ int librados::IoCtxImpl::read(const object_t& oid,
 
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
-  rd.read(off, len, &bl, NULL);
+  rd.read(off, len, &bl, NULL, NULL);
   int r = operate_read(oid, &rd, &bl);
   if (r < 0)
     return r;
@@ -1202,6 +1197,16 @@ int librados::IoCtxImpl::notify(const object_t& oid, uint64_t ver, bufferlist& b
   return r;
 }
 
+int librados::IoCtxImpl::set_alloc_hint(const object_t& oid,
+                                        uint64_t expected_object_size,
+                                        uint64_t expected_write_size)
+{
+  ::ObjectOperation wr;
+  prepare_assert_ops(&wr);
+  wr.set_alloc_hint(expected_object_size, expected_write_size);
+  return operate(oid, &wr, NULL);
+}
+
 version_t librados::IoCtxImpl::last_version()
 {
   return last_objver;
@@ -1238,8 +1243,8 @@ void librados::IoCtxImpl::C_aio_Ack::finish(int r)
     c->safe = true;
   c->cond.Signal();
 
-  if (c->bl.length() > 0) {
-    c->rval = c->bl.length();
+  if (r == 0 && c->blp && c->blp->length() > 0) {
+    c->rval = c->blp->length();
   }
 
   if (c->callback_complete) {

@@ -137,15 +137,7 @@ private:
 
 public:
   int pending() { return _pending; }
-  int issued() {
-    if (0) {
-      //#warning capability debug sanity check, remove me someday
-      unsigned o = _issued;
-      _calc_issued();
-      assert(o == _issued);
-    }
-    return _issued;
-  }
+  int issued() { return _issued; }
   bool is_null() { return !_pending && _revokes.empty(); }
 
   ceph_seq_t issue(unsigned c) {
@@ -192,9 +184,14 @@ public:
       // can i forget any revocations?
       while (!_revokes.empty() && _revokes.front().seq < seq)
 	_revokes.pop_front();
-      if (!_revokes.empty() && _revokes.front().seq == seq)
-	_revokes.begin()->before = caps;
-      _calc_issued();
+      if (!_revokes.empty()) {
+	if (_revokes.front().seq == seq)
+	  _revokes.begin()->before = caps;
+	_calc_issued();
+      } else {
+	// seq < last_sent
+	_issued = caps | _pending;
+      }
     }
     //check_rdcaps_list();
   }
@@ -311,7 +308,7 @@ public:
 	issue(newpending);
       last_issue_stamp = other.last_issue_stamp;
     } else {
-      inc_last_seq();
+      issue(CEPH_CAP_PIN);
     }
 
     client_follows = other.client_follows;
@@ -330,7 +327,7 @@ public:
       else
 	issue(newpending);
     } else {
-      inc_last_seq();
+      issue(CEPH_CAP_PIN);
     }
 
     // wanted

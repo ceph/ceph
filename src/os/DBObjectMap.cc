@@ -156,9 +156,8 @@ string DBObjectMap::ghobject_key(const ghobject_t &oid)
     t += snprintf(t, end - t, ".%llx", (long long unsigned)oid.hobj.pool);
   snprintf(t, end - t, ".%.*X", (int)(sizeof(oid.hobj.hash)*2), oid.hobj.hash);
 
-  if (oid.generation != ghobject_t::NO_GEN) {
-    assert(oid.shard_id != ghobject_t::NO_SHARD);
-
+  if (oid.generation != ghobject_t::NO_GEN ||
+      oid.shard_id != ghobject_t::NO_SHARD) {
     t += snprintf(t, end - t, ".%llx", (long long unsigned)oid.generation);
     t += snprintf(t, end - t, ".%x", (int)oid.shard_id);
   }
@@ -248,9 +247,9 @@ bool DBObjectMap::parse_ghobject_key_v0(const string &in, coll_t *c,
 
   *c = coll_t(coll);
   int64_t pool = -1;
-  pg_t pg;
+  spg_t pg;
   if (c->is_pg_prefix(pg))
-    pool = (int64_t)pg.pool();
+    pool = (int64_t)pg.pgid.pool();
   (*oid) = ghobject_t(hobject_t(name, key, snap, hash, pool, ""));
   return true;
 }
@@ -800,7 +799,7 @@ int DBObjectMap::clear_keys_header(const ghobject_t &oid,
   // create new header
   Header newheader = generate_new_header(oid, Header());
   set_map_header(oid, *newheader, t);
-  if (attrs.size())
+  if (!attrs.empty())
     t->set(xattr_prefix(newheader), attrs);
   return db->submit_transaction(t);
 }

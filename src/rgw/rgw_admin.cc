@@ -45,7 +45,7 @@ void _usage()
   cerr << "  user info                  get user info\n";
   cerr << "  user rm                    remove user\n";
   cerr << "  user suspend               suspend a user\n";
-  cerr << "  user enable                reenable user after suspension\n";
+  cerr << "  user enable                re-enable user after suspension\n";
   cerr << "  user check                 check user info\n";
   cerr << "  user stats                 show user stats as accounted by quota subsystem\n";
   cerr << "  caps add                   add user capabilities\n";
@@ -87,7 +87,8 @@ void _usage()
   cerr << "  usage trim                 trim usage (by user, date range)\n";
   cerr << "  temp remove                remove temporary objects that were created up to\n";
   cerr << "                             specified date (and optional time)\n";
-  cerr << "  gc list                    dump expired garbage collection objects\n";
+  cerr << "  gc list                    dump expired garbage collection objects (specify\n";
+  cerr << "                             --include-all to list all entries, including unexpired)\n";
   cerr << "  gc process                 manually process garbage\n";
   cerr << "  metadata get               get metadata info\n";
   cerr << "  metadata put               put metadata info\n";
@@ -812,6 +813,7 @@ int main(int argc, char **argv)
   int64_t max_size = -1;
   bool have_max_objects = false;
   bool have_max_size = false;
+  int include_all = false;
 
   int sync_stats = false;
 
@@ -951,6 +953,8 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &check_objects, NULL, "--check-objects", (char*)NULL)) {
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &sync_stats, NULL, "--sync-stats", (char*)NULL)) {
+     // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &include_all, NULL, "--include-all", (char*)NULL)) {
      // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
       caps = val;
@@ -1352,7 +1356,9 @@ int main(int argc, char **argv)
   case OPT_USER_INFO:
     break;
   case OPT_USER_CREATE:
-    user_op.set_generate_key(); // generate a new key by default
+    if (!user_op.has_existing_user()) {
+      user_op.set_generate_key(); // generate a new key by default
+    }
     ret = user.add(user_op, &err_msg);
     if (ret < 0) {
       cerr << "could not create user: " << err_msg << std::endl;
@@ -1891,7 +1897,7 @@ next:
 
     do {
       list<cls_rgw_gc_obj_info> result;
-      int ret = store->list_gc_objs(&index, marker, 1000, result, &truncated);
+      int ret = store->list_gc_objs(&index, marker, 1000, !include_all, result, &truncated);
       if (ret < 0) {
 	cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret) << std::endl;
 	return 1;

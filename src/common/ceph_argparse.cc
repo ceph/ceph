@@ -56,6 +56,25 @@ void string_to_vec(std::vector<std::string>& args, std::string argstr)
   }
 }
 
+bool split_dashdash(const std::vector<const char*>& args,
+		    std::vector<const char*>& options,
+		    std::vector<const char*>& arguments) {
+  bool dashdash = false;
+  for (std::vector<const char*>::const_iterator i = args.begin();
+       i != args.end();
+       ++i) {
+    if (dashdash) {
+      arguments.push_back(*i);
+    } else {
+      if (strcmp(*i, "--") == 0)
+	dashdash = true;
+      else
+	options.push_back(*i);
+    }
+  }
+  return dashdash;
+}
+
 void env_to_vec(std::vector<const char*>& args, const char *name)
 {
   if (!name)
@@ -64,13 +83,32 @@ void env_to_vec(std::vector<const char*>& args, const char *name)
   if (!p)
     return;
 
+  bool dashdash = false;
+  std::vector<const char*> options;
+  std::vector<const char*> arguments;
+  if (split_dashdash(args, options, arguments))
+    dashdash = true;
+
+  std::vector<const char*> env_options;
+  std::vector<const char*> env_arguments;
   static vector<string> str_vec;
+  std::vector<const char*> env;
   str_vec.clear();
   get_str_vec(p, " ", str_vec);
   for (vector<string>::iterator i = str_vec.begin();
        i != str_vec.end();
-       i++)
-    args.push_back(i->c_str());
+       ++i)
+    env.push_back(i->c_str());
+  if (split_dashdash(env, env_options, env_arguments))
+    dashdash = true;
+
+  args.clear();
+  args.insert(args.end(), options.begin(), options.end());
+  args.insert(args.end(), env_options.begin(), env_options.end());
+  if (dashdash)
+    args.push_back("--");
+  args.insert(args.end(), arguments.begin(), arguments.end());
+  args.insert(args.end(), env_arguments.begin(), env_arguments.end());
 }
 
 void argv_to_vec(int argc, const char **argv,

@@ -107,6 +107,7 @@ public:
   static const unsigned STATE_STICKY =        (1<<15);  // sticky pin due to inode stickydirs
   static const unsigned STATE_DNPINNEDFRAG =  (1<<16);  // dir is refragmenting
   static const unsigned STATE_ASSIMRSTAT =    (1<<17);  // assimilating inode->frag rstats
+  static const unsigned STATE_DIRTYDFT =      (1<<18);  // dirty dirfragtree
 
   // common states
   static const unsigned STATE_CLEAN =  0;
@@ -115,7 +116,7 @@ public:
   // these state bits are preserved by an import/export
   // ...except if the directory is hashed, in which case none of them are!
   static const unsigned MASK_STATE_EXPORTED = 
-  (STATE_COMPLETE|STATE_DIRTY);
+  (STATE_COMPLETE|STATE_DIRTY|STATE_DIRTYDFT);
   static const unsigned MASK_STATE_IMPORT_KEPT = 
   (						  
    STATE_IMPORTING
@@ -129,10 +130,10 @@ public:
    |STATE_FROZENDIR
    |STATE_STICKY);
   static const unsigned MASK_STATE_FRAGMENT_KEPT = 
-  (STATE_DIRTY |
-   STATE_COMPLETE |
+  (STATE_DIRTY|
    STATE_EXPORTBOUND |
-   STATE_IMPORTBOUND);
+   STATE_IMPORTBOUND |
+   STATE_REJOINUNDEF);
 
   // -- rep spec --
   static const int REP_NONE =     0;
@@ -150,7 +151,7 @@ public:
 
   static const int WAIT_DNLOCK_OFFSET = 4;
 
-  static const uint64_t WAIT_ANY_MASK  = (0xffffffff);
+  static const uint64_t WAIT_ANY_MASK = (uint64_t)(-1);
   static const uint64_t WAIT_ATFREEZEROOT = (WAIT_UNFREEZE);
   static const uint64_t WAIT_ATSUBTREEROOT = (WAIT_SINGLEAUTH);
 
@@ -170,7 +171,6 @@ public:
 
   fnode_t fnode;
   snapid_t first;
-  ceph_seq_t mseq; // migrate sequence
   map<snapid_t,old_rstat_t> dirty_old_rstat;  // [value.first,key]
 
   // my inodes with dirty rstat data
@@ -179,7 +179,7 @@ public:
   void resync_accounted_fragstat();
   void resync_accounted_rstat();
   void assimilate_dirty_rstat_inodes();
-  void assimilate_dirty_rstat_inodes_finish(Mutation *mut, EMetaBlob *blob);
+  void assimilate_dirty_rstat_inodes_finish(MutationRef& mut, EMetaBlob *blob);
 
 protected:
   version_t projected_version;
@@ -219,6 +219,7 @@ public:
   void log_mark_dirty();
   void mark_clean();
 
+  bool is_new() { return item_new.is_on_list(); }
   void mark_new(LogSegment *ls);
 
 public:
@@ -324,6 +325,7 @@ protected:
     return num_dirty;
   }
 
+  int64_t get_frag_size() { return get_projected_fnode()->fragstat.size(); }
 
   // -- dentries and inodes --
  public:
@@ -370,10 +372,10 @@ public:
   void merge(list<CDir*>& subs, list<Context*>& waiters, bool replay);
 
   bool should_split() {
-    return (int)get_num_head_items() > g_conf->mds_bal_split_size;
+    return (int)get_frag_size() > g_conf->mds_bal_split_size;
   }
   bool should_merge() {
-    return (int)get_num_head_items() < g_conf->mds_bal_merge_size;
+    return (int)get_frag_size() < g_conf->mds_bal_merge_size;
   }
 
 private:
@@ -473,6 +475,7 @@ private:
   bool is_complete() { return state & STATE_COMPLETE; }
   bool is_exporting() { return state & STATE_EXPORTING; }
   bool is_importing() { return state & STATE_IMPORTING; }
+  bool is_dirty_dft() { return state & STATE_DIRTYDFT; }
 
   int get_dir_rep() { return dir_rep; }
   bool is_rep() { 
@@ -495,14 +498,15 @@ protected:
 
   // -- commit --
   map<version_t, list<Context*> > waiting_for_commit;
-  void _commit(version_t want);
-  void _omap_commit();
+  void _commit(version_t want, int op_prio);
+  void _omap_commit(int op_prio);
   void _encode_dentry(CDentry *dn, bufferlist& bl, const set<snapid_t> *snaps);
   void _committed(version_t v);
 public:
   void wait_for_commit(Context *c, version_t v=0);
   void commit_to(version_t want);
-  void commit(version_t want, Context *c, bool ignore_authpinnability=false);
+  void commit(version_t want, Context *c,
+	      bool ignore_authpinnability=false, int op_prio=-1);
 
   // -- dirtyness --
   version_t get_committing_version() { return committing_version; }
@@ -532,7 +536,7 @@ protected:
   map< inodeno_t, list<Context*> > waiting_on_ino;
 
 public:
-  bool is_waiting_for_dentry(const char *dname, snapid_t snap) {
+  bool is_waiting_for_dentry(const string& dname, snapid_t snap) {
     return waiting_on_dentry.count(string_snap_t(dname, snap));
   }
   void add_dentry_waiter(const string& dentry, snapid_t snap, Context *c);
@@ -555,7 +559,6 @@ public:
   void encode_export(bufferlist& bl);
   void finish_export(utime_t now);
   void abort_export() {
-    mseq += 2;
     put(PIN_TEMPEXPORTING);
   }
   void decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls);

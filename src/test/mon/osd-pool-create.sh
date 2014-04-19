@@ -23,7 +23,8 @@ function run() {
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=127.0.0.1 "
 
-    for TEST_function in $(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p') ; do
+    FUNCTIONS=${FUNCTIONS:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
+    for TEST_function in $FUNCTIONS ; do
         setup $dir || return 1
         $TEST_function $dir || return 1
         teardown $dir || return 1
@@ -65,17 +66,25 @@ function TEST_default_deprectated_2() {
 function TEST_erasure_crush_rule() {
     local dir=$1
     run_mon $dir a --public-addr 127.0.0.1
-    crush_ruleset=erasure_ruleset
+    # 
+    # choose the crush ruleset used with an erasure coded pool
+    #
+    local crush_ruleset=myruleset
+    ! ./ceph osd crush rule ls | grep $crush_ruleset || return 1
     ./ceph osd crush rule create-erasure $crush_ruleset
     ./ceph osd crush rule ls | grep $crush_ruleset
-    ./ceph osd pool create pool_erasure 12 12 erasure 2>&1 | \
-        grep 'crush_ruleset is missing' || return 1
-    ! ./ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=WRONG > $dir/out 2>&1
-    grep 'WRONG does not exist' $dir/out || return 1
-    grep 'EINVAL' $dir/out || return 1
+    local poolname
+    poolname=pool_erasure1
     ! ./ceph --format json osd dump | grep '"crush_ruleset":1' || return 1
-    ./ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=$crush_ruleset
+    ./ceph osd pool create $poolname 12 12 erasure default $crush_ruleset
     ./ceph --format json osd dump | grep '"crush_ruleset":1' || return 1
+    #
+    # a crush ruleset by the name of the pool is implicitly created
+    #
+    poolname=pool_erasure2
+    ./ceph osd erasure-code-profile set myprofile
+    ./ceph osd pool create $poolname 12 12 erasure myprofile
+    ./ceph osd crush rule ls | grep $poolname || return 1
 }
 
 function TEST_erasure_crush_rule_pending() {
@@ -86,43 +95,8 @@ function TEST_erasure_crush_rule_pending() {
     # add to the pending OSD map without triggering a paxos proposal
     result=$(echo '{"prefix":"osdmonitor_prepare_command","prepare":"osd crush rule create-erasure","name":"'$crush_ruleset'"}' | nc -U $dir/a/ceph-mon.a.asok | cut --bytes=5-)
     test $result = true || return 1
-    ./ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=$crush_ruleset || return 1
+    ./ceph osd pool create pool_erasure 12 12 erasure default $crush_ruleset || return 1
     grep "$crush_ruleset try again" $dir/a/log || return 1
-}
-
-function TEST_erasure_code_property_format() {
-    local dir=$1
-    # osd_pool_default_erasure_code_properties is
-    # valid JSON but not of the expected type
-    run_mon $dir a --public-addr 127.0.0.1 \
-        --osd_pool_default_erasure_code_properties 1
-    ./ceph osd pool create poolA 12 12 erasure 2>&1 | grep 'must be a JSON object' || return 1
-}
-
-function TEST_erasure_crush_property_format_json() {
-    local dir=$1
-    # osd_pool_default_erasure_code_properties is JSON
-    expected='"erasure-code-plugin":"example"'
-    run_mon $dir a --public-addr 127.0.0.1 \
-        --osd_pool_default_erasure_code_properties "{$expected}"
-    ! ./ceph --format json osd dump | grep "$expected" || return 1
-    crush_ruleset=erasure_ruleset
-    ./ceph osd crush rule create-erasure $crush_ruleset
-    ./ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=$crush_ruleset
-    ./ceph --format json osd dump | grep "$expected" || return 1
-}
-
-function TEST_erasure_crush_property_format_plain() {
-    local dir=$1
-    # osd_pool_default_erasure_code_properties is plain text
-    expected='"erasure-code-plugin":"example"'
-    run_mon $dir a --public-addr 127.0.0.1 \
-        --osd_pool_default_erasure_code_properties "erasure-code-plugin=example"
-    ! ./ceph --format json osd dump | grep "$expected" || return 1
-    crush_ruleset=erasure_ruleset
-    ./ceph osd crush rule create-erasure $crush_ruleset
-    ./ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=$crush_ruleset
-    ./ceph --format json osd dump | grep "$expected" || return 1
 }
 
 function TEST_erasure_crush_stripe_width() {
@@ -130,9 +104,7 @@ function TEST_erasure_crush_stripe_width() {
     # the default stripe width is used to initialize the pool
     run_mon $dir a --public-addr 127.0.0.1
     stripe_width=$(./ceph-conf --show-config-value osd_pool_erasure_code_stripe_width)
-    crush_ruleset=erasure_ruleset
-    ./ceph osd crush rule create-erasure $crush_ruleset
-    ./ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=$crush_ruleset
+    ./ceph osd pool create pool_erasure 12 12 erasure
     ./ceph --format json osd dump | tee $dir/osd.json
     grep '"stripe_width":'$stripe_width $dir/osd.json > /dev/null || return 1
 }
@@ -141,20 +113,18 @@ function TEST_erasure_crush_stripe_width_padded() {
     local dir=$1
     # setting osd_pool_erasure_code_stripe_width modifies the stripe_width
     # and it is padded as required by the default plugin
-    properties+=" erasure-code-plugin=jerasure"
-    properties+=" erasure-code-technique=reed_sol_van"
+    profile+=" plugin=jerasure"
+    profile+=" technique=reed_sol_van"
     k=4
-    properties+=" erasure-code-k=$k"
-    properties+=" erasure-code-m=2"
+    profile+=" k=$k"
+    profile+=" m=2"
     expected_chunk_size=2048
     actual_stripe_width=$(($expected_chunk_size * $k))
     desired_stripe_width=$(($actual_stripe_width - 1))
     run_mon $dir a --public-addr 127.0.0.1 \
         --osd_pool_erasure_code_stripe_width $desired_stripe_width \
-        --osd_pool_default_erasure_code_properties "$properties"
-    crush_ruleset=erasure_ruleset
-    ./ceph osd crush rule create-erasure $crush_ruleset
-    ./ceph osd pool create pool_erasure 12 12 erasure crush_ruleset=$crush_ruleset
+        --osd_pool_default_erasure_code_profile "$profile"
+    ./ceph osd pool create pool_erasure 12 12 erasure
     ./ceph osd dump | tee $dir/osd.json
     grep "stripe_width $actual_stripe_width" $dir/osd.json > /dev/null || return 1
 }
@@ -163,12 +133,11 @@ function TEST_erasure_code_pool() {
     local dir=$1
     run_mon $dir a --public-addr 127.0.0.1
     ./ceph --format json osd dump > $dir/osd.json
-    ! grep "erasure-code-plugin" $dir/osd.json || return 1
-    ./ceph osd crush rule create-erasure erasure_ruleset
-    ./ceph osd pool create erasurecodes 12 12 erasure crush_ruleset=erasure_ruleset
+    local expected='"erasure_code_profile":"default"'
+    ! grep "$expected" $dir/osd.json || return 1
+    ./ceph osd pool create erasurecodes 12 12 erasure
     ./ceph --format json osd dump | tee $dir/osd.json
-    grep "erasure-code-plugin" $dir/osd.json > /dev/null || return 1
-    grep "erasure-code-directory" $dir/osd.json > /dev/null || return 1
+    grep "$expected" $dir/osd.json > /dev/null || return 1
 
     ./ceph osd pool create erasurecodes 12 12 erasure 2>&1 | \
         grep 'already exists' || return 1

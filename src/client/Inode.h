@@ -126,6 +126,13 @@ class Inode {
     return false;
   }
 
+  __u32 hash_dentry_name(const string &dn) {
+    int which = dir_layout.dl_dir_hash;
+    if (!which)
+      which = CEPH_STR_HASH_LINUX;
+    return ceph_str_hash(which, dn.data(), dn.length());
+  }
+
   unsigned flags;
 
   // about the dir (if this is one!)
@@ -140,12 +147,9 @@ class Inode {
   __u16 flushing_cap_tid[CEPH_CAP_BITS];
   int shared_gen, cache_gen;
   int snap_caps, snap_cap_refs;
-  unsigned exporting_issued;
-  int exporting_mds;
-  ceph_seq_t exporting_mseq;
   utime_t hold_caps_until;
   xlist<Inode*>::item cap_item, flushing_cap_item;
-  tid_t last_flush_tid;
+  ceph_tid_t last_flush_tid;
 
   SnapRealm *snaprealm;
   xlist<Inode*>::item snaprealm_item;
@@ -216,7 +220,6 @@ class Inode {
       dir_hashed(false), dir_replicated(false), auth_cap(NULL),
       dirty_caps(0), flushing_caps(0), flushing_cap_seq(0), shared_gen(0), cache_gen(0),
       snap_caps(0), snap_cap_refs(0),
-      exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
       cap_item(this), flushing_cap_item(this), last_flush_tid(0),
       snaprealm(0), snaprealm_item(this), snapdir_parent(0),
       oset((void *)this, newlayout->fl_pg_pool, ino),
@@ -248,7 +251,7 @@ class Inode {
   bool put_open_ref(int mode);
 
   void get_cap_ref(int cap);
-  bool put_cap_ref(int cap);
+  int put_cap_ref(int cap);
   bool is_any_caps();
   bool cap_is_valid(Cap* cap);
   int caps_issued(int *implemented = 0);

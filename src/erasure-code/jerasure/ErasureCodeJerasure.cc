@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -20,7 +20,6 @@
 #include "ErasureCodeJerasure.h"
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
-#include "vectorop.h"
 extern "C" {
 #include "jerasure.h"
 #include "reed_sol.h"
@@ -28,6 +27,9 @@ extern "C" {
 #include "cauchy.h"
 #include "liberation.h"
 }
+
+// FIXME(loic) this may be too conservative, check back with feedback from Andreas 
+#define LARGEST_VECTOR_WORDSIZE 16
 
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
@@ -50,10 +52,10 @@ void ErasureCodeJerasure::init(const map<string,string> &parameters)
 {
   dout(10) << "technique=" << technique << dendl;
   map<string,string>::const_iterator parameter;
-  parameter = parameters.find("erasure-code-ruleset-root");
+  parameter = parameters.find("ruleset-root");
   if (parameter != parameters.end())
     ruleset_root = parameter->second;
-  parameter = parameters.find("erasure-code-ruleset-failure-domain");
+  parameter = parameters.find("ruleset-failure-domain");
   if (parameter != parameters.end())
     ruleset_failure_domain = parameter->second;
   parse(parameters);
@@ -113,11 +115,11 @@ int ErasureCodeJerasure::encode(const set<int> &want_to_encode,
     bufferptr pad(padded_length - in.length());
     pad.zero();
     out.push_back(pad);
-    out.rebuild_page_aligned();
   }
   unsigned coding_length = blocksize * m;
   bufferptr coding(buffer::create_page_aligned(coding_length));
   out.push_back(coding);
+  out.rebuild_page_aligned();
   char *chunks[k + m];
   for (int i = 0; i < k + m; i++) {
     bufferlist &chunk = (*encoded)[i];
@@ -136,6 +138,22 @@ int ErasureCodeJerasure::decode(const set<int> &want_to_read,
                                 const map<int, bufferlist> &chunks,
                                 map<int, bufferlist> *decoded)
 {
+  vector<int> have;
+  have.reserve(chunks.size());
+  for (map<int, bufferlist>::const_iterator i = chunks.begin();
+       i != chunks.end();
+       ++i) {
+    have.push_back(i->first);
+  }
+  if (includes(
+	have.begin(), have.end(), want_to_read.begin(), want_to_read.end())) {
+    for (set<int>::iterator i = want_to_read.begin();
+	 i != want_to_read.end();
+	 ++i) {
+      (*decoded)[*i] = chunks.find(*i)->second;
+    }
+    return 0;
+  }
   unsigned blocksize = (*chunks.begin()).second.length();
   int erasures[k + m + 1];
   int erasures_count = 0;
@@ -145,10 +163,11 @@ int ErasureCodeJerasure::decode(const set<int> &want_to_read,
     if (chunks.find(i) == chunks.end()) {
       erasures[erasures_count] = i;
       erasures_count++;
-      bufferptr ptr(blocksize);
+      bufferptr ptr(buffer::create_page_aligned(blocksize));
       (*decoded)[i].push_front(ptr);
     } else {
       (*decoded)[i] = chunks.find(i)->second;
+      (*decoded)[i].rebuild_page_aligned();
     }
     if (i < k)
       data[i] = (*decoded)[i].c_str();
@@ -231,9 +250,9 @@ unsigned ErasureCodeJerasureReedSolomonVandermonde::get_alignment() const
 
 void ErasureCodeJerasureReedSolomonVandermonde::parse(const map<std::string,std::string> &parameters)
 {
-  k = to_int("erasure-code-k", parameters, DEFAULT_K);
-  m = to_int("erasure-code-m", parameters, DEFAULT_M);
-  w = to_int("erasure-code-w", parameters, DEFAULT_W);
+  k = to_int("k", parameters, DEFAULT_K);
+  m = to_int("m", parameters, DEFAULT_M);
+  w = to_int("w", parameters, DEFAULT_W);
   if (w != 8 && w != 16 && w != 32) {
     derr << "ReedSolomonVandermonde: w=" << w
 	 << " must be one of {8, 16, 32} : revert to 8 " << dendl;
@@ -274,9 +293,9 @@ unsigned ErasureCodeJerasureReedSolomonRAID6::get_alignment() const
 
 void ErasureCodeJerasureReedSolomonRAID6::parse(const map<std::string,std::string> &parameters)
 {
-  k = to_int("erasure-code-k", parameters, DEFAULT_K);
+  k = to_int("k", parameters, DEFAULT_K);
   m = 2;
-  w = to_int("erasure-code-w", parameters, DEFAULT_W);
+  w = to_int("w", parameters, DEFAULT_W);
   if (w != 8 && w != 16 && w != 32) {
     derr << "ReedSolomonRAID6: w=" << w
 	 << " must be one of {8, 16, 32} : revert to 8 " << dendl;
@@ -319,10 +338,10 @@ unsigned ErasureCodeJerasureCauchy::get_alignment() const
 
 void ErasureCodeJerasureCauchy::parse(const map<std::string,std::string> &parameters)
 {
-  k = to_int("erasure-code-k", parameters, DEFAULT_K);
-  m = to_int("erasure-code-m", parameters, DEFAULT_M);
-  w = to_int("erasure-code-w", parameters, DEFAULT_W);
-  packetsize = to_int("erasure-code-packetsize", parameters, DEFAULT_PACKETSIZE);
+  k = to_int("k", parameters, DEFAULT_K);
+  m = to_int("m", parameters, DEFAULT_M);
+  w = to_int("w", parameters, DEFAULT_W);
+  packetsize = to_int("packetsize", parameters, DEFAULT_PACKETSIZE);
 }
 
 void ErasureCodeJerasureCauchy::prepare_schedule(int *matrix)
@@ -389,10 +408,10 @@ unsigned ErasureCodeJerasureLiberation::get_alignment() const
 
 void ErasureCodeJerasureLiberation::parse(const map<std::string,std::string> &parameters)
 {
-  k = to_int("erasure-code-k", parameters, DEFAULT_K);
-  m = to_int("erasure-code-m", parameters, DEFAULT_M);
-  w = to_int("erasure-code-w", parameters, DEFAULT_W);
-  packetsize = to_int("erasure-code-packetsize", parameters, DEFAULT_PACKETSIZE);
+  k = to_int("k", parameters, DEFAULT_K);
+  m = to_int("m", parameters, DEFAULT_M);
+  w = to_int("w", parameters, DEFAULT_W);
+  packetsize = to_int("packetsize", parameters, DEFAULT_PACKETSIZE);
 
   bool error = false;
   if (k > w) {
@@ -441,10 +460,10 @@ void ErasureCodeJerasureBlaumRoth::prepare()
 //
 void ErasureCodeJerasureLiber8tion::parse(const map<std::string,std::string> &parameters)
 {
-  k = to_int("erasure-code-k", parameters, DEFAULT_K);
+  k = to_int("k", parameters, DEFAULT_K);
   m = DEFAULT_M;
   w = DEFAULT_W;
-  packetsize = to_int("erasure-code-packetsize", parameters, DEFAULT_PACKETSIZE);
+  packetsize = to_int("packetsize", parameters, DEFAULT_PACKETSIZE);
 
   bool error = false;
   if (k > w) {

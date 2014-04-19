@@ -430,13 +430,15 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
   ceph::unordered_map<uint64_t, pool_stat_t> pg_pool_sum_old;
 
   // pgs
+  set<int64_t> deleted_pools;
   bufferlist::iterator p = dirty_pgs.begin();
   while (!p.end()) {
     pg_t pgid;
     ::decode(pgid, p);
-    dout(20) << " refreshing pg " << pgid << dendl;
     bufferlist bl;
     int r = mon->store->get(pgmap_pg_prefix, stringify(pgid), bl);
+    dout(20) << " refreshing pg " << pgid << " got " << r << " len "
+	     << bl.length() << dendl;
 
     if (pg_pool_sum_old.count(pgid.pool()) == 0)
       pg_pool_sum_old[pgid.pool()] = pg_map.pg_pool_sum[pgid.pool()];
@@ -445,6 +447,8 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
       pg_map.update_pg(pgid, bl);
     } else {
       pg_map.remove_pg(pgid);
+      if (pgid.ps() == 0)
+	deleted_pools.insert(pgid.pool());
     }
   }
 
@@ -465,6 +469,14 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
 
   pg_map.update_global_delta(g_ceph_context, inc_stamp, pg_sum_old);
   pg_map.update_pool_deltas(g_ceph_context, inc_stamp, pg_pool_sum_old);
+
+  // clean up deleted pools after updating the deltas
+  for (set<int64_t>::iterator p = deleted_pools.begin();
+       p != deleted_pools.end();
+       ++p) {
+    dout(20) << " deleted pool " << *p << dendl;
+    pg_map.deleted_pool(*p);
+  }
 
   // ok, we're now on the new version
   pg_map.version = v;
@@ -1071,15 +1083,25 @@ void PGMonitor::map_pg_creates()
     pg_stat_t& s = pg_map.pg_stat[pgid];
     if (s.parent_split_bits)
       on = s.parent;
-    vector<int> acting;
-    int nrep = osdmap->pg_to_acting_osds(on, acting);
 
-    if (s.acting.size()) {
-      pg_map.creating_pgs_by_osd[s.acting[0]].erase(pgid);
-      if (pg_map.creating_pgs_by_osd[s.acting[0]].size() == 0)
-        pg_map.creating_pgs_by_osd.erase(s.acting[0]);
+    vector<int> up, acting;
+    int up_primary, acting_primary;
+    osdmap->pg_to_up_acting_osds(
+      on,
+      &up,
+      &up_primary,
+      &acting,
+      &acting_primary);
+
+    if (s.acting_primary != -1) {
+      pg_map.creating_pgs_by_osd[s.acting_primary].erase(pgid);
+      if (pg_map.creating_pgs_by_osd[s.acting_primary].size() == 0)
+        pg_map.creating_pgs_by_osd.erase(s.acting_primary);
     }
+    s.up = up;
+    s.up_primary = up_primary;
     s.acting = acting;
+    s.acting_primary = acting_primary;
 
     // don't send creates for localized pgs
     if (pgid.preferred() >= 0)
@@ -1089,8 +1111,8 @@ void PGMonitor::map_pg_creates()
     if (s.parent_split_bits)
       continue;
 
-    if (nrep) {
-      pg_map.creating_pgs_by_osd[acting[0]].insert(pgid);
+    if (acting_primary != -1) {
+      pg_map.creating_pgs_by_osd[acting_primary].insert(pgid);
     } else {
       dout(20) << "map_pg_creates  " << pgid << " -> no osds in epoch "
 	       << mon->osdmon()->osdmap.get_epoch() << ", skipping" << dendl;
@@ -1159,8 +1181,8 @@ bool PGMonitor::check_down_pgs()
        p != pg_map.pg_stat.end();
        ++p) {
     if ((p->second.state & PG_STATE_STALE) == 0 &&
-	p->second.acting.size() &&
-	osdmap->is_down(p->second.acting[0])) {
+	p->second.acting_primary != -1 &&
+	osdmap->is_down(p->second.acting_primary)) {
       dout(10) << " marking pg " << p->first << " stale with acting " << p->second.acting << dendl;
 
       map<pg_t,pg_stat_t>::iterator q = pending_inc.pg_stat_updates.find(p->first);
@@ -1199,6 +1221,7 @@ void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
     f->dump_int("bytes_used", sum.num_bytes);
     f->dump_int("objects", sum.num_objects);
     if (verbose) {
+      f->dump_int("dirty", sum.num_objects_dirty);
       f->dump_int("rd", sum.num_rd);
       f->dump_int("rd_kb", sum.num_rd_kb);
       f->dump_int("wr", sum.num_wr);
@@ -1210,7 +1233,8 @@ void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
     tbl << percentify(((float)kb_used / pg_map.osd_sum.kb)*100);
     tbl << sum.num_objects;
     if (verbose) {
-      tbl << stringify(si_t(sum.num_rd))
+      tbl << stringify(si_t(sum.num_objects_dirty))
+	  << stringify(si_t(sum.num_rd))
           << stringify(si_t(sum.num_wr));
     }
   }
@@ -1231,6 +1255,7 @@ void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
     tbl.define_column("\%USED", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("OBJECTS", TextTable::LEFT, TextTable::LEFT);
     if (verbose) {
+      tbl.define_column("DIRTY", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("READ", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("WRITE", TextTable::LEFT, TextTable::LEFT);
     }
@@ -1526,12 +1551,12 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       r = -ENOENT;
       goto reply;
     }
-    if (!pg_map.pg_stat[pgid].acting.size()) {
+    if (pg_map.pg_stat[pgid].acting_primary == -1) {
       ss << "pg " << pgid << " has no primary osd";
       r = -EAGAIN;
       goto reply;
     }
-    int osd = pg_map.pg_stat[pgid].acting[0];
+    int osd = pg_map.pg_stat[pgid].acting_primary;
     if (!mon->osdmon()->osdmap.is_up(osd)) {
       ss << "pg " << pgid << " primary osd." << osd << " not up";
       r = -EAGAIN;
@@ -1646,7 +1671,12 @@ bool PGMonitor::prepare_command(MMonCommand *m)
   } else if (prefix == "pg set_full_ratio" ||
 	     prefix == "pg set_nearfull_ratio") {
     double n;
-    cmd_getval(g_ceph_context, cmdmap, "ratio", n);
+    if (!cmd_getval(g_ceph_context, cmdmap, "ratio", n)) {
+      ss << "unable to parse 'ratio' value '"
+         << cmd_vartype_stringify(cmdmap["who"]) << "'";
+      r = -EINVAL;
+      goto reply;
+    }
     string op = prefix.substr(3, string::npos);
     if (op == "set_full_ratio")
       pending_inc.full_ratio = n;
@@ -1876,6 +1906,50 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
   check_full_osd_health(summary, detail, pg_map.full_osds, "full", HEALTH_ERR);
   check_full_osd_health(summary, detail, pg_map.nearfull_osds, "near full", HEALTH_WARN);
 
+  // near-target max pools
+  const map<int64_t,pg_pool_t>& pools = mon->osdmon()->osdmap.get_pools();
+  for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin();
+       p != pools.end(); ++p) {
+    if ((!p->second.target_max_objects && !p->second.target_max_bytes) ||
+	!pg_map.pg_pool_sum.count(p->first))
+      continue;
+    bool nearfull = false;
+    const char *name = mon->osdmon()->osdmap.get_pool_name(p->first);
+    const pool_stat_t& st = pg_map.get_pg_pool_sum_stat(p->first);
+    uint64_t ratio = p->second.cache_target_full_ratio_micro +
+      ((1000000 - p->second.cache_target_full_ratio_micro) *
+       g_conf->mon_cache_target_full_warn_ratio);
+    if (p->second.target_max_objects && (uint64_t)st.stats.sum.num_objects >
+	p->second.target_max_objects * ratio / 1000000) {
+      nearfull = true;
+      if (detail) {
+	ostringstream ss;
+	ss << "cache pool '" << name << "' with "
+	   << si_t(st.stats.sum.num_objects)
+	   << " objects at/near target max "
+	   << si_t(p->second.target_max_objects) << " objects";
+	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
+    }
+    if (p->second.target_max_bytes && (uint64_t)st.stats.sum.num_bytes >
+	p->second.target_max_bytes * ratio / 1000000) {
+      nearfull = true;
+      if (detail) {
+	ostringstream ss;
+	ss << "cache pool '" << mon->osdmon()->osdmap.get_pool_name(p->first)
+	   << "' with " << si_t(st.stats.sum.num_bytes)
+	   << "B at/near target max "
+	   << si_t(p->second.target_max_bytes) << "B";
+	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
+    }
+    if (nearfull) {
+      ostringstream ss;
+      ss << "'" << name << "' at/near target max";
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+    }
+  }
+
   // scrub
   if (pg_map.pg_sum.stats.sum.num_scrub_errors) {
     ostringstream ss;
@@ -1965,12 +2039,17 @@ int PGMonitor::dump_stuck_pg_stats(stringstream &ds,
 {
   PGMap::StuckPG stuck_type;
   string type = args[0];
+
   if (type == "inactive")
     stuck_type = PGMap::STUCK_INACTIVE;
-  if (type == "unclean")
+  else if (type == "unclean")
     stuck_type = PGMap::STUCK_UNCLEAN;
-  if (type == "stale")
+  else if (type == "stale")
     stuck_type = PGMap::STUCK_STALE;
+  else {
+    ds << "Unknown type: " << type << std::endl;
+    return 0;
+  }
 
   utime_t now(ceph_clock_now(g_ceph_context));
   utime_t cutoff = now - utime_t(threshold, 0);

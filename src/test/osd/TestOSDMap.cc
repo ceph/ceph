@@ -49,8 +49,35 @@ public:
       pending_inc.new_uuid[i] = sample_uuid;
     }
     osdmap.apply_incremental(pending_inc);
+
+    // kludge to get an erasure coding rule and pool
+    int r = osdmap.crush->add_simple_ruleset("erasure", "default", "osd",
+					     "indep", pg_pool_t::TYPE_ERASURE,
+					     &cerr);
+    pg_pool_t *p = (pg_pool_t *)osdmap.get_pg_pool(2);
+    p->type = pg_pool_t::TYPE_ERASURE;
+    p->crush_ruleset = r;
   }
   unsigned int get_num_osds() { return num_osds; }
+
+  void test_mappings(int pool,
+		     int num,
+		     vector<int> *any,
+		     vector<int> *first,
+		     vector<int> *primary) {
+    for (int i=0; i<num; ++i) {
+      vector<int> o;
+      int p;
+      pg_t pgid(i, pool);
+      osdmap.pg_to_acting_osds(pgid, &o, &p);
+      for (unsigned j=0; j<o.size(); ++j)
+	(*any)[o[j]]++;
+      if (!o.empty())
+	(*first)[o[0]]++;
+      if (p >= 0)
+	(*primary)[p]++;
+    }
+  }
 };
 
 TEST_F(OSDMapTest, Create) {
@@ -236,4 +263,86 @@ TEST_F(OSDMapTest, KeepsNecessaryTemps) {
   OSDMap::remove_redundant_temporaries(g_ceph_context, osdmap, &pending_inc);
   EXPECT_FALSE(pending_inc.new_pg_temp.count(pgid));
   EXPECT_FALSE(pending_inc.new_primary_temp.count(pgid));
+}
+
+TEST_F(OSDMapTest, PrimaryAffinity) {
+  set_up_map();
+
+  /*
+  osdmap.print(cout);
+  Formatter *f = new_formatter("json-pretty");
+  f->open_object_section("CRUSH");
+  osdmap.crush->dump(f);
+  f->close_section();
+  f->flush(cout);
+  delete f;
+  */
+
+  int n = get_num_osds();
+  for (map<int64_t,pg_pool_t>::const_iterator p = osdmap.get_pools().begin();
+       p != osdmap.get_pools().end();
+       ++p) {
+    int pool = p->first;
+    cout << "pool " << pool << std::endl;
+    {
+      vector<int> any(n, 0);
+      vector<int> first(n, 0);
+      vector<int> primary(n, 0);
+      test_mappings(0, 10000, &any, &first, &primary);
+      for (int i=0; i<n; ++i) {
+	//cout << "osd." << i << " " << any[i] << " " << first[i] << " " << primary[i] << std::endl;
+	ASSERT_LT(0, any[i]);
+	ASSERT_LT(0, first[i]);
+	ASSERT_LT(0, primary[i]);
+      }
+    }
+
+    osdmap.set_primary_affinity(0, 0);
+    osdmap.set_primary_affinity(1, 0);
+    {
+      vector<int> any(n, 0);
+      vector<int> first(n, 0);
+      vector<int> primary(n, 0);
+      test_mappings(pool, 10000, &any, &first, &primary);
+      for (int i=0; i<n; ++i) {
+	//cout << "osd." << i << " " << any[i] << " " << first[i] << " " << primary[i] << std::endl;
+	ASSERT_LT(0, any[i]);
+	if (i >= 2) {
+	  ASSERT_LT(0, first[i]);
+	  ASSERT_LT(0, primary[i]);
+	} else {
+	  if (p->second.is_replicated())
+	    ASSERT_EQ(0, first[i]);
+	  ASSERT_EQ(0, primary[i]);
+	}
+      }
+    }
+
+    osdmap.set_primary_affinity(0, 0x8000);
+    osdmap.set_primary_affinity(1, 0);
+    {
+      vector<int> any(n, 0);
+      vector<int> first(n, 0);
+      vector<int> primary(n, 0);
+      test_mappings(pool, 10000, &any, &first, &primary);
+      for (int i=0; i<n; ++i) {
+	//cout << "osd." << i << " " << any[i] << " " << first[i] << " " << primary[i] << std::endl;
+	ASSERT_LT(0, any[i]);
+	if (i >= 2) {
+	  ASSERT_LT(0, first[i]);
+	  ASSERT_LT(0, primary[i]);
+	} else if (i == 1) {
+	  if (p->second.is_replicated())
+	    ASSERT_EQ(0, first[i]);
+	  ASSERT_EQ(0, primary[i]);
+	} else {
+	  ASSERT_LT(10000/6/4, primary[0]);
+	  ASSERT_GT(10000/6/4*3, primary[0]);
+	}
+      }
+    }
+
+    osdmap.set_primary_affinity(0, 0x10000);
+    osdmap.set_primary_affinity(1, 0x10000);
+  }
 }

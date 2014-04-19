@@ -179,6 +179,9 @@ private:
   int authenticate_err;
 
   list<Message*> waiting_for_session;
+  Context *session_established_context;
+  bool had_a_connection;
+  double reopen_interval_multiplier;
 
   string _pick_random_mon();
   void _finish_hunting();
@@ -246,6 +249,22 @@ public:
     Mutex::Locker l(monc_lock);
     _sub_unwant(what);
   }
+  /**
+   * Increase the requested subscription start point. If you do increase
+   * the value, apply the passed-in flags as well; otherwise do nothing.
+   */
+  bool sub_want_increment(string what, version_t start, unsigned flags) {
+    Mutex::Locker l(monc_lock);
+    map<string,ceph_mon_subscribe_item>::iterator i =
+            sub_have.find(what);
+    if (i == sub_have.end() || i->second.start < start) {
+      ceph_mon_subscribe_item& item = sub_have[what];
+      item.start = start;
+      item.flags = flags;
+      return true;
+    }
+    return false;
+  }
   
   KeyRing *keyring;
   RotatingKeyRing *rotating_secrets;
@@ -280,8 +299,19 @@ public:
     Mutex::Locker l(monc_lock);
     _send_mon_message(m);
   }
-  void reopen_session() {
+  /**
+   * If you specify a callback, you should not call
+   * reopen_session() again until it has been triggered. The MonClient
+   * will behave, but the first callback could be triggered after
+   * the session has been killed and the MonClient has started trying
+   * to reconnect to another monitor.
+   */
+  void reopen_session(Context *cb=NULL) {
     Mutex::Locker l(monc_lock);
+    if (cb) {
+      delete session_established_context;
+      session_established_context = cb;
+    }
     _reopen_session();
   }
 
@@ -379,7 +409,7 @@ public:
 			const vector<string>& cmd, const bufferlist& inbl,
 			bufferlist *outbl, string *outs,
 			Context *onfinish);
-  int start_mon_command(const string mon_name,  ///< mon name, with mon. prefix
+  int start_mon_command(const string &mon_name,  ///< mon name, with mon. prefix
 			const vector<string>& cmd, const bufferlist& inbl,
 			bufferlist *outbl, string *outs,
 			Context *onfinish);
@@ -404,8 +434,8 @@ private:
     version_req_d(Context *con, version_t *n, version_t *o) : context(con),newest(n), oldest(o) {}
   };
 
-  map<tid_t, version_req_d*> version_requests;
-  tid_t version_req_id;
+  map<ceph_tid_t, version_req_d*> version_requests;
+  ceph_tid_t version_req_id;
   void handle_get_version_reply(MMonGetVersionReply* m);
 
 

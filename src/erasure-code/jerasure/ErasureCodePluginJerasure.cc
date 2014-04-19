@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -33,8 +33,8 @@ public:
 		      ErasureCodeInterfaceRef *erasure_code) {
     ErasureCodeJerasure *interface;
     std::string t;
-    if (parameters.find("erasure-code-technique") != parameters.end())
-      t = parameters.find("erasure-code-technique")->second;
+    if (parameters.find("technique") != parameters.end())
+      t = parameters.find("technique")->second;
     if (t == "reed_sol_van") {
       interface = new ErasureCodeJerasureReedSolomonVandermonde();
     } else if (t == "reed_sol_r6_op") {
@@ -63,8 +63,27 @@ public:
   }
 };
 
+extern "C" {
+#include "galois.h"
+
+extern gf_t *gfp_array[];
+extern int  gfp_is_composite[];
+}
+
 int __erasure_code_init(char *plugin_name)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  int w[] = { 4, 8, 16, 32 };
+  for(int i = 0; i < 4; i++) {
+    if (gfp_array[w[i]] == NULL) {
+      gfp_array[w[i]] = (gf_t*)malloc(sizeof(gf_t));
+      assert(gfp_array[w[i]]);
+      gfp_is_composite[w[i]] = 0;
+      if (!gf_init_easy(gfp_array[w[i]], w[i])) {
+	derr << "failed to gf_init_easy(" << w[i] << ")" << dendl;
+	return -EINVAL;
+      }
+    }
+  }
   return instance.add(plugin_name, new ErasureCodePluginJerasure());
 }

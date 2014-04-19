@@ -52,6 +52,6 @@ Possibilities:
   this ought to work. It'll make things like clone slow, but let's
   face it: they're already slow on non-btrfs file systems because they
   actually copy the data (instead of duplicating the extent refs in
-  btrfs). And it should make the full ObjectStore iterface safe,
+  btrfs). And it should make the full ObjectStore interface safe,
   without upper layers having to worry about the kinds and orders of
   transactions they perform.

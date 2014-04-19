@@ -118,6 +118,12 @@ class TestIoctx(object):
         self.ioctx.write_full('abc', 'd')
         eq(self.ioctx.read('abc'), 'd')
 
+    def test_append(self):
+        self.ioctx.write('abc', 'a')
+        self.ioctx.append('abc', 'b')
+        self.ioctx.append('abc', 'c')
+        eq(self.ioctx.read('abc'), 'abc')
+
     def test_write_zeros(self):
         self.ioctx.write('abc', 'a\0b\0c')
         eq(self.ioctx.read('abc'), 'a\0b\0c')
@@ -136,8 +142,9 @@ class TestIoctx(object):
         self.ioctx.write('a', '')
         self.ioctx.write('b', 'foo')
         self.ioctx.write_full('c', 'bar')
+        self.ioctx.append('d', 'jazz')
         object_names = [obj.key for obj in self.ioctx.list_objects()]
-        eq(sorted(object_names), ['a', 'b', 'c'])
+        eq(sorted(object_names), ['a', 'b', 'c', 'd'])
 
     def test_xattrs(self):
         xattrs = dict(a='1', b='2', c='3', d='a\0b', e='\0')
@@ -249,6 +256,7 @@ class TestIoctx(object):
             while count[0] < 4:
                 lock.wait()
         eq(comp.get_return_value(), 0)
+        eq(comp2.get_return_value(), 0)
         [i.remove() for i in self.ioctx.list_objects()]
 
     def test_aio_write_full(self):

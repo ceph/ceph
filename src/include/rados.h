@@ -121,6 +121,9 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSD_IN  0x10000
 #define CEPH_OSD_OUT 0
 
+#define CEPH_OSD_MAX_PRIMARY_AFFINITY 0x10000
+#define CEPH_OSD_DEFAULT_PRIMARY_AFFINITY 0x10000
+
 
 /*
  * osd map flag bits
@@ -138,6 +141,7 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSDMAP_NORECOVER (1<<10) /* block osd recovery and backfill */
 #define CEPH_OSDMAP_NOSCRUB  (1<<11) /* block periodic scrub */
 #define CEPH_OSDMAP_NODEEP_SCRUB (1<<12) /* block periodic deep-scrub */
+#define CEPH_OSDMAP_NOTIERAGENT (1<<13) /* disable tiering agent */
 
 /*
  * The error code to return when an OSD can't handle a write
@@ -237,6 +241,9 @@ enum {
 
 	/* convert tmap to omap */
 	CEPH_OSD_OP_TMAP2OMAP = CEPH_OSD_OP_MODE_RMW | CEPH_OSD_OP_TYPE_DATA | 34,
+
+	/* hints */
+	CEPH_OSD_OP_SETALLOCHINT = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 35,
 
 	/** multi **/
 	CEPH_OSD_OP_CLONERANGE = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_MULTI | 1,
@@ -377,7 +384,6 @@ enum {
 
 /* xattr comparison */
 enum {
-	CEPH_OSD_CMPXATTR_OP_NOP = 0,
 	CEPH_OSD_CMPXATTR_OP_EQ  = 1,
 	CEPH_OSD_CMPXATTR_OP_NE  = 2,
 	CEPH_OSD_CMPXATTR_OP_GT  = 3,
@@ -460,6 +466,10 @@ struct ceph_osd_op {
 		struct {
 			__u8 flags;
 		} __attribute__ ((packed)) tmap2omap;
+		struct {
+			__le64 expected_object_size;
+			__le64 expected_write_size;
+		} __attribute__ ((packed)) alloc_hint;
 	};
 	__le32 payload_len;
 } __attribute__ ((packed));

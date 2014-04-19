@@ -3,6 +3,9 @@ libosd_la_SOURCES = \
 	osd/PGLog.cc \
 	osd/ReplicatedPG.cc \
 	osd/ReplicatedBackend.cc \
+	osd/ECBackend.cc \
+	osd/ECMsgTypes.cc \
+	osd/ECTransaction.cc \
 	osd/PGBackend.cc \
 	osd/Ager.cc \
 	osd/HitSet.cc \
@@ -14,8 +17,9 @@ libosd_la_SOURCES = \
 	common/TrackedOp.cc \
 	osd/SnapMapper.cc \
 	osd/osd_types.cc \
+	osd/ECUtil.cc \
 	objclass/class_api.cc
-libosd_la_LIBADD = $(LIBOSDC) $(LIBOS) $(LIBERASURE_CODE)
+libosd_la_LIBADD = $(LIBOSDC) $(LIBOS)
 noinst_LTLIBRARIES += libosd.la
 
 noinst_HEADERS += \
@@ -33,6 +37,11 @@ noinst_HEADERS += \
 	osd/ReplicatedPG.h \
 	osd/PGBackend.h \
 	osd/ReplicatedBackend.h \
+	osd/TierAgentState.h \
+	osd/ECBackend.h \
+	osd/ECUtil.h \
+	osd/ECMsgTypes.h \
+	osd/ECTransaction.h \
 	osd/Watch.h \
 	osd/osd_types.h
 

@@ -22,7 +22,7 @@ struct MMDSOpenIno : public Message {
   vector<inode_backpointer_t> ancestors;
 
   MMDSOpenIno() : Message(MSG_MDS_OPENINO) {}
-  MMDSOpenIno(tid_t t, inodeno_t i, vector<inode_backpointer_t>& a) :
+  MMDSOpenIno(ceph_tid_t t, inodeno_t i, vector<inode_backpointer_t>& a) :
     Message(MSG_MDS_OPENINO), ino(i), ancestors(a) {
     header.tid = t;
   }

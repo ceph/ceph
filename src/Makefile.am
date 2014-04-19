@@ -8,6 +8,7 @@ DIST_SUBDIRS += gtest ocf libs3 java
 
 include arch/Makefile.am
 include auth/Makefile.am
+include brag/Makefile.am
 include crush/Makefile.am
 include mon/Makefile.am
 include mds/Makefile.am
@@ -53,8 +54,8 @@ bin_PROGRAMS += ceph-mds
 
 # user tools
 
-mount_ceph_SOURCES = mount/mount.ceph.c
-mount_ceph_LDADD = $(LIBCOMMON)
+mount_ceph_SOURCES = mount/mount.ceph.c common/secret.c
+mount_ceph_LDADD = $(LIBCOMMON) $(KEYUTILS_LIB)
 if LINUX
 su_sbin_PROGRAMS += mount.ceph
 endif # LINUX
@@ -73,8 +74,8 @@ ceph_syn_SOURCES += client/SyntheticClient.cc # uses g_conf.. needs cleanup
 ceph_syn_LDADD = $(LIBCLIENT) $(CEPH_GLOBAL)
 bin_PROGRAMS += ceph-syn
 
-rbd_SOURCES = rbd.cc
-rbd_LDADD = $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL) -lblkid
+rbd_SOURCES = rbd.cc common/secret.c
+rbd_LDADD = $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL) -lblkid $(KEYUTILS_LIB)
 if LINUX
 bin_PROGRAMS += rbd
 endif #LINUX
@@ -275,8 +276,19 @@ base: core-daemons admin-tools \
 FORCE:
 .git_version: FORCE
 	$(srcdir)/check_version $(srcdir)/.git_version
+
+# if NO_VERSION is set, only generate a new ceph_ver.h if there currently 
+# is none, and call "make_version -n" to fill it with a fixed string.
+# Otherwise, set it from the contents of .git_version.
+
 ceph_ver.h: .git_version
-	$(srcdir)/make_version $(srcdir)/.git_version ./ceph_ver.h
+	if [ -n "$$NO_VERSION" ] ; then \
+	    if [ ! -f ./ceph_ver.h ] ; then \
+	        $(srcdir)/make_version -n ./ceph_ver.h ; \
+	    fi; \
+        else \
+	    $(srcdir)/make_version $(srcdir)/.git_version ./ceph_ver.h ; \
+	fi
 
 ceph_ver.c: ./ceph_ver.h
 common/version.cc: ./ceph_ver.h
