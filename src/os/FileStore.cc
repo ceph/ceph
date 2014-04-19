@@ -418,7 +418,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   blk_size(0),
   fsid_fd(-1), op_fd(-1),
   basedir_fd(-1), current_fd(-1),
-  generic_backend(NULL), backend(NULL),
+  backend(NULL),
   index_manager(do_update),
   ondisk_finisher(g_ceph_context),
   lock("FileStore::lock"),
@@ -462,7 +462,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   m_filestore_sloppy_crc(g_conf->filestore_sloppy_crc),
   m_filestore_sloppy_crc_block_size(g_conf->filestore_sloppy_crc_block_size),
   m_filestore_max_alloc_hint_size(g_conf->filestore_max_alloc_hint_size),
-  m_fs_type(FS_TYPE_NONE),
+  m_fs_type(0),
   m_filestore_max_inline_xattr_size(0),
   m_filestore_max_inline_xattrs(0)
 {
@@ -512,9 +512,6 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   g_ceph_context->get_perfcounters_collection()->add(logger);
   g_ceph_context->_conf->add_observer(this);
 
-  generic_backend = new GenericFileStoreBackend(this);
-  backend = generic_backend;
-
   superblock.compat_features = get_fs_initial_compat_set();
 }
 
@@ -522,8 +519,6 @@ FileStore::~FileStore()
 {
   g_ceph_context->_conf->remove_observer(this);
   g_ceph_context->get_perfcounters_collection()->remove(logger);
-
-  delete generic_backend;
 
   if (journal)
     journal->logger = NULL;
@@ -582,6 +577,56 @@ int FileStore::dump_journal(ostream& out)
   r = journal->dump(out);
   delete journal;
   return r;
+}
+
+FileStoreBackend *FileStoreBackend::create(long f_type, FileStore *fs)
+{
+  switch (f_type) {
+#if defined(__linux__)
+  case BTRFS_SUPER_MAGIC:
+    return new BtrfsFileStoreBackend(fs);
+# ifdef HAVE_LIBXFS
+  case XFS_SUPER_MAGIC:
+    return new XfsFileStoreBackend(fs);
+# endif
+#endif
+#ifdef HAVE_LIBZFS
+  case ZFS_SUPER_MAGIC:
+    return new ZFSFileStoreBackend(fs);
+#endif
+  default:
+    return new GenericFileStoreBackend(fs);
+  }
+}
+
+void FileStore::create_backend(long f_type)
+{
+  m_fs_type = f_type;
+
+  assert(backend == NULL);
+  backend = FileStoreBackend::create(f_type, this);
+
+  dout(0) << "backend " << backend->get_name()
+	  << " (magic 0x" << std::hex << f_type << std::dec << ")"
+	  << dendl;
+
+  switch (f_type) {
+  case BTRFS_SUPER_MAGIC:
+    wbthrottle.set_fs(WBThrottle::BTRFS);
+    break;
+
+  case XFS_SUPER_MAGIC:
+    // wbthrottle is constructed with fs(WBThrottle::XFS)
+    if (m_filestore_replica_fadvise) {
+      dout(1) << " disabling 'filestore replica fadvise' due to known issues with fadvise(DONTNEED) on xfs" << dendl;
+      g_conf->set_val("filestore_replica_fadvise", "false");
+      g_conf->apply_changes(NULL);
+      assert(m_filestore_replica_fadvise == false);
+    }
+    break;
+  }
+
+  set_xattr_limits_via_conf();
 }
 
 int FileStore::mkfs()
@@ -677,19 +722,7 @@ int FileStore::mkfs()
     goto close_fsid_fd;
   }
 
-  if (basefs.f_type == BTRFS_SUPER_MAGIC) {
-#if defined(__linux__)
-    backend = new BtrfsFileStoreBackend(this);
-#endif
-  } else if (basefs.f_type == XFS_SUPER_MAGIC) {
-#ifdef HAVE_LIBXFS
-    backend = new XfsFileStoreBackend(this);
-#endif
-  } else if (basefs.f_type == ZFS_SUPER_MAGIC) {
-#ifdef HAVE_LIBZFS
-    backend = new ZFSFileStoreBackend(this);
-#endif
-  }
+  create_backend(basefs.f_type);
 
   ret = backend->create_current();
   if (ret < 0) {
@@ -761,10 +794,8 @@ int FileStore::mkfs()
   fsid_fd = -1;
  close_basedir_fd:
   VOID_TEMP_FAILURE_RETRY(::close(basedir_fd));
-  if (backend != generic_backend) {
-    delete backend;
-    backend = generic_backend;
-  }
+  delete backend;
+  backend = NULL;
   return ret;
 }
 
@@ -871,40 +902,7 @@ int FileStore::_detect_fs()
 
   blk_size = st.f_bsize;
 
-  m_fs_type = FS_TYPE_OTHER;
-  if (st.f_type == BTRFS_SUPER_MAGIC) {
-#if defined(__linux__)
-    dout(0) << "mount detected btrfs" << dendl;
-    backend = new BtrfsFileStoreBackend(this);
-    m_fs_type = FS_TYPE_BTRFS;
-
-    wbthrottle.set_fs(WBThrottle::BTRFS);
-#endif
-  } else if (st.f_type == XFS_SUPER_MAGIC) {
-#ifdef HAVE_LIBXFS
-    dout(0) << "mount detected xfs (libxfs)" << dendl;
-    backend = new XfsFileStoreBackend(this);
-#else
-    dout(0) << "mount detected xfs" << dendl;
-#endif
-    m_fs_type = FS_TYPE_XFS;
-
-    // wbthrottle is constructed with fs(WBThrottle::XFS)
-    if (m_filestore_replica_fadvise) {
-      dout(1) << " disabling 'filestore replica fadvise' due to known issues with fadvise(DONTNEED) on xfs" << dendl;
-      g_conf->set_val("filestore_replica_fadvise", "false");
-      g_conf->apply_changes(NULL);
-      assert(m_filestore_replica_fadvise == false);
-    }
-  } else if (st.f_type == ZFS_SUPER_MAGIC) {
-#ifdef HAVE_LIBZFS
-    dout(0) << "mount detected zfs (libzfs)" << dendl;
-    backend = new ZFSFileStoreBackend(this);
-    m_fs_type = FS_TYPE_ZFS;
-#endif
-  }
-
-  set_xattr_limits_via_conf();
+  create_backend(st.f_type);
 
   r = backend->detect_features();
   if (r < 0) {
@@ -1547,10 +1545,8 @@ int FileStore::umount()
     basedir_fd = -1;
   }
 
-  if (backend != generic_backend) {
-    delete backend;
-    backend = generic_backend;
-  }
+  delete backend;
+  backend = NULL;
 
   object_map.reset();
 
@@ -5011,33 +5007,28 @@ void FileStore::set_xattr_limits_via_conf()
   uint32_t fs_xattr_size;
   uint32_t fs_xattrs;
 
-  assert(m_fs_type != FS_TYPE_NONE);
-
-  switch(m_fs_type) {
-    case FS_TYPE_XFS:
-      fs_xattr_size = g_conf->filestore_max_inline_xattr_size_xfs;
-      fs_xattrs = g_conf->filestore_max_inline_xattrs_xfs;
-      break;
-    case FS_TYPE_BTRFS:
-      fs_xattr_size = g_conf->filestore_max_inline_xattr_size_btrfs;
-      fs_xattrs = g_conf->filestore_max_inline_xattrs_btrfs;
-      break;
-    case FS_TYPE_ZFS:
-    case FS_TYPE_OTHER:
-      fs_xattr_size = g_conf->filestore_max_inline_xattr_size_other;
-      fs_xattrs = g_conf->filestore_max_inline_xattrs_other;
-      break;
-    default:
-      assert(!"Unknown fs type");
+  switch (m_fs_type) {
+  case XFS_SUPER_MAGIC:
+    fs_xattr_size = g_conf->filestore_max_inline_xattr_size_xfs;
+    fs_xattrs = g_conf->filestore_max_inline_xattrs_xfs;
+    break;
+  case BTRFS_SUPER_MAGIC:
+    fs_xattr_size = g_conf->filestore_max_inline_xattr_size_btrfs;
+    fs_xattrs = g_conf->filestore_max_inline_xattrs_btrfs;
+    break;
+  default:
+    fs_xattr_size = g_conf->filestore_max_inline_xattr_size_other;
+    fs_xattrs = g_conf->filestore_max_inline_xattrs_other;
+    break;
   }
 
-  //Use override value if set
+  // Use override value if set
   if (g_conf->filestore_max_inline_xattr_size)
     m_filestore_max_inline_xattr_size = g_conf->filestore_max_inline_xattr_size;
   else
     m_filestore_max_inline_xattr_size = fs_xattr_size;
 
-  //Use override value if set
+  // Use override value if set
   if (g_conf->filestore_max_inline_xattrs)
     m_filestore_max_inline_xattrs = g_conf->filestore_max_inline_xattrs;
   else
