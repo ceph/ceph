@@ -64,14 +64,6 @@ static const __SWORD_TYPE ZFS_SUPER_MAGIC(0x2fc12fc1);
 #endif
 
 
-enum fs_types {
-  FS_TYPE_NONE = 0,
-  FS_TYPE_XFS,
-  FS_TYPE_BTRFS,
-  FS_TYPE_ZFS,
-  FS_TYPE_OTHER
-};
-
 class FileStoreBackend;
 
 #define CEPH_FS_FEATURE_INCOMPAT_SHARDS CompatSet::Feature(1, "sharded objects")
@@ -135,8 +127,9 @@ private:
 
   int fsid_fd, op_fd, basedir_fd, current_fd;
 
-  FileStoreBackend *generic_backend;
   FileStoreBackend *backend;
+
+  void create_backend(long f_type);
 
   deque<uint64_t> snaps;
 
@@ -614,7 +607,7 @@ private:
   bool m_filestore_sloppy_crc;
   int m_filestore_sloppy_crc_block_size;
   uint64_t m_filestore_max_alloc_hint_size;
-  enum fs_types m_fs_type;
+  long m_fs_type;
 
   //Determined xattr handling based on fs type
   void set_xattr_limits_via_conf();
@@ -680,9 +673,14 @@ protected:
   int get_crc_block_size() {
     return filestore->m_filestore_sloppy_crc_block_size;
   }
+
 public:
   FileStoreBackend(FileStore *fs) : filestore(fs) {}
   virtual ~FileStoreBackend() {}
+
+  static FileStoreBackend *create(long f_type, FileStore *fs);
+
+  virtual const char *get_name() = 0;
   virtual int detect_features() = 0;
   virtual int create_current() = 0;
   virtual bool can_checkpoint() = 0;
