@@ -2260,7 +2260,9 @@ bool pg_interval_t::check_new_interval(
 
 ostream& operator<<(ostream& out, const pg_interval_t& i)
 {
-  out << "interval(" << i.first << "-" << i.last << " " << i.up << "/" << i.acting;
+  out << "interval(" << i.first << "-" << i.last
+      << " up " << i.up << "(" << i.up_primary << ")"
+      << " acting " << i.acting << "(" << i.primary << ")";
   if (i.maybe_went_rw)
     out << " maybe_went_rw";
   out << ")";
