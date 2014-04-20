@@ -2102,19 +2102,20 @@ ostream &operator<<(ostream &lhs, const pg_notify_t &notify)
 
 void pg_interval_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(3, 2, bl);
+  ENCODE_START(4, 2, bl);
   ::encode(first, bl);
   ::encode(last, bl);
   ::encode(up, bl);
   ::encode(acting, bl);
   ::encode(maybe_went_rw, bl);
   ::encode(primary, bl);
+  ::encode(up_primary, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_interval_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
   ::decode(first, bl);
   ::decode(last, bl);
   ::decode(up, bl);
@@ -2125,6 +2126,12 @@ void pg_interval_t::decode(bufferlist::iterator& bl)
   } else {
     if (acting.size())
       primary = acting[0];
+  }
+  if (struct_v >= 4) {
+    ::decode(up_primary, bl);
+  } else {
+    if (up.size())
+      up_primary = up[0];
   }
   DECODE_FINISH(bl);
 }
@@ -2142,6 +2149,7 @@ void pg_interval_t::dump(Formatter *f) const
   for (vector<int>::const_iterator p = acting.begin(); p != acting.end(); ++p)
     f->dump_int("osd", *p);
   f->dump_int("primary", primary);
+  f->dump_int("up_primary", up_primary);
   f->close_section();
 }
 
@@ -2194,6 +2202,7 @@ bool pg_interval_t::check_new_interval(
     i.acting = old_acting;
     i.up = old_up;
     i.primary = old_acting_primary;
+    i.up_primary = old_up_primary;
 
     if (!i.acting.empty() && i.primary != -1 &&
 	i.acting.size() >=
