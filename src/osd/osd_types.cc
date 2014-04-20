@@ -2157,10 +2157,12 @@ void pg_interval_t::generate_test_instances(list<pg_interval_t*>& o)
 }
 
 bool pg_interval_t::check_new_interval(
-  int old_primary,
-  int new_primary,
+  int old_acting_primary,
+  int new_acting_primary,
   const vector<int> &old_acting,
   const vector<int> &new_acting,
+  int old_up_primary,
+  int new_up_primary,
   const vector<int> &old_up,
   const vector<int> &new_up,
   epoch_t same_interval_since,
@@ -2173,8 +2175,13 @@ bool pg_interval_t::check_new_interval(
   std::ostream *out)
 {
   // remember past interval
-  if (old_primary != new_primary ||
-      new_acting != old_acting || new_up != old_up ||
+  //  NOTE: a change in the up set primary triggers an interval
+  //  change, even though the interval members in the pg_interval_t
+  //  do not change.
+  if (old_acting_primary != new_acting_primary ||
+      new_acting != old_acting ||
+      old_up_primary != new_up_primary ||
+      new_up != old_up ||
       (!(lastmap->get_pools().count(pool_id))) ||
       (lastmap->get_pools().find(pool_id)->second.min_size !=
        osdmap->get_pools().find(pool_id)->second.min_size)  ||
@@ -2185,7 +2192,7 @@ bool pg_interval_t::check_new_interval(
     i.last = osdmap->get_epoch() - 1;
     i.acting = old_acting;
     i.up = old_up;
-    i.primary = old_primary;
+    i.primary = old_acting_primary;
 
     if (!i.acting.empty() && i.primary != -1 &&
 	i.acting.size() >=
