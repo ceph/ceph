@@ -2141,6 +2141,7 @@ void pg_interval_t::dump(Formatter *f) const
   f->open_array_section("acting");
   for (vector<int>::const_iterator p = acting.begin(); p != acting.end(); ++p)
     f->dump_int("osd", *p);
+  f->dump_int("primary", primary);
   f->close_section();
 }
 
