@@ -155,6 +155,8 @@ TEST(pg_interval_t, check_new_interval)
   int new_primary = osd_id;
   vector<int> new_up;
   new_up.push_back(osd_id);
+  int old_up_primary = osd_id;
+  int new_up_primary = osd_id;
   vector<int> old_up = new_up;
   pg_t pgid;
   pgid.set_pool(pool_id);
@@ -172,6 +174,8 @@ TEST(pg_interval_t, check_new_interval)
 						   new_primary,
 						   old_acting,
 						   new_acting,
+						   old_up_primary,
+						   new_up_primary,
 						   old_up,
 						   new_up,
 						   same_interval_since,
@@ -200,6 +204,8 @@ TEST(pg_interval_t, check_new_interval)
 						  new_primary,
 						  old_acting,
 						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
 						  old_up,
 						  new_up,
 						  same_interval_since,
@@ -231,6 +237,8 @@ TEST(pg_interval_t, check_new_interval)
 						  new_primary,
 						  old_acting,
 						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
 						  old_up,
 						  new_up,
 						  same_interval_since,
@@ -263,6 +271,40 @@ TEST(pg_interval_t, check_new_interval)
 						  new_primary,
 						  old_acting,
 						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  osdmap,
+						  lastmap,
+						  pool_id,
+						  pgid,
+						  &past_intervals));
+    ASSERT_EQ((unsigned int)1, past_intervals.size());
+    ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
+    ASSERT_EQ(osdmap->get_epoch() - 1, past_intervals[same_interval_since].last);
+    ASSERT_EQ(osd_id, past_intervals[same_interval_since].acting[0]);
+    ASSERT_EQ(osd_id, past_intervals[same_interval_since].up[0]);
+  }
+
+  //
+  // The up primary has changed
+  //
+  {
+    vector<int> new_up;
+    int _new_up_primary = osd_id + 1;
+
+    map<epoch_t, pg_interval_t> past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(pg_interval_t::check_new_interval(old_primary,
+						  new_primary,
+						  old_acting,
+						  new_acting,
+						  old_up_primary,
+						  _new_up_primary,
 						  old_up,
 						  new_up,
 						  same_interval_since,
@@ -300,6 +342,8 @@ TEST(pg_interval_t, check_new_interval)
 						  new_primary,
 						  old_acting,
 						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
 						  old_up,
 						  new_up,
 						  same_interval_since,
@@ -337,6 +381,8 @@ TEST(pg_interval_t, check_new_interval)
 						  new_primary,
 						  old_acting,
 						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
 						  old_up,
 						  new_up,
 						  same_interval_since,
@@ -369,6 +415,8 @@ TEST(pg_interval_t, check_new_interval)
 						  new_primary,
 						  old_acting,
 						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
 						  old_up,
 						  new_up,
 						  same_interval_since,
@@ -419,6 +467,8 @@ TEST(pg_interval_t, check_new_interval)
 						  new_primary,
 						  old_acting,
 						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
 						  old_up,
 						  new_up,
 						  same_interval_since,
@@ -452,6 +502,8 @@ TEST(pg_interval_t, check_new_interval)
 						  new_primary,
 						  old_acting,
 						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
 						  old_up,
 						  new_up,
 						  same_interval_since,
@@ -495,6 +547,8 @@ TEST(pg_interval_t, check_new_interval)
 						  new_primary,
 						  old_acting,
 						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
 						  old_up,
 						  new_up,
 						  same_interval_since,
@@ -542,6 +596,8 @@ TEST(pg_interval_t, check_new_interval)
 						  new_primary,
 						  old_acting,
 						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
 						  old_up,
 						  new_up,
 						  same_interval_since,

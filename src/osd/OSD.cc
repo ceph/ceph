@@ -2156,6 +2156,7 @@ struct pistate {
   vector<int> old_acting, old_up;
   epoch_t same_interval_since;
   int primary;
+  int up_primary;
 };
 
 void OSD::build_past_intervals_parallel()
@@ -2207,9 +2208,10 @@ void OSD::build_past_intervals_parallel()
 	continue;
 
       vector<int> acting, up;
+      int up_primary;
       int primary;
       cur_map->pg_to_up_acting_osds(
-	pg->info.pgid.pgid, &up, 0, &acting, &primary);
+	pg->info.pgid.pgid, &up, &up_primary, &acting, &primary);
 
       if (p.same_interval_since == 0) {
 	dout(10) << __func__ << " epoch " << cur_epoch << " pg " << pg->info.pgid
@@ -2219,6 +2221,7 @@ void OSD::build_past_intervals_parallel()
 	p.old_up = up;
 	p.old_acting = acting;
 	p.primary = primary;
+	p.up_primary = up_primary;
 	continue;
       }
       assert(last_map);
@@ -2228,6 +2231,8 @@ void OSD::build_past_intervals_parallel()
 	p.primary,
 	primary,
 	p.old_acting, acting,
+	p.up_primary,
+	up_primary,
 	p.old_up, up,
 	p.same_interval_since,
 	pg->info.history.last_epoch_clean,
