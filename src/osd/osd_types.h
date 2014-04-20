@@ -1683,8 +1683,14 @@ struct pg_interval_t {
   epoch_t first, last;
   bool maybe_went_rw;
   int primary;
+  int up_primary;
 
-  pg_interval_t() : first(0), last(0), maybe_went_rw(false), primary(-1) {}
+  pg_interval_t()
+    : first(0), last(0),
+      maybe_went_rw(false),
+      primary(-1),
+      up_primary(-1)
+  {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
