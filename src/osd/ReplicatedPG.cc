@@ -472,6 +472,30 @@ void ReplicatedPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef 
   op->mark_delayed("waiting for degraded object");
 }
 
+bool ReplicatedPG::maybe_await_blocked_snapset(
+  const hobject_t &hoid,
+  OpRequestRef op)
+{
+  ObjectContextRef obc;
+  if (obc = object_contexts.lookup(hoid.get_head())) {
+    if (obc->is_blocked()) {
+      wait_for_blocked_object(obc->obs.oi.soid, op);
+      return true;
+    } else {
+      return false;
+    }
+  }
+  if (obc = object_contexts.lookup(hoid.get_snapdir())) {
+    if (obc->is_blocked()) {
+      wait_for_blocked_object(obc->obs.oi.soid, op);
+      return true;
+    } else {
+      return false;
+    }
+  }
+  return false;
+}
+
 void ReplicatedPG::wait_for_blocked_object(const hobject_t& soid, OpRequestRef op)
 {
   dout(10) << __func__ << " " << soid << " " << op << dendl;
@@ -1262,7 +1286,17 @@ void ReplicatedPG::do_op(OpRequestRef op)
 		m->get_pg().ps(),
 		m->get_object_locator().get_pool(),
 		m->get_object_locator().nspace);
-  int r = find_object_context(oid, &obc, can_create, &missing_oid);
+
+  // io blocked on obc?
+  if (((m->get_flags() & CEPH_OSD_FLAG_FLUSH) == 0) &&
+      maybe_await_blocked_snapset(oid, op)) {
+    return;
+  }
+
+  int r = find_object_context(
+    oid, &obc, can_create,
+    m->get_flags() & CEPH_OSD_FLAG_MAP_SNAP_CLONE,
+    &missing_oid);
 
   if (r == -EAGAIN) {
     // If we're not the primary of this OSD, and we have
@@ -1370,7 +1404,8 @@ void ReplicatedPG::do_op(OpRequestRef op)
 	if (src_oid.is_head() && is_missing_object(src_oid)) {
 	  wait_for_unreadable_object(src_oid, op);
 	} else if ((r = find_object_context(
-		      src_oid, &sobc, false, &wait_oid)) == -EAGAIN) {
+		      src_oid, &sobc, false, false,
+		      &wait_oid)) == -EAGAIN) {
 	  // missing the specific snap we need; requeue and wait.
 	  wait_for_unreadable_object(wait_oid, op);
 	} else if (r) {
@@ -1640,7 +1675,8 @@ void ReplicatedPG::promote_object(OpRequestRef op, ObjectContextRef obc,
   oloc.pool = pool.info.tier_of;
   start_copy(cb, obc, obc->obs.oi.soid, oloc, 0,
 	     CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |
-	     CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE,
+	     CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |
+	     CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE,
 	     obc->obs.oi.soid.snap == CEPH_NOSNAP);
 
   assert(obc->is_blocked());
@@ -2230,18 +2266,34 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
     derr << __func__ << "could not find coid " << coid << dendl;
     assert(0);
   }
+  assert(obc->ssc);
+
+  if (!obc->get_snaptrimmer_write()) {
+    dout(10) << __func__ << ": Unable to get a wlock on " << coid << dendl;
+    return NULL;
+  }
+
+  hobject_t snapoid(
+    coid.oid, coid.get_key(),
+    obc->ssc->snapset.head_exists ? CEPH_NOSNAP:CEPH_SNAPDIR, coid.hash,
+    info.pgid.pool(), coid.get_namespace());
+  ObjectContextRef snapset_obc = get_object_context(snapoid, false);
+
+  if (!snapset_obc->get_snaptrimmer_write()) {
+    dout(10) << __func__ << ": Unable to get a wlock on " << snapoid << dendl;
+    list<OpRequestRef> to_wake;
+    bool requeue_recovery = false;
+    bool requeue_snaptrimmer = false;
+    obc->put_write(&to_wake, &requeue_recovery, &requeue_snaptrimmer);
+    assert(to_wake.empty());
+    assert(!requeue_recovery);
+    return NULL;
+  }
 
   object_info_t &coi = obc->obs.oi;
   set<snapid_t> old_snaps(coi.snaps.begin(), coi.snaps.end());
   assert(old_snaps.size());
 
-  // get snap set context
-  if (!obc->ssc)
-    obc->ssc = get_snapset_context(
-      coid,
-      false);
-
-  assert(obc->ssc);
   SnapSet& snapset = obc->ssc->snapset;
 
   dout(10) << coid << " old_snaps " << old_snaps
@@ -2250,6 +2302,9 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
 
   RepGather *repop = simple_repop_create(obc);
   OpContext *ctx = repop->ctx;
+  ctx->snapset_obc = snapset_obc;
+  ctx->lock_to_release = OpContext::W_LOCK;
+  ctx->release_snapset_obc = true;
   ctx->at_version = get_next_version();
 
   PGBackend::PGTransaction *t = ctx->op_t;
@@ -2374,12 +2429,6 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
 
   // save head snapset
   dout(10) << coid << " new snapset " << snapset << dendl;
-
-  hobject_t snapoid(
-    coid.oid, coid.get_key(),
-    snapset.head_exists ? CEPH_NOSNAP:CEPH_SNAPDIR, coid.hash,
-    info.pgid.pool(), coid.get_namespace());
-  ctx->snapset_obc = get_object_context(snapoid, false);
 
   if (snapset.clones.empty() && !snapset.head_exists) {
     dout(10) << coid << " removing " << snapoid << dendl;
@@ -4575,11 +4624,9 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
   int ret = find_object_context(
     hobject_t(soid.oid, soid.get_key(), snapid, soid.hash, info.pgid.pool(),
 	      soid.get_namespace()),
-    &rollback_to, false, &missing_oid);
+    &rollback_to, false, false, &missing_oid);
   if (ret == -EAGAIN) {
-    /* a different problem, like degraded pool
-     * with not-yet-restored object. We shouldn't have been able
-     * to get here; recovery should have completed first! */
+    /* clone must be missing */
     assert(is_missing_object(missing_oid));
     dout(20) << "_rollback_to attempted to roll back to a missing object "
 	     << missing_oid << " (requested snapid: ) " << snapid << dendl;
@@ -4743,9 +4790,9 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   }
 
   if (ctx->obs->exists)
-    filter_snapc(snapc);
+    filter_snapc(snapc.snaps);
   
-  if (ctx->obs->exists &&               // head exist(ed)
+  if ((ctx->obs->exists && !ctx->obs->oi.is_whiteout()) && // head exist(ed)
       snapc.snaps.size() &&                 // there are snaps
       snapc.snaps[0] > ctx->new_snapset.seq) {  // existing object is old
     // clone
@@ -5467,6 +5514,8 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
     flags |= CEPH_OSD_FLAG_IGNORE_CACHE;
   if (cop->flags & CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY)
     flags |= CEPH_OSD_FLAG_IGNORE_OVERLAY;
+  if (cop->flags & CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE)
+    flags |= CEPH_OSD_FLAG_MAP_SNAP_CLONE;
 
   C_GatherBuilder gather(g_ceph_context);
 
@@ -5547,7 +5596,7 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
 
   assert(cop->rval >= 0);
 
-  if (oid.snap < CEPH_NOSNAP) {
+  if (oid.snap < CEPH_NOSNAP && !cop->results.snaps.empty()) {
     // verify snap hasn't been deleted
     vector<snapid_t>::iterator p = cop->results.snaps.begin();
     while (p != cop->results.snaps.end()) {
@@ -5775,6 +5824,42 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     results->started_temp_obj = false;
   }
 
+  if (r == -ENOENT && soid.is_snap()) {
+    dout(10) << __func__
+	     << ": enoent while trying to promote clone, " << soid
+	     << " must have been trimmed, removing from snapset"
+	     << dendl;
+    hobject_t head(soid.get_head());
+    ObjectContextRef obc = get_object_context(head, false);
+    assert(obc);
+    RepGather *repop = simple_repop_create(obc);
+    OpContext *tctx = repop->ctx;
+    tctx->at_version = get_next_version();
+    filter_snapc(tctx->new_snapset.snaps);
+    vector<snapid_t> new_clones(tctx->new_snapset.clones.size());
+    for (vector<snapid_t>::iterator i = tctx->new_snapset.clones.begin();
+	 i != tctx->new_snapset.clones.end();
+	 ++i) {
+      if (*i != soid.snap)
+	new_clones.push_back(*i);
+    }
+    tctx->new_snapset.clones.swap(new_clones);
+    tctx->new_snapset.clone_overlap.erase(soid.snap);
+    tctx->new_snapset.clone_size.erase(soid.snap);
+
+    // take RWWRITE lock for duration of our local write.  ignore starvation.
+    if (!obc->rwstate.take_write_lock()) {
+      assert(0 == "problem!");
+    }
+    tctx->lock_to_release = OpContext::W_LOCK;
+    dout(20) << __func__ << " took lock on obc, " << obc->rwstate << dendl;
+
+    finish_ctx(tctx, pg_log_entry_t::PROMOTE);
+
+    simple_repop_submit(repop);
+    return;
+  }
+
   bool whiteout = false;
   if (r == -ENOENT &&
       soid.snap == CEPH_NOSNAP &&
@@ -5844,7 +5929,7 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
 	vector<snapid_t>::iterator p = snapset.snaps.begin();
 	while (p != snapset.snaps.end() && *p > soid.snap)
 	  ++p;
-	assert(p != snapset.snaps.end() && *p == soid.snap);
+	assert(p != snapset.snaps.end());
 	do {
 	  tctx->new_obs.oi.snaps.push_back(*p);
 	  ++p;
@@ -6048,6 +6133,66 @@ int ReplicatedPG::start_flush(OpContext *ctx, bool blocking, hobject_t *pmissing
     cancel_flush(fop, false);
   }
 
+  // construct a SnapContext appropriate for this clone/head
+  SnapContext dsnapc;
+  SnapContext snapc;
+  if (soid.snap == CEPH_NOSNAP) {
+    snapc.seq = snapset.seq;
+    snapc.snaps = snapset.snaps;
+
+    if (!snapset.clones.empty() && snapset.clones.back() != snapset.seq) {
+      dsnapc.seq = snapset.clones.back();
+      vector<snapid_t>::iterator p = snapset.snaps.begin();
+      while (p != snapset.snaps.end() && *p > dsnapc.seq)
+	++p;
+      dsnapc.snaps = vector<snapid_t>(p, snapset.snaps.end());
+    }
+  } else {
+    vector<snapid_t>::iterator citer = std::find(
+      snapset.clones.begin(),
+      snapset.clones.end(),
+      soid.snap);
+    assert(citer != snapset.clones.end());
+    snapid_t prev_snapc = (citer == snapset.clones.begin()) ?
+      snapid_t(0) : *(citer - 1);
+
+    vector<snapid_t>::iterator p = snapset.snaps.begin();
+    while (p != snapset.snaps.end() && *p >= oi.snaps.back())
+      ++p;
+    snapc.snaps = vector<snapid_t>(p, snapset.snaps.end());
+
+    // we may need to send a delete first
+    while (p != snapset.snaps.end() && *p > prev_snapc)
+      ++p;
+    dsnapc.snaps = vector<snapid_t>(p, snapset.snaps.end());
+
+    if (dsnapc.snaps.empty()) {
+      snapc.seq = prev_snapc;
+    } else {
+      dsnapc.seq = prev_snapc;
+      snapc.seq = oi.snaps.back() - 1;
+    }
+  }
+
+  object_locator_t base_oloc(soid);
+  base_oloc.pool = pool.info.tier_of;
+
+  if (!dsnapc.snaps.empty()) {
+    ObjectOperation o;
+    o.remove();
+    osd->objecter_lock.Lock();
+    osd->objecter->mutate(
+      soid.oid,
+      base_oloc,
+      o,
+      dsnapc,
+      oi.mtime,
+      CEPH_OSD_FLAG_IGNORE_OVERLAY | CEPH_OSD_FLAG_ORDERSNAP,
+      NULL,
+      NULL /* no callback, we'll rely on the ordering w.r.t the next op */);
+    osd->objecter_lock.Unlock();
+  }
+
   FlushOpRef fop(new FlushOp);
   fop->ctx = ctx;
   fop->flushed_version = oi.user_version;
@@ -6062,27 +6207,10 @@ int ReplicatedPG::start_flush(OpContext *ctx, bool blocking, hobject_t *pmissing
     o.copy_from(soid.oid.name, soid.snap, oloc, oi.user_version,
 		CEPH_OSD_COPY_FROM_FLAG_FLUSH |
 		CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |
-		CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE);
+		CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |
+		CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE);
   }
   C_Flush *fin = new C_Flush(this, soid, get_last_peering_reset());
-  object_locator_t base_oloc(soid);
-  base_oloc.pool = pool.info.tier_of;
-
-  // construct a SnapContext appropriate for this clone/head
-  SnapContext snapc;
-  if (soid.snap == CEPH_NOSNAP) {
-    snapc.seq = snapset.seq;
-    snapc.snaps = snapset.snaps;
-  } else {
-    // we want to only include snaps that are older than the oldest
-    // snap for which we are defined, so that the object appears to
-    // have been written before that.
-    vector<snapid_t>::iterator p = snapset.snaps.begin();
-    while (p != snapset.snaps.end() && *p >= oi.snaps.back())
-      ++p;
-    snapc.snaps = vector<snapid_t>(p, snapset.snaps.end());
-    snapc.seq = oi.snaps.back() - 1;
-  }
 
   osd->objecter_lock.Lock();
   ceph_tid_t tid = osd->objecter->mutate(soid.oid, base_oloc, o, snapc, oi.mtime,
@@ -6236,8 +6364,9 @@ void ReplicatedPG::cancel_flush(FlushOpRef fop, bool requeue)
     Mutex::Locker l(osd->objecter_lock);
     osd->objecter->op_cancel(fop->objecter_tid, -ECANCELED);
   }
-  if (fop->ctx->op && requeue) {
-    requeue_op(fop->ctx->op);
+  if (requeue) {
+    if (fop->ctx->op)
+      requeue_op(fop->ctx->op);
     requeue_ops(fop->dup_ops);
   }
   if (fop->blocking) {
@@ -6987,6 +7116,7 @@ void ReplicatedPG::context_registry_on_change()
 int ReplicatedPG::find_object_context(const hobject_t& oid,
 				      ObjectContextRef *pobc,
 				      bool can_create,
+				      bool map_snapid_to_clone,
 				      hobject_t *pmissing)
 {
   hobject_t head(oid.oid, oid.get_key(), CEPH_NOSNAP, oid.hash,
@@ -7040,17 +7170,79 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
   }
 
   // we want a snap
-  if (pool.info.is_removed_snap(oid.snap)) {
+  if (!map_snapid_to_clone && pool.info.is_removed_snap(oid.snap)) {
     dout(10) << __func__ << " snap " << oid.snap << " is removed" << dendl;
     return -ENOENT;
   }
 
   SnapSetContext *ssc = get_snapset_context(oid, can_create);
-  if (!ssc) {
+  if (!ssc || !(ssc->exists)) {
     dout(20) << __func__ << " " << oid << " no snapset" << dendl;
     if (pmissing)
       *pmissing = head;  // start by getting the head
+    if (ssc)
+      put_snapset_context(ssc);
     return -ENOENT;
+  }
+
+  if (map_snapid_to_clone) {
+    dout(10) << "find_object_context " << oid << " @" << oid.snap
+	     << " snapset " << ssc->snapset
+	     << " map_snapid_to_clone=true" << dendl;
+    if (oid.snap > ssc->snapset.seq) {
+      // already must be readable
+      ObjectContextRef obc = get_object_context(head, false);
+      dout(10) << "find_object_context " << oid << " @" << oid.snap
+	       << " snapset " << ssc->snapset
+	       << " maps to head" << dendl;
+      *pobc = obc;
+      put_snapset_context(ssc);
+      return (obc && obc->obs.exists) ? 0 : -ENOENT;
+    } else {
+      vector<snapid_t>::const_iterator citer = std::find(
+	ssc->snapset.clones.begin(),
+	ssc->snapset.clones.end(),
+	oid.snap);
+      if (citer == ssc->snapset.clones.end()) {
+	dout(10) << "find_object_context " << oid << " @" << oid.snap
+		 << " snapset " << ssc->snapset
+		 << " maps to nothing" << dendl;
+	put_snapset_context(ssc);
+	return -ENOENT;
+      }
+
+      dout(10) << "find_object_context " << oid << " @" << oid.snap
+	       << " snapset " << ssc->snapset
+	       << " maps to " << oid << dendl;
+
+      if (pg_log.get_missing().is_missing(oid)) {
+	dout(10) << "find_object_context " << oid << " @" << oid.snap
+		 << " snapset " << ssc->snapset
+		 << " " << oid << " is missing" << dendl;
+	if (pmissing)
+	  *pmissing = oid;
+	put_snapset_context(ssc);
+	return -EAGAIN;
+      }
+
+      ObjectContextRef obc = get_object_context(oid, false);
+      if (!obc || !obc->obs.exists) {
+	dout(10) << "find_object_context " << oid << " @" << oid.snap
+		 << " snapset " << ssc->snapset
+		 << " " << oid << " is not present" << dendl;
+	if (pmissing)
+	  *pmissing = oid;
+	put_snapset_context(ssc);
+	return -ENOENT;
+      }
+      dout(10) << "find_object_context " << oid << " @" << oid.snap
+	       << " snapset " << ssc->snapset
+	       << " " << oid << " HIT" << dendl;
+      *pobc = obc;
+      put_snapset_context(ssc);
+      return 0;
+    }
+    assert(0); //unreachable
   }
 
   dout(10) << "find_object_context " << oid << " @" << oid.snap
@@ -10814,6 +11006,11 @@ void ReplicatedPG::agent_work(int start_max)
       osd->logger->inc(l_osd_agent_skip);
       continue;
     }
+    if (is_missing_object(p->get_head())) {
+      dout(20) << __func__ << " skip (missing head) " << *p << dendl;
+      osd->logger->inc(l_osd_agent_skip);
+      continue;
+    }
     ObjectContextRef obc = get_object_context(*p, false, NULL);
     if (!obc) {
       // we didn't flush; we may miss something here.
@@ -11643,6 +11840,7 @@ boost::statechart::result ReplicatedPG::TrimmingObjects::react(const SnapTrim&)
   dout(10) << "TrimmingObjects: trimming snap " << snap_to_trim << dendl;
 
   // Get next
+  hobject_t old_pos = pos;
   int r = pg->snap_mapper.get_next_object_to_trim(snap_to_trim, &pos);
   if (r != 0 && r != -ENOENT) {
     derr << __func__ << ": get_next returned " << cpp_strerror(r) << dendl;
@@ -11656,6 +11854,12 @@ boost::statechart::result ReplicatedPG::TrimmingObjects::react(const SnapTrim&)
 
   dout(10) << "TrimmingObjects react trimming " << pos << dendl;
   RepGather *repop = pg->trim_object(pos);
+  if (!repop) {
+    dout(10) << __func__ << " could not get write lock on obj "
+	     << pos << dendl;
+    pos = old_pos;
+    return discard_event();
+  }
   assert(repop);
   repop->queue_snap_trimmer = true;
 
