@@ -466,6 +466,8 @@ if test "x$enable_xio" = x"yes"; then
 
    AC_DEFINE([HAVE_XIO], [1], [Accelio conditional compilation])
 
+   AM_CXXFLAGS="${AM_CXXFLAGS} -DHAVE_XIO"
+
    XIO_LIBS="-lxio -libverbs -lrdmacm"
    AC_SUBST(XIO_LIBS)
 fi
@@ -622,6 +624,11 @@ AC_CHECK_LIB(boost_system-mt, main, [],
 AC_CHECK_LIB(boost_thread-mt, main, [],
     [AC_CHECK_LIB(boost_thread, main, [],
         AC_MSG_FAILURE(["Boost thread library not found."]))])
+
+# And boost regex
+AC_CHECK_LIB(boost_regex-mt, main, [],
+    [AC_CHECK_LIB(boost_regex, main, [],
+        AC_MSG_FAILURE(["Boost regex library not found."]))])
 
 #
 # Check for boost_program_options library (defines BOOST_PROGRAM_OPTIONS_LIBS).
