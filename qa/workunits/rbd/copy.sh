@@ -288,8 +288,6 @@ test_pool_image_args() {
 
     rm -f /tmp/empty
     ceph osd pool delete test test --yes-i-really-really-mean-it
-    ceph osd pool delete rbd rbd --yes-i-really-really-mean-it
-    ceph osd pool create rbd 100
 }
 
 test_clone() {
