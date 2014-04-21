@@ -1,0 +1,6 @@
+
+export CPPFLAGS="-I/opt/accelio/include"
+export LDFLAGS="-L/opt/ofed/lib -L/opt/accelio/lib"
+export LIBS="-libverbs -lrdmacm -lpthread"
+
+./configure --prefix=/opt/ceph --enable-xio
