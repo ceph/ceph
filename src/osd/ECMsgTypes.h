@@ -26,11 +26,12 @@ struct ECSubWrite {
   hobject_t soid;
   pg_stat_t stats;
   ObjectStore::Transaction t;
- eversion_t at_version;
+  eversion_t at_version;
   eversion_t trim_to;
   vector<pg_log_entry_t> log_entries;
   set<hobject_t> temp_added;
   set<hobject_t> temp_removed;
+  boost::optional<pg_hit_set_history_t> updated_hit_set_history;
   ECSubWrite() {}
   ECSubWrite(
     pg_shard_t from,
@@ -42,6 +43,7 @@ struct ECSubWrite {
     eversion_t at_version,
     eversion_t trim_to,
     vector<pg_log_entry_t> log_entries,
+    boost::optional<pg_hit_set_history_t> updated_hit_set_history,
     const set<hobject_t> &temp_added,
     const set<hobject_t> &temp_removed)
     : from(from), tid(tid), reqid(reqid),
@@ -49,7 +51,8 @@ struct ECSubWrite {
       at_version(at_version),
       trim_to(trim_to), log_entries(log_entries),
       temp_added(temp_added),
-      temp_removed(temp_removed) {}
+      temp_removed(temp_removed),
+      updated_hit_set_history(updated_hit_set_history) {}
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;
