@@ -818,6 +818,7 @@ void ECBackend::handle_sub_write(
   clear_temp_objs(op.temp_removed);
   get_parent()->log_operation(
     op.log_entries,
+    op.updated_hit_set_history,
     op.trim_to,
     !(op.t.empty()),
     localt);
@@ -1201,6 +1202,7 @@ void ECBackend::submit_transaction(
   PGTransaction *_t,
   const eversion_t &trim_to,
   vector<pg_log_entry_t> &log_entries,
+  boost::optional<pg_hit_set_history_t> &hset_history,
   Context *on_local_applied_sync,
   Context *on_all_applied,
   Context *on_all_commit,
@@ -1215,6 +1217,7 @@ void ECBackend::submit_transaction(
   op->version = at_version;
   op->trim_to = trim_to;
   op->log_entries.swap(log_entries);
+  op->updated_hit_set_history.swap(hset_history);
   op->on_local_applied_sync = on_local_applied_sync;
   op->on_all_applied = on_all_applied;
   op->on_all_commit = on_all_commit;
@@ -1520,6 +1523,7 @@ void ECBackend::start_write(Op *op) {
       op->version,
       op->trim_to,
       op->log_entries,
+      op->updated_hit_set_history,
       op->temp_added,
       op->temp_cleared);
     if (*i == get_parent()->whoami_shard()) {

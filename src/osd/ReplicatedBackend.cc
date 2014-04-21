@@ -494,6 +494,7 @@ void ReplicatedBackend::submit_transaction(
   PGTransaction *_t,
   const eversion_t &trim_to,
   vector<pg_log_entry_t> &log_entries,
+  boost::optional<pg_hit_set_history_t> &hset_history,
   Context *on_local_applied_sync,
   Context *on_all_acked,
   Context *on_all_commit,
@@ -536,6 +537,7 @@ void ReplicatedBackend::submit_transaction(
     t->get_temp_cleared().size() ?
       *(t->get_temp_cleared().begin()) :hobject_t(),
     log_entries,
+    hset_history,
     &op,
     op_t);
 
@@ -546,7 +548,7 @@ void ReplicatedBackend::submit_transaction(
   }
   clear_temp_objs(t->get_temp_cleared());
 
-  parent->log_operation(log_entries, trim_to, true, &local_t);
+  parent->log_operation(log_entries, hset_history, trim_to, true, &local_t);
   local_t.append(*op_t);
   local_t.swap(*op_t);
   
