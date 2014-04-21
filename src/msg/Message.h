@@ -164,10 +164,24 @@
 #define MSG_TIMECHECK             0x600
 #define MSG_MON_HEALTH            0x601
 
+// Xio Testing
+#define MSG_DATA_PING		  0x602
+
 
 // ======================================================
 
 // abstract Message class
+
+#define MSG_MAGIC_XIO          0x0002
+#define MSG_MAGIC_TRACE_XCON   0x0004
+#define MSG_MAGIC_TRACE_DTOR   0x0008
+#define MSG_MAGIC_TRACE_HDR    0x0010
+#define MSG_MAGIC_TRACE_XIO    0x0020
+#define MSG_MAGIC_TRACE_XMSGR    0x0040
+
+#define MSG_SPECIAL_HANDLING_REDUPE	1
+
+namespace bi = boost::intrusive;
 
 class Message : public RefCountedObject {
 protected:
@@ -191,6 +205,9 @@ protected:
   ConnectionRef connection;
 
   uint32_t magic;
+  uint32_t special_handling;
+
+  bi::list_member_hook<> dispatch_q;
 
 public:
   class CompletionHook : public Context {
@@ -199,10 +216,17 @@ public:
     friend class Message;
   public:
     CompletionHook(Message *_m) : m(_m) {}
+    virtual Message* get_message() { return m; }
     virtual void set_message(Message *_m) { m = _m; }
+    virtual void claim(int r) = 0;
     virtual void finish(int r) = 0;
     virtual ~CompletionHook() {}
   };
+
+  typedef bi::list< Message,
+		    bi::member_hook< Message,
+				     bi::list_member_hook<>,
+				     &Message::dispatch_q > > Queue;
 
 protected:
   CompletionHook* completion_hook; // owned by Messenger
@@ -227,6 +251,7 @@ public:
   Message()
     : connection(NULL),
       magic(0),
+      special_handling(0),
       completion_hook(NULL),
       byte_throttler(NULL),
       msg_throttler(NULL),
@@ -287,6 +312,8 @@ public:
 
   uint32_t get_magic() { return magic; }
   void set_magic(int _magic) { magic = _magic; }
+  uint32_t get_special_handling() { return special_handling; }
+  void set_special_handling(int n) { special_handling = n; }
 
   /*
    * If you use get_[data, middle, payload] you shouldn't
@@ -341,6 +368,8 @@ public:
   void claim_data(bufferlist& bl) {
     if (byte_throttler)
       byte_throttler->put(data.length());
+    if (completion_hook)
+      completion_hook->claim(data.buffers().size());
     bl.claim(data);
   }
   off_t get_data_len() { return data.length(); }
