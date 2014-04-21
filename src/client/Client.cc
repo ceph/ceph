@@ -3581,9 +3581,11 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
   ldout(cct, 5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq()
 		<< " EXPORT from mds." << mds << dendl;
 
-  if (in->caps.count(mds)) {
-    Cap *cap = in->caps[mds];
+  Cap *cap = NULL;
+  if (in->caps.count(mds))
+    cap = in->caps[mds];
 
+  if (cap && cap->cap_id == m->get_cap_id())
     if (m->peer.cap_id) {
       MetaSession *tsession = _get_or_open_mds_session(m->peer.mds);
       if (in->caps.count(m->peer.mds)) {
