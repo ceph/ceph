@@ -50,11 +50,19 @@
 #include "page.h"
 #include "crc32c.h"
 
+#if defined(HAVE_XIO)
+extern "C" {
+#include "libxio.h"
+}
+#endif /* HAVE_XIO */
+
 #ifdef __CEPH__
 # include "include/assert.h"
 #else
 # include <assert.h>
 #endif
+
+class XioCompletionHook;
 
 namespace ceph {
 
@@ -131,6 +139,10 @@ private:
   class raw_char;
   class raw_pipe;
 
+public:
+  class xio_mempool;
+  class xio_msg_buffer;
+
   friend std::ostream& operator<<(std::ostream& out, const raw &r);
 
 public:
@@ -146,6 +158,10 @@ public:
   static raw* create_static(unsigned len, char *buf);
   static raw* create_page_aligned(unsigned len);
   static raw* create_zero_copy(unsigned len, int fd, int64_t *offset);
+
+#if defined(HAVE_XIO)
+ static raw* create_msg(unsigned len, char *buf, XioCompletionHook *m_hook);
+#endif
 
   /*
    * a buffer pointer.  references (a subsequence of) a raw buffer.
@@ -460,10 +476,13 @@ public:
   };
 };
 
+#if defined(HAVE_XIO)
+  struct xio_mempool_obj* get_xio_mp(const buffer::ptr& bp);
+#endif
+
 typedef buffer::ptr bufferptr;
 typedef buffer::list bufferlist;
 typedef buffer::hash bufferhash;
-
 
 inline bool operator>(bufferlist& l, bufferlist& r) {
   for (unsigned p = 0; ; p++) {
