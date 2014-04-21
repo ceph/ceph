@@ -6553,6 +6553,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now)
     repop->ctx->op_t,
     pg_trim_to,
     repop->ctx->log,
+    repop->ctx->updated_hset_history,
     onapplied_sync,
     on_all_applied,
     on_all_commit,
@@ -6571,6 +6572,7 @@ void ReplicatedBackend::issue_op(
   hobject_t new_temp_oid,
   hobject_t discard_temp_oid,
   vector<pg_log_entry_t> &log_entries,
+  boost::optional<pg_hit_set_history_t> &hset_hist,
   InProgressOp *op,
   ObjectStore::Transaction *op_t)
 {
@@ -6625,6 +6627,7 @@ void ReplicatedBackend::issue_op(
 
     wr->new_temp_oid = new_temp_oid;
     wr->discard_temp_oid = discard_temp_oid;
+    wr->updated_hit_set_history = hset_hist;
 
     get_parent()->send_message_osd_cluster(
       peer.osd, wr, get_osdmap()->get_epoch());
@@ -7353,6 +7356,7 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
     parent->update_stats(m->pg_stats);
     parent->log_operation(
       log,
+      m->updated_hit_set_history,
       m->pg_trim_to,
       update_snaps,
       &(rm->localt));
@@ -10366,7 +10370,7 @@ void ReplicatedPG::check_local()
 hobject_t ReplicatedPG::get_hit_set_current_object(utime_t stamp)
 {
   ostringstream ss;
-  ss << "hit_set_" << info.pgid << "_current_" << stamp;
+  ss << "hit_set_" << info.pgid.pgid << "_current_" << stamp;
   hobject_t hoid(sobject_t(ss.str(), CEPH_NOSNAP), "",
 		 info.pgid.ps(), info.pgid.pool(),
 		 cct->_conf->osd_hit_set_namespace);
@@ -10377,7 +10381,7 @@ hobject_t ReplicatedPG::get_hit_set_current_object(utime_t stamp)
 hobject_t ReplicatedPG::get_hit_set_archive_object(utime_t start, utime_t end)
 {
   ostringstream ss;
-  ss << "hit_set_" << info.pgid << "_archive_" << start << "_" << end;
+  ss << "hit_set_" << info.pgid.pgid << "_archive_" << start << "_" << end;
   hobject_t hoid(sobject_t(ss.str(), CEPH_NOSNAP), "",
 		 info.pgid.ps(), info.pgid.pool(),
 		 cct->_conf->osd_hit_set_namespace);
@@ -10508,15 +10512,16 @@ void ReplicatedPG::hit_set_persist()
 
   // If any archives are degraded we skip this persist request
   // account for the additional entry being added below
-  for (unsigned num = info.hit_set.history.size() + 1; num > max; --num) {
-    list<pg_hit_set_info_t>::iterator p = info.hit_set.history.begin();
-    assert(p != info.hit_set.history.end());
+  for (list<pg_hit_set_info_t>::iterator p = info.hit_set.history.begin();
+       p != info.hit_set.history.end();
+       ++p) {
     hobject_t aoid = get_hit_set_archive_object(p->begin, p->end);
 
     // Once we hit a degraded object just skip further trim
     if (is_degraded_object(aoid))
       return;
   }
+
   oid = get_hit_set_archive_object(start, now);
   // If the current object is degraded we skip this persist request
   if (is_degraded_object(oid))
@@ -10563,18 +10568,20 @@ void ReplicatedPG::hit_set_persist()
     repop->on_applied = new C_HitSetFlushing(this, flush_time);
   OpContext *ctx = repop->ctx;
   ctx->at_version = get_next_version();
+  ctx->updated_hset_history = info.hit_set;
+  pg_hit_set_history_t &updated_hit_set_hist = *(ctx->updated_hset_history);
 
-  if (info.hit_set.current_last_stamp != utime_t()) {
+  if (updated_hit_set_hist.current_last_stamp != utime_t()) {
     // FIXME: we cheat slightly here by bundling in a remove on a object
     // other the RepGather object.  we aren't carrying an ObjectContext for
     // the deleted object over this period.
     hobject_t old_obj =
-      get_hit_set_current_object(info.hit_set.current_last_stamp);
+      get_hit_set_current_object(updated_hit_set_hist.current_last_stamp);
     ctx->log.push_back(
       pg_log_entry_t(pg_log_entry_t::DELETE,
 		     old_obj,
 		     ctx->at_version,
-		     info.hit_set.current_last_update,
+		     updated_hit_set_hist.current_last_update,
 		     0,
 		     osd_reqid_t(),
 		     ctx->mtime));
@@ -10600,13 +10607,13 @@ void ReplicatedPG::hit_set_persist()
     ctx->delta_stats.num_bytes -= st.st_size;
   }
 
-  info.hit_set.current_last_update = info.last_update; // *after* above remove!
-  info.hit_set.current_info.version = ctx->at_version;
+  updated_hit_set_hist.current_last_update = info.last_update; // *after* above remove!
+  updated_hit_set_hist.current_info.version = ctx->at_version;
 
-  info.hit_set.history.push_back(info.hit_set.current_info);
+  updated_hit_set_hist.history.push_back(updated_hit_set_hist.current_info);
   hit_set_create();
-  info.hit_set.current_info = pg_hit_set_info_t();
-  info.hit_set.current_last_stamp = utime_t();
+  updated_hit_set_hist.current_info = pg_hit_set_info_t();
+  updated_hit_set_hist.current_last_stamp = utime_t();
 
   // fabricate an object_info_t and SnapSet
   obc->obs.oi.version = ctx->at_version;
@@ -10618,6 +10625,7 @@ void ReplicatedPG::hit_set_persist()
   ctx->new_snapset.head_exists = true;
 
   ctx->delta_stats.num_objects++;
+  ctx->delta_stats.num_objects_hit_set_archive++;
   ctx->delta_stats.num_bytes += bl.length();
 
   bufferlist bss;
@@ -10653,9 +10661,12 @@ void ReplicatedPG::hit_set_persist()
 
 void ReplicatedPG::hit_set_trim(RepGather *repop, unsigned max)
 {
-  for (unsigned num = info.hit_set.history.size(); num > max; --num) {
-    list<pg_hit_set_info_t>::iterator p = info.hit_set.history.begin();
-    assert(p != info.hit_set.history.end());
+  assert(repop->ctx->updated_hset_history);
+  pg_hit_set_history_t &updated_hit_set_hist =
+    *(repop->ctx->updated_hset_history);
+  for (unsigned num = updated_hit_set_hist.history.size(); num > max; --num) {
+    list<pg_hit_set_info_t>::iterator p = updated_hit_set_hist.history.begin();
+    assert(p != updated_hit_set_hist.history.end());
     hobject_t oid = get_hit_set_archive_object(p->begin, p->end);
 
     assert(!is_degraded_object(oid));
@@ -10683,7 +10694,7 @@ void ReplicatedPG::hit_set_trim(RepGather *repop, unsigned max)
     }
     if (agent_state)
       agent_state->remove_oldest_hit_set();
-    info.hit_set.history.pop_front();
+    updated_hit_set_hist.history.pop_front();
 
     struct stat st;
     int r = osd->store->stat(
@@ -10692,6 +10703,7 @@ void ReplicatedPG::hit_set_trim(RepGather *repop, unsigned max)
       &st);
     assert(r == 0);
     --repop->ctx->delta_stats.num_objects;
+    --repop->ctx->delta_stats.num_objects_hit_set_archive;
     repop->ctx->delta_stats.num_bytes -= st.st_size;
   }
 }
@@ -10891,9 +10903,19 @@ void ReplicatedPG::agent_load_hit_sets()
 	  break;
 	}
 
+	ObjectContextRef obc = get_object_context(oid, false);
+	if (!obc) {
+	  derr << __func__ << ": could not load hitset " << oid << dendl;
+	  break;
+	}
+
 	bufferlist bl;
-	int r = osd->store->read(coll, oid, 0, 0, bl);
-	assert(r >= 0);
+	{
+	  obc->ondisk_read_lock();
+	  int r = osd->store->read(coll, oid, 0, 0, bl);
+	  assert(r >= 0);
+	  obc->ondisk_read_unlock();
+	}
 	HitSetRef hs(new HitSet);
 	bufferlist::iterator pbl = bl.begin();
 	::decode(*hs, pbl);
@@ -11063,10 +11085,10 @@ void ReplicatedPG::agent_choose_mode()
 
   uint64_t num_user_objects = info.stats.stats.sum.num_objects;
 
-  // adjust (effective) user objects down based on the (max) number
+  // adjust (effective) user objects down based on the number
   // of HitSet objects, which should not count toward our total since
   // they cannot be flushed.
-  uint64_t unflushable = pool.info.hit_set_count;
+  uint64_t unflushable = info.stats.stats.sum.num_objects_hit_set_archive;
 
   // also exclude omap objects if ec backing pool
   const pg_pool_t *base_pool = get_osdmap()->get_pg_pool(pool.info.tier_of);
@@ -11284,6 +11306,9 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
     if (soid.snap != CEPH_SNAPDIR)
       stat.num_objects++;
 
+    if (soid.nspace == cct->_conf->osd_hit_set_namespace)
+      stat.num_objects_hit_set_archive++;
+
     // new snapset?
     if (soid.snap == CEPH_SNAPDIR ||
 	soid.snap == CEPH_NOSNAP) {
@@ -11482,6 +11507,7 @@ void ReplicatedPG::_scrub_finish()
 	   << scrub_cstat.sum.num_object_clones << "/" << info.stats.stats.sum.num_object_clones << " clones, "
 	   << scrub_cstat.sum.num_objects_dirty << "/" << info.stats.stats.sum.num_objects_dirty << " dirty, "
 	   << scrub_cstat.sum.num_objects_omap << "/" << info.stats.stats.sum.num_objects_omap << " omap, "
+	   << scrub_cstat.sum.num_objects_hit_set_archive << "/" << info.stats.stats.sum.num_objects_hit_set_archive << " hit_set_archive, "
 	   << scrub_cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes."
 	   << dendl;
 
@@ -11491,6 +11517,8 @@ void ReplicatedPG::_scrub_finish()
        !info.stats.dirty_stats_invalid) ||
       (scrub_cstat.sum.num_objects_omap != info.stats.stats.sum.num_objects_omap &&
        !info.stats.omap_stats_invalid) ||
+      (scrub_cstat.sum.num_objects_hit_set_archive != info.stats.stats.sum.num_objects_hit_set_archive &&
+       !info.stats.hitset_stats_invalid) ||
       scrub_cstat.sum.num_whiteouts != info.stats.stats.sum.num_whiteouts ||
       scrub_cstat.sum.num_bytes != info.stats.stats.sum.num_bytes) {
     osd->clog.error() << info.pgid << " " << mode
@@ -11499,6 +11527,7 @@ void ReplicatedPG::_scrub_finish()
 		      << scrub_cstat.sum.num_object_clones << "/" << info.stats.stats.sum.num_object_clones << " clones, "
 		      << scrub_cstat.sum.num_objects_dirty << "/" << info.stats.stats.sum.num_objects_dirty << " dirty, "
 		      << scrub_cstat.sum.num_objects_omap << "/" << info.stats.stats.sum.num_objects_omap << " omap, "
+		      << scrub_cstat.sum.num_objects_hit_set_archive << "/" << info.stats.stats.sum.num_objects_hit_set_archive << " hit_set_archive, "
 		      << scrub_cstat.sum.num_whiteouts << "/" << info.stats.stats.sum.num_whiteouts << " whiteouts, "
 		      << scrub_cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes.\n";
     ++scrubber.shallow_errors;
@@ -11508,6 +11537,7 @@ void ReplicatedPG::_scrub_finish()
       info.stats.stats = scrub_cstat;
       info.stats.dirty_stats_invalid = false;
       info.stats.omap_stats_invalid = false;
+      info.stats.hitset_stats_invalid = false;
       publish_stats_to_osd();
       share_pg_info();
     }

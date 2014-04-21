@@ -552,6 +552,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
   }
   if (info.last_backfill.is_max())
     info.stats = oinfo.stats;
+  info.hit_set = oinfo.hit_set;
 
   // do we have divergent entries to throw out?
   if (olog.head < log.head) {
