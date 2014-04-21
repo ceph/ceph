@@ -102,13 +102,13 @@ Ceph configuration file, and replace the values in braces with appropriate value
 
 	osd mkfs type = {fs-type}
 	osd mkfs options {fs-type} = {mkfs options}   # default for xfs is "-f"
-	osd mount options {fs-type} = {mount options} # default mount option is "rw, noatime"
+	osd mount options {fs-type} = {mount options} # default mount option is "rw,noatime"
 
 For example:: 
 
 	osd mkfs type = btrfs
 	osd mkfs options btrfs = -m raid0
-	osd mount options btrfs = rw, noatime
+	osd mount options btrfs = rw,noatime
 	
 For each ``[osd.n]`` section of your configuration file, specify the storage device. 
 For example:: 
