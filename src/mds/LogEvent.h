@@ -70,6 +70,7 @@ protected:
   virtual ~LogEvent() { }
 
   string get_type_str() const;
+  static __u32 str_to_type(std::string const &str);
   int get_type() const { return _type; }
   void set_type(int t) { _type = t; }
 
