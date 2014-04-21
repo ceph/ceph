@@ -132,8 +132,6 @@ public:
   void pre_exec();
   void execute();
   int read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs);
-  int iterate_user_manifest_parts(rgw_bucket& bucket, string& obj_prefix, RGWAccessControlPolicy *bucket_policy,
-                                  uint64_t *ptotal_len, bool read_data);
   int handle_user_manifest(const char *prefix);
 
   int get_data_cb(bufferlist& bl, off_t ofs, off_t len);
@@ -324,6 +322,8 @@ protected:
   const char *obj_manifest;
   time_t mtime;
 
+  MD5 *user_manifest_parts_hash;
+
 public:
   RGWPutObj() {
     ret = 0;
@@ -333,6 +333,7 @@ public:
     chunked_upload = false;
     obj_manifest = NULL;
     mtime = 0;
+    user_manifest_parts_hash = NULL;
   }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
@@ -342,6 +343,8 @@ public:
 
   RGWPutObjProcessor *select_processor();
   void dispose_processor(RGWPutObjProcessor *processor);
+
+  int user_manifest_iterate_cb(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs);
 
   int verify_permission();
   void pre_exec();
