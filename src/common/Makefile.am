@@ -61,6 +61,7 @@ libcommon_internal_la_SOURCES = \
 	common/ceph_json.cc \
 	common/ipaddr.cc \
 	common/pick_address.cc \
+	common/address_helper.cc \
 	common/util.cc \
 	common/TextTable.cc \
 	common/ceph_fs.cc \
