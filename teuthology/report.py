@@ -274,7 +274,13 @@ class ResultsReporter(object):
         if response.status_code == 200:
             return job_id
 
-        resp_json = response.json()
+        # This call is wrapped in a try/except because of:
+        #  http://tracker.ceph.com/issues/8166
+        try:
+            resp_json = response.json()
+        except ValueError:
+            resp_json = dict()
+
         if resp_json:
             msg = resp_json.get('message', '')
         else:
