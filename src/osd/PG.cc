@@ -7375,6 +7375,7 @@ PG::PriorSet::PriorSet(bool ec_pool,
 	down.insert(o);
       } else if (pinfo->lost_at > interval.first) {
 	dout(10) << "build_prior  prior osd." << o << " is down, but lost_at " << pinfo->lost_at << dendl;
+	up_now.insert(so);
 	down.insert(o);
       } else {
 	dout(10) << "build_prior  prior osd." << o << " is down" << dendl;
