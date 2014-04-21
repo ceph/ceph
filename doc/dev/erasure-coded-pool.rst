@@ -49,7 +49,7 @@ Interface
 
 Set up an erasure-coded pool::
 
- $ ceph osd create ecpool 12 12 erasure
+ $ ceph osd pool create ecpool 12 12 erasure
 
 Set up an erasure-coded pool and the associated crush ruleset::
 
