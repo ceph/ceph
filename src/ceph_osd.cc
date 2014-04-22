@@ -31,8 +31,9 @@ using namespace std;
 
 #include "mon/MonMap.h"
 
-
 #include "msg/Messenger.h"
+#include "msg/XioMessenger.h"
+#include "msg/QueueStrategy.h"
 
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
@@ -352,6 +353,18 @@ int main(int argc, const char **argv)
   ms_hb_back_server->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   ms_hb_front_server->set_cluster_protocol(CEPH_OSD_PROTOCOL);
 
+  Messenger *ms_xio_public = new XioMessenger(g_ceph_context,
+					      entity_name_t::OSD(whoami), "xio client",
+					      getpid(),
+					      2 /* portals */,
+					      new QueueStrategy(2) /* dispatch strategy */);
+
+  Messenger *ms_xio_objecter = new XioMessenger(g_ceph_context,
+						entity_name_t::OSD(whoami), "xio objecter",
+						getpid(),
+						2 /* portals */,
+						new QueueStrategy(2) /* dispatch strategy */);
+
   cout << "starting osd." << whoami
        << " at " << ms_public->get_myaddr()
        << " osd_data " << g_conf->osd_data
@@ -385,7 +398,19 @@ int main(int argc, const char **argv)
   //try to poison pill any OSD connections on the wrong address
   ms_public->set_policy(entity_name_t::TYPE_OSD,
 			Messenger::Policy::stateless_server(0,0));
-  
+
+
+  ms_xio_public->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
+  ms_xio_public->set_policy(entity_name_t::TYPE_MON,
+			    Messenger::Policy::lossy_client(supported,
+							    CEPH_FEATURE_UID |
+							    CEPH_FEATURE_PGID64 |
+							    CEPH_FEATURE_OSDENC));
+  //try to poison pill any OSD connections on the wrong address
+  ms_public->set_policy(entity_name_t::TYPE_OSD,
+			Messenger::Policy::stateless_server(0,0));
+
+
   ms_cluster->set_default_policy(Messenger::Policy::stateless_server(0, 0));
   ms_cluster->set_policy(entity_name_t::TYPE_MON, Messenger::Policy::lossy_client(0,0));
   ms_cluster->set_policy(entity_name_t::TYPE_OSD,
@@ -412,6 +437,13 @@ int main(int argc, const char **argv)
   if (r < 0)
     exit(1);
 
+  entity_addr_t ms_xio_public_addr = ms_public->get_myaddr();
+  ms_xio_public_addr.set_port(
+    ms_xio_public_addr.get_port() + 111 /* XXXX shift */);
+  r = ms_xio_public->bind(ms_xio_public_addr);
+  if (r < 0)
+    exit(1);
+
   // hb back should bind to same ip as cluster_addr (if specified)
   entity_addr_t hb_back_addr = g_conf->osd_heartbeat_addr;
   if (hb_back_addr.is_blank_ip()) {
@@ -432,6 +464,13 @@ int main(int argc, const char **argv)
     exit(1);
 
   ms_objecter->bind(g_conf->public_addr);
+
+  entity_addr_t ms_xio_objecter_addr = ms_objecter->get_myaddr();
+  ms_xio_objecter_addr.set_port(
+    ms_xio_objecter_addr.get_port() + 111 /* XXXX shift */);
+  r = ms_xio_objecter->bind(ms_xio_objecter_addr);
+  if (r < 0)
+    exit(1);
 
   // Set up crypto, daemonize, etc.
   global_init_daemonize(g_ceph_context, 0);
@@ -456,10 +495,12 @@ int main(int argc, const char **argv)
 		whoami,
 		ms_cluster,
 		ms_public,
+		ms_xio_public,
 		ms_hbclient,
 		ms_hb_front_server,
 		ms_hb_back_server,
 		ms_objecter,
+		ms_xio_objecter,
 		&mc,
 		g_conf->osd_data, g_conf->osd_journal);
 
@@ -479,6 +520,8 @@ int main(int argc, const char **argv)
   ms_hb_back_server->start();
   ms_cluster->start();
   ms_objecter->start();
+  ms_xio_public->start();
+  ms_xio_objecter->start();
 
   // start osd
   err = osd->init();
@@ -505,6 +548,8 @@ int main(int argc, const char **argv)
   ms_hb_back_server->wait();
   ms_cluster->wait();
   ms_objecter->wait();
+  ms_xio_public->wait();
+  ms_xio_objecter->wait();
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_osd_signal);
@@ -519,6 +564,9 @@ int main(int argc, const char **argv)
   delete ms_hb_back_server;
   delete ms_cluster;
   delete ms_objecter;
+  delete ms_xio_public;
+  delete ms_xio_objecter;
+
   client_byte_throttler.reset();
   client_msg_throttler.reset();
   g_ceph_context->put();
