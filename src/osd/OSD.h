@@ -133,6 +133,7 @@ enum {
   l_osd_tier_whiteout,
   l_osd_tier_dirty,
   l_osd_tier_clean,
+  l_osd_tier_delay,
 
   l_osd_agent_wake,
   l_osd_agent_skip,
@@ -466,6 +467,8 @@ public:
     }
   } agent_thread;
   bool agent_stop_flag;
+  Mutex agent_timer_lock;
+  SafeTimer agent_timer;
 
   void agent_entry();
   void agent_stop();
