@@ -75,6 +75,7 @@ struct OpRequest : public TrackedOp {
   void _dump(utime_t now, Formatter *f) const;
 
 private:
+  Message *request; /// the logical request we are tracking
   osd_reqid_t reqid;
   uint8_t hit_flag_points;
   uint8_t latest_flag_point;
@@ -93,6 +94,10 @@ protected:
   void _unregistered();
 
 public:
+  ~OpRequest() {
+    request->put();
+  }
+  Message *get_req() const { return request; }
   bool been_queued_for_pg() { return hit_flag_points & flag_queued_for_pg; }
   bool been_reached_pg() { return hit_flag_points & flag_reached_pg; }
   bool been_delayed() { return hit_flag_points & flag_delayed; }

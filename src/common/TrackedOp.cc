@@ -167,8 +167,10 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
 
       utime_t age = now - (*i)->get_initiated();
       stringstream ss;
-      ss << "slow request " << age << " seconds old, received at " << (*i)->get_initiated()
-	 << ": " << *((*i)->request) << " currently "
+      ss << "slow request " << age << " seconds old, received at "
+         << (*i)->get_initiated() << ": ";
+      (*i)->_dump_op_descriptor(ss);
+      ss << " currently "
 	 << ((*i)->current.size() ? (*i)->current : (*i)->state_string());
       warning_vector.push_back(ss.str());
 
@@ -231,10 +233,12 @@ void OpTracker::_mark_event(TrackedOp *op, const string &evt,
 			    utime_t time)
 {
   Mutex::Locker locker(ops_in_flight_lock);
+  stringstream ss;
+  op->_dump_op_descriptor(ss);
   dout(5) << //"reqid: " << op->get_reqid() <<
 	     ", seq: " << op->seq
 	  << ", time: " << time << ", event: " << evt
-	  << ", request: " << *op->request << dendl;
+	  << ", op: " << ss.str() << dendl;
 }
 
 void OpTracker::RemoveOnDelete::operator()(TrackedOp *op) {
