@@ -55,6 +55,11 @@ void OpRequest::_dump(utime_t now, Formatter *f) const
   }
 }
 
+void OpRequest::_dump_op_descriptor(ostream& stream) const
+{
+  get_req()->print(stream);
+}
+
 bool OpRequest::check_rmw(int flag) {
   return rmw_flags & flag;
 }
