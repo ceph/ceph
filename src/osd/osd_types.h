@@ -311,6 +311,7 @@ struct pg_t {
   }
 
   pg_t get_parent() const;
+  pg_t get_ancestor(unsigned old_pg_num) const;
 
   int print(char *o, int maxlen) const;
   bool parse(const char *s);
@@ -1688,8 +1689,14 @@ struct pg_interval_t {
   epoch_t first, last;
   bool maybe_went_rw;
   int primary;
+  int up_primary;
 
-  pg_interval_t() : first(0), last(0), maybe_went_rw(false), primary(-1) {}
+  pg_interval_t()
+    : first(0), last(0),
+      maybe_went_rw(false),
+      primary(-1),
+      up_primary(-1)
+  {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
@@ -1701,10 +1708,12 @@ struct pg_interval_t {
    * if an interval was closed out.
    */
   static bool check_new_interval(
-    int old_primary,                            ///< [in] primary as of lastmap
-    int new_primary,                            ///< [in] primary as of lastmap
+    int old_acting_primary,                     ///< [in] primary as of lastmap
+    int new_acting_primary,                     ///< [in] primary as of lastmap
     const vector<int> &old_acting,              ///< [in] acting as of lastmap
     const vector<int> &new_acting,              ///< [in] acting as of osdmap
+    int old_up_primary,                         ///< [in] up primary of lastmap
+    int new_up_primary,                         ///< [in] up primary of osdmap
     const vector<int> &old_up,                  ///< [in] up as of lastmap
     const vector<int> &new_up,                  ///< [in] up as of osdmap
     epoch_t same_interval_since,                ///< [in] as of osdmap

@@ -394,6 +394,15 @@ ostream& operator<<(ostream& out, const spg_t &pg)
   return out;
 }
 
+pg_t pg_t::get_ancestor(unsigned old_pg_num) const
+{
+  int old_bits = pg_pool_t::calc_bits_of(old_pg_num);
+  int old_mask = (1 << old_bits) - 1;
+  pg_t ret = *this;
+  ret.m_seed = ceph_stable_mod(m_seed, old_pg_num, old_mask);
+  return ret;
+}
+
 bool pg_t::is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *children) const
 {
   assert(m_seed < old_pg_num);
@@ -2113,19 +2122,20 @@ ostream &operator<<(ostream &lhs, const pg_notify_t &notify)
 
 void pg_interval_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(3, 2, bl);
+  ENCODE_START(4, 2, bl);
   ::encode(first, bl);
   ::encode(last, bl);
   ::encode(up, bl);
   ::encode(acting, bl);
   ::encode(maybe_went_rw, bl);
   ::encode(primary, bl);
+  ::encode(up_primary, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_interval_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
   ::decode(first, bl);
   ::decode(last, bl);
   ::decode(up, bl);
@@ -2136,6 +2146,12 @@ void pg_interval_t::decode(bufferlist::iterator& bl)
   } else {
     if (acting.size())
       primary = acting[0];
+  }
+  if (struct_v >= 4) {
+    ::decode(up_primary, bl);
+  } else {
+    if (up.size())
+      up_primary = up[0];
   }
   DECODE_FINISH(bl);
 }
@@ -2152,6 +2168,8 @@ void pg_interval_t::dump(Formatter *f) const
   f->open_array_section("acting");
   for (vector<int>::const_iterator p = acting.begin(); p != acting.end(); ++p)
     f->dump_int("osd", *p);
+  f->dump_int("primary", primary);
+  f->dump_int("up_primary", up_primary);
   f->close_section();
 }
 
@@ -2168,10 +2186,12 @@ void pg_interval_t::generate_test_instances(list<pg_interval_t*>& o)
 }
 
 bool pg_interval_t::check_new_interval(
-  int old_primary,
-  int new_primary,
+  int old_acting_primary,
+  int new_acting_primary,
   const vector<int> &old_acting,
   const vector<int> &new_acting,
+  int old_up_primary,
+  int new_up_primary,
   const vector<int> &old_up,
   const vector<int> &new_up,
   epoch_t same_interval_since,
@@ -2184,8 +2204,13 @@ bool pg_interval_t::check_new_interval(
   std::ostream *out)
 {
   // remember past interval
-  if (old_primary != new_primary ||
-      new_acting != old_acting || new_up != old_up ||
+  //  NOTE: a change in the up set primary triggers an interval
+  //  change, even though the interval members in the pg_interval_t
+  //  do not change.
+  if (old_acting_primary != new_acting_primary ||
+      new_acting != old_acting ||
+      old_up_primary != new_up_primary ||
+      new_up != old_up ||
       (!(lastmap->get_pools().count(pool_id))) ||
       (lastmap->get_pools().find(pool_id)->second.min_size !=
        osdmap->get_pools().find(pool_id)->second.min_size)  ||
@@ -2196,7 +2221,8 @@ bool pg_interval_t::check_new_interval(
     i.last = osdmap->get_epoch() - 1;
     i.acting = old_acting;
     i.up = old_up;
-    i.primary = old_primary;
+    i.primary = old_acting_primary;
+    i.up_primary = old_up_primary;
 
     if (!i.acting.empty() && i.primary != -1 &&
 	i.acting.size() >=
@@ -2254,7 +2280,9 @@ bool pg_interval_t::check_new_interval(
 
 ostream& operator<<(ostream& out, const pg_interval_t& i)
 {
-  out << "interval(" << i.first << "-" << i.last << " " << i.up << "/" << i.acting;
+  out << "interval(" << i.first << "-" << i.last
+      << " up " << i.up << "(" << i.up_primary << ")"
+      << " acting " << i.acting << "(" << i.primary << ")";
   if (i.maybe_went_rw)
     out << " maybe_went_rw";
   out << ")";
