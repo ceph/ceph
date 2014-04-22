@@ -649,7 +649,7 @@ def update_grub_rpm(remote, newversion):
         newgrub = generate_legacy_grub_entry(remote, newversion)
         for line in newgrub:
             data += line + '\n'
-        temp_file_path = teuthology.remote_mktemp(remote)
+        temp_file_path = remote.remote_mktemp()
         teuthology.sudo_write_file(remote, temp_file_path, StringIO(data), '755')
         teuthology.move_file(remote, temp_file_path, '/boot/grub/grub.conf', True)
     else:

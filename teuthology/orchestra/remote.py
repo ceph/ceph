@@ -8,7 +8,9 @@ import time
 import pexpect
 import re
 import logging
+from cStringIO import StringIO
 from teuthology import lockstatus as ls
+import paramiko
 
 try:
     import libvirt
@@ -107,6 +109,82 @@ class Remote(object):
         r.remote = self
         return r
 
+    def remote_mktemp(self, sudo=False):
+        """
+        Make a remote temporary file 
+        """
+        args = []
+        if sudo:
+            args.append('sudo')
+        args.extend([
+            'python',
+            '-c',
+            'import os; import tempfile; import sys; (fd,fname) = tempfile.mkstemp(); os.close(fd); sys.stdout.write(fname.rstrip()); sys.stdout.flush()'
+            ])
+        proc = self.run(
+            args=args,
+            stdout=StringIO(),
+            )
+        data = proc.stdout.getvalue()
+        return data
+
+    def _set_remote_perms(self, tempf, perms):
+        args = []
+        args.extend([
+            'sudo',
+            'chmod',
+            perms,
+            tempf,
+            ])
+        self.run(
+            args=args,
+            stdout=StringIO(),
+            )
+
+    def _do_sftp_cmd(self, args, tempf, sudo=False):
+        self.run(
+            args=args,
+            stdout=StringIO(),
+            )
+        if sudo:
+            self._set_remote_perms(tempf, '0666')
+        conn = self.connect()
+        transport = conn.get_transport()
+        sftp = paramiko.SFTPClient.from_transport(transport)
+        with sftp.open(tempf, 'rb') as file_sftp:
+            result = file_sftp.read()
+        return result
+
+    def copy_remote(self, path, sudo=False):
+        """
+        Read a file from the remote host into memory.
+        """
+        tempf = self.remote_mktemp()
+        args = [
+            'sudo',
+            'cp',
+            path,
+            tempf,
+            ]
+        return self._do_sftp_cmd(args, tempf, sudo)
+
+    def tar_remote(self, path, sudo=False, zip_flag=False):
+        """
+        Tar a remote file.
+        """
+        zip_fld = lambda x: 'cz' if x else 'c'
+        tempf = self.remote_mktemp()
+        args = [
+            'sudo',
+            'tar',
+            zip_fld(zip_flag),
+            '-f', tempf,
+            '-C', path,
+            '--',
+            '.',
+            ]
+        return self._do_sftp_cmd(args, tempf, sudo)
+                
 
 def getShortName(name):
     """
