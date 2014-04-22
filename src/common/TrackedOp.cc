@@ -121,9 +121,6 @@ void OpTracker::unregister_inflight_op(TrackedOp *i)
   // caller checks;
   assert(tracking_enabled);
 
-  i->request->clear_data();
-  i->request->clear_payload();
-
   Mutex::Locker locker(ops_in_flight_lock);
   assert(i->xitem.get_list() == &ops_in_flight);
   utime_t now = ceph_clock_now(cct);
@@ -241,12 +238,12 @@ void OpTracker::_mark_event(TrackedOp *op, const string &evt,
 }
 
 void OpTracker::RemoveOnDelete::operator()(TrackedOp *op) {
+  op->mark_event("done");
+  op->_unregistered();
   if (!tracker->tracking_enabled) {
-    op->request->clear_data();
     delete op;
     return;
   }
-  op->mark_event("done");
   tracker->unregister_inflight_op(op);
   // Do not delete op, unregister_inflight_op took control
 }

@@ -90,6 +90,7 @@ private:
 
 protected:
   void _dump_op_descriptor(ostream& stream) const;
+  void _unregistered();
 
 public:
   bool been_queued_for_pg() { return hit_flag_points & flag_queued_for_pg; }
