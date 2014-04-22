@@ -2713,7 +2713,12 @@ public:
     /// if set, requeue snaptrim on lock release
     bool snaptrimmer_write_marker;
 
-    RWState() : state(RWNONE), count(0), backfill_read_marker(false) {}
+    RWState()
+      : state(RWNONE),
+	count(0),
+	backfill_read_marker(false),
+	snaptrimmer_write_marker(false)
+    {}
     bool get_read(OpRequestRef op) {
       if (get_read_lock()) {
 	return true;

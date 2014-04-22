@@ -1100,7 +1100,6 @@ public:
     int incarnation;
 
     op_target_t target;
-    bool used_replica;
 
     ConnectionRef con;  // for rx buffer only
 
