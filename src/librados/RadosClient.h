@@ -34,6 +34,7 @@ class Message;
 class MWatchNotify;
 class MLog;
 class SimpleMessenger;
+class XioMessenger;
 
 class librados::RadosClient : public Dispatcher
 {
@@ -49,7 +50,7 @@ private:
 
   OSDMap osdmap;
   MonClient monclient;
-  SimpleMessenger *messenger;
+  Messenger *messenger;
 
   uint64_t instance_id;
 
@@ -78,6 +79,7 @@ private:
   rados_log_callback_t log_cb;
   void *log_cb_arg;
   string log_watch;
+  bool use_xio;
 
   int wait_for_osdmap();
 
@@ -88,6 +90,7 @@ public:
   ~RadosClient();
   int ping_monitor(string mon_id, string *result);
   int connect();
+  int xio_connect();
   void shutdown();
 
   uint64_t get_instance_id();
