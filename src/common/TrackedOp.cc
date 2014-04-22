@@ -264,9 +264,8 @@ void TrackedOp::mark_event(const string &event)
 
 void TrackedOp::dump(utime_t now, Formatter *f) const
 {
-  Message *m = request;
   stringstream name;
-  m->print(name);
+  _dump_op_descriptor(name);
   f->dump_string("description", name.str().c_str()); // this TrackedOp
   f->dump_stream("received_at") << get_arrived();
   f->dump_float("age", now - get_arrived());
