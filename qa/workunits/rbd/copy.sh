@@ -321,8 +321,8 @@ test_clone() {
     rbd -p rbd2 ls | grep -v clone2
 
     rados rmpool rbd2 rbd2 --yes-i-really-really-mean-it
-    rados rmpool rbd rbd --yes-i-really-really-mean-it
-    rados mkpool rbd rbd --yes-i-really-really-mean-it
+    rbd ls
+    exit 1
 }
 
 test_pool_image_args
