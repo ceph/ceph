@@ -3,7 +3,7 @@
 # make sure rbd pool is EMPTY.. this is a test script!!
 rbd ls | wc -l | grep -v '^0$' && echo "nonempty rbd pool, aborting!  run this script on an empty test cluster only." && exit 1
 
-IMGS="testimg1 testimg2 testimg3 foo foo2 bar bar2 test1 test2 test3"
+IMGS="testimg1 testimg2 testimg3 foo foo2 bar bar2 test1 test2 test3 clone2"
 
 remove_images() {
     for img in $IMGS
@@ -288,9 +288,14 @@ test_pool_image_args() {
 
     rm -f /tmp/empty
     ceph osd pool delete test test --yes-i-really-really-mean-it
+
+    for f in foo test1 test10 test12 test2 test3 ; do
+	rbd rm $f
+    done
 }
 
 test_clone() {
+    echo "testing clone..."
     remove_images
     rbd create test1 $RBD_CREATE_ARGS -s 1
     rbd snap create test1@s1
@@ -309,9 +314,14 @@ test_clone() {
     rbd ls -l | grep clone2 | grep rbd2/clone@s1
     rbd -p rbd2 ls | grep -v clone2
 
+    rbd rm clone2
+    rbd snap unprotect rbd2/clone@s1
+    rbd snap rm rbd2/clone@s1
+    rbd rm rbd2/clone
+    rbd snap unprotect test1@s1
+    rbd snap rm test1@s1
+    rbd rm test1
     rados rmpool rbd2 rbd2 --yes-i-really-really-mean-it
-    rados rmpool rbd rbd --yes-i-really-really-mean-it
-    rados mkpool rbd rbd --yes-i-really-really-mean-it
 }
 
 test_pool_image_args
