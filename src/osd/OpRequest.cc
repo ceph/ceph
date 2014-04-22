@@ -60,6 +60,11 @@ void OpRequest::_dump_op_descriptor(ostream& stream) const
   get_req()->print(stream);
 }
 
+void OpRequest::_unregistered() {
+  request->clear_data();
+  request->clear_payload();
+}
+
 bool OpRequest::check_rmw(int flag) {
   return rmw_flags & flag;
 }

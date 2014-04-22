@@ -156,6 +156,8 @@ protected:
   virtual void _event_marked() {}
   /// return a unique descriptor of the Op; eg the message it's attached to
   virtual void _dump_op_descriptor(ostream& stream) const = 0;
+  /// called when the last non-OpTracker reference is dropped
+  virtual void _unregistered() {};
 
 public:
   virtual ~TrackedOp() { assert(request); request->put(); }
