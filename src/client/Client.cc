@@ -1471,7 +1471,7 @@ int Client::encode_inode_release(Inode *in, MetaRequest *req,
       rel.seq = caps->seq;
       rel.issue_seq = caps->issue_seq;
       rel.mseq = caps->mseq;
-      rel.caps = caps->issued;
+      rel.caps = caps->implemented;
       rel.wanted = caps->wanted;
       rel.dname_len = 0;
       rel.dname_seq = 0;
