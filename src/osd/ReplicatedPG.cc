@@ -11311,6 +11311,14 @@ void ReplicatedPG::agent_choose_mode_restart()
   unlock();
 }
 
+// Divide, but never return 0
+static inline uint64_t normdiv(uint64_t n, uint64_t d)
+{
+  uint64_t result = n / d;
+  if (result == 0) return 1;
+  return result;
+}
+
 void ReplicatedPG::agent_choose_mode(bool restart)
 {
   // Let delay play out
@@ -11321,6 +11329,7 @@ void ReplicatedPG::agent_choose_mode(bool restart)
   agent_state->delaying = false;
 
   uint64_t divisor = pool.info.get_pg_num_divisor(info.pgid.pgid);
+  assert(divisor > 0);
 
   uint64_t num_user_objects = info.stats.stats.sum.num_objects;
 
@@ -11369,19 +11378,20 @@ void ReplicatedPG::agent_choose_mode(bool restart)
       info.stats.stats.sum.num_objects;
     dirty_micro =
       num_dirty * avg_size * 1000000 /
-      (pool.info.target_max_bytes / divisor);
+      normdiv(pool.info.target_max_bytes, divisor);
     full_micro =
       num_user_objects * avg_size * 1000000 /
-      (pool.info.target_max_bytes / divisor);
+      normdiv(pool.info.target_max_bytes, divisor);
   }
   if (pool.info.target_max_objects) {
     uint64_t dirty_objects_micro =
       num_dirty * 1000000 /
-      (pool.info.target_max_objects / divisor);
+      normdiv(pool.info.target_max_objects, divisor);
     if (dirty_objects_micro > dirty_micro)
       dirty_micro = dirty_objects_micro;
     uint64_t full_objects_micro =
-      num_user_objects * 1000000 / (pool.info.target_max_objects / divisor);
+      num_user_objects * 1000000 /
+      normdiv(pool.info.target_max_objects, divisor);
     if (full_objects_micro > full_micro)
       full_micro = full_objects_micro;
   }
@@ -11425,7 +11435,11 @@ void ReplicatedPG::agent_choose_mode(bool restart)
     // set effort in [0..1] range based on where we are between
     evict_mode = TierAgentState::EVICT_MODE_SOME;
     uint64_t over = full_micro - evict_target;
-    uint64_t span = 1000000 - evict_target;
+    uint64_t span;
+    if (evict_target >= 1000000)
+      span = 1;
+    else
+      span = 1000000 - evict_target;
     evict_effort = MAX(over * 1000000 / span,
 		       (unsigned)(1000000.0 * g_conf->osd_agent_min_evict_effort));
 
