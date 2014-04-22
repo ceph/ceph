@@ -1217,7 +1217,7 @@ void ECBackend::submit_transaction(
   op->version = at_version;
   op->trim_to = trim_to;
   op->log_entries.swap(log_entries);
-  op->updated_hit_set_history.swap(hset_history);
+  std::swap(op->updated_hit_set_history, hset_history);
   op->on_local_applied_sync = on_local_applied_sync;
   op->on_all_applied = on_all_applied;
   op->on_all_commit = on_all_commit;
