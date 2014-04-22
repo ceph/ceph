@@ -41,6 +41,12 @@ def task(ctx, config):
        to probabilistically choose when to wait, and the method used
        makes it closer to -- but not identical to -- the half-life.)
 
+    scrub_interval: (-1) the approximate length of time to loop before
+       waiting until a scrub is performed while cleaning. (In reality
+       this is used to probabilistically choose when to wait, and it
+       only applies to the cases where cleaning is being performed). 
+       -1 is used to indicate that no scrubbing will be done.
+  
     chance_down: (0.4) the probability that the thrasher will mark an
        OSD down rather than marking it out. (The thrasher will not
        consider that OSD out of the cluster, since presently an OSD
