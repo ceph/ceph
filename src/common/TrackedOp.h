@@ -127,7 +127,6 @@ private:
   friend class OpTracker;
   xlist<TrackedOp*>::item xitem;
 protected:
-  Message *request; /// the logical request we are tracking
   OpTracker *tracker; /// the tracker we are associated with
 
   utime_t initiated_at;
@@ -138,9 +137,8 @@ protected:
 
   uint32_t warn_interval_multiplier; // limits output of a given op warning
 
-  TrackedOp(Message *req, OpTracker *_tracker, const utime_t& initiated) :
+  TrackedOp(OpTracker *_tracker, const utime_t& initiated) :
     xitem(this),
-    request(req),
     tracker(_tracker),
     initiated_at(initiated),
     lock("TrackedOp::lock"),
@@ -160,7 +158,7 @@ protected:
   virtual void _unregistered() {};
 
 public:
-  virtual ~TrackedOp() { assert(request); request->put(); }
+  virtual ~TrackedOp() {}
 
   const utime_t& get_initiated() const {
     return initiated_at;
@@ -171,7 +169,6 @@ public:
       (events.rbegin()->first - get_initiated()) :
       0.0;
   }
-  Message *get_req() const { return request; }
 
   void mark_event(const string &event);
   virtual const char *state_string() const {
