@@ -8853,8 +8853,10 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
   utime_t mtime = ceph_clock_now(cct);
   info.last_update.epoch = get_osdmap()->get_epoch();
   const pg_missing_t &missing = pg_log.get_missing();
-  map<hobject_t, pg_missing_t::item>::const_iterator m = missing.missing.begin();
-  map<hobject_t, pg_missing_t::item>::const_iterator mend = missing.missing.end();
+  map<hobject_t, pg_missing_t::item>::const_iterator m =
+    missing_loc.get_all_missing().begin();
+  map<hobject_t, pg_missing_t::item>::const_iterator mend =
+    missing_loc.get_all_missing().end();
   while (m != mend) {
     const hobject_t &oid(m->first);
     if (!missing_loc.is_unfound(oid)) {
@@ -8906,7 +8908,8 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
 	t->remove(
 	  coll,
 	  ghobject_t(oid, ghobject_t::NO_GEN, pg_whoami.shard));
-	pg_log.missing_rm(m++);
+	pg_log.missing_add_event(e);
+	++m;
 	missing_loc.recovered(oid);
       }
       break;
