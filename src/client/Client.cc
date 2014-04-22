@@ -712,14 +712,21 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       in->dirstat.nfiles == 0 &&
       in->dirstat.nsubdirs == 0) {
     ldout(cct, 10) << " marking I_COMPLETE on empty dir " << *in << dendl;
-    in->flags |= I_COMPLETE;
     if (in->dir) {
+      Dir *dir = in->dir;
       ldout(cct, 10) << " dir is open on empty dir " << in->ino << " with "
-		     << in->dir->dentry_map.size() << " entries, tearing down" << dendl;
-      while (!in->dir->dentry_map.empty())
-	unlink(in->dir->dentry_map.begin()->second, true);
-      close_dir(in->dir);
+		     << dir->dentry_map.size() << " entries, tearing down" << dendl;
+      for (map<string,Dentry*>::iterator p = dir->dentry_map.begin();
+	   p != dir->dentry_map.end(); ) {
+	Dentry *dn = p->second;
+	++p;
+	if (dn->inode || dn->lru_is_expireable())
+	  unlink(dn, true);
+      }
+      if (dir->is_empty())
+	close_dir(dir);
     }
+    in->flags |= I_COMPLETE;
   }
 
   return in;
