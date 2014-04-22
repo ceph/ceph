@@ -17,6 +17,9 @@
 struct TierAgentState {
   /// current position iterating across pool
   hobject_t position;
+  /// Count of agent_work since start of object hash space
+  int started;
+  bool delaying;
 
   /// histogram of ages we've encountered
   pow2_hist_t atime_hist;
@@ -66,7 +69,9 @@ struct TierAgentState {
   unsigned evict_effort;
 
   TierAgentState()
-    : hist_age(0),
+    : started(0),
+      delaying(false),
+      hist_age(0),
       flush_mode(FLUSH_MODE_IDLE),
       evict_mode(EVICT_MODE_IDLE),
       evict_effort(0)
@@ -75,8 +80,9 @@ struct TierAgentState {
   /// false if we have any work to do
   bool is_idle() const {
     return
-      flush_mode == FLUSH_MODE_IDLE &&
-      evict_mode == EVICT_MODE_IDLE;
+      delaying ||
+      (flush_mode == FLUSH_MODE_IDLE &&
+      evict_mode == EVICT_MODE_IDLE);
   }
 
   /// add archived HitSet
