@@ -15,7 +15,7 @@ requests >= 1.0
 raven
 web.py
 docopt
-psutil
+psutil >= 2.1.0
 configparser
 
 # Test Dependencies
