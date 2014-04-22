@@ -628,11 +628,21 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
   else if (command == "mark_unfound_lost") {
     string mulcmd;
     cmd_getval(cct, cmdmap, "mulcmd", mulcmd);
-    if (mulcmd != "revert") {
-      ss << "mode must be 'revert'; mark and delete not yet implemented";
+    int mode = -1;
+    if (mulcmd == "revert") {
+      if (pool.info.ec_pool()) {
+	ss << "mode must be 'delete' for ec pool";
+	return -EINVAL;
+      }
+      mode = pg_log_entry_t::LOST_REVERT;
+    } else if (mulcmd == "delete") {
+      mode = pg_log_entry_t::LOST_DELETE;
+    } else {
+      ss << "mode must be 'revert' or 'delete'; mark not yet implemented";
       return -EINVAL;
     }
-    int mode = pg_log_entry_t::LOST_REVERT;
+    assert(mode == pg_log_entry_t::LOST_REVERT ||
+	   mode == pg_log_entry_t::LOST_DELETE);
 
     if (!is_primary()) {
       ss << "not primary";
@@ -651,7 +661,8 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
       return -EINVAL;
     }
 
-    ss << "pg has " << unfound << " objects unfound and apparently lost, marking";
+    ss << "pg has " << unfound
+       << " objects unfound and apparently lost, marking";
     mark_all_unfound_lost(mode);
     return 0;
   }
