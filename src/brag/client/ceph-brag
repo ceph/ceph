@@ -223,7 +223,9 @@ def describe_usage():
   print >> sys.stderr, "Usage:"
   print >> sys.stderr, "======\n"
 
-  print >> sys.stderr, sys.argv[0] + " <commands> [command-options]\n"
+  print >> sys.stderr, sys.argv[0] + " [<commands> [command-options]]\n"
+  print >> sys.stderr, "without any option, shows the data to be published and do nothing"
+  print >> sys.stderr, ""
   print >> sys.stderr, "commands:"
   print >> sys.stderr, "publish - publish the brag report to the server"
   print >> sys.stderr, "update-metadata <update-metadata-options> - Update"
