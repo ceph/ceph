@@ -317,6 +317,7 @@ public:
 private:
   Messenger *&cluster_messenger;
   Messenger *&client_messenger;
+  Messenger *&client_xio_messenger;
 public:
   PerfCounters *&logger;
   PerfCounters *&recoverystate_perf;
@@ -390,10 +391,12 @@ public:
     cluster_messenger->send_message(m, con.get());
   }
   void send_message_osd_client(Message *m, Connection *con) {
-    client_messenger->send_message(m, con);
+    Messenger *messenger = con->get_messenger();
+    messenger->send_message(m, con);
   }
   void send_message_osd_client(Message *m, const ConnectionRef& con) {
-    client_messenger->send_message(m, con.get());
+    Messenger *messenger = con->get_messenger();
+    messenger->send_message(m, con.get());
   }
   entity_name_t get_cluster_msgr_name() {
     return cluster_messenger->get_myname();
@@ -793,7 +796,9 @@ protected:
 
   Messenger   *cluster_messenger;
   Messenger   *client_messenger;
+  Messenger*  client_xio_messenger;
   Messenger   *objecter_messenger;
+  Messenger*  objecter_xio_messenger;
   MonClient   *monc; // check the "monc helpers" list before accessing directly
   PerfCounters      *logger;
   PerfCounters      *recoverystate_perf;
@@ -1895,10 +1900,12 @@ protected:
       int id,
       Messenger *internal,
       Messenger *external,
+      Messenger *xio_exteral,
       Messenger *hb_client,
       Messenger *hb_front_server,
       Messenger *hb_back_server,
       Messenger *osdc_messenger,
+      Messenger *xio_osdc_messenger,
       MonClient *mc, const std::string &dev, const std::string &jdev);
   ~OSD();
 
