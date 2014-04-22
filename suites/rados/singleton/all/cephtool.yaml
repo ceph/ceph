@@ -14,6 +14,7 @@ tasks:
     - wrongly marked me down
     - had wrong client addr
     - had wrong cluster addr
+    - must scrub before tier agent can activate
 - workunit:
     clients:
       all:
