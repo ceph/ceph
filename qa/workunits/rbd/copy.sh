@@ -288,6 +288,10 @@ test_pool_image_args() {
 
     rm -f /tmp/empty
     ceph osd pool delete test test --yes-i-really-really-mean-it
+
+    for f in foo test1 test10 test12 test2 test3 ; do
+	rbd rm $f
+    done
 }
 
 test_clone() {
