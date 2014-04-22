@@ -1711,7 +1711,7 @@ void MDS::respawn()
     dout(1) << " cwd " << cwd << dendl;
 
     /* Fall back to a best-effort: just running in our CWD */
-    strncpy(exe_path, orig_argv[0], sizeof(exe_path));
+    strncpy(exe_path, orig_argv[0], sizeof(exe_path) - 1);
   }
 
   dout(1) << " exe_path " << exe_path << dendl;
