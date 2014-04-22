@@ -5,6 +5,38 @@
 v0.80 Firefly
 =============
 
+This release will form the basis for our long-term supported release
+Firefly, v0.80.x.  The big new features are support for erasure coding
+and cache tiering, although a broad range of other features, fixes,
+and improvements have been made across the code base.  Highlights include:
+
+* *Erasure coding*: support for a broad range of erasure codes for lower
+  storage overhead and better data durability.
+* *Cache tiering*: support for creating 'cache pools' that store hot,
+  recently accessed objects with automatic demotion of colder data to
+  a base tier.  Typically the cache pool is backed by faster storage
+  devices like SSDs.
+* *Primary affinity*: Ceph now has the ability to skew selection of
+  OSDs as the "primary" copy, which allows the read workload to be
+  cheaply skewed away from parts of the cluster without migrating any
+  data.
+* *Key/value OSD backend* (experimental): An alternative storage backend
+  for Ceph OSD processes that puts all data in a key/value database like
+  leveldb.  This provides better performance for workloads dominated by
+  key/value operations (like radosgw bucket indices).
+* *Standalone radosgw* (experimental): The radosgw process can now run
+  in a standalone mode without an apache (or similar) web server or
+  fastcgi.  This simplifies deployment and can improve performance.
+
+We expect to maintain a series of stable releases based on v0.80
+Firefly for as much as a year.  In the meantime, development of Ceph
+continues with the next release, Giant, which will feature work on the
+CephFS distributed file system, more alternative storage backends
+(like RocksDB and f2fs), RDMA support, support for pyramind erasure
+codes, and additional functionality in the block device (RBD) like
+copy-on-read and multisite mirroring.
+
+
 Upgrade Sequencing
 ------------------
 
