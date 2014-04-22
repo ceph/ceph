@@ -130,6 +130,7 @@ protected:
   Message *request; /// the logical request we are tracking
   OpTracker *tracker; /// the tracker we are associated with
 
+  utime_t initiated_at;
   list<pair<utime_t, string> > events; /// list of events and their times
   Mutex lock; /// to protect the events list
   string current; /// the current state the event is in
@@ -137,10 +138,11 @@ protected:
 
   uint32_t warn_interval_multiplier; // limits output of a given op warning
 
-  TrackedOp(Message *req, OpTracker *_tracker) :
+  TrackedOp(Message *req, OpTracker *_tracker, const utime_t& initiated) :
     xitem(this),
     request(req),
     tracker(_tracker),
+    initiated_at(initiated),
     lock("TrackedOp::lock"),
     seq(0),
     warn_interval_multiplier(1)
@@ -158,13 +160,13 @@ protected:
 public:
   virtual ~TrackedOp() { assert(request); request->put(); }
 
-  utime_t get_arrived() const {
-    return request->get_recv_stamp();
+  const utime_t& get_initiated() const {
+    return initiated_at;
   }
   // This function maybe needs some work; assumes last event is completion time
   double get_duration() const {
     return events.size() ?
-      (events.rbegin()->first - get_arrived()) :
+      (events.rbegin()->first - get_initiated()) :
       0.0;
   }
   Message *get_req() const { return request; }
