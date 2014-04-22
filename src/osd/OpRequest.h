@@ -88,6 +88,9 @@ private:
 
   OpRequest(Message *req, OpTracker *tracker);
 
+protected:
+  void _dump_op_descriptor(ostream& stream) const;
+
 public:
   bool been_queued_for_pg() { return hit_flag_points & flag_queued_for_pg; }
   bool been_reached_pg() { return hit_flag_points & flag_reached_pg; }

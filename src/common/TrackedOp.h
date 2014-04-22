@@ -152,6 +152,8 @@ protected:
   virtual void _dump(utime_t now, Formatter *f) const {}
   /// if you want something else to happen when events are marked, implement
   virtual void _event_marked() {}
+  /// return a unique descriptor of the Op; eg the message it's attached to
+  virtual void _dump_op_descriptor(ostream& stream) const = 0;
 
 public:
   virtual ~TrackedOp() { assert(request); request->put(); }
