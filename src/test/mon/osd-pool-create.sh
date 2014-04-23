@@ -157,6 +157,39 @@ function TEST_replicated_pool() {
         grep 'cannot change to type erasure' || return 1
 }
 
+function TEST_auid() {
+    local dir=$1
+    cat > $dir/mon-keyring <<EOF
+[mon.]
+        key = AQCztJdSyNb0NBAASA2yPZPuwXeIQnDJ9O8gVw==
+        caps mon = "allow *"
+EOF
+    local args="$CEPH_ARGS"
+    args+=" --auth-service-required cephx "
+    args+=" --auth-cluster-required cephx "
+    args+=" --auth-client-required cephx "
+    args+=" --auth-supported cephx "
+    CEPH_ARGS="$args" run_mon $dir a --public-addr 127.0.0.1 \
+        --keyring $dir/mon-keyring || return 1
+    local auid=458
+    cat > $dir/jean-keyring <<EOF
+[client.jean]
+        key = AQCziVZT6EJoIRAA/HVxueyPmRGjvqQeOR40hQ==
+        auid = $auid
+        caps mon = "allow *"
+EOF
+    CEPH_ARGS="$args" ./ceph --name mon. \
+        --keyring $dir/mon-keyring \
+        auth import --in-file $dir/jean-keyring || return 1
+    CEPH_ARGS="$args" ./ceph --name client.jean \
+        --keyring $dir/jean-keyring \
+        osd pool create jean-pool 12 || return 1
+    CEPH_ARGS="$args" ./ceph --name mon. \
+        --keyring $dir/mon-keyring \
+        --format xml osd dump | \
+        grep "<auid>$auid</auid>" || return 1
+}
+
 main osd-pool-create
 
 # Local Variables:

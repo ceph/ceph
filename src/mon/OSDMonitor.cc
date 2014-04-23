@@ -4800,7 +4800,8 @@ done:
       }
     }
 
-    err = prepare_new_pool(poolstr, 0, // auid=0 for admin created pool
+    MonSession *session = m->get_session();
+    err = prepare_new_pool(poolstr, session->auid,
 			   -1, // default crush rule
 			   ruleset_name,
 			   pg_num, pgp_num,
