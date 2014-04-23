@@ -90,7 +90,7 @@ Setting up a backing storage pool typically involves one of two scenarios:
 In the standard storage scenario, you can setup a CRUSH ruleset to establish 
 the failure domain (e.g., osd, host, chassis, rack, row, etc.). Ceph OSD 
 Daemons perform optimally when all storage drives in the ruleset are of the 
-same size, speed (both RPMs and throughput) and type. See doc:`CRUSH Maps` 
+same size, speed (both RPMs and throughput) and type. See `CRUSH Maps`_ 
 for details on creating a ruleset. Once you have created a ruleset, create 
 a backing storage pool. 
 
@@ -360,3 +360,4 @@ disable and remove it.
 .. _Pools - Set Pool Values: ../pools#set-pool-values
 .. _Placing Different Pools on Different OSDs: ../crush-map/#placing-different-pools-on-different-osds
 .. _Bloom Filter: http://en.wikipedia.org/wiki/Bloom_filter
+.. _CRUSH Maps: ../crush-map
