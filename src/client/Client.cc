@@ -712,14 +712,21 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       in->dirstat.nfiles == 0 &&
       in->dirstat.nsubdirs == 0) {
     ldout(cct, 10) << " marking I_COMPLETE on empty dir " << *in << dendl;
-    in->flags |= I_COMPLETE;
     if (in->dir) {
+      Dir *dir = in->dir;
       ldout(cct, 10) << " dir is open on empty dir " << in->ino << " with "
-		     << in->dir->dentry_map.size() << " entries, tearing down" << dendl;
-      while (!in->dir->dentry_map.empty())
-	unlink(in->dir->dentry_map.begin()->second, true);
-      close_dir(in->dir);
+		     << dir->dentry_map.size() << " entries, tearing down" << dendl;
+      for (map<string,Dentry*>::iterator p = dir->dentry_map.begin();
+	   p != dir->dentry_map.end(); ) {
+	Dentry *dn = p->second;
+	++p;
+	if (dn->inode || dn->lru_is_expireable())
+	  unlink(dn, true);
+      }
+      if (dir->is_empty())
+	close_dir(dir);
     }
+    in->flags |= I_COMPLETE;
   }
 
   return in;
@@ -1464,7 +1471,7 @@ int Client::encode_inode_release(Inode *in, MetaRequest *req,
       rel.seq = caps->seq;
       rel.issue_seq = caps->issue_seq;
       rel.mseq = caps->mseq;
-      rel.caps = caps->issued;
+      rel.caps = caps->implemented;
       rel.wanted = caps->wanted;
       rel.dname_len = 0;
       rel.dname_seq = 0;
@@ -3574,9 +3581,11 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
   ldout(cct, 5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq()
 		<< " EXPORT from mds." << mds << dendl;
 
-  if (in->caps.count(mds)) {
-    Cap *cap = in->caps[mds];
+  Cap *cap = NULL;
+  if (in->caps.count(mds))
+    cap = in->caps[mds];
 
+  if (cap && cap->cap_id == m->get_cap_id())
     if (m->peer.cap_id) {
       MetaSession *tsession = _get_or_open_mds_session(m->peer.mds);
       if (in->caps.count(m->peer.mds)) {
