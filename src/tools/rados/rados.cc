@@ -1125,12 +1125,12 @@ static int do_cache_evict(IoCtx& io_ctx, string oid)
 
 static int do_cache_flush_evict_all(IoCtx& io_ctx, bool blocking)
 {
-  int r;
   int errors = 0;
   try {
     librados::ObjectIterator i = io_ctx.objects_begin();
     librados::ObjectIterator i_end = io_ctx.objects_end();
     for (; i != i_end; ++i) {
+      int r;
       cout << i->first << "\t" << i->second << std::endl;
       if (i->second.size()) {
 	io_ctx.locator_set_key(i->second);
