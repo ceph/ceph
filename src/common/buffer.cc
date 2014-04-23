@@ -1539,7 +1539,7 @@ int buffer::list::read_fd_zero_copy(int fd, size_t len)
   try {
     bufferptr bp = buffer::create_zero_copy(len, fd, NULL);
     append(bp);
-  } catch (buffer::error_code e) {
+  } catch (buffer::error_code &e) {
     return e.code;
   } catch (buffer::malformed_input) {
     return -EIO;
