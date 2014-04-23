@@ -781,7 +781,7 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->open_array_section("old_erasure_code_profiles");
   for (vector<string>::const_iterator p = old_erasure_code_profiles.begin();
        p != old_erasure_code_profiles.end();
-       p++) {
+       ++p) {
     f->dump_string("old", p->c_str());
   }
   f->close_section();
@@ -1217,13 +1217,13 @@ int OSDMap::apply_incremental(const Incremental &inc)
   for (map<string,map<string,string> >::const_iterator i =
 	 inc.new_erasure_code_profiles.begin();
        i != inc.new_erasure_code_profiles.end();
-       i++) {
+       ++i) {
     set_erasure_code_profile(i->first, i->second);
   }
   
   for (vector<string>::const_iterator i = inc.old_erasure_code_profiles.begin();
        i != inc.old_erasure_code_profiles.end();
-       i++)
+       ++i)
     erasure_code_profiles.erase(*i);
   
   // up/down
@@ -2028,11 +2028,11 @@ void OSDMap::dump_erasure_code_profiles(const map<string,map<string,string> > &p
   f->open_object_section("erasure_code_profiles");
   for (map<string,map<string,string> >::const_iterator i = profiles.begin();
        i != profiles.end();
-       i++) {
+       ++i) {
     f->open_object_section(i->first.c_str());
     for (map<string,string>::const_iterator j = i->second.begin();
 	 j != i->second.end();
-	 j++) {
+	 ++j) {
       f->dump_string(j->first.c_str(), j->second.c_str());
     }
     f->close_section();
