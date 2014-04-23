@@ -283,6 +283,10 @@ public:
     missing.rm(p);
   }
 
+  void missing_add_event(const pg_log_entry_t &e) {
+    missing.add_next_event(e);
+  }
+
   //////////////////// get or set log ////////////////////
 
   const IndexedLog &get_log() const { return log; }

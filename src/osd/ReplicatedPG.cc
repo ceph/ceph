@@ -652,11 +652,21 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
   else if (command == "mark_unfound_lost") {
     string mulcmd;
     cmd_getval(cct, cmdmap, "mulcmd", mulcmd);
-    if (mulcmd != "revert") {
-      ss << "mode must be 'revert'; mark and delete not yet implemented";
+    int mode = -1;
+    if (mulcmd == "revert") {
+      if (pool.info.ec_pool()) {
+	ss << "mode must be 'delete' for ec pool";
+	return -EINVAL;
+      }
+      mode = pg_log_entry_t::LOST_REVERT;
+    } else if (mulcmd == "delete") {
+      mode = pg_log_entry_t::LOST_DELETE;
+    } else {
+      ss << "mode must be 'revert' or 'delete'; mark not yet implemented";
       return -EINVAL;
     }
-    int mode = pg_log_entry_t::LOST_REVERT;
+    assert(mode == pg_log_entry_t::LOST_REVERT ||
+	   mode == pg_log_entry_t::LOST_DELETE);
 
     if (!is_primary()) {
       ss << "not primary";
@@ -675,7 +685,8 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
       return -EINVAL;
     }
 
-    ss << "pg has " << unfound << " objects unfound and apparently lost, marking";
+    ss << "pg has " << unfound
+       << " objects unfound and apparently lost, marking";
     mark_all_unfound_lost(mode);
     return 0;
   }
@@ -9038,8 +9049,10 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
   utime_t mtime = ceph_clock_now(cct);
   info.last_update.epoch = get_osdmap()->get_epoch();
   const pg_missing_t &missing = pg_log.get_missing();
-  map<hobject_t, pg_missing_t::item>::const_iterator m = missing.missing.begin();
-  map<hobject_t, pg_missing_t::item>::const_iterator mend = missing.missing.end();
+  map<hobject_t, pg_missing_t::item>::const_iterator m =
+    missing_loc.get_all_missing().begin();
+  map<hobject_t, pg_missing_t::item>::const_iterator mend =
+    missing_loc.get_all_missing().end();
   while (m != mend) {
     const hobject_t &oid(m->first);
     if (!missing_loc.is_unfound(oid)) {
@@ -9088,11 +9101,11 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
 	pg_log.add(e);
 	dout(10) << e << dendl;
 
-	// delete local copy?  NOT YET!  FIXME
-	if (m->second.have != eversion_t()) {
-	  assert(0 == "not implemented.. tho i'm not sure how useful it really would be.");
-	}
-	pg_log.missing_rm(m++);
+	t->remove(
+	  coll,
+	  ghobject_t(oid, ghobject_t::NO_GEN, pg_whoami.shard));
+	pg_log.missing_add_event(e);
+	++m;
 	missing_loc.recovered(oid);
       }
       break;
