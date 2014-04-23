@@ -4128,7 +4128,7 @@ COMMAND("pg " \
 COMMAND("pg " \
 	"name=pgid,type=CephPgid " \
 	"name=cmd,type=CephChoices,strings=mark_unfound_lost " \
-	"name=mulcmd,type=CephChoices,strings=revert", \
+	"name=mulcmd,type=CephChoices,strings=revert|delete", \
 	"mark all unfound objects in this pg as lost, either removing or reverting to a prior version if one is available",
 	"osd", "rw", "cli")
 COMMAND("pg " \
@@ -4143,7 +4143,7 @@ COMMAND("pg " \
 COMMAND("query",
 	"show details of a specific pg", "osd", "r", "cli,rest")
 COMMAND("mark_unfound_lost " \
-	"name=mulcmd,type=CephChoices,strings=revert", \
+	"name=mulcmd,type=CephChoices,strings=revert|delete", \
 	"mark all unfound objects in this pg as lost, either removing or reverting to a prior version if one is available",
 	"osd", "rw", "cli,rest")
 COMMAND("list_missing " \
