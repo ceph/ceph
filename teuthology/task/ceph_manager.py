@@ -681,7 +681,7 @@ class CephManager:
         self.log(status)
         return status['pgmap']['num_pgs']
 
-    def create_pool_with_unique_name(self, pg_num=16, ec_pool=False):
+    def create_pool_with_unique_name(self, pg_num=16, ec_pool=False, ec_m=1, ec_k=2):
         """
         Create a pool named unique_pool_X where X is unique.
         """
@@ -689,10 +689,15 @@ class CephManager:
         with self.lock:
             name = "unique_pool_%s" % (str(self.next_pool_id),)
             self.next_pool_id += 1
-            self.create_pool(name, pg_num, ec_pool=ec_pool)
+            self.create_pool(
+                name,
+                pg_num,
+                ec_pool=ec_pool,
+                ec_m=ec_m,
+                ec_k=ec_k)
         return name
 
-    def create_pool(self, pool_name, pg_num=16, ec_pool=False):
+    def create_pool(self, pool_name, pg_num=16, ec_pool=False, ec_m=1, ec_k=2):
         """
         Create a pool named from the pool_name parameter.
         :param pool_name: name of the pool being created.
@@ -705,7 +710,7 @@ class CephManager:
             self.log("creating pool_name %s"%(pool_name,))
             if ec_pool and not self.created_erasure_pool:
                 self.created_erasure_pool = True
-                self.raw_cluster_cmd('osd', 'erasure-code-profile', 'set', 'teuthologyprofile', 'ruleset-failure-domain=osd', 'm=1', 'k=2')
+                self.raw_cluster_cmd('osd', 'erasure-code-profile', 'set', 'teuthologyprofile', 'ruleset-failure-domain=osd', 'm='+str(ec_m), 'k='+str(ec_k))
 
             if ec_pool:
                 self.raw_cluster_cmd('osd', 'pool', 'create', pool_name, str(pg_num), str(pg_num), 'erasure', 'teuthologyprofile')
