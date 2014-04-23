@@ -1528,8 +1528,11 @@ void ReplicatedPG::do_op(OpRequestRef op)
     reply_ctx(ctx, -ENFILE);
     return;
   }
-  if (!op->may_write() && !op->may_cache() && (!obc->obs.exists ||
-					       obc->obs.oi.is_whiteout())) {
+  if (!op->may_write() &&
+      !op->may_cache() &&
+      (!obc->obs.exists ||
+       ((m->get_snapid() != CEPH_SNAPDIR) &&
+	obc->obs.oi.is_whiteout()))) {
     reply_ctx(ctx, -ENOENT);
     return;
   }
@@ -3534,7 +3537,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
           resp.clones.push_back(ci);
         }
-        if (ssc->snapset.head_exists) {
+        if (ssc->snapset.head_exists &&
+	    !ctx->obc->obs.oi.is_whiteout()) {
           assert(obs.exists);
           clone_info ci;
           ci.cloneid = CEPH_NOSNAP;
