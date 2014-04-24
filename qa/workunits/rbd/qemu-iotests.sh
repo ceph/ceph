@@ -24,7 +24,7 @@ done
 
 if [ "$iotests" = "qemu/tests/qemu-iotests" ]
 then
-    git clone git://repo.or.cz/qemu.git
+    git clone git://apt-mirror.front.sepia.ceph.com/qemu.git
     testlist=$testlist' 032 033 055 077'
 else
     git clone git://ceph.com/git/qemu-iotests.git
