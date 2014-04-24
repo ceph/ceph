@@ -229,6 +229,12 @@ class TestImage(object):
         self.image.close()
         remove_image()
 
+    def test_invalidate_cache(self):
+        self.image.write('abc', 0)
+        eq('abc', self.image.read(0, 3))
+        self.image.invalidate_cache()
+        eq('abc', self.image.read(0, 3))
+
     def test_stat(self):
         info = self.image.stat()
         check_stat(info, IMG_SIZE, IMG_ORDER)
