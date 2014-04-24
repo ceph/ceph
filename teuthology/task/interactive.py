@@ -6,8 +6,6 @@ import readline
 import rlcompleter
 rlcompleter.__name__ # silence pyflakes
 import pprint
-import yaml
-import os
 
 readline.parse_and_bind('tab: complete')
 
@@ -29,11 +27,6 @@ def task(ctx, config):
         - ceph:
         - interactive:
     """
-
-    # TODO perhaps this would be better in the install task
-    if ctx.archive is not None:
-        with file(os.path.join(ctx.archive, 'cluster.yaml'), 'w') as f:
-            yaml.safe_dump({'cluster': dict([(x.name,y) for x,y in ctx.cluster.remotes.iteritems()])}, f, default_flow_style=False)
 
     pp = pprint.PrettyPrinter().pprint
     code.interact(
