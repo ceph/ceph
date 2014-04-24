@@ -139,7 +139,7 @@ namespace librbd {
     void flush_cache_aio(Context *onfinish);
     int flush_cache();
     void shutdown_cache();
-    void invalidate_cache();
+    int invalidate_cache();
     void clear_nonexistence_cache();
     int register_watch();
     void unregister_watch();
