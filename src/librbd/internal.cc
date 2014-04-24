@@ -2881,6 +2881,19 @@ reprotect_and_return_err:
     return r;
   }
 
+  int invalidate_cache(ImageCtx *ictx)
+  {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << "invalidate_cache " << ictx << dendl;
+
+    int r = ictx_check(ictx);
+    if (r < 0)
+      return r;
+
+    RWLock::WLocker l(ictx->md_lock);
+    return ictx->invalidate_cache();
+  }
+
   int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
 		AioCompletion *c)
   {
