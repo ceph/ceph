@@ -19,7 +19,6 @@ import yaml
 import json
 import re
 import tempfile
-import paramiko
 
 from teuthology import safepath
 from .orchestra import run
@@ -556,7 +555,7 @@ def remove_lines_from_file(remote, path, line_is_valid_test,
     # get a temp file path on the remote host to write to,
     # we don't want to blow away the remote file and then have the
     # network drop out
-    temp_file_path = remote.remote_mktemp()
+    temp_file_path = remote.mktemp()
 
     # write out the data to a temp file
     write_file(remote, temp_file_path, out_data)
@@ -572,7 +571,7 @@ def append_lines_to_file(remote, path, lines, sudo=False):
     Remove_lines_from_list.
     """
 
-    temp_file_path = remote.remote_mktemp()
+    temp_file_path = remote.mktemp()
 
     data = get_file(remote, path, sudo)
 
@@ -612,35 +611,11 @@ def create_file(remote, path, data="", permissions=str(644), sudo=False):
         append_lines_to_file(remote, path, data, sudo)
 
 
-def do_remote_sftp(remote, tempf, sudo=False):
-    """
-    Make sure file is aways readble if root, and use SFTPClient to
-    copy across data.
-    """
-    if sudo:
-        args = []
-        args.extend([
-            'sudo',
-            'chmod',
-            '0666',
-            tempf,
-            ])
-        remote.run(
-            args=args,
-            stdout=StringIO(),
-            )
-    conn = remote.connect()
-    transport = conn.get_transport()
-    sftp = paramiko.SFTPClient.from_transport(transport)
-    with sftp.open(tempf, 'rb') as file_sftp:
-        result = file_sftp.read()
-    return result
-
 def get_file(remote, path, sudo=False):
     """
     Copy_remote wrapper.
     """
-    return remote.copy_remote(path, sudo)
+    return remote.get_file(path, sudo)
 
 def pull_directory(remote, remotedir, localdir):
     """
@@ -650,7 +625,7 @@ def pull_directory(remote, remotedir, localdir):
               remote.shortname, remotedir, localdir)
     if not os.path.exists(localdir):
         os.mkdir(localdir)
-    result = remote.tar_remote(remotedir, sudo=True)
+    result = remote.get_tar(remotedir, sudo=True)
     _, local_tarfile = tempfile.mkstemp()
     with open(local_tarfile, 'r+') as fb1:
         fb1.write(result)
@@ -688,7 +663,7 @@ def pull_directory_tarball(remote, remotedir, localfile):
     """
     log.debug('Transferring archived files from %s:%s to %s',
               remote.shortname, remotedir, localfile)
-    tardata = remote.tar_remote(remotedir, zip_flag=True, sudo=True)
+    tardata = remote.get_tar(remotedir, zip_flag=True, sudo=True)
     with open(localfile, 'w') as out:
         out.write(tardata)
 
