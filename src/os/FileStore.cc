@@ -275,6 +275,14 @@ int FileStore::lfn_open(coll_t cid,
 	     << ") in index: " << cpp_strerror(-r) << dendl;
 	goto fail;
       }
+      r = chain_fsetxattr(fd, XATTR_SPILL_OUT_NAME,
+                          XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT));
+      if (r < 0) {
+        VOID_TEMP_FAILURE_RETRY(::close(fd));
+        derr << "error setting spillout xattr for oid " << oid << " (" << (*path)->path()
+                       << "):" << cpp_strerror(-r) << dendl;
+        goto fail;
+      }
     }
   }
 
