@@ -750,6 +750,14 @@ written." % (self.name, ret, length))
         if ret < 0:
             raise make_ex(ret, 'error flushing image')
 
+    def invalidate_cache(self):
+        """
+        Drop any cached data for the image.
+        """
+        ret = self.librbd.rbd_invalidate_cache(self.image)
+        if ret < 0:
+            raise make_ex(ret, 'error invalidating cache')
+
     def stripe_unit(self):
         """
         Returns the stripe unit used for the image.
