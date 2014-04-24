@@ -2457,6 +2457,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
         f->dump_int("pg_num", p->get_pg_num());
       } else if (var == "pgp_num") {
         f->dump_int("pgp_num", p->get_pgp_num());
+      } else if (var == "auid") {
+        f->dump_int("auid", p->get_auid());
       } else if (var == "size") {
         f->dump_int("size", p->get_size());
       } else if (var == "min_size") {
@@ -2490,6 +2492,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
         ss << "pg_num: " << p->get_pg_num();
       } else if (var == "pgp_num") {
         ss << "pgp_num: " << p->get_pgp_num();
+      } else if (var == "auid") {
+        ss << "auid: " << p->get_auid();
       } else if (var == "size") {
         ss << "size: " << p->get_size();
       } else if (var == "min_size") {
@@ -3330,6 +3334,12 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -EINVAL;
     }
     p.min_size = n;
+  } else if (var == "auid") {
+    if (interr.length()) {
+      ss << "error parsing integer value '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    p.auid = n;
   } else if (var == "crash_replay_interval") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
