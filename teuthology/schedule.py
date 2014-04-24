@@ -69,6 +69,7 @@ def main(ctx):
         print 'Job scheduled with name {name} and ID {jid}'.format(
             name=ctx.name, jid=jid)
         job_config['job_id'] = str(jid)
-        # Let paddles know the job is queued
-        report.try_push_job_info(job_config, dict(status='queued'))
+        # Let paddles know the job is queued, but only for 'real' jobs
+        if not job_config.get('last_in_suite', False):
+            report.try_push_job_info(job_config, dict(status='queued'))
         num -= 1
