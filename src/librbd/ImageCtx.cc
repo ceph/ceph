@@ -568,9 +568,9 @@ namespace librbd {
     object_cacher->stop();
   }
 
-  void ImageCtx::invalidate_cache() {
+  int ImageCtx::invalidate_cache() {
     if (!object_cacher)
-      return;
+      return 0;
     cache_lock.Lock();
     object_cacher->release_set(object_set);
     cache_lock.Unlock();
@@ -580,8 +580,12 @@ namespace librbd {
     cache_lock.Lock();
     bool unclean = object_cacher->release_set(object_set);
     cache_lock.Unlock();
-    if (unclean)
-      lderr(cct) << "could not release all objects from cache" << dendl;
+    if (unclean) {
+      lderr(cct) << "could not release all objects from cache: "
+		 << unclean << " bytes remain" << dendl;
+      return -EBUSY;
+    }
+    return r;
   }
 
   void ImageCtx::clear_nonexistence_cache() {
