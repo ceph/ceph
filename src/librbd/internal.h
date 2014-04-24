@@ -188,6 +188,7 @@ namespace librbd {
   int aio_flush(ImageCtx *ictx, AioCompletion *c);
   int flush(ImageCtx *ictx);
   int _flush(ImageCtx *ictx);
+  int invalidate_cache(ImageCtx *ictx);
 
   ssize_t handle_sparse_read(CephContext *cct,
 			     ceph::bufferlist data_bl,
