@@ -3822,12 +3822,6 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
 
     if (!inline_set.count(p->first) &&
 	  inline_set.size() >= m_filestore_max_inline_xattrs) {
-	if (inline_set.count(p->first)) {
-	  inline_set.erase(p->first);
-	  r = chain_fremovexattr(**fd, n);
-	  if (r < 0)
-	    goto out_close;
-	}
 	omap_set[p->first].push_back(p->second);
 	continue;
     }
