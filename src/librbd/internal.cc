@@ -1504,7 +1504,9 @@ reprotect_and_return_err:
     if (size < ictx->size && ictx->object_cacher) {
       // need to invalidate since we're deleting objects, and
       // ObjectCacher doesn't track non-existent objects
-      ictx->invalidate_cache();
+      r = ictx->invalidate_cache();
+      if (r < 0)
+	return r;
     }
     resize_helper(ictx, size, prog_ctx);
 
@@ -1847,7 +1849,9 @@ reprotect_and_return_err:
     // need to flush any pending writes before resizing and rolling back -
     // writes might create new snapshots. Rolling back will replace
     // the current version, so we have to invalidate that too.
-    ictx->invalidate_cache();
+    r = ictx->invalidate_cache();
+    if (r < 0)
+      return r;
 
     ldout(cct, 2) << "resizing to snapshot size..." << dendl;
     NoOpProgressContext no_op;
