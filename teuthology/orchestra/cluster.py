@@ -4,6 +4,7 @@ part of context, Cluster is used to save connection information.
 """
 import teuthology.misc
 
+
 class Cluster(object):
     """
     Manage SSH connections to a cluster of machines.
@@ -11,7 +12,8 @@ class Cluster(object):
 
     def __init__(self, remotes=None):
         """
-        Initialize
+        :param remotes: A sequence of 2-tuples of this format:
+                            (Remote, [role_1, role_2 ...])
         """
         self.remotes = {}
         if remotes is not None:
@@ -21,7 +23,8 @@ class Cluster(object):
     def __repr__(self):
         remotes = [(k, v) for k, v in self.remotes.items()]
         remotes.sort(key=lambda tup: tup[0].name)
-        remotes = '{' + ', '.join('{remote!r}: {roles!r}'.format(remote=k, roles=v) for k, v in remotes) + '}'
+        remotes = '[' + ', '.join('[{remote!r}, {roles!r}]'.format(
+            remote=k, roles=v) for k, v in remotes) + ']'
         return '{classname}(remotes={remotes})'.format(
             classname=self.__class__.__name__,
             remotes=remotes,
