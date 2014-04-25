@@ -17,6 +17,7 @@
 
 extern "C" {
 #include <stdlib.h>
+#include <string.h>
 #include "libxio.h"
 }
 
@@ -24,9 +25,12 @@ class XioPool
 {
 public:
   struct xio_mempool *handle;
+  static const int MB = 8;
   struct xio_piece {
-    struct xio_piece *next;
     struct xio_mempool_obj mp[1];
+    struct xio_piece *next;
+    int s;
+    char payload[MB];
   } *first;
   XioPool(struct xio_mempool *_handle) :
     handle(_handle), first(0)
@@ -37,22 +41,25 @@ public:
       struct xio_piece *p;
       while ((p = first)) {
 	first = p->next;
+	memset(p->payload, 0xcf, p->s);	// XXX DEBUG
 	xio_mempool_free(p->mp);
       }
     }
   void *alloc(size_t _s)
     {
 	void *r;
-	struct xio_piece *x = static_cast<struct xio_piece *>(malloc(sizeof *x));
-	if (!x) return 0;
-	int e = xio_mempool_alloc(handle, _s, x->mp);
+	struct xio_mempool_obj mp[1];
+	struct xio_piece *x;
+	int e = xio_mempool_alloc(handle, (sizeof(*x)-MB) + _s, mp);
 	if (e) {
-	  free(x);
 	  r = 0;
 	} else {
+	  x = reinterpret_cast<struct xio_piece *>(mp->addr);
+	  *x->mp = *mp;
 	  x->next = first;
+	  x->s = _s;
 	  first = x;
-	  r = x->mp->addr;
+	  r = x->payload;
 	}
 	return r;
     }
