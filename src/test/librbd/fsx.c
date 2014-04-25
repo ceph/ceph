@@ -1115,11 +1115,11 @@ void
 usage(void)
 {
 	fprintf(stdout, "usage: %s",
-		"fsx [-dnqxAFLOWZ] [-b opnum] [-c Prob] [-l flen] [-m start:end] [-o oplen] [-p progressinterval] [-r readbdy] [-s style] [-t truncbdy] [-w writebdy] [-D startingop] [-N numops] [-P dirpath] [-S seed] pname iname\n\
+		"fsx [-dfnqxyACFHLORWZ] [-b opnum] [-c Prob] [-l flen] [-m start:end] [-o oplen] [-p progressinterval] [-r readbdy] [-s style] [-t truncbdy] [-w writebdy] [-D startingop] [-N numops] [-P dirpath] [-S seed] pname iname\n\
 	-b opnum: beginning operation number (default 1)\n\
 	-c P: 1 in P chance of file close+open at each op (default infinity)\n\
 	-d: debug output for all operations\n\
-	-f flush and invalidate cache after I/O\n\
+	-f: flush and invalidate cache after I/O\n\
 	-l flen: the upper bound on file size (default 262144)\n\
 	-m startop:endop: monitor (print debug output) specified byte range (default 0:infinity)\n\
 	-n: no verifications of file size\n\
@@ -1131,25 +1131,25 @@ usage(void)
 	-t truncbdy: 4096 would make truncates page aligned (default 1)\n\
 	-w writebdy: 4096 would make writes page aligned (default 1)\n\
 	-x: preallocate file space before starting, XFS only (default 0)\n\
-	-y synchronize changes to a file\n"
+	-y: synchronize changes to a file\n"
 
 #ifdef AIO
 "	-A: Use the AIO system calls\n"
 #endif
-"	-D startingop: debug output starting at specified operation\n"
+"	-C: do not use clone calls\n\
+	-D startingop: debug output starting at specified operation\n"
 #ifdef FALLOCATE
 "	-F: Do not use fallocate (preallocation) calls\n"
 #endif
-"        -H: Do not use punch hole calls\n"
-"        -C: Do not use clone calls\n"
-"	-L: fsxLite - no file creations & no file size changes\n\
+"	-H: do not use punch hole calls\n\
+	-L: fsxLite - no file creations & no file size changes\n\
 	-N numops: total # operations to do (default infinity)\n\
 	-O: use oplen (see -o flag) for every op (default random)\n\
-	-P: save .fsxlog and .fsxgood files in dirpath (default ./)\n\
+	-P dirpath: save .fsxlog and .fsxgood files in dirpath (default ./)\n\
+	-R: read() system calls only (mapped reads disabled)\n\
 	-S seed: for random # generator (default 1) 0 gets timestamp\n\
 	-W: mapped write operations DISabled\n\
-        -R: read() system calls only (mapped reads disabled)\n\
-        -Z: O_DIRECT (use -R, -W, -r and -w too)\n\
+	-Z: O_DIRECT (use -R, -W, -r and -w too)\n\
 	poolname: this is REQUIRED (no default)\n\
 	imagename: this is REQUIRED (no default)\n");
 	exit(89);
