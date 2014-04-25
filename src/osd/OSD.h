@@ -1471,7 +1471,7 @@ protected:
     ); ///< @return false if there was a map gap between from and now
 
   void wake_pg_waiters(PG* pg, spg_t pgid) {
-    // Need write lock on pg_map
+    // Need write lock on pg_map_lock
     map<spg_t, list<OpRequestRef> >::iterator i = waiting_for_pg.find(pgid);
     if (i != waiting_for_pg.end()) {
       for (list<OpRequestRef>::iterator j = i->second.begin();

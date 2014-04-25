@@ -2019,12 +2019,14 @@ PG *OSD::get_pg_or_queue_for_pg(spg_t pgid, OpRequestRef op)
 {
   {
     RWLock::RLocker l(pg_map_lock);
-    if (pg_map.count(pgid))
-      return pg_map[pgid];
+    ceph::unordered_map<spg_t, PG*>::iterator i = pg_map.find(pgid);
+    if (i != pg_map.end())
+      return i->second;
   }
   RWLock::WLocker l(pg_map_lock);
-  if (pg_map.count(pgid)) {
-    return pg_map[pgid];
+  ceph::unordered_map<spg_t, PG*>::iterator i = pg_map.find(pgid);
+  if (i != pg_map.end()) {
+    return i->second;
   } else {
     waiting_for_pg[pgid].push_back(op);
     return NULL;
@@ -6065,26 +6067,6 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
       p->second.acting.swap(acting);  // keep the latest
     }
   }
-
-  // scan pgs with waiters
-  RWLock::WLocker l(pg_map_lock);
-  map<spg_t, list<OpRequestRef> >::iterator p = waiting_for_pg.begin();
-  while (p != waiting_for_pg.end()) {
-    spg_t pgid = p->first;
-
-    vector<int> acting;
-    int nrep = osdmap->pg_to_acting_osds(pgid.pgid, acting);
-    int role = osdmap->calc_pg_role(whoami, acting, nrep);
-    if (role >= 0) {
-      ++p;  // still me
-    } else {
-      dout(10) << " discarding waiting ops for " << pgid << dendl;
-      while (!p->second.empty()) {
-	p->second.pop_front();
-      }
-      waiting_for_pg.erase(p++);
-    }
-  }
 }
 
 void OSD::consume_map()
@@ -6147,6 +6129,44 @@ void OSD::consume_map()
     (*i)->session_dispatch_lock.Unlock();
     (*i)->put();
   }
+
+  // remove any PGs which we no longer host from the waiting_for_pg list
+  set<spg_t> pgs_to_delete;
+  {
+    RWLock::RLocker l(pg_map_lock);
+    map<spg_t, list<OpRequestRef> >::iterator p = waiting_for_pg.begin();
+    while (p != waiting_for_pg.end()) {
+      spg_t pgid = p->first;
+
+      vector<int> acting;
+      int nrep = osdmap->pg_to_acting_osds(pgid.pgid, acting);
+      int role = osdmap->calc_pg_role(whoami, acting, nrep);
+
+      if (role < 0) {
+        pgs_to_delete.insert(p->first);
+        /* we can delete list contents under the read lock because
+         * nobody will be adding to them -- everybody is now using a map
+         * new enough that they will simply drop ops instead of adding
+         * them to the list. */
+        dout(10) << " discarding waiting ops for " << pgid << dendl;
+        while (!p->second.empty()) {
+          p->second.pop_front();
+        }
+      }
+      ++p;
+    }
+  }
+  {
+    RWLock::WLocker l(pg_map_lock);
+    for (set<spg_t>::iterator i = pgs_to_delete.begin();
+        i != pgs_to_delete.end();
+        ++i) {
+      map<spg_t, list<OpRequestRef> >::iterator p = waiting_for_pg.find(*i);
+      assert(p->second.empty());
+      waiting_for_pg.erase(p);
+    }
+  }
+
 
   // scan pg's
   {
