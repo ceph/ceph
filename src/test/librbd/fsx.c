@@ -1533,8 +1533,8 @@ main(int argc, char **argv)
 	good_buf = (char *) malloc(maxfilelen + writebdy);
 	good_buf = round_ptr_up(good_buf, writebdy, 0);
 	memset(good_buf, '\0', maxfilelen);
-	temp_buf = (char *) malloc(maxfilelen + writebdy);
-	temp_buf = round_ptr_up(temp_buf, writebdy, 0);
+	temp_buf = (char *) malloc(maxfilelen + readbdy);
+	temp_buf = round_ptr_up(temp_buf, readbdy, 0);
 	memset(temp_buf, '\0', maxfilelen);
 	if (lite) {	/* zero entire existing file */
 		ssize_t written;
