@@ -223,6 +223,18 @@ prterr(char *prefix)
 }
 
 void
+prterrcode(char *prefix, int code)
+{
+	prt("%s%s%s\n", prefix, prefix ? ": " : "", strerror(-code));
+}
+
+void
+simple_err(const char *msg, int err)
+{
+    fprintf(stderr, "%s: %s\n", msg, strerror(-err));
+}
+
+void
 log4(int operation, int arg0, int arg1, int arg2)
 {
 	struct log_entry *le;
@@ -238,12 +250,6 @@ log4(int operation, int arg0, int arg1, int arg2)
 	logcount++;
 	if (logptr >= LOGSIZE)
 		logptr = 0;
-}
-
-void
-simple_err(const char *msg, int err)
-{
-    fprintf(stderr, "%s: %s\n", msg, strerror(-err));
 }
 
 void
@@ -352,12 +358,6 @@ logdump(void)
 		if (i == LOGSIZE)
 			i = 0;
 	}
-}
-
-void
-prterrcode(char *prefix, int code)
-{
-	prt("%s%s%s\n", prefix, prefix ? ": " : "", strerror(-code));
 }
 
 void
