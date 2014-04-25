@@ -2123,7 +2123,7 @@ TEST_F(LibRadosTierPP, HitSetTrim) {
 
   // do a bunch of writes and make sure the hitsets rotate
   utime_t start = ceph_clock_now(NULL);
-  utime_t hard_stop = start + utime_t(count * period * 12, 0);
+  utime_t hard_stop = start + utime_t(count * period * 50, 0);
 
   time_t first = 0;
   while (true) {
@@ -4088,7 +4088,7 @@ TEST_F(LibRadosTierECPP, HitSetTrim) {
 
   // do a bunch of writes and make sure the hitsets rotate
   utime_t start = ceph_clock_now(NULL);
-  utime_t hard_stop = start + utime_t(count * period * 12, 0);
+  utime_t hard_stop = start + utime_t(count * period * 50, 0);
 
   time_t first = 0;
   int bsize = alignment;
