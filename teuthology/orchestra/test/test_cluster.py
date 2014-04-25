@@ -40,7 +40,7 @@ class TestCluster(object):
                 (r2, ['baz']),
                 ],
             )
-        assert repr(c) == "Cluster(remotes={Remote(name='r1'): ['foo', 'bar'], Remote(name='r2'): ['baz']})" # noqa
+        assert repr(c) == "Cluster(remotes=[[Remote(name='r1'), ['foo', 'bar']], [Remote(name='r2'), ['baz']]])" # noqa
 
     @fudge.with_fakes
     def test_str(self):
