@@ -420,10 +420,24 @@ public:
     }
   }
 
+private:
+  Mutex peer_map_epoch_lock;
+  map<int, epoch_t> peer_map_epoch;
+public:
+  epoch_t get_peer_epoch(int p);
+  epoch_t note_peer_epoch(int p, epoch_t e);
+  void forget_peer_epoch(int p, epoch_t e);
+
+  void send_map(class MOSDMap *m, Connection *con);
+  void send_incremental_map(epoch_t since, Connection *con, OSDMapRef& osdmap);
+  MOSDMap *build_incremental_map_msg(epoch_t from, epoch_t to,
+                                       OSDSuperblock& superblock);
   bool should_share_map(entity_name_t name, Connection *con, epoch_t epoch,
                         OSDMapRef& osdmap, const epoch_t *sent_epoch_p);
   void share_map_incoming(entity_name_t name, Connection *con, epoch_t epoch,
                           OSDMapRef& osdmap, epoch_t *sent_epoch_p);
+  void share_map_outgoing(int peer, Connection *con,
+                          OSDMapRef map = OSDMapRef());
 
   ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch);
   pair<ConnectionRef,ConnectionRef> get_con_osd_hb(int peer, epoch_t from_epoch);  // (back, front)
@@ -1373,17 +1387,7 @@ private:
   RWLock          map_lock;
   list<OpRequestRef>  waiting_for_osdmap;
 
-  Mutex peer_map_epoch_lock;
-  map<int, epoch_t> peer_map_epoch;
-  
-  epoch_t get_peer_epoch(int p);
-  epoch_t note_peer_epoch(int p, epoch_t e);
-  void forget_peer_epoch(int p, epoch_t e);
-
   friend struct send_map_on_destruct;
-
-  void _share_map_outgoing(int peer, Connection *con,
-			   OSDMapRef map = OSDMapRef());
 
   void wait_for_new_map(OpRequestRef op);
   void handle_osd_map(class MOSDMap *m);
@@ -1422,14 +1426,6 @@ private:
   void pin_map_inc_bl(epoch_t e, bufferlist &bl) {
     return service.pin_map_inc_bl(e, bl);
   }
-  bool get_inc_map_bl(epoch_t e, bufferlist& bl) {
-    return service.get_inc_map_bl(e, bl);
-  }
-
-  MOSDMap *build_incremental_map_msg(epoch_t from, epoch_t to,
-                                     OSDSuperblock& superblock);
-  void send_incremental_map(epoch_t since, Connection *con, OSDMapRef& osdmap);
-  void send_map(MOSDMap *m, Connection *con);
 
 protected:
   // -- placement groups --
