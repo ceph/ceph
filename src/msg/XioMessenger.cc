@@ -331,7 +331,6 @@ int XioMessenger::session_event(struct xio_session *session,
        * we don't currently, so if conn_iter points to nothing or to
        * an address other than xcon, there's nothing to clean up */
     }
-    xcon->conn = NULL;
 #if 0 /* XXX remove from an ephemeral_conns list? */
     xcon->put(); /* XXX currently, there is no sentinel ref */
 #endif

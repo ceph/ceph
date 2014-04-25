@@ -159,13 +159,13 @@ public:
   struct xio_msg* req_arr;
   struct xio_mempool_obj mp_this;
   int nbuffers;
-  int nref;
+  atomic_t nrefs;
 
 public:
   XioMsg(Message *_m, XioConnection *_xcon, struct xio_mempool_obj& _mp) :
     XioSubmit(XIO_MSG_TYPE_REQ, _xcon),
     m(_m), hdr(m->get_header(), m->get_footer()),
-    req_arr(NULL), mp_this(_mp), nref(1)
+    req_arr(NULL), mp_this(_mp), nrefs(1)
     {
       const entity_inst_t &inst = xcon->get_messenger()->get_myinst();
       hdr.peer_type = inst.name.type();
@@ -177,11 +177,11 @@ public:
       req_0.user_context = this;
     }
 
-  XioMsg* get() { ++nref; return this; };
+  XioMsg* get() { nrefs.inc(); return this; };
 
   void put() {
-    --nref;
-    if (nref == 0) {
+    int refs = nrefs.dec();
+    if (refs == 0) {
       struct xio_mempool_obj *mp = &this->mp_this;
       this->~XioMsg();
       xio_mempool_free(mp);
@@ -205,69 +205,77 @@ public:
 
 extern struct xio_mempool *xio_msgr_noreg_mpool;
 
-#define XMSG_REFS_BASELINE 9999999
-
 class XioCompletionHook : public Message::CompletionHook
 {
 private:
+  XioConnection *xcon;
   list <struct xio_msg *> msg_seq;
   XioPool rsp_pool;
   atomic_t nrefs;
-  atomic_t xmsg_refs;
+  bool cl_flag;
   friend class XioConnection;
   friend class XioMessenger;
 public:
   struct xio_mempool_obj mp_this;
 
-  XioCompletionHook(Message *_m, list <struct xio_msg *>& _msg_seq,
+  XioCompletionHook(XioConnection *_xcon, Message *_m,
+		    list <struct xio_msg *>& _msg_seq,
 		    struct xio_mempool_obj& _mp) :
-    CompletionHook(_m), msg_seq(_msg_seq), rsp_pool(xio_msgr_noreg_mpool),
-    nrefs(1), xmsg_refs(XMSG_REFS_BASELINE), mp_this(_mp)
+    CompletionHook(_m),
+    xcon(_xcon),
+    msg_seq(_msg_seq),
+    rsp_pool(xio_msgr_noreg_mpool),
+    nrefs(1),
+    cl_flag(false),
+    mp_this(_mp)
     {}
   virtual void finish(int r);
   virtual void complete(int r) {
     finish(r);
   }
 
-  XioCompletionHook * get() {
+  int release_msgs();
+
+  XioCompletionHook* get() {
     nrefs.inc(); return this;
   }
 
   void put() {
     int refs = nrefs.dec();
-    if (refs == 1) {
+    if (refs == 0) {
+      /* in Marcus' new system, refs reaches 0 twice:  once in
+       * Message lifecycle, and again after xio_release_msg.
+       */
+      if (!cl_flag && release_msgs())
+	return;
       struct xio_mempool_obj *mp = &this->mp_this;
       this->~XioCompletionHook();
       xio_mempool_free(mp);
     }
   }
 
-  void claim(int r) {
-    xmsg_refs.add(r);
-    get_message()->add(r);
-  }
+  XioConnection* get_xcon() { return xcon; }
 
-  void put_xmsg_ref() {
-    if (xmsg_refs.dec() >= XMSG_REFS_BASELINE)
-      get_message()->put();
-  }
+  list <struct xio_msg *>& get_seq() { return msg_seq; }
+
+  void claim(int r) {}
 
   XioPool& get_pool() { return rsp_pool; }
 
   void on_err_finalize(XioConnection *xcon);
-  virtual ~XioCompletionHook() { }
+  virtual ~XioCompletionHook() {}
 };
 
 struct XioRsp : public XioSubmit
 {
   XioCompletionHook *xhook;
-  struct xio_msg *msg;
 public:
-  XioRsp(XioConnection *_xcon, XioCompletionHook *_xhook, struct xio_msg *_msg)
-    : XioSubmit(XIO_MSG_TYPE_RSP, _xcon), xhook(_xhook->get()), msg(_msg)
+  XioRsp(XioConnection *_xcon, XioCompletionHook *_xhook)
+    : XioSubmit(XIO_MSG_TYPE_RSP, _xhook->get_xcon()),
+      xhook(_xhook->get())
     {};
 
-  struct xio_msg* get_msg() { return msg; }
+  XioCompletionHook *get_xhook() { return xhook; }
 
   void finalize()
     {

@@ -169,6 +169,7 @@ public:
       XioSubmit::Queue send_q;
       XioSubmit::Queue::iterator q_iter;
       struct xio_msg *msg = NULL;
+      list <struct xio_msg *>::iterator iter;
       XioSubmit *xs;
       XioMsg *xmsg;
 
@@ -205,10 +206,15 @@ public:
 	      /* XIO_MSG_TYPE_RSP */
 	    {
 	      XioRsp* xrsp = static_cast<XioRsp*>(xs);
-	      code = xio_release_msg(xrsp->get_msg());
+	      list <struct xio_msg *>& msg_seq = xrsp->get_xhook()->get_seq();
+	      for (iter = msg_seq.begin(); iter != msg_seq.end();
+		   ++iter) {
+		msg = *iter;
+		code = xio_release_msg(msg);
+	      }
 	      xrsp->finalize();
 	    }
-	      break;
+	    break;
 	    };
 
 	    if (code) { // XXX cleanup or discard
@@ -226,7 +232,7 @@ public:
 	pthread_mutex_unlock(&mtx);
 #endif
 
-	xio_context_run_loop(ctx, 100);
+	xio_context_run_loop(ctx, 80);
 
       } while ((!_shutdown) || (!drained));
 
