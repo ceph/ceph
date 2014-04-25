@@ -184,6 +184,9 @@ def main(ctx):
 
         if job_config.get('last_in_suite'):
             log.info('Generating coverage for %s', job_config['name'])
+            if teuth_config.results_server:
+                report.try_delete_jobs(job_config['name'],
+                                       job_config['job_id'])
             args = [
                 os.path.join(teuth_bin_path, 'teuthology-results'),
                 '--timeout',
