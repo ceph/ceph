@@ -230,6 +230,8 @@ OSDService::OSDService(OSD *osd) :
   cur_state(NONE),
   last_msg(0),
   cur_ratio(0),
+  epoch_lock("OSDService::epoch_lock"),
+  boot_epoch(0), up_epoch(0), bind_epoch(0),
   is_stopping_lock("OSDService::is_stopping_lock"),
   state(NOT_STOPPING)
 #ifdef PG_DEBUG_REFS
@@ -918,7 +920,6 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   asok_hook(NULL),
   osd_compat(get_osd_compat_set()),
   state_lock(), state(STATE_INITIALIZING),
-  epoch_lock(), boot_epoch(0), up_epoch(0), bind_epoch(0),
   op_tp(cct, "OSD::op_tp", cct->_conf->osd_op_threads, "osd_op_threads"),
   recovery_tp(cct, "OSD::recovery_tp", cct->_conf->osd_recovery_threads, "osd_recovery_threads"),
   disk_tp(cct, "OSD::disk_tp", cct->_conf->osd_disk_threads, "osd_disk_threads"),
@@ -1248,9 +1249,10 @@ int OSD::init()
 
   create_recoverystate_perf();
 
-  epoch_lock.lock();
-  bind_epoch = osdmap->get_epoch();
-  epoch_lock.unlock();
+  {
+    epoch_t bind_epoch = osdmap->get_epoch();
+    service.set_epochs(NULL, NULL, &bind_epoch);
+  }
 
   // load up pgs (as they previously existed)
   load_pgs();
@@ -1689,9 +1691,7 @@ int OSD::shutdown()
 
   // note unmount epoch
   dout(10) << "noting clean unmount in epoch " << osdmap->get_epoch() << dendl;
-  epoch_lock.lock();
-  superblock.mounted = boot_epoch;
-  epoch_lock.unlock();
+  superblock.mounted = service.get_boot_epoch();
   superblock.clean_thru = osdmap->get_epoch();
   ObjectStore::Transaction t;
   write_superblock(t);
@@ -3818,10 +3818,8 @@ void OSD::_send_boot()
     dout(10) << " assuming hb_front_addr ip matches client_addr" << dendl;
   }
 
-  epoch_lock.lock();
-  epoch_t _boot_epoch = boot_epoch;
-  epoch_lock.unlock();
-  MOSDBoot *mboot = new MOSDBoot(superblock, _boot_epoch, hb_back_addr, hb_front_addr, cluster_addr);
+  MOSDBoot *mboot = new MOSDBoot(superblock, service.get_boot_epoch(),
+                                 hb_back_addr, hb_front_addr, cluster_addr);
   dout(10) << " client_addr " << client_messenger->get_myaddr()
 	   << ", cluster_addr " << cluster_addr
 	   << ", hb_back_addr " << hb_back_addr
@@ -5480,6 +5478,36 @@ void OSDService::dec_scrubs_active()
   sched_scrub_lock.Unlock();
 }
 
+void OSDService::retrieve_epochs(epoch_t *_boot_epoch, epoch_t *_up_epoch,
+                                 epoch_t *_bind_epoch) const
+{
+  Mutex::Locker l(epoch_lock);
+  if (_boot_epoch)
+    *_boot_epoch = boot_epoch;
+  if (_up_epoch)
+    *_up_epoch = up_epoch;
+  if (_bind_epoch)
+    *_bind_epoch = bind_epoch;
+}
+
+void OSDService::set_epochs(const epoch_t *_boot_epoch, const epoch_t *_up_epoch,
+                            const epoch_t *_bind_epoch)
+{
+  Mutex::Locker l(epoch_lock);
+  if (_boot_epoch) {
+    assert(*_boot_epoch == 0 || *_boot_epoch >= boot_epoch);
+    boot_epoch = *_boot_epoch;
+  }
+  if (_up_epoch) {
+    assert(*_up_epoch == 0 || *_up_epoch >= up_epoch);
+    up_epoch = *_up_epoch;
+  }
+  if (_bind_epoch) {
+    assert(*_bind_epoch == 0 || *_bind_epoch >= bind_epoch);
+    bind_epoch = *_bind_epoch;
+  }
+}
+
 bool OSDService::prepare_to_stop()
 {
   Mutex::Locker l(is_stopping_lock);
@@ -5787,9 +5815,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     had_map_since = ceph_clock_now(cct);
   }
 
-  epoch_lock.lock();
-  epoch_t _bind_epoch = bind_epoch;
-  epoch_lock.unlock();
+  epoch_t _bind_epoch = service.get_bind_epoch();
   if (osdmap->is_up(whoami) &&
       osdmap->get_addr(whoami) == client_messenger->get_myaddr() &&
       _bind_epoch < osdmap->get_up_from(whoami)) {
@@ -5844,11 +5870,10 @@ void OSD::handle_osd_map(MOSDMap *m)
 		     << " != my " << hb_front_server_messenger->get_myaddr() << ")";
       
       if (!service.is_stopping()) {
-	epoch_lock.lock();
-	up_epoch = 0;
+        epoch_t up_epoch = 0;
+        epoch_t bind_epoch = osdmap->get_epoch();
+        service.set_epochs(NULL,&up_epoch, &bind_epoch);
 	do_restart = true;
-	bind_epoch = osdmap->get_epoch();
-	epoch_lock.unlock();
 
 	start_waiting_for_healthy();
 
@@ -5878,12 +5903,11 @@ void OSD::handle_osd_map(MOSDMap *m)
 
 
   // note in the superblock that we were clean thru the prior epoch
-  epoch_lock.lock();
+  epoch_t boot_epoch = service.get_boot_epoch();
   if (boot_epoch && boot_epoch >= superblock.mounted) {
     superblock.mounted = boot_epoch;
     superblock.clean_thru = osdmap->get_epoch();
   }
-  epoch_lock.unlock();
 
   // superblock and commit
   write_superblock(t);
@@ -6033,7 +6057,9 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
   dout(7) << "advance_map epoch " << osdmap->get_epoch()
           << dendl;
 
-  epoch_lock.lock();
+  epoch_t up_epoch;
+  epoch_t boot_epoch;
+  service.retrieve_epochs(&boot_epoch, &up_epoch, NULL);
   if (!up_epoch &&
       osdmap->is_up(whoami) &&
       osdmap->get_inst(whoami) == client_messenger->get_myinst()) {
@@ -6043,8 +6069,8 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
       boot_epoch = osdmap->get_epoch();
       dout(10) << "boot_epoch is " << boot_epoch << dendl;
     }
+    service.set_epochs(&boot_epoch, &up_epoch, NULL);
   }
-  epoch_lock.unlock();
 
   // scan pg creations
   ceph::unordered_map<spg_t, create_pg_info>::iterator n = creating_pgs.begin();
@@ -6421,11 +6447,9 @@ bool OSD::require_same_or_newer_map(OpRequestRef op, epoch_t epoch)
     return false;
   }
 
-  epoch_lock.lock();
-  epoch_t _epoch = epoch;
-  epoch_lock.unlock();
-  if (_epoch < up_epoch) {
-    dout(7) << "from pre-up epoch " << epoch << " < " << _epoch << dendl;
+  epoch_t up_epoch = service.get_up_epoch();
+  if (epoch < up_epoch) {
+    dout(7) << "from pre-up epoch " << epoch << " < " << up_epoch << dendl;
     return false;
   }
 
@@ -7824,10 +7848,8 @@ void OSD::handle_replica_op(OpRequestRef op, OSDMapRef osdmap)
   assert(m->get_header().type == MSGTYPE);
 
   dout(10) << __func__ << " " << *m << " epoch " << m->map_epoch << dendl;
-  epoch_lock.lock();
-  epoch_t _up_epoch = up_epoch;
-  epoch_lock.unlock();
-  if (m->map_epoch < _up_epoch) {
+  epoch_t up_epoch = service.get_up_epoch();
+  if (m->map_epoch < up_epoch) {
     dout(3) << "replica op from before up" << dendl;
     return;
   }
