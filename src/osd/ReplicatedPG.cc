@@ -1317,7 +1317,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
 	(!(m->get_flags() & CEPH_OSD_FLAG_BALANCE_READS) &&
 	 !(m->get_flags() & CEPH_OSD_FLAG_LOCALIZE_READS))) {
       // missing the specific snap we need; requeue and wait.
-      assert(!can_create); // only happens on a read
+      assert(!op->may_write()); // only happens on a read/cache
       wait_for_unreadable_object(missing_oid, op);
       return;
     }
