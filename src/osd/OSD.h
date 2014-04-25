@@ -434,10 +434,10 @@ public:
                                        OSDSuperblock& superblock);
   bool should_share_map(entity_name_t name, Connection *con, epoch_t epoch,
                         OSDMapRef& osdmap, const epoch_t *sent_epoch_p);
-  void share_map_incoming(entity_name_t name, Connection *con, epoch_t epoch,
-                          OSDMapRef& osdmap, epoch_t *sent_epoch_p);
-  void share_map_outgoing(int peer, Connection *con,
-                          OSDMapRef map = OSDMapRef());
+  void share_map(entity_name_t name, Connection *con, epoch_t epoch,
+                 OSDMapRef& osdmap, epoch_t *sent_epoch_p);
+  void share_map_peer(int peer, Connection *con,
+                      OSDMapRef map = OSDMapRef());
 
   ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch);
   pair<ConnectionRef,ConnectionRef> get_con_osd_hb(int peer, epoch_t from_epoch);  // (back, front)
