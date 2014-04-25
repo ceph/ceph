@@ -34,6 +34,7 @@
 #include <errno.h>
 #include <math.h>
 
+#include "include/intarith.h"
 #include "include/rados/librados.h"
 #include "include/rbd/librbd.h"
 
@@ -172,15 +173,6 @@ int aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset);
 FILE *	fsxlogf = NULL;
 int badoff = -1;
 int closeopen = 0;
-
-static void *round_ptr_up(void *ptr, unsigned long align, unsigned long offset)
-{
-	unsigned long ret = (unsigned long)ptr;
-
-	ret = ((ret + align - 1) & ~(align - 1));
-	ret += offset;
-	return (void *)ret;
-}
 
 void
 vwarnc(int code, const char *fmt, va_list ap) {
@@ -1530,12 +1522,29 @@ main(int argc, char **argv)
 	original_buf = (char *) malloc(maxfilelen);
 	for (i = 0; i < (int)maxfilelen; i++)
 		original_buf[i] = random() % 256;
-	good_buf = (char *) malloc(maxfilelen + writebdy);
-	good_buf = round_ptr_up(good_buf, writebdy, 0);
+
+	ret = posix_memalign((void **)&good_buf, MAX(writebdy, sizeof(void *)),
+			     maxfilelen);
+	if (ret > 0) {
+		if (ret == EINVAL)
+			prt("writebdy is not a suitable power of two\n");
+		else
+			prterrcode("main: posix_memalign(good_buf)", -ret);
+		exit(94);
+	}
 	memset(good_buf, '\0', maxfilelen);
-	temp_buf = (char *) malloc(maxfilelen + readbdy);
-	temp_buf = round_ptr_up(temp_buf, readbdy, 0);
+
+	ret = posix_memalign((void **)&temp_buf, MAX(readbdy, sizeof(void *)),
+			     maxfilelen);
+	if (ret > 0) {
+		if (ret == EINVAL)
+			prt("readbdy is not a suitable power of two\n");
+		else
+			prterrcode("main: posix_memalign(temp_buf)", -ret);
+		exit(95);
+	}
 	memset(temp_buf, '\0', maxfilelen);
+
 	if (lite) {	/* zero entire existing file */
 		ssize_t written;
 
