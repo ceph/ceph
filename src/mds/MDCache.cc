@@ -10445,8 +10445,12 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& md
 {
   dout(10) << "send_dentry_unlink " << *dn << dendl;
   // share unlink news with replicas
-  for (map<int,unsigned>::iterator it = dn->replicas_begin();
-       it != dn->replicas_end();
+  map<int,unsigned> replicas;
+  replicas.insert(dn->replicas_begin(), dn->replicas_end());
+  if (straydn)
+    replicas.insert(straydn->replicas_begin(), straydn->replicas_end());
+  for (map<int,unsigned>::iterator it = replicas.begin();
+       it != replicas.end();
        ++it) {
     // don't tell (rmdir) witnesses; they already know
     if (mdr.get() && mdr->more()->witnessed.count(it->first))
