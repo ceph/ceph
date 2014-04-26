@@ -1702,8 +1702,9 @@ void MDS::respawn()
   /* Determine the path to our executable, try to read
    * linux-specific /proc/ path first */
   char exe_path[PATH_MAX];
-  ssize_t exe_path_bytes = readlink("/proc/self/exe", exe_path, sizeof(exe_path));
-  if (exe_path_bytes == -1) {
+  ssize_t exe_path_bytes = readlink("/proc/self/exe", exe_path,
+				    sizeof(exe_path) - 1);
+  if (exe_path_bytes < 0) {
     /* Print CWD for the user's interest */
     char buf[PATH_MAX];
     char *cwd = getcwd(buf, sizeof(buf));
@@ -1712,6 +1713,8 @@ void MDS::respawn()
 
     /* Fall back to a best-effort: just running in our CWD */
     strncpy(exe_path, orig_argv[0], sizeof(exe_path) - 1);
+  } else {
+    exe_path[exe_path_bytes] = '\0';
   }
 
   dout(1) << " exe_path " << exe_path << dendl;
