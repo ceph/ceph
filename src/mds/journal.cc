@@ -1332,36 +1332,49 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     if (mds->sessionmap.version >= sessionmapv) {
       dout(10) << "EMetaBlob.replay sessionmap v " << sessionmapv
 	       << " <= table " << mds->sessionmap.version << dendl;
-    } else {
-      dout(10) << "EMetaBlob.replay sessionmap v" << sessionmapv
+    } else if (mds->sessionmap.version + 2 >= sessionmapv) {
+      dout(10) << "EMetaBlob.replay sessionmap v " << sessionmapv
 	       << " -(1|2) == table " << mds->sessionmap.version
 	       << " prealloc " << preallocated_inos
 	       << " used " << used_preallocated_ino
 	       << dendl;
       Session *session = mds->sessionmap.get_session(client_name);
-      assert(session);
-      dout(20) << " (session prealloc " << session->info.prealloc_inos << ")" << dendl;
-      if (used_preallocated_ino) {
-	if (session->info.prealloc_inos.empty()) {
-	  // HRM: badness in the journal
-	  mds->clog.warn() << " replayed op " << client_reqs << " on session for " << client_name
-			   << " with empty prealloc_inos\n";
-	} else {
-	  inodeno_t next = session->next_ino();
-	  inodeno_t i = session->take_ino(used_preallocated_ino);
-	  if (next != i)
-	    mds->clog.warn() << " replayed op " << client_reqs << " used ino " << i
-			     << " but session next is " << next << "\n";
-	  assert(i == used_preallocated_ino);
-	  session->info.used_inos.clear();
+      if (session) {
+	dout(20) << " (session prealloc " << session->info.prealloc_inos << ")" << dendl;
+	if (used_preallocated_ino) {
+	  if (session->info.prealloc_inos.empty()) {
+	    // HRM: badness in the journal
+	    mds->clog.warn() << " replayed op " << client_reqs << " on session for "
+			     << client_name << " with empty prealloc_inos\n";
+	  } else {
+	    inodeno_t next = session->next_ino();
+	    inodeno_t i = session->take_ino(used_preallocated_ino);
+	    if (next != i)
+	      mds->clog.warn() << " replayed op " << client_reqs << " used ino " << i
+			       << " but session next is " << next << "\n";
+	    assert(i == used_preallocated_ino);
+	    session->info.used_inos.clear();
+	  }
+	  mds->sessionmap.projected = ++mds->sessionmap.version;
 	}
-	mds->sessionmap.projected = ++mds->sessionmap.version;
-      }
-      if (preallocated_inos.size()) {
-	session->info.prealloc_inos.insert(preallocated_inos);
-	mds->sessionmap.projected = ++mds->sessionmap.version;
+	if (!preallocated_inos.empty()) {
+	  session->info.prealloc_inos.insert(preallocated_inos);
+	  mds->sessionmap.projected = ++mds->sessionmap.version;
+	}
+      } else {
+	dout(10) << "EMetaBlob.replay no session for " << client_name << dendl;
+	if (used_preallocated_ino)
+	  mds->sessionmap.projected = ++mds->sessionmap.version;
+	if (!preallocated_inos.empty())
+	  mds->sessionmap.projected = ++mds->sessionmap.version;
       }
       assert(sessionmapv == mds->sessionmap.version);
+    } else {
+      mds->clog.error() << "journal replay sessionmap v " << sessionmapv
+			<< " -(1|2) > table " << mds->sessionmap.version << "\n";
+      assert(g_conf->mds_wipe_sessions);
+      mds->sessionmap.wipe();
+      mds->sessionmap.version = mds->sessionmap.projected = sessionmapv;
     }
   }
 
