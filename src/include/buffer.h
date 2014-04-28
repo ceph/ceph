@@ -131,6 +131,7 @@ private:
    * an abstract raw buffer.  with a reference count.
    */
   class raw;
+  class raw_crc;
   class raw_malloc;
   class raw_static;
   class raw_mmap_pages;

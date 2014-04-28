@@ -126,18 +126,18 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
     unsigned len;
     atomic_t nref;
 
-    mutable Mutex crc_lock;
-    map<pair<size_t, size_t>, pair<uint32_t, uint32_t> > crc_map;
-
-    raw(unsigned l)
-      : data(NULL), len(l), nref(0),
-	crc_lock("buffer::raw::crc_lock", false, false)
+    raw(unsigned l) : data(NULL), len(l), nref(0)
     { }
     raw(char *c, unsigned l)
-      : data(c), len(l), nref(0),
-	crc_lock("buffer::raw::crc_lock", false, false)
+      : data(c), len(l), nref(0)
     { }
     virtual ~raw() {};
+    void operator delete(void* v)
+      {
+	static_cast<buffer::raw*>(v)->delete_this();
+      }
+
+    virtual void delete_this() { ::delete this; }
 
     // no copying.
     raw(const raw &other);
@@ -164,7 +164,34 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
     bool is_n_page_sized() {
       return (len & ~CEPH_PAGE_MASK) == 0;
     }
-    bool get_crc(const pair<size_t, size_t> &fromto,
+
+    virtual bool get_crc(const pair<size_t, size_t> &fromto,
+			 pair<uint32_t, uint32_t> *crc) const {
+      return false;
+    }
+
+    virtual void set_crc(const pair<size_t, size_t> &fromto,
+		 const pair<uint32_t, uint32_t> &crc) {}
+    virtual void invalidate_crc() {}
+
+  };
+
+  class buffer::raw_crc : public buffer::raw {
+  public:
+    mutable Mutex crc_lock;
+    map<pair<size_t, size_t>, pair<uint32_t, uint32_t> > crc_map;
+
+    raw_crc(unsigned l) :
+    raw(l),
+    crc_lock("buffer::raw::crc_lock", false, false)
+      {}
+    raw_crc(char *c, unsigned l) :
+      raw(c, l),
+      crc_lock("buffer::raw::crc_lock", false, false)
+      {}
+    virtual ~raw_crc() {};
+
+    virtual bool get_crc(const pair<size_t, size_t> &fromto,
 		 pair<uint32_t, uint32_t> *crc) const {
       Mutex::Locker l(crc_lock);
       map<pair<size_t, size_t>, pair<uint32_t, uint32_t> >::const_iterator i =
@@ -174,31 +201,33 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
       *crc = i->second;
       return true;
     }
-    void set_crc(const pair<size_t, size_t> &fromto,
+
+    virtual void set_crc(const pair<size_t, size_t> &fromto,
 		 const pair<uint32_t, uint32_t> &crc) {
       Mutex::Locker l(crc_lock);
       crc_map[fromto] = crc;
     }
-    void invalidate_crc() {
+
+    virtual void invalidate_crc() {
       Mutex::Locker l(crc_lock);
       crc_map.clear();
     }
   };
 
-  class buffer::raw_malloc : public buffer::raw {
+  class buffer::raw_malloc : public buffer::raw_crc {
   public:
-    raw_malloc(unsigned l) : raw(l) {
+    raw_malloc(unsigned l) : raw_crc(l) {
       if (len) {
 	data = (char *)malloc(len);
-        if (!data)
-          throw bad_alloc();
+	if (!data)
+	  throw bad_alloc();
       } else {
 	data = 0;
       }
       inc_total_alloc(len);
       bdout << "raw_malloc " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
-    raw_malloc(unsigned l, char *b) : raw(b, l) {
+    raw_malloc(unsigned l, char *b) : raw_crc(b, l) {
       inc_total_alloc(len);
       bdout << "raw_malloc " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
@@ -213,9 +242,9 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
   };
 
 #ifndef __CYGWIN__
-  class buffer::raw_mmap_pages : public buffer::raw {
+  class buffer::raw_mmap_pages : public buffer::raw_crc {
   public:
-    raw_mmap_pages(unsigned l) : raw(l) {
+    raw_mmap_pages(unsigned l) : raw_crc(l) {
       data = (char*)::mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);
       if (!data)
 	throw bad_alloc();
@@ -232,9 +261,9 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
     }
   };
 
-  class buffer::raw_posix_aligned : public buffer::raw {
+  class buffer::raw_posix_aligned : public buffer::raw_crc {
   public:
-    raw_posix_aligned(unsigned l) : raw(l) {
+    raw_posix_aligned(unsigned l) : raw_crc(l) {
 #ifdef DARWIN
       data = (char *) valloc (len);
 #else
@@ -260,10 +289,10 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
 #endif
 
 #ifdef __CYGWIN__
-  class buffer::raw_hack_aligned : public buffer::raw {
+  class buffer::raw_hack_aligned : public buffer::raw_crc {
     char *realdata;
   public:
-    raw_hack_aligned(unsigned l) : raw(l) {
+    raw_hack_aligned(unsigned l) : raw_crc(l) {
       realdata = new char[len+CEPH_PAGE_SIZE-1];
       unsigned off = ((unsigned)realdata) & ~CEPH_PAGE_MASK;
       if (off)
@@ -470,9 +499,9 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
   /*
    * primitive buffer types
    */
-  class buffer::raw_char : public buffer::raw {
+  class buffer::raw_char : public buffer::raw_crc {
   public:
-    raw_char(unsigned l) : raw(l) {
+    raw_char(unsigned l) : raw_crc(l) {
       if (len)
 	data = new char[len];
       else
@@ -480,7 +509,7 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
       inc_total_alloc(len);
       bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
-    raw_char(unsigned l, char *b) : raw(b, l) {
+    raw_char(unsigned l, char *b) : raw_crc(b, l) {
       inc_total_alloc(len);
       bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
@@ -494,9 +523,9 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
     }
   };
 
-  class buffer::raw_static : public buffer::raw {
+  class buffer::raw_static : public buffer::raw_crc {
   public:
-    raw_static(const char *d, unsigned l) : raw((char*)d, l) { }
+    raw_static(const char *d, unsigned l) : raw_crc((char*)d, l) { }
     ~raw_static() {}
     raw* clone_empty() {
       return new buffer::raw_char(len);
@@ -512,6 +541,7 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
       raw((char*)d, l), m_hook(_m_hook->get()) {}
     ~xio_msg_buffer() { m_hook->put(); }
     void operator delete(void*) {} // do nothing (pool allocated)
+    void delete_this() {} // also virutalized
     raw* clone_empty() {
       return new buffer::raw_char(len);
     }
