@@ -7,6 +7,7 @@ import psutil
 import subprocess
 import tempfile
 import logging
+import getpass
 
 from . import report
 from .config import config
@@ -158,7 +159,12 @@ def kill_processes(run_name, pids=None):
     else:
         log.info("Killing Pids: " + str(to_kill))
         for pid in to_kill:
-            subprocess.call(['sudo', 'kill', str(pid)])
+            args = ['kill', str(pid)]
+            # Don't attempt to use sudo if it's not necessary
+            proc_user = psutil.Process(int(pid)).username()
+            if proc_user != getpass.getuser():
+                args.insert(0, 'sudo')
+            subprocess.call(args)
 
 
 def process_matches_run(pid, run_name):
