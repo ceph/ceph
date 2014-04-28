@@ -6,7 +6,7 @@
     user info                  get user info
     user rm                    remove user
     user suspend               suspend a user
-    user enable                reenable user after suspension
+    user enable                re-enable user after suspension
     user check                 check user info
     user stats                 show user stats as accounted by quota subsystem
     caps add                   add user capabilities

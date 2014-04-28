@@ -16,6 +16,7 @@
 #define CEPH_MAUTHREPLY_H
 
 #include "msg/Message.h"
+#include "common/errno.h"
 
 struct MAuthReply : public Message {
   __u32 protocol;
@@ -38,8 +39,7 @@ private:
 public:
   const char *get_type_name() const { return "auth_reply"; }
   void print(ostream& o) const {
-    char buf[80];
-    o << "auth_reply(proto " << protocol << " " << result << " " << strerror_r(-result, buf, sizeof(buf));
+    o << "auth_reply(proto " << protocol << " " << result << " " << cpp_strerror(result);
     if (result_msg.length())
       o << ": " << result_msg;
     o << ")";

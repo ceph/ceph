@@ -22,7 +22,8 @@ def jsonify_cluster_info(ci):
 @jsonify.register(db.components_info)
 def jsonify_components_info(comps):
     return dict(
-            num_bytes=comps.num_bytes,
+            num_data_bytes=comps.num_data_bytes,
+            num_bytes_total=comps.num_bytes_total,
             num_osds=comps.num_osds,
             num_objects=comps.num_objects,
             num_pgs=comps.num_pgs,

@@ -16,7 +16,7 @@ class CReadOpsTest : public RadosTest {
 protected:
   void write_object() {
     // Create an object and write to it
-    ASSERT_EQ(len, rados_write(ioctx, obj, data, len, 0));
+    ASSERT_EQ(0, rados_write(ioctx, obj, data, len, 0));
   }
   void remove_object() {
     ASSERT_EQ(0, rados_remove(ioctx, obj));

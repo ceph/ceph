@@ -23,6 +23,7 @@ using namespace std;
 
 #include "common/config.h"
 #include "common/ceph_argparse.h"
+#include "common/errno.h"
 #include "global/global_init.h"
 #include "mon/MonMap.h"
 #include "include/str_list.h"
@@ -115,9 +116,8 @@ int main(int argc, const char **argv)
     }
   }
 
-  char buf[80];
   if (!create && r < 0) {
-    cerr << me << ": couldn't open " << fn << ": " << strerror_r(-r, buf, sizeof(buf)) << std::endl;
+    cerr << me << ": couldn't open " << fn << ": " << cpp_strerror(r) << std::endl;
     return -1;
   }    
   else if (create && !clobber && r == 0) {
@@ -198,7 +198,7 @@ int main(int argc, const char **argv)
 	 << std::endl;
     int r = monmap.write(fn.c_str());
     if (r < 0) {
-      cerr << "monmaptool: error writing to '" << fn << "': " << strerror_r(-r, buf, sizeof(buf)) << std::endl;
+      cerr << "monmaptool: error writing to '" << fn << "': " << cpp_strerror(r) << std::endl;
       return 1;
     }
   }

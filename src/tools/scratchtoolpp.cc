@@ -116,7 +116,7 @@ int main(int argc, const char **argv)
   cout << "io_ctx.stat returned " << r << " size = " << stat_size << " mtime = " << stat_mtime << std::endl;
 
   r = io_ctx.stat(oid, NULL, NULL);
-  cout << "io_ctx.stat(does_not_exist) = " << r;
+  cout << "io_ctx.stat(does_not_exist) = " << r << std::endl;
 
   uint64_t handle;
   C_Watch wc;
@@ -136,12 +136,10 @@ int main(int argc, const char **argv)
 
   r = io_ctx.unwatch(oid, handle);
   cout << "io_ctx.unwatch returned " << r << std::endl;
-  cout << "*** press enter to continue ***" << std::endl;
   testradospp_milestone();
 
   r = io_ctx.notify(oid, objver, notify_bl);
   cout << "io_ctx.notify returned " << r << std::endl;
-  cout << "*** press enter to continue ***" << std::endl;
   testradospp_milestone();
   io_ctx.set_assert_version(objver);
 
@@ -186,20 +184,11 @@ int main(int argc, const char **argv)
   assert(r == -EOVERFLOW);
 
   // test assert_src_version
-  const char *dest = "baz";
   r = io_ctx.read(oid, bl, 0, 1);
   assert(r >= 0);
   v = io_ctx.get_last_version();
   cout << oid << " version is " << v << std::endl;
   io_ctx.set_assert_src_version(oid, v);
-  r = io_ctx.clone_range(dest, 0, oid, 0, 1);
-  assert(r >= 0);
-  io_ctx.set_assert_src_version(oid, v-1);
-  r = io_ctx.clone_range(dest, 0, oid, 0, 1);
-  assert(r == -ERANGE);
-  io_ctx.set_assert_src_version(oid, v+1);
-  r = io_ctx.clone_range(dest, 0, oid, 0, 1);
-  assert(r == -EOVERFLOW);
   
   r = io_ctx.exec(oid, "crypto", "sha1", bl, bl2);
   cout << "exec returned " << r << std::endl;
@@ -267,7 +256,7 @@ int main(int argc, const char **argv)
     ObjectReadOperation o;
     o.cmpxattr("foo", CEPH_OSD_CMPXATTR_OP_EQ, val);
     r = io_ctx.operate(oid, &o, &bl2);
-    cout << " got " << r << " wanted ECANCELED" << std::endl;
+    cout << " got " << r << " wanted " << -ECANCELED << " (-ECANCELED)" << std::endl;
     assert(r == -ECANCELED);
   }
 
@@ -279,7 +268,7 @@ int main(int argc, const char **argv)
     io_ctx.locator_set_key(oid);
     o.write_full(val);
     r = io_ctx.operate(oidb, &o);
-    cout << " got " << r << " wanted ECANCELED" << std::endl;
+    cout << " got " << r << " wanted " << -ECANCELED << " (-ECANCELED)" << std::endl;
     assert(r == -ECANCELED);
   }
   {

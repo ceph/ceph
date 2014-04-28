@@ -24,7 +24,8 @@ Run 'ceph-brag -h' to get the usage information of this tool.
       "cluster_creation_date": "2014-01-16 13:38:41.928551",
       "uuid": "20679d0e-04b1-4004-8ee9-45ac271510e9",
       "components_count": {
-        "num_bytes": 0,
+        "num_data_bytes": 0,
+        "num_bytes_total": 1209312904,
         "num_osds": 1,
         "num_objects": 0,
         "num_pgs": 192,

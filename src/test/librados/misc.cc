@@ -289,7 +289,7 @@ TEST_F(LibRadosMiscPP, Tmap2OmapPP) {
 TEST_F(LibRadosMisc, Exec) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   char buf2[512];
   int res = rados_exec(ioctx, "foo", "rbd", "get_all_features",
 			  NULL, 0, buf2, sizeof(buf2));
@@ -378,7 +378,7 @@ TEST_F(LibRadosMiscPP, Operate2PP) {
 TEST_F(LibRadosMiscPP, BigObjectPP) {
   bufferlist bl;
   bl.append("abcdefg");
-  ASSERT_EQ((int)bl.length(), ioctx.write("foo", bl, bl.length(), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
 
   {
     ObjectWriteOperation o;
@@ -451,7 +451,7 @@ TEST_F(LibRadosMiscPP, CloneRangePP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  ASSERT_EQ(sizeof(buf), (size_t)ioctx.write("foo", bl, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
   ioctx.locator_set_key("foo");
   ASSERT_EQ(0, ioctx.clone_range("bar", 0, "foo", 0, sizeof(buf)));
   bufferlist bl2;
@@ -462,7 +462,7 @@ TEST_F(LibRadosMiscPP, CloneRangePP) {
 TEST_F(LibRadosMisc, CloneRange) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "src", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "src", buf, sizeof(buf), 0));
   rados_ioctx_locator_set_key(ioctx, "src");
   ASSERT_EQ(0, rados_clone_range(ioctx, "dst", 0, "src", 0, sizeof(buf)));
   char buf2[sizeof(buf)];

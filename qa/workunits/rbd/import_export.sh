@@ -4,11 +4,12 @@
 objects () {
    image=$1
    prefix=$(rbd info $image | grep block_name_prefix | awk '{print $NF;}')
+
    # strip off prefix and leading zeros from objects; sort, although
    # it doesn't necessarily make sense as they're hex, at least it makes
    # the list repeatable and comparable
    objects=$(rados ls -p rbd | grep $prefix | \
-	     sed -e 's/'$prefix'\.//' -e 's/^0*\([0-9a-f]\)/\1/' | sort)
+       sed -e 's/'$prefix'\.//' -e 's/^0*\([0-9a-f]\)/\1/' | sort)
    echo $objects
 }
 
@@ -55,6 +56,12 @@ cmp /tmp/img /tmp/img3
 
 rm /tmp/img /tmp/img2 /tmp/img3
 
+
+tiered=0
+if ceph osd dump | grep ^pool | grep "'rbd'" | grep tier; then
+    tiered=1
+fi
+
 # create specifically sparse files
 # 1 1M block of sparse, 1 1M block of random
 dd if=/dev/urandom bs=1M seek=1 count=1 of=/tmp/sparse1
@@ -67,7 +74,7 @@ dd if=/dev/urandom bs=1M count=1 of=/tmp/sparse2; truncate /tmp/sparse2 -s 2M
 # 1M sparse, 1M data
 rbd import $RBD_CREATE_ARGS --order 20 /tmp/sparse1
 rbd ls -l | grep sparse1 | grep '2048k'
-[ "$(objects sparse1)" = '1' ]
+[ $tiered -eq 1 -o "$(objects sparse1)" = '1' ]
 
 # export, compare contents and on-disk size
 rbd export sparse1 /tmp/sparse1.out
@@ -78,7 +85,7 @@ rbd rm sparse1
 # 1M data, 1M sparse
 rbd import $RBD_CREATE_ARGS --order 20 /tmp/sparse2
 rbd ls -l | grep sparse2 | grep '2048k'
-[ "$(objects sparse2)" = '0' ]
+[ $tiered -eq 1 -o "$(objects sparse2)" = '0' ]
 rbd export sparse2 /tmp/sparse2.out
 compare_files_and_ondisk_sizes /tmp/sparse2 /tmp/sparse2.out
 rm /tmp/sparse2.out
@@ -89,7 +96,7 @@ truncate /tmp/sparse1 -s 10M
 # import from stdin just for fun, verify still sparse
 rbd import $RBD_CREATE_ARGS --order 20 - sparse1 < /tmp/sparse1
 rbd ls -l | grep sparse1 | grep '10240k'
-[ "$(objects sparse1)" = '1' ]
+[ $tiered -eq 1 -o "$(objects sparse1)" = '1' ]
 rbd export sparse1 /tmp/sparse1.out
 compare_files_and_ondisk_sizes /tmp/sparse1 /tmp/sparse1.out
 rm /tmp/sparse1.out
@@ -100,7 +107,7 @@ dd if=/dev/urandom bs=2M count=1 of=/tmp/sparse2 oflag=append conv=notrunc
 # again from stding
 rbd import $RBD_CREATE_ARGS --order 20 - sparse2 < /tmp/sparse2
 rbd ls -l | grep sparse2 | grep '4096k'
-[ "$(objects sparse2)" = '0 2 3' ]
+[ $tiered -eq 1 -o "$(objects sparse2)" = '0 2 3' ]
 rbd export sparse2 /tmp/sparse2.out
 compare_files_and_ondisk_sizes /tmp/sparse2 /tmp/sparse2.out
 rm /tmp/sparse2.out
@@ -112,13 +119,13 @@ rbd rm sparse2
 
 echo "partially-sparse file imports to partially-sparse image"
 rbd import $RBD_CREATE_ARGS --order 20 /tmp/sparse1 sparse
-[ "$(objects sparse)" = '1' ]
+[ $tiered -eq 1 -o "$(objects sparse)" = '1' ]
 rbd rm sparse
 
 echo "zeros import through stdin to sparse image"
 # stdin
 dd if=/dev/zero bs=1M count=4 | rbd import $RBD_CREATE_ARGS - sparse
-[ "$(objects sparse)" = '' ]
+[ $tiered -eq 1 -o "$(objects sparse)" = '' ]
 rbd rm sparse
 
 echo "zeros export to sparse file"
@@ -127,7 +134,7 @@ rbd create sparse --size 4
 prefix=$(rbd info sparse | grep block_name_prefix | awk '{print $NF;}')
 # drop in 0 object directly
 dd if=/dev/zero bs=4M count=1 | rados -p rbd put ${prefix}.000000000000 -
-[ "$(objects sparse)" = '0' ]
+[ $tiered -eq 1 -o "$(objects sparse)" = '0' ]
 # 1 object full of zeros; export should still create 0-disk-usage file
 rm /tmp/sparse || true
 rbd export sparse /tmp/sparse

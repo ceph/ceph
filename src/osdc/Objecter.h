@@ -1061,11 +1061,8 @@ public:
 
   struct OSDSession;
 
-  struct Op {
-    OSDSession *session;
-    xlist<Op*>::item session_item;
-    int incarnation;
-    
+  struct op_target_t {
+    int flags;
     object_t base_oid;
     object_locator_t base_oloc;
     object_t target_oid;
@@ -1077,7 +1074,32 @@ public:
     pg_t pgid;           ///< last pg we mapped to
     vector<int> acting;  ///< acting for last pg we mapped to
     int primary;         ///< primary for last pg we mapped to
+
     bool used_replica;
+    bool paused;
+
+    int osd;      ///< the final target osd, or -1
+
+    op_target_t(object_t oid, object_locator_t oloc, int flags)
+      : flags(flags),
+	base_oid(oid),
+	base_oloc(oloc),
+	precalc_pgid(false),
+	primary(-1),
+	used_replica(false),
+	paused(false),
+	osd(-1)
+    {}
+
+    void dump(Formatter *f) const;
+  };
+
+  struct Op {
+    OSDSession *session;
+    xlist<Op*>::item session_item;
+    int incarnation;
+
+    op_target_t target;
 
     ConnectionRef con;  // for rx buffer only
 
@@ -1092,14 +1114,12 @@ public:
     vector<Context*> out_handler;
     vector<int*> out_rval;
 
-    int flags, priority;
+    int priority;
     Context *onack, *oncommit, *ontimeout;
 
     ceph_tid_t tid;
     eversion_t replay_version;        // for op replay
     int attempts;
-
-    bool paused;
 
     version_t *objver;
     epoch_t *reply_epoch;
@@ -1116,16 +1136,14 @@ public:
     Op(const object_t& o, const object_locator_t& ol, vector<OSDOp>& op,
        int f, Context *ac, Context *co, version_t *ov) :
       session(NULL), session_item(this), incarnation(0),
-      base_oid(o), base_oloc(ol),
-      precalc_pgid(false),
-      primary(-1),
-      used_replica(false), con(NULL),
+      target(o, ol, f),
+      con(NULL),
       snapid(CEPH_NOSNAP),
       outbl(NULL),
-      flags(f), priority(0), onack(ac), oncommit(co),
+      priority(0), onack(ac), oncommit(co),
       ontimeout(NULL),
       tid(0), attempts(0),
-      paused(false), objver(ov), reply_epoch(NULL),
+      objver(ov), reply_epoch(NULL),
       map_dne_bound(0),
       budgeted(false),
       should_resend(true) {
@@ -1141,8 +1159,8 @@ public:
 	out_rval[i] = NULL;
       }
 
-      if (base_oloc.key == o)
-	base_oloc.key.clear();
+      if (target.base_oloc.key == o)
+	target.base_oloc.key.clear();
     }
     ~Op() {
       while (!out_handler.empty()) {
@@ -1334,18 +1352,13 @@ public:
 
   struct LingerOp : public RefCountedObject {
     uint64_t linger_id;
-    object_t oid;
-    object_locator_t oloc;
 
-    pg_t pgid;
-    vector<int> acting;
-    int primary;
+    op_target_t target;
 
     snapid_t snap;
     SnapContext snapc;
     utime_t mtime;
 
-    int flags;
     vector<OSDOp> ops;
     bufferlist inbl;
     bufferlist *poutbl;
@@ -1360,8 +1373,9 @@ public:
     ceph_tid_t register_tid;
     epoch_t map_dne_bound;
 
-    LingerOp() : linger_id(0), primary(-1),
-		 snap(CEPH_NOSNAP), flags(0),
+    LingerOp() : linger_id(0),
+		 target(object_t(), object_locator_t(), 0),
+		 snap(CEPH_NOSNAP),
 		 poutbl(NULL), pobjver(NULL),
 		 registered(false),
 		 on_reg_ack(NULL), on_reg_commit(NULL),
@@ -1464,7 +1478,9 @@ public:
     RECALC_OP_TARGET_OSD_DOWN,
   };
   bool osdmap_full_flag() const;
-  bool op_should_be_paused(Op *op);
+  bool target_should_be_paused(op_target_t *op);
+
+  int calc_target(op_target_t *t);
   int recalc_op_target(Op *op);
   bool recalc_linger_op_target(LingerOp *op);
 
@@ -1695,8 +1711,8 @@ public:
     Op *o = new Op(object_t(), oloc,
 		   op.ops, flags | global_op_flags | CEPH_OSD_FLAG_READ,
 		   onack, NULL, NULL);
-    o->precalc_pgid = true;
-    o->base_pgid = pg_t(hash, oloc.pool);
+    o->target.precalc_pgid = true;
+    o->target.base_pgid = pg_t(hash, oloc.pool);
     o->priority = op.priority;
     o->snapid = CEPH_NOSNAP;
     o->outbl = pbl;

@@ -2574,7 +2574,6 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
 	assert(session);
 	Capability *cap = in->get_client_cap(q->first);
 	assert(cap);
-	cap->clear_new();
 	cap->merge(q->second, true);
 	mds->mdcache->do_cap_import(session, in, cap, q->second.cap_id, q->second.seq,
 				    q->second.mseq - 1, it->second.peer, CEPH_CAP_FLAG_AUTH);
@@ -2993,10 +2992,10 @@ void Migrator::handle_export_caps(MExportCaps *ex)
   
   assert(in);
   assert(in->is_auth());
-  /*
-   * note: i may be frozen, but i won't have been encoded for export (yet)!
-   *  see export_go() vs export_go_synced().
-   */
+
+  // FIXME
+  if (in->is_frozen())
+    return;
 
   C_M_LoggedImportCaps *finish = new C_M_LoggedImportCaps(this, in, ex->get_source().num());
   finish->client_map = ex->client_map;
@@ -3026,6 +3025,8 @@ void Migrator::logged_import_caps(CInode *in,
 				  map<client_t,uint64_t>& sseqmap) 
 {
   dout(10) << "logged_import_caps on " << *in << dendl;
+  // see export_go() vs export_go_synced()
+  assert(in->is_auth());
 
   // force open client sessions and finish cap import
   mds->server->finish_force_open_sessions(client_map, sseqmap);

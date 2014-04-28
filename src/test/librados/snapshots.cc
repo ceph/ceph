@@ -24,7 +24,7 @@ const int bufsize = 128;
 TEST_F(LibRadosSnapshots, SnapList) {
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   ASSERT_EQ(0, rados_ioctx_snap_create(ioctx, "snap1"));
   rados_snap_t snaps[10];
   EXPECT_EQ(1, rados_ioctx_snap_list(ioctx, snaps,
@@ -40,7 +40,7 @@ TEST_F(LibRadosSnapshotsPP, SnapListPP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
   ASSERT_EQ(0, ioctx.snap_create("snap1"));
   std::vector<snap_t> snaps;
   EXPECT_EQ(0, ioctx.snap_list(&snaps));
@@ -54,7 +54,7 @@ TEST_F(LibRadosSnapshotsPP, SnapListPP) {
 TEST_F(LibRadosSnapshots, SnapRemove) {
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   ASSERT_EQ(0, rados_ioctx_snap_create(ioctx, "snap1"));
   rados_snap_t rid;
   ASSERT_EQ(0, rados_ioctx_snap_lookup(ioctx, "snap1", &rid));
@@ -68,7 +68,7 @@ TEST_F(LibRadosSnapshotsPP, SnapRemovePP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
   ASSERT_EQ(0, ioctx.snap_create("snap1"));
   rados_snap_t rid;
   ASSERT_EQ(0, ioctx.snap_lookup("snap1", &rid));
@@ -79,12 +79,12 @@ TEST_F(LibRadosSnapshotsPP, SnapRemovePP) {
 TEST_F(LibRadosSnapshots, Rollback) {
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   ASSERT_EQ(0, rados_ioctx_snap_create(ioctx, "snap1"));
   char buf2[sizeof(buf)];
   memset(buf2, 0xdd, sizeof(buf2));
   EXPECT_EQ(0, rados_write_full(ioctx, "foo", buf2, sizeof(buf2)));
-  EXPECT_EQ(0, rados_rollback(ioctx, "foo", "snap1"));
+  EXPECT_EQ(0, rados_ioctx_snap_rollback(ioctx, "foo", "snap1"));
   char buf3[sizeof(buf)];
   EXPECT_EQ((int)sizeof(buf3), rados_read(ioctx, "foo", buf3, sizeof(buf3), 0));
   EXPECT_EQ(0, memcmp(buf, buf3, sizeof(buf)));
@@ -96,14 +96,14 @@ TEST_F(LibRadosSnapshotsPP, RollbackPP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
   ASSERT_EQ(0, ioctx.snap_create("snap1"));
   char buf2[sizeof(buf)];
   memset(buf2, 0xdd, sizeof(buf2));
   bufferlist bl2;
   bl2.append(buf2, sizeof(buf2));
   EXPECT_EQ(0, ioctx.write_full("foo", bl2));
-  EXPECT_EQ(0, ioctx.rollback("foo", "snap1"));
+  EXPECT_EQ(0, ioctx.snap_rollback("foo", "snap1"));
   bufferlist bl3;
   EXPECT_EQ((int)sizeof(buf), ioctx.read("foo", bl3, sizeof(buf), 0));
   EXPECT_EQ(0, memcmp(buf, bl3.c_str(), sizeof(buf)));
@@ -113,7 +113,7 @@ TEST_F(LibRadosSnapshotsPP, RollbackPP) {
 TEST_F(LibRadosSnapshots, SnapGetName) {
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   ASSERT_EQ(0, rados_ioctx_snap_create(ioctx, "snapfoo"));
   rados_snap_t rid;
   EXPECT_EQ(0, rados_ioctx_snap_lookup(ioctx, "snapfoo", &rid));
@@ -132,7 +132,7 @@ TEST_F(LibRadosSnapshotsPP, SnapGetNamePP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
   ASSERT_EQ(0, ioctx.snap_create("snapfoo"));
   rados_snap_t rid;
   EXPECT_EQ(0, ioctx.snap_lookup("snapfoo", &rid));
@@ -155,7 +155,7 @@ TEST_F(LibRadosSnapshotsSelfManaged, Snap) {
   ::std::reverse(my_snaps.begin(), my_snaps.end());
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
 
   my_snaps.push_back(-2);
   ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_create(ioctx, &my_snaps.back()));
@@ -165,7 +165,7 @@ TEST_F(LibRadosSnapshotsSelfManaged, Snap) {
   ::std::reverse(my_snaps.begin(), my_snaps.end());
   char buf2[sizeof(buf)];
   memset(buf2, 0xdd, sizeof(buf2));
-  ASSERT_EQ((int)sizeof(buf2), rados_write(ioctx, "foo", buf2, sizeof(buf2), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf2, sizeof(buf2), 0));
   rados_ioctx_snap_set_read(ioctx, my_snaps[1]-1);
   char buf3[sizeof(buf)];
   ASSERT_EQ(-ENOENT, rados_read(ioctx, "foo", buf3, sizeof(buf3), 0));
@@ -192,7 +192,7 @@ TEST_F(LibRadosSnapshotsSelfManaged, Rollback) {
   ::std::reverse(my_snaps.begin(), my_snaps.end());
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
 
   my_snaps.push_back(-2);
   ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_create(ioctx, &my_snaps.back()));
@@ -202,7 +202,7 @@ TEST_F(LibRadosSnapshotsSelfManaged, Rollback) {
   ::std::reverse(my_snaps.begin(), my_snaps.end());
   char buf2[sizeof(buf)];
   memset(buf2, 0xdd, sizeof(buf2));
-  ASSERT_EQ((int)sizeof(buf2), rados_write(ioctx, "foo", buf2, sizeof(buf2), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf2, sizeof(buf2), 0));
   rados_ioctx_selfmanaged_snap_rollback(ioctx, "foo", my_snaps[1]);
   char buf3[sizeof(buf)];
   ASSERT_EQ((int)sizeof(buf3), rados_read(ioctx, "foo", buf3, sizeof(buf3), 0));
@@ -226,7 +226,7 @@ TEST_F(LibRadosSnapshotsSelfManagedPP, SnapPP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
 
   my_snaps.push_back(-2);
   ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps.back()));
@@ -237,7 +237,7 @@ TEST_F(LibRadosSnapshotsSelfManagedPP, SnapPP) {
   memset(buf2, 0xdd, sizeof(buf2));
   bufferlist bl2;
   bl2.append(buf2, sizeof(buf2));
-  ASSERT_EQ((int)sizeof(buf2), ioctx.write("foo", bl2, sizeof(buf2), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl2, sizeof(buf2), 0));
 
   ioctx.snap_set_read(my_snaps[1]);
   bufferlist bl3;
@@ -269,9 +269,9 @@ TEST_F(LibRadosSnapshotsSelfManagedPP, RollbackPP) {
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
   //Write 3 consecutive buffers
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), bufsize));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), bufsize*2));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), bufsize));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), bufsize*2));
 
   snap_set_t ss;
 
@@ -293,9 +293,9 @@ TEST_F(LibRadosSnapshotsSelfManagedPP, RollbackPP) {
   bufferlist bl2;
   bl2.append(buf2, sizeof(buf2));
   //Change the middle buffer
-  ASSERT_EQ((int)sizeof(buf2), ioctx.write("foo", bl2, sizeof(buf2), bufsize));
+  ASSERT_EQ(0, ioctx.write("foo", bl2, sizeof(buf2), bufsize));
   //Add another after
-  ASSERT_EQ((int)sizeof(buf2), ioctx.write("foo", bl2, sizeof(buf2), bufsize*3));
+  ASSERT_EQ(0, ioctx.write("foo", bl2, sizeof(buf2), bufsize*3));
 
   ASSERT_EQ(-EINVAL, ioctx.list_snaps("foo", &ss));
   ObjectReadOperation o;
@@ -352,11 +352,11 @@ TEST_F(LibRadosSnapshotsSelfManagedPP, SnapOverlapPP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), bufsize*2));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), bufsize*4));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), bufsize*6));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), bufsize*8));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), bufsize*2));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), bufsize*4));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), bufsize*6));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), bufsize*8));
 
   snap_set_t ss;
   snap_t head = SNAP_HEAD;
@@ -376,11 +376,11 @@ TEST_F(LibRadosSnapshotsSelfManagedPP, SnapOverlapPP) {
   memset(buf2, 0xdd, sizeof(buf2));
   bufferlist bl2;
   bl2.append(buf2, sizeof(buf2));
-  ASSERT_EQ((int)sizeof(buf2), ioctx.write("foo", bl2, sizeof(buf2), bufsize*1));
-  ASSERT_EQ((int)sizeof(buf2), ioctx.write("foo", bl2, sizeof(buf2), bufsize*3));
-  ASSERT_EQ((int)sizeof(buf2), ioctx.write("foo", bl2, sizeof(buf2), bufsize*5));
-  ASSERT_EQ((int)sizeof(buf2), ioctx.write("foo", bl2, sizeof(buf2), bufsize*7));
-  ASSERT_EQ((int)sizeof(buf2), ioctx.write("foo", bl2, sizeof(buf2), bufsize*9));
+  ASSERT_EQ(0, ioctx.write("foo", bl2, sizeof(buf2), bufsize*1));
+  ASSERT_EQ(0, ioctx.write("foo", bl2, sizeof(buf2), bufsize*3));
+  ASSERT_EQ(0, ioctx.write("foo", bl2, sizeof(buf2), bufsize*5));
+  ASSERT_EQ(0, ioctx.write("foo", bl2, sizeof(buf2), bufsize*7));
+  ASSERT_EQ(0, ioctx.write("foo", bl2, sizeof(buf2), bufsize*9));
 
   ASSERT_EQ(0, readioctx.list_snaps("foo", &ss));
   ASSERT_EQ(2u, ss.clones.size());
@@ -414,10 +414,10 @@ TEST_F(LibRadosSnapshotsSelfManagedPP, SnapOverlapPP) {
   memset(buf3, 0xee, sizeof(buf3));
   bufferlist bl4;
   bl4.append(buf3, sizeof(buf3));
-  ASSERT_EQ((int)sizeof(buf3), ioctx.write("foo", bl2, sizeof(buf3), bufsize*1));
-  ASSERT_EQ((int)sizeof(buf3), ioctx.write("foo", bl2, sizeof(buf3), bufsize*4));
-  ASSERT_EQ((int)sizeof(buf3), ioctx.write("foo", bl2, sizeof(buf3), bufsize*5));
-  ASSERT_EQ((int)sizeof(buf3), ioctx.write("foo", bl2, sizeof(buf3), bufsize*8));
+  ASSERT_EQ(0, ioctx.write("foo", bl2, sizeof(buf3), bufsize*1));
+  ASSERT_EQ(0, ioctx.write("foo", bl2, sizeof(buf3), bufsize*4));
+  ASSERT_EQ(0, ioctx.write("foo", bl2, sizeof(buf3), bufsize*5));
+  ASSERT_EQ(0, ioctx.write("foo", bl2, sizeof(buf3), bufsize*8));
 
   ASSERT_EQ(0, readioctx.list_snaps("foo", &ss));
   ASSERT_EQ(3u, ss.clones.size());
@@ -469,7 +469,7 @@ TEST_F(LibRadosSnapshotsSelfManagedPP, SnapOverlapPP) {
 TEST_F(LibRadosSnapshotsEC, SnapList) {
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   ASSERT_EQ(0, rados_ioctx_snap_create(ioctx, "snap1"));
   rados_snap_t snaps[10];
   EXPECT_EQ(1, rados_ioctx_snap_list(ioctx, snaps,
@@ -485,7 +485,7 @@ TEST_F(LibRadosSnapshotsECPP, SnapListPP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
   ASSERT_EQ(0, ioctx.snap_create("snap1"));
   std::vector<snap_t> snaps;
   EXPECT_EQ(0, ioctx.snap_list(&snaps));
@@ -499,7 +499,7 @@ TEST_F(LibRadosSnapshotsECPP, SnapListPP) {
 TEST_F(LibRadosSnapshotsEC, SnapRemove) {
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   ASSERT_EQ(0, rados_ioctx_snap_create(ioctx, "snap1"));
   rados_snap_t rid;
   ASSERT_EQ(0, rados_ioctx_snap_lookup(ioctx, "snap1", &rid));
@@ -513,7 +513,7 @@ TEST_F(LibRadosSnapshotsECPP, SnapRemovePP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
   ASSERT_EQ(0, ioctx.snap_create("snap1"));
   rados_snap_t rid;
   ASSERT_EQ(0, ioctx.snap_lookup("snap1", &rid));
@@ -524,12 +524,12 @@ TEST_F(LibRadosSnapshotsECPP, SnapRemovePP) {
 TEST_F(LibRadosSnapshotsEC, Rollback) {
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   ASSERT_EQ(0, rados_ioctx_snap_create(ioctx, "snap1"));
   char buf2[sizeof(buf)];
   memset(buf2, 0xdd, sizeof(buf2));
   EXPECT_EQ(0, rados_write_full(ioctx, "foo", buf2, sizeof(buf2)));
-  EXPECT_EQ(0, rados_rollback(ioctx, "foo", "snap1"));
+  EXPECT_EQ(0, rados_ioctx_snap_rollback(ioctx, "foo", "snap1"));
   char buf3[sizeof(buf)];
   EXPECT_EQ((int)sizeof(buf3), rados_read(ioctx, "foo", buf3, sizeof(buf3), 0));
   EXPECT_EQ(0, memcmp(buf, buf3, sizeof(buf)));
@@ -541,14 +541,14 @@ TEST_F(LibRadosSnapshotsECPP, RollbackPP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
   ASSERT_EQ(0, ioctx.snap_create("snap1"));
   char buf2[sizeof(buf)];
   memset(buf2, 0xdd, sizeof(buf2));
   bufferlist bl2;
   bl2.append(buf2, sizeof(buf2));
   EXPECT_EQ(0, ioctx.write_full("foo", bl2));
-  EXPECT_EQ(0, ioctx.rollback("foo", "snap1"));
+  EXPECT_EQ(0, ioctx.snap_rollback("foo", "snap1"));
   bufferlist bl3;
   EXPECT_EQ((int)sizeof(buf), ioctx.read("foo", bl3, sizeof(buf), 0));
   EXPECT_EQ(0, memcmp(buf, bl3.c_str(), sizeof(buf)));
@@ -558,7 +558,7 @@ TEST_F(LibRadosSnapshotsECPP, RollbackPP) {
 TEST_F(LibRadosSnapshotsEC, SnapGetName) {
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   ASSERT_EQ(0, rados_ioctx_snap_create(ioctx, "snapfoo"));
   rados_snap_t rid;
   EXPECT_EQ(0, rados_ioctx_snap_lookup(ioctx, "snapfoo", &rid));
@@ -577,7 +577,7 @@ TEST_F(LibRadosSnapshotsECPP, SnapGetNamePP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
   ASSERT_EQ(0, ioctx.snap_create("snapfoo"));
   rados_snap_t rid;
   EXPECT_EQ(0, ioctx.snap_lookup("snapfoo", &rid));
@@ -601,7 +601,7 @@ TEST_F(LibRadosSnapshotsSelfManagedEC, Snap) {
   int bsize = alignment;
   char *buf = (char *)new char[bsize];
   memset(buf, 0xcc, bsize);
-  ASSERT_EQ(bsize, rados_write(ioctx, "foo", buf, bsize, 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, bsize, 0));
 
   my_snaps.push_back(-2);
   ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_create(ioctx, &my_snaps.back()));
@@ -610,8 +610,8 @@ TEST_F(LibRadosSnapshotsSelfManagedEC, Snap) {
 					&my_snaps[0], my_snaps.size()));
   ::std::reverse(my_snaps.begin(), my_snaps.end());
   char *buf2 = (char *)new char[bsize];
-  memset(buf2, 0xdd, sizeof(buf2));
-  ASSERT_EQ(bsize, rados_write(ioctx, "foo", buf2, bsize, bsize));
+  memset(buf2, 0xdd, bsize);
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf2, bsize, bsize));
   rados_ioctx_snap_set_read(ioctx, my_snaps[1]-1);
   char *buf3 = (char *)new char[bsize*2];
   ASSERT_EQ(-ENOENT, rados_read(ioctx, "foo", buf3, bsize*2, 0));
@@ -641,8 +641,8 @@ TEST_F(LibRadosSnapshotsSelfManagedEC, Rollback) {
   ::std::reverse(my_snaps.begin(), my_snaps.end());
   int bsize = alignment;
   char *buf = (char *)new char[bsize];
-  memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ(bsize, rados_write(ioctx, "foo", buf, bsize, 0));
+  memset(buf, 0xcc, bsize);
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, bsize, 0));
 
   my_snaps.push_back(-2);
   ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_create(ioctx, &my_snaps.back()));
@@ -651,9 +651,9 @@ TEST_F(LibRadosSnapshotsSelfManagedEC, Rollback) {
 					&my_snaps[0], my_snaps.size()));
   ::std::reverse(my_snaps.begin(), my_snaps.end());
   char *buf2 = (char *)new char[bsize];
-  memset(buf2, 0xdd, sizeof(buf2));
+  memset(buf2, 0xdd, bsize);
 
-  ASSERT_EQ(bsize, rados_write(ioctx, "foo", buf2, bsize, bsize));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf2, bsize, bsize));
   rados_ioctx_selfmanaged_snap_rollback(ioctx, "foo", my_snaps[1]);
   char *buf3 = (char *)new char[bsize*2];
   ASSERT_EQ(bsize, rados_read(ioctx, "foo", buf3, bsize*2, 0));
@@ -678,10 +678,10 @@ TEST_F(LibRadosSnapshotsSelfManagedECPP, SnapPP) {
   ::std::reverse(my_snaps.begin(), my_snaps.end());
   int bsize = alignment;
   char *buf = (char *)new char[bsize];
-  memset(buf, 0xcc, sizeof(buf));
+  memset(buf, 0xcc, bsize);
   bufferlist bl1;
   bl1.append(buf, bsize);
-  ASSERT_EQ(bsize, ioctx.write("foo", bl1, bsize, 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, bsize, 0));
 
   my_snaps.push_back(-2);
   ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps.back()));
@@ -693,7 +693,7 @@ TEST_F(LibRadosSnapshotsSelfManagedECPP, SnapPP) {
   bufferlist bl2;
   bl2.append(buf2, bsize);
   // Add another aligned buffer
-  ASSERT_EQ(bsize, ioctx.write("foo", bl2, bsize, bsize));
+  ASSERT_EQ(0, ioctx.write("foo", bl2, bsize, bsize));
 
   ioctx.snap_set_read(my_snaps[1]);
   bufferlist bl3;
@@ -728,9 +728,9 @@ TEST_F(LibRadosSnapshotsSelfManagedECPP, RollbackPP) {
   bufferlist bl1;
   bl1.append(buf, bsize);
   //Write 3 consecutive buffers
-  ASSERT_EQ(bsize, ioctx.write("foo", bl1, bsize, 0));
-  ASSERT_EQ(bsize, ioctx.write("foo", bl1, bsize, bsize));
-  ASSERT_EQ(bsize, ioctx.write("foo", bl1, bsize, bsize*2));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, bsize, 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, bsize, bsize));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, bsize, bsize*2));
 
   snap_set_t ss;
 
@@ -752,9 +752,9 @@ TEST_F(LibRadosSnapshotsSelfManagedECPP, RollbackPP) {
   bufferlist bl2;
   bl2.append(buf2, bsize);
   //Change the middle buffer
-  //ASSERT_EQ((int)sizeof(buf2), ioctx.write("foo", bl2, sizeof(buf2), bufsize));
+  //ASSERT_EQ(0, ioctx.write("foo", bl2, sizeof(buf2), bufsize));
   //Add another after
-  ASSERT_EQ(bsize, ioctx.write("foo", bl2, bsize, bsize*3));
+  ASSERT_EQ(0, ioctx.write("foo", bl2, bsize, bsize*3));
 
   ASSERT_EQ(-EINVAL, ioctx.list_snaps("foo", &ss));
   ObjectReadOperation o;

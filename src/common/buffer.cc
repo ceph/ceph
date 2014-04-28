@@ -20,9 +20,9 @@
 #include "common/simple_spin.h"
 #include "common/strtol.h"
 #include "include/atomic.h"
+#include "common/Mutex.h"
 #include "include/types.h"
 #include "include/compat.h"
-#include "include/Spinlock.h"
 
 #include <errno.h>
 #include <fstream>
@@ -123,12 +123,16 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
     unsigned len;
     atomic_t nref;
 
-    Spinlock crc_lock;
+    mutable Mutex crc_lock;
     map<pair<size_t, size_t>, pair<uint32_t, uint32_t> > crc_map;
 
-    raw(unsigned l) : data(NULL), len(l), nref(0)
+    raw(unsigned l)
+      : data(NULL), len(l), nref(0),
+	crc_lock("buffer::raw::crc_lock", false, false)
     { }
-    raw(char *c, unsigned l) : data(c), len(l), nref(0)
+    raw(char *c, unsigned l)
+      : data(c), len(l), nref(0),
+	crc_lock("buffer::raw::crc_lock", false, false)
     { }
     virtual ~raw() {};
 
@@ -159,7 +163,7 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
     }
     bool get_crc(const pair<size_t, size_t> &fromto,
 		 pair<uint32_t, uint32_t> *crc) const {
-      Spinlock::Locker l(crc_lock);
+      Mutex::Locker l(crc_lock);
       map<pair<size_t, size_t>, pair<uint32_t, uint32_t> >::const_iterator i =
 	crc_map.find(fromto);
       if (i == crc_map.end())
@@ -169,11 +173,11 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
     }
     void set_crc(const pair<size_t, size_t> &fromto,
 		 const pair<uint32_t, uint32_t> &crc) {
-      Spinlock::Locker l(crc_lock);
+      Mutex::Locker l(crc_lock);
       crc_map[fromto] = crc;
     }
     void invalidate_crc() {
-      Spinlock::Locker l(crc_lock);
+      Mutex::Locker l(crc_lock);
       crc_map.clear();
     }
   };

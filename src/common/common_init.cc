@@ -121,7 +121,6 @@ void common_init_finish(CephContext *cct, int flags)
 
   if (cct->_conf->lockdep) {
     g_lockdep = true;
-    ldout(cct,0) << "lockdep is enabled" << dendl;
     lockdep_register_ceph_context(cct);
   }
 }

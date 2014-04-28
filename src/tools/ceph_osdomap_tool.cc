@@ -32,6 +32,7 @@
 #include "os/LevelDBStore.h"
 #include "mon/MonitorDBStore.h"
 #include "os/DBObjectMap.h"
+#include "common/errno.h"
 
 namespace po = boost::program_options;
 using namespace std;

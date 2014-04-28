@@ -14,6 +14,8 @@
 #include <iostream>
 #include <string>
 
+#include "test/librados/TestCase.h"
+
 
 using namespace librados;
 using ceph::buffer;
@@ -54,7 +56,13 @@ struct WatcherUnwatcher : public Thread {
     return NULL;
   }
 };
-TEST(WatchStress, Stress1) {
+
+typedef RadosTestParamPP WatchStress;
+
+INSTANTIATE_TEST_CASE_P(WatchStressTests, WatchStress,
+			::testing::Values("", "cache"));
+
+TEST_P(WatchStress, Stress1) {
   ASSERT_EQ(0, sem_init(&sem, 0, 0));
   Rados ncluster;
   std::string pool_name = get_temp_pool_name();

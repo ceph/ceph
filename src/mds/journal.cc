@@ -62,7 +62,7 @@
 // -----------------------
 // LogSegment
 
-void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
+void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld, int op_prio)
 {
   set<CDir*> commit;
 
@@ -103,7 +103,7 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
       assert(dir->is_auth());
       if (dir->can_auth_pin()) {
 	dout(15) << "try_to_expire committing " << *dir << dendl;
-	dir->commit(0, gather_bld.new_sub());
+	dir->commit(0, gather_bld.new_sub(), false, op_prio);
       } else {
 	dout(15) << "try_to_expire waiting for unfreeze on " << *dir << dendl;
 	dir->add_waiter(CDir::WAIT_UNFREEZE, gather_bld.new_sub());

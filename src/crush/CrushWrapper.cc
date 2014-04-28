@@ -1,6 +1,7 @@
 
 #include "common/debug.h"
 #include "common/Formatter.h"
+#include "common/errno.h"
 
 #include "CrushWrapper.h"
 
@@ -453,8 +454,7 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
       int empty = 0, newid;
       int r = add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, p->first, 1, &cur, &empty, &newid);
       if (r < 0) {
-        char buf[128]; 
-        ldout(cct, 1) << "add_bucket failure error: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+        ldout(cct, 1) << "add_bucket failure error: " << cpp_strerror(r) << dendl;
         return r;
       }
       set_item_name(newid, q->second);

@@ -303,7 +303,7 @@ inline void encode(const boost::optional<T> &p, bufferlist &bl)
   __u8 present = static_cast<bool>(p);
   ::encode(present, bl);
   if (p)
-    ::encode(p.get(), bl);
+    encode(p.get(), bl);
 }
 
 template<typename T>
@@ -314,7 +314,7 @@ inline void decode(boost::optional<T> &p, bufferlist::iterator &bp)
   if (present) {
     T t;
     p = t;
-    ::decode(p.get(), bp);
+    decode(p.get(), bp);
   }
 }
 

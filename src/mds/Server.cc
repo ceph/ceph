@@ -53,6 +53,7 @@
 #include "events/ECommitted.h"
 
 #include "include/filepath.h"
+#include "common/errno.h"
 #include "common/Timer.h"
 #include "common/perf_counters.h"
 #include "include/compat.h"
@@ -857,9 +858,8 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
   // that have projected linkages from getting new replica.
   mds->locker->set_xlocks_done(mdr.get(), mdr->client_request->get_op() == CEPH_MDS_OP_RENAME);
 
-  char buf[80];
   dout(10) << "early_reply " << reply->get_result() 
-	   << " (" << strerror_r(-reply->get_result(), buf, sizeof(buf))
+	   << " (" << cpp_strerror(reply->get_result())
 	   << ") " << *req << dendl;
 
   if (tracei || tracedn) {
@@ -894,9 +894,8 @@ void Server::reply_request(MDRequestRef& mdr, MClientReply *reply, CInode *trace
   assert(mdr.get());
   MClientRequest *req = mdr->client_request;
   
-  char buf[80];
   dout(10) << "reply_request " << reply->get_result() 
-	   << " (" << strerror_r(-reply->get_result(), buf, sizeof(buf))
+	   << " (" << cpp_strerror(reply->get_result())
 	   << ") " << *req << dendl;
 
   // note successful request in session map?
@@ -3313,6 +3312,9 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
 
   dout(10) << "do_open_truncate " << *in << dendl;
 
+  SnapRealm *realm = in->find_snaprealm();
+  mds->locker->issue_new_caps(in, cmode, mdr->session, realm, mdr->client_request->is_replay());
+
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "open_truncate");
   mdlog->start_entry(le);
@@ -3341,10 +3343,6 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
   mdcache->predirty_journal_parents(mdr, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, in);
   
-  // do the open
-  SnapRealm *realm = in->find_snaprealm();
-  mds->locker->issue_new_caps(in, cmode, mdr->session, realm, mdr->client_request->is_replay());
-
   // make sure ino gets into the journal
   le->metablob.add_opened_ino(in->ino());
   LogSegment *ls = mds->mdlog->get_current_segment();
@@ -7117,7 +7115,7 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequestRef& mdr,
   
   if (target && target->is_dir()) {
     assert(destdn);
-    mdcache->project_subtree_rename(in, straydir, destdir);
+    mdcache->project_subtree_rename(target, straydir, destdir);
   }
 
   if (in && in->is_dir()) {

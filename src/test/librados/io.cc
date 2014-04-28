@@ -20,9 +20,9 @@ typedef RadosTestECPP LibRadosIoECPP;
 TEST_F(LibRadosIo, SimpleWrite) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   rados_ioctx_set_namespace(ioctx, "nspace");
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
 }
 
 TEST_F(LibRadosIoPP, SimpleWritePP) {
@@ -30,9 +30,9 @@ TEST_F(LibRadosIoPP, SimpleWritePP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
   ioctx.set_namespace("nspace");
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
 }
 
 TEST_F(LibRadosIoPP, ReadOpPP) {
@@ -40,7 +40,7 @@ TEST_F(LibRadosIoPP, ReadOpPP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
 
   {
       bufferlist op_bl;
@@ -161,7 +161,7 @@ TEST_F(LibRadosIo, RoundTrip) {
   char buf[128];
   char buf2[128];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   memset(buf2, 0, sizeof(buf2));
   ASSERT_EQ((int)sizeof(buf2), rados_read(ioctx, "foo", buf2, sizeof(buf2), 0));
   ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
@@ -169,14 +169,13 @@ TEST_F(LibRadosIo, RoundTrip) {
 
 TEST_F(LibRadosIoPP, RoundTripPP) {
   char buf[128];
-  char buf2[128];
   Rados cluster;
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
   bufferlist cl;
-  ASSERT_EQ((int)sizeof(buf2), ioctx.read("foo", cl, sizeof(buf), 0));
+  ASSERT_EQ((int)sizeof(buf), ioctx.read("foo", cl, sizeof(buf), 0));
   ASSERT_EQ(0, memcmp(buf, cl.c_str(), sizeof(buf)));
 }
 
@@ -185,9 +184,9 @@ TEST_F(LibRadosIo, OverlappingWriteRoundTrip) {
   char buf2[64];
   char buf3[128];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   memset(buf2, 0xdd, sizeof(buf2));
-  ASSERT_EQ((int)sizeof(buf2), rados_write(ioctx, "foo", buf2, sizeof(buf2), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf2, sizeof(buf2), 0));
   memset(buf3, 0xdd, sizeof(buf3));
   ASSERT_EQ((int)sizeof(buf3), rados_read(ioctx, "foo", buf3, sizeof(buf3), 0));
   ASSERT_EQ(0, memcmp(buf3, buf2, sizeof(buf2)));
@@ -200,11 +199,11 @@ TEST_F(LibRadosIoPP, OverlappingWriteRoundTripPP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
   memset(buf2, 0xdd, sizeof(buf2));
   bufferlist bl2;
   bl2.append(buf2, sizeof(buf2));
-  ASSERT_EQ((int)sizeof(buf2), ioctx.write("foo", bl2, sizeof(buf2), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl2, sizeof(buf2), 0));
   bufferlist bl3;
   ASSERT_EQ((int)sizeof(buf), ioctx.read("foo", bl3, sizeof(buf), 0));
   ASSERT_EQ(0, memcmp(bl3.c_str(), buf2, sizeof(buf2)));
@@ -216,7 +215,7 @@ TEST_F(LibRadosIo, WriteFullRoundTrip) {
   char buf2[64];
   char buf3[128];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   memset(buf2, 0xdd, sizeof(buf2));
   ASSERT_EQ(0, rados_write_full(ioctx, "foo", buf2, sizeof(buf2)));
   memset(buf3, 0xdd, sizeof(buf3));
@@ -230,7 +229,7 @@ TEST_F(LibRadosIoPP, WriteFullRoundTripPP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
   memset(buf2, 0xdd, sizeof(buf2));
   bufferlist bl2;
   bl2.append(buf2, sizeof(buf2));
@@ -245,9 +244,9 @@ TEST_F(LibRadosIo, AppendRoundTrip) {
   char buf2[64];
   char buf3[sizeof(buf) + sizeof(buf2)];
   memset(buf, 0xde, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
+  ASSERT_EQ(0, rados_append(ioctx, "foo", buf, sizeof(buf)));
   memset(buf2, 0xad, sizeof(buf2));
-  ASSERT_EQ((int)sizeof(buf2), rados_append(ioctx, "foo", buf2, sizeof(buf2)));
+  ASSERT_EQ(0, rados_append(ioctx, "foo", buf2, sizeof(buf2)));
   memset(buf3, 0, sizeof(buf3));
   ASSERT_EQ((int)sizeof(buf3), rados_read(ioctx, "foo", buf3, sizeof(buf3), 0));
   ASSERT_EQ(0, memcmp(buf3, buf, sizeof(buf)));
@@ -260,11 +259,11 @@ TEST_F(LibRadosIoPP, AppendRoundTripPP) {
   memset(buf, 0xde, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.append("foo", bl1, sizeof(buf)));
+  ASSERT_EQ(0, ioctx.append("foo", bl1, sizeof(buf)));
   memset(buf2, 0xad, sizeof(buf2));
   bufferlist bl2;
   bl2.append(buf2, sizeof(buf2));
-  ASSERT_EQ((int)sizeof(buf2), ioctx.append("foo", bl2, sizeof(buf2)));
+  ASSERT_EQ(0, ioctx.append("foo", bl2, sizeof(buf2)));
   bufferlist bl3;
   ASSERT_EQ((int)(sizeof(buf) + sizeof(buf2)),
 	    ioctx.read("foo", bl3, (sizeof(buf) + sizeof(buf2)), 0));
@@ -277,7 +276,7 @@ TEST_F(LibRadosIo, TruncTest) {
   char buf[128];
   char buf2[sizeof(buf)];
   memset(buf, 0xaa, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
+  ASSERT_EQ(0, rados_append(ioctx, "foo", buf, sizeof(buf)));
   ASSERT_EQ(0, rados_trunc(ioctx, "foo", sizeof(buf) / 2));
   memset(buf2, 0, sizeof(buf2));
   ASSERT_EQ((int)(sizeof(buf)/2), rados_read(ioctx, "foo", buf2, sizeof(buf2), 0));
@@ -289,7 +288,7 @@ TEST_F(LibRadosIoPP, TruncTestPP) {
   memset(buf, 0xaa, sizeof(buf));
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.append("foo", bl, sizeof(buf)));
+  ASSERT_EQ(0, ioctx.append("foo", bl, sizeof(buf)));
   ASSERT_EQ(0, ioctx.trunc("foo", sizeof(buf) / 2));
   bufferlist bl2;
   ASSERT_EQ((int)(sizeof(buf)/2), ioctx.read("foo", bl2, sizeof(buf), 0));
@@ -300,7 +299,7 @@ TEST_F(LibRadosIo, RemoveTest) {
   char buf[128];
   char buf2[sizeof(buf)];
   memset(buf, 0xaa, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
+  ASSERT_EQ(0, rados_append(ioctx, "foo", buf, sizeof(buf)));
   ASSERT_EQ(0, rados_remove(ioctx, "foo"));
   memset(buf2, 0, sizeof(buf2));
   ASSERT_EQ(-ENOENT, rados_read(ioctx, "foo", buf2, sizeof(buf2), 0));
@@ -311,7 +310,7 @@ TEST_F(LibRadosIoPP, RemoveTestPP) {
   memset(buf, 0xaa, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.append("foo", bl1, sizeof(buf)));
+  ASSERT_EQ(0, ioctx.append("foo", bl1, sizeof(buf)));
   ASSERT_EQ(0, ioctx.remove("foo"));
   bufferlist bl2;
   ASSERT_EQ(-ENOENT, ioctx.read("foo", bl2, sizeof(buf), 0));
@@ -322,7 +321,7 @@ TEST_F(LibRadosIo, XattrsRoundTrip) {
   char attr1[] = "attr1";
   char attr1_buf[] = "foo bar baz";
   memset(buf, 0xaa, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
+  ASSERT_EQ(0, rados_append(ioctx, "foo", buf, sizeof(buf)));
   ASSERT_EQ(-ENODATA, rados_getxattr(ioctx, "foo", attr1, buf, sizeof(buf)));
   ASSERT_EQ(0, rados_setxattr(ioctx, "foo", attr1, attr1_buf, sizeof(attr1_buf)));
   ASSERT_EQ((int)sizeof(attr1_buf),
@@ -337,7 +336,7 @@ TEST_F(LibRadosIoPP, XattrsRoundTripPP) {
   memset(buf, 0xaa, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.append("foo", bl1, sizeof(buf)));
+  ASSERT_EQ(0, ioctx.append("foo", bl1, sizeof(buf)));
   bufferlist bl2;
   ASSERT_EQ(-ENODATA, ioctx.getxattr("foo", attr1, bl2));
   bufferlist bl3;
@@ -354,7 +353,7 @@ TEST_F(LibRadosIo, RmXattr) {
   char attr1[] = "attr1";
   char attr1_buf[] = "foo bar baz";
   memset(buf, 0xaa, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
+  ASSERT_EQ(0, rados_append(ioctx, "foo", buf, sizeof(buf)));
   ASSERT_EQ(0,
       rados_setxattr(ioctx, "foo", attr1, attr1_buf, sizeof(attr1_buf)));
   ASSERT_EQ(0, rados_rmxattr(ioctx, "foo", attr1));
@@ -368,7 +367,7 @@ TEST_F(LibRadosIoPP, RmXattrPP) {
   memset(buf, 0xaa, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.append("foo", bl1, sizeof(buf)));
+  ASSERT_EQ(0, ioctx.append("foo", bl1, sizeof(buf)));
   bufferlist bl2;
   bl2.append(attr1_buf, sizeof(attr1_buf));
   ASSERT_EQ(0, ioctx.setxattr("foo", attr1, bl2));
@@ -387,7 +386,7 @@ TEST_F(LibRadosIo, XattrIter) {
     attr2_buf[j] = j % 0xff;
   }
   memset(buf, 0xaa, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
+  ASSERT_EQ(0, rados_append(ioctx, "foo", buf, sizeof(buf)));
   ASSERT_EQ(0, rados_setxattr(ioctx, "foo", attr1, attr1_buf, sizeof(attr1_buf)));
   ASSERT_EQ(0, rados_setxattr(ioctx, "foo", attr2, attr2_buf, sizeof(attr2_buf)));
   rados_xattrs_iter_t iter;
@@ -429,7 +428,7 @@ TEST_F(LibRadosIoPP, XattrListPP) {
   memset(buf, 0xaa, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.append("foo", bl1, sizeof(buf)));
+  ASSERT_EQ(0, ioctx.append("foo", bl1, sizeof(buf)));
   bufferlist bl2;
   bl2.append(attr1_buf, sizeof(attr1_buf));
   ASSERT_EQ(0, ioctx.setxattr("foo", attr1, bl2));
@@ -455,9 +454,9 @@ TEST_F(LibRadosIoPP, XattrListPP) {
 TEST_F(LibRadosIoEC, SimpleWrite) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   rados_ioctx_set_namespace(ioctx, "nspace");
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
 }
 
 TEST_F(LibRadosIoECPP, SimpleWritePP) {
@@ -465,9 +464,9 @@ TEST_F(LibRadosIoECPP, SimpleWritePP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
   ioctx.set_namespace("nspace");
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
 }
 
 TEST_F(LibRadosIoECPP, ReadOpPP) {
@@ -475,7 +474,7 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
 
   {
       bufferlist op_bl;
@@ -596,7 +595,7 @@ TEST_F(LibRadosIoEC, RoundTrip) {
   char buf[128];
   char buf2[128];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   memset(buf2, 0, sizeof(buf2));
   ASSERT_EQ((int)sizeof(buf2), rados_read(ioctx, "foo", buf2, sizeof(buf2), 0));
   ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
@@ -604,14 +603,13 @@ TEST_F(LibRadosIoEC, RoundTrip) {
 
 TEST_F(LibRadosIoECPP, RoundTripPP) {
   char buf[128];
-  char buf2[128];
   Rados cluster;
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
   bufferlist cl;
-  ASSERT_EQ((int)sizeof(buf2), ioctx.read("foo", cl, sizeof(buf), 0));
+  ASSERT_EQ((int)sizeof(buf), ioctx.read("foo", cl, sizeof(buf) * 3, 0));
   ASSERT_EQ(0, memcmp(buf, cl.c_str(), sizeof(buf)));
 }
 
@@ -622,10 +620,10 @@ TEST_F(LibRadosIoEC, OverlappingWriteRoundTrip) {
   char *buf2 = (char *)new char[bsize];
   char *buf3 = (char *)new char[dbsize];
   memset(buf, 0xcc, dbsize);
-  ASSERT_EQ(dbsize, rados_write(ioctx, "foo", buf, dbsize, 0));
-  memset(buf2, 0xdd, sizeof(buf2));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, dbsize, 0));
+  memset(buf2, 0xdd, bsize);
   ASSERT_EQ(-EOPNOTSUPP, rados_write(ioctx, "foo", buf2, bsize, 0));
-  memset(buf3, 0xdd, sizeof(buf3));
+  memset(buf3, 0xdd, dbsize);
   ASSERT_EQ(dbsize, rados_read(ioctx, "foo", buf3, dbsize, 0));
   // Read the same as first write
   ASSERT_EQ(0, memcmp(buf3, buf, dbsize));
@@ -643,7 +641,7 @@ TEST_F(LibRadosIoECPP, OverlappingWriteRoundTripPP) {
   memset(buf, 0xcc, dbsize);
   bufferlist bl1;
   bl1.append(buf, dbsize);
-  ASSERT_EQ(dbsize, ioctx.write("foo", bl1, dbsize, 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, dbsize, 0));
   memset(buf2, 0xdd, bsize);
   bufferlist bl2;
   bl2.append(buf2, bsize);
@@ -662,12 +660,12 @@ TEST_F(LibRadosIoEC, WriteFullRoundTrip) {
   char buf2[64];
   char buf3[128];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   memset(buf2, 0xdd, sizeof(buf2));
   ASSERT_EQ(0, rados_write_full(ioctx, "foo", buf2, sizeof(buf2)));
-  memset(buf3, 0xdd, sizeof(buf3));
+  memset(buf3, 0xee, sizeof(buf3));
   ASSERT_EQ((int)sizeof(buf2), rados_read(ioctx, "foo", buf3, sizeof(buf3), 0));
-  ASSERT_EQ(0, memcmp(buf2, buf2, sizeof(buf2)));
+  ASSERT_EQ(0, memcmp(buf3, buf2, sizeof(buf2)));
 }
 
 TEST_F(LibRadosIoECPP, WriteFullRoundTripPP) {
@@ -676,7 +674,7 @@ TEST_F(LibRadosIoECPP, WriteFullRoundTripPP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
   memset(buf2, 0xdd, sizeof(buf2));
   bufferlist bl2;
   bl2.append(buf2, sizeof(buf2));
@@ -691,17 +689,23 @@ TEST_F(LibRadosIoEC, AppendRoundTrip) {
   char *buf2 = (char *)new char[alignment];
   char *buf3 = (char *)new char[alignment *2];
   memset(buf, 0xde, alignment);
-  ASSERT_EQ((int)alignment, rados_append(ioctx, "foo", buf, alignment));
+  ASSERT_EQ(0, rados_append(ioctx, "foo", buf, alignment));
   memset(buf2, 0xad, alignment);
-  ASSERT_EQ((int)alignment, rados_append(ioctx, "foo", buf2, alignment));
+  ASSERT_EQ(0, rados_append(ioctx, "foo", buf2, alignment));
   memset(buf3, 0, alignment*2);
   ASSERT_EQ((int)alignment*2, rados_read(ioctx, "foo", buf3, alignment*2, 0));
   ASSERT_EQ(0, memcmp(buf3, buf, alignment));
   ASSERT_EQ(0, memcmp(buf3 + alignment, buf2, alignment));
 
+  int uasize = alignment/2;
+  char *unalignedbuf = (char *)new char[uasize];
+  ASSERT_EQ(0, rados_append(ioctx, "foo", unalignedbuf, uasize));
+  ASSERT_EQ(-EOPNOTSUPP, rados_append(ioctx, "foo", unalignedbuf, uasize));
+
   delete[] buf;
   delete[] buf2;
   delete[] buf3;
+  delete[] unalignedbuf;
 }
 
 TEST_F(LibRadosIoECPP, AppendRoundTripPP) {
@@ -710,14 +714,14 @@ TEST_F(LibRadosIoECPP, AppendRoundTripPP) {
   memset(buf, 0xde, alignment);
   bufferlist bl1;
   bl1.append(buf, alignment);
-  ASSERT_EQ((int)alignment, ioctx.append("foo", bl1, alignment));
+  ASSERT_EQ(0, ioctx.append("foo", bl1, alignment));
   memset(buf2, 0xad, alignment);
   bufferlist bl2;
   bl2.append(buf2, alignment);
-  ASSERT_EQ((int)alignment, ioctx.append("foo", bl2, alignment));
+  ASSERT_EQ(0, ioctx.append("foo", bl2, alignment));
   bufferlist bl3;
   ASSERT_EQ((int)(alignment * 2),
-	    ioctx.read("foo", bl3, (alignment * 2), 0));
+	    ioctx.read("foo", bl3, (alignment * 4), 0));
   const char *bl3_str = bl3.c_str();
   ASSERT_EQ(0, memcmp(bl3_str, buf, alignment));
   ASSERT_EQ(0, memcmp(bl3_str + alignment, buf2, alignment));
@@ -730,7 +734,7 @@ TEST_F(LibRadosIoEC, TruncTest) {
   char buf[128];
   char buf2[sizeof(buf)];
   memset(buf, 0xaa, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
+  ASSERT_EQ(0, rados_append(ioctx, "foo", buf, sizeof(buf)));
   ASSERT_EQ(-EOPNOTSUPP, rados_trunc(ioctx, "foo", sizeof(buf) / 2));
   memset(buf2, 0, sizeof(buf2));
   // Same size
@@ -744,7 +748,7 @@ TEST_F(LibRadosIoECPP, TruncTestPP) {
   memset(buf, 0xaa, sizeof(buf));
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.append("foo", bl, sizeof(buf)));
+  ASSERT_EQ(0, ioctx.append("foo", bl, sizeof(buf)));
   ASSERT_EQ(-EOPNOTSUPP, ioctx.trunc("foo", sizeof(buf) / 2));
   bufferlist bl2;
   // Same size
@@ -757,7 +761,7 @@ TEST_F(LibRadosIoEC, RemoveTest) {
   char buf[128];
   char buf2[sizeof(buf)];
   memset(buf, 0xaa, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
+  ASSERT_EQ(0, rados_append(ioctx, "foo", buf, sizeof(buf)));
   ASSERT_EQ(0, rados_remove(ioctx, "foo"));
   memset(buf2, 0, sizeof(buf2));
   ASSERT_EQ(-ENOENT, rados_read(ioctx, "foo", buf2, sizeof(buf2), 0));
@@ -768,7 +772,7 @@ TEST_F(LibRadosIoECPP, RemoveTestPP) {
   memset(buf, 0xaa, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.append("foo", bl1, sizeof(buf)));
+  ASSERT_EQ(0, ioctx.append("foo", bl1, sizeof(buf)));
   ASSERT_EQ(0, ioctx.remove("foo"));
   bufferlist bl2;
   ASSERT_EQ(-ENOENT, ioctx.read("foo", bl2, sizeof(buf), 0));
@@ -779,7 +783,7 @@ TEST_F(LibRadosIoEC, XattrsRoundTrip) {
   char attr1[] = "attr1";
   char attr1_buf[] = "foo bar baz";
   memset(buf, 0xaa, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
+  ASSERT_EQ(0, rados_append(ioctx, "foo", buf, sizeof(buf)));
   ASSERT_EQ(-ENODATA, rados_getxattr(ioctx, "foo", attr1, buf, sizeof(buf)));
   ASSERT_EQ(0, rados_setxattr(ioctx, "foo", attr1, attr1_buf, sizeof(attr1_buf)));
   ASSERT_EQ((int)sizeof(attr1_buf),
@@ -794,7 +798,7 @@ TEST_F(LibRadosIoECPP, XattrsRoundTripPP) {
   memset(buf, 0xaa, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.append("foo", bl1, sizeof(buf)));
+  ASSERT_EQ(0, ioctx.append("foo", bl1, sizeof(buf)));
   bufferlist bl2;
   ASSERT_EQ(-ENODATA, ioctx.getxattr("foo", attr1, bl2));
   bufferlist bl3;
@@ -811,7 +815,7 @@ TEST_F(LibRadosIoEC, RmXattr) {
   char attr1[] = "attr1";
   char attr1_buf[] = "foo bar baz";
   memset(buf, 0xaa, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
+  ASSERT_EQ(0, rados_append(ioctx, "foo", buf, sizeof(buf)));
   ASSERT_EQ(0,
       rados_setxattr(ioctx, "foo", attr1, attr1_buf, sizeof(attr1_buf)));
   ASSERT_EQ(0, rados_rmxattr(ioctx, "foo", attr1));
@@ -825,7 +829,7 @@ TEST_F(LibRadosIoECPP, RmXattrPP) {
   memset(buf, 0xaa, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.append("foo", bl1, sizeof(buf)));
+  ASSERT_EQ(0, ioctx.append("foo", bl1, sizeof(buf)));
   bufferlist bl2;
   bl2.append(attr1_buf, sizeof(attr1_buf));
   ASSERT_EQ(0, ioctx.setxattr("foo", attr1, bl2));
@@ -844,7 +848,7 @@ TEST_F(LibRadosIoEC, XattrIter) {
     attr2_buf[j] = j % 0xff;
   }
   memset(buf, 0xaa, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_append(ioctx, "foo", buf, sizeof(buf)));
+  ASSERT_EQ(0, rados_append(ioctx, "foo", buf, sizeof(buf)));
   ASSERT_EQ(0, rados_setxattr(ioctx, "foo", attr1, attr1_buf, sizeof(attr1_buf)));
   ASSERT_EQ(0, rados_setxattr(ioctx, "foo", attr2, attr2_buf, sizeof(attr2_buf)));
   rados_xattrs_iter_t iter;
@@ -886,7 +890,7 @@ TEST_F(LibRadosIoECPP, XattrListPP) {
   memset(buf, 0xaa, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.append("foo", bl1, sizeof(buf)));
+  ASSERT_EQ(0, ioctx.append("foo", bl1, sizeof(buf)));
   bufferlist bl2;
   bl2.append(attr1_buf, sizeof(attr1_buf));
   ASSERT_EQ(0, ioctx.setxattr("foo", attr1, bl2));

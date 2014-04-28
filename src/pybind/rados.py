@@ -383,7 +383,7 @@ Rados object in state %s." % (self.state))
       Ping a monitor to assess liveness
 
       May be used as a simply way to assess liveness, or to obtain
-      informations about the monitor in a simple way even in the
+      information about the monitor in a simple way even in the
       absence of quorum.
 
       :param mon_id: the ID portion of the monitor's name (i.e., mon.<ID>)
@@ -1205,29 +1205,26 @@ class Ioctx(object):
         :type offset: int
 
         :raises: :class:`TypeError`
-        :raises: :class:`IncompleteWriteError`
         :raises: :class:`LogicError`
         :returns: int - number of bytes written 
         """
         self.require_ioctx_open()
+        if not isinstance(key, str):
+            raise TypeError('key must be a string')
         if not isinstance(data, str):
             raise TypeError('data must be a string')
         length = len(data)
         ret = run_in_thread(self.librados.rados_write,
                             (self.io, c_char_p(key), c_char_p(data),
                             c_size_t(length), c_uint64(offset)))
-        if ret == length:
+        if ret == 0:
             return ret
         elif ret < 0:
             raise make_ex(ret, "Ioctx.write(%s): failed to write %s" % \
                 (self.name, key))
-        elif ret < length:
-            raise IncompleteWriteError("Wrote only %d out of %d bytes" % \
-                (ret, length))
         else:
             raise LogicError("Ioctx.write(%s): rados_write \
-returned %d, but %d was the maximum number of bytes it could have \
-written." % (self.name, ret, length))
+returned %d, but should return zero on success." % (self.name, ret))
 
     def write_full(self, key, data):
         """
@@ -1256,9 +1253,43 @@ written." % (self.name, ret, length))
                             c_size_t(length)))
         if ret == 0:
             return ret
-        else:
-            raise make_ex(ret, "Ioctx.write(%s): failed to write_full %s" % \
+        elif ret < 0:
+            raise make_ex(ret, "Ioctx.write_full(%s): failed to write %s" % \
                 (self.name, key))
+        else:
+            raise LogicError("Ioctx.write_full(%s): rados_write_full \
+returned %d, but should return zero on success." % (self.name, ret))
+
+    def append(self, key, data):
+        """
+        Append data to an object synchronously
+
+        :param key: name of the object
+        :type key: str
+        :param data: data to write
+        :type data: str
+
+        :raises: :class:`TypeError`
+        :raises: :class:`LogicError`
+        :returns: int - number of bytes written
+        """
+        self.require_ioctx_open()
+        if not isinstance(key, str):
+            raise TypeError('key must be a string')
+        if not isinstance(data, str):
+            raise TypeError('data must be a string')
+        length = len(data)
+        ret = run_in_thread(self.librados.rados_append,
+                            (self.io, c_char_p(key), c_char_p(data),
+                            c_size_t(length)))
+        if ret == 0:
+            return ret
+        elif ret < 0:
+            raise make_ex(ret, "Ioctx.append(%s): failed to append %s" % \
+                (self.name, key))
+        else:
+            raise LogicError("Ioctx.append(%s): rados_append \
+returned %d, but should return zero on success." % (self.name, ret))
 
     def read(self, key, length=8192, offset=0):
         """
