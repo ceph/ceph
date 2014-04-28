@@ -2,8 +2,40 @@
  Release Notes
 ===============
 
-v0.80 Firefly (upcoming release, draft notes)
-=============================================
+v0.80 Firefly
+=============
+
+This release will form the basis for our long-term supported release
+Firefly, v0.80.x.  The big new features are support for erasure coding
+and cache tiering, although a broad range of other features, fixes,
+and improvements have been made across the code base.  Highlights include:
+
+* *Erasure coding*: support for a broad range of erasure codes for lower
+  storage overhead and better data durability.
+* *Cache tiering*: support for creating 'cache pools' that store hot,
+  recently accessed objects with automatic demotion of colder data to
+  a base tier.  Typically the cache pool is backed by faster storage
+  devices like SSDs.
+* *Primary affinity*: Ceph now has the ability to skew selection of
+  OSDs as the "primary" copy, which allows the read workload to be
+  cheaply skewed away from parts of the cluster without migrating any
+  data.
+* *Key/value OSD backend* (experimental): An alternative storage backend
+  for Ceph OSD processes that puts all data in a key/value database like
+  leveldb.  This provides better performance for workloads dominated by
+  key/value operations (like radosgw bucket indices).
+* *Standalone radosgw* (experimental): The radosgw process can now run
+  in a standalone mode without an apache (or similar) web server or
+  fastcgi.  This simplifies deployment and can improve performance.
+
+We expect to maintain a series of stable releases based on v0.80
+Firefly for as much as a year.  In the meantime, development of Ceph
+continues with the next release, Giant, which will feature work on the
+CephFS distributed file system, more alternative storage backends
+(like RocksDB and f2fs), RDMA support, support for pyramind erasure
+codes, and additional functionality in the block device (RBD) like
+copy-on-read and multisite mirroring.
+
 
 Upgrade Sequencing
 ------------------
@@ -30,14 +62,30 @@ Upgrade Sequencing
   for multipart uploads that prevents a multipart request that was initiated
   with a new radosgw from being completed by an old radosgw.
 
+
 Upgrading from v0.79
 --------------------
 
-TBD
+* OSDMap's json-formatted dump changed for keys 'full' and 'nearfull'.
+  What was previously being outputted as 'true' or 'false' strings are
+  now being outputted 'true' and 'false' booleans according to json syntax.
 
+* HEALTH_WARN on 'mon osd down out interval == 0'. Having this option set
+  to zero on the leader acts much like having the 'noout' flag set.  This
+  warning will only be reported if the monitor getting the 'health' or
+  'status' request has this option set to zero.
+
+* Monitor 'auth' commands now require the mon 'x' capability.  This matches
+  dumpling v0.67.x and earlier, but differs from emperor v0.72.x.
 
 * A librados WATCH operation on a non-existent object now returns ENOENT;
   previously it did not.
+
+* Librados interface change:  As there are no partial writes, the rados_write()
+  and rados_append() operations now return 0 on success like rados_write_full()
+  always has.  This includes the C++ interface equivalents and AIO return
+  values for the aio variants.
+
 
 Upgrading from v0.72 Emperor
 ----------------------------
@@ -185,7 +233,26 @@ Upgrading from v0.67 Dumpling
 Notable changes since v0.79
 ---------------------------
 
-TBD
+* ceph-fuse, libcephfs: fix several caching bugs (Yan, Zheng)
+* ceph-fuse: trim inodes in response to mds memory pressure (Yan, Zheng)
+* librados: fix inconsistencies in API error values (David Zafman)
+* librados: fix watch operations with cache pools (Sage Weil)
+* librados: new snap rollback operation (David Zafman)
+* mds: fix respawn (John Spray)
+* mds: misc bugs (Yan, Zheng)
+* mds: misc multi-mds fixes (Yan, Zheng)
+* mds: use shared_ptr for requests (Greg Farnum)
+* mon: fix peer feature checks (Sage Weil)
+* mon: require 'x' mon caps for auth operations (Joao Luis)
+* mon: shutdown when removed from mon cluster (Joao Luis)
+* msgr: fix locking bug in authentication (Josh Durgin)
+* osd: fix bug in journal replay/restart (Sage Weil)
+* osd: many many many bug fixes with cache tiering (Samuel Just)
+* osd: track omap and hit_set objects in pg stats (Samuel Just)
+* osd: warn if agent cannot enable due to invalid (post-split) stats (Sage Weil)
+* rados bench: track metadata for multiple runs separately (Guang Yang)
+* rgw: fixed subuser modify (Yehuda Sadeh)
+* rpm: fix redhat-lsb dependency (Sage Weil, Alfredo Deza)
 
 
 Notable changes since v0.72 Emperor
@@ -193,17 +260,21 @@ Notable changes since v0.72 Emperor
 
 * buffer: some zero-copy groundwork (Josh Durgin)
 * build: misc improvements (Ken Dreyer)
+* ceph-conf: stop creating bogus log files (Josh Durgin, Sage Weil)
 * ceph-crush-location: new hook for setting CRUSH location of osd daemons on start)
 * ceph-disk: avoid fd0 (Loic Dachary)
 * ceph-disk: generalize path names, add tests (Loic Dachary)
 * ceph-disk: misc improvements for puppet (Loic Dachary)
 * ceph-disk: several bug fixes (Loic Dachary)
 * ceph-fuse: fix race for sync reads (Sage Weil)
+* ceph-fuse, libcephfs: fix several caching bugs (Yan, Zheng)
+* ceph-fuse: trim inodes in response to mds memory pressure (Yan, Zheng)
 * ceph-kvstore-tool: expanded command set and capabilities (Joao Eduardo Luis)
 * ceph.spec: fix build dependency (Loic Dachary)
 * common: bloom filter improvements (Sage Weil)
 * common: check preexisting admin socket for active daemon before removing (Loic Dachary)
 * common: fix aligned buffer allocation (Loic Dachary)
+* common: fix authentication on big-endian architectures (Dan Mick)
 * common: fix config variable substitution (Loic Dachary)
 * common: portability changes to support libc++ (Noah Watkins)
 * common: switch to unordered_map from hash_map (Noah Watkins)
@@ -216,6 +287,7 @@ Notable changes since v0.72 Emperor
 * crush, osd: s/rep/replicated/ for less confusion (Loic Dachary)
 * crush: refactor descend_once behavior; support set_choose*_tries for replicated rules (Sage Weil)
 * crush: usability and test improvements (Loic Dachary)
+* debian: change directory ownership between ceph and ceph-common (Sage Weil)
 * debian: integrate misc fixes from downstream packaging (James Page)
 * doc: big update to install docs (John Wilkins)
 * doc: many many install doc improvements (John Wilkins)
@@ -223,41 +295,61 @@ Notable changes since v0.72 Emperor
 * doc: misc fixes (David Moreau Simard, Kun Huang)
 * erasure-code: improve buffer alignment (Loic Dachary)
 * erasure-code: rewrite region-xor using vector operations (Andreas Peters)
+* init: fix startup ordering/timeout problem with OSDs (Dmitry Smirnov)
 * libcephfs: fix resource leak (Zheng Yan)
 * librados: add C API coverage for atomic write operations (Christian Marie)
+* librados: fix inconsistencies in API error values (David Zafman)
 * librados: fix throttle leak (and eventual deadlock) (Josh Durgin)
+* librados: fix watch operations with cache pools (Sage Weil)
+* librados: new snap rollback operation (David Zafman)
 * librados, osd: new TMAP2OMAP operation (Yan, Zheng)
 * librados: read directly into user buffer (Rutger ter Borg)
 * librbd: fix use-after-free aio completion bug #5426 (Josh Durgin)
 * librbd: localize/distribute parent reads (Sage Weil)
+* librbd: skip zeroes/holes when copying sparse images (Josh Durgin)
 * mailmap: affiliation updates (Loic Dachary)
 * mailmap updates (Loic Dachary)
 * many portability improvements (Noah Watkins)
 * many unit test improvements (Loic Dachary)
 * mds: always store backtrace in default pool (Yan, Zheng)
+* mds: cope with MDS failure during creation (John Spray)
 * mds: fix cap migration behavior (Yan, Zheng)
 * mds: fix client session flushing (Yan, Zheng)
+* mds: fix crash from client sleep/resume (Zheng Yan)
 * mds: fix many many multi-mds bugs (Yan, Zheng)
 * mds: fix readdir end check (Zheng Yan)
 * mds: fix Resetter locking (Alexandre Oliva)
+* mds: fix respawn (John Spray)
 * mds: inline data support (Li Wang, Yunchuan Wen)
+* mds: misc bugs (Yan, Zheng)
+* mds: misc fixes for directory fragments (Zheng Yan)
+* mds: misc fixes for larger directories (Zheng Yan)
+* mds: misc fixes for multiple MDSs (Zheng Yan)
+* mds: misc multi-mds fixes (Yan, Zheng)
+* mds: remove .ceph directory (John Spray)
 * mds: store directories in omap instead of tmap (Yan, Zheng)
 * mds: update old-format backtraces opportunistically (Zheng Yan)
+* mds: use shared_ptr for requests (Greg Farnum)
 * misc cleanups from coverity (Xing Lin)
+* misc coverity fixes, cleanups (Danny Al-Gaaf)
 * misc coverity fixes (Xing Lin, Li Wang, Danny Al-Gaaf)
 * misc portability fixes (Noah Watkins, Alan Somers)
 * misc portability fixes (Noah Watkins, Christophe Courtaut, Alan Somers, huanjun)
 * misc portability work (Noah Watkins)
+* mon: add erasure profiles and improve erasure pool creation (Loic Dachary)
 * mon: add 'mon getmap EPOCH' (Joao Eduardo Luis)
 * mon: allow adjustment of cephfs max file size via 'ceph mds set max_file_size' (Sage Weil)
 * mon: allow debug quorum_{enter,exit} commands via admin socket
+* mon: 'ceph osd pg-temp ...' and primary-temp commands (Ilya Dryomov)
 * mon: change mds allow_new_snaps syntax to be more consistent (Sage Weil)
 * mon: clean up initial crush rule creation (Loic Dachary)
 * mon: collect misc metadata about osd (os, kernel, etc.), new 'osd metadata' command (Sage Weil)
 * mon: do not create erasure rules by default (Sage Weil)
 * mon: do not generate spurious MDSMaps in certain cases (Sage Weil)
 * mon: do not use keyring if auth = none (Loic Dachary)
+* mon: fix peer feature checks (Sage Weil)
 * mon: fix pg_temp leaks (Joao Eduardo Luis)
+* mon: fix pool count in 'ceph -s' output (Sage Weil)
 * mon: handle more whitespace (newline, tab) in mon capabilities (Sage Weil)
 * mon: improve (replicate or erasure) pool creation UX (Loic Dachary)
 * mon: infrastructure to handle mixed-version mon cluster and cli/rest API (Greg Farnum)
@@ -270,12 +362,17 @@ Notable changes since v0.72 Emperor
 * mon, osd: new 'erasure' pool type (still not fully supported)
 * mon: persist quorum features to disk (Greg Farnum)
 * mon: prevent extreme changes in pool pg_num (Greg Farnum)
+* mon: require 'x' mon caps for auth operations (Joao Luis)
+* mon: shutdown when removed from mon cluster (Joao Luis)
 * mon: take 'osd pool set ...' value as an int, not string (Joao Eduardo Luis)
 * mon: track osd features in OSDMap (Joao Luis, David Zafman)
 * mon: trim MDSMaps (Joao Eduardo Luis)
 * mon: warn if crush has non-optimal tunables (Sage Weil)
 * mount.ceph: add -n for autofs support (Steve Stock)
+* msgr: fix locking bug in authentication (Josh Durgin)
 * msgr: fix messenger restart race (Xihui He)
+* msgr: improve connection error detection between clients and monitors (Greg Farnum, Sage Weil)
+* osd: add/fix CPU feature detection for jerasure (Loic Dachary)
 * osd: add HitSet tracking for read ops (Sage Weil, Greg Farnum)
 * osd: avoid touching leveldb for some xattrs (Haomai Wang, Sage Weil)
 * osd: backfill to multiple targets (David Zafman)
@@ -287,6 +384,7 @@ Notable changes since v0.72 Emperor
 * osd: enable new hashpspool layout by default (Sage Weil)
 * osd: erasure plugin benchmarking tool (Loic Dachary)
 * osd: fix and cleanup misc backfill issues (David Zafman)
+* osd: fix bug in journal replay/restart (Sage Weil)
 * osd: fix copy-get omap bug (Sage Weil)
 * osd: fix linux kernel version detection (Ilya Dryomov)
 * osd: fix memstore segv (Haomai Wang)
@@ -298,18 +396,27 @@ Notable changes since v0.72 Emperor
 * osd: generalize scrubbing infrastructure to allow EC (David Zafman)
 * osd: handle more whitespace (newline, tab) in osd capabilities (Sage Weil)
 * osd: ignore num_objects_dirty on scrub for old pools (Sage Weil)
+* osd: improved scrub checks on clones (Sage Weil, Sam Just)
 * osd: improve locking in fd lookup cache (Samuel Just, Greg Farnum)
 * osd: include more info in pg query result (Sage Weil)
 * osd, librados: fix full cluster handling (Josh Durgin)
+* osd: many erasure fixes (Sam Just)
+* osd: many many many bug fixes with cache tiering (Samuel Just)
+* osd: move to jerasure2 library (Loic Dachary)
 * osd: new 'chassis' type in default crush hierarchy (Sage Weil)
 * osd: new keyvaluestore-dev backend based on leveldb (Haomai Wang)
 * osd: new OSDMap encoding (Greg Farnum)
+* osd: new tests for erasure pools (David Zafman)
 * osd: preliminary cache pool support (no snaps) (Greg Farnum, Sage Weil)
+* osd: reduce scrub lock contention (Guang Yang)
 * osd: requery unfound on stray notify (#6909) (Samuel Just)
 * osd: some PGBackend infrastructure (Samuel Just)
 * osd: support for new 'memstore' (memory-backed) backend (Sage Weil)
 * osd: track erasure compatibility (David Zafman)
+* osd: track omap and hit_set objects in pg stats (Samuel Just)
+* osd: warn if agent cannot enable due to invalid (post-split) stats (Sage Weil)
 * rados: add 'crush location', smart replica selection/balancing (Sage Weil)
+* rados bench: track metadata for multiple runs separately (Guang Yang)
 * rados: some performance optimizations (Yehuda Sadeh)
 * rados tool: fix listomapvals (Josh Durgin)
 * rbd: add 'rbdmap' init script for mapping rbd images on book (Adam Twardowski)
@@ -322,7 +429,9 @@ Notable changes since v0.72 Emperor
 * rest-api: do not fail when no OSDs yet exist (Dan Mick)
 * rgw: add 'status' command to sysvinit script (David Moreau Simard)
 * rgw: allow multiple frontends (Yehuda Sadeh)
+* rgw: allow use of an erasure data pool (Yehuda Sadeh)
 * rgw: convert bucket info to new format on demand (Yehuda Sadeh)
+* rgw: fixed subuser modify (Yehuda Sadeh)
 * rgw: fix error setting empty owner on ACLs (Yehuda Sadeh)
 * rgw: fix fastcgi deadlock (do not return data from librados callback) (Yehuda Sadeh)
 * rgw: fix many-part multipart uploads (Yehuda Sadeh)
@@ -340,6 +449,7 @@ Notable changes since v0.72 Emperor
 * rgw: support for password (instead of admin token) for keystone authentication (Christophe Courtaut)
 * rgw: switch from mongoose to civetweb (Yehuda Sadeh)
 * rgw: user quotas (Yehuda Sadeh)
+* rpm: fix redhat-lsb dependency (Sage Weil, Alfredo Deza)
 * specfile: fix RPM build on RHEL6 (Ken Dreyer, Derek Yarnell)
 * specfile: ship libdir/ceph (Key Dreyer)
 * sysvinit, upstart: prevent both init systems from starting the same daemons (Josh Durgin)

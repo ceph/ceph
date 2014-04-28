@@ -36,7 +36,7 @@ void usage(ostream& out)
 {
   out <<					\
 "usage: rest-bench [options] <write|seq>\n"
-"       rest-bench [options] cleanup <prefix>\n"
+"       rest-bench [options] cleanup [--run-name run_name] [--prefix prefix]\n"
 "BENCHMARK OPTIONS\n"
 "   --seconds\n"
 "        benchmak length (default: 60)\n"
@@ -678,6 +678,8 @@ int main(int argc, const char **argv)
 
   bool show_time = false;
   bool cleanup = true;
+  std::string run_name;
+  std::string prefix;
 
 
   for (i = args.begin(); i != args.end(); ) {
@@ -722,6 +724,10 @@ int main(int argc, const char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &val, "-t", "--concurrent-ios", (char*)NULL)) {
       concurrent_ios = strtol(val.c_str(), NULL, 10);
+    } else if (ceph_argparse_witharg(args, i, &val, "--run-name", (char*)NULL)) {
+      run_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--prefix", (char*)NULL)) {
+      prefix = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--seconds", (char*)NULL)) {
       seconds = strtol(val.c_str(), NULL, 10);
     } else if (ceph_argparse_witharg(args, i, &val, "-b", "--block-size", (char*)NULL)) {
@@ -740,7 +746,6 @@ int main(int argc, const char **argv)
   if (args.empty())
     usage_exit();
   int operation = 0;
-  const char *prefix = NULL;
   if (strcmp(args[0], "write") == 0)
     operation = OP_WRITE;
   else if (strcmp(args[0], "seq") == 0)
@@ -748,10 +753,7 @@ int main(int argc, const char **argv)
   else if (strcmp(args[0], "rand") == 0)
     operation = OP_RAND_READ;
   else if (strcmp(args[0], "cleanup") == 0) {
-    if (args.size() < 2)
-      usage_exit();
     operation = OP_CLEANUP;
-    prefix = args[1];
   } else
     usage_exit();
 
@@ -784,12 +786,12 @@ int main(int argc, const char **argv)
   }
 
   if (operation == OP_CLEANUP) {
-    ret = bencher.clean_up(prefix, concurrent_ios);
+    ret = bencher.clean_up(prefix.c_str(), concurrent_ios, run_name.c_str());
     if (ret != 0)
       cerr << "error during cleanup: " << ret << std::endl;
   } else {
     ret = bencher.aio_bench(operation, seconds, 0,
-			    concurrent_ios, op_size, cleanup);
+			    concurrent_ios, op_size, cleanup, run_name.c_str());
     if (ret != 0) {
         cerr << "error during benchmark: " << ret << std::endl;
     }

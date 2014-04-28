@@ -658,7 +658,7 @@ private:
    * onto the original Paxos' Prepare phase. Basically, we'll generate a
    * Proposal Number, taking @p oldpn into consideration, and we will send
    * it to a quorum, along with our first and last committed versions. By
-   * sending these informations in a message to the quorum, we expect to
+   * sending these information in a message to the quorum, we expect to
    * obtain acceptances from a majority, allowing us to commit, or be
    * informed of a higher Proposal Number known by one or more of the Peons
    * in the quorum.
@@ -676,7 +676,7 @@ private:
    * accordingly.
    *
    * Once a Peon receives a collect message from the Leader it will reply
-   * with its first and last committed versions, as well as informations so
+   * with its first and last committed versions, as well as information so
    * the Leader may know if his Proposal Number was, or was not, accepted by
    * the Peon. The Peon will accept the Leader's Proposal Number iif it is
    * higher than the Peon's currently accepted Proposal Number. The Peon may

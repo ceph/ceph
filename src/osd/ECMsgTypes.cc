@@ -16,7 +16,7 @@
 
 void ECSubWrite::encode(bufferlist &bl) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   ::encode(from, bl);
   ::encode(tid, bl);
   ::encode(reqid, bl);
@@ -28,12 +28,13 @@ void ECSubWrite::encode(bufferlist &bl) const
   ::encode(log_entries, bl);
   ::encode(temp_added, bl);
   ::encode(temp_removed, bl);
+  ::encode(updated_hit_set_history, bl);
   ENCODE_FINISH(bl);
 }
 
 void ECSubWrite::decode(bufferlist::iterator &bl)
 {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   ::decode(from, bl);
   ::decode(tid, bl);
   ::decode(reqid, bl);
@@ -45,17 +46,22 @@ void ECSubWrite::decode(bufferlist::iterator &bl)
   ::decode(log_entries, bl);
   ::decode(temp_added, bl);
   ::decode(temp_removed, bl);
+  if (struct_v >= 2) {
+    ::decode(updated_hit_set_history, bl);
+  }
   DECODE_FINISH(bl);
 }
 
 std::ostream &operator<<(
   std::ostream &lhs, const ECSubWrite &rhs)
 {
-  return lhs
-    << "ECSubWrite(tid=" << rhs.tid
-    << ", reqid=" << rhs.reqid
-    << ", at_version=" << rhs.at_version
-    << ", trim_to=" << rhs.trim_to << ")";
+  lhs << "ECSubWrite(tid=" << rhs.tid
+      << ", reqid=" << rhs.reqid
+      << ", at_version=" << rhs.at_version
+      << ", trim_to=" << rhs.trim_to;
+  if (rhs.updated_hit_set_history)
+    lhs << ", has_updated_hit_set_history";
+  return lhs <<  ")";
 }
 
 void ECSubWrite::dump(Formatter *f) const
@@ -64,6 +70,8 @@ void ECSubWrite::dump(Formatter *f) const
   f->dump_stream("reqid") << reqid;
   f->dump_stream("at_version") << at_version;
   f->dump_stream("trim_to") << trim_to;
+  f->dump_stream("has_updated_hit_set_history")
+    << static_cast<bool>(updated_hit_set_history);
 }
 
 void ECSubWrite::generate_test_instances(list<ECSubWrite*> &o)

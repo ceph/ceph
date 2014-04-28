@@ -17,7 +17,7 @@ typedef RadosTestECPP LibRadosStatECPP;
 TEST_F(LibRadosStat, Stat) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   uint64_t size;
   time_t mtime;
   ASSERT_EQ(0, rados_stat(ioctx, "foo", &size, &mtime));
@@ -30,7 +30,7 @@ TEST_F(LibRadosStatPP, StatPP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
   uint64_t size;
   time_t mtime;
   ASSERT_EQ(0, ioctx.stat("foo", &size, &mtime));
@@ -42,13 +42,13 @@ TEST_F(LibRadosStat, StatNS) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   rados_ioctx_set_namespace(ioctx, "");
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo2", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo2", buf, sizeof(buf), 0));
 
   char buf2[64];
   memset(buf2, 0xcc, sizeof(buf2));
   rados_ioctx_set_namespace(ioctx, "nspace");
-  ASSERT_EQ((int)sizeof(buf2), rados_write(ioctx, "foo", buf2, sizeof(buf2), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf2, sizeof(buf2), 0));
 
   uint64_t size;
   time_t mtime;
@@ -70,15 +70,15 @@ TEST_F(LibRadosStatPP, StatPPNS) {
   bufferlist bl;
   bl.append(buf, sizeof(buf));
   ioctx.set_namespace("");
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl, sizeof(buf), 0));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo2", bl, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo2", bl, sizeof(buf), 0));
 
   char buf2[64];
   memset(buf2, 0xbb, sizeof(buf2));
   bufferlist bl2;
   bl2.append(buf2, sizeof(buf2));
   ioctx.set_namespace("nspace");
-  ASSERT_EQ((int)sizeof(buf2), ioctx.write("foo", bl2, sizeof(buf2), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl2, sizeof(buf2), 0));
 
   uint64_t size;
   time_t mtime;
@@ -111,7 +111,7 @@ TEST_F(LibRadosStat, PoolStat) {
   ASSERT_EQ(strlen(actual_pool_name), l);
   ASSERT_EQ(0, strcmp(actual_pool_name, pool_name.c_str()));
   memset(buf, 0xff, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   struct rados_pool_stat_t stats;
   memset(&stats, 0, sizeof(stats));
   ASSERT_EQ(0, rados_ioctx_pool_stat(ioctx, &stats));
@@ -124,7 +124,7 @@ TEST_F(LibRadosStatPP, PoolStatPP) {
   memset(buf, 0xff, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
   std::list<std::string> v;
   std::map<std::string,stats_map> stats;
   ASSERT_EQ(0, cluster.get_pool_stats(v, stats));
@@ -133,7 +133,7 @@ TEST_F(LibRadosStatPP, PoolStatPP) {
 TEST_F(LibRadosStatEC, Stat) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   uint64_t size;
   time_t mtime;
   ASSERT_EQ(0, rados_stat(ioctx, "foo", &size, &mtime));
@@ -146,7 +146,7 @@ TEST_F(LibRadosStatECPP, StatPP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
   uint64_t size;
   time_t mtime;
   ASSERT_EQ(0, ioctx.stat("foo", &size, &mtime));
@@ -158,13 +158,13 @@ TEST_F(LibRadosStatEC, StatNS) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   rados_ioctx_set_namespace(ioctx, "");
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo2", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo2", buf, sizeof(buf), 0));
 
   char buf2[64];
   memset(buf2, 0xcc, sizeof(buf2));
   rados_ioctx_set_namespace(ioctx, "nspace");
-  ASSERT_EQ((int)sizeof(buf2), rados_write(ioctx, "foo", buf2, sizeof(buf2), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf2, sizeof(buf2), 0));
 
   uint64_t size;
   time_t mtime;
@@ -186,15 +186,15 @@ TEST_F(LibRadosStatECPP, StatPPNS) {
   bufferlist bl;
   bl.append(buf, sizeof(buf));
   ioctx.set_namespace("");
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl, sizeof(buf), 0));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo2", bl, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo2", bl, sizeof(buf), 0));
 
   char buf2[64];
   memset(buf2, 0xbb, sizeof(buf2));
   bufferlist bl2;
   bl2.append(buf2, sizeof(buf2));
   ioctx.set_namespace("nspace");
-  ASSERT_EQ((int)sizeof(buf2), ioctx.write("foo", bl2, sizeof(buf2), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl2, sizeof(buf2), 0));
 
   uint64_t size;
   time_t mtime;
@@ -227,7 +227,7 @@ TEST_F(LibRadosStatEC, PoolStat) {
   ASSERT_EQ(strlen(actual_pool_name), l);
   ASSERT_EQ(0, strcmp(actual_pool_name, pool_name.c_str()));
   memset(buf, 0xff, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   struct rados_pool_stat_t stats;
   memset(&stats, 0, sizeof(stats));
   ASSERT_EQ(0, rados_ioctx_pool_stat(ioctx, &stats));
@@ -240,7 +240,7 @@ TEST_F(LibRadosStatECPP, PoolStatPP) {
   memset(buf, 0xff, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
   std::list<std::string> v;
   std::map<std::string,stats_map> stats;
   ASSERT_EQ(0, cluster.get_pool_stats(v, stats));

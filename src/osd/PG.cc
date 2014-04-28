@@ -638,24 +638,28 @@ void PG::generate_past_intervals()
 
   OSDMapRef last_map, cur_map;
   int primary = -1;
+  int up_primary = -1;
   vector<int> acting, up, old_acting, old_up;
 
   cur_map = osd->get_map(cur_epoch);
   cur_map->pg_to_up_acting_osds(
-    get_pgid().pgid, &up, 0, &acting, &primary);
+    get_pgid().pgid, &up, &up_primary, &acting, &primary);
   epoch_t same_interval_since = cur_epoch;
   dout(10) << __func__ << " over epochs " << cur_epoch << "-"
 	   << end_epoch << dendl;
   ++cur_epoch;
   for (; cur_epoch <= end_epoch; ++cur_epoch) {
     int old_primary = primary;
+    int old_up_primary = up_primary;
     last_map.swap(cur_map);
     old_up.swap(up);
     old_acting.swap(acting);
 
     cur_map = osd->get_map(cur_epoch);
-    cur_map->pg_to_up_acting_osds(
-      get_pgid().pgid, &up, 0, &acting, &primary);
+    pg_t pgid = get_pgid().pgid;
+    if (cur_map->get_pools().count(pgid.pool()))
+      pgid = pgid.get_ancestor(cur_map->get_pg_num(pgid.pool()));
+    cur_map->pg_to_up_acting_osds(pgid, &up, &up_primary, &acting, &primary);
 
     std::stringstream debug;
     bool new_interval = pg_interval_t::check_new_interval(
@@ -663,14 +667,16 @@ void PG::generate_past_intervals()
       primary,
       old_acting,
       acting,
+      old_up_primary,
+      up_primary,
       old_up,
       up,
       same_interval_since,
       info.history.last_epoch_clean,
       cur_map,
       last_map,
-      info.pgid.pool(),
-      info.pgid.pgid,
+      pgid.pool(),
+      pgid,
       &past_intervals,
       &debug);
     if (new_interval) {
@@ -1536,6 +1542,7 @@ void PG::activate(ObjectStore::Transaction& t,
 	pi.last_complete = info.last_update;
 	pi.last_backfill = hobject_t();
 	pi.history = info.history;
+	pi.hit_set = info.hit_set;
 	pi.stats.stats.clear();
 
 	m = new MOSDPGLog(
@@ -2860,18 +2867,18 @@ void PG::update_snap_map(
 /**
  * filter trimming|trimmed snaps out of snapcontext
  */
-void PG::filter_snapc(SnapContext& snapc)
+void PG::filter_snapc(vector<snapid_t> &snaps)
 {
   bool filtering = false;
   vector<snapid_t> newsnaps;
-  for (vector<snapid_t>::iterator p = snapc.snaps.begin();
-       p != snapc.snaps.end();
+  for (vector<snapid_t>::iterator p = snaps.begin();
+       p != snaps.end();
        ++p) {
     if (snap_trimq.contains(*p) || info.purged_snaps.contains(*p)) {
       if (!filtering) {
 	// start building a new vector with what we've seen so far
-	dout(10) << "filter_snapc filtering " << snapc << dendl;
-	newsnaps.insert(newsnaps.begin(), snapc.snaps.begin(), p);
+	dout(10) << "filter_snapc filtering " << snaps << dendl;
+	newsnaps.insert(newsnaps.begin(), snaps.begin(), p);
 	filtering = true;
       }
       dout(20) << "filter_snapc  removing trimq|purged snap " << *p << dendl;
@@ -2881,8 +2888,8 @@ void PG::filter_snapc(SnapContext& snapc)
     }
   }
   if (filtering) {
-    snapc.snaps.swap(newsnaps);
-    dout(10) << "filter_snapc  result " << snapc << dendl;
+    snaps.swap(newsnaps);
+    dout(10) << "filter_snapc  result " << snaps << dendl;
   }
 }
 
@@ -3449,6 +3456,7 @@ void PG::repair_object(
     assert(waiting_for_unreadable_object.empty());
 
     pg_log.missing_add(soid, oi.version, eversion_t());
+    missing_loc.add_missing(soid, oi.version, eversion_t());
     missing_loc.add_location(soid, ok_peer);
 
     pg_log.set_last_requested(0);
@@ -4683,6 +4691,8 @@ void PG::start_peering_interval(
       old_acting_primary.osd,
       new_acting_primary,
       oldacting, newacting,
+      old_up_primary.osd,
+      new_up_primary,
       oldup, newup,
       info.history.same_interval_since,
       info.history.last_epoch_clean,
@@ -6590,6 +6600,7 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MInfoRec& infoev
     ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
     pg->rewind_divergent_log(*t, infoevt.info.last_update);
     pg->info.stats = infoevt.info.stats;
+    pg->info.hit_set = infoevt.info.hit_set;
   }
   
   assert(infoevt.info.last_update == pg->info.last_update);
@@ -6909,7 +6920,7 @@ boost::statechart::result PG::RecoveryState::GetLog::react(const MLogRec& logevt
 	     << "non-auth_log_shard osd." << logevt.from << dendl;
     return discard_event();
   }
-  dout(10) << "GetLog: recieved master log from osd" 
+  dout(10) << "GetLog: received master log from osd"
 	   << logevt.from << dendl;
   msg = logevt.msg;
   post_event(GotLog());
@@ -7374,6 +7385,7 @@ PG::PriorSet::PriorSet(bool ec_pool,
 	down.insert(o);
       } else if (pinfo->lost_at > interval.first) {
 	dout(10) << "build_prior  prior osd." << o << " is down, but lost_at " << pinfo->lost_at << dendl;
+	up_now.insert(so);
 	down.insert(o);
       } else {
 	dout(10) << "build_prior  prior osd." << o << " is down" << dendl;

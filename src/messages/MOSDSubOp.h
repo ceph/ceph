@@ -25,7 +25,7 @@
 
 class MOSDSubOp : public Message {
 
-  static const int HEAD_VERSION = 9;
+  static const int HEAD_VERSION = 10;
   static const int COMPAT_VERSION = 1;
 
 public:
@@ -89,6 +89,9 @@ public:
 
   hobject_t new_temp_oid;      ///< new temp object that we must now start tracking
   hobject_t discard_temp_oid;  ///< previously used temp object that we can now stop tracking
+
+  /// non-empty if this transaction involves a hit_set history update
+  boost::optional<pg_hit_set_history_t> updated_hit_set_history;
 
   int get_cost() const {
     if (ops.size() == 1 && ops[0].op.op == CEPH_OSD_OP_PULL)
@@ -169,6 +172,9 @@ public:
 	ghobject_t::NO_SHARD);
       pgid.shard = ghobject_t::NO_SHARD;
     }
+    if (header.version >= 10) {
+      ::decode(updated_hit_set_history, p);
+    }
   }
 
   virtual void encode_payload(uint64_t features) {
@@ -217,6 +223,7 @@ public:
     ::encode(discard_temp_oid, payload);
     ::encode(from, payload);
     ::encode(pgid.shard, payload);
+    ::encode(updated_hit_set_history, payload);
   }
 
   MOSDSubOp()
@@ -258,6 +265,8 @@ public:
     out << " v " << version
 	<< " snapset=" << snapset << " snapc=" << snapc;    
     if (!data_subset.empty()) out << " subset " << data_subset;
+    if (updated_hit_set_history)
+      out << ", has_updated_hit_set_history";
     out << ")";
   }
 };

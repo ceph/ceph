@@ -1207,6 +1207,12 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
     goto ignore;
   }
 
+  if (osdmap.exists(from) &&
+      osdmap.get_info(from).up_from > m->version) {
+    dout(7) << "prepare_boot msg from before last up_from, ignoring" << dendl;
+    goto ignore;
+  }
+
   // noup?
   if (!can_mark_up(from)) {
     dout(7) << "preprocess_boot ignoring boot from " << m->get_orig_source_inst() << dendl;
@@ -2056,6 +2062,29 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       }
     }
 
+    // Warn if 'mon_osd_down_out_interval' is set to zero.
+    // Having this option set to zero on the leader acts much like the
+    // 'noout' flag.  It's hard to figure out what's going wrong with clusters
+    // without the 'noout' flag set but acting like that just the same, so
+    // we report a HEALTH_WARN in case this option is set to zero.
+    // This is an ugly hack to get the warning out, but until we find a way
+    // to spread global options throughout the mon cluster and have all mons
+    // using a base set of the same options, we need to work around this sort
+    // of things.
+    // There's also the obvious drawback that if this is set on a single
+    // monitor on a 3-monitor cluster, this warning will only be shown every
+    // third monitor connection.
+    if (g_conf->mon_warn_on_osd_down_out_interval_zero &&
+        g_conf->mon_osd_down_out_interval == 0) {
+      ostringstream ss;
+      ss << "mon." << mon->name << " has mon_osd_down_out_interval set to 0";
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+      if (detail) {
+        ss << "; this has the same effect as the 'noout' flag";
+        detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
+    }
+
     get_pools_health(summary, detail);
   }
 }
@@ -2428,6 +2457,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
         f->dump_int("pg_num", p->get_pg_num());
       } else if (var == "pgp_num") {
         f->dump_int("pgp_num", p->get_pgp_num());
+      } else if (var == "auid") {
+        f->dump_int("auid", p->get_auid());
       } else if (var == "size") {
         f->dump_int("size", p->get_size());
       } else if (var == "min_size") {
@@ -2461,6 +2492,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
         ss << "pg_num: " << p->get_pg_num();
       } else if (var == "pgp_num") {
         ss << "pgp_num: " << p->get_pgp_num();
+      } else if (var == "auid") {
+        ss << "auid: " << p->get_auid();
       } else if (var == "size") {
         ss << "size: " << p->get_size();
       } else if (var == "min_size") {
@@ -3301,6 +3334,12 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -EINVAL;
     }
     p.min_size = n;
+  } else if (var == "auid") {
+    if (interr.length()) {
+      ss << "error parsing integer value '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    p.auid = n;
   } else if (var == "crash_replay_interval") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
@@ -3318,6 +3357,13 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
 	return -EEXIST;
       return 0;
     }
+    string force;
+    cmd_getval(g_ceph_context,cmdmap, "force", force);
+    if (p.cache_mode != pg_pool_t::CACHEMODE_NONE &&
+	force != "--yes-i-really-mean-it") {
+      ss << "splits in cache pools must be followed by scrubs and leave sufficient free space to avoid overfilling.  use --yes-i-really-mean-it to force.";
+      return -EPERM;
+    }
     int expected_osds = MIN(p.get_pg_num(), osdmap.get_num_osds());
     int64_t new_pgs = n - p.get_pg_num();
     int64_t pgs_per_osd = new_pgs / expected_osds;
@@ -3333,7 +3379,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
 	++i) {
       if (i->m_pool == static_cast<uint64_t>(pool)) {
 	ss << "currently creating pgs, wait";
-	return -EAGAIN;
+	return -EBUSY;
       }
     }
     p.set_pg_num(n);
@@ -3355,7 +3401,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
 	++i) {
       if (i->m_pool == static_cast<uint64_t>(pool)) {
 	ss << "currently creating pgs, wait";
-	return -EAGAIN;
+	return -EBUSY;
       }
     }
     p.set_pgp_num(n);
@@ -3614,8 +3660,7 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
 				       CRUSH_HASH_DEFAULT, type, 0, NULL,
 				       NULL, &bucketno);
     if (err < 0) {
-      char buf[128];
-      ss << "add_bucket error: '" << strerror_r(-err, buf, sizeof(buf)) << "'";
+      ss << "add_bucket error: '" << cpp_strerror(err) << "'";
       goto reply;
     }
     err = newcrush.set_item_name(bucketno, name);

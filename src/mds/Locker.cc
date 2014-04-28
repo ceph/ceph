@@ -1674,7 +1674,8 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, bool share, client
       issue_caps(in, cap);
     }
   
-    if (share && in->is_auth() && in->filelock.is_stable())
+    if (share && in->is_auth() &&
+	(in->filelock.gcaps_allowed(CAP_LONER) & (CEPH_CAP_GWR|CEPH_CAP_GBUFFER)))
       share_inode_max_size(in);
   }
   issue_caps_set(need_issue);
@@ -1709,6 +1710,7 @@ Capability* Locker::issue_new_caps(CInode *in,
     // new cap
     cap = in->add_client_cap(my_client, session, realm);
     cap->set_wanted(my_want);
+    cap->mark_new();
     cap->inc_suppress(); // suppress file cap messages for new cap (we'll bundle with the open() reply)
     is_new = true;
   } else {
@@ -1842,7 +1844,11 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
 	seq = cap->issue((wanted|likes) & allowed);
       int after = cap->pending();
 
-      if (seq > 0) {
+      if (cap->is_new()) {
+	// haven't send caps to client yet
+	if (before & ~after)
+	  cap->confirm_receipt(seq, after);
+      } else {
         dout(7) << "   sending MClientCaps to client." << it->first
 		<< " seq " << cap->get_last_seq()
 		<< " new pending " << ccap_string(after) << " was " << ccap_string(before) 
@@ -2066,7 +2072,6 @@ void Locker::calc_new_client_ranges(CInode *in, uint64_t size, map<client_t,clie
     if ((p->second->issued() | p->second->wanted()) & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
       client_writeable_range_t& nr = new_ranges[p->first];
       nr.range.first = 0;
-      nr.follows = latest->client_ranges[p->first].follows;
       if (latest->client_ranges.count(p->first)) {
 	client_writeable_range_t& oldr = latest->client_ranges[p->first];
 	nr.range.last = MAX(ms, oldr.range.last);
@@ -3559,11 +3564,12 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
       }
     }
     
+    bool need_recover = false;
     if (lock->get_type() == CEPH_LOCK_IFILE) {
       assert(in);
       if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
         mds->mdcache->queue_file_recover(in);
-        mds->mdcache->do_file_recover();
+	need_recover = true;
         gather++;
       }
     }
@@ -3577,6 +3583,8 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
 
     if (gather) {
       lock->get_parent()->auth_pin(lock);
+      if (need_recover)
+	mds->mdcache->do_file_recover();
       return false;
     }
   }
@@ -3697,11 +3705,12 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
     }
   }
 
+  bool need_recover = false;
   if (lock->get_type() == CEPH_LOCK_IFILE) {
     assert(in);
     if(in->state_test(CInode::STATE_NEEDSRECOVER)) {
       mds->mdcache->queue_file_recover(in);
-      mds->mdcache->do_file_recover();
+      need_recover = true;
       gather++;
     }
   }
@@ -3732,6 +3741,8 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
 
   if (gather) {
     lock->get_parent()->auth_pin(lock);
+    if (need_recover)
+      mds->mdcache->do_file_recover();
   } else {
     lock->set_state(LOCK_LOCK);
     lock->finish_waiters(ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
@@ -4391,15 +4402,18 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
 	issue_caps(in);
       gather++;
     }
+    bool need_recover = false;
     if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
       mds->mdcache->queue_file_recover(in);
-      mds->mdcache->do_file_recover();
+      need_recover = true;
       gather++;
     }
 
-    if (gather)
+    if (gather) {
       lock->get_parent()->auth_pin(lock);
-    else {
+      if (need_recover)
+	mds->mdcache->do_file_recover();
+    } else {
       in->start_scatter(lock);
       lock->set_state(LOCK_MIX);
       lock->clear_scatter_wanted();
@@ -4463,14 +4477,17 @@ void Locker::file_excl(ScatterLock *lock, bool *need_issue)
       issue_caps(in);
     gather++;
   }
+  bool need_recover = false;
   if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
     mds->mdcache->queue_file_recover(in);
-    mds->mdcache->do_file_recover();
+    need_recover = true;
     gather++;
   }
   
   if (gather) {
     lock->get_parent()->auth_pin(lock);
+    if (need_recover)
+      mds->mdcache->do_file_recover();
   } else {
     lock->set_state(LOCK_EXCL);
     if (need_issue)

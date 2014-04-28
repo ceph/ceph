@@ -372,6 +372,8 @@ enum {
 	CEPH_OSD_FLAG_SKIPRWLOCKS =   0x10000,  /* skip rw locks */
 	CEPH_OSD_FLAG_IGNORE_OVERLAY =0x20000,  /* ignore pool overlay */
 	CEPH_OSD_FLAG_FLUSH =         0x40000,  /* this is part of flush */
+	CEPH_OSD_FLAG_MAP_SNAP_CLONE =0x80000,  /* map snap direct to clone id
+						 */
 };
 
 enum {
@@ -401,6 +403,8 @@ enum {
 	CEPH_OSD_COPY_FROM_FLAG_FLUSH = 1,     /* part of a flush operation */
 	CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY = 2,  /* ignore pool overlay */
 	CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE = 4, /* ignore osd cache logic */
+	CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE = 8, /* map snap direct to
+						     * cloneid */
 };
 
 enum {
