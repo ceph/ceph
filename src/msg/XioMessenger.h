@@ -27,8 +27,6 @@ extern "C" {
 #include "common/Thread.h"
 #include "common/Mutex.h"
 
-extern struct xio_mempool *xio_msgr_mpool;
-
 class XioMessenger : public SimplePolicyMessenger
 {
 private:

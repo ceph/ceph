@@ -28,7 +28,6 @@ atomic_t initialized;
 
 atomic_t XioMessenger::nInstances;
 
-struct xio_mempool *xio_msgr_mpool;
 struct xio_mempool *xio_msgr_noreg_mpool;
 
 static struct xio_session_ops xio_msgr_ops;
@@ -211,20 +210,6 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
       xopt = 1;
       xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_DISABLE_HUGETBL,
 		  &xopt, sizeof(unsigned));
-
-      /* set up registered mempool */
-      xio_msgr_mpool = xio_mempool_create_ex(-1 /* nodeid */,
-	XIO_MEMPOOL_FLAG_REG_MR|XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC);
-      (void) xio_mempool_add_allocator(xio_msgr_mpool, 512, 0, 4096, 128);
-      (void) xio_mempool_add_allocator(xio_msgr_mpool, 4096, 0, 4096, 128);
-      (void) xio_mempool_add_allocator(xio_msgr_mpool, 32768, 0, 4096,
-					    32768);
-      (void) xio_mempool_add_allocator(xio_msgr_mpool, 65536, 0, 4096,
-					    32768);
-      (void) xio_mempool_add_allocator(xio_msgr_mpool, 131072, 0, 4096,
-					    65536);
-      (void) xio_mempool_add_allocator(xio_msgr_mpool, (1024*1024), 0,
-					    4096, 128);
 
       /* and unregisterd one */
 #define XMSG_MEMPOOL_MIN 4096
