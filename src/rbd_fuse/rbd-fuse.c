@@ -23,6 +23,7 @@
 
 static int gotrados = 0;
 char *pool_name;
+char *mount_image_name;
 rados_t cluster;
 rados_ioctx_t ioctx;
 
@@ -36,6 +37,7 @@ struct rbd_stat {
 struct rbd_options {
 	char *ceph_config;
 	char *pool_name;
+	char *image_name;
 };
 
 struct rbd_image {
@@ -114,11 +116,15 @@ enumerate_images(struct rbd_image **head)
 
 	fprintf(stderr, "pool %s: ", pool_name);
 	for (ip = ibuf; ip < &ibuf[ibuf_len]; ip += strlen(ip) + 1)  {
-		fprintf(stderr, "%s, ", ip);
-		im = malloc(sizeof(*im));
-		im->image_name = ip;
-		im->next = *head;
-		*head = im;
+		if ((mount_image_name == NULL) ||
+		    ((strlen(mount_image_name) > 0) &&
+		    (strcmp(ip, mount_image_name) == 0))) {
+			fprintf(stderr, "%s, ", ip);
+			im = malloc(sizeof(*im));
+			im->image_name = ip;
+			im->next = *head;
+			*head = im;
+		}
 	}
 	fprintf(stderr, "\n");
 }
@@ -471,6 +477,7 @@ rbdfs_init(struct fuse_conn_info *conn)
 		exit(90);
 
 	pool_name = rbd_options.pool_name;
+	mount_image_name = rbd_options.image_name;
 	ret = rados_ioctx_create(cluster, pool_name, &ioctx);
 	if (ret < 0)
 		exit(91);
@@ -647,7 +654,9 @@ enum {
 	KEY_CEPH_CONFIG,
 	KEY_CEPH_CONFIG_LONG,
 	KEY_RADOS_POOLNAME,
-	KEY_RADOS_POOLNAME_LONG
+	KEY_RADOS_POOLNAME_LONG,
+    KEY_RBD_IMAGENAME,
+    KEY_RBD_IMAGENAME_LONG
 };
 
 static struct fuse_opt rbdfs_opts[] = {
@@ -661,6 +670,9 @@ static struct fuse_opt rbdfs_opts[] = {
 	{"-p %s", offsetof(struct rbd_options, pool_name), KEY_RADOS_POOLNAME},
 	{"--poolname=%s", offsetof(struct rbd_options, pool_name),
 	 KEY_RADOS_POOLNAME_LONG},
+    {"-i %s", offsetof(struct rbd_options, image_name), KEY_RBD_IMAGENAME},
+    {"--image=%s", offsetof(struct rbd_options, image_name),
+    KEY_RBD_IMAGENAME_LONG},
 };
 
 static void usage(const char *progname)
@@ -673,6 +685,7 @@ static void usage(const char *progname)
 "    -V   --version         print version\n"
 "    -c   --configfile      ceph configuration file [/etc/ceph/ceph.conf]\n"
 "    -p   --poolname        rados pool name [rbd]\n"
+"    -i   --image           RBD image name\n"
 "\n", progname);
 }
 
@@ -709,6 +722,15 @@ static int rbdfs_opt_proc(void *data, const char *arg, int key,
 		rbd_options.pool_name = strdup(arg+2);
 		return 0;
 	}
+    
+    if (key == KEY_RBD_IMAGENAME) {
+        if (rbd_options.image_name!= NULL) {
+            free(rbd_options.image_name);
+            rbd_options.image_name = NULL;
+        }
+        rbd_options.image_name = strdup(arg+2);
+        return 0;
+    }
 
 	return 1;
 }
