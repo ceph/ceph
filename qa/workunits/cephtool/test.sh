@@ -60,6 +60,15 @@ ceph osd tier add data cache2
 expect_false ceph osd tier add metadata cache
 ceph osd tier cache-mode cache writeback
 ceph osd tier cache-mode cache readonly
+TRIES=0
+while ! ceph osd pool set cache pg_num 3 --yes-i-really-mean-it 2>$TMPFILE
+do
+    grep 'currently creating pgs' $TMPFILE
+    TRIES=$(( $TRIES + 1 ))
+    test $TRIES -ne 60
+    sleep 3
+done
+expect_false ceph osd pool set cache pg_num 4
 ceph osd tier cache-mode cache none
 ceph osd tier set-overlay data cache
 expect_false ceph osd tier set-overlay data cache2
@@ -447,6 +456,12 @@ set +e
 ceph osd pool set pool_erasure size 4444 2>$TMPFILE
 check_response 'not change the size'
 set -e
+
+auid=5555
+ceph osd pool set data auid $auid
+ceph osd pool get data auid | grep $auid
+ceph --format=xml osd pool get data auid | grep $auid
+ceph osd pool set data auid 0
 
 ceph osd pool set data hashpspool true
 ceph osd pool set data hashpspool false

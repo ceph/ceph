@@ -341,9 +341,14 @@ public:
   }
   void log_operation(
     vector<pg_log_entry_t> &logv,
+    boost::optional<pg_hit_set_history_t> &hset_history,
     const eversion_t &trim_to,
     bool transaction_applied,
     ObjectStore::Transaction *t) {
+    if (hset_history) {
+      info.hit_set = *hset_history;
+      dirty_info = true;
+    }
     append_log(logv, trim_to, *t, transaction_applied);
   }
 
@@ -453,6 +458,7 @@ public:
 
     PGBackend::PGTransaction *op_t;
     vector<pg_log_entry_t> log;
+    boost::optional<pg_hit_set_history_t> updated_hset_history;
 
     interval_set<uint64_t> modified_ranges;
     ObjectContextRef obc;
@@ -647,31 +653,37 @@ protected:
    * @return true on success, false if we are queued
    */
   bool get_rw_locks(OpContext *ctx) {
-    if (ctx->op->may_write() || ctx->op->may_cache()) {
-      /* If snapset_obc, !obc->obs->exists and we need to
-       * get a write lock on the snapdir as well as the
-       * head.  Fortunately, we are guarranteed to get a
-       * write lock on the head if !obc->obs->exists
-       */
-      if (ctx->snapset_obc) {
-	assert(!ctx->obc->obs.exists);
+    /* If snapset_obc, !obc->obs->exists and we will always take the
+     * snapdir lock *before* the head lock.  Since all callers will do
+     * this (read or write) if we get the first we will be guaranteed
+     * to get the second.
+     */
+    if (ctx->snapset_obc) {
+      assert(!ctx->obc->obs.exists);
+      if (ctx->op->may_write() || ctx->op->may_cache()) {
 	if (ctx->snapset_obc->get_write(ctx->op)) {
 	  ctx->release_snapset_obc = true;
 	  ctx->lock_to_release = OpContext::W_LOCK;
 	} else {
 	  return false;
 	}
-	// we are creating it and have the only ref
-	bool got = ctx->obc->get_write(ctx->op);
-	assert(got);
-	return true;
       } else {
-	if (ctx->obc->get_write(ctx->op)) {
-	  ctx->lock_to_release = OpContext::W_LOCK;
-	  return true;
+	assert(ctx->op->may_read());
+	if (ctx->snapset_obc->get_read(ctx->op)) {
+	  ctx->release_snapset_obc = true;
+	  ctx->lock_to_release = OpContext::R_LOCK;
 	} else {
 	  return false;
 	}
+      }
+    }
+    if (ctx->op->may_write() || ctx->op->may_cache()) {
+      if (ctx->obc->get_write(ctx->op)) {
+	ctx->lock_to_release = OpContext::W_LOCK;
+	return true;
+      } else {
+	assert(!ctx->snapset_obc);
+	return false;
       }
     } else {
       assert(ctx->op->may_read());
@@ -679,6 +691,7 @@ protected:
 	ctx->lock_to_release = OpContext::R_LOCK;
 	return true;
       } else {
+	assert(!ctx->snapset_obc);
 	return false;
       }
     }
@@ -707,17 +720,33 @@ protected:
     bool requeue_recovery = false;
     bool requeue_recovery_clone = false;
     bool requeue_recovery_snapset = false;
-    if (ctx->snapset_obc && ctx->release_snapset_obc) {
-      ctx->snapset_obc->put_write(&to_req, &requeue_recovery_snapset);
-      ctx->release_snapset_obc = false;
-    }
+    bool requeue_snaptrimmer = false;
+    bool requeue_snaptrimmer_clone = false;
+    bool requeue_snaptrimmer_snapset = false;
     switch (ctx->lock_to_release) {
     case OpContext::W_LOCK:
-      ctx->obc->put_write(&to_req, &requeue_recovery);
+      if (ctx->snapset_obc && ctx->release_snapset_obc) {
+	ctx->snapset_obc->put_write(
+	  &to_req,
+	  &requeue_recovery_snapset,
+	  &requeue_snaptrimmer_snapset);
+	ctx->release_snapset_obc = false;
+      }
+      ctx->obc->put_write(
+	&to_req,
+	&requeue_recovery,
+	&requeue_snaptrimmer);
       if (ctx->clone_obc)
-	ctx->clone_obc->put_write(&to_req, &requeue_recovery_clone);
+	ctx->clone_obc->put_write(
+	  &to_req,
+	  &requeue_recovery_clone,
+	  &requeue_snaptrimmer_clone);
       break;
     case OpContext::R_LOCK:
+      if (ctx->snapset_obc && ctx->release_snapset_obc) {
+	ctx->snapset_obc->put_read(&to_req);
+	ctx->release_snapset_obc = false;
+      }
       ctx->obc->put_read(&to_req);
       break;
     case OpContext::NONE:
@@ -725,9 +754,14 @@ protected:
     default:
       assert(0);
     };
+    assert(ctx->release_snapset_obc == false);
     ctx->lock_to_release = OpContext::NONE;
     if (requeue_recovery || requeue_recovery_clone || requeue_recovery_snapset)
       osd->recovery_wq.queue(this);
+    if (requeue_snaptrimmer ||
+	requeue_snaptrimmer_clone ||
+	requeue_snaptrimmer_snapset)
+      queue_snap_trim();
     requeue_ops(to_req);
   }
 
@@ -866,6 +900,7 @@ protected:
   int find_object_context(const hobject_t& oid,
 			  ObjectContextRef *pobc,
 			  bool can_create,
+			  bool map_snapid_to_clone=false,
 			  hobject_t *missing_oid=NULL);
 
   void add_object_context_to_pg_stat(ObjectContextRef obc, pg_stat_t *stat);
@@ -1338,6 +1373,7 @@ public:
   bool is_degraded_object(const hobject_t& oid);
   void wait_for_degraded_object(const hobject_t& oid, OpRequestRef op);
 
+  bool maybe_await_blocked_snapset(const hobject_t &soid, OpRequestRef op);
   void wait_for_blocked_object(const hobject_t& soid, OpRequestRef op);
   void kick_object_context_blocked(ObjectContextRef obc);
 

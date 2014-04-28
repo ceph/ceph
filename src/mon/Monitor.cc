@@ -198,6 +198,15 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   assert(r);
 
   exited_quorum = ceph_clock_now(g_ceph_context);
+
+  // assume our commands until we have an election.  this only means
+  // we won't reply with EINVAL before the election; any command that
+  // actually matters will wait until we have quorum etc and then
+  // retry (and revalidate).
+  const MonCommand *cmds;
+  int cmdsize;
+  get_locally_supported_monitor_commands(&cmds, &cmdsize);
+  set_leader_supported_commands(cmds, cmdsize);
 }
 
 PaxosService *Monitor::get_paxos_service_by_name(const string& name)
@@ -450,6 +459,16 @@ int Monitor::preinit()
 
       dout(10) << " monmap is " << *monmap << dendl;
       dout(10) << " extra probe peers " << extra_probe_peers << dendl;
+    }
+  } else if (!monmap->contains(name)) {
+    derr << "not in monmap and have been in a quorum before; "
+         << "must have been removed" << dendl;
+    if (g_conf->mon_force_quorum_join) {
+      dout(0) << "we should have died but "
+              << "'mon_force_quorum_join' is set -- allowing boot" << dendl;
+    } else {
+      derr << "commit suicide!" << dendl;
+      return -ENOENT;
     }
   }
 
@@ -3527,6 +3546,7 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
 void Monitor::handle_get_version(MMonGetVersion *m)
 {
   dout(10) << "handle_get_version " << *m << dendl;
+  PaxosService *svc = NULL;
 
   MonSession *s = static_cast<MonSession *>(m->get_connection()->get_priv());
   if (!s) {
@@ -3538,28 +3558,35 @@ void Monitor::handle_get_version(MMonGetVersion *m)
   if (!is_leader() && !is_peon()) {
     dout(10) << " waiting for quorum" << dendl;
     waitfor_quorum.push_back(new C_RetryMessage(this, m));
-    return;
+    goto out;
   }
 
-  MMonGetVersionReply *reply = new MMonGetVersionReply();
-  reply->handle = m->handle;
   if (m->what == "mdsmap") {
-    reply->version = mdsmon()->mdsmap.get_epoch();
-    reply->oldest_version = mdsmon()->get_first_committed();
+    svc = mdsmon();
   } else if (m->what == "osdmap") {
-    reply->version = osdmon()->osdmap.get_epoch();
-    reply->oldest_version = osdmon()->get_first_committed();
+    svc = osdmon();
   } else if (m->what == "monmap") {
-    reply->version = monmap->get_epoch();
-    reply->oldest_version = monmon()->get_first_committed();
+    svc = monmon();
   } else {
     derr << "invalid map type " << m->what << dendl;
   }
 
-  messenger->send_message(reply, m->get_source_inst());
+  if (svc) {
+    if (!svc->is_readable()) {
+      svc->wait_for_readable(new C_RetryMessage(this, m));
+      goto out;
+    }
+    MMonGetVersionReply *reply = new MMonGetVersionReply();
+    reply->handle = m->handle;
+    reply->version = svc->get_last_committed();
+    reply->oldest_version = svc->get_first_committed();
+    messenger->send_message(reply, m->get_source_inst());
+  }
 
-  s->put();
   m->put();
+
+ out:
+  s->put();
 }
 
 bool Monitor::ms_handle_reset(Connection *con)

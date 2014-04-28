@@ -749,6 +749,9 @@ void MDS::handle_command(MMonCommand *m)
   else if (m->cmd[0] == "exit") {
     suicide();
   }
+  else if (m->cmd[0] == "respawn") {
+    respawn();
+  }
   else if (m->cmd[0] == "session" && m->cmd[1] == "kill") {
     Session *session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT,
 							    strtol(m->cmd[2].c_str(), 0, 10)));
@@ -994,9 +997,10 @@ void MDS::handle_mds_map(MMDSMap *m)
     } else {
       // did i just recover?
       if ((is_active() || is_clientreplay()) &&
-          (oldstate == MDSMap::STATE_REJOIN ||
+          (oldstate == MDSMap::STATE_CREATING ||
+	   oldstate == MDSMap::STATE_REJOIN ||
 	   oldstate == MDSMap::STATE_RECONNECT))
-        recovery_done();
+        recovery_done(oldstate);
 
       if (is_active()) {
         active_start();
@@ -1199,12 +1203,10 @@ void MDS::boot_create()
     dout(10) << "boot_create creating fresh anchortable" << dendl;
     anchorserver->reset();
     anchorserver->save(fin.new_sub());
-    anchorserver->handle_mds_recovery(whoami);
 
     dout(10) << "boot_create creating fresh snaptable" << dendl;
     snapserver->reset();
     snapserver->save(fin.new_sub());
-    snapserver->handle_mds_recovery(whoami);
   }
 
   assert(g_conf->mds_kill_create_at != 1);
@@ -1564,7 +1566,7 @@ void MDS::active_start()
   finish_contexts(g_ceph_context, waiting_for_active);  // kick waiters
 }
 
-void MDS::recovery_done()
+void MDS::recovery_done(int oldstate)
 {
   dout(1) << "recovery_done -- successful recovery!" << dendl;
   assert(is_clientreplay() || is_active());
@@ -1578,6 +1580,9 @@ void MDS::recovery_done()
     anchorserver->finish_recovery(active);
     snapserver->finish_recovery(active);
   }
+
+  if (oldstate == MDSMap::STATE_CREATING)
+    return;
 
   mdcache->start_recovered_truncates();
   mdcache->do_file_recover();
@@ -1694,13 +1699,28 @@ void MDS::respawn()
   }
   new_argv[orig_argc] = NULL;
 
-  char buf[PATH_MAX];
-  char *cwd = getcwd(buf, sizeof(buf));
-  assert(cwd);
-  dout(1) << " cwd " << cwd << dendl;
+  /* Determine the path to our executable, try to read
+   * linux-specific /proc/ path first */
+  char exe_path[PATH_MAX];
+  ssize_t exe_path_bytes = readlink("/proc/self/exe", exe_path,
+				    sizeof(exe_path) - 1);
+  if (exe_path_bytes < 0) {
+    /* Print CWD for the user's interest */
+    char buf[PATH_MAX];
+    char *cwd = getcwd(buf, sizeof(buf));
+    assert(cwd);
+    dout(1) << " cwd " << cwd << dendl;
+
+    /* Fall back to a best-effort: just running in our CWD */
+    strncpy(exe_path, orig_argv[0], sizeof(exe_path) - 1);
+  } else {
+    exe_path[exe_path_bytes] = '\0';
+  }
+
+  dout(1) << " exe_path " << exe_path << dendl;
 
   unblock_all_signals(NULL);
-  execv(orig_argv[0], new_argv);
+  execv(exe_path, new_argv);
 
   dout(0) << "respawn execv " << orig_argv[0]
 	  << " failed with " << cpp_strerror(errno) << dendl;

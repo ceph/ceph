@@ -20,7 +20,7 @@ typedef RadosTestECPP LibRadosListECPP;
 TEST_F(LibRadosList, ListObjects) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   rados_list_ctx_t ctx;
   ASSERT_EQ(0, rados_objects_list_open(ioctx, &ctx));
   const char *entry;
@@ -38,7 +38,7 @@ TEST_F(LibRadosListPP, ListObjectsPP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
   ObjectIterator iter(ioctx.objects_begin());
   bool foundit = false;
   while (iter != ioctx.objects_end()) {
@@ -54,7 +54,7 @@ TEST_F(LibRadosListPP, ListObjectsTwicePP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
   ObjectIterator iter(ioctx.objects_begin());
   bool foundit = false;
   while (iter != ioctx.objects_end()) {
@@ -80,7 +80,7 @@ TEST_F(LibRadosListPP, ListObjectsCopyIterPP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
 
   // make sure this is still valid after the original iterators are gone
   ObjectIterator iter3;
@@ -112,7 +112,7 @@ TEST_F(LibRadosListPP, ListObjectsEndIter) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
 
   ObjectIterator iter(ioctx.objects_begin());
   ObjectIterator iter_end(ioctx.objects_end());
@@ -154,18 +154,18 @@ TEST_F(LibRadosList, ListObjectsNS) {
   memset(buf, 0xcc, sizeof(buf));
   // Create :foo1, :foo2, :foo3, n1:foo1, ns1:foo4, ns1:foo5, ns2:foo6, n2:foo7
   rados_ioctx_set_namespace(ioctx, "");
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo1", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo1", buf, sizeof(buf), 0));
   rados_ioctx_set_namespace(ioctx, "ns1");
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo1", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo1", buf, sizeof(buf), 0));
   rados_ioctx_set_namespace(ioctx, "");
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo2", buf, sizeof(buf), 0));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo3", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo2", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo3", buf, sizeof(buf), 0));
   rados_ioctx_set_namespace(ioctx, "ns1");
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo4", buf, sizeof(buf), 0));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo5", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo4", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo5", buf, sizeof(buf), 0));
   rados_ioctx_set_namespace(ioctx, "ns2");
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo6", buf, sizeof(buf), 0));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo7", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo6", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo7", buf, sizeof(buf), 0));
 
   std::set<std::string> def, ns1, ns2;
   def.insert(std::string("foo1"));
@@ -222,18 +222,18 @@ TEST_F(LibRadosListPP, ListObjectsPPNS) {
   bl1.append(buf, sizeof(buf));
   // Create :foo1, :foo2, :foo3, n1:foo1, ns1:foo4, ns1:foo5, ns2:foo6, n2:foo7
   ioctx.set_namespace("");
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo1", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo1", bl1, sizeof(buf), 0));
   ioctx.set_namespace("ns1");
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo1", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo1", bl1, sizeof(buf), 0));
   ioctx.set_namespace("");
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo2", bl1, sizeof(buf), 0));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo3", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo2", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo3", bl1, sizeof(buf), 0));
   ioctx.set_namespace("ns1");
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo4", bl1, sizeof(buf), 0));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo5", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo4", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo5", bl1, sizeof(buf), 0));
   ioctx.set_namespace("ns2");
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo6", bl1, sizeof(buf), 0));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo7", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo6", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo7", bl1, sizeof(buf), 0));
 
   std::set<std::string> def, ns1, ns2;
   def.insert(std::string("foo1"));
@@ -262,7 +262,7 @@ TEST_F(LibRadosListPP, ListObjectsManyPP) {
   bl.append(buf, sizeof(buf));
 
   for (int i=0; i<256; ++i) {
-    ASSERT_EQ((int)sizeof(buf), ioctx.write(stringify(i), bl, bl.length(), 0));
+    ASSERT_EQ(0, ioctx.write(stringify(i), bl, bl.length(), 0));
   }
 
   librados::ObjectIterator it = ioctx.objects_begin();
@@ -287,7 +287,7 @@ TEST_F(LibRadosList, ListObjectsStart) {
 
   for (int i=0; i<16; ++i) {
     string n = stringify(i);
-    ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, n.c_str(), buf, sizeof(buf), 0));
+    ASSERT_EQ(0, rados_write(ioctx, n.c_str(), buf, sizeof(buf), 0));
   }
 
   rados_list_ctx_t ctx;
@@ -321,7 +321,7 @@ TEST_F(LibRadosListPP, ListObjectsStartPP) {
   bl.append(buf, sizeof(buf));
 
   for (int i=0; i<16; ++i) {
-    ASSERT_EQ((int)sizeof(buf), ioctx.write(stringify(i), bl, bl.length(), 0));
+    ASSERT_EQ(0, ioctx.write(stringify(i), bl, bl.length(), 0));
   }
 
   librados::ObjectIterator it = ioctx.objects_begin();
@@ -345,7 +345,7 @@ TEST_F(LibRadosListPP, ListObjectsStartPP) {
 TEST_F(LibRadosListEC, ListObjects) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   rados_list_ctx_t ctx;
   ASSERT_EQ(0, rados_objects_list_open(ioctx, &ctx));
   const char *entry;
@@ -363,7 +363,7 @@ TEST_F(LibRadosListECPP, ListObjectsPP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
   ObjectIterator iter(ioctx.objects_begin());
   bool foundit = false;
   while (iter != ioctx.objects_end()) {
@@ -379,7 +379,7 @@ TEST_F(LibRadosListECPP, ListObjectsTwicePP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
   ObjectIterator iter(ioctx.objects_begin());
   bool foundit = false;
   while (iter != ioctx.objects_end()) {
@@ -405,7 +405,7 @@ TEST_F(LibRadosListECPP, ListObjectsCopyIterPP) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
 
   // make sure this is still valid after the original iterators are gone
   ObjectIterator iter3;
@@ -437,7 +437,7 @@ TEST_F(LibRadosListECPP, ListObjectsEndIter) {
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
 
   ObjectIterator iter(ioctx.objects_begin());
   ObjectIterator iter_end(ioctx.objects_end());
@@ -462,18 +462,18 @@ TEST_F(LibRadosListEC, ListObjectsNS) {
   memset(buf, 0xcc, sizeof(buf));
   // Create :foo1, :foo2, :foo3, n1:foo1, ns1:foo4, ns1:foo5, ns2:foo6, n2:foo7
   rados_ioctx_set_namespace(ioctx, "");
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo1", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo1", buf, sizeof(buf), 0));
   rados_ioctx_set_namespace(ioctx, "ns1");
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo1", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo1", buf, sizeof(buf), 0));
   rados_ioctx_set_namespace(ioctx, "");
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo2", buf, sizeof(buf), 0));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo3", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo2", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo3", buf, sizeof(buf), 0));
   rados_ioctx_set_namespace(ioctx, "ns1");
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo4", buf, sizeof(buf), 0));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo5", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo4", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo5", buf, sizeof(buf), 0));
   rados_ioctx_set_namespace(ioctx, "ns2");
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo6", buf, sizeof(buf), 0));
-  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo7", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo6", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_write(ioctx, "foo7", buf, sizeof(buf), 0));
 
   std::set<std::string> def, ns1, ns2;
   def.insert(std::string("foo1"));
@@ -512,18 +512,18 @@ TEST_F(LibRadosListECPP, ListObjectsPPNS) {
   bl1.append(buf, sizeof(buf));
   // Create :foo1, :foo2, :foo3, n1:foo1, ns1:foo4, ns1:foo5, ns2:foo6, n2:foo7
   ioctx.set_namespace("");
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo1", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo1", bl1, sizeof(buf), 0));
   ioctx.set_namespace("ns1");
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo1", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo1", bl1, sizeof(buf), 0));
   ioctx.set_namespace("");
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo2", bl1, sizeof(buf), 0));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo3", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo2", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo3", bl1, sizeof(buf), 0));
   ioctx.set_namespace("ns1");
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo4", bl1, sizeof(buf), 0));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo5", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo4", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo5", bl1, sizeof(buf), 0));
   ioctx.set_namespace("ns2");
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo6", bl1, sizeof(buf), 0));
-  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo7", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo6", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.write("foo7", bl1, sizeof(buf), 0));
 
   std::set<std::string> def, ns1, ns2;
   def.insert(std::string("foo1"));
@@ -552,7 +552,7 @@ TEST_F(LibRadosListECPP, ListObjectsManyPP) {
   bl.append(buf, sizeof(buf));
 
   for (int i=0; i<256; ++i) {
-    ASSERT_EQ((int)sizeof(buf), ioctx.write(stringify(i), bl, bl.length(), 0));
+    ASSERT_EQ(0, ioctx.write(stringify(i), bl, bl.length(), 0));
   }
 
   librados::ObjectIterator it = ioctx.objects_begin();
@@ -577,7 +577,7 @@ TEST_F(LibRadosListEC, ListObjectsStart) {
 
   for (int i=0; i<16; ++i) {
     string n = stringify(i);
-    ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, n.c_str(), buf, sizeof(buf), 0));
+    ASSERT_EQ(0, rados_write(ioctx, n.c_str(), buf, sizeof(buf), 0));
   }
 
   rados_list_ctx_t ctx;
@@ -611,7 +611,7 @@ TEST_F(LibRadosListECPP, ListObjectsStartPP) {
   bl.append(buf, sizeof(buf));
 
   for (int i=0; i<16; ++i) {
-    ASSERT_EQ((int)sizeof(buf), ioctx.write(stringify(i), bl, bl.length(), 0));
+    ASSERT_EQ(0, ioctx.write(stringify(i), bl, bl.length(), 0));
   }
 
   librados::ObjectIterator it = ioctx.objects_begin();

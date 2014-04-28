@@ -58,9 +58,8 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
   /* socket creation */
   listen_sd = ::socket(family, SOCK_STREAM, 0);
   if (listen_sd < 0) {
-    char buf[80];
     lderr(msgr->cct) << "accepter.bind unable to create socket: "
-		     << strerror_r(errno, buf, sizeof(buf)) << dendl;
+		     << cpp_strerror(errno) << dendl;
     return -errno;
   }
 
@@ -84,9 +83,8 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
 
     rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), listen_addr.addr_size());
     if (rc < 0) {
-      char buf[80];
       lderr(msgr->cct) << "accepter.bind unable to bind to " << listen_addr.ss_addr()
-		       << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+		       << ": " << cpp_strerror(errno) << dendl;
       return -errno;
     }
   } else {
@@ -100,11 +98,10 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
 	break;
     }
     if (rc < 0) {
-      char buf[80];
       lderr(msgr->cct) << "accepter.bind unable to bind to " << listen_addr.ss_addr()
 		       << " on any port in range " << msgr->cct->_conf->ms_bind_port_min
 		       << "-" << msgr->cct->_conf->ms_bind_port_max
-		       << ": " << strerror_r(errno, buf, sizeof(buf))
+		       << ": " << cpp_strerror(errno)
 		       << dendl;
       return -errno;
     }
@@ -191,8 +188,6 @@ void *Accepter::entry()
   
   int errors = 0;
 
-  char buf[80];
-
   struct pollfd pfd;
   pfd.fd = listen_sd;
   pfd.events = POLLIN | POLLERR | POLLNVAL | POLLHUP;
@@ -220,7 +215,7 @@ void *Accepter::entry()
       msgr->add_accept_pipe(sd);
     } else {
       ldout(msgr->cct,0) << "accepter no incoming connection?  sd = " << sd
-	      << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+	      << " errno " << errno << " " << cpp_strerror(errno) << dendl;
       if (++errors > 4)
 	break;
     }

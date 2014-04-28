@@ -869,7 +869,7 @@ TEST(cls_rbd, snapid_race)
   bl.append(bp);
 
   string oid = "foo";
-  ASSERT_EQ(4096, ioctx.write(oid, bl, 4096, 0));
+  ASSERT_EQ(0, ioctx.write(oid, bl, 4096, 0));
   ASSERT_EQ(0, old_snapshot_add(&ioctx, oid, 1, "test1"));
   ASSERT_EQ(0, old_snapshot_add(&ioctx, oid, 3, "test3"));
   ASSERT_EQ(-ESTALE, old_snapshot_add(&ioctx, oid, 2, "test2"));
