@@ -670,7 +670,7 @@ static struct fuse_opt rbdfs_opts[] = {
 	{"-p %s", offsetof(struct rbd_options, pool_name), KEY_RADOS_POOLNAME},
 	{"--poolname=%s", offsetof(struct rbd_options, pool_name),
 	 KEY_RADOS_POOLNAME_LONG},
-    {"-i %s", offsetof(struct rbd_options, image_name), KEY_RBD_IMAGENAME},
+    {"-r %s", offsetof(struct rbd_options, image_name), KEY_RBD_IMAGENAME},
     {"--image=%s", offsetof(struct rbd_options, image_name),
     KEY_RBD_IMAGENAME_LONG},
 };
@@ -685,7 +685,7 @@ static void usage(const char *progname)
 "    -V   --version         print version\n"
 "    -c   --configfile      ceph configuration file [/etc/ceph/ceph.conf]\n"
 "    -p   --poolname        rados pool name [rbd]\n"
-"    -i   --image           RBD image name\n"
+"    -r   --image           RBD image name\n"
 "\n", progname);
 }
 
