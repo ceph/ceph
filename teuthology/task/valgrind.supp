@@ -1,5 +1,5 @@
 {
-   tcmalloc: msync heap allocation points to uninit bytes
+   tcmalloc: msync heap allocation points to uninit bytes (precise)
    Memcheck:Param
    msync(start)
    obj:/lib/x86_64-linux-gnu/libpthread-2.15.so
@@ -9,6 +9,40 @@
    fun:_ZN8tcmalloc8PageHeap8GrowHeapEm
    fun:_ZN8tcmalloc8PageHeap3NewEm
    obj:/usr/lib/libtcmalloc.so.0.1.0
+}
+{
+   tcmalloc: msync heap allocation points to uninit bytes (trusty)
+   Memcheck:Param
+   msync(start)
+   obj:/lib/x86_64-linux-gnu/libpthread-2.19.so
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   fun:_ULx86_64_step
+   fun:_Z13GetStackTracePPvii
+   fun:_ZN8tcmalloc8PageHeap8GrowHeapEm
+   fun:_ZN8tcmalloc8PageHeap3NewEm
+   fun:_ZN8tcmalloc15CentralFreeList8PopulateEv
+   fun:_ZN8tcmalloc15CentralFreeList18FetchFromSpansSafeEv
+   fun:_ZN8tcmalloc15CentralFreeList11RemoveRangeEPPvS2_i
+}
+{
+   tcmalloc: msync heap allocation points to uninit bytes 2 (trusty)
+   Memcheck:Param
+   msync(start)
+   fun:__msync_nocancel
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   obj:/usr/lib/x86_64-linux-gnu/libunwind.so.8.0.1
+   fun:_ULx86_64_step
+   fun:_Z13GetStackTracePPvii
+   fun:_ZN8tcmalloc8PageHeap8GrowHeapEm
+   fun:_ZN8tcmalloc8PageHeap3NewEm
+   fun:_ZN8tcmalloc15CentralFreeList8PopulateEv
+   fun:_ZN8tcmalloc15CentralFreeList18FetchFromSpansSafeEv
+   fun:_ZN8tcmalloc15CentralFreeList11RemoveRangeEPPvS2_i
 }
 {
 	tcmalloc: string
