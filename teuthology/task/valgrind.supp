@@ -2,13 +2,13 @@
    tcmalloc: msync heap allocation points to uninit bytes
    Memcheck:Param
    msync(start)
-   obj:/lib/x86_64-linux-gnu/libpthread-*
-   obj:/usr/lib/libunwind.so.*
+   obj:/lib/x86_64-linux-gnu/libpthread-2.15.so
+   obj:/usr/lib/libunwind.so.7.0.0
    fun:_ULx86_64_step
    fun:_Z13GetStackTracePPvii
    fun:_ZN8tcmalloc8PageHeap8GrowHeapEm
    fun:_ZN8tcmalloc8PageHeap3NewEm
-   obj:/usr/lib/libtcmalloc.so.*
+   obj:/usr/lib/libtcmalloc.so.0.1.0
 }
 {
 	tcmalloc: string
