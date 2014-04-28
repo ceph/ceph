@@ -191,6 +191,12 @@ void *Accepter::entry()
   struct pollfd pfd;
   pfd.fd = listen_sd;
   pfd.events = POLLIN | POLLERR | POLLNVAL | POLLHUP;
+
+  // Clear all outstanding pipes and connections, this is to avoid a race between old
+  // and new accepter thread (e.g. connections accepted after last time cleanup and new
+  // thread starts working). It does no harm to mark down twice anyway.
+  msgr->mark_down_all();
+
   while (!done) {
     ldout(msgr->cct,20) << "accepter calling poll" << dendl;
     int r = poll(&pfd, 1, -1);
