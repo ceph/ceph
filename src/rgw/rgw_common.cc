@@ -731,7 +731,7 @@ bool url_decode(string& src_str, string& dest_str)
 static void escape_char(char c, string& dst)
 {
   char buf[16];
-  snprintf(buf, sizeof(buf), "%%%.2X", (unsigned int)c);
+  snprintf(buf, sizeof(buf), "%%%.2X", (int)(unsigned char)c);
   dst.append(buf);
 }
 
