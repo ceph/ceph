@@ -9,6 +9,7 @@ import json
 import threading
 from teuthology import misc as teuthology
 from teuthology.task import ceph as ceph_task
+from teuthology.task.scrub import Scrubber
 
 class Thrasher:
     """
@@ -350,6 +351,7 @@ class Thrasher:
         Loop to select random actions to thrash ceph manager with.
         """
         cleanint = self.config.get("clean_interval", 60)
+        scrubint = self.config.get("scrub_interval", -1)
         maxdead = self.config.get("max_dead", 0)
         delay = self.config.get("op_delay", 5)
         self.log("starting do_thrash")
@@ -368,6 +370,10 @@ class Thrasher:
                         timeout=self.config.get('timeout')
                         )
                 time.sleep(self.clean_wait)
+                if scrubint > 0:
+                    if random.uniform(0, 1) < (float(delay) / scrubint):
+                        self.log('Scrubbing while thrashing being performed')
+                        Scrubber(self.ceph_manager, self.config)
             self.choose_action()()
             time.sleep(delay)
         self.all_up()
