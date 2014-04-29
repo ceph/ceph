@@ -228,6 +228,8 @@ public:
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
 
+  bool get_enabled() const { return enabled; }
+
   const utime_t& get_created() const { return created; }
   void set_created(utime_t ct) { modified = created = ct; }
   const utime_t& get_modified() const { return modified; }
