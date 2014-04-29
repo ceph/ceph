@@ -48,7 +48,8 @@ Pod::Usage::pod2usage(-verbose => 1) && exit if ($help);
 my $s3;
 my $domain   = "front.sepia.ceph.com";
 my $host     = get_hostname();
-our $hostname = "$host.$domain:7280";
+my $port     = $ENV{RGW_PORT}||7280;
+our $hostname = "$host.$domain:$port";
 our $testfileloc;
 our $mytestfilename;
 

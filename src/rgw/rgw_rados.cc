@@ -3064,6 +3064,28 @@ public:
     }
 };
 
+int RGWRados::rewrite_obj(const string& bucket_owner, rgw_obj& obj)
+{
+  map<string, bufferlist> attrset;
+  off_t ofs = 0;
+  off_t end = -1;
+  void *handle = NULL;
+
+  time_t mtime;
+  uint64_t total_len;
+  uint64_t obj_size;
+  RGWRadosCtx rctx(this);
+  int ret = prepare_get_obj((void *)&rctx, obj, &ofs, &end, &attrset,
+                            NULL, NULL, &mtime, NULL, NULL, &total_len,
+                            &obj_size, NULL, &handle, NULL);
+  if (ret < 0)
+    return ret;
+
+  attrset.erase(RGW_ATTR_ID_TAG);
+
+  return copy_obj_data((void *)&rctx, bucket_owner, &handle, end, obj, obj, &mtime, attrset, RGW_OBJ_CATEGORY_MAIN, NULL, NULL);
+}
+
 /**
  * Copy an object.
  * dest_obj: the object to copy into
