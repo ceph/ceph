@@ -1844,7 +1844,7 @@ Valid parameters for quotas include:
 
 
 Read User Quota
----------------
+~~~~~~~~~~~~~~~
 
 Read user quota setting
 
@@ -1854,10 +1854,9 @@ GET /admin/user?quota&uid=<uid>[&quota-type=<user|bucket>]
 
 
 Modify User Quota
------------------
+~~~~~~~~~~~~~~~~~
 
-
- - requires the 'users' write cap set
+requires the 'users' write cap set
 
 PUT /admin/user?quota&uid=<uid>[&quota-type=<user|bucket>]
 
@@ -1894,3 +1893,7 @@ Standard Error Responses
 
 :Description: No such access key.
 :Code: 404 Not Found
+
+
+
+.. _Admin Guide: ../admin
