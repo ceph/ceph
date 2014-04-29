@@ -134,6 +134,7 @@ def main(ctx):
         {'internal.save_config': None},
         {'internal.check_lock': None},
         {'internal.connect': None},
+        {'internal.serialize_remote_roles': None},
         {'internal.check_conflict': None},
     ])
     if not ctx.config.get('use_existing_cluster', False):

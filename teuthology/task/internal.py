@@ -231,20 +231,18 @@ def connect(ctx, config):
         for rem in remotes:
             ctx.cluster.add(rem, rem.name)
 
-    if hasattr(ctx, 'archive'):  # connect is called in many invocations e.g. -nuke. We don't want write this then
-        serialize_remote_roles(ctx)
 
-def serialize_remote_roles(ctx):
+def serialize_remote_roles(ctx, config):
     """
     Provides an explicit mapping for which remotes have been assigned what roles
     So that other software can be loosely coupled to teuthology
     """
-    assert hasattr(ctx, 'archive')
-
     if ctx.archive is not None:
-        with file(os.path.join(ctx.archive, 'info.yaml'), 'a') as info:
-            role_map = {'cluster': dict([(remote.name, {'roles': roles}) for remote, roles in ctx.cluster.remotes.iteritems()])}
-            yaml.safe_dump(role_map, info, default_flow_style=False)
+        with file(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
+            info_yaml = yaml.safe_load(info_file)
+            info_file.seek(0)
+            info_yaml['cluster'] = dict([(remote.name, {'roles': roles}) for remote, roles in ctx.cluster.remotes.iteritems()])
+            yaml.safe_dump(info_yaml, info_file, default_flow_style=False)
 
 
 def check_ceph_data(ctx, config):
