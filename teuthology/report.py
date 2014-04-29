@@ -174,7 +174,7 @@ class ResultsReporter(object):
     last_run_file = 'last_successful_run'
 
     def __init__(self, archive_base=None, base_uri=None, save=False,
-                 refresh=False, timeout=20, log=None):
+                 refresh=False, log=None):
         self.log = log or init_logging()
         self.archive_base = archive_base or config.archive_base
         self.base_uri = base_uri or config.results_server
@@ -183,7 +183,6 @@ class ResultsReporter(object):
         self.serializer = ResultsSerializer(archive_base, log=self.log)
         self.save_last_run = save
         self.refresh = refresh
-        self.timeout = timeout
 
     def report_all_runs(self):
         """
