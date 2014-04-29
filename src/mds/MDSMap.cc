@@ -144,6 +144,8 @@ void MDSMap::dump(Formatter *f) const
     f->dump_int("pool", *p);
   f->close_section();
   f->dump_int("metadata_pool", metadata_pool);
+  f->dump_bool("enabled", enabled);
+  f->dump_string("fs_name", fs_name);
 }
 
 void MDSMap::generate_test_instances(list<MDSMap*>& ls)
@@ -489,6 +491,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(data_pools, bl);
     ::encode(cas_pool, bl);
     ::encode(enabled, bl);
+    ::encode(fs_name, bl);
 
     // kclient ignores everything from here
     __u16 ev = 7;
@@ -540,6 +543,7 @@ void MDSMap::decode(bufferlist::iterator& p)
   }
   if (struct_v >= 5) {
     ::decode(enabled, p);
+    ::decode(fs_name, p);
   }
 
   // kclient ignores everything from here
