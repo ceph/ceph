@@ -1117,7 +1117,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
     }
     string sure;
     cmd_getval(g_ceph_context, cmdmap, "sure", sure);
-    if (sure != "--yes-i-really-mean-it") {
+    if (pending_mdsmap.enabled && sure != "--yes-i-really-mean-it") {
       ss << "this is DANGEROUS and will wipe out the mdsmap's fs, and may clobber data in the new pools you specify.  add --yes-i-really-mean-it if you do.";
       r = -EPERM;
     } else {
