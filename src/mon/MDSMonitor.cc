@@ -1129,6 +1129,14 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       r = -ENOENT;
       goto out;
     }
+
+    // Warn if crash_replay_interval is not set on the data pool
+    //  (on creation should have done pools[pool].crash_replay_interval =
+    //  cct->_conf->osd_default_data_pool_replay_window;)
+    pg_pool_t const *data_pool = osdmon->osdmap.get_pg_pool(data);
+    if (data_pool->get_crash_replay_interval() == 0) {
+      ss << "warning: crash_replay_interval not set on data pool '" << data << "', ";
+    }
     
     string sure;
     cmd_getval(g_ceph_context, cmdmap, "sure", sure);
