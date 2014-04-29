@@ -1115,6 +1115,21 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       r = -EINVAL;
       goto out;
     }
+
+    // Check that the requested pools exist
+    OSDMonitor *osdmon = mon->osdmon();
+    if (!osdmon->osdmap.have_pg_pool(metadata)) {
+      ss << "metadata pool '" << metadata << "' not found";
+      r = -ENOENT;
+      goto out;
+    }
+
+    if (!osdmon->osdmap.have_pg_pool(data)) {
+      ss << "data pool '" << data << "' not found";
+      r = -ENOENT;
+      goto out;
+    }
+    
     string sure;
     cmd_getval(g_ceph_context, cmdmap, "sure", sure);
     if (pending_mdsmap.enabled && sure != "--yes-i-really-mean-it") {
