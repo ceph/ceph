@@ -37,10 +37,6 @@ using namespace std;
 #define MDS_PORT_LOCKER  0x300
 #define MDS_PORT_MIGRATOR 0x400
 
-// FIXME: this should not be hardcoded
-#define MDS_DATA_POOL		0
-#define MDS_METADATA_POOL	1
-
 #define MAX_MDS                   0x100
 #define NUM_STRAY                 10
 
