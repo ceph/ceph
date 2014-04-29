@@ -35,11 +35,13 @@ def walk_jobs(connection, tube_name, callback, pattern=None):
         log.info('No jobs in Beanstalk Queue')
         return
 
+    # Try to figure out a sane timeout based on how many jobs are in the queue
+    timeout = job_count / 2000.0 * 60
     matching_jobs = OrderedDict()
     for i in range(1, job_count + 1):
         sys.stderr.write("{i}/{count}\r".format(i=i, count=job_count))
         sys.stderr.flush()
-        job = connection.reserve(timeout=30)
+        job = connection.reserve(timeout=timeout)
         if job is None or job.body is None:
             continue
         job_config = yaml.safe_load(job.body)
