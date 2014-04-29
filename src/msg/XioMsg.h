@@ -208,7 +208,7 @@ extern struct xio_mempool *xio_msgr_noreg_mpool;
 class XioCompletionHook : public Message::CompletionHook
 {
 private:
-  XioConnection *xcon;
+  ConnectionRef conn;
   list <struct xio_msg *> msg_seq;
   XioPool rsp_pool;
   atomic_t nrefs;
@@ -222,7 +222,7 @@ public:
 		    list <struct xio_msg *>& _msg_seq,
 		    struct xio_mempool_obj& _mp) :
     CompletionHook(_m),
-    xcon(_xcon),
+    conn(_m ? _m->get_connection() : 0),
     msg_seq(_msg_seq),
     rsp_pool(xio_msgr_noreg_mpool),
     nrefs(1),
@@ -239,6 +239,12 @@ public:
   XioCompletionHook* get() {
     nrefs.inc(); return this;
   }
+  virtual void set_message(Message *_m) {
+    m = _m;
+    if (m) {
+      conn = _m->get_connection();
+    }
+  }
 
   void put() {
     int refs = nrefs.dec();
@@ -254,7 +260,7 @@ public:
     }
   }
 
-  XioConnection* get_xcon() { return xcon; }
+  XioConnection* get_xcon() { return static_cast<XioConnection*>(conn.get()); }
 
   list <struct xio_msg *>& get_seq() { return msg_seq; }
 
