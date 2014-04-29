@@ -276,6 +276,7 @@ int XioMessenger::session_event(struct xio_session *session,
 
     xcon->conn = conn;
     xcon->portal = static_cast<XioPortal*>(xctxa.user_context);
+    assert(xcon->portal);
 
     xcona.user_context = xcon;
     (void) xio_modify_connection(conn, &xcona, XIO_CONNECTION_ATTR_USER_CTX);

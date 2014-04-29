@@ -92,6 +92,10 @@ public:
 
   const entity_inst_t& get_peer() const { return peer; }
 
+  XioConnection* get() {
+    return static_cast<XioConnection*>(RefCountedObject::get());
+  }
+
   uint32_t get_magic() { return magic; }
   void set_magic(int _magic) { magic = _magic; }
   uint32_t get_special_handling() { return special_handling; }
