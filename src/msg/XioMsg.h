@@ -222,7 +222,7 @@ public:
 		    list <struct xio_msg *>& _msg_seq,
 		    struct xio_mempool_obj& _mp) :
     CompletionHook(_m),
-    conn(_m ? _m->get_connection() : 0),
+    conn(_xcon->get()),
     msg_seq(_msg_seq),
     rsp_pool(xio_msgr_noreg_mpool),
     nrefs(1),
@@ -241,9 +241,6 @@ public:
   }
   virtual void set_message(Message *_m) {
     m = _m;
-    if (m) {
-      conn = _m->get_connection();
-    }
   }
 
   void put() {
