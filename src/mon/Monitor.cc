@@ -2316,7 +2316,7 @@ void Monitor::handle_command(MMonCommand *m)
     return;
   }
 
-  if (module == "mds") {
+  if (module == "mds" || module == "fs") {
     mdsmon()->dispatch(m);
     return;
   }
