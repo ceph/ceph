@@ -100,6 +100,7 @@ def print_matching_runs(jobs_dict):
 def main(args):
     machine_type = args['--machine_type']
     delete = args['--delete']
+    runs = args['--runs']
     show_desc = args['--description']
     try:
         connection = connect()
@@ -107,6 +108,9 @@ def main(args):
         if delete:
             walk_jobs(connection, machine_type,
                       delete_matching_jobs)
+        elif runs:
+            walk_jobs(connection, machine_type,
+                      print_matching_runs)
         else:
             walk_jobs(connection, machine_type,
                       _print_matching_jobs(show_desc))
