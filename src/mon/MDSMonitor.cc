@@ -379,6 +379,11 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
   int state = m->get_state();
   version_t seq = m->get_seq();
 
+  // Ignore beacons if filesystem is disabled
+  if (!mdsmap.enabled) {
+    return false;
+  }
+
   // boot?
   if (state == MDSMap::STATE_BOOT) {
     // zap previous instance of this name?
@@ -1227,6 +1232,9 @@ void MDSMonitor::tick()
   // make sure mds's are still alive
   // ...if i am an active leader
   if (!is_active()) return;
+
+  // Do nothing if the filesystem is disabled
+  if (!mdsmap.enabled) return;
 
   dout(10) << mdsmap << dendl;
   
