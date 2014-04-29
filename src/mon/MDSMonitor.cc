@@ -1160,6 +1160,21 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 						get_last_committed() + 1));
       return true;
     }
+  } else if (prefix == "mds rmfs") {
+
+    // Check there is something to delete
+    if (!pending_mdsmap.enabled) {
+      ss << "no filesystem configured";
+      r = -EINVAL;
+      goto out;
+    }
+
+    MDSMap newmap;
+    pending_mdsmap = newmap;
+    assert(pending_mdsmap.enabled == false);
+    pending_mdsmap.metadata_pool = -1;
+    pending_mdsmap.cas_pool = -1;
+    pending_mdsmap.created = ceph_clock_now(g_ceph_context);
   } else {
     ss << "unrecognized command";
   }
