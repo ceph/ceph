@@ -79,7 +79,9 @@ void MDSMonitor::create_new_fs(MDSMap &m, int metadata_pool, int data_pool)
 void MDSMonitor::create_initial()
 {
   dout(10) << "create_initial" << dendl;
-  create_new_fs(pending_mdsmap, MDS_METADATA_POOL, MDS_DATA_POOL);
+
+  // Initial state is a disable MDS map
+  assert(mdsmap.enabled != true);
 }
 
 
