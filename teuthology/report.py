@@ -183,6 +183,13 @@ class ResultsReporter(object):
         self.serializer = ResultsSerializer(archive_base, log=self.log)
         self.save_last_run = save
         self.refresh = refresh
+        self.session = self._make_session()
+
+    def _make_session(self, max_retries=10):
+        session = requests.Session()
+        adapter = requests.adapters.HTTPAdapter(max_retries=max_retries)
+        session.mount('http://', adapter)
+        return session
 
     def report_all_runs(self):
         """
