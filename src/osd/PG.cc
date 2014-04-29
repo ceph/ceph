@@ -3027,7 +3027,8 @@ bool PG::sched_scrub()
 
 void PG::reg_next_scrub()
 {
-  if (scrubber.must_scrub) {
+  if (scrubber.must_scrub ||
+      (info.stats.stats_invalid && g_conf->osd_scrub_invalid_stats)) {
     scrubber.scrub_reg_stamp = utime_t();
   } else {
     scrubber.scrub_reg_stamp = info.history.last_scrub_stamp;
