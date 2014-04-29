@@ -732,8 +732,6 @@ deb_packages = {'ceph': [
     'python-ceph',
     'libcephfs1',
     'libcephfs1-dbg',
-    'salt-common',
-    'salt-minion',
 ]}
 
 rpm_packages = {'ceph': [
