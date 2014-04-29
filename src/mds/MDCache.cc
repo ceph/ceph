@@ -9944,7 +9944,7 @@ void MDCache::handle_discover(MDiscover *dis)
     }
 
     // frozen inode?
-    if (dnl->is_primary() && dnl->get_inode()->is_frozen()) {
+    if (dnl->is_primary() && dnl->get_inode()->is_frozen_inode()) {
       if (tailitem && dis->wants_xlocked()) {
 	dout(7) << "handle_discover allowing discovery of frozen tail " << *dnl->get_inode() << dendl;
       } else if (reply->is_empty()) {
