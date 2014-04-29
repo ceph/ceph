@@ -236,7 +236,7 @@ class ResultsReporter(object):
         ))
         if jobs:
             if not self.refresh:
-                response = requests.head("{base}/runs/{name}/".format(
+                response = self.session.head("{base}/runs/{name}/".format(
                     base=self.base_uri, name=run_name))
                 if response.status_code == 200:
                     self.log.info("    already present; skipped")
@@ -275,7 +275,7 @@ class ResultsReporter(object):
             job_info['status'] = 'dead'
         job_json = json.dumps(job_info)
         headers = {'content-type': 'application/json'}
-        response = requests.post(run_uri, data=job_json, headers=headers)
+        response = self.session.post(run_uri, data=job_json, headers=headers)
 
         if response.status_code == 200:
             return job_id
@@ -294,7 +294,8 @@ class ResultsReporter(object):
 
         if msg and msg.endswith('already exists'):
             job_uri = os.path.join(run_uri, job_id, '')
-            response = requests.put(job_uri, data=job_json, headers=headers)
+            response = self.session.put(job_uri, data=job_json,
+                                        headers=headers)
         elif msg:
             self.log.error(
                 "POST to {uri} failed with status {status}: {msg}".format(
@@ -344,7 +345,7 @@ class ResultsReporter(object):
             if not 'job_id' in fields:
                 fields.append('job_id')
             uri += "?fields=" + ','.join(fields)
-        response = requests.get(uri)
+        response = self.session.get(uri)
         response.raise_for_status()
         return response.json()
 
@@ -357,7 +358,7 @@ class ResultsReporter(object):
         """
         uri = "{base}/runs/{name}/jobs/{job_id}/".format(
             base=self.base_uri, name=run_name, job_id=job_id)
-        response = requests.delete(uri)
+        response = self.session.delete(uri)
         response.raise_for_status()
 
     def delete_jobs(self, run_name, job_ids):
@@ -378,7 +379,7 @@ class ResultsReporter(object):
         """
         uri = "{base}/runs/{name}/".format(
             base=self.base_uri, name=run_name)
-        response = requests.delete(uri)
+        response = self.session.delete(uri)
         response.raise_for_status()
 
 
