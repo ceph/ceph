@@ -364,6 +364,17 @@ class ResultsReporter(object):
         for job_id in job_ids:
             self.delete_job(self, run_name, job_id)
 
+    def delete_run(self, run_name):
+        """
+        Delete a run from the results server.
+
+        :param run_name: The name of the run
+        """
+        uri = "{base}/runs/{name}/".format(
+            base=self.base_uri, name=run_name)
+        response = requests.delete(uri)
+        response.raise_for_status()
+
 
 def push_job_info(run_name, job_id, job_info, base_uri=None):
     """
@@ -420,13 +431,14 @@ def try_push_job_info(job_config, extra_info=None):
                               config.results_server)
 
 
-def try_delete_jobs(run_name, job_ids):
+def try_delete_jobs(run_name, job_ids, delete_empty_run=True):
     """
     Using the same error checking and retry mechanism as try_push_job_info(),
     delete one or more jobs
 
-    :param run_name: The name of the run.
-    :param job_ids:  Either a single job_id, or a list of job_ids
+    :param run_name:         The name of the run.
+    :param job_ids:          Either a single job_id, or a list of job_ids
+    :param delete_empty_run: If this would empty the run, delete it.
     """
     log = init_logging()
 
@@ -441,8 +453,21 @@ def try_delete_jobs(run_name, job_ids):
         job_ids = [job_ids]
 
     reporter = ResultsReporter()
+
     log.debug("Deleting jobs from {server}: {jobs}".format(
         server=config.results_server, jobs=str(job_ids)))
+
+    if delete_empty_run:
+        got_jobs = reporter.get_jobs(run_name, fields=['job_id'])
+        got_job_ids = [j['job_id'] for j in got_jobs]
+        if sorted(got_job_ids) == sorted(job_ids):
+            with safe_while(_raise=False) as proceed:
+                while proceed():
+                    try:
+                        reporter.delete_run(run_name)
+                        return
+                    except (requests.exceptions.RequestException, socket.error):  # noqa
+                        log.exception("Run deletion failed")
 
     def try_delete_job(job_id):
         with safe_while(_raise=False) as proceed:
