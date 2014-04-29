@@ -1521,6 +1521,7 @@ public:
     return clone_objs(ctx, dst_obj, v, attrs, category, pmtime, truncate_dest, exclusive, xattr_cond);
   }
 
+  int rewrite_obj(const string& bucket_owner, rgw_obj& obj);
   /**
    * Copy an object.
    * dest_obj: the object to copy into
