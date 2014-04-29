@@ -456,7 +456,7 @@ class Image(object):
             pool = create_string_buffer(size)
             name = create_string_buffer(size)
             snapname = create_string_buffer(size)
-            ret = self.librbd.rbd_get_parent_info(self.image, pool, len(pool), 
+            ret = self.librbd.rbd_get_parent_info(self.image, pool, len(pool),
                 name, len(name), snapname, len(snapname))
             if ret == -errno.ERANGE:
                 size *= 2
@@ -749,6 +749,14 @@ written." % (self.name, ret, length))
         ret = self.librbd.rbd_flush(self.image)
         if ret < 0:
             raise make_ex(ret, 'error flushing image')
+
+    def invalidate_cache(self):
+        """
+        Drop any cached data for the image.
+        """
+        ret = self.librbd.rbd_invalidate_cache(self.image)
+        if ret < 0:
+            raise make_ex(ret, 'error invalidating cache')
 
     def stripe_unit(self):
         """
