@@ -9,7 +9,6 @@ from datetime import datetime
 
 import teuthology
 from .config import config
-from .contextutil import safe_while
 
 
 def init_logging():
@@ -427,15 +426,13 @@ def try_push_job_info(job_config, extra_info=None):
     else:
         job_info = job_config
 
-    with safe_while(_raise=False) as proceed:
-        while proceed():
-            try:
-                log.debug("Pushing job info to %s", config.results_server)
-                push_job_info(run_name, job_id, job_info)
-                return
-            except (requests.exceptions.RequestException, socket.error):
-                log.exception("Could not report results to %s",
-                              config.results_server)
+    try:
+        log.debug("Pushing job info to %s", config.results_server)
+        push_job_info(run_name, job_id, job_info)
+        return
+    except (requests.exceptions.RequestException, socket.error):
+        log.exception("Could not report results to %s",
+                      config.results_server)
 
 
 def try_delete_jobs(run_name, job_ids, delete_empty_run=True):
@@ -468,22 +465,18 @@ def try_delete_jobs(run_name, job_ids, delete_empty_run=True):
         got_jobs = reporter.get_jobs(run_name, fields=['job_id'])
         got_job_ids = [j['job_id'] for j in got_jobs]
         if sorted(got_job_ids) == sorted(job_ids):
-            with safe_while(_raise=False) as proceed:
-                while proceed():
-                    try:
-                        reporter.delete_run(run_name)
-                        return
-                    except (requests.exceptions.RequestException, socket.error):  # noqa
-                        log.exception("Run deletion failed")
+            try:
+                reporter.delete_run(run_name)
+                return
+            except (requests.exceptions.RequestException, socket.error):
+                log.exception("Run deletion failed")
 
     def try_delete_job(job_id):
-        with safe_while(_raise=False) as proceed:
-            while proceed():
-                try:
-                    reporter.delete_job(run_name, job_id)
-                    return
-                except (requests.exceptions.RequestException, socket.error):
-                    log.exception("Job deletion failed")
+            try:
+                reporter.delete_job(run_name, job_id)
+                return
+            except (requests.exceptions.RequestException, socket.error):
+                log.exception("Job deletion failed")
 
     for job_id in job_ids:
         try_delete_job(job_id)
