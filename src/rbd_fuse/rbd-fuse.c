@@ -513,7 +513,7 @@ rbdfs_utime(const char *path, struct utimbuf *utime)
 int
 rbdfs_unlink(const char *path)
 {
-	int fd = find_openrbd(path);
+	int fd = find_openrbd(path+1);
 	if (fd != -1) {
 		struct rbd_openimage *rbd = &opentbl[fd];
 		rbd_close(rbd->image);
