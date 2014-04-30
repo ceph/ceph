@@ -1121,8 +1121,6 @@ int main(int argc, const char **argv)
 
       fe = new RGWFCGXFrontend(fcgi_pe, config);
     } else if (framework == "civetweb" || framework == "mongoose") {
-      string err;
-
       int port;
       config->get_val("port", 80, &port);
 
