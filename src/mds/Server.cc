@@ -5645,6 +5645,8 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     srcdn->list_replicas(witnesses);
   else
     witnesses.insert(srcdn->authority().first);
+  if (srcdnl->is_remote() && !srci->is_auth())
+    witnesses.insert(srci->authority().first);
   destdn->list_replicas(witnesses);
   if (destdnl->is_remote() && !oldin->is_auth())
     witnesses.insert(oldin->authority().first);
