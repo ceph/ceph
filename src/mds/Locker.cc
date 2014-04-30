@@ -515,10 +515,12 @@ void Locker::set_xlocks_done(MutationImpl *mut, bool skip_dentry)
   for (set<SimpleLock*>::iterator p = mut->xlocks.begin();
        p != mut->xlocks.end();
        ++p) {
+    MDSCacheObject *object = (*p)->get_parent();
+    assert(object->is_auth());
     if (skip_dentry &&
 	((*p)->get_type() == CEPH_LOCK_DN || (*p)->get_type() == CEPH_LOCK_DVERSION))
       continue;
-    dout(10) << "set_xlocks_done on " << **p << " " << *(*p)->get_parent() << dendl;
+    dout(10) << "set_xlocks_done on " << **p << " " << *object << dendl;
     (*p)->set_xlock_done();
   }
 }
