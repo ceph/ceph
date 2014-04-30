@@ -85,8 +85,6 @@ ostream& operator<<(ostream& out, CDir& dir)
     out << " ap=" << dir.get_auth_pins() 
 	<< "+" << dir.get_dir_auth_pins()
 	<< "+" << dir.get_nested_auth_pins();
-  if (dir.get_nested_anchors())
-    out << " na=" << dir.get_nested_anchors();
 
   out << " state=" << dir.get_state();
   if (dir.state_test(CDir::STATE_COMPLETE)) out << "|complete";
@@ -200,8 +198,6 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   dir_auth_pins = 0;
   request_pins = 0;
 
-  nested_anchors = 0;
-  
   dir_rep = REP_NONE;
 }
 
@@ -529,9 +525,6 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
   if (in->auth_pins + in->nested_auth_pins)
     dn->adjust_nested_auth_pins(in->auth_pins + in->nested_auth_pins, in->auth_pins, NULL);
 
-  if (in->inode.anchored + in->nested_anchors)
-    dn->adjust_nested_anchors(in->nested_anchors + in->inode.anchored);
-
   // verify open snaprealm parent
   if (in->snaprealm)
     in->snaprealm->adjust_parent();
@@ -602,9 +595,6 @@ void CDir::unlink_inode_work( CDentry *dn )
     if (in->auth_pins + in->nested_auth_pins)
       dn->adjust_nested_auth_pins(0 - (in->auth_pins + in->nested_auth_pins), 0 - in->auth_pins, NULL);
     
-    if (in->inode.anchored + in->nested_anchors)
-      dn->adjust_nested_anchors(0 - (in->nested_anchors + in->inode.anchored));
-
     // detach inode
     in->remove_primary_parent(dn);
     dn->get_linkage()->inode = 0;
@@ -743,8 +733,7 @@ void CDir::steal_dentry(CDentry *dn)
       fnode.rstat.rbytes += pi->accounted_rstat.rbytes;
       fnode.rstat.rfiles += pi->accounted_rstat.rfiles;
       fnode.rstat.rsubdirs += pi->accounted_rstat.rsubdirs;
-      fnode.rstat.ranchors += pi->accounted_rstat.ranchors;
-      fnode.rstat.rsnaprealms += pi->accounted_rstat.ranchors;
+      fnode.rstat.rsnaprealms += pi->accounted_rstat.rsnaprealms;
       if (pi->accounted_rstat.rctime > fnode.rstat.rctime)
 	fnode.rstat.rctime = pi->accounted_rstat.rctime;
 
@@ -768,7 +757,6 @@ void CDir::steal_dentry(CDentry *dn)
     dn->dir->adjust_nested_auth_pins(-ap, -dap, NULL);
   }
 
-  nested_anchors += dn->nested_anchors;
   if (dn->is_dirty()) 
     num_dirty++;
 
@@ -1117,27 +1105,6 @@ void CDir::take_dentry_waiting(const string& dname, snapid_t first, snapid_t las
     put(PIN_DNWAITER);
 }
 
-void CDir::add_ino_waiter(inodeno_t ino, Context *c) 
-{
-  if (waiting_on_ino.empty())
-    get(PIN_INOWAITER);
-  waiting_on_ino[ino].push_back(c);
-  dout(10) << "add_ino_waiter ino " << ino << " " << c << " on " << *this << dendl;
-}
-
-void CDir::take_ino_waiting(inodeno_t ino, list<Context*>& ls)
-{
-  if (waiting_on_ino.empty()) return;
-  if (waiting_on_ino.count(ino) == 0) return;
-  dout(10) << "take_ino_waiting ino " << ino
-	   << " x " << waiting_on_ino[ino].size() 
-	   << " on " << *this << dendl;
-  ls.splice(ls.end(), waiting_on_ino[ino]);
-  waiting_on_ino.erase(ino);
-  if (waiting_on_ino.empty())
-    put(PIN_INOWAITER);
-}
-
 void CDir::take_sub_waiting(list<Context*>& ls)
 {
   dout(10) << "take_sub_waiting" << dendl;
@@ -1148,14 +1115,6 @@ void CDir::take_sub_waiting(list<Context*>& ls)
       ls.splice(ls.end(), p->second);
     waiting_on_dentry.clear();
     put(PIN_DNWAITER);
-  }
-  if (!waiting_on_ino.empty()) {
-    for (map<inodeno_t, list<Context*> >::iterator p = waiting_on_ino.begin(); 
-	 p != waiting_on_ino.end();
-	 ++p) 
-      ls.splice(ls.end(), p->second);
-    waiting_on_ino.clear();
-    put(PIN_INOWAITER);
   }
 }
 
@@ -1668,11 +1627,8 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 	  if (snaps)
 	    in->purge_stale_snap_data(*snaps);
 
-	  if (undef_inode) {
-	    if (inode.anchored)
-	      dn->adjust_nested_anchors(1);
-	  } else {
-	    cache->add_inode( in ); // add
+	  if (!undef_inode) {
+	    cache->add_inode(in); // add
 	    dn = add_primary_dentry(dname, in, first, last); // link
 	  }
 	  dout(12) << "_fetched  got " << *dn << " " << *in << dendl;
@@ -2387,15 +2343,6 @@ void CDir::adjust_nested_auth_pins(int inc, int dirinc, void *by)
     else if (newcum == inc)      
       inode->adjust_nested_auth_pins(1, by);
   }
-}
-
-void CDir::adjust_nested_anchors(int by)
-{
-  assert(by);
-  nested_anchors += by;
-  dout(20) << "adjust_nested_anchors by " << by << " -> " << nested_anchors << dendl;
-  assert(nested_anchors >= 0);
-  inode->adjust_nested_anchors(by);
 }
 
 #ifdef MDS_VERIFY_FRAGSTAT

@@ -26,7 +26,6 @@
 #include "MDLog.h"
 #include "Migrator.h"
 #include "MDBalancer.h"
-#include "AnchorClient.h"
 #include "InoTable.h"
 #include "SnapClient.h"
 #include "Mutation.h"
@@ -4217,17 +4216,8 @@ void Server::handle_client_link(MDRequestRef& mdr)
     reply_request(mdr, -EINVAL);
     return;
   }
-  
-  xlocks.insert(&targeti->linklock);
 
-  // take any locks needed for anchor creation/verification
-  // NOTE: we do this on the master even if the anchor/link update may happen
-  // on the slave.  That means we may have out of date anchor state on our
-  // end.  That's fine:  either, we xlock when we don't need to (slow but
-  // not a problem), or we rdlock when we need to xlock, but then discover we
-  // need to xlock and on our next pass through we adjust the locks (this works
-  // as long as the linklock rdlock isn't the very last lock we take).
-  mds->mdcache->anchor_create_prep_locks(mdr, targeti, rdlocks, xlocks);
+  xlocks.insert(&targeti->linklock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -4235,20 +4225,6 @@ void Server::handle_client_link(MDRequestRef& mdr)
   // pick mtime
   if (mdr->now == utime_t())
     mdr->now = ceph_clock_now(g_ceph_context);
-
-  // does the target need an anchor?
-  if (targeti->is_auth()) {
-    if (targeti->is_anchored()) {
-      dout(7) << "target anchored already (nlink=" << targeti->inode.nlink << "), sweet" << dendl;
-    } 
-    else {
-      dout(7) << "target needs anchor, nlink=" << targeti->inode.nlink << ", creating anchor" << dendl;
-      
-      mdcache->anchor_create(mdr, targeti,
-			     new C_MDS_RetryRequest(mdcache, mdr));
-      return;
-    }
-  }
 
   // go!
   assert(g_conf->mds_kill_link_at != 1);
@@ -4419,9 +4395,6 @@ void Server::_link_remote(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targ
     le->metablob.add_null_dentry(dn, true);
   }
 
-  if (mdr->more()->dst_reanchor_atid)
-    le->metablob.add_table_transaction(TABLE_ANCHOR, mdr->more()->dst_reanchor_atid);
-
   journal_and_reply(mdr, targeti, dn, le, new C_MDS_link_remote_finish(mds, mdr, inc, dn, targeti));
 }
 
@@ -4457,10 +4430,6 @@ void Server::_link_remote_finish(MDRequestRef& mdr, bool inc,
     mds->mdcache->send_dentry_unlink(dn, NULL, null_ref);
   }
   
-  // commit anchor update?
-  if (mdr->more()->dst_reanchor_atid) 
-    mds->anchorclient->commit(mdr->more()->dst_reanchor_atid, mdr->ls);
-
   // bump target popularity
   mds->balancer->hit_inode(mdr->now, targeti, META_POP_IWR);
   mds->balancer->hit_dir(mdr->now, dn->get_dir(), META_POP_IWR);
@@ -4523,23 +4492,6 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
   mdr->auth_pin(targeti);
 
   //assert(0);  // test hack: make sure master can handle a slave that fails to prepare...
-
-  // anchor?
-  if (mdr->slave_request->get_op() == MMDSSlaveRequest::OP_LINKPREP) {
-    
-    // NOTE: the master took any locks needed for anchor creation/verification.
-
-    if (targeti->is_anchored()) {
-      dout(7) << "target anchored already (nlink=" << targeti->inode.nlink << "), sweet" << dendl;
-    } 
-    else {
-      dout(7) << "target needs anchor, nlink=" << targeti->inode.nlink << ", creating anchor" << dendl;
-      mdcache->anchor_create(mdr, targeti,
-			     new C_MDS_RetryRequest(mdcache, mdr));
-      return;
-    }
-  }
-
   assert(g_conf->mds_kill_link_at != 5);
 
   // journal it
@@ -4872,18 +4824,6 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
     rdlocks.insert(&in->filelock);   // to verify it's empty
   mds->locker->include_snap_rdlocks(rdlocks, dnl->get_inode());
 
-  // if we unlink a snapped multiversion inode and are creating a
-  // remote link to it, it must be anchored.  this mirrors the logic
-  // in MDCache::journal_cow_dentry().
-  bool need_snap_dentry = 
-    dnl->is_primary() &&
-    in->is_multiversion() &&
-    in->find_snaprealm()->get_newest_seq() + 1 > dn->first;
-  if (need_snap_dentry) {
-    dout(10) << " i need to be anchored because i am multiversion and will get a remote cow dentry" << dendl;
-    mds->mdcache->anchor_create_prep_locks(mdr, in, rdlocks, xlocks);
-  }
-
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
@@ -4896,26 +4836,6 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   // yay!
   if (mdr->now == utime_t())
     mdr->now = ceph_clock_now(g_ceph_context);
-
-  // NOTE: this is non-optimal.  we create an anchor at the old
-  // location, and then change it.  we can do better, but it's more
-  // complicated.  this is fine for now.
-  if (need_snap_dentry && !in->is_anchored()) {
-    mdcache->anchor_create(mdr, in, new C_MDS_RetryRequest(mdcache, mdr));
-    return;
-  }
-
-  // get stray dn ready?
-  if (dnl->is_primary()) {
-    if (!mdr->more()->dst_reanchor_atid && in->is_anchored()) {
-      dout(10) << "reanchoring to stray " << *dnl->get_inode() << dendl;
-      vector<Anchor> trace;
-      straydn->make_anchor_trace(trace, dnl->get_inode());
-      mds->anchorclient->prepare_update(dnl->get_inode()->ino(), trace, &mdr->more()->dst_reanchor_atid, 
-					new C_MDS_RetryRequest(mdcache, mdr));
-      return;
-    }
-  }
 
   if (in->is_dir() && in->has_subtree_root_dirfrag()) {
     // subtree root auths need to be witnesses
@@ -5037,9 +4957,6 @@ void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
     le->metablob.renamed_dirino = in->ino();
   }
 
-  if (mdr->more()->dst_reanchor_atid)
-    le->metablob.add_table_transaction(TABLE_ANCHOR, mdr->more()->dst_reanchor_atid);
-
   dn->push_projected_linkage();
 
   if (in->is_dir()) {
@@ -5086,10 +5003,6 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
   // update subtree map?
   if (straydn && straydnl->get_inode()->is_dir()) 
     mdcache->adjust_subtree_after_rename(straydnl->get_inode(), dn->get_dir(), true);
-
-  // commit anchor update?
-  if (mdr->more()->dst_reanchor_atid) 
-    mds->anchorclient->commit(mdr->more()->dst_reanchor_atid, mdr->ls);
 
   // bump pop
   mds->balancer->hit_dir(mdr->now, dn->get_dir(), META_POP_IWR);
@@ -5719,9 +5632,6 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   else
     rdlocks.insert(&srci->snaplock);
 
-  // take any locks needed for anchor creation/verification
-  mds->mdcache->anchor_create_prep_locks(mdr, srci, rdlocks, xlocks);
-
   CInode *auth_pin_freeze = !srcdn->is_auth() && srcdnl->is_primary() ? srci : NULL;
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks,
 				  &remote_wrlocks, auth_pin_freeze))
@@ -5775,45 +5685,6 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   // -- declare now --
   if (mdr->now == utime_t())
     mdr->now = ceph_clock_now(g_ceph_context);
-
-  // -- prepare anchor updates --
-  if (!linkmerge || srcdnl->is_primary()) {
-    C_GatherBuilder anchorgather(g_ceph_context);
-
-    if (srcdnl->is_primary() &&
-      (srcdnl->get_inode()->is_anchored() ||
-       (srcdnl->get_inode()->is_dir() && (srcdnl->get_inode()->inode.rstat.ranchors ||
-                                          srcdnl->get_inode()->nested_anchors ||
-                                          !mdcache->is_leaf_subtree(mdcache->get_projected_subtree_root(srcdn->get_dir()))))) &&
-      !mdr->more()->src_reanchor_atid) {
-      dout(10) << "reanchoring src->dst " << *srcdnl->get_inode() << dendl;
-      vector<Anchor> trace;
-      destdn->make_anchor_trace(trace, srcdnl->get_inode());
-      mds->anchorclient->prepare_update(srcdnl->get_inode()->ino(),
-					trace, &mdr->more()->src_reanchor_atid,
-					anchorgather.new_sub());
-    }
-    if (destdnl->is_primary() &&
-	destdnl->get_inode()->is_anchored() &&
-	!mdr->more()->dst_reanchor_atid) {
-      dout(10) << "reanchoring dst->stray " << *destdnl->get_inode() << dendl;
-
-      assert(straydn);
-      vector<Anchor> trace;
-      straydn->make_anchor_trace(trace, destdnl->get_inode());
-
-      mds->anchorclient->prepare_update(destdnl->get_inode()->ino(), trace,
-		  &mdr->more()->dst_reanchor_atid, anchorgather.new_sub());
-    }
-
-    if (anchorgather.has_subs())  {
-      anchorgather.set_finisher(new C_MDS_RetryRequest(mdcache, mdr));
-      anchorgather.activate();
-      return;  // waiting for anchor prepares
-    }
-
-    assert(g_conf->mds_kill_rename_at != 2);
-  }
 
   // -- prepare witnesses --
 
@@ -5908,12 +5779,6 @@ void Server::_rename_finish(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, 
   if (!mdr->more()->slaves.empty() && in->is_dir())
     assert(g_conf->mds_kill_rename_at != 6);
   
-  // commit anchor updates?
-  if (mdr->more()->src_reanchor_atid) 
-    mds->anchorclient->commit(mdr->more()->src_reanchor_atid, mdr->ls);
-  if (mdr->more()->dst_reanchor_atid) 
-    mds->anchorclient->commit(mdr->more()->dst_reanchor_atid, mdr->ls);
-
   // bump popularity
   mds->balancer->hit_dir(mdr->now, srcdn->get_dir(), META_POP_IWR);
   if (destdnl->is_remote() && in->is_auth())
@@ -6310,12 +6175,6 @@ void Server::_rename_prepare(MDRequestRef& mdr,
   // make renamed inode first track the dn
   if (srcdnl->is_primary() && destdn->is_auth())
     srci->first = destdn->first;  
-
-  // anchor updates?
-  if (mdr->more()->src_reanchor_atid)
-    metablob->add_table_transaction(TABLE_ANCHOR, mdr->more()->src_reanchor_atid);
-  if (mdr->more()->dst_reanchor_atid)
-    metablob->add_table_transaction(TABLE_ANCHOR, mdr->more()->dst_reanchor_atid);
 
   if (oldin && oldin->is_dir())
     mdcache->project_subtree_rename(oldin, destdn->get_dir(), straydn->get_dir());
@@ -6880,7 +6739,6 @@ void _rollback_repair_dir(MutationRef& mut, CDir *dir, rename_rollback::drec &r,
     pf->rstat.rbytes += linkunlink * rstat.rbytes;
     pf->rstat.rfiles += linkunlink * rstat.rfiles;
     pf->rstat.rsubdirs += linkunlink * rstat.rsubdirs;
-    pf->rstat.ranchors += linkunlink * rstat.ranchors;
     pf->rstat.rsnaprealms += linkunlink * rstat.rsnaprealms;
   }
   if (pf->fragstat.mtime == ctime) {
@@ -7389,9 +7247,6 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   rdlocks.erase(&diri->snaplock);
   xlocks.insert(&diri->snaplock);
 
-  // we need to anchor... get these locks up front!
-  mds->mdcache->anchor_create_prep_locks(mdr, diri, rdlocks, xlocks);
-
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
@@ -7409,12 +7264,6 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
 
   if (mdr->now == utime_t())
     mdr->now = ceph_clock_now(g_ceph_context);
-
-  // anchor
-  if (!diri->is_anchored()) {
-    mdcache->anchor_create(mdr, diri, new C_MDS_RetryRequest(mdcache, mdr));
-    return;
-  }
 
   // allocate a snapid
   if (!mdr->more()->stid) {

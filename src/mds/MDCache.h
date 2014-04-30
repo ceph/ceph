@@ -137,7 +137,6 @@ public:
     frag_t frag;
     snapid_t snap;
     filepath want_path;
-    inodeno_t want_ino;
     bool want_base_dir;
     bool want_xlocked;
 
@@ -166,9 +165,6 @@ public:
 		     bool want_xlocked=false, int from=-1);
   void discover_path(CDir *base, snapid_t snap, filepath want_path, Context *onfinish,
 		     bool want_xlocked=false);
-  void discover_ino(CDir *base, inodeno_t want_ino, Context *onfinish,
-		    bool want_xlocked=false);
-
   void kick_discovers(int who);  // after a failure.
 
 
@@ -780,11 +776,6 @@ public:
 
   void open_remote_dirfrag(CInode *diri, frag_t fg, Context *fin);
   CInode *get_dentry_inode(CDentry *dn, MDRequestRef& mdr, bool projected=false);
-  void open_remote_ino(inodeno_t ino, Context *fin, bool want_xlocked=false,
-		       inodeno_t hadino=0, version_t hadv=0);
-  void open_remote_ino_2(inodeno_t ino,
-			 vector<Anchor>& anchortrace, bool want_xlocked,
-			 inodeno_t hadino, version_t hadv, Context *onfinish);
 
   bool parallel_fetch(map<inodeno_t,filepath>& pathmap, set<inodeno_t>& missing);
   bool parallel_fetch_traverse_dir(inodeno_t ino, filepath& path, 
@@ -794,7 +785,7 @@ public:
   void open_remote_dentry(CDentry *dn, bool projected, Context *fin,
 			  bool want_xlocked=false);
   void _open_remote_dentry_finish(CDentry *dn, inodeno_t ino, Context *fin,
-				  bool want_xlocked, int mode, int r);
+				  bool want_xlocked, int r);
 
   void make_trace(vector<CDentry*>& trace, CInode *in);
 
@@ -860,18 +851,6 @@ public:
   void handle_find_ino(MMDSFindIno *m);
   void handle_find_ino_reply(MMDSFindInoReply *m);
   void kick_find_ino_peers(int who);
-
-  // -- anchors --
-public:
-  void anchor_create_prep_locks(MDRequestRef& mdr, CInode *in, set<SimpleLock*>& rdlocks,
-				set<SimpleLock*>& xlocks);
-  void anchor_create(MDRequestRef& mdr, CInode *in, Context *onfinish);
-  void anchor_destroy(CInode *in, Context *onfinish);
-protected:
-  void _anchor_prepared(CInode *in, version_t atid, bool add);
-  void _anchor_logged(CInode *in, version_t atid, MutationRef& mut);
-  friend class C_MDC_AnchorPrepared;
-  friend class C_MDC_AnchorLogged;
 
   // -- snaprealms --
 public:
