@@ -1,0 +1,4 @@
+overrides:
+  rgw:
+    ec-data-pool: true
+    cache-pools: true
