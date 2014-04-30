@@ -91,8 +91,6 @@ public:
   static const int PIN_DIRFRAG =         -1; 
   static const int PIN_CAPS =             2;  // client caps
   static const int PIN_IMPORTING =       -4;  // importing
-  static const int PIN_ANCHORING =        5;
-  static const int PIN_UNANCHORING =      6;
   static const int PIN_OPENINGDIR =       7;
   static const int PIN_REMOTEPARENT =     8;
   static const int PIN_BATCHOPENJOURNAL = 9;
@@ -117,8 +115,6 @@ public:
     case PIN_DIRFRAG: return "dirfrag";
     case PIN_CAPS: return "caps";
     case PIN_IMPORTING: return "importing";
-    case PIN_ANCHORING: return "anchoring";
-    case PIN_UNANCHORING: return "unanchoring";
     case PIN_OPENINGDIR: return "openingdir";
     case PIN_REMOTEPARENT: return "remoteparent";
     case PIN_BATCHOPENJOURNAL: return "batchopenjournal";
@@ -143,8 +139,6 @@ public:
 
   // -- state --
   static const int STATE_EXPORTING =   (1<<2);   // on nonauth bystander.
-  static const int STATE_ANCHORING =   (1<<3);
-  static const int STATE_UNANCHORING = (1<<4);
   static const int STATE_OPENINGDIR =  (1<<5);
   static const int STATE_FREEZING =    (1<<7);
   static const int STATE_FROZEN =      (1<<8);
@@ -168,11 +162,9 @@ public:
 
   // -- waiters --
   static const uint64_t WAIT_DIR         = (1<<0);
-  static const uint64_t WAIT_ANCHORED    = (1<<1);
-  static const uint64_t WAIT_UNANCHORED  = (1<<2);
-  static const uint64_t WAIT_FROZEN      = (1<<3);
-  static const uint64_t WAIT_TRUNC       = (1<<4);
-  static const uint64_t WAIT_FLOCK       = (1<<5);
+  static const uint64_t WAIT_FROZEN      = (1<<1);
+  static const uint64_t WAIT_TRUNC       = (1<<2);
+  static const uint64_t WAIT_FLOCK       = (1<<3);
   
   static const uint64_t WAIT_ANY_MASK	= (uint64_t)(-1);
 
@@ -416,10 +408,6 @@ public:
 #endif
   int auth_pin_freeze_allowance;
 
-private:
-  int nested_anchors;   // _NOT_ including me!
-
- public:
   inode_load_vec_t pop;
 
   // friends
@@ -430,7 +418,6 @@ private:
   friend class CDir;
   friend class CInodeExport;
 
- public:
   // ---------------------------
   CInode(MDCache *c, bool auth=true, snapid_t f=2, snapid_t l=CEPH_NOSNAP) : 
     mdcache(c),
@@ -448,7 +435,6 @@ private:
     item_dirty_dirfrag_dirfragtree(this), 
     auth_pins(0), nested_auth_pins(0),
     auth_pin_freeze_allowance(0),
-    nested_anchors(0),
     pop(ceph_clock_now(g_ceph_context)),
     versionlock(this, &versionlock_type),
     authlock(this, &authlock_type),
@@ -480,10 +466,6 @@ private:
   bool is_symlink() { return inode.is_symlink(); }
   bool is_dir()     { return inode.is_dir(); }
 
-  bool is_anchored() { return inode.anchored; }
-  bool is_anchoring() { return state_test(STATE_ANCHORING); }
-  bool is_unanchoring() { return state_test(STATE_UNANCHORING); }
-  
   bool is_root() { return inode.ino == MDS_INO_ROOT; }
   bool is_stray() { return MDS_INO_IS_STRAY(inode.ino); }
   bool is_mdsdir() { return MDS_INO_IS_MDSDIR(inode.ino); }
@@ -525,7 +507,6 @@ private:
   void make_path_string(string& s, bool force=false, CDentry *use_parent=NULL);
   void make_path_string_projected(string& s);  
   void make_path(filepath& s);
-  void make_anchor_trace(vector<class Anchor>& trace);
   void name_stray_dentry(string& dname);
 
 
@@ -785,9 +766,6 @@ public:
   bool can_auth_pin();
   void auth_pin(void *by);
   void auth_unpin(void *by);
-
-  void adjust_nested_anchors(int by);
-  int get_nested_anchors() { return nested_anchors; }
 
   // -- freeze --
   bool is_freezing_inode() { return state_test(STATE_FREEZING); }
