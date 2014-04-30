@@ -27,13 +27,7 @@ the socket path and a log file.  For example::
 Redeploy Ceph Configuration
 ===========================
 
-If you deploy Ceph with ``mkcephfs``, manually redeploy ``ceph.conf`` to the 
-hosts in your cluster. For example:: 
-
-	cd /etc/ceph
-	ssh {host-name} sudo tee /etc/ceph/ceph.conf < ceph.conf
-
-If you used ``ceph-deploy``, push a new copy to the hosts in your cluster.
+If you use ``ceph-deploy``, push a new copy to the hosts in your cluster.
 For example:: 
 
 	ceph-deploy config push {host-name [host-name]...}
