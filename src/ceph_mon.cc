@@ -452,7 +452,7 @@ int main(int argc, const char **argv)
   bufferlist magicbl;
   err = store->get(Monitor::MONITOR_NAME, "magic", magicbl);
   if (!magicbl.length()) {
-    derr << "unable to read magic from mon data.. did you run mkcephfs?" << dendl;
+    derr << "unable to read magic from mon data" << dendl;
     prefork.exit(1);
   }
   string magic(magicbl.c_str(), magicbl.length()-1);  // ignore trailing \n
