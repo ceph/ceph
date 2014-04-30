@@ -163,6 +163,7 @@ OPTION(mon_osd_nearfull_ratio, OPT_FLOAT, .85) // what % full makes an OSD near 
 OPTION(mon_globalid_prealloc, OPT_INT, 100)   // how many globalids to prealloc
 OPTION(mon_osd_report_timeout, OPT_INT, 900)    // grace period before declaring unresponsive OSDs dead
 OPTION(mon_force_standby_active, OPT_BOOL, true) // should mons force standby-replay mds to be active
+OPTION(mon_warn_on_osd_down_out_interval_zero, OPT_BOOL, true) // warn if 'mon_osd_down_out_interval == 0'
 OPTION(mon_min_osdmap_epochs, OPT_INT, 500)
 OPTION(mon_max_pgmap_epochs, OPT_INT, 500)
 OPTION(mon_max_log_epochs, OPT_INT, 500)

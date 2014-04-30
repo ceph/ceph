@@ -6,3 +6,8 @@ v0.67.8
   non-plain format. This is consistent with the behavior for a pool
   which used to hold images, but contains none. Scripts relying on
   this behavior should be updated.
+
+- HEALTH_WARN on 'mon osd down out interval == 0'. Having this option set
+  to zero on the leader acts much like having the 'noout' flag set.  This
+  warning will only be reported if the monitor getting the 'health' or
+  'status' request has this option set to zero.
