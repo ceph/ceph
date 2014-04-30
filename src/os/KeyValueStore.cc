@@ -87,7 +87,6 @@ bool StripObjectMap::check_spos(const StripObjectHeader &header,
                                 const SequencerPosition &spos)
 {
   if (spos > header.spos) {
-    stringstream out;
     dout(10) << "cid: " << "oid: " << header.oid
              << " not skipping op, *spos " << spos << dendl;
     dout(10) << " > header.spos " << header.spos << dendl;
