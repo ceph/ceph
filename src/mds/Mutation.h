@@ -295,7 +295,7 @@ struct MDRequestImpl : public MutationImpl {
   
   More* more();
   bool has_more();
-  bool are_slaves();
+  bool has_witnesses();
   bool slave_did_prepare();
   bool did_ino_allocation();
   bool freeze_auth_pin(CInode *inode);

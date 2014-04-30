@@ -825,8 +825,8 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
   if (!g_conf->mds_early_reply)
     return;
 
-  if (mdr->are_slaves()) {
-    dout(10) << "early_reply - there are slaves, not allowed." << dendl;
+  if (mdr->has_witnesses()) {
+    dout(10) << "early_reply - there are witnesses, not allowed." << dendl;
     mds->mdlog->flush();
     return; 
   }
