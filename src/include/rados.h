@@ -374,6 +374,8 @@ enum {
 	CEPH_OSD_FLAG_FLUSH =         0x40000,  /* this is part of flush */
 	CEPH_OSD_FLAG_MAP_SNAP_CLONE =0x80000,  /* map snap direct to clone id
 						 */
+	CEPH_OSD_FLAG_ENFORCE_SNAPC    =0x100000,  /* use snapc provided even if
+						      pool uses pool snaps */
 };
 
 enum {
