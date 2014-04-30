@@ -185,30 +185,6 @@ void SnapServer::_server_update(bufferlist& bl)
 
 void SnapServer::handle_query(MMDSTableRequest *req)
 {
-  /*  bufferlist::iterator p = req->bl.begin();
-  inodeno_t curino;
-  ::decode(curino, p);
-  dout(7) << "handle_lookup " << *req << " ino " << curino << dendl;
-
-  vector<Anchor> trace;
-  while (true) {
-    assert(anchor_map.count(curino) == 1);
-    Anchor &anchor = anchor_map[curino];
-    
-    dout(10) << "handle_lookup  adding " << anchor << dendl;
-    trace.insert(trace.begin(), anchor);  // lame FIXME
-    
-    if (anchor.dirino < MDS_INO_BASE) break;
-    curino = anchor.dirino;
-  }
-
-  // reply
-  MMDSTableRequest *reply = new MMDSTableRequest(table, TABLE_OP_QUERY_REPLY, req->reqid, version);
-  ::encode(curino, req->bl);
-  ::encode(trace, req->bl);
-  mds->send_message_mds(reply, req->get_source().num());
-
-  */
   req->put();
 }
 

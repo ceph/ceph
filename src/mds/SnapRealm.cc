@@ -91,7 +91,7 @@ bool SnapRealm::_open_parents(Context *finish, snapid_t first, snapid_t last)
 	       << p->second.ino << dendl;
       CInode *parent = mdcache->get_inode(p->second.ino);
       if (!parent) {
-	mdcache->open_remote_ino(p->second.ino, finish);
+	mdcache->open_ino(p->second.ino, mdcache->mds->mdsmap->get_metadata_pool(), finish);
 	return false;
       }
       assert(parent->snaprealm);  // hmm!
