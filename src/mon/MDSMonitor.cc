@@ -794,22 +794,170 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
   }
 
   string prefix;
-
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
+  /* Refuse to execute if mon cluster unavailable */
   MonSession *session = m->get_session();
   if (!session) {
     mon->reply_command(m, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
 
+  /* Execute filesystem add/remove, or pass through to filesystem_command */
+  bool const handled = management_command(prefix, cmdmap, ss, r);
+  if (!handled) {
+    if (!pending_mdsmap.enabled) {
+      ss << "No filesystem configured: use `ceph mds newfs` to create a filesystem";
+      r = -ENOENT;
+    } else {
+      bool const completed = filesystem_command(m, prefix, cmdmap, ss, r);
+      if (!completed) {
+        // Do not reply, the message has been enqueued for retry
+        return false;
+      }
+    }
+  }
+
+  /* Compose response */
+  string rs;
+  getline(ss, rs);
+
+  if (r >= 0) {
+    // success.. delay reply
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, r, rs,
+					      get_last_committed() + 1));
+    return true;
+  } else {
+    // reply immediately
+    mon->reply_command(m, r, rs, rdata, get_last_committed());
+    return false;
+  }
+}
+
+
+/**
+ * Handle a command for creating or removing a filesystem.
+ *
+ * @return true if such a command was found, else false to
+ *         fall through and look for other types of command.
+ */
+bool MDSMonitor::management_command(
+    std::string const &prefix,
+    map<string, cmd_vartype> &cmdmap,
+    std::stringstream &ss,
+    int &r)
+{
+  if (prefix == "mds newfs") {
+    MDSMap newmap;
+    int64_t metadata, data;
+    if (!cmd_getval(g_ceph_context, cmdmap, "metadata", metadata)) {
+      ss << "error parsing 'metadata' value '"
+         << cmd_vartype_stringify(cmdmap["metadata"]) << "'";
+      r = -EINVAL;
+      return true;
+    }
+    if (!cmd_getval(g_ceph_context, cmdmap, "data", data)) {
+      ss << "error parsing 'data' value '"
+         << cmd_vartype_stringify(cmdmap["data"]) << "'";
+      r = -EINVAL;
+      return true;
+    }
+
+    // Check that the requested pools exist
+    OSDMonitor *osdmon = mon->osdmon();
+    if (!osdmon->osdmap.have_pg_pool(metadata)) {
+      ss << "metadata pool '" << metadata << "' not found";
+      r = -ENOENT;
+      return true;
+    }
+
+    if (!osdmon->osdmap.have_pg_pool(data)) {
+      ss << "data pool '" << data << "' not found";
+      r = -ENOENT;
+      return true;
+    }
+
+    // Warn if crash_replay_interval is not set on the data pool
+    //  (on creation should have done pools[pool].crash_replay_interval =
+    //  cct->_conf->osd_default_data_pool_replay_window;)
+    pg_pool_t const *data_pool = osdmon->osdmap.get_pg_pool(data);
+    if (data_pool->get_crash_replay_interval() == 0) {
+      ss << "warning: crash_replay_interval not set on data pool '" << data << "', ";
+    }
+    
+    string sure;
+    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
+    if (pending_mdsmap.enabled && sure != "--yes-i-really-mean-it") {
+      ss << "this is DANGEROUS and will wipe out the mdsmap's fs, and may clobber data in the new pools you specify.  add --yes-i-really-mean-it if you do.";
+      r = -EPERM;
+
+      return true;
+    } else {
+      newmap.inc = pending_mdsmap.inc;
+      pending_mdsmap = newmap;
+      pending_mdsmap.epoch = mdsmap.epoch + 1;
+      create_new_fs(pending_mdsmap, metadata, data);
+      ss << "new fs with metadata pool " << metadata << " and data pool " << data;
+      r = 0;
+      return true;
+    }
+  } else if (prefix == "mds rmfs") {
+
+    // Check there is something to delete
+    if (!pending_mdsmap.enabled) {
+      ss << "no filesystem configured";
+      r = -EINVAL;
+      return true;
+    }
+
+    // Check for confirmation flag
+    string sure;
+    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
+    if (sure != "--yes-i-really-mean-it") {
+      ss << "this is a DESTRUCTIVE operation and will make data in your filesystem permanently" \
+            "inaccessible.  Add --yes-i-really-mean-it if you are sure you wish to continue.";
+      r = -EPERM;
+      return true;
+    }
+
+    MDSMap newmap;
+    pending_mdsmap = newmap;
+    pending_mdsmap.epoch = mdsmap.epoch + 1;
+    assert(pending_mdsmap.enabled == false);
+    pending_mdsmap.metadata_pool = -1;
+    pending_mdsmap.cas_pool = -1;
+    pending_mdsmap.created = ceph_clock_now(g_ceph_context);
+
+    r = 0;
+    return true;
+  } else {
+    return false;
+  }
+}
+
+
+/**
+ * Handle a command that affects the filesystem (i.e. a filesystem
+ * must exist for the command to act upon).
+ *
+ * @return true if the message is done with,
+ *         else false (if it was enqueued for retry)
+ */
+bool MDSMonitor::filesystem_command(
+    MMonCommand *m,
+    std::string const &prefix,
+    map<string, cmd_vartype> &cmdmap,
+    std::stringstream &ss,
+    int &r)
+{
   string whostr;
   cmd_getval(g_ceph_context, cmdmap, "who", whostr);
   if (prefix == "mds stop" ||
       prefix == "mds deactivate") {
     int who = parse_pos_long(whostr.c_str(), &ss);
-    if (who < 0)
-      goto out;
+    if (who < 0) {
+      return true;
+    }
     if (!pending_mdsmap.is_active(who)) {
       r = -EEXIST;
       ss << "mds." << who << " not active (" 
@@ -834,8 +982,9 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
   } else if (prefix == "mds set_max_mds") {
     // NOTE: see also "mds set max_mds", which can modify the same field.
     int64_t maxmds;
-    if (!cmd_getval(g_ceph_context, cmdmap, "maxmds", maxmds) || maxmds < 0)
-      goto out;
+    if (!cmd_getval(g_ceph_context, cmdmap, "maxmds", maxmds) || maxmds < 0) {
+      return true;
+    }
     pending_mdsmap.max_mds = maxmds;
     r = 0;
     ss << "max_mds = " << pending_mdsmap.max_mds;
@@ -843,19 +992,21 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
     string var;
     if (!cmd_getval(g_ceph_context, cmdmap, "var", var) || var.empty()) {
       ss << "Invalid variable";
-      goto out;
+      return true;
     }
     string val;
     string interr;
     int64_t n = 0;
-    if (!cmd_getval(g_ceph_context, cmdmap, "val", val))
-      goto out;
+    if (!cmd_getval(g_ceph_context, cmdmap, "val", val)) {
+      return true;
+    }
     // we got a string.  see if it contains an int.
     n = strict_strtoll(val.c_str(), 10, &interr);
     if (var == "max_mds") {
       // NOTE: see also "mds set_max_mds", which can modify the same field.
-      if (interr.length())
-	goto out;
+      if (interr.length()) {
+	return true;
+      }
       pending_mdsmap.max_mds = n;
     } else if (var == "inline_data") {
       if (val == "true" || val == "yes" || (!interr.length() && n == 1)) {
@@ -864,7 +1015,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	    confirm != "--yes-i-really-mean-it") {
 	  ss << "inline data is new and experimental; you must specify --yes-i-really-mean-it";
 	  r = -EPERM;
-	  goto out;
+	  return true;
 	}
 	ss << "inline data enabled";
 	pending_mdsmap.set_inline_data_enabled(true);
@@ -876,17 +1027,17 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       } else {
 	ss << "value must be false|no|0 or true|yes|1";
 	r = -EINVAL;
-	goto out;
+	return true;
       }
     } else if (var == "max_file_size") {
       if (interr.length()) {
 	ss << var << " requires an integer value";
-	goto out;
+	return true;
       }
       if (n < CEPH_MIN_STRIPE_UNIT) {
 	r = -ERANGE;
 	ss << var << " must at least " << CEPH_MIN_STRIPE_UNIT;
-	goto out;
+	return true;
       }
       pending_mdsmap.max_file_size = n;
     } else if (var == "allow_new_snaps") {
@@ -899,18 +1050,18 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	    confirm != "--yes-i-really-mean-it") {
 	  ss << "Snapshots are unstable and will probably break your FS! Set to --yes-i-really-mean-it if you are sure you want to enable them";
 	  r = -EPERM;
-	  goto out;
+	  return true;
 	}
 	pending_mdsmap.set_snaps_allowed();
 	ss << "enabled new snapshots";
       } else {
 	ss << "value must be true|yes|1 or false|no|0";
 	r = -EINVAL;
-	goto out;
+	return true;
       }
     } else {
       ss << "unknown variable " << var;
-      goto out;
+      return true;
     }
     r = 0;
   } else if (prefix == "mds setmap") {
@@ -924,9 +1075,8 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
     if (pending_mdsmap.epoch == e) {
       map.epoch = pending_mdsmap.epoch;  // make sure epoch is correct
       pending_mdsmap = map;
-      string rs = "set mds map";
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
-						get_last_committed() + 1));
+      ss << "set mds map";
+      r = 0;
       return true;
     } else {
       ss << "next mdsmap epoch " << pending_mdsmap.epoch << " != " << e;
@@ -938,24 +1088,21 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       ss << "error parsing 'gid' value '"
          << cmd_vartype_stringify(cmdmap["gid"]) << "'";
       r = -EINVAL;
-      goto out;
+      return true;
     }
     int64_t state;
     if (!cmd_getval(g_ceph_context, cmdmap, "state", state)) {
       ss << "error parsing 'state' string value '"
          << cmd_vartype_stringify(cmdmap["state"]) << "'";
       r = -EINVAL;
-      goto out;
+      return true;
     }
     if (!pending_mdsmap.is_dne_gid(gid)) {
       MDSMap::mds_info_t& info = pending_mdsmap.get_info_gid(gid);
       info.state = state;
       stringstream ss;
       ss << "set mds gid " << gid << " to state " << state << " " << ceph_mds_state_name(state);
-      string rs;
-      getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
-						get_last_committed() + 1));
+      r = 0;
       return true;
     }
 
@@ -974,7 +1121,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       ss << "error parsing 'gid' value '"
          << cmd_vartype_stringify(cmdmap["gid"]) << "'";
       r = -EINVAL;
-      goto out;
+      return true;
     }
     int state = pending_mdsmap.get_state_gid(gid);
     if (state == 0) {
@@ -988,10 +1135,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       pending_mdsmap.mds_info.erase(gid);
       stringstream ss;
       ss << "removed mds gid " << gid;
-      string rs;
-      getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
-						get_last_committed() + 1));
+      r = 0;
       return true;
     }
   } else if (prefix == "mds rmfailed") {
@@ -1000,15 +1144,12 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       ss << "error parsing 'who' value '"
          << cmd_vartype_stringify(cmdmap["who"]) << "'";
       r = -EINVAL;
-      goto out;
+      return true;
     }
     pending_mdsmap.failed.erase(w);
     stringstream ss;
     ss << "removed failed mds." << w;
-    string rs;
-    getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
-					      get_last_committed() + 1));
+    r = 0;
     return true;
   } else if (prefix == "mds cluster_down") {
     if (pending_mdsmap.test_flag(CEPH_MDSMAP_DOWN)) {
@@ -1032,7 +1173,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       ss << "error parsing feature value '"
          << cmd_vartype_stringify(cmdmap["feature"]) << "'";
       r = -EINVAL;
-      goto out;
+      return true;
     }
     if (pending_mdsmap.compat.compat.contains(f)) {
       ss << "removing compat feature " << f;
@@ -1048,7 +1189,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       ss << "error parsing feature value '"
          << cmd_vartype_stringify(cmdmap["feature"]) << "'";
       r = -EINVAL;
-      goto out;
+      return true;
     }
     if (pending_mdsmap.compat.incompat.contains(f)) {
       ss << "removing incompat feature " << f;
@@ -1105,93 +1246,11 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       if (r == 0)
 	ss << "removed data pool " << poolid << " from mdsmap";
     }
-  } else if (prefix == "mds newfs") {
-    MDSMap newmap;
-    int64_t metadata, data;
-    if (!cmd_getval(g_ceph_context, cmdmap, "metadata", metadata)) {
-      ss << "error parsing 'metadata' value '"
-         << cmd_vartype_stringify(cmdmap["metadata"]) << "'";
-      r = -EINVAL;
-      goto out;
-    }
-    if (!cmd_getval(g_ceph_context, cmdmap, "data", data)) {
-      ss << "error parsing 'data' value '"
-         << cmd_vartype_stringify(cmdmap["data"]) << "'";
-      r = -EINVAL;
-      goto out;
-    }
-
-    // Check that the requested pools exist
-    OSDMonitor *osdmon = mon->osdmon();
-    if (!osdmon->osdmap.have_pg_pool(metadata)) {
-      ss << "metadata pool '" << metadata << "' not found";
-      r = -ENOENT;
-      goto out;
-    }
-
-    if (!osdmon->osdmap.have_pg_pool(data)) {
-      ss << "data pool '" << data << "' not found";
-      r = -ENOENT;
-      goto out;
-    }
-
-    // Warn if crash_replay_interval is not set on the data pool
-    //  (on creation should have done pools[pool].crash_replay_interval =
-    //  cct->_conf->osd_default_data_pool_replay_window;)
-    pg_pool_t const *data_pool = osdmon->osdmap.get_pg_pool(data);
-    if (data_pool->get_crash_replay_interval() == 0) {
-      ss << "warning: crash_replay_interval not set on data pool '" << data << "', ";
-    }
-    
-    string sure;
-    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
-    if (pending_mdsmap.enabled && sure != "--yes-i-really-mean-it") {
-      ss << "this is DANGEROUS and will wipe out the mdsmap's fs, and may clobber data in the new pools you specify.  add --yes-i-really-mean-it if you do.";
-      r = -EPERM;
-    } else {
-      newmap.inc = pending_mdsmap.inc;
-      pending_mdsmap = newmap;
-      pending_mdsmap.epoch = mdsmap.epoch + 1;
-      create_new_fs(pending_mdsmap, metadata, data);
-      ss << "new fs with metadata pool " << metadata << " and data pool " << data;
-      string rs;
-      getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
-						get_last_committed() + 1));
-      return true;
-    }
-  } else if (prefix == "mds rmfs") {
-
-    // Check there is something to delete
-    if (!pending_mdsmap.enabled) {
-      ss << "no filesystem configured";
-      r = -EINVAL;
-      goto out;
-    }
-
-    MDSMap newmap;
-    pending_mdsmap = newmap;
-    assert(pending_mdsmap.enabled == false);
-    pending_mdsmap.metadata_pool = -1;
-    pending_mdsmap.cas_pool = -1;
-    pending_mdsmap.created = ceph_clock_now(g_ceph_context);
   } else {
     ss << "unrecognized command";
   }
- out:
-  string rs;
-  getline(ss, rs);
 
-  if (r >= 0) {
-    // success.. delay reply
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, r, rs,
-					      get_last_committed() + 1));
-    return true;
-  } else {
-    // reply immediately
-    mon->reply_command(m, r, rs, rdata, get_last_committed());
-    return false;
-  }
+  return true;
 }
 
 

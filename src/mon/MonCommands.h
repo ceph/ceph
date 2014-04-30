@@ -288,11 +288,15 @@ COMMAND("mds add_data_pool " \
 COMMAND("mds remove_data_pool " \
 	"name=pool,type=CephString", \
 	"remove data pool <pool>", "mds", "rw", "cli,rest")
+COMMAND("mds rmfs " \
+	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
+	"disable the filesystem", \
+	"mds", "rw", "cli,rest")
 COMMAND("mds newfs " \
 	"name=metadata,type=CephInt,range=0 " \
 	"name=data,type=CephInt,range=0 " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
-	"make new filesystom using pools <metadata> and <data>", \
+	"make new filesystem using pools <metadata> and <data>", \
 	"mds", "rw", "cli,rest")
 /*
  * Monmap commands
