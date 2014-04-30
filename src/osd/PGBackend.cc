@@ -202,7 +202,6 @@ void PGBackend::rollback_setattrs(
   map<string, boost::optional<bufferlist> > &old_attrs,
   ObjectStore::Transaction *t) {
   map<string, bufferlist> to_set;
-  set<string> to_remove;
   assert(!hoid.is_temp());
   for (map<string, boost::optional<bufferlist> >::iterator i = old_attrs.begin();
        i != old_attrs.end();
