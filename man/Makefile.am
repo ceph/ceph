@@ -4,7 +4,6 @@ dist_man_MANS = \
 	ceph-osd.8 \
 	ceph-mds.8 \
 	ceph-mon.8 \
-	mkcephfs.8 \
 	ceph-fuse.8 \
 	ceph-syn.8 \
 	crushtool.8 \
