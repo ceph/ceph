@@ -1900,7 +1900,6 @@ next:
     formatter->open_array_section("objects");
     while (is_truncated) {
       map<string, RGWObjEnt> result;
-      string ns;
       int r = store->cls_bucket_list(bucket, marker, prefix, 1000, 
                                      result, &is_truncated, &marker,
                                      bucket_object_check_filter);
