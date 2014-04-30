@@ -222,8 +222,7 @@ void Dumper::dump_entries()
   Mutex localLock("dump_entries");
   JSONFormatter jf(true);
 
-  int r = recover_journal();
-  if (r) {
+  if (recover_journal()) {
     return;
   }
 
