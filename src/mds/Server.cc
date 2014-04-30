@@ -2624,7 +2624,8 @@ public:
 
     mds->locker->share_inode_max_size(newi);
 
-    mds->mdcache->send_dentry_link(dn);
+    MDRequestRef null_ref;
+    mds->mdcache->send_dentry_link(dn, null_ref);
 
     mds->balancer->hit_inode(mdr->now, newi, META_POP_IWR);
 
@@ -3948,7 +3949,8 @@ public:
 
     mdr->apply();
 
-    mds->mdcache->send_dentry_link(dn);
+    MDRequestRef null_ref;
+    mds->mdcache->send_dentry_link(dn, null_ref);
 
     if (newi->inode.is_file())
       mds->locker->share_inode_max_size(newi);
@@ -4328,8 +4330,9 @@ void Server::_link_local_finish(MDRequestRef& mdr, CDentry *dn, CInode *targeti,
   targeti->pop_and_dirty_projected_inode(mdr->ls);
 
   mdr->apply();
-  
-  mds->mdcache->send_dentry_link(dn);
+
+  MDRequestRef null_ref;
+  mds->mdcache->send_dentry_link(dn, null_ref);
 
   // bump target popularity
   mds->balancer->hit_inode(mdr->now, targeti, META_POP_IWR);
@@ -4450,12 +4453,11 @@ void Server::_link_remote_finish(MDRequestRef& mdr, bool inc,
 
   mdr->apply();
 
+  MDRequestRef null_ref;
   if (inc)
-    mds->mdcache->send_dentry_link(dn);
-  else {
-    MDRequestRef null_ref;
+    mds->mdcache->send_dentry_link(dn, null_ref);
+  else
     mds->mdcache->send_dentry_unlink(dn, NULL, null_ref);
-  }
   
   // commit anchor update?
   if (mdr->more()->dst_reanchor_atid) 
@@ -5647,9 +5649,11 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     witnesses.insert(srcdn->authority().first);
   if (srcdnl->is_remote() && !srci->is_auth())
     witnesses.insert(srci->authority().first);
-  destdn->list_replicas(witnesses);
-  if (destdnl->is_remote() && !oldin->is_auth())
-    witnesses.insert(oldin->authority().first);
+  if (!destdnl->is_null()) {
+    destdn->list_replicas(witnesses);
+    if (destdnl->is_remote() && !oldin->is_auth())
+      witnesses.insert(oldin->authority().first);
+  }
   dout(10) << " witnesses " << witnesses << ", have " << mdr->more()->witnessed << dendl;
 
 
@@ -5899,6 +5903,8 @@ void Server::_rename_finish(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, 
 
   // apply
   _rename_apply(mdr, srcdn, destdn, straydn);
+
+  mds->mdcache->send_dentry_link(destdn, mdr);
 
   CDentry::linkage_t *destdnl = destdn->get_linkage();
   CInode *in = destdnl->get_inode();
