@@ -947,7 +947,7 @@ public:
 
   // -- namespace --
 public:
-  void send_dentry_link(CDentry *dn);
+  void send_dentry_link(CDentry *dn, MDRequestRef& mdr);
   void send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& mdr);
 protected:
   void handle_dentry_link(MDentryLink *m);

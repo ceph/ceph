@@ -10808,7 +10808,7 @@ void MDCache::handle_dir_update(MDirUpdate *m)
 
 // LINK
 
-void MDCache::send_dentry_link(CDentry *dn)
+void MDCache::send_dentry_link(CDentry *dn, MDRequestRef& mdr)
 {
   dout(7) << "send_dentry_link " << *dn << dendl;
 
@@ -10816,6 +10816,9 @@ void MDCache::send_dentry_link(CDentry *dn)
   for (map<int,unsigned>::iterator p = dn->replicas_begin();
        p != dn->replicas_end(); 
        ++p) {
+    // don't tell (rename) witnesses; they already know
+    if (mdr.get() && mdr->more()->witnessed.count(p->first))
+      continue;
     if (mds->mdsmap->get_state(p->first) < MDSMap::STATE_REJOIN ||
 	(mds->mdsmap->get_state(p->first) == MDSMap::STATE_REJOIN &&
 	 rejoin_gather.count(p->first)))
@@ -10895,7 +10898,7 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& md
        it != dn->replicas_end();
        ++it) {
     // don't tell (rmdir) witnesses; they already know
-    if (mdr && mdr->more()->witnessed.count(it->first))
+    if (mdr.get() && mdr->more()->witnessed.count(it->first))
       continue;
 
     if (mds->mdsmap->get_state(it->first) < MDSMap::STATE_REJOIN ||
