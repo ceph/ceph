@@ -1794,17 +1794,24 @@ Upgrading
 * The 'rbd ls' function now returns success and returns an empty when a pool
   does not store any rbd images.  Previously it would return an ENOENT error.
 
+* Ceph will now issue a health warning if the 'mon osd down out
+  interval' config option is set to zero.  This warning can be
+  disabled by adding 'mon warn on osd down out interval zero = false'
+  to ceph.conf.
+
 Notable Changes
 ---------------
 
 * all: improve keepalive detection of failed monitor connections (#7888, Sage Weil)
 * ceph-fuse, libcephfs: pin inodes during readahead, fixing rare crash (#7867, Sage Weil)
 * librbd: make cache writeback a bit less aggressive (Sage Weil)
+* librbd: make symlink for qemu to detect librbd in RPM (#7293, Josh Durgin)
 * mon: allow 'hashpspool' pool flag to be set and unset (Loic Dachary)
 * mon: commit paxos state only after entire quorum acks, fixing rare race where prior round state is readable (#7736, Sage Weil)
 * mon: make elections and timeouts a bit more robust (#7212, Sage Weil)
 * mon: prevent extreme pool split operations (Greg Farnum)
 * mon: wait for quorum for get_version requests to close rare pool creation race (#7997, Sage Weil)
+* mon: warn on 'mon osd down out interval = 0' (#7784, Joao Luis)
 * msgr: fix byte-order for auth challenge, fixing auth errors on big-endian clients (#7977, Dan Mick)
 * msgr: fix occasional crash in authentication code (usually triggered by librbd) (#6840, Josh Durgin)
 * msgr: fix rebind() race (#6992, Xihui He)
@@ -1823,6 +1830,7 @@ Notable Changes
 * rgw: do'nt log system requests in usage log (#6889, Yehuda Sadeh)
 * rgw: fix bucket recreation (#6951, Yehuda Sadeh)
 * rgw: fix Swift range response (#7099, Julien Calvet, Yehuda Sadeh)
+* rgw: fix URL escaping (#8202, Yehuda Sadeh)
 * rgw: fix whitespace trimming in http headers (#7543, Yehuda Sadeh)
 * rgw: make multi-object deletion idempotent (#7346, Yehuda Sadeh)
 
