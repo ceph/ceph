@@ -32,7 +32,7 @@ We expect to maintain a series of stable releases based on v0.80
 Firefly for as much as a year.  In the meantime, development of Ceph
 continues with the next release, Giant, which will feature work on the
 CephFS distributed file system, more alternative storage backends
-(like RocksDB and f2fs), RDMA support, support for pyramind erasure
+(like RocksDB and f2fs), RDMA support, support for pyramid erasure
 codes, and additional functionality in the block device (RBD) like
 copy-on-read and multisite mirroring.
 
