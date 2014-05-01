@@ -110,7 +110,7 @@ void usage(ostream& out)
 "IMPORT AND EXPORT\n"
 "   import [options] <local-directory> <rados-pool>\n"
 "       Upload <local-directory> to <rados-pool>\n"
-"   export [options] rados-pool> <local-directory>\n"
+"   export [options] <rados-pool> <local-directory>\n"
 "       Download <rados-pool> to <local-directory>\n"
 "   options:\n"
 "       -f / --force                 Copy everything, even if it hasn't changed.\n"
