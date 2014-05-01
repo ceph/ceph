@@ -33,13 +33,14 @@ steps:
 #. `Make a Pull Request`_
 #. `Notify the Relevant Person`_
 
-
-
 Get the Source
 --------------
 
 Ceph documentation lives in the Ceph repository right along side the Ceph source
-code under the ``ceph/doc`` directory. The most common way to make contributions
+code under the ``ceph/doc`` directory. For details on github and ceph,
+see :ref:`Get Involved`.
+
+The most common way to make contributions
 is to use the `Fork and Pull`_ approach. To use this approach, you must:
 
 - Install git locally. :: 
