@@ -1996,7 +1996,7 @@ public:
 
   std::string get_corrupt_pg_log_name() const;
   static int read_info(
-    ObjectStore *store, const coll_t coll,
+    ObjectStore *store, const coll_t &coll,
     bufferlist &bl, pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals,
     hobject_t &biginfo_oid, hobject_t &infos_oid,
     interval_set<snapid_t>  &snap_collections, __u8 &);
