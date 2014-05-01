@@ -19,8 +19,9 @@ tasks:
 - rados:
     clients: [client.0]
     pools: [base]
-    ops: 4000
-    objects: 10000
+    ops: 10000
+    objects: 6600
+    max_seconds: 1200
     size: 1024
     op_weights:
       read: 100
