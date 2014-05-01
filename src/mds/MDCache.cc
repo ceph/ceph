@@ -7306,17 +7306,12 @@ bool MDCache::shutdown_pass()
     return false;
   }
 
-  // make mydir subtree go away
-  if (myin) {
-    CDir *mydir = myin->get_dirfrag(frag_t());
-    if (mydir && mydir->is_subtree_root()) {
-      adjust_subtree_auth(mydir, CDIR_AUTH_UNKNOWN);
-      remove_subtree(mydir);
-    }
-  }
-  
+  CDir *mydir = myin ? myin->get_dirfrag(frag_t()) : NULL;
+  if (mydir && !mydir->is_subtree_root())
+    mydir = NULL;
+
   // subtrees map not empty yet?
-  if (!subtrees.empty()) {
+  if (subtrees.size() > (mydir ? 1 : 0)) {
     dout(7) << "still have " << num_subtrees() << " subtrees" << dendl;
     show_subtrees();
     migrator->show_importing();
@@ -7325,9 +7320,15 @@ bool MDCache::shutdown_pass()
       show_cache();
     return false;
   }
-  assert(subtrees.empty());
   assert(!migrator->is_exporting());
   assert(!migrator->is_importing());
+
+  // make mydir subtree go away
+  if (mydir) {
+    adjust_subtree_auth(mydir, CDIR_AUTH_UNKNOWN);
+    remove_subtree(mydir);
+  }
+  assert(subtrees.empty());
 
   // (only do this once!)
   if (!mds->mdlog->is_capped()) {
