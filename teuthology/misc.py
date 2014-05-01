@@ -625,11 +625,9 @@ def pull_directory(remote, remotedir, localdir):
               remote.shortname, remotedir, localdir)
     if not os.path.exists(localdir):
         os.mkdir(localdir)
-    result = remote.get_tar(remotedir, sudo=True)
     _, local_tarfile = tempfile.mkstemp()
+    remote.get_tar(remotedir, local_tarfile, sudo=True)
     with open(local_tarfile, 'r+') as fb1:
-        fb1.write(result)
-        fb1.seek(0)
         tar = tarfile.open(mode='r|', fileobj=fb1)
         while True:
             ti = tar.next()
@@ -663,9 +661,7 @@ def pull_directory_tarball(remote, remotedir, localfile):
     """
     log.debug('Transferring archived files from %s:%s to %s',
               remote.shortname, remotedir, localfile)
-    tardata = remote.get_tar(remotedir, zip_flag=True, sudo=True)
-    with open(localfile, 'w') as out:
-        out.write(tardata)
+    remote.get_tar(remotedir, localfile, zip_flag=True, sudo=True)
 
 
 def get_wwn_id_map(remote, devs):

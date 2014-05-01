@@ -74,6 +74,10 @@ class Remote(object):
         return self.name.split('@')[1]
 
     @property
+    def username(self):
+        return self.name.split('@')[0]
+
+    @property
     def is_online(self):
         if self.ssh is None:
             return False
@@ -154,6 +158,14 @@ class Remote(object):
             result = file_sftp.read()
         return result
 
+    def _sftp_copy_file(self, file_path, to_path):
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.load_system_host_keys()
+        client.connect(self.hostname, username=self.username)
+        sftp = client.open_sftp()
+        sftp.get(file_path, to_path)
+
     def remove(self, path):
         self.run(args=['rm', '-fr', path]) 
 
@@ -164,7 +176,6 @@ class Remote(object):
         if not sudo:
             return self._sftp_get_file(path)
         temp_file_path = self.mktemp()
-        self.chmod(temp_file_path, '0666')
         args = [
             'sudo',
             'cp',
@@ -172,17 +183,17 @@ class Remote(object):
             temp_file_path,
             ]
         self.run(args=args)
+        self.chmod(temp_file_path, '0666')
         ret = self._sftp_get_file(temp_file_path) 
         self.remove(temp_file_path)
         return ret
 
-    def get_tar(self, path, sudo=False, zip_flag=False):
+    def get_tar(self, path, to_path, sudo=False, zip_flag=False):
         """
         Tar a remote file.
         """
         zip_fld = lambda x: 'cz' if x else 'c'
         temp_file_path = self.mktemp()
-        self.chmod(temp_file_path, '0666')
         args = []
         if sudo:
             args.append('sudo')
@@ -195,10 +206,11 @@ class Remote(object):
             '.',
             ])
         self.run(args=args)
-        ret = self._sftp_get_file(temp_file_path)
+        if sudo:
+            self.chmod(temp_file_path, '0666')
+        self._sftp_copy_file(temp_file_path, to_path)
         self.remove(temp_file_path)
-        return ret
-                
+
 
 def getShortName(name):
     """
