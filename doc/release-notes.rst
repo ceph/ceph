@@ -1834,6 +1834,8 @@ Notable Changes
 * rgw: fix whitespace trimming in http headers (#7543, Yehuda Sadeh)
 * rgw: make multi-object deletion idempotent (#7346, Yehuda Sadeh)
 
+For more detailed information, see :download:`the complete changelog <changelog/v0.67.8.txt>`.
+
 v0.67.7 "Dumpling"
 ==================
 
