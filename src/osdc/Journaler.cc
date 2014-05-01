@@ -1070,14 +1070,12 @@ bool JournalStream::readable(bufferlist &read_buf, uint64_t &need)
   if (read_buf.length() >= need) {
     if (format >= JOURNAL_FORMAT_RESILIENT) {
       ::decode(entry_sentinel, p);
-    }
-
-    ::decode(entry_size, p);
-    if (format >= JOURNAL_FORMAT_RESILIENT) {
       if (entry_sentinel != sentinel) {
         throw buffer::malformed_input("Invalid sentinel"); 
       }
     }
+
+    ::decode(entry_size, p);
   } else {
     return false;
   }
