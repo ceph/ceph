@@ -1056,19 +1056,18 @@ void Journaler::handle_write_error(int r)
  */
 bool JournalStream::readable(bufferlist &read_buf, uint64_t &need)
 {
-  // have enough for entry size?
   uint32_t entry_size = 0;
   uint64_t start_ptr = 0;
   uint64_t entry_sentinel = 0;
   bufferlist::iterator p = read_buf.begin();
 
-  // Do we have enough data to decode an entry header?
+  // Do we have enough data to decode an entry prefix?
   if (format >= JOURNAL_FORMAT_RESILIENT) {
     need = sizeof(entry_size) + sizeof(entry_sentinel);
   } else {
     need = sizeof(entry_size);
   }
-  if (read_buf.length() >= sizeof(entry_size) + sizeof(entry_sentinel) + sizeof(start_ptr)) {
+  if (read_buf.length() >= need) {
     if (format >= JOURNAL_FORMAT_RESILIENT) {
       ::decode(entry_sentinel, p);
     }
@@ -1083,7 +1082,7 @@ bool JournalStream::readable(bufferlist &read_buf, uint64_t &need)
     return false;
   }
 
-  // Do we have enough data to decode an entry header and payload?
+  // Do we have enough data to decode an entry prefix, payload and suffix?
   if (format >= JOURNAL_FORMAT_RESILIENT) {
     need = sizeof(entry_size) + sizeof(entry_sentinel) + entry_size + sizeof(start_ptr);
   } else {
