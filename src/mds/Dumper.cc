@@ -227,7 +227,6 @@ void Dumper::dump_entries()
   }
 
   jf.open_array_section("log");
-  bool got_data = true;
   lock.Lock();
   // Until the journal is empty, pop an event or wait for one to
   // be available.
@@ -236,7 +235,7 @@ void Dumper::dump_entries()
       << "/" << journaler->get_write_pos() - journaler->get_read_pos() << dendl;
   while (journaler->get_read_pos() != journaler->get_write_pos()) {
     bufferlist entry_bl;
-    got_data = journaler->try_read_entry(entry_bl);
+    bool got_data = journaler->try_read_entry(entry_bl);
     dout(10) << "try_read_entry: " << got_data << dendl;
     if (got_data) {
       LogEvent *le = LogEvent::decode(entry_bl);
