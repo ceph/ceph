@@ -149,7 +149,7 @@ int     mapped_writes = 0;              /* -W flag disables */
 int     fallocate_calls = 0;            /* -F flag disables */
 int     punch_hole_calls = 1;           /* -H flag disables */
 int	clone_calls = 1;                /* -C flag disables */
-int     randomize_striping = 1;
+int	randomize_striping = 1;		/* -U flag disables */
 int 	mapped_reads = 0;		/* -R flag disables it */
 int	fsxgoodfd = 0;
 int	o_direct;			/* -Z */
@@ -1111,7 +1111,7 @@ void
 usage(void)
 {
 	fprintf(stdout, "usage: %s",
-		"fsx [-dfnqxyACFHLORWZ] [-b opnum] [-c Prob] [-h holebdy] [-l flen] [-m start:end] [-o oplen] [-p progressinterval] [-r readbdy] [-s style] [-t truncbdy] [-w writebdy] [-D startingop] [-N numops] [-P dirpath] [-S seed] pname iname\n\
+		"fsx [-dfnqxyACFHLORUWZ] [-b opnum] [-c Prob] [-h holebdy] [-l flen] [-m start:end] [-o oplen] [-p progressinterval] [-r readbdy] [-s style] [-t truncbdy] [-w writebdy] [-D startingop] [-N numops] [-P dirpath] [-S seed] pname iname\n\
 	-b opnum: beginning operation number (default 1)\n\
 	-c P: 1 in P chance of file close+open at each op (default infinity)\n\
 	-d: debug output for all operations\n\
@@ -1145,6 +1145,7 @@ usage(void)
 	-P dirpath: save .fsxlog and .fsxgood files in dirpath (default ./)\n\
 	-R: read() system calls only (mapped reads disabled)\n\
 	-S seed: for random # generator (default 1) 0 gets timestamp\n\
+	-U: disable randomized striping\n\
 	-W: mapped write operations DISabled\n\
 	-Z: O_DIRECT (use -R, -W, -r and -w too)\n\
 	poolname: this is REQUIRED (no default)\n\
@@ -1324,7 +1325,7 @@ main(int argc, char **argv)
 
 	setvbuf(stdout, (char *)0, _IOLBF, 0); /* line buffered stdout */
 
-	while ((ch = getopt(argc, argv, "b:c:dfh:l:m:no:p:qr:s:t:w:xyACD:FHLN:OP:RS:WZ"))
+	while ((ch = getopt(argc, argv, "b:c:dfh:l:m:no:p:qr:s:t:w:xyACD:FHLN:OP:RS:UWZ"))
 	       != EOF)
 		switch (ch) {
 		case 'b':
@@ -1463,6 +1464,9 @@ main(int argc, char **argv)
 				fprintf(stdout, "Seed set to %d\n", seed);
 			if (seed < 0)
 				usage();
+			break;
+		case 'U':
+			randomize_striping = 0;
 			break;
 		case 'W':
 		        mapped_writes = 0;
