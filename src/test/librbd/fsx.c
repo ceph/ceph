@@ -464,20 +464,21 @@ check_size(void)
 	}
 }
 
+#define TRUNC_HACK_SIZE	(200ULL << 9)	/* 512-byte aligned for krbd */
 
 void
 check_trunc_hack(void)
 {
 	rbd_image_info_t statbuf;
 
-	rbd_resize(image, (off_t)0);
-	rbd_resize(image, (off_t)100000);
+	rbd_resize(image, 0ULL);
+	rbd_resize(image, TRUNC_HACK_SIZE);
 	rbd_stat(image, &statbuf, sizeof(statbuf));
-	if (statbuf.size != (off_t)100000) {
+	if (statbuf.size != TRUNC_HACK_SIZE) {
  		prt("no extend on truncate! not posix!\n");
  		exit(130);
  	}
-	rbd_resize(image, (off_t)0);
+	rbd_resize(image, 0ULL);
 }
 
 int
