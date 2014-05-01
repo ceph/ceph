@@ -14,7 +14,8 @@ Filesystem clients.
             |      OSDs     | |    Monitor    | |      MDS      |
             +---------------+ +---------------+ +---------------+
 
-- **OSDs**: A :term:`Ceph OSD Daemon` (OSD) stores data, handles data 
+- **OSDs**: A :term:`Ceph OSD Daemon` is often referred to as an OSD.
+  An OSD stores data, handles data 
   replication, recovery, backfilling, rebalancing, and provides some monitoring
   information to Ceph Monitors by checking other Ceph OSD Daemons for a 
   heartbeat. A Ceph Storage Cluster requires at least two Ceph OSD Daemons to 

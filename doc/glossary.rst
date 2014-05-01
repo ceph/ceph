@@ -83,7 +83,8 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 	Ceph OSD Daemon
 	OSD
 	Ceph OSD
-		The Ceph OSD software, which interacts with a logical disk (OSD). Ceph 
+		The Ceph OSD software, which interacts with a logical
+		disk (:term:`Object Storage Device` or OSD). Ceph 
 		users often frequently conflate the term OSD with "Ceph OSD Daemon."
 		
 	Ceph Monitor
