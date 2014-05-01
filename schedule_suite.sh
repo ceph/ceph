@@ -148,6 +148,7 @@ $kernelvalue
 nuke-on-error: true
 machine_type: $mtype
 os_type: $distro
+suite: $nicesuite
 tasks:
 - chef:
 - clock.check:
