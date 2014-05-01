@@ -637,7 +637,7 @@ inline bool operator>(const eversion_t& l, const eversion_t& r) {
 inline bool operator>=(const eversion_t& l, const eversion_t& r) {
   return (l.epoch == r.epoch) ? (l.version >= r.version):(l.epoch >= r.epoch);
 }
-inline ostream& operator<<(ostream& out, const eversion_t e) {
+inline ostream& operator<<(ostream& out, const eversion_t& e) {
   return out << e.epoch << "'" << e.version;
 }
 
