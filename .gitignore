@@ -11,3 +11,5 @@
 
 /*.egg-info
 /virtualenv
+/build
+/*.yaml
