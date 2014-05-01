@@ -148,6 +148,7 @@ $kernelvalue
 nuke-on-error: true
 machine_type: $mtype
 os_type: $distro
+branch: $ceph
 suite: $nicesuite
 tasks:
 - chef:
