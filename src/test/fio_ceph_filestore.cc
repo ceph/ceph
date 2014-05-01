@@ -9,16 +9,7 @@
 #include "os/FileStore.h"
 #include "global/global_init.h"
 
-/* silence some fio.h include issues.
- * fio.h needs to made robust for third-party software.
- */
-#undef ARRAY_SIZE /* double declartion */
-#define CONFIG_CPU_COUNT /* double declaration: fio.h should check if CPU_COUNT alread got defined */
-#undef le16_to_cpu
-#undef le32_to_cpu
-#undef le64_to_cpu
-
-#include "fio.h"
+#include <fio.h>
 
 struct fio_ceph_filestore_iou {
 	struct io_u *io_u;
