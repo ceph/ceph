@@ -22,7 +22,6 @@
 #include "PGLog.h"
 #include "osd_types.h"
 #include "common/WorkQueue.h"
-#include "osd_types.h"
 #include "include/Context.h"
 #include "os/ObjectStore.h"
 #include "common/LogClient.h"
