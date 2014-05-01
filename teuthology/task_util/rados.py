@@ -39,3 +39,12 @@ def create_replicated_pool(remote, name, pgnum):
     remote.run(args=[
         'ceph', 'osd', 'pool', 'create', name, str(pgnum), str(pgnum),
         ])
+
+def create_cache_pool(remote, base_name, cache_name, pgnum, size):
+    remote.run(args=[
+            'ceph', 'osd', 'pool', 'create', cache_name, str(pgnum)
+            ])
+    remote.run(args=[
+            'ceph', 'osd', 'tier', 'add-cache', base_name, cache_name,
+            str(size),
+            ])

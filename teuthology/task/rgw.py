@@ -14,7 +14,8 @@ from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.task_util.rgw import rgwadmin
 from teuthology.task_util.rados import (rados, create_ec_pool,
-                                        create_replicated_pool)
+                                        create_replicated_pool,
+                                        create_cache_pool)
 
 log = logging.getLogger(__name__)
 
@@ -508,6 +509,9 @@ def create_nonregion_pools(ctx, config, regions):
             create_ec_pool(remote, data_pool, client, 64)
         else:
             create_replicated_pool(remote, data_pool, 64)
+        if ctx.rgw.cache_pools:
+            create_cache_pool(remote, data_pool, data_pool + '.cache', 64,
+                              64*1024*1024)
     yield
 
 
@@ -757,6 +761,10 @@ def task(ctx, config):
     if 'ec-data-pool' in config:
         ctx.rgw.ec_data_pool = bool(config['ec-data-pool'])
         del config['ec-data-pool']
+        ctx.rgw.cache_pools = False
+    if 'cache-pools' in config:
+        ctx.rgw.cache_pools = bool(config['cache-pools'])
+        del config['cache-pools']
 
     ctx.rgw.frontend = 'apache'
     if 'frontend' in config:
