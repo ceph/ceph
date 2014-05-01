@@ -625,7 +625,7 @@ def pull_directory(remote, remotedir, localdir):
               remote.shortname, remotedir, localdir)
     if not os.path.exists(localdir):
         os.mkdir(localdir)
-    _, local_tarfile = tempfile.mkstemp()
+    _, local_tarfile = tempfile.mkstemp(dir=localdir)
     remote.get_tar(remotedir, local_tarfile, sudo=True)
     with open(local_tarfile, 'r+') as fb1:
         tar = tarfile.open(mode='r|', fileobj=fb1)

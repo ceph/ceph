@@ -74,10 +74,6 @@ class Remote(object):
         return self.name.split('@')[1]
 
     @property
-    def username(self):
-        return self.name.split('@')[0]
-
-    @property
     def is_online(self):
         if self.ssh is None:
             return False
@@ -159,11 +155,7 @@ class Remote(object):
         return result
 
     def _sftp_copy_file(self, file_path, to_path):
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.load_system_host_keys()
-        client.connect(self.hostname, username=self.username)
-        sftp = client.open_sftp()
+        sftp = self.ssh.open_sftp()
         sftp.get(file_path, to_path)
 
     def remove(self, path):
