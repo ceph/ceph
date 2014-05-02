@@ -95,7 +95,6 @@ class JournalStream
 
 class Journaler {
 public:
-  CephContext *cct;
   // this goes at the head of the log "file".
   struct Header {
     uint64_t trimmed_pos;
@@ -180,6 +179,7 @@ public:
 
 private:
   // me
+  CephContext *cct;
   inodeno_t ino;
   int64_t pg_pool;
   bool readonly;
@@ -197,9 +197,12 @@ private:
 
   SafeTimer *timer;
 
+  class C_DelayFlush;
+  friend class C_DelayFlush;
+
   class C_DelayFlush : public Context {
     Journaler *journaler;
-  public:
+    public:
     C_DelayFlush(Journaler *j) : journaler(j) {}
     void finish(int r) {
       journaler->delay_flush_event = 0;
@@ -243,8 +246,6 @@ private:
   friend class C_ReProbe;
   class C_RereadHeadProbe;
   friend class C_RereadHeadProbe;
-
-
 
   // writer
   uint64_t prezeroing_pos;
@@ -320,9 +321,11 @@ private:
    */
   void handle_write_error(int r);
 
+  bool _is_readable();
+
 public:
   Journaler(inodeno_t ino_, int64_t pool, const char *mag, Objecter *obj, PerfCounters *l, int lkey, SafeTimer *tim) : 
-    cct(obj->cct), last_written(mag), last_committed(mag),
+    last_written(mag), last_committed(mag), cct(obj->cct),
     ino(ino_), pg_pool(pool), readonly(true), magic(mag),
     objecter(obj), filer(objecter), logger(l), logger_key_lat(lkey),
     timer(tim), delay_flush_event(0),
@@ -337,6 +340,11 @@ public:
     memset(&layout, 0, sizeof(layout));
   }
 
+  /* reset
+   *  NOTE: we assume the caller knows/has ensured that any objects 
+   * in our sequence do not exist.. e.g. after a MKFS.  this is _not_
+   * an "erase" method.
+   */
   void reset() {
     assert(state == STATE_ACTIVE);
     readonly = true;
@@ -359,15 +367,6 @@ public:
     waiting_for_zero = false;
   }
 
-  // me
-  //void open(Context *onopen);
-  //void claim(Context *onclaim, msg_addr_t from);
-
-  /* reset 
-   *  NOTE: we assume the caller knows/has ensured that any objects 
-   * in our sequence do not exist.. e.g. after a MKFS.  this is _not_
-   * an "erase" method.
-   */
   void create(ceph_file_layout *layout);
   void recover(Context *onfinish);
   void reread_head(Context *onfinish);
@@ -405,7 +404,6 @@ public:
     read_buf.clear();
   }
 
-  bool _is_readable();
   bool is_readable();
   bool try_read_entry(bufferlist& bl);
   void wait_for_readable(Context *onfinish);
