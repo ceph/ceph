@@ -10930,15 +10930,11 @@ void ReplicatedPG::hit_set_trim(RepGather *repop, unsigned max)
       agent_state->remove_oldest_hit_set();
     updated_hit_set_hist.history.pop_front();
 
-    struct stat st;
-    int r = osd->store->stat(
-      coll,
-      ghobject_t(oid, ghobject_t::NO_GEN, pg_whoami.shard),
-      &st);
-    assert(r == 0);
+    ObjectContextRef obc = get_object_context(oid, false);
+    assert(obc);
     --repop->ctx->delta_stats.num_objects;
     --repop->ctx->delta_stats.num_objects_hit_set_archive;
-    repop->ctx->delta_stats.num_bytes -= st.st_size;
+    repop->ctx->delta_stats.num_bytes -= obc->obs.oi.size;
   }
 }
 
