@@ -1577,20 +1577,9 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     else if (type == 'I') {
       // inode
       
-      // parse out inode
-      inode_t inode;
-      string symlink;
-      fragtree_t fragtree;
-      map<string, bufferptr> xattrs;
-      bufferlist snapbl;
-      map<snapid_t,old_inode_t> old_inodes;
-      ::decode(inode, q);
-      if (inode.is_symlink())
-        ::decode(symlink, q);
-      ::decode(fragtree, q);
-      ::decode(xattrs, q);
-      ::decode(snapbl, q);
-      ::decode(old_inodes, q);
+      // Load inode data before looking up or constructing CInode
+      InodeStore inode_data;
+      inode_data.decode_bare(q);
       
       if (stale)
 	continue;
@@ -1610,22 +1599,22 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 
       if (!dn || undef_inode) {
 	// add inode
-	CInode *in = cache->get_inode(inode.ino, last);
+	CInode *in = cache->get_inode(inode_data.inode.ino, last);
 	if (!in || undef_inode) {
 	  if (undef_inode && in)
 	    in->first = first;
 	  else
 	    in = new CInode(cache, true, first, last);
 	  
-	  in->inode = inode;
+	  in->inode = inode_data.inode;
 	  // symlink?
 	  if (in->is_symlink()) 
-	    in->symlink = symlink;
+	    in->symlink = inode_data.symlink;
 	  
-	  in->dirfragtree.swap(fragtree);
-	  in->xattrs.swap(xattrs);
-	  in->decode_snap_blob(snapbl);
-	  in->old_inodes.swap(old_inodes);
+	  in->dirfragtree.swap(inode_data.dirfragtree);
+	  in->xattrs.swap(inode_data.xattrs);
+	  in->decode_snap_blob(inode_data.snap_blob);
+	  in->old_inodes.swap(inode_data.old_inodes);
 	  if (snaps)
 	    in->purge_stale_snap_data(*snaps);
 
@@ -1654,8 +1643,8 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 	  string dirpath, inopath;
 	  this->inode->make_path_string(dirpath);
 	  in->make_path_string(inopath);
-	  clog.error() << "loaded dup inode " << inode.ino
-	    << " [" << first << "," << last << "] v" << inode.version
+	  clog.error() << "loaded dup inode " << inode_data.inode.ino
+	    << " [" << first << "," << last << "] v" << inode_data.inode.version
 	    << " at " << dirpath << "/" << dname
 	    << ", but inode " << in->vino() << " v" << in->inode.version
 	    << " already exists at " << inopath << "\n";
@@ -1909,23 +1898,11 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
     
     // marker, name, inode, [symlink string]
     bl.append('I');         // inode
-    ::encode(in->inode, bl);
-    
-    if (in->is_symlink()) {
-      // include symlink destination!
-      dout(18) << "    including symlink ptr " << in->symlink << dendl;
-      ::encode(in->symlink, bl);
-    }
-    
-    ::encode(in->dirfragtree, bl);
-    ::encode(in->xattrs, bl);
-    bufferlist snapbl;
-    in->encode_snap_blob(snapbl);
-    ::encode(snapbl, bl);
-    
+
     if (in->is_multiversion() && snaps)
       in->purge_stale_snap_data(*snaps);
-    ::encode(in->old_inodes, bl);
+
+    in->encode_bare(bl);
   }
 }
 
