@@ -18,15 +18,12 @@
 #include <boost/program_options/cmdline.hpp>
 #include <boost/program_options/parsers.hpp>
 #include <iostream>
-#include <set>
 #include <sstream>
 #include <stdlib.h>
 #include <fstream>
 #include <string>
-#include <sstream>
 #include <map>
 #include <set>
-#include <boost/scoped_ptr.hpp>
 
 #include "global/global_init.h"
 #include "os/LevelDBStore.h"
