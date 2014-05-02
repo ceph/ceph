@@ -5697,7 +5697,7 @@ void OSD::check_osdmap_features(ObjectStore *fs)
   }
 }
 
-void OSD::advance_pg(
+bool OSD::advance_pg(
   epoch_t osd_epoch, PG *pg,
   ThreadPool::TPHandle &handle,
   PG::RecoveryCtx *rctx,
@@ -5708,11 +5708,19 @@ void OSD::advance_pg(
   OSDMapRef lastmap = pg->get_osdmap();
 
   if (lastmap->get_epoch() == osd_epoch)
-    return;
+    return true;
   assert(lastmap->get_epoch() < osd_epoch);
 
+  epoch_t min_epoch = service.get_min_pg_epoch();
+  epoch_t max;
+  if (min_epoch) {
+    max = min_epoch + g_conf->osd_map_max_advance;
+  } else {
+    max = next_epoch + g_conf->osd_map_max_advance;
+  }
+
   for (;
-       next_epoch <= osd_epoch;
+       next_epoch <= osd_epoch && next_epoch <= max;
        ++next_epoch) {
     OSDMapRef nextmap = service.try_get_map(next_epoch);
     if (!nextmap)
@@ -5746,6 +5754,13 @@ void OSD::advance_pg(
   }
   service.pg_update_epoch(pg->info.pgid, lastmap->get_epoch());
   pg->handle_activate_map(rctx);
+  if (next_epoch <= osd_epoch) {
+    dout(10) << __func__ << " advanced by max " << g_conf->osd_map_max_advance
+	     << " past min epoch " << min_epoch
+	     << " ... will requeue " << *pg << dendl;
+    return false;
+  }
+  return true;
 }
 
 /** 
@@ -7722,8 +7737,9 @@ void OSD::process_peering_events(
       pg->unlock();
       continue;
     }
-    advance_pg(curmap->get_epoch(), pg, handle, &rctx, &split_pgs);
-    if (!pg->peering_queue.empty()) {
+    if (!advance_pg(curmap->get_epoch(), pg, handle, &rctx, &split_pgs)) {
+      pg->queue_null(curmap->get_epoch(), curmap->get_epoch());
+    } else if (!pg->peering_queue.empty()) {
       PG::CephPeeringEvtRef evt = pg->peering_queue.front();
       pg->peering_queue.pop_front();
       pg->handle_peering_event(evt, &rctx);
