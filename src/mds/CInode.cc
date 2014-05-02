@@ -896,7 +896,7 @@ struct C_Inode_Stored : public Context {
   }
 };
 
-object_t CInode::get_object_name(inodeno_t ino, frag_t fg, const char *suffix)
+object_t InodeStore::get_object_name(inodeno_t ino, frag_t fg, const char *suffix)
 {
   char n[60];
   snprintf(n, sizeof(n), "%llx.%08llx%s", (long long unsigned)ino, (long long unsigned)fg, suffix ? suffix : "");
@@ -1126,31 +1126,40 @@ void CInode::clear_dirty_parent()
 // ------------------
 // parent dir
 
-void CInode::encode_store(bufferlist& bl)
+
+void InodeStore::encode_bare(bufferlist &bl) const
 {
-  ENCODE_START(4, 4, bl);
   ::encode(inode, bl);
   if (is_symlink())
     ::encode(symlink, bl);
   ::encode(dirfragtree, bl);
   ::encode(xattrs, bl);
-  bufferlist snapbl;
-  encode_snap_blob(snapbl);
-  ::encode(snapbl, bl);
+  ::encode(snap_blob, bl);
   ::encode(old_inodes, bl);
+}
+
+void InodeStore::encode(bufferlist &bl) const
+{
+  ENCODE_START(4, 4, bl);
+  encode_bare(bl);
   ENCODE_FINISH(bl);
 }
 
-void CInode::decode_store(bufferlist::iterator& bl) {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
+void CInode::encode_store(bufferlist& bl)
+{
+  encode_snap_blob(snap_blob);
+  InodeStore::encode(bl);
+  snap_blob.clear();
+}
+
+void InodeStore::decode_bare(bufferlist::iterator &bl, __u8 struct_v)
+{
   ::decode(inode, bl);
   if (is_symlink())
     ::decode(symlink, bl);
   ::decode(dirfragtree, bl);
   ::decode(xattrs, bl);
-  bufferlist snapbl;
-  ::decode(snapbl, bl);
-  decode_snap_blob(snapbl);
+  ::decode(snap_blob, bl);
   ::decode(old_inodes, bl);
   if (struct_v == 2 && inode.is_dir()) {
     bool default_layout_exists;
@@ -1160,7 +1169,21 @@ void CInode::decode_store(bufferlist::iterator& bl) {
       ::decode(inode.layout, bl); // but we only care about the layout portion
     }
   }
+}
+
+
+void InodeStore::decode(bufferlist::iterator &bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
+  decode_bare(bl, struct_v);
   DECODE_FINISH(bl);
+}
+
+void CInode::decode_store(bufferlist::iterator& bl)
+{
+  InodeStore::decode(bl);
+  decode_snap_blob(snap_blob);
+  snap_blob.clear();
 }
 
 // ------------------
@@ -2364,7 +2387,7 @@ void CInode::encode_snap_blob(bufferlist &snapbl)
     dout(20) << "encode_snap_blob " << *snaprealm << dendl;
   }
 }
-void CInode::decode_snap_blob(bufferlist& snapbl) 
+void CInode::decode_snap_blob(bufferlist& snapbl)
 {
   if (snapbl.length()) {
     open_snaprealm();
@@ -3351,3 +3374,37 @@ void CInode::decode_import(bufferlist::iterator& p,
 
   DECODE_FINISH(p);
 }
+
+
+void InodeStore::dump(Formatter *f) const
+{
+  f->open_object_section("inode_store");
+  {
+    inode.dump(f);
+    f->dump_string("symlink", symlink);
+    // FIXME: dirfragtree: dump methods for fragtree_t
+    // FIXME: xattrs: JSON-safe versions of binary xattrs
+    f->open_array_section("old_inodes");
+    for (std::map<snapid_t, old_inode_t>::const_iterator i = old_inodes.begin(); i != old_inodes.end(); ++i) {
+      f->open_object_section("old_inode");
+      {
+        // The key is the last snapid, the first is in the old_inode_t
+        f->dump_int("last", i->first);
+        i->second.dump(f);
+      }
+      f->close_section();  // old_inode
+    }
+    f->close_section();  // old_inodes
+  }
+  f->close_section();  // inode_store
+}
+
+
+void InodeStore::generate_test_instances(list<InodeStore*> &ls)
+{
+  InodeStore *populated = new InodeStore;
+  populated->inode.ino = 0xdeadbeef;
+  populated->symlink = "rhubarb";
+  ls.push_back(populated);
+}
+

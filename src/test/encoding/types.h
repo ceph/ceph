@@ -156,6 +156,9 @@ TYPE(cap_reconnect_t)
 TYPE(inode_backtrace_t)
 TYPE(inode_backpointer_t)
 
+#include "mds/CInode.h"
+TYPE(InodeStore)
+
 #include "mds/MDSMap.h"
 TYPE_FEATUREFUL(MDSMap)
 TYPE_FEATUREFUL(MDSMap::mds_info_t)
