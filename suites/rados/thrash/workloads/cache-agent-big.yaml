@@ -7,7 +7,7 @@ tasks:
     client.0:
       - ceph osd erasure-code-profile set teuthologyprofile ruleset-failure-domain=osd
         m=1 k=2
-      - ceph osd pool create base 4 erasure teuthologyprofile
+      - ceph osd pool create base 4 4 erasure teuthologyprofile
       - ceph osd pool create cache 4
       - ceph osd tier add base cache
       - ceph osd tier cache-mode cache writeback
@@ -19,8 +19,9 @@ tasks:
 - rados:
     clients: [client.0]
     pools: [base]
-    ops: 4000
-    objects: 10000
+    ops: 10000
+    objects: 6600
+    max_seconds: 1200
     size: 1024
     op_weights:
       read: 100
