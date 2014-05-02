@@ -6738,10 +6738,8 @@ void _rollback_repair_dir(MutationRef& mut, CDir *dir, rename_rollback::drec &r,
 
   if (isdir) {
     pf->fragstat.nsubdirs += linkunlink;
-    pf->rstat.rsubdirs += linkunlink;
   } else {
     pf->fragstat.nfiles += linkunlink;
-    pf->rstat.rfiles += linkunlink;
   }    
   if (r.ino) {
     pf->rstat.rbytes += linkunlink * rstat.rbytes;
