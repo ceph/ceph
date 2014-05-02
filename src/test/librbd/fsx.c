@@ -1449,10 +1449,13 @@ do_flatten()
 void
 docloseopen(void)
 {
+	char *name;
 	int ret;
 
 	if (testcalls <= simulatedopcount)
 		return;
+
+	name = strdup(ctx.name);
 
 	if (debug)
 		prt("%lu close/open\n", testcalls);
@@ -1463,11 +1466,13 @@ docloseopen(void)
 		report_failure(180);
 	}
 
-	ret = ops->open(iname, &ctx);
+	ret = ops->open(name, &ctx);
 	if (ret < 0) {
 		prterrcode("docloseopen: ops->open", ret);
 		report_failure(181);
 	}
+
+	free(name);
 }
 
 #define TRIM_OFF_LEN(off, len, size)	\
