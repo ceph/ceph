@@ -8761,7 +8761,9 @@ void MDCache::request_finish(MDRequestRef& mdr)
   if (mdr->has_more() && mdr->more()->slave_commit) {
     Context *fin = mdr->more()->slave_commit;
     mdr->more()->slave_commit = 0;
-    fin->complete(mdr->aborted ? -1 : 0);   // this must re-call request_finish.
+    int ret = mdr->aborted ? -1 : 0;
+    mdr->aborted = false;
+    fin->complete(ret);   // this must re-call request_finish.
     return; 
   }
 
