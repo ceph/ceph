@@ -17,13 +17,9 @@
 #include <boost/program_options/variables_map.hpp>
 #include <boost/program_options/cmdline.hpp>
 #include <boost/program_options/parsers.hpp>
-#include <iostream>
 #include <sstream>
 #include <stdlib.h>
-#include <fstream>
 #include <string>
-#include <map>
-#include <set>
 
 #include "global/global_init.h"
 #include "os/LevelDBStore.h"
