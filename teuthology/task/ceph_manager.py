@@ -123,6 +123,17 @@ class Thrasher:
         self.ceph_manager.mark_in_osd(osd)
         self.log("Added osd %s"%(str(osd),))
 
+    def reweight_osd(self, osd=None):
+        """
+        Reweight an osd that is in
+        :param osd: Osd to be marked.
+        """
+        if osd is None:
+            osd = random.choice(self.in_osds)
+        val = random.uniform(.1, 1.0)
+        self.log("Reweighting osd %s to %f" % (str(osd), val))
+        self.raw_cluster_cmd('osd', 'reweight', str(osd), val)
+
     def primary_affinity(self, osd=None):
         if osd is None:
             osd = random.choice(self.in_osds)
@@ -320,6 +331,7 @@ class Thrasher:
             actions.append((self.revive_osd, 1.0,))
         if self.config.get('thrash_primary_affinity', True):
             actions.append((self.primary_affinity, 1.0,))
+        actions.append((self.reweight_osd, self.config.get('reweight_osd',.5),))
         actions.append((self.grow_pool, self.config.get('chance_pgnum_grow', 0),))
         actions.append((self.fix_pgp_num, self.config.get('chance_pgpnum_fix', 0),))
         actions.append((self.test_pool_min_size, chance_test_min_size,))
