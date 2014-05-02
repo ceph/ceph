@@ -348,6 +348,7 @@ void MDCache::create_empty_hierarchy(C_Gather *gather)
 
   root->inode.dirstat = rootdir->fnode.fragstat;
   root->inode.rstat = rootdir->fnode.rstat;
+  ++root->inode.rstat.rsubdirs;
   root->inode.accounted_rstat = root->inode.rstat;
 
   rootdir->mark_complete();
@@ -398,6 +399,7 @@ void MDCache::create_mydir_hierarchy(C_Gather *gather)
 
   myin->inode.dirstat = mydir->fnode.fragstat;
   myin->inode.rstat = mydir->fnode.rstat;
+  ++myin->inode.rstat.rsubdirs;
   myin->inode.accounted_rstat = myin->inode.rstat;
 
 
