@@ -11090,8 +11090,12 @@ void ReplicatedPG::agent_work(int start_max)
     if (agent_state->evict_mode != TierAgentState::EVICT_MODE_IDLE &&
 	agent_maybe_evict(obc))
       ++started;
-    if (started >= start_max)
+    if (started >= start_max) {
+      // If finishing early, set "next" to the next object
+      if (++p != ls.end())
+	next = *p;
       break;
+    }
   }
 
   if (++agent_state->hist_age > g_conf->osd_agent_hist_halflife) {
