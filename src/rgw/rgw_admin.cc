@@ -1,23 +1,24 @@
 #include <errno.h>
-
 #include <iostream>
 #include <sstream>
 #include <string>
 
 using namespace std;
 
-#include "common/ceph_json.h"
+#include "auth/Crypto.h"
 
+#include "common/armor.h"
+#include "common/ceph_json.h"
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "common/Formatter.h"
-#include "common/ceph_json.h"
-#include "global/global_init.h"
 #include "common/errno.h"
+
+#include "global/global_init.h"
+
 #include "include/utime.h"
 #include "include/str_list.h"
 
-#include "common/armor.h"
 #include "rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_rados.h"
@@ -27,7 +28,6 @@ using namespace std;
 #include "rgw_formats.h"
 #include "rgw_usage.h"
 #include "rgw_replica_log.h"
-#include "auth/Crypto.h"
 
 #define dout_subsys ceph_subsys_rgw
 
