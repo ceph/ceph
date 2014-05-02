@@ -217,7 +217,7 @@ int SnapMapper::update_snaps(
 
 void SnapMapper::add_oid(
   const hobject_t &oid,
-  set<snapid_t> snaps,
+  const set<snapid_t>& snaps,
   MapCacher::Transaction<std::string, bufferlist> *t)
 {
   dout(20) << __func__ << " " << oid << " " << snaps << dendl;
