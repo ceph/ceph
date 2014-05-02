@@ -7,7 +7,7 @@ Device` services to :term:`Cloud Platforms`, deploy a :term:`Ceph Filesystem` or
 use Ceph for another purpose, all :term:`Ceph Storage Cluster` deployments begin
 with setting up each :term:`Ceph Node`, your network and the Ceph Storage
 Cluster. A Ceph Storage Cluster requires at least one Ceph Monitor and at least
-two Ceph :term:`OSD`s. The Ceph Metadata Server is essential when running Ceph
+two Ceph :term:`OSD`\s. The Ceph Metadata Server is essential when running Ceph
 Filesystem clients.
 
 .. ditaa::  +---------------+ +---------------+ +---------------+
