@@ -24,8 +24,8 @@ CPU
 
 Ceph metadata servers dynamically redistribute their load, which is CPU
 intensive. So your metadata servers should have significant processing power
-(e.g., quad core or better CPUs). Ceph OSDs run the RADOS service, calculate
-data placement with CRUSH, replicate data, and maintain their own copy of the
+(e.g., quad core or better CPUs). Ceph OSDs run the :term:`RADOS` service, calculate
+data placement with :term:`CRUSH`, replicate data, and maintain their own copy of the
 cluster map. Therefore, OSDs should have a reasonable amount of processing power
 (e.g., dual core processors). Monitors simply maintain a master copy of the
 cluster map, so they are not CPU intensive. You must also consider whether the
