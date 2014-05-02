@@ -845,15 +845,17 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   
   double fac = 1.0 / (double)(1 << bits);  // for scaling load vecs
 
-  dout(15) << "           rstat " << fnode.rstat << dendl;
-  dout(15) << " accounted_rstat " << fnode.accounted_rstat << dendl;
+  version_t rstat_version = inode->get_projected_inode()->rstat.version;
+  version_t dirstat_version = inode->get_projected_inode()->dirstat.version;
+
   nest_info_t rstatdiff;
-  rstatdiff.add_delta(fnode.accounted_rstat, fnode.rstat);
-  dout(15) << "           fragstat " << fnode.fragstat << dendl;
-  dout(15) << " accounted_fragstat " << fnode.accounted_fragstat << dendl;
   frag_info_t fragstatdiff;
-  bool touched_mtime;
-  fragstatdiff.add_delta(fnode.accounted_fragstat, fnode.fragstat, touched_mtime);
+  if (fnode.accounted_rstat.version == rstat_version)
+    rstatdiff.add_delta(fnode.accounted_rstat, fnode.rstat);
+  if (fnode.accounted_fragstat.version == dirstat_version) {
+    bool touched_mtime;
+    fragstatdiff.add_delta(fnode.accounted_fragstat, fnode.fragstat, touched_mtime);
+  }
   dout(10) << " rstatdiff " << rstatdiff << " fragstatdiff " << fragstatdiff << dendl;
 
   prepare_old_fragment(replay);
@@ -905,9 +907,9 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   // fix up new frag fragstats
   for (int i=0; i<n; i++) {
     CDir *f = subfrags[i];
-    f->fnode.rstat.version = fnode.rstat.version;
+    f->fnode.rstat.version = rstat_version;
     f->fnode.accounted_rstat = f->fnode.rstat;
-    f->fnode.fragstat.version = fnode.fragstat.version;
+    f->fnode.fragstat.version = dirstat_version;
     f->fnode.accounted_fragstat = f->fnode.fragstat;
     dout(10) << " rstat " << f->fnode.rstat << " fragstat " << f->fnode.fragstat
 	     << " on " << *f << dendl;
