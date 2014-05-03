@@ -29,6 +29,7 @@ def task(ctx, config):
           op_weights: <dictionary mapping operation type to integer weight>
           runs: <number of times to run> - the pool is remade between runs
           ec_pool: use an ec pool
+          pool_snaps: use pool snapshots instead of selfmanaged snapshots
 
     For example::
 
@@ -51,6 +52,7 @@ def task(ctx, config):
               rollback: 2
               snap_remove: 0
             ec_pool: true
+            pool_snaps: true
             runs: 10
         - interactive:
 
@@ -93,6 +95,8 @@ def task(ctx, config):
         'ceph_test_rados']
     if config.get('ec_pool', False):
         args.extend(['--ec-pool'])
+    if config.get('pool_snaps', False):
+        args.extend(['--pool-snaps'])
     args.extend([
         '--op', 'read', str(op_weights.get('read', 100)),
         '--op', 'write', str(op_weights.get('write', 100)),
