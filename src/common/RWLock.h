@@ -102,6 +102,14 @@ public:
     unlock();
   }
 
+  void get(bool for_write) {
+    if (for_write) {
+      get_write();
+    } else {
+      get_read();
+    }
+  }
+
 public:
   class RLocker {
     const RWLock &m_lock;
