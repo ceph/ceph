@@ -197,13 +197,13 @@ protected:
 public:
   RGWPutObjProcessor() : store(NULL), obj_ctx(NULL), is_complete(false) {}
   virtual ~RGWPutObjProcessor();
-  virtual int prepare(RGWRados *_store, void *_o) {
+  virtual int prepare(RGWRados *_store, void *_o, string *oid_rand) {
     store = _store;
     obj_ctx = _o;
     return 0;
   };
   virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle) = 0;
-  virtual int throttle_data(void *handle) = 0;
+  virtual int throttle_data(void *handle, bool need_to_wait) = 0;
   virtual int complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
 };
 
@@ -217,12 +217,12 @@ class RGWPutObjProcessor_Plain : public RGWPutObjProcessor
   off_t ofs;
 
 protected:
-  int prepare(RGWRados *store, void *obj_ctx);
+  int prepare(RGWRados *store, void *obj_ctx, string *oid_rand);
   int handle_data(bufferlist& bl, off_t ofs, void **phandle);
   int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
 
 public:
-  int throttle_data(void *handle) { return 0; }
+  int throttle_data(void *handle, bool need_to_wait) { return 0; }
   RGWPutObjProcessor_Plain(rgw_bucket& b, const string& o) : bucket(b), obj_str(o), ofs(0) {}
 };
 
@@ -243,10 +243,10 @@ protected:
   uint64_t obj_len;
 
   int drain_pending();
-  int handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle);
+  int handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle, bool exclusive);
 
 public:
-  int throttle_data(void *handle);
+  int throttle_data(void *handle, bool need_to_wait);
 
   RGWPutObjProcessor_Aio() : max_chunks(RGW_MAX_PENDING_CHUNKS), obj_len(0) {}
   virtual ~RGWPutObjProcessor_Aio() {
@@ -277,9 +277,7 @@ protected:
   rgw_obj cur_obj;
   RGWObjManifest manifest;
 
-  virtual bool immutable_head() { return false; }
-
-  int write_data(bufferlist& bl, off_t ofs, void **phandle);
+  int write_data(bufferlist& bl, off_t ofs, void **phandle, bool exclusive);
   virtual int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
 
   void prepare_next_part(off_t ofs);
@@ -297,11 +295,12 @@ public:
                                 bucket(_b),
                                 obj_str(_o),
                                 unique_tag(_t) {}
-  int prepare(RGWRados *store, void *obj_ctx);
+  int prepare(RGWRados *store, void *obj_ctx, string *oid_rand);
+  virtual bool immutable_head() { return false; }
   void set_extra_data_len(uint64_t len) {
     extra_data_len = len;
   }
-  int handle_data(bufferlist& bl, off_t ofs, void **phandle);
+  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle);
   bufferlist& get_extra_data() { return extra_data_bl; }
 };
 

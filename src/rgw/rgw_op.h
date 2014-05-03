@@ -317,7 +317,7 @@ public:
     policy.set_ctx(s->cct);
   }
 
-  RGWPutObjProcessor *select_processor();
+  RGWPutObjProcessor *select_processor(bool *is_multipart);
   void dispose_processor(RGWPutObjProcessor *processor);
 
   int verify_permission();
@@ -705,21 +705,22 @@ class RGWMPObj {
   string upload_id;
 public:
   RGWMPObj() {}
-  RGWMPObj(string& _oid, string& _upload_id) {
-    init(_oid, _upload_id);
+  RGWMPObj(const string& _oid, const string& _upload_id) {
+    init(_oid, _upload_id, _upload_id);
   }
-  void init(string& _oid, string& _upload_id) {
+  void init(const string& _oid, const string& _upload_id) {
+    init(_oid, _upload_id, _upload_id);
+  }
+  void init(const string& _oid, const string& _upload_id, const string& part_unique_str) {
     if (_oid.empty()) {
       clear();
       return;
     }
     oid = _oid;
     upload_id = _upload_id;
-    prefix = oid;
-    prefix.append(".");
-    prefix.append(upload_id);
-    meta = prefix;
-    meta.append(MP_META_SUFFIX);
+    prefix = oid + ".";
+    meta = prefix + upload_id + MP_META_SUFFIX;
+    prefix.append(part_unique_str);
   }
   string& get_meta() { return meta; }
   string get_part(int num) {
@@ -750,7 +751,7 @@ public:
       return false;
     oid = meta.substr(0, mid_pos);
     upload_id = meta.substr(mid_pos + 1, end_pos - mid_pos - 1);
-    init(oid, upload_id);
+    init(oid, upload_id, upload_id);
     return true;
   }
   void clear() {
