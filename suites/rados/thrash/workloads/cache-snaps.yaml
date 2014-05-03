@@ -13,6 +13,7 @@ tasks:
       - ceph osd pool set cache hit_set_type bloom
       - ceph osd pool set cache hit_set_count 8
       - ceph osd pool set cache hit_set_period 3600
+      - ceph osd pool set cache target_max_objects 250
 - rados:
     clients: [client.0]
     pools: [base]
