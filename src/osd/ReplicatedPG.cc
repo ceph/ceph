@@ -1200,6 +1200,12 @@ void ReplicatedPG::do_op(OpRequestRef op)
     return do_pg_op(op);
   }
 
+  if (get_osdmap()->is_blacklisted(m->get_source_addr())) {
+    dout(10) << "do_op " << m->get_source_addr() << " is blacklisted" << dendl;
+    osd->reply_op_error(op, -EBLACKLISTED);
+    return;
+  }
+
   // order this op as a write?
   bool write_ordered =
     op->may_write() ||
