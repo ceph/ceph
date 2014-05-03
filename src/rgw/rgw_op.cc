@@ -1357,22 +1357,26 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
   string upload_id;
 
 protected:
-  bool immutable_head() { return true; }
-  int prepare(RGWRados *store, void *obj_ctx);
+  int prepare(RGWRados *store, void *obj_ctx, string *oid_rand);
   int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
 
 public:
+  bool immutable_head() { return true; }
   RGWPutObjProcessor_Multipart(const string& bucket_owner, uint64_t _p, req_state *_s) :
                    RGWPutObjProcessor_Atomic(bucket_owner, _s->bucket, _s->object_str, _p, _s->req_id), s(_s) {}
 };
 
-int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx)
+int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx, string *oid_rand)
 {
-  RGWPutObjProcessor::prepare(store, obj_ctx);
+  RGWPutObjProcessor::prepare(store, obj_ctx, NULL);
 
   string oid = obj_str;
   upload_id = s->info.args.get("uploadId");
-  mp.init(oid, upload_id);
+  if (!oid_rand) {
+    mp.init(oid, upload_id);
+  } else {
+    mp.init(oid, upload_id, *oid_rand);
+  }
 
   part_num = s->info.args.get("partNumber");
   if (part_num.empty()) {
@@ -1388,7 +1392,13 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx)
     return -EINVAL;
   }
 
-  string upload_prefix = oid + "." + upload_id;
+  string upload_prefix = oid + ".";
+
+  if (!oid_rand) {
+    upload_prefix.append(upload_id);
+  } else {
+    upload_prefix.append(*oid_rand);
+  }
 
   rgw_obj target_obj;
   target_obj.init(bucket, oid);
@@ -1466,7 +1476,7 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_
 }
 
 
-RGWPutObjProcessor *RGWPutObj::select_processor()
+RGWPutObjProcessor *RGWPutObj::select_processor(bool *is_multipart)
 {
   RGWPutObjProcessor *processor;
 
@@ -1480,6 +1490,10 @@ RGWPutObjProcessor *RGWPutObj::select_processor()
     processor = new RGWPutObjProcessor_Atomic(bucket_owner, s->bucket, s->object_str, part_size, s->req_id);
   } else {
     processor = new RGWPutObjProcessor_Multipart(bucket_owner, part_size, s);
+  }
+
+  if (is_multipart) {
+    *is_multipart = multipart;
   }
 
   return processor;
@@ -1507,6 +1521,7 @@ void RGWPutObj::execute()
   map<string, bufferlist> attrs;
   int len;
   map<string, string>::iterator iter;
+  bool multipart;
 
 
   perfcounter->inc(l_rgw_put);
@@ -1547,9 +1562,9 @@ void RGWPutObj::execute()
     supplied_md5[sizeof(supplied_md5) - 1] = '\0';
   }
 
-  processor = select_processor();
+  processor = select_processor(&multipart);
 
-  ret = processor->prepare(store, s->obj_ctx);
+  ret = processor->prepare(store, s->obj_ctx, NULL);
   if (ret < 0)
     goto done;
 
@@ -1572,9 +1587,48 @@ void RGWPutObj::execute()
 
     hash.Update(data_ptr, len);
 
-    ret = processor->throttle_data(handle);
-    if (ret < 0)
-      goto done;
+    /* do we need this operation to be synchronous? if we're dealing with an object with immutable
+     * head, e.g., multipart object we need to make sure we're the first one writing to this object
+     */
+    bool need_to_wait = (ofs == 0) && multipart;
+
+    ret = processor->throttle_data(handle, need_to_wait);
+    if (ret < 0) {
+      if (!need_to_wait || ret != -EEXIST) {
+        ldout(s->cct, 20) << "processor->thottle_data() returned ret=" << ret << dendl;
+        goto done;
+      }
+
+      ldout(s->cct, 5) << "NOTICE: processor->throttle_data() returned -EEXIST, need to restart write" << dendl;
+
+      /* restart processing with different oid suffix */
+
+      dispose_processor(processor);
+      processor = select_processor(&multipart);
+
+      string oid_rand;
+      char buf[33];
+      gen_rand_alphanumeric(store->ctx(), buf, sizeof(buf) - 1);
+      oid_rand.append(buf);
+
+      ret = processor->prepare(store, s->obj_ctx, &oid_rand);
+      if (ret < 0) {
+        ldout(s->cct, 0) << "ERROR: processor->prepare() returned " << ret << dendl;
+        goto done;
+      }
+
+      ret = processor->handle_data(data, ofs, &handle);
+      if (ret < 0) {
+        ldout(s->cct, 0) << "ERROR: processor->handle_data() returned " << ret << dendl;
+        goto done;
+      }
+
+      ret = processor->throttle_data(handle, false);
+      if (ret < 0) {
+        ldout(s->cct, 0) << "ERROR: processor->throttle_data() returned " << ret << dendl;
+        goto done;
+      }
+    }
 
     ofs += len;
   } while (len > 0);
@@ -1683,7 +1737,7 @@ void RGWPostObj::execute()
 
   processor = select_processor();
 
-  ret = processor->prepare(store, s->obj_ctx);
+  ret = processor->prepare(store, s->obj_ctx, NULL);
   if (ret < 0)
     goto done;
 
@@ -1708,7 +1762,7 @@ void RGWPostObj::execute()
 
      hash.Update(data_ptr, len);
 
-     ret = processor->throttle_data(handle);
+     ret = processor->throttle_data(handle, false);
      if (ret < 0)
        goto done;
 
