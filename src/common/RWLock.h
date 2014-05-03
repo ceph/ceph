@@ -88,6 +88,7 @@ public:
     assert(r == 0);
     if (g_lockdep) id = lockdep_locked(name, id);
     nwlock.inc();
+
   }
   bool try_get_write() {
     if (pthread_rwlock_trywrlock(&L) == 0) {
