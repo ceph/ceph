@@ -131,8 +131,8 @@ class Thrasher:
         if osd is None:
             osd = random.choice(self.in_osds)
         val = random.uniform(.1, 1.0)
-        self.log("Reweighting osd %s to %f" % (str(osd), val))
-        self.ceph_manager.raw_cluster_cmd('osd', 'reweight', str(osd), val)
+        self.log("Reweighting osd %s to %s" % (str(osd), str(val)))
+        self.ceph_manager.raw_cluster_cmd('osd', 'reweight', str(osd), str(val))
 
     def primary_affinity(self, osd=None):
         if osd is None:
