@@ -197,13 +197,6 @@ private:
       _unstable = new unstable_bits_t;
     return _unstable;
   }
-  void clear_more() {
-    if (_unstable) {
-      assert(_unstable->empty());
-      delete _unstable;
-      _unstable = NULL;
-    }
-  }
   void try_clear_more() {
     if (_unstable && _unstable->empty()) {
       delete _unstable;
@@ -284,8 +277,8 @@ public:
   struct ptr_lt {
     bool operator()(const SimpleLock* l, const SimpleLock* r) const {
       // first sort by object type (dn < inode)
-      if ((l->type->type>CEPH_LOCK_DN) <  (r->type->type>CEPH_LOCK_DN)) return true;
-      if ((l->type->type>CEPH_LOCK_DN) == (r->type->type>CEPH_LOCK_DN)) {
+      if (!(l->type->type > CEPH_LOCK_DN) && (r->type->type > CEPH_LOCK_DN)) return true;
+      if ((l->type->type > CEPH_LOCK_DN) == (r->type->type > CEPH_LOCK_DN)) {
 	// then sort by object
 	if (l->parent->is_lt(r->parent)) return true;
 	if (l->parent == r->parent) {

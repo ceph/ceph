@@ -2698,7 +2698,7 @@ stats_out:
       f->open_array_section("erasure-code-profiles");
     for(map<string,map<string,string> >::const_iterator i = profiles.begin();
 	i != profiles.end();
-	i++) {
+	++i) {
       if (f)
         f->dump_string("profile", i->first.c_str());
       else
@@ -2724,7 +2724,7 @@ stats_out:
       f->open_object_section("profile");
     for (map<string,string>::const_iterator i = profile.begin();
 	 i != profile.end();
-	 i++) {
+	 ++i) {
       if (f)
         f->dump_string(i->first.c_str(), i->second.c_str());
       else

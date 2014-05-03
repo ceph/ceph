@@ -2397,7 +2397,6 @@ void RGWInitMultipart::execute()
 static int get_multipart_info(RGWRados *store, struct req_state *s, string& meta_oid,
                               RGWAccessControlPolicy *policy, map<string, bufferlist>& attrs)
 {
-  map<string, bufferlist> parts_map;
   map<string, bufferlist>::iterator iter;
   bufferlist header;
 
