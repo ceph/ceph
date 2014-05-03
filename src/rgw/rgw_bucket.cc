@@ -74,9 +74,10 @@ int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& bucke
 
   if (need_stats) {
     map<string, RGWBucketEnt>& m = buckets.get_buckets();
-    int r = store->update_containers_stats(m);
-    if (r < 0) {
+    ret = store->update_containers_stats(m);
+    if (ret < 0 && ret != -ENOENT) {
       ldout(store->ctx(), 0) << "ERROR: could not get stats for buckets" << dendl;
+      return ret;
     }
   }
   return 0;
