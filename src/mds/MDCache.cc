@@ -4054,8 +4054,10 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 	dirs_to_share.insert(dir);
 	unsigned nonce = dir->add_replica(from);
 	dout(10) << " have " << p->frag << " -> " << fg << " " << *dir << dendl;
-	if (ack)
+	if (ack) {
 	  ack->add_strong_dirfrag(dir->dirfrag(), nonce, dir->dir_rep);
+	  ack->add_dirfrag_base(dir);
+	}
       }
     }
   }
