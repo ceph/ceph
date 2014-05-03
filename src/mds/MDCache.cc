@@ -2760,6 +2760,20 @@ void MDCache::handle_mds_failure(int who)
   kick_find_ino_peers(who);
   kick_open_ino_peers(who);
 
+  for (map<dirfrag_t,fragment_info_t>::iterator p = fragments.begin();
+       p != fragments.end(); ) {
+    dirfrag_t df = p->first;
+    fragment_info_t& info = p->second;
+    ++p;
+    if (info.is_fragmenting())
+      continue;
+    dout(10) << "cancelling fragment " << df << " bit " << info.bits << dendl;
+    list<CDir*> dirs;
+    info.dirs.swap(dirs);
+    fragments.erase(df);
+    fragment_unmark_unfreeze_dirs(dirs);
+  }
+
   show_subtrees();  
 }
 
@@ -10740,12 +10754,12 @@ void MDCache::adjust_dir_fragments(CInode *diri,
 
 class C_MDC_FragmentFrozen : public Context {
   MDCache *mdcache;
-  dirfrag_t basedirfrag;
+  MDRequestRef mdr;
 public:
-  C_MDC_FragmentFrozen(MDCache *m, dirfrag_t df) :
-    mdcache(m), basedirfrag(df) {}
+  C_MDC_FragmentFrozen(MDCache *m, MDRequestRef& r) :
+    mdcache(m), mdr(r) {}
   virtual void finish(int r) {
-    mdcache->fragment_frozen(basedirfrag, r);
+    mdcache->fragment_frozen(mdr, r);
   }
 };
 
@@ -10797,18 +10811,19 @@ void MDCache::split_dir(CDir *dir, int bits)
   if (!can_fragment(diri, dirs))
     return;
 
+  MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_FRAGMENTDIR);
+  mdr->more()->fragment_base = dir->dirfrag();
+
   assert(fragments.count(dir->dirfrag()) == 0);
   fragment_info_t& info = fragments[dir->dirfrag()];
+  info.mdr = mdr;
   info.dirs.push_back(dir);
   info.bits = bits;
   info.last_cum_auth_pins_change = ceph_clock_now(g_ceph_context);
 
-  C_GatherBuilder gather(g_ceph_context, new C_MDC_FragmentFrozen(this, dir->dirfrag()));
-  fragment_freeze_dirs(dirs, gather);
-  gather.activate();
-
+  fragment_freeze_dirs(dirs);
   // initial mark+complete pass
-  fragment_mark_and_complete(dirs);
+  fragment_mark_and_complete(mdr);
 }
 
 void MDCache::merge_dir(CInode *diri, frag_t frag)
@@ -10833,23 +10848,23 @@ void MDCache::merge_dir(CInode *diri, frag_t frag)
   int bits = first->get_frag().bits() - frag.bits();
   dout(10) << " we are merginb by " << bits << " bits" << dendl;
 
-  dirfrag_t df(diri->ino(), frag);
-  assert(fragments.count(df) == 0);
-  fragment_info_t& info = fragments[df];
+  dirfrag_t basedirfrag(diri->ino(), frag);
+  MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_FRAGMENTDIR);
+  mdr->more()->fragment_base = basedirfrag;
+
+  assert(fragments.count(basedirfrag) == 0);
+  fragment_info_t& info = fragments[basedirfrag];
+  info.mdr = mdr;
   info.dirs = dirs;
   info.bits = -bits;
   info.last_cum_auth_pins_change = ceph_clock_now(g_ceph_context);
 
-  C_GatherBuilder gather(g_ceph_context,
-			 new C_MDC_FragmentFrozen(this, dirfrag_t(diri->ino(), frag)));
-  fragment_freeze_dirs(dirs, gather);
-  gather.activate();
-
+  fragment_freeze_dirs(dirs);
   // initial mark+complete pass
-  fragment_mark_and_complete(dirs);
+  fragment_mark_and_complete(mdr);
 }
 
-void MDCache::fragment_freeze_dirs(list<CDir*>& dirs, C_GatherBuilder &gather)
+void MDCache::fragment_freeze_dirs(list<CDir*>& dirs)
 {
   for (list<CDir*>::iterator p = dirs.begin(); p != dirs.end(); ++p) {
     CDir *dir = *p;
@@ -10857,29 +10872,37 @@ void MDCache::fragment_freeze_dirs(list<CDir*>& dirs, C_GatherBuilder &gather)
     dir->state_set(CDir::STATE_FRAGMENTING);
     dir->freeze_dir();
     assert(dir->is_freezing_dir());
-    dir->add_waiter(CDir::WAIT_FROZEN, gather.new_sub());
   }
 }
 
 class C_MDC_FragmentMarking : public Context {
   MDCache *mdcache;
-  list<CDir*> dirs;
+  MDRequestRef mdr;
 public:
-  C_MDC_FragmentMarking(MDCache *m, list<CDir*>& d) : mdcache(m), dirs(d) {}
+  C_MDC_FragmentMarking(MDCache *m, MDRequestRef& r) : mdcache(m), mdr(r) {}
   virtual void finish(int r) {
-    mdcache->fragment_mark_and_complete(dirs);
+    mdcache->fragment_mark_and_complete(mdr);
   }
 };
 
-void MDCache::fragment_mark_and_complete(list<CDir*>& dirs)
+void MDCache::fragment_mark_and_complete(MDRequestRef& mdr)
 {
-  CInode *diri = dirs.front()->get_inode();
-  dout(10) << "fragment_mark_and_complete " << dirs << " on " << *diri << dendl;
+  dirfrag_t basedirfrag = mdr->more()->fragment_base;
+  map<dirfrag_t,fragment_info_t>::iterator it = fragments.find(basedirfrag);
+  if (it == fragments.end() || it->second.mdr != mdr) {
+    dout(7) << "fragment_mark_and_complete " << basedirfrag << " must have aborted" << dendl;
+    request_finish(mdr);
+    return;
+  }
+
+  fragment_info_t& info = it->second;
+  CInode *diri = info.dirs.front()->get_inode();
+  dout(10) << "fragment_mark_and_complete " << info.dirs << " on " << *diri << dendl;
 
   C_GatherBuilder gather(g_ceph_context);
   
-  for (list<CDir*>::iterator p = dirs.begin();
-       p != dirs.end();
+  for (list<CDir*>::iterator p = info.dirs.begin();
+       p != info.dirs.end();
        ++p) {
     CDir *dir = *p;
 
@@ -10918,12 +10941,29 @@ void MDCache::fragment_mark_and_complete(list<CDir*>& dirs)
     }
   }
   if (gather.has_subs()) {
-    gather.set_finisher(new C_MDC_FragmentMarking(this, dirs));
+    gather.set_finisher(new C_MDC_FragmentMarking(this, mdr));
     gather.activate();
+    return;
   }
 
-  // flush log so that request auth_pins are retired
-  mds->mdlog->flush();
+  for (list<CDir*>::iterator p = info.dirs.begin();
+       p != info.dirs.end();
+       ++p) {
+    CDir *dir = *p;
+    if (!dir->is_frozen_dir()) {
+      assert(dir->is_freezing_dir());
+      dir->add_waiter(CDir::WAIT_FROZEN, gather.new_sub());
+    }
+  }
+  if (gather.has_subs()) {
+    gather.set_finisher(new C_MDC_FragmentFrozen(this, mdr));
+    gather.activate();
+    // flush log so that request auth_pins are retired
+    mds->mdlog->flush();
+    return;
+  }
+
+  fragment_frozen(mdr, 0);
 }
 
 void MDCache::fragment_unmark_unfreeze_dirs(list<CDir*>& dirs)
@@ -10933,19 +10973,22 @@ void MDCache::fragment_unmark_unfreeze_dirs(list<CDir*>& dirs)
     CDir *dir = *p;
     dout(10) << " frag " << *dir << dendl;
 
-    assert(dir->state_test(CDir::STATE_DNPINNEDFRAG));
-    dir->state_clear(CDir::STATE_DNPINNEDFRAG);
-
     assert(dir->state_test(CDir::STATE_FRAGMENTING));
     dir->state_clear(CDir::STATE_FRAGMENTING);
 
-    for (CDir::map_t::iterator p = dir->items.begin();
-	 p != dir->items.end();
-	 ++p) {
-      CDentry *dn = p->second;
-      assert(dn->state_test(CDentry::STATE_FRAGMENTING));
-      dn->state_clear(CDentry::STATE_FRAGMENTING);
-      dn->put(CDentry::PIN_FRAGMENTING);
+    if (dir->state_test(CDir::STATE_DNPINNEDFRAG)) {
+      dir->state_clear(CDir::STATE_DNPINNEDFRAG);
+
+      for (CDir::map_t::iterator p = dir->items.begin();
+	  p != dir->items.end();
+	  ++p) {
+	CDentry *dn = p->second;
+	assert(dn->state_test(CDentry::STATE_FRAGMENTING));
+	dn->state_clear(CDentry::STATE_FRAGMENTING);
+	dn->put(CDentry::PIN_FRAGMENTING);
+      }
+    } else {
+      dir->auth_unpin(dir);
     }
 
     dir->unfreeze_dir();
@@ -10960,7 +11003,7 @@ bool MDCache::fragment_are_all_frozen(CDir *dir)
        p != fragments.end() && p->first.ino == dir->ino();
        ++p) {
     if (p->first.frag.contains(dir->get_frag()))
-      return p->second.has_frozen;
+      return p->second.all_frozen;
   }
   assert(0);
   return false;
@@ -10993,7 +11036,7 @@ void MDCache::find_stale_fragment_freeze()
     dirfrag_t df = p->first;
     fragment_info_t& info = p->second;
     ++p;
-    if (info.has_frozen)
+    if (info.all_frozen)
       continue;
     CDir *dir;
     int total_auth_pins = 0;
@@ -11023,7 +11066,7 @@ void MDCache::find_stale_fragment_freeze()
 	(!dir->inode->is_root() && dir->get_parent_dir()->is_freezing())) {
       dout(10) << " cancel fragmenting " << df << " bit " << info.bits << dendl;
       list<CDir*> dirs;
-      dirs.swap(info.dirs);
+      info.dirs.swap(dirs);
       fragments.erase(df);
       fragment_unmark_unfreeze_dirs(dirs);
     }
@@ -11077,24 +11120,22 @@ public:
   }
 };
 
-void MDCache::fragment_frozen(dirfrag_t basedirfrag, int r)
+void MDCache::fragment_frozen(MDRequestRef& mdr, int r)
 {
+  dirfrag_t basedirfrag = mdr->more()->fragment_base;
   map<dirfrag_t,fragment_info_t>::iterator it = fragments.find(basedirfrag);
-  if (r < 0) {
+  if (it == fragments.end() || it->second.mdr != mdr) {
     dout(7) << "fragment_frozen " << basedirfrag << " must have aborted" << dendl;
-    assert(it == fragments.end());
+    request_finish(mdr);
     return;
   }
-  assert(it != fragments.end());
-  fragment_info_t& info = it->second;
 
+  assert(r == 0);
+  fragment_info_t& info = it->second;
   dout(10) << "fragment_frozen " << basedirfrag.frag << " by " << info.bits
 	   << " on " << info.dirs.front()->get_inode() << dendl;
 
-  info.has_frozen = true;
-
-  MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_FRAGMENTDIR);
-  mdr->more()->fragment_base = basedirfrag;
+  info.all_frozen = true;
   dispatch_fragment_dir(mdr);
 }
 
@@ -11102,7 +11143,12 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
 {
   dirfrag_t basedirfrag = mdr->more()->fragment_base;
   map<dirfrag_t,fragment_info_t>::iterator it = fragments.find(basedirfrag);
-  assert(it != fragments.end());
+  if (it == fragments.end() || it->second.mdr != mdr) {
+    dout(7) << "dispatch_fragment_dir " << basedirfrag << " must have aborted" << dendl;
+    request_finish(mdr);
+    return;
+  }
+
   fragment_info_t& info = it->second;
   CInode *diri = info.dirs.front()->get_inode();
 
