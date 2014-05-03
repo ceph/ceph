@@ -204,11 +204,14 @@ void StripObjectMap::clone_wrap(StripObjectHeader &old_header,
 
   if (target_header)
     *target_header = old_header;
+  if (origin_header)
+    *origin_header = old_header;
 
   clone(old_header.header, cid, oid, t, &new_origin_header,
         &target_header->header);
 
-  old_header.header = new_origin_header;
+  if(origin_header)
+    origin_header->header = new_origin_header;
 
   if (target_header) {
     target_header->oid = oid;
