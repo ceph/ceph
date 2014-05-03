@@ -719,10 +719,10 @@ int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m
   manifest->set_head(_h);
   last_ofs = 0;
 
-  char buf[33];
-  gen_rand_alphanumeric(cct, buf, sizeof(buf) - 1);
-
   if (manifest->get_prefix().empty()) {
+    char buf[33];
+    gen_rand_alphanumeric(cct, buf, sizeof(buf) - 1);
+
     string oid_prefix = ".";
     oid_prefix.append(buf);
     oid_prefix.append("_");
@@ -1006,9 +1006,9 @@ RGWPutObjProcessor::~RGWPutObjProcessor()
   }
 }
 
-int RGWPutObjProcessor_Plain::prepare(RGWRados *store, void *obj_ctx)
+int RGWPutObjProcessor_Plain::prepare(RGWRados *store, void *obj_ctx, string *oid_rand)
 {
-  RGWPutObjProcessor::prepare(store, obj_ctx);
+  RGWPutObjProcessor::prepare(store, obj_ctx, oid_rand);
 
   obj.init(bucket, obj_str);
 
@@ -1041,7 +1041,7 @@ int RGWPutObjProcessor_Plain::do_complete(string& etag, time_t *mtime, time_t se
 }
 
 
-int RGWPutObjProcessor_Aio::handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle)
+int RGWPutObjProcessor_Aio::handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle, bool exclusive)
 {
   if ((uint64_t)abs_ofs + bl.length() > obj_len)
     obj_len = abs_ofs + bl.length();
@@ -1051,7 +1051,7 @@ int RGWPutObjProcessor_Aio::handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t 
   int r = store->aio_put_obj_data(NULL, obj,
                                      bl,
                                      ((ofs != 0) ? ofs : -1),
-                                     false, phandle);
+                                     exclusive, phandle);
 
   return r;
 }
@@ -1091,7 +1091,7 @@ int RGWPutObjProcessor_Aio::drain_pending()
   return ret;
 }
 
-int RGWPutObjProcessor_Aio::throttle_data(void *handle)
+int RGWPutObjProcessor_Aio::throttle_data(void *handle, bool need_to_wait)
 {
   if (handle) {
     struct put_obj_aio_info info;
@@ -1099,10 +1099,13 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle)
     pending.push_back(info);
   }
   size_t orig_size = pending.size();
-  while (pending_has_completed()) {
+  while (pending_has_completed()
+         || need_to_wait) {
     int r = wait_pending_front();
     if (r < 0)
       return r;
+
+    need_to_wait = false;
   }
 
   /* resize window in case messages are draining too fast */
@@ -1118,7 +1121,7 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle)
   return 0;
 }
 
-int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phandle)
+int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phandle, bool exclusive)
 {
   if (ofs >= next_part_ofs) {
     int r = prepare_next_part(ofs);
@@ -1127,7 +1130,7 @@ int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phan
     }
   }
 
-  return RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle);
+  return RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle, exclusive);
 }
 
 int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **phandle)
@@ -1168,12 +1171,15 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **pha
   }
   off_t write_ofs = data_ofs;
   data_ofs = write_ofs + bl.length();
-  return write_data(bl, write_ofs, phandle);
+  bool exclusive = (!write_ofs && immutable_head()); /* immutable head object, need to verify nothing exists there
+                                                        we could be racing with another upload, to the same
+                                                        object and cleanup can be messy */
+  return write_data(bl, write_ofs, phandle, exclusive);
 }
 
-int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, void *obj_ctx)
+int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, void *obj_ctx, string *oid_rand)
 {
-  RGWPutObjProcessor::prepare(store, obj_ctx);
+  RGWPutObjProcessor::prepare(store, obj_ctx, oid_rand);
 
   head_obj.init(bucket, obj_str);
 
@@ -1220,12 +1226,12 @@ int RGWPutObjProcessor_Atomic::complete_writing_data()
   }
   if (pending_data_bl.length()) {
     void *handle;
-    int r = write_data(pending_data_bl, data_ofs, &handle);
+    int r = write_data(pending_data_bl, data_ofs, &handle, false);
     if (r < 0) {
       ldout(store->ctx(), 0) << "ERROR: write_data() returned " << r << dendl;
       return r;
     }
-    r = throttle_data(handle);
+    r = throttle_data(handle, false);
     if (r < 0) {
       ldout(store->ctx(), 0) << "ERROR: throttle_data() returned " << r << dendl;
       return r;
@@ -3014,7 +3020,7 @@ public:
       }
     }
 
-    ret = processor->throttle_data(handle);
+    ret = processor->throttle_data(handle, false);
     if (ret < 0)
       return ret;
 
@@ -3161,7 +3167,7 @@ int RGWRados::copy_obj(void *ctx,
 
     RGWPutObjProcessor_Atomic processor(dest_bucket_info.owner, dest_obj.bucket, dest_obj.object,
                                         cct->_conf->rgw_obj_stripe_size, tag);
-    ret = processor.prepare(this, ctx);
+    ret = processor.prepare(this, ctx, NULL);
     if (ret < 0)
       return ret;
 
