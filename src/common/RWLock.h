@@ -154,6 +154,65 @@ public:
       }
     }
   };
+
+  class Context {
+    RWLock& lock;
+
+  public:
+    enum LockState {
+      Untaken = 0,
+      TakenForRead = 1,
+      TakenForWrite = 2,
+    };
+
+  private:
+    LockState state;
+
+  public:
+    Context(RWLock& l) : lock(l) {}
+    Context(RWLock& l, LockState s) : lock(l), state(s) {}
+
+    void get_write() {
+      assert(state == Untaken);
+
+      lock.get_write();
+      state = TakenForWrite;
+    }
+
+    void get_read() {
+      assert(state == Untaken);
+
+      lock.get_read();
+      state = TakenForRead;
+    }
+
+    void unlock() {
+      assert(state != Untaken);
+      lock.unlock();
+      state = Untaken;
+    }
+
+    void promote() {
+      assert(state == TakenForRead);
+      unlock();
+      get_write();
+    }
+
+    LockState get_state() { return state; }
+    void set_state(LockState s) {
+      state = s;
+    }
+
+    bool is_locked() {
+      return (state != Untaken);
+    }
+
+    bool is_rlocked() {
+      return (state == TakenForRead);
+    }
+
+    bool is_wlocked() {
+      return (state == TakenForWrite);
     }
   };
 };
