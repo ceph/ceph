@@ -114,24 +114,46 @@ public:
   class RLocker {
     const RWLock &m_lock;
 
+    bool locked;
+
   public:
     RLocker(const RWLock& lock) : m_lock(lock) {
       m_lock.get_read();
+      locked = true;
+    }
+    void unlock() {
+      assert(locked);
+      m_lock.unlock();
+      locked = false;
     }
     ~RLocker() {
-      m_lock.put_read();
+      if (locked) {
+        m_lock.unlock();
+      }
     }
   };
 
   class WLocker {
     RWLock &m_lock;
 
+    bool locked;
+
   public:
     WLocker(RWLock& lock) : m_lock(lock) {
       m_lock.get_write();
+      locked = true;
+    }
+    void unlock() {
+      assert(locked);
+      m_lock.unlock();
+      locked = false;
     }
     ~WLocker() {
-      m_lock.put_write();
+      if (locked) {
+        m_lock.unlock();
+      }
+    }
+  };
     }
   };
 };
