@@ -952,11 +952,12 @@ private:
     list<CDir*> resultfrags;
     MDRequestRef mdr;
     // for deadlock detection
-    bool has_frozen;
+    bool all_frozen;
     utime_t last_cum_auth_pins_change;
     int last_cum_auth_pins;
     int num_remote_waiters;	// number of remote authpin waiters
-    fragment_info_t() : has_frozen(false), last_cum_auth_pins(0), num_remote_waiters(0) {}
+    fragment_info_t() : all_frozen(false), last_cum_auth_pins(0), num_remote_waiters(0) {}
+    bool is_fragmenting() { return !resultfrags.empty(); }
   };
   map<dirfrag_t,fragment_info_t> fragments;
 
@@ -972,9 +973,9 @@ private:
   void get_force_dirfrag_bound_set(vector<dirfrag_t>& dfs, set<CDir*>& bounds);
 
   bool can_fragment(CInode *diri, list<CDir*>& dirs);
-  void fragment_freeze_dirs(list<CDir*>& dirs, C_GatherBuilder &gather);
-  void fragment_mark_and_complete(list<CDir*>& dirs);
-  void fragment_frozen(dirfrag_t basedirfrag, int r);
+  void fragment_freeze_dirs(list<CDir*>& dirs);
+  void fragment_mark_and_complete(MDRequestRef& mdr);
+  void fragment_frozen(MDRequestRef& mdr, int r);
   void fragment_unmark_unfreeze_dirs(list<CDir*>& dirs);
   void dispatch_fragment_dir(MDRequestRef& mdr);
   void _fragment_logged(MDRequestRef& mdr);
