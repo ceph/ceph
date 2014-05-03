@@ -20,28 +20,42 @@
 #include <pthread.h>
 #include <include/assert.h>
 #include "lockdep.h"
+#include "include/atomic.h"
 
 class RWLock
 {
   mutable pthread_rwlock_t L;
   const char *name;
   mutable int id;
+  mutable atomic_t nrlock, nwlock;
 
 public:
   RWLock(const RWLock& other);
   const RWLock& operator=(const RWLock& other);
 
-  RWLock(const char *n) : name(n), id(-1) {
+  RWLock(const char *n) : name(n), id(-1), nrlock(0), nwlock(0) {
     pthread_rwlock_init(&L, NULL);
     if (g_lockdep) id = lockdep_register(name);
   }
 
+  bool is_locked() const {
+    return (nrlock.read() > 0) || (nwlock.read() > 0);
+  }
+
+  bool is_wlocked() const {
+    return (nwlock.read() > 0);
+  }
   virtual ~RWLock() {
     pthread_rwlock_unlock(&L);
     pthread_rwlock_destroy(&L);
   }
 
   void unlock() const {
+    if (nwlock.read() > 0) {
+      nwlock.dec();
+    } else {
+      nrlock.dec();
+    }
     if (g_lockdep) id = lockdep_will_unlock(name, id);
     int r = pthread_rwlock_unlock(&L);
     assert(r == 0);
@@ -53,9 +67,11 @@ public:
     int r = pthread_rwlock_rdlock(&L);
     assert(r == 0);
     if (g_lockdep) id = lockdep_locked(name, id);
+    nrlock.inc();
   }
   bool try_get_read() const {
     if (pthread_rwlock_tryrdlock(&L) == 0) {
+      nrlock.inc();
       if (g_lockdep) id = lockdep_locked(name, id);
       return true;
     }
@@ -71,10 +87,12 @@ public:
     int r = pthread_rwlock_wrlock(&L);
     assert(r == 0);
     if (g_lockdep) id = lockdep_locked(name, id);
+    nwlock.inc();
   }
   bool try_get_write() {
     if (pthread_rwlock_trywrlock(&L) == 0) {
       if (g_lockdep) id = lockdep_locked(name, id);
+      nwlock.inc();
       return true;
     }
     return false;
