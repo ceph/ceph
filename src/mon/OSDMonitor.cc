@@ -5193,6 +5193,50 @@ done:
       goto reply;
     }
 
+    /* Mode description:
+     *
+     *  none:       No cache-mode defined
+     *  forward:    Forward all reads and writes to base pool
+     *  writeback:  Cache writes, promote reads from base pool
+     *  readonly:   Forward writes to base pool
+     *
+     * Hence, these are the allowed transitions:
+     *
+     *  none -> any
+     *  forward -> writeback || any IF num_objects_dirty == 0
+     *  writeback -> forward
+     *  readonly -> any
+     */
+
+    // We check if the transition is valid against the current pool mode, as
+    // it is the only committed state thus far.  We will blantly squash
+    // whatever mode is on the pending state.
+
+    if (p->cache_mode == pg_pool_t::CACHEMODE_WRITEBACK &&
+        mode != pg_pool_t::CACHEMODE_FORWARD) {
+      ss << "unable to set cache-mode '" << pg_pool_t::get_cache_mode_name(mode)
+         << "' on a '" << pg_pool_t::get_cache_mode_name(p->cache_mode)
+         << "' pool; only '"
+         << pg_pool_t::get_cache_mode_name(pg_pool_t::CACHEMODE_FORWARD)
+        << "' allowed.";
+      err = -EINVAL;
+      goto reply;
+    }
+    if (p->cache_mode == pg_pool_t::CACHEMODE_FORWARD &&
+               mode != pg_pool_t::CACHEMODE_WRITEBACK) {
+
+      const pool_stat_t& tier_stats =
+        mon->pgmon()->pg_map.get_pg_pool_sum_stat(pool_id);
+
+      if (tier_stats.stats.sum.num_objects_dirty > 0) {
+        ss << "unable to set cache-mode '"
+           << pg_pool_t::get_cache_mode_name(mode) << "' on pool '" << poolstr
+           << "': dirty objects found";
+        err = -EBUSY;
+        goto reply;
+      }
+    }
+
     // go
     pending_inc.get_new_pool(pool_id, p)->cache_mode = mode;
     ss << "set cache-mode for pool '" << poolstr

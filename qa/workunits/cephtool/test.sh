@@ -83,7 +83,31 @@ ceph osd pool create cache2 2
 ceph osd tier add data cache
 ceph osd tier add data cache2
 expect_false ceph osd tier add metadata cache
+# test some state transitions
 ceph osd tier cache-mode cache writeback
+ceph osd tier cache-mode cache forward
+ceph osd tier cache-mode cache readonly
+ceph osd tier cache-mode cache forward
+ceph osd tier cache-mode cache none
+ceph osd tier cache-mode cache writeback
+expect_false ceph osd tier cache-mode cache none
+expect_false ceph osd tier cache-mode cache readonly
+# test with dirty objects in the tier pool
+# tier pool currently set to 'writeback'
+rados -p cache put /etc/passwd /etc/passwd
+ceph tell osd.* flush_pg_stats || true
+# 1 dirty object in pool 'cache'
+ceph osd tier cache-mode cache forward
+expect_false ceph osd tier cache-mode cache none
+expect_false ceph osd tier cache-mode cache readonly
+ceph osd tier cache-mode cache writeback
+# remove object from tier pool
+rados -p cache rm /etc/passwd
+rados -p cache cache-flush-evict-all
+ceph tell osd.* flush_pg_stats || true
+# no dirty objects in pool 'cache'
+ceph osd tier cache-mode cache forward
+ceph osd tier cache-mode cache none
 ceph osd tier cache-mode cache readonly
 TRIES=0
 while ! ceph osd pool set cache pg_num 3 --yes-i-really-mean-it 2>$TMPFILE
