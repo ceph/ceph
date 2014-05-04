@@ -1929,22 +1929,6 @@ void CInode::finish_scatter_gather_update(int type)
 	  pi->rstat.version = v;
 	}
       }
-
-      if (pi->rstat.rsubdirs < 0 ||
-	  pi->rstat.rfiles < 0 ||
-	  pi->rstat.rbytes < 0) {
-	clog.error() << "bad/negative rstat on " << ino()
-		     << ", inode has " << pi->rstat << "\n";
-
-	if (pi->rstat.rsubdirs < 0)
-	  pi->rstat.rsubdirs = 0;
-	if (pi->rstat.rfiles < 0)
-	  pi->rstat.rfiles = 0;
-	if (pi->rstat.rbytes < 0)
-	  pi->rstat.rbytes = 0;
-
-	assert(!"bad/negative rstat" == g_conf->mds_verify_scatter);
-      }
     }
     break;
 
