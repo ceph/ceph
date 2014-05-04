@@ -425,7 +425,7 @@ int KeyValueStore::BufferTransaction::submit_transaction()
     }
   }
 
-  r = store->backend->submit_transaction(t);
+  r = store->backend->submit_transaction_sync(t);
   for (list<Context*>::iterator it = finishes.begin(); it != finishes.end(); ++it) {
     (*it)->complete(r);
   }
