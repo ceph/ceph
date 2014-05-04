@@ -666,13 +666,13 @@ void Migrator::maybe_do_queued_export()
 class C_MDC_ExportFreeze : public Context {
   Migrator *mig;
   CDir *ex;   // dir i'm exporting
-
+  uint64_t tid;
 public:
-  C_MDC_ExportFreeze(Migrator *m, CDir *e) :
-	mig(m), ex(e) {}
+  C_MDC_ExportFreeze(Migrator *m, CDir *e, uint64_t t) :
+	mig(m), ex(e), tid(t) {}
   virtual void finish(int r) {
     if (r >= 0)
-      mig->export_frozen(ex);
+      mig->export_frozen(ex, tid);
   }
 };
 
@@ -820,7 +820,7 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr)
   // start the freeze, but hold it up with an auth_pin.
   dir->freeze_tree();
   assert(dir->is_freezing_tree());
-  dir->add_waiter(CDir::WAIT_FROZEN, new C_MDC_ExportFreeze(this, dir));
+  dir->add_waiter(CDir::WAIT_FROZEN, new C_MDC_ExportFreeze(this, dir, it->second.tid));
 }
 
 /*
@@ -889,15 +889,19 @@ void Migrator::export_sessions_flushed(CDir *dir, uint64_t tid)
     export_go(dir);     // start export.
 }
 
-void Migrator::export_frozen(CDir *dir)
+void Migrator::export_frozen(CDir *dir, uint64_t tid)
 {
   dout(7) << "export_frozen on " << *dir << dendl;
-  assert(dir->is_frozen());
-  assert(dir->get_cum_auth_pins() == 0);
 
   map<CDir*,export_state_t>::iterator it = export_state.find(dir);
-  assert(it != export_state.end());
+  if (it == export_state.end() || it->second.tid != tid) {
+    dout(7) << "export must have aborted" << dendl;
+    return;
+  }
+
   assert(it->second.state == EXPORT_FREEZING);
+  assert(dir->is_frozen());
+  assert(dir->get_cum_auth_pins() == 0);
 
   CInode *diri = dir->get_inode();
 
