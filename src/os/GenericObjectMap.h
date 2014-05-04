@@ -129,6 +129,9 @@ class GenericObjectMap {
   int submit_transaction(KeyValueDB::Transaction t) {
     return db->submit_transaction(t);
   }
+  int submit_transaction_sync(KeyValueDB::Transaction t) {
+    return db->submit_transaction_sync(t);
+  }
 
   /// persistent state for store @see generate_header
   struct State {
