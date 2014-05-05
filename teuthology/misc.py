@@ -18,6 +18,8 @@ import urlparse
 import yaml
 import json
 import re
+import tempfile
+import paramiko
 
 from teuthology import safepath
 from .orchestra import run
@@ -554,7 +556,7 @@ def remove_lines_from_file(remote, path, line_is_valid_test,
     # get a temp file path on the remote host to write to,
     # we don't want to blow away the remote file and then have the
     # network drop out
-    temp_file_path = remote_mktemp(remote)
+    temp_file_path = remote.remote_mktemp()
 
     # write out the data to a temp file
     write_file(remote, temp_file_path, out_data)
@@ -570,7 +572,7 @@ def append_lines_to_file(remote, path, lines, sudo=False):
     Remove_lines_from_list.
     """
 
-    temp_file_path = remote_mktemp(remote)
+    temp_file_path = remote.remote_mktemp()
 
     data = get_file(remote, path, sudo)
 
@@ -583,26 +585,6 @@ def append_lines_to_file(remote, path, lines, sudo=False):
 
     # then do a 'mv' to the actual file location
     move_file(remote, temp_file_path, path)
-
-
-def remote_mktemp(remote, sudo=False):
-    """
-    Make a temporary file on a remote system
-    """
-    args = []
-    if sudo:
-        args.append('sudo')
-    args.extend([
-        'python',
-        '-c',
-        'import os; import tempfile; (fd,fname) = tempfile.mkstemp(); os.close(fd); print fname.rstrip()'
-        ])
-    proc = remote.run(
-        args=args,
-        stdout=StringIO(),
-        )
-    data = proc.stdout.getvalue()
-    return data
 
 
 def create_file(remote, path, data="", permissions=str(644), sudo=False):
@@ -630,25 +612,35 @@ def create_file(remote, path, data="", permissions=str(644), sudo=False):
         append_lines_to_file(remote, path, data, sudo)
 
 
+def do_remote_sftp(remote, tempf, sudo=False):
+    """
+    Make sure file is aways readble if root, and use SFTPClient to
+    copy across data.
+    """
+    if sudo:
+        args = []
+        args.extend([
+            'sudo',
+            'chmod',
+            '0666',
+            tempf,
+            ])
+        remote.run(
+            args=args,
+            stdout=StringIO(),
+            )
+    conn = remote.connect()
+    transport = conn.get_transport()
+    sftp = paramiko.SFTPClient.from_transport(transport)
+    with sftp.open(tempf, 'rb') as file_sftp:
+        result = file_sftp.read()
+    return result
+
 def get_file(remote, path, sudo=False):
     """
-    Read a file from remote host into memory.
+    Copy_remote wrapper.
     """
-    args = []
-    if sudo:
-        args.append('sudo')
-    args.extend([
-        'cat',
-        '--',
-        path,
-        ])
-    proc = remote.run(
-        args=args,
-        stdout=StringIO(),
-        )
-    data = proc.stdout.getvalue()
-    return data
-
+    return remote.copy_remote(path, sudo)
 
 def pull_directory(remote, remotedir, localdir):
     """
@@ -658,44 +650,36 @@ def pull_directory(remote, remotedir, localdir):
               remote.shortname, remotedir, localdir)
     if not os.path.exists(localdir):
         os.mkdir(localdir)
-    proc = remote.run(
-        args=[
-            'sudo',
-            'tar',
-            'c',
-            '-f', '-',
-            '-C', remotedir,
-            '--',
-            '.',
-            ],
-        stdout=run.PIPE,
-        wait=False,
-        )
-    tar = tarfile.open(mode='r|', fileobj=proc.stdout)
-    while True:
-        ti = tar.next()
-        if ti is None:
-            break
+    result = remote.tar_remote(remotedir, sudo=True)
+    _, local_tarfile = tempfile.mkstemp()
+    with open(local_tarfile, 'r+') as fb1:
+        fb1.write(result)
+        fb1.seek(0)
+        tar = tarfile.open(mode='r|', fileobj=fb1)
+        while True:
+            ti = tar.next()
+            if ti is None:
+                break
 
-        if ti.isdir():
-            # ignore silently; easier to just create leading dirs below
-            pass
-        elif ti.isfile():
-            sub = safepath.munge(ti.name)
-            safepath.makedirs(root=localdir, path=os.path.dirname(sub))
-            tar.makefile(ti, targetpath=os.path.join(localdir, sub))
-        else:
-            if ti.isdev():
-                type_ = 'device'
-            elif ti.issym():
-                type_ = 'symlink'
-            elif ti.islnk():
-                type_ = 'hard link'
+            if ti.isdir():
+                # ignore silently; easier to just create leading dirs below
+                pass
+            elif ti.isfile():
+                sub = safepath.munge(ti.name)
+                safepath.makedirs(root=localdir, path=os.path.dirname(sub))
+                tar.makefile(ti, targetpath=os.path.join(localdir, sub))
             else:
-                type_ = 'unknown'
-                log.info('Ignoring tar entry: %r type %r', ti.name, type_)
-                continue
-    proc.exitstatus.get()
+                if ti.isdev():
+                    type_ = 'device'
+                elif ti.issym():
+                    type_ = 'symlink'
+                elif ti.islnk():
+                    type_ = 'hard link'
+                else:
+                    type_ = 'unknown'
+                    log.info('Ignoring tar entry: %r type %r', ti.name, type_)
+                    continue
+    os.remove(local_tarfile)
 
 
 def pull_directory_tarball(remote, remotedir, localfile):
@@ -704,21 +688,9 @@ def pull_directory_tarball(remote, remotedir, localfile):
     """
     log.debug('Transferring archived files from %s:%s to %s',
               remote.shortname, remotedir, localfile)
-    out = open(localfile, 'w')
-    proc = remote.run(
-        args=[
-            'sudo',
-            'tar',
-            'cz',
-            '-f', '-',
-            '-C', remotedir,
-            '--',
-            '.',
-            ],
-        stdout=out,
-        wait=False,
-        )
-    proc.exitstatus.get()
+    tardata = remote.tar_remote(remotedir, zip_flag=True, sudo=True)
+    with open(localfile, 'w') as out:
+        out.write(tardata)
 
 
 def get_wwn_id_map(remote, devs):
