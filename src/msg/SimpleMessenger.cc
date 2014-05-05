@@ -571,7 +571,7 @@ void SimpleMessenger::wait()
       Pipe *p = rank_pipe.begin()->second;
       p->unregister_pipe();
       p->pipe_lock.Lock();
-      p->stop();
+      p->stop_and_wait();
       p->pipe_lock.Unlock();
     }
 
@@ -599,7 +599,7 @@ void SimpleMessenger::mark_down_all()
     Pipe *p = *q;
     ldout(cct,5) << "mark_down_all accepting_pipe " << p << dendl;
     p->pipe_lock.Lock();
-    p->stop();
+    p->stop_and_wait();
     ConnectionRef con = p->connection_state;
     if (con && con->clear_pipe(p))
       dispatch_queue.queue_reset(con.get());
@@ -614,7 +614,7 @@ void SimpleMessenger::mark_down_all()
     rank_pipe.erase(it);
     p->unregister_pipe();
     p->pipe_lock.Lock();
-    p->stop();
+    p->stop_and_wait();
     ConnectionRef con = p->connection_state;
     if (con && con->clear_pipe(p))
       dispatch_queue.queue_reset(con.get());
@@ -631,7 +631,7 @@ void SimpleMessenger::mark_down(const entity_addr_t& addr)
     ldout(cct,1) << "mark_down " << addr << " -- " << p << dendl;
     p->unregister_pipe();
     p->pipe_lock.Lock();
-    p->stop();
+    p->stop_and_wait();
     if (p->connection_state) {
       // generate a reset event for the caller in this case, even
       // though they asked for it, since this is the addr-based (and
@@ -658,7 +658,7 @@ void SimpleMessenger::mark_down(Connection *con)
     assert(p->msgr == this);
     p->unregister_pipe();
     p->pipe_lock.Lock();
-    p->stop();
+    p->stop_and_wait();
     if (p->connection_state) {
       // do not generate a reset event for the caller in this case,
       // since they asked for it.
@@ -682,7 +682,7 @@ void SimpleMessenger::mark_down_on_empty(Connection *con)
     p->unregister_pipe();
     if (p->out_q.empty()) {
       ldout(cct,1) << "mark_down_on_empty " << con << " -- " << p << " closing (queue is empty)" << dendl;
-      p->stop();
+      p->stop_and_wait();
     } else {
       ldout(cct,1) << "mark_down_on_empty " << con << " -- " << p << " marking (queue is not empty)" << dendl;
       p->close_on_empty = true;

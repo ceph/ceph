@@ -83,6 +83,7 @@ Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
     state(st),
     connection_state(NULL),
     reader_running(false), reader_needs_join(false),
+    reader_dispatching(false),
     writer_running(false),
     in_q(&(r->dispatch_queue)),
     send_keepalive(false),
@@ -642,6 +643,7 @@ int Pipe::accept()
          ++p)
       out_q[p->first].splice(out_q[p->first].begin(), p->second);
   }
+  existing->stop_and_wait();
   existing->pipe_lock.Unlock();
 
  open:
@@ -1390,6 +1392,15 @@ void Pipe::stop()
   shutdown_socket();
 }
 
+void Pipe::stop_and_wait()
+{
+  if (state != STATE_CLOSED)
+    stop();
+  
+  while (reader_running &&
+	 reader_dispatching)
+    cond.Wait(pipe_lock);
+}
 
 /* read msgs from socket.
  * also, server.
@@ -1540,9 +1551,13 @@ void Pipe::reader()
         delay_thread->queue(release, m);
       } else {
         if (in_q->can_fast_dispatch(m)) {
+	  reader_dispatching = true;
           pipe_lock.Unlock();
           in_q->fast_dispatch(m);
           pipe_lock.Lock();
+	  reader_dispatching = false;
+	  if (state == STATE_CLOSED) // there might be somebody waiting
+	    cond.Signal();
         } else {
           in_q->enqueue(m, m->get_priority(), conn_id);
         }
