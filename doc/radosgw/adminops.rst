@@ -1815,22 +1815,18 @@ None.
 Quotas
 ======
 
-.. todo:: Need clarification on syntax.
-
-
-The Admin Operations API enables you to set quotas on users and buckets.
-Quotas include the maximum number of objects in a bucket and the maximum
-storage size in megabytes.
+The Admin Operations API enables you to set quotas on users and on bucket owned
+by users. See `Quota Management`_ for additional details. Quotas include the
+maximum number of objects in a bucket and the maximum storage size in megabytes.
 
 To view quotas, the user must have a ``users=read`` capability. To set,
 modify or disable a quota, the user must have ``users=write`` capability.
 See the `Admin Guide`_ for details.
 
-
 Valid parameters for quotas include:
 
 - **Bucket:** The ``bucket`` option allows you to specify a quota for
-  a particular bucket.
+  buckets owned by a user.
 
 - **Maximum Objects:** The ``max-objects`` setting allows you to specify
   the maximum number of objects. A negative value disables this setting.
@@ -1843,26 +1839,48 @@ Valid parameters for quotas include:
 
 
 
-Read User Quota
-~~~~~~~~~~~~~~~
+Get User Quota
+~~~~~~~~~~~~~~
 
-Read user quota setting
+To get a quota, the user must have ``users`` capability set with ``read`` 
+permission. ::
 
- - requires the 'users' read cap set.
-
-GET /admin/user?quota&uid=<uid>[&quota-type=<user|bucket>]
+	GET /admin/user?quota&uid=<uid>&quota-type=user
 
 
-Modify User Quota
-~~~~~~~~~~~~~~~~~
+Set User Quota
+~~~~~~~~~~~~~~
 
-requires the 'users' write cap set
+To set a quota, the user must have ``users`` capability set with ``write`` 
+permission. ::
 
-PUT /admin/user?quota&uid=<uid>[&quota-type=<user|bucket>]
+	PUT /admin/user?quota&uid=<uid>&quota-type=user
 
-Content should include a json representation of the quota settings
-(either the user quota, or the bucket quota, or both) as encoded in
-the corresponding read operation.
+
+The content must include a JSON representation of the quota settings
+as encoded in the corresponding read operation.
+
+
+Get Bucket Quota
+~~~~~~~~~~~~~~~~
+
+To get a quota, the user must have ``users`` capability set with ``read`` 
+permission. ::
+
+	GET /admin/user?quota&uid=<uid>&quota-type=bucket
+
+
+Set Bucket Quota
+~~~~~~~~~~~~~~~~
+
+To set a quota, the user must have ``users`` capability set with ``write`` 
+permission. ::
+
+	PUT /admin/user?quota&uid=<uid>&quota-type=bucket
+
+The content must include a JSON representation of the quota settings
+as encoded in the corresponding read operation.
+
 
 
 
@@ -1897,3 +1915,4 @@ Standard Error Responses
 
 
 .. _Admin Guide: ../admin
+.. _Quota Management: ../admin#quota-management
