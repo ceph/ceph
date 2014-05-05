@@ -13,7 +13,7 @@ Ceph Storage Clusters. :term:`Ceph Object Storage` supports two interfaces:
    that is compatible with a large subset of the OpenStack Swift API.
    
 Ceph Object Storage uses the Ceph Object Gateway daemon (``radosgw``), which is
-a FastCGI module for interacting with ``librgw``. Since it
+a FastCGI module for interacting with a Ceph Storage Cluster. Since it
 provides interfaces compatible with OpenStack Swift and Amazon S3, the Ceph
 Object Gateway has its own user management. Ceph Object Gateway can store data
 in the same Ceph Storage Cluster used to store data from Ceph Filesystem clients
@@ -25,7 +25,7 @@ you may write data with one API and retrieve it with the other.
             +------------------------+-+------------------------+
             |                      radosgw                      |
             +---------------------------------------------------+
-            |                      librgw                       |
+            |                      librados                     |
             +------------------------+-+------------------------+
             |          OSDs          | |        Monitors        |
             +------------------------+ +------------------------+   
