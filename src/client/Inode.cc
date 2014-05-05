@@ -137,7 +137,7 @@ int Inode::put_cap_ref(int cap)
 
 bool Inode::is_any_caps()
 {
-  return caps.size();
+  return !caps.empty() || snap_caps;
 }
 
 bool Inode::cap_is_valid(Cap* cap)
