@@ -2454,7 +2454,7 @@ void CInode::choose_lock_state(SimpleLock *lock, int allissued)
   if (is_auth()) {
     if (lock->is_xlocked()) {
       // do nothing here
-    } else {
+    } else if (lock->get_state() != LOCK_MIX) {
       if (issued & CEPH_CAP_GEXCL)
 	lock->set_state(LOCK_EXCL);
       else if (issued & CEPH_CAP_GWR)

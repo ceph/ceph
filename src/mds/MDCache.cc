@@ -4593,7 +4593,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
     //  infer state from replica state:
     //   * go to MIX if they might have wrlocks
     //   * go to LOCK if they are LOCK (just bc identify_files_to_recover might start twiddling filelock)
-    in->filelock.infer_state_from_strong_rejoin(is.filelock, true);  // maybe also go to LOCK
+    in->filelock.infer_state_from_strong_rejoin(is.filelock, !in->is_dir());  // maybe also go to LOCK
     in->nestlock.infer_state_from_strong_rejoin(is.nestlock, false);
     in->dirfragtreelock.infer_state_from_strong_rejoin(is.dftlock, false);
 
