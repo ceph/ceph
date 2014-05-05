@@ -365,7 +365,7 @@ void RGWLoadGenProcess::run()
   int num_buckets;
   conf->get_val("num_buckets", 1, &num_buckets);
 
-  string buckets[num_buckets];
+  vector<string> buckets(num_buckets);
 
   atomic_t failed;
 
