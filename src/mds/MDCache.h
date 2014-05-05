@@ -625,11 +625,11 @@ public:
     frag_t fg = in->pick_dirfrag(dn);
     return in->get_dirfrag(fg);
   }
-  CDir* get_force_dirfrag(dirfrag_t df) {
+  CDir* get_force_dirfrag(dirfrag_t df, bool replay) {
     CInode *diri = get_inode(df.ino);
     if (!diri)
       return NULL;
-    CDir *dir = force_dir_fragment(diri, df.frag);
+    CDir *dir = force_dir_fragment(diri, df.frag, replay);
     if (!dir)
       dir = diri->get_dirfrag(df.frag);
     return dir;

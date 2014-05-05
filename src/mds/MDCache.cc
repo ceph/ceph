@@ -2942,8 +2942,10 @@ void MDCache::handle_resolve(MMDSResolve *m)
     return;
   }
 
+  bool survivor = false;
   // am i a surviving ambiguous importer?
   if (mds->is_clientreplay() || mds->is_active() || mds->is_stopping()) {
+    survivor = true;
     // check for any import success/failure (from this node)
     map<dirfrag_t, vector<dirfrag_t> >::iterator p = my_ambiguous_imports.begin();
     while (p != my_ambiguous_imports.end()) {
@@ -2962,7 +2964,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
 	     q != m->subtrees.end();
 	     ++q) {
 	  // an ambiguous import won't race with a refragmentation; it's appropriate to force here.
-	  CDir *base = get_force_dirfrag(q->first);
+	  CDir *base = get_force_dirfrag(q->first, false);
 	  if (!base || !base->contains(dir)) 
 	    continue;  // base not dir or an ancestor of dir, clearly doesn't claim dir.
 
@@ -3000,7 +3002,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
        pi != m->subtrees.end();
        ++pi) {
     dout(10) << "peer claims " << pi->first << " bounds " << pi->second << dendl;
-    CDir *dir = get_force_dirfrag(pi->first);
+    CDir *dir = get_force_dirfrag(pi->first, !survivor);
     if (!dir)
       continue;
     adjust_bounded_subtree_auth(dir, pi->second, from);
@@ -3244,6 +3246,7 @@ void MDCache::disambiguate_imports()
 {
   dout(10) << "disambiguate_imports" << dendl;
 
+  bool is_resolve = mds->is_resolve();
   // other nodes' ambiguous imports
   for (map<int, map<dirfrag_t, vector<dirfrag_t> > >::iterator p = other_ambiguous_imports.begin();
        p != other_ambiguous_imports.end();
@@ -3256,7 +3259,7 @@ void MDCache::disambiguate_imports()
 	 ++q) {
       dout(10) << " ambiguous import " << q->first << " bounds " << q->second << dendl;
       // an ambiguous import will not race with a refragmentation; it's appropriate to force here.
-      CDir *dir = get_force_dirfrag(q->first);
+      CDir *dir = get_force_dirfrag(q->first, is_resolve);
       if (!dir) continue;
       
       if (dir->is_ambiguous_auth() ||	// works for me_ambig or if i am a surviving bystander
@@ -3301,7 +3304,7 @@ void MDCache::disambiguate_imports()
   assert(my_ambiguous_imports.empty());
   mds->mdlog->flush();
 
-  if (mds->is_resolve()) {
+  if (is_resolve) {
     // verify all my subtrees are unambiguous!
     for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
 	 p != subtrees.end();
@@ -4697,17 +4700,14 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
        ++p) {
     // we may have had incorrect dir fragmentation; refragment based
     // on what they auth tells us.
-    CInode *diri = get_inode(p->first.ino);
-    CDir *dir = NULL;
-    if (diri) {
-      dir = diri->get_dirfrag(p->first.frag);
-      if (!dir) {
-	dir = force_dir_fragment(diri, p->first.frag, false);
-	if (dir)
-	  refragged_inodes.insert(dir->get_inode());
-      }
+    CDir *dir = get_dirfrag(p->first);
+    if (!dir) {
+      dir = get_force_dirfrag(p->first, false);
+      if (dir)
+	refragged_inodes.insert(dir->get_inode());
     }
     if (!dir) {
+      CInode *diri = get_inode(p->first.ino);
       if (!diri) {
 	// barebones inode; the full inode loop below will clean up.
 	diri = new CInode(this, false);
@@ -4943,7 +4943,7 @@ void MDCache::handle_cache_rejoin_missing(MMDSCacheRejoin *missing)
        ++p) {
     // we may have had incorrect dir fragmentation; refragment based
     // on what they auth tells us.
-    CDir *dir = get_force_dirfrag(p->first);
+    CDir *dir = get_force_dirfrag(p->first, false);
     assert(dir);
 
     dir->set_replica_nonce(p->second.nonce);
