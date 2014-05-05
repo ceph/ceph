@@ -510,7 +510,7 @@ void CInode::force_dirfrags()
     list<frag_t> leaves;
     dirfragtree.get_leaves(leaves);
     for (list<frag_t>::iterator p = leaves.begin(); p != leaves.end(); ++p)
-      mdcache->get_force_dirfrag(dirfrag_t(ino(),*p));
+      mdcache->get_force_dirfrag(dirfrag_t(ino(),*p), true);
   }
 
   verify_dirfrags();
