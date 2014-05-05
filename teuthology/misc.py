@@ -611,11 +611,17 @@ def create_file(remote, path, data="", permissions=str(644), sudo=False):
         append_lines_to_file(remote, path, data, sudo)
 
 
-def get_file(remote, path, sudo=False):
+def get_file(remote, path, sudo=False, dest_dir='/tmp'):
     """
-    Copy_remote wrapper.
+    Get the contents of a remote file. Do not use for large files; use
+    Remote.get_file() instead.
     """
-    return remote.get_file(path, sudo)
+    local_path = remote.get_file(path, sudo=sudo, dest_dir=dest_dir)
+    with open(local_path) as file_obj:
+        file_data = file_obj.read()
+    os.remove(local_path)
+    return file_data
+
 
 def pull_directory(remote, remotedir, localdir):
     """
@@ -628,7 +634,7 @@ def pull_directory(remote, remotedir, localdir):
     _, local_tarfile = tempfile.mkstemp(dir=localdir)
     remote.get_tar(remotedir, local_tarfile, sudo=True)
     with open(local_tarfile, 'r+') as fb1:
-        tar = tarfile.open(mode='r|', fileobj=fb1)
+        tar = tarfile.open(mode='r|gz', fileobj=fb1)
         while True:
             ti = tar.next()
             if ti is None:
@@ -661,7 +667,7 @@ def pull_directory_tarball(remote, remotedir, localfile):
     """
     log.debug('Transferring archived files from %s:%s to %s',
               remote.shortname, remotedir, localfile)
-    remote.get_tar(remotedir, localfile, zip_flag=True, sudo=True)
+    remote.get_tar(remotedir, localfile, sudo=True)
 
 
 def get_wwn_id_map(remote, devs):

@@ -10,7 +10,8 @@ import re
 import logging
 from cStringIO import StringIO
 from teuthology import lockstatus as ls
-import paramiko
+import os
+import tempfile
 
 try:
     import libvirt
@@ -116,13 +117,11 @@ class Remote(object):
         Returns: the name of the temp file created using
                  tempfile.mkstemp
         """
-        py_cmd = """
-        import os; import tempfile; import sys;
-        (fd,fname) = tempfile.mkstemp();
-        os.close(fd);
-        sys.stdout.write(fname.rstrip());
-        sys.stdout.flush()'
-        """.replace('\n', ' ')
+        py_cmd = "import os; import tempfile; import sys;" + \
+            "(fd,fname) = tempfile.mkstemp();" + \
+            "os.close(fd);" + \
+            "sys.stdout.write(fname.rstrip());" + \
+            "sys.stdout.flush()"
         args = [
             'python',
             '-c',
@@ -149,66 +148,68 @@ class Remote(object):
             args=args,
             )
 
-    def _sftp_get_file(self, file_path):
+    def _sftp_get_file(self, remote_path, local_path):
         """
-        Use the Paramiko SFTPClient to copy the data from the remote
-        file.  Returns the file's content.
+        Use the paramiko.SFTPClient to get a file. Returns the local filename.
         """
-        conn = self.connect()
-        transport = conn.get_transport()
-        sftp = paramiko.SFTPClient.from_transport(transport)
-        with sftp.open(file_path, 'rb') as file_sftp:
-            result = file_sftp.read()
-        return result
-
-    def _sftp_copy_file(self, file_path, to_path):
         sftp = self.ssh.open_sftp()
-        sftp.get(file_path, to_path)
+        sftp.get(remote_path, local_path)
+        return local_path
+
+    def _sftp_open_file(self, remote_path):
+        """
+        Use the paramiko.SFTPClient to open a file. Returns a
+        paramiko.SFTPFile object.
+        """
+        sftp = self.ssh.open_sftp()
+        return sftp.open(remote_path)
 
     def remove(self, path):
         self.run(args=['rm', '-fr', path])
 
-    def get_file(self, path, sudo=False):
+    def get_file(self, path, sudo=False, dest_dir='/tmp'):
         """
-        Read a file from the remote host into memory.
+        Fetch a remote file, and return its local filename.
         """
-        if not sudo:
-            return self._sftp_get_file(path)
-        temp_file_path = self.mktemp()
-        args = [
-            'sudo',
-            'cp',
-            path,
-            temp_file_path,
-            ]
-        self.run(args=args)
-        self.chmod(temp_file_path, '0666')
-        ret = self._sftp_get_file(temp_file_path)
-        self.remove(temp_file_path)
-        return ret
+        if sudo:
+            orig_path = path
+            path = self.mktemp()
+            args = [
+                'sudo',
+                'cp',
+                orig_path,
+                path,
+                ]
+            self.run(args=args)
+            self.chmod(path, '0666')
+        (fd, local_temp_path) = tempfile.mkstemp(dir=dest_dir)
+        os.close(fd)
+        self._sftp_get_file(path, local_temp_path)
+        if sudo:
+            self.remove(path)
+        return local_temp_path
 
-    def get_tar(self, path, to_path, sudo=False, zip_flag=False):
+    def get_tar(self, path, to_path, sudo=False):
         """
-        Tar a remote file.
+        Tar a remote directory and copy it locally
         """
-        zip_fld = lambda x: 'cz' if x else 'c'
-        temp_file_path = self.mktemp()
+        remote_temp_path = self.mktemp()
         args = []
         if sudo:
             args.append('sudo')
         args.extend([
             'tar',
-            zip_fld(zip_flag),
-            '-f', temp_file_path,
+            'cz',
+            '-f', remote_temp_path,
             '-C', path,
             '--',
             '.',
             ])
         self.run(args=args)
         if sudo:
-            self.chmod(temp_file_path, '0666')
-        self._sftp_copy_file(temp_file_path, to_path)
-        self.remove(temp_file_path)
+            self.chmod(remote_temp_path, '0666')
+        self._sftp_get_file(remote_temp_path, to_path)
+        self.remove(remote_temp_path)
 
 
 def getShortName(name):
