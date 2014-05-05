@@ -9,7 +9,7 @@ boto >= 2.0b4
 bunch >= 1.0.0
 configobj
 httplib2
-paramiko >= 1.12.0
+paramiko < 1.8
 pexpect
 requests >= 1.0
 raven
