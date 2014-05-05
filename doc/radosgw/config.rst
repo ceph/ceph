@@ -414,6 +414,9 @@ should return the following:
    </ListAllMyBucketsResult>
 
 
+If you receive an error, check your settings and try again. See 
+`Adjust Path Ownership/Permissions`_ for details.
+
 Using The Gateway
 =================
 
