@@ -3926,16 +3926,8 @@ void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
   case MMDSCacheRejoin::OP_STRONG:
     handle_cache_rejoin_strong(m);
     break;
-
   case MMDSCacheRejoin::OP_ACK:
     handle_cache_rejoin_ack(m);
-    break;
-  case MMDSCacheRejoin::OP_MISSING:
-    handle_cache_rejoin_missing(m);
-    break;
-
-  case MMDSCacheRejoin::OP_FULL:
-    handle_cache_rejoin_full(m);
     break;
 
   default: 
@@ -4928,90 +4920,6 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
   }
 }
 
-
-
-/* This functions DOES NOT put the passed message before returning */
-void MDCache::handle_cache_rejoin_missing(MMDSCacheRejoin *missing)
-{
-  dout(7) << "handle_cache_rejoin_missing from " << missing->get_source() << dendl;
-
-  MMDSCacheRejoin *full = new MMDSCacheRejoin(MMDSCacheRejoin::OP_FULL);
-
-  // dirs
-  for (map<dirfrag_t, MMDSCacheRejoin::dirfrag_strong>::iterator p = missing->strong_dirfrags.begin();
-       p != missing->strong_dirfrags.end();
-       ++p) {
-    // we may have had incorrect dir fragmentation; refragment based
-    // on what they auth tells us.
-    CDir *dir = get_force_dirfrag(p->first, false);
-    assert(dir);
-
-    dir->set_replica_nonce(p->second.nonce);
-    dir->state_clear(CDir::STATE_REJOINING);
-    dout(10) << " adjusted frag on " << *dir << dendl;
-  }
-
-  // inodes
-  for (set<vinodeno_t>::iterator p = missing->weak_inodes.begin();
-       p != missing->weak_inodes.end();
-       ++p) {
-    CInode *in = get_inode(*p);
-    if (!in) {
-      dout(10) << " don't have inode " << *p << dendl;
-      continue; // we must have trimmed it after the originalo rejoin
-    }
-    
-    dout(10) << " sending " << *in << dendl;
-    full->add_inode_base(in);
-  }
-
-  mds->send_message(full, missing->get_connection());
-}
-
-/* This function DOES NOT put the passed message before returning */
-void MDCache::handle_cache_rejoin_full(MMDSCacheRejoin *full)
-{
-  dout(7) << "handle_cache_rejoin_full from " << full->get_source() << dendl;
-  int from = full->get_source().num();
-  
-  // integrate full inodes
-  bufferlist::iterator p = full->inode_base.begin();
-  while (!p.end()) {
-    inodeno_t ino;
-    snapid_t last;
-    bufferlist basebl;
-    ::decode(ino, p);
-    ::decode(last, p);
-    ::decode(basebl, p);
-
-    CInode *in = get_inode(ino);
-    assert(in);
-    bufferlist::iterator pp = basebl.begin();
-    in->_decode_base(pp);
-
-    set<CInode*>::iterator q = rejoin_undef_inodes.find(in);
-    if (q != rejoin_undef_inodes.end()) {
-      CInode *in = *q;
-      in->state_clear(CInode::STATE_REJOINUNDEF);
-      dout(10) << " got full " << *in << dendl;
-      rejoin_undef_inodes.erase(q);
-    } else {
-      dout(10) << " had full " << *in << dendl;
-    }
-  }
-
-  // done?
-  assert(rejoin_gather.count(from));
-  rejoin_gather.erase(from);
-  if (rejoin_gather.empty()) {
-    rejoin_gather_finish();
-  } else {
-    dout(7) << "still need rejoin from (" << rejoin_gather << ")" << dendl;
-  }
-}
-
-
-
 /**
  * rejoin_trim_undef_inodes() -- remove REJOINUNDEF flagged inodes
  *
@@ -5089,7 +4997,6 @@ void MDCache::rejoin_gather_finish()
   rejoin_ack_gather.erase(mds->whoami);
 
   // did we already get our acks too?
-  // this happens when the rejoin_gather has to wait on a MISSING/FULL exchange.
   if (rejoin_ack_gather.empty()) {
     // finally, kickstart past snap parent opens
     open_snap_parents();

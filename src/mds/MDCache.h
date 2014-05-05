@@ -439,9 +439,6 @@ protected:
 				      set<vinodeno_t>& acked_inodes,
 				      set<SimpleLock *>& gather_locks);
   void handle_cache_rejoin_ack(MMDSCacheRejoin *m);
-  void handle_cache_rejoin_purge(MMDSCacheRejoin *m);
-  void handle_cache_rejoin_missing(MMDSCacheRejoin *m);
-  void handle_cache_rejoin_full(MMDSCacheRejoin *m);
   void rejoin_send_acks();
   void rejoin_trim_undef_inodes();
   void maybe_send_pending_rejoins() {
