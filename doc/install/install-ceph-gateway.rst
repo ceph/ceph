@@ -149,7 +149,12 @@ To install Apache with 100-continue, execute the following steps:
    ``noarch`` entry above.
 
 
-#. Update your repo and install Apache and FastCGI. :: 
+#. Update your repository. On RHEL systems, enable the 
+   ``rhel-6-server-optional-rpms`` repository. ::
+
+	sudo yum update --enablerepo=rhel-6-server-optional-rpms
+
+#. Install Apache and FastCGI. :: 
 
 	sudo yum update && sudo yum install httpd mod_fastcgi
 
@@ -218,9 +223,6 @@ RPM-based Packages
 
 	sudo /etc/init.d/httpd restart
 
-.. _RFC 2616, Section 8: http://www.w3.org/Protocols/rfc2616/rfc2616-sec8.html
-.. _gitbuilder.ceph.com: http://gitbuilder.ceph.com
-.. _Installing YUM Priorities: ../yum-priorities
 
 
 Enable SSL
@@ -365,3 +367,6 @@ following::
 .. _Get Packages: ../get-packages
 .. _Ubuntu Server Guide: https://help.ubuntu.com/12.04/serverguide/httpd.html
 .. _Setting up an SSL secured Webserver with CentOS: http://wiki.centos.org/HowTos/Https
+.. _RFC 2616, Section 8: http://www.w3.org/Protocols/rfc2616/rfc2616-sec8.html
+.. _gitbuilder.ceph.com: http://gitbuilder.ceph.com
+.. _Installing YUM Priorities: ../yum-priorities
