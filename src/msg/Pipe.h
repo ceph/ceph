@@ -173,6 +173,7 @@ class DispatchQueue;
     utime_t backoff;         // backoff time
 
     bool reader_running, reader_needs_join;
+    bool reader_dispatching; /// reader thread is dispatching without pipe_lock
     bool writer_running;
 
     map<int, list<Message*> > out_q;  // priority queue for outbound msgs
@@ -257,7 +258,11 @@ class DispatchQueue;
     void register_pipe();
     void unregister_pipe();
     void join();
+    /// stop a Pipe by closing its socket and setting it to STATE_CLOSED
     void stop();
+    /// stop() a Pipe if not already done, and wait for it to finish any
+    /// fast_dispatch in progress.
+    void stop_and_wait();
 
     void _send(Message *m) {
       assert(pipe_lock.is_locked());
