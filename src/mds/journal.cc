@@ -988,7 +988,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     dirlump &lump = lump_map[*lp];
 
     // the dir 
-    CDir *dir = mds->mdcache->get_force_dirfrag(*lp);
+    CDir *dir = mds->mdcache->get_force_dirfrag(*lp, true);
     if (!dir) {
       // hmm.  do i have the inode?
       CInode *diri = mds->mdcache->get_inode((*lp).ino);
@@ -2350,7 +2350,7 @@ void ESubtreeMap::replay(MDS *mds)
       }
 
       for (vector<dirfrag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q)
-	mds->mdcache->get_force_dirfrag(*q);
+	mds->mdcache->get_force_dirfrag(*q, true);
 
       set<CDir*> bounds;
       mds->mdcache->get_subtree_bounds(dir, bounds);
