@@ -111,15 +111,22 @@ class Remote(object):
 
     def mktemp(self):
         """
-        Make a remote temporary file 
-        
+        Make a remote temporary file
+
         Returns: the name of the temp file created using
                  tempfile.mkstemp
         """
+        py_cmd = """
+        import os; import tempfile; import sys;
+        (fd,fname) = tempfile.mkstemp();
+        os.close(fd);
+        sys.stdout.write(fname.rstrip());
+        sys.stdout.flush()'
+        """.replace('\n', ' ')
         args = [
             'python',
             '-c',
-            'import os; import tempfile; import sys; (fd,fname) = tempfile.mkstemp(); os.close(fd); sys.stdout.write(fname.rstrip()); sys.stdout.flush()'
+            py_cmd,
             ]
         proc = self.run(
             args=args,
@@ -159,9 +166,9 @@ class Remote(object):
         sftp.get(file_path, to_path)
 
     def remove(self, path):
-        self.run(args=['rm', '-fr', path]) 
+        self.run(args=['rm', '-fr', path])
 
-    def get_file(self, path, sudo=False): 
+    def get_file(self, path, sudo=False):
         """
         Read a file from the remote host into memory.
         """
@@ -176,7 +183,7 @@ class Remote(object):
             ]
         self.run(args=args)
         self.chmod(temp_file_path, '0666')
-        ret = self._sftp_get_file(temp_file_path) 
+        ret = self._sftp_get_file(temp_file_path)
         self.remove(temp_file_path)
         return ret
 
