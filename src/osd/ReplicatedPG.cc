@@ -4619,8 +4619,8 @@ inline int ReplicatedPG::_delete_oid(OpContext *ctx, bool no_whiteout)
   }
   oi.size = 0;
 
-  // cache: writeback: set whiteout on delete?
-  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK && !no_whiteout) {
+  // cache: cache: set whiteout on delete?
+  if (pool.info.cache_mode != pg_pool_t::CACHEMODE_NONE && !no_whiteout) {
     dout(20) << __func__ << " setting whiteout on " << soid << dendl;
     oi.set_flag(object_info_t::FLAG_WHITEOUT);
     ctx->delta_stats.num_whiteouts++;
@@ -5088,7 +5088,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   }
 
   // cache: clear whiteout?
-  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK) {
+  if (pool.info.cache_mode != pg_pool_t::CACHEMODE_NONE) {
     if (ctx->user_modify &&
 	ctx->obc->obs.oi.is_whiteout()) {
       dout(10) << __func__ << " clearing whiteout on " << soid << dendl;
