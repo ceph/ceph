@@ -761,7 +761,7 @@ def task(ctx, config):
     if 'ec-data-pool' in config:
         ctx.rgw.ec_data_pool = bool(config['ec-data-pool'])
         del config['ec-data-pool']
-        ctx.rgw.cache_pools = False
+    ctx.rgw.cache_pools = False
     if 'cache-pools' in config:
         ctx.rgw.cache_pools = bool(config['cache-pools'])
         del config['cache-pools']
