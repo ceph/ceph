@@ -7433,6 +7433,9 @@ void ReplicatedPG::kick_object_context_blocked(ObjectContextRef obc)
   dout(10) << __func__ << " " << soid << " requeuing " << ls.size() << " requests" << dendl;
   requeue_ops(ls);
   waiting_for_blocked_object.erase(p);
+
+  if (obc->requeue_scrub_on_unblock)
+    osd->queue_for_scrub(this);
 }
 
 SnapSetContext *ReplicatedPG::create_snapset_context(const hobject_t& oid)
@@ -11509,6 +11512,26 @@ void ReplicatedPG::agent_estimate_atime_temp(const hobject_t& oid,
 // ==========================================================================================
 // SCRUB
 
+
+bool ReplicatedPG::_range_available_for_scrub(
+  const hobject_t &begin, const hobject_t &end)
+{
+  pair<hobject_t, ObjectContextRef> next;
+  next.second = object_contexts.lookup(begin);
+  next.first = begin;
+  bool more = true;
+  while (more && next.first < end) {
+    if (next.second && next.second->is_blocked()) {
+      next.second->requeue_scrub_on_unblock = true;
+      dout(10) << __func__ << ": scrub delayed, "
+	       << next.first << " is blocked"
+	       << dendl;
+      return false;
+    }
+    more = object_contexts.get_next(next.first, &next);
+  }
+  return true;
+}
 
 void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 {
