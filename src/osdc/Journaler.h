@@ -93,6 +93,37 @@ class JournalStream
 };
 
 
+// This always lives in the same location for a given MDS
+// instance, it tells the daemon where to look for the journal.
+class JournalPointer {
+  public:
+  // The currently active journal
+  inodeno_t front;
+  // The backup journal, if any (may be 0)
+  inodeno_t back;
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(front, bl);
+    ::encode(back, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    ::decode(front, bl);
+    ::decode(back, bl);
+    DECODE_FINISH(bl);
+  }
+
+  JournalPointer() : front(0), back(0) {}
+
+  bool is_null() const {
+    return front == 0 && back == 0;
+  }
+};
+
+
 class Journaler {
 public:
   // this goes at the head of the log "file".
@@ -177,6 +208,10 @@ public:
   } last_written, last_committed;
   WRITE_CLASS_ENCODER(Header)
 
+  uint32_t get_stream_format() const {
+    return stream_format;
+  }
+
 private:
   // me
   CephContext *cct;
@@ -186,7 +221,6 @@ private:
   ceph_file_layout layout;
   uint32_t stream_format;
   JournalStream journal_stream;
-
 
   const char *magic;
   Objecter *objecter;
