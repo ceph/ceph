@@ -367,6 +367,13 @@ public:
     waiting_for_zero = false;
   }
 
+  void erase(Context *completion);
+private:
+  void _erase_finish(int data_result, Context *completion);
+  class C_EraseFinish;
+  friend class C_EraseFinish;
+
+public:
   void create(ceph_file_layout *layout);
   void recover(Context *onfinish);
   void reread_head(Context *onfinish);
