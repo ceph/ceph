@@ -15,8 +15,8 @@ sbin_SCRIPTS =
 su_sbin_PROGRAMS =
 su_sbin_SCRIPTS =
 dist_bin_SCRIPTS =
-lib_LTLIBRARIES =
-noinst_LTLIBRARIES =
+lib_LTLIBRARIES = 
+noinst_LTLIBRARIES = 
 noinst_LIBRARIES =
 radoslib_LTLIBRARIES =
 
@@ -26,12 +26,8 @@ bin_DEBUGPROGRAMS =
 # like sbin_SCRIPTS but can be used to install to e.g. /usr/sbin
 ceph_sbindir = $(sbindir)
 
-# certain things go straight into /sbin if installed under /usr, though!
-if USR_EXEC_PREFIX
-  su_sbindir = /sbin
-else
-  su_sbindir = $(exec_prefix)/sbin
-endif
+# certain things go straight into /sbin, though!
+su_sbindir = /sbin
 
 # C/C++ tests to build will be appended to this
 check_PROGRAMS =
@@ -198,3 +194,4 @@ DENCODER_DEPS =
 
 
 radoslibdir = $(libdir)/rados-classes
+
