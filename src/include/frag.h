@@ -452,24 +452,6 @@ public:
     return true;
   }
 
-  // verify that we describe a legal partition of the namespace.
-  void verify() const {
-    std::map<frag_t,int32_t> copy;
-    std::list<frag_t> q;
-    q.push_back(frag_t());
-    
-    while (1) {
-      frag_t cur = q.front();
-      q.pop_front();
-      int b = get_split(cur);
-      if (!b) continue;
-      copy[cur] = b;
-      cur.split(b, q);
-    }
-    
-    assert(copy == _splits);	
-  }
-  
   // encoding
   void encode(bufferlist& bl) const {
     ::encode(_splits, bl);
