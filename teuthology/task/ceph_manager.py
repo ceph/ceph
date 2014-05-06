@@ -374,6 +374,9 @@ class Thrasher:
             if random.uniform(0, 1) < (float(delay) / cleanint):
                 while len(self.dead_osds) > maxdead:
                     self.revive_osd()
+                for osd in self.in_osds:
+                    self.ceph_manager.raw_cluster_cmd('osd', 'reweight',
+                                                      str(osd), str(1))
                 if random.uniform(0, 1) < float(
                     self.config.get('chance_test_map_discontinuity', 0)):
                     self.test_map_discontinuity()
