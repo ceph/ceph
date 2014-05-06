@@ -561,7 +561,10 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
     rule_iter = manifest->rules.begin();
     stripe_ofs = 0;
     stripe_size = manifest->get_head_size();
-    cur_part_id = rule_iter->second.start_part_num;
+    if (rule_iter != manifest->rules.end()) {
+      cur_part_id = rule_iter->second.start_part_num;
+      cur_override_prefix = rule_iter->second.override_prefix;
+    }
     update_location();
     return;
   }
@@ -570,6 +573,11 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
   next_rule_iter = rule_iter;
   if (rule_iter != manifest->rules.begin()) {
     --rule_iter;
+  }
+
+  if (rule_iter == manifest->rules.end()) {
+    update_location();
+    return;
   }
 
   RGWObjManifestRule& rule = rule_iter->second;
@@ -601,6 +609,8 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
     stripe_size = next - stripe_ofs;
   }
 
+  cur_override_prefix = rule.override_prefix;
+
   update_location();
 }
 
@@ -618,7 +628,7 @@ void RGWObjManifest::obj_iterator::update_location()
     return;
   }
 
-  manifest->get_implicit_location(cur_part_id, cur_stripe, ofs, &location);
+  manifest->get_implicit_location(cur_part_id, cur_stripe, ofs, &cur_override_prefix, &location);
 }
 
 void RGWObjManifest::obj_iterator::operator++()
@@ -699,6 +709,8 @@ void RGWObjManifest::obj_iterator::operator++()
     stripe_size = MIN(rule->part_size - (stripe_ofs - part_ofs), rule->stripe_max_size);
   }
 
+  cur_override_prefix = rule->override_prefix;
+
   ofs = stripe_ofs;
   if (ofs > obj_size) {
     ofs = obj_size;
@@ -746,7 +758,7 @@ int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m
   
   cur_part_id = rule.start_part_num;
 
-  manifest->get_implicit_location(cur_part_id, cur_stripe, 0, &cur_obj);
+  manifest->get_implicit_location(cur_part_id, cur_stripe, 0, NULL, &cur_obj);
 
   manifest->update_iterators();
 
@@ -780,7 +792,7 @@ int RGWObjManifest::generator::create_next(uint64_t ofs)
   manifest->set_obj_size(ofs);
 
 
-  manifest->get_implicit_location(cur_part_id, cur_stripe, ofs, &cur_obj);
+  manifest->get_implicit_location(cur_part_id, cur_stripe, ofs, NULL, &cur_obj);
 
   manifest->update_iterators();
 
@@ -797,9 +809,14 @@ const RGWObjManifest::obj_iterator& RGWObjManifest::obj_end()
   return end_iter;
 }
 
-void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs, rgw_obj *location)
+void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs, string *override_prefix, rgw_obj *location)
 {
-  string oid = prefix;
+  string oid;
+  if (!override_prefix || override_prefix->empty()) {
+    oid = prefix;
+  } else {
+    oid = *override_prefix;
+  }
   string ns;
 
   if (!cur_part_id) {
@@ -857,10 +874,14 @@ int RGWObjManifest::append(RGWObjManifest& m)
     return 0;
   }
 
+  string override_prefix;
+
   if (prefix.empty()) {
     prefix = m.prefix;
-  } else if (prefix != m.prefix) {
-    return append_explicit(m);
+  }
+
+  if (prefix != m.prefix) {
+    override_prefix = m.prefix;
   }
 
   map<uint64_t, RGWObjManifestRule>::iterator miter = m.rules.begin();
@@ -882,9 +903,15 @@ int RGWObjManifest::append(RGWObjManifest& m)
       next_rule.part_size = m.obj_size - next_rule.start_ofs;
     }
 
+    if (override_prefix != rule.override_prefix) {
+      append_rules(m, miter, &override_prefix);
+      break;
+    }
+
     if (rule.part_size != next_rule.part_size ||
-        rule.stripe_max_size != next_rule.stripe_max_size) {
-      append_rules(m, miter);
+        rule.stripe_max_size != next_rule.stripe_max_size ||
+        rule.override_prefix != next_rule.override_prefix) {
+      append_rules(m, miter, NULL);
       break;
     }
 
@@ -894,7 +921,7 @@ int RGWObjManifest::append(RGWObjManifest& m)
     }
 
     if (expected_part_num != next_rule.start_part_num) {
-      append_rules(m, miter);
+      append_rules(m, miter, NULL);
       break;
     }
   }
@@ -904,11 +931,14 @@ int RGWObjManifest::append(RGWObjManifest& m)
   return 0;
 }
 
-void RGWObjManifest::append_rules(RGWObjManifest& m, map<uint64_t, RGWObjManifestRule>::iterator& miter)
+void RGWObjManifest::append_rules(RGWObjManifest& m, map<uint64_t, RGWObjManifestRule>::iterator& miter,
+                                  string *override_prefix)
 {
   for (; miter != m.rules.end(); ++miter) {
     RGWObjManifestRule rule = miter->second;
     rule.start_ofs += obj_size;
+    if (override_prefix)
+      rule.override_prefix = *override_prefix;
     rules[rule.start_ofs] = rule;
   }
 }
