@@ -123,7 +123,7 @@ Create Data Directory
 
 Deployment scripts may not create the default Ceph Object Gateway data
 directory.  Create data directories for each instance of a ``radosgw`` daemon
-(if they don't exist). The ``host``  variables in the Ceph
+(if you haven't done so already). The ``host``  variables in the Ceph
 configuration file determine which host runs each instance of a ``radosgw``
 daemon. The typical form specifies the ``radosgw`` daemon, the cluster name and
 the daemon ID. ::
@@ -280,14 +280,10 @@ of a gateway configuration for Debian/Ubuntu and CentOS/RHEL.
 
 .. rubric:: Debian/Ubuntu
 
-
 .. literalinclude:: rgw-debian.conf
    :language: ini
 
-
 .. rubric:: CentOS/RHEL
-
-
 
 .. literalinclude:: rgw-centos.conf
    :language: ini
@@ -354,7 +350,7 @@ executing::
 	
 If the result is ``1`` or ``Enforcing``, execute::
 
-	setenforce 0
+	sudo setenforce 0
 
 Then, restart Apache and the gateway daemon to see if that resolves the issue. 
 If it does, you can configure your system to disable SELinux.
