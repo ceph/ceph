@@ -251,12 +251,14 @@ class KludgeFile(object):
         self._wrapped.close()
         self._wrapped.channel.shutdown_write()
 
+
 def run(
     client, args,
     stdin=None, stdout=None, stderr=None,
     logger=None,
     check_status=True,
     wait=True,
+    name=None
     ):
     """
     Run a command remotely.
@@ -270,6 +272,7 @@ def run(
     :param logger: If logging, write stdout/stderr to "out" and "err" children of this logger. Defaults to logger named after this module.
     :param check_status: Whether to raise CommandFailedError on non-zero exit status, and . Defaults to True. All signals and connection loss are made to look like SIGHUP.
     :param wait: Whether to wait for process to exit. If False, returned ``r.exitstatus`` s a `gevent.event.AsyncResult`, and the actual status is available via ``.get()``.
+    :param name: Human readable name (probably hostname) of the destination host
     """
     r = execute(client, args)
 
@@ -285,11 +288,15 @@ def run(
     if logger is None:
         logger = log
     (host, port) = client.get_transport().getpeername()
+
+    if name is None:
+        name = host
+
     g_err = None
     if stderr is not PIPE:
         if stderr is None:
             stderr = logger.getChild('err')
-        g_err = gevent.spawn(copy_file_to, r.stderr, stderr, host)
+        g_err = gevent.spawn(copy_file_to, r.stderr, stderr, name)
         r.stderr = stderr
     else:
         assert not wait, "Using PIPE for stderr without wait=False would deadlock."
@@ -298,7 +305,7 @@ def run(
     if stdout is not PIPE:
         if stdout is None:
             stdout = logger.getChild('out')
-        g_out = gevent.spawn(copy_file_to, r.stdout, stdout, host)
+        g_out = gevent.spawn(copy_file_to, r.stdout, stdout, name)
         r.stdout = stdout
     else:
         assert not wait, "Using PIPE for stdout without wait=False would deadlock."
@@ -329,8 +336,7 @@ def run(
                 # signal; sadly SSH does not tell us which signal
                 raise CommandCrashedError(command=r.command)
             if status != 0:
-                (host, port) = client.get_transport().getpeername()
-                raise CommandFailedError(command=r.command, exitstatus=status, node=host)
+                raise CommandFailedError(command=r.command, exitstatus=status, node=name)
         return status
 
     if wait:

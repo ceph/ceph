@@ -106,7 +106,7 @@ class Remote(object):
 
         TODO refactor to move run.run here?
         """
-        r = self._runner(client=self.ssh, **kwargs)
+        r = self._runner(client=self.ssh, name=self.name, **kwargs)
         r.remote = self
         return r
 
