@@ -664,6 +664,11 @@ namespace librbd {
 					  ictx->header_oid,
 					  snap_id,
 					  RBD_PROTECTION_STATUS_UNPROTECTED);
+    if (r < 0) {
+      lderr(ictx->cct) << "snap_unprotect: error setting unprotected status"
+		       << dendl;
+      goto reprotect_and_return_err;
+    }
     notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
     return 0;
 
