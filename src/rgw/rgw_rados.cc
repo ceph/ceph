@@ -597,8 +597,8 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
     stripe_size = rule.stripe_max_size;
     stripe_size = MIN(manifest->get_obj_size() - stripe_ofs, stripe_size);
   } else {
-    stripe_size = rule.part_size - (ofs - stripe_ofs);
-    stripe_size = MIN(stripe_size, rule.stripe_max_size);
+    uint64_t next = MIN(stripe_ofs + rule.stripe_max_size, part_ofs + rule.part_size);
+    stripe_size = next - stripe_ofs;
   }
 
   update_location();
