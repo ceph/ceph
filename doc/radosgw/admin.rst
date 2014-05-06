@@ -256,13 +256,13 @@ secret. You may also remove an access key and secret. Options include:
 - ``--key-type=<type>`` specifies a key type. The options are: swift, s3
 
 
-To add a key, specify the user.
+To add a key, specify the user. ::
 
 	radosgw-admin key create --uid=johndoe --key-type=s3 --gen-key --gen-secret
 
 You may also specify a key and a secret.
 
-To remove an access key, 
+To remove an access key, specify the user. :: 
 
 	radosgw-admin key rm --uid=johndoe
 
