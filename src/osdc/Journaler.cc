@@ -915,7 +915,44 @@ bool Journaler::is_readable()
   return r;
 }
 
+class Journaler::C_EraseFinish : public Context {
+  Journaler *journaler;
+  Context *completion;
+  public:
+  C_EraseFinish(Journaler *j, Context *c) : journaler(j), completion(c) {}
+  void finish(int r) {
+    journaler->_erase_finish(r, completion);
+  }
+};
 
+/**
+ * Entirely erase the journal, including header.  For use when you
+ * have already made a copy of the journal somewhere else.
+ */
+void Journaler::erase(Context *completion)
+{
+  // Async delete the journal data
+  uint64_t first = trimmed_pos / get_layout_period();
+  uint64_t num = (write_pos - trimmed_pos) / get_layout_period() + 1;
+  filer.purge_range(ino, &layout, SnapContext(), first, num, ceph_clock_now(cct), 0,
+      new C_EraseFinish(this, completion));
+
+  // We will not start the operation to delete the header until _erase_finish has
+  // seen the data deletion succeed: otherwise if there was an error deleting data
+  // we might prematurely delete the header thereby lose our reference to the data.
+}
+
+void Journaler::_erase_finish(int data_result, Context *completion)
+{
+  if (data_result == 0) {
+    // Async delete the journal header
+    filer.purge_range(ino, &layout, SnapContext(), 0, 1, ceph_clock_now(cct), 0,
+        completion);
+  } else {
+    lderr(cct) << "Failed to delete journal " << ino << " data: " << cpp_strerror(data_result) << dendl;
+    completion->complete(data_result);
+  }
+}
 
 /* try_read_entry(bl)
  *  read entry into bl if it's ready.
