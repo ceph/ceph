@@ -4817,8 +4817,16 @@ void RGWRados::get_obj_aio_completion_cb(completion_t c, void *arg)
   ldout(cct, 20) << "get_obj_aio_completion_cb: io completion ofs=" << ofs << " len=" << len << dendl;
   d->throttle.put(len);
 
-  if (d->is_cancelled())
+  r = rados_aio_get_return_value(c);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: got unexpected error when trying to read object: " << r << dendl;
+    d->set_cancelled(r);
     goto done;
+  }
+
+  if (d->is_cancelled()) {
+    goto done;
+  }
 
   d->data_lock.Lock();
 
