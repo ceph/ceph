@@ -48,6 +48,7 @@ enum {
 #include <list>
 
 class Journaler;
+class JournalPointer;
 class LogEvent;
 class MDS;
 class LogSegment;
@@ -97,6 +98,22 @@ protected:
   void _replay();         // old way
   void _replay_thread();  // new way
 
+  // Journal recovery/rewrite logic
+  class RecoveryThread : public Thread {
+    MDLog *log;
+    Context *completion;
+  public:
+    void set_completion(Context *c) {completion = c;}
+    RecoveryThread(MDLog *l) : log(l), completion(NULL) {}
+    void* entry() {
+      log->_recovery_thread(completion);
+      return 0;
+    }
+  } recovery_thread;
+  void _recovery_thread(Context *completion);
+  int _read_pointer(JournalPointer *jp);
+  int _write_pointer(JournalPointer const &ptr);
+  void _reformat_journal(JournalPointer const &jp, Journaler *old_journal, Context *completion);
 
   // -- segments --
   map<uint64_t,LogSegment*> segments;
@@ -154,6 +171,7 @@ public:
 		  logger(0),
 		  replay_thread(this),
 		  already_replayed(false),
+		  recovery_thread(this),
 		  expiring_events(0), expired_events(0),
 		  cur_event(NULL) { }		  
   ~MDLog();
