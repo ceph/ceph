@@ -15,7 +15,6 @@
 #include "include/rados/librados.h"
 
 #include <assert.h>
-#include <pthread.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
