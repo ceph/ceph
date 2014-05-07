@@ -151,7 +151,7 @@ int	clone_calls = 1;                /* -C flag disables */
 int	randomize_striping = 1;		/* -U flag disables */
 int 	mapped_reads = 0;		/* -R flag disables it */
 int	fsxgoodfd = 0;
-int	o_direct;			/* -Z */
+int	o_direct = 0;			/* -Z flag */
 int	aio = 0;
 
 int num_clones = 0;
@@ -501,7 +501,7 @@ krbd_open(const char *name, struct rbd_ctx *ctx)
 		return ret;
 	}
 
-	fd = open(devnode, O_RDWR);
+	fd = open(devnode, O_RDWR | o_direct);
 	if (fd < 0) {
 		ret = -errno;
 		prt("open(%s) failed\n", devnode);
@@ -575,6 +575,9 @@ int
 __krbd_flush(struct rbd_ctx *ctx)
 {
 	int ret;
+
+	if (o_direct)
+		return 0;
 
 	/*
 	 * fsync(2) on the block device does not sync the filesystem
@@ -1032,7 +1035,7 @@ doflush(unsigned offset, unsigned size)
 {
 	int ret;
 
-	if (o_direct == O_DIRECT)
+	if (o_direct)
 		return;
 
 	ret = ops->flush(&ctx);
@@ -1964,6 +1967,8 @@ main(int argc, char **argv)
 			break;
                 case 'R':
                         mapped_reads = 0;
+			if (!quiet)
+				fprintf(stdout, "mapped reads DISABLED\n");
                         break;
 		case 'S':
                         seed = getnum(optarg, &endp);
