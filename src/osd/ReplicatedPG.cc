@@ -477,7 +477,8 @@ bool ReplicatedPG::maybe_await_blocked_snapset(
   OpRequestRef op)
 {
   ObjectContextRef obc;
-  if (obc = object_contexts.lookup(hoid.get_head())) {
+  obc = object_contexts.lookup(hoid.get_head());
+  if (obc) {
     if (obc->is_blocked()) {
       wait_for_blocked_object(obc->obs.oi.soid, op);
       return true;
@@ -485,7 +486,8 @@ bool ReplicatedPG::maybe_await_blocked_snapset(
       return false;
     }
   }
-  if (obc = object_contexts.lookup(hoid.get_snapdir())) {
+  obc = object_contexts.lookup(hoid.get_snapdir());
+  if (obc) {
     if (obc->is_blocked()) {
       wait_for_blocked_object(obc->obs.oi.soid, op);
       return true;
