@@ -84,6 +84,10 @@ class Remote(object):
             return False
         return self.ssh.get_transport().is_active()
 
+    def ensure_online(self):
+        if not self.is_online:
+            return self.connect()
+
     @property
     def system_type(self):
         """
