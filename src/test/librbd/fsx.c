@@ -1381,8 +1381,19 @@ check_clone(int clonenum)
 		exit(169);
 	}
 
-	good_buf = malloc(file_info.st_size);
-	temp_buf = malloc(file_info.st_size);
+	ret = posix_memalign((void **)&good_buf, MAX(writebdy, sizeof(void *)),
+			     file_info.st_size);
+	if (ret > 0) {
+		prterrcode("check_clone: posix_memalign(good_buf)", -ret);
+		exit(96);
+	}
+
+	ret = posix_memalign((void **)&temp_buf, MAX(readbdy, sizeof(void *)),
+			     file_info.st_size);
+	if (ret > 0) {
+		prterrcode("check_clone: posix_memalign(temp_buf)", -ret);
+		exit(97);
+	}
 
 	if ((ret = pread(fd, good_buf, file_info.st_size, 0)) < 0) {
 		simple_err("check_clone: pread", -errno);
