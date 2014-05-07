@@ -388,7 +388,7 @@ public:
     info.stats = stat;
   }
 
-  void schedule_work(
+  void schedule_recovery_work(
     GenContext<ThreadPool::TPHandle&> *c);
 
   pg_shard_t whoami_shard() const {
