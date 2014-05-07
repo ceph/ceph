@@ -2186,6 +2186,30 @@ void pg_interval_t::generate_test_instances(list<pg_interval_t*>& o)
   o.back()->maybe_went_rw = true;
 }
 
+bool pg_interval_t::is_new_interval(
+  int old_acting_primary,
+  int new_acting_primary,
+  const vector<int> &old_acting,
+  const vector<int> &new_acting,
+  int old_up_primary,
+  int new_up_primary,
+  const vector<int> &old_up,
+  const vector<int> &new_up,
+  OSDMapRef osdmap,
+  OSDMapRef lastmap,
+  int64_t pool_id,
+  pg_t pgid) {
+  return old_acting_primary != new_acting_primary ||
+    new_acting != old_acting ||
+    old_up_primary != new_up_primary ||
+    new_up != old_up ||
+    (!(lastmap->get_pools().count(pool_id))) ||
+    (lastmap->get_pools().find(pool_id)->second.min_size !=
+     osdmap->get_pools().find(pool_id)->second.min_size)  ||
+    pgid.is_split(lastmap->get_pg_num(pgid.pool()),
+		  osdmap->get_pg_num(pgid.pool()), 0);
+}
+
 bool pg_interval_t::check_new_interval(
   int old_acting_primary,
   int new_acting_primary,
@@ -2208,15 +2232,19 @@ bool pg_interval_t::check_new_interval(
   //  NOTE: a change in the up set primary triggers an interval
   //  change, even though the interval members in the pg_interval_t
   //  do not change.
-  if (old_acting_primary != new_acting_primary ||
-      new_acting != old_acting ||
-      old_up_primary != new_up_primary ||
-      new_up != old_up ||
-      (!(lastmap->get_pools().count(pool_id))) ||
-      (lastmap->get_pools().find(pool_id)->second.min_size !=
-       osdmap->get_pools().find(pool_id)->second.min_size)  ||
-      pgid.is_split(lastmap->get_pg_num(pgid.pool()),
-        osdmap->get_pg_num(pgid.pool()), 0)) {
+  if (is_new_interval(
+	old_acting_primary,
+	new_acting_primary,
+	old_acting,
+	new_acting,
+	old_up_primary,
+	new_up_primary,
+	old_up,
+	new_up,
+	osdmap,
+	lastmap,
+	pool_id,
+	pgid)) {
     pg_interval_t& i = (*past_intervals)[same_interval_since];
     i.first = same_interval_since;
     i.last = osdmap->get_epoch() - 1;

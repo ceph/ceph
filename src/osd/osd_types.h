@@ -1704,12 +1704,30 @@ struct pg_interval_t {
   static void generate_test_instances(list<pg_interval_t*>& o);
 
   /**
+   * Determines whether there is an interval change
+   */
+  static bool is_new_interval(
+    int old_acting_primary,                     ///< [in] primary as of lastmap
+    int new_acting_primary,                     ///< [in] primary as of lastmap
+    const vector<int> &old_acting,              ///< [in] acting as of lastmap
+    const vector<int> &new_acting,              ///< [in] acting as of osdmap
+    int old_up_primary,                         ///< [in] up primary of lastmap
+    int new_up_primary,                         ///< [in] up primary of osdmap
+    const vector<int> &old_up,                  ///< [in] up as of lastmap
+    const vector<int> &new_up,                  ///< [in] up as of osdmap
+    ceph::shared_ptr<const OSDMap> osdmap,  ///< [in] current map
+    ceph::shared_ptr<const OSDMap> lastmap, ///< [in] last map
+    int64_t poolid,                             ///< [in] pool for pg
+    pg_t pgid                                   ///< [in] pgid for pg
+    );
+
+  /**
    * Integrates a new map into *past_intervals, returns true
    * if an interval was closed out.
    */
   static bool check_new_interval(
     int old_acting_primary,                     ///< [in] primary as of lastmap
-    int new_acting_primary,                     ///< [in] primary as of lastmap
+    int new_acting_primary,                     ///< [in] primary as of osdmap
     const vector<int> &old_acting,              ///< [in] acting as of lastmap
     const vector<int> &new_acting,              ///< [in] acting as of osdmap
     int old_up_primary,                         ///< [in] up primary of lastmap
