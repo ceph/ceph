@@ -2037,10 +2037,14 @@ public:
   void fulfill_info(pg_shard_t from, const pg_query_t &query,
 		    pair<pg_shard_t, pg_info_t> &notify_info);
   void fulfill_log(pg_shard_t from, const pg_query_t &query, epoch_t query_epoch);
-  bool is_split(OSDMapRef lastmap, OSDMapRef nextmap);
-  bool acting_up_affected(
-    int newupprimary, int newactingprimary,
-    const vector<int>& newup, const vector<int>& newacting);
+
+  bool should_restart_peering(
+    int newupprimary,
+    int newactingprimary,
+    const vector<int>& newup,
+    const vector<int>& newacting,
+    OSDMapRef lastmap,
+    OSDMapRef osdmap);
 
   // OpRequest queueing
   bool can_discard_op(OpRequestRef op);
