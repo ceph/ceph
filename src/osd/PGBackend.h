@@ -189,7 +189,7 @@
      virtual void update_stats(
        const pg_stat_t &stat) = 0;
 
-     virtual void schedule_work(
+     virtual void schedule_recovery_work(
        GenContext<ThreadPool::TPHandle&> *c) = 0;
 
      virtual pg_shard_t whoami_shard() const = 0;
@@ -624,14 +624,14 @@ struct PG_SendMessageOnConn: public Context {
   }
 };
 
-struct PG_QueueAsync : public Context {
+struct PG_RecoveryQueueAsync : public Context {
   PGBackend::Listener *pg;
   GenContext<ThreadPool::TPHandle&> *c;
-  PG_QueueAsync(
+  PG_RecoveryQueueAsync(
     PGBackend::Listener *pg,
     GenContext<ThreadPool::TPHandle&> *c) : pg(pg), c(c) {}
   void finish(int) {
-    pg->schedule_work(c);
+    pg->schedule_recovery_work(c);
   }
 };
 

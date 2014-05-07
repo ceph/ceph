@@ -2312,9 +2312,9 @@ void PG::clear_publish_stats()
  */
 void PG::init(
   int role,
-  vector<int>& newup, int new_up_primary,
-  vector<int>& newacting, int new_acting_primary,
-  pg_history_t& history,
+  const vector<int>& newup, int new_up_primary,
+  const vector<int>& newacting, int new_acting_primary,
+  const pg_history_t& history,
   pg_interval_map_t& pi,
   bool backfill,
   ObjectStore::Transaction *t)
@@ -4465,7 +4465,7 @@ void PG::fulfill_log(
   ConnectionRef con = osd->get_con_osd_cluster(
     from.osd, get_osdmap()->get_epoch());
   if (con) {
-    osd->osd->_share_map_outgoing(from.osd, con.get(), get_osdmap());
+    osd->share_map_peer(from.osd, con.get(), get_osdmap());
     osd->send_message_osd_cluster(mlog, con.get());
   } else {
     mlog->put();
