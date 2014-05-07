@@ -27,7 +27,7 @@ def main(args):
         filename=os.path.join(args.archive_dir, 'results.log'),
     )
     formatter = logging.Formatter(
-        fmt='%(asctime)s.%(msecs)03d %(levelname)s:%(message)s',
+        fmt=u'%(asctime)s.%(msecs)03d %(levelname)s:%(message)s',
         datefmt='%Y-%m-%dT%H:%M:%S',
     )
     handler.setFormatter(formatter)

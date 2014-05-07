@@ -101,7 +101,7 @@ def main(args):
         filename=os.path.join(args.test_dir, 'coverage.log'),
     )
     formatter = logging.Formatter(
-        fmt='%(asctime)s.%(msecs)03d %(levelname)s:%(message)s',
+        fmt=u'%(asctime)s.%(msecs)03d %(levelname)s:%(message)s',
         datefmt='%Y-%m-%dT%H:%M:%S',
     )
     handler.setFormatter(formatter)

@@ -27,7 +27,7 @@ def set_up_logging(ctx):
             filename=os.path.join(ctx.archive, 'teuthology.log'),
         )
         formatter = logging.Formatter(
-            fmt='%(asctime)s.%(msecs)03d %(levelname)s:%(name)s:%(message)s',
+            fmt=u'%(asctime)s.%(msecs)03d %(levelname)s:%(name)s:%(message)s',
             datefmt='%Y-%m-%dT%H:%M:%S',
         )
         handler.setFormatter(formatter)
