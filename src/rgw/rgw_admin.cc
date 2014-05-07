@@ -1545,9 +1545,11 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_BUCKET_LINK) {
-    int r = RGWBucketAdminOp::link(store, bucket_op);
+    bucket_op.set_bucket_id(bucket_id);
+    string err;
+    int r = RGWBucketAdminOp::link(store, bucket_op, &err);
     if (r < 0) {
-      cerr << "failure: " << cpp_strerror(-r) << std::endl;
+      cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
       return -r;
     }
   }
