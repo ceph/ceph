@@ -111,8 +111,6 @@ protected:
     }
   } recovery_thread;
   void _recovery_thread(Context *completion);
-  int _read_pointer(JournalPointer *jp);
-  int _write_pointer(JournalPointer const &ptr);
   void _reformat_journal(JournalPointer const &jp, Journaler *old_journal, Context *completion);
 
   // -- segments --

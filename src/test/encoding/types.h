@@ -129,8 +129,10 @@ TYPE(MonCap)
 TYPE(DBObjectMap::_Header)
 TYPE(DBObjectMap::State)
 
-#include "osdc/Journaler.h"
+#include "mds/JournalPointer.h"
 TYPE(JournalPointer)
+
+#include "osdc/Journaler.h"
 TYPE(Journaler::Header)
 
 #include "mds/snap.h"
