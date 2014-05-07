@@ -1,9 +1,5 @@
 
-#include <iostream>
-
-#include "crush/CrushWrapper.h"
 #include "osd/OSDMap.h"
-#include "common/config.h"
 #include "include/buffer.h"
 
 int main(int argc, char **argv)
