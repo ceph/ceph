@@ -222,7 +222,7 @@ void MDLog::submit_entry(LogEvent *le, Context *c)
   if (le->get_type() == EVENT_SUBTREEMAP ||
       (le->get_type() == EVENT_IMPORTFINISH && mds->is_resolve())) {
     // avoid infinite loop when ESubtreeMap is very large.
-    // don not insert ESubtreeMap among EImportFinish events that finish
+    // do not insert ESubtreeMap among EImportFinish events that finish
     // disambiguate imports. Because the ESubtreeMap reflects the subtree
     // state when all EImportFinish events are replayed.
   } else if (journaler->get_write_pos()/period != last_seg/period) {
