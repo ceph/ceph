@@ -79,7 +79,7 @@ class Remote(object):
         if self.ssh is None:
             return False
         try:
-            self.run(args="echo online")
+            self.run(args="true")
         except Exception:
             return False
         return self.ssh.get_transport().is_active()
