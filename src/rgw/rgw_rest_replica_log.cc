@@ -159,21 +159,62 @@ static int bucket_instance_to_bucket(RGWRados *store, string& bucket_instance, r
   return 0;
 }
 
+static int get_bucket_for_bounds(RGWRados *store, XMLArgs& args, rgw_bucket& bucket, bool *index_by_instance)
+{
+  string bucket_instance = args.get("bucket-instance");
+
+  args.get_bool("index-by-instance", index_by_instance, true);
+
+  if (*index_by_instance) {
+    int r;
+    if ((r = bucket_instance_to_bucket(store, bucket_instance, bucket)) < 0)  {
+      return r;
+    }
+  } else {
+    string bucket_name = args.get("bucket");
+
+    if (bucket_name.empty()) {
+      bucket_name = bucket_instance;
+
+      ssize_t pos = bucket_name.find(':');
+      if (pos >= 0) {
+        bucket_name = bucket_name.substr(0, pos);
+      }
+    }
+
+    if (bucket_name.empty()) {
+      dout(5) << " Error - invalid parameter list" << dendl;
+      return -EINVAL;
+    }
+    RGWBucketInfo bucket_info;
+  
+    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL, NULL);
+    if (r < 0) {
+      dout(5) << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    bucket = bucket_info.bucket;
+  }
+
+  return 0;
+
+}
+
 void RGWOp_BILog_SetBounds::execute() {
   string bucket_instance = s->info.args.get("bucket-instance"),
          marker = s->info.args.get("marker"),
          time = s->info.args.get("time"),
          daemon_id = s->info.args.get("daemon_id");
 
-  if (bucket_instance.empty() ||
-      marker.empty() ||
+  if (marker.empty() ||
       time.empty() ||
       daemon_id.empty()) {
     dout(5) << "Error - invalid parameter list" << dendl;
     http_ret = -EINVAL;
     return;
   }
-  
+
   utime_t ut;
   
   if (parse_to_utime(time, ut) < 0) {
@@ -189,9 +230,12 @@ void RGWOp_BILog_SetBounds::execute() {
   }
 
   rgw_bucket bucket;
-  if ((http_ret = bucket_instance_to_bucket(store, bucket_instance, bucket)) < 0) 
-    return;
+  bool index_by_instance;
 
+  if ((http_ret = get_bucket_for_bounds(store, s->info.args, bucket, &index_by_instance)) < 0) {
+    return;
+  }
+  
   RGWReplicaBucketLogger rl(store);
   bufferlist bl;
   list<RGWReplicaItemMarker> markers;
@@ -206,10 +250,10 @@ void RGWOp_BILog_SetBounds::execute() {
 
 void RGWOp_BILog_GetBounds::execute() {
   string bucket_instance = s->info.args.get("bucket-instance");
+  rgw_bucket bucket;
+  bool index_by_instance;
 
-  if (bucket_instance.empty()) {
-    dout(5) << " Error - invalid parameter list" << dendl;
-    http_ret = -EINVAL;
+  if ((http_ret = get_bucket_for_bounds(store, s->info.args, bucket, &index_by_instance)) < 0) {
     return;
   }
 
@@ -220,12 +264,11 @@ void RGWOp_BILog_GetBounds::execute() {
     return;
   }
 
-  rgw_bucket bucket;
   if ((http_ret = bucket_instance_to_bucket(store, bucket_instance, bucket)) < 0) 
     return;
 
   RGWReplicaBucketLogger rl(store);
-  http_ret = rl.get_bounds(bucket, shard_id, bounds);
+  http_ret = rl.get_bounds(bucket, shard_id, bounds, index_by_instance);
 }
 
 void RGWOp_BILog_GetBounds::send_response() {
@@ -241,11 +284,10 @@ void RGWOp_BILog_GetBounds::send_response() {
 }
 
 void RGWOp_BILog_DeleteBounds::execute() {
-  string bucket_instance = s->info.args.get("bucket-instance"),
-         daemon_id = s->info.args.get("daemon_id");
+  string bucket_instance = s->info.args.get("bucket-instance");
+  string daemon_id = s->info.args.get("daemon_id");
 
-  if (bucket_instance.empty() ||
-      daemon_id.empty()) {
+  if (daemon_id.empty()) {
     dout(5) << "Error - invalid parameter list" << dendl;
     http_ret = -EINVAL;
     return;
@@ -259,11 +301,14 @@ void RGWOp_BILog_DeleteBounds::execute() {
   }
 
   rgw_bucket bucket;
-  if ((http_ret = bucket_instance_to_bucket(store, bucket_instance, bucket)) < 0) 
+  bool index_by_instance;
+
+  if ((http_ret = get_bucket_for_bounds(store, s->info.args, bucket, &index_by_instance)) < 0) {
     return;
+  }
   
   RGWReplicaBucketLogger rl(store);
-  http_ret = rl.delete_bound(bucket, shard_id, daemon_id);
+  http_ret = rl.delete_bound(bucket, shard_id, daemon_id, index_by_instance);
 }
 
 RGWOp *RGWHandler_ReplicaLog::op_get() {
