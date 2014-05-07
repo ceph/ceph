@@ -4686,6 +4686,7 @@ void PG::start_peering_interval(
     dout(10) << " no lastmap" << dendl;
     dirty_info = true;
     dirty_big_info = true;
+    info.history.same_interval_since = osdmap->get_epoch();
   } else {
     std::stringstream debug;
     bool new_interval = pg_interval_t::check_new_interval(
@@ -4709,16 +4710,10 @@ void PG::start_peering_interval(
       dout(10) << " noting past " << past_intervals.rbegin()->second << dendl;
       dirty_info = true;
       dirty_big_info = true;
+      info.history.same_interval_since = osdmap->get_epoch();
     }
   }
 
-  if (old_up_primary != up_primary ||
-      old_acting_primary != primary ||
-      oldacting != acting ||
-      oldup != up ||
-      is_split(lastmap, osdmap)) {
-    info.history.same_interval_since = osdmap->get_epoch();
-  }
   if (old_up_primary != up_primary ||
       oldup != up) {
     info.history.same_up_since = osdmap->get_epoch();
