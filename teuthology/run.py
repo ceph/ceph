@@ -23,15 +23,9 @@ def set_up_logging(ctx):
     if ctx.archive is not None:
         os.mkdir(ctx.archive)
 
-        handler = logging.FileHandler(
-            filename=os.path.join(ctx.archive, 'teuthology.log'),
-        )
-        formatter = logging.Formatter(
-            fmt=u'%(asctime)s.%(msecs)03d %(levelname)s:%(name)s:%(message)s',
-            datefmt='%Y-%m-%dT%H:%M:%S',
-        )
-        handler.setFormatter(formatter)
-        logging.getLogger().addHandler(handler)
+        teuthology.setup_log_file(
+            logging.getLogger(),
+            os.path.join(ctx.archive, 'teuthology.log'))
 
     install_except_hook()
 

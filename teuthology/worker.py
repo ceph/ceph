@@ -10,6 +10,7 @@ import yaml
 
 from datetime import datetime
 
+from teuthology import setup_log_file
 from . import beanstalk
 from . import report
 from . import safepath
@@ -126,12 +127,7 @@ def main(ctx):
 
     log_file_path = os.path.join(ctx.log_dir, 'worker.{tube}.{pid}'.format(
         pid=os.getpid(), tube=ctx.tube,))
-    log_handler = logging.FileHandler(filename=log_file_path)
-    log_formatter = logging.Formatter(
-        fmt=u'%(asctime)s.%(msecs)03d %(levelname)s:%(name)s:%(message)s',
-        datefmt='%Y-%m-%dT%H:%M:%S')
-    log_handler.setFormatter(log_formatter)
-    log.addHandler(log_handler)
+    setup_log_file(log, log_file_path)
 
     if not os.path.isdir(ctx.archive_dir):
         sys.exit("{prog}: archive directory must exist: {path}".format(

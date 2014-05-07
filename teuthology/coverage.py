@@ -97,15 +97,8 @@ def main(args):
 
     read_config(args)
 
-    handler = logging.FileHandler(
-        filename=os.path.join(args.test_dir, 'coverage.log'),
-    )
-    formatter = logging.Formatter(
-        fmt=u'%(asctime)s.%(msecs)03d %(levelname)s:%(message)s',
-        datefmt='%Y-%m-%dT%H:%M:%S',
-    )
-    handler.setFormatter(formatter)
-    logging.getLogger().addHandler(handler)
+    log_path = os.path.join(args.test_dir, 'coverage.log')
+    teuthology.setup_log_file(log, log_path)
 
     try:
         analyze(args)

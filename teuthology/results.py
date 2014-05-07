@@ -23,15 +23,8 @@ def main(args):
 
     misc.read_config(args)
 
-    handler = logging.FileHandler(
-        filename=os.path.join(args.archive_dir, 'results.log'),
-    )
-    formatter = logging.Formatter(
-        fmt=u'%(asctime)s.%(msecs)03d %(levelname)s:%(message)s',
-        datefmt='%Y-%m-%dT%H:%M:%S',
-    )
-    handler.setFormatter(formatter)
-    logging.getLogger().addHandler(handler)
+    log_path = os.path.join(args.archive_dir, 'results.log')
+    teuthology.setup_log_file(log, log_path)
 
     try:
         results(args)
