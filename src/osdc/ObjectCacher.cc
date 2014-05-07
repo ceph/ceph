@@ -213,7 +213,6 @@ int ObjectCacher::Object::map_read(OSDRead *rd,
 	  ldout(oc->cct, 20) << "map_read miss " << left << " left, " << *n << dendl;
 	}
         cur += left;
-        left = 0;
         assert(cur == (loff_t)ex_it->offset + (loff_t)ex_it->length);
         break;  // no more.
       }
