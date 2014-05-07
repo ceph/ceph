@@ -16,6 +16,7 @@ libmds_la_SOURCES = \
 	mds/LogEvent.cc \
 	mds/MDSTable.cc \
 	mds/InoTable.cc \
+	mds/JournalPointer.cc \
 	mds/MDSTableClient.cc \
 	mds/MDSTableServer.cc \
 	mds/SnapRealm.cc \
@@ -37,6 +38,7 @@ noinst_HEADERS += \
 	mds/CInode.h \
 	mds/Capability.h \
 	mds/InoTable.h \
+	mds/JournalPointer.h \
 	mds/LocalLock.h \
 	mds/Locker.h \
 	mds/LogEvent.h \
