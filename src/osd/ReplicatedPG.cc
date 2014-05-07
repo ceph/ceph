@@ -4619,8 +4619,8 @@ inline int ReplicatedPG::_delete_oid(OpContext *ctx, bool no_whiteout)
   }
   oi.size = 0;
 
-  // cache: writeback: set whiteout on delete?
-  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK && !no_whiteout) {
+  // cache: cache: set whiteout on delete?
+  if (pool.info.cache_mode != pg_pool_t::CACHEMODE_NONE && !no_whiteout) {
     dout(20) << __func__ << " setting whiteout on " << soid << dendl;
     oi.set_flag(object_info_t::FLAG_WHITEOUT);
     ctx->delta_stats.num_whiteouts++;
@@ -5088,7 +5088,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   }
 
   // cache: clear whiteout?
-  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK) {
+  if (pool.info.cache_mode != pg_pool_t::CACHEMODE_NONE) {
     if (ctx->user_modify &&
 	ctx->obc->obs.oi.is_whiteout()) {
       dout(10) << __func__ << " clearing whiteout on " << soid << dendl;
@@ -10935,15 +10935,11 @@ void ReplicatedPG::hit_set_trim(RepGather *repop, unsigned max)
       agent_state->remove_oldest_hit_set();
     updated_hit_set_hist.history.pop_front();
 
-    struct stat st;
-    int r = osd->store->stat(
-      coll,
-      ghobject_t(oid, ghobject_t::NO_GEN, pg_whoami.shard),
-      &st);
-    assert(r == 0);
+    ObjectContextRef obc = get_object_context(oid, false);
+    assert(obc);
     --repop->ctx->delta_stats.num_objects;
     --repop->ctx->delta_stats.num_objects_hit_set_archive;
-    repop->ctx->delta_stats.num_bytes -= st.st_size;
+    repop->ctx->delta_stats.num_bytes -= obc->obs.oi.size;
   }
 }
 
