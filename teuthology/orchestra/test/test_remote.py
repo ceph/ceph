@@ -45,7 +45,7 @@ class TestRemote(object):
             client=fudge.inspector.arg.passes_test(lambda v: v is ssh),
             args=fudge.inspector.arg.passes_test(lambda v: v is args),
             foo=fudge.inspector.arg.passes_test(lambda v: v is foo),
-            name='jdoe@xyzzy.example.com'
+            name='xyzzy.example.com'
             ).returns(ret)
         r = remote.Remote(name='jdoe@xyzzy.example.com', ssh=ssh)
         # monkey patch ook ook
