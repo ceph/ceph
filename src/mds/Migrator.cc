@@ -2628,10 +2628,11 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
   MutationRef mut = it->second.mut;
   import_state.erase(it);
 
-  mds->mdlog->start_submit_entry(new EImportFinish(dir, true));
-
   // adjust auth, with possible subtree merge.
   cache->adjust_subtree_auth(dir, mds->get_nodeid());
+
+  mds->mdlog->start_submit_entry(new EImportFinish(dir, true));
+
   cache->try_subtree_merge(dir);   // NOTE: this may journal subtree_map as sideffect
 
   // process delayed expires
