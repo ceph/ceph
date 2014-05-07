@@ -130,6 +130,7 @@ TYPE(DBObjectMap::_Header)
 TYPE(DBObjectMap::State)
 
 #include "osdc/Journaler.h"
+TYPE(JournalPointer)
 TYPE(Journaler::Header)
 
 #include "mds/snap.h"
