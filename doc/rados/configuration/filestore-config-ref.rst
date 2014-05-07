@@ -256,6 +256,7 @@ Misc
 ``filestore merge threshold``
 
 :Description: Min number of files in a subdir before merging into parent
+              NOTE: A negative value means to disable subdir merging
 :Type: Integer
 :Required: No
 :Default: ``10``
@@ -263,7 +264,7 @@ Misc
 
 ``filestore split multiple``
 
-:Description:  ``filestore_split_multiple * filestore_merge_threshold * 16`` 
+:Description:  ``filestore_split_multiple * abs(filestore_merge_threshold) * 16`` 
                is the maximum number of files in a subdirectory before 
                splitting into child directories.
 
