@@ -12,26 +12,19 @@
  *
  */
 
-#include <boost/scoped_ptr.hpp>
-#include <boost/lexical_cast.hpp>
-#include <boost/program_options/option.hpp>
-#include <boost/program_options/options_description.hpp>
 #include <boost/program_options/variables_map.hpp>
-#include <boost/program_options/cmdline.hpp>
 #include <boost/program_options/parsers.hpp>
-#include <iostream>
-#include <set>
-#include <sstream>
+
 #include <stdlib.h>
-#include <fstream>
 
 #include "common/Formatter.h"
+#include "common/errno.h"
 
 #include "global/global_init.h"
+
 #include "os/ObjectStore.h"
 #include "os/FileStore.h"
-#include "common/perf_counters.h"
-#include "common/errno.h"
+
 #include "osd/PGLog.h"
 #include "osd/OSD.h"
 
