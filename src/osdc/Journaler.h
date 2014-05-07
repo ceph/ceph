@@ -121,6 +121,23 @@ class JournalPointer {
   bool is_null() const {
     return front == 0 && back == 0;
   }
+
+  void dump(Formatter *f) const {
+    f->open_object_section("journal_pointer");
+    {
+      f->dump_unsigned("front", front);
+      f->dump_unsigned("back", back);
+    }
+    f->close_section(); // journal_header
+  }
+
+  static void generate_test_instances(list<JournalPointer*> &ls)
+  {
+    ls.push_back(new JournalPointer());
+    ls.push_back(new JournalPointer());
+    ls.back()->front = 0xdeadbeef;
+    ls.back()->back = 0xfeedbead;
+  }
 };
 
 
