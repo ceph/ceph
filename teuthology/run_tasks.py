@@ -82,6 +82,15 @@ def run_tasks(tasks, ctx):
             from .task import interactive
             log.warning('Saw failure, going into interactive mode...')
             interactive.task(ctx=ctx, config=None)
+        # Throughout teuthology, (x,) = y has been used to assign values
+        # from yaml files where only one entry of type y is correct.  This
+        # causes failures with 'too many values to unpack.'  We want to
+        # fail as before, but with easier to understand error indicators.
+        if type(e) == ValueError:
+            if e.message == 'too many values to unpack':
+                emsg = 'Possible configuration error in yaml file'
+                log.error(emsg)
+                ctx.summary['failure_info'] = emsg
     finally:
         try:
             exc_info = sys.exc_info()
