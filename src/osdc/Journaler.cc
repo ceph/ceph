@@ -1209,4 +1209,3 @@ size_t JournalStream::write(bufferlist &entry, bufferlist &to, uint64_t const &s
   }
 }
 
-// eof.

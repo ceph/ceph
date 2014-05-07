@@ -18,6 +18,7 @@
 #include "LogEvent.h"
 
 #include "osdc/Journaler.h"
+#include "mds/JournalPointer.h"
 
 #include "common/entity_name.h"
 #include "common/perf_counters.h"
@@ -509,12 +510,12 @@ void MDLog::_recovery_thread(Context *completion)
   // First, read the pointer object.
   // If the pointer object is not present, then create it with
   // front = default ino and back = null
-  JournalPointer jp;
-  int const read_result = _read_pointer(&jp);
+  JournalPointer jp(mds->get_nodeid(), mds->mdsmap->get_metadata_pool());
+  int const read_result = jp.load(mds->objecter, &(mds->mds_lock));
   if (read_result == -ENOENT) {
     inodeno_t const default_log_ino = MDS_INO_LOG_OFFSET + mds->get_nodeid();
     jp.front = default_log_ino;
-    int write_result = _write_pointer(jp);
+    int write_result = jp.save(mds->objecter, &(mds->mds_lock));
     // Nothing graceful we can do for this
     assert(write_result >= 0);
   } else if (read_result != 0) {
@@ -555,7 +556,7 @@ void MDLog::_recovery_thread(Context *completion)
     } else {
       dout(1) << "Successfully erased journal, updating journal pointer" << dendl;
       jp.back = 0;
-      int write_result = _write_pointer(jp);
+      int write_result = jp.save(mds->objecter, &(mds->mds_lock));
       // Nothing graceful we can do for this
       assert(write_result >= 0);
     }
@@ -617,7 +618,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
   inodeno_t primary_ino = MDS_INO_LOG_OFFSET + mds->get_nodeid();
   inodeno_t secondary_ino = MDS_INO_LOG_BACKUP_OFFSET + mds->get_nodeid();
   jp.back = (jp.front == primary_ino ? secondary_ino : primary_ino);
-  int write_result = _write_pointer(jp);
+  int write_result = jp.save(mds->objecter, &(mds->mds_lock));
   assert(write_result == 0);
 
   /* Create the new Journaler file */
@@ -701,7 +702,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
   inodeno_t const tmp = jp.front;
   jp.front = jp.back;
   jp.back = tmp;
-  write_result = _write_pointer(jp);
+  write_result = jp.save(mds->objecter, &(mds->mds_lock));
   assert(write_result == 0);
 
   /* Delete the old journal to free space */
@@ -716,7 +717,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
 
   /* Update the pointer to reflect we're back in clean single journal state. */
   jp.back = 0;
-  write_result = _write_pointer(jp);
+  write_result = jp.save(mds->objecter, &(mds->mds_lock));
   assert(write_result == 0);
 
   /* Reset the Journaler object to its default state */
@@ -729,74 +730,6 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
   mds->mds_lock.Lock();
   completion->complete(0);
   mds->mds_lock.Unlock();
-}
-
-/**
- * Blocking read of JournalPointer for this MDS
- */
-int MDLog::_read_pointer(JournalPointer *jp)
-{
-  assert(!mds->mds_lock.is_locked_by_me());
-  assert(jp);
-
-  inodeno_t const pointer_ino = MDS_INO_LOG_POINTER_OFFSET + mds->get_nodeid();
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%llx.%08llx", (long long unsigned)pointer_ino, (long long unsigned)0);
-
-  // Blocking read of data
-  dout(4) << "Reading journal pointer '" << buf << "'" << dendl;
-  bufferlist data;
-  C_SaferCond waiter;
-  mds->mds_lock.Lock();
-  mds->objecter->read_full(object_t(buf), object_locator_t(mds->mdsmap->get_metadata_pool()),
-      CEPH_NOSNAP, &data, 0, &waiter);
-  mds->mds_lock.Unlock();
-  int r = waiter.wait();
-
-  // Construct JournalPointer result, null or decoded data
-  if (r == 0) {
-    bufferlist::iterator q = data.begin();
-    jp->decode(q);
-  } else {
-    dout(1) << "Journal pointer '" << buf << "' read failed: " << cpp_strerror(r) << dendl;
-  }
-  return r;
-}
-
-
-/**
- * Blocking write of JournalPointer for this MDS
- *
- * @return objecter write op status code
- */
-int MDLog::_write_pointer(JournalPointer const &ptr)
-{
-  assert(!mds->mds_lock.is_locked_by_me());
-  // It is not valid to persist a null pointer
-  assert(!ptr.is_null());
-
-  // Calculate object ID
-  inodeno_t const pointer_ino = MDS_INO_LOG_POINTER_OFFSET + mds->get_nodeid();
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%llx.%08llx", (long long unsigned)pointer_ino, (long long unsigned)0);
-  dout(4) << "Writing pointer object '" << buf << "': 0x"
-    << std::hex << ptr.front << ":0x" << ptr.back << std::dec << dendl;
-
-  // Serialize JournalPointer object
-  bufferlist data;
-  ptr.encode(data);
-
-  // Write to RADOS and wait for durability
-  C_SaferCond waiter;
-  mds->mds_lock.Lock();
-  mds->objecter->write_full(object_t(buf), object_locator_t(mds->mdsmap->get_metadata_pool()),
-      SnapContext(), data, ceph_clock_now(g_ceph_context), 0, NULL, &waiter);
-  mds->mds_lock.Unlock();
-  int write_result = waiter.wait();
-  if (write_result < 0) {
-    derr << "Error writing pointer object '" << buf << "': " << cpp_strerror(write_result) << dendl;
-  }
-  return write_result;
 }
 
 

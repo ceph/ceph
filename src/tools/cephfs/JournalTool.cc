@@ -464,12 +464,12 @@ int JournalTool::journal_reset()
 {
   int r = 0;
   Resetter resetter;
-  r = resetter.init(rank);
+  r = resetter.init();
   if (r < 0) {
     derr << "resetter::init failed: " << cpp_strerror(r) << dendl;
     return r;
   }
-  resetter.reset();
+  resetter.reset(rank);
   resetter.shutdown();
 
   return r;
