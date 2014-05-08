@@ -6285,6 +6285,9 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
       destdn->get_dir()->unlink_inode(destdn);
 
       straydn->pop_projected_linkage();
+      if (mdr->is_slave() && !mdr->more()->slave_update_journaled)
+	assert(!straydn->is_projected()); // no other projected
+
       mdcache->touch_dentry_bottom(straydn);  // drop dn as quickly as possible.
 
       // nlink-- targeti
@@ -6316,6 +6319,8 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
     if (!linkmerge) {
       // destdn
       destdnl = destdn->pop_projected_linkage();
+      if (mdr->is_slave() && !mdr->more()->slave_update_journaled)
+	assert(!destdn->is_projected()); // no other projected
 
       destdn->link_remote(destdnl, in);
       if (destdn->is_auth())
@@ -6333,6 +6338,8 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
       destdn->get_dir()->unlink_inode(destdn);
     }
     destdnl = destdn->pop_projected_linkage();
+    if (mdr->is_slave() && !mdr->more()->slave_update_journaled)
+      assert(!destdn->is_projected()); // no other projected
 
     // srcdn inode import?
     if (!srcdn->is_auth() && destdn->is_auth()) {
@@ -6381,6 +6388,8 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
   if (srcdn->is_auth())
     srcdn->mark_dirty(mdr->more()->pvmap[srcdn], mdr->ls);
   srcdn->pop_projected_linkage();
+  if (mdr->is_slave() && !mdr->more()->slave_update_journaled)
+    assert(!srcdn->is_projected()); // no other projected
   
   // apply remaining projected inodes (nested)
   mdr->apply();
@@ -6629,11 +6638,18 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   
   bufferlist blah;  // inode import data... obviously not used if we're the slave
   _rename_prepare(mdr, &le->commit, &blah, srcdn, destdn, straydn);
-  
-  submit_mdlog_entry(le,new C_MDS_SlaveRenamePrep(this, mdr,
-                                                  srcdn, destdn, straydn),
-                     mdr, __func__);
-  mdlog->flush();
+
+  if (le->commit.empty()) {
+    dout(10) << " empty metablob, skipping journal" << dendl;
+    mdlog->cancel_entry(le);
+    mdr->ls = NULL;
+    _logged_slave_rename(mdr, srcdn, destdn, straydn);
+  } else {
+    mdr->more()->slave_update_journaled = true;
+    submit_mdlog_entry(le, new C_MDS_SlaveRenamePrep(this, mdr, srcdn, destdn, straydn),
+		       mdr, __func__);
+    mdlog->flush();
+  }
 }
 
 void Server::_logged_slave_rename(MDRequestRef& mdr,
@@ -6717,12 +6733,6 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
 
   list<Context*> finished;
   if (r == 0) {
-    // write a commit to the journal
-    ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_commit", mdr->reqid, 
-					mdr->slave_to_mds, ESlaveUpdate::OP_COMMIT, 
-					ESlaveUpdate::RENAME);
-    mdlog->start_entry(le);
-
     // unfreeze+singleauth inode
     //  hmm, do i really need to delay this?
     if (mdr->more()->is_inode_exporter) {
@@ -6765,8 +6775,17 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
     mds->queue_waiters(finished);
     mdr->cleanup();
 
-    submit_mdlog_entry(le, new C_MDS_CommittedSlave(this, mdr), mdr, __func__);
-    mdlog->flush();
+    if (mdr->more()->slave_update_journaled) {
+      // write a commit to the journal
+      ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_commit", mdr->reqid,
+					  mdr->slave_to_mds, ESlaveUpdate::OP_COMMIT,
+					  ESlaveUpdate::RENAME);
+      mdlog->start_entry(le);
+      submit_mdlog_entry(le, new C_MDS_CommittedSlave(this, mdr), mdr, __func__);
+      mdlog->flush();
+    } else {
+      _committed_slave(mdr);
+    }
   } else {
 
     // abort
@@ -7059,12 +7078,20 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequestRef& mdr,
     mdcache->project_subtree_rename(in, destdir, srcdir);
   }
 
-  submit_mdlog_entry(le,
-                     new C_MDS_LoggedRenameRollback(this, mut, mdr, srcdn,
-                                                    srcdnpv, destdn,
-                                                    straydn, finish_mdr),
-                     mdr, __func__);
-  mdlog->flush();
+  if (mdr && !mdr->more()->slave_update_journaled) {
+    assert(le->commit.empty());
+    mdlog->cancel_entry(le);
+    mut->ls = NULL;
+    _rename_rollback_finish(mut, mdr, srcdn, srcdnpv, destdn, straydn, finish_mdr);
+  } else {
+    assert(!le->commit.empty());
+    if (mdr)
+      mdr->more()->slave_update_journaled = false;
+    Context *fin = new C_MDS_LoggedRenameRollback(this, mut, mdr, srcdn, srcdnpv,
+						  destdn, straydn, finish_mdr);
+    submit_mdlog_entry(le, fin, mdr, __func__);
+    mdlog->flush();
+  }
 }
 
 void Server::_rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentry *srcdn,
