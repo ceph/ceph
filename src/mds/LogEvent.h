@@ -41,9 +41,6 @@
 #define EVENT_SUBTREEMAP_TEST   50
 
 
-#include <string>
-using namespace std;
-
 #include "include/buffer.h"
 #include "include/Context.h"
 #include "include/utime.h"
