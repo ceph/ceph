@@ -1437,19 +1437,23 @@ int Objecter::calc_target(op_target_t *t)
   bool is_read = t->flags & CEPH_OSD_FLAG_READ;
   bool is_write = t->flags & CEPH_OSD_FLAG_WRITE;
 
+  const pg_pool_t *pi = osdmap->get_pg_pool(t->base_oloc.pool);
+  bool force_resend = false;
   bool need_check_tiering = false;
-  if (t->target_oid.name.empty()) {
+  if (pi && osdmap->get_epoch() == pi->last_force_op_resend) {
+    force_resend = true;
+  }
+  if (t->target_oid.name.empty() || force_resend) {
     t->target_oid = t->base_oid;
     need_check_tiering = true;
   }
-  if (t->target_oloc.empty()) {
+  if (t->target_oloc.empty() || force_resend) {
     t->target_oloc = t->base_oloc;
     need_check_tiering = true;
   }
   
   if (need_check_tiering &&
       (t->flags & CEPH_OSD_FLAG_IGNORE_OVERLAY) == 0) {
-    const pg_pool_t *pi = osdmap->get_pg_pool(t->base_oloc.pool);
     if (pi) {
       if (is_read && pi->has_read_tier())
 	t->target_oloc.pool = pi->read_tier;
@@ -1485,7 +1489,8 @@ int Objecter::calc_target(op_target_t *t)
   }
 
   if (t->pgid != pgid ||
-      is_pg_changed(t->primary, t->acting, primary, acting, t->used_replica)) {
+      is_pg_changed(t->primary, t->acting, primary, acting, t->used_replica) ||
+      force_resend) {
     t->pgid = pgid;
     t->acting = acting;
     t->primary = primary;
