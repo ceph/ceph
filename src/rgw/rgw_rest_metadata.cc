@@ -142,7 +142,7 @@ int RGWOp_Metadata_Put::get_data(bufferlist& bl) {
         return r;
       }
       bl.append(data, read_len);
-    } while ((read_len == chunk_size));
+    } while (read_len == chunk_size);
   }
 
   free(data);

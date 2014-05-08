@@ -54,7 +54,7 @@ struct rbd_openimage {
 #define MAX_RBD_IMAGES		128
 struct rbd_openimage opentbl[MAX_RBD_IMAGES];
 
-struct rbd_options rbd_options = {"/etc/ceph/ceph.conf", "rbd"};
+struct rbd_options rbd_options = {"/etc/ceph/ceph.conf", "rbd", NULL};
 
 #define rbdsize(fd)	opentbl[fd].rbd_stat.rbd_info.size
 #define rbdblksize(fd)	opentbl[fd].rbd_stat.rbd_info.obj_size
@@ -148,7 +148,7 @@ int
 open_rbd_image(const char *image_name)
 {
 	struct rbd_image *im;
-	struct rbd_openimage *rbd;
+	struct rbd_openimage *rbd = NULL;
 	int fd;
 
 	if (image_name == (char *)NULL) 
@@ -177,7 +177,7 @@ open_rbd_image(const char *image_name)
 				break;
 			}
 		}
-		if (i == MAX_RBD_IMAGES)
+		if (i == MAX_RBD_IMAGES || !rbd)
 			return -1;
 		int ret = rbd_open(ioctx, rbd->image_name, &(rbd->image), NULL);
 		if (ret < 0) {
@@ -655,8 +655,8 @@ enum {
 	KEY_CEPH_CONFIG_LONG,
 	KEY_RADOS_POOLNAME,
 	KEY_RADOS_POOLNAME_LONG,
-    KEY_RBD_IMAGENAME,
-    KEY_RBD_IMAGENAME_LONG
+	KEY_RBD_IMAGENAME,
+	KEY_RBD_IMAGENAME_LONG
 };
 
 static struct fuse_opt rbdfs_opts[] = {
@@ -670,9 +670,9 @@ static struct fuse_opt rbdfs_opts[] = {
 	{"-p %s", offsetof(struct rbd_options, pool_name), KEY_RADOS_POOLNAME},
 	{"--poolname=%s", offsetof(struct rbd_options, pool_name),
 	 KEY_RADOS_POOLNAME_LONG},
-    {"-r %s", offsetof(struct rbd_options, image_name), KEY_RBD_IMAGENAME},
-    {"--image=%s", offsetof(struct rbd_options, image_name),
-    KEY_RBD_IMAGENAME_LONG},
+	{"-r %s", offsetof(struct rbd_options, image_name), KEY_RBD_IMAGENAME},
+	{"--image=%s", offsetof(struct rbd_options, image_name),
+	KEY_RBD_IMAGENAME_LONG},
 };
 
 static void usage(const char *progname)
@@ -723,14 +723,14 @@ static int rbdfs_opt_proc(void *data, const char *arg, int key,
 		return 0;
 	}
     
-    if (key == KEY_RBD_IMAGENAME) {
-        if (rbd_options.image_name!= NULL) {
-            free(rbd_options.image_name);
-            rbd_options.image_name = NULL;
-        }
-        rbd_options.image_name = strdup(arg+2);
-        return 0;
-    }
+	if (key == KEY_RBD_IMAGENAME) {
+		if (rbd_options.image_name!= NULL) {
+			free(rbd_options.image_name);
+			rbd_options.image_name = NULL;
+		}
+		rbd_options.image_name = strdup(arg+2);
+		return 0;
+	}
 
 	return 1;
 }
@@ -738,8 +738,8 @@ static int rbdfs_opt_proc(void *data, const char *arg, int key,
 void
 simple_err(const char *msg, int err)
 {
-    fprintf(stderr, "%s: %s\n", msg, strerror(-err));
-    return;
+	fprintf(stderr, "%s: %s\n", msg, strerror(-err));
+	return;
 }
 
 int
@@ -775,8 +775,7 @@ int main(int argc, char *argv[])
 {
 	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
-	if (fuse_opt_parse(&args, &rbd_options, rbdfs_opts, rbdfs_opt_proc)
-	    == -1) {
+	if (fuse_opt_parse(&args, &rbd_options, rbdfs_opts, rbdfs_opt_proc) == -1) {
 		exit(1);
 	}
 

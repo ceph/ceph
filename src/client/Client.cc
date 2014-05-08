@@ -3943,7 +3943,7 @@ int Client::mount(const std::string &mount_root)
   Mutex::Locker lock(client_lock);
 
   if (mounted) {
-    ldout(cct, 5) << "already mounted" << dendl;;
+    ldout(cct, 5) << "already mounted" << dendl;
     return 0;
   }
 

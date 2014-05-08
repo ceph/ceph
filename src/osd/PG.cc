@@ -434,7 +434,7 @@ bool PG::MissingLoc::add_source_info(
   const pg_info_t &oinfo,
   const pg_missing_t &omissing)
 {
-  bool found_missing = false;;
+  bool found_missing = false;
   // found items?
   for (map<hobject_t,pg_missing_t::item>::const_iterator p = needs_recovery_map.begin();
        p != needs_recovery_map.end();

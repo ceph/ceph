@@ -724,7 +724,6 @@ int crush_bucket_add_item(struct crush_bucket *b, int item, int weight)
 	default:
 		return -1;
 	}
-	return 0;
 }
 
 /************************************************/
@@ -937,7 +936,6 @@ int crush_bucket_remove_item(struct crush_bucket *b, int item)
 	default:
 		return -1;
 	}
-	return 0;
 }
 
 
@@ -1043,7 +1041,6 @@ int crush_bucket_adjust_item_weight(struct crush_bucket *b, int item, int weight
 	default:
 		return -1;
 	}
-	return 0;
 }
 
 /************************************************/
@@ -1159,7 +1156,6 @@ int crush_reweight_bucket(struct crush_map *crush, struct crush_bucket *b)
 	default:
 		return -1;
 	}
-	return 0;
 }
 
 /***************************/
