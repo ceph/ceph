@@ -2651,7 +2651,7 @@ void MDCache::handle_mds_failure(int who)
   for (ceph::unordered_map<metareqid_t, MDRequestRef>::iterator p = active_requests.begin();
        p != active_requests.end();
        ++p) {
-    MDRequestRef& mdr = p->second;;
+    MDRequestRef& mdr = p->second;
     // slave to the failed node?
     if (mdr->slave_to_mds == who) {
       if (mdr->slave_did_prepare()) {

@@ -551,7 +551,7 @@ void MDBalancer::prep_rebalance(int beat)
 	  if (maxim <= .001) continue;
 	  try_match(ex->second, maxex,
 		    im->first, maxim);
-	  if (maxex <= .001) break;;
+	  if (maxex <= .001) break;
 	}
       }
     }
