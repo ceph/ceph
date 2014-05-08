@@ -175,7 +175,7 @@ static int wait_for_udev_add(struct udev_monitor *mon, const char *pool,
   struct udev_device *bus_dev = NULL;
 
   /*
-   * Catch /sys/bus/rbd/<id>, note it, and wait for the corresponding
+   * Catch /sys/devices/rbd/<id>/ and wait for the corresponding
    * block device to show up.  This is necessary because rbd devices
    * and block devices aren't linked together in our sysfs layout.
    */
@@ -581,7 +581,7 @@ extern "C" int krbd_create_from_context(struct CephContext *cct,
   ctx->cct = cct;
   ctx->udev = udev_new();
   if (!ctx->udev) {
-    free(ctx);
+    delete ctx;
     return -ENOMEM;
   }
 
