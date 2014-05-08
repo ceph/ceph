@@ -7,17 +7,18 @@ Device` services to :term:`Cloud Platforms`, deploy a :term:`Ceph Filesystem` or
 use Ceph for another purpose, all :term:`Ceph Storage Cluster` deployments begin
 with setting up each :term:`Ceph Node`, your network and the Ceph Storage
 Cluster. A Ceph Storage Cluster requires at least one Ceph Monitor and at least
-two Ceph OSD Daemons. The Ceph Metadata Server is essential when running Ceph
+two Ceph :term:`OSD`\s. The Ceph Metadata Server is essential when running Ceph
 Filesystem clients.
 
 .. ditaa::  +---------------+ +---------------+ +---------------+
             |      OSDs     | |    Monitor    | |      MDS      |
             +---------------+ +---------------+ +---------------+
 
-- **OSDs**: A :term:`Ceph OSD Daemon` (OSD) stores data, handles data 
+- **OSDs**: A :term:`Ceph Object Storage Daemon` (OSD)
+  stores data, handles data 
   replication, recovery, backfilling, rebalancing, and provides some monitoring
-  information to Ceph Monitors by checking other Ceph OSD Daemons for a 
-  heartbeat. A Ceph Storage Cluster requires at least two Ceph OSD Daemons to 
+  information to Ceph Monitors by checking other Ceph OSDs for a 
+  heartbeat. A Ceph Storage Cluster requires at least two Ceph OSDs to 
   achieve an ``active + clean`` state when the cluster makes two copies of your
   data (Ceph makes 2 copies by default, but you can adjust it).
   

@@ -76,15 +76,20 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 		OpenNebula, ProxMox, etc.
 
 	Object Storage Device
-	OSD
-		A physical or logical storage unit (*e.g.*, LUN). Ceph users often 
-		conflate the term OSD with "Ceph OSD Daemon."
-		
+		A physical or logical storage unit (*e.g.*, LUN).
+		Under Ceph, the term OSD refers to :term:`Object
+		Storage Daemon`, and not Object Storage Device.
+
 	Ceph OSD Daemon
+	Object Storage Daemon
 	OSD
 	Ceph OSD
-		The Ceph OSD software, which interacts with a logical disk (OSD). Ceph 
-		users often frequently conflate the term OSD with "Ceph OSD Daemon."
+	Ceph Object Storage Daemon
+		The Ceph Object Storage Daemon (OSD) software,
+		which interacts with a logical
+		disk (:term:`Object Storage Device`).
+	        Under Ceph, the term OSD refers to Object
+		Storage Daemon, and not :term:`Object Storage Device`.
 		
 	Ceph Monitor
 	MON
