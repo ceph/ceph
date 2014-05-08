@@ -1199,6 +1199,12 @@ def prepare_dev(
             )
             command(
                 [
+                    'partprobe',
+                    data,
+                    ],
+                )
+            command(
+                [
                     # wait for udev event queue to clear
                     'udevadm',
                     'settle',
