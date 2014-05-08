@@ -362,6 +362,11 @@ class MDS : public Dispatcher {
   // start up, shutdown
   int init(int wanted_state=MDSMap::STATE_BOOT);
 
+  friend class MDSSocketHook;
+  class MDSSocketHook *asok_hook;
+  bool asok_command(string command, cmdmap_t& cmdmap, string format,
+		    ostream& ss);
+  void set_up_admin_socket();
   void create_logger();
 
   void bcast_mds_map();  // to mounted clients

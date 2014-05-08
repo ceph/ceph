@@ -105,7 +105,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   messenger(m),
   monc(mc),
   clog(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
-  sessionmap(this) {
+  sessionmap(this), asok_hook(NULL) {
 
   orig_argc = 0;
   orig_argv = NULL;
@@ -193,6 +193,47 @@ MDS::~MDS() {
   
   if (messenger)
     delete messenger;
+}
+
+class MDSSocketHook : public AdminSocketHook {
+  MDS *mds;
+public:
+  MDSSocketHook(MDS *m) : mds(m) {}
+  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
+	    bufferlist& out) {
+    stringstream ss;
+    bool r = mds->asok_command(command, cmdmap, format, ss);
+    out.append(ss);
+    return r;
+  }
+};
+
+bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
+		    ostream& ss)
+{
+  Formatter *f = new_formatter(format);
+  if (!f)
+    f = new_formatter("json-pretty");
+  if (command == "status") {
+    f->open_object_section("status");
+    f->dump_stream("cluster_fsid") << monc->get_fsid();
+    f->dump_unsigned("whoami", whoami);
+    f->dump_string("state", ceph_mds_state_name(get_state()));
+    f->dump_unsigned("mdsmap_epoch", mdsmap->get_epoch());
+    f->close_section(); // status
+  }
+  f->flush(ss);
+  delete f;
+  return true;
+}
+
+void MDS::set_up_admin_socket()
+{
+  int r;
+  AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+  asok_hook = new MDSSocketHook(this);
+  r = admin_socket->register_command("status", "status", asok_hook, "high-level status of MDS");
+  assert(0 == r);
 }
 
 void MDS::create_logger()
@@ -550,6 +591,7 @@ int MDS::init(int wanted_state)
   reset_tick();
 
   create_logger();
+  set_up_admin_socket();
 
   mds_lock.Unlock();
 
