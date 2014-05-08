@@ -60,7 +60,7 @@ def quote(args):
     return ' '.join(_quote(args))
 
 
-def execute(client, args):
+def execute(client, args, name=None):
     """
     Execute a command remotely.
 
@@ -68,6 +68,7 @@ def execute(client, args):
 
     :param client: SSHConnection to run the command with
     :param args: command to run
+    :param name: name of client (optional)
     :type args: string or list of strings
 
     Returns a RemoteProcess, where exitstatus is a callable that will
@@ -77,8 +78,13 @@ def execute(client, args):
         cmd = args
     else:
         cmd = quote(args)
-    (host, port) = client.get_transport().getpeername()
-    log.debug('Running [{h}]: {cmd!r}'.format(h=host, cmd=cmd))
+
+    if name:
+        host = name
+    else:
+        (host, port) = client.get_transport().getpeername()
+    log.info('Running [{h}]: {cmd!r}'.format(h=host, cmd=cmd))
+
     (in_, out, err) = client.exec_command(cmd)
 
     def get_exitstatus():
@@ -274,7 +280,12 @@ def run(
     :param wait: Whether to wait for process to exit. If False, returned ``r.exitstatus`` s a `gevent.event.AsyncResult`, and the actual status is available via ``.get()``.
     :param name: Human readable name (probably hostname) of the destination host
     """
-    r = execute(client, args)
+    (host, port) = client.get_transport().getpeername()
+
+    if name is None:
+        name = host
+
+    r = execute(client, args, name=name)
 
     r.stdin = KludgeFile(wrapped=r.stdin)
 
@@ -287,10 +298,6 @@ def run(
 
     if logger is None:
         logger = log
-    (host, port) = client.get_transport().getpeername()
-
-    if name is None:
-        name = host
 
     g_err = None
     if stderr is not PIPE:
