@@ -1396,7 +1396,7 @@ int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset, M
   } else {
     // write-thru!  flush what we just wrote.
     Cond cond;
-    bool done;
+    bool done = false;
     Context *fin = block_writes_upfront ?
       new C_Cond(&cond, &done, &ret) : onfreespace;
     assert(fin);
