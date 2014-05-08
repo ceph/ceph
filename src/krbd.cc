@@ -581,7 +581,7 @@ extern "C" int krbd_create_from_context(struct CephContext *cct,
   ctx->cct = cct;
   ctx->udev = udev_new();
   if (!ctx->udev) {
-    free(ctx);
+    delete ctx;
     return -ENOMEM;
   }
 
