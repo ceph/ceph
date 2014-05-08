@@ -16,7 +16,8 @@
 
 
 #include "MDSUtility.h"
-#include "osdc/Journaler.h"
+
+class Journaler;
 
 /**
  * This class lets you dump out an mds journal for troubleshooting or whatever.
@@ -28,17 +29,17 @@
 
 class Dumper : public MDSUtility {
 private:
-  Journaler *journaler;
   int rank;
+  inodeno_t ino;
 
 public:
-  Dumper() : journaler(NULL), rank(-1)
+  Dumper() : rank(-1), ino(-1)
   {}
 
   void handle_mds_map(MMDSMap* m);
 
   int init(int rank);
-  int recover_journal();
+  int recover_journal(Journaler *journaler);
   void dump(const char *dumpfile);
   void undump(const char *dumpfile);
 };
