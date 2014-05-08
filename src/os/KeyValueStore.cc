@@ -867,7 +867,7 @@ int KeyValueStore::mount()
     stringstream err2;
 
     if (g_conf->keyvaluestore_debug_check_backend && !dbomap->check(err2)) {
-      derr << err2.str() << dendl;;
+      derr << err2.str() << dendl;
       delete dbomap;
       ret = -EINVAL;
       goto close_current_fd;
