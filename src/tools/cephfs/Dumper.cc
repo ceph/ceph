@@ -22,6 +22,7 @@
 #include "common/safe_io.h"
 #include "mds/mdstypes.h"
 #include "mds/LogEvent.h"
+#include "mds/JournalPointer.h"
 #include "osdc/Journaler.h"
 
 #include "Dumper.h"
@@ -38,14 +39,19 @@ int Dumper::init(int rank_)
     return r;
   }
 
-  inodeno_t ino = MDS_INO_LOG_OFFSET + rank;
-  journaler = new Journaler(ino, mdsmap->get_metadata_pool(), CEPH_FS_ONDISK_MAGIC,
-                                       objecter, 0, 0, &timer);
-  return 0;
+  JournalPointer jp(rank, mdsmap->get_metadata_pool());
+  int jp_load_result = jp.load(objecter, &lock);
+  if (jp_load_result != 0) {
+    std::cerr << "Error loading journal: " << cpp_strerror(jp_load_result) << std::endl;
+    return jp_load_result;
+  } else {
+    ino = jp.front;
+    return 0;
+  }
 }
 
 
-int Dumper::recover_journal()
+int Dumper::recover_journal(Journaler *journaler)
 {
   bool done = false;
   Cond cond;
@@ -77,14 +83,15 @@ void Dumper::dump(const char *dump_file)
   Cond cond;
   Mutex localLock("dump:lock");
 
-  r = recover_journal();
+  Journaler journaler(ino, mdsmap->get_metadata_pool(), CEPH_FS_ONDISK_MAGIC,
+                                       objecter, 0, 0, &timer);
+  r = recover_journal(&journaler);
   if (r) {
     return;
   }
-  uint64_t start = journaler->get_read_pos();
-  uint64_t end = journaler->get_write_pos();
+  uint64_t start = journaler.get_read_pos();
+  uint64_t end = journaler.get_write_pos();
   uint64_t len = end-start;
-  inodeno_t ino = MDS_INO_LOG_OFFSET + rank;
 
   cout << "journal is " << start << "~" << len << std::endl;
 
@@ -92,7 +99,7 @@ void Dumper::dump(const char *dump_file)
   bufferlist bl;
 
   lock.Lock();
-  filer.read(ino, &journaler->get_layout(), CEPH_NOSNAP,
+  filer.read(ino, &journaler.get_layout(), CEPH_NOSNAP,
              start, len, &bl, 0, new C_SafeCond(&localLock, &cond, &done));
   lock.Unlock();
   localLock.Lock();
@@ -159,8 +166,6 @@ void Dumper::undump(const char *dump_file)
 
   cout << "start " << start << " len " << len << std::endl;
   
-  inodeno_t ino = MDS_INO_LOG_OFFSET + rank;
-
   Journaler::Header h;
   h.trimmed_pos = start;
   h.expire_pos = start;
