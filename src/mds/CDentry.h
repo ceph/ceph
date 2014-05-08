@@ -226,7 +226,7 @@ public:
   void push_projected_linkage(CInode *inode); 
   linkage_t *pop_projected_linkage();
 
-  bool is_projected() { return projected.size(); }
+  bool is_projected() { return !projected.empty(); }
 
   linkage_t *get_projected_linkage() {
     if (!projected.empty())

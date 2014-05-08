@@ -164,6 +164,13 @@ void MDLog::start_entry(LogEvent *e)
   e->set_start_off(get_write_pos());
 }
 
+void MDLog::cancel_entry(LogEvent *le)
+{
+  assert(le == cur_event);
+  cur_event = NULL;
+  delete le;
+}
+
 void MDLog::submit_entry(LogEvent *le, Context *c) 
 {
   assert(!mds->is_any_replay());
