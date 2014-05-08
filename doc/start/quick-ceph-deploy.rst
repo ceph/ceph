@@ -7,34 +7,7 @@ If you haven't completed your `Preflight Checklist`_, do that first. This
 on your admin node. Create a three Ceph Node cluster so you can 
 explore Ceph functionality. 
 
-.. ditaa:: 
-           /------------------\         /----------------\
-           |    Admin Node    |         |      node1     |
-           |                  +-------->+ cCCC           |
-           |    ceph–deploy   |         |    mon.node1   |
-           \---------+--------/         \----------------/
-                     |
-                     |                  /----------------\
-                     |                  |      node2     |
-                     +----------------->+ cCCC           |
-                     |                  |     osd.0      |
-                     |                  \----------------/
-                     |
-                     |                  /----------------\
-                     |                  |      node3     |
-                     +----------------->| cCCC           |
-                                        |     osd.1      |
-                                        \----------------/
-
-For best results, create a directory on your admin node node for maintaining the
-configuration that ``ceph-deploy`` generates for your cluster. ::
-
-	mkdir my-cluster
-	cd my-cluster
-
-.. tip:: The ``ceph-deploy`` utility will output files to the 
-   current directory. Ensure you are in this directory when executing
-   ``ceph-deploy``.
+.. include:: quick-common.rst
 
 As a first exercise, create a Ceph Storage Cluster with one Ceph Monitor and two
 Ceph OSD Daemons. Once the cluster reaches a ``active + clean`` state, expand it 
