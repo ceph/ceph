@@ -775,8 +775,7 @@ int main(int argc, char *argv[])
 {
 	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
-	if (fuse_opt_parse(&args, &rbd_options, rbdfs_opts, rbdfs_opt_proc)
-	    == -1) {
+	if (fuse_opt_parse(&args, &rbd_options, rbdfs_opts, rbdfs_opt_proc) == -1) {
 		exit(1);
 	}
 
