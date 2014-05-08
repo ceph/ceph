@@ -54,7 +54,7 @@ struct rbd_openimage {
 #define MAX_RBD_IMAGES		128
 struct rbd_openimage opentbl[MAX_RBD_IMAGES];
 
-struct rbd_options rbd_options = {"/etc/ceph/ceph.conf", "rbd"};
+struct rbd_options rbd_options = {"/etc/ceph/ceph.conf", "rbd", NULL};
 
 #define rbdsize(fd)	opentbl[fd].rbd_stat.rbd_info.size
 #define rbdblksize(fd)	opentbl[fd].rbd_stat.rbd_info.obj_size
