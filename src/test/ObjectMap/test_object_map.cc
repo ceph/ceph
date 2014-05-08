@@ -533,7 +533,7 @@ public:
 
     string strpath(path);
 
-    cerr << "using path " << strpath << std::endl;;
+    cerr << "using path " << strpath << std::endl;
     LevelDBStore *store = new LevelDBStore(g_ceph_context, strpath);
     assert(!store->create_and_open(cerr));
 

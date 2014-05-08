@@ -3102,7 +3102,7 @@ void Server::handle_client_file_setlock(MDRequestRef& mdr)
     return;
   }
 
-  dout(10) << " state prior to lock change: " << *lock_state << dendl;;
+  dout(10) << " state prior to lock change: " << *lock_state << dendl;
   if (CEPH_LOCK_UNLOCK == set_lock.type) {
     list<ceph_filelock> activated_locks;
     list<Context*> waiters;
