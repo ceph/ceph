@@ -427,7 +427,7 @@ int MonClient::authenticate(double timeout)
   Mutex::Locker lock(monc_lock);
 
   if (state == MC_STATE_HAVE_SESSION) {
-    ldout(cct, 5) << "already authenticated" << dendl;;
+    ldout(cct, 5) << "already authenticated" << dendl;
     return 0;
   }
 

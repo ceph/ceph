@@ -100,7 +100,7 @@ public:
    * @param con The new Connection which has been established. You are not
    * granted a reference to it -- take one if you need one!
    */
-  virtual void ms_handle_connect(Connection *con) { };
+  virtual void ms_handle_connect(Connection *con) {}
 
   /**
    * This function will be called synchronously whenever a Connection is
@@ -111,14 +111,14 @@ public:
    * @param con The new Connection which has been established. You are not
    * granted a reference to it -- take one if you need one!
    */
-  virtual void ms_handle_fast_connect(Connection *con) { };
+  virtual void ms_handle_fast_connect(Connection *con) {}
 
   /**
    * Callback indicating we have accepted an incoming connection.
    *
    * @param con The (new or existing) Connection associated with the session
    */
-  virtual void ms_handle_accept(Connection *con) { };
+  virtual void ms_handle_accept(Connection *con) {}
 
   /**
    * Callback indicating we have accepted an incoming connection, if you
@@ -127,7 +127,7 @@ public:
    *
    * @param con The (new or existing) Connection associated with the session
    */
-  virtual void ms_handle_fast_accept(Connection *con) { };
+  virtual void ms_handle_fast_accept(Connection *con) {}
 
   /*
    * this indicates that the ordered+reliable delivery semantics have 
@@ -169,7 +169,7 @@ public:
    *
    * @return True if this function call properly filled in *a, false otherwise.
    */
-  virtual bool ms_get_authorizer(int dest_type, AuthAuthorizer **a, bool force_new) { return false; };
+  virtual bool ms_get_authorizer(int dest_type, AuthAuthorizer **a, bool force_new) { return false; }
   /**
    * Verify the authorizer for a new incoming Connection.
    *
@@ -186,7 +186,7 @@ public:
    */
   virtual bool ms_verify_authorizer(Connection *con, int peer_type,
 				    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-				    bool& isvalid, CryptoKey& session_key) { return false; };
+				    bool& isvalid, CryptoKey& session_key) { return false; }
   /**
    * @} //Authentication
    */
