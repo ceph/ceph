@@ -270,7 +270,7 @@ public:
 
  protected:
   void handle_export_discover_ack(MExportDirDiscoverAck *m);
-  void export_frozen(CDir *dir);
+  void export_frozen(CDir *dir, uint64_t tid);
   void handle_export_prep_ack(MExportDirPrepAck *m);
   void export_sessions_flushed(CDir *dir, uint64_t tid);
   void export_go(CDir *dir);

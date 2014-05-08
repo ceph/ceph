@@ -348,6 +348,7 @@ void MDCache::create_empty_hierarchy(C_Gather *gather)
 
   root->inode.dirstat = rootdir->fnode.fragstat;
   root->inode.rstat = rootdir->fnode.rstat;
+  ++root->inode.rstat.rsubdirs;
   root->inode.accounted_rstat = root->inode.rstat;
 
   rootdir->mark_complete();
@@ -398,6 +399,7 @@ void MDCache::create_mydir_hierarchy(C_Gather *gather)
 
   myin->inode.dirstat = mydir->fnode.fragstat;
   myin->inode.rstat = mydir->fnode.rstat;
+  ++myin->inode.rstat.rsubdirs;
   myin->inode.accounted_rstat = myin->inode.rstat;
 
 
@@ -1807,9 +1809,6 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
     pi->rstat.add(delta);
     dout(20) << "        result [" << first << "," << last << "] " << pi->rstat << dendl;
 
-    if (pi->rstat.rbytes < 0 && pin->dirfragtree.is_leaf(frag_t()))
-      assert(!"negative rstat rbytes" == g_conf->mds_verify_scatter);
-
     last = first-1;
   }
 }
@@ -2758,6 +2757,20 @@ void MDCache::handle_mds_failure(int who)
   kick_find_ino_peers(who);
   kick_open_ino_peers(who);
 
+  for (map<dirfrag_t,fragment_info_t>::iterator p = fragments.begin();
+       p != fragments.end(); ) {
+    dirfrag_t df = p->first;
+    fragment_info_t& info = p->second;
+    ++p;
+    if (info.is_fragmenting())
+      continue;
+    dout(10) << "cancelling fragment " << df << " bit " << info.bits << dendl;
+    list<CDir*> dirs;
+    info.dirs.swap(dirs);
+    fragments.erase(df);
+    fragment_unmark_unfreeze_dirs(dirs);
+  }
+
   show_subtrees();  
 }
 
@@ -2929,8 +2942,10 @@ void MDCache::handle_resolve(MMDSResolve *m)
     return;
   }
 
+  bool survivor = false;
   // am i a surviving ambiguous importer?
   if (mds->is_clientreplay() || mds->is_active() || mds->is_stopping()) {
+    survivor = true;
     // check for any import success/failure (from this node)
     map<dirfrag_t, vector<dirfrag_t> >::iterator p = my_ambiguous_imports.begin();
     while (p != my_ambiguous_imports.end()) {
@@ -2949,7 +2964,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
 	     q != m->subtrees.end();
 	     ++q) {
 	  // an ambiguous import won't race with a refragmentation; it's appropriate to force here.
-	  CDir *base = get_force_dirfrag(q->first);
+	  CDir *base = get_force_dirfrag(q->first, false);
 	  if (!base || !base->contains(dir)) 
 	    continue;  // base not dir or an ancestor of dir, clearly doesn't claim dir.
 
@@ -2987,7 +3002,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
        pi != m->subtrees.end();
        ++pi) {
     dout(10) << "peer claims " << pi->first << " bounds " << pi->second << dendl;
-    CDir *dir = get_force_dirfrag(pi->first);
+    CDir *dir = get_force_dirfrag(pi->first, !survivor);
     if (!dir)
       continue;
     adjust_bounded_subtree_auth(dir, pi->second, from);
@@ -3045,7 +3060,7 @@ void MDCache::maybe_resolve_finish()
   finish_committed_masters();
   if (mds->is_resolve()) {
     trim_unlinked_inodes();
-    recalc_auth_bits();
+    recalc_auth_bits(false);
     mds->resolve_done();
   } else {
     maybe_send_pending_rejoins();
@@ -3231,6 +3246,7 @@ void MDCache::disambiguate_imports()
 {
   dout(10) << "disambiguate_imports" << dendl;
 
+  bool is_resolve = mds->is_resolve();
   // other nodes' ambiguous imports
   for (map<int, map<dirfrag_t, vector<dirfrag_t> > >::iterator p = other_ambiguous_imports.begin();
        p != other_ambiguous_imports.end();
@@ -3243,7 +3259,7 @@ void MDCache::disambiguate_imports()
 	 ++q) {
       dout(10) << " ambiguous import " << q->first << " bounds " << q->second << dendl;
       // an ambiguous import will not race with a refragmentation; it's appropriate to force here.
-      CDir *dir = get_force_dirfrag(q->first);
+      CDir *dir = get_force_dirfrag(q->first, is_resolve);
       if (!dir) continue;
       
       if (dir->is_ambiguous_auth() ||	// works for me_ambig or if i am a surviving bystander
@@ -3288,7 +3304,7 @@ void MDCache::disambiguate_imports()
   assert(my_ambiguous_imports.empty());
   mds->mdlog->flush();
 
-  if (mds->is_resolve()) {
+  if (is_resolve) {
     // verify all my subtrees are unambiguous!
     for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
 	 p != subtrees.end();
@@ -3409,15 +3425,19 @@ void MDCache::trim_unlinked_inodes()
  * once subtree auth is disambiguated, we need to adjust all the 
  * auth and dirty bits in our cache before moving on.
  */
-void MDCache::recalc_auth_bits()
+void MDCache::recalc_auth_bits(bool replay)
 {
-  dout(7) << "recalc_auth_bits" << dendl;
+  dout(7) << "recalc_auth_bits " << (replay ? "(replay)" : "") <<  dendl;
 
   if (root) {
     root->inode_auth.first = mds->mdsmap->get_root();
-    if (mds->whoami != root->inode_auth.first) {
+    bool auth = mds->whoami == root->inode_auth.first;
+    if (auth) {
+      root->state_set(CInode::STATE_AUTH);
+    } else {
       root->state_clear(CInode::STATE_AUTH);
-      root->state_set(CInode::STATE_REJOINING);
+      if (!replay)
+	root->state_set(CInode::STATE_REJOINING);
     }
   }
 
@@ -3432,11 +3452,16 @@ void MDCache::recalc_auth_bits()
   for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
        p != subtrees.end();
        ++p) {
-
-    CInode *inode = p->first->get_inode();
-    if (inode->is_mdsdir() && inode->ino() != MDS_INO_MDSDIR(mds->get_nodeid())) {
-      inode->state_clear(CInode::STATE_AUTH);
-      inode->state_set(CInode::STATE_REJOINING);
+    if (p->first->inode->is_mdsdir()) {
+      CInode *in = p->first->inode;
+      bool auth = in->ino() == MDS_INO_MDSDIR(mds->get_nodeid());
+      if (auth) {
+	in->state_set(CInode::STATE_AUTH);
+      } else {
+	in->state_clear(CInode::STATE_AUTH);
+	if (!replay)
+	  in->state_set(CInode::STATE_REJOINING);
+      }
     }
 
     list<CDir*> dfq;  // dirfrag queue
@@ -3453,16 +3478,18 @@ void MDCache::recalc_auth_bits()
       if (auth) {
 	dir->state_set(CDir::STATE_AUTH);
       } else {
-	// close empty non-auth dirfrag
-	if (!dir->is_subtree_root() && dir->get_num_any() == 0) {
-	  dir->inode->close_dirfrag(dir->get_frag());
-	  continue;
-	}
-	dir->state_set(CDir::STATE_REJOINING);
 	dir->state_clear(CDir::STATE_AUTH);
-	dir->state_clear(CDir::STATE_COMPLETE);
-	if (dir->is_dirty()) 
-	  dir->mark_clean();
+	if (!replay) {
+	  // close empty non-auth dirfrag
+	  if (!dir->is_subtree_root() && dir->get_num_any() == 0) {
+	    dir->inode->close_dirfrag(dir->get_frag());
+	    continue;
+	  }
+	  dir->state_set(CDir::STATE_REJOINING);
+	  dir->state_clear(CDir::STATE_COMPLETE);
+	  if (dir->is_dirty())
+	    dir->mark_clean();
+	}
       }
 
       // dentries in this dir
@@ -3472,34 +3499,38 @@ void MDCache::recalc_auth_bits()
 	// dn
 	CDentry *dn = q->second;
 	CDentry::linkage_t *dnl = dn->get_linkage();
-	if (auth)
+	if (auth) {
 	  dn->state_set(CDentry::STATE_AUTH);
-	else {
-	  dn->state_set(CDentry::STATE_REJOINING);
+	} else {
 	  dn->state_clear(CDentry::STATE_AUTH);
-	  if (dn->is_dirty()) 
-	    dn->mark_clean();
+	  if (!replay) {
+	    dn->state_set(CDentry::STATE_REJOINING);
+	    if (dn->is_dirty())
+	      dn->mark_clean();
+	  }
 	}
 
 	if (dnl->is_primary()) {
 	  // inode
-	  if (auth) 
-	    dnl->get_inode()->state_set(CInode::STATE_AUTH);
-	  else {
-	    dnl->get_inode()->state_set(CInode::STATE_REJOINING);
-	    dnl->get_inode()->state_clear(CInode::STATE_AUTH);
-	    if (dnl->get_inode()->is_dirty())
-	      dnl->get_inode()->mark_clean();
-	    if (dnl->get_inode()->is_dirty_parent())
-	      dnl->get_inode()->clear_dirty_parent();
-	    // avoid touching scatterlocks for our subtree roots!
-	    if (subtree_inodes.count(dnl->get_inode()) == 0)
-	      dnl->get_inode()->clear_scatter_dirty();
+	  CInode *in = dnl->get_inode();
+	  if (auth) {
+	    in->state_set(CInode::STATE_AUTH);
+	  } else {
+	    in->state_clear(CInode::STATE_AUTH);
+	    if (!replay) {
+	      in->state_set(CInode::STATE_REJOINING);
+	      if (in->is_dirty())
+		in->mark_clean();
+	      if (in->is_dirty_parent())
+		in->clear_dirty_parent();
+	      // avoid touching scatterlocks for our subtree roots!
+	      if (subtree_inodes.count(in) == 0)
+		in->clear_scatter_dirty();
+	    }
 	  }
-
 	  // recurse?
-	  if (dnl->get_inode()->is_dir()) 
-	    dnl->get_inode()->get_nested_dirfrags(dfq);
+	  if (in->is_dir())
+	    in->get_nested_dirfrags(dfq);
 	}
       }
     }
@@ -3895,16 +3926,8 @@ void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
   case MMDSCacheRejoin::OP_STRONG:
     handle_cache_rejoin_strong(m);
     break;
-
   case MMDSCacheRejoin::OP_ACK:
     handle_cache_rejoin_ack(m);
-    break;
-  case MMDSCacheRejoin::OP_MISSING:
-    handle_cache_rejoin_missing(m);
-    break;
-
-  case MMDSCacheRejoin::OP_FULL:
-    handle_cache_rejoin_full(m);
     break;
 
   default: 
@@ -4039,8 +4062,10 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 	dirs_to_share.insert(dir);
 	unsigned nonce = dir->add_replica(from);
 	dout(10) << " have " << p->frag << " -> " << fg << " " << *dir << dendl;
-	if (ack)
+	if (ack) {
 	  ack->add_strong_dirfrag(dir->dirfrag(), nonce, dir->dir_rep);
+	  ack->add_dirfrag_base(dir);
+	}
       }
     }
   }
@@ -4563,7 +4588,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
     //  infer state from replica state:
     //   * go to MIX if they might have wrlocks
     //   * go to LOCK if they are LOCK (just bc identify_files_to_recover might start twiddling filelock)
-    in->filelock.infer_state_from_strong_rejoin(is.filelock, true);  // maybe also go to LOCK
+    in->filelock.infer_state_from_strong_rejoin(is.filelock, !in->is_dir());  // maybe also go to LOCK
     in->nestlock.infer_state_from_strong_rejoin(is.nestlock, false);
     in->dirfragtreelock.infer_state_from_strong_rejoin(is.dftlock, false);
 
@@ -4667,17 +4692,14 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
        ++p) {
     // we may have had incorrect dir fragmentation; refragment based
     // on what they auth tells us.
-    CInode *diri = get_inode(p->first.ino);
-    CDir *dir = NULL;
-    if (diri) {
-      dir = diri->get_dirfrag(p->first.frag);
-      if (!dir) {
-	dir = force_dir_fragment(diri, p->first.frag, false);
-	if (dir)
-	  refragged_inodes.insert(dir->get_inode());
-      }
+    CDir *dir = get_dirfrag(p->first);
+    if (!dir) {
+      dir = get_force_dirfrag(p->first, false);
+      if (dir)
+	refragged_inodes.insert(dir->get_inode());
     }
     if (!dir) {
+      CInode *diri = get_inode(p->first.ino);
       if (!diri) {
 	// barebones inode; the full inode loop below will clean up.
 	diri = new CInode(this, false);
@@ -4898,90 +4920,6 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
   }
 }
 
-
-
-/* This functions DOES NOT put the passed message before returning */
-void MDCache::handle_cache_rejoin_missing(MMDSCacheRejoin *missing)
-{
-  dout(7) << "handle_cache_rejoin_missing from " << missing->get_source() << dendl;
-
-  MMDSCacheRejoin *full = new MMDSCacheRejoin(MMDSCacheRejoin::OP_FULL);
-
-  // dirs
-  for (map<dirfrag_t, MMDSCacheRejoin::dirfrag_strong>::iterator p = missing->strong_dirfrags.begin();
-       p != missing->strong_dirfrags.end();
-       ++p) {
-    // we may have had incorrect dir fragmentation; refragment based
-    // on what they auth tells us.
-    CDir *dir = get_force_dirfrag(p->first);
-    assert(dir);
-
-    dir->set_replica_nonce(p->second.nonce);
-    dir->state_clear(CDir::STATE_REJOINING);
-    dout(10) << " adjusted frag on " << *dir << dendl;
-  }
-
-  // inodes
-  for (set<vinodeno_t>::iterator p = missing->weak_inodes.begin();
-       p != missing->weak_inodes.end();
-       ++p) {
-    CInode *in = get_inode(*p);
-    if (!in) {
-      dout(10) << " don't have inode " << *p << dendl;
-      continue; // we must have trimmed it after the originalo rejoin
-    }
-    
-    dout(10) << " sending " << *in << dendl;
-    full->add_inode_base(in);
-  }
-
-  mds->send_message(full, missing->get_connection());
-}
-
-/* This function DOES NOT put the passed message before returning */
-void MDCache::handle_cache_rejoin_full(MMDSCacheRejoin *full)
-{
-  dout(7) << "handle_cache_rejoin_full from " << full->get_source() << dendl;
-  int from = full->get_source().num();
-  
-  // integrate full inodes
-  bufferlist::iterator p = full->inode_base.begin();
-  while (!p.end()) {
-    inodeno_t ino;
-    snapid_t last;
-    bufferlist basebl;
-    ::decode(ino, p);
-    ::decode(last, p);
-    ::decode(basebl, p);
-
-    CInode *in = get_inode(ino);
-    assert(in);
-    bufferlist::iterator pp = basebl.begin();
-    in->_decode_base(pp);
-
-    set<CInode*>::iterator q = rejoin_undef_inodes.find(in);
-    if (q != rejoin_undef_inodes.end()) {
-      CInode *in = *q;
-      in->state_clear(CInode::STATE_REJOINUNDEF);
-      dout(10) << " got full " << *in << dendl;
-      rejoin_undef_inodes.erase(q);
-    } else {
-      dout(10) << " had full " << *in << dendl;
-    }
-  }
-
-  // done?
-  assert(rejoin_gather.count(from));
-  rejoin_gather.erase(from);
-  if (rejoin_gather.empty()) {
-    rejoin_gather_finish();
-  } else {
-    dout(7) << "still need rejoin from (" << rejoin_gather << ")" << dendl;
-  }
-}
-
-
-
 /**
  * rejoin_trim_undef_inodes() -- remove REJOINUNDEF flagged inodes
  *
@@ -5059,7 +4997,6 @@ void MDCache::rejoin_gather_finish()
   rejoin_ack_gather.erase(mds->whoami);
 
   // did we already get our acks too?
-  // this happens when the rejoin_gather has to wait on a MISSING/FULL exchange.
   if (rejoin_ack_gather.empty()) {
     // finally, kickstart past snap parent opens
     open_snap_parents();
@@ -6738,6 +6675,8 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
         dir->remove_dentry(dn);
       } else {
         dout(20) << "trim_non_auth_subtree(" << dir << ") keeping inode " << in << " with dentry " << dn <<dendl;
+	dn->state_clear(CDentry::STATE_AUTH);
+	in->state_clear(CInode::STATE_AUTH);
       }
     } else if (keep_dir && dnl->is_null()) { // keep null dentry for slave rollback
       dout(20) << "trim_non_auth_subtree(" << dir << ") keeping dentry " << dn <<dendl;
@@ -6748,6 +6687,7 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
       dir->remove_dentry(dn);
     }
   }
+  dir->state_clear(CDir::STATE_AUTH);
   /**
    * We've now checked all our children and deleted those that need it.
    * Now return to caller, and tell them if *we're* a keeper.
@@ -7288,17 +7228,12 @@ bool MDCache::shutdown_pass()
     return false;
   }
 
-  // make mydir subtree go away
-  if (myin) {
-    CDir *mydir = myin->get_dirfrag(frag_t());
-    if (mydir && mydir->is_subtree_root()) {
-      adjust_subtree_auth(mydir, CDIR_AUTH_UNKNOWN);
-      remove_subtree(mydir);
-    }
-  }
-  
+  CDir *mydir = myin ? myin->get_dirfrag(frag_t()) : NULL;
+  if (mydir && !mydir->is_subtree_root())
+    mydir = NULL;
+
   // subtrees map not empty yet?
-  if (!subtrees.empty()) {
+  if (subtrees.size() > (mydir ? 1 : 0)) {
     dout(7) << "still have " << num_subtrees() << " subtrees" << dendl;
     show_subtrees();
     migrator->show_importing();
@@ -7307,9 +7242,15 @@ bool MDCache::shutdown_pass()
       show_cache();
     return false;
   }
-  assert(subtrees.empty());
   assert(!migrator->is_exporting());
   assert(!migrator->is_importing());
+
+  // make mydir subtree go away
+  if (mydir) {
+    adjust_subtree_auth(mydir, CDIR_AUTH_UNKNOWN);
+    remove_subtree(mydir);
+  }
+  assert(subtrees.empty());
 
   // (only do this once!)
   if (!mds->mdlog->is_capped()) {
@@ -8742,7 +8683,9 @@ void MDCache::request_finish(MDRequestRef& mdr)
   if (mdr->has_more() && mdr->more()->slave_commit) {
     Context *fin = mdr->more()->slave_commit;
     mdr->more()->slave_commit = 0;
-    fin->complete(mdr->aborted ? -1 : 0);   // this must re-call request_finish.
+    int ret = mdr->aborted ? -1 : 0;
+    mdr->aborted = false;
+    fin->complete(ret);   // this must re-call request_finish.
     return; 
   }
 
@@ -9926,7 +9869,7 @@ void MDCache::handle_discover(MDiscover *dis)
     }
 
     // frozen inode?
-    if (dnl->is_primary() && dnl->get_inode()->is_frozen()) {
+    if (dnl->is_primary() && dnl->get_inode()->is_frozen_inode()) {
       if (tailitem && dis->wants_xlocked()) {
 	dout(7) << "handle_discover allowing discovery of frozen tail " << *dnl->get_inode() << dendl;
       } else if (reply->is_empty()) {
@@ -10427,8 +10370,12 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& md
 {
   dout(10) << "send_dentry_unlink " << *dn << dendl;
   // share unlink news with replicas
-  for (map<int,unsigned>::iterator it = dn->replicas_begin();
-       it != dn->replicas_end();
+  map<int,unsigned> replicas;
+  replicas.insert(dn->replicas_begin(), dn->replicas_end());
+  if (straydn)
+    replicas.insert(straydn->replicas_begin(), straydn->replicas_end());
+  for (map<int,unsigned>::iterator it = replicas.begin();
+       it != replicas.end();
        ++it) {
     // don't tell (rmdir) witnesses; they already know
     if (mdr.get() && mdr->more()->witnessed.count(it->first))
@@ -10711,12 +10658,12 @@ void MDCache::adjust_dir_fragments(CInode *diri,
 
 class C_MDC_FragmentFrozen : public Context {
   MDCache *mdcache;
-  dirfrag_t basedirfrag;
+  MDRequestRef mdr;
 public:
-  C_MDC_FragmentFrozen(MDCache *m, dirfrag_t df) :
-    mdcache(m), basedirfrag(df) {}
+  C_MDC_FragmentFrozen(MDCache *m, MDRequestRef& r) :
+    mdcache(m), mdr(r) {}
   virtual void finish(int r) {
-    mdcache->fragment_frozen(basedirfrag, r);
+    mdcache->fragment_frozen(mdr, r);
   }
 };
 
@@ -10768,18 +10715,19 @@ void MDCache::split_dir(CDir *dir, int bits)
   if (!can_fragment(diri, dirs))
     return;
 
+  MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_FRAGMENTDIR);
+  mdr->more()->fragment_base = dir->dirfrag();
+
   assert(fragments.count(dir->dirfrag()) == 0);
   fragment_info_t& info = fragments[dir->dirfrag()];
+  info.mdr = mdr;
   info.dirs.push_back(dir);
   info.bits = bits;
   info.last_cum_auth_pins_change = ceph_clock_now(g_ceph_context);
 
-  C_GatherBuilder gather(g_ceph_context, new C_MDC_FragmentFrozen(this, dir->dirfrag()));
-  fragment_freeze_dirs(dirs, gather);
-  gather.activate();
-
+  fragment_freeze_dirs(dirs);
   // initial mark+complete pass
-  fragment_mark_and_complete(dirs);
+  fragment_mark_and_complete(mdr);
 }
 
 void MDCache::merge_dir(CInode *diri, frag_t frag)
@@ -10804,23 +10752,23 @@ void MDCache::merge_dir(CInode *diri, frag_t frag)
   int bits = first->get_frag().bits() - frag.bits();
   dout(10) << " we are merginb by " << bits << " bits" << dendl;
 
-  dirfrag_t df(diri->ino(), frag);
-  assert(fragments.count(df) == 0);
-  fragment_info_t& info = fragments[df];
+  dirfrag_t basedirfrag(diri->ino(), frag);
+  MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_FRAGMENTDIR);
+  mdr->more()->fragment_base = basedirfrag;
+
+  assert(fragments.count(basedirfrag) == 0);
+  fragment_info_t& info = fragments[basedirfrag];
+  info.mdr = mdr;
   info.dirs = dirs;
   info.bits = -bits;
   info.last_cum_auth_pins_change = ceph_clock_now(g_ceph_context);
 
-  C_GatherBuilder gather(g_ceph_context,
-			 new C_MDC_FragmentFrozen(this, dirfrag_t(diri->ino(), frag)));
-  fragment_freeze_dirs(dirs, gather);
-  gather.activate();
-
+  fragment_freeze_dirs(dirs);
   // initial mark+complete pass
-  fragment_mark_and_complete(dirs);
+  fragment_mark_and_complete(mdr);
 }
 
-void MDCache::fragment_freeze_dirs(list<CDir*>& dirs, C_GatherBuilder &gather)
+void MDCache::fragment_freeze_dirs(list<CDir*>& dirs)
 {
   for (list<CDir*>::iterator p = dirs.begin(); p != dirs.end(); ++p) {
     CDir *dir = *p;
@@ -10828,29 +10776,37 @@ void MDCache::fragment_freeze_dirs(list<CDir*>& dirs, C_GatherBuilder &gather)
     dir->state_set(CDir::STATE_FRAGMENTING);
     dir->freeze_dir();
     assert(dir->is_freezing_dir());
-    dir->add_waiter(CDir::WAIT_FROZEN, gather.new_sub());
   }
 }
 
 class C_MDC_FragmentMarking : public Context {
   MDCache *mdcache;
-  list<CDir*> dirs;
+  MDRequestRef mdr;
 public:
-  C_MDC_FragmentMarking(MDCache *m, list<CDir*>& d) : mdcache(m), dirs(d) {}
+  C_MDC_FragmentMarking(MDCache *m, MDRequestRef& r) : mdcache(m), mdr(r) {}
   virtual void finish(int r) {
-    mdcache->fragment_mark_and_complete(dirs);
+    mdcache->fragment_mark_and_complete(mdr);
   }
 };
 
-void MDCache::fragment_mark_and_complete(list<CDir*>& dirs)
+void MDCache::fragment_mark_and_complete(MDRequestRef& mdr)
 {
-  CInode *diri = dirs.front()->get_inode();
-  dout(10) << "fragment_mark_and_complete " << dirs << " on " << *diri << dendl;
+  dirfrag_t basedirfrag = mdr->more()->fragment_base;
+  map<dirfrag_t,fragment_info_t>::iterator it = fragments.find(basedirfrag);
+  if (it == fragments.end() || it->second.mdr != mdr) {
+    dout(7) << "fragment_mark_and_complete " << basedirfrag << " must have aborted" << dendl;
+    request_finish(mdr);
+    return;
+  }
+
+  fragment_info_t& info = it->second;
+  CInode *diri = info.dirs.front()->get_inode();
+  dout(10) << "fragment_mark_and_complete " << info.dirs << " on " << *diri << dendl;
 
   C_GatherBuilder gather(g_ceph_context);
   
-  for (list<CDir*>::iterator p = dirs.begin();
-       p != dirs.end();
+  for (list<CDir*>::iterator p = info.dirs.begin();
+       p != info.dirs.end();
        ++p) {
     CDir *dir = *p;
 
@@ -10889,12 +10845,29 @@ void MDCache::fragment_mark_and_complete(list<CDir*>& dirs)
     }
   }
   if (gather.has_subs()) {
-    gather.set_finisher(new C_MDC_FragmentMarking(this, dirs));
+    gather.set_finisher(new C_MDC_FragmentMarking(this, mdr));
     gather.activate();
+    return;
   }
 
-  // flush log so that request auth_pins are retired
-  mds->mdlog->flush();
+  for (list<CDir*>::iterator p = info.dirs.begin();
+       p != info.dirs.end();
+       ++p) {
+    CDir *dir = *p;
+    if (!dir->is_frozen_dir()) {
+      assert(dir->is_freezing_dir());
+      dir->add_waiter(CDir::WAIT_FROZEN, gather.new_sub());
+    }
+  }
+  if (gather.has_subs()) {
+    gather.set_finisher(new C_MDC_FragmentFrozen(this, mdr));
+    gather.activate();
+    // flush log so that request auth_pins are retired
+    mds->mdlog->flush();
+    return;
+  }
+
+  fragment_frozen(mdr, 0);
 }
 
 void MDCache::fragment_unmark_unfreeze_dirs(list<CDir*>& dirs)
@@ -10904,19 +10877,22 @@ void MDCache::fragment_unmark_unfreeze_dirs(list<CDir*>& dirs)
     CDir *dir = *p;
     dout(10) << " frag " << *dir << dendl;
 
-    assert(dir->state_test(CDir::STATE_DNPINNEDFRAG));
-    dir->state_clear(CDir::STATE_DNPINNEDFRAG);
-
     assert(dir->state_test(CDir::STATE_FRAGMENTING));
     dir->state_clear(CDir::STATE_FRAGMENTING);
 
-    for (CDir::map_t::iterator p = dir->items.begin();
-	 p != dir->items.end();
-	 ++p) {
-      CDentry *dn = p->second;
-      assert(dn->state_test(CDentry::STATE_FRAGMENTING));
-      dn->state_clear(CDentry::STATE_FRAGMENTING);
-      dn->put(CDentry::PIN_FRAGMENTING);
+    if (dir->state_test(CDir::STATE_DNPINNEDFRAG)) {
+      dir->state_clear(CDir::STATE_DNPINNEDFRAG);
+
+      for (CDir::map_t::iterator p = dir->items.begin();
+	  p != dir->items.end();
+	  ++p) {
+	CDentry *dn = p->second;
+	assert(dn->state_test(CDentry::STATE_FRAGMENTING));
+	dn->state_clear(CDentry::STATE_FRAGMENTING);
+	dn->put(CDentry::PIN_FRAGMENTING);
+      }
+    } else {
+      dir->auth_unpin(dir);
     }
 
     dir->unfreeze_dir();
@@ -10931,7 +10907,7 @@ bool MDCache::fragment_are_all_frozen(CDir *dir)
        p != fragments.end() && p->first.ino == dir->ino();
        ++p) {
     if (p->first.frag.contains(dir->get_frag()))
-      return p->second.has_frozen;
+      return p->second.all_frozen;
   }
   assert(0);
   return false;
@@ -10964,7 +10940,7 @@ void MDCache::find_stale_fragment_freeze()
     dirfrag_t df = p->first;
     fragment_info_t& info = p->second;
     ++p;
-    if (info.has_frozen)
+    if (info.all_frozen)
       continue;
     CDir *dir;
     int total_auth_pins = 0;
@@ -10994,7 +10970,7 @@ void MDCache::find_stale_fragment_freeze()
 	(!dir->inode->is_root() && dir->get_parent_dir()->is_freezing())) {
       dout(10) << " cancel fragmenting " << df << " bit " << info.bits << dendl;
       list<CDir*> dirs;
-      dirs.swap(info.dirs);
+      info.dirs.swap(dirs);
       fragments.erase(df);
       fragment_unmark_unfreeze_dirs(dirs);
     }
@@ -11048,24 +11024,22 @@ public:
   }
 };
 
-void MDCache::fragment_frozen(dirfrag_t basedirfrag, int r)
+void MDCache::fragment_frozen(MDRequestRef& mdr, int r)
 {
+  dirfrag_t basedirfrag = mdr->more()->fragment_base;
   map<dirfrag_t,fragment_info_t>::iterator it = fragments.find(basedirfrag);
-  if (r < 0) {
+  if (it == fragments.end() || it->second.mdr != mdr) {
     dout(7) << "fragment_frozen " << basedirfrag << " must have aborted" << dendl;
-    assert(it == fragments.end());
+    request_finish(mdr);
     return;
   }
-  assert(it != fragments.end());
-  fragment_info_t& info = it->second;
 
+  assert(r == 0);
+  fragment_info_t& info = it->second;
   dout(10) << "fragment_frozen " << basedirfrag.frag << " by " << info.bits
 	   << " on " << info.dirs.front()->get_inode() << dendl;
 
-  info.has_frozen = true;
-
-  MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_FRAGMENTDIR);
-  mdr->more()->fragment_base = basedirfrag;
+  info.all_frozen = true;
   dispatch_fragment_dir(mdr);
 }
 
@@ -11073,7 +11047,12 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
 {
   dirfrag_t basedirfrag = mdr->more()->fragment_base;
   map<dirfrag_t,fragment_info_t>::iterator it = fragments.find(basedirfrag);
-  assert(it != fragments.end());
+  if (it == fragments.end() || it->second.mdr != mdr) {
+    dout(7) << "dispatch_fragment_dir " << basedirfrag << " must have aborted" << dendl;
+    request_finish(mdr);
+    return;
+  }
+
   fragment_info_t& info = it->second;
   CInode *diri = info.dirs.front()->get_inode();
 

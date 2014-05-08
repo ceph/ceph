@@ -33,15 +33,11 @@ class MMDSCacheRejoin : public Message {
   static const int OP_WEAK    = 1;  // replica -> auth, i exist, + maybe open files.
   static const int OP_STRONG  = 2;  // replica -> auth, i exist, + open files and lock state.
   static const int OP_ACK     = 3;  // auth -> replica, here is your lock state.
-  static const int OP_MISSING = 5;  // auth -> replica, i am missing these items
-  static const int OP_FULL    = 6;  // replica -> auth, here is the full object.
   static const char *get_opname(int op) {
     switch (op) {
     case OP_WEAK: return "weak";
     case OP_STRONG: return "strong";
     case OP_ACK: return "ack";
-    case OP_MISSING: return "missing";
-    case OP_FULL: return "full";
     default: assert(0); return 0;
     }
   }

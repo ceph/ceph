@@ -347,12 +347,12 @@ protected:
   void discard_delayed_resolve(int who);
   void maybe_resolve_finish();
   void disambiguate_imports();
-  void recalc_auth_bits();
   void trim_unlinked_inodes();
   void add_uncommitted_slave_update(metareqid_t reqid, int master, MDSlaveUpdate*);
   void finish_uncommitted_slave_update(metareqid_t reqid, int master);
   MDSlaveUpdate* get_uncommitted_slave_update(metareqid_t reqid, int master);
 public:
+  void recalc_auth_bits(bool replay);
   void remove_inode_recursive(CInode *in);
 
   bool is_ambiguous_slave_update(metareqid_t reqid, int master) {
@@ -439,9 +439,6 @@ protected:
 				      set<vinodeno_t>& acked_inodes,
 				      set<SimpleLock *>& gather_locks);
   void handle_cache_rejoin_ack(MMDSCacheRejoin *m);
-  void handle_cache_rejoin_purge(MMDSCacheRejoin *m);
-  void handle_cache_rejoin_missing(MMDSCacheRejoin *m);
-  void handle_cache_rejoin_full(MMDSCacheRejoin *m);
   void rejoin_send_acks();
   void rejoin_trim_undef_inodes();
   void maybe_send_pending_rejoins() {
@@ -625,11 +622,11 @@ public:
     frag_t fg = in->pick_dirfrag(dn);
     return in->get_dirfrag(fg);
   }
-  CDir* get_force_dirfrag(dirfrag_t df) {
+  CDir* get_force_dirfrag(dirfrag_t df, bool replay) {
     CInode *diri = get_inode(df.ino);
     if (!diri)
       return NULL;
-    CDir *dir = force_dir_fragment(diri, df.frag);
+    CDir *dir = force_dir_fragment(diri, df.frag, replay);
     if (!dir)
       dir = diri->get_dirfrag(df.frag);
     return dir;
@@ -952,11 +949,12 @@ private:
     list<CDir*> resultfrags;
     MDRequestRef mdr;
     // for deadlock detection
-    bool has_frozen;
+    bool all_frozen;
     utime_t last_cum_auth_pins_change;
     int last_cum_auth_pins;
     int num_remote_waiters;	// number of remote authpin waiters
-    fragment_info_t() : has_frozen(false), last_cum_auth_pins(0), num_remote_waiters(0) {}
+    fragment_info_t() : all_frozen(false), last_cum_auth_pins(0), num_remote_waiters(0) {}
+    bool is_fragmenting() { return !resultfrags.empty(); }
   };
   map<dirfrag_t,fragment_info_t> fragments;
 
@@ -972,9 +970,9 @@ private:
   void get_force_dirfrag_bound_set(vector<dirfrag_t>& dfs, set<CDir*>& bounds);
 
   bool can_fragment(CInode *diri, list<CDir*>& dirs);
-  void fragment_freeze_dirs(list<CDir*>& dirs, C_GatherBuilder &gather);
-  void fragment_mark_and_complete(list<CDir*>& dirs);
-  void fragment_frozen(dirfrag_t basedirfrag, int r);
+  void fragment_freeze_dirs(list<CDir*>& dirs);
+  void fragment_mark_and_complete(MDRequestRef& mdr);
+  void fragment_frozen(MDRequestRef& mdr, int r);
   void fragment_unmark_unfreeze_dirs(list<CDir*>& dirs);
   void dispatch_fragment_dir(MDRequestRef& mdr);
   void _fragment_logged(MDRequestRef& mdr);
