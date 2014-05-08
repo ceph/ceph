@@ -479,7 +479,7 @@ static int do_show_info(const char *imgname, librbd::Image& image,
   string parent_pool, parent_name, parent_snapname;
   uint8_t old_format;
   uint64_t overlap, features;
-  bool snap_protected;
+  bool snap_protected = false;
   int r;
 
   r = image.stat(info, sizeof(info));
