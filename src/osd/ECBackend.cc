@@ -1091,7 +1091,7 @@ void ECBackend::filter_read_op(
   }
 
   if (op.in_progress.empty()) {
-    get_parent()->schedule_work(
+    get_parent()->schedule_recovery_work(
       get_parent()->bless_gencontext(
 	new FinishReadOp(this, op.tid)));
   }

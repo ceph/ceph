@@ -1,23 +1,24 @@
 #include <errno.h>
-
 #include <iostream>
 #include <sstream>
 #include <string>
 
 using namespace std;
 
-#include "common/ceph_json.h"
+#include "auth/Crypto.h"
 
+#include "common/armor.h"
+#include "common/ceph_json.h"
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "common/Formatter.h"
-#include "common/ceph_json.h"
-#include "global/global_init.h"
 #include "common/errno.h"
+
+#include "global/global_init.h"
+
 #include "include/utime.h"
 #include "include/str_list.h"
 
-#include "common/armor.h"
 #include "rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_rados.h"
@@ -27,7 +28,6 @@ using namespace std;
 #include "rgw_formats.h"
 #include "rgw_usage.h"
 #include "rgw_replica_log.h"
-#include "auth/Crypto.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -1545,9 +1545,11 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_BUCKET_LINK) {
-    int r = RGWBucketAdminOp::link(store, bucket_op);
+    bucket_op.set_bucket_id(bucket_id);
+    string err;
+    int r = RGWBucketAdminOp::link(store, bucket_op, &err);
     if (r < 0) {
-      cerr << "failure: " << cpp_strerror(-r) << std::endl;
+      cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
       return -r;
     }
   }
@@ -1900,7 +1902,6 @@ next:
     formatter->open_array_section("objects");
     while (is_truncated) {
       map<string, RGWObjEnt> result;
-      string ns;
       int r = store->cls_bucket_list(bucket, marker, prefix, 1000, 
                                      result, &is_truncated, &marker,
                                      bucket_object_check_filter);

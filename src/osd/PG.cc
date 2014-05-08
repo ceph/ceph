@@ -2312,9 +2312,9 @@ void PG::clear_publish_stats()
  */
 void PG::init(
   int role,
-  vector<int>& newup, int new_up_primary,
-  vector<int>& newacting, int new_acting_primary,
-  pg_history_t& history,
+  const vector<int>& newup, int new_up_primary,
+  const vector<int>& newacting, int new_acting_primary,
+  const pg_history_t& history,
   pg_interval_map_t& pi,
   bool backfill,
   ObjectStore::Transaction *t)
@@ -2693,7 +2693,7 @@ std::string PG::get_corrupt_pg_log_name() const
 }
 
 int PG::read_info(
-  ObjectStore *store, const coll_t coll, bufferlist &bl,
+  ObjectStore *store, const coll_t &coll, bufferlist &bl,
   pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals,
   hobject_t &biginfo_oid, hobject_t &infos_oid,
   interval_set<snapid_t>  &snap_collections, __u8 &struct_v)
@@ -3881,7 +3881,6 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         scrubber.received_maps.clear();
 
         {
-	  hobject_t end;
 
           // get the start and end of our scrub chunk
           //
@@ -3900,11 +3899,11 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	      cct->_conf->osd_scrub_chunk_max,
 	      0,
 	      &objects,
-	      &end);
+	      &scrubber.end);
             assert(ret >= 0);
 
             // in case we don't find a boundary: start again at the end
-            start = end;
+            start = scrubber.end;
 
             // special case: reached end of file store, implicitly a boundary
             if (objects.empty()) {
@@ -3912,25 +3911,19 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
             }
 
             // search backward from the end looking for a boundary
-            objects.push_back(end);
+            objects.push_back(scrubber.end);
             while (!boundary_found && objects.size() > 1) {
               hobject_t end = objects.back().get_boundary();
               objects.pop_back();
 
               if (objects.back().get_filestore_key() != end.get_filestore_key()) {
-                end = end;
+                scrubber.end = end;
                 boundary_found = true;
               }
             }
           }
-
-	  if (!_range_available_for_scrub(scrubber.start, end)) {
-	    // we'll be requeued by whatever made us unavailable for scrub
-	    done = true;
-	    break;
-	  }
-	  scrubber.end = end;
         }
+
         scrubber.block_writes = true;
 
         // walk the log to find the latest update that affects our chunk
@@ -4472,7 +4465,7 @@ void PG::fulfill_log(
   ConnectionRef con = osd->get_con_osd_cluster(
     from.osd, get_osdmap()->get_epoch());
   if (con) {
-    osd->osd->_share_map_outgoing(from.osd, con.get(), get_osdmap());
+    osd->share_map_peer(from.osd, con.get(), get_osdmap());
     osd->send_message_osd_cluster(mlog, con.get());
   } else {
     mlog->put();

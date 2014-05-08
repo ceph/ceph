@@ -762,6 +762,7 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
   if (!pg_stats_have_changed(from, stats)) {
     dout(10) << " message contains no new osd|pg stats" << dendl;
     MPGStatsAck *ack = new MPGStatsAck;
+    ack->set_tid(stats->get_tid());
     for (map<pg_t,pg_stat_t>::const_iterator p = stats->pg_stat.begin();
 	 p != stats->pg_stat.end();
 	 ++p) {

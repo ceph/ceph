@@ -333,10 +333,10 @@ void ReplicatedPG::begin_peer_recover(
   peer_missing[peer].revise_have(soid, eversion_t());
 }
 
-void ReplicatedPG::schedule_work(
+void ReplicatedPG::schedule_recovery_work(
   GenContext<ThreadPool::TPHandle&> *c)
 {
-  osd->gen_wq.queue(c);
+  osd->recovery_gen_wq.queue(c);
 }
 
 void ReplicatedPG::send_message_osd_cluster(
@@ -1198,6 +1198,12 @@ void ReplicatedPG::do_op(OpRequestRef op)
       return;
     }
     return do_pg_op(op);
+  }
+
+  if (get_osdmap()->is_blacklisted(m->get_source_addr())) {
+    dout(10) << "do_op " << m->get_source_addr() << " is blacklisted" << dendl;
+    osd->reply_op_error(op, -EBLACKLISTED);
+    return;
   }
 
   // order this op as a write?
@@ -2152,7 +2158,7 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
 	m->get_priority());
     c->to_continue.swap(to_continue);
     t->register_on_complete(
-      new PG_QueueAsync(
+      new PG_RecoveryQueueAsync(
 	get_parent(),
 	get_parent()->bless_gencontext(c)));
   }
@@ -2510,7 +2516,15 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
 
 void ReplicatedPG::snap_trimmer()
 {
-  lock();
+  if (g_conf->osd_snap_trim_sleep > 0) {
+    utime_t t;
+    t.set_from_double(g_conf->osd_snap_trim_sleep);
+    t.sleep();
+    lock();
+    dout(20) << __func__ << " slept for " << t << dendl;
+  } else {
+    lock();
+  }
   if (deleting) {
     unlock();
     return;
@@ -4605,8 +4619,8 @@ inline int ReplicatedPG::_delete_oid(OpContext *ctx, bool no_whiteout)
   }
   oi.size = 0;
 
-  // cache: writeback: set whiteout on delete?
-  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK && !no_whiteout) {
+  // cache: cache: set whiteout on delete?
+  if (pool.info.cache_mode != pg_pool_t::CACHEMODE_NONE && !no_whiteout) {
     dout(20) << __func__ << " setting whiteout on " << soid << dendl;
     oi.set_flag(object_info_t::FLAG_WHITEOUT);
     ctx->delta_stats.num_whiteouts++;
@@ -5074,7 +5088,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   }
 
   // cache: clear whiteout?
-  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK) {
+  if (pool.info.cache_mode != pg_pool_t::CACHEMODE_NONE) {
     if (ctx->user_modify &&
 	ctx->obc->obs.oi.is_whiteout()) {
       dout(10) << __func__ << " clearing whiteout on " << soid << dendl;
@@ -7425,9 +7439,6 @@ void ReplicatedPG::kick_object_context_blocked(ObjectContextRef obc)
   dout(10) << __func__ << " " << soid << " requeuing " << ls.size() << " requests" << dendl;
   requeue_ops(ls);
   waiting_for_blocked_object.erase(p);
-
-  if (obc->requeue_scrub_on_unblock)
-    osd->queue_for_scrub(this);
 }
 
 SnapSetContext *ReplicatedPG::create_snapset_context(const hobject_t& oid)
@@ -8927,7 +8938,7 @@ void ReplicatedBackend::sub_op_push(OpRequestRef op)
 	  op->get_req()->get_priority());
       c->to_continue.swap(to_continue);
       t->register_on_complete(
-	new PG_QueueAsync(
+	new PG_RecoveryQueueAsync(
 	  get_parent(),
 	  get_parent()->bless_gencontext(c)));
     }
@@ -10924,15 +10935,11 @@ void ReplicatedPG::hit_set_trim(RepGather *repop, unsigned max)
       agent_state->remove_oldest_hit_set();
     updated_hit_set_hist.history.pop_front();
 
-    struct stat st;
-    int r = osd->store->stat(
-      coll,
-      ghobject_t(oid, ghobject_t::NO_GEN, pg_whoami.shard),
-      &st);
-    assert(r == 0);
+    ObjectContextRef obc = get_object_context(oid, false);
+    assert(obc);
     --repop->ctx->delta_stats.num_objects;
     --repop->ctx->delta_stats.num_objects_hit_set_archive;
-    repop->ctx->delta_stats.num_bytes -= st.st_size;
+    repop->ctx->delta_stats.num_bytes -= obc->obs.oi.size;
   }
 }
 
@@ -10960,6 +10967,7 @@ void ReplicatedPG::agent_setup()
     agent_state->position.hash = pool.info.get_random_pg_position(
       info.pgid.pgid,
       rand());
+    agent_state->start = agent_state->position;
 
     dout(10) << __func__ << " allocated new state, position "
 	     << agent_state->position << dendl;
@@ -10980,13 +10988,14 @@ void ReplicatedPG::agent_clear()
   agent_state.reset(NULL);
 }
 
-void ReplicatedPG::agent_work(int start_max)
+// Return false if no objects operated on since start of object hash space
+bool ReplicatedPG::agent_work(int start_max)
 {
   lock();
   if (!agent_state) {
     dout(10) << __func__ << " no agent state, stopping" << dendl;
     unlock();
-    return;
+    return true;
   }
 
   assert(!deleting);
@@ -10994,7 +11003,7 @@ void ReplicatedPG::agent_work(int start_max)
   if (agent_state->is_idle()) {
     dout(10) << __func__ << " idle, stopping" << dendl;
     unlock();
-    return;
+    return true;
   }
 
   osd->logger->inc(l_osd_agent_wake);
@@ -11084,8 +11093,12 @@ void ReplicatedPG::agent_work(int start_max)
     if (agent_state->evict_mode != TierAgentState::EVICT_MODE_IDLE &&
 	agent_maybe_evict(obc))
       ++started;
-    if (started >= start_max)
+    if (started >= start_max) {
+      // If finishing early, set "next" to the next object
+      if (++p != ls.end())
+	next = *p;
       break;
+    }
   }
 
   if (++agent_state->hist_age > g_conf->osd_agent_hist_halflife) {
@@ -11095,13 +11108,42 @@ void ReplicatedPG::agent_work(int start_max)
     agent_state->temp_hist.decay();
   }
 
+  // Total objects operated on so far
+  int total_started = agent_state->started + started;
+  bool need_delay = false;
+
+  dout(20) << __func__ << " start pos " << agent_state->position
+    << " next start pos " << next
+    << " started " << total_started << dendl;
+
+  // See if we've made a full pass over the object hash space
+  // This might check at most ls_max objects a second time to notice that
+  // we've checked every objects at least once.
+  if (agent_state->position < agent_state->start && next >= agent_state->start) {
+    dout(20) << __func__ << " wrap around " << agent_state->start << dendl;
+    if (total_started == 0)
+      need_delay = true;
+    else
+      total_started = 0;
+    agent_state->start = next;
+  }
+  agent_state->started = total_started;
+
+  // See if we are starting from beginning
   if (next.is_max())
     agent_state->position = hobject_t();
   else
     agent_state->position = next;
-  dout(20) << __func__ << " final position " << agent_state->position << dendl;
+
+  if (need_delay) {
+    assert(agent_state->delaying == false);
+    agent_delay();
+    unlock();
+    return false;
+  }
   agent_choose_mode();
   unlock();
+  return true;
 }
 
 void ReplicatedPG::agent_load_hit_sets()
@@ -11303,9 +11345,37 @@ void ReplicatedPG::agent_stop()
   }
 }
 
-void ReplicatedPG::agent_choose_mode()
+void ReplicatedPG::agent_delay()
 {
+  dout(20) << __func__ << dendl;
+  if (agent_state && !agent_state->is_idle()) {
+    assert(agent_state->delaying == false);
+    agent_state->delaying = true;
+    osd->agent_disable_pg(this, agent_state->evict_effort);
+  }
+}
+
+void ReplicatedPG::agent_choose_mode_restart()
+{
+  dout(20) << __func__ << dendl;
+  lock();
+  if (agent_state && agent_state->delaying) {
+    agent_state->delaying = false;
+    agent_choose_mode(true);
+  }
+  unlock();
+}
+
+void ReplicatedPG::agent_choose_mode(bool restart)
+{
+  // Let delay play out
+  if (agent_state->delaying) {
+    dout(20) << __func__ << this << " delaying, ignored" << dendl;
+    return;
+  }
+
   uint64_t divisor = pool.info.get_pg_num_divisor(info.pgid.pgid);
+  assert(divisor > 0);
 
   uint64_t num_user_objects = info.stats.stats.sum.num_objects;
 
@@ -11354,19 +11424,20 @@ void ReplicatedPG::agent_choose_mode()
       info.stats.stats.sum.num_objects;
     dirty_micro =
       num_dirty * avg_size * 1000000 /
-      (pool.info.target_max_bytes / divisor);
+      MAX(pool.info.target_max_bytes / divisor, 1);
     full_micro =
       num_user_objects * avg_size * 1000000 /
-      (pool.info.target_max_bytes / divisor);
+      MAX(pool.info.target_max_bytes / divisor, 1);
   }
   if (pool.info.target_max_objects) {
     uint64_t dirty_objects_micro =
       num_dirty * 1000000 /
-      (pool.info.target_max_objects / divisor);
+      MAX(pool.info.target_max_objects / divisor, 1);
     if (dirty_objects_micro > dirty_micro)
       dirty_micro = dirty_objects_micro;
     uint64_t full_objects_micro =
-      num_user_objects * 1000000 / (pool.info.target_max_objects / divisor);
+      num_user_objects * 1000000 /
+      MAX(pool.info.target_max_objects / divisor, 1);
     if (full_objects_micro > full_micro)
       full_micro = full_objects_micro;
   }
@@ -11378,7 +11449,7 @@ void ReplicatedPG::agent_choose_mode()
   TierAgentState::flush_mode_t flush_mode = TierAgentState::FLUSH_MODE_IDLE;
   uint64_t flush_target = pool.info.cache_target_dirty_ratio_micro;
   uint64_t flush_slop = (float)flush_target * g_conf->osd_agent_slop;
-  if (agent_state->flush_mode == TierAgentState::FLUSH_MODE_IDLE)
+  if (restart || agent_state->flush_mode == TierAgentState::FLUSH_MODE_IDLE)
     flush_target += flush_slop;
   else
     flush_target -= MIN(flush_target, flush_slop);
@@ -11395,7 +11466,7 @@ void ReplicatedPG::agent_choose_mode()
   unsigned evict_effort = 0;
   uint64_t evict_target = pool.info.cache_target_full_ratio_micro;
   uint64_t evict_slop = (float)evict_target * g_conf->osd_agent_slop;
-  if (agent_state->evict_mode == TierAgentState::EVICT_MODE_IDLE)
+  if (restart || agent_state->evict_mode == TierAgentState::EVICT_MODE_IDLE)
     evict_target += evict_slop;
   else
     evict_target -= MIN(evict_target, evict_slop);
@@ -11410,7 +11481,11 @@ void ReplicatedPG::agent_choose_mode()
     // set effort in [0..1] range based on where we are between
     evict_mode = TierAgentState::EVICT_MODE_SOME;
     uint64_t over = full_micro - evict_target;
-    uint64_t span = 1000000 - evict_target;
+    uint64_t span;
+    if (evict_target >= 1000000)
+      span = 1;
+    else
+      span = 1000000 - evict_target;
     evict_effort = MAX(over * 1000000 / span,
 		       (unsigned)(1000000.0 * g_conf->osd_agent_min_evict_effort));
 
@@ -11459,11 +11534,11 @@ void ReplicatedPG::agent_choose_mode()
   // (including flush).  This is probably fine (they should be
   // correlated) but it is not precisely correct.
   if (agent_state->is_idle()) {
-    if (!old_idle) {
+    if (!restart && !old_idle) {
       osd->agent_disable_pg(this, old_effort);
     }
   } else {
-    if (old_idle) {
+    if (restart || old_idle) {
       osd->agent_enable_pg(this, agent_state->evict_effort);
     } else if (old_effort != agent_state->evict_effort) {
       osd->agent_adjust_pg(this, old_effort, agent_state->evict_effort);
@@ -11504,23 +11579,6 @@ void ReplicatedPG::agent_estimate_atime_temp(const hobject_t& oid,
 // ==========================================================================================
 // SCRUB
 
-
-bool ReplicatedPG::_range_available_for_scrub(
-  const hobject_t &begin, const hobject_t &end)
-{
-  pair<hobject_t, ObjectContextRef> next;
-  next.second = object_contexts.lookup(begin);
-  next.first = begin;
-  bool more = true;
-  while (more && next.first < end) {
-    if (next.second && next.second->is_blocked()) {
-      next.second->requeue_scrub_on_unblock = true;
-      return true;
-    }
-    more = object_contexts.get_next(next.first, &next);
-  }
-  return false;
-}
 
 void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 {
