@@ -148,7 +148,7 @@ int
 open_rbd_image(const char *image_name)
 {
 	struct rbd_image *im;
-	struct rbd_openimage *rbd;
+	struct rbd_openimage *rbd = NULL;
 	int fd;
 
 	if (image_name == (char *)NULL) 
@@ -177,7 +177,7 @@ open_rbd_image(const char *image_name)
 				break;
 			}
 		}
-		if (i == MAX_RBD_IMAGES)
+		if (i == MAX_RBD_IMAGES || !rbd)
 			return -1;
 		int ret = rbd_open(ioctx, rbd->image_name, &(rbd->image), NULL);
 		if (ret < 0) {
