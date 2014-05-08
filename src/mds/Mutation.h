@@ -209,6 +209,7 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
     set<int> witnessed;       // nodes who have journaled a RenamePrepare
     map<MDSCacheObject*,version_t> pvmap;
 
+    bool has_journaled_slaves;
     bool slave_update_journaled;
     
     // for rename
@@ -244,7 +245,7 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
     dirfrag_t fragment_base;
 
     More() : 
-      slave_update_journaled(false),
+      has_journaled_slaves(false), slave_update_journaled(false),
       srcdn_auth_mds(-1), inode_import_v(0), rename_inode(0),
       is_freeze_authpin(false), is_ambiguous_auth(false),
       is_remote_frozen_authpin(false), is_inode_exporter(false),

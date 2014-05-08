@@ -845,8 +845,8 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
   if (!g_conf->mds_early_reply)
     return;
 
-  if (mdr->has_witnesses()) {
-    dout(10) << "early_reply - there are witnesses, not allowed." << dendl;
+  if (mdr->has_more() && mdr->more()->has_journaled_slaves) {
+    dout(10) << "early_reply - there are journaled slaves, not allowed." << dendl;
     mds->mdlog->flush();
     return; 
   }
@@ -4562,6 +4562,7 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
   // set up commit waiter
   mdr->more()->slave_commit = new C_MDS_SlaveLinkCommit(this, mdr, targeti);
 
+  mdr->more()->slave_update_journaled = true;
   submit_mdlog_entry(le, new C_MDS_SlaveLinkPrep(this, mdr, targeti),
                      mdr, __func__);
   mdlog->flush();
@@ -4742,6 +4743,8 @@ void Server::handle_slave_link_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *m)
   // witnessed!
   assert(mdr->more()->witnessed.count(from) == 0);
   mdr->more()->witnessed.insert(from);
+  assert(!m->is_not_journaled());
+  mdr->more()->has_journaled_slaves = true;
   
   // remove from waiting list
   assert(mdr->more()->waiting_on_slave.count(from));
@@ -5134,6 +5137,7 @@ void Server::handle_slave_rmdir_prep(MDRequestRef& mdr)
 
     MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
 						   MMDSSlaveRequest::OP_RMDIRPREPACK);
+    reply->mark_not_journaled();
     mds->send_message_mds(reply, mdr->slave_to_mds);
 
     // send caps to auth (if we're not already)
@@ -5207,6 +5211,8 @@ void Server::handle_slave_rmdir_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *ac
 
   mdr->more()->slaves.insert(from);
   mdr->more()->witnessed.insert(from);
+  if (!ack->is_not_journaled())
+    mdr->more()->has_journaled_slaves = true;
 
   // remove from waiting list
   assert(mdr->more()->waiting_on_slave.count(from));
@@ -6659,8 +6665,11 @@ void Server::_logged_slave_rename(MDRequestRef& mdr,
 
   // prepare ack
   MMDSSlaveRequest *reply = NULL;
-  if (!mdr->aborted)
+  if (!mdr->aborted) {
     reply= new MMDSSlaveRequest(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_RENAMEPREPACK);
+    if (!mdr->more()->slave_update_journaled)
+      reply->mark_not_journaled();
+  }
 
   CDentry::linkage_t *srcdnl = srcdn->get_linkage();
   CDentry::linkage_t *destdnl = NULL; 
@@ -7180,6 +7189,8 @@ void Server::handle_slave_rename_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *a
   assert(mdr->more()->witnessed.count(from) == 0);
   if (ack->witnesses.empty()) {
     mdr->more()->witnessed.insert(from);
+    if (!ack->is_not_journaled())
+      mdr->more()->has_journaled_slaves = true;
   } else {
     dout(10) << " extra witnesses (srcdn replicas) are " << ack->witnesses << dendl;
     mdr->more()->extra_witnesses.swap(ack->witnesses);
