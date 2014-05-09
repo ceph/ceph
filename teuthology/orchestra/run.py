@@ -123,6 +123,8 @@ def copy_to_log(f, logger, host, loglevel=logging.INFO):
     # api for now
     for line in f.xreadlines():
         line = line.rstrip()
+        # Second part of work-around for http://tracker.ceph.com/issues/8313
+        line = unicode(line, 'utf-8', 'replace').encode('utf-8')
         logger.log(loglevel, '[' + host + ']: ' + line)
 
 def copy_and_close(src, fdst):
