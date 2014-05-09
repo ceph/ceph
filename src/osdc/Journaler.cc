@@ -37,12 +37,14 @@ void Journaler::set_writeable()
   readonly = false;
 }
 
-void Journaler::create(ceph_file_layout *l)
+void Journaler::create(ceph_file_layout *l, stream_format_t const sf)
 {
   assert(!readonly);
   ldout(cct, 1) << "create blank journal" << dendl;
   state = STATE_ACTIVE;
 
+  stream_format = sf;
+  journal_stream.set_format(sf);
   set_layout(l);
 
   prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos =
@@ -341,6 +343,7 @@ void Journaler::write_head(Context *oncommit)
   last_written.expire_pos = expire_pos;
   last_written.unused_field = expire_pos;
   last_written.write_pos = safe_pos;
+  last_written.stream_format = stream_format;
   ldout(cct, 10) << "write_head " << last_written << dendl;
   
   last_wrote_head = ceph_clock_now(cct);
