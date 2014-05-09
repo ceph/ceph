@@ -452,7 +452,7 @@ public:
     g_num_inoa++;
     state = 0;  
     if (auth) state_set(STATE_AUTH);
-  };
+  }
   ~CInode() {
     g_num_ino--;
     g_num_inos++;

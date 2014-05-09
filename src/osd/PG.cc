@@ -7182,7 +7182,7 @@ boost::statechart::result PG::RecoveryState::GetMissing::react(const MLogRec& lo
     }
   }
   return discard_event();
-};
+}
 
 boost::statechart::result PG::RecoveryState::GetMissing::react(const QueryState& q)
 {

@@ -2222,7 +2222,7 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
   }
 
   return true;  // we made a decision (see is_valid)
-};
+}
 
 
 void MDS::ms_handle_accept(Connection *con)
