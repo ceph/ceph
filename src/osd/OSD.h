@@ -1055,8 +1055,14 @@ private:
   int state;
 
 public:
-  int get_state() { Spinlock::Locker l(state_lock); return state; }
-  void set_state(int s) { Spinlock::Locker l(state_lock); state = s; }
+  int get_state() {
+    Spinlock::Locker l(state_lock);
+    return state;
+  }
+  void set_state(int s) {
+    Spinlock::Locker l(state_lock);
+    state = s;
+  }
   bool is_initializing() {
     Spinlock::Locker l(state_lock);
     return state == STATE_INITIALIZING;
