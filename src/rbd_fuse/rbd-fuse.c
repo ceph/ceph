@@ -565,7 +565,7 @@ struct rbdfuse_attr {
 	{ "user.rbdfuse.imagesize", &imagesize },
 	{ "user.rbdfuse.imageorder", &imageorder },
 	{ "user.rbdfuse.imagefeatures", &imagefeatures },
-	{ NULL }
+	{ NULL, NULL }
 };
 
 int
