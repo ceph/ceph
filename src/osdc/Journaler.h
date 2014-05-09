@@ -78,7 +78,6 @@ class JournalStream
   stream_format_t format;
 
   public:
-  JournalStream() : format(JOURNAL_FORMAT_RESILIENT) {}
   JournalStream(stream_format_t format_) : format(format_) {}
 
   void set_format(stream_format_t format_) {format = format_;}
@@ -106,9 +105,7 @@ public:
     stream_format_t stream_format; //< The encoding of LogEvents within the journal byte stream
 
     Header(const char *m="") :
-      trimmed_pos(0), expire_pos(0), unused_field(0), write_pos(0),
-      magic(m),
-      stream_format(JOURNAL_FORMAT_RESILIENT) {
+      trimmed_pos(0), expire_pos(0), unused_field(0), write_pos(0), magic(m), stream_format(-1) {
       memset(&layout, 0, sizeof(layout));
     }
 
@@ -329,7 +326,9 @@ private:
 public:
   Journaler(inodeno_t ino_, int64_t pool, const char *mag, Objecter *obj, PerfCounters *l, int lkey, SafeTimer *tim) : 
     last_written(mag), last_committed(mag), cct(obj->cct),
-    ino(ino_), pg_pool(pool), readonly(true), magic(mag),
+    ino(ino_), pg_pool(pool), readonly(true),
+    stream_format(-1), journal_stream(-1),
+    magic(mag),
     objecter(obj), filer(objecter), logger(l), logger_key_lat(lkey),
     timer(tim), delay_flush_event(0),
     state(STATE_UNDEF), error(0),
@@ -338,7 +337,7 @@ public:
     read_pos(0), requested_pos(0), received_pos(0),
     fetch_len(0), temp_fetch_len(0),
     on_readable(0), on_write_error(NULL),
-    expire_pos(0), trimming_pos(0), trimmed_pos(0) 
+    expire_pos(0), trimming_pos(0), trimmed_pos(0)
   {
     memset(&layout, 0, sizeof(layout));
   }
@@ -377,7 +376,7 @@ private:
   friend class C_EraseFinish;
 
 public:
-  void create(ceph_file_layout *layout);
+  void create(ceph_file_layout *layout, stream_format_t const sf);
   void recover(Context *onfinish);
   void reread_head(Context *onfinish);
   void reprobe(Context *onfinish);
