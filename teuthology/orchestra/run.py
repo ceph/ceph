@@ -2,6 +2,7 @@
 Paramiko run support
 """
 from cStringIO import StringIO
+from paramiko import ChannelFile
 
 import gevent
 import gevent.event
@@ -114,6 +115,10 @@ def copy_to_log(f, logger, host, loglevel=logging.INFO):
     """
     Interface to older xreadlines api.
     """
+    # Work-around for http://tracker.ceph.com/issues/8313
+    if isinstance(f, ChannelFile):
+        f._flags += ChannelFile.FLAG_BINARY
+
     # i can't seem to get fudge to fake an iterable, so using this old
     # api for now
     for line in f.xreadlines():
