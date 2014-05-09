@@ -8870,8 +8870,13 @@ MDRequestRef MDCache::request_start(MClientRequest *req)
   params.reqid = req->get_reqid();
   params.attempt = req->get_num_fwd();
   params.client_req = req;
+  params.initiated = req->get_recv_stamp();
+  params.throttled = req->get_throttle_stamp();
+  params.all_read = req->get_recv_complete_stamp();
+  params.dispatched = req->get_dispatch_stamp();
 
-  MDRequestRef mdr(new MDRequestImpl(params));
+  MDRequestRef mdr =
+      mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params>(params);
   active_requests[params.reqid] = mdr;
   dout(7) << "request_start " << *mdr << dendl;
   return mdr;
@@ -8885,7 +8890,12 @@ MDRequestRef MDCache::request_start_slave(metareqid_t ri, __u32 attempt, Message
   params.attempt = attempt;
   params.triggering_slave_req = m;
   params.slave_to = by;
-  MDRequestRef mdr(new MDRequestImpl(params));
+  params.initiated = m->get_recv_stamp();
+  params.throttled = m->get_throttle_stamp();
+  params.all_read = m->get_recv_complete_stamp();
+  params.dispatched = m->get_dispatch_stamp();
+  MDRequestRef mdr =
+      mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params>(params);
   assert(active_requests.count(mdr->reqid) == 0);
   active_requests[mdr->reqid] = mdr;
   dout(7) << "request_start_slave " << *mdr << " by mds." << by << dendl;
@@ -8897,6 +8907,8 @@ MDRequestRef MDCache::request_start_internal(int op)
   MDRequestImpl::Params params;
   params.reqid.name = entity_name_t::MDS(mds->get_nodeid());
   params.reqid.tid = mds->issue_tid();
+  params.initiated = ceph_clock_now(g_ceph_context);
+  params.internal_op = op;
   MDRequestRef mdr =
       mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params>(params);
 
