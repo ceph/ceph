@@ -189,6 +189,6 @@ public:
   void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<cls_replica_log_bound*>& ls);
 };
-WRITE_CLASS_ENCODER(cls_replica_log_bound);
+WRITE_CLASS_ENCODER(cls_replica_log_bound)
 
 #endif /* CLS_REPLICA_LOG_TYPES_H_ */

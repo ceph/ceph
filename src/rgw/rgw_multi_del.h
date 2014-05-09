@@ -13,7 +13,7 @@ public:
 
   std::vector<string> objects;
   bool quiet;
-  bool is_quiet() { return quiet; };
+  bool is_quiet() { return quiet; }
 };
 
 class RGWMultiDelQuiet : public XMLObj

@@ -55,7 +55,7 @@ inline const char *get_mdstableserver_opname(int op) {
   case TABLESERVER_OP_SERVER_READY: return "server_ready";
   default: assert(0); return 0;
   }
-};
+}
 
 enum {
   TABLE_OP_CREATE,
@@ -70,6 +70,6 @@ inline const char *get_mdstable_opname(int op) {
   case TABLE_OP_DESTROY: return "destroy";
   default: assert(0); return 0;
   }
-};
+}
 
 #endif

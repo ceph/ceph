@@ -162,6 +162,6 @@ private:
 };
 
 
-WRITE_CLASS_ENCODER_FEATURES(AuthMonitor::Incremental);
+WRITE_CLASS_ENCODER_FEATURES(AuthMonitor::Incremental)
 
 #endif

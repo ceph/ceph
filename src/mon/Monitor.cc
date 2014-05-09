@@ -4128,7 +4128,7 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
     isvalid = true;
   }
   return true;
-};
+}
 
 #undef dout_prefix
 #define dout_prefix *_dout

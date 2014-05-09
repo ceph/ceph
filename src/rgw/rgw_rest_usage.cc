@@ -86,11 +86,11 @@ void RGWOp_Usage_Delete::execute() {
 RGWOp *RGWHandler_Usage::op_get()
 {
   return new RGWOp_Usage_Get;
-};
+}
 
 RGWOp *RGWHandler_Usage::op_delete()
 {
   return new RGWOp_Usage_Delete;
-};
+}
 
 

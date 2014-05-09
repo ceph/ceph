@@ -134,7 +134,7 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
       : data(c), len(l), nref(0),
 	crc_lock("buffer::raw::crc_lock", false, false)
     { }
-    virtual ~raw() {};
+    virtual ~raw() {}
 
     // no copying.
     raw(const raw &other);
@@ -1433,7 +1433,7 @@ void buffer::list::rebuild_page_aligned()
     // splice in *replace (implement me later?)
     
     last_p = begin();  // just in case we were in the removed region.
-  };
+  }
 
   void buffer::list::write(int off, int len, std::ostream& out) const
   {

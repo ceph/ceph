@@ -191,7 +191,7 @@ public:
 
   public:
     /// Provide the final size of the copied object to the CopyCallback
-    virtual ~CopyCallback() {};
+    virtual ~CopyCallback() {}
   };
 
   friend class CopyFromCallback;

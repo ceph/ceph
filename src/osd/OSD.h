@@ -1236,7 +1236,7 @@ public:
     HeartbeatDispatcher(OSD *o) : Dispatcher(cct), osd(o) {}
     bool ms_dispatch(Message *m) {
       return osd->heartbeat_dispatch(m);
-    };
+    }
     bool ms_handle_reset(Connection *con) {
       return osd->heartbeat_reset(con);
     }

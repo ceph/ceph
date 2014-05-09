@@ -195,6 +195,6 @@ public:
     return 0;
   } ///< @return error value, 0 on success
 };
-}; // namespace
+} // namespace
 
 #endif
