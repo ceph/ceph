@@ -35,6 +35,7 @@ class Remote(object):
     def __init__(self, name, ssh=None, shortname=None, console=None,
                  host_key=None, keep_alive=True):
         self.name = name
+        self.hostname = name.split('@')[-1]
         self._shortname = shortname
         self.host_key = host_key
         self.keep_alive = keep_alive
@@ -69,10 +70,6 @@ class Remote(object):
         if name is None:
             name = self.name
         return name
-
-    @property
-    def hostname(self):
-        return self.name.split('@')[1]
 
     @property
     def is_online(self):
