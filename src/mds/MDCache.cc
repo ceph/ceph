@@ -6188,12 +6188,17 @@ void MDCache::start_recovered_truncates()
  * however, we may expire a replica whose authority is recovering.
  * 
  */
-bool MDCache::trim(int max) 
+bool MDCache::trim(int max, int count)
 {
   // trim LRU
-  if (max < 0) {
+  if (count > 0) {
+    max = lru.lru_get_size() - count;
+    if (max <= 0)
+      max = 1;
+  } else if (max < 0) {
     max = g_conf->mds_cache_size;
-    if (!max) return false;
+    if (max <= 0)
+      return false;
   }
   dout(7) << "trim max=" << max << "  cur=" << lru.lru_get_size() << dendl;
 

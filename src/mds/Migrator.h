@@ -257,7 +257,7 @@ public:
 			utime_t now);
   void finish_export_dir(CDir *dir, utime_t now, int target,
 			 map<inodeno_t,map<client_t,Capability::Import> >& peer_imported,
-			 list<Context*>& finished);
+			 list<Context*>& finished, int *num_dentries);
 
   void add_export_finish_waiter(CDir *dir, Context *c) {
     map<CDir*, export_state_t>::iterator it = export_state.find(dir);
