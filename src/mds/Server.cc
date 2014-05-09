@@ -7055,6 +7055,12 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequestRef& mdr,
       le->commit.add_remote_dentry(srcdn, true);
   }
 
+  if (!rollback.orig_src.ino && // remote linkage
+      in && in->authority().first == whoami) {
+    le->commit.add_dir_context(in->get_projected_parent_dir());
+    le->commit.add_primary_dentry(in->get_projected_parent_dn(), in, true);
+  }
+
   if (force_journal_dest) {
     assert(rollback.orig_dest.ino);
     le->commit.add_dir_context(destdir);
@@ -7063,7 +7069,7 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequestRef& mdr,
 
   // slave: no need to journal straydn
 
-  if (target && target->authority().first == whoami) {
+  if (target && target != in && target->authority().first == whoami) {
     assert(rollback.orig_dest.remote_ino);
     le->commit.add_dir_context(target->get_projected_parent_dir());
     le->commit.add_primary_dentry(target->get_projected_parent_dn(), target, true);
