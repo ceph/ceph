@@ -1461,7 +1461,7 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
 
 void Migrator::finish_export_dir(CDir *dir, utime_t now, int peer,
 				 map<inodeno_t,map<client_t,Capability::Import> >& peer_imported,
-				 list<Context*>& finished)
+				 list<Context*>& finished, int *num_dentries)
 {
   dout(10) << "finish_export_dir " << *dir << dendl;
 
@@ -1500,11 +1500,14 @@ void Migrator::finish_export_dir(CDir *dir, utime_t now, int peer,
       // subdirs?
       in->get_nested_dirfrags(subdirs);
     }
+
+    cache->touch_dentry_bottom(dn); // move dentry to tail of LRU
+    ++(*num_dentries);
   }
 
   // subdirs
   for (list<CDir*>::iterator it = subdirs.begin(); it != subdirs.end(); ++it) 
-    finish_export_dir(*it, now, peer, peer_imported, finished);
+    finish_export_dir(*it, now, peer, peer_imported, finished, num_dentries);
 }
 
 class C_MDS_ExportFinishLogged : public Context {
@@ -1765,9 +1768,10 @@ void Migrator::export_finish(CDir *dir)
   assert(g_conf->mds_kill_export_at != 13);
   
   // finish export (adjust local cache state)
+  int num_dentries = 0;
   C_Contexts *fin = new C_Contexts(g_ceph_context);
-  finish_export_dir(dir, ceph_clock_now(g_ceph_context),
-		    it->second.peer, it->second.peer_imported, fin->contexts);
+  finish_export_dir(dir, ceph_clock_now(g_ceph_context), it->second.peer,
+		    it->second.peer_imported, fin->contexts, &num_dentries);
   dir->add_waiter(CDir::WAIT_UNFREEZE, fin);
 
   // unfreeze
@@ -1815,6 +1819,8 @@ void Migrator::export_finish(CDir *dir)
 
   cache->show_subtrees();
   audit();
+
+  cache->trim(-1, num_dentries); // try trimming exported dentries
 
   // send pending import_maps?
   mds->mdcache->maybe_send_pending_resolves();
@@ -2329,6 +2335,7 @@ void Migrator::import_reverse(CDir *dir)
       !dir->get_inode()->has_subtree_root_dirfrag(mds->get_nodeid()))
     dir->get_inode()->clear_scatter_dirty();
 
+  int num_dentries = 0;
   // adjust auth bits.
   list<CDir*> q;
   q.push_back(dir);
@@ -2381,6 +2388,9 @@ void Migrator::import_reverse(CDir *dir)
 	  if (bounds.count(*p) == 0)
 	    q.push_back(*p);
       }
+
+      cache->touch_dentry_bottom(dn); // move dentry to tail of LRU
+      ++num_dentries;
     }
   }
 
@@ -2413,6 +2423,8 @@ void Migrator::import_reverse(CDir *dir)
   mds->mdlog->start_submit_entry(new EImportFinish(dir, false));	// log failure
 
   cache->try_subtree_merge(dir);  // NOTE: this may journal subtree map as side effect
+
+  cache->trim(-1, num_dentries); // try trimming dentries
 
   // bystanders?
   if (stat.bystanders.empty()) {
