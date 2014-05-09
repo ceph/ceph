@@ -63,12 +63,9 @@ class Remote(object):
 
     @property
     def shortname(self):
-        """
-        shortname decorator
-        """
         name = self._shortname
         if name is None:
-            name = self.name
+            name = self.hostname.split('.')[0]
         return name
 
     @property
@@ -93,7 +90,7 @@ class Remote(object):
         return misc.get_system_type(self)
 
     def __str__(self):
-        return self.shortname
+        return self.name
 
     def __repr__(self):
         return '{classname}(name={name!r})'.format(
