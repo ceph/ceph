@@ -41,13 +41,13 @@ class TestRemote(object):
             exitstatus=None,
             exited=None,
             )
+        r = remote.Remote(name='jdoe@xyzzy.example.com', ssh=ssh)
         run.expects_call().with_args(
             client=fudge.inspector.arg.passes_test(lambda v: v is ssh),
             args=fudge.inspector.arg.passes_test(lambda v: v is args),
             foo=fudge.inspector.arg.passes_test(lambda v: v is foo),
-            name='xyzzy.example.com'
+            name=r.shortname,
             ).returns(ret)
-        r = remote.Remote(name='jdoe@xyzzy.example.com', ssh=ssh)
         # monkey patch ook ook
         r._runner = run
         got = r.run(
