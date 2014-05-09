@@ -127,7 +127,7 @@ void MDLog::create(Context *c)
   dout(5) << "create empty log" << dendl;
   init_journaler();
   journaler->set_writeable();
-  journaler->create(&mds->mdcache->default_log_layout);
+  journaler->create(&mds->mdcache->default_log_layout, g_conf->mds_journal_format);
   journaler->write_head(c);
 
   logger->set(l_mdl_expos, journaler->get_expire_pos());
@@ -580,7 +580,7 @@ void MDLog::_recovery_thread(Context *completion)
   }
 
   /* Check whether the front journal format is acceptable or needs re-write */
-  if (front_journal->get_stream_format() >= JOURNAL_FORMAT_RESILIENT) {
+  if (front_journal->get_stream_format() >= g_conf->mds_journal_format) {
     /* Great, the journal is of current format and ready to rock, hook
      * it into this->journaler and complete */
     journaler = front_journal;
@@ -627,7 +627,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
   dout(4) << "Writing new journal header " << jp.back << dendl;
   ceph_file_layout new_layout = old_journal->get_layout();
   new_journal->set_writeable();
-  new_journal->create(&new_layout);
+  new_journal->create(&new_layout, g_conf->mds_journal_format);
 
   /* Write the new journal header to RADOS */
   C_SaferCond write_head_wait;
