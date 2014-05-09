@@ -108,6 +108,24 @@ def _get_config_value_for_remote(ctx, remote, config, key):
     return config.get(key)
 
 
+def _get_uri(tag, branch, sha1):
+    """
+    Set the uri -- common code used by both install and debian upgrade
+    """
+    uri = None
+    if tag:
+        uri = 'ref/' + tag
+    elif branch:
+        uri = 'ref/' + branch
+    elif sha1:
+        uri = 'sha1/' + sha1
+    else:
+        # FIXME: Should master be the default?
+        log.debug("defaulting to master branch")
+        uri = 'ref/master'
+    return uri
+
+
 def _get_baseurlinfo_and_dist(ctx, remote, config):
     """
     Through various commands executed on the remote, determines the
@@ -171,21 +189,11 @@ def _get_baseurlinfo_and_dist(ctx, remote, config):
     # branch/tag/sha1 flavor
     retval['flavor'] = config.get('flavor', 'basic')
 
-    uri = None
     log.info('config is %s', config)
     tag = _get_config_value_for_remote(ctx, remote, config, 'tag')
     branch = _get_config_value_for_remote(ctx, remote, config, 'branch')
     sha1 = _get_config_value_for_remote(ctx, remote, config, 'sha1')
-    if tag:
-        uri = 'ref/' + tag
-    elif branch:
-        uri = 'ref/' + branch
-    elif sha1:
-        uri = 'sha1/' + sha1
-    else:
-        # FIXME: Should master be the default?
-        log.debug("defaulting to master branch")
-        uri = 'ref/master'
+    uri = _get_uri(tag, branch, sha1)
     retval['uri'] = uri
 
     return retval
@@ -858,12 +866,10 @@ def _upgrade_deb_packages(ctx, config, remote, debs):
 
     # branch/tag/sha1 flavor
     flavor = 'basic'
-    if 'sha1' in config:
-        uri = 'sha1/' + config.get('sha1')
-    elif 'branch' in config:
-        uri = 'ref/' + config.get('branch')
-    elif 'tag' in config:
-        uri = 'ref/' + config.get('tag')
+    sha1 = config.get('sha1')
+    branch = config.get('branch')
+    tag = config.get('tag')
+    uri = _get_uri(tag, branch, sha1)
     base_url = 'http://{host}/{proj}-deb-{dist}-{arch}-{flavor}/{uri}'.format(
         host=ctx.teuthology_config.get('gitbuilder_host',
                                        'gitbuilder.ceph.com'),
