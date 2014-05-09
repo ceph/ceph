@@ -797,6 +797,7 @@ void Server::journal_and_reply(MDRequestRef& mdr, CInode *in, CDentry *dn, LogEv
   early_reply(mdr, in, dn);
   
   mdr->committing = true;
+  mdr->mark_event("submitting journal entry");
   mdlog->submit_entry(le, fin);
   
   if (mdr->client_request && mdr->client_request->is_replay()) {
@@ -882,6 +883,8 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
   utime_t lat = ceph_clock_now(g_ceph_context) - mdr->client_request->get_recv_stamp();
   mds->logger->tinc(l_mds_replyl, lat);
   dout(20) << "lat " << lat << dendl;
+
+  mdr->mark_event("early_replied");
 }
 
 /*
@@ -897,6 +900,8 @@ void Server::reply_request(MDRequestRef& mdr, MClientReply *reply, CInode *trace
   dout(10) << "reply_request " << reply->get_result() 
 	   << " (" << cpp_strerror(reply->get_result())
 	   << ") " << *req << dendl;
+
+  mdr->mark_event("replying");
 
   // note successful request in session map?
   if (req->may_write() && mdr->session && reply->get_result() == 0)
