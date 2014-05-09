@@ -89,7 +89,7 @@ def execute(client, args, name=None):
         host = name
     else:
         (host, port) = client.get_transport().getpeername()
-    log.info('Running [{h}]: {cmd!r}'.format(h=host, cmd=cmd))
+    log.getChild(host).info(u"Running: {cmd!r}".format(cmd=cmd))
 
     (in_, out, err) = client.exec_command(cmd)
 
@@ -124,7 +124,7 @@ def execute(client, args, name=None):
     return r
 
 
-def copy_to_log(f, logger, host, loglevel=logging.INFO):
+def copy_to_log(f, logger, loglevel=logging.INFO):
     """
     Interface to older xreadlines api.
     """
@@ -138,7 +138,7 @@ def copy_to_log(f, logger, host, loglevel=logging.INFO):
         line = line.rstrip()
         # Second part of work-around for http://tracker.ceph.com/issues/8313
         line = unicode(line, 'utf-8', 'replace').encode('utf-8')
-        logger.log(loglevel, '[' + host + ']: ' + line)
+        logger.log(loglevel, line)
 
 
 def copy_and_close(src, fdst):
@@ -152,7 +152,7 @@ def copy_and_close(src, fdst):
     fdst.close()
 
 
-def copy_file_to(f, dst, host):
+def copy_file_to(f, dst):
     """
     Copy file
     :param f: file to be copied.
@@ -163,10 +163,9 @@ def copy_file_to(f, dst, host):
         # looks like a Logger to me; not using isinstance to make life
         # easier for unit tests
         handler = copy_to_log
-        return handler(f, dst, host)
     else:
         handler = shutil.copyfileobj
-        return handler(f, dst)
+    return handler(f, dst)
 
 
 class CommandFailedError(Exception):
@@ -332,8 +331,8 @@ def run(
     g_err = None
     if stderr is not PIPE:
         if stderr is None:
-            stderr = logger.getChild('err')
-        g_err = gevent.spawn(copy_file_to, r.stderr, stderr, name)
+            stderr = logger.getChild(name).getChild('err')
+        g_err = gevent.spawn(copy_file_to, r.stderr, stderr)
         r.stderr = stderr
     else:
         assert not wait, \
@@ -342,8 +341,8 @@ def run(
     g_out = None
     if stdout is not PIPE:
         if stdout is None:
-            stdout = logger.getChild('out')
-        g_out = gevent.spawn(copy_file_to, r.stdout, stdout, name)
+            stdout = logger.getChild(name).getChild('out')
+        g_out = gevent.spawn(copy_file_to, r.stdout, stdout)
         r.stdout = stdout
     else:
         assert not wait, \
