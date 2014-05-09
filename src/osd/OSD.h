@@ -759,6 +759,7 @@ public:
   void pg_stat_queue_dequeue(PG *pg);
 
   void init();
+  void start_shutdown();
   void shutdown();
 
   // split
