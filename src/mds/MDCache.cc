@@ -8929,6 +8929,7 @@ MDRequestRef MDCache::request_get(metareqid_t rid)
 void MDCache::request_finish(MDRequestRef& mdr)
 {
   dout(7) << "request_finish " << *mdr << dendl;
+  mdr->mark_event("finishing request");
 
   // slave finisher?
   if (mdr->has_more() && mdr->more()->slave_commit) {
@@ -8944,6 +8945,7 @@ void MDCache::request_finish(MDRequestRef& mdr)
 
 void MDCache::request_forward(MDRequestRef& mdr, int who, int port)
 {
+  mdr->mark_event("forwarding request");
   if (mdr->client_request->get_source().is_client()) {
     dout(7) << "request_forward " << *mdr << " to mds." << who << " req "
             << *mdr->client_request << dendl;
@@ -9090,11 +9092,14 @@ void MDCache::request_cleanup(MDRequestRef& mdr)
 
   if (mds->logger)
     log_stat();
+
+  mdr->mark_event("cleaned up request");
 }
 
 void MDCache::request_kill(MDRequestRef& mdr)
 {
   mdr->killed = true;
+  mdr->mark_event("killing request");
   if (!mdr->committing) {
     dout(10) << "request_kill " << *mdr << dendl;
     request_cleanup(mdr);
