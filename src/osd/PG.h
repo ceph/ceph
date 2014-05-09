@@ -516,7 +516,7 @@ public:
     const char *get_state_name() { return state_name; }
     NamedState(CephContext *cct_, const char *state_name_)
       : state_name(state_name_),
-        enter_time(ceph_clock_now(cct_)) {};
+        enter_time(ceph_clock_now(cct_)) {}
     virtual ~NamedState() {}
   };
 
@@ -1138,7 +1138,7 @@ public:
     const hobject_t &hoid,
     const map<string, bufferptr> &attrs,
     pg_shard_t osd,
-    ostream &out) { return false; };
+    ostream &out) { return false; }
   void clear_scrub_reserved();
   void scrub_reserve_replicas();
   void scrub_unreserve_replicas();

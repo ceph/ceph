@@ -164,7 +164,7 @@ struct ExpiringCryptoKey {
     ::decode(expiration, bl);
   }
 };
-WRITE_CLASS_ENCODER(ExpiringCryptoKey);
+WRITE_CLASS_ENCODER(ExpiringCryptoKey)
 
 static inline ostream& operator<<(ostream& out, const ExpiringCryptoKey& c)
 {
@@ -226,7 +226,7 @@ struct RotatingSecrets {
 
   void dump();
 };
-WRITE_CLASS_ENCODER(RotatingSecrets);
+WRITE_CLASS_ENCODER(RotatingSecrets)
 
 
 

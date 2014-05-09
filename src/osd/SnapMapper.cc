@@ -69,7 +69,7 @@ struct Mapping {
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(Mapping);
+WRITE_CLASS_ENCODER(Mapping)
 
 string SnapMapper::get_prefix(snapid_t snap)
 {

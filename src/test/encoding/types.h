@@ -214,8 +214,8 @@ TYPE(EUpdate)
 #ifdef WITH_RADOSGW
 
 #include "rgw/rgw_rados.h"
-TYPE(RGWObjManifestPart);
-TYPE(RGWObjManifest);
+TYPE(RGWObjManifestPart)
+TYPE(RGWObjManifest)
 
 #include "rgw/rgw_acl.h"
 TYPE(ACLPermission)
@@ -276,8 +276,8 @@ TYPE(cls_user_get_header_ret)
 TYPE(cls_user_complete_stats_sync_op)
 
 #include "rgw/rgw_common.h"
-TYPE(RGWAccessKey);
-TYPE(RGWSubUser);
+TYPE(RGWAccessKey)
+TYPE(RGWSubUser)
 TYPE(RGWUserInfo)
 TYPE(rgw_bucket)
 TYPE(RGWBucketInfo)
