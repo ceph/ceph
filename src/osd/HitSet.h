@@ -167,8 +167,8 @@ public:
 private:
   void reset_to_type(impl_type_t type);
 };
-WRITE_CLASS_ENCODER(HitSet);
-WRITE_CLASS_ENCODER(HitSet::Params);
+WRITE_CLASS_ENCODER(HitSet)
+WRITE_CLASS_ENCODER(HitSet::Params)
 
 typedef boost::shared_ptr<HitSet> HitSetRef;
 

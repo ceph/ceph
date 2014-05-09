@@ -116,7 +116,7 @@ struct RGWObjManifestPart {
   void dump(Formatter *f) const;
   static void generate_test_instances(list<RGWObjManifestPart*>& o);
 };
-WRITE_CLASS_ENCODER(RGWObjManifestPart);
+WRITE_CLASS_ENCODER(RGWObjManifestPart)
 
 /*
  The manifest defines a set of rules for structuring the object parts.
@@ -163,7 +163,7 @@ struct RGWObjManifestRule {
   }
   void dump(Formatter *f) const;
 };
-WRITE_CLASS_ENCODER(RGWObjManifestRule);
+WRITE_CLASS_ENCODER(RGWObjManifestRule)
 
 class RGWObjManifest {
 protected:
@@ -484,7 +484,7 @@ public:
     }
   };
 };
-WRITE_CLASS_ENCODER(RGWObjManifest);
+WRITE_CLASS_ENCODER(RGWObjManifest)
 
 struct RGWUploadPartInfo {
   uint32_t num;
@@ -541,7 +541,7 @@ public:
     store = _store;
     obj_ctx = _o;
     return 0;
-  };
+  }
   virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle) = 0;
   virtual int throttle_data(void *handle) = 0;
   virtual int complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
@@ -767,7 +767,7 @@ struct RGWZonePlacementInfo {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
-WRITE_CLASS_ENCODER(RGWZonePlacementInfo);
+WRITE_CLASS_ENCODER(RGWZonePlacementInfo)
 
 struct RGWZoneParams {
   rgw_bucket domain_root;
@@ -838,7 +838,7 @@ struct RGWZoneParams {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
-WRITE_CLASS_ENCODER(RGWZoneParams);
+WRITE_CLASS_ENCODER(RGWZoneParams)
 
 struct RGWZone {
   string name;
@@ -870,7 +870,7 @@ struct RGWZone {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
-WRITE_CLASS_ENCODER(RGWZone);
+WRITE_CLASS_ENCODER(RGWZone)
 
 struct RGWDefaultRegionInfo {
   string default_region;
@@ -889,7 +889,7 @@ struct RGWDefaultRegionInfo {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
-WRITE_CLASS_ENCODER(RGWDefaultRegionInfo);
+WRITE_CLASS_ENCODER(RGWDefaultRegionInfo)
 
 struct RGWRegionPlacementTarget {
   string name;
@@ -926,7 +926,7 @@ struct RGWRegionPlacementTarget {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
-WRITE_CLASS_ENCODER(RGWRegionPlacementTarget);
+WRITE_CLASS_ENCODER(RGWRegionPlacementTarget)
 
 
 struct RGWRegion {
@@ -985,7 +985,7 @@ struct RGWRegion {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
-WRITE_CLASS_ENCODER(RGWRegion);
+WRITE_CLASS_ENCODER(RGWRegion)
 
 struct RGWRegionMap {
   Mutex lock;
@@ -1011,7 +1011,7 @@ struct RGWRegionMap {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
-WRITE_CLASS_ENCODER(RGWRegionMap);
+WRITE_CLASS_ENCODER(RGWRegionMap)
 
 class RGWDataChangesLog;
 class RGWReplicaLogger;
