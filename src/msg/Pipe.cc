@@ -259,6 +259,10 @@ int Pipe::accept()
   bool authorizer_valid;
   uint64_t feat_missing;
   bool replaced = false;
+  // this variable denotes if the connection attempt from peer is a hard 
+  // reset or not, it is true if there is an existing connection and the
+  // connection sequence from peer is equal to zero
+  bool is_reset_from_peer = false;
   CryptoKey session_key;
   int removed; // single-use down below
 
@@ -472,6 +476,8 @@ int Pipe::accept()
 
       if (connect.connect_seq == 0 && existing->connect_seq > 0) {
 	ldout(msgr->cct,0) << "accept peer reset, then tried to connect to us, replacing" << dendl;
+        // this is a hard reset from peer
+        is_reset_from_peer = true;
 	if (policy.resetcheck)
 	  existing->was_session_reset(); // this resets out_queue, msg_ and connect_seq #'s
 	goto replace;
@@ -594,7 +600,8 @@ int Pipe::accept()
  replace:
   assert(existing->pipe_lock.is_locked());
   assert(pipe_lock.is_locked());
-  if (connect.features & CEPH_FEATURE_RECONNECT_SEQ) {
+  // if it is a hard reset from peer, we don't need a round-trip to negotiate in/out sequence
+  if ((connect.features & CEPH_FEATURE_RECONNECT_SEQ) && !is_reset_from_peer) {
     reply_tag = CEPH_MSGR_TAG_SEQ;
     existing_seq = existing->in_seq;
   }
@@ -631,7 +638,10 @@ int Pipe::accept()
     uint64_t replaced_conn_id = conn_id;
     conn_id = existing->conn_id;
     existing->conn_id = replaced_conn_id;
-    in_seq = existing->in_seq;
+
+    // reset the in_seq if this is a hard reset from peer,
+    // otherwise we respect our original connection's value
+    in_seq = is_reset_from_peer ? 0 : existing->in_seq;
     in_seq_acked = in_seq;
 
     // steal outgoing queue and out_seq
