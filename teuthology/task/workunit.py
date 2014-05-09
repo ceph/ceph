@@ -170,7 +170,7 @@ def _make_scratch_dir(ctx, role, subdir):
     id_ = role[len(PREFIX):]
     log.debug("getting remote for {id} role {role_}".format(id=id_, role_=role))
     (remote,) = ctx.cluster.only(role).remotes.iterkeys()
-    dir_owner = remote.shortname.split('@', 1)[0]
+    dir_owner = remote.user
     mnt = os.path.join(teuthology.get_testdir(ctx), 'mnt.{id}'.format(id=id_))
     # if neither kclient nor ceph-fuse are required for a workunit,
     # mnt may not exist. Stat and create the directory if it doesn't.
