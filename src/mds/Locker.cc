@@ -166,6 +166,19 @@ void Locker::include_snap_rdlocks_wlayout(set<SimpleLock*>& rdlocks, CInode *in,
   }
 }
 
+struct MarkEventOnDestruct {
+  MDRequestRef& mdr;
+  const char* message;
+  bool mark_event;
+  MarkEventOnDestruct(MDRequestRef& _mdr,
+                      const char *_message) : mdr(_mdr),
+                          message(_message),
+                          mark_event(true) {}
+  ~MarkEventOnDestruct() {
+    if (mark_event)
+      mdr->mark_event(message);
+  }
+};
 
 /* If this function returns false, the mdr has been placed
  * on the appropriate wait list */
@@ -183,6 +196,8 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
     return true;  // at least we had better be!
   }
   dout(10) << "acquire_locks " << *mdr << dendl;
+
+  MarkEventOnDestruct marker(mdr, "failed to acquire_locks");
 
   client_t client = mdr->get_client();
 
@@ -276,6 +291,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
   map<int, set<MDSCacheObject*> > mustpin_remote;  // mds -> (object set)
   
   // can i auth pin them all now?
+  marker.message = "failed to authpin local pins";
   for (set<SimpleLock*>::iterator p = mustpin.begin();
        p != mustpin.end();
        ++p) {
@@ -329,6 +345,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 
   // request remote auth_pins
   if (!mustpin_remote.empty()) {
+    marker.message = "requesting remote authpins";
     for (map<int, set<MDSCacheObject*> >::iterator p = mustpin_remote.begin();
 	 p != mustpin_remote.end();
 	 ++p) {
@@ -453,16 +470,20 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       cancel_locking(mdr.get(), &issue_set);
     }
     if (xlocks.count(*p)) {
+      marker.message = "failed to xlock, waiting";
       if (!xlock_start(*p, mdr)) 
 	goto out;
       dout(10) << " got xlock on " << **p << " " << *(*p)->get_parent() << dendl;
     } else if (need_wrlock || need_remote_wrlock) {
       if (need_remote_wrlock && !mdr->remote_wrlocks.count(*p)) {
+        marker.message = "waiting for remote wrlocks";
 	remote_wrlock_start(*p, (*remote_wrlocks)[*p], mdr);
 	goto out;
       }
       if (need_wrlock && !mdr->wrlocks.count(*p)) {
+        marker.message = "failed to wrlock, waiting";
 	if (need_remote_wrlock && !(*p)->can_wrlock(mdr->get_client())) {
+	  marker.message = "failed to wrlock, dropping remote wrlock and waiting";
 	  // can't take the wrlock because the scatter lock is gathering. need to
 	  // release the remote wrlock, so that the gathering process can finish.
 	  remote_wrlock_finish(*p, mdr->remote_wrlocks[*p], mdr.get());
@@ -474,6 +495,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	dout(10) << " got wrlock on " << **p << " " << *(*p)->get_parent() << dendl;
       }
     } else {
+      marker.message = "failed to rdlock, waiting";
       if (!rdlock_start(*p, mdr)) 
 	goto out;
       dout(10) << " got rdlock on " << **p << " " << *(*p)->get_parent() << dendl;
@@ -503,6 +525,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 
   mdr->done_locking = true;
   result = true;
+  marker.message = "acquired locks";
 
  out:
   issue_caps_set(issue_set);
