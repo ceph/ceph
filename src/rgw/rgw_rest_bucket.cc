@@ -238,17 +238,17 @@ RGWOp *RGWHandler_Bucket::op_get()
     return new RGWOp_Check_Bucket_Index;
 
   return new RGWOp_Bucket_Info;
-};
+}
 
 RGWOp *RGWHandler_Bucket::op_put()
 {
   return new RGWOp_Bucket_Link;
-};
+}
 
 RGWOp *RGWHandler_Bucket::op_post()
 {
   return new RGWOp_Bucket_Unlink;
-};
+}
 
 RGWOp *RGWHandler_Bucket::op_delete()
 {
@@ -256,5 +256,5 @@ RGWOp *RGWHandler_Bucket::op_delete()
     return new RGWOp_Object_Remove;
 
   return new RGWOp_Bucket_Remove;
-};
+}
 

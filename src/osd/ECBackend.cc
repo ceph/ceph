@@ -1095,7 +1095,7 @@ void ECBackend::filter_read_op(
       get_parent()->bless_gencontext(
 	new FinishReadOp(this, op.tid)));
   }
-};
+}
 
 void ECBackend::check_recovery_sources(const OSDMapRef osdmap)
 {
