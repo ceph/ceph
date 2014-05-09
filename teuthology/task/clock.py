@@ -1,5 +1,5 @@
 """
-Clock synchronizer 
+Clock synchronizer
 """
 import logging
 import contextlib
@@ -53,7 +53,6 @@ def task(ctx, config):
                 'PATH=/usr/bin:/usr/sbin',
                 'ntpdc', '-p',
                 ],
-            logger=log.getChild(rem.name),
         )
 
     try:
@@ -67,7 +66,6 @@ def task(ctx, config):
                     'PATH=/usr/bin:/usr/sbin',
                     'ntpdc', '-p',
                     ],
-                logger=log.getChild(rem.name),
                 )
 
 
@@ -75,7 +73,7 @@ def task(ctx, config):
 def check(ctx, config):
     """
     Run ntpdc at the start and the end of the task.
-   
+
     :param ctx: Context
     :param config: Configuration
     """
@@ -86,7 +84,6 @@ def check(ctx, config):
                 'PATH=/usr/bin:/usr/sbin',
                 'ntpdc', '-p',
                 ],
-            logger=log.getChild(rem.name),
             )
 
     try:
@@ -100,5 +97,4 @@ def check(ctx, config):
                     'PATH=/usr/bin:/usr/sbin',
                     'ntpdc', '-p',
                     ],
-                logger=log.getChild(rem.name),
                 )
