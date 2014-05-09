@@ -167,7 +167,7 @@ RGWResolver::RGWResolver() {
 
 int RGWResolver::resolve_cname(const string& hostname, string& cname, bool *found) {
   return resolver->resolve_cname(hostname, cname, found);
-};
+}
 
 RGWResolver *rgw_resolver;
 

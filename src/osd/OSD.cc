@@ -5032,7 +5032,7 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
     s->put();
   }
   return true;
-};
+}
 
 void OSD::do_waiters()
 {

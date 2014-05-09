@@ -1013,7 +1013,7 @@ int RGWPutObjProcessor_Plain::prepare(RGWRados *store, void *obj_ctx)
   obj.init(bucket, obj_str);
 
   return 0;
-};
+}
 
 int RGWPutObjProcessor_Plain::handle_data(bufferlist& bl, off_t _ofs, void **phandle)
 {
@@ -1202,7 +1202,7 @@ int RGWPutObjProcessor_Atomic::prepare_next_part(off_t ofs) {
   add_obj(cur_obj);
 
   return 0;
-};
+}
 
 int RGWPutObjProcessor_Atomic::complete_parts()
 {

@@ -736,14 +736,14 @@ public:
   virtual void update_stats(const string& user, rgw_bucket& bucket, int obj_delta, uint64_t added_bytes, uint64_t removed_bytes) {
     bucket_stats_cache.adjust_stats(user, bucket, obj_delta, added_bytes, removed_bytes);
     user_stats_cache.adjust_stats(user, bucket, obj_delta, added_bytes, removed_bytes);
-  };
+  }
 };
 
 
 RGWQuotaHandler *RGWQuotaHandler::generate_handler(RGWRados *store, bool quota_threads)
 {
   return new RGWQuotaHandlerImpl(store, quota_threads);
-};
+}
 
 void RGWQuotaHandler::free_handler(RGWQuotaHandler *handler)
 {

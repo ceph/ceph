@@ -821,7 +821,7 @@ public:
   void *entry() {
     pprocess->run();
     return NULL;
-  };
+  }
 };
 
 class RGWProcessFrontend : public RGWFrontend {

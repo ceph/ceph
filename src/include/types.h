@@ -443,7 +443,7 @@ inline ostream& operator<<(ostream &oss, health_status_t status) {
       break;
   }
   return oss;
-};
+}
 #endif
 
 #endif

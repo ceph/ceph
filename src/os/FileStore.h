@@ -682,7 +682,7 @@ protected:
   }
 public:
   FileStoreBackend(FileStore *fs) : filestore(fs) {}
-  virtual ~FileStoreBackend() {};
+  virtual ~FileStoreBackend() {}
   virtual int detect_features() = 0;
   virtual int create_current() = 0;
   virtual bool can_checkpoint() = 0;

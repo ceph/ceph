@@ -957,6 +957,6 @@ struct MonCommand {
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(MonCommand);
+WRITE_CLASS_ENCODER(MonCommand)
 
 #endif

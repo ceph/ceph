@@ -32,12 +32,12 @@ void JSONObjIter::operator++()
 {
   if (cur != last)
     ++cur;
-};
+}
 
 JSONObj *JSONObjIter::operator*()
 {
   return cur->second;
-};
+}
 
 // does not work, FIXME
 ostream& operator<<(ostream& out, JSONObj& obj) {

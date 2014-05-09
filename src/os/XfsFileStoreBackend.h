@@ -25,7 +25,7 @@ private:
   int set_extsize(int fd, unsigned int val);
 public:
   XfsFileStoreBackend(FileStore *fs);
-  ~XfsFileStoreBackend() {};
+  ~XfsFileStoreBackend() {}
   int detect_features();
   int set_alloc_hint(int fd, uint64_t hint);
 };
