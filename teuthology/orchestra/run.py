@@ -137,8 +137,11 @@ def copy_to_log(f, logger, loglevel=logging.INFO):
     for line in f.xreadlines():
         line = line.rstrip()
         # Second part of work-around for http://tracker.ceph.com/issues/8313
-        line = unicode(line, 'utf-8', 'replace').encode('utf-8')
-        logger.log(loglevel, line)
+        try:
+            line = unicode(line, 'utf-8', 'replace').encode('utf-8')
+            logger.log(loglevel, line)
+        except (UnicodeDecodeError, UnicodeEncodeError):
+            logger.exception("Encountered unprintable line in command output")
 
 
 def copy_and_close(src, fdst):
