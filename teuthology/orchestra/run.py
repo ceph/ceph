@@ -334,7 +334,7 @@ def run(
     g_err = None
     if stderr is not PIPE:
         if stderr is None:
-            stderr = logger.getChild(name).getChild('err')
+            stderr = logger.getChild(name).getChild('stderr')
         g_err = gevent.spawn(copy_file_to, r.stderr, stderr)
         r.stderr = stderr
     else:
@@ -344,7 +344,7 @@ def run(
     g_out = None
     if stdout is not PIPE:
         if stdout is None:
-            stdout = logger.getChild(name).getChild('out')
+            stdout = logger.getChild(name).getChild('stdout')
         g_out = gevent.spawn(copy_file_to, r.stdout, stdout)
         r.stdout = stdout
     else:
