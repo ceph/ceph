@@ -61,9 +61,9 @@ public:
     ::encode(request_ack, payload);
   }
 
-  const char *get_type_name() const { return "osd_mark_me_down"; }
+  const char *get_type_name() const { return "MOSDMarkMeDown"; }
   void print(ostream& out) const {
-    out << "osd_mark_me_down("
+    out << "MOSDMarkMeDown("
 	<< "request_ack=" << request_ack
 	<< ", target_osd=" << target_osd
 	<< ", fsid=" << fsid
