@@ -35,6 +35,7 @@ private:
   XioConnection::EntitySet conns_entity_map;
   XioPortals portals;
   DispatchStrategy* dispatch_strategy;
+  XioLoopbackConnection loop_con;
   int port_shift;
   uint32_t magic;
   uint32_t special_handling;
@@ -77,7 +78,7 @@ public:
   virtual void set_cluster_protocol(int p)
     { }
 
-  virtual int bind(const entity_addr_t& bind_addr);
+  virtual int bind(const entity_addr_t& addr);
 
   virtual int start();
 

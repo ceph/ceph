@@ -118,4 +118,23 @@ public:
 
 typedef boost::intrusive_ptr<XioConnection> XioConnectionRef;
 
+class XioLoopbackConnection : public Connection
+{
+private:
+public:
+  XioLoopbackConnection(Messenger *m) : Connection(m)
+    {
+      const entity_inst_t& m_inst = m->get_myinst();
+      peer_addr = m_inst.addr;
+      peer_type = m_inst.name.type();
+      set_features(824633720832); /* XXXX set to ours */
+    }
+  XioLoopbackConnection* get() {
+    return static_cast<XioLoopbackConnection*>(RefCountedObject::get());
+  }
+  virtual bool is_connected() { return true; }
+};
+
+typedef boost::intrusive_ptr<XioLoopbackConnection> LoopbackConnectionRef;
+
 #endif /* XIO_CONNECTION_H */
