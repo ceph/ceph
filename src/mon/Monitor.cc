@@ -133,7 +133,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 		 Messenger *m, XioMessenger *xm, MonMap *map) :
   Dispatcher(cct_),
   name(nm),
-  rank(-1), 
+  rank(-1),
   messenger(m),
   xmsgr(xm),
   con_self(m ? m->get_loopback_connection() : NULL),
