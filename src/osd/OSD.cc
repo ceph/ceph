@@ -4775,7 +4775,9 @@ void OSDService::share_map(
       dout(10) << name << " has old map " << epoch
           << " < " << osdmap->get_epoch() << dendl;
       // we know the Session is valid or we wouldn't be sending
-      *sent_epoch_p = osdmap->get_epoch();
+      if (sent_epoch_p) {
+	*sent_epoch_p = osdmap->get_epoch();
+      }
       send_incremental_map(epoch, con, osdmap);
     } else if (con->get_messenger() == osd->cluster_messenger &&
         osdmap->is_up(name.num()) &&
