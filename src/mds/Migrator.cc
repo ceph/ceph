@@ -245,14 +245,12 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
     dout(10) << "export state=locking : dropping locks and removing auth_pin" << dendl;
     it->second.state = EXPORT_CANCELLED;
     dir->auth_unpin(this);
-    dir->state_clear(CDir::STATE_EXPORTING);
     break;
   case EXPORT_DISCOVERING:
     dout(10) << "export state=discovering : canceling freeze and removing auth_pin" << dendl;
     it->second.state = EXPORT_CANCELLED;
     dir->unfreeze_tree();  // cancel the freeze
     dir->auth_unpin(this);
-    dir->state_clear(CDir::STATE_EXPORTING);
     if (notify_peer && mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer)) // tell them.
       mds->send_message_mds(new MExportDirCancel(dir->dirfrag(), it->second.tid), it->second.peer);
     break;
@@ -261,7 +259,6 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
     dout(10) << "export state=freezing : canceling freeze" << dendl;
     it->second.state = EXPORT_CANCELLED;
     dir->unfreeze_tree();  // cancel the freeze
-    dir->state_clear(CDir::STATE_EXPORTING);
     if (notify_peer && mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer)) // tell them.
       mds->send_message_mds(new MExportDirCancel(dir->dirfrag(), it->second.tid), it->second.peer);
     break;
@@ -297,7 +294,6 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
     dir->unfreeze_tree();
     cache->adjust_subtree_auth(dir, mds->get_nodeid());
     cache->try_subtree_merge(dir);  // NOTE: this may journal subtree_map as side effect
-    dir->state_clear(CDir::STATE_EXPORTING);
     if (notify_peer && mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer)) // tell them.
       mds->send_message_mds(new MExportDirCancel(dir->dirfrag(), it->second.tid), it->second.peer);
     break;
@@ -306,7 +302,6 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
     dout(10) << "export state=exporting : reversing, and unfreezing" << dendl;
     it->second.state = EXPORT_CANCELLED;
     export_reverse(dir);
-    dir->state_clear(CDir::STATE_EXPORTING);
     break;
 
   case EXPORT_LOGGINGFINISH:
@@ -323,22 +318,25 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
   if (it->second.state == EXPORT_CANCELLED) {
     // wake up any waiters
     mds->queue_waiters(it->second.waiting_for_finish);
+
+    MutationRef mut = it->second.mut;
+
+    export_state.erase(it);
+    dir->state_clear(CDir::STATE_EXPORTING);
+
+    // send pending import_maps?  (these need to go out when all exports have finished.)
+    cache->maybe_send_pending_resolves();
+
     // drop locks
     if (state == EXPORT_LOCKING || state == EXPORT_DISCOVERING) {
-      MDRequestRef mdr = ceph::static_pointer_cast<MDRequestImpl,
-						   MutationImpl>(it->second.mut);
+      MDRequestRef mdr = ceph::static_pointer_cast<MDRequestImpl, MutationImpl>(mut);
       assert(mdr);
       if (mdr->more()->waiting_on_slave.empty())
 	mds->mdcache->request_finish(mdr);
-    } else if (it->second.mut) {
-      MutationRef& mut = it->second.mut;
+    } else if (mut) {
       mds->locker->drop_locks(mut.get());
       mut->cleanup();
     }
-
-    export_state.erase(it);
-    // send pending import_maps?  (these need to go out when all exports have finished.)
-    cache->maybe_send_pending_resolves();
 
     cache->show_subtrees();
 
@@ -1802,20 +1800,13 @@ void Migrator::export_finish(CDir *dir)
   // discard delayed expires
   cache->discard_delayed_expire(dir);
 
-  // remove from exporting list, clean up state
-  dir->state_clear(CDir::STATE_EXPORTING);
-
   // queue finishers
   mds->queue_waiters(it->second.waiting_for_finish);
 
-  // unpin path
-  MutationRef& mut = it->second.mut;
-  if (mut) {
-    mds->locker->drop_locks(mut.get());
-    mut->cleanup();
-  }
-
+  MutationRef mut = it->second.mut;
+  // remove from exporting list, clean up state
   export_state.erase(it);
+  dir->state_clear(CDir::STATE_EXPORTING);
 
   cache->show_subtrees();
   audit();
@@ -1824,6 +1815,12 @@ void Migrator::export_finish(CDir *dir)
 
   // send pending import_maps?
   mds->mdcache->maybe_send_pending_resolves();
+
+  // drop locks, unpin path
+  if (mut) {
+    mds->locker->drop_locks(mut.get());
+    mut->cleanup();
+  }
   
   maybe_do_queued_export();
 }
@@ -2492,14 +2489,18 @@ void Migrator::import_reverse_final(CDir *dir)
 
   // clean up
   map<dirfrag_t, import_state_t>::iterator it = import_state.find(dir->dirfrag());
-  if (it->second.mut) {
-    mds->locker->drop_locks(it->second.mut.get());
-    it->second.mut->cleanup();
-  }
+  assert(it != import_state.end());
+
+  MutationRef mut = it->second.mut;
   import_state.erase(it);
 
   // send pending import_maps?
   mds->mdcache->maybe_send_pending_resolves();
+
+  if (mut) {
+    mds->locker->drop_locks(mut.get());
+    mut->cleanup();
+  }
 
   cache->show_subtrees();
   //audit();  // this fails, bc we munge up the subtree map during handle_import_map (resolve phase)
