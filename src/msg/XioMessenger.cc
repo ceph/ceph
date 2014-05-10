@@ -187,6 +187,7 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
     conns_lock("XioMessenger::conns_lock"),
     portals(this, nportals),
     dispatch_strategy(ds),
+    loop_con(this),
     port_shift(0),
     magic(0),
     special_handling(0)
@@ -405,11 +406,18 @@ int XioMessenger::bind(const entity_addr_t& addr)
       derr << "WARNING: need 'rdma local' config for remote use!" <<dendl;
     }
   }
-  string base_uri = xio_uri_from_entity(*a, false /* want_port */);
-  dout(4) << dout_format("XioMessenger %p bind: xio_uri %s:%d",
-	 this, base_uri.c_str(), a->get_port()) << dendl;
 
-  return portals.bind(&xio_msgr_ops, base_uri, a->get_port());
+  set_myaddr(*a);
+  entity_addr_t shift_addr = *a;
+  if (port_shift) {
+    shift_addr.set_port(shift_addr.get_port() + port_shift);
+  }
+
+  string base_uri = xio_uri_from_entity(shift_addr, false /* want_port */);
+  dout(4) << dout_format("XioMessenger %p bind: xio_uri %s:%d",
+	 this, base_uri.c_str(), shift_addr.get_port()) << dendl;
+
+  return portals.bind(&xio_msgr_ops, base_uri, shift_addr.get_port());
 } /* bind */
 
 int XioMessenger::start()
@@ -447,6 +455,12 @@ static inline XioMsg* pool_alloc_xio_msg(Message *m, XioConnection *xcon)
 
 int XioMessenger::send_message(Message *m, Connection *con)
 {
+  if (con == &loop_con) {
+    m->set_connection(con);
+    ds_dispatch(m);
+    return true;
+  }
+
   XioConnection *xcon = static_cast<XioConnection*>(con);
   int code = 0;
   bool trace_hdr = false;
@@ -550,7 +564,6 @@ int XioMessenger::send_message(Message *m, Connection *con)
 
 int XioMessenger::shutdown()
 {
-
   portals.shutdown();
   started = false;
   return 0;
@@ -558,11 +571,18 @@ int XioMessenger::shutdown()
 
 ConnectionRef XioMessenger::get_connection(const entity_inst_t& dest)
 {
+  const entity_inst_t& self_inst = get_myinst();
+  if ((&dest == &self_inst) ||
+      (dest == self_inst)) {
+    return get_loopback_connection();
+  }
+
   entity_inst_t _dest = dest;
   if (port_shift) {
     _dest.addr.set_port(
       _dest.addr.get_port() + port_shift);
   }
+
   XioConnection::EntitySet::iterator conn_iter =
     conns_entity_map.find(_dest, XioConnection::EntityComp());
   if (conn_iter != conns_entity_map.end())
@@ -604,8 +624,7 @@ ConnectionRef XioMessenger::get_connection(const entity_inst_t& dest)
 
 ConnectionRef XioMessenger::get_loopback_connection()
 {
-  abort();
-  return NULL;
+  return (loop_con.get());
 } /* get_loopback_connection */
 
 XioMessenger::~XioMessenger()
