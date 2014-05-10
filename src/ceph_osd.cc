@@ -353,17 +353,25 @@ int main(int argc, const char **argv)
   ms_hb_back_server->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   ms_hb_front_server->set_cluster_protocol(CEPH_OSD_PROTOCOL);
 
-  Messenger *ms_xio_public = new XioMessenger(g_ceph_context,
-					      entity_name_t::OSD(whoami), "xio client",
-					      getpid(),
-					      2 /* portals */,
-					      new QueueStrategy(2) /* dispatch strategy */);
+  XioMessenger *ms_xio_public = new XioMessenger(
+    g_ceph_context,
+    entity_name_t::OSD(whoami), "xio client",
+    getpid(),
+    2 /* portals */,
+    new QueueStrategy(2) /* dispatch strategy */);
 
-  Messenger *ms_xio_objecter = new XioMessenger(g_ceph_context,
-						entity_name_t::OSD(whoami), "xio objecter",
-						getpid(),
-						2 /* portals */,
-						new QueueStrategy(2) /* dispatch strategy */);
+  ms_xio_public->set_cluster_protocol(CEPH_OSD_PROTOCOL);
+  ms_xio_public->set_port_shift(111);
+
+  XioMessenger *ms_xio_objecter = new XioMessenger(
+    g_ceph_context,
+    entity_name_t::OSD(whoami), "xio objecter",
+    getpid(),
+    2 /* portals */,
+    new QueueStrategy(2) /* dispatch strategy */);
+
+  ms_xio_objecter->set_cluster_protocol(CEPH_OSD_PROTOCOL);
+  ms_xio_objecter->set_port_shift(111);
 
   cout << "starting osd." << whoami
        << " at " << ms_public->get_myaddr()
@@ -437,10 +445,7 @@ int main(int argc, const char **argv)
   if (r < 0)
     exit(1);
 
-  entity_addr_t ms_xio_public_addr = ms_public->get_myaddr();
-  ms_xio_public_addr.set_port(
-    ms_xio_public_addr.get_port() + 111 /* XXXX shift */);
-  r = ms_xio_public->bind(ms_xio_public_addr);
+  r = ms_xio_public->bind(ms_public->get_myaddr());
   if (r < 0)
     exit(1);
 
@@ -465,10 +470,7 @@ int main(int argc, const char **argv)
 
   ms_objecter->bind(g_conf->public_addr);
 
-  entity_addr_t ms_xio_objecter_addr = ms_objecter->get_myaddr();
-  ms_xio_objecter_addr.set_port(
-    ms_xio_objecter_addr.get_port() + 111 /* XXXX shift */);
-  r = ms_xio_objecter->bind(ms_xio_objecter_addr);
+  r = ms_xio_objecter->bind(ms_objecter->get_myaddr());
   if (r < 0)
     exit(1);
 
