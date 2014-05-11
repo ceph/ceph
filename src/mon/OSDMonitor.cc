@@ -1884,6 +1884,11 @@ void OSDMonitor::tick()
 	    pending_inc.new_state[o] = 0;
 	  pending_inc.new_state[o] |= CEPH_OSD_AUTOOUT;
 
+	  // remember previous weight
+	  if (pending_inc.new_xinfo.count(o) == 0)
+	    pending_inc.new_xinfo[o] = osdmap.osd_xinfo[o];
+	  pending_inc.new_xinfo[o].old_weight = osdmap.osd_weight[o];
+
 	  do_propose = true;
 	
 	  mon->clog.info() << "osd." << o << " out (down for " << down << ")\n";
