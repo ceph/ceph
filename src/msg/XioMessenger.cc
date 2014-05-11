@@ -21,6 +21,8 @@
 
 #include "XioMsg.h"
 #include "XioMessenger.h"
+#include "common/address_helper.h"
+
 #define dout_subsys ceph_subsys_xio
 
 Mutex mtx("XioMessenger Package Lock");
@@ -264,7 +266,14 @@ int XioMessenger::session_event(struct xio_session *session,
   switch (event_data->event) {
   case XIO_SESSION_NEW_CONNECTION_EVENT:
   {
-    xcon = new XioConnection(this, XioConnection::PASSIVE, entity_inst_t());
+    struct xio_session_attr s_attr;
+    entity_inst_t s_inst;
+
+    (void) xio_query_session(session, &s_attr, XIO_SESSION_ATTR_URI);
+    string s_uri(s_attr.uri, s_attr.uri_len);
+    (void) entity_addr_from_url(&s_inst.addr, s_uri.c_str());
+
+    xcon = new XioConnection(this, XioConnection::PASSIVE, s_inst);
     xcon->session = session;
 
     struct xio_connection *conn = event_data->conn;
@@ -408,6 +417,7 @@ int XioMessenger::bind(const entity_addr_t& addr)
   }
 
   set_myaddr(*a);
+
   entity_addr_t shift_addr = *a;
   if (port_shift) {
     shift_addr.set_port(shift_addr.get_port() + port_shift);
@@ -457,6 +467,7 @@ int XioMessenger::send_message(Message *m, Connection *con)
 {
   if (con == &loop_con) {
     m->set_connection(con);
+    m->set_src(get_myinst().name);
     ds_dispatch(m);
     return true;
   }
