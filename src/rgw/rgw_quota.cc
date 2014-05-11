@@ -451,9 +451,6 @@ class RGWUserStatsCache : public RGWQuotaCache<string> {
     void *entry() {
       ldout(cct, 20) << "UserSyncThread: start" << dendl;
       do {
-
-        string key = "user";
-
         int ret = stats->sync_all_users();
         if (ret < 0) {
           ldout(cct, 0) << "ERROR: sync_all_users() returned ret=" << ret << dendl;
