@@ -30,13 +30,13 @@ int entity_addr_from_url(entity_addr_t *addr /* out */, const char *url)
 	struct addrinfo hints;
 	struct addrinfo *res;
 
-	regex expr("tcp://([^:]*):([\\d]+)");
+	regex expr("(tcp|rdma)://([^:]*):([\\d]+)");
 	cmatch m;
 
 	if (regex_match(url, m, expr)) {
 		int error;
-		string host(m[1].first, m[1].second);
-		string port(m[2].first, m[2].second);
+		string host(m[2].first, m[2].second);
+		string port(m[3].first, m[3].second);
 		memset(&hints, 0, sizeof(hints));
 		hints.ai_family = PF_UNSPEC;
 		error = getaddrinfo(host.c_str(), NULL, &hints, &res);

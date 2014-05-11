@@ -61,11 +61,11 @@ void print_ceph_msg(Message *m)
 }
 
 XioConnection::XioConnection(XioMessenger *m, XioConnection::type _type,
-			     const entity_inst_t& peer) :
+			     const entity_inst_t& _peer) :
   Connection(m),
   xio_conn_type(_type),
   portal(m->default_portal()),
-  peer(peer),
+  peer(_peer),
   session(NULL),
   conn(NULL),
   magic(m->get_magic()),
@@ -74,6 +74,7 @@ XioConnection::XioConnection(XioMessenger *m, XioConnection::type _type,
   pthread_spin_init(&sp, PTHREAD_PROCESS_PRIVATE);
   peer_addr = peer.addr;
   peer_type = peer.name.type();
+  set_peer_addr(peer.addr);
 
   /* XXXX fake features, aieee! */
   set_features(68719476735);

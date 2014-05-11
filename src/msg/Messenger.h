@@ -173,7 +173,7 @@ protected:
   /**
    * set messenger's address
    */
-  void set_myaddr(const entity_addr_t& a) { my_inst.addr = a; }
+  virtual void set_myaddr(const entity_addr_t& a) { my_inst.addr = a; }
 public:
   /**
    * Retrieve the Messenger's name.
@@ -580,14 +580,17 @@ public:
    *  one reference to it.
    */
   void ms_deliver_dispatch(Message *m) {
+
+    /* XXX delete me */
+    ConnectionRef con = m->get_connection();
+    std::cout << "ms_deliver_dispatch con " << con << " " <<
+      typeid(*con).name() << " has peer_addr " << con->get_peer_addr()
+	      << std::endl;
+
     m->set_dispatch_stamp(ceph_clock_now(cct));
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
 	 ++p) {
-      /* XXXX kill me */
-      if (m->get_type() == 41) {
-	cout << "ms_deliver_dispatch: " << *m << " on " << *p << std::endl;
-      }
       if ((*p)->ms_dispatch(m))
 	return;
     }

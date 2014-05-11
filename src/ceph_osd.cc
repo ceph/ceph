@@ -373,6 +373,16 @@ int main(int argc, const char **argv)
   ms_xio_objecter->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   ms_xio_objecter->set_port_shift(111);
 
+  XioMessenger *ms_xio_hb = new XioMessenger(
+    g_ceph_context,
+    entity_name_t::OSD(whoami), "xio objecter",
+    getpid(),
+    2 /* portals */,
+    new QueueStrategy(2) /* dispatch strategy */);
+
+  ms_xio_hb->set_cluster_protocol(CEPH_OSD_PROTOCOL);
+  ms_xio_hb->set_port_shift(111);
+
   cout << "starting osd." << whoami
        << " at " << ms_public->get_myaddr()
        << " osd_data " << g_conf->osd_data
@@ -388,7 +398,7 @@ int main(int argc, const char **argv)
 		 g_conf->osd_client_message_cap));
 
   uint64_t supported =
-    CEPH_FEATURE_UID | 
+    CEPH_FEATURE_UID |
     CEPH_FEATURE_NOSRCADDR |
     CEPH_FEATURE_PGID64 |
     CEPH_FEATURE_MSG_AUTH |
@@ -435,6 +445,8 @@ int main(int argc, const char **argv)
 				Messenger::Policy::stateless_server(0, 0));
   ms_hb_front_server->set_policy(entity_name_t::TYPE_OSD,
 				 Messenger::Policy::stateless_server(0, 0));
+  ms_xio_hb->set_policy(entity_name_t::TYPE_OSD,
+			Messenger::Policy::stateless_server(0, 0));
 
   ms_objecter->set_default_policy(Messenger::Policy::lossy_client(0, CEPH_FEATURE_OSDREPLYMUX));
 
@@ -474,6 +486,10 @@ int main(int argc, const char **argv)
   if (r < 0)
     exit(1);
 
+  r = ms_xio_hb->bind(hb_back_addr);
+  if (r < 0)
+    exit(1);
+
   // Set up crypto, daemonize, etc.
   global_init_daemonize(g_ceph_context, 0);
   common_init_finish(g_ceph_context);
@@ -492,19 +508,37 @@ int main(int argc, const char **argv)
     return -1;
   global_init_chdir(g_ceph_context);
 
-  osd = new OSD(g_ceph_context,
-		store,
-		whoami,
-		ms_cluster,
-		ms_public,
-		ms_xio_public,
-		ms_hbclient,
-		ms_hb_front_server,
-		ms_hb_back_server,
-		ms_objecter,
-		ms_xio_objecter,
-		&mc,
-		g_conf->osd_data, g_conf->osd_journal);
+  if (g_conf->cluster_rdma) {
+    osd = new OSD(g_ceph_context,
+		  store,
+		  whoami,
+		  ms_cluster,
+		  ms_xio_public,
+		  ms_xio_public,
+		  ms_xio_hb,
+		  ms_xio_hb,
+		  ms_xio_hb,
+		  ms_xio_objecter,
+		  ms_xio_objecter,
+		  &mc,
+		  g_conf->osd_data,
+		  g_conf->osd_journal);
+  } else {
+    osd = new OSD(g_ceph_context,
+		  store,
+		  whoami,
+		  ms_cluster,
+		  ms_public,
+		  ms_xio_public,
+		  ms_hbclient,
+		  ms_hb_front_server,
+		  ms_hb_back_server,
+		  ms_objecter,
+		  ms_xio_objecter,
+		  &mc,
+		  g_conf->osd_data,
+		  g_conf->osd_journal);
+  }
 
   int err = osd->pre_init();
   if (err < 0) {

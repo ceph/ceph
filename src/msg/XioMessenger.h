@@ -51,6 +51,11 @@ public:
 
   XioPortal* default_portal() { return portals.get_portal0(); }
 
+  virtual void set_myaddr(const entity_addr_t& a) {
+    Messenger::set_myaddr(a);
+    loop_con.set_peer_addr(a);
+  }
+
   uint32_t get_magic() { return magic; }
   void set_magic(int _magic) { magic = _magic; }
   uint32_t get_special_handling() { return special_handling; }

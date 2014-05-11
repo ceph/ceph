@@ -309,6 +309,7 @@ public:
   void set_header(const ceph_msg_header &e) { header = e; }
   void set_footer(const ceph_msg_footer &e) { footer = e; }
   ceph_msg_footer &get_footer() { return footer; }
+  void set_src(const entity_name_t& src) { header.src = src; }
 
   uint32_t get_magic() { return magic; }
   void set_magic(int _magic) { magic = _magic; }
