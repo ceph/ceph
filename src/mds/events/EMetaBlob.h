@@ -74,8 +74,6 @@ public:
     typedef map<snapid_t, old_inode_t> old_inodes_t;
     old_inodes_t old_inodes;
 
-    bufferlist _enc;
-
     fullbit(const fullbit& o);
     const fullbit& operator=(const fullbit& o);
 
@@ -84,26 +82,16 @@ public:
 	    const map<string,bufferptr> &xa, const string& sym,
 	    const bufferlist &sbl, __u8 st,
 	    const old_inodes_t *oi = NULL) :
-      //dn(d), dnfirst(df), dnlast(dl), dnv(v), 
-      //inode(i), dirfragtree(dft), xattrs(xa), symlink(sym), snapbl(sbl), dirty(dr) 
-      _enc(1024)
+      dn(d), dnfirst(df), dnlast(dl), dnv(v), inode(i), xattrs(xa), state(st)
     {
-      ::encode(d, _enc);
-      ::encode(df, _enc);
-      ::encode(dl, _enc);
-      ::encode(v, _enc);
-      ::encode(i, _enc);
-      ::encode(xa, _enc);
       if (i.is_symlink())
-	::encode(sym, _enc);
+	symlink = sym;
       if (i.is_dir()) {
-	::encode(dft, _enc);
-	::encode(sbl, _enc);
+	dirfragtree = dft;
+	snapbl = sbl;
       }
-      ::encode(st, _enc);
-      ::encode(oi ? true : false, _enc);
       if (oi)
-	::encode(*oi, _enc);
+	old_inodes = *oi;
     }
     fullbit(bufferlist::iterator &p) {
       decode(p);
@@ -153,19 +141,8 @@ public:
     unsigned char d_type;
     bool dirty;
 
-    bufferlist _enc;
-
     remotebit(const string& d, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
-      //dn(d), dnfirst(df), dnlast(dl), dnv(v), ino(i), d_type(dt), dirty(dr) { }
-      _enc(256) {
-      ::encode(d, _enc);
-      ::encode(df, _enc);
-      ::encode(dl, _enc);
-      ::encode(v, _enc);
-      ::encode(i, _enc);
-      ::encode(dt, _enc);
-      ::encode(dr, _enc);
-    }
+      dn(d), dnfirst(df), dnlast(dl), dnv(v), ino(i), d_type(dt), dirty(dr) { }
     remotebit(bufferlist::iterator &p) { decode(p); }
     remotebit(): dnfirst(0), dnlast(0), dnv(0), ino(0),
 	d_type('\0'), dirty(false) {}
@@ -191,17 +168,8 @@ public:
     version_t dnv;
     bool dirty;
 
-    bufferlist _enc;
-
     nullbit(const string& d, snapid_t df, snapid_t dl, version_t v, bool dr) : 
-      //dn(d), dnfirst(df), dnlast(dl), dnv(v), dirty(dr) { }
-      _enc(128) {
-      ::encode(d, _enc);
-      ::encode(df, _enc);
-      ::encode(dl, _enc);
-      ::encode(v, _enc);
-      ::encode(dr, _enc);
-    }
+      dn(d), dnfirst(df), dnlast(dl), dnv(v), dirty(dr) { }
     nullbit(bufferlist::iterator &p) { decode(p); }
     nullbit(): dnfirst(0), dnlast(0), dnv(0), dirty(false) {}
 
