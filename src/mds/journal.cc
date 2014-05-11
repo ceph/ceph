@@ -314,13 +314,10 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
       dout(20) << "EMetaBlob::add_dir_context(" << dir << ") have lump " << dir->dirfrag() << dendl;
       break;
     }
-      
+
     // stop at root/stray
     CInode *diri = dir->get_inode();
     CDentry *parent = diri->get_projected_parent_dn();
-
-    if (!parent)
-      break;
 
     if (mode == TO_AUTH_SUBTREE_ROOT) {
       // subtree root?
@@ -354,6 +351,9 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
 	maybenot = true;
       }
     }
+
+    if (!parent)
+      break;
 
     if (maybenot) {
       dout(25) << "EMetaBlob::add_dir_context(" << dir << ")      maybe " << *parent << dendl;
