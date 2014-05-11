@@ -3875,7 +3875,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   EUpdate *le = new EUpdate(mds->mdlog, "scatter_writebehind");
   mds->mdlog->start_entry(le);
 
-  mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
+  mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
   mdcache->journal_dirty_inode(mut.get(), &le->metablob, in);
   
   in->finish_scatter_gather_update_accounted(lock->get_type(), mut, &le->metablob);
