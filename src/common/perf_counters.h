@@ -111,14 +111,34 @@ private:
 
   /** Represents a PerfCounters data element. */
   struct perf_counter_data_any_d {
-    perf_counter_data_any_d();
+    perf_counter_data_any_d()
+      : name(NULL),
+	type(PERFCOUNTER_NONE),
+	u64(0),
+	avgcount(0)
+    {}
+    perf_counter_data_any_d(const perf_counter_data_any_d& other)
+      : name(other.name),
+	type(other.type),
+	u64(other.u64.read()),
+	avgcount(other.avgcount.read())
+    {}
+
     void write_schema_json(char *buf, size_t buf_sz) const;
     void  write_json(char *buf, size_t buf_sz) const;
 
     const char *name;
     enum perfcounter_type_d type;
-    uint64_t u64;
-    uint64_t avgcount;
+    atomic64_t u64;
+    atomic64_t avgcount;
+
+    perf_counter_data_any_d& operator=(const perf_counter_data_any_d& other) {
+      name = other.name;
+      type = other.type;
+      u64.set(other.u64.read());
+      avgcount.set(other.avgcount.read());
+      return *this;
+    }
   };
   typedef std::vector<perf_counter_data_any_d> perf_counter_data_vec_t;
 
