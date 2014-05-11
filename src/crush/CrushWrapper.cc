@@ -653,6 +653,33 @@ int CrushWrapper::adjust_item_weight(CephContext *cct, int id, int weight)
   return changed;
 }
 
+int CrushWrapper::adjust_subtree_weight(CephContext *cct, int id, int weight)
+{
+  ldout(cct, 5) << "adjust_item_weight " << id << " weight " << weight << dendl;
+  crush_bucket *b = get_bucket(id);
+  if (IS_ERR(b))
+    return PTR_ERR(b);
+  int changed = 0;
+  list<crush_bucket*> q;
+  q.push_back(b);
+  while (!q.empty()) {
+    b = q.front();
+    q.pop_front();
+    for (unsigned i=0; i<b->size; ++i) {
+      int n = b->items[i];
+      if (n >= 0) {
+	crush_bucket_adjust_item_weight(b, n, weight);
+      } else {
+	crush_bucket *sub = get_bucket(n);
+	if (IS_ERR(sub))
+	  continue;
+	q.push_back(sub);
+      }
+    }
+  }
+  return changed;
+}
+
 bool CrushWrapper::check_item_present(int id)
 {
   bool found = false;
