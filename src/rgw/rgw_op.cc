@@ -756,7 +756,7 @@ static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t 
 static int get_obj_user_manifest_iterate_cb(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs,
                                        void *param)
 {
-  RGWGetObj *op = (RGWGetObj *)param;
+  RGWGetObj *op = static_cast<RGWGetObj *>(param);
   return op->read_user_manifest_part(bucket, ent, bucket_policy, start_ofs, end_ofs);
 }
 
@@ -1522,7 +1522,7 @@ void RGWPutObj::pre_exec()
 static int put_obj_user_manifest_iterate_cb(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs,
                                        void *param)
 {
-  RGWPutObj *op = (RGWPutObj *)param;
+  RGWPutObj *op = static_cast<RGWPutObj *>(param);
   return op->user_manifest_iterate_cb(bucket, ent, bucket_policy, start_ofs, end_ofs);
 }
 
