@@ -1252,13 +1252,13 @@ void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
     tbl.define_column("ID", TextTable::LEFT, TextTable::LEFT);
     if (verbose)
       tbl.define_column("CATEGORY", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("USED", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("%%USED", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("OBJECTS", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("%%USED", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
     if (verbose) {
-      tbl.define_column("DIRTY", TextTable::LEFT, TextTable::LEFT);
-      tbl.define_column("READ", TextTable::LEFT, TextTable::LEFT);
-      tbl.define_column("WRITE", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("DIRTY", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("READ", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("WRITE", TextTable::LEFT, TextTable::RIGHT);
     }
   }
 
@@ -1335,12 +1335,12 @@ void PGMonitor::dump_fs_stats(stringstream &ss, Formatter *f, bool verbose)
     f->close_section();
   } else {
     TextTable tbl;
-    tbl.define_column("SIZE", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("AVAIL", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("RAW USED", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("%%RAW USED", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("SIZE", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("RAW USED", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("%%RAW USED", TextTable::LEFT, TextTable::RIGHT);
     if (verbose) {
-      tbl.define_column("OBJECTS", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
     }
     tbl << stringify(si_t(pg_map.osd_sum.kb*1024))
         << stringify(si_t(pg_map.osd_sum.kb_avail*1024))
