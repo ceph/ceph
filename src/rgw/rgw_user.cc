@@ -1923,11 +1923,8 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
 
   std::string old_email = old_info.user_email;
   if (!op_email.empty()) {
-    bool same_email = false;
-    same_email = (old_email.compare(op_email) == 0);
-
     // make sure we are not adding a duplicate email
-    if (!same_email) {
+    if (old_email.compare(op_email) != 0) {
       ret = rgw_get_user_info_by_email(store, op_email, duplicate_check);
       if (ret >= 0 && duplicate_check.user_id != user_id) {
         set_err_msg(err_msg, "cannot add duplicate email");
