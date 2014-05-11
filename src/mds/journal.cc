@@ -399,12 +399,24 @@ void EMetaBlob::update_segment(LogSegment *ls)
 
 void EMetaBlob::fullbit::encode(bufferlist& bl) const {
   ENCODE_START(6, 5, bl);
-  if (!_enc.length()) {
-    fullbit copy(dn, dnfirst, dnlast, dnv, inode, dirfragtree, xattrs, symlink,
-		 snapbl, state, &old_inodes);
-    bl.append(copy._enc);
+  ::encode(dn, bl);
+  ::encode(dnfirst, bl);
+  ::encode(dnlast, bl);
+  ::encode(dnv, bl);
+  ::encode(inode, bl);
+  ::encode(xattrs, bl);
+  if (inode.is_symlink())
+    ::encode(symlink, bl);
+  if (inode.is_dir()) {
+    ::encode(dirfragtree, bl);
+    ::encode(snapbl, bl);
+  }
+  ::encode(state, bl);
+  if (old_inodes.empty()) {
+    ::encode(false, bl);
   } else {
-    bl.append(_enc);
+    ::encode(true, bl);
+    ::encode(old_inodes, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -452,19 +464,6 @@ void EMetaBlob::fullbit::decode(bufferlist::iterator &bl) {
 
 void EMetaBlob::fullbit::dump(Formatter *f) const
 {
-  if (_enc.length() && !dn.length()) {
-    /* if our bufferlist has data but our name is empty, we
-     * haven't initialized ourselves; do so in order to print members!
-     * We use const_cast here because the whole point is we aren't
-     * fully set up and this isn't changing who we "are", just our
-     * representation.
-     */
-    EMetaBlob::fullbit *me = const_cast<EMetaBlob::fullbit*>(this);
-    bufferlist encoded;
-    encode(encoded);
-    bufferlist::iterator p = encoded.begin();
-    me->decode(p);
-  }
   f->dump_string("dentry", dn);
   f->dump_stream("snapid.first") << dnfirst;
   f->dump_stream("snapid.last") << dnlast;
@@ -558,12 +557,13 @@ void EMetaBlob::fullbit::update_inode(MDS *mds, CInode *in)
 void EMetaBlob::remotebit::encode(bufferlist& bl) const
 {
   ENCODE_START(2, 2, bl);
-  if (!_enc.length()) {
-    remotebit copy(dn, dnfirst, dnlast, dnv, ino, d_type, dirty);
-    bl.append(copy._enc);
-  } else {
-    bl.append(_enc);
-  }
+  ::encode(dn, bl);
+  ::encode(dnfirst, bl);
+  ::encode(dnlast, bl);
+  ::encode(dnv, bl);
+  ::encode(ino, bl);
+  ::encode(d_type, bl);
+  ::encode(dirty, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -582,19 +582,6 @@ void EMetaBlob::remotebit::decode(bufferlist::iterator &bl)
 
 void EMetaBlob::remotebit::dump(Formatter *f) const
 {
-  if (_enc.length() && !dn.length()) {
-    /* if our bufferlist has data but our name is empty, we
-     * haven't initialized ourselves; do so in order to print members!
-     * We use const_cast here because the whole point is we aren't
-     * fully set up and this isn't changing who we "are", just our
-     * representation.
-     */
-    EMetaBlob::remotebit *me = const_cast<EMetaBlob::remotebit*>(this);
-    bufferlist encoded;
-    encode(encoded);
-    bufferlist::iterator p = encoded.begin();
-    me->decode(p);
-  }
   f->dump_string("dentry", dn);
   f->dump_int("snapid.first", dnfirst);
   f->dump_int("snapid.last", dnlast);
@@ -636,12 +623,11 @@ generate_test_instances(list<EMetaBlob::remotebit*>& ls)
 void EMetaBlob::nullbit::encode(bufferlist& bl) const
 {
   ENCODE_START(2, 2, bl);
-  if (!_enc.length()) {
-    nullbit copy(dn, dnfirst, dnlast, dnv, dirty);
-    bl.append(copy._enc);
-  } else {
-    bl.append(_enc);
-  }
+  ::encode(dn, bl);
+  ::encode(dnfirst, bl);
+  ::encode(dnlast, bl);
+  ::encode(dnv, bl);
+  ::encode(dirty, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -658,19 +644,6 @@ void EMetaBlob::nullbit::decode(bufferlist::iterator &bl)
 
 void EMetaBlob::nullbit::dump(Formatter *f) const
 {
-  if (_enc.length() && !dn.length()) {
-    /* if our bufferlist has data but our name is empty, we
-     * haven't initialized ourselves; do so in order to print members!
-     * We use const_cast here because the whole point is we aren't
-     * fully set up and this isn't changing who we "are", just our
-     * representation.
-     */
-    EMetaBlob::nullbit *me = const_cast<EMetaBlob::nullbit*>(this);
-    bufferlist encoded;
-    encode(encoded);
-    bufferlist::iterator p = encoded.begin();
-    me->decode(p);
-  }
   f->dump_string("dentry", dn);
   f->dump_int("snapid.first", dnfirst);
   f->dump_int("snapid.last", dnlast);
