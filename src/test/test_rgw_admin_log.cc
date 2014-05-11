@@ -1000,7 +1000,7 @@ TEST(TestRGWAdmin, datalog_trim) {
   EXPECT_EQ(200U, g_test->get_resp_code());
   entries.clear();
   get_datalog_list(entries);
-  EXPECT_TRUE(entries.size() > 0);
+  EXPECT_TRUE(!entries.empty());
 
   ss.str("");
   ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time 
@@ -1017,7 +1017,7 @@ TEST(TestRGWAdmin, datalog_trim) {
   EXPECT_EQ(200U, g_test->get_resp_code());
   entries.clear();
   get_datalog_list(entries);
-  EXPECT_TRUE(entries.size() == 0);
+  EXPECT_TRUE(entries.empty());
 
   ASSERT_EQ(0, caps_rm(cname, perm));
   perm = "write";
