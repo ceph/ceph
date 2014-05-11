@@ -73,7 +73,7 @@ static int get_idata_from_key(cls_method_context_t hctx, const string &key,
   }
 
   CLS_LOG(20, "idata is %s", idata.str().c_str());
-  return 0;
+  return r;
 }
 
 
