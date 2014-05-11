@@ -380,8 +380,6 @@ static int omap_insert(cls_method_context_t hctx,
     }
   }
 
-  r = 0;
-
   bufferlist old_size;
   r = cls_cxx_getxattr(hctx, "size", &old_size);
   if (r < 0) {
