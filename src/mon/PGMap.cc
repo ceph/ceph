@@ -862,7 +862,6 @@ void PGMap::recovery_summary(Formatter *f, ostream *out,
       *out << delta_sum.stats.sum.num_objects_unfound
 	   << "/" << delta_sum.stats.sum.num_objects << " unfound (" << b << "%)";
     }
-    first = false;
   }
 }
 
