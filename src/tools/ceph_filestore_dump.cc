@@ -598,10 +598,9 @@ int export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
     return ret;
 
   uint64_t offset = 0;
-  bufferlist rawdatabl, databl;
+  bufferlist rawdatabl;
   while(total > 0) {
     rawdatabl.clear();
-    databl.clear();
     mysize_t len = max_read;
     if (len > total)
       len = total;
@@ -637,7 +636,6 @@ int export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
   }
 
   //Handle omap information
-  databl.clear();
   bufferlist hdrbuf;
   map<string, bufferlist> out;
   ret = store->omap_get(cid, obj, &hdrbuf, &out);
