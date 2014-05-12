@@ -9353,7 +9353,10 @@ void MDCache::snaprealm_create(MDRequestRef& mdr, CInode *in)
   journal_cow_inode(mut, &le->metablob, in);
   le->metablob.add_primary_dentry(in->get_projected_parent_dn(), in, true);
 
-  mds->mdlog->submit_entry(le, new C_MDC_snaprealm_create_finish(this, mdr, mut, in));
+  mds->server->submit_mdlog_entry(le,
+                                  new C_MDC_snaprealm_create_finish(this, mdr,
+                                                                    mut, in),
+                                  mdr, __func__);
   mds->mdlog->flush();
 }
 
@@ -11654,7 +11657,8 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
   */
 
   add_uncommitted_fragment(basedirfrag, info.bits, le->orig_frags, mdr->ls);
-  mds->mdlog->submit_entry(le, new C_MDC_FragmentPrep(this, mdr));
+  mds->server->submit_mdlog_entry(le, new C_MDC_FragmentPrep(this, mdr),
+                                  mdr, __func__);
   mds->mdlog->flush();
 }
 
