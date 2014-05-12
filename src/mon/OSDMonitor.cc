@@ -5077,8 +5077,10 @@ done:
       goto reply;
     }
     // go
-    pending_inc.get_new_pool(pool_id, p)->read_tier = overlaypool_id;
-    pending_inc.get_new_pool(pool_id, p)->write_tier = overlaypool_id;
+    pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
+    np->read_tier = overlaypool_id;
+    np->write_tier = overlaypool_id;
+    np->last_force_op_resend = pending_inc.epoch;
     ss << "overlay for '" << poolstr << "' is now (or already was) '" << overlaypoolstr << "'";
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
 					      get_last_committed() + 1));
@@ -5100,8 +5102,10 @@ done:
       goto reply;
     }
     // go
-    pending_inc.get_new_pool(pool_id, p)->clear_read_tier();
-    pending_inc.get_new_pool(pool_id, p)->clear_write_tier();
+    pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
+    np->clear_read_tier();
+    np->clear_write_tier();
+    np->last_force_op_resend = pending_inc.epoch;
     ss << "there is now (or already was) no overlay for '" << poolstr << "'";
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
 					      get_last_committed() + 1));
