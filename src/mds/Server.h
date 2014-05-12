@@ -103,6 +103,8 @@ public:
 
   void journal_and_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn,
 			 LogEvent *le, Context *fin);
+  void submit_mdlog_entry(LogEvent *le, Context *fin,
+                          MDRequestRef& mdr, const char *evt);
   void dispatch_client_request(MDRequestRef& mdr);
   void early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);
   void reply_request(MDRequestRef& mdr, int r = 0, CInode *tracei = 0, CDentry *tracedn = 0);
