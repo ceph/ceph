@@ -3576,10 +3576,13 @@ void Monitor::handle_get_version(MMonGetVersion *m)
       svc->wait_for_readable(new C_RetryMessage(this, m));
       goto out;
     }
+
     MMonGetVersionReply *reply = new MMonGetVersionReply();
     reply->handle = m->handle;
     reply->version = svc->get_last_committed();
     reply->oldest_version = svc->get_first_committed();
+    reply->set_tid(m->get_tid());
+
     messenger->send_message(reply, m->get_source_inst());
   }
 
