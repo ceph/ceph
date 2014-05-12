@@ -1326,6 +1326,7 @@ public:
     string *prs;
     int target_osd;
     pg_t target_pg;
+    int osd; /* calculated osd for sending request */
     epoch_t map_dne_bound;
     int map_check_error;           // error to return if map check fails
     const char *map_check_error_str;
@@ -1334,7 +1335,7 @@ public:
 
     CommandOp()
       : session(NULL),
-	tid(0), poutbl(NULL), prs(NULL), target_osd(-1),
+	tid(0), poutbl(NULL), prs(NULL), target_osd(-1), osd(-1),
 	map_dne_bound(0),
 	map_check_error(0),
 	map_check_error_str(NULL),
@@ -1342,7 +1343,8 @@ public:
   };
 
   int submit_command(CommandOp *c, ceph_tid_t *ptid);
-  int _recalc_command_target(CommandOp *c);
+  int _calc_command_target(CommandOp *c);
+  void _assign_command_session(CommandOp *c);
   void _send_command(CommandOp *c);
   int command_op_cancel(OSDSession *s, ceph_tid_t tid, int r);
   void _finish_command(CommandOp *c, int r, string rs);
@@ -1366,6 +1368,7 @@ public:
     version_t *pobjver;
 
     bool registered;
+    bool canceled;
     Context *on_reg_ack, *on_reg_commit;
 
     OSDSession *session;
@@ -1378,6 +1381,7 @@ public:
 		 snap(CEPH_NOSNAP),
 		 poutbl(NULL), pobjver(NULL),
 		 registered(false),
+		 canceled(false),
 		 on_reg_ack(NULL), on_reg_commit(NULL),
 		 session(NULL),
 		 register_tid(0),
@@ -1430,7 +1434,7 @@ public:
   // -- osd sessions --
   struct OSDSession : public RefCountedObject {
     RWLock lock;
-    Mutex completion_lock;
+    Mutex **completion_locks;
 
     // pending ops
     map<ceph_tid_t,Op*>            ops;
@@ -1439,11 +1443,27 @@ public:
 
     int osd;
     int incarnation;
+    int num_locks;
     ConnectionRef con;
 
-    OSDSession(int o) : lock("OSDSession"), completion_lock("OSDSession::completion_lock"), osd(o), incarnation(0), con(NULL) {}
+    OSDSession(CephContext *cct, int o) : lock("OSDSession"), osd(o), incarnation(0), con(NULL) {
+      num_locks = cct->_conf->objecter_completion_locks_per_session;
+      completion_locks = new Mutex *[num_locks];
+      for (int i = 0; i < num_locks; i++) {
+        completion_locks[i] = new Mutex("OSDSession::completion_lock");
+      }
+    }
+
+    ~OSDSession() {
+      for (int i = 0; i < num_locks; i++) {
+        delete completion_locks[i];
+      }
+      delete[] completion_locks;
+    }
 
     bool is_homeless() { return (osd == -1); }
+
+    Mutex *get_lock(object_t& oid);
   };
   map<int,OSDSession*> osd_sessions;
 
@@ -1494,12 +1514,11 @@ public:
 		   RWLock::Context& lc);
   void _session_op_remove(Op *op);
   void _session_linger_op_remove(LingerOp *info);
+  void _session_command_op_remove(CommandOp *op);
   void _session_op_assign(Op *op, OSDSession *s);
   int _get_osd_session(int osd, RWLock::Context& lc, OSDSession **psession);
   int _assign_op_target_session(Op *op, RWLock::Context& lc, bool src_session_locked, bool dst_session_locked);
   int _get_op_target_session(Op *op, RWLock::Context& lc, OSDSession **psession);
-  void _session_op_validate(Op *op, RWLock::Context& lc, bool session_locked);
-  int _recalc_op_target(Op *op, RWLock::Context& lc, bool session_locked = false);
   int _recalc_linger_op_target(LingerOp *op, RWLock::Context& lc);
 
   void _linger_submit(LingerOp *info);
@@ -1507,10 +1526,10 @@ public:
   void _linger_ack(LingerOp *info, int r);
   void _linger_commit(LingerOp *info, int r);
 
-  void _check_op_pool_dne(Op *op);
+  void _check_op_pool_dne(Op *op, bool session_locked);
   void _send_op_map_check(Op *op);
   void _op_cancel_map_check(Op *op);
-  void _check_linger_pool_dne(LingerOp *op);
+  void _check_linger_pool_dne(LingerOp *op, bool *need_unregister);
   void _send_linger_map_check(LingerOp *op);
   void _linger_cancel_map_check(LingerOp *op);
   void _check_command_map_dne(CommandOp *op);
@@ -1574,7 +1593,7 @@ public:
     logger(NULL), tick_event(NULL),
     m_request_state_hook(NULL),
     num_homeless_ops(0),
-    homeless_session(-1),
+    homeless_session(cct, -1),
     mon_timeout(mon_timeout),
     osd_timeout(osd_timeout),
     op_throttle_bytes(cct, "objecter_bytes", cct->_conf->objecter_inflight_op_bytes),
@@ -1771,6 +1790,7 @@ public:
 		    Context *onack,
 		    version_t *objver);
   void unregister_linger(uint64_t linger_id);
+  void _unregister_linger(uint64_t linger_id);
 
   /**
    * set up initial ops in the op vector, and allocate a final op slot.
