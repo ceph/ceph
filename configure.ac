@@ -392,7 +392,7 @@ if test "x$enable_cephfs_java" = "xyes"; then
 	# setup defaults for Debian default-jdk package (without --with-jdk-dir)
 	AS_IF([test -z "$with_jdk_dir"], [
 		   # This works with Debian's and CentOS' default-jdk package
-       for dir in '/usr/lib/jvm/default-java/' '/usr/lib/jvm/java/' ; do
+       for dir in '/usr/lib/jvm/default-java/' '/usr/lib/jvm/java/' '/usr/lib/jvm/java-gcj/'; do
           # only test if a suitable path has not yet been found
           AS_IF([test "$EXTRA_JDK_BIN_DIR" == ""], [
 		          AS_IF([test -x "$javac_prog"], [
