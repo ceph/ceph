@@ -4,7 +4,12 @@ Connection utilities
 import base64
 import paramiko
 import os
+import logging
+
 from ..config import config
+from ..contextutil import safe_while
+
+log = logging.getLogger(__name__)
 
 
 def split_user(user_at_host):
@@ -85,7 +90,15 @@ def connect(user_at_host, host_key=None, keep_alive=False,
             if opt_name in opts:
                 connect_args[arg_name] = opts[opt_name]
 
+    log.info(connect_args)
+
     # just let the exceptions bubble up to caller
-    ssh.connect(**connect_args)
+    with safe_while(sleep=1, action='connect to ' + host) as proceed:
+        while proceed():
+            try:
+                ssh.connect(**connect_args)
+                break
+            except paramiko.AuthenticationException:
+                log.exception("Error connecting to {host}".format(host=host))
     ssh.get_transport().set_keepalive(keep_alive)
     return ssh

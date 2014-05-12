@@ -1,13 +1,15 @@
-from teuthology import config
-
 import fudge
 
+from teuthology import config
 from .util import assert_raises
-
 from .. import connection
 
 
 class TestConnection(object):
+    def setup(self):
+        import time
+        time.sleep = lambda s: True
+
     def clear_config(self):
         config.config.teuthology_yaml = ''
         config.config.load_files()
