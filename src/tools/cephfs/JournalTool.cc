@@ -232,7 +232,7 @@ int JournalTool::main_header(std::vector<const char*> &argv)
     dout(4) << "Writing object..." << dendl;
     bufferlist header_bl;
     ::encode(*(js.header), header_bl);
-    io.write_full(JournalScanner::obj_name(0, rank), header_bl);
+    io.write_full(js.obj_name(0), header_bl);
     dout(4) << "Write complete." << dendl;
     std::cout << "Successfully updated header." << std::endl;
   } else {
@@ -341,7 +341,7 @@ int JournalTool::main_event(std::vector<const char*> &argv)
     if (filter.get_range(start, end)) {
       // Special case for range filter: erase a numeric range in the log
       uint64_t range = end - start;
-      int r = erase_region(start, range);
+      int r = erase_region(js, start, range);
       if (r) {
         derr << "Failed to erase region 0x" << std::hex << start << "~0x" << range << std::dec
              << ": " << cpp_strerror(r) << dendl;
@@ -352,7 +352,7 @@ int JournalTool::main_event(std::vector<const char*> &argv)
       for (JournalScanner::EventMap::iterator i = js.events.begin(); i != js.events.end(); ++i) {
         dout(4) << "Erasing offset 0x" << std::hex << i->first << std::dec << dendl;
 
-        int r = erase_region(i->first, i->second.raw_size);
+        int r = erase_region(js, i->first, i->second.raw_size);
         if (r) {
           derr << "Failed to erase event 0x" << std::hex << i->first << std::dec
                << ": " << cpp_strerror(r) << dendl;
@@ -647,7 +647,7 @@ int JournalTool::replay_offline(EMetaBlob &metablob, bool const dry_run)
  * Erase a region of the log by overwriting it with ENoOp
  *
  */
-int JournalTool::erase_region(uint64_t const pos, uint64_t const length)
+int JournalTool::erase_region(JournalScanner const &js, uint64_t const pos, uint64_t const length)
 {
   // To erase this region, we use our preamble, the encoding overhead
   // of an ENoOp, and our trailing start ptr.  Calculate how much padding
@@ -692,7 +692,7 @@ int JournalTool::erase_region(uint64_t const pos, uint64_t const length)
   uint64_t obj_offset = (pos / object_size);
   int r = 0;
   while(log_data.length()) {
-    std::string const oid = JournalScanner::obj_name(obj_offset, rank);
+    std::string const oid = js.obj_name(obj_offset);
     uint32_t offset_in_obj = write_offset % object_size;
     uint32_t write_len = min(log_data.length(), object_size - offset_in_obj);
 
