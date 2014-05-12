@@ -38,7 +38,8 @@ def main(args):
     if args['--verbose']:
         teuthology.log.setLevel(logging.DEBUG)
 
-    archive_base = os.path.abspath(os.path.expanduser(args['--archive']))
+    archive_base = os.path.abspath(os.path.expanduser(args['--archive'])) or \
+        config.archive_base
     save = not args['--no-save']
 
     log = init_logging()
