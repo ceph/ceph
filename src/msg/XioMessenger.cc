@@ -450,7 +450,7 @@ int XioMessenger::send_message(Message *m, const entity_inst_t& dest)
 {
   ConnectionRef conn = get_connection(dest);
   if (conn)
-    return send_message(m, conn.get() /* intrusive_pointer */);
+    return send_message(m, &(*conn));
   else
     return EINVAL;
 } /* send_message(Message *, const entity_inst_t&) */
@@ -632,7 +632,7 @@ ConnectionRef XioMessenger::get_connection(const entity_inst_t& dest)
     /* conn has nref == 1 */
     conns_entity_map.insert(*conn);
 
-    return conn;
+    return conn->get();
   }
 } /* get_connection */
 
