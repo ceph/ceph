@@ -189,7 +189,7 @@ class ResultsReporter(object):
 
         if not self.base_uri:
             msg = "No results_server set in {yaml}; cannot report results"
-            log.warn(msg.format(yaml=config.teuthology_yaml))
+            self.log.warn(msg.format(yaml=config.teuthology_yaml))
 
     def _make_session(self, max_retries=10):
         session = requests.Session()
