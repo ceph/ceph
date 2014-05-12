@@ -273,6 +273,9 @@ int XioMessenger::session_event(struct xio_session *session,
     string s_uri(s_attr.uri, s_attr.uri_len);
     (void) entity_addr_from_url(&s_inst.addr, s_uri.c_str());
 
+    if (port_shift)
+      s_inst.addr.set_port(s_inst.addr.get_port()-port_shift);
+
     xcon = new XioConnection(this, XioConnection::PASSIVE, s_inst);
     xcon->session = session;
 

@@ -1100,8 +1100,9 @@ void Monitor::handle_sync(MMonSync *m)
 
 void Monitor::_sync_reply_no_cookie(MMonSync *m)
 {
+  ConnectionRef con = m->get_connection();
   MMonSync *reply = new MMonSync(MMonSync::OP_NO_COOKIE, m->cookie);
-  messenger->send_message(reply, m->get_connection());
+  con->get_messenger()->send_message(reply, con);
 }
 
 void Monitor::handle_sync_get_cookie(MMonSync *m)
@@ -1151,9 +1152,10 @@ void Monitor::handle_sync_get_cookie(MMonSync *m)
   }
   dout(10) << __func__ << " will sync from version " << sp.last_committed << dendl;
 
+  ConnectionRef con = m->get_connection();
   MMonSync *reply = new MMonSync(MMonSync::OP_COOKIE, sp.cookie);
   reply->last_committed = sp.last_committed;
-  messenger->send_message(reply, m->get_connection());
+  con->get_messenger()->send_message(reply, con);
 }
 
 void Monitor::handle_sync_get_chunk(MMonSync *m)
@@ -1215,7 +1217,8 @@ void Monitor::handle_sync_get_chunk(MMonSync *m)
 
   ::encode(tx, reply->chunk_bl);
 
-  messenger->send_message(reply, m->get_connection());
+  ConnectionRef con = m->get_connection();
+  con->get_messenger()->send_message(reply, con);
 }
 
 // requester
@@ -1396,9 +1399,9 @@ void Monitor::handle_probe(MMonProbe *m)
  */
 void Monitor::handle_probe_probe(MMonProbe *m)
 {
-  dout(10) << "handle_probe_probe " << m->get_source_inst() << *m
-	   << " features " << m->get_connection()->get_features() << dendl;
   ConnectionRef con = m->get_connection();
+  dout(10) << "handle_probe_probe " << m->get_source_inst() << *m
+	   << " features " << con->get_features() << dendl;
   uint64_t missing = required_features & ~(con->get_features());
   if (missing) {
     dout(1) << " peer " << m->get_source_addr() << " missing features "
@@ -3572,8 +3575,9 @@ void Monitor::handle_get_version(MMonGetVersion *m)
 {
   dout(10) << "handle_get_version " << *m << dendl;
   PaxosService *svc = NULL;
+  ConnectionRef con = m->get_connection();
 
-  MonSession *s = static_cast<MonSession *>(m->get_connection()->get_priv());
+  MonSession *s = static_cast<MonSession *>(con->get_priv());
   if (!s) {
     dout(10) << " no session, dropping" << dendl;
     m->put();
@@ -3605,7 +3609,7 @@ void Monitor::handle_get_version(MMonGetVersion *m)
     reply->handle = m->handle;
     reply->version = svc->get_last_committed();
     reply->oldest_version = svc->get_first_committed();
-    messenger->send_message(reply, m->get_source_inst());
+    con->get_messenger()->send_message(reply, con);
   }
 
   m->put();
