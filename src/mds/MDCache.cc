@@ -8866,9 +8866,13 @@ MDRequestRef MDCache::request_start(MClientRequest *req)
   }
 
   // register new client request
-  MDRequestRef mdr(new MDRequestImpl(req->get_reqid(),
-                                     req->get_num_fwd(), req));
-  active_requests[req->get_reqid()] = mdr;
+  MDRequestImpl::Params params;
+  params.reqid = req->get_reqid();
+  params.attempt = req->get_num_fwd();
+  params.client_req = req;
+
+  MDRequestRef mdr(new MDRequestImpl(params));
+  active_requests[params.reqid] = mdr;
   dout(7) << "request_start " << *mdr << dendl;
   return mdr;
 }
@@ -8876,7 +8880,12 @@ MDRequestRef MDCache::request_start(MClientRequest *req)
 MDRequestRef MDCache::request_start_slave(metareqid_t ri, __u32 attempt, Message *m)
 {
   int by = m->get_source().num();
-  MDRequestRef mdr(new MDRequestImpl(ri, attempt, by));
+  MDRequestImpl::Params params;
+  params.reqid = ri;
+  params.attempt = attempt;
+  params.triggering_slave_req = m;
+  params.slave_to = by;
+  MDRequestRef mdr(new MDRequestImpl(params));
   assert(active_requests.count(mdr->reqid) == 0);
   active_requests[mdr->reqid] = mdr;
   dout(7) << "request_start_slave " << *mdr << " by mds." << by << dendl;
@@ -8885,10 +8894,11 @@ MDRequestRef MDCache::request_start_slave(metareqid_t ri, __u32 attempt, Message
 
 MDRequestRef MDCache::request_start_internal(int op)
 {
-  MDRequestRef mdr(new MDRequestImpl);
-  mdr->reqid.name = entity_name_t::MDS(mds->get_nodeid());
-  mdr->reqid.tid = mds->issue_tid();
-  mdr->internal_op = op;
+  MDRequestImpl::Params params;
+  params.reqid.name = entity_name_t::MDS(mds->get_nodeid());
+  params.reqid.tid = mds->issue_tid();
+  MDRequestRef mdr =
+      mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params>(params);
 
   assert(active_requests.count(mdr->reqid) == 0);
   active_requests[mdr->reqid] = mdr;
