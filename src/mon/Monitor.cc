@@ -2841,11 +2841,6 @@ bool Monitor::_ms_dispatch(Message *m)
 {
   bool ret = true;
 
-  /* XXX */
-  cout << "Monitor::ms_dispatch m->type " << m->get_type()
-       << " magic " << m->get_magic() << " shutdown "
-       << is_shutdown() << std::endl;
-
   if (is_shutdown()) {
     m->put();
     return true;
@@ -2949,44 +2944,36 @@ bool Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
   switch (m->get_type()) {
 
     case MSG_ROUTE:
-      cout << "handle_route " << *m << std::endl;
       handle_route(static_cast<MRoute*>(m));
       break;
 
     // misc
     case CEPH_MSG_MON_GET_MAP:
-      cout << "handle_mon_get_map " << *m << std::endl;
       handle_mon_get_map(static_cast<MMonGetMap*>(m));
       break;
 
     case CEPH_MSG_MON_GET_VERSION:
-      cout << "handle_get_version " << *m << std::endl;
       handle_get_version(static_cast<MMonGetVersion*>(m));
       break;
 
     case MSG_MON_COMMAND:
-      cout << "handle_command " << *m << std::endl;
       handle_command(static_cast<MMonCommand*>(m));
       break;
 
     case CEPH_MSG_MON_SUBSCRIBE:
       /* FIXME: check what's being subscribed, filter accordingly */
-      cout << "handle_subscribe " << *m << std::endl;
       handle_subscribe(static_cast<MMonSubscribe*>(m));
       break;
 
     case MSG_MON_PROBE:
-      cout << "handle_probe " << *m << std::endl;
       handle_probe(static_cast<MMonProbe*>(m));
       break;
 
     // Sync (i.e., the new slurp, but on steroids)
     case MSG_MON_SYNC:
-      cout << "handle_sync " << *m << std::endl;
       handle_sync(static_cast<MMonSync*>(m));
       break;
     case MSG_MON_SCRUB:
-      cout << "handle_scrub " << *m << std::endl;
       handle_scrub(static_cast<MMonScrub*>(m));
       break;
 

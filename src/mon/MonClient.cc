@@ -273,28 +273,22 @@ bool MonClient::ms_dispatch(Message *m)
 
   switch (m->get_type()) {
   case CEPH_MSG_MON_MAP:
-    cout << "handle_monmap " << *m << std::endl;
     handle_monmap(static_cast<MMonMap*>(m));
     break;
   case CEPH_MSG_AUTH_REPLY:
-    cout << "handle_auth " << *m << std::endl;
     handle_auth(static_cast<MAuthReply*>(m));
     break;
   case CEPH_MSG_MON_SUBSCRIBE_ACK:
-    cout << "handle_subscribe_ack " << *m << std::endl;
     handle_subscribe_ack(static_cast<MMonSubscribeAck*>(m));
     break;
   case CEPH_MSG_MON_GET_VERSION_REPLY:
-    cout << "handle_get_version_reply " << *m << std::endl;
     handle_get_version_reply(static_cast<MMonGetVersionReply*>(m));
     break;
   case MSG_MON_COMMAND_ACK:
-    cout << "handle_mon_command_ack " << *m << std::endl;
     handle_mon_command_ack(static_cast<MMonCommandAck*>(m));
     break;
   case MSG_LOGACK:
     if (log_client) {
-      cout << "handle_logack " << *m << std::endl;
       log_client->handle_log_ack(static_cast<MLogAck*>(m));
       if (more_log_pending) {
 	send_log();
@@ -346,7 +340,6 @@ void MonClient::handle_monmap(MMonMap *m)
    */
 
   if (false /* !monmap.get_addr_name(cur_con->get_peer_addr(), cur_mon) */) {
-    cout << "handle_monmap addr mismatch " << epoch << std::endl;
     ldout(cct, 10) << "mon." << cur_mon << " went away" << dendl;
     _reopen_session();  // can't find the mon we were talking to (above)
   }
