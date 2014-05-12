@@ -13,6 +13,10 @@ def run_one_task(taskname, **kwargs):
     subtask = 'task'
     if '.' in taskname:
         (submod, subtask) = taskname.rsplit('.', 1)
+
+    # Teuthology configs may refer to modules like ceph_deploy as ceph-deploy
+    submod = submod.replace('-', '_')
+
     parent = __import__('teuthology.task', globals(), locals(), [submod], 0)
     try:
         mod = getattr(parent, submod)
