@@ -46,7 +46,7 @@ def main(args):
                                log=log)
     if dead and not job:
         for run_name in run:
-            reporter.report_run(run[0], dead=True)
+            try_mark_run_dead(run[0])
     elif dead and len(run) == 1 and job:
         reporter.report_jobs(run[0], job, dead=True)
     elif len(run) == 1 and job:
