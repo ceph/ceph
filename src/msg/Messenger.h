@@ -581,11 +581,13 @@ public:
    */
   void ms_deliver_dispatch(Message *m) {
 
+#if 0
     /* XXX delete me */
     ConnectionRef con = m->get_connection();
     std::cout << "ms_deliver_dispatch con " << con << " " <<
       typeid(*con).name() << " has peer_addr " << con->get_peer_addr()
 	      << std::endl;
+#endif
 
     m->set_dispatch_stamp(ceph_clock_now(cct));
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
