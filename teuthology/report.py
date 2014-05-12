@@ -10,6 +10,8 @@ from datetime import datetime
 import teuthology
 from .config import config
 
+report_exceptions = (requests.exceptions.RequestException, socket.error)
+
 
 def init_logging():
     """
@@ -433,7 +435,7 @@ def try_push_job_info(job_config, extra_info=None):
         log.debug("Pushing job info to %s", config.results_server)
         push_job_info(run_name, job_id, job_info)
         return
-    except (requests.exceptions.RequestException, socket.error):
+    except report_exceptions:
         log.exception("Could not report results to %s",
                       config.results_server)
 
@@ -468,14 +470,14 @@ def try_delete_jobs(run_name, job_ids, delete_empty_run=True):
             try:
                 reporter.delete_run(run_name)
                 return
-            except (requests.exceptions.RequestException, socket.error):
+            except report_exceptions:
                 log.exception("Run deletion failed")
 
     def try_delete_job(job_id):
             try:
                 reporter.delete_job(run_name, job_id)
                 return
-            except (requests.exceptions.RequestException, socket.error):
+            except report_exceptions:
                 log.exception("Job deletion failed")
 
     for job_id in job_ids:
