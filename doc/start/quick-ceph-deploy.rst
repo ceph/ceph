@@ -16,6 +16,15 @@ by adding a third Ceph OSD Daemon, a Metadata Server and two more Ceph Monitors.
 .. important:: Do not call ``ceph-deploy`` with ``sudo`` or run it as ``root`` 
    if you are logged in as a different user, because it will not issue ``sudo`` 
    commands needed on the remote host.
+   
+.. topic:: Disable ``requiretty``
+
+   On some distributions (e.g., CentOS), you may receive an error while trying 
+   to execute ``ceph-deploy`` commands. If ``requiretty`` is set
+   by default, disable it by executing ``sudo visudo`` and locate the 
+   ``Default requiretty`` setting. Change it to ``Default:ceph !requiretty`` to
+   ensure that ``ceph-deploy`` can connect using the ``ceph`` user and execute 
+   commands with ``sudo``.
 
 Create a Cluster
 ================
