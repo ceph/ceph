@@ -2,6 +2,30 @@
  Release Notes
 ===============
 
+v0.80.1 Firefly
+===============
+
+This first Firefly point release fixes a few bugs, the most visible
+being a problem that prevents scrub from completing in some cases.
+
+Notable Changes
+---------------
+
+* osd: revert incomplete scrub fix (Samuel Just)
+* rgw: fix stripe calculation for manifest objects (Yehuda Sadeh)
+* rgw: improve handling, memory usage for abort reads (Yehuda Sadeh)
+* rgw: send Swift user manifest HTTP header (Yehuda Sadeh)
+* libcephfs, ceph-fuse: expose MDS session state via admin socket (Yan, Zheng)
+* osd: add simple throttle for snap trimming (Sage Weil)
+* monclient: fix possible hang from ill-timed monitor connection failure (Sage Weil)
+* osd: fix trimming of past HitSets (Sage Weil)
+* osd: fix whiteouts for non-writeback cache modes (Sage Weil)
+* osd: prevent divide by zero in tiering agent (David Zafman)
+* osd: prevent busy loop when tiering agent can do no work (David Zafman)
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.1.txt>`.
+
+
 v0.80 Firefly
 =============
 
