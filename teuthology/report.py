@@ -482,3 +482,26 @@ def try_delete_jobs(run_name, job_ids, delete_empty_run=True):
 
     for job_id in job_ids:
         try_delete_job(job_id)
+
+
+def try_mark_run_dead(run_name):
+    """
+    Using the same error checking and retry mechanism as try_push_job_info(),
+    mark any unfinished runs as dead.
+
+    :param run_name:         The name of the run.
+    """
+    log = init_logging()
+    reporter = ResultsReporter()
+    if not reporter.base_uri:
+        return
+
+    log.debug("Marking run as dead: {name}".format(name=run_name))
+    jobs = reporter.get_jobs(run_name, fields=['status'])
+    for job in jobs:
+        if job['status'] not in ['pass', 'fail', 'dead']:
+            try:
+                reporter.report_job(run_name, job['job_id'], dead=True)
+            except report_exceptions:
+                log.exception("Could not mark job as dead: {name}".format(
+                    name=run_name))
