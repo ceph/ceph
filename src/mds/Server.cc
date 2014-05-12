@@ -603,24 +603,19 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     return;
   }
 
+  if (session->is_closed()) {
+    dout(1) << " session is closed, ignoring reconnect, sending close" << dendl;
+    mds->clog.info() << "denied reconnect attempt (mds is "
+	<< ceph_mds_state_name(mds->get_state())
+	<< ") from " << m->get_source_inst() << " (session is closed)\n";
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), m->get_connection());
+    m->put();
+    return;
+  }
+
   // notify client of success with an OPEN
   mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), m->get_connection());
-
-  if (session->is_closed()) {
-    dout(10) << " session is closed, will make best effort to reconnect " 
-	     << m->get_source_inst() << dendl;
-    mds->sessionmap.set_state(session, Session::STATE_OPENING);
-    version_t pv = ++mds->sessionmap.projected;
-    uint64_t sseq = session->get_state_seq();
-    mdlog->start_submit_entry(new ESession(session->info.inst, true, pv),
-			      new C_MDS_session_finish(mds, session, sseq, true, pv));
-    mdlog->flush();
-    mds->clog.debug() << "reconnect by new " << session->info.inst
-	<< " after " << delay << "\n";
-  } else {
-    mds->clog.debug() << "reconnect by " << session->info.inst
-	<< " after " << delay << "\n";
-  }
+  mds->clog.debug() << "reconnect by " << session->info.inst << " after " << delay << "\n";
   
   // snaprealms
   for (vector<ceph_mds_snaprealm_reconnect>::iterator p = m->realms.begin();
