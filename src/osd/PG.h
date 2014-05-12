@@ -947,8 +947,7 @@ public:
       waiting_on(0), shallow_errors(0), deep_errors(0), fixed(0),
       active_rep_scrub(0),
       must_scrub(false), must_deep_scrub(false), must_repair(false),
-      classic(false),
-      finalizing(false), is_chunky(false), state(INACTIVE),
+      state(INACTIVE),
       deep(false)
     {
     }
@@ -983,12 +982,7 @@ public:
     // Map from object with errors to good peer
     map<hobject_t, pair<ScrubMap::object, pg_shard_t> > authoritative;
 
-    // classic scrub
-    bool classic;
-    bool finalizing;
-
     // chunky scrub
-    bool is_chunky;
     hobject_t start, end;
     eversion_t subset_last_update;
 
@@ -1045,9 +1039,6 @@ public:
       if (!block_writes)
 	return false;
 
-      if (!is_chunky)
-	return true;
-
       if (soid >= start && soid < end)
 	return true;
 
@@ -1056,8 +1047,6 @@ public:
 
     // clear all state
     void reset() {
-      classic = false;
-      finalizing = false;
       block_writes = false;
       active = false;
       queue_snap_trim = false;

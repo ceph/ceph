@@ -1017,12 +1017,6 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 
 void ReplicatedPG::calc_trim_to()
 {
-  if (is_scrubbing() && scrubber.classic) {
-    dout(10) << "calc_trim_to no trim during classic scrub" << dendl;
-    pg_trim_to = eversion_t();
-    return;
-  }
-
   size_t target = cct->_conf->osd_min_pg_log_entries;
   if (is_degraded() ||
       state_test(PG_STATE_RECOVERING |
@@ -5294,7 +5288,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 					       ctx->obs->oi.category);
   }
 
-  if (scrubber.active && scrubber.is_chunky) {
+  if (scrubber.active) {
     assert(soid < scrubber.start || soid >= scrubber.end);
     if (soid < scrubber.start)
       scrub_cstat.add(ctx->delta_stats, ctx->obs->oi.category);
@@ -6513,17 +6507,12 @@ void ReplicatedPG::op_applied(const eversion_t &applied_version)
   assert(applied_version <= info.last_update);
   last_update_applied = applied_version;
   if (is_primary()) {
-    if (scrubber.active && scrubber.is_chunky) {
+    if (scrubber.active) {
       if (last_update_applied == scrubber.subset_last_update) {
         osd->scrub_wq.queue(this);
       }
-    } else if (last_update_applied == info.last_update && scrubber.block_writes) {
-      dout(10) << "requeueing scrub for cleanup" << dendl;
-      scrubber.finalizing = true;
-      scrub_gather_replica_maps();
-      ++scrubber.waiting_on;
-      scrubber.waiting_on_whom.insert(pg_whoami);
-      osd->scrub_wq.queue(this);
+    } else {
+      assert(!scrubber.block_writes);
     }
   } else {
     dout(10) << "op_applied on replica on version " << applied_version << dendl;
