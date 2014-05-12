@@ -78,6 +78,7 @@ struct MutationImpl {
   list<CInode*> dirty_cow_inodes;
   list<pair<CDentry*,version_t> > dirty_cow_dentries;
 
+  // keep our default values synced with MDRequestParam's
   MutationImpl()
     : attempt(0),
       ls(0),
@@ -250,46 +251,25 @@ struct MDRequestImpl : public MutationImpl {
 
 
   // ---------------------------------------------------
-  MDRequestImpl() :
-    session(0), item_session_request(this),
-    client_request(0), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
-    alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
-    o_trunc(false),
-    getattr_caps(0),
-    slave_request(0),
-    internal_op(-1),
-    retry(0),
-    waited_for_osdmap(false),
-    _more(0) {
-    in[0] = in[1] = 0; 
-  }
-  MDRequestImpl(metareqid_t ri, __u32 attempt, MClientRequest *req) :
-    MutationImpl(ri, attempt),
-    session(0), item_session_request(this),
-    client_request(req), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
-    alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
-    o_trunc(false),
-    getattr_caps(0),
-    slave_request(0),
-    internal_op(-1),
-    retry(0),
-    waited_for_osdmap(false),
-    _more(0) {
-    in[0] = in[1] = 0; 
-  }
-  MDRequestImpl(metareqid_t ri, __u32 attempt, int by) :
-    MutationImpl(ri, attempt, by),
-    session(0), item_session_request(this),
-    client_request(0), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
-    alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
-    o_trunc(false),
-    getattr_caps(0),
-    slave_request(0),
-    internal_op(-1),
-    retry(0),
-    waited_for_osdmap(false),
-    _more(0) {
-    in[0] = in[1] = 0; 
+  struct Params {
+    metareqid_t reqid;
+    __u32 attempt;
+    MClientRequest *client_req;
+    class Message *triggering_slave_req;
+    int slave_to;
+    // keep these default values synced to MutationImpl's
+    Params() : attempt(0), client_req(NULL),
+        triggering_slave_req(NULL), slave_to(-1), internal_op(-1) {}
+  };
+  MDRequestImpl(const Params& params) :
+    MutationImpl(params.reqid, params.attempt, params.slave_to),
+    session(NULL), item_session_request(this),
+    client_request(params.client_req), straydn(NULL), snapid(CEPH_NOSNAP),
+    tracei(NULL), tracedn(NULL), alloc_ino(0), used_prealloc_ino(0), snap_caps(0),
+    did_early_reply(false), o_trunc(false), getattr_caps(0),
+    slave_request(NULL), internal_op(params.internal_op), retry(0),
+    waited_for_osdmap(false), _more(NULL) {
+    in[0] = in[1] = NULL;
   }
   ~MDRequestImpl();
   
