@@ -773,7 +773,6 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
   int key_type = op_state.get_key_type();
   bool gen_access = op_state.will_gen_access();
   bool gen_secret = op_state.will_gen_secret();
-  std::string subuser = op_state.get_subuser();
 
   if (!keys_allowed) {
     set_err_msg(err_msg, "access keys not allowed for this user");
