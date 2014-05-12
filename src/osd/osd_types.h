@@ -882,6 +882,7 @@ public:
   map<string,string> properties;  ///< OBSOLETE
   string erasure_code_profile; ///< name of the erasure code profile in OSDMap
   epoch_t last_change;      ///< most recent epoch changed, exclusing snapshot changes
+  epoch_t last_force_op_resend; ///< last epoch that forced clients to resend
   snapid_t snap_seq;        ///< seq for per-pool snapshot
   epoch_t snap_epoch;       ///< osdmap epoch of last snap
   uint64_t auid;            ///< who owns the pg
@@ -940,6 +941,7 @@ public:
       crush_ruleset(0), object_hash(0),
       pg_num(0), pgp_num(0),
       last_change(0),
+      last_force_op_resend(0),
       snap_seq(0), snap_epoch(0),
       auid(0),
       crash_replay_interval(0),
@@ -979,6 +981,7 @@ public:
     return ceph_str_hash_name(get_object_hash());
   }
   epoch_t get_last_change() const { return last_change; }
+  epoch_t get_last_force_op_resend() const { return last_force_op_resend; }
   epoch_t get_snap_epoch() const { return snap_epoch; }
   snapid_t get_snap_seq() const { return snap_seq; }
   uint64_t get_auid() const { return auid; }

@@ -6157,7 +6157,8 @@ int ReplicatedPG::start_flush(
       // nonblocking can join anything
       // blocking can only join a blocking flush
       dout(20) << __func__ << " piggybacking on existing flush " << dendl;
-      fop->dup_ops.push_back(op);
+      if (op)
+	fop->dup_ops.push_back(op);
       return -EAGAIN;   // clean up this ctx; op will retry later
     }
 

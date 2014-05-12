@@ -770,6 +770,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("pg_placement_num", get_pgp_num());
   f->dump_unsigned("crash_replay_interval", get_crash_replay_interval());
   f->dump_stream("last_change") << get_last_change();
+  f->dump_stream("last_force_op_resend") << get_last_force_op_resend();
   f->dump_unsigned("auid", get_auid());
   f->dump_string("snap_mode", is_pool_snaps_mode() ? "pool" : "selfmanaged");
   f->dump_unsigned("snap_seq", get_snap_seq());
@@ -1058,7 +1059,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   }
 
   __u8 encode_compat = 5;
-  ENCODE_START(14, encode_compat, bl);
+  ENCODE_START(15, encode_compat, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -1097,12 +1098,13 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(cache_min_flush_age, bl);
   ::encode(cache_min_evict_age, bl);
   ::encode(erasure_code_profile, bl);
+  ::encode(last_force_op_resend, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(14, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(15, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
@@ -1199,7 +1201,11 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 14) {
     ::decode(erasure_code_profile, bl);
   }
-
+  if (struct_v >= 15) {
+    ::decode(last_force_op_resend, bl);
+  } else {
+    last_force_op_resend = 0;
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
 }
@@ -1216,6 +1222,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.pg_num = 6;
   a.pgp_num = 5;
   a.last_change = 9;
+  a.last_force_op_resend = 123823;
   a.snap_seq = 10;
   a.snap_epoch = 11;
   a.auid = 12;
@@ -1264,8 +1271,11 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
       << " object_hash " << p.get_object_hash_name()
       << " pg_num " << p.get_pg_num()
       << " pgp_num " << p.get_pgp_num()
-      << " last_change " << p.get_last_change()
-      << " owner " << p.get_auid();
+      << " last_change " << p.get_last_change();
+  if (p.get_last_force_op_resend())
+    out << " lfor " << p.get_last_force_op_resend();
+  if (p.get_auid())
+    out << " owner " << p.get_auid();
   if (p.flags)
     out << " flags " << p.get_flags_string();
   if (p.crash_replay_interval)
