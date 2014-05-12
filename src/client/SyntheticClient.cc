@@ -1140,10 +1140,6 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       const char *a = t.get_string(buf, p);
       list<string> contents;
       client->getdir(a, contents);
-    } else if (strcmp(op, "getdir") == 0) {
-      const char *a = t.get_string(buf, p);
-      list<string> contents;
-      client->getdir(a, contents);
     } else if (strcmp(op, "opendir") == 0) {
       const char *a = t.get_string(buf, p);
       int64_t b = t.get_int();

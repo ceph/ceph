@@ -643,26 +643,12 @@ void MDBalancer::try_rebalance()
 
   // do my exports!
   set<CDir*> already_exporting;
-  double total_sent = 0;
-  double total_goal = 0;
 
   for (map<int,double>::iterator it = my_targets.begin();
        it != my_targets.end();
        ++it) {
-
-      /*
-	double fac = 1.0;
-	if (false && total_goal > 0 && total_sent > 0) {
-	fac = total_goal / total_sent;
-	dout(0) << " total sent is " << total_sent << " / " << total_goal << " -> fac 1/ " << fac << dendl;
-	if (fac > 1.0) fac = 1.0;
-	}
-	fac = .9 - .4 * ((float)g_conf->num_mds / 128.0);  // hack magic fixme
-      */
-
     int target = (*it).first;
     double amount = (*it).second;
-    total_goal += amount;
 
     if (amount < MIN_OFFLOAD) continue;
     if (amount / target_load < .2) continue;
@@ -708,7 +694,6 @@ void MDBalancer::try_rebalance()
       }
     }
     if (amount-have < MIN_OFFLOAD) {
-      total_sent += have;
       continue;
     }
 
@@ -735,7 +720,6 @@ void MDBalancer::try_rebalance()
       }
     if (amount-have < MIN_OFFLOAD) {
       //fudge = amount-have;
-      total_sent += have;
       continue;
     }
 
@@ -754,7 +738,6 @@ void MDBalancer::try_rebalance()
 	break;
     }
     //fudge = amount - have;
-    total_sent += have;
 
     for (list<CDir*>::iterator it = exports.begin(); it != exports.end(); ++it) {
       dout(0) << "   - exporting "

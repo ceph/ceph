@@ -770,8 +770,6 @@ int RGWObjManifest::generator::create_next(uint64_t ofs)
   if (ofs < last_ofs) /* only going forward */
     return -EINVAL;
 
-  string obj_name = manifest->prefix;
-
   uint64_t max_head_size = manifest->get_max_head_size();
 
   if (ofs <= max_head_size) {
@@ -790,7 +788,6 @@ int RGWObjManifest::generator::create_next(uint64_t ofs)
 
   last_ofs = ofs;
   manifest->set_obj_size(ofs);
-
 
   manifest->get_implicit_location(cur_part_id, cur_stripe, ofs, NULL, &cur_obj);
 

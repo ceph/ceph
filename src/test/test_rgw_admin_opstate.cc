@@ -624,7 +624,7 @@ TEST(TestRGWAdmin, opstate_set_list_delete) {
     EXPECT_TRUE((*it).object.compare(obj_1) == 0);
     EXPECT_EQ((*it).state, (uint32_t)RGWOpState::OPSTATE_COMPLETE);
 
-    it++;
+    ++it;
     EXPECT_TRUE((*it).client_id.compare(cid_2) == 0);
     EXPECT_TRUE((*it).op_id.compare(oid_2) == 0);
     EXPECT_TRUE((*it).object.compare(obj_2) == 0);
