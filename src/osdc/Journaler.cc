@@ -1167,10 +1167,15 @@ size_t JournalStream::read(bufferlist &from, bufferlist &entry, uint64_t &start_
       start_ptr = 0;
     }
   }
+
+  size_t raw_length;
   if (format >= JOURNAL_FORMAT_RESILIENT) {
+    raw_length = sizeof(entry_size) + sizeof(entry_sentinel) + entry_size + sizeof(start_ptr);
     assert(entry_sentinel == sentinel);
+  } else {
+    raw_length = sizeof(entry_size) + entry_size;
   }
-  assert(from.length() >= sizeof(entry_size) + sizeof(entry_sentinel) + entry_size + sizeof(start_ptr));
+  assert(from.length() >= raw_length);
   assert(entry_size != 0);
   
   if (format >= JOURNAL_FORMAT_RESILIENT) {
@@ -1182,11 +1187,7 @@ size_t JournalStream::read(bufferlist &from, bufferlist &entry, uint64_t &start_
     from.splice(0, sizeof(start_ptr));
   }
 
-  if (format >= JOURNAL_FORMAT_RESILIENT) {
-    return (sizeof(entry_sentinel) + sizeof(entry_size) + entry_size + sizeof(start_ptr));
-  } else {
-    return (sizeof(entry_size) + entry_size);
-  }
+  return raw_length;
 }
 
 
