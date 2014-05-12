@@ -2981,6 +2981,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       e.cap.mseq = cap->get_mseq();
       e.cap.realm = realm->inode->ino();
     } else {
+      if (cap)
+	cap->clear_new();
       e.cap.cap_id = 0;
       e.cap.caps = 0;
       e.cap.seq = 0;
