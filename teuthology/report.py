@@ -500,8 +500,10 @@ def try_mark_run_dead(run_name):
     jobs = reporter.get_jobs(run_name, fields=['status'])
     for job in jobs:
         if job['status'] not in ['pass', 'fail', 'dead']:
+            job_id = job['job_id']
             try:
+                log.info("Marking job {job_id} as dead".format(job_id=job_id))
                 reporter.report_job(run_name, job['job_id'], dead=True)
             except report_exceptions:
-                log.exception("Could not mark job as dead: {name}".format(
-                    name=run_name))
+                log.exception("Could not mark job as dead: {job_id}".format(
+                    job_id=job_id))
