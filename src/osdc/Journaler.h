@@ -143,6 +143,7 @@ public:
 	f->dump_unsigned("write_pos", write_pos);
 	f->dump_unsigned("expire_pos", expire_pos);
 	f->dump_unsigned("trimmed_pos", trimmed_pos);
+	f->dump_unsigned("stream_format", stream_format);
 	f->open_object_section("layout");
 	{
 	  f->dump_unsigned("stripe_unit", layout.fl_stripe_unit);
