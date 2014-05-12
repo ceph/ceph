@@ -35,7 +35,11 @@ class Remote(object):
     def __init__(self, name, ssh=None, shortname=None, console=None,
                  host_key=None, keep_alive=True):
         self.name = name
-        (self.user, self.hostname) = name.split('@')
+        if '@' in name:
+            (self.user, self.hostname) = name.split('@')
+        else:
+            self.user = os.getlogin()
+            self.hostname = name
         self._shortname = shortname
         self.host_key = host_key
         self.keep_alive = keep_alive
