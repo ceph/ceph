@@ -76,12 +76,16 @@ int RGWReplicaLogger::update_bound(const string& oid, const string& pool,
 }
 
 int RGWReplicaLogger::delete_bound(const string& oid, const string& pool,
-                                   const string& daemon_id)
+                                   const string& daemon_id, bool purge_all)
 {
   librados::IoCtx ioctx;
   int r = open_ioctx(ioctx, pool);
   if (r < 0) {
     return r;
+  }
+
+  if (purge_all) {
+    return ioctx.remove(oid);
   }
 
   librados::ObjectWriteOperation opw;

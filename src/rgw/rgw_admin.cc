@@ -2598,7 +2598,7 @@ next:
         return EINVAL;
       }
       RGWReplicaObjectLogger logger(store, pool_name, META_REPLICA_LOG_OBJ_PREFIX);
-      int ret = logger.delete_bound(shard_id, daemon_id);
+      int ret = logger.delete_bound(shard_id, daemon_id, false);
       if (ret < 0)
         return -ret;
     } else if (replica_log_type == ReplicaLog_Data) {
@@ -2611,7 +2611,7 @@ next:
         return EINVAL;
       }
       RGWReplicaObjectLogger logger(store, pool_name, DATA_REPLICA_LOG_OBJ_PREFIX);
-      int ret = logger.delete_bound(shard_id, daemon_id);
+      int ret = logger.delete_bound(shard_id, daemon_id, false);
       if (ret < 0)
         return -ret;
     } else if (replica_log_type == ReplicaLog_Bucket) {
@@ -2627,7 +2627,7 @@ next:
       }
 
       RGWReplicaBucketLogger logger(store);
-      ret = logger.delete_bound(bucket, shard_id, daemon_id, replicalog_index_by_instance);
+      ret = logger.delete_bound(bucket, shard_id, daemon_id, replicalog_index_by_instance, false);
       if (ret < 0)
         return -ret;
     }
