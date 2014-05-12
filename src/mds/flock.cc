@@ -209,8 +209,7 @@ void ceph_lock_state_t::adjust_locks(list<multimap<uint64_t, ceph_filelock>::ite
 {
   dout(15) << "adjust_locks" << dendl;
   bool new_lock_to_end = (0 == new_lock.length);
-  uint64_t new_lock_start = new_lock.start;
-  uint64_t new_lock_end = new_lock.start + new_lock.length - 1;
+  uint64_t new_lock_start, new_lock_end;
   uint64_t old_lock_start, old_lock_end;
   __s64 old_lock_client = 0;
   ceph_filelock *old_lock;
