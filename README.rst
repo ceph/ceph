@@ -418,6 +418,12 @@ These values are used by downburst to create the virtual machine.
 When locking a file, a downburst meta-data yaml file can be specified by using
 the downburst-conf parameter on the command line.
 
+To find the downburst executable, teuthology first checks the PATH environment
+variable.  If not defined, teuthology next checks for
+src/downburst/virtualenv/bin/downburst executables in the user's home
+directory, /home/ubuntu, and /home/teuthology.  This can all be overridden if
+the user specifies a downburst field in the user's .teuthology.yaml file.
+
 HOST KEYS:
 ----------
 

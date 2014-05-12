@@ -419,6 +419,8 @@ def _get_downburst_exec():
     Then check in ~/src, ~ubuntu/src, and ~teuthology/src.
     Return '' if no executable downburst is found.
     """
+    if config.downburst:
+        return config.downburst
     path = os.environ.get('PATH', None)
     if path:
         for p in os.environ.get('PATH', '').split(os.pathsep):
@@ -448,21 +450,10 @@ def create_if_vm(ctx, machine_name):
 
     createMe = decanonicalize_hostname(machine_name)
     with tempfile.NamedTemporaryFile() as tmp:
-        try:
-            lfile = ctx.downburst_conf
-            with open(lfile) as downb_yaml:
-                lcnfg = yaml.safe_load(downb_yaml)
-                if lcnfg.keys() == ['downburst']:
-                    lcnfg = lcnfg['downburst']
-        except (TypeError, AttributeError):
-            if hasattr(ctx, 'config') and ctx.config is not None:
-                lcnfg = ctx.config.get('downburst', dict())
-            else:
-                lcnfg = {}
-        except IOError:
-            print "Error reading %s" % lfile
-            return False
-
+        if hasattr(ctx, 'config') and ctx.config is not None:
+            lcnfg = ctx.config.get('downburst', dict())
+        else:
+            lcnfg = {}
         distro = lcnfg.get('distro', os_type.lower())
         distroversion = lcnfg.get('distroversion', os_version)
 
