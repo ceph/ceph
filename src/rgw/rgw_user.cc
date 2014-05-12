@@ -737,9 +737,6 @@ int RGWAccessKeyPool::check_op(RGWUserAdminOpState& op_state,
     return -EACCES;
   }
 
-  std::string access_key = op_state.get_access_key();
-  std::string secret_key = op_state.get_secret_key();
-
   int32_t key_type = op_state.get_key_type();
 
   // if a key type wasn't specified set it to s3
@@ -748,8 +745,9 @@ int RGWAccessKeyPool::check_op(RGWUserAdminOpState& op_state,
 
   op_state.set_key_type(key_type);
 
-  /* see if the access key or secret key was specified */
-  if (key_type == KEY_TYPE_S3 && !op_state.will_gen_access() && access_key.empty()) {
+  /* see if the access key was specified */
+  if (key_type == KEY_TYPE_S3 && !op_state.will_gen_access() && 
+      op_state.get_access_key().empty()) {
     set_err_msg(err_msg, "empty access key");
     return -EINVAL;
   }
