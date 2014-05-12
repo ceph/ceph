@@ -417,7 +417,6 @@ TEST(ConfUtils, IllegalFiles) {
   std::ostringstream warn;
   std::string illegal_conf1_f(next_tempfile(illegal_conf1));
   ConfFile cf1;
-  std::string val;
   ASSERT_EQ(cf1.parse_file(illegal_conf1_f.c_str(), &err, &warn), 0);
   ASSERT_EQ(err.size(), 1U);
 

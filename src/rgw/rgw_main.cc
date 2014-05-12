@@ -1083,10 +1083,7 @@ int main(int argc, const char **argv)
   register_async_signal_handler(SIGUSR1, handle_sigterm);
   sighandler_alrm = signal(SIGALRM, godown_alarm);
 
-  string frontend_frameworks = g_conf->rgw_frontends;
-
   list<string> frontends;
-
   get_str_list(g_conf->rgw_frontends, ",", frontends);
 
   multimap<string, RGWFrontendConfig *> fe_map;

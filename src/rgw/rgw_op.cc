@@ -756,7 +756,7 @@ static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t 
 static int get_obj_user_manifest_iterate_cb(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs,
                                        void *param)
 {
-  RGWGetObj *op = (RGWGetObj *)param;
+  RGWGetObj *op = static_cast<RGWGetObj *>(param);
   return op->read_user_manifest_part(bucket, ent, bucket_policy, start_ofs, end_ofs);
 }
 
@@ -1170,7 +1170,6 @@ void RGWCreateBucket::execute()
   bufferlist aclbl;
   bufferlist corsbl;
   bool existed;
-  int r;
   rgw_obj obj(store->zone.domain_root, s->bucket_name_str);
   obj_version objv, *pobjv = NULL;
 
@@ -1194,8 +1193,8 @@ void RGWCreateBucket::execute()
   s->bucket_owner.set_id(s->user.user_id);
   s->bucket_owner.set_name(s->user.display_name);
   if (s->bucket_exists) {
-    r = get_policy_from_attr(s->cct, store, s->obj_ctx, s->bucket_info, s->bucket_attrs,
-                             &old_policy, obj);
+    int r = get_policy_from_attr(s->cct, store, s->obj_ctx, s->bucket_info, s->bucket_attrs,
+                                 &old_policy, obj);
     if (r >= 0)  {
       if (old_policy.get_owner().get_id().compare(s->user.user_id) != 0) {
         ret = -EEXIST;
@@ -1522,7 +1521,7 @@ void RGWPutObj::pre_exec()
 static int put_obj_user_manifest_iterate_cb(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs,
                                        void *param)
 {
-  RGWPutObj *op = (RGWPutObj *)param;
+  RGWPutObj *op = static_cast<RGWPutObj *>(param);
   return op->user_manifest_iterate_cb(bucket, ent, bucket_policy, start_ofs, end_ofs);
 }
 

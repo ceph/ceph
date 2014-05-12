@@ -1183,9 +1183,9 @@ extern "C" int ceph_ll_lookup_inode(
   if (r) {
     return r;
   }
-  if (inode) {
-    assert(*inode != NULL);
-  }
+
+  assert(inode != NULL);
+  assert(*inode != NULL);
 
   // Request the parent inode, so that we can look up the name
   Inode *parent;

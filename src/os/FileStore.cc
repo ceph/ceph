@@ -3756,7 +3756,6 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
   r = _fgetattrs(**fd, inline_set, false);
   assert(!m_filestore_fail_eio || r != -EIO);
   dout(15) << "setattrs " << cid << "/" << oid << dendl;
-  r = 0;
 
   for (map<string,bufferptr>::iterator p = aset.begin();
        p != aset.end();
@@ -4090,7 +4089,6 @@ int FileStore::_collection_remove_recursive(const coll_t &cid,
 
   vector<ghobject_t> objects;
   ghobject_t max;
-  r = 0;
   while (!max.is_max()) {
     r = collection_list_partial(cid, max, 200, 300, 0, &objects, &max);
     if (r < 0)
