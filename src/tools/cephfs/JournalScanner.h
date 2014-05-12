@@ -48,6 +48,8 @@ class JournalScanner
     io(io_),
     rank(rank_),
     filter(filter_),
+    pointer_present(false),
+    pointer_valid(false),
     header_present(false),
     header_valid(false),
     header(NULL) {};
@@ -57,6 +59,8 @@ class JournalScanner
       int rank_) :
     io(io_),
     rank(rank_),
+    pointer_present(false),
+    pointer_valid(false),
     header_present(false),
     header_valid(false),
     header(NULL) {};
@@ -64,13 +68,16 @@ class JournalScanner
   ~JournalScanner();
 
   int scan(bool const full=true);
+  int scan_pointer();
   int scan_header();
   int scan_events();
   void report(std::ostream &out) const;
 
-  static std::string obj_name(uint64_t offset, int const rank);
+  std::string obj_name(uint64_t offset) const;
+  std::string obj_name(inodeno_t ino, uint64_t offset) const;
 
   // The results of the scan
+  inodeno_t ino;  // Corresponds to JournalPointer.front
   class EventRecord {
     public:
     EventRecord() : log_event(NULL), raw_size(0) {}
@@ -80,6 +87,8 @@ class JournalScanner
   };
   typedef std::map<uint64_t, EventRecord> EventMap;
   typedef std::pair<uint64_t, uint64_t> Range;
+  bool pointer_present;
+  bool pointer_valid;
   bool header_present;
   bool header_valid;
   Journaler::Header *header;

@@ -13,6 +13,7 @@
 
 
 #include "include/rados/librados.hpp"
+#include "mds/JournalPointer.h"
 
 #include "JournalScanner.h"
 
@@ -29,11 +30,19 @@ int JournalScanner::scan(bool const full)
 {
   int r = 0;
 
-  r = scan_header();
+  r = scan_pointer();
   if (r < 0) {
     return r;
   }
-  if (full) {
+
+  if (pointer_present) {
+    r = scan_header();
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  if (full && header_present) {
     r = scan_events();
     if (r < 0) {
       return r;
@@ -43,12 +52,47 @@ int JournalScanner::scan(bool const full)
   return 0;
 }
 
+
+int JournalScanner::scan_pointer()
+{
+  // Issue read
+  std::string const pointer_oid = obj_name(MDS_INO_LOG_POINTER_OFFSET + rank, 0);
+  bufferlist pointer_bl;
+  int r = io.read(pointer_oid, pointer_bl, INT_MAX, 0);
+  if (r == -ENOENT) {
+    // 'Successfully' discovered the pointer is missing.
+    derr << "Pointer " << pointer_oid << " is absent" << dendl;
+    return 0;
+  } else if (r < 0) {
+    // Error preventing us interrogating pointer
+    derr << "Pointer " << pointer_oid << " is unreadable" << dendl;
+    return r;
+  } else {
+    dout(4) << "Pointer " << pointer_oid << " is readable" << dendl;
+    pointer_present = true;
+
+    JournalPointer jp;
+    try {
+      bufferlist::iterator q = pointer_bl.begin();
+      jp.decode(q);
+    } catch(buffer::error e) {
+      derr << "Pointer " << pointer_oid << " is corrupt: " << e.what() << dendl;
+      return 0;
+    }
+
+    pointer_valid = true;
+    ino = jp.front;
+    return 0;
+  }
+}
+
+
 int JournalScanner::scan_header()
 {
   int r;
 
   bufferlist header_bl;
-  std::string header_name = obj_name(0, rank);
+  std::string header_name = obj_name(0);
   dout(4) << "JournalScanner::scan: reading header object '" << header_name << "'" << dendl;
   r = io.read(header_name, header_bl, INT_MAX, 0);
   if (r < 0) {
@@ -110,7 +154,7 @@ int JournalScanner::scan_events()
   for (uint64_t obj_offset = (read_offset / object_size); ; obj_offset++) {
     // Read this journal segment
     bufferlist this_object;
-    std::string const oid = obj_name(obj_offset, rank);
+    std::string const oid = obj_name(obj_offset);
     r = io.read(oid, this_object, INT_MAX, 0);
 
     // Handle absent journal segments
@@ -258,7 +302,10 @@ JournalScanner::~JournalScanner()
  */
 bool JournalScanner::is_healthy() const
 {
-  return (header_present && header_valid && ranges_invalid.empty() && objects_missing.empty());
+  return (pointer_present && pointer_valid
+      && header_present && header_valid
+      && ranges_invalid.empty()
+      && objects_missing.empty());
 }
 
 
@@ -272,27 +319,40 @@ bool JournalScanner::is_readable() const
 
 
 /**
- * Calculate the object name for a given offset in a particular MDS's journal
+ * Calculate the object name for a given offset
  */
-std::string JournalScanner::obj_name(uint64_t offset, int const rank)
+std::string JournalScanner::obj_name(inodeno_t ino, uint64_t offset) const
 {
-  char header_name[60];
-  snprintf(header_name, sizeof(header_name), "%llx.%08llx",
-      (unsigned long long)(MDS_INO_LOG_OFFSET + rank),
+  char name[60];
+  snprintf(name, sizeof(name), "%llx.%08llx",
+      (unsigned long long)(ino),
       (unsigned long long)offset);
-  return std::string(header_name);
+  return std::string(name);
 }
 
 
+std::string JournalScanner::obj_name(uint64_t offset) const
+{
+  return obj_name(ino, offset);
+}
+
+
+/*
+ * Write a human readable summary of the journal health
+ */
 void JournalScanner::report(std::ostream &out) const
 {
   out << "Overall journal integrity: " << (is_healthy() ? "OK" : "DAMAGED") << std::endl;
 
-  if (!header_present) {
-    out << "Header not found" << std::endl;
+  if (!pointer_present) {
+    out << "Pointer not found" << std::endl;
+  } else if (!pointer_valid) {
+    out << "Pointer could not be decoded" << std::endl;
   }
 
-  if (header_present && !header_valid) {
+  if (!header_present) {
+    out << "Header not found" << std::endl;
+  } else if (!header_valid) {
     out << "Header could not be decoded" << std::endl;
   }
 

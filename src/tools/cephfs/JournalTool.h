@@ -22,6 +22,7 @@
 #include "JournalFilter.h"
 
 class EMetaBlob;
+class JournalScanner;
 
 
 /**
@@ -57,7 +58,7 @@ class JournalTool : public MDSUtility
     int replay_offline(EMetaBlob &metablob, bool const dry_run);
 
     // Splicing
-    int erase_region(uint64_t const pos, uint64_t const length);
+    int erase_region(JournalScanner const &jp, uint64_t const pos, uint64_t const length);
 
   public:
     void usage();
