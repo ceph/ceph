@@ -44,6 +44,7 @@ using namespace std;
 enum kvstore_types {
     KV_TYPE_NONE = 0,
     KV_TYPE_LEVELDB,
+    KV_TYPE_ROCKSDB,
     KV_TYPE_OTHER
 };
 
@@ -374,7 +375,7 @@ class KeyValueStore : public ObjectStore,
                 bool update_to=false);
   ~KeyValueStore();
 
-  int _detect_backend() { kv_type = KV_TYPE_LEVELDB; return 0; }
+  int _detect_backend();
   bool test_mount_in_use();
   int version_stamp_is_valid(uint32_t *version);
   int update_version_stamp();

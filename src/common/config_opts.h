@@ -553,6 +553,8 @@ OPTION(osd_leveldb_compression, OPT_BOOL, true) // OSD's leveldb uses compressio
 OPTION(osd_leveldb_paranoid, OPT_BOOL, false) // OSD's leveldb paranoid flag
 OPTION(osd_leveldb_log, OPT_STR, "")  // enable OSD leveldb log file
 
+OPTION(osd_keyvaluedb, OPT_STR, "leveldb")
+
 // determines whether PGLog::check() compares written out log to stored log
 OPTION(osd_debug_pg_log_writeout, OPT_BOOL, false)
 
