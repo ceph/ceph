@@ -60,7 +60,7 @@ public:
       const string &prefix ///< [in] Prefix by which to remove keys
       ) = 0;
 
-    virtual ~TransactionImpl() {};
+    virtual ~TransactionImpl() {}
   };
   typedef ceph::shared_ptr< TransactionImpl > Transaction;
 

@@ -42,8 +42,6 @@
 #include "MDBalancer.h"
 #include "Migrator.h"
 
-#include "AnchorServer.h"
-#include "AnchorClient.h"
 #include "SnapServer.h"
 #include "SnapClient.h"
 
@@ -131,8 +129,6 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   inotable = new InoTable(this);
   snapserver = new SnapServer(this);
   snapclient = new SnapClient(this);
-  anchorserver = new AnchorServer(this);
-  anchorclient = new AnchorClient(this);
 
   server = new Server(this);
   locker = new Locker(this, mdcache);
@@ -172,10 +168,8 @@ MDS::~MDS() {
   if (mdlog) { delete mdlog; mdlog = NULL; }
   if (balancer) { delete balancer; balancer = NULL; }
   if (inotable) { delete inotable; inotable = NULL; }
-  if (anchorserver) { delete anchorserver; anchorserver = NULL; }
   if (snapserver) { delete snapserver; snapserver = NULL; }
   if (snapclient) { delete snapclient; snapclient = NULL; }
-  if (anchorclient) { delete anchorclient; anchorclient = NULL; }
   if (osdmap) { delete osdmap; osdmap = 0; }
   if (mdsmap) { delete mdsmap; mdsmap = 0; }
 
@@ -375,7 +369,7 @@ void MDS::create_logger()
 MDSTableClient *MDS::get_table_client(int t)
 {
   switch (t) {
-  case TABLE_ANCHOR: return anchorclient;
+  case TABLE_ANCHOR: return NULL;
   case TABLE_SNAP: return snapclient;
   default: assert(0);
   }
@@ -384,7 +378,7 @@ MDSTableClient *MDS::get_table_client(int t)
 MDSTableServer *MDS::get_table_server(int t)
 {
   switch (t) {
-  case TABLE_ANCHOR: return anchorserver;
+  case TABLE_ANCHOR: return NULL;
   case TABLE_SNAP: return snapserver;
   default: assert(0);
   }
@@ -1299,10 +1293,6 @@ void MDS::boot_create()
 
   // initialize tables
   if (mdsmap->get_tableserver() == whoami) {
-    dout(10) << "boot_create creating fresh anchortable" << dendl;
-    anchorserver->reset();
-    anchorserver->save(fin.new_sub());
-
     dout(10) << "boot_create creating fresh snaptable" << dendl;
     snapserver->reset();
     snapserver->save(fin.new_sub());
@@ -1361,16 +1351,14 @@ void MDS::boot_start(int step, int r)
       dout(2) << "boot_start " << step << ": opening sessionmap" << dendl;
       sessionmap.load(gather.new_sub());
 
-      if (mdsmap->get_tableserver() == whoami) {
-	dout(2) << "boot_start " << step << ": opening anchor table" << dendl;
-	anchorserver->load(gather.new_sub());
-
-	dout(2) << "boot_start " << step << ": opening snap table" << dendl;	
-	snapserver->load(gather.new_sub());
-      }
-      
       dout(2) << "boot_start " << step << ": opening mds log" << dendl;
       mdlog->open(gather.new_sub());
+
+      if (mdsmap->get_tableserver() == whoami) {
+	dout(2) << "boot_start " << step << ": opening snap table" << dendl;
+	snapserver->load(gather.new_sub());
+      }
+
       gather.activate();
     }
     break;
@@ -1670,13 +1658,10 @@ void MDS::recovery_done(int oldstate)
   dout(1) << "recovery_done -- successful recovery!" << dendl;
   assert(is_clientreplay() || is_active());
   
-  // kick anchortable (resent AGREEs)
+  // kick snaptable (resent AGREEs)
   if (mdsmap->get_tableserver() == whoami) {
     set<int> active;
-    mdsmap->get_mds_set(active, MDSMap::STATE_CLIENTREPLAY);
-    mdsmap->get_mds_set(active, MDSMap::STATE_ACTIVE);
-    mdsmap->get_mds_set(active, MDSMap::STATE_STOPPING);
-    anchorserver->finish_recovery(active);
+    mdsmap->get_clientreplay_or_active_or_stopping_mds_set(active);
     snapserver->finish_recovery(active);
   }
 
@@ -1701,7 +1686,6 @@ void MDS::handle_mds_recovery(int who)
   mdcache->handle_mds_recovery(who);
 
   if (mdsmap->get_tableserver() == whoami) {
-    anchorserver->handle_mds_recovery(who);
     snapserver->handle_mds_recovery(who);
   }
 
@@ -1719,7 +1703,6 @@ void MDS::handle_mds_failure(int who)
 
   mdcache->handle_mds_failure(who);
 
-  anchorclient->handle_mds_failure(who);
   snapclient->handle_mds_failure(who);
 }
 
@@ -1803,8 +1786,9 @@ void MDS::respawn()
   /* Determine the path to our executable, try to read
    * linux-specific /proc/ path first */
   char exe_path[PATH_MAX];
-  ssize_t exe_path_bytes = readlink("/proc/self/exe", exe_path, sizeof(exe_path));
-  if (exe_path_bytes == -1) {
+  ssize_t exe_path_bytes = readlink("/proc/self/exe", exe_path,
+				    sizeof(exe_path) - 1);
+  if (exe_path_bytes < 0) {
     /* Print CWD for the user's interest */
     char buf[PATH_MAX];
     char *cwd = getcwd(buf, sizeof(buf));
@@ -1813,6 +1797,8 @@ void MDS::respawn()
 
     /* Fall back to a best-effort: just running in our CWD */
     strncpy(exe_path, orig_argv[0], sizeof(exe_path) - 1);
+  } else {
+    exe_path[exe_path_bytes] = '\0';
   }
 
   dout(1) << " exe_path " << exe_path << dendl;
@@ -2337,7 +2323,7 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
   }
 
   return true;  // we made a decision (see is_valid)
-};
+}
 
 
 void MDS::ms_handle_accept(Connection *con)

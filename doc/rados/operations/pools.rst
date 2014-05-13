@@ -240,6 +240,7 @@ To remove a snapshot of a pool, execute::
 
 .. _setpoolvalues:
 
+
 Set Pool Values
 ===============
 
@@ -251,25 +252,34 @@ You may set values for the following keys:
 
 ``size``
 
-:Description: Sets the number of replicas for objects in the pool. See `Set the Number of Object Replicas`_ for further details. Replicated pools only.
+:Description: Sets the number of replicas for objects in the pool. 
+              See `Set the Number of Object Replicas`_ for further details. 
+              Replicated pools only.
+
 :Type: Integer
 
 ``min_size``
 
-:Description: Sets the minimum number of replicas required for io.  See `Set the Number of Object Replicas`_ for further details. Replicated pools only.
-:Type: Integer
+:Description: Sets the minimum number of replicas required for I/O.  
+              See `Set the Number of Object Replicas`_ for further details. 
+              Replicated pools only.
 
-.. note:: Version ``0.54`` and above
+:Type: Integer
+:Version: ``0.54`` and above
 
 ``crash_replay_interval``
 
-:Description: The number of seconds to allow clients to replay acknowledged, but uncommitted requests. 
+:Description: The number of seconds to allow clients to replay acknowledged, 
+              but uncommitted requests.
+              
 :Type: Integer
 
 
 ``pgp_num``
 
-:Description: The effective number of placement groups to use when calculating data placement. 
+:Description: The effective number of placement groups to use when calculating 
+              data placement.
+
 :Type: Integer
 :Valid Range: Equal to or less than ``pg_num``.
 
@@ -279,14 +289,108 @@ You may set values for the following keys:
 :Description: The ruleset to use for mapping object placement in the cluster.
 :Type: Integer
 
+
 ``hashpspool``
 
 :Description: Set/Unset HASHPSPOOL flag on a given pool.
 :Type: Integer
 :Valid Range: 1 sets flag, 0 unsets flag
+:Version: Version ``0.48`` Argonaut and above.	
 
 
-.. note:: Version ``0.48`` Argonaut and above.	
+``hit_set_type``
+
+:Description: Enables hit set tracking for cache pools.
+              See `Bloom Filter`_ for additional information.
+
+:Type: String
+:Valid Settings: ``bloom``, ``explicit_hash``, ``explicit_object``
+:Default: ``bloom``. Other values are for testing.
+
+``hit_set_count``
+
+:Description: The number of hit sets to store for cache pools. The higher 
+              the number, the more RAM consumed by the ``ceph-osd`` daemon.
+
+:Type: Integer
+:Valid Range: ``1``. Agent doesn't handle > 1 yet.
+
+
+``hit_set_period``
+
+:Description: The duration of a hit set period in seconds for cache pools. 
+              The higher the number, the more RAM consumed by the 
+              ``ceph-osd`` daemon.
+
+:Type: Integer
+:Example: ``3600`` 1hr
+
+
+``hit_set_fpp``
+
+:Description: The false positive probability for the ``bloom`` hit set type.
+              See `Bloom Filter`_ for additional information.
+
+:Type: Double
+:Valid Range: 0.0 - 1.0
+:Default: ``0.05``
+
+
+``cache_target_dirty_ratio``
+
+:Description: The percentage of the cache pool containing modified (dirty) 
+              objects before the cache tiering agent will flush them to the
+              backing storage pool.
+              
+:Type: Double
+:Default: ``.4``
+
+
+``cache_target_full_ratio``
+
+:Description: The percentage of the cache pool containing unmodified (clean)
+              objects before the cache tiering agent will evict them from the
+              cache pool.
+             
+:Type: Double
+:Default: ``.8``
+
+
+``target_max_bytes``
+
+:Description: Ceph will begin flushing or evicting objects when the 
+              ``max_bytes`` threshold is triggered.
+              
+:Type: Integer
+:Example: ``1000000000000``  #1-TB
+
+
+``target_max_objects`` 
+
+:Description: Ceph will begin flushing or evicting objects when the 
+              ``max_objects`` threshold is triggered.
+
+:Type: Integer
+:Example: ``1000000`` #1M objects
+
+
+``cache_min_flush_age``
+
+:Description: The time (in seconds) before the cache tiering agent will flush 
+              an object from the cache pool to the storage pool.
+              
+:Type: Integer
+:Example: ``600`` 10min 
+
+
+``cache_min_evict_age``
+
+:Description: The time (in seconds) before the cache tiering agent will evict
+              an object from the cache pool.
+              
+:Type: Integer
+:Example: ``1800`` 30min
+
 
 
 Get Pool Values
@@ -350,3 +454,4 @@ a size of 2).
 
 
 .. _Pool, PG and CRUSH Config Reference: ../../configuration/pool-pg-config-ref
+.. _Bloom Filter: http://en.wikipedia.org/wiki/Bloom_filter

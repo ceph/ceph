@@ -1,5 +1,5 @@
 #ifndef CEPH_RGW_ACL_SWIFT_H
-#define CEPH_RGW_ACL_SWIFT3_H
+#define CEPH_RGW_ACL_SWIFT_H
 
 #include <map>
 #include <string>

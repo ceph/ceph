@@ -10,20 +10,18 @@
 * License version 2.1, as published by the Free Software
 * Foundation. See file COPYING.
 */
-#include <iostream>
-#include <string>
-#include <sstream>
-#include <map>
-#include <set>
 #include <boost/scoped_ptr.hpp>
-#include <errno.h>
+
+#include <set>
+#include <string>
+
+#include "common/ceph_argparse.h"
+#include "common/debug.h"
 
 #include "include/types.h"
 #include "include/buffer.h"
-#include "common/ceph_argparse.h"
+
 #include "global/global_init.h"
-#include "common/debug.h"
-#include "common/config.h"
 
 #include "mon/MonitorDBStore.h"
 #include "mon/MonitorStore.h"

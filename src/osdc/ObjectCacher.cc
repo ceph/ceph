@@ -213,7 +213,6 @@ int ObjectCacher::Object::map_read(OSDRead *rd,
 	  ldout(oc->cct, 20) << "map_read miss " << left << " left, " << *n << dendl;
 	}
         cur += left;
-        left = 0;
         assert(cur == (loff_t)ex_it->offset + (loff_t)ex_it->length);
         break;  // no more.
       }
@@ -1397,7 +1396,7 @@ int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset, M
   } else {
     // write-thru!  flush what we just wrote.
     Cond cond;
-    bool done;
+    bool done = false;
     Context *fin = block_writes_upfront ?
       new C_Cond(&cond, &done, &ret) : onfreespace;
     assert(fin);

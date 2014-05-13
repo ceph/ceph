@@ -34,7 +34,7 @@ struct Subscription {
   bool incremental_onetime;  // has CEPH_FEATURE_INCSUBOSDMAP
   
   Subscription(MonSession *s, const string& t) : session(s), type(t), type_item(this),
-						 next(0), onetime(false), incremental_onetime(false) {};
+						 next(0), onetime(false), incremental_onetime(false) {}
 };
 
 struct MonSession : public RefCountedObject {

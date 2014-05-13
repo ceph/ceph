@@ -461,6 +461,7 @@ public:
 		   uint64_t srcoff, uint64_t len, uint64_t dstoff,
 		   const SequencerPosition& spos);
   int _do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
+  int _do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
   int _do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
   int _remove(coll_t cid, const ghobject_t& oid, const SequencerPosition &spos);
 
@@ -670,14 +671,18 @@ protected:
     return filestore->current_fn;
   }
   int _copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) {
-    return filestore->_do_copy_range(from, to, srcoff, len, dstoff);
+    if (has_fiemap()) {
+      return filestore->_do_sparse_copy_range(from, to, srcoff, len, dstoff);
+    } else {
+      return filestore->_do_copy_range(from, to, srcoff, len, dstoff);
+    }
   }
   int get_crc_block_size() {
     return filestore->m_filestore_sloppy_crc_block_size;
   }
 public:
   FileStoreBackend(FileStore *fs) : filestore(fs) {}
-  virtual ~FileStoreBackend() {};
+  virtual ~FileStoreBackend() {}
   virtual int detect_features() = 0;
   virtual int create_current() = 0;
   virtual bool can_checkpoint() = 0;

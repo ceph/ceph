@@ -49,6 +49,7 @@ noinst_HEADERS += \
 	include/interval_set.h \
 	include/int_types.h \
 	include/ipaddr.h \
+	include/krbd.h \
 	include/linux_fiemap.h \
 	include/lru.h \
 	include/msgr.h \

@@ -97,6 +97,8 @@ public:
   ~OpRequest() {
     request->put();
   }
+  bool send_map_update;
+  epoch_t sent_epoch;
   Message *get_req() const { return request; }
   bool been_queued_for_pg() { return hit_flag_points & flag_queued_for_pg; }
   bool been_reached_pg() { return hit_flag_points & flag_reached_pg; }

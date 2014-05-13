@@ -88,6 +88,6 @@ struct sr_t {
   void dump(Formatter *f) const;
   static void generate_test_instances(list<sr_t*>& ls);
 };
-WRITE_CLASS_ENCODER(sr_t);
+WRITE_CLASS_ENCODER(sr_t)
 
 #endif

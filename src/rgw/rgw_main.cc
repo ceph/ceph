@@ -360,7 +360,7 @@ void RGWLoadGenProcess::run()
   int num_buckets;
   conf->get_val("num_buckets", 1, &num_buckets);
 
-  string buckets[num_buckets];
+  vector<string> buckets(num_buckets);
 
   atomic_t failed;
 
@@ -673,7 +673,7 @@ void RGWLoadGenProcess::handle_request(RGWRequest *r)
 
 static int civetweb_callback(struct mg_connection *conn) {
   struct mg_request_info *req_info = mg_get_request_info(conn);
-  RGWProcessEnv *pe = (RGWProcessEnv *)req_info->user_data;
+  RGWProcessEnv *pe = static_cast<RGWProcessEnv *>(req_info->user_data);
   RGWRados *store = pe->store;
   RGWREST *rest = pe->rest;
   OpsLogSocket *olog = pe->olog;
@@ -821,7 +821,7 @@ public:
   void *entry() {
     pprocess->run();
     return NULL;
-  };
+  }
 };
 
 class RGWProcessFrontend : public RGWFrontend {
@@ -1083,10 +1083,7 @@ int main(int argc, const char **argv)
   register_async_signal_handler(SIGUSR1, handle_sigterm);
   sighandler_alrm = signal(SIGALRM, godown_alarm);
 
-  string frontend_frameworks = g_conf->rgw_frontends;
-
   list<string> frontends;
-
   get_str_list(g_conf->rgw_frontends, ",", frontends);
 
   multimap<string, RGWFrontendConfig *> fe_map;
@@ -1121,8 +1118,6 @@ int main(int argc, const char **argv)
 
       fe = new RGWFCGXFrontend(fcgi_pe, config);
     } else if (framework == "civetweb" || framework == "mongoose") {
-      string err;
-
       int port;
       config->get_val("port", 80, &port);
 

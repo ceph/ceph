@@ -116,7 +116,7 @@ struct RGWObjManifestPart {
   void dump(Formatter *f) const;
   static void generate_test_instances(list<RGWObjManifestPart*>& o);
 };
-WRITE_CLASS_ENCODER(RGWObjManifestPart);
+WRITE_CLASS_ENCODER(RGWObjManifestPart)
 
 /*
  The manifest defines a set of rules for structuring the object parts.
@@ -139,31 +139,34 @@ struct RGWObjManifestRule {
   uint64_t start_ofs;
   uint64_t part_size; /* each part size, 0 if there's no part size, meaning it's unlimited */
   uint64_t stripe_max_size; /* underlying obj max size */
+  string override_prefix;
 
   RGWObjManifestRule() : start_part_num(0), start_ofs(0), part_size(0), stripe_max_size(0) {}
   RGWObjManifestRule(uint32_t _start_part_num, uint64_t _start_ofs, uint64_t _part_size, uint64_t _stripe_max_size) :
                        start_part_num(_start_part_num), start_ofs(_start_ofs), part_size(_part_size), stripe_max_size(_stripe_max_size) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(start_part_num, bl);
     ::encode(start_ofs, bl);
     ::encode(part_size, bl);
     ::encode(stripe_max_size, bl);
+    ::encode(override_prefix, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1,  bl);
+    DECODE_START(2, bl);
     ::decode(start_part_num, bl);
     ::decode(start_ofs, bl);
     ::decode(part_size, bl);
     ::decode(stripe_max_size, bl);
+    ::decode(override_prefix, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
 };
-WRITE_CLASS_ENCODER(RGWObjManifestRule);
+WRITE_CLASS_ENCODER(RGWObjManifestRule)
 
 class RGWObjManifest {
 protected:
@@ -183,7 +186,7 @@ protected:
 
   void convert_to_explicit();
   int append_explicit(RGWObjManifest& m);
-  void append_rules(RGWObjManifest& m, map<uint64_t, RGWObjManifestRule>::iterator& iter);
+  void append_rules(RGWObjManifest& m, map<uint64_t, RGWObjManifestRule>::iterator& iter, string *override_prefix);
 
   void update_iterators() {
     begin_iter.seek(0);
@@ -223,7 +226,7 @@ public:
     objs.swap(_objs);
   }
 
-  void get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs, rgw_obj *location);
+  void get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs, string *override_prefix, rgw_obj *location);
 
   void set_trivial_rule(uint64_t tail_ofs, uint64_t stripe_max_size) {
     RGWObjManifestRule rule(0, tail_ofs, 0, stripe_max_size);
@@ -358,6 +361,7 @@ public:
 
     int cur_part_id;
     int cur_stripe;
+    string cur_override_prefix;
 
     rgw_obj location;
 
@@ -484,7 +488,7 @@ public:
     }
   };
 };
-WRITE_CLASS_ENCODER(RGWObjManifest);
+WRITE_CLASS_ENCODER(RGWObjManifest)
 
 struct RGWUploadPartInfo {
   uint32_t num;
@@ -537,13 +541,13 @@ protected:
 public:
   RGWPutObjProcessor(const string& _bo) : store(NULL), obj_ctx(NULL), is_complete(false), bucket_owner(_bo) {}
   virtual ~RGWPutObjProcessor();
-  virtual int prepare(RGWRados *_store, void *_o) {
+  virtual int prepare(RGWRados *_store, void *_o, string *oid_rand) {
     store = _store;
     obj_ctx = _o;
     return 0;
-  };
+  }
   virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle) = 0;
-  virtual int throttle_data(void *handle) = 0;
+  virtual int throttle_data(void *handle, bool need_to_wait) = 0;
   virtual int complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
 };
 
@@ -557,12 +561,12 @@ class RGWPutObjProcessor_Plain : public RGWPutObjProcessor
   off_t ofs;
 
 protected:
-  int prepare(RGWRados *store, void *obj_ctx);
+  int prepare(RGWRados *store, void *obj_ctx, string *oid_rand);
   int handle_data(bufferlist& bl, off_t ofs, void **phandle);
   int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
 
 public:
-  int throttle_data(void *handle) { return 0; }
+  int throttle_data(void *handle, bool need_to_wait) { return 0; }
   RGWPutObjProcessor_Plain(const string& bucket_owner, rgw_bucket& b, const string& o) : RGWPutObjProcessor(bucket_owner),
                                                                                          bucket(b), obj_str(o), ofs(0) {}
 };
@@ -584,10 +588,10 @@ protected:
   uint64_t obj_len;
 
   int drain_pending();
-  int handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle);
+  int handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle, bool exclusive);
 
 public:
-  int throttle_data(void *handle);
+  int throttle_data(void *handle, bool need_to_wait);
 
   RGWPutObjProcessor_Aio(const string& bucket_owner) : RGWPutObjProcessor(bucket_owner), max_chunks(RGW_MAX_PENDING_CHUNKS), obj_len(0) {}
   virtual ~RGWPutObjProcessor_Aio() {
@@ -618,9 +622,7 @@ protected:
   RGWObjManifest manifest;
   RGWObjManifest::generator manifest_gen;
 
-  virtual bool immutable_head() { return false; }
-
-  int write_data(bufferlist& bl, off_t ofs, void **phandle);
+  int write_data(bufferlist& bl, off_t ofs, void **phandle, bool exclusive);
   virtual int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
 
   int prepare_next_part(off_t ofs);
@@ -640,11 +642,12 @@ public:
                                 bucket(_b),
                                 obj_str(_o),
                                 unique_tag(_t) {}
-  int prepare(RGWRados *store, void *obj_ctx);
+  int prepare(RGWRados *store, void *obj_ctx, string *oid_rand);
+  virtual bool immutable_head() { return false; }
   void set_extra_data_len(uint64_t len) {
     extra_data_len = len;
   }
-  int handle_data(bufferlist& bl, off_t ofs, void **phandle);
+  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle);
   bufferlist& get_extra_data() { return extra_data_bl; }
 };
 
@@ -767,7 +770,7 @@ struct RGWZonePlacementInfo {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
-WRITE_CLASS_ENCODER(RGWZonePlacementInfo);
+WRITE_CLASS_ENCODER(RGWZonePlacementInfo)
 
 struct RGWZoneParams {
   rgw_bucket domain_root;
@@ -838,7 +841,7 @@ struct RGWZoneParams {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
-WRITE_CLASS_ENCODER(RGWZoneParams);
+WRITE_CLASS_ENCODER(RGWZoneParams)
 
 struct RGWZone {
   string name;
@@ -870,7 +873,7 @@ struct RGWZone {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
-WRITE_CLASS_ENCODER(RGWZone);
+WRITE_CLASS_ENCODER(RGWZone)
 
 struct RGWDefaultRegionInfo {
   string default_region;
@@ -889,7 +892,7 @@ struct RGWDefaultRegionInfo {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
-WRITE_CLASS_ENCODER(RGWDefaultRegionInfo);
+WRITE_CLASS_ENCODER(RGWDefaultRegionInfo)
 
 struct RGWRegionPlacementTarget {
   string name;
@@ -926,7 +929,7 @@ struct RGWRegionPlacementTarget {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
-WRITE_CLASS_ENCODER(RGWRegionPlacementTarget);
+WRITE_CLASS_ENCODER(RGWRegionPlacementTarget)
 
 
 struct RGWRegion {
@@ -985,7 +988,7 @@ struct RGWRegion {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
-WRITE_CLASS_ENCODER(RGWRegion);
+WRITE_CLASS_ENCODER(RGWRegion)
 
 struct RGWRegionMap {
   Mutex lock;
@@ -1011,7 +1014,7 @@ struct RGWRegionMap {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
-WRITE_CLASS_ENCODER(RGWRegionMap);
+WRITE_CLASS_ENCODER(RGWRegionMap)
 
 class RGWDataChangesLog;
 class RGWReplicaLogger;
@@ -1521,6 +1524,7 @@ public:
     return clone_objs(ctx, dst_obj, v, attrs, category, pmtime, truncate_dest, exclusive, xattr_cond);
   }
 
+  int rewrite_obj(const string& bucket_owner, rgw_obj& obj);
   /**
    * Copy an object.
    * dest_obj: the object to copy into

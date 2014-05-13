@@ -114,7 +114,7 @@ health_status_t DataHealthService::get_health(
       stringstream ss;
       ss << "mon." << mon_name << " addr " << it->first.addr
           << " has " << stats.latest_avail_percent
-          << "\% avail disk space -- " << health_detail;
+          << "%% avail disk space -- " << health_detail;
       detail->push_back(make_pair(health_status, ss.str()));
     }
 
@@ -233,7 +233,7 @@ void DataHealthService::service_tick()
     if (ours.latest_avail_percent != last_warned_percent)
       mon->clog.warn()
 	<< "reached concerning levels of available space on local monitor storage"
-	<< " (" << ours.latest_avail_percent << "\% free)\n";
+	<< " (" << ours.latest_avail_percent << "%% free)\n";
     last_warned_percent = ours.latest_avail_percent;
   } else {
     last_warned_percent = 0;

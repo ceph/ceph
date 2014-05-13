@@ -45,7 +45,7 @@ protected:
 
 public:
 
-  JSONObj() : parent(NULL){};
+  JSONObj() : parent(NULL){}
 
   virtual ~JSONObj();
 

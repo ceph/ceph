@@ -191,24 +191,28 @@ public:
 
   public:
     /// Provide the final size of the copied object to the CopyCallback
-    virtual ~CopyCallback() {};
+    virtual ~CopyCallback() {}
   };
 
   friend class CopyFromCallback;
   friend class PromoteCallback;
 
   struct FlushOp {
-    OpContext *ctx;             ///< the parent OpContext
-    list<OpRequestRef> dup_ops; ///< dup flush requests
+    ObjectContextRef obc;       ///< obc we are flushing
+    OpRequestRef op;            ///< initiating op
+    list<OpRequestRef> dup_ops; ///< bandwagon jumpers
     version_t flushed_version;  ///< user version we are flushing
     ceph_tid_t objecter_tid;    ///< copy-from request tid
     int rval;                   ///< copy-from result
     bool blocking;              ///< whether we are blocking updates
     bool removal;               ///< we are removing the backend object
+    Context *on_flush;          ///< callback, may be null
 
     FlushOp()
-      : ctx(NULL), objecter_tid(0), rval(0),
-	blocking(false), removal(false) {}
+      : objecter_tid(0), rval(0),
+	blocking(false), removal(false),
+	on_flush(NULL) {}
+    ~FlushOp() { assert(!on_flush); }
   };
   typedef boost::shared_ptr<FlushOp> FlushOpRef;
 
@@ -384,7 +388,7 @@ public:
     info.stats = stat;
   }
 
-  void schedule_work(
+  void schedule_recovery_work(
     GenContext<ThreadPool::TPHandle&> *c);
 
   pg_shard_t whoami_shard() const {
@@ -805,7 +809,7 @@ protected:
   friend class C_HitSetFlushing;
 
   void agent_setup();       ///< initialize agent state
-  void agent_work(int max); ///< entry point to do some agent work
+  bool agent_work(int max); ///< entry point to do some agent work
   bool agent_maybe_flush(ObjectContextRef& obc);  ///< maybe flush
   bool agent_maybe_evict(ObjectContextRef& obc);  ///< maybe evict
 
@@ -821,11 +825,13 @@ protected:
 
   /// stop the agent
   void agent_stop();
+  void agent_delay();
 
   /// clear agent state
   void agent_clear();
 
-  void agent_choose_mode();  ///< choose (new) agent mode(s)
+  void agent_choose_mode(bool restart = false);  ///< choose (new) agent mode(s)
+  void agent_choose_mode_restart();
 
   /// true if we can send an ondisk/commit for v
   bool already_complete(eversion_t v) {
@@ -1221,7 +1227,11 @@ protected:
   // -- flush --
   map<hobject_t, FlushOpRef> flush_ops;
 
-  int start_flush(OpContext *ctx, bool blocking, hobject_t *pmissing);
+  /// start_flush takes ownership of on_flush iff ret == -EINPROGRESS
+  int start_flush(
+    OpRequestRef op, ObjectContextRef obc,
+    bool blocking, hobject_t *pmissing,
+    Context *on_flush);
   void finish_flush(hobject_t oid, ceph_tid_t tid, int r);
   int try_flush_mark_clean(FlushOpRef fop);
   void cancel_flush(FlushOpRef fop, bool requeue);
@@ -1233,6 +1243,8 @@ protected:
   friend struct C_Flush;
 
   // -- scrub --
+  virtual bool _range_available_for_scrub(
+    const hobject_t &begin, const hobject_t &end);
   virtual void _scrub(ScrubMap& map);
   virtual void _scrub_clear_state();
   virtual void _scrub_finish();

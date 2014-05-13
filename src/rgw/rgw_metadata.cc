@@ -69,9 +69,9 @@ struct RGWMetadataLogData {
     encode_json("read_version", read_version, f);
     encode_json("write_version", write_version, f);
     encode_json("status", LogStatusDump(status), f);
-  };
+  }
 };
-WRITE_CLASS_ENCODER(RGWMetadataLogData);
+WRITE_CLASS_ENCODER(RGWMetadataLogData)
 
 
 int RGWMetadataLog::add_entry(RGWRados *store, RGWMetadataHandler *handler, const string& section, const string& key, bufferlist& bl) {

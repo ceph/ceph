@@ -354,7 +354,7 @@ struct RGWAccessKey {
   void decode_json(JSONObj *obj);
   void decode_json(JSONObj *obj, bool swift);
 };
-WRITE_CLASS_ENCODER(RGWAccessKey);
+WRITE_CLASS_ENCODER(RGWAccessKey)
 
 struct RGWSubUser {
   string name;
@@ -380,7 +380,7 @@ struct RGWSubUser {
 
   void decode_json(JSONObj *obj);
 };
-WRITE_CLASS_ENCODER(RGWSubUser);
+WRITE_CLASS_ENCODER(RGWSubUser)
 
 class RGWUserCaps
 {
@@ -410,7 +410,7 @@ public:
 
   void decode_json(JSONObj *obj);
 };
-WRITE_CLASS_ENCODER(RGWUserCaps);
+WRITE_CLASS_ENCODER(RGWUserCaps)
 
 void encode_json(const char *name, const obj_version& v, Formatter *f);
 void encode_json(const char *name, const RGWUserCaps& val, Formatter *f);

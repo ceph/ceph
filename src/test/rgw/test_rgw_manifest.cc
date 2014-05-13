@@ -181,7 +181,7 @@ TEST(TestRGWManifest, obj_with_head_and_tail) {
 
 TEST(TestRGWManifest, multipart) {
   int num_parts = 16;
-  RGWObjManifest pm[num_parts];
+  vector <RGWObjManifest> pm(num_parts);
   rgw_bucket bucket;
   uint64_t part_size = 10 * 1024 * 1024;
   uint64_t stripe_size = 4 * 1024 * 1024;

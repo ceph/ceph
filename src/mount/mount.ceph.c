@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+#include "common/module.h"
 #include "common/secret.h"
 #include "include/addr_parsing.h"
 
@@ -290,28 +291,13 @@ static int parse_arguments(int argc, char *const *const argv,
 
 /* modprobe failing doesn't necessarily prevent from working, so this
    returns void */
-static void modprobe(void) {
-	int status;
-	status = system("/sbin/modprobe ceph");
-	if (status < 0) {
-		char error_buf[80];
-		fprintf(stderr, "mount.ceph: cannot run modprobe: %s\n",
-				strerror_r(errno, error_buf, sizeof(error_buf)));
-	} else if (WIFEXITED(status)) {
-		status = WEXITSTATUS(status);
-		if (status != 0) {
-			fprintf(stderr,
-				"mount.ceph: modprobe failed, exit status %d\n",
-				status);
-		}
-	} else if (WIFSIGNALED(status)) {
-		fprintf(stderr,
-			"mount.ceph: modprobe failed with signal %d\n",
-			WTERMSIG(status));
-	} else {
-		fprintf(stderr, "mount.ceph: weird status from modprobe: %d\n",
-			status);
-	}
+static void modprobe(void)
+{
+	int r;
+
+	r = module_load("ceph", NULL);
+	if (r)
+		printf("failed to load ceph kernel module (%d)\n", r);
 }
 
 static void usage(const char *prog_name)

@@ -11,22 +11,16 @@
  * Foundation.  See file COPYING.
  * 
  */
-
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <errno.h>
-
-#include <iostream>
 #include <string>
-using namespace std;
 
-#include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
+
 #include "global/global_init.h"
-#include "mon/MonMap.h"
 #include "include/str_list.h"
+#include "mon/MonMap.h"
+
+using namespace std;
 
 void usage()
 {

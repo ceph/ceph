@@ -1387,7 +1387,7 @@ int FileStore::mount()
     stringstream err2;
 
     if (g_conf->filestore_debug_omap_check && !dbomap->check(err2)) {
-      derr << err2.str() << dendl;;
+      derr << err2.str() << dendl;
       delete dbomap;
       ret = -EINVAL;
       goto close_current_fd;
@@ -1477,7 +1477,7 @@ int FileStore::mount()
   {
     stringstream err2;
     if (g_conf->filestore_debug_omap_check && !object_map->check(err2)) {
-      derr << err2.str() << dendl;;
+      derr << err2.str() << dendl;
       ret = -EINVAL;
       goto close_current_fd;
     }
@@ -2889,7 +2889,7 @@ int FileStore::_clone(coll_t cid, const ghobject_t& oldoid, const ghobject_t& ne
     }
     r = ::ftruncate(**n, 0);
     if (r < 0) {
-      goto out;
+      goto out3;
     }
     struct stat st;
     ::fstat(**o, &st);
@@ -2898,6 +2898,11 @@ int FileStore::_clone(coll_t cid, const ghobject_t& oldoid, const ghobject_t& ne
       r = -errno;
       goto out3;
     }
+    r = ::ftruncate(**n, st.st_size);
+    if (r < 0) {
+      goto out3;
+    }
+
     dout(20) << "objectmap clone" << dendl;
     r = object_map->clone(oldoid, newoid, &spos);
     if (r < 0 && r != -ENOENT)
@@ -2934,6 +2939,125 @@ int FileStore::_do_clone_range(int from, int to, uint64_t srcoff, uint64_t len, 
   return backend->clone_range(from, to, srcoff, len, dstoff);
 }
 
+int FileStore::_do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff)
+{
+  dout(20) << __func__ << " " << srcoff << "~" << len << " to " << dstoff << dendl;
+  int r = 0;
+  struct fiemap *fiemap = NULL;
+
+  // fiemap doesn't allow zero length
+  if (len == 0)
+    return 0;
+
+  r = backend->do_fiemap(from, srcoff, len, &fiemap);
+  if (r < 0) {
+    derr << "do_fiemap failed:" << srcoff << "~" << len << " = " << r << dendl;
+    return r;
+  }
+
+  // No need to copy
+  if (fiemap->fm_mapped_extents == 0)
+    return r;
+
+  int buflen = 4096*32;
+  char buf[buflen];
+  struct fiemap_extent *extent = &fiemap->fm_extents[0];
+
+  /* start where we were asked to start */
+  if (extent->fe_logical < srcoff) {
+    extent->fe_length -= srcoff - extent->fe_logical;
+    extent->fe_logical = srcoff;
+  }
+
+  uint64_t i = 0;
+
+  while (i < fiemap->fm_mapped_extents) {
+    struct fiemap_extent *next = extent + 1;
+
+    dout(10) << __func__ << " fm_mapped_extents=" << fiemap->fm_mapped_extents
+             << " fe_logical=" << extent->fe_logical << " fe_length="
+             << extent->fe_length << dendl;
+
+    /* try to merge extents */
+    while ((i < fiemap->fm_mapped_extents - 1) &&
+           (extent->fe_logical + extent->fe_length == next->fe_logical)) {
+        next->fe_length += extent->fe_length;
+        next->fe_logical = extent->fe_logical;
+        extent = next;
+        next = extent + 1;
+        i++;
+    }
+
+    if (extent->fe_logical + extent->fe_length > srcoff + len)
+      extent->fe_length = srcoff + len - extent->fe_logical;
+
+    int64_t actual;
+
+    actual = ::lseek64(from, extent->fe_logical, SEEK_SET);
+    if (actual != (int64_t)extent->fe_logical) {
+      r = errno;
+      derr << "lseek64 to " << srcoff << " got " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    actual = ::lseek64(to, extent->fe_logical - srcoff + dstoff, SEEK_SET);
+    if (actual != (int64_t)(extent->fe_logical - srcoff + dstoff)) {
+      r = errno;
+      derr << "lseek64 to " << dstoff << " got " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    loff_t pos = 0;
+    loff_t end = extent->fe_length;
+    while (pos < end) {
+      int l = MIN(end-pos, buflen);
+      r = ::read(from, buf, l);
+      dout(25) << "  read from " << pos << "~" << l << " got " << r << dendl;
+      if (r < 0) {
+        if (errno == EINTR) {
+          continue;
+        } else {
+          r = -errno;
+          derr << __func__ << ": read error at " << pos << "~" << len
+              << ", " << cpp_strerror(r) << dendl;
+          break;
+        }
+      }
+      if (r == 0) {
+        r = -ERANGE;
+        derr << __func__ << " got short read result at " << pos
+             << " of fd " << from << " len " << len << dendl;
+        break;
+      }
+      int op = 0;
+      while (op < r) {
+        int r2 = safe_write(to, buf+op, r-op);
+        dout(25) << " write to " << to << " len " << (r-op)
+                 << " got " << r2 << dendl;
+        if (r2 < 0) {
+          r = r2;
+          derr << __func__ << ": write error at " << pos << "~"
+               << r-op << ", " << cpp_strerror(r) << dendl;
+          break;
+        }
+        op += (r-op);
+      }
+      if (r < 0)
+        break;
+      pos += r;
+    }
+    i++;
+    extent++;
+  }
+
+  if (r >= 0 && m_filestore_sloppy_crc) {
+    int rc = backend->_crc_update_clone_range(from, to, srcoff, len, dstoff);
+    assert(rc >= 0);
+  }
+
+  dout(20) << __func__ << " " << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
+  return r;
+}
+
 int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff)
 {
   dout(20) << "_do_copy_range " << srcoff << "~" << len << " to " << dstoff << dendl;
@@ -2952,7 +3076,7 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
     derr << "lseek64 to " << dstoff << " got " << cpp_strerror(r) << dendl;
     return r;
   }
-  
+
   loff_t pos = srcoff;
   loff_t end = srcoff + len;
   int buflen = 4096*32;
@@ -3632,7 +3756,6 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
   r = _fgetattrs(**fd, inline_set, false);
   assert(!m_filestore_fail_eio || r != -EIO);
   dout(15) << "setattrs " << cid << "/" << oid << dendl;
-  r = 0;
 
   for (map<string,bufferptr>::iterator p = aset.begin();
        p != aset.end();
@@ -3966,7 +4089,6 @@ int FileStore::_collection_remove_recursive(const coll_t &cid,
 
   vector<ghobject_t> objects;
   ghobject_t max;
-  r = 0;
   while (!max.is_max()) {
     r = collection_list_partial(cid, max, 200, 300, 0, &objects, &max);
     if (r < 0)

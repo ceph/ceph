@@ -451,9 +451,6 @@ class RGWUserStatsCache : public RGWQuotaCache<string> {
     void *entry() {
       ldout(cct, 20) << "UserSyncThread: start" << dendl;
       do {
-
-        string key = "user";
-
         int ret = stats->sync_all_users();
         if (ret < 0) {
           ldout(cct, 0) << "ERROR: sync_all_users() returned ret=" << ret << dendl;
@@ -736,14 +733,14 @@ public:
   virtual void update_stats(const string& user, rgw_bucket& bucket, int obj_delta, uint64_t added_bytes, uint64_t removed_bytes) {
     bucket_stats_cache.adjust_stats(user, bucket, obj_delta, added_bytes, removed_bytes);
     user_stats_cache.adjust_stats(user, bucket, obj_delta, added_bytes, removed_bytes);
-  };
+  }
 };
 
 
 RGWQuotaHandler *RGWQuotaHandler::generate_handler(RGWRados *store, bool quota_threads)
 {
   return new RGWQuotaHandlerImpl(store, quota_threads);
-};
+}
 
 void RGWQuotaHandler::free_handler(RGWQuotaHandler *handler)
 {

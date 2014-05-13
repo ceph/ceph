@@ -791,6 +791,12 @@ def mount(
     Mounts a device with given filessystem type and
     mount options to a tempfile path under /var/lib/ceph/tmp.
     """
+    # sanity check: none of the arguments are None
+    if dev is None:
+        raise ValueError('dev may not be None')
+    if fstype is None:
+        raise ValueError('fstype may not be None')
+
     # pick best-of-breed mount options based on fs type
     if options is None:
         options = MOUNT_OPTIONS.get(fstype, '')
@@ -1197,6 +1203,12 @@ def prepare_dev(
                     data,
                 ],
             )
+            command(
+                [
+                    'partprobe',
+                    data,
+                    ],
+                )
             command(
                 [
                     # wait for udev event queue to clear
@@ -2193,16 +2205,17 @@ def main_list(args):
             ptype = get_partition_type(dev)
             if ptype == 'ceph data':
                 fs_type = get_dev_fs(dev)
-                try:
-                    tpath = mount(dev=dev, fstype=fs_type, options='')
+                if fs_type is not None:
                     try:
-                        journal_uuid = get_oneliner(tpath, 'journal_uuid')
-                        if journal_uuid:
-                            journal_map[journal_uuid.lower()] = dev
-                    finally:
-                        unmount(tpath)
-                except MountError:
-                    pass
+                        tpath = mount(dev=dev, fstype=fs_type, options='')
+                        try:
+                            journal_uuid = get_oneliner(tpath, 'journal_uuid')
+                            if journal_uuid:
+                                journal_map[journal_uuid.lower()] = dev
+                        finally:
+                            unmount(tpath)
+                    except MountError:
+                        pass
 
     for base, parts in sorted(partmap.iteritems()):
         if parts:

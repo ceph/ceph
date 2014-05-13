@@ -175,7 +175,7 @@ public:
     }
 
     ret_ctx->handle_response(r, ret.dir.header);
-  };
+  }
 };
 
 int cls_rgw_get_dir_header_async(IoCtx& io_ctx, string& oid, RGWGetDirHeader_CB *ctx)

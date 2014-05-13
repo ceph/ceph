@@ -472,6 +472,15 @@ void ECBackend::continue_recovery_op(
       set<pg_shard_t> to_read;
       int r = get_min_avail_to_read_shards(
 	op.hoid, want, true, &to_read);
+      if (r != 0) {
+	// we must have lost a recovery source
+	assert(!op.recovery_progress.first);
+	dout(10) << __func__ << ": canceling recovery op for obj " << op.hoid
+		 << dendl;
+	get_parent()->cancel_pull(op.hoid);
+	recovery_ops.erase(op.hoid);
+	return;
+      }
       assert(r == 0);
       m->read(
 	this,
@@ -1082,11 +1091,11 @@ void ECBackend::filter_read_op(
   }
 
   if (op.in_progress.empty()) {
-    get_parent()->schedule_work(
+    get_parent()->schedule_recovery_work(
       get_parent()->bless_gencontext(
 	new FinishReadOp(this, op.tid)));
   }
-};
+}
 
 void ECBackend::check_recovery_sources(const OSDMapRef osdmap)
 {

@@ -400,7 +400,7 @@ public:
   
   void _enqueue(GenContext<ThreadPool::TPHandle&> *c) {
     _queue.push_back(c);
-  };
+  }
   void _enqueue_front(GenContext<ThreadPool::TPHandle&> *c) {
     _queue.push_front(c);
   }

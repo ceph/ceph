@@ -197,9 +197,9 @@ bool MDRequestImpl::has_more()
   return _more;
 }
 
-bool MDRequestImpl::are_slaves()
+bool MDRequestImpl::has_witnesses()
 {
-  return _more && !_more->slaves.empty();
+  return _more && !_more->witnessed.empty();
 }
 
 bool MDRequestImpl::slave_did_prepare()

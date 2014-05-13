@@ -84,7 +84,7 @@ struct LevelDBStoreStats {
     DECODE_FINISH(p);
   }
 };
-WRITE_CLASS_ENCODER(LevelDBStoreStats);
+WRITE_CLASS_ENCODER(LevelDBStoreStats)
 
 // data stats
 
@@ -134,7 +134,7 @@ struct DataStats {
     DECODE_FINISH(p);
   }
 };
-WRITE_CLASS_ENCODER(DataStats);
+WRITE_CLASS_ENCODER(DataStats)
 
 struct ScrubResult {
   map<string,uint32_t> prefix_crc;  ///< prefix -> crc
@@ -173,7 +173,7 @@ struct ScrubResult {
     ls.back()->prefix_keys["bar"] = 456;
   }
 };
-WRITE_CLASS_ENCODER(ScrubResult);
+WRITE_CLASS_ENCODER(ScrubResult)
 
 static inline ostream& operator<<(ostream& out, const ScrubResult& r) {
   return out << "ScrubResult(keys " << r.prefix_keys << " crc " << r.prefix_crc << ")";

@@ -206,7 +206,7 @@ public:
   /// Add mapping for oid, must not already be mapped
   void add_oid(
     const hobject_t &oid,       ///< [in] oid to add
-    std::set<snapid_t> new_snaps, ///< [in] snaps
+    const std::set<snapid_t>& new_snaps, ///< [in] snaps
     MapCacher::Transaction<std::string, bufferlist> *t ///< [out] transaction
     );
 

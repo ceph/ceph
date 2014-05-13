@@ -11,25 +11,10 @@ three Ceph Nodes (or virtual machines) that will host your Ceph Storage Cluster.
 Before proceeding any further, see `OS Recommendations`_ to verify that you have
 a supported distribution and version of Linux.
 
+In the descriptions below, :term:`Node` refers to a single machine.
 
-.. ditaa:: 
-           /------------------\         /----------------\
-           |    Admin Node    |         |     node1      |
-           |                  +-------->+                |
-           |    ceph–deploy   |         | cCCC           |
-           \---------+--------/         \----------------/
-                     |
-                     |                  /----------------\
-                     |                  |     node2      |
-                     +----------------->+                |
-                     |                  | cCCC           |
-                     |                  \----------------/
-                     |
-                     |                  /----------------\
-                     |                  |     node3      |
-                     +----------------->|                |
-                                        | cCCC           |
-                                        \----------------/
+.. include:: quick-common.rst
+
 
 
 Ceph Deploy Setup

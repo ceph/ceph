@@ -315,7 +315,7 @@ class MonitorDBStore
     }
     pair<string,string> get_last_key() {
       return last_key;
-    };
+    }
     virtual bool has_next_chunk() {
       return !done && _is_valid();
     }
@@ -571,7 +571,7 @@ class MonitorDBStore
 
 };
 
-WRITE_CLASS_ENCODER(MonitorDBStore::Op);
-WRITE_CLASS_ENCODER(MonitorDBStore::Transaction);
+WRITE_CLASS_ENCODER(MonitorDBStore::Op)
+WRITE_CLASS_ENCODER(MonitorDBStore::Transaction)
 
 #endif /* CEPH_MONITOR_DB_STORE_H */

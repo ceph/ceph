@@ -132,9 +132,6 @@ TYPE(DBObjectMap::State)
 #include "osdc/Journaler.h"
 TYPE(Journaler::Header)
 
-#include "mds/Anchor.h"
-TYPE(Anchor)
-
 #include "mds/snap.h"
 TYPE(SnapInfo)
 TYPE(snaplink_t)
@@ -165,9 +162,6 @@ TYPE_FEATUREFUL(MDSMap::mds_info_t)
 
 #include "mds/Capability.h"
 TYPE_NOCOPY(Capability)
-
-#include "mds/AnchorServer.h"
-TYPEWITHSTRAYDATA(AnchorServer)
 
 #include "mds/InoTable.h"
 TYPE(InoTable)
@@ -220,8 +214,8 @@ TYPE(EUpdate)
 #ifdef WITH_RADOSGW
 
 #include "rgw/rgw_rados.h"
-TYPE(RGWObjManifestPart);
-TYPE(RGWObjManifest);
+TYPE(RGWObjManifestPart)
+TYPE(RGWObjManifest)
 
 #include "rgw/rgw_acl.h"
 TYPE(ACLPermission)
@@ -282,8 +276,8 @@ TYPE(cls_user_get_header_ret)
 TYPE(cls_user_complete_stats_sync_op)
 
 #include "rgw/rgw_common.h"
-TYPE(RGWAccessKey);
-TYPE(RGWSubUser);
+TYPE(RGWAccessKey)
+TYPE(RGWSubUser)
 TYPE(RGWUserInfo)
 TYPE(rgw_bucket)
 TYPE(RGWBucketInfo)

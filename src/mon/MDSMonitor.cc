@@ -21,22 +21,18 @@
 
 #include "common/strtol.h"
 #include "common/ceph_argparse.h"
+#include "common/perf_counters.h"
+#include "common/Timer.h"
+#include "common/config.h"
+#include "common/cmdparse.h"
 
 #include "messages/MMDSMap.h"
 #include "messages/MMDSBeacon.h"
 #include "messages/MMDSLoadTargets.h"
 #include "messages/MMonCommand.h"
-
 #include "messages/MGenericMessage.h"
 
-#include "common/perf_counters.h"
-#include "common/Timer.h"
-
-#include "common/config.h"
 #include "include/assert.h"
-
-#include "MonitorDBStore.h"
-#include "common/cmdparse.h"
 #include "include/str_list.h"
 
 #include "mds/mdstypes.h"

@@ -169,7 +169,7 @@ TEST(ErasureCodePlugin, sse)
   parameters["m"] = "1";
   for (vector<string>::iterator sse_variant = sse_variants.begin();
        sse_variant != sse_variants.end();
-       sse_variant++) {
+       ++sse_variant) {
     //
     // load the plugin variant
     //
