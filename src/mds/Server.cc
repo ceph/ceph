@@ -3068,7 +3068,7 @@ void Server::handle_client_file_setlock(MDRequestRef& mdr)
      it will redeliver this request at a later date, so drop the request.
    */
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks)) {
-    dout(0) << "handle_client_file_setlock could not get locks!" << dendl;
+    dout(10) << "handle_client_file_setlock could not get locks!" << dendl;
     return;
   }
 
@@ -3082,7 +3082,7 @@ void Server::handle_client_file_setlock(MDRequestRef& mdr)
   set_lock.type = req->head.args.filelock_change.type;
   bool will_wait = req->head.args.filelock_change.wait;
 
-  dout(0) << "handle_client_file_setlock: " << set_lock << dendl;
+  dout(10) << "handle_client_file_setlock: " << set_lock << dendl;
 
   ceph_lock_state_t *lock_state = NULL;
 
@@ -3097,8 +3097,8 @@ void Server::handle_client_file_setlock(MDRequestRef& mdr)
     break;
 
   default:
-    dout(0) << "got unknown lock type " << set_lock.type
-	    << ", dropping request!" << dendl;
+    dout(10) << "got unknown lock type " << set_lock.type
+	     << ", dropping request!" << dendl;
     return;
   }
 
@@ -3159,7 +3159,7 @@ void Server::handle_client_file_readlock(MDRequestRef& mdr)
   */
   rdlocks.insert(&cur->flocklock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks)) {
-    dout(0) << "handle_client_file_readlock could not get locks!" << dendl;
+    dout(10) << "handle_client_file_readlock could not get locks!" << dendl;
     return;
   }
   
@@ -3184,8 +3184,8 @@ void Server::handle_client_file_readlock(MDRequestRef& mdr)
     break;
 
   default:
-    dout(0) << "got unknown lock type " << checking_lock.type
-	    << ", dropping request!" << dendl;
+    dout(10) << "got unknown lock type " << checking_lock.type
+	     << ", dropping request!" << dendl;
     return;
   }
   lock_state->look_for_lock(checking_lock);
