@@ -120,6 +120,8 @@ bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
     m_client->dump_mds_sessions(f);
   else if (command == "dump_cache")
     m_client->dump_cache(f);
+  else if (command == "kick_stale_sessions")
+    m_client->_kick_stale_sessions();
   else
     assert(0 == "bad command registered");
   m_client->client_lock.Unlock();
@@ -404,6 +406,14 @@ int Client::init()
     lderr(cct) << "error registering admin socket command: "
 	       << cpp_strerror(-ret) << dendl;
   }
+  ret = admin_socket->register_command("kick_stale_sessions",
+				       "kick_stale_sessions",
+				       &m_command_hook,
+				       "kick sessions that were remote reset");
+  if (ret < 0) {
+    lderr(cct) << "error registering admin socket command: "
+	       << cpp_strerror(-ret) << dendl;
+  }
 
   client_lock.Lock();
   initialized = true;
@@ -419,6 +429,7 @@ void Client::shutdown()
   admin_socket->unregister_command("mds_requests");
   admin_socket->unregister_command("mds_sessions");
   admin_socket->unregister_command("dump_cache");
+  admin_socket->unregister_command("kick_stale_sessions");
 
   if (ino_invalidate_cb) {
     ldout(cct, 10) << "shutdown stopping cache invalidator finisher" << dendl;
@@ -1464,7 +1475,7 @@ int Client::encode_inode_release(Inode *in, MetaRequest *req,
       rel.seq = caps->seq;
       rel.issue_seq = caps->issue_seq;
       rel.mseq = caps->mseq;
-      rel.caps = caps->issued;
+      rel.caps = caps->implemented;
       rel.wanted = caps->wanted;
       rel.dname_len = 0;
       rel.dname_seq = 0;
@@ -1538,7 +1549,8 @@ bool Client::have_open_session(int mds)
 {
   return
     mds_sessions.count(mds) &&
-    mds_sessions[mds]->state == MetaSession::STATE_OPEN;
+    (mds_sessions[mds]->state == MetaSession::STATE_OPEN ||
+     mds_sessions[mds]->state == MetaSession::STATE_STALE);
 }
 
 MetaSession *Client::_get_mds_session(int mds, Connection *con)
@@ -1647,6 +1659,19 @@ void Client::handle_client_session(MClientSession *m)
   }
 
   m->put();
+}
+
+void Client::_kick_stale_sessions()
+{
+  ldout(cct, 1) << "kick_stale_sessions" << dendl;
+
+  for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
+       p != mds_sessions.end(); ) {
+    MetaSession *s = p->second;
+    ++p;
+    if (s->state == MetaSession::STATE_STALE)
+      _closed_mds_session(s);
+  }
 }
 
 void Client::send_request(MetaRequest *request, MetaSession *session)
@@ -2065,15 +2090,21 @@ void Client::kick_requests_closed(MetaSession *session)
 {
   ldout(cct, 10) << "kick_requests_closed for mds." << session->mds_num << dendl;
   for (map<ceph_tid_t, MetaRequest*>::iterator p = mds_requests.begin();
-       p != mds_requests.end();
-       ++p) {
-    if (p->second->mds == session->mds_num) {
-      if (p->second->caller_cond) {
-	p->second->kick = true;
-	p->second->caller_cond->Signal();
+       p != mds_requests.end(); ) {
+    MetaRequest *req = p->second;
+    ++p;
+    if (req->mds == session->mds_num) {
+      if (req->caller_cond) {
+	req->kick = true;
+	req->caller_cond->Signal();
       }
-      p->second->item.remove_myself();
-      p->second->unsafe_item.remove_myself();
+      req->item.remove_myself();
+      if (req->got_unsafe) {
+	lderr(cct) << "kick_requests_closed removing unsafe request " << req->get_tid() << dendl;
+	req->unsafe_item.remove_myself();
+	mds_requests.erase(req->get_tid());
+	put_request(req);
+      }
     }
   }
   assert(session->requests.empty());
@@ -2327,6 +2358,9 @@ void Client::put_cap_ref(Inode *in, int cap)
 int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
 {
   while (1) {
+    if (!in->is_any_caps())
+      return -ESTALE;
+
     if (endoff > 0 &&
 	(endoff >= (loff_t)in->max_size ||
 	 endoff > (loff_t)(in->size << 1)) &&
@@ -3050,12 +3084,31 @@ void Client::remove_all_caps(Inode *in)
     remove_cap(in->caps.begin()->second, true);
 }
 
-void Client::remove_session_caps(MetaSession *mds) 
+void Client::remove_session_caps(MetaSession *s)
 {
-  while (mds->caps.size()) {
-    Cap *cap = *mds->caps.begin();
+  ldout(cct, 10) << "remove_session_caps mds." << s->mds_num << dendl;
+
+  while (s->caps.size()) {
+    Cap *cap = *s->caps.begin();
+    Inode *in = cap->inode;
+    int dirty_caps = 0;
+    if (in->auth_cap == cap) {
+      dirty_caps = in->dirty_caps | in->flushing_caps;
+      in->wanted_max_size = 0;
+      in->requested_max_size = 0;
+    }
     remove_cap(cap, false);
+    signal_cond_list(in->waitfor_caps);
+    if (dirty_caps) {
+      lderr(cct) << "remove_session_caps still has dirty|flushing caps on " << *in << dendl;
+      if (in->flushing_caps)
+	num_flushing_caps--;
+      in->flushing_caps = 0;
+      in->dirty_caps = 0;
+      put_inode(in);
+    }
   }
+  sync_cond.Signal();
 }
 
 void Client::trim_caps(MetaSession *s, int max)
@@ -3574,9 +3627,11 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
   ldout(cct, 5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq()
 		<< " EXPORT from mds." << mds << dendl;
 
-  if (in->caps.count(mds)) {
-    Cap *cap = in->caps[mds];
+  Cap *cap = NULL;
+  if (in->caps.count(mds))
+    cap = in->caps[mds];
 
+  if (cap && cap->cap_id == m->get_cap_id()) {
     if (m->peer.cap_id) {
       MetaSession *tsession = _get_or_open_mds_session(m->peer.mds);
       if (in->caps.count(m->peer.mds)) {
@@ -3888,7 +3943,7 @@ int Client::mount(const std::string &mount_root)
   Mutex::Locker lock(client_lock);
 
   if (mounted) {
-    ldout(cct, 5) << "already mounted" << dendl;;
+    ldout(cct, 5) << "already mounted" << dendl;
     return 0;
   }
 
@@ -8958,6 +9013,10 @@ void Client::ms_handle_remote_reset(Connection *con)
 	  break;
 
 	case MetaSession::STATE_OPEN:
+	  ldout(cct, 1) << "reset from mds we were open; mark session as stale" << dendl;
+	  s->state = MetaSession::STATE_STALE;
+	  break;
+
 	case MetaSession::STATE_NEW:
 	case MetaSession::STATE_CLOSED:
 	default:

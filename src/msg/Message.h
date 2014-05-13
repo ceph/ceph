@@ -350,7 +350,7 @@ public:
       dispatch_throttle_size(0) {
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
-  };
+  }
   Message(int t, int version=1, int compat_version=0)
     : connection(NULL),
       byte_throttler(NULL),

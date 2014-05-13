@@ -45,12 +45,12 @@ class RootController(RestController):
         try:
             db.put_new_version(request.body)
         except ValueError as ve:
-            return self.fail(status_code=422, msg="Improper payload")
+            return self.fail(status_code=422, msg="Improper payload : " + str(ve))
         except KeyError as ke:
-            msg = "Payload not as expected, some keys are missing"
+            msg = "Payload not as expected, some keys are missing : " + str(ke)
             return self.fail(status_code=422, msg=msg)
         except Exception as e:
-            return self.fail(status_code=500, msg="Internal Server Error")
+            return self.fail(status_code=500, msg="Internal Server Error : " + str(e))
        
         response.status = 201
         return "CREATED"

@@ -115,7 +115,6 @@ public:
 
 TEST_F(TestHASH_INDEX_TAG_2, generate_and_parse_name) {
   const vector<string> path;
-  std::string mangled_name;
   const std::string key("KEY");
   uint64_t hash = 0xABABABAB;
   uint64_t pool = -1;
@@ -139,7 +138,6 @@ public:
 
 TEST_F(TestHOBJECT_WITH_POOL, generate_and_parse_name) {
   const vector<string> path;
-  std::string mangled_name;
   const std::string key("KEY");
   uint64_t hash = 0xABABABAB;
   uint64_t pool = 0xCDCDCDCD;

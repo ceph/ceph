@@ -36,7 +36,7 @@
 #include "SessionMap.h"
 
 
-#define CEPH_MDS_PROTOCOL    23 /* cluster internal */
+#define CEPH_MDS_PROTOCOL    24 /* cluster internal */
 
 
 enum {
@@ -135,8 +135,6 @@ class MMDSBeacon;
 class InoTable;
 class SnapServer;
 class SnapClient;
-class AnchorServer;
-class AnchorClient;
 
 class MDSTableServer;
 class MDSTableClient;
@@ -176,9 +174,6 @@ class MDS : public Dispatcher, public md_config_obs_t {
   MDBalancer   *balancer;
 
   InoTable     *inotable;
-
-  AnchorServer *anchorserver;
-  AnchorClient *anchorclient;
 
   SnapServer   *snapserver;
   SnapClient   *snapclient;
@@ -343,6 +338,7 @@ class MDS : public Dispatcher, public md_config_obs_t {
 
   // who am i etc
   int get_nodeid() { return whoami; }
+  uint64_t get_metadata_pool() { return mdsmap->get_metadata_pool(); }
   MDSMap *get_mds_map() { return mdsmap; }
   OSDMap *get_osd_map() { return osdmap; }
 

@@ -327,8 +327,6 @@ void MonClient::handle_monmap(MMonMap *m)
   if (!monmap.get_addr_name(cur_con->get_peer_addr(), cur_mon)) {
     ldout(cct, 10) << "mon." << cur_mon << " went away" << dendl;
     _reopen_session();  // can't find the mon we were talking to (above)
-  } else {
-    _finish_hunting();
   }
 
   map_cond.Signal();
@@ -429,7 +427,7 @@ int MonClient::authenticate(double timeout)
   Mutex::Locker lock(monc_lock);
 
   if (state == MC_STATE_HAVE_SESSION) {
-    ldout(cct, 5) << "already authenticated" << dendl;;
+    ldout(cct, 5) << "already authenticated" << dendl;
     return 0;
   }
 
@@ -756,8 +754,6 @@ void MonClient::_renew_subs()
 
 void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
 {
-  _finish_hunting();
-
   if (sub_renew_sent != utime_t()) {
     sub_renew_after = sub_renew_sent;
     sub_renew_after += m->interval / 2.0;

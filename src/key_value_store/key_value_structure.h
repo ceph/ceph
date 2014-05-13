@@ -57,7 +57,7 @@ public:
   virtual int suicide() = 0;
 
   ////////////////DESTRUCTOR/////////////////
-  virtual ~KeyValueStructure() {};
+  virtual ~KeyValueStructure() {}
 
   ////////////////UPDATERS///////////////////
 
