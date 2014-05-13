@@ -75,6 +75,7 @@ namespace librbd {
 	m_tried_parent(false), m_sparse(sparse) {
     }
     virtual ~AioRead() {}
+    ssize_t write_COR();
     virtual bool should_complete(int r);
     virtual int send();
 
