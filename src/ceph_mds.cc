@@ -22,6 +22,12 @@ using namespace std;
 
 #include "include/ceph_features.h"
 
+#include "msg/Messenger.h"
+#if defined(HAVE_XIO)
+#include "msg/XioMessenger.h"
+#include "msg/QueueStrategy.h"
+#endif
+
 #include "common/config.h"
 #include "common/strtol.h"
 
@@ -29,8 +35,6 @@ using namespace std;
 #include "mds/MDS.h"
 #include "mds/Dumper.h"
 #include "mds/Resetter.h"
-
-#include "msg/Messenger.h"
 
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
@@ -231,12 +235,25 @@ int main(int argc, const char **argv)
     usage();
   }
 
-  Messenger *messenger = Messenger::create(g_ceph_context,
+  Messenger *simple_msgr = Messenger::create(g_ceph_context,
 					   entity_name_t::MDS(-1), "mds",
 					   getpid());
-  messenger->set_cluster_protocol(CEPH_MDS_PROTOCOL);
+  simple_msgr->set_cluster_protocol(CEPH_MDS_PROTOCOL);
 
-  cout << "starting " << g_conf->name << " at " << messenger->get_myaddr()
+#if defined(HAVE_XIO)
+  XioMessenger *xmsgr = new XioMessenger(
+    g_ceph_context,
+    entity_name_t::MDS(-1),
+    "xio mds",
+    0 /* nonce */,
+    2 /* portals */,
+    new QueueStrategy(2) /* dispatch strategy */);
+
+  xmsgr->set_cluster_protocol(CEPH_MDS_PROTOCOL);
+  xmsgr->set_port_shift(111);;
+#endif
+
+  cout << "starting " << g_conf->name << " at " << simple_msgr->get_myaddr()
        << std::endl;
   uint64_t supported =
     CEPH_FEATURE_UID |
@@ -248,20 +265,38 @@ int main(int argc, const char **argv)
     CEPH_FEATURE_EXPORT_PEER;
   uint64_t required =
     CEPH_FEATURE_OSDREPLYMUX;
-  messenger->set_default_policy(Messenger::Policy::lossy_client(supported, required));
-  messenger->set_policy(entity_name_t::TYPE_MON,
+
+  simple_msgr->set_default_policy(Messenger::Policy::lossy_client(supported, required));
+  simple_msgr->set_policy(entity_name_t::TYPE_MON,
 			Messenger::Policy::lossy_client(supported,
 							CEPH_FEATURE_UID |
 							CEPH_FEATURE_PGID64));
-  messenger->set_policy(entity_name_t::TYPE_MDS,
+  simple_msgr->set_policy(entity_name_t::TYPE_MDS,
 			Messenger::Policy::lossless_peer(supported,
 							 CEPH_FEATURE_UID));
-  messenger->set_policy(entity_name_t::TYPE_CLIENT,
+  simple_msgr->set_policy(entity_name_t::TYPE_CLIENT,
 			Messenger::Policy::stateful_server(supported, 0));
 
-  int r = messenger->bind(g_conf->public_addr);
+  int r = simple_msgr->bind(g_conf->public_addr);
   if (r < 0)
     exit(1);
+
+#if defined(HAVE_XIO)
+  xmsgr->set_default_policy(Messenger::Policy::lossy_client(supported, required));
+  xmsgr->set_policy(entity_name_t::TYPE_MON,
+		    Messenger::Policy::lossy_client(supported,
+						    CEPH_FEATURE_UID |
+						    CEPH_FEATURE_PGID64));
+  xmsgr->set_policy(entity_name_t::TYPE_MDS,
+		    Messenger::Policy::lossless_peer(supported,
+						     CEPH_FEATURE_UID));
+  xmsgr->set_policy(entity_name_t::TYPE_CLIENT,
+		    Messenger::Policy::stateful_server(supported, 0));
+
+  r = xmsgr->bind(g_conf->public_addr);
+  if (r < 0)
+    exit(1);
+#endif
 
   if (shadow != MDSMap::STATE_ONESHOT_REPLAY)
     global_init_daemonize(g_ceph_context, 0);
@@ -273,10 +308,21 @@ int main(int argc, const char **argv)
     return -1;
   global_init_chdir(g_ceph_context);
 
-  messenger->start();
+  simple_msgr->start();
+#if defined(HAVE_XIO)
+  xmsgr->start();
+#endif
+
+  Messenger *cluster_msgr = (g_conf->cluster_rdma) ?
+#if defined(HAVE_XIO)
+    xmsgr
+#else
+    simple_msgr
+#endif
+    : simple_msgr;
 
   // start mds
-  mds = new MDS(g_conf->name.get_id().c_str(), messenger, &mc);
+  mds = new MDS(g_conf->name.get_id().c_str(), cluster_msgr, &mc);
 
   // in case we have to respawn...
   mds->orig_argc = argc;
@@ -298,7 +344,8 @@ int main(int argc, const char **argv)
   if (g_conf->inject_early_sigterm)
     kill(getpid(), SIGTERM);
 
-  messenger->wait();
+  simple_msgr->wait();
+  xmsgr->wait();
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_mds_signal);
