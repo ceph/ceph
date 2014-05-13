@@ -32,11 +32,15 @@ _rbd()
                 return 0
                 ;;
             snap)
-                COMPREPLY=( $(compgen -W "ls create rollback rm" -- ${cur}) )
+                COMPREPLY=( $(compgen -W "ls create rollback rm purge protect unprotect" -- ${cur}) )
                 return 0
                 ;;
-            *)
-                COMPREPLY=( $(compgen -W "ls list info create resize rm export import cp copy mv rename snap watch map unmap showmapped" -- ${cur}) )
+            lock)
+                COMPREPLY=( $(compgen -W "list add remove" -- ${cur}) )
+                return 0
+                ;;
+            rbd)
+                COMPREPLY=( $(compgen -W "ls list info create clone flatten resize rm export import diff export-diff import-diff cp copy mv rename snap watch lock bench-write map unmap showmapped" -- ${cur}) )
                 return 0
             ;;
         esac
