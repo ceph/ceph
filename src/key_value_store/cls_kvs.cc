@@ -73,7 +73,7 @@ static int get_idata_from_key(cls_method_context_t hctx, const string &key,
   }
 
   CLS_LOG(20, "idata is %s", idata.str().c_str());
-  return 0;
+  return r;
 }
 
 
@@ -379,8 +379,6 @@ static int omap_insert(cls_method_context_t hctx,
       return r;
     }
   }
-
-  r = 0;
 
   bufferlist old_size;
   r = cls_cxx_getxattr(hctx, "size", &old_size);

@@ -23,7 +23,7 @@ public:
   void fill(unsigned count) {
     char buf[50];
     for (unsigned i = 0; i < count; ++i) {
-      sprintf(buf, "hitsettest_%d", i);
+      sprintf(buf, "hitsettest_%u", i);
       hobject_t obj(object_t(buf), "", 0, i, 0, "");
       hitset->insert(obj);
     }
@@ -32,7 +32,7 @@ public:
   void verify_fill(unsigned count) {
     char buf[50];
     for (unsigned i = 0; i < count; ++i) {
-      sprintf(buf, "hitsettest_%d", i);
+      sprintf(buf, "hitsettest_%u", i);
       hobject_t obj(object_t(buf), "", 0, i, 0, "");
       EXPECT_TRUE(hitset->contains(obj));
     }

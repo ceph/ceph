@@ -866,7 +866,7 @@ public:
 	m->fsid,
 	m->get_target(),
 	m->get_epoch(),
-	m->ack));
+	false));   // ACK itself does not request an ack
   }
   ~C_AckMarkedDown() {
     m->put();
@@ -903,8 +903,10 @@ bool OSDMonitor::preprocess_mark_me_down(MOSDMarkMeDown *m)
   return false;
 
  reply:
-  Context *c(new C_AckMarkedDown(this, m));
-  c->complete(0);
+  if (m->request_ack) {
+    Context *c(new C_AckMarkedDown(this, m));
+    c->complete(0);
+  }
   return true;
 }
 
@@ -917,7 +919,8 @@ bool OSDMonitor::prepare_mark_me_down(MOSDMarkMeDown *m)
 
   mon->clog.info() << "osd." << target_osd << " marked itself down\n";
   pending_inc.new_state[target_osd] = CEPH_OSD_UP;
-  wait_for_finished_proposal(new C_AckMarkedDown(this, m));
+  if (m->request_ack)
+    wait_for_finished_proposal(new C_AckMarkedDown(this, m));
   return true;
 }
 
@@ -1210,6 +1213,7 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
   if (osdmap.exists(from) &&
       osdmap.get_info(from).up_from > m->version) {
     dout(7) << "prepare_boot msg from before last up_from, ignoring" << dendl;
+    send_latest(m, m->sb.current_epoch+1);
     goto ignore;
   }
 
@@ -2697,7 +2701,7 @@ stats_out:
       f->open_array_section("erasure-code-profiles");
     for(map<string,map<string,string> >::const_iterator i = profiles.begin();
 	i != profiles.end();
-	i++) {
+	++i) {
       if (f)
         f->dump_string("profile", i->first.c_str());
       else
@@ -2723,7 +2727,7 @@ stats_out:
       f->open_object_section("profile");
     for (map<string,string>::const_iterator i = profile.begin();
 	 i != profile.end();
-	 i++) {
+	 ++i) {
       if (f)
         f->dump_string(i->first.c_str(), i->second.c_str());
       else
@@ -5073,8 +5077,10 @@ done:
       goto reply;
     }
     // go
-    pending_inc.get_new_pool(pool_id, p)->read_tier = overlaypool_id;
-    pending_inc.get_new_pool(pool_id, p)->write_tier = overlaypool_id;
+    pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
+    np->read_tier = overlaypool_id;
+    np->write_tier = overlaypool_id;
+    np->last_force_op_resend = pending_inc.epoch;
     ss << "overlay for '" << poolstr << "' is now (or already was) '" << overlaypoolstr << "'";
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
 					      get_last_committed() + 1));
@@ -5096,8 +5102,10 @@ done:
       goto reply;
     }
     // go
-    pending_inc.get_new_pool(pool_id, p)->clear_read_tier();
-    pending_inc.get_new_pool(pool_id, p)->clear_write_tier();
+    pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
+    np->clear_read_tier();
+    np->clear_write_tier();
+    np->last_force_op_resend = pending_inc.epoch;
     ss << "there is now (or already was) no overlay for '" << poolstr << "'";
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
 					      get_last_committed() + 1));
@@ -5131,6 +5139,59 @@ done:
       err = -EINVAL;
       goto reply;
     }
+
+    // pool already has this cache-mode set and there are no pending changes
+    if (p->cache_mode == mode && pending_inc.new_pools.count(pool_id) == 0) {
+      ss << "set cache-mode for pool '" << poolstr << "'"
+         << " to " << pg_pool_t::get_cache_mode_name(mode);
+      err = 0;
+      goto reply;
+    }
+
+    /* Mode description:
+     *
+     *  none:       No cache-mode defined
+     *  forward:    Forward all reads and writes to base pool
+     *  writeback:  Cache writes, promote reads from base pool
+     *  readonly:   Forward writes to base pool
+     *
+     * Hence, these are the allowed transitions:
+     *
+     *  none -> any
+     *  forward -> writeback || any IF num_objects_dirty == 0
+     *  writeback -> forward
+     *  readonly -> any
+     */
+
+    // We check if the transition is valid against the current pool mode, as
+    // it is the only committed state thus far.  We will blantly squash
+    // whatever mode is on the pending state.
+
+    if (p->cache_mode == pg_pool_t::CACHEMODE_WRITEBACK &&
+        mode != pg_pool_t::CACHEMODE_FORWARD) {
+      ss << "unable to set cache-mode '" << pg_pool_t::get_cache_mode_name(mode)
+         << "' on a '" << pg_pool_t::get_cache_mode_name(p->cache_mode)
+         << "' pool; only '"
+         << pg_pool_t::get_cache_mode_name(pg_pool_t::CACHEMODE_FORWARD)
+        << "' allowed.";
+      err = -EINVAL;
+      goto reply;
+    }
+    if (p->cache_mode == pg_pool_t::CACHEMODE_FORWARD &&
+               mode != pg_pool_t::CACHEMODE_WRITEBACK) {
+
+      const pool_stat_t& tier_stats =
+        mon->pgmon()->pg_map.get_pg_pool_sum_stat(pool_id);
+
+      if (tier_stats.stats.sum.num_objects_dirty > 0) {
+        ss << "unable to set cache-mode '"
+           << pg_pool_t::get_cache_mode_name(mode) << "' on pool '" << poolstr
+           << "': dirty objects found";
+        err = -EBUSY;
+        goto reply;
+      }
+    }
+
     // go
     pending_inc.get_new_pool(pool_id, p)->cache_mode = mode;
     ss << "set cache-mode for pool '" << poolstr

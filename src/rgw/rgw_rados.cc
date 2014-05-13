@@ -561,7 +561,10 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
     rule_iter = manifest->rules.begin();
     stripe_ofs = 0;
     stripe_size = manifest->get_head_size();
-    cur_part_id = rule_iter->second.start_part_num;
+    if (rule_iter != manifest->rules.end()) {
+      cur_part_id = rule_iter->second.start_part_num;
+      cur_override_prefix = rule_iter->second.override_prefix;
+    }
     update_location();
     return;
   }
@@ -570,6 +573,11 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
   next_rule_iter = rule_iter;
   if (rule_iter != manifest->rules.begin()) {
     --rule_iter;
+  }
+
+  if (rule_iter == manifest->rules.end()) {
+    update_location();
+    return;
   }
 
   RGWObjManifestRule& rule = rule_iter->second;
@@ -597,9 +605,11 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
     stripe_size = rule.stripe_max_size;
     stripe_size = MIN(manifest->get_obj_size() - stripe_ofs, stripe_size);
   } else {
-    stripe_size = rule.part_size - (ofs - stripe_ofs);
-    stripe_size = MIN(stripe_size, rule.stripe_max_size);
+    uint64_t next = MIN(stripe_ofs + rule.stripe_max_size, part_ofs + rule.part_size);
+    stripe_size = next - stripe_ofs;
   }
+
+  cur_override_prefix = rule.override_prefix;
 
   update_location();
 }
@@ -618,7 +628,7 @@ void RGWObjManifest::obj_iterator::update_location()
     return;
   }
 
-  manifest->get_implicit_location(cur_part_id, cur_stripe, ofs, &location);
+  manifest->get_implicit_location(cur_part_id, cur_stripe, ofs, &cur_override_prefix, &location);
 }
 
 void RGWObjManifest::obj_iterator::operator++()
@@ -699,6 +709,8 @@ void RGWObjManifest::obj_iterator::operator++()
     stripe_size = MIN(rule->part_size - (stripe_ofs - part_ofs), rule->stripe_max_size);
   }
 
+  cur_override_prefix = rule->override_prefix;
+
   ofs = stripe_ofs;
   if (ofs > obj_size) {
     ofs = obj_size;
@@ -719,10 +731,10 @@ int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m
   manifest->set_head(_h);
   last_ofs = 0;
 
-  char buf[33];
-  gen_rand_alphanumeric(cct, buf, sizeof(buf) - 1);
-
   if (manifest->get_prefix().empty()) {
+    char buf[33];
+    gen_rand_alphanumeric(cct, buf, sizeof(buf) - 1);
+
     string oid_prefix = ".";
     oid_prefix.append(buf);
     oid_prefix.append("_");
@@ -746,7 +758,7 @@ int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m
   
   cur_part_id = rule.start_part_num;
 
-  manifest->get_implicit_location(cur_part_id, cur_stripe, 0, &cur_obj);
+  manifest->get_implicit_location(cur_part_id, cur_stripe, 0, NULL, &cur_obj);
 
   manifest->update_iterators();
 
@@ -757,8 +769,6 @@ int RGWObjManifest::generator::create_next(uint64_t ofs)
 {
   if (ofs < last_ofs) /* only going forward */
     return -EINVAL;
-
-  string obj_name = manifest->prefix;
 
   uint64_t max_head_size = manifest->get_max_head_size();
 
@@ -779,8 +789,7 @@ int RGWObjManifest::generator::create_next(uint64_t ofs)
   last_ofs = ofs;
   manifest->set_obj_size(ofs);
 
-
-  manifest->get_implicit_location(cur_part_id, cur_stripe, ofs, &cur_obj);
+  manifest->get_implicit_location(cur_part_id, cur_stripe, ofs, NULL, &cur_obj);
 
   manifest->update_iterators();
 
@@ -797,9 +806,14 @@ const RGWObjManifest::obj_iterator& RGWObjManifest::obj_end()
   return end_iter;
 }
 
-void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs, rgw_obj *location)
+void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs, string *override_prefix, rgw_obj *location)
 {
-  string oid = prefix;
+  string oid;
+  if (!override_prefix || override_prefix->empty()) {
+    oid = prefix;
+  } else {
+    oid = *override_prefix;
+  }
   string ns;
 
   if (!cur_part_id) {
@@ -857,10 +871,14 @@ int RGWObjManifest::append(RGWObjManifest& m)
     return 0;
   }
 
+  string override_prefix;
+
   if (prefix.empty()) {
     prefix = m.prefix;
-  } else if (prefix != m.prefix) {
-    return append_explicit(m);
+  }
+
+  if (prefix != m.prefix) {
+    override_prefix = m.prefix;
   }
 
   map<uint64_t, RGWObjManifestRule>::iterator miter = m.rules.begin();
@@ -882,9 +900,15 @@ int RGWObjManifest::append(RGWObjManifest& m)
       next_rule.part_size = m.obj_size - next_rule.start_ofs;
     }
 
+    if (override_prefix != rule.override_prefix) {
+      append_rules(m, miter, &override_prefix);
+      break;
+    }
+
     if (rule.part_size != next_rule.part_size ||
-        rule.stripe_max_size != next_rule.stripe_max_size) {
-      append_rules(m, miter);
+        rule.stripe_max_size != next_rule.stripe_max_size ||
+        rule.override_prefix != next_rule.override_prefix) {
+      append_rules(m, miter, NULL);
       break;
     }
 
@@ -894,7 +918,7 @@ int RGWObjManifest::append(RGWObjManifest& m)
     }
 
     if (expected_part_num != next_rule.start_part_num) {
-      append_rules(m, miter);
+      append_rules(m, miter, NULL);
       break;
     }
   }
@@ -904,11 +928,14 @@ int RGWObjManifest::append(RGWObjManifest& m)
   return 0;
 }
 
-void RGWObjManifest::append_rules(RGWObjManifest& m, map<uint64_t, RGWObjManifestRule>::iterator& miter)
+void RGWObjManifest::append_rules(RGWObjManifest& m, map<uint64_t, RGWObjManifestRule>::iterator& miter,
+                                  string *override_prefix)
 {
   for (; miter != m.rules.end(); ++miter) {
     RGWObjManifestRule rule = miter->second;
     rule.start_ofs += obj_size;
+    if (override_prefix)
+      rule.override_prefix = *override_prefix;
     rules[rule.start_ofs] = rule;
   }
 }
@@ -1006,14 +1033,14 @@ RGWPutObjProcessor::~RGWPutObjProcessor()
   }
 }
 
-int RGWPutObjProcessor_Plain::prepare(RGWRados *store, void *obj_ctx)
+int RGWPutObjProcessor_Plain::prepare(RGWRados *store, void *obj_ctx, string *oid_rand)
 {
-  RGWPutObjProcessor::prepare(store, obj_ctx);
+  RGWPutObjProcessor::prepare(store, obj_ctx, oid_rand);
 
   obj.init(bucket, obj_str);
 
   return 0;
-};
+}
 
 int RGWPutObjProcessor_Plain::handle_data(bufferlist& bl, off_t _ofs, void **phandle)
 {
@@ -1041,7 +1068,7 @@ int RGWPutObjProcessor_Plain::do_complete(string& etag, time_t *mtime, time_t se
 }
 
 
-int RGWPutObjProcessor_Aio::handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle)
+int RGWPutObjProcessor_Aio::handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle, bool exclusive)
 {
   if ((uint64_t)abs_ofs + bl.length() > obj_len)
     obj_len = abs_ofs + bl.length();
@@ -1051,7 +1078,7 @@ int RGWPutObjProcessor_Aio::handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t 
   int r = store->aio_put_obj_data(NULL, obj,
                                      bl,
                                      ((ofs != 0) ? ofs : -1),
-                                     false, phandle);
+                                     exclusive, phandle);
 
   return r;
 }
@@ -1091,7 +1118,7 @@ int RGWPutObjProcessor_Aio::drain_pending()
   return ret;
 }
 
-int RGWPutObjProcessor_Aio::throttle_data(void *handle)
+int RGWPutObjProcessor_Aio::throttle_data(void *handle, bool need_to_wait)
 {
   if (handle) {
     struct put_obj_aio_info info;
@@ -1099,10 +1126,13 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle)
     pending.push_back(info);
   }
   size_t orig_size = pending.size();
-  while (pending_has_completed()) {
+  while (pending_has_completed()
+         || need_to_wait) {
     int r = wait_pending_front();
     if (r < 0)
       return r;
+
+    need_to_wait = false;
   }
 
   /* resize window in case messages are draining too fast */
@@ -1118,7 +1148,7 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle)
   return 0;
 }
 
-int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phandle)
+int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phandle, bool exclusive)
 {
   if (ofs >= next_part_ofs) {
     int r = prepare_next_part(ofs);
@@ -1127,7 +1157,7 @@ int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phan
     }
   }
 
-  return RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle);
+  return RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle, exclusive);
 }
 
 int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **phandle)
@@ -1168,12 +1198,15 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **pha
   }
   off_t write_ofs = data_ofs;
   data_ofs = write_ofs + bl.length();
-  return write_data(bl, write_ofs, phandle);
+  bool exclusive = (!write_ofs && immutable_head()); /* immutable head object, need to verify nothing exists there
+                                                        we could be racing with another upload, to the same
+                                                        object and cleanup can be messy */
+  return write_data(bl, write_ofs, phandle, exclusive);
 }
 
-int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, void *obj_ctx)
+int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, void *obj_ctx, string *oid_rand)
 {
-  RGWPutObjProcessor::prepare(store, obj_ctx);
+  RGWPutObjProcessor::prepare(store, obj_ctx, oid_rand);
 
   head_obj.init(bucket, obj_str);
 
@@ -1202,7 +1235,7 @@ int RGWPutObjProcessor_Atomic::prepare_next_part(off_t ofs) {
   add_obj(cur_obj);
 
   return 0;
-};
+}
 
 int RGWPutObjProcessor_Atomic::complete_parts()
 {
@@ -1220,12 +1253,12 @@ int RGWPutObjProcessor_Atomic::complete_writing_data()
   }
   if (pending_data_bl.length()) {
     void *handle;
-    int r = write_data(pending_data_bl, data_ofs, &handle);
+    int r = write_data(pending_data_bl, data_ofs, &handle, false);
     if (r < 0) {
       ldout(store->ctx(), 0) << "ERROR: write_data() returned " << r << dendl;
       return r;
     }
-    r = throttle_data(handle);
+    r = throttle_data(handle, false);
     if (r < 0) {
       ldout(store->ctx(), 0) << "ERROR: throttle_data() returned " << r << dendl;
       return r;
@@ -3014,7 +3047,7 @@ public:
       }
     }
 
-    ret = processor->throttle_data(handle);
+    ret = processor->throttle_data(handle, false);
     if (ret < 0)
       return ret;
 
@@ -3063,6 +3096,28 @@ public:
       handle = _h;
     }
 };
+
+int RGWRados::rewrite_obj(const string& bucket_owner, rgw_obj& obj)
+{
+  map<string, bufferlist> attrset;
+  off_t ofs = 0;
+  off_t end = -1;
+  void *handle = NULL;
+
+  time_t mtime;
+  uint64_t total_len;
+  uint64_t obj_size;
+  RGWRadosCtx rctx(this);
+  int ret = prepare_get_obj((void *)&rctx, obj, &ofs, &end, &attrset,
+                            NULL, NULL, &mtime, NULL, NULL, &total_len,
+                            &obj_size, NULL, &handle, NULL);
+  if (ret < 0)
+    return ret;
+
+  attrset.erase(RGW_ATTR_ID_TAG);
+
+  return copy_obj_data((void *)&rctx, bucket_owner, &handle, end, obj, obj, &mtime, attrset, RGW_OBJ_CATEGORY_MAIN, NULL, NULL);
+}
 
 /**
  * Copy an object.
@@ -3139,7 +3194,7 @@ int RGWRados::copy_obj(void *ctx,
 
     RGWPutObjProcessor_Atomic processor(dest_bucket_info.owner, dest_obj.bucket, dest_obj.object,
                                         cct->_conf->rgw_obj_stripe_size, tag);
-    ret = processor.prepare(this, ctx);
+    ret = processor.prepare(this, ctx, NULL);
     if (ret < 0)
       return ret;
 
@@ -4817,8 +4872,16 @@ void RGWRados::get_obj_aio_completion_cb(completion_t c, void *arg)
   ldout(cct, 20) << "get_obj_aio_completion_cb: io completion ofs=" << ofs << " len=" << len << dendl;
   d->throttle.put(len);
 
-  if (d->is_cancelled())
+  r = rados_aio_get_return_value(c);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: got unexpected error when trying to read object: " << r << dendl;
+    d->set_cancelled(r);
     goto done;
+  }
+
+  if (d->is_cancelled()) {
+    goto done;
+  }
 
   d->data_lock.Lock();
 

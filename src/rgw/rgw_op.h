@@ -132,8 +132,6 @@ public:
   void pre_exec();
   void execute();
   int read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs);
-  int iterate_user_manifest_parts(rgw_bucket& bucket, string& obj_prefix, RGWAccessControlPolicy *bucket_policy,
-                                  uint64_t *ptotal_len, bool read_data);
   int handle_user_manifest(const char *prefix);
 
   int get_data_cb(bufferlist& bl, off_t ofs, off_t len);
@@ -324,6 +322,8 @@ protected:
   const char *obj_manifest;
   time_t mtime;
 
+  MD5 *user_manifest_parts_hash;
+
 public:
   RGWPutObj() {
     ret = 0;
@@ -333,6 +333,7 @@ public:
     chunked_upload = false;
     obj_manifest = NULL;
     mtime = 0;
+    user_manifest_parts_hash = NULL;
   }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
@@ -340,8 +341,10 @@ public:
     policy.set_ctx(s->cct);
   }
 
-  RGWPutObjProcessor *select_processor();
+  RGWPutObjProcessor *select_processor(bool *is_multipart);
   void dispose_processor(RGWPutObjProcessor *processor);
+
+  int user_manifest_iterate_cb(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs);
 
   int verify_permission();
   void pre_exec();
@@ -754,21 +757,22 @@ class RGWMPObj {
   string upload_id;
 public:
   RGWMPObj() {}
-  RGWMPObj(string& _oid, string& _upload_id) {
-    init(_oid, _upload_id);
+  RGWMPObj(const string& _oid, const string& _upload_id) {
+    init(_oid, _upload_id, _upload_id);
   }
-  void init(string& _oid, string& _upload_id) {
+  void init(const string& _oid, const string& _upload_id) {
+    init(_oid, _upload_id, _upload_id);
+  }
+  void init(const string& _oid, const string& _upload_id, const string& part_unique_str) {
     if (_oid.empty()) {
       clear();
       return;
     }
     oid = _oid;
     upload_id = _upload_id;
-    prefix = oid;
-    prefix.append(".");
-    prefix.append(upload_id);
-    meta = prefix;
-    meta.append(MP_META_SUFFIX);
+    prefix = oid + ".";
+    meta = prefix + upload_id + MP_META_SUFFIX;
+    prefix.append(part_unique_str);
   }
   string& get_meta() { return meta; }
   string get_part(int num) {
@@ -799,7 +803,7 @@ public:
       return false;
     oid = meta.substr(0, mid_pos);
     upload_id = meta.substr(mid_pos + 1, end_pos - mid_pos - 1);
-    init(oid, upload_id);
+    init(oid, upload_id, upload_id);
     return true;
   }
   void clear() {

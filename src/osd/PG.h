@@ -516,7 +516,7 @@ public:
     const char *get_state_name() { return state_name; }
     NamedState(CephContext *cct_, const char *state_name_)
       : state_name(state_name_),
-        enter_time(ceph_clock_now(cct_)) {};
+        enter_time(ceph_clock_now(cct_)) {}
     virtual ~NamedState() {}
   };
 
@@ -947,8 +947,7 @@ public:
       waiting_on(0), shallow_errors(0), deep_errors(0), fixed(0),
       active_rep_scrub(0),
       must_scrub(false), must_deep_scrub(false), must_repair(false),
-      classic(false),
-      finalizing(false), is_chunky(false), state(INACTIVE),
+      state(INACTIVE),
       deep(false)
     {
     }
@@ -983,12 +982,7 @@ public:
     // Map from object with errors to good peer
     map<hobject_t, pair<ScrubMap::object, pg_shard_t> > authoritative;
 
-    // classic scrub
-    bool classic;
-    bool finalizing;
-
     // chunky scrub
-    bool is_chunky;
     hobject_t start, end;
     eversion_t subset_last_update;
 
@@ -1045,9 +1039,6 @@ public:
       if (!block_writes)
 	return false;
 
-      if (!is_chunky)
-	return true;
-
       if (soid >= start && soid < end)
 	return true;
 
@@ -1056,8 +1047,6 @@ public:
 
     // clear all state
     void reset() {
-      classic = false;
-      finalizing = false;
       block_writes = false;
       active = false;
       queue_snap_trim = false;
@@ -1118,6 +1107,13 @@ public:
   void build_scrub_map(ScrubMap &map, ThreadPool::TPHandle &handle);
   void build_inc_scrub_map(
     ScrubMap &map, eversion_t v, ThreadPool::TPHandle &handle);
+  /**
+   * returns true if [begin, end) is good to scrub at this time
+   * a false return value obliges the implementer to requeue scrub when the
+   * condition preventing scrub clears
+   */
+  virtual bool _range_available_for_scrub(
+    const hobject_t &begin, const hobject_t &end) = 0;
   virtual void _scrub(ScrubMap &map) { }
   virtual void _scrub_clear_state() { }
   virtual void _scrub_finish() { }
@@ -1131,7 +1127,7 @@ public:
     const hobject_t &hoid,
     const map<string, bufferptr> &attrs,
     pg_shard_t osd,
-    ostream &out) { return false; };
+    ostream &out) { return false; }
   void clear_scrub_reserved();
   void scrub_reserve_replicas();
   void scrub_unreserve_replicas();
@@ -1955,11 +1951,11 @@ public:
 
   void init(
     int role,
-    vector<int>& up,
+    const vector<int>& up,
     int up_primary,
-    vector<int>& acting,
+    const vector<int>& acting,
     int acting_primary,
-    pg_history_t& history,
+    const pg_history_t& history,
     pg_interval_map_t& pim,
     bool backfill,
     ObjectStore::Transaction *t);
@@ -1996,7 +1992,7 @@ public:
 
   std::string get_corrupt_pg_log_name() const;
   static int read_info(
-    ObjectStore *store, const coll_t coll,
+    ObjectStore *store, const coll_t &coll,
     bufferlist &bl, pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals,
     hobject_t &biginfo_oid, hobject_t &infos_oid,
     interval_set<snapid_t>  &snap_collections, __u8 &);
@@ -2124,9 +2120,11 @@ public:
   virtual void check_blacklisted_watchers() = 0;
   virtual void get_watchers(std::list<obj_watch_item_t>&) = 0;
 
-  virtual void agent_work(int max) = 0;
+  virtual bool agent_work(int max) = 0;
   virtual void agent_stop() = 0;
+  virtual void agent_delay() = 0;
   virtual void agent_clear() = 0;
+  virtual void agent_choose_mode_restart() = 0;
 };
 
 ostream& operator<<(ostream& out, const PG& pg);

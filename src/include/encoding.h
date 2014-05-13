@@ -372,7 +372,7 @@ inline void encode(const std::list<T>& ls, bufferlist& bl)
     en = n;
     bl.copy_in(pos, sizeof(en), (char*)&en);
   } else {
-    __u32 n = ls.size();    // FIXME: this is slow on a list.
+    __u32 n = (__u32)(ls.size());    // FIXME: this is slow on a list.
     encode(n, bl);
     for (typename std::list<T>::const_iterator p = ls.begin(); p != ls.end(); ++p)
       encode(*p, bl);
@@ -407,7 +407,7 @@ inline void encode(const std::list<ceph::shared_ptr<T> >& ls, bufferlist& bl)
     en = n;
     bl.copy_in(pos, sizeof(en), (char*)&en);
   } else {
-    __u32 n = ls.size();    // FIXME: this is slow on a list.
+    __u32 n = (__u32)(ls.size());    // FIXME: this is slow on a list.
     encode(n, bl);
     for (typename std::list<ceph::shared_ptr<T> >::const_iterator p = ls.begin(); p != ls.end(); ++p)
       encode(**p, bl);
@@ -430,7 +430,7 @@ inline void decode(std::list<ceph::shared_ptr<T> >& ls, bufferlist::iterator& p)
 template<class T>
 inline void encode(const std::set<T>& s, bufferlist& bl)
 {
-  __u32 n = s.size();
+  __u32 n = (__u32)(s.size());
   encode(n, bl);
   for (typename std::set<T>::const_iterator p = s.begin(); p != s.end(); ++p)
     encode(*p, bl);
@@ -471,7 +471,7 @@ inline void decode(std::vector<T*>& v, bufferlist::iterator& p)
 template<class T>
 inline void encode(const std::vector<T>& v, bufferlist& bl, uint64_t features)
 {
-  __u32 n = v.size();
+  __u32 n = (__u32)(v.size());
   encode(n, bl);
   for (typename std::vector<T>::const_iterator p = v.begin(); p != v.end(); ++p)
     encode(*p, bl, features);
@@ -479,7 +479,7 @@ inline void encode(const std::vector<T>& v, bufferlist& bl, uint64_t features)
 template<class T>
 inline void encode(const std::vector<T>& v, bufferlist& bl)
 {
-  __u32 n = v.size();
+  __u32 n = (__u32)(v.size());
   encode(n, bl);
   for (typename std::vector<T>::const_iterator p = v.begin(); p != v.end(); ++p)
     encode(*p, bl);
@@ -512,7 +512,7 @@ inline void decode_nohead(int len, std::vector<T>& v, bufferlist::iterator& p)
 template<class T>
 inline void encode(const std::vector<ceph::shared_ptr<T> >& v, bufferlist& bl)
 {
-  __u32 n = v.size();
+  __u32 n = (__u32)(v.size());
   encode(n, bl);
   for (typename std::vector<ceph::shared_ptr<T> >::const_iterator p = v.begin(); p != v.end(); ++p)
     if (*p)
@@ -561,7 +561,7 @@ inline void decode(std::map<T,U*>& m, bufferlist::iterator& p)
 template<class T, class U>
 inline void encode(const std::map<T,U>& m, bufferlist& bl)
 {
-  __u32 n = m.size();
+  __u32 n = (__u32)(m.size());
   encode(n, bl);
   for (typename std::map<T,U>::const_iterator p = m.begin(); p != m.end(); ++p) {
     encode(p->first, bl);
@@ -571,7 +571,7 @@ inline void encode(const std::map<T,U>& m, bufferlist& bl)
 template<class T, class U>
 inline void encode(const std::map<T,U>& m, bufferlist& bl, uint64_t features)
 {
-  __u32 n = m.size();
+  __u32 n = (__u32)(m.size());
   encode(n, bl);
   for (typename std::map<T,U>::const_iterator p = m.begin(); p != m.end(); ++p) {
     encode(p->first, bl, features);
@@ -632,7 +632,7 @@ inline void decode_nohead(int n, std::map<T,U>& m, bufferlist::iterator& p)
 template<class T, class U>
 inline void encode(const std::multimap<T,U>& m, bufferlist& bl)
 {
-  __u32 n = m.size();
+  __u32 n = (__u32)(m.size());
   encode(n, bl);
   for (typename std::multimap<T,U>::const_iterator p = m.begin(); p != m.end(); ++p) {
     encode(p->first, bl);
@@ -657,7 +657,7 @@ inline void decode(std::multimap<T,U>& m, bufferlist::iterator& p)
 template<class T, class U>
 inline void encode(const unordered_map<T,U>& m, bufferlist& bl)
 {
-  __u32 n = m.size();
+  __u32 n = (__u32)(m.size());
   encode(n, bl);
   for (typename unordered_map<T,U>::const_iterator p = m.begin(); p != m.end(); ++p) {
     encode(p->first, bl);
@@ -681,7 +681,7 @@ inline void decode(unordered_map<T,U>& m, bufferlist::iterator& p)
 template<class T>
 inline void encode(const ceph::unordered_set<T>& m, bufferlist& bl)
 {
-  __u32 n = m.size();
+  __u32 n = (__u32)(m.size());
   encode(n, bl);
   for (typename ceph::unordered_set<T>::const_iterator p = m.begin(); p != m.end(); ++p)
     encode(*p, bl);

@@ -305,7 +305,7 @@ class SyntheticWorkloadState {
 public:
   static const unsigned max_in_flight = 16;
   static const unsigned max_objects = 3000;
-  static const unsigned max_object_len = 1024 * 20;
+  static const unsigned max_object_len = 1024 * 40;
   coll_t cid;
   unsigned in_flight;
   map<ghobject_t, bufferlist> contents;
@@ -336,6 +336,34 @@ public:
       if (state->contents.count(hoid))
         state->available_objects.insert(hoid);
       --(state->in_flight);
+      state->cond.Signal();
+    }
+  };
+
+  class C_SyntheticOnClone : public Context {
+  public:
+    SyntheticWorkloadState *state;
+    ObjectStore::Transaction *t;
+    ghobject_t oid, noid;
+    C_SyntheticOnClone(SyntheticWorkloadState *state,
+                          ObjectStore::Transaction *t, ghobject_t oid, ghobject_t noid)
+      : state(state), t(t), oid(oid), noid(noid) {}
+
+    void finish(int r) {
+      Mutex::Locker locker(state->lock);
+      ASSERT_TRUE(state->in_flight_objects.count(oid));
+      ASSERT_EQ(r, 0);
+      state->in_flight_objects.erase(oid);
+      if (state->contents.count(oid))
+        state->available_objects.insert(oid);
+      if (state->contents.count(noid))
+        state->available_objects.insert(noid);
+      --(state->in_flight);
+      bufferlist r2;
+      r = state->store->read(state->cid, noid, 0, state->contents[noid].length(), r2);
+      if (!state->contents[noid].contents_equal(r2)) {
+        ASSERT_TRUE(state->contents[noid].contents_equal(r2));
+      }
       state->cond.Signal();
     }
   };
@@ -415,6 +443,33 @@ public:
     return store->queue_transaction(osr, t, new C_SyntheticOnReadable(this, t, new_obj));
   }
 
+  int clone() {
+    Mutex::Locker locker(lock);
+    if (!can_unlink())
+      return -ENOENT;
+    if (!can_create())
+      return -ENOSPC;
+    wait_for_ready();
+
+    ghobject_t old_obj;
+    do {
+      old_obj = get_uniform_random_object();
+    } while (contents[old_obj].length());
+    available_objects.erase(old_obj);
+    ghobject_t new_obj = object_gen->create_object(rng);
+    available_objects.erase(new_obj);
+
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    t->clone(cid, old_obj, new_obj);
+    ++in_flight;
+    in_flight_objects.insert(old_obj);
+
+    bufferlist value;
+    value.append(contents[old_obj]);
+    contents[new_obj] = value;
+    return store->queue_transaction(osr, t, new C_SyntheticOnClone(this, t, old_obj, new_obj));
+  }
+
   int write() {
     Mutex::Locker locker(lock);
     if (!can_unlink())
@@ -426,7 +481,7 @@ public:
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
 
     boost::uniform_int<> u1(0, max_object_len/2);
-    boost::uniform_int<> u2(0, max_object_len);
+    boost::uniform_int<> u2(0, max_object_len/10);
     uint64_t offset = u1(*rng);
     uint64_t len = u2(*rng);
     bufferlist bl;
@@ -621,8 +676,10 @@ TEST_P(StoreTest, Synthetic) {
       test_obj.stat();
     } else if (val > 85) {
       test_obj.unlink();
-    } else if (val > 50) {
+    } else if (val > 55) {
       test_obj.write();
+    } else if (val > 50) {
+      test_obj.clone();
     } else if (val > 10) {
       test_obj.read();
     } else {

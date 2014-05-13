@@ -371,7 +371,6 @@ OPTION(mds_kill_journal_at, OPT_INT, 0)
 OPTION(mds_kill_journal_expire_at, OPT_INT, 0)
 OPTION(mds_kill_journal_replay_at, OPT_INT, 0)
 OPTION(mds_kill_create_at, OPT_INT, 0)
-OPTION(mds_open_remote_link_mode, OPT_INT, 0)
 OPTION(mds_inject_traceless_reply_probability, OPT_DOUBLE, 0) /* percentage
 				of MDS modify replies to skip sending the
 				client a trace on [0-1]*/
@@ -399,6 +398,7 @@ OPTION(osd_backfill_retry_interval, OPT_DOUBLE, 10.0)
 OPTION(osd_agent_max_ops, OPT_INT, 4)
 OPTION(osd_agent_min_evict_effort, OPT_FLOAT, .1)
 OPTION(osd_agent_quantize_effort, OPT_FLOAT, .1)
+OPTION(osd_agent_delay_time, OPT_FLOAT, 5.0)
 
 // decay atime and hist histograms after how many objects go by
 OPTION(osd_agent_hist_halflife, OPT_INT, 1000)
@@ -449,6 +449,7 @@ OPTION(osd_tier_default_cache_hit_set_period, OPT_INT, 1200)
 OPTION(osd_tier_default_cache_hit_set_type, OPT_STR, "bloom")
 
 OPTION(osd_map_dedup, OPT_BOOL, true)
+OPTION(osd_map_max_advance, OPT_INT, 200) // make this < cache_size!
 OPTION(osd_map_cache_size, OPT_INT, 500)
 OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
 OPTION(osd_map_share_max_epochs, OPT_INT, 100)  // cap on # of inc maps we send to peers, clients
@@ -469,8 +470,10 @@ OPTION(osd_backfill_scan_max, OPT_INT, 512)
 OPTION(osd_op_thread_timeout, OPT_INT, 15)
 OPTION(osd_recovery_thread_timeout, OPT_INT, 30)
 OPTION(osd_snap_trim_thread_timeout, OPT_INT, 60*60*1)
+OPTION(osd_snap_trim_sleep, OPT_FLOAT, 0)
 OPTION(osd_scrub_thread_timeout, OPT_INT, 60)
 OPTION(osd_scrub_finalize_thread_timeout, OPT_INT, 60*10)
+OPTION(osd_scrub_invalid_stats, OPT_BOOL, true)
 OPTION(osd_remove_thread_timeout, OPT_INT, 60*60)
 OPTION(osd_command_thread_timeout, OPT_INT, 10*60)
 OPTION(osd_age, OPT_FLOAT, .8)
