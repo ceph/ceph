@@ -77,7 +77,7 @@ XioConnection::XioConnection(XioMessenger *m, XioConnection::type _type,
   set_peer_addr(peer.addr);
 
   /* XXXX fake features, aieee! */
-  set_features(68719476735);
+  set_features(XXX_XIO_ALL_FEATURES);
 
 }
 
