@@ -11,6 +11,7 @@ import logging
 from cStringIO import StringIO
 from teuthology import lockstatus as ls
 import os
+import pwd
 import tempfile
 
 try:
@@ -38,7 +39,9 @@ class Remote(object):
         if '@' in name:
             (self.user, self.hostname) = name.split('@')
         else:
-            self.user = os.getlogin()
+            # os.getlogin() doesn't work on non-login shells. The following
+            # should work on any unix system
+            self.user = pwd.getpwuid(os.getuid()).pw_name
             self.hostname = name
         self._shortname = shortname
         self.host_key = host_key
