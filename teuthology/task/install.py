@@ -325,8 +325,7 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
                 log.info('Package not there yet, waiting...')
                 time.sleep(15)
                 continue
-            raise Exception('failed to fetch package version from %s' %
-                            base_url + '/version')
+            raise VersionNotFoundError("%s/version" % base_url)
         version = r.stdout.getvalue().strip()
         log.info('Package version is %s', version)
         break
@@ -438,8 +437,7 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
                 log.info('Package not there yet, waiting...')
                 time.sleep(15)
                 continue
-            raise Exception('failed to fetch package version from %s' %
-                            version_url)
+            raise VersionNotFoundError(version_url)
         version = r.stdout.getvalue().strip()
         log.info('Package version is %s', version)
         break
@@ -895,8 +893,7 @@ def _upgrade_deb_packages(ctx, config, remote, debs):
                 log.info('Package not there yet, waiting...')
                 time.sleep(15)
                 continue
-            raise Exception('failed to fetch package version from %s' %
-                            base_url + '/version')
+            raise VersionNotFoundError("%s/version" % base_url)
         version = r.stdout.getvalue().strip()
         log.info('Package version is %s', version)
         break
