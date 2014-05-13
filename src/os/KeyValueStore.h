@@ -365,7 +365,7 @@ class KeyValueStore : public ObjectStore,
   void op_queue_release_throttle(Op *o);
   void _finish_op(OpSequencer *osr);
 
-  PerfCounters *logger;
+  PerfCounters *perf_logger;
 
  public:
 

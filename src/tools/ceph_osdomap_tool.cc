@@ -10,29 +10,17 @@
 * License kkjversion 2.1, as published by the Free Software
 * Foundation. See file COPYING.
 */
-#include <boost/scoped_ptr.hpp>
-#include <boost/lexical_cast.hpp>
-#include <boost/program_options/option.hpp>
-#include <boost/program_options/options_description.hpp>
 #include <boost/program_options/variables_map.hpp>
-#include <boost/program_options/cmdline.hpp>
 #include <boost/program_options/parsers.hpp>
-#include <iostream>
-#include <set>
-#include <sstream>
-#include <stdlib.h>
-#include <fstream>
-#include <string>
-#include <sstream>
-#include <map>
-#include <set>
-#include <boost/scoped_ptr.hpp>
 
-#include "global/global_init.h"
-#include "os/LevelDBStore.h"
-#include "mon/MonitorDBStore.h"
-#include "os/DBObjectMap.h"
+#include <stdlib.h>
+#include <string>
+
 #include "common/errno.h"
+#include "global/global_init.h"
+
+#include "os/DBObjectMap.h"
+#include "os/LevelDBStore.h"
 
 namespace po = boost::program_options;
 using namespace std;

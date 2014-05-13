@@ -1327,7 +1327,7 @@ public:
   }
   int getattr(
     coll_t cid, const ghobject_t& oid,
-    const string name, bufferlist& value) {
+    const string& name, bufferlist& value) {
     bufferptr bp;
     int r = getattr(cid, oid, name.c_str(), bp);
     value.push_back(bp);

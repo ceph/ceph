@@ -31,7 +31,7 @@ void RGWCORSRule_S3::to_xml(XMLFormatter& f) {
   f.open_object_section("CORSRule");
   /*ID if present*/
   if (id.length() > 0) {
-    f.dump_string("ID", id);;
+    f.dump_string("ID", id);
   }
   /*AllowedMethods*/
   if (allowed_methods & RGW_CORS_GET)
