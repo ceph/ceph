@@ -199,7 +199,7 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld, int op_pri
     assert(in->is_auth());
     if (in->can_auth_pin()) {
       dout(15) << "try_to_expire waiting for storing backtrace on " << *in << dendl;
-      in->store_backtrace(gather_bld.new_sub());
+      in->store_backtrace(gather_bld.new_sub(), op_prio);
     } else {
       dout(15) << "try_to_expire waiting for unfreeze on " << *in << dendl;
       in->add_waiter(CInode::WAIT_UNFREEZE, gather_bld.new_sub());

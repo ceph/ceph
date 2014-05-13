@@ -1026,10 +1026,13 @@ struct C_Inode_StoredBacktrace : public Context {
   }
 };
 
-void CInode::store_backtrace(Context *fin)
+void CInode::store_backtrace(Context *fin, int op_prio)
 {
   dout(10) << "store_backtrace on " << *this << dendl;
   assert(is_dirty_parent());
+
+  if (op_prio < 0)
+    op_prio = CEPH_MSG_PRIO_DEFAULT;
 
   auth_pin(this);
 
@@ -1045,6 +1048,7 @@ void CInode::store_backtrace(Context *fin)
   ::encode(bt, bl);
 
   ObjectOperation op;
+  op.priority = op_prio;
   op.create(false);
   op.setxattr("parent", bl);
 
@@ -1071,6 +1075,7 @@ void CInode::store_backtrace(Context *fin)
       continue;
 
     ObjectOperation op;
+    op.priority = op_prio;
     op.create(false);
     op.setxattr("parent", bl);
 
