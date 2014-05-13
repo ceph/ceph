@@ -96,6 +96,14 @@ host. ::
 
 	zypper install boost-devel gcc-c++ libedit-devel libopenssl-devel fuse-devel
 
+Fedora 20
+---------
+
+As root, run:
+
+::
+
+    yum install make automake autoconf  boost-devel fuse-devel gcc-c++ libtool libuuid-devel libblkid-devel keyutils-libs-devel cryptopp-devel fcgi-devel libcurl-devel expat-devel gperftools-devel libedit-devel libatomic_ops-devel snappy-devel leveldb-devel libaio-devel xfsprogs-devel git libudev-devel
 
 
 Build Ceph
@@ -160,15 +168,19 @@ Once you have installed the tools, setup an RPM compilation environment::
 
 Fetch the source tarball for the RPM compilation environment::
 
-	wget -P ~/rpmbuild/SOURCES/ http://ceph.com/download/ceph-<version>.tar.gz
+	wget -P ~/rpmbuild/SOURCES/ http://ceph.com/download/ceph-<version>.tar.bz2
 
 Or from the EU mirror::
 
-	wget -P ~/rpmbuild/SOURCES/ http://eu.ceph.com/download/ceph-<version>.tar.gz
+	wget -P ~/rpmbuild/SOURCES/ http://eu.ceph.com/download/ceph-<version>.tar.bz2
+
+Extract the specfile::
+
+    tar --strip-components=1 --no-anchored -xvf ~/rpmbuild/SOURCES/ceph-<version>.tar.gz "ceph.spec" -C ~/rpmbuild/SPECS/
 
 Build the RPM packages::
 
-	rpmbuild -tb ~/rpmbuild/SOURCES/ceph-<version>.tar.gz
+	rpmbuild -ba ~/rpmbuild/SPECS/ceph.spec
 
 For multi-processor CPUs use the ``-j`` option to accelerate the build.
 
