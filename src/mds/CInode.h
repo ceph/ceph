@@ -527,7 +527,7 @@ public:
   void _fetched(bufferlist& bl, bufferlist& bl2, Context *fin);  
 
   void build_backtrace(int64_t pool, inode_backtrace_t& bt);
-  void store_backtrace(Context *fin);
+  void store_backtrace(Context *fin, int op_prio=-1);
   void _stored_backtrace(version_t v, Context *fin);
   void _mark_dirty_parent(LogSegment *ls, bool dirty_pool=false);
   void clear_dirty_parent();
