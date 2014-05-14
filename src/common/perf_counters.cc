@@ -106,9 +106,13 @@ void PerfCounters::inc(int idx, uint64_t amt)
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
   if (!(data.type & PERFCOUNTER_U64))
     return;
-  data.u64.add(amt);
-  if (data.type & PERFCOUNTER_LONGRUNAVG)
+  if (data.type & PERFCOUNTER_LONGRUNAVG) {
     data.avgcount.inc();
+    data.u64.add(amt);
+    data.avgcount2.inc();
+  } else {
+    data.u64.add(amt);
+  }
 }
 
 void PerfCounters::dec(int idx, uint64_t amt)
@@ -136,8 +140,13 @@ void PerfCounters::set(int idx, uint64_t amt)
   if (!(data.type & PERFCOUNTER_U64))
     return;
   data.u64.set(amt);
-  if (data.type & PERFCOUNTER_LONGRUNAVG)
+  if (data.type & PERFCOUNTER_LONGRUNAVG) {
     data.avgcount.inc();
+    data.u64.set(amt);
+    data.avgcount2.inc();
+  } else {
+    data.u64.set(amt);
+  }
 }
 
 uint64_t PerfCounters::get(int idx) const
@@ -163,9 +172,13 @@ void PerfCounters::tinc(int idx, utime_t amt)
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
   if (!(data.type & PERFCOUNTER_TIME))
     return;
-  data.u64.add(amt.to_nsec());
-  if (data.type & PERFCOUNTER_LONGRUNAVG)
+  if (data.type & PERFCOUNTER_LONGRUNAVG) {
     data.avgcount.inc();
+    data.u64.add(amt.to_nsec());
+    data.avgcount2.inc();
+  } else {
+    data.u64.add(amt.to_nsec());
+  }
 }
 
 void PerfCounters::tset(int idx, utime_t amt)
@@ -209,7 +222,8 @@ pair<uint64_t, uint64_t> PerfCounters::get_tavg_ms(int idx) const
     return make_pair(0, 0);
   if (!(data.type & PERFCOUNTER_LONGRUNAVG))
     return make_pair(0, 0);
-  return make_pair(data.avgcount.read(), data.u64.read()/1000000);
+  pair<uint64_t,uint64_t> a = data.read_avg();
+  return make_pair(a.second, a.first / 1000000ull);
 }
 
 void PerfCounters::dump_formatted(Formatter *f, bool schema)
@@ -229,15 +243,15 @@ void PerfCounters::dump_formatted(Formatter *f, bool schema)
     } else {
       if (d->type & PERFCOUNTER_LONGRUNAVG) {
 	f->open_object_section(d->name);
+	pair<uint64_t,uint64_t> a = d->read_avg();
 	if (d->type & PERFCOUNTER_U64) {
-	  f->dump_unsigned("avgcount", d->avgcount.read());
-	  f->dump_unsigned("sum", d->u64.read());
+	  f->dump_unsigned("avgcount", a.second);
+	  f->dump_unsigned("sum", a.first);
 	} else if (d->type & PERFCOUNTER_TIME) {
-	  f->dump_unsigned("avgcount", d->avgcount.read());
-	  uint64_t v = d->u64.read();
+	  f->dump_unsigned("avgcount", a.second);
 	  f->dump_format_unquoted("sum", "%"PRId64".%09"PRId64,
-				  v / 1000000000ull,
-				  v % 1000000000ull);
+				  a.first / 1000000000ull,
+				  a.first % 1000000000ull);
 	} else {
 	  assert(0);
 	}
