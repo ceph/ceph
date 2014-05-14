@@ -126,6 +126,7 @@ public:
 private:
   string internal_name;         ///< internal name, used to name the perfcounter instance
   string basedir, journalpath;
+  osflagbits_t generic_flags;
   std::string current_fn;
   std::string current_op_seq_fn;
   std::string omap_dir;
@@ -405,7 +406,9 @@ public:
 		 bool force_clear_omap=false);
 
 public:
-  FileStore(const std::string &base, const std::string &jdev, const char *internal_name = "filestore", bool update_to=false);
+  FileStore(const std::string &base, const std::string &jdev,
+    osflagbits_t flags = 0,
+    const char *internal_name = "filestore", bool update_to=false);
   ~FileStore();
 
   int _detect_fs();
