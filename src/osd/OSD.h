@@ -321,7 +321,7 @@ public:
   PerfCounters *&logger;
   PerfCounters *&recoverystate_perf;
   MonClient   *&monc;
-  ThreadPool::WorkQueueVal<pair<PGRef, OpRequestRef>, PGRef> &op_wq;
+  ShardedThreadPool::ShardedWQ < pair <PGRef, OpRequestRef> > &op_wq;
   ThreadPool::BatchWorkQueue<PG> &peering_wq;
   ThreadPool::WorkQueue<PG> &recovery_wq;
   ThreadPool::WorkQueue<PG> &snap_trim_wq;
@@ -1087,6 +1087,7 @@ public:
 private:
 
   ThreadPool op_tp;
+  ShardedThreadPool op_sharded_tp;
   ThreadPool recovery_tp;
   ThreadPool disk_tp;
   ThreadPool command_tp;
@@ -1293,65 +1294,283 @@ private:
 
   // -- op queue --
 
-  struct OpWQ: public ThreadPool::WorkQueueVal<pair<PGRef, OpRequestRef>,
-					       PGRef > {
-    Mutex qlock;
-    map<PG*, list<OpRequestRef> > pg_for_processing;
-    OSD *osd;
-    PrioritizedQueue<pair<PGRef, OpRequestRef>, entity_inst_t > pqueue;
-    OpWQ(OSD *o, time_t ti, ThreadPool *tp)
-      : ThreadPool::WorkQueueVal<pair<PGRef, OpRequestRef>, PGRef >(
-	"OSD::OpWQ", ti, ti*10, tp),
-	qlock("OpWQ::qlock"),
-	osd(o),
-	pqueue(o->cct->_conf->osd_op_pq_max_tokens_per_priority,
-	       o->cct->_conf->osd_op_pq_min_cost)
-    {}
+ 
+  class ShardedOpWQ: public ShardedThreadPool::ShardedWQ < pair <PGRef, OpRequestRef> > {
 
-    void dump(Formatter *f) {
-      lock();
-      pqueue.dump(f);
-      unlock();
-    }
-
-    void _enqueue_front(pair<PGRef, OpRequestRef> item);
-    void _enqueue(pair<PGRef, OpRequestRef> item);
-    PGRef _dequeue();
-
-    struct Pred {
-      PG *pg;
-      Pred(PG *pg) : pg(pg) {}
-      bool operator()(const pair<PGRef, OpRequestRef> &op) {
-	return op.first == pg;
-      }
+    struct ShardData {
+      Mutex sdata_lock;
+      Cond sdata_cond;
+      PrioritizedQueue< pair<PGRef, OpRequestRef>, entity_inst_t> pqueue;
+      ShardData(string lock_name, uint64_t max_tok_per_prio, uint64_t min_cost):
+          sdata_lock(lock_name.c_str()),
+          pqueue(max_tok_per_prio, min_cost) {}
     };
-    void dequeue(PG *pg, list<OpRequestRef> *dequeued = 0) {
-      lock();
-      if (!dequeued) {
-	pqueue.remove_by_filter(Pred(pg));
-	pg_for_processing.erase(pg);
-      } else {
-	list<pair<PGRef, OpRequestRef> > _dequeued;
-	pqueue.remove_by_filter(Pred(pg), &_dequeued);
-	for (list<pair<PGRef, OpRequestRef> >::iterator i = _dequeued.begin();
-	     i != _dequeued.end();
-	     ++i) {
-	  dequeued->push_back(i->second);
-	}
-	if (pg_for_processing.count(pg)) {
-	  dequeued->splice(
-	    dequeued->begin(),
-	    pg_for_processing[pg]);
-	  pg_for_processing.erase(pg);
-	}
+
+    vector<ShardData*> shard_list;
+    OSD *osd;
+    uint32_t num_shards;
+    Mutex opQ_lock;
+    Cond  opQ_cond;
+
+    public:
+      ShardedOpWQ(uint32_t pnum_shards, OSD *o, time_t ti, ShardedThreadPool* tp):
+        ShardedThreadPool::ShardedWQ < pair <PGRef, OpRequestRef> >(ti, ti*10, tp),
+        osd(o), num_shards(pnum_shards), opQ_lock("OSD::ShardedOpWQLock") {
+        for(uint32_t i = 0; i < num_shards; i++) {
+          char lock_name[32] = {0};
+          snprintf(lock_name, sizeof(lock_name), "%s.%d", "OSD::ShardedOpWQ::", i);
+          ShardData* one_shard = new ShardData(lock_name, osd->cct->_conf->osd_op_pq_max_tokens_per_priority,
+                                              osd->cct->_conf->osd_op_pq_min_cost);
+          shard_list.push_back(one_shard);
+        }
       }
-      unlock();
-    }
-    bool _empty() {
-      return pqueue.empty();
-    }
-    void _process(PGRef pg, ThreadPool::TPHandle &handle);
-  } op_wq;
+
+      ~ShardedOpWQ() {
+
+        while(!shard_list.empty()) {
+          delete shard_list.back();
+          shard_list.pop_back();
+        }
+      }
+
+      void _process(uint32_t thread_index, heartbeat_handle_d *hb ) {
+
+	uint32_t shard_index = thread_index % num_shards;
+
+        ShardData* sdata = shard_list[shard_index];
+
+        if (NULL != sdata) {
+
+          sdata->sdata_lock.Lock();
+
+          while (true) {
+
+           while(!sdata->pqueue.empty()) {
+
+             if (pause_threads.read() != 0){
+
+               break;
+             }
+
+             in_process.inc();
+             ThreadPool::TPHandle tp_handle(osd->cct, hb, timeout_interval, suicide_interval);
+             tp_handle.reset_tp_timeout();
+
+             pair<PGRef, OpRequestRef> item = sdata->pqueue.dequeue();
+
+             (item.first)->lock_suspend_timeout(tp_handle);
+	     //unlocking after holding the PG lock as it should maintain the op order
+             sdata->sdata_lock.Unlock();
+             //Should it be within some config option ?
+  	     lgeneric_subdout(osd->cct, osd, 30) << "dequeue status: ";
+             Formatter *f = new_formatter("json");
+             f->open_object_section("q");
+             dump(f);
+             f->close_section();
+             f->flush(*_dout);
+             delete f;
+             *_dout << dendl;
+
+             osd->dequeue_op(item.first, item.second, tp_handle);
+             (item.first)->unlock();
+
+             sdata->sdata_lock.Lock();
+  	     in_process.dec();
+	     if ((pause_threads.read() != 0) || (drain_threads.read() != 0)) {
+               opQ_lock.Lock();	       
+               opQ_cond.Signal();
+	       opQ_lock.Unlock();
+             }          
+           }
+
+           if (stop_threads.read() != 0){
+             break;
+           }
+
+           osd->cct->get_heartbeat_map()->reset_timeout(hb, 4, 0);
+           sdata->sdata_cond.WaitInterval(osd->cct, sdata->sdata_lock, utime_t(2, 0));
+
+         }
+         sdata->sdata_lock.Unlock();
+
+        } else {
+          assert(0);
+        }
+
+      }
+
+      void stop_threads_on_queue() {
+        stop_threads.set(1);
+        for(uint32_t i = 0; i < num_shards; i++) {
+          ShardData* sdata = shard_list[i];
+          if (NULL != sdata) {
+            sdata->sdata_lock.Lock();
+            sdata->sdata_cond.Signal();
+            sdata->sdata_lock.Unlock();
+          }
+        }
+      
+      }
+
+      void pause_threads_on_queue() {
+        pause_threads.set(1);
+        opQ_lock.Lock();
+        while (in_process.read()) {
+	  opQ_cond.Wait(opQ_lock);
+        }
+        opQ_lock.Unlock();
+
+      }
+
+      void pause_new_threads_on_queue() {
+        pause_threads.set(1);
+
+      }
+
+      void unpause_threads_on_queue() {
+        pause_threads.set(0);
+        for(uint32_t i = 0; i < num_shards; i++) {
+          ShardData* sdata = shard_list[i];
+          if (NULL != sdata) {
+            sdata->sdata_lock.Lock();
+            sdata->sdata_cond.Signal();
+            sdata->sdata_lock.Unlock();
+          }
+        }
+
+      }
+
+      void drain_threads_on_queue() {
+        drain_threads.set(1);
+	opQ_lock.Lock();
+        for(uint32_t i = 0; i < num_shards; i++) {
+	  if (!_empty(i)) {
+            opQ_cond.Wait(opQ_lock);
+          }
+        }
+        while (in_process.read()){
+          opQ_cond.Wait(opQ_lock);
+        }
+        opQ_lock.Unlock();
+
+        drain_threads.set(0);
+      }
+      
+      void drain() {
+
+       drain_threads_on_queue();
+      }
+
+      void _enqueue(pair <PGRef, OpRequestRef> item) {
+
+        uint32_t shard_index = (((item.first)->get_pgid().ps())% shard_list.size());
+
+        ShardData* sdata = shard_list[shard_index];
+        if (NULL != sdata) {
+          unsigned priority = item.second->get_req()->get_priority();
+          unsigned cost = item.second->get_req()->get_cost();
+          sdata->sdata_lock.Lock();
+          if (priority >= CEPH_MSG_PRIO_LOW)
+            sdata->pqueue.enqueue_strict(
+              item.second->get_req()->get_source_inst(), priority, item);
+          else
+            sdata->pqueue.enqueue(item.second->get_req()->get_source_inst(),
+              priority, cost, item);
+
+
+          sdata->sdata_cond.SignalOne();
+          sdata->sdata_lock.Unlock();
+        } else {
+          assert(0);
+        }
+      }
+
+      void _enqueue_front(pair <PGRef, OpRequestRef> item) {
+
+	uint32_t shard_index = (((item.first)->get_pgid().ps())% shard_list.size());
+
+        ShardData* sdata = shard_list[shard_index];
+        if (NULL != sdata) {
+          unsigned priority = item.second->get_req()->get_priority();
+          unsigned cost = item.second->get_req()->get_cost();
+          sdata->sdata_lock.Lock();
+          if (priority >= CEPH_MSG_PRIO_LOW)
+            sdata->pqueue.enqueue_strict_front(
+              item.second->get_req()->get_source_inst(),priority, item);
+          else
+            sdata->pqueue.enqueue_front(item.second->get_req()->get_source_inst(),
+              priority, cost, item);
+
+          sdata->sdata_cond.SignalOne();
+          sdata->sdata_lock.Unlock();
+        } else {
+          assert(0);
+        }
+      }
+
+
+      void dump(Formatter *f) {
+        for(uint32_t i = 0; i < num_shards; i++) {
+          ShardData* sdata = shard_list[i];
+          if (NULL != sdata) {
+            sdata->sdata_lock.Lock();
+            sdata->pqueue.dump(f);
+            sdata->sdata_lock.Unlock();
+          }
+        }
+      }
+
+      struct Pred {
+        PG *pg;
+        Pred(PG *pg) : pg(pg) {}
+        bool operator()(const pair<PGRef, OpRequestRef> &op) {
+          return op.first == pg;
+        }
+      };
+
+      void dequeue(PG *pg, list<OpRequestRef> *dequeued = 0) {
+        ShardData* sdata = NULL;
+        if (pg) {
+          uint32_t shard_index = pg->get_pgid().ps()% shard_list.size();
+          sdata = shard_list[shard_index];
+          if (!sdata) {
+            assert(0);
+          }
+        } else {
+          assert(0);
+        }
+
+        if (!dequeued) {
+          sdata->sdata_lock.Lock();
+          sdata->pqueue.remove_by_filter(Pred(pg));
+          sdata->sdata_lock.Unlock();
+        } else {
+          list<pair<PGRef, OpRequestRef> > _dequeued;
+          sdata->sdata_lock.Lock();
+          sdata->pqueue.remove_by_filter(Pred(pg), &_dequeued);
+          sdata->sdata_lock.Unlock();
+          for (list<pair<PGRef, OpRequestRef> >::iterator i = _dequeued.begin();
+            i != _dequeued.end(); ++i) {
+            dequeued->push_back(i->second);
+          }
+        }
+
+      }
+
+      bool _empty(uint32_t shard_index) {
+        ShardData* sdata = shard_list[shard_index];
+        if (NULL != sdata) {
+          sdata->sdata_lock.Lock();
+          bool is_empty = sdata->pqueue.empty();
+          sdata->sdata_lock.Unlock();
+          return is_empty;
+        }
+        return true;
+
+      }
+
+  } op_shardedwq;
+
 
   void enqueue_op(PG *pg, OpRequestRef op);
   void dequeue_op(
