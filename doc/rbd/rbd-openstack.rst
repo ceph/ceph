@@ -203,7 +203,6 @@ edit ``/etc/cinder/cinder.conf`` by adding::
     rbd_ceph_conf=/etc/ceph/ceph.conf
     rbd_flatten_volume_from_snapshot=false
     rbd_max_clone_depth=5
-    glance_api_version=2
 
 If you're using `cephx authentication`_, also configure the user and
 uuid of the secret you added to ``libvirt`` as documented earlier::
