@@ -2197,15 +2197,14 @@ bool pg_interval_t::is_new_interval(
   const vector<int> &new_up,
   OSDMapRef osdmap,
   OSDMapRef lastmap,
-  int64_t pool_id,
   pg_t pgid) {
   return old_acting_primary != new_acting_primary ||
     new_acting != old_acting ||
     old_up_primary != new_up_primary ||
     new_up != old_up ||
-    (!(lastmap->get_pools().count(pool_id))) ||
-    (lastmap->get_pools().find(pool_id)->second.min_size !=
-     osdmap->get_pools().find(pool_id)->second.min_size)  ||
+    (!(lastmap->get_pools().count(pgid.pool()))) ||
+    (lastmap->get_pools().find(pgid.pool())->second.min_size !=
+     osdmap->get_pools().find(pgid.pool())->second.min_size)  ||
     pgid.is_split(lastmap->get_pg_num(pgid.pool()),
 		  osdmap->get_pg_num(pgid.pool()), 0);
 }
@@ -2223,7 +2222,6 @@ bool pg_interval_t::check_new_interval(
   epoch_t last_epoch_clean,
   OSDMapRef osdmap,
   OSDMapRef lastmap,
-  int64_t pool_id,
   pg_t pgid,
   map<epoch_t, pg_interval_t> *past_intervals,
   std::ostream *out)
@@ -2243,7 +2241,6 @@ bool pg_interval_t::check_new_interval(
 	new_up,
 	osdmap,
 	lastmap,
-	pool_id,
 	pgid)) {
     pg_interval_t& i = (*past_intervals)[same_interval_since];
     i.first = same_interval_since;
@@ -2255,7 +2252,7 @@ bool pg_interval_t::check_new_interval(
 
     if (!i.acting.empty() && i.primary != -1 &&
 	i.acting.size() >=
-	lastmap->get_pools().find(pool_id)->second.min_size) {
+	lastmap->get_pools().find(pgid.pool())->second.min_size) {
       if (out)
 	*out << "generate_past_intervals " << i
 	     << ": not rw,"
