@@ -1105,6 +1105,8 @@ int main(int argc, char **argv)
     ("file", po::value<string>(&file),
      "path of file to export or import")
     ("debug", "Enable diagnostic output to stderr")
+    ("skip-journal-replay", "Disable journal replay")
+    ("skip-mount-omap", "Disable mounting of omap")
     ;
 
   po::variables_map vm;
@@ -1199,6 +1201,12 @@ int main(int argc, char **argv)
     debug = true;
   }
 
+  osflagbits_t flags = 0;
+  if (vm.count("skip-journal-replay"))
+    flags |= SKIP_JOURNAL_REPLAY;
+  if (vm.count("skip-mount-omap"))
+    flags |= SKIP_MOUNT_OMAP;
+
   global_init(
     &def_args, ceph_options, CEPH_ENTITY_TYPE_OSD,
     CODE_ENVIRONMENT_UTILITY_NODOUT, 0);
@@ -1243,7 +1251,7 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  ObjectStore *fs = new FileStore(fspath, jpath);
+  ObjectStore *fs = ObjectStore::create(NULL, "filestore", fspath, jpath, flags);
   
   int r = fs->mount();
   if (r < 0) {
