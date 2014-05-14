@@ -50,7 +50,7 @@ struct MutationImpl {
   set<CInode*> stickydirs;
 
   // auth pins
-  set< MDSCacheObject* > remote_auth_pins;
+  map<MDSCacheObject*,int> remote_auth_pins;
   set< MDSCacheObject* > auth_pins;
   
   // held locks
