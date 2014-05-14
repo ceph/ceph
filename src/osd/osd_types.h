@@ -1717,7 +1717,6 @@ struct pg_interval_t {
     const vector<int> &new_up,                  ///< [in] up as of osdmap
     ceph::shared_ptr<const OSDMap> osdmap,  ///< [in] current map
     ceph::shared_ptr<const OSDMap> lastmap, ///< [in] last map
-    int64_t poolid,                             ///< [in] pool for pg
     pg_t pgid                                   ///< [in] pgid for pg
     );
 
@@ -1738,7 +1737,6 @@ struct pg_interval_t {
     epoch_t last_epoch_clean,                   ///< [in] current
     ceph::shared_ptr<const OSDMap> osdmap,  ///< [in] current map
     ceph::shared_ptr<const OSDMap> lastmap, ///< [in] last map
-    int64_t poolid,                             ///< [in] pool for pg
     pg_t pgid,                                  ///< [in] pgid for pg
     map<epoch_t, pg_interval_t> *past_intervals,///< [out] intervals
     ostream *out = 0                            ///< [out] debug ostream

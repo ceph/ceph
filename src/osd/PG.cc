@@ -675,7 +675,6 @@ void PG::generate_past_intervals()
       info.history.last_epoch_clean,
       cur_map,
       last_map,
-      pgid.pool(),
       pgid,
       &past_intervals,
       &debug);
@@ -4571,7 +4570,6 @@ bool PG::should_restart_peering(
 	newup,
 	osdmap,
 	lastmap,
-	info.pgid.pool(),
 	info.pgid.pgid)) {
     dout(20) << "new interval newup " << newup
 	     << " newacting " << newacting << dendl;
@@ -4704,7 +4702,6 @@ void PG::start_peering_interval(
       info.history.last_epoch_clean,
       osdmap,
       lastmap,
-      info.pgid.pool(),
       info.pgid.pgid,
       &past_intervals,
       &debug);
