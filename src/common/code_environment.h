@@ -19,6 +19,7 @@ enum code_environment_t {
   CODE_ENVIRONMENT_UTILITY = 0,
   CODE_ENVIRONMENT_DAEMON = 1,
   CODE_ENVIRONMENT_LIBRARY = 2,
+  CODE_ENVIRONMENT_UTILITY_NODOUT = 3,
 };
 
 #ifdef __cplusplus
