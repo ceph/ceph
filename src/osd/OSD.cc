@@ -181,7 +181,7 @@ OSDService::OSDService(OSD *osd) :
   logger(osd->logger),
   recoverystate_perf(osd->recoverystate_perf),
   monc(osd->monc),
-  op_wq(osd->op_wq),
+  op_wq(osd->op_shardedwq),
   peering_wq(osd->peering_wq),
   recovery_wq(osd->recovery_wq),
   snap_trim_wq(osd->snap_trim_wq),
@@ -923,6 +923,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   osd_compat(get_osd_compat_set()),
   state_lock(), state(STATE_INITIALIZING),
   op_tp(cct, "OSD::op_tp", cct->_conf->osd_op_threads, "osd_op_threads"),
+  op_sharded_tp(cct, "OSD::op_sharded_tp", cct->_conf->osd_op_num_sharded_pool_threads, cct->_conf->osd_op_num_shards),
   recovery_tp(cct, "OSD::recovery_tp", cct->_conf->osd_recovery_threads, "osd_recovery_threads"),
   disk_tp(cct, "OSD::disk_tp", cct->_conf->osd_disk_threads, "osd_disk_threads"),
   command_tp(cct, "OSD::command_tp", 1),
@@ -940,7 +941,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   finished_lock("OSD::finished_lock"),
   op_tracker(cct, cct->_conf->osd_enable_op_tracker),
   test_ops_hook(NULL),
-  op_wq(this, cct->_conf->osd_op_thread_timeout, &op_tp),
+  op_shardedwq(cct->_conf->osd_op_num_shards, this, cct->_conf->osd_op_thread_timeout, &op_sharded_tp),
   peering_wq(this, cct->_conf->osd_op_thread_timeout, &op_tp),
   map_lock("OSD::map_lock"),
   pg_map_lock("OSD::pg_map_lock"),
@@ -1052,7 +1053,7 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     op_tracker.dump_historic_ops(f);
   } else if (command == "dump_op_pq_state") {
     f->open_object_section("pq");
-    op_wq.dump(f);
+    op_shardedwq.dump(f);
     f->close_section();
   } else if (command == "dump_blacklist") {
     list<pair<entity_addr_t,utime_t> > bl;
@@ -1281,6 +1282,7 @@ int OSD::init()
   monc->set_log_client(&clog);
 
   op_tp.start();
+  op_sharded_tp.start();
   recovery_tp.start();
   disk_tp.start();
   command_tp.start();
@@ -1581,6 +1583,7 @@ void OSD::suicide(int exitcode)
 
   derr << " pausing thread pools" << dendl;
   op_tp.pause();
+  op_sharded_tp.pause();
   disk_tp.pause();
   recovery_tp.pause();
   command_tp.pause();
@@ -1630,7 +1633,6 @@ int OSD::shutdown()
   }
   
   // finish ops
-  op_wq.drain(); // should already be empty except for lagard PGs
   {
     Mutex::Locker l(finished_lock);
     finished.clear(); // zap waiters (bleh, this is messy)
@@ -1672,6 +1674,9 @@ int OSD::shutdown()
   op_tp.drain();
   op_tp.stop();
   dout(10) << "op tp stopped" << dendl;
+
+  op_sharded_tp.drain();
+  op_sharded_tp.stop();
 
   command_tp.drain();
   command_tp.stop();
@@ -7937,88 +7942,10 @@ void OSD::enqueue_op(PG *pg, OpRequestRef op)
   pg->queue_op(op);
 }
 
-void OSD::OpWQ::_enqueue(pair<PGRef, OpRequestRef> item)
-{
-  unsigned priority = item.second->get_req()->get_priority();
-  unsigned cost = item.second->get_req()->get_cost();
-  if (priority >= CEPH_MSG_PRIO_LOW)
-    pqueue.enqueue_strict(
-      item.second->get_req()->get_source_inst(),
-      priority, item);
-  else
-    pqueue.enqueue(item.second->get_req()->get_source_inst(),
-      priority, cost, item);
-  osd->logger->set(l_osd_opq, pqueue.length());
-}
-
-void OSD::OpWQ::_enqueue_front(pair<PGRef, OpRequestRef> item)
-{
-  Mutex::Locker l(qlock);
-  if (pg_for_processing.count(&*(item.first))) {
-    pg_for_processing[&*(item.first)].push_front(item.second);
-    item.second = pg_for_processing[&*(item.first)].back();
-    pg_for_processing[&*(item.first)].pop_back();
-  }
-  unsigned priority = item.second->get_req()->get_priority();
-  unsigned cost = item.second->get_req()->get_cost();
-  if (priority >= CEPH_MSG_PRIO_LOW)
-    pqueue.enqueue_strict_front(
-      item.second->get_req()->get_source_inst(),
-      priority, item);
-  else
-    pqueue.enqueue_front(item.second->get_req()->get_source_inst(),
-      priority, cost, item);
-  osd->logger->set(l_osd_opq, pqueue.length());
-}
-
-PGRef OSD::OpWQ::_dequeue()
-{
-  assert(!pqueue.empty());
-  PGRef pg;
-  {
-    Mutex::Locker l(qlock);
-    pair<PGRef, OpRequestRef> ret = pqueue.dequeue();
-    pg = ret.first;
-    pg_for_processing[&*pg].push_back(ret.second);
-  }
-  osd->logger->set(l_osd_opq, pqueue.length());
-  return pg;
-}
-
-void OSD::OpWQ::_process(PGRef pg, ThreadPool::TPHandle &handle)
-{
-  pg->lock_suspend_timeout(handle);
-  OpRequestRef op;
-  {
-    Mutex::Locker l(qlock);
-    if (!pg_for_processing.count(&*pg)) {
-      pg->unlock();
-      return;
-    }
-    assert(pg_for_processing[&*pg].size());
-    op = pg_for_processing[&*pg].front();
-    pg_for_processing[&*pg].pop_front();
-    if (!(pg_for_processing[&*pg].size()))
-      pg_for_processing.erase(&*pg);
-  }
-
-  lgeneric_subdout(osd->cct, osd, 30) << "dequeue status: ";
-  Formatter *f = new_formatter("json");
-  f->open_object_section("q");
-  dump(f);
-  f->close_section();
-  f->flush(*_dout);
-  delete f;
-  *_dout << dendl;
-
-  osd->dequeue_op(pg, op, handle);
-  pg->unlock();
-}
-
 
 void OSDService::dequeue_pg(PG *pg, list<OpRequestRef> *dequeued)
 {
-  osd->op_wq.dequeue(pg, dequeued);
+  osd->op_shardedwq.dequeue(pg, dequeued);
 }
 
 /*
