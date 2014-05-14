@@ -364,7 +364,7 @@ int write_simple(sectiontype_t type, int fd)
 
 static void invalid_path(string &path)
 {
-  cout << "Invalid path to osd store specified: " << path << "\n";
+  cerr << "Invalid path to osd store specified: " << path << "\n";
   exit(1);
 }
 
@@ -379,7 +379,7 @@ int get_log(ObjectStore *fs, coll_t coll, spg_t pgid, const pg_info_t &info,
       cerr << oss.str() << std::endl;
   }
   catch (const buffer::error &e) {
-    cout << "read_log threw exception error " << e.what() << std::endl;
+    cerr << "read_log threw exception error " << e.what() << std::endl;
     return 1;
   }
   return 0;
@@ -439,7 +439,7 @@ int finish_remove_pgs(ObjectStore *store, uint64_t *next_removal_seq)
   vector<coll_t> ls;
   int r = store->list_collections(ls);
   if (r < 0) {
-    cout << "finish_remove_pgs: failed to list pgs: " << cpp_strerror(-r)
+    cerr << "finish_remove_pgs: failed to list pgs: " << cpp_strerror(-r)
       << std::endl;
     return r;
   }
@@ -509,7 +509,7 @@ int header::get_header()
 
   bytes = ebl.read_fd(file_fd, sh.header_size);
   if ((size_t)bytes != sh.header_size) {
-    cout << "Unexpected EOF" << std::endl;
+    cerr << "Unexpected EOF" << std::endl;
     return EFAULT;
   }
 
@@ -526,14 +526,14 @@ int footer::get_footer()
 
   bytes = ebl.read_fd(file_fd, sh.footer_size);
   if ((size_t)bytes != sh.footer_size) {
-    cout << "Unexpected EOF" << std::endl;
+    cerr << "Unexpected EOF" << std::endl;
     return EFAULT;
   }
 
   decode(ebliter);
 
   if (magic != endmagic) {
-    cout << "Bad footer magic" << std::endl;
+    cerr << "Bad footer magic" << std::endl;
     return EFAULT;
   }
 
@@ -556,7 +556,7 @@ int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
     struct_ver,
     true, true);
   if (ret < 0) ret = -ret;
-  if (ret) cout << "Failed to write info" << std::endl;
+  if (ret) cerr << "Failed to write info" << std::endl;
   return ret;
 }
 
@@ -594,12 +594,11 @@ int export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
   if (ret < 0)
     return ret;
 
-  if (file_fd != STDOUT_FILENO)
-    cout << "read " << obj << std::endl;
+  cerr << "read " << obj << std::endl;
 
   total = st.st_size;
-  if (debug && file_fd != STDOUT_FILENO)
-    cout << "size=" << total << std::endl;
+  if (debug)
+    cerr << "size=" << total << std::endl;
 
   object_begin objb(obj);
   ret = write_section(TYPE_OBJECT_BEGIN, objb, file_fd);
@@ -624,8 +623,8 @@ int export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
     total -= ret;
     offset += ret;
 
-    if (debug && file_fd != STDOUT_FILENO)
-      cout << "data section offset=" << offset << " len=" << len << std::endl;
+    if (debug)
+      cerr << "data section offset=" << offset << " len=" << len << std::endl;
 
     ret = write_section(TYPE_DATA, dblock, file_fd);
     if (ret) return ret;
@@ -640,15 +639,15 @@ int export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
   if (ret)
     return ret;
 
-  if (debug && file_fd != STDOUT_FILENO) {
-    cout << "attrs size " << aset.size() << std::endl;
+  if (debug) {
+    cerr << "attrs size " << aset.size() << std::endl;
   }
 
   //Handle omap information
   bufferlist hdrbuf;
   ret = store->omap_get_header(cid, obj, &hdrbuf, true);
   if (ret < 0) {
-    cout << "omap_get_header: " << cpp_strerror(-ret) << std::endl;
+    cerr << "omap_get_header: " << cpp_strerror(-ret) << std::endl;
     return ret;
   }
 
@@ -660,7 +659,7 @@ int export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
   ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(cid, obj);
   if (!iter) {
     ret = -ENOENT;
-    cout << "omap_get_iterator: " << cpp_strerror(-ret) << std::endl;
+    cerr << "omap_get_iterator: " << cpp_strerror(-ret) << std::endl;
     return ret;
   }
   iter->seek_to_first();
@@ -677,8 +676,8 @@ int export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
     if (ret)
       return ret;
   }
-  if (debug && file_fd != STDOUT_FILENO)
-    cout << "omap map size " << mapcount << std::endl;
+  if (debug)
+    cerr << "omap map size " << mapcount << std::endl;
 
   ret = write_simple(TYPE_OBJECT_END, file_fd);
   if (ret)
@@ -737,8 +736,7 @@ int do_export(ObjectStore *fs, coll_t coll, spg_t pgid, pg_info_t &info,
   PGLog::IndexedLog log;
   pg_missing_t missing;
 
-  if (file_fd != STDOUT_FILENO)
-    cout << "Exporting " << pgid << std::endl;
+  cerr << "Exporting " << pgid << std::endl;
 
   int ret = get_log(fs, coll, pgid, info, log, missing);
   if (ret > 0)
@@ -753,8 +751,7 @@ int do_export(ObjectStore *fs, coll_t coll, spg_t pgid, pg_info_t &info,
 
   ret = export_files(fs, coll);
   if (ret) {
-    if (file_fd != STDOUT_FILENO)
-      cout << "export_files error " << ret << std::endl;
+    cerr << "export_files error " << ret << std::endl;
     return ret;
   }
 
@@ -778,7 +775,7 @@ int super_header::read_super()
 
   bytes = ebl.read_fd(file_fd, super_header::FIXED_LENGTH);
   if ((size_t)bytes != super_header::FIXED_LENGTH) {
-    cout << "Unexpected EOF" << std::endl;
+    cerr << "Unexpected EOF" << std::endl;
     return EFAULT;
   }
 
@@ -801,7 +798,7 @@ int read_section(int fd, sectiontype_t *type, bufferlist *bl)
   bl->clear();
   bytes = bl->read_fd(fd, hdr.size);
   if (bytes != hdr.size) {
-    cout << "Unexpected EOF" << std::endl;
+    cerr << "Unexpected EOF" << std::endl;
     return EFAULT;
   }
 
@@ -823,7 +820,7 @@ int get_data(ObjectStore *store, coll_t coll, ghobject_t hoid,
   ds.decode(ebliter);
 
   if (debug)
-    cout << "\tdata: offset " << ds.offset << " len " << ds.len << std::endl;
+    cerr << "\tdata: offset " << ds.offset << " len " << ds.len << std::endl;
   t->write(coll, hoid, ds.offset, ds.len,  ds.databl);
   return 0;
 }
@@ -837,7 +834,7 @@ int get_attrs(ObjectStore *store, coll_t coll, ghobject_t hoid,
   as.decode(ebliter);
 
   if (debug)
-    cout << "\tattrs: len " << as.data.size() << std::endl;
+    cerr << "\tattrs: len " << as.data.size() << std::endl;
   t->setattrs(coll, hoid, as.data);
 
   if (hoid.hobj.snap < CEPH_MAXSNAP && hoid.generation == ghobject_t::NO_GEN) {
@@ -848,7 +845,7 @@ int get_attrs(ObjectStore *store, coll_t coll, ghobject_t hoid,
       object_info_t oi(attr_bl);
   
       if (debug)
-        cout << "object_info " << oi << std::endl;
+        cerr << "object_info " << oi << std::endl;
   
       OSDriver::OSTransaction _t(driver.get_transaction(t));
       set<snapid_t> oi_snaps(oi.snaps.begin(), oi.snaps.end());
@@ -867,7 +864,7 @@ int get_omap_hdr(ObjectStore *store, coll_t coll, ghobject_t hoid,
   oh.decode(ebliter);
 
   if (debug)
-    cout << "\tomap header: " << string(oh.hdr.c_str(), oh.hdr.length())
+    cerr << "\tomap header: " << string(oh.hdr.c_str(), oh.hdr.length())
       << std::endl;
   t->omap_setheader(coll, hoid, oh.hdr);
   return 0;
@@ -881,7 +878,7 @@ int get_omap(ObjectStore *store, coll_t coll, ghobject_t hoid,
   os.decode(ebliter);
 
   if (debug)
-    cout << "\tomap: size " << os.omap.size() << std::endl;
+    cerr << "\tomap: size " << os.omap.size() << std::endl;
   t->omap_setkeys(coll, hoid, os.omap);
   return 0;
 }
@@ -997,12 +994,12 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
     return ret;
 
   if (sh.magic != super_header::super_magic) {
-    cout << "Invalid magic number" << std::endl;
+    cerr << "Invalid magic number" << std::endl;
     return EFAULT;
   }
 
   if (sh.version > super_header::super_ver) {
-    cout << "Can't handle export format version=" << sh.version << std::endl;
+    cerr << "Can't handle export format version=" << sh.version << std::endl;
     return EINVAL;
   }
 
@@ -1021,10 +1018,10 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   spg_t pgid = pgb.pgid;
 
   if (debug) {
-    cout << "Exported features: " << pgb.superblock.compat_features << std::endl;
+    cerr << "Exported features: " << pgb.superblock.compat_features << std::endl;
   }
   if (sb.compat_features.compare(pgb.superblock.compat_features) == -1) {
-    cout << "Export has incompatible features set "
+    cerr << "Export has incompatible features set "
       << pgb.superblock.compat_features << std::endl;
     return 1;
   }
@@ -1035,7 +1032,7 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   //Check for PG already present.
   coll_t coll(pgid);
   if (store->collection_exists(coll)) {
-    cout << "pgid " << pgid << " already exists" << std::endl;
+    cerr << "pgid " << pgid << " already exists" << std::endl;
     return 1;
   }
 
@@ -1080,7 +1077,7 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   }
 
   if (!found_metadata) {
-    cout << "Missing metadata section" << std::endl;
+    cerr << "Missing metadata section" << std::endl;
     return EFAULT;
   }
 
@@ -1116,32 +1113,32 @@ int main(int argc, char **argv)
     po::notify(vm);
   }
   catch(...) {
-    cout << desc << std::endl;
-    exit(1);
+    cerr << desc << std::endl;
+    return 1;
   }
      
   if (vm.count("help")) {
-    cout << desc << std::endl;
+    cerr << desc << std::endl;
     return 1;
   }
 
   if (!vm.count("filestore-path")) {
-    cout << "Must provide filestore-path" << std::endl
+    cerr << "Must provide filestore-path" << std::endl
 	 << desc << std::endl;
     return 1;
   } 
   if (!vm.count("journal-path")) {
-    cout << "Must provide journal-path" << std::endl
+    cerr << "Must provide journal-path" << std::endl
 	 << desc << std::endl;
     return 1;
   } 
   if (!vm.count("type")) {
-    cout << "Must provide type (info, log, remove, export, import)"
+    cerr << "Must provide type (info, log, remove, export, import)"
       << std::endl << desc << std::endl;
     return 1;
   } 
   if (type != "import" && !vm.count("pgid")) {
-    cout << "Must provide pgid" << std::endl
+    cerr << "Must provide pgid" << std::endl
 	 << desc << std::endl;
     return 1;
   } 
@@ -1162,7 +1159,7 @@ int main(int argc, char **argv)
   }
 
   if (vm.count("file") && file_fd == fd_none) {
-    cout << "--file option only applies to import or export" << std::endl;
+    cerr << "--file option only applies to import or export" << std::endl;
     return 1;
   }
 
@@ -1176,12 +1173,12 @@ int main(int argc, char **argv)
         && type != "import") ||
       (type != "import" && pgidstr.length() == 0)) {
     cerr << "Invalid params" << std::endl;
-    exit(1);
+    return 1;
   }
 
   if (type == "import" && pgidstr.length()) {
     cerr << "--pgid option invalid with import" << std::endl;
-    exit(1);
+    return 1;
   }
 
   vector<const char *> ceph_options, def_args;
@@ -1240,8 +1237,8 @@ int main(int argc, char **argv)
 
   spg_t pgid;
   if (pgidstr.length() && !pgid.parse(pgidstr.c_str())) {
-    cout << "Invalid pgid '" << pgidstr << "' specified" << std::endl;
-    exit(1);
+    cerr << "Invalid pgid '" << pgidstr << "' specified" << std::endl;
+    return 1;
   }
 
   ObjectStore *fs = new FileStore(fspath, jpath);
@@ -1249,9 +1246,9 @@ int main(int argc, char **argv)
   int r = fs->mount();
   if (r < 0) {
     if (r == -EBUSY) {
-      cout << "OSD has the store locked" << std::endl;
+      cerr << "OSD has the store locked" << std::endl;
     } else {
-      cout << "Mount failed with '" << cpp_strerror(-r) << "'" << std::endl;
+      cerr << "Mount failed with '" << cpp_strerror(-r) << "'" << std::endl;
     }
     return 1;
   }
@@ -1274,7 +1271,7 @@ int main(int argc, char **argv)
   bufferlist::iterator p;
   r = fs->read(coll_t::META_COLL, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
   if (r < 0) {
-    cout << "Failure to read OSD superblock error= " << r << std::endl;
+    cerr << "Failure to read OSD superblock error= " << r << std::endl;
     goto out;
   }
 
@@ -1288,12 +1285,12 @@ int main(int argc, char **argv)
   superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
 #endif
 
-  if (debug && file_fd != STDOUT_FILENO) {
-    cout << "Supported features: " << supported << std::endl;
-    cout << "On-disk features: " << superblock.compat_features << std::endl;
+  if (debug) {
+    cerr << "Supported features: " << supported << std::endl;
+    cerr << "On-disk features: " << superblock.compat_features << std::endl;
   }
   if (supported.compare(superblock.compat_features) == -1) {
-    cout << "On-disk OSD incompatible features set "
+    cerr << "On-disk OSD incompatible features set "
       << superblock.compat_features << std::endl;
     ret = EINVAL;
     goto out;
@@ -1306,9 +1303,9 @@ int main(int argc, char **argv)
     // An OSD should never have call set_allow_sharded_objects() before
     // updating its own OSD features.
     if (fs_sharded_objects)
-      cout << "FileStore sharded but OSD not set, Corruption?" << std::endl;
+      cerr << "FileStore sharded but OSD not set, Corruption?" << std::endl;
     else
-      cout << "Found incomplete transition to sharded objects" << std::endl;
+      cerr << "Found incomplete transition to sharded objects" << std::endl;
     ret = EINVAL;
     goto out;
   }
@@ -1319,11 +1316,11 @@ int main(int argc, char **argv)
       ret = do_import(fs, superblock);
     }
     catch (const buffer::error &e) {
-      cout << "do_import threw exception error " << e.what() << std::endl;
+      cerr << "do_import threw exception error " << e.what() << std::endl;
       ret = EFAULT;
     }
     if (ret == EFAULT) {
-      cout << "Corrupt input for import" << std::endl;
+      cerr << "Corrupt input for import" << std::endl;
     }
     if (ret == 0)
       cout << "Import successful" << std::endl;
@@ -1338,7 +1335,7 @@ int main(int argc, char **argv)
     finish_remove_pgs(fs, &next_removal_seq);
     int r = initiate_new_remove_pg(fs, pgid, &next_removal_seq);
     if (r) {
-      cout << "PG '" << pgid << "' not found" << std::endl;
+      cerr << "PG '" << pgid << "' not found" << std::endl;
       ret = 1;
       goto out;
     }
@@ -1349,8 +1346,9 @@ int main(int argc, char **argv)
 
   r = fs->list_collections(ls);
   if (r < 0) {
-    cout << "failed to list pgs: " << cpp_strerror(-r) << std::endl;
-    exit(1);
+    cerr << "failed to list pgs: " << cpp_strerror(-r) << std::endl;
+    ret = 1;
+    goto out;
   }
 
   for (it = ls.begin(); it != ls.end(); ++it) {
@@ -1393,7 +1391,7 @@ int main(int argc, char **argv)
     r = PG::read_info(fs, coll, bl, info, past_intervals, biginfo_oid,
       infos_oid, snap_collections, struct_ver);
     if (r < 0) {
-      cout << "read_info error " << cpp_strerror(-r) << std::endl;
+      cerr << "read_info error " << cpp_strerror(-r) << std::endl;
       ret = 1;
       goto out;
     }
@@ -1429,13 +1427,13 @@ int main(int argc, char **argv)
       cout << std::endl;
     }
   } else {
-    cout << "PG '" << pgid << "' not found" << std::endl;
+    cerr << "PG '" << pgid << "' not found" << std::endl;
     ret = 1;
   }
 
 out:
   if (fs->umount() < 0) {
-    cout << "umount failed" << std::endl;
+    cerr << "umount failed" << std::endl;
     return 1;
   }
 
