@@ -467,6 +467,8 @@ OPTION(osd_disk_thread_ioprio_class, OPT_STR, "") // rt realtime be besteffort b
 OPTION(osd_disk_thread_ioprio_priority, OPT_INT, -1) // 0-7
 OPTION(osd_recovery_threads, OPT_INT, 1)
 OPTION(osd_recover_clone_overlap, OPT_BOOL, true)   // preserve clone_overlap during recovery/migration
+OPTION(osd_op_num_sharded_pool_threads, OPT_INT, 10)
+OPTION(osd_op_num_shards, OPT_INT, 5)
 
 // Only use clone_overlap for recovery if there are fewer than
 // osd_recover_clone_overlap_limit entries in the overlap set
