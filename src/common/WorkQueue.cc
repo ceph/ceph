@@ -255,3 +255,95 @@ void ThreadPool::drain(WorkQueue_* wq)
   _lock.Unlock();
 }
 
+ShardedThreadPool::ShardedThreadPool(CephContext *pcct_, string nm, uint32_t pnum_threads):
+  cct(pcct_), name(nm), lockname(nm + "::lock"), shardedpool_lock(lockname.c_str()), num_threads(pnum_threads), wq(NULL) {}
+
+void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
+{
+  assert (wq != NULL);
+  ldout(cct,10) << "worker start" << dendl;
+
+  std::stringstream ss;
+  ss << name << " thread " << (void*)pthread_self();
+  heartbeat_handle_d *hb = cct->get_heartbeat_map()->add_worker(ss.str());
+
+  wq->_process(thread_index, hb);
+
+  ldout(cct,10) << "sharded worker finish" << dendl;
+
+  cct->get_heartbeat_map()->remove_worker(hb);
+
+}
+
+void ShardedThreadPool::start_threads()
+{
+  assert(shardedpool_lock.is_locked());
+  int32_t thread_index = 0;
+  while (threads_shardedpool.size() < num_threads) {
+
+    WorkThreadSharded *wt = new WorkThreadSharded(this, thread_index);
+    ldout(cct, 10) << "start_threads creating and starting " << wt << dendl;
+    threads_shardedpool.push_back(wt);
+    wt->create();
+    thread_index ++;
+  }
+}
+
+void ShardedThreadPool::start()
+{
+  ldout(cct,10) << "start" << dendl;
+
+  shardedpool_lock.Lock();
+  start_threads();
+  shardedpool_lock.Unlock();
+  ldout(cct,15) << "started" << dendl;
+}
+
+void ShardedThreadPool::stop()
+{
+  ldout(cct,10) << "stop" << dendl;
+  assert (wq != NULL);
+  wq->stop_threads_on_queue();
+
+  for (vector<WorkThreadSharded*>::iterator p = threads_shardedpool.begin();
+       p != threads_shardedpool.end();
+       ++p) {
+    (*p)->join();
+    delete *p;
+  }
+  threads_shardedpool.clear();
+  ldout(cct,15) << "stopped" << dendl;
+}
+
+void ShardedThreadPool::pause()
+{
+  ldout(cct,10) << "pause" << dendl;
+  assert (wq != NULL);
+  wq->pause_threads_on_queue();
+  ldout(cct,10) << "paused" << dendl; 
+}
+
+void ShardedThreadPool::pause_new()
+{
+  ldout(cct,10) << "pause_new" << dendl;
+  assert (wq != NULL);
+  wq->pause_new_threads_on_queue();
+  ldout(cct,10) << "paused_new" << dendl;
+}
+
+void ShardedThreadPool::unpause()
+{
+  ldout(cct,10) << "unpause" << dendl;
+  assert (wq != NULL);
+  wq->unpause_threads_on_queue();
+  ldout(cct,10) << "unpaused" << dendl;
+}
+
+void ShardedThreadPool::drain()
+{
+  ldout(cct,10) << "drain" << dendl;
+  assert (wq != NULL);
+  wq->drain_threads_on_queue();
+  ldout(cct,10) << "drained" << dendl;
+}
+
