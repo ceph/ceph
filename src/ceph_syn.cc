@@ -17,6 +17,11 @@
 #include <string>
 using namespace std;
 
+#if defined(HAVE_XIO)
+#include "msg/XioMessenger.h"
+#include "msg/QueueStrategy.h"
+#endif
+
 #include "common/config.h"
 
 #include "client/SyntheticClient.h"
@@ -65,9 +70,32 @@ int main(int argc, const char **argv, char *envp[])
 
   cout << "ceph-syn: starting " << g_conf->num_client << " syn client(s)" << std::endl;
   for (int i=0; i<g_conf->num_client; i++) {
-    messengers[i] = Messenger::create(g_ceph_context,
-				      entity_name_t(entity_name_t::TYPE_CLIENT,-1), "synclient",
-				      i * 1000000 + getpid());
+#if defined(HAVE_XIO)
+    if (g_conf->client_rdma) {
+      XioMessenger *xmsgr
+	= new XioMessenger(g_ceph_context, entity_name_t::CLIENT(-1),
+			   "xio synclient",
+			   i * 1000000 + getpid(),
+			   0 /* portals */,
+			   new QueueStrategy(2) /* dispatch strategy */);
+      xmsgr->set_port_shift(111);
+      messengers[i] = xmsgr;
+
+    }
+    else {
+      messengers[i] = Messenger::create(g_ceph_context,
+					entity_name_t(
+					  entity_name_t::TYPE_CLIENT,-1),
+					"synclient",
+					i * 1000000 + getpid());
+    }
+#else
+      messengers[i] = Messenger::create(g_ceph_context,
+					entity_name_t(
+					  entity_name_t::TYPE_CLIENT,-1),
+					"synclient",
+					i * 1000000 + getpid());
+#endif
     messengers[i]->bind(g_conf->public_addr);
     mclients[i] = new MonClient(g_ceph_context);
     mclients[i]->build_initial_monmap();
