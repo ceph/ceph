@@ -90,7 +90,7 @@ public:
     if (g_conf->client_rdma) {
       xio = true;
       XioMessenger *xmsgr
-	= new XioMessenger(cct, entity_name_t::CLIENT(-1), "client",
+	= new XioMessenger(cct, entity_name_t::CLIENT(-1), "xio client",
 			   msgr_nonce, 0 /* portals */,
 			   new QueueStrategy(2) /* dispatch strategy */);
       xmsgr->set_port_shift(111);
