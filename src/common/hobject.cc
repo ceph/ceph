@@ -235,6 +235,20 @@ void ghobject_t::decode(bufferlist::iterator& bl)
   DECODE_FINISH(bl);
 }
 
+void ghobject_t::decode(json_spirit::Value& v)
+{
+  hobj.decode(v);
+  using namespace json_spirit;
+  Object& o = v.get_obj();
+  for (Object::size_type i=0; i<o.size(); i++) {
+    Pair& p = o[i];
+    if (p.name_ == "generation")
+      generation = p.value_.get_uint64();
+    else if (p.name_ == "shard_id")
+      shard_id = p.value_.get_int();
+  }
+}
+
 void ghobject_t::dump(Formatter *f) const
 {
   hobj.dump(f);
