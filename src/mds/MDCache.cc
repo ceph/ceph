@@ -3732,24 +3732,24 @@ void MDCache::rejoin_send_rejoins()
       if (mdr->is_slave())
 	continue;
       // auth pins
-      for (set<MDSCacheObject*>::iterator q = mdr->remote_auth_pins.begin();
+      for (map<MDSCacheObject*,int>::iterator q = mdr->remote_auth_pins.begin();
 	   q != mdr->remote_auth_pins.end();
 	   ++q) {
-	if (!(*q)->is_auth()) {
-	  int who = (*q)->authority().first;
-	  if (rejoins.count(who) == 0) continue;
-	  MMDSCacheRejoin *rejoin = rejoins[who];
+	if (!q->first->is_auth()) {
+	  assert(q->second == q->first->authority().first);
+	  if (rejoins.count(q->second) == 0) continue;
+	  MMDSCacheRejoin *rejoin = rejoins[q->second];
 	  
-	  dout(15) << " " << *mdr << " authpin on " << **q << dendl;
+	  dout(15) << " " << *mdr << " authpin on " << *q->first << dendl;
 	  MDSCacheObjectInfo i;
-	  (*q)->set_object_info(i);
+	  q->first->set_object_info(i);
 	  if (i.ino)
 	    rejoin->add_inode_authpin(vinodeno_t(i.ino, i.snapid), mdr->reqid, mdr->attempt);
 	  else
 	    rejoin->add_dentry_authpin(i.dirfrag, i.dname, i.snapid, mdr->reqid, mdr->attempt);
 
 	  if (mdr->has_more() && mdr->more()->is_remote_frozen_authpin &&
-	      mdr->more()->rename_inode == (*q))
+	      mdr->more()->rename_inode == q->first)
 	    rejoin->add_inode_frozen_authpin(vinodeno_t(i.ino, i.snapid),
 					     mdr->reqid, mdr->attempt);
 	}
