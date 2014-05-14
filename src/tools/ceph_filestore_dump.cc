@@ -575,6 +575,15 @@ int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
   return 0;
 }
 
+const int OMAP_BATCH_SIZE = 25;
+void get_omap_batch(ObjectMap::ObjectMapIterator &iter, map<string, bufferlist> &oset)
+{
+  oset.clear();
+  for (int count = OMAP_BATCH_SIZE; count && iter->valid(); --count, iter->next()) {
+    oset.insert(pair<string, bufferlist>(iter->key(), iter->value()));
+  }
+}
+
 int export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
 {
   struct stat st;
@@ -637,25 +646,39 @@ int export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
 
   //Handle omap information
   bufferlist hdrbuf;
-  map<string, bufferlist> out;
-  ret = store->omap_get(cid, obj, &hdrbuf, &out);
-  if (ret < 0)
+  ret = store->omap_get_header(cid, obj, &hdrbuf, true);
+  if (ret < 0) {
+    cout << "omap_get_header: " << cpp_strerror(-ret) << std::endl;
     return ret;
+  }
 
   omap_hdr_section ohs(hdrbuf);
   ret = write_section(TYPE_OMAP_HDR, ohs, file_fd);
   if (ret)
     return ret;
 
-  if (!out.empty()) {
+  ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(cid, obj);
+  if (!iter) {
+    ret = -ENOENT;
+    cout << "omap_get_iterator: " << cpp_strerror(-ret) << std::endl;
+    return ret;
+  }
+  iter->seek_to_first();
+  int mapcount = 0;
+  map<string, bufferlist> out;
+  while(iter->valid()) {
+    get_omap_batch(iter, out);
+
+    if (out.empty()) break;
+
+    mapcount += out.size();
     omap_section oms(out);
     ret = write_section(TYPE_OMAP, oms, file_fd);
     if (ret)
       return ret;
-
-    if (debug && file_fd != STDOUT_FILENO)
-      cout << "omap map size " << out.size() << std::endl;
   }
+  if (debug && file_fd != STDOUT_FILENO)
+    cout << "omap map size " << mapcount << std::endl;
 
   ret = write_simple(TYPE_OBJECT_END, file_fd);
   if (ret)
