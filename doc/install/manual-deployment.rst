@@ -241,11 +241,11 @@ The procedure is as follows:
 
 #. Start the monitor(s).
 
-   For Debian/Ubuntu, use Upstart::
+   For Ubuntu, use Upstart::
 
 	sudo start ceph-mon id=node1
 
-   For CentOS/RHEL, use sysvinit::
+   For Debian/CentOS/RHEL, use sysvinit::
 
 	sudo /etc/init.d/ceph start mon.node1
 
@@ -410,7 +410,7 @@ OSDs with the long form procedure, execute the following on ``node2`` and
    it is not yet running. The OSD is ``down`` and ``in``. You must start 
    your new OSD before it can begin receiving data.
 
-   For Debian/Ubuntu, use Upstart::
+   For Ubuntu, use Upstart::
 
 	sudo start ceph-osd id={osd-num}
 
@@ -419,7 +419,7 @@ OSDs with the long form procedure, execute the following on ``node2`` and
 	sudo start ceph-osd id=0
 	sudo start ceph-osd id=1
 
-   For CentOS/RHEL, use sysvinit::
+   For Debian/CentOS/RHEL, use sysvinit::
 
 	sudo /etc/init.d/ceph start osd.{osd-num}
 
