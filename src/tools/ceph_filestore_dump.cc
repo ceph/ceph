@@ -1194,10 +1194,7 @@ int main(int argc, char **argv)
     ceph_options.push_back(i->c_str());
   }
 
-  //Suppress derr() output to stderr by default
   if (!vm.count("debug")) {
-    close(STDERR_FILENO);
-    (void)open("/dev/null", O_WRONLY);
     debug = false;
   } else {
     debug = true;
@@ -1205,11 +1202,15 @@ int main(int argc, char **argv)
 
   global_init(
     &def_args, ceph_options, CEPH_ENTITY_TYPE_OSD,
-    CODE_ENVIRONMENT_UTILITY, 0);
+    CODE_ENVIRONMENT_UTILITY_NODOUT, 0);
     //CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
   g_conf = g_ceph_context->_conf;
+  if (debug) {
+    g_conf->set_val_or_die("log_to_stderr", "true");
+    g_conf->set_val_or_die("err_to_stderr", "true");
+  }
+  g_conf->apply_changes(NULL);
 
   //Verify that fspath really is an osd store
   struct stat st;
