@@ -104,10 +104,10 @@ weight).
 	ceph auth add osd.{osd-num} osd 'allow *' mon 'allow rwx' -i /var/lib/ceph/osd/ceph-{osd-num}/keyring
 
 
-#. Add the OSD to the CRUSH map so that it can begin receiving data. The 
+#. Add the OSD to the CRUSH map so that the OSD can begin receiving data. The 
    ``ceph osd crush add`` command allows you to add OSDs to the CRUSH hierarchy 
    wherever you wish. If you specify at least one bucket, the command 
-   will place the OSD in the most specific bucket you specify, *and* it will 
+   will place the OSD into the most specific bucket you specify, *and* it will 
    move that bucket underneath any other buckets you specify. **Important:** If 
    you specify only the root bucket, the command will attach the OSD directly 
    to the root, but CRUSH rules expect OSDs to be inside of hosts.
