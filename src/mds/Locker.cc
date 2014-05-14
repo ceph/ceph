@@ -350,14 +350,14 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
   // request remote auth_pins
   if (!mustpin_remote.empty()) {
     marker.message = "requesting remote authpins";
-    for (set<MDSCacheObject*>::iterator p = mdr->remote_auth_pins.begin();
+    for (map<MDSCacheObject*,int>::iterator p = mdr->remote_auth_pins.begin();
 	 p != mdr->remote_auth_pins.end();
 	 ++p) {
-      if (mustpin.count(*p)) {
-	int auth = (*p)->authority().first;
-	map<int, set<MDSCacheObject*> >::iterator q = mustpin_remote.find(auth);
+      if (mustpin.count(p->first)) {
+	assert(p->second == p->first->authority().first);
+	map<int, set<MDSCacheObject*> >::iterator q = mustpin_remote.find(p->second);
 	if (q != mustpin_remote.end())
-	  q->second.insert(*p);
+	  q->second.insert(p->first);
       }
     }
     for (map<int, set<MDSCacheObject*> >::iterator p = mustpin_remote.begin();
