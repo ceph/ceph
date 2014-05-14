@@ -169,6 +169,13 @@ instance name follows. For example::
    same name in your S3 FastCGI file too. See `Add a Ceph Object Gateway 
    Script`_ for details.
 
+Configuring Print Continue
+--------------------------
+
+On CentOS/RHEL distributions, turn off ``print continue``. If you have it set
+to ``true``, you may encounter problems with ``PUT`` operations. ::
+
+	rgw print continue = false
 
 Configuring Operations Logging
 ------------------------------
