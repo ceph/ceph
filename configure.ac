@@ -602,6 +602,9 @@ AC_CHECK_HEADER([boost/statechart/state.hpp], [],
 AC_CHECK_HEADER([boost/program_options/option.hpp], [],
     AC_MSG_FAILURE(["Can't find boost program_options headers"]))
 
+AC_CHECK_HEADER([boost/preprocessor/repetition/repeat.hpp], [],
+    AC_MSG_FAILURE(["Can't find boost preprocessor headers"]))
+
 # If we have the boost system library installed, then we may want to link
 # with it.
 AC_CHECK_LIB(boost_system-mt, main, [],

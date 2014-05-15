@@ -1994,10 +1994,10 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--secret", (char*)NULL)) {
       int r = g_conf->set_val("keyfile", val.c_str());
       assert(r == 0);
-    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "-h", "--help")) {
       usage();
       return 0;
-    } else if (ceph_argparse_flag(args, i, "--new-format", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--new-format")) {
       format = 2;
       format_specified = true;
     } else if (ceph_argparse_withint(args, i, &format, &err, "--image-format",
@@ -2028,7 +2028,7 @@ int main(int argc, const char **argv)
       }
       size = sizell << 20;   // bytes to MB
       size_set = true;
-    } else if (ceph_argparse_flag(args, i, "-l", "--long", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "-l", "--long")) {
       lflag = true;
     } else if (ceph_argparse_withlonglong(args, i, &stripe_unit, &err, "--stripe-unit", (char*)NULL)) {
     } else if (ceph_argparse_withlonglong(args, i, &stripe_count, &err, "--stripe-count", (char*)NULL)) {
@@ -2050,7 +2050,7 @@ int main(int argc, const char **argv)
       imgname = strdup(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--shared", (char *)NULL)) {
       lock_tag = strdup(val.c_str());
-    } else if (ceph_argparse_flag(args, i, "--no-settle", (char *)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--no-settle")) {
       cerr << "rbd: --no-settle is deprecated" << std::endl;
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--options", (char*)NULL)) {
       char *map_options = strdup(val.c_str());
@@ -2058,12 +2058,12 @@ int main(int argc, const char **argv)
         cerr << "rbd: couldn't parse map options" << std::endl;
         return EXIT_FAILURE;
       }
-    } else if (ceph_argparse_flag(args, i, "--read-only", (char *)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--read-only")) {
       // --read-only is equivalent to -o ro
       put_map_option("rw", "ro");
-    } else if (ceph_argparse_flag(args, i, "--no-progress", (char *)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--no-progress")) {
       progress = false;
-    } else if (ceph_argparse_flag(args, i , "--allow-shrink", (char *)NULL)) {
+    } else if (ceph_argparse_flag(args, i , "--allow-shrink")) {
       resize_allow_shrink = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char *) NULL)) {
       std::string err;

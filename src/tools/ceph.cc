@@ -152,25 +152,25 @@ static void parse_cmd_args(vector<const char*> &args,
       if (i == args.end())
 	usage();
       *admin_socket_cmd = *i++;
-    } else if (ceph_argparse_flag(args, i, "-s", "--status", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "-s", "--status")) {
       *mode = CEPH_TOOL_MODE_STATUS;
-    } else if (ceph_argparse_flag(args, i, "-w", "--watch", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "-w", "--watch")) {
       *mode = CEPH_TOOL_MODE_WATCH;
-    } else if (ceph_argparse_flag(args, i, "--watch-debug", (char*) NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--watch-debug")) {
       *watch_level = "log-debug";
-    } else if (ceph_argparse_flag(args, i, "--watch-info", (char*) NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--watch-info")) {
       *watch_level = "log-info";
-    } else if (ceph_argparse_flag(args, i, "--watch-sec", (char*) NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--watch-sec")) {
       *watch_level = "log-sec";
-    } else if (ceph_argparse_flag(args, i, "--watch-warn", (char*) NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--watch-warn")) {
       *watch_level = "log-warn";
-    } else if (ceph_argparse_flag(args, i, "--watch-error", (char*) NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--watch-error")) {
       *watch_level = "log-error";
-    } else if (ceph_argparse_flag(args, i, "--concise", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--concise")) {
       *concise = true;
-    } else if (ceph_argparse_flag(args, i, "--verbose", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--verbose")) {
       *concise = false;
-    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "-h", "--help")) {
       usage();
     } else {
       if (admin_socket_cmd && admin_socket_cmd->length()) {

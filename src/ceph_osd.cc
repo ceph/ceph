@@ -91,28 +91,28 @@ int main(int argc, const char **argv)
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "-h", "--help")) {
       usage();
       exit(0);
-    } else if (ceph_argparse_flag(args, i, "--mkfs", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--mkfs")) {
       mkfs = true;
-    } else if (ceph_argparse_flag(args, i, "--mkjournal", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--mkjournal")) {
       mkjournal = true;
-    } else if (ceph_argparse_flag(args, i, "--mkkey", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--mkkey")) {
       mkkey = true;
-    } else if (ceph_argparse_flag(args, i, "--flush-journal", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--flush-journal")) {
       flushjournal = true;
-    } else if (ceph_argparse_flag(args, i, "--convert-filestore", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--convert-filestore")) {
       convertfilestore = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--dump-pg-log", (char*)NULL)) {
       dump_pg_log = val;
-    } else if (ceph_argparse_flag(args, i, "--dump-journal", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--dump-journal")) {
       dump_journal = true;
-    } else if (ceph_argparse_flag(args, i, "--get-cluster-fsid", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--get-cluster-fsid")) {
       get_cluster_fsid = true;
-    } else if (ceph_argparse_flag(args, i, "--get-osd-fsid", "--get-osd-uuid", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--get-osd-fsid", "--get-osd-uuid")) {
       get_osd_fsid = true;
-    } else if (ceph_argparse_flag(args, i, "--get-journal-fsid", "--get-journal-uuid", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--get-journal-fsid", "--get-journal-uuid")) {
       get_journal_fsid = true;
     } else {
       ++i;

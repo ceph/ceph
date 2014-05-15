@@ -376,22 +376,22 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
        * argument parses will still need to see it. */
       break;
     }
-    else if (ceph_argparse_flag(args, i, "--show_conf", (char*)NULL)) {
+    else if (ceph_argparse_flag(args, i, "--show_conf")) {
       cerr << cf << std::endl;
       _exit(0);
     }
-    else if (ceph_argparse_flag(args, i, "--show_config", (char*)NULL)) {
+    else if (ceph_argparse_flag(args, i, "--show_config")) {
       show_config = true;
     }
     else if (ceph_argparse_witharg(args, i, &val, "--show_config_value", (char*)NULL)) {
       show_config_value = true;
       show_config_value_arg = val;
     }
-    else if (ceph_argparse_flag(args, i, "--foreground", "-f", (char*)NULL)) {
+    else if (ceph_argparse_flag(args, i, "--foreground", "-f")) {
       set_val_or_die("daemonize", "false");
       set_val_or_die("pid_file", "");
     }
-    else if (ceph_argparse_flag(args, i, "-d", (char*)NULL)) {
+    else if (ceph_argparse_flag(args, i, "-d")) {
       set_val_or_die("daemonize", "false");
       set_val_or_die("log_file", "");
       set_val_or_die("pid_file", "");
@@ -503,7 +503,7 @@ int md_config_t::parse_option(std::vector<const char*>& args,
       } else {
 	std::string no("--no-");
 	no += opt->name;
-	if (ceph_argparse_flag(args, i, no.c_str(), (char*)NULL)) {
+	if (ceph_argparse_flag(args, i, no.c_str())) {
 	  set_val_impl("false", opt);
 	  break;
 	}

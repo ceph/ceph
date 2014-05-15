@@ -212,7 +212,7 @@ int main(int argc, const char **argv)
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "-h", "--help")) {
       usage();
       exit(0);
     } else if (ceph_argparse_witharg(args, i, &val, "-d", "--decompile", (char*)NULL)) {
@@ -222,31 +222,31 @@ int main(int argc, const char **argv)
       infn = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--outfn", (char*)NULL)) {
       outfn = val;
-    } else if (ceph_argparse_flag(args, i, "-v", "--verbose", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "-v", "--verbose")) {
       verbose += 1;
-    } else if (ceph_argparse_flag(args, i, "--show_utilization", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--show_utilization")) {
       display = true;
       tester.set_output_utilization(true);
-    } else if (ceph_argparse_flag(args, i, "--show_utilization_all", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--show_utilization_all")) {
       display = true;
       tester.set_output_utilization_all(true);
-    } else if (ceph_argparse_flag(args, i, "--show_statistics", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--show_statistics")) {
       display = true;
       tester.set_output_statistics(true);
-    } else if (ceph_argparse_flag(args, i, "--show_bad_mappings", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--show_bad_mappings")) {
       display = true;
       tester.set_output_bad_mappings(true);
-    } else if (ceph_argparse_flag(args, i, "--show_choose_tries", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--show_choose_tries")) {
       display = true;
       tester.set_output_choose_tries(true);
     } else if (ceph_argparse_witharg(args, i, &val, "-c", "--compile", (char*)NULL)) {
       srcfn = val;
       compile = true;
-    } else if (ceph_argparse_flag(args, i, "-t", "--test", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "-t", "--test")) {
       test = true;
-    } else if (ceph_argparse_flag(args, i, "-s", "--simulate", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "-s", "--simulate")) {
       tester.set_random_placement();
-    } else if (ceph_argparse_flag(args, i, "--enable-unsafe-tunables", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--enable-unsafe-tunables")) {
       unsafe_tunables = true;
     } else if (ceph_argparse_withint(args, i, &choose_local_tries, &err,
 				     "--set_choose_local_tries", (char*)NULL)) {
@@ -263,7 +263,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_withint(args, i, &chooseleaf_vary_r, &err,
 				     "--set_chooseleaf_vary_r", (char*)NULL)) {
       adjust = true;
-    } else if (ceph_argparse_flag(args, i, "--reweight", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--reweight")) {
       reweight = true;
     } else if (ceph_argparse_withint(args, i, &add_item, &err, "--add_item", (char*)NULL)) {
       if (!err.str().empty()) {
@@ -309,11 +309,11 @@ int main(int argc, const char **argv)
       std::string name(*i);
       i = args.erase(i);
       add_loc[type] = name;
-    } else if (ceph_argparse_flag(args, i, "--output-csv", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--output-csv")) {
       write_to_file = true;
       tester.set_output_data_file(true);
       tester.set_output_csv(true);
-    } else if (ceph_argparse_flag(args, i, "--help-output", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--help-output")) {
       data_analysis_usage();
       exit(0);
     } else if (ceph_argparse_witharg(args, i, &val, "--output-name", (char*)NULL)) {
@@ -335,7 +335,7 @@ int main(int argc, const char **argv)
       }
       reweight_weight = atof(*i);
       i = args.erase(i);
-    } else if (ceph_argparse_flag(args, i, "--build", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--build")) {
       build = true;
     } else if (ceph_argparse_withint(args, i, &num_osds, &err, "--num_osds", (char*)NULL)) {
       if (!err.str().empty()) {
