@@ -1204,6 +1204,28 @@ int do_list_attrs(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
   return 0;
 }
 
+int do_list_omap(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
+{
+  ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(coll, ghobj);
+  if (!iter) {
+    cerr << "omap_get_iterator: " << cpp_strerror(ENOENT) << std::endl;
+    return -ENOENT;
+  }
+  iter->seek_to_first();
+  map<string, bufferlist> oset;
+  while(iter->valid()) {
+    get_omap_batch(iter, oset);
+
+    for (map<string,bufferlist>::iterator i = oset.begin();i != oset.end(); ++i) {
+      string key(i->first);
+      if (outistty)
+        cleanbin(key);
+      cout << key << std::endl;
+    }
+  }
+  return 0;
+}
+
 void usage(po::options_description &desc)
 {
     cerr << std::endl;
@@ -1578,6 +1600,12 @@ int main(int argc, char **argv)
         goto out;
       } else if (objcmd == "list-attrs") {
         int r = do_list_attrs(fs, coll, ghobj);
+        if (r) {
+          ret = 1;
+        }
+        goto out;
+      } else if (objcmd == "list-omap") {
+        int r = do_list_omap(fs, coll, ghobj);
         if (r) {
           ret = 1;
         }
