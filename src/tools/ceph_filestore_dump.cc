@@ -28,6 +28,9 @@
 #include "osd/PGLog.h"
 #include "osd/OSD.h"
 
+#include "json_spirit/json_spirit_value.h"
+#include "json_spirit/json_spirit_reader.h"
+
 namespace po = boost::program_options;
 using namespace std;
 
@@ -1128,10 +1131,64 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   return 0;
 }
 
+int do_remove_object(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
+{
+  spg_t pg;
+  coll.is_pg_prefix(pg);
+  OSDriver driver(
+    store,
+    coll_t(),
+    OSD::make_snapmapper_oid());
+  SnapMapper mapper(&driver, 0, 0, 0, pg.shard);
+  struct stat st;
+
+  int r = store->stat(coll, ghobj, &st);
+  if (r < 0) {
+    cerr << "remove: " << cpp_strerror(-r) << std::endl;
+    return r;
+  }
+
+  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  OSDriver::OSTransaction _t(driver.get_transaction(t));
+  cout << "remove " << ghobj << std::endl;
+  r = mapper.remove_oid(ghobj.hobj, &_t);
+  if (r != 0 && r != -ENOENT) {
+    cerr << "remove_oid returned " << cpp_strerror(-r) << std::endl;
+    return r;
+  }
+
+  t->remove(coll, ghobj);
+
+  store->apply_transaction(*t);
+  delete t;
+  return 0;
+}
+
+void usage(po::options_description &desc)
+{
+    cerr << std::endl;
+    cerr << desc << std::endl;
+    cerr << std::endl;
+    cerr << "Positional syntax:" << std::endl;
+    cerr << std::endl;
+    cerr << "(requires --filestore-path, --journal-path and --pgid to be specified)" << std::endl;
+    cerr << "(optional [file] argument will read stdin or write stdout if not specified or if '-' specified)" << std::endl;
+    cerr << "ceph-filestore-dump ... <object> (get|set)-bytes [file]" << std::endl;
+    cerr << "ceph-filestore-dump ... <object> (set-(attr|omap) <key> [file]" << std::endl;
+    cerr << "ceph-filestore-dump ... <object> (set-omaphdr) [file]" << std::endl;
+    cerr << "ceph-filestore-dump ... <object> (get|rm)-(attr|omap) <key>" << std::endl;
+    cerr << "ceph-filestore-dump ... <object> (get-omaphdr)" << std::endl;
+    cerr << "ceph-filestore-dump ... <object> list-attrs" << std::endl;
+    cerr << "ceph-filestore-dump ... <object> list-omap" << std::endl;
+    cerr << "ceph-filestore-dump ... <object> remove" << std::endl;
+    cerr << std::endl;
+    exit(1);
+}
+
 int main(int argc, char **argv)
 {
-  string fspath, jpath, pgidstr, type, file;
-  Formatter *formatter = new JSONFormatter(true);
+  string fspath, jpath, pgidstr, type, file, object, objcmd, arg1, arg2;
+  ghobject_t ghobj;
 
   po::options_description desc("Allowed options");
   desc.add_options()
@@ -1143,7 +1200,7 @@ int main(int argc, char **argv)
     ("pgid", po::value<string>(&pgidstr),
      "PG id, mandatory except for import")
     ("type", po::value<string>(&type),
-     "Arg is one of [info, log, remove, export, or import], mandatory")
+     "Arg is one of [info, log, remove, export, import]")
     ("file", po::value<string>(&file),
      "path of file to export or import")
     ("debug", "Enable diagnostic output to stderr")
@@ -1151,43 +1208,72 @@ int main(int argc, char **argv)
     ("skip-mount-omap", "Disable mounting of omap")
     ;
 
+  po::options_description positional("Positional options");
+  positional.add_options()
+    ("object", po::value<string>(&object), "ghobject in json")
+    ("objcmd", po::value<string>(&objcmd), "command [(get|set)-bytes, (get|set|rm)-(attr|omap), list-attrs, list-omap, remove]")
+    ("arg1", po::value<string>(&arg1), "arg1 based on cmd")
+    ("arg2", po::value<string>(&arg2), "arg2 based on cmd")
+    ;
+
+  po::options_description all("All options");
+  all.add(desc).add(positional);
+
+  po::positional_options_description pd;
+  pd.add("object", 1).add("objcmd", 1).add("arg1", 1).add("arg2", 1);
+
   po::variables_map vm;
   po::parsed_options parsed =
-   po::command_line_parser(argc, argv).options(desc).allow_unregistered().run();
+   po::command_line_parser(argc, argv).options(all).allow_unregistered().positional(pd).run();
   po::store( parsed, vm);
   try {
     po::notify(vm);
   }
   catch(...) {
-    cerr << desc << std::endl;
-    return 1;
+    usage(desc);
   }
-     
+
   if (vm.count("help")) {
-    cerr << desc << std::endl;
-    return 1;
+    usage(desc);
   }
 
   if (!vm.count("filestore-path")) {
-    cerr << "Must provide filestore-path" << std::endl
-	 << desc << std::endl;
-    return 1;
+    cerr << "Must provide --filestore-path" << std::endl;
+    usage(desc);
   } 
   if (!vm.count("journal-path")) {
-    cerr << "Must provide journal-path" << std::endl
-	 << desc << std::endl;
-    return 1;
+    cerr << "Must provide --journal-path" << std::endl;
+    usage(desc);
   } 
-  if (!vm.count("type")) {
-    cerr << "Must provide type (info, log, remove, export, import)"
-      << std::endl << desc << std::endl;
-    return 1;
+  if (vm.count("object") && !vm.count("objcmd")) {
+    cerr << "Invalid syntax, missing command" << std::endl;
+    usage(desc);
+  }
+  if (!vm.count("type") && !(vm.count("object") && vm.count("objcmd"))) {
+    cerr << "Must provide --type (info, log, remove, export, import) or object command..."
+      << std::endl;
+    usage(desc);
   } 
+  if (vm.count("type") && vm.count("object")) {
+    cerr << "Can't specify both --type and object command syntax" << std::endl;
+    usage(desc);
+  }
   if (type != "import" && !vm.count("pgid")) {
-    cerr << "Must provide pgid" << std::endl
-	 << desc << std::endl;
-    return 1;
+    cerr << "Must provide pgid" << std::endl;
+    usage(desc);
   } 
+
+  if (vm.count("object")) {
+    json_spirit::Value v;
+    try {
+      if (!json_spirit::read(object, v))
+        throw std::runtime_error("bad json");
+      ghobj.decode(v);
+    } catch (std::runtime_error& e) {
+      cerr << "error parsing offset: " << e.what() << std::endl;
+      exit(1);
+    }
+  }
 
   outistty = isatty(STDOUT_FILENO);
 
@@ -1421,6 +1507,10 @@ int main(int argc, char **argv)
       continue;
     }
 
+    if (it->is_temp(tmppgid)) {
+      continue;
+    }
+
     if (tmppgid != pgid) {
       continue;
     }
@@ -1435,10 +1525,24 @@ int main(int argc, char **argv)
   }
 
   epoch_t map_epoch;
+// The following code for export, info, log require omap or !skip-mount-omap
   if (it != ls.end()) {
   
     coll_t coll = *it;
   
+    if (vm.count("objcmd")) {
+      ret = 0;
+      if (objcmd == "remove") {
+        int r = do_remove_object(fs, coll, ghobj);
+        if (r) {
+          ret = 1;
+        }
+        goto out;
+      }
+      cerr << "Unknown object command '" << objcmd << "'" << std::endl;
+      usage(desc);
+    }
+
     bufferlist bl;
     map_epoch = PG::peek_map_epoch(fs, coll, infos_oid, &bl);
     if (debug)
