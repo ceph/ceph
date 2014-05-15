@@ -1307,6 +1307,26 @@ int do_set_bytes(ObjectStore *store, coll_t coll, ghobject_t &ghobj, int fd)
   return 0;
 }
 
+int do_get_attr(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key)
+{
+  bufferptr bp;
+
+  int r = store->getattr(coll, ghobj, key.c_str(), bp);
+  if (r < 0) {
+    cerr << "getattr: " << cpp_strerror(-r) << std::endl;
+    return r;
+  }
+
+  string value(bp.c_str(), bp.length());
+  if (outistty) {
+    cleanbin(value);
+    value.push_back('\n');
+  }
+  cout << value;
+
+  return 0;
+}
+
 void usage(po::options_description &desc)
 {
     cerr << std::endl;
@@ -1726,6 +1746,13 @@ int main(int argc, char **argv)
         }
         if (r)
           ret = 1;
+        goto out;
+      } else if (objcmd == "get-attr") {
+	if (vm.count("arg1") == 0)
+	  usage(desc);
+	r = do_get_attr(fs, coll, ghobj, arg1);
+	if (r)
+	  ret = 1;
         goto out;
       }
       cerr << "Unknown object command '" << objcmd << "'" << std::endl;
