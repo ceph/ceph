@@ -1131,6 +1131,28 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   return 0;
 }
 
+int do_list(ObjectStore *store, coll_t coll, Formatter *formatter)
+{
+  vector<ghobject_t> objects;
+  ghobject_t next;
+  while (!next.is_max()) {
+    int r = store->collection_list_partial(coll, next, 200, 300, 0,
+      &objects, &next);
+    if (r < 0)
+      return r;
+    for (vector<ghobject_t>::iterator i = objects.begin();
+	 i != objects.end(); ++i) {
+
+      formatter->open_object_section("list");
+      i->dump(formatter);
+      formatter->close_section();
+      formatter->flush(cout);
+      cout << std::endl;
+    }
+  }
+  return 0;
+}
+
 int do_remove_object(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
 {
   spg_t pg;
@@ -1200,7 +1222,7 @@ int main(int argc, char **argv)
     ("pgid", po::value<string>(&pgidstr),
      "PG id, mandatory except for import")
     ("type", po::value<string>(&type),
-     "Arg is one of [info, log, remove, export, import]")
+     "Arg is one of [info, log, remove, export, import, list]")
     ("file", po::value<string>(&file),
      "path of file to export or import")
     ("debug", "Enable diagnostic output to stderr")
@@ -1250,7 +1272,7 @@ int main(int argc, char **argv)
     usage(desc);
   }
   if (!vm.count("type") && !(vm.count("object") && vm.count("objcmd"))) {
-    cerr << "Must provide --type (info, log, remove, export, import) or object command..."
+    cerr << "Must provide --type or object command..."
       << std::endl;
     usage(desc);
   } 
@@ -1311,8 +1333,6 @@ int main(int argc, char **argv)
   }
   
   if ((fspath.length() == 0 || jpath.length() == 0) ||
-      (type != "info" && type != "log" && type != "remove" && type != "export"
-        && type != "import") ||
       (type != "import" && pgidstr.length() == 0)) {
     cerr << "Invalid params" << std::endl;
     return 1;
@@ -1543,6 +1563,17 @@ int main(int argc, char **argv)
       usage(desc);
     }
 
+    if (type == "list") {
+      Formatter *formatter = new JSONFormatter(false);
+      r = do_list(fs, coll, formatter);
+      if (r) {
+        cerr << "do_list failed with " << r << std::endl;
+        ret = 1;
+      }
+      goto out;
+    }
+
+    Formatter *formatter = new JSONFormatter(true);
     bufferlist bl;
     map_epoch = PG::peek_map_epoch(fs, coll, infos_oid, &bl);
     if (debug)
@@ -1591,6 +1622,10 @@ int main(int argc, char **argv)
       formatter->close_section();
       formatter->flush(cout);
       cout << std::endl;
+    } else {
+      cerr << "Must provide --type (info, log, remove, export, import, list)"
+	<< std::endl;
+      usage(desc);
     }
   } else {
     cerr << "PG '" << pgid << "' not found" << std::endl;
