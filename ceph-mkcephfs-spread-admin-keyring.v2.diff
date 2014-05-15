@@ -1,0 +1,76 @@
+---
+ src/ceph_common.sh |    6 +++++-
+ src/mkcephfs.in    |   26 ++++++++++++++++++++++++++
+ 2 files changed, 31 insertions(+), 1 deletion(-)
+
+--- a/src/ceph_common.sh
++++ b/src/ceph_common.sh
+@@ -32,6 +32,8 @@ verify_conf() {
+ 
+ 
+ check_host() {
++    silent=$1
++
+     # what host is this daemon assigned to?
+     host=`$CCONF -c $conf -n $type.$id host`
+     if [ "$host" = "localhost" ]; then
+@@ -73,7 +75,9 @@ check_host() {
+ 	get_conf sshdir "$sshdir" "ssh path"
+     fi
+ 
+-    echo "=== $type.$id === "
++    if [ -z "$silent" ]; then
++        echo "=== $type.$id === "
++    fi
+ 
+     return 0
+ }
+--- a/src/mkcephfs.in
++++ b/src/mkcephfs.in
+@@ -89,6 +89,7 @@ moreargs=""
+ auto_action=0
+ manual_action=0
+ nocopyconf=0
++spreadadminkey=0
+ 
+ while [ $# -ge 1 ]; do
+ case $1 in
+@@ -170,6 +171,9 @@ case $1 in
+ 	    shift
+ 	    adminkeyring=$1
+ 	    ;;
++     --spread-admin-key)
++	    spreadadminkey=1
++	    ;;
+     *)
+ 	    echo unrecognized option \'$1\'
+ 	    usage_exit
+@@ -550,6 +554,28 @@ if [ $allhosts -eq 1 ]; then
+     echo "placing client.admin keyring in $adminkeyring"
+     cp $dir/keyring.admin $adminkeyring
+ 
++    if [ $spreadadminkey -eq 1 ]; then
++	get_conf auth "" "auth supported" global
++	if [ -n "$auth" ] && [ -n "$ssh" ]; then
++	    get_name_list "osd mds mon"
++	    old_host=""
++	    for name in $what; do
++		type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $name is 'mon1'
++		id=`echo $name | cut -c 4- | sed 's/^\\.//'`
++		num=$id
++		name="$type.$id"
++
++		check_host "silent" || continue
++
++		if [ -z "$old_host" ] || [ $host != $old_host ]; then
++		    echo "copy client.admin over to $host"
++		    scp -q $adminkeyring $host:$adminkeyring
++		    old_host=$host
++		fi
++	    done
++	fi
++    fi
++
+     exit 0
+ fi
+ 

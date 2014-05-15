@@ -1,0 +1,23 @@
+--- ceph-0.80.orgin/src/init-ceph.in	2014-04-28 15:24:09.175712718 +0200
++++ ceph-0.80/src/init-ceph.in	2014-04-28 15:51:42.638400133 +0200
+@@ -139,12 +139,20 @@
+     --btrfs | --fsmount)
+ 	    dofsmount=1
+ 	    ;;
++    --xfs)
++	    doxfs=1
++	    dobtrfs=0
++	    ;;
+     --nobtrfs | --nofsmount)
+ 	    dofsmount=0
+ 	    ;;
+     --btrfsumount | --fsumount)
+ 	    dofsumount=1
+ 	    ;;
++    --xfsumount)
++	    doxfsumount=1
++	    dobtrfsumount=0
++	    ;;
+     --conf | -c)
+ 	    [ -z "$2" ] && usage_exit
+ 	    options="$options $1"

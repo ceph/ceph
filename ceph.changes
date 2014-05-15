@@ -1,0 +1,177 @@
+-------------------------------------------------------------------
+Tue May  8 09:58:56 CEST 2012 - hmacht@suse.de
+
+- add rpmlintrc: libcls_*.so needs to be shipped in base package,
+  not in -devel package
+
+-------------------------------------------------------------------
+Fri May  4 16:13:53 UTC 2012 - dkukawka@suse.de
+
+- add new patch:
+  - ceph-common_sh.fix.sshdir.diff: fix for ceph_common.sh: if 
+    $sshdir doesn't exist, create it to avaid warnings.
+
+    Note: always define "ssh path" in global section of ceph.conf
+    or make sure you call mkcephfs/rcceph from / or another 
+    well known directory to prevent stange placing of core dumps
+    (bnc#759972)
+
+-------------------------------------------------------------------
+Thu May  3 09:08:56 CEST 2012 - hmacht@suse.de
+
+- udpate to 0.46:
+  * rbd: new caching mode (see below)
+  * rbd: trim/discard support
+  * cluster naming
+  * osd: new default locations (slimmer .conf files, see below)
+  * osd: various journal replay fixes for non-btrfs file systems
+  * log: async and multi-level logging (see below)
+
+-------------------------------------------------------------------
+Thu Apr 12 09:01:58 UTC 2012 - dkukawka@suse.de
+
+- updated to 0.45 (git ):
+  * mon: command to disable localized pgs for a pool
+  * mon: set pgp_num == pg_num (by default) for new pools
+  * v0.45
+  * configure: --with-system-leveld
+  * filestore: fix leveldb includes
+  * cephfs: fix uninit var warning
+  * encoding: fix iterator use for struct_len copy_in
+  * buffer: allow advance() to move an iterator backward
+  * configure: HAVE_FALLOCATE -> CEPH_HAVE_FALLOCATE
+  * encoding: use iterator to copy_in encoded length
+
+-------------------------------------------------------------------
+Tue Apr 10 18:10:53 UTC 2012 - dkukawka@suse.de
+
+- updated to 0.44.2: 
+  * filestore: set guard on collection_move
+  * FileStore: do not check dbobjectmap without option set
+
+-------------------------------------------------------------------
+Fri Mar 30 11:14:07 CEST 2012 - hmacht@suse.de
+
+- update to 0.44.1:
+  * osd: a few replay fixes for non-btrfs users
+  * librados: resend watch operations at appropriate times
+  * fix rpm builds
+  * fix libnss builds
+
+-------------------------------------------------------------------
+Tue Mar 27 09:45:48 UTC 2012 - dkukawka@suse.com
+
+- updated to 0.44:
+  * osd: key/value objects (objects are now blobs, key/value 
+    bundles, and xattrs)
+  * osd: cleaned up PG state, stats
+  * osd: fixed transaction replay on non-btrfs after ill-timed
+    failures
+  * osd: several recovery fixes
+  * radosgw: improved PUT performance
+  * radosgw: improved list objects performance, filtering
+  * radosgw: manifests for large objects
+  * radosgw: Swift/S3 ACL interoperability (last set ACL type wins)
+  * librados: new key/value object API
+  * Ubuntu 12.04 precise packages
+- updated radosgw-init-opensuse.patch
+- added new patch from git to fix build: 
+  - ceph-d3bcac241f25-fix-0.44-build.patch
+- fixed spec CFLAGS/CXXFLAGS handling to build
+
+-------------------------------------------------------------------
+Fri Mar 16 12:56:59 UTC 2012 - dkukawka@suse.de
+
+- fix output in ceph-init-ceph.add.xfs.support.diff for XFS mount 
+
+-------------------------------------------------------------------
+Thu Mar 15 16:49:57 UTC 2012 - dkukawka@suse.de
+
+- bnc#752638: added two new patches to support XFS instead of 
+  btrfs to work around bnc#751743:
+  - ceph-init-ceph.add.xfs.support.diff
+  - ceph-mkcephfs.add.xfs.support.diff
+  NOTE: make sure you set the correct options if you try to use
+        XFS instead btrfs 
+
+-------------------------------------------------------------------
+Mon Mar  5 11:53:10 CET 2012 - hmacht@suse.de
+
+- update to 0.43:
+
+ * improved signal handlers (cleaner shutdown)
+ * osd: refactored/improved push/pull code (recovery)
+ * osd: ability query osd pg state
+ * osd: ability to query missing/unfound objects
+ * osd: dump in-progress operations via admin socket
+ * osd: clearer pg states; added 'remapped' and 'recovering'
+ * mon: track time since pg states have changed; issue health
+   warning when "stuck" in peering, recovery
+ * mon: validate new crush map before accepting it
+ * mon: paxos recovery bug fixes
+ * crushtool: improved testing
+ * crush: fix weight adjustment for tree, list buckets; unit tests
+ * This is of course in addition to the usual helping of bug fixes,
+    mostly in the OSD code.  Nothing too drastic this time around.
+
+-------------------------------------------------------------------
+Thu Feb 23 12:31:14 CET 2012 - hmacht@suse.de
+
+- update to 0.42:
+  Notable changes include:
+
+  * osd: new (non-backwards compatible!) encoding for all
+    structures
+  * osd: fixed bug with transactions being non-atomic (leaking
+    across commit boundaries)
+  * osd: track in-progress requests, log slow ones
+  * osd: randomly choose pull target during recovery (better load
+    balance)
+  * osd: fixed recovery stall
+  * mon: a few recovery bug fixes
+  * mon: trim old auth files
+  * mon: better detection/warning about down pgs
+  * objecter: expose in-process requests via admin socket
+  * new infrastructure for testing data structure encoding changes
+  * (forward and backward compatibility)
+
+-------------------------------------------------------------------
+Wed Feb 15 14:48:30 CET 2012 - hmacht@suse.de
+
+- update README.SUSE to v2
+- ceph.spec: Ship libcls_*.so with base package, not -devel,
+  the OSDs look for them and load them dynamically
+- Misc spec file cleanups and merges with upstream and openSUSE
+
+-------------------------------------------------------------------
+Tue Jan 31 12:55:05 CET 2012 - hmacht@suse.de
+
+- add README.SUSE
+- update to 0.41:
+  - osd: new 'backfill' recovery code (less memory, faster)
+  - osd: misc bug fixes (scrub, out of order replies)
+  - radosgw: better logging
+  - librados: improved api for compound operations
+
+-------------------------------------------------------------------
+Sun Jan 29 20:36:01 CET 2012 - hmacht@suse.de
+
+- build with support for tcmalloc (google-perftools) and gtk2
+
+-------------------------------------------------------------------
+Thu Jan 19 17:28:00 CET 2012 - hmacht@suse.de
+
+- update to 0.40
+- remove rcfiles-remove-init-4.patch, gone upstream
+
+-------------------------------------------------------------------
+Wed Dec 21 12:00:44 CET 2011 - hmacht@suse.de
+
+- update to 0.39
+- add libuuid-devel to BuildRequires
+
+-------------------------------------------------------------------
+Sun Nov 20 23:06:28 CET 2011 - hmacht@suse.de
+
+- initial creation and submission of the ceph distributed network
+  storage (fate#309242)
