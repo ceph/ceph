@@ -3465,7 +3465,7 @@ void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
   }
   
   // get all the latest maps
-  if (osdmap->get_epoch() > oldest)
+  if (osdmap->get_epoch() + 1 >= oldest)
     osdmap_subscribe(osdmap->get_epoch() + 1, true);
   else
     osdmap_subscribe(oldest - 1, true);
