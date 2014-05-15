@@ -1271,6 +1271,42 @@ int do_get_bytes(ObjectStore *store, coll_t coll, ghobject_t &ghobj, int fd)
   return 0;
 }
 
+int do_set_bytes(ObjectStore *store, coll_t coll, ghobject_t &ghobj, int fd)
+{
+  ObjectStore::Transaction tran;
+  ObjectStore::Transaction *t = &tran;
+
+  if (debug)
+    cerr << "Write " << ghobj << std::endl;
+
+  t->touch(coll, ghobj);
+  t->truncate(coll, ghobj, 0);
+
+  uint64_t offset = 0;
+  bufferlist rawdatabl;
+  do {
+    rawdatabl.clear();
+    ssize_t bytes = rawdatabl.read_fd(fd, max_read);
+    if (bytes < 0) {
+      cerr << "read_fd error " << cpp_strerror(-bytes) << std::endl;
+      return 1;
+    }
+
+    if (bytes == 0)
+      break;
+
+    if (debug)
+      cerr << "\tdata: offset " << offset << " bytes " << bytes << std::endl;
+    t->write(coll, ghobj, offset, bytes,  rawdatabl);
+
+    offset += bytes;
+    // XXX: Should we apply_transaction() every once in a while for very large files
+  } while(true);
+
+  store->apply_transaction(*t);
+  return 0;
+}
+
 void usage(po::options_description &desc)
 {
     cerr << std::endl;
@@ -1671,6 +1707,21 @@ int main(int argc, char **argv)
           }
           r = do_get_bytes(fs, coll, ghobj, fd);
           if (fd != STDOUT_FILENO)
+            close(fd);
+        } else {
+          int fd;
+          if (vm.count("arg1") == 0 || arg1 == "-") {
+            fd = STDIN_FILENO;
+	  } else {
+            fd = open(arg1.c_str(), O_RDONLY|O_LARGEFILE, 0666);
+            if (fd == -1) {
+              cerr << "open " << arg1 << " " << cpp_strerror(errno) << std::endl;
+              ret = 1;
+              goto out;
+            }
+          }
+          r = do_set_bytes(fs, coll, ghobj, fd);
+          if (fd != STDIN_FILENO)
             close(fd);
         }
         if (r)
