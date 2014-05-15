@@ -1186,6 +1186,24 @@ int do_remove_object(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
   return 0;
 }
 
+int do_list_attrs(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
+{
+  map<string,bufferptr> aset;
+  int r = store->getattrs(coll, ghobj, aset);
+  if (r < 0) {
+    cerr << "getattrs: " << cpp_strerror(-r) << std::endl;
+    return r;
+  }
+
+  for (map<string,bufferptr>::iterator i = aset.begin();i != aset.end(); ++i) {
+    string key(i->first);
+    if (outistty)
+      cleanbin(key);
+    cout << key << std::endl;
+  }
+  return 0;
+}
+
 void usage(po::options_description &desc)
 {
     cerr << std::endl;
@@ -1554,6 +1572,12 @@ int main(int argc, char **argv)
       ret = 0;
       if (objcmd == "remove") {
         int r = do_remove_object(fs, coll, ghobj);
+        if (r) {
+          ret = 1;
+        }
+        goto out;
+      } else if (objcmd == "list-attrs") {
+        int r = do_list_attrs(fs, coll, ghobj);
         if (r) {
           ret = 1;
         }
