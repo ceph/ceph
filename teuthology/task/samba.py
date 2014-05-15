@@ -175,7 +175,7 @@ def task(ctx, config):
 
         # let smbd initialize, probably a better way...
         import time
-        time.sleep(5)
+        time.sleep(90)
     try:
         yield
     finally:
