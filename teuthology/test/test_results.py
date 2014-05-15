@@ -1,5 +1,6 @@
 import os
 import textwrap
+from ..config import config
 from .. import results
 from .fake_archive import FakeArchive
 
@@ -40,6 +41,7 @@ class TestResultsEmail(object):
         'body': textwrap.dedent("""
     Test Run: test_name
     =================================================================
+    info:   http://example.com/test_name/
     logs:   http://qa-proxy.ceph.com/teuthology/test_name/
     failed: 1
     hung:   1
@@ -50,6 +52,7 @@ class TestResultsEmail(object):
     [88979]  description for job with name test_name
     -----------------------------------------------------------------
     time:   35190s
+    info:   http://example.com/test_name/88979/
     log:    http://qa-proxy.ceph.com/teuthology/test_name/88979/
 
         Failure reason!
@@ -58,15 +61,18 @@ class TestResultsEmail(object):
     Hung
     =================================================================
     [30481] description for job with name test_name
+    info:   http://example.com/test_name/30481/
 
     Passed
     =================================================================
     [68369] description for job with name test_name
-    time:    33771s
+    time:   33771s
+    info:   http://example.com/test_name/68369/
     """).strip(),
     }
 
     def setup(self):
+        config.results_ui_server = "http://example.com/"
         self.archive = FakeArchive()
         self.archive.setup()
         self.archive_base = self.archive.archive_base
@@ -83,4 +89,5 @@ class TestResultsEmail(object):
             run_dir,
             36000)
         assert subject == self.reference['subject']
+        print body
         assert body == self.reference['body']

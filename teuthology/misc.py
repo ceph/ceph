@@ -117,6 +117,22 @@ def get_http_log_path(archive_dir, job_id=None):
     return os.path.join(http_base, archive_subdir, str(job_id), '')
 
 
+def get_results_url(run_name, job_id=None):
+    """
+    :param run_name: The name of the test run
+    :param job_id: The job_id of the job. Optional.
+    :returns: URL to the run (or job, if job_id is passed) in the results web
+              UI. For example, Inktank uses Pulpito.
+    """
+    if not config.results_ui_server:
+        return None
+    base_url = config.results_ui_server
+
+    if job_id is None:
+        return os.path.join(base_url, run_name, '')
+    return os.path.join(base_url, run_name, str(job_id), '')
+
+
 def get_ceph_binary_url(package=None,
                         branch=None, tag=None, sha1=None, dist=None,
                         flavor=None, format=None, arch=None):

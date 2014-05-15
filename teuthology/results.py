@@ -104,6 +104,13 @@ def build_email_body(name, archive_dir, timeout):
         job_dir = os.path.join(archive_dir, job)
         summary_file = os.path.join(job_dir, 'summary.yaml')
 
+        # Every job gets a link to e.g. pulpito's pages
+        info_url = misc.get_results_url(name, job)
+        if info_url:
+            info_line = email_templates['info_url_templ'].format(info=info_url)
+        else:
+            info_line = ''
+
         # Unfinished jobs will have no summary.yaml
         if not os.path.exists(summary_file):
             info_file = os.path.join(job_dir, 'info.yaml')
@@ -117,6 +124,7 @@ def build_email_body(name, archive_dir, timeout):
             hung[job] = email_templates['hung_templ'].format(
                 job_id=job,
                 desc=desc,
+                info_line=info_line,
             )
             continue
 
@@ -128,6 +136,7 @@ def build_email_body(name, archive_dir, timeout):
                 job_id=job,
                 desc=summary.get('description'),
                 time=int(summary.get('duration', 0)),
+                info_line=info_line,
             )
         else:
             log = misc.get_http_log_path(archive_dir, job)
@@ -159,6 +168,7 @@ def build_email_body(name, archive_dir, timeout):
                 desc=summary.get('description'),
                 time=int(summary.get('duration', 0)),
                 reason=reason,
+                info_line=info_line,
                 log_line=log_line,
                 sentry_line=sentry_line,
             )
@@ -196,6 +206,7 @@ def build_email_body(name, archive_dir, timeout):
 
     body = email_templates['body_templ'].format(
         name=name,
+        info_root=misc.get_results_url(name),
         log_root=misc.get_http_log_path(archive_dir),
         fail_count=len(failed),
         hung_count=len(hung),
@@ -212,6 +223,7 @@ email_templates = {
     'body_templ': dedent("""\
         Test Run: {name}
         =================================================================
+        info:   {info_root}
         logs:   {log_root}
         failed: {fail_count}
         hung:   {hung_count}
@@ -227,19 +239,20 @@ email_templates = {
     'fail_templ': dedent("""\
         [{job_id}]  {desc}
         -----------------------------------------------------------------
-        time:   {time}s{log_line}{sentry_line}
+        time:   {time}s{info_line}{log_line}{sentry_line}
 
         {reason}
 
         """),
+    'info_url_templ': "\ninfo:   {info}",
     'fail_log_templ': "\nlog:    {log}",
     'fail_sentry_templ': "\nsentry: {sentry_event}",
     'hung_templ': dedent("""\
-        [{job_id}] {desc}
+        [{job_id}] {desc}{info_line}
         """),
     'pass_templ': dedent("""\
         [{job_id}] {desc}
-        time:    {time}s
+        time:   {time}s{info_line}
 
         """),
 }
