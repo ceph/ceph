@@ -1226,6 +1226,51 @@ int do_list_omap(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
   return 0;
 }
 
+int do_get_bytes(ObjectStore *store, coll_t coll, ghobject_t &ghobj, int fd)
+{
+  struct stat st;
+  mysize_t total;
+
+  int ret = store->stat(coll, ghobj, &st);
+  if (ret < 0) {
+    cerr << "get-bytes: " << cpp_strerror(-ret) << std::endl;
+    return 1;
+  }
+
+  total = st.st_size;
+  if (debug)
+    cerr << "size=" << total << std::endl;
+
+  uint64_t offset = 0;
+  bufferlist rawdatabl;
+  while(total > 0) {
+    rawdatabl.clear();
+    mysize_t len = max_read;
+    if (len > total)
+      len = total;
+
+    ret = store->read(coll, ghobj, offset, len, rawdatabl);
+    if (ret < 0)
+      return ret;
+    if (ret == 0)
+      return -EINVAL;
+
+    if (debug)
+      cerr << "data section offset=" << offset << " len=" << len << std::endl;
+
+    total -= ret;
+    offset += ret;
+
+    ret = write(fd, rawdatabl.c_str(), ret);
+    if (ret == -1) {
+      perror("write");
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
 void usage(po::options_description &desc)
 {
     cerr << std::endl;
@@ -1609,6 +1654,27 @@ int main(int argc, char **argv)
         if (r) {
           ret = 1;
         }
+        goto out;
+      } else if (objcmd == "get-bytes" || objcmd == "set-bytes") {
+        int r;
+        if (objcmd == "get-bytes") {
+          int fd;
+          if (vm.count("arg1") == 0 || arg1 == "-") {
+            fd = STDOUT_FILENO;
+	  } else {
+            fd = open(arg1.c_str(), O_WRONLY|O_TRUNC|O_CREAT|O_EXCL|O_LARGEFILE, 0666);
+            if (fd == -1) {
+              cerr << "open " << arg1 << " " << cpp_strerror(errno) << std::endl;
+              ret = 1;
+              goto out;
+            }
+          }
+          r = do_get_bytes(fs, coll, ghobj, fd);
+          if (fd != STDOUT_FILENO)
+            close(fd);
+        }
+        if (r)
+          ret = 1;
         goto out;
       }
       cerr << "Unknown object command '" << objcmd << "'" << std::endl;
