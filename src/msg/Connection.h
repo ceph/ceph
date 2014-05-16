@@ -131,37 +131,5 @@ public:
 
 typedef boost::intrusive_ptr<Connection> ConnectionRef;
 
-class Pipe;
-
-struct PipeConnection : public Connection {
-  Pipe* pipe;
-
-  friend class boost::intrusive_ptr<PipeConnection>;
-  friend class Pipe;
-
-public:
-
-  PipeConnection(Messenger *m)
-    : Connection(m),
-      pipe(NULL) { }
-
-  ~PipeConnection();
-
-  Pipe* get_pipe();
-
-  bool try_get_pipe(Pipe** p);
-
-  bool clear_pipe(Pipe* old_p);
-
-  void reset_pipe(Pipe* p);
-
-  bool is_connected() {
-    Mutex::Locker l(lock);
-    return pipe != NULL;
-  }
-
-}; /* PipeConnection */
-
-typedef boost::intrusive_ptr<PipeConnection> PipeConnectionRef;
 
 #endif /* CEPH_CONNECTION_H */

@@ -225,6 +225,10 @@ public:
    */
   Pipe *add_accept_pipe(int sd);
 
+  Connection *create_anon_connection() {
+    return new PipeConnection(NULL);
+  }
+
 private:
 
   /**
@@ -292,7 +296,7 @@ private:
    * it will assume the lock is held. NOTE: if you are making a request
    * without locking, you MUST have filled in the con with a valid pointer.
    */
-  void submit_message(Message *m, Connection *con,
+  void submit_message(Message *m, PipeConnection *con,
 		      const entity_addr_t& addr, int dest_type,
 		      bool lazy, bool already_locked);
   /**
