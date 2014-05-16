@@ -103,7 +103,8 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   messenger(m),
   monc(mc),
   clog(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
-  sessionmap(this) {
+  op_tracker(cct, m->cct->_conf->mds_enable_op_tracker),
+  sessionmap(this), asok_hook(NULL) {
 
   orig_argc = 0;
   orig_argv = NULL;
@@ -151,6 +152,10 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
 
   logger = 0;
   mlogger = 0;
+  op_tracker.set_complaint_and_threshold(m->cct->_conf->mds_op_complaint_time,
+                                         m->cct->_conf->mds_op_log_threshold);
+  op_tracker.set_history_size_and_duration(m->cct->_conf->mds_op_history_size,
+                                           m->cct->_conf->mds_op_history_duration);
 }
 
 MDS::~MDS() {
@@ -187,6 +192,95 @@ MDS::~MDS() {
   
   if (messenger)
     delete messenger;
+}
+
+class MDSSocketHook : public AdminSocketHook {
+  MDS *mds;
+public:
+  MDSSocketHook(MDS *m) : mds(m) {}
+  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
+	    bufferlist& out) {
+    stringstream ss;
+    bool r = mds->asok_command(command, cmdmap, format, ss);
+    out.append(ss);
+    return r;
+  }
+};
+
+bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
+		    ostream& ss)
+{
+  Formatter *f = new_formatter(format);
+  if (!f)
+    f = new_formatter("json-pretty");
+  if (command == "status") {
+    f->open_object_section("status");
+    f->dump_stream("cluster_fsid") << monc->get_fsid();
+    f->dump_unsigned("whoami", whoami);
+    f->dump_string("state", ceph_mds_state_name(get_state()));
+    f->dump_unsigned("mdsmap_epoch", mdsmap->get_epoch());
+    f->close_section(); // status
+  } else if (command == "dump_ops_in_flight") {
+    op_tracker.dump_ops_in_flight(f);
+  } else if (command == "dump_historic_ops") {
+    op_tracker.dump_historic_ops(f);
+  }
+  f->flush(ss);
+  delete f;
+  return true;
+}
+
+void MDS::set_up_admin_socket()
+{
+  int r;
+  AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+  asok_hook = new MDSSocketHook(this);
+  r = admin_socket->register_command("status", "status", asok_hook,
+				     "high-level status of MDS");
+  assert(0 == r);
+  r = admin_socket->register_command("dump_ops_in_flight",
+				     "dump_ops_in_flight", asok_hook,
+				     "show the ops currently in flight");
+  assert(0 == r);
+  r = admin_socket->register_command("dump_historic_ops", "dump_historic_ops",
+				     asok_hook,
+				     "show slowest recent ops");
+  assert(0 == r);
+}
+
+void MDS::clean_up_admin_socket()
+{
+  AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+  admin_socket->unregister_command("status");
+  admin_socket->unregister_command("dump_ops_in_flight");
+  admin_socket->unregister_command("dump_historic_ops");
+  delete asok_hook;
+  asok_hook = NULL;
+}
+
+const char** MDS::get_tracked_conf_keys() const
+{
+  static const char* KEYS[] = {
+    "mds_op_complaint_time", "mds_op_log_threshold",
+    "mds_op_history_size", "mds_op_history_duration",
+    NULL
+  };
+  return KEYS;
+}
+
+void MDS::handle_conf_change(const struct md_config_t *conf,
+			     const std::set <std::string> &changed)
+{
+  if (changed.count("mds_op_complaint_time") ||
+      changed.count("mds_op_log_threshold")) {
+    op_tracker.set_complaint_and_threshold(conf->mds_op_complaint_time,
+                                           conf->mds_op_log_threshold);
+  }
+  if (changed.count("mds_op_history_size") ||
+      changed.count("mds_op_history_duration")) {
+    op_tracker.set_history_size_and_duration(conf->mds_op_history_size,
+                                             conf->mds_op_history_duration);
+  }
 }
 
 void MDS::create_logger()
@@ -544,6 +638,8 @@ int MDS::init(int wanted_state)
   reset_tick();
 
   create_logger();
+  set_up_admin_socket();
+  g_conf->add_observer(this);
 
   mds_lock.Unlock();
 
@@ -612,9 +708,22 @@ void MDS::tick()
     if (snapserver)
       snapserver->check_osd_map(false);
   }
+
+  check_ops_in_flight();
 }
 
-
+void MDS::check_ops_in_flight()
+{
+  vector<string> warnings;
+  if (op_tracker.check_ops_in_flight(warnings)) {
+    for (vector<string>::iterator i = warnings.begin();
+        i != warnings.end();
+        ++i) {
+      clog.warn() << *i;
+    }
+  }
+  return;
+}
 
 
 // -----------------------
@@ -1658,6 +1767,8 @@ void MDS::suicide()
   //timer.join();
   timer.shutdown();
   
+  clean_up_admin_socket();
+
   // shut down cache
   mdcache->shutdown();
 
@@ -1665,6 +1776,8 @@ void MDS::suicide()
     objecter->shutdown_locked();
 
   monc->shutdown();
+
+  op_tracker.on_shutdown();
 
   // shut down messenger
   messenger->shutdown();

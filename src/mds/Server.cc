@@ -791,7 +791,7 @@ void Server::journal_and_reply(MDRequestRef& mdr, CInode *in, CDentry *dn, LogEv
   early_reply(mdr, in, dn);
   
   mdr->committing = true;
-  mdlog->submit_entry(le, fin);
+  submit_mdlog_entry(le, fin, mdr, __func__);
   
   if (mdr->client_request && mdr->client_request->is_replay()) {
     if (mds->queue_one_replay()) {
@@ -804,6 +804,32 @@ void Server::journal_and_reply(MDRequestRef& mdr, CInode *in, CDentry *dn, LogEv
     mds->locker->drop_rdlocks(mdr.get());
   else
     mdlog->flush();
+}
+
+class C_MarkEvent : public Context
+{
+  Context *true_finisher;
+  MDRequestRef mdr;
+  string event_str;
+public:
+  C_MarkEvent(Context *f, MDRequestRef& _mdr,
+              const char *evt) :
+                true_finisher(f), mdr(_mdr), event_str("journal_committed: ") {
+    event_str += evt;
+  }
+  virtual void finish(int r) {
+    mdr->mark_event(event_str);
+    true_finisher->complete(r);
+  }
+};
+
+void Server::submit_mdlog_entry(LogEvent *le, Context *fin, MDRequestRef& mdr,
+                                const char *event)
+{
+  string event_str("submit entry: ");
+  event_str += event;
+  mdr->mark_event(event_str);
+  mdlog->submit_entry(le, new C_MarkEvent(fin, mdr, event));
 }
 
 /*
@@ -876,6 +902,8 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
   utime_t lat = ceph_clock_now(g_ceph_context) - mdr->client_request->get_recv_stamp();
   mds->logger->tinc(l_mds_replyl, lat);
   dout(20) << "lat " << lat << dendl;
+
+  mdr->mark_event("early_replied");
 }
 
 /*
@@ -891,6 +919,8 @@ void Server::reply_request(MDRequestRef& mdr, MClientReply *reply, CInode *trace
   dout(10) << "reply_request " << reply->get_result() 
 	   << " (" << cpp_strerror(reply->get_result())
 	   << ") " << *req << dendl;
+
+  mdr->mark_event("replying");
 
   // note successful request in session map?
   if (req->may_write() && mdr->session && reply->get_result() == 0)
@@ -1350,7 +1380,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       m->put();
       return;
     }
-    mdr = mdcache->request_start_slave(m->get_reqid(), m->get_attempt(), from);
+    mdr = mdcache->request_start_slave(m->get_reqid(), m->get_attempt(), m);
   }
   assert(mdr->slave_request == 0);     // only one at a time, please!  
 
@@ -2574,7 +2604,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
     mdlog->start_entry(le);
     le->add_clean_inode(cur);
     ls->open_files.push_back(&cur->item_open_file);
-    mds->mdlog->submit_entry(le);
+    mdlog->submit_entry(le);
   }
   
   // hit pop
@@ -4532,7 +4562,8 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
   // set up commit waiter
   mdr->more()->slave_commit = new C_MDS_SlaveLinkCommit(this, mdr, targeti);
 
-  mdlog->submit_entry(le, new C_MDS_SlaveLinkPrep(this, mdr, targeti));
+  submit_mdlog_entry(le, new C_MDS_SlaveLinkPrep(this, mdr, targeti),
+                     mdr, __func__);
   mdlog->flush();
 }
 
@@ -4675,7 +4706,8 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequestRef& mdr)
   le->commit.add_dir(parent, true);
   le->commit.add_primary_dentry(in->get_projected_parent_dn(), 0, true);
   
-  mdlog->submit_entry(le, new C_MDS_LoggedLinkRollback(this, mut, mdr));
+  submit_mdlog_entry(le, new C_MDS_LoggedLinkRollback(this, mut, mdr),
+                     mdr, __func__);
   mdlog->flush();
 }
 
@@ -5114,7 +5146,8 @@ void Server::handle_slave_rmdir_prep(MDRequestRef& mdr)
   // set up commit waiter
   mdr->more()->slave_commit = new C_MDS_SlaveRmdirCommit(this, mdr);
 
-  mdlog->submit_entry(le, new C_MDS_SlaveRmdirPrep(this, mdr, dn, straydn));
+  submit_mdlog_entry(le, new C_MDS_SlaveRmdirPrep(this, mdr, dn, straydn),
+                     mdr, __func__);
   mdlog->flush();
 }
 
@@ -5176,7 +5209,7 @@ void Server::_commit_slave_rmdir(MDRequestRef& mdr, int r)
     mdlog->start_entry(le);
     mdr->cleanup();
 
-    mdlog->submit_entry(le, new C_MDS_CommittedSlave(this, mdr));
+    submit_mdlog_entry(le, new C_MDS_CommittedSlave(this, mdr), mdr, __func__);
     mdlog->flush();
   } else {
     // abort
@@ -5242,7 +5275,10 @@ void Server::do_rmdir_rollback(bufferlist &rbl, int master, MDRequestRef& mdr)
 
   mdcache->project_subtree_rename(in, straydn->get_dir(), dn->get_dir());
 
-  mdlog->submit_entry(le, new C_MDS_LoggedRmdirRollback(this, mdr, rollback.reqid, dn, straydn));
+  submit_mdlog_entry(le,
+                     new C_MDS_LoggedRmdirRollback(this, mdr,rollback.reqid,
+                                                   dn, straydn),
+                     mdr, __func__);
   mdlog->flush();
 }
 
@@ -6556,7 +6592,9 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   bufferlist blah;  // inode import data... obviously not used if we're the slave
   _rename_prepare(mdr, &le->commit, &blah, srcdn, destdn, straydn);
   
-  mdlog->submit_entry(le, new C_MDS_SlaveRenamePrep(this, mdr, srcdn, destdn, straydn));
+  submit_mdlog_entry(le,new C_MDS_SlaveRenamePrep(this, mdr,
+                                                  srcdn, destdn, straydn),
+                     mdr, __func__);
   mdlog->flush();
 }
 
@@ -6685,10 +6723,11 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
       mdr->more()->is_ambiguous_auth = false;
     }
 
+
     mds->queue_waiters(finished);
     mdr->cleanup();
 
-    mdlog->submit_entry(le, new C_MDS_CommittedSlave(this, mdr));
+    submit_mdlog_entry(le, new C_MDS_CommittedSlave(this, mdr), mdr, __func__);
     mdlog->flush();
   } else {
 
@@ -6982,8 +7021,11 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequestRef& mdr,
     mdcache->project_subtree_rename(in, destdir, srcdir);
   }
 
-  mdlog->submit_entry(le, new C_MDS_LoggedRenameRollback(this, mut, mdr, srcdn, srcdnpv,
-							 destdn, straydn, finish_mdr));
+  submit_mdlog_entry(le,
+                     new C_MDS_LoggedRenameRollback(this, mut, mdr, srcdn,
+                                                    srcdnpv, destdn,
+                                                    straydn, finish_mdr),
+                     mdr, __func__);
   mdlog->flush();
 }
 
@@ -7311,7 +7353,8 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, diri);
 
   // journal the snaprealm changes
-  mdlog->submit_entry(le, new C_MDS_mksnap_finish(mds, mdr, diri, info));
+  submit_mdlog_entry(le, new C_MDS_mksnap_finish(mds, mdr, diri, info),
+                     mdr, __func__);
   mdlog->flush();
 }
 
@@ -7429,7 +7472,8 @@ void Server::handle_client_rmsnap(MDRequestRef& mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, diri);
 
-  mdlog->submit_entry(le, new C_MDS_rmsnap_finish(mds, mdr, diri, snapid));
+  submit_mdlog_entry(le, new C_MDS_rmsnap_finish(mds, mdr, diri, snapid),
+                     mdr, __func__);
   mdlog->flush();
 }
 

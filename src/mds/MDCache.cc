@@ -4504,7 +4504,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	  if (have_request(r->reqid))
 	    mdr = request_get(r->reqid);
 	  else
-	    mdr = request_start_slave(r->reqid, r->attempt, from);
+	    mdr = request_start_slave(r->reqid, r->attempt, strong);
 	  mdr->auth_pin(dn);
 	}
       }
@@ -4599,7 +4599,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	if (have_request(r->reqid))
 	  mdr = request_get(r->reqid);
 	else
-	  mdr = request_start_slave(r->reqid, r->attempt, from);
+	  mdr = request_start_slave(r->reqid, r->attempt, strong);
 	if (strong->frozen_authpin_inodes.count(in->vino())) {
 	  assert(!in->get_num_auth_pins());
 	  mdr->freeze_auth_pin(in);
@@ -8633,16 +8633,36 @@ MDRequestRef MDCache::request_start(MClientRequest *req)
   }
 
   // register new client request
-  MDRequestRef mdr(new MDRequestImpl(req->get_reqid(),
-                                     req->get_num_fwd(), req));
-  active_requests[req->get_reqid()] = mdr;
+  MDRequestImpl::Params params;
+  params.reqid = req->get_reqid();
+  params.attempt = req->get_num_fwd();
+  params.client_req = req;
+  params.initiated = req->get_recv_stamp();
+  params.throttled = req->get_throttle_stamp();
+  params.all_read = req->get_recv_complete_stamp();
+  params.dispatched = req->get_dispatch_stamp();
+
+  MDRequestRef mdr =
+      mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params>(params);
+  active_requests[params.reqid] = mdr;
   dout(7) << "request_start " << *mdr << dendl;
   return mdr;
 }
 
-MDRequestRef MDCache::request_start_slave(metareqid_t ri, __u32 attempt, int by)
+MDRequestRef MDCache::request_start_slave(metareqid_t ri, __u32 attempt, Message *m)
 {
-  MDRequestRef mdr(new MDRequestImpl(ri, attempt, by));
+  int by = m->get_source().num();
+  MDRequestImpl::Params params;
+  params.reqid = ri;
+  params.attempt = attempt;
+  params.triggering_slave_req = m;
+  params.slave_to = by;
+  params.initiated = m->get_recv_stamp();
+  params.throttled = m->get_throttle_stamp();
+  params.all_read = m->get_recv_complete_stamp();
+  params.dispatched = m->get_dispatch_stamp();
+  MDRequestRef mdr =
+      mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params>(params);
   assert(active_requests.count(mdr->reqid) == 0);
   active_requests[mdr->reqid] = mdr;
   dout(7) << "request_start_slave " << *mdr << " by mds." << by << dendl;
@@ -8651,10 +8671,13 @@ MDRequestRef MDCache::request_start_slave(metareqid_t ri, __u32 attempt, int by)
 
 MDRequestRef MDCache::request_start_internal(int op)
 {
-  MDRequestRef mdr(new MDRequestImpl);
-  mdr->reqid.name = entity_name_t::MDS(mds->get_nodeid());
-  mdr->reqid.tid = mds->issue_tid();
-  mdr->internal_op = op;
+  MDRequestImpl::Params params;
+  params.reqid.name = entity_name_t::MDS(mds->get_nodeid());
+  params.reqid.tid = mds->issue_tid();
+  params.initiated = ceph_clock_now(g_ceph_context);
+  params.internal_op = op;
+  MDRequestRef mdr =
+      mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params>(params);
 
   assert(active_requests.count(mdr->reqid) == 0);
   active_requests[mdr->reqid] = mdr;
@@ -8673,6 +8696,7 @@ MDRequestRef MDCache::request_get(metareqid_t rid)
 void MDCache::request_finish(MDRequestRef& mdr)
 {
   dout(7) << "request_finish " << *mdr << dendl;
+  mdr->mark_event("finishing request");
 
   // slave finisher?
   if (mdr->has_more() && mdr->more()->slave_commit) {
@@ -8690,6 +8714,7 @@ void MDCache::request_finish(MDRequestRef& mdr)
 
 void MDCache::request_forward(MDRequestRef& mdr, int who, int port)
 {
+  mdr->mark_event("forwarding request");
   if (mdr->client_request->get_source().is_client()) {
     dout(7) << "request_forward " << *mdr << " to mds." << who << " req "
             << *mdr->client_request << dendl;
@@ -8836,11 +8861,14 @@ void MDCache::request_cleanup(MDRequestRef& mdr)
 
   if (mds->logger)
     log_stat();
+
+  mdr->mark_event("cleaned up request");
 }
 
 void MDCache::request_kill(MDRequestRef& mdr)
 {
   mdr->killed = true;
+  mdr->mark_event("killing request");
   if (!mdr->committing) {
     dout(10) << "request_kill " << *mdr << dendl;
     request_cleanup(mdr);
@@ -8900,7 +8928,10 @@ void MDCache::snaprealm_create(MDRequestRef& mdr, CInode *in)
   journal_cow_inode(mut, &le->metablob, in);
   le->metablob.add_primary_dentry(in->get_projected_parent_dn(), in, true);
 
-  mds->mdlog->submit_entry(le, new C_MDC_snaprealm_create_finish(this, mdr, mut, in));
+  mds->server->submit_mdlog_entry(le,
+                                  new C_MDC_snaprealm_create_finish(this, mdr,
+                                                                    mut, in),
+                                  mdr, __func__);
   mds->mdlog->flush();
 }
 
@@ -11136,7 +11167,8 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
   */
 
   add_uncommitted_fragment(basedirfrag, info.bits, le->orig_frags, mdr->ls);
-  mds->mdlog->submit_entry(le, new C_MDC_FragmentPrep(this, mdr));
+  mds->server->submit_mdlog_entry(le, new C_MDC_FragmentPrep(this, mdr),
+                                  mdr, __func__);
   mds->mdlog->flush();
 }
 
