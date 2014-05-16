@@ -129,7 +129,7 @@ def lock_machines(ctx, config):
                     log.info("Error in virtual machine keys")
                 newscandict = {}
                 for dkey in newly_locked.iterkeys():
-                    stats = lockstatus.get_status(ctx, dkey)
+                    stats = lockstatus.get_status(dkey)
                     newscandict[dkey] = stats['sshpubkey']
                 ctx.config['targets'] = newscandict
             else:
@@ -169,7 +169,7 @@ def check_lock(ctx, config):
         return
     log.info('Checking locks...')
     for machine in ctx.config['targets'].iterkeys():
-        status = lockstatus.get_status(ctx, machine)
+        status = lockstatus.get_status(machine)
         log.debug('machine status is %s', repr(status))
         assert status is not None, \
             'could not read lock status for {name}'.format(name=machine)

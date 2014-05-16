@@ -1,5 +1,5 @@
-import json
 import httplib2
+import requests
 import logging
 import os
 from .config import config
@@ -17,8 +17,10 @@ def send_request(method, url, body=None, headers=None):
     return (False, None, resp.status)
 
 
-def get_status(ctx, name):
-    success, content, _ = send_request('GET', os.path.join(config.lock_server, name))
+def get_status(name):
+    uri = os.path.join(config.lock_server, 'nodes', name, '')
+    response = requests.get(uri)
+    success = response.ok
     if success:
-        return json.loads(content)
+        return response.json()
     return None

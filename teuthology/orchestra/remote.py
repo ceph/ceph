@@ -429,7 +429,7 @@ class VirtualConsole():
             raise RuntimeError("libvirt not found")
 
         self.shortname = getShortName(name)
-        status_info = ls.get_status('', self.shortname)
+        status_info = ls.get_status(self.shortname)
         try:
             phys_host = status_info['vpshost']
         except TypeError:

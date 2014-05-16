@@ -9,6 +9,8 @@ import collections
 import tempfile
 import os
 import time
+import requests
+import json
 
 import teuthology
 from .config import config
@@ -56,38 +58,45 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
     return []
 
 
-def lock_one(ctx, name, user=None, description=None):
+def lock_one(name, user=None, description=None):
     if user is None:
         user = misc.get_user()
-    success, _, _ = ls.send_request(
-        'POST',
-        config.lock_server + '/' + name,
-        urllib.urlencode(dict(user=user, desc=description)))
+    request = dict(name=name, locked=True, locked_by=user,
+                   description=description)
+    uri = os.path.join(config.lock_server, 'nodes', name, 'lock', '')
+    response = requests.put(uri, json.dumps(request))
+    success = response.ok
     if success:
         log.debug('locked %s as %s', name, user)
     else:
-        log.error('failed to lock %s', name)
-    return success
+        try:
+            reason = response.json().get('message')
+        except ValueError:
+            reason = str(response.status_code)
+        log.error('failed to lock {node}. reason: {reason}'.format(
+            node=name, reason=reason))
+    return response
 
 
 def unlock_one(ctx, name, user=None):
     if user is None:
         user = misc.get_user()
-    success, _, http_ret = ls.send_request(
-        'DELETE',
-        config.lock_server + '/' + name + '?' +
-        urllib.urlencode(dict(user=user)))
+    request = dict(name=name, locked=False, locked_by=user, description=None)
+    uri = os.path.join(config.lock_server, 'nodes', name, 'lock', '')
+    response = requests.put(uri, json.dumps(request))
+    success = response.ok
     if success:
         log.debug('unlocked %s', name)
         if not destroy_if_vm(ctx, name):
             log.error('downburst destroy failed for %s', name)
             log.info('%s is not locked' % name)
     else:
-        log.error('failed to unlock %s', name)
-        failure_types = {403: 'You do not have %s locked',
-                         404: '%s is an invalid host name'}
-        if http_ret in failure_types:
-            log.error(failure_types[http_ret], name)
+        try:
+            reason = response.json().get('message')
+        except ValueError:
+            reason = str(response.status_code)
+        log.error('failed to unlock {node}. reason: {reason}'.format(
+            node=name, reason=reason))
     return success
 
 
@@ -252,7 +261,7 @@ def main(ctx):
 
     elif ctx.lock:
         for machine in machines:
-            if not lock_one(ctx, machine, user):
+            if not lock_one(machine, user):
                 ret = 1
                 if not ctx.f:
                     return ret
@@ -502,8 +511,8 @@ def destroy_if_vm(ctx, machine_name):
     """
     Return False only on vm downburst failures.
     """
-    status_info = ls.get_status(ctx, machine_name)
-    phys_host = status_info['vpshost']
+    status_info = ls.get_status(machine_name)
+    phys_host = status_info['vm_host']
     if not phys_host:
         return True
     destroyMe = decanonicalize_hostname(machine_name)
