@@ -39,7 +39,7 @@ static ostream& _prefix(std::ostream *_dout, SimpleMessenger *msgr) {
 
 SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
 				 string mname, uint64_t _nonce)
-  : Messenger(cct, name),
+  : SimplePolicyMessenger(cct, name,mname, _nonce),
     accepter(this, _nonce),
     dispatch_queue(cct, this),
     reaper_thread(this),
@@ -47,7 +47,6 @@ SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
     lock("SimpleMessenger::lock"), need_addr(true), did_bind(false),
     global_seq(0),
     cluster_protocol(0),
-    policy_lock("SimpleMessenger::policy_lock"),
     dispatch_throttler(cct, string("msgr_dispatch_throttler-") + mname,
 		       cct->_conf->ms_dispatch_throttle_bytes),
     reaper_started(false), reaper_stop(false),
