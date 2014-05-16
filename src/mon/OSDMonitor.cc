@@ -4493,7 +4493,8 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       pending_inc.new_primary_affinity[id] = ww;
       ss << "set osd." << id << " primary-affinity to " << w << " (" << ios::hex << ww << ios::dec << ")";
       getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+                                                get_last_committed() + 1));
       return true;
     }
   } else if (prefix == "osd reweight") {
