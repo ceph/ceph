@@ -29,6 +29,7 @@
 #include "common/Cond.h"
 #include "common/Timer.h"
 #include "common/LogClient.h"
+#include "common/TrackedOp.h"
 
 #include "MDSMap.h"
 
@@ -140,7 +141,7 @@ class MDSTableClient;
 
 class AuthAuthorizeHandlerRegistry;
 
-class MDS : public Dispatcher {
+class MDS : public Dispatcher, public md_config_obs_t {
  public:
   Mutex        mds_lock;
   SafeTimer    timer;
@@ -181,6 +182,7 @@ class MDS : public Dispatcher {
   MDSTableServer *get_table_server(int t);
 
   PerfCounters       *logger, *mlogger;
+  OpTracker    op_tracker;
 
   int orig_argc;
   const char **orig_argv;
@@ -358,6 +360,18 @@ class MDS : public Dispatcher {
   // start up, shutdown
   int init(int wanted_state=MDSMap::STATE_BOOT);
 
+  // admin socket handling
+  friend class MDSSocketHook;
+  class MDSSocketHook *asok_hook;
+  bool asok_command(string command, cmdmap_t& cmdmap, string format,
+		    ostream& ss);
+  void set_up_admin_socket();
+  void clean_up_admin_socket();
+  void check_ops_in_flight(); // send off any slow ops to monitor
+    // config observer bits
+  virtual const char** get_tracked_conf_keys() const;
+  virtual void handle_conf_change(const struct md_config_t *conf,
+				  const std::set <std::string> &changed);
   void create_logger();
 
   void bcast_mds_map();  // to mounted clients

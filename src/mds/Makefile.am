@@ -25,7 +25,8 @@ libmds_la_SOURCES = \
 	mds/snap.cc \
 	mds/SessionMap.cc \
 	mds/MDLog.cc \
-	mds/MDSUtility.cc
+	mds/MDSUtility.cc \
+	common/TrackedOp.cc
 libmds_la_LIBADD = $(LIBOSDC)
 noinst_LTLIBRARIES += libmds.la
 
