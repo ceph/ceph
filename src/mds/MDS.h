@@ -366,6 +366,7 @@ class MDS : public Dispatcher, public md_config_obs_t {
   bool asok_command(string command, cmdmap_t& cmdmap, string format,
 		    ostream& ss);
   void set_up_admin_socket();
+  void clean_up_admin_socket();
   void check_ops_in_flight(); // send off any slow ops to monitor
     // config observer bits
   virtual const char** get_tracked_conf_keys() const;

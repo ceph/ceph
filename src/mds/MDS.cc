@@ -248,6 +248,16 @@ void MDS::set_up_admin_socket()
   assert(0 == r);
 }
 
+void MDS::clean_up_admin_socket()
+{
+  AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+  admin_socket->unregister_command("status");
+  admin_socket->unregister_command("dump_ops_in_flight");
+  admin_socket->unregister_command("dump_historic_ops");
+  delete asok_hook;
+  asok_hook = NULL;
+}
+
 const char** MDS::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {
@@ -1757,6 +1767,8 @@ void MDS::suicide()
   //timer.join();
   timer.shutdown();
   
+  clean_up_admin_socket();
+
   // shut down cache
   mdcache->shutdown();
 
