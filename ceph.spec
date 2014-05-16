@@ -369,7 +369,19 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph/
 mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph/
 cp %{S:1} $RPM_BUILD_ROOT/%{_docdir}/ceph/README.SUSE
-
+%if 0%{?suse_version} 
+%fdupes -s %{python_sitelib}/rados.py*
+%fdupes -s %{python_sitelib}/rbd.py*
+%fdupes -s %{python_sitelib}/ceph_argparse.py*
+%fdupes -s %{python_sitelib}/ceph_rest_api.py*
+%fdupes -s %{python_sitelib}/cephfs.py*
+%else
+%{python_sitelib}/rados.py*
+%{python_sitelib}/rbd.py*
+%{python_sitelib}/ceph_argparse.py*
+%{python_sitelib}/ceph_rest_api.py*
+%{python_sitelib}/cephfs.py*
+%endif
 %clean
 rm -rf $RPM_BUILD_ROOT
 
