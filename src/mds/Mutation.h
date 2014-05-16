@@ -23,6 +23,8 @@
 #include "SimpleLock.h"
 #include "Capability.h"
 
+#include "common/TrackedOp.h"
+
 class LogSegment;
 class Capability;
 class CInode;
@@ -78,6 +80,7 @@ struct MutationImpl {
   list<CInode*> dirty_cow_inodes;
   list<pair<CDentry*,version_t> > dirty_cow_dentries;
 
+  // keep our default values synced with MDRequestParam's
   MutationImpl()
     : attempt(0),
       ls(0),
@@ -155,7 +158,7 @@ typedef ceph::shared_ptr<MutationImpl> MutationRef;
  * mostly information about locks held, so that we can drop them all
  * the request is finished or forwarded.  see request_*().
  */
-struct MDRequestImpl : public MutationImpl {
+struct MDRequestImpl : public MutationImpl, public TrackedOp {
   Session *session;
   elist<MDRequestImpl*>::item item_session_request;  // if not on list, op is aborted.
 
@@ -247,46 +250,35 @@ struct MDRequestImpl : public MutationImpl {
 
 
   // ---------------------------------------------------
-  MDRequestImpl() :
-    session(0), item_session_request(this),
-    client_request(0), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
-    alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
-    o_trunc(false),
-    getattr_caps(0),
-    slave_request(0),
-    internal_op(-1),
-    retry(0),
-    waited_for_osdmap(false),
-    _more(0) {
-    in[0] = in[1] = 0; 
-  }
-  MDRequestImpl(metareqid_t ri, __u32 attempt, MClientRequest *req) :
-    MutationImpl(ri, attempt),
-    session(0), item_session_request(this),
-    client_request(req), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
-    alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
-    o_trunc(false),
-    getattr_caps(0),
-    slave_request(0),
-    internal_op(-1),
-    retry(0),
-    waited_for_osdmap(false),
-    _more(0) {
-    in[0] = in[1] = 0; 
-  }
-  MDRequestImpl(metareqid_t ri, __u32 attempt, int by) :
-    MutationImpl(ri, attempt, by),
-    session(0), item_session_request(this),
-    client_request(0), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
-    alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
-    o_trunc(false),
-    getattr_caps(0),
-    slave_request(0),
-    internal_op(-1),
-    retry(0),
-    waited_for_osdmap(false),
-    _more(0) {
-    in[0] = in[1] = 0; 
+  struct Params {
+    metareqid_t reqid;
+    __u32 attempt;
+    MClientRequest *client_req;
+    class Message *triggering_slave_req;
+    int slave_to;
+    utime_t initiated;
+    utime_t throttled, all_read, dispatched;
+    int internal_op;
+    // keep these default values synced to MutationImpl's
+    Params() : attempt(0), client_req(NULL),
+        triggering_slave_req(NULL), slave_to(-1), internal_op(-1) {}
+  };
+  MDRequestImpl(const Params& params, OpTracker *tracker) :
+    MutationImpl(params.reqid, params.attempt, params.slave_to),
+    TrackedOp(tracker, params.initiated),
+    session(NULL), item_session_request(this),
+    client_request(params.client_req), straydn(NULL), snapid(CEPH_NOSNAP),
+    tracei(NULL), tracedn(NULL), alloc_ino(0), used_prealloc_ino(0), snap_caps(0),
+    did_early_reply(false), o_trunc(false), getattr_caps(0),
+    slave_request(NULL), internal_op(params.internal_op), retry(0),
+    waited_for_osdmap(false), _more(NULL) {
+    in[0] = in[1] = NULL;
+    if (!params.throttled.is_zero())
+      tracker->_mark_event(this, "throttled", params.throttled);
+    if (!params.all_read.is_zero())
+      tracker->_mark_event(this, "all_read", params.all_read);
+    if (!params.dispatched.is_zero())
+      tracker->_mark_event(this, "dispatched", params.dispatched);
   }
   ~MDRequestImpl();
   
@@ -304,6 +296,12 @@ struct MDRequestImpl : public MutationImpl {
   void clear_ambiguous_auth();
 
   void print(ostream &out);
+
+  // TrackedOp stuff
+  typedef ceph::shared_ptr<MDRequestImpl> Ref;
+protected:
+  void _dump(utime_t now, Formatter *f) const;
+  void _dump_op_descriptor(ostream& stream) const;
 };
 
 typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
