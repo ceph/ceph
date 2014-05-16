@@ -131,7 +131,8 @@ int SimpleMessenger::_send_message(Message *m, Connection *con, bool lazy)
       << " " << m << " con " << con
       << dendl;
 
-  submit_message(m, static_cast<PipeConnection*>(con), con->get_peer_addr(), con->get_peer_type(), lazy, false);
+  submit_message(m, static_cast<PipeConnection*>(con),
+		 con->get_peer_addr(), con->get_peer_type(), lazy, false);
   return 0;
 }
 

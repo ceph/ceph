@@ -16,6 +16,7 @@ noinst_HEADERS += \
 	msg/Message.h \
 	msg/Messenger.h \
 	msg/Pipe.h \
+	msg/PipeConnection.h \
 	msg/SimpleMessenger.h \
 	msg/msg_types.h
 

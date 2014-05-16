@@ -225,6 +225,10 @@ public:
    */
   Pipe *add_accept_pipe(int sd);
 
+  Connection *create_anon_connection() {
+    return new PipeConnection(cct, NULL);
+  }
+
 private:
 
   /**

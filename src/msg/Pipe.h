@@ -20,6 +20,7 @@
 #include "msg_types.h"
 #include "Messenger.h"
 #include "auth/AuthSessionHandler.h"
+#include "PipeConnection.h"
 
 
 class SimpleMessenger;
