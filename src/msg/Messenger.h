@@ -149,6 +149,11 @@ public:
                            uint64_t nonce);
 
   /**
+   * create a anonymous Connection instance
+   */
+  virtual Connection *create_anon_connection() = 0;
+
+  /**
    * @defgroup Accessors
    * @{
    */

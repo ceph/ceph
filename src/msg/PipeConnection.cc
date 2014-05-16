@@ -15,7 +15,7 @@
 #include "Message.h"
 #include "Pipe.h"
 #include "SimpleMessenger.h"
-#include "Connection.h"
+#include "PipeConnection.h"
 
 PipeConnection::~PipeConnection()
 {
