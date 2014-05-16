@@ -6198,14 +6198,20 @@ int ReplicatedPG::start_flush(
       ++p;
     snapc.snaps = vector<snapid_t>(p, snapset.snaps.end());
 
+    while (p != snapset.snaps.end() && *p >= oi.snaps.back())
+      ++p;
+    vector<snapid_t>::iterator dnewest = p;
+
     // we may need to send a delete first
     while (p != snapset.snaps.end() && *p > prev_snapc)
       ++p;
     dsnapc.snaps = vector<snapid_t>(p, snapset.snaps.end());
 
-    if (dsnapc.snaps.empty()) {
+    if (p == dnewest) {
+      // no snaps between the oldest in this clone and prev_snapc
       snapc.seq = prev_snapc;
     } else {
+      // snaps between oldest in this clone and prev_snapc, send delete
       dsnapc.seq = prev_snapc;
       snapc.seq = oi.snaps.back() - 1;
     }
