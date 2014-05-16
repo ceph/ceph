@@ -18,6 +18,7 @@ noinst_HEADERS += \
 	msg/Pipe.h \
 	msg/PipeConnection.h \
 	msg/SimpleMessenger.h \
+	msg/SimplePolicyMessenger.h \
 	msg/msg_types.h
 
 noinst_LTLIBRARIES += libmsg.la
