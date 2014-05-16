@@ -52,13 +52,61 @@ namespace librbd {
 	     m_parent_completion);
   }
 
+  //copy-on-read : read the entire object from parent, using bufferlist m_entire_object
+  void AioRequest::read_from_parent_COR(vector<pair<uint64_t,uint64_t> >& image_extents)
+  {
+    assert(!m_parent_completion);
+    m_parent_completion = aio_create_completion_internal(this, rbd_req_cb);
+    ldout(m_ictx->cct, 20) << "read_from_parent_COR this = " << this
+                           << " parent completion " << m_parent_completion
+                           << " extents " << image_extents
+                           << dendl;
+    aio_read(m_ictx->parent, image_extents, NULL, &m_entire_object,
+             m_parent_completion);
+  }
+
   /** read **/
+  //copy-on-read: after read entire object, just write it into child
+  ssize_t AioRead::write_COR()
+  {
+    ldout(m_ictx->cct, 20) << "write_COR" << dendl;
+    int ret = 0;
+
+    m_ictx->snap_lock.get_read();
+    ::SnapContext snapc = m_ictx->snapc;
+    m_ictx->snap_lock.put_read();
+
+    librados::ObjectWriteOperation copyup_cor;
+    copyup_cor.exec("rbd","copyup",m_entire_object);
+
+    std::vector<librados::snap_t> m_snaps;
+    for (std::vector<snapid_t>::const_iterator it = snapc.snaps.begin();
+                it != snapc.snaps.end(); ++it) {
+      m_snaps.push_back(it->val);
+    }
+
+    librados::AioCompletion *rados_completion =
+        librados::Rados::aio_create_completion(NULL, NULL, NULL);
+    m_ictx->md_ctx.aio_operate(m_oid, rados_completion, &copyup_cor,
+                               snapc.seq.val, m_snaps);
+    rados_completion->wait_for_complete();
+    ret = rados_completion->get_return_value();
+    ldout(m_ictx->cct, 20) << "ret = " << ret <<dendl;
+    rados_completion->release();
+
+    if (ret < 0) {
+      ldout(m_ictx->cct, 20) << "couldn't write object! error " << ret << dendl;
+      ret = -EIO;
+    }
+    return ret;
+  }
 
   bool AioRead::should_complete(int r)
   {
     ldout(m_ictx->cct, 20) << "should_complete " << this << " " << m_oid << " " << m_object_off << "~" << m_object_len
 			   << " r = " << r << dendl;
 
+    bool COR = m_ictx->cct->_conf->rbd_clone_cor;
     if (!m_tried_parent && r == -ENOENT) {
       RWLock::RLocker l(m_ictx->snap_lock);
       RWLock::RLocker l2(m_ictx->parent_lock);
@@ -77,9 +125,31 @@ namespace librbd {
       uint64_t object_overlap = m_ictx->prune_parent_extents(image_extents, image_overlap);
       if (object_overlap) {
 	m_tried_parent = true;
-	read_from_parent(image_extents);
+        if(COR)//copy-on-read option
+        {
+            vector<pair<uint64_t,uint64_t> > extend_image_extents;
+            //extend range to entire object
+            Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
+                            m_object_no, 0, m_ictx->layout.fl_object_size,
+                            extend_image_extents);
+            //read entire object from parent , and put it in m_entire_object
+            read_from_parent_COR(extend_image_extents);
+        }
+        else
+            read_from_parent(image_extents);
 	return false;
       }
+    }
+
+    if(COR) //copy-on-read option
+    {
+      //if read entire object from parent success
+      if(m_tried_parent && r>0)
+        {
+          // copy the read range to m_read_data
+          m_read_data.substr_of(m_entire_object, m_object_off, m_object_len);
+          write_COR();
+        }
     }
 
     return true;
