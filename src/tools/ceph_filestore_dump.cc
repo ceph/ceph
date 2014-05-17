@@ -620,11 +620,11 @@ int export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
       return -EINVAL;
 
     data_section dblock(offset, len, rawdatabl);
-    total -= ret;
-    offset += ret;
-
     if (debug)
       cerr << "data section offset=" << offset << " len=" << len << std::endl;
+
+    total -= ret;
+    offset += ret;
 
     ret = write_section(TYPE_DATA, dblock, file_fd);
     if (ret) return ret;
