@@ -10546,9 +10546,10 @@ CDir *MDCache::force_dir_fragment(CInode *diri, frag_t fg, bool replay)
       src.push_back(pdir);
       adjust_dir_fragments(diri, src, parent, split, result, waiters, replay);
       dir = diri->get_dirfrag(fg);
-      if (dir)
-        dout(10) << "force_dir_fragment result " << *dir << dendl;
-      return dir;
+      if (dir) {
+	dout(10) << "force_dir_fragment result " << *dir << dendl;
+	break;
+      }
     }
     if (parent == frag_t())
       break;
@@ -10557,16 +10558,20 @@ CDir *MDCache::force_dir_fragment(CInode *diri, frag_t fg, bool replay)
     dout(10) << " " << last << " parent is " << parent << dendl;
   }
 
-  // hoover up things under fg?
-  diri->get_dirfrags_under(fg, src);
-  if (src.empty()) {
-    dout(10) << "force_dir_fragment no frags under " << fg << dendl;
-    return NULL;
+  if (!dir) {
+    // hoover up things under fg?
+    diri->get_dirfrags_under(fg, src);
+    if (src.empty()) {
+      dout(10) << "force_dir_fragment no frags under " << fg << dendl;
+    } else {
+      dout(10) << " will combine frags under " << fg << ": " << src << dendl;
+      adjust_dir_fragments(diri, src, fg, 0, result, waiters, replay);
+      dir = result.front();
+      dout(10) << "force_dir_fragment result " << *dir << dendl;
+    }
   }
-  dout(10) << " will combine frags under " << fg << ": " << src << dendl;
-  adjust_dir_fragments(diri, src, fg, 0, result, waiters, replay);
-  dir = result.front();
-  dout(10) << "force_dir_fragment result " << *dir << dendl;
+  if (!replay)
+    mds->queue_waiters(waiters);
   return dir;
 }
 
