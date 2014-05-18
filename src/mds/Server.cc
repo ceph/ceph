@@ -826,10 +826,13 @@ public:
 void Server::submit_mdlog_entry(LogEvent *le, Context *fin, MDRequestRef& mdr,
                                 const char *event)
 {
-  string event_str("submit entry: ");
-  event_str += event;
-  mdr->mark_event(event_str);
-  mdlog->submit_entry(le, new C_MarkEvent(fin, mdr, event));
+  if (mdr) {
+    string event_str("submit entry: ");
+    event_str += event;
+    mdr->mark_event(event_str);
+    mdlog->submit_entry(le, new C_MarkEvent(fin, mdr, event));
+  } else
+    mdlog->submit_entry(le, fin);
 }
 
 /*
