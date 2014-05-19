@@ -116,8 +116,7 @@ public:
     }
 
     void encode(bufferlist &bl) const {
-      __u8 struct_v = 2;
-      ::encode(struct_v, bl);
+      ENCODE_START(2, 2, bl);
       ::encode(magic, bl);
       ::encode(trimmed_pos, bl);
       ::encode(expire_pos, bl);
@@ -125,10 +124,10 @@ public:
       ::encode(write_pos, bl);
       ::encode(layout, bl);
       ::encode(stream_format, bl);
+      ENCODE_FINISH(bl);
     }
     void decode(bufferlist::iterator &bl) {
-      __u8 struct_v;
-      ::decode(struct_v, bl);
+      DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
       ::decode(magic, bl);
       ::decode(trimmed_pos, bl);
       ::decode(expire_pos, bl);
@@ -140,6 +139,7 @@ public:
       } else {
         stream_format = JOURNAL_FORMAT_LEGACY;
       }
+      DECODE_FINISH(bl);
     }
 
     void dump(Formatter *f) const {
