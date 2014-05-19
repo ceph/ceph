@@ -1202,7 +1202,7 @@ class Ioctx(object):
 
         :raises: :class:`TypeError`
         :raises: :class:`LogicError`
-        :returns: int - number of bytes written
+        :returns: int - 0 on success
         """
         self.require_ioctx_open()
         if not isinstance(key, str):
@@ -1267,7 +1267,7 @@ returned %d, but should return zero on success." % (self.name, ret))
 
         :raises: :class:`TypeError`
         :raises: :class:`LogicError`
-        :returns: int - number of bytes written
+        :returns: int - 0 on success
         """
         self.require_ioctx_open()
         if not isinstance(key, str):
