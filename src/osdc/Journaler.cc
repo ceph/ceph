@@ -1094,7 +1094,7 @@ void Journaler::handle_write_error(int r)
  * to get the next header if header was unavailable, or enough to get the whole
  * next entry if the header was available but the body wasn't).
  */
-bool JournalStream::readable(bufferlist &read_buf, uint64_t *need)
+bool JournalStream::readable(bufferlist &read_buf, uint64_t *need) const
 {
   assert(need != NULL);
 
