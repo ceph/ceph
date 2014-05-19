@@ -1139,11 +1139,12 @@ bool JournalStream::readable(bufferlist &read_buf, uint64_t *need) const
  * Consume one entry from a journal byte stream 'from', splicing a
  * serialized LogEvent blob into 'entry'.
  *
- * 'entry' must be initially empty.  'from' must contain sufficient
- * valid data (i.e. readable is true).
+ * 'entry' must be non null and point to an empty bufferlist.
+ *
+ * 'from' must contain sufficient valid data (i.e. readable is true).
  *
  * 'start_ptr' will be set to the entry's start pointer, if the collection
- * format provides it.
+ * format provides it.  It may not be null.
  *
  * @returns The number of bytes consumed from the `from` byte stream.  Note
  *          that this is not equal to the length of `entry`, which contains
@@ -1155,42 +1156,34 @@ size_t JournalStream::read(bufferlist &from, bufferlist *entry, uint64_t *start_
   assert(entry != NULL);
   assert(entry->length() == 0);
 
-  uint64_t entry_sentinel = 0;
-  uint32_t entry_size;
-  {
-    bufferlist::iterator p = from.begin();
-    if (format >= JOURNAL_FORMAT_RESILIENT) {
-      ::decode(entry_sentinel, p);
-    }
-    ::decode(entry_size, p);
-    p.advance(entry_size);
-    if (format >= JOURNAL_FORMAT_RESILIENT) {
-      ::decode(*start_ptr, p);
-    } else {
-      *start_ptr = 0;
-    }
-  }
+  uint32_t entry_size = 0;
 
-  size_t raw_length;
+  // Consume envelope prefix: entry_size and entry_sentinel
+  bufferlist::iterator from_ptr = from.begin();
   if (format >= JOURNAL_FORMAT_RESILIENT) {
-    raw_length = JOURNAL_ENVELOPE_RESILIENT + entry_size;
+    uint64_t entry_sentinel = 0;
+    ::decode(entry_sentinel, from_ptr);
+    // Assertion instead of clean check because of precondition of this
+    // fn is that readable() already passed
     assert(entry_sentinel == sentinel);
-  } else {
-    raw_length = JOURNAL_ENVELOPE_LEGACY + entry_size;
   }
-  assert(from.length() >= raw_length);
+  ::decode(entry_size, from_ptr);
   assert(entry_size != 0);
-  
+
+  // Read out the payload
+  from_ptr.copy(entry_size, *entry);
+
+  // Consume the envelope suffix (start_ptr)
   if (format >= JOURNAL_FORMAT_RESILIENT) {
-    from.splice(0, sizeof(entry_sentinel));
-  }
-  from.splice(0, sizeof(entry_size));
-  from.splice(0, entry_size, entry);
-  if (format >= JOURNAL_FORMAT_RESILIENT) {
-    from.splice(0, sizeof(*start_ptr));
+    ::decode(*start_ptr, from_ptr);
+  } else {
+    *start_ptr = 0;
   }
 
-  return raw_length;
+  // Trim the input buffer to discard the bytes we have consumed
+  from.splice(0, from_ptr.get_off());
+
+  return from_ptr.get_off();
 }
 
 
