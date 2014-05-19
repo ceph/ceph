@@ -111,6 +111,8 @@ int JournalScanner::scan_header()
   catch (buffer::error e)
   {
     derr << "Header is corrupt (" << e.what() << ")" << dendl;
+    delete header;
+    header = NULL;
     return 0;  // "Successfully" found an error
   }
 
@@ -119,7 +121,7 @@ int JournalScanner::scan_header()
     return 0;  // "Successfully" found an error
   }
   if (!((header->trimmed_pos <= header->expire_pos) && (header->expire_pos <= header->write_pos))) {
-    derr << "Header is corrupt (inconsistent offsets)" << dendl;
+    derr << "Header is invalid (inconsistent offsets)" << dendl;
     return 0;  // "Successfully" found an error
   }
   header_valid = true;
