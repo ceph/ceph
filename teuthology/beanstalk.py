@@ -39,8 +39,7 @@ def walk_jobs(connection, tube_name, callback, pattern=None):
     timeout = job_count / 2000.0 * 60
     matching_jobs = OrderedDict()
     for i in range(1, job_count + 1):
-        sys.stderr.write("{i}/{count}\r".format(i=i, count=job_count))
-        sys.stderr.flush()
+        print_progress(i, job_count, "Loading")
         job = connection.reserve(timeout=timeout)
         if job is None or job.body is None:
             continue
@@ -50,9 +49,20 @@ def walk_jobs(connection, tube_name, callback, pattern=None):
         if pattern is not None and pattern not in job_name:
             continue
         matching_jobs[job_id] = job
+    end_progress()
+    callback(matching_jobs)
+
+
+def print_progress(index, total, message=None):
+    msg = "{m} ".format(m=message) if message else ''
+    sys.stderr.write("{msg}{i}/{total}\r".format(
+        msg=msg, i=index, total=total))
+    sys.stderr.flush()
+
+
+def end_progress():
     sys.stderr.write('\n')
     sys.stderr.flush()
-    callback(matching_jobs)
 
 
 def _print_matching_jobs(show_desc=False):
