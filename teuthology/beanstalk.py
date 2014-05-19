@@ -48,7 +48,7 @@ def walk_jobs(connection, tube_name, callback, pattern=None):
         job_id = job.stats()['id']
         if pattern is not None and pattern not in job_name:
             continue
-        matching_jobs[job_id] = job
+        matching_jobs[job_id] = [job, job_config]
     end_progress()
     callback(matching_jobs)
 
@@ -69,9 +69,8 @@ def _print_matching_jobs(show_desc=False):
     def print_matching_jobs(jobs_dict):
         i = 0
         job_count = len(jobs_dict)
-        for job_id, job in jobs_dict.iteritems():
+        for job_id, (job, job_config) in jobs_dict.iteritems():
             i += 1
-            job_config = yaml.safe_load(job.body)
             job_name = job_config['name']
             job_desc = job_config['description']
             job_id = job.stats()['id']
@@ -88,8 +87,7 @@ def _print_matching_jobs(show_desc=False):
 
 
 def delete_matching_jobs(jobs_dict):
-    for job_id, job in jobs_dict.iteritems():
-        job_config = yaml.safe_load(job.body)
+    for job_id, (job, job_config) in jobs_dict.iteritems():
         job_name = job_config['name']
         job_id = job.stats()['id']
         print 'Deleting {job_id}/{job_name}'.format(
@@ -102,8 +100,7 @@ def delete_matching_jobs(jobs_dict):
 
 def print_matching_runs(jobs_dict):
     runs = set()
-    for job_id, job in jobs_dict.iteritems():
-        job_config = yaml.safe_load(job.body)
+    for job_id, (job, job_config) in jobs_dict.iteritems():
         runs.add(job_config['name'])
     for run in runs:
         print run
