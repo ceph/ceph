@@ -6359,6 +6359,34 @@ void OSD::handle_pg_backfill_reserve(OpRequestRef op)
   if (!require_same_or_newer_map(op, m->query_epoch))
     return;
 
+  PG::CephPeeringEvtRef evt;
+  if (m->type == MBackfillReserve::REQUEST) {
+    evt = PG::CephPeeringEvtRef(
+      new PG::CephPeeringEvt(
+	m->query_epoch,
+	m->query_epoch,
+	PG::RequestBackfillPrio(m->priority)));
+  } else if (m->type == MBackfillReserve::GRANT) {
+    evt = PG::CephPeeringEvtRef(
+      new PG::CephPeeringEvt(
+	m->query_epoch,
+	m->query_epoch,
+	PG::RemoteBackfillReserved()));
+  } else if (m->type == MBackfillReserve::REJECT) {
+    evt = PG::CephPeeringEvtRef(
+      new PG::CephPeeringEvt(
+	m->query_epoch,
+	m->query_epoch,
+	PG::RemoteReservationRejected()));
+  } else {
+    assert(0);
+  }
+
+  if (service.splitting(m->pgid)) {
+    peering_wait_for_split[m->pgid].push_back(evt);
+    return;
+  }
+
   PG *pg = 0;
   if (!_have_pg(m->pgid))
     return;
@@ -6366,30 +6394,7 @@ void OSD::handle_pg_backfill_reserve(OpRequestRef op)
   pg = _lookup_lock_pg(m->pgid);
   assert(pg);
 
-  if (m->type == MBackfillReserve::REQUEST) {
-    pg->queue_peering_event(
-      PG::CephPeeringEvtRef(
-	new PG::CephPeeringEvt(
-	  m->query_epoch,
-	  m->query_epoch,
-	  PG::RequestBackfillPrio(m->priority))));
-  } else if (m->type == MBackfillReserve::GRANT) {
-    pg->queue_peering_event(
-      PG::CephPeeringEvtRef(
-	new PG::CephPeeringEvt(
-	  m->query_epoch,
-	  m->query_epoch,
-	  PG::RemoteBackfillReserved())));
-  } else if (m->type == MBackfillReserve::REJECT) {
-    pg->queue_peering_event(
-      PG::CephPeeringEvtRef(
-	new PG::CephPeeringEvt(
-	  m->query_epoch,
-	  m->query_epoch,
-	  PG::RemoteReservationRejected())));
-  } else {
-    assert(0);
-  }
+  pg->queue_peering_event(evt);
   pg->unlock();
 }
 
@@ -6403,38 +6408,42 @@ void OSD::handle_pg_recovery_reserve(OpRequestRef op)
   if (!require_same_or_newer_map(op, m->query_epoch))
     return;
 
+  PG::CephPeeringEvtRef evt;
+  if (m->type == MRecoveryReserve::REQUEST) {
+    evt = PG::CephPeeringEvtRef(
+      new PG::CephPeeringEvt(
+	m->query_epoch,
+	m->query_epoch,
+	PG::RequestRecovery()));
+  } else if (m->type == MRecoveryReserve::GRANT) {
+    evt = PG::CephPeeringEvtRef(
+      new PG::CephPeeringEvt(
+	m->query_epoch,
+	m->query_epoch,
+	PG::RemoteRecoveryReserved()));
+  } else if (m->type == MRecoveryReserve::RELEASE) {
+    evt = PG::CephPeeringEvtRef(
+      new PG::CephPeeringEvt(
+	m->query_epoch,
+	m->query_epoch,
+	PG::RecoveryDone()));
+  } else {
+    assert(0);
+  }
+
+  if (service.splitting(m->pgid)) {
+    peering_wait_for_split[m->pgid].push_back(evt);
+    return;
+  }
+
   PG *pg = 0;
   if (!_have_pg(m->pgid))
     return;
 
   pg = _lookup_lock_pg(m->pgid);
-  if (!pg)
-    return;
+  assert(pg);
 
-  if (m->type == MRecoveryReserve::REQUEST) {
-    pg->queue_peering_event(
-      PG::CephPeeringEvtRef(
-	new PG::CephPeeringEvt(
-	  m->query_epoch,
-	  m->query_epoch,
-	  PG::RequestRecovery())));
-  } else if (m->type == MRecoveryReserve::GRANT) {
-    pg->queue_peering_event(
-      PG::CephPeeringEvtRef(
-	new PG::CephPeeringEvt(
-	  m->query_epoch,
-	  m->query_epoch,
-	  PG::RemoteRecoveryReserved())));
-  } else if (m->type == MRecoveryReserve::RELEASE) {
-    pg->queue_peering_event(
-      PG::CephPeeringEvtRef(
-	new PG::CephPeeringEvt(
-	  m->query_epoch,
-	  m->query_epoch,
-	  PG::RecoveryDone())));
-  } else {
-    assert(0);
-  }
+  pg->queue_peering_event(evt);
   pg->unlock();
 }
 
