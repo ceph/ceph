@@ -202,10 +202,10 @@ public:
 
   private:
     mutable bufferlist dnbl;
-    bool dn_decoded;
-    list<ceph::shared_ptr<fullbit> >   dfull;
-    list<remotebit> dremote;
-    list<nullbit>   dnull;
+    mutable bool dn_decoded;
+    mutable list<ceph::shared_ptr<fullbit> > dfull;
+    mutable list<remotebit> dremote;
+    mutable list<nullbit> dnull;
 
   public:
     dirlump() : state(0), nfull(0), nremote(0), nnull(0), dn_decoded(true) { }
@@ -221,9 +221,13 @@ public:
     bool is_dirty_dft() { return state & STATE_DIRTYDFT; }
     void mark_dirty_dft() { state |= STATE_DIRTYDFT; }
 
-    list<ceph::shared_ptr<fullbit> >   &get_dfull()   { return dfull; }
-    list<remotebit> &get_dremote() { return dremote; }
-    list<nullbit>   &get_dnull()   { return dnull; }
+    const list<ceph::shared_ptr<fullbit> > &get_dfull()   const { return dfull; }
+    const list<remotebit>                  &get_dremote() const { return dremote; }
+    const list<nullbit>                    &get_dnull()   const { return dnull; }
+
+    void add_dnull(nullbit const &n)                   { dnull.push_back(n); };
+    void add_dfull(ceph::shared_ptr<fullbit> const &p) { dfull.push_back(p); };
+    void add_dremote(remotebit const &r)               { dremote.push_back(r); };
 
     void print(dirfrag_t dirfrag, ostream& out) {
       out << "dirlump " << dirfrag << " v " << fnode.version
@@ -263,7 +267,7 @@ public:
       ::encode(dremote, dnbl);
       ::encode(dnull, dnbl);
     }
-    void _decode_bits() { 
+    void _decode_bits() const { 
       if (dn_decoded) return;
       bufferlist::iterator p = dnbl.begin();
       ::decode(dfull, p);
@@ -313,9 +317,9 @@ private:
  public:
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
-  void get_inodes(std::set<inodeno_t> &inodes);
-  void get_paths(std::vector<std::string> &paths);
-  void get_dentries(std::map<dirfrag_t, std::set<std::string> > &dentries);
+  void get_inodes(std::set<inodeno_t> &inodes) const;
+  void get_paths(std::vector<std::string> &paths) const;
+  void get_dentries(std::map<dirfrag_t, std::set<std::string> > &dentries) const;
   entity_name_t get_client_name() const {return client_name;}
 
   void dump(Formatter *f) const;
@@ -381,10 +385,10 @@ private:
   void add_null_dentry(dirlump& lump, CDentry *dn, bool dirty) {
     // add the dir
     lump.nnull++;
-    lump.get_dnull().push_back(nullbit(dn->get_name(), 
-				       dn->first, dn->last,
-				       dn->get_projected_version(), 
-				       dirty));
+    lump.add_dnull(nullbit(dn->get_name(), 
+			   dn->first, dn->last,
+			   dn->get_projected_version(), 
+			   dirty));
   }
 
   void add_remote_dentry(CDentry *dn, bool dirty) {
@@ -400,11 +404,11 @@ private:
       rdt = dn->get_projected_linkage()->get_remote_d_type();
     }
     lump.nremote++;
-    lump.get_dremote().push_back(remotebit(dn->get_name(), 
-					   dn->first, dn->last,
-					   dn->get_projected_version(), 
-					   rino, rdt,
-					   dirty));
+    lump.add_dremote(remotebit(dn->get_name(), 
+			       dn->first, dn->last,
+                               dn->get_projected_version(), 
+                               rino, rdt,
+                               dirty));
   }
 
   // return remote pointer to to-be-journaled inode
@@ -434,14 +438,14 @@ private:
       sr->encode(snapbl);
 
     lump.nfull++;
-    lump.get_dfull().push_back(ceph::shared_ptr<fullbit>(new fullbit(dn->get_name(), 
-									 dn->first, dn->last,
-									 dn->get_projected_version(), 
-									 *pi, in->dirfragtree,
-									 *in->get_projected_xattrs(),
-									 in->symlink, snapbl,
-									 state,
-									 &in->old_inodes)));
+    lump.add_dfull(ceph::shared_ptr<fullbit>(new fullbit(dn->get_name(), 
+                                                         dn->first, dn->last,
+                                                         dn->get_projected_version(), 
+                                                         *pi, in->dirfragtree,
+                                                         *in->get_projected_xattrs(),
+                                                         in->symlink, snapbl,
+                                                         state,
+                                                         &in->old_inodes)));
   }
 
   // convenience: primary or remote?  figure it out.

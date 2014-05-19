@@ -48,7 +48,7 @@ bool JournalFilter::apply(uint64_t pos, LogEvent &le) const
 
   /* Filtering by client */
   if (client_name.num()) {
-    EMetaBlob *metablob = le.get_metablob();
+    EMetaBlob const *metablob = le.get_metablob();
     if (metablob) {
       if (metablob->get_client_name() != client_name) {
         return false;
@@ -65,7 +65,7 @@ bool JournalFilter::apply(uint64_t pos, LogEvent &le) const
 
   /* Filtering by inode */
   if (inode) {
-    EMetaBlob *metablob = le.get_metablob();
+    EMetaBlob const *metablob = le.get_metablob();
     if (metablob) {
       std::set<inodeno_t> inodes;
       metablob->get_inodes(inodes);
@@ -86,7 +86,7 @@ bool JournalFilter::apply(uint64_t pos, LogEvent &le) const
 
   /* Filtering by frag and dentry */
   if (!frag_dentry.empty() || frag.ino) {
-    EMetaBlob *metablob = le.get_metablob();
+    EMetaBlob const *metablob = le.get_metablob();
     if (metablob) {
       std::map<dirfrag_t, std::set<std::string> > dentries;
       metablob->get_dentries(dentries);
@@ -129,7 +129,7 @@ bool JournalFilter::apply(uint64_t pos, LogEvent &le) const
 
   /* Filtering by file path */
   if (!path_expr.empty()) {
-    EMetaBlob *metablob = le.get_metablob();
+    EMetaBlob const *metablob = le.get_metablob();
     if (metablob) {
       std::vector<std::string> paths;
       metablob->get_paths(paths);

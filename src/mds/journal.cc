@@ -821,27 +821,27 @@ void EMetaBlob::decode(bufferlist::iterator &bl)
  * dirlumps, and the inodes of the dirs themselves.
  */
 void EMetaBlob::get_inodes(
-    std::set<inodeno_t> &inodes)
+    std::set<inodeno_t> &inodes) const
 {
   // For all dirlumps in this metablob
-  for (std::map<dirfrag_t, dirlump>::iterator i = lump_map.begin(); i != lump_map.end(); ++i) {
+  for (std::map<dirfrag_t, dirlump>::const_iterator i = lump_map.begin(); i != lump_map.end(); ++i) {
     // Record inode of dirlump
     inodeno_t const dir_ino = i->first.ino;
     inodes.insert(dir_ino);
 
     // Decode dirlump bits
-    dirlump &dl = i->second;
+    dirlump const &dl = i->second;
     dl._decode_bits();
 
     // Record inodes of fullbits
-    list<ceph::shared_ptr<fullbit> > &fb_list = dl.get_dfull();
+    list<ceph::shared_ptr<fullbit> > const &fb_list = dl.get_dfull();
     for (list<ceph::shared_ptr<fullbit> >::const_iterator
         iter = fb_list.begin(); iter != fb_list.end(); ++iter) {
       inodes.insert((*iter)->inode.ino);
     }
 
     // Record inodes of remotebits
-    list<remotebit> &rb_list = dl.get_dremote();
+    list<remotebit> const &rb_list = dl.get_dremote();
     for (list<remotebit>::const_iterator
 	iter = rb_list.begin(); iter != rb_list.end(); ++iter) {
       inodes.insert(iter->ino);
@@ -854,17 +854,17 @@ void EMetaBlob::get_inodes(
  * Get a map of dirfrag to set of dentries in that dirfrag which are
  * touched in this operation.
  */
-void EMetaBlob::get_dentries(std::map<dirfrag_t, std::set<std::string> > &dentries)
+void EMetaBlob::get_dentries(std::map<dirfrag_t, std::set<std::string> > &dentries) const
 {
-  for (std::map<dirfrag_t, dirlump>::iterator i = lump_map.begin(); i != lump_map.end(); ++i) {
-    dirlump &dl = i->second;
+  for (std::map<dirfrag_t, dirlump>::const_iterator i = lump_map.begin(); i != lump_map.end(); ++i) {
+    dirlump const &dl = i->second;
     dirfrag_t const &df = i->first;
 
     // Get all bits
     dl._decode_bits();
-    list<ceph::shared_ptr<fullbit> > &fb_list = dl.get_dfull();
-    list<nullbit> &nb_list = dl.get_dnull();
-    list<remotebit> &rb_list = dl.get_dremote();
+    list<ceph::shared_ptr<fullbit> > const &fb_list = dl.get_dfull();
+    list<nullbit> const &nb_list = dl.get_dnull();
+    list<remotebit> const &rb_list = dl.get_dremote();
 
     // For all bits, store dentry
     for (list<ceph::shared_ptr<fullbit> >::const_iterator
@@ -889,12 +889,9 @@ void EMetaBlob::get_dentries(std::map<dirfrag_t, std::set<std::string> > &dentri
  * Calculate all paths that we can infer are touched by this metablob.  Only uses
  * information local to this metablob so it may only be the path within the
  * subtree.
- *
- * This is not const because the contained dirlump and 'bit' objects
- * are modified by being decoded.
  */
 void EMetaBlob::get_paths(
-    std::vector<std::string> &paths)
+    std::vector<std::string> &paths) const
 {
   // Each dentry has a 'location' which is a 2-tuple of parent inode and dentry name
   typedef std::pair<inodeno_t, std::string> Location;
@@ -916,14 +913,14 @@ void EMetaBlob::get_paths(
   // First pass
   // ==========
   // Build a tiny local metadata cache for the path structure in this metablob
-  for (std::map<dirfrag_t, dirlump>::iterator i = lump_map.begin(); i != lump_map.end(); ++i) {
+  for (std::map<dirfrag_t, dirlump>::const_iterator i = lump_map.begin(); i != lump_map.end(); ++i) {
     inodeno_t const dir_ino = i->first.ino;
-    dirlump &dl = i->second;
+    dirlump const &dl = i->second;
     dl._decode_bits();
 
-    list<ceph::shared_ptr<fullbit> > &fb_list = dl.get_dfull();
-    list<nullbit> &nb_list = dl.get_dnull();
-    list<remotebit> &rb_list = dl.get_dremote();
+    list<ceph::shared_ptr<fullbit> > const &fb_list = dl.get_dfull();
+    list<nullbit> const &nb_list = dl.get_dnull();
+    list<remotebit> const &rb_list = dl.get_dremote();
 
     for (list<ceph::shared_ptr<fullbit> >::const_iterator
         iter = fb_list.begin(); iter != fb_list.end(); ++iter) {
@@ -950,12 +947,12 @@ void EMetaBlob::get_paths(
   // Second pass
   // ===========
   // Output paths for all childless nodes in the metablob
-  for (std::map<dirfrag_t, dirlump>::iterator i = lump_map.begin(); i != lump_map.end(); ++i) {
+  for (std::map<dirfrag_t, dirlump>::const_iterator i = lump_map.begin(); i != lump_map.end(); ++i) {
     inodeno_t const dir_ino = i->first.ino;
-    dirlump &dl = i->second;
+    dirlump const &dl = i->second;
     dl._decode_bits();
 
-    list<ceph::shared_ptr<fullbit> > &fb_list = dl.get_dfull();
+    list<ceph::shared_ptr<fullbit> > const &fb_list = dl.get_dfull();
     for (list<ceph::shared_ptr<fullbit> >::const_iterator
         iter = fb_list.begin(); iter != fb_list.end(); ++iter) {
       std::string const &dentry = (*iter)->dn;
@@ -967,14 +964,14 @@ void EMetaBlob::get_paths(
       }
     }
 
-    list<nullbit> &nb_list = dl.get_dnull();
+    list<nullbit> const &nb_list = dl.get_dnull();
     for (list<nullbit>::const_iterator
 	iter = nb_list.begin(); iter != nb_list.end(); ++iter) {
       std::string const &dentry = iter->dn;
       leaf_locations.push_back(Location(dir_ino, dentry));
     }
 
-    list<remotebit> &rb_list = dl.get_dremote();
+    list<remotebit> const &rb_list = dl.get_dremote();
     for (list<remotebit>::const_iterator
 	iter = rb_list.begin(); iter != rb_list.end(); ++iter) {
       std::string const &dentry = iter->dn;
@@ -1215,7 +1212,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     lump._decode_bits();
 
     // full dentry+inode pairs
-    for (list<ceph::shared_ptr<fullbit> >::iterator pp = lump.get_dfull().begin();
+    for (list<ceph::shared_ptr<fullbit> >::const_iterator pp = lump.get_dfull().begin();
 	 pp != lump.get_dfull().end();
 	 ++pp) {
       ceph::shared_ptr<fullbit> p = *pp;
@@ -1296,7 +1293,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     }
 
     // remote dentries
-    for (list<remotebit>::iterator p = lump.get_dremote().begin();
+    for (list<remotebit>::const_iterator p = lump.get_dremote().begin();
 	 p != lump.get_dremote().end();
 	 ++p) {
       CDentry *dn = dir->lookup_exact_snap(p->dn, p->dnlast);
@@ -1329,7 +1326,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     }
 
     // null dentries
-    for (list<nullbit>::iterator p = lump.get_dnull().begin();
+    for (list<nullbit>::const_iterator p = lump.get_dnull().begin();
 	 p != lump.get_dnull().end();
 	 ++p) {
       CDentry *dn = dir->lookup_exact_snap(p->dn, p->dnlast);

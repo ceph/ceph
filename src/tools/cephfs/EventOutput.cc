@@ -73,7 +73,7 @@ void EventOutput::list() const
 {
   for (JournalScanner::EventMap::const_iterator i = scan.events.begin(); i != scan.events.end(); ++i) {
     std::vector<std::string> ev_paths;
-    EMetaBlob *emb = i->second.log_event->get_metablob();
+    EMetaBlob const *emb = i->second.log_event->get_metablob();
     if (emb) {
       emb->get_paths(ev_paths);
     }

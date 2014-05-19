@@ -45,7 +45,7 @@ public:
 
   void update_segment();
   void replay(MDS *mds);
-  EMetaBlob *get_metablob() {return &metablob;}
+  EMetaBlob const *get_metablob() const {return &metablob;}
 };
 
 #endif
