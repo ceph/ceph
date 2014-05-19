@@ -176,7 +176,7 @@ def task(ctx, config):
         # let smbd initialize, probably a better way...
         import time
         log.info('Sleeping 90 seconds...')
-        time.sleep(90)
+        time.sleep(100)
         log.info('Sleeping stopped...')
     try:
         yield
