@@ -243,8 +243,6 @@ int JournalFilter::parse_args(
         return -EINVAL;
       }
       client_name = entity_name_t::CLIENT(client_num);
-      
-      dout(4) << "dentry filter: '" << frag_dentry << "'" << dendl;
     } else {
       // We're done with args the filter understands
       break;
