@@ -1356,6 +1356,10 @@ int Client::make_request(MetaRequest *request,
   // assign a unique tid
   ceph_tid_t tid = ++last_tid;
   request->set_tid(tid);
+
+  // and timestamp
+  request->op_stamp = ceph_clock_now(NULL);
+
   // make note
   mds_requests[tid] = request->get();
   if (uid < 0) {
@@ -1740,6 +1744,7 @@ MClientRequest* Client::build_client_request(MetaRequest *request)
 {
   MClientRequest *req = new MClientRequest(request->get_op());
   req->set_tid(request->tid);
+  req->set_stamp(request->op_stamp);
   memcpy(&req->head, &request->head, sizeof(ceph_mds_request_head));
 
   // if the filepath's haven't been set, set them!
