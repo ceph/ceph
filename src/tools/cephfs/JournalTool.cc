@@ -325,7 +325,7 @@ int JournalTool::main_event(std::vector<const char*> &argv)
 
     for (JournalScanner::EventMap::iterator i = js.events.begin(); i != js.events.end(); ++i) {
       LogEvent *le = i->second.log_event;
-      EMetaBlob *mb = le->get_metablob();
+      EMetaBlob const *mb = le->get_metablob();
       if (mb) {
         replay_offline(*mb, dry_run);
       }
@@ -476,13 +476,13 @@ int JournalTool::journal_reset()
 }
 
 
-int JournalTool::replay_offline(EMetaBlob &metablob, bool const dry_run)
+int JournalTool::replay_offline(EMetaBlob const &metablob, bool const dry_run)
 {
   int r;
 
   // Replay roots
-  for (list<ceph::shared_ptr<EMetaBlob::fullbit> >::iterator p = metablob.roots.begin(); p != metablob.roots.end(); ++p) {
-    EMetaBlob::fullbit &fb = *(*p);
+  for (list<ceph::shared_ptr<EMetaBlob::fullbit> >::const_iterator p = metablob.roots.begin(); p != metablob.roots.end(); ++p) {
+    EMetaBlob::fullbit const &fb = *(*p);
     inodeno_t ino = fb.inode.ino;
     dout(4) << __func__ << ": updating root 0x" << std::hex << ino << std::dec << dendl;
 
@@ -534,9 +534,9 @@ int JournalTool::replay_offline(EMetaBlob &metablob, bool const dry_run)
   // indicate renamed directories)
 
   // Replay fullbits (dentry+inode)
-  for (list<dirfrag_t>::iterator lp = metablob.lump_order.begin(); lp != metablob.lump_order.end(); ++lp) {
-    dirfrag_t &frag = *lp;
-    EMetaBlob::dirlump &lump = metablob.lump_map[frag];
+  for (list<dirfrag_t>::const_iterator lp = metablob.lump_order.begin(); lp != metablob.lump_order.end(); ++lp) {
+    dirfrag_t const &frag = *lp;
+    EMetaBlob::dirlump const &lump = metablob.lump_map.find(frag)->second;
     lump._decode_bits();
     object_t frag_object_id = InodeStore::get_object_name(frag.ino, frag.frag, "");
 
@@ -565,9 +565,9 @@ int JournalTool::replay_offline(EMetaBlob &metablob, bool const dry_run)
     }
 
     // Try to get the existing dentry
-    list<ceph::shared_ptr<EMetaBlob::fullbit> > &fb_list = lump.get_dfull();
-    for (list<ceph::shared_ptr<EMetaBlob::fullbit> >::iterator fbi = fb_list.begin(); fbi != fb_list.end(); ++fbi) {
-      EMetaBlob::fullbit &fb = *(*fbi);
+    list<ceph::shared_ptr<EMetaBlob::fullbit> > const &fb_list = lump.get_dfull();
+    for (list<ceph::shared_ptr<EMetaBlob::fullbit> >::const_iterator fbi = fb_list.begin(); fbi != fb_list.end(); ++fbi) {
+      EMetaBlob::fullbit const &fb = *(*fbi);
 
       // Get a key like "foobar_head"
       std::string key;
@@ -612,7 +612,7 @@ int JournalTool::replay_offline(EMetaBlob &metablob, bool const dry_run)
       }
     }
 
-    list<EMetaBlob::nullbit> &nb_list = lump.get_dnull();
+    list<EMetaBlob::nullbit> const &nb_list = lump.get_dnull();
     for (list<EMetaBlob::nullbit>::const_iterator
 	iter = nb_list.begin(); iter != nb_list.end(); ++iter) {
       EMetaBlob::nullbit const &nb = *iter;
@@ -633,7 +633,7 @@ int JournalTool::replay_offline(EMetaBlob &metablob, bool const dry_run)
     }
   }
 
-  for (std::vector<inodeno_t>::iterator i = metablob.destroyed_inodes.begin();
+  for (std::vector<inodeno_t>::const_iterator i = metablob.destroyed_inodes.begin();
        i != metablob.destroyed_inodes.end(); ++i) {
     dout(4) << "Destroyed inode: " << *i << dendl;
     // TODO: if it was a dir, then delete its dirfrag objects
