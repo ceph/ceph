@@ -2,6 +2,11 @@
 
 set -e
 
+test -f src/ceph.in || {
+    echo "You must run this script in the top-level ceph directory"
+    exit 1
+}
+
 check_for_pkg_config() {
     which pkg-config >/dev/null && return
 
