@@ -211,6 +211,9 @@ uuid of the secret you added to ``libvirt`` as documented earlier::
     rbd_user=cinder
     rbd_secret_uuid=457eb676-33da-42ec-9a8c-9293d545c337
 
+Note that if you are configuring multiple cinder back ends,
+``glance_api_version=2`` must be in the ``[DEFAULT]`` section.
+
 
 Configuring Cinder Backup
 -------------------------
