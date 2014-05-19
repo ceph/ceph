@@ -21,6 +21,25 @@ from teuthology.misc import get_distro_version
 
 log = logging.getLogger(__name__)
 
+hostname_expr = '(?P<user>.*@)?(?P<shortname>.*)\.front\.sepia\.ceph\.com'
+
+
+def canonicalize_hostname(hostname, user='ubuntu'):
+    match = re.match(hostname_expr, hostname)
+    if match is None:
+        user_at = user + '@' if user else ''
+        hostname = '{user_at}{short}.front.sepia.ceph.com'.format(
+            user_at=user_at,
+            short=hostname)
+    return hostname
+
+
+def decanonicalize_hostname(hostname):
+    match = re.match(hostname_expr, hostname)
+    if match:
+        hostname = match.groupdict()['shortname']
+    return hostname
+
 
 def lock_many(ctx, num, machinetype, user=None, description=None):
     machinetypes = misc.get_multi_machine_types(machinetype)
@@ -131,12 +150,6 @@ def update_lock(ctx, name, description=None, status=None, sshpubkey=None):
             headers={'Content-type': 'application/x-www-form-urlencoded'})
         return success
     return True
-
-
-def canonicalize_hostname(s):
-    if re.match('ubuntu@.*\.front\.sepia\.ceph\.com', s) is None:
-        s = 'ubuntu@' + s + '.front.sepia.ceph.com'
-    return s
 
 
 def main(ctx):
@@ -414,12 +427,6 @@ def do_summary(ctx):
 
     print "         ---  ---"
     print "{cnt:12d}  {up:3d}".format(cnt=total_count, up=total_up)
-
-
-def decanonicalize_hostname(s):
-    if re.match('ubuntu@.*\.front\.sepia\.ceph\.com', s):
-        s = s[len('ubuntu@'): -len('.front.sepia.ceph.com')]
-    return s
 
 
 def _get_downburst_exec():
