@@ -161,7 +161,7 @@ Although Reed-Solomon is provided as a default, Ceph uses it via an
 allow each pool to choose the plugin that implements it using
 key=value pairs stored in an `erasure code profile`_. 
 
-.. _erasure code profile: ../../erasure-coded-pool
+.. _erasure code profile: ../../../erasure-coded-pool
 
 ::
  
