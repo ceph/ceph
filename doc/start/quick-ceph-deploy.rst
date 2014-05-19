@@ -70,7 +70,7 @@ configuration file, perform the following steps using ``ceph-deploy``.
 
    For example::
 
-	ceph-deploy install node1 node2 node3
+	ceph-deploy install admin-node node1 node2 node3
 
    The ``ceph-deploy`` utility will install Ceph on each node.
    **NOTE**: If you use ``ceph-deploy purge``, you must re-execute this step 
@@ -148,11 +148,11 @@ configuration file, perform the following steps using ``ceph-deploy``.
    CLI without having to specify the monitor address and 
    ``ceph.client.admin.keyring`` each time you execute a command. :: 
    
-	ceph-deploy admin {ceph-node}
+	ceph-deploy admin {admin-node} {ceph-node}
 
    For example:: 
 
-	ceph-deploy admin node1 node2 node3 admin-node
+	ceph-deploy admin admin-node node1 node2 node3
 
    **Note:** Since you are using ``ceph-deploy`` to talk to the
    local host (admin-node), your host must be reachable by its hostname 
@@ -325,6 +325,7 @@ example::
 	a test file containing some object data and a pool name using the 
 	``rados put`` command on the command line. For example::
    
+		echo {Test-data} > testfile.txt
 		rados put {object-name} {file-path} --pool=data   	
 		rados put test-object-1 testfile.txt --pool=data
    
