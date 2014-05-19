@@ -38,7 +38,7 @@
 void JournalTool::usage()
 {
   std::cout << "Usage: \n"
-    << "  cephfs-journal-tool [options] journal [inspect|import|export]\n"
+    << "  cephfs-journal-tool [options] journal [inspect|import|export|reset]\n"
     << "  cephfs-journal-tool [options] header <get|set <field> <value>\n"
     << "  cephfs-journal-tool [options] event <selector> <effect> <output>\n"
     << "    <selector>:  [--by-type=<metablob|client|mds|...?>|--by-inode=<inode>|--by-path=<path>|by-tree=<path>|by-range=<N>..<M>|by-dirfrag-name=<dirfrag id>,<name>]\n"
@@ -165,15 +165,16 @@ int JournalTool::main_header(std::vector<const char*> &argv)
   JournalScanner js(io, rank, filter);
   int r = js.scan(false);
   if (r < 0) {
-    derr << "Unable to scan journal" << dendl;
+    std::cerr << "Unable to scan journal" << std::endl;
     return r;
   }
 
   if (!js.header_present) {
-    derr << "Header object not found!" << dendl;
+    std::cerr << "Header object not found!" << std::endl;
     return -ENOENT;
-  } else if (!js.header_valid) {
-    derr << "Header invalid!" << dendl;
+  } else if (!js.header_valid && js.header == NULL) {
+    // Can't do a read or a single-field write without a copy of the original
+    derr << "Header could not be read!" << dendl;
     return -ENOENT;
   } else {
     assert(js.header != NULL);
