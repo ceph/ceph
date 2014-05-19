@@ -34,6 +34,25 @@ is_vm = lambda x: x.startswith('vpm') or x.startswith('ubuntu@vpm')
 is_arm = lambda x: x.startswith('tala') or x.startswith(
     'ubuntu@tala') or x.startswith('saya') or x.startswith('ubuntu@saya')
 
+hostname_expr = '(?P<user>.*@)?(?P<shortname>.*)\.front\.sepia\.ceph\.com'
+
+
+def canonicalize_hostname(hostname, user='ubuntu'):
+    match = re.match(hostname_expr, hostname)
+    if match is None:
+        user_at = user + '@' if user else ''
+        hostname = '{user_at}{short}.front.sepia.ceph.com'.format(
+            user_at=user_at,
+            short=hostname)
+    return hostname
+
+
+def decanonicalize_hostname(hostname):
+    match = re.match(hostname_expr, hostname)
+    if match:
+        hostname = match.groupdict()['shortname']
+    return hostname
+
 
 def config_file(string):
     """

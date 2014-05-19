@@ -50,3 +50,26 @@ def test_get_http_log_path():
 
     path = misc.get_http_log_path(archive_dir)
     assert path == "http://qa-proxy.ceph.com/teuthology/teuthology-2013-09-12_11:49:50-ceph-deploy-master-testing-basic-vps/"
+
+
+class TestHostnames(object):
+
+    def test_canonicalize_hostname(self):
+        host_base = 'box1'
+        result = misc.canonicalize_hostname(host_base)
+        assert result == 'ubuntu@box1.front.sepia.ceph.com'
+
+    def test_decanonicalize_hostname(self):
+        host = 'ubuntu@box1.front.sepia.ceph.com'
+        result = misc.decanonicalize_hostname(host)
+        assert result == 'box1'
+
+    def test_canonicalize_hostname_nouser(self):
+        host_base = 'box1'
+        result = misc.canonicalize_hostname(host_base, user=None)
+        assert result == 'box1.front.sepia.ceph.com'
+
+    def test_decanonicalize_hostname_nouser(self):
+        host = 'box1.front.sepia.ceph.com'
+        result = misc.decanonicalize_hostname(host)
+        assert result == 'box1'
