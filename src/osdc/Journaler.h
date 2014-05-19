@@ -61,8 +61,14 @@ class Context;
 class PerfCounters;
 
 typedef __u8 stream_format_t;
+
+// Legacy envelope is leading uint32_t size
 #define JOURNAL_FORMAT_LEGACY 0
+#define JOURNAL_ENVELOPE_LEGACY (sizeof(uint32_t))
+
+// Resilient envelope is leading uint64_t sentinel, uint32_t size, trailing uint64_t start_ptr
 #define JOURNAL_FORMAT_RESILIENT 1
+#define JOURNAL_ENVELOPE_RESILIENT (sizeof(uint32_t) + sizeof(uint64_t) + sizeof(uint64_t))
 
 
 /**
