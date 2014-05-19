@@ -212,7 +212,7 @@ int JournalScanner::scan_events()
         bool readable = false;
         try {
           uint64_t need;
-          readable = journal_stream.readable(read_buf, need);
+          readable = journal_stream.readable(read_buf, &need);
         } catch (buffer::error e) {
           readable = false;
           dout(4) << "Invalid container encoding at 0x" << std::hex << read_offset << std::dec << dendl;
@@ -233,7 +233,7 @@ int JournalScanner::scan_events()
         // This cannot fail to decode because we pre-checked that a serialized entry
         // blob would be readable.
         uint64_t start_ptr = 0;
-        uint64_t consumed = journal_stream.read(read_buf, le_bl, start_ptr);
+        uint64_t consumed = journal_stream.read(read_buf, &le_bl, &start_ptr);
         dout(10) << "Consumed 0x" << std::hex << consumed << std::dec << " bytes" << dendl;
         if (start_ptr != read_offset) {
           derr << "Bad entry start ptr (0x" << std::hex << start_ptr << ") at 0x"
