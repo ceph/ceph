@@ -675,7 +675,7 @@ int JournalTool::erase_region(JournalScanner const &js, uint64_t const pos, uint
 
   // Serialize region of log stream
   bufferlist log_data;
-  stream.write(entry, log_data, pos);
+  stream.write(entry, &log_data, pos);
 
   dout(4) << "erase_region data length " << log_data.length() << dendl;
   assert(log_data.length() == length);
