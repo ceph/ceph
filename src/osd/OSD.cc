@@ -7860,6 +7860,13 @@ void OSD::handle_op(OpRequestRef op, OSDMapRef osdmap)
     return;
   }
 
+  // check against current map too
+  if (!osdmap->have_pg_pool(pgid.pool()) ||
+      osdmap->get_pg_acting_role(pgid.pgid, whoami) < 0) {
+    dout(7) << "dropping; no longer have PG (or pool); client will retarget" << dendl;
+    return;
+  }
+
   PG *pg = get_pg_or_queue_for_pg(pgid, op);
   if (pg) {
     op->send_map_update = share_map.should_send;
