@@ -21,6 +21,8 @@ TEST(BloomFilter, Basic) {
 
   ASSERT_TRUE(bf.contains("foo"));
   ASSERT_TRUE(bf.contains("bar"));
+
+  ASSERT_EQ(2, bf.element_count());
 }
 
 TEST(BloomFilter, Empty) {
