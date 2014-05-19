@@ -119,10 +119,14 @@ def unlock_one(ctx, name, user=None):
     return success
 
 
-def list_locks():
-    success, content, _ = ls.send_request('GET', config.lock_server)
+def list_locks(machine_type=None):
+    uri = os.path.join(config.lock_server, 'nodes', '')
+    if machine_type:
+        uri += '?machine_type=' + machine_type
+    response = requests.get(uri)
+    success = response.ok
     if success:
-        return json.loads(content)
+        return response.json()
     return None
 
 
