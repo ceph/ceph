@@ -1119,8 +1119,13 @@ class CephManager:
         num_active_recovered = self.get_num_active_recovered()
         while not self.is_recovered():
             if timeout is not None:
-                assert time.time() - start < timeout, \
-                    'failed to recover before timeout expired'
+                if self.get_is_making_recovery_progress():
+                    self.log("making progress, resetting timeout")
+                    start = time.time()
+                else:
+                    self.log("no progress seen, keeping timeout for now")
+                    assert time.time() - start < timeout, \
+                        'failed to recover before timeout expired'
             cur_active_recovered = self.get_num_active_recovered()
             if cur_active_recovered != num_active_recovered:
                 start = time.time()
