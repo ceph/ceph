@@ -2803,7 +2803,7 @@ void OSD::_add_heartbeat_peer(int p)
     hi->peer = p;
     HeartbeatSession *s = new HeartbeatSession(p);
     hi->con_back = cons.first.get();
-    hi->con_back->set_priv(s);
+    hi->con_back->set_priv(s->get());
     if (cons.second) {
       hi->con_front = cons.second.get();
       hi->con_front->set_priv(s->get());
@@ -2817,6 +2817,7 @@ void OSD::_add_heartbeat_peer(int p)
 	       << " " << hi->con_back->get_peer_addr()
 	       << dendl;
     }
+    s->put();
   } else {
     hi = &i->second;
   }
@@ -3672,6 +3673,7 @@ void OSD::ms_handle_fast_connect(Connection *con)
       assert(con->get_peer_type() == CEPH_ENTITY_TYPE_OSD);
       s->entity_name.set_type(CEPH_ENTITY_TYPE_OSD);
     }
+    s->put();
   }
 }
 
