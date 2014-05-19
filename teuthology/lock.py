@@ -408,13 +408,12 @@ def scan_for_locks(ctx, machines):
 
 def do_summary(ctx):
     lockd = collections.defaultdict(lambda: [0, 0, 'unknown'])
-    for l in list_locks():
-        if ctx.machine_type and l['type'] != ctx.machine_type:
-            continue
-        who = l['locked_by'] if l['locked'] == 1 else '(free)', l['type']
+    for l in list_locks(ctx.machine_type):
+        who = l['locked_by'] if l['locked'] == 1 \
+            else '(free)', l['machine_type']
         lockd[who][0] += 1
-        lockd[who][1] += l['up']         # up is 1 or 0
-        lockd[who][2] = l['type']
+        lockd[who][1] += 1 if l['up'] else 0
+        lockd[who][2] = l['machine_type']
 
     locks = sorted([p for p in lockd.iteritems()
                     ], key=lambda sort: (sort[1][2], sort[1][0]))
