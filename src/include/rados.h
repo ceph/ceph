@@ -376,6 +376,7 @@ enum {
 						 */
 	CEPH_OSD_FLAG_ENFORCE_SNAPC    =0x100000,  /* use snapc provided even if
 						      pool uses pool snaps */
+	CEPH_OSD_FLAG_REDIRECTED   = 0x200000,  /* op has been redirected */
 };
 
 enum {

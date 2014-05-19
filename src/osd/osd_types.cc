@@ -48,6 +48,7 @@ const char *ceph_osd_flag_name(unsigned flag)
   case CEPH_OSD_FLAG_FLUSH: return "flush";
   case CEPH_OSD_FLAG_MAP_SNAP_CLONE: return "map_snap_clone";
   case CEPH_OSD_FLAG_ENFORCE_SNAPC: return "enforce_snapc";
+  case CEPH_OSD_FLAG_REDIRECTED: return "redirected";
   default: return "???";
   }
 }
