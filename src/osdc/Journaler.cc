@@ -465,7 +465,7 @@ uint64_t Journaler::append_entry(bufferlist& bl)
 	
   
   // append
-  size_t wrote = journal_stream.write(bl, write_buf, write_pos);
+  size_t wrote = journal_stream.write(bl, &write_buf, write_pos);
   ldout(cct, 10) << "append_entry len " << s << " to " << write_pos << "~" << wrote << dendl;
   write_pos += wrote;
 
@@ -875,7 +875,7 @@ bool Journaler::_is_readable()
 
   // Check if the retrieve bytestream has enough for an entry
   uint64_t need;
-  if (journal_stream.readable(read_buf, need)) {
+  if (journal_stream.readable(read_buf, &need)) {
     return true;
   }
 
@@ -969,7 +969,7 @@ bool Journaler::try_read_entry(bufferlist& bl)
   }
 
   uint64_t start_ptr;
-  size_t consumed = journal_stream.read(read_buf, bl, start_ptr);
+  size_t consumed = journal_stream.read(read_buf, &bl, &start_ptr);
   if (stream_format >= JOURNAL_FORMAT_RESILIENT) {
     assert(start_ptr == read_pos);
   }
@@ -1094,8 +1094,10 @@ void Journaler::handle_write_error(int r)
  * to get the next header if header was unavailable, or enough to get the whole
  * next entry if the header was available but the body wasn't).
  */
-bool JournalStream::readable(bufferlist &read_buf, uint64_t &need)
+bool JournalStream::readable(bufferlist &read_buf, uint64_t *need)
 {
+  assert(need != NULL);
+
   uint32_t entry_size = 0;
   uint64_t start_ptr = 0;
   uint64_t entry_sentinel = 0;
@@ -1103,11 +1105,11 @@ bool JournalStream::readable(bufferlist &read_buf, uint64_t &need)
 
   // Do we have enough data to decode an entry prefix?
   if (format >= JOURNAL_FORMAT_RESILIENT) {
-    need = sizeof(entry_size) + sizeof(entry_sentinel);
+    *need = sizeof(entry_size) + sizeof(entry_sentinel);
   } else {
-    need = sizeof(entry_size);
+    *need = sizeof(entry_size);
   }
-  if (read_buf.length() >= need) {
+  if (read_buf.length() >= *need) {
     if (format >= JOURNAL_FORMAT_RESILIENT) {
       ::decode(entry_sentinel, p);
       if (entry_sentinel != sentinel) {
@@ -1122,11 +1124,11 @@ bool JournalStream::readable(bufferlist &read_buf, uint64_t &need)
 
   // Do we have enough data to decode an entry prefix, payload and suffix?
   if (format >= JOURNAL_FORMAT_RESILIENT) {
-    need = sizeof(entry_size) + sizeof(entry_sentinel) + entry_size + sizeof(start_ptr);
+    *need = sizeof(entry_size) + sizeof(entry_sentinel) + entry_size + sizeof(start_ptr);
   } else {
-    need = sizeof(entry_size) + entry_size;
+    *need = sizeof(entry_size) + entry_size;
   }
-  if (read_buf.length() >= need) {
+  if (read_buf.length() >= *need) {
     return true;  // No more bytes needed
   }
 
@@ -1141,16 +1143,18 @@ bool JournalStream::readable(bufferlist &read_buf, uint64_t &need)
  * 'entry' must be initially empty.  'from' must contain sufficient
  * valid data (i.e. readable is true).
  *
- * 'offset' will be set to the entry's start pointer, if the collection
+ * 'start_ptr' will be set to the entry's start pointer, if the collection
  * format provides it.
  *
- * Note that the number of bytes consumed is *not* equal to the
- * length of the blob returned: the former includes envelope data
- * while the latter is just the inner LogEvent serialized.
+ * @returns The number of bytes consumed from the `from` byte stream.  Note
+ *          that this is not equal to the length of `entry`, which contains
+ *          the inner serialized LogEvent and not the envelope.
  */
-size_t JournalStream::read(bufferlist &from, bufferlist &entry, uint64_t &start_ptr)
+size_t JournalStream::read(bufferlist &from, bufferlist *entry, uint64_t *start_ptr)
 {
-  assert(entry.length() == 0);
+  assert(start_ptr != NULL);
+  assert(entry != NULL);
+  assert(entry->length() == 0);
 
   uint64_t entry_sentinel = 0;
   uint32_t entry_size;
@@ -1162,15 +1166,15 @@ size_t JournalStream::read(bufferlist &from, bufferlist &entry, uint64_t &start_
     ::decode(entry_size, p);
     p.advance(entry_size);
     if (format >= JOURNAL_FORMAT_RESILIENT) {
-      ::decode(start_ptr, p);
+      ::decode(*start_ptr, p);
     } else {
-      start_ptr = 0;
+      *start_ptr = 0;
     }
   }
 
   size_t raw_length;
   if (format >= JOURNAL_FORMAT_RESILIENT) {
-    raw_length = sizeof(entry_size) + sizeof(entry_sentinel) + entry_size + sizeof(start_ptr);
+    raw_length = sizeof(entry_size) + sizeof(entry_sentinel) + entry_size + sizeof(*start_ptr);
     assert(entry_sentinel == sentinel);
   } else {
     raw_length = sizeof(entry_size) + entry_size;
@@ -1182,9 +1186,9 @@ size_t JournalStream::read(bufferlist &from, bufferlist &entry, uint64_t &start_
     from.splice(0, sizeof(entry_sentinel));
   }
   from.splice(0, sizeof(entry_size));
-  from.splice(0, entry_size, &entry);
+  from.splice(0, entry_size, entry);
   if (format >= JOURNAL_FORMAT_RESILIENT) {
-    from.splice(0, sizeof(start_ptr));
+    from.splice(0, sizeof(*start_ptr));
   }
 
   return raw_length;
@@ -1194,16 +1198,18 @@ size_t JournalStream::read(bufferlist &from, bufferlist &entry, uint64_t &start_
 /**
  * Append one entry
  */
-size_t JournalStream::write(bufferlist &entry, bufferlist &to, uint64_t const &start_ptr)
+size_t JournalStream::write(bufferlist &entry, bufferlist *to, uint64_t const &start_ptr)
 {
+  assert(to != NULL);
+
   uint32_t const entry_size = entry.length();
   if (format >= JOURNAL_FORMAT_RESILIENT) {
-    ::encode(sentinel, to);
+    ::encode(sentinel, *to);
   }
-  ::encode(entry_size, to);
-  to.claim_append(entry);
+  ::encode(entry_size, *to);
+  to->claim_append(entry);
   if (format >= JOURNAL_FORMAT_RESILIENT) {
-    ::encode(start_ptr, to);
+    ::encode(start_ptr, *to);
   }
 
   if (format >= JOURNAL_FORMAT_RESILIENT) {
