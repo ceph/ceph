@@ -1099,7 +1099,6 @@ bool JournalStream::readable(bufferlist &read_buf, uint64_t *need)
   assert(need != NULL);
 
   uint32_t entry_size = 0;
-  uint64_t start_ptr = 0;
   uint64_t entry_sentinel = 0;
   bufferlist::iterator p = read_buf.begin();
 
@@ -1124,9 +1123,9 @@ bool JournalStream::readable(bufferlist &read_buf, uint64_t *need)
 
   // Do we have enough data to decode an entry prefix, payload and suffix?
   if (format >= JOURNAL_FORMAT_RESILIENT) {
-    *need = sizeof(entry_size) + sizeof(entry_sentinel) + entry_size + sizeof(start_ptr);
+    *need = JOURNAL_ENVELOPE_RESILIENT + entry_size;
   } else {
-    *need = sizeof(entry_size) + entry_size;
+    *need = JOURNAL_ENVELOPE_LEGACY + entry_size;
   }
   if (read_buf.length() >= *need) {
     return true;  // No more bytes needed
@@ -1174,10 +1173,10 @@ size_t JournalStream::read(bufferlist &from, bufferlist *entry, uint64_t *start_
 
   size_t raw_length;
   if (format >= JOURNAL_FORMAT_RESILIENT) {
-    raw_length = sizeof(entry_size) + sizeof(entry_sentinel) + entry_size + sizeof(*start_ptr);
+    raw_length = JOURNAL_ENVELOPE_RESILIENT + entry_size;
     assert(entry_sentinel == sentinel);
   } else {
-    raw_length = sizeof(entry_size) + entry_size;
+    raw_length = JOURNAL_ENVELOPE_LEGACY + entry_size;
   }
   assert(from.length() >= raw_length);
   assert(entry_size != 0);
@@ -1213,9 +1212,9 @@ size_t JournalStream::write(bufferlist &entry, bufferlist *to, uint64_t const &s
   }
 
   if (format >= JOURNAL_FORMAT_RESILIENT) {
-    return sizeof(sentinel) + sizeof(entry_size) + entry_size + sizeof(start_ptr);
+    return JOURNAL_ENVELOPE_RESILIENT + entry_size;
   } else {
-    return sizeof(entry_size) + entry_size;
+    return JOURNAL_ENVELOPE_LEGACY + entry_size;
   }
 }
 
