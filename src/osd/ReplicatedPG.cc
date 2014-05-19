@@ -1834,7 +1834,8 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
   calc_trim_to();
 
   // verify that we are doing this in order?
-  if (cct->_conf->osd_debug_op_order && m->get_source().is_client()) {
+  if (cct->_conf->osd_debug_op_order && m->get_source().is_client() &&
+      !pool.info.is_tier() && !pool.info.has_tiers()) {
     map<client_t,ceph_tid_t>& cm = debug_op_order[obc->obs.oi.soid];
     ceph_tid_t t = m->get_tid();
     client_t n = m->get_source().num();
