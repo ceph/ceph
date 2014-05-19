@@ -182,7 +182,6 @@ TEST(pg_interval_t, check_new_interval)
 						   last_epoch_clean,
 						   osdmap,
 						   lastmap,
-						   pool_id,
 						   pgid,
 						   &past_intervals));
     ASSERT_TRUE(past_intervals.empty());
@@ -212,7 +211,6 @@ TEST(pg_interval_t, check_new_interval)
 						  last_epoch_clean,
 						  osdmap,
 						  lastmap,
-						  pool_id,
 						  pgid,
 						  &past_intervals));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -245,7 +243,6 @@ TEST(pg_interval_t, check_new_interval)
 						  last_epoch_clean,
 						  osdmap,
 						  lastmap,
-						  pool_id,
 						  pgid,
 						  &past_intervals));
     old_primary = new_primary;
@@ -279,7 +276,6 @@ TEST(pg_interval_t, check_new_interval)
 						  last_epoch_clean,
 						  osdmap,
 						  lastmap,
-						  pool_id,
 						  pgid,
 						  &past_intervals));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -311,7 +307,6 @@ TEST(pg_interval_t, check_new_interval)
 						  last_epoch_clean,
 						  osdmap,
 						  lastmap,
-						  pool_id,
 						  pgid,
 						  &past_intervals));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -350,7 +345,6 @@ TEST(pg_interval_t, check_new_interval)
 						  last_epoch_clean,
 						  osdmap,
 						  lastmap,
-						  pool_id,
 						  pgid,
 						  &past_intervals));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -389,7 +383,6 @@ TEST(pg_interval_t, check_new_interval)
 						  last_epoch_clean,
 						  osdmap,
 						  lastmap,
-						  pool_id,
 						  pgid,
 						  &past_intervals));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -423,7 +416,6 @@ TEST(pg_interval_t, check_new_interval)
 						  last_epoch_clean,
 						  osdmap,
 						  lastmap,
-						  pool_id,
 						  pgid,
 						  &past_intervals,
 						  &out));
@@ -475,7 +467,6 @@ TEST(pg_interval_t, check_new_interval)
 						  last_epoch_clean,
 						  osdmap,
 						  lastmap,
-						  pool_id,
 						  pgid,
 						  &past_intervals,
 						  &out));
@@ -510,7 +501,6 @@ TEST(pg_interval_t, check_new_interval)
 						  last_epoch_clean,
 						  osdmap,
 						  lastmap,
-						  pool_id,
 						  pgid,
 						  &past_intervals,
 						  &out));
@@ -555,7 +545,6 @@ TEST(pg_interval_t, check_new_interval)
 						  last_epoch_clean,
 						  osdmap,
 						  lastmap,
-						  pool_id,
 						  pgid,
 						  &past_intervals,
 						  &out));
@@ -604,7 +593,6 @@ TEST(pg_interval_t, check_new_interval)
 						  last_epoch_clean,
 						  osdmap,
 						  lastmap,
-						  pool_id,
 						  pgid,
 						  &past_intervals,
 						  &out));
