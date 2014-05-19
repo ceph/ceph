@@ -44,14 +44,17 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
                     if provision.create_if_vm(ctx, machine):
                         ok_machs[machine] = machines[machine]
                     else:
-                        log.error('Unable to create virtual machine: %s' % machine)
+                        log.error('Unable to create virtual machine: %s',
+                                  machine)
                         unlock_one(ctx, machine)
                 return ok_machs
             return machines
         if status == 503:
-            log.error('Insufficient nodes available to lock %d %s nodes.', num,machinetype)
+            log.error('Insufficient nodes available to lock %d %s nodes.',
+                      num, machinetype)
         else:
-            log.error('Could not lock %d %s nodes, reason: unknown.', num, machinetype)
+            log.error('Could not lock %d %s nodes, reason: unknown.',
+                      num, machinetype)
     return []
 
 
