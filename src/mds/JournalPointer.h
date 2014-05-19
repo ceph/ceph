@@ -30,6 +30,8 @@ class JournalPointer {
   // Metadata pool ID
   int64_t pool_id;
 
+  std::string get_object_id() const;
+
   public:
   // The currently active journal
   inodeno_t front;
@@ -57,6 +59,7 @@ class JournalPointer {
 
   int load(Objecter *objecter, Mutex *lock);
   int save(Objecter *objecter, Mutex *lock) const;
+  void save(Objecter *objecter, Context *completion) const;
 
   bool is_null() const {
     return front == 0 && back == 0;
