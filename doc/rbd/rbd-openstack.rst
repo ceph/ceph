@@ -231,7 +231,14 @@ On your Cinder Backup node, edit ``/etc/cinder/cinder.conf`` and add::
 Configuring Nova
 ----------------
 
-In order to boot all the virtual machines directly into Ceph Nova must be configured.
+In order to boot all the virtual machines directly into Ceph Nova must
+be configured.
+
+For Havana and Icehouse, more patches are required to implement
+cloning and fix bugs with image size and live migration of ephemeral
+disks on rbd. These are available in branches based on upstream Nova
+`stable/havana`_ and `stable/icehouse`_.
+
 On every Compute nodes, edit ``/etc/nova/nova.conf`` and add::
 
     libvirt_images_type=rbd
@@ -249,6 +256,9 @@ On every Compute nodes, edit ``/etc/nova/nova.conf`` and add::
     libvirt_inject_password=false
     libvirt_inject_key=false
     libvirt_inject_partition=-2
+
+.. _stable/havana: https://github.com/jdurgin/nova/tree/havana-ephemeral-rbd
+.. _stable/icehouse: https://github.com/angdraug/nova/tree/rbd-ephemeral-clone-stable-icehouse
 
 
 Restart OpenStack
