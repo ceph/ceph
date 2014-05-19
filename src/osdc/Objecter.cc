@@ -1768,6 +1768,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     unregister_op(op);
     m->get_redirect().combine_with_locator(op->target.target_oloc,
 					   op->target.target_oid.name);
+    op->target.flags |= CEPH_OSD_FLAG_REDIRECTED;
     _op_submit(op);
     m->put();
     return;
