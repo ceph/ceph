@@ -75,20 +75,6 @@ void MDLog::create_logger()
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
 
-void MDLog::init_journaler()
-{
-  // inode
-  ino = MDS_INO_LOG_OFFSET + mds->get_nodeid();
-  
-  // log streamer
-  if (journaler) delete journaler;
-  journaler = new Journaler(ino, mds->mdsmap->get_metadata_pool(), CEPH_FS_ONDISK_MAGIC, mds->objecter,
-			    logger, l_mdl_jlat,
-			    &mds->timer);
-  assert(journaler->is_readonly());
-  journaler->set_write_error_handler(new C_MDL_WriteError(this));
-}
-
 void MDLog::handle_journaler_write_error(int r)
 {
   if (r == -EBLACKLISTED) {
@@ -125,10 +111,31 @@ uint64_t MDLog::get_safe_pos()
 void MDLog::create(Context *c)
 {
   dout(5) << "create empty log" << dendl;
-  init_journaler();
+
+  C_GatherBuilder gather(g_ceph_context);
+  gather.set_finisher(c);
+
+  // The inode of the default Journaler we will create
+  ino = MDS_INO_LOG_OFFSET + mds->get_nodeid();
+
+  // Instantiate Journaler and start async write to RADOS
+  assert(journaler == NULL);
+  journaler = new Journaler(ino, mds->mdsmap->get_metadata_pool(), CEPH_FS_ONDISK_MAGIC, mds->objecter,
+			    logger, l_mdl_jlat,
+			    &mds->timer);
+  assert(journaler->is_readonly());
+  journaler->set_write_error_handler(new C_MDL_WriteError(this));
   journaler->set_writeable();
   journaler->create(&mds->mdcache->default_log_layout, g_conf->mds_journal_format);
-  journaler->write_head(c);
+  journaler->write_head(gather.new_sub());
+
+  // Async write JournalPointer to RADOS
+  JournalPointer jp(mds->get_nodeid(), mds->mdsmap->get_metadata_pool());
+  jp.front = ino;
+  jp.back = 0;
+  jp.save(mds->objecter, gather.new_sub());
+
+  gather.activate();
 
   logger->set(l_mdl_expos, journaler->get_expire_pos());
   logger->set(l_mdl_wrpos, journaler->get_write_pos());

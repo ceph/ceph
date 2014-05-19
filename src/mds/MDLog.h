@@ -141,8 +141,6 @@ public:
 
 
 private:
-  void init_journaler();
-
   struct C_MDL_WriteError : public Context {
     MDLog *mdlog;
     C_MDL_WriteError(MDLog *m) : mdlog(m) {}
