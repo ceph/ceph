@@ -182,8 +182,7 @@ default, edit ``/etc/glance/glance-api.conf`` and add::
     rbd_store_user=glance
     rbd_store_pool=images
 
-If want to enable copy-on-write cloning of images into
-volumes, also add::
+If you want to enable copy-on-write cloning of images, also add::
 
     show_image_direct_url=True
 
