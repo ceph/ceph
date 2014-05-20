@@ -625,7 +625,7 @@ int export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
 
   //Handle attrs for this object
   map<string,bufferptr> aset;
-  ret = store->getattrs(cid, obj, aset, false);
+  ret = store->getattrs(cid, obj, aset);
   if (ret) return ret;
   attr_section as(aset);
   ret = write_section(TYPE_ATTRS, as, file_fd);

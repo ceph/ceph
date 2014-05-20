@@ -1342,10 +1342,9 @@ public:
    * @param cid collection for object
    * @param oid oid of object
    * @param aset place to put output result.
-   * @param user_only true -> only user attributes are return else all attributes are returned
    * @returns 0 on success, negative error code on failure.
    */
-  virtual int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset, bool user_only = false) = 0;
+  virtual int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset) = 0;
 
   /**
    * getattrs -- get all of the xattrs of an object
@@ -1353,12 +1352,11 @@ public:
    * @param cid collection for object
    * @param oid oid of object
    * @param aset place to put output result.
-   * @param user_only true -> only user attributes are return else all attributes are returned
    * @returns 0 on success, negative error code on failure.
    */
-  int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferlist>& aset, bool user_only = false) {
+  int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferlist>& aset) {
     map<string,bufferptr> bmap;
-    int r = getattrs(cid, oid, bmap, user_only);
+    int r = getattrs(cid, oid, bmap);
     for (map<string,bufferptr>::iterator i = bmap.begin();
 	i != bmap.end();
 	++i) {

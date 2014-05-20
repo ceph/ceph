@@ -358,7 +358,7 @@ int MemStore::getattr(coll_t cid, const ghobject_t& oid,
 }
 
 int MemStore::getattrs(coll_t cid, const ghobject_t& oid,
-		       map<string,bufferptr>& aset, bool user_only)
+		       map<string,bufferptr>& aset)
 {
   dout(10) << __func__ << " " << cid << " " << oid << dendl;
   CollectionRef c = get_collection(cid);
@@ -369,17 +369,7 @@ int MemStore::getattrs(coll_t cid, const ghobject_t& oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  if (user_only) {
-    for (map<string,bufferptr>::iterator p = o->xattr.begin();
-	 p != o->xattr.end();
-	 ++p) {
-      if (p->first.length() > 1 && p->first[0] == '_') {
-	aset[p->first.substr(1)] = p->second;
-      }
-    }
-  } else {
-    aset = o->xattr;
-  }
+  aset = o->xattr;
   return 0;
 }
 
