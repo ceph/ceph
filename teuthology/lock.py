@@ -21,125 +21,6 @@ logging.getLogger("requests.packages.urllib3.connectionpool").setLevel(
     logging.WARNING)
 
 
-def lock_many(ctx, num, machinetype, user=None, description=None):
-    machinetypes = misc.get_multi_machine_types(machinetype)
-    if user is None:
-        user = misc.get_user()
-    for machinetype in machinetypes:
-        uri = os.path.join(config.lock_server, 'nodes', 'lock_many', '')
-        response = requests.post(
-            uri,
-            json.dumps(
-                dict(
-                    locked_by=user,
-                    count=num,
-                    machine_type=machinetype,
-                    description=description,
-                ))
-        )
-        if response.ok:
-            machines = {machine['name']: machine['ssh_pub_key']
-                        for machine in response.json()}
-            log.debug('locked {machines}'.format(
-                machines=', '.join(machines.keys())))
-            if machinetype == 'vps':
-                ok_machs = {}
-                for machine in machines:
-                    if provision.create_if_vm(ctx, machine):
-                        ok_machs[machine] = machines[machine]
-                    else:
-                        log.error('Unable to create virtual machine: %s',
-                                  machine)
-                        unlock_one(ctx, machine)
-                return ok_machs
-            return machines
-        elif response.status_code == 503:
-            log.error('Insufficient nodes available to lock %d %s nodes.',
-                      num, machinetype)
-            log.error(response.text)
-        else:
-            log.error('Could not lock %d %s nodes, reason: unknown.',
-                      num, machinetype)
-    return []
-
-
-def lock_one(name, user=None, description=None):
-    if user is None:
-        user = misc.get_user()
-    request = dict(name=name, locked=True, locked_by=user,
-                   description=description)
-    uri = os.path.join(config.lock_server, 'nodes', name, 'lock', '')
-    response = requests.put(uri, json.dumps(request))
-    success = response.ok
-    if success:
-        log.debug('locked %s as %s', name, user)
-    else:
-        try:
-            reason = response.json().get('message')
-        except ValueError:
-            reason = str(response.status_code)
-        log.error('failed to lock {node}. reason: {reason}'.format(
-            node=name, reason=reason))
-    return response
-
-
-def unlock_one(ctx, name, user=None):
-    if user is None:
-        user = misc.get_user()
-    request = dict(name=name, locked=False, locked_by=user, description=None)
-    uri = os.path.join(config.lock_server, 'nodes', name, 'lock', '')
-    response = requests.put(uri, json.dumps(request))
-    success = response.ok
-    if success:
-        log.debug('unlocked %s', name)
-        if not provision.destroy_if_vm(ctx, name):
-            log.error('downburst destroy failed for %s', name)
-            log.info('%s is not locked' % name)
-    else:
-        try:
-            reason = response.json().get('message')
-        except ValueError:
-            reason = str(response.status_code)
-        log.error('failed to unlock {node}. reason: {reason}'.format(
-            node=name, reason=reason))
-    return success
-
-
-def list_locks(machine_type=None):
-    uri = os.path.join(config.lock_server, 'nodes', '')
-    if machine_type:
-        uri += '?machine_type=' + machine_type
-    response = requests.get(uri)
-    success = response.ok
-    if success:
-        return response.json()
-    return None
-
-
-def update_lock(ctx, name, description=None, status=None, ssh_pub_key=None):
-    status_info = get_status(name)
-    phys_host = status_info['vpshost']
-    if phys_host:
-        keyscan_out = ''
-        while not keyscan_out:
-            time.sleep(10)
-            keyscan_out, _ = keyscan_check([name])
-    updated = {}
-    if description is not None:
-        updated['description'] = description
-    if status is not None:
-        updated['up'] = (status == 'up')
-    if ssh_pub_key is not None:
-        updated['ssh_pub_key'] = ssh_pub_key
-
-    if updated:
-        response = requests.put(
-            config.lock_server + '/nodes/' + name,
-            json.dumps(updated))
-        return response.ok
-    return True
-
-
 def main(ctx):
     if ctx.verbose:
         teuthology.log.setLevel(logging.DEBUG)
@@ -320,6 +201,147 @@ def main(ctx):
     return ret
 
 
+def lock_many(ctx, num, machinetype, user=None, description=None):
+    machinetypes = misc.get_multi_machine_types(machinetype)
+    if user is None:
+        user = misc.get_user()
+    for machinetype in machinetypes:
+        uri = os.path.join(config.lock_server, 'nodes', 'lock_many', '')
+        response = requests.post(
+            uri,
+            json.dumps(
+                dict(
+                    locked_by=user,
+                    count=num,
+                    machine_type=machinetype,
+                    description=description,
+                ))
+        )
+        if response.ok:
+            machines = {machine['name']: machine['ssh_pub_key']
+                        for machine in response.json()}
+            log.debug('locked {machines}'.format(
+                machines=', '.join(machines.keys())))
+            if machinetype == 'vps':
+                ok_machs = {}
+                for machine in machines:
+                    if provision.create_if_vm(ctx, machine):
+                        ok_machs[machine] = machines[machine]
+                    else:
+                        log.error('Unable to create virtual machine: %s',
+                                  machine)
+                        unlock_one(ctx, machine)
+                return ok_machs
+            return machines
+        elif response.status_code == 503:
+            log.error('Insufficient nodes available to lock %d %s nodes.',
+                      num, machinetype)
+            log.error(response.text)
+        else:
+            log.error('Could not lock %d %s nodes, reason: unknown.',
+                      num, machinetype)
+    return []
+
+
+def lock_one(name, user=None, description=None):
+    if user is None:
+        user = misc.get_user()
+    request = dict(name=name, locked=True, locked_by=user,
+                   description=description)
+    uri = os.path.join(config.lock_server, 'nodes', name, 'lock', '')
+    response = requests.put(uri, json.dumps(request))
+    success = response.ok
+    if success:
+        log.debug('locked %s as %s', name, user)
+    else:
+        try:
+            reason = response.json().get('message')
+        except ValueError:
+            reason = str(response.status_code)
+        log.error('failed to lock {node}. reason: {reason}'.format(
+            node=name, reason=reason))
+    return response
+
+
+def unlock_one(ctx, name, user=None):
+    if user is None:
+        user = misc.get_user()
+    request = dict(name=name, locked=False, locked_by=user, description=None)
+    uri = os.path.join(config.lock_server, 'nodes', name, 'lock', '')
+    response = requests.put(uri, json.dumps(request))
+    success = response.ok
+    if success:
+        log.debug('unlocked %s', name)
+        if not provision.destroy_if_vm(ctx, name):
+            log.error('downburst destroy failed for %s', name)
+            log.info('%s is not locked' % name)
+    else:
+        try:
+            reason = response.json().get('message')
+        except ValueError:
+            reason = str(response.status_code)
+        log.error('failed to unlock {node}. reason: {reason}'.format(
+            node=name, reason=reason))
+    return success
+
+
+def list_locks(machine_type=None):
+    uri = os.path.join(config.lock_server, 'nodes', '')
+    if machine_type:
+        uri += '?machine_type=' + machine_type
+    response = requests.get(uri)
+    success = response.ok
+    if success:
+        return response.json()
+    return None
+
+
+def update_lock(ctx, name, description=None, status=None, ssh_pub_key=None):
+    status_info = get_status(name)
+    phys_host = status_info['vpshost']
+    if phys_host:
+        keyscan_out = ''
+        while not keyscan_out:
+            time.sleep(10)
+            keyscan_out, _ = keyscan_check([name])
+    updated = {}
+    if description is not None:
+        updated['description'] = description
+    if status is not None:
+        updated['up'] = (status == 'up')
+    if ssh_pub_key is not None:
+        updated['ssh_pub_key'] = ssh_pub_key
+
+    if updated:
+        response = requests.put(
+            config.lock_server + '/nodes/' + name,
+            json.dumps(updated))
+        return response.ok
+    return True
+
+
+def keyscan_check(machines):
+    locks = list_locks()
+    current_locks = {}
+    for lock in locks:
+        current_locks[lock['name']] = lock
+
+    if not machines:
+        machines = current_locks.keys()
+
+    for i, machine in enumerate(machines):
+        if '@' in machine:
+            _, machines[i] = machine.rsplit('@')
+    args = ['ssh-keyscan', '-t', 'rsa']
+    args.extend(machines)
+    p = subprocess.Popen(
+        args=args,
+        stdout=subprocess.PIPE,
+    )
+    out, err = p.communicate()
+    return (out, current_locks)
+
+
 def updatekeys(ctx):
     loglevel = logging.INFO
     if ctx.verbose:
@@ -347,26 +369,9 @@ def updatekeys(ctx):
     return scan_for_locks(ctx, machines)
 
 
-def keyscan_check(machines):
-    locks = list_locks()
-    current_locks = {}
-    for lock in locks:
-        current_locks[lock['name']] = lock
-
-    if len(machines) == 0:
-        machines = current_locks.keys()
-
-    for i, machine in enumerate(machines):
-        if '@' in machine:
-            _, machines[i] = machine.rsplit('@')
-    args = ['ssh-keyscan', '-t', 'rsa']
-    args.extend(machines)
-    p = subprocess.Popen(
-        args=args,
-        stdout=subprocess.PIPE,
-    )
-    out, err = p.communicate()
-    return (out, current_locks)
+def scan_for_locks(ctx, machines):
+    out, current_locks = keyscan_check(machines)
+    return update_keys(ctx, out, current_locks)
 
 
 def update_keys(ctx, out, current_locks):
@@ -383,11 +388,6 @@ def update_keys(ctx, out, current_locks):
                 log.error('failed to update %s!', full_name)
                 ret = 1
     return ret
-
-
-def scan_for_locks(ctx, machines):
-    out, current_locks = keyscan_check(machines)
-    return update_keys(ctx, out, current_locks)
 
 
 def do_summary(ctx):
