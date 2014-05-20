@@ -2885,6 +2885,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   dir->verify_fragstat();
 #endif
 
+  utime_t now = ceph_clock_now(NULL);
   mdr->now = ceph_clock_now(g_ceph_context);
 
   snapid_t snapid = mdr->snapid;
@@ -2993,7 +2994,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
     // dentry
     dout(12) << "including    dn " << *dn << dendl;
     ::encode(dn->name, dnbl);
-    mds->locker->issue_client_lease(dn, client, dnbl, mdr->now, mdr->session);
+    mds->locker->issue_client_lease(dn, client, dnbl, now, mdr->session);
 
     // inode
     dout(12) << "including inode " << *in << dendl;
