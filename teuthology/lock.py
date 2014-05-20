@@ -298,12 +298,11 @@ def list_locks(machine_type=None):
 
 def update_lock(name, description=None, status=None, ssh_pub_key=None):
     status_info = get_status(name)
-    phys_host = status_info['vpshost']
-    if phys_host:
-        keyscan_out = ''
-        while not keyscan_out:
+    if status_info['is_vm']:
+        ssh_key = None
+        while not ssh_key:
             time.sleep(10)
-            keyscan_out, _ = keyscan_check([name])
+            ssh_key = ssh_keyscan(name)
     updated = {}
     if description is not None:
         updated['description'] = description
