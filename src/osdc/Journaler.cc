@@ -936,7 +936,7 @@ void Journaler::erase(Context *completion)
 {
   // Async delete the journal data
   uint64_t first = trimmed_pos / get_layout_period();
-  uint64_t num = (write_pos - trimmed_pos) / get_layout_period() + 1;
+  uint64_t num = (write_pos - trimmed_pos) / get_layout_period() + 2;
   filer.purge_range(ino, &layout, SnapContext(), first, num, ceph_clock_now(cct), 0,
       new C_EraseFinish(this, completion));
 
