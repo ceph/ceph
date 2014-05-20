@@ -31,12 +31,21 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
   JournalTool jt;
+
+  // Handle --help before calling init() so we don't depend on network.
+  if (args.empty() || (args.size() == 1 && (std::string(args[0]) == "--help" || std::string(args[0]) == "-h"))) {
+    jt.usage();
+    return 0;
+  }
+
+  // Connect to mon cluster, download MDS map etc
   int rc = jt.init();
   if (rc != 0) {
       std::cerr << "Error in initialization: " << cpp_strerror(rc) << std::endl;
       return rc;
   }
 
+  // Finally, execute the user's commands
   rc = jt.main(args);
   if (rc != 0) {
     std::cerr << "Error (" << cpp_strerror(rc) << ")" << std::endl;
