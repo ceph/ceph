@@ -1432,6 +1432,26 @@ int do_rm_omap(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key)
   return 0;
 }
 
+int do_get_omaphdr(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
+{
+  bufferlist hdrbl;
+
+  int r = store->omap_get_header(coll, ghobj, &hdrbl, true);
+  if (r < 0) {
+    cerr << "omap_get_header: " << cpp_strerror(-r) << std::endl;
+    return r;
+  }
+
+  string header(hdrbl.c_str(), hdrbl.length());
+  if (outistty) {
+    cleanbin(header);
+    header.push_back('\n');
+  }
+  cout << header;
+
+  return 0;
+}
+
 void usage(po::options_description &desc)
 {
     cerr << std::endl;
@@ -1919,6 +1939,13 @@ int main(int argc, char **argv)
 	if (vm.count("arg1") == 0)
 	  usage(desc);
 	r = do_rm_omap(fs, coll, ghobj, arg1);
+	if (r)
+	  ret = 1;
+        goto out;
+      } else if (objcmd == "get-omaphdr") {
+	if (vm.count("arg1"))
+	  usage(desc);
+	r = do_get_omaphdr(fs, coll, ghobj);
 	if (r)
 	  ret = 1;
         goto out;
