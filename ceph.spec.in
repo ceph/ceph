@@ -34,7 +34,6 @@ Requires:	parted
 Requires:	util-linux
 Requires:	hdparm
 Requires(post):	binutils
-BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 BuildRequires:	make
 BuildRequires:	gcc-c++
 BuildRequires:	libtool
