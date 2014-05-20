@@ -2886,6 +2886,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
 #endif
 
   utime_t now = ceph_clock_now(NULL);
+  mdr->set_mds_stamp(now);
   mdr->now = ceph_clock_now(g_ceph_context);
 
   snapid_t snapid = mdr->snapid;
@@ -4404,6 +4405,8 @@ void Server::_link_remote(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targ
 
   assert(g_conf->mds_kill_link_at != 2);
 
+  mdr->set_mds_stamp(ceph_clock_now(NULL));
+
   // add to event
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, inc ? "link_remote":"unlink_remote");
@@ -5774,6 +5777,9 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     assert(g_conf->mds_kill_rename_at != 3);
   if (!mdr->more()->slaves.empty() && srci->is_dir())
     assert(g_conf->mds_kill_rename_at != 4);
+
+  // -- declare now --
+  mdr->set_mds_stamp(ceph_clock_now(g_ceph_context));
 
   // -- prepare journal entry --
   mdr->ls = mdlog->get_current_segment();
