@@ -2,7 +2,6 @@ import argparse
 import json
 import logging
 import subprocess
-import urllib
 import yaml
 import re
 import collections
@@ -11,12 +10,15 @@ import time
 import requests
 
 import teuthology
-from . import lockstatus as ls
 from . import misc
 from . import provision
 from .config import config
+from .lockstatus import get_status
 
 log = logging.getLogger(__name__)
+# Don't need to see connection pool INFO messages
+logging.getLogger("requests.packages.urllib3.connectionpool").setLevel(
+    logging.WARNING)
 
 
 def lock_many(ctx, num, machinetype, user=None, description=None):
@@ -24,18 +26,20 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
     if user is None:
         user = misc.get_user()
     for machinetype in machinetypes:
-        success, content, status = ls.send_request(
-            'POST',
-            config.lock_server,
-            urllib.urlencode(
+        uri = os.path.join(config.lock_server, 'nodes', 'lock_many', '')
+        response = requests.post(
+            uri,
+            json.dumps(
                 dict(
-                    user=user,
-                    num=num,
-                    machinetype=machinetype,
-                    desc=description,
-                )))
-        if success:
-            machines = json.loads(content)
+                    locked_by=user,
+                    count=num,
+                    machine_type=machinetype,
+                    description=description,
+                ))
+        )
+        if response.ok:
+            machines = {machine['name']: machine['ssh_pub_key']
+                        for machine in response.json()}
             log.debug('locked {machines}'.format(
                 machines=', '.join(machines.keys())))
             if machinetype == 'vps':
@@ -49,9 +53,10 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
                         unlock_one(ctx, machine)
                 return ok_machs
             return machines
-        if status == 503:
+        elif response.status_code == 503:
             log.error('Insufficient nodes available to lock %d %s nodes.',
                       num, machinetype)
+            log.error(response.text)
         else:
             log.error('Could not lock %d %s nodes, reason: unknown.',
                       num, machinetype)
@@ -111,8 +116,8 @@ def list_locks(machine_type=None):
     return None
 
 
-def update_lock(ctx, name, description=None, status=None, sshpubkey=None):
-    status_info = ls.get_status(ctx, name)
+def update_lock(ctx, name, description=None, status=None, ssh_pub_key=None):
+    status_info = get_status(name)
     phys_host = status_info['vpshost']
     if phys_host:
         keyscan_out = ''
@@ -121,19 +126,17 @@ def update_lock(ctx, name, description=None, status=None, sshpubkey=None):
             keyscan_out, _ = keyscan_check(ctx, [name])
     updated = {}
     if description is not None:
-        updated['desc'] = description
+        updated['description'] = description
     if status is not None:
-        updated['status'] = status
-    if sshpubkey is not None:
-        updated['sshpubkey'] = sshpubkey
+        updated['up'] = (status == 'up')
+    if ssh_pub_key is not None:
+        updated['ssh_pub_key'] = ssh_pub_key
 
     if updated:
-        success, _, _ = ls.send_request(
-            'PUT',
-            config.lock_server + '/' + name,
-            body=urllib.urlencode(updated),
-            headers={'Content-type': 'application/x-www-form-urlencoded'})
-        return success
+        response = requests.put(
+            config.lock_server + '/nodes/' + name,
+            json.dumps(updated))
+        return response.ok
     return True
 
 
@@ -145,7 +148,8 @@ def main(ctx):
 
     ret = 0
     user = ctx.owner
-    machines = [misc.canonicalize_hostname(m) for m in ctx.machines]
+    machines = [misc.canonicalize_hostname(m, user=False)
+                for m in ctx.machines]
     machines_to_update = []
 
     if ctx.targets:
@@ -187,7 +191,7 @@ def main(ctx):
         if machines:
             statuses = []
             for machine in machines:
-                status = ls.get_status(ctx, machine)
+                status = get_status(machine)
                 if status:
                     statuses.append(status)
                 else:
@@ -198,7 +202,7 @@ def main(ctx):
         vmachines = []
 
         for vmachine in statuses:
-            if vmachine['vpshost']:
+            if vmachine['vm_host']:
                 if vmachine['locked']:
                     vmachines.append(vmachine['name'])
         if vmachines:
@@ -206,7 +210,7 @@ def main(ctx):
             # Listing specific machines will update the keys.
             if machines:
                 scan_for_locks(ctx, vmachines)
-                statuses = [ls.get_status(ctx, machine)
+                statuses = [get_status(machine)
                             for machine in machines]
             else:
                 statuses = list_locks()
@@ -247,7 +251,7 @@ def main(ctx):
             else:
                 frag = {'targets': {}}
                 for f in statuses:
-                    frag['targets'][f['name']] = f['sshpubkey']
+                    frag['targets'][f['name']] = f['ssh_pub_key']
                 print yaml.safe_dump(frag, default_flow_style=False)
         else:
             log.error('error retrieving lock statuses')
@@ -374,9 +378,9 @@ def update_keys(ctx, out, current_locks):
         full_name = 'ubuntu@{host}'.format(host=hostname)
         log.info('Checking %s', full_name)
         assert full_name in current_locks, 'host is not in the database!'
-        if current_locks[full_name]['sshpubkey'] != pubkey:
+        if current_locks[full_name]['ssh_pub_key'] != pubkey:
             log.info('New key found. Updating...')
-            if not update_lock(ctx, full_name, sshpubkey=pubkey):
+            if not update_lock(ctx, full_name, ssh_pub_key=pubkey):
                 log.error('failed to update %s!', full_name)
                 ret = 1
     return ret
