@@ -342,6 +342,29 @@ def keyscan_check(machines):
     return (out, current_locks)
 
 
+def ssh_keyscan(hostnames):
+    """
+    Fetch the SSH public key of one or more hosts
+    """
+    args = ['ssh-keyscan', '-t', 'rsa']
+    if isinstance(hostnames, basestring):
+        args.append(hostnames)
+    else:
+        args.extend(hostnames)
+    p = subprocess.Popen(
+        args=args,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    p.wait()
+
+    keys_dict = dict()
+    for line in p.stdout.readlines():
+        host, key = line.strip().split(' ', 1)
+        keys_dict[host] = key
+    return keys_dict
+
+
 def updatekeys(ctx):
     loglevel = logging.INFO
     if ctx.verbose:
