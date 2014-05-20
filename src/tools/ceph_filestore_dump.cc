@@ -1174,12 +1174,20 @@ int main(int argc, char **argv)
   file_fd = fd_none;
   if (type == "export") {
     if (!vm.count("file")) {
+      if (outistty) {
+        cerr << "stdout is a tty and no --file option specified" << std::endl;
+        exit(1);
+      }
       file_fd = STDOUT_FILENO;
     } else {
       file_fd = open(file.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666);
     }
   } else if (type == "import") {
     if (!vm.count("file")) {
+      if (isatty(STDIN_FILENO)) {
+        cerr << "stdin is a tty and no --file option specified" << std::endl;
+        exit(1);
+      }
       file_fd = STDIN_FILENO;
     } else {
       file_fd = open(file.c_str(), O_RDONLY);
