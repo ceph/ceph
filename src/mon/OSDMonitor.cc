@@ -3669,7 +3669,7 @@ done:
 	  ss << "set pool " << pool << " pgp_num to " << n;
 	}
       } else if (var == "crush_ruleset") {
-	if (osdmap.crush->rule_exists(n)) {
+	if (osdmap.crush->ruleset_exists(n)) {
 	  pending_inc.new_pools[pool].crush_ruleset = n;
 	  ss << "set pool " << pool << " crush_ruleset to " << n;
 	} else {
