@@ -123,7 +123,7 @@ def update_lock(ctx, name, description=None, status=None, ssh_pub_key=None):
         keyscan_out = ''
         while not keyscan_out:
             time.sleep(10)
-            keyscan_out, _ = keyscan_check(ctx, [name])
+            keyscan_out, _ = keyscan_check([name])
     updated = {}
     if description is not None:
         updated['description'] = description
@@ -347,15 +347,14 @@ def updatekeys(ctx):
     return scan_for_locks(ctx, machines)
 
 
-def keyscan_check(ctx, machines):
+def keyscan_check(machines):
     locks = list_locks()
     current_locks = {}
     for lock in locks:
         current_locks[lock['name']] = lock
 
-    if hasattr(ctx, 'all'):
-        if ctx.all:
-            machines = current_locks.keys()
+    if len(machines) == 0:
+        machines = current_locks.keys()
 
     for i, machine in enumerate(machines):
         if '@' in machine:
@@ -387,7 +386,7 @@ def update_keys(ctx, out, current_locks):
 
 
 def scan_for_locks(ctx, machines):
-    out, current_locks = keyscan_check(ctx, machines)
+    out, current_locks = keyscan_check(machines)
     return update_keys(ctx, out, current_locks)
 
 
