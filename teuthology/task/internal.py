@@ -125,7 +125,7 @@ def lock_machines(ctx, config):
                                 log.info('recreating: ' + guest)
                                 provision.destroy_if_vm(ctx, 'ubuntu@' + guest)
                                 provision.create_if_vm(ctx, 'ubuntu@' + guest)
-                if lock.update_keys(ctx, keyscan_out, current_locks):
+                if lock.update_keys(keyscan_out, current_locks):
                     log.info("Error in virtual machine keys")
                 newscandict = {}
                 for dkey in newly_locked.iterkeys():

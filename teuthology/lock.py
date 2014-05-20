@@ -90,7 +90,7 @@ def main(ctx):
             # Avoid ssh-keyscans for everybody when listing all machines
             # Listing specific machines will update the keys.
             if machines:
-                scan_for_locks(ctx, vmachines)
+                scan_for_locks(vmachines)
                 statuses = [get_status(machine)
                             for machine in machines]
             else:
@@ -196,7 +196,7 @@ def main(ctx):
 
     if ctx.desc is not None or ctx.status is not None:
         for machine in machines_to_update:
-            update_lock(ctx, machine, ctx.desc, ctx.status)
+            update_lock(machine, ctx.desc, ctx.status)
 
     return ret
 
@@ -296,7 +296,7 @@ def list_locks(machine_type=None):
     return None
 
 
-def update_lock(ctx, name, description=None, status=None, ssh_pub_key=None):
+def update_lock(name, description=None, status=None, ssh_pub_key=None):
     status_info = get_status(name)
     phys_host = status_info['vpshost']
     if phys_host:
@@ -389,15 +389,15 @@ def updatekeys(ctx):
         except IOError as e:
             raise argparse.ArgumentTypeError(str(e))
 
-    return scan_for_locks(ctx, machines)
+    return scan_for_locks(machines)
 
 
-def scan_for_locks(ctx, machines):
+def scan_for_locks(machines):
     out, current_locks = keyscan_check(machines)
-    return update_keys(ctx, out, current_locks)
+    return update_keys(out, current_locks)
 
 
-def update_keys(ctx, out, current_locks):
+def update_keys(out, current_locks):
     ret = 0
     for key_entry in out.splitlines():
         hostname, pubkey = key_entry.split(' ', 1)
@@ -407,7 +407,7 @@ def update_keys(ctx, out, current_locks):
         assert full_name in current_locks, 'host is not in the database!'
         if current_locks[full_name]['ssh_pub_key'] != pubkey:
             log.info('New key found. Updating...')
-            if not update_lock(ctx, full_name, ssh_pub_key=pubkey):
+            if not update_lock(full_name, ssh_pub_key=pubkey):
                 log.error('failed to update %s!', full_name)
                 ret = 1
     return ret
