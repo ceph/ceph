@@ -1978,7 +1978,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     // delay propagating until later?
     if (!stop && !first &&
 	g_conf->mds_dirstat_min_interval > 0) {
-      double since_last_prop = mut->now - pin->last_dirstat_prop;
+      double since_last_prop = mut->get_mds_stamp() - pin->last_dirstat_prop;
       if (since_last_prop < g_conf->mds_dirstat_min_interval) {
 	dout(10) << "predirty_journal_parents last prop " << since_last_prop
 		 << " < " << g_conf->mds_dirstat_min_interval
@@ -2020,7 +2020,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     assert(mut->wrlocks.count(&pin->nestlock) ||
 	   mut->is_slave());
     
-    pin->last_dirstat_prop = mut->now;
+    pin->last_dirstat_prop = mut->get_mds_stamp();
 
     // dirfrag -> diri
     mut->auth_pin(pin);
