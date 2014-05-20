@@ -2612,7 +2612,6 @@ void Server::handle_client_open(MDRequestRef& mdr)
   }
   
   // hit pop
-  mdr->now = ceph_clock_now(g_ceph_context);
   if (cmode == CEPH_FILE_MODE_RDWR ||
       cmode == CEPH_FILE_MODE_WR) 
     mds->balancer->hit_inode(mdr->get_mds_stamp(), cur, META_POP_IWR);
@@ -2766,8 +2765,6 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   // created null dn.
     
   // create inode.
-  mdr->now = ceph_clock_now(g_ceph_context);
-
   SnapRealm *realm = diri->find_snaprealm();   // use directory's realm; inode isn't attached yet.
   snapid_t follows = realm->get_newest_seq();
 
@@ -2887,7 +2884,6 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
 
   utime_t now = ceph_clock_now(NULL);
   mdr->set_mds_stamp(now);
-  mdr->now = ceph_clock_now(g_ceph_context);
 
   snapid_t snapid = mdr->snapid;
   dout(10) << "snapid " << snapid << dendl;
@@ -4027,8 +4023,6 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
 
   SnapRealm *realm = dn->get_dir()->inode->find_snaprealm();
   snapid_t follows = realm->get_newest_seq();
-  mdr->now = ceph_clock_now(g_ceph_context);
-
   CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino),
 				   mode, &layout);
   assert(newi);
@@ -4108,7 +4102,6 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
   // new inode
   SnapRealm *realm = dn->get_dir()->inode->find_snaprealm();
   snapid_t follows = realm->get_newest_seq();
-  mdr->now = ceph_clock_now(g_ceph_context);
 
   unsigned mode = req->head.args.mkdir.mode;
   mode &= ~S_IFMT;
@@ -4183,7 +4176,6 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  mdr->now = ceph_clock_now(g_ceph_context);
   snapid_t follows = dn->get_dir()->inode->find_snaprealm()->get_newest_seq();
 
   unsigned mode = S_IFLNK | 0777;
@@ -4254,10 +4246,6 @@ void Server::handle_client_link(MDRequestRef& mdr)
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
-
-  // pick mtime
-  if (mdr->now == utime_t())
-    mdr->now = ceph_clock_now(g_ceph_context);
 
   // go!
   assert(g_conf->mds_kill_link_at != 1);
@@ -4523,7 +4511,6 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
   assert(dnl->is_primary());
 
   mdr->set_op_stamp(mdr->slave_request->op_stamp);
-  mdr->now = mdr->slave_request->now;
 
   mdr->auth_pin(targeti);
 
@@ -4872,9 +4859,6 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   }
 
   // yay!
-  if (mdr->now == utime_t())
-    mdr->now = ceph_clock_now(g_ceph_context);
-
   if (in->is_dir() && in->has_subtree_root_dirfrag()) {
     // subtree root auths need to be witnesses
     set<int> witnesses;
@@ -4903,7 +4887,7 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
     if (!mdr->more()->waiting_on_slave.empty())
       return;  // we're waiting for a witness.
   }
-  
+
   // ok!
   if (dnl->is_remote() && !dnl->get_inode()->is_auth()) 
     _link_remote(mdr, false, dn, dnl->get_inode());
@@ -5727,10 +5711,6 @@ void Server::handle_client_rename(MDRequestRef& mdr)
       }
     }
   }
-
-  // -- declare now --
-  if (mdr->now == utime_t())
-    mdr->now = ceph_clock_now(g_ceph_context);
 
   // -- prepare witnesses --
 
@@ -7320,9 +7300,6 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
     reply_request(mdr, -EINVAL);
     return;
   }
-
-  if (mdr->now == utime_t())
-    mdr->now = ceph_clock_now(g_ceph_context);
 
   // allocate a snapid
   if (!mdr->more()->stid) {
