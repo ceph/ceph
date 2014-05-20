@@ -1452,6 +1452,26 @@ int do_get_omaphdr(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
   return 0;
 }
 
+int do_set_omaphdr(ObjectStore *store, coll_t coll, ghobject_t &ghobj, int fd)
+{
+  ObjectStore::Transaction tran;
+  ObjectStore::Transaction *t = &tran;
+  bufferlist hdrbl;
+
+  if (debug)
+    cerr << "Omap_setheader " << ghobj << std::endl;
+
+  if (get_fd_data(fd, hdrbl))
+    return 1;
+
+  t->touch(coll, ghobj);
+
+  t->omap_setheader(coll, ghobj, hdrbl);
+
+  store->apply_transaction(*t);
+  return 0;
+}
+
 void usage(po::options_description &desc)
 {
     cerr << std::endl;
@@ -1946,6 +1966,27 @@ int main(int argc, char **argv)
 	if (vm.count("arg1"))
 	  usage(desc);
 	r = do_get_omaphdr(fs, coll, ghobj);
+	if (r)
+	  ret = 1;
+        goto out;
+      } else if (objcmd == "set-omaphdr") {
+        // Extra arg
+	if (vm.count("arg2"))
+	  usage(desc);
+	int fd;
+	if (vm.count("arg1") == 0 || arg1 == "-") {
+	  fd = STDIN_FILENO;
+	} else {
+	  fd = open(arg1.c_str(), O_RDONLY|O_LARGEFILE, 0666);
+	  if (fd == -1) {
+	    cerr << "open " << arg1 << " " << cpp_strerror(errno) << std::endl;
+	    ret = 1;
+	    goto out;
+	  }
+	}
+	r = do_set_omaphdr(fs, coll, ghobj, fd);
+	if (fd != STDIN_FILENO)
+	  close(fd);
 	if (r)
 	  ret = 1;
         goto out;
