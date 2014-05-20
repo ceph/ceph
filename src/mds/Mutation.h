@@ -39,7 +39,6 @@ struct MutationImpl {
   metareqid_t reqid;
   __u32 attempt;      // which attempt for this request
   LogSegment *ls;  // the log segment i'm committing to
-  utime_t now;
 
 private:
   utime_t mds_stamp; ///< mds-local timestamp (real time)
