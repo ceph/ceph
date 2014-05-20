@@ -8645,6 +8645,7 @@ MDRequestRef MDCache::request_start(MClientRequest *req)
   MDRequestRef mdr =
       mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params>(params);
   active_requests[params.reqid] = mdr;
+  mdr->set_op_stamp(req->get_stamp());
   dout(7) << "request_start " << *mdr << dendl;
   return mdr;
 }
