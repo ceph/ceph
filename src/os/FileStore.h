@@ -461,7 +461,7 @@ public:
   int _remove(coll_t cid, const ghobject_t& oid, const SequencerPosition &spos);
 
   int _fgetattr(int fd, const char *name, bufferptr& bp);
-  int _fgetattrs(int fd, map<string,bufferptr>& aset, bool user_only);
+  int _fgetattrs(int fd, map<string,bufferptr>& aset);
   int _fsetattrs(int fd, map<string, bufferptr> &aset);
 
   void _start_sync();
