@@ -863,6 +863,17 @@ public:
     if (!crush) return -1;
     return crush_find_rule(crush, ruleset, type, size);
   }
+
+  bool ruleset_exists(int ruleset) const {
+    for (size_t i = 0; i < crush->max_rules; ++i) {
+     if (crush->rules[i]->mask.ruleset == ruleset) {
+       return true;
+     }
+    }
+
+    return false;
+  }
+
   void do_rule(int rule, int x, vector<int>& out, int maxout,
 	       const vector<__u32>& weight) const {
     Mutex::Locker l(mapper_lock);
