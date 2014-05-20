@@ -3126,8 +3126,12 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
   if (*crush_ruleset < 0) {
     switch (pool_type) {
     case pg_pool_t::TYPE_REPLICATED:
-      *crush_ruleset =
-	CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(g_ceph_context);
+      *crush_ruleset = osdmap.crush->get_osd_pool_default_crush_replicated_ruleset(g_ceph_context);
+      if (*crush_ruleset < 0) {
+        // Errors may happen e.g. if no valid ruleset is available
+        ss << "No suitable CRUSH ruleset exists";
+        return *crush_ruleset;
+      }
       break;
     case pg_pool_t::TYPE_ERASURE:
       {
@@ -3154,6 +3158,11 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
 	 << " is not a known pool type";
       return -EINVAL;
       break;
+    }
+  } else {
+    if (!osdmap.crush->ruleset_exists(*crush_ruleset)) {
+      ss << "CRUSH ruleset " << *crush_ruleset << " not found";
+      return -ENOENT;
     }
   }
 
