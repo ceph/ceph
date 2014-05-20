@@ -25,6 +25,7 @@
 #ifndef NO_ATOMIC_OPS
 
 // libatomic_ops implementation
+#define AO_REQUIRE_CAS
 #include <atomic_ops.h>
 
 // reinclude our assert to clobber the system one
