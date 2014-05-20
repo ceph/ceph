@@ -2509,7 +2509,17 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
   pool_names.push_back("metadata");
   pool_names.push_back("rbd");
 
+  stringstream ss;
+  int r;
+  if (nosd >= 0)
+    r = build_simple_crush_map(cct, *crush, nosd, &ss);
+  else
+    r = build_simple_crush_map_from_conf(cct, *crush, &ss);
+
   int poolbase = get_max_osd() ? get_max_osd() : 1;
+
+  int const default_replicated_ruleset = crush->get_osd_pool_default_crush_replicated_ruleset(cct);
+  assert(default_replicated_ruleset >= 0);
 
   for (vector<string>::iterator p = pool_names.begin();
        p != pool_names.end(); ++p) {
@@ -2520,8 +2530,7 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
       pools[pool].flags |= pg_pool_t::FLAG_HASHPSPOOL;
     pools[pool].size = cct->_conf->osd_pool_default_size;
     pools[pool].min_size = cct->_conf->get_osd_pool_default_min_size();
-    pools[pool].crush_ruleset =
-      CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(cct);
+    pools[pool].crush_ruleset = default_replicated_ruleset;
     pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
     pools[pool].set_pg_num(poolbase << pg_bits);
     pools[pool].set_pgp_num(poolbase << pgp_bits);
@@ -2531,13 +2540,6 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     pool_name[pool] = *p;
     name_pool[*p] = pool;
   }
-
-  stringstream ss;
-  int r;
-  if (nosd >= 0)
-    r = build_simple_crush_map(cct, *crush, nosd, &ss);
-  else
-    r = build_simple_crush_map_from_conf(cct, *crush, &ss);
 
   if (r < 0)
     lderr(cct) << ss.str() << dendl;
