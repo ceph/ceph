@@ -320,7 +320,7 @@ void MDRequestImpl::_dump(utime_t now, Formatter *f) const
       f->dump_int("inode_export_v", slave_request->inode_export_v);
       f->dump_bool("has_srci_replica",
                    slave_request->srci_replica.length() != 0);
-      f->dump_stream("timestamp_now") << slave_request->now;
+      f->dump_stream("op_stamp") << slave_request->op_stamp;
       f->close_section(); // request_info
     }
     else { // internal request
