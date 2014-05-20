@@ -6523,6 +6523,11 @@ void OSD::handle_pg_query(OpRequestRef op)
     assert(role != 0);
     dout(10) << " pg " << pgid << " dne" << dendl;
     pg_info_t empty(pgid);
+    /* This is racy, but that should be ok: if we complete the deletion
+     * before the pg is recreated, we'll just start it off backfilling
+     * instead of just empty */
+    if (service.deleting_pgs.lookup(pgid))
+      empty.last_backfill = hobject_t();
     if (it->second.type == pg_query_t::LOG ||
 	it->second.type == pg_query_t::FULLLOG) {
       ConnectionRef con = service.get_con_osd_cluster(from, osdmap->get_epoch());
