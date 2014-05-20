@@ -1392,6 +1392,29 @@ int do_get_omap(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key)
   return 0;
 }
 
+int do_set_omap(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key, int fd)
+{
+  ObjectStore::Transaction tran;
+  ObjectStore::Transaction *t = &tran;
+  map<string, bufferlist> attrset;
+  bufferlist valbl;
+
+  if (debug)
+    cerr << "Set_omap " << ghobj << std::endl;
+
+  if (get_fd_data(fd, valbl))
+    return 1;
+
+  attrset.insert(pair<string, bufferlist>(key, valbl));
+
+  t->touch(coll, ghobj);
+
+  t->omap_setkeys(coll, ghobj, attrset);
+
+  store->apply_transaction(*t);
+  return 0;
+}
+
 void usage(po::options_description &desc)
 {
     cerr << std::endl;
@@ -1851,6 +1874,27 @@ int main(int argc, char **argv)
 	if (vm.count("arg1") == 0)
 	  usage(desc);
 	r = do_get_omap(fs, coll, ghobj, arg1);
+	if (r)
+	  ret = 1;
+        goto out;
+      } else if (objcmd == "set-omap") {
+	if (vm.count("arg1") == 0)
+	  usage(desc);
+
+	int fd;
+	if (vm.count("arg2") == 0 || arg2 == "-") {
+	  fd = STDIN_FILENO;
+	} else {
+	  fd = open(arg2.c_str(), O_RDONLY|O_LARGEFILE, 0666);
+	  if (fd == -1) {
+	    cerr << "open " << arg2 << " " << cpp_strerror(errno) << std::endl;
+	    ret = 1;
+	    goto out;
+	  }
+	}
+	r = do_set_omap(fs, coll, ghobj, arg1, fd);
+	if (fd != STDIN_FILENO)
+	  close(fd);
 	if (r)
 	  ret = 1;
         goto out;
