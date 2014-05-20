@@ -3423,7 +3423,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
-    if (!osdmap.crush->rule_exists(n)) {
+    if (!osdmap.crush->ruleset_exists(n)) {
       ss << "crush ruleset " << n << " does not exist";
       return -ENOENT;
     }
