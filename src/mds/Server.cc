@@ -7327,7 +7327,8 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   // allocate a snapid
   if (!mdr->more()->stid) {
     // prepare an stid
-    mds->snapclient->prepare_create(diri->ino(), snapname, mdr->now, 
+    mds->snapclient->prepare_create(diri->ino(), snapname,
+				    mdr->get_mds_stamp(),
 				    &mdr->more()->stid, &mdr->more()->snapidbl,
 				    new C_MDS_RetryRequest(mds->mdcache, mdr));
     return;
