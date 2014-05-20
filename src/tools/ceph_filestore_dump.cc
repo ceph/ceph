@@ -1361,6 +1361,37 @@ int do_rm_attr(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key)
   return 0;
 }
 
+int do_get_omap(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key)
+{
+  set<string> keys;
+  map<string, bufferlist> out;
+
+  keys.insert(key);
+
+  int r = store->omap_get_values(coll, ghobj, keys, &out);
+  if (r < 0) {
+    cerr << "omap_get_values: " << cpp_strerror(-r) << std::endl;
+    return r;
+  }
+
+  if (out.empty()) {
+    cerr << "Key not found" << std::endl;
+    return -ENOENT;
+  }
+
+  assert(out.size() == 1);
+
+  bufferlist bl = out.begin()->second;
+  string value(bl.c_str(), bl.length());
+  if (outistty) {
+    cleanbin(value);
+    value.push_back('\n');
+  }
+  cout << value;
+
+  return 0;
+}
+
 void usage(po::options_description &desc)
 {
     cerr << std::endl;
@@ -1813,6 +1844,13 @@ int main(int argc, char **argv)
 	if (vm.count("arg1") == 0)
 	  usage(desc);
 	r = do_rm_attr(fs, coll, ghobj, arg1);
+	if (r)
+	  ret = 1;
+        goto out;
+      } else if (objcmd == "get-omap") {
+	if (vm.count("arg1") == 0)
+	  usage(desc);
+	r = do_get_omap(fs, coll, ghobj, arg1);
 	if (r)
 	  ret = 1;
         goto out;
