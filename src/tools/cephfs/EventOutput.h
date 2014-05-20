@@ -34,8 +34,8 @@ class EventOutput
 
     void summary() const;
     void list() const;
-    void json() const;
-    void binary() const;
+    int json() const;
+    int binary() const;
 };
 
 #endif // EVENT_OUTPUT_H

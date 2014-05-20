@@ -24,13 +24,13 @@
 #include "EventOutput.h"
 
 
-void EventOutput::binary() const
+int EventOutput::binary() const
 {
   // Binary output, files
   int r = ::mkdir(path.c_str(), 0755);
   if (r != 0) {
     std::cerr << "Error creating output directory: " << cpp_strerror(r) << std::endl;
-    assert(r == 0);
+    return r;
   }
 
   for (JournalScanner::EventMap::const_iterator i = scan.events.begin(); i != scan.events.end(); ++i) {
@@ -44,11 +44,16 @@ void EventOutput::binary() const
     std::ofstream bin_file(file_path.c_str(), std::ofstream::out | std::ofstream::binary);
     le_bin.write_stream(bin_file);
     bin_file.close();
+    if (bin_file.fail()) {
+      return -EIO;
+    }
   }
   std::cerr << "Wrote output to binary files in directory '" << path << "'" << std::endl;
+
+  return 0;
 }
 
-void EventOutput::json() const
+int EventOutput::json() const
 {
   JSONFormatter jf(true);
   std::ofstream out_file(path.c_str(), std::ofstream::out);
@@ -66,7 +71,13 @@ void EventOutput::json() const
   jf.close_section();  // journal
   jf.flush(out_file);
   out_file.close();
-  std::cerr << "Wrote output to JSON file '" << path << "'" << std::endl;
+
+  if (out_file.fail()) {
+    return -EIO;
+  } else {
+    std::cerr << "Wrote output to JSON file '" << path << "'" << std::endl;
+    return 0;
+  }
 }
 
 void EventOutput::list() const
