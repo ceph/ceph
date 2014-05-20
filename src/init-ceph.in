@@ -341,6 +341,7 @@ for name in $what; do
 	    do_cmd_okfail "$cmd" $runarg
 	    if [ "$ERR" != "0" ]; then
 		EXIT_STATUS=$ERR
+		continue
 	    fi
 
 	    if [ "$type" = "mon" ]; then
