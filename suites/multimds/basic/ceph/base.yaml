@@ -1,3 +1,7 @@
+overrides:
+  ceph:
+    conf:
+      fuse_default_permissions: 0
 tasks:
 - install:
 - ceph:
