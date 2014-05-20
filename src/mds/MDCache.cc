@@ -1857,9 +1857,9 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 
   assert(mds->mdlog->entry_is_open());
 
-  // declare now?
-  if (mut->now == utime_t())
-    mut->now = ceph_clock_now(g_ceph_context);
+  // make sure stamp is set
+  if (mut->get_mds_stamp() == utime_t())
+    mut->set_mds_stamp(ceph_clock_now(g_ceph_context));
 
   if (in->is_base())
     return;
