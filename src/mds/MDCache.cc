@@ -1910,10 +1910,10 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
       parent->resync_accounted_fragstat();
 
       if (do_parent_mtime) {
-	pf->fragstat.mtime = mut->now;
-	if (mut->now > pf->rstat.rctime) {
+	pf->fragstat.mtime = mut->get_op_stamp();
+	if (pf->fragstat.mtime > pf->rstat.rctime) {
 	  dout(10) << "predirty_journal_parents updating mtime on " << *parent << dendl;
-	  pf->rstat.rctime = mut->now;
+	  pf->rstat.rctime = pf->fragstat.mtime;
 	} else {
 	  dout(10) << "predirty_journal_parents updating mtime UNDERWATER on " << *parent << dendl;
 	}
