@@ -1,4 +1,5 @@
 
+#include "osd/osd_types.h"
 #include "common/debug.h"
 #include "common/Formatter.h"
 #include "common/errno.h"
@@ -1374,6 +1375,12 @@ void CrushWrapper::generate_test_instances(list<CrushWrapper*>& o)
   // fixme
 }
 
+/**
+ * Determine the default CRUSH ruleset ID to be used with
+ * newly created replicated pools.
+ *
+ * @returns a ruleset ID (>=0) or an error (<0)
+ */
 int CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(CephContext *cct)
 {
   int crush_ruleset = cct->_conf->osd_pool_default_crush_replicated_ruleset;
@@ -1388,6 +1395,11 @@ int CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(CephContext *cct
                   << dendl;
     crush_ruleset = cct->_conf->osd_pool_default_crush_rule;
   }
+
+  if (crush_ruleset == CEPH_DEFAULT_CRUSH_REPLICATED_RULESET) {
+    crush_ruleset = find_first_ruleset(pg_pool_t::TYPE_REPLICATED);
+  }
+
   return crush_ruleset;
 }
 
