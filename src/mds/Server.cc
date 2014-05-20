@@ -1384,6 +1384,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       return;
     }
     mdr = mdcache->request_start_slave(m->get_reqid(), m->get_attempt(), m);
+    mdr->set_op_stamp(m->op_stamp);
   }
   assert(mdr->slave_request == 0);     // only one at a time, please!  
 
@@ -1986,7 +1987,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 
   in->inode.uid = mdr->client_request->get_caller_uid();
 
-  in->inode.ctime = in->inode.mtime = in->inode.atime = mdr->now;   // now
+  in->inode.ctime = in->inode.mtime = in->inode.atime = mdr->get_op_stamp();
 
   MClientRequest *req = mdr->client_request;
   if (req->get_data().length()) {
@@ -4299,7 +4300,7 @@ void Server::_link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti)
   // project inode update
   inode_t *pi = targeti->project_inode();
   pi->nlink++;
-  pi->ctime = mdr->now;
+  pi->ctime = mdr->get_op_stamp();
   pi->version = tipv;
 
   snapid_t follows = dn->get_dir()->inode->find_snaprealm()->get_newest_seq();
@@ -4391,7 +4392,7 @@ void Server::_link_remote(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targ
       op = MMDSSlaveRequest::OP_UNLINKPREP;
     MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, mdr->attempt, op);
     targeti->set_object_info(req->get_object_info());
-    req->now = mdr->now;
+    req->op_stamp = mdr->get_op_stamp();
     mds->send_message_mds(req, linkauth);
 
     assert(mdr->more()->waiting_on_slave.count(linkauth) == 0);
@@ -4517,6 +4518,7 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
   CDentry::linkage_t *dnl = dn->get_linkage();
   assert(dnl->is_primary());
 
+  mdr->set_op_stamp(mdr->slave_request->op_stamp);
   mdr->now = mdr->slave_request->now;
 
   mdr->auth_pin(targeti);
@@ -4553,7 +4555,7 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
   ::encode(rollback, le->rollback);
   mdr->more()->rollback_bl = le->rollback;
 
-  pi->ctime = mdr->now;
+  pi->ctime = mdr->get_op_stamp();
   pi->version = targeti->pre_dirty();
 
   dout(10) << " projected inode " << pi << " v " << pi->version << dendl;
@@ -4957,7 +4959,7 @@ void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
   inode_t *pi = in->project_inode();
   mdr->add_projected_inode(in); // do this _after_ my dn->pre_dirty().. we apply that one manually.
   pi->version = in->pre_dirty();
-  pi->ctime = mdr->now;
+  pi->ctime = mdr->get_op_stamp();
   pi->nlink--;
   if (pi->nlink == 0)
     in->state_set(CInode::STATE_ORPHAN);
@@ -5065,7 +5067,7 @@ bool Server::_rmdir_prepare_witness(MDRequestRef& mdr, int who, CDentry *dn, CDe
 					       MMDSSlaveRequest::OP_RMDIRPREP);
   dn->make_path(req->srcdnpath);
   straydn->make_path(req->destdnpath);
-  req->now = mdr->now;
+  req->op_stamp = mdr->get_op_stamp();
   
   mdcache->replicate_stray(straydn, who, req->stray);
   
@@ -5118,7 +5120,7 @@ void Server::handle_slave_rmdir_prep(MDRequestRef& mdr)
   CDentry *straydn = mdr->straydn;
   dout(10) << " straydn " << *straydn << dendl;
   
-  mdr->now = mdr->slave_request->now;
+  mdr->set_op_stamp(mdr->slave_request->op_stamp);
 
   rmdir_rollback rollback;
   rollback.reqid = mdr->reqid;
@@ -5861,7 +5863,7 @@ bool Server::_rename_prepare_witness(MDRequestRef& mdr, int who, set<int> &witne
 					       MMDSSlaveRequest::OP_RENAMEPREP);
   srcdn->make_path(req->srcdnpath);
   destdn->make_path(req->destdnpath);
-  req->now = mdr->now;
+  req->op_stamp = mdr->get_op_stamp();
   
   if (straydn)
     mdcache->replicate_stray(straydn, who, req->stray);
@@ -6075,12 +6077,12 @@ void Server::_rename_prepare(MDRequestRef& mdr,
 
   if (!silent) {
     if (pi) {
-      pi->ctime = mdr->now;
+      pi->ctime = mdr->get_op_stamp();
       if (linkmerge)
 	pi->nlink--;
     }
     if (tpi) {
-      tpi->ctime = mdr->now;
+      tpi->ctime = mdr->get_op_stamp();
       tpi->nlink--;
       if (tpi->nlink == 0)
 	oldin->state_set(CInode::STATE_ORPHAN);
@@ -6446,7 +6448,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   if (destdnl->is_primary() && !linkmerge)
     assert(straydn);
 
-  mdr->now = mdr->slave_request->now;
+  mdr->set_op_stamp(mdr->slave_request->op_stamp);
   mdr->more()->srcdn_auth_mds = srcdn->authority().first;
 
   // set up commit waiter (early, to clean up any freezing etc we do)
@@ -7335,7 +7337,7 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   info.ino = diri->ino();
   info.snapid = snapid;
   info.name = snapname;
-  info.stamp = mdr->now;
+  info.stamp = mdr->get_op_stamp();
 
   inode_t *pi = diri->project_inode();
   pi->ctime = info.stamp;
