@@ -378,20 +378,25 @@ int JournalTool::main_event(std::vector<const char*> &argv)
   // Generate output
   // ===============
   EventOutput output(js, output_path);
+  int output_result = 0;
   if (output_style == "binary") {
-      output.binary();
+      output_result = output.binary();
   } else if (output_style == "json") {
-      output.json();
+      output_result = output.json();
   } else if (output_style == "summary") {
       output.summary();
   } else if (output_style == "list") {
       output.list();
   } else {
-    derr << "Bad output command '" << output_style << "'" << dendl;
+    std::cerr << "Bad output command '" << output_style << "'" << std::endl;
     return -EINVAL;
   }
 
-  return 0;
+  if (output_result != 0) {
+    std::cerr << "Error writing output: " << cpp_strerror(output_result) << std::endl;
+  }
+
+  return output_result;
 }
 
 /**
