@@ -1618,6 +1618,9 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
        !i.end(); ++i) {
     Object *ob = *i;
 
+    if (ob->dirty_or_tx == 0)
+      continue;
+
     if (!flush(ob, 0, 0)) {
       // we'll need to gather...
       ldout(cct, 10) << "flush_set " << oset << " will wait for ack tid " 
