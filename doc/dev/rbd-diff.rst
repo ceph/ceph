@@ -7,7 +7,7 @@ two snapshots (or a snapshot and the head) of an RBD image.
 Header
 ~~~~~~
 
-"rbd diff v1\n"
+"rbd diff v1\\n"
 
 Metadata records
 ~~~~~~~~~~~~~~~~
