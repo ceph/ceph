@@ -9,6 +9,7 @@ import time
 import yaml
 
 from datetime import datetime
+from traceback import format_tb
 
 from teuthology import setup_log_file
 from . import beanstalk
@@ -38,6 +39,23 @@ def restart():
     args = sys.argv[:]
     args.insert(0, sys.executable)
     os.execv(sys.executable, args)
+
+
+def install_except_hook():
+    """
+    Install an exception hook that first logs any uncaught exception, then
+    raises it.
+    """
+    def log_exception(exception_class, exception, traceback):
+        logging.critical(''.join(format_tb(traceback)))
+        if not exception.message:
+            logging.critical(exception_class.__name__)
+        else:
+            logging.critical('{0}: {1}'.format(
+                exception_class.__name__, exception))
+        # Now raise the exception like normal
+        sys.__excepthook__(exception_class, exception, traceback)
+    sys.excepthook = log_exception
 
 
 class filelock(object):
@@ -128,6 +146,8 @@ def main(ctx):
     log_file_path = os.path.join(ctx.log_dir, 'worker.{tube}.{pid}'.format(
         pid=os.getpid(), tube=ctx.tube,))
     setup_log_file(log, log_file_path)
+
+    install_except_hook()
 
     if not os.path.isdir(ctx.archive_dir):
         sys.exit("{prog}: archive directory must exist: {path}".format(
