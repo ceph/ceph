@@ -109,23 +109,23 @@ def lock_machines(ctx, config):
                     vmlist.append(lmach)
             if vmlist:
                 log.info('Waiting for virtual machines to come up')
-                keyscan_out = ''
+                keys_dict = dict()
                 loopcount = 0
-                while len(keyscan_out.splitlines()) != len(vmlist):
+                while len(keys_dict) != len(vmlist):
                     loopcount += 1
                     time.sleep(10)
-                    keyscan_out, current_locks = lock.keyscan_check(vmlist)
+                    keys_dict = lock.ssh_keyscan(vmlist)
                     log.info('virtual machine is still unavailable')
                     if loopcount == 40:
                         loopcount = 0
                         log.info('virtual machine(s) still not up, ' +
                                  'recreating unresponsive ones.')
                         for guest in vmlist:
-                            if guest not in keyscan_out:
+                            if guest not in keys_dict.keys():
                                 log.info('recreating: ' + guest)
                                 provision.destroy_if_vm(ctx, 'ubuntu@' + guest)
                                 provision.create_if_vm(ctx, 'ubuntu@' + guest)
-                if lock.update_keys(keyscan_out, current_locks):
+                if lock.do_update_keys(keys_dict):
                     log.info("Error in virtual machine keys")
                 newscandict = {}
                 for dkey in newly_locked.iterkeys():
