@@ -154,10 +154,6 @@ configuration file, perform the following steps using ``ceph-deploy``.
 
 	ceph-deploy admin admin-node node1 node2 node3
 
-   **Note:** Since you are using ``ceph-deploy`` to talk to the
-   local host (admin-node), your host must be reachable by its hostname 
-   (e.g., you can modify ``/etc/hosts`` if necessary). 
-   
 #. Ensure that you have the correct permissions for the 
    ``ceph.client.admin.keyring``. ::
 
