@@ -67,113 +67,41 @@ For RPM-based systems (Red Hat, SUSE, etc.),
 	rpmbuild
 
 
+Build Prerequisites
+===================
+
+debian-based
+------------
+
+The list of debian package depencies can be found in deps.deb.txt:
+
+	sudo apt-get install `cat deps.deb.txt`
+
+Note: libsnappy-dev and libleveldb-dev are not available upstream for natty, oneiric, and squeeze.  Backports for Ceph can be found at ceph.com/debian-leveldb.
+
+rpm-based
+---------
+
+The list of RPM package dependencies can be found in deps.rpm.txt:
+
+	sudo yum install `cat deps.rpm.txt`
+
+
 Building the Documentation
 ==========================
 
 Prerequisites
 -------------
-To build the documentation, you must install the following:
 
-- python-dev
-- python-pip
-- python-virtualenv
-- doxygen
-- ditaa
-- libxml2-dev
-- libxslt-dev
-- dot
-- graphviz
+The list of package dependencides for building the documentation can be found
+in doc_deps.deb.txt:
 
-For example:
-
-	sudo apt-get install python-dev python-pip python-virtualenv doxygen ditaa libxml2-dev libxslt-dev dot graphviz
+	sudo apt-get install `cat doc_deps.deb.txt`
 
 Building the Documentation
 --------------------------
 
 To build the documentation, ensure that you are in the top-level `/ceph directory, and execute the build script. For example:
 
-	$ admin/build-doc
-
-
-Build Prerequisites
-===================
-
-debian-based
-------------
-To build the source code, you must install the following:
-
-- automake
-- autoconf
-- pkg-config
-- gcc
-- g++
-- make
-- libboost-dev
-- libedit-dev
-- libssl-dev
-- libtool
-- libfcgi
-- libfcgi-dev
-- xfslibs-dev
-- libfuse-dev
-- linux-kernel-headers
-- libcrypto++-dev
-- libaio-dev
-- libgoogle-perftools-dev
-- libkeyutils-dev
-- uuid-dev
-- libblkid-dev
-- libudev-dev
-- libatomic-ops-dev
-- libboost-program-options-dev
-- libboost-system-dev
-- libboost-thread-dev
-- libexpat1-dev
-- libleveldb-dev
-- libsnappy-dev
-- libcurl4-gnutls-dev
-- python-argparse
-- python-flask
-
-For example:
-
-	$ apt-get install automake autoconf pkg-config gcc g++ make libboost-dev libedit-dev libssl-dev libtool libfcgi libfcgi-dev xfslibs-dev libfuse-dev linux-kernel-headers libcrypto++-dev libaio-dev libgoogle-perftools-dev libkeyutils-dev uuid-dev libblkid-dev libudev-dev libatomic-ops-dev libboost-program-options-dev libboost-system-dev libboost-thread-dev libexpat1-dev libleveldb-dev libsnappy-dev libcurl4-gnutls-dev python-argparse python-flask python-nose
-
-Note: libsnappy-dev and libleveldb-dev are not available upstream for natty, oneiric, and squeeze.  Backports for Ceph can be found at ceph.com/debian-leveldb.
-
-rpm-based
----------
-These are the rpm packages needed to install in an rpm-based OS:
-
-    autoconf
-    automake
-    gcc
-    gcc-c++
-    make
-    libtool
-    python-argparse
-    python-flask
-    libuuid-devel
-    libblkid-devel
-    libudev-devel (systemd-devel)
-    keyutils-libs-devel
-    cryptopp-devel
-    nss-devel
-    fcgi-devel
-    expat-devel
-    libcurl-devel
-    xfsprogs-devel
-    fuse-devel
-    gperftools-devel
-    libedit-devel
-    libatomic_ops-devel
-    snappy-devel
-    leveldb-devel
-    libaio-devel
-    boost-devel
-
-For example:
-
-	$ yum install autoconf automake gcc gcc-c++ make libtool python-argparse python-flask libuuid-devel libblkid-devel systemd-devel keyutils-libs-devel cryptopp-devel nss-devel fcgi-devel expat-devel libcurl-devel xfsprogs-devel fuse-devel gperftools-devel libedit-devel libatomic_ops-devel snappy-devel leveldb-devel libaio-devel boost-devel python-nose
+	admin/build-doc
 
