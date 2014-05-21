@@ -53,18 +53,11 @@ int Dumper::init(int rank_)
 
 int Dumper::recover_journal(Journaler *journaler)
 {
-  bool done = false;
-  Cond cond;
-  Mutex localLock("dump:recover_journal");
-  int r;
-
+  C_SaferCond cond;
   lock.Lock();
-  journaler->recover(new C_SafeCond(&localLock, &cond, &done, &r));
+  journaler->recover(&cond);
   lock.Unlock();
-  localLock.Lock();
-  while (!done)
-    cond.Wait(localLock);
-  localLock.Unlock();
+  int const r = cond.wait();
 
   if (r < 0) { // Error
     derr << "error on recovery: " << cpp_strerror(r) << dendl;
@@ -78,10 +71,7 @@ int Dumper::recover_journal(Journaler *journaler)
 
 void Dumper::dump(const char *dump_file)
 {
-  bool done = false;
   int r = 0;
-  Cond cond;
-  Mutex localLock("dump:lock");
 
   Journaler journaler(ino, mdsmap->get_metadata_pool(), CEPH_FS_ONDISK_MAGIC,
                                        objecter, 0, 0, &timer);
@@ -98,14 +88,12 @@ void Dumper::dump(const char *dump_file)
   Filer filer(objecter);
   bufferlist bl;
 
+  C_SaferCond cond;
   lock.Lock();
   filer.read(ino, &journaler.get_layout(), CEPH_NOSNAP,
-             start, len, &bl, 0, new C_SafeCond(&localLock, &cond, &done));
+             start, len, &bl, 0, &cond);
   lock.Unlock();
-  localLock.Lock();
-  while (!done)
-    cond.Wait(localLock);
-  localLock.Unlock();
+  r = cond.wait();
 
   cout << "read " << bl.length() << " bytes at offset " << start << std::endl;
 
@@ -140,7 +128,7 @@ void Dumper::dump(const char *dump_file)
 
 void Dumper::undump(const char *dump_file)
 {
-  Mutex localLock("undump:lock");
+
   cout << "undump " << dump_file << std::endl;
   
   int fd = ::open(dump_file, O_RDONLY);
@@ -182,41 +170,44 @@ void Dumper::undump(const char *dump_file)
   object_locator_t oloc(mdsmap->get_metadata_pool());
   SnapContext snapc;
 
-  bool done = false;
-  Cond cond;
-  
   cout << "writing header " << oid << std::endl;
+  C_SaferCond header_cond;
   lock.Lock();
   objecter->write_full(oid, oloc, snapc, hbl, ceph_clock_now(g_ceph_context), 0, 
-		       NULL, 
-		       new C_SafeCond(&localLock, &cond, &done));
+		       NULL, &header_cond);
   lock.Unlock();
 
-  localLock.Lock();
-  while (!done)
-    cond.Wait(localLock);
-  localLock.Unlock();
+  r = header_cond.wait();
+  if (r != 0) {
+    derr << "Failed to write header: " << cpp_strerror(r) << dendl;
+    return;
+  }
   
-  // read
+  // Stream from `fd` to `filer`
   Filer filer(objecter);
   uint64_t pos = start;
   uint64_t left = len;
   while (left > 0) {
+    // Read
     bufferlist j;
     lseek64(fd, pos, SEEK_SET);
     uint64_t l = MIN(left, 1024*1024);
     j.read_fd(fd, l);
+
+    // Write
     cout << " writing " << pos << "~" << l << std::endl;
+    C_SaferCond write_cond;
     lock.Lock();
-    filer.write(ino, &h.layout, snapc, pos, l, j, ceph_clock_now(g_ceph_context), 0, NULL,
-        new C_SafeCond(&localLock, &cond, &done));
+    filer.write(ino, &h.layout, snapc, pos, l, j, ceph_clock_now(g_ceph_context), 0, NULL, &write_cond);
     lock.Unlock();
 
-    localLock.Lock();
-    while (!done)
-      cond.Wait(localLock);
-    localLock.Unlock();
+    r = write_cond.wait();
+    if (r != 0) {
+      derr << "Failed to write header: " << cpp_strerror(r) << dendl;
+      return;
+    }
       
+    // Advance
     pos += l;
     left -= l;
   }
