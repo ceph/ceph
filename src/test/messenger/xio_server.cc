@@ -75,7 +75,7 @@ int main(int argc, const char **argv)
 	entity_addr_from_url(&bind_addr, dest_str.c_str());
 
 	messenger = new XioMessenger(g_ceph_context,
-				     entity_name_t::GENERIC(),
+				     entity_name_t::MON(),
 				     "xio_server",
 				     0 /* nonce */,
 				     2 /* portals */,

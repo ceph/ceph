@@ -85,7 +85,7 @@ int main(int argc, const char **argv)
 	  "data buffer size " << n_dsize << std::endl;
 
 	messenger = Messenger::create(g_ceph_context,
-				      entity_name_t::GENERIC(),
+				      entity_name_t::MON(),
 				      "client",
 				      getpid());
 
@@ -96,7 +96,7 @@ int main(int argc, const char **argv)
 	dest_str += ":";
 	dest_str += port;
 	entity_addr_from_url(&dest_addr, dest_str.c_str());
-	entity_inst_t dest_server(entity_name_t::GENERIC(), dest_addr);
+	entity_inst_t dest_server(entity_name_t::MON(), dest_addr);
 
 	dispatcher = new SimpleDispatcher(messenger);
 	messenger->add_dispatcher_head(dispatcher);

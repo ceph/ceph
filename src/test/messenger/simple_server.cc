@@ -74,7 +74,7 @@ int main(int argc, const char **argv)
 	entity_addr_from_url(&bind_addr, dest_str.c_str());
 
 	messenger = Messenger::create(g_ceph_context,
-				      entity_name_t::GENERIC(),
+				      entity_name_t::MON(),
 				      "simple_server",
 				      0 /* nonce */);
 	messenger->set_default_policy(

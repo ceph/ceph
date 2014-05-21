@@ -81,7 +81,7 @@ int main(int argc, const char **argv)
 	};
 
 	messenger = new XioMessenger(g_ceph_context,
-				     entity_name_t::GENERIC(),
+				     entity_name_t::MON(),
 				     "xio_client",
 				     0 /* nonce */,
 				     0 /* portals */,
@@ -96,7 +96,7 @@ int main(int argc, const char **argv)
 	dest_str += ":";
 	dest_str += port;
 	entity_addr_from_url(&dest_addr, dest_str.c_str());
-	entity_inst_t dest_server(entity_name_t::GENERIC(), dest_addr);
+	entity_inst_t dest_server(entity_name_t::MON(), dest_addr);
 
 	dispatcher = new XioDispatcher(messenger);
 	messenger->add_dispatcher_head(dispatcher);
