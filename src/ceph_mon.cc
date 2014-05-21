@@ -29,11 +29,14 @@ using namespace std;
 #include "mon/MonClient.h"
 
 #include "msg/Messenger.h"
+#include "msg/XioMessenger.h"
+#include "msg/QueueStrategy.h"
 
 #include "include/CompatSet.h"
 
 #include "common/ceph_argparse.h"
 #include "common/pick_address.h"
+#include "common/address_helper.h"
 #include "common/Timer.h"
 #include "common/errno.h"
 #include "common/Preforker.h"
@@ -71,7 +74,7 @@ int obtain_monmap(MonitorDBStore &store, bufferlist &bl)
       assert(err == 0);
       assert(bl.length() > 0);
       dout(10) << __func__ << " read last committed monmap ver "
-               << latest_ver << dendl;
+	       << latest_ver << dendl;
       return 0;
     }
   }
@@ -222,7 +225,8 @@ int main(int argc, const char **argv)
 
   uuid_d fsid;
   std::string val;
-  for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
+  for (std::vector<const char*>::iterator i = args.begin();
+       i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
@@ -234,13 +238,16 @@ int main(int argc, const char **argv)
       compact = true;
     } else if (ceph_argparse_flag(args, i, "--force-sync", (char*)NULL)) {
       force_sync = true;
-    } else if (ceph_argparse_flag(args, i, "--yes-i-really-mean-it", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--yes-i-really-mean-it",
+				  (char*)NULL)) {
       yes_really = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--osdmap", (char*)NULL)) {
       osdmapfn = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--inject_monmap", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--inject_monmap",
+				     (char*)NULL)) {
       inject_monmap = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--extract-monmap", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--extract-monmap",
+				     (char*)NULL)) {
       extract_monmap = val;
     } else {
       ++i;
@@ -252,8 +259,10 @@ int main(int argc, const char **argv)
   }
 
   if (force_sync && !yes_really) {
-    cerr << "are you SURE you want to force a sync?  this will erase local data and may\n"
-	 << "break your mon cluster.  pass --yes-i-really-mean-it if you do." << std::endl;
+    cerr << "are you SURE you want to force a sync?  "
+	 << "this will erase local data and may\n"
+	 << "break your mon cluster.  pass --yes-i-really-mean-it if you do."
+	 << std::endl;
     exit(1);
   }
 
@@ -303,7 +312,8 @@ int main(int argc, const char **argv)
     if (g_conf->monmap.length()) {
       int err = monmapbl.read_file(g_conf->monmap.c_str(), &error);
       if (err < 0) {
-	cerr << argv[0] << ": error reading " << g_conf->monmap << ": " << error << std::endl;
+	cerr << argv[0] << ": error reading " << g_conf->monmap << ": "
+	     << error << std::endl;
 	exit(1);
       }
       try {
@@ -313,13 +323,15 @@ int main(int argc, const char **argv)
 	monmap.set_epoch(0);
       }
       catch (const buffer::error& e) {
-	cerr << argv[0] << ": error decoding monmap " << g_conf->monmap << ": " << e.what() << std::endl;
+	cerr << argv[0] << ": error decoding monmap " << g_conf->monmap
+	     << ": " << e.what() << std::endl;
 	exit(1);
-      }      
+      }
     } else {
       int err = monmap.build_initial(g_ceph_context, cerr);
       if (err < 0) {
-	cerr << argv[0] << ": warning: no initial monitors; must use admin socket to feed hints" << std::endl;
+	cerr << argv[0] << ": warning: no initial monitors; "
+	     << "must use admin socket to feed hints" << std::endl;
       }
 
       // am i part of the initial quorum?
@@ -349,11 +361,13 @@ int main(int argc, const char **argv)
 
 	  if (name.find("noname-") == 0) {
 	    cout << argv[0] << ": mon." << name << " " << local
-		 << " is local, renaming to mon." << g_conf->name.get_id() << std::endl;
+		 << " is local, renaming to mon." << g_conf->name.get_id()
+		 << std::endl;
 	    monmap.rename(name, g_conf->name.get_id());
 	  } else {
 	    cout << argv[0] << ": mon." << name << " " << local
-		 << " is local, but not 'noname-' + something; not assuming it's me" << std::endl;
+		 << " is local, but not 'noname-' + something; "
+		 << "not assuming it's me" << std::endl;
 	  }
 	}
       }
@@ -363,9 +377,10 @@ int main(int argc, const char **argv)
       monmap.fsid = g_conf->fsid;
       cout << argv[0] << ": set fsid to " << g_conf->fsid << std::endl;
     }
-    
+
     if (monmap.fsid.is_zero()) {
-      cerr << argv[0] << ": generated monmap has no fsid; use '--fsid <uuid>'" << std::endl;
+      cerr << argv[0] << ": generated monmap has no fsid; use '--fsid <uuid>'"
+	   << std::endl;
       exit(10);
     }
 
@@ -386,18 +401,20 @@ int main(int argc, const char **argv)
     int r = store.create_and_open(cerr);
     if (r < 0) {
       cerr << argv[0] << ": error opening mon data directory at '"
-           << g_conf->mon_data << "': " << cpp_strerror(r) << std::endl;
+	   << g_conf->mon_data << "': " << cpp_strerror(r) << std::endl;
       exit(1);
     }
     assert(r == 0);
 
-    Monitor mon(g_ceph_context, g_conf->name.get_id(), &store, 0, &monmap);
+    Monitor mon(g_ceph_context, g_conf->name.get_id(), &store, NULL, NULL,
+		&monmap);
     r = mon.mkfs(osdmapbl);
     if (r < 0) {
-      cerr << argv[0] << ": error creating monfs: " << cpp_strerror(r) << std::endl;
+      cerr << argv[0] << ": error creating monfs: " << cpp_strerror(r)
+	   << std::endl;
       exit(1);
     }
-    cout << argv[0] << ": created monfs at " << g_conf->mon_data 
+    cout << argv[0] << ": created monfs at " << g_conf->mon_data
 	 << " for " << g_conf->name << std::endl;
     return 0;
   }
@@ -518,9 +535,9 @@ int main(int argc, const char **argv)
     int err = obtain_monmap(*store, mapbl);
     if (err >= 0) {
       try {
-        monmap.decode(mapbl);
+	monmap.decode(mapbl);
       } catch (const buffer::error& e) {
-        cerr << "can't decode monmap: " << e.what() << std::endl;
+	cerr << "can't decode monmap: " << e.what() << std::endl;
       }
     } else {
       derr << "unable to obtain a monmap: " << cpp_strerror(err) << dendl;
@@ -529,7 +546,8 @@ int main(int argc, const char **argv)
       int r = mapbl.write_file(extract_monmap.c_str());
       if (r < 0) {
 	r = -errno;
-	derr << "error writing monmap to " << extract_monmap << ": " << cpp_strerror(r) << dendl;
+	derr << "error writing monmap to " << extract_monmap << ": " <<
+	  cpp_strerror(r) << dendl;
 	prefork.exit(1);
       }
       derr << "wrote monmap to " << extract_monmap << dendl;
@@ -557,7 +575,9 @@ int main(int argc, const char **argv)
       }
     }
   } else {
-    dout(0) << g_conf->name << " does not exist in monmap, will attempt to join an existing cluster" << dendl;
+    dout(0) << g_conf->name <<
+      " does not exist in monmap, will attempt to join an existing cluster"
+	    << dendl;
 
     pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
     if (!g_conf->public_addr.is_blank_ip()) {
@@ -587,12 +607,16 @@ int main(int argc, const char **argv)
 
   // bind
   int rank = monmap.get_rank(g_conf->name.get_id());
-  Messenger *messenger = Messenger::create(g_ceph_context,
-					   entity_name_t::MON(rank),
-					   "mon",
-					   0);
-  messenger->set_cluster_protocol(CEPH_MON_PROTOCOL);
-  messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
+
+  Messenger *cluster_msgr = NULL;
+
+  /* SimpleMessenger */
+  Messenger *simple_msgr = Messenger::create(g_ceph_context,
+					     entity_name_t::MON(rank),
+					     "mon",
+					     0);
+  simple_msgr->set_cluster_protocol(CEPH_MON_PROTOCOL);
+  simple_msgr->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
 
   uint64_t supported =
     CEPH_FEATURE_UID |
@@ -600,34 +624,39 @@ int main(int argc, const char **argv)
     CEPH_FEATURE_MONCLOCKCHECK |
     CEPH_FEATURE_PGID64 |
     CEPH_FEATURE_MSG_AUTH;
-  messenger->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
-  messenger->set_policy(entity_name_t::TYPE_MON,
-                        Messenger::Policy::lossless_peer_reuse(supported,
-							       CEPH_FEATURE_UID |
-							       CEPH_FEATURE_PGID64 |
-							       CEPH_FEATURE_MON_SINGLE_PAXOS));
-  messenger->set_policy(entity_name_t::TYPE_OSD,
-                        Messenger::Policy::stateless_server(supported,
-                                                            CEPH_FEATURE_PGID64 |
-                                                            CEPH_FEATURE_OSDENC));
-  messenger->set_policy(entity_name_t::TYPE_CLIENT,
-			Messenger::Policy::stateless_server(supported, 0));
-  messenger->set_policy(entity_name_t::TYPE_MDS,
-			Messenger::Policy::stateless_server(supported, 0));
-
+  simple_msgr->set_default_policy(Messenger::Policy::stateless_server(
+				  supported, 0));
+  simple_msgr->set_policy(entity_name_t::TYPE_MON,
+			  Messenger::Policy::lossless_peer_reuse(
+			    supported,
+			    CEPH_FEATURE_UID |
+			    CEPH_FEATURE_PGID64 |
+			    CEPH_FEATURE_MON_SINGLE_PAXOS));
+  simple_msgr->set_policy(entity_name_t::TYPE_OSD,
+			  Messenger::Policy::stateless_server(
+			    supported,
+			    CEPH_FEATURE_PGID64 |
+			    CEPH_FEATURE_OSDENC));
+  simple_msgr->set_policy(entity_name_t::TYPE_CLIENT,
+			  Messenger::Policy::stateless_server(supported, 0));
+  simple_msgr->set_policy(entity_name_t::TYPE_MDS,
+			  Messenger::Policy::stateless_server(supported, 0));
 
   // throttle client traffic
   Throttle *client_throttler = new Throttle(g_ceph_context, "mon_client_bytes",
 					    g_conf->mon_client_bytes);
-  messenger->set_policy_throttlers(entity_name_t::TYPE_CLIENT, client_throttler, NULL);
+  simple_msgr->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
+				     client_throttler, NULL);
 
   // throttle daemon traffic
   // NOTE: actual usage on the leader may multiply by the number of
   // monitors if they forward large update messages from daemons.
   Throttle *daemon_throttler = new Throttle(g_ceph_context, "mon_daemon_bytes",
 					    g_conf->mon_daemon_bytes);
-  messenger->set_policy_throttlers(entity_name_t::TYPE_OSD, daemon_throttler, NULL);
-  messenger->set_policy_throttlers(entity_name_t::TYPE_MDS, daemon_throttler, NULL);
+  simple_msgr->set_policy_throttlers(entity_name_t::TYPE_OSD, daemon_throttler,
+				     NULL);
+  simple_msgr->set_policy_throttlers(entity_name_t::TYPE_MDS, daemon_throttler,
+				     NULL);
 
   dout(0) << "starting " << g_conf->name << " rank " << rank
        << " at " << ipaddr
@@ -635,15 +664,68 @@ int main(int argc, const char **argv)
        << " fsid " << monmap.get_fsid()
        << dendl;
 
-  err = messenger->bind(ipaddr);
+  err = simple_msgr->bind(ipaddr);
   if (err < 0) {
     derr << "unable to bind monitor to " << ipaddr << dendl;
     prefork.exit(1);
   }
 
+  /* XioMessenger */
+  XioMessenger *xmsgr = new XioMessenger(g_ceph_context,
+					 entity_name_t::MON(rank),
+					 "xio mon",
+					 0 /* nonce */,
+					 2 /* portals */,
+					 new QueueStrategy(2) /* dispatch strategy */);
+
+  xmsgr->set_cluster_protocol(CEPH_MON_PROTOCOL);
+  xmsgr->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
+  xmsgr->set_port_shift(111);
+
+  xmsgr->set_default_policy(Messenger::Policy::stateless_server(
+				  supported, 0));
+  xmsgr->set_policy(entity_name_t::TYPE_MON,
+			Messenger::Policy::lossless_peer_reuse(
+			  supported,
+			  CEPH_FEATURE_UID |
+			  CEPH_FEATURE_PGID64 |
+			  CEPH_FEATURE_MON_SINGLE_PAXOS));
+  xmsgr->set_policy(entity_name_t::TYPE_OSD,
+			Messenger::Policy::stateless_server(
+			  supported,
+			  CEPH_FEATURE_PGID64 |
+			  CEPH_FEATURE_OSDENC));
+  xmsgr->set_policy(entity_name_t::TYPE_CLIENT,
+			Messenger::Policy::stateless_server(supported, 0));
+  xmsgr->set_policy(entity_name_t::TYPE_MDS,
+			Messenger::Policy::stateless_server(supported, 0));
+
+  xmsgr->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
+				   client_throttler, NULL);
+
+  xmsgr->set_policy_throttlers(entity_name_t::TYPE_OSD, daemon_throttler,
+				   NULL);
+  xmsgr->set_policy_throttlers(entity_name_t::TYPE_MDS, daemon_throttler,
+				   NULL);
+
+  cout << "starting " << g_conf->name << " rank " << rank
+       << " at " << ipaddr
+       << " mon_data " << g_conf->mon_data
+       << " fsid " << monmap.get_fsid()
+       << std::endl;
+
+  err = xmsgr->bind(simple_msgr->get_myaddr());
+  if (err < 0)
+    prefork.exit(1);
+
+  if (g_conf->cluster_rdma)
+    cluster_msgr = xmsgr;
+  else
+    cluster_msgr = simple_msgr;
+
   // start monitor
-  mon = new Monitor(g_ceph_context, g_conf->name.get_id(), store, 
-		    messenger, &monmap);
+  mon = new Monitor(g_ceph_context, g_conf->name.get_id(), store,
+		    cluster_msgr, xmsgr, &monmap);
 
   if (force_sync) {
     derr << "flagging a forced sync ..." << dendl;
@@ -667,7 +749,8 @@ int main(int argc, const char **argv)
     prefork.daemonize();
   }
 
-  messenger->start();
+  simple_msgr->start();
+  xmsgr->start();
 
   mon->init();
 
@@ -680,7 +763,8 @@ int main(int argc, const char **argv)
   if (g_conf->inject_early_sigterm)
     kill(getpid(), SIGTERM);
 
-  messenger->wait();
+  simple_msgr->wait();
+  xmsgr->wait();
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_mon_signal);
@@ -689,12 +773,13 @@ int main(int argc, const char **argv)
 
   delete mon;
   delete store;
-  delete messenger;
+  delete simple_msgr;
   delete client_throttler;
   delete daemon_throttler;
   g_ceph_context->put();
 
-  // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
+  // cd on exit, so that gmon.out (if any) goes into a separate directory
+  // for each node.
   char s[20];
   snprintf(s, sizeof(s), "gmon/%d", getpid());
   if ((mkdir(s, 0755) == 0) && (chdir(s) == 0)) {

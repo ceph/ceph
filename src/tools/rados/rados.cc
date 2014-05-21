@@ -1330,7 +1330,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
      goto out;
   }
 
-  ret = rados.connect();
+  if (opts.count("xio"))
+    ret = rados.xio_connect();
+  else
+    ret = rados.connect();
   if (ret) {
      cerr << "couldn't connect to cluster! error " << ret << std::endl;
      ret = -1;
@@ -2630,6 +2633,8 @@ int main(int argc, const char **argv)
       opts["lock-type"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-N", "--namespace", (char*)NULL)) {
       opts["namespace"] = val;
+    } else if (ceph_argparse_flag(args, i, "-x", "--xio", (char*)NULL)) {
+      opts["xio"] = "true";
     } else {
       if (val[0] == '-')
         usage_exit();

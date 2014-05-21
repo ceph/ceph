@@ -461,6 +461,29 @@ fi
 AM_CONDITIONAL(HAVE_JUNIT4, [test "$have_junit4" = "1"])
 
 #
+# Accelio and OFED
+#
+AC_ARG_ENABLE(xio,
+    [AC_HELP_STRING([--enable-xio], [build Ceph Accelio transport])],
+    [], [enable_xio=no])
+
+AM_CONDITIONAL(ENABLE_XIO, [test "x$enable_xio" = "xyes"])
+
+if test "x$enable_xio" = x"yes"; then
+   AC_CHECK_HEADER([libxio.h], [], AC_MSG_ERROR([Cannot find header 'libxio.h'.]))
+   AC_CHECK_LIB([xio], [xio_init], [], AC_MSG_FAILURE([Accelio not found]))
+   AC_CHECK_LIB([ibverbs], [ibv_query_device], [], AC_MSG_FAILURE([OFED not found]))
+   AC_CHECK_LIB([rdmacm], [rdma_connect], [], AC_MSG_FAILURE([OFED not found]))
+
+   AC_DEFINE([HAVE_XIO], [1], [Accelio conditional compilation])
+
+   AM_CXXFLAGS="${AM_CXXFLAGS} -DHAVE_XIO"
+
+   XIO_LIBS="-lxio -libverbs -lrdmacm"
+   AC_SUBST(XIO_LIBS)
+fi
+
+#
 # FreeBSD has it in base.
 #
 if test x"$freebsd" != x"yes"; then
@@ -612,6 +635,11 @@ AC_CHECK_LIB(boost_system-mt, main, [],
 AC_CHECK_LIB(boost_thread-mt, main, [],
     [AC_CHECK_LIB(boost_thread, main, [],
         AC_MSG_FAILURE(["Boost thread library not found."]))])
+
+# And boost regex
+AC_CHECK_LIB(boost_regex-mt, main, [],
+    [AC_CHECK_LIB(boost_regex, main, [],
+        AC_MSG_FAILURE(["Boost regex library not found."]))])
 
 #
 # Check for boost_program_options library (defines BOOST_PROGRAM_OPTIONS_LIBS).

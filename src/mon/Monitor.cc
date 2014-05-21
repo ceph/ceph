@@ -130,11 +130,12 @@ long parse_pos_long(const char *s, ostream *pss)
 }
 
 Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
-		 Messenger *m, MonMap *map) :
+		 Messenger *m, XioMessenger *xm, MonMap *map) :
   Dispatcher(cct_),
   name(nm),
-  rank(-1), 
+  rank(-1),
   messenger(m),
+  xmsgr(xm),
   con_self(m ? m->get_loopback_connection() : NULL),
   lock("Monitor::lock"),
   timer(cct_, lock),
@@ -452,9 +453,11 @@ int Monitor::preinit()
     get_str_list(g_conf->mon_initial_members, initial_members);
 
     if (!initial_members.empty()) {
-      dout(1) << " initial_members " << initial_members << ", filtering seed monmap" << dendl;
+      dout(1) << " initial_members " << initial_members <<
+	", filtering seed monmap" << dendl;
 
-      monmap->set_initial_members(g_ceph_context, initial_members, name, messenger->get_myaddr(),
+      monmap->set_initial_members(g_ceph_context, initial_members, name,
+				  messenger->get_myaddr(),
 				  &extra_probe_peers);
 
       dout(10) << " monmap is " << *monmap << dendl;
@@ -590,6 +593,7 @@ int Monitor::init()
 
   // i'm ready!
   messenger->add_dispatcher_tail(this);
+  xmsgr->add_dispatcher_tail(this);
 
   bootstrap();
 
@@ -705,6 +709,7 @@ void Monitor::shutdown()
   lock.Unlock();
 
   messenger->shutdown();  // last thing!  ceph_mon.cc will delete mon.
+  xmsgr->shutdown();
 }
 
 void Monitor::bootstrap()
@@ -1095,8 +1100,9 @@ void Monitor::handle_sync(MMonSync *m)
 
 void Monitor::_sync_reply_no_cookie(MMonSync *m)
 {
+  ConnectionRef con = m->get_connection();
   MMonSync *reply = new MMonSync(MMonSync::OP_NO_COOKIE, m->cookie);
-  messenger->send_message(reply, m->get_connection());
+  con->get_messenger()->send_message(reply, con);
 }
 
 void Monitor::handle_sync_get_cookie(MMonSync *m)
@@ -1146,9 +1152,10 @@ void Monitor::handle_sync_get_cookie(MMonSync *m)
   }
   dout(10) << __func__ << " will sync from version " << sp.last_committed << dendl;
 
+  ConnectionRef con = m->get_connection();
   MMonSync *reply = new MMonSync(MMonSync::OP_COOKIE, sp.cookie);
   reply->last_committed = sp.last_committed;
-  messenger->send_message(reply, m->get_connection());
+  con->get_messenger()->send_message(reply, con);
 }
 
 void Monitor::handle_sync_get_chunk(MMonSync *m)
@@ -1210,7 +1217,8 @@ void Monitor::handle_sync_get_chunk(MMonSync *m)
 
   ::encode(tx, reply->chunk_bl);
 
-  messenger->send_message(reply, m->get_connection());
+  ConnectionRef con = m->get_connection();
+  con->get_messenger()->send_message(reply, con);
 }
 
 // requester
@@ -1391,17 +1399,18 @@ void Monitor::handle_probe(MMonProbe *m)
  */
 void Monitor::handle_probe_probe(MMonProbe *m)
 {
+  ConnectionRef con = m->get_connection();
   dout(10) << "handle_probe_probe " << m->get_source_inst() << *m
-	   << " features " << m->get_connection()->get_features() << dendl;
-  uint64_t missing = required_features & ~m->get_connection()->get_features();
+	   << " features " << con->get_features() << dendl;
+  uint64_t missing = required_features & ~(con->get_features());
   if (missing) {
     dout(1) << " peer " << m->get_source_addr() << " missing features "
 	    << missing << dendl;
-    if (m->get_connection()->has_feature(CEPH_FEATURE_OSD_PRIMARY_AFFINITY)) {
+    if (con->has_feature(CEPH_FEATURE_OSD_PRIMARY_AFFINITY)) {
       MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_MISSING_FEATURES,
 				   name, has_ever_joined);
       m->required_features = required_features;
-      messenger->send_message(r, m->get_connection());
+      con->get_messenger()->send_message(r, con);
     }
     m->put();
     return;
@@ -1411,10 +1420,10 @@ void Monitor::handle_probe_probe(MMonProbe *m)
 			       name, has_ever_joined);
   r->name = name;
   r->quorum = quorum;
-  monmap->encode(r->monmap_bl, m->get_connection()->get_features());
+  monmap->encode(r->monmap_bl, con->get_features());
   r->paxos_first_version = paxos->get_first_committed();
   r->paxos_last_version = paxos->get_version();
-  messenger->send_message(r, m->get_connection());
+  con->get_messenger()->send_message(r, con);
 
   // did we discover a peer here?
   if (!monmap->contains(m->get_source_addr())) {
@@ -2163,7 +2172,8 @@ bool Monitor::is_keyring_required()
 void Monitor::handle_command(MMonCommand *m)
 {
   if (m->fsid != monmap->fsid) {
-    dout(0) << "handle_command on fsid " << m->fsid << " != " << monmap->fsid << dendl;
+    dout(0) << "handle_command on fsid " << m->fsid << " != "
+	    << monmap->fsid << dendl;
     reply_command(m, -EPERM, "wrong fsid", 0);
     return;
   }
@@ -2571,7 +2581,9 @@ void Monitor::handle_forward(MForward *m)
     dout(0) << "forward from entity with insufficient caps! " 
 	    << session->caps << dendl;
   } else {
-    Connection *c = new Connection(NULL);  // msgr must be null; see PaxosService::dispatch()
+    // see PaxosService::dispatch(); we rely on this being anon
+    // (c->msgr == NULL)
+    Connection *c = messenger->create_anon_connection();
     MonSession *s = new MonSession(m->msg->get_source_inst(), c);
     c->set_priv(s);
     c->set_peer_addr(m->client.addr);
@@ -2631,14 +2643,14 @@ void Monitor::try_send_message(Message *m, const entity_inst_t& to)
 
 void Monitor::send_reply(PaxosServiceMessage *req, Message *reply)
 {
-  ConnectionRef connection = req->get_connection();
-  if (!connection) {
+  ConnectionRef con = req->get_connection();
+  if (!con) {
     dout(2) << "send_reply no connection, dropping reply " << *reply
 	    << " to " << req << " " << *req << dendl;
     reply->put();
     return;
   }
-  MonSession *session = static_cast<MonSession*>(connection->get_priv());
+  MonSession *session = static_cast<MonSession*>(con->get_priv());
   if (!session) {
     dout(2) << "send_reply no session, dropping reply " << *reply
 	    << " to " << req << " " << *req << dendl;
@@ -2646,20 +2658,21 @@ void Monitor::send_reply(PaxosServiceMessage *req, Message *reply)
     return;
   }
   if (session->proxy_con) {
-    dout(15) << "send_reply routing reply to " << req->get_connection()->get_peer_addr()
+    dout(15) << "send_reply routing reply to " << con->get_peer_addr()
 	     << " via " << session->proxy_con->get_peer_addr()
 	     << " for request " << *req << dendl;
-    messenger->send_message(new MRoute(session->proxy_tid, reply),
-			    session->proxy_con);    
+    session->proxy_con->get_messenger()->send_message(
+      new MRoute(session->proxy_tid, reply), session->proxy_con);
   } else {
-    messenger->send_message(reply, session->con);
+    con->get_messenger()->send_message(reply, con);
   }
   session->put();
 }
 
 void Monitor::no_reply(PaxosServiceMessage *req)
 {
-  MonSession *session = static_cast<MonSession*>(req->get_connection()->get_priv());
+  ConnectionRef con = req->get_connection();
+  MonSession *session = static_cast<MonSession*>(con->get_priv());
   if (!session) {
     dout(2) << "no_reply no session, dropping non-reply to " << req << " " << *req << dendl;
     return;
@@ -2669,15 +2682,17 @@ void Monitor::no_reply(PaxosServiceMessage *req)
       dout(10) << "no_reply to " << req->get_source_inst()
 	       << " via " << session->proxy_con->get_peer_addr()
 	       << " for request " << *req << dendl;
-      messenger->send_message(new MRoute(session->proxy_tid, NULL),
-			      session->proxy_con);
+      session->proxy_con->get_messenger()->send_message(
+	new MRoute(session->proxy_tid, NULL), session->proxy_con);
     } else {
-      dout(10) << "no_reply no quorum nullroute feature for " << req->get_source_inst()
+      dout(10) << "no_reply no quorum nullroute feature for " <<
+	req->get_source_inst()
 	       << " via " << session->proxy_con->get_peer_addr()
 	       << " for request " << *req << dendl;
     }
   } else {
-    dout(10) << "no_reply to " << req->get_source_inst() << " " << *req << dendl;
+    dout(10) << "no_reply to " << req->get_source_inst() << " " << *req
+	     << dendl;
   }
   session->put();
 }
@@ -2819,7 +2834,7 @@ void Monitor::waitlist_or_zap_client(Message *m)
     maybe_wait_for_quorum.push_back(new C_RetryMessage(this, m));
   } else {
     dout(5) << "discarding message " << *m << " and sending client elsewhere" << dendl;
-    messenger->mark_down(con);
+    con->get_messenger()->mark_down(con);
     m->put();
   }
 }
@@ -3094,7 +3109,6 @@ void Monitor::handle_ping(MPing *m)
 {
   dout(10) << __func__ << " " << *m << dendl;
   MPing *reply = new MPing;
-  entity_inst_t inst = m->get_source_inst();
   bufferlist payload;
   Formatter *f = new JSONFormatter(true);
   f->open_object_section("pong");
@@ -3111,8 +3125,10 @@ void Monitor::handle_ping(MPing *m)
   f->flush(ss);
   ::encode(ss.str(), payload);
   reply->set_payload(payload);
-  dout(10) << __func__ << " reply payload len " << reply->get_payload().length() << dendl;
-  messenger->send_message(reply, inst);
+  dout(10) << __func__ << " reply payload len "
+	   << reply->get_payload().length() << dendl;
+  const ConnectionRef& conn = m->get_connection();
+  conn->get_messenger()->send_message(reply, conn);
   m->put();
 }
 
@@ -3491,7 +3507,7 @@ void Monitor::handle_timecheck(MTimeCheck *m)
 void Monitor::handle_subscribe(MMonSubscribe *m)
 {
   dout(10) << "handle_subscribe " << *m << dendl;
-  
+
   bool reply = false;
 
   MonSession *s = static_cast<MonSession *>(m->get_connection()->get_priv());
@@ -3510,7 +3526,7 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
     if ((p->second.flags & CEPH_SUBSCRIBE_ONETIME) == 0)
       reply = true;
 
-    session_map.add_update_sub(s, p->first, p->second.start, 
+    session_map.add_update_sub(s, p->first, p->second.start,
 			       p->second.flags & CEPH_SUBSCRIBE_ONETIME,
 			       m->get_connection()->has_feature(CEPH_FEATURE_INCSUBOSDMAP));
 
@@ -3533,11 +3549,12 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
     }
   }
 
-  // ???
-
-  if (reply)
-    messenger->send_message(new MMonSubscribeAck(monmap->get_fsid(), (int)g_conf->mon_subscribe_interval),
-			    m->get_source_inst());
+  if (reply) {
+    ConnectionRef con = m->get_connection();
+    con->get_messenger()->send_message(
+      new MMonSubscribeAck(monmap->get_fsid(),
+			   (int)g_conf->mon_subscribe_interval), con);
+  }
 
   s->put();
   m->put();
@@ -3547,8 +3564,9 @@ void Monitor::handle_get_version(MMonGetVersion *m)
 {
   dout(10) << "handle_get_version " << *m << dendl;
   PaxosService *svc = NULL;
+  ConnectionRef con = m->get_connection();
 
-  MonSession *s = static_cast<MonSession *>(m->get_connection()->get_priv());
+  MonSession *s = static_cast<MonSession *>(con->get_priv());
   if (!s) {
     dout(10) << " no session, dropping" << dendl;
     m->put();
@@ -3580,7 +3598,7 @@ void Monitor::handle_get_version(MMonGetVersion *m)
     reply->handle = m->handle;
     reply->version = svc->get_last_committed();
     reply->oldest_version = svc->get_first_committed();
-    messenger->send_message(reply, m->get_source_inst());
+    con->get_messenger()->send_message(reply, con);
   }
 
   m->put();
@@ -3648,7 +3666,7 @@ void Monitor::send_latest_monmap(Connection *con)
 {
   bufferlist bl;
   monmap->encode(bl, con->get_features());
-  messenger->send_message(new MMonMap(bl), con);
+  con->get_messenger()->send_message(new MMonMap(bl), con);
 }
 
 void Monitor::handle_mon_get_map(MMonGetMap *m)
@@ -3825,19 +3843,19 @@ void Monitor::tick()
     
     // don't trim monitors
     if (s->inst.name.is_mon())
-      continue; 
+      continue;
 
     if (!s->until.is_zero() && s->until < now) {
       dout(10) << " trimming session " << s->con << " " << s->inst
 	       << " (until " << s->until << " < now " << now << ")" << dendl;
-      messenger->mark_down(s->con);
+      s->con->get_messenger()->mark_down(s->con);
       remove_session(s);
     } else if (!exited_quorum.is_zero()) {
       if (now > (exited_quorum + 2 * g_conf->mon_lease)) {
         // boot the client Session because we've taken too long getting back in
         dout(10) << " trimming session " << s->con << " " << s->inst
 		 << " because we've been out of quorum too long" << dendl;
-        messenger->mark_down(s->con);
+        s->con->get_messenger()->mark_down(s->con);
         remove_session(s);
       }
     }

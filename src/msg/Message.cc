@@ -87,7 +87,7 @@ using namespace std;
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
 #include "messages/MMonHealth.h"
-
+#include "messages/MDataPing.h"
 #include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
 #include "messages/MMonSubscribe.h"
@@ -672,6 +672,10 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
     m = new MMonHealth();
     break;
 
+  case MSG_DATA_PING:
+    m = new MDataPing();
+    break;
+
     // -- simple messages without payload --
 
   case CEPH_MSG_SHUTDOWN:
@@ -703,7 +707,7 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
     m->put();
     return 0;
   }
-  
+
   m->set_header(header);
   m->set_footer(footer);
   m->set_payload(front);

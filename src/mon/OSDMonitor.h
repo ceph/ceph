@@ -209,6 +209,7 @@ private:
   void send_full(PaxosServiceMessage *m);
   void send_incremental(PaxosServiceMessage *m, epoch_t first);
   void send_incremental(epoch_t first, entity_inst_t& dest, bool onetime);
+  void send_incremental(epoch_t first, ConnectionRef &con, bool onetime);
 
   int reweight_by_utilization(int oload, std::string& out_str);
 
@@ -320,7 +321,7 @@ private:
 	osdmon->dispatch(m);
       else
 	assert(0 == "bad C_ReplyMap return value");
-    }    
+    }
   };
   struct C_PoolOp : public Context {
     OSDMonitor *osdmon;

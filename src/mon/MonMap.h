@@ -56,7 +56,7 @@ class MonMap {
     }
   }
 
-  MonMap() 
+  MonMap()
     : epoch(0) {
     memset(&fsid, 0, sizeof(fsid));
   }

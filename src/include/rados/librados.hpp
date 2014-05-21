@@ -880,6 +880,7 @@ namespace librados
     int init_with_context(config_t cct_);
     config_t cct();
     int connect();
+    int xio_connect();
     void shutdown();
     int conf_read_file(const char * const path) const;
     int conf_parse_argv(int argc, const char ** argv) const;
