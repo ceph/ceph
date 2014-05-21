@@ -207,7 +207,7 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
     if user is None:
         user = misc.get_user()
     for machinetype in machinetypes:
-        uri = os.path.join(config.lock_server, 'nodes', 'lock_many', '')
+        uri = os.path.join(config.lock_server, 'lock_many', '')
         response = requests.post(
             uri,
             json.dumps(
@@ -249,7 +249,7 @@ def lock_one(name, user=None, description=None):
         user = misc.get_user()
     request = dict(name=name, locked=True, locked_by=user,
                    description=description)
-    uri = os.path.join(config.lock_server, 'nodes', name, 'lock', '')
+    uri = os.path.join(config.lock_server, name, 'lock', '')
     response = requests.put(uri, json.dumps(request))
     success = response.ok
     if success:
@@ -268,7 +268,7 @@ def unlock_one(ctx, name, user=None):
     if user is None:
         user = misc.get_user()
     request = dict(name=name, locked=False, locked_by=user, description=None)
-    uri = os.path.join(config.lock_server, 'nodes', name, 'lock', '')
+    uri = os.path.join(config.lock_server, name, 'lock', '')
     response = requests.put(uri, json.dumps(request))
     success = response.ok
     if success:
@@ -287,7 +287,7 @@ def unlock_one(ctx, name, user=None):
 
 
 def list_locks(keyed_by_name=False, **kwargs):
-    uri = os.path.join(config.lock_server, 'nodes', '')
+    uri = os.path.join(config.lock_server, '')
     if kwargs:
         uri += '?' + urllib.urlencode(kwargs)
     response = requests.get(uri)
@@ -317,7 +317,7 @@ def update_lock(name, description=None, status=None, ssh_pub_key=None):
         updated['ssh_pub_key'] = ssh_pub_key
 
     if updated:
-        uri = os.path.join(config.lock_server, 'nodes', name, '')
+        uri = os.path.join(config.lock_server, name, '')
         response = requests.put(
             uri,
             json.dumps(updated))
