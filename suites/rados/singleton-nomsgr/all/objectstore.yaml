@@ -2,7 +2,6 @@ roles:
 - [mon.0, osd.0, osd.1, mds.a, client.0]
 tasks:
 - install:
-- ceph:
 - exec:
     client.0:
       - mkdir $TESTDIR/ostest && cd $TESTDIR/ostest && ceph_test_objectstore
