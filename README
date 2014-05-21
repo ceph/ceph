@@ -28,13 +28,13 @@ Building Ceph
 
 To prepare the source tree after it has been git cloned,
 
-	$ git submodule update --init
+	git submodule update --init
 
 To build the server daemons, and FUSE client, execute the following:
 
-	$ ./autogen.sh
-	$ ./configure
-	$ make
+	./autogen.sh
+	./configure
+	make
 
 (Note that the FUSE client will only be built if libfuse is present.)
 
@@ -47,9 +47,9 @@ package build dependencies on those platforms.  In many cases,
 dependencies can be avoided with --with-foo or --without-bar switches.
 For example,
 
-$ ./configure --with-nss         # use libnss instead of libcrypto++
-$ ./configure --without-radosgw  # do not build radosgw and avoid libfcgi-dev
-$ ./configure --without-tcmalloc # avoid google-perftools dependency
+	./configure --with-nss         # use libnss instead of libcrypto++
+	./configure --without-radosgw  # do not build radosgw
+	./configure --without-tcmalloc # avoid google-perftools dependency
 
 
 Building packages
@@ -58,13 +58,13 @@ Building packages
 You can build packages for Debian or Debian-derived (e.g., Ubuntu)
 systems with
 
-$ sudo apt-get install dpkg-dev
-$ dpkg-checkbuilddeps        # make sure we have all dependencies
-$ dpkg-buildpackage
+	sudo apt-get install dpkg-dev
+	dpkg-checkbuilddeps        # make sure we have all dependencies
+	dpkg-buildpackage
 
-For RPM-based systems (Redhat, Suse, etc.),
+For RPM-based systems (Red Hat, SUSE, etc.),
 
-$ rpmbuild
+	rpmbuild
 
 
 Building the Documentation
