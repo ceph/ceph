@@ -366,7 +366,7 @@ OSDs with the long form procedure, execute the following on ``node2`` and
 #. Initialize the OSD data directory. :: 
 
 	ssh {new-osd-host}
-	sudo ceph-osd -i {osd-num} --mkfs --mkkey
+	sudo ceph-osd -i {osd-num} --mkfs --mkkey --osd-uuid [{uuid}]
 	
    The directory must be empty before you can run ``ceph-osd`` with the 
    ``--mkkey`` option. In addition, the ceph-osd tool requires specification
@@ -377,7 +377,7 @@ OSDs with the long form procedure, execute the following on ``node2`` and
    ``ceph-{osd-num}`` in the path is the ``$cluster-$id``.  If your 
    cluster name differs from ``ceph``, use your cluster name instead.::
 
-	sudo ceph auth add osd.{osd-num} osd 'allow *' mon 'allow rwx' -i /var/lib/ceph/osd/ceph-{osd-num}/keyring
+	sudo ceph auth add osd.{osd-num} osd 'allow *' mon 'allow profile osd' -i /var/lib/ceph/osd/ceph-{osd-num}/keyring
 
 
 #. Add your Ceph Node to the CRUSH map. ::
