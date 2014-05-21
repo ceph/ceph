@@ -902,10 +902,16 @@ bool MDSMonitor::management_command(
       return true;
     }
   } else if (prefix == "mds rmfs") {
-
     // Check there is something to delete
     if (!pending_mdsmap.enabled) {
       ss << "no filesystem configured";
+      r = -EINVAL;
+      return true;
+    }
+
+    // Check that no MDS daemons are active
+    if (!pending_mdsmap.up.empty()) {
+      ss << "all MDS daemons must be inactive before removing filesystem";
       r = -EINVAL;
       return true;
     }
