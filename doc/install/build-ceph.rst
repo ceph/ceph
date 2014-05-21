@@ -176,7 +176,7 @@ Or from the EU mirror::
 
 Extract the specfile::
 
-    tar --strip-components=1 --no-anchored -xvf ~/rpmbuild/SOURCES/ceph-<version>.tar.gz "ceph.spec" -C ~/rpmbuild/SPECS/
+    tar --strip-components=1 -C ~/rpmbuild/SPECS/ --no-anchored -xvjf ~/rpmbuild/SOURCES/ceph-<version>.tar.bz2 "ceph.spec"
 
 Build the RPM packages::
 
