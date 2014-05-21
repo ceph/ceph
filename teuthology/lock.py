@@ -8,6 +8,7 @@ import collections
 import os
 import time
 import requests
+import urllib
 
 import teuthology
 from . import misc
@@ -90,7 +91,7 @@ def main(ctx):
             # Avoid ssh-keyscans for everybody when listing all machines
             # Listing specific machines will update the keys.
             if machines:
-                scan_for_locks(vmachines)
+                do_update_keys(vmachines)
                 statuses = [get_status(machine)
                             for machine in machines]
             else:
@@ -285,14 +286,18 @@ def unlock_one(ctx, name, user=None):
     return success
 
 
-def list_locks(machine_type=None):
+def list_locks(keyed_by_name=False, **kwargs):
     uri = os.path.join(config.lock_server, 'nodes', '')
-    if machine_type:
-        uri += '?machine_type=' + machine_type
+    if kwargs:
+        uri += '?' + urllib.urlencode(kwargs)
     response = requests.get(uri)
     success = response.ok
     if success:
-        return response.json()
+        if not keyed_by_name:
+            return response.json()
+        else:
+            return {node['name']: node
+                    for node in response.json()}
     return None
 
 
@@ -312,33 +317,12 @@ def update_lock(name, description=None, status=None, ssh_pub_key=None):
         updated['ssh_pub_key'] = ssh_pub_key
 
     if updated:
+        uri = os.path.join(config.lock_server, 'nodes', name, '')
         response = requests.put(
-            config.lock_server + '/nodes/' + name,
+            uri,
             json.dumps(updated))
         return response.ok
     return True
-
-
-def keyscan_check(machines):
-    locks = list_locks()
-    current_locks = {}
-    for lock in locks:
-        current_locks[lock['name']] = lock
-
-    if not machines:
-        machines = current_locks.keys()
-
-    for i, machine in enumerate(machines):
-        if '@' in machine:
-            _, machines[i] = machine.rsplit('@')
-    args = ['ssh-keyscan', '-t', 'rsa']
-    args.extend(machines)
-    p = subprocess.Popen(
-        args=args,
-        stdout=subprocess.PIPE,
-    )
-    out, err = p.communicate()
-    return (out, current_locks)
 
 
 def ssh_keyscan(hostnames):
@@ -388,26 +372,25 @@ def updatekeys(ctx):
         except IOError as e:
             raise argparse.ArgumentTypeError(str(e))
 
-    return scan_for_locks(machines)
+    return do_update_keys(machines)
 
 
-def scan_for_locks(machines):
-    out, current_locks = keyscan_check(machines)
-    return update_keys(out, current_locks)
+def do_update_keys(machines):
+    reference = list_locks(keyed_by_name=True, up=True)
+    if not machines:
+        machines = reference.keys()
+    keys_dict = ssh_keyscan(machines)
+    return push_new_keys(keys_dict, reference)
 
 
-def update_keys(out, current_locks):
+def push_new_keys(keys_dict, reference):
     ret = 0
-    for key_entry in out.splitlines():
-        hostname, pubkey = key_entry.split(' ', 1)
-        # TODO: separate out user
-        full_name = 'ubuntu@{host}'.format(host=hostname)
-        log.info('Checking %s', full_name)
-        assert full_name in current_locks, 'host is not in the database!'
-        if current_locks[full_name]['ssh_pub_key'] != pubkey:
+    for hostname, pubkey in keys_dict.iteritems():
+        log.info('Checking %s', hostname)
+        if reference[hostname]['ssh_pub_key'] != pubkey:
             log.info('New key found. Updating...')
-            if not update_lock(full_name, ssh_pub_key=pubkey):
-                log.error('failed to update %s!', full_name)
+            if not update_lock(hostname, ssh_pub_key=pubkey):
+                log.error('failed to update %s!', hostname)
                 ret = 1
     return ret
 
