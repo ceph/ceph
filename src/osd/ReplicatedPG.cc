@@ -6170,6 +6170,7 @@ int ReplicatedPG::start_flush(
 
   // construct a SnapContext appropriate for this clone/head
   SnapContext dsnapc;
+  dsnapc.seq = 0;
   SnapContext snapc;
   if (soid.snap == CEPH_NOSNAP) {
     snapc.seq = snapset.seq;
@@ -6196,14 +6197,20 @@ int ReplicatedPG::start_flush(
       ++p;
     snapc.snaps = vector<snapid_t>(p, snapset.snaps.end());
 
+    while (p != snapset.snaps.end() && *p >= oi.snaps.back())
+      ++p;
+    vector<snapid_t>::iterator dnewest = p;
+
     // we may need to send a delete first
     while (p != snapset.snaps.end() && *p > prev_snapc)
       ++p;
     dsnapc.snaps = vector<snapid_t>(p, snapset.snaps.end());
 
-    if (dsnapc.snaps.empty()) {
+    if (p == dnewest) {
+      // no snaps between the oldest in this clone and prev_snapc
       snapc.seq = prev_snapc;
     } else {
+      // snaps between oldest in this clone and prev_snapc, send delete
       dsnapc.seq = prev_snapc;
       snapc.seq = oi.snaps.back() - 1;
     }
@@ -6212,7 +6219,7 @@ int ReplicatedPG::start_flush(
   object_locator_t base_oloc(soid);
   base_oloc.pool = pool.info.tier_of;
 
-  if (!dsnapc.snaps.empty()) {
+  if (dsnapc.seq > 0) {
     ObjectOperation o;
     o.remove();
     osd->objecter_lock.Lock();
