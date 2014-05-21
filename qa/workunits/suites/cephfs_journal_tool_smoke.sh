@@ -25,6 +25,11 @@ if [ ! -s $JOURNAL_FILE ] ; then
     exit -1
 fi
 
+# Can we execute a journal reset?
+$BIN journal reset
+$BIN journal inspect
+$BIN header get
+
 # Can we import what we exported?
 $BIN journal import $JOURNAL_FILE
 
@@ -56,12 +61,4 @@ $BIN header set trimmed_pos 123
 
 echo "Rolling back journal to original state..."
 $BIN journal import $JOURNAL_FILE
-
-# XXX doing this *last* because journal reset appends to the journal,
-# and import does not truncated the appended part, resulting in
-# corruption when trying to do an 'import' after a 'reset'.
-# Can we execute a journal reset?
-$BIN journal reset
-$BIN journal inspect
-$BIN header get
 

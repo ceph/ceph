@@ -182,9 +182,28 @@ void Dumper::undump(const char *dump_file)
     derr << "Failed to write header: " << cpp_strerror(r) << dendl;
     return;
   }
+
+  Filer filer(objecter);
+
+  /* Erase any objects at the end of the region to which we shall write
+   * the new log data.  This is to avoid leaving trailing junk after
+   * the newly written data.  Any junk more than one object ahead
+   * will be taken care of during normal operation by Journaler's
+   * prezeroing behaviour */
+  {
+    uint32_t const object_size = h.layout.fl_object_size;
+    assert(object_size > 0);
+    uint64_t const last_obj = h.write_pos / object_size;
+    uint64_t const purge_count = 2;
+    C_SaferCond purge_cond;
+    cout << "Purging " << purge_count << " objects from " << last_obj << std::endl;
+    lock.Lock();
+    filer.purge_range(ino, &h.layout, snapc, last_obj, purge_count, ceph_clock_now(g_ceph_context), 0, &purge_cond);
+    lock.Unlock();
+    purge_cond.wait();
+  }
   
   // Stream from `fd` to `filer`
-  Filer filer(objecter);
   uint64_t pos = start;
   uint64_t left = len;
   while (left > 0) {
