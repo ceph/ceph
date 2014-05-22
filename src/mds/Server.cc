@@ -1384,6 +1384,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       return;
     }
     mdr = mdcache->request_start_slave(m->get_reqid(), m->get_attempt(), m);
+    mdr->set_op_stamp(m->op_stamp);
   }
   assert(mdr->slave_request == 0);     // only one at a time, please!  
 
@@ -1986,7 +1987,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 
   in->inode.uid = mdr->client_request->get_caller_uid();
 
-  in->inode.ctime = in->inode.mtime = in->inode.atime = mdr->now;   // now
+  in->inode.ctime = in->inode.mtime = in->inode.atime = mdr->get_op_stamp();
 
   MClientRequest *req = mdr->client_request;
   if (req->get_data().length()) {
@@ -2611,12 +2612,11 @@ void Server::handle_client_open(MDRequestRef& mdr)
   }
   
   // hit pop
-  mdr->now = ceph_clock_now(g_ceph_context);
   if (cmode == CEPH_FILE_MODE_RDWR ||
       cmode == CEPH_FILE_MODE_WR) 
-    mds->balancer->hit_inode(mdr->now, cur, META_POP_IWR);
+    mds->balancer->hit_inode(mdr->get_mds_stamp(), cur, META_POP_IWR);
   else
-    mds->balancer->hit_inode(mdr->now, cur, META_POP_IRD, 
+    mds->balancer->hit_inode(mdr->get_mds_stamp(), cur, META_POP_IRD,
 			     mdr->client_request->get_source().num());
 
   CDentry *dn = 0;
@@ -2654,7 +2654,7 @@ public:
     MDRequestRef null_ref;
     mds->mdcache->send_dentry_link(dn, null_ref);
 
-    mds->balancer->hit_inode(mdr->now, newi, META_POP_IWR);
+    mds->balancer->hit_inode(mdr->get_mds_stamp(), newi, META_POP_IWR);
 
     MClientReply *reply = new MClientReply(mdr->client_request, 0);
     reply->set_extra_bl(mdr->reply_extra_bl);
@@ -2765,8 +2765,6 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   // created null dn.
     
   // create inode.
-  mdr->now = ceph_clock_now(g_ceph_context);
-
   SnapRealm *realm = diri->find_snaprealm();   // use directory's realm; inode isn't attached yet.
   snapid_t follows = realm->get_newest_seq();
 
@@ -2884,7 +2882,8 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   dir->verify_fragstat();
 #endif
 
-  mdr->now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now(NULL);
+  mdr->set_mds_stamp(now);
 
   snapid_t snapid = mdr->snapid;
   dout(10) << "snapid " << snapid << dendl;
@@ -2992,7 +2991,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
     // dentry
     dout(12) << "including    dn " << *dn << dendl;
     ::encode(dn->name, dnbl);
-    mds->locker->issue_client_lease(dn, client, dnbl, mdr->now, mdr->session);
+    mds->locker->issue_client_lease(dn, client, dnbl, now, mdr->session);
 
     // inode
     dout(12) << "including inode " << *in << dendl;
@@ -3072,7 +3071,7 @@ public:
       mds->mdcache->truncate_inode(in, mdr->ls);
     }
 
-    mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
+    mds->balancer->hit_inode(mdr->get_mds_stamp(), in, META_POP_IWR);
 
     mds->server->reply_request(mdr, 0);
 
@@ -3801,7 +3800,7 @@ public:
     
     mdr->apply();
 
-    mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
+    mds->balancer->hit_inode(mdr->get_mds_stamp(), in, META_POP_IWR);
 
     mds->server->reply_request(mdr, 0);
   }
@@ -3983,7 +3982,7 @@ public:
       mds->locker->share_inode_max_size(newi);
 
     // hit pop
-    mds->balancer->hit_inode(mdr->now, newi, META_POP_IWR);
+    mds->balancer->hit_inode(mdr->get_mds_stamp(), newi, META_POP_IWR);
 
     // reply
     MClientReply *reply = new MClientReply(mdr->client_request, 0);
@@ -4024,8 +4023,6 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
 
   SnapRealm *realm = dn->get_dir()->inode->find_snaprealm();
   snapid_t follows = realm->get_newest_seq();
-  mdr->now = ceph_clock_now(g_ceph_context);
-
   CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino),
 				   mode, &layout);
   assert(newi);
@@ -4105,7 +4102,6 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
   // new inode
   SnapRealm *realm = dn->get_dir()->inode->find_snaprealm();
   snapid_t follows = realm->get_newest_seq();
-  mdr->now = ceph_clock_now(g_ceph_context);
 
   unsigned mode = req->head.args.mkdir.mode;
   mode &= ~S_IFMT;
@@ -4180,7 +4176,6 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  mdr->now = ceph_clock_now(g_ceph_context);
   snapid_t follows = dn->get_dir()->inode->find_snaprealm()->get_newest_seq();
 
   unsigned mode = S_IFLNK | 0777;
@@ -4252,10 +4247,6 @@ void Server::handle_client_link(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  // pick mtime
-  if (mdr->now == utime_t())
-    mdr->now = ceph_clock_now(g_ceph_context);
-
   // go!
   assert(g_conf->mds_kill_link_at != 1);
 
@@ -4299,7 +4290,7 @@ void Server::_link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti)
   // project inode update
   inode_t *pi = targeti->project_inode();
   pi->nlink++;
-  pi->ctime = mdr->now;
+  pi->ctime = mdr->get_op_stamp();
   pi->version = tipv;
 
   snapid_t follows = dn->get_dir()->inode->find_snaprealm()->get_newest_seq();
@@ -4339,8 +4330,8 @@ void Server::_link_local_finish(MDRequestRef& mdr, CDentry *dn, CInode *targeti,
   mds->mdcache->send_dentry_link(dn, null_ref);
 
   // bump target popularity
-  mds->balancer->hit_inode(mdr->now, targeti, META_POP_IWR);
-  mds->balancer->hit_dir(mdr->now, dn->get_dir(), META_POP_IWR);
+  mds->balancer->hit_inode(mdr->get_mds_stamp(), targeti, META_POP_IWR);
+  mds->balancer->hit_dir(mdr->get_mds_stamp(), dn->get_dir(), META_POP_IWR);
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
@@ -4391,7 +4382,7 @@ void Server::_link_remote(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targ
       op = MMDSSlaveRequest::OP_UNLINKPREP;
     MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, mdr->attempt, op);
     targeti->set_object_info(req->get_object_info());
-    req->now = mdr->now;
+    req->op_stamp = mdr->get_op_stamp();
     mds->send_message_mds(req, linkauth);
 
     assert(mdr->more()->waiting_on_slave.count(linkauth) == 0);
@@ -4401,6 +4392,8 @@ void Server::_link_remote(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targ
   dout(10) << " targeti auth has prepared nlink++/--" << dendl;
 
   assert(g_conf->mds_kill_link_at != 2);
+
+  mdr->set_mds_stamp(ceph_clock_now(NULL));
 
   // add to event
   mdr->ls = mdlog->get_current_segment();
@@ -4461,8 +4454,8 @@ void Server::_link_remote_finish(MDRequestRef& mdr, bool inc,
     mds->mdcache->send_dentry_unlink(dn, NULL, null_ref);
   
   // bump target popularity
-  mds->balancer->hit_inode(mdr->now, targeti, META_POP_IWR);
-  mds->balancer->hit_dir(mdr->now, dn->get_dir(), META_POP_IWR);
+  mds->balancer->hit_inode(mdr->get_mds_stamp(), targeti, META_POP_IWR);
+  mds->balancer->hit_dir(mdr->get_mds_stamp(), dn->get_dir(), META_POP_IWR);
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
@@ -4517,7 +4510,7 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
   CDentry::linkage_t *dnl = dn->get_linkage();
   assert(dnl->is_primary());
 
-  mdr->now = mdr->slave_request->now;
+  mdr->set_op_stamp(mdr->slave_request->op_stamp);
 
   mdr->auth_pin(targeti);
 
@@ -4553,7 +4546,7 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
   ::encode(rollback, le->rollback);
   mdr->more()->rollback_bl = le->rollback;
 
-  pi->ctime = mdr->now;
+  pi->ctime = mdr->get_op_stamp();
   pi->version = targeti->pre_dirty();
 
   dout(10) << " projected inode " << pi << " v " << pi->version << dendl;
@@ -4582,7 +4575,7 @@ void Server::_logged_slave_link(MDRequestRef& mdr, CInode *targeti)
   mdr->apply();
 
   // hit pop
-  mds->balancer->hit_inode(mdr->now, targeti, META_POP_IWR);
+  mds->balancer->hit_inode(mdr->get_mds_stamp(), targeti, META_POP_IWR);
 
   // done.
   mdr->slave_request->put();
@@ -4866,9 +4859,6 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   }
 
   // yay!
-  if (mdr->now == utime_t())
-    mdr->now = ceph_clock_now(g_ceph_context);
-
   if (in->is_dir() && in->has_subtree_root_dirfrag()) {
     // subtree root auths need to be witnesses
     set<int> witnesses;
@@ -4897,7 +4887,7 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
     if (!mdr->more()->waiting_on_slave.empty())
       return;  // we're waiting for a witness.
   }
-  
+
   // ok!
   if (dnl->is_remote() && !dnl->get_inode()->is_auth()) 
     _link_remote(mdr, false, dn, dnl->get_inode());
@@ -4957,7 +4947,7 @@ void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
   inode_t *pi = in->project_inode();
   mdr->add_projected_inode(in); // do this _after_ my dn->pre_dirty().. we apply that one manually.
   pi->version = in->pre_dirty();
-  pi->ctime = mdr->now;
+  pi->ctime = mdr->get_op_stamp();
   pi->nlink--;
   if (pi->nlink == 0)
     in->state_set(CInode::STATE_ORPHAN);
@@ -5037,7 +5027,7 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
     mdcache->adjust_subtree_after_rename(straydnl->get_inode(), dn->get_dir(), true);
 
   // bump pop
-  mds->balancer->hit_dir(mdr->now, dn->get_dir(), META_POP_IWR);
+  mds->balancer->hit_dir(mdr->get_mds_stamp(), dn->get_dir(), META_POP_IWR);
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
@@ -5065,7 +5055,7 @@ bool Server::_rmdir_prepare_witness(MDRequestRef& mdr, int who, CDentry *dn, CDe
 					       MMDSSlaveRequest::OP_RMDIRPREP);
   dn->make_path(req->srcdnpath);
   straydn->make_path(req->destdnpath);
-  req->now = mdr->now;
+  req->op_stamp = mdr->get_op_stamp();
   
   mdcache->replicate_stray(straydn, who, req->stray);
   
@@ -5118,7 +5108,7 @@ void Server::handle_slave_rmdir_prep(MDRequestRef& mdr)
   CDentry *straydn = mdr->straydn;
   dout(10) << " straydn " << *straydn << dendl;
   
-  mdr->now = mdr->slave_request->now;
+  mdr->set_op_stamp(mdr->slave_request->op_stamp);
 
   rmdir_rollback rollback;
   rollback.reqid = mdr->reqid;
@@ -5722,10 +5712,6 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     }
   }
 
-  // -- declare now --
-  if (mdr->now == utime_t())
-    mdr->now = ceph_clock_now(g_ceph_context);
-
   // -- prepare witnesses --
 
   // do srcdn auth last
@@ -5771,6 +5757,9 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     assert(g_conf->mds_kill_rename_at != 3);
   if (!mdr->more()->slaves.empty() && srci->is_dir())
     assert(g_conf->mds_kill_rename_at != 4);
+
+  // -- declare now --
+  mdr->set_mds_stamp(ceph_clock_now(g_ceph_context));
 
   // -- prepare journal entry --
   mdr->ls = mdlog->get_current_segment();
@@ -5822,9 +5811,9 @@ void Server::_rename_finish(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, 
     assert(g_conf->mds_kill_rename_at != 6);
   
   // bump popularity
-  mds->balancer->hit_dir(mdr->now, srcdn->get_dir(), META_POP_IWR);
+  mds->balancer->hit_dir(mdr->get_mds_stamp(), srcdn->get_dir(), META_POP_IWR);
   if (destdnl->is_remote() && in->is_auth())
-    mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);
+    mds->balancer->hit_inode(mdr->get_mds_stamp(), in, META_POP_IWR);
 
   // did we import srci?  if so, explicitly ack that import that, before we unlock and reply.
 
@@ -5861,7 +5850,7 @@ bool Server::_rename_prepare_witness(MDRequestRef& mdr, int who, set<int> &witne
 					       MMDSSlaveRequest::OP_RENAMEPREP);
   srcdn->make_path(req->srcdnpath);
   destdn->make_path(req->destdnpath);
-  req->now = mdr->now;
+  req->op_stamp = mdr->get_op_stamp();
   
   if (straydn)
     mdcache->replicate_stray(straydn, who, req->stray);
@@ -6075,12 +6064,12 @@ void Server::_rename_prepare(MDRequestRef& mdr,
 
   if (!silent) {
     if (pi) {
-      pi->ctime = mdr->now;
+      pi->ctime = mdr->get_op_stamp();
       if (linkmerge)
 	pi->nlink--;
     }
     if (tpi) {
-      tpi->ctime = mdr->now;
+      tpi->ctime = mdr->get_op_stamp();
       tpi->nlink--;
       if (tpi->nlink == 0)
 	oldin->state_set(CInode::STATE_ORPHAN);
@@ -6446,7 +6435,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   if (destdnl->is_primary() && !linkmerge)
     assert(straydn);
 
-  mdr->now = mdr->slave_request->now;
+  mdr->set_op_stamp(mdr->slave_request->op_stamp);
   mdr->more()->srcdn_auth_mds = srcdn->authority().first;
 
   // set up commit waiter (early, to clean up any freezing etc we do)
@@ -6655,9 +6644,10 @@ void Server::_logged_slave_rename(MDRequestRef& mdr,
   destdnl = destdn->get_linkage();
 
   // bump popularity
-  mds->balancer->hit_dir(mdr->now, srcdn->get_dir(), META_POP_IWR);
+  mds->balancer->hit_dir(mdr->get_mds_stamp(), srcdn->get_dir(), META_POP_IWR);
   if (destdnl->get_inode() && destdnl->get_inode()->is_auth())
-    mds->balancer->hit_inode(mdr->now, destdnl->get_inode(), META_POP_IWR);
+    mds->balancer->hit_inode(mdr->get_mds_stamp(), destdnl->get_inode(),
+			     META_POP_IWR);
 
   // done.
   mdr->slave_request->put();
@@ -6711,7 +6701,8 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
       ::decode(peer_imported, bp);
 
       dout(10) << " finishing inode export on " << *destdnl->get_inode() << dendl;
-      mdcache->migrator->finish_export_inode(destdnl->get_inode(), mdr->now,
+      mdcache->migrator->finish_export_inode(destdnl->get_inode(),
+					     mdr->get_mds_stamp(),
 					     mdr->slave_to_mds, peer_imported, finished);
       mds->queue_waiters(finished);   // this includes SINGLEAUTH waiters.
 
@@ -7310,13 +7301,11 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
     return;
   }
 
-  if (mdr->now == utime_t())
-    mdr->now = ceph_clock_now(g_ceph_context);
-
   // allocate a snapid
   if (!mdr->more()->stid) {
     // prepare an stid
-    mds->snapclient->prepare_create(diri->ino(), snapname, mdr->now, 
+    mds->snapclient->prepare_create(diri->ino(), snapname,
+				    mdr->get_mds_stamp(),
 				    &mdr->more()->stid, &mdr->more()->snapidbl,
 				    new C_MDS_RetryRequest(mds->mdcache, mdr));
     return;
@@ -7333,7 +7322,7 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   info.ino = diri->ino();
   info.snapid = snapid;
   info.name = snapname;
-  info.stamp = mdr->now;
+  info.stamp = mdr->get_op_stamp();
 
   inode_t *pi = diri->project_inode();
   pi->ctime = info.stamp;

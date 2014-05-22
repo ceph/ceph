@@ -538,6 +538,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
   }
 
   mdr->done_locking = true;
+  mdr->set_mds_stamp(ceph_clock_now(NULL));
   result = true;
   marker.message = "acquired locks";
 
