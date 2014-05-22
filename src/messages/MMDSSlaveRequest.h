@@ -98,6 +98,7 @@ class MMDSSlaveRequest : public Message {
 
   static const unsigned FLAG_NONBLOCK	= 1;
   static const unsigned FLAG_WOULDBLOCK	= 2;
+  static const unsigned FLAG_NOTJOURNALED = 4;
 
   // for locking
   __u16 lock_type;  // lock object type
@@ -133,6 +134,8 @@ public:
   bool is_nonblock() { return (flags & FLAG_NONBLOCK); }
   void mark_error_wouldblock() { flags |= FLAG_WOULDBLOCK; }
   bool is_error_wouldblock() { return (flags & FLAG_WOULDBLOCK); }
+  void mark_not_journaled() { flags |= FLAG_NOTJOURNALED; }
+  bool is_not_journaled() { return (flags & FLAG_NOTJOURNALED); }
 
   void set_lock_type(int t) { lock_type = t; }
 
