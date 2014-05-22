@@ -565,7 +565,7 @@ public:
   size_t get_cache_size() { return lru.lru_get_size(); }
 
   // trimming
-  bool trim(int max = -1);   // trim cache
+  bool trim(int max=-1, int count=-1);   // trim cache
   bool trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap);
   void trim_dirfrag(CDir *dir, CDir *con,
 		    map<int, MCacheExpire*>& expiremap);
@@ -659,7 +659,8 @@ public:
   }
   void touch_dentry_bottom(CDentry *dn) {
     lru.lru_bottouch(dn);
-    if (dn->get_projected_linkage()->is_primary()) {
+    if (dn->get_projected_linkage()->is_primary() &&
+	dn->get_dir()->inode->is_stray()) {
       CInode *in = dn->get_projected_linkage()->get_inode();
       if (in->has_dirfrags()) {
 	list<CDir*> ls;

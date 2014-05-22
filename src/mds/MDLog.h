@@ -202,6 +202,7 @@ private:
   LogEvent *cur_event;
 public:
   void start_entry(LogEvent *e);
+  void cancel_entry(LogEvent *e);
   void submit_entry(LogEvent *e, Context *c = 0);
   void start_submit_entry(LogEvent *e, Context *c = 0) {
     start_entry(e);
