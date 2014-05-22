@@ -359,11 +359,35 @@ def get_dev_path(name):
     """
     return '/dev/' + name.replace('!', '/')
 
+
 def get_dev_relpath(name):
     """
     get a relative path to /dev from a name (cciss!c0d1)
     """
     return name.replace('!', '/')
+
+
+def get_dev_size(dev, size='megabytes'):
+    """
+    Attempt to get the size of a device so that we can prevent errors
+    from actions to devices that are smaller, and improve error reporting.
+
+    Because we want to avoid breakage in case this approach is not robust, we
+    will issue a warning if we failed to get the size.
+
+    :param size: bytes or megabytes
+    :param dev: the device to calculate the size
+    """
+    fd = os.open(dev, os.O_RDONLY)
+    dividers = {'bytes': 1, 'megabytes': 1024*1024}
+    try:
+        device_size = os.lseek(fd, 0, os.SEEK_END)
+        divider = dividers.get(size, 1024*1024)  # default to megabytes
+        return device_size/divider
+    except Exception as error:
+        LOG.warning('failed to get size of %s: %s' % (dev, str(error)))
+    finally:
+        os.close(fd)
 
 
 def get_partition_dev(dev, pnum):
@@ -971,6 +995,17 @@ def prepare_journal_dev(
             size=journal_size,
             )
         LOG.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
+
+    dev_size = get_dev_size(journal)
+
+    if journal_size > dev_size:
+        LOG.error('refusing to create journal on %s' % journal)
+        LOG.error('journal size (%sM) is bigger than device (%sM)' % (journal_size, dev_size))
+        raise Error('%s device size (%sM) is not big enough for journal' % (
+        journal,
+        dev_size)
+        )
+
 
     try:
         LOG.debug('Creating journal partition num %d size %d on %s', num, journal_size, journal)
