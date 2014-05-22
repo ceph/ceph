@@ -114,7 +114,7 @@ class MMDSSlaveRequest : public Message {
   bufferlist inode_export;
   version_t inode_export_v;
   bufferlist srci_replica;
-  utime_t now;
+  utime_t op_stamp;
 
   bufferlist stray;  // stray dir + dentry
 
@@ -158,7 +158,7 @@ public:
     ::encode(srcdnpath, payload);
     ::encode(destdnpath, payload);
     ::encode(witnesses, payload);
-    ::encode(now, payload);
+    ::encode(op_stamp, payload);
     ::encode(inode_export, payload);
     ::encode(inode_export_v, payload);
     ::encode(srci_replica, payload);
@@ -176,7 +176,7 @@ public:
     ::decode(srcdnpath, p);
     ::decode(destdnpath, p);
     ::decode(witnesses, p);
-    ::decode(now, p);
+    ::decode(op_stamp, p);
     ::decode(inode_export, p);
     ::decode(inode_export_v, p);
     ::decode(srci_replica, p);
