@@ -534,6 +534,13 @@ private:
   
   void add_dir_context(CDir *dir, int mode = TO_AUTH_SUBTREE_ROOT);
 
+  bool empty() {
+    return roots.empty() && lump_order.empty() && table_tids.empty() &&
+	   truncate_start.empty() && truncate_finish.empty() &&
+	   destroyed_inodes.empty() && client_reqs.empty() &&
+	   opened_ino == 0 && inotablev == 0 && sessionmapv == 0;
+  }
+
   void print(ostream& out) const {
     out << "[metablob";
     if (!lump_order.empty()) 

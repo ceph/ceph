@@ -3732,24 +3732,24 @@ void MDCache::rejoin_send_rejoins()
       if (mdr->is_slave())
 	continue;
       // auth pins
-      for (set<MDSCacheObject*>::iterator q = mdr->remote_auth_pins.begin();
+      for (map<MDSCacheObject*,int>::iterator q = mdr->remote_auth_pins.begin();
 	   q != mdr->remote_auth_pins.end();
 	   ++q) {
-	if (!(*q)->is_auth()) {
-	  int who = (*q)->authority().first;
-	  if (rejoins.count(who) == 0) continue;
-	  MMDSCacheRejoin *rejoin = rejoins[who];
+	if (!q->first->is_auth()) {
+	  assert(q->second == q->first->authority().first);
+	  if (rejoins.count(q->second) == 0) continue;
+	  MMDSCacheRejoin *rejoin = rejoins[q->second];
 	  
-	  dout(15) << " " << *mdr << " authpin on " << **q << dendl;
+	  dout(15) << " " << *mdr << " authpin on " << *q->first << dendl;
 	  MDSCacheObjectInfo i;
-	  (*q)->set_object_info(i);
+	  q->first->set_object_info(i);
 	  if (i.ino)
 	    rejoin->add_inode_authpin(vinodeno_t(i.ino, i.snapid), mdr->reqid, mdr->attempt);
 	  else
 	    rejoin->add_dentry_authpin(i.dirfrag, i.dname, i.snapid, mdr->reqid, mdr->attempt);
 
 	  if (mdr->has_more() && mdr->more()->is_remote_frozen_authpin &&
-	      mdr->more()->rename_inode == (*q))
+	      mdr->more()->rename_inode == q->first)
 	    rejoin->add_inode_frozen_authpin(vinodeno_t(i.ino, i.snapid),
 					     mdr->reqid, mdr->attempt);
 	}
@@ -6188,12 +6188,17 @@ void MDCache::start_recovered_truncates()
  * however, we may expire a replica whose authority is recovering.
  * 
  */
-bool MDCache::trim(int max) 
+bool MDCache::trim(int max, int count)
 {
   // trim LRU
-  if (max < 0) {
+  if (count > 0) {
+    max = lru.lru_get_size() - count;
+    if (max <= 0)
+      max = 1;
+  } else if (max < 0) {
     max = g_conf->mds_cache_size;
-    if (!max) return false;
+    if (max <= 0)
+      return false;
   }
   dout(7) << "trim max=" << max << "  cur=" << lru.lru_get_size() << dendl;
 
@@ -10542,9 +10547,10 @@ CDir *MDCache::force_dir_fragment(CInode *diri, frag_t fg, bool replay)
       src.push_back(pdir);
       adjust_dir_fragments(diri, src, parent, split, result, waiters, replay);
       dir = diri->get_dirfrag(fg);
-      if (dir)
-        dout(10) << "force_dir_fragment result " << *dir << dendl;
-      return dir;
+      if (dir) {
+	dout(10) << "force_dir_fragment result " << *dir << dendl;
+	break;
+      }
     }
     if (parent == frag_t())
       break;
@@ -10553,16 +10559,20 @@ CDir *MDCache::force_dir_fragment(CInode *diri, frag_t fg, bool replay)
     dout(10) << " " << last << " parent is " << parent << dendl;
   }
 
-  // hoover up things under fg?
-  diri->get_dirfrags_under(fg, src);
-  if (src.empty()) {
-    dout(10) << "force_dir_fragment no frags under " << fg << dendl;
-    return NULL;
+  if (!dir) {
+    // hoover up things under fg?
+    diri->get_dirfrags_under(fg, src);
+    if (src.empty()) {
+      dout(10) << "force_dir_fragment no frags under " << fg << dendl;
+    } else {
+      dout(10) << " will combine frags under " << fg << ": " << src << dendl;
+      adjust_dir_fragments(diri, src, fg, 0, result, waiters, replay);
+      dir = result.front();
+      dout(10) << "force_dir_fragment result " << *dir << dendl;
+    }
   }
-  dout(10) << " will combine frags under " << fg << ": " << src << dendl;
-  adjust_dir_fragments(diri, src, fg, 0, result, waiters, replay);
-  dir = result.front();
-  dout(10) << "force_dir_fragment result " << *dir << dendl;
+  if (!replay)
+    mds->queue_waiters(waiters);
   return dir;
 }
 
