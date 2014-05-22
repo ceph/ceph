@@ -2875,7 +2875,7 @@ jobject sockaddrToInetAddress(JNIEnv* env, const sockaddr_storage& ss, jint* por
         return NULL;
     }
     env->SetByteArrayRegion(byteArray.get(), 0, addressLength,
-            reinterpret_cast<const jbyte*>(rawAddress));
+			    reinterpret_cast<jbyte*>(const_cast<void*>(rawAddress)));
 
     if (ss.ss_family == AF_UNIX) {
         // Note that we get here for AF_UNIX sockets on accept(2). The unix(7) man page claims
