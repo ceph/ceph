@@ -75,6 +75,14 @@ class filelock(object):
         self.fd = None
 
 
+class BranchNotFoundError(ValueError):
+    def __init__(self, branch):
+        self.branch = branch
+
+    def __str__(self):
+        return "teuthology branch not found: '{0}'".format(self.branch)
+
+
 def fetch_teuthology_branch(path, branch='master'):
     """
     Make sure we have the correct teuthology branch checked out and up-to-date
@@ -113,9 +121,8 @@ def fetch_teuthology_branch(path, branch='master'):
                 cwd=path,
             )
         except subprocess.CalledProcessError:
-            log.exception("teuthology branch not found: %s", branch)
             shutil.rmtree(path)
-            raise
+            raise BranchNotFoundError(branch)
 
         log.debug("Bootstrapping %s", path)
         # This magic makes the bootstrap script not attempt to clobber an
@@ -191,7 +198,16 @@ def main(ctx):
         teuth_path = os.path.join(os.getenv("HOME"),
                                   'teuthology-' + teuthology_branch)
 
-        fetch_teuthology_branch(path=teuth_path, branch=teuthology_branch)
+        try:
+            fetch_teuthology_branch(path=teuth_path, branch=teuthology_branch)
+        except BranchNotFoundError:
+            log.exception(
+                "Branch not found; throwing job away")
+            # Optionally, we could mark the job as dead, but we don't have a
+            # great way to express why it is dead.
+            report.try_delete_jobs(job_config['name'],
+                                   job_config['job_id'])
+            continue
 
         teuth_bin_path = os.path.join(teuth_path, 'virtualenv', 'bin')
         if not os.path.isdir(teuth_bin_path):
