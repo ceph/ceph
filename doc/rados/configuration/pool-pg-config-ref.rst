@@ -83,14 +83,14 @@ Ceph configuration file.
 :Default: ``4096`` 
 
 
-``osd pool default size`` 
+``osd pool default size``
 
-:Description: Sets the number of replicas for objects in the pool. The default 
-              value is the same as 
+:Description: Sets the number of replicas for objects in the pool. The default
+              value is the same as
               ``ceph osd pool set {pool-name} size {size}``.
 
 :Type: 32-bit Integer
-:Default: ``2`` 
+:Default: ``3``
 
 
 ``osd pool default min size``
