@@ -39,8 +39,12 @@ struct MutationImpl {
   metareqid_t reqid;
   __u32 attempt;      // which attempt for this request
   LogSegment *ls;  // the log segment i'm committing to
-  utime_t now;
 
+private:
+  utime_t mds_stamp; ///< mds-local timestamp (real time)
+  utime_t op_stamp;  ///< op timestamp (client provided)
+
+public:
   // flag mutation as slave
   int slave_to_mds;                // this is a slave request if >= 0.
 
@@ -112,6 +116,21 @@ struct MutationImpl {
     if (reqid.name.is_client())
       return client_t(reqid.name.num());
     return -1;
+  }
+
+  void set_mds_stamp(utime_t t) {
+    mds_stamp = t;
+  }
+  utime_t get_mds_stamp() const {
+    return mds_stamp;
+  }
+  void set_op_stamp(utime_t t) {
+    op_stamp = t;
+  }
+  utime_t get_op_stamp() const {
+    if (op_stamp != utime_t())
+      return op_stamp;
+    return get_mds_stamp();
   }
 
   // pin items in cache

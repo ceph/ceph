@@ -1857,9 +1857,9 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 
   assert(mds->mdlog->entry_is_open());
 
-  // declare now?
-  if (mut->now == utime_t())
-    mut->now = ceph_clock_now(g_ceph_context);
+  // make sure stamp is set
+  if (mut->get_mds_stamp() == utime_t())
+    mut->set_mds_stamp(ceph_clock_now(g_ceph_context));
 
   if (in->is_base())
     return;
@@ -1910,10 +1910,10 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
       parent->resync_accounted_fragstat();
 
       if (do_parent_mtime) {
-	pf->fragstat.mtime = mut->now;
-	if (mut->now > pf->rstat.rctime) {
+	pf->fragstat.mtime = mut->get_op_stamp();
+	if (pf->fragstat.mtime > pf->rstat.rctime) {
 	  dout(10) << "predirty_journal_parents updating mtime on " << *parent << dendl;
-	  pf->rstat.rctime = mut->now;
+	  pf->rstat.rctime = pf->fragstat.mtime;
 	} else {
 	  dout(10) << "predirty_journal_parents updating mtime UNDERWATER on " << *parent << dendl;
 	}
@@ -1978,7 +1978,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     // delay propagating until later?
     if (!stop && !first &&
 	g_conf->mds_dirstat_min_interval > 0) {
-      double since_last_prop = mut->now - pin->last_dirstat_prop;
+      double since_last_prop = mut->get_mds_stamp() - pin->last_dirstat_prop;
       if (since_last_prop < g_conf->mds_dirstat_min_interval) {
 	dout(10) << "predirty_journal_parents last prop " << since_last_prop
 		 << " < " << g_conf->mds_dirstat_min_interval
@@ -2020,7 +2020,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     assert(mut->wrlocks.count(&pin->nestlock) ||
 	   mut->is_slave());
     
-    pin->last_dirstat_prop = mut->now;
+    pin->last_dirstat_prop = mut->get_mds_stamp();
 
     // dirfrag -> diri
     mut->auth_pin(pin);
@@ -8645,6 +8645,7 @@ MDRequestRef MDCache::request_start(MClientRequest *req)
   MDRequestRef mdr =
       mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params>(params);
   active_requests[params.reqid] = mdr;
+  mdr->set_op_stamp(req->get_stamp());
   dout(7) << "request_start " << *mdr << dendl;
   return mdr;
 }
