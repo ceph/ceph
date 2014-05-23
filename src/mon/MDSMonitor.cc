@@ -885,6 +885,15 @@ bool MDSMonitor::management_command(
       ss << "warning: crash_replay_interval not set on data pool '" << data << "', ";
     }
     
+    string fs_name;
+    cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
+    if (fs_name.empty()) {
+        // Ensure fs name is not empty so that we can implement
+        // commmands that refer to FS by name in future.
+        ss << "Filesystem name may not be empty";
+        return -EINVAL;
+    }
+
     string sure;
     cmd_getval(g_ceph_context, cmdmap, "sure", sure);
     if (pending_mdsmap.enabled && sure != "--yes-i-really-mean-it") {
@@ -902,11 +911,15 @@ bool MDSMonitor::management_command(
       return true;
     }
   } else if (prefix == "mds rmfs") {
-    // Check there is something to delete
-    if (!pending_mdsmap.enabled) {
-      ss << "no filesystem configured";
-      r = -EINVAL;
-      return true;
+    // Check caller has correctly named the FS to delete
+    // (redundant while there is only one FS, but command
+    //  syntax should apply to multi-FS future)
+    string fs_name;
+    cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
+    if (!pending_mdsmap.enabled || fs_name != pending_mdsmap.fs_name) {
+        // Consider absence success to make deletes idempotent
+        ss << "filesystem '" << fs_name << "' does not exist";
+        return 0;
     }
 
     // Check that no MDS daemons are active

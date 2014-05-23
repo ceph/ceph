@@ -289,10 +289,12 @@ COMMAND("mds remove_data_pool " \
 	"name=pool,type=CephString", \
 	"remove data pool <pool>", "mds", "rw", "cli,rest")
 COMMAND("mds rmfs " \
+	"name=fs_name,type=CephString " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"disable the filesystem", \
 	"mds", "rw", "cli,rest")
 COMMAND("mds newfs " \
+	"name=fs_name,type=CephString " \
 	"name=metadata,type=CephInt,range=0 " \
 	"name=data,type=CephInt,range=0 " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
