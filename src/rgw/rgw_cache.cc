@@ -61,14 +61,16 @@ bool ObjectCache::chain_cache_entry(rgw_cache_entry_info& cache_info, RGWChained
 {
   RWLock::WLocker l(lock);
 
-  ldout(cct, 10) << "cache put: name=" << cache_info.cache_locator << dendl;
+  ldout(cct, 10) << "chain_cache_entry: cache_locator=" << cache_info.cache_locator << dendl;
   map<string, ObjectCacheEntry>::iterator iter = cache_map.find(cache_info.cache_locator);
   if (iter == cache_map.end()) {
+    ldout(cct, 20) << "chain_cache_entry: couldn't find cachce locator" << dendl;
     return false;
   }
 
   ObjectCacheEntry& entry = iter->second;
   if (entry.gen != cache_info.gen) {
+    ldout(cct, 20) << "chain_cache_entry: entry.gen (" << entry.gen << ") != cache_info.gen (" << cache_info.gen << ")" << dendl;
     return false;
   }
 
