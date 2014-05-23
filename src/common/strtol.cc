@@ -17,6 +17,9 @@
 #include <sstream>
 #include <stdlib.h>
 #include <string>
+extern "C" {
+#include <stdint.h>
+}
 
 using std::ostringstream;
 
@@ -123,4 +126,44 @@ float strict_strtof(const char *str, std::string *err)
   }
   *err = "";
   return ret;
+}
+
+uint64_t strict_sistrtoll(const char *str, std::string *err)
+{
+  std::string s(str);
+  if (s.size() == 0) {
+    ostringstream oss;
+    oss << "strict_sistrtoll: value not specified";
+    *err = oss.str();
+    return 0;
+  }
+  const char &u = s.at(s.size()-1); //str[std::strlen(str)-1];
+  int m = 0;
+  if (u == 'B')
+    m = 0;
+  else if (u == 'K')
+    m = 10;
+  else if (u == 'M')
+    m = 20;
+  else if (u == 'G')
+    m = 30;
+  else if (u == 'T')
+    m = 40;
+  else if (u == 'P')
+    m = 50;
+  else if (u == 'E')
+    m = 60;
+  else
+    m = -1;
+
+  const char *v = NULL;
+  if (m >= 0)
+    s = std::string(str, s.size()-1);
+  v = s.c_str();
+
+  uint64_t r = strict_strtoll(v, 10, err);
+  if (err->empty() && m > 0) {
+    r = (r << m);
+  }
+  return r;
 }
