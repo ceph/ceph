@@ -1336,7 +1336,7 @@ private:
         }
       }
 
-      void _process(uint32_t thread_index, heartbeat_handle_d *hb, atomic_t& in_process );
+      void _process(uint32_t thread_index, heartbeat_handle_d *hb);
       void _enqueue(pair <PGRef, OpRequestRef> item);
       void _enqueue_front(pair <PGRef, OpRequestRef> item);
       
@@ -1398,26 +1398,9 @@ private:
         }
 
       }
-
-      bool is_all_shard_empty() {
-        bool is_empty = true;
-        for(uint32_t i = 0; i < num_shards; i++) {
-          ShardData* sdata = shard_list[i];
-          assert(NULL != sdata);
-          sdata->sdata_op_ordering_lock.Lock();
-          if (!sdata->pqueue.empty()) {
-	    is_empty = false;
-            sdata->sdata_op_ordering_lock.Unlock();
-            break;
-          }
-          sdata->sdata_op_ordering_lock.Unlock();
-        }
-        return is_empty;
-
-      }
  
-      bool is_shard_empty(uint32_t shard_index) {
-
+      bool is_shard_empty(uint32_t thread_index) {
+        uint32_t shard_index = thread_index % num_shards; 
         ShardData* sdata = shard_list[shard_index];
         assert(NULL != sdata);
         Mutex::Locker l(sdata->sdata_op_ordering_lock);
