@@ -100,7 +100,7 @@ For example::
 
 	ceph-deploy new node1
 
-This command will create the following files in the current direction
+This command will create the following files in the current directory
 of the admin node:
 
 - ``ceph.conf``
