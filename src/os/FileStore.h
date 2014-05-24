@@ -363,6 +363,8 @@ public:
    */
   bool get_allow_sharded_objects();
 
+  void collect_metadata(map<string,string> *pm);
+
   int statfs(struct statfs *buf);
 
   int _do_transactions(

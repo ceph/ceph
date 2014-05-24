@@ -1174,6 +1174,8 @@ public:
 
   virtual int statfs(struct statfs *buf) = 0;
 
+  virtual void collect_metadata(map<string,string> *pm) { }
+
   /**
    * get the most recent "on-disk format version" supported
    */
