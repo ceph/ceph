@@ -167,6 +167,7 @@ SendFaster <contact@sendfaster.com> Christopher O'Connell <jwriteclub@gmail.com>
 iNic <contact@inic.no> Bjørnar Ness <bjornar.ness@gmail.com>
 Pogoapp <contact@pogoapp.com> Paul Meserve <paul@pogodan.com>
 Commerce Guys <contact@commerceguys.com> Nikola Kotur <kotnick@gmail.com>
+École polytechnique fédérale de Lausanne <contact@epfl.ch> Stefan Eilemann <Stefan.Eilemann@epfl.ch>
 #
 # Local Variables:
 # compile-command: "git log --pretty='%aN <%aE>' | \
