@@ -543,6 +543,14 @@ bool parse_attrname(char **name)
   return false;
 }
 
+void FileStore::collect_metadata(map<string,string> *pm)
+{
+  (*pm)["filestore_backend"] = backend->get_name();
+  ostringstream ss;
+  ss << "0x" << std::hex << m_fs_type << std::dec;
+  (*pm)["filestore_f_type"] = ss.str();
+}
+
 int FileStore::statfs(struct statfs *buf)
 {
   if (::statfs(basedir.c_str(), buf) < 0) {
