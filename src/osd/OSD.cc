@@ -7962,7 +7962,7 @@ void OSD::enqueue_op(PG *pg, OpRequestRef op)
   pg->queue_op(op);
 }
 
-void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb, atomic_t& in_process ) {
+void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb ) {
 
   uint32_t shard_index = thread_index % num_shards;
 
@@ -7981,11 +7981,9 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb, a
       return;
     }
   }
-
   pair<PGRef, OpRequestRef> item = sdata->pqueue.dequeue();
   sdata->pg_for_processing[&*(item.first)].push_back(item.second);
   sdata->sdata_op_ordering_lock.Unlock();
-  in_process.inc();
   ThreadPool::TPHandle tp_handle(osd->cct, hb, timeout_interval, suicide_interval);
 
   (item.first)->lock_suspend_timeout(tp_handle);
@@ -8015,7 +8013,6 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb, a
 
   osd->dequeue_op(item.first, op, tp_handle);
   (item.first)->unlock();
-  in_process.dec();
 
 }
 
