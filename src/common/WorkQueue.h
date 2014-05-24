@@ -442,6 +442,8 @@ class ShardedThreadPool {
   atomic_t pause_threads;
   atomic_t drain_threads;
   atomic_t in_process; 
+  uint32_t num_paused;
+  uint32_t num_drained;
 
 public:
 
@@ -452,9 +454,9 @@ public:
     baseShardedWQ(time_t ti, time_t sti):timeout_interval(ti), suicide_interval(sti) {}
     virtual ~baseShardedWQ() {}
 
-    virtual void _process(uint32_t thread_index, heartbeat_handle_d *hb, atomic_t& in_process ) = 0;
+    virtual void _process(uint32_t thread_index, heartbeat_handle_d *hb ) = 0;
     virtual void return_waiting_threads() = 0;
-    virtual bool is_all_shard_empty() = 0;
+    virtual bool is_shard_empty(uint32_t thread_index) = 0;
   };      
 
   template <typename T>

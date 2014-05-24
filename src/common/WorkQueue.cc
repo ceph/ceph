@@ -257,7 +257,7 @@ void ThreadPool::drain(WorkQueue_* wq)
 
 ShardedThreadPool::ShardedThreadPool(CephContext *pcct_, string nm, uint32_t pnum_threads):
   cct(pcct_), name(nm), lockname(nm + "::lock"), shardedpool_lock(lockname.c_str()), num_threads(pnum_threads), 
-  stop_threads(0), pause_threads(0),drain_threads(0), in_process(0), wq(NULL) {}
+  stop_threads(0), pause_threads(0),drain_threads(0), in_process(0), num_paused(0), num_drained(0), wq(NULL) {}
 
 void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
 {
@@ -271,20 +271,30 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
   while (!stop_threads.read()) {
     if(pause_threads.read()) {
       shardedpool_lock.Lock();
+      ++num_paused;
+      wait_cond.Signal();
       while(pause_threads.read()) {
        cct->get_heartbeat_map()->reset_timeout(hb, 4, 0);
        shardedpol_cond.WaitInterval(cct, shardedpool_lock, utime_t(2, 0));
       }
+      --num_paused;
       shardedpool_lock.Unlock();
     }
-
-    wq->_process(thread_index, hb, in_process);
-
-    if ((pause_threads.read() != 0) || (drain_threads.read() != 0)) {
+    if (drain_threads.read()) {
       shardedpool_lock.Lock();
-      wait_cond.Signal();
+      if (wq->is_shard_empty(thread_index)) {
+        ++num_drained;
+        wait_cond.Signal();
+        while (drain_threads.read()) {
+          cct->get_heartbeat_map()->reset_timeout(hb, 4, 0);
+          shardedpol_cond.WaitInterval(cct, shardedpool_lock, utime_t(2, 0));
+        }
+        --num_drained;
+      }
       shardedpool_lock.Unlock();
     }
+
+    wq->_process(thread_index, hb);
 
   }
 
@@ -341,7 +351,7 @@ void ShardedThreadPool::pause()
   pause_threads.set(1);
   assert (wq != NULL);
   wq->return_waiting_threads();
-  while (in_process.read()){
+  while (num_threads != num_paused){
     wait_cond.Wait(shardedpool_lock);
   }
   shardedpool_lock.Unlock();
@@ -376,7 +386,7 @@ void ShardedThreadPool::drain()
   drain_threads.set(1);
   assert (wq != NULL);
   wq->return_waiting_threads();
-  while (in_process.read() || !wq->is_all_shard_empty()){
+  while (num_threads != num_drained) {
     wait_cond.Wait(shardedpool_lock);
   }
   drain_threads.set(0);
