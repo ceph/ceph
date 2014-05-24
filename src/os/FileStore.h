@@ -637,6 +637,7 @@ private:
   int read_superblock();
 
   friend class FileStoreBackend;
+  friend class TestFileStore;
 };
 
 ostream& operator<<(ostream& out, const FileStore::OpSequencer& s);
