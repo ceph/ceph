@@ -430,6 +430,11 @@ COMMAND("osd crush reweight " \
 	"name=weight,type=CephFloat,range=0.0", \
 	"change <name>'s weight to <weight> in crush map", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd crush reweight-subtree " \
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
+	"name=weight,type=CephFloat,range=0.0", \
+	"change all leaf items beneath <name> to <weight> in crush map", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush tunables " \
 	"name=profile,type=CephChoices,strings=legacy|argonaut|bobtail|firefly|optimal|default", \
 	"set crush tunables values to <profile>", "osd", "rw", "cli,rest")
