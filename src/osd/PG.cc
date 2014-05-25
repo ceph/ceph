@@ -3421,7 +3421,14 @@ void PG::repair_object(
   eversion_t v;
   bufferlist bv;
   bv.push_back(po->attrs[OI_ATTR]);
-  object_info_t oi(bv);
+  object_info_t oi;
+  int err = po->get_object_info_t(&oi);
+  if (err) {
+    dout(0) << "repair_object " << soid
+	    << " failed to ScrubMap::object::get_object_info_t "
+	    << err << dendl;
+    return;
+  }
   if (bad_peer != primary) {
     peer_missing[bad_peer].add(soid, oi.version, eversion_t());
   } else {

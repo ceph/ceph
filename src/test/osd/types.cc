@@ -1241,6 +1241,12 @@ TEST_F(ObjectContextTest, read_write_lock)
 
 }
 
+TEST(ScrubMap, get_object_info_t) {
+  ScrubMap::object so;
+  object_info_t oi;
+  ASSERT_EQ(-ENOENT, so.get_object_info_t(&oi));
+}
+
 TEST(pg_pool_t_test, get_pg_num_divisor) {
   pg_pool_t p;
   p.set_pg_num(16);
