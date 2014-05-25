@@ -1012,8 +1012,10 @@ class Ioctx(object):
         :returns: completion object
         """
         buf = create_string_buffer(length)
-        def oncomplete_(completion):
-            return oncomplete(completion, buf.value)
+        def oncomplete_(completion_v):
+            return_value = completion_v.get_return_value()
+            return oncomplete(completion_v, ctypes.string_at(buf, return_value) if return_value >= 0 else None)
+
         completion = self.__get_completion(oncomplete_, None)
         ret = self.librados.rados_aio_read(self.io, c_char_p(object_name),
                             completion.rados_comp, buf, c_size_t(length),
