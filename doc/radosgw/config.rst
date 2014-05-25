@@ -118,24 +118,6 @@ you have created all of the foregoing pools::
 	rados lspools
 
 
-Create Data Directory
-=====================
-
-Deployment scripts may not create the default Ceph Object Gateway data
-directory.  Create data directories for each instance of a ``radosgw`` daemon
-(if you haven't done so already). The ``host``  variables in the Ceph
-configuration file determine which host runs each instance of a ``radosgw``
-daemon. The typical form specifies the ``radosgw`` daemon, the cluster name and
-the daemon ID. ::
-
-	sudo mkdir -p /var/lib/ceph/radosgw/{$cluster}-{$id}
-
-Using the exemplary ``ceph.conf`` settings above, you would execute the following::
-
-	sudo mkdir -p /var/lib/ceph/radosgw/ceph-radosgw.gateway
-
-
-
 Add a Gateway Configuration to Ceph
 ===================================
 
@@ -258,6 +240,25 @@ Ensure that you apply execute permissions to ``s3gw.fcgi``. ::
 On some distributions, you must also change the ownership to ``apache``. :: 
 
 	sudo chown apache:apache s3gw.fcgi
+
+
+
+Create Data Directory
+=====================
+
+Deployment scripts may not create the default Ceph Object Gateway data
+directory.  Create data directories for each instance of a ``radosgw`` daemon
+(if you haven't done so already). The ``host``  variables in the Ceph
+configuration file determine which host runs each instance of a ``radosgw``
+daemon. The typical form specifies the ``radosgw`` daemon, the cluster name and
+the daemon ID. ::
+
+	sudo mkdir -p /var/lib/ceph/radosgw/{$cluster}-{$id}
+
+Using the exemplary ``ceph.conf`` settings above, you would execute the following::
+
+	sudo mkdir -p /var/lib/ceph/radosgw/ceph-radosgw.gateway
+
 
 
 Create a Gateway Configuration

@@ -43,7 +43,7 @@ Create a User
 
 To create a user (S3 interface), execute the following::
 
-	rados-admin user create --uid={username} --display-name="{display-name}" [--email={email}]
+	radosgw-admin user create --uid={username} --display-name="{display-name}" [--email={email}]
 
 For example:: 	
 	
