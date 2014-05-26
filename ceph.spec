@@ -42,7 +42,7 @@ Release:        6%{?dist}
 Summary:        A Scalable Distributed File System
 License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
 Group:          System/Filesystems
-URL:            http://ceph.newdream.net/
+URL:            http://ceph.com/
 Source0:        http://ceph.com/download/%{name}-%{version}.tar.gz
 Source1:        README.SUSE.v0.2
 Source2:        mkinitrd-root.on.rbd.tar.bz2
