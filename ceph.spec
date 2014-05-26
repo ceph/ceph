@@ -350,7 +350,7 @@ sed -i -e "s/-lcurses/-lncurses/g" src/Makefile
 sed -i -e "s/-lcurses/-lncurses/g" man/Makefile
 %endif
 
-make -j$(getconf _NPROCESSORS_ONLN)
+make %{?_smp_mflags}
 
 %install
 make DESTDIR=$RPM_BUILD_ROOT install
