@@ -43,9 +43,9 @@ Summary:        A Scalable Distributed File System
 License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
 Group:          System/Filesystems
 URL:            http://ceph.com/
-Source0:        http://ceph.com/download/%{name}-%{version}.tar.gz
+Source0:        http://ceph.com/download/%{name}-%{version}.tar.bz2
 Source1:        README.SUSE.v0.2
-Source2:        mkinitrd-root.on.rbd.tar.bz2
+Source2:        mkinitrd-root.on.rbd.tar.xz
 # PATCH-FIX-OPENSUSE rcfiles-remove-init-2.patch -- Scripts require $network which is unavailable in runlevel 2
 Patch0:         rcfiles-remove-init-2.patch
 # PATCH-FIX-OPENSUSE radosgw-init-opensuse.patch -- Run daemon as wwwrun, use startproc/killproc, and add status action

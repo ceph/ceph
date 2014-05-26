@@ -1,0 +1,3 @@
+<services>
+ <service name="download_files" mode="disabled"/>
+</services>
