@@ -118,6 +118,7 @@ Group:		Development/Libraries
 License:	LGPL-2.0
 Requires:	%{name} = %{version}-%{release}
 Requires:	librados2 = %{version}
+Requires:	libradosstriper1 = %{version}
 Requires:	librbd1 = %{version}
 Requires:	libcephfs1 = %{version}
 %description devel
@@ -166,6 +167,16 @@ RADOS is a reliable, autonomic distributed object storage cluster
 developed as part of the Ceph distributed storage system. This is a
 shared library allowing applications to access the distributed object
 store using a simple file-like interface.
+
+%package -n libradosstriper1
+Summary:	RADOS striping interface
+Group:		System Environment/Libraries
+License:	LGPL-2.0
+Requires:	librados2 = %{version}
+%description -n libradosstriper1
+Striping interface built on top of the rados library, allowing
+to stripe bigger objects onto several standard rados objects using
+an interface very similar to the rados one.
 
 %package -n librbd1
 Summary:	RADOS block device client library
@@ -517,6 +528,9 @@ fi
 %{_includedir}/rados/rados_types.h
 %{_includedir}/rados/rados_types.hpp
 %{_includedir}/rados/memory.h
+%dir %{_includedir}/radosstriper
+%{_includedir}/radosstriper/libradosstriper.h
+%{_includedir}/radosstriper/libradosstriper.hpp
 %dir %{_includedir}/rbd
 %{_includedir}/rbd/librbd.h
 %{_includedir}/rbd/librbd.hpp
@@ -524,6 +538,7 @@ fi
 %{_libdir}/libcephfs.so
 %{_libdir}/librbd.so
 %{_libdir}/librados.so
+%{_libdir}/libradosstriper.so
 %{_libdir}/libcephfs_jni.so
 
 #################################################################################
@@ -579,6 +594,17 @@ fi
 /sbin/ldconfig
 
 %postun -n librados2
+/sbin/ldconfig
+
+#################################################################################
+%files -n libradosstriper1
+%defattr(-,root,root,-)
+%{_libdir}/libradosstriper.so.*
+
+%post -n libradosstriper1
+/sbin/ldconfig
+
+%postun -n libradosstriper1
 /sbin/ldconfig
 
 #################################################################################
