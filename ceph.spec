@@ -24,7 +24,7 @@
 # google-perftools don't compile on x86_64, and apparently the
 # decision was to not build the package at all, even if tcmalloc
 # itself would have worked just fine.
-# Beware: '%bcond_without' turns that feature on!  So as 'osd-mon' 
+# Beware: '%bcond_without' turns that feature on!  So as 'osd-mon'
 # experiences core-dumps in 'tcmalloc::PageHeap::GrowHeap'...
 %bcond_without tcmalloc
 
@@ -36,24 +36,24 @@
 #################################################################################
 # common
 #################################################################################
-Name:		ceph
+Name:           ceph
 Version:        0.80.1
-Release:	6%{?dist}
+Release:        6%{?dist}
 Summary:        A Scalable Distributed File System
 License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
 Group:          System/Filesystems
-URL:		http://ceph.newdream.net/
-Source0:	http://ceph.com/download/%{name}-%{version}.tar.gz
-Source1:	README.SUSE.v0.2
+URL:            http://ceph.newdream.net/
+Source0:        http://ceph.com/download/%{name}-%{version}.tar.gz
+Source1:        README.SUSE.v0.2
 Source2:        mkinitrd-root.on.rbd.tar.bz2
 # PATCH-FIX-OPENSUSE rcfiles-remove-init-2.patch -- Scripts require $network which is unavailable in runlevel 2
 Patch0:         rcfiles-remove-init-2.patch
 # PATCH-FIX-OPENSUSE radosgw-init-opensuse.patch -- Run daemon as wwwrun, use startproc/killproc, and add status action
 Patch1:         radosgw-init-opensuse.patch
-Patch2:		ceph-mkcephfs.add.xfs.support.diff
-Patch3:		ceph-init-ceph.add.xfs.support.diff
+Patch2:         ceph-mkcephfs.add.xfs.support.diff
+Patch3:         ceph-init-ceph.add.xfs.support.diff
 # not yet cleanly applied
-Patch4:		0001-fix-runlevels-for-start-scripts.patch
+Patch4:         0001-fix-runlevels-for-start-scripts.patch
 # not yet cleanly applied
 Patch5:         ceph-mkcephfs-spread-admin-keyring.v2.diff
 # PATCH-FIX-OPENSUSE: Remove drop.ceph.com
@@ -65,27 +65,27 @@ Patch6:         remove-ceph-drop.diff
 Patch100:       ceph-add-syncfs-support.v3.diff
 # not yet cleanly applied
 Patch101:       ceph-disk.patch
-Requires:	librbd1 = %{version}-%{release}
-Requires:	librados2 = %{version}-%{release}
-Requires:	libcephfs1 = %{version}-%{release}
-Requires(post):	binutils
+Requires:       librbd1 = %{version}-%{release}
+Requires:       librados2 = %{version}-%{release}
+Requires:       libcephfs1 = %{version}-%{release}
+Requires(post): binutils
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
-BuildRequires:	gcc-c++
-BuildRequires:	libtool
-BuildRequires:	boost-devel > 1.48
-BuildRequires:	libedit-devel
-BuildRequires:	perl
-BuildRequires:	gdbm
-BuildRequires:	pkgconfig
-BuildRequires:	python
-BuildRequires:	libuuid-devel
-BuildRequires:	libaio-devel
-BuildRequires:	libblkid-devel
+BuildRequires:  gcc-c++
+BuildRequires:  libtool
+BuildRequires:  boost-devel > 1.48
+BuildRequires:  libedit-devel
+BuildRequires:  perl
+BuildRequires:  gdbm
+BuildRequires:  pkgconfig
+BuildRequires:  python
+BuildRequires:  libuuid-devel
+BuildRequires:  libaio-devel
+BuildRequires:  libblkid-devel
 BuildRequires:  snappy-devel
 BuildRequires:  leveldb-devel
 BuildRequires:  xfsprogs-devel
 BuildRequires:  libxml2-devel
-%if 0%{?suse_version} 
+%if 0%{?suse_version}
 BuildRequires:  fdupes
 %endif
 
@@ -93,20 +93,20 @@ BuildRequires:  fdupes
 # specific
 #################################################################################
 %if 0%{defined suse_version}
-BuildRequires:	%insserv_prereq
-Recommends:	logrotate
-BuildRequires:	mozilla-nss-devel
-BuildRequires:	keyutils-devel
-BuildRequires:	libatomic-ops-devel
+BuildRequires:  %insserv_prereq
+Recommends:     logrotate
+BuildRequires:  mozilla-nss-devel
+BuildRequires:  keyutils-devel
+BuildRequires:  libatomic-ops-devel
 %else
-BuildRequires:	nss-devel
-BuildRequires:	keyutils-libs-devel
-BuildRequires:	libatomic_ops-devel
-Requires(post):	chkconfig
+BuildRequires:  nss-devel
+BuildRequires:  keyutils-libs-devel
+BuildRequires:  libatomic_ops-devel
+Requires(post): chkconfig
 Requires(preun):chkconfig
 Requires(preun):initscripts
 %endif
-BuildRequires:	libcurl-devel
+BuildRequires:  libcurl-devel
 %ifnarch ppc ppc64 s390 s390x ia64
 %if 0%{with tcmalloc}
 # use isa so this will not be satisfied by
@@ -125,10 +125,10 @@ performance, reliability, and scalability.
 #################################################################################
 %package fuse
 License:        "GPL-2.0 ..."; GPL-2.0
-Summary:	Ceph fuse-based client
+Summary:        Ceph fuse-based client
 Group:          System/Filesystems
-Requires:	%{name} = %{version}-%{release}
-BuildRequires:	fuse-devel
+Requires:       %{name} = %{version}-%{release}
+BuildRequires:  fuse-devel
 %description fuse
 FUSE based client for Ceph distributed network file system
 
@@ -150,30 +150,30 @@ FUSE based client for Ceph distributed network file system
 %endif
 
 %package devel
-Summary:	Ceph headers
+Summary:        Ceph headers
 Group:          Development/Libraries/C and C++
 License:        "GPL-2.0 ..."; GPL-2.0
-Requires:	%{name} = %{version}-%{release}
-Requires:	librados2 = %{version}
-Requires:	librbd1 = %{version}
-Requires:	libcephfs1 = %{version}
+Requires:       %{name} = %{version}-%{release}
+Requires:       librados2 = %{version}
+Requires:       librbd1 = %{version}
+Requires:       libcephfs1 = %{version}
 %description devel
 This package contains libraries and headers needed to develop programs
 that use Ceph.
 
 %package radosgw
 License:        "GPL-2.0 ..."; GPL-2.0
-Summary:	Rados REST Gateway
-Group:		System/Filesystems
-Requires:	librados2 = %{version}-%{release}
+Summary:        Rados REST Gateway
+Group:          System/Filesystems
+Requires:       librados2 = %{version}-%{release}
 %if 0%{defined suse_version}
-BuildRequires:	libexpat-devel
-BuildRequires:	FastCGI-devel
-Requires:	apache2-mod_fcgid
+BuildRequires:  libexpat-devel
+BuildRequires:  FastCGI-devel
+Requires:       apache2-mod_fcgid
 %else
-BuildRequires:	expat-devel
-BuildRequires:	fcgi-devel
-Requires:	mod_fcgid
+BuildRequires:  expat-devel
+BuildRequires:  fcgi-devel
+Requires:       mod_fcgid
 %endif
 %description radosgw
 radosgw is an S3 HTTP REST gateway for the RADOS object store. It is
@@ -183,11 +183,11 @@ conjunction with any FastCGI capable web server.
 %if %{with gtk2}
 
 %package gcephtool
-Summary:	Graphical Monitoring Tool for Ceph
-Group:		System/Filesystems
-License:	"GPL-2.0 ..."; GPL-2.0
-Requires:	gtk2 gtkmm24
-BuildRequires:	gtk2-devel gtkmm24-devel
+Summary:        Graphical Monitoring Tool for Ceph
+Group:          System/Filesystems
+License:        "GPL-2.0 ..."; GPL-2.0
+Requires:       gtk2 gtkmm24
+BuildRequires:  gtk2-devel gtkmm24-devel
 %description gcephtool
 gcephtool is a graphical monitor for the clusters running the Ceph distributed
 file system.
@@ -195,11 +195,11 @@ file system.
 
 %if 0%{?suse_version}
 %package resource-agents
-Summary:	OCF-compliant Resource Agents for Ceph Daemons
-Group:		System/Filesystems
-License:	"GPL-2.0 ..."; GPL-2.0
-Requires:	%{name} = %{version}
-Requires:	resource-agents
+Summary:        OCF-compliant Resource Agents for Ceph Daemons
+Group:          System/Filesystems
+License:        "GPL-2.0 ..."; GPL-2.0
+Requires:       %{name} = %{version}
+Requires:       resource-agents
 %description resource-agents
 Resource agents for monitoring and managing Ceph daemons
 under Open Cluster Framework (OCF) compliant resource
@@ -207,7 +207,7 @@ managers such as Pacemaker.
 %endif
 
 %package -n librados2
-Summary:	RADOS distributed object store client library
+Summary:        RADOS distributed object store client library
 Group:          System/Filesystems
 License:        "GPL-2.0 ..."; GPL-2.0
 %description -n librados2
@@ -217,10 +217,10 @@ shared library allowing applications to access the distributed object
 store using a simple file-like interface.
 
 %package -n librbd1
-Summary:	RADOS Block Device Client Library
+Summary:        RADOS Block Device Client Library
 Group:          System/Filesystems
 License:        "GPL-2.0 ..."; GPL-2.0
-Requires:	librados2 = %{version}-%{release}
+Requires:       librados2 = %{version}-%{release}
 %description -n librbd1
 RBD is a block device striped across multiple distributed objects in
 RADOS, a reliable, autonomic distributed object storage cluster
@@ -228,9 +228,9 @@ developed as part of the Ceph distributed storage system. This is a
 shared library allowing applications to manage these block devices.
 
 %package -n libcephfs1
-Summary:	Ceph distributed file system client library
-Group:		System/Filesystems
-License:	"GPL-2.0 ..."; GPL-2.0
+Summary:        Ceph distributed file system client library
+Group:          System/Filesystems
+License:        "GPL-2.0 ..."; GPL-2.0
 %description -n libcephfs1
 Ceph is a distributed network file system designed to provide excellent
 performance, reliability, and scalability. This is a shared library
@@ -260,12 +260,12 @@ BuildRequires:  java-devel
 
 
 %package -n python-ceph
-Summary:	Python Libraries for the Ceph Distributed Filesystem
-Group:		System/Filesystems
-License:	"GPL-2.0 ..."; GPL-2.0
-Requires:	librados2 = %{version}-%{release}
-Requires:	librbd1 = %{version}-%{release}
-Requires:	libcephfs1 = %{version}-%{release}
+Summary:        Python Libraries for the Ceph Distributed Filesystem
+Group:          System/Filesystems
+License:        "GPL-2.0 ..."; GPL-2.0
+Requires:       librados2 = %{version}-%{release}
+Requires:       librbd1 = %{version}-%{release}
+Requires:       libcephfs1 = %{version}-%{release}
 %if 0%{defined suse_version}
 %py_requires
 %endif
@@ -286,9 +286,9 @@ Requires:       librbd1 = %{version}-%{release}
 This package contains Ceph benchmarks and test tools.
 
 %package -n ceph-keys
-Summary:	Evil Keys
-Group:		System/Filesystems
-License:	"GPL-2.0 ..."; GPL-2.0
+Summary:        Evil Keys
+Group:          System/Filesystems
+License:        "GPL-2.0 ..."; GPL-2.0
 %if 0%{defined suse_version}
 %py_requires
 %endif
@@ -369,7 +369,7 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph/
 mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph/
 cp %{S:1} $RPM_BUILD_ROOT/%{_docdir}/ceph/README.SUSE
-%if 0%{?suse_version} 
+%if 0%{?suse_version}
 %fdupes -s %{python_sitelib}/rados.py*
 %fdupes -s %{python_sitelib}/rbd.py*
 %fdupes -s %{python_sitelib}/ceph_argparse.py*
