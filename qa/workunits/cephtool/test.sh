@@ -283,7 +283,7 @@ current_epoch=$(ceph mds getmap -o $mdsmapfile --no-log-to-stderr 2>&1 | grep ep
 ceph mds setmap -i $mdsmapfile $epoch
 rm $mdsmapfile
 
-ceph mds newfs 0 1 --yes-i-really-mean-it
+ceph mds newfs default 0 1 --yes-i-really-mean-it
 ceph osd pool create data2 10
 poolnum=$(ceph osd dump | grep 'pool.*data2' | awk '{print $2;}')
 ceph mds add_data_pool $poolnum
@@ -321,6 +321,8 @@ ceph mds stat
 # ceph mds rmfailed
 # ceph mds set_state
 # ceph mds stop
+
+ceph mds rmfs default 0 1 --yes-i-really-mean-it
 
 # no mon add/remove
 ceph mon dump
