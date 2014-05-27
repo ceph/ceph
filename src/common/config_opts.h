@@ -597,6 +597,8 @@ OPTION(osd_bench_large_size_max_throughput, OPT_U64, 100 << 20) // 100 MB/s
 OPTION(osd_bench_max_block_size, OPT_U64, 64 << 20) // cap the block size at 64MB
 OPTION(osd_bench_duration, OPT_U32, 30) // duration of 'osd bench', capped at 30s to avoid triggering timeouts
 
+OPTION(filestore_omap_backend, OPT_STR, "leveldb")
+
 OPTION(filestore_debug_disable_sharded_check, OPT_BOOL, false)
 
 /// filestore wb throttle limits

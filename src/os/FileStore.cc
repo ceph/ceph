@@ -69,7 +69,7 @@
 #include "common/fd.h"
 #include "HashIndex.h"
 #include "DBObjectMap.h"
-#include "LevelDBStore.h"
+#include "KeyValueDB.h"
 
 #include "common/ceph_crypto.h"
 using ceph::crypto::SHA1;
@@ -733,22 +733,13 @@ int FileStore::mkfs()
     }
     VOID_TEMP_FAILURE_RETRY(::close(fd));  
   }
-
-  {
-    leveldb::Options options;
-    options.create_if_missing = true;
-    leveldb::DB *db;
-    leveldb::Status status = leveldb::DB::Open(options, omap_dir, &db);
-    if (status.ok()) {
-      delete db;
-      dout(1) << "leveldb db exists/created" << dendl;
-    } else {
-      derr << "mkfs failed to create leveldb: " << status.ToString() << dendl;
-      ret = -1;
-      goto close_fsid_fd;
-    }
+  if (KeyValueDB::test_init(g_conf->filestore_omap_backend, omap_dir)){
+    dout(1) << g_conf->filestore_omap_backend << " db exists/created" << dendl;
+  } else {
+    derr << "mkfs failed to create " << g_conf->filestore_omap_backend << dendl;
+    ret = -1;
+    goto close_fsid_fd;
   }
-
   // journal?
   ret = mkjournal();
   if (ret)
@@ -1375,21 +1366,25 @@ int FileStore::mount()
     if (g_conf->osd_compact_leveldb_on_mount)
       g_conf->set_val("leveldb_compact_on_mount", "true", true, false);
 
-    LevelDBStore *omap_store = new LevelDBStore(g_ceph_context, omap_dir);
+    KeyValueDB * omap_store = KeyValueDB::create(g_ceph_context,
+						 g_conf->filestore_omap_backend,
+						 omap_dir);
+    if (omap_store == NULL)
+    {
+      derr << "Error creating " << g_conf->filestore_omap_backend << dendl;
+      ret = -1;
+      goto close_current_fd;
+    }
+
     omap_store->init();
 
     stringstream err;
     if (omap_store->create_and_open(err)) {
       delete omap_store;
-      derr << "Error initializing leveldb: " << err.str() << dendl;
+      derr << "Error initializing " << g_conf->filestore_omap_backend
+	   << " : " << err.str() << dendl;
       ret = -1;
       goto close_current_fd;
-    }
-
-    if (g_conf->osd_compact_leveldb_on_mount) {
-      derr << "Compacting store..." << dendl;
-      omap_store->compact();
-      derr << "...finished compacting store" << dendl;
     }
 
     DBObjectMap *dbomap = new DBObjectMap(omap_store);
