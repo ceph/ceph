@@ -111,14 +111,51 @@ private:
 
   /** Represents a PerfCounters data element. */
   struct perf_counter_data_any_d {
-    perf_counter_data_any_d();
+    perf_counter_data_any_d()
+      : name(NULL),
+	type(PERFCOUNTER_NONE),
+	u64(0),
+	avgcount(0),
+	avgcount2(0)
+    {}
+    perf_counter_data_any_d(const perf_counter_data_any_d& other)
+      : name(other.name),
+	type(other.type),
+	u64(other.u64.read()) {
+      pair<uint64_t,uint64_t> a = other.read_avg();
+      u64.set(a.first);
+      avgcount.set(a.second);
+      avgcount2.set(a.second);
+    }
+
     void write_schema_json(char *buf, size_t buf_sz) const;
     void  write_json(char *buf, size_t buf_sz) const;
 
     const char *name;
     enum perfcounter_type_d type;
-    uint64_t u64;
-    uint64_t avgcount;
+    atomic64_t u64;
+    atomic64_t avgcount;
+    atomic64_t avgcount2;
+
+    perf_counter_data_any_d& operator=(const perf_counter_data_any_d& other) {
+      name = other.name;
+      type = other.type;
+      pair<uint64_t,uint64_t> a = other.read_avg();
+      u64.set(a.first);
+      avgcount.set(a.second);
+      avgcount2.set(a.second);
+      return *this;
+    }
+
+    /// read <sum, count> safely
+    pair<uint64_t,uint64_t> read_avg() const {
+      uint64_t sum, count;
+      do {
+	count = avgcount.read();
+	sum = u64.read();
+      } while (avgcount2.read() != count);
+      return make_pair(sum, count);
+    }
   };
   typedef std::vector<perf_counter_data_any_d> perf_counter_data_vec_t;
 
