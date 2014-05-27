@@ -69,10 +69,10 @@ Note:
 
 #. Note that the order of the keys does not matter.
 #. The key name (left of ``=``) must be a valid CRUSH ``type``.  By default
-   these include root, datacenter, row, rack, and host, but those types can be
-   customized to be anything appropriate by modifying the CRUSH map.
+   these include root, datacenter, row, rack, chassis and host, but those types
+   can be customized to be anything appropriate by modifying the CRUSH map.
 #. Not all keys need to be specified.  For example, by default, Ceph
-   automatically sets a ceph-osd daemon's location to be
+   automatically sets a ``ceph-osd`` daemon's location to be
    ``root=default host=HOSTNAME`` (based on the output from ``hostname -s``).
 
 ceph-crush-location hook
@@ -496,7 +496,9 @@ A rule takes the following form::
 
 ``ruleset``
 
-:Description: A means of classifying a rule as belonging to a set of rules. Activated by `setting the ruleset in a pool`_. 
+:Description: A means of classifying a rule as belonging to a set of rules. 
+              Activated by `setting the ruleset in a pool`_.
+
 :Purpose: A component of the rule mask.
 :Type: Integer
 :Required: Yes
@@ -507,7 +509,9 @@ A rule takes the following form::
 
 ``type``
 
-:Description: Describes a rule for either a storage drive (replicated) or a RAID.
+:Description: Describes a rule for either a storage drive (replicated) 
+              or a RAID.
+              
 :Purpose: A component of the rule mask. 
 :Type: String
 :Required: Yes
@@ -516,7 +520,9 @@ A rule takes the following form::
 
 ``min_size``
 
-:Description: If a pool makes fewer replicas than this number, CRUSH will NOT select this rule.
+:Description: If a pool makes fewer replicas than this number, CRUSH will 
+              **NOT** select this rule.
+
 :Type: Integer
 :Purpose: A component of the rule mask.
 :Required: Yes
@@ -524,7 +530,9 @@ A rule takes the following form::
 
 ``max_size``
 
-:Description: If a pool makes more replicas than this number, CRUSH will NOT select this rule.
+:Description: If a pool makes more replicas than this number, CRUSH will 
+              **NOT** select this rule.
+              
 :Type: Integer
 :Purpose: A component of the rule mask.
 :Required: Yes
@@ -541,7 +549,8 @@ A rule takes the following form::
 
 ``step choose firstn {num} type {bucket-type}``
 
-:Description: Selects the number of buckets of the given type. The number is usually the number of replicas in the pool (i.e., pool size). 
+:Description: Selects the number of buckets of the given type. The number is 
+              usually the number of replicas in the pool (i.e., pool size). 
 
               - If ``{num} == 0``, choose ``pool-num-replicas`` buckets (all available).
               - If ``{num} > 0 && < pool-num-replicas``, choose that many buckets.
@@ -554,7 +563,10 @@ A rule takes the following form::
 
 ``step chooseleaf firstn {num} type {bucket-type}``
 
-:Description: Selects a set of buckets of ``{bucket-type}`` and chooses a leaf node from the subtree of each bucket in the set of buckets. The number of buckets in the set is usually the number of replicas in the pool (i.e., pool size).
+:Description: Selects a set of buckets of ``{bucket-type}`` and chooses a leaf 
+              node from the subtree of each bucket in the set of buckets. The 
+              number of buckets in the set is usually the number of replicas in
+              the pool (i.e., pool size).
 
               - If ``{num} == 0``, choose ``pool-num-replicas`` buckets (all available).
               - If ``{num} > 0 && < pool-num-replicas``, choose that many buckets.
@@ -568,13 +580,37 @@ A rule takes the following form::
 
 ``step emit`` 
 
-:Description: Outputs the current value and empties the stack. Typically used at the end of a rule, but may also be used to pick from different trees in the same rule.
+:Description: Outputs the current value and empties the stack. Typically used 
+              at the end of a rule, but may also be used to pick from different
+              trees in the same rule.
+              
 :Purpose: A component of the rule.
 :Prerequisite: Follows ``step choose``.
 :Example: ``step emit``
 
-.. important:: To activate one or more rules with a common ruleset number to a pool, set the ruleset number of the pool.
+.. important:: To activate one or more rules with a common ruleset number to a 
+   pool, set the ruleset number of the pool.
 
+
+
+Primary Affinity
+================
+
+When a Ceph Client reads or writes data, it always contacts the primary OSD in
+the acting set. For set ``[2, 3, 4]``, ``osd.2`` is the primary. Sometimes an
+OSD isn't well suited to act as a primary compared to other OSDs (e.g., it has 
+a slow disk or a slow controller). To prevent performance bottlenecks 
+(especially on read operations) while maximizing utilization of your hardware,
+you can set a Ceph OSD's primary affinity so that CRUSH is less likely to use 
+the OSD as a primary in an acting set. ::
+
+	ceph osd primary-affinity <osd-id> <weight>
+
+Primary affinity is ``1`` by default (*i.e.,* an OSD may act as a primary). You
+may set the OSD primary range from ``0-1``, where ``0`` means that the OSD may
+**NOT** be used as a primary and ``1`` means that an OSD may be used as a
+primary.  When the weight is ``< 1``, it is less likely that CRUSH will select
+the Ceph OSD Daemon to act as a primary.
 
 
 Placing Different Pools on Different OSDS:
