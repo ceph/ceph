@@ -122,7 +122,7 @@ performance, reliability, and scalability.
 # packages
 #################################################################################
 %package fuse
-License:        "GPL-2.0 ..."; GPL-2.0
+License:        GPL-2.0
 Summary:        Ceph fuse-based client
 Group:          System/Filesystems
 Requires:       %{name} = %{version}-%{release}
@@ -150,7 +150,7 @@ FUSE based client for Ceph distributed network file system
 %package devel
 Summary:        Ceph headers
 Group:          Development/Libraries/C and C++
-License:        "GPL-2.0 ..."; GPL-2.0
+License:        GPL-2.0
 Requires:       %{name} = %{version}-%{release}
 Requires:       librados2 = %{version}
 Requires:       librbd1 = %{version}
@@ -160,7 +160,7 @@ This package contains libraries and headers needed to develop programs
 that use Ceph.
 
 %package radosgw
-License:        "GPL-2.0 ..."; GPL-2.0
+License:        GPL-2.0
 Summary:        Rados REST Gateway
 Group:          System/Filesystems
 Requires:       librados2 = %{version}-%{release}
@@ -183,7 +183,7 @@ conjunction with any FastCGI capable web server.
 %package gcephtool
 Summary:        Graphical Monitoring Tool for Ceph
 Group:          System/Filesystems
-License:        "GPL-2.0 ..."; GPL-2.0
+License:        GPL-2.0
 Requires:       gtk2 gtkmm24
 BuildRequires:  gtk2-devel gtkmm24-devel
 %description gcephtool
@@ -195,7 +195,7 @@ file system.
 %package resource-agents
 Summary:        OCF-compliant Resource Agents for Ceph Daemons
 Group:          System/Filesystems
-License:        "GPL-2.0 ..."; GPL-2.0
+License:        GPL-2.0
 Requires:       %{name} = %{version}
 Requires:       resource-agents
 %description resource-agents
@@ -207,7 +207,7 @@ managers such as Pacemaker.
 %package -n librados2
 Summary:        RADOS distributed object store client library
 Group:          System/Filesystems
-License:        "GPL-2.0 ..."; GPL-2.0
+License:        GPL-2.0
 %description -n librados2
 RADOS is a reliable, autonomic distributed object storage cluster
 developed as part of the Ceph distributed storage system. This is a
@@ -217,7 +217,7 @@ store using a simple file-like interface.
 %package -n librbd1
 Summary:        RADOS Block Device Client Library
 Group:          System/Filesystems
-License:        "GPL-2.0 ..."; GPL-2.0
+License:        GPL-2.0
 Requires:       librados2 = %{version}-%{release}
 %description -n librbd1
 RBD is a block device striped across multiple distributed objects in
@@ -228,7 +228,7 @@ shared library allowing applications to manage these block devices.
 %package -n libcephfs1
 Summary:        Ceph distributed file system client library
 Group:          System/Filesystems
-License:        "GPL-2.0 ..."; GPL-2.0
+License:        GPL-2.0
 %description -n libcephfs1
 Ceph is a distributed network file system designed to provide excellent
 performance, reliability, and scalability. This is a shared library
@@ -260,7 +260,7 @@ BuildRequires:  java-devel
 %package -n python-ceph
 Summary:        Python Libraries for the Ceph Distributed Filesystem
 Group:          System/Filesystems
-License:        "GPL-2.0 ..."; GPL-2.0
+License:        GPL-2.0
 Requires:       librados2 = %{version}-%{release}
 Requires:       librbd1 = %{version}-%{release}
 Requires:       libcephfs1 = %{version}-%{release}
@@ -286,7 +286,7 @@ This package contains Ceph benchmarks and test tools.
 %package -n ceph-keys
 Summary:        Evil Keys
 Group:          System/Filesystems
-License:        "GPL-2.0 ..."; GPL-2.0
+License:        GPL-2.0
 %if 0%{defined suse_version}
 %py_requires
 %endif
