@@ -95,22 +95,24 @@ void osd_xinfo_t::dump(Formatter *f) const
   f->dump_float("laggy_probability", laggy_probability);
   f->dump_int("laggy_interval", laggy_interval);
   f->dump_int("features", features);
+  f->dump_unsigned("old_weight", old_weight);
 }
 
 void osd_xinfo_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(3, 1, bl);
   ::encode(down_stamp, bl);
   __u32 lp = laggy_probability * 0xfffffffful;
   ::encode(lp, bl);
   ::encode(laggy_interval, bl);
   ::encode(features, bl);
+  ::encode(old_weight, bl);
   ENCODE_FINISH(bl);
 }
 
 void osd_xinfo_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START(1, bl);
+  DECODE_START(3, bl);
   ::decode(down_stamp, bl);
   __u32 lp;
   ::decode(lp, bl);
@@ -120,6 +122,10 @@ void osd_xinfo_t::decode(bufferlist::iterator& bl)
     ::decode(features, bl);
   else
     features = 0;
+  if (struct_v >= 3)
+    ::decode(old_weight, bl);
+  else
+    old_weight = 0;
   DECODE_FINISH(bl);
 }
 
@@ -130,13 +136,15 @@ void osd_xinfo_t::generate_test_instances(list<osd_xinfo_t*>& o)
   o.back()->down_stamp = utime_t(2, 3);
   o.back()->laggy_probability = .123;
   o.back()->laggy_interval = 123456;
+  o.back()->old_weight = 0x7fff;
 }
 
 ostream& operator<<(ostream& out, const osd_xinfo_t& xi)
 {
   return out << "down_stamp " << xi.down_stamp
 	     << " laggy_probability " << xi.laggy_probability
-	     << " laggy_interval " << xi.laggy_interval;
+	     << " laggy_interval " << xi.laggy_interval
+	     << " old_weight " << xi.old_weight;
 }
 
 // ----------------------------------
@@ -1202,9 +1210,12 @@ int OSDMap::apply_incremental(const Incremental &inc)
        ++i) {
     set_weight(i->first, i->second);
 
-    // if we are marking in, clear the AUTOOUT and NEW bits.
-    if (i->second)
+    // if we are marking in, clear the AUTOOUT and NEW bits, and clear
+    // xinfo old_weight.
+    if (i->second) {
       osd_state[i->first] &= ~(CEPH_OSD_AUTOOUT | CEPH_OSD_NEW);
+      osd_xinfo[i->first].old_weight = 0;
+    }
   }
 
   for (map<int32_t,uint32_t>::const_iterator i = inc.new_primary_affinity.begin();
