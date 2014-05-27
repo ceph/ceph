@@ -63,7 +63,7 @@ Patch6:         remove-ceph-drop.diff
 # SLES specific patches
 # not yet cleanly applied
 Patch100:       ceph-add-syncfs-support.v3.diff
-# not yet cleanly applied
+# it was rebased and enabled by mjura@suse.com
 Patch101:       ceph-disk.patch
 Requires:       librbd1 = %{version}-%{release}
 Requires:       librados2 = %{version}-%{release}
@@ -304,6 +304,7 @@ what look like some ceph keys that shodul nto rearly exist in packaging.
 %patch1 -p1
 %patch2 -p1
 %patch3 -p1
+%patch101 -p1
 
 %build
 ./autogen.sh
