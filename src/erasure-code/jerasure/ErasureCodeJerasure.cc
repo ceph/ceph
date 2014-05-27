@@ -341,6 +341,11 @@ void ErasureCodeJerasureCauchy::parse(const map<std::string,std::string> &parame
   k = to_int("k", parameters, DEFAULT_K);
   m = to_int("m", parameters, DEFAULT_M);
   w = to_int("w", parameters, DEFAULT_W);
+  if (w != 8 && w != 16 && w != 32) {
+    derr << "Cauchy: w=" << w
+	 << " must be one of {8, 16, 32} : revert to 8 " << dendl;
+    w = 8;
+  }
   packetsize = to_int("packetsize", parameters, DEFAULT_PACKETSIZE);
 }
 
