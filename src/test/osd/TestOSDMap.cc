@@ -50,13 +50,23 @@ public:
     }
     osdmap.apply_incremental(pending_inc);
 
-    // kludge to get an erasure coding rule and pool
+    // Create an EC ruleset and a pool using it
     int r = osdmap.crush->add_simple_ruleset("erasure", "default", "osd",
 					     "indep", pg_pool_t::TYPE_ERASURE,
 					     &cerr);
-    pg_pool_t *p = (pg_pool_t *)osdmap.get_pg_pool(2);
+
+    OSDMap::Incremental new_pool_inc(osdmap.get_epoch() + 1);
+    new_pool_inc.new_pool_max = osdmap.get_pool_max();
+    new_pool_inc.fsid = osdmap.get_fsid();
+    pg_pool_t empty;
+    uint64_t pool_id = ++new_pool_inc.new_pool_max;
+    pg_pool_t *p = new_pool_inc.get_new_pool(pool_id, &empty);
+    p->size = 3;
+    p->set_pg_num(64);
+    p->set_pgp_num(64);
     p->type = pg_pool_t::TYPE_ERASURE;
     p->crush_ruleset = r;
+    osdmap.apply_incremental(new_pool_inc);
   }
   unsigned int get_num_osds() { return num_osds; }
 

@@ -35,19 +35,21 @@ function run() {
     teardown $dir || return 1
 }
 
+TEST_POOL=rbd
+
 function TEST_osd_pool_get_set() {
     local dir=$1
     ./ceph osd dump | grep 'pool 0' | grep hashpspool || return 1
-    ./ceph osd pool set data hashpspool 0 || return 1
+    ./ceph osd pool set $TEST_POOL hashpspool 0 || return 1
     ! ./ceph osd dump | grep 'pool 0' | grep hashpspool || return 1
-    ./ceph osd pool set data hashpspool 1 || return 1
+    ./ceph osd pool set $TEST_POOL hashpspool 1 || return 1
     ./ceph osd dump | grep 'pool 0' | grep hashpspool || return 1
-    ./ceph osd pool set data hashpspool false || return 1
+    ./ceph osd pool set $TEST_POOL hashpspool false || return 1
     ! ./ceph osd dump | grep 'pool 0' | grep hashpspool || return 1
-    ./ceph osd pool set data hashpspool false || return 1
+    ./ceph osd pool set $TEST_POOL hashpspool false || return 1
     # check that setting false twice does not toggle to true (bug)
     ! ./ceph osd dump | grep 'pool 0' | grep hashpspool || return 1
-    ./ceph osd pool set data hashpspool true || return 1
+    ./ceph osd pool set $TEST_POOL hashpspool true || return 1
     ./ceph osd dump | grep 'pool 0' | grep hashpspool || return 1
 }
 

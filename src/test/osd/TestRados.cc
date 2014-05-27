@@ -261,7 +261,7 @@ int main(int argc, char **argv)
   };
 
   map<TestOpType, unsigned int> op_weights;
-  string pool_name = "data";
+  string pool_name = "rbd";
   bool ec_pool = false;
   bool no_omap = false;
 

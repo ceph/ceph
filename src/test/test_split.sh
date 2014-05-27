@@ -7,9 +7,11 @@
 # Includes
 source "`dirname $0`/test_common.sh"
 
+TEST_POOL=rbd
+
 # Constants
 my_write_objects() {
-        write_objects $1 $2 10 1000000 data
+        write_objects $1 $2 10 1000000 $TEST_POOL
 }
 
 setup() {
@@ -22,7 +24,7 @@ setup() {
 }
 
 get_pgp_num() {
-        ./ceph -c ./ceph.conf osd pool get data pgp_num > $TEMPDIR/pgp_num
+        ./ceph -c ./ceph.conf osd pool get $TEST_POOL pgp_num > $TEMPDIR/pgp_num
         [ $? -eq 0 ] || die "failed to get pgp_num"
         PGP_NUM=`grep PGP_NUM $TEMPDIR/pgp_num | sed 's/.*PGP_NUM:\([ 0123456789]*\).*$/\1/'`
 }
@@ -37,7 +39,7 @@ split1_impl() {
         # Double the number of PGs
         PGP_NUM=$((PGP_NUM*2))
         echo "doubling PGP_NUM to $PGP_NUM..."
-        ./ceph -c ./ceph.conf osd pool set data pgp_num $PGP_NUM
+        ./ceph -c ./ceph.conf osd pool set $TEST_POOL pgp_num $PGP_NUM
 
         sleep 30
 
