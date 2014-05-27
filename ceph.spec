@@ -52,9 +52,7 @@ Patch0:         rcfiles-remove-init-2.patch
 Patch1:         radosgw-init-opensuse.patch
 Patch2:         ceph-mkcephfs.add.xfs.support.diff
 Patch3:         ceph-init-ceph.add.xfs.support.diff
-# not yet cleanly applied
 Patch4:         0001-fix-runlevels-for-start-scripts.patch
-# not yet cleanly applied
 Patch5:         ceph-mkcephfs-spread-admin-keyring.v2.diff
 # PATCH-FIX-OPENSUSE: Remove drop.ceph.com
 # not yet cleanly applied
@@ -304,6 +302,10 @@ what look like some ceph keys that shodul nto rearly exist in packaging.
 %patch1 -p1
 %patch2 -p1
 %patch3 -p1
+%patch4 -p1
+%patch5 -p1
+%patch6 -p1
+%patch100 -p1
 %patch101 -p1
 
 %build
