@@ -1,2 +1,3 @@
 usr/bin/ceph-mds
+usr/bin/cephfs-journal-tool
 usr/share/man/man8/ceph-mds.8
