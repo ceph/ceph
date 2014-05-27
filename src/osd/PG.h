@@ -2053,8 +2053,6 @@ public:
 
   static bool op_must_wait_for_map(OSDMapRef curmap, OpRequestRef op);
 
-  static bool split_request(OpRequestRef op, unsigned match, unsigned bits);
-
   bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch);
   bool old_peering_evt(CephPeeringEvtRef evt) {
     return old_peering_msg(evt->get_epoch_sent(), evt->get_epoch_requested());
