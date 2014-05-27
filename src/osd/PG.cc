@@ -1946,24 +1946,6 @@ void PG::finish_recovery_op(const hobject_t& soid, bool dequeue)
   osd->osd->finish_recovery_op(this, soid, dequeue);
 }
 
-static void split_list(
-  list<OpRequestRef> *from,
-  list<OpRequestRef> *to,
-  unsigned match,
-  unsigned bits)
-{
-  for (list<OpRequestRef>::iterator i = from->begin();
-       i != from->end();
-    ) {
-    if (PG::split_request(*i, match, bits)) {
-      to->push_back(*i);
-      from->erase(i++);
-    } else {
-      ++i;
-    }
-  }
-}
-
 static void split_replay_queue(
   map<eversion_t, OpRequestRef> *from,
   map<eversion_t, OpRequestRef> *to,
@@ -1973,7 +1955,7 @@ static void split_replay_queue(
   for (map<eversion_t, OpRequestRef>::iterator i = from->begin();
        i != from->end();
        ) {
-    if (PG::split_request(i->second, match, bits)) {
+    if (OSD::split_request(i->second, match, bits)) {
       to->insert(*i);
       from->erase(i++);
     } else {
@@ -1993,10 +1975,12 @@ void PG::split_ops(PG *child, unsigned split_bits) {
   split_replay_queue(&replay_queue, &(child->replay_queue), match, split_bits);
 
   osd->dequeue_pg(this, &waiting_for_active);
-  split_list(&waiting_for_active, &(child->waiting_for_active), match, split_bits);
+  OSD::split_list(
+    &waiting_for_active, &(child->waiting_for_active), match, split_bits);
   {
     Mutex::Locker l(map_lock); // to avoid a race with the osd dispatch
-    split_list(&waiting_for_map, &(child->waiting_for_map), match, split_bits);
+    OSD::split_list(
+      &waiting_for_map, &(child->waiting_for_map), match, split_bits);
   }
 }
 
@@ -4849,16 +4833,6 @@ bool PG::can_discard_request(OpRequestRef op)
     return can_discard_backfill(op);
   }
   return true;
-}
-
-bool PG::split_request(OpRequestRef op, unsigned match, unsigned bits)
-{
-  unsigned mask = ~((~0)<<bits);
-  switch (op->get_req()->get_type()) {
-  case CEPH_MSG_OSD_OP:
-    return (static_cast<MOSDOp*>(op->get_req())->get_pg().m_seed & mask) == match;
-  }
-  return false;
 }
 
 bool PG::op_must_wait_for_map(OSDMapRef curmap, OpRequestRef op)

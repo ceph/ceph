@@ -53,6 +53,7 @@ using namespace std;
 #include "common/simple_cache.hpp"
 #include "common/sharedptr_registry.hpp"
 #include "common/PrioritizedQueue.h"
+#include "messages/MOSDOp.h"
 
 #define CEPH_OSD_PROTOCOL    10 /* cluster internal */
 
@@ -1095,6 +1096,35 @@ private:
 
   // -- sessions --
 public:
+
+
+  static bool split_request(OpRequestRef op, unsigned match, unsigned bits) {
+    unsigned mask = ~((~0)<<bits);
+    switch (op->get_req()->get_type()) {
+    case CEPH_MSG_OSD_OP:
+      return (static_cast<MOSDOp*>(
+		op->get_req())->get_pg().m_seed & mask) == match;
+    }
+    return false;
+  }
+
+  static void split_list(
+    list<OpRequestRef> *from,
+    list<OpRequestRef> *to,
+    unsigned match,
+    unsigned bits) {
+    for (list<OpRequestRef>::iterator i = from->begin();
+	 i != from->end();
+      ) {
+      if (split_request(*i, match, bits)) {
+	to->push_back(*i);
+	from->erase(i++);
+      } else {
+	++i;
+      }
+    }
+  }
+
   struct Session : public RefCountedObject {
     EntityName entity_name;
     OSDCap caps;
