@@ -51,8 +51,12 @@ using namespace std;
 #define MDS_INO_CEPH              2
 
 #define MDS_INO_MDSDIR_OFFSET     (1*MAX_MDS)
-#define MDS_INO_LOG_OFFSET        (2*MAX_MDS)
 #define MDS_INO_STRAY_OFFSET      (6*MAX_MDS)
+
+// Locations for journal data
+#define MDS_INO_LOG_OFFSET        (2*MAX_MDS)
+#define MDS_INO_LOG_BACKUP_OFFSET (3*MAX_MDS)
+#define MDS_INO_LOG_POINTER_OFFSET    (4*MAX_MDS)
 
 #define MDS_INO_SYSTEM_BASE       ((6*MAX_MDS) + (MAX_MDS * NUM_STRAY))
 

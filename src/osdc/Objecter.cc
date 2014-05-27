@@ -248,7 +248,10 @@ void Objecter::init_unlocked()
 					   "objecter_requests",
 					   m_request_state_hook,
 					   "show in-progress osd requests");
-  if (ret < 0) {
+
+  /* Don't warn on EEXIST, happens if multiple ceph clients
+   * are instantiated from one process */
+  if (ret < 0 && ret != -EEXIST) {
     lderr(cct) << "error registering admin socket command: "
 	       << cpp_strerror(ret) << dendl;
   }

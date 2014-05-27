@@ -56,6 +56,13 @@ Options
    Connect to specified monitor (instead of looking through
    ``ceph.conf``).
 
+.. option:: --journal-check <rank>
+
+    Attempt to replay the journal for MDS <rank>, then exit.
+
+.. option:: --hot-standby <rank>
+
+    Start as a hot standby for MDS <rank>.
 
 Availability
 ============
