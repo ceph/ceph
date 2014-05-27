@@ -1,11 +1,7 @@
----
- src/ceph_common.sh |    6 +++++-
- src/mkcephfs.in    |   26 ++++++++++++++++++++++++++
- 2 files changed, 31 insertions(+), 1 deletion(-)
-
---- a/src/ceph_common.sh
-+++ b/src/ceph_common.sh
-@@ -32,6 +32,8 @@ verify_conf() {
+diff -u -r ceph-0.80.1-prepatch/src/ceph_common.sh ceph-0.80.1/src/ceph_common.sh
+--- ceph-0.80.1-prepatch/src/ceph_common.sh	2014-05-27 15:19:09.326614788 +0200
++++ ceph-0.80.1/src/ceph_common.sh	2014-05-27 15:19:27.645570917 +0200
+@@ -32,6 +32,8 @@
  
  
  check_host() {
@@ -14,7 +10,7 @@
      # what host is this daemon assigned to?
      host=`$CCONF -c $conf -n $type.$id host`
      if [ "$host" = "localhost" ]; then
-@@ -73,7 +75,9 @@ check_host() {
+@@ -82,7 +84,9 @@
  	get_conf sshdir "$sshdir" "ssh path"
      fi
  
@@ -25,9 +21,33 @@
  
      return 0
  }
---- a/src/mkcephfs.in
-+++ b/src/mkcephfs.in
-@@ -89,6 +89,7 @@ moreargs=""
+diff -u -r ceph-0.80.1-prepatch/src/ceph_common.sh ceph-0.80.1/src/ceph_common.sh
+--- ceph-0.80.1-prepatch/src/ceph_common.sh	2014-05-27 15:19:09.218615047 +0200
++++ ceph-0.80.1/src/ceph_common.sh	2014-05-27 15:18:15.163744499 +0200
+@@ -32,8 +32,6 @@
+ 
+ 
+ check_host() {
+-    silent=$1
+-
+     # what host is this daemon assigned to?
+     host=`$CCONF -c $conf -n $type.$id host`
+     if [ "$host" = "localhost" ]; then
+@@ -84,9 +82,7 @@
+ 	get_conf sshdir "$sshdir" "ssh path"
+     fi
+ 
+-    if [ -z "$silent" ]; then
+-        echo "=== $type.$id === "
+-    fi
++    echo "=== $type.$id === "
+ 
+     return 0
+ }
+diff -u -r ceph-0.80.1-prepatch/src/mkcephfs.in ceph-0.80.1/src/mkcephfs.in
+--- ceph-0.80.1-prepatch/src/mkcephfs.in	2014-05-27 15:19:09.218615047 +0200
++++ ceph-0.80.1/src/mkcephfs.in	2014-05-27 15:19:27.646570915 +0200
+@@ -92,6 +92,7 @@
  auto_action=0
  manual_action=0
  nocopyconf=0
@@ -35,7 +55,7 @@
  
  while [ $# -ge 1 ]; do
  case $1 in
-@@ -170,6 +171,9 @@ case $1 in
+@@ -177,6 +178,9 @@
  	    shift
  	    adminkeyring=$1
  	    ;;
@@ -45,7 +65,7 @@
      *)
  	    echo unrecognized option \'$1\'
  	    usage_exit
-@@ -550,6 +554,28 @@ if [ $allhosts -eq 1 ]; then
+@@ -560,6 +564,28 @@
      echo "placing client.admin keyring in $adminkeyring"
      cp $dir/keyring.admin $adminkeyring
  
@@ -71,6 +91,56 @@
 +	fi
 +    fi
 +
+     exit 0
+ fi
+ 
+diff -u -r ceph-0.80.1-prepatch/src/mkcephfs.in ceph-0.80.1/src/mkcephfs.in
+--- ceph-0.80.1-prepatch/src/mkcephfs.in	2014-05-27 15:19:09.331614776 +0200
++++ ceph-0.80.1/src/mkcephfs.in	2014-05-27 15:18:15.163744499 +0200
+@@ -92,7 +92,6 @@
+ auto_action=0
+ manual_action=0
+ nocopyconf=0
+-spreadadminkey=0
+ 
+ while [ $# -ge 1 ]; do
+ case $1 in
+@@ -178,9 +177,6 @@
+ 	    shift
+ 	    adminkeyring=$1
+ 	    ;;
+-     --spread-admin-key)
+-	    spreadadminkey=1
+-	    ;;
+     *)
+ 	    echo unrecognized option \'$1\'
+ 	    usage_exit
+@@ -564,28 +560,6 @@
+     echo "placing client.admin keyring in $adminkeyring"
+     cp $dir/keyring.admin $adminkeyring
+ 
+-    if [ $spreadadminkey -eq 1 ]; then
+-	get_conf auth "" "auth supported" global
+-	if [ -n "$auth" ] && [ -n "$ssh" ]; then
+-	    get_name_list "osd mds mon"
+-	    old_host=""
+-	    for name in $what; do
+-		type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $name is 'mon1'
+-		id=`echo $name | cut -c 4- | sed 's/^\\.//'`
+-		num=$id
+-		name="$type.$id"
+-
+-		check_host "silent" || continue
+-
+-		if [ -z "$old_host" ] || [ $host != $old_host ]; then
+-		    echo "copy client.admin over to $host"
+-		    scp -q $adminkeyring $host:$adminkeyring
+-		    old_host=$host
+-		fi
+-	    done
+-	fi
+-    fi
+-
      exit 0
  fi
  
