@@ -15,8 +15,7 @@
 #define JOURNAL_RESETTER_H_
 
 
-#include "osdc/Journaler.h"
-#include "mds/MDSUtility.h"
+#include "MDSUtility.h"
 
 /**
  * This class lets you reset an mds journal for troubleshooting or whatever.
@@ -25,13 +24,11 @@
  * of the file to dump to.
  */
 class Resetter : public MDSUtility {
+  int rank; 
 public:
-  Journaler *journaler;
+  Resetter() {}
 
-  Resetter() : journaler(NULL) {}
-
-  int init(int rank);
-  void reset();
+  void reset(int rank);
 };
 
 #endif /* JOURNAL_RESETTER_H_ */

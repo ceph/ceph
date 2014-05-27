@@ -61,7 +61,8 @@ class ESession : public LogEvent {
   }
   
   void update_segment();
-  void replay(MDS *mds);  
+  void replay(MDS *mds);
+  entity_inst_t get_client_inst() const {return client_inst;}
 };
 
 #endif

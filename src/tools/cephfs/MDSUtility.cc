@@ -11,7 +11,7 @@
  * Foundation.  See file COPYING.
  */
 
-#include "mds/MDSUtility.h"
+#include "MDSUtility.h"
 #include "mon/MonClient.h"
 
 #define dout_subsys ceph_subsys_mds
@@ -54,8 +54,11 @@ int MDSUtility::init()
   messenger->start();
 
   // Initialize MonClient
-  if (monc->build_initial_monmap() < 0)
+  if (monc->build_initial_monmap() < 0) {
+    messenger->shutdown();
+    messenger->wait();
     return -1;
+  }
 
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON|CEPH_ENTITY_TYPE_OSD|CEPH_ENTITY_TYPE_MDS);
   monc->set_messenger(messenger);
@@ -63,6 +66,9 @@ int MDSUtility::init()
   r = monc->authenticate();
   if (r < 0) {
     derr << "Authentication failed, did you specify an MDS ID with a valid keyring?" << dendl;
+    monc->shutdown();
+    messenger->shutdown();
+    messenger->wait();
     return r;
   }
 
