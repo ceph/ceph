@@ -42,70 +42,77 @@ TYPED_TEST_CASE(ErasureCodeTest, JerasureTypes);
 
 TYPED_TEST(ErasureCodeTest, encode_decode)
 {
-  TypeParam jerasure;
-  map<std::string,std::string> parameters;
-  parameters["k"] = "2";
-  parameters["m"] = "2";
-  parameters["w"] = "7";
-  parameters["packetsize"] = "8";
-  jerasure.init(parameters);
+  const char *per_chunk_alignments[] = { "false", "true" };
+  for (int per_chunk_alignment = 0 ;
+       per_chunk_alignment < 2;
+       per_chunk_alignment++) {
+    TypeParam jerasure;
+    map<std::string,std::string> parameters;
+    parameters["k"] = "2";
+    parameters["m"] = "2";
+    parameters["w"] = "7";
+    parameters["packetsize"] = "8";
+    parameters["jerasure-per-chunk-alignment"] =
+      per_chunk_alignments[per_chunk_alignment];
+    jerasure.init(parameters);
 
 #define LARGE_ENOUGH 2048
-  bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
-  in_ptr.zero();
-  in_ptr.set_length(0);
-  const char *payload =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  in_ptr.append(payload, strlen(payload));
-  bufferlist in;
-  in.push_front(in_ptr);
-  int want_to_encode[] = { 0, 1, 2, 3 };
-  map<int, bufferlist> encoded;
-  EXPECT_EQ(0, jerasure.encode(set<int>(want_to_encode, want_to_encode+4),
-                              in,
-                              &encoded));
-  EXPECT_EQ(4u, encoded.size());
-  unsigned length =  encoded[0].length();
-  EXPECT_EQ(0, strncmp(encoded[0].c_str(), in.c_str(), length));
-  EXPECT_EQ(0, strncmp(encoded[1].c_str(), in.c_str() + length,
-		       in.length() - length));
-
-
-  // all chunks are available
-  {
-    int want_to_decode[] = { 0, 1 };
-    map<int, bufferlist> decoded;
-    EXPECT_EQ(0, jerasure.decode(set<int>(want_to_decode, want_to_decode+2),
-                                encoded,
-                                &decoded));
-    EXPECT_EQ(2u, decoded.size()); 
-    EXPECT_EQ(length, decoded[0].length());
-    EXPECT_EQ(0, strncmp(decoded[0].c_str(), in.c_str(), length));
-    EXPECT_EQ(0, strncmp(decoded[1].c_str(), in.c_str() + length,
+    bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
+    in_ptr.zero();
+    in_ptr.set_length(0);
+    const char *payload =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    in_ptr.append(payload, strlen(payload));
+    bufferlist in;
+    in.push_front(in_ptr);
+    int want_to_encode[] = { 0, 1, 2, 3 };
+    map<int, bufferlist> encoded;
+    EXPECT_EQ(0, jerasure.encode(set<int>(want_to_encode, want_to_encode+4),
+				 in,
+				 &encoded));
+    EXPECT_EQ(4u, encoded.size());
+    unsigned length =  encoded[0].length();
+    EXPECT_EQ(0, strncmp(encoded[0].c_str(), in.c_str(), length));
+    EXPECT_EQ(0, strncmp(encoded[1].c_str(), in.c_str() + length,
 			 in.length() - length));
-  }
 
-  // two chunks are missing 
-  {
-    map<int, bufferlist> degraded = encoded;
-    degraded.erase(0);
-    degraded.erase(1);
-    EXPECT_EQ(2u, degraded.size());
-    int want_to_decode[] = { 0, 1 };
-    map<int, bufferlist> decoded;
-    EXPECT_EQ(0, jerasure.decode(set<int>(want_to_decode, want_to_decode+2),
-                                degraded,
-                                &decoded));
-    // always decode all, regardless of want_to_decode
-    EXPECT_EQ(4u, decoded.size()); 
-    EXPECT_EQ(length, decoded[0].length());
-    EXPECT_EQ(0, strncmp(decoded[0].c_str(), in.c_str(), length));
-    EXPECT_EQ(0, strncmp(decoded[1].c_str(), in.c_str() + length,
-			 in.length() - length));
+
+    // all chunks are available
+    {
+      int want_to_decode[] = { 0, 1 };
+      map<int, bufferlist> decoded;
+      EXPECT_EQ(0, jerasure.decode(set<int>(want_to_decode, want_to_decode+2),
+				   encoded,
+				   &decoded));
+      EXPECT_EQ(2u, decoded.size()); 
+      EXPECT_EQ(length, decoded[0].length());
+      EXPECT_EQ(0, strncmp(decoded[0].c_str(), in.c_str(), length));
+      EXPECT_EQ(0, strncmp(decoded[1].c_str(), in.c_str() + length,
+			   in.length() - length));
+    }
+
+    // two chunks are missing 
+    {
+      map<int, bufferlist> degraded = encoded;
+      degraded.erase(0);
+      degraded.erase(1);
+      EXPECT_EQ(2u, degraded.size());
+      int want_to_decode[] = { 0, 1 };
+      map<int, bufferlist> decoded;
+      EXPECT_EQ(0, jerasure.decode(set<int>(want_to_decode, want_to_decode+2),
+				   degraded,
+				   &decoded));
+      // always decode all, regardless of want_to_decode
+      EXPECT_EQ(4u, decoded.size()); 
+      EXPECT_EQ(length, decoded[0].length());
+      EXPECT_EQ(0, strncmp(decoded[0].c_str(), in.c_str(), length));
+      EXPECT_EQ(0, strncmp(decoded[1].c_str(), in.c_str() + length,
+			   in.length() - length));
+    }
   }
 }
 
@@ -216,7 +223,7 @@ TEST(ErasureCodeTest, encode)
   parameters["w"] = "8";
   jerasure.init(parameters);
 
-  unsigned alignment = jerasure.get_alignment();
+  unsigned aligned_object_size = jerasure.get_alignment() * 2;
   {
     //
     // When the input bufferlist needs to be padded because
@@ -225,17 +232,16 @@ TEST(ErasureCodeTest, encode)
     bufferlist in;
     map<int,bufferlist> encoded;
     int want_to_encode[] = { 0, 1, 2, 3 };
-    int trail_length = 10;
-    in.append(string(alignment + trail_length, 'X'));
+    int trail_length = 1;
+    in.append(string(aligned_object_size + trail_length, 'X'));
     EXPECT_EQ(0, jerasure.encode(set<int>(want_to_encode, want_to_encode+4),
 				 in,
 				 &encoded));
     EXPECT_EQ(4u, encoded.size());
-    for(int i = 0; i < 4; i++)
-      EXPECT_EQ(alignment, encoded[i].length());
     char *last_chunk = encoded[1].c_str();
+    int length =encoded[1].length();
     EXPECT_EQ('X', last_chunk[0]);
-    EXPECT_EQ('\0', last_chunk[trail_length]);
+    EXPECT_EQ('\0', last_chunk[length - trail_length]);
   }
 
   {
@@ -251,11 +257,10 @@ TEST(ErasureCodeTest, encode)
     map<int,bufferlist> encoded;
     set<int> want_to_encode;
     want_to_encode.insert(0);
-    int trail_length = 10;
-    in.append(string(alignment + trail_length, 'X'));
+    int trail_length = 1;
+    in.append(string(aligned_object_size + trail_length, 'X'));
     EXPECT_EQ(0, jerasure.encode(want_to_encode, in, &encoded));
     EXPECT_EQ(1u, encoded.size());
-    EXPECT_EQ(alignment, encoded[0].length());
   }
 }
 
