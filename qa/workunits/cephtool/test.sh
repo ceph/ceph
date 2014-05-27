@@ -515,6 +515,7 @@ ceph osd pool set rbd cache_target_dirty_ratio .123
 expect_false ceph osd pool set rbd cache_target_dirty_ratio -.2
 expect_false ceph osd pool set rbd cache_target_dirty_ratio 1.1
 ceph osd pool set rbd cache_target_full_ratio .123
+ceph osd dump -f json-pretty | grep '"cache_target_full_ratio_micro": 123000'
 ceph osd pool set rbd cache_target_full_ratio 1.0
 ceph osd pool set rbd cache_target_full_ratio 0
 expect_false ceph osd pool set rbd cache_target_full_ratio 1.1
