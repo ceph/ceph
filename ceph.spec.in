@@ -50,7 +50,7 @@ BuildRequires:  libudev-devel
 BuildRequires:  leveldb-devel > 1.2
 BuildRequires:  xfsprogs-devel
 BuildRequires:  yasm
-%if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
+%if 0%{?rhel} || 0%{?centos_version} || 0%{?fedora}
 BuildRequires:  snappy-devel
 %endif
 
@@ -158,7 +158,7 @@ managers such as Pacemaker.
 Summary:	RADOS distributed object store client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-%if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
+%if 0%{?rhel} || 0%{?centos_version} || 0%{?fedora}
 Obsoletes:	ceph-libs
 %endif
 %description -n librados2
@@ -171,7 +171,7 @@ store using a simple file-like interface.
 Summary:	RADOS block device client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-%if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
+%if 0%{?rhel} || 0%{?centos_version} || 0%{?fedora}
 Obsoletes:	ceph-libs
 %endif
 %description -n librbd1
@@ -184,7 +184,7 @@ shared library allowing applications to manage these block devices.
 Summary:	Ceph distributed file system client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-%if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
+%if 0%{?rhel} || 0%{?centos_version} || 0%{?fedora}
 Obsoletes:	ceph-libs
 %endif
 %description -n libcephfs1
