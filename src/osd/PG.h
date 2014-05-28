@@ -2012,7 +2012,7 @@ public:
     int new_acting_primary) {
     actingset.clear();
     acting = newacting;
-    for (shard_id_t i = 0; i < acting.size(); ++i) {
+    for (uint8_t i = 0; i < acting.size(); ++i) {
       if (acting[i] != CRUSH_ITEM_NONE)
 	actingset.insert(
 	  pg_shard_t(
@@ -2027,13 +2027,13 @@ public:
     }
     up_primary = pg_shard_t();
     primary = pg_shard_t();
-    for (shard_id_t i = 0; i < up.size(); ++i) {
+    for (uint8_t i = 0; i < up.size(); ++i) {
       if (up[i] == new_up_primary) {
 	up_primary = pg_shard_t(up[i], i);
 	break;
       }
     }
-    for (shard_id_t i = 0; i < acting.size(); ++i) {
+    for (uint8_t i = 0; i < acting.size(); ++i) {
       if (acting[i] == new_acting_primary) {
 	primary = pg_shard_t(acting[i], i);
 	break;
