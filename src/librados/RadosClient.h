@@ -141,6 +141,18 @@ public:
   void get();
   bool put();
   void blacklist_self(bool set);
+
+private:
+  bool ms_can_fast_dispatch_any() const { return true; }
+  bool ms_can_fast_dispatch(Message *m) const {
+    switch (m->get_type()) {
+    case CEPH_MSG_OSD_OPREPLY:
+      return true;
+    default:
+      return false;
+    }
+  }
+  void ms_fast_dispatch(Message *m) { ms_dispatch(m); }
 };
 
 #endif
