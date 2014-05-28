@@ -144,7 +144,7 @@ TEST_F(TestHOBJECT_WITH_POOL, generate_and_parse_name) {
   uint64_t hash = 0xABABABAB;
   uint64_t pool = 0xCDCDCDCD;
   int64_t gen = 0xefefefefef;
-  int8_t shard_id = 0xb;
+  shard_id_t shard_id(0xb);
 
   {
     std::string name(".XA/B_\\C.D");

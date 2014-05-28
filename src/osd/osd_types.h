@@ -67,11 +67,11 @@ string ceph_osd_flag_string(unsigned flags);
 struct pg_shard_t {
   int osd;
   shard_id_t shard;
-  pg_shard_t() : osd(-1), shard(ghobject_t::NO_SHARD) {}
-  explicit pg_shard_t(int osd) : osd(osd), shard(ghobject_t::NO_SHARD) {}
+  pg_shard_t() : osd(-1), shard(shard_id_t::NO_SHARD) {}
+  explicit pg_shard_t(int osd) : osd(osd), shard(shard_id_t::NO_SHARD) {}
   pg_shard_t(int osd, shard_id_t shard) : osd(osd), shard(shard) {}
   static pg_shard_t undefined_shard() {
-    return pg_shard_t(-1, ghobject_t::NO_SHARD);
+    return pg_shard_t(-1, shard_id_t::NO_SHARD);
   }
   bool is_undefined() const {
     return osd == -1;
@@ -393,9 +393,9 @@ CEPH_HASH_NAMESPACE_END
 struct spg_t {
   pg_t pgid;
   shard_id_t shard;
-  spg_t() : shard(ghobject_t::NO_SHARD) {}
+  spg_t() : shard(shard_id_t::NO_SHARD) {}
   spg_t(pg_t pgid, shard_id_t shard) : pgid(pgid), shard(shard) {}
-  explicit spg_t(pg_t pgid) : pgid(pgid), shard(ghobject_t::NO_SHARD) {}
+  explicit spg_t(pg_t pgid) : pgid(pgid), shard(shard_id_t::NO_SHARD) {}
   unsigned get_split_bits(unsigned pg_num) const {
     return pgid.get_split_bits(pg_num);
   }
@@ -427,7 +427,7 @@ struct spg_t {
     return is_split;
   }
   bool is_no_shard() const {
-    return shard == ghobject_t::NO_SHARD;
+    return shard == shard_id_t::NO_SHARD;
   }
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
@@ -1705,8 +1705,8 @@ struct pg_notify_t {
   shard_id_t to;
   shard_id_t from;
   pg_notify_t() :
-    query_epoch(0), epoch_sent(0), to(ghobject_t::no_shard()),
-    from(ghobject_t::no_shard()) {}
+    query_epoch(0), epoch_sent(0), to(shard_id_t::NO_SHARD),
+    from(shard_id_t::NO_SHARD) {}
   pg_notify_t(
     shard_id_t to,
     shard_id_t from,
@@ -1846,8 +1846,8 @@ struct pg_query_t {
   shard_id_t to;
   shard_id_t from;
 
-  pg_query_t() : type(-1), epoch_sent(0), to(ghobject_t::NO_SHARD),
-		 from(ghobject_t::NO_SHARD) {}
+  pg_query_t() : type(-1), epoch_sent(0), to(shard_id_t::NO_SHARD),
+		 from(shard_id_t::NO_SHARD) {}
   pg_query_t(
     int t,
     shard_id_t to,

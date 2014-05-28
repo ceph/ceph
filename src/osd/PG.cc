@@ -965,30 +965,30 @@ void PG::calc_ec_acting(
   for (uint8_t i = 0; i < want.size(); ++i) {
     ss << "For position " << (unsigned)i << ": ";
     if (up.size() > (unsigned)i && up[i] != CRUSH_ITEM_NONE &&
-	!all_info.find(pg_shard_t(up[i], i))->second.is_incomplete() &&
-	all_info.find(pg_shard_t(up[i], i))->second.last_update >=
+	!all_info.find(pg_shard_t(up[i], shard_id_t(i)))->second.is_incomplete() &&
+	all_info.find(pg_shard_t(up[i], shard_id_t(i)))->second.last_update >=
 	auth_log_shard->second.log_tail) {
-      ss << " selecting up[i]: " << pg_shard_t(up[i], i) << std::endl;
+      ss << " selecting up[i]: " << pg_shard_t(up[i], shard_id_t(i)) << std::endl;
       want[i] = up[i];
       ++usable;
       continue;
     }
     if (up.size() > (unsigned)i && up[i] != CRUSH_ITEM_NONE) {
-      ss << " backfilling up[i]: " << pg_shard_t(up[i], i)
+      ss << " backfilling up[i]: " << pg_shard_t(up[i], shard_id_t(i))
 	 << " and ";
-      backfill->insert(pg_shard_t(up[i], i));
+      backfill->insert(pg_shard_t(up[i], shard_id_t(i)));
     }
 
     if (acting.size() > (unsigned)i && acting[i] != CRUSH_ITEM_NONE &&
-	!all_info.find(pg_shard_t(acting[i], i))->second.is_incomplete() &&
-	all_info.find(pg_shard_t(acting[i], i))->second.last_update >=
+	!all_info.find(pg_shard_t(acting[i], shard_id_t(i)))->second.is_incomplete() &&
+	all_info.find(pg_shard_t(acting[i], shard_id_t(i)))->second.last_update >=
 	auth_log_shard->second.log_tail) {
-      ss << " selecting acting[i]: " << pg_shard_t(acting[i], i) << std::endl;
+      ss << " selecting acting[i]: " << pg_shard_t(acting[i], shard_id_t(i)) << std::endl;
       want[i] = acting[i];
       ++usable;
     } else {
-      for (set<pg_shard_t>::iterator j = all_info_by_shard[i].begin();
-	   j != all_info_by_shard[i].end();
+      for (set<pg_shard_t>::iterator j = all_info_by_shard[shard_id_t(i)].begin();
+	   j != all_info_by_shard[shard_id_t(i)].end();
 	   ++j) {
 	assert(j->shard == i);
 	if (!all_info.find(*j)->second.is_incomplete() &&
@@ -1008,9 +1008,9 @@ void PG::calc_ec_acting(
   bool found_primary = false;
   for (uint8_t i = 0; i < want.size(); ++i) {
     if (want[i] != CRUSH_ITEM_NONE) {
-      acting_backfill->insert(pg_shard_t(want[i], i));
+      acting_backfill->insert(pg_shard_t(want[i], shard_id_t(i)));
       if (!found_primary) {
-	*want_primary = pg_shard_t(want[i], i);
+	*want_primary = pg_shard_t(want[i], shard_id_t(i));
 	found_primary = true;
       }
     }
@@ -1072,7 +1072,7 @@ void PG::calc_replicated_acting(
   for (vector<int>::const_iterator i = up.begin();
        i != up.end();
        ++i) {
-    pg_shard_t up_cand = pg_shard_t(*i, ghobject_t::no_shard());
+    pg_shard_t up_cand = pg_shard_t(*i, shard_id_t::NO_SHARD);
     if (up_cand == primary->first)
       continue;
     const pg_info_t &cur_info = all_info.find(up_cand)->second;
@@ -1108,7 +1108,7 @@ void PG::calc_replicated_acting(
   for (vector<int>::const_iterator i = acting.begin();
        i != acting.end();
        ++i) {
-    pg_shard_t acting_cand(*i, ghobject_t::no_shard());
+    pg_shard_t acting_cand(*i, shard_id_t::NO_SHARD);
     if (usable >= size)
       break;
 
@@ -1301,7 +1301,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id)
       have.insert(
 	pg_shard_t(
 	  want[i],
-	  pool.info.ec_pool() ? i : ghobject_t::NO_SHARD));
+	  pool.info.ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD));
   }
   if (!(*recoverable_predicate)(have)) {
     want_acting.clear();
@@ -1386,7 +1386,7 @@ void PG::build_might_have_unfound()
     std::vector<int>::const_iterator a = interval.acting.begin();
     std::vector<int>::const_iterator a_end = interval.acting.end();
     for (; a != a_end; ++a, ++i) {
-      pg_shard_t shard(*a, pool.info.ec_pool() ? i : ghobject_t::NO_SHARD);
+      pg_shard_t shard(*a, pool.info.ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD);
       if (*a != CRUSH_ITEM_NONE && shard != pg_whoami)
 	might_have_unfound.insert(shard);
     }
@@ -6961,7 +6961,7 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
 	    int o = interval.acting[i];
 	    if (o == CRUSH_ITEM_NONE)
 	      continue;
-	    pg_shard_t so(o, pg->pool.info.ec_pool() ? i : ghobject_t::NO_SHARD);
+	    pg_shard_t so(o, pg->pool.info.ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD);
 	    if (!osdmap->exists(o) || osdmap->get_info(o).lost_at > interval.first)
 	      continue;  // dne or lost
 	    if (osdmap->is_up(o)) {
@@ -7525,13 +7525,13 @@ PG::PriorSet::PriorSet(bool ec_pool,
   // sending them any new info/logs/whatever.
   for (unsigned i=0; i<acting.size(); i++) {
     if (acting[i] != CRUSH_ITEM_NONE)
-      probe.insert(pg_shard_t(acting[i], ec_pool ? i : ghobject_t::NO_SHARD));
+      probe.insert(pg_shard_t(acting[i], ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD));
   }
   // It may be possible to exlude the up nodes, but let's keep them in
   // there for now.
   for (unsigned i=0; i<up.size(); i++) {
     if (up[i] != CRUSH_ITEM_NONE)
-      probe.insert(pg_shard_t(up[i], ec_pool ? i : ghobject_t::NO_SHARD));
+      probe.insert(pg_shard_t(up[i], ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD));
   }
 
   for (map<epoch_t,pg_interval_t>::const_reverse_iterator p = past_intervals.rbegin();
@@ -7560,7 +7560,7 @@ PG::PriorSet::PriorSet(bool ec_pool,
       int o = interval.acting[i];
       if (o == CRUSH_ITEM_NONE)
 	continue;
-      pg_shard_t so(o, ec_pool ? i : ghobject_t::NO_SHARD);
+      pg_shard_t so(o, ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD);
 
       const osd_info_t *pinfo = 0;
       if (osdmap.exists(o))

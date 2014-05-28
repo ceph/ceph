@@ -2549,7 +2549,7 @@ void OSD::calc_priors_during(
 	    pset.insert(
 	      pg_shard_t(
 		acting[i],
-		osdmap->pg_is_ec(pgid.pgid) ? shard_id_t(i) : ghobject_t::NO_SHARD));
+		osdmap->pg_is_ec(pgid.pgid) ? shard_id_t(i) : shard_id_t::NO_SHARD));
 	  }
 	  up++;
 	}
@@ -2563,7 +2563,7 @@ void OSD::calc_priors_during(
 	  pset.insert(
 	    pg_shard_t(
 	      acting[i],
-	      osdmap->pg_is_ec(pgid.pgid) ? i : ghobject_t::NO_SHARD));
+	      osdmap->pg_is_ec(pgid.pgid) ? shard_id_t(i) : shard_id_t::NO_SHARD));
 	}
       }
     }
@@ -3409,7 +3409,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       ss << "Must not call on ec pool";
       return;
     }
-    spg_t pgid = spg_t(curmap->raw_pg_to_pg(rawpg), ghobject_t::no_shard());
+    spg_t pgid = spg_t(curmap->raw_pg_to_pg(rawpg), shard_id_t::NO_SHARD);
 
     hobject_t obj(object_t(objname), string(""), CEPH_NOSNAP, rawpg.ps(), pool, nspace);
     ObjectStore::Transaction t;
@@ -6581,7 +6581,7 @@ bool OSD::compat_must_dispatch_immediately(PG *pg)
       tmpacting.insert(
 	pg_shard_t(
 	  pg->acting[i],
-	  pg->pool.info.ec_pool() ? i : ghobject_t::NO_SHARD));
+	  pg->pool.info.ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD));
     }
   }
 
