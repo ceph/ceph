@@ -4288,6 +4288,16 @@ void ScrubMap::generate_test_instances(list<ScrubMap*>& o)
 
 // -- ScrubMap::object --
 
+int ScrubMap::object::get_object_info_t(object_info_t *oi)
+{
+  if (attrs.count(OI_ATTR) == 0)
+    return -ENOENT;
+  bufferlist bl;
+  bl.push_back(attrs[OI_ATTR]);
+  oi->decode(bl);
+  return 0;
+}
+
 void ScrubMap::object::encode(bufferlist& bl) const
 {
   ENCODE_START(6, 2, bl);

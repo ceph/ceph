@@ -3110,6 +3110,7 @@ struct ScrubMap {
       nlinks(0), omap_digest(0), omap_digest_present(false),
       read_error(false) {}
 
+    int get_object_info_t(object_info_t *oi);
     void encode(bufferlist& bl) const;
     void decode(bufferlist::iterator& bl);
     void dump(Formatter *f) const;
