@@ -1,4 +1,11 @@
 -------------------------------------------------------------------
+Wed May 28 23:59:59 UTC 2014 - tbehrens@suse.com
+
+- filter spurious setgid warning - mongoose/civetweb is not trying to
+  relinquish suid, BinariesCheck.py in rpmlint is a bit simplistic
+  there ...
+
+-------------------------------------------------------------------
 Wed May 28 22:00:00 UTC 2014 - tbehrens@suse.com
 
 - special-case systemd distros' tmpfs setup in /var/run/ceph

@@ -47,6 +47,8 @@ Source0:        http://ceph.com/download/%{name}-%{version}.tar.bz2
 Source1:        README.SUSE.v0.2
 Source2:        mkinitrd-root.on.rbd.tar.xz
 Source3:        ceph-tmpfiles.d.conf
+# filter spurious setgid warning - mongoose/civetweb is not trying to relinquish suid
+Source4:        ceph-rpmlintrc
 # PATCH-FIX-OPENSUSE rcfiles-remove-init-2.patch -- Scripts require $network which is unavailable in runlevel 2
 Patch0:         rcfiles-remove-init-2.patch
 # PATCH-FIX-OPENSUSE radosgw-init-opensuse.patch -- Run daemon as wwwrun, use startproc/killproc, and add status action
