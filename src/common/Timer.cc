@@ -205,8 +205,7 @@ public:
 RWTimer::RWTimer(CephContext *cct_, RWLock &rwl, bool safe_callbacks)
   : cct(cct_), rwlock(rwl), lock("RWTimer::lock"),
     safe_callbacks(safe_callbacks),
-    thread(NULL),
-    stopping(false)
+    thread(NULL)
 {
 }
 
@@ -228,7 +227,7 @@ void RWTimer::shutdown()
   if (thread) {
     assert(rwlock.is_locked());
     cancel_all_events();
-    stopping = true;
+    stopping.set(1);
     lock.Lock();
     cond.Signal();
     lock.Unlock();
@@ -244,7 +243,7 @@ void RWTimer::timer_thread()
   ldout(cct,10) << "timer_thread starting" << dendl;
   lock.Lock();
 
-  while (!stopping) {
+  while (!stopping.read()) {
     utime_t now = ceph_clock_now(cct);
 
     while (!schedule.empty()) {
@@ -283,9 +282,16 @@ void RWTimer::timer_thread()
       cond.WaitUntil(lock, schedule.begin()->first);
 
     lock.Unlock();
+
+    ldout(cct,20) << "timer_thread awake" << dendl;
+
+    if (stopping.read()) {
+      ldout(cct,10) << "timer_thread exiting" << dendl;
+      return;
+    }
+
     rwlock.get_write();
     lock.Lock();
-    ldout(cct,20) << "timer_thread awake" << dendl;
   }
   lock.Unlock();
   ldout(cct,10) << "timer_thread exiting" << dendl;
