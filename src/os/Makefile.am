@@ -60,9 +60,17 @@ noinst_HEADERS += \
 	os/XfsFileStoreBackend.h \
 	os/ZFSFileStoreBackend.h
 
-if WITH_LIBROCKSDB
+if WITH_SLIBROCKSDB
 libos_rocksdb_la_SOURCES = os/RocksDBStore.cc
-libos_rocksdb_la_CXXFLAGS = ${AM_CXXFLAGS} ${LIBROCKSDB_CFLAGS} -std=gnu++11
+libos_rocksdb_la_CXXFLAGS = ${AM_CXXFLAGS} ${LIBROCKSDB_CFLAGS} -std=gnu++11 -I rocksdb/include
+libos_rocksdb_la_LIBADD = rocksdb/librocksdb.la
+noinst_LTLIBRARIES += libos_rocksdb.la
+noinst_HEADERS += os/RocksDBStore.h
+endif
+if WITH_DLIBROCKSDB
+libos_rocksdb_la_SOURCES = os/RocksDBStore.cc
+libos_rocksdb_la_CXXFLAGS = ${AM_CXXFLAGS} ${LIBROCKSDB_CFLAGS} -std=gnu++11 
+libos_rocksdb_la_LIBADD = -lrocksdb
 noinst_LTLIBRARIES += libos_rocksdb.la
 noinst_HEADERS += os/RocksDBStore.h
 endif

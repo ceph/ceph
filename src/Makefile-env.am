@@ -160,7 +160,7 @@ LIBOS += libos_zfs.a -lzfs
 endif # WITH_LIBZFS
 
 if WITH_LIBROCKSDB
-LIBOS += libos_rocksdb.la -lrocksdb
+LIBOS += libos_rocksdb.la 
 endif # WITH_LIBROCKSDB
 
 if WITH_TCMALLOC
