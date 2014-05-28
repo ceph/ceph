@@ -66,6 +66,8 @@ Patch101:       ceph-disk.patch
 Requires:       librbd1 = %{version}-%{release}
 Requires:       librados2 = %{version}-%{release}
 Requires:       libcephfs1 = %{version}-%{release}
+# python-ceph is used for client tools.
+Requires:	python-ceph = %{version}-%{release}
 Requires(post): binutils
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 BuildRequires:  gcc-c++
