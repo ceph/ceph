@@ -631,6 +631,18 @@ public:
     return s->arg2;
   }
 
+  /**
+   * calculate a map of osds to weights for a given rule
+   *
+   * Generate a map of which OSDs get how much relative weight for a
+   * given rule.
+   *
+   * @param ruleno [in] rule id
+   * @param pmap [out] map of osd to weight
+   * @return 0 for success, or negative error code
+   */
+  int get_rule_weight_map(unsigned ruleno, map<int,float> *pmap);
+
   /* modifiers */
   int add_rule(int len, int ruleset, int type, int minsize, int maxsize, int ruleno) {
     if (!crush) return -ENOENT;
