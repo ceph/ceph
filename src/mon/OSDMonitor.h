@@ -272,7 +272,7 @@ private:
 				 stringstream &ss);
   int prepare_pool_size(const unsigned pool_type,
 			const string &erasure_code_profile,
-			unsigned *size,
+			unsigned *size, unsigned *min_size,
 			stringstream &ss);
   int prepare_pool_stripe_width(const unsigned pool_type,
 				const string &erasure_code_profile,
