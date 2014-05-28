@@ -215,10 +215,10 @@ def main(ctx):
                                (teuthology_branch, teuth_bin_path))
 
         if job_config.get('last_in_suite'):
-            log.info('Generating results email for %s', job_config['name'])
             if teuth_config.results_server:
                 report.try_delete_jobs(job_config['name'],
                                        job_config['job_id'])
+            log.info('Generating results email for %s', job_config['name'])
             args = [
                 os.path.join(teuth_bin_path, 'teuthology-results'),
                 '--timeout',
@@ -230,7 +230,9 @@ def main(ctx):
                 '--name',
                 job_config['name'],
             ]
-            subprocess.Popen(args=args).wait()
+            result_pid = subprocess.Popen(args=args,
+                                          preexec_fn=os.setpgrp,).pid
+            log.debug("teuthology-results PID: %s", result_pid)
         else:
             log.info('Creating archive dir %s', archive_path_full)
             safepath.makedirs(ctx.archive_dir, safe_archive)
