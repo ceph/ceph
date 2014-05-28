@@ -328,7 +328,6 @@ def get_sysinfo(max_osds):
 
   incr = lambda a,k: 1 if k not in a else a[k]+1
   while count < max_osds:
-    meta = {'id':count}
     (rc, o, e) = run_command(['ceph', 'osd', 'metadata', str(count)])
     if rc is 0:
       if osd_metadata_available is False:
@@ -354,7 +353,7 @@ def get_sysinfo(max_osds):
         dstr += jmeta['distro_codename'] + ' ('
         dstr += jmeta['distro_description'] + ')'
         distro[dstr] = incr(distro, dstr)
-      except KeyError as ke:
+      except KeyError:
         pass
 
       cpu[jmeta['cpu']] = incr(cpu, jmeta['cpu'])
@@ -494,7 +493,7 @@ def unpublish():
     fail = True
   try:
     url = owner['url']
-  except KeyError as e:
+  except KeyError:
     fail = True
 
   if fail:
