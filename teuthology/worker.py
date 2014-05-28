@@ -215,7 +215,7 @@ def main(ctx):
                                (teuthology_branch, teuth_bin_path))
 
         if job_config.get('last_in_suite'):
-            log.info('Generating coverage for %s', job_config['name'])
+            log.info('Generating results email for %s', job_config['name'])
             if teuth_config.results_server:
                 report.try_delete_jobs(job_config['name'],
                                        job_config['job_id'])
