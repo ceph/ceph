@@ -269,7 +269,7 @@ public:
   }
 
   bool is_degenerate() const {
-    return generation == NO_GEN && shard_id == NO_SHARD;
+    return generation == NO_GEN && shard_id == shard_id_t::NO_SHARD;
   }
 
   bool is_no_gen() const {
@@ -277,7 +277,7 @@ public:
   }
 
   bool is_no_shard() const {
-    return shard_id == NO_SHARD;
+    return shard_id == shard_id_t::NO_SHARD;
   }
 
   // maximum sorted value.
