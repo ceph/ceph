@@ -18,6 +18,8 @@ from teuthology import contextutil
 from ..orchestra import run
 import ceph_client as cclient
 
+DEFAULT_CONF_PATH = '/etc/ceph/ceph.conf'
+
 log = logging.getLogger(__name__)
 
 class DaemonState(object):
@@ -409,6 +411,29 @@ def make_admin_daemon_dir(ctx, remote):
                 ],
             )
 
+
+def write_conf(ctx, conf_path=DEFAULT_CONF_PATH):
+    conf_fp = StringIO()
+    ctx.ceph.conf.write(conf_fp)
+    conf_fp.seek(0)
+    writes = ctx.cluster.run(
+        args=[
+            'sudo', 'mkdir', '-p', '/etc/ceph', run.Raw('&&'),
+            'sudo', 'chmod', '0755', '/etc/ceph', run.Raw('&&'),
+            'sudo', 'python',
+            '-c',
+            'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
+            conf_path,
+            run.Raw('&&'),
+            'sudo', 'chmod', '0644', conf_path,
+        ],
+        stdin=run.PIPE,
+        wait=False)
+    log.warn("writes: ")
+    teuthology.feed_many_stdins_and_close(conf_fp, writes)
+    run.wait(writes)
+
+
 @contextlib.contextmanager
 def cluster(ctx, config):
     """
@@ -576,26 +601,8 @@ def cluster(ctx, config):
     conf['global']['fsid'] = fsid
 
     log.info('Writing ceph.conf for FSID %s...' % fsid)
-    conf_path = config.get('conf_path', '/etc/ceph/ceph.conf')
-    conf_fp = StringIO()
-    conf.write(conf_fp)
-    conf_fp.seek(0)
-    writes = ctx.cluster.run(
-        args=[
-            'sudo', 'mkdir', '-p', '/etc/ceph', run.Raw('&&'),
-            'sudo', 'chmod', '0755', '/etc/ceph', run.Raw('&&'),
-            'sudo', 'python',
-            '-c',
-            'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
-            conf_path,
-            run.Raw('&&'),
-            'sudo', 'chmod', '0644', conf_path,
-            ],
-        stdin=run.PIPE,
-        wait=False,
-        )
-    teuthology.feed_many_stdins_and_close(conf_fp, writes)
-    run.wait(writes)
+    conf_path = config.get('conf_path', DEFAULT_CONF_PATH)
+    write_conf(ctx, conf_path)
 
     log.info('Creating admin key on %s...' % firstmon)
     ctx.cluster.only(firstmon).run(
