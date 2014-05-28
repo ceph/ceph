@@ -3,6 +3,10 @@ include Makefile-env.am
 SUBDIRS += ocf java
 DIST_SUBDIRS += gtest ocf libs3 java
 
+if WITH_SLIBROCKSDB
+  SUBDIRS += rocksdb
+endif
+
 
 # subdirs
 
