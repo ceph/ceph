@@ -953,7 +953,7 @@ void PG::calc_ec_acting(
       ++i) {
     all_info_by_shard[i->first.shard].insert(i->first);
   }
-  for (shard_id_t i = 0; i < want.size(); ++i) {
+  for (uint8_t i = 0; i < want.size(); ++i) {
     ss << "For position " << (unsigned)i << ": ";
     if (up.size() > (unsigned)i && up[i] != CRUSH_ITEM_NONE &&
 	!all_info.find(pg_shard_t(up[i], i))->second.is_incomplete() &&
@@ -997,7 +997,7 @@ void PG::calc_ec_acting(
   }
 
   bool found_primary = false;
-  for (shard_id_t i = 0; i < want.size(); ++i) {
+  for (uint8_t i = 0; i < want.size(); ++i) {
     if (want[i] != CRUSH_ITEM_NONE) {
       acting_backfill->insert(pg_shard_t(want[i], i));
       if (!found_primary) {
