@@ -451,9 +451,9 @@ class TestMDS(TestArgparse):
         self.assert_valid_command(['mds', 'remove_data_pool', 'foo'])
 
     def test_newfs(self):
-        self.assert_valid_command(['mds', 'newfs', '1', '2',
+        self.assert_valid_command(['mds', 'newfs', 'default', '1', '2',
                                    '--yes-i-really-mean-it'])
-        self.assert_valid_command(['mds', 'newfs', '1', '2'])
+        self.assert_valid_command(['mds', 'newfs', 'default', '1', '2'])
         assert_equal({}, validate_command(sigdict, ['mds', 'newfs']))
         assert_equal({}, validate_command(sigdict, ['mds', 'newfs', '1']))
         assert_equal({}, validate_command(sigdict, ['mds',
@@ -473,6 +473,10 @@ class TestMDS(TestArgparse):
                                                     '-1',
                                                     '--yes-i-really-mean-it']))
 
+    def test_newfs(self):
+        self.assert_valid_command(['mds', 'rmfs', 'default', '--yes-i-really-mean-it'])
+        self.assert_valid_command(['mds', 'rmfs', 'default'])
+        assert_equal({}, validate_command(sigdict, ['mds', 'rmfs']))
 
 class TestMon(TestArgparse):
 
