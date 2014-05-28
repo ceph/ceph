@@ -115,7 +115,7 @@ class RWTimer
 
   std::multimap<utime_t, Context*> schedule;
   std::map<Context*, std::multimap<utime_t, Context*>::iterator> events;
-  bool stopping;
+  atomic_t stopping;
 
   void dump(const char *caller = 0) const;
 
