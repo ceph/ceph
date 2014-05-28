@@ -7,9 +7,11 @@
 # Includes
 source "`dirname $0`/test_common.sh"
 
+TEST_POOL=rbd
+
 # Functions
 my_write_objects() {
-        write_objects $1 $2 10 1000000 data
+        write_objects $1 $2 10 1000000 $TEST_POOL
 }
 
 setup() {
@@ -22,16 +24,16 @@ setup() {
 }
 
 read_write_1_impl() {
-        write_objects 1 2 100 8192 data
+        write_objects 1 2 100 8192 $TEST_POOL
         read_objects 2 100 8192 
 
-        write_objects 3 3 10 81920 data
+        write_objects 3 3 10 81920 $TEST_POOL
         read_objects 3 10 81920 
 
-        write_objects 4 4 100 4 data
+        write_objects 4 4 100 4 $TEST_POOL
         read_objects 4 100 4
 
-        write_objects 1 2 100 8192 data
+        write_objects 1 2 100 8192 $TEST_POOL
         read_objects 2 100 8192
 
         # success

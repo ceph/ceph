@@ -393,9 +393,9 @@ class TestMDS(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['mds', 'rm', '1']))
         for name in ('osd', 'mon', 'client', 'mds'):
             self.assert_valid_command(['mds', 'rm', '1', name + '.42'])
-            assert_equal({}, validate_command(sigdict, ['mds', 'rm',
+            assert_equal(None, validate_command(sigdict, ['mds', 'rm',
                                                         '-1', name + '.42']))
-            assert_equal({}, validate_command(sigdict, ['mds', 'rm',
+            assert_equal(None, validate_command(sigdict, ['mds', 'rm',
                                                         '-1', name]))
             assert_equal({}, validate_command(sigdict, ['mds', 'rm',
                                                         '1', name + '.42',
@@ -473,7 +473,7 @@ class TestMDS(TestArgparse):
                                                     '-1',
                                                     '--yes-i-really-mean-it']))
 
-    def test_newfs(self):
+    def test_rmfs(self):
         self.assert_valid_command(['mds', 'rmfs', 'default', '--yes-i-really-mean-it'])
         self.assert_valid_command(['mds', 'rmfs', 'default'])
         assert_equal({}, validate_command(sigdict, ['mds', 'rmfs']))

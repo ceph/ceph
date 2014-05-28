@@ -113,11 +113,13 @@ expect_false ceph injectargs mon.a '--mon_pg_warn_min_objects 10F'
 ceph daemon mon.a config set mon_pg_warn_min_objects $initial_value
 
 # tiering
+ceph osd pool create slow 2
+ceph osd pool create slow2 2
 ceph osd pool create cache 2
 ceph osd pool create cache2 2
-ceph osd tier add data cache
-ceph osd tier add data cache2
-expect_false ceph osd tier add metadata cache
+ceph osd tier add slow cache
+ceph osd tier add slow cache2
+expect_false ceph osd tier add slow2 cache
 # test some state transitions
 ceph osd tier cache-mode cache writeback
 ceph osd tier cache-mode cache forward
@@ -154,19 +156,19 @@ do
 done
 expect_false ceph osd pool set cache pg_num 4
 ceph osd tier cache-mode cache none
-ceph osd tier set-overlay data cache
-expect_false ceph osd tier set-overlay data cache2
-expect_false ceph osd tier remove data cache
-ceph osd tier remove-overlay data
-ceph osd tier set-overlay data cache2
-ceph osd tier remove-overlay data
-ceph osd tier remove data cache
-ceph osd tier add metadata cache
-expect_false ceph osd tier set-overlay data cache
-ceph osd tier set-overlay metadata cache
-ceph osd tier remove-overlay metadata
-ceph osd tier remove metadata cache
-ceph osd tier remove data cache2
+ceph osd tier set-overlay slow cache
+expect_false ceph osd tier set-overlay slow cache2
+expect_false ceph osd tier remove slow cache
+ceph osd tier remove-overlay slow
+ceph osd tier set-overlay slow cache2
+ceph osd tier remove-overlay slow
+ceph osd tier remove slow cache
+ceph osd tier add slow2 cache
+expect_false ceph osd tier set-overlay slow cache
+ceph osd tier set-overlay slow2 cache
+ceph osd tier remove-overlay slow2
+ceph osd tier remove slow2 cache
+ceph osd tier remove slow cache2
 
 # make sure a non-empty pool fails
 rados -p cache2 put /etc/passwd /etc/passwd
@@ -174,18 +176,18 @@ while ! ceph df | grep cache2 | grep ' 1 ' ; do
     echo waiting for pg stats to flush
     sleep 2
 done
-expect_false ceph osd tier add data cache2
-ceph osd tier add data cache2 --force-nonempty
-ceph osd tier remove data cache2
+expect_false ceph osd tier add slow cache2
+ceph osd tier add slow cache2 --force-nonempty
+ceph osd tier remove slow cache2
 
 ceph osd pool delete cache cache --yes-i-really-really-mean-it
 ceph osd pool delete cache2 cache2 --yes-i-really-really-mean-it
 
 # convenient add-cache command
 ceph osd pool create cache3 2
-ceph osd tier add-cache data cache3 1024000
+ceph osd tier add-cache slow cache3 1024000
 ceph osd dump | grep cache3 | grep bloom | grep 'false_positive_probability: 0.05' | grep 'target_bytes 1024000' | grep '1200s x4'
-ceph osd tier remove data cache3
+ceph osd tier remove slow cache3
 ceph osd pool delete cache3 cache3 --yes-i-really-really-mean-it
 
 # check health check
@@ -266,6 +268,13 @@ if ! grep "$mymsg" $TMPDIR/$$; then
 fi
 kill $wpid
 
+
+ceph osd pool create fs_data 10
+ceph osd pool create fs_metadata 10
+data_pool=$(ceph osd dump | grep 'pool.*fs_data' | awk '{print $2;}')
+metadata_pool=$(ceph osd dump | grep 'pool.*fs_metadata' | awk '{print $2;}')
+ceph mds newfs default $metadata_pool $data_pool --yes-i-really-mean-it
+
 ceph mds cluster_down
 ceph mds cluster_up
 
@@ -283,14 +292,16 @@ current_epoch=$(ceph mds getmap -o $mdsmapfile --no-log-to-stderr 2>&1 | grep ep
 ceph mds setmap -i $mdsmapfile $epoch
 rm $mdsmapfile
 
-ceph mds newfs default 0 1 --yes-i-really-mean-it
 ceph osd pool create data2 10
-poolnum=$(ceph osd dump | grep 'pool.*data2' | awk '{print $2;}')
-ceph mds add_data_pool $poolnum
-ceph mds add_data_pool rbd
-ceph mds remove_data_pool $poolnum
-ceph mds remove_data_pool rbd
+ceph osd pool create data3 10
+data2_pool=$(ceph osd dump | grep 'pool.*data2' | awk '{print $2;}')
+data3_pool=$(ceph osd dump | grep 'pool.*data3' | awk '{print $2;}')
+ceph mds add_data_pool $data2_pool
+ceph mds add_data_pool $data3_pool
+ceph mds remove_data_pool $data2_pool
+ceph mds remove_data_pool $data3_pool
 ceph osd pool delete data2 data2 --yes-i-really-really-mean-it
+ceph osd pool delete data3 data3 --yes-i-really-really-mean-it
 ceph mds set_max_mds 4
 ceph mds set_max_mds 3
 ceph mds set max_mds 4
@@ -322,7 +333,7 @@ ceph mds stat
 # ceph mds set_state
 # ceph mds stop
 
-ceph mds rmfs default 0 1 --yes-i-really-mean-it
+ceph mds rmfs default --yes-i-really-mean-it
 
 # no mon add/remove
 ceph mon dump

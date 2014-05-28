@@ -7,6 +7,8 @@
 # Includes
 source "`dirname $0`/test_common.sh"
 
+TEST_POOL=rbd
+
 # Functions
 setup() {
         export CEPH_NUM_OSD=$1
@@ -21,13 +23,13 @@ setup() {
 
 recovery1_impl() {
         # Write lots and lots of objects
-        write_objects 1 1 200 4000 data
+        write_objects 1 1 200 4000 $TEST_POOL
 
         # Take down osd1
         stop_osd 1
 
         # Continue writing a lot of objects
-        write_objects 2 2 200 4000 data
+        write_objects 2 2 200 4000 $TEST_POOL
 
         # Bring up osd1
         restart_osd 1
@@ -66,13 +68,13 @@ lost1_impl() {
 	try_to_fetch_unfound=$1
 
         # Write lots and lots of objects
-        write_objects 1 1 20 8000 data
+        write_objects 1 1 20 8000 $TEST_POOL
 
         # Take down osd1
         stop_osd 1
 
         # Continue writing a lot of objects
-        write_objects 2 2 20 8000 data
+        write_objects 2 2 20 8000 $TEST_POOL
 
         # Bring up osd1
         restart_osd 1
@@ -94,7 +96,7 @@ lost1_impl() {
 	  # verify we get woken to an error when it's declared lost.
 	  echo "trying to get one of the unfound objects"
 	  (
-	  ./rados -c ./ceph.conf -p data get obj02 $TEMPDIR/obj02 &&\
+	  ./rados -c ./ceph.conf -p $TEST_POOL get obj02 $TEMPDIR/obj02 &&\
 	    die "expected radostool error"
 	  ) &
 	fi
@@ -108,7 +110,7 @@ lost1_impl() {
 
 	# Reading from a lost object gives back an error code.
 	# TODO: check error code
-	./rados -c ./ceph.conf -p data get obj01 $TEMPDIR/obj01 &&\
+	./rados -c ./ceph.conf -p $TEST_POOL get obj01 $TEMPDIR/obj01 &&\
 	  die "expected radostool error"
 
 	if [ "$try_to_fetch_unfound" -eq 1 ]; then
