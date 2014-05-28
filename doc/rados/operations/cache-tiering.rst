@@ -112,24 +112,23 @@ have the high performance drives while omitting the hosts that don't. See
 `Placing Different Pools on Different OSDs`_ for details.
 
 
-In subsequent examples, we will refer to the cache pool as ``hot-storage``.
+In subsequent examples, we will refer to the cache pool as ``hot-storage`` and
+the backing pool as ``cold-storage``.
 
 
 Creating a Cache Tier
 =====================
 
-Setting up a cache tier involves naming a backing storage pool, 
-a cache pool and the cache mode. ::
+Setting up a cache tier involves associating a backing storage pool with
+a cache pool ::
 
-	ceph osd tier add {storagepool} {cachepool} [writeback|readonly]
+	ceph osd tier add {storagepool} {cachepool}
 
-To set up a writeback (read/write) cache pool ``hot-storage`` for pool 
-``cold-storage``, execute the following::
+For example ::
 
-	ceph osd tier add cold-storage hot-storage [cache-mode]
+	ceph osd tier add cold-storage hot-storage
 
-You can specify the cache mode when creating a tier. To set the cache mode
-in a subsequent step, execute the following:: 
+To set the cache mode, execute the following::
 
 	ceph osd tier cache-mode {cachepool} {cache-mode}
 
