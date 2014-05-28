@@ -3075,20 +3075,23 @@ int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_pr
 
 int OSDMonitor::prepare_pool_size(const unsigned pool_type,
 				  const string &erasure_code_profile,
-				  unsigned *size,
+				  unsigned *size, unsigned *min_size,
 				  stringstream &ss)
 {
   int err = 0;
   switch (pool_type) {
   case pg_pool_t::TYPE_REPLICATED:
     *size = g_conf->osd_pool_default_size;
+    *min_size = g_conf->get_osd_pool_default_min_size();
     break;
   case pg_pool_t::TYPE_ERASURE:
     {
       ErasureCodeInterfaceRef erasure_code;
       err = get_erasure_code(erasure_code_profile, &erasure_code, ss);
-      if (err == 0)
+      if (err == 0) {
 	*size = erasure_code->get_chunk_count();
+	*min_size = erasure_code->get_data_chunk_count();
+      }
     }
     break;
   default:
@@ -3205,8 +3208,8 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
 				 crush_ruleset_name, &crush_ruleset, ss);
   if (r)
     return r;
-  unsigned size;
-  r = prepare_pool_size(pool_type, erasure_code_profile, &size, ss);
+  unsigned size, min_size;
+  r = prepare_pool_size(pool_type, erasure_code_profile, &size, &min_size, ss);
   if (r)
     return r;
   uint32_t stripe_width = 0;
@@ -3232,7 +3235,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     pi->flags |= pg_pool_t::FLAG_HASHPSPOOL;
 
   pi->size = size;
-  pi->min_size = g_conf->get_osd_pool_default_min_size();
+  pi->min_size = min_size;
   pi->crush_ruleset = crush_ruleset;
   pi->object_hash = CEPH_STR_HASH_RJENKINS;
   pi->set_pg_num(pg_num ? pg_num : g_conf->osd_pool_default_pg_num);

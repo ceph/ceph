@@ -146,7 +146,11 @@ private:
 			  vector<string>& args) const;
 
   void dump_object_stat_sum(TextTable &tbl, Formatter *f,
-                            object_stat_sum_t &sum, bool verbose);
+                            object_stat_sum_t &sum,
+			    uint64_t avail,
+			    bool verbose);
+
+  int64_t get_rule_avail(OSDMap& osdmap, int ruleno);
 
 public:
   PGMonitor(Monitor *mn, Paxos *p, const string& service_name)

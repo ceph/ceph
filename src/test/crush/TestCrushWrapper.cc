@@ -538,6 +538,11 @@ TEST(CrushWrapper, dump_rules) {
 	      ss.str().find("<item_name>default</item_name></step>"));
   }
 
+  map<int,float> wm;
+  c->get_rule_weight_map(0, &wm);
+  ASSERT_TRUE(wm.size() == 1);
+  ASSERT_TRUE(wm[0] == 1.0);
+
   delete c;
 }
 
