@@ -46,6 +46,7 @@ URL:            http://ceph.com/
 Source0:        http://ceph.com/download/%{name}-%{version}.tar.bz2
 Source1:        README.SUSE.v0.2
 Source2:        mkinitrd-root.on.rbd.tar.xz
+Source3:        ceph-tmpfiles.d.conf
 # PATCH-FIX-OPENSUSE rcfiles-remove-init-2.patch -- Scripts require $network which is unavailable in runlevel 2
 Patch0:         rcfiles-remove-init-2.patch
 # PATCH-FIX-OPENSUSE radosgw-init-opensuse.patch -- Run daemon as wwwrun, use startproc/killproc, and add status action
@@ -368,8 +369,12 @@ chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
-# TODO - review why that generates a warning
-#mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph/
+%if 0%{?suse_version} >= 1310
+%{__install} -d -m 0755 %{buildroot}/%{_tmpfilesdir}
+%{__install} -m 0644 %{SOURCE3} %{buildroot}/%{_tmpfilesdir}/%{name}.conf
+%else
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph/
+%endif
 mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph/
 cp %{S:1} $RPM_BUILD_ROOT/%{_docdir}/ceph/README.SUSE
 rm $RPM_BUILD_ROOT%{python_sitelib}/*.pyo
@@ -378,6 +383,9 @@ rm -rf $RPM_BUILD_ROOT
 
 %post
 /sbin/ldconfig
+%if 0%{?suse_version} >= 1310
+systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
+%endif
 #/sbin/chkconfig --add ceph
 
 #%preun
@@ -488,8 +496,11 @@ rm -rf $RPM_BUILD_ROOT
 %dir %{_localstatedir}/lib/ceph/
 %dir %{_localstatedir}/lib/ceph/tmp/
 %dir %{_localstatedir}/log/ceph/
-# TODO - review why that generates a warning
-#%ghost %dir %{_localstatedir}/run/ceph/
+%if 0%{?suse_version} < 1310
+%ghost %dir %{_localstatedir}/run/ceph/
+%else
+%{_tmpfilesdir}/%{name}.conf
+%endif
 %dir %{_sysconfdir}/ceph/
 /usr/sbin/rcceph
 %{_libdir}/rados-classes/libcls_rbd.so*

@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Wed May 28 22:00:00 UTC 2014 - tbehrens@suse.com
+
+- special-case systemd distros' tmpfs setup in /var/run/ceph
+  * FWIW, SLE12 has suse_version 1315
+
+-------------------------------------------------------------------
 Tue May 27 23:59:59 UTC 2014 - tbehrens@suse.com
 
 - Disable /var/run parts for the while
