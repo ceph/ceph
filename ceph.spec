@@ -83,9 +83,6 @@ BuildRequires:  snappy-devel
 BuildRequires:  leveldb-devel
 BuildRequires:  xfsprogs-devel
 BuildRequires:  libxml2-devel
-%if 0%{?suse_version}
-BuildRequires:  fdupes
-%endif
 
 #################################################################################
 # specific
@@ -369,22 +366,11 @@ chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph/
+# TODO - review why that generates a warning
+#mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph/
 mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph/
 cp %{S:1} $RPM_BUILD_ROOT/%{_docdir}/ceph/README.SUSE
-%if 0%{?suse_version}
-%fdupes -s %{python_sitelib}/rados.py*
-%fdupes -s %{python_sitelib}/rbd.py*
-%fdupes -s %{python_sitelib}/ceph_argparse.py*
-%fdupes -s %{python_sitelib}/ceph_rest_api.py*
-%fdupes -s %{python_sitelib}/cephfs.py*
-%else
-%{python_sitelib}/rados.py*
-%{python_sitelib}/rbd.py*
-%{python_sitelib}/ceph_argparse.py*
-%{python_sitelib}/ceph_rest_api.py*
-%{python_sitelib}/cephfs.py*
-%endif
+rm $RPM_BUILD_ROOT%{python_sitelib}/*.pyo
 %clean
 rm -rf $RPM_BUILD_ROOT
 
@@ -500,7 +486,8 @@ rm -rf $RPM_BUILD_ROOT
 %dir %{_localstatedir}/lib/ceph/
 %dir %{_localstatedir}/lib/ceph/tmp/
 %dir %{_localstatedir}/log/ceph/
-%ghost %dir %{_localstatedir}/run/ceph/
+# TODO - review why that generates a warning
+#%ghost %dir %{_localstatedir}/run/ceph/
 %dir %{_sysconfdir}/ceph/
 /usr/sbin/rcceph
 %{_libdir}/rados-classes/libcls_rbd.so*

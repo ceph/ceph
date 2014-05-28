@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Tue May 27 23:59:59 UTC 2014 - tbehrens@suse.com
+
+- Disable /var/run parts for the while
+- Do not package .pyo files anymore
+
+-------------------------------------------------------------------
 Tue May 27 14:05:10 UTC 2014 - mjura@suse.com
 
 - Rebase and enable ceph-disk.patch
