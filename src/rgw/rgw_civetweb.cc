@@ -167,6 +167,6 @@ int RGWMongoose::send_content_length(uint64_t len)
 {
   has_content_length = true;
   char buf[21];
-  snprintf(buf, sizeof(buf), "%"PRIu64, len);
+  snprintf(buf, sizeof(buf), "%" PRIu64, len);
   return print("Content-Length: %s\n", buf);
 }
