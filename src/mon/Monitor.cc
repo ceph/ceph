@@ -1150,7 +1150,7 @@ void Monitor::handle_sync(MMonSync *m)
 void Monitor::_sync_reply_no_cookie(MMonSync *m)
 {
   MMonSync *reply = new MMonSync(MMonSync::OP_NO_COOKIE, m->cookie);
-  messenger->send_message(reply, m->get_connection());
+  m->get_connection()->send_message(reply);
 }
 
 void Monitor::handle_sync_get_cookie(MMonSync *m)
@@ -1202,7 +1202,7 @@ void Monitor::handle_sync_get_cookie(MMonSync *m)
 
   MMonSync *reply = new MMonSync(MMonSync::OP_COOKIE, sp.cookie);
   reply->last_committed = sp.last_committed;
-  messenger->send_message(reply, m->get_connection());
+  m->get_connection()->send_message(reply);
 }
 
 void Monitor::handle_sync_get_chunk(MMonSync *m)
@@ -1264,7 +1264,7 @@ void Monitor::handle_sync_get_chunk(MMonSync *m)
 
   ::encode(tx, reply->chunk_bl);
 
-  messenger->send_message(reply, m->get_connection());
+  m->get_connection()->send_message(reply);
 }
 
 // requester
@@ -1455,7 +1455,7 @@ void Monitor::handle_probe_probe(MMonProbe *m)
       MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_MISSING_FEATURES,
 				   name, has_ever_joined);
       m->required_features = required_features;
-      messenger->send_message(r, m->get_connection());
+      m->get_connection()->send_message(r);
     }
     m->put();
     return;
@@ -1468,7 +1468,7 @@ void Monitor::handle_probe_probe(MMonProbe *m)
   monmap->encode(r->monmap_bl, m->get_connection()->get_features());
   r->paxos_first_version = paxos->get_first_committed();
   r->paxos_last_version = paxos->get_version();
-  messenger->send_message(r, m->get_connection());
+  m->get_connection()->send_message(r);
 
   // did we discover a peer here?
   if (!monmap->contains(m->get_source_addr())) {
@@ -2715,10 +2715,9 @@ void Monitor::send_reply(PaxosServiceMessage *req, Message *reply)
     dout(15) << "send_reply routing reply to " << req->get_connection()->get_peer_addr()
 	     << " via " << session->proxy_con->get_peer_addr()
 	     << " for request " << *req << dendl;
-    messenger->send_message(new MRoute(session->proxy_tid, reply),
-			    session->proxy_con);    
+    session->proxy_con->send_message(new MRoute(session->proxy_tid, reply));
   } else {
-    messenger->send_message(reply, session->con);
+    session->con->send_message(reply);
   }
   session->put();
 }
@@ -2735,8 +2734,7 @@ void Monitor::no_reply(PaxosServiceMessage *req)
       dout(10) << "no_reply to " << req->get_source_inst()
 	       << " via " << session->proxy_con->get_peer_addr()
 	       << " for request " << *req << dendl;
-      messenger->send_message(new MRoute(session->proxy_tid, NULL),
-			      session->proxy_con);
+      session->proxy_con->send_message(new MRoute(session->proxy_tid, NULL));
     } else {
       dout(10) << "no_reply no quorum nullroute feature for " << req->get_source_inst()
 	       << " via " << session->proxy_con->get_peer_addr()
@@ -2772,7 +2770,7 @@ void Monitor::handle_route(MRoute *m)
       // reset payload, in case encoding is dependent on target features
       if (m->msg) {
 	m->msg->clear_payload();
-	messenger->send_message(m->msg, rr->con);
+	rr->con->send_message(m->msg);
 	m->msg = NULL;
       }
       routed_requests.erase(m->session_mon_tid);
@@ -3536,7 +3534,7 @@ void Monitor::handle_timecheck_peon(MTimeCheck *m)
   reply->round = m->round;
   dout(10) << __func__ << " send " << *m
            << " to " << m->get_source_inst() << dendl;
-  messenger->send_message(reply, m->get_connection());
+  m->get_connection()->send_message(reply);
 }
 
 void Monitor::handle_timecheck(MTimeCheck *m)
@@ -3609,8 +3607,7 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
   // ???
 
   if (reply)
-    messenger->send_message(new MMonSubscribeAck(monmap->get_fsid(), (int)g_conf->mon_subscribe_interval),
-			    m->get_source_inst());
+    m->get_connection()->send_message(new MMonSubscribeAck(monmap->get_fsid(), (int)g_conf->mon_subscribe_interval));
 
   s->put();
   m->put();
@@ -3656,7 +3653,7 @@ void Monitor::handle_get_version(MMonGetVersion *m)
     reply->oldest_version = svc->get_first_committed();
     reply->set_tid(m->get_tid());
 
-    messenger->send_message(reply, m->get_source_inst());
+    m->get_connection()->send_message(reply);
   }
 
   m->put();
@@ -3724,7 +3721,7 @@ void Monitor::send_latest_monmap(Connection *con)
 {
   bufferlist bl;
   monmap->encode(bl, con->get_features());
-  messenger->send_message(new MMonMap(bl), con);
+  con->send_message(new MMonMap(bl));
 }
 
 void Monitor::handle_mon_get_map(MMonGetMap *m)
@@ -3787,7 +3784,7 @@ void Monitor::handle_scrub(MMonScrub *m)
 	break;
       MMonScrub *reply = new MMonScrub(MMonScrub::OP_RESULT, m->version);
       _scrub(&reply->result);
-      messenger->send_message(reply, m->get_connection());
+      m->get_connection()->send_message(reply);
     }
     break;
 

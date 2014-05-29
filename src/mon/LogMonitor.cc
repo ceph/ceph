@@ -456,7 +456,7 @@ void LogMonitor::check_sub(Subscription *s)
 	  << " with " << mlog->entries.size() << " entries"
 	  << " (version " << mlog->version << ")" << dendl;
   
-  mon->messenger->send_message(mlog, s->session->inst);
+  s->session->con->send_message(mlog);
   if (s->onetime)
     mon->session_map.remove_sub(s);
   else
