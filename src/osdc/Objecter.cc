@@ -947,7 +947,7 @@ void Objecter::reopen_session(OSDSession *s)
   entity_inst_t inst = osdmap->get_inst(s->osd);
   ldout(cct, 10) << "reopen_session osd." << s->osd << " session, addr now " << inst << dendl;
   if (s->con) {
-    messenger->mark_down(s->con);
+    s->con->mark_down();
     logger->inc(l_osdc_osd_session_close);
   }
   s->con = messenger->get_connection(inst);
@@ -959,7 +959,7 @@ void Objecter::close_session(OSDSession *s)
 {
   ldout(cct, 10) << "close_session for osd." << s->osd << dendl;
   if (s->con) {
-    messenger->mark_down(s->con);
+    s->con->mark_down();
     logger->inc(l_osdc_osd_session_close);
   }
   s->ops.clear();
