@@ -232,7 +232,7 @@ def main(ctx):
             ]
             result_pid = subprocess.Popen(args=args,
                                           preexec_fn=os.setpgrp,).pid
-            log.debug("teuthology-results PID: %s", result_pid)
+            log.info("teuthology-results PID: %s", result_pid)
         else:
             log.info('Creating archive dir %s', archive_path_full)
             safepath.makedirs(ctx.archive_dir, safe_archive)
