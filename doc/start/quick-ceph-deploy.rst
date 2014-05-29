@@ -12,6 +12,14 @@ explore Ceph functionality.
 As a first exercise, create a Ceph Storage Cluster with one Ceph Monitor and two
 Ceph OSD Daemons. Once the cluster reaches a ``active + clean`` state, expand it 
 by adding a third Ceph OSD Daemon, a Metadata Server and two more Ceph Monitors.
+For best results, create a directory on your admin node node for maintaining the
+configuration files and keys that ``ceph-deploy`` generates for your cluster. ::
+
+	mkdir my-cluster
+	cd my-cluster
+
+The ``ceph-deploy`` utility will output files to the current directory. Ensure you
+are in this directory when executing ``ceph-deploy``.
 
 .. important:: Do not call ``ceph-deploy`` with ``sudo`` or run it as ``root`` 
    if you are logged in as a different user, because it will not issue ``sudo`` 
@@ -42,7 +50,7 @@ To purge the Ceph packages too, you may also execute::
 If you execute ``purge``, you must re-install Ceph.
 
 On your admin node from the directory you created for holding your
-configuration file, perform the following steps using ``ceph-deploy``.
+configuration details, perform the following steps using ``ceph-deploy``.
 
 #. Create the cluster. ::
 
@@ -57,6 +65,11 @@ configuration file, perform the following steps using ``ceph-deploy``.
    keyring, and a log file for the new cluster.  See `ceph-deploy new -h`_ 
    for additional details.
 
+#. Change the default number of replicas in the Ceph configuration file from 
+   ``3`` to ``2`` so that Ceph can achieve an ``active + clean`` state with 
+   just two Ceph OSDs. Add the following line under the ``[default]`` section::
+   
+	osd pool default size = 2
 
 #. If you have more than one network interface, add the ``public network`` 
    setting under the ``[global]`` section of your Ceph configuration file. 
@@ -79,10 +92,6 @@ configuration file, perform the following steps using ``ceph-deploy``.
 
 #. Add the initial monitor(s) and gather the keys (new in 
    ``ceph-deploy`` v1.1.3). ::
-
-	ceph-deploy mon create-initial
-
-   For example::
 
 	ceph-deploy mon create-initial
 
@@ -153,6 +162,11 @@ configuration file, perform the following steps using ``ceph-deploy``.
    For example:: 
 
 	ceph-deploy admin admin-node node1 node2 node3
+
+
+   When ``ceph-deploy`` is talking to the local admin host (``admin-node``), 
+   it must be reachable by its hostname. If necessary, modify ``/etc/hosts`` 
+   to add the name of the admin host.
 
 #. Ensure that you have the correct permissions for the 
    ``ceph.client.admin.keyring``. ::
