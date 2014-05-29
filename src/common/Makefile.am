@@ -39,6 +39,7 @@ libcommon_la_SOURCES = \
 	common/ceph_argparse.cc \
 	common/ceph_context.cc \
 	common/buffer.cc \
+	common/types.cc \
 	common/code_environment.cc \
 	common/dout.cc \
 	common/histogram.cc \

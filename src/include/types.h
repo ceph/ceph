@@ -446,4 +446,26 @@ inline ostream& operator<<(ostream &oss, health_status_t status) {
 };
 #endif
 
+struct shard_id_t {
+  uint8_t id;
+
+  shard_id_t() : id(0) {}
+  explicit shard_id_t(uint8_t _id) : id(_id) {}
+
+  operator uint8_t() const { return id; }
+
+  const static shard_id_t NO_SHARD;
+
+  void encode(bufferlist &bl) const {
+    ::encode(id, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(id, bl);
+  }
+};
+WRITE_CLASS_ENCODER(shard_id_t)
+WRITE_EQ_OPERATORS_1(shard_id_t, id)
+WRITE_CMP_OPERATORS_1(shard_id_t, id)
+ostream &operator<<(ostream &lhs, const shard_id_t &rhs);
+
 #endif
