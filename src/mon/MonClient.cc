@@ -636,7 +636,7 @@ void MonClient::_reopen_session(int rank, string name)
   // send an initial keepalive to ensure our timestamp is valid by the
   // time we are in an OPENED state (by sequencing this before
   // authentication).
-  messenger->send_keepalive(cur_con.get());
+  cur_con->send_keepalive();
 
   MAuth *m = new MAuth;
   m->protocol = 0;
@@ -705,7 +705,7 @@ void MonClient::tick()
     if (now > sub_renew_after)
       _renew_subs();
 
-    messenger->send_keepalive(cur_con.get());
+    cur_con->send_keepalive();
 
     if (state == MC_STATE_HAVE_SESSION) {
       send_log();
