@@ -111,8 +111,24 @@ public:
    * @return 0 on success, or -errno on failure.
    */
   virtual int send_message(Message *m) = 0;
-  void send_keepalive();          ///< send keepalive to this connection
-  void mark_down();               ///< close this connection
+  /**
+   * Send a "keepalive" ping along the given Connection, if it's working.
+   * If the underlying connection has broken, this function does nothing.
+   *
+   * @return 0, or implementation-defined error numbers.
+   */
+  virtual void send_keepalive() = 0;
+  /**
+   * Mark down the given Connection.
+   *
+   * This will cause us to discard its outgoing queue, and if reset
+   * detection is enabled in the policy and the endpoint tries to
+   * reconnect they will discard their queue when we inform them of
+   * the session reset.
+   *
+   * It does not generate any notifications to the Dispatcher.
+   */
+  virtual void mark_down() = 0;
 
   int get_peer_type() { return peer_type; }
   void set_peer_type(int t) { peer_type = t; }

@@ -132,33 +132,13 @@ public:
    * @{
    */
   virtual int send_message(Message *m, const entity_inst_t& dest) {
-    return _send_message(m, dest, false);
+    return _send_message(m, dest);
   }
 
   int send_message(Message *m, Connection *con) {
-    return _send_message(m, con, false);
+    return _send_message(m, con);
   }
 
-  /**
-   * Lazily queue the given Message for the given entity. Unlike with
-   * send_message(), lazy_send_message() will not establish a
-   * Connection if none exists, re-establish the connection if it
-   * has broken, or queue the Message if the connection is broken.
-   *
-   * @param m The Message to send. The Messenger consumes a single reference
-   * when you pass it in.
-   * @param dest The entity to send the Message to.
-   *
-   * @return 0 on success, or -EINVAL if the dest's address is empty.
-   */
-
-  virtual int lazy_send_message(Message *m, const entity_inst_t& dest) {
-    return _send_message(m, dest, true);
-  }
-
-  virtual int lazy_send_message(Message *m, Connection *con) {
-    return _send_message(m, con, true);
-  }
   /** @} // Messaging */
 
   /**
@@ -168,9 +148,9 @@ public:
   virtual ConnectionRef get_connection(const entity_inst_t& dest);
   virtual ConnectionRef get_loopback_connection();
   virtual int send_keepalive(const entity_inst_t& addr);
-  virtual int send_keepalive(Connection *con);
+  int send_keepalive(Connection *con);
   virtual void mark_down(const entity_addr_t& addr);
-  virtual void mark_down(Connection *con);
+  void mark_down(Connection *con);
   virtual void mark_down_on_empty(Connection *con);
   virtual void mark_disposable(Connection *con);
   virtual void mark_down_all();
@@ -250,14 +230,14 @@ private:
 		     Message *first);
   /**
    * Send a message, lazily or not.
-   * This just glues [lazy_]send_message together and passes
+   * This just glues send_message together and passes
    * the input on to submit_message.
    */
-  int _send_message(Message *m, const entity_inst_t& dest, bool lazy);
+  int _send_message(Message *m, const entity_inst_t& dest);
   /**
    * Same as above, but for the Connection-based variants.
    */
-  int _send_message(Message *m, Connection *con, bool lazy);
+  int _send_message(Message *m, Connection *con);
   /**
    * Queue up a Message for delivery to the entity specified
    * by addr and dest_type.
@@ -268,7 +248,6 @@ private:
    * @param con The existing Connection to use, or NULL if you don't know of one.
    * @param addr The address to send the Message to.
    * @param dest_type The peer type of the address we're sending to
-   * @param lazy If true, do not establish or fix a Connection to send the Message;
    * just drop silently under failure.
    * @param already_locked If false, submit_message() will acquire the
    * SimpleMessenger lock before accessing shared data structures; otherwise
@@ -277,7 +256,7 @@ private:
    */
   void submit_message(Message *m, PipeConnection *con,
 		      const entity_addr_t& addr, int dest_type,
-		      bool lazy, bool already_locked);
+		      bool already_locked);
   /**
    * Look through the pipes in the pipe_reap_queue and tear them down.
    */

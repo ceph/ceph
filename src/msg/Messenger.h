@@ -404,35 +404,6 @@ public:
    * @return 0 on success, or -errno on failure.
    */
   virtual int send_message(Message *m, const entity_inst_t& dest) = 0;
-  /**
-   * Lazily queue the given Message for the given entity. Unlike with
-   * send_message(), lazy_send_message() will not establish a
-   * Connection if none exists, re-establish the connection if it
-   * has broken, or queue the Message if the connection is broken.
-   *
-   * @param m The Message to send. The Messenger consumes a single reference
-   * when you pass it in.
-   * @param dest The entity to send the Message to.
-   *
-   * DEPRECATED: please do not use this interface for any new code;
-   * use the Connection* variant.
-   *
-   * @return 0.
-   */
-  virtual int lazy_send_message(Message *m, const entity_inst_t& dest) = 0;
-  /**
-   * Lazily queue the given Message for the given Connection. Unlike with
-   * send_message(), lazy_send_message() does not necessarily re-establish
-   * the connection if it has broken, or even queue the Message if the
-   * connection is broken.
-   *
-   * @param m The Message to send. The Messenger consumes a single reference
-   * when you pass it in.
-   * @param dest The entity to send the Message to.
-   *
-   * @return 0.
-   */
-  virtual int lazy_send_message(Message *m, Connection *con) = 0;
 
   /**
    * @} // Messaging
@@ -464,14 +435,6 @@ public:
    */
   virtual int send_keepalive(const entity_inst_t& dest) = 0;
   /**
-   * Send a "keepalive" ping along the given Connection, if it's working.
-   * If the underlying connection has broken, this function does nothing.
-   *
-   * @param dest The entity to send the keepalive to.
-   * @return 0, or implementation-defined error numbers.
-   */
-  virtual int send_keepalive(Connection *con) = 0;
-  /**
    * Mark down a Connection to a remote.
    *
    * This will cause us to discard our outgoing queue for them, and if
@@ -489,24 +452,6 @@ public:
    * @param a The address to mark down.
    */
   virtual void mark_down(const entity_addr_t& a) = 0;
-  /**
-   * Mark down the given Connection.
-   *
-   * This will cause us to discard its outgoing queue, and if reset
-   * detection is enabled in the policy and the endpoint tries to
-   * reconnect they will discard their queue when we inform them of
-   * the session reset.
-   *
-   * If the Connection* is NULL, this is a no-op.
-   *
-   * It does not generate any notifications to the Dispatcher.
-   *
-   * @param con The Connection to mark down.
-   */
-  virtual void mark_down(Connection *con) = 0;
-  void mark_down(const ConnectionRef& con) {
-    mark_down(con.get());
-  }
   /**
    * Mark all the existing Connections down. This is equivalent
    * to iterating over all Connections and calling mark_down()

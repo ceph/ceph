@@ -88,22 +88,21 @@ int SimpleMessenger::shutdown()
   return 0;
 }
 
-int SimpleMessenger::_send_message(Message *m, const entity_inst_t& dest,
-                                   bool lazy)
+int SimpleMessenger::_send_message(Message *m, const entity_inst_t& dest)
 {
   // set envelope
   m->get_header().src = get_myname();
 
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
-  ldout(cct,1) << (lazy ? "lazy " : "") <<"--> " << dest.name << " "
+  ldout(cct,1) <<"--> " << dest.name << " "
           << dest.addr << " -- " << *m
     	  << " -- ?+" << m->get_data().length()
 	  << " " << m 
 	  << dendl;
 
   if (dest.addr == entity_addr_t()) {
-    ldout(cct,0) << (lazy ? "lazy_" : "") << "send_message message " << *m
+    ldout(cct,0) << "send_message message " << *m
                  << " with empty dest " << dest.addr << dendl;
     m->put();
     return -EINVAL;
@@ -112,26 +111,26 @@ int SimpleMessenger::_send_message(Message *m, const entity_inst_t& dest,
   lock.Lock();
   Pipe *pipe = _lookup_pipe(dest.addr);
   submit_message(m, (pipe ? pipe->connection_state.get() : NULL),
-                 dest.addr, dest.name.type(), lazy, true);
+                 dest.addr, dest.name.type(), true);
   lock.Unlock();
   return 0;
 }
 
-int SimpleMessenger::_send_message(Message *m, Connection *con, bool lazy)
+int SimpleMessenger::_send_message(Message *m, Connection *con)
 {
   //set envelope
   m->get_header().src = get_myname();
 
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
 
-  ldout(cct,1) << (lazy ? "lazy " : "") << "--> " << con->get_peer_addr()
+  ldout(cct,1) << "--> " << con->get_peer_addr()
       << " -- " << *m
       << " -- ?+" << m->get_data().length()
       << " " << m << " con " << con
       << dendl;
 
   submit_message(m, static_cast<PipeConnection*>(con),
-		 con->get_peer_addr(), con->get_peer_type(), lazy, false);
+		 con->get_peer_addr(), con->get_peer_type(), false);
   return 0;
 }
 
@@ -400,7 +399,7 @@ ConnectionRef SimpleMessenger::get_loopback_connection()
 
 void SimpleMessenger::submit_message(Message *m, PipeConnection *con,
 				     const entity_addr_t& dest_addr, int dest_type,
-				     bool lazy, bool already_locked)
+				     bool already_locked)
 {
   if (cct->_conf->ms_dump_on_send) {
     m->encode(-1, true);
@@ -465,9 +464,6 @@ void SimpleMessenger::submit_message(Message *m, PipeConnection *con,
     ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", lossy server for target type "
 		  << ceph_entity_type_name(dest_type) << ", no session, dropping." << dendl;
     m->put();
-  } else if (lazy) {
-    ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", lazy, dropping." << dendl;
-    m->put();
   } else {
     ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
     if (!already_locked) {
@@ -475,7 +471,7 @@ void SimpleMessenger::submit_message(Message *m, PipeConnection *con,
        *  grab the lock and do it again. If we got here, we know it's a non-lossy
        *  Connection, so we can use our existing pointer without doing another lookup. */
       Mutex::Locker l(lock);
-      submit_message(m, con, dest_addr, dest_type, lazy, true);
+      submit_message(m, con, dest_addr, dest_type, true);
     } else {
       connect_rank(dest_addr, dest_type, static_cast<PipeConnection*>(con), m);
     }

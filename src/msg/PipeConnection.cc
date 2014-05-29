@@ -71,3 +71,13 @@ int PipeConnection::send_message(Message *m)
 {
   return static_cast<SimpleMessenger*>(msgr)->send_message(m, this);
 }
+
+void PipeConnection::send_keepalive()
+{
+  static_cast<SimpleMessenger*>(msgr)->send_keepalive(this);
+}
+
+void PipeConnection::mark_down()
+{
+  static_cast<SimpleMessenger*>(msgr)->mark_down(this);
+}
