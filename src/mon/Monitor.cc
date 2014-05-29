@@ -2782,7 +2782,7 @@ void Monitor::handle_route(MRoute *m)
   } else {
     dout(10) << " not a routed request, trying to send anyway" << dendl;
     if (m->msg) {
-      messenger->lazy_send_message(m->msg, m->dest);
+      messenger->send_message(m->msg, m->dest);
       m->msg = NULL;
     }
   }
