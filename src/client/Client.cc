@@ -1619,8 +1619,7 @@ MetaSession *Client::_open_mds_session(int mds)
   session->con = messenger->get_connection(session->inst);
   session->state = MetaSession::STATE_OPENING;
   mds_sessions[mds] = session;
-  messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN),
-			  session->con);
+  session->con->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN));
   return session;
 }
 
@@ -1628,8 +1627,7 @@ void Client::_close_mds_session(MetaSession *s)
 {
   ldout(cct, 2) << "_close_mds_session mds." << s->mds_num << " seq " << s->seq << dendl;
   s->state = MetaSession::STATE_CLOSING;
-  messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, s->seq),
-			  s->con);
+  s->con->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, s->seq));
 }
 
 void Client::_closed_mds_session(MetaSession *s)
@@ -1688,8 +1686,7 @@ void Client::handle_client_session(MClientSession *m)
     break;
 
   case CEPH_SESSION_FLUSHMSG:
-    messenger->send_message(new MClientSession(CEPH_SESSION_FLUSHMSG_ACK, m->get_seq()),
-			    session->con);
+    session->con->send_message(new MClientSession(CEPH_SESSION_FLUSHMSG_ACK, m->get_seq()));
     break;
 
   default:
@@ -1743,7 +1740,7 @@ void Client::send_request(MetaRequest *request, MetaSession *session)
   session->requests.push_back(&request->item);
 
   ldout(cct, 10) << "send_request " << *r << " to mds." << mds << dendl;
-  messenger->send_message(r, session->con);
+  session->con->send_message(r);
 }
 
 MClientRequest* Client::build_client_request(MetaRequest *request)
@@ -2099,7 +2096,7 @@ void Client::send_reconnect(MetaSession *session)
   //make sure unsafe requests get saved
   resend_unsafe_requests(session);
 
-  messenger->send_message(m, session->con);
+  session->con->send_message(m);
 
   mount_cond.Signal();
 }
@@ -2162,8 +2159,7 @@ void Client::got_mds_push(MetaSession *s)
   s->seq++;
   ldout(cct, 10) << " mds." << s->mds_num << " seq now " << s->seq << dendl;
   if (s->state == MetaSession::STATE_CLOSING) {
-    messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, s->seq),
-			    s->con);
+    s->con->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, s->seq));
   }
 }
 
@@ -2539,7 +2535,7 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
     in->requested_max_size = in->wanted_max_size;
     ldout(cct, 15) << "auth cap, setting max_size = " << in->requested_max_size << dendl;
   }
-  messenger->send_message(m, session->con);
+  session->con->send_message(m);
 }
 
 
@@ -2781,7 +2777,7 @@ void Client::flush_snaps(Inode *in, bool all_again, CapSnap *again)
     capsnap->atime.encode_timeval(&m->head.atime);
     m->head.time_warp_seq = capsnap->time_warp_seq;
 
-    messenger->send_message(m, session->con);
+    session->con->send_message(m);
   }
 }
 
@@ -4177,7 +4173,7 @@ void Client::flush_cap_releases()
        p != mds_sessions.end();
        ++p) {
     if (p->second->release && mdsmap->is_clientreplay_or_active_or_stopping(p->first)) {
-      messenger->send_message(p->second->release, p->second->con);
+      p->second->con->send_message(p->second->release);
       p->second->release = 0;
     }
   }
@@ -4239,8 +4235,7 @@ void Client::renew_caps(MetaSession *session)
   ldout(cct, 10) << "renew_caps mds." << session->mds_num << dendl;
   session->last_cap_renew_request = ceph_clock_now(cct);
   uint64_t seq = ++session->cap_renew_seq;
-  messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_RENEWCAPS, seq),
-			  session->con);
+  session->con->send_message(new MClientSession(CEPH_SESSION_REQUEST_RENEWCAPS, seq));
 }
 
 
