@@ -28,6 +28,9 @@ public:
   GenericFileStoreBackend(FileStore *fs);
   virtual ~GenericFileStoreBackend() {}
 
+  virtual const char *get_name() {
+    return "generic";
+  }
   virtual int detect_features();
   virtual int create_current();
   virtual bool can_checkpoint() { return false; }
