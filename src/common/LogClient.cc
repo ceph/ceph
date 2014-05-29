@@ -100,7 +100,7 @@ void LogClient::do_log(clog_type type, const std::string& s)
       assert(messenger->get_myname().is_mon());
       ldout(cct,10) << "send_log to self" << dendl;
       Message *log = _get_mon_log_message();
-      messenger->send_message(log, messenger->get_myinst());
+      messenger->get_loopback_connection()->send_message(log);
     }
   }
 }
