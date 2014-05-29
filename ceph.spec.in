@@ -19,6 +19,7 @@ Source0:	http://ceph.com/download/%{name}-%{version}.tar.bz2
 Requires:	librbd1 = %{version}-%{release}
 Requires:	librados2 = %{version}-%{release}
 Requires:	libcephfs1 = %{version}-%{release}
+Requires:	ceph-common = %{version}-%{release}
 Requires:	python
 Requires:	python-argparse
 Requires:	python-ceph
@@ -96,10 +97,50 @@ block and file system storage.
 #################################################################################
 # packages
 #################################################################################
+%package -n ceph-common
+Summary:	Ceph Common
+Group:		System Environment/Base
+Requires:	librbd1 = %{version}-%{release}
+Requires:	librados2 = %{version}-%{release}
+Requires:	libcephfs1 = %{version}-%{release}
+Requires:	python
+Requires:	python-argparse
+Requires:	python-ceph
+Requires:	python-requests
+Requires:       xfsprogs
+Requires:	cryptsetup
+Requires:	parted
+Requires:	util-linux
+Requires:	hdparm
+Requires:       redhat-lsb-core
+Requires(post):	binutils
+BuildRequires:	make
+BuildRequires:	gcc-c++
+BuildRequires:	libtool
+BuildRequires:	boost-devel
+BuildRequires:	libedit-devel
+BuildRequires:	perl
+BuildRequires:	gdbm
+BuildRequires:	pkgconfig
+BuildRequires:	python
+BuildRequires:	python-nose
+BuildRequires:	python-argparse
+BuildRequires:  libaio-devel
+BuildRequires:  libcurl-devel
+BuildRequires:  libxml2-devel
+BuildRequires:  libuuid-devel
+BuildRequires:  libblkid-devel >= 2.17
+BuildRequires:  libudev-devel
+BuildRequires:  leveldb-devel > 1.2
+BuildRequires:  xfsprogs-devel
+BuildRequires:  yasm
+%description -n ceph-common
+common utilities to mount and interact with a ceph storage cluster
+
 %package fuse
 Summary:	Ceph fuse-based client
 Group:		System Environment/Base
-Requires:	%{name}
+Requires:	ceph-common
 BuildRequires:	fuse-devel
 %description fuse
 FUSE based client for Ceph distributed network file system
@@ -107,7 +148,7 @@ FUSE based client for Ceph distributed network file system
 %package -n rbd-fuse
 Summary:	Ceph fuse-based client
 Group:		System Environment/Base
-Requires:	%{name}
+Requires:	ceph-common
 BuildRequires:	fuse-devel
 %description -n rbd-fuse
 FUSE based client to map Ceph rbd images to files
@@ -116,7 +157,7 @@ FUSE based client to map Ceph rbd images to files
 Summary:	Ceph headers
 Group:		Development/Libraries
 License:	LGPL-2.0
-Requires:	%{name} = %{version}-%{release}
+Requires:	ceph-common = %{version}-%{release}
 Requires:	librados2 = %{version}
 Requires:	librbd1 = %{version}
 Requires:	libcephfs1 = %{version}
@@ -127,7 +168,7 @@ that use Ceph.
 %package radosgw
 Summary:	Rados REST gateway
 Group:		Development/Libraries
-Requires:	librados2 = %{version}-%{release}
+Requires:	ceph-common = %{version}-%{release}
 %if 0%{defined suse_version}
 BuildRequires:	libexpat-devel
 BuildRequires:	FastCGI-devel
@@ -146,7 +187,7 @@ conjunction with any FastCGI capable web server.
 Summary:	OCF-compliant resource agents for Ceph daemons
 Group:		System Environment/Base
 License:	LGPL-2.0
-Requires:	%{name} = %{version}
+Requires:	ceph-common = %{version}
 Requires:	resource-agents
 %description resource-agents
 Resource agents for monitoring and managing Ceph daemons
@@ -384,31 +425,18 @@ fi
 %dir %{_docdir}/ceph
 %{_docdir}/ceph/sample.ceph.conf
 %{_docdir}/ceph/sample.fetch_config
-%{_datadir}/ceph/known_hosts_drop.ceph.com
-%{_datadir}/ceph/id_dsa_drop.ceph.com
-%{_datadir}/ceph/id_dsa_drop.ceph.com.pub
-%{_bindir}/ceph
 %{_bindir}/cephfs
-%{_bindir}/ceph-conf
 %{_bindir}/ceph-clsinfo
 %{_bindir}/ceph-rest-api
 %{_bindir}/crushtool
 %{_bindir}/monmaptool
 %{_bindir}/osdmaptool
-%{_bindir}/ceph-authtool
-%{_bindir}/ceph-syn
-%{_bindir}/ceph-post-file
-%{_bindir}/ceph-brag
-%{_bindir}/ceph-crush-location
 %{_bindir}/ceph-run
 %{_bindir}/ceph-mon
 %{_bindir}/ceph-mds
 %{_bindir}/ceph-osd
 %{_bindir}/ceph-rbdnamer
-%{_bindir}/ceph-dencoder
 %{_bindir}/librados-config
-%{_bindir}/rados
-%{_bindir}/rbd
 %{_bindir}/ceph-client-debug
 %{_bindir}/cephfs-journal-tool
 %{_bindir}/ceph-debugpack
@@ -421,7 +449,6 @@ fi
 %{_sbindir}/ceph-disk-udev
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/rcceph
-/sbin/mount.ceph
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/ceph_common.sh
 %dir %{_libdir}/rados-classes
@@ -444,37 +471,23 @@ fi
 %{_libdir}/ceph/erasure-code/libec_jerasure*.so*
 %{_libdir}/ceph/erasure-code/libec_test_jerasure*.so*
 %{_libdir}/ceph/erasure-code/libec_missing_entry_point.so*
-/lib/udev/rules.d/50-rbd.rules
 /lib/udev/rules.d/60-ceph-partuuid-workaround.rules
 /lib/udev/rules.d/95-ceph-osd.rules
 %dir %{_sysconfdir}/ceph/
 %config %{_sysconfdir}/bash_completion.d/ceph
-%config %{_sysconfdir}/bash_completion.d/rados
-%config %{_sysconfdir}/bash_completion.d/radosgw-admin
-%config %{_sysconfdir}/bash_completion.d/rbd
-%{_initrddir}/rbdmap
-%config(noreplace) %{_sysconfdir}/ceph/rbdmap
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %config(noreplace) %{_sysconfdir}/logrotate.d/radosgw
 %{_mandir}/man8/ceph-mon.8*
 %{_mandir}/man8/ceph-mds.8*
 %{_mandir}/man8/ceph-osd.8*
 %{_mandir}/man8/ceph-run.8*
-%{_mandir}/man8/ceph-syn.8*
-%{_mandir}/man8/ceph-post-file.8*
-%{_mandir}/man8/ceph-dencoder.8*
 %{_mandir}/man8/ceph-rest-api.8*
 %{_mandir}/man8/crushtool.8*
 %{_mandir}/man8/osdmaptool.8*
 %{_mandir}/man8/monmaptool.8*
-%{_mandir}/man8/ceph-conf.8*
-%{_mandir}/man8/ceph.8*
 %{_mandir}/man8/cephfs.8*
 %{_mandir}/man8/mount.ceph.8*
-%{_mandir}/man8/rados.8*
-%{_mandir}/man8/rbd.8*
 %{_mandir}/man8/ceph-rbdnamer.8*
-%{_mandir}/man8/ceph-authtool.8*
 %{_mandir}/man8/ceph-debugpack.8*
 %{_mandir}/man8/ceph-clsinfo.8.gz
 %{_mandir}/man8/librados-config.8.gz
@@ -489,6 +502,37 @@ fi
 %dir %{_localstatedir}/log/ceph/
 %ghost %dir %{_localstatedir}/run/ceph/
 
+
+#################################################################################
+%files -n ceph-common
+%{_bindir}/ceph
+%{_bindir}/ceph-authtool
+%{_bindir}/ceph-conf
+%{_bindir}/ceph-dencoder
+%{_bindir}/ceph-syn
+%{_bindir}/ceph-crush-location
+%{_bindir}/rados
+%{_bindir}/rbd
+%{_bindir}/ceph-post-file
+%{_bindir}/ceph-brag
+%{_mandir}/man8/ceph-authtool.8*
+%{_mandir}/man8/ceph-conf.8*
+%{_mandir}/man8/ceph-dencoder.8*
+%{_mandir}/man8/ceph-syn.8*
+%{_mandir}/man8/ceph-post-file.8*
+%{_mandir}/man8/ceph.8*
+%{_mandir}/man8/rados.8*
+%{_mandir}/man8/rbd.8*
+%{_datadir}/ceph/known_hosts_drop.ceph.com
+%{_datadir}/ceph/id_dsa_drop.ceph.com
+%{_datadir}/ceph/id_dsa_drop.ceph.com.pub
+/sbin/mount.ceph
+/lib/udev/rules.d/50-rbd.rules
+%config %{_sysconfdir}/bash_completion.d/rados
+%config %{_sysconfdir}/bash_completion.d/radosgw-admin
+%config %{_sysconfdir}/bash_completion.d/rbd
+%config(noreplace) %{_sysconfdir}/ceph/rbdmap
+%{_initrddir}/rbdmap
 
 #################################################################################
 %files fuse
