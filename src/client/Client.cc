@@ -1633,7 +1633,7 @@ void Client::_close_mds_session(MetaSession *s)
 void Client::_closed_mds_session(MetaSession *s)
 {
   s->state = MetaSession::STATE_CLOSED;
-  messenger->mark_down(s->con);
+  s->con->mark_down();
   signal_context_list(s->waiting_for_open);
   mount_cond.Signal();
   remove_session_caps(s);
@@ -2013,7 +2013,7 @@ void Client::handle_mds_map(MMDSMap* m)
     int newstate = mdsmap->get_state(p->first);
     if (!mdsmap->is_up(p->first) ||
 	mdsmap->get_inst(p->first) != p->second->inst) {
-      messenger->mark_down(p->second->con);
+      p->second->con->mark_down();
       if (mdsmap->is_up(p->first))
 	p->second->inst = mdsmap->get_inst(p->first);
     } else if (oldstate == newstate)
