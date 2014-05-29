@@ -31,6 +31,9 @@ private:
 public:
   BtrfsFileStoreBackend(FileStore *fs);
   ~BtrfsFileStoreBackend() {}
+  const char *get_name() {
+    return "btrfs";
+  }
   int detect_features();
   bool can_checkpoint();
   int create_current();

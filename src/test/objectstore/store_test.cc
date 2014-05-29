@@ -75,6 +75,15 @@ bool sorted(const vector<ghobject_t> &in) {
   return true;
 }
 
+TEST_P(StoreTest, collect_metadata) {
+  map<string,string> pm;
+  store->collect_metadata(&pm);
+  if (GetParam() == string("filestore")) {
+    ASSERT_NE(pm.count("filestore_backend"), 0);
+    ASSERT_NE(pm.count("filestore_f_type"), 0);
+  }
+}
+
 TEST_P(StoreTest, SimpleColTest) {
   coll_t cid = coll_t("initial");
   int r = 0;
@@ -1265,6 +1274,11 @@ int main(int argc, char **argv) {
   return RUN_ALL_TESTS();
 }
 
-// Local Variables:
-// compile-command: "cd ../.. ; make ceph_test_objectstore ; ./ceph_test_objectstore --gtest_filter=StoreTest.* --log-to-stderr=true --debug-filestore=20"
-// End:
+/*
+ * Local Variables:
+ * compile-command: "cd ../.. ; make ceph_test_objectstore && 
+ *    ./ceph_test_objectstore \
+ *        --gtest_filter=*.collect_metadata* --log-to-stderr=true --debug-filestore=20
+ *  "
+ * End:
+ */
