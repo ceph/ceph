@@ -45,6 +45,9 @@ public:
     return pipe != NULL;
   }
 
+  int send_message(Message *m);
+
+
 }; /* PipeConnection */
 
 typedef boost::intrusive_ptr<PipeConnection> PipeConnectionRef;

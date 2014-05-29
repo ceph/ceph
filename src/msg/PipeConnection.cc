@@ -66,3 +66,8 @@ void PipeConnection::reset_pipe(Pipe *p)
     pipe->put();
   pipe = p->get();
 }
+
+int PipeConnection::send_message(Message *m)
+{
+  return static_cast<SimpleMessenger*>(msgr)->send_message(m, this);
+}

@@ -15,11 +15,6 @@
 #include "Connection.h"
 #include "Messenger.h"
 
-void Connection::send_message(Message *m)
-{
-  msgr->send_message(m, this);
-}
-
 void Connection::send_keepalive()
 {
   msgr->send_keepalive(this);

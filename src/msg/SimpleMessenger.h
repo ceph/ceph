@@ -135,7 +135,7 @@ public:
     return _send_message(m, dest, false);
   }
 
-  virtual int send_message(Message *m, Connection *con) {
+  int send_message(Message *m, Connection *con) {
     return _send_message(m, con, false);
   }
 
