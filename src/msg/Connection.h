@@ -35,6 +35,7 @@
 
 // abstract Connection, for keeping per-connection state
 
+class Message;
 class Messenger;
 
 struct Connection : public RefCountedObject {
@@ -96,6 +97,10 @@ public:
   Messenger *get_messenger() {
     return msgr;
   }
+
+  void send_message(Message *m);  ///< send message to this connection
+  void send_keepalive();          ///< send keepalive to this connection
+  void mark_down();               ///< close this connection
 
   int get_peer_type() { return peer_type; }
   void set_peer_type(int t) { peer_type = t; }
