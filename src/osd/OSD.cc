@@ -2883,9 +2883,9 @@ void OSD::_remove_heartbeat_peer(int n)
 	   << " " << q->second.con_back->get_peer_addr()
 	   << " " << (q->second.con_front ? q->second.con_front->get_peer_addr() : entity_addr_t())
 	   << dendl;
-  hbclient_messenger->mark_down(q->second.con_back);
+  q->second.con_back->mark_down();
   if (q->second.con_front) {
-    hbclient_messenger->mark_down(q->second.con_front);
+    q->second.con_front->mark_down();
   }
   heartbeat_peers.erase(q);
 }
@@ -3014,9 +3014,9 @@ void OSD::reset_heartbeat_peers()
   Mutex::Locker l(heartbeat_lock);
   while (!heartbeat_peers.empty()) {
     HeartbeatInfo& hi = heartbeat_peers.begin()->second;
-    hbclient_messenger->mark_down(hi.con_back);
+    hi.con_back->mark_down();
     if (hi.con_front) {
-      hbclient_messenger->mark_down(hi.con_front);
+      hi.con_front->mark_down();
     }
     heartbeat_peers.erase(heartbeat_peers.begin());
   }
@@ -3306,11 +3306,11 @@ bool OSD::heartbeat_reset(Connection *con)
       dout(10) << "heartbeat_reset failed hb con " << con << " for osd." << p->second.peer
 	       << ", reopening" << dendl;
       if (con != p->second.con_back) {
-	hbclient_messenger->mark_down(p->second.con_back);
+	p->second.con_back->mark_down();
       }
       p->second.con_back.reset(NULL);
       if (p->second.con_front && con != p->second.con_front) {
-	hbclient_messenger->mark_down(p->second.con_front);
+	p->second.con_front->mark_down();
       }
       p->second.con_front.reset(NULL);
       pair<ConnectionRef,ConnectionRef> newcon = service.get_con_osd_hb(p->second.peer, p->second.epoch);
@@ -5679,9 +5679,9 @@ void OSD::note_down_osd(int peer)
   failure_pending.erase(peer);
   map<int,HeartbeatInfo>::iterator p = heartbeat_peers.find(peer);
   if (p != heartbeat_peers.end()) {
-    hbclient_messenger->mark_down(p->second.con_back);
+    p->second.con_back->mark_down();
     if (p->second.con_front) {
-      hbclient_messenger->mark_down(p->second.con_front);
+      p->second.con_front->mark_down();
     }
     heartbeat_peers.erase(p);
   }
@@ -6594,7 +6594,7 @@ bool OSD::require_same_or_newer_map(OpRequestRef op, epoch_t epoch)
 	      << " expected " << (osdmap->have_inst(from) ? osdmap->get_cluster_addr(from) : entity_addr_t())
 	      << dendl;
       ConnectionRef con = m->get_connection();
-      cluster_messenger->mark_down(con.get());
+      con->mark_down();
       Session *s = static_cast<Session*>(con->get_priv());
       if (s) {
 	s->session_dispatch_lock.Lock();
