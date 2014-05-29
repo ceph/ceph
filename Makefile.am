@@ -48,3 +48,14 @@ clean-local:
 	fi
 
 	@rm -rf src/test/virtualenv
+
+
+# NOTE: This only works when enough dependencies are installed for
+# autoconf to be happy.  These commands should be run manually to
+# bootstrap.
+install-deps:
+	if test -x /usr/bin/apt-get; then \
+	  sudo apt-get -y --no-install-recommends install `cat deps.deb.txt`; \
+	else \
+	  sudo yum -y install `cat deps.rpm.txt`; \
+	fi
