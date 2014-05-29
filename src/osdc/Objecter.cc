@@ -1156,7 +1156,7 @@ void Objecter::tick()
     for (set<OSDSession*>::iterator i = toping.begin();
 	 i != toping.end();
 	 ++i) {
-      messenger->send_message(new MPing, (*i)->con);
+      (*i)->con->send_message(new MPing);
     }
   }
     
@@ -1673,7 +1673,7 @@ void Objecter::send_op(Op *op)
   logger->inc(l_osdc_op_send);
   logger->inc(l_osdc_op_send_bytes, m->get_data().length());
 
-  messenger->send_message(m, op->session->con);
+  op->session->con->send_message(m);
 }
 
 int Objecter::calc_op_budget(Op *op)
@@ -2856,7 +2856,7 @@ void Objecter::_send_command(CommandOp *c)
   m->cmd = c->cmd;
   m->set_data(c->inbl);
   m->set_tid(c->tid);
-  messenger->send_message(m, c->session->con);
+  c->session->con->send_message(m);
   logger->inc(l_osdc_command_send);
 }
 
