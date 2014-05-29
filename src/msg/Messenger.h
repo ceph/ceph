@@ -426,15 +426,6 @@ public:
    */
   virtual ConnectionRef get_loopback_connection() = 0;
   /**
-   * Send a "keepalive" ping to the given dest, if it has a working Connection.
-   * If the Messenger doesn't already have a Connection, or if the underlying
-   * connection has broken, this function does nothing.
-   *
-   * @param dest The entity to send the keepalive to.
-   * @return 0, or implementation-defined error numbers.
-   */
-  virtual int send_keepalive(const entity_inst_t& dest) = 0;
-  /**
    * Mark down a Connection to a remote.
    *
    * This will cause us to discard our outgoing queue for them, and if

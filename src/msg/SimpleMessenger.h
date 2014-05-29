@@ -147,7 +147,6 @@ public:
    */
   virtual ConnectionRef get_connection(const entity_inst_t& dest);
   virtual ConnectionRef get_loopback_connection();
-  virtual int send_keepalive(const entity_inst_t& addr);
   int send_keepalive(Connection *con);
   virtual void mark_down(const entity_addr_t& addr);
   void mark_down(Connection *con);
