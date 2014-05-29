@@ -29,6 +29,8 @@ if WITH_LIBZFS
 libos_la_SOURCES += os/ZFSFileStoreBackend.cc
 endif
 
+libos_la_CXXFLAGS = ${AM_CXXFLAGS}
+libos_la_LIBADD =
 noinst_LTLIBRARIES += libos.la
 
 noinst_HEADERS += \
@@ -66,3 +68,9 @@ noinst_LIBRARIES += libos_zfs.a
 noinst_HEADERS += os/ZFS.h
 endif
 
+if WITH_KINETIC
+libos_la_SOURCES += os/KineticStore.cc
+libos_la_CXXFLAGS += -std=gnu++11
+libos_la_LIBADD += -lkinetic_client -lprotobuf -lglog -lgflags libcrypto.a
+noinst_HEADERS += os/KineticStore.h
+endif
