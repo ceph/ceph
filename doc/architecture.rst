@@ -387,13 +387,13 @@ The only input required by the client is the object ID and the pool.
 It's simple: Ceph stores data in named pools (e.g., "liverpool"). When a client
 wants to store a named object (e.g., "john," "paul," "george," "ringo", etc.)
 it calculates a placement group using the object name, a hash code, the
-number of OSDs in the cluster and the pool name. Ceph clients use the following
+number of PGs in the pool and the pool name. Ceph clients use the following
 steps to compute PG IDs.
 
 #. The client inputs the pool ID and the object ID. (e.g., pool = "liverpool" 
    and object-id = "john")
 #. CRUSH takes the object ID and hashes it.
-#. CRUSH calculates the hash modulo the number of OSDs. (e.g., ``0x58``) to get 
+#. CRUSH calculates the hash modulo the number of PGs. (e.g., ``0x58``) to get 
    a PG ID.
 #. CRUSH gets the pool ID given the pool name (e.g., "liverpool" = ``4``)
 #. CRUSH prepends the pool ID to the PG ID (e.g., ``4.0x58``).
