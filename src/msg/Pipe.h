@@ -189,7 +189,6 @@ class DispatchQueue;
     bool send_keepalive_ack;
     utime_t keepalive_ack_stamp;
     bool halt_delivery; //if a pipe's queue is destroyed, stop adding to it
-    bool close_on_empty;
     
     __u32 connect_seq, peer_global_seq;
     uint64_t out_seq;
