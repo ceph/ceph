@@ -40,6 +40,7 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 	Ceph Object Store
 	RADOS
 	RADOS Cluster
+	Reliable Autonomic Distributed Object Store
 		The core set of storage software which stores the user's data (MON+OSD).
 
 	Ceph Cluster Map
