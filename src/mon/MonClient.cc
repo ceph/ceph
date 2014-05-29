@@ -131,8 +131,11 @@ int MonClient::get_monmap_privately()
   while (monmap.fsid.is_zero()) {
     cur_mon = _pick_random_mon();
     cur_con = messenger->get_connection(monmap.get_inst(cur_mon));
-    ldout(cct, 10) << "querying mon." << cur_mon << " " << cur_con->get_peer_addr() << dendl;
-    cur_con->send_message(new MMonGetMap);
+    if (cur_con) {
+      ldout(cct, 10) << "querying mon." << cur_mon << " "
+		     << cur_con->get_peer_addr() << dendl;
+      cur_con->send_message(new MMonGetMap);
+    }
 
     if (--attempt == 0)
       break;
@@ -141,14 +144,16 @@ int MonClient::get_monmap_privately()
     interval.set_from_double(cct->_conf->mon_client_hunt_interval);
     map_cond.WaitInterval(cct, monc_lock, interval);
 
-    if (monmap.fsid.is_zero()) {
-      messenger->mark_down(cur_con);  // nope, clean that connection up
+    if (monmap.fsid.is_zero() && cur_con) {
+      cur_con->mark_down();  // nope, clean that connection up
     }
   }
 
   if (temp_msgr) {
-    messenger->mark_down(cur_con);
-    cur_con.reset(NULL);
+    if (cur_con) {
+      cur_con->mark_down();
+      cur_con.reset(NULL);
+    }
     monc_lock.Unlock();
     messenger->shutdown();
     if (smessenger)
@@ -233,7 +238,7 @@ int MonClient::ping_monitor(const string &mon_id, string *result_reply)
   }
   pinger->lock.Unlock();
 
-  smsgr->mark_down(con);
+  con->mark_down();
   smsgr->shutdown();
   smsgr->wait();
   delete smsgr;
@@ -416,7 +421,8 @@ void MonClient::shutdown()
   monc_lock.Lock();
   timer.shutdown();
 
-  messenger->mark_down(cur_con);
+  if (cur_con)
+    cur_con->mark_down();
   cur_con.reset(NULL);
 
   monc_lock.Unlock();
@@ -593,7 +599,7 @@ void MonClient::_reopen_session(int rank, string name)
   }
 
   if (cur_con) {
-    messenger->mark_down(cur_con);
+    cur_con->mark_down();
   }
   cur_con = messenger->get_connection(monmap.get_inst(cur_mon));
 	
