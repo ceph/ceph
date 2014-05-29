@@ -98,7 +98,19 @@ public:
     return msgr;
   }
 
-  void send_message(Message *m);  ///< send message to this connection
+  /**
+   * Queue the given Message to send out on the given Connection.
+   * Success in this function does not guarantee Message delivery, only
+   * success in queueing the Message. Other guarantees may be provided based
+   * on the Connection policy.
+   *
+   * @param m The Message to send. The Messenger consumes a single reference
+   * when you pass it in.
+   * @param con The Connection to send the Message out on.
+   *
+   * @return 0 on success, or -errno on failure.
+   */
+  virtual int send_message(Message *m) = 0;
   void send_keepalive();          ///< send keepalive to this connection
   void mark_down();               ///< close this connection
 
