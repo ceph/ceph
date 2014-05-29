@@ -88,6 +88,9 @@ BuildRequires:  snappy-devel
 BuildRequires:  leveldb-devel
 BuildRequires:  xfsprogs-devel
 BuildRequires:  libxml2-devel
+%if 0%{?suse_version} >= 1310
+BuildRequires:  systemd
+%endif
 
 #################################################################################
 # specific
@@ -386,6 +389,7 @@ rm -rf $RPM_BUILD_ROOT
 %post
 /sbin/ldconfig
 %if 0%{?suse_version} >= 1310
+%dir %{_tmpfilesdir}/
 systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
 %endif
 #/sbin/chkconfig --add ceph
@@ -501,6 +505,7 @@ systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
 %if 0%{?suse_version} < 1310
 %ghost %dir %{_localstatedir}/run/ceph/
 %else
+%dir %{_tmpfilesdir}/
 %{_tmpfilesdir}/%{name}.conf
 %endif
 %dir %{_sysconfdir}/ceph/

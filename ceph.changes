@@ -1,4 +1,11 @@
 -------------------------------------------------------------------
+Thu May 29 11:39:26 CEST 2014 - osynge@suse.com
+
+- added BuildRequires on systemd for openSUSE_13.1 and above
+- added _tmpfilesdir to spec as causing a build failure on 
+  openSUSE_13.1
+
+-------------------------------------------------------------------
 Wed May 28 23:59:59 UTC 2014 - tbehrens@suse.com
 
 - filter spurious setgid warning - mongoose/civetweb is not trying to
