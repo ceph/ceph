@@ -405,22 +405,6 @@ public:
    */
   virtual int send_message(Message *m, const entity_inst_t& dest) = 0;
   /**
-   * Queue the given Message to send out on the given Connection.
-   * Success in this function does not guarantee Message delivery, only
-   * success in queueing the Message. Other guarantees may be provided based
-   * on the Connection policy.
-   *
-   * @param m The Message to send. The Messenger consumes a single reference
-   * when you pass it in.
-   * @param con The Connection to send the Message out on.
-   *
-   * @return 0 on success, or -errno on failure.
-   */
-  virtual int send_message(Message *m, Connection *con) = 0;
-  int send_message(Message *m, const ConnectionRef& con) {
-    return send_message(m, con.get());
-  }
-  /**
    * Lazily queue the given Message for the given entity. Unlike with
    * send_message(), lazy_send_message() will not establish a
    * Connection if none exists, re-establish the connection if it
