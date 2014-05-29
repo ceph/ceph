@@ -293,12 +293,11 @@ def run_xfstests_one_client(ctx, role, properties):
 
         # Fetch the test script
         test_root = teuthology.get_testdir(ctx)
-        test_script = 'run_xfstests.sh'
+        test_script = 'run_xfstests_krbd.sh'
         test_path = os.path.join(test_root, test_script)
 
         git_branch = 'master'
         test_url = 'https://raw.github.com/ceph/ceph/{branch}/qa/{script}'.format(branch=git_branch, script=test_script)
-        # test_url = 'http://ceph.newdream.net/git/?p=ceph.git;a=blob_plain;hb=refs/heads/{branch};f=qa/{script}'.format(branch=git_branch, script=test_script)
 
         log.info('Fetching {script} for {role} from {url}'.format(script=test_script,
                                                                 role=role,
