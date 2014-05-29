@@ -389,7 +389,6 @@ rm -rf $RPM_BUILD_ROOT
 %post
 /sbin/ldconfig
 %if 0%{?suse_version} >= 1310
-%dir %{_tmpfilesdir}/
 systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
 %endif
 #/sbin/chkconfig --add ceph
