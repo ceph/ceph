@@ -67,9 +67,9 @@ class DaemonState(object):
         :param args: positional arguments passed to remote.run
         :param kwargs: keyword arguments passed to remote.run
         """
-        self.log.info('Restarting')
+        self.log.info('Restarting daemon')
         if self.proc is not None:
-            self.log.debug('stopping old one...')
+            self.log.info('Stopping old one...')
             self.stop()
         cmd_args = list(self.command_args)
         cmd_args.extend(args)
@@ -84,9 +84,9 @@ class DaemonState(object):
 
         :param extra_args: Extra keyword arguments to be added.
         """
-        self.log.info('Restarting')
+        self.log.info('Restarting daemon')
         if self.proc is not None:
-            self.log.debug('stopping old one...')
+            self.log.info('Stopping old one...')
             self.stop()
         cmd_args = list(self.command_args)
         # we only want to make a temporary mod of the args list
@@ -765,7 +765,7 @@ def cluster(ctx, config):
                         mkfs = ['mkfs.%s' % fs] + mkfs_options
                         log.info('%s on %s on %s' % (mkfs, dev, remote))
                     remote.run(args= ['yes', run.Raw('|')] + ['sudo'] + mkfs + [dev])
-                        
+
                 log.info('mount %s on %s -o %s' % (dev, remote,
                                                    ','.join(mount_options)))
                 remote.run(
@@ -1056,11 +1056,11 @@ def get_all_pg_info(rem_site, testdir):
                         '--format', 'json'], stdout=StringIO())
     all_info = json.loads(info.stdout.getvalue())
     return all_info['pg_stats']
-    
+
 def osd_scrub_pgs(ctx, config):
     """
     Scrub pgs when we exit.
-    
+
     First make sure all pgs are active and clean.
     Next scrub all osds.
     Then periodically check until all pgs have scrub time stamps that
