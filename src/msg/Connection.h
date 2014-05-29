@@ -130,6 +130,21 @@ public:
    */
   virtual void mark_down() = 0;
 
+  /**
+   * Mark a Connection as "disposable", setting it to lossy
+   * (regardless of initial Policy).  This does not immediately close
+   * the Connection once Messages have been delivered, so as long as
+   * there are no errors you can continue to receive responses; but it
+   * will not attempt to reconnect for message delivery or preserve
+   * your old delivery semantics, either.
+   *
+   * TODO: There's some odd stuff going on in our SimpleMessenger
+   * implementation during connect that looks unused; is there
+   * more of a contract that that's enforcing?
+   */
+  virtual void mark_disposable() = 0;
+
+
   int get_peer_type() { return peer_type; }
   void set_peer_type(int t) { peer_type = t; }
 
