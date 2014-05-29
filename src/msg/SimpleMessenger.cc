@@ -478,36 +478,6 @@ void SimpleMessenger::submit_message(Message *m, PipeConnection *con,
   }
 }
 
-int SimpleMessenger::send_keepalive(const entity_inst_t& dest)
-{
-  const entity_addr_t dest_addr = dest.addr;
-  entity_addr_t dest_proc_addr = dest_addr;
-  int ret = 0;
-
-  lock.Lock();
-  {
-    // local?
-    if (my_inst.addr != dest_addr) {
-      // remote.
-      Pipe *pipe = _lookup_pipe(dest_proc_addr);
-      if (pipe) {
-        // connected?
-	pipe->pipe_lock.Lock();
-	ldout(cct,20) << "send_keepalive remote, " << dest_addr << ", have pipe." << dendl;
-	pipe->_send_keepalive();
-	pipe->pipe_lock.Unlock();
-      } else {
-        ret = -EINVAL;
-      }
-      if (!pipe) {
-	ldout(cct,20) << "send_keepalive no pipe for " << dest_addr << ", doing nothing." << dendl;
-      }
-    }
-  }
-  lock.Unlock();
-  return ret;
-}
-
 int SimpleMessenger::send_keepalive(Connection *con)
 {
   int ret = 0;
