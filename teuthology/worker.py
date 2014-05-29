@@ -91,6 +91,11 @@ def fetch_teuthology_branch(path, branch='master'):
     lock = filelock('%s.lock' % path)
     lock.acquire()
     try:
+        if os.path.isdir(path) and \
+                not os.path.isdir(os.path.join(path, '.git')):
+            log.info("Removing possibly-corrupt repo for branch %s", branch)
+            shutil.rmtree(path)
+
         if not os.path.isdir(path):
             log.info("Cloning %s from upstream", branch)
             teuthology_git_upstream = teuth_config.ceph_git_base_url + \
