@@ -48,7 +48,7 @@ public:
   int send_message(Message *m);
   void send_keepalive();
   void mark_down();
-
+  void mark_disposable();
 
 }; /* PipeConnection */
 

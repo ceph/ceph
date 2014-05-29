@@ -81,3 +81,8 @@ void PipeConnection::mark_down()
 {
   static_cast<SimpleMessenger*>(msgr)->mark_down(this);
 }
+
+void PipeConnection::mark_disposable()
+{
+  static_cast<SimpleMessenger*>(msgr)->mark_disposable(this);
+}
