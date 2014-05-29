@@ -392,11 +392,11 @@ steps to compute PG IDs.
 
 #. The client inputs the pool ID and the object ID. (e.g., pool = "liverpool" 
    and object-id = "john")
-#. CRUSH takes the object ID and hashes it.
-#. CRUSH calculates the hash modulo the number of PGs. (e.g., ``0x58``) to get 
+#. Ceph takes the object ID and hashes it.
+#. Ceph calculates the hash modulo the number of PGs. (e.g., ``58``) to get 
    a PG ID.
-#. CRUSH gets the pool ID given the pool name (e.g., "liverpool" = ``4``)
-#. CRUSH prepends the pool ID to the PG ID (e.g., ``4.0x58``).
+#. Ceph gets the pool ID given the pool name (e.g., "liverpool" = ``4``)
+#. Ceph prepends the pool ID to the PG ID (e.g., ``4.58``).
 
 Computing object locations is much faster than performing object location query
 over a chatty session. The :abbr:`CRUSH (Controlled Replication Under Scalable
