@@ -3078,7 +3078,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 				curmap->get_epoch(),
 				MOSDPing::PING_REPLY,
 				m->stamp);
-      m->get_connection()->get_messenger()->send_message(r, m->get_connection());
+      m->get_connection()->send_message(r);
 
       if (curmap->is_up(from)) {
 	service.note_peer_epoch(from, m->map_epoch);
@@ -3095,7 +3095,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 				  curmap->get_epoch(),
 				  MOSDPing::YOU_DIED,
 				  m->stamp);
-	m->get_connection()->get_messenger()->send_message(r, m->get_connection());
+	m->get_connection()->send_message(r);
       }
     }
     break;
@@ -3258,17 +3258,16 @@ void OSD::heartbeat()
     if (i->second.first_tx == utime_t())
       i->second.first_tx = now;
     dout(30) << "heartbeat sending ping to osd." << peer << dendl;
-    hbclient_messenger->send_message(new MOSDPing(monc->get_fsid(),
-						  service.get_osdmap()->get_epoch(),
-						  MOSDPing::PING,
-						  now),
-				     i->second.con_back);
+    i->second.con_back->send_message(new MOSDPing(monc->get_fsid(),
+					  service.get_osdmap()->get_epoch(),
+					  MOSDPing::PING,
+					  now));
+
     if (i->second.con_front)
-      hbclient_messenger->send_message(new MOSDPing(monc->get_fsid(),
-						    service.get_osdmap()->get_epoch(),
-						    MOSDPing::PING,
-						    now),
-				       i->second.con_front);
+      i->second.con_front->send_message(new MOSDPing(monc->get_fsid(),
+					     service.get_osdmap()->get_epoch(),
+						     MOSDPing::PING,
+						     now));
   }
 
   dout(30) << "heartbeat check" << dendl;
@@ -4296,7 +4295,7 @@ void OSD::handle_command(MCommand *m)
   ConnectionRef con = m->get_connection();
   Session *session = static_cast<Session *>(con->get_priv());
   if (!session) {
-    client_messenger->send_message(new MCommandReply(m, -EPERM), con);
+    con->send_message(new MCommandReply(m, -EPERM));
     m->put();
     return;
   }
@@ -4305,7 +4304,7 @@ void OSD::handle_command(MCommand *m)
   session->put();
 
   if (!caps.allow_all() || m->get_source().is_mon()) {
-    client_messenger->send_message(new MCommandReply(m, -EPERM), con);
+    con->send_message(new MCommandReply(m, -EPERM));
     m->put();
     return;
   }
@@ -4747,7 +4746,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     MCommandReply *reply = new MCommandReply(r, rs);
     reply->set_tid(tid);
     reply->set_data(odata);
-    client_messenger->send_message(reply, con);
+    con->send_message(reply);
   }
   return;
 }
@@ -4924,7 +4923,7 @@ bool OSD::heartbeat_dispatch(Message *m)
   case CEPH_MSG_OSD_MAP:
     {
       ConnectionRef self = cluster_messenger->get_loopback_connection();
-      cluster_messenger->send_message(m, self);
+      self->send_message(m);
     }
     break;
 
@@ -6409,10 +6408,7 @@ MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
 
 void OSDService::send_map(MOSDMap *m, Connection *con)
 {
-  Messenger *msgr = client_messenger;
-  if (entity_name_t::TYPE_OSD == con->get_peer_type())
-    msgr = cluster_messenger;
-  msgr->send_message(m, con);
+  con->send_message(m);
 }
 
 void OSDService::send_incremental_map(epoch_t since, Connection *con,
@@ -6971,7 +6967,7 @@ void OSD::do_notifies(
 	      << " on " << it->second.size() << " PGs" << dendl;
       MOSDPGNotify *m = new MOSDPGNotify(curmap->get_epoch(),
 					 it->second);
-      cluster_messenger->send_message(m, con.get());
+      con->send_message(m);
     } else {
       dout(7) << "do_notify osd " << it->first
 	      << " sending separate messages" << dendl;
@@ -6983,7 +6979,7 @@ void OSD::do_notifies(
 	list[0] = *i;
 	MOSDPGNotify *m = new MOSDPGNotify(i->first.epoch_sent,
 					   list);
-	cluster_messenger->send_message(m, con.get());
+	con->send_message(m);
       }
     }
   }
@@ -7010,7 +7006,7 @@ void OSD::do_queries(map<int, map<spg_t,pg_query_t> >& query_map,
       dout(7) << "do_queries querying osd." << who
 	      << " on " << pit->second.size() << " PGs" << dendl;
       MOSDPGQuery *m = new MOSDPGQuery(curmap->get_epoch(), pit->second);
-      cluster_messenger->send_message(m, con.get());
+      con->send_message(m);
     } else {
       dout(7) << "do_queries querying osd." << who
 	      << " sending saperate messages "
@@ -7021,7 +7017,7 @@ void OSD::do_queries(map<int, map<spg_t,pg_query_t> >& query_map,
 	map<spg_t, pg_query_t> to_send;
 	to_send.insert(*i);
 	MOSDPGQuery *m = new MOSDPGQuery(i->second.epoch_sent, to_send);
-	cluster_messenger->send_message(m, con.get());
+	con->send_message(m);
       }
     }
   }
@@ -7053,7 +7049,7 @@ void OSD::do_infos(map<int,
     if (con->has_feature(CEPH_FEATURE_INDEP_PG_MAP)) {
       MOSDPGInfo *m = new MOSDPGInfo(curmap->get_epoch());
       m->pg_list = p->second;
-      cluster_messenger->send_message(m, con.get());
+      con->send_message(m);
     } else {
       for (vector<pair<pg_notify_t, pg_interval_map_t> >::iterator i =
 	     p->second.begin();
@@ -7063,7 +7059,7 @@ void OSD::do_infos(map<int,
 	to_send[0] = *i;
 	MOSDPGInfo *m = new MOSDPGInfo(i->first.epoch_sent);
 	m->pg_list = to_send;
-	cluster_messenger->send_message(m, con.get());
+	con->send_message(m);
       }
     }
   }
@@ -7428,7 +7424,7 @@ void OSD::handle_pg_query(OpRequestRef op)
 	  osdmap->get_epoch(), empty,
 	  it->second.epoch_sent);
 	service.share_map_peer(from, con.get(), osdmap);
-	cluster_messenger->send_message(mlog, con.get());
+	con->send_message(mlog);
       }
     } else {
       notify_list[from].push_back(
@@ -7737,7 +7733,7 @@ void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v,
   MOSDOpReply *reply = new MOSDOpReply(m, err, osdmap->get_epoch(), flags,
 				       true);
   reply->set_reply_versions(v, uv);
-  m->get_connection()->get_messenger()->send_message(reply, m->get_connection());
+  m->get_connection()->send_message(reply);
 }
 
 void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
