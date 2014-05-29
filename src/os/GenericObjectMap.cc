@@ -249,7 +249,7 @@ bool GenericObjectMap::parse_header_key(const string &long_name,
       return false;
     shardstring = string(current, end);
 
-    shard_id = (shard_t)strtoul(shardstring.c_str(), NULL, 16);
+    shard_id = (shard_id_t)strtoul(shardstring.c_str(), NULL, 16);
   }
 
   if (out) {
