@@ -464,9 +464,9 @@ Ceph disables TCP buffering by default.
 
 
 .. _Scalability and High Availability: ../../../architecture#scalability-and-high-availability
-.. _Hardware Recommendations - Networks: ../../../install/hardware-recommendations#networks
-.. _Ceph configuration file: ../../../start/quick-start/#add-a-configuration-file
-.. _hardware recommendations: ../../../install/hardware-recommendations
+.. _Hardware Recommendations - Networks: ../../../start/hardware-recommendations#networks
+.. _Ceph configuration file: ../../../start/quick-ceph-deploy/#create-a-cluster
+.. _hardware recommendations: ../../../start/hardware-recommendations
 .. _Monitor / OSD Interaction: ../mon-osd-interaction
 .. _Message Signatures: ../auth-config-ref#signatures
 .. _CIDR: http://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing
