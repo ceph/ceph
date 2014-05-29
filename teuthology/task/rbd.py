@@ -260,7 +260,8 @@ def run_xfstests(ctx, config):
                 test_dev: 'test_dev'
                 scratch_dev: 'scratch_dev'
                 fs_type: 'xfs'
-                tests: '1-9 11-15 17 19-21 26-28 31-34 41 45-48'
+                tests: 'generic/100 xfs/003 xfs/005 xfs/006 generic/015'
+                randomize: true
     """
     with parallel() as p:
         for role, properties in config.items():
@@ -286,6 +287,7 @@ def run_xfstests_one_client(ctx, role, properties):
 
         fs_type = properties.get('fs_type')
         tests = properties.get('tests')
+        randomize = properties.get('randomize')
 
         (remote,) = ctx.cluster.only(role).remotes.keys()
 
@@ -310,6 +312,7 @@ def run_xfstests_one_client(ctx, role, properties):
         log.info('    scratch device: {dev}'.format(dev=scratch_dev))
         log.info('     using fs_type: {fs_type}'.format(fs_type=fs_type))
         log.info('      tests to run: {tests}'.format(tests=tests))
+        log.info('         randomize: {randomize}'.format(randomize=randomize))
 
         # Note that the device paths are interpreted using
         # readlink -f <path> in order to get their canonical
@@ -327,8 +330,10 @@ def run_xfstests_one_client(ctx, role, properties):
             '-t', test_dev,
             '-s', scratch_dev,
             ]
+        if randomize:
+            args.append('-r')
         if tests:
-            args.append(tests)
+            args.extend(['--', tests])
         remote.run(args=args, logger=log.getChild(role))
     finally:
         log.info('Removing {script} on {role}'.format(script=test_script,
@@ -360,7 +365,8 @@ def xfstests(ctx, config):
                 scratch_size: 250
                 scratch_format: 1
                 fs_type: 'xfs'
-                tests: '1-9 11-15 17 19-21 26-28 31-34 41 45-48'
+                tests: 'generic/100 xfs/003 xfs/005 xfs/006 generic/015'
+                randomize: true
     """
     if config is None:
         config = { 'all': None }
@@ -416,6 +422,7 @@ def xfstests(ctx, config):
             test_dev='/dev/rbd/rbd/{image}'.format(image=test_image),
             scratch_dev='/dev/rbd/rbd/{image}'.format(image=scratch_image),
             fs_type=properties.get('fs_type', 'xfs'),
+            randomize=properties.get('randomize', False),
             tests=properties.get('tests'),
             )
 
