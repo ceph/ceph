@@ -1,5 +1,6 @@
 libmsg_la_SOURCES = \
 	msg/Accepter.cc \
+	msg/Connection.cc \
 	msg/DispatchQueue.cc \
 	msg/Message.cc \
 	msg/Messenger.cc \
