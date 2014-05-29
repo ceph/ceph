@@ -3,20 +3,17 @@ roles:
 - [mon.b, mds.a, osd.3, osd.4, osd.5]
 - [client.0]
 - [client.1]
-- [client.2]
 tasks:
 - install:
 - ceph:
 - rbd.xfstests:
     client.0:
-        tests: 1-9 11-15 17 19-21 26-29 31-34 41 46-54 56 61 63-67 69-70 74-76 78-79 84-89 91
         test_image: 'test_image-0'
         scratch_image: 'scratch_image-0'
+        tests: '-g auto'
+        randomize: true
     client.1:
-        tests: 92 100 103 105 108 110 116-121 124 126 129-132
         test_image: 'test_image-1'
         scratch_image: 'scratch_image-1'
-    client.2:
-        tests: 133-135 137-141 164-167 184 187-190 192 194 196 199 201 203 214-216 220-227 234 236-238 241 243-249 253 257-259 261-262 269 273 275 277-278
-        test_image: 'test_image-2'
-        scratch_image: 'scratch_image-2'
+        tests: '-g auto'
+        randomize: true
