@@ -132,7 +132,7 @@ int MonClient::get_monmap_privately()
     cur_mon = _pick_random_mon();
     cur_con = messenger->get_connection(monmap.get_inst(cur_mon));
     ldout(cct, 10) << "querying mon." << cur_mon << " " << cur_con->get_peer_addr() << dendl;
-    messenger->send_message(new MMonGetMap, cur_con);
+    cur_con->send_message(new MMonGetMap);
 
     if (--attempt == 0)
       break;
@@ -222,7 +222,7 @@ int MonClient::ping_monitor(const string &mon_id, string *result_reply)
   ConnectionRef con = smsgr->get_connection(monmap.get_inst(mon_id));
   ldout(cct, 10) << __func__ << " ping mon." << mon_id
                  << " " << con->get_peer_addr() << dendl;
-  smsgr->send_message(new MPing, con);
+  con->send_message(new MPing);
 
   pinger->lock.Lock();
   int ret = pinger->wait_for_reply(cct->_conf->client_mount_timeout);
@@ -552,7 +552,7 @@ void MonClient::_send_mon_message(Message *m, bool force)
     assert(cur_con);
     ldout(cct, 10) << "_send_mon_message to mon." << cur_mon
 		   << " at " << cur_con->get_peer_addr() << dendl;
-    messenger->send_message(m, cur_con);
+    cur_con->send_message(m);
   } else {
     waiting_for_session.push_back(m);
   }
