@@ -97,9 +97,14 @@ Pool specific commands
   Remove pool snapshot named *foo*.
 
 :command:`bench` *seconds* *mode* [ -b *objsize* ] [ -t *threads* ]
-  Benchmark for seconds. The mode can be write or read. The default
+  Benchmark for *seconds*. The mode can be *write*, *seq*, or
+  *rand*. *seq* and *rand* are read benchmarks, either
+  sequential or random. Before running one of the reading benchmarks,
+  run a write benchmark with the *--no-cleanup* option. The default
   object size is 4 MB, and the default number of simulated threads
-  (parallel writes) is 16.
+  (parallel writes) is 16. 
+
+:command:`cleanup`
 
 :command:`listomapkeys` *name*
   List all the keys stored in the object map of object name.
