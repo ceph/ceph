@@ -4770,7 +4770,8 @@ void OSDService::share_map(
 	   << name << " " << con->get_peer_addr()
 	   << " " << epoch << dendl;
 
-  assert(osd->is_active());
+  assert(osd->is_active() ||
+	 osd->is_stopping());
 
   bool want_shared = should_share_map(name, con, epoch,
                                       osdmap, sent_epoch_p);
