@@ -452,21 +452,6 @@ public:
    */
   virtual void mark_down_all() = 0;
   /**
-   * Mark a Connection as "disposable", setting it to lossy
-   * (regardless of initial Policy).  This does not immediately close
-   * the Connection once Messages have been delivered, so as long as
-   * there are no errors you can continue to receive responses; but it
-   * will not attempt to reconnect for message delivery or preserve
-   * your old delivery semantics, either.
-   *
-   * TODO: There's some odd stuff going on in our SimpleMessenger
-   * implementation during connect that looks unused; is there
-   * more of a contract that that's enforcing?
-   *
-   * @param con The Connection to mark as disposable.
-   */
-  virtual void mark_disposable(Connection *con) = 0;
-  /**
    * @} // Connection Management
    */
 protected:
