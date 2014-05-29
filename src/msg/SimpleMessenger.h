@@ -150,7 +150,6 @@ public:
   int send_keepalive(Connection *con);
   virtual void mark_down(const entity_addr_t& addr);
   void mark_down(Connection *con);
-  virtual void mark_down_on_empty(Connection *con);
   virtual void mark_disposable(Connection *con);
   virtual void mark_down_all();
   /** @} // Connection Management */

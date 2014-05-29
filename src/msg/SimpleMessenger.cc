@@ -642,29 +642,6 @@ void SimpleMessenger::mark_down(Connection *con)
   lock.Unlock();
 }
 
-void SimpleMessenger::mark_down_on_empty(Connection *con)
-{
-  lock.Lock();
-  Pipe *p = static_cast<Pipe *>(static_cast<PipeConnection*>(con)->get_pipe());
-  if (p) {
-    assert(p->msgr == this);
-    p->pipe_lock.Lock();
-    p->unregister_pipe();
-    if (p->out_q.empty()) {
-      ldout(cct,1) << "mark_down_on_empty " << con << " -- " << p << " closing (queue is empty)" << dendl;
-      p->stop_and_wait();
-    } else {
-      ldout(cct,1) << "mark_down_on_empty " << con << " -- " << p << " marking (queue is not empty)" << dendl;
-      p->close_on_empty = true;
-    }
-    p->pipe_lock.Unlock();
-    p->put();
-  } else {
-    ldout(cct,1) << "mark_down_on_empty " << con << " -- pipe dne" << dendl;
-  }
-  lock.Unlock();
-}
-
 void SimpleMessenger::mark_disposable(Connection *con)
 {
   lock.Lock();

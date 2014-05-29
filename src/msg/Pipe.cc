@@ -90,7 +90,6 @@ Pipe::Pipe(SimpleMessenger *r, int st, PipeConnection *con)
     in_q(&(r->dispatch_queue)),
     send_keepalive(false),
     send_keepalive_ack(false),
-    close_on_empty(false),
     connect_seq(0), peer_global_seq(0),
     out_seq(0), in_seq(0), in_seq_acked(0) {
   if (con) {
@@ -129,11 +128,6 @@ void Pipe::handle_ack(uint64_t seq)
     lsubdout(msgr->cct, ms, 10) << "reader got ack seq "
 				<< seq << " >= " << m->get_seq() << " on " << m << " " << *m << dendl;
     m->put();
-  }
-
-  if (sent.empty() && close_on_empty) {
-    lsubdout(msgr->cct, ms, 10) << "reader got last ack, queue empty, closing" << dendl;
-    stop();
   }
 }
 
@@ -1696,7 +1690,7 @@ void Pipe::writer()
       Message *m = _get_next_outgoing();
       if (m) {
 	m->set_seq(++out_seq);
-	if (!policy.lossy || close_on_empty) {
+	if (!policy.lossy) {
 	  // put on sent list
 	  sent.push_back(m); 
 	  m->get();
@@ -1757,12 +1751,6 @@ void Pipe::writer()
       continue;
     }
     
-    if (sent.empty() && close_on_empty) {
-      ldout(msgr->cct,10) << "writer out and sent queues empty, closing" << dendl;
-      stop();
-      continue;
-    }
-
     // wait
     ldout(msgr->cct,20) << "writer sleeping" << dendl;
     cond.Wait(pipe_lock);

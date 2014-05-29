@@ -133,8 +133,7 @@ public:
    * this indicates that the ordered+reliable delivery semantics have 
    * been violated.  Messages may have been lost due to a fault
    * in the network connection.
-   * Only called on lossy Connections or those you've
-   * designated mark_down_on_empty().
+   * Only called on lossy Connections.
    *
    * @param con The Connection which broke. You are not granted
    * a reference to it.
