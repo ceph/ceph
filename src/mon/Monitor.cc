@@ -2887,7 +2887,7 @@ void Monitor::waitlist_or_zap_client(Message *m)
     maybe_wait_for_quorum.push_back(new C_RetryMessage(this, m));
   } else {
     dout(5) << "discarding message " << *m << " and sending client elsewhere" << dendl;
-    messenger->mark_down(con);
+    con->mark_down();
     m->put();
   }
 }
@@ -3915,7 +3915,7 @@ void Monitor::tick()
       continue;
     }
 
-    messenger->mark_down(s->con);
+    s->con->mark_down();
     remove_session(s);
     logger->inc(l_mon_session_trim);
   }
