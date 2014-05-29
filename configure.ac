@@ -517,6 +517,18 @@ AC_LANG_POP([C++])
 # Find supported SIMD / SSE extensions supported by the compiler
 AX_INTEL_FEATURES()
 
+# kinetic osd backend?
+AC_ARG_WITH([kinetic],
+            [AS_HELP_STRING([--with-kinetic], [build kinetic support])],
+            [],
+            [with_kinetic=no])
+# no pkg-config support yet
+#AS_IF([test "x$with_kinetic" = "xyes"],
+#            [PKG_CHECK_MODULES([KINETIC], [kinetic_client], [], [true])])
+AS_IF([test "x$with_kinetic" = "xyes"],
+            [AC_DEFINE([HAVE_KINETIC], [1], [Defined if you have kinetic enabled])])
+AM_CONDITIONAL(WITH_KINETIC, [ test "$with_kinetic" = "yes" ])
+
 # use system libs3?
 AC_ARG_WITH([system-libs3],
 	[AS_HELP_STRING([--with-system-libs3], [use system libs3])],
