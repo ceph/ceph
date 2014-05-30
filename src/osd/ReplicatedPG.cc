@@ -6718,6 +6718,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now)
     repop->ctx->at_version,
     repop->ctx->op_t,
     pg_trim_to,
+    min_last_complete_ondisk,
     repop->ctx->log,
     repop->ctx->updated_hset_history,
     onapplied_sync,
@@ -6735,6 +6736,7 @@ void ReplicatedBackend::issue_op(
   ceph_tid_t tid,
   osd_reqid_t reqid,
   eversion_t pg_trim_to,
+  eversion_t pg_trim_rollback_to,
   hobject_t new_temp_oid,
   hobject_t discard_temp_oid,
   vector<pg_log_entry_t> &log_entries,
@@ -6790,6 +6792,7 @@ void ReplicatedBackend::issue_op(
       wr->pg_stats = get_info().stats;
     
     wr->pg_trim_to = pg_trim_to;
+    wr->pg_trim_rollback_to = pg_trim_rollback_to;
 
     wr->new_temp_oid = new_temp_oid;
     wr->discard_temp_oid = discard_temp_oid;
@@ -7590,6 +7593,7 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
       log,
       m->updated_hit_set_history,
       m->pg_trim_to,
+      m->pg_trim_rollback_to,
       update_snaps,
       &(rm->localt));
       

@@ -362,8 +362,21 @@ public:
     eversion_t trim_to,
     pg_info_t &info);
 
-  void clear_can_rollback_to() {
+  void trim_rollback_info(
+    eversion_t trim_rollback_to,
+    LogEntryHandler *h) {
+    if (trim_rollback_to > log.can_rollback_to)
+      log.can_rollback_to = trim_rollback_to;
+    log.advance_rollback_info_trimmed_to(
+      trim_rollback_to,
+      h);
+  }
+
+  void clear_can_rollback_to(LogEntryHandler *h) {
     log.can_rollback_to = log.head;
+    log.advance_rollback_info_trimmed_to(
+      log.head,
+      h);
   }
 
   //////////////////// get or set log & missing ////////////////////

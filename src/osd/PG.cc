@@ -2640,7 +2640,10 @@ void PG::add_log_entry(pg_log_entry_t& e, bufferlist& log_bl)
 
 
 void PG::append_log(
-  vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t,
+  vector<pg_log_entry_t>& logv,
+  eversion_t trim_to,
+  eversion_t trim_rollback_to,
+  ObjectStore::Transaction &t,
   bool transaction_applied)
 {
   if (transaction_applied)
@@ -2654,13 +2657,23 @@ void PG::append_log(
     p->offset = 0;
     add_log_entry(*p, keys[p->get_key_name()]);
   }
-  if (!transaction_applied)
-    pg_log.clear_can_rollback_to();
+
+  PGLogEntryHandler handler;
+  if (!transaction_applied) {
+    pg_log.clear_can_rollback_to(&handler);
+  } else if (trim_rollback_to > pg_log.get_rollback_trimmed_to()) {
+    pg_log.trim_rollback_info(
+      trim_rollback_to,
+      &handler);
+  }
 
   dout(10) << "append_log  adding " << keys.size() << " keys" << dendl;
   t.omap_setkeys(coll_t::META_COLL, log_oid, keys);
-  PGLogEntryHandler handler;
+
   pg_log.trim(&handler, trim_to, info);
+
+  dout(10) << __func__ << ": trimming to " << trim_rollback_to
+	   << " entries " << handler.to_trim << dendl;
   handler.apply(this, &t);
 
   // update the local pg, pg log
