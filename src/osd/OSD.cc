@@ -6037,8 +6037,13 @@ bool OSD::advance_pg(
        next_epoch <= osd_epoch && next_epoch <= max;
        ++next_epoch) {
     OSDMapRef nextmap = service.try_get_map(next_epoch);
-    if (!nextmap)
+    if (!nextmap) {
+      dout(20) << __func__ << " missing map " << next_epoch << dendl;
+      // make sure max is bumped up so that we can get past any
+      // gap in maps
+      max = MAX(max, next_epoch + g_conf->osd_map_max_advance);
       continue;
+    }
 
     vector<int> newup, newacting;
     int up_primary, acting_primary;
@@ -6069,7 +6074,7 @@ bool OSD::advance_pg(
   service.pg_update_epoch(pg->info.pgid, lastmap->get_epoch());
   pg->handle_activate_map(rctx);
   if (next_epoch <= osd_epoch) {
-    dout(10) << __func__ << " advanced by max " << g_conf->osd_map_max_advance
+    dout(10) << __func__ << " advanced to max " << max
 	     << " past min epoch " << min_epoch
 	     << " ... will requeue " << *pg << dendl;
     return false;

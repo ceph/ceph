@@ -1585,6 +1585,8 @@ void RGWPutObj::execute()
     goto done;
 
   if (supplied_md5_b64) {
+    need_calc_md5 = true;
+
     ldout(s->cct, 15) << "supplied_md5_b64=" << supplied_md5_b64 << dendl;
     ret = ceph_unarmor(supplied_md5_bin, &supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1],
                        supplied_md5_b64, supplied_md5_b64 + strlen(supplied_md5_b64));
@@ -1703,6 +1705,11 @@ void RGWPutObj::execute()
 
     buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
     etag = calc_md5;
+
+    if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
+      ret = -ERR_BAD_DIGEST;
+      goto done;
+    }
   }
 
   policy.encode(aclbl);
