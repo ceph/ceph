@@ -2635,9 +2635,10 @@ void Monitor::handle_forward(MForward *m)
   } else {
     // see PaxosService::dispatch(); we rely on this being anon
     // (c->msgr == NULL)
-    Connection *c = messenger->create_anon_connection();
-    MonSession *s = new MonSession(m->msg->get_source_inst(), c);
-    c->set_priv(s);
+    ConnectionRef c = messenger->create_anon_connection();
+    MonSession *s = new MonSession(m->msg->get_source_inst(),
+				   static_cast<Connection*>(c.get()));
+    c->set_priv(s->get());
     c->set_peer_addr(m->client.addr);
     c->set_peer_type(m->client.name.type());
     c->set_features(m->con_features);
@@ -2673,6 +2674,7 @@ void Monitor::handle_forward(MForward *m)
     dout(10) << " mesg " << req << " from " << m->get_source_addr() << dendl;
 
     _ms_dispatch(req);
+    s->put();
   }
   session->put();
   m->put();
