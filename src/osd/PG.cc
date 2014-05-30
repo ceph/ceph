@@ -6577,6 +6577,7 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
   MOSDPGLog *msg = logevt.msg.get();
   dout(10) << "got info+log from osd." << logevt.from << " " << msg->info << " " << msg->log << dendl;
 
+  ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
   if (msg->info.last_backfill == hobject_t()) {
     // restart backfill
     pg->unreg_next_scrub();
@@ -6584,10 +6585,13 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
     pg->reg_next_scrub();
     pg->dirty_info = true;
     pg->dirty_big_info = true;  // maybe.
-    pg->pg_log.claim_log(msg->log);
+
+    PGLogEntryHandler rollbacker;
+    pg->pg_log.claim_log_and_clear_rollback_info(msg->log, &rollbacker);
+    rollbacker.apply(pg, t);
+
     pg->pg_log.reset_backfill();
   } else {
-    ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
     pg->merge_log(*t, msg->info, msg->log, logevt.from);
   }
 

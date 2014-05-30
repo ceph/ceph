@@ -62,13 +62,33 @@ struct PGLog {
     list<pg_log_entry_t>::iterator complete_to;  // not inclusive of referenced item
     version_t last_requested;           // last object requested by primary
 
+    //
+  private:
+    /**
+     * rollback_info_trimmed_to_riter points to the first log entry <=
+     * rollback_info_trimmed_to
+     *
+     * It's a reverse_iterator because rend() is a natural representation for
+     * tail, and rbegin() works nicely for head.
+     */
+    list<pg_log_entry_t>::reverse_iterator rollback_info_trimmed_to_riter;
+  public:
+    void advance_rollback_info_trimmed_to(eversion_t to, LogEntryHandler *h);
+
     /****/
     IndexedLog() :
       complete_to(log.end()),
-      last_requested(0) {}
+      last_requested(0),
+      rollback_info_trimmed_to_riter(log.rbegin())
+      {}
 
-    void claim_log(const pg_log_t& o) {
+    void claim_log_and_clear_rollback_info(const pg_log_t& o) {
+      // we must have already trimmed the old entries
+      assert(rollback_info_trimmed_to == head);
+      assert(rollback_info_trimmed_to_riter == log.rbegin());
+
       log = o.log;
+      rollback_info_trimmed_to = head;
       head = o.head;
       tail = o.tail;
       index();
@@ -80,8 +100,13 @@ struct PGLog {
       IndexedLog *olog);
 
     void zero() {
+      // we must have already trimmed the old entries
+      assert(rollback_info_trimmed_to == head);
+      assert(rollback_info_trimmed_to_riter == log.rbegin());
+
       unindex();
       pg_log_t::clear();
+      rollback_info_trimmed_to_riter = log.rbegin();
       reset_recovery_pointers();
     }
     void reset_recovery_pointers() {
@@ -114,6 +139,11 @@ struct PGLog {
 	  caller_ops[i->reqid] = &(*i);
 	}
       }
+
+      rollback_info_trimmed_to_riter = log.rbegin();
+      while (rollback_info_trimmed_to_riter != log.rend() &&
+	     rollback_info_trimmed_to_riter->version > rollback_info_trimmed_to)
+	rollback_info_trimmed_to_riter++;
     }
 
     void index(pg_log_entry_t& e) {
@@ -143,6 +173,11 @@ struct PGLog {
     void add(pg_log_entry_t& e) {
       // add to log
       log.push_back(e);
+
+      // riter previously pointed to the previous entry
+      if (rollback_info_trimmed_to_riter == log.rbegin())
+	++rollback_info_trimmed_to_riter;
+
       assert(e.version > head);
       assert(head.version == 0 || e.version.version > head.version);
       head = e.version;
@@ -333,8 +368,10 @@ public:
 
   //////////////////// get or set log & missing ////////////////////
 
-  void claim_log(const pg_log_t &o) {
-    log.claim_log(o);
+  void claim_log_and_clear_rollback_info(const pg_log_t &o, LogEntryHandler *h) {
+    log.can_rollback_to = log.head;
+    log.advance_rollback_info_trimmed_to(log.head, h);
+    log.claim_log_and_clear_rollback_info(o);
     missing.clear();
     mark_dirty_to(eversion_t::max());
   }
