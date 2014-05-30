@@ -1996,7 +1996,10 @@ public:
 
   void add_log_entry(pg_log_entry_t& e, bufferlist& log_bl);
   void append_log(
-    vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t,
+    vector<pg_log_entry_t>& logv,
+    eversion_t trim_to,
+    eversion_t trim_rollback_to,
+    ObjectStore::Transaction &t,
     bool transaction_applied = true);
   bool check_log_for_corruption(ObjectStore *store);
   void trim_peers();
