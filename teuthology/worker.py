@@ -2,6 +2,7 @@ import fcntl
 import logging
 import os
 import subprocess
+import signal
 import shutil
 import sys
 import tempfile
@@ -240,6 +241,9 @@ def main(ctx):
             # dies (e.g. because of a restart)
             result_pid = subprocess.Popen(args=args,
                                           preexec_fn=os.setpgrp,).pid
+            # Indicate that we don't care about collecting its return code, so
+            # it doesn't become a zombie. We can't have zombies piling up.
+            signal.signal(signal.SIGCHLD, signal.SIG_IGN)
             log.info("teuthology-results PID: %s", result_pid)
         else:
             log.info('Creating archive dir %s', archive_path_full)
