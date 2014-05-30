@@ -58,7 +58,7 @@ def shutdown_daemons(ctx):
 
     for name, proc in nodes.iteritems():
         log.info('Waiting for %s to finish shutdowns...', name)
-        proc.exitstatus.get()
+        proc.wait()
 
 
 def find_kernel_mounts(ctx):
@@ -77,7 +77,7 @@ def find_kernel_mounts(ctx):
     kernel_mounts = list()
     for remote, proc in nodes.iteritems():
         try:
-            proc.exitstatus.get()
+            proc.wait()
             log.debug('kernel mount exists on %s', remote.name)
             kernel_mounts.append(remote)
         except run.CommandFailedError:  # no mounts!
@@ -108,7 +108,7 @@ def remove_kernel_mounts(ctx, kernel_mounts):
         nodes[remote] = proc
 
     for remote, proc in nodes:
-        proc.exitstatus.get()
+        proc.wait()
 
 
 def remove_osd_mounts(ctx):
@@ -165,7 +165,7 @@ def reboot(ctx, remotes):
         # we just ignore these procs because reboot -f doesn't actually
         # send anything back to the ssh client!
         # for remote, proc in nodes.iteritems():
-        # proc.exitstatus.get()
+        # proc.wait()
     if remotes:
         log.info('waiting for nodes to reboot')
         time.sleep(8)  # if we try and reconnect too quickly, it succeeds!
@@ -193,7 +193,7 @@ def reset_syslog_dir(ctx):
 
     for name, proc in nodes.iteritems():
         log.info('Waiting for %s to restart syslog...', name)
-        proc.exitstatus.get()
+        proc.wait()
 
 
 def dpkg_configure(ctx):
@@ -215,7 +215,7 @@ def dpkg_configure(ctx):
         log.info(
             'Waiting for %s to dpkg --configure -a and apt-get -f install...',
             name)
-        proc.exitstatus.get()
+        proc.wait()
 
 
 def remove_installed_packages(ctx):
@@ -251,7 +251,7 @@ def remove_testing_tree(ctx):
 
     for name, proc in nodes.iteritems():
         log.info('Waiting for %s to clear filesystem...', name)
-        proc.exitstatus.get()
+        proc.wait()
 
 
 def synch_clocks(remotes):
@@ -274,7 +274,7 @@ def synch_clocks(remotes):
         nodes[remote.name] = proc
     for name, proc in nodes.iteritems():
         log.info('Waiting for clock to synchronize on %s...', name)
-        proc.exitstatus.get()
+        proc.wait()
 
 
 def main(ctx):

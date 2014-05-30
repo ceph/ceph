@@ -33,7 +33,7 @@ def parallel_test(ctx, config):
             nodes[remote.name] = proc
         for name, proc in nodes.iteritems():
             """Wait for each process to finish before yielding and allowing other contextmanagers to run."""
-            proc.exitstatus.get()
+            proc.wait()
     yield
 
 @contextlib.contextmanager
@@ -45,7 +45,7 @@ def task(ctx, config):
         assert(False), "task parallel_example only supports a list or dictionary for configuration"
     if config is None:
         config = ['client.{id}'.format(id=id_)
-                  for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')] 
+                  for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
     if isinstance(config, list):
         config = dict.fromkeys(config)
     clients = config.keys()

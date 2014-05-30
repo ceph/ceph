@@ -85,7 +85,7 @@ def _find_arch_and_dist(ctx):
 
     Currently this only returns armv7l on the quantal distro or x86_64
     on the precise distro
-  
+
     :param ctx: Context
     :returns: arch,distro
     """
@@ -293,7 +293,7 @@ def download_deb(ctx, config):
 
     for name, proc in procs.iteritems():
         log.debug('Waiting for download/copy to %s to complete...', name)
-        proc.exitstatus.get()
+        proc.wait()
 
 
 def _no_grub_link(in_file, remote, kernel_ver):
@@ -302,7 +302,7 @@ def _no_grub_link(in_file, remote, kernel_ver):
     (as is the case in Arm kernels)
 
     :param infile: kernel file or image file to be copied.
-    :param remote: remote machine 
+    :param remote: remote machine
     :param kernel_ver: kernel version
     """
     boot1 = '/boot/%s' % in_file
@@ -469,7 +469,7 @@ def install_and_reboot(ctx, config):
 
     for name, proc in procs.iteritems():
         log.debug('Waiting for install on %s to complete...', name)
-        proc.exitstatus.get()
+        proc.wait()
 
 def enable_disable_kdb(ctx, config):
     """
