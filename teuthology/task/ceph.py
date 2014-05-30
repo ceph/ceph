@@ -44,19 +44,21 @@ class DaemonState(object):
         self.log = command_kwargs.get('logger', log)
         self.proc = None
 
-    def stop(self):
+    def stop(self, timeout=300):
         """
         Stop this daemon instance.
 
         Note: this can raise a run.CommandFailedError,
         run.CommandCrashedError, or run.ConnectionLostError.
+
+        :param timeout: timeout to pass to orchestra.run.wait()
         """
         if not self.running():
             self.log.error('tried to stop a non-running daemon')
             return
         self.proc.stdin.close()
         self.log.debug('waiting for process to exit')
-        run.wait([self.proc])
+        run.wait([self.proc], timeout=timeout)
         self.proc = None
         self.log.info('Stopped')
 
