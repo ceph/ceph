@@ -39,6 +39,12 @@ public:
     string name = "jerasure";
     if (parameters.count("jerasure-name"))
       name = parameters.find("jerasure-name")->second;
+    if (parameters.count("jerasure-variant")) {
+      dout(10) << "jerasure-variant " 
+	       << parameters.find("jerasure-variant")->second << dendl;
+	ret = instance.factory(name + "_" + parameters.find("jerasure-variant")->second,
+			       parameters, erasure_code, ss);
+    } else {
     if (ceph_arch_intel_pclmul &&
 	ceph_arch_intel_sse42 &&
 	ceph_arch_intel_sse41 &&
@@ -55,6 +61,7 @@ public:
     } else {
       dout(10) << "generic plugin" << dendl;
       ret = instance.factory(name + "_generic", parameters, erasure_code, ss);
+    }
     }
     if (ret)
       derr << ss.str() << dendl;
