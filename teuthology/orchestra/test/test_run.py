@@ -1,7 +1,6 @@
 from cStringIO import StringIO
 
 import fudge
-import gevent.event
 import logging
 
 from .. import run
@@ -280,12 +279,11 @@ class TestRun(object):
             wait=False,
             )
         assert r.command == 'foo'
-        assert isinstance(r.exitstatus, gevent.event.AsyncResult)
         e = assert_raises(
             run.CommandFailedError,
-            r.exitstatus.get,
+            r.wait,
             )
-        assert e.exitstatus == 42
+        assert r.returncode == 42
         assert str(e) == "Command failed on HOST with status 42: 'foo'"
 
     @fudge.with_fakes
@@ -305,6 +303,7 @@ class TestRun(object):
         logger = fudge.Fake('logger').is_a_stub()
         channel = fudge.Fake('channel')
         out.has_attr(channel=channel)
+        channel.expects('exit_status_ready').with_args().returns(False)
         channel.expects('recv_exit_status').with_args().returns(0)
         r = run.run(
             client=ssh,
@@ -315,9 +314,9 @@ class TestRun(object):
             )
         r.stdin.write('bar')
         assert r.command == 'foo'
-        assert isinstance(r.exitstatus, gevent.event.AsyncResult)
-        assert r.exitstatus.ready() == False
-        got = r.exitstatus.get()
+        assert r.poll() is None
+        got = r.wait()
+        assert isinstance(r.returncode, int)
         assert got == 0
 
     @fudge.with_fakes
@@ -339,6 +338,7 @@ class TestRun(object):
         logger = fudge.Fake('logger').is_a_stub()
         channel = fudge.Fake('channel')
         out.has_attr(channel=channel)
+        channel.expects('exit_status_ready').with_args().returns(False)
         channel.expects('recv_exit_status').with_args().returns(0)
         r = run.run(
             client=ssh,
@@ -347,13 +347,14 @@ class TestRun(object):
             stdout=run.PIPE,
             wait=False,
             )
+        assert r.exitstatus is None
         assert r.command == 'foo'
-        assert isinstance(r.exitstatus, gevent.event.AsyncResult)
-        assert r.exitstatus.ready() == False
+        assert r.poll() is None
         assert r.stdout.read() == 'one'
         assert r.stdout.read() == 'two'
         assert r.stdout.read() == ''
-        got = r.exitstatus.get()
+        got = r.wait()
+        assert isinstance(r.exitstatus, int)
         assert got == 0
 
     @fudge.with_fakes
@@ -375,6 +376,7 @@ class TestRun(object):
         logger = fudge.Fake('logger').is_a_stub()
         channel = fudge.Fake('channel')
         out.has_attr(channel=channel)
+        channel.expects('exit_status_ready').with_args().returns(False)
         channel.expects('recv_exit_status').with_args().returns(0)
         r = run.run(
             client=ssh,
@@ -383,13 +385,14 @@ class TestRun(object):
             stderr=run.PIPE,
             wait=False,
             )
+        assert r.exitstatus is None
         assert r.command == 'foo'
-        assert isinstance(r.exitstatus, gevent.event.AsyncResult)
-        assert r.exitstatus.ready() is False
+        assert r.poll() is None
         assert r.stderr.read() == 'one'
         assert r.stderr.read() == 'two'
         assert r.stderr.read() == ''
-        got = r.exitstatus.get()
+        got = r.wait()
+        assert isinstance(r.exitstatus, int)
         assert got == 0
 
     def test_quote_simple(self):
