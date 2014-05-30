@@ -2693,6 +2693,14 @@ void RGWCompleteMultipart::execute()
 
   iter = parts->parts.begin();
 
+  meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
+
+  ret = get_obj_attrs(store, s, meta_obj, attrs, NULL, NULL);
+  if (ret < 0) {
+    ldout(s->cct, 0) << "ERROR: failed to get obj attrs, obj=" << meta_obj << " ret=" << ret << dendl;
+    return;
+  }
+
   do {
     ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts, marker, obj_parts, &marker, &truncated);
     if (ret == -ENOENT) {
@@ -2782,7 +2790,6 @@ void RGWCompleteMultipart::execute()
     return;
 
   // remove the upload obj
-  meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
   meta_obj.set_in_extra_data(true);
   store->delete_obj(s->obj_ctx, s->bucket_owner.get_id(), meta_obj);
 }
