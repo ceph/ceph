@@ -132,3 +132,12 @@ Packaging:
     Copyright (C) 2004-2009 by Sage Weil <sage@newdream.net>
     Copyright (C) 2010 Canonical, Ltd.
     Licensed under LGPL-2.1
+
+File: qa/workunits/erasure-code/jquery.js
+  Copyright 2012 jQuery Foundation and other contributors
+  Released under the MIT license
+  http://jquery.org/license
+
+Files: qa/workunits/erasure-code/jquery.{flot.categories,flot}.js
+  Copyright (c) 2007-2014 IOLA and Ole Laursen.
+  Licensed under the MIT license.

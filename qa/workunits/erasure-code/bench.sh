@@ -14,6 +14,33 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
+# Test that it works from sources with:
+#
+#  TOTAL_SIZE=$((1024 * 1024)) \
+#  CEPH_ERASURE_CODE_BENCHMARK=src/ceph_erasure_code_benchmark  \
+#  PLUGIN_DIRECTORY=src/.libs \
+#      qa/workunits/erasure-code/bench.sh fplot jerasure |
+#      tee qa/workunits/erasure-code/bench.js
+#
+# This should start immediately and display:
+#
+# var encode_reed_sol_van_4096 = [
+# [ '2/1',  .48035538612887358583  ],
+# [ '3/2',  .21648470405675016626  ],
+# etc.
+#
+# and complete within a few seconds. The result can then be displayed with:
+#
+#  firefox qa/workunits/erasure-code/bench.html
+#
+# Once it is confirmed to work, it can be run with a more significant
+# volume of data so that the measures are more reliable:
+#
+#  CEPH_ERASURE_CODE_BENCHMARK=src/ceph_erasure_code_benchmark  \
+#  PLUGIN_DIRECTORY=src/.libs \
+#      qa/workunits/erasure-code/bench.sh fplot jerasure |
+#      tee qa/workunits/erasure-code/bench.js
+#
 set -e
 
 export PATH=/sbin:$PATH
@@ -121,6 +148,31 @@ function jerasure_test() {
             done
         done
     done
+}
+
+function fplot() {
+    local plugin=$1
+    local serie
+    ${plugin}_test | while read seconds total plugin k m workload iteration size erasures rest ; do 
+        if [ -z $seconds ] ; then
+            echo null,
+        elif [ $seconds = serie ] ; then
+            if [ "$serie" ] ; then
+                echo '];'
+            fi
+             local serie=$total
+             echo "var $serie = ["
+        else
+            local x
+            if [ $workload = encode ] ; then
+                x=$k/$m
+            else
+                x=$k/$m/$erasures
+            fi
+            echo "[ '$x', " $(echo "( $total / 1024 / 1024 ) / $seconds" | bc -ql) " ], "
+        fi
+    done
+    echo '];'
 }
 
 function main() {
@@ -326,6 +378,9 @@ EOF
     }
 
     run_test
+
+elif [ "$1" = fplot ] ; then
+    "$@"
 else
     main
 fi
