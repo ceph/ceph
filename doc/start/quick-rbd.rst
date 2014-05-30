@@ -73,5 +73,5 @@ See `block devices`_ for additional details.
 
 .. _Storage Cluster Quick Start: ../quick-ceph-deploy
 .. _block devices: ../../rbd/rbd
-.. _FAQ: http://wiki.ceph.com/03FAQs/01General_FAQ#How_Can_I_Give_Ceph_a_Try.3F
+.. _FAQ: http://wiki.ceph.com/FAQs/How_Can_I_Give_Ceph_a_Try%3F
 .. _OS Recommendations: ../os-recommendations

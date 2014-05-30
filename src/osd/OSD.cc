@@ -2316,7 +2316,6 @@ void OSD::build_past_intervals_parallel()
 	p.same_interval_since,
 	pg->info.history.last_epoch_clean,
 	cur_map, last_map,
-	pg->info.pgid.pool(),
 	pg->info.pgid.pgid,
 	&pg->past_intervals,
 	&debug);
@@ -2803,7 +2802,7 @@ void OSD::_add_heartbeat_peer(int p)
     hi->peer = p;
     HeartbeatSession *s = new HeartbeatSession(p);
     hi->con_back = cons.first.get();
-    hi->con_back->set_priv(s);
+    hi->con_back->set_priv(s->get());
     if (cons.second) {
       hi->con_front = cons.second.get();
       hi->con_front->set_priv(s->get());
@@ -2817,6 +2816,7 @@ void OSD::_add_heartbeat_peer(int p)
 	       << " " << hi->con_back->get_peer_addr()
 	       << dendl;
     }
+    s->put();
   } else {
     hi = &i->second;
   }
@@ -3672,6 +3672,7 @@ void OSD::ms_handle_fast_connect(Connection *con)
       assert(con->get_peer_type() == CEPH_ENTITY_TYPE_OSD);
       s->entity_name.set_type(CEPH_ENTITY_TYPE_OSD);
     }
+    s->put();
   }
 }
 
@@ -3752,7 +3753,7 @@ void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
   }
   
   // get all the latest maps
-  if (osdmap->get_epoch() > oldest)
+  if (osdmap->get_epoch() + 1 >= oldest)
     osdmap_subscribe(osdmap->get_epoch() + 1, true);
   else
     osdmap_subscribe(oldest - 1, true);
@@ -3843,6 +3844,10 @@ void OSD::_collect_metadata(map<string,string> *pm)
   (*pm)["back_addr"] = stringify(cluster_messenger->get_myaddr());
   (*pm)["hb_front_addr"] = stringify(hb_front_server_messenger->get_myaddr());
   (*pm)["hb_back_addr"] = stringify(hb_back_server_messenger->get_myaddr());
+
+  // backend
+  (*pm)["osd_objectstore"] = g_conf->osd_objectstore;
+  store->collect_metadata(pm);
 
   // kernel info
   struct utsname u;
@@ -4765,7 +4770,8 @@ void OSDService::share_map(
 	   << name << " " << con->get_peer_addr()
 	   << " " << epoch << dendl;
 
-  assert(osd->is_active());
+  assert(osd->is_active() ||
+	 osd->is_stopping());
 
   bool want_shared = should_share_map(name, con, epoch,
                                       osdmap, sent_epoch_p);
@@ -5266,7 +5272,7 @@ void OSD::_dispatch(Message *m)
 
   default:
     {
-      OpRequestRef op = op_tracker.create_request<OpRequest>(m);
+      OpRequestRef op = op_tracker.create_request<OpRequest, Message*>(m);
       op->mark_event("waiting_for_osdmap");
       // no map?  starting up?
       if (!osdmap) {
@@ -7856,6 +7862,13 @@ void OSD::handle_op(OpRequestRef op, OSDMapRef osdmap)
 		      << " features " << m->get_connection()->get_features()
 		      << "\n";
     service.reply_op_error(op, -ENXIO);
+    return;
+  }
+
+  // check against current map too
+  if (!osdmap->have_pg_pool(pgid.pool()) ||
+      osdmap->get_pg_acting_role(pgid.pgid, whoami) < 0) {
+    dout(7) << "dropping; no longer have PG (or pool); client will retarget" << dendl;
     return;
   }
 

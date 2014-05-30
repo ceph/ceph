@@ -35,11 +35,13 @@ start_rgw=0
 ip=""
 nodaemon=0
 smallmds=0
+ec=0
 hitset=""
 overwrite_conf=1
 cephx=1 #turn cephx on by default
 cache=""
 memstore=0
+journal=1
 
 MON_ADDR=""
 
@@ -65,7 +67,10 @@ usage=$usage"\t-k keep old configuration files\n"
 usage=$usage"\t-x enable cephx (on by default)\n"
 usage=$usage"\t-X disable cephx\n"
 usage=$usage"\t--hitset <pool> <hit_set_type>: enable hitset tracking\n"
+usage=$usage"\t-e : create an erasure pool\n";
 usage=$usage"\t-o config\t\t add extra config parameters to mds section\n"
+usage=$usage"\t-J no journal\t\tdisable filestore journal\n"
+
 
 usage_exit() {
 	printf "$usage"
@@ -90,6 +95,9 @@ case $1 in
 	    ;;
     -r )
 	    start_rgw=1
+	    ;;
+    -e )
+	    ec=1
 	    ;;
     --new | -n )
 	    new=1
@@ -142,6 +150,9 @@ case $1 in
 	    ;;
     -X )
 	    cephx=0
+	    ;;
+    -J )
+	    journal=0
 	    ;;
     -k )
 	    overwrite_conf=0
@@ -342,6 +353,11 @@ cat <<EOF >> $conf
 	auth client required = none
 EOF
 fi
+                        if [ $journal -eq 1 ]; then
+			    journal_path="$CEPH_DEV_DIR/osd\$id.journal"
+			else
+			    journal_path=""
+			fi
 			cat <<EOF >> $conf
 
 [client]
@@ -360,7 +376,7 @@ $extra_conf
 [osd]
 $DAEMONOPTS
         osd data = $CEPH_DEV_DIR/osd\$id
-        osd journal = $CEPH_DEV_DIR/osd\$id.journal
+        osd journal = $journal_path
         osd journal size = 100
         osd class tmp = out
         osd class dir = .libs
@@ -614,6 +630,14 @@ EOF
 fi
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
+
+if [ "$ec" -eq 1 ]; then
+    $SUDO $CEPH_ADM <<EOF
+osd erasure-code-profile set ec-profile m=2 k=1
+osd pool create ec 8 8 erasure ec-profile
+quit
+EOF
+fi
 
 do_cache() {
     while [ -n "$*" ]; do

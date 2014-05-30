@@ -1,4 +1,5 @@
 
+#include "osd/osd_types.h"
 #include "common/debug.h"
 #include "common/Formatter.h"
 #include "common/errno.h"
@@ -793,6 +794,52 @@ int CrushWrapper::add_simple_ruleset(string name, string root_name,
   return rno;
 }
 
+int CrushWrapper::get_rule_weight_map(unsigned ruleno, map<int,float> *pmap)
+{
+  if (ruleno >= crush->max_rules)
+    return -ENOENT;
+  if (crush->rules[ruleno] == NULL)
+    return -ENOENT;
+  crush_rule *rule = crush->rules[ruleno];
+
+  // build a weight map for each TAKE in the rule, and then merge them
+  for (unsigned i=0; i<rule->len; ++i) {
+    map<int,float> m;
+    float sum = 0;
+    if (rule->steps[i].op == CRUSH_RULE_TAKE) {
+      int n = rule->steps[i].arg1;
+      if (n >= 0) {
+	m[n] = 1.0;
+	sum = 1.0;
+      } else {
+	list<int> q;
+	q.push_back(n);
+	while (!q.empty()) {
+	  int bno = q.front();
+	  q.pop_front();
+	  crush_bucket *b = crush->buckets[-1-bno];
+	  assert(b);
+	  for (unsigned j=0; j<b->size; ++j) {
+	    float w = crush_get_bucket_item_weight(b, j);
+	    m[b->items[j]] = w;
+	    sum += w;
+	  }
+	}
+      }
+    }
+    for (map<int,float>::iterator p = m.begin(); p != m.end(); ++p) {
+      map<int,float>::iterator q = pmap->find(p->first);
+      if (q == pmap->end()) {
+	(*pmap)[p->first] = p->second / sum;
+      } else {
+	q->second += p->second / sum;
+      }
+    }
+  }
+
+  return 0;
+}
+
 int CrushWrapper::remove_rule(int ruleno)
 {
   if (ruleno >= (int)crush->max_rules)
@@ -1374,6 +1421,12 @@ void CrushWrapper::generate_test_instances(list<CrushWrapper*>& o)
   // fixme
 }
 
+/**
+ * Determine the default CRUSH ruleset ID to be used with
+ * newly created replicated pools.
+ *
+ * @returns a ruleset ID (>=0) or an error (<0)
+ */
 int CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(CephContext *cct)
 {
   int crush_ruleset = cct->_conf->osd_pool_default_crush_replicated_ruleset;
@@ -1388,6 +1441,11 @@ int CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(CephContext *cct
                   << dendl;
     crush_ruleset = cct->_conf->osd_pool_default_crush_rule;
   }
+
+  if (crush_ruleset == CEPH_DEFAULT_CRUSH_REPLICATED_RULESET) {
+    crush_ruleset = find_first_ruleset(pg_pool_t::TYPE_REPLICATED);
+  }
+
   return crush_ruleset;
 }
 

@@ -1857,9 +1857,9 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 
   assert(mds->mdlog->entry_is_open());
 
-  // declare now?
-  if (mut->now == utime_t())
-    mut->now = ceph_clock_now(g_ceph_context);
+  // make sure stamp is set
+  if (mut->get_mds_stamp() == utime_t())
+    mut->set_mds_stamp(ceph_clock_now(g_ceph_context));
 
   if (in->is_base())
     return;
@@ -1910,10 +1910,10 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
       parent->resync_accounted_fragstat();
 
       if (do_parent_mtime) {
-	pf->fragstat.mtime = mut->now;
-	if (mut->now > pf->rstat.rctime) {
+	pf->fragstat.mtime = mut->get_op_stamp();
+	if (pf->fragstat.mtime > pf->rstat.rctime) {
 	  dout(10) << "predirty_journal_parents updating mtime on " << *parent << dendl;
-	  pf->rstat.rctime = mut->now;
+	  pf->rstat.rctime = pf->fragstat.mtime;
 	} else {
 	  dout(10) << "predirty_journal_parents updating mtime UNDERWATER on " << *parent << dendl;
 	}
@@ -1978,19 +1978,14 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     // delay propagating until later?
     if (!stop && !first &&
 	g_conf->mds_dirstat_min_interval > 0) {
-      if (pin->last_dirstat_prop.sec() > 0) {
-	double since_last_prop = mut->now - pin->last_dirstat_prop;
-	if (since_last_prop < g_conf->mds_dirstat_min_interval) {
-	  dout(10) << "predirty_journal_parents last prop " << since_last_prop
-		   << " < " << g_conf->mds_dirstat_min_interval
-		   << ", stopping" << dendl;
-	  stop = true;
-	} else {
-	  dout(10) << "predirty_journal_parents last prop " << since_last_prop << " ago, continuing" << dendl;
-	}
-      } else {
-	dout(10) << "predirty_journal_parents last prop never, stopping" << dendl;
+      double since_last_prop = mut->get_mds_stamp() - pin->last_dirstat_prop;
+      if (since_last_prop < g_conf->mds_dirstat_min_interval) {
+	dout(10) << "predirty_journal_parents last prop " << since_last_prop
+		 << " < " << g_conf->mds_dirstat_min_interval
+		 << ", stopping" << dendl;
 	stop = true;
+      } else {
+	dout(10) << "predirty_journal_parents last prop " << since_last_prop << " ago, continuing" << dendl;
       }
     }
 
@@ -2025,7 +2020,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     assert(mut->wrlocks.count(&pin->nestlock) ||
 	   mut->is_slave());
     
-    pin->last_dirstat_prop = mut->now;
+    pin->last_dirstat_prop = mut->get_mds_stamp();
 
     // dirfrag -> diri
     mut->auth_pin(pin);
@@ -3737,24 +3732,24 @@ void MDCache::rejoin_send_rejoins()
       if (mdr->is_slave())
 	continue;
       // auth pins
-      for (set<MDSCacheObject*>::iterator q = mdr->remote_auth_pins.begin();
+      for (map<MDSCacheObject*,int>::iterator q = mdr->remote_auth_pins.begin();
 	   q != mdr->remote_auth_pins.end();
 	   ++q) {
-	if (!(*q)->is_auth()) {
-	  int who = (*q)->authority().first;
-	  if (rejoins.count(who) == 0) continue;
-	  MMDSCacheRejoin *rejoin = rejoins[who];
+	if (!q->first->is_auth()) {
+	  assert(q->second == q->first->authority().first);
+	  if (rejoins.count(q->second) == 0) continue;
+	  MMDSCacheRejoin *rejoin = rejoins[q->second];
 	  
-	  dout(15) << " " << *mdr << " authpin on " << **q << dendl;
+	  dout(15) << " " << *mdr << " authpin on " << *q->first << dendl;
 	  MDSCacheObjectInfo i;
-	  (*q)->set_object_info(i);
+	  q->first->set_object_info(i);
 	  if (i.ino)
 	    rejoin->add_inode_authpin(vinodeno_t(i.ino, i.snapid), mdr->reqid, mdr->attempt);
 	  else
 	    rejoin->add_dentry_authpin(i.dirfrag, i.dname, i.snapid, mdr->reqid, mdr->attempt);
 
 	  if (mdr->has_more() && mdr->more()->is_remote_frozen_authpin &&
-	      mdr->more()->rename_inode == (*q))
+	      mdr->more()->rename_inode == q->first)
 	    rejoin->add_inode_frozen_authpin(vinodeno_t(i.ino, i.snapid),
 					     mdr->reqid, mdr->attempt);
 	}
@@ -4509,7 +4504,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	  if (have_request(r->reqid))
 	    mdr = request_get(r->reqid);
 	  else
-	    mdr = request_start_slave(r->reqid, r->attempt, from);
+	    mdr = request_start_slave(r->reqid, r->attempt, strong);
 	  mdr->auth_pin(dn);
 	}
       }
@@ -4604,7 +4599,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	if (have_request(r->reqid))
 	  mdr = request_get(r->reqid);
 	else
-	  mdr = request_start_slave(r->reqid, r->attempt, from);
+	  mdr = request_start_slave(r->reqid, r->attempt, strong);
 	if (strong->frozen_authpin_inodes.count(in->vino())) {
 	  assert(!in->get_num_auth_pins());
 	  mdr->freeze_auth_pin(in);
@@ -6193,12 +6188,17 @@ void MDCache::start_recovered_truncates()
  * however, we may expire a replica whose authority is recovering.
  * 
  */
-bool MDCache::trim(int max) 
+bool MDCache::trim(int max, int count)
 {
   // trim LRU
-  if (max < 0) {
+  if (count > 0) {
+    max = lru.lru_get_size() - count;
+    if (max <= 0)
+      max = 1;
+  } else if (max < 0) {
     max = g_conf->mds_cache_size;
-    if (!max) return false;
+    if (max <= 0)
+      return false;
   }
   dout(7) << "trim max=" << max << "  cur=" << lru.lru_get_size() << dendl;
 
@@ -8638,16 +8638,37 @@ MDRequestRef MDCache::request_start(MClientRequest *req)
   }
 
   // register new client request
-  MDRequestRef mdr(new MDRequestImpl(req->get_reqid(),
-                                     req->get_num_fwd(), req));
-  active_requests[req->get_reqid()] = mdr;
+  MDRequestImpl::Params params;
+  params.reqid = req->get_reqid();
+  params.attempt = req->get_num_fwd();
+  params.client_req = req;
+  params.initiated = req->get_recv_stamp();
+  params.throttled = req->get_throttle_stamp();
+  params.all_read = req->get_recv_complete_stamp();
+  params.dispatched = req->get_dispatch_stamp();
+
+  MDRequestRef mdr =
+      mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params>(params);
+  active_requests[params.reqid] = mdr;
+  mdr->set_op_stamp(req->get_stamp());
   dout(7) << "request_start " << *mdr << dendl;
   return mdr;
 }
 
-MDRequestRef MDCache::request_start_slave(metareqid_t ri, __u32 attempt, int by)
+MDRequestRef MDCache::request_start_slave(metareqid_t ri, __u32 attempt, Message *m)
 {
-  MDRequestRef mdr(new MDRequestImpl(ri, attempt, by));
+  int by = m->get_source().num();
+  MDRequestImpl::Params params;
+  params.reqid = ri;
+  params.attempt = attempt;
+  params.triggering_slave_req = m;
+  params.slave_to = by;
+  params.initiated = m->get_recv_stamp();
+  params.throttled = m->get_throttle_stamp();
+  params.all_read = m->get_recv_complete_stamp();
+  params.dispatched = m->get_dispatch_stamp();
+  MDRequestRef mdr =
+      mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params>(params);
   assert(active_requests.count(mdr->reqid) == 0);
   active_requests[mdr->reqid] = mdr;
   dout(7) << "request_start_slave " << *mdr << " by mds." << by << dendl;
@@ -8656,10 +8677,13 @@ MDRequestRef MDCache::request_start_slave(metareqid_t ri, __u32 attempt, int by)
 
 MDRequestRef MDCache::request_start_internal(int op)
 {
-  MDRequestRef mdr(new MDRequestImpl);
-  mdr->reqid.name = entity_name_t::MDS(mds->get_nodeid());
-  mdr->reqid.tid = mds->issue_tid();
-  mdr->internal_op = op;
+  MDRequestImpl::Params params;
+  params.reqid.name = entity_name_t::MDS(mds->get_nodeid());
+  params.reqid.tid = mds->issue_tid();
+  params.initiated = ceph_clock_now(g_ceph_context);
+  params.internal_op = op;
+  MDRequestRef mdr =
+      mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params>(params);
 
   assert(active_requests.count(mdr->reqid) == 0);
   active_requests[mdr->reqid] = mdr;
@@ -8678,6 +8702,7 @@ MDRequestRef MDCache::request_get(metareqid_t rid)
 void MDCache::request_finish(MDRequestRef& mdr)
 {
   dout(7) << "request_finish " << *mdr << dendl;
+  mdr->mark_event("finishing request");
 
   // slave finisher?
   if (mdr->has_more() && mdr->more()->slave_commit) {
@@ -8695,6 +8720,7 @@ void MDCache::request_finish(MDRequestRef& mdr)
 
 void MDCache::request_forward(MDRequestRef& mdr, int who, int port)
 {
+  mdr->mark_event("forwarding request");
   if (mdr->client_request->get_source().is_client()) {
     dout(7) << "request_forward " << *mdr << " to mds." << who << " req "
             << *mdr->client_request << dendl;
@@ -8841,11 +8867,14 @@ void MDCache::request_cleanup(MDRequestRef& mdr)
 
   if (mds->logger)
     log_stat();
+
+  mdr->mark_event("cleaned up request");
 }
 
 void MDCache::request_kill(MDRequestRef& mdr)
 {
   mdr->killed = true;
+  mdr->mark_event("killing request");
   if (!mdr->committing) {
     dout(10) << "request_kill " << *mdr << dendl;
     request_cleanup(mdr);
@@ -8905,7 +8934,10 @@ void MDCache::snaprealm_create(MDRequestRef& mdr, CInode *in)
   journal_cow_inode(mut, &le->metablob, in);
   le->metablob.add_primary_dentry(in->get_projected_parent_dn(), in, true);
 
-  mds->mdlog->submit_entry(le, new C_MDC_snaprealm_create_finish(this, mdr, mut, in));
+  mds->server->submit_mdlog_entry(le,
+                                  new C_MDC_snaprealm_create_finish(this, mdr,
+                                                                    mut, in),
+                                  mdr, __func__);
   mds->mdlog->flush();
 }
 
@@ -10515,9 +10547,10 @@ CDir *MDCache::force_dir_fragment(CInode *diri, frag_t fg, bool replay)
       src.push_back(pdir);
       adjust_dir_fragments(diri, src, parent, split, result, waiters, replay);
       dir = diri->get_dirfrag(fg);
-      if (dir)
-        dout(10) << "force_dir_fragment result " << *dir << dendl;
-      return dir;
+      if (dir) {
+	dout(10) << "force_dir_fragment result " << *dir << dendl;
+	break;
+      }
     }
     if (parent == frag_t())
       break;
@@ -10526,16 +10559,20 @@ CDir *MDCache::force_dir_fragment(CInode *diri, frag_t fg, bool replay)
     dout(10) << " " << last << " parent is " << parent << dendl;
   }
 
-  // hoover up things under fg?
-  diri->get_dirfrags_under(fg, src);
-  if (src.empty()) {
-    dout(10) << "force_dir_fragment no frags under " << fg << dendl;
-    return NULL;
+  if (!dir) {
+    // hoover up things under fg?
+    diri->get_dirfrags_under(fg, src);
+    if (src.empty()) {
+      dout(10) << "force_dir_fragment no frags under " << fg << dendl;
+    } else {
+      dout(10) << " will combine frags under " << fg << ": " << src << dendl;
+      adjust_dir_fragments(diri, src, fg, 0, result, waiters, replay);
+      dir = result.front();
+      dout(10) << "force_dir_fragment result " << *dir << dendl;
+    }
   }
-  dout(10) << " will combine frags under " << fg << ": " << src << dendl;
-  adjust_dir_fragments(diri, src, fg, 0, result, waiters, replay);
-  dir = result.front();
-  dout(10) << "force_dir_fragment result " << *dir << dendl;
+  if (!replay)
+    mds->queue_waiters(waiters);
   return dir;
 }
 
@@ -11141,7 +11178,8 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
   */
 
   add_uncommitted_fragment(basedirfrag, info.bits, le->orig_frags, mdr->ls);
-  mds->mdlog->submit_entry(le, new C_MDC_FragmentPrep(this, mdr));
+  mds->server->submit_mdlog_entry(le, new C_MDC_FragmentPrep(this, mdr),
+                                  mdr, __func__);
   mds->mdlog->flush();
 }
 

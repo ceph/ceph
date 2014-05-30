@@ -20,10 +20,12 @@
 #include "common/entity_name.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
-#include "mds/Dumper.h"
 #include "mds/mdstypes.h"
 #include "mds/LogEvent.h"
+#include "mds/JournalPointer.h"
 #include "osdc/Journaler.h"
+
+#include "Dumper.h"
 
 #define dout_subsys ceph_subsys_mds
 
@@ -37,14 +39,19 @@ int Dumper::init(int rank_)
     return r;
   }
 
-  inodeno_t ino = MDS_INO_LOG_OFFSET + rank;
-  journaler = new Journaler(ino, mdsmap->get_metadata_pool(), CEPH_FS_ONDISK_MAGIC,
-                                       objecter, 0, 0, &timer);
-  return 0;
+  JournalPointer jp(rank, mdsmap->get_metadata_pool());
+  int jp_load_result = jp.load(objecter, &lock);
+  if (jp_load_result != 0) {
+    std::cerr << "Error loading journal: " << cpp_strerror(jp_load_result) << std::endl;
+    return jp_load_result;
+  } else {
+    ino = jp.front;
+    return 0;
+  }
 }
 
 
-int Dumper::recover_journal()
+int Dumper::recover_journal(Journaler *journaler)
 {
   bool done = false;
   Cond cond;
@@ -76,14 +83,15 @@ void Dumper::dump(const char *dump_file)
   Cond cond;
   Mutex localLock("dump:lock");
 
-  r = recover_journal();
+  Journaler journaler(ino, mdsmap->get_metadata_pool(), CEPH_FS_ONDISK_MAGIC,
+                                       objecter, 0, 0, &timer);
+  r = recover_journal(&journaler);
   if (r) {
     return;
   }
-  uint64_t start = journaler->get_read_pos();
-  uint64_t end = journaler->get_write_pos();
+  uint64_t start = journaler.get_read_pos();
+  uint64_t end = journaler.get_write_pos();
   uint64_t len = end-start;
-  inodeno_t ino = MDS_INO_LOG_OFFSET + rank;
 
   cout << "journal is " << start << "~" << len << std::endl;
 
@@ -91,7 +99,7 @@ void Dumper::dump(const char *dump_file)
   bufferlist bl;
 
   lock.Lock();
-  filer.read(ino, &journaler->get_layout(), CEPH_NOSNAP,
+  filer.read(ino, &journaler.get_layout(), CEPH_NOSNAP,
              start, len, &bl, 0, new C_SafeCond(&localLock, &cond, &done));
   lock.Unlock();
   localLock.Lock();
@@ -132,6 +140,7 @@ void Dumper::dump(const char *dump_file)
 
 void Dumper::undump(const char *dump_file)
 {
+  Mutex localLock("undump:lock");
   cout << "undump " << dump_file << std::endl;
   
   int fd = ::open(dump_file, O_RDONLY);
@@ -157,8 +166,6 @@ void Dumper::undump(const char *dump_file)
 
   cout << "start " << start << " len " << len << std::endl;
   
-  inodeno_t ino = MDS_INO_LOG_OFFSET + rank;
-
   Journaler::Header h;
   h.trimmed_pos = start;
   h.expire_pos = start;
@@ -179,14 +186,16 @@ void Dumper::undump(const char *dump_file)
   Cond cond;
   
   cout << "writing header " << oid << std::endl;
+  lock.Lock();
   objecter->write_full(oid, oloc, snapc, hbl, ceph_clock_now(g_ceph_context), 0, 
 		       NULL, 
-		       new C_SafeCond(&lock, &cond, &done));
-
-  lock.Lock();
-  while (!done)
-    cond.Wait(lock);
+		       new C_SafeCond(&localLock, &cond, &done));
   lock.Unlock();
+
+  localLock.Lock();
+  while (!done)
+    cond.Wait(localLock);
+  localLock.Unlock();
   
   // read
   Filer filer(objecter);
@@ -198,13 +207,16 @@ void Dumper::undump(const char *dump_file)
     uint64_t l = MIN(left, 1024*1024);
     j.read_fd(fd, l);
     cout << " writing " << pos << "~" << l << std::endl;
-    filer.write(ino, &h.layout, snapc, pos, l, j, ceph_clock_now(g_ceph_context), 0, NULL, new C_SafeCond(&lock, &cond, &done));
-
     lock.Lock();
-    while (!done)
-      cond.Wait(lock);
+    filer.write(ino, &h.layout, snapc, pos, l, j, ceph_clock_now(g_ceph_context), 0, NULL,
+        new C_SafeCond(&localLock, &cond, &done));
     lock.Unlock();
-    
+
+    localLock.Lock();
+    while (!done)
+      cond.Wait(localLock);
+    localLock.Unlock();
+      
     pos += l;
     left -= l;
   }
@@ -213,60 +225,3 @@ void Dumper::undump(const char *dump_file)
   cout << "done." << std::endl;
 }
 
-
-/**
- * Write JSON-formatted log entries to standard out.
- */
-void Dumper::dump_entries()
-{
-  Mutex localLock("dump_entries");
-  JSONFormatter jf(true);
-
-  if (recover_journal()) {
-    return;
-  }
-
-  jf.open_array_section("log");
-  lock.Lock();
-  // Until the journal is empty, pop an event or wait for one to
-  // be available.
-  dout(10) << "Journaler read/write/size: "
-      << journaler->get_read_pos() << "/" << journaler->get_write_pos()
-      << "/" << journaler->get_write_pos() - journaler->get_read_pos() << dendl;
-  while (journaler->get_read_pos() != journaler->get_write_pos()) {
-    bufferlist entry_bl;
-    bool got_data = journaler->try_read_entry(entry_bl);
-    dout(10) << "try_read_entry: " << got_data << dendl;
-    if (got_data) {
-      LogEvent *le = LogEvent::decode(entry_bl);
-      if (!le) {
-	dout(0) << "Error decoding LogEvent" << dendl;
-	break;
-      } else {
-	jf.open_object_section("log_event");
-	jf.dump_unsigned("type", le->get_type());
-	jf.dump_unsigned("start_off", le->get_start_off());
-	jf.dump_unsigned("stamp_sec", le->get_stamp().tv.tv_sec);
-	jf.dump_unsigned("stamp_nsec", le->get_stamp().tv.tv_nsec);
-	le->dump(&jf);
-	jf.close_section();
-	delete le;
-      }
-    } else {
-      bool done = false;
-      Cond cond;
-
-      journaler->wait_for_readable(new C_SafeCond(&localLock, &cond, &done));
-      lock.Unlock();
-      localLock.Lock();
-      while (!done)
-        cond.Wait(localLock);
-      localLock.Unlock();
-      lock.Lock();
-    }
-  }
-  lock.Unlock();
-  jf.close_section();
-  jf.flush(cout);
-  return;
-}

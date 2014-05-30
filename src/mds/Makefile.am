@@ -1,7 +1,5 @@
 libmds_la_SOURCES = \
 	mds/Capability.cc \
-	mds/Dumper.cc \
-	mds/Resetter.cc \
 	mds/MDS.cc \
 	mds/flock.cc \
 	mds/locks.c \
@@ -18,6 +16,7 @@ libmds_la_SOURCES = \
 	mds/LogEvent.cc \
 	mds/MDSTable.cc \
 	mds/InoTable.cc \
+	mds/JournalPointer.cc \
 	mds/MDSTableClient.cc \
 	mds/MDSTableServer.cc \
 	mds/SnapRealm.cc \
@@ -25,7 +24,7 @@ libmds_la_SOURCES = \
 	mds/snap.cc \
 	mds/SessionMap.cc \
 	mds/MDLog.cc \
-	mds/MDSUtility.cc
+	common/TrackedOp.cc
 libmds_la_LIBADD = $(LIBOSDC)
 noinst_LTLIBRARIES += libmds.la
 
@@ -38,8 +37,8 @@ noinst_HEADERS += \
 	mds/CDir.h \
 	mds/CInode.h \
 	mds/Capability.h \
-	mds/Dumper.h \
 	mds/InoTable.h \
+	mds/JournalPointer.h \
 	mds/LocalLock.h \
 	mds/Locker.h \
 	mds/LogEvent.h \
@@ -52,10 +51,8 @@ noinst_HEADERS += \
 	mds/MDSTable.h \
 	mds/MDSTableServer.h \
 	mds/MDSTableClient.h \
-	mds/MDSUtility.h \
 	mds/Mutation.h \
 	mds/Migrator.h \
-	mds/Resetter.h \
 	mds/ScatterLock.h \
 	mds/Server.h \
 	mds/SessionMap.h \
@@ -75,6 +72,7 @@ noinst_HEADERS += \
 	mds/events/EImportFinish.h \
 	mds/events/EImportStart.h \
 	mds/events/EMetaBlob.h \
+	mds/events/ENoOp.h \
 	mds/events/EOpen.h \
 	mds/events/EResetJournal.h \
 	mds/events/ESession.h \

@@ -27,8 +27,6 @@ using namespace std;
 
 #include "mon/MonMap.h"
 #include "mds/MDS.h"
-#include "mds/Dumper.h"
-#include "mds/Resetter.h"
 
 #include "msg/Messenger.h"
 
@@ -55,65 +53,14 @@ void usage()
        << "        connect to monitor at given address\n"
        << "  --debug_mds n\n"
        << "        debug MDS level (e.g. 10)\n"
-       << "  --dump-journal rank filename\n"
-       << "        dump the MDS journal (binary) for rank.\n"
-       << "  --dump-journal-entries rank filename\n"
-       << "        dump the MDS journal (JSON) for rank.\n"
        << "  --journal-check rank\n"
        << "        replay the journal for rank, then exit\n"
        << "  --hot-standby rank\n"
        << "        start up as a hot standby for rank\n"
-       << "  --reset-journal rank\n"
-       << "        discard the MDS journal for rank, and replace it with a single\n"
-       << "        event that updates/resets inotable and sessionmap on replay.\n"
        << dendl;
   generic_server_usage();
 }
 
-static int do_cmds_special_action(const std::string &action,
-				  const std::string &dump_file, int rank)
-{
-  common_init_finish(g_ceph_context, CINIT_FLAG_NO_DAEMON_ACTIONS);
-
-  if (action == "dump-journal") {
-    dout(0) << "dumping journal for mds." << rank << " to " << dump_file << dendl;
-    Dumper journal_dumper;
-    journal_dumper.init(rank);
-    journal_dumper.dump(dump_file.c_str());
-    journal_dumper.shutdown();
-  } else if (action == "dump-journal-entries") {
-    Dumper journal_dumper;
-    journal_dumper.init(rank);
-    journal_dumper.dump_entries();
-    journal_dumper.shutdown();
-  } else if (action == "undump-journal") {
-    dout(0) << "undumping journal for mds." << rank << " from " << dump_file << dendl;
-    Dumper journal_dumper;
-    journal_dumper.init(rank);
-    journal_dumper.undump(dump_file.c_str());
-    journal_dumper.shutdown();
-  } else if (action == "reset-journal") {
-    dout(0) << "resetting journal" << dendl;
-    Resetter resetter;
-    resetter.init(rank);
-    resetter.reset();
-    resetter.shutdown();
-  } else {
-    assert(0);
-  }
-  return 0;
-}
-
-static void set_special_action(std::string &dest, const std::string &act)
-{
-  if (!dest.empty()) {
-    derr << "Parse error! Can't specify more than one action. You "
-	 << "specified both " << act << " and " << dest << "\n" << dendl;
-    usage();
-    exit(1);
-  }
-  dest = act;
-}
 
 static int parse_rank(const char *opt_name, const std::string &val)
 {
@@ -148,43 +95,12 @@ int main(int argc, const char **argv)
 
   // mds specific args
   int shadow = 0;
-  int rank = -1;
   std::string dump_file;
 
   std::string val, action;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    }
-    else if (ceph_argparse_witharg(args, i, &val, "--dump-journal", (char*)NULL)) {
-      set_special_action(action, "dump-journal");
-      rank = parse_rank("dump-journal", val);
-      if (i == args.end()) {
-	derr << "error parsing --dump-journal: you must give a second "
-	     << "dump-journal argument: the filename to dump the journal to. "
-	     << "\n" << dendl;
-	usage();
-      }
-      dump_file = *i++;
-    }
-    else if (ceph_argparse_witharg(args, i, &val, "--undump-journal", (char*)NULL)) {
-      set_special_action(action, "undump-journal");
-      rank = parse_rank("undump-journal", val);
-      if (i == args.end()) {
-	derr << "error parsing --undump-journal: you must give a second "
-	     << "undump-journal argument: the filename to undump the journal from. "
-	     << "\n" << dendl;
-	usage();
-      }
-      dump_file = *i++;
-    }
-    else if (ceph_argparse_witharg(args, i, &val, "--dump-journal-entries", (char*)NULL)){
-      set_special_action(action, "dump-journal-entries");
-      rank = parse_rank("dump-journal-entries", val);
-    }
-    else if (ceph_argparse_witharg(args, i, &val, "--reset-journal", (char*)NULL)) {
-      set_special_action(action, "reset-journal");
-      rank = parse_rank("reset-journal", val);
     }
     else if (ceph_argparse_witharg(args, i, &val, "--journal-check", (char*)NULL)) {
       int r = parse_rank("journal-check", val);
@@ -219,11 +135,6 @@ int main(int argc, const char **argv)
   }
 
   pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
-
-  // Check for special actions
-  if (!action.empty()) {
-    return do_cmds_special_action(action, dump_file, rank);
-  }
 
   // Normal startup
   if (g_conf->name.has_default_id()) {

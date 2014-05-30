@@ -129,6 +129,9 @@ TYPE(MonCap)
 TYPE(DBObjectMap::_Header)
 TYPE(DBObjectMap::State)
 
+#include "mds/JournalPointer.h"
+TYPE(JournalPointer)
+
 #include "osdc/Journaler.h"
 TYPE(Journaler::Header)
 
@@ -155,6 +158,9 @@ TYPE(mds_load_t)
 TYPE(cap_reconnect_t)
 TYPE(inode_backtrace_t)
 TYPE(inode_backpointer_t)
+
+#include "mds/CInode.h"
+TYPE(InodeStore)
 
 #include "mds/MDSMap.h"
 TYPE_FEATUREFUL(MDSMap)

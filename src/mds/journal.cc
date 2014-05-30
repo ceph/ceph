@@ -20,6 +20,7 @@
 
 #include "events/EMetaBlob.h"
 #include "events/EResetJournal.h"
+#include "events/ENoOp.h"
 
 #include "events/EUpdate.h"
 #include "events/ESlaveUpdate.h"
@@ -199,7 +200,7 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld, int op_pri
     assert(in->is_auth());
     if (in->can_auth_pin()) {
       dout(15) << "try_to_expire waiting for storing backtrace on " << *in << dendl;
-      in->store_backtrace(gather_bld.new_sub());
+      in->store_backtrace(gather_bld.new_sub(), op_prio);
     } else {
       dout(15) << "try_to_expire waiting for unfreeze on " << *in << dendl;
       in->add_waiter(CInode::WAIT_UNFREEZE, gather_bld.new_sub());
@@ -314,13 +315,10 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
       dout(20) << "EMetaBlob::add_dir_context(" << dir << ") have lump " << dir->dirfrag() << dendl;
       break;
     }
-      
+
     // stop at root/stray
     CInode *diri = dir->get_inode();
     CDentry *parent = diri->get_projected_parent_dn();
-
-    if (!parent)
-      break;
 
     if (mode == TO_AUTH_SUBTREE_ROOT) {
       // subtree root?
@@ -354,6 +352,9 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
 	maybenot = true;
       }
     }
+
+    if (!parent)
+      break;
 
     if (maybenot) {
       dout(25) << "EMetaBlob::add_dir_context(" << dir << ")      maybe " << *parent << dendl;
@@ -399,12 +400,24 @@ void EMetaBlob::update_segment(LogSegment *ls)
 
 void EMetaBlob::fullbit::encode(bufferlist& bl) const {
   ENCODE_START(6, 5, bl);
-  if (!_enc.length()) {
-    fullbit copy(dn, dnfirst, dnlast, dnv, inode, dirfragtree, xattrs, symlink,
-		 snapbl, state, &old_inodes);
-    bl.append(copy._enc);
+  ::encode(dn, bl);
+  ::encode(dnfirst, bl);
+  ::encode(dnlast, bl);
+  ::encode(dnv, bl);
+  ::encode(inode, bl);
+  ::encode(xattrs, bl);
+  if (inode.is_symlink())
+    ::encode(symlink, bl);
+  if (inode.is_dir()) {
+    ::encode(dirfragtree, bl);
+    ::encode(snapbl, bl);
+  }
+  ::encode(state, bl);
+  if (old_inodes.empty()) {
+    ::encode(false, bl);
   } else {
-    bl.append(_enc);
+    ::encode(true, bl);
+    ::encode(old_inodes, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -452,19 +465,6 @@ void EMetaBlob::fullbit::decode(bufferlist::iterator &bl) {
 
 void EMetaBlob::fullbit::dump(Formatter *f) const
 {
-  if (_enc.length() && !dn.length()) {
-    /* if our bufferlist has data but our name is empty, we
-     * haven't initialized ourselves; do so in order to print members!
-     * We use const_cast here because the whole point is we aren't
-     * fully set up and this isn't changing who we "are", just our
-     * representation.
-     */
-    EMetaBlob::fullbit *me = const_cast<EMetaBlob::fullbit*>(this);
-    bufferlist encoded;
-    encode(encoded);
-    bufferlist::iterator p = encoded.begin();
-    me->decode(p);
-  }
   f->dump_string("dentry", dn);
   f->dump_stream("snapid.first") << dnfirst;
   f->dump_stream("snapid.last") << dnlast;
@@ -558,12 +558,13 @@ void EMetaBlob::fullbit::update_inode(MDS *mds, CInode *in)
 void EMetaBlob::remotebit::encode(bufferlist& bl) const
 {
   ENCODE_START(2, 2, bl);
-  if (!_enc.length()) {
-    remotebit copy(dn, dnfirst, dnlast, dnv, ino, d_type, dirty);
-    bl.append(copy._enc);
-  } else {
-    bl.append(_enc);
-  }
+  ::encode(dn, bl);
+  ::encode(dnfirst, bl);
+  ::encode(dnlast, bl);
+  ::encode(dnv, bl);
+  ::encode(ino, bl);
+  ::encode(d_type, bl);
+  ::encode(dirty, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -582,19 +583,6 @@ void EMetaBlob::remotebit::decode(bufferlist::iterator &bl)
 
 void EMetaBlob::remotebit::dump(Formatter *f) const
 {
-  if (_enc.length() && !dn.length()) {
-    /* if our bufferlist has data but our name is empty, we
-     * haven't initialized ourselves; do so in order to print members!
-     * We use const_cast here because the whole point is we aren't
-     * fully set up and this isn't changing who we "are", just our
-     * representation.
-     */
-    EMetaBlob::remotebit *me = const_cast<EMetaBlob::remotebit*>(this);
-    bufferlist encoded;
-    encode(encoded);
-    bufferlist::iterator p = encoded.begin();
-    me->decode(p);
-  }
   f->dump_string("dentry", dn);
   f->dump_int("snapid.first", dnfirst);
   f->dump_int("snapid.last", dnlast);
@@ -636,12 +624,11 @@ generate_test_instances(list<EMetaBlob::remotebit*>& ls)
 void EMetaBlob::nullbit::encode(bufferlist& bl) const
 {
   ENCODE_START(2, 2, bl);
-  if (!_enc.length()) {
-    nullbit copy(dn, dnfirst, dnlast, dnv, dirty);
-    bl.append(copy._enc);
-  } else {
-    bl.append(_enc);
-  }
+  ::encode(dn, bl);
+  ::encode(dnfirst, bl);
+  ::encode(dnlast, bl);
+  ::encode(dnv, bl);
+  ::encode(dirty, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -658,19 +645,6 @@ void EMetaBlob::nullbit::decode(bufferlist::iterator &bl)
 
 void EMetaBlob::nullbit::dump(Formatter *f) const
 {
-  if (_enc.length() && !dn.length()) {
-    /* if our bufferlist has data but our name is empty, we
-     * haven't initialized ourselves; do so in order to print members!
-     * We use const_cast here because the whole point is we aren't
-     * fully set up and this isn't changing who we "are", just our
-     * representation.
-     */
-    EMetaBlob::nullbit *me = const_cast<EMetaBlob::nullbit*>(this);
-    bufferlist encoded;
-    encode(encoded);
-    bufferlist::iterator p = encoded.begin();
-    me->decode(p);
-  }
   f->dump_string("dentry", dn);
   f->dump_int("snapid.first", dnfirst);
   f->dump_int("snapid.last", dnlast);
@@ -841,6 +815,190 @@ void EMetaBlob::decode(bufferlist::iterator &bl)
   DECODE_FINISH(bl);
 }
 
+
+/**
+ * Get all inodes touched by this metablob.  Includes the 'bits' within
+ * dirlumps, and the inodes of the dirs themselves.
+ */
+void EMetaBlob::get_inodes(
+    std::set<inodeno_t> &inodes) const
+{
+  // For all dirlumps in this metablob
+  for (std::map<dirfrag_t, dirlump>::const_iterator i = lump_map.begin(); i != lump_map.end(); ++i) {
+    // Record inode of dirlump
+    inodeno_t const dir_ino = i->first.ino;
+    inodes.insert(dir_ino);
+
+    // Decode dirlump bits
+    dirlump const &dl = i->second;
+    dl._decode_bits();
+
+    // Record inodes of fullbits
+    list<ceph::shared_ptr<fullbit> > const &fb_list = dl.get_dfull();
+    for (list<ceph::shared_ptr<fullbit> >::const_iterator
+        iter = fb_list.begin(); iter != fb_list.end(); ++iter) {
+      inodes.insert((*iter)->inode.ino);
+    }
+
+    // Record inodes of remotebits
+    list<remotebit> const &rb_list = dl.get_dremote();
+    for (list<remotebit>::const_iterator
+	iter = rb_list.begin(); iter != rb_list.end(); ++iter) {
+      inodes.insert(iter->ino);
+    }
+  }
+}
+
+
+/**
+ * Get a map of dirfrag to set of dentries in that dirfrag which are
+ * touched in this operation.
+ */
+void EMetaBlob::get_dentries(std::map<dirfrag_t, std::set<std::string> > &dentries) const
+{
+  for (std::map<dirfrag_t, dirlump>::const_iterator i = lump_map.begin(); i != lump_map.end(); ++i) {
+    dirlump const &dl = i->second;
+    dirfrag_t const &df = i->first;
+
+    // Get all bits
+    dl._decode_bits();
+    list<ceph::shared_ptr<fullbit> > const &fb_list = dl.get_dfull();
+    list<nullbit> const &nb_list = dl.get_dnull();
+    list<remotebit> const &rb_list = dl.get_dremote();
+
+    // For all bits, store dentry
+    for (list<ceph::shared_ptr<fullbit> >::const_iterator
+        iter = fb_list.begin(); iter != fb_list.end(); ++iter) {
+      dentries[df].insert((*iter)->dn);
+
+    }
+    for (list<nullbit>::const_iterator
+	iter = nb_list.begin(); iter != nb_list.end(); ++iter) {
+      dentries[df].insert(iter->dn);
+    }
+    for (list<remotebit>::const_iterator
+	iter = rb_list.begin(); iter != rb_list.end(); ++iter) {
+      dentries[df].insert(iter->dn);
+    }
+  }
+}
+
+
+
+/**
+ * Calculate all paths that we can infer are touched by this metablob.  Only uses
+ * information local to this metablob so it may only be the path within the
+ * subtree.
+ */
+void EMetaBlob::get_paths(
+    std::vector<std::string> &paths) const
+{
+  // Each dentry has a 'location' which is a 2-tuple of parent inode and dentry name
+  typedef std::pair<inodeno_t, std::string> Location;
+
+  // Whenever we see a dentry within a dirlump, we remember it as a child of
+  // the dirlump's inode
+  std::map<inodeno_t, std::list<std::string> > children;
+
+  // Whenever we see a location for an inode, remember it: this allows us to
+  // build a path given an inode
+  std::map<inodeno_t, Location> ino_locations;
+
+  // Special case: operations on root inode populate roots but not dirlumps
+  if (lump_map.empty() && !roots.empty()) {
+    paths.push_back("/");
+    return;
+  }
+
+  // First pass
+  // ==========
+  // Build a tiny local metadata cache for the path structure in this metablob
+  for (std::map<dirfrag_t, dirlump>::const_iterator i = lump_map.begin(); i != lump_map.end(); ++i) {
+    inodeno_t const dir_ino = i->first.ino;
+    dirlump const &dl = i->second;
+    dl._decode_bits();
+
+    list<ceph::shared_ptr<fullbit> > const &fb_list = dl.get_dfull();
+    list<nullbit> const &nb_list = dl.get_dnull();
+    list<remotebit> const &rb_list = dl.get_dremote();
+
+    for (list<ceph::shared_ptr<fullbit> >::const_iterator
+        iter = fb_list.begin(); iter != fb_list.end(); ++iter) {
+      std::string const &dentry = (*iter)->dn;
+      children[dir_ino].push_back(dentry);
+      ino_locations[(*iter)->inode.ino] = Location(dir_ino, dentry);
+    }
+
+    for (list<nullbit>::const_iterator
+	iter = nb_list.begin(); iter != nb_list.end(); ++iter) {
+      std::string const &dentry = iter->dn;
+      children[dir_ino].push_back(dentry);
+    }
+
+    for (list<remotebit>::const_iterator
+	iter = rb_list.begin(); iter != rb_list.end(); ++iter) {
+      std::string const &dentry = iter->dn;
+      children[dir_ino].push_back(dentry);
+    }
+  }
+
+  std::vector<Location> leaf_locations;
+
+  // Second pass
+  // ===========
+  // Output paths for all childless nodes in the metablob
+  for (std::map<dirfrag_t, dirlump>::const_iterator i = lump_map.begin(); i != lump_map.end(); ++i) {
+    inodeno_t const dir_ino = i->first.ino;
+    dirlump const &dl = i->second;
+    dl._decode_bits();
+
+    list<ceph::shared_ptr<fullbit> > const &fb_list = dl.get_dfull();
+    for (list<ceph::shared_ptr<fullbit> >::const_iterator
+        iter = fb_list.begin(); iter != fb_list.end(); ++iter) {
+      std::string const &dentry = (*iter)->dn;
+      children[dir_ino].push_back(dentry);
+      ino_locations[(*iter)->inode.ino] = Location(dir_ino, dentry);
+      if (children.find((*iter)->inode.ino) == children.end()) {
+        leaf_locations.push_back(Location(dir_ino, dentry));
+
+      }
+    }
+
+    list<nullbit> const &nb_list = dl.get_dnull();
+    for (list<nullbit>::const_iterator
+	iter = nb_list.begin(); iter != nb_list.end(); ++iter) {
+      std::string const &dentry = iter->dn;
+      leaf_locations.push_back(Location(dir_ino, dentry));
+    }
+
+    list<remotebit> const &rb_list = dl.get_dremote();
+    for (list<remotebit>::const_iterator
+	iter = rb_list.begin(); iter != rb_list.end(); ++iter) {
+      std::string const &dentry = iter->dn;
+      leaf_locations.push_back(Location(dir_ino, dentry));
+    }
+  }
+
+  // For all the leaf locations identified, generate paths
+  for (std::vector<Location>::iterator i = leaf_locations.begin(); i != leaf_locations.end(); ++i) {
+    Location const &loc = *i;
+    std::string path = loc.second;
+    inodeno_t ino = loc.first;
+    while(ino_locations.find(ino) != ino_locations.end()) {
+      Location const &loc = ino_locations[ino];
+      if (!path.empty()) {
+        path = loc.second + "/" + path;
+      } else {
+        path = loc.second + path;
+      }
+      ino = loc.first;
+    }
+
+    paths.push_back(path);
+  }
+}
+
+
 void EMetaBlob::dump(Formatter *f) const
 {
   f->open_array_section("lumps");
@@ -886,7 +1044,7 @@ void EMetaBlob::dump(Formatter *f) const
   f->close_section(); // renamed directory fragments
 
   f->dump_int("inotable version", inotablev);
-  f->dump_int("SesionMap version", sessionmapv);
+  f->dump_int("SessionMap version", sessionmapv);
   f->dump_int("allocated ino", allocated_ino);
   
   f->dump_stream("preallocated inos") << preallocated_inos;
@@ -1054,7 +1212,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     lump._decode_bits();
 
     // full dentry+inode pairs
-    for (list<ceph::shared_ptr<fullbit> >::iterator pp = lump.get_dfull().begin();
+    for (list<ceph::shared_ptr<fullbit> >::const_iterator pp = lump.get_dfull().begin();
 	 pp != lump.get_dfull().end();
 	 ++pp) {
       ceph::shared_ptr<fullbit> p = *pp;
@@ -1135,7 +1293,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     }
 
     // remote dentries
-    for (list<remotebit>::iterator p = lump.get_dremote().begin();
+    for (list<remotebit>::const_iterator p = lump.get_dremote().begin();
 	 p != lump.get_dremote().end();
 	 ++p) {
       CDentry *dn = dir->lookup_exact_snap(p->dn, p->dnlast);
@@ -1168,7 +1326,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     }
 
     // null dentries
-    for (list<nullbit>::iterator p = lump.get_dnull().begin();
+    for (list<nullbit>::const_iterator p = lump.get_dnull().begin();
 	 p != lump.get_dnull().end();
 	 ++p) {
       CDentry *dn = dir->lookup_exact_snap(p->dn, p->dnlast);
@@ -2831,3 +2989,35 @@ void EResetJournal::replay(MDS *mds)
   mds->mdcache->show_subtrees();
 }
 
+
+void ENoOp::encode(bufferlist &bl) const
+{
+  ENCODE_START(2, 2, bl);
+  ::encode(pad_size, bl);
+  uint8_t const pad = 0xff;
+  for (unsigned int i = 0; i < pad_size; ++i) {
+    ::encode(pad, bl);
+  }
+  ENCODE_FINISH(bl);
+}
+
+
+void ENoOp::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(2, bl);
+  ::decode(pad_size, bl);
+  if (bl.get_remaining() != pad_size) {
+    // This is spiritually an assertion, but expressing in a way that will let
+    // journal debug tools catch it and recognise a malformed entry.
+    throw buffer::end_of_buffer();
+  } else {
+    bl.advance(pad_size);
+  }
+  DECODE_FINISH(bl);
+}
+
+
+void ENoOp::replay(MDS *mds)
+{
+  dout(4) << "ENoOp::replay, " << pad_size << " bytes skipped in journal" << dendl;
+}

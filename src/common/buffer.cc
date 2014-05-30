@@ -1692,6 +1692,20 @@ __u32 buffer::list::crc32c(__u32 crc) const
   return crc;
 }
 
+
+/**
+ * Binary write all contents to a C++ stream
+ */
+void buffer::list::write_stream(std::ostream &out) const
+{
+  for (std::list<ptr>::const_iterator p = _buffers.begin(); p != _buffers.end(); ++p) {
+    if (p->length() > 0) {
+      out.write(p->c_str(), p->length());
+    }
+  }
+}
+
+
 void buffer::list::hexdump(std::ostream &out) const
 {
   std::ios_base::fmtflags original_flags = out.flags();

@@ -396,7 +396,7 @@ You may set values for the following keys:
 Get Pool Values
 ===============
 
-To set a value to a pool, execute the following:: 
+To get a value from a pool, execute the following:: 
 
 	ceph osd pool get {pool-name} {key}
 	
@@ -445,11 +445,11 @@ Get the Number of Object Replicas
 
 To get the number of object replicas, execute the following:: 
 
-	ceph osd dump | grep 'rep size'
+	ceph osd dump | grep 'replicated size'
 	
-Ceph will list the pools, with the ``rep size`` attribute highlighted.
-By default, ceph Creates one replica of an object (a total of two copies, or 
-a size of 2).
+Ceph will list the pools, with the ``replicated size`` attribute highlighted.
+By default, ceph Creates two replicas of an object (a total of three copies, or 
+a size of 3).
 
 
 

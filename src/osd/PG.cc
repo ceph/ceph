@@ -675,7 +675,6 @@ void PG::generate_past_intervals()
       info.history.last_epoch_clean,
       cur_map,
       last_map,
-      pgid.pool(),
       pgid,
       &past_intervals,
       &debug);
@@ -4348,24 +4347,27 @@ bool PG::may_need_replay(const OSDMapRef osdmap) const
   return crashed;
 }
 
-bool PG::is_split(OSDMapRef lastmap, OSDMapRef nextmap)
-{
-  return info.pgid.is_split(
-    lastmap->get_pg_num(pool.id),
-    nextmap->get_pg_num(pool.id),
-    0);
-}
-
-bool PG::acting_up_affected(
+bool PG::should_restart_peering(
   int newupprimary,
   int newactingprimary,
-  const vector<int>& newup, const vector<int>& newacting)
+  const vector<int>& newup,
+  const vector<int>& newacting,
+  OSDMapRef lastmap,
+  OSDMapRef osdmap)
 {
-  if (newupprimary != up_primary.osd ||
-      newactingprimary != primary.osd ||
-      acting != newacting ||
-      up != newup) {
-    dout(20) << "acting_up_affected newup " << newup
+  if (pg_interval_t::is_new_interval(
+	primary.osd,
+	newactingprimary,
+	acting,
+	newacting,
+	up_primary.osd,
+	newupprimary,
+	up,
+	newup,
+	osdmap,
+	lastmap,
+	info.pgid.pgid)) {
+    dout(20) << "new interval newup " << newup
 	     << " newacting " << newacting << dendl;
     return true;
   } else {
@@ -4482,6 +4484,7 @@ void PG::start_peering_interval(
     dout(10) << " no lastmap" << dendl;
     dirty_info = true;
     dirty_big_info = true;
+    info.history.same_interval_since = osdmap->get_epoch();
   } else {
     std::stringstream debug;
     bool new_interval = pg_interval_t::check_new_interval(
@@ -4495,7 +4498,6 @@ void PG::start_peering_interval(
       info.history.last_epoch_clean,
       osdmap,
       lastmap,
-      info.pgid.pool(),
       info.pgid.pgid,
       &past_intervals,
       &debug);
@@ -4505,16 +4507,10 @@ void PG::start_peering_interval(
       dout(10) << " noting past " << past_intervals.rbegin()->second << dendl;
       dirty_info = true;
       dirty_big_info = true;
+      info.history.same_interval_since = osdmap->get_epoch();
     }
   }
 
-  if (old_up_primary != up_primary ||
-      old_acting_primary != primary ||
-      oldacting != acting ||
-      oldup != up ||
-      is_split(lastmap, osdmap)) {
-    info.history.same_interval_since = osdmap->get_epoch();
-  }
   if (old_up_primary != up_primary ||
       oldup != up) {
     info.history.same_up_since = osdmap->get_epoch();
@@ -5184,13 +5180,14 @@ boost::statechart::result PG::RecoveryState::Started::react(const AdvMap& advmap
 {
   dout(10) << "Started advmap" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
-  if (pg->acting_up_affected(
+  if (pg->should_restart_peering(
 	advmap.up_primary,
 	advmap.acting_primary,
 	advmap.newup,
-	advmap.newacting) ||
-      pg->is_split(advmap.lastmap, advmap.osdmap)) {
-    dout(10) << "up or acting affected, transitioning to Reset" << dendl;
+	advmap.newacting,
+	advmap.lastmap,
+	advmap.osdmap)) {
+    dout(10) << "should_restart_peering, transitioning to Reset" << dendl;
     post_event(advmap);
     return transit< Reset >();
   }
@@ -5243,13 +5240,14 @@ boost::statechart::result PG::RecoveryState::Reset::react(const AdvMap& advmap)
   // _before_ we are active.
   pg->generate_past_intervals();
 
-  if (pg->acting_up_affected(
+  if (pg->should_restart_peering(
 	advmap.up_primary,
 	advmap.acting_primary,
 	advmap.newup,
-	advmap.newacting) ||
-      pg->is_split(advmap.lastmap, advmap.osdmap)) {
-    dout(10) << "up or acting affected, calling start_peering_interval again"
+	advmap.newacting,
+	advmap.lastmap,
+	advmap.osdmap)) {
+    dout(10) << "should restart peering, calling start_peering_interval again"
 	     << dendl;
     pg->start_peering_interval(
       advmap.lastmap,

@@ -403,7 +403,7 @@ if test "x$enable_cephfs_java" = "xyes"; then
 	# setup defaults for Debian default-jdk package (without --with-jdk-dir)
 	AS_IF([test -z "$with_jdk_dir"], [
 		   # This works with Debian's and CentOS' default-jdk package
-       for dir in '/usr/lib/jvm/default-java/' '/usr/lib/jvm/java/' ; do
+       for dir in '/usr/lib/jvm/default-java/' '/usr/lib/jvm/java/' '/usr/lib/jvm/java-gcj/'; do
           # only test if a suitable path has not yet been found
           AS_IF([test "$EXTRA_JDK_BIN_DIR" == ""], [
 		          AS_IF([test -x "$javac_prog"], [
@@ -483,8 +483,13 @@ AS_IF([test "x$with_libatomic_ops" != xno],
                    [no libatomic-ops found (use --without-libatomic-ops to disable)])
               ])])
 AS_IF([test "$HAVE_ATOMIC_OPS" = "1"],
-	[],
+	[
+         AC_CHECK_SIZEOF(AO_t, [], [
+                                #include <atomic_ops.h>
+                                ])
+         ],
 	[AC_DEFINE([NO_ATOMIC_OPS], [1], [Defined if you do not have atomic_ops])])
+
 
 AM_CONDITIONAL(WITH_LIBATOMIC, [test "$HAVE_ATOMIC_OPS" = "1"])
 

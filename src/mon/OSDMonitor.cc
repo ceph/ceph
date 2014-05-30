@@ -1285,7 +1285,10 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 	(g_conf->mon_osd_auto_mark_new_in && (oldstate & CEPH_OSD_NEW)) ||
 	(g_conf->mon_osd_auto_mark_in)) {
       if (can_mark_in(from)) {
-	pending_inc.new_weight[from] = CEPH_OSD_IN;
+	if (osdmap.osd_xinfo[from].old_weight > 0)
+	  pending_inc.new_weight[from] = osdmap.osd_xinfo[from].old_weight;
+	else
+	  pending_inc.new_weight[from] = CEPH_OSD_IN;
       } else {
 	dout(7) << "prepare_boot NOIN set, will not mark in " << m->get_orig_source_addr() << dendl;
       }
@@ -1883,6 +1886,11 @@ void OSDMonitor::tick()
 	  if (pending_inc.new_state.count(o) == 0)
 	    pending_inc.new_state[o] = 0;
 	  pending_inc.new_state[o] |= CEPH_OSD_AUTOOUT;
+
+	  // remember previous weight
+	  if (pending_inc.new_xinfo.count(o) == 0)
+	    pending_inc.new_xinfo[o] = osdmap.osd_xinfo[o];
+	  pending_inc.new_xinfo[o].old_weight = osdmap.osd_weight[o];
 
 	  do_propose = true;
 	
@@ -3067,20 +3075,23 @@ int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_pr
 
 int OSDMonitor::prepare_pool_size(const unsigned pool_type,
 				  const string &erasure_code_profile,
-				  unsigned *size,
+				  unsigned *size, unsigned *min_size,
 				  stringstream &ss)
 {
   int err = 0;
   switch (pool_type) {
   case pg_pool_t::TYPE_REPLICATED:
     *size = g_conf->osd_pool_default_size;
+    *min_size = g_conf->get_osd_pool_default_min_size();
     break;
   case pg_pool_t::TYPE_ERASURE:
     {
       ErasureCodeInterfaceRef erasure_code;
       err = get_erasure_code(erasure_code_profile, &erasure_code, ss);
-      if (err == 0)
+      if (err == 0) {
 	*size = erasure_code->get_chunk_count();
+	*min_size = erasure_code->get_data_chunk_count();
+      }
     }
     break;
   default:
@@ -3129,8 +3140,12 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
   if (*crush_ruleset < 0) {
     switch (pool_type) {
     case pg_pool_t::TYPE_REPLICATED:
-      *crush_ruleset =
-	CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(g_ceph_context);
+      *crush_ruleset = osdmap.crush->get_osd_pool_default_crush_replicated_ruleset(g_ceph_context);
+      if (*crush_ruleset < 0) {
+        // Errors may happen e.g. if no valid ruleset is available
+        ss << "No suitable CRUSH ruleset exists";
+        return *crush_ruleset;
+      }
       break;
     case pg_pool_t::TYPE_ERASURE:
       {
@@ -3157,6 +3172,11 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
 	 << " is not a known pool type";
       return -EINVAL;
       break;
+    }
+  } else {
+    if (!osdmap.crush->ruleset_exists(*crush_ruleset)) {
+      ss << "CRUSH ruleset " << *crush_ruleset << " not found";
+      return -ENOENT;
     }
   }
 
@@ -3188,8 +3208,8 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
 				 crush_ruleset_name, &crush_ruleset, ss);
   if (r)
     return r;
-  unsigned size;
-  r = prepare_pool_size(pool_type, erasure_code_profile, &size, ss);
+  unsigned size, min_size;
+  r = prepare_pool_size(pool_type, erasure_code_profile, &size, &min_size, ss);
   if (r)
     return r;
   uint32_t stripe_width = 0;
@@ -3215,7 +3235,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     pi->flags |= pg_pool_t::FLAG_HASHPSPOOL;
 
   pi->size = size;
-  pi->min_size = g_conf->get_osd_pool_default_min_size();
+  pi->min_size = min_size;
   pi->crush_ruleset = crush_ruleset;
   pi->object_hash = CEPH_STR_HASH_RJENKINS;
   pi->set_pg_num(pg_num ? pg_num : g_conf->osd_pool_default_pg_num);
@@ -3414,7 +3434,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
-    if (!osdmap.crush->rule_exists(n)) {
+    if (!osdmap.crush->ruleset_exists(n)) {
       ss << "crush ruleset " << n << " does not exist";
       return -ENOENT;
     }
@@ -3507,7 +3527,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "value must be in the range 0..1";
       return -ERANGE;
     }
-    p.cache_target_full_ratio_micro = n;
+    p.cache_target_full_ratio_micro = f * 1000000;
   } else if (var == "cache_min_flush_age") {
     if (interr.length()) {
       ss << "error parsing int '" << val << "': " << interr;
@@ -4493,7 +4513,8 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       pending_inc.new_primary_affinity[id] = ww;
       ss << "set osd." << id << " primary-affinity to " << w << " (" << ios::hex << ww << ios::dec << ")";
       getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+                                                get_last_committed() + 1));
       return true;
     }
   } else if (prefix == "osd reweight") {

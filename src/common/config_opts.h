@@ -370,6 +370,7 @@ OPTION(mds_kill_openc_at, OPT_INT, 0)
 OPTION(mds_kill_journal_at, OPT_INT, 0)
 OPTION(mds_kill_journal_expire_at, OPT_INT, 0)
 OPTION(mds_kill_journal_replay_at, OPT_INT, 0)
+OPTION(mds_journal_format, OPT_U32, 1)  // Default to most recent JOURNAL_FORMAT_*
 OPTION(mds_kill_create_at, OPT_INT, 0)
 OPTION(mds_inject_traceless_reply_probability, OPT_DOUBLE, 0) /* percentage
 				of MDS modify replies to skip sending the
@@ -381,6 +382,11 @@ OPTION(max_mds, OPT_INT, 1)
 OPTION(mds_standby_for_name, OPT_STR, "")
 OPTION(mds_standby_for_rank, OPT_INT, -1)
 OPTION(mds_standby_replay, OPT_BOOL, false)
+OPTION(mds_enable_op_tracker, OPT_BOOL, true) // enable/disable MDS op tracking
+OPTION(mds_op_history_size, OPT_U32, 20)    // Max number of completed ops to track
+OPTION(mds_op_history_duration, OPT_U32, 600) // Oldest completed op to track
+OPTION(mds_op_complaint_time, OPT_FLOAT, 30) // how many seconds old makes an op complaint-worthy
+OPTION(mds_op_log_threshold, OPT_INT, 5) // how many op log messages to show in one go
 
 // If true, compact leveldb store on mount
 OPTION(osd_compact_leveldb_on_mount, OPT_BOOL, false)
