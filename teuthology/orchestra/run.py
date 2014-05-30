@@ -125,6 +125,15 @@ class RemoteProcess(object):
             return self.returncode
         return None
 
+    def __repr__(self):
+        return '{classname}(client={client!r}, args={args!r}, check_status={check}, hostname={name!r})'.format(  # noqa
+            classname=self.__class__.__name__,
+            client=self.client,
+            args=self.args,
+            check=self.check_status,
+            name=self.hostname,
+            )
+
 
 class Raw(object):
 
