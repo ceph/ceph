@@ -42,26 +42,26 @@ public:
     if (parameters.count("jerasure-variant")) {
       dout(10) << "jerasure-variant " 
 	       << parameters.find("jerasure-variant")->second << dendl;
-	ret = instance.factory(name + "_" + parameters.find("jerasure-variant")->second,
-			       parameters, erasure_code, ss);
+      ret = instance.factory(name + "_" + parameters.find("jerasure-variant")->second,
+			     parameters, erasure_code, ss);
     } else {
-    if (ceph_arch_intel_pclmul &&
-	ceph_arch_intel_sse42 &&
-	ceph_arch_intel_sse41 &&
-	ceph_arch_intel_ssse3 &&
-	ceph_arch_intel_sse3 &&
-	ceph_arch_intel_sse2) {
-      dout(10) << "SSE4 plugin" << dendl;
-      ret = instance.factory(name + "_sse4", parameters, erasure_code, ss);
-    } else if (ceph_arch_intel_ssse3 &&
-	       ceph_arch_intel_sse3 &&
-	       ceph_arch_intel_sse2) {
-      dout(10) << "SSE3 plugin" << dendl;
-      ret = instance.factory(name + "_sse3", parameters, erasure_code, ss);
-    } else {
-      dout(10) << "generic plugin" << dendl;
-      ret = instance.factory(name + "_generic", parameters, erasure_code, ss);
-    }
+      if (ceph_arch_intel_pclmul &&
+	  ceph_arch_intel_sse42 &&
+	  ceph_arch_intel_sse41 &&
+	  ceph_arch_intel_ssse3 &&
+	  ceph_arch_intel_sse3 &&
+	  ceph_arch_intel_sse2) {
+	dout(10) << "SSE4 plugin" << dendl;
+	ret = instance.factory(name + "_sse4", parameters, erasure_code, ss);
+      } else if (ceph_arch_intel_ssse3 &&
+		 ceph_arch_intel_sse3 &&
+		 ceph_arch_intel_sse2) {
+	dout(10) << "SSE3 plugin" << dendl;
+	ret = instance.factory(name + "_sse3", parameters, erasure_code, ss);
+      } else {
+	dout(10) << "generic plugin" << dendl;
+	ret = instance.factory(name + "_generic", parameters, erasure_code, ss);
+      }
     }
     if (ret)
       derr << ss.str() << dendl;
