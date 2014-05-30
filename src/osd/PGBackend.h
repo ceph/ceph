@@ -177,6 +177,7 @@
        vector<pg_log_entry_t> &logv,
        boost::optional<pg_hit_set_history_t> &hset_history,
        const eversion_t &trim_to,
+       const eversion_t &trim_rollback_to,
        bool transaction_applied,
        ObjectStore::Transaction *t) = 0;
 
@@ -492,6 +493,7 @@
      const eversion_t &at_version,        ///< [in] version
      PGTransaction *t,                    ///< [in] trans to execute
      const eversion_t &trim_to,           ///< [in] trim log to here
+     const eversion_t &trim_rollback_to,  ///< [in] trim rollback info to here
      vector<pg_log_entry_t> &log_entries, ///< [in] log entries for t
      /// [in] hitset history (if updated with this transaction)
      boost::optional<pg_hit_set_history_t> &hset_history,
