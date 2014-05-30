@@ -19,6 +19,7 @@
 #include "common/config.h"
 #include "include/utime.h"
 #include "common/Clock.h"
+#include "tracing/mutex.tp.h"
 
 Mutex::Mutex(const char *n, bool r, bool ld,
 	     bool bt,
@@ -77,20 +78,27 @@ Mutex::~Mutex() {
 }
 
 void Mutex::Lock(bool no_lockdep) {
+  utime_t start;
+  int r;
+
+  tracepoint(mutex, lock_enter, this, name);
+
   if (lockdep && g_lockdep && !no_lockdep) _will_lock();
 
   if (TryLock()) {
-    return;
+    goto out;
   }
 
-  utime_t start;
   if (logger && cct && cct->_conf->mutex_perf_counter)
     start = ceph_clock_now(cct);
-  int r = pthread_mutex_lock(&_m);
+  r = pthread_mutex_lock(&_m);
   if (logger && cct && cct->_conf->mutex_perf_counter)
     logger->tinc(l_mutex_wait,
 		 ceph_clock_now(cct) - start);
   assert(r == 0);
   if (lockdep && g_lockdep) _locked();
   _post_lock();
+
+out:
+  tracepoint(mutex, lock_exit, this, name);
 }

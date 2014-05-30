@@ -156,6 +156,7 @@ LIBRBD = librbd.la
 LIBKRBD = libkrbd.la
 LIBCEPHFS = libcephfs.la
 LIBERASURE_CODE = liberasure_code.la
+LIBTRACEPOINTS = tracing/libtracepoints.la
 
 if WITH_LIBAIO
 LIBOS += -laio
