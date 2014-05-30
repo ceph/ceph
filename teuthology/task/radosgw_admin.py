@@ -699,7 +699,16 @@ def task(ctx, config):
     key.delete()
 
     # link the bucket to another user
-    (err, out) = rgwadmin(ctx, client, ['bucket', 'link', '--uid', user2, '--bucket', bucket_name],
+    (err, out) = rgwadmin(ctx, client, ['metadata', 'get', 'bucket:{n}'.format(n=bucket_name)],
+        check_status=True)
+
+    bucket_data = out['data']
+    assert bucket_data['bucket']['name'] == bucket_name
+
+    bucket_id = bucket_data['bucket']['bucket_id']
+
+    # link the bucket to another user
+    (err, out) = rgwadmin(ctx, client, ['bucket', 'link', '--uid', user2, '--bucket', bucket_name, '--bucket-id', bucket_id],
         check_status=True)
 
     # try to remove user, should fail (has a linked bucket)
@@ -712,7 +721,7 @@ def task(ctx, config):
 
     # relink the bucket to the first user and delete the second user
     (err, out) = rgwadmin(ctx, client,
-        ['bucket', 'link', '--uid', user1, '--bucket', bucket_name],
+        ['bucket', 'link', '--uid', user1, '--bucket', bucket_name, '--bucket-id', bucket_id],
         check_status=True)
 
     (err, out) = rgwadmin(ctx, client, ['user', 'rm', '--uid', user2],
