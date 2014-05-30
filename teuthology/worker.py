@@ -235,6 +235,9 @@ def main(ctx):
                 '--name',
                 job_config['name'],
             ]
+            # Execute teuthology-results, passing 'preexec_fn=os.setpgrp' to
+            # make sure that it will continue to run if this worker process
+            # dies (e.g. because of a restart)
             result_pid = subprocess.Popen(args=args,
                                           preexec_fn=os.setpgrp,).pid
             log.info("teuthology-results PID: %s", result_pid)
