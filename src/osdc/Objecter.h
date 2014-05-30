@@ -1097,7 +1097,7 @@ public:
     void dump(Formatter *f) const;
   };
 
-  struct Op {
+  struct Op : public RefCountedObject {
     OSDSession *session;
     int incarnation;
 
@@ -1164,15 +1164,17 @@ public:
       if (target.base_oloc.key == o)
 	target.base_oloc.key.clear();
     }
+
+    bool operator<(const Op& other) const {
+      return tid < other.tid;
+    }
+
+  private:
     ~Op() {
       while (!out_handler.empty()) {
 	delete out_handler.back();
 	out_handler.pop_back();
       }
-    }
-
-    bool operator<(const Op& other) const {
-      return tid < other.tid;
     }
   };
 

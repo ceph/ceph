@@ -388,6 +388,8 @@ void Objecter::unregister_linger(uint64_t linger_id)
 
 void Objecter::_unregister_linger(uint64_t linger_id)
 {
+  assert(rwlock.is_wlocked());
+
   map<uint64_t, LingerOp*>::iterator iter = linger_ops.find(linger_id);
   if (iter != linger_ops.end()) {
     LingerOp *info = iter->second;
@@ -848,6 +850,8 @@ void Objecter::C_Op_Map_Latest::finish(int r)
     op->map_dne_bound = latest;
 
   objecter->_check_op_pool_dne(op, false);
+
+  op->put();
 }
 
 int Objecter::pool_snap_by_name(int64_t poolid, const char *snap_name, snapid_t *snap)
@@ -941,6 +945,7 @@ void Objecter::_send_op_map_check(Op *op)
   assert(rwlock.is_wlocked());
   // ask the monitor
   if (check_latest_map_ops.count(op->tid) == 0) {
+    op->get();
     check_latest_map_ops[op->tid] = op;
     C_Op_Map_Latest *c = new C_Op_Map_Latest(this, op->tid);
     monc->get_version("osdmap", &c->latest, NULL, c);
@@ -953,6 +958,8 @@ void Objecter::_op_cancel_map_check(Op *op)
   map<ceph_tid_t, Op*>::iterator iter =
     check_latest_map_ops.find(op->tid);
   if (iter != check_latest_map_ops.end()) {
+    Op *op = iter->second;
+    op->put();
     check_latest_map_ops.erase(iter);
   }
 }
@@ -1536,7 +1543,7 @@ ceph_tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
     r = _calc_target(&op->target);
     check_for_latest_map = (r == RECALC_OP_TARGET_POOL_DNE);
     if (_get_session(op->target.osd, &s, lc) == -EAGAIN ||
-        check_for_latest_map) {
+        (check_for_latest_map && lc.is_rlocked())) {
       lc.promote();
       continue;
     }
@@ -2026,10 +2033,10 @@ void Objecter::_finish_op(Op *op)
 {
   ldout(cct, 15) << "finish_op " << op->tid << dendl;
 
+  assert(op->session->lock.is_wlocked());
+
   if (op->budgeted)
     put_op_budget(op);
-
-  assert(op->session->lock.is_wlocked());
 
   op->session->ops.erase(op->tid);
 
@@ -2045,7 +2052,7 @@ void Objecter::_finish_op(Op *op)
 
   inflight_ops.dec();
 
-  delete op;
+  op->put();
 }
 
 void Objecter::finish_op(OSDSession *session, ceph_tid_t tid)
