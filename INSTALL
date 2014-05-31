@@ -1,17 +1,21 @@
 Installation Instructions
 *************************
 
-If pulling from git, you first need to build the configure script with
+When pulling from git, use the --recursive option to include sub-modules:
+
+$ git clone --recursive https://github.com/ceph/ceph.git
+
+And then build the configure script with:
 
 $ ./autogen.sh
 
-Then,
+Then the usual:
 
 $ ./configure
 $ make
 
 Note that if the FUSE library is not found, the user-space fuse client
-will not be built.  
+will not be built.
 
 If you are doing development, you may want to do
 
