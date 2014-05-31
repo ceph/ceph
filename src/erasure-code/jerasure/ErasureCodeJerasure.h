@@ -52,15 +52,8 @@ public:
 
   virtual unsigned int get_chunk_size(unsigned int object_size) const;
 
-  virtual int minimum_to_decode(const set<int> &want_to_read,
-                                const set<int> &available_chunks,
-                                set<int> *minimum);
   virtual int encode_chunks(const set<int> &want_to_encode,
 			    map<int, bufferlist> *encoded);
-
-  virtual int minimum_to_decode_with_cost(const set<int> &want_to_read,
-                                          const map<int, int> &available,
-                                          set<int> *minimum);
 
   virtual int decode_chunks(const set<int> &want_to_read,
 			    const map<int, bufferlist> &chunks,

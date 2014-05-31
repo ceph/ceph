@@ -14,7 +14,43 @@
  * 
  */
 
+#include <errno.h>
+#include <vector>
+#include <algorithm>
+
 #include "ErasureCode.h"
+
+int ErasureCode::minimum_to_decode(const set<int> &want_to_read,
+                                   const set<int> &available_chunks,
+                                   set<int> *minimum)
+{
+  if (includes(available_chunks.begin(), available_chunks.end(),
+	       want_to_read.begin(), want_to_read.end())) {
+    *minimum = want_to_read;
+  } else {
+    unsigned int k = get_data_chunk_count();
+    if (available_chunks.size() < (unsigned)k)
+      return -EIO;
+    set<int>::iterator i;
+    unsigned j;
+    for (i = available_chunks.begin(), j = 0; j < (unsigned)k; ++i, j++)
+      minimum->insert(*i);
+  }
+  return 0;
+}
+
+int ErasureCode::minimum_to_decode_with_cost(const set<int> &want_to_read,
+                                             const map<int, int> &available,
+                                             set<int> *minimum)
+{
+  set <int> available_chunks;
+  for (map<int, int>::const_iterator i = available.begin();
+       i != available.end();
+       ++i)
+    available_chunks.insert(i->first);
+  return minimum_to_decode(want_to_read, available_chunks, minimum);
+}
+
 int ErasureCode::encode_prepare(const bufferlist &raw,
                                 bufferlist *prepared) const
 {
