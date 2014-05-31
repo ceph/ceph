@@ -257,7 +257,7 @@ void ThreadPool::drain(WorkQueue_* wq)
 
 ShardedThreadPool::ShardedThreadPool(CephContext *pcct_, string nm, uint32_t pnum_threads):
   cct(pcct_), name(nm), lockname(nm + "::lock"), shardedpool_lock(lockname.c_str()), num_threads(pnum_threads), 
-  stop_threads(0), pause_threads(0),drain_threads(0), in_process(0), num_paused(0), num_drained(0), wq(NULL) {}
+  stop_threads(0), pause_threads(0),drain_threads(0), num_paused(0), num_drained(0), wq(NULL) {}
 
 void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
 {
