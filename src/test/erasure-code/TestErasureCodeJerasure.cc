@@ -357,8 +357,8 @@ int main(int argc, char **argv)
 
 /* 
  * Local Variables:
- * compile-command: "cd ../.. ; make -j4 && 
- *   make unittest_erasure_code_jerasure && 
+ * compile-command: "cd ../.. ;
+ *   make -j4 unittest_erasure_code_jerasure &&
  *   valgrind --tool=memcheck --leak-check=full \
  *      ./unittest_erasure_code_jerasure \
  *      --gtest_filter=*.* --log-to-stderr=true --debug-osd=20"

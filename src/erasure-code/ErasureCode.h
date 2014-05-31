@@ -30,6 +30,14 @@ namespace ceph {
   public:
     virtual ~ErasureCode() {}
 
+    virtual int minimum_to_decode(const set<int> &want_to_read,
+                                  const set<int> &available_chunks,
+                                  set<int> *minimum);
+
+    virtual int minimum_to_decode_with_cost(const set<int> &want_to_read,
+                                            const map<int, int> &available,
+                                            set<int> *minimum);
+
     int encode_prepare(const bufferlist &raw, bufferlist *prepared) const;
 
     virtual int encode(const set<int> &want_to_encode,
