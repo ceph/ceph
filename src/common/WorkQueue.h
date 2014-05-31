@@ -435,7 +435,7 @@ class ShardedThreadPool {
   string name;
   string lockname;
   Mutex shardedpool_lock;
-  Cond shardedpol_cond;
+  Cond shardedpool_cond;
   Cond wait_cond;
   uint32_t num_threads;
   atomic_t stop_threads;
