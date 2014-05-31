@@ -53,7 +53,7 @@ void AppendGenerator::get_ranges_map(
     }
     if (alignment)
       assert(segment_length % alignment == 0);
-    out.insert(make_pair(pos, segment_length));
+    out.insert(pair<uint64_t, uint64_t>(pos, segment_length));
     pos += segment_length;
   }
 }
@@ -72,7 +72,7 @@ void VarLenGenerator::get_ranges_map(
       segment_length = limit - pos;
     }
     if (include) {
-      out.insert(make_pair(pos, segment_length));
+      out.insert(pair<uint64_t, uint64_t>(pos, segment_length));
       include = false;
     } else {
       include = true;
@@ -108,7 +108,9 @@ ObjectDesc::iterator &ObjectDesc::iterator::advance(bool init) {
   interval_set<uint64_t> ranges;
   cur_cont->first->get_ranges(cur_cont->second, ranges);
   while (!ranges.contains(pos)) {
-    stack.push_front(make_pair(cur_cont, limit));
+    stack.push_front(pair<list<pair<ceph::shared_ptr<ContentsGenerator>,
+				    ContDesc> >::iterator,
+		     uint64_t>(cur_cont, limit));
     uint64_t length = cur_cont->first->get_length(cur_cont->second);
     uint64_t next;
     if (pos >= length) {
@@ -153,7 +155,7 @@ const ContDesc &ObjectDesc::most_recent() {
 }
 
 void ObjectDesc::update(ContentsGenerator *gen, const ContDesc &next) {
-  layers.push_front(make_pair(gen, next));
+  layers.push_front(pair<ceph::shared_ptr<ContentsGenerator>, ContDesc>(ceph::shared_ptr<ContentsGenerator>(gen), next));
   return;
 }
 
