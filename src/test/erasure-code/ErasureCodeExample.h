@@ -24,7 +24,7 @@
 
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
-#include "erasure-code/ErasureCodeInterface.h"
+#include "erasure-code/ErasureCode.h"
 
 #define FIRST_DATA_CHUNK 0
 #define SECOND_DATA_CHUNK 1
@@ -35,7 +35,7 @@
 
 #define MINIMUM_TO_RECOVER 2u
 
-class ErasureCodeExample : public ErasureCodeInterface {
+class ErasureCodeExample : public ErasureCode {
 public:
   virtual ~ErasureCodeExample() {}
 

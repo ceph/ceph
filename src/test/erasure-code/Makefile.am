@@ -73,7 +73,9 @@ libec_test_jerasure_generic_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libec_test_jerasure_generic_la_LDFLAGS = ${AM_LDFLAGS} -export-symbols-regex '.*__erasure_code_.*'
 erasure_codelib_LTLIBRARIES += libec_test_jerasure_generic.la
 
-unittest_erasure_code_plugin_SOURCES = test/erasure-code/TestErasureCodePlugin.cc 
+unittest_erasure_code_plugin_SOURCES = \
+	erasure-code/ErasureCode.cc \
+	test/erasure-code/TestErasureCodePlugin.cc 
 unittest_erasure_code_plugin_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_erasure_code_plugin_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 if LINUX
@@ -106,26 +108,30 @@ endif
 check_PROGRAMS += unittest_erasure_code_plugin_jerasure
 
 if WITH_BETTER_YASM_ELF64
-unittest_erasure_code_isa_SOURCES = test/erasure-code/TestErasureCodeIsa.cc
+unittest_erasure_code_isa_SOURCES = \
+	erasure-code/ErasureCode.cc \
+	test/erasure-code/TestErasureCodeIsa.cc
 unittest_erasure_code_isa_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-unittest_erasure_code_isa_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL) .libs/libec_isa.la .libs/liberasure_code.la
+unittest_erasure_code_isa_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL) .libs/libec_isa.la $(LIBERASURE_CODE)
 if LINUX
 unittest_erasure_code_isa_LDADD += -ldl
 endif
 check_PROGRAMS += unittest_erasure_code_isa
 
 unittest_erasure_code_plugin_isa_SOURCES = \
+	erasure-code/ErasureCode.cc \
 	test/erasure-code/TestErasureCodePluginIsa.cc
 unittest_erasure_code_plugin_isa_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-unittest_erasure_code_plugin_isa_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL) .libs/libec_isa.la .libs/liberasure_code.la
+unittest_erasure_code_plugin_isa_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL) .libs/libec_isa.la $(LIBERASURE_CODE)
 if LINUX
 unittest_erasure_code_plugin_isa_LDADD += -ldl
 endif
 check_PROGRAMS += unittest_erasure_code_plugin_isa
 endif
 
-unittest_erasure_code_example_SOURCES = test/erasure-code/TestErasureCodeExample.cc 
-
+unittest_erasure_code_example_SOURCES = \
+	erasure-code/ErasureCode.cc \
+	test/erasure-code/TestErasureCodeExample.cc
 noinst_HEADERS += test/erasure-code/ErasureCodeExample.h
 unittest_erasure_code_example_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_erasure_code_example_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
