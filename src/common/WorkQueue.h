@@ -441,7 +441,6 @@ class ShardedThreadPool {
   atomic_t stop_threads;
   atomic_t pause_threads;
   atomic_t drain_threads;
-  atomic_t in_process; 
   uint32_t num_paused;
   uint32_t num_drained;
 
