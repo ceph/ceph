@@ -30,6 +30,16 @@ TRACEPOINT_EVENT(mutex, lock_exit,
     )
 )
 
+TRACEPOINT_EVENT(mutex, unlock,
+    TP_ARGS(
+        const void *, addr,
+        const char *, name),
+    TP_FIELDS(
+        ctf_integer_hex(unsigned long, addr, addr)
+        ctf_string(name, name)
+    )
+)
+
 #endif /* MUTEX_TP_H */
 
 #include <lttng/tracepoint-event.h>
