@@ -3,7 +3,7 @@
 branch="$1"
 if [ -z "$branch" ]; then branch="master"; fi
 
-export COVDIR="$HOME/cov-analysis-linux64-6.0.2"
+export COVDIR="$HOME/cov-analysis"
 if [ ! -d "$COVDIR" ]; then
     echo "missing $COVDIR; get that from coverity!"
     exit 1
