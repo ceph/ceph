@@ -102,3 +102,11 @@ void Mutex::Lock(bool no_lockdep) {
 out:
   tracepoint(mutex, lock_exit, this, name);
 }
+
+void Mutex::Unlock() {
+  _pre_unlock();
+  if (lockdep && g_lockdep) _will_unlock();
+  int r = pthread_mutex_unlock(&_m);
+  assert(r == 0);
+  tracepoint(mutex, unlock, this, name);
+}
