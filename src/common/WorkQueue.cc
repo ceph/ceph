@@ -275,7 +275,7 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
       wait_cond.Signal();
       while(pause_threads.read()) {
        cct->get_heartbeat_map()->reset_timeout(hb, 4, 0);
-       shardedpol_cond.WaitInterval(cct, shardedpool_lock, utime_t(2, 0));
+       shardedpool_cond.WaitInterval(cct, shardedpool_lock, utime_t(2, 0));
       }
       --num_paused;
       shardedpool_lock.Unlock();
@@ -287,7 +287,7 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
         wait_cond.Signal();
         while (drain_threads.read()) {
           cct->get_heartbeat_map()->reset_timeout(hb, 4, 0);
-          shardedpol_cond.WaitInterval(cct, shardedpool_lock, utime_t(2, 0));
+          shardedpool_cond.WaitInterval(cct, shardedpool_lock, utime_t(2, 0));
         }
         --num_drained;
       }
@@ -374,7 +374,7 @@ void ShardedThreadPool::unpause()
   ldout(cct,10) << "unpause" << dendl;
   shardedpool_lock.Lock();
   pause_threads.set(0);
-  shardedpol_cond.Signal();
+  shardedpool_cond.Signal();
   shardedpool_lock.Unlock();
   ldout(cct,10) << "unpaused" << dendl;
 }
@@ -390,6 +390,7 @@ void ShardedThreadPool::drain()
     wait_cond.Wait(shardedpool_lock);
   }
   drain_threads.set(0);
+  shardedpool_cond.Signal();
   shardedpool_lock.Unlock();
   ldout(cct,10) << "drained" << dendl;
 }
