@@ -67,6 +67,9 @@ The instructions below detail the setup for Glance, Cinder and Nova, although
 they do not have to be used together. You may store images in Ceph block devices
 while running VMs using a local disk, or vice versa.
 
+.. important:: Ceph doesn’t support QCOW2 for hosting virtual machine disk. Thus if you want
+  to boot virtual machines in Ceph (ephemeral backend or boot from volume), Glance image format must be RAW.
+
 .. tip:: This document describes using Ceph Block Devices with OpenStack Havana.
    For earlier versions of OpenStack see
    `Block Devices and OpenStack (Dumpling)`_.
@@ -83,6 +86,7 @@ your Ceph cluster is running, then create the pools. ::
     ceph osd pool create volumes 128
     ceph osd pool create images 128
     ceph osd pool create backups 128
+    ceph osd pool create vms 128
 
 See `Create a Pool`_ for detail on specifying the number of placement groups for
 your pools, and `Placement Groups`_ for details on the number of placement
@@ -121,7 +125,7 @@ Setup Ceph Client Authentication
 If you have `cephx authentication`_ enabled, create a new user for Nova/Cinder
 and Glance. Execute the following::
 
-    ceph auth get-or-create client.cinder mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=volumes, allow rx pool=images'
+    ceph auth get-or-create client.cinder mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=volumes, allow rwx pool=vms, allow rx pool=images'
     ceph auth get-or-create client.glance mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=images'
     ceph auth get-or-create client.cinder-backup mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=backups'
 
@@ -230,21 +234,34 @@ On your Cinder Backup node, edit ``/etc/cinder/cinder.conf`` and add::
     restore_discard_excess_bytes=true
 
 
+Configuring Nova to attach Ceph RBD block device
+------------------------------------------------
+
+In order to be able to attach Cinder devices (either normal block or by issuing a boot from volume), you must tell Nova (and libvirt)
+which user and UUID to refer to when attaching the device.
+This user will be used by libvirt to connect/authenticate to the Ceph cluster.
+
+    rbd_user=cinder
+    rbd_secret_uuid=457eb676-33da-42ec-9a8c-9293d545c337
+
+These two flags are also used by the Nova ephemeral backend.
+
+
 Configuring Nova
 ----------------
 
-In order to boot all the virtual machines directly into Ceph Nova must
-be configured.
+In order to boot all the virtual machines directly into Ceph, the ephemeral backend for Nova must be configured.
 
 For Havana and Icehouse, more patches are required to implement
-cloning and fix bugs with image size and live migration of ephemeral
+copy on write cloning and fix bugs with image size and live migration of ephemeral
 disks on rbd. These are available in branches based on upstream Nova
 `stable/havana`_ and `stable/icehouse`_.
+Using them is not mandatory but highly recommended in order to take advantage of the copy-on-write clone functionality.
 
 On every Compute nodes, edit ``/etc/nova/nova.conf`` and add::
 
     libvirt_images_type=rbd
-    libvirt_images_rbd_pool=volumes
+    libvirt_images_rbd_pool=vms
     libvirt_images_rbd_ceph_conf=/etc/ceph/ceph.conf
     rbd_user=cinder
     rbd_secret_uuid=457eb676-33da-42ec-9a8c-9293d545c337
@@ -259,8 +276,28 @@ On every Compute nodes, edit ``/etc/nova/nova.conf`` and add::
     libvirt_inject_key=false
     libvirt_inject_partition=-2
 
+To ensure a proper live-migration, use the following flags::
+
+    libvirt_live_migration_flag="VIR_MIGRATE_UNDEFINE_SOURCE,VIR_MIGRATE_PEER2PEER,VIR_MIGRATE_LIVE,VIR_MIGRATE_PERSIST_DEST"
+
 .. _stable/havana: https://github.com/jdurgin/nova/tree/havana-ephemeral-rbd
 .. _stable/icehouse: https://github.com/angdraug/nova/tree/rbd-ephemeral-clone-stable-icehouse
+
+
+Configuring Cinder Backup
+-------------------------
+
+OpenStack Cinder Backup requires a specific daemon so don't forget to install it.
+On your Cinder Backup node, edit ``/etc/cinder/cinder.conf`` and add::
+
+    backup_driver=cinder.backup.drivers.ceph
+    backup_ceph_conf=/etc/ceph/ceph.conf
+    backup_ceph_user=cinder-backup
+    backup_ceph_chunk_size=134217728
+    backup_ceph_pool=backups
+    backup_ceph_stripe_unit=0
+    backup_ceph_stripe_count=0
+    restore_discard_excess_bytes=true
 
 
 Restart OpenStack
