@@ -184,6 +184,22 @@ placement groups for your pool.
 .. _Placement Groups: ../placement-groups
  
 
+
+Set Pool Quotas
+===============
+
+You can set pool quotas for the maximum number of bytes and/or the maximum 
+number of objects per pool. ::
+
+	ceph osd pool set-quota {pool-name} [max-objects {obj-count}] [max_bytes {bytes}] 
+
+For example:: 
+
+	ceph osd pool set-quota data max-objects 10000
+
+To remove a quota, set its value to ``0``.
+
+
 Delete a Pool
 =============
 
