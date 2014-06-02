@@ -321,7 +321,7 @@ def make_response(fmt, output, statusmsg, errorcode):
             try:
                 native_output = json.loads(output or '[]')
                 response = json.dumps({"output":native_output,
-                                       "status":statusmsg})
+                                       "status":statusmsg}, indent=2)
             except:
                 return flask.make_response("Error decoding JSON from " + output, 500)
         elif 'xml' in fmt:
