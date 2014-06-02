@@ -553,7 +553,8 @@
      const hobject_t &start,
      const hobject_t &end,
      snapid_t seq,
-     vector<hobject_t> *ls);
+     vector<hobject_t> *ls,
+     vector<ghobject_t> *gen_obs=0);
 
    int objects_get_attr(
      const hobject_t &hoid,

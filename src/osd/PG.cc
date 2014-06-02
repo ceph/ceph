@@ -1442,7 +1442,7 @@ void PG::activate(ObjectStore::Transaction& t,
     min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
   }
   last_update_applied = info.last_update;
-
+  last_rollback_info_trimmed_to_applied = pg_log.get_rollback_trimmed_to();
 
   need_up_thru = false;
 
@@ -2661,10 +2661,20 @@ void PG::append_log(
   PGLogEntryHandler handler;
   if (!transaction_applied) {
     pg_log.clear_can_rollback_to(&handler);
+    t.register_on_applied(
+      new C_UpdateLastRollbackInfoTrimmedToApplied(
+	this,
+	get_osdmap()->get_epoch(),
+	info.last_update));
   } else if (trim_rollback_to > pg_log.get_rollback_trimmed_to()) {
     pg_log.trim_rollback_info(
       trim_rollback_to,
       &handler);
+    t.register_on_applied(
+      new C_UpdateLastRollbackInfoTrimmedToApplied(
+	this,
+	get_osdmap()->get_epoch(),
+	trim_rollback_to));
   }
 
   dout(10) << "append_log  adding " << keys.size() << " keys" << dendl;
@@ -3274,6 +3284,34 @@ void PG::scrub_unreserve_replicas()
   }
 }
 
+void PG::_scan_rollback_obs(
+  const vector<ghobject_t> &rollback_obs,
+  ThreadPool::TPHandle &handle)
+{
+  ObjectStore::Transaction *t = NULL;
+  eversion_t trimmed_to = last_rollback_info_trimmed_to_applied;
+  for (vector<ghobject_t>::const_iterator i = rollback_obs.begin();
+       i != rollback_obs.end();
+       ++i) {
+    if (i->generation < trimmed_to.version) {
+      osd->clog.error() << "osd." << osd->whoami
+			<< " pg " << info.pgid
+			<< " found obsolete rollback obj "
+			<< *i << " generation < trimmed_to "
+			<< trimmed_to
+			<< "...repaired";
+      if (!t)
+	t = new ObjectStore::Transaction;
+      t->remove(coll, *i);
+    }
+  }
+  if (t) {
+    derr << __func__ << ": queueing trans to clean up obsolete rollback objs"
+	 << dendl;
+    osd->store->queue_transaction_and_cleanup(osr.get(), t);
+  }
+}
+
 void PG::_scan_snaps(ScrubMap &smap) 
 {
   for (map<hobject_t, ScrubMap::object>::iterator i = smap.objects.begin();
@@ -3361,13 +3399,21 @@ int PG::build_scrub_map_chunk(
 
   // objects
   vector<hobject_t> ls;
-  int ret = get_pgbackend()->objects_list_range(start, end, 0, &ls);
+  vector<ghobject_t> rollback_obs;
+  int ret = get_pgbackend()->objects_list_range(
+    start,
+    end,
+    0,
+    &ls,
+    &rollback_obs);
   if (ret < 0) {
     dout(5) << "objects_list_range error: " << ret << dendl;
     return ret;
   }
 
+
   get_pgbackend()->be_scan_list(map, ls, deep, handle);
+  _scan_rollback_obs(rollback_obs, handle);
   _scan_snaps(map);
 
   // pg attrs
