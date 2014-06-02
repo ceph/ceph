@@ -34,10 +34,11 @@ def main(args):
 def kill_run(run_name, archive_base=None, owner=None, machine_type=None,
              preserve_queue=False):
     run_info = {}
+    serializer = report.ResultsSerializer(archive_base)
     if archive_base:
         run_archive_dir = os.path.join(archive_base, run_name)
         if os.path.isdir(run_archive_dir):
-            run_info = find_run_info(run_archive_dir)
+            run_info = find_run_info(serializer, run_name)
             machine_type = run_info['machine_type']
             owner = run_info['owner']
         elif machine_type is None:
@@ -55,53 +56,35 @@ def kill_run(run_name, archive_base=None, owner=None, machine_type=None,
 
 def kill_job(run_name, job_id, archive_base=None, owner=None,
              machine_type=None):
-    job_archive_dir = os.path.join(archive_base, run_name, job_id)
-    job_info = find_job_info(job_archive_dir)
+    serializer = report.ResultsSerializer(archive_base)
+    job_info = serializer.job_info(run_name, job_id)
     owner = job_info['owner']
     kill_processes(run_name, [job_info.get('pid')])
     targets = dict(targets=job_info.get('targets', {}))
     nuke_targets(targets, owner)
 
 
-def find_run_info(run_archive_dir):
+def find_run_info(serializer, run_name):
     log.info("Assembling run information...")
     run_info_fields = [
         'machine_type',
         'owner',
     ]
 
-    run_info = dict(pids=[])
+    pids = []
+    run_info = {}
     job_info = {}
-    for job_id in os.listdir(run_archive_dir):
-        job_dir = os.path.join(run_archive_dir, job_id)
+    for (job_id, job_dir) in serializer.jobs_for_run(run_name).iteritems():
         if not os.path.isdir(job_dir):
             continue
-        job_info = find_job_info(job_dir)
+        job_info = serializer.job_info(run_name, job_id)
         for key in job_info.keys():
             if key in run_info_fields and key not in run_info:
                 run_info[key] = job_info[key]
         if 'pid' in job_info:
-            run_info['pids'].append(job_info['pid'])
+            pids.append(job_info['pid'])
+    run_info['pids'] = pids
     return run_info
-
-
-def find_job_info(job_archive_dir):
-    job_info = {}
-
-    info_file = os.path.join(job_archive_dir, 'info.yaml')
-    if os.path.isfile(info_file):
-        job_info.update(yaml.safe_load(open(info_file, 'r')))
-
-    conf_file = os.path.join(job_archive_dir, 'config.yaml')
-    if os.path.isfile(conf_file):
-        job_info.update(yaml.safe_load(open(conf_file, 'r')))
-    else:
-        conf_file = os.path.join(job_archive_dir, 'orig.config.yaml')
-        if os.path.isfile(conf_file):
-            log.debug("config.yaml not found but orig.config.yaml found")
-            job_info.update(yaml.safe_load(open(conf_file, 'r')))
-
-    return job_info
 
 
 def remove_paddles_jobs(run_name):
