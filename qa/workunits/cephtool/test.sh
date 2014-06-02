@@ -51,6 +51,66 @@ function check_response()
 	fi
 }
 
+function get_config_value_or_die()
+{
+  local target config_opt raw val
+
+  target=$1
+  config_opt=$2
+
+  raw="`ceph daemon $target config get $config_opt 2>/dev/null`"
+  if [[ $? -ne 0 ]]; then
+    echo "error obtaining config opt '$config_opt' from '$target': $raw"
+    exit 1
+  fi
+
+  raw=`echo $raw | sed -e 's/[{} "]//g'`
+  val=`echo $raw | cut -f2 -d:`
+
+  echo "$val"
+  return 0
+}
+
+function expect_config_value()
+{
+  local target config_opt expected_val val
+  target=$1
+  config_opt=$2
+  expected_val=$3
+
+  val=$(get_config_value_or_die $target $config_opt)
+
+  if [[ "$val" != "$expected_val" ]]; then
+    echo "expected '$expected_val', got '$val'"
+    exit 1
+  fi
+}
+
+
+# Test SI units during injectargs and 'config set'
+# We only aim at testing the units are parsed accordingly
+# and don't intend to test whether the options being set
+# actually expect SI units to be passed.
+# Keep in mind that all integer based options (i.e., INT,
+# LONG, U32, U64) will accept SI unit modifiers.
+initial_value=$(get_config_value_or_die "mon.a" "mon_pg_warn_min_objects")
+ceph daemon mon.a config set mon_pg_warn_min_objects 10
+expect_config_value "mon.a" "mon_pg_warn_min_objects" 10
+ceph daemon mon.a config set mon_pg_warn_min_objects 10K
+expect_config_value "mon.a" "mon_pg_warn_min_objects" 10240
+ceph daemon mon.a config set mon_pg_warn_min_objects 1G
+expect_config_value "mon.a" "mon_pg_warn_min_objects" 1073741824
+ceph daemon mon.a config set mon_pg_warn_min_objects 10F > $TMPFILE || true
+check_response "'10F': (22) Invalid argument"
+# now test with injectargs
+ceph tell mon.a injectargs '--mon_pg_warn_min_objects 10'
+expect_config_value "mon.a" "mon_pg_warn_min_objects" 10
+ceph tell mon.a injectargs '--mon_pg_warn_min_objects 10K'
+expect_config_value "mon.a" "mon_pg_warn_min_objects" 10240
+ceph tell mon.a injectargs '--mon_pg_warn_min_objects 1G'
+expect_config_value "mon.a" "mon_pg_warn_min_objects" 1073741824
+expect_false ceph injectargs mon.a '--mon_pg_warn_min_objects 10F'
+ceph daemon mon.a config set mon_pg_warn_min_objects $initial_value
 
 # tiering
 ceph osd pool create cache 2
@@ -589,6 +649,5 @@ ceph tell osd.0 bench 409600 4096
 expect_false ceph tell osd.0 bench 51 2097152
 # but 50 must succeed
 ceph tell osd.0 bench 50 2097152
-
 
 echo OK
