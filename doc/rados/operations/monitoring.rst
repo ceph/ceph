@@ -45,24 +45,54 @@ To watch the cluster's ongoing events, open a new terminal. Then, enter::
 
 	ceph -w
 
-Ceph will print each version of the placement group map and their status.  For
-example, a tiny Ceph cluster consisting of one monitor, one metadata server and
-two OSDs may print the following:: 
+Ceph will print each event.  For example, a tiny Ceph cluster consisting of 
+one monitor, and two OSDs may print the following:: 
 
-   health HEALTH_OK
-   monmap e1: 1 mons at {a=192.168.0.1:6789/0}, election epoch 0, quorum 0 a
-   osdmap e13: 2 osds: 2 up, 2 in
-    placement groupmap v9713: 384 placement groups: 384 active+clean; 8730 bytes data, 22948 MB used, 264 GB / 302 GB avail
-   mdsmap e4: 1/1/1 up {0=a=up:active}
+    cluster b370a29d-9287-4ca3-ab57-3d824f65e339
+     health HEALTH_OK
+     monmap e1: 1 mons at {ceph1=10.0.0.8:6789/0}, election epoch 2, quorum 0 ceph1
+     osdmap e63: 2 osds: 2 up, 2 in
+      pgmap v41338: 952 pgs, 20 pools, 17130 MB data, 2199 objects
+            115 GB used, 167 GB / 297 GB avail
+                 952 active+clean
 
-	2012-08-01 11:33:53.831268 mon.0 [INF] placement groupmap v9712: 384 placement groups: 384 active+clean; 8730 bytes data, 22948 MB used, 264 GB / 302 GB avail
-	2012-08-01 11:35:31.904650 mon.0 [INF] placement groupmap v9713: 384 placement groups: 384 active+clean; 8730 bytes data, 22948 MB used, 264 GB / 302 GB avail
-	2012-08-01 11:35:53.903189 mon.0 [INF] placement groupmap v9714: 384 placement groups: 384 active+clean; 8730 bytes data, 22948 MB used, 264 GB / 302 GB avail
-	2012-08-01 11:37:31.865809 mon.0 [INF] placement groupmap v9715: 384 placement groups: 384 active+clean; 8730 bytes data, 22948 MB used, 264 GB / 302 GB avail
+    2014-06-02 15:45:21.655871 osd.0 [INF] 17.71 deep-scrub ok
+    2014-06-02 15:45:47.880608 osd.1 [INF] 1.0 scrub ok
+    2014-06-02 15:45:48.865375 osd.1 [INF] 1.3 scrub ok
+    2014-06-02 15:45:50.866479 osd.1 [INF] 1.4 scrub ok
+    2014-06-02 15:45:01.345821 mon.0 [INF] pgmap v41339: 952 pgs: 952 active+clean; 17130 MB data, 115 GB used, 167 GB / 297 GB avail
+    2014-06-02 15:45:05.718640 mon.0 [INF] pgmap v41340: 952 pgs: 1 active+clean+scrubbing+deep, 951 active+clean; 17130 MB data, 115 GB used, 167 GB / 297 GB avail
+    2014-06-02 15:45:53.997726 osd.1 [INF] 1.5 scrub ok
+    2014-06-02 15:45:06.734270 mon.0 [INF] pgmap v41341: 952 pgs: 1 active+clean+scrubbing+deep, 951 active+clean; 17130 MB data, 115 GB used, 167 GB / 297 GB avail
+    2014-06-02 15:45:15.722456 mon.0 [INF] pgmap v41342: 952 pgs: 952 active+clean; 17130 MB data, 115 GB used, 167 GB / 297 GB avail
+    2014-06-02 15:46:06.836430 osd.0 [INF] 17.75 deep-scrub ok
+    2014-06-02 15:45:55.720929 mon.0 [INF] pgmap v41343: 952 pgs: 1 active+clean+scrubbing+deep, 951 active+clean; 17130 MB data, 115 GB used, 167 GB / 297 GB avail
+
+
+The output provides:
+
+- Cluster ID
+- Cluster health status
+- The monitor map epoch and the status of the monitor quorum
+- The OSD map epoch and the status of OSDs 
+- The placement group map version
+- The number of placement groups and pools
+- The *notional* amount of data stored and the number of objects stored; and,
+- The total amount of data stored.
+
+.. topic:: How Ceph Calculates Data Usage
+
+   The ``used`` value reflects the *actual* amount of raw storage used. The 
+   ``xxx GB / xxx GB`` value means the amount available (the lesser number)
+   of the overall storage capacity of the cluster. The notional number reflects 
+   the size of the stored data before it is replicated, cloned or snapshotted.
+   Therefore, the amount of data actually stored typically exceeds the notional
+   amount stored, because Ceph creates replicas of the data and may also use 
+   storage capacity for cloning and snapshotting.
 
 
 Checking a Cluster's Usage Stats
-========================================
+================================
 
 To check a cluster's data usage and data distribution among pools, you can
 use the ``df`` option. It is similar to Linux ``df``. Execute 
@@ -117,13 +147,16 @@ In interactive mode, type ``status`` and press **Enter**. ::
 	ceph> status
 
 Ceph will print the cluster status. For example, a tiny Ceph  cluster consisting
-of one monitor, one metadata server and  two OSDs may print the following::
+of one monitor, and two OSDs may print the following::
 
-   health HEALTH_OK
-   monmap e1: 1 mons at {a=192.168.0.1:6789/0}, election epoch 0, quorum 0 a
-   osdmap e13: 2 osds: 2 up, 2 in
-    placement groupmap v9754: 384 placement groups: 384 active+clean; 8730 bytes data, 22948 MB used, 264 GB / 302 GB avail
-   mdsmap e4: 1/1/1 up {0=a=up:active}
+    cluster b370a29d-9287-4ca3-ab57-3d824f65e339
+     health HEALTH_OK
+     monmap e1: 1 mons at {ceph1=10.0.0.8:6789/0}, election epoch 2, quorum 0 ceph1
+     osdmap e63: 2 osds: 2 up, 2 in
+      pgmap v41332: 952 pgs, 20 pools, 17130 MB data, 2199 objects
+            115 GB used, 167 GB / 297 GB avail
+                   1 active+clean+scrubbing+deep
+                 951 active+clean
 
 
 Checking OSD Status
