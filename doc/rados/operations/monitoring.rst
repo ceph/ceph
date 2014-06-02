@@ -61,6 +61,46 @@ two OSDs may print the following::
 	2012-08-01 11:37:31.865809 mon.0 [INF] placement groupmap v9715: 384 placement groups: 384 active+clean; 8730 bytes data, 22948 MB used, 264 GB / 302 GB avail
 
 
+Checking a Cluster's Usage Stats
+========================================
+
+To check a cluster's data usage and data distribution among pools, you can
+use the ``df`` option. It is similar to Linux ``df``. Execute 
+the following::
+
+	ceph df
+
+The **GLOBAL** section of the output provides an overview of the amount of 
+storage your cluster uses for your data.
+
+- **SIZE:** The overall storage capacity of the cluster.
+- **AVAIL:** The amount of free space available in the cluster.
+- **RAW USED:** The amount of raw storage used.
+- **% RAW USED:** The percentage of raw storage used. Use this number in 
+  conjunction with the ``full ratio`` and ``near full ratio`` to ensure that 
+  you are not reaching your cluster's capacity. See `Storage Capacity`_ for 
+  additional details.
+
+The **POOLS** section of the output provides a list of pools and the notional 
+usage of each pool. The output from this section **DOES NOT** reflect replicas,
+clones or snapshots. For example, if you store an object with 1MB of data, the 
+notional usage will be 1MB, but the actual usage may be 2MB or more depending 
+on the number of replicas, clones and snapshots.
+
+- **NAME:** The name of the pool.
+- **ID:** The pool ID.
+- **USED:** The notional amount of data stored in kilobytes, unless the number 
+  appends **M** for megabytes or **G** for gigabytes.
+- **%USED:** The notional percentage of storage used per pool.
+- **Objects:** The notional number of objects stored per pool.
+
+.. note:: The numbers in the **POOLS** section are notional. They are not 
+   inclusive of the number of replicas, shapshots or clones. As a result, 
+   the sum of the **USED** and **%USED** amounts will not add up to the 
+   **RAW USED** and **%RAW USED** amounts in the **GLOBAL** section of the 
+   output.
+
+
 Checking a Cluster's Status
 ===========================
 
@@ -209,4 +249,4 @@ injectargs``, which relies on the monitor but doesn't require you to login
 directly to the host in question ).
 
 .. _Viewing a Configuration at Runtime: ../../configuration/ceph-conf#ceph-runtime-config
-
+.. _Storage Capacity: ../../configuration/mon-config-ref#storage-capacity
