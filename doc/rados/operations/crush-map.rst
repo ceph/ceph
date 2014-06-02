@@ -54,23 +54,25 @@ with a failed host are in a degraded state.
 .. note:: Lines of code in example boxes may extend past the edge of the box. 
    Please scroll when reading or copying longer examples.
 
+
 CRUSH Location
 ==============
 
 The location of an OSD in terms of the CRUSH map's hierarchy is referred to
 as a 'crush location'.  This location specifier takes the form of a list of
 key and value pairs describing a position.  For example, if an OSD is in a
-particular row, rack, and host, and is part of the 'default' CRUSH tree, its
-crush location could be described as::
+particular row, rack, chassis and host, and is part of the 'default' CRUSH 
+tree, its crush location could be described as::
 
-  root=default row=a rack=a12 host=foohost
+  root=default row=a rack=a2 chassis=a2a host=a2a1
 
 Note:
 
 #. Note that the order of the keys does not matter.
 #. The key name (left of ``=``) must be a valid CRUSH ``type``.  By default
-   these include root, datacenter, row, rack, chassis and host, but those types
-   can be customized to be anything appropriate by modifying the CRUSH map.
+   these include root, datacenter, room, row, pod, pdu, rack, chassis and host, 
+   but those types can be customized to be anything appropriate by modifying 
+   the CRUSH map.
 #. Not all keys need to be specified.  For example, by default, Ceph
    automatically sets a ``ceph-osd`` daemon's location to be
    ``root=default host=HOSTNAME`` (based on the output from ``hostname -s``).
@@ -198,7 +200,8 @@ There are four main sections to a CRUSH Map.
    
 #. **Bucket Types**: Bucket ``types`` define the types of buckets used in your 
    CRUSH hierarchy. Buckets consist of a hierarchical aggregation of storage 
-   locations (e.g., rows, racks, hosts, etc.) and their assigned weights.
+   locations (e.g., rows, racks, chassis, hosts, etc.) and their assigned 
+   weights.
 
 #. **Bucket Instances:** Once you define bucket types, you must declare bucket 
    instances for your hosts, and any other failure domain partitioning
@@ -216,7 +219,8 @@ to better ensure data safety and availability.
 
 .. note:: The generated CRUSH map doesn't take your larger grained failure 
    domains into account. So you should modify your CRUSH map to account for
-   larger grained failure domains such as racks, rows, data centers, etc.
+   larger grained failure domains such as chassis, racks, rows, data 
+   centers, etc.
 
 
 
@@ -274,7 +278,15 @@ For example::
 	# types
 	type 0 osd
 	type 1 host
-	type 2 rack
+	type 2 chassis
+	type 3 rack
+	type 4 row
+	type 5 pdu
+	type 6 pod
+	type 7 room
+	type 8 datacenter
+	type 9 region
+	type 10 root
 
 
 
@@ -292,9 +304,10 @@ devices and the logical elements that contain them.
 To map placement groups to OSDs across failure domains, a CRUSH map defines a
 hierarchical list of bucket types (i.e., under ``#types`` in the generated CRUSH
 map). The purpose of creating a bucket hierarchy is to segregate the
-leaf nodes by their failure domains, such as hosts, racks, rows, rooms, and data
-centers. With the exception of the leaf nodes representing OSDs, the rest of the
-hierarchy is arbitrary, and you may define it according to your own needs.
+leaf nodes by their failure domains, such as hosts, chassis, racks, power 
+distribution units, pods, rows, rooms, and data centers. With the exception of 
+the leaf nodes representing OSDs, the rest of the hierarchy is arbitrary, and 
+you may define it according to your own needs.
 
 We recommend adapting your CRUSH map to your firms's hardware naming conventions
 and using instances names that reflect the physical hardware. Your naming
@@ -328,12 +341,15 @@ and two node buckets named ``host`` and ``rack`` respectively.
 .. note:: The higher numbered ``rack`` bucket type aggregates the lower 
    numbered ``host`` bucket type. 
 
-Since leaf nodes reflect storage devices declared under the ``#devices`` list at
-the beginning of the CRUSH map, you do not need to declare them as bucket
+Since leaf nodes reflect storage devices declared under the ``#devices`` list 
+at the beginning of the CRUSH map, you do not need to declare them as bucket
 instances. The second lowest bucket type in your hierarchy usually aggregates
 the devices (i.e., it's usually the computer containing the storage media, and
 uses whatever term you prefer to describe it, such as  "node", "computer",
-"server," "host", "machine", etc.).
+"server," "host", "machine", etc.). In high density environments, it is
+increasingly common to see multiple hosts/nodes per chassis. You should account
+for chassis failure too--e.g., the need to pull a chassis if a node fails may 
+result in bringing down numerous hosts/nodes and their OSDs.
 
 When declaring a bucket instance, you must specify its type, give it a unique
 name (string), assign it a unique ID expressed as a negative integer (optional),
