@@ -267,39 +267,35 @@ def concise_sig_for_uri(sig, flavor):
         ret += '?' + '&'.join(args)
     return ret
 
-def show_human_help(prefix):
+def show_help(prefix):
     '''
-    Dump table showing commands matching prefix
+    return dictionary with commands matching prefix
     '''
-    # XXX There ought to be a better discovery mechanism than an HTML table
-    s = '<html><body><table border=1><th>Possible commands:</th><th>Method</th><th>Description</th>'
 
-    permmap = {'r':'GET', 'rw':'PUT', 'rx':'GET', 'rwx':'PUT'}
-    line = ''
+    result = []
+
     for cmdsig in sorted(app.ceph_sigdict.itervalues(), cmp=descsort):
+        obj = {}
         concise = concise_sig(cmdsig['sig'])
         flavor = cmdsig.get('flavor', 'mon')
         if flavor == 'tell':
             concise = 'tell/<target>/' + concise
         if concise.startswith(prefix):
-            line = ['<tr><td>']
             wrapped_sig = textwrap.wrap(
                 concise_sig_for_uri(cmdsig['sig'], flavor), 40
             )
+            obj['command'] = ''
             for sigline in wrapped_sig:
-                line.append(flask.escape(sigline) + '\n')
-            line.append('</td><td>')
-            line.append(permmap[cmdsig['perm']])
-            line.append('</td><td>')
-            line.append(flask.escape(cmdsig['help']))
-            line.append('</td></tr>\n')
-            s += ''.join(line)
+                obj['command'] += sigline
+            if 'w' in cmdsig['perm']:
+                obj['method'] = 'PUT'
+            else:
+                obj['method'] = 'GET'
 
-    s += '</table></body></html>'
-    if line:
-        return s
-    else:
-        return ''
+            obj['description'] = cmdsig['help']
+            result.append(obj)
+
+    return result
 
 @app.before_request
 def log_request():
@@ -327,8 +323,7 @@ def make_response(fmt, output, statusmsg, errorcode):
                 response = json.dumps({"output":native_output,
                                        "status":statusmsg})
             except:
-                return flask.make_response("Error decoding JSON from " +
-                                           output, 500)
+                return flask.make_response("Error decoding JSON from " + output, 500)
         elif 'xml' in fmt:
             # XXX
             # one is tempted to do this with xml.etree, but figuring out how
@@ -354,14 +349,15 @@ def make_response(fmt, output, statusmsg, errorcode):
         if not 200 <= errorcode < 300:
             response = response + '\n' + statusmsg + '\n'
 
-    return flask.make_response(response, errorcode)
+    response = flask.make_response(response, errorcode)
+    response.mimetype = fmt
+    return response
 
 def handler(catchall_path=None, fmt=None, target=None):
     '''
     Main endpoint handler; generic for every endpoint, including catchall.
     Handles the catchall, anything with <.fmt>, anything with embedded
-    <target>.  Partial match or ?help cause the HTML-table
-    "show_human_help" output.
+    <target>.  Partial match or ?help cause the "show_help" output.
     '''
 
     ep = catchall_path or flask.request.endpoint
@@ -415,13 +411,10 @@ def handler(catchall_path=None, fmt=None, target=None):
 
     # show "match as much as you gave me" help for unknown endpoints
     if not ep in app.ceph_urls:
-        helptext = show_human_help(prefix)
-        if helptext:
-            resp = flask.make_response(helptext, 400)
-            resp.headers['Content-Type'] = 'text/html'
-            return resp
-        else:
-            return make_response(fmt, '', 'Invalid endpoint ' + ep, 400)
+        helptext = show_help(prefix)
+        # XXX: This can be handled here to create XML or HTML output
+        fmt = 'application/json'
+        return make_response(fmt, json.dumps(helptext), 'Invalid endpoint: ' + ep, 400)
 
     found = None
     exc = ''
