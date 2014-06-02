@@ -174,8 +174,16 @@ def main(ctx):
 
     connection = beanstalk.connect()
     beanstalk.watch_tube(connection, ctx.tube)
+    result_proc = None
 
     while True:
+        # Check to see if we have a teuthology-results process hanging around
+        # and if so, read its return code so that it can exit.
+        if result_proc is not None and result_proc.poll() is not None:
+            log.debug("teuthology-results exited with code: %s",
+                      result_proc.returncode)
+            result_proc = None
+
         if need_restart():
             restart()
 
@@ -239,12 +247,8 @@ def main(ctx):
             # Execute teuthology-results, passing 'preexec_fn=os.setpgrp' to
             # make sure that it will continue to run if this worker process
             # dies (e.g. because of a restart)
-            result_pid = subprocess.Popen(args=args,
-                                          preexec_fn=os.setpgrp,).pid
-            # Indicate that we don't care about collecting its return code, so
-            # it doesn't become a zombie. We can't have zombies piling up.
-            signal.signal(signal.SIGCHLD, signal.SIG_IGN)
-            log.info("teuthology-results PID: %s", result_pid)
+            result_proc = subprocess.Popen(args=args, preexec_fn=os.setpgrp)
+            log.info("teuthology-results PID: %s", result_proc.pid)
         else:
             log.info('Creating archive dir %s', archive_path_full)
             safepath.makedirs(ctx.archive_dir, safe_archive)
