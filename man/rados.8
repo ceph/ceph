@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "RADOS" "8" "January 12, 2014" "dev" "Ceph"
+.TH "RADOS" "8" "May 29, 2014" "dev" "Ceph"
 .SH NAME
 rados \- rados object storage utility
 .
@@ -148,9 +148,16 @@ Create pool snapshot named \fIfoo\fP\&.
 Remove pool snapshot named \fIfoo\fP\&.
 .TP
 .B \fBbench\fP \fIseconds\fP \fImode\fP [ \-b \fIobjsize\fP ] [ \-t \fIthreads\fP ]
-Benchmark for seconds. The mode can be write or read. The default
+Benchmark for \fIseconds\fP\&. The mode can be \fIwrite\fP, \fIseq\fP, or
+\fIrand\fP\&. \fIseq\fP and \fIrand\fP are read benchmarks, either
+sequential or random. Before running one of the reading benchmarks,
+run a write benchmark with the \fI\-\-no\-cleanup\fP option. The default
 object size is 4 MB, and the default number of simulated threads
 (parallel writes) is 16.
+.UNINDENT
+.sp
+\fBcleanup\fP
+.INDENT 0.0
 .TP
 .B \fBlistomapkeys\fP \fIname\fP
 List all the keys stored in the object map of object name.
