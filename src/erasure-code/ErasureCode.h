@@ -17,6 +17,11 @@
 #ifndef CEPH_ERASURE_CODE_H
 #define CEPH_ERASURE_CODE_H
 
+/*! @file ErasureCode.h
+    @brief Base class for erasure code plugins implementors
+
+ */ 
+
 #include "ErasureCodeInterface.h"
 
 namespace ceph {
@@ -24,6 +29,23 @@ namespace ceph {
   class ErasureCode : public ErasureCodeInterface {
   public:
     virtual ~ErasureCode() {}
+
+    int encode_prepare(const bufferlist &raw, bufferlist *prepared) const;
+
+    virtual int encode(const set<int> &want_to_encode,
+                       const bufferlist &in,
+                       map<int, bufferlist> *encoded);
+
+    virtual int encode_chunks(const set<int> &want_to_encode,
+                              map<int, bufferlist> *encoded);
+
+    virtual int decode(const set<int> &want_to_read,
+                       const map<int, bufferlist> &chunks,
+                       map<int, bufferlist> *decoded);
+
+    virtual int decode_chunks(const set<int> &want_to_read,
+                              const map<int, bufferlist> &chunks,
+                              map<int, bufferlist> *decoded);
 
   };
 }
