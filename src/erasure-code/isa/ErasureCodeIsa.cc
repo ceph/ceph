@@ -115,104 +115,38 @@ ErasureCodeIsa::minimum_to_decode_with_cost(const set<int> &want_to_read,
   return minimum_to_decode(want_to_read, available_chunks, minimum);
 }
 
-// -----------------------------------------------------------------------------
-
-int
-ErasureCodeIsa::encode(const set<int> &want_to_encode,
-                       const bufferlist &in,
-                       map<int, bufferlist> *encoded)
+int ErasureCodeIsa::encode_chunks(const set<int> &want_to_encode,
+                                  map<int, bufferlist> *encoded)
 {
-  unsigned blocksize = get_chunk_size(in.length());
-  unsigned padded_length = blocksize * k;
-  dout(10) << "encode adjusted buffer length from " << in.length()
-    << " to " << padded_length << dendl;
-  assert(padded_length % k == 0);
-  bufferlist out(in);
-
-  if (padded_length - in.length() > 0) {
-    bufferptr pad(padded_length - in.length());
-    pad.zero();
-    out.push_back(pad);
-  }
-  unsigned coding_length = blocksize * m;
-  bufferptr coding(buffer::create_page_aligned(coding_length));
-  out.push_back(coding);
-  out.rebuild_page_aligned();
   char *chunks[k + m];
-
-  for (int i = 0; i < k + m; i++) {
-    bufferlist &chunk = (*encoded)[i];
-    chunk.substr_of(out, i * blocksize, blocksize);
-    chunks[i] = chunk.c_str();
-  }
-
-  isa_encode(&chunks[0], &chunks[k], blocksize);
-
-  for (int i = 0; i < k + m; i++) {
-    if (want_to_encode.count(i) == 0)
-      encoded->erase(i);
-  }
-
+  for (int i = 0; i < k + m; i++)
+    chunks[i] = (*encoded)[i].c_str();
+  isa_encode(&chunks[0], &chunks[k], (*encoded)[0].length());
   return 0;
 }
 
-// -----------------------------------------------------------------------------
-
-int
-ErasureCodeIsa::decode(const set<int> &want_to_read,
-                       const map<int, bufferlist> &chunks,
-                       map<int, bufferlist> *decoded)
+int ErasureCodeIsa::decode_chunks(const set<int> &want_to_read,
+                                  const map<int, bufferlist> &chunks,
+                                  map<int, bufferlist> *decoded)
 {
-  vector<int> have;
-  have.reserve(chunks.size());
-
-  for (map<int, bufferlist>::const_iterator i = chunks.begin();
-       i != chunks.end();
-       ++i) {
-    have.push_back(i->first);
-  }
-
-  if (includes(
-               have.begin(),
-               have.end(),
-               want_to_read.begin(),
-               want_to_read.end())) {
-    for (set<int>::iterator i = want_to_read.begin();
-         i != want_to_read.end();
-         ++i) {
-      (*decoded)[*i] = chunks.find(*i)->second;
-    }
-    return 0;
-  }
   unsigned blocksize = (*chunks.begin()).second.length();
   int erasures[k + m + 1];
   int erasures_count = 0;
   char *data[k];
   char *coding[m];
-
-  for (int i = 0; i < k + m; i++) {
+  for (int i =  0; i < k + m; i++) {
     if (chunks.find(i) == chunks.end()) {
       erasures[erasures_count] = i;
       erasures_count++;
-      bufferptr ptr(buffer::create_page_aligned(blocksize));
-      (*decoded)[i].push_front(ptr);
-    } else {
-      (*decoded)[i] = chunks.find(i)->second;
-      (*decoded)[i].rebuild_page_aligned();
     }
-    if (i < k) {
+    if (i < k)
       data[i] = (*decoded)[i].c_str();
-    } else {
+    else
       coding[i - k] = (*decoded)[i].c_str();
-    }
   }
   erasures[erasures_count] = -1;
-
-  if (erasures_count > 0) {
-    int retc = isa_decode(erasures, data, coding, blocksize);
-    return retc;
-  } else
-    return 0;
+  assert(erasures_count > 0);
+  return isa_decode(erasures, data, coding, blocksize);
 }
 
 // -----------------------------------------------------------------------------

@@ -27,12 +27,12 @@
 
 // -----------------------------------------------------------------------------
 #include "common/Mutex.h"
-#include "erasure-code/ErasureCodeInterface.h"
+#include "erasure-code/ErasureCode.h"
 // -----------------------------------------------------------------------------
 #include <list>
 // -----------------------------------------------------------------------------
 
-class ErasureCodeIsa : public ErasureCodeInterface {
+class ErasureCodeIsa : public ErasureCode {
 public:
   enum eMatrix {kVandermonde=0, kCauchy=1};
 
@@ -76,18 +76,16 @@ public:
   virtual int minimum_to_decode(const set<int> &want_to_read,
                                 const set<int> &available_chunks,
                                 set<int> *minimum);
+  virtual int encode_chunks(const set<int> &want_to_encode,
+			    map<int, bufferlist> *encoded);
 
   virtual int minimum_to_decode_with_cost(const set<int> &want_to_read,
                                           const map<int, int> &available,
                                           set<int> *minimum);
 
-  virtual int encode(const set<int> &want_to_encode,
-                     const bufferlist &in,
-                     map<int, bufferlist> *encoded);
-
-  virtual int decode(const set<int> &want_to_read,
-                     const map<int, bufferlist> &chunks,
-                     map<int, bufferlist> *decoded);
+  virtual int decode_chunks(const set<int> &want_to_read,
+			    const map<int, bufferlist> &chunks,
+			    map<int, bufferlist> *decoded);
 
   void init(const map<std::string, std::string> &parameters);
 
