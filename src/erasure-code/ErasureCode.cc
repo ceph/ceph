@@ -144,13 +144,34 @@ int ErasureCode::decode_chunks(const set<int> &want_to_read,
 }
 
 int ErasureCode::parse(const map<std::string,std::string> &parameters,
- ostream *ss)
+		       ostream *ss)
 {
-  return 0;
+  return to_mapping(parameters, ss);
 }
 
 const vector<int> &ErasureCode::get_chunk_mapping() const {
   return chunk_mapping;
+}
+
+int ErasureCode::to_mapping(const map<std::string,std::string> &parameters,
+			    ostream *ss)
+{
+  if (parameters.find("mapping") != parameters.end()) {
+    std::string mapping = parameters.find("mapping")->second;
+    int position = 0;
+    vector<int> coding_chunk_mapping;
+    for(std::string::iterator it = mapping.begin(); it != mapping.end(); ++it) {
+      if (*it == 'D')
+	chunk_mapping.push_back(position);
+      else
+	coding_chunk_mapping.push_back(position);
+      position++;
+    }
+    chunk_mapping.insert(chunk_mapping.end(),
+			 coding_chunk_mapping.begin(),
+			 coding_chunk_mapping.end());
+  }
+  return 0;
 }
 
 int ErasureCode::to_int(const std::string &name,
