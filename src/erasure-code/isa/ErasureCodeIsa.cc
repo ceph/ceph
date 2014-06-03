@@ -63,7 +63,9 @@ ErasureCodeIsa::init(const map<string, string> &parameters)
   parameter = parameters.find("ruleset-failure-domain");
   if (parameter != parameters.end())
     ruleset_failure_domain = parameter->second;
-  parse(parameters);
+  ostringstream ss;
+  if (parse(parameters, &ss))
+    derr << ss.str() << dendl;
   prepare();
 }
 
@@ -385,38 +387,47 @@ ErasureCodeIsaDefault::get_alignment() const
 
 // -----------------------------------------------------------------------------
 
-void
-ErasureCodeIsaDefault::parse(const map<std::string,
-                             std::string> &parameters)
+int ErasureCodeIsaDefault::parse(const map<std::string,
+                                 std::string> &parameters,
+                                 ostream *ss)
 {
-  k = to_int("k", parameters, DEFAULT_K);
-  m = to_int("m", parameters, DEFAULT_M);
+  int err = ErasureCode::parse(parameters, ss);
+  err |= to_int("k", parameters, &k, DEFAULT_K, ss);
+  err |= to_int("m", parameters, &m, DEFAULT_M, ss);
 
   if (matrixtype == kVandermonde) {
-    // these are verified safe values evaluted using the benchmarktool and 10*(combinatoric for maximum loss) random full erasures
+    // these are verified safe values evaluated using the
+    // benchmarktool and 10*(combinatoric for maximum loss) random
+    // full erasures
     if (k > 32) {
-      derr << "Vandermonde: m=" << m
-        << " should be less/equal than 32 : revert to k=32" << dendl;
+      *ss << "Vandermonde: m=" << m
+          << " should be less/equal than 32 : revert to k=32" << std::endl;
       k = 32;
+      err = -EINVAL;
     }
 
     if (m > 4) {
-      derr << "Vandermonde: m=" << m
-        << " should be less than 5 to guarantee an MDS codec: revert to m=4" << dendl;
+      *ss << "Vandermonde: m=" << m
+          << " should be less than 5 to guarantee an MDS codec:"
+          << " revert to m=4" << std::endl;
       m = 4;
+      err = -EINVAL;
     }
     switch (m) {
     case 4:
       if (k > 21) {
-        derr << "Vandermonde: K=" << k
-          << " should be less than 22 to guarantee an MDS codec with m=4: revert to k=21" << dendl;
+        *ss << "Vandermonde: k=" << k
+            << " should be less than 22 to guarantee an MDS"
+            << " codec with m=4: revert to k=21" << std::endl;
         k = 21;
+        err = -EINVAL;
       }
       break;
     default:
       ;
     }
   }
+  return err;
 }
 
 // -----------------------------------------------------------------------------
