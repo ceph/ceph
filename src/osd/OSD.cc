@@ -2562,7 +2562,7 @@ void OSD::calc_priors_during(
     oldmap->pg_to_acting_osds(pgid.pgid, acting);
     dout(20) << "  " << pgid << " in epoch " << e << " was " << acting << dendl;
     int up = 0;
-    for (unsigned i=0; i<acting.size(); i++)
+    for (unsigned i=0; i<acting.size(); i++) {
       if (osdmap->is_up(acting[i])) {
 	if (acting[i] != whoami) {
 	  pset.insert(
@@ -2572,14 +2572,17 @@ void OSD::calc_priors_during(
 	}
 	up++;
       }
+    }
     if (!up && !acting.empty()) {
       // sucky.  add down osds, even tho we can't reach them right now.
-      for (unsigned i=0; i<acting.size(); i++)
-	if (acting[i] != whoami)
+      for (unsigned i=0; i<acting.size(); i++) {
+	if (acting[i] != whoami) {
 	  pset.insert(
 	    pg_shard_t(
 	      acting[i],
 	      osdmap->pg_is_ec(pgid.pgid) ? shard_id_t(i) : shard_id_t::NO_SHARD));
+	}
+      }
     }
   }
   dout(10) << "calc_priors_during " << pgid
