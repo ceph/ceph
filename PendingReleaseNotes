@@ -1,8 +1,4 @@
 
-v0.81
+v0.82
 -----
 
-- Disallow nonsensical 'tier cache-mode' transitions.  From this point
-  onward, 'writeback' can only transition to 'forward' and 'forward'
-  can transition to 1) 'writeback' if there are dirty objects, or 2) any if
-  there are no dirty objects.
