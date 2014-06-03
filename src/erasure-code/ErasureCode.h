@@ -60,6 +60,13 @@ namespace ceph {
                               map<int, bufferlist> *decoded);
 
     virtual const vector<int> &get_chunk_mapping() const;
+
+    virtual int parse(const map<std::string,std::string> &parameters,
+		      ostream *ss);
+
+    int to_mapping(const map<std::string,std::string> &parameters,
+		   ostream *ss);
+
     static int to_int(const std::string &name,
 		      const map<std::string,std::string> &parameters,
 		      int *value,
