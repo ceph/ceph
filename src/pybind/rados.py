@@ -159,7 +159,7 @@ def run_in_thread(target, args, timeout=0):
         # poll for thread exit
         while t.is_alive():
             t.join(POLL_TIME_INCR)
-            if timeout:
+            if timeout and t.is_alive():
                 countdown = countdown - POLL_TIME_INCR
                 if countdown <= 0:
                     raise KeyboardInterrupt
