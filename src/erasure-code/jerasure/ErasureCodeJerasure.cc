@@ -72,6 +72,13 @@ int ErasureCodeJerasure::parse(const map<std::string,std::string> &parameters,
   err |= to_int("k", parameters, &k, DEFAULT_K, ss);
   err |= to_int("m", parameters, &m, DEFAULT_M, ss);
   err |= to_int("w", parameters, &w, DEFAULT_W, ss);
+  if (chunk_mapping.size() > 0 && (int)chunk_mapping.size() != k + m) {
+    *ss << "mapping " << parameters.find("mapping")->second
+	<< " maps " << chunk_mapping.size() << " chunks instead of"
+	<< " the expected " << k + m << " and will be ignored" << std::endl;
+    chunk_mapping.clear();
+    err = -EINVAL;
+  }
   return err;
 }
 
