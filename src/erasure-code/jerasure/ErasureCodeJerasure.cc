@@ -55,8 +55,27 @@ void ErasureCodeJerasure::init(const map<string,string> &parameters)
   parameter = parameters.find("ruleset-failure-domain");
   if (parameter != parameters.end())
     ruleset_failure_domain = parameter->second;
-  parse(parameters);
+  ostringstream ss;
+  if (parse(parameters, &ss))
+    derr << ss.str() << dendl;
   prepare();
+}
+
+int ErasureCodeJerasure::parse(const map<std::string,std::string> &parameters,
+			       ostream *ss)
+{
+  int err = ErasureCode::parse(parameters, ss);
+  err |= to_int("k", parameters, &k, DEFAULT_K, ss);
+  err |= to_int("m", parameters, &m, DEFAULT_M, ss);
+  err |= to_int("w", parameters, &w, DEFAULT_W, ss);
+  if (chunk_mapping.size() > 0 && (int)chunk_mapping.size() != k) {
+    *ss << "mapping " << parameters.find("mapping")->second
+	<< " maps " << chunk_mapping.size() << " chunks instead of"
+	<< " the expected " << k << " and will be ignored" << std::endl;
+    chunk_mapping.clear();
+    err = -EINVAL;
+  }
+  return err;
 }
 
 unsigned int ErasureCodeJerasure::get_chunk_size(unsigned int object_size) const
@@ -165,17 +184,19 @@ unsigned ErasureCodeJerasureReedSolomonVandermonde::get_alignment() const
   }
 }
 
-void ErasureCodeJerasureReedSolomonVandermonde::parse(const map<std::string,std::string> &parameters)
+int ErasureCodeJerasureReedSolomonVandermonde::parse(const map<std::string,std::string> &parameters,
+						      ostream *ss)
 {
-  k = to_int("k", parameters, DEFAULT_K);
-  m = to_int("m", parameters, DEFAULT_M);
-  w = to_int("w", parameters, DEFAULT_W);
+  int err = ErasureCodeJerasure::parse(parameters, ss);
   if (w != 8 && w != 16 && w != 32) {
-    derr << "ReedSolomonVandermonde: w=" << w
-	 << " must be one of {8, 16, 32} : revert to " << DEFAULT_W << dendl;
+    *ss << "ReedSolomonVandermonde: w=" << w
+	<< " must be one of {8, 16, 32} : revert to DEFAULT_W " << std::endl;
     w = DEFAULT_W;
+    err = -EINVAL;
   }
-  per_chunk_alignment = to_bool("jerasure-per-chunk-alignment", parameters, false);
+  err |= to_bool("jerasure-per-chunk-alignement", parameters,
+		 &per_chunk_alignment, false, ss);
+  return err;
 }
 
 void ErasureCodeJerasureReedSolomonVandermonde::prepare()
@@ -213,16 +234,18 @@ unsigned ErasureCodeJerasureReedSolomonRAID6::get_alignment() const
   }
 }
 
-void ErasureCodeJerasureReedSolomonRAID6::parse(const map<std::string,std::string> &parameters)
+int ErasureCodeJerasureReedSolomonRAID6::parse(const map<std::string,std::string> &parameters,
+					       ostream *ss)
 {
-  k = to_int("k", parameters, DEFAULT_K);
+  int err = ErasureCodeJerasure::parse(parameters, ss);
   m = 2;
-  w = to_int("w", parameters, DEFAULT_W);
   if (w != 8 && w != 16 && w != 32) {
-    derr << "ReedSolomonRAID6: w=" << w
-	 << " must be one of {8, 16, 32} : revert to 8 " << dendl;
+    *ss << "ReedSolomonRAID6: w=" << w
+	<< " must be one of {8, 16, 32} : revert to 8 " << std::endl;
     w = 8;
+    err = -EINVAL;
   }
+  return err;
 }
 
 void ErasureCodeJerasureReedSolomonRAID6::prepare()
@@ -266,19 +289,21 @@ unsigned ErasureCodeJerasureCauchy::get_alignment() const
   }  
 }
 
-void ErasureCodeJerasureCauchy::parse(const map<std::string,std::string> &parameters)
+int ErasureCodeJerasureCauchy::parse(const map<std::string,std::string> &parameters,
+				     ostream *ss)
 {
-  k = to_int("k", parameters, DEFAULT_K);
-  m = to_int("m", parameters, DEFAULT_M);
-  w = to_int("w", parameters, DEFAULT_W);
+  int err = ErasureCodeJerasure::parse(parameters, ss);
   if (w != 8 && w != 16 && w != 32) {
-    derr << "Cauchy: w=" << w
-	 << " must be one of {8, 16, 32} : revert to " 
-	 << DEFAULT_W << dendl;
+    *ss << "Cauchy: w=" << w
+	<< " must be one of {8, 16, 32} : revert to " 
+        << DEFAULT_W << std::endl;
     w = DEFAULT_W;
+    err = -EINVAL;
   }
-  packetsize = to_int("packetsize", parameters, DEFAULT_PACKETSIZE);
-  per_chunk_alignment = to_bool("jerasure-per-chunk-alignment", parameters, false);
+  err |= to_int("packetsize", parameters, &packetsize, DEFAULT_PACKETSIZE, ss);
+  err |= to_bool("jerasure-per-chunk-alignement", parameters,
+		 &per_chunk_alignment, false, ss);
+  return err;
 }
 
 void ErasureCodeJerasureCauchy::prepare_schedule(int *matrix)
@@ -343,38 +368,39 @@ unsigned ErasureCodeJerasureLiberation::get_alignment() const
   return alignment;
 }
 
-void ErasureCodeJerasureLiberation::parse(const map<std::string,std::string> &parameters)
+int ErasureCodeJerasureLiberation::parse(const map<std::string,std::string> &parameters,
+					 ostream *ss)
 {
-  k = to_int("k", parameters, DEFAULT_K);
-  m = to_int("m", parameters, DEFAULT_M);
-  w = to_int("w", parameters, DEFAULT_W);
-  packetsize = to_int("packetsize", parameters, DEFAULT_PACKETSIZE);
+  int err = ErasureCodeJerasure::parse(parameters, ss);
+  err |= to_int("packetsize", parameters, &packetsize, DEFAULT_PACKETSIZE, ss);
 
   bool error = false;
   if (k > w) {
-    derr << "k=" << k << " must be less than or equal to w=" << w << dendl;
+    *ss << "k=" << k << " must be less than or equal to w=" << w << std::endl;
     error = true;
   }
   if (w <= 2 || !is_prime(w)) {
-    derr <<  "w=" << w << " must be greater than two and be prime" << dendl;
+    *ss <<  "w=" << w << " must be greater than two and be prime" << std::endl;
     error = true;
   }
   if (packetsize == 0) {
-    derr << "packetsize=" << packetsize << " must be set" << dendl;
+    *ss << "packetsize=" << packetsize << " must be set" << std::endl;
     error = true;
   }
   if ((packetsize%(sizeof(int))) != 0) {
-    derr << "packetsize=" << packetsize
-	 << " must be a multiple of sizeof(int) = " << sizeof(int) << dendl;
+    *ss << "packetsize=" << packetsize
+	<< " must be a multiple of sizeof(int) = " << sizeof(int) << std::endl;
     error = true;
   }
   if (error) {
-    derr << "reverting to k=" << DEFAULT_K << ", w="
-	 << DEFAULT_W << ", packetsize=" << DEFAULT_PACKETSIZE << dendl;
+    *ss << "reverting to k=" << DEFAULT_K << ", w="
+	<< DEFAULT_W << ", packetsize=" << DEFAULT_PACKETSIZE << std::endl;
     k = DEFAULT_K;
     w = DEFAULT_W;
     packetsize = DEFAULT_PACKETSIZE;
+    err = -EINVAL;
   }
+  return err;
 }
 
 void ErasureCodeJerasureLiberation::prepare()
@@ -395,28 +421,31 @@ void ErasureCodeJerasureBlaumRoth::prepare()
 // 
 // ErasureCodeJerasureLiber8tion
 //
-void ErasureCodeJerasureLiber8tion::parse(const map<std::string,std::string> &parameters)
+int ErasureCodeJerasureLiber8tion::parse(const map<std::string,std::string> &parameters,
+					 ostream *ss)
 {
-  k = to_int("k", parameters, DEFAULT_K);
+  int err = ErasureCodeJerasure::parse(parameters, ss);
   m = DEFAULT_M;
   w = DEFAULT_W;
-  packetsize = to_int("packetsize", parameters, DEFAULT_PACKETSIZE);
+  err |= to_int("packetsize", parameters, &packetsize, DEFAULT_PACKETSIZE, ss);
 
   bool error = false;
   if (k > w) {
-    derr << "k=" << k << " must be less than or equal to w=" << w << dendl;
+    *ss << "k=" << k << " must be less than or equal to w=" << w << std::endl;
     error = true;
   }
   if (packetsize == 0) {
-    derr << "packetsize=" << packetsize << " must be set" << dendl;
+    *ss << "packetsize=" << packetsize << " must be set" << std::endl;
     error = true;
   }
   if (error) {
-    derr << "reverting to k=" << DEFAULT_K << ", packetsize="
-	 << DEFAULT_PACKETSIZE << dendl;
+    *ss << "reverting to k=" << DEFAULT_K << ", packetsize="
+	<< DEFAULT_PACKETSIZE << std::endl;
     k = DEFAULT_K;
     packetsize = DEFAULT_PACKETSIZE;
+    err = -EINVAL;
   }
+  return err;
 }
 
 void ErasureCodeJerasureLiber8tion::prepare()
