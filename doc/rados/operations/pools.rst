@@ -10,7 +10,7 @@ pools for storing data. A pool provides you with:
   A typical configuration stores an object and one additional copy
   (i.e., ``size = 2``), but you can determine the number of copies/replicas.
   For erasure coded pools, it is the number of coding chunks
-  (i.e. ``erasure-code-m=2``)
+  (i.e. ``m=2`` in the **erasure code profile**)
   
 - **Placement Groups**: You can set the number of placement groups for the pool.
   A typical configuration uses approximately 100 placement groups per OSD to 
@@ -63,12 +63,7 @@ To create a pool, execute::
 
 	ceph osd pool create {pool-name} {pg-num} [{pgp-num}] [replicated]
 	ceph osd pool create {pool-name} {pg-num}  {pgp-num}   erasure \
-             [{crush_ruleset=ruleset}] \
-             [{erasure-code-directory=directory}] \
-             [{erasure-code-plugin=plugin}] \
-             [{erasure-code-k=data-chunks}] \
-             [{erasure-code-m=coding-chunks}] \
-             [{key=value} ...]
+             {erasure-code-profile}
 
 Where: 
 
@@ -112,61 +107,11 @@ Where:
 :Required: No. 
 :Default: replicated
 
-``{crush_ruleset=ruleset}``
+``{erasure-code-profile=profile}``
 
-:Description: For **erasure** pools only. Set the name of the CRUSH
-              **ruleset**. It must be an existing ruleset matching
-              the requirements of the underlying erasure code plugin. 
-
-:Type: String
-:Required: No. 
-
-``{erasure-code-directory=directory}``
-
-:Description: For **erasure** pools only. Set the **directory** name
-              from which the erasure code plugin is loaded.
-
-:Type: String
-:Required: No.
-:Default: /usr/lib/ceph/erasure-code
-
-``{erasure-code-plugin=plugin}``
-
-:Description: For **erasure** pools only. Use the erasure code **plugin**
-              to compute coding chunks and recover missing chunks.
-
-:Type: String
-:Required: No. 
-:Default: jerasure
-
-``{erasure-code-k=data-chunks}``
-
-:Description: For **erasure** pools using the **jerasure** plugin
-              only. Each object is split in **data-chunks** parts,
-              each stored on a different OSD.
-
-:Type: Integer
-:Required: No. 
-:Default: 4
-
-``{erasure-code-m=coding-chunks}``
-
-:Description: For **erasure** pools using the **jerasure** plugin
-              only. Compute **coding chunks** for each object and
-              store them on different OSDs. The number of coding
-              chunks is also the number of OSDs that can be down
-              without losing data.
-
-:Type: Integer
-:Required: No. 
-:Default: 2
-
-``{key=value}``
-
-:Description: For **erasure** pools, the semantic of the remaining
-              key/value pairs is defined by the erasure code plugin.
-              For **replicated** pools, the key/value pairs are
-              ignored.
+:Description: For **erasure** pools only. Use the erasure code
+              **profile**. It must be an existing profile as
+              defined by **osd erasure-code-profile set**.
 
 :Type: String
 :Required: No. 
@@ -178,11 +123,10 @@ you have many pools with many placement groups (e.g., 50 pools with 100
 placement groups each). The point of diminishing returns depends upon the power
 of the OSD host.
 
-See `Placement Groups`_ for details on calculating an appropriate number of 
+See `Placement Groups`_ for details on calculating an appropriate number of
 placement groups for your pool.
 
 .. _Placement Groups: ../placement-groups
- 
 
 
 Set Pool Quotas
