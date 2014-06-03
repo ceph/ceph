@@ -168,7 +168,7 @@ def task(ctx, config):
                       ],
                   )
 
-        run.wait(fuse_daemons.itervalues())
+        run.wait(fuse_daemons.itervalues(), timeout=600)
 
         for id_, remote in clients:
             mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
