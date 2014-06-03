@@ -98,9 +98,6 @@ public:
 
   virtual void prepare() = 0;
 
-  static int to_int(const std::string &name,
-                    const map<std::string, std::string> &parameters,
-                    int default_value);
 };
 
 // -----------------------------------------------------------------------------

@@ -117,32 +117,6 @@ int ErasureCodeIsa::decode_chunks(const set<int> &want_to_read,
 
 // -----------------------------------------------------------------------------
 
-int
-ErasureCodeIsa::to_int(const std::string &name,
-                       const map<std::string, std::string> &parameters,
-                       int default_value)
-{
-  if (parameters.find(name) == parameters.end() ||
-      parameters.find(name)->second.size() == 0) {
-    dout(10) << name << " defaults to " << default_value << dendl;
-    return default_value;
-  }
-  const std::string value = parameters.find(name)->second;
-  std::string p = value;
-  std::string err;
-  int r = strict_strtol(p.c_str(), 10, &err);
-  if (!err.empty()) {
-    derr << "could not convert " << name << "=" << value
-      << " to int because " << err
-      << ", set to default " << default_value << dendl;
-    return default_value;
-  }
-  dout(10) << name << " set to " << r << dendl;
-  return r;
-}
-
-// -----------------------------------------------------------------------------
-
 void
 ErasureCodeIsaDefault::isa_encode(char **data,
                                   char **coding,
