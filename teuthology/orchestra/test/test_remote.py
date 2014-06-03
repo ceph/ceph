@@ -27,6 +27,8 @@ class TestRemote(object):
     def test_run(self):
         fudge.clear_expectations()
         ssh = fudge.Fake('SSHConnection')
+        ssh.expects('get_transport').returns_fake().expects('getpeername')\
+            .returns(('name', 22))
         run = fudge.Fake('run')
         args = [
             'something',
@@ -34,12 +36,8 @@ class TestRemote(object):
             ]
         foo = object()
         ret = RemoteProcess(
-            command='fakey',
-            stdin=None,
-            stdout=None,
-            stderr=None,
-            exitstatus=None,
-            exited=None,
+            client=ssh,
+            args='fakey',
             )
         r = remote.Remote(name='jdoe@xyzzy.example.com', ssh=ssh)
         run.expects_call().with_args(

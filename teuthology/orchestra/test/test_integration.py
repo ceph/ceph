@@ -59,7 +59,8 @@ class TestIntegration():
         r.stdin.write('bar\n')
         r.stdin.close()
 
-        got = r.exitstatus.get()
+        r.wait()
+        got = r.exitstatus
         assert got == 0
         assert r.stdout.getvalue() == 'foo\nbar\n'
 

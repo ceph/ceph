@@ -39,10 +39,10 @@ def task(ctx, config):
         'thrashosds task only accepts a dict for configuration'
     first_mon = teuthology.get_first_mon(ctx, config)
     (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
-    
+
     num_osds = teuthology.num_instances_of_type(ctx.cluster, 'osd')
     log.info('num_osds is %s' % num_osds)
-    assert num_osds == 3        
+    assert num_osds == 3
 
     manager = ceph_manager.CephManager(
         mon,
@@ -60,7 +60,7 @@ def task(ctx, config):
     # write some data
     p = rados_start(ctx, mon, ['-p', 'rbd', 'bench', '15', 'write', '-b', '4096',
                           '--no-cleanup'])
-    err = p.exitstatus.get();
+    err = p.wait()
     log.info('err is %d' % err)
 
     # mark osd.0 out to trigger a rebalance/backfill
@@ -88,7 +88,7 @@ def task(ctx, config):
     manager.revive_osd(1)
 
     # wait for our writes to complete + succeed
-    err = p.exitstatus.get()
+    err = p.wait()
     log.info('err is %d' % err)
 
     # cluster must recover

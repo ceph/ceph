@@ -150,7 +150,7 @@ def task(ctx, config):
                     proc.stdin.writelines(['restarted\n'])
                     proc.stdin.flush()
                 try:
-                    proc.exitstatus.get()
+                    proc.wait()
                 except tor.CommandFailedError:
                     raise Exception('restart task got non-zero exit status from script: {s}'.format(s=c))
     finally:

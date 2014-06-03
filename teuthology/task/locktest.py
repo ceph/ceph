@@ -63,7 +63,7 @@ def task(ctx, config):
                 )
 
         log.info('built locktest on each client')
-        
+
         host.run(args=['sudo', 'touch',
                        '{mnt}/locktestfile'.format(mnt=hostmnt),
                        run.Raw('&&'),
@@ -96,9 +96,9 @@ def task(ctx, config):
             logger=log.getChild('locktest.client'),
             wait=False
             )
-        
-        hostresult = hostproc.exitstatus.get()
-        clientresult = clientproc.exitstatus.get()
+
+        hostresult = hostproc.wait()
+        clientresult = clientproc.wait()
         if (hostresult != 0) or (clientresult != 0):
             raise Exception("Did not pass locking test!")
         log.info('finished locktest executable with results {r} and {s}'. \

@@ -65,8 +65,8 @@ def task(ctx, config):
                 ],
             wait=False,
             check_status=False)
-        result = proc.exitstatus.get();
-    
+        result = proc.wait()
+
         if result != 0:
             remote.run(
                 args=[
@@ -78,4 +78,4 @@ def task(ctx, config):
         remote.run(args=[
                 'rm', '-rf', '--', dir
                 ])
-        
+
