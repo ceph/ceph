@@ -24,7 +24,7 @@ module on your behalf if it's not already loaded. ::
 
 For example:: 
 
-  sudo rbd map foo --pool rbd myimage --id admin
+  sudo rbd map --pool rbd myimage --id admin
  
 If you use `cephx`_ authentication, you must also specify a secret.  It may come
 from a keyring or a file containing the secret. ::
