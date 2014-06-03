@@ -55,6 +55,17 @@ namespace ceph {
                               const map<int, bufferlist> &chunks,
                               map<int, bufferlist> *decoded);
 
+    static int to_int(const std::string &name,
+		      const map<std::string,std::string> &parameters,
+		      int *value,
+		      int default_value,
+		      ostream *ss);
+
+    static int to_bool(const std::string &name,
+		       const map<std::string,std::string> &parameters,
+		       bool *value,
+		       bool default_value,
+		       ostream *ss);
   };
 }
 
