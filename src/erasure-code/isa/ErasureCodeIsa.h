@@ -94,7 +94,9 @@ public:
 
   virtual unsigned get_alignment() const = 0;
 
-  virtual void parse(const map<std::string, std::string> &parameters) = 0;
+  virtual int parse(const map<std::string,
+                    std::string> &parameters,
+                    ostream *ss) = 0;
 
   virtual void prepare() = 0;
 
@@ -125,7 +127,8 @@ public:
     return g_decode_tbls_lru.size();
   }
 
-  // we implement an LRU cache for coding matrix - the cache size is sufficient up to (12,4) decodings
+  // we implement an LRU cache for coding matrix - the cache size is
+  // sufficient up to (12,4) decodings
   typedef std::pair<std::list<std::string>::iterator, bufferptr> lru_entry_t;
 
   std::map<std::string, lru_entry_t> g_decode_tbls_map;
@@ -161,7 +164,9 @@ public:
 
   virtual unsigned get_alignment() const;
 
-  virtual void parse(const map<std::string, std::string> &parameters);
+  virtual int parse(const map<std::string,
+                    std::string> &parameters,
+                    ostream *ss);
 
   virtual void prepare();
 
