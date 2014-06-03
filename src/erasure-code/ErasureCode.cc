@@ -83,11 +83,16 @@ int ErasureCode::encode(const set<int> &want_to_encode,
   if (err)
     return err;
   unsigned blocksize = get_chunk_size(in.length());
+  map<int, bufferlist> sorted_encoded;
   for (unsigned int i = 0; i < k + m; i++) {
-    bufferlist &chunk = (*encoded)[i];
+    bufferlist &chunk = sorted_encoded[i];
     chunk.substr_of(out, i * blocksize, blocksize);
   }
-  encode_chunks(want_to_encode, encoded);
+  encode_chunks(want_to_encode, &sorted_encoded);
+  for (unsigned int i = 0; i < k + m; i++) {
+    int chunk = chunk_mapping.size() > 0 ? chunk_mapping[i] : i;
+    (*encoded)[chunk].claim(sorted_encoded[i]);
+  }
   for (unsigned int i = 0; i < k + m; i++) {
     if (want_to_encode.count(i) == 0)
       encoded->erase(i);
@@ -219,12 +224,18 @@ int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
 			       bufferlist *decoded)
 {
   set<int> want_to_read;
-  for (unsigned int i = 0; i < get_data_chunk_count(); i++)
-    want_to_read.insert(i);
+
+  for (unsigned int i = 0; i < get_data_chunk_count(); i++) {
+    int chunk = chunk_mapping.size() > i ? chunk_mapping[i] : i;
+    want_to_read.insert(chunk);
+  }
   map<int, bufferlist> decoded_map;
   int r = decode(want_to_read, chunks, &decoded_map);
-  if (r == 0)
-    for (unsigned int i = 0; i < get_data_chunk_count(); i++)
-      decoded->claim_append(decoded_map[i]);
+  if (r == 0) {
+    for (unsigned int i = 0; i < get_data_chunk_count(); i++) {
+      int chunk = chunk_mapping.size() > i ? chunk_mapping[i] : i;
+      decoded->claim_append(decoded_map[chunk]);
+    }
+  }
   return r;
 }
