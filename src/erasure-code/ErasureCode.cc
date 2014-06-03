@@ -149,6 +149,10 @@ int ErasureCode::parse(const map<std::string,std::string> &parameters,
   return 0;
 }
 
+const vector<int> &ErasureCode::get_chunk_mapping() const {
+  return chunk_mapping;
+}
+
 int ErasureCode::to_int(const std::string &name,
 			const map<std::string,std::string> &parameters,
 			int *value,
