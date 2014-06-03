@@ -70,12 +70,6 @@ public:
   virtual unsigned get_alignment() const = 0;
   virtual void parse(const map<std::string,std::string> &parameters) = 0;
   virtual void prepare() = 0;
-  static int to_int(const std::string &name,
-                    const map<std::string,std::string> &parameters,
-                    int default_value);
-  static bool to_bool(const std::string &name,
-		      const map<std::string,std::string> &parameters,
-		      bool default_value);
   static bool is_prime(int value);
 };
 

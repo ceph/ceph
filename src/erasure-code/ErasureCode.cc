@@ -18,6 +18,7 @@
 #include <vector>
 #include <algorithm>
 
+#include "common/strtol.h"
 #include "ErasureCode.h"
 
 int ErasureCode::minimum_to_decode(const set<int> &want_to_read,
@@ -142,4 +143,43 @@ int ErasureCode::decode_chunks(const set<int> &want_to_read,
   assert("ErasureCode::decode_chunks not implemented" == 0);
 }
 
+int ErasureCode::to_int(const std::string &name,
+			const map<std::string,std::string> &parameters,
+			int *value,
+			int default_value,
+			ostream *ss)
+{
+  if (parameters.find(name) == parameters.end() ||
+      parameters.find(name)->second.size() == 0) {
+    *value = default_value;
+    return 0;
+  }
+  std::string p = parameters.find(name)->second;
+  std::string err;
+  int r = strict_strtol(p.c_str(), 10, &err);
+  if (!err.empty()) {
+    *ss << "could not convert " << name << "=" << p
+	<< " to int because " << err
+	<< ", set to default " << default_value << std::endl;
+    *value = default_value;
+    return -EINVAL;
+  }
+  *value = r;
+  return 0;
+}
 
+int ErasureCode::to_bool(const std::string &name,
+			 const map<std::string,std::string> &parameters,
+			 bool *value,
+			 bool default_value,
+			 ostream *ss)
+{
+  if (parameters.find(name) == parameters.end() ||
+      parameters.find(name)->second.size() == 0) {
+    *value = default_value;
+    return 0;
+  }
+  const std::string p = parameters.find(name)->second;
+  *value = (p == "yes") || (p == "true");
+  return 0;
+}
