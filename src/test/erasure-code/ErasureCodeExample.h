@@ -193,6 +193,11 @@ public:
     return 0;
   }
 
+  virtual const vector<int> &get_chunk_mapping() const {
+    static vector<int> mapping;
+    return mapping;
+  }
+
 };
 
 #endif

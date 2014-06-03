@@ -22,12 +22,16 @@
 
  */ 
 
+#include <vector>
+
 #include "ErasureCodeInterface.h"
 
 namespace ceph {
 
   class ErasureCode : public ErasureCodeInterface {
   public:
+    vector<int> chunk_mapping;
+
     virtual ~ErasureCode() {}
 
     virtual int minimum_to_decode(const set<int> &want_to_read,
@@ -55,6 +59,7 @@ namespace ceph {
                               const map<int, bufferlist> &chunks,
                               map<int, bufferlist> *decoded);
 
+    virtual const vector<int> &get_chunk_mapping() const;
     static int to_int(const std::string &name,
 		      const map<std::string,std::string> &parameters,
 		      int *value,

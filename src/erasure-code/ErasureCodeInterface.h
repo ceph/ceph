@@ -142,6 +142,7 @@
 
 #include <map>
 #include <set>
+#include <vector>
 #include "include/memory.h"
 #include "include/buffer.h"
 
@@ -346,6 +347,41 @@ namespace ceph {
     virtual int decode_chunks(const set<int> &want_to_read,
                               const map<int, bufferlist> &chunks,
                               map<int, bufferlist> *decoded) = 0;
+
+    /**
+     * Return the ordered list of chunks or an empty vector
+     * if no remapping is necessary.
+     *
+     * By default encoding an object with K=2,M=1 will create three
+     * chunks, the first two are data and the last one coding. For
+     * a 10MB object, it would be:
+     *
+     *   chunk 0 for the first 5MB
+     *   chunk 1 for the last 5MB
+     *   chunk 2 for the 5MB coding chunk
+     * 
+     * The plugin may, however, decide to remap them in a different
+     * order, such as:
+     * 
+     *   chunk 0 for the last 5MB
+     *   chunk 1 for the 5MB coding chunk
+     *   chunk 2 for the first 5MB
+     *
+     * The vector<int> remaps the chunks so that the first chunks are
+     * data, in sequential order, and the last chunks contain parity
+     * in the same order as they were output by the encoding function.
+     * 
+     * In the example above the mapping would be:
+     *
+     *   [ 1, 2, 0 ]
+     *
+     * The returned vector<int> only contains information for chunks
+     * that need remapping. If no remapping is necessary, the
+     * vector<int> is empty.
+     *
+     * @return vector<int> list of indices of chunks to be remapped
+     */
+    virtual const vector<int> &get_chunk_mapping() const = 0;
 
     /**
      * Decode the first **get_data_chunk_count()** **chunks** and
