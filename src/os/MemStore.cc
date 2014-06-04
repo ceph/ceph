@@ -953,6 +953,8 @@ void MemStore::_do_transaction(Transaction& t)
       {
         coll_t cid(i.get_cid());
         ghobject_t oid = i.get_oid();
+        uint64_t expected_object_size = i.get_length();
+        uint64_t expected_write_size = i.get_length();
       }
       break;
 
