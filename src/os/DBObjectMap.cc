@@ -157,7 +157,7 @@ string DBObjectMap::ghobject_key(const ghobject_t &oid)
   snprintf(t, end - t, ".%.*X", (int)(sizeof(oid.hobj.hash)*2), oid.hobj.hash);
 
   if (oid.generation != ghobject_t::NO_GEN ||
-      oid.shard_id != ghobject_t::NO_SHARD) {
+      oid.shard_id != shard_id_t::NO_SHARD) {
     t += snprintf(t, end - t, ".%llx", (long long unsigned)oid.generation);
     t += snprintf(t, end - t, ".%x", (int)oid.shard_id);
   }

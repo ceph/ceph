@@ -219,7 +219,7 @@ int FileStore::lfn_open(coll_t cid,
 			Index *index) 
 {
   assert(get_allow_sharded_objects() ||
-	 ( oid.shard_id == ghobject_t::NO_SHARD &&
+	 ( oid.shard_id == shard_id_t::NO_SHARD &&
 	   oid.generation == ghobject_t::NO_GEN ));
   assert(outfd);
   int flags = O_RDWR;

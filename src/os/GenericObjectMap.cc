@@ -145,7 +145,7 @@ string GenericObjectMap::header_key(const coll_t &cid, const ghobject_t &oid)
   full_name += string(buf);
 
   if (oid.generation != ghobject_t::NO_GEN) {
-    assert(oid.shard_id != ghobject_t::NO_SHARD);
+    assert(oid.shard_id != shard_id_t::NO_SHARD);
     full_name.append(GHOBJECT_KEY_SEP_S);
 
     t = buf;
@@ -175,7 +175,7 @@ bool GenericObjectMap::parse_header_key(const string &long_name,
   snapid_t snap;
   uint64_t pool;
   gen_t generation = ghobject_t::NO_GEN;
-  shard_t shard_id = ghobject_t::NO_SHARD;
+  shard_id_t shard_id = shard_id_t::NO_SHARD;
 
   string::const_iterator current = long_name.begin();
   string::const_iterator end;
@@ -249,7 +249,7 @@ bool GenericObjectMap::parse_header_key(const string &long_name,
       return false;
     shardstring = string(current, end);
 
-    shard_id = (shard_t)strtoul(shardstring.c_str(), NULL, 16);
+    shard_id = (shard_id_t)strtoul(shardstring.c_str(), NULL, 16);
   }
 
   if (out) {
