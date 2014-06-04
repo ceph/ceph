@@ -2,7 +2,6 @@ import fcntl
 import logging
 import os
 import subprocess
-import signal
 import shutil
 import sys
 import tempfile
