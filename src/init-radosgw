@@ -35,7 +35,7 @@ done
 PREFIX='client.radosgw.'
 
 # user to run radosgw as (it not specified in ceph.conf)
-DEFAULT_USER='www-data'
+DEFAULT_USER='wwwrun'
 
 RADOSGW=`which radosgw`
 if [ ! -x "$RADOSGW" ]; then
@@ -78,7 +78,7 @@ case "$1" in
             fi
 
             echo "Starting $name..."
-            start-stop-daemon --start -u $user -x $RADOSGW -- -n $name
+	     /sbin/startproc -u $user $RADOSGW
         done
         daemon_is_running $RADOSGW
         ;;
@@ -94,7 +94,8 @@ case "$1" in
         start-stop-daemon --stop -x $RADOSGW --oknodo
         ;;
     status)
-        daemon_is_running $RADOSGW
+	 /sbin/checkproc $RADOSGW
+	 rc_status -v
         ;;
     *)
         echo "Usage: $0 {start|stop|restart|force-reload|reload|status} [-v|--verbose]" >&2
