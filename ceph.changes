@@ -1,4 +1,12 @@
 -------------------------------------------------------------------
+Wed Jun 4 19:00:00 CEST 2014 - tbehrens@suse.com
+
+- convert over to pull tarballs from SUSE github repo
+- tarballs not equivalent (ours miss the ceph-build/release_tarball.sh
+  run), but since we do a full ./autogen + configure run anyway, that
+  yields the same build results.
+
+-------------------------------------------------------------------
 Wed Jun 4 13:00:00 CEST 2014 - tbehrens@suse.com
 
 - cap build parallelism at 6-wide. will otherwise exhaust memory
