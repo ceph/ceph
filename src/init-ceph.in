@@ -4,7 +4,7 @@
 
 ### BEGIN INIT INFO
 # Provides:          ceph
-# Default-Start:     3 4 5
+# Default-Start:     3 5
 # Default-Stop:      0 1 6
 # Required-Start:    $remote_fs $named $network $time
 # Required-Stop:     $remote_fs $named $network $time
