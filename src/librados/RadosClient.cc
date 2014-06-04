@@ -245,6 +245,7 @@ int librados::RadosClient::connect()
 
   monclient.set_messenger(messenger);
 
+  objecter->init();
   messenger->add_dispatcher_head(this);
 
   messenger->start();
@@ -268,7 +269,7 @@ int librados::RadosClient::connect()
   messenger->set_myname(entity_name_t::CLIENT(monclient.get_global_id()));
 
   objecter->set_client_incarnation(0);
-  objecter->init();
+  objecter->start();
   lock.Lock();
 
   timer.init();
