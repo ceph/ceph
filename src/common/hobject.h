@@ -231,11 +231,7 @@ WRITE_CMP_OPERATORS_7(hobject_t,
 		      snap)
 
 typedef version_t gen_t;
-typedef uint8_t shard_t;
 
-#ifndef UINT8_MAX
-#define UINT8_MAX (255)
-#endif
 #ifndef UINT64_MAX
 #define UINT64_MAX (18446744073709551615ULL)
 #endif
@@ -243,18 +239,16 @@ typedef uint8_t shard_t;
 struct ghobject_t {
   hobject_t hobj;
   gen_t generation;
-  shard_t shard_id;
+  shard_id_t shard_id;
 
 public:
-  static const shard_t NO_SHARD = UINT8_MAX;
-  static shard_t no_shard() { return NO_SHARD; }
   static const gen_t NO_GEN = UINT64_MAX;
 
-  ghobject_t() : generation(NO_GEN), shard_id(NO_SHARD) {}
+  ghobject_t() : generation(NO_GEN), shard_id(shard_id_t::NO_SHARD) {}
 
-  ghobject_t(const hobject_t &obj) : hobj(obj), generation(NO_GEN), shard_id(NO_SHARD) {}
+  ghobject_t(const hobject_t &obj) : hobj(obj), generation(NO_GEN), shard_id(shard_id_t::NO_SHARD) {}
 
-  ghobject_t(const hobject_t &obj, gen_t gen, shard_t shard) : hobj(obj), generation(gen), shard_id(shard) {}
+  ghobject_t(const hobject_t &obj, gen_t gen, shard_id_t shard) : hobj(obj), generation(gen), shard_id(shard) {}
 
   bool match(uint32_t bits, uint32_t match) const {
     return hobj.match_hash(hobj.hash, bits, match);
@@ -275,7 +269,7 @@ public:
   }
 
   bool is_degenerate() const {
-    return generation == NO_GEN && shard_id == NO_SHARD;
+    return generation == NO_GEN && shard_id == shard_id_t::NO_SHARD;
   }
 
   bool is_no_gen() const {
@@ -283,7 +277,7 @@ public:
   }
 
   bool is_no_shard() const {
-    return shard_id == NO_SHARD;
+    return shard_id == shard_id_t::NO_SHARD;
   }
 
   // maximum sorted value.

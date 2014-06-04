@@ -58,8 +58,8 @@ public:
       ::decode(pgid.shard, p);
       ::decode(from, p);
     } else {
-      pgid.shard = ghobject_t::NO_SHARD;
-      from = pg_shard_t(get_source().num(), ghobject_t::NO_SHARD);
+      pgid.shard = shard_id_t::NO_SHARD;
+      from = pg_shard_t(get_source().num(), shard_id_t::NO_SHARD);
     }
   }
 
