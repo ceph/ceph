@@ -832,6 +832,9 @@ reprotect_and_return_err:
 	     bool old_format, uint64_t features, int *order,
 	     uint64_t stripe_unit, uint64_t stripe_count)
   {
+    if (!order)
+      return -EINVAL;
+
     CephContext *cct = (CephContext *)io_ctx.cct();
     ldout(cct, 20) << "create " << &io_ctx << " name = " << imgname
 		   << " size = " << size << " old_format = " << old_format
@@ -856,9 +859,6 @@ reprotect_and_return_err:
       lderr(cct) << "rbd image " << imgname << " already exists" << dendl;
       return -EEXIST;
     }
-
-    if (!order)
-      return -EINVAL;
 
     if (!*order)
       *order = cct->_conf->rbd_default_order;
