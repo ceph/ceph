@@ -1475,7 +1475,6 @@ int KvFlatBtreeAsync::set_op(const string &key, const bufferlist &val,
 	return err;
       }
       return set_op(key, val, update_on_existing, idata);
-      break;
     }
     default:
       if (verbose) cerr << "\t" << client_name << ": writing obj failed with "
