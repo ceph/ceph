@@ -1,4 +1,9 @@
 -------------------------------------------------------------------
+Wed Jun 4 20:00:00 CEST 2014 - tbehrens@suse.com
+
+- SLE11 & friends need explicit xz build-requires.
+
+-------------------------------------------------------------------
 Wed Jun 4 19:00:00 CEST 2014 - tbehrens@suse.com
 
 - convert over to pull tarballs from SUSE github repo

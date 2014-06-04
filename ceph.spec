@@ -92,6 +92,7 @@ BuildRequires:  snappy-devel
 BuildRequires:  leveldb-devel
 BuildRequires:  xfsprogs-devel
 BuildRequires:  libxml2-devel
+BuildRequires:  xz
 %if 0%{?suse_version} >= 1310
 BuildRequires:  systemd
 %endif
