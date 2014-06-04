@@ -318,6 +318,8 @@ protected:
   off_t ofs;
   const char *supplied_md5_b64;
   const char *supplied_etag;
+  const char *if_match;
+  const char *if_nomatch;
   string etag;
   bool chunked_upload;
   RGWAccessControlPolicy policy;
@@ -330,6 +332,8 @@ public:
     ofs = 0;
     supplied_md5_b64 = NULL;
     supplied_etag = NULL;
+    if_match = NULL;
+    if_nomatch = NULL;
     chunked_upload = false;
     obj_manifest = NULL;
     mtime = 0;

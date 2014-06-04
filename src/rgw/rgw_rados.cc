@@ -981,9 +981,11 @@ void RGWObjVersionTracker::generate_new_write_ver(CephContext *cct)
   append_rand_alpha(cct, write_version.tag, write_version.tag, TAG_LEN);
 }
 
-int RGWPutObjProcessor::complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs)
+int RGWPutObjProcessor::complete(string& etag, time_t *mtime, time_t set_mtime,
+                                 map<string, bufferlist>& attrs,
+                                 const char *if_match, const char * if_nomatch)
 {
-  int r = do_complete(etag, mtime, set_mtime, attrs);
+  int r = do_complete(etag, mtime, set_mtime, attrs, if_match, if_nomatch);
   if (r < 0)
     return r;
 
@@ -1026,7 +1028,9 @@ int RGWPutObjProcessor_Plain::handle_data(bufferlist& bl, off_t _ofs, void **pha
   return 0;
 }
 
-int RGWPutObjProcessor_Plain::do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs)
+int RGWPutObjProcessor_Plain::do_complete(string& etag, time_t *mtime, time_t set_mtime, 
+                                          map<string, bufferlist>& attrs,
+                                          const char *if_match, const char *if_nomatch)
 {
   RGWRados::PutObjMetaExtraParams params;
   params.set_mtime = set_mtime;
@@ -1243,7 +1247,11 @@ int RGWPutObjProcessor_Atomic::complete_writing_data()
   return 0;
 }
 
-int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs) {
+int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, 
+                                           time_t set_mtime, map<string,
+                                           bufferlist>& attrs,
+                                           const char *if_match,
+                                           const char *if_nomatch) {
   int r = complete_writing_data();
   if (r < 0)
     return r;
@@ -1255,6 +1263,8 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
   extra_params.data = &first_chunk;
   extra_params.manifest = &manifest;
   extra_params.ptag = &unique_tag; /* use req_id as operation tag */
+  extra_params.if_match = if_match;
+  extra_params.if_nomatch = if_nomatch;
   extra_params.mtime = mtime;
   extra_params.set_mtime = set_mtime;
   extra_params.owner = bucket_owner;
@@ -2760,7 +2770,8 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
                   bool modify_version,
                   RGWObjVersionTracker *objv_tracker,
                   time_t set_mtime,
-                  const string& bucket_owner)
+                  const string& bucket_owner,
+                  const char *if_match, const char *if_nomatch)
 {
   rgw_bucket bucket;
   rgw_rados_ref ref;
@@ -2780,7 +2791,8 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
     op.create(true); // exclusive create
   } else {
     bool reset_obj = (flags & PUT_OBJ_CREATE) != 0;
-    r = prepare_atomic_for_write(rctx, obj, op, &state, reset_obj, ptag);
+    r = prepare_atomic_for_write(rctx, obj, op, &state, reset_obj, ptag,
+                                 if_match, if_nomatch);
     if (r < 0)
       return r;
   }
@@ -2906,10 +2918,13 @@ done_cancel:
    * - object was removed (ENOENT)
    * should treat it as a success
    */
-  if ((r == -ECANCELED || r == -ENOENT) ||
-      (!(flags & PUT_OBJ_EXCL) && r == -EEXIST)) {
-    r = 0;
+  if (if_match == NULL && if_nomatch == NULL) {
+    if ((r == -ECANCELED || r == -ENOENT) ||
+        (!(flags & PUT_OBJ_EXCL) && r == -EEXIST)) {
+      r = 0;
+    }
   }
+  // TODO: refine error code for if_match/if_nomatch
 
   return r;
 }
@@ -3973,15 +3988,22 @@ int RGWRados::append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj,
 
 int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
                             ObjectWriteOperation& op, RGWObjState **pstate,
-			    bool reset_obj, const string *ptag)
+			    bool reset_obj, const string *ptag,
+                            const char *if_match, const char *if_nomatch)
 {
+  if (if_match) {
+    ldout(cct, 15) << "prepare_atomic_for_write_impl: if_match = " << if_match << dendl;
+  } 
+
   int r = get_obj_state(rctx, obj, pstate, NULL);
   if (r < 0)
     return r;
 
   RGWObjState *state = *pstate;
 
-  bool need_guard = (state->has_manifest || (state->obj_tag.length() != 0)) && (!state->fake_tag);
+  bool need_guard = (state->has_manifest || (state->obj_tag.length() != 0) ||
+                     if_match != NULL || if_nomatch != NULL) && 
+                    (!state->fake_tag);
 
   if (!state->is_atomic) {
     ldout(cct, 20) << "prepare_atomic_for_write_impl: state is not atomic. state=" << (void *)state << dendl;
@@ -3998,6 +4020,30 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
     /* first verify that the object wasn't replaced under */
     op.cmpxattr(RGW_ATTR_ID_TAG, LIBRADOS_CMPXATTR_OP_EQ, state->obj_tag);
     // FIXME: need to add FAIL_NOTEXIST_OK for racing deletion
+  }
+
+  if (if_match) {
+    string if_match_str(if_match);
+    if (if_match_str != "*") {
+      bufferlist bl;
+      bl.append(if_match_str.c_str(), if_match_str.size() + 1);
+
+      op.cmpxattr(RGW_ATTR_ETAG, LIBRADOS_CMPXATTR_OP_EQ, bl);
+    } else {
+      // TODO: to test the object is existing
+    }
+  }
+
+  if (if_nomatch) {
+    string if_nomatch_str(if_nomatch);
+    if (if_nomatch_str != "*") {
+      bufferlist bl;
+      bl.append(if_nomatch_str.c_str(), if_nomatch_str.size() + 1);
+
+      op.cmpxattr(RGW_ATTR_ETAG, LIBRADOS_CMPXATTR_OP_NE, bl);
+    } else {
+      // TODO: to test the object is NOT existing
+    }
   }
 
   if (reset_obj) {
@@ -4026,7 +4072,8 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
 
 int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj,
                             ObjectWriteOperation& op, RGWObjState **pstate,
-			    bool reset_obj, const string *ptag)
+			    bool reset_obj, const string *ptag,
+                            const char *if_match, const char *if_nomatch)
 {
   if (!rctx) {
     *pstate = NULL;
@@ -4034,7 +4081,8 @@ int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj,
   }
 
   int r;
-  r = prepare_atomic_for_write_impl(rctx, obj, op, pstate, reset_obj, ptag);
+  r = prepare_atomic_for_write_impl(rctx, obj, op, pstate, reset_obj, ptag,
+                                    if_match, if_nomatch);
 
   return r;
 }

@@ -527,7 +527,9 @@ protected:
   bool is_complete;
   string bucket_owner;
 
-  virtual int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs) = 0;
+  virtual int do_complete(string& etag, time_t *mtime, time_t set_mtime,
+                          map<string, bufferlist>& attrs,
+                          const char *if_match = NULL, const char *if_nomatch = NULL) = 0;
 
   list<rgw_obj> objs;
 
@@ -544,7 +546,9 @@ public:
   };
   virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle) = 0;
   virtual int throttle_data(void *handle) = 0;
-  virtual int complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
+  virtual int complete(string& etag, time_t *mtime, time_t set_mtime,
+                       map<string, bufferlist>& attrs,
+                       const char *if_match = NULL, const char *if_nomatch = NULL);
 };
 
 class RGWPutObjProcessor_Plain : public RGWPutObjProcessor
@@ -559,7 +563,9 @@ class RGWPutObjProcessor_Plain : public RGWPutObjProcessor
 protected:
   int prepare(RGWRados *store, void *obj_ctx);
   int handle_data(bufferlist& bl, off_t ofs, void **phandle);
-  int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
+  int do_complete(string& etag, time_t *mtime, time_t set_mtime,
+                  map<string, bufferlist>& attrs,
+                  const char *if_match = NULL, const char *if_nomatch = NULL);
 
 public:
   int throttle_data(void *handle) { return 0; }
@@ -621,7 +627,9 @@ protected:
   virtual bool immutable_head() { return false; }
 
   int write_data(bufferlist& bl, off_t ofs, void **phandle);
-  virtual int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
+  virtual int do_complete(string& etag, time_t *mtime, time_t set_mtime,
+                          map<string, bufferlist>& attrs,
+                          const char *if_match = NULL, const char *if_nomatch = NULL);
 
   int prepare_next_part(off_t ofs);
   int complete_parts();
@@ -1223,10 +1231,14 @@ class RGWRados
                          librados::ObjectOperation& op, RGWObjState **state);
   int prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
                          librados::ObjectWriteOperation& op, RGWObjState **pstate,
-			 bool reset_obj, const string *ptag);
+			 bool reset_obj, const string *ptag,
+                         const char *if_match = NULL,
+                         const char *if_nomatch = NULL);
   int prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj,
                          librados::ObjectWriteOperation& op, RGWObjState **pstate,
-			 bool reset_obj, const string *ptag);
+			 bool reset_obj, const string *ptag,
+                         const char *if_match = NULL,
+                         const char *if_nomatch = NULL);
 
   void atomic_write_finish(RGWObjState *state, int r) {
     if (state && r == -ECANCELED) {
@@ -1424,6 +1436,8 @@ public:
     const bufferlist *data;
     RGWObjManifest *manifest;
     const string *ptag;
+    const char *if_match;
+    const char *if_nomatch;
     list<string> *remove_objs;
     bool modify_version;
     RGWObjVersionTracker *objv_tracker;
@@ -1432,6 +1446,7 @@ public:
 
     PutObjMetaExtraParams() : mtime(NULL), rmattrs(NULL),
                      data(NULL), manifest(NULL), ptag(NULL),
+                     if_match(NULL), if_nomatch(NULL),
                      remove_objs(NULL), modify_version(false),
                      objv_tracker(NULL), set_mtime(0) {}
   };
@@ -1443,7 +1458,8 @@ public:
               RGWObjManifest *manifest, const string *ptag, list<string> *remove_objs,
               bool modify_version, RGWObjVersionTracker *objv_tracker,
               time_t set_mtime /* 0 for don't set */,
-              const string& owner);
+              const string& owner,
+              const char *if_match = NULL, const char *if_nomatch = NULL);
 
   virtual int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
               map<std::string, bufferlist>& attrs, RGWObjCategory category, int flags,
@@ -1457,7 +1473,8 @@ public:
                            RGWObjCategory category, int flags, PutObjMetaExtraParams& params) {
     return put_obj_meta_impl(ctx, obj, size, params.mtime, attrs, category, flags,
                         params.rmattrs, params.data, params.manifest, params.ptag, params.remove_objs,
-                        params.modify_version, params.objv_tracker, params.set_mtime, params.owner);
+                        params.modify_version, params.objv_tracker, params.set_mtime, params.owner,
+                        params.if_match, params.if_nomatch);
   }
 
   virtual int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
