@@ -20,6 +20,10 @@
 %bcond_without gtk2
 %endif
 
+%if 0%{?jobs} > 6
+ %define jobs 6
+%endif
+
 # it seems there is no usable tcmalloc rpm for x86_64; parts of
 # google-perftools don't compile on x86_64, and apparently the
 # decision was to not build the package at all, even if tcmalloc
@@ -358,7 +362,7 @@ sed -i -e "s/-lcurses/-lncurses/g" src/Makefile
 sed -i -e "s/-lcurses/-lncurses/g" man/Makefile
 %endif
 
-make %{?_smp_mflags}
+make %{?jobs:-j%{jobs}}
 
 %install
 make DESTDIR=$RPM_BUILD_ROOT install

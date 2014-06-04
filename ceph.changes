@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Wed Jun 4 13:00:00 CEST 2014 - tbehrens@suse.com
+
+- cap build parallelism at 6-wide. will otherwise exhaust memory
+  on build hosts (~800MB per process currently)
+
+-------------------------------------------------------------------
 Thu May 29 11:39:26 CEST 2014 - osynge@suse.com
 
 - added BuildRequires on systemd for openSUSE_13.1 and above
