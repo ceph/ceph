@@ -9,8 +9,9 @@ usage: teuthology-queue -h
        teuthology-queue [-r] -m MACHINE_TYPE
        teuthology-queue -m MACHINE_TYPE -D PATTERN
 
-List Jobs in queue:
-  If -d then jobs with PATTERN in the job name are deleted from the queue.
+List Jobs in queue.
+If -D is passed, then jobs with PATTERN in the job name are deleted from the
+queue.
 
 Arguments:
   -m, --machine_type MACHINE_TYPE
@@ -21,8 +22,6 @@ optional arguments:
   -D, --delete PATTERN  Delete Jobs with PATTERN in their name
   -d, --description     Show job descriptions
   -r, --runs            Only show run names
-
-
 """.format(archive_base=teuthology.config.config.archive_base)
 
 
