@@ -2,6 +2,7 @@
 Wed Jun 4 20:00:00 CEST 2014 - tbehrens@suse.com
 
 - SLE11 & friends need explicit xz build-requires.
+- update README.SUSE.v0.2 to new upstream domain names.
 
 -------------------------------------------------------------------
 Wed Jun 4 19:00:00 CEST 2014 - tbehrens@suse.com
