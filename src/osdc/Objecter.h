@@ -1608,6 +1608,7 @@ public:
   }
 
   void init();
+  void start();
   void shutdown();
 
   /**
