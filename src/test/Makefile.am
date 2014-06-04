@@ -639,8 +639,8 @@ ceph_test_librbd_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_librbd
 
 if LINUX
-ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.c
-nodist_EXTRA_ceph_test_librbd_fsx_SOURCES = dummy.cc # force c++ linking
+# Force use of C++ linker with dummy.cc - LIBKRBD is a C++ library
+ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.c common/dummy.cc
 ceph_test_librbd_fsx_LDADD = $(LIBKRBD) $(LIBRBD) $(LIBRADOS)
 ceph_test_librbd_fsx_CFLAGS = ${AM_CFLAGS} -Wno-format
 bin_DEBUGPROGRAMS += ceph_test_librbd_fsx
