@@ -559,7 +559,7 @@ int main(int argc, char **argv) {
 }
 
 TEST_F(ObjectMapTest, CreateOneObject) {
-  ghobject_t hoid(hobject_t(sobject_t("foo", CEPH_NOSNAP)), 100, 0);
+  ghobject_t hoid(hobject_t(sobject_t("foo", CEPH_NOSNAP)), 100, shard_id_t(0));
   map<string, bufferlist> to_set;
   string key("test");
   string val("test_val");
@@ -614,8 +614,8 @@ TEST_F(ObjectMapTest, CreateOneObject) {
 }
 
 TEST_F(ObjectMapTest, CloneOneObject) {
-  ghobject_t hoid(hobject_t(sobject_t("foo", CEPH_NOSNAP)), 200, 0);
-  ghobject_t hoid2(hobject_t(sobject_t("foo2", CEPH_NOSNAP)), 201, 1);
+  ghobject_t hoid(hobject_t(sobject_t("foo", CEPH_NOSNAP)), 200, shard_id_t(0));
+  ghobject_t hoid2(hobject_t(sobject_t("foo2", CEPH_NOSNAP)), 201, shard_id_t(1));
 
   tester.set_key(hoid, "foo", "bar");
   tester.set_key(hoid, "foo2", "bar2");
