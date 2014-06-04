@@ -2694,6 +2694,7 @@ void RGWCompleteMultipart::execute()
   iter = parts->parts.begin();
 
   meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
+  meta_obj.set_in_extra_data(true);
 
   ret = get_obj_attrs(store, s, meta_obj, attrs, NULL, NULL);
   if (ret < 0) {
@@ -2790,7 +2791,6 @@ void RGWCompleteMultipart::execute()
     return;
 
   // remove the upload obj
-  meta_obj.set_in_extra_data(true);
   store->delete_obj(s->obj_ctx, s->bucket_owner.get_id(), meta_obj);
 }
 
