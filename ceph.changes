@@ -22,7 +22,7 @@ Wed Jun 4 13:00:00 CEST 2014 - tbehrens@suse.com
 Thu May 29 11:39:26 CEST 2014 - osynge@suse.com
 
 - added BuildRequires on systemd for openSUSE_13.1 and above
-- added _tmpfilesdir to spec as causing a build failure on 
+- added _tmpfilesdir to spec as causing a build failure on
   openSUSE_13.1
 
 -------------------------------------------------------------------
@@ -88,12 +88,12 @@ Wed Feb  5 14:22:27 UTC 2014 - ddiss@suse.com
 -------------------------------------------------------------------
 Tue Jan 28 12:54:41 UTC 2014 - dmueller@suse.com
 
-- add dependency on python-ceph (ceph(1) requires it) 
+- add dependency on python-ceph (ceph(1) requires it)
 
 -------------------------------------------------------------------
 Thu Dec 12 09:33:07 UTC 2013 - mjura@suse.com
 
-- Add ceph-disk.patch, preparing for crowbar-barclamp-ceph 
+- Add ceph-disk.patch, preparing for crowbar-barclamp-ceph
   + Update symbolic links for disk journal
 
 -------------------------------------------------------------------
@@ -105,7 +105,7 @@ Mon Dec  9 13:40:48 UTC 2013 - dmueller@suse.com
 -------------------------------------------------------------------
 Thu Dec  5 10:26:40 UTC 2013 - dmueller@suse.com
 
-- add 0001-Added-python-wrapper-to-rados_cluster_stat.patch (bnc#853656) 
+- add 0001-Added-python-wrapper-to-rados_cluster_stat.patch (bnc#853656)
 - Update to 0.56.7:
   * librados: fix async aio completion wakeup (manifests as rbd hang)
   * librados: fix hang when osd becomes full and then not full
@@ -115,7 +115,7 @@ Thu Dec  5 10:26:40 UTC 2013 - dmueller@suse.com
 -------------------------------------------------------------------
 Thu Sep 26 07:43:10 UTC 2013 - mjura@suse.com
 
-- Add ceph-disk.patch, preparing for crowbar-barclamp-ceph 
+- Add ceph-disk.patch, preparing for crowbar-barclamp-ceph
   + Resolving with sysvinit
   + Update symbolic links for disk journal
   + Add waiting for udev event queue to clear
@@ -154,13 +154,13 @@ Thu Jul 18 17:47:38 UTC 2013 - rw@suse.com
 -------------------------------------------------------------------
 Wed Jun 26 15:03:12 UTC 2013 - dalgaaf@suse.de
 
-- updated to latest cuttlefish branch state (v0.61.4-29-gccb3dd5) 
+- updated to latest cuttlefish branch state (v0.61.4-29-gccb3dd5)
 - fixed patch
 
 -------------------------------------------------------------------
 Wed Jun 12 06:38:39 UTC 2013 - dalgaaf@suse.de
 
-- updated to latest cuttlefish branch state (v0.61.3-9-g60e4bb0) 
+- updated to latest cuttlefish branch state (v0.61.3-9-g60e4bb0)
 
 -------------------------------------------------------------------
 Fri Jun  7 10:35:26 UTC 2013 - dalgaaf@suse.de
@@ -168,33 +168,33 @@ Fri Jun  7 10:35:26 UTC 2013 - dalgaaf@suse.de
 - fix 'Requires:' to get sgdisk into the system:
   Fix package Requirements to get sgdisk. On RHEL/CentOS/Fedora the
   package is gdisk. On SUSE/openSUSE < 12.2 it's scsirastools on
-  openSUSE >= 12.2 it's in gptfdisk. 
+  openSUSE >= 12.2 it's in gptfdisk.
 
 -------------------------------------------------------------------
 Wed Jun  5 12:08:14 UTC 2013 - dalgaaf@suse.de
 
-- updated to cuttlefish branch (v0.61.2-57-g8544ea7) 
+- updated to cuttlefish branch (v0.61.2-57-g8544ea7)
 
 -------------------------------------------------------------------
 Wed Jun  5 12:01:18 UTC 2013 - dalgaaf@suse.de
 
-- replace boost-devel with boost49-devel to make use of an 
+- replace boost-devel with boost49-devel to make use of an
   up-to-date boost package to get ceph build
 
 -------------------------------------------------------------------
 Wed Jun  5 11:57:44 UTC 2013 - dalgaaf@suse.de
 
-- drop debian files from package 
+- drop debian files from package
 
 -------------------------------------------------------------------
 Mon May  6 09:41:20 UTC 2013 - dalgaaf@suse.de
 
-- updated to v0.60-889-g378eb32 
+- updated to v0.60-889-g378eb32
 
 -------------------------------------------------------------------
 Mon Apr 15 10:57:16 UTC 2013 - dalgaaf@suse.de
 
-- updated to v0.60-490-g06a95a6 
+- updated to v0.60-490-g06a95a6
 - some spec updates
 - replaced some patches with newer versions:
   - rcfiles-remove-init-2.patch with:
@@ -205,7 +205,7 @@ Mon Apr 15 10:57:16 UTC 2013 - dalgaaf@suse.de
 -------------------------------------------------------------------
 Wed Mar 13 11:30:37 UTC 2013 - dalgaaf@suse.de
 
-- updated to v0.58-500-gaf3b163 
+- updated to v0.58-500-gaf3b163
 - updated patch:
   - radosgw-init-opensuse.v2.patch
 
@@ -214,8 +214,8 @@ Thu Feb 28 13:14:28 UTC 2013 - dalgaaf@suse.de
 
 - updated to v0.57-646-gcaa0af2
 - added new files to -devel -test and base package
-- added new build dependency to leveldb and snappy, since we 
-  now build with system leveldb 
+- added new build dependency to leveldb and snappy, since we
+  now build with system leveldb
 - added new Requires: cryptsetup, gptfdisk, parted, util-linux
 - remove patch no longer needed due to switch to system leveldb:
   - 0001-leveldb-env_posix.cc-do-not-call-exit-1-on-a-shared-library.patch
@@ -223,12 +223,12 @@ Thu Feb 28 13:14:28 UTC 2013 - dalgaaf@suse.de
 -------------------------------------------------------------------
 Mon Feb 25 09:56:47 UTC 2013 - dalgaaf@suse.de
 
-- updated to v0.57-502-g9217c4a 
+- updated to v0.57-502-g9217c4a
 
 -------------------------------------------------------------------
 Wed Feb 20 11:45:37 UTC 2013 - dalgaaf@suse.de
 
-- updated to v0.57-403-g3692ccd 
+- updated to v0.57-403-g3692ccd
 - removed upstream gone patches:
   - ceph-init-create-dirs-only-on-startup.diff
   - ceph-common_sh.fix.sshdir.diff
@@ -273,13 +273,13 @@ Mon Feb 11 13:32:54 UTC 2013 - dalgaaf@suse.de
 -------------------------------------------------------------------
 Sat Feb  2 17:25:00 UTC 2013 - dalgaaf@suse.de
 
-- change requested memory in _constraints file to 4 Gbyte 
+- change requested memory in _constraints file to 4 Gbyte
 
 -------------------------------------------------------------------
 Fri Feb  1 10:24:14 UTC 2013 - dalgaaf@suse.de
 
 - updated to v0.56-578-g91f8c3c + merged wip-rpm-update3 branch
-  to get rbd-fuse packaging for RPM+DEB based distros tested 
+  to get rbd-fuse packaging for RPM+DEB based distros tested
 - removed upstream gone patches
   - 0002-Don-t-install-rbd-fuse-binary.patch
   - ceph-install-rbd-manpage.patch
@@ -292,7 +292,7 @@ Fri Feb  1 09:14:21 UTC 2013 - dalgaaf@suse.de
 - added new temporary patch:
   - ceph-install-rbd-manpage.patch
 - removed upstream gone patch:
-  - 0001-ceph-filestore-dump.cc-don-t-use-po-value-string-req.patch 
+  - 0001-ceph-filestore-dump.cc-don-t-use-po-value-string-req.patch
 
 -------------------------------------------------------------------
 Thu Jan 31 21:56:25 UTC 2013 - dalgaaf@suse.de
@@ -305,14 +305,14 @@ Thu Jan 31 21:56:25 UTC 2013 - dalgaaf@suse.de
 Thu Jan 31 09:37:29 UTC 2013 - dalgaaf@suse.de
 
 - add new patch to fix build on RHEL and CentOS 6:
-  - 0001-ceph-filestore-dump.cc-don-t-use-po-value-string-req.patch 
+  - 0001-ceph-filestore-dump.cc-don-t-use-po-value-string-req.patch
 
 -------------------------------------------------------------------
 Thu Jan 31 07:10:42 UTC 2013 - dalgaaf@suse.de
 
 - updated to git v0.56-571-g0758fab
 - removed upstream gone patches:
-  - 0001-PGMap-fix-Wsign-compare-warning.patch 
+  - 0001-PGMap-fix-Wsign-compare-warning.patch
 - spec: add %{_bindir}/ceph-filestore-dump to ceph-test
 
 -------------------------------------------------------------------
@@ -320,13 +320,13 @@ Wed Jan 30 17:01:30 UTC 2013 - dalgaaf@suse.de
 
 - add new patches:
   - 0001-PGMap-fix-Wsign-compare-warning.patch
-  - 0002-Don-t-install-rbd-fuse-binary.patch -> reverts a patch 
-    from git master 
+  - 0002-Don-t-install-rbd-fuse-binary.patch -> reverts a patch
+    from git master
 
 -------------------------------------------------------------------
 Wed Jan 30 12:08:03 UTC 2013 - dalgaaf@suse.de
 
-- updated to git v0.56-565-gc782d2a 
+- updated to git v0.56-565-gc782d2a
 
 -------------------------------------------------------------------
 Tue Jan 29 11:56:02 UTC 2013 - dalgaaf@suse.de
@@ -343,9 +343,9 @@ Tue Jan 29 11:56:02 UTC 2013 - dalgaaf@suse.de
 Mon Jan 28 18:01:26 UTC 2013 - dalgaaf@suse.de
 
 - spec: fix 'License:' again use ' and ' instead ' ; '
-- spec: move %{_libdir}/libcephfs_jni.so to devel package 
+- spec: move %{_libdir}/libcephfs_jni.so to devel package
 - rpmlint: remove addFilter("E: devel-file-in-non-devel-package")
-  instead add addFilter("devel-file-in-non-devel-package 
+  instead add addFilter("devel-file-in-non-devel-package
   .*/usr/lib/rados-classes/*") to only match the files needed
 
 -------------------------------------------------------------------
@@ -354,7 +354,7 @@ Mon Jan 28 11:45:37 UTC 2013 - dalgaaf@suse.de
 - add new /usr/bin/rbd-fuse to filelist of ceph-fuse
 - added new patch to fix build of rbd-fuse on SLES11-SP2:
   - 0001-configure-fix-check-for-fuse_getgroups.patch
-  - 0002-rbd-fuse-fix-usage-of-conn-want.patch 
+  - 0002-rbd-fuse-fix-usage-of-conn-want.patch
   - 0003-rbd-fuse-fix-printf-format-for-off_t-and-size_t.patch
 
 -------------------------------------------------------------------
@@ -368,9 +368,9 @@ Mon Jan 28 10:17:48 UTC 2013 - dalgaaf@suse.de
   - 0001-utime-fix-narrowing-conversion-compiler-warning-in-s.patch
   - 0002-rbd-don-t-ignore-return-value-of-system.patch
 - spec: fix 'License:' again, the delimiter is no "; " but " ; "
-- spec: fix dependency for librbd1 and libcephfs_jni1: don't 
+- spec: fix dependency for librbd1 and libcephfs_jni1: don't
   require libcephfs1/librados2 the build system will find the dep.
-- enable ceph-resource-agents package (OCF-compliant Resource 
+- enable ceph-resource-agents package (OCF-compliant Resource
   Agents for Ceph Daemons) for SUSE
 - rpmlintrc: addFilter("ceph-test.* no-manual-page-for-binary")
 
@@ -378,14 +378,14 @@ Mon Jan 28 10:17:48 UTC 2013 - dalgaaf@suse.de
 Fri Jan 25 17:11:36 UTC 2013 - dalgaaf@suse.de
 
 - updated to git v0.56-438-ga6ed62e
-- fix dependency for librbd1 and libcephfs_jni1: require only 
+- fix dependency for librbd1 and libcephfs_jni1: require only
   libcephfs1/librados2 and no special version
 - add sharutils as BuildRequires
 
 -------------------------------------------------------------------
 Thu Jan 24 10:25:36 UTC 2013 - dalgaaf@suse.de
 
-- updated to git v0.56-417-g67c7757 
+- updated to git v0.56-417-g67c7757
 
 -------------------------------------------------------------------
 Wed Jan 23 10:18:10 UTC 2013 - dalgaaf@suse.de
@@ -394,7 +394,7 @@ Wed Jan 23 10:18:10 UTC 2013 - dalgaaf@suse.de
 - added new patches for ceph:
   - 0001-configure-fix-RPM_RELEASE.patch
   - 0002-configure-remove-m4_include-m4-acx_pthread.m4.patch
-- added new patch for included leveldb: 
+- added new patch for included leveldb:
   - 0001-leveldb-env_posix.cc-do-not-call-exit-1-on-a-shared-library.patch
 - fix libedit-devel linking: add some more Makefiles to replace
   -lcurses with -lncurses (for SLES11SP2 on ibs)
@@ -402,25 +402,25 @@ Wed Jan 23 10:18:10 UTC 2013 - dalgaaf@suse.de
 -------------------------------------------------------------------
 Tue Jan 22 10:50:37 UTC 2013 - dalgaaf@suse.de
 
-- updated to git v0.56-361-g3399860 
+- updated to git v0.56-361-g3399860
 
 -------------------------------------------------------------------
 Mon Jan 21 17:10:10 UTC 2013 - dalgaaf@suse.de
 
-- updated to git v0.56-357-g2491f97 
+- updated to git v0.56-357-g2491f97
 
 -------------------------------------------------------------------
 Fri Jan 18 11:24:29 UTC 2013 - dalgaaf@suse.de
 
 - updated to git v0.56-337-g76e715b
-- add Requires: perl and python 
+- add Requires: perl and python
 
 -------------------------------------------------------------------
 Thu Jan 17 10:50:49 UTC 2013 - dalgaaf@suse.de
 
 - updated to git v0.56-287-gb0162fa
 - removed upstream gone patch:
-  - 0001-configure.ac-fix-problem-with-enable-cephfs-java.patch 
+  - 0001-configure.ac-fix-problem-with-enable-cephfs-java.patch
 
 -------------------------------------------------------------------
 Wed Jan 16 14:02:35 UTC 2013 - dalgaaf@suse.de
@@ -449,35 +449,35 @@ Tue Jan 15 17:36:42 UTC 2013 - dalgaaf@suse.de
 
 - update to to git e182c1fd3132d
 - added new patch:
-  - 0001-ac_prog_javah.m4-fix-autotools-warning.patch: fix a 
-    autotools warning on older autotools systems as e.g. SLES11 
+  - 0001-ac_prog_javah.m4-fix-autotools-warning.patch: fix a
+    autotools warning on older autotools systems as e.g. SLES11
 
 -------------------------------------------------------------------
 Fri Jan 11 14:24:42 UTC 2013 - dalgaaf@suse.de
 
-- updated to git 310112f702d1429 
+- updated to git 310112f702d1429
 - removed patch:
-  - 0001-osd-ReplicatedPG.cc-fix-errors-in-_scrub.patch: same 
+  - 0001-osd-ReplicatedPG.cc-fix-errors-in-_scrub.patch: same
     patch was commited by another developer and is incluede now
 
 -------------------------------------------------------------------
 Fri Jan 11 13:38:42 UTC 2013 - dalgaaf@suse.de
 
 - enable libedit again for CentOS and RHEL, build an extra package
-  of libedit for these ditros 
+  of libedit for these ditros
 
 -------------------------------------------------------------------
 Fri Jan 11 12:36:25 UTC 2013 - dalgaaf@suse.de
 
 - fix build:
-  - RHEL6 and CentOS6: use java-1.6.0-openjdk-devel, disable 
-    fdupes and libedit 
+  - RHEL6 and CentOS6: use java-1.6.0-openjdk-devel, disable
+    fdupes and libedit
 
 -------------------------------------------------------------------
 Wed Jan  9 20:56:18 UTC 2013 - dalgaaf@suse.de
 
 - added new patch to fix build:
-  - 0001-osd-ReplicatedPG.cc-fix-errors-in-_scrub.patch 
+  - 0001-osd-ReplicatedPG.cc-fix-errors-in-_scrub.patch
 
 -------------------------------------------------------------------
 Wed Jan  9 19:49:59 UTC 2013 - dalgaaf@suse.de
@@ -496,7 +496,7 @@ Wed Jan  9 14:30:28 UTC 2013 - dalgaaf@suse.de
   - 0006-configure.ac-change-junit4-handling.patch
   - 0007-configure.ac-check-for-org.junit.rules.ExternalResou.patch
 - removed patches:
-  - ceph-fix-configure-junit-qa.diff 
+  - ceph-fix-configure-junit-qa.diff
 - spec:
   - fix Requires and BuildRequries for cephfs-java and ceph-test
   - fix Licence tags
@@ -508,7 +508,7 @@ Fri Jan  4 10:07:43 UTC 2013 - dalgaaf@suse.de
 
 - updated patch:
   - ceph-fix-configure-junit-qa.diff: fix install dir for jar files
-    to common $(datadir)/java 
+    to common $(datadir)/java
 - rename libcephfs-java to cephfs-java since the package contains
   no classic lib as complained by rpmlint
 
@@ -516,8 +516,8 @@ Fri Jan  4 10:07:43 UTC 2013 - dalgaaf@suse.de
 Thu Jan  3 16:58:54 UTC 2013 - dalgaaf@suse.de
 
 - added patch:
-  - ceph-fix-configure-junit-qa.diff: add AM_CONDITIONAL for 
-    junit4 to be able to build java packages without having 
+  - ceph-fix-configure-junit-qa.diff: add AM_CONDITIONAL for
+    junit4 to be able to build java packages without having
     junit4 available on SLES11-SP2
 - fix spec:
   - s/libcephfs-jni/libcephfs_jni1/ due to SO name
@@ -536,9 +536,9 @@ Thu Jan  3 10:28:21 UTC 2013 - dalgaaf@suse.de
   * librbd: fixes for read-only pools for image cloning
   * osd: fix for mixing argonaut and post-v0.54 OSDs
   * osd: some recovery tuning
-  * osd: fix for several scrub, recovery, and watch/notify 
+  * osd: fix for several scrub, recovery, and watch/notify
          races/bugs
-  * osd: fix pool_stat_t backwawrd compatibility with pre-v0.41 
+  * osd: fix pool_stat_t backwawrd compatibility with pre-v0.41
          clients
   * osd: experimental split support
   * mkcephfs: misc fixes for fs initialization, mounting
@@ -547,25 +547,25 @@ Thu Jan  3 10:28:21 UTC 2013 - dalgaaf@suse.de
   * mount.fuse.ceph: allow mounting of ceph-fuse via /etc/fstab
   * config: always complain about config parsing errors
   * mon: fixed memory leaks, misc bugs
-  * mds: many misc fixes 
+  * mds: many misc fixes
 - adapted spec file, added new java bindings to new packages:
   libcephfs-java and libcephfs-jni
 
 -------------------------------------------------------------------
 Wed Dec 19 11:19:05 UTC 2012 - dalgaaf@suse.de
 
-- updated to git 04e7a5ca136416 
+- updated to git 04e7a5ca136416
 
 -------------------------------------------------------------------
 Fri Dec 14 10:14:02 UTC 2012 - dalgaaf@suse.de
 
-- updated to git 24523913e3a1fa incl. the 0.55.1 release with 
+- updated to git 24523913e3a1fa incl. the 0.55.1 release with
   the following release notes:
   * init-ceph: typo (new 'fs type' stuff was broken)
   * debian: fixed conflicting upstart and sysvinit scripts
   * auth: fixed default auth settings
   * osd: dropped some broken asserts
-  * librbd: fix locking bug, race with 'flatten' 
+  * librbd: fix locking bug, race with 'flatten'
 - removed upstream integrated patches:
   - 0001-fix-build-of-unittest_formatter.patch
   - 0001-include-atomic.h-add-stdlib.h-for-size_t.patch
@@ -574,14 +574,14 @@ Fri Dec 14 10:14:02 UTC 2012 - dalgaaf@suse.de
 -------------------------------------------------------------------
 Tue Dec 11 12:46:38 UTC 2012 - dalgaaf@suse.de
 
-- remove rest-bench subpackage since the only file included in 
-  this package is already part of ceph-test 
+- remove rest-bench subpackage since the only file included in
+  this package is already part of ceph-test
 
 -------------------------------------------------------------------
 Tue Dec 11 12:04:11 UTC 2012 - dalgaaf@suse.de
 
 - add patch:
-  - 0001-include-atomic.h-add-stdlib.h-for-size_t.patch 
+  - 0001-include-atomic.h-add-stdlib.h-for-size_t.patch
 
 -------------------------------------------------------------------
 Tue Dec 11 10:41:05 UTC 2012 - dalgaaf@suse.de
@@ -592,7 +592,7 @@ Tue Dec 11 10:41:05 UTC 2012 - dalgaaf@suse.de
 -------------------------------------------------------------------
 Mon Dec 10 17:47:18 UTC 2012 - dalgaaf@suse.de
 
-- updated to git d4c6a22d798ff6 including the v0.55 release with 
+- updated to git d4c6a22d798ff6 including the v0.55 release with
   these release notes for 0.55:
   * auth: enable cephx by default
   * librbd: fine-grained striping feature
@@ -625,43 +625,43 @@ Fri Dec  7 14:51:34 UTC 2012 - dalgaaf@suse.de
 -------------------------------------------------------------------
 Wed Nov 28 23:36:48 UTC 2012 - dalgaaf@suse.de
 
-- update to git 6a36ac5bd6f4e3d 
+- update to git 6a36ac5bd6f4e3d
 
 -------------------------------------------------------------------
 Wed Nov 28 16:06:42 UTC 2012 - dalgaaf@suse.de
 
-- update source package: includes a build fix for unittests 
+- update source package: includes a build fix for unittests
 
 -------------------------------------------------------------------
 Wed Nov 28 14:25:53 UTC 2012 - dalgaaf@suse.de
 
-- adapt ceph-add-syncfs-support.v3.diff to new source 
+- adapt ceph-add-syncfs-support.v3.diff to new source
 
 -------------------------------------------------------------------
 Wed Nov 28 13:35:19 UTC 2012 - dalgaaf@suse.de
 
-- update to git snapshot (base: c99d9c3ae7825979) including 30 
+- update to git snapshot (base: c99d9c3ae7825979) including 30
   patches to cleanup twice included header files
 
 -------------------------------------------------------------------
 Tue Nov 27 14:37:18 UTC 2012 - dalgaaf@suse.de
 
 - update patch:
-  - ceph-add-syncfs-support.v3.diff: fix syncfs handling again 
+  - ceph-add-syncfs-support.v3.diff: fix syncfs handling again
     to avoid multiple sync calls to the same kernel function
-    in case syncfs fails 
+    in case syncfs fails
 
 -------------------------------------------------------------------
 Mon Nov 26 15:56:12 UTC 2012 - dalgaaf@suse.de
 
-- update to git 39d2d08a233c81d 
+- update to git 39d2d08a233c81d
 - remove upstream gone patches:
   - 0001-make-mkcephfs-and-init-ceph-osd-filesystem-handling-v3
 
 -------------------------------------------------------------------
 Thu Nov 22 16:14:44 UTC 2012 - dalgaaf@suse.de
 
-- update to git 2b002a8de3d64a5 
+- update to git 2b002a8de3d64a5
 
 -------------------------------------------------------------------
 Thu Nov 22 15:01:31 UTC 2012 - dalgaaf@suse.de
@@ -671,8 +671,8 @@ Thu Nov 22 15:01:31 UTC 2012 - dalgaaf@suse.de
 -------------------------------------------------------------------
 Thu Nov 22 14:08:50 UTC 2012 - dalgaaf@suse.de
 
-- move libhadoopcephfs files into a new subpackage called 
-  libhadoopcephfs1 
+- move libhadoopcephfs files into a new subpackage called
+  libhadoopcephfs1
 
 -------------------------------------------------------------------
 Thu Nov 22 13:20:01 UTC 2012 - dalgaaf@suse.de
@@ -687,20 +687,20 @@ Thu Nov 22 11:45:42 UTC 2012 - dalgaaf@suse.de
 - added updated patch:
   - ceph-mkcephfs-spread-admin-keyring.v2.diff
 - removed no longer needed patch:
-  - ceph-mkcephfs-fix-create-keyring.diff 
+  - ceph-mkcephfs-fix-create-keyring.diff
 
 -------------------------------------------------------------------
 Wed Nov 21 18:42:04 UTC 2012 - dalgaaf@suse.de
 
 - add new patch:
-  - 0002-fix-fwrite-related-compiler-warnings.patch 
+  - 0002-fix-fwrite-related-compiler-warnings.patch
 
 -------------------------------------------------------------------
 Wed Nov 21 17:35:37 UTC 2012 - dalgaaf@suse.de
 
 - added new patch
   * 0001-make-mkcephfs-and-init-ceph-osd-filesystem-handling-v3:
-    -> patch to make file system handling in mkcephfs and 
+    -> patch to make file system handling in mkcephfs and
        ceph-init more flexible, enable support for all fs types
 - removed unused patches from package
 
@@ -710,27 +710,27 @@ Wed Nov 21 11:19:53 UTC 2012 - dalgaaf@suse.de
 - update to 0.54:
   * osd: use entire device if journal is a block device
   * osd: new caps structure (see below)
-  * osd: backfill target reservations (improve performance during 
+  * osd: backfill target reservations (improve performance during
     recovery)
   * ceph-fuse: many fixes (including memory leaks, hangs)
   * radosgw: REST API for managing usage stats
   * radosgw: many small fixes, cleanups (coverity)
   * mds: misc fixes for multi-mds clusters
   * rbd: ls -l
-  * ceph-disk-prepare: support for external journals, default 
+  * ceph-disk-prepare: support for external journals, default
     mount/mkfs options, etc.
   * ceph-debugpack: miscimprovements
 
 -------------------------------------------------------------------
 Mon Oct 22 13:02:19 UTC 2012 - dkukawka@suse.de
 
-- update to 0.53: 
+- update to 0.53:
   * librbd: image locking
   * rbd: fix list command when more than 1024 (format 2) images
-  * osd: backfill reservation framework (to avoid flooding new 
+  * osd: backfill reservation framework (to avoid flooding new
     osds with backfill data)
   * osd, mon: honor new 'nobackfill' and 'norecover' osdmap flags
-  * osd: new 'deep scrub' will compare object content across 
+  * osd: new 'deep scrub' will compare object content across
     replicas (once per week by default)
   * osd: crush performance improvements
   * osd: some performance improvements related to request queuing
@@ -738,19 +738,19 @@ Mon Oct 22 13:02:19 UTC 2012 - dkukawka@suse.de
   * osd: misc recovery fixes
   * osd: fix memory leak on certain error paths
   * osd: default journal size to 1 GB
-  * crush: default root of tree type is now 'root' instead of 
+  * crush: default root of tree type is now 'root' instead of
     'pool' (to avoid confusiong wrt rados pools)
   * ceph-fuse: fix handling for .. in root directory
   * librados: some locking fixes
   * mon: some election bug fixes
-  * mon: some additional on-disk metadata to facilitate future 
+  * mon: some additional on-disk metadata to facilitate future
     mon changes (post-bobtail)
-  * mon: throttle osd flapping based on osd history (limits osdmap 
+  * mon: throttle osd flapping based on osd history (limits osdmap
     "thrashing" on overloaded or unhappy clusters)
   * mon: new 'osd crush create-or-move ...' command
   * radosgw: fix copy-object vs attributes
   * radosgw: fix bug in bucket stat updates
-  * mds: fix ino release on abort session close, relative getattr 
+  * mds: fix ino release on abort session close, relative getattr
     path, mds shutdown, other misc items
   * common: thread pool sizes can now be adjusted at runtime
 - remove obsync package, it's no longer available
@@ -762,7 +762,7 @@ Tue Oct  2 13:02:59 UTC 2012 - dkukawka@suse.de
 - update to latest release 0.52:
   * librbd: fully functional and documented image cloning
   * librbd: image (advisory) locking
-  * librbd: 'protect'/'unprotect' commands to prevent clone parent 
+  * librbd: 'protect'/'unprotect' commands to prevent clone parent
     from being deleted
   * librbd: 'flatten' command to sever clone parent relationship
   * librbd: a few fixes to 'discard' support
@@ -772,7 +772,7 @@ Tue Oct  2 13:02:59 UTC 2012 - dkukawka@suse.de
   * mon: 'report' command for dumping detailed cluster status
   * mon: throttle client messages (limit memory consumption)
   * mon: more informative info about stuck PGs in 'health detail'
-  * osd, mon: use feature bits to lock out clients lacking 
+  * osd, mon: use feature bits to lock out clients lacking
     CRUSH tunables when they are in use
   * radosgw: support for swift manifest objects
   * radosgw: support for multi-object deletes
@@ -795,9 +795,9 @@ Wed Aug  1 11:14:02 UTC 2012 - dkukawka@suse.de
 Mon Jul 30 18:51:00 UTC 2012 - dkukawka@suse.de
 
 - added new patches:
-  - ceph-mkcephfs-spread-admin-keyring.diff: add support for 
-    mkcephfs --spread-admin-key to spread the admin keyring to 
-    all MON/MDS/OSDs from the config to be able to manage the 
+  - ceph-mkcephfs-spread-admin-keyring.diff: add support for
+    mkcephfs --spread-admin-key to spread the admin keyring to
+    all MON/MDS/OSDs from the config to be able to manage the
     cluster from each of them
   - ceph-mkcephfs-fix-create-keyring.diff: fix handling of keyring
     path for creation of the keys for MDS and OSDs. Due to the
@@ -912,7 +912,7 @@ Thu Jul  5 17:35:40 UTC 2012 - dkukawka@suse.de
   these are fixes for help/usage of some cmdline tools, bugfixes
   and a version bump of librados:
   - 0001-config-remove-bad-argparse_flag-argument-in-parse_op.patch
-  - 0003-ceph-better-usage.patch 
+  - 0003-ceph-better-usage.patch
   - 0004-ReplicatedPG-remove-faulty-scrub-assert-in-sub_op_mo.patch
   - 0007-rgw-admin-fix-usage-help.patch
   - 0008-rgw-radosgw-admin-date-params-now-also-accept-time.patch
@@ -924,7 +924,7 @@ Thu Jul  5 17:35:40 UTC 2012 - dkukawka@suse.de
 -------------------------------------------------------------------
 Wed Jul  4 10:17:45 UTC 2012 - dkukawka@suse.de
 
-- remove ceph-gceph package since it was removed from source 
+- remove ceph-gceph package since it was removed from source
 
 -------------------------------------------------------------------
 Wed Jul  4 09:59:32 UTC 2012 - dkukawka@suse.de
@@ -932,7 +932,7 @@ Wed Jul  4 09:59:32 UTC 2012 - dkukawka@suse.de
 - updated to 0.48 (argonaut):
   - osd: stability improvements
   - osd: capability model simplification
-  - osd: simpler/safer \u2013mkfs (no longer removes all files; safe 
+  - osd: simpler/safer \u2013mkfs (no longer removes all files; safe
          to re-run on active osd)
   - osd: potentially buggy FIEMAP behavior disabled by default
   - rbd: caching improvements
@@ -946,10 +946,10 @@ Wed Jul  4 09:59:32 UTC 2012 - dkukawka@suse.de
   - doc: improved documentation (ceph, rbd, radosgw, chef, etc.)
   - config: new default locations for daemon keyrings
   - config: arbitrary variable substitutions
-  - improved \u2018admin socket\u2019 daemon admin interface 
+  - improved \u2018admin socket\u2019 daemon admin interface
     (ceph \u2013admin-daemon ...)
   - chef: support for multiple monitor clusters
-  - upstart: basic support for monitors, mds, radosgw; osd support 
+  - upstart: basic support for monitors, mds, radosgw; osd support
     still a work in progress.
 
 -------------------------------------------------------------------
@@ -957,8 +957,8 @@ Wed Jun 27 09:29:40 UTC 2012 - dkukawka@suse.com
 
 - updated to 0.47.3:
   - rgw: replace all bad use of formatter->dump_format()
-  - librados, ObjectCacher: include limits.h for INT_MAX 
-  - filestore: disable 'filestore fiemap' by default 
+  - librados, ObjectCacher: include limits.h for INT_MAX
+  - filestore: disable 'filestore fiemap' by default
 - removed no longer needed patches:
   - ceph-fix-INT_MAX-git9a9418ebfde1.diff
 
@@ -966,8 +966,8 @@ Wed Jun 27 09:29:40 UTC 2012 - dkukawka@suse.com
 Tue Jun  5 16:01:35 UTC 2012 - dkukawka@suse.de
 
 - add new patch:
-  - ceph-add-syncfs-support.diff: add support for syncfs without 
-    having a new glibc or new kernel headers 
+  - ceph-add-syncfs-support.diff: add support for syncfs without
+    having a new glibc or new kernel headers
 
 -------------------------------------------------------------------
 Fri Jun  1 13:15:21 UTC 2012 - dkukawka@suse.de
@@ -987,14 +987,14 @@ Fri Jun  1 12:39:32 UTC 2012 - dkukawka@suse.de
   * libs3 compilation/install confusion (when building from source)
   * ceph.spec updates
   * osd: fix xattr detection
-  * mon: admin tools to control unwieldy clusters (temporarily 
+  * mon: admin tools to control unwieldy clusters (temporarily
     block osd boots, failures, etc.)
   * osd: reduced memory footprint for peering/thrashing
   * librbd: write-thru cache mode
   * librbd: improved error handling
-  * osd: removal of ill-conceived \u2018localized pg\u2019 feature (those 
+  * osd: removal of ill-conceived \u2018localized pg\u2019 feature (those
     annoying PGs with \u2018p\u2019 in them)
-  * rest-bench: simple tool to benchmark radosgw (or S3) (based 
+  * rest-bench: simple tool to benchmark radosgw (or S3) (based
     on \u2018rados bench\u2019 command)
   * rbd: new caching mode
   * rbd: trim/discard support
@@ -1016,11 +1016,11 @@ Tue May  8 09:58:56 CEST 2012 - hmacht@suse.de
 Fri May  4 16:13:53 UTC 2012 - dkukawka@suse.de
 
 - add new patch:
-  - ceph-common_sh.fix.sshdir.diff: fix for ceph_common.sh: if 
+  - ceph-common_sh.fix.sshdir.diff: fix for ceph_common.sh: if
     $sshdir doesn't exist, create it to avaid warnings.
 
     Note: always define "ssh path" in global section of ceph.conf
-    or make sure you call mkcephfs/rcceph from / or another 
+    or make sure you call mkcephfs/rcceph from / or another
     well known directory to prevent stange placing of core dumps
     (bnc#759972)
 
@@ -1053,7 +1053,7 @@ Thu Apr 12 09:01:58 UTC 2012 - dkukawka@suse.de
 -------------------------------------------------------------------
 Tue Apr 10 18:10:53 UTC 2012 - dkukawka@suse.de
 
-- updated to 0.44.2: 
+- updated to 0.44.2:
   * filestore: set guard on collection_move
   * FileStore: do not check dbobjectmap without option set
 
@@ -1070,7 +1070,7 @@ Fri Mar 30 11:14:07 CEST 2012 - hmacht@suse.de
 Tue Mar 27 09:45:48 UTC 2012 - dkukawka@suse.com
 
 - updated to 0.44:
-  * osd: key/value objects (objects are now blobs, key/value 
+  * osd: key/value objects (objects are now blobs, key/value
     bundles, and xattrs)
   * osd: cleaned up PG state, stats
   * osd: fixed transaction replay on non-btrfs after ill-timed
@@ -1083,24 +1083,24 @@ Tue Mar 27 09:45:48 UTC 2012 - dkukawka@suse.com
   * librados: new key/value object API
   * Ubuntu 12.04 precise packages
 - updated radosgw-init-opensuse.patch
-- added new patch from git to fix build: 
+- added new patch from git to fix build:
   - ceph-d3bcac241f25-fix-0.44-build.patch
 - fixed spec CFLAGS/CXXFLAGS handling to build
 
 -------------------------------------------------------------------
 Fri Mar 16 12:56:59 UTC 2012 - dkukawka@suse.de
 
-- fix output in ceph-init-ceph.add.xfs.support.diff for XFS mount 
+- fix output in ceph-init-ceph.add.xfs.support.diff for XFS mount
 
 -------------------------------------------------------------------
 Thu Mar 15 16:49:57 UTC 2012 - dkukawka@suse.de
 
-- bnc#752638: added two new patches to support XFS instead of 
+- bnc#752638: added two new patches to support XFS instead of
   btrfs to work around bnc#751743:
   - ceph-init-ceph.add.xfs.support.diff
   - ceph-mkcephfs.add.xfs.support.diff
   NOTE: make sure you set the correct options if you try to use
-        XFS instead btrfs 
+        XFS instead btrfs
 
 -------------------------------------------------------------------
 Mon Mar  5 11:53:10 CET 2012 - hmacht@suse.de
