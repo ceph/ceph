@@ -75,7 +75,7 @@ int JournalScanner::scan_pointer()
     try {
       bufferlist::iterator q = pointer_bl.begin();
       jp.decode(q);
-    } catch(buffer::error e) {
+    } catch(buffer::error &e) {
       derr << "Pointer " << pointer_oid << " is corrupt: " << e.what() << dendl;
       return 0;
     }
@@ -108,7 +108,7 @@ int JournalScanner::scan_header()
   {
     header->decode(header_bl_i);
   }
-  catch (buffer::error e)
+  catch (buffer::error &e)
   {
     derr << "Header is corrupt (" << e.what() << ")" << dendl;
     delete header;
@@ -215,7 +215,7 @@ int JournalScanner::scan_events()
         try {
           uint64_t need;
           readable = journal_stream.readable(read_buf, &need);
-        } catch (buffer::error e) {
+        } catch (buffer::error &e) {
           readable = false;
           dout(4) << "Invalid container encoding at 0x" << std::hex << read_offset << std::dec << dendl;
           gap = true;
