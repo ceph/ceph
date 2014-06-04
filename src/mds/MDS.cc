@@ -540,6 +540,8 @@ int MDS::init(int wanted_state)
   dout(10) << sizeof(Capability) << "\tCapability " << dendl;
   dout(10) << sizeof(xlist<void*>::item) << "\t xlist<>::item   *2=" << 2*sizeof(xlist<void*>::item) << dendl;
 
+  objecter->init();
+
   messenger->add_dispatcher_tail(this);
 
   // get monmap
@@ -562,7 +564,7 @@ int MDS::init(int wanted_state)
   while (monc->wait_auth_rotating(30.0) < 0) {
     derr << "unable to obtain rotating service keys; retrying" << dendl;
   }
-  objecter->init();
+  objecter->start();
 
   mds_lock.Lock();
   if (want_state == CEPH_MDS_STATE_DNE) {

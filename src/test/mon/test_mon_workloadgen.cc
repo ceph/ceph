@@ -260,6 +260,7 @@ class ClientStub : public TestStub
     objecter->set_balanced_budget();
 
     monc.set_messenger(messenger.get());
+    objecter->init();
     messenger->add_dispatcher_head(this);
     messenger->start();
     monc.set_want_keys(CEPH_ENTITY_TYPE_MON|CEPH_ENTITY_TYPE_OSD);
@@ -281,7 +282,7 @@ class ClientStub : public TestStub
     monc.wait_auth_rotating(30.0);
 
     objecter->set_client_incarnation(0);
-    objecter->init();
+    objecter->start();
 
     lock.Lock();
     timer.init();

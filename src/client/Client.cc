@@ -345,6 +345,7 @@ int Client::init()
 
   objectcacher->start();
 
+  objecter->init();
   // ok!
   messenger->add_dispatcher_head(this);
 
@@ -357,10 +358,7 @@ int Client::init()
     monclient->shutdown();
     return r;
   }
-
-  client_lock.Unlock();
-  objecter->init();
-  client_lock.Lock();
+  objecter->start();
 
   monclient->set_want_keys(CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_OSD);
   monclient->sub_want("mdsmap", 0, 0);

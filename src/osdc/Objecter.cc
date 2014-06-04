@@ -168,6 +168,9 @@ void Objecter::handle_conf_change(const struct md_config_t *conf,
 
 // messages ------------------------------
 
+/*
+ * initialize only internal data structures, don't initiate cluster interaction
+ */
 void Objecter::init()
 {
   assert(!initialized.read());
@@ -266,25 +269,30 @@ void Objecter::init()
 
   timer.init();
 
-  rwlock.get_read();
+  initialized.set(1);
+}
+
+/*
+ * ok, cluster interaction can happen
+ */
+void Objecter::start()
+{
+  RWLock::RLocker rl(rwlock);
 
   schedule_tick();
   if (osdmap->get_epoch() == 0) {
     int r = _maybe_request_map();
     assert (r == 0 || osdmap->get_epoch() > 0);
   }
-
-  rwlock.unlock();
-
-  initialized.set(1);
 }
 
 void Objecter::shutdown()
 {
   assert(initialized.read());
-  initialized.set(0);
 
   RWLock::WLocker wl(rwlock);
+
+  initialized.set(0);
 
   map<int,OSDSession*>::iterator p;
   while (!osd_sessions.empty()) {
