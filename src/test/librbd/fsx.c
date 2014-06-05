@@ -1381,6 +1381,7 @@ check_clone(int clonenum)
 		exit(169);
 	}
 
+	good_buf = NULL;
 	ret = posix_memalign((void **)&good_buf, MAX(writebdy, sizeof(void *)),
 			     file_info.st_size);
 	if (ret > 0) {
@@ -1388,6 +1389,7 @@ check_clone(int clonenum)
 		exit(96);
 	}
 
+	temp_buf = NULL;
 	ret = posix_memalign((void **)&temp_buf, MAX(readbdy, sizeof(void *)),
 			     file_info.st_size);
 	if (ret > 0) {
