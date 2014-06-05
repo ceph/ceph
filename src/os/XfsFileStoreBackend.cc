@@ -61,6 +61,14 @@ int XfsFileStoreBackend::set_extsize(int fd, unsigned int val)
     goto out;
   }
 
+  // already set?
+  if ((fsx.fsx_xflags & XFS_XFLAG_EXTSIZE) && fsx.fsx_extsize == val)
+    return 0;
+
+  // xfs won't change extent size if any extents are allocated
+  if (fsx.fsx_nextents != 0)
+    return 0;
+
   fsx.fsx_xflags |= XFS_XFLAG_EXTSIZE;
   fsx.fsx_extsize = val;
 
