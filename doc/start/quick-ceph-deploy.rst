@@ -32,6 +32,16 @@ configuration of your cluster. ::
    ``ceph-deploy``.
 
 
+.. topic:: Disable ``requiretty``
+
+   On some distributions (e.g., CentOS), you may receive an error while trying 
+   to execute ``ceph-deploy`` commands. If ``requiretty`` is set
+   by default, disable it by executing ``sudo visudo`` and locate the 
+   ``Default requiretty`` setting. Change it to ``Default:ceph !requiretty`` to
+   ensure that ``ceph-deploy`` can connect using the ``ceph`` user and execute 
+   commands with ``sudo``.
+
+
 Create a Cluster
 ================
 
@@ -58,6 +68,7 @@ for the new cluster.  See `ceph-deploy new -h`_ for additional details.
 .. tip:: If you deploy without executing foregoing step on a single node 
    cluster, your Ceph Storage Cluster will not achieve an ``active + clean``
    state. To remedy this situation, you must modify your `CRUSH Map`_.
+
 
 Install Ceph
 ============
