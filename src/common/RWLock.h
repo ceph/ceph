@@ -18,6 +18,7 @@
 #define CEPH_RWLock_Posix__H
 
 #include <pthread.h>
+#include <include/assert.h>
 #include "lockdep.h"
 
 class RWLock
