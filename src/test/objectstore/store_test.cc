@@ -79,8 +79,8 @@ TEST_P(StoreTest, collect_metadata) {
   map<string,string> pm;
   store->collect_metadata(&pm);
   if (GetParam() == string("filestore")) {
-    ASSERT_NE(pm.count("filestore_backend"), 0);
-    ASSERT_NE(pm.count("filestore_f_type"), 0);
+    ASSERT_NE(pm.count("filestore_backend"), 0u);
+    ASSERT_NE(pm.count("filestore_f_type"), 0u);
   }
 }
 
