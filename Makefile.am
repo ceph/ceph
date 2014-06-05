@@ -66,3 +66,8 @@ dist-hook:
 	  cd $(srcdir); \
 	  git log --format='%aN <%aE>' | sort -u >$(distdir)/AUTHORS; \
 	fi
+#	Generates ChangeLog from git
+	if test -d $(srcdir)/.git; then \
+	  cd $(srcdir); \
+	  git log --oneline --decorate --no-merges > $(distdir)/ChangeLog; \
+	fi
