@@ -3,6 +3,9 @@ Thu Jun 5 10:00:00 CEST 2014 - tbehrens@suse.com
 
 - remove patch ceph-mkcephfs-spread-admin-keyring.v2.diff - this was
   not doing anything anyway
+- remove patch ceph-common_sh.fix.sshdir.diff
+  (that was removed from the spec file, but not the package, long time
+  ago)
 - rolled all other existing patches into distro/suse-0-80-1 branch on
   github:
   * remove patch rcfiles-remove-init-2.patch
