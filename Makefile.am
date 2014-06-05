@@ -59,3 +59,10 @@ install-deps:
 	else \
 	  sudo yum -y install `cat deps.rpm.txt`; \
 	fi
+
+dist-hook:
+#	Generates the full list of contributors
+	if test -d $(srcdir)/.git; then \
+	  cd $(srcdir); \
+	  git log --format='%aN <%aE>' | sort -u >$(distdir)/AUTHORS; \
+	fi
