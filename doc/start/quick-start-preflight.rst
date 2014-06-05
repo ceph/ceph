@@ -118,6 +118,12 @@ Once you have completed this pre-flight checklist, you are ready to begin using
 ``ceph-deploy``.
 
 
+.. note:: Some distributions (e.g., RHEL) require you to comment out 
+   ``Default requiretty`` in the ``/etc/sudoers`` file for ``ceph-deploy`` to 
+   work properly. If editing, ``/etc/sudoers``, ensure that you use 
+   ``sudo visudo`` rather than a text editor.
+
+
 Hostname Resolution
 ===================
 
