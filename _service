@@ -1,8 +1,8 @@
 <services>
   <service name="tar_scm" mode="disabled">
-    <param name="versionformat">0.80.1+git.%h</param>
+    <param name="versionformat">0.80.1_suse+git.%h</param>
     <param name="url">git://github.com/SUSE/ceph.git</param>
-    <param name="revision">v0.80.1</param>
+    <param name="revision">distro/suse-0-80-1</param>
     <param name="filename">ceph</param>
     <param name="scm">git</param>
   </service>

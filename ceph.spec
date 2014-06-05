@@ -41,7 +41,7 @@
 # common
 #################################################################################
 Name:           ceph
-Version:        0.80.1+git.a38fe11
+Version:        0.80.1_suse+git.3217378
 Release:        0%{?dist}
 Summary:        A Scalable Distributed File System
 License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
@@ -53,23 +53,7 @@ Source2:        mkinitrd-root.on.rbd.tar.xz
 Source3:        ceph-tmpfiles.d.conf
 # filter spurious setgid warning - mongoose/civetweb is not trying to relinquish suid
 Source4:        ceph-rpmlintrc
-# PATCH-FIX-OPENSUSE rcfiles-remove-init-2.patch -- Scripts require $network which is unavailable in runlevel 2
-Patch0:         rcfiles-remove-init-2.patch
-# PATCH-FIX-OPENSUSE radosgw-init-opensuse.patch -- Run daemon as wwwrun, use startproc/killproc, and add status action
-Patch1:         radosgw-init-opensuse.patch
-Patch2:         ceph-mkcephfs.add.xfs.support.diff
-Patch3:         ceph-init-ceph.add.xfs.support.diff
-Patch4:         0001-fix-runlevels-for-start-scripts.patch
-Patch5:         ceph-mkcephfs-spread-admin-keyring.v2.diff
-# PATCH-FIX-OPENSUSE: Remove drop.ceph.com
-# not yet cleanly applied
-Patch6:         remove-ceph-drop.diff
 
-# SLES specific patches
-# not yet cleanly applied
-Patch100:       ceph-add-syncfs-support.v3.diff
-# it was rebased and enabled by mjura@suse.com
-Patch101:       ceph-disk.patch
 Requires:       librbd1 = %{version}-%{release}
 Requires:       librados2 = %{version}-%{release}
 Requires:       libcephfs1 = %{version}-%{release}
@@ -308,15 +292,6 @@ what look like some ceph keys that shodul nto rearly exist in packaging.
 #################################################################################
 %prep
 %setup -q
-%patch0 -p1
-%patch1 -p1
-%patch2 -p1
-%patch3 -p1
-%patch4 -p1
-%patch5 -p1
-%patch6 -p1
-%patch100 -p1
-%patch101 -p1
 
 %build
 ./autogen.sh

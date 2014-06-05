@@ -1,4 +1,21 @@
 -------------------------------------------------------------------
+Thu Jun 5 10:00:00 CEST 2014 - tbehrens@suse.com
+
+- remove patch ceph-mkcephfs-spread-admin-keyring.v2.diff - this was
+  not doing anything anyway
+- rolled all other existing patches into distro/suse-0-80-1 branch on
+  github:
+  * remove patch rcfiles-remove-init-2.patch
+  * remove patch radosgw-init-opensuse.patch
+  * remove patch ceph-mkcephfs.add.xfs.support.diff
+  * remove patch ceph-init-ceph.add.xfs.support.diff
+  * remove patch 0001-fix-runlevels-for-start-scripts.patch
+  * remove patch remove-ceph-drop.diff
+  * remove patch ceph-add-syncfs-support.v3.diff
+  * remove patch ceph-disk.patch
+- update tarball accordingly
+
+-------------------------------------------------------------------
 Wed Jun 4 20:00:00 CEST 2014 - tbehrens@suse.com
 
 - SLE11 & friends need explicit xz build-requires.
