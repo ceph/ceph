@@ -1297,16 +1297,19 @@ void Objecter::kick_requests(OSDSession *session)
 {
   ldout(cct, 10) << "kick_requests for osd." << session->osd << dendl;
 
+  map<uint64_t, LingerOp *> lresend;
   RWLock::WLocker wl(rwlock);
 
-  _kick_requests(session);
+  session->lock.get_write();
+  _kick_requests(session, lresend);
+  session->lock.unlock();
+
+  _linger_ops_resend(lresend);
 }
 
-void Objecter::_kick_requests(OSDSession *session)
+void Objecter::_kick_requests(OSDSession *session, map<uint64_t, LingerOp *>& lresend)
 {
   assert(rwlock.is_locked());
-
-  session->lock.get_write();
 
   // resend ops
   map<ceph_tid_t,Op*> resend;  // resend in tid order
@@ -1328,7 +1331,6 @@ void Objecter::_kick_requests(OSDSession *session)
   }
 
   // resend lingers
-  map<uint64_t, LingerOp*> lresend;  // resend in order
   for (map<ceph_tid_t, LingerOp*>::iterator j = session->linger_ops.begin(); j != session->linger_ops.end(); ++j) {
     LingerOp *op = j->second;
     op->get();
@@ -1346,7 +1348,11 @@ void Objecter::_kick_requests(OSDSession *session)
     _send_command(cresend.begin()->second);
     cresend.erase(cresend.begin());
   }
-  session->lock.unlock();
+}
+
+void Objecter::_linger_ops_resend(map<uint64_t, LingerOp *>& lresend)
+{
+  assert(rwlock.is_locked());
 
   while (!lresend.empty()) {
     LingerOp *op = lresend.begin()->second;
@@ -3095,10 +3101,12 @@ void Objecter::ms_handle_reset(Connection *con)
       map<int,OSDSession*>::iterator p = osd_sessions.find(osd);
       if (p != osd_sessions.end()) {
 	OSDSession *session = p->second;
+        map<uint64_t, LingerOp *> lresend;
         session->lock.get_write();
 	_reopen_session(session);
-	_kick_requests(session);
+	_kick_requests(session, lresend);
         session->lock.unlock();
+        _linger_ops_resend(lresend);
         rwlock.unlock();
 	maybe_request_map();
       } else {
