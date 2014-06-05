@@ -122,7 +122,7 @@ namespace ceph {
 #if SIZEOF_AO_T == 8
   typedef atomic_t atomic64_t;
 #else
-  typedef atomic_spinlock_t<long long> atomic64_t;
+  typedef atomic_spinlock_t<unsigned long long> atomic64_t;
 #endif
 
 }
