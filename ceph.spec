@@ -100,11 +100,13 @@ Requires(preun):initscripts
 %endif
 BuildRequires:  libcurl-devel
 %ifnarch ppc ppc64 s390 s390x ia64
+%if 0%{?suse_version} >= 1200
 %if 0%{with tcmalloc}
 # use isa so this will not be satisfied by
 # google-perftools-devel.i686 on a x86_64 box
 # http://rpm.org/wiki/PackagerDocs/ArchDependencies
 BuildRequires:  gperftools-devel%{?_isa}
+%endif
 %endif
 %endif
 
@@ -300,6 +302,8 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 
 # be explicit about --with/without-tcmalloc because the
 # autoconf default differs from what's needed for rpm
+#
+# Prefix with CXXFLAGS="-g -pg" to remove optimisation.
 %{configure}    CPPFLAGS="$java_inc" \
                 --localstatedir=/var \
                 --sysconfdir=/etc \
@@ -321,8 +325,12 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
                 --without-system-leveldb \
 %endif
 %ifnarch ppc ppc64 s390 s390x ia64
+%if 0%{?suse_version} >= 1200
 %if 0%{with tcmalloc}
                 --with-tcmalloc \
+%else
+                --without-tcmalloc \
+%endif
 %else
                 --without-tcmalloc \
 %endif

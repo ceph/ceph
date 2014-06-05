@@ -1,4 +1,9 @@
 -------------------------------------------------------------------
+Thu Jun  5 15:15:48 CEST 2014
+- ceph-mon core-dumps on SLE11sp3 if linked to tcmalloc.
+  * Prevent tcmalloc use on less than SLE12
+
+-------------------------------------------------------------------
 Thu Jun 5 12:00:00 CEST 2014 - tbehrens@suse.com
 
 - fixing build breakages:
