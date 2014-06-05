@@ -288,18 +288,26 @@ COMMAND("mds add_data_pool " \
 COMMAND("mds remove_data_pool " \
 	"name=pool,type=CephString", \
 	"remove data pool <pool>", "mds", "rw", "cli,rest")
-COMMAND("mds rmfs " \
-	"name=fs_name,type=CephString " \
-	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
-	"disable the filesystem", \
-	"mds", "rw", "cli,rest")
 COMMAND("mds newfs " \
-	"name=fs_name,type=CephString " \
 	"name=metadata,type=CephInt,range=0 " \
 	"name=data,type=CephInt,range=0 " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"make new filesystem using pools <metadata> and <data>", \
 	"mds", "rw", "cli,rest")
+COMMAND("fs new " \
+	"name=fs_name,type=CephString " \
+	"name=metadata,type=CephString " \
+	"name=data,type=CephString ", \
+	"make new filesystem using named pools <metadata> and <data>", \
+	"fs", "rw", "cli,rest")
+COMMAND("fs rm " \
+	"name=fs_name,type=CephString " \
+	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
+	"disable the named filesystem", \
+	"fs", "rw", "cli,rest")
+COMMAND("fs ls ", \
+	"list filesystems", \
+	"fs", "r", "cli,rest")
 /*
  * Monmap commands
  */

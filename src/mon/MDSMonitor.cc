@@ -57,9 +57,10 @@ void MDSMonitor::print_map(MDSMap &m, int dbl)
   *_dout << dendl;
 }
 
-void MDSMonitor::create_new_fs(MDSMap &m, int metadata_pool, int data_pool)
+void MDSMonitor::create_new_fs(MDSMap &m, std::string const &name, int metadata_pool, int data_pool)
 {
   m.enabled = true;
+  m.fs_name = name;
   m.max_mds = g_conf->max_mds;
   m.created = ceph_clock_now(g_ceph_context);
   m.data_pools.insert(data_pool);
@@ -701,6 +702,63 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	ds << mdsmap.compat;
       }
       r = 0;
+  } else if (prefix == "fs ls") {
+    if (f) {
+      f->open_array_section("filesystems");
+      {
+        if (pending_mdsmap.enabled) {
+          f->open_object_section("filesystem");
+          {
+            f->dump_string("name", pending_mdsmap.fs_name);
+            const char *md_pool_name = mon->osdmon()->osdmap.get_pool_name(pending_mdsmap.metadata_pool);
+            assert(md_pool_name != NULL);
+            // Use pool IDs instead of names in JSON output as it's aimed
+            // mainly at machines.
+            f->dump_string("metadata_pool", md_pool_name);
+            f->dump_int("metadata_pool_id", pending_mdsmap.metadata_pool);
+            f->open_array_section("data_pool_ids");
+            {
+              for (std::set<int64_t>::iterator dpi = pending_mdsmap.data_pools.begin();
+                   dpi != pending_mdsmap.data_pools.end(); ++dpi) {
+                f->dump_int("data_pool_id", *dpi);
+              }
+            }
+
+            f->open_array_section("data_pools");
+            {
+                for (std::set<int64_t>::iterator dpi = pending_mdsmap.data_pools.begin();
+                   dpi != pending_mdsmap.data_pools.end(); ++dpi) {
+                  const char *pool_name = mon->osdmon()->osdmap.get_pool_name(*dpi);
+                  assert(pool_name != NULL);
+                  f->dump_string("data_pool", pool_name);
+                }
+            }
+
+            f->close_section();
+          }
+          f->close_section();
+        }
+      }
+      f->close_section();
+      f->flush(ds);
+    } else {
+      if (pending_mdsmap.enabled) {
+        const char *md_pool_name = mon->osdmon()->osdmap.get_pool_name(pending_mdsmap.metadata_pool);
+        assert(md_pool_name != NULL);
+        
+        ds << "name: " << pending_mdsmap.fs_name << ", metadata pool: " << md_pool_name << ", data pools: [";
+        for (std::set<int64_t>::iterator dpi = pending_mdsmap.data_pools.begin();
+           dpi != pending_mdsmap.data_pools.end(); ++dpi) {
+          const char *pool_name = mon->osdmon()->osdmap.get_pool_name(*dpi);
+          assert(pool_name != NULL);
+          ds << pool_name << " ";
+        }
+        ds << "]" << std::endl;
+      } else {
+        ds << "No filesystems enabled" << std::endl;
+      }
+    }
+    r = 0;
   }
 
   if (r != -1) {
@@ -807,7 +865,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
   bool const handled = management_command(prefix, cmdmap, ss, r);
   if (!handled) {
     if (!pending_mdsmap.enabled) {
-      ss << "No filesystem configured: use `ceph mds newfs` to create a filesystem";
+      ss << "No filesystem configured: use `ceph fs new` to create a filesystem";
       r = -ENOENT;
     } else {
       bool const completed = filesystem_command(m, prefix, cmdmap, ss, r);
@@ -848,8 +906,12 @@ bool MDSMonitor::management_command(
     int &r)
 {
   if (prefix == "mds newfs") {
+    /* Legacy `newfs` command, takes pool numbers instead of
+     * names, assumes fs name to be 'default', and can
+     * overwrite existing filesystem settings */
     MDSMap newmap;
     int64_t metadata, data;
+
     if (!cmd_getval(g_ceph_context, cmdmap, "metadata", metadata)) {
       ss << "error parsing 'metadata' value '"
          << cmd_vartype_stringify(cmdmap["metadata"]) << "'";
@@ -862,36 +924,13 @@ bool MDSMonitor::management_command(
       r = -EINVAL;
       return true;
     }
-
+ 
     // Check that the requested pools exist
     OSDMonitor *osdmon = mon->osdmon();
     if (!osdmon->osdmap.have_pg_pool(metadata)) {
       ss << "metadata pool '" << metadata << "' not found";
       r = -ENOENT;
       return true;
-    }
-
-    if (!osdmon->osdmap.have_pg_pool(data)) {
-      ss << "data pool '" << data << "' not found";
-      r = -ENOENT;
-      return true;
-    }
-
-    // Warn if crash_replay_interval is not set on the data pool
-    //  (on creation should have done pools[pool].crash_replay_interval =
-    //  cct->_conf->osd_default_data_pool_replay_window;)
-    pg_pool_t const *data_pool = osdmon->osdmap.get_pg_pool(data);
-    if (data_pool->get_crash_replay_interval() == 0) {
-      ss << "warning: crash_replay_interval not set on data pool '" << data << "', ";
-    }
-    
-    string fs_name;
-    cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
-    if (fs_name.empty()) {
-        // Ensure fs name is not empty so that we can implement
-        // commmands that refer to FS by name in future.
-        ss << "Filesystem name may not be empty";
-        return -EINVAL;
     }
 
     string sure;
@@ -905,12 +944,73 @@ bool MDSMonitor::management_command(
       newmap.inc = pending_mdsmap.inc;
       pending_mdsmap = newmap;
       pending_mdsmap.epoch = mdsmap.epoch + 1;
-      create_new_fs(pending_mdsmap, metadata, data);
+      create_new_fs(pending_mdsmap, "default", metadata, data);
       ss << "new fs with metadata pool " << metadata << " and data pool " << data;
       r = 0;
       return true;
     }
-  } else if (prefix == "mds rmfs") {
+  } else if (prefix == "fs new") {
+    string metadata_name;
+    cmd_getval(g_ceph_context, cmdmap, "metadata", metadata_name);
+    int64_t metadata = mon->osdmon()->osdmap.lookup_pg_pool_name(metadata_name);
+    if (metadata < 0) {
+      r = -ENOENT;
+      ss << "pool '" << metadata_name << "' does not exist";
+      return true;
+    }
+
+    string data_name;
+    cmd_getval(g_ceph_context, cmdmap, "data", data_name);
+    int64_t data = mon->osdmon()->osdmap.lookup_pg_pool_name(data_name);
+    if (data < 0) {
+      r = -ENOENT;
+      ss << "pool '" << data_name << "' does not exist";
+      return true;
+    }
+
+    // Warn if crash_replay_interval is not set on the data pool
+    //  (on creation should have done pools[pool].crash_replay_interval =
+    //  cct->_conf->osd_default_data_pool_replay_window;)
+    pg_pool_t const *data_pool = mon->osdmon()->osdmap.get_pg_pool(data);
+    if (data_pool->get_crash_replay_interval() == 0) {
+      ss << "warning: crash_replay_interval not set on data pool '" << data << "', ";
+    }
+    
+    string fs_name;
+    cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
+    if (fs_name.empty()) {
+        // Ensure fs name is not empty so that we can implement
+        // commmands that refer to FS by name in future.
+        ss << "Filesystem name may not be empty";
+        return -EINVAL;
+    }
+
+    if (pending_mdsmap.enabled == true
+        && pending_mdsmap.fs_name == fs_name
+        && *(pending_mdsmap.data_pools.begin()) == data
+        && pending_mdsmap.metadata_pool == metadata) {
+      // Identical FS created already, this is a no-op
+      r = 0;
+      ss << "filesystem '" << fs_name << "' already exists";
+      return true;
+    }
+
+    if (pending_mdsmap.enabled) {
+      /* We currently only support one filesystem, so cannot create a second */
+      ss << "A filesystem already exists, use `ceph fs rm` if you wish to delete it";
+      r = -EINVAL;
+    }
+
+    // All checks passed, go ahead and create.
+    MDSMap newmap;
+    newmap.inc = pending_mdsmap.inc;
+    pending_mdsmap = newmap;
+    pending_mdsmap.epoch = mdsmap.epoch + 1;
+    create_new_fs(pending_mdsmap, fs_name, metadata, data);
+    ss << "new fs with metadata pool " << metadata << " and data pool " << data;
+    r = 0;
+    return true;
+  } else if (prefix == "fs rm") {
     // Check caller has correctly named the FS to delete
     // (redundant while there is only one FS, but command
     //  syntax should apply to multi-FS future)
