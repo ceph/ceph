@@ -282,6 +282,7 @@ def download_kernel(ctx, config):
                 kernel_url = urlparse.urljoin(rpm_url, 'kernel.x86_64.rpm')
                 output, err_mess = StringIO(), StringIO()
                 role_remote.run(args=['sudo', 'yum', 'list', 'installed', 'kernel'], stdout=output, stderr=err_mess )
+                # Check if short (first 8 digits) sha1 is in uname output as expected
                 if src[0:7] in output.getvalue():
                     output.close()
                     err_mess.close()
