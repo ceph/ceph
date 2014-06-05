@@ -8,8 +8,8 @@
 #define POOL_LIST_BUF_SZ 32768
 
 TEST(LibRadosPools, PoolList) {
-  std::vector<char> pool_list_buf(POOL_LIST_BUF_SZ, '\0');
-  char *buf = &pool_list_buf[0];
+  char pool_list_buf[POOL_LIST_BUF_SZ];
+  char *buf = pool_list_buf;
   rados_t cluster;
   std::string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool(pool_name, &cluster));
@@ -23,6 +23,14 @@ TEST(LibRadosPools, PoolList) {
     buf += strlen(buf) + 1;
   }
   ASSERT_EQ(found_pool, true);
+
+  // make sure we honor the buffer size limit
+  buf = pool_list_buf;
+  memset(buf, 0, POOL_LIST_BUF_SZ);
+  ASSERT_LT(rados_pool_list(cluster, buf, 20), POOL_LIST_BUF_SZ);
+  ASSERT_NE(0, buf[0]);  // include at least one pool name
+  ASSERT_EQ(0, buf[20]);  // but don't touch the stopping point
+
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
