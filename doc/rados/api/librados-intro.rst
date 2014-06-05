@@ -676,7 +676,7 @@ C++ Example
 		{
 			librados::bufferlist bl;
 			bl.append("Hello World!");
-			ret = io_ctx.write("hw", bl);
+			ret = io_ctx.write_full("hw", bl);
 			if (ret < 0) {
 				std::cerr << "Couldn't write object! error " << ret << std::endl;
 				exit(EXIT_FAILURE);
