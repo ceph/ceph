@@ -17,6 +17,7 @@ Thu Jun 5 10:00:00 CEST 2014 - tbehrens@suse.com
   * remove patch ceph-add-syncfs-support.v3.diff
   * remove patch ceph-disk.patch
 - update tarball accordingly
+- remove stale rpmlintrc, this is now called ceph-rpmlintrc
 
 -------------------------------------------------------------------
 Wed Jun 4 20:00:00 CEST 2014 - tbehrens@suse.com
