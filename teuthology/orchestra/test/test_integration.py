@@ -4,7 +4,7 @@ monkey.patch_all()
 from cStringIO import StringIO
 
 import os
-from .. import connection, run
+from .. import connection, remote, run
 from .util import assert_raises
 from teuthology.exceptions import CommandCrashedError, ConnectionLostError
 
@@ -73,3 +73,12 @@ class TestIntegration():
             stdout=StringIO(),
             )
         assert r.stdout.getvalue() == 'yup\n'
+
+    def test_distro(self):
+        rem = remote.Remote(HOST)
+        assert rem.distro.distributor
+        assert rem.distro.name
+        assert rem.distro.description
+        assert rem.distro.release
+        assert rem.distro.codename
+        assert rem.distro.package_type

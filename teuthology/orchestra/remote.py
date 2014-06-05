@@ -237,6 +237,62 @@ class Remote(object):
         self._sftp_get_file(remote_temp_path, to_path)
         self.remove(remote_temp_path)
 
+    @property
+    def distro(self):
+        if not hasattr(self, '_distro'):
+            lsb_info = self.run(args=['lsb_release', '-a'], stdout=StringIO(),
+                                stderr=StringIO())
+            self._distro = Distribution(lsb_info.stdout.getvalue().strip())
+        return self._distro
+
+
+class Distribution(object):
+    """
+    Parse 'lsb_release -a' output and populate attributes
+
+    Given output like:
+        Distributor ID: Ubuntu
+        Description:    Ubuntu 12.04.4 LTS
+        Release:        12.04
+        Codename:       precise
+
+    Attributes will be:
+        distributor = 'Ubuntu'
+        description = 'Ubuntu 12.04.4 LTS'
+        release = '12.04'
+        codename = 'precise'
+    Additionally, a few convenience attributes will be set:
+        name = 'ubuntu'
+        package_type = 'deb'
+    """
+
+    __slots__ = ['_lsb_release_str', '__expr', 'distributor', 'description',
+                 'release', 'codename', 'name', 'package_type']
+
+    def __init__(self, lsb_release_str):
+        self._lsb_release_str = lsb_release_str.strip()
+        self.distributor = self._get_match("Distributor ID:\s*(.*)")
+        self.name = self.distributor.lower()
+        self.description = self._get_match("Description:\s*(.*)")
+        self.release = self._get_match("Release:\s*(.*)")
+        self.codename = self._get_match("Codename:\s*(.*)")
+
+        if self.distributor in ['Ubuntu', 'Debian']:
+            self.package_type = "deb"
+        elif self.distributor in ['CentOS', 'Fedora', 'RedHatEnterpriseServer',
+                                  'openSUSE project', 'SUSE LINUX']:
+            self.package_type = "rpm"
+
+    def _get_match(self, regex):
+        match = re.search(regex, self._lsb_release_str)
+        if match:
+            return match.groups()[0]
+        return ''
+
+    def __str__(self):
+        return " ".join([self.distributor, self.release,
+                         self.codename]).strip()
+
 
 def getShortName(name):
     """
