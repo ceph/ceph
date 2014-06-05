@@ -290,8 +290,6 @@ def download_kernel(ctx, config):
                 err_mess.close()
                 proc = role_remote.run(args=['sudo', 'yum', 'install', '-y', kernel_url], wait=False)
                 procs[role_remote.name] = proc
-
-                #download_rpm_kernel(role_remote, kernel_url, src)
                 continue
 
             larch, ldist = _find_arch_and_dist(ctx)
@@ -612,16 +610,6 @@ def need_to_install_distro(ctx, role):
     log.info('Not newest distro kernel. Curent: {cur} Expected: {new}'.format(cur=current, new=newest))
     return True
 
-
-def download_rpm_kernel(remote, url, sha1):
-    """
-    Install RPM kernel from URL.
-    """
-    output, err_mess = StringIO(), StringIO()
-    remote.run(args=['sudo', 'yum', 'list', 'installed', 'kernel'], stdout=output, stderr=err_mess )
-    if sha1[0:7] in output.getvalue():
-        return
-    remote.run(args=['sudo', 'yum', 'install', '-y', url], stdout=output, stderr=err_mess )
 
 def install_kernel(remote, sha1=None):
     """
