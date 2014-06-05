@@ -180,7 +180,7 @@ void rgw_flush_formatter_and_reset(struct req_state *s, Formatter *formatter)
   std::ostringstream oss;
   formatter->flush(oss);
   std::string outs(oss.str());
-  if (!outs.empty()) {
+  if (!outs.empty() && s->op != OP_HEAD) {
     s->cio->write(outs.c_str(), outs.size());
   }
 
@@ -192,7 +192,7 @@ void rgw_flush_formatter(struct req_state *s, Formatter *formatter)
   std::ostringstream oss;
   formatter->flush(oss);
   std::string outs(oss.str());
-  if (!outs.empty()) {
+  if (!outs.empty() && s->op != OP_HEAD) {
     s->cio->write(outs.c_str(), outs.size());
   }
 }
