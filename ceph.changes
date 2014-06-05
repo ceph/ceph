@@ -1,8 +1,10 @@
 -------------------------------------------------------------------
 Thu Jun 5 12:00:00 CEST 2014 - tbehrens@suse.com
 
-- extending ceph-rpmlintrc for devel-file-in-non-devel-package error,
-  but only for erasure-code
+- fixing build breakages:
+  * extending ceph-rpmlintrc for devel-file-in-non-devel-package error,
+    but only for erasure-code
+  * increasing mem limits to 8GB ram, since we were still getting OOMs
 
 -------------------------------------------------------------------
 Thu Jun 5 10:00:00 CEST 2014 - tbehrens@suse.com
