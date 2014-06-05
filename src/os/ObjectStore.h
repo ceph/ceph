@@ -537,16 +537,16 @@ public:
        * stream. There is no checking that the encoded data is of the
        * correct type.
        */
-      int get_op() {
+      int decode_op() {
 	__u32 op;
 	::decode(op, p);
 	return op;
       }
-      void get_bl(bufferlist& bl) {
+      void decode_bl(bufferlist& bl) {
 	::decode(bl, p);
       }
       /// Get an oid, recognize various legacy forms and update them.
-      ghobject_t get_oid() {
+      ghobject_t decode_oid() {
 	ghobject_t oid;
 	if (sobject_encoding) {
 	  sobject_t soid;
@@ -564,36 +564,36 @@ public:
 	}
 	return oid;
       }
-      coll_t get_cid() {
+      coll_t decode_cid() {
 	coll_t c;
 	::decode(c, p);
 	return c;
       }
-      uint64_t get_length() {
+      uint64_t decode_length() {
 	uint64_t len;
 	::decode(len, p);
 	return len;
       }
-      string get_attrname() {
+      string decode_attrname() {
 	string s;
 	::decode(s, p);
 	return s;
       }
-      string get_key() {
+      string decode_key() {
 	string s;
 	::decode(s, p);
 	return s;
       }
-      void get_attrset(map<string,bufferptr>& aset) {
+      void decode_attrset(map<string,bufferptr>& aset) {
 	::decode(aset, p);
       }
-      void get_attrset(map<string,bufferlist>& aset) {
+      void decode_attrset(map<string,bufferlist>& aset) {
 	::decode(aset, p);
       }
-      void get_keyset(set<string> &keys) {
+      void decode_keyset(set<string> &keys) {
 	::decode(keys, p);
       }
-      uint32_t get_u32() {
+      uint32_t decode_u32() {
 	uint32_t bits;
 	::decode(bits, p);
 	return bits;
