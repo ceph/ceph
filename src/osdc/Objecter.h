@@ -1539,7 +1539,8 @@ public:
   void _command_cancel_map_check(CommandOp *op);
 
   void kick_requests(OSDSession *session);
-  void _kick_requests(OSDSession *session);
+  void _kick_requests(OSDSession *session, map<uint64_t, LingerOp *>& lresend);
+  void _linger_ops_resend(map<uint64_t, LingerOp *>& lresend);
 
   int _get_session(int osd, OSDSession **session, RWLock::Context& lc);
   void put_session(OSDSession *s);
