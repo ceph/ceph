@@ -223,12 +223,11 @@ void StripObjectMap::rename_wrap(const coll_t &cid, const ghobject_t &oid,
                                  StripObjectHeader *header)
 {
   assert(header);
+  assert(header->header);
   rename(header->header, cid, oid, t);
 
-  if (header) {
-    header->oid = oid;
-    header->cid = cid;
-  }
+  header->oid = oid;
+  header->cid = cid;
 }
 
 int StripObjectMap::get_values_with_header(const StripObjectHeader &header,
@@ -1452,8 +1451,8 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
         // TODO: can kvstore make use of the hint?
         coll_t cid(i.get_cid());
         ghobject_t oid = i.get_oid();
-        uint64_t expected_object_size = i.get_length();
-        uint64_t expected_write_size = i.get_length();
+        i.get_length(); // uint64_t expected_object_size
+        i.get_length(); // uint64_t expected_write_size
       }
       break;
 
