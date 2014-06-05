@@ -147,6 +147,7 @@ LIBMDS = libmds.la
 LIBCLIENT = libclient.la
 LIBCLIENT_FUSE = libclient_fuse.la
 LIBRADOS = librados.la
+LIBRADOSSTRIPER = libradosstriper.la
 LIBRGW = librgw.la
 LIBRBD = librbd.la
 LIBKRBD = libkrbd.la
