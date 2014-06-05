@@ -2058,10 +2058,10 @@ extern "C" int rados_pool_list(rados_t cluster, char *buf, size_t len)
   std::list<std::string>::const_iterator i = pools.begin();
   std::list<std::string>::const_iterator p_end = pools.end();
   for (; i != p_end; ++i) {
-    if (len == 0)
-      break;
     int rl = i->length() + 1;
-    strncat(b, i->c_str(), len - 2); // leave space for two NULLs
+    if (len < (unsigned)rl)
+      break;
+    strncat(b, i->c_str(), rl);
     needed += rl;
     len -= rl;
     b += rl;
