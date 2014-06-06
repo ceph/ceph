@@ -109,11 +109,25 @@ def task(ctx, config):
         '--max-stride-size', str(config.get('max_stride_size', object_size / 5)),
         '--max-seconds', str(config.get('max_seconds', 0))
         ])
+    # Parallel of the op_types in test/osd/TestRados.cc
     for field in [
-        'copy_from', 'is_dirty', 'undirty', 'cache_flush',
-        'cache_try_flush', 'cache_evict',
-        'snap_create', 'snap_remove', 'rollback', 'setattr', 'rmattr',
-        'watch', 'append',
+        # read handled above
+        # write handled above
+        # delete handled above
+        "snap_create",
+        "snap_remove",
+        "rollback",
+        "setattr",
+        "rmattr",
+        "watch",
+        "copy_from",
+        "hit_set_list",
+        "is_dirty",
+        "undirty",
+        "cache_flush",
+        "cache_try_flush",
+        "cache_evict",
+        "append",
         ]:
         if field in op_weights:
             args.extend([
