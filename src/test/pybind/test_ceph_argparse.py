@@ -393,9 +393,9 @@ class TestMDS(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['mds', 'rm', '1']))
         for name in ('osd', 'mon', 'client', 'mds'):
             self.assert_valid_command(['mds', 'rm', '1', name + '.42'])
-            assert_equal(None, validate_command(sigdict, ['mds', 'rm',
+            assert_equal({}, validate_command(sigdict, ['mds', 'rm',
                                                         '-1', name + '.42']))
-            assert_equal(None, validate_command(sigdict, ['mds', 'rm',
+            assert_equal({}, validate_command(sigdict, ['mds', 'rm',
                                                         '-1', name]))
             assert_equal({}, validate_command(sigdict, ['mds', 'rm',
                                                         '1', name + '.42',
@@ -451,9 +451,9 @@ class TestMDS(TestArgparse):
         self.assert_valid_command(['mds', 'remove_data_pool', 'foo'])
 
     def test_newfs(self):
-        self.assert_valid_command(['mds', 'newfs', 'default', '1', '2',
+        self.assert_valid_command(['mds', 'newfs', '1', '2',
                                    '--yes-i-really-mean-it'])
-        self.assert_valid_command(['mds', 'newfs', 'default', '1', '2'])
+        self.assert_valid_command(['mds', 'newfs', '1', '2'])
         assert_equal({}, validate_command(sigdict, ['mds', 'newfs']))
         assert_equal({}, validate_command(sigdict, ['mds', 'newfs', '1']))
         assert_equal({}, validate_command(sigdict, ['mds',
@@ -473,10 +473,19 @@ class TestMDS(TestArgparse):
                                                     '-1',
                                                     '--yes-i-really-mean-it']))
 
-    def test_rmfs(self):
-        self.assert_valid_command(['mds', 'rmfs', 'default', '--yes-i-really-mean-it'])
-        self.assert_valid_command(['mds', 'rmfs', 'default'])
-        assert_equal({}, validate_command(sigdict, ['mds', 'rmfs']))
+
+class TestFS(TestArgparse):
+    def test_fs_new(self):
+        self.assert_valid_command(['fs', 'new', 'default', 'metadata', 'data'])
+
+    def test_fs_rm(self):
+        self.assert_valid_command(['fs', 'rm', 'default'])
+        self.assert_valid_command(['fs', 'rm', 'default', '--yes-i-really-mean-it'])
+        assert_equal({}, validate_command(sigdict, ['fs', 'rm', 'default', '--yes-i-really-mean-it', 'toomany']))
+
+    def test_fs_ls(self):
+        self.assert_valid_command(['fs', 'ls'])
+        assert_equal({}, validate_command(sigdict, ['fs', 'ls', 'toomany']))
 
 class TestMon(TestArgparse):
 
