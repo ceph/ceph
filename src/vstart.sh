@@ -537,7 +537,7 @@ EOF
         echo $cmd
         $cmd
 
-        cmd="$CEPH_ADM mds newfs default 2 1"
+        cmd="$CEPH_ADM fs new default cephfs_metadata cephfs_data"
         echo $cmd
         $cmd
 	fi
