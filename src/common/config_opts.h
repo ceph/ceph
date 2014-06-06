@@ -736,8 +736,15 @@ OPTION(rbd_default_features, OPT_INT, 3) // 1 for layering, 3 for layering+strip
 
 OPTION(nss_db_path, OPT_STR, "") // path to nss db
 
-
 OPTION(rgw_max_chunk_size, OPT_INT, 512 * 1024)
+
+/*
+ * Represents the number of shards for the bucket index object, the default value 0
+ * means there is no sharding, the name of the bucket index object is '.dir.{bucket_marker}',
+ * if a positive value is given, the name of the bucket index objects are
+ * '.dir.{bucket_marker}.{X}', where X is zero-based shard Id.
+ */
+OPTION(rgw_bucket_index_objs, OPT_U32, 10)
 
 OPTION(rgw_data, OPT_STR, "/var/lib/ceph/radosgw/$cluster-$id")
 OPTION(rgw_enable_apis, OPT_STR, "s3, swift, swift_auth, admin")

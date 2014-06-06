@@ -1218,6 +1218,9 @@ class RGWRados
 
   uint64_t max_chunk_size;
 
+  // The number of bucket index object shards
+  uint32_t bucket_index_objs;
+
   int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker);
   int append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj,
                          librados::ObjectOperation& op, RGWObjState **state);
@@ -1283,6 +1286,7 @@ public:
                watch_initialized(false),
                bucket_id_lock("rados_bucket_id"), max_bucket_id(0),
                max_chunk_size(0),
+               bucket_index_objs(0),
                cct(NULL), rados(NULL),
                pools_initialized(false),
                quota_handler(NULL),
@@ -1748,9 +1752,9 @@ public:
   int cls_obj_complete_del(rgw_bucket& bucket, string& tag, int64_t pool, uint64_t epoch, string& name);
   int cls_obj_complete_cancel(rgw_bucket& bucket, string& tag, string& name);
   int cls_obj_set_bucket_tag_timeout(rgw_bucket& bucket, uint64_t timeout);
-  int cls_bucket_list(rgw_bucket& bucket, string start, string prefix, uint32_t num,
-                      map<string, RGWObjEnt>& m, bool *is_truncated,
-                      string *last_entry, bool (*force_check_filter)(const string&  name) = NULL);
+  int cls_bucket_list(rgw_bucket& bucket, const string& start, const string& prefix,
+                      uint32_t suggest_num,  map<string, RGWObjEnt>& m, bool *is_truncated,
+                      bool (*force_check_filter)(const string&  name) = NULL);
   int cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header);
   int cls_bucket_head_async(rgw_bucket& bucket, RGWGetDirHeader_CB *ctx);
   int prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
@@ -1848,6 +1852,20 @@ public:
   }
 
  private:
+  /**
+   * Get the bucket index object (shard) with the given directory object base
+   * and object key.
+   *
+   * dir_oid_base - the directory object base name.
+   * object_key - the object key.
+   *
+   * Return the sharded bucket index object.
+   */
+  string get_bucket_index_obj(const string& dir_oid_base, const string& object_key);
+
+  template<typename T>
+  void build_bucket_index_objs_map(const string& oid_base, map<string, T>& bucket_objs_map);
+
   int process_intent_log(rgw_bucket& bucket, string& oid,
 			 time_t epoch, int flags, bool purge);
   /**

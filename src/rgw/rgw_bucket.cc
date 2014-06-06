@@ -719,14 +719,15 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
     map<string, RGWObjEnt> result;
 
     int r = store->cls_bucket_list(bucket, marker, prefix, 1000, result,
-             &is_truncated, &marker,
-             bucket_object_check_filter);
+             &is_truncated,  bucket_object_check_filter);
 
     if (r == -ENOENT) {
       break;
     } else if (r < 0 && r != -ENOENT) {
       set_err_msg(err_msg, "ERROR: failed operation r=" + cpp_strerror(-r));
     }
+    // Refresh marker
+    marker = result.rbegin()->first;
   }
 
   store->cls_obj_set_bucket_tag_timeout(bucket, 0);
