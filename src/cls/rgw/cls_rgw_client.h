@@ -24,13 +24,26 @@ void cls_rgw_bucket_complete_op(librados::ObjectWriteOperation& o, RGWModifyOp o
                                 rgw_bucket_entry_ver& ver, string& name, rgw_bucket_dir_entry_meta& dir_meta,
 				list<string> *remove_objs, bool log_op);
 
-int cls_rgw_list_op(librados::IoCtx& io_ctx, string& oid, string& start_obj,
-                    string& filter_prefix, uint32_t num_entries,
-                    rgw_bucket_dir *dir, bool *is_truncated);
+/*
+ * List the bucket with the starting object and prefix, the index objects are
+ * the keys of the *list_result* map, which should be pre-populated by caller.
+ *
+ * io_ctx - IO context for rados.
+ * start_obj - marker for the listing.
+ * filter_prefix - filer prefix.
+ * num_entries - number of entries to request for each object (note the total amount of entries returned
+ *               depends on the number of shardings).
+ * list_results - the list results keyed by index object id.
+ *
+ * Return 0 on success, or else the failure code.
+ */
+int cls_rgw_list_op(librados::IoCtx& io_ctx, const string & start_obj,
+                    const string& filter_prefix, uint32_t num_entries,
+                    map<string, struct rgw_cls_list_ret>* list_results);
 
-int cls_rgw_bucket_check_index_op(librados::IoCtx& io_ctx, string& oid,
-				  rgw_bucket_dir_header *existing_header,
-				  rgw_bucket_dir_header *calculated_header);
+int cls_rgw_bucket_check_index_op(librados::IoCtx& io_ctx,
+                  map<string, struct rgw_cls_check_index_ret>& results);
+
 int cls_rgw_bucket_rebuild_index_op(librados::IoCtx& io_ctx, string& oid);
   
 int cls_rgw_get_dir_header(librados::IoCtx& io_ctx, string& oid, rgw_bucket_dir_header *header);

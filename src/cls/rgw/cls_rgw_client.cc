@@ -57,60 +57,105 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, string&
   o.exec("rgw", "bucket_complete_op", in);
 }
 
+template<typename T>
+class ClsBucketOpCtx : public ObjectOperationCompletion {
+private:
+  //struct rgw_cls_list_ret* list_ret;
+  T* result;
+  // Return code of the operation
+  int* pret;
+public:
+  //ClsBucketListCtx(struct rgw_cls_list_ret *_list_ret, int *_pret) : list_ret(_list_ret), pret(_pret) {}
+  ClsBucketOpCtx(T* _result, int *_pret) : result(_result), pret(_pret) {}
+  ~ClsBucketOpCtx() {}
 
-int cls_rgw_list_op(IoCtx& io_ctx, string& oid, string& start_obj,
-                    string& filter_prefix, uint32_t num_entries,
-                    rgw_bucket_dir *dir, bool *is_truncated)
+  // The completion callback, fill the listing result
+  void handle_completion(int r, bufferlist& outbl) {
+    if (r >= 0) {
+      try {
+        bufferlist::iterator iter = outbl.begin();
+        ::decode((*result), iter);
+      } catch (buffer::error& err) {
+        r = -EIO;
+      }
+    }
+    if (pret) {
+      *pret = r;
+    }
+  }
+};
+
+int cls_rgw_list_op(IoCtx& io_ctx, const string& start_obj,
+                   const string& filter_prefix, uint32_t num_entries,
+                   map<string, struct rgw_cls_list_ret>* list_results)
 {
-  bufferlist in, out;
-  struct rgw_cls_list_op call;
-  call.start_obj = start_obj;
-  call.filter_prefix = filter_prefix;
-  call.num_entries = num_entries;
-  ::encode(call, in);
-  int r = io_ctx.exec(oid, "rgw", "bucket_list", in, out);
-  if (r < 0)
-    return r;
+  int ret = 0;
+  
+  list<librados::AioCompletion*> completions;
+  map<string, struct rgw_cls_list_ret>::iterator iter;
+  for (iter = list_results->begin(); iter != list_results->end(); ++iter) {
+    // Prepare the parameters
+    bufferlist in;
+    struct rgw_cls_list_op call;
+    call.start_obj = start_obj;
+    call.filter_prefix = filter_prefix;
+    call.num_entries = num_entries;
+    ::encode(call, in);
 
-  struct rgw_cls_list_ret ret;
-  try {
-    bufferlist::iterator iter = out.begin();
-    ::decode(ret, iter);
-  } catch (buffer::error& err) {
-    return -EIO;
+    librados::ObjectReadOperation op;
+    op.exec("rgw", "bucket_list", in, new ClsBucketOpCtx<struct rgw_cls_list_ret>(&iter->second, NULL));
+    AioCompletion* c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+    completions.push_back(c);
+
+    // Do AIO operate
+    io_ctx.aio_operate(iter->first, c, &op, NULL);
   }
 
-  if (dir)
-    *dir = ret.dir;
-  if (is_truncated)
-    *is_truncated = ret.is_truncated;
-
- return r;
+  // Wait for completion
+  while (!completions.empty()) {
+    AioCompletion* tmp_c = completions.front();
+    completions.pop_front();
+    tmp_c->wait_for_complete_and_cb();
+    int tmp_ret = tmp_c->get_return_value();
+    if (tmp_ret != 0) {
+      ret = tmp_ret;
+    }
+    tmp_c->release(); 
+  }
+  return ret;
 }
 
-int cls_rgw_bucket_check_index_op(IoCtx& io_ctx, string& oid,
-				  rgw_bucket_dir_header *existing_header,
-				  rgw_bucket_dir_header *calculated_header)
+int cls_rgw_bucket_check_index_op(IoCtx& io_ctx, 
+                  map<string, struct rgw_cls_check_index_ret>* results)
 {
+  int ret = 0;
+  list<librados::AioCompletion*> completions;
   bufferlist in, out;
-  int r = io_ctx.exec(oid, "rgw", "bucket_check_index", in, out);
-  if (r < 0)
-    return r;
+  map<string, struct rgw_cls_check_index_ret>::iterator iter;
+  for (iter = results->begin(); iter != results->end(); ++iter) {
+    bufferlist in, out;
+    librados::ObjectReadOperation op;
+    op.exec("rgw", "bucket_check_index", in, new ClsBucketOpCtx<struct rgw_cls_check_index_ret>(&iter->second, NULL));
+    AioCompletion* c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+    completions.push_back(c);
 
-  struct rgw_cls_check_index_ret ret;
-  try {
-    bufferlist::iterator iter = out.begin();
-    ::decode(ret, iter);
-  } catch (buffer::error& err) {
-    return -EIO;
+    // Do AIO operation
+    io_ctx.aio_operate(iter->first, c, &op, NULL);
+
+    // Wait for completion
+    while (!completions.empty()) {
+      AioCompletion* tmp_c = completions.front();
+      completions.pop_front();
+      tmp_c->wait_for_complete_and_cb();
+      int tmp_ret = tmp_c->get_return_value();
+      if (tmp_ret != 0) {
+        ret = tmp_ret;
+      }
+      tmp_c->release();
+    }
+
+    return ret;
   }
-
-  if (existing_header)
-    *existing_header = ret.existing_header;
-  if (calculated_header)
-    *calculated_header = ret.calculated_header;
-
-  return 0;
 }
 
 int cls_rgw_bucket_rebuild_index_op(IoCtx& io_ctx, string& oid)
