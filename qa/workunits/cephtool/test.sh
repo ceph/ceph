@@ -271,9 +271,7 @@ kill $wpid
 
 ceph osd pool create fs_data 10
 ceph osd pool create fs_metadata 10
-data_pool=$(ceph osd dump | grep 'pool.*fs_data' | awk '{print $2;}')
-metadata_pool=$(ceph osd dump | grep 'pool.*fs_metadata' | awk '{print $2;}')
-ceph mds newfs default $metadata_pool $data_pool --yes-i-really-mean-it
+ceph fs new default fs_metadata fs_data
 
 ceph mds cluster_down
 ceph mds cluster_up
@@ -333,7 +331,9 @@ ceph mds stat
 # ceph mds set_state
 # ceph mds stop
 
-ceph mds rmfs default --yes-i-really-mean-it
+ceph fs rm default --yes-i-really-mean-it
+ceph osd pool delete fs_data fs_data --yes-i-really-really-mean-it
+ceph osd pool delete fs_metadata fs_metadata --yes-i-really-really-mean-it
 
 # no mon add/remove
 ceph mon dump
@@ -445,6 +445,7 @@ id2=`ceph osd create $uuid`
 ceph osd rm $id
 
 ceph osd ls
+ceph osd pool create data 10
 ceph osd lspools | grep data
 ceph osd map data foo | grep 'pool.*data.*object.*foo.*pg.*up.*acting'
 
@@ -457,6 +458,7 @@ ceph osd tree
 ceph osd pool mksnap data datasnap
 rados -p data lssnap | grep datasnap
 ceph osd pool rmsnap data datasnap
+ceph osd pool delete data data --yes-i-really-really-mean-it
 
 ceph osd pool create data2 10
 ceph osd pool rename data2 data3
@@ -536,17 +538,20 @@ expect_false ceph osd pg-temp asdf qwer
 expect_false ceph osd pg-temp 0.0 asdf
 expect_false ceph osd pg-temp 0.0
 
-# don't test ceph osd primary-temp for now
+# A temporary pool for testing pool get/set operations
+TEST_POOL_GETSET=pool_getset
+ceph osd pool create $TEST_POOL_GETSET 10
 
+# don't test ceph osd primary-temp for now
 for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset; do
-	ceph osd pool get data $s
+	ceph osd pool get $TEST_POOL_GETSET $s
 done
 
-old_size=$(ceph osd pool get data size | sed -e 's/size: //')
+old_size=$(ceph osd pool get $TEST_POOL_GETSET size | sed -e 's/size: //')
 (( new_size = old_size + 1 ))
-ceph osd pool set data size $new_size
-ceph osd pool get data size | grep "size: $new_size"
-ceph osd pool set data size $old_size
+ceph osd pool set $TEST_POOL_GETSET size $new_size
+ceph osd pool get $TEST_POOL_GETSET size | grep "size: $new_size"
+ceph osd pool set $TEST_POOL_GETSET size $old_size
 
 ceph osd pool create pool_erasure 12 12 erasure
 set +e
@@ -555,17 +560,19 @@ check_response 'not change the size'
 set -e
 
 auid=5555
-ceph osd pool set data auid $auid
-ceph osd pool get data auid | grep $auid
-ceph --format=xml osd pool get data auid | grep $auid
-ceph osd pool set data auid 0
+ceph osd pool set $TEST_POOL_GETSET auid $auid
+ceph osd pool get $TEST_POOL_GETSET auid | grep $auid
+ceph --format=xml osd pool get $TEST_POOL_GETSET auid | grep $auid
+ceph osd pool set $TEST_POOL_GETSET auid 0
 
-ceph osd pool set data hashpspool true
-ceph osd pool set data hashpspool false
-ceph osd pool set data hashpspool 0
-ceph osd pool set data hashpspool 1
-expect_false ceph osd pool set data hashpspool asdf
-expect_false ceph osd pool set data hashpspool 2
+ceph osd pool set $TEST_POOL_GETSET hashpspool true
+ceph osd pool set $TEST_POOL_GETSET hashpspool false
+ceph osd pool set $TEST_POOL_GETSET hashpspool 0
+ceph osd pool set $TEST_POOL_GETSET hashpspool 1
+expect_false ceph osd pool set $TEST_POOL_GETSET hashpspool asdf
+expect_false ceph osd pool set $TEST_POOL_GETSET hashpspool 2
+
+ceph osd pool delete $TEST_POOL_GETSET $TEST_POOL_GETSET --yes-i-really-really-mean-it
 
 ceph osd pool set rbd hit_set_type explicit_hash
 ceph osd pool get rbd hit_set_type | grep "hit_set_type: explicit_hash"
