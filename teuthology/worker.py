@@ -91,10 +91,12 @@ def fetch_teuthology_branch(path, branch='master'):
     lock = filelock('%s.lock' % path)
     lock.acquire()
     try:
-        if os.path.isdir(path) and \
-                not os.path.isdir(os.path.join(path, '.git')):
-            log.info("Removing possibly-corrupt repo for branch %s", branch)
-            shutil.rmtree(path)
+        if os.path.isdir(path):
+            p = subprocess.Popen('git status', shell=True)
+            if p.wait() == 128:
+                log.info("Repo at %s appears corrupt; removing",
+                         branch)
+                shutil.rmtree(path)
 
         if not os.path.isdir(path):
             log.info("Cloning %s from upstream", branch)
