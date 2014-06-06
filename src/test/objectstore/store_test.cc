@@ -311,13 +311,20 @@ public:
 };
 
 class SyntheticWorkloadState {
+  struct Object {
+    bufferlist data;
+    map<string, bufferlist> attrs;
+  };
 public:
   static const unsigned max_in_flight = 16;
   static const unsigned max_objects = 3000;
   static const unsigned max_object_len = 1024 * 40;
+  static const unsigned max_attr_size = 5;
+  static const unsigned max_attr_name_len = 100;
+  static const unsigned max_attr_value_len = 1024 * 4;
   coll_t cid;
   unsigned in_flight;
-  map<ghobject_t, bufferlist> contents;
+  map<ghobject_t, Object> contents;
   set<ghobject_t> available_objects;
   set<ghobject_t> in_flight_objects;
   ObjectGenerator *object_gen;
@@ -369,9 +376,9 @@ public:
         state->available_objects.insert(noid);
       --(state->in_flight);
       bufferlist r2;
-      r = state->store->read(state->cid, noid, 0, state->contents[noid].length(), r2);
-      if (!state->contents[noid].contents_equal(r2)) {
-        ASSERT_TRUE(state->contents[noid].contents_equal(r2));
+      r = state->store->read(state->cid, noid, 0, state->contents[noid].data.length(), r2);
+      if (!state->contents[noid].data.contents_equal(r2)) {
+        ASSERT_TRUE(state->contents[noid].data.contents_equal(r2));
       }
       state->cond.Signal();
     }
@@ -385,7 +392,7 @@ public:
 
     bufferptr bp(size);
     for (unsigned int i = 0; i < size - 1; i++) {
-      bp[i] = alphanum[rand() % sizeof(alphanum)];
+      bp[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
     }
     bp[size - 1] = '\0';
 
@@ -448,7 +455,7 @@ public:
     ++in_flight;
     in_flight_objects.insert(new_obj);
     if (!contents.count(new_obj))
-      contents[new_obj] = bufferlist();
+      contents[new_obj] = Object();
     return store->queue_transaction(osr, t, new C_SyntheticOnReadable(this, t, new_obj));
   }
 
@@ -463,7 +470,7 @@ public:
     ghobject_t old_obj;
     do {
       old_obj = get_uniform_random_object();
-    } while (contents[old_obj].length());
+    } while (contents[old_obj].data.length());
     available_objects.erase(old_obj);
     ghobject_t new_obj = object_gen->create_object(rng);
     available_objects.erase(new_obj);
@@ -473,10 +480,143 @@ public:
     ++in_flight;
     in_flight_objects.insert(old_obj);
 
-    bufferlist value;
-    value.append(contents[old_obj]);
-    contents[new_obj] = value;
+    contents[new_obj] = contents[old_obj];
     return store->queue_transaction(osr, t, new C_SyntheticOnClone(this, t, old_obj, new_obj));
+  }
+
+  int setattrs() {
+    Mutex::Locker locker(lock);
+    if (!can_unlink())
+      return -ENOENT;
+    wait_for_ready();
+
+    ghobject_t obj = get_uniform_random_object();
+    available_objects.erase(obj);
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+
+    boost::uniform_int<> u0(1, max_attr_size);
+    boost::uniform_int<> u1(4, max_attr_name_len);
+    boost::uniform_int<> u2(4, max_attr_value_len);
+    boost::uniform_int<> u3(0, 100);
+    uint64_t size = u0(*rng);
+    uint64_t name_len, value_len;
+    uint64_t get_exist;
+    map<string, bufferlist> attrs;
+    set<string> keys;
+    for (map<string, bufferlist>::iterator it = contents[obj].attrs.begin();
+         it != contents[obj].attrs.end(); ++it)
+      keys.insert(it->first);
+
+    while (size--) {
+      bufferlist name, value;
+      get_exist = u3(*rng);
+      value_len = u2(*rng);
+      filled_byte_array(value, value_len);
+      if (get_exist < 50 && keys.size()) {
+        set<string>::iterator k = keys.begin();
+        attrs[*k] = value;
+        contents[obj].attrs[*k] = value;
+        keys.erase(k);
+      } else {
+        name_len = u1(*rng);
+        filled_byte_array(name, name_len);
+        attrs[name.c_str()] = value;
+        contents[obj].attrs[name.c_str()] = value;
+      }
+    }
+    t->setattrs(cid, obj, attrs);
+    ++in_flight;
+    in_flight_objects.insert(obj);
+    return store->queue_transaction(osr, t, new C_SyntheticOnReadable(this, t, obj));
+  }
+
+  void getattrs() {
+    ghobject_t obj;
+    int retry;
+    {
+      Mutex::Locker locker(lock);
+      if (!can_unlink())
+        return ;
+      wait_for_ready();
+
+      retry = 10;
+      do {
+        obj = get_uniform_random_object();
+        if (!--retry)
+          return ;
+      } while (contents[obj].attrs.empty());
+    }
+    map<string, bufferlist> attrs;
+    int r = store->getattrs(cid, obj, attrs);
+    ASSERT_TRUE(r == 0);
+    ASSERT_TRUE(attrs.size() == contents[obj].attrs.size());
+    for (map<string, bufferlist>::iterator it = contents[obj].attrs.begin();
+         it != contents[obj].attrs.end(); ++it) {
+      ASSERT_TRUE(it->second.contents_equal(attrs[it->first]));
+    }
+  }
+
+  void getattr() {
+    ghobject_t obj;
+    int r;
+    int retry;
+    {
+      Mutex::Locker locker(lock);
+      if (!can_unlink())
+        return ;
+      wait_for_ready();
+
+      retry = 10;
+      do {
+        obj = get_uniform_random_object();
+        if (!--retry)
+          return ;
+      } while (contents[obj].attrs.empty());
+    }
+    boost::uniform_int<> u(0, contents[obj].attrs.size()-1);
+    retry = u(*rng);
+    map<string, bufferlist>::iterator it = contents[obj].attrs.begin();
+    while (retry) {
+      retry--;
+      it++;
+    }
+
+    bufferlist bl;
+    r = store->getattr(cid, obj, it->first, bl);
+    ASSERT_TRUE(r >= 0);
+    ASSERT_TRUE(it->second.contents_equal(bl));
+  }
+
+  int rmattr() {
+    Mutex::Locker locker(lock);
+    if (!can_unlink())
+      return -ENOENT;
+    wait_for_ready();
+
+    ghobject_t obj;
+    int retry = 10;
+    do {
+      obj = get_uniform_random_object();
+      if (!--retry)
+        return 0;
+    } while (contents[obj].attrs.empty());
+
+    boost::uniform_int<> u(0, contents[obj].attrs.size()-1);
+    retry = u(*rng);
+    map<string, bufferlist>::iterator it = contents[obj].attrs.begin();
+    while (retry) {
+      retry--;
+      it++;
+    }
+
+    available_objects.erase(obj);
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    t->rmattr(cid, obj, it->first);
+
+    contents[obj].attrs.erase(it->first);
+    ++in_flight;
+    in_flight_objects.insert(obj);
+    return store->queue_transaction(osr, t, new C_SyntheticOnReadable(this, t, obj));
   }
 
   int write() {
@@ -499,16 +639,17 @@ public:
 
     filled_byte_array(bl, len);
 
-    if (contents[new_obj].length() <= offset) {
-      contents[new_obj].append_zero(offset-contents[new_obj].length());
-      contents[new_obj].append(bl);
+    if (contents[new_obj].data.length() <= offset) {
+      contents[new_obj].data.append_zero(offset-contents[new_obj].data.length());
+      contents[new_obj].data.append(bl);
     } else {
       bufferlist value;
-      contents[new_obj].copy(0, offset, value);
+      contents[new_obj].data.copy(0, offset, value);
       value.append(bl);
-      if (value.length() < contents[new_obj].length())
-        contents[new_obj].copy(value.length(), contents[new_obj].length()-value.length(), value);
-      value.swap(contents[new_obj]);
+      if (value.length() < contents[new_obj].data.length())
+        contents[new_obj].data.copy(value.length(),
+                                    contents[new_obj].data.length()-value.length(), value);
+      value.swap(contents[new_obj].data);
     }
 
     t->write(cid, new_obj, offset, len, bl);
@@ -537,14 +678,14 @@ public:
     }
     bufferlist bl, result;
     r = store->read(cid, obj, offset, len, result);
-    if (offset >= contents[obj].length()) {
+    if (offset >= contents[obj].data.length()) {
       ASSERT_EQ(r, 0);
     } else {
-      size_t max_len = contents[obj].length() - offset;
+      size_t max_len = contents[obj].data.length() - offset;
       if (len > max_len)
         len = max_len;
       ASSERT_EQ(len, result.length());
-      contents[obj].copy(offset, len, bl);
+      contents[obj].data.copy(offset, len, bl);
       ASSERT_EQ(r, (int)len);
       ASSERT_TRUE(result.contents_equal(bl));
     }
@@ -567,11 +708,11 @@ public:
     t->truncate(cid, obj, len);
     ++in_flight;
     in_flight_objects.insert(obj);
-    if (contents[obj].length() <= len)
-      contents[obj].append_zero(len - contents[obj].length());
+    if (contents[obj].data.length() <= len)
+      contents[obj].data.append_zero(len - contents[obj].data.length());
     else {
-      contents[obj].copy(0, len, bl);
-      bl.swap(contents[obj]);
+      contents[obj].data.copy(0, len, bl);
+      bl.swap(contents[obj].data);
     }
 
     return store->queue_transaction(osr, t, new C_SyntheticOnReadable(this, t, obj));
@@ -627,7 +768,7 @@ public:
     struct stat buf;
     int r = store->stat(cid, hoid, &buf);
     ASSERT_EQ(0, r);
-    ASSERT_TRUE(buf.st_size == contents[hoid].length());
+    ASSERT_TRUE(buf.st_size == contents[hoid].data.length());
     {
       Mutex::Locker locker(lock);
       --in_flight;
@@ -693,6 +834,44 @@ TEST_P(StoreTest, Synthetic) {
       test_obj.read();
     } else {
       test_obj.truncate();
+    }
+  }
+  test_obj.wait_for_done();
+}
+
+TEST_P(StoreTest, AttrSynthetic) {
+  ObjectStore::Sequencer osr("test");
+  MixedGenerator gen;
+  gen_type rng(time(NULL));
+  coll_t cid("synthetic_2");
+
+  SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid);
+  test_obj.init();
+  for (int i = 0; i < 500; ++i) {
+    if (!(i % 10)) cerr << "seeding object " << i << std::endl;
+    test_obj.touch();
+  }
+  for (int i = 0; i < 10000; ++i) {
+    if (!(i % 10)) {
+      cerr << "Op " << i << std::endl;
+      test_obj.print_internal_state();
+    }
+    boost::uniform_int<> true_false(0, 99);
+    int val = true_false(rng);
+    if (val > 97) {
+      test_obj.scan();
+    } else if (val > 93) {
+      test_obj.stat();
+    } else if (val > 75) {
+      test_obj.rmattr();
+    } else if (val > 47) {
+      test_obj.setattrs();
+    } else if (val > 45) {
+      test_obj.clone();
+    } else if (val > 30) {
+      test_obj.getattrs();
+    } else {
+      test_obj.getattr();
     }
   }
   test_obj.wait_for_done();
