@@ -28,13 +28,15 @@ def task(ctx, config):
         mds_remote, ctx=ctx, logger=log.getChild('ceph_manager'),
     )
 
-    # Stop the MDS and reset the filesystem so that next start will go into CREATING
+    # Stop MDS
+    manager.raw_cluster_cmd('mds', 'set', "max_mds", "0")
     mds = ctx.daemons.get_daemon('mds', mds_id)
     mds.stop()
-    data_pool_id = manager.get_pool_num("data")
-    md_pool_id = manager.get_pool_num("metadata")
-    manager.raw_cluster_cmd_result('mds', 'newfs', md_pool_id.__str__(), data_pool_id.__str__(),
-                                   '--yes-i-really-mean-it')
+    manager.raw_cluster_cmd('mds', 'fail', mds_id)
+
+    # Reset the filesystem so that next start will go into CREATING
+    manager.raw_cluster_cmd('fs', 'rm', "default", "--yes-i-really-mean-it")
+    manager.raw_cluster_cmd('fs', 'new', "default", "metadata", "data")
 
     # Start the MDS with mds_kill_create_at set, it will crash during creation
     mds.restart_with_args(["--mds_kill_create_at=1"])

@@ -56,15 +56,14 @@ class Filesystem(object):
         mds = self._ctx.daemons.get_daemon('mds', self.mds_id)
         mds.restart()
 
-    def newfs(self):
+    def reset(self):
         log.info("Creating new filesystem")
-        self.mds_stop()
 
-        data_pool_id = self.mds_manager.get_pool_num("data")
-        md_pool_id = self.mds_manager.get_pool_num("metadata")
-        self.mds_manager.raw_cluster_cmd_result('mds', 'newfs',
-                                                md_pool_id.__str__(), data_pool_id.__str__(),
-                                                '--yes-i-really-mean-it')
+        assert not self._ctx.daemons.get_daemon('mds', self.mds_id).running()
+        self.mds_manager.raw_cluster_cmd_result('mds', 'set', "max_mds", "0")
+        self.mds_manager.raw_cluster_cmd_result('mds', 'fail', self.mds_id)
+        self.mds_manager.raw_cluster_cmd_result('fs', 'rm', "default", "--yes-i-really-mean-it")
+        self.mds_manager.raw_cluster_cmd_result('fs', 'new', "default", "metadata", "data")
 
     @property
     def _mount_path(self):
@@ -155,7 +154,7 @@ def task(ctx, config):
 
     # Create a filesystem using the older journal format.
     fs.mds_stop()
-    fs.newfs()
+    fs.reset()
     fs.mds_restart()
 
     # Do some client work so that the log is populated with something.
