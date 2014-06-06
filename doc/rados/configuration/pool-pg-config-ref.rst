@@ -95,7 +95,7 @@ Ceph configuration file.
 
 ``osd pool default min size``
 
-:Descrption: Sets the minimum number of written replicas for objects in the 
+:Descrpition: Sets the minimum number of written replicas for objects in the 
              pool in order to acknowledge a write operation to the client. 
              If minimum is not met, Ceph will not acknowledge the write to the 
              client. This setting ensures a minimum number of replicas when 
