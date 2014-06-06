@@ -1,10 +1,9 @@
 import argparse
-from teuthology.suite import ls
+import teuthology.ls
 
 
 def main():
-    args = parse_args()
-    ls(args.archive_dir, args.verbose)
+    teuthology.ls.main(parse_args())
 
 
 def parse_args():
