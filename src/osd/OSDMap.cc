@@ -978,7 +978,8 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     if (p->second.flags & pg_pool_t::FLAG_HASHPSPOOL) {
       features |= CEPH_FEATURE_OSDHASHPSPOOL;
     }
-    if (p->second.is_erasure()) {
+    if (p->second.is_erasure() &&
+	entity_type != CEPH_ENTITY_TYPE_CLIENT) { // not for clients
       features |= CEPH_FEATURE_OSD_ERASURE_CODES;
     }
     if (!p->second.tiers.empty() ||
