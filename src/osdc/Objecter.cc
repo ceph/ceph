@@ -1625,6 +1625,7 @@ void Objecter::send_op(Op *op)
   ldout(cct, 15) << "send_op " << op->tid << " to osd." << op->session->osd << dendl;
 
   int flags = op->target.flags;
+  flags |= CEPH_OSD_FLAG_KNOWN_REDIR;
   if (op->oncommit)
     flags |= CEPH_OSD_FLAG_ONDISK;
   if (op->onack)
