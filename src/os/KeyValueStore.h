@@ -147,9 +147,31 @@ class StripObjectMap: public GenericObjectMap {
 class KeyValueStore : public ObjectStore,
                       public md_config_obs_t {
  public:
+  struct KVPerfTracker {
+    PerfCounters::avg_tracker<uint64_t> os_commit_latency;
+    PerfCounters::avg_tracker<uint64_t> os_apply_latency;
+
+    objectstore_perf_stat_t get_cur_stats() const {
+      objectstore_perf_stat_t ret;
+      ret.filestore_commit_latency = os_commit_latency.avg();
+      ret.filestore_apply_latency = os_apply_latency.avg();
+      return ret;
+    }
+
+    void update_from_perfcounters(PerfCounters &logger) {
+      os_commit_latency.consume_next(
+        logger.get_tavg_ms(
+          l_os_commit_lat));
+      os_apply_latency.consume_next(
+        logger.get_tavg_ms(
+          l_os_apply_lat));
+    }
+
+  } perf_tracker;
+
   objectstore_perf_stat_t get_cur_stats() {
-    objectstore_perf_stat_t ret;
-    return ret;
+    perf_tracker.update_from_perfcounters(*perf_logger);
+    return perf_tracker.get_cur_stats();
   }
 
   static const uint32_t target_version = 1;
