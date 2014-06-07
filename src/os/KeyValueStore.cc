@@ -520,7 +520,7 @@ KeyValueStore::KeyValueStore(const std::string &base,
   current_op_seq_fn = sss.str();
 
   // initialize perf_logger
-  PerfCountersBuilder plb(g_ceph_context, internal_name, l_os_commit_lat, l_os_last);
+  PerfCountersBuilder plb(g_ceph_context, internal_name, l_os_commit_len, l_os_last);
 
   plb.add_u64(l_os_oq_max_ops, "op_queue_max_ops");
   plb.add_u64(l_os_oq_ops, "op_queue_ops");
@@ -528,6 +528,7 @@ KeyValueStore::KeyValueStore(const std::string &base,
   plb.add_u64(l_os_oq_max_bytes, "op_queue_max_bytes");
   plb.add_u64(l_os_oq_bytes, "op_queue_bytes");
   plb.add_u64_counter(l_os_bytes, "bytes");
+  plb.add_time_avg(l_os_commit_lat, "commit_latency");
   plb.add_time_avg(l_os_apply_lat, "apply_latency");
   plb.add_time_avg(l_os_queue_lat, "queue_transaction_latency_avg");
 
@@ -1094,6 +1095,7 @@ void KeyValueStore::_finish_op(OpSequencer *osr)
 
   utime_t lat = ceph_clock_now(g_ceph_context);
   lat -= o->start;
+  perf_logger->tinc(l_os_commit_lat, lat);
   perf_logger->tinc(l_os_apply_lat, lat);
 
   if (o->onreadable_sync) {
