@@ -386,6 +386,26 @@ int write_simple(sectiontype_t type, int fd)
   return hbl.write_fd(fd);
 }
 
+static int get_fd_data(int fd, bufferlist &bl)
+{
+  uint64_t total = 0;
+  do {
+    ssize_t bytes = bl.read_fd(fd, max_read);
+    if (bytes < 0) {
+      cerr << "read_fd error " << cpp_strerror(-bytes) << std::endl;
+      return 1;
+    }
+
+    if (bytes == 0)
+      break;
+
+    total += bytes;
+  } while(true);
+
+  assert(bl.length() == total);
+  return 0;
+}
+
 static void invalid_path(string &path)
 {
   cerr << "Invalid path to osd store specified: " << path << "\n";
