@@ -57,6 +57,7 @@
 #include "json_spirit/json_spirit_value.h"
 #include "json_spirit/json_spirit_reader.h"
 #include "include/assert.h"  // json_spirit clobbers it
+#include "tracing/osd.tp.h"
 
 #define dout_subsys ceph_subsys_osd
 #define DOUT_PREFIX_ARGS this, osd->whoami, get_osdmap()
@@ -1767,7 +1768,19 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
     p->second->ondisk_read_lock();
   }
 
+  {
+    osd_reqid_t reqid = ctx->op->get_reqid();
+    tracepoint(osd, prepare_tx_enter, reqid.name._type,
+        reqid.name._num, reqid.tid, reqid.inc);
+  }
+
   int result = prepare_transaction(ctx);
+
+  {
+    osd_reqid_t reqid = ctx->op->get_reqid();
+    tracepoint(osd, prepare_tx_exit, reqid.name._type,
+        reqid.name._num, reqid.tid, reqid.inc);
+  }
 
   if (op->may_read()) {
     dout(10) << " dropping ondisk_read_lock" << dendl;
