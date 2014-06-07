@@ -73,7 +73,7 @@ Build Prerequisites
 debian-based
 ------------
 
-The list of debian package depencies can be found in deps.deb.txt:
+The list of debian package dependencies can be found in deps.deb.txt:
 
 	sudo apt-get install `cat deps.deb.txt`
 
@@ -93,7 +93,7 @@ Building the Documentation
 Prerequisites
 -------------
 
-The list of package dependencides for building the documentation can be found
+The list of package dependencies for building the documentation can be found
 in doc_deps.deb.txt:
 
 	sudo apt-get install `cat doc_deps.deb.txt`
