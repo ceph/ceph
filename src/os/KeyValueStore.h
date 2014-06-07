@@ -48,6 +48,8 @@ enum kvstore_types {
 };
 
 
+static uint64_t default_strip_size = 1024;
+
 class StripObjectMap: public GenericObjectMap {
  public:
 
@@ -139,8 +141,6 @@ class StripObjectMap: public GenericObjectMap {
     );
 
   StripObjectMap(KeyValueDB *db): GenericObjectMap(db) {}
-
-  static const uint64_t default_strip_size = 1024;
 };
 
 
@@ -478,7 +478,10 @@ class KeyValueStore : public ObjectStore,
                    const ghobject_t& newoid, uint64_t srcoff,
                    uint64_t len, uint64_t dstoff, BufferTransaction &t);
   int _remove(coll_t cid, const ghobject_t& oid, BufferTransaction &t);
-
+  int _set_alloc_hint(coll_t cid, const ghobject_t& oid,
+                      uint64_t expected_object_size,
+                      uint64_t expected_write_size,
+                      BufferTransaction &t);
 
   void start_sync() {}
   void sync() {}
@@ -582,6 +585,7 @@ class KeyValueStore : public ObjectStore,
   std::string m_osd_rollback_to_cluster_snap;
   int m_keyvaluestore_queue_max_ops;
   int m_keyvaluestore_queue_max_bytes;
+  int m_keyvaluestore_strip_size;
 
   int do_update;
 
