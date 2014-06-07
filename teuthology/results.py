@@ -9,7 +9,7 @@ from textwrap import fill
 
 import teuthology
 from teuthology import misc
-from teuthology import suite
+from teuthology import ls
 from .report import ResultsSerializer
 
 log = logging.getLogger(__name__)
@@ -100,7 +100,7 @@ def build_email_body(name, archive_dir, timeout):
     hung = {}
     passed = {}
 
-    for job in suite.get_jobs(archive_dir):
+    for job in ls.get_jobs(archive_dir):
         job_dir = os.path.join(archive_dir, job)
         summary_file = os.path.join(job_dir, 'summary.yaml')
 
