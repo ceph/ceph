@@ -13,7 +13,6 @@
 #include "osd/osd_types.h"
 
 
-
 OpRequest::OpRequest(Message *req, OpTracker *tracker) :
   TrackedOp(tracker, req->get_recv_stamp()),
   rmw_flags(0), request(req),
