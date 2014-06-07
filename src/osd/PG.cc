@@ -41,6 +41,7 @@
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDSubOpReply.h"
 #include "common/BackTrace.h"
+#include "tracing/pg.tp.h"
 
 #include <sstream>
 
@@ -1718,6 +1719,12 @@ void PG::queue_op(OpRequestRef& op)
     return;
   }
   osd->op_wq.queue(make_pair(PGRef(this), op));
+  {
+    // after queue() to include any locking costs
+    osd_reqid_t reqid = op->get_reqid();
+    tracepoint(pg, queue_op, reqid.name._type,
+        reqid.name._num, reqid.tid, reqid.inc);
+  }
 }
 
 void PG::replay_queued_ops()
