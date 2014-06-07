@@ -1669,7 +1669,8 @@ int KeyValueStore::fiemap(coll_t cid, const ghobject_t& oid,
   map<uint64_t, uint64_t> m;
   for (vector<StripObjectMap::StripExtent>::iterator iter = extents.begin();
        iter != extents.end(); ++iter) {
-    m[iter->offset] = iter->len;
+    uint64_t off = iter->no * header.strip_size + iter->offset;
+    m[off] = iter->len;
   }
   ::encode(m, bl);
   return 0;
