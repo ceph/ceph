@@ -393,6 +393,10 @@ int Monitor::preinit()
     pcb.add_u64_counter(l_mon_session_add, "session_add");
     pcb.add_u64_counter(l_mon_session_rm, "session_rm");
     pcb.add_u64_counter(l_mon_session_trim, "session_trim");
+    pcb.add_u64_counter(l_mon_num_elections, "num_elections");
+    pcb.add_u64_counter(l_mon_election_call, "election_call");
+    pcb.add_u64_counter(l_mon_election_win, "election_win");
+    pcb.add_u64_counter(l_mon_election_lose, "election_lose");
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
   }
@@ -1579,6 +1583,9 @@ void Monitor::join_election()
 {
   dout(10) << __func__ << dendl;
   state = STATE_ELECTING;
+
+  logger->inc(l_mon_num_elections);
+
   _reset();
 }
 
@@ -1587,6 +1594,9 @@ void Monitor::start_election()
   dout(10) << "start_election" << dendl;
   state = STATE_ELECTING;
   _reset();
+
+  logger->inc(l_mon_num_elections);
+  logger->inc(l_mon_election_call);
 
   cancel_probe_timeout();
 
@@ -1659,6 +1669,8 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   }
   health_monitor->start(epoch);
 
+  logger->inc(l_mon_election_win);
+
   finish_election();
   if (monmap->size() > 1 &&
       monmap->get_epoch() > 0)
@@ -1680,6 +1692,8 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     (*p)->election_finished();
   health_monitor->start(epoch);
+
+  logger->inc(l_mon_election_win);
 
   finish_election();
 }
