@@ -214,6 +214,25 @@ function TEST_replicated_pool_with_ruleset() {
         grep "doesn't exist" || return 1
 }
 
+function TEST_erasure_code_pool_LRC() {
+    local dir=$1
+    run_mon $dir a --public-addr 127.0.0.1
+
+    ./ceph osd erasure-code-profile set LRCprofile \
+             plugin=LRC \
+             mapping=DD_ \
+             layers='[ [ "DDc", "" ] ]' || return 1
+
+    ./ceph --format json osd dump > $dir/osd.json
+    local expected='"erasure_code_profile":"LRCprofile"'
+    local poolname=erasurecodes
+    ! grep "$expected" $dir/osd.json || return 1
+    ./ceph osd pool create $poolname 12 12 erasure LRCprofile
+    ./ceph --format json osd dump | tee $dir/osd.json
+    grep "$expected" $dir/osd.json > /dev/null || return 1
+    ./ceph osd crush rule ls | grep $poolname || return 1
+}
+
 function TEST_replicated_pool() {
     local dir=$1
     run_mon $dir a --public-addr 127.0.0.1
