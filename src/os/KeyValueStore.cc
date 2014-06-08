@@ -510,6 +510,7 @@ KeyValueStore::KeyValueStore(const std::string &base,
   m_keyvaluestore_queue_max_ops(g_conf->keyvaluestore_queue_max_ops),
   m_keyvaluestore_queue_max_bytes(g_conf->keyvaluestore_queue_max_bytes),
   m_keyvaluestore_strip_size(g_conf->keyvaluestore_default_strip_size),
+  m_keyvaluestore_max_expected_write_size(g_conf->keyvaluestore_max_expected_write_size),
   do_update(do_update)
 {
   ostringstream oss;
@@ -3008,7 +3009,8 @@ int KeyValueStore::_set_alloc_hint(coll_t cid, const ghobject_t& oid,
   // Now only consider to change "strip_size" when the object is blank,
   // because set_alloc_hint is expected to be very lightweight<O(1)>
   if (blank) {
-    header->strip_size = expected_write_size;
+    header->strip_size = MIN(expected_write_size, m_keyvaluestore_max_expected_write_size);
+    dout(20) << __func__ << " hint " << header->strip_size << " success" << dendl;
   }
 
   dout(10) << __func__ << "" << cid << "/" << oid << " object_size "
@@ -3033,9 +3035,11 @@ void KeyValueStore::handle_conf_change(const struct md_config_t *conf,
                                        const std::set <std::string> &changed)
 {
   if (changed.count("keyvaluestore_queue_max_ops") ||
-      changed.count("keyvaluestore_queue_max_bytes")) {
+      changed.count("keyvaluestore_queue_max_bytes") ||
+      changed.count("keyvaluestore_max_expected_write_size")) {
     m_keyvaluestore_queue_max_ops = conf->keyvaluestore_queue_max_ops;
     m_keyvaluestore_queue_max_bytes = conf->keyvaluestore_queue_max_bytes;
+    m_keyvaluestore_max_expected_write_size = conf->keyvaluestore_max_expected_write_size;
   }
   if (changed.count("keyvaluestore_default_strip_size")) {
     m_keyvaluestore_strip_size = conf->keyvaluestore_default_strip_size;
