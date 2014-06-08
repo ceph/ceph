@@ -4,6 +4,7 @@ erasure_codelibdir = $(pkglibdir)/erasure-code
 erasure_codelib_LTLIBRARIES =  
 
 include erasure-code/jerasure/Makefile.am
+include erasure-code/LRC/Makefile.am
 
 if WITH_BETTER_YASM_ELF64
 include erasure-code/isa/Makefile.am
