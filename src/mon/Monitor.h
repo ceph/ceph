@@ -85,6 +85,15 @@ enum {
   l_cluster_last,
 };
 
+enum {
+  l_mon_first = 456000,
+  l_mon_num_sessions,
+  l_mon_session_add,
+  l_mon_session_rm,
+  l_mon_session_trim,
+  l_mon_last,
+};
+
 class QuorumService;
 class PaxosService;
 
