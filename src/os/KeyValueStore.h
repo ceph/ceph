@@ -586,9 +586,8 @@ class KeyValueStore : public ObjectStore,
   int m_keyvaluestore_queue_max_ops;
   int m_keyvaluestore_queue_max_bytes;
   int m_keyvaluestore_strip_size;
-
+  uint64_t m_keyvaluestore_max_expected_write_size;
   int do_update;
-
 
   static const string OBJECT_STRIP_PREFIX;
   static const string OBJECT_XATTR;
