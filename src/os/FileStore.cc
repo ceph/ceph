@@ -1703,7 +1703,8 @@ void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
 
 void FileStore::_finish_op(OpSequencer *osr)
 {
-  Op *o = osr->dequeue();
+  list<Context*> to_queue;
+  Op *o = osr->dequeue(&to_queue);
   
   dout(10) << "_finish_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << dendl;
   osr->apply_lock.Unlock();  // locked in _do_op
@@ -1721,6 +1722,7 @@ void FileStore::_finish_op(OpSequencer *osr)
   if (o->onreadable) {
     op_finisher.queue(o->onreadable);
   }
+  op_finisher.queue(to_queue);
   delete o;
 }
 
@@ -1836,7 +1838,8 @@ void FileStore::_journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk)
   // this should queue in order because the journal does it's completions in order.
   queue_op(osr, o);
 
-  osr->dequeue_journal();
+  list<Context*> to_queue;
+  osr->dequeue_journal(&to_queue);
 
   // do ondisk completions async, to prevent any onreadable_sync completions
   // getting blocked behind an ondisk completion.
@@ -1844,6 +1847,7 @@ void FileStore::_journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk)
     dout(10) << " queueing ondisk " << ondisk << dendl;
     ondisk_finisher.queue(ondisk);
   }
+  ondisk_finisher.queue(to_queue);
 }
 
 int FileStore::_do_transactions(

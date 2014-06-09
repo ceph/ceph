@@ -128,6 +128,22 @@ public:
    */
   struct Sequencer_impl {
     virtual void flush() = 0;
+
+    /**
+     * Async flush_commit
+     *
+     * There are two cases:
+     * 1) sequencer is currently idle: the method returns true and
+     *    c is deleted
+     * 2) sequencer is not idle: the method returns false and c is
+     *    called asyncronously with a value of 0 once all transactions
+     *    queued on this sequencer prior to the call have been applied
+     *    and committed.
+     */
+    virtual bool flush_commit(
+      Context *c ///< [in] context to call upon flush/commit
+      ) = 0; ///< @return true if idle, false otherwise
+
     virtual ~Sequencer_impl() {}
   };
 
@@ -152,6 +168,16 @@ public:
     void flush() {
       if (p)
 	p->flush();
+    }
+
+    /// @see Sequencer_impl::flush_commit()
+    bool flush_commit(Context *c) {
+      if (!p) {
+	delete c;
+	return true;
+      } else {
+	return p->flush_commit(c);
+      }
     }
   };
 
