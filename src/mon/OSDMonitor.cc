@@ -3959,45 +3959,81 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     } while (false);
 
   } else if (prefix == "osd crush reweight") {
-    do {
-      // osd crush reweight <name> <weight>
-      CrushWrapper newcrush;
-      _get_pending_crush(newcrush);
+    // osd crush reweight <name> <weight>
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
 
-      string name;
-      cmd_getval(g_ceph_context, cmdmap, "name", name);
-      if (!newcrush.name_exists(name)) {
-	err = -ENOENT;
-	ss << "device '" << name << "' does not appear in the crush map";
-	break;
-      }
+    string name;
+    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    if (!newcrush.name_exists(name)) {
+      err = -ENOENT;
+      ss << "device '" << name << "' does not appear in the crush map";
+      goto reply;
+    }
 
-      int id = newcrush.get_item_id(name);
-      if (id < 0) {
-	ss << "device '" << name << "' is not a leaf in the crush map";
-	break;
-      }
-      double w;
-      if (!cmd_getval(g_ceph_context, cmdmap, "weight", w)) {
-        ss << "unable to parse weight value '"
-           << cmd_vartype_stringify(cmdmap["weight"]) << "'";
-        err = -EINVAL;
-        break;
-      }
+    int id = newcrush.get_item_id(name);
+    if (id < 0) {
+      ss << "device '" << name << "' is not a leaf in the crush map";
+      err = -EINVAL;
+      goto reply;
+    }
+    double w;
+    if (!cmd_getval(g_ceph_context, cmdmap, "weight", w)) {
+      ss << "unable to parse weight value '"
+	 << cmd_vartype_stringify(cmdmap["weight"]) << "'";
+      err = -EINVAL;
+      goto reply;
+    }
 
-      err = newcrush.adjust_item_weightf(g_ceph_context, id, w);
-      if (err >= 0) {
-	pending_inc.crush.clear();
-	newcrush.encode(pending_inc.crush);
-	ss << "reweighted item id " << id << " name '" << name << "' to " << w
-	   << " in crush map";
-	getline(ss, rs);
-	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+    err = newcrush.adjust_item_weightf(g_ceph_context, id, w);
+    if (err < 0)
+      goto reply;
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush);
+    ss << "reweighted item id " << id << " name '" << name << "' to " << w
+       << " in crush map";
+    getline(ss, rs);
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
 						  get_last_committed() + 1));
-	return true;
-      }
-    } while (false);
+    return true;
+  } else if (prefix == "osd crush reweight-subtree") {
+    // osd crush reweight <name> <weight>
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
 
+    string name;
+    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    if (!newcrush.name_exists(name)) {
+      err = -ENOENT;
+      ss << "device '" << name << "' does not appear in the crush map";
+      goto reply;
+    }
+
+    int id = newcrush.get_item_id(name);
+    if (id >= 0) {
+      ss << "device '" << name << "' is not a subtree in the crush map";
+      err = -EINVAL;
+      goto reply;
+    }
+    double w;
+    if (!cmd_getval(g_ceph_context, cmdmap, "weight", w)) {
+      ss << "unable to parse weight value '"
+	 << cmd_vartype_stringify(cmdmap["weight"]) << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+
+    err = newcrush.adjust_subtree_weightf(g_ceph_context, id, w);
+    if (err < 0)
+      goto reply;
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush);
+    ss << "reweighted subtree id " << id << " name '" << name << "' to " << w
+       << " in crush map";
+    getline(ss, rs);
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+					      get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd crush tunables") {
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
