@@ -1,50 +1,80 @@
 import yaml
 
 import teuthology.beanstalk
-from teuthology.misc import get_user
-from teuthology.misc import read_config
+from teuthology.misc import config_file, deep_merge, get_user
 from teuthology import report
 
 
-def main(ctx):
-    if ctx.owner is None:
-        ctx.owner = 'scheduled_{user}'.format(user=get_user())
-    read_config(ctx)
+def main(args):
+    if not args['--last-in-suite']:
+        if args['--email']:
+            raise ValueError(
+                '--email is only applicable to the last job in a suite')
+        if args['--timeout']:
+            raise ValueError(
+                '--timeout is only applicable to the last job in a suite')
+    job_config = build_config(args)
+    schedule_job(job_config, args['--num'])
 
-    beanstalk = teuthology.beanstalk.connect()
 
-    tube = ctx.worker
-    beanstalk.use(tube)
-
+def build_config(args):
+    """
+    Given a dict of arguments, build a job config
+    """
+    config_paths = args.get('<conf_file>', list())
+    conf_dict = dict()
+    for conf_path in config_paths:
+        conf_dict = deep_merge(conf_dict, config_file(conf_path))
     # strip out targets; the worker will allocate new ones when we run
     # the job with --lock.
-    if ctx.config.get('targets'):
-        del ctx.config['targets']
+    if 'targets' in conf_dict:
+        del conf_dict['targets']
+    args['config'] = conf_dict
+
+    owner = args['--owner']
+    if owner is None:
+        owner = 'scheduled_{user}'.format(user=get_user())
 
     job_config = dict(
-        name=ctx.name,
-        last_in_suite=ctx.last_in_suite,
-        email=ctx.email,
-        description=ctx.description,
-        owner=ctx.owner,
-        verbose=ctx.verbose,
-        machine_type=ctx.worker,
+        name=args['--name'],
+        last_in_suite=args['--last-in-suite'],
+        email=args['--email'],
+        description=args['--description'],
+        owner=owner,
+        verbose=args['--verbose'],
+        machine_type=args['--worker'],
+        tube=args['--worker'],
+        priority=int(args['--priority']),
     )
-    # Merge job_config and ctx.config
-    job_config.update(ctx.config)
-    if ctx.timeout is not None:
-        job_config['results_timeout'] = ctx.timeout
+    # Update the dict we just created, and not the other way around, to let
+    # settings in the yaml override what's passed on the command line. This is
+    # primarily to accommodate jobs with multiple machine types.
+    job_config.update(conf_dict)
+    if args['--timeout'] is not None:
+        job_config['results_timeout'] = args['--timeout']
+    return job_config
 
+
+def schedule_job(job_config, num=1):
+    """
+    Schedule a job.
+
+    :param job_config: The complete job dict
+    :param num:      The number of times to schedule the job
+    """
+    num = int(num)
     job = yaml.safe_dump(job_config)
-    num = ctx.num
+    tube = job_config.pop('tube')
+    beanstalk = teuthology.beanstalk.connect()
+    beanstalk.use(tube)
     while num > 0:
         jid = beanstalk.put(
             job,
             ttr=60 * 60 * 24,
-            priority=ctx.priority,
+            priority=job_config['priority'],
         )
         print 'Job scheduled with name {name} and ID {jid}'.format(
-            name=ctx.name, jid=jid)
+            name=job_config['name'], jid=jid)
         job_config['job_id'] = str(jid)
         report.try_push_job_info(job_config, dict(status='queued'))
         num -= 1
