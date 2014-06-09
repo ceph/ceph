@@ -40,7 +40,6 @@ void Journaler::set_writeable()
 void Journaler::create(ceph_file_layout *l, stream_format_t const sf)
 {
   assert(!readonly);
-  ldout(cct, 1) << "create blank journal" << dendl;
   state = STATE_ACTIVE;
 
   stream_format = sf;
@@ -50,6 +49,9 @@ void Journaler::create(ceph_file_layout *l, stream_format_t const sf)
   prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos =
     read_pos = requested_pos = received_pos =
     expire_pos = trimming_pos = trimmed_pos = layout.fl_stripe_count * layout.fl_object_size;
+
+  ldout(cct, 1) << "created blank journal at inode 0x" << std::hex << ino << std::dec
+    << ", format=" << stream_format << dendl;
 }
 
 void Journaler::set_layout(ceph_file_layout *l)
@@ -76,6 +78,7 @@ ostream& operator<<(ostream& out, Journaler::Header &h)
   return out << "loghead(trim " << h.trimmed_pos
 	     << ", expire " << h.expire_pos
 	     << ", write " << h.write_pos
+	     << ", stream_format " << (int)(h.stream_format)
 	     << ")";
 }
 

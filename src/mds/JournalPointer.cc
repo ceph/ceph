@@ -24,7 +24,7 @@
 
 #define dout_subsys ceph_subsys_journaler
 #undef dout_prefix
-#define dout_prefix *_dout << objecter->messenger->get_myname() << ".journalpointer"
+#define dout_prefix *_dout << objecter->messenger->get_myname() << ".journalpointer "
 
 
 std::string JournalPointer::get_object_id() const
