@@ -402,6 +402,14 @@ def get_partition_dev(dev, pnum):
     """
     name = get_dev_name(os.path.realpath(dev))
     partname = None
+    if name.startswith('dm-'):
+        partitions = []
+        for root, dirs, files in os.walk(os.path.join('/sys/devices/virtual/block', name, 'holders')):
+            for holder in dirs:
+                if os.path.exists(os.path.join('/sys/devices/virtual/block', holder, 'dm', 'uuid')):
+                    uuid = open(os.path.join('/sys/devices/virtual/block', holder, 'dm', 'uuid')).readline()
+                    if uuid.startswith("part" + str(pnum)):
+                        partname = holder
     for f in os.listdir(os.path.join('/sys/block', name)):
         if f.startswith(name) and f.endswith(str(pnum)):
             # we want the shortest name that starts with the base name and ends with the partition number
@@ -446,13 +454,21 @@ def is_partition(dev):
         raise Error('not a block device', dev)
 
     name = get_dev_name(dev)
-    if os.path.exists(os.path.join('/sys/block', name)):
+    if os.path.exists(os.path.join('/sys/block', name)) and not name.startswith('dm-'):
         return False
 
     # make sure it is a partition of something else
-    for basename in os.listdir('/sys/block'):
-        if os.path.exists(os.path.join('/sys/block', basename, name)):
-            return True
+    if name.startswith("dm-"):
+        if os.path.exists(os.path.join('/sys/devices/virtual/block', name, 'dm', 'uuid')):
+            uuid = open(os.path.join('/sys/devices/virtual/block', name, 'dm', 'uuid')).readline()
+            if uuid.startswith("part"):
+                return True
+            else:
+                return False
+    else:
+        for basename in os.listdir('/sys/block'):
+            if os.path.exists(os.path.join('/sys/block', basename, name)):
+                return True
 
     raise Error('not a disk or partition', dev)
 
@@ -1063,9 +1079,18 @@ def prepare_journal_dev(
                 ],
             )
 
-        journal_symlink = '/dev/disk/by-partuuid/{journal_uuid}'.format(
-            journal_uuid=journal_uuid,
-            )
+        dev = get_dev_name(os.path.realpath(journal))
+        if dev.startswith("dm-"):
+            for root, dirs, files in os.walk(os.path.join('/sys/devices/virtual/block', dev, 'holders')):
+                for holder in dirs:
+                    if os.path.exists(os.path.join('/sys/devices/virtual/block', holder, 'dm', 'uuid')):
+                        uuid = open(os.path.join('/sys/devices/virtual/block', holder, 'dm', 'uuid')).readline().strip()
+                        if uuid.startswith('part' + str(num)):
+                            journal_symlink = os.path.join('/dev/disk/by-id', 'dm-uuid-' + uuid)
+        else:
+            journal_symlink = '/dev/disk/by-partuuid/{journal_uuid}'.format(
+                journal_uuid=journal_uuid,
+                )
 
         journal_dmcrypt = None
         if journal_dm_keypath:
