@@ -8,7 +8,6 @@ from traceback import format_tb
 
 import teuthology
 from . import report
-from .misc import get_distro
 from .misc import get_user
 from .misc import read_config
 from .nuke import nuke
