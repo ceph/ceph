@@ -296,10 +296,14 @@ for name in $what; do
 
 		if [ "$fs_type" = "btrfs" ]; then
 		    echo Mounting Btrfs on $host:$fs_path
-		    do_root_cmd "modprobe btrfs ; btrfs device scan || btrfsctl -a ; egrep -q '^[^ ]+ $fs_path' /proc/mounts || mount -t btrfs $fs_opt $first_dev $fs_path"
+		    do_root_cmd_okfail "modprobe btrfs ; btrfs device scan || btrfsctl -a ; egrep -q '^[^ ]+ $fs_path' /proc/mounts || mount -t btrfs $fs_opt $first_dev $fs_path"
 		else
 		    echo Mounting $fs_type on $host:$fs_path
-		    do_root_cmd "modprobe $fs_type ; egrep -q '^[^ ]+ $fs_path' /proc/mounts || mount -t $fs_type $fs_opt $first_dev $fs_path"
+		    do_root_cmd_okfail "modprobe $fs_type ; egrep -q '^[^ ]+ $fs_path' /proc/mounts || mount -t $fs_type $fs_opt $first_dev $fs_path"
+		fi
+		if [ "$ERR" != "0" ]; then
+		    EXIT_STATUS=$ERR
+		    continue
 		fi
 	    fi
 
