@@ -159,7 +159,7 @@ static void test_strict_sistrtoll_units(const std::string& foo,
   long long tmp = strict_strtoll(str, 10, &err2);
   ASSERT_EQ(err2, "");
   tmp = (tmp << m);
-  ASSERT_EQ(tmp, r);
+  ASSERT_EQ(tmp, (long long)r);
 }
 
 TEST(SIStrToLL, WithUnits) {

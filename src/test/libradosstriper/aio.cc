@@ -410,7 +410,7 @@ TEST_F(StriperTestPP, RoundTripAppendPP) {
     TestAlarm alarm;
     my_completion3->wait_for_complete();
   }
-  ASSERT_EQ(sizeof(buf) + sizeof(buf2), my_completion3->get_return_value());
+  ASSERT_EQ(sizeof(buf) + sizeof(buf2), (unsigned)my_completion3->get_return_value());
   ASSERT_EQ(0, memcmp(bl3.c_str(), buf, sizeof(buf)));
   ASSERT_EQ(0, memcmp(bl3.c_str() + sizeof(buf), buf2, sizeof(buf2)));
   my_completion->release();
@@ -495,7 +495,7 @@ TEST_F(StriperTest, RoundTripWriteFull) {
     TestAlarm alarm;
     rados_aio_wait_for_complete(my_completion3);
   }
-  ASSERT_EQ(sizeof(buf2), rados_aio_get_return_value(my_completion3));
+  ASSERT_EQ(sizeof(buf2), (unsigned)rados_aio_get_return_value(my_completion3));
   ASSERT_EQ(0, memcmp(buf3, buf2, sizeof(buf2)));
   rados_aio_release(my_completion);
   rados_aio_release(my_completion2);
@@ -534,7 +534,7 @@ TEST_F(StriperTestPP, RoundTripWriteFullPP) {
     TestAlarm alarm;
     my_completion3->wait_for_complete();
   }
-  ASSERT_EQ(sizeof(buf2), my_completion3->get_return_value());
+  ASSERT_EQ(sizeof(buf2), (unsigned)my_completion3->get_return_value());
   ASSERT_EQ(0, memcmp(bl3.c_str(), buf2, sizeof(buf2)));
   my_completion->release();
   my_completion2->release();
