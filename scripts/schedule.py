@@ -51,13 +51,6 @@ def parse_args():
         help='job owner',
     )
     parser.add_argument(
-        '--delete',
-        metavar='JOBID',
-        type=int,
-        nargs='*',
-        help='list of jobs to remove from the queue',
-    )
-    parser.add_argument(
         '-n', '--num',
         default=1,
         type=int,
@@ -79,13 +72,6 @@ def parse_args():
         '-w', '--worker',
         default='plana',
         help='which worker to use (type of machine)',
-    )
-    parser.add_argument(
-        '-s', '--show',
-        metavar='JOBID',
-        type=int,
-        nargs='*',
-        help='output the contents of specified jobs in the queue',
     )
 
     args = parser.parse_args()

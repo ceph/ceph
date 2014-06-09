@@ -16,29 +16,6 @@ def main(ctx):
     tube = ctx.worker
     beanstalk.use(tube)
 
-    if ctx.show:
-        for job_id in ctx.show:
-            job = beanstalk.peek(job_id)
-            if job is None and ctx.verbose:
-                print 'job {jid} is not in the queue'.format(jid=job_id)
-            else:
-                print '--- job {jid} priority {prio} ---\n'.format(
-                    jid=job_id,
-                    prio=job.stats()['pri']), job.body
-        return
-
-    if ctx.delete:
-        for job_id in ctx.delete:
-            job = beanstalk.peek(job_id)
-            if job is None:
-                print 'job {jid} is not in the queue'.format(jid=job_id)
-            else:
-                job.delete()
-                name = yaml.safe_load(job.body).get('name')
-                if name:
-                    report.try_delete_jobs(name, job_id)
-        return
-
     # strip out targets; the worker will allocate new ones when we run
     # the job with --lock.
     if ctx.config.get('targets'):
