@@ -190,8 +190,8 @@ def install_firmware(ctx, config):
             log.info('Skipping firmware on distro kernel');
             return
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
-        machine_type = teuthology.get_system_type(role_remote)
-        if machine_type == 'rpm':
+        package_type = teuthology.get_system_type(role_remote)
+        if package_type == 'rpm':
             return
         log.info('Installing linux-firmware on {role}...'.format(role=role))
         role_remote.run(
@@ -246,7 +246,7 @@ def download_kernel(ctx, config):
 	if src.find('distro') >= 0:
             log.info('Installing newest kernel distro');
             return
-        machine_type = teuthology.get_system_type(role_remote)
+        package_type = teuthology.get_system_type(role_remote)
         if src.find('/') >= 0:
             # local deb
             log.info('Copying kernel deb {path} to {role}...'.format(path=src,
@@ -265,7 +265,7 @@ def download_kernel(ctx, config):
         else:
             log.info('Downloading kernel {sha1} on {role}...'.format(sha1=src,
                                                                      role=role))
-            if machine_type == 'rpm':
+            if package_type == 'rpm':
                 dist, ver = teuthology.get_system_type(role_remote, distro=True, version=True)
                 if '.' in ver:
                     ver = ver.split('.')[0]
@@ -283,7 +283,8 @@ def download_kernel(ctx, config):
                 output, err_mess = StringIO(), StringIO()
                 role_remote.run(args=['sudo', 'yum', 'list', 'installed', 'kernel'], stdout=output, stderr=err_mess )
                 # Check if short (first 8 digits) sha1 is in uname output as expected
-                if src[0:7] in output.getvalue():
+                short_sha1 = src[0:7]
+                if short_sha1 in output.getvalue():
                     output.close()
                     err_mess.close()
                     continue
@@ -619,19 +620,19 @@ def install_kernel(remote, sha1=None):
     then modify 01_ceph_kernel to have correct entry + updategrub + reboot.
     """
     if sha1:
-        short = sha1[0:7]
+        short_sha1 = sha1[0:7]
     else:
-        short = None
+        short_sha1 = None
     system_type = teuthology.get_system_type(remote)
     distribution = ''
     if system_type == 'rpm':
         output, err_mess = StringIO(), StringIO()
         kern_out, kern_err = StringIO(), StringIO()
-        if short:
+        if short_sha1:
             remote.run(args=['rpm', '-q', 'kernel' ], stdout=output, stderr=err_mess )
-            if short in output.getvalue():
+            if short_sha1 in output.getvalue():
                 for kernel in output.getvalue().split('\n'):
-                    if short in kernel:
+                    if short_sha1 in kernel:
                         remote.run(args=['rpm', '-ql', kernel ], stdout=kern_out, stderr=kern_err )
                         for file in kern_out.getvalue().split('\n'):
                             if 'vmlinuz' in file:
