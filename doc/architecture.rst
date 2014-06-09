@@ -721,7 +721,7 @@ as ``D2v2`` ) while others are acknowledged and on disk ( such as ``C1v1`` and
           |           +------+------+
           |           |    OSD 2    |
           |  +------+ |         log |
-          +->| D1v2 | |  +----+     | 
+          +->| D2v2 | |  +----+     |
           |  +------+ |  |D2v1| 1,1 |
           |           |  +----+     |
           |           +-------------+
