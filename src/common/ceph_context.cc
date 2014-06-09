@@ -260,9 +260,7 @@ CephContext::CephContext(uint32_t module_type_)
     _admin_socket(NULL),
     _perf_counters_collection(NULL),
     _perf_counters_conf_obs(NULL),
-    _heartbeat_map(NULL),
-    _crypto_none(NULL),
-    _crypto_aes(NULL)
+    _heartbeat_map(NULL)
 {
   ceph_spin_init(&_service_thread_lock);
 
@@ -406,12 +404,20 @@ AdminSocket *CephContext::get_admin_socket()
 
 CryptoHandler *CephContext::get_crypto_handler(int type)
 {
-  switch (type) {
-  case CEPH_CRYPTO_NONE:
-    return _crypto_none;
-  case CEPH_CRYPTO_AES:
-    return _crypto_aes;
-  default:
-    return NULL;
-  }
+    CryptoHandler *handler = NULL;
+    switch(type)
+    {
+    case CEPH_CRYPTO_NONE:
+        handler = CryptoNone::instance();
+        break;
+
+    case CEPH_CRYPTO_AES:
+        handler = CryptoAES::instance();
+        break;
+
+    default:
+        break;
+    }
+
+    return handler;
 }
