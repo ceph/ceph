@@ -551,6 +551,11 @@ public:
   }
   void reweight(CephContext *cct);
 
+  int adjust_subtree_weight(CephContext *cct, int id, int weight);
+  int adjust_subtree_weightf(CephContext *cct, int id, float weight) {
+    return adjust_subtree_weight(cct, id, (int)(weight * (float)0x10000));
+  }
+
   /// check if item id is present in the map hierarchy
   bool check_item_present(int id);
 
