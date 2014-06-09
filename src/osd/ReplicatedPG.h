@@ -819,12 +819,18 @@ protected:
     }
   };
   struct C_OSD_OndiskWriteUnlock : public Context {
-    ObjectContext *obc, *obc2;
-    C_OSD_OndiskWriteUnlock(ObjectContext *o, ObjectContext *o2=0) : obc(o), obc2(o2) {}
+    ObjectContext *obc, *obc2, *obc3;
+    C_OSD_OndiskWriteUnlock(
+      ObjectContext *o,
+      ObjectContext *o2=0,
+      ObjectContext *o3=0)
+      : obc(o), obc2(o2), obc3(o3) {}
     void finish(int r) {
       obc->ondisk_write_unlock();
       if (obc2)
 	obc2->ondisk_write_unlock();
+      if (obc3)
+	obc3->ondisk_write_unlock();
     }
   };
   struct C_OSD_OndiskWriteUnlockList : public Context {
