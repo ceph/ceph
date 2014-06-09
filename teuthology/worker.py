@@ -92,7 +92,7 @@ def fetch_teuthology_branch(path, branch='master'):
     lock.acquire()
     try:
         if os.path.isdir(path):
-            p = subprocess.Popen('git status', shell=True)
+            p = subprocess.Popen('git status', shell=True, cwd=path)
             if p.wait() == 128:
                 log.info("Repo at %s appears corrupt; removing",
                          branch)
