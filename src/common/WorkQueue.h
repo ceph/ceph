@@ -446,12 +446,12 @@ class ShardedThreadPool {
 
 public:
 
-  class baseShardedWQ {
+  class BaseShardedWQ {
   
   public:
     time_t timeout_interval, suicide_interval;
-    baseShardedWQ(time_t ti, time_t sti):timeout_interval(ti), suicide_interval(sti) {}
-    virtual ~baseShardedWQ() {}
+    BaseShardedWQ(time_t ti, time_t sti):timeout_interval(ti), suicide_interval(sti) {}
+    virtual ~BaseShardedWQ() {}
 
     virtual void _process(uint32_t thread_index, heartbeat_handle_d *hb ) = 0;
     virtual void return_waiting_threads() = 0;
@@ -459,7 +459,7 @@ public:
   };      
 
   template <typename T>
-  class ShardedWQ: public baseShardedWQ {
+  class ShardedWQ: public BaseShardedWQ {
   
     ShardedThreadPool* sharded_pool;
 
@@ -469,7 +469,7 @@ public:
 
 
   public:
-    ShardedWQ(time_t ti, time_t sti, ShardedThreadPool* tp): baseShardedWQ(ti, sti), 
+    ShardedWQ(time_t ti, time_t sti, ShardedThreadPool* tp): BaseShardedWQ(ti, sti), 
                                                                  sharded_pool(tp) {
       tp->set_wq(this);
     }
@@ -489,12 +489,13 @@ public:
 
 private:
 
-  baseShardedWQ* wq;
+  BaseShardedWQ* wq;
   // threads
   struct WorkThreadSharded : public Thread {
     ShardedThreadPool *pool;
     uint32_t thread_index;
-    WorkThreadSharded(ShardedThreadPool *p, uint32_t pthread_index): pool(p),thread_index(pthread_index) {}
+    WorkThreadSharded(ShardedThreadPool *p, uint32_t pthread_index): pool(p),
+      thread_index(pthread_index) {}
     void *entry() {
       pool->shardedthreadpool_worker(thread_index);
       return 0;
@@ -504,7 +505,7 @@ private:
   vector<WorkThreadSharded*> threads_shardedpool;
   void start_threads();
   void shardedthreadpool_worker(uint32_t thread_index);
-  void set_wq(baseShardedWQ* swq) {
+  void set_wq(BaseShardedWQ* swq) {
     wq = swq;
   }
 
