@@ -352,7 +352,7 @@ Set Bucket Quota
 Bucket quotas apply to the buckets owned by the specified ``uid``. They are
 independent of the user. ::
 
-	radosgw-admin quota set --uid=<uid> --bucket-scope=bucket [--max-objects=<num objects>] [--max-size=<max size]
+	radosgw-admin quota set --uid=<uid> --quota-scope=bucket [--max-objects=<num objects>] [--max-size=<max size]
 
 A negative value for num objects and / or max size means that the
 specific quota attribute check is disabled.
