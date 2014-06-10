@@ -10,6 +10,7 @@ import threading
 from teuthology import misc as teuthology
 from teuthology.task import ceph as ceph_task
 from teuthology.task.scrub import Scrubber
+from teuthology.task_util.rados import cmd_erasure_code_profile
 
 class Thrasher:
     """
@@ -404,7 +405,6 @@ class CephManager:
         self.config = config
         self.controller = controller
         self.next_pool_id = 0
-        self.created_erasure_pool = False
         if (logger):
             self.log = lambda x: logger.info(x)
         else:
@@ -702,7 +702,16 @@ class CephManager:
         self.log(status)
         return status['pgmap']['num_pgs']
 
-    def create_pool_with_unique_name(self, pg_num=16, ec_pool=False, ec_m=1, ec_k=2):
+    def create_erasure_code_profile(self, profile_name, profile):
+        """
+        Create an erasure code profile name that can be used as a parameter
+        when creating an erasure coded pool.
+        """
+        with self.lock:
+            args = cmd_erasure_code_profile(profile_name, profile)
+            self.raw_cluster_cmd(*args)
+
+    def create_pool_with_unique_name(self, pg_num=16, erasure_code_profile_name=None):
         """
         Create a pool named unique_pool_X where X is unique.
         """
@@ -713,12 +722,10 @@ class CephManager:
             self.create_pool(
                 name,
                 pg_num,
-                ec_pool=ec_pool,
-                ec_m=ec_m,
-                ec_k=ec_k)
+                erasure_code_profile=erasure_code_profile_name)
         return name
 
-    def create_pool(self, pool_name, pg_num=16, ec_pool=False, ec_m=1, ec_k=2):
+    def create_pool(self, pool_name, pg_num=16, erasure_code_profile_name=None):
         """
         Create a pool named from the pool_name parameter.
         :param pool_name: name of the pool being created.
@@ -729,12 +736,8 @@ class CephManager:
             assert isinstance(pg_num, int)
             assert pool_name not in self.pools
             self.log("creating pool_name %s"%(pool_name,))
-            if ec_pool and not self.created_erasure_pool:
-                self.created_erasure_pool = True
-                self.raw_cluster_cmd('osd', 'erasure-code-profile', 'set', 'teuthologyprofile', 'ruleset-failure-domain=osd', 'm='+str(ec_m), 'k='+str(ec_k))
-
-            if ec_pool:
-                self.raw_cluster_cmd('osd', 'pool', 'create', pool_name, str(pg_num), str(pg_num), 'erasure', 'teuthologyprofile')
+            if erasure_code_profile_name:
+                self.raw_cluster_cmd('osd', 'pool', 'create', pool_name, str(pg_num), str(pg_num), 'erasure', erasure_code_profile_name)
             else:
                 self.raw_cluster_cmd('osd', 'pool', 'create', pool_name, str(pg_num))
             self.pools[pool_name] = pg_num

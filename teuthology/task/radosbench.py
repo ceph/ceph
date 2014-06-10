@@ -21,7 +21,12 @@ def task(ctx, config):
         time: <seconds to run>
         pool: <pool to use>
         unique_pool: use a unique pool, defaults to False
-        ec_pool: create ec pool, defaults to False
+        ec_pool: create an ec pool, defaults to False
+        erasure_code_profile:
+          name: teuthologyprofile
+          k: 2
+          m: 1
+          ruleset-failure-domain: osd
 
     example:
 
@@ -46,13 +51,20 @@ def task(ctx, config):
         id_ = role[len(PREFIX):]
         (remote,) = ctx.cluster.only(role).remotes.iterkeys()
 
+        if config.get('ec_pool', False):
+            profile = config.get('erasure_code_profile', {})
+            profile_name = profile.get('name', 'teuthologyprofile')
+            ctx.manager.create_erasure_code_profile(profile_name, profile)
+        else:
+            profile_name = None
+
         pool = 'data'
         if config.get('pool'):
             pool = config.get('pool')
             if pool is not 'data':
-                ctx.manager.create_pool(pool, ec_pool=config.get('ec_pool', False))
+                ctx.manager.create_pool(pool, erasure_code_profile_name=profile_name)
         else:
-            pool = ctx.manager.create_pool_with_unique_name(ec_pool=config.get('ec_pool', False))
+            pool = ctx.manager.create_pool_with_unique_name(erasure_code_profile_name=profile_name)
 
         proc = remote.run(
             args=[

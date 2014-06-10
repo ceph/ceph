@@ -24,12 +24,8 @@ def rados(ctx, remote, cmd, wait=True, check_status=False):
     else:
         return proc
 
-def create_ec_pool(remote, name, profile_name, pgnum, m=1, k=2):
-    remote.run(args=[
-        'ceph', 'osd', 'erasure-code-profile', 'set',
-        profile_name, 'm=' + str(m), 'k=' + str(k),
-        'ruleset-failure-domain=osd',
-        ])
+def create_ec_pool(remote, name, profile_name, pgnum, profile):
+    remote.run(args=cmd_erasure_code_profile(profile_name, profile))
     remote.run(args=[
         'ceph', 'osd', 'pool', 'create', name,
         str(pgnum), str(pgnum), 'erasure', profile_name,
@@ -48,3 +44,35 @@ def create_cache_pool(remote, base_name, cache_name, pgnum, size):
             'ceph', 'osd', 'tier', 'add-cache', base_name, cache_name,
             str(size),
             ])
+
+def cmd_erasure_code_profile(profile_name, profile):
+    """
+    Return the shell command to run to create the erasure code profile
+    described by the profile parameter.
+    
+    :param profile_name: a string matching [A-Za-z0-9-_.]+
+    :param profile: a map whose semantic depends on the erasure code plugin
+    :returns: a shell command as an array suitable for Remote.run
+
+    If profile is {}, it is replaced with 
+
+      { 'k': '2', 'm': '1', 'ruleset-failure-domain': 'osd'}
+
+    for backward compatibility. In previous versions of teuthology,
+    these values were hardcoded as function arguments and some yaml
+    files were designed with these implicit values. The teuthology
+    code should not know anything about the erasure code profile
+    content or semantic. The valid values and parameters are outside
+    its scope.
+    """
+
+    if profile == {}:
+        profile = {
+            'k': '2',
+            'm': '1',
+            'ruleset-failure-domain': 'osd'
+        }
+    return [
+        'ceph', 'osd', 'erasure-code-profile', 'set',
+        profile_name
+        ] + [ key + '=' + value for key, value in profile.iteritems() ]
