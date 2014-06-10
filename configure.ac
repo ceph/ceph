@@ -29,6 +29,15 @@ AC_CONFIG_SUBDIRS([src/gtest])
 AC_CANONICAL_HOST
 AC_CANONICAL_TARGET
 
+# Check that submodules exist
+AC_CHECK_FILES(
+        [ceph-object-corpus/bin/prune.sh]
+        [src/civetweb/README.md]
+        [src/erasure-code/jerasure/gf-complete/README]
+        [src/erasure-code/jerasure/jerasure/README]
+        [src/libs3/README]
+        , [], [AC_MSG_ERROR([Missing submodules.  You should probably run 'git submodule update --init'])])
+
 # Fix automake problems in 1.12
 m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
 
