@@ -923,7 +923,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   osd_compat(get_osd_compat_set()),
   state_lock(), state(STATE_INITIALIZING),
   op_tp(cct, "OSD::op_tp", cct->_conf->osd_op_threads, "osd_op_threads"),
-  op_sharded_tp(cct, "OSD::op_sharded_tp", cct->_conf->osd_op_num_sharded_pool_threads),
+  op_sharded_tp(cct, "OSD::op_sharded_tp", 
+    cct->_conf->osd_op_num_threads_per_shard * cct->_conf->osd_op_num_shards),
   recovery_tp(cct, "OSD::recovery_tp", cct->_conf->osd_recovery_threads, "osd_recovery_threads"),
   disk_tp(cct, "OSD::disk_tp", cct->_conf->osd_disk_threads, "osd_disk_threads"),
   command_tp(cct, "OSD::command_tp", 1),
@@ -967,7 +968,6 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   next_removal_seq(0),
   service(this)
 {
-  assert(cct->_conf->osd_op_num_sharded_pool_threads >= cct->_conf->osd_op_num_shards);
   monc->set_messenger(client_messenger);
   op_tracker.set_complaint_and_threshold(cct->_conf->osd_op_complaint_time,
                                          cct->_conf->osd_op_log_threshold);
