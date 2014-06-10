@@ -63,8 +63,6 @@ class TestRados(object):
 
     def list_non_default_pools(self):
         pools = self.rados.list_pools()
-        pools.remove('data')
-        pools.remove('metadata')
         pools.remove('rbd')
         return set(pools)
 

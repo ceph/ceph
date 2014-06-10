@@ -528,6 +528,18 @@ EOF
                     $SUDO $CEPH_ADM -i $CEPH_DEV_DIR/mds.${name}s/keyring auth add mds.${name}s \
 			mon 'allow *' osd 'allow *' mds 'allow'
 	    fi
+
+        cmd="$CEPH_ADM osd pool create cephfs_data 128"
+        echo $cmd
+        $cmd
+
+        cmd="$CEPH_ADM osd pool create cephfs_metadata 128"
+        echo $cmd
+        $cmd
+
+        cmd="$CEPH_ADM fs new default cephfs_metadata cephfs_data"
+        echo $cmd
+        $cmd
 	fi
 	
 	run 'mds' $CEPH_BIN/ceph-mds -i $name $ARGS $CMDS_ARGS
