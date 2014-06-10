@@ -1182,6 +1182,9 @@ def prepare_dev(
         LOG.debug('OSD data device %s is a partition', data)
         rawdev = data
     else:
+        if journal_dmcrypt is not None:
+            dmcrypt_unmap(journal)
+
         LOG.debug('Creating osd partition on %s', data)
         try:
             command_check_call(
@@ -1263,6 +1266,8 @@ def prepare_dev(
     finally:
         if rawdev != dev:
             dmcrypt_unmap(osd_uuid)
+        if journal_dmcrypt is not None:
+            dmcrypt_unmap(journal)
 
     if not is_partition(data):
         try:
