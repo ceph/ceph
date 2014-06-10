@@ -1,99 +1,42 @@
-import argparse
+import docopt
 
 import teuthology.misc
 import teuthology.schedule
 
+doc = """
+usage: teuthology-schedule -h
+       teuthology-schedule [options] <conf_file> [<conf_file> ...]
+
+Schedule ceph integration tests
+
+positional arguments:
+  <conf_file>                          Config file to read
+
+optional arguments:
+  -h, --help                           Show this help message and exit
+  -v, --verbose                        Be more verbose
+  -n <name>, --name <name>             Name of suite run the job is part of
+  -d <desc>, --description <desc>      Job description
+  -o <owner>, --owner <owner>          Job owner
+  -w <worker>, --worker <worker>       Which worker to use (type of machine)
+                                       [default: plana]
+  -p <priority>, --priority <priority> Job priority (lower is sooner)
+                                       [default: 1000]
+  -N <num>, --num <num>                Number of times to run/queue the job
+                                       [default: 1]
+
+  --last-in-suite                      Mark the last job in a suite so suite
+                                       post-processing can be run
+                                       [default: False]
+  --email <email>                      Where to send the results of a suite.
+                                       Only applies to the last job in a suite.
+  --timeout <timeout>                  How many seconds to wait for jobs to
+                                       finish before emailing results. Only
+                                       applies to the last job in a suite.
+
+"""
+
 
 def main():
-    teuthology.schedule.main(parse_args())
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description='Schedule ceph integration tests')
-    parser.add_argument(
-        'config',
-        metavar='CONFFILE',
-        nargs='*',
-        type=teuthology.misc.config_file,
-        action=teuthology.misc.MergeConfig,
-        default={},
-        help='config file to read',
-    )
-    parser.add_argument(
-        '--name',
-        help='name of suite run the job is part of',
-    )
-    parser.add_argument(
-        '--last-in-suite',
-        action='store_true',
-        default=False,
-        help='mark the last job in a suite so suite post-processing can be ' +
-        'run',
-    )
-    parser.add_argument(
-        '--email',
-        help='where to send the results of a suite (only applies to the ' +
-        'last job in a suite)',
-    )
-    parser.add_argument(
-        '--timeout',
-        help='how many seconds to wait for jobs to finish before emailing ' +
-        'results (only applies to the last job in a suite',
-        type=int,
-    )
-    parser.add_argument(
-        '--description',
-        help='job description',
-    )
-    parser.add_argument(
-        '--owner',
-        help='job owner',
-    )
-    parser.add_argument(
-        '--delete',
-        metavar='JOBID',
-        type=int,
-        nargs='*',
-        help='list of jobs to remove from the queue',
-    )
-    parser.add_argument(
-        '-n', '--num',
-        default=1,
-        type=int,
-        help='number of times to run/queue the job'
-    )
-    parser.add_argument(
-        '-p', '--priority',
-        default=1000,
-        type=int,
-        help='beanstalk priority (lower is sooner)'
-    )
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        default=False,
-        help='be more verbose',
-    )
-    parser.add_argument(
-        '-w', '--worker',
-        default='plana',
-        help='which worker to use (type of machine)',
-    )
-    parser.add_argument(
-        '-s', '--show',
-        metavar='JOBID',
-        type=int,
-        nargs='*',
-        help='output the contents of specified jobs in the queue',
-    )
-
-    args = parser.parse_args()
-
-    if not args.last_in_suite:
-        msg = '--email is only applicable to the last job in a suite'
-        assert not args.email, msg
-        msg = '--timeout is only applicable to the last job in a suite'
-        assert not args.timeout, msg
-
-    return args
+    args = docopt.docopt(doc)
+    teuthology.schedule.main(args)
