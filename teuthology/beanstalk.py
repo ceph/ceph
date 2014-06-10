@@ -21,6 +21,9 @@ def connect():
 
 
 def watch_tube(connection, tube_name):
+    if ',' in tube_name:
+        log.debug("Correcting tube name to 'multi'")
+        tube_name = 'multi'
     connection.watch(tube_name)
     connection.ignore('default')
 
