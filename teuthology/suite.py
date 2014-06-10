@@ -17,106 +17,148 @@ log = logging.getLogger(__name__)
 
 
 def main(args):
-    if args.verbose:
+    verbose = args.verbose
+    limit = args.limit
+    dry_run = args.dry_run
+    name = args.name
+    priority = args.priority
+    num = args.num
+    worker = args.worker
+    owner = args.owner
+    base = args.base
+    collections = args.collections
+    email = args.email
+    timeout = args.timeout
+    base_yaml_paths = args.config
+
+    if verbose:
         teuthology.log.setLevel(logging.DEBUG)
 
-    base_arg = [
+    arch = get_arch(base_yaml_paths)
+    machine_type = get_machine_type(base_yaml_paths)
+
+    base_args = [
         os.path.join(os.path.dirname(sys.argv[0]), 'teuthology-schedule'),
-        '--name', args.name,
-        '--num', str(args.num),
-        '--worker', args.worker,
+        '--name', name,
+        '--num', str(num),
+        '--worker', worker,
     ]
-    if args.priority:
-        base_arg.extend(['--priority', str(args.priority)])
-    if args.verbose:
-        base_arg.append('-v')
-    if args.owner:
-        base_arg.extend(['--owner', args.owner])
+    if priority:
+        base_args.extend(['--priority', str(priority)])
+    if verbose:
+        base_args.append('-v')
+    if owner:
+        base_args.extend(['--owner', owner])
 
     collections = [
-        (os.path.join(args.base, collection), collection)
-        for collection in args.collections
+        (os.path.join(base, collection), collection)
+        for collection in collections
     ]
 
-    count = 1
     num_jobs = 0
     for collection, collection_name in sorted(collections):
-        log.debug('Collection %s in %s' % (collection_name, collection))
-        configs = [(combine_path(collection_name, item[0]), item[1])
-                   for item in build_matrix(collection)]
-        log.info('Collection %s in %s generated %d jobs' %
-                 (collection_name, collection, len(configs)))
-        num_jobs += len(configs)
-
-        arch = get_arch(args.config)
-        machine_type = get_machine_type(args.config)
-        for description, config in configs:
-            if args.limit > 0:
-                if count > args.limit:
-                    log.info('Stopped after {limit} jobs due to --limit={limit}'.format(
-                    limit=args.limit))
-
-                    break
-            raw_yaml = '\n'.join([file(a, 'r').read() for a in config])
-
-            parsed_yaml = yaml.load(raw_yaml)
-            os_type = parsed_yaml.get('os_type')
-            exclude_arch = parsed_yaml.get('exclude_arch')
-            exclude_os_type = parsed_yaml.get('exclude_os_type')
-
-            if exclude_arch:
-                if exclude_arch == arch:
-                    log.info('Skipping due to excluded_arch: %s facets %s',
-                             exclude_arch, description)
-                    continue
-            if exclude_os_type:
-                if exclude_os_type == os_type:
-                    log.info('Skipping due to excluded_os_type: %s facets %s',
-                             exclude_os_type, description)
-                    continue
-            # We should not run multiple tests (changing distros) unless the
-            # machine is a VPS.
-            # Re-imaging baremetal is not yet supported.
-            if machine_type != 'vps':
-                if os_type and os_type != 'ubuntu':
-                    log.info(
-                        'Skipping due to non-ubuntu on baremetal facets %s',
-                        description)
-                    continue
-
-            log.info(
-                'Scheduling %s', description
-            )
-
-            arg = copy.deepcopy(base_arg)
-            arg.extend([
-                '--description', description,
-                '--',
-            ])
-            arg.extend(args.config)
-            arg.extend(config)
-
-            if args.dry_run:
-                log.info('dry-run: %s' % ' '.join(arg))
-            else:
-                subprocess.check_call(
-                    args=arg,
-                )
-            count += 1
+        num_created = schedule_collection(name=collection_name,
+                                          collection=collection,
+                                          base_yamls=base_yaml_paths,
+                                          base_args=base_args,
+                                          arch=arch,
+                                          machine_type=machine_type,
+                                          limit=limit,
+                                          offset=num_jobs,
+                                          dry_run=dry_run,
+                                          )
+        num_jobs += num_created
 
     if num_jobs:
-        arg = copy.deepcopy(base_arg)
+        arg = copy.deepcopy(base_args)
         arg.append('--last-in-suite')
-        if args.email:
-            arg.extend(['--email', args.email])
-        if args.timeout:
-            arg.extend(['--timeout', args.timeout])
-        if args.dry_run:
+        if email:
+            arg.extend(['--email', email])
+        if timeout:
+            arg.extend(['--timeout', timeout])
+        if dry_run:
             log.info('dry-run: %s' % ' '.join(arg))
         else:
             subprocess.check_call(
                 args=arg,
             )
+
+
+def schedule_collection(name,
+                        collection,
+                        base_yamls,
+                        base_args,
+                        arch,
+                        machine_type,
+                        limit=0,
+                        offset=0,
+                        dry_run=True,
+                        ):
+    """
+    schedule one collection.
+    returns number of jobs scheduled
+    """
+    count = 0
+    log.debug('Collection %s in %s' % (name, collection))
+    configs = [(combine_path(name, item[0]), item[1]) for item in
+               build_matrix(collection)]
+    job_count = len(configs)
+    log.info('Collection %s in %s generated %d jobs' % (
+        name, collection, len(configs)))
+
+    for description, config in configs:
+        if limit > 0 and (count + offset) >= limit:
+            log.info(
+                'Stopped after {limit} jobs due to --limit={limit}'.format(
+                    limit=limit))
+            break
+        raw_yaml = '\n'.join([file(a, 'r').read() for a in config])
+
+        parsed_yaml = yaml.load(raw_yaml)
+        os_type = parsed_yaml.get('os_type')
+        exclude_arch = parsed_yaml.get('exclude_arch')
+        exclude_os_type = parsed_yaml.get('exclude_os_type')
+
+        if exclude_arch:
+            if exclude_arch == arch:
+                log.info('Skipping due to excluded_arch: %s facets %s',
+                         exclude_arch, description)
+                continue
+        if exclude_os_type:
+            if exclude_os_type == os_type:
+                log.info('Skipping due to excluded_os_type: %s facets %s',
+                         exclude_os_type, description)
+                continue
+        # We should not run multiple tests (changing distros) unless the
+        # machine is a VPS.
+        # Re-imaging baremetal is not yet supported.
+        if machine_type != 'vps':
+            if os_type and os_type != 'ubuntu':
+                log.info(
+                    'Skipping due to non-ubuntu on baremetal facets %s',
+                    description)
+                continue
+
+        log.info(
+            'Scheduling %s', description
+        )
+
+        arg = copy.deepcopy(base_args)
+        arg.extend([
+            '--description', description,
+            '--',
+        ])
+        arg.extend(base_yamls)
+        arg.extend(config)
+
+        if dry_run:
+            log.info('dry-run: %s' % ' '.join(arg))
+        else:
+            subprocess.check_call(
+                args=arg,
+            )
+        count += 1
+    return job_count
 
 
 def combine_path(left, right):
