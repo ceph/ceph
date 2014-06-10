@@ -22,7 +22,7 @@ TEST(BloomFilter, Basic) {
   ASSERT_TRUE(bf.contains("foo"));
   ASSERT_TRUE(bf.contains("bar"));
 
-  ASSERT_EQ(2, bf.element_count());
+  ASSERT_EQ(2U, bf.element_count());
 }
 
 TEST(BloomFilter, Empty) {
@@ -300,6 +300,6 @@ TEST(BloomFilter, Assignement) {
   ASSERT_TRUE(bf2.contains("foo"));
   ASSERT_FALSE(bf2.contains("bar"));
 
-  ASSERT_EQ(2, bf1.element_count());
-  ASSERT_EQ(1, bf2.element_count());
+  ASSERT_EQ(2U, bf1.element_count());
+  ASSERT_EQ(1U, bf2.element_count());
 }
