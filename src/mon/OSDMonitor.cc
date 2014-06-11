@@ -2946,7 +2946,7 @@ int OSDMonitor::crush_ruleset_create_erasure(const string &name,
     ErasureCodeInterfaceRef erasure_code;
     int err = get_erasure_code(profile, &erasure_code, ss);
     if (err) {
-      ss << "failed to load plugin using profile " << profile;
+      ss << "failed to load plugin using profile " << profile << std::endl;
       return err;
     }
 
@@ -2974,7 +2974,7 @@ int OSDMonitor::get_erasure_code(const string &erasure_code_profile,
   if (plugin == profile.end()) {
     ss << "cannot determine the erasure code plugin"
        << " because there is no 'plugin' entry in the erasure_code_profile "
-       << profile;
+       << profile << std::endl;
     return -EINVAL;
   }
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
