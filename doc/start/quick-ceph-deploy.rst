@@ -312,6 +312,10 @@ the following::
 	ceph quorum_status --format json-pretty
 
 
+.. tip:: When you run Ceph with multiple monitors, you SHOULD install and 
+         configure NTP on each monitor host. Ensure that the
+         monitors are NTP peers.
+
 
 Storing/Retrieving Object Data
 ==============================
