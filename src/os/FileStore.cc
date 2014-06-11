@@ -275,6 +275,14 @@ int FileStore::lfn_open(coll_t cid,
 	     << ") in index: " << cpp_strerror(-r) << dendl;
 	goto fail;
       }
+      r = chain_fsetxattr(fd, XATTR_SPILL_OUT_NAME,
+                          XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT));
+      if (r < 0) {
+        VOID_TEMP_FAILURE_RETRY(::close(fd));
+        derr << "error setting spillout xattr for oid " << oid << " (" << (*path)->path()
+                       << "):" << cpp_strerror(-r) << dendl;
+        goto fail;
+      }
     }
   }
 
@@ -2936,8 +2944,20 @@ int FileStore::_clone(coll_t cid, const ghobject_t& oldoid, const ghobject_t& ne
   }
 
   {
+    char buf[2];
     map<string, bufferptr> aset;
-    r = _fgetattrs(**o, aset, false);
+    r = _fgetattrs(**o, aset);
+    if (r < 0)
+      goto out3;
+
+    r = chain_fgetxattr(**o, XATTR_SPILL_OUT_NAME, buf, sizeof(buf));
+    if (r >= 0 && !strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT))) {
+      r = chain_fsetxattr(**n, XATTR_SPILL_OUT_NAME, XATTR_NO_SPILL_OUT,
+                          sizeof(XATTR_NO_SPILL_OUT));
+    } else {
+      r = chain_fsetxattr(**n, XATTR_SPILL_OUT_NAME, XATTR_SPILL_OUT,
+                          sizeof(XATTR_SPILL_OUT));
+    }
     if (r < 0)
       goto out3;
 
@@ -3517,7 +3537,7 @@ int FileStore::_fgetattr(int fd, const char *name, bufferptr& bp)
   return l;
 }
 
-int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset, bool user_only)
+int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset)
 {
   // get attr list
   char names1[100];
@@ -3551,17 +3571,9 @@ int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset, bool user_only)
   while (name < end) {
     char *attrname = name;
     if (parse_attrname(&name)) {
-      char *set_name = name;
-      bool can_get = true;
-      if (user_only) {
-	if (*set_name =='_')
-	  set_name++;
-	else
-	  can_get = false;
-      }
-      if (*set_name && can_get) {
+      if (*name) {
         dout(20) << "fgetattrs " << fd << " getting '" << name << "'" << dendl;
-        int r = _fgetattr(fd, attrname, aset[set_name]);
+        int r = _fgetattr(fd, attrname, aset[name]);
         if (r < 0)
 	  return r;
       }
@@ -3680,7 +3692,7 @@ int FileStore::getattr(coll_t cid, const ghobject_t& oid, const char *name, buff
   }
 }
 
-int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset, bool user_only)
+int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset)
 {
   set<string> omap_attrs;
   map<string, bufferlist> omap_aset;
@@ -3699,7 +3711,7 @@ int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>
   if (r >= 0 && !strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT)))
     spill_out = false;
 
-  r = _fgetattrs(**fd, aset, user_only);
+  r = _fgetattrs(**fd, aset);
   if (r < 0) {
     goto out;
   }
@@ -3732,16 +3744,7 @@ int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>
   for (map<string, bufferlist>::iterator i = omap_aset.begin();
 	 i != omap_aset.end();
 	 ++i) {
-    string key;
-    if (user_only) {
-	if (i->first[0] != '_')
-	  continue;
-	if (i->first == "_")
-	  continue;
-	key = i->first.substr(1, i->first.size());
-    } else {
-	key = i->first;
-    }
+    string key(i->first);
     aset.insert(make_pair(key,
 			    bufferptr(i->second.c_str(), i->second.length())));
   }
@@ -3779,7 +3782,7 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
   else
     spill_out = 1;
 
-  r = _fgetattrs(**fd, inline_set, false);
+  r = _fgetattrs(**fd, inline_set);
   assert(!m_filestore_fail_eio || r != -EIO);
   dout(15) << "setattrs " << cid << "/" << oid << dendl;
 
@@ -3802,12 +3805,6 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
 
     if (!inline_set.count(p->first) &&
 	  inline_set.size() >= m_filestore_max_inline_xattrs) {
-	if (inline_set.count(p->first)) {
-	  inline_set.erase(p->first);
-	  r = chain_fremovexattr(**fd, n);
-	  if (r < 0)
-	    goto out_close;
-	}
 	omap_set[p->first].push_back(p->second);
 	continue;
     }
@@ -3920,7 +3917,7 @@ int FileStore::_rmattrs(coll_t cid, const ghobject_t& oid,
     spill_out = false;
   }
 
-  r = _fgetattrs(**fd, aset, false);
+  r = _fgetattrs(**fd, aset);
   if (r >= 0) {
     for (map<string,bufferptr>::iterator p = aset.begin(); p != aset.end(); ++p) {
       char n[CHAIN_XATTR_MAX_NAME_LEN];
@@ -4025,7 +4022,7 @@ int FileStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset)
     r = -errno;
     goto out;
   }
-  r = _fgetattrs(fd, aset, true);
+  r = _fgetattrs(fd, aset);
   VOID_TEMP_FAILURE_RETRY(::close(fd));
  out:
   dout(10) << "collection_getattrs " << fn << " = " << r << dendl;

@@ -281,7 +281,7 @@ public:
     bool allow_eio = false);
   int fiemap(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
   int getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr& value);
-  int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset, bool user_only = false);
+  int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset);
 
   int list_collections(vector<coll_t>& ls);
   bool collection_exists(coll_t c);
