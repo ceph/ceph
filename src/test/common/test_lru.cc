@@ -67,6 +67,28 @@ TEST(lru, InsertBot) {
   ASSERT_EQ(99, (static_cast<Item*>(lru.lru_expire()))->id);
 }
 
+TEST(lru, Adjust) {
+  LRU lru = LRU(10);
+
+  lru.lru_set_midpoint(.6); // 60% of 10 elements.
+  for (int i=0; i<100; i++) {
+    lru.lru_touch(new Item(i));
+  }
+  ASSERT_EQ(6, lru.lru_get_top());
+  ASSERT_EQ(94, lru.lru_get_bot());
+  ASSERT_EQ(100, lru.lru_get_size());
+
+  lru.lru_clear();
+
+  lru.lru_set_midpoint(1.2); // 120% of 10 elements.
+  for (int i=0; i<100; i++) {
+    lru.lru_touch(new Item(i));
+  }
+  ASSERT_EQ(12, lru.lru_get_top());
+  ASSERT_EQ(88, lru.lru_get_bot());
+  ASSERT_EQ(100, lru.lru_get_size());
+}
+
 
 /*
  * Local Variables:
