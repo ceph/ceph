@@ -154,7 +154,7 @@ public:
     cct = _cct;
     lru_window = cct->_conf->rgw_cache_lru_size / 2;
   }
-  bool chain_cache_entry(rgw_cache_entry_info& cache_info, RGWChainedCache::Entry *chained_entry);
+  bool chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry);
 };
 
 template <class T>
@@ -224,8 +224,8 @@ public:
 
   int delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj& obj, RGWObjVersionTracker *objv_tracker);
 
-  bool chain_cache_entry(rgw_cache_entry_info& cache_info, RGWChainedCache::Entry *chained_entry) {
-    return cache.chain_cache_entry(cache_info, chained_entry);
+  bool chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry) {
+    return cache.chain_cache_entry(cache_info_entries, chained_entry);
   }
 };
 
