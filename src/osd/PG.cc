@@ -194,7 +194,8 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   finish_sync_event(NULL),
   scrub_after_recovery(false),
   active_pushes(0),
-  recovery_state(this)
+  recovery_state(this),
+  pg_id(p)
 {
 #ifdef PG_DEBUG_REFS
   osd->add_pgid(p, this);

@@ -466,6 +466,8 @@ OPTION(osd_op_pq_min_cost, OPT_U64, 65536)
 OPTION(osd_disk_threads, OPT_INT, 1)
 OPTION(osd_recovery_threads, OPT_INT, 1)
 OPTION(osd_recover_clone_overlap, OPT_BOOL, true)   // preserve clone_overlap during recovery/migration
+OPTION(osd_op_num_threads_per_shard, OPT_INT, 2)
+OPTION(osd_op_num_shards, OPT_INT, 5)
 
 // Only use clone_overlap for recovery if there are fewer than
 // osd_recover_clone_overlap_limit entries in the overlap set
