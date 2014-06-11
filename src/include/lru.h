@@ -150,6 +150,7 @@ class LRU {
     lru_top.clear();
     lru_bot.clear();
     lru_pintail.clear();
+    lru_num = 0;
   }
 
   // insert at top of lru
