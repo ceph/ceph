@@ -2019,7 +2019,7 @@ int KeyValueStore::getattr(coll_t cid, const ghobject_t& oid, const char *name,
 }
 
 int KeyValueStore::getattrs(coll_t cid, const ghobject_t& oid,
-                           map<string,bufferptr>& aset, bool user_only)
+                           map<string,bufferptr>& aset)
 {
   int r;
   map<string, bufferlist> attr_aset;
@@ -2036,15 +2036,7 @@ int KeyValueStore::getattrs(coll_t cid, const ghobject_t& oid,
   for (map<string, bufferlist>::iterator i = attr_aset.begin();
        i != attr_aset.end(); ++i) {
     string key;
-    if (user_only) {
-      if (i->first[0] != '_')
-        continue;
-      if (i->first == "_")
-        continue;
-      key = i->first.substr(1, i->first.size());
-    } else {
-      key = i->first;
-    }
+    key = i->first;
     aset.insert(make_pair(key,
                 bufferptr(i->second.c_str(), i->second.length())));
   }
