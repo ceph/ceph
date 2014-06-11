@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Wed Jun 11 17:05:02 CEST 2014
+
+- added dependency on gptfdisk
+  * ceph-disk uses gptfdisk to format OSD disks
+
+-------------------------------------------------------------------
 Thu Jun  5 15:15:48 CEST 2014
 - ceph-mon core-dumps on SLE11sp3 if linked to tcmalloc.
   * Prevent tcmalloc use on less than SLE12

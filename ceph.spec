@@ -109,6 +109,8 @@ BuildRequires:  gperftools-devel%{?_isa}
 %endif
 %endif
 %endif
+# ceph-disk uses gptfdisk to format OSD disks
+Requires: gptfdisk
 
 %description
 Ceph is a distributed network file system designed to provide excellent
