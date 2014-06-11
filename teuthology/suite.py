@@ -17,19 +17,19 @@ log = logging.getLogger(__name__)
 
 
 def main(args):
-    verbose = args.verbose
-    limit = args.limit
-    dry_run = args.dry_run
-    name = args.name
-    priority = args.priority
-    num = args.num
-    worker = args.worker
-    owner = args.owner
-    base = args.base
-    collections = args.collections
-    email = args.email
-    timeout = args.timeout
-    base_yaml_paths = args.config
+    verbose = args['--verbose']
+    limit = int(args['--limit'])
+    dry_run = args['--dry-run']
+    name = args['--name']
+    priority = int(args['--priority'])
+    num = int(args['--num'])
+    worker = args['--worker']
+    owner = args['--owner']
+    base = args['--base']
+    collections = args['--collections']
+    email = args['--email']
+    timeout = args['--timeout']
+    base_yaml_paths = args['<config_yaml>']
 
     if verbose:
         teuthology.log.setLevel(logging.DEBUG)
