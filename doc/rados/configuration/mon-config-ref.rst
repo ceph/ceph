@@ -248,6 +248,7 @@ possible to run daemons for multiple clusters on the same hardware.
 .. note:: Do not set this value if you use a deployment tool that does
    it for you.
 
+
 .. index:: Ceph Monitor; initial members
 
 Initial Members
@@ -563,7 +564,9 @@ Trimming requires that the placement groups are ``active + clean``.
 
 ``paxos propose interval``
 
-:Description: Gather updates for this time interval before proposing a map update. 
+:Description: Gather updates for this time interval before proposing 
+              a map update. 
+
 :Type: Double
 :Default: ``1.0``
 
@@ -678,6 +681,30 @@ will not work, because there is a single Paxos instance for all services.
 
 Clock
 -----
+
+Ceph daemons pass critical messages to each other, which must be processed
+before daemons reach a timeout threshold. If the clocks in Ceph monitors
+are not synchronized, it can lead to a number of anomalies. For example:
+
+- Daemons ignoring received messages (e.g., timestamps outdated)
+- Timeouts triggered too soon/late when a message wasn't received in time.
+
+See `Monitor Store Synchronization`_ and `Slurp`_ for details.
+
+
+.. tip:: You SHOULD install NTP on your Ceph monitor hosts to 
+         ensure that the monitor cluster operates with synchronized clocks.
+
+Clock drift may still be noticeable with NTP even though the discrepancy isn't
+yet harmful. Ceph's clock drift / clock skew warnings may get triggered even 
+though NTP maintains a reasonable level of synchronization. Increasing your 
+clock drift may be tolerable under such circumstances; however, a number of 
+factors such as workload, network latency, configuring overrides to default 
+timeouts and the `Monitor Store Synchronization`_ settings may influence 
+the level of acceptable clock drift without compromising Paxos guarantees.
+
+Ceph provides the following tunable options to allow you to find 
+acceptable values.
 
 
 ``clock offset``
