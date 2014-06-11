@@ -1877,9 +1877,10 @@ public:
   // Prevent copying
   PG(const PG& rhs);
   PG& operator=(const PG& rhs);
+  const spg_t pg_id;
 
  public:
-  spg_t      get_pgid() const { return info.pgid; }
+  const spg_t&      get_pgid() const { return pg_id; }
   int        get_nrep() const { return acting.size(); }
 
   void init_primary_up_acting(
