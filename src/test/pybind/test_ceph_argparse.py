@@ -947,7 +947,7 @@ class TestOSD(TestArgparse):
                                    'replicated'])
         self.assert_valid_command(['osd', 'pool', 'create',
                                    'poolname', '128', '128',
-                                   'erasure', 'profile', 'ruleset'])
+                                   'erasure', 'A-Za-z0-9-_.', 'ruleset^^'])
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname']))
@@ -956,12 +956,14 @@ class TestOSD(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname',
                                                     '128', '128',
-                                                    'erasure', '^^^']))
+                                                    'erasure', '^^^', 
+													'ruleset']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname',
                                                     '128', '128',
                                                     'erasure', 'profile',
-                                                    '^^^']))
+                                                    'ruleset',
+												    'toomany']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname',
                                                     '128', '128',
