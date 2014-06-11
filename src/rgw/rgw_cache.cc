@@ -57,26 +57,45 @@ int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cac
   return 0;
 }
 
-bool ObjectCache::chain_cache_entry(rgw_cache_entry_info& cache_info, RGWChainedCache::Entry *chained_entry)
+bool ObjectCache::chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry)
 {
   RWLock::WLocker l(lock);
 
-  ldout(cct, 10) << "chain_cache_entry: cache_locator=" << cache_info.cache_locator << dendl;
-  map<string, ObjectCacheEntry>::iterator iter = cache_map.find(cache_info.cache_locator);
-  if (iter == cache_map.end()) {
-    ldout(cct, 20) << "chain_cache_entry: couldn't find cachce locator" << dendl;
-    return false;
+  list<rgw_cache_entry_info *>::iterator citer;
+
+  list<ObjectCacheEntry *> cache_entry_list;
+
+  /* first verify that all entries are still valid */
+  for (citer = cache_info_entries.begin(); citer != cache_info_entries.end(); ++citer) {
+    rgw_cache_entry_info *cache_info = *citer;
+
+    ldout(cct, 10) << "chain_cache_entry: cache_locator=" << cache_info->cache_locator << dendl;
+    map<string, ObjectCacheEntry>::iterator iter = cache_map.find(cache_info->cache_locator);
+    if (iter == cache_map.end()) {
+      ldout(cct, 20) << "chain_cache_entry: couldn't find cachce locator" << dendl;
+      return false;
+    }
+
+    ObjectCacheEntry *entry = &iter->second;
+
+    if (entry->gen != cache_info->gen) {
+      ldout(cct, 20) << "chain_cache_entry: entry.gen (" << entry->gen << ") != cache_info.gen (" << cache_info->gen << ")" << dendl;
+      return false;
+    }
+
+    cache_entry_list.push_back(entry);
   }
 
-  ObjectCacheEntry& entry = iter->second;
-  if (entry.gen != cache_info.gen) {
-    ldout(cct, 20) << "chain_cache_entry: entry.gen (" << entry.gen << ") != cache_info.gen (" << cache_info.gen << ")" << dendl;
-    return false;
-  }
 
   chained_entry->cache->chain_cb(chained_entry->key, chained_entry->data);
 
-  entry.chained_entries.push_back(make_pair<RGWChainedCache *, string>(chained_entry->cache, chained_entry->key));
+  list<ObjectCacheEntry *>::iterator liter;
+
+  for (liter = cache_entry_list.begin(); liter != cache_entry_list.end(); ++liter) {
+    ObjectCacheEntry *entry = *liter;
+
+    entry->chained_entries.push_back(make_pair<RGWChainedCache *, string>(chained_entry->cache, chained_entry->key));
+  }
 
   return true;
 }

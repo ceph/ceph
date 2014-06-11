@@ -5522,9 +5522,14 @@ int RGWRados::get_bucket_info(void *ctx, const string& bucket_name, RGWBucketInf
   if (pattrs)
     *pattrs = e.attrs;
 
+  list<rgw_cache_entry_info *> cache_info_entries;
+  cache_info_entries.push_back(&entry_cache_info);
+  cache_info_entries.push_back(&cache_info);
+
+
   /* chain to both bucket entry point and bucket instance */
-  if (binfo_cache.put(this, bucket_name, &e, entry_cache_info)) {
-    binfo_cache.put(this, bucket_name, &e, cache_info);
+  if (!binfo_cache.put(this, bucket_name, &e, cache_info_entries)) {
+    ldout(cct, 20) << "couldn't put binfo cache entry, might have raced with data changes" << dendl;
   }
 
   return 0;

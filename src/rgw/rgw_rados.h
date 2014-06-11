@@ -1667,7 +1667,7 @@ public:
 
   virtual void finish_get_obj(void **handle);
 
-  virtual bool chain_cache_entry(rgw_cache_entry_info& cache_info, RGWChainedCache::Entry *chained_entry) { return false; }
+  virtual bool chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry) { return false; }
 
   int iterate_obj(void *ctx, rgw_obj& obj,
                   off_t ofs, off_t end,
@@ -1957,11 +1957,11 @@ public:
     return true;
   }
 
-  bool put(RGWRados *store, const string& key, T *entry, rgw_cache_entry_info& cache_info) {
+  bool put(RGWRados *store, const string& key, T *entry, list<rgw_cache_entry_info *>& cache_info_entries) {
     Entry chain_entry(this, key, entry);
 
     /* we need the store cache to call us under its lock to maintain lock ordering */
-    return store->chain_cache_entry(cache_info, &chain_entry);
+    return store->chain_cache_entry(cache_info_entries, &chain_entry);
   }
 
   void chain_cb(const string& key, void *data) {
