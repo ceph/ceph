@@ -89,6 +89,38 @@ TEST(lru, Adjust) {
   ASSERT_EQ(100, lru.lru_get_size());
 }
 
+TEST(lru, Pinning) {
+  LRU lru = LRU();
+
+  Item *ob0 = new Item(0);
+  Item *ob1 = new Item(1);
+
+  // test before ob1 are in a LRU
+  ob1->lru_pin();
+  ASSERT_FALSE(ob1->lru_is_expireable());
+
+  ob1->lru_unpin();
+  ASSERT_TRUE(ob1->lru_is_expireable());
+
+  // test when ob1 are in a LRU
+  lru.lru_touch(ob0);
+  lru.lru_touch(ob1);
+
+  ob1->lru_pin();
+  ob1->lru_pin(); // Verify that, one incr.
+  ASSERT_EQ(1, lru.lru_get_num_pinned());
+  ASSERT_FALSE(ob1->lru_is_expireable());
+
+  ob1->lru_unpin();
+  ob1->lru_unpin(); // Verify that, one decr.
+  ASSERT_EQ(0, lru.lru_get_num_pinned());
+  ASSERT_TRUE(ob1->lru_is_expireable());
+
+  ASSERT_EQ(0, (static_cast<Item*>(lru.lru_expire()))->id);
+  ob0->lru_pin();
+  ASSERT_EQ(1, (static_cast<Item*>(lru.lru_expire()))->id);
+}
+
 
 /*
  * Local Variables:
