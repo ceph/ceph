@@ -378,6 +378,11 @@ unittest_hitset_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_hitset_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_hitset
 
+unittest_lru_SOURCES = test/common/test_lru.cc
+unittest_lru_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_lru_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_lru
+
 if LINUX
 unittest_pglog_LDADD += -ldl
 endif # LINUX
