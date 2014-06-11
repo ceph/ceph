@@ -1231,12 +1231,12 @@ class RGWRados
                          librados::ObjectOperation& op, RGWObjState **state);
   int prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
                          librados::ObjectWriteOperation& op, RGWObjState **pstate,
-			 bool reset_obj, const string *ptag,
+                         bool reset_obj, const string *ptag,
                          const char *if_match = NULL,
                          const char *if_nomatch = NULL);
   int prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj,
                          librados::ObjectWriteOperation& op, RGWObjState **pstate,
-			 bool reset_obj, const string *ptag,
+                         bool reset_obj, const string *ptag,
                          const char *if_match = NULL,
                          const char *if_nomatch = NULL);
 

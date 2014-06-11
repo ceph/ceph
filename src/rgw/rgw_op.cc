@@ -1418,7 +1418,7 @@ static bool is_v2_upload_id(const string& upload_id)
   return (strncmp(uid, MULTIPART_UPLOAD_ID_PREFIX, sizeof(MULTIPART_UPLOAD_ID_PREFIX) - 1) == 0);
 }
 
-int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_t set_mtime, 
+int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_t set_mtime,
                                               map<string, bufferlist>& attrs,
                                               const char *if_match, const char *if_nomatch)
 {
