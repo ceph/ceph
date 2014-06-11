@@ -60,6 +60,7 @@ void RGWOp_User_Create::execute()
   bool gen_key;
   bool suspended;
   bool system;
+  bool exclusive;
 
   uint32_t max_buckets;
   int32_t key_type = KEY_TYPE_UNDEFINED;
@@ -77,6 +78,7 @@ void RGWOp_User_Create::execute()
   RESTArgs::get_bool(s, "suspended", false, &suspended);
   RESTArgs::get_uint32(s, "max-buckets", RGW_DEFAULT_MAX_BUCKETS, &max_buckets);
   RESTArgs::get_bool(s, "system", false, &system);
+  RESTArgs::get_bool(s, "exclusive", false, &exclusive);
 
   if (!s->user.system && system) {
     ldout(s->cct, 0) << "cannot set system flag by non-system user" << dendl;
@@ -120,6 +122,9 @@ void RGWOp_User_Create::execute()
 
   if (s->info.args.exists("system"))
     op_state.set_system(system);
+
+  if (s->info.args.exists("exclusive"))
+    op_state.set_exclusive(exclusive);
 
   if (gen_key)
     op_state.set_generate_key();
