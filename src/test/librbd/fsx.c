@@ -1382,7 +1382,8 @@ check_clone(int clonenum)
 	}
 
 	good_buf = NULL;
-	ret = posix_memalign((void **)&good_buf, MAX(writebdy, sizeof(void *)),
+	ret = posix_memalign((void **)&good_buf,
+			     MAX(writebdy, (int)sizeof(void *)),
 			     file_info.st_size);
 	if (ret > 0) {
 		prterrcode("check_clone: posix_memalign(good_buf)", -ret);
@@ -1390,7 +1391,8 @@ check_clone(int clonenum)
 	}
 
 	temp_buf = NULL;
-	ret = posix_memalign((void **)&temp_buf, MAX(readbdy, sizeof(void *)),
+	ret = posix_memalign((void **)&temp_buf,
+			     MAX(readbdy, (int)sizeof(void *)),
 			     file_info.st_size);
 	if (ret > 0) {
 		prterrcode("check_clone: posix_memalign(temp_buf)", -ret);
@@ -2064,8 +2066,8 @@ main(int argc, char **argv)
 	for (i = 0; i < (int)maxfilelen; i++)
 		original_buf[i] = random() % 256;
 
-	ret = posix_memalign((void **)&good_buf, MAX(writebdy, sizeof(void *)),
-			     maxfilelen);
+	ret = posix_memalign((void **)&good_buf,
+			     MAX(writebdy, (int)sizeof(void *)), maxfilelen);
 	if (ret > 0) {
 		if (ret == EINVAL)
 			prt("writebdy is not a suitable power of two\n");
@@ -2075,8 +2077,8 @@ main(int argc, char **argv)
 	}
 	memset(good_buf, '\0', maxfilelen);
 
-	ret = posix_memalign((void **)&temp_buf, MAX(readbdy, sizeof(void *)),
-			     maxfilelen);
+	ret = posix_memalign((void **)&temp_buf,
+			     MAX(readbdy, (int)sizeof(void *)), maxfilelen);
 	if (ret > 0) {
 		if (ret == EINVAL)
 			prt("readbdy is not a suitable power of two\n");
