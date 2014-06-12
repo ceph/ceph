@@ -96,6 +96,10 @@ struct MonSessionMap {
     }
   }
 
+  unsigned get_size() const {
+    return sessions.size();
+  }
+
   void remove_session(MonSession *s) {
     assert(!s->closed);
     for (map<string,Subscription*>::iterator p = s->sub_map.begin(); p != s->sub_map.end(); ++p) {
