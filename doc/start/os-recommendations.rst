@@ -6,12 +6,14 @@ Ceph Dependencies
 =================
 
 As a general rule, we recommend deploying Ceph on newer releases of Linux. 
+We also recommend deploying on releases with long-term support.
 
 Linux Kernel
 ------------
 
 - **Ceph Kernel Client:**  We currently recommend:
 
+  - v3.10.0 or later
   - v3.6.6 or later in the v3.6 stable series
   - v3.4.20 or later in the v3.4 stable series
 
@@ -21,11 +23,14 @@ Linux Kernel
 glibc
 -----
 
-- **syncfs(2)**: For non-btrfs filesystems such as XFS and ext4 where
-  more than one ``ceph-osd`` daemon is used on a single server, Ceph
-  performs signficantly better with the ``syncfs(2)`` system call
-  (added in kernel 2.6.39 and glibc 2.14).  New versions of Ceph (v0.55 and
-  later) do not depend on glibc support.
+- **fdatasync(2)**: With Firefly v0.80 and beyond, use ``fdatasync(2)`` 
+  instead of ``fsync(2)`` to improve performance.
+
+- **syncfs(2)**: For non-btrfs filesystems 
+  such as XFS and ext4 where more than one ``ceph-osd`` daemon is used on a 
+  single server, Ceph performs significantly better with the ``syncfs(2)`` 
+  system call (added in kernel 2.6.39 and glibc 2.14).  New versions of 
+  Ceph (v0.55 and later) do not depend on glibc support.
 
 
 Platforms
@@ -37,6 +42,37 @@ specific distributions aside from the kernel and system initialization
 package (i.e., sysvinit, upstart, systemd).
 
 
+
+Firefly (0.80)
+--------------
+
++----------+----------+--------------------+--------------+---------+------------+
+| Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    | 
++==========+==========+====================+==============+=========+============+
+| Ubuntu   | 12.04    | Precise Pangolin   | linux-3.2.0  | 1, 2    | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+| Ubuntu   | 14.04    | Trusty Tahr        | linux-3.13.0 |         | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+| Debian   | 6.0      | Squeeze            | linux-2.6.32 | 1, 2, 3 | B          |
++----------+----------+--------------------+--------------+---------+------------+
+| Debian   | 7.0      | Wheezy             | linux-3.2.0  | 1, 2    | B          |
++----------+----------+--------------------+--------------+---------+------------+
+| CentOS   | 6        | N/A                | linux-2.6.32 | 1, 2    | B, I       |
++----------+----------+--------------------+--------------+---------+------------+
+| RHEL     | 6        |                    | linux-2.6.32 | 1, 2    | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+| RHEL     | 7        |                    | linux-3.10.0 |         | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+| Fedora   | 19.0     | Schrödinger's Cat  | linux-3.10.0 |         | B          |
++----------+----------+--------------------+--------------+---------+------------+
+| Fedora   | 20.0     | Heisenbug          | linux-3.14.0 |         | B          |
++----------+----------+--------------------+--------------+---------+------------+
+
+**NOTE**: Ceph also supports ``Quantal``, ``Raring`` and ``Saucy``. However, we 
+recommend using LTS releases.
+
+
+
 Emperor (0.72)
 --------------
 
@@ -45,9 +81,9 @@ Emperor (0.72)
 +==========+==========+====================+==============+=========+============+
 | Ubuntu   | 12.04    | Precise Pangolin   | linux-3.2.0  | 1, 2    | B, I, C    |
 +----------+----------+--------------------+--------------+---------+------------+
-| Ubuntu   | 12.10    | Quantal Quetzal    | linux-3.5.4  | 2, 4    | B          |
+| Ubuntu   | 12.10    | Quantal Quetzal    | linux-3.5.4  | 2       | B          |
 +----------+----------+--------------------+--------------+---------+------------+
-| Ubuntu   | 13.04    | Raring Ringtail    | linux-3.8.5  | 4       | B          |
+| Ubuntu   | 13.04    | Raring Ringtail    | linux-3.8.5  |         | B          |
 +----------+----------+--------------------+--------------+---------+------------+
 | Debian   | 6.0      | Squeeze            | linux-2.6.32 | 1, 2, 3 | B          |
 +----------+----------+--------------------+--------------+---------+------------+
@@ -187,8 +223,6 @@ Notes
   ``ceph-osd`` daemons using ``XFS`` or ``ext4`` on the same host will
   not perform as well as they could.
 
-- **4**: Ceph provides ARM support for Quantal and Raring. Saucy support is
-  not supported yet, but support is coming soon.
 
 Testing
 -------
@@ -202,4 +236,3 @@ Testing
 - **C**: We run a comprehensive functional, regression, and stress test suite
   on this platform on a continuous basis. This includes development branches,
   pre-release, and released code.
-
