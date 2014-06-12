@@ -7,9 +7,8 @@ email=$4
 flavor=$5
 teuthology_branch=$6
 mtype=$7
-template=$8
-distro=$9
-limit=${10}
+distro=$8
+limit=${9}
 extra_args=""
 
 if [ -z "$limit" ]
@@ -20,7 +19,7 @@ else
 fi
 
 if [ -z "$kernel" ]; then
-    echo "usage: $0 <suite> <ceph branch> <kernel branch> [email] [flavor] [teuthology-branch] [machinetype] [template] [distro]"
+    echo "usage: $0 <suite> <ceph branch> <kernel branch> [email] [flavor] [teuthology-branch] [machinetype] [distro]"
     echo "  flavor can be 'basic', 'gcov', 'notcmalloc'."
     echo "  PRIO=123 in the environment sets priority (default 1000, smaller=higher)"
     exit 1
@@ -194,11 +193,6 @@ if [ "$flavor" = "gcov" ]; then
     cat <<EOF >> $fn
     coverage: yes
 EOF
-fi
-
-## template, too?
-if [ -n "$template" ]; then
-    sed s/CEPH_SHA1/$CEPH_SHA1/ $template | sed s/KERNEL_SHA1/$KERNEL_SHA1/ >> $fn
 fi
 
 echo "name $name"
