@@ -533,10 +533,11 @@ public:
   /**
    * get feature bits required by the current structure
    *
+   * @param entity_type [in] what entity type we are asking about
    * @param mask [out] set of all possible map-related features we could set
    * @return feature bits used by this map
    */
-  uint64_t get_features(uint64_t *mask) const;
+  uint64_t get_features(int entity_type, uint64_t *mask) const;
 
   /**
    * get intersection of features supported by up osds

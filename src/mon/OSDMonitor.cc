@@ -283,15 +283,14 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 
 void OSDMonitor::update_msgr_features()
 {
-  uint64_t mask;
-  uint64_t features = osdmap.get_features(&mask);
-
   set<int> types;
   types.insert((int)entity_name_t::TYPE_OSD);
   types.insert((int)entity_name_t::TYPE_CLIENT);
   types.insert((int)entity_name_t::TYPE_MDS);
   types.insert((int)entity_name_t::TYPE_MON);
   for (set<int>::iterator q = types.begin(); q != types.end(); ++q) {
+    uint64_t mask;
+    uint64_t features = osdmap.get_features(*q, &mask);
     if ((mon->messenger->get_policy(*q).features_required & mask) != features) {
       dout(0) << "crush map has features " << features << ", adjusting msgr requires" << dendl;
       Messenger::Policy p = mon->messenger->get_policy(*q);
@@ -1179,7 +1178,8 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
   assert(m->get_orig_source_inst().name.is_osd());
 
   // check if osd has required features to boot
-  if ((osdmap.get_features(NULL) & CEPH_FEATURE_OSD_ERASURE_CODES) &&
+  if ((osdmap.get_features(CEPH_ENTITY_TYPE_OSD, NULL) &
+       CEPH_FEATURE_OSD_ERASURE_CODES) &&
       !(m->get_connection()->get_features() & CEPH_FEATURE_OSD_ERASURE_CODES)) {
     dout(0) << __func__ << " osdmap requires Erasure Codes but osd at "
             << m->get_orig_source_inst()

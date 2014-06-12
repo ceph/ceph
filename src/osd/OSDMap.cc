@@ -950,7 +950,7 @@ bool OSDMap::find_osd_on_ip(const entity_addr_t& ip) const
 }
 
 
-uint64_t OSDMap::get_features(uint64_t *pmask) const
+uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
 {
   uint64_t features = 0;  // things we actually have
   uint64_t mask = 0;      // things we could have
@@ -978,8 +978,9 @@ uint64_t OSDMap::get_features(uint64_t *pmask) const
       features |= CEPH_FEATURE_OSD_CACHEPOOL;
     }
   }
-  mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL |
-          CEPH_FEATURE_OSD_ERASURE_CODES;
+  mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL;
+  if (entity_type != CEPH_ENTITY_TYPE_CLIENT)
+    mask |= CEPH_FEATURE_OSD_ERASURE_CODES;
 
   if (osd_primary_affinity) {
     for (int i = 0; i < max_osd; ++i) {
