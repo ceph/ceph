@@ -770,6 +770,17 @@ inline void decode(std::multimap<T,U>& m, bufferlist::iterator& p)
 
 // ceph::unordered_map
 template<class T, class U>
+inline void encode(const unordered_map<T,U>& m, bufferlist& bl,
+		   uint64_t features)
+{
+  __u32 n = (__u32)(m.size());
+  encode(n, bl);
+  for (typename unordered_map<T,U>::const_iterator p = m.begin(); p != m.end(); ++p) {
+    encode(p->first, bl, features);
+    encode(p->second, bl, features);
+  }
+}
+template<class T, class U>
 inline void encode(const unordered_map<T,U>& m, bufferlist& bl)
 {
   __u32 n = (__u32)(m.size());
