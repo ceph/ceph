@@ -854,7 +854,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
   string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
-  /* Refuse to execute if mon cluster unavailable */
+  /* Refuse access if message not associated with a valid session */
   MonSession *session = m->get_session();
   if (!session) {
     mon->reply_command(m, -EACCES, "access denied", rdata, get_last_committed());
