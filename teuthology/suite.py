@@ -6,6 +6,7 @@ import copy
 import itertools
 import logging
 import os
+import requests
 import subprocess
 import sys
 import yaml
@@ -76,6 +77,43 @@ def main(args):
             subprocess.check_call(
                 args=arg,
             )
+
+
+def get_gitbuilder_url(distro, pkg_type, arch, kernel_flavor):
+    """
+    Return a base URL like:
+        http://gitbuilder.ceph.com/ceph-deb-squeeze-x86_64-basic/
+
+    :param distro:        A distro-ish string like 'trusty' or 'fedora20'
+    :param pkg_type:      Probably 'rpm' or 'deb'
+    :param arch:          A string like 'x86_64'
+    :param kernel_flavor: A string like 'basic'
+    """
+    templ = 'http://gitbuilder.ceph.com/ceph-{pkg}-{distro}-{arch}-{flav}/'
+    return templ.format(pkg=pkg_type, distro=distro, arch=arch,
+                        flav=kernel_flavor)
+
+
+def get_hash(branch='master'):
+    # Alternate method:
+    #resp = requests.get(
+    #    'https://api.github.com/repos/ceph/ceph/git/refs/heads/master')
+    #hash = .json()['object']['sha']
+    base_url = get_gitbuilder_url('precise', 'deb', 'x86_64', 'basic')
+    url = os.path.join(base_url, 'ref', branch, 'sha1')
+    resp = requests.get(url)
+    resp.raise_for_status()
+    return resp.text.strip()
+
+
+def package_version_for_hash(hash, distro, pkg_type, arch='x86_64',
+                             kernel_flavor='basic'):
+    base_url = get_gitbuilder_url(distro, pkg_type, arch, kernel_flavor)
+    url = os.path.join(base_url, 'sha1', hash, 'version')
+    resp = requests.get(url)
+    if not resp.ok:
+        return None
+    return resp.text.strip()
 
 
 def schedule_suite(name,
