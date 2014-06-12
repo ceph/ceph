@@ -2038,6 +2038,14 @@ int main(int argc, const char **argv)
 	return EXIT_FAILURE;
       }
     } else if (ceph_argparse_withlonglong(args, i, &bench_io_size, &err, "--io-size", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << "rbd: " << err.str() << std::endl;
+	return EXIT_FAILURE;
+      }
+      if (bench_io_size == 0) {
+	cerr << "rbd: io-size must be > 0" << std::endl;
+	return EXIT_FAILURE;
+      }
     } else if (ceph_argparse_withlonglong(args, i, &bench_io_threads, &err, "--io-threads", (char*)NULL)) {
     } else if (ceph_argparse_withlonglong(args, i, &bench_bytes, &err, "--io-total", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &bench_pattern, &err, "--io-pattern", (char*)NULL)) {
