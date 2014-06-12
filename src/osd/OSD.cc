@@ -5977,11 +5977,10 @@ void OSD::check_osdmap_features(ObjectStore *fs)
   // current memory location, and setting or clearing bits in integer
   // fields, and we are the only writer, this is not a problem.
 
-  uint64_t mask;
-  uint64_t features = osdmap->get_features(&mask);
-
   {
     Messenger::Policy p = client_messenger->get_default_policy();
+    uint64_t mask;
+    uint64_t features = osdmap->get_features(entity_name_t::TYPE_CLIENT, &mask);
     if ((p.features_required & mask) != features) {
       dout(0) << "crush map has features " << features
 	      << ", adjusting msgr requires for clients" << dendl;
@@ -5990,24 +5989,38 @@ void OSD::check_osdmap_features(ObjectStore *fs)
     }
   }
   {
+    Messenger::Policy p = cluster_messenger->get_policy(entity_name_t::TYPE_MON);
+    uint64_t mask;
+    uint64_t features = osdmap->get_features(entity_name_t::TYPE_MON, &mask);
+    if ((p.features_required & mask) != features) {
+      dout(0) << "crush map has features " << features
+	      << ", adjusting msgr requires for mons" << dendl;
+      p.features_required = (p.features_required & ~mask) | features;
+      client_messenger->set_policy(entity_name_t::TYPE_MON, p);
+    }
+  }
+  {
     Messenger::Policy p = cluster_messenger->get_policy(entity_name_t::TYPE_OSD);
+    uint64_t mask;
+    uint64_t features = osdmap->get_features(entity_name_t::TYPE_OSD, &mask);
+
     if ((p.features_required & mask) != features) {
       dout(0) << "crush map has features " << features
 	      << ", adjusting msgr requires for osds" << dendl;
       p.features_required = (p.features_required & ~mask) | features;
       cluster_messenger->set_policy(entity_name_t::TYPE_OSD, p);
     }
-  }
 
-  if ((features & CEPH_FEATURE_OSD_ERASURE_CODES) &&
+    if ((features & CEPH_FEATURE_OSD_ERASURE_CODES) &&
 	!fs->get_allow_sharded_objects()) {
-    dout(0) << __func__ << " enabling on-disk ERASURE CODES compat feature" << dendl;
-    superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    write_superblock(*t);
-    int err = store->queue_transaction_and_cleanup(NULL, t);
-    assert(err == 0);
-    fs->set_allow_sharded_objects();
+      dout(0) << __func__ << " enabling on-disk ERASURE CODES compat feature" << dendl;
+      superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
+      ObjectStore::Transaction *t = new ObjectStore::Transaction;
+      write_superblock(*t);
+      int err = store->queue_transaction_and_cleanup(NULL, t);
+      assert(err == 0);
+      fs->set_allow_sharded_objects();
+    }
   }
 }
 
