@@ -816,6 +816,14 @@ inline void decode(ceph::unordered_set<T>& m, bufferlist::iterator& p)
 
 // deque
 template<class T>
+inline void encode(const std::deque<T>& ls, bufferlist& bl, uint64_t features)
+{
+  __u32 n = ls.size();
+  encode(n, bl);
+  for (typename std::deque<T>::const_iterator p = ls.begin(); p != ls.end(); ++p)
+    encode(*p, bl, features);
+}
+template<class T>
 inline void encode(const std::deque<T>& ls, bufferlist& bl)
 {
   __u32 n = ls.size();
