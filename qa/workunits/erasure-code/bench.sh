@@ -1,6 +1,6 @@
 #!/bin/bash 
 #
-# Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+# Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -14,6 +14,33 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
+# Test that it works from sources with:
+#
+#  TOTAL_SIZE=$((1024 * 1024)) \
+#  CEPH_ERASURE_CODE_BENCHMARK=src/ceph_erasure_code_benchmark  \
+#  PLUGIN_DIRECTORY=src/.libs \
+#      qa/workunits/erasure-code/bench.sh fplot jerasure |
+#      tee qa/workunits/erasure-code/bench.js
+#
+# This should start immediately and display:
+#
+# var encode_reed_sol_van_4096 = [
+# [ '2/1',  .48035538612887358583  ],
+# [ '3/2',  .21648470405675016626  ],
+# etc.
+#
+# and complete within a few seconds. The result can then be displayed with:
+#
+#  firefox qa/workunits/erasure-code/bench.html
+#
+# Once it is confirmed to work, it can be run with a more significant
+# volume of data so that the measures are more reliable:
+#
+#  CEPH_ERASURE_CODE_BENCHMARK=src/ceph_erasure_code_benchmark  \
+#  PLUGIN_DIRECTORY=src/.libs \
+#      qa/workunits/erasure-code/bench.sh fplot jerasure |
+#      tee qa/workunits/erasure-code/bench.js
+#
 set -e
 
 export PATH=/sbin:$PATH
@@ -22,8 +49,9 @@ export PATH=/sbin:$PATH
 : ${CEPH_ERASURE_CODE_BENCHMARK:=ceph_erasure_code_benchmark}
 : ${PLUGIN_DIRECTORY:=/usr/lib/ceph/erasure-code}
 : ${PLUGINS:=example jerasure}
-: ${ITERATIONS:=1024}
-: ${SIZE:=1048576}
+: ${TOTAL_SIZE:=$((10 * 1024 * 1024))}
+: ${SIZES:=4096 $((1024 * 1024))}
+: ${PARAMETERS:=--parameter jerasure-per-chunk-alignement=true}
 
 function bench_header() {
     echo -e "seconds\tKB\tplugin\tk\tm\twork.\titer.\tsize\teras.\tcommand."
@@ -50,58 +78,101 @@ function bench() {
         --iterations $iterations \
         --size $size \
         --erasures $erasures \
-        --parameter erasure-code-k=$k \
-        --parameter erasure-code-m=$m \
-        --parameter erasure-code-directory=$PLUGIN_DIRECTORY)
+        --parameter k=$k \
+        --parameter m=$m \
+        --parameter directory=$PLUGIN_DIRECTORY)
     result=$($command "$@")
     echo -e "$result\t$plugin\t$k\t$m\t$workload\t$iterations\t$size\t$erasures\t$command ""$@"
 }
 
 function example_test() {
     local plugin=example
-
-    bench $plugin 2 1 encode $ITERATIONS $SIZE 0
-    bench $plugin 2 1 decode $ITERATIONS $SIZE 1
+    local size
+    for size in $SIZES ; do
+        bench $plugin 2 1 encode $ITERATIONS $size 0
+        bench $plugin 2 1 decode $ITERATIONS $size 1
+    done
 }
 
-#
-# The results are expected to be consistent with 
-# https://www.usenix.org/legacy/events/fast09/tech/full_papers/plank/plank_html/
-# 
+function packetsize() {
+    local k=$1
+    local w=$2
+    local vector_wordsize=$3
+    local size=$4
+
+    local p=$(( ($size / $k / $w / $vector_wordsize ) * $vector_wordsize))
+    if [ $p -gt 3100 ] ; then
+        p=3100
+    fi
+    echo $p
+}
+
 function jerasure_test() {
     local plugin=jerasure
+    local w=8
+    local VECTOR_WORDSIZE=16
+    local ks="2 3 4 6 10"
+    declare -A k2ms
+    k2ms[2]="1"
+    k2ms[3]="2"
+    k2ms[4]="2 3"
+    k2ms[6]="2 3 4"
+    k2ms[10]="3 4"
+    for technique in reed_sol_van cauchy_good ; do
+        for size in $SIZES ; do
+            echo "serie encode_${technique}_${size}"
+            for k in $ks ; do
+                for m in ${k2ms[$k]} ; do
+                    bench $plugin $k $m encode $(($TOTAL_SIZE / $size)) $size 0 \
+                        --parameter packetsize=$(packetsize $k $w $VECTOR_WORDSIZE $size) \
+                        ${PARAMETERS} \
+                        --parameter technique=$technique
 
-    for technique in reed_sol_van ; do
-        for k in 4 6 10 ; do
-            for m in $(seq 1 4) ; do
-                bench $plugin $k $m encode $ITERATIONS $SIZE 0 \
-                    --parameter erasure-code-technique=$technique
-
-                for erasures in $(seq 1 $m) ; do
-                    bench $plugin $k $m decode $ITERATIONS $SIZE $erasures \
-                        --parameter erasure-code-technique=$technique
                 done
             done
         done
     done
-
-    for technique in cauchy_orig cauchy_good ; do
-        for packetsize in $(seq 512 512 4096) ; do
-            for k in 4 6 10 ; do
-                for m in $(seq 1 4) ; do
-                    bench $plugin $k $m encode $ITERATIONS $SIZE 0 \
-                        --parameter erasure-code-packetsize=$packetsize \
-                        --parameter erasure-code-technique=$technique
-
+    for technique in reed_sol_van cauchy_good ; do
+        for size in $SIZES ; do
+            echo "serie decode_${technique}_${size}"
+            for k in $ks ; do
+                for m in ${k2ms[$k]} ; do
+                    echo
                     for erasures in $(seq 1 $m) ; do
-                        bench $plugin $k $m decode $ITERATIONS $SIZE $erasures \
-                            --parameter erasure-code-packetsize=$packetsize \
-                            --parameter erasure-code-technique=$technique
+                        bench $plugin $k $m decode $(($TOTAL_SIZE / $size)) $size $erasures \
+                            --parameter packetsize=$(packetsize $k $w $VECTOR_WORDSIZE  $size) \
+                            ${PARAMETERS} \
+                            --parameter technique=$technique
                     done
                 done
             done
         done
     done
+}
+
+function fplot() {
+    local plugin=$1
+    local serie
+    ${plugin}_test | while read seconds total plugin k m workload iteration size erasures rest ; do 
+        if [ -z $seconds ] ; then
+            echo null,
+        elif [ $seconds = serie ] ; then
+            if [ "$serie" ] ; then
+                echo '];'
+            fi
+             local serie=$total
+             echo "var $serie = ["
+        else
+            local x
+            if [ $workload = encode ] ; then
+                x=$k/$m
+            else
+                x=$k/$m/$erasures
+            fi
+            echo "[ '$x', " $(echo "( $total / 1024 / 1024 ) / $seconds" | bc -ql) " ], "
+        fi
+    done
+    echo '];'
 }
 
 function main() {
@@ -111,13 +182,12 @@ function main() {
     done
 }
 
-if [ "$1" = TEST ]
-then
+if [ "$1" = TEST ] ; then
     set -x
     set -o functrace
     PS4=' ${FUNCNAME[0]}: $LINENO: '
 
-    ITERATIONS=1
+    TOTAL_SIZE=1024
     SIZE=1024
 
     function run_test() {
@@ -126,103 +196,191 @@ then
         mkdir $dir
         expected=$(cat <<EOF
 plugin	k	m	work.	iter.	size	eras.
-example	2	1	encode	1	1024	0
-example	2	1	decode	1	1024	1
-jerasure	2	1	encode	1	1024	0
-jerasure	2	1	decode	1	1024	1
-jerasure	2	2	encode	1	1024	0
-jerasure	2	2	decode	1	1024	1
-jerasure	2	2	decode	1	1024	2
-jerasure	2	1	encode	1	1024	0
-jerasure	2	1	decode	1	1024	1
-jerasure	2	2	encode	1	1024	0
-jerasure	2	2	decode	1	1024	1
-jerasure	2	2	decode	1	1024	2
-jerasure	2	1	encode	1	1024	0
-jerasure	2	1	decode	1	1024	1
-jerasure	2	2	encode	1	1024	0
-jerasure	2	2	decode	1	1024	1
-jerasure	2	2	decode	1	1024	2
-jerasure	2	1	encode	1	1024	0
-jerasure	2	1	decode	1	1024	1
-jerasure	2	2	encode	1	1024	0
-jerasure	2	2	decode	1	1024	1
-jerasure	2	2	decode	1	1024	2
-jerasure	2	1	encode	1	1024	0
-jerasure	2	1	decode	1	1024	1
-jerasure	2	2	encode	1	1024	0
-jerasure	2	2	decode	1	1024	1
-jerasure	2	2	decode	1	1024	2
-jerasure	2	1	encode	1	1024	0
-jerasure	2	1	decode	1	1024	1
-jerasure	2	2	encode	1	1024	0
-jerasure	2	2	decode	1	1024	1
-jerasure	2	2	decode	1	1024	2
-jerasure	2	1	encode	1	1024	0
-jerasure	2	1	decode	1	1024	1
-jerasure	2	2	encode	1	1024	0
-jerasure	2	2	decode	1	1024	1
-jerasure	2	2	decode	1	1024	2
-jerasure	6	3	encode	1	1024	0
-jerasure	6	3	decode	1	1024	1
-jerasure	6	3	decode	1	1024	2
-jerasure	6	3	decode	1	1024	3
-jerasure	6	4	encode	1	1024	0
-jerasure	6	4	decode	1	1024	1
-jerasure	6	4	decode	1	1024	2
-jerasure	6	4	decode	1	1024	3
-jerasure	6	4	decode	1	1024	4
-jerasure	10	3	encode	1	1024	0
-jerasure	10	3	decode	1	1024	1
-jerasure	10	3	decode	1	1024	2
-jerasure	10	3	decode	1	1024	3
-jerasure	10	4	encode	1	1024	0
-jerasure	10	4	decode	1	1024	1
-jerasure	10	4	decode	1	1024	2
-jerasure	10	4	decode	1	1024	3
-jerasure	10	4	decode	1	1024	4
-jerasure	6	3	encode	1	1024	0
-jerasure	6	3	decode	1	1024	1
-jerasure	6	3	decode	1	1024	2
-jerasure	6	3	decode	1	1024	3
-jerasure	6	4	encode	1	1024	0
-jerasure	6	4	decode	1	1024	1
-jerasure	6	4	decode	1	1024	2
-jerasure	6	4	decode	1	1024	3
-jerasure	6	4	decode	1	1024	4
-jerasure	10	3	encode	1	1024	0
-jerasure	10	3	decode	1	1024	1
-jerasure	10	3	decode	1	1024	2
-jerasure	10	3	decode	1	1024	3
-jerasure	10	4	encode	1	1024	0
-jerasure	10	4	decode	1	1024	1
-jerasure	10	4	decode	1	1024	2
-jerasure	10	4	decode	1	1024	3
-jerasure	10	4	decode	1	1024	4
-jerasure	6	3	encode	1	1024	0
-jerasure	6	3	decode	1	1024	1
-jerasure	6	3	decode	1	1024	2
-jerasure	6	3	decode	1	1024	3
-jerasure	6	4	encode	1	1024	0
-jerasure	6	4	decode	1	1024	1
-jerasure	6	4	decode	1	1024	2
-jerasure	6	4	decode	1	1024	3
-jerasure	6	4	decode	1	1024	4
-jerasure	10	3	encode	1	1024	0
-jerasure	10	3	decode	1	1024	1
-jerasure	10	3	decode	1	1024	2
-jerasure	10	3	decode	1	1024	3
-jerasure	10	4	encode	1	1024	0
-jerasure	10	4	decode	1	1024	1
-jerasure	10	4	decode	1	1024	2
-jerasure	10	4	decode	1	1024	3
-jerasure	10	4	decode	1	1024	4
+serie encode_reed_sol_van_4096
+jerasure	2	1	encode	0	4096	0
+jerasure	3	2	encode	0	4096	0
+jerasure	4	2	encode	0	4096	0
+jerasure	4	3	encode	0	4096	0
+jerasure	6	2	encode	0	4096	0
+jerasure	6	3	encode	0	4096	0
+jerasure	6	4	encode	0	4096	0
+jerasure	10	3	encode	0	4096	0
+jerasure	10	4	encode	0	4096	0
+serie encode_reed_sol_van_1048576
+jerasure	2	1	encode	0	1048576	0
+jerasure	3	2	encode	0	1048576	0
+jerasure	4	2	encode	0	1048576	0
+jerasure	4	3	encode	0	1048576	0
+jerasure	6	2	encode	0	1048576	0
+jerasure	6	3	encode	0	1048576	0
+jerasure	6	4	encode	0	1048576	0
+jerasure	10	3	encode	0	1048576	0
+jerasure	10	4	encode	0	1048576	0
+serie encode_cauchy_good_4096
+jerasure	2	1	encode	0	4096	0
+jerasure	3	2	encode	0	4096	0
+jerasure	4	2	encode	0	4096	0
+jerasure	4	3	encode	0	4096	0
+jerasure	6	2	encode	0	4096	0
+jerasure	6	3	encode	0	4096	0
+jerasure	6	4	encode	0	4096	0
+jerasure	10	3	encode	0	4096	0
+jerasure	10	4	encode	0	4096	0
+serie encode_cauchy_good_1048576
+jerasure	2	1	encode	0	1048576	0
+jerasure	3	2	encode	0	1048576	0
+jerasure	4	2	encode	0	1048576	0
+jerasure	4	3	encode	0	1048576	0
+jerasure	6	2	encode	0	1048576	0
+jerasure	6	3	encode	0	1048576	0
+jerasure	6	4	encode	0	1048576	0
+jerasure	10	3	encode	0	1048576	0
+jerasure	10	4	encode	0	1048576	0
+serie decode_reed_sol_van_4096
+
+jerasure	2	1	decode	0	4096	1
+
+jerasure	3	2	decode	0	4096	1
+jerasure	3	2	decode	0	4096	2
+
+jerasure	4	2	decode	0	4096	1
+jerasure	4	2	decode	0	4096	2
+
+jerasure	4	3	decode	0	4096	1
+jerasure	4	3	decode	0	4096	2
+jerasure	4	3	decode	0	4096	3
+
+jerasure	6	2	decode	0	4096	1
+jerasure	6	2	decode	0	4096	2
+
+jerasure	6	3	decode	0	4096	1
+jerasure	6	3	decode	0	4096	2
+jerasure	6	3	decode	0	4096	3
+
+jerasure	6	4	decode	0	4096	1
+jerasure	6	4	decode	0	4096	2
+jerasure	6	4	decode	0	4096	3
+jerasure	6	4	decode	0	4096	4
+
+jerasure	10	3	decode	0	4096	1
+jerasure	10	3	decode	0	4096	2
+jerasure	10	3	decode	0	4096	3
+
+jerasure	10	4	decode	0	4096	1
+jerasure	10	4	decode	0	4096	2
+jerasure	10	4	decode	0	4096	3
+jerasure	10	4	decode	0	4096	4
+serie decode_reed_sol_van_1048576
+
+jerasure	2	1	decode	0	1048576	1
+
+jerasure	3	2	decode	0	1048576	1
+jerasure	3	2	decode	0	1048576	2
+
+jerasure	4	2	decode	0	1048576	1
+jerasure	4	2	decode	0	1048576	2
+
+jerasure	4	3	decode	0	1048576	1
+jerasure	4	3	decode	0	1048576	2
+jerasure	4	3	decode	0	1048576	3
+
+jerasure	6	2	decode	0	1048576	1
+jerasure	6	2	decode	0	1048576	2
+
+jerasure	6	3	decode	0	1048576	1
+jerasure	6	3	decode	0	1048576	2
+jerasure	6	3	decode	0	1048576	3
+
+jerasure	6	4	decode	0	1048576	1
+jerasure	6	4	decode	0	1048576	2
+jerasure	6	4	decode	0	1048576	3
+jerasure	6	4	decode	0	1048576	4
+
+jerasure	10	3	decode	0	1048576	1
+jerasure	10	3	decode	0	1048576	2
+jerasure	10	3	decode	0	1048576	3
+
+jerasure	10	4	decode	0	1048576	1
+jerasure	10	4	decode	0	1048576	2
+jerasure	10	4	decode	0	1048576	3
+jerasure	10	4	decode	0	1048576	4
+serie decode_cauchy_good_4096
+
+jerasure	2	1	decode	0	4096	1
+
+jerasure	3	2	decode	0	4096	1
+jerasure	3	2	decode	0	4096	2
+
+jerasure	4	2	decode	0	4096	1
+jerasure	4	2	decode	0	4096	2
+
+jerasure	4	3	decode	0	4096	1
+jerasure	4	3	decode	0	4096	2
+jerasure	4	3	decode	0	4096	3
+
+jerasure	6	2	decode	0	4096	1
+jerasure	6	2	decode	0	4096	2
+
+jerasure	6	3	decode	0	4096	1
+jerasure	6	3	decode	0	4096	2
+jerasure	6	3	decode	0	4096	3
+
+jerasure	6	4	decode	0	4096	1
+jerasure	6	4	decode	0	4096	2
+jerasure	6	4	decode	0	4096	3
+jerasure	6	4	decode	0	4096	4
+
+jerasure	10	3	decode	0	4096	1
+jerasure	10	3	decode	0	4096	2
+jerasure	10	3	decode	0	4096	3
+
+jerasure	10	4	decode	0	4096	1
+jerasure	10	4	decode	0	4096	2
+jerasure	10	4	decode	0	4096	3
+jerasure	10	4	decode	0	4096	4
+serie decode_cauchy_good_1048576
+
+jerasure	2	1	decode	0	1048576	1
+
+jerasure	3	2	decode	0	1048576	1
+jerasure	3	2	decode	0	1048576	2
+
+jerasure	4	2	decode	0	1048576	1
+jerasure	4	2	decode	0	1048576	2
+
+jerasure	4	3	decode	0	1048576	1
+jerasure	4	3	decode	0	1048576	2
+jerasure	4	3	decode	0	1048576	3
+
+jerasure	6	2	decode	0	1048576	1
+jerasure	6	2	decode	0	1048576	2
+
+jerasure	6	3	decode	0	1048576	1
+jerasure	6	3	decode	0	1048576	2
+jerasure	6	3	decode	0	1048576	3
+
+jerasure	6	4	decode	0	1048576	1
+jerasure	6	4	decode	0	1048576	2
+jerasure	6	4	decode	0	1048576	3
+jerasure	6	4	decode	0	1048576	4
+
+jerasure	10	3	decode	0	1048576	1
+jerasure	10	3	decode	0	1048576	2
+jerasure	10	3	decode	0	1048576	3
+
+jerasure	10	4	decode	0	1048576	1
+jerasure	10	4	decode	0	1048576	2
+jerasure	10	4	decode	0	1048576	3
+jerasure	10	4	decode	0	1048576	4
 EOF
 )
-        test "$(main | cut --fields=3-9 )" = "$expected" || return 1
+        test "$(PLUGINS=jerasure main | cut --fields=3-9 )" = "$expected" || return 1
     }
 
     run_test
+
+elif [ "$1" = fplot ] ; then
+    "$@"
 else
     main
 fi

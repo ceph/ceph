@@ -13,6 +13,7 @@ noinst_HEADERS += \
   erasure-code/jerasure/ErasureCodeJerasure.h
 
 jerasure_sources = \
+  erasure-code/ErasureCode.cc \
   erasure-code/jerasure/jerasure/src/cauchy.c \
   erasure-code/jerasure/jerasure/src/galois.c \
   erasure-code/jerasure/jerasure/src/jerasure.c \

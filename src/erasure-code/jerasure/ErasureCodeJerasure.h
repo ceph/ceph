@@ -17,9 +17,9 @@
 #ifndef CEPH_ERASURE_CODE_JERASURE_H
 #define CEPH_ERASURE_CODE_JERASURE_H
 
-#include "erasure-code/ErasureCodeInterface.h"
+#include "erasure-code/ErasureCode.h"
 
-class ErasureCodeJerasure : public ErasureCodeInterface {
+class ErasureCodeJerasure : public ErasureCode {
 public:
   int k;
   int m;
@@ -27,11 +27,13 @@ public:
   const char *technique;
   string ruleset_root;
   string ruleset_failure_domain;
+  bool per_chunk_alignment;
 
   ErasureCodeJerasure(const char *_technique) :
     technique(_technique),
     ruleset_root("default"),
-    ruleset_failure_domain("host")
+    ruleset_failure_domain("host"),
+    per_chunk_alignment(false)
   {}
 
   virtual ~ErasureCodeJerasure() {}
@@ -50,21 +52,12 @@ public:
 
   virtual unsigned int get_chunk_size(unsigned int object_size) const;
 
-  virtual int minimum_to_decode(const set<int> &want_to_read,
-                                const set<int> &available_chunks,
-                                set<int> *minimum);
+  virtual int encode_chunks(const set<int> &want_to_encode,
+			    map<int, bufferlist> *encoded);
 
-  virtual int minimum_to_decode_with_cost(const set<int> &want_to_read,
-                                          const map<int, int> &available,
-                                          set<int> *minimum);
-
-  virtual int encode(const set<int> &want_to_encode,
-                     const bufferlist &in,
-                     map<int, bufferlist> *encoded);
-
-  virtual int decode(const set<int> &want_to_read,
-                     const map<int, bufferlist> &chunks,
-                     map<int, bufferlist> *decoded);
+  virtual int decode_chunks(const set<int> &want_to_read,
+			    const map<int, bufferlist> &chunks,
+			    map<int, bufferlist> *decoded);
 
   void init(const map<std::string,std::string> &parameters);
   virtual void jerasure_encode(char **data,
@@ -80,6 +73,9 @@ public:
   static int to_int(const std::string &name,
                     const map<std::string,std::string> &parameters,
                     int default_value);
+  static bool to_bool(const std::string &name,
+		      const map<std::string,std::string> &parameters,
+		      bool default_value);
   static bool is_prime(int value);
 };
 
