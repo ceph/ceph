@@ -580,6 +580,18 @@ inline void decode_nohead(int len, std::vector<T>& v, bufferlist::iterator& p)
 
 // vector (shared_ptr)
 template<class T>
+inline void encode(const std::vector<ceph::shared_ptr<T> >& v, bufferlist& bl,
+		   uint64_t features)
+{
+  __u32 n = (__u32)(v.size());
+  encode(n, bl);
+  for (typename std::vector<ceph::shared_ptr<T> >::const_iterator p = v.begin(); p != v.end(); ++p)
+    if (*p)
+      encode(**p, bl, features);
+    else
+      encode(T(), bl, features);
+}
+template<class T>
 inline void encode(const std::vector<ceph::shared_ptr<T> >& v, bufferlist& bl)
 {
   __u32 n = (__u32)(v.size());
