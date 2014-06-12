@@ -509,6 +509,8 @@ KeyValueStore::KeyValueStore(const std::string &base,
   perf_logger(NULL),
   m_keyvaluestore_queue_max_ops(g_conf->keyvaluestore_queue_max_ops),
   m_keyvaluestore_queue_max_bytes(g_conf->keyvaluestore_queue_max_bytes),
+  m_keyvaluestore_strip_size(g_conf->keyvaluestore_default_strip_size),
+  m_keyvaluestore_max_expected_write_size(g_conf->keyvaluestore_max_expected_write_size),
   do_update(do_update)
 {
   ostringstream oss;
@@ -873,6 +875,7 @@ int KeyValueStore::mount()
       goto close_current_fd;
     }
 
+    default_strip_size = m_keyvaluestore_strip_size;
     backend.reset(dbomap);
   }
 
@@ -1450,11 +1453,12 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
 
     case Transaction::OP_SETALLOCHINT:
       {
-        // TODO: can kvstore make use of the hint?
         coll_t cid(i.decode_cid());
         ghobject_t oid = i.decode_oid();
-        i.decode_length(); // uint64_t expected_object_size
-        i.decode_length(); // uint64_t expected_write_size
+        uint64_t expected_object_size = i.decode_length();
+        uint64_t expected_write_size = i.decode_length();
+        r = _set_alloc_hint(cid, oid, expected_object_size,
+                            expected_write_size, t);
       }
       break;
 
@@ -2966,11 +2970,54 @@ int KeyValueStore::_split_collection(coll_t cid, uint32_t bits, uint32_t rem,
   return 0;
 }
 
+int KeyValueStore::_set_alloc_hint(coll_t cid, const ghobject_t& oid,
+                                   uint64_t expected_object_size,
+                                   uint64_t expected_write_size,
+                                   BufferTransaction &t)
+{
+  dout(15) << __func__ << " " << cid << "/" << oid << " object_size "
+           << expected_object_size << " write_size "
+           << expected_write_size << dendl;
+
+  int r = 0;
+  StripObjectMap::StripObjectHeader *header;
+
+  r = t.lookup_cached_header(cid, oid, &header, false);
+  if (r < 0) {
+    dout(10) << __func__ << " " << cid << "/" << oid
+             << " failed to get header: r = " << r << dendl;
+    return r;
+  }
+
+  bool blank = true;
+  for (vector<char>::iterator it = header->bits.begin();
+       it != header->bits.end(); ++it) {
+    if (*it) {
+      blank = false;
+      break;
+    }
+  }
+
+  // Now only consider to change "strip_size" when the object is blank,
+  // because set_alloc_hint is expected to be very lightweight<O(1)>
+  if (blank) {
+    header->strip_size = MIN(expected_write_size, m_keyvaluestore_max_expected_write_size);
+    dout(20) << __func__ << " hint " << header->strip_size << " success" << dendl;
+  }
+
+  dout(10) << __func__ << "" << cid << "/" << oid << " object_size "
+           << expected_object_size << " write_size "
+           << expected_write_size << " = " << r << dendl;
+
+  return r;
+}
+
 const char** KeyValueStore::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {
     "keyvaluestore_queue_max_ops",
     "keyvaluestore_queue_max_bytes",
+    "keyvaluestore_strip_size",
     NULL
   };
   return KEYS;
@@ -2980,9 +3027,15 @@ void KeyValueStore::handle_conf_change(const struct md_config_t *conf,
                                        const std::set <std::string> &changed)
 {
   if (changed.count("keyvaluestore_queue_max_ops") ||
-      changed.count("keyvaluestore_queue_max_bytes")) {
+      changed.count("keyvaluestore_queue_max_bytes") ||
+      changed.count("keyvaluestore_max_expected_write_size")) {
     m_keyvaluestore_queue_max_ops = conf->keyvaluestore_queue_max_ops;
     m_keyvaluestore_queue_max_bytes = conf->keyvaluestore_queue_max_bytes;
+    m_keyvaluestore_max_expected_write_size = conf->keyvaluestore_max_expected_write_size;
+  }
+  if (changed.count("keyvaluestore_default_strip_size")) {
+    m_keyvaluestore_strip_size = conf->keyvaluestore_default_strip_size;
+    default_strip_size = m_keyvaluestore_strip_size;
   }
 }
 

@@ -1362,6 +1362,43 @@ TEST_P(StoreTest, MoveRename) {
   }
 }
 
+TEST_P(StoreTest, SetAllocHint) {
+  coll_t cid("alloc_hint");
+  ghobject_t hoid(hobject_t("test_hint", "", CEPH_NOSNAP, 0, 0, ""));
+  int r;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid);
+    t.touch(cid, hoid);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.set_alloc_hint(cid, hoid, 4*1024*1024, 1024*4);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.set_alloc_hint(cid, hoid, 4*1024*1024, 1024*4);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove_collection(cid);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+}
+
 INSTANTIATE_TEST_CASE_P(
   ObjectStore,
   StoreTest,
