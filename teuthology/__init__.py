@@ -5,6 +5,10 @@ monkey.patch_all()
 
 import logging
 
+# We don't need to see log entries for each connection opened
+logging.getLogger('requests.packages.urllib3.connectionpool').setLevel(
+    logging.WARN)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s.%(msecs)03d %(levelname)s:%(name)s:%(message)s')
