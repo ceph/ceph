@@ -82,7 +82,7 @@ void MDSMonitor::create_initial()
   dout(10) << "create_initial" << dendl;
 
   // Initial state is a disable MDS map
-  assert(mdsmap.enabled != true);
+  assert(mdsmap.get_enabled() == false);
 }
 
 
@@ -381,7 +381,7 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
   version_t seq = m->get_seq();
 
   // Ignore beacons if filesystem is disabled
-  if (!mdsmap.enabled) {
+  if (!mdsmap.get_enabled()) {
     return false;
   }
 
@@ -706,7 +706,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
     if (f) {
       f->open_array_section("filesystems");
       {
-        if (pending_mdsmap.enabled) {
+        if (pending_mdsmap.get_enabled()) {
           f->open_object_section("filesystem");
           {
             f->dump_string("name", pending_mdsmap.fs_name);
@@ -742,7 +742,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
       f->close_section();
       f->flush(ds);
     } else {
-      if (pending_mdsmap.enabled) {
+      if (pending_mdsmap.get_enabled()) {
         const char *md_pool_name = mon->osdmon()->osdmap.get_pool_name(pending_mdsmap.metadata_pool);
         assert(md_pool_name != NULL);
         
@@ -864,7 +864,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
   /* Execute filesystem add/remove, or pass through to filesystem_command */
   bool const handled = management_command(prefix, cmdmap, ss, r);
   if (!handled) {
-    if (!pending_mdsmap.enabled) {
+    if (!pending_mdsmap.get_enabled()) {
       ss << "No filesystem configured: use `ceph fs new` to create a filesystem";
       r = -ENOENT;
     } else {
@@ -956,7 +956,7 @@ bool MDSMonitor::management_command(
 
     string sure;
     cmd_getval(g_ceph_context, cmdmap, "sure", sure);
-    if (pending_mdsmap.enabled && sure != "--yes-i-really-mean-it") {
+    if (pending_mdsmap.get_enabled() && sure != "--yes-i-really-mean-it") {
       ss << "this is DANGEROUS and will wipe out the mdsmap's fs, and may clobber data in the new pools you specify.  add --yes-i-really-mean-it if you do.";
       r = -EPERM;
 
@@ -1006,7 +1006,7 @@ bool MDSMonitor::management_command(
         return -EINVAL;
     }
 
-    if (pending_mdsmap.enabled == true
+    if (pending_mdsmap.get_enabled()
         && pending_mdsmap.fs_name == fs_name
         && *(pending_mdsmap.data_pools.begin()) == data
         && pending_mdsmap.metadata_pool == metadata) {
@@ -1016,7 +1016,7 @@ bool MDSMonitor::management_command(
       return true;
     }
 
-    if (pending_mdsmap.enabled) {
+    if (pending_mdsmap.get_enabled()) {
       /* We currently only support one filesystem, so cannot create a second */
       ss << "A filesystem already exists, use `ceph fs rm` if you wish to delete it";
       r = -EINVAL;
@@ -1037,7 +1037,7 @@ bool MDSMonitor::management_command(
     //  syntax should apply to multi-FS future)
     string fs_name;
     cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
-    if (!pending_mdsmap.enabled || fs_name != pending_mdsmap.fs_name) {
+    if (!pending_mdsmap.get_enabled() || fs_name != pending_mdsmap.fs_name) {
         // Consider absence success to make deletes idempotent
         ss << "filesystem '" << fs_name << "' does not exist";
         return 0;
@@ -1064,7 +1064,7 @@ bool MDSMonitor::management_command(
     newmap.inc = pending_mdsmap.inc;
     pending_mdsmap = newmap;
     pending_mdsmap.epoch = mdsmap.epoch + 1;
-    assert(pending_mdsmap.enabled == false);
+    assert(pending_mdsmap.get_enabled() == false);
     pending_mdsmap.metadata_pool = -1;
     pending_mdsmap.cas_pool = -1;
     pending_mdsmap.created = ceph_clock_now(g_ceph_context);
@@ -1435,7 +1435,7 @@ void MDSMonitor::tick()
   if (!is_active()) return;
 
   // Do nothing if the filesystem is disabled
-  if (!mdsmap.enabled) return;
+  if (!mdsmap.get_enabled()) return;
 
   dout(10) << mdsmap << dendl;
   
