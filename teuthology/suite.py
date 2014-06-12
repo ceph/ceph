@@ -26,7 +26,7 @@ def main(args):
     worker = args['--worker']
     owner = args['--owner']
     base = args['--base']
-    collections = args['--collections']
+    suite = args['--suite']
     email = args['--email']
     timeout = args['--timeout']
     base_yaml_paths = args['<config_yaml>']
@@ -50,24 +50,18 @@ def main(args):
     if owner:
         base_args.extend(['--owner', owner])
 
-    collections = [
-        (os.path.join(base, collection), collection)
-        for collection in collections
-    ]
+    suite_path = os.path.join(base, suite)
 
     num_jobs = 0
-    for collection, collection_name in sorted(collections):
-        num_created = schedule_collection(name=collection_name,
-                                          collection=collection,
-                                          base_yamls=base_yaml_paths,
-                                          base_args=base_args,
-                                          arch=arch,
-                                          machine_type=machine_type,
-                                          limit=limit,
-                                          offset=num_jobs,
-                                          dry_run=dry_run,
-                                          )
-        num_jobs += num_created
+    schedule_suite(name=suite,
+                   path=suite_path,
+                   base_yamls=base_yaml_paths,
+                   base_args=base_args,
+                   arch=arch,
+                   machine_type=machine_type,
+                   limit=limit,
+                   dry_run=dry_run,
+                   )
 
     if num_jobs:
         arg = copy.deepcopy(base_args)
@@ -84,30 +78,29 @@ def main(args):
             )
 
 
-def schedule_collection(name,
-                        collection,
-                        base_yamls,
-                        base_args,
-                        arch,
-                        machine_type,
-                        limit=0,
-                        offset=0,
-                        dry_run=True,
-                        ):
+def schedule_suite(name,
+                   path,
+                   base_yamls,
+                   base_args,
+                   arch,
+                   machine_type,
+                   limit=0,
+                   dry_run=True,
+                   ):
     """
-    schedule one collection.
+    schedule one suite.
     returns number of jobs scheduled
     """
     count = 0
-    log.debug('Collection %s in %s' % (name, collection))
+    log.debug('Suite %s in %s' % (name, path))
     configs = [(combine_path(name, item[0]), item[1]) for item in
-               build_matrix(collection)]
+               build_matrix(path)]
     job_count = len(configs)
-    log.info('Collection %s in %s generated %d jobs' % (
-        name, collection, len(configs)))
+    log.info('Suite %s in %s generated %d jobs' % (
+        name, path, len(configs)))
 
     for description, config in configs:
-        if limit > 0 and (count + offset) >= limit:
+        if limit > 0 and count >= limit:
             log.info(
                 'Stopped after {limit} jobs due to --limit={limit}'.format(
                     limit=limit))

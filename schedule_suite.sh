@@ -205,7 +205,7 @@ echo "name $name"
 
 ./virtualenv/bin/teuthology-suite -v $fn \
     --base ~/src/ceph-qa-suite/suites \
-    --collections $suite \
+    --suite $suite \
     --email $email \
     --timeout 36000 \
     $limitline \
