@@ -35,7 +35,7 @@ def main(args):
     if verbose:
         teuthology.log.setLevel(logging.DEBUG)
 
-    arch = get_arch(base_yaml_paths)
+    arch = get_arch(machine_type)
 
     if ',' in machine_type:
         worker = 'multi'
@@ -270,14 +270,10 @@ def build_matrix(path):
     return []
 
 
-def get_arch(config):
-    for yamlfile in config:
-        y = yaml.safe_load(file(yamlfile))
-        machine_type = y.get('machine_type')
-        if machine_type:
-            locks = lock.list_locks()
-            for machine in locks:
-                if machine['type'] == machine_type:
-                    arch = machine['arch']
-                    return arch
+def get_arch(machine_type):
+    locks = lock.list_locks()
+    for machine in locks:
+        if machine['type'] == machine_type:
+            arch = machine['arch']
+            return arch
     return None
