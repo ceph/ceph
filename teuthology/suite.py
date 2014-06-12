@@ -154,25 +154,22 @@ def schedule_suite(name,
         exclude_arch = parsed_yaml.get('exclude_arch')
         exclude_os_type = parsed_yaml.get('exclude_os_type')
 
-        if exclude_arch:
-            if exclude_arch == arch:
-                log.info('Skipping due to excluded_arch: %s facets %s',
-                         exclude_arch, description)
-                continue
-        if exclude_os_type:
-            if exclude_os_type == os_type:
-                log.info('Skipping due to excluded_os_type: %s facets %s',
-                         exclude_os_type, description)
-                continue
+        if exclude_arch and exclude_arch == arch:
+            log.info('Skipping due to excluded_arch: %s facets %s',
+                     exclude_arch, description)
+            continue
+        if exclude_os_type and exclude_os_type == os_type:
+            log.info('Skipping due to excluded_os_type: %s facets %s',
+                     exclude_os_type, description)
+            continue
         # We should not run multiple tests (changing distros) unless the
         # machine is a VPS.
         # Re-imaging baremetal is not yet supported.
-        if machine_type != 'vps':
-            if os_type and os_type != 'ubuntu':
-                log.info(
-                    'Skipping due to non-ubuntu on baremetal facets %s',
-                    description)
-                continue
+        if machine_type != 'vps' and os_type and os_type != 'ubuntu':
+            log.info(
+                'Skipping due to non-ubuntu on baremetal facets %s',
+                description)
+            continue
 
         log.info(
             'Scheduling %s', description
