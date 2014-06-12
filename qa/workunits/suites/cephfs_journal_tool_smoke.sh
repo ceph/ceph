@@ -12,6 +12,31 @@ if [ -d $BINARY_OUTPUT ] ; then
     rm -rf $BINARY_OUTPUT
 fi
 
+# Check that the import/export stuff really works as expected
+# first because it's used as the reset method between
+# following checks.
+echo "Testing that export/import cycle preserves state"
+HEADER_STATE=`$BIN header get`
+EVENT_LIST=`$BIN event get list 2>&1`
+$BIN journal export $JOURNAL_FILE
+$BIN journal import $JOURNAL_FILE
+NEW_HEADER_STATE=`$BIN header get`
+NEW_EVENT_LIST=`$BIN event get list 2>&1`
+
+if [ ! "$HEADER_STATE" = "$NEW_HEADER_STATE" ] ; then
+    echo "Import failed to preserve header state"
+    echo $HEADER_STATE
+    echo $NEW_HEADER_STATE
+    exit -1
+fi
+
+if [ ! "$EVENT_LIST" = "$NEW_EVENT_LIST" ] ; then
+    echo "Import failed to preserve event state"
+    echo $EVENT_LIST
+    echo $NEW_EVENT_LIST
+    exit -1
+fi
+
 echo "Testing 'journal' commands..."
 
 # Simplest thing: print the vital statistics of the journal
