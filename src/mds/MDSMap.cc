@@ -544,6 +544,16 @@ void MDSMap::decode(bufferlist::iterator& p)
   if (struct_v >= 5) {
     ::decode(enabled, p);
     ::decode(fs_name, p);
+  } else {
+    if (epoch > 1) {
+      // If an MDS has ever been started, epoch will be greater than 1,
+      // assume filesystem is enabled.
+      enabled = true;
+    } else {
+      // Upgrading from a cluster that never used an MDS, switch off
+      // filesystem until it's explicitly enabled.
+      enabled = false;
+    }
   }
 
   // kclient ignores everything from here
