@@ -24,7 +24,7 @@ def main(args):
     name = args['--name']
     priority = int(args['--priority'])
     num = int(args['--num'])
-    worker = args['--worker']
+    machine_type = args['--machine-type']
     owner = args['--owner']
     base = args['--base']
     suite = args['--suite']
@@ -36,7 +36,11 @@ def main(args):
         teuthology.log.setLevel(logging.DEBUG)
 
     arch = get_arch(base_yaml_paths)
-    machine_type = get_machine_type(base_yaml_paths)
+
+    if ',' in machine_type:
+        worker = 'multi'
+    else:
+        worker = machine_type
 
     base_args = [
         os.path.join(os.path.dirname(sys.argv[0]), 'teuthology-schedule'),

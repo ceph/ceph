@@ -40,8 +40,8 @@ optional arguments:
   -l <limit>, --limit <limit>
                          Queue at most this many jobs
                          [default: 0]
-  -w <worker>, --worker <worker>
-                         Which worker to use (type of machine)
+  -m <type>, --machine-type <type>
+                         Machine type
                          [default: plana]
 
 """
