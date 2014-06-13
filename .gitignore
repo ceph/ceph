@@ -13,3 +13,5 @@
 /virtualenv
 /build
 /*.yaml
+
+.ropeproject
