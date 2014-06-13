@@ -1,7 +1,7 @@
 -------------------------------------------------------------------
-Wed Jun 11 17:05:02 CEST 2014
+Wed Jun 11 17:05:02 CEST 2014 - osynge@suse.com
 
-- added dependency on gptfdisk - osynge@suse.com
+- added dependency on gptfdisk
   * ceph-disk uses gptfdisk to format OSD disks
     https://bugzilla.novell.com/show_bug.cgi?id=882064
 
