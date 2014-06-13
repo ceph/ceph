@@ -71,6 +71,8 @@ extern CompatSet get_mdsmap_compat_set_base(); // pre v0.20
 #define MDS_FEATURE_INCOMPAT_INLINE CompatSet::Feature(7, "mds uses inline data")
 #define MDS_FEATURE_INCOMPAT_NOANCHOR CompatSet::Feature(8, "no anchor table")
 
+#define MDS_FS_NAME_DEFAULT "cephfs"
+
 class MDSMap {
 public:
   // mds states
@@ -193,7 +195,7 @@ public:
 
 public:
   MDSMap() 
-    : epoch(0), enabled(false), fs_name("default"),
+    : epoch(0), enabled(false), fs_name(MDS_FS_NAME_DEFAULT),
       flags(0), last_failure(0),
       last_failure_osd_epoch(0),
       tableserver(0), root(0),
