@@ -59,8 +59,9 @@ function run_mon() {
 function kill_daemons() {
     local dir=$1
     for pidfile in $(find $dir | grep pidfile) ; do
+        pid=$(cat $pidfile)
         for try in 0 1 1 1 2 3 ; do
-            kill -9 $(cat $pidfile 2> /dev/null) 2> /dev/null || break
+            kill -9 $pid 2> /dev/null || break
             sleep $try
         done
     done
