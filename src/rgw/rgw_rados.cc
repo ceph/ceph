@@ -54,6 +54,7 @@ static string *notify_oids = NULL;
 static string shadow_ns = "shadow";
 static string dir_oid_prefix = ".dir.";
 static string default_storage_pool = ".rgw.buckets";
+static string default_storage_extra_pool = ".rgw.buckets.extra";
 static string avail_pools = ".pools.avail";
 
 static string zone_info_oid_prefix = "zone_info.";
@@ -308,6 +309,7 @@ void RGWZoneParams::init_default(RGWRados *store)
     RGWZonePlacementInfo default_placement;
     default_placement.index_pool = ".rgw.buckets.index";
     default_placement.data_pool = ".rgw.buckets";
+    default_placement.data_extra_pool = ".rgw.buckets.extra";
     placement_pools["default-placement"] = default_placement;
   }
 }
