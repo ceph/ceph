@@ -129,9 +129,9 @@
 #include "common/cmdparse.h"
 #include "include/str_list.h"
 
+#include "tracing/osd.tp.h"
 #include "include/assert.h"
 #include "common/config.h"
-#include "tracing/osd.tp.h"
 
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix

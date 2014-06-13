@@ -56,8 +56,8 @@
 
 #include "json_spirit/json_spirit_value.h"
 #include "json_spirit/json_spirit_reader.h"
-#include "include/assert.h"  // json_spirit clobbers it
 #include "tracing/osd.tp.h"
+#include "include/assert.h"  // json_spirit clobbers it
 
 #define dout_subsys ceph_subsys_osd
 #define DOUT_PREFIX_ARGS this, osd->whoami, get_osdmap()
