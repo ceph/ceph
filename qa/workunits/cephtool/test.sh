@@ -296,7 +296,7 @@ function test_mon_mds()
 {
   ceph osd pool create fs_data 10
   ceph osd pool create fs_metadata 10
-  ceph fs new default fs_metadata fs_data
+  ceph fs new cephfs fs_metadata fs_data
 
   # Check for default crash_replay_interval set automatically in 'fs new'
   ceph osd dump | grep fs_data > $TMPFILE
@@ -365,7 +365,7 @@ function test_mon_mds()
   metadata_poolnum=$(ceph osd dump | grep 'pool.*fs_metadata' | awk '{print $2;}')
   set +e
 
-  ceph fs rm default --yes-i-really-mean-it
+  ceph fs rm cephfs --yes-i-really-mean-it
 
   ceph mds newfs $metadata_poolnum $ec_poolnum --yes-i-really-mean-it 2>$TMPFILE
   check_response 'erasure-code' $? 22
