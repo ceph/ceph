@@ -15,34 +15,32 @@ command line will be used for every combination, and will override anything in
 the suite.
 
 positional arguments:
-  <config_yaml>          Optional extra job yaml to include
+  <config_yaml>               Optional extra job yaml to include
 
 optional arguments:
-  -h, --help             Show this help message and exit
-  -v, --verbose          Be more verbose
-  --dry-run              Do a dry run; do not schedule anything
-  -n, --name <name>      Name for this suite
-  --base <base>          Base directory for the suite
-                         e.g. ~/src/ceph-qa-suite/suites
+  -h, --help                  Show this help message and exit
+  -v, --verbose               Be more verbose
+  --dry-run                   Do a dry run; do not schedule anything
+  -n, --name <name>           Name for this suite
+  --base <base>               Base directory for the suite
+                              e.g. ~/src/ceph-qa-suite/suites
   -s <suite>, --suite <suite>
-                         The suite to run
-  --owner <owner>        Job owner
-  --email <email>        When tests finish or time out, send an email to this
-                         address.
-  --timeout <timeout>    How long, in seconds, to wait for jobs to finish
-                         before sending email. This does not kill jobs.
-                         [default: 21600]
+                              The suite to run
+  --owner <owner>             Job owner
+  -e <email>, --email <email> When tests finish or time out, send an email here
+  --timeout <timeout>         How long, in seconds, to wait for jobs to finish
+                              before sending email. This does not kill jobs.
+                              [default: 21600]
   -p <priority>, --priority <priority>
-                         Job priority (lower is sooner)
-                         [default: 1000]
-  -N <num>, --num <num>  Number of times to run/queue the job
-                         [default: 1]
-  -l <limit>, --limit <limit>
-                         Queue at most this many jobs
-                         [default: 0]
+                              Job priority (lower is sooner)
+                              [default: 1000]
+  -N <num>, --num <num>       Number of times to run/queue the job
+                              [default: 1]
+  -l <jobs>, --limit <jobs>   Queue at most this many jobs
+                              [default: 0]
   -m <type>, --machine-type <type>
-                         Machine type
-                         [default: plana]
+                              Machine type
+                              [default: plana]
 
 """
 
