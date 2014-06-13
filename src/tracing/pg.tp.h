@@ -4,6 +4,8 @@
 
 #undef TRACEPOINT_INCLUDE
 #define TRACEPOINT_INCLUDE "./pg.tp.h"
+#undef TRACEPOINT_INCLUDE_FILE
+#define TRACEPOINT_INCLUDE_FILE ./pg.tp.h
 
 #if !defined(PG_TP_H) || defined(TRACEPOINT_HEADER_MULTI_READ)
 #define PG_TP_H

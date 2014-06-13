@@ -4,6 +4,8 @@
 
 #undef TRACEPOINT_INCLUDE
 #define TRACEPOINT_INCLUDE "./osd.tp.h"
+#undef TRACEPOINT_INCLUDE_FILE
+#define TRACEPOINT_INCLUDE_FILE ./osd.tp.h
 
 #if !defined(OSD_TP_H) || defined(TRACEPOINT_HEADER_MULTI_READ)
 #define OSD_TP_H

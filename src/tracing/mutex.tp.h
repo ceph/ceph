@@ -4,6 +4,8 @@
 
 #undef TRACEPOINT_INCLUDE
 #define TRACEPOINT_INCLUDE "./mutex.tp.h"
+#undef TRACEPOINT_INCLUDE_FILE
+#define TRACEPOINT_INCLUDE_FILE ./mutex.tp.h
 
 #if !defined(MUTEX_TP_H) || defined(TRACEPOINT_HEADER_MULTI_READ)
 #define MUTEX_TP_H
