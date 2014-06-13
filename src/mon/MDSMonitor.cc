@@ -908,8 +908,8 @@ bool MDSMonitor::management_command(
 {
   if (prefix == "mds newfs") {
     /* Legacy `newfs` command, takes pool numbers instead of
-     * names, assumes fs name to be 'default', and can
-     * overwrite existing filesystem settings */
+     * names, assumes fs name to be MDS_FS_NAME_DEFAULT, and
+     * can overwrite existing filesystem settings */
     MDSMap newmap;
     int64_t metadata, data;
 
@@ -966,7 +966,7 @@ bool MDSMonitor::management_command(
       newmap.inc = pending_mdsmap.inc;
       pending_mdsmap = newmap;
       pending_mdsmap.epoch = mdsmap.epoch + 1;
-      create_new_fs(pending_mdsmap, "default", metadata, data);
+      create_new_fs(pending_mdsmap, MDS_FS_NAME_DEFAULT, metadata, data);
       ss << "new fs with metadata pool " << metadata << " and data pool " << data;
       r = 0;
       return true;
