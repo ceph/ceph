@@ -394,9 +394,6 @@ public:
     else
       return i->second;
   }
-  map<string,string> &get_erasure_code_profile(const string &name) {
-    return erasure_code_profiles[name];
-  }
   const map<string,map<string,string> > &get_erasure_code_profiles() const {
     return erasure_code_profiles;
   }
