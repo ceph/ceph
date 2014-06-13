@@ -57,16 +57,16 @@ def main(args):
 
     suite_path = os.path.join(base, suite)
 
-    num_jobs = 0
-    schedule_suite(name=suite,
-                   path=suite_path,
-                   base_yamls=base_yaml_paths,
-                   base_args=base_args,
-                   arch=arch,
-                   machine_type=machine_type,
-                   limit=limit,
-                   dry_run=dry_run,
-                   )
+    num_jobs = schedule_suite(
+        name=suite,
+        path=suite_path,
+        base_yamls=base_yaml_paths,
+        base_args=base_args,
+        arch=arch,
+        machine_type=machine_type,
+        limit=limit,
+        dry_run=dry_run,
+        )
 
     if num_jobs:
         arg = copy.deepcopy(base_args)
