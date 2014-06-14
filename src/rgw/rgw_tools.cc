@@ -35,7 +35,8 @@ int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, string& oid, cons
 }
 
 int rgw_get_system_obj(RGWRados *rgwstore, void *ctx, rgw_bucket& bucket, const string& key, bufferlist& bl,
-                       RGWObjVersionTracker *objv_tracker, time_t *pmtime, map<string, bufferlist> *pattrs)
+                       RGWObjVersionTracker *objv_tracker, time_t *pmtime, map<string, bufferlist> *pattrs,
+                       rgw_cache_entry_info *cache_info)
 {
   struct rgw_err err;
   void *handle = NULL;
@@ -50,7 +51,7 @@ int rgw_get_system_obj(RGWRados *rgwstore, void *ctx, rgw_bucket& bucket, const 
     if (ret < 0)
       return ret;
 
-    ret = rgwstore->get_obj(ctx, objv_tracker, &handle, obj, bl, 0, request_len - 1);
+    ret = rgwstore->get_obj(ctx, objv_tracker, &handle, obj, bl, 0, request_len - 1, cache_info);
     rgwstore->finish_get_obj(&handle);
     if (ret < 0)
       return ret;
