@@ -1317,6 +1317,8 @@ int OSD::init()
   if (is_stopping())
     return 0;
 
+  check_config();
+
   dout(10) << "ensuring pgs have consumed prior maps" << dendl;
   consume_map();
   peering_wq.drain();
@@ -8233,6 +8235,9 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_max_backfills",
     "osd_op_complaint_time", "osd_op_log_threshold",
     "osd_op_history_size", "osd_op_history_duration",
+    "osd_map_cache_size",
+    "osd_map_max_advance",
+    "osd_pg_epoch_persisted_max_stale",
     NULL
   };
   return KEYS;
@@ -8254,6 +8259,23 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
       changed.count("osd_op_history_duration")) {
     op_tracker.set_history_size_and_duration(cct->_conf->osd_op_history_size,
                                              cct->_conf->osd_op_history_duration);
+  }
+
+  check_config();
+}
+
+void OSD::check_config()
+{
+  // some sanity checks
+  if (g_conf->osd_map_cache_size <= g_conf->osd_map_max_advance + 2) {
+    clog.warn() << "osd_map_cache_size (" << g_conf->osd_map_cache_size << ")"
+		<< " is not > osd_map_max_advance ("
+		<< g_conf->osd_map_max_advance << ")";
+  }
+  if (g_conf->osd_map_cache_size <= (int)g_conf->osd_pg_epoch_persisted_max_stale + 2) {
+    clog.warn() << "osd_map_cache_size (" << g_conf->osd_map_cache_size << ")"
+		<< " is not > osd_pg_epoch_persisted_max_stale ("
+		<< g_conf->osd_pg_epoch_persisted_max_stale << ")";
   }
 }
 
