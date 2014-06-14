@@ -127,40 +127,22 @@ public:
   }
 
   void mark_queued_for_pg() {
-    mark_event("queued_for_pg");
-    current = "queued for pg";
-    hit_flag_points |= flag_queued_for_pg;
-    latest_flag_point = flag_queued_for_pg;
+    mark_flag_point(flag_queued_for_pg, "queued_for_pg");
   }
   void mark_reached_pg() {
-    mark_event("reached_pg");
-    current = "reached pg";
-    hit_flag_points |= flag_reached_pg;
-    latest_flag_point = flag_reached_pg;
+    mark_flag_point(flag_reached_pg, "reached_pg");
   }
   void mark_delayed(string s) {
-    mark_event(s);
-    current = s;
-    hit_flag_points |= flag_delayed;
-    latest_flag_point = flag_delayed;
+    mark_flag_point(flag_delayed, s);
   }
   void mark_started() {
-    mark_event("started");
-    current = "started";
-    hit_flag_points |= flag_started;
-    latest_flag_point = flag_started;
+    mark_flag_point(flag_started, "started");
   }
   void mark_sub_op_sent(string s) {
-    mark_event(s);
-    current = s;
-    hit_flag_points |= flag_sub_op_sent;
-    latest_flag_point = flag_sub_op_sent;
+    mark_flag_point(flag_sub_op_sent, s);
   }
   void mark_commit_sent() {
-    mark_event("commit_sent");
-    current = "commit sent";
-    hit_flag_points |= flag_commit_sent;
-    latest_flag_point = flag_commit_sent;
+    mark_flag_point(flag_commit_sent, "commit_sent");
   }
 
   utime_t get_dequeued_time() const {
@@ -175,6 +157,10 @@ public:
   }
 
   typedef ceph::shared_ptr<OpRequest> Ref;
+
+private:
+  void set_rmw_flags(int flags);
+  void mark_flag_point(uint8_t flag, string s);
 };
 
 typedef OpRequest::Ref OpRequestRef;
