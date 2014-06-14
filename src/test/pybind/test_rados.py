@@ -239,6 +239,25 @@ class TestIoctx(object):
         eq(contents, "bar")
         [i.remove() for i in self.ioctx.list_objects()]
 
+    def test_aio_write_zeros(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(blah):
+            with lock:
+                count[0] += 1
+                lock.notify()
+            return 0
+        comp = self.ioctx.aio_write("foo", "a\0b\0c", 0, cb, cb)
+        comp.wait_for_complete()
+        comp.wait_for_safe()
+        with lock:
+            while count[0] < 2:
+                lock.wait()
+        eq(comp.get_return_value(), 0)
+        contents = self.ioctx.read("foo")
+        eq(contents, "a\0b\0c")
+        [i.remove() for i in self.ioctx.list_objects()]
+
     def test_aio_append(self):
         lock = threading.Condition()
         count = [0]
