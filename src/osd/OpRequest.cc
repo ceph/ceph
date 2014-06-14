@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 
+#include "tracing/oprequest.h"
 #include "OpRequest.h"
 #include "common/Formatter.h"
 #include <iostream>
@@ -88,9 +89,29 @@ bool OpRequest::need_class_read_cap() {
 bool OpRequest::need_class_write_cap() {
   return check_rmw(CEPH_OSD_RMW_FLAG_CLASS_WRITE);
 }
-void OpRequest::set_read() { rmw_flags |= CEPH_OSD_RMW_FLAG_READ; }
-void OpRequest::set_write() { rmw_flags |= CEPH_OSD_RMW_FLAG_WRITE; }
-void OpRequest::set_class_read() { rmw_flags |= CEPH_OSD_RMW_FLAG_CLASS_READ; }
-void OpRequest::set_class_write() { rmw_flags |= CEPH_OSD_RMW_FLAG_CLASS_WRITE; }
-void OpRequest::set_pg_op() { rmw_flags |= CEPH_OSD_RMW_FLAG_PGOP; }
-void OpRequest::set_cache() { rmw_flags |= CEPH_OSD_RMW_FLAG_CACHE; }
+
+void OpRequest::set_rmw_flags(int flags) {
+  int old_rmw_flags = rmw_flags;
+  rmw_flags |= flags;
+  tracepoint(oprequest, set_rmw_flags, reqid.name._type,
+	     reqid.name._num, reqid.tid, reqid.inc,
+	     flags, old_rmw_flags, rmw_flags);
+}
+
+void OpRequest::set_read() { set_rmw_flags(CEPH_OSD_RMW_FLAG_READ); }
+void OpRequest::set_write() { set_rmw_flags(CEPH_OSD_RMW_FLAG_WRITE); }
+void OpRequest::set_class_read() { set_rmw_flags(CEPH_OSD_RMW_FLAG_CLASS_READ); }
+void OpRequest::set_class_write() { set_rmw_flags(CEPH_OSD_RMW_FLAG_CLASS_WRITE); }
+void OpRequest::set_pg_op() { set_rmw_flags(CEPH_OSD_RMW_FLAG_PGOP); }
+void OpRequest::set_cache() { set_rmw_flags(CEPH_OSD_RMW_FLAG_CACHE); }
+
+void OpRequest::mark_flag_point(uint8_t flag, string s) {
+  uint8_t old_flags = hit_flag_points;
+  mark_event(s);
+  current = s;
+  hit_flag_points |= flag;
+  latest_flag_point = flag;
+  tracepoint(oprequest, mark_flag_point, reqid.name._type,
+	     reqid.name._num, reqid.tid, reqid.inc, rmw_flags,
+	     flag, s.c_str(), old_flags, hit_flag_points);
+}
