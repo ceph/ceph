@@ -433,37 +433,41 @@ int JournalTool::journal_inspect()
 int JournalTool::journal_export(std::string const &path, bool import)
 {
   int r = 0;
-  Dumper dumper;
   JournalScanner js(io, rank);
 
-  /*
-   * Check that the header is valid and no objects are missing before
-   * trying to dump
-   */
-  r = js.scan();
-  if (r < 0) {
-    derr << "Unable to scan journal, assuming badly damaged" << dendl;
-    return r;
-  }
-  if (!js.is_readable()) {
-    derr << "Journal not readable, attempt object-by-object dump with `rados`" << dendl;
-    return -EIO;
+  if (!import) {
+    /*
+     * If doing an export, first check that the header is valid and
+     * no objects are missing before trying to dump
+     */
+    r = js.scan();
+    if (r < 0) {
+      derr << "Unable to scan journal, assuming badly damaged" << dendl;
+      return r;
+    }
+    if (!js.is_readable()) {
+      derr << "Journal not readable, attempt object-by-object dump with `rados`" << dendl;
+      return -EIO;
+    }
   }
 
   /*
    * Assuming we can cleanly read the journal data, dump it out to a file
    */
-  r = dumper.init(rank);
-  if (r < 0) {
-    derr << "dumper::init failed: " << cpp_strerror(r) << dendl;
-    return r;
+  {
+    Dumper dumper;
+    r = dumper.init(rank);
+    if (r < 0) {
+      derr << "dumper::init failed: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    if (import) {
+      dumper.undump(path.c_str());
+    } else {
+      dumper.dump(path.c_str());
+    }
+    dumper.shutdown();
   }
-  if (import) {
-    dumper.undump(path.c_str());
-  } else {
-    dumper.dump(path.c_str());
-  }
-  dumper.shutdown();
 
   return r;
 }
