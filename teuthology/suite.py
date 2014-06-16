@@ -87,11 +87,10 @@ def prepare_and_schedule(owner, name, suite, machine_type, base,
         dry_run=dry_run,
         )
 
-    if num_jobs:
+    if email and num_jobs:
         arg = copy.deepcopy(base_args)
         arg.append('--last-in-suite')
-        if email:
-            arg.extend(['--email', email])
+        arg.extend(['--email', email])
         if timeout:
             arg.extend(['--timeout', timeout])
         if dry_run:
