@@ -2007,28 +2007,32 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 			    list<pair<health_status_t,string> > *detail) const
 {
   int num_osds = osdmap.get_num_osds();
-  int num_up_osds = osdmap.get_num_up_osds();
-  int num_in_osds = osdmap.get_num_in_osds();
 
   if (num_osds == 0) {
     summary.push_back(make_pair(HEALTH_ERR, "no osds"));
   } else {
-    if (num_up_osds < num_in_osds) {
-      ostringstream ss;
-      ss << (num_in_osds - num_up_osds) << "/" << num_in_osds << " in osds are down";
-      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
-
-      if (detail) {
-	for (int i = 0; i < osdmap.get_max_osd(); i++) {
-	  if (osdmap.exists(i) && !osdmap.is_up(i)) {
-	    const osd_info_t& info = osdmap.get_info(i);
-	    ostringstream ss;
-	    ss << "osd." << i << " is down since epoch " << info.down_at
-	       << ", last address " << osdmap.get_addr(i);
-	    detail->push_back(make_pair(HEALTH_WARN, ss.str()));
-	  }
+    int num_in_osds = 0;
+    int num_down_in_osds = 0;
+    for (int i = 0; i < osdmap.get_max_osd(); i++) {
+      if (!osdmap.exists(i) || osdmap.is_out(i))
+	continue;
+      ++num_in_osds;
+      if (!osdmap.is_up(i)) {
+	++num_down_in_osds;
+	if (detail) {
+	  const osd_info_t& info = osdmap.get_info(i);
+	  ostringstream ss;
+	  ss << "osd." << i << " is down since epoch " << info.down_at
+	     << ", last address " << osdmap.get_addr(i);
+	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
 	}
       }
+    }
+    assert(num_down_in_osds <= num_in_osds);
+    if (num_down_in_osds > 0) {
+      ostringstream ss;
+      ss << num_down_in_osds << "/" << num_in_osds << " in osds are down";
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
     }
 
     // warn about flags
