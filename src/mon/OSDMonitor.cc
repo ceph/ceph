@@ -4184,23 +4184,8 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     cmd_getval(g_ceph_context, cmdmap, "name", name);
     string profile;
     cmd_getval(g_ceph_context, cmdmap, "profile", profile);
-    if (profile == "") {
+    if (profile == "")
       profile = "default";
-      if (!osdmap.has_erasure_code_profile(profile)) {
-	if (pending_inc.has_erasure_code_profile(profile))
-	  goto wait;
-
-	map<string,string> profile_map;
-	err = osdmap.get_erasure_code_profile_default(g_ceph_context,
-						      profile_map,
-						      &ss);
-	if (err)
-	  goto reply;
-	dout(20) << "erasure code profile " << name << " set" << dendl;
-	pending_inc.set_erasure_code_profile(profile, profile_map);
-	goto wait;
-      }
-    }
 
     int ruleset;
     err = crush_ruleset_create_erasure(name, profile, &ruleset, ss);
