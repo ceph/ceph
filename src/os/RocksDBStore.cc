@@ -30,6 +30,17 @@ int RocksDBStore::init()
   options.paranoid_checks = g_conf->rocksdb_paranoid;
   options.max_open_files = g_conf->rocksdb_max_open_files;
   options.log_file = g_conf->rocksdb_log;
+  options.write_buffer_num = g_conf->rocksdb_write_buffer_num;
+  options.max_background_compactions = g_conf->rocksdb_background_compactions;
+  options.max_background_flushes = g_conf->rocksdb_background_flushes;
+  options.target_file_size_base = g_conf->rocksdb_target_file_size_base;
+  options.level0_file_num_compaction_trigger = g_conf->rocksdb_level0_file_num_compaction_trigger;
+  options.level0_slowdown_writes_trigger = g_conf->rocksdb_level0_slowdown_writes_trigger;
+  options.level0_stop_writes_trigger = g_conf->rocksdb_level0_stop_writes_trigger;
+  options.disableDataSync = g_conf->rocksdb_disableDataSync;
+  options.num_levels = g_conf->rocksdb_num_levels;
+  options.disableWAL = g_conf->rocksdb_disableWAL;
+  options.wal_dir = g_conf->rocksdb_wal_dir;
   return 0;
 }
 
@@ -39,6 +50,14 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
 
   if (options.write_buffer_size)
     ldoptions.write_buffer_size = options.write_buffer_size;
+  if (options.write_buffer_num)
+    ldoptions.max_write_buffer_number = options.write_buffer_num;
+  if (options.max_background_compactions)
+    ldoptions.max_background_compactions = options.max_background_compactions;
+  if (options.max_background_flushes)
+    ldoptions.max_background_flushes = options.max_background_flushes;
+  if (options.target_file_size_base)
+    ldoptions.target_file_size_base = options.target_file_size_base;
   if (options.max_open_files)
     ldoptions.max_open_files = options.max_open_files;
   if (options.cache_size) {
@@ -73,6 +92,19 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
     rocksdb::Env *env = rocksdb::Env::Default();
     env->NewLogger(options.log_file, &ldoptions.info_log);
   }
+  if(options.disableDataSync)
+    ldoptions.disableDataSync = options.disableDataSync;
+  if(options.num_levels)
+    ldoptions.num_levels = options.num_levels;
+  if(options.level0_file_num_compaction_trigger)
+    ldoptions.level0_file_num_compaction_trigger = options.level0_file_num_compaction_trigger;
+  if(options.level0_slowdown_writes_trigger)
+    ldoptions.level0_slowdown_writes_trigger = options.level0_slowdown_writes_trigger;
+  if(options.level0_stop_writes_trigger)
+    ldoptions.level0_stop_writes_trigger = options.level0_stop_writes_trigger;
+  if(options.wal_dir.length())
+    ldoptions.wal_dir = options.wal_dir;
+
 
   //rocksdb::DB *_db;
   rocksdb::Status status = rocksdb::DB::Open(ldoptions, path, &db);
@@ -141,7 +173,9 @@ int RocksDBStore::submit_transaction(KeyValueDB::Transaction t)
 {
   RocksDBTransactionImpl * _t =
     static_cast<RocksDBTransactionImpl *>(t.get());
-  rocksdb::Status s = db->Write(rocksdb::WriteOptions(), _t->bat);
+  rocksdb::WriteOptions woptions;
+  woptions.disableWAL = options.disableWAL;
+  rocksdb::Status s = db->Write(woptions, _t->bat);
   logger->inc(l_rocksdb_txns);
   return s.ok() ? 0 : -1;
 }
@@ -150,9 +184,10 @@ int RocksDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
 {
   RocksDBTransactionImpl * _t =
     static_cast<RocksDBTransactionImpl *>(t.get());
-  rocksdb::WriteOptions options;
-  options.sync = true;
-  rocksdb::Status s = db->Write(options, _t->bat);
+  rocksdb::WriteOptions woptions;
+  woptions.sync = true;
+  woptions.disableWAL = options.disableWAL;
+  rocksdb::Status s = db->Write(woptions, _t->bat);
   logger->inc(l_rocksdb_txns);
   return s.ok() ? 0 : -1;
 }
