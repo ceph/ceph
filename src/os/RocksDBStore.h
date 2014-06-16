@@ -109,6 +109,10 @@ public:
    */
   struct options_t {
     uint64_t write_buffer_size; /// in-memory write buffer size
+    uint64_t write_buffer_num; /// in-memory write buffer number
+    uint64_t target_file_size_base; /// Target file size for compaction
+    int max_background_compactions; /// Maximum number of concurrent background compaction jobs
+    int max_background_flushes; /// Maximum number of concurrent background memtable flushea jobs
     int max_open_files; /// maximum number of files RocksDB can open at once
     uint64_t cache_size; /// size of extra decompressed cache to use
     uint64_t block_size; /// user data per block
@@ -119,8 +123,15 @@ public:
     int block_restart_interval;
     bool error_if_exists;
     bool paranoid_checks;
+    uint64_t level0_file_num_compaction_trigger;
+    uint64_t level0_slowdown_writes_trigger;
+    uint64_t level0_stop_writes_trigger;
+    bool disableDataSync;
+    bool disableWAL;
+    int num_levels;
 
     string log_file;
+    string wal_dir;
 
     options_t() :
       write_buffer_size(0), //< 0 means default
@@ -131,7 +142,13 @@ public:
       compression_type("none"), //< set to false for no compression
       block_restart_interval(0), //< 0 means default
       error_if_exists(false), //< set to true if you want to check nonexistence
-      paranoid_checks(false) //< set to true if you want paranoid checks
+      paranoid_checks(false), //< set to true if you want paranoid checks
+      level0_file_num_compaction_trigger(0),
+      level0_slowdown_writes_trigger(0),
+      level0_stop_writes_trigger(0),
+      disableDataSync(false),
+      disableWAL(false),
+      num_levels(0)
     {}
   } options;
 
