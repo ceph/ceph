@@ -2381,7 +2381,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     if (!pmaster_bucket) {
       uint64_t iid = instance_id();
       uint64_t bid = next_bucket_id();
-      char buf[32];
+      char buf[zone.name.size() + 48];
       snprintf(buf, sizeof(buf), "%s.%llu.%llu", zone.name.c_str(), (long long)iid, (long long)bid);
       bucket.marker = buf;
       bucket.bucket_id = bucket.marker;
