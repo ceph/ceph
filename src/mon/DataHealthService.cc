@@ -68,8 +68,9 @@ void DataHealthService::start_epoch()
   last_warned_percent = 0;
 }
 
-health_status_t DataHealthService::get_health(
+void DataHealthService::get_health(
     Formatter *f,
+    list<pair<health_status_t,string> >& summary,
     list<pair<health_status_t,string> > *detail)
 {
   dout(10) << __func__ << dendl;
@@ -77,8 +78,6 @@ health_status_t DataHealthService::get_health(
     f->open_object_section("data_health");
     f->open_array_section("mons");
   }
-
-  health_status_t overall_status = HEALTH_OK;
 
   for (map<entity_inst_t,DataStats>::iterator it = stats.begin();
        it != stats.end(); ++it) {
@@ -107,8 +106,6 @@ health_status_t DataHealthService::get_health(
       health_detail.append(ss.str());
     }
 
-    if (overall_status > health_status)
-      overall_status = health_status;
 
     if (detail && health_status != HEALTH_OK) {
       stringstream ss;
@@ -134,8 +131,6 @@ health_status_t DataHealthService::get_health(
     f->close_section(); // mons
     f->close_section(); // data_health
   }
-
-  return overall_status;
 }
 
 int DataHealthService::update_store_stats(DataStats &ours)
