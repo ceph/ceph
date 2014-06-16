@@ -35,6 +35,25 @@ def main(args):
     if verbose:
         teuthology.log.setLevel(logging.DEBUG)
 
+    prepare_and_schedule(owner=owner,
+                         name=name,
+                         suite=suite,
+                         machine_type=machine_type,
+                         base=base,
+                         base_yaml_paths=base_yaml_paths,
+                         email=email,
+                         priority=priority,
+                         limit=limit,
+                         num=num,
+                         timeout=timeout,
+                         dry_run=dry_run,
+                         verbose=verbose,
+                         )
+
+
+def prepare_and_schedule(owner, name, suite, machine_type, base,
+                         base_yaml_paths, email, priority, limit, num, timeout,
+                         dry_run, verbose):
     arch = get_arch(machine_type)
 
     if ',' in machine_type:
