@@ -2,3 +2,7 @@
 v0.82
 -----
 
+* The experimental keyvaluestore-dev OSD backend had an on-disk format
+  change that prevents existing OSD data from being upgraded.  This
+  affects developers and testers only.
+
