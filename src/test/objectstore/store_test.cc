@@ -138,6 +138,24 @@ TEST_P(StoreTest, SimpleObjectTest) {
   {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
+    t.touch(cid, hoid);
+    cerr << "Remove then create" << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append("abcde");
+    t.remove(cid, hoid);
+    t.write(cid, hoid, 10, 5, bl);
+    cerr << "Remove then create" << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
     t.remove_collection(cid);
     cerr << "Cleaning" << std::endl;
     r = store->apply_transaction(t);
