@@ -89,10 +89,10 @@ health_status_t DataHealthService::get_health(
     string health_detail;
     if (stats.latest_avail_percent <= g_conf->mon_data_avail_crit) {
       health_status = HEALTH_ERR;
-      health_detail = "shutdown iminent!";
+      health_detail = "shutdown imminent";
     } else if (stats.latest_avail_percent <= g_conf->mon_data_avail_warn) {
       health_status = HEALTH_WARN;
-      health_detail = "low disk space!";
+      health_detail = "low disk space";
     }
 
     if (stats.store_stats.bytes_total >= g_conf->mon_leveldb_size_warn) {
@@ -114,7 +114,7 @@ health_status_t DataHealthService::get_health(
       stringstream ss;
       ss << "mon." << mon_name << " addr " << it->first.addr
           << " has " << stats.latest_avail_percent
-          << "%% avail disk space -- " << health_detail;
+          << "% avail disk space -- " << health_detail;
       detail->push_back(make_pair(health_status, ss.str()));
     }
 
