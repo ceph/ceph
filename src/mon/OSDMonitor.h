@@ -249,7 +249,7 @@ private:
 				   stringstream &ss);
   int get_erasure_code(const string &erasure_code_profile,
 		       ErasureCodeInterfaceRef *erasure_code,
-		       stringstream &ss);
+		       stringstream &ss) const;
   int prepare_pool_crush_ruleset(const unsigned pool_type,
 				 const string &erasure_code_profile,
 				 const string &ruleset_name,

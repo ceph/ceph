@@ -63,6 +63,16 @@ function TEST_default_deprectated_2() {
     grep "osd_pool_default_crush_rule is deprecated " $dir/a/log || return 1
 }
 
+# Before http://tracker.ceph.com/issues/8307 the invalid profile was created
+function TEST_erasure_invalid_profile() {
+    local dir=$1
+    run_mon $dir a --public-addr 127.0.0.1
+    local poolname=pool_erasure
+    local notaprofile=not-a-valid-erasure-code-profile
+    ! ./ceph osd pool create $poolname 12 12 erasure $notaprofile || return 1
+    ! ./ceph osd erasure-code-profile ls | grep $notaprofile || return 1
+}
+
 function TEST_erasure_crush_rule() {
     local dir=$1
     run_mon $dir a --public-addr 127.0.0.1
