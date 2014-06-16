@@ -18,7 +18,7 @@ set -e
 [ -z "$CEPH_NUM_MDS" ] && CEPH_NUM_MDS=3
 [ -z "$CEPH_NUM_RGW" ] && CEPH_NUM_RGW=1
 
-[ -z "$CEPH_DIR" ] && CEPH_DIR="$PWD/"
+[ -z "$CEPH_DIR" ] && CEPH_DIR="$PWD"
 [ -z "$CEPH_DEV_DIR" ] && CEPH_DEV_DIR="$CEPH_DIR/dev"
 [ -z "$CEPH_OUT_DIR" ] && CEPH_OUT_DIR="$CEPH_DIR/out"
 [ -z "$CEPH_RGW_PORT" ] && CEPH_RGW_PORT=8000
@@ -628,8 +628,6 @@ EOF
     done
 fi
 
-echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
-
 if [ "$ec" -eq 1 ]; then
     $SUDO $CEPH_ADM <<EOF
 osd erasure-code-profile set ec-profile m=2 k=1
@@ -671,7 +669,13 @@ EOF
 }
 do_hitsets $hitset
 
+echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
+
 echo ""
 echo "export PYTHONPATH=./pybind"
 echo "export LD_LIBRARY_PATH=.libs"
 
+if [ "$CEPH_DIR" != "$PWD" ]; then
+    echo "export CEPH_CONF=$conf_fn"
+    echo "export CEPH_KEYRING=$keyring_fn"
+fi
