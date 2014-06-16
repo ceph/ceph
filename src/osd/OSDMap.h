@@ -381,9 +381,6 @@ public:
       erasure_code_profiles.find(name);
     return i != erasure_code_profiles.end();
   }
-  int get_erasure_code_profile_default(CephContext *cct,
-				       map<string,string> &profile_map,
-				       ostream *ss);
   void set_erasure_code_profile(const string &name,
 				const map<string,string> &profile) {
     erasure_code_profiles[name] = profile;
@@ -793,8 +790,6 @@ public:
    */
   int build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
 		   int num_osd, int pg_bits, int pgp_bits);
-  int set_erasure_code_profile_default(CephContext *cct);
-
   static int _build_crush_types(CrushWrapper& crush);
   static int build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
 				    int num_osd, ostream *ss);
