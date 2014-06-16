@@ -3001,8 +3001,8 @@ int KeyValueStore::_set_alloc_hint(coll_t cid, const ghobject_t& oid,
   // Now only consider to change "strip_size" when the object is blank,
   // because set_alloc_hint is expected to be very lightweight<O(1)>
   if (blank) {
-    header->strip_size = MIN(expected_write_size, m_keyvaluestore_max_expected_write_size);
-    dout(20) << __func__ << " hint " << header->strip_size << " success" << dendl;
+    // header->strip_size = MIN(expected_write_size, m_keyvaluestore_max_expected_write_size);
+    // dout(20) << __func__ << " hint " << header->strip_size << " success" << dendl;
   }
 
   dout(10) << __func__ << "" << cid << "/" << oid << " object_size "
