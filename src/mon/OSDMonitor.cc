@@ -4193,7 +4193,7 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
 	map<string,string> profile_map;
 	err = osdmap.get_erasure_code_profile_default(g_ceph_context,
 						      profile_map,
-						      ss);
+						      &ss);
 	if (err)
 	  goto reply;
 	dout(20) << "erasure code profile " << name << " set" << dendl;
