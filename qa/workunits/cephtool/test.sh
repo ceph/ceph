@@ -51,6 +51,31 @@ function check_response()
 	fi
 }
 
+#
+# Verify ceph osd pool set data crush_ruleset when
+# when ruleset != rule_id http://tracker.ceph.com/issues/8599
+#
+MAP=$TMPFILE.map.$$
+ceph osd getcrushmap -o $MAP
+[ -s $MAP ]
+crushtool --decompile $MAP -o $MAP.decompiled
+RULESET=55
+cat >> $MAP.decompiled <<EOF
+rule testrule1 {
+	ruleset $RULESET
+	type replicated
+	min_size 1
+	max_size 10
+	step take default
+	step choose firstn 0 type osd
+	step emit
+}
+EOF
+crushtool --compile $MAP.decompiled -o $MAP.modified
+ceph osd setcrushmap -i $MAP.modified
+ceph osd pool set data crush_ruleset $RULESET
+ceph osd pool set data crush_ruleset 0
+rm $MAP{,.decompiled,.modified}
 
 # tiering
 ceph osd pool create cache 2
