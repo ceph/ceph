@@ -710,6 +710,11 @@ public:
   bool needs_recovery() const;
   bool needs_backfill() const;
 
+  /// get log recovery reservation priority
+  unsigned get_recovery_priority();
+  /// get backfill reservation priority
+  unsigned get_backfill_priority();
+
   void mark_clean();  ///< mark an active pg clean
 
   bool _calc_past_interval_range(epoch_t *start, epoch_t *end);
