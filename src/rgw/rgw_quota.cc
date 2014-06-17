@@ -318,11 +318,11 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const string& user, rgw_bucket
 {
   RGWBucketInfo bucket_info;
 
-  uint64_t bucket_ver;
-  uint64_t master_ver;
+  string bucket_ver;
+  string master_ver;
 
   map<RGWObjCategory, RGWStorageStats> bucket_stats;
-  int r = store->get_bucket_stats(bucket, &bucket_ver, &master_ver, bucket_stats, NULL);
+  int r = store->get_bucket_stats(bucket, bucket_ver, master_ver, bucket_stats, NULL);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket.name << dendl;
     return r;
