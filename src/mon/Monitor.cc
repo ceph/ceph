@@ -3822,6 +3822,10 @@ void Monitor::tick()
   // trim sessions
   utime_t now = ceph_clock_now(g_ceph_context);
   xlist<MonSession*>::iterator p = session_map.sessions.begin();
+
+  bool out_for_too_long = (!exited_quorum.is_zero()
+      && now > (exited_quorum + 2*g_conf->mon_lease));
+
   while (!p.end()) {
     MonSession *s = *p;
     ++p;
@@ -3835,14 +3839,12 @@ void Monitor::tick()
 	       << " (until " << s->until << " < now " << now << ")" << dendl;
       messenger->mark_down(s->con);
       remove_session(s);
-    } else if (!exited_quorum.is_zero()) {
-      if (now > (exited_quorum + 2 * g_conf->mon_lease)) {
-        // boot the client Session because we've taken too long getting back in
-        dout(10) << " trimming session " << s->con << " " << s->inst
-		 << " because we've been out of quorum too long" << dendl;
-        messenger->mark_down(s->con);
-        remove_session(s);
-      }
+    } else if (out_for_too_long) {
+      // boot the client Session because we've taken too long getting back in
+      dout(10) << " trimming session " << s->con << " " << s->inst
+        << " because we've been out of quorum too long" << dendl;
+      messenger->mark_down(s->con);
+      remove_session(s);
     }
   }
 
