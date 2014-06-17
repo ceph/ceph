@@ -3977,7 +3977,7 @@ void OSD::send_pg_stats(const utime_t &now)
   osd_stat_t cur_stat = osd_stat;
   stat_lock.Unlock();
 
-  osd_stat.fs_perf_stat = store->get_cur_stats();
+  cur_stat.fs_perf_stat = store->get_cur_stats();
    
   pg_stat_queue_lock.Lock();
 
