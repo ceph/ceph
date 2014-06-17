@@ -394,6 +394,9 @@ OPTION(osd_compact_leveldb_on_mount, OPT_BOOL, false)
 // Maximum number of backfills to or from a single osd
 OPTION(osd_max_backfills, OPT_U64, 10)
 
+// Minimum recovery priority (255 = max, smaller = lower)
+OPTION(osd_min_recovery_priority, OPT_INT, 0)
+
 // Refuse backfills when OSD full ratio is above this value
 OPTION(osd_backfill_full_ratio, OPT_FLOAT, 0.85)
 
