@@ -788,6 +788,16 @@ public:
 			 spg_t pgid);
   void init_splits_between(spg_t pgid, OSDMapRef frommap, OSDMapRef tomap);
 
+  // -- stats --
+  Mutex stat_lock;
+  osd_stat_t osd_stat;
+
+  void update_osd_stat(vector<int>& hb_peers);
+  osd_stat_t get_osd_stat() {
+    Mutex::Locker l(stat_lock);
+    return osd_stat;
+  }
+
   // -- OSD Full Status --
   Mutex full_status_lock;
   enum s_names { NONE, NEAR, FULL } cur_state;
@@ -1258,12 +1268,6 @@ public:
   } heartbeat_dispatcher;
 
 private:
-  // -- stats --
-  Mutex stat_lock;
-  osd_stat_t osd_stat;
-
-  void update_osd_stat();
-  
   // -- waiters --
   list<OpRequestRef> finished;
   Mutex finished_lock;
