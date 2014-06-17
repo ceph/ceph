@@ -28,8 +28,8 @@ public:
     GRANT = 1,
     REJECT = 2,
   };
-  int type;
-  unsigned priority;
+  uint32_t type;
+  uint32_t priority;
 
   MBackfillReserve()
     : Message(MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION),
