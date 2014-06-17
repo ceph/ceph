@@ -355,6 +355,8 @@ def ceph_conf(field, name):
         raise RuntimeError('unable to get conf option %s for %s: %s' % (field, name, errdata))
     return outdata.rstrip()
 
+PROMPT = 'ceph> '
+
 def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
     """
     Do new-style command dance.
@@ -385,8 +387,14 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
             # do the command-interpreter looping
             # for raw_input to do readline cmd editing
             import readline
+
+            if sys.stdin.isatty():
+                prompt = PROMPT
+            else:
+                prompt = ''
+
             while True:
-                interactive_input = raw_input('ceph> ')
+                interactive_input = raw_input(prompt)
                 if interactive_input in ['q', 'quit', 'Q']:
                     return 0, '', ''
                 cmdargs = parse_cmdargs(interactive_input.split())[2]
