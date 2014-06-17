@@ -2973,7 +2973,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     }
 
     // munge -1 truncate to 0 truncate
-    if (op.extent.truncate_seq == 1 && op.extent.truncate_size == (-1ULL)) {
+    if (ceph_osd_op_uses_extent(op.op) &&
+        op.extent.truncate_seq == 1 &&
+        op.extent.truncate_size == (-1ULL)) {
       op.extent.truncate_size = 0;
       op.extent.truncate_seq = 0;
     }
