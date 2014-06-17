@@ -689,11 +689,6 @@ public:
   }
 
   // -- backfill_reservation --
-  enum {
-    BACKFILL_LOW = 0,   // backfill non-degraded PGs
-    BACKFILL_HIGH = 1,	// backfill degraded PGs
-    RECOVERY = AsyncReserver<spg_t>::MAX_PRIORITY  // log based recovery
-  };
   Finisher reserver_finisher;
   AsyncReserver<spg_t> local_reserver;
   AsyncReserver<spg_t> remote_reserver;
