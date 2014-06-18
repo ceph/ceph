@@ -281,15 +281,6 @@ Requires:       librbd1 = %{version}-%{release}
 %description -n ceph-test
 This package contains Ceph benchmarks and test tools.
 
-%package -n ceph-keys
-Summary:        Evil Keys
-Group:          System/Filesystems
-License:        GPL-2.0
-%if 0%{defined suse_version}
-%py_requires
-%endif
-%description -n ceph-keys
-what look like some ceph keys that shodul nto rearly exist in packaging.
 
 #################################################################################
 # common
@@ -373,6 +364,10 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph/
 mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph/
 cp %{S:1} $RPM_BUILD_ROOT/%{_docdir}/ceph/README.SUSE
 rm $RPM_BUILD_ROOT%{python_sitelib}/*.pyo
+rm -f $RPM_BUILD_ROOT/usr/share/ceph/id_dsa_drop.ceph.com
+rm -f $RPM_BUILD_ROOT/usr/share/ceph/id_dsa_drop.ceph.com.pub
+rm -f $RPM_BUILD_ROOT/usr/share/ceph/known_hosts_drop.ceph.com
+
 %clean
 rm -rf $RPM_BUILD_ROOT
 
@@ -635,15 +630,6 @@ systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
 %{python_sitelib}/ceph_rest_api.py*
 %{python_sitelib}/cephfs.py*
 %changelog
-
-%files -n ceph-keys
-%defattr(-,root,root,-)
-%dir /usr/share/ceph
-/usr/share/ceph/id_dsa_drop.ceph.com
-/usr/share/ceph/id_dsa_drop.ceph.com.pub
-/usr/share/ceph/known_hosts_drop.ceph.com
-
-
 
 
 %files -n ceph-test
