@@ -1367,7 +1367,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     const bool wrn = (op_size != (1<<22));
     op_size = uint64_t((op_size + align - 1) / align) * align;
     if (wrn)
-      cerr << "WARNING: op_size has been rounded to " << op_size << std::endl;
+      cerr << "INFO: op_size has been rounded to " << op_size << std::endl;
   }
 
   // snapname?
