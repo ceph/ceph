@@ -1,0 +1,2 @@
+addFilter("missing-call-to-setgroups-before-setuid .*radosgw")
+addFilter("devel-file-in-non-devel-package .*ceph/erasure-code")

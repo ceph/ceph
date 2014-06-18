@@ -1,0 +1,160 @@
+README.SUSE for the ceph package
+================================
+
+Information in this document is mainly taken from the ceph homepage
+[1]. For details about the internals and the architecture, please refer
+to the latter. Especially [2] is a good read to get aquainted with the
+concepts behind ceph.
+
+[1] http://ceph.com
+
+[2] http://ceph.com/docs/master/architecture/
+
+Ceph Components
+===============
+
+ - Monitor (abbrevs.: mon, ceph-mon):
+   - One or more (3 recommended for high availability)
+   - Always odd number for decision making purposes
+   - Handles critical cluster state and configuration information
+   - Tracks the list of osds and their current state
+   - Through it, clients connect to the distributed file system
+ - Meta Data Server (abbbrevs.: mds, ceph-mds):
+   - Provides the ceph filesystem service
+   - One or more:
+     - state <active>: Provides Scalability
+     - state <standby>: Provides High Availability
+ - Object Storage Daemon (abbrevs.: osd, ceph-osd):
+   - One or more, the more the better for data replication
+   - Provides the RADOS service
+   - Peers with other osds for data replication
+   - Services object read/write/etc request from clients
+
+
+Howto set up a small Ceph cluster
+=================================
+
+In this howto (and the corresponding configuration), 5 server instances,
+host0 through host4, are considered and assigned as follows:
+
+ mon:		host0
+ mds:		host0
+ osd0:		host1
+ osd1:		host2
+ osd2:		host3
+
+ client:	host4
+
+Do the following to set up a small cluster for basic testing:
+
+ 1. Install required ceph packages, 'zypper in ceph' should do the trick
+
+ 2. Copy the ceph.conf.SUSE in this directory to host0 as
+    /etc/ceph/ceph.conf
+
+ 3. The easiest way to set things up is to use public key authentication
+    for all osds. This way you will not have to type passwords too
+    often. So create a ssh key pair on host0 and copy the public key to
+    all osds or all hosts you need access to. Please refer to external
+    documentation on how to do this. Remember, this is optional.
+
+ 4. Create btrfs filesystems on each host except the client (host4) you
+    want to use as storage device:
+
+     mkfs.btrfs /dev/sdb
+
+    Every other filesystem will work, so would a partition for basic
+    testing, but btrfs and a dedicated device is recommended.
+
+ 5. Create required directories on each host like so:
+
+     host0: mkdir -p /data/mon.host0
+     host1: mkdir -p /data/osd.0
+     host2: mkdir -p /data/osd.1
+     host3: mkdir -p /data/osd.2
+     host4: mkdir -p /mnt/cephfs
+
+ 6. There is a powerful tool (mkcephfs) which will now set up all hosts
+    according to there individual configuration. For manual setup,
+    please refer to 'man mkcephfs'.
+
+    So, do the following on host0 (mon/mds):
+
+     mkcephfs -c /etc/ceph/ceph.conf --mkbtrfs -a
+
+    The '-a' switch tells mkcephfs to setup all osds via ssh.
+
+    This will copy the configuration to all hosts and will setup the
+    entire cluster.
+
+ 7. Now, just run the following to start all daemons on all hosts and
+    mount all filesystems to their specified targets:
+
+     /etc/init.d/ceph -a start
+
+    If everything has gone right, your cluster is set up and running.
+
+ 8. There are two interesing commands to check if everything is running
+    fine:
+
+     ceph -s: Shows the status of the cluster, including the number of
+              osds and monitors
+     ceph -w: Watch the status as data is copied to and from the osds
+
+ 9. To actually use the cluster, perform the following steps on a client
+    (here: host4):
+
+    1. Make sure ceph-kmp (the kernel modules) is installed, 'zypper in
+       ceph-kmp' should do the trick.
+    2. modprobe ceph
+    3. mount.ceph host0:/ /mnt/cephfs
+
+
+Howto create a RBD image
+========================
+
+ On a machine within the cluster, do:
+
+  1. rbd create foo --size 1024
+
+     This creates a remote image of 1G (1024M) in the default pool,
+     which is 'rbd'. Use the -p switch to create the image in another
+     pool.
+
+   2. Check if image has been created:
+
+      $ rbd ls
+      $ rbd info foo
+
+ On a client machine, do:
+
+  1. Load the rbd module
+  2. echo "10.11.1.48 name=admin rbd foo" > /sys/bus/rbd/add
+     (replace 10.11.1.48 with the IP of your monitor (ceph-mon) system)
+  3. Now you should have a /dev/rbd0 on which you can create a file
+     system:
+
+     $ mkfs -t ext3 /dev/rbd0
+
+  4. Mount it:
+
+      $ mount -t ext3 /dev/rbd0 <mountpoint>
+
+
+Howto create a virtual machine RBD image
+========================================
+
+ 1. Install packages virt-utils and kvm
+ 2. This command will create an RBD image in pool data called openSUSE
+    with size 10G:
+
+    $ qemu-img create -f rbd rbd:data/openSUSE 10G
+
+ 3. Start the VM with:
+
+    $ qemu-kvm --drive format=rbd,file=rbd:data/openSUSE \
+               -cdrom <path to installation media> \
+               -boot d -m 1024
+
+
+Feedback always welcome at http://bugzilla.novell.com.
