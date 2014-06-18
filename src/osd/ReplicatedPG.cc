@@ -11684,7 +11684,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       osd->clog.error() << mode << " " << info.pgid << " " << soid
 			<< " on disk size (" << p->second.size
 			<< ") does not match object info size ("
-			<< oi.size << ") ajusted for ondisk to ("
+			<< oi.size << ") adjusted for ondisk to ("
 			<< pgbackend->be_get_ondisk_size(oi.size)
 			<< ")";
       ++scrubber.shallow_errors;
