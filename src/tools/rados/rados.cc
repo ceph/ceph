@@ -421,10 +421,8 @@ static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op
   char *buf = new char[op_size];
   int count = op_size;
   uint64_t offset = 0;
-  std::cout << "lluis: " << op_size << " " << infile << " " << objname << std::endl;
   while (count != 0) {
     count = read(fd, buf, op_size);
-    std::cout << "lluis: putting " << count << " bytes" << std::endl;
     if (count < 0) {
       ret = -errno;
       cerr << "error reading input file " << infile << ": " << cpp_strerror(ret) << std::endl;
