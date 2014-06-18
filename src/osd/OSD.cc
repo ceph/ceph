@@ -1242,6 +1242,8 @@ int OSD::init()
   disk_tp.start();
   command_tp.start();
 
+  set_disk_tp_priority();
+
   // start the heartbeat
   heartbeat_thread.create();
 
@@ -7258,6 +7260,8 @@ const char** OSD::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {
     "osd_max_backfills",
+    "osd_disk_thread_ioprio_class",
+    "osd_disk_thread_ioprio_priority",
     NULL
   };
   return KEYS;
@@ -7270,6 +7274,20 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
     service.local_reserver.set_max(g_conf->osd_max_backfills);
     service.remote_reserver.set_max(g_conf->osd_max_backfills);
   }
+  if (changed.count("osd_disk_thread_ioprio_class") ||
+      changed.count("osd_disk_thread_ioprio_priority")) {
+    set_disk_tp_priority();
+  }
+}
+
+void OSD::set_disk_tp_priority()
+{
+  dout(10) << __func__
+	   << " class " << cct->_conf->osd_disk_thread_ioprio_class
+	   << " priority " << cct->_conf->osd_disk_thread_ioprio_priority
+	   << dendl;
+  disk_tp.set_ioprio(cct->_conf->osd_disk_thread_ioprio_class,
+		     cct->_conf->osd_disk_thread_ioprio_priority);
 }
 
 // --------------------------------
