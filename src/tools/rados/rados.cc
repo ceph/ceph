@@ -1361,6 +1361,12 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
   }
 
+  // align op_size
+  if (io_ctx.pool_requires_alignment()) {
+    uint64_t align = io_ctx.pool_required_alignment();
+    op_size = uint64_t((op_size + align - 1) / align) * align;
+  }
+
   // snapname?
   if (snapname) {
     ret = io_ctx.snap_lookup(snapname, &snapid);
