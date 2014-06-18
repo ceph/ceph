@@ -90,6 +90,9 @@ function TEST_crush_rule_create_simple_exists() {
 function TEST_crush_rule_create_erasure() {
     local dir=$1
     local ruleset=ruleset3
+    #
+    # create a new ruleset with the default profile, implicitly
+    #
     ./ceph osd crush rule create-erasure $ruleset || return 1
     ./ceph osd crush rule create-erasure $ruleset 2>&1 | \
         grep "$ruleset already exists" || return 1
@@ -98,9 +101,24 @@ function TEST_crush_rule_create_erasure() {
         grep '<op>chooseleaf_indep</op><num>0</num><type>host</type>' || return 1
     ./ceph osd crush rule rm $ruleset || return 1
     ! ./ceph osd crush rule ls | grep $ruleset || return 1
+    #
+    # create a new ruleset with the default profile, explicitly
+    #
     ./ceph osd crush rule create-erasure $ruleset default || return 1
     ./ceph osd crush rule ls | grep $ruleset || return 1
     ./ceph osd crush rule rm $ruleset || return 1
+    ! ./ceph osd crush rule ls | grep $ruleset || return 1
+    #
+    # create a new ruleset and the default profile, implicitly
+    #
+    ./ceph osd erasure-code-profile rm default || return 1
+    ! ./ceph osd erasure-code-profile ls | grep default || return 1
+    ./ceph osd crush rule create-erasure $ruleset || return 1
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
+    grep 'profile default set' $dir/a/log || return 1
+    ./ceph osd erasure-code-profile ls | grep default || return 1
+    ./ceph osd crush rule rm $ruleset || return 1
+    ! ./ceph osd crush rule ls | grep $ruleset || return 1
 }
 
 function TEST_crush_rule_create_erasure_exists() {
@@ -112,6 +130,21 @@ function TEST_crush_rule_create_erasure_exists() {
     ./ceph osd crush rule create-erasure $ruleset 2>&1 | \
         grep "$ruleset already exists" || return 1
     ./ceph osd crush rule rm $ruleset || return 1
+}
+
+function TEST_crush_rule_create_erasure_profile_default_exists() {
+    local dir=$1
+    local ruleset=ruleset6
+    ./ceph osd erasure-code-profile rm default || return 1
+    ! ./ceph osd erasure-code-profile ls | grep default || return 1
+    # add to the pending OSD map without triggering a paxos proposal
+    result=$(echo '{"prefix":"osdmonitor_prepare_command","prepare":"osd erasure-code-profile set","name":"default"}' | nc -U $dir/a/ceph-mon.a.asok | cut --bytes=5-)
+    test $result = true || return 1
+    ./ceph osd crush rule create-erasure $ruleset || return 1
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
+    grep 'profile default already pending' $dir/a/log || return 1
+    ./ceph osd crush rule rm $ruleset || return 1
+    ./ceph osd erasure-code-profile ls | grep default || return 1
 }
 
 main osd-crush

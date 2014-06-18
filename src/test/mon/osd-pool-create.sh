@@ -109,6 +109,28 @@ function TEST_erasure_crush_rule_pending() {
     grep "$crush_ruleset try again" $dir/a/log || return 1
 }
 
+function TEST_erasure_code_profile_default() {
+    local dir=$1
+    run_mon $dir a --public-addr 127.0.0.1
+    ./ceph osd erasure-code-profile rm default || return 1
+    ! ./ceph osd erasure-code-profile ls | grep default || return 1
+    ./ceph osd pool create $poolname 12 12 erasure default
+    ./ceph osd erasure-code-profile ls | grep default || return 1
+}
+
+function TEST_erasure_code_profile_default_pending() {
+    local dir=$1
+    run_mon $dir a --public-addr 127.0.0.1
+    ./ceph osd erasure-code-profile rm default || return 1
+    ! ./ceph osd erasure-code-profile ls | grep default || return 1
+    # add to the pending OSD map without triggering a paxos proposal
+    result=$(echo '{"prefix":"osdmonitor_prepare_command","prepare":"osd erasure-code-profile set","name":"default"}' | nc -U $dir/a/ceph-mon.a.asok | cut --bytes=5-)
+    test $result = true || return 1
+    ./ceph osd pool create pool_erasure 12 12 erasure default || return 1
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
+    grep 'profile default already pending' $dir/a/log || return 1
+}
+
 function TEST_erasure_crush_stripe_width() {
     local dir=$1
     # the default stripe width is used to initialize the pool
