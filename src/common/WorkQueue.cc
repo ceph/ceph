@@ -16,6 +16,7 @@
 
 #include "include/types.h"
 #include "include/utime.h"
+#include "common/errno.h"
 #include "WorkQueue.h"
 
 #include "common/config.h"
@@ -33,6 +34,8 @@ ThreadPool::ThreadPool(CephContext *cct_, string nm, int n, const char *option)
     _stop(false),
     _pause(0),
     _draining(0),
+    ioprio_class(-1),
+    ioprio_priority(-1),
     _num_threads(n),
     last_work_queue(0),
     processing(0)
@@ -156,6 +159,11 @@ void ThreadPool::start_threads()
     WorkThread *wt = new WorkThread(this);
     ldout(cct, 10) << "start_threads creating and starting " << wt << dendl;
     _threads.insert(wt);
+
+    int r = wt->set_ioprio(ioprio_class, ioprio_priority);
+    if (r < 0)
+      lderr(cct) << " set_ioprio got " << cpp_strerror(r) << dendl;
+
     wt->create();
   }
 }
@@ -254,3 +262,16 @@ void ThreadPool::drain(WorkQueue_* wq)
   _lock.Unlock();
 }
 
+void ThreadPool::set_ioprio(int cls, int priority)
+{
+  Mutex::Locker l(_lock);
+  ioprio_class = cls;
+  ioprio_priority = priority;
+  for (set<WorkThread*>::iterator p = _threads.begin();
+       p != _threads.end();
+       ++p) {
+    int r = (*p)->set_ioprio(cls, priority);
+    if (r < 0)
+      lderr(cct) << " set_ioprio got " << cpp_strerror(r) << dendl;
+  }
+}
