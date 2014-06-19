@@ -2649,7 +2649,7 @@ void pg_log_entry_t::dump(Formatter *f) const
   f->dump_string("op", get_op_name());
   f->dump_stream("object") << soid;
   f->dump_stream("version") << version;
-  f->dump_stream("prior_version") << version;
+  f->dump_stream("prior_version") << prior_version;
   f->dump_stream("reqid") << reqid;
   f->dump_stream("mtime") << mtime;
   if (snaps.length() > 0) {
