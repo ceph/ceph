@@ -1566,7 +1566,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     mon->osdmon()->osdmap.pg_to_up_acting_osds(pgid, up, acting);
     if (f) {
       f->open_object_section("pg_map");
-      f->dump_int("epoch", mon->osdmon()->osdmap.get_epoch());
+      f->dump_unsigned("epoch", mon->osdmon()->osdmap.get_epoch());
       f->dump_stream("raw_pgid") << pgid;
       f->dump_stream("pgid") << mpgid;
 
