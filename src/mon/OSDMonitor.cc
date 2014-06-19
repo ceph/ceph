@@ -2254,7 +2254,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
   } else if (prefix == "osd getmaxosd") {
     if (f) {
       f->open_object_section("getmaxosd");
-      f->dump_int("epoch", osdmap.get_epoch());
+      f->dump_unsigned("epoch", osdmap.get_epoch());
       f->dump_int("max_osd", osdmap.get_max_osd());
       f->close_section();
       f->flush(rdata);
@@ -2338,7 +2338,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       fullobjname = oid.name;
     if (f) {
       f->open_object_section("osd_map");
-      f->dump_int("epoch", osdmap.get_epoch());
+      f->dump_unsigned("epoch", osdmap.get_epoch());
       f->dump_string("pool", poolstr);
       f->dump_int("pool_id", pool);
       f->dump_stream("objname") << fullobjname;
