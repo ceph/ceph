@@ -154,7 +154,7 @@ int RGWGC::process(int index, int max_secs)
 
   string marker;
   bool truncated;
-  IoCtx *ctx = NULL;
+  IoCtx *ctx = new IoCtx;
   do {
     int max = 100;
     std::list<cls_rgw_gc_obj_info> entries;
@@ -167,7 +167,6 @@ int RGWGC::process(int index, int max_secs)
       goto done;
 
     string last_pool;
-    ctx = new IoCtx;
     std::list<cls_rgw_gc_obj_info>::iterator iter;
     for (iter = entries.begin(); iter != entries.end(); ++iter) {
       bool remove_tag;
