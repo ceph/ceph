@@ -18,6 +18,7 @@ class Config(object):
         'lock_server': 'http://teuthology.front.sepia.ceph.com/locker/lock',
         'max_job_time': 259200,  # 3 days
         'results_server': 'http://paddles.front.sepia.ceph.com/',
+        'results_email': 'ceph-qa@ceph.com',
         'verify_host_keys': True,
         'watchdog_interval': 600,
     }
