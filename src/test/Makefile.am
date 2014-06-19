@@ -245,7 +245,18 @@ check_SCRIPTS += \
 
 EXTRA_DIST += \
 	$(srcdir)/test/mon/mon-test-helpers.sh \
-	$(srcdir)/test/osd/osd-test-helpers.sh
+	$(srcdir)/test/osd/osd-test-helpers.sh \
+        $(srcdir)/test/coverage.sh \
+        $(srcdir)/test/erasure-code/test-erasure-code.sh \
+        $(srcdir)/test/mon/osd-pool-create.sh \
+        $(srcdir)/test/mon/misc.sh \
+        $(srcdir)/test/mon/osd-crush.sh \
+        $(srcdir)/test/mon/osd-erasure-code-profile.sh \
+        $(srcdir)/test/mon/mkfs.sh \
+        $(srcdir)/test/ceph-disk.sh \
+        $(srcdir)/test/mon/mon-handle-forward.sh \
+        $(srcdir)/test/vstart_wrapped_tests.sh \
+        $(srcdir)/test/pybind/test_ceph_argparse.py
 
 # target to build but not run the unit tests
 unittests:: $(check_PROGRAMS)
