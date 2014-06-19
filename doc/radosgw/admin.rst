@@ -258,7 +258,7 @@ secret. You may also remove an access key and secret. Options include:
 
 To add a key, specify the user. ::
 
-	radosgw-admin key create --uid=johndoe --key-type=s3 --gen-key --gen-secret
+	radosgw-admin key create --uid=johndoe --key-type=s3 --gen-access-key --gen-secret
 
 You may also specify a key and a secret.
 
