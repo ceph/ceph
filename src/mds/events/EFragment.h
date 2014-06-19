@@ -68,6 +68,8 @@ public:
       ::encode(*drb, rollback);
   }
 
+  EMetaBlob *get_metablob() { return &metablob; }
+
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;

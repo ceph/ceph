@@ -136,6 +136,8 @@ public:
     out << commit;
   }
 
+  EMetaBlob *get_metablob() { return &commit; }
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
