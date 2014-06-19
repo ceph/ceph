@@ -1915,7 +1915,7 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
 
   if (f) {
     f->open_object_section("timechecks");
-    f->dump_int("epoch", get_epoch());
+    f->dump_unsigned("epoch", get_epoch());
     f->dump_int("round", timecheck_round);
     f->dump_stream("round_status")
       << ((timecheck_round%2) ? "on-going" : "finished");
