@@ -4,8 +4,8 @@ import teuthology.suite
 
 doc = """
 usage: teuthology-suite [-h]
-       teuthology-suite --name <name> --suite <suite> [options]
-       teuthology-suite -n <name> -s <suite> [options] [<config_yaml>...]
+       teuthology-suite --suite <suite> [options]
+       teuthology-suite  -s <suite> [options] [<config_yaml>...]
 
 Run a suite of ceph integration tests. A suite is a directory containing
 facets. A facet is a directory containing config snippets. Running a suite
@@ -21,13 +21,27 @@ Miscellaneous arguments:
 
 Standard arguments:
   <config_yaml>               Optional extra job yaml to include
-  -n, --name <name>           Name for this suite
   --base <base>               Base directory for the suite
                               e.g. ~/src/ceph-qa-suite/suites
   -s <suite>, --suite <suite>
                               The suite to schedule
+  -c <ceph>, --ceph <ceph>    The ceph branch to run against
+                              [default: master]
+  -k <kernel>, --kernel <kernel>
+                              The kernel branch to run against
+                              [default: testing]
+  -f <flavor>, --flavor <flavor>
+                              The kernel flavor to run against: ('basic',
+                              'gcov', 'notcmalloc')
+                              [default: basic]
+  -t <branch>, --teuthology-branch <branch>
+                              The teuthology branch to run against
+                              [default: master]
   -m <type>, --machine-type <type>
                               Machine type [default: plana]
+  -d <distro>, --distro <distro>
+                              Distribution to run against
+                              [default: ubuntu]
 
 Scheduler arguments:
   --owner <owner>             Job owner
