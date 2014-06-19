@@ -164,7 +164,6 @@ EXTRA_DIST += \
 	$(srcdir)/.git_version \
 	$(srcdir)/ceph-rbdnamer \
 	$(srcdir)/test/encoding/readable.sh \
-	$(srcdir)/test/encoding/check-generated.sh \
 	$(srcdir)/upstart/ceph-all.conf \
 	$(srcdir)/upstart/ceph-mon.conf \
 	$(srcdir)/upstart/ceph-mon-all.conf \
@@ -190,7 +189,6 @@ EXTRA_DIST += \
 	ceph-crush-location \
 	mount.fuse.ceph \
 	rbdmap \
-	unittest_bufferlist.sh \
 	yasm-wrapper
 
 EXTRA_DIST += \
