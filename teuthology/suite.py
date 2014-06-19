@@ -379,7 +379,15 @@ def schedule_suite(name,
         arg.extend(config)
 
         if dry_run:
-            log.info('dry-run: %s' % ' '.join(arg))
+            # Quote any individual args so that individual commands can be
+            # copied and pasted in order to execute them individually.
+            printable_args = []
+            for item in arg:
+                if ' ' in item:
+                    printable_args.append("'%s'" % item)
+                else:
+                    printable_args.append(item)
+            log.info('dry-run: %s' % ' '.join(printable_args))
         else:
             subprocess.check_call(
                 args=arg,
