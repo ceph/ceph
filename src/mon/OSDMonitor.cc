@@ -2344,7 +2344,10 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       f->dump_stream("objname") << fullobjname;
       f->dump_stream("raw_pgid") << pgid;
       f->dump_stream("pgid") << mpgid;
-      f->dump_stream("up") << up;
+      f->open_array_section("up");
+      for (vector<int>::iterator p = up.begin(); p != up.end(); ++p)
+        f->dump_int("osd", *p);
+      f->close_section();
       f->dump_int("up_primary", up_p);
       f->open_array_section("acting");
       for (vector<int>::iterator p = acting.begin(); p != acting.end(); ++p)
