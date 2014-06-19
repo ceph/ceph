@@ -1392,6 +1392,24 @@ int RGWRados::init_rados()
   return ret;
 }
 
+/**
+ * Add new connection to connections map
+ * @param region_conn_map map which new connection will be added to 
+ * @param region region which new connection will connect to
+ * @param new_connection pointer to new connection instance
+ */
+static void add_new_connection_to_map(map<string, RGWRESTConn *> &region_conn_map, RGWRegion &region, RGWRESTConn *new_connection) 
+{
+  // Delete if connection is already exists
+  map<string, RGWRESTConn *>::iterator iterRegion = region_conn_map.find(region.name);
+  if (iterRegion != region_conn_map.end()) {
+    delete iterRegion->second;
+  }
+    
+  // Add new connection to connections map
+  region_conn_map[region.name] = new_connection;
+}
+
 /** 
  * Initialize the RADOS instance and prepare to do other ops
  * Returns 0 on success, -ERR# on failure.
@@ -1434,8 +1452,7 @@ int RGWRados::init_complete()
 
     for (iter = region_map.regions.begin(); iter != region_map.regions.end(); ++iter) {
       RGWRegion& region = iter->second;
-
-      region_conn_map[region.name] = new RGWRESTConn(cct, this, region.endpoints);
+      add_new_connection_to_map(region_conn_map, region, new RGWRESTConn(cct, this, region.endpoints));
     }
   }
 
