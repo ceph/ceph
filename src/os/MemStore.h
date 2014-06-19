@@ -16,6 +16,7 @@
 #ifndef CEPH_MEMSTORE_H
 #define CEPH_MEMSTORE_H
 
+#include <mutex>
 #include <boost/intrusive_ptr.hpp>
 
 #include "include/assert.h"
@@ -29,6 +30,7 @@
 class MemStore : public ObjectStore {
 public:
   struct Object : public RefCountedObject {
+    std::mutex omap_mutex;
     map<string,bufferptr> xattr;
     bufferlist omap_header;
     map<string,bufferlist> omap;
@@ -188,35 +190,35 @@ private:
       : c(c), o(o), it(o->omap.begin()) {}
 
     int seek_to_first() {
-      RWLock::RLocker l(c->lock);
+      std::lock_guard<std::mutex>(o->omap_mutex);
       it = o->omap.begin();
       return 0;
     }
     int upper_bound(const string &after) {
-      RWLock::RLocker l(c->lock);
+      std::lock_guard<std::mutex>(o->omap_mutex);
       it = o->omap.upper_bound(after);
       return 0;
     }
     int lower_bound(const string &to) {
-      RWLock::RLocker l(c->lock);
+      std::lock_guard<std::mutex>(o->omap_mutex);
       it = o->omap.lower_bound(to);
       return 0;
     }
     bool valid() {
-      RWLock::RLocker l(c->lock);
+      std::lock_guard<std::mutex>(o->omap_mutex);
       return it != o->omap.end();      
     }
     int next() {
-      RWLock::RLocker l(c->lock);
+      std::lock_guard<std::mutex>(o->omap_mutex);
       ++it;
       return 0;
     }
     string key() {
-      RWLock::RLocker l(c->lock);
+      std::lock_guard<std::mutex>(o->omap_mutex);
       return it->first;
     }
     bufferlist value() {
-      RWLock::RLocker l(c->lock);
+      std::lock_guard<std::mutex>(o->omap_mutex);
       return it->second;
     }
     int status() {

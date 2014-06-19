@@ -463,6 +463,7 @@ int MemStore::omap_get(
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
+  std::lock_guard<std::mutex> lock(o->omap_mutex);
   *header = o->omap_header;
   *out = o->omap;
   return 0;
@@ -484,6 +485,7 @@ int MemStore::omap_get_header(
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
+  std::lock_guard<std::mutex> lock(o->omap_mutex);
   *header = o->omap_header;
   return 0;
 }
@@ -503,6 +505,7 @@ int MemStore::omap_get_keys(
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
+  std::lock_guard<std::mutex> lock(o->omap_mutex);
   for (map<string,bufferlist>::iterator p = o->omap.begin();
        p != o->omap.end();
        ++p)
@@ -526,6 +529,7 @@ int MemStore::omap_get_values(
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
+  std::lock_guard<std::mutex> lock(o->omap_mutex);
   for (set<string>::const_iterator p = keys.begin();
        p != keys.end();
        ++p) {
@@ -552,6 +556,7 @@ int MemStore::omap_check_keys(
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
+  std::lock_guard<std::mutex> lock(o->omap_mutex);
   for (set<string>::const_iterator p = keys.begin();
        p != keys.end();
        ++p) {
@@ -1109,6 +1114,12 @@ int MemStore::_clone(coll_t cid, const ghobject_t& oldoid,
   }
   used_bytes += oo->get_size() - no->get_size();
   no->clone(oo.get(), 0, oo->get_size(), 0);
+
+  // take both omap locks with std::lock()
+  std::unique_lock<std::mutex> oo_lock(oo->omap_mutex, std::defer_lock),
+      no_lock(no->omap_mutex, std::defer_lock);
+  std::lock(oo_lock, no_lock);
+
   no->omap_header = oo->omap_header;
   no->omap = oo->omap;
   no->xattr = oo->xattr;
@@ -1160,6 +1171,7 @@ int MemStore::_omap_clear(coll_t cid, const ghobject_t &oid)
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
+  std::lock_guard<std::mutex> lock(o->omap_mutex);
   o->omap.clear();
   o->omap_header.clear();
   return 0;
@@ -1177,6 +1189,7 @@ int MemStore::_omap_setkeys(coll_t cid, const ghobject_t &oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
+  std::lock_guard<std::mutex> lock(o->omap_mutex);
   for (map<string,bufferlist>::const_iterator p = aset.begin(); p != aset.end(); ++p)
     o->omap[p->first] = p->second;
   return 0;
@@ -1194,6 +1207,7 @@ int MemStore::_omap_rmkeys(coll_t cid, const ghobject_t &oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
+  std::lock_guard<std::mutex> lock(o->omap_mutex);
   for (set<string>::const_iterator p = keys.begin(); p != keys.end(); ++p)
     o->omap.erase(*p);
   return 0;
@@ -1212,10 +1226,10 @@ int MemStore::_omap_rmkeyrange(coll_t cid, const ghobject_t &oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
+  std::lock_guard<std::mutex> lock(o->omap_mutex);
   map<string,bufferlist>::iterator p = o->omap.lower_bound(first);
   map<string,bufferlist>::iterator e = o->omap.lower_bound(last);
-  while (p != e)
-    o->omap.erase(p++);
+  o->omap.erase(p, e);
   return 0;
 }
 
@@ -1231,6 +1245,7 @@ int MemStore::_omap_setheader(coll_t cid, const ghobject_t &oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
+  std::lock_guard<std::mutex> lock(o->omap_mutex);
   o->omap_header = bl;
   return 0;
 }
