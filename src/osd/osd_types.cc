@@ -2102,8 +2102,8 @@ void pg_notify_t::dump(Formatter *f) const
 {
   f->dump_int("from", from);
   f->dump_int("to", to);
-  f->dump_stream("query_epoch") << query_epoch;
-  f->dump_stream("epoch_sent") << epoch_sent;
+  f->dump_unsigned("query_epoch", query_epoch);
+  f->dump_unsigned("epoch_sent", epoch_sent);
   {
     f->open_object_section("info");
     info.dump(f);
@@ -2461,8 +2461,8 @@ struct DumpVisitor : public ObjectModDesc::Visitor {
 void ObjectModDesc::dump(Formatter *f) const
 {
   f->open_object_section("object_mod_desc");
-  f->dump_stream("can_local_rollback") << can_local_rollback;
-  f->dump_stream("stashed") << stashed;
+  f->dump_bool("can_local_rollback", can_local_rollback);
+  f->dump_bool("stashed", stashed);
   {
     f->open_array_section("ops");
     DumpVisitor vis(f);
