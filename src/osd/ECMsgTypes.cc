@@ -70,8 +70,8 @@ void ECSubWrite::dump(Formatter *f) const
   f->dump_stream("reqid") << reqid;
   f->dump_stream("at_version") << at_version;
   f->dump_stream("trim_to") << trim_to;
-  f->dump_stream("has_updated_hit_set_history")
-    << static_cast<bool>(updated_hit_set_history);
+  f->dump_bool("has_updated_hit_set_history",
+      static_cast<bool>(updated_hit_set_history));
 }
 
 void ECSubWrite::generate_test_instances(list<ECSubWrite*> &o)
@@ -123,8 +123,8 @@ void ECSubWriteReply::dump(Formatter *f) const
 {
   f->dump_unsigned("tid", tid);
   f->dump_stream("last_complete") << last_complete;
-  f->dump_stream("committed") << committed;
-  f->dump_stream("applied") << applied;
+  f->dump_bool("committed", committed);
+  f->dump_bool("applied", applied);
 }
 
 void ECSubWriteReply::generate_test_instances(list<ECSubWriteReply*>& o)
