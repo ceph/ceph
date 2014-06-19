@@ -34,9 +34,9 @@ TEST(lru, InsertTop) {
   for (int i=0; i<100; i++) {
     lru.lru_insert_top(new Item(i));
   }
-  ASSERT_EQ(5, lru.lru_get_top());
-  ASSERT_EQ(95, lru.lru_get_bot());
-  ASSERT_EQ(100, lru.lru_get_size());
+  ASSERT_EQ(5U, lru.lru_get_top());
+  ASSERT_EQ(95U, lru.lru_get_bot());
+  ASSERT_EQ(100U, lru.lru_get_size());
 
   ASSERT_EQ(0, (static_cast<Item*>(lru.lru_expire()))->id);
 }
@@ -47,9 +47,9 @@ TEST(lru, InsertMid) {
   for (int i=0; i<100; i++) {
     lru.lru_insert_mid(new Item(i));
   }
-  ASSERT_EQ(0, lru.lru_get_top());
-  ASSERT_EQ(100, lru.lru_get_bot());
-  ASSERT_EQ(100, lru.lru_get_size());
+  ASSERT_EQ(0U, lru.lru_get_top());
+  ASSERT_EQ(100U, lru.lru_get_bot());
+  ASSERT_EQ(100U, lru.lru_get_size());
 
   ASSERT_EQ(0, (static_cast<Item*>(lru.lru_expire()))->id);
 }
@@ -60,9 +60,9 @@ TEST(lru, InsertBot) {
   for (int i=0; i<100; i++) {
     lru.lru_insert_bot(new Item(i));
   }
-  ASSERT_EQ(0, lru.lru_get_top());
-  ASSERT_EQ(100, lru.lru_get_bot());
-  ASSERT_EQ(100, lru.lru_get_size());
+  ASSERT_EQ(0U, lru.lru_get_top());
+  ASSERT_EQ(100U, lru.lru_get_bot());
+  ASSERT_EQ(100U, lru.lru_get_size());
 
   ASSERT_EQ(99, (static_cast<Item*>(lru.lru_expire()))->id);
 }
@@ -74,9 +74,9 @@ TEST(lru, Adjust) {
   for (int i=0; i<100; i++) {
     lru.lru_touch(new Item(i));
   }
-  ASSERT_EQ(6, lru.lru_get_top());
-  ASSERT_EQ(94, lru.lru_get_bot());
-  ASSERT_EQ(100, lru.lru_get_size());
+  ASSERT_EQ(6U, lru.lru_get_top());
+  ASSERT_EQ(94U, lru.lru_get_bot());
+  ASSERT_EQ(100U, lru.lru_get_size());
 
   lru.lru_clear();
 
@@ -84,9 +84,9 @@ TEST(lru, Adjust) {
   for (int i=0; i<100; i++) {
     lru.lru_touch(new Item(i));
   }
-  ASSERT_EQ(12, lru.lru_get_top());
-  ASSERT_EQ(88, lru.lru_get_bot());
-  ASSERT_EQ(100, lru.lru_get_size());
+  ASSERT_EQ(12U, lru.lru_get_top());
+  ASSERT_EQ(88U, lru.lru_get_bot());
+  ASSERT_EQ(100U, lru.lru_get_size());
 }
 
 TEST(lru, Pinning) {
@@ -108,12 +108,12 @@ TEST(lru, Pinning) {
 
   ob1->lru_pin();
   ob1->lru_pin(); // Verify that, one incr.
-  ASSERT_EQ(1, lru.lru_get_num_pinned());
+  ASSERT_EQ(1U, lru.lru_get_num_pinned());
   ASSERT_FALSE(ob1->lru_is_expireable());
 
   ob1->lru_unpin();
   ob1->lru_unpin(); // Verify that, one decr.
-  ASSERT_EQ(0, lru.lru_get_num_pinned());
+  ASSERT_EQ(0U, lru.lru_get_num_pinned());
   ASSERT_TRUE(ob1->lru_is_expireable());
 
   ASSERT_EQ(0, (static_cast<Item*>(lru.lru_expire()))->id);
