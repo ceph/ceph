@@ -115,7 +115,7 @@ public:
    * If the subclass embeds a MetaBlob, return it here so that
    * tools can examine metablobs while traversing lists of LogEvent.
    */
-  virtual EMetaBlob const *get_metablob() const {return NULL;}
+  virtual EMetaBlob *get_metablob() { return NULL; }
 };
 
 inline ostream& operator<<(ostream& out, LogEvent& le) {
