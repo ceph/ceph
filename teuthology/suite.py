@@ -202,16 +202,15 @@ def prepare_and_schedule(owner, name, suite, machine_type, base,
 
 def schedule_fail(message, name=None):
     email = config.results_email
-    if not email:
-        return
-    subject = "Failed to schedule {name}".format(name=name)
-    msg = MIMEText(message)
-    msg['Subject'] = subject
-    msg['From'] = config.results_sending_email
-    msg['To'] = email
-    smtp = smtplib.SMTP('localhost')
-    smtp.sendmail(msg['From'], [msg['To']], msg.as_string())
-    smtp.quit()
+    if email:
+        subject = "Failed to schedule {name}".format(name=name)
+        msg = MIMEText(message)
+        msg['Subject'] = subject
+        msg['From'] = config.results_sending_email
+        msg['To'] = email
+        smtp = smtplib.SMTP('localhost')
+        smtp.sendmail(msg['From'], [msg['To']], msg.as_string())
+        smtp.quit()
     raise ScheduleFailError(message, name)
 
 
