@@ -105,7 +105,7 @@ ostream &operator<<(ostream &lhs, const ECBackend::ReadOp &rhs)
 
 void ECBackend::ReadOp::dump(Formatter *f) const
 {
-  f->dump_stream("tid") << tid;
+  f->dump_unsigned("tid", tid);
   if (op && op->get_req()) {
     f->dump_stream("op") << *(op->get_req());
   }
