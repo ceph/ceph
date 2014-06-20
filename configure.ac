@@ -763,6 +763,13 @@ AC_CHECK_TYPES([__u8, __s8, __u16, __s16, __u32, __s32, __u64, __s64, __le16,
 AC_CHECK_HEADER([lttng/tracepoint.h], [],
   AC_MSG_ERROR([lttng/tracepoint.h not found (liblttng-ust-dev)]))
 
+AC_CHECK_PROG([LTTNG_GEN_TP_CHECK], [lttng-gen-tp], [yes])
+if test x"$LTTNG_GEN_TP_CHECK" != "xyes"; then
+    AC_MSG_FAILURE([lttng-gen-tp not found])
+fi
+AC_SUBST([LTTNG_GEN_TP_PROG], [lttng-gen-tp])
+
+
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
 #AC_C_CONST
