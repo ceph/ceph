@@ -188,6 +188,18 @@ ceph osd dump | grep cache3 | grep bloom | grep 'false_positive_probability: 0.0
 ceph osd tier remove data cache3
 ceph osd pool delete cache3 cache3 --yes-i-really-really-mean-it
 
+# protection against pool removal when used as tiers
+ceph osd pool create datapool 2
+ceph osd pool create cachepool 2
+ceph osd tier add-cache datapool cachepool 1024000
+ceph osd pool delete cachepool cachepool --yes-i-really-really-mean-it 2> $TMPFILE || true
+check_response "EBUSY: pool 'cachepool' is a tier of 'datapool'"
+ceph osd pool delete datapool datapool --yes-i-really-really-mean-it 2> $TMPFILE || true
+check_response "EBUSY: pool 'datapool' has tiers cachepool"
+ceph osd tier remove datapool cachepool
+ceph osd pool delete cachepool cachepool --yes-i-really-really-mean-it
+ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
+
 # check health check
 ceph osd pool create cache4 2
 ceph osd pool set cache4 target_max_objects 5
