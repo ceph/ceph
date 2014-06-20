@@ -41,7 +41,7 @@
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDSubOpReply.h"
 #include "common/BackTrace.h"
-#include "tracing/pg.tp.h"
+#include "tracing/pg.h"
 
 #include <sstream>
 
