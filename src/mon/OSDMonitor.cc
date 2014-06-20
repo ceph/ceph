@@ -5698,8 +5698,12 @@ int OSDMonitor::_check_remove_pool(int64_t pool, const pg_pool_t *p,
     return -EBUSY;
   }
   if (!p->tiers.empty()) {
-    *ss << "pool '" << poolstr << "' includes tiers "
-	<< p->tiers;
+    *ss << "pool '" << poolstr << "' has tiers";
+    for(std::set<uint64_t>::iterator i = p->tiers.begin(); i != p->tiers.end(); ++i) {
+      const char *name = osdmap.get_pool_name(*i);
+      assert(name != NULL);
+      *ss << " " << name;
+    }
     return -EBUSY;
   }
   *ss << "pool '" << poolstr << "' removed";
