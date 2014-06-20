@@ -2091,8 +2091,14 @@ def main_activate_all(args):
         if name.find('.') < 0:
             continue
         (tag, uuid) = name.split('.')
-        if tag == OSD_UUID:
-            path = os.path.join(dir, name)
+
+        if tag == OSD_UUID or tag == DMCRYPT_OSD_UUID:
+
+            if tag == DMCRYPT_OSD_UUID:
+                path = os.path.join('/dev/mapper', uuid)
+            else:
+                path = os.path.join(dir, name)
+
             LOG.info('Activating %s', path)
             activate_lock.acquire()
             try:
