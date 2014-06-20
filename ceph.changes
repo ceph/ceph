@@ -2,7 +2,7 @@
 Wed Jun 18 15:35:04 CEST 2014 - osynge@suse.com
 
 - Removed ceph-keys from the spec file.
-  * These upstream keys are removed for security and 
+  * These upstream keys are removed for security and
     privacy reasons.
 
 -------------------------------------------------------------------
