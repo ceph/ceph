@@ -19,7 +19,7 @@
 #include "common/config.h"
 #include "include/utime.h"
 #include "common/Clock.h"
-#include "tracing/mutex.tp.h"
+#include "tracing/mutex.h"
 
 Mutex::Mutex(const char *n, bool r, bool ld,
 	     bool bt,
