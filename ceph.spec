@@ -353,6 +353,11 @@ ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/usr/sbin/rcceph-radosgw
 install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
+
+# udev rules
+install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rules
+install -m 0644 -D udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
+
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
 %if 0%{?suse_version} >= 1310
@@ -378,24 +383,24 @@ systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
 %endif
 #/sbin/chkconfig --add ceph
 
-#%preun
-#%if %{defined suse_version}
-#%stop_on_removal ceph
-#%endif
-#if [ $1 = 0 ] ; then
-#    /sbin/service ceph stop >/dev/null 2>&1
-#    /sbin/chkconfig --del ceph
-#fi
+%preun
+%if %{defined suse_version}
+%stop_on_removal ceph
+%endif
+if [ $1 = 0 ] ; then
+    /sbin/service ceph stop >/dev/null 2>&1
+    /sbin/chkconfig --del ceph
+fi
 
-#%postun
-#/sbin/ldconfig
-#if [ "$1" -ge "1" ] ; then
-#    /sbin/service ceph condrestart >/dev/null 2>&1 || :
-#fi
-#%if %{defined suse_version}
-#%restart_on_update ceph
-#%insserv_cleanup
-#%endif
+%postun
+/sbin/ldconfig
+if [ "$1" -ge "1" ] ; then
+    /sbin/service ceph condrestart >/dev/null 2>&1 || :
+fi
+%if %{defined suse_version}
+%restart_on_update ceph
+%insserv_cleanup
+%endif
 
 #################################################################################
 # files
@@ -452,6 +457,10 @@ systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
 %{_sbindir}/ceph-disk-udev
 /sbin/mount.fuse.ceph
 %{_libdir}/ceph
+%dir /lib/udev
+%dir /lib/udev/rules.d
+/lib/udev/rules.d/50-rbd.rules
+/lib/udev/rules.d/95-ceph-osd.rules
 %config %{_sysconfdir}/bash_completion.d/ceph
 %config %{_sysconfdir}/bash_completion.d/rados
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin
@@ -714,3 +723,4 @@ systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
 %{_bindir}/ceph_test_rados_api_tier
 %{_bindir}/ceph_test_rgw_manifest
 
+%changelog

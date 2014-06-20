@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Fri Jun 20 16:45:23 UTC 2014 - osynge@suse.com
+- Fixing untracked changes that came from merging many ceph builds.
+  * Re added %preun and %postun functions.
+  * Re added udev rules.
+
+-------------------------------------------------------------------
 Wed Jun 18 15:35:04 CEST 2014 - osynge@suse.com
 
 - Removed ceph-keys from the spec file.
