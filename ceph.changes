@@ -120,7 +120,7 @@ Tue May 16 14:50:17 CEST 2014 - osynge@suse.com
 Wed Feb  5 14:22:27 UTC 2014 - ddiss@suse.com
 
 - Updated to v0.72.2
-  + mon: \u2018osd pool set ...\u2019 syntax change
+  + mon: 'osd pool set ...' syntax change
   + osd: added test for missing on-disk HEAD object
   + osd: fix osd bench block size argument
   + rgw: fix hang on large object GET
