@@ -2277,8 +2277,6 @@ next:
       for (list<rgw_bi_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
         rgw_bi_log_entry& entry = *iter;
         encode_json("entry", entry, formatter);
-
-        marker = entry.id;
       }
       formatter->flush(cout);
     } while (truncated && count < max_entries);

@@ -151,7 +151,7 @@ int cls_rgw_bucket_check_index_op(IoCtx& io_ctx,
 {
   int ret;
   vector<librados::AioCompletion*> completions;
-  bufferlist in, out;
+  bufferlist in;
   map<string, struct rgw_cls_check_index_ret>::iterator iter = results.begin();
   while (iter != results.end()) {
     completions.clear();
@@ -366,7 +366,6 @@ int cls_rgw_bi_log_list(IoCtx& io_ctx, map<string, cls_rgw_bi_log_list_ret>& lis
       return ret;
   }
 
-  uint32_t num = max / (list_results.size());
   vector<librados::AioCompletion*> completions;
   map<string, cls_rgw_bi_log_list_ret>::iterator iter = list_results.begin();
   while (iter != list_results.end()) {
@@ -377,17 +376,14 @@ int cls_rgw_bi_log_list(IoCtx& io_ctx, map<string, cls_rgw_bi_log_list_ret>& lis
       cls_rgw_bi_log_list_op call;
       if (!markers.empty()) {
         // It requires a marker for each shard
-        if (!markers.count(iter->first))
-          return -EINVAL;
-        call.marker = markers[iter->first];
+        if (markers.count(iter->first))
+          call.marker = markers[iter->first];
+        else
+          call.marker = "";
       } else {
         call.marker = marker;
       }
-      if (iter == list_results.begin()) {
-        call.max = num + (max % (list_results.size()));
-      } else {
-        call.max = num;
-      }
+      call.max = max;
       ::encode(call, in);
 
       librados::ObjectReadOperation op;
@@ -422,9 +418,9 @@ int cls_rgw_bi_log_trim(IoCtx& io_ctx, vector<string>& bucket_objs, string& star
     vector<string>::iterator viter;
     for (viter = bucket_objs.begin(); viter != bucket_objs.end(); ++viter) {
        if (start_markers.count(*viter) == 0)
-         return -EINVAL;
+         start_markers[*viter] = "";
        if (end_markers.count(*viter) == 0)
-         return -EINVAL;
+         end_markers[*viter] = "";
     }
   }
 
@@ -436,7 +432,7 @@ int cls_rgw_bi_log_trim(IoCtx& io_ctx, vector<string>& bucket_objs, string& star
     uint32_t max_aio_requests = max_io;
     for (iter = bucket_objs.begin(); iter != bucket_objs.end() && max_aio_requests-- > 0; ++iter)
     {
-      bufferlist in, out;
+      bufferlist in;
       cls_rgw_bi_log_trim_op call;
       if (!start_markers.empty()) {
         call.start_marker = start_markers[*iter];
@@ -468,6 +464,8 @@ int cls_rgw_bi_log_trim(IoCtx& io_ctx, vector<string>& bucket_objs, string& star
       }
       miter->first->release();
     }
+    if (ret < 0)
+      break;
   } while (!bucket_objs.empty());
 
   return ret;
@@ -596,7 +594,7 @@ int cls_rgw_util_wait_for_complete_and_cb(const vector<librados::AioCompletion*>
   for (iter = completions.begin(); iter != completions.end(); ++iter) {
     (*iter)->wait_for_complete_and_cb();
     int r = (*iter)->get_return_value();
-    if (r != 0) {
+    if (r < 0) {
       ret = r;
     }
 
@@ -613,7 +611,7 @@ int cls_rgw_util_wait_for_complete(const vector<librados::AioCompletion*>& compl
   for (iter = completions.begin(); iter != completions.end(); ++iter) {
     (*iter)->wait_for_complete();
     int r = (*iter)->get_return_value();
-    if (r != 0) {
+    if (r < 0) {
       ret = r;
     }
 

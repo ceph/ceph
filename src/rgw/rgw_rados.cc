@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
+#include <boost/algorithm/string.hpp>
+
 #include "common/ceph_json.h"
 
 #include "common/errno.h"
@@ -3726,7 +3728,7 @@ int RGWRados::open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
 {
   string bucket_oid_base;
   open_bucket_index_base(bucket, index_ctx, bucket_oid_base);
- 
+
   // Get the bucket info
   RGWBucketInfo binfo;
   int ret = get_bucket_info(NULL, bucket.name, binfo, NULL, NULL);
@@ -5317,17 +5319,13 @@ class RGWGetBucketStatsContext : public RGWGetDirHeader_CB {
   RGWGetBucketStats_CB *cb;
   uint32_t pendings;
   map<RGWObjCategory, RGWStorageStats> stats;
-  uint64_t ver;
-  uint64_t master_ver;
-  string max_marker;
   int ret_code;
   bool should_cb;
   Mutex lock;
 
 public:
   RGWGetBucketStatsContext(RGWGetBucketStats_CB *_cb, uint32_t _pendings) : cb(_cb),
-    pendings(_pendings), stats(), ver(0), master_ver(0), max_marker(),
-    ret_code(0), should_cb(true), lock("RGWGetBucketStatsContext") {}
+    pendings(_pendings), stats(), ret_code(0), should_cb(true), lock("RGWGetBucketStatsContext") {}
   void handle_response(int r, rgw_bucket_dir_header& header) {
     Mutex::Locker l(lock);
     if (should_cb) {
@@ -5339,8 +5337,8 @@ public:
       // Are we all done?
       if (--pendings == 0) {
         if (ret_code == 0)
-          cb->set_response(ver, master_ver, &stats, max_marker);
-        cb->handle_response(r);
+          cb->set_response(&stats);
+        cb->handle_response(ret_code);
         cb->put();
       }
     }
@@ -5751,7 +5749,7 @@ int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
     ent.size = 0;
 
     map<string, rgw_bucket_dir_header>::iterator hiter;
-    for (hiter = headers.begin(); hiter != headers.end(); ++hiter) { 
+    for (hiter = headers.begin(); hiter != headers.end(); ++hiter) {
       RGWObjCategory category = main_category;
       map<uint8_t, struct rgw_bucket_category_stats>::iterator iter = (hiter->second.stats).find((uint8_t)category);
       if (iter != hiter->second.stats.end()) {
@@ -5901,32 +5899,62 @@ int RGWRados::list_bi_log_entries(rgw_bucket& bucket, string& marker, uint32_t m
   map<string, cls_rgw_bi_log_list_ret>::iterator miter;
   string max_entry_id;
   // We need to refresh marker
-  marker = "";
+  map<string, string> new_markers;
   for (miter = list_results.begin(); miter != list_results.end(); ++miter) {
-    std::list<rgw_bi_log_entry>::iterator iter;
-    for (iter = miter->second.entries.begin(); iter != miter->second.entries.end(); ++iter) {
-      rgw_bi_log_entry& entry = *iter;
+    std::list<rgw_bi_log_entry>::iterator liter;
+    for (liter = miter->second.entries.begin(); liter != miter->second.entries.end(); ++liter) {
+      if (result.size() == max) {
+        if (truncated)
+          *truncated = true;
+        goto done;
+      }
+      rgw_bi_log_entry& entry = *liter;
       // If there are multiple shards, we compose the marker with the following schema:
       //   {shard_id_0}#{largest_entity_id_for_this_shard},{shard_id_1}#{largest_entity_id_for_this_shard}...
       if (list_results.size() > 1) {
         string tmp_entry_id = miter->first;
         tmp_entry_id.append("#");
         tmp_entry_id.append(entry.id);
-        entry.id = tmp_entry_id; 
+        entry.id = tmp_entry_id;
       }
       result.push_back(entry);
-      max_entry_id = entry.id;
+      new_markers[miter->first] = entry.id;
     }
-    if (marker.length()) {
-      marker.append(",");
-    }
-    marker.append(max_entry_id);
+
     if (truncated) {
       (*truncated) = (*truncated) || miter->second.truncated;
     }
   }
-  ldout(cct, 20) << __func__ << " refreshed marker: " << marker << dendl;
 
+done:
+  // Refresh new marker
+  if (list_results.size() == 1 && new_markers.size() == 1) {
+    // There is only one bucket index object
+    marker = new_markers[list_results.begin()->first];
+  } else {
+    // We need to identify the marker change for each shard and update it if needed
+    if (marker.find('#') != string::npos) {
+      vector<string> parts;
+      boost::split(parts, marker, boost::is_any_of(",#"));
+      for (size_t i = 0; i < parts.size();) {
+        if (new_markers.count(parts[i]) == 0) {
+          new_markers[parts[i]] = parts[i + 1];
+        }
+        i += 2;
+      }
+    }
+    // Normalize marker
+    marker = "";
+    map<string, string>::const_iterator iter;
+    for (iter = new_markers.begin(); iter != new_markers.end(); ++iter) {
+      if (marker.length() != 0) {
+        marker.append(",");
+      }
+      marker.append(iter->second);
+    }
+  }
+
+  ldout(cct, 20) << __func__ << " refreshed marker: " << marker << dendl;
   return 0;
 }
 
@@ -5990,7 +6018,7 @@ int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, RGWModifyOp op, string& tag
   if (r < 0)
     return r;
   ldout(cct, 20) << " bucket index object: " << bucket_obj << dendl;
- 
+
   ObjectWriteOperation o;
   cls_rgw_bucket_prepare_op(o, op, tag, name, locator, zone_public_config.log_data);
   r = index_ctx.operate(bucket_obj, &o);
@@ -6127,7 +6155,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, const string& start, const str
       }
       m[e.name] = e;
       ldout(cct, 10) << "RGWRados::cls_bucket_list: got " << e.name << dendl;
- 
+
       // Suggest updates if there is any
       if (updates.length()) {
         ObjectWriteOperation o;

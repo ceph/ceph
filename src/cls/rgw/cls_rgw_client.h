@@ -27,8 +27,8 @@ void cls_rgw_bucket_init(librados::ObjectWriteOperation& o);
 int cls_rgw_bucket_index_init_op(librados::IoCtx &io_ctx,
         const vector<string>& bucket_objs, uint32_t max_io);
 
-int cls_rgw_bucket_set_tag_timeout(librados::IoCtx& io_ctx, const vector<string>& bucket_objs, uint64_t tag_timeout,
-        uint32_t max_io);
+int cls_rgw_bucket_set_tag_timeout(librados::IoCtx& io_ctx,
+        const vector<string>& bucket_objs, uint64_t tag_timeout, uint32_t max_io);
 
 void cls_rgw_bucket_prepare_op(librados::ObjectWriteOperation& o, RGWModifyOp op, string& tag,
                                string& name, string& locator, bool log_op);
@@ -46,7 +46,7 @@ void cls_rgw_bucket_complete_op(librados::ObjectWriteOperation& o, RGWModifyOp o
  * io_ctx        - IO context for rados.
  * start_obj     - marker for the listing.
  * filter_prefix - filer prefix.
- * num_entries   - number of entries to request for each object (note the total 
+ * num_entries   - number of entries to request for each object (note the total
  *                 amount of entries returned depends on the number of shardings).
  * list_results  - the list results keyed by bucket index object id.
  * max_aio       - the maximum number of AIO (for throttling).
@@ -91,7 +91,7 @@ int cls_rgw_bucket_rebuild_index_op(librados::IoCtx& io_ctx, const vector<string
  * max_io   - the maximum number of AIO (for throttling).
  *
  * Return 0 on success, a failure code otherwise.
- */ 
+ */
 int cls_rgw_bucket_remove_objs_op(librados::IoCtx& io_ctx,
         const map<string, vector<rgw_bucket_dir_entry> >& updates, uint32_t max_io);
 
@@ -117,7 +117,8 @@ void cls_rgw_suggest_changes(librados::ObjectWriteOperation& o, bufferlist& upda
 
 int cls_rgw_bi_log_list(librados::IoCtx& io_ctx, map<string, struct cls_rgw_bi_log_list_ret>& list_results,
         string& marker, uint32_t max, uint32_t max_io);
-int cls_rgw_bi_log_trim(librados::IoCtx& io_ctx, vector<string>& bucket_objs, string& start_marker, string& end_marker, uint32_t max_io);
+int cls_rgw_bi_log_trim(librados::IoCtx& io_ctx, vector<string>& bucket_objs, string& start_marker,
+        string& end_marker, uint32_t max_io);
 
 /* usage logging */
 int cls_rgw_usage_log_read(librados::IoCtx& io_ctx, string& oid, string& user,

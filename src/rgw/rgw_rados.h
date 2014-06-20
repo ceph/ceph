@@ -1126,21 +1126,13 @@ public:
 class RGWGetBucketStats_CB : public RefCountedObject {
 protected:
   rgw_bucket bucket;
-  string bucket_ver;
-  string master_ver;
   map<RGWObjCategory, RGWStorageStats> *stats;
-  string max_marker;
 public:
   RGWGetBucketStats_CB(rgw_bucket& _bucket) : bucket(_bucket), stats(NULL) {}
   virtual ~RGWGetBucketStats_CB() {}
   virtual void handle_response(int r) = 0;
-  virtual void set_response(uint64_t _bucket_ver, uint64_t _master_ver,
-                            map<RGWObjCategory, RGWStorageStats> *_stats,
-                            const string &_max_marker) {
-    bucket_ver = _bucket_ver;
-    master_ver = _master_ver;
+  virtual void set_response( map<RGWObjCategory, RGWStorageStats> *_stats) {
     stats = _stats;
-    max_marker = _max_marker;
   }
 };
 
