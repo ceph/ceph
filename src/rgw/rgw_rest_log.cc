@@ -317,7 +317,7 @@ void RGWOp_BILog_List::execute() {
 
     count += entries.size();
 
-    send_response(entries, marker);
+    send_response(entries);
   } while (truncated && count < max_entries);
 
   send_response_end();
@@ -339,13 +339,12 @@ void RGWOp_BILog_List::send_response() {
   s->formatter->open_array_section("entries");
 }
 
-void RGWOp_BILog_List::send_response(list<rgw_bi_log_entry>& entries, string& marker)
+void RGWOp_BILog_List::send_response(list<rgw_bi_log_entry>& entries)
 {
   for (list<rgw_bi_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
     rgw_bi_log_entry& entry = *iter;
     encode_json("entry", entry, s->formatter);
 
-    marker = entry.id;
     flusher.flush();
   }
 }
@@ -380,7 +379,7 @@ void RGWOp_BILog_Info::execute() {
     }
   }
   map<RGWObjCategory, RGWStorageStats> stats;
-  int ret =  store->get_bucket_stats(bucket_info.bucket, &bucket_ver, &master_ver, stats, &max_marker);
+  int ret =  store->get_bucket_stats(bucket_info.bucket, bucket_ver, master_ver, stats, &max_marker);
   if (ret < 0 && ret != -ENOENT) {
     http_ret = ret;
     return;
