@@ -1,4 +1,18 @@
-Add New Provider
+Installation
+============
+
+The LTTng libraries that ship with Ubuntu 12.04 have been very buggy, and the
+generated header files using `lttng-gen-tp` have needed to be fixed just to
+compile in the Ceph tree. The packages available in Ubuntu 14.04 seem to work
+alright, and for older versions please install LTTng from the LTTng PPA.
+
+    https://launchpad.net/~lttng/+archive/ppa
+
+Then install as normal
+
+    apt-get install lttng-tools liblttng-ust-dev
+
+Add/Update Provider
 ================
 
 ## Create tracepoint definition file
@@ -6,27 +20,5 @@ Add New Provider
 Add tracepoint definitions for the provider into a `.tp` file. Documentation
 on defining a tracepoint can be found in `man lttng-ust`. By convention files
 are named according to the logical sub-system they correspond to (e.g.
-`mutex.tp`, `pg.tp`).
-
-## Generate tracepoint source files
-
-The `.tp` file is converted into source files using the `lttng-gen-tp` tool.
-
-    lttng-gen-tp mutex.tp -o mutex.tp.h -o mutex.tp.c
-
-## Add source files to libtracepoints.la
-
-Modify Makefile.am to include the generated source files from the previous
-step.
-
-## Commit changes to Git
-
-Commit both the source `.tp` file as well as the generated sources, and the
-changes to Makefile.am.
-
-Add Tracepoint to Existing Provider
-===================================
-
-New tracepoints can be added to an existing provider by updating the
-corresponding `.tp` file and re-generating the source files. Make sure to
-commit the updated files back into Git.
+`mutex.tp`, `pg.tp`). Place the `.tp` file into the `src/tracing` directory
+and modify the automake file `src/tracing/Makefile.am` accordingly.

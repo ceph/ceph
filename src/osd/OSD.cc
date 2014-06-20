@@ -131,7 +131,7 @@
 
 #include "include/assert.h"
 #include "common/config.h"
-#include "tracing/osd.tp.h"
+#include "tracing/osd.h"
 
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
