@@ -239,6 +239,7 @@ check_SCRIPTS += \
 	test/mon/osd-erasure-code-profile.sh \
 	test/mon/mkfs.sh \
 	test/osd/osd-config.sh \
+	test/osd/osd-bench.sh \
 	test/ceph-disk.sh \
 	test/mon/mon-handle-forward.sh \
 	test/vstart_wrapped_tests.sh
