@@ -4498,9 +4498,8 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       // However, to avoid the osd from getting hung on this and having
       // timers being triggered, we are going to limit the count assuming
       // a configurable throughput and duration.
-      int64_t total_throughput =
+      int64_t max_count =
         g_conf->osd_bench_large_size_max_throughput * duration;
-      int64_t max_count = (int64_t) (total_throughput / bsize);
       if (count > max_count) {
         ss << "'count' values greater than " << max_count
            << " for a block size of " << prettybyte_t(bsize) << ", assuming "
