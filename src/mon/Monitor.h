@@ -771,6 +771,7 @@ public:
 
   static int check_features(MonitorDBStore *store);
 
+  int sanitize_options();
   int preinit();
   int init();
   void init_paxos();
