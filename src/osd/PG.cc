@@ -2207,29 +2207,31 @@ void PG::_update_calc_stats()
   info.stats.ondisk_log_start = pg_log.get_tail();
 
   // calc copies, degraded
-  unsigned target = MAX(
-    get_osdmap()->get_pg_size(info.pgid.pgid), actingbackfill.size());
-  info.stats.stats.calc_copies(target);
+  unsigned target = get_osdmap()->get_pg_size(info.pgid.pgid);
+  info.stats.stats.calc_copies(MAX(target, actingbackfill.size()));
   info.stats.stats.sum.num_objects_degraded = 0;
+  info.stats.stats.sum.num_objects_misplaced = 0;
   if ((is_degraded() || !is_clean()) && is_active()) {
     // NOTE: we only generate copies, degraded, unfound values for
     // the summation, not individual stat categories.
     uint64_t num_objects = info.stats.stats.sum.num_objects;
 
+    // a degraded objects has fewer replicas or EC shards than the
+    // pool specifies
     uint64_t degraded = 0;
 
-    // if the actingbackfill set is smaller than we want, add in those missing replicas
-    if (actingbackfill.size() < target)
-      degraded += (target - actingbackfill.size()) * num_objects;
+    // if acting is smaller than desired, add in those missing replicas
+    if (acting.size() < target)
+      degraded += (target - acting.size()) * num_objects;
 
     // missing on primary
     info.stats.stats.sum.num_objects_missing_on_primary =
       pg_log.get_missing().num_missing();
     degraded += pg_log.get_missing().num_missing();
 
-    assert(!actingbackfill.empty());
-    for (set<pg_shard_t>::iterator i = actingbackfill.begin();
-	 i != actingbackfill.end();
+    assert(!acting.empty());
+    for (set<pg_shard_t>::iterator i = actingset.begin();
+	 i != actingset.end();
 	 ++i) {
       if (*i == pg_whoami) continue;
       assert(peer_missing.count(*i));
@@ -2242,6 +2244,37 @@ void PG::_update_calc_stats()
     }
     info.stats.stats.sum.num_objects_degraded = degraded;
     info.stats.stats.sum.num_objects_unfound = get_num_unfound();
+
+    // a misplaced object is not stored on the correct OSD
+    uint64_t misplaced = 0;
+    unsigned i = 0;
+    unsigned in_place = 0;
+    for (vector<int>::iterator p = up.begin(); p != up.end(); ++p, ++i) {
+      pg_shard_t s(*p,
+		   pool.info.ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD);
+      if (actingset.count(s)) {
+	++in_place;
+      } else {
+	// not where it should be
+	misplaced += num_objects;
+	if (actingbackfill.count(s)) {
+	  // ...but partially backfilled
+	  misplaced -= peer_info[s].stats.stats.sum.num_objects;
+	  dout(20) << __func__ << " osd." << *p << " misplaced "
+		   << num_objects << " but partially backfilled "
+		   << peer_info[s].stats.stats.sum.num_objects
+		   << dendl;
+	} else {
+	  dout(20) << __func__ << " osd." << *p << " misplaced "
+		   << num_objects << " but partially backfilled "
+		   << dendl;
+	}
+      }
+    }
+    // count extra replicas in acting but not in up as misplaced
+    if (in_place < actingset.size())
+      misplaced += (actingset.size() - in_place) * num_objects;
+    info.stats.stats.sum.num_objects_misplaced = misplaced;
   }
 }
 
