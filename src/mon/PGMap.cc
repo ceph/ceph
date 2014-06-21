@@ -677,7 +677,7 @@ void PGMap::dump_osd_stats(Formatter *f) const
 void PGMap::dump_pg_stats_plain(ostream& ss,
 				const ceph::unordered_map<pg_t, pg_stat_t>& pg_stats) const
 {
-  ss << "pg_stat\tobjects\tmip\tdegr\tunf\tbytes\tlog\tdisklog\tstate\tstate_stamp\tv\treported\tup\tup_primary\tacting\tacting_primary\tlast_scrub\tscrub_stamp\tlast_deep_scrub\tdeep_scrub_stamp" << std::endl;
+  ss << "pg_stat\tobjects\tmip\tdegr\tmisp\tunf\tbytes\tlog\tdisklog\tstate\tstate_stamp\tv\treported\tup\tup_primary\tacting\tacting_primary\tlast_scrub\tscrub_stamp\tlast_deep_scrub\tdeep_scrub_stamp" << std::endl;
   for (ceph::unordered_map<pg_t, pg_stat_t>::const_iterator i = pg_stats.begin();
        i != pg_stats.end(); ++i) {
     const pg_stat_t &st(i->second);
@@ -686,6 +686,7 @@ void PGMap::dump_pg_stats_plain(ostream& ss,
       //<< "\t" << st.num_object_copies
        << "\t" << st.stats.sum.num_objects_missing_on_primary
        << "\t" << st.stats.sum.num_objects_degraded
+       << "\t" << st.stats.sum.num_objects_misplaced
        << "\t" << st.stats.sum.num_objects_unfound
        << "\t" << st.stats.sum.num_bytes
        << "\t" << st.log_size
@@ -887,6 +888,23 @@ void PGMap::recovery_summary(Formatter *f, ostream *out,
     } else {
       *out << delta_sum.stats.sum.num_objects_degraded
 	   << "/" << delta_sum.stats.sum.num_object_copies << " objects degraded (" << b << "%)";
+    }
+    first = false;
+  }
+  if (delta_sum.stats.sum.num_objects_misplaced) {
+    double pc = (double)delta_sum.stats.sum.num_objects_misplaced /
+      (double)delta_sum.stats.sum.num_object_copies * (double)100.0;
+    char b[20];
+    snprintf(b, sizeof(b), "%.3lf", pc);
+    if (f) {
+      f->dump_unsigned("misplaced_objects", delta_sum.stats.sum.num_objects_misplaced);
+      f->dump_unsigned("misplaced_total", delta_sum.stats.sum.num_object_copies);
+      f->dump_string("misplaced_ratio", b);
+    } else {
+      if (!first)
+	*out << "; ";
+      *out << delta_sum.stats.sum.num_objects_misplaced
+	   << "/" << delta_sum.stats.sum.num_object_copies << " objects misplaced (" << b << "%)";
     }
     first = false;
   }
