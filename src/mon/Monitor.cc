@@ -472,6 +472,7 @@ int Monitor::preinit()
     pcb.add_u64(l_cluster_num_pg_peering, "num_pg_peering");
     pcb.add_u64(l_cluster_num_object, "num_object");
     pcb.add_u64(l_cluster_num_object_degraded, "num_object_degraded");
+    pcb.add_u64(l_cluster_num_object_misplaced, "num_object_misplaced");
     pcb.add_u64(l_cluster_num_object_unfound, "num_object_unfound");
     pcb.add_u64(l_cluster_num_bytes, "num_bytes");
     pcb.add_u64(l_cluster_num_mds_up, "num_mds_up");
