@@ -6825,6 +6825,8 @@ bool OSD::compat_must_dispatch_immediately(PG *pg)
     tmpacting = pg->actingbackfill;
   } else {
     for (unsigned i = 0; i < pg->acting.size(); ++i) {
+      if (pg->acting[i] == CRUSH_ITEM_NONE)
+	continue;
       tmpacting.insert(
 	pg_shard_t(
 	  pg->acting[i],
@@ -6835,7 +6837,7 @@ bool OSD::compat_must_dispatch_immediately(PG *pg)
   for (set<pg_shard_t>::iterator i = tmpacting.begin();
        i != tmpacting.end();
        ++i) {
-    if (i->osd == whoami)
+    if (i->osd == whoami || i->osd == CRUSH_ITEM_NONE)
       continue;
     ConnectionRef conn =
       service.get_con_osd_cluster(i->osd, pg->get_osdmap()->get_epoch());
