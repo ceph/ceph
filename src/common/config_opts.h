@@ -191,6 +191,7 @@ OPTION(mon_max_log_entries_per_event, OPT_INT, 4096)
 OPTION(mon_health_data_update_interval, OPT_FLOAT, 60.0)
 OPTION(mon_data_avail_crit, OPT_INT, 5)
 OPTION(mon_data_avail_warn, OPT_INT, 30)
+OPTION(mon_data_size_warn, OPT_U64, 15*1024*1024*1024) // issue a warning when the monitor's data store goes over 15GB (in bytes)
 OPTION(mon_config_key_max_entry_size, OPT_INT, 4096) // max num bytes per config-key entry
 OPTION(mon_sync_timeout, OPT_DOUBLE, 60.0)
 OPTION(mon_sync_max_payload_size, OPT_U32, 1048576) // max size for a sync chunk payload (say, 1MB)
@@ -219,7 +220,6 @@ OPTION(mon_leveldb_max_open_files, OPT_INT, 0) // monitor's leveldb max open fil
 OPTION(mon_leveldb_compression, OPT_BOOL, false) // monitor's leveldb uses compression
 OPTION(mon_leveldb_paranoid, OPT_BOOL, false)   // monitor's leveldb paranoid flag
 OPTION(mon_leveldb_log, OPT_STR, "")
-OPTION(mon_leveldb_size_warn, OPT_U64, 40*1024*1024*1024) // issue a warning when the monitor's leveldb goes over 40GB (in bytes)
 OPTION(mon_force_quorum_join, OPT_BOOL, false) // force monitor to join quorum even if it has been previously removed from the map
 OPTION(paxos_stash_full_interval, OPT_INT, 25)   // how often (in commits) to stash a full copy of the PaxosService state
 OPTION(paxos_max_join_drift, OPT_INT, 10) // max paxos iterations before we must first sync the monitor stores
