@@ -29,7 +29,7 @@ public:
     return check_caps(s->user.caps);
   }
   virtual void send_response();
-  virtual void send_response(list<rgw_bi_log_entry>& entries, string& marker);
+  virtual void send_response(list<rgw_bi_log_entry>& entries);
   virtual void send_response_end();
   void execute();
   virtual const string name() {
@@ -38,11 +38,11 @@ public:
 };
 
 class RGWOp_BILog_Info : public RGWRESTOp {
-  uint64_t bucket_ver;
-  uint64_t master_ver;
+  string bucket_ver;
+  string master_ver;
   string max_marker;
 public:
-  RGWOp_BILog_Info() : bucket_ver(0), master_ver(0) {}
+  RGWOp_BILog_Info() : bucket_ver(), master_ver() {}
   ~RGWOp_BILog_Info() {}
 
   int check_caps(RGWUserCaps& caps) {
