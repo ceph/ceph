@@ -66,12 +66,12 @@ std::ostream &operator<<(
 
 void ECSubWrite::dump(Formatter *f) const
 {
-  f->dump_stream("tid") << tid;
+  f->dump_unsigned("tid", tid);
   f->dump_stream("reqid") << reqid;
   f->dump_stream("at_version") << at_version;
   f->dump_stream("trim_to") << trim_to;
-  f->dump_stream("has_updated_hit_set_history")
-    << static_cast<bool>(updated_hit_set_history);
+  f->dump_bool("has_updated_hit_set_history",
+      static_cast<bool>(updated_hit_set_history));
 }
 
 void ECSubWrite::generate_test_instances(list<ECSubWrite*> &o)
@@ -121,10 +121,10 @@ std::ostream &operator<<(
 
 void ECSubWriteReply::dump(Formatter *f) const
 {
-  f->dump_stream("tid") << tid;
+  f->dump_unsigned("tid", tid);
   f->dump_stream("last_complete") << last_complete;
-  f->dump_stream("committed") << committed;
-  f->dump_stream("applied") << applied;
+  f->dump_bool("committed", committed);
+  f->dump_bool("applied", applied);
 }
 
 void ECSubWriteReply::generate_test_instances(list<ECSubWriteReply*>& o)
@@ -171,7 +171,7 @@ std::ostream &operator<<(
 void ECSubRead::dump(Formatter *f) const
 {
   f->dump_stream("from") << from;
-  f->dump_stream("tid") << tid;
+  f->dump_unsigned("tid", tid);
   f->open_array_section("objects");
   for (map<hobject_t, list<pair<uint64_t, uint64_t> > >::const_iterator i =
 	 to_read.begin();
@@ -259,7 +259,7 @@ std::ostream &operator<<(
 void ECSubReadReply::dump(Formatter *f) const
 {
   f->dump_stream("from") << from;
-  f->dump_stream("tid") << tid;
+  f->dump_unsigned("tid", tid);
   f->open_array_section("buffers_read");
   for (map<hobject_t, list<pair<uint64_t, bufferlist> > >::const_iterator i =
 	 buffers_read.begin();

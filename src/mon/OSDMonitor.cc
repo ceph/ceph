@@ -2254,7 +2254,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
   } else if (prefix == "osd getmaxosd") {
     if (f) {
       f->open_object_section("getmaxosd");
-      f->dump_int("epoch", osdmap.get_epoch());
+      f->dump_unsigned("epoch", osdmap.get_epoch());
       f->dump_int("max_osd", osdmap.get_max_osd());
       f->close_section();
       f->flush(rdata);
@@ -2338,15 +2338,21 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       fullobjname = oid.name;
     if (f) {
       f->open_object_section("osd_map");
-      f->dump_int("epoch", osdmap.get_epoch());
+      f->dump_unsigned("epoch", osdmap.get_epoch());
       f->dump_string("pool", poolstr);
       f->dump_int("pool_id", pool);
       f->dump_stream("objname") << fullobjname;
       f->dump_stream("raw_pgid") << pgid;
       f->dump_stream("pgid") << mpgid;
-      f->dump_stream("up") << up;
+      f->open_array_section("up");
+      for (vector<int>::iterator p = up.begin(); p != up.end(); ++p)
+        f->dump_int("osd", *p);
+      f->close_section();
       f->dump_int("up_primary", up_p);
-      f->dump_stream("acting") << acting;
+      f->open_array_section("acting");
+      for (vector<int>::iterator p = acting.begin(); p != acting.end(); ++p)
+        f->dump_int("osd", *p);
+      f->close_section();
       f->dump_int("acting_primary", acting_p);
       f->close_section(); // osd_map
       f->flush(rdata);
