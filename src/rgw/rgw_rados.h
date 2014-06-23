@@ -1126,21 +1126,13 @@ public:
 class RGWGetBucketStats_CB : public RefCountedObject {
 protected:
   rgw_bucket bucket;
-  uint64_t bucket_ver;
-  uint64_t master_ver;
   map<RGWObjCategory, RGWStorageStats> *stats;
-  string max_marker;
 public:
   RGWGetBucketStats_CB(rgw_bucket& _bucket) : bucket(_bucket), stats(NULL) {}
   virtual ~RGWGetBucketStats_CB() {}
   virtual void handle_response(int r) = 0;
-  virtual void set_response(uint64_t _bucket_ver, uint64_t _master_ver,
-                            map<RGWObjCategory, RGWStorageStats> *_stats,
-                            const string &_max_marker) {
-    bucket_ver = _bucket_ver;
-    master_ver = _master_ver;
+  virtual void set_response( map<RGWObjCategory, RGWStorageStats> *_stats) {
     stats = _stats;
-    max_marker = _max_marker;
   }
 };
 
@@ -1181,9 +1173,21 @@ class RGWRados
   int open_bucket_index_ctx(rgw_bucket& bucket, librados::IoCtx&  index_ctx);
   int open_bucket_data_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx);
   int open_bucket_data_extra_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx);
-  int open_bucket_index(rgw_bucket& bucket, librados::IoCtx&  index_ctx, string& bucket_oid);
+  int open_bucket_index_base(rgw_bucket& bucket, librados::IoCtx&  index_ctx,
+          string& bucket_oid_base);
 
-  struct GetObjState {
+  /** open bucket index methods, open the bucket index IO context,
+   *  and populate the bucket index object(s)
+   */
+  template<typename T>
+  int open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
+          map<string, T>& bucket_objs);
+  int open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
+          vector<string>& bucket_objs);
+  int open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
+          const string& obj_key, string& bucket_oid);
+
+   struct GetObjState {
     librados::IoCtx io_ctx;
     bool sent_data;
 
@@ -1220,6 +1224,10 @@ class RGWRados
   uint64_t max_bucket_id;
 
   uint64_t max_chunk_size;
+
+  // This field represents the number of bucket index object shards, it is initialized
+  // from the configuration
+  uint32_t max_bucket_index_shards;
 
   int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker);
   int append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj,
@@ -1286,6 +1294,7 @@ public:
                watch_initialized(false),
                bucket_id_lock("rados_bucket_id"), max_bucket_id(0),
                max_chunk_size(0),
+               max_bucket_index_shards(0),
                cct(NULL), rados(NULL),
                pools_initialized(false),
                quota_handler(NULL),
@@ -1719,7 +1728,7 @@ public:
   }
 
   int decode_policy(bufferlist& bl, ACLOwner *owner);
-  int get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_t *master_ver, map<RGWObjCategory, RGWStorageStats>& stats,
+  int get_bucket_stats(rgw_bucket& bucket, string& bucket_ver, string& master_ver, map<RGWObjCategory, RGWStorageStats>& stats,
                        string *max_marker);
   int get_bucket_stats_async(rgw_bucket& bucket, RGWGetBucketStats_CB *cb);
   int get_user_stats(const string& user, RGWStorageStats& stats);
@@ -1752,11 +1761,21 @@ public:
   int cls_obj_complete_del(rgw_bucket& bucket, string& tag, int64_t pool, uint64_t epoch, string& name);
   int cls_obj_complete_cancel(rgw_bucket& bucket, string& tag, string& name);
   int cls_obj_set_bucket_tag_timeout(rgw_bucket& bucket, uint64_t timeout);
-  int cls_bucket_list(rgw_bucket& bucket, string start, string prefix, uint32_t num,
-                      map<string, RGWObjEnt>& m, bool *is_truncated,
-                      string *last_entry, bool (*force_check_filter)(const string&  name) = NULL);
-  int cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header);
-  int cls_bucket_head_async(rgw_bucket& bucket, RGWGetDirHeader_CB *ctx);
+  int cls_bucket_list(rgw_bucket& bucket, const string& start, const string& prefix,
+                      uint32_t suggest_num,  map<string, RGWObjEnt>& m, bool *is_truncated,
+                      bool (*force_check_filter)(const string&  name) = NULL);
+  int cls_bucket_head(rgw_bucket& bucket, map<string, struct rgw_bucket_dir_header>& headers);
+
+  /**
+   * Issue bucket head request async.
+   *
+   * bucket  - the bucket.
+   * ctx     - the callback to caller.
+   * num_aio - number of AIOs issued.
+   *
+   * Return 0 on success, a failure code otherwise.
+   */
+  int cls_bucket_head_async(rgw_bucket& bucket, RGWGetDirHeader_CB *ctx, int* num_aio);
   int prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
                            RGWModifyOp op, rgw_obj& oid, string& tag);
   int complete_update_index(rgw_bucket& bucket, string& oid, string& tag, int64_t poolid, uint64_t epoch, uint64_t size,
@@ -1852,6 +1871,29 @@ public:
   }
 
  private:
+  /**
+   * This is a helper method, it generates a list of bucket index objects with the given
+   * bucket base oid and number of shards.
+   *
+   * bucket_oid_base - base name of the bucket index object;
+   * bucket_objs - filled by this method, a list of bucket index objects.
+   * num_shards - number of bucket index object shards.
+   */
+  void get_bucket_index_objs(const string& bucket_oid_base, vector<string>& bucket_objs,
+          uint32_t num_shards);
+
+  /**
+   * Get the bucket index object with the given base bucket index object and object key,
+   * and the number of bucket index shards.
+   *
+   * bucket_oid_base - bucket object base name.
+   * obj_key - object key.
+   * bucket_obj - the bucket index object for the given object.
+   * num_shards - number of bucket index shards.
+   */
+  void get_bucket_index_obj(const string& bucket_oid_base, const string& obj_key,
+          string& bucket_obj, uint32_t num_shards);
+
   int process_intent_log(rgw_bucket& bucket, string& oid,
 			 time_t epoch, int flags, bool purge);
   /**
