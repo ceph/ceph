@@ -25,6 +25,7 @@ extern "C" {
 #elif defined(__FreeBSD__)
 #include <sys/types.h>
 #endif
+#include <unistd.h>
 #include <string.h>
 #include "rados_types.h"
 
