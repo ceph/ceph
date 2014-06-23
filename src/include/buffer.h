@@ -14,11 +14,7 @@
 #ifndef CEPH_BUFFER_H
 #define CEPH_BUFFER_H
 
-#if defined(__linux__)
-#include <stdlib.h>
-#include <linux/types.h>
-#elif defined(__FreeBSD__)
-#include <sys/types.h>
+#if defined(__linux__) || defined(__FreeBSD__)
 #include <stdlib.h>
 #endif
 
