@@ -1874,6 +1874,26 @@ void PG::mark_clean()
   dirty_info = true;
 }
 
+unsigned PG::get_recovery_priority()
+{
+  // a higher value -> a higher priority
+  return OSD_RECOVERY_PRIORITY_MAX;
+}
+
+unsigned PG::get_backfill_priority()
+{
+  // a higher value -> a higher priority
+
+  // degraded: 200 + num missing replicas
+  if (is_degraded()) {
+    assert(pool.info.size > acting.size());
+    return 200 + (pool.info.size - acting.size());
+  }
+
+  // baseline
+  return 1;
+}
+
 void PG::finish_recovery(list<Context*>& tfin)
 {
   dout(10) << "finish_recovery" << dendl;
@@ -5532,13 +5552,12 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserve
       backfill_osd_it->osd, pg->get_osdmap()->get_epoch());
     if (con) {
       if (con->has_feature(CEPH_FEATURE_BACKFILL_RESERVATION)) {
-        unsigned priority = pg->is_degraded() ? OSDService::BACKFILL_HIGH
-	  : OSDService::BACKFILL_LOW;
         pg->osd->send_message_osd_cluster(
           new MBackfillReserve(
 	  MBackfillReserve::REQUEST,
 	  spg_t(pg->info.pgid.pgid, backfill_osd_it->shard),
-	  pg->get_osdmap()->get_epoch(), priority),
+	  pg->get_osdmap()->get_epoch(),
+	  pg->get_backfill_priority()),
 	con.get());
       } else {
         post_event(RemoteBackfillReserved());
@@ -5607,8 +5626,8 @@ PG::RecoveryState::WaitLocalBackfillReserved::WaitLocalBackfillReserved(my_conte
     pg->info.pgid,
     new QueuePeeringEvt<LocalBackfillReserved>(
       pg, pg->get_osdmap()->get_epoch(),
-      LocalBackfillReserved()), pg->is_degraded() ? OSDService::BACKFILL_HIGH
-	 : OSDService::BACKFILL_LOW);
+      LocalBackfillReserved()),
+    pg->get_backfill_priority());
 }
 
 void PG::RecoveryState::WaitLocalBackfillReserved::exit()
@@ -5663,7 +5682,8 @@ PG::RecoveryState::RepWaitRecoveryReserved::RepWaitRecoveryReserved(my_context c
     pg->info.pgid,
     new QueuePeeringEvt<RemoteRecoveryReserved>(
       pg, pg->get_osdmap()->get_epoch(),
-      RemoteRecoveryReserved()), OSDService::RECOVERY);
+      RemoteRecoveryReserved()),
+    pg->get_recovery_priority());
 }
 
 boost::statechart::result
@@ -5804,7 +5824,8 @@ PG::RecoveryState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_conte
     pg->info.pgid,
     new QueuePeeringEvt<LocalRecoveryReserved>(
       pg, pg->get_osdmap()->get_epoch(),
-      LocalRecoveryReserved()), OSDService::RECOVERY);
+      LocalRecoveryReserved()),
+    pg->get_recovery_priority());
 }
 
 void PG::RecoveryState::WaitLocalRecoveryReserved::exit()
