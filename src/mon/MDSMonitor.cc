@@ -989,15 +989,7 @@ bool MDSMonitor::management_command(
       ss << "pool '" << data_name << "' does not exist";
       return true;
     }
-
-    // Warn if crash_replay_interval is not set on the data pool
-    //  (on creation should have done pools[pool].crash_replay_interval =
-    //  cct->_conf->osd_default_data_pool_replay_window;)
-    pg_pool_t const *data_pool = mon->osdmon()->osdmap.get_pg_pool(data);
-    if (data_pool->get_crash_replay_interval() == 0) {
-      ss << "warning: crash_replay_interval not set on data pool '" << data << "', ";
-    }
-    
+   
     string fs_name;
     cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
     if (fs_name.empty()) {
@@ -1021,6 +1013,16 @@ bool MDSMonitor::management_command(
       /* We currently only support one filesystem, so cannot create a second */
       ss << "A filesystem already exists, use `ceph fs rm` if you wish to delete it";
       r = -EINVAL;
+    }
+
+    // Automatically set crash_replay_interval on data pool if it
+    // isn't already set.
+    pg_pool_t const *data_pool = mon->osdmon()->osdmap.get_pg_pool(data);
+    assert(data_pool != NULL);  // Checked it existed above
+    if (data_pool->get_crash_replay_interval() == 0) {
+      r = mon->osdmon()->set_crash_replay_interval(data, g_conf->osd_default_data_pool_replay_window);
+      assert(r == 0);  // We just did get_pg_pool so it must exist and be settable
+      request_proposal(mon->osdmon());
     }
 
     // All checks passed, go ahead and create.

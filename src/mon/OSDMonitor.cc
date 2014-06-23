@@ -3309,6 +3309,35 @@ int OSDMonitor::parse_osd_id(const char *s, stringstream *pss)
   return id;
 }
 
+
+/**
+ * Special setter for crash_replay_interval on a pool.  Equivalent to
+ * using prepare_command_pool_set, but in a form convenient for use
+ * from MDSMonitor rather than from an administrative command.
+ */
+int OSDMonitor::set_crash_replay_interval(const int64_t pool_id, const uint32_t cri)
+{
+  pg_pool_t p;
+  if (pending_inc.new_pools.count(pool_id)) {
+    p = pending_inc.new_pools[pool_id];
+  } else {
+    const pg_pool_t *p_ptr = osdmap.get_pg_pool(pool_id);
+    if (p_ptr == NULL) {
+      return -ENOENT;
+    } else {
+      p = *p_ptr;
+    }
+  }
+
+  dout(10) << "Set pool " << pool_id << " crash_replay_interval=" << cri << dendl;
+  p.crash_replay_interval = cri;
+  p.last_change = pending_inc.epoch;
+  pending_inc.new_pools[pool_id] = p;
+
+  return 0;
+}
+
+
 int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
                                          stringstream& ss)
 {
