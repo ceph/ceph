@@ -2,14 +2,27 @@ from setuptools import setup, find_packages
 
 setup(
     name='teuthology',
-    version='0.0.1',
+    version='0.1.0',
     packages=find_packages(),
 
-    author='Tommi Virtanen',
-    author_email='tommi.virtanen@dreamhost.com',
-    description='Ceph test runner',
+    author='Inktank Storage, Inc.',
+    author_email='ceph-qa@ceph.com',
+    description='Ceph test framework',
     license='MIT',
-    keywords='ceph testing ssh cluster',
+    keywords='teuthology test ceph cluster',
+    url='https://github.com/ceph/teuthology',
+    classifiers=[
+        'Intended Audience :: Developers',
+        'License :: OSI Approved :: MIT License',
+        'Natural Language :: English',
+        'Operating System :: POSIX :: Linux',
+        'Programming Language :: Python :: 2.7'
+        'Topic :: Software Development :: Quality Assurance',
+        'Topic :: Software Development :: Testing',
+        'Topic :: System :: Distributed Computing',
+        'Topic :: System :: Filesystems',
+    ],
+
 
     # to find the code associated with entry point
     # A.B:foo first cd into directory A, open file B
