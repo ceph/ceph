@@ -60,7 +60,6 @@ const char *parse_good[] = {
   "  allow pool foo rwx; allow pool bar r  ",
   "  allow     pool foo rwx; allow pool bar r  ",
   " allow wx pool taco",
-  "\tallow\nwx\tpool \n taco\t",
   "allow r   pool    foo    object_prefix   blah   ;   allow   w   auid  5",
   "allow class-read object_prefix rbd_children, allow pool libvirt-pool-test rwx",
   "allow class-read object_prefix rbd-children, allow pool libvirt_pool_test rwx",
@@ -104,6 +103,7 @@ const char *parse_bad[] = {
   "allow namespace=foo",
   "allow rwx auid 123 namespace asdf",
   "allow wwx pool ''",
+  "\tallow\nwx\tpool \n taco\t",
   0
 };
 
