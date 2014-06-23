@@ -24,7 +24,9 @@ def build_config(args):
     config_paths = args.get('<conf_file>', list())
     conf_dict = dict()
     for conf_path in config_paths:
-        conf_dict = deep_merge(conf_dict, config_file(conf_path))
+        with file(conf_path) as partial_file:
+            partial_dict = yaml.safe_load(partial_file)
+        conf_dict = deep_merge(conf_dict, partial_dict)
     # strip out targets; the worker will allocate new ones when we run
     # the job with --lock.
     if 'targets' in conf_dict:

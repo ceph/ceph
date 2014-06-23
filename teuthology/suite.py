@@ -58,23 +58,26 @@ def main(args):
                                           teuthology_branch, kernel_branch,
                                           kernel_flavor, distro, machine_type)
 
-    with NamedTemporaryFile(prefix='schedule_suite_') as base_yaml:
+    with NamedTemporaryFile(prefix='schedule_suite_',
+                            delete=False) as base_yaml:
         base_yaml.write(config_string)
-        base_yaml_paths.insert(0, base_yaml.name)
-        prepare_and_schedule(owner=owner,
-                             name=name,
-                             suite=suite,
-                             machine_type=machine_type,
-                             base=base,
-                             base_yaml_paths=base_yaml_paths,
-                             email=email,
-                             priority=priority,
-                             limit=limit,
-                             num=num,
-                             timeout=timeout,
-                             dry_run=dry_run,
-                             verbose=verbose,
-                             )
+        base_yaml_path = base_yaml.name
+    base_yaml_paths.insert(0, base_yaml_path)
+    prepare_and_schedule(owner=owner,
+                            name=name,
+                            suite=suite,
+                            machine_type=machine_type,
+                            base=base,
+                            base_yaml_paths=base_yaml_paths,
+                            email=email,
+                            priority=priority,
+                            limit=limit,
+                            num=num,
+                            timeout=timeout,
+                            dry_run=dry_run,
+                            verbose=verbose,
+                            )
+    os.remove(base_yaml_path)
 
 
 def make_name(suite, ceph_branch, kernel_branch, kernel_flavor, machine_type,
