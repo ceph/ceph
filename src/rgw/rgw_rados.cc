@@ -2230,7 +2230,6 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
 			   bool get_content_type, string& ns, bool enforce_ns,
                            bool *is_truncated, RGWAccessListFilter *filter)
 {
-  ldout(cct, 20) << __func__ << "shanghai" << dendl;
   int count = 0;
   bool truncated;
 
