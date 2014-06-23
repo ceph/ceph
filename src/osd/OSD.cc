@@ -42,6 +42,7 @@
 
 #include "common/ceph_argparse.h"
 #include "common/version.h"
+#include "common/io_priority.h"
 
 #include "os/ObjectStore.h"
 
@@ -1290,6 +1291,8 @@ int OSD::init()
   recovery_tp.start();
   disk_tp.start();
   command_tp.start();
+
+  set_disk_tp_priority();
 
   // start the heartbeat
   heartbeat_thread.create();
@@ -8249,6 +8252,8 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_map_cache_size",
     "osd_map_max_advance",
     "osd_pg_epoch_persisted_max_stale",
+    "osd_disk_thread_ioprio_class",
+    "osd_disk_thread_ioprio_priority",
     NULL
   };
   return KEYS;
@@ -8275,6 +8280,10 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
     op_tracker.set_history_size_and_duration(cct->_conf->osd_op_history_size,
                                              cct->_conf->osd_op_history_duration);
   }
+  if (changed.count("osd_disk_thread_ioprio_class") ||
+      changed.count("osd_disk_thread_ioprio_priority")) {
+    set_disk_tp_priority();
+  }
 
   check_config();
 }
@@ -8292,6 +8301,17 @@ void OSD::check_config()
 		<< " is not > osd_pg_epoch_persisted_max_stale ("
 		<< g_conf->osd_pg_epoch_persisted_max_stale << ")";
   }
+}
+
+void OSD::set_disk_tp_priority()
+{
+  dout(10) << __func__
+	   << " class " << cct->_conf->osd_disk_thread_ioprio_class
+	   << " priority " << cct->_conf->osd_disk_thread_ioprio_priority
+	   << dendl;
+  int cls =
+    ceph_ioprio_string_to_class(cct->_conf->osd_disk_thread_ioprio_class);
+  disk_tp.set_ioprio(cls, cct->_conf->osd_disk_thread_ioprio_priority);
 }
 
 // --------------------------------

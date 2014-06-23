@@ -13,6 +13,7 @@ libcommon_la_SOURCES = \
 	common/admin_socket_client.cc \
 	common/cmdparse.cc \
 	common/escape.c \
+	common/io_priority.cc \
 	common/Clock.cc \
 	common/Throttle.cc \
 	common/Timer.cc \
@@ -177,6 +178,7 @@ noinst_HEADERS += \
 	common/arch.h \
 	common/armor.h \
 	common/common_init.h \
+	common/io_priority.h \
 	common/pipe.h \
 	common/code_environment.h \
 	common/signal.h \

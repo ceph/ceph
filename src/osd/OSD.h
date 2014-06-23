@@ -1090,6 +1090,8 @@ private:
 
   bool paused_recovery;
 
+  void set_disk_tp_priority();
+
   // -- sessions --
 public:
   struct Session : public RefCountedObject {
