@@ -135,7 +135,8 @@ protected:
     // check we do not have an extra object behind
     uint64_t rados_size;
     time_t mtime;
-    ASSERT_EQ(-ENOENT, ioctx.stat(getObjName(soid, nb_objects), &rados_size, &mtime));
+    std::string oid = getObjName(soid, nb_objects);
+    ASSERT_EQ(-ENOENT, ioctx.stat(oid, &rados_size, &mtime));
   }
 };
   
