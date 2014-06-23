@@ -95,7 +95,7 @@ health_status_t DataHealthService::get_health(
       health_detail = "low disk space!";
     }
 
-    if (stats.store_stats.bytes_total >= g_conf->mon_leveldb_size_warn) {
+    if (stats.store_stats.bytes_total >= g_conf->mon_data_size_warn) {
       if (health_status > HEALTH_WARN)
         health_status = HEALTH_WARN;
       if (!health_detail.empty())
@@ -103,7 +103,7 @@ health_status_t DataHealthService::get_health(
       stringstream ss;
       ss << "store is getting too big! "
          << prettybyte_t(stats.store_stats.bytes_total)
-         << " >= " << prettybyte_t(g_conf->mon_leveldb_size_warn);
+         << " >= " << prettybyte_t(g_conf->mon_data_size_warn);
       health_detail.append(ss.str());
     }
 
