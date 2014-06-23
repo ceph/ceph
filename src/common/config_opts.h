@@ -545,14 +545,6 @@ OPTION(osd_op_history_duration, OPT_U32, 600) // Oldest completed op to track
 OPTION(osd_target_transaction_size, OPT_INT, 30)     // to adjust various transactions that batch smaller items
 OPTION(osd_failsafe_full_ratio, OPT_FLOAT, .97) // what % full makes an OSD "full" (failsafe)
 OPTION(osd_failsafe_nearfull_ratio, OPT_FLOAT, .90) // what % full makes an OSD near full (failsafe)
-OPTION(osd_leveldb_write_buffer_size, OPT_U64, 0) // OSD's leveldb write buffer size
-OPTION(osd_leveldb_cache_size, OPT_U64, 0) // OSD's leveldb cache size
-OPTION(osd_leveldb_block_size, OPT_U64, 0) // OSD's leveldb block size
-OPTION(osd_leveldb_bloom_size, OPT_INT, 0) // OSD's leveldb bloom bits per entry
-OPTION(osd_leveldb_max_open_files, OPT_INT, 0) // OSD's leveldb max open files
-OPTION(osd_leveldb_compression, OPT_BOOL, true) // OSD's leveldb uses compression
-OPTION(osd_leveldb_paranoid, OPT_BOOL, false) // OSD's leveldb paranoid flag
-OPTION(osd_leveldb_log, OPT_STR, "")  // enable OSD leveldb log file
 
 // determines whether PGLog::check() compares written out log to stored log
 OPTION(osd_debug_pg_log_writeout, OPT_BOOL, false)
