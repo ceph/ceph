@@ -1926,7 +1926,7 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
 
   if (f) {
     f->open_object_section("timechecks");
-    f->dump_int("epoch", get_epoch());
+    f->dump_unsigned("epoch", get_epoch());
     f->dump_int("round", timecheck_round);
     f->dump_stream("round_status")
       << ((timecheck_round%2) ? "on-going" : "finished");
@@ -3840,6 +3840,10 @@ void Monitor::tick()
   // trim sessions
   utime_t now = ceph_clock_now(g_ceph_context);
   xlist<MonSession*>::iterator p = session_map.sessions.begin();
+
+  bool out_for_too_long = (!exited_quorum.is_zero()
+      && now > (exited_quorum + 2*g_conf->mon_lease));
+
   while (!p.end()) {
     MonSession *s = *p;
     ++p;
@@ -3851,19 +3855,17 @@ void Monitor::tick()
     if (!s->until.is_zero() && s->until < now) {
       dout(10) << " trimming session " << s->con << " " << s->inst
 	       << " (until " << s->until << " < now " << now << ")" << dendl;
-      messenger->mark_down(s->con);
-      remove_session(s);
-      logger->inc(l_mon_session_trim);
-    } else if (!exited_quorum.is_zero()) {
-      if (now > (exited_quorum + 2 * g_conf->mon_lease)) {
-        // boot the client Session because we've taken too long getting back in
-        dout(10) << " trimming session " << s->con << " " << s->inst
-		 << " because we've been out of quorum too long" << dendl;
-        messenger->mark_down(s->con);
-	logger->inc(l_mon_session_trim);
-        remove_session(s);
-      }
+    } else if (out_for_too_long) {
+      // boot the client Session because we've taken too long getting back in
+      dout(10) << " trimming session " << s->con << " " << s->inst
+        << " because we've been out of quorum too long" << dendl;
+    } else {
+      continue;
     }
+
+    messenger->mark_down(s->con);
+    remove_session(s);
+    logger->inc(l_mon_session_trim);
   }
 
   sync_trim_providers();
