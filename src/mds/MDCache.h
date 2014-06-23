@@ -325,7 +325,7 @@ protected:
     bool safe;
     bool committing;
     bool recovering;
-    umaster() : safe(false), committing(false), recovering(false) {}
+    umaster() : ls(NULL), safe(false), committing(false), recovering(false) {}
   };
   map<metareqid_t, umaster>                 uncommitted_masters;         // master: req -> slave set
 
