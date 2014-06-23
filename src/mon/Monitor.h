@@ -106,7 +106,8 @@ struct MonCommand;
 
 #define COMPAT_SET_LOC "feature_set"
 
-class Monitor : public Dispatcher {
+class Monitor : public Dispatcher,
+                public md_config_obs_t {
 public:
   // me
   string name;
@@ -770,6 +771,11 @@ public:
   ~Monitor();
 
   static int check_features(MonitorDBStore *store);
+
+  // config observer
+  virtual const char** get_tracked_conf_keys() const;
+  virtual void handle_conf_change(const struct md_config_t *conf,
+                                  const std::set<std::string> &changed);
 
   int sanitize_options();
   int preinit();
