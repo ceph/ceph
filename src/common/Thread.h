@@ -21,6 +21,10 @@
 class Thread {
  private:
   pthread_t thread_id;
+  pid_t pid;
+  int ioprio_class, ioprio_priority;
+
+  void *entry_wrapper();
 
  public:
   Thread(const Thread& other);
@@ -44,6 +48,7 @@ class Thread {
   void create(size_t stacksize = 0);
   int join(void **prval = 0);
   int detach();
+  int set_ioprio(int cls, int prio);
 };
 
 #endif
