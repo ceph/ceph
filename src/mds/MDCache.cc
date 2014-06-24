@@ -468,8 +468,7 @@ void MDCache::_create_system_file(CDir *dir, const char *name, CInode *in, Conte
   if (mdir)
     le->metablob.add_new_dir(mdir); // dirty AND complete AND new
 
-  mds->mdlog->submit_entry(le);
-  mds->mdlog->wait_for_safe(new C_MDC_CreateSystemFile(this, mut, dn, dpv, fin));
+  mds->mdlog->submit_entry(le, new C_MDC_CreateSystemFile(this, mut, dn, dpv, fin));
   mds->mdlog->flush();
 }
 
@@ -876,8 +875,7 @@ void MDCache::try_subtree_merge_at(CDir *dir, bool do_eval)
       le->metablob.add_dir_context(in->get_parent_dn()->get_dir());
       journal_dirty_inode(mut.get(), &le->metablob, in);
       
-      mds->mdlog->submit_entry(le);
-      mds->mdlog->wait_for_safe(new C_MDC_SubtreeMergeWB(this, in, mut));
+      mds->mdlog->submit_entry(le, new C_MDC_SubtreeMergeWB(this, in, mut));
       mds->mdlog->flush();
     }
   } 
@@ -3096,8 +3094,8 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
 
       // log commit
       mds->mdlog->start_submit_entry(new ESlaveUpdate(mds->mdlog, "unknown", p->first, from,
-						      ESlaveUpdate::OP_COMMIT, su->origop));
-      mds->mdlog->wait_for_safe(new C_MDC_SlaveCommit(this, from, p->first));
+						      ESlaveUpdate::OP_COMMIT, su->origop),
+				     new C_MDC_SlaveCommit(this, from, p->first));
       mds->mdlog->flush();
 
       finish_uncommitted_slave_update(p->first, from);
