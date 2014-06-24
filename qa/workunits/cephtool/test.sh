@@ -724,19 +724,109 @@ function test_osd_bench()
   ceph tell osd.0 bench 50 2097152
 }
 
-test_mon_injectargs_SI ;
-test_tiering ;
-test_auth ;
-test_mon_misc ;
-test_mon_mds ;
-test_mon_mon ;
-test_mon_osd ;
-test_mon_osd_pool ;
-test_mon_pg ;
-test_mon_osd_pool_set ;
-test_mon_osd_erasure_code ;
-test_mon_osd_misc ;
-test_mon_heap_profiler ;
-test_osd_bench ;
+
+#
+# New tests should be added to the TESTS array below
+#
+# Individual tests may be run using the '-t <testname>' argument
+# The user can specify '-t <testname>' as many times as she wants
+#
+# Tests will be run in order presented in the TESTS array, or in
+# the order specified by the '-t <testname>' options.
+#
+# '-l' will list all the available test names
+# '-h' will show usage
+#
+# The test maintains backward compatibility: not specifying arguments
+# will run all tests following the order they appear in the TESTS array.
+#
+
+TESTS=(
+  mon_injectargs_SI
+  tiering
+  auth
+  mon_misc
+  mon_mds
+  mon_mon
+  mon_osd
+  mon_osd_pool
+  mon_pg
+  mon_osd_pool_set
+  mon_osd_erasure_code
+  mon_osd_misc
+  mon_heap_profiler
+  osd_bench
+)
+
+#
+# "main" follows
+#
+
+function list_tests()
+{
+  echo "AVAILABLE TESTS"
+  for i in ${TESTS[@]}; do
+    echo "  $i"
+  done
+}
+
+function usage()
+{
+  echo "usage: $0 [-h|-l|-t <testname> [-t <testname>...]]"
+}
+
+tests_to_run=()
+
+while [[ $# -gt 0 ]]; do
+  opt=$1
+
+  case "$opt" in
+    "-l" )
+      do_list=1
+      ;;
+    "-t" )
+      shift
+      if [[ -z "$1" ]]; then
+        echo "missing argument to '-t'"
+        usage ;
+        exit 1
+      fi
+      tests_to_run=("${tests_to_run[@]}" "$1")
+      ;;
+    "-h" )
+      usage ;
+      exit 0
+      ;;
+  esac
+  shift
+done
+
+if [[ $do_list -eq 1 ]]; then
+  list_tests ;
+  exit 0
+fi
+
+if [[ ${#tests_to_run[@]} -eq 0 ]]; then
+  tests_to_run=("${TESTS[@]}")
+fi
+
+for i in ${tests_to_run[@]}; do
+  test_${i} ;
+done
+
+#test_mon_injectargs_SI ;
+#test_tiering ;
+#test_auth ;
+#test_mon_misc ;
+#test_mon_mds ;
+#test_mon_mon ;
+#test_mon_osd ;
+#test_mon_osd_pool ;
+#test_mon_pg ;
+#test_mon_osd_pool_set ;
+#test_mon_osd_erasure_code ;
+#test_mon_osd_misc ;
+#test_mon_heap_profiler ;
+#test_osd_bench ;
 
 echo OK
