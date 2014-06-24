@@ -3762,6 +3762,53 @@ void OSD::_send_boot()
   monc->send_mon_message(mboot);
 }
 
+bool OSD::_lsb_release_set (char *buf, const char *str, map<string,string> *pm, const char *key)
+{
+  if (strncmp (buf, str, strlen (str)) == 0) {
+    char *value;
+
+    if (buf[strlen(buf)-1] == '\n')
+      buf[strlen(buf)-1] = '\0';
+
+    value = buf + strlen (str) + 1;
+    (*pm)[key] = value;
+
+    return true;
+  }
+  return false;
+}
+
+void OSD::_lsb_release_parse (map<string,string> *pm)
+{
+  FILE *fp = NULL;
+  char buf[512];
+
+  fp = popen("lsb_release -idrc", "r");
+  if (!fp) {
+    int ret = -errno;
+    derr << "lsb_release_parse - failed to call lsb_release binary with error: " << cpp_strerror(ret) << dendl;
+    return;
+  }
+
+  while (fgets(buf, sizeof(buf) - 1, fp) != NULL) {
+    if (_lsb_release_set(buf, "Distributor ID:", pm, "distro")) 
+      continue;
+    if (_lsb_release_set(buf, "Description:", pm, "distro_description"))
+      continue;
+    if (_lsb_release_set(buf, "Release:", pm, "distro_version"))
+      continue;
+    if (_lsb_release_set(buf, "Codename:", pm, "distro_codename"))
+      continue;
+    
+    derr << "unhandled output: " << buf << dendl;
+  }
+
+  if (pclose(fp)) {
+    int ret = -errno;
+    derr << "lsb_release_parse - pclose failed: " << cpp_strerror(ret) << dendl;
+  }
+}
+
 void OSD::_collect_metadata(map<string,string> *pm)
 {
   (*pm)["ceph_version"] = pretty_version_to_str();
@@ -3831,34 +3878,7 @@ void OSD::_collect_metadata(map<string,string> *pm)
   }
 
   // distro info
-  f = fopen("/etc/lsb-release", "r");
-  if (f) {
-    char buf[100];
-    while (!feof(f)) {
-      char *line = fgets(buf, sizeof(buf), f);
-      if (!line)
-	break;
-      char *eq = strchr(buf, '=');
-      if (!eq)
-	break;
-      *eq = '\0';
-      ++eq;
-      while (*eq == '\"')
-	++eq;
-      while (*eq && (eq[strlen(eq)-1] == '\n' ||
-		     eq[strlen(eq)-1] == '\"'))
-	eq[strlen(eq)-1] = '\0';
-      if (strcmp(buf, "DISTRIB_ID") == 0)
-	(*pm)["distro"] = eq;
-      else if (strcmp(buf, "DISTRIB_RELEASE") == 0)
-	(*pm)["distro_version"] = eq;
-      else if (strcmp(buf, "DISTRIB_CODENAME") == 0)
-	(*pm)["distro_codename"] = eq;
-      else if (strcmp(buf, "DISTRIB_DESCRIPTION") == 0)
-	(*pm)["distro_description"] = eq;
-    }
-    fclose(f);
-  }
+  _lsb_release_parse(pm); 
 
   dout(10) << __func__ << " " << *pm << dendl;
 }
