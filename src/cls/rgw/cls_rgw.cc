@@ -755,7 +755,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
     if (cur_disk.pending_map.empty()) {
       if (cur_disk.exists) {
         struct rgw_bucket_category_stats& old_stats = header.stats[cur_disk.meta.category];
-        CLS_LOG(10, "total_entries: %"PRId64" -> %"PRId64"\n", old_stats.num_entries, old_stats.num_entries - 1);
+        CLS_LOG(10, "total_entries: %" PRId64 " -> %" PRId64 "\n", old_stats.num_entries, old_stats.num_entries - 1);
         old_stats.num_entries--;
         old_stats.total_size -= cur_disk.meta.size;
         old_stats.total_size_rounded -= get_rounded_size(cur_disk.meta.size);
@@ -771,7 +771,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
 	  return ret;
         break;
       case CEPH_RGW_UPDATE:
-        CLS_LOG(10, "CEPH_RGW_UPDATE name=%s total_entries: %"PRId64" -> %"PRId64"\n", cur_change.name.c_str(), stats.num_entries, stats.num_entries + 1);
+        CLS_LOG(10, "CEPH_RGW_UPDATE name=%s total_entries: %" PRId64 " -> %" PRId64 "\n", cur_change.name.c_str(), stats.num_entries, stats.num_entries + 1);
         stats.num_entries++;
         stats.total_size += cur_change.meta.size;
         stats.total_size_rounded += get_rounded_size(cur_change.meta.size);
