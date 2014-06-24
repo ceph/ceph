@@ -286,14 +286,10 @@ void MDLog::cap()
 // -----------------------------
 // segments
 
-void MDLog::start_new_segment(Context *onsync)
+void MDLog::start_new_segment()
 {
   prepare_new_segment();
-  journal_segment_subtree_map();
-  if (onsync) {
-    wait_for_safe(onsync);
-    flush();
-  }
+  journal_segment_subtree_map(NULL);
 }
 
 void MDLog::prepare_new_segment()
@@ -311,10 +307,10 @@ void MDLog::prepare_new_segment()
   mds->mdcache->advance_stray();
 }
 
-void MDLog::journal_segment_subtree_map()
+void MDLog::journal_segment_subtree_map(Context *onsync)
 {
   dout(7) << __func__ << dendl;
-  submit_entry(mds->mdcache->create_subtree_map());
+  submit_entry(mds->mdcache->create_subtree_map(), onsync);
 }
 
 void MDLog::trim(int m)

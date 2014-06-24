@@ -1311,8 +1311,7 @@ void MDS::boot_create()
   assert(g_conf->mds_kill_create_at != 1);
 
   // ok now journal it
-  mdlog->journal_segment_subtree_map();
-  mdlog->wait_for_safe(fin.new_sub());
+  mdlog->journal_segment_subtree_map(fin.new_sub());
   mdlog->flush();
 
   fin.activate();
@@ -1424,7 +1423,7 @@ void MDS::starting_done()
   mdcache->open_root();
 
   // start new segment
-  mdlog->start_new_segment(0);
+  mdlog->start_new_segment();
 }
 
 

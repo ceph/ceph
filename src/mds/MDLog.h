@@ -174,9 +174,9 @@ public:
 
 
   // -- segments --
-  void start_new_segment(Context *onsync=0);
+  void start_new_segment();
   void prepare_new_segment();
-  void journal_segment_subtree_map();
+  void journal_segment_subtree_map(Context *onsync=0);
 
   LogSegment *peek_current_segment() {
     return segments.empty() ? NULL : segments.rbegin()->second;
