@@ -1064,6 +1064,14 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	ss << "pool '" << poolname << "' does not exist";
       }
     }
+    const pg_pool_t *p = mon->osdmon()->osdmap.get_pg_pool(poolid);
+    assert(p != NULL);
+    if (p->is_erasure()) {
+      // I'm sorry Dave, I'm afraid I can't do that
+      r = -EINVAL;
+      poolid = -1;
+      ss << "can't use pool '" << poolname << "' as it's an erasure-code pool";
+    }
     if (poolid >= 0) {
       pending_mdsmap.add_data_pool(poolid);
       ss << "added data pool " << poolid << " to mdsmap";
@@ -1112,6 +1120,35 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       r = -EINVAL;
       goto out;
     }
+
+    const pg_pool_t *p = mon->osdmon()->osdmap.get_pg_pool(data);
+    if (!p) {
+      ss << "pool id '" << data << "' does not exist";
+      r = -ENOENT;
+      goto out;
+    } else if (p->is_erasure()) {
+      const char *pn = mon->osdmon()->osdmap.get_pool_name(data);
+      assert(pn != NULL);
+      ss << "pool '" << pn << "' (id '" << data << "')"
+         << " is an erasure-code pool";
+      r = -EINVAL;
+      goto out;
+    }
+
+    p = mon->osdmon()->osdmap.get_pg_pool(metadata);
+    if (!p) {
+      ss << "pool id '" << metadata << "' does not exist";
+      r = -ENOENT;
+      goto out;
+    } else if (p->is_erasure()) {
+      const char *pn = mon->osdmon()->osdmap.get_pool_name(metadata);
+      assert(pn != NULL);
+      ss << "pool '" << pn << "' (id '" << metadata << "')"
+         << " is an erasure-code pool";
+      r = -EINVAL;
+      goto out;
+    }
+
     string sure;
     cmd_getval(g_ceph_context, cmdmap, "sure", sure);
     if (sure != "--yes-i-really-mean-it") {
