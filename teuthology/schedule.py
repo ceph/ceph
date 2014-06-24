@@ -1,7 +1,7 @@
 import yaml
 
 import teuthology.beanstalk
-from teuthology.misc import config_file, deep_merge, get_user
+from teuthology.misc import deep_merge, get_user
 from teuthology import report
 
 

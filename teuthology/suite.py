@@ -339,13 +339,13 @@ def schedule_suite(name,
     log.info('Suite %s in %s generated %d jobs' % (
         name, path, len(configs)))
 
-    for description, config in configs:
+    for description, fragment_paths in configs:
         if limit > 0 and count >= limit:
             log.info(
                 'Stopped after {limit} jobs due to --limit={limit}'.format(
                     limit=limit))
             break
-        raw_yaml = '\n'.join([file(a, 'r').read() for a in config])
+        raw_yaml = '\n'.join([file(a, 'r').read() for a in fragment_paths])
 
         parsed_yaml = yaml.load(raw_yaml)
         os_type = parsed_yaml.get('os_type')
@@ -379,7 +379,7 @@ def schedule_suite(name,
             '--',
         ])
         arg.extend(base_yamls)
-        arg.extend(config)
+        arg.extend(fragment_paths)
 
         if dry_run:
             # Quote any individual args so that individual commands can be
