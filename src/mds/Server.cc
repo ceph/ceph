@@ -148,14 +148,18 @@ class C_MDS_session_finish : public Context {
   version_t cmapv;
   interval_set<inodeno_t> inos;
   version_t inotablev;
+  Context *fin;
 public:
-  C_MDS_session_finish(MDS *m, Session *se, uint64_t sseq, bool s, version_t mv) :
-    mds(m), session(se), state_seq(sseq), open(s), cmapv(mv), inotablev(0) { }
-  C_MDS_session_finish(MDS *m, Session *se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t>& i, version_t iv) :
-    mds(m), session(se), state_seq(sseq), open(s), cmapv(mv), inos(i), inotablev(iv) { }
+  C_MDS_session_finish(MDS *m, Session *se, uint64_t sseq, bool s, version_t mv, Context *fin_ = NULL) :
+    mds(m), session(se), state_seq(sseq), open(s), cmapv(mv), inotablev(0), fin(fin_) { }
+  C_MDS_session_finish(MDS *m, Session *se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t>& i, version_t iv, Context *fin_ = NULL) :
+    mds(m), session(se), state_seq(sseq), open(s), cmapv(mv), inos(i), inotablev(iv), fin(fin_) { }
   void finish(int r) {
     assert(r == 0);
     mds->server->_session_logged(session, state_seq, open, cmapv, inos, inotablev);
+    if (fin) {
+      fin->complete(r);
+    }
   }
 };
 
@@ -252,7 +256,7 @@ void Server::handle_client_session(MClientSession *m)
 		<< ", BUGGY!" << dendl;
 	assert(0);
       }
-      journal_close_session(session, Session::STATE_CLOSING);
+      journal_close_session(session, Session::STATE_CLOSING, NULL);
     }
     break;
 
@@ -322,6 +326,15 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       CDentry *dn = static_cast<CDentry*>(r->parent);
       dout(20) << " killing client lease of " << *dn << dendl;
       dn->remove_client_lease(r, mds->locker);
+    }
+    if (client_reconnect_gather.count(session->info.get_client())) {
+      dout(20) << " removing client from reconnect set" << dendl;
+      client_reconnect_gather.erase(session->info.get_client());
+
+      if (client_reconnect_gather.empty()) {
+        dout(7) << " client " << session->info.inst << " was last reconnect, finishing" << dendl;
+        reconnect_gather_finish();
+      }
     }
     
     if (session->is_closing()) {
@@ -435,7 +448,7 @@ void Server::terminate_sessions()
 	session->is_killing() ||
 	session->is_closed())
       continue;
-    journal_close_session(session, Session::STATE_CLOSING);
+    journal_close_session(session, Session::STATE_CLOSING, NULL);
   }
 
   mdlog->wait_for_safe(new C_MDS_TerminatedSessions(this));
@@ -500,28 +513,31 @@ void Server::find_idle_sessions()
     mds->clog.info() << "closing stale session " << session->info.inst
 	<< " after " << age << "\n";
     dout(10) << "autoclosing stale session " << session->info.inst << " last " << session->last_cap_renew << dendl;
-    kill_session(session);
+    kill_session(session, NULL);
   }
 }
 
-void Server::kill_session(Session *session)
+void Server::kill_session(Session *session, Context *on_safe)
 {
   if ((session->is_opening() ||
        session->is_open() ||
        session->is_stale()) &&
       !session->is_importing()) {
     dout(10) << "kill_session " << session << dendl;
-    journal_close_session(session, Session::STATE_KILLING);
+    journal_close_session(session, Session::STATE_KILLING, on_safe);
   } else {
     dout(10) << "kill_session importing or already closing/killing " << session << dendl;
     assert(session->is_closing() || 
 	   session->is_closed() || 
 	   session->is_killing() ||
 	   session->is_importing());
+    if (on_safe) {
+      on_safe->complete(0);
+    }
   }
 }
 
-void Server::journal_close_session(Session *session, int state)
+void Server::journal_close_session(Session *session, int state, Context *on_safe)
 {
   uint64_t sseq = mds->sessionmap.set_state(session, state);
   version_t pv = ++mds->sessionmap.projected;
@@ -540,7 +556,7 @@ void Server::journal_close_session(Session *session, int state)
     piv = 0;
 
   mdlog->start_submit_entry(new ESession(session->info.inst, false, pv, both, piv),
-			    new C_MDS_session_finish(mds, session, sseq, false, pv, both, piv));
+			    new C_MDS_session_finish(mds, session, sseq, false, pv, both, piv, on_safe));
   mdlog->flush();
 
   // clean up requests, too
@@ -703,7 +719,7 @@ void Server::reconnect_tick()
       Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
       assert(session);
       dout(1) << "reconnect gave up on " << session->info.inst << dendl;
-      kill_session(session);
+      kill_session(session, NULL);
       failed_reconnects++;
     }
     client_reconnect_gather.clear();
@@ -7572,4 +7588,13 @@ void Server::_rmsnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid)
   reply_request(mdr, reply);
 }
 
+
+/**
+ * Return true if server is in state RECONNECT and this
+ * client has not yet reconnected.
+ */
+bool Server::waiting_for_reconnect(client_t c) const
+{
+  return client_reconnect_gather.count(c) > 0;
+}
 

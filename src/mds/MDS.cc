@@ -210,6 +210,8 @@ public:
 bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
 		    ostream& ss)
 {
+  dout(1) << "asok_command: " << command << dendl;
+
   Formatter *f = new_formatter(format);
   if (!f)
     f = new_formatter("json-pretty");
@@ -224,6 +226,48 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
     op_tracker.dump_ops_in_flight(f);
   } else if (command == "dump_historic_ops") {
     op_tracker.dump_historic_ops(f);
+  } else if (command == "session ls") {
+    mds_lock.Lock();
+
+    // Dump sessions, decorated with recovery/replay status
+    f->open_array_section("sessions");
+    const ceph::unordered_map<entity_name_t, Session*> session_map = sessionmap.get_sessions();
+    for (ceph::unordered_map<entity_name_t,Session*>::const_iterator p = session_map.begin();
+         p != session_map.end();
+         ++p)  {
+      if (!p->first.is_client()) {
+        continue;
+      }
+
+      f->open_object_section("session");
+      f->dump_int("id", p->first.num());
+      f->dump_string("state", p->second->get_state_name());
+      f->dump_int("replay_requests", is_clientreplay() ? p->second->get_request_count() : 0);
+      f->dump_bool("reconnecting", server->waiting_for_reconnect(p->first.num()));
+      f->dump_stream("inst") << p->second->info.inst;
+      f->close_section(); //session
+    }
+    f->close_section(); //sessions
+
+    mds_lock.Unlock();
+  } else if (command == "session evict") {
+    std::string client_id;
+    const bool got_arg = cmd_getval(g_ceph_context, cmdmap, "client_id", client_id);
+    assert(got_arg == true);
+
+    mds_lock.Lock();
+    Session *session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT,
+							    strtol(client_id.c_str(), 0, 10)));
+    if (session) {
+      C_SaferCond on_safe;
+      server->kill_session(session, &on_safe);
+
+      mds_lock.Unlock();
+      on_safe.wait();
+    } else {
+      dout(15) << "session " << session << " not in sessionmap!" << dendl;
+      mds_lock.Unlock();
+    }
   }
   f->flush(ss);
   delete f;
@@ -245,6 +289,16 @@ void MDS::set_up_admin_socket()
   r = admin_socket->register_command("dump_historic_ops", "dump_historic_ops",
 				     asok_hook,
 				     "show slowest recent ops");
+  assert(0 == r);
+  r = admin_socket->register_command("session evict",
+				     "session evict name=client_id,type=CephString",
+				     asok_hook,
+				     "Evict a CephFS client");
+  assert(0 == r);
+  r = admin_socket->register_command("session ls",
+				     "session ls",
+				     asok_hook,
+				     "Enumerate connected CephFS clients");
   assert(0 == r);
 }
 
@@ -859,7 +913,7 @@ void MDS::handle_command(MMonCommand *m)
     Session *session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT,
 							    strtol(m->cmd[2].c_str(), 0, 10)));
     if (session)
-      server->kill_session(session);
+      server->kill_session(session, NULL);
     else
       dout(15) << "session " << session << " not in sessionmap!" << dendl;
   } else if (m->cmd[0] == "issue_caps") {
