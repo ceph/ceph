@@ -368,6 +368,12 @@ function test_mon_mds()
   check_response 'erasure-code' $? 22
   ceph mds newfs $poolnum $poolnum --yes-i-really-mean-it 2>$TMPFILE
   check_response 'erasure-code' $? 22
+  ceph fs new cephfs fs_metadata mds-ec-pool 2>$TMPFILE
+  check_response 'erasure-code' $? 22
+  ceph fs new cephfs mds-ec-pool fs_data 2>$TMPFILE
+  check_response 'erasure-code' $? 22
+  ceph fs new cephfs mds-ec-pool mds-ec-pool 2>$TMPFILE
+  check_response 'erasure-code' $? 22
   set -e
   ceph osd pool delete mds-ec-pool mds-ec-pool --yes-i-really-really-mean-it
 
