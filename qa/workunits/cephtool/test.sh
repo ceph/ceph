@@ -836,19 +836,4 @@ done
 
 set -x
 
-#test_mon_injectargs_SI ;
-#test_tiering ;
-#test_auth ;
-#test_mon_misc ;
-#test_mon_mds ;
-#test_mon_mon ;
-#test_mon_osd ;
-#test_mon_osd_pool ;
-#test_mon_pg ;
-#test_mon_osd_pool_set ;
-#test_mon_osd_erasure_code ;
-#test_mon_osd_misc ;
-#test_mon_heap_profiler ;
-#test_osd_bench ;
-
 echo OK
