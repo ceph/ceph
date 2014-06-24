@@ -323,9 +323,8 @@ def package_version_for_hash(hash, kernel_flavor='basic',
                                   kernel_flavor)
     url = os.path.join(base_url, 'sha1', hash, 'version')
     resp = requests.get(url)
-    if not resp.ok:
-        return None
-    return resp.text.strip()
+    if resp.ok:
+        return resp.text.strip()
 
 
 def get_branch_info(project, branch, project_owner='ceph'):
