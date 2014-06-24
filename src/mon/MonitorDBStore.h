@@ -15,13 +15,13 @@
 
 #include "include/types.h"
 #include "include/buffer.h"
+#include "include/stringify.h"
 #include <set>
 #include <map>
 #include <string>
 #include <boost/scoped_ptr.hpp>
 #include <sstream>
 #include "os/KeyValueDB.h"
-#include "os/LevelDBStore.h"
 
 #include "include/assert.h"
 #include "common/Formatter.h"
@@ -29,7 +29,7 @@
 
 class MonitorDBStore
 {
-  boost::scoped_ptr<LevelDBStore> db;
+  boost::scoped_ptr<KeyValueDB> db;
   bool do_dump;
   int dump_fd;
 
@@ -487,23 +487,32 @@ class MonitorDBStore
   }
 
   void init_options() {
-    db->init();
     if (g_conf->mon_leveldb_write_buffer_size)
-      db->options.write_buffer_size = g_conf->mon_leveldb_write_buffer_size;
+      g_conf->set_val("leveldb_write_buffer_size",
+		      stringify(g_conf->mon_leveldb_write_buffer_size), true,
+		      false);
     if (g_conf->mon_leveldb_cache_size)
-      db->options.cache_size = g_conf->mon_leveldb_cache_size;
+      g_conf->set_val("leveldb_cache_size",
+		      stringify(g_conf->mon_leveldb_cache_size), true, false);
     if (g_conf->mon_leveldb_block_size)
-      db->options.block_size = g_conf->mon_leveldb_block_size;
+      g_conf->set_val("leveldb_block_size",
+		      stringify(g_conf->mon_leveldb_block_size), true, false);
     if (g_conf->mon_leveldb_bloom_size)
-      db->options.bloom_size = g_conf->mon_leveldb_bloom_size;
+      g_conf->set_val("leveldb_bloom_size",
+		      stringify(g_conf->mon_leveldb_bloom_size), true, false);
     if (g_conf->mon_leveldb_compression)
-      db->options.compression_enabled = g_conf->mon_leveldb_compression;
-    if (g_conf->mon_leveldb_max_open_files)
-      db->options.max_open_files = g_conf->mon_leveldb_max_open_files;
+      g_conf->set_val("leveldb_compression", "true", true, false);
     if (g_conf->mon_leveldb_paranoid)
-      db->options.paranoid_checks = g_conf->mon_leveldb_paranoid;
+      g_conf->set_val("leveldb_paranoid", "true", true, false);
+    if (g_conf->mon_leveldb_max_open_files)
+      g_conf->set_val("leveldb_max_open_files",
+		      stringify(g_conf->mon_leveldb_max_open_files), true,
+		      false);
     if (g_conf->mon_leveldb_log.length())
-      db->options.log_file = g_conf->mon_leveldb_log;
+      g_conf->set_val("leveldb_log", stringify(g_conf->mon_leveldb_log), true,
+		      false);
+
+    db->init();
   }
 
   int open(ostream &out) {
@@ -540,11 +549,14 @@ class MonitorDBStore
     os << path.substr(0, path.size() - pos) << "/store.db";
     string full_path = os.str();
 
-    LevelDBStore *db_ptr = new LevelDBStore(g_ceph_context, full_path);
+    KeyValueDB *db_ptr = KeyValueDB::create(g_ceph_context,
+					    g_conf->mon_keyvaluedb,
+					    full_path);
     if (!db_ptr) {
-      derr << __func__ << " error initializing level db back storage in "
-		<< full_path << dendl;
-      assert(0 != "MonitorDBStore: error initializing level db back storage");
+      derr << __func__ << " error initializing "
+	   << g_conf->mon_keyvaluedb << " db back storage in "
+	   << full_path << dendl;
+      assert(0 != "MonitorDBStore: error initializing keyvaluedb back storage");
     }
     db.reset(db_ptr);
 
@@ -560,7 +572,7 @@ class MonitorDBStore
       }
     }
   }
-  MonitorDBStore(LevelDBStore *db_ptr) :
+  MonitorDBStore(KeyValueDB *db_ptr) :
     db(0), do_dump(false), dump_fd(-1) {
     db.reset(db_ptr);
   }

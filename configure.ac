@@ -517,6 +517,31 @@ AC_LANG_POP([C++])
 # Find supported SIMD / SSE extensions supported by the compiler
 AX_INTEL_FEATURES()
 
+# use rocksdb
+AC_ARG_WITH([librocksdb],
+            [AS_HELP_STRING([--with-librocksdb], [build rocksdb support])],
+            [],
+            [with_librocksdb=no])
+AS_IF([test "x$with_librocksdb" = "xyes"],
+            [PKG_CHECK_MODULES([LIBROCKSDB], [rocksdb], [], [true])])
+AS_IF([test "x$with_librocksdb" = "xyes"],
+            [AC_DEFINE([HAVE_LIBROCKSDB], [1], [Defined if you have librocksdb enabled])])
+AM_CONDITIONAL(WITH_LIBROCKSDB, [ test "$with_librocksdb" = "yes" ])
+
+#add rocksdb support
+# check libz
+AS_IF([test "x$with_librocksdb" = "xyes"],
+            [AC_CHECK_LIB([z], [gzread], [], [AC_MSG_FAILURE([libz not found])])])
+# check libbz2
+AS_IF([test "x$with_librocksdb" = "xyes"],
+            [AC_CHECK_LIB([bz2], [BZ2_bzCompressInit], [], [AC_MSG_FAILURE([libbz2 not found])])])
+# check librt
+AS_IF([test "x$with_librocksdb" = "xyes"],
+            [AC_CHECK_LIB([rt], [clock_gettime], [], [AC_MSG_FAILURE([librt not found])])])
+# use system rocksdb
+#AC_CHECK_LIB([rocksdb], [rocksdb_open], [], [AC_MSG_FAILURE([librocks not found])],[-lsnappy -lpthread -lrt -lbz2 -lz])
+#AC_CHECK_LIB([rocksdb], [open], [], [AC_MSG_FAILURE([librocks not found])],[-lsnappy -lpthread -lrt -lbz2 -lz])
+
 # use system libs3?
 AC_ARG_WITH([system-libs3],
 	[AS_HELP_STRING([--with-system-libs3], [use system libs3])],

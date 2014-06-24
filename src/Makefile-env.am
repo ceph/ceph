@@ -162,6 +162,10 @@ if WITH_LIBZFS
 LIBOS += libos_zfs.a -lzfs
 endif # WITH_LIBZFS
 
+if WITH_LIBROCKSDB
+LIBOS += libos_rocksdb.la -lrocksdb
+endif # WITH_LIBROCKSDB
+
 if WITH_TCMALLOC
 LIBPERFGLUE += -ltcmalloc
 endif # WITH_TCMALLOC

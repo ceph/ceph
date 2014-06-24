@@ -15,6 +15,7 @@ libos_la_SOURCES = \
 	os/KeyValueStore.cc \
 	os/ObjectStore.cc \
 	os/WBThrottle.cc \
+        os/KeyValueDB.cc \
 	common/TrackedOp.cc
 
 if LINUX
@@ -59,6 +60,12 @@ noinst_HEADERS += \
 	os/XfsFileStoreBackend.h \
 	os/ZFSFileStoreBackend.h
 
+if WITH_LIBROCKSDB
+libos_rocksdb_la_SOURCES = os/RocksDBStore.cc
+libos_rocksdb_la_CXXFLAGS = ${AM_CXXFLAGS} ${LIBROCKSDB_CFLAGS} -std=gnu++11
+noinst_LTLIBRARIES += libos_rocksdb.la
+noinst_HEADERS += os/RocksDBStore.h
+endif
 if WITH_LIBZFS
 libos_zfs_a_SOURCES = os/ZFS.cc
 libos_zfs_a_CXXFLAGS = ${AM_CXXFLAGS} ${LIBZFS_CFLAGS}

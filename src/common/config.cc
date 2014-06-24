@@ -661,7 +661,7 @@ void md_config_t::set_val_or_die(const char *key, const char *val)
   assert(ret == 0);
 }
 
-int md_config_t::set_val(const char *key, const char *val, bool meta)
+int md_config_t::set_val(const char *key, const char *val, bool meta, bool safe)
 {
   Mutex::Locker l(lock);
   if (!key)
@@ -698,7 +698,7 @@ int md_config_t::set_val(const char *key, const char *val, bool meta)
   for (int i = 0; i < NUM_CONFIG_OPTIONS; ++i) {
     config_option *opt = &config_optionsp[i];
     if (strcmp(opt->name, k.c_str()) == 0) {
-      if (internal_safe_to_start_threads) {
+      if (safe && internal_safe_to_start_threads) {
 	// If threads have been started...
 	if ((opt->type == OPT_STR) || (opt->type == OPT_ADDR) ||
 	    (opt->type == OPT_UUID)) {
