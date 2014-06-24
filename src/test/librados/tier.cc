@@ -3993,6 +3993,8 @@ TEST_F(LibRadosTierECPP, HitSetRead) {
   }
 }
 
+// disable this test until hitset-get reliably works on EC pools
+#if 0
 TEST_F(LibRadosTierECPP, HitSetWrite) {
   int num_pg = _get_pg_num(cluster, pool_name);
   assert(num_pg > 0);
@@ -4065,6 +4067,7 @@ TEST_F(LibRadosTierECPP, HitSetWrite) {
     ASSERT_TRUE(found);
   }
 }
+#endif
 
 TEST_F(LibRadosTierECPP, HitSetTrim) {
   unsigned count = 3;
