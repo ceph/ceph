@@ -693,12 +693,14 @@ function test_mon_osd_misc()
 
 function test_mon_heap_profiler()
 {
+  set +e
   # expect 'heap' commands to be correctly parsed
   ceph heap stats
   ceph heap start_profiler
   ceph heap dump
   ceph heap stop_profiler
   ceph heap release
+  set -e
 }
 
 function test_osd_bench()
