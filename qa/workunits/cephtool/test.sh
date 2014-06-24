@@ -668,6 +668,9 @@ function test_mon_osd_erasure_code()
   ceph osd erasure-code-profile set fooprofile a=b c=d e=f --force
   ceph osd erasure-code-profile set fooprofile a=b c=d e=f
   expect_false ceph osd erasure-code-profile set fooprofile a=b c=d e=f g=h
+  #
+  # cleanup by removing profile 'fooprofile'
+  ceph osd erasure-code-profile rm fooprofile
 }
 
 function test_mon_osd_misc()
