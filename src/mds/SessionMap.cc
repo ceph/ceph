@@ -14,6 +14,7 @@
 
 #include "MDS.h"
 #include "MDCache.h"
+#include "Mutation.h"
 #include "SessionMap.h"
 #include "osdc/Filer.h"
 
@@ -228,6 +229,7 @@ void SessionMap::dump(Formatter *f) const
     f->open_object_section("entity name");
     p->first.dump(f);
     f->close_section(); // entity name
+    f->dump_string("state", p->second->get_state_name());
     f->open_object_section("Session info");
     p->second->info.dump(f);
     f->close_section(); // Session info
@@ -267,3 +269,24 @@ void SessionMap::wipe_ino_prealloc()
   }
   projected = ++version;
 }
+
+/**
+ * Calculate the length of the `requests` member list,
+ * because elist does not have a size() method.
+ *
+ * O(N) runtime.  This would be const, but elist doesn't
+ * have const iterators.
+ */
+size_t Session::get_request_count()
+{
+  size_t result = 0;
+
+  elist<MDRequestImpl*>::iterator p = requests.begin(
+      member_offset(MDRequestImpl, item_session_request));
+  while (!p.end()) {
+    ++result;
+  }
+
+  return result;
+}
+
