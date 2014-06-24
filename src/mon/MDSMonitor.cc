@@ -1015,14 +1015,29 @@ bool MDSMonitor::management_command(
       r = -EINVAL;
     }
 
-    // Automatically set crash_replay_interval on data pool if it
-    // isn't already set.
     pg_pool_t const *data_pool = mon->osdmon()->osdmap.get_pg_pool(data);
     assert(data_pool != NULL);  // Checked it existed above
+    pg_pool_t const *metadata_pool = mon->osdmon()->osdmap.get_pg_pool(metadata);
+    assert(metadata_pool != NULL);  // Checked it existed above
+
+    // Automatically set crash_replay_interval on data pool if it
+    // isn't already set.
     if (data_pool->get_crash_replay_interval() == 0) {
       r = mon->osdmon()->set_crash_replay_interval(data, g_conf->osd_default_data_pool_replay_window);
       assert(r == 0);  // We just did get_pg_pool so it must exist and be settable
       request_proposal(mon->osdmon());
+    }
+
+    if (data_pool->is_erasure()) {
+      ss << "data pool '" << data_name << " is an erasure-code pool";
+      r = -EINVAL;
+      return true;
+    }
+
+    if (metadata_pool->is_erasure()) {
+      ss << "metadata pool '" << metadata_name << " is an erasure-code pool";
+      r = -EINVAL;
+      return true;
     }
 
     // All checks passed, go ahead and create.
