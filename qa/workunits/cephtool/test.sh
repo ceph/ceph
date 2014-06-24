@@ -298,6 +298,10 @@ function test_mon_mds()
   ceph osd pool create fs_metadata 10
   ceph fs new default fs_metadata fs_data
 
+  # Check for default crash_replay_interval set automatically in 'fs new'
+  ceph osd dump | grep fs_data > $TMPFILE
+  check_response "crash_replay_interval 45 "
+
   ceph mds cluster_down
   ceph mds cluster_up
 
