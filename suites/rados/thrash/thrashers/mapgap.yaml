@@ -11,6 +11,7 @@ tasks:
     log-whitelist:
     - wrongly marked me down
     - objects unfound and apparently lost
+    - osd_map_cache_size
 - thrashosds:
     timeout: 1800
     chance_pgnum_grow: 1
