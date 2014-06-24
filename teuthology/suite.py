@@ -52,8 +52,8 @@ def main(args):
         config.results_email = email
     timeout = args['--timeout']
 
-    name = make_name(nice_suite, ceph_branch, kernel_branch, kernel_flavor,
-                     machine_type)
+    name = make_run_name(nice_suite, ceph_branch, kernel_branch, kernel_flavor,
+                         machine_type)
     config_string = create_initial_config(nice_suite, ceph_branch,
                                           teuthology_branch, kernel_branch,
                                           kernel_flavor, distro, machine_type)
@@ -80,8 +80,12 @@ def main(args):
     os.remove(base_yaml_path)
 
 
-def make_name(suite, ceph_branch, kernel_branch, kernel_flavor, machine_type,
-              user=None, timestamp=None):
+def make_run_name(suite, ceph_branch, kernel_branch, kernel_flavor,
+                  machine_type, user=None, timestamp=None):
+    """
+    Generate a run name based on the parameters. A run name looks like:
+        teuthology-2014-06-23_19:00:37-rados-dumpling-testing-basic-plana
+    """
     if not user:
         user = pwd.getpwuid(os.getuid()).pw_name
     # We assume timestamp is a datetime.datetime object
@@ -230,6 +234,11 @@ class ScheduleFailError(RuntimeError):
 
 
 def get_worker(machine_type):
+    """
+    Map a given machine_type to a beanstalkd worker. If machine_type mentions
+    multiple machine types - e.g. 'plana,mira', then this returns 'multi'.
+    Otherwise it returns what was passed.
+    """
     if ',' in machine_type:
         return 'multi'
     else:
@@ -238,7 +247,14 @@ def get_worker(machine_type):
 
 def get_hash(project='ceph', branch='master', flavor='basic',
              distro='ubuntu', machine_type='plana'):
-    # Alternate method for ceph
+    """
+    Find the hash representing the head of the project's repository via
+    querying a gitbuilder repo.
+
+    Will return None in the case of a 404 or any other HTTP error.
+    """
+    # Alternate method for github-hosted projects - left here for informational
+    # purposes
     #resp = requests.get(
     #    'https://api.github.com/repos/ceph/ceph/git/refs/heads/master')
     #hash = .json()['object']['sha']
@@ -274,6 +290,9 @@ def get_distro_defaults(distro, machine_type):
         arch = 'x86_64'
         release = 'centos6'
         pkg_type = 'rpm'
+    log.debug(
+        "Defaults for machine_type %s: arch=%s, release=%s, pkg_type=%s)",
+        machine_type, arch, release, pkg_type)
     return (
         arch,
         release,
