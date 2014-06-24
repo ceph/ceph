@@ -69,7 +69,7 @@ class ResultsSerializer(object):
     yamls = ('orig.config.yaml', 'config.yaml', 'info.yaml', 'summary.yaml')
 
     def __init__(self, archive_base, log=None):
-        self.archive_base = archive_base
+        self.archive_base = archive_base or config.archive_base
         self.log = log or init_logging()
 
     def job_info(self, run_name, job_id, pretty=False):
