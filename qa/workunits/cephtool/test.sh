@@ -86,7 +86,6 @@ function expect_config_value()
   fi
 }
 
-
 # Test SI units during injectargs and 'config set'
 # We only aim at testing the units are parsed accordingly
 # and don't intend to test whether the options being set
@@ -314,6 +313,24 @@ ceph mds set allow_new_snaps 0
 ceph mds set allow_new_snaps false
 ceph mds set allow_new_snaps no
 expect_false ceph mds set allow_new_snaps taco
+
+# we should never be able to add EC pools as data or metadata pools
+# create an ec-pool
+ceph osd pool create mds-ec-pool 10 10 erasure
+set +e
+ceph mds add_data_pool mds-ec-pool 2>$TMPFILE
+check_response 'erasure-code' $? 22
+set -e
+poolnum=$(ceph osd dump | grep 'pool.*mds-ec-pool' | awk '{print $2;}')
+set +e
+ceph mds newfs 0 $poolnum --yes-i-really-mean-it 2>$TMPFILE
+check_response 'erasure-code' $? 22
+ceph mds newfs $poolnum 1 --yes-i-really-mean-it 2>$TMPFILE
+check_response 'erasure-code' $? 22
+ceph mds newfs $poolnum $poolnum --yes-i-really-mean-it 2>$TMPFILE
+check_response 'erasure-code' $? 22
+set -e
+ceph osd pool delete mds-ec-pool mds-ec-pool --yes-i-really-really-mean-it
 
 ceph mds stat
 # ceph mds tell mds.a getmap
