@@ -210,6 +210,8 @@ public:
 bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
 		    ostream& ss)
 {
+  dout(1) << "asok_command: " << command << dendl;
+
   Formatter *f = new_formatter(format);
   if (!f)
     f = new_formatter("json-pretty");
@@ -224,6 +226,24 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
     op_tracker.dump_ops_in_flight(f);
   } else if (command == "dump_historic_ops") {
     op_tracker.dump_historic_ops(f);
+  } else if (command == "session ls") {
+    mds_lock.Lock();
+    sessionmap.dump(f);
+    mds_lock.Unlock();
+  } else if (command == "session evict") {
+    std::string client_id;
+    const bool got_arg = cmd_getval(g_ceph_context, cmdmap, "client_id", client_id);
+    assert(got_arg == true);
+
+    mds_lock.Lock();
+    Session *session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT,
+							    strtol(client_id.c_str(), 0, 10)));
+    if (session) {
+      server->kill_session(session);
+    } else {
+      dout(15) << "session " << session << " not in sessionmap!" << dendl;
+    }
+    mds_lock.Unlock();
   }
   f->flush(ss);
   delete f;
@@ -245,6 +265,16 @@ void MDS::set_up_admin_socket()
   r = admin_socket->register_command("dump_historic_ops", "dump_historic_ops",
 				     asok_hook,
 				     "show slowest recent ops");
+  assert(0 == r);
+  r = admin_socket->register_command("session evict",
+				     "session evict name=client_id,type=CephString",
+				     asok_hook,
+				     "Evict a CephFS client");
+  assert(0 == r);
+  r = admin_socket->register_command("session ls",
+				     "session ls",
+				     asok_hook,
+				     "Enumerate connected CephFS clients");
   assert(0 == r);
 }
 

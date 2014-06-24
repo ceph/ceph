@@ -228,6 +228,7 @@ void SessionMap::dump(Formatter *f) const
     f->open_object_section("entity name");
     p->first.dump(f);
     f->close_section(); // entity name
+    f->dump_string("state", p->second->get_state_name());
     f->open_object_section("Session info");
     p->second->info.dump(f);
     f->close_section(); // Session info
