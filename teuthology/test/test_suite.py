@@ -9,18 +9,19 @@ from teuthology import suite
 class TestSuite(object):
     def test_name_timestamp_passed(self):
         stamp = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
-        name = suite.make_name('suite', 'ceph', 'kernel', 'flavor', 'mtype',
-                               timestamp=stamp)
+        name = suite.make_run_name('suite', 'ceph', 'kernel', 'flavor',
+                                   'mtype', timestamp=stamp)
         assert str(stamp) in name
 
     def test_name_timestamp_not_passed(self):
         stamp = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
-        name = suite.make_name('suite', 'ceph', 'kernel', 'flavor', 'mtype')
+        name = suite.make_run_name('suite', 'ceph', 'kernel', 'flavor',
+                                   'mtype')
         assert str(stamp) in name
 
     def test_name_user(self):
-        name = suite.make_name('suite', 'ceph', 'kernel', 'flavor', 'mtype',
-                               user='USER')
+        name = suite.make_run_name('suite', 'ceph', 'kernel', 'flavor',
+                                   'mtype', user='USER')
         assert name.startswith('USER-')
 
     def test_ceph_hash(self):
