@@ -741,6 +741,7 @@ function test_osd_bench()
 # will run all tests following the order they appear in the TESTS array.
 #
 
+set +x
 TESTS=(
   mon_injectargs_SI
   tiering
@@ -811,8 +812,12 @@ if [[ ${#tests_to_run[@]} -eq 0 ]]; then
 fi
 
 for i in ${tests_to_run[@]}; do
+  set -x
   test_${i} ;
+  set +x
 done
+
+set -x
 
 #test_mon_injectargs_SI ;
 #test_tiering ;
