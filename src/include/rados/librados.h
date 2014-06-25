@@ -2061,10 +2061,10 @@ void rados_write_op_set_alloc_hint(rados_write_op_t write_op,
 /**
  * Perform a write operation synchronously
  * @param write_op operation to perform
- * @io the ioctx that the object is in
- * @oid the object id
- * @mtime the time to set the mtime to, NULL for the current time
- * @flags flags to apply to the entire operation (LIBRADOS_OPERATION_*)
+ * @param io the ioctx that the object is in
+ * @param oid the object id
+ * @param mtime the time to set the mtime to, NULL for the current time
+ * @param flags flags to apply to the entire operation (LIBRADOS_OPERATION_*)
  */
 int rados_write_op_operate(rados_write_op_t write_op,
 			   rados_ioctx_t io,
@@ -2074,11 +2074,11 @@ int rados_write_op_operate(rados_write_op_t write_op,
 /**
  * Perform a write operation asynchronously
  * @param write_op operation to perform
- * @io the ioctx that the object is in
+ * @param io the ioctx that the object is in
  * @param completion what to do when operation has been attempted
- * @oid the object id
- * @mtime the time to set the mtime to, NULL for the current time
- * @flags flags to apply to the entire operation (LIBRADOS_OPERATION_*)
+ * @param oid the object id
+ * @param mtime the time to set the mtime to, NULL for the current time
+ * @param flags flags to apply to the entire operation (LIBRADOS_OPERATION_*)
  */
 int rados_aio_write_op_operate(rados_write_op_t write_op,
                                rados_ioctx_t io,
