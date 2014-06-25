@@ -101,6 +101,14 @@ def make_run_name(suite, ceph_branch, kernel_branch, kernel_flavor,
 
 def create_initial_config(nice_suite, ceph_branch, teuthology_branch,
                           kernel_branch, kernel_flavor, distro, machine_type):
+    """
+    Put together the config file used as the basis for each job in the run.
+    Grabs hashes for the latest ceph, kernel and teuthology versions in the
+    branches specified and specifies them so we know exactly what we're
+    testing.
+
+    :returns: A yaml-formatted string
+    """
     # Put together a stanza specifying the kernel hash
     if kernel_branch == 'distro':
         kernel_hash = 'distro'
@@ -164,6 +172,12 @@ def create_initial_config(nice_suite, ceph_branch, teuthology_branch,
 def prepare_and_schedule(owner, name, suite, machine_type, base,
                          base_yaml_paths, email, priority, limit, num, timeout,
                          dry_run, verbose):
+    """
+    Puts together some "base arguments" with which to execute
+    teuthology-schedule for each job, then passes them and other parameters to
+    schedule_suite(). Finally, schedules a "last-in-suite" job that sends an
+    email to the specified address (if one is specified).
+    """
     arch = get_arch(machine_type)
 
     base_args = [
@@ -208,6 +222,10 @@ def prepare_and_schedule(owner, name, suite, machine_type, base,
 
 
 def schedule_fail(message, name=None):
+    """
+    If an email address has been specified anywhere, send an alert there. Then
+    raise a ScheduleFailError.
+    """
     email = config.results_email
     if email:
         subject = "Failed to schedule {name}".format(name=name)
@@ -318,6 +336,11 @@ def get_gitbuilder_url(project, distro, pkg_type, arch, kernel_flavor):
 
 def package_version_for_hash(hash, kernel_flavor='basic',
                              distro='ubuntu', machine_type='plana'):
+    """
+    Does what it says on the tin. Uses gitbuilder repos.
+
+    :returns: a string.
+    """
     (arch, release, pkg_type) = get_distro_defaults(distro, machine_type)
     base_url = get_gitbuilder_url('ceph', release, pkg_type, arch,
                                   kernel_flavor)
@@ -328,6 +351,16 @@ def package_version_for_hash(hash, kernel_flavor='basic',
 
 
 def get_branch_info(project, branch, project_owner='ceph'):
+    """
+    Use the GitHub API to query a project's branch. Returns:
+        {u'object': {u'sha': <a_sha_string>,
+                    u'type': <string>,
+                    u'url': <url_to_commit>},
+        u'ref': u'refs/heads/<branch>',
+        u'url': <url_to_branch>}
+
+    We mainly use this to check if a branch exists.
+    """
     url_templ = 'https://api.github.com/repos/{project_owner}/{project}/git/refs/heads/{branch}'  # noqa
     url = url_templ.format(project_owner=project_owner, project=project,
                            branch=branch)
@@ -495,6 +528,12 @@ def build_matrix(path):
 
 
 def get_arch(machine_type):
+    """
+    Based on a given machine_type, return its architecture by querying the lock
+    server. Sound expensive? It is!
+
+    :returns: A string or None
+    """
     locks = lock.list_locks()
     for machine in locks:
         if machine['type'] == machine_type:
