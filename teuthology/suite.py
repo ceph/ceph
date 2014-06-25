@@ -112,6 +112,9 @@ def create_initial_config(nice_suite, ceph_branch, teuthology_branch,
     # Put together a stanza specifying the kernel hash
     if kernel_branch == 'distro':
         kernel_hash = 'distro'
+    # Skip the stanza if the branch passed is '-'
+    elif kernel_branch == '-':
+        kernel_hash = None
     else:
         kernel_hash = get_hash('kernel', kernel_branch, kernel_flavor,
                                machine_type)
@@ -121,6 +124,9 @@ def create_initial_config(nice_suite, ceph_branch, teuthology_branch,
     if kernel_hash:
         log.info("kernel sha1: {hash}".format(hash=kernel_hash))
         kernel_dict = dict(kernel=dict(kdb=True, sha1=kernel_hash))
+        kernel_stanza = yaml.dump(kernel_dict, default_flow_style=False).strip()
+    else:
+        kernel_stanza = ''
 
     # Get the ceph hash
     ceph_hash = get_hash('ceph', ceph_branch, kernel_flavor, machine_type)
@@ -162,7 +168,7 @@ def create_initial_config(nice_suite, ceph_branch, teuthology_branch,
         ceph_hash=ceph_hash,
         teuthology_branch=teuthology_branch,
         machine_type=machine_type,
-        kernel_stanza=yaml.dump(kernel_dict, default_flow_style=False).strip(),
+        kernel_stanza=kernel_stanza,
         distro=distro,
         s3_branch=s3_branch,
     )
