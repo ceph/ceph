@@ -68,8 +68,9 @@ void DataHealthService::start_epoch()
   last_warned_percent = 0;
 }
 
-health_status_t DataHealthService::get_health(
+void DataHealthService::get_health(
     Formatter *f,
+    list<pair<health_status_t,string> >& summary,
     list<pair<health_status_t,string> > *detail)
 {
   dout(10) << __func__ << dendl;
@@ -77,8 +78,6 @@ health_status_t DataHealthService::get_health(
     f->open_object_section("data_health");
     f->open_array_section("mons");
   }
-
-  health_status_t overall_status = HEALTH_OK;
 
   for (map<entity_inst_t,DataStats>::iterator it = stats.begin();
        it != stats.end(); ++it) {
@@ -89,10 +88,10 @@ health_status_t DataHealthService::get_health(
     string health_detail;
     if (stats.latest_avail_percent <= g_conf->mon_data_avail_crit) {
       health_status = HEALTH_ERR;
-      health_detail = "shutdown iminent!";
+      health_detail = "low disk space, shutdown imminent";
     } else if (stats.latest_avail_percent <= g_conf->mon_data_avail_warn) {
       health_status = HEALTH_WARN;
-      health_detail = "low disk space!";
+      health_detail = "low disk space";
     }
 
     if (stats.store_stats.bytes_total >= g_conf->mon_leveldb_size_warn) {
@@ -107,15 +106,13 @@ health_status_t DataHealthService::get_health(
       health_detail.append(ss.str());
     }
 
-    if (overall_status > health_status)
-      overall_status = health_status;
-
-    if (detail && health_status != HEALTH_OK) {
+    if (health_status != HEALTH_OK) {
       stringstream ss;
-      ss << "mon." << mon_name << " addr " << it->first.addr
-          << " has " << stats.latest_avail_percent
-          << "%% avail disk space -- " << health_detail;
-      detail->push_back(make_pair(health_status, ss.str()));
+      ss << "mon." << mon_name << " " << health_detail;
+      summary.push_back(make_pair(health_status, ss.str()));
+      ss << " -- " <<  stats.latest_avail_percent << "% avail";
+      if (detail)
+	detail->push_back(make_pair(health_status, ss.str()));
     }
 
     if (f) {
@@ -134,8 +131,6 @@ health_status_t DataHealthService::get_health(
     f->close_section(); // mons
     f->close_section(); // data_health
   }
-
-  return overall_status;
 }
 
 int DataHealthService::update_store_stats(DataStats &ours)

@@ -1900,6 +1900,8 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
     s->get_health(summary, detailbl ? &detail : NULL);
   }
 
+  health_monitor->get_health(f, summary, (detailbl ? &detail : NULL));
+
   if (f)
     f->open_array_section("summary");
   stringstream ss;
@@ -1984,10 +1986,6 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
   }
   if (f)
     f->close_section();
-
-  health_status_t hmstatus = health_monitor->get_health(f, (detailbl ? &detail : NULL));
-  if (overall > hmstatus)
-    overall = hmstatus;
 
   stringstream fss;
   fss << overall;
