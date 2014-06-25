@@ -86,6 +86,8 @@ function expect_config_value()
   fi
 }
 
+function test_mon_injectargs_SI()
+{
 # Test SI units during injectargs and 'config set'
 # We only aim at testing the units are parsed accordingly
 # and don't intend to test whether the options being set
@@ -110,7 +112,10 @@ ceph tell mon.a injectargs '--mon_pg_warn_min_objects 1G'
 expect_config_value "mon.a" "mon_pg_warn_min_objects" 1073741824
 expect_false ceph injectargs mon.a '--mon_pg_warn_min_objects 10F'
 ceph daemon mon.a config set mon_pg_warn_min_objects $initial_value
+}
 
+function test_tiering()
+{
 # tiering
 ceph osd pool create cache 2
 ceph osd pool create cache2 2
@@ -214,7 +219,11 @@ ceph health | grep WARN | grep cache4
 ceph health detail | grep cache4 | grep 'target max' | grep objects
 ceph health detail | grep cache4 | grep 'target max' | grep 'B'
 ceph osd pool delete cache4 cache4 --yes-i-really-really-mean-it
+}
 
+
+function test_auth()
+{
 # Assumes there are at least 3 MDSes and two OSDs
 #
 
@@ -238,7 +247,11 @@ ceph auth export -o authfile2
 diff authfile authfile2
 rm authfile authfile2
 ceph auth del client.xx
+}
 
+
+function test_mon_misc()
+{
 # with and without verbosity
 ceph osd dump | grep '^epoch'
 ceph --concise osd dump | grep '^epoch'
@@ -276,7 +289,11 @@ if ! grep "$mymsg" $TMPDIR/$$; then
     grep "$mymsg" $TMPDIR/$$
 fi
 kill $wpid
+}
 
+
+function test_mon_mds()
+{
 ceph mds cluster_down
 ceph mds cluster_up
 
@@ -350,14 +367,20 @@ ceph mds stat
 # ceph mds rmfailed
 # ceph mds set_state
 # ceph mds stop
+}
 
+function test_mon_mon()
+{
 # no mon add/remove
 ceph mon dump
 ceph mon getmap -o $TMPDIR/monmap.$$
 [ -s $TMPDIR/monmap.$$ ]
 # ceph mon tell
 ceph mon_status
+}
 
+function test_mon_osd()
+{
 bl=192.168.0.1:0/1000
 ceph osd blacklist add $bl
 ceph osd blacklist ls | grep $bl
@@ -469,7 +492,10 @@ ceph osd dump | grep 'flags pauserd,pausewr'
 ceph osd unpause
 
 ceph osd tree
+}
 
+function test_mon_osd_pool()
+{
 ceph osd pool mksnap data datasnap
 rados -p data lssnap | grep datasnap
 ceph osd pool rmsnap data datasnap
@@ -489,7 +515,10 @@ ceph osd lspools | grep replicated
 ceph osd pool delete replicated replicated --yes-i-really-really-mean-it
 
 ceph osd stat | grep up,
+}
 
+function test_mon_pg()
+{
 ceph pg debug unfound_objects_exist
 ceph pg debug degraded_pgs_exist
 ceph pg deep-scrub 0.0
@@ -553,6 +582,10 @@ expect_false ceph osd pg-temp 0.0 asdf
 expect_false ceph osd pg-temp 0.0
 
 # don't test ceph osd primary-temp for now
+}
+
+function test_mon_osd_pool_set()
+{
 
 for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset; do
 	ceph osd pool get data $s
@@ -611,7 +644,10 @@ ceph osd pool set rbd cache_min_flush_age 123
 ceph osd pool set rbd cache_min_evict_age 234
 
 ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 0'
+}
 
+function test_mon_osd_erasure_code()
+{
 
 ceph osd erasure-code-profile set fooprofile a=b c=d
 ceph osd erasure-code-profile set fooprofile a=b c=d
@@ -619,8 +655,10 @@ expect_false ceph osd erasure-code-profile set fooprofile a=b c=d e=f
 ceph osd erasure-code-profile set fooprofile a=b c=d e=f --force
 ceph osd erasure-code-profile set fooprofile a=b c=d e=f
 expect_false ceph osd erasure-code-profile set fooprofile a=b c=d e=f g=h
+}
 
-
+function test_mon_osd_misc()
+{
 set +e
 
 # expect error about missing 'pool' argument
@@ -634,15 +672,21 @@ ceph pg set_full_ratio 95 2>$TMPFILE; check_response 'not in range' $? 22
 
 # expect "not in range" for invalid overload percentage
 ceph osd reweight-by-utilization 80 2>$TMPFILE; check_response 'not in range' $? 22
+set -e
+}
 
+function test_mon_heap_profiler()
+{
 # expect 'heap' commands to be correctly parsed
 ceph heap stats
 ceph heap start_profiler
 ceph heap dump
 ceph heap stop_profiler
 ceph heap release
+}
 
-
+function test_osd_bench()
+{
 # test osd bench limits
 # As we should not rely on defaults (as they may change over time),
 # lets inject some values and perform some simple tests
@@ -679,5 +723,21 @@ ceph tell osd.0 bench 409600 4096
 expect_false ceph tell osd.0 bench 51 2097152
 # but 50 must succeed
 ceph tell osd.0 bench 50 2097152
+}
+
+test_mon_injectargs_SI ;
+test_tiering ;
+test_auth ;
+test_mon_misc ;
+test_mon_mds ;
+test_mon_mon ;
+test_mon_osd ;
+test_mon_osd_pool ;
+test_mon_pg ;
+test_mon_osd_pool_set ;
+test_mon_osd_erasure_code ;
+test_mon_osd_misc ;
+test_mon_heap_profiler ;
+test_osd_bench ;
 
 echo OK
