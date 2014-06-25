@@ -53,6 +53,7 @@ using namespace std;
 #include "common/simple_cache.hpp"
 #include "common/sharedptr_registry.hpp"
 #include "common/PrioritizedQueue.h"
+#include "messages/MOSDOp.h"
 
 #define CEPH_OSD_PROTOCOL    10 /* cluster internal */
 
@@ -1094,6 +1095,35 @@ private:
 
   // -- sessions --
 public:
+
+
+  static bool split_request(OpRequestRef op, unsigned match, unsigned bits) {
+    unsigned mask = ~((~0)<<bits);
+    switch (op->get_req()->get_type()) {
+    case CEPH_MSG_OSD_OP:
+      return (static_cast<MOSDOp*>(
+		op->get_req())->get_pg().m_seed & mask) == match;
+    }
+    return false;
+  }
+
+  static void split_list(
+    list<OpRequestRef> *from,
+    list<OpRequestRef> *to,
+    unsigned match,
+    unsigned bits) {
+    for (list<OpRequestRef>::iterator i = from->begin();
+	 i != from->end();
+      ) {
+      if (split_request(*i, match, bits)) {
+	to->push_back(*i);
+	from->erase(i++);
+      } else {
+	++i;
+      }
+    }
+  }
+
   struct Session : public RefCountedObject {
     EntityName entity_name;
     OSDCap caps;
@@ -1103,6 +1133,9 @@ public:
 
     Mutex session_dispatch_lock;
     list<OpRequestRef> waiting_on_map;
+
+    OSDMapRef osdmap;  /// Map as of which waiting_for_pg is current
+    map<spg_t, list<OpRequestRef> > waiting_for_pg;
 
     Mutex sent_epoch_lock;
     epoch_t last_sent_epoch;
@@ -1115,26 +1148,87 @@ public:
       sent_epoch_lock("Session::sent_epoch_lock"), last_sent_epoch(0),
       received_map_lock("Session::received_map_lock"), received_map_epoch(0)
     {}
+
+    
   };
+  void update_waiting_for_pg(Session *session, OSDMapRef osdmap);
+  void session_notify_pg_create(Session *session, OSDMapRef osdmap, spg_t pgid);
+  void session_notify_pg_cleared(Session *session, OSDMapRef osdmap, spg_t pgid);
   void dispatch_session_waiting(Session *session, OSDMapRef osdmap);
-  Mutex session_waiting_for_map_lock;
+
+  Mutex session_waiting_lock;
   set<Session*> session_waiting_for_map;
+  map<spg_t, set<Session*> > session_waiting_for_pg;
+
   /// Caller assumes refs for included Sessions
   void get_sessions_waiting_for_map(set<Session*> *out) {
-    Mutex::Locker l(session_waiting_for_map_lock);
+    Mutex::Locker l(session_waiting_lock);
     out->swap(session_waiting_for_map);
   }
   void register_session_waiting_on_map(Session *session) {
-    Mutex::Locker l(session_waiting_for_map_lock);
+    Mutex::Locker l(session_waiting_lock);
     session->get();
     session_waiting_for_map.insert(session);
   }
   void clear_session_waiting_on_map(Session *session) {
-    Mutex::Locker l(session_waiting_for_map_lock);
+    Mutex::Locker l(session_waiting_lock);
     set<Session*>::iterator i = session_waiting_for_map.find(session);
     if (i != session_waiting_for_map.end()) {
       (*i)->put();
       session_waiting_for_map.erase(i);
+    }
+  }
+  void register_session_waiting_on_pg(Session *session, spg_t pgid) {
+    Mutex::Locker l(session_waiting_lock);
+    set<Session*> &s = session_waiting_for_pg[pgid];
+    set<Session*>::iterator i = s.find(session);
+    if (i == s.end()) {
+      session->get();
+      s.insert(session);
+    }
+  }
+  void clear_session_waiting_on_pg(Session *session, spg_t pgid) {
+    Mutex::Locker l(session_waiting_lock);
+    map<spg_t, set<Session*> >::iterator i = session_waiting_for_pg.find(pgid);
+    if (i == session_waiting_for_pg.end()) {
+      return;
+    }
+    set<Session*>::iterator j = i->second.find(session);
+    if (j != i->second.end()) {
+      (*j)->put();
+      i->second.erase(j);
+    }
+    if (i->second.empty()) {
+      session_waiting_for_pg.erase(i);
+    }
+  }
+  void get_sessions_possibly_interested_in_pg(
+    spg_t pgid, set<Session*> *sessions) {
+    Mutex::Locker l(session_waiting_lock);
+    while (1) {
+      map<spg_t, set<Session*> >::iterator i = session_waiting_for_pg.find(pgid);
+      if (i != session_waiting_for_pg.end()) {
+	sessions->insert(i->second.begin(), i->second.end());
+      }
+      if (pgid.pgid.ps() == 0) {
+	break;
+      } else {
+	pgid = pgid.get_parent();
+      }
+    }
+    for (set<Session*>::iterator i = sessions->begin();
+	 i != sessions->end();
+	 ++i) {
+      (*i)->get();
+    }
+  }
+  void get_pgs_with_waiting_sessions(set<spg_t> *pgs) {
+    Mutex::Locker l(session_waiting_lock);
+    for (map<spg_t, set<Session*> >::iterator i =
+	   session_waiting_for_pg.begin();
+	 i != session_waiting_for_pg.end();
+	 ++i) {
+      pgs->insert(i->first);
     }
   }
 
@@ -1529,7 +1623,6 @@ protected:
   // -- placement groups --
   RWLock pg_map_lock; // this lock orders *above* individual PG _locks
   ceph::unordered_map<spg_t, PG*> pg_map; // protected by pg_map lock
-  map<spg_t, list<OpRequestRef> > waiting_for_pg; // protected by pg_map lock
 
   map<spg_t, list<PG::CephPeeringEvtRef> > peering_wait_for_split;
   PGRecoveryStats pg_recovery_stats;
@@ -1594,15 +1687,20 @@ protected:
     ); ///< @return false if there was a map gap between from and now
 
   void wake_pg_waiters(PG* pg, spg_t pgid) {
+    assert(osd_lock.is_locked());
     // Need write lock on pg_map_lock
-    map<spg_t, list<OpRequestRef> >::iterator i = waiting_for_pg.find(pgid);
-    if (i != waiting_for_pg.end()) {
-      for (list<OpRequestRef>::iterator j = i->second.begin();
-	   j != i->second.end();
-	   ++j) {
-	enqueue_op(pg, *j);
+    set<Session*> concerned_sessions;
+    get_sessions_possibly_interested_in_pg(pgid, &concerned_sessions);
+
+    for (set<Session*>::iterator i = concerned_sessions.begin();
+	 i != concerned_sessions.end();
+	 ++i) {
+      {
+	Mutex::Locker l((*i)->session_dispatch_lock);
+	session_notify_pg_create(*i, osdmap, pgid);
+	dispatch_session_waiting(*i, osdmap);
       }
-      waiting_for_pg.erase(i);
+      (*i)->put();
     }
   }
 
