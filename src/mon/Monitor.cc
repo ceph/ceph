@@ -380,12 +380,64 @@ void Monitor::write_features(MonitorDBStore::Transaction &t)
   t.put(MONITOR_NAME, COMPAT_SET_LOC, bl);
 }
 
+const char** Monitor::get_tracked_conf_keys() const
+{
+  static const char* KEYS[] = {
+    "mon_lease",
+    "mon_lease_renew_interval",
+    "mon_lease_ack_timeout",
+    NULL
+  };
+  return KEYS;
+}
+
+void Monitor::handle_conf_change(const struct md_config_t *conf,
+                                 const std::set<std::string> &changed)
+{
+  sanitize_options();
+}
+
+int Monitor::sanitize_options()
+{
+  int r = 0;
+
+  // mon_lease must be greater than mon_lease_renewal; otherwise we
+  // may incur in leases expiring before they are renewed.
+  if (g_conf->mon_lease <= g_conf->mon_lease_renew_interval) {
+    clog.error() << "mon_lease (" << g_conf->mon_lease
+                 << ") must be greater "
+                 << "than mon_lease_renew_interval ("
+                 << g_conf->mon_lease_renew_interval << ")";
+    r = -EINVAL;
+  }
+
+  // mon_lease_ack_timeout must be greater than mon_lease to make sure we've
+  // got time to renew the lease and get an ack for it. Having both options
+  // with the same value, for a given small vale, could mean timing out if
+  // the monitors happened to be overloaded -- or even under normal load for
+  // a small enough value.
+  if (g_conf->mon_lease_ack_timeout <= g_conf->mon_lease) {
+    clog.error() << "mon_lease_ack_timeout ("
+                 << g_conf->mon_lease_ack_timeout
+                 << ") must be greater than mon_lease ("
+                 << g_conf->mon_lease << ")";
+    r = -EINVAL;
+  }
+  return r;
+}
+
 int Monitor::preinit()
 {
   lock.Lock();
 
   dout(1) << "preinit fsid " << monmap->fsid << dendl;
-  
+
+  int r = sanitize_options();
+  if (r < 0) {
+    derr << "option sanitization failed!" << dendl;
+    return r;
+  }
+
   assert(!logger);
   {
     PerfCountersBuilder pcb(g_ceph_context, "mon", l_mon_first, l_mon_last);
@@ -500,8 +552,6 @@ int Monitor::preinit()
   init_paxos();
   health_monitor->init();
 
-  int r;
-
   if (is_keyring_required()) {
     // we need to bootstrap authentication keys so we can form an
     // initial quorum.
@@ -575,6 +625,9 @@ int Monitor::preinit()
                                      "force monitor out of the quorum");
   assert(r == 0);
   lock.Lock();
+
+  // add ourselves as a conf observer
+  g_conf->add_observer(this);
 
   lock.Unlock();
   return 0;
