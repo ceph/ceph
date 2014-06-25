@@ -44,12 +44,14 @@ def checkout_repo(repo_url, dest_path, branch):
         )
     except subprocess.CalledProcessError:
         shutil.rmtree(dest_path)
-        raise BranchNotFoundError(branch)
+        raise BranchNotFoundError(branch, repo_url)
 
 
 class BranchNotFoundError(ValueError):
-    def __init__(self, branch):
+    def __init__(self, branch, repo):
         self.branch = branch
+        self.repo = repo
 
     def __str__(self):
-        return "teuthology branch not found: '{0}'".format(self.branch)
+        return "Branch {branch} not found in repo: {repo}".format(
+            branch=self.branch, repo=self.repo)
