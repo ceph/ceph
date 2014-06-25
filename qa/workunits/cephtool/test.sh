@@ -224,9 +224,6 @@ function test_tiering()
 
 function test_auth()
 {
-  # Assumes there are at least 3 MDSes and two OSDs
-  #
-
   ceph auth add client.xx mon allow osd "allow *"
   ceph auth export client.xx >client.xx.keyring
   ceph auth add client.xx -i client.xx.keyring
@@ -381,6 +378,9 @@ function test_mon_mon()
 
 function test_mon_osd()
 {
+  #
+  # osd blacklist
+  #
   bl=192.168.0.1:0/1000
   ceph osd blacklist add $bl
   ceph osd blacklist ls | grep $bl
@@ -396,6 +396,9 @@ function test_mon_osd()
   expect_false "ceph osd blacklist $bl/-1"
   expect_false "ceph osd blacklist $bl/foo"
 
+  #
+  # osd crush
+  #
   ceph osd crush tunables legacy
   ceph osd crush show-tunables | grep argonaut
   ceph osd crush tunables bobtail
@@ -403,6 +406,9 @@ function test_mon_osd()
   ceph osd crush tunables firefly
   ceph osd crush show-tunables | grep firefly
 
+  #
+  # osd scrub
+  #
   # how do I tell when these are done?
   ceph osd scrub 0
   ceph osd deep-scrub 0
@@ -498,6 +504,9 @@ function test_mon_osd()
 
 function test_mon_osd_pool()
 {
+  #
+  # osd pool
+  #
   ceph osd pool mksnap data datasnap
   rados -p data lssnap | grep datasnap
   ceph osd pool rmsnap data datasnap
@@ -559,11 +568,15 @@ function test_mon_pg()
   ceph report | grep osd_stats
   ceph status
   ceph -s
-  # ceph sync force
 
+  #
+  # tell osd version
+  #
   ceph tell osd.0 version
   expect_false ceph tell osd.9999 version 
   expect_false ceph tell osd.foo version
+
+  # back to pg stuff
 
   ceph tell osd.0 dump_pg_recovery_stats | grep Started
 
