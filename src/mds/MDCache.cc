@@ -2273,7 +2273,7 @@ ESubtreeMap *MDCache::create_subtree_map()
   show_subtrees();
 
   ESubtreeMap *le = new ESubtreeMap();
-  mds->mdlog->start_entry(le);
+  mds->mdlog->_start_entry(le);
   
   CDir *mydir = 0;
   if (myin) {
