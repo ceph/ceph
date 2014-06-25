@@ -89,207 +89,207 @@ function expect_config_value()
 
 function test_mon_injectargs_SI()
 {
-# Test SI units during injectargs and 'config set'
-# We only aim at testing the units are parsed accordingly
-# and don't intend to test whether the options being set
-# actually expect SI units to be passed.
-# Keep in mind that all integer based options (i.e., INT,
-# LONG, U32, U64) will accept SI unit modifiers.
-initial_value=$(get_config_value_or_die "mon.a" "mon_pg_warn_min_objects")
-ceph daemon mon.a config set mon_pg_warn_min_objects 10
-expect_config_value "mon.a" "mon_pg_warn_min_objects" 10
-ceph daemon mon.a config set mon_pg_warn_min_objects 10K
-expect_config_value "mon.a" "mon_pg_warn_min_objects" 10240
-ceph daemon mon.a config set mon_pg_warn_min_objects 1G
-expect_config_value "mon.a" "mon_pg_warn_min_objects" 1073741824
-ceph daemon mon.a config set mon_pg_warn_min_objects 10F > $TMPFILE || true
-check_response "'10F': (22) Invalid argument"
-# now test with injectargs
-ceph tell mon.a injectargs '--mon_pg_warn_min_objects 10'
-expect_config_value "mon.a" "mon_pg_warn_min_objects" 10
-ceph tell mon.a injectargs '--mon_pg_warn_min_objects 10K'
-expect_config_value "mon.a" "mon_pg_warn_min_objects" 10240
-ceph tell mon.a injectargs '--mon_pg_warn_min_objects 1G'
-expect_config_value "mon.a" "mon_pg_warn_min_objects" 1073741824
-expect_false ceph injectargs mon.a '--mon_pg_warn_min_objects 10F'
-ceph daemon mon.a config set mon_pg_warn_min_objects $initial_value
+  # Test SI units during injectargs and 'config set'
+  # We only aim at testing the units are parsed accordingly
+  # and don't intend to test whether the options being set
+  # actually expect SI units to be passed.
+  # Keep in mind that all integer based options (i.e., INT,
+  # LONG, U32, U64) will accept SI unit modifiers.
+  initial_value=$(get_config_value_or_die "mon.a" "mon_pg_warn_min_objects")
+  ceph daemon mon.a config set mon_pg_warn_min_objects 10
+  expect_config_value "mon.a" "mon_pg_warn_min_objects" 10
+  ceph daemon mon.a config set mon_pg_warn_min_objects 10K
+  expect_config_value "mon.a" "mon_pg_warn_min_objects" 10240
+  ceph daemon mon.a config set mon_pg_warn_min_objects 1G
+  expect_config_value "mon.a" "mon_pg_warn_min_objects" 1073741824
+  ceph daemon mon.a config set mon_pg_warn_min_objects 10F > $TMPFILE || true
+  check_response "'10F': (22) Invalid argument"
+  # now test with injectargs
+  ceph tell mon.a injectargs '--mon_pg_warn_min_objects 10'
+  expect_config_value "mon.a" "mon_pg_warn_min_objects" 10
+  ceph tell mon.a injectargs '--mon_pg_warn_min_objects 10K'
+  expect_config_value "mon.a" "mon_pg_warn_min_objects" 10240
+  ceph tell mon.a injectargs '--mon_pg_warn_min_objects 1G'
+  expect_config_value "mon.a" "mon_pg_warn_min_objects" 1073741824
+  expect_false ceph injectargs mon.a '--mon_pg_warn_min_objects 10F'
+  ceph daemon mon.a config set mon_pg_warn_min_objects $initial_value
 }
 
 function test_tiering()
 {
-# tiering
-ceph osd pool create cache 2
-ceph osd pool create cache2 2
-ceph osd tier add data cache
-ceph osd tier add data cache2
-expect_false ceph osd tier add metadata cache
-# test some state transitions
-ceph osd tier cache-mode cache writeback
-ceph osd tier cache-mode cache forward
-ceph osd tier cache-mode cache readonly
-ceph osd tier cache-mode cache forward
-ceph osd tier cache-mode cache none
-ceph osd tier cache-mode cache writeback
-expect_false ceph osd tier cache-mode cache none
-expect_false ceph osd tier cache-mode cache readonly
-# test with dirty objects in the tier pool
-# tier pool currently set to 'writeback'
-rados -p cache put /etc/passwd /etc/passwd
-ceph tell osd.* flush_pg_stats || true
-# 1 dirty object in pool 'cache'
-ceph osd tier cache-mode cache forward
-expect_false ceph osd tier cache-mode cache none
-expect_false ceph osd tier cache-mode cache readonly
-ceph osd tier cache-mode cache writeback
-# remove object from tier pool
-rados -p cache rm /etc/passwd
-rados -p cache cache-flush-evict-all
-ceph tell osd.* flush_pg_stats || true
-# no dirty objects in pool 'cache'
-ceph osd tier cache-mode cache forward
-ceph osd tier cache-mode cache none
-ceph osd tier cache-mode cache readonly
-TRIES=0
-while ! ceph osd pool set cache pg_num 3 --yes-i-really-mean-it 2>$TMPFILE
-do
+  # tiering
+  ceph osd pool create cache 2
+  ceph osd pool create cache2 2
+  ceph osd tier add data cache
+  ceph osd tier add data cache2
+  expect_false ceph osd tier add metadata cache
+  # test some state transitions
+  ceph osd tier cache-mode cache writeback
+  ceph osd tier cache-mode cache forward
+  ceph osd tier cache-mode cache readonly
+  ceph osd tier cache-mode cache forward
+  ceph osd tier cache-mode cache none
+  ceph osd tier cache-mode cache writeback
+  expect_false ceph osd tier cache-mode cache none
+  expect_false ceph osd tier cache-mode cache readonly
+  # test with dirty objects in the tier pool
+  # tier pool currently set to 'writeback'
+  rados -p cache put /etc/passwd /etc/passwd
+  ceph tell osd.* flush_pg_stats || true
+  # 1 dirty object in pool 'cache'
+  ceph osd tier cache-mode cache forward
+  expect_false ceph osd tier cache-mode cache none
+  expect_false ceph osd tier cache-mode cache readonly
+  ceph osd tier cache-mode cache writeback
+  # remove object from tier pool
+  rados -p cache rm /etc/passwd
+  rados -p cache cache-flush-evict-all
+  ceph tell osd.* flush_pg_stats || true
+  # no dirty objects in pool 'cache'
+  ceph osd tier cache-mode cache forward
+  ceph osd tier cache-mode cache none
+  ceph osd tier cache-mode cache readonly
+  TRIES=0
+  while ! ceph osd pool set cache pg_num 3 --yes-i-really-mean-it 2>$TMPFILE
+  do
     grep 'currently creating pgs' $TMPFILE
     TRIES=$(( $TRIES + 1 ))
     test $TRIES -ne 60
     sleep 3
-done
-expect_false ceph osd pool set cache pg_num 4
-ceph osd tier cache-mode cache none
-ceph osd tier set-overlay data cache
-expect_false ceph osd tier set-overlay data cache2
-expect_false ceph osd tier remove data cache
-ceph osd tier remove-overlay data
-ceph osd tier set-overlay data cache2
-ceph osd tier remove-overlay data
-ceph osd tier remove data cache
-ceph osd tier add metadata cache
-expect_false ceph osd tier set-overlay data cache
-ceph osd tier set-overlay metadata cache
-ceph osd tier remove-overlay metadata
-ceph osd tier remove metadata cache
-ceph osd tier remove data cache2
+  done
+  expect_false ceph osd pool set cache pg_num 4
+  ceph osd tier cache-mode cache none
+  ceph osd tier set-overlay data cache
+  expect_false ceph osd tier set-overlay data cache2
+  expect_false ceph osd tier remove data cache
+  ceph osd tier remove-overlay data
+  ceph osd tier set-overlay data cache2
+  ceph osd tier remove-overlay data
+  ceph osd tier remove data cache
+  ceph osd tier add metadata cache
+  expect_false ceph osd tier set-overlay data cache
+  ceph osd tier set-overlay metadata cache
+  ceph osd tier remove-overlay metadata
+  ceph osd tier remove metadata cache
+  ceph osd tier remove data cache2
 
-# make sure a non-empty pool fails
-rados -p cache2 put /etc/passwd /etc/passwd
-while ! ceph df | grep cache2 | grep ' 1 ' ; do
+  # make sure a non-empty pool fails
+  rados -p cache2 put /etc/passwd /etc/passwd
+  while ! ceph df | grep cache2 | grep ' 1 ' ; do
     echo waiting for pg stats to flush
     sleep 2
-done
-expect_false ceph osd tier add data cache2
-ceph osd tier add data cache2 --force-nonempty
-ceph osd tier remove data cache2
+  done
+  expect_false ceph osd tier add data cache2
+  ceph osd tier add data cache2 --force-nonempty
+  ceph osd tier remove data cache2
 
-ceph osd pool delete cache cache --yes-i-really-really-mean-it
-ceph osd pool delete cache2 cache2 --yes-i-really-really-mean-it
+  ceph osd pool delete cache cache --yes-i-really-really-mean-it
+  ceph osd pool delete cache2 cache2 --yes-i-really-really-mean-it
 
-# convenient add-cache command
-ceph osd pool create cache3 2
-ceph osd tier add-cache data cache3 1024000
-ceph osd dump | grep cache3 | grep bloom | grep 'false_positive_probability: 0.05' | grep 'target_bytes 1024000' | grep '1200s x4'
-ceph osd tier remove data cache3
-ceph osd pool delete cache3 cache3 --yes-i-really-really-mean-it
+  # convenient add-cache command
+  ceph osd pool create cache3 2
+  ceph osd tier add-cache data cache3 1024000
+  ceph osd dump | grep cache3 | grep bloom | grep 'false_positive_probability: 0.05' | grep 'target_bytes 1024000' | grep '1200s x4'
+  ceph osd tier remove data cache3
+  ceph osd pool delete cache3 cache3 --yes-i-really-really-mean-it
 
-# protection against pool removal when used as tiers
-ceph osd pool create datapool 2
-ceph osd pool create cachepool 2
-ceph osd tier add-cache datapool cachepool 1024000
-ceph osd pool delete cachepool cachepool --yes-i-really-really-mean-it 2> $TMPFILE || true
-check_response "EBUSY: pool 'cachepool' is a tier of 'datapool'"
-ceph osd pool delete datapool datapool --yes-i-really-really-mean-it 2> $TMPFILE || true
-check_response "EBUSY: pool 'datapool' has tiers cachepool"
-ceph osd tier remove datapool cachepool
-ceph osd pool delete cachepool cachepool --yes-i-really-really-mean-it
-ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
+  # protection against pool removal when used as tiers
+  ceph osd pool create datapool 2
+  ceph osd pool create cachepool 2
+  ceph osd tier add-cache datapool cachepool 1024000
+  ceph osd pool delete cachepool cachepool --yes-i-really-really-mean-it 2> $TMPFILE || true
+  check_response "EBUSY: pool 'cachepool' is a tier of 'datapool'"
+  ceph osd pool delete datapool datapool --yes-i-really-really-mean-it 2> $TMPFILE || true
+  check_response "EBUSY: pool 'datapool' has tiers cachepool"
+  ceph osd tier remove datapool cachepool
+  ceph osd pool delete cachepool cachepool --yes-i-really-really-mean-it
+  ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
 
-# check health check
-ceph osd pool create cache4 2
-ceph osd pool set cache4 target_max_objects 5
-ceph osd pool set cache4 target_max_bytes 1000
-for f in `seq 1 5` ; do
+  # check health check
+  ceph osd pool create cache4 2
+  ceph osd pool set cache4 target_max_objects 5
+  ceph osd pool set cache4 target_max_bytes 1000
+  for f in `seq 1 5` ; do
     rados -p cache4 put foo$f /etc/passwd
-done
-while ! ceph df | grep cache4 | grep ' 5 ' ; do
+  done
+  while ! ceph df | grep cache4 | grep ' 5 ' ; do
     echo waiting for pg stats to flush
     sleep 2
-done
-ceph health | grep WARN | grep cache4
-ceph health detail | grep cache4 | grep 'target max' | grep objects
-ceph health detail | grep cache4 | grep 'target max' | grep 'B'
-ceph osd pool delete cache4 cache4 --yes-i-really-really-mean-it
+  done
+  ceph health | grep WARN | grep cache4
+  ceph health detail | grep cache4 | grep 'target max' | grep objects
+  ceph health detail | grep cache4 | grep 'target max' | grep 'B'
+  ceph osd pool delete cache4 cache4 --yes-i-really-really-mean-it
 }
 
 
 function test_auth()
 {
-# Assumes there are at least 3 MDSes and two OSDs
-#
+  # Assumes there are at least 3 MDSes and two OSDs
+  #
 
-ceph auth add client.xx mon allow osd "allow *"
-ceph auth export client.xx >client.xx.keyring
-ceph auth add client.xx -i client.xx.keyring
-rm -f client.xx.keyring
-ceph auth list | grep client.xx
-ceph auth get client.xx | grep caps | grep mon
-ceph auth get client.xx | grep caps | grep osd
-ceph auth get-key client.xx
-ceph auth print-key client.xx
-ceph auth print_key client.xx
-ceph auth caps client.xx osd "allow rw"
-expect_false "ceph auth get client.xx | grep caps | grep mon"
-ceph auth get client.xx | grep osd | grep "allow rw"
-ceph auth export | grep client.xx
-ceph auth export -o authfile
-ceph auth import -i authfile
-ceph auth export -o authfile2
-diff authfile authfile2
-rm authfile authfile2
-ceph auth del client.xx
+  ceph auth add client.xx mon allow osd "allow *"
+  ceph auth export client.xx >client.xx.keyring
+  ceph auth add client.xx -i client.xx.keyring
+  rm -f client.xx.keyring
+  ceph auth list | grep client.xx
+  ceph auth get client.xx | grep caps | grep mon
+  ceph auth get client.xx | grep caps | grep osd
+  ceph auth get-key client.xx
+  ceph auth print-key client.xx
+  ceph auth print_key client.xx
+  ceph auth caps client.xx osd "allow rw"
+  expect_false "ceph auth get client.xx | grep caps | grep mon"
+  ceph auth get client.xx | grep osd | grep "allow rw"
+  ceph auth export | grep client.xx
+  ceph auth export -o authfile
+  ceph auth import -i authfile
+  ceph auth export -o authfile2
+  diff authfile authfile2
+  rm authfile authfile2
+  ceph auth del client.xx
 }
 
 
 function test_mon_misc()
 {
-# with and without verbosity
-ceph osd dump | grep '^epoch'
-ceph --concise osd dump | grep '^epoch'
+  # with and without verbosity
+  ceph osd dump | grep '^epoch'
+  ceph --concise osd dump | grep '^epoch'
 
-# df
-ceph df > $TMPFILE
-grep GLOBAL $TMPFILE
-grep -v DIRTY $TMPFILE
-ceph df detail > $TMPFILE
-grep CATEGORY $TMPFILE
-grep DIRTY $TMPFILE
-ceph df --format json > $TMPFILE
-grep 'total_space' $TMPFILE
-grep -v 'dirty' $TMPFILE
-ceph df detail --format json > $TMPFILE
-grep 'rd_kb' $TMPFILE
-grep 'dirty' $TMPFILE
-ceph df --format xml | grep '<total_space>'
-ceph df detail --format xml | grep '<rd_kb>'
+  # df
+  ceph df > $TMPFILE
+  grep GLOBAL $TMPFILE
+  grep -v DIRTY $TMPFILE
+  ceph df detail > $TMPFILE
+  grep CATEGORY $TMPFILE
+  grep DIRTY $TMPFILE
+  ceph df --format json > $TMPFILE
+  grep 'total_space' $TMPFILE
+  grep -v 'dirty' $TMPFILE
+  ceph df detail --format json > $TMPFILE
+  grep 'rd_kb' $TMPFILE
+  grep 'dirty' $TMPFILE
+  ceph df --format xml | grep '<total_space>'
+  ceph df detail --format xml | grep '<rd_kb>'
 
-ceph fsid
-ceph health
-ceph health detail
-ceph health --format json-pretty
-ceph health detail --format xml-pretty
+  ceph fsid
+  ceph health
+  ceph health detail
+  ceph health --format json-pretty
+  ceph health detail --format xml-pretty
 
-ceph -w > $TMPDIR/$$ &
-wpid="$!"
-mymsg="this is a test log message $$.$(date)"
-ceph log "$mymsg"
-sleep 3
-if ! grep "$mymsg" $TMPDIR/$$; then
+  ceph -w > $TMPDIR/$$ &
+  wpid="$!"
+  mymsg="this is a test log message $$.$(date)"
+  ceph log "$mymsg"
+  sleep 3
+  if ! grep "$mymsg" $TMPDIR/$$; then
     # in case it is very slow (mon thrashing or something)
     sleep 30
     grep "$mymsg" $TMPDIR/$$
-fi
-kill $wpid
+  fi
+  kill $wpid
 }
 
 
@@ -354,358 +354,358 @@ ceph mds stat
 
 function test_mon_mon()
 {
-# no mon add/remove
-ceph mon dump
-ceph mon getmap -o $TMPDIR/monmap.$$
-[ -s $TMPDIR/monmap.$$ ]
-# ceph mon tell
-ceph mon_status
+  # no mon add/remove
+  ceph mon dump
+  ceph mon getmap -o $TMPDIR/monmap.$$
+  [ -s $TMPDIR/monmap.$$ ]
+  # ceph mon tell
+  ceph mon_status
 }
 
 function test_mon_osd()
 {
-bl=192.168.0.1:0/1000
-ceph osd blacklist add $bl
-ceph osd blacklist ls | grep $bl
-ceph osd blacklist rm $bl
-expect_false "ceph osd blacklist ls | grep $bl"
+  bl=192.168.0.1:0/1000
+  ceph osd blacklist add $bl
+  ceph osd blacklist ls | grep $bl
+  ceph osd blacklist rm $bl
+  expect_false "ceph osd blacklist ls | grep $bl"
 
-bl=192.168.0.1
-# test without nonce, invalid nonce
-ceph osd blacklist add $bl
-ceph osd blacklist ls | grep $bl
-ceph osd blacklist rm $bl
-expect_false "ceph osd blacklist ls | grep $bl"
-expect_false "ceph osd blacklist $bl/-1"
-expect_false "ceph osd blacklist $bl/foo"
+  bl=192.168.0.1
+  # test without nonce, invalid nonce
+  ceph osd blacklist add $bl
+  ceph osd blacklist ls | grep $bl
+  ceph osd blacklist rm $bl
+  expect_false "ceph osd blacklist ls | grep $bl"
+  expect_false "ceph osd blacklist $bl/-1"
+  expect_false "ceph osd blacklist $bl/foo"
 
-ceph osd crush tunables legacy
-ceph osd crush show-tunables | grep argonaut
-ceph osd crush tunables bobtail
-ceph osd crush show-tunables | grep bobtail
-ceph osd crush tunables firefly
-ceph osd crush show-tunables | grep firefly
+  ceph osd crush tunables legacy
+  ceph osd crush show-tunables | grep argonaut
+  ceph osd crush tunables bobtail
+  ceph osd crush show-tunables | grep bobtail
+  ceph osd crush tunables firefly
+  ceph osd crush show-tunables | grep firefly
 
-# how do I tell when these are done?
-ceph osd scrub 0
-ceph osd deep-scrub 0
-ceph osd repair 0
+  # how do I tell when these are done?
+  ceph osd scrub 0
+  ceph osd deep-scrub 0
+  ceph osd repair 0
 
-for f in noup nodown noin noout noscrub nodeep-scrub nobackfill norecover notieragent
-do
+  for f in noup nodown noin noout noscrub nodeep-scrub nobackfill norecover notieragent
+  do
     ceph osd set $f
     ceph osd unset $f
-done
-expect_false ceph osd set bogus
-expect_false ceph osd unset bogus
+  done
+  expect_false ceph osd set bogus
+  expect_false ceph osd unset bogus
 
-ceph osd set noup
-ceph osd down 0
-ceph osd dump | grep 'osd.0 down'
-ceph osd unset noup
-for ((i=0; i < 100; i++)); do
-	if ! ceph osd dump | grep 'osd.0 up'; then
-		echo "waiting for osd.0 to come back up"
-		sleep 10
-	else
-		break
-	fi
-done
+  ceph osd set noup
+  ceph osd down 0
+  ceph osd dump | grep 'osd.0 down'
+  ceph osd unset noup
+  for ((i=0; i < 100; i++)); do
+    if ! ceph osd dump | grep 'osd.0 up'; then
+      echo "waiting for osd.0 to come back up"
+      sleep 10
+    else
+      break
+    fi
+  done
 
-ceph osd thrash 10
-ceph osd down `seq 0 31`  # force everything down so that we can trust up
-# make sure everything gets back up+in.
-for ((i=0; i < 100; i++)); do
-	if ceph osd dump | grep ' down '; then
-		echo "waiting for osd(s) to come back up"
-		sleep 10
-	else
-		break
-	fi
-done
-# if you have more osds than this you are on your own
-for f in `seq 0 31`; do
+  ceph osd thrash 10
+  ceph osd down `seq 0 31`  # force everything down so that we can trust up
+  # make sure everything gets back up+in.
+  for ((i=0; i < 100; i++)); do
+    if ceph osd dump | grep ' down '; then
+      echo "waiting for osd(s) to come back up"
+      sleep 10
+    else
+      break
+    fi
+  done
+  # if you have more osds than this you are on your own
+  for f in `seq 0 31`; do
     ceph osd in $f || true
-done
+  done
 
-ceph osd dump | grep 'osd.0 up'
-ceph osd find 1
-ceph osd metadata 1 | grep 'distro'
-ceph osd out 0
-ceph osd dump | grep 'osd.0.*out'
-ceph osd in 0
-ceph osd dump | grep 'osd.0.*in'
-ceph osd find 0
+  ceph osd dump | grep 'osd.0 up'
+  ceph osd find 1
+  ceph osd metadata 1 | grep 'distro'
+  ceph osd out 0
+  ceph osd dump | grep 'osd.0.*out'
+  ceph osd in 0
+  ceph osd dump | grep 'osd.0.*in'
+  ceph osd find 0
 
-f=$TMPDIR/map.$$
-ceph osd getcrushmap -o $f
-[ -s $f ]
-rm $f
-ceph osd getmap -o $f
-[ -s $f ]
-rm $f
-save=$(ceph osd getmaxosd | sed -e 's/max_osd = //' -e 's/ in epoch.*//')
-ceph osd setmaxosd 10
-ceph osd getmaxosd | grep 'max_osd = 10'
-ceph osd setmaxosd $save
-ceph osd getmaxosd | grep "max_osd = $save"
+  f=$TMPDIR/map.$$
+  ceph osd getcrushmap -o $f
+  [ -s $f ]
+  rm $f
+  ceph osd getmap -o $f
+  [ -s $f ]
+  rm $f
+  save=$(ceph osd getmaxosd | sed -e 's/max_osd = //' -e 's/ in epoch.*//')
+  ceph osd setmaxosd 10
+  ceph osd getmaxosd | grep 'max_osd = 10'
+  ceph osd setmaxosd $save
+  ceph osd getmaxosd | grep "max_osd = $save"
 
-for id in `ceph osd ls` ; do
-	ceph tell osd.$id version
-done
+  for id in `ceph osd ls` ; do
+    ceph tell osd.$id version
+  done
 
-ceph osd rm 0 2>&1 | grep 'EBUSY'
+  ceph osd rm 0 2>&1 | grep 'EBUSY'
 
-id=`ceph osd create`
-ceph osd lost $id --yes-i-really-mean-it
-ceph osd rm $id
+  id=`ceph osd create`
+  ceph osd lost $id --yes-i-really-mean-it
+  ceph osd rm $id
 
-uuid=`uuidgen`
-id=`ceph osd create $uuid`
-id2=`ceph osd create $uuid`
-[ "$id" = "$id2" ]
-ceph osd rm $id
+  uuid=`uuidgen`
+  id=`ceph osd create $uuid`
+  id2=`ceph osd create $uuid`
+  [ "$id" = "$id2" ]
+  ceph osd rm $id
 
-ceph osd ls
-ceph osd lspools | grep data
-ceph osd map data foo | grep 'pool.*data.*object.*foo.*pg.*up.*acting'
+  ceph osd ls
+  ceph osd lspools | grep data
+  ceph osd map data foo | grep 'pool.*data.*object.*foo.*pg.*up.*acting'
 
-ceph osd pause
-ceph osd dump | grep 'flags pauserd,pausewr'
-ceph osd unpause
+  ceph osd pause
+  ceph osd dump | grep 'flags pauserd,pausewr'
+  ceph osd unpause
 
-ceph osd tree
+  ceph osd tree
 
-ceph osd stat | grep up,
+  ceph osd stat | grep up,
 }
 
 function test_mon_osd_pool()
 {
-ceph osd pool mksnap data datasnap
-rados -p data lssnap | grep datasnap
-ceph osd pool rmsnap data datasnap
+  ceph osd pool mksnap data datasnap
+  rados -p data lssnap | grep datasnap
+  ceph osd pool rmsnap data datasnap
 
-ceph osd pool create data2 10
-ceph osd pool rename data2 data3
-ceph osd lspools | grep data3
-ceph osd pool delete data3 data3 --yes-i-really-really-mean-it
+  ceph osd pool create data2 10
+  ceph osd pool rename data2 data3
+  ceph osd lspools | grep data3
+  ceph osd pool delete data3 data3 --yes-i-really-really-mean-it
 
-ceph osd pool create replicated 12 12 replicated
-ceph osd pool create replicated 12 12 replicated
-ceph osd pool create replicated 12 12 # default is replicated
-ceph osd pool create replicated 12    # default is replicated, pgp_num = pg_num
-# should fail because the type is not the same
-expect_false ceph osd pool create replicated 12 12 erasure
-ceph osd lspools | grep replicated
-ceph osd pool delete replicated replicated --yes-i-really-really-mean-it
+  ceph osd pool create replicated 12 12 replicated
+  ceph osd pool create replicated 12 12 replicated
+  ceph osd pool create replicated 12 12 # default is replicated
+  ceph osd pool create replicated 12    # default is replicated, pgp_num = pg_num
+  # should fail because the type is not the same
+  expect_false ceph osd pool create replicated 12 12 erasure
+  ceph osd lspools | grep replicated
+  ceph osd pool delete replicated replicated --yes-i-really-really-mean-it
 }
 
 function test_mon_pg()
 {
-ceph pg debug unfound_objects_exist
-ceph pg debug degraded_pgs_exist
-ceph pg deep-scrub 0.0
-ceph pg dump
-ceph pg dump pgs_brief --format=json
-ceph pg dump pgs --format=json
-ceph pg dump pools --format=json
-ceph pg dump osds --format=json
-ceph pg dump sum --format=json
-ceph pg dump all --format=json
-ceph pg dump pgs_brief osds --format=json
-ceph pg dump pools osds pgs_brief --format=json
-ceph pg dump_json
-ceph pg dump_pools_json
-ceph pg dump_stuck inactive
-ceph pg dump_stuck unclean
-ceph pg dump_stuck stale
-# can't test this...
-# ceph pg force_create_pg
-ceph pg getmap -o $TMPDIR/map.$$
-[ -s $TMPDIR/map.$$ ]
-ceph pg map 0.0 | grep acting
-ceph pg repair 0.0
-ceph pg scrub 0.0
+  ceph pg debug unfound_objects_exist
+  ceph pg debug degraded_pgs_exist
+  ceph pg deep-scrub 0.0
+  ceph pg dump
+  ceph pg dump pgs_brief --format=json
+  ceph pg dump pgs --format=json
+  ceph pg dump pools --format=json
+  ceph pg dump osds --format=json
+  ceph pg dump sum --format=json
+  ceph pg dump all --format=json
+  ceph pg dump pgs_brief osds --format=json
+  ceph pg dump pools osds pgs_brief --format=json
+  ceph pg dump_json
+  ceph pg dump_pools_json
+  ceph pg dump_stuck inactive
+  ceph pg dump_stuck unclean
+  ceph pg dump_stuck stale
+  # can't test this...
+  # ceph pg force_create_pg
+  ceph pg getmap -o $TMPDIR/map.$$
+  [ -s $TMPDIR/map.$$ ]
+  ceph pg map 0.0 | grep acting
+  ceph pg repair 0.0
+  ceph pg scrub 0.0
 
-ceph pg send_pg_creates
-ceph pg set_full_ratio 0.90
-ceph pg dump --format=plain | grep '^full_ratio 0.9'
-ceph pg set_full_ratio 0.95
-ceph pg set_nearfull_ratio 0.90
-ceph pg dump --format=plain | grep '^nearfull_ratio 0.9'
-ceph pg set_nearfull_ratio 0.85
-ceph pg stat | grep 'pgs:'
-ceph pg 0.0 query
-ceph tell 0.0 query
-ceph quorum enter
-ceph quorum_status
-ceph report | grep osd_stats
-ceph status
-ceph -s
-# ceph sync force
+  ceph pg send_pg_creates
+  ceph pg set_full_ratio 0.90
+  ceph pg dump --format=plain | grep '^full_ratio 0.9'
+  ceph pg set_full_ratio 0.95
+  ceph pg set_nearfull_ratio 0.90
+  ceph pg dump --format=plain | grep '^nearfull_ratio 0.9'
+  ceph pg set_nearfull_ratio 0.85
+  ceph pg stat | grep 'pgs:'
+  ceph pg 0.0 query
+  ceph tell 0.0 query
+  ceph quorum enter
+  ceph quorum_status
+  ceph report | grep osd_stats
+  ceph status
+  ceph -s
+  # ceph sync force
 
-ceph tell osd.0 version
-expect_false ceph tell osd.9999 version 
-expect_false ceph tell osd.foo version
+  ceph tell osd.0 version
+  expect_false ceph tell osd.9999 version 
+  expect_false ceph tell osd.foo version
 
-ceph tell osd.0 dump_pg_recovery_stats | grep Started
+  ceph tell osd.0 dump_pg_recovery_stats | grep Started
 
-ceph osd reweight 0 0.9
-expect_false ceph osd reweight 0 -1
-ceph osd reweight 0 1
+  ceph osd reweight 0 0.9
+  expect_false ceph osd reweight 0 -1
+  ceph osd reweight 0 1
 
-ceph osd primary-affinity osd.0 .9
-expect_false ceph osd primary-affinity osd.0 -2
-ceph osd primary-affinity osd.0 1
+  ceph osd primary-affinity osd.0 .9
+  expect_false ceph osd primary-affinity osd.0 -2
+  ceph osd primary-affinity osd.0 1
 
-ceph osd pg-temp 0.0 0 1 2
-ceph osd pg-temp 0.0 1 0 2
-expect_false ceph osd pg-temp asdf qwer
-expect_false ceph osd pg-temp 0.0 asdf
-expect_false ceph osd pg-temp 0.0
+  ceph osd pg-temp 0.0 0 1 2
+  ceph osd pg-temp 0.0 1 0 2
+  expect_false ceph osd pg-temp asdf qwer
+  expect_false ceph osd pg-temp 0.0 asdf
+  expect_false ceph osd pg-temp 0.0
 
-# don't test ceph osd primary-temp for now
+  # don't test ceph osd primary-temp for now
 }
 
 function test_mon_osd_pool_set()
 {
 
-for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset; do
-	ceph osd pool get data $s
-done
+  for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset; do
+    ceph osd pool get data $s
+  done
 
-old_size=$(ceph osd pool get data size | sed -e 's/size: //')
-(( new_size = old_size + 1 ))
-ceph osd pool set data size $new_size
-ceph osd pool get data size | grep "size: $new_size"
-ceph osd pool set data size $old_size
+  old_size=$(ceph osd pool get data size | sed -e 's/size: //')
+  (( new_size = old_size + 1 ))
+  ceph osd pool set data size $new_size
+  ceph osd pool get data size | grep "size: $new_size"
+  ceph osd pool set data size $old_size
 
-ceph osd pool create pool_erasure 12 12 erasure
-set +e
-ceph osd pool set pool_erasure size 4444 2>$TMPFILE
-check_response 'not change the size'
-set -e
+  ceph osd pool create pool_erasure 12 12 erasure
+  set +e
+  ceph osd pool set pool_erasure size 4444 2>$TMPFILE
+  check_response 'not change the size'
+  set -e
 
-auid=5555
-ceph osd pool set data auid $auid
-ceph osd pool get data auid | grep $auid
-ceph --format=xml osd pool get data auid | grep $auid
-ceph osd pool set data auid 0
+  auid=5555
+  ceph osd pool set data auid $auid
+  ceph osd pool get data auid | grep $auid
+  ceph --format=xml osd pool get data auid | grep $auid
+  ceph osd pool set data auid 0
 
-ceph osd pool set data hashpspool true
-ceph osd pool set data hashpspool false
-ceph osd pool set data hashpspool 0
-ceph osd pool set data hashpspool 1
-expect_false ceph osd pool set data hashpspool asdf
-expect_false ceph osd pool set data hashpspool 2
+  ceph osd pool set data hashpspool true
+  ceph osd pool set data hashpspool false
+  ceph osd pool set data hashpspool 0
+  ceph osd pool set data hashpspool 1
+  expect_false ceph osd pool set data hashpspool asdf
+  expect_false ceph osd pool set data hashpspool 2
 
-ceph osd pool set rbd hit_set_type explicit_hash
-ceph osd pool get rbd hit_set_type | grep "hit_set_type: explicit_hash"
-ceph osd pool set rbd hit_set_type explicit_object
-ceph osd pool get rbd hit_set_type | grep "hit_set_type: explicit_object"
-ceph osd pool set rbd hit_set_type bloom
-ceph osd pool get rbd hit_set_type | grep "hit_set_type: bloom"
-expect_false ceph osd pool set rbd hit_set_type i_dont_exist
-ceph osd pool set rbd hit_set_period 123
-ceph osd pool get rbd hit_set_period | grep "hit_set_period: 123"
-ceph osd pool set rbd hit_set_count 12
-ceph osd pool get rbd hit_set_count | grep "hit_set_count: 12"
-ceph osd pool set rbd hit_set_fpp .01
-ceph osd pool get rbd hit_set_fpp | grep "hit_set_fpp: 0.01"
+  ceph osd pool set rbd hit_set_type explicit_hash
+  ceph osd pool get rbd hit_set_type | grep "hit_set_type: explicit_hash"
+  ceph osd pool set rbd hit_set_type explicit_object
+  ceph osd pool get rbd hit_set_type | grep "hit_set_type: explicit_object"
+  ceph osd pool set rbd hit_set_type bloom
+  ceph osd pool get rbd hit_set_type | grep "hit_set_type: bloom"
+  expect_false ceph osd pool set rbd hit_set_type i_dont_exist
+  ceph osd pool set rbd hit_set_period 123
+  ceph osd pool get rbd hit_set_period | grep "hit_set_period: 123"
+  ceph osd pool set rbd hit_set_count 12
+  ceph osd pool get rbd hit_set_count | grep "hit_set_count: 12"
+  ceph osd pool set rbd hit_set_fpp .01
+  ceph osd pool get rbd hit_set_fpp | grep "hit_set_fpp: 0.01"
 
-ceph osd pool set rbd target_max_objects 123
-ceph osd pool set rbd target_max_bytes 123456
-ceph osd pool set rbd cache_target_dirty_ratio .123
-expect_false ceph osd pool set rbd cache_target_dirty_ratio -.2
-expect_false ceph osd pool set rbd cache_target_dirty_ratio 1.1
-ceph osd pool set rbd cache_target_full_ratio .123
-ceph osd dump -f json-pretty | grep '"cache_target_full_ratio_micro": 123000'
-ceph osd pool set rbd cache_target_full_ratio 1.0
-ceph osd pool set rbd cache_target_full_ratio 0
-expect_false ceph osd pool set rbd cache_target_full_ratio 1.1
-ceph osd pool set rbd cache_min_flush_age 123
-ceph osd pool set rbd cache_min_evict_age 234
+  ceph osd pool set rbd target_max_objects 123
+  ceph osd pool set rbd target_max_bytes 123456
+  ceph osd pool set rbd cache_target_dirty_ratio .123
+  expect_false ceph osd pool set rbd cache_target_dirty_ratio -.2
+  expect_false ceph osd pool set rbd cache_target_dirty_ratio 1.1
+  ceph osd pool set rbd cache_target_full_ratio .123
+  ceph osd dump -f json-pretty | grep '"cache_target_full_ratio_micro": 123000'
+  ceph osd pool set rbd cache_target_full_ratio 1.0
+  ceph osd pool set rbd cache_target_full_ratio 0
+  expect_false ceph osd pool set rbd cache_target_full_ratio 1.1
+  ceph osd pool set rbd cache_min_flush_age 123
+  ceph osd pool set rbd cache_min_evict_age 234
 
-ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 0'
+  ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 0'
 }
 
 function test_mon_osd_erasure_code()
 {
 
-ceph osd erasure-code-profile set fooprofile a=b c=d
-ceph osd erasure-code-profile set fooprofile a=b c=d
-expect_false ceph osd erasure-code-profile set fooprofile a=b c=d e=f
-ceph osd erasure-code-profile set fooprofile a=b c=d e=f --force
-ceph osd erasure-code-profile set fooprofile a=b c=d e=f
-expect_false ceph osd erasure-code-profile set fooprofile a=b c=d e=f g=h
+  ceph osd erasure-code-profile set fooprofile a=b c=d
+  ceph osd erasure-code-profile set fooprofile a=b c=d
+  expect_false ceph osd erasure-code-profile set fooprofile a=b c=d e=f
+  ceph osd erasure-code-profile set fooprofile a=b c=d e=f --force
+  ceph osd erasure-code-profile set fooprofile a=b c=d e=f
+  expect_false ceph osd erasure-code-profile set fooprofile a=b c=d e=f g=h
 }
 
 function test_mon_osd_misc()
 {
-set +e
+  set +e
 
-# expect error about missing 'pool' argument
-ceph osd map 2>$TMPFILE; check_response 'pool' $? 22
+  # expect error about missing 'pool' argument
+  ceph osd map 2>$TMPFILE; check_response 'pool' $? 22
 
-# expect error about unused argument foo
-ceph osd ls foo 2>$TMPFILE; check_response 'unused' $? 22 
+  # expect error about unused argument foo
+  ceph osd ls foo 2>$TMPFILE; check_response 'unused' $? 22 
 
-# expect "not in range" for invalid full ratio
-ceph pg set_full_ratio 95 2>$TMPFILE; check_response 'not in range' $? 22
+  # expect "not in range" for invalid full ratio
+  ceph pg set_full_ratio 95 2>$TMPFILE; check_response 'not in range' $? 22
 
-# expect "not in range" for invalid overload percentage
-ceph osd reweight-by-utilization 80 2>$TMPFILE; check_response 'not in range' $? 22
-set -e
+  # expect "not in range" for invalid overload percentage
+  ceph osd reweight-by-utilization 80 2>$TMPFILE; check_response 'not in range' $? 22
+  set -e
 }
 
 function test_mon_heap_profiler()
 {
-# expect 'heap' commands to be correctly parsed
-ceph heap stats
-ceph heap start_profiler
-ceph heap dump
-ceph heap stop_profiler
-ceph heap release
+  # expect 'heap' commands to be correctly parsed
+  ceph heap stats
+  ceph heap start_profiler
+  ceph heap dump
+  ceph heap stop_profiler
+  ceph heap release
 }
 
 function test_osd_bench()
 {
-# test osd bench limits
-# As we should not rely on defaults (as they may change over time),
-# lets inject some values and perform some simple tests
-# max iops: 10              # 100 IOPS
-# max throughput: 10485760  # 10MB/s
-# max block size: 2097152   # 2MB
-# duration: 10              # 10 seconds
+  # test osd bench limits
+  # As we should not rely on defaults (as they may change over time),
+  # lets inject some values and perform some simple tests
+  # max iops: 10              # 100 IOPS
+  # max throughput: 10485760  # 10MB/s
+  # max block size: 2097152   # 2MB
+  # duration: 10              # 10 seconds
 
-ceph tell osd.0 injectargs "\
-  --osd-bench-duration 10 \
-  --osd-bench-max-block-size 2097152 \
-  --osd-bench-large-size-max-throughput 10485760 \
-  --osd-bench-small-size-max-iops 10"
+  ceph tell osd.0 injectargs "\
+    --osd-bench-duration 10 \
+    --osd-bench-max-block-size 2097152 \
+    --osd-bench-large-size-max-throughput 10485760 \
+    --osd-bench-small-size-max-iops 10"
 
-# anything with a bs larger than 2097152  must fail
-expect_false ceph tell osd.0 bench 1 2097153
-# but using 'osd_bench_max_bs' must succeed
-ceph tell osd.0 bench 1 2097152
+  # anything with a bs larger than 2097152  must fail
+  expect_false ceph tell osd.0 bench 1 2097153
+  # but using 'osd_bench_max_bs' must succeed
+  ceph tell osd.0 bench 1 2097152
 
-# we assume 1MB as a large bs; anything lower is a small bs
-# for a 4096 bytes bs, for 10 seconds, we are limited by IOPS
-# max count: 409600
+  # we assume 1MB as a large bs; anything lower is a small bs
+  # for a 4096 bytes bs, for 10 seconds, we are limited by IOPS
+  # max count: 409600
 
-# more than max count must not be allowed
-expect_false ceph tell osd.0 bench 409601 4096
-# but 409600 must be succeed
-ceph tell osd.0 bench 409600 4096
+  # more than max count must not be allowed
+  expect_false ceph tell osd.0 bench 409601 4096
+  # but 409600 must be succeed
+  ceph tell osd.0 bench 409600 4096
 
-# for a large bs, we are limited by throughput.
-# for a 2MB block size for 10 seconds, out max count is 50
-# max count: 50
+  # for a large bs, we are limited by throughput.
+  # for a 2MB block size for 10 seconds, out max count is 50
+  # max count: 50
 
-# more than max count must not be allowed
-expect_false ceph tell osd.0 bench 51 2097152
-# but 50 must succeed
-ceph tell osd.0 bench 50 2097152
+  # more than max count must not be allowed
+  expect_false ceph tell osd.0 bench 51 2097152
+  # but 50 must succeed
+  ceph tell osd.0 bench 50 2097152
 }
 
 test_mon_injectargs_SI ;
