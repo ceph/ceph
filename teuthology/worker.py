@@ -2,7 +2,6 @@ import fcntl
 import logging
 import os
 import subprocess
-import shutil
 import sys
 import tempfile
 import time
@@ -18,6 +17,7 @@ from . import safepath
 from .config import config as teuth_config
 from .kill import kill_job
 from .misc import read_config
+from .repo_utils import checkout_repo, BranchNotFoundError
 
 log = logging.getLogger(__name__)
 start_time = datetime.utcnow()
@@ -75,14 +75,6 @@ class filelock(object):
         self.fd = None
 
 
-class BranchNotFoundError(ValueError):
-    def __init__(self, branch):
-        self.branch = branch
-
-    def __str__(self):
-        return "teuthology branch not found: '{0}'".format(self.branch)
-
-
 def fetch_teuthology_branch(dest_path, branch='master'):
     """
     Make sure we have the correct teuthology branch checked out and up-to-date
@@ -91,45 +83,9 @@ def fetch_teuthology_branch(dest_path, branch='master'):
     lock = filelock('%s.lock' % dest_path)
     lock.acquire()
     try:
-        #if os.path.isdir(path):
-        #    p = subprocess.Popen('git status', shell=True, cwd=path)
-        #    if p.wait() == 128:
-        #        log.info("Repo at %s appears corrupt; removing",
-        #                 branch)
-        #        shutil.rmtree(path)
-
-        if not os.path.isdir(dest_path):
-            log.info("Cloning %s from upstream", branch)
-            teuthology_git_upstream = teuth_config.ceph_git_base_url + \
-                'teuthology.git'
-            log.info(
-                subprocess.check_output(('git', 'clone', '--branch', branch,
-                                         teuthology_git_upstream, dest_path),
-                                        cwd=os.path.dirname(dest_path))
-            )
-        elif time.time() - os.stat('/etc/passwd').st_mtime > 60:
-            # only do this at most once per minute
-            log.info("Fetching %s from upstream", branch)
-            log.info(
-                subprocess.check_output(('git', 'fetch', '-p', 'origin'),
-                                        cwd=dest_path)
-            )
-            log.info(
-                subprocess.check_output(('touch', dest_path))
-            )
-        else:
-            log.info("%s was just updated; assuming it is current", branch)
-
-        # This try/except block will notice if the requested branch doesn't
-        # exist, whether it was cloned or fetched.
-        try:
-            subprocess.check_output(
-                ('git', 'reset', '--hard', 'origin/%s' % branch),
-                cwd=dest_path,
-            )
-        except subprocess.CalledProcessError:
-            shutil.rmtree(dest_path)
-            raise BranchNotFoundError(branch)
+        teuthology_git_upstream = teuth_config.ceph_git_base_url + \
+            'teuthology.git'
+        checkout_repo(teuthology_git_upstream, dest_path, branch)
 
         log.debug("Bootstrapping %s", dest_path)
         # This magic makes the bootstrap script not attempt to clobber an
