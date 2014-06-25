@@ -298,6 +298,7 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 #
 # Prefix with CXXFLAGS="-g -pg" to remove optimisation.
 %{configure}    CPPFLAGS="$java_inc" \
+                --disable-static \
                 --localstatedir=/var \
                 --sysconfdir=/etc \
                 --docdir=%{_docdir}/ceph \

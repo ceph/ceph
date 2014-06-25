@@ -1,4 +1,9 @@
 -------------------------------------------------------------------
+Wed Jun 25 18:16:51 UTC 2014 - osynge@suse.com
+- disable static builds at configure stage.
+  * Add the '--disable-static' to configure options.
+
+-------------------------------------------------------------------
 Fri Jun 20 16:45:23 UTC 2014 - osynge@suse.com
 - Fixing untracked changes that came from merging many ceph builds.
   * Re added %preun and %postun functions.
