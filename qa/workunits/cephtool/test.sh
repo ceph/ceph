@@ -475,6 +475,8 @@ ceph osd dump | grep 'flags pauserd,pausewr'
 ceph osd unpause
 
 ceph osd tree
+
+ceph osd stat | grep up,
 }
 
 function test_mon_osd_pool()
@@ -496,8 +498,6 @@ ceph osd pool create replicated 12    # default is replicated, pgp_num = pg_num
 expect_false ceph osd pool create replicated 12 12 erasure
 ceph osd lspools | grep replicated
 ceph osd pool delete replicated replicated --yes-i-really-really-mean-it
-
-ceph osd stat | grep up,
 }
 
 function test_mon_pg()
