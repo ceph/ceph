@@ -676,18 +676,6 @@ void Monitor::shutdown()
   }
 
   elector.shutdown();
-
-  if (logger) {
-    cct->get_perfcounters_collection()->remove(logger);
-    delete logger;
-    logger = NULL;
-  }
-  if (cluster_logger) {
-    if (cluster_logger_registered)
-      cct->get_perfcounters_collection()->remove(cluster_logger);
-    delete cluster_logger;
-    cluster_logger = NULL;
-  }
   
   // clean up
   paxos->shutdown();
@@ -701,6 +689,18 @@ void Monitor::shutdown()
   timer.shutdown();
 
   remove_all_sessions();
+
+  if (logger) {
+    cct->get_perfcounters_collection()->remove(logger);
+    delete logger;
+    logger = NULL;
+  }
+  if (cluster_logger) {
+    if (cluster_logger_registered)
+      cct->get_perfcounters_collection()->remove(cluster_logger);
+    delete cluster_logger;
+    cluster_logger = NULL;
+  }
 
   // unlock before msgr shutdown...
   lock.Unlock();
