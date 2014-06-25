@@ -231,6 +231,7 @@ OSDService::OSDService(OSD *osd) :
   map_bl_cache(cct->_conf->osd_map_cache_size),
   map_bl_inc_cache(cct->_conf->osd_map_cache_size),
   in_progress_split_lock("OSDService::in_progress_split_lock"),
+  stat_lock("OSD::stat_lock"),
   full_status_lock("OSDService::full_status_lock"),
   cur_state(NONE),
   last_msg(0),
@@ -941,7 +942,6 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   hb_back_server_messenger(hb_back_serverm),
   heartbeat_thread(this),
   heartbeat_dispatcher(this),
-  stat_lock("OSD::stat_lock"),
   finished_lock("OSD::finished_lock"),
   op_tracker(cct, cct->_conf->osd_enable_op_tracker),
   test_ops_hook(NULL),
@@ -2783,12 +2783,13 @@ bool OSDService::too_full_for_backfill(double *_ratio, double *_max_ratio)
   return cur_ratio >= max_ratio;
 }
 
-
-void OSD::update_osd_stat()
+void OSDService::update_osd_stat(vector<int>& hb_peers)
 {
+  Mutex::Locker lock(stat_lock);
+
   // fill in osd stats too
   struct statfs stbuf;
-  store->statfs(&stbuf);
+  osd->store->statfs(&stbuf);
 
   uint64_t bytes = stbuf.f_blocks * stbuf.f_bsize;
   uint64_t used = (stbuf.f_blocks - stbuf.f_bfree) * stbuf.f_bsize;
@@ -2798,18 +2799,16 @@ void OSD::update_osd_stat()
   osd_stat.kb_used = used >> 10;
   osd_stat.kb_avail = avail >> 10;
 
-  logger->set(l_osd_stat_bytes, bytes);
-  logger->set(l_osd_stat_bytes_used, used);
-  logger->set(l_osd_stat_bytes_avail, avail);
+  osd->logger->set(l_osd_stat_bytes, bytes);
+  osd->logger->set(l_osd_stat_bytes_used, used);
+  osd->logger->set(l_osd_stat_bytes_avail, avail);
 
-  osd_stat.hb_in.clear();
-  for (map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin(); p != heartbeat_peers.end(); ++p)
-    osd_stat.hb_in.push_back(p->first);
+  osd_stat.hb_in.swap(hb_peers);
   osd_stat.hb_out.clear();
 
-  service.check_nearfull_warning(osd_stat);
+  check_nearfull_warning(osd_stat);
 
-  op_tracker.get_age_ms_histogram(&osd_stat.op_queue_age_hist);
+  osd->op_tracker.get_age_ms_histogram(&osd_stat.op_queue_age_hist);
 
   dout(20) << "update_osd_stat " << osd_stat << dendl;
 }
@@ -3213,12 +3212,14 @@ void OSD::heartbeat()
   dout(30) << "heartbeat checking stats" << dendl;
 
   // refresh stats?
-  {
-    Mutex::Locker lock(stat_lock);
-    update_osd_stat();
-  }
+  vector<int> hb_peers;
+  for (map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin();
+       p != heartbeat_peers.end();
+       ++p)
+    hb_peers.push_back(p->first);
+  service.update_osd_stat(hb_peers);
 
-  dout(5) << "heartbeat: " << osd_stat << dendl;
+  dout(5) << "heartbeat: " << service.get_osd_stat() << dendl;
 
   utime_t now = ceph_clock_now(cct);
 
@@ -4123,11 +4124,9 @@ void OSD::send_pg_stats(const utime_t &now)
 
   dout(20) << "send_pg_stats" << dendl;
 
-  stat_lock.Lock();
-  osd_stat_t cur_stat = osd_stat;
-  stat_lock.Unlock();
+  osd_stat_t cur_stat = service.get_osd_stat();
 
-  osd_stat.fs_perf_stat = store->get_cur_stats();
+  cur_stat.fs_perf_stat = store->get_cur_stats();
    
   pg_stat_queue_lock.Lock();
 
