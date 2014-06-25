@@ -26,6 +26,7 @@ include msg/Makefile.am
 include messages/Makefile.am
 include include/Makefile.am
 include librados/Makefile.am
+include libradosstriper/Makefile.am
 include librbd/Makefile.am
 include rgw/Makefile.am
 include cls/Makefile.am
@@ -163,7 +164,6 @@ EXTRA_DIST += \
 	$(srcdir)/.git_version \
 	$(srcdir)/ceph-rbdnamer \
 	$(srcdir)/test/encoding/readable.sh \
-	$(srcdir)/test/encoding/check-generated.sh \
 	$(srcdir)/upstart/ceph-all.conf \
 	$(srcdir)/upstart/ceph-mon.conf \
 	$(srcdir)/upstart/ceph-mon-all.conf \
@@ -189,7 +189,6 @@ EXTRA_DIST += \
 	ceph-crush-location \
 	mount.fuse.ceph \
 	rbdmap \
-	unittest_bufferlist.sh \
 	yasm-wrapper
 
 EXTRA_DIST += \

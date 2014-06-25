@@ -78,7 +78,7 @@ public:
     ::decode(epoch, p);
     vector<pair<pg_t, pg_query_t> > _pg_list;
     ::decode(_pg_list, p);
-    vector<shard_id_t> _shard_list(_pg_list.size(), ghobject_t::no_shard());
+    vector<shard_id_t> _shard_list(_pg_list.size(), shard_id_t::NO_SHARD);
     if (header.version >= 3) {
       _shard_list.clear();
       ::decode(_shard_list, p);

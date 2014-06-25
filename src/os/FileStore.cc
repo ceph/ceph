@@ -219,7 +219,7 @@ int FileStore::lfn_open(coll_t cid,
 			Index *index) 
 {
   assert(get_allow_sharded_objects() ||
-	 ( oid.shard_id == ghobject_t::NO_SHARD &&
+	 ( oid.shard_id == shard_id_t::NO_SHARD &&
 	   oid.generation == ghobject_t::NO_GEN ));
   assert(outfd);
   int flags = O_RDWR;
@@ -274,6 +274,14 @@ int FileStore::lfn_open(coll_t cid,
 	derr << "error creating " << oid << " (" << (*path)->path()
 	     << ") in index: " << cpp_strerror(-r) << dendl;
 	goto fail;
+      }
+      r = chain_fsetxattr(fd, XATTR_SPILL_OUT_NAME,
+                          XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT));
+      if (r < 0) {
+        VOID_TEMP_FAILURE_RETRY(::close(fd));
+        derr << "error setting spillout xattr for oid " << oid << " (" << (*path)->path()
+                       << "):" << cpp_strerror(-r) << dendl;
+        goto fail;
       }
     }
   }
@@ -2166,7 +2174,7 @@ unsigned FileStore::_do_transaction(
     if (handle)
       handle->reset_tp_timeout();
 
-    int op = i.get_op();
+    int op = i.decode_op();
     int r = 0;
 
     _inject_failure();
@@ -2176,8 +2184,8 @@ unsigned FileStore::_do_transaction(
       break;
     case Transaction::OP_TOUCH:
       {
-	coll_t cid = i.get_cid();
-	ghobject_t oid = i.get_oid();
+	coll_t cid = i.decode_cid();
+	ghobject_t oid = i.decode_oid();
 	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _touch(cid, oid);
       }
@@ -2185,13 +2193,13 @@ unsigned FileStore::_do_transaction(
       
     case Transaction::OP_WRITE:
       {
-	coll_t cid = i.get_cid();
-	ghobject_t oid = i.get_oid();
-	uint64_t off = i.get_length();
-	uint64_t len = i.get_length();
+	coll_t cid = i.decode_cid();
+	ghobject_t oid = i.decode_oid();
+	uint64_t off = i.decode_length();
+	uint64_t len = i.decode_length();
 	bool replica = i.get_replica();
 	bufferlist bl;
-	i.get_bl(bl);
+	i.decode_bl(bl);
 	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _write(cid, oid, off, len, bl, replica);
       }
@@ -2199,10 +2207,10 @@ unsigned FileStore::_do_transaction(
       
     case Transaction::OP_ZERO:
       {
-	coll_t cid = i.get_cid();
-	ghobject_t oid = i.get_oid();
-	uint64_t off = i.get_length();
-	uint64_t len = i.get_length();
+	coll_t cid = i.decode_cid();
+	ghobject_t oid = i.decode_oid();
+	uint64_t off = i.decode_length();
+	uint64_t len = i.decode_length();
 	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _zero(cid, oid, off, len);
       }
@@ -2210,19 +2218,19 @@ unsigned FileStore::_do_transaction(
       
     case Transaction::OP_TRIMCACHE:
       {
-	i.get_cid();
-	i.get_oid();
-	i.get_length();
-	i.get_length();
+	i.decode_cid();
+	i.decode_oid();
+	i.decode_length();
+	i.decode_length();
 	// deprecated, no-op
       }
       break;
       
     case Transaction::OP_TRUNCATE:
       {
-	coll_t cid = i.get_cid();
-	ghobject_t oid = i.get_oid();
-	uint64_t off = i.get_length();
+	coll_t cid = i.decode_cid();
+	ghobject_t oid = i.decode_oid();
+	uint64_t off = i.decode_length();
 	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _truncate(cid, oid, off);
       }
@@ -2230,8 +2238,8 @@ unsigned FileStore::_do_transaction(
       
     case Transaction::OP_REMOVE:
       {
-	coll_t cid = i.get_cid();
-	ghobject_t oid = i.get_oid();
+	coll_t cid = i.decode_cid();
+	ghobject_t oid = i.decode_oid();
 	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _remove(cid, oid, spos);
       }
@@ -2239,11 +2247,11 @@ unsigned FileStore::_do_transaction(
       
     case Transaction::OP_SETATTR:
       {
-	coll_t cid = i.get_cid();
-	ghobject_t oid = i.get_oid();
-	string name = i.get_attrname();
+	coll_t cid = i.decode_cid();
+	ghobject_t oid = i.decode_oid();
+	string name = i.decode_attrname();
 	bufferlist bl;
-	i.get_bl(bl);
+	i.decode_bl(bl);
 	if (_check_replay_guard(cid, oid, spos) > 0) {
 	  map<string, bufferptr> to_set;
 	  to_set[name] = bufferptr(bl.c_str(), bl.length());
@@ -2257,10 +2265,10 @@ unsigned FileStore::_do_transaction(
       
     case Transaction::OP_SETATTRS:
       {
-	coll_t cid = i.get_cid();
-	ghobject_t oid = i.get_oid();
+	coll_t cid = i.decode_cid();
+	ghobject_t oid = i.decode_oid();
 	map<string, bufferptr> aset;
-	i.get_attrset(aset);
+	i.decode_attrset(aset);
 	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _setattrs(cid, oid, aset, spos);
   	if (r == -ENOSPC)
@@ -2270,9 +2278,9 @@ unsigned FileStore::_do_transaction(
 
     case Transaction::OP_RMATTR:
       {
-	coll_t cid = i.get_cid();
-	ghobject_t oid = i.get_oid();
-	string name = i.get_attrname();
+	coll_t cid = i.decode_cid();
+	ghobject_t oid = i.decode_oid();
+	string name = i.decode_attrname();
 	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _rmattr(cid, oid, name.c_str(), spos);
       }
@@ -2280,8 +2288,8 @@ unsigned FileStore::_do_transaction(
 
     case Transaction::OP_RMATTRS:
       {
-	coll_t cid = i.get_cid();
-	ghobject_t oid = i.get_oid();
+	coll_t cid = i.decode_cid();
+	ghobject_t oid = i.decode_oid();
 	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _rmattrs(cid, oid, spos);
       }
@@ -2289,39 +2297,39 @@ unsigned FileStore::_do_transaction(
       
     case Transaction::OP_CLONE:
       {
-	coll_t cid = i.get_cid();
-	ghobject_t oid = i.get_oid();
-	ghobject_t noid = i.get_oid();
+	coll_t cid = i.decode_cid();
+	ghobject_t oid = i.decode_oid();
+	ghobject_t noid = i.decode_oid();
 	r = _clone(cid, oid, noid, spos);
       }
       break;
 
     case Transaction::OP_CLONERANGE:
       {
-	coll_t cid = i.get_cid();
-	ghobject_t oid = i.get_oid();
-	ghobject_t noid = i.get_oid();
- 	uint64_t off = i.get_length();
-	uint64_t len = i.get_length();
+	coll_t cid = i.decode_cid();
+	ghobject_t oid = i.decode_oid();
+	ghobject_t noid = i.decode_oid();
+	uint64_t off = i.decode_length();
+	uint64_t len = i.decode_length();
 	r = _clone_range(cid, oid, noid, off, len, off, spos);
       }
       break;
 
     case Transaction::OP_CLONERANGE2:
       {
-	coll_t cid = i.get_cid();
-	ghobject_t oid = i.get_oid();
-	ghobject_t noid = i.get_oid();
- 	uint64_t srcoff = i.get_length();
-	uint64_t len = i.get_length();
- 	uint64_t dstoff = i.get_length();
+	coll_t cid = i.decode_cid();
+	ghobject_t oid = i.decode_oid();
+	ghobject_t noid = i.decode_oid();
+	uint64_t srcoff = i.decode_length();
+	uint64_t len = i.decode_length();
+	uint64_t dstoff = i.decode_length();
 	r = _clone_range(cid, oid, noid, srcoff, len, dstoff, spos);
       }
       break;
 
     case Transaction::OP_MKCOLL:
       {
-	coll_t cid = i.get_cid();
+	coll_t cid = i.decode_cid();
 	if (_check_replay_guard(cid, spos) > 0)
 	  r = _create_collection(cid, spos);
       }
@@ -2329,7 +2337,7 @@ unsigned FileStore::_do_transaction(
 
     case Transaction::OP_RMCOLL:
       {
-	coll_t cid = i.get_cid();
+	coll_t cid = i.decode_cid();
 	if (_check_replay_guard(cid, spos) > 0)
 	  r = _destroy_collection(cid);
       }
@@ -2337,17 +2345,17 @@ unsigned FileStore::_do_transaction(
 
     case Transaction::OP_COLL_ADD:
       {
-	coll_t ncid = i.get_cid();
-	coll_t ocid = i.get_cid();
-	ghobject_t oid = i.get_oid();
+	coll_t ncid = i.decode_cid();
+	coll_t ocid = i.decode_cid();
+	ghobject_t oid = i.decode_oid();
 	r = _collection_add(ncid, ocid, oid, spos);
       }
       break;
 
     case Transaction::OP_COLL_REMOVE:
        {
-	coll_t cid = i.get_cid();
-	ghobject_t oid = i.get_oid();
+	coll_t cid = i.decode_cid();
+	ghobject_t oid = i.decode_oid();
 	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _remove(cid, oid, spos);
        }
@@ -2356,9 +2364,9 @@ unsigned FileStore::_do_transaction(
     case Transaction::OP_COLL_MOVE:
       {
 	// WARNING: this is deprecated and buggy; only here to replay old journals.
-	coll_t ocid = i.get_cid();
-	coll_t ncid = i.get_cid();
-	ghobject_t oid = i.get_oid();
+	coll_t ocid = i.decode_cid();
+	coll_t ncid = i.decode_cid();
+	ghobject_t oid = i.decode_oid();
 	r = _collection_add(ocid, ncid, oid, spos);
 	if (r == 0 &&
 	    (_check_replay_guard(ocid, oid, spos) > 0))
@@ -2368,20 +2376,20 @@ unsigned FileStore::_do_transaction(
 
     case Transaction::OP_COLL_MOVE_RENAME:
       {
-	coll_t oldcid = i.get_cid();
-	ghobject_t oldoid = i.get_oid();
-	coll_t newcid = i.get_cid();
-	ghobject_t newoid = i.get_oid();
+	coll_t oldcid = i.decode_cid();
+	ghobject_t oldoid = i.decode_oid();
+	coll_t newcid = i.decode_cid();
+	ghobject_t newoid = i.decode_oid();
 	r = _collection_move_rename(oldcid, oldoid, newcid, newoid, spos);
       }
       break;
 
     case Transaction::OP_COLL_SETATTR:
       {
-	coll_t cid = i.get_cid();
-	string name = i.get_attrname();
+	coll_t cid = i.decode_cid();
+	string name = i.decode_attrname();
 	bufferlist bl;
-	i.get_bl(bl);
+	i.decode_bl(bl);
 	if (_check_replay_guard(cid, spos) > 0)
 	  r = _collection_setattr(cid, name.c_str(), bl.c_str(), bl.length());
       }
@@ -2389,8 +2397,8 @@ unsigned FileStore::_do_transaction(
 
     case Transaction::OP_COLL_RMATTR:
       {
-	coll_t cid = i.get_cid();
-	string name = i.get_attrname();
+	coll_t cid = i.decode_cid();
+	string name = i.decode_attrname();
 	if (_check_replay_guard(cid, spos) > 0)
 	  r = _collection_rmattr(cid, name.c_str());
       }
@@ -2402,81 +2410,81 @@ unsigned FileStore::_do_transaction(
 
     case Transaction::OP_COLL_RENAME:
       {
-	coll_t cid(i.get_cid());
-	coll_t ncid(i.get_cid());
+	coll_t cid(i.decode_cid());
+	coll_t ncid(i.decode_cid());
 	r = _collection_rename(cid, ncid, spos);
       }
       break;
 
     case Transaction::OP_OMAP_CLEAR:
       {
-	coll_t cid(i.get_cid());
-	ghobject_t oid = i.get_oid();
+	coll_t cid(i.decode_cid());
+	ghobject_t oid = i.decode_oid();
 	r = _omap_clear(cid, oid, spos);
       }
       break;
     case Transaction::OP_OMAP_SETKEYS:
       {
-	coll_t cid(i.get_cid());
-	ghobject_t oid = i.get_oid();
+	coll_t cid(i.decode_cid());
+	ghobject_t oid = i.decode_oid();
 	map<string, bufferlist> aset;
-	i.get_attrset(aset);
+	i.decode_attrset(aset);
 	r = _omap_setkeys(cid, oid, aset, spos);
       }
       break;
     case Transaction::OP_OMAP_RMKEYS:
       {
-	coll_t cid(i.get_cid());
-	ghobject_t oid = i.get_oid();
+	coll_t cid(i.decode_cid());
+	ghobject_t oid = i.decode_oid();
 	set<string> keys;
-	i.get_keyset(keys);
+	i.decode_keyset(keys);
 	r = _omap_rmkeys(cid, oid, keys, spos);
       }
       break;
     case Transaction::OP_OMAP_RMKEYRANGE:
       {
-	coll_t cid(i.get_cid());
-	ghobject_t oid = i.get_oid();
+	coll_t cid(i.decode_cid());
+	ghobject_t oid = i.decode_oid();
 	string first, last;
-	first = i.get_key();
-	last = i.get_key();
+	first = i.decode_key();
+	last = i.decode_key();
 	r = _omap_rmkeyrange(cid, oid, first, last, spos);
       }
       break;
     case Transaction::OP_OMAP_SETHEADER:
       {
-	coll_t cid(i.get_cid());
-	ghobject_t oid = i.get_oid();
+	coll_t cid(i.decode_cid());
+	ghobject_t oid = i.decode_oid();
 	bufferlist bl;
-	i.get_bl(bl);
+	i.decode_bl(bl);
 	r = _omap_setheader(cid, oid, bl, spos);
       }
       break;
     case Transaction::OP_SPLIT_COLLECTION:
       {
-	coll_t cid(i.get_cid());
-	uint32_t bits(i.get_u32());
-	uint32_t rem(i.get_u32());
-	coll_t dest(i.get_cid());
+	coll_t cid(i.decode_cid());
+	uint32_t bits(i.decode_u32());
+	uint32_t rem(i.decode_u32());
+	coll_t dest(i.decode_cid());
 	r = _split_collection_create(cid, bits, rem, dest, spos);
       }
       break;
     case Transaction::OP_SPLIT_COLLECTION2:
       {
-	coll_t cid(i.get_cid());
-	uint32_t bits(i.get_u32());
-	uint32_t rem(i.get_u32());
-	coll_t dest(i.get_cid());
+	coll_t cid(i.decode_cid());
+	uint32_t bits(i.decode_u32());
+	uint32_t rem(i.decode_u32());
+	coll_t dest(i.decode_cid());
 	r = _split_collection(cid, bits, rem, dest, spos);
       }
       break;
 
     case Transaction::OP_SETALLOCHINT:
       {
-        coll_t cid = i.get_cid();
-        ghobject_t oid = i.get_oid();
-        uint64_t expected_object_size = i.get_length();
-        uint64_t expected_write_size = i.get_length();
+        coll_t cid = i.decode_cid();
+        ghobject_t oid = i.decode_oid();
+        uint64_t expected_object_size = i.decode_length();
+        uint64_t expected_write_size = i.decode_length();
         if (_check_replay_guard(cid, oid, spos) > 0)
           r = _set_alloc_hint(cid, oid, expected_object_size,
                               expected_write_size);
@@ -2936,8 +2944,20 @@ int FileStore::_clone(coll_t cid, const ghobject_t& oldoid, const ghobject_t& ne
   }
 
   {
+    char buf[2];
     map<string, bufferptr> aset;
-    r = _fgetattrs(**o, aset, false);
+    r = _fgetattrs(**o, aset);
+    if (r < 0)
+      goto out3;
+
+    r = chain_fgetxattr(**o, XATTR_SPILL_OUT_NAME, buf, sizeof(buf));
+    if (r >= 0 && !strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT))) {
+      r = chain_fsetxattr(**n, XATTR_SPILL_OUT_NAME, XATTR_NO_SPILL_OUT,
+                          sizeof(XATTR_NO_SPILL_OUT));
+    } else {
+      r = chain_fsetxattr(**n, XATTR_SPILL_OUT_NAME, XATTR_SPILL_OUT,
+                          sizeof(XATTR_SPILL_OUT));
+    }
     if (r < 0)
       goto out3;
 
@@ -3517,7 +3537,7 @@ int FileStore::_fgetattr(int fd, const char *name, bufferptr& bp)
   return l;
 }
 
-int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset, bool user_only)
+int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset)
 {
   // get attr list
   char names1[100];
@@ -3551,17 +3571,9 @@ int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset, bool user_only)
   while (name < end) {
     char *attrname = name;
     if (parse_attrname(&name)) {
-      char *set_name = name;
-      bool can_get = true;
-      if (user_only) {
-	if (*set_name =='_')
-	  set_name++;
-	else
-	  can_get = false;
-      }
-      if (*set_name && can_get) {
+      if (*name) {
         dout(20) << "fgetattrs " << fd << " getting '" << name << "'" << dendl;
-        int r = _fgetattr(fd, attrname, aset[set_name]);
+        int r = _fgetattr(fd, attrname, aset[name]);
         if (r < 0)
 	  return r;
       }
@@ -3680,7 +3692,7 @@ int FileStore::getattr(coll_t cid, const ghobject_t& oid, const char *name, buff
   }
 }
 
-int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset, bool user_only)
+int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset)
 {
   set<string> omap_attrs;
   map<string, bufferlist> omap_aset;
@@ -3699,7 +3711,7 @@ int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>
   if (r >= 0 && !strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT)))
     spill_out = false;
 
-  r = _fgetattrs(**fd, aset, user_only);
+  r = _fgetattrs(**fd, aset);
   if (r < 0) {
     goto out;
   }
@@ -3732,16 +3744,7 @@ int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>
   for (map<string, bufferlist>::iterator i = omap_aset.begin();
 	 i != omap_aset.end();
 	 ++i) {
-    string key;
-    if (user_only) {
-	if (i->first[0] != '_')
-	  continue;
-	if (i->first == "_")
-	  continue;
-	key = i->first.substr(1, i->first.size());
-    } else {
-	key = i->first;
-    }
+    string key(i->first);
     aset.insert(make_pair(key,
 			    bufferptr(i->second.c_str(), i->second.length())));
   }
@@ -3779,7 +3782,7 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
   else
     spill_out = 1;
 
-  r = _fgetattrs(**fd, inline_set, false);
+  r = _fgetattrs(**fd, inline_set);
   assert(!m_filestore_fail_eio || r != -EIO);
   dout(15) << "setattrs " << cid << "/" << oid << dendl;
 
@@ -3802,12 +3805,6 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
 
     if (!inline_set.count(p->first) &&
 	  inline_set.size() >= m_filestore_max_inline_xattrs) {
-	if (inline_set.count(p->first)) {
-	  inline_set.erase(p->first);
-	  r = chain_fremovexattr(**fd, n);
-	  if (r < 0)
-	    goto out_close;
-	}
 	omap_set[p->first].push_back(p->second);
 	continue;
     }
@@ -3920,7 +3917,7 @@ int FileStore::_rmattrs(coll_t cid, const ghobject_t& oid,
     spill_out = false;
   }
 
-  r = _fgetattrs(**fd, aset, false);
+  r = _fgetattrs(**fd, aset);
   if (r >= 0) {
     for (map<string,bufferptr>::iterator p = aset.begin(); p != aset.end(); ++p) {
       char n[CHAIN_XATTR_MAX_NAME_LEN];
@@ -4025,7 +4022,7 @@ int FileStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset)
     r = -errno;
     goto out;
   }
-  r = _fgetattrs(fd, aset, true);
+  r = _fgetattrs(fd, aset);
   VOID_TEMP_FAILURE_RETRY(::close(fd));
  out:
   dout(10) << "collection_getattrs " << fn << " = " << r << dendl;

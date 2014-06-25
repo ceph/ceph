@@ -1625,6 +1625,7 @@ void Objecter::send_op(Op *op)
   ldout(cct, 15) << "send_op " << op->tid << " to osd." << op->session->osd << dendl;
 
   int flags = op->target.flags;
+  flags |= CEPH_OSD_FLAG_KNOWN_REDIR;
   if (op->oncommit)
     flags |= CEPH_OSD_FLAG_ONDISK;
   if (op->onack)
@@ -1771,6 +1772,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     unregister_op(op);
     m->get_redirect().combine_with_locator(op->target.target_oloc,
 					   op->target.target_oid.name);
+    op->target.flags |= CEPH_OSD_FLAG_REDIRECTED;
     _op_submit(op);
     m->put();
     return;

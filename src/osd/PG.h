@@ -710,6 +710,11 @@ public:
   bool needs_recovery() const;
   bool needs_backfill() const;
 
+  /// get log recovery reservation priority
+  unsigned get_recovery_priority();
+  /// get backfill reservation priority
+  unsigned get_backfill_priority();
+
   void mark_clean();  ///< mark an active pg clean
 
   bool _calc_past_interval_range(epoch_t *start, epoch_t *end);
@@ -1877,9 +1882,10 @@ public:
   // Prevent copying
   PG(const PG& rhs);
   PG& operator=(const PG& rhs);
+  const spg_t pg_id;
 
  public:
-  spg_t      get_pgid() const { return info.pgid; }
+  const spg_t&      get_pgid() const { return pg_id; }
   int        get_nrep() const { return acting.size(); }
 
   void init_primary_up_acting(
@@ -1889,30 +1895,30 @@ public:
     int new_acting_primary) {
     actingset.clear();
     acting = newacting;
-    for (shard_id_t i = 0; i < acting.size(); ++i) {
+    for (uint8_t i = 0; i < acting.size(); ++i) {
       if (acting[i] != CRUSH_ITEM_NONE)
 	actingset.insert(
 	  pg_shard_t(
 	    acting[i],
-	    pool.info.ec_pool() ? i : ghobject_t::NO_SHARD));
+	    pool.info.ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD));
     }
     up = newup;
     if (!pool.info.ec_pool()) {
-      up_primary = pg_shard_t(new_up_primary, ghobject_t::no_shard());
-      primary = pg_shard_t(new_acting_primary, ghobject_t::no_shard());
+      up_primary = pg_shard_t(new_up_primary, shard_id_t::NO_SHARD);
+      primary = pg_shard_t(new_acting_primary, shard_id_t::NO_SHARD);
       return;
     }
     up_primary = pg_shard_t();
     primary = pg_shard_t();
-    for (shard_id_t i = 0; i < up.size(); ++i) {
+    for (uint8_t i = 0; i < up.size(); ++i) {
       if (up[i] == new_up_primary) {
-	up_primary = pg_shard_t(up[i], i);
+	up_primary = pg_shard_t(up[i], shard_id_t(i));
 	break;
       }
     }
-    for (shard_id_t i = 0; i < acting.size(); ++i) {
+    for (uint8_t i = 0; i < acting.size(); ++i) {
       if (acting[i] == new_acting_primary) {
-	primary = pg_shard_t(acting[i], i);
+	primary = pg_shard_t(acting[i], shard_id_t(i));
 	break;
       }
     }

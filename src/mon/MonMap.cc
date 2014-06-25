@@ -130,7 +130,7 @@ void MonMap::print(ostream& out) const
 
 void MonMap::dump(Formatter *f) const
 {
-  f->dump_int("epoch", epoch);
+  f->dump_unsigned("epoch", epoch);
   f->dump_stream("fsid") <<  fsid;
   f->dump_stream("modified") << last_changed;
   f->dump_stream("created") << created;

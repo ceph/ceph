@@ -394,9 +394,6 @@ public:
     else
       return i->second;
   }
-  map<string,string> &get_erasure_code_profile(const string &name) {
-    return erasure_code_profiles[name];
-  }
   const map<string,map<string,string> > &get_erasure_code_profiles() const {
     return erasure_code_profiles;
   }
@@ -534,10 +531,11 @@ public:
   /**
    * get feature bits required by the current structure
    *
+   * @param entity_type [in] what entity type we are asking about
    * @param mask [out] set of all possible map-related features we could set
    * @return feature bits used by this map
    */
-  uint64_t get_features(uint64_t *mask) const;
+  uint64_t get_features(int entity_type, uint64_t *mask) const;
 
   /**
    * get intersection of features supported by up osds
@@ -675,9 +673,9 @@ public:
     vector<int> acting;
     pg_to_acting_osds(pgid, &acting, &primary);
     if (i->second.ec_pool()) {
-      for (shard_id_t i = 0; i < acting.size(); ++i) {
+      for (uint8_t i = 0; i < acting.size(); ++i) {
 	if (acting[i] == primary) {
-	  *out = spg_t(pgid, i);
+	  *out = spg_t(pgid, shard_id_t(i));
 	  return true;
 	}
       }

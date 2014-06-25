@@ -977,8 +977,8 @@ def prepare_journal_dev(
     if journal == data:
         # we're sharing the disk between osd data and journal;
         # make journal be partition number 2, so it's pretty
-        num = 2
-        journal_part = '{num}:0:{size}M'.format(
+        num = get_free_partition_index(dev=journal)
+        journal_part = '{num}:+0:+{size}M'.format(
             num=num,
             size=journal_size,
             )
@@ -1192,6 +1192,7 @@ def prepare_dir(
 
 def prepare_dev(
     data,
+    data_size,
     journal,
     fstype,
     mkfs_args,
@@ -1223,21 +1224,46 @@ def prepare_dev(
         LOG.debug('OSD data device %s is a partition', data)
         rawdev = data
     else:
+        if journal_dmcrypt is not None:
+            dmcrypt_unmap(journal)
+
         LOG.debug('Creating osd partition on %s', data)
         try:
-            command_check_call(
-                [
-                    'sgdisk',
-                    '--largest-new=1',
-                    '--change-name=1:ceph data',
-                    '--partition-guid=1:{osd_uuid}'.format(
-                        osd_uuid=osd_uuid,
-                        ),
-                    '--typecode=1:%s' % ptype_tobe,
-                    '--',
-                    data,
-                ],
-            )
+            if data_size is None:
+                num = 1
+                command_check_call(
+                    [
+                        'sgdisk',
+                        '--largest-new=1',
+                        '--change-name=1:ceph data',
+                        '--partition-guid=1:{osd_uuid}'.format(
+                            osd_uuid=osd_uuid,
+                            ),
+                        '--typecode=1:%s' % ptype_tobe,
+                        '--',
+                        data,
+                    ],
+                )
+            else:
+                num = get_free_partition_index(dev=data)
+                part = '{num}:+0:+{size}M'.format(
+                    num=num,
+                    size=data_size)
+                command_check_call(
+                    [
+                        'sgdisk',
+                        '--new={part}'.format(part=part),
+                        '--change-name={num}:ceph data'.format(num=num),
+                        '--partition-guid={num}:{osd_uuid}'.format(
+                            num=num,
+                            osd_uuid=osd_uuid,
+                            ),
+                        '--typecode={num}:{ptype}'.format(num=num, ptype=ptype_tobe),
+                        '--',
+                        data,
+                    ],
+                )
+
             command(
                 [
                     'partprobe',
@@ -1254,7 +1280,7 @@ def prepare_dev(
         except subprocess.CalledProcessError as e:
             raise Error(e)
 
-        rawdev = get_partition_dev(data, 1)
+        rawdev = get_partition_dev(data, num)
 
     dev = None
     if osd_dm_keypath:
@@ -1304,13 +1330,15 @@ def prepare_dev(
     finally:
         if rawdev != dev:
             dmcrypt_unmap(osd_uuid)
+        if journal_dmcrypt is not None:
+            dmcrypt_unmap(journal)
 
     if not is_partition(data):
         try:
             command_check_call(
                 [
                     'sgdisk',
-                    '--typecode=1:%s' % ptype_osd,
+                    '--typecode={num}:{ptype}'.format(num=num, ptype=ptype_osd),
                     '--',
                     data,
                 ],
@@ -1401,6 +1429,11 @@ def main_prepare(args):
             )
         journal_size = int(journal_size)
 
+        if args.data_size is not None:
+            data_size = int(args.data_size)
+        else:
+            data_size = None
+
         # colocate journal with data?
         if stat.S_ISBLK(dmode) and not is_partition(args.data) and args.journal is None and args.journal_file is None:
             LOG.info('Will colocate journal with data on %s', args.data)
@@ -1444,6 +1477,7 @@ def main_prepare(args):
                 raise Error('data path is not a directory', args.data)
             prepare_dev(
                 data=args.data,
+                data_size=data_size,
                 journal=journal_symlink,
                 fstype=args.fs_type,
                 mkfs_args=mkfs_args,
@@ -2057,8 +2091,14 @@ def main_activate_all(args):
         if name.find('.') < 0:
             continue
         (tag, uuid) = name.split('.')
-        if tag == OSD_UUID:
-            path = os.path.join(dir, name)
+
+        if tag == OSD_UUID or tag == DMCRYPT_OSD_UUID:
+
+            if tag == DMCRYPT_OSD_UUID:
+                path = os.path.join('/dev/mapper', uuid)
+            else:
+                path = os.path.join(dir, name)
+
             LOG.info('Activating %s', path)
             activate_lock.acquire()
             try:
@@ -2451,6 +2491,11 @@ def parse_args():
         metavar='KEYDIR',
         default='/etc/ceph/dmcrypt-keys',
         help='directory where dm-crypt keys are stored',
+        )
+    prepare_parser.add_argument(
+        '--data-size',
+        default=None,
+        help='size of data partition'
         )
     prepare_parser.add_argument(
         'data',

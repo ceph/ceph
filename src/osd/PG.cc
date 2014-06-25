@@ -194,7 +194,8 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   finish_sync_event(NULL),
   scrub_after_recovery(false),
   active_pushes(0),
-  recovery_state(this)
+  recovery_state(this),
+  pg_id(p)
 {
 #ifdef PG_DEBUG_REFS
   osd->add_pgid(p, this);
@@ -397,7 +398,8 @@ bool PG::search_for_missing(
   if (found_missing && num_unfound_before != missing_loc.num_unfound())
     publish_stats_to_osd();
   if (found_missing &&
-    (get_osdmap()->get_features(NULL) & CEPH_FEATURE_OSD_ERASURE_CODES)) {
+      (get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, NULL) &
+       CEPH_FEATURE_OSD_ERASURE_CODES)) {
     pg_info_t tinfo(oinfo);
     tinfo.pgid.shard = pg_whoami.shard;
     (*(ctx->info_map))[from.osd].push_back(
@@ -953,33 +955,33 @@ void PG::calc_ec_acting(
       ++i) {
     all_info_by_shard[i->first.shard].insert(i->first);
   }
-  for (shard_id_t i = 0; i < want.size(); ++i) {
+  for (uint8_t i = 0; i < want.size(); ++i) {
     ss << "For position " << (unsigned)i << ": ";
     if (up.size() > (unsigned)i && up[i] != CRUSH_ITEM_NONE &&
-	!all_info.find(pg_shard_t(up[i], i))->second.is_incomplete() &&
-	all_info.find(pg_shard_t(up[i], i))->second.last_update >=
+	!all_info.find(pg_shard_t(up[i], shard_id_t(i)))->second.is_incomplete() &&
+	all_info.find(pg_shard_t(up[i], shard_id_t(i)))->second.last_update >=
 	auth_log_shard->second.log_tail) {
-      ss << " selecting up[i]: " << pg_shard_t(up[i], i) << std::endl;
+      ss << " selecting up[i]: " << pg_shard_t(up[i], shard_id_t(i)) << std::endl;
       want[i] = up[i];
       ++usable;
       continue;
     }
     if (up.size() > (unsigned)i && up[i] != CRUSH_ITEM_NONE) {
-      ss << " backfilling up[i]: " << pg_shard_t(up[i], i)
+      ss << " backfilling up[i]: " << pg_shard_t(up[i], shard_id_t(i))
 	 << " and ";
-      backfill->insert(pg_shard_t(up[i], i));
+      backfill->insert(pg_shard_t(up[i], shard_id_t(i)));
     }
 
     if (acting.size() > (unsigned)i && acting[i] != CRUSH_ITEM_NONE &&
-	!all_info.find(pg_shard_t(acting[i], i))->second.is_incomplete() &&
-	all_info.find(pg_shard_t(acting[i], i))->second.last_update >=
+	!all_info.find(pg_shard_t(acting[i], shard_id_t(i)))->second.is_incomplete() &&
+	all_info.find(pg_shard_t(acting[i], shard_id_t(i)))->second.last_update >=
 	auth_log_shard->second.log_tail) {
-      ss << " selecting acting[i]: " << pg_shard_t(acting[i], i) << std::endl;
+      ss << " selecting acting[i]: " << pg_shard_t(acting[i], shard_id_t(i)) << std::endl;
       want[i] = acting[i];
       ++usable;
     } else {
-      for (set<pg_shard_t>::iterator j = all_info_by_shard[i].begin();
-	   j != all_info_by_shard[i].end();
+      for (set<pg_shard_t>::iterator j = all_info_by_shard[shard_id_t(i)].begin();
+	   j != all_info_by_shard[shard_id_t(i)].end();
 	   ++j) {
 	assert(j->shard == i);
 	if (!all_info.find(*j)->second.is_incomplete() &&
@@ -997,11 +999,11 @@ void PG::calc_ec_acting(
   }
 
   bool found_primary = false;
-  for (shard_id_t i = 0; i < want.size(); ++i) {
+  for (uint8_t i = 0; i < want.size(); ++i) {
     if (want[i] != CRUSH_ITEM_NONE) {
-      acting_backfill->insert(pg_shard_t(want[i], i));
+      acting_backfill->insert(pg_shard_t(want[i], shard_id_t(i)));
       if (!found_primary) {
-	*want_primary = pg_shard_t(want[i], i);
+	*want_primary = pg_shard_t(want[i], shard_id_t(i));
 	found_primary = true;
       }
     }
@@ -1063,7 +1065,7 @@ void PG::calc_replicated_acting(
   for (vector<int>::const_iterator i = up.begin();
        i != up.end();
        ++i) {
-    pg_shard_t up_cand = pg_shard_t(*i, ghobject_t::no_shard());
+    pg_shard_t up_cand = pg_shard_t(*i, shard_id_t::NO_SHARD);
     if (up_cand == primary->first)
       continue;
     const pg_info_t &cur_info = all_info.find(up_cand)->second;
@@ -1099,7 +1101,7 @@ void PG::calc_replicated_acting(
   for (vector<int>::const_iterator i = acting.begin();
        i != acting.end();
        ++i) {
-    pg_shard_t acting_cand(*i, ghobject_t::no_shard());
+    pg_shard_t acting_cand(*i, shard_id_t::NO_SHARD);
     if (usable >= size)
       break;
 
@@ -1285,7 +1287,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id)
       have.insert(
 	pg_shard_t(
 	  want[i],
-	  pool.info.ec_pool() ? i : ghobject_t::NO_SHARD));
+	  pool.info.ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD));
   }
   if (!(*recoverable_predicate)(have)) {
     want_acting.clear();
@@ -1370,7 +1372,7 @@ void PG::build_might_have_unfound()
     std::vector<int>::const_iterator a = interval.acting.begin();
     std::vector<int>::const_iterator a_end = interval.acting.end();
     for (; a != a_end; ++a, ++i) {
-      pg_shard_t shard(*a, pool.info.ec_pool() ? i : ghobject_t::NO_SHARD);
+      pg_shard_t shard(*a, pool.info.ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD);
       if (*a != CRUSH_ITEM_NONE && shard != pg_whoami)
 	might_have_unfound.insert(shard);
     }
@@ -1870,6 +1872,26 @@ void PG::mark_clean()
     queue_snap_trim();
 
   dirty_info = true;
+}
+
+unsigned PG::get_recovery_priority()
+{
+  // a higher value -> a higher priority
+  return OSD_RECOVERY_PRIORITY_MAX;
+}
+
+unsigned PG::get_backfill_priority()
+{
+  // a higher value -> a higher priority
+
+  // degraded: 200 + num missing replicas
+  if (is_degraded()) {
+    assert(pool.info.size > acting.size());
+    return 200 + (pool.info.size - acting.size());
+  }
+
+  // baseline
+  return 1;
 }
 
 void PG::finish_recovery(list<Context*>& tfin)
@@ -3507,6 +3529,17 @@ void PG::replica_scrub(
 void PG::scrub(ThreadPool::TPHandle &handle)
 {
   lock();
+  if (g_conf->osd_scrub_sleep > 0 &&
+      (scrubber.state == PG::Scrubber::NEW_CHUNK ||
+       scrubber.state == PG::Scrubber::INACTIVE)) {
+    dout(20) << __func__ << " state is INACTIVE|NEW_CHUNK, sleeping" << dendl;
+    unlock();
+    utime_t t;
+    t.set_from_double(g_conf->osd_scrub_sleep);
+    t.sleep();
+    lock();
+    dout(20) << __func__ << " slept for " << t << dendl;
+  }
   if (deleting) {
     unlock();
     return;
@@ -5519,13 +5552,12 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserve
       backfill_osd_it->osd, pg->get_osdmap()->get_epoch());
     if (con) {
       if (con->has_feature(CEPH_FEATURE_BACKFILL_RESERVATION)) {
-        unsigned priority = pg->is_degraded() ? OSDService::BACKFILL_HIGH
-	  : OSDService::BACKFILL_LOW;
         pg->osd->send_message_osd_cluster(
           new MBackfillReserve(
 	  MBackfillReserve::REQUEST,
 	  spg_t(pg->info.pgid.pgid, backfill_osd_it->shard),
-	  pg->get_osdmap()->get_epoch(), priority),
+	  pg->get_osdmap()->get_epoch(),
+	  pg->get_backfill_priority()),
 	con.get());
       } else {
         post_event(RemoteBackfillReserved());
@@ -5594,8 +5626,8 @@ PG::RecoveryState::WaitLocalBackfillReserved::WaitLocalBackfillReserved(my_conte
     pg->info.pgid,
     new QueuePeeringEvt<LocalBackfillReserved>(
       pg, pg->get_osdmap()->get_epoch(),
-      LocalBackfillReserved()), pg->is_degraded() ? OSDService::BACKFILL_HIGH
-	 : OSDService::BACKFILL_LOW);
+      LocalBackfillReserved()),
+    pg->get_backfill_priority());
 }
 
 void PG::RecoveryState::WaitLocalBackfillReserved::exit()
@@ -5650,7 +5682,8 @@ PG::RecoveryState::RepWaitRecoveryReserved::RepWaitRecoveryReserved(my_context c
     pg->info.pgid,
     new QueuePeeringEvt<RemoteRecoveryReserved>(
       pg, pg->get_osdmap()->get_epoch(),
-      RemoteRecoveryReserved()), OSDService::RECOVERY);
+      RemoteRecoveryReserved()),
+    pg->get_recovery_priority());
 }
 
 boost::statechart::result
@@ -5791,7 +5824,8 @@ PG::RecoveryState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_conte
     pg->info.pgid,
     new QueuePeeringEvt<LocalRecoveryReserved>(
       pg, pg->get_osdmap()->get_epoch(),
-      LocalRecoveryReserved()), OSDService::RECOVERY);
+      LocalRecoveryReserved()),
+    pg->get_recovery_priority());
 }
 
 void PG::RecoveryState::WaitLocalRecoveryReserved::exit()
@@ -6570,7 +6604,7 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
 	    int o = interval.acting[i];
 	    if (o == CRUSH_ITEM_NONE)
 	      continue;
-	    pg_shard_t so(o, pg->pool.info.ec_pool() ? i : ghobject_t::NO_SHARD);
+	    pg_shard_t so(o, pg->pool.info.ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD);
 	    if (!osdmap->exists(o) || osdmap->get_info(o).lost_at > interval.first)
 	      continue;  // dne or lost
 	    if (osdmap->is_up(o)) {
@@ -7133,13 +7167,13 @@ PG::PriorSet::PriorSet(bool ec_pool,
   // sending them any new info/logs/whatever.
   for (unsigned i=0; i<acting.size(); i++) {
     if (acting[i] != CRUSH_ITEM_NONE)
-      probe.insert(pg_shard_t(acting[i], ec_pool ? i : ghobject_t::NO_SHARD));
+      probe.insert(pg_shard_t(acting[i], ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD));
   }
   // It may be possible to exlude the up nodes, but let's keep them in
   // there for now.
   for (unsigned i=0; i<up.size(); i++) {
     if (up[i] != CRUSH_ITEM_NONE)
-      probe.insert(pg_shard_t(up[i], ec_pool ? i : ghobject_t::NO_SHARD));
+      probe.insert(pg_shard_t(up[i], ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD));
   }
 
   for (map<epoch_t,pg_interval_t>::const_reverse_iterator p = past_intervals.rbegin();
@@ -7168,7 +7202,7 @@ PG::PriorSet::PriorSet(bool ec_pool,
       int o = interval.acting[i];
       if (o == CRUSH_ITEM_NONE)
 	continue;
-      pg_shard_t so(o, ec_pool ? i : ghobject_t::NO_SHARD);
+      pg_shard_t so(o, ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD);
 
       const osd_info_t *pinfo = 0;
       if (osdmap.exists(o))

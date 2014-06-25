@@ -283,15 +283,14 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 
 void OSDMonitor::update_msgr_features()
 {
-  uint64_t mask;
-  uint64_t features = osdmap.get_features(&mask);
-
   set<int> types;
   types.insert((int)entity_name_t::TYPE_OSD);
   types.insert((int)entity_name_t::TYPE_CLIENT);
   types.insert((int)entity_name_t::TYPE_MDS);
   types.insert((int)entity_name_t::TYPE_MON);
   for (set<int>::iterator q = types.begin(); q != types.end(); ++q) {
+    uint64_t mask;
+    uint64_t features = osdmap.get_features(*q, &mask);
     if ((mon->messenger->get_policy(*q).features_required & mask) != features) {
       dout(0) << "crush map has features " << features << ", adjusting msgr requires" << dendl;
       Messenger::Policy p = mon->messenger->get_policy(*q);
@@ -1182,7 +1181,8 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
   assert(m->get_orig_source_inst().name.is_osd());
 
   // check if osd has required features to boot
-  if ((osdmap.get_features(NULL) & CEPH_FEATURE_OSD_ERASURE_CODES) &&
+  if ((osdmap.get_features(CEPH_ENTITY_TYPE_OSD, NULL) &
+       CEPH_FEATURE_OSD_ERASURE_CODES) &&
       !(m->get_connection()->get_features() & CEPH_FEATURE_OSD_ERASURE_CODES)) {
     dout(0) << __func__ << " osdmap requires Erasure Codes but osd at "
             << m->get_orig_source_inst()
@@ -2254,7 +2254,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
   } else if (prefix == "osd getmaxosd") {
     if (f) {
       f->open_object_section("getmaxosd");
-      f->dump_int("epoch", osdmap.get_epoch());
+      f->dump_unsigned("epoch", osdmap.get_epoch());
       f->dump_int("max_osd", osdmap.get_max_osd());
       f->close_section();
       f->flush(rdata);
@@ -2338,15 +2338,21 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       fullobjname = oid.name;
     if (f) {
       f->open_object_section("osd_map");
-      f->dump_int("epoch", osdmap.get_epoch());
+      f->dump_unsigned("epoch", osdmap.get_epoch());
       f->dump_string("pool", poolstr);
       f->dump_int("pool_id", pool);
       f->dump_stream("objname") << fullobjname;
       f->dump_stream("raw_pgid") << pgid;
       f->dump_stream("pgid") << mpgid;
-      f->dump_stream("up") << up;
+      f->open_array_section("up");
+      for (vector<int>::iterator p = up.begin(); p != up.end(); ++p)
+        f->dump_int("osd", *p);
+      f->close_section();
       f->dump_int("up_primary", up_p);
-      f->dump_stream("acting") << acting;
+      f->open_array_section("acting");
+      for (vector<int>::iterator p = acting.begin(); p != acting.end(); ++p)
+        f->dump_int("osd", *p);
+      f->close_section();
       f->dump_int("acting_primary", acting_p);
       f->close_section(); // osd_map
       f->flush(rdata);
@@ -2946,7 +2952,7 @@ int OSDMonitor::crush_ruleset_create_erasure(const string &name,
     ErasureCodeInterfaceRef erasure_code;
     int err = get_erasure_code(profile, &erasure_code, ss);
     if (err) {
-      ss << "failed to load plugin using profile " << profile;
+      ss << "failed to load plugin using profile " << profile << std::endl;
       return err;
     }
 
@@ -2963,7 +2969,7 @@ int OSDMonitor::crush_ruleset_create_erasure(const string &name,
 
 int OSDMonitor::get_erasure_code(const string &erasure_code_profile,
 				 ErasureCodeInterfaceRef *erasure_code,
-				 stringstream &ss)
+				 stringstream &ss) const
 {
   if (pending_inc.has_erasure_code_profile(erasure_code_profile))
     return -EAGAIN;
@@ -2974,7 +2980,7 @@ int OSDMonitor::get_erasure_code(const string &erasure_code_profile,
   if (plugin == profile.end()) {
     ss << "cannot determine the erasure code plugin"
        << " because there is no 'plugin' entry in the erasure_code_profile "
-       << profile;
+       << profile << std::endl;
     return -EINVAL;
   }
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
@@ -3959,45 +3965,81 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     } while (false);
 
   } else if (prefix == "osd crush reweight") {
-    do {
-      // osd crush reweight <name> <weight>
-      CrushWrapper newcrush;
-      _get_pending_crush(newcrush);
+    // osd crush reweight <name> <weight>
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
 
-      string name;
-      cmd_getval(g_ceph_context, cmdmap, "name", name);
-      if (!newcrush.name_exists(name)) {
-	err = -ENOENT;
-	ss << "device '" << name << "' does not appear in the crush map";
-	break;
-      }
+    string name;
+    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    if (!newcrush.name_exists(name)) {
+      err = -ENOENT;
+      ss << "device '" << name << "' does not appear in the crush map";
+      goto reply;
+    }
 
-      int id = newcrush.get_item_id(name);
-      if (id < 0) {
-	ss << "device '" << name << "' is not a leaf in the crush map";
-	break;
-      }
-      double w;
-      if (!cmd_getval(g_ceph_context, cmdmap, "weight", w)) {
-        ss << "unable to parse weight value '"
-           << cmd_vartype_stringify(cmdmap["weight"]) << "'";
-        err = -EINVAL;
-        break;
-      }
+    int id = newcrush.get_item_id(name);
+    if (id < 0) {
+      ss << "device '" << name << "' is not a leaf in the crush map";
+      err = -EINVAL;
+      goto reply;
+    }
+    double w;
+    if (!cmd_getval(g_ceph_context, cmdmap, "weight", w)) {
+      ss << "unable to parse weight value '"
+	 << cmd_vartype_stringify(cmdmap["weight"]) << "'";
+      err = -EINVAL;
+      goto reply;
+    }
 
-      err = newcrush.adjust_item_weightf(g_ceph_context, id, w);
-      if (err >= 0) {
-	pending_inc.crush.clear();
-	newcrush.encode(pending_inc.crush);
-	ss << "reweighted item id " << id << " name '" << name << "' to " << w
-	   << " in crush map";
-	getline(ss, rs);
-	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+    err = newcrush.adjust_item_weightf(g_ceph_context, id, w);
+    if (err < 0)
+      goto reply;
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush);
+    ss << "reweighted item id " << id << " name '" << name << "' to " << w
+       << " in crush map";
+    getline(ss, rs);
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
 						  get_last_committed() + 1));
-	return true;
-      }
-    } while (false);
+    return true;
+  } else if (prefix == "osd crush reweight-subtree") {
+    // osd crush reweight <name> <weight>
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
 
+    string name;
+    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    if (!newcrush.name_exists(name)) {
+      err = -ENOENT;
+      ss << "device '" << name << "' does not appear in the crush map";
+      goto reply;
+    }
+
+    int id = newcrush.get_item_id(name);
+    if (id >= 0) {
+      ss << "device '" << name << "' is not a subtree in the crush map";
+      err = -EINVAL;
+      goto reply;
+    }
+    double w;
+    if (!cmd_getval(g_ceph_context, cmdmap, "weight", w)) {
+      ss << "unable to parse weight value '"
+	 << cmd_vartype_stringify(cmdmap["weight"]) << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+
+    err = newcrush.adjust_subtree_weightf(g_ceph_context, id, w);
+    if (err < 0)
+      goto reply;
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush);
+    ss << "reweighted subtree id " << id << " name '" << name << "' to " << w
+       << " in crush map";
+    getline(ss, rs);
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+					      get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd crush tunables") {
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
@@ -5662,8 +5704,12 @@ int OSDMonitor::_check_remove_pool(int64_t pool, const pg_pool_t *p,
     return -EBUSY;
   }
   if (!p->tiers.empty()) {
-    *ss << "pool '" << poolstr << "' includes tiers "
-	<< p->tiers;
+    *ss << "pool '" << poolstr << "' has tiers";
+    for(std::set<uint64_t>::iterator i = p->tiers.begin(); i != p->tiers.end(); ++i) {
+      const char *name = osdmap.get_pool_name(*i);
+      assert(name != NULL);
+      *ss << " " << name;
+    }
     return -EBUSY;
   }
   *ss << "pool '" << poolstr << "' removed";

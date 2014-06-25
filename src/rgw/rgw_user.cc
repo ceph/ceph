@@ -6,6 +6,7 @@
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
+#include "common/RWLock.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
 
@@ -192,24 +193,58 @@ int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_inf
   return ret;
 }
 
+struct user_info_entry {
+  RGWUserInfo info;
+  RGWObjVersionTracker objv_tracker;
+  time_t mtime;
+};
+
+static RGWChainedCacheImpl<user_info_entry> uinfo_cache;
+
 int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucket, RGWUserInfo& info,
                                  RGWObjVersionTracker *objv_tracker, time_t *pmtime)
 {
+  user_info_entry e;
+  if (uinfo_cache.find(key, &e)) {
+    info = e.info;
+    if (objv_tracker)
+      *objv_tracker = e.objv_tracker;
+    if (pmtime)
+      *pmtime = e.mtime;
+    return 0;
+  }
+
   bufferlist bl;
   RGWUID uid;
 
-  int ret = rgw_get_system_obj(store, NULL, bucket, key, bl, NULL, pmtime);
+  int ret = rgw_get_system_obj(store, NULL, bucket, key, bl, NULL, &e.mtime);
   if (ret < 0)
     return ret;
+
+  rgw_cache_entry_info cache_info;
 
   bufferlist::iterator iter = bl.begin();
   try {
     ::decode(uid, iter);
-    return rgw_get_user_info_by_uid(store, uid.user_id, info, objv_tracker);
+    int ret = rgw_get_user_info_by_uid(store, uid.user_id, e.info, &e.objv_tracker, NULL, &cache_info);
+    if (ret < 0) {
+      return ret;
+    }
   } catch (buffer::error& err) {
     ldout(store->ctx(), 0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
     return -EIO;
   }
+
+  list<rgw_cache_entry_info *> cache_info_entries;
+  cache_info_entries.push_back(&cache_info);
+
+  uinfo_cache.put(store, key, &e, cache_info_entries);
+
+  info = e.info;
+  if (objv_tracker)
+    *objv_tracker = e.objv_tracker;
+  if (pmtime)
+    *pmtime = e.mtime;
 
   return 0;
 }
@@ -219,12 +254,13 @@ int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucke
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 int rgw_get_user_info_by_uid(RGWRados *store, string& uid, RGWUserInfo& info,
-                             RGWObjVersionTracker *objv_tracker, time_t *pmtime)
+                             RGWObjVersionTracker *objv_tracker, time_t *pmtime,
+                             rgw_cache_entry_info *cache_info)
 {
   bufferlist bl;
   RGWUID user_id;
 
-  int ret = rgw_get_system_obj(store, NULL, store->zone.user_uid_pool, uid, bl, objv_tracker, pmtime);
+  int ret = rgw_get_system_obj(store, NULL, store->zone.user_uid_pool, uid, bl, objv_tracker, pmtime, NULL, cache_info);
   if (ret < 0)
     return ret;
 

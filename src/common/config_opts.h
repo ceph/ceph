@@ -394,6 +394,9 @@ OPTION(osd_compact_leveldb_on_mount, OPT_BOOL, false)
 // Maximum number of backfills to or from a single osd
 OPTION(osd_max_backfills, OPT_U64, 10)
 
+// Minimum recovery priority (255 = max, smaller = lower)
+OPTION(osd_min_recovery_priority, OPT_INT, 0)
+
 // Refuse backfills when OSD full ratio is above this value
 OPTION(osd_backfill_full_ratio, OPT_FLOAT, 0.85)
 
@@ -466,6 +469,8 @@ OPTION(osd_op_pq_min_cost, OPT_U64, 65536)
 OPTION(osd_disk_threads, OPT_INT, 1)
 OPTION(osd_recovery_threads, OPT_INT, 1)
 OPTION(osd_recover_clone_overlap, OPT_BOOL, true)   // preserve clone_overlap during recovery/migration
+OPTION(osd_op_num_threads_per_shard, OPT_INT, 2)
+OPTION(osd_op_num_shards, OPT_INT, 5)
 
 // Only use clone_overlap for recovery if there are fewer than
 // osd_recover_clone_overlap_limit entries in the overlap set
@@ -516,6 +521,7 @@ OPTION(osd_scrub_min_interval, OPT_FLOAT, 60*60*24)    // if load is low
 OPTION(osd_scrub_max_interval, OPT_FLOAT, 7*60*60*24)  // regardless of load
 OPTION(osd_scrub_chunk_min, OPT_INT, 5)
 OPTION(osd_scrub_chunk_max, OPT_INT, 25)
+OPTION(osd_scrub_sleep, OPT_FLOAT, 0)   // sleep between [deep]scrub ops
 OPTION(osd_deep_scrub_interval, OPT_FLOAT, 60*60*24*7) // once a week
 OPTION(osd_deep_scrub_stride, OPT_INT, 524288)
 OPTION(osd_scan_list_ping_tp_interval, OPT_U64, 100)
@@ -632,6 +638,7 @@ OPTION(filestore_index_retry_probability, OPT_DOUBLE, 0)
 OPTION(filestore_debug_inject_read_err, OPT_BOOL, false)
 
 OPTION(filestore_debug_omap_check, OPT_BOOL, 0) // Expensive debugging check on sync
+OPTION(filestore_omap_header_cache_size, OPT_INT, 1024) 
 
 // Use omap for xattrs for attrs over
 // filestore_max_inline_xattr_size or
@@ -691,6 +698,8 @@ OPTION(keyvaluestore_debug_check_backend, OPT_BOOL, 0) // Expensive debugging ch
 OPTION(keyvaluestore_op_threads, OPT_INT, 2)
 OPTION(keyvaluestore_op_thread_timeout, OPT_INT, 60)
 OPTION(keyvaluestore_op_thread_suicide_timeout, OPT_INT, 180)
+OPTION(keyvaluestore_default_strip_size, OPT_INT, 4096) // Only affect new object
+OPTION(keyvaluestore_max_expected_write_size, OPT_U64, 1ULL << 24) // bytes
 
 // max bytes to search ahead in journal searching for corruption
 OPTION(journal_max_corrupt_search, OPT_U64, 10<<20)

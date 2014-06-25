@@ -54,6 +54,7 @@ static string *notify_oids = NULL;
 static string shadow_ns = "shadow";
 static string dir_oid_prefix = ".dir.";
 static string default_storage_pool = ".rgw.buckets";
+static string default_storage_extra_pool = ".rgw.buckets.extra";
 static string avail_pools = ".pools.avail";
 
 static string zone_info_oid_prefix = "zone_info.";
@@ -308,6 +309,7 @@ void RGWZoneParams::init_default(RGWRados *store)
     RGWZonePlacementInfo default_placement;
     default_placement.index_pool = ".rgw.buckets.index";
     default_placement.data_pool = ".rgw.buckets";
+    default_placement.data_extra_pool = ".rgw.buckets.extra";
     placement_pools["default-placement"] = default_placement;
   }
 }
@@ -1688,7 +1690,8 @@ int RGWRados::open_bucket_data_ctx(rgw_bucket& bucket, librados::IoCtx& data_ctx
 
 int RGWRados::open_bucket_data_extra_ctx(rgw_bucket& bucket, librados::IoCtx& data_ctx)
 {
-  int r = open_bucket_pool_ctx(bucket.name, bucket.data_extra_pool, data_ctx);
+  string& pool = (!bucket.data_extra_pool.empty() ? bucket.data_extra_pool : bucket.data_pool);
+  int r = open_bucket_pool_ctx(bucket.name, pool, data_ctx);
   if (r < 0)
     return r;
 
@@ -3388,7 +3391,7 @@ set_err_state:
   }
 
   if (copy_first) {
-    ret = get_obj(ctx, NULL, &handle, src_obj, first_chunk, 0, max_chunk_size);
+    ret = get_obj(ctx, NULL, &handle, src_obj, first_chunk, 0, max_chunk_size, NULL);
     if (ret < 0)
       goto done_ret;
 
@@ -3461,7 +3464,7 @@ int RGWRados::copy_obj_data(void *ctx,
 
   do {
     bufferlist bl;
-    ret = get_obj(ctx, NULL, handle, src_obj, bl, ofs, end);
+    ret = get_obj(ctx, NULL, handle, src_obj, bl, ofs, end, NULL);
     if (ret < 0)
       return ret;
 
@@ -4551,7 +4554,7 @@ int RGWRados::clone_objs(void *ctx, rgw_obj& dst_obj,
 
 
 int RGWRados::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **handle, rgw_obj& obj,
-                      bufferlist& bl, off_t ofs, off_t end)
+                      bufferlist& bl, off_t ofs, off_t end, rgw_cache_entry_info *cache_info)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -5366,13 +5369,14 @@ int RGWRados::get_bucket_instance_info(void *ctx, rgw_bucket& bucket, RGWBucketI
 }
 
 int RGWRados::get_bucket_instance_from_oid(void *ctx, string& oid, RGWBucketInfo& info,
-                                           time_t *pmtime, map<string, bufferlist> *pattrs)
+                                           time_t *pmtime, map<string, bufferlist> *pattrs,
+                                           rgw_cache_entry_info *cache_info)
 {
   ldout(cct, 20) << "reading from " << zone.domain_root << ":" << oid << dendl;
 
   bufferlist epbl;
 
-  int ret = rgw_get_system_obj(this, ctx, zone.domain_root, oid, epbl, &info.objv_tracker, pmtime, pattrs);
+  int ret = rgw_get_system_obj(this, ctx, zone.domain_root, oid, epbl, &info.objv_tracker, pmtime, pattrs, cache_info);
   if (ret < 0) {
     return ret;
   }
@@ -5392,11 +5396,12 @@ int RGWRados::get_bucket_entrypoint_info(void *ctx, const string& bucket_name,
                                          RGWBucketEntryPoint& entry_point,
                                          RGWObjVersionTracker *objv_tracker,
                                          time_t *pmtime,
-                                         map<string, bufferlist> *pattrs)
+                                         map<string, bufferlist> *pattrs,
+                                         rgw_cache_entry_info *cache_info)
 {
   bufferlist bl;
 
-  int ret = rgw_get_system_obj(this, ctx, zone.domain_root, bucket_name, bl, objv_tracker, pmtime, pattrs);
+  int ret = rgw_get_system_obj(this, ctx, zone.domain_root, bucket_name, bl, objv_tracker, pmtime, pattrs, cache_info);
   if (ret < 0) {
     return ret;
   }
@@ -5446,15 +5451,34 @@ int RGWRados::convert_old_bucket_info(void *ctx, string& bucket_name)
   return 0;
 }
 
+struct bucket_info_entry {
+  RGWBucketInfo info;
+  time_t mtime;
+  map<string, bufferlist> attrs;
+};
+
+static RGWChainedCacheImpl<bucket_info_entry> binfo_cache;
+
 int RGWRados::get_bucket_info(void *ctx, const string& bucket_name, RGWBucketInfo& info,
                               time_t *pmtime, map<string, bufferlist> *pattrs)
 {
+  bucket_info_entry e;
+  if (binfo_cache.find(bucket_name, &e)) {
+    info = e.info;
+    if (pattrs)
+      *pattrs = e.attrs;
+    if (pmtime)
+      *pmtime = e.mtime;
+    return 0;
+  }
+
   bufferlist bl;
 
   RGWBucketEntryPoint entry_point;
   time_t ep_mtime;
   RGWObjVersionTracker ot;
-  int ret = get_bucket_entrypoint_info(ctx, bucket_name, entry_point, &ot, &ep_mtime, pattrs);
+  rgw_cache_entry_info entry_cache_info;
+  int ret = get_bucket_entrypoint_info(ctx, bucket_name, entry_point, &ot, &ep_mtime, pattrs, &entry_cache_info);
   if (ret < 0) {
     info.bucket.name = bucket_name; /* only init this field */
     return ret;
@@ -5485,12 +5509,31 @@ int RGWRados::get_bucket_info(void *ctx, const string& bucket_name, RGWBucketInf
   string oid;
   get_bucket_meta_oid(entry_point.bucket, oid);
 
-  ret = get_bucket_instance_from_oid(ctx, oid, info, pmtime, pattrs);
-  info.ep_objv = ot.read_version;
+  rgw_cache_entry_info cache_info;
+
+  ret = get_bucket_instance_from_oid(ctx, oid, e.info, &e.mtime, &e.attrs, &cache_info);
+  e.info.ep_objv = ot.read_version;
+  info = e.info;
   if (ret < 0) {
     info.bucket.name = bucket_name;
     return ret;
   }
+
+  if (pmtime)
+    *pmtime = e.mtime;
+  if (pattrs)
+    *pattrs = e.attrs;
+
+  list<rgw_cache_entry_info *> cache_info_entries;
+  cache_info_entries.push_back(&entry_cache_info);
+  cache_info_entries.push_back(&cache_info);
+
+
+  /* chain to both bucket entry point and bucket instance */
+  if (!binfo_cache.put(this, bucket_name, &e, cache_info_entries)) {
+    ldout(cct, 20) << "couldn't put binfo cache entry, might have raced with data changes" << dendl;
+  }
+
   return 0;
 }
 

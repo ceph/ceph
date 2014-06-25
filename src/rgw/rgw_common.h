@@ -1226,6 +1226,13 @@ public:
 };
 WRITE_CLASS_ENCODER(rgw_obj)
 
+struct rgw_cache_entry_info {
+  string cache_locator;
+  uint64_t gen;
+
+  rgw_cache_entry_info() : gen(0) {}
+};
+
 inline ostream& operator<<(ostream& out, const rgw_obj &o) {
   return out << o.bucket.name << ":" << o.object;
 }

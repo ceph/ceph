@@ -1629,7 +1629,7 @@ int main(int argc, char **argv)
       oid += "-";
       oid += bucket_id;
       oid += "-";
-      oid += string(bucket.name);
+      oid += bucket_name;
     }
 
     if (opt_cmd == OPT_LOG_SHOW) {
