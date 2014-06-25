@@ -191,6 +191,7 @@ OPTION(mon_max_log_entries_per_event, OPT_INT, 4096)
 OPTION(mon_health_data_update_interval, OPT_FLOAT, 60.0)
 OPTION(mon_data_avail_crit, OPT_INT, 5)
 OPTION(mon_data_avail_warn, OPT_INT, 30)
+OPTION(mon_data_size_warn, OPT_U64, 15*1024*1024*1024) // issue a warning when the monitor's data store goes over 15GB (in bytes)
 OPTION(mon_config_key_max_entry_size, OPT_INT, 4096) // max num bytes per config-key entry
 OPTION(mon_sync_timeout, OPT_DOUBLE, 60.0)
 OPTION(mon_sync_max_payload_size, OPT_U32, 1048576) // max size for a sync chunk payload (say, 1MB)
@@ -211,15 +212,6 @@ OPTION(mon_debug_dump_location, OPT_STR, "/var/log/ceph/$cluster-$name.tdump")
 
 OPTION(mon_sync_provider_kill_at, OPT_INT, 0)  // kill the sync provider at a specific point in the work flow
 OPTION(mon_sync_requester_kill_at, OPT_INT, 0) // kill the sync requester at a specific point in the work flow
-OPTION(mon_leveldb_write_buffer_size, OPT_U64, 32*1024*1024) // monitor's leveldb write buffer size
-OPTION(mon_leveldb_cache_size, OPT_U64, 512*1024*1024) // monitor's leveldb cache size
-OPTION(mon_leveldb_block_size, OPT_U64, 64*1024) // monitor's leveldb block size
-OPTION(mon_leveldb_bloom_size, OPT_INT, 0) // monitor's leveldb bloom bits per entry
-OPTION(mon_leveldb_max_open_files, OPT_INT, 0) // monitor's leveldb max open files
-OPTION(mon_leveldb_compression, OPT_BOOL, false) // monitor's leveldb uses compression
-OPTION(mon_leveldb_paranoid, OPT_BOOL, false)   // monitor's leveldb paranoid flag
-OPTION(mon_leveldb_log, OPT_STR, "")
-OPTION(mon_leveldb_size_warn, OPT_U64, 40*1024*1024*1024) // issue a warning when the monitor's leveldb goes over 40GB (in bytes)
 OPTION(mon_force_quorum_join, OPT_BOOL, false) // force monitor to join quorum even if it has been previously removed from the map
 OPTION(paxos_stash_full_interval, OPT_INT, 25)   // how often (in commits) to stash a full copy of the PaxosService state
 OPTION(paxos_max_join_drift, OPT_INT, 10) // max paxos iterations before we must first sync the monitor stores
@@ -561,14 +553,6 @@ OPTION(osd_op_history_duration, OPT_U32, 600) // Oldest completed op to track
 OPTION(osd_target_transaction_size, OPT_INT, 30)     // to adjust various transactions that batch smaller items
 OPTION(osd_failsafe_full_ratio, OPT_FLOAT, .97) // what % full makes an OSD "full" (failsafe)
 OPTION(osd_failsafe_nearfull_ratio, OPT_FLOAT, .90) // what % full makes an OSD near full (failsafe)
-OPTION(osd_leveldb_write_buffer_size, OPT_U64, 0) // OSD's leveldb write buffer size
-OPTION(osd_leveldb_cache_size, OPT_U64, 0) // OSD's leveldb cache size
-OPTION(osd_leveldb_block_size, OPT_U64, 0) // OSD's leveldb block size
-OPTION(osd_leveldb_bloom_size, OPT_INT, 0) // OSD's leveldb bloom bits per entry
-OPTION(osd_leveldb_max_open_files, OPT_INT, 0) // OSD's leveldb max open files
-OPTION(osd_leveldb_compression, OPT_BOOL, true) // OSD's leveldb uses compression
-OPTION(osd_leveldb_paranoid, OPT_BOOL, false) // OSD's leveldb paranoid flag
-OPTION(osd_leveldb_log, OPT_STR, "")  // enable OSD leveldb log file
 
 // determines whether PGLog::check() compares written out log to stored log
 OPTION(osd_debug_pg_log_writeout, OPT_BOOL, false)
