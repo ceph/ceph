@@ -280,7 +280,7 @@ def command(arguments, **kwargs):
     process in a tuple: (output, returncode).
     """
     arguments = _get_command_executable(arguments)
-
+    LOG.info('Running command: %s' % ' '.join(arguments))
     process = subprocess.Popen(
         arguments,
         stdout=subprocess.PIPE,
@@ -300,6 +300,7 @@ def command_check_call(arguments):
     otherwise.
     """
     arguments = _get_command_executable(arguments)
+    LOG.info('Running command: %s' % ' '.join(arguments))
     return subprocess.check_call(arguments)
 
 
