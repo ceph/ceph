@@ -676,14 +676,22 @@ function test_mon_osd_misc()
 
 function test_mon_heap_profiler()
 {
+  do_test=1
   set +e
   # expect 'heap' commands to be correctly parsed
-  ceph heap stats
+  ceph heap stats 2>$TMPFILE
+  if [[ $? -eq 22 && `grep 'tcmalloc not enabled' $TMPFILE` ]]; then
+    echo "tcmalloc not enabled; skip heap profiler test"
+    do_test=0
+  fi
+  set -e
+
+  [[ $do_test -eq 0 ]] && return 0
+
   ceph heap start_profiler
   ceph heap dump
   ceph heap stop_profiler
   ceph heap release
-  set -e
 }
 
 function test_osd_bench()
