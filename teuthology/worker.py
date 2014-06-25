@@ -83,12 +83,12 @@ class BranchNotFoundError(ValueError):
         return "teuthology branch not found: '{0}'".format(self.branch)
 
 
-def fetch_teuthology_branch(path, branch='master'):
+def fetch_teuthology_branch(dest_path, branch='master'):
     """
     Make sure we have the correct teuthology branch checked out and up-to-date
     """
     # only let one worker create/update the checkout at a time
-    lock = filelock('%s.lock' % path)
+    lock = filelock('%s.lock' % dest_path)
     lock.acquire()
     try:
         #if os.path.isdir(path):
@@ -98,24 +98,24 @@ def fetch_teuthology_branch(path, branch='master'):
         #                 branch)
         #        shutil.rmtree(path)
 
-        if not os.path.isdir(path):
+        if not os.path.isdir(dest_path):
             log.info("Cloning %s from upstream", branch)
             teuthology_git_upstream = teuth_config.ceph_git_base_url + \
                 'teuthology.git'
             log.info(
                 subprocess.check_output(('git', 'clone', '--branch', branch,
-                                         teuthology_git_upstream, path),
-                                        cwd=os.path.dirname(path))
+                                         teuthology_git_upstream, dest_path),
+                                        cwd=os.path.dirname(dest_path))
             )
         elif time.time() - os.stat('/etc/passwd').st_mtime > 60:
             # only do this at most once per minute
             log.info("Fetching %s from upstream", branch)
             log.info(
                 subprocess.check_output(('git', 'fetch', '-p', 'origin'),
-                                        cwd=path)
+                                        cwd=dest_path)
             )
             log.info(
-                subprocess.check_output(('touch', path))
+                subprocess.check_output(('touch', dest_path))
             )
         else:
             log.info("%s was just updated; assuming it is current", branch)
@@ -125,20 +125,20 @@ def fetch_teuthology_branch(path, branch='master'):
         try:
             subprocess.check_output(
                 ('git', 'reset', '--hard', 'origin/%s' % branch),
-                cwd=path,
+                cwd=dest_path,
             )
         except subprocess.CalledProcessError:
-            shutil.rmtree(path)
+            shutil.rmtree(dest_path)
             raise BranchNotFoundError(branch)
 
-        log.debug("Bootstrapping %s", path)
+        log.debug("Bootstrapping %s", dest_path)
         # This magic makes the bootstrap script not attempt to clobber an
         # existing virtualenv. But the branch's bootstrap needs to actually
         # check for the NO_CLOBBER variable.
         env = os.environ.copy()
         env['NO_CLOBBER'] = '1'
         cmd = './bootstrap'
-        boot_proc = subprocess.Popen(cmd, shell=True, cwd=path, env=env,
+        boot_proc = subprocess.Popen(cmd, shell=True, cwd=dest_path, env=env,
                                      stdout=subprocess.PIPE,
                                      stderr=subprocess.STDOUT)
         returncode = boot_proc.wait()
@@ -214,7 +214,8 @@ def main(ctx):
                                   'teuthology-' + teuthology_branch)
 
         try:
-            fetch_teuthology_branch(path=teuth_path, branch=teuthology_branch)
+            fetch_teuthology_branch(dest_path=teuth_path,
+                                    branch=teuthology_branch)
         except BranchNotFoundError:
             log.exception(
                 "Branch not found; throwing job away")
