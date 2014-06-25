@@ -169,8 +169,6 @@ public:
     segments.erase(p);
   }
 
-
-private:
   struct C_MDL_WriteError : public Context {
     MDLog *mdlog;
     C_MDL_WriteError(MDLog *m) : mdlog(m) {}
@@ -206,10 +204,27 @@ public:
   ~MDLog();
 
 
+private:
   // -- segments --
-  void start_new_segment();
-  void prepare_new_segment();
-  void journal_segment_subtree_map(Context *onsync);
+  void _start_new_segment();
+  void _prepare_new_segment();
+  void _journal_segment_subtree_map(Context *onsync);
+public:
+  void start_new_segment() {
+    Mutex::Locker l(submit_mutex);
+    _start_new_segment();
+  }
+  void prepare_new_segment() {
+    Mutex::Locker l(submit_mutex);
+    _prepare_new_segment();
+  }
+  void journal_segment_subtree_map(Context *onsync=NULL) {
+    submit_mutex.Lock();
+    _journal_segment_subtree_map(onsync);
+    submit_mutex.Unlock();
+    if (onsync)
+      flush();
+  }
 
   LogSegment *peek_current_segment() {
     return segments.empty() ? NULL : segments.rbegin()->second;
@@ -250,12 +265,21 @@ public:
 private:
   LogEvent *cur_event;
 public:
-  void start_entry(LogEvent *e);
+  void _start_entry(LogEvent *e);
+  void start_entry(LogEvent *e) {
+    Mutex::Locker l(submit_mutex);
+    _start_entry(e);
+  }
   void cancel_entry(LogEvent *e);
-  void submit_entry(LogEvent *e, Context *c = 0);
+  void _submit_entry(LogEvent *e, Context *c);
+  void submit_entry(LogEvent *e, Context *c = 0) {
+    Mutex::Locker l(submit_mutex);
+    _submit_entry(e, c);
+  }
   void start_submit_entry(LogEvent *e, Context *c = 0) {
-    start_entry(e);
-    submit_entry(e, c);
+    Mutex::Locker l(submit_mutex);
+    _start_entry(e);
+    _submit_entry(e, c);
   }
   bool entry_is_open() { return cur_event != NULL; }
 
