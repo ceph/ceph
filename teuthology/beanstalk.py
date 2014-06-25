@@ -124,6 +124,15 @@ class RunPrinter(JobProcessor):
 
 
 class JobDeleter(JobProcessor):
+    def __init__(self, pattern):
+        self.pattern = pattern
+        super(JobDeleter, self).__init__()
+
+    def add_job(self, job_id, job_config, job_obj=None):
+        job_name = job_config['name']
+        if self.pattern in job_name:
+            super(JobDeleter, self).add_job(job_id, job_config, job_obj)
+
     def process_job(self, job_id):
         job_config = self.jobs[job_id]['job_config']
         job_name = job_config['name']
@@ -147,7 +156,7 @@ def main(args):
         watch_tube(connection, machine_type)
         if delete:
             walk_jobs(connection, machine_type,
-                      JobDeleter())
+                      JobDeleter(delete))
         elif runs:
             walk_jobs(connection, machine_type,
                       RunPrinter())
