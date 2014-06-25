@@ -67,7 +67,7 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld, int op_pri
 {
   set<CDir*> commit;
 
-  dout(6) << "LogSegment(" << offset << ").try_to_expire" << dendl;
+  dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire" << dendl;
 
   assert(g_conf->mds_kill_journal_expire_at != 1);
 
@@ -275,11 +275,11 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld, int op_pri
   }
   
   if (gather_bld.has_subs()) {
-    dout(6) << "LogSegment(" << offset << ").try_to_expire waiting" << dendl;
+    dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire waiting" << dendl;
     mds->mdlog->flush();
   } else {
     assert(g_conf->mds_kill_journal_expire_at != 5);
-    dout(6) << "LogSegment(" << offset << ").try_to_expire success" << dendl;
+    dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire success" << dendl;
   }
 }
 

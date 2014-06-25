@@ -370,14 +370,16 @@ void MDLog::trim(int m)
     ++p;
     
     if (ls->end > journaler->get_write_safe_pos()) {
-      dout(5) << "trim segment " << ls->offset << ", not fully flushed yet, safe "
+      dout(5) << "trim segment " << ls->seq << "/" << ls->offset << ", not fully flushed yet, safe "
 	      << journaler->get_write_safe_pos() << " < end " << ls->end << dendl;
       break;
     }
     if (expiring_segments.count(ls)) {
-      dout(5) << "trim already expiring segment " << ls->offset << ", " << ls->num_events << " events" << dendl;
+      dout(5) << "trim already expiring segment " << ls->seq << "/" << ls->offset
+	      << ", " << ls->num_events << " events" << dendl;
     } else if (expired_segments.count(ls)) {
-      dout(5) << "trim already expired segment " << ls->offset << ", " << ls->num_events << " events" << dendl;
+      dout(5) << "trim already expired segment " << ls->seq << "/" << ls->offset
+	      << ", " << ls->num_events << " events" << dendl;
     } else {
       try_expire(ls, op_prio);
     }
@@ -396,11 +398,11 @@ void MDLog::try_expire(LogSegment *ls, int op_prio)
     assert(expiring_segments.count(ls) == 0);
     expiring_segments.insert(ls);
     expiring_events += ls->num_events;
-    dout(5) << "try_expire expiring segment " << ls->offset << dendl;
+    dout(5) << "try_expire expiring segment " << ls->seq << "/" << ls->offset << dendl;
     gather_bld.set_finisher(new C_MaybeExpiredSegment(this, ls, op_prio));
     gather_bld.activate();
   } else {
-    dout(10) << "try_expire expired segment " << ls->offset << dendl;
+    dout(10) << "try_expire expired segment " << ls->seq << "/" << ls->offset << dendl;
     _expired(ls);
   }
   
@@ -410,7 +412,8 @@ void MDLog::try_expire(LogSegment *ls, int op_prio)
 
 void MDLog::_maybe_expired(LogSegment *ls, int op_prio)
 {
-  dout(10) << "_maybe_expired segment " << ls->offset << " " << ls->num_events << " events" << dendl;
+  dout(10) << "_maybe_expired segment " << ls->seq << "/" << ls->offset
+	   << ", " << ls->num_events << " events" << dendl;
   assert(expiring_segments.count(ls));
   expiring_segments.erase(ls);
   expiring_events -= ls->num_events;
@@ -424,11 +427,13 @@ void MDLog::_trim_expired_segments()
   while (!segments.empty()) {
     LogSegment *ls = segments.begin()->second;
     if (!expired_segments.count(ls)) {
-      dout(10) << "_trim_expired_segments waiting for " << ls->offset << " to expire" << dendl;
+      dout(10) << "_trim_expired_segments waiting for " << ls->seq << "/" << ls->offset
+	       << " to expire" << dendl;
       break;
     }
     
-    dout(10) << "_trim_expired_segments trimming expired " << ls->offset << dendl;
+    dout(10) << "_trim_expired_segments trimming expired "
+	     << ls->seq << "/" << ls->offset << dendl;
     expired_events -= ls->num_events;
     expired_segments.erase(ls);
     num_events -= ls->num_events;
@@ -452,10 +457,12 @@ void MDLog::_trim_expired_segments()
 
 void MDLog::_expired(LogSegment *ls)
 {
-  dout(5) << "_expired segment " << ls->offset << " " << ls->num_events << " events" << dendl;
+  dout(5) << "_expired segment " << ls->seq << "/" << ls->offset
+	  << ", " << ls->num_events << " events" << dendl;
 
   if (!capped && ls == peek_current_segment()) {
-    dout(5) << "_expired not expiring " << ls->offset << ", last one and !capped" << dendl;
+    dout(5) << "_expired not expiring " << ls->seq << "/" << ls->offset
+	    << ", last one and !capped" << dendl;
   } else {
     // expired.
     expired_segments.insert(ls);
@@ -906,7 +913,7 @@ void MDLog::standby_trim_segments()
     LogSegment *seg = get_oldest_segment();
     if (seg->end > expire_pos)
       break;
-    dout(10) << " removing segment " << seg->offset << dendl;
+    dout(10) << " removing segment " << seg->seq << "/" << seg->offset << dendl;
     seg->dirty_dirfrags.clear_list();
     seg->new_dirfrags.clear_list();
     seg->dirty_inodes.clear_list();
