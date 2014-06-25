@@ -51,4 +51,17 @@ function run_osd() {
     [ "$id" = "$(cat $osd_data/whoami)" ] || return 1
 
     ./ceph osd crush create-or-move "$id" 1 root=default host=localhost
+
+    status=1
+    # Workaround for http://tracker.ceph.com/issues/8630
+    for ((i=0; i < 60; i++)); do
+        if ! ceph osd dump | grep "osd.$id up"; then
+            sleep 1
+        else
+            status=0
+            break
+        fi
+    done
+
+    return $status
 }
