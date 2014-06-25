@@ -127,7 +127,7 @@ class JobDeleter(JobProcessor):
     def process_job(self, job_id):
         job_config = self.jobs[job_id]['job_config']
         job_name = job_config['name']
-        print 'Deleting {job_id}/{job_name}'.format(
+        print 'Deleting {job_name}/{job_id}'.format(
             job_id=job_id,
             job_name=job_name,
             )
