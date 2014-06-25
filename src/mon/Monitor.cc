@@ -410,9 +410,9 @@ int Monitor::sanitize_options()
   // mon_lease must be greater than mon_lease_renewal; otherwise we
   // may incur in leases expiring before they are renewed.
   if (g_conf->mon_lease <= g_conf->mon_lease_renew_interval) {
-    clog.error() << "'mon_lease' (val: " << g_conf->mon_lease
+    clog.error() << "mon_lease (" << g_conf->mon_lease
                  << ") must be greater "
-                 << "than 'mon_lease_renew_interval' (val: "
+                 << "than mon_lease_renew_interval ("
                  << g_conf->mon_lease_renew_interval << ")";
     r = -EINVAL;
   }
@@ -423,9 +423,9 @@ int Monitor::sanitize_options()
   // the monitors happened to be overloaded -- or even under normal load for
   // a small enough value.
   if (g_conf->mon_lease_ack_timeout <= g_conf->mon_lease) {
-    clog.error() << "'mon_lease_ack_timeout' (val: "
+    clog.error() << "mon_lease_ack_timeout ("
                  << g_conf->mon_lease_ack_timeout
-                 << ") must be greater than 'mon_lease' (val: "
+                 << ") must be greater than mon_lease ("
                  << g_conf->mon_lease << ")";
     r = -EINVAL;
   }
