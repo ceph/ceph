@@ -70,6 +70,8 @@ protected:
 
   bool capped;
 
+  bool stopping;
+
   inodeno_t ino;
   Journaler *journaler;
 
@@ -121,6 +123,29 @@ protected:
   int expiring_events;
   int expired_events;
 
+  struct PendingEvent {
+    LogEvent *le;
+    Context *fin;
+    bool flush;
+    PendingEvent(LogEvent *e, Context *c, bool f=false) : le(e), fin(c), flush(f) {}
+  };
+
+  map<uint64_t,list<PendingEvent> > pending_events; // log segment -> event list
+  Mutex submit_mutex;
+  Cond submit_cond;
+
+  void _submit_thread();
+  class SubmitThread : public Thread {
+    MDLog *log;
+  public:
+    SubmitThread(MDLog *l) : log(l) {}
+    void* entry() {
+      log->_submit_thread();
+      return 0;
+    }
+  } submit_thread;
+  friend class SubmitThread;
+
   // -- subtreemaps --
   friend class ESubtreeMap;
   friend class C_MDS_WroteImportMap;
@@ -168,12 +193,15 @@ public:
 		  num_events(0), 
 		  unflushed(0),
 		  capped(false),
+		  stopping(false),
 		  journaler(0),
 		  logger(0),
 		  replay_thread(this),
 		  already_replayed(false),
 		  recovery_thread(this),
 		  event_seq(0), expiring_events(0), expired_events(0),
+		  submit_mutex("MDLog::submit_mutex"),
+		  submit_thread(this),
 		  cur_event(NULL) { }		  
   ~MDLog();
 
@@ -215,6 +243,8 @@ public:
 
   bool is_capped() { return capped; }
   void cap();
+
+  void shutdown();
 
   // -- events --
 private:
