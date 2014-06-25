@@ -29,7 +29,7 @@ die() {
 debug_level=0
 verbose=0
 profile=0
-CONFIGURE_FLAGS=""
+CONFIGURE_FLAGS="--disable-static"
 while getopts  "d:e:hHTPjpnvO:" flag
 do
     case $flag in
