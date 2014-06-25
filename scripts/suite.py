@@ -23,8 +23,6 @@ Miscellaneous arguments:
 
 Standard arguments:
   <config_yaml>               Optional extra job yaml to include
-  --base <base>               Base directory for the suite
-                              e.g. ~/src/ceph-qa-suite/suites
   -s <suite>, --suite <suite>
                               The suite to schedule
   -c <ceph>, --ceph <ceph>    The ceph branch to run against
