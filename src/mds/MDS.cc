@@ -1753,6 +1753,8 @@ void MDS::suicide()
   dout(1) << "suicide.  wanted " << ceph_mds_state_name(want_state)
 	  << ", now " << ceph_mds_state_name(state) << dendl;
 
+  mdlog->shutdown();
+
   // stop timers
   if (beacon_sender) {
     timer.cancel_event(beacon_sender);
