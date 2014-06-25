@@ -734,7 +734,7 @@ function test_osd_bench()
 
   # we assume 1MB as a large bs; anything lower is a small bs
   # for a 4096 bytes bs, for 10 seconds, we are limited by IOPS
-  # max count: 409600
+  # max count: 409600 (bytes)
 
   # more than max count must not be allowed
   expect_false ceph tell osd.0 bench 409601 4096
@@ -742,13 +742,14 @@ function test_osd_bench()
   ceph tell osd.0 bench 409600 4096
 
   # for a large bs, we are limited by throughput.
-  # for a 2MB block size for 10 seconds, out max count is 50
-  # max count: 50
+  # for a 2MB block size for 10 seconds, assuming 10MB/s throughput,
+  # the max count will be (10MB * 10s) = 100MB
+  # max count: 104857600 (bytes)
 
   # more than max count must not be allowed
-  expect_false ceph tell osd.0 bench 51 2097152
-  # but 50 must succeed
-  ceph tell osd.0 bench 50 2097152
+  expect_false ceph tell osd.0 bench 104857601 2097152
+  # up to max count must be allowed
+  ceph tell osd.0 bench 104857600 2097152
 }
 
 
