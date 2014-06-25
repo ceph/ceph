@@ -64,19 +64,19 @@ def main(args):
         base_yaml_path = base_yaml.name
     base_yaml_paths.insert(0, base_yaml_path)
     prepare_and_schedule(owner=owner,
-                            name=name,
-                            suite=suite,
-                            machine_type=machine_type,
-                            base=base,
-                            base_yaml_paths=base_yaml_paths,
-                            email=email,
-                            priority=priority,
-                            limit=limit,
-                            num=num,
-                            timeout=timeout,
-                            dry_run=dry_run,
-                            verbose=verbose,
-                            )
+                         name=name,
+                         suite=suite,
+                         machine_type=machine_type,
+                         base=base,
+                         base_yaml_paths=base_yaml_paths,
+                         email=email,
+                         priority=priority,
+                         limit=limit,
+                         num=num,
+                         timeout=timeout,
+                         dry_run=dry_run,
+                         verbose=verbose,
+                         )
     os.remove(base_yaml_path)
 
 
@@ -124,7 +124,8 @@ def create_initial_config(nice_suite, ceph_branch, teuthology_branch,
     if kernel_hash:
         log.info("kernel sha1: {hash}".format(hash=kernel_hash))
         kernel_dict = dict(kernel=dict(kdb=True, sha1=kernel_hash))
-        kernel_stanza = yaml.dump(kernel_dict, default_flow_style=False).strip()
+        kernel_stanza = yaml.dump(kernel_dict,
+                                  default_flow_style=False).strip()
     else:
         kernel_stanza = ''
 
@@ -279,9 +280,9 @@ def get_hash(project='ceph', branch='master', flavor='basic',
     """
     # Alternate method for github-hosted projects - left here for informational
     # purposes
-    #resp = requests.get(
-    #    'https://api.github.com/repos/ceph/ceph/git/refs/heads/master')
-    #hash = .json()['object']['sha']
+    # resp = requests.get(
+    #     'https://api.github.com/repos/ceph/ceph/git/refs/heads/master')
+    # hash = .json()['object']['sha']
     (arch, release, pkg_type) = get_distro_defaults(distro, machine_type)
     base_url = get_gitbuilder_url(project, release, pkg_type, arch, flavor)
     url = os.path.join(base_url, 'ref', branch, 'sha1')
