@@ -2,9 +2,16 @@
 	$(LTTNG_GEN_TP_PROG) $<
 	rm -f $<.o
 
-dist_noinst_DATA = mutex.tp oprequest.tp osd.tp pg.tp
+dist_noinst_DATA = \
+	librados.tp \
+	mutex.tp \
+	oprequest.tp \
+	osd.tp \
+	pg.tp
 
 libtracepoints_la_SOURCES = \
+	librados.c \
+	librados.h \
 	mutex.c \
 	mutex.h \
 	oprequest.c \
@@ -20,6 +27,11 @@ libtracepoints_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
 libtracepoints_la_LDFLAGS =
 noinst_LTLIBRARIES = libtracepoints.la
 
-BUILT_SOURCES = mutex.h oprequest.h osd.h pg.h
+BUILT_SOURCES = \
+	librados.h \
+	mutex.h \
+	oprequest.h \
+	osd.h \
+	pg.h
 
 CLEANFILES = $(libtracepoints_la_SOURCES)
