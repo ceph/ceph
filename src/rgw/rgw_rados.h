@@ -1965,7 +1965,7 @@ public:
   }
 
   void chain_cb(const string& key, void *data) {
-    T *entry = (T *)data;
+    T *entry = static_cast<T *>(data);
     RWLock::WLocker wl(lock);
     entries[key] = *entry;
   }
