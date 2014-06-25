@@ -394,11 +394,15 @@ public:
     }
     obj_iterator(RGWObjManifest *_m) : manifest(_m) {
       init();
-      seek(0);
+      if (!manifest->empty()) {
+        seek(0);
+      }
     }
     obj_iterator(RGWObjManifest *_m, uint64_t _ofs) : manifest(_m) {
       init();
-      seek(_ofs);
+      if (!manifest->empty()) {
+        seek(_ofs);
+      }
     }
     void seek(uint64_t ofs);
 
@@ -676,6 +680,31 @@ struct RGWObjState {
   RGWObjState() : is_atomic(false), has_attrs(0), exists(false),
                   size(0), mtime(0), epoch(0), fake_tag(false), has_manifest(false),
                   has_data(false), prefetch_data(false), keep_tail(false) {}
+  RGWObjState(const RGWObjState& rhs) {
+    is_atomic = rhs.is_atomic;
+    has_attrs = rhs.has_attrs;
+    exists = rhs.exists;
+    size = rhs.size;
+    mtime = rhs.mtime;
+    epoch = rhs.epoch;
+    if (rhs.obj_tag.length()) {
+      obj_tag = rhs.obj_tag;
+    }
+    write_tag = rhs.write_tag;
+    fake_tag = rhs.fake_tag;
+    if (rhs.has_manifest) {
+      manifest = rhs.manifest;
+    }
+    has_manifest = rhs.has_manifest;
+    shadow_obj = rhs.shadow_obj;
+    has_data = rhs.has_data;
+    if (rhs.data.length()) {
+      data = rhs.data;
+    }
+    prefetch_data = rhs.prefetch_data;
+    keep_tail = rhs.keep_tail;
+    objv_tracker = rhs.objv_tracker;
+  }
 
   bool get_attr(string name, bufferlist& dest) {
     map<string, bufferlist>::iterator iter = attrset.find(name);
