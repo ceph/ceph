@@ -769,6 +769,33 @@ if test x"$LTTNG_GEN_TP_CHECK" != "xyes"; then
 fi
 AC_SUBST([LTTNG_GEN_TP_PROG], [lttng-gen-tp])
 
+AC_MSG_CHECKING([if time_t is an integer])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <time.h>]], [[
+    struct {
+        unsigned int time_t_is_integer: ((time_t) 1.5 == 1) ? 1 : -1;
+    } x;
+    return 0;
+]])], [
+   AC_MSG_RESULT([yes])
+], [
+   AC_MSG_RESULT([no])
+   AC_MSG_FAILURE([time_t is not an integer.  We assume this for tracing.])
+])
+
+AC_MSG_CHECKING([if time_t fits in uint64_t])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <time.h>
+#include <inttypes.h>]], [[
+    struct {
+        unsigned int time_t_fits_in_uin64_t: (sizeof(time_t) <= sizeof(uint64_t)) ? 1 : -1;
+    } x;
+    return 0;
+]])], [
+   AC_MSG_RESULT([yes])
+], [
+   AC_MSG_RESULT([no])
+   AC_MSG_FAILURE([time_t is larger than uint64_t.  We assume it can be cast to uint64_t, for tracing.])
+])
+
 
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
