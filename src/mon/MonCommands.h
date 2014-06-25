@@ -585,11 +585,13 @@ COMMAND("osd tier add " \
 	"name=pool,type=CephPoolname " \
 	"name=tierpool,type=CephPoolname " \
 	"name=force_nonempty,type=CephChoices,strings=--force-nonempty,req=false",
-	"add the tier <tierpool> to base pool <pool>", "osd", "rw", "cli,rest")
+	"add the tier <tierpool> (the second one) to base pool <pool> (the first one)", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd tier remove " \
 	"name=pool,type=CephPoolname " \
 	"name=tierpool,type=CephPoolname",
-	"remove the tier <tierpool> from base pool <pool>", "osd", "rw", "cli,rest")
+	"remove the tier <tierpool> (the second one) from base pool <pool> (the first one)", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd tier cache-mode " \
 	"name=pool,type=CephPoolname " \
 	"name=mode,type=CephChoices,strings=none|writeback|forward|readonly", \
@@ -606,7 +608,7 @@ COMMAND("osd tier add-cache " \
 	"name=pool,type=CephPoolname " \
 	"name=tierpool,type=CephPoolname " \
 	"name=size,type=CephInt,range=0", \
-	"add a cache <tierpool> of size <size> to existing pool <pool>", \
+	"add a cache <tierpool> (the second one) of size <size> to existing pool <pool> (the first one)", \
 	"osd", "rw", "cli,rest")
 
 /*
