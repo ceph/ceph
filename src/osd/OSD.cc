@@ -4527,6 +4527,11 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       // However, to avoid the osd from getting hung on this and having
       // timers being triggered, we are going to limit the count assuming
       // a configurable throughput and duration.
+      // NOTE: max_count is the total amount of bytes that we believe we
+      //       will be able to write during 'duration' for the given
+      //       throughput.  The block size hardly impacts this unless it's
+      //       way too big.  Given we already check how big the block size
+      //       is, it's safe to assume everything will check out.
       int64_t max_count =
         g_conf->osd_bench_large_size_max_throughput * duration;
       if (count > max_count) {
