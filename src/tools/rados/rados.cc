@@ -1359,15 +1359,15 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	   << cpp_strerror(ret) << std::endl;
       goto out;
     }
-  }
 
-  // align op_size
-  if (io_ctx.pool_requires_alignment()) {
-    const uint64_t align = io_ctx.pool_required_alignment();
-    const bool wrn = (op_size != (1<<22));
-    op_size = uint64_t((op_size + align - 1) / align) * align;
-    if (wrn)
-      cerr << "INFO: op_size has been rounded to " << op_size << std::endl;
+    // align op_size
+    if (io_ctx.pool_requires_alignment()) {
+      const uint64_t align = io_ctx.pool_required_alignment();
+      const bool wrn = (op_size != (1<<22));
+      op_size = uint64_t((op_size + align - 1) / align) * align;
+      if (wrn)
+	cerr << "INFO: op_size has been rounded to " << op_size << std::endl;
+    }
   }
 
   // snapname?
