@@ -1083,10 +1083,13 @@ public:
   }
 
   void set_obj(const string& o) {
+    object.reserve(128);
+
     orig_obj = o;
     if (ns.empty()) {
-      if (o.empty())
+      if (o.empty()) {
         return;
+      }
       if (o.size() < 1 || o[0] != '_') {
         object = o;
         return;
