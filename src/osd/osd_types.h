@@ -69,7 +69,7 @@ const char *ceph_osd_flag_name(unsigned flag);
 string ceph_osd_flag_string(unsigned flags);
 
 struct pg_shard_t {
-  int osd;
+  int32_t osd;
   shard_id_t shard;
   pg_shard_t() : osd(-1), shard(shard_id_t::NO_SHARD) {}
   explicit pg_shard_t(int osd) : osd(osd), shard(shard_id_t::NO_SHARD) {}
@@ -1340,8 +1340,8 @@ struct pg_stat_t {
   bool hitset_stats_invalid;
 
   /// up, acting primaries
-  int up_primary;
-  int acting_primary;
+  int32_t up_primary;
+  int32_t acting_primary;
 
   pg_stat_t()
     : reported_seq(0),
@@ -1691,11 +1691,11 @@ ostream &operator<<(ostream &lhs, const pg_notify_t &notify);
  */
 class OSDMap;
 struct pg_interval_t {
-  vector<int> up, acting;
+  vector<int32_t> up, acting;
   epoch_t first, last;
   bool maybe_went_rw;
-  int primary;
-  int up_primary;
+  int32_t primary;
+  int32_t up_primary;
 
   pg_interval_t()
     : first(0), last(0),
