@@ -69,7 +69,7 @@ const char *ceph_osd_flag_name(unsigned flag);
 string ceph_osd_flag_string(unsigned flags);
 
 struct pg_shard_t {
-  int osd;
+  int32_t osd;
   shard_id_t shard;
   pg_shard_t() : osd(-1), shard(shard_id_t::NO_SHARD) {}
   explicit pg_shard_t(int osd) : osd(osd), shard(shard_id_t::NO_SHARD) {}
