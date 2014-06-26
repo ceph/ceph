@@ -56,23 +56,23 @@ static int do_rados_getxattrs(rados_ioctx_t io_ctx, const char *oid,
 			const char **exkeys, const char **exvals)
 {
 	rados_xattrs_iter_t iter;
-	int nval = 0, i, nfound = 0, ret = 0;
+	int nval = 0, i, nfound = 0, r = 0, ret = 1;
 
 	for (i = 0; exvals[i]; ++i) {
 		++nval;
 	}
-	ret = rados_getxattrs(io_ctx, oid, &iter);
-	if (ret) {
-		printf("rados_getxattrs(%s) failed with error %d\n", oid, ret);
+	r = rados_getxattrs(io_ctx, oid, &iter);
+	if (r) {
+		printf("rados_getxattrs(%s) failed with error %d\n", oid, r);
 		return 1;
 	}
 	while (1) {
 	        size_t len;
 	        const char *key, *val;
-		ret = rados_getxattrs_next(iter, &key, &val, &len);
-		if (ret) {
+		r = rados_getxattrs_next(iter, &key, &val, &len);
+		if (r) {
 			printf("rados_getxattrs(%s): rados_getxattrs_next "
-				"returned error %d\n", oid, ret);
+				"returned error %d\n", oid, r);
 			goto out_err;
 		}
 		if (!key)
@@ -95,13 +95,12 @@ static int do_rados_getxattrs(rados_ioctx_t io_ctx, const char *oid,
 			"Expected %d\n", oid, nfound, nval);
 		goto out_err;
 	}
-	rados_getxattrs_end(iter);
+	ret = 0;
 	printf("rados_getxattrs(%s)\n", oid);
-	return 0;
 
 out_err:
 	rados_getxattrs_end(iter);
-	return 1;
+	return ret;
 }
 
 static int testrados(void)
