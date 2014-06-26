@@ -338,7 +338,7 @@ TEST_F(StriperTest, XattrIter) {
     const char *name;
     const char *val;
     size_t len;
-    ASSERT_EQ(0, rados_getxattrs_next(iter, &name, &val, &len));
+    ASSERT_EQ(0, rados_striper_getxattrs_next(iter, &name, &val, &len));
     if (name == NULL) {
       break;
     }
@@ -355,7 +355,7 @@ TEST_F(StriperTest, XattrIter) {
       ASSERT_EQ(0, 1) << "Unexpected attribute : " << name;;
     }
   }
-  rados_getxattrs_end(iter);
+  rados_striper_getxattrs_end(iter);
 }
 
 TEST_F(StriperTestPP, XattrListPP) {
