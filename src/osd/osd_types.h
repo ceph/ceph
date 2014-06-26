@@ -1340,8 +1340,8 @@ struct pg_stat_t {
   bool hitset_stats_invalid;
 
   /// up, acting primaries
-  int up_primary;
-  int acting_primary;
+  int32_t up_primary;
+  int32_t acting_primary;
 
   pg_stat_t()
     : reported_seq(0),
