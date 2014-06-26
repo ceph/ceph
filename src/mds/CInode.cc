@@ -2938,11 +2938,13 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
   // xattr
   bufferlist xbl;
-  e.xattr_version = i->xattr_version;
   if (!had_latest_xattrs) {
     if (!pxattrs)
       pxattrs = pxattr ? get_projected_xattrs() : &xattrs;
     ::encode(*pxattrs, xbl);
+    e.xattr_version = i->xattr_version;
+  } else {
+    e.xattr_version = 0;
   }
   
   // do we have room?
@@ -3044,6 +3046,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     } else {
       dout(10) << "dropping xattrs version " << i->xattr_version << dendl;
       xbl.clear(); // no xattrs .. XXX what's this about?!?
+      e.xattr_version = 0;
     }
   }
 
