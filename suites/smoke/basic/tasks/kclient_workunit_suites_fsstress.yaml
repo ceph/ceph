@@ -1,6 +1,7 @@
 tasks:
 - install:
 - ceph:
+    fs: xfs
 - kclient:
 - workunit:
     clients:
