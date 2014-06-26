@@ -73,7 +73,7 @@ static int do_rados_getxattrs(rados_ioctx_t io_ctx, const char *oid,
 		if (ret) {
 			printf("rados_getxattrs(%s): rados_getxattrs_next "
 				"returned error %d\n", oid, ret);
-			return 1;
+			goto out_err;
 		}
 		if (!key)
 			break;
@@ -87,17 +87,21 @@ static int do_rados_getxattrs(rados_ioctx_t io_ctx, const char *oid,
 			printf("rados_getxattrs(%s): got key %s, but the "
 				"value was %s rather than %s.\n",
 				oid, key, val, exvals[i]);
-			return 1;
+			goto out_err;
 		}
 	}
 	if (nfound != nval) {
 		printf("rados_getxattrs(%s): only found %d extended attributes. "
 			"Expected %d\n", oid, nfound, nval);
-		return 1;
+		goto out_err;
 	}
 	rados_getxattrs_end(iter);
 	printf("rados_getxattrs(%s)\n", oid);
 	return 0;
+
+out_err:
+	rados_getxattrs_end(iter);
+	return 1;
 }
 
 static int testrados(void)
