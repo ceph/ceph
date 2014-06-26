@@ -1691,11 +1691,11 @@ ostream &operator<<(ostream &lhs, const pg_notify_t &notify);
  */
 class OSDMap;
 struct pg_interval_t {
-  vector<int> up, acting;
+  vector<int32_t> up, acting;
   epoch_t first, last;
   bool maybe_went_rw;
-  int primary;
-  int up_primary;
+  int32_t primary;
+  int32_t up_primary;
 
   pg_interval_t()
     : first(0), last(0),
