@@ -41,7 +41,7 @@ void dump_open_fds(CephContext *cct)
     char path[PATH_MAX];
     snprintf(path, sizeof(path), "%s/%s", fn, de.d_name);
     char target[PATH_MAX];
-    ssize_t r = readlink(path, target, sizeof(target));
+    ssize_t r = readlink(path, target, sizeof(target) - 1);
     if (r < 0) {
       r = -errno;
       lderr(cct) << "dump_open_fds unable to readlink " << path << ": " << cpp_strerror(r) << dendl;
