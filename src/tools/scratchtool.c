@@ -163,6 +163,10 @@ static int testrados(void)
 
 	rados_ioctx_t io_ctx;
 	r = rados_ioctx_create(cl, "foo", &io_ctx);
+	if (r < 0) {
+		printf("error creating ioctx\n");
+		goto out_err;
+	}
 	printf("rados_ioctx_create = %d, io_ctx = %p\n", r, io_ctx);
 
 	/* list all pools */
@@ -174,7 +178,7 @@ static int testrados(void)
 		if (r != buf_sz) {
 			printf("buffer size mismatch: got %d the first time, but %d "
 			"the second.\n", buf_sz, r);
-			goto out_err;
+			goto out_err_cleanup;
 		}
 		const char *b = buf;
 		printf("begin pools.\n");
@@ -224,21 +228,21 @@ static int testrados(void)
 
 	/* attrs */
 	if (do_rados_setxattr(io_ctx, oid, "b", "2"))
-		goto out_err;
+		goto out_err_cleanup;
 	if (do_rados_setxattr(io_ctx, oid, "a", "1"))
-		goto out_err;
+		goto out_err_cleanup;
 	if (do_rados_setxattr(io_ctx, oid, "c", "3"))
-		goto out_err;
+		goto out_err_cleanup;
 	if (do_rados_getxattr(io_ctx, oid, "a", "1"))
-		goto out_err;
+		goto out_err_cleanup;
 	if (do_rados_getxattr(io_ctx, oid, "b", "2"))
-		goto out_err;
+		goto out_err_cleanup;
 	if (do_rados_getxattr(io_ctx, oid, "c", "3"))
-		goto out_err;
+		goto out_err_cleanup;
 	const char *exkeys[] = { "a", "b", "c", NULL };
 	const char *exvals[] = { "1", "2", "3", NULL };
 	if (do_rados_getxattrs(io_ctx, oid, exkeys, exvals))
-		goto out_err;
+		goto out_err_cleanup;
 
 	uint64_t size;
 	time_t mtime;
@@ -296,14 +300,15 @@ static int testrados(void)
 	r = rados_ioctx_pool_stat(io_ctx, &st);
 	printf("rados_stat_pool = %d, %lld KB, %lld objects\n", r, (long long)st.num_kb, (long long)st.num_objects);
 
+	ret = 0;
+
+out_err_cleanup:
 	/* delete a pool */
-	printf("rados_delete_pool = %d\n", r);
 	rados_ioctx_destroy(io_ctx);
 
 	r = rados_pool_delete(cl, "foo");
-	printf("rados_ioctx_pool_delete = %d\n", r);
+	printf("rados_delete_pool = %d\n", r);
 
-	ret = 0;
 out_err:
 	rados_shutdown(cl);
 	return ret;
