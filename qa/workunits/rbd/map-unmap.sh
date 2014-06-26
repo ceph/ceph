@@ -21,28 +21,14 @@ function map_unmap() {
 	[ $# -eq 1 ] || exit 99
 	local image_name="$1"
 
-	DEV="$(sudo rbd map "${image_name}")"
-	sudo rbd unmap "${DEV}"
+	local dev
+	dev="$(sudo rbd map "${image_name}")"
+	sudo rbd unmap "${dev}"
 }
-
-function setup() {
-	[ $# -eq 2 ] || exit 99
-	local image_name="$1"
-	local image_size="$2"
-
-	rbd create "${image_name}" --size="${image_size}"
-}
-
-function cleanup() {
-	# Have to rely on globals for the trap call
-	# rbd unmap "${DEV}"			|| true
-	rbd rm "${IMAGE_NAME}"			|| true
-}
-trap cleanup EXIT HUP INT
 
 #### Start
 
-setup "${IMAGE_NAME}" "${IMAGE_SIZE}"
+rbd create "${IMAGE_NAME}" --size="${IMAGE_SIZE}"
 
 COUNT=0
 START_TIME=$(get_time)
@@ -53,6 +39,6 @@ while ! times_up "${END_TIME}"; do
 done
 ELAPSED=$(expr "$(get_time)" - "${START_TIME}")
 
-echo "${COUNT} iterations completed in ${ELAPSED} seconds"
+rbd rm "${IMAGE_NAME}"
 
-exit 0
+echo "${COUNT} iterations completed in ${ELAPSED} seconds"
