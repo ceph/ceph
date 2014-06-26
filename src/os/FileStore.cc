@@ -4462,7 +4462,10 @@ int FileStore::_create_collection(
 {
   char fn[PATH_MAX];
   get_cdir(c, fn, sizeof(fn));
-  dout(15) << "create_collection " << fn << dendl;
+  dout(15) << "create_collection " << fn
+    << ", expected number of objects in this collection: "
+    << c.get_coll_expected_num_objects()
+    << " pg number of this collection: " << c.get_coll_pg_num() << dendl;
   int r = ::mkdir(fn, 0755);
   if (r < 0)
     r = -errno;

@@ -275,6 +275,7 @@ private:
                        unsigned pg_num, unsigned pgp_num,
 		       const string &erasure_code_profile,
                        const unsigned pool_type,
+                       const uint64_t expected_num_objects,
 		       stringstream &ss);
   int prepare_new_pool(MPoolOp *m);
 

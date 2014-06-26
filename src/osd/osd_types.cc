@@ -568,9 +568,11 @@ bool coll_t::is_removal(uint64_t *seq, spg_t *pgid) const
 
 void coll_t::encode(bufferlist& bl) const
 {
-  __u8 struct_v = 3;
+  __u8 struct_v = 4;
   ::encode(struct_v, bl);
   ::encode(str, bl);
+  ::encode(pg_num, bl);
+  ::encode(expected_num_objects, bl);
 }
 
 void coll_t::decode(bufferlist::iterator& bl)
@@ -589,6 +591,8 @@ void coll_t::decode(bufferlist::iterator& bl)
       str = "meta";
     else
       str = pg_and_snap_to_str(pgid, snap);
+    pg_num = 0;
+    expected_num_objects = 0;
     break;
   }
 
@@ -616,11 +620,21 @@ void coll_t::decode(bufferlist::iterator& bl)
       throw std::domain_error(oss.str());
     }
     }
+    pg_num = 0;
+    expected_num_objects = 0;
     break;
   }
 
   case 3:
     ::decode(str, bl);
+    pg_num = 0;
+    expected_num_objects = 0;
+    break;
+
+  case 4:
+    ::decode(str, bl);
+    ::decode(pg_num, bl);
+    ::decode(expected_num_objects, bl);
     break;
     
   default: {
@@ -1061,7 +1075,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   }
 
   __u8 encode_compat = 5;
-  ENCODE_START(15, encode_compat, bl);
+  ENCODE_START(16, encode_compat, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -1101,12 +1115,13 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(cache_min_evict_age, bl);
   ::encode(erasure_code_profile, bl);
   ::encode(last_force_op_resend, bl);
+  ::encode(expected_num_objects, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(15, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(16, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
@@ -1207,6 +1222,11 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
     ::decode(last_force_op_resend, bl);
   } else {
     last_force_op_resend = 0;
+  }
+  if (struct_v >= 16) {
+    ::decode(expected_num_objects, bl);
+  } else {
+    expected_num_objects = 0;
   }
   DECODE_FINISH(bl);
   calc_pg_masks();

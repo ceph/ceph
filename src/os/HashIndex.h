@@ -267,6 +267,14 @@ private:
     vector<string> *path   ///< [out] Path components for hoid.
     );
 
+  /// Pre-hash and split folders to avoid runtime splitting,
+  /// based on the number of objects estimation given by user.
+  int pre_split_folder();
+
+  /// Initialize the folder (dir info) with the given hash level and number
+  /// of its subdirs.
+  int init_split_folder(vector<string> &paths, uint32_t hash_level);
+
   /// do collection split for path
   static int col_split_level(
     HashIndex &from,            ///< [in] from index
@@ -316,6 +324,25 @@ private:
       *bits = path.size() * 4;
   }
 
+  /// Calculate the number of bits.
+  static int calc_bits(uint64_t n) {
+    int ret = 0;
+    while (n > 0) {
+      n = n >> 1;
+      ret++;
+    }
+    return ret;
+  }
+  
+  /// Convert a number to hex string (upper case).
+  static string to_hex(int n) {
+    assert(n >= 0 && n < 16);
+    char c = (n <= 9 ? ('0' + n) : ('A' + n - 10));
+    string str;
+    str.append(1, c);
+    return str;
+  }
+
   /// Get path contents by hash
   int get_path_contents_by_hash(
     const vector<string> &path,            /// [in] Path to list
@@ -335,6 +362,11 @@ private:
     ghobject_t *next,            /// [in,out] List objects >= *next
     vector<ghobject_t> *out      /// [out] Listed objects
     ); ///< @return Error Code, 0 on success
+
+  /// Create the given levels of sub directories from the given root.
+  /// The contents of *path* is not changed after calling this function.
+  int create_path_recursive(
+      vector<string> &path, int level);
 };
 
 #endif

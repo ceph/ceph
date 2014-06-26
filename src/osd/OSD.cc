@@ -2432,7 +2432,9 @@ void OSD::handle_pg_peering_evt(
     switch (result) {
     case RES_NONE: {
       // ok, create the pg locally using provided Info and History
-      rctx.transaction->create_collection(coll_t(pgid));
+      const pg_pool_t* pp = osdmap->get_pg_pool(pgid.pool());
+      rctx.transaction->create_collection(coll_t(pgid, pp->get_pg_num(),
+            pp->expected_num_objects / pp->get_pg_num()));
       PG *pg = _create_lock_pg(
 	get_map(epoch),
 	pgid, create, false, result == RES_SELF,
@@ -6657,7 +6659,7 @@ void OSD::handle_pg_create(OpRequestRef op)
     }
 
     dout(20) << "mkpg " << on << " e" << created << dendl;
-   
+
     // is it still ours?
     vector<int> up, acting;
     int up_primary = -1;
@@ -6728,8 +6730,9 @@ void OSD::handle_pg_create(OpRequestRef op)
 
     PG *pg = NULL;
     if (can_create_pg(pgid)) {
+      const pg_pool_t* pp = osdmap->get_pg_pool(pgid.pool());
       pg_interval_map_t pi;
-      rctx.transaction->create_collection(coll_t(pgid));
+      rctx.transaction->create_collection(coll_t(pgid, pp->get_pg_num(), pp->expected_num_objects / pp->get_pg_num()));
       pg = _create_lock_pg(
 	osdmap, pgid, true, false, false,
 	0, creating_pgs[pgid].acting, whoami,

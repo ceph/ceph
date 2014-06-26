@@ -586,7 +586,7 @@ class TestOSD(TestArgparse):
         self.assert_valid_command(['osd', 'crush', 'dump'])
         assert_equal({}, validate_command(sigdict, ['osd', 'crush']))
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
-                                                    'dump', 
+                                                    'dump',
                                                     'toomany']))
 
     def test_setcrushmap(self):
@@ -948,6 +948,9 @@ class TestOSD(TestArgparse):
         self.assert_valid_command(['osd', 'pool', 'create',
                                    'poolname', '128', '128',
                                    'erasure', 'profile', 'ruleset'])
+        self.assert_valid_command(['osd', 'pool', 'create',
+                                   'poolname', '128', '128',
+                                   'erasure', 'profile', 'ruleset', '123456'])
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname']))
@@ -967,6 +970,11 @@ class TestOSD(TestArgparse):
                                                     '128', '128',
                                                     'INVALID', 'profile',
                                                     'ruleset']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
+                                                    'poolname',
+                                                    '128', '128',
+                                                    'erasure', 'profile',
+                                                    'ruleset', '-123456']))
 
     def test_pool_delete(self):
         self.assert_valid_command(['osd', 'pool', 'delete',
@@ -1123,7 +1131,7 @@ class TestConfigKey(TestArgparse):
     def test_list(self):
         self.check_no_arg('config-key', 'list')
 # Local Variables:
-# compile-command: "cd ../.. ; make -j4 && 
+# compile-command: "cd ../.. ; make -j4 &&
 #  PYTHONPATH=pybind nosetests --stop \
 #  test/pybind/test_ceph_argparse.py # test_ceph_argparse.py:TestOSD.test_rm"
 # End:

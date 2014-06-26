@@ -466,15 +466,22 @@ public:
   const static coll_t META_COLL;
 
   coll_t()
-    : str("meta")
+    : str("meta"), pg_num(0), expected_num_objects(0)
   { }
 
   explicit coll_t(const std::string &str_)
-    : str(str_)
+    : str(str_), pg_num(0), expected_num_objects(0)
   { }
 
   explicit coll_t(spg_t pgid, snapid_t snap = CEPH_NOSNAP)
-    : str(pg_and_snap_to_str(pgid, snap))
+    : str(pg_and_snap_to_str(pgid, snap)), pg_num(0), expected_num_objects(0)
+  { }
+
+  explicit coll_t(spg_t pgid, uint64_t pg_num_, uint64_t expected_num_objects_,
+      snapid_t snap = CEPH_NOSNAP) :
+      str(pg_and_snap_to_str(pgid, snap)),
+      pg_num(pg_num_),
+      expected_num_objects(expected_num_objects_)
   { }
 
   static coll_t make_temp_coll(spg_t pgid) {
@@ -492,6 +499,9 @@ public:
   const char* c_str() const {
     return str.c_str();
   }
+
+  uint64_t get_coll_pg_num() const { return pg_num; }
+  uint64_t get_coll_expected_num_objects() const { return expected_num_objects; }
 
   int operator<(const coll_t &rhs) const {
     return str < rhs.str;
@@ -531,6 +541,13 @@ private:
   }
 
   std::string str;
+
+  // The below two fields are used to pre-hash pg so that folder
+  // hierarchies are created along with pg creation, this can be
+  // used to avoid runtime folder splitting.
+  // Default value of 0 means nothing to do with pre-hash for pg
+  uint64_t pg_num;
+  uint64_t expected_num_objects;
 };
 
 WRITE_CLASS_ENCODER(coll_t)
@@ -920,6 +937,7 @@ public:
   bool has_write_tier() const { return write_tier >= 0; }
   void clear_write_tier() { write_tier = -1; }
 
+  uint64_t expected_num_objects;  ///< pre-hash pg folders based on the value of this setting
   uint64_t target_max_bytes;   ///< tiering: target max pool size
   uint64_t target_max_objects; ///< tiering: target max pool size
 
