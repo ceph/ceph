@@ -132,7 +132,6 @@ TEST(LibCephFS, ReleaseMounted) {
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
   ASSERT_EQ(0, ceph_mount(cmount, "/"));
   ASSERT_EQ(-EISCONN, ceph_release(cmount));
-  ceph_shutdown(cmount);
 }
 
 TEST(LibCephFS, UnmountRelease) {

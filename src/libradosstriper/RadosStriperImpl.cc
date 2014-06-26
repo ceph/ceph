@@ -588,7 +588,7 @@ int libradosstriper::RadosStriperImpl::remove(const std::string& soid)
     }
     // return
     return rcr;
-  } catch (ErrorCode e) {
+  } catch (ErrorCode &e) {
     // errror caught when trying to take the exclusive lock
     return e.m_code;
   }
@@ -600,7 +600,7 @@ int libradosstriper::RadosStriperImpl::trunc(const std::string& soid, uint64_t s
   std::string firstObjOid = getObjectId(soid, 0);
   try {
     RadosExclusiveLock lock(&m_ioCtx, firstObjOid);
-  } catch (ErrorCode e) {
+  } catch (ErrorCode &e) {
     return e.m_code;
   }
   // load layout and size

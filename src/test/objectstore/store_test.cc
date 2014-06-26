@@ -596,7 +596,7 @@ public:
     map<string, bufferlist>::iterator it = contents[obj].attrs.begin();
     while (retry) {
       retry--;
-      it++;
+      ++it;
     }
 
     bufferlist bl;
@@ -624,7 +624,7 @@ public:
     map<string, bufferlist>::iterator it = contents[obj].attrs.begin();
     while (retry) {
       retry--;
-      it++;
+      ++it;
     }
 
     available_objects.erase(obj);
