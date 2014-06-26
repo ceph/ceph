@@ -301,7 +301,7 @@ int libradosstriper::RadosStriperImpl::append(const std::string& soid,
   // open the object. This will create it if needed, retrieve its layout
   // and size and take a shared lock on it
   ceph_file_layout layout;
-  size_t size = len;
+  uint64_t size = len;
   std::string lockCookie;
   int rc = openStripedObjectForWrite(soid, &layout, &size, &lockCookie, false);
   if (rc) return rc;
@@ -356,7 +356,7 @@ int libradosstriper::RadosStriperImpl::aio_append(const std::string& soid,
 						  size_t len)
 {
   ceph_file_layout layout;
-  size_t size = len;
+  uint64_t size = len;
   std::string lockCookie;
   int rc = openStripedObjectForWrite(soid, &layout, &size, &lockCookie, false);
   if (rc) return rc;
@@ -441,7 +441,7 @@ int libradosstriper::RadosStriperImpl::aio_read(const std::string& soid,
   // open the object. This will retrieve its layout and size
   // and take a shared lock on it
   ceph_file_layout layout;
-  size_t size;
+  uint64_t size;
   std::string lockCookie;
   int rc = openStripedObjectForRead(soid, &layout, &size, &lockCookie);
   if (rc) return rc;
@@ -829,7 +829,9 @@ int libradosstriper::RadosStriperImpl::internal_get_layout_and_size(const std::s
   rc = extract_uint32_attr(attrs, XATTR_LAYOUT_OBJECT_SIZE, &layout->fl_object_size);
   if (rc) return rc;
   // deal with size
-  rc = extract_sizet_attr(attrs, XATTR_SIZE, size);
+  size_t ssize;
+  rc = extract_sizet_attr(attrs, XATTR_SIZE, &ssize);
+  *size = ssize;
   return rc;
 }
 
