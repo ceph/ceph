@@ -7,9 +7,6 @@ RUN_TIME=300		# approximate duration of run (seconds)
 IMAGE_NAME="image-$$"
 IMAGE_SIZE="1024"	# MB
 
-ID_TIMEOUT="10"		# seconds to wait to get rbd id after mapping
-ID_DELAY=".1"		# floating-point seconds to delay before rescan
-
 function get_time() {
 	date '+%s'
 }
@@ -20,49 +17,12 @@ function times_up() {
 	test $(get_time) -ge "${end_time}"
 }
 
-function _get_id() {
-	[ $# -eq 1 ] || exit 99
-	local image_name="$1"
-	local id=""
-
-	cd /sys/bus/rbd/devices
-	for i in *; do
-		if [ "$(cat $i/name)" = "${image_name}" ]; then
-			id="$i"
-			break
-		fi
-	done
-	cd - >/dev/null
-
-	echo $id
-	test -n "${id}"		# return code 0 if id was found
-}
-function get_id() {
-	[ $# -eq 1 ] || exit 99
-	local image_name="$1"
-	local id=""
-	local end_time=$(expr $(get_time) + ${ID_TIMEOUT})
-
-	while ! id=$(_get_id "${image_name}") && ! times_up "${end_time}"; do
-		echo "get_id: image not mapped; trying again after delay" >&2
-		sleep "${ID_DELAY}"
-	done
-
-	echo $id
-	test -n "${id}"		# return code 0 if id was found
-}
-
 function map_unmap() {
 	[ $# -eq 1 ] || exit 99
 	local image_name="$1"
 
-	rbd map "${image_name}"
-	udevadm settle
-
-	RBD_ID=$(get_id "${image_name}")
-
-	rbd unmap "/dev/rbd${RBD_ID}"
-	udevadm settle
+	DEV="$(sudo rbd map "${image_name}")"
+	sudo rbd unmap "${DEV}"
 }
 
 function setup() {
@@ -70,20 +30,13 @@ function setup() {
 	local image_name="$1"
 	local image_size="$2"
 
-	[ -d /sys/bus/rbd ] || sudo modprobe rbd
-
-	# allow ubuntu user to map/unmap rbd devices
-	sudo chown ubuntu /sys/bus/rbd/add
-	sudo chown ubuntu /sys/bus/rbd/remove
 	rbd create "${image_name}" --size="${image_size}"
 }
 
 function cleanup() {
-    	# Have to rely on globals for the trap call
-	# rbd unmap "/dev/rbd${RBD_ID}"		|| true
+	# Have to rely on globals for the trap call
+	# rbd unmap "${DEV}"			|| true
 	rbd rm "${IMAGE_NAME}"			|| true
-	sudo chown root /sys/bus/rbd/remove	|| true
-	sudo chown root /sys/bus/rbd/add	|| true
 }
 trap cleanup EXIT HUP INT
 
