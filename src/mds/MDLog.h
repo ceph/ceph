@@ -117,6 +117,7 @@ protected:
   map<uint64_t,LogSegment*> segments;
   set<LogSegment*> expiring_segments;
   set<LogSegment*> expired_segments;
+  uint64_t event_seq;
   int expiring_events;
   int expired_events;
 
@@ -126,6 +127,10 @@ protected:
   friend class MDCache;
 
 public:
+  uint64_t get_last_segment_seq() {
+    assert(!segments.empty());
+    return segments.rbegin()->first;
+  }
   uint64_t get_last_segment_offset() {
     assert(!segments.empty());
     return segments.rbegin()->first;
@@ -168,7 +173,7 @@ public:
 		  replay_thread(this),
 		  already_replayed(false),
 		  recovery_thread(this),
-		  expiring_events(0), expired_events(0),
+		  event_seq(0), expiring_events(0), expired_events(0),
 		  cur_event(NULL) { }		  
   ~MDLog();
 
@@ -176,7 +181,7 @@ public:
   // -- segments --
   void start_new_segment();
   void prepare_new_segment();
-  void journal_segment_subtree_map(Context *onsync=0);
+  void journal_segment_subtree_map(Context *onsync);
 
   LogSegment *peek_current_segment() {
     return segments.empty() ? NULL : segments.rbegin()->second;
@@ -187,9 +192,9 @@ public:
     return segments.rbegin()->second;
   }
 
-  LogSegment *get_segment(uint64_t off) {
-    if (segments.count(off))
-      return segments[off];
+  LogSegment *get_segment(uint64_t seq) {
+    if (segments.count(seq))
+      return segments[seq];
     return NULL;
   }
 
