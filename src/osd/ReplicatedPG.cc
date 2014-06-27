@@ -1081,7 +1081,7 @@ void ReplicatedPG::do_request(
     osd->reply_op_error(op, -EPERM);
     return;
   }
-  assert(!op_must_wait_for_map(get_osdmap(), op));
+  assert(!op_must_wait_for_map(get_osdmap()->get_epoch(), op));
   if (can_discard_request(op)) {
     return;
   }

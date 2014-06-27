@@ -1696,7 +1696,7 @@ void PG::take_op_map_waiters()
   for (list<OpRequestRef>::iterator i = waiting_for_map.begin();
        i != waiting_for_map.end();
        ) {
-    if (op_must_wait_for_map(get_osdmap_with_maplock(), *i)) {
+    if (op_must_wait_for_map(get_osdmap_with_maplock()->get_epoch(), *i)) {
       break;
     } else {
       osd->op_wq.queue(make_pair(PGRef(this), *i));
@@ -1713,7 +1713,7 @@ void PG::queue_op(OpRequestRef& op)
     waiting_for_map.push_back(op);
     return;
   }
-  if (op_must_wait_for_map(get_osdmap_with_maplock(), op)) {
+  if (op_must_wait_for_map(get_osdmap_with_maplock()->get_epoch(), op)) {
     waiting_for_map.push_back(op);
     return;
   }
@@ -4868,67 +4868,67 @@ bool PG::can_discard_request(OpRequestRef& op)
   return true;
 }
 
-bool PG::op_must_wait_for_map(OSDMapRef curmap, OpRequestRef op)
+bool PG::op_must_wait_for_map(epoch_t cur_epoch, OpRequestRef& op)
 {
   switch (op->get_req()->get_type()) {
   case CEPH_MSG_OSD_OP:
     return !have_same_or_newer_map(
-      curmap,
+      cur_epoch,
       static_cast<MOSDOp*>(op->get_req())->get_map_epoch());
 
   case MSG_OSD_SUBOP:
     return !have_same_or_newer_map(
-      curmap,
+      cur_epoch,
       static_cast<MOSDSubOp*>(op->get_req())->map_epoch);
 
   case MSG_OSD_SUBOPREPLY:
     return !have_same_or_newer_map(
-      curmap,
+      cur_epoch,
       static_cast<MOSDSubOpReply*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_SCAN:
     return !have_same_or_newer_map(
-      curmap,
+      cur_epoch,
       static_cast<MOSDPGScan*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_BACKFILL:
     return !have_same_or_newer_map(
-      curmap,
+      cur_epoch,
       static_cast<MOSDPGBackfill*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_PUSH:
     return !have_same_or_newer_map(
-      curmap,
+      cur_epoch,
       static_cast<MOSDPGPush*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_PULL:
     return !have_same_or_newer_map(
-      curmap,
+      cur_epoch,
       static_cast<MOSDPGPull*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_PUSH_REPLY:
     return !have_same_or_newer_map(
-      curmap,
+      cur_epoch,
       static_cast<MOSDPGPushReply*>(op->get_req())->map_epoch);
 
   case MSG_OSD_EC_WRITE:
     return !have_same_or_newer_map(
-      curmap,
+      cur_epoch,
       static_cast<MOSDECSubOpWrite*>(op->get_req())->map_epoch);
 
   case MSG_OSD_EC_WRITE_REPLY:
     return !have_same_or_newer_map(
-      curmap,
+      cur_epoch,
       static_cast<MOSDECSubOpWriteReply*>(op->get_req())->map_epoch);
 
   case MSG_OSD_EC_READ:
     return !have_same_or_newer_map(
-      curmap,
+      cur_epoch,
       static_cast<MOSDECSubOpRead*>(op->get_req())->map_epoch);
 
   case MSG_OSD_EC_READ_REPLY:
     return !have_same_or_newer_map(
-      curmap,
+      cur_epoch,
       static_cast<MOSDECSubOpReadReply*>(op->get_req())->map_epoch);
   }
   assert(0);
