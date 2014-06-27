@@ -171,6 +171,14 @@ void MDLog::start_entry(LogEvent *e)
   assert(cur_event == NULL);
   cur_event = e;
   e->set_start_off(get_write_pos());
+
+  event_seq++;
+
+  EMetaBlob *metablob = e->get_metablob();
+  if (metablob) {
+    metablob->event_seq = event_seq;
+    metablob->last_subtree_map = get_last_segment_seq();
+  }
 }
 
 void MDLog::cancel_entry(LogEvent *le)
@@ -294,9 +302,10 @@ void MDLog::start_new_segment()
 
 void MDLog::prepare_new_segment()
 {
-  dout(7) << __func__ << " at " << journaler->get_write_pos() << dendl;
+  uint64_t seq = event_seq + 1;
+  dout(7) << __func__ << " seq " << seq << dendl;
 
-  segments[journaler->get_write_pos()] = new LogSegment(journaler->get_write_pos());
+  segments[seq] = new LogSegment(seq, journaler->get_write_pos());
 
   logger->inc(l_mdl_segadd);
   logger->set(l_mdl_seg, segments.size());
@@ -310,7 +319,9 @@ void MDLog::prepare_new_segment()
 void MDLog::journal_segment_subtree_map(Context *onsync)
 {
   dout(7) << __func__ << dendl;
-  submit_entry(mds->mdcache->create_subtree_map(), onsync);
+  ESubtreeMap *sle = mds->mdcache->create_subtree_map();
+  sle->event_seq = get_last_segment_seq();
+  submit_entry(sle, onsync);
 }
 
 void MDLog::trim(int m)
@@ -430,7 +441,7 @@ void MDLog::_trim_expired_segments()
     logger->inc(l_mdl_segtrm);
     logger->inc(l_mdl_evtrm, ls->num_events);
     
-    segments.erase(ls->offset);
+    segments.erase(ls->seq);
     delete ls;
     trimmed = true;
   }
@@ -835,8 +846,15 @@ void MDLog::_replay_thread()
     // new segment?
     if (le->get_type() == EVENT_SUBTREEMAP ||
 	le->get_type() == EVENT_RESETJOURNAL) {
-      segments[pos] = new LogSegment(pos);
+      ESubtreeMap *sle = dynamic_cast<ESubtreeMap*>(le);
+      if (sle && sle->event_seq > 0)
+	event_seq = sle->event_seq;
+      else
+	event_seq = pos;
+      segments[event_seq] = new LogSegment(event_seq, pos);
       logger->set(l_mdl_seg, segments.size());
+    } else {
+      event_seq++;
     }
 
     // have we seen an import map yet?

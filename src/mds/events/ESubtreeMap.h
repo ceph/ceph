@@ -24,8 +24,9 @@ public:
   map<dirfrag_t, vector<dirfrag_t> > subtrees;
   set<dirfrag_t> ambiguous_subtrees;
   uint64_t expire_pos;
+  uint64_t event_seq;
 
-  ESubtreeMap() : LogEvent(EVENT_SUBTREEMAP), expire_pos(0) { }
+  ESubtreeMap() : LogEvent(EVENT_SUBTREEMAP), expire_pos(0), event_seq(0) { }
   
   void print(ostream& out) const {
     out << "ESubtreeMap " << subtrees.size() << " subtrees " 

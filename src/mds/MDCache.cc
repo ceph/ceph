@@ -6115,7 +6115,7 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
   CDentry *dn = in->get_projected_parent_dn();
   le->metablob.add_dir_context(dn->get_dir());
   le->metablob.add_primary_dentry(dn, in, true);
-  le->metablob.add_truncate_finish(in->ino(), ls->offset);
+  le->metablob.add_truncate_finish(in->ino(), ls->seq);
 
   journal_dirty_inode(mut.get(), &le->metablob, in);
   mds->mdlog->submit_entry(le, new C_MDC_TruncateLogged(this, in, mut));
