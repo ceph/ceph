@@ -3,6 +3,7 @@
 
 dist_noinst_DATA = \
 	librados.tp \
+	librbd.tp \
 	mutex.tp \
 	oprequest.tp \
 	osd.tp \
@@ -33,13 +34,22 @@ librados_tp_la_LIBADD = -llttng-ust -ldl
 librados_tp_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
 librados_tp_la_LDFLAGS =
 
+librbd_tp_la_SOURCES = \
+	librbd.c \
+	librbd.h
+librbd_tp_la_LIBADD = -llttng-ust -ldl
+librbd_tp_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
+librbd_tp_la_LDFLAGS =
+
 noinst_LTLIBRARIES = \
 	libcommon_tp.la \
 	libosd_tp.la \
-	librados_tp.la
+	librados_tp.la \
+	librbd_tp.la
 
 BUILT_SOURCES = \
 	librados.h \
+	librbd.h \
 	mutex.h \
 	oprequest.h \
 	osd.h \

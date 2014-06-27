@@ -9,7 +9,8 @@ librbd_la_SOURCES = \
 librbd_la_LIBADD = \
 	$(LIBRADOS) $(LIBOSDC) \
 	libcls_rbd_client.la libcls_lock_client.la \
-	$(PTHREAD_LIBS) $(EXTRALIBS)
+	$(PTHREAD_LIBS) $(EXTRALIBS) \
+	$(LIBRBD_TP)
 librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0
 if LINUX
 librbd_la_LDFLAGS += -export-symbols-regex '^rbd_.*'
