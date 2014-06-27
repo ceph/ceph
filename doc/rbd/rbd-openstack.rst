@@ -182,8 +182,7 @@ default, edit ``/etc/glance/glance-api.conf`` and add::
     rbd_store_user=glance
     rbd_store_pool=images
 
-If want to enable copy-on-write cloning of images into
-volumes, also add::
+If you want to enable copy-on-write cloning of images, also add::
 
     show_image_direct_url=True
 
@@ -211,6 +210,9 @@ uuid of the secret you added to ``libvirt`` as documented earlier::
     rbd_user=cinder
     rbd_secret_uuid=457eb676-33da-42ec-9a8c-9293d545c337
 
+Note that if you are configuring multiple cinder back ends,
+``glance_api_version=2`` must be in the ``[DEFAULT]`` section.
+
 
 Configuring Cinder Backup
 -------------------------
@@ -231,7 +233,14 @@ On your Cinder Backup node, edit ``/etc/cinder/cinder.conf`` and add::
 Configuring Nova
 ----------------
 
-In order to boot all the virtual machines directly into Ceph Nova must be configured.
+In order to boot all the virtual machines directly into Ceph Nova must
+be configured.
+
+For Havana and Icehouse, more patches are required to implement
+cloning and fix bugs with image size and live migration of ephemeral
+disks on rbd. These are available in branches based on upstream Nova
+`stable/havana`_ and `stable/icehouse`_.
+
 On every Compute nodes, edit ``/etc/nova/nova.conf`` and add::
 
     libvirt_images_type=rbd
@@ -249,6 +258,9 @@ On every Compute nodes, edit ``/etc/nova/nova.conf`` and add::
     libvirt_inject_password=false
     libvirt_inject_key=false
     libvirt_inject_partition=-2
+
+.. _stable/havana: https://github.com/jdurgin/nova/tree/havana-ephemeral-rbd
+.. _stable/icehouse: https://github.com/angdraug/nova/tree/rbd-ephemeral-clone-stable-icehouse
 
 
 Restart OpenStack

@@ -354,7 +354,7 @@ struct RGWAccessKey {
   void decode_json(JSONObj *obj);
   void decode_json(JSONObj *obj, bool swift);
 };
-WRITE_CLASS_ENCODER(RGWAccessKey);
+WRITE_CLASS_ENCODER(RGWAccessKey)
 
 struct RGWSubUser {
   string name;
@@ -380,7 +380,7 @@ struct RGWSubUser {
 
   void decode_json(JSONObj *obj);
 };
-WRITE_CLASS_ENCODER(RGWSubUser);
+WRITE_CLASS_ENCODER(RGWSubUser)
 
 class RGWUserCaps
 {
@@ -410,7 +410,7 @@ public:
 
   void decode_json(JSONObj *obj);
 };
-WRITE_CLASS_ENCODER(RGWUserCaps);
+WRITE_CLASS_ENCODER(RGWUserCaps)
 
 void encode_json(const char *name, const obj_version& v, Formatter *f);
 void encode_json(const char *name, const RGWUserCaps& val, Formatter *f);
@@ -1083,10 +1083,13 @@ public:
   }
 
   void set_obj(const string& o) {
+    object.reserve(128);
+
     orig_obj = o;
     if (ns.empty()) {
-      if (o.empty())
+      if (o.empty()) {
         return;
+      }
       if (o.size() < 1 || o[0] != '_') {
         object = o;
         return;
@@ -1225,6 +1228,13 @@ public:
   }
 };
 WRITE_CLASS_ENCODER(rgw_obj)
+
+struct rgw_cache_entry_info {
+  string cache_locator;
+  uint64_t gen;
+
+  rgw_cache_entry_info() : gen(0) {}
+};
 
 inline ostream& operator<<(ostream& out, const rgw_obj &o) {
   return out << o.bucket.name << ":" << o.object;

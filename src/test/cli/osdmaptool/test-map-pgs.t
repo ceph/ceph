@@ -24,8 +24,7 @@
   pool 1 pg_num 8000
   pool 2 pg_num 8000
   $ TOTAL=$((POOL_COUNT * $PG_NUM))
-  $ PATTERN=$(echo "size $SIZE\t$TOTAL")
-  $ grep "$PATTERN" $OUT || cat "$OUT"
+  $ grep -P "size $SIZE\t$TOTAL" $OUT || cat $OUT
   size 3\t24000 (esc)
   $ STATS_CRUSH=$(grep '^ avg ' "$OUT")
 # 
@@ -39,8 +38,7 @@
   pool 1 pg_num 8000
   pool 2 pg_num 8000
   $ TOTAL=$((POOL_COUNT * $PG_NUM))
-  $ PATTERN=$(echo "size $SIZE\t$TOTAL")
-  $ grep "$PATTERN" $OUT || cat "$OUT"
+  $ grep -P "size $SIZE\t$TOTAL" $OUT || cat $OUT
   size 3\t24000 (esc)
   $ STATS_RANDOM=$(grep '^ avg ' "$OUT")
 # it is almost impossible to get the same stats with random and crush

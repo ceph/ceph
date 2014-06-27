@@ -43,7 +43,7 @@ public:
   int32_t op;
   epoch_t epoch;
   bufferlist monmap_bl;
-  set<int> quorum;
+  set<int32_t> quorum;
   uint64_t quorum_features;
   bufferlist sharing_bl;
   /* the following were both used in the next branch for a while

@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
- * Ceph - scalable distributed file system
+ * Ceph distributed storage system
  *
  * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
  *
@@ -169,7 +169,7 @@ TEST(ErasureCodePlugin, sse)
   parameters["m"] = "1";
   for (vector<string>::iterator sse_variant = sse_variants.begin();
        sse_variant != sse_variants.end();
-       sse_variant++) {
+       ++sse_variant) {
     //
     // load the plugin variant
     //

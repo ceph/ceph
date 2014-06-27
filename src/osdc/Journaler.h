@@ -60,9 +60,46 @@ class CephContext;
 class Context;
 class PerfCounters;
 
+typedef __u8 stream_format_t;
+
+// Legacy envelope is leading uint32_t size
+#define JOURNAL_FORMAT_LEGACY 0
+#define JOURNAL_ENVELOPE_LEGACY (sizeof(uint32_t))
+
+// Resilient envelope is leading uint64_t sentinel, uint32_t size, trailing uint64_t start_ptr
+#define JOURNAL_FORMAT_RESILIENT 1
+#define JOURNAL_ENVELOPE_RESILIENT (sizeof(uint32_t) + sizeof(uint64_t) + sizeof(uint64_t))
+
+
+/**
+ * Represents a collection of entries serialized in a byte stream.
+ *
+ * Each entry consists of:
+ *  - a blob (used by the next level up as a serialized LogEvent)
+ *  - a uint64_t (used by the next level up as a pointer to the start of the entry
+ *    in the collection bytestream)
+ */
+class JournalStream
+{
+  stream_format_t format;
+
+  public:
+  JournalStream(stream_format_t format_) : format(format_) {}
+
+  void set_format(stream_format_t format_) {format = format_;}
+
+  bool readable(bufferlist &bl, uint64_t *need) const;
+  size_t read(bufferlist &from, bufferlist *to, uint64_t *start_ptr);
+  size_t write(bufferlist &entry, bufferlist *to, uint64_t const &start_ptr);
+
+  // A magic number for the start of journal entries, so that we can
+  // identify them in damaged journals.
+  static const uint64_t sentinel = 0x3141592653589793;
+};
+
+
 class Journaler {
 public:
-  CephContext *cct;
   // this goes at the head of the log "file".
   struct Header {
     uint64_t trimmed_pos;
@@ -70,33 +107,39 @@ public:
     uint64_t unused_field;
     uint64_t write_pos;
     string magic;
-    ceph_file_layout layout;
+    ceph_file_layout layout; //< The mapping from byte stream offsets to RADOS objects
+    stream_format_t stream_format; //< The encoding of LogEvents within the journal byte stream
 
     Header(const char *m="") :
-      trimmed_pos(0), expire_pos(0), unused_field(0), write_pos(0),
-      magic(m) {
+      trimmed_pos(0), expire_pos(0), unused_field(0), write_pos(0), magic(m), stream_format(-1) {
       memset(&layout, 0, sizeof(layout));
     }
 
     void encode(bufferlist &bl) const {
-      __u8 struct_v = 1;
-      ::encode(struct_v, bl);
+      ENCODE_START(2, 2, bl);
       ::encode(magic, bl);
       ::encode(trimmed_pos, bl);
       ::encode(expire_pos, bl);
       ::encode(unused_field, bl);
       ::encode(write_pos, bl);
       ::encode(layout, bl);
+      ::encode(stream_format, bl);
+      ENCODE_FINISH(bl);
     }
     void decode(bufferlist::iterator &bl) {
-      __u8 struct_v;
-      ::decode(struct_v, bl);
+      DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
       ::decode(magic, bl);
       ::decode(trimmed_pos, bl);
       ::decode(expire_pos, bl);
       ::decode(unused_field, bl);
       ::decode(write_pos, bl);
       ::decode(layout, bl);
+      if (struct_v > 1) {
+        ::decode(stream_format, bl);
+      } else {
+        stream_format = JOURNAL_FORMAT_LEGACY;
+      }
+      DECODE_FINISH(bl);
     }
 
     void dump(Formatter *f) const {
@@ -106,6 +149,7 @@ public:
 	f->dump_unsigned("write_pos", write_pos);
 	f->dump_unsigned("expire_pos", expire_pos);
 	f->dump_unsigned("trimmed_pos", trimmed_pos);
+	f->dump_unsigned("stream_format", stream_format);
 	f->open_object_section("layout");
 	{
 	  f->dump_unsigned("stripe_unit", layout.fl_stripe_unit);
@@ -123,22 +167,33 @@ public:
     static void generate_test_instances(list<Header*> &ls)
     {
       ls.push_back(new Header());
+
       ls.push_back(new Header());
       ls.back()->trimmed_pos = 1;
       ls.back()->expire_pos = 2;
       ls.back()->unused_field = 3;
       ls.back()->write_pos = 4;
       ls.back()->magic = "magique";
+
+      ls.push_back(new Header());
+      ls.back()->stream_format = JOURNAL_FORMAT_RESILIENT;
     }
   } last_written, last_committed;
   WRITE_CLASS_ENCODER(Header)
 
+  uint32_t get_stream_format() const {
+    return stream_format;
+  }
+
 private:
   // me
+  CephContext *cct;
   inodeno_t ino;
   int64_t pg_pool;
   bool readonly;
   ceph_file_layout layout;
+  uint32_t stream_format;
+  JournalStream journal_stream;
 
   const char *magic;
   Objecter *objecter;
@@ -149,9 +204,12 @@ private:
 
   SafeTimer *timer;
 
+  class C_DelayFlush;
+  friend class C_DelayFlush;
+
   class C_DelayFlush : public Context {
     Journaler *journaler;
-  public:
+    public:
     C_DelayFlush(Journaler *j) : journaler(j) {}
     void finish(int r) {
       journaler->delay_flush_event = 0;
@@ -195,8 +253,6 @@ private:
   friend class C_ReProbe;
   class C_RereadHeadProbe;
   friend class C_RereadHeadProbe;
-
-
 
   // writer
   uint64_t prezeroing_pos;
@@ -272,10 +328,14 @@ private:
    */
   void handle_write_error(int r);
 
+  bool _is_readable();
+
 public:
   Journaler(inodeno_t ino_, int64_t pool, const char *mag, Objecter *obj, PerfCounters *l, int lkey, SafeTimer *tim) : 
-    cct(obj->cct), last_written(mag), last_committed(mag),
-    ino(ino_), pg_pool(pool), readonly(true), magic(mag),
+    last_written(mag), last_committed(mag), cct(obj->cct),
+    ino(ino_), pg_pool(pool), readonly(true),
+    stream_format(-1), journal_stream(-1),
+    magic(mag),
     objecter(obj), filer(objecter), logger(l), logger_key_lat(lkey),
     timer(tim), delay_flush_event(0),
     state(STATE_UNDEF), error(0),
@@ -284,11 +344,16 @@ public:
     read_pos(0), requested_pos(0), received_pos(0),
     fetch_len(0), temp_fetch_len(0),
     on_readable(0), on_write_error(NULL),
-    expire_pos(0), trimming_pos(0), trimmed_pos(0) 
+    expire_pos(0), trimming_pos(0), trimmed_pos(0)
   {
     memset(&layout, 0, sizeof(layout));
   }
 
+  /* reset
+   *  NOTE: we assume the caller knows/has ensured that any objects 
+   * in our sequence do not exist.. e.g. after a MKFS.  this is _not_
+   * an "erase" method.
+   */
   void reset() {
     assert(state == STATE_ACTIVE);
     readonly = true;
@@ -311,16 +376,14 @@ public:
     waiting_for_zero = false;
   }
 
-  // me
-  //void open(Context *onopen);
-  //void claim(Context *onclaim, msg_addr_t from);
+  void erase(Context *completion);
+private:
+  void _erase_finish(int data_result, Context *completion);
+  class C_EraseFinish;
+  friend class C_EraseFinish;
 
-  /* reset 
-   *  NOTE: we assume the caller knows/has ensured that any objects 
-   * in our sequence do not exist.. e.g. after a MKFS.  this is _not_
-   * an "erase" method.
-   */
-  void create(ceph_file_layout *layout);
+public:
+  void create(ceph_file_layout *layout, stream_format_t const sf);
   void recover(Context *onfinish);
   void reread_head(Context *onfinish);
   void reprobe(Context *onfinish);
@@ -357,7 +420,6 @@ public:
     read_buf.clear();
   }
 
-  bool _is_readable();
   bool is_readable();
   bool try_read_entry(bufferlist& bl);
   void wait_for_readable(Context *onfinish);

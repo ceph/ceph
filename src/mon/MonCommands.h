@@ -430,6 +430,11 @@ COMMAND("osd crush reweight " \
 	"name=weight,type=CephFloat,range=0.0", \
 	"change <name>'s weight to <weight> in crush map", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd crush reweight-subtree " \
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
+	"name=weight,type=CephFloat,range=0.0", \
+	"change all leaf items beneath <name> to <weight> in crush map", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush tunables " \
 	"name=profile,type=CephChoices,strings=legacy|argonaut|bobtail|firefly|optimal|default", \
 	"set crush tunables values to <profile>", "osd", "rw", "cli,rest")
@@ -537,8 +542,8 @@ COMMAND("osd pool create " \
 	"name=pg_num,type=CephInt,range=0 " \
 	"name=pgp_num,type=CephInt,range=0,req=false " \
         "name=pool_type,type=CephChoices,strings=replicated|erasure,req=false " \
-	"name=erasure_code_profile,type=CephString,req=false,goodchars=[A-Za-z0-9-_.=] " \
-	"name=ruleset,type=CephString,req=false,goodchars=[A-Za-z0-9-_.=]", \
+	"name=erasure_code_profile,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] " \
+	"name=ruleset,type=CephString,req=false", \
 	"create pool", "osd", "rw", "cli,rest")
 COMMAND("osd pool delete " \
 	"name=pool,type=CephPoolname " \
@@ -585,11 +590,13 @@ COMMAND("osd tier add " \
 	"name=pool,type=CephPoolname " \
 	"name=tierpool,type=CephPoolname " \
 	"name=force_nonempty,type=CephChoices,strings=--force-nonempty,req=false",
-	"add the tier <tierpool> to base pool <pool>", "osd", "rw", "cli,rest")
+	"add the tier <tierpool> (the second one) to base pool <pool> (the first one)", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd tier remove " \
 	"name=pool,type=CephPoolname " \
 	"name=tierpool,type=CephPoolname",
-	"remove the tier <tierpool> from base pool <pool>", "osd", "rw", "cli,rest")
+	"remove the tier <tierpool> (the second one) from base pool <pool> (the first one)", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd tier cache-mode " \
 	"name=pool,type=CephPoolname " \
 	"name=mode,type=CephChoices,strings=none|writeback|forward|readonly", \
@@ -606,7 +613,7 @@ COMMAND("osd tier add-cache " \
 	"name=pool,type=CephPoolname " \
 	"name=tierpool,type=CephPoolname " \
 	"name=size,type=CephInt,range=0", \
-	"add a cache <tierpool> of size <size> to existing pool <pool>", \
+	"add a cache <tierpool> (the second one) of size <size> to existing pool <pool> (the first one)", \
 	"osd", "rw", "cli,rest")
 
 /*

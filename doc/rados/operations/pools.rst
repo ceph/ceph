@@ -10,7 +10,7 @@ pools for storing data. A pool provides you with:
   A typical configuration stores an object and one additional copy
   (i.e., ``size = 2``), but you can determine the number of copies/replicas.
   For erasure coded pools, it is the number of coding chunks
-  (i.e. ``erasure-code-m=2``)
+  (i.e. ``m=2`` in the **erasure code profile**)
   
 - **Placement Groups**: You can set the number of placement groups for the pool.
   A typical configuration uses approximately 100 placement groups per OSD to 
@@ -63,12 +63,7 @@ To create a pool, execute::
 
 	ceph osd pool create {pool-name} {pg-num} [{pgp-num}] [replicated]
 	ceph osd pool create {pool-name} {pg-num}  {pgp-num}   erasure \
-             [{crush_ruleset=ruleset}] \
-             [{erasure-code-directory=directory}] \
-             [{erasure-code-plugin=plugin}] \
-             [{erasure-code-k=data-chunks}] \
-             [{erasure-code-m=coding-chunks}] \
-             [{key=value} ...]
+             {erasure-code-profile}
 
 Where: 
 
@@ -112,61 +107,11 @@ Where:
 :Required: No. 
 :Default: replicated
 
-``{crush_ruleset=ruleset}``
+``{erasure-code-profile=profile}``
 
-:Description: For **erasure** pools only. Set the name of the CRUSH
-              **ruleset**. It must be an existing ruleset matching
-              the requirements of the underlying erasure code plugin. 
-
-:Type: String
-:Required: No. 
-
-``{erasure-code-directory=directory}``
-
-:Description: For **erasure** pools only. Set the **directory** name
-              from which the erasure code plugin is loaded.
-
-:Type: String
-:Required: No.
-:Default: /usr/lib/ceph/erasure-code
-
-``{erasure-code-plugin=plugin}``
-
-:Description: For **erasure** pools only. Use the erasure code **plugin**
-              to compute coding chunks and recover missing chunks.
-
-:Type: String
-:Required: No. 
-:Default: jerasure
-
-``{erasure-code-k=data-chunks}``
-
-:Description: For **erasure** pools using the **jerasure** plugin
-              only. Each object is split in **data-chunks** parts,
-              each stored on a different OSD.
-
-:Type: Integer
-:Required: No. 
-:Default: 4
-
-``{erasure-code-m=coding-chunks}``
-
-:Description: For **erasure** pools using the **jerasure** plugin
-              only. Compute **coding chunks** for each object and
-              store them on different OSDs. The number of coding
-              chunks is also the number of OSDs that can be down
-              without losing data.
-
-:Type: Integer
-:Required: No. 
-:Default: 2
-
-``{key=value}``
-
-:Description: For **erasure** pools, the semantic of the remaining
-              key/value pairs is defined by the erasure code plugin.
-              For **replicated** pools, the key/value pairs are
-              ignored.
+:Description: For **erasure** pools only. Use the erasure code
+              **profile**. It must be an existing profile as
+              defined by **osd erasure-code-profile set**.
 
 :Type: String
 :Required: No. 
@@ -178,11 +123,26 @@ you have many pools with many placement groups (e.g., 50 pools with 100
 placement groups each). The point of diminishing returns depends upon the power
 of the OSD host.
 
-See `Placement Groups`_ for details on calculating an appropriate number of 
+See `Placement Groups`_ for details on calculating an appropriate number of
 placement groups for your pool.
 
 .. _Placement Groups: ../placement-groups
- 
+
+
+Set Pool Quotas
+===============
+
+You can set pool quotas for the maximum number of bytes and/or the maximum 
+number of objects per pool. ::
+
+	ceph osd pool set-quota {pool-name} [max_objects {obj-count}] [max_bytes {bytes}] 
+
+For example:: 
+
+	ceph osd pool set-quota data max_objects 10000
+
+To remove a quota, set its value to ``0``.
+
 
 Delete a Pool
 =============
@@ -240,6 +200,7 @@ To remove a snapshot of a pool, execute::
 
 .. _setpoolvalues:
 
+
 Set Pool Values
 ===============
 
@@ -251,25 +212,34 @@ You may set values for the following keys:
 
 ``size``
 
-:Description: Sets the number of replicas for objects in the pool. See `Set the Number of Object Replicas`_ for further details. Replicated pools only.
+:Description: Sets the number of replicas for objects in the pool. 
+              See `Set the Number of Object Replicas`_ for further details. 
+              Replicated pools only.
+
 :Type: Integer
 
 ``min_size``
 
-:Description: Sets the minimum number of replicas required for io.  See `Set the Number of Object Replicas`_ for further details. Replicated pools only.
-:Type: Integer
+:Description: Sets the minimum number of replicas required for I/O.  
+              See `Set the Number of Object Replicas`_ for further details. 
+              Replicated pools only.
 
-.. note:: Version ``0.54`` and above
+:Type: Integer
+:Version: ``0.54`` and above
 
 ``crash_replay_interval``
 
-:Description: The number of seconds to allow clients to replay acknowledged, but uncommitted requests. 
+:Description: The number of seconds to allow clients to replay acknowledged, 
+              but uncommitted requests.
+              
 :Type: Integer
 
 
 ``pgp_num``
 
-:Description: The effective number of placement groups to use when calculating data placement. 
+:Description: The effective number of placement groups to use when calculating 
+              data placement.
+
 :Type: Integer
 :Valid Range: Equal to or less than ``pg_num``.
 
@@ -279,20 +249,114 @@ You may set values for the following keys:
 :Description: The ruleset to use for mapping object placement in the cluster.
 :Type: Integer
 
+
 ``hashpspool``
 
 :Description: Set/Unset HASHPSPOOL flag on a given pool.
 :Type: Integer
 :Valid Range: 1 sets flag, 0 unsets flag
+:Version: Version ``0.48`` Argonaut and above.	
 
 
-.. note:: Version ``0.48`` Argonaut and above.	
+``hit_set_type``
+
+:Description: Enables hit set tracking for cache pools.
+              See `Bloom Filter`_ for additional information.
+
+:Type: String
+:Valid Settings: ``bloom``, ``explicit_hash``, ``explicit_object``
+:Default: ``bloom``. Other values are for testing.
+
+``hit_set_count``
+
+:Description: The number of hit sets to store for cache pools. The higher 
+              the number, the more RAM consumed by the ``ceph-osd`` daemon.
+
+:Type: Integer
+:Valid Range: ``1``. Agent doesn't handle > 1 yet.
+
+
+``hit_set_period``
+
+:Description: The duration of a hit set period in seconds for cache pools. 
+              The higher the number, the more RAM consumed by the 
+              ``ceph-osd`` daemon.
+
+:Type: Integer
+:Example: ``3600`` 1hr
+
+
+``hit_set_fpp``
+
+:Description: The false positive probability for the ``bloom`` hit set type.
+              See `Bloom Filter`_ for additional information.
+
+:Type: Double
+:Valid Range: 0.0 - 1.0
+:Default: ``0.05``
+
+
+``cache_target_dirty_ratio``
+
+:Description: The percentage of the cache pool containing modified (dirty) 
+              objects before the cache tiering agent will flush them to the
+              backing storage pool.
+              
+:Type: Double
+:Default: ``.4``
+
+
+``cache_target_full_ratio``
+
+:Description: The percentage of the cache pool containing unmodified (clean)
+              objects before the cache tiering agent will evict them from the
+              cache pool.
+             
+:Type: Double
+:Default: ``.8``
+
+
+``target_max_bytes``
+
+:Description: Ceph will begin flushing or evicting objects when the 
+              ``max_bytes`` threshold is triggered.
+              
+:Type: Integer
+:Example: ``1000000000000``  #1-TB
+
+
+``target_max_objects`` 
+
+:Description: Ceph will begin flushing or evicting objects when the 
+              ``max_objects`` threshold is triggered.
+
+:Type: Integer
+:Example: ``1000000`` #1M objects
+
+
+``cache_min_flush_age``
+
+:Description: The time (in seconds) before the cache tiering agent will flush 
+              an object from the cache pool to the storage pool.
+              
+:Type: Integer
+:Example: ``600`` 10min 
+
+
+``cache_min_evict_age``
+
+:Description: The time (in seconds) before the cache tiering agent will evict
+              an object from the cache pool.
+              
+:Type: Integer
+:Example: ``1800`` 30min
+
 
 
 Get Pool Values
 ===============
 
-To set a value to a pool, execute the following:: 
+To get a value from a pool, execute the following:: 
 
 	ceph osd pool get {pool-name} {key}
 	
@@ -341,12 +405,13 @@ Get the Number of Object Replicas
 
 To get the number of object replicas, execute the following:: 
 
-	ceph osd dump | grep 'rep size'
+	ceph osd dump | grep 'replicated size'
 	
-Ceph will list the pools, with the ``rep size`` attribute highlighted.
-By default, ceph Creates one replica of an object (a total of two copies, or 
-a size of 2).
+Ceph will list the pools, with the ``replicated size`` attribute highlighted.
+By default, ceph Creates two replicas of an object (a total of three copies, or 
+a size of 3).
 
 
 
 .. _Pool, PG and CRUSH Config Reference: ../../configuration/pool-pg-config-ref
+.. _Bloom Filter: http://en.wikipedia.org/wiki/Bloom_filter

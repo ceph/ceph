@@ -70,8 +70,7 @@ int BtrfsFileStoreBackend::detect_features()
   if (m_filestore_btrfs_clone_range) {
     int fd = ::openat(get_basedir_fd(), "clone_range_test", O_CREAT|O_WRONLY, 0600);
     if (fd >= 0) {
-      ::unlinkat(get_basedir_fd(), "clone_range_test", 0);
-      if (fd < 0) {
+      if (::unlinkat(get_basedir_fd(), "clone_range_test", 0) < 0) {
 	r = -errno;
 	dout(0) << "detect_feature: failed to unlink test file for CLONE_RANGE ioctl: "
 		<< cpp_strerror(r) << dendl;

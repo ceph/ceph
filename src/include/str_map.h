@@ -53,7 +53,7 @@
  * @return **0** on success or a -EINVAL on error.
  */
 extern int get_str_map(const std::string &str,
-		       std::stringstream &ss,
+		       std::ostream &ss,
 		       std::map<std::string,std::string> *str_map);
 
 #endif

@@ -123,14 +123,17 @@ void RGWOp_Bucket_Link::execute()
 {
   std::string uid;
   std::string bucket;
+  std::string bucket_id;
 
   RGWBucketAdminOpState op_state;
 
   RESTArgs::get_string(s, "uid", uid, &uid);
   RESTArgs::get_string(s, "bucket", bucket, &bucket);
+  RESTArgs::get_string(s, "bucket-id", bucket_id, &bucket_id);
 
   op_state.set_user_id(uid);
   op_state.set_bucket_name(bucket);
+  op_state.set_bucket_id(bucket_id);
 
   http_ret = RGWBucketAdminOp::link(store, op_state);
 }
@@ -235,17 +238,17 @@ RGWOp *RGWHandler_Bucket::op_get()
     return new RGWOp_Check_Bucket_Index;
 
   return new RGWOp_Bucket_Info;
-};
+}
 
 RGWOp *RGWHandler_Bucket::op_put()
 {
   return new RGWOp_Bucket_Link;
-};
+}
 
 RGWOp *RGWHandler_Bucket::op_post()
 {
   return new RGWOp_Bucket_Unlink;
-};
+}
 
 RGWOp *RGWHandler_Bucket::op_delete()
 {
@@ -253,5 +256,5 @@ RGWOp *RGWHandler_Bucket::op_delete()
     return new RGWOp_Object_Remove;
 
   return new RGWOp_Bucket_Remove;
-};
+}
 

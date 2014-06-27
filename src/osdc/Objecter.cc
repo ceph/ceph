@@ -248,7 +248,10 @@ void Objecter::init_unlocked()
 					   "objecter_requests",
 					   m_request_state_hook,
 					   "show in-progress osd requests");
-  if (ret < 0) {
+
+  /* Don't warn on EEXIST, happens if multiple ceph clients
+   * are instantiated from one process */
+  if (ret < 0 && ret != -EEXIST) {
     lderr(cct) << "error registering admin socket command: "
 	       << cpp_strerror(ret) << dendl;
   }
@@ -1243,9 +1246,11 @@ ceph_tid_t Objecter::op_submit(Op *op)
 
 ceph_tid_t Objecter::_op_submit(Op *op)
 {
-  // pick tid
-  ceph_tid_t mytid = ++last_tid;
-  op->tid = mytid;
+  // pick tid if we haven't got one yet
+  if (op->tid == ceph_tid_t(0)) {
+    ceph_tid_t mytid = ++last_tid;
+    op->tid = mytid;
+  }
   assert(client_inc >= 0);
 
   // pick target
@@ -1437,19 +1442,23 @@ int Objecter::calc_target(op_target_t *t)
   bool is_read = t->flags & CEPH_OSD_FLAG_READ;
   bool is_write = t->flags & CEPH_OSD_FLAG_WRITE;
 
+  const pg_pool_t *pi = osdmap->get_pg_pool(t->base_oloc.pool);
+  bool force_resend = false;
   bool need_check_tiering = false;
-  if (t->target_oid.name.empty()) {
+  if (pi && osdmap->get_epoch() == pi->last_force_op_resend) {
+    force_resend = true;
+  }
+  if (t->target_oid.name.empty() || force_resend) {
     t->target_oid = t->base_oid;
     need_check_tiering = true;
   }
-  if (t->target_oloc.empty()) {
+  if (t->target_oloc.empty() || force_resend) {
     t->target_oloc = t->base_oloc;
     need_check_tiering = true;
   }
   
   if (need_check_tiering &&
       (t->flags & CEPH_OSD_FLAG_IGNORE_OVERLAY) == 0) {
-    const pg_pool_t *pi = osdmap->get_pg_pool(t->base_oloc.pool);
     if (pi) {
       if (is_read && pi->has_read_tier())
 	t->target_oloc.pool = pi->read_tier;
@@ -1485,7 +1494,8 @@ int Objecter::calc_target(op_target_t *t)
   }
 
   if (t->pgid != pgid ||
-      is_pg_changed(t->primary, t->acting, primary, acting, t->used_replica)) {
+      is_pg_changed(t->primary, t->acting, primary, acting, t->used_replica) ||
+      force_resend) {
     t->pgid = pgid;
     t->acting = acting;
     t->primary = primary;
@@ -1508,7 +1518,7 @@ int Objecter::calc_target(op_target_t *t)
 	// look for a local replica.  prefer the primary if the
 	// distance is the same.
 	int best = -1;
-	int best_locality;
+	int best_locality = 0;
 	for (unsigned i = 0; i < acting.size(); ++i) {
 	  int locality = osdmap->crush->get_common_ancestor_distance(
 		 cct, acting[i], crush_location);
@@ -1615,6 +1625,7 @@ void Objecter::send_op(Op *op)
   ldout(cct, 15) << "send_op " << op->tid << " to osd." << op->session->osd << dendl;
 
   int flags = op->target.flags;
+  flags |= CEPH_OSD_FLAG_KNOWN_REDIR;
   if (op->oncommit)
     flags |= CEPH_OSD_FLAG_ONDISK;
   if (op->onack)
@@ -1761,6 +1772,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     unregister_op(op);
     m->get_redirect().combine_with_locator(op->target.target_oloc,
 					   op->target.target_oid.name);
+    op->target.flags |= CEPH_OSD_FLAG_REDIRECTED;
     _op_submit(op);
     m->put();
     return;

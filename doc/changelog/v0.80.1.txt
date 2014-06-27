@@ -1,0 +1,216 @@
+commit a38fe1169b6d2ac98b427334c12d7cf81f809b74 (tag: refs/tags/v0.80.1)
+Author: Jenkins <jenkins@inktank.com>
+Date:   Mon May 12 15:12:54 2014 +0000
+
+    0.80.1
+
+commit ab873622c6d41bc8053a1d205da2e4b55e77351d
+Author: Jenkins <jenkins@inktank.com>
+Date:   Mon May 12 15:11:33 2014 +0000
+
+    0.80.1
+
+commit 03e7d1d550132a55e87972123d5bc3c0bb0cc981
+Author: Jenkins <jenkins@inktank.com>
+Date:   Mon May 12 15:10:56 2014 +0000
+
+    0.80.1
+
+commit 7a4919c7fa10020643df09e012376e4b563ca17d
+Author: Jenkins <jenkins@inktank.com>
+Date:   Mon May 12 15:09:01 2014 +0000
+
+    0.80.1
+
+commit ce852b29dc5cf9857a6bfeef7839293cfadf1877 (refs/remotes/gh/firefly)
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Fri May 2 16:21:26 2014 -0700
+
+    Revert "ReplicatedPG: block scrub on blocked object contexts"
+
+    This reverts commit e66f2e36c06ca00c1147f922d3513f56b122a5c0.
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+    0f3235d46c8fd6c537bd4aa8a3faec6c00f311a8 is the firefly commit
+    corresponding to e66f2e36c06ca00c1147f922d3513f56b122a5c0.
+
+    (cherry picked from commit 84728058dbb91b8ed062240b3373b18078f0c9ca)
+
+commit db8873b69c73b40110bf1512c114e4a0395671ab
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue May 6 16:55:27 2014 -0700
+
+    rgw: fix stripe_size calculation
+
+    Fixes: #8299
+    Backport: firefly
+    The stripe size calculation was broken, specifically affected cases
+    where we had manifest that described multiple parts.
+
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 9968b938b5d47fdf3a67db134bd2ea6bf3a28086)
+
+commit e0fb2e63074d5f71679bb68656336f68e8190f39
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue May 6 11:06:29 2014 -0700
+
+    rgw: cut short object read if a chunk returns error
+
+    Fixes: #8289
+    Backport: firefly, dumpling
+    When reading an object, if we hit an error when trying to read one of
+    the rados objects then we should just stop. Otherwise we're just going
+    to continue reading the rest of the object, and since it can't be sent
+    back to the client (as we have a hole in the middle), we end up
+    accumulating everything in memory.
+
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 03b0d1cfb7bd30a77fedcf75eb06476b21b14e95)
+
+commit 328665db17bf87d36a3dcbf5f0d0d1a9410e2f96
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Apr 21 15:34:04 2014 -0700
+
+    rgw: send user manifest header field
+
+    Fixes: #8170
+    Backport: firefly
+    If user manifest header exists (swift) send it as part of the object
+    header data.
+
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 5cc5686039a882ad345681133c9c5a4a2c2fd86b)
+
+commit cdb0fac29693fb0250b515891804c4c7fd3045c7
+Author: Yan, Zheng <zheng.z.yan@intel.com>
+Date:   Fri Apr 11 15:03:37 2014 +0800
+
+    client: add asok command to kick sessions that were remote reset
+
+    Fixes: #8021
+    Signed-off-by: Yan, Zheng <zheng.z.yan@intel.com>
+    (cherry picked from commit 09a1bc5a4601d356b9cc69be8541e6515d763861)
+
+commit 4a91196bf49936471a731f9316ef904fda982b26
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Apr 18 13:50:11 2014 -0700
+
+    osd: throttle snap trimmming with simple delay
+
+    This is not particularly smart, but it is *a* knob that lets you make
+    the snap trimmer slow down.  It's a flow and a simple delay, so it is
+    adjustable at runtime.  Default is 0 (no change in behavior).
+
+    Partial solution for #6278.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 4413670d784efc2392359f0f22bca7c9056188f4)
+
+commit 3ba2e228db1829a02f9cd31225672604fdc8adf7
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri May 2 14:48:35 2014 -0700
+
+    mon/MonClient: remove stray _finish_hunting() calls
+
+    Callig _finish_hunting() clears out the bool hunting flag, which means we
+    don't retry by connection to another mon periodically.  Instead, we send
+    keepalives every 10s.  But, since we aren't yet in state HAVE_SESSION, we
+    don't check that the keepalives are getting responses.  This means that an
+    ill-timed connection reset (say, after we get a MonMap, but before we
+    finish authenticating) can drop the monc into a black hole that does not
+    retry.
+
+    Instead, we should *only* call _finish_hunting() when we complete the
+    authentication handshake.
+
+    Fixes: #8278
+    Backport: firefly, dumpling
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 77a6f0aefebebf057f02bfb95c088a30ed93c53f)
+
+commit 383f6440ce34b0d84c0dfa06f561896dad6862f4
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri May 2 16:41:26 2014 -0700
+
+    osd/ReplicatedPG: fix trim of in-flight hit_sets
+
+    We normally need to stat the hit_set to know how many bytes to adjust the
+    stats by.  If the hit_set was just written, we will get ENOENT.
+
+    Get the obc instead, which will either get the in-memory copy (because the
+    repop is still in flight) or load it off of disk.
+
+    Fixes: #8283
+    Backport: firefly
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 72fdd557c35cb721d4b502c5a8f68c878f11a19c)
+
+commit ef35448e63916102261ff6198f2c0ab4e4a57e9b
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue May 6 11:01:27 2014 -0700
+
+    osd/ReplicatedPG: fix whiteouts for other cache mode
+
+    We were special casing WRITEBACK mode for handling whiteouts; this needs to
+    also include the FORWARD and READONLY modes.  To avoid having to list
+    specific cache modes, though, just check != NONE.
+
+    Fixes: #8296
+    Backport: firefly
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 3e387d62ed95898db8a7d7163c2bacc363b8f617)
+
+commit e7df73dd7aaf5a0b1171f73d6695d26cd25b7b35
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu May 1 16:53:17 2014 -0700
+
+    osd: Prevent divide by zero in agent_choose_mode()
+
+    Fixes: #8175
+    Backport: firefly
+
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit f47f867952e6b2a16a296c82bb9b585b21cde6c8)
+
+commit 022d467b5d6b77c17b6fdaeec8369cae61e9e5a4
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Mon Apr 21 23:52:04 2014 -0700
+
+    osd, common: If agent_work() finds no objs to work on delay 5 (default) secs
+
+    Add config osd_agent_delay_time of 5 seconds
+    Honor delay by ignoring agent_choose_mode() calls
+    Add tier_delay to logger
+    Treat restart after delay like we were previously idle
+
+    Fixes: #8113
+    Backport: firefly
+
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit b7d31e5f5952c631dd4172bcb825e77a13fc60bc)
+
+commit 6a55c3bc3caf46652e962fa9434900fb494d1e6c
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Thu May 1 18:54:30 2014 -0700
+
+    osd/ReplicatedPG: agent_work() fix next if finished early due to start_max
+
+    Backport: firefly
+
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 9cf470cac8dd4d8f769e768f2de6b9eb67a3c3af)
+
+commit 1b899148a729235ab2835d368077f18e62a36a93
+Author: Haomai Wang <haomaiwang@gmail.com>
+Date:   Sat May 3 12:53:06 2014 +0800
+
+    Fix clone problem
+
+    When clone happened, the origin header also will be updated in GenericObjectMap,
+    so the new header wraper(StripObjectHeader) should be updated too.
+
+    Fix #8282
+    Signed-off-by: Haomai Wang <haomaiwang@gmail.com>
+    (cherry picked from commit 3aee1e0ffe0583f74c02d9c9e86c7fb267f3515c)

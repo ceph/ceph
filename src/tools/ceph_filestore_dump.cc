@@ -12,26 +12,19 @@
  *
  */
 
-#include <boost/scoped_ptr.hpp>
-#include <boost/lexical_cast.hpp>
-#include <boost/program_options/option.hpp>
-#include <boost/program_options/options_description.hpp>
 #include <boost/program_options/variables_map.hpp>
-#include <boost/program_options/cmdline.hpp>
 #include <boost/program_options/parsers.hpp>
-#include <iostream>
-#include <set>
-#include <sstream>
+
 #include <stdlib.h>
-#include <fstream>
 
 #include "common/Formatter.h"
+#include "common/errno.h"
 
 #include "global/global_init.h"
+
 #include "os/ObjectStore.h"
 #include "os/FileStore.h"
-#include "common/perf_counters.h"
-#include "common/errno.h"
+
 #include "osd/PGLog.h"
 #include "osd/OSD.h"
 
@@ -191,7 +184,7 @@ struct pg_begin {
     if (struct_v > 2) {
       ::decode(pgid.shard, bl);
     } else {
-      pgid.shard = ghobject_t::NO_SHARD;
+      pgid.shard = shard_id_t::NO_SHARD;
     }
     DECODE_FINISH(bl);
   }
@@ -220,7 +213,7 @@ struct object_begin {
       ::decode(hoid.shard_id, bl);
     } else {
       hoid.generation = ghobject_t::NO_GEN;
-      hoid.shard_id = ghobject_t::NO_SHARD;
+      hoid.shard_id = shard_id_t::NO_SHARD;
     }
     DECODE_FINISH(bl);
   }
@@ -632,7 +625,7 @@ int export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
 
   //Handle attrs for this object
   map<string,bufferptr> aset;
-  ret = store->getattrs(cid, obj, aset, false);
+  ret = store->getattrs(cid, obj, aset);
   if (ret) return ret;
   attr_section as(aset);
   ret = write_section(TYPE_ATTRS, as, file_fd);

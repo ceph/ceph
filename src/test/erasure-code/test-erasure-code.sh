@@ -60,6 +60,18 @@ function TEST_rados_put() {
     diff $dir/ORIGINAL $dir/COPY || return 1
 
     rm $dir/ORIGINAL $dir/COPY
+
+    # 
+    # Verify that the rados command enforces alignment constraints
+    # imposed by the stripe width
+    # See http://tracker.ceph.com/issues/8622
+    #
+    local stripe_width=$(./ceph-conf --show-config-value osd_pool_erasure_code_stripe_width)
+    local block_size=$((stripe_width - 1))
+    dd if=/dev/zero of=$dir/ORIGINAL bs=$block_size count=2
+    ./rados --block-size=$block_size \
+        --pool ecpool put UNALIGNED $dir/ORIGINAL || return 1
+    rm $dir/ORIGINAL
 }
 
 main test-erasure-code

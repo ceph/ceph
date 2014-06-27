@@ -26,6 +26,7 @@ include msg/Makefile.am
 include messages/Makefile.am
 include include/Makefile.am
 include librados/Makefile.am
+include libradosstriper/Makefile.am
 include librbd/Makefile.am
 include rgw/Makefile.am
 include cls/Makefile.am
@@ -54,8 +55,8 @@ bin_PROGRAMS += ceph-mds
 
 # user tools
 
-mount_ceph_SOURCES = mount/mount.ceph.c common/secret.c
-mount_ceph_LDADD = $(LIBCOMMON) $(KEYUTILS_LIB)
+mount_ceph_SOURCES = mount/mount.ceph.c
+mount_ceph_LDADD = $(LIBSECRET) $(LIBCOMMON)
 if LINUX
 su_sbin_PROGRAMS += mount.ceph
 endif # LINUX
@@ -74,12 +75,18 @@ ceph_syn_SOURCES += client/SyntheticClient.cc # uses g_conf.. needs cleanup
 ceph_syn_LDADD = $(LIBCLIENT) $(CEPH_GLOBAL)
 bin_PROGRAMS += ceph-syn
 
-rbd_SOURCES = rbd.cc common/secret.c
-rbd_LDADD = $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL) -lblkid $(KEYUTILS_LIB)
+
+libkrbd_la_SOURCES = krbd.cc
+libkrbd_la_LIBADD = $(LIBSECRET) -lblkid -ludev
+if LINUX
+noinst_LTLIBRARIES += libkrbd.la
+endif LINUX
+
+rbd_SOURCES = rbd.cc
+rbd_LDADD = $(LIBKRBD) $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL)
 if LINUX
 bin_PROGRAMS += rbd
 endif #LINUX
-
 
 
 # Fuse targets
@@ -157,7 +164,6 @@ EXTRA_DIST += \
 	$(srcdir)/.git_version \
 	$(srcdir)/ceph-rbdnamer \
 	$(srcdir)/test/encoding/readable.sh \
-	$(srcdir)/test/encoding/check-generated.sh \
 	$(srcdir)/upstart/ceph-all.conf \
 	$(srcdir)/upstart/ceph-mon.conf \
 	$(srcdir)/upstart/ceph-mon-all.conf \
@@ -183,7 +189,6 @@ EXTRA_DIST += \
 	ceph-crush-location \
 	mount.fuse.ceph \
 	rbdmap \
-	unittest_bufferlist.sh \
 	yasm-wrapper
 
 EXTRA_DIST += \
@@ -241,9 +246,8 @@ bin_SCRIPTS += \
 	ceph-crush-location
 
 BUILT_SOURCES += init-ceph
-su_sbin_SCRIPTS += mkcephfs
 
-shell_scripts += init-ceph mkcephfs
+shell_scripts += init-ceph
 
 
 
@@ -268,7 +272,7 @@ admin-tools: monmaptool osdmaptool crushtool ceph-authtool
 base: core-daemons admin-tools \
 	cephfs ceph-syn ceph-conf \
 	rados librados-config \
-	init-ceph mkcephfs ceph_mon_store_converter ceph-post-file
+	init-ceph ceph_mon_store_converter ceph-post-file
 
 
 # version stuff
