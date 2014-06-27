@@ -201,6 +201,14 @@ public:
     ::encode(s, bl);
   }
 
+  void decode_state_rejoin(bufferlist::iterator& p, list<Context*>& waiters) {
+    SimpleLock::decode_state_rejoin(p, waiters);
+    if (is_flushing()) {
+      set_dirty();
+      clear_flushing();
+    }
+  }
+
   bool remove_replica(int from, bool rejoin) {
     if (rejoin &&
 	(state == LOCK_MIX ||

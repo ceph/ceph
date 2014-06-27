@@ -6,7 +6,7 @@
  * Copyright (C) 2011 New Dream Network
  *
  * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public
+ * modify it under the terms of the GNU Lesser General Public
  * License version 2.1, as published by the Free Software
  * Foundation.	See file COPYING.
  *
@@ -39,6 +39,7 @@ extern "C" {
 
 #define LIBRBD_SUPPORTS_WATCH 0
 #define LIBRBD_SUPPORTS_AIO_FLUSH 1
+#define LIBRBD_SUPPORTS_INVALIDATE 1
 
 typedef void *rbd_snap_t;
 typedef void *rbd_image_t;
@@ -375,6 +376,14 @@ int rbd_flush(rbd_image_t image);
  * @returns 0 on success, negative error code on failure
  */
 int rbd_aio_flush(rbd_image_t image, rbd_completion_t c);
+
+/**
+ * Drop any cached data for an image
+ *
+ * @param image the image to invalidate cached data for
+ * @returns 0 on success, negative error code on failure
+ */
+int rbd_invalidate_cache(rbd_image_t image);
 
 #ifdef __cplusplus
 }

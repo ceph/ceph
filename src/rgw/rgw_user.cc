@@ -6,6 +6,7 @@
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
+#include "common/RWLock.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
 
@@ -192,24 +193,58 @@ int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_inf
   return ret;
 }
 
+struct user_info_entry {
+  RGWUserInfo info;
+  RGWObjVersionTracker objv_tracker;
+  time_t mtime;
+};
+
+static RGWChainedCacheImpl<user_info_entry> uinfo_cache;
+
 int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucket, RGWUserInfo& info,
                                  RGWObjVersionTracker *objv_tracker, time_t *pmtime)
 {
+  user_info_entry e;
+  if (uinfo_cache.find(key, &e)) {
+    info = e.info;
+    if (objv_tracker)
+      *objv_tracker = e.objv_tracker;
+    if (pmtime)
+      *pmtime = e.mtime;
+    return 0;
+  }
+
   bufferlist bl;
   RGWUID uid;
 
-  int ret = rgw_get_system_obj(store, NULL, bucket, key, bl, NULL, pmtime);
+  int ret = rgw_get_system_obj(store, NULL, bucket, key, bl, NULL, &e.mtime);
   if (ret < 0)
     return ret;
+
+  rgw_cache_entry_info cache_info;
 
   bufferlist::iterator iter = bl.begin();
   try {
     ::decode(uid, iter);
-    return rgw_get_user_info_by_uid(store, uid.user_id, info, objv_tracker);
+    int ret = rgw_get_user_info_by_uid(store, uid.user_id, e.info, &e.objv_tracker, NULL, &cache_info);
+    if (ret < 0) {
+      return ret;
+    }
   } catch (buffer::error& err) {
     ldout(store->ctx(), 0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
     return -EIO;
   }
+
+  list<rgw_cache_entry_info *> cache_info_entries;
+  cache_info_entries.push_back(&cache_info);
+
+  uinfo_cache.put(store, key, &e, cache_info_entries);
+
+  info = e.info;
+  if (objv_tracker)
+    *objv_tracker = e.objv_tracker;
+  if (pmtime)
+    *pmtime = e.mtime;
 
   return 0;
 }
@@ -219,12 +254,13 @@ int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucke
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 int rgw_get_user_info_by_uid(RGWRados *store, string& uid, RGWUserInfo& info,
-                             RGWObjVersionTracker *objv_tracker, time_t *pmtime)
+                             RGWObjVersionTracker *objv_tracker, time_t *pmtime,
+                             rgw_cache_entry_info *cache_info)
 {
   bufferlist bl;
   RGWUID user_id;
 
-  int ret = rgw_get_system_obj(store, NULL, store->zone.user_uid_pool, uid, bl, objv_tracker, pmtime);
+  int ret = rgw_get_system_obj(store, NULL, store->zone.user_uid_pool, uid, bl, objv_tracker, pmtime, NULL, cache_info);
   if (ret < 0)
     return ret;
 
@@ -737,9 +773,6 @@ int RGWAccessKeyPool::check_op(RGWUserAdminOpState& op_state,
     return -EACCES;
   }
 
-  std::string access_key = op_state.get_access_key();
-  std::string secret_key = op_state.get_secret_key();
-
   int32_t key_type = op_state.get_key_type();
 
   // if a key type wasn't specified set it to s3
@@ -748,8 +781,9 @@ int RGWAccessKeyPool::check_op(RGWUserAdminOpState& op_state,
 
   op_state.set_key_type(key_type);
 
-  /* see if the access key or secret key was specified */
-  if (key_type == KEY_TYPE_S3 && !op_state.will_gen_access() && access_key.empty()) {
+  /* see if the access key was specified */
+  if (key_type == KEY_TYPE_S3 && !op_state.will_gen_access() && 
+      op_state.get_access_key().empty()) {
     set_err_msg(err_msg, "empty access key");
     return -EINVAL;
   }
@@ -775,7 +809,6 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
   int key_type = op_state.get_key_type();
   bool gen_access = op_state.will_gen_access();
   bool gen_secret = op_state.will_gen_secret();
-  std::string subuser = op_state.get_subuser();
 
   if (!keys_allowed) {
     set_err_msg(err_msg, "access keys not allowed for this user");
@@ -1923,11 +1956,8 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
 
   std::string old_email = old_info.user_email;
   if (!op_email.empty()) {
-    bool same_email = false;
-    same_email = (old_email.compare(op_email) == 0);
-
     // make sure we are not adding a duplicate email
-    if (!same_email) {
+    if (old_email.compare(op_email) != 0) {
       ret = rgw_get_user_info_by_email(store, op_email, duplicate_check);
       if (ret >= 0 && duplicate_check.user_id != user_id) {
         set_err_msg(err_msg, "cannot add duplicate email");

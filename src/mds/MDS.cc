@@ -42,8 +42,6 @@
 #include "MDBalancer.h"
 #include "Migrator.h"
 
-#include "AnchorServer.h"
-#include "AnchorClient.h"
 #include "SnapServer.h"
 #include "SnapClient.h"
 
@@ -105,7 +103,8 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   messenger(m),
   monc(mc),
   clog(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
-  sessionmap(this) {
+  op_tracker(cct, m->cct->_conf->mds_enable_op_tracker),
+  sessionmap(this), asok_hook(NULL) {
 
   orig_argc = 0;
   orig_argv = NULL;
@@ -130,8 +129,6 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   inotable = new InoTable(this);
   snapserver = new SnapServer(this);
   snapclient = new SnapClient(this);
-  anchorserver = new AnchorServer(this);
-  anchorclient = new AnchorClient(this);
 
   server = new Server(this);
   locker = new Locker(this, mdcache);
@@ -155,6 +152,10 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
 
   logger = 0;
   mlogger = 0;
+  op_tracker.set_complaint_and_threshold(m->cct->_conf->mds_op_complaint_time,
+                                         m->cct->_conf->mds_op_log_threshold);
+  op_tracker.set_history_size_and_duration(m->cct->_conf->mds_op_history_size,
+                                           m->cct->_conf->mds_op_history_duration);
 }
 
 MDS::~MDS() {
@@ -167,10 +168,8 @@ MDS::~MDS() {
   if (mdlog) { delete mdlog; mdlog = NULL; }
   if (balancer) { delete balancer; balancer = NULL; }
   if (inotable) { delete inotable; inotable = NULL; }
-  if (anchorserver) { delete anchorserver; anchorserver = NULL; }
   if (snapserver) { delete snapserver; snapserver = NULL; }
   if (snapclient) { delete snapclient; snapclient = NULL; }
-  if (anchorclient) { delete anchorclient; anchorclient = NULL; }
   if (osdmap) { delete osdmap; osdmap = 0; }
   if (mdsmap) { delete mdsmap; mdsmap = 0; }
 
@@ -193,6 +192,95 @@ MDS::~MDS() {
   
   if (messenger)
     delete messenger;
+}
+
+class MDSSocketHook : public AdminSocketHook {
+  MDS *mds;
+public:
+  MDSSocketHook(MDS *m) : mds(m) {}
+  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
+	    bufferlist& out) {
+    stringstream ss;
+    bool r = mds->asok_command(command, cmdmap, format, ss);
+    out.append(ss);
+    return r;
+  }
+};
+
+bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
+		    ostream& ss)
+{
+  Formatter *f = new_formatter(format);
+  if (!f)
+    f = new_formatter("json-pretty");
+  if (command == "status") {
+    f->open_object_section("status");
+    f->dump_stream("cluster_fsid") << monc->get_fsid();
+    f->dump_unsigned("whoami", whoami);
+    f->dump_string("state", ceph_mds_state_name(get_state()));
+    f->dump_unsigned("mdsmap_epoch", mdsmap->get_epoch());
+    f->close_section(); // status
+  } else if (command == "dump_ops_in_flight") {
+    op_tracker.dump_ops_in_flight(f);
+  } else if (command == "dump_historic_ops") {
+    op_tracker.dump_historic_ops(f);
+  }
+  f->flush(ss);
+  delete f;
+  return true;
+}
+
+void MDS::set_up_admin_socket()
+{
+  int r;
+  AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+  asok_hook = new MDSSocketHook(this);
+  r = admin_socket->register_command("status", "status", asok_hook,
+				     "high-level status of MDS");
+  assert(0 == r);
+  r = admin_socket->register_command("dump_ops_in_flight",
+				     "dump_ops_in_flight", asok_hook,
+				     "show the ops currently in flight");
+  assert(0 == r);
+  r = admin_socket->register_command("dump_historic_ops", "dump_historic_ops",
+				     asok_hook,
+				     "show slowest recent ops");
+  assert(0 == r);
+}
+
+void MDS::clean_up_admin_socket()
+{
+  AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+  admin_socket->unregister_command("status");
+  admin_socket->unregister_command("dump_ops_in_flight");
+  admin_socket->unregister_command("dump_historic_ops");
+  delete asok_hook;
+  asok_hook = NULL;
+}
+
+const char** MDS::get_tracked_conf_keys() const
+{
+  static const char* KEYS[] = {
+    "mds_op_complaint_time", "mds_op_log_threshold",
+    "mds_op_history_size", "mds_op_history_duration",
+    NULL
+  };
+  return KEYS;
+}
+
+void MDS::handle_conf_change(const struct md_config_t *conf,
+			     const std::set <std::string> &changed)
+{
+  if (changed.count("mds_op_complaint_time") ||
+      changed.count("mds_op_log_threshold")) {
+    op_tracker.set_complaint_and_threshold(conf->mds_op_complaint_time,
+                                           conf->mds_op_log_threshold);
+  }
+  if (changed.count("mds_op_history_size") ||
+      changed.count("mds_op_history_duration")) {
+    op_tracker.set_history_size_and_duration(conf->mds_op_history_size,
+                                             conf->mds_op_history_duration);
+  }
 }
 
 void MDS::create_logger()
@@ -291,7 +379,7 @@ void MDS::create_logger()
 MDSTableClient *MDS::get_table_client(int t)
 {
   switch (t) {
-  case TABLE_ANCHOR: return anchorclient;
+  case TABLE_ANCHOR: return NULL;
   case TABLE_SNAP: return snapclient;
   default: assert(0);
   }
@@ -300,7 +388,7 @@ MDSTableClient *MDS::get_table_client(int t)
 MDSTableServer *MDS::get_table_server(int t)
 {
   switch (t) {
-  case TABLE_ANCHOR: return anchorserver;
+  case TABLE_ANCHOR: return NULL;
   case TABLE_SNAP: return snapserver;
   default: assert(0);
   }
@@ -550,6 +638,8 @@ int MDS::init(int wanted_state)
   reset_tick();
 
   create_logger();
+  set_up_admin_socket();
+  g_conf->add_observer(this);
 
   mds_lock.Unlock();
 
@@ -618,9 +708,22 @@ void MDS::tick()
     if (snapserver)
       snapserver->check_osd_map(false);
   }
+
+  check_ops_in_flight();
 }
 
-
+void MDS::check_ops_in_flight()
+{
+  vector<string> warnings;
+  if (op_tracker.check_ops_in_flight(warnings)) {
+    for (vector<string>::iterator i = warnings.begin();
+        i != warnings.end();
+        ++i) {
+      clog.warn() << *i;
+    }
+  }
+  return;
+}
 
 
 // -----------------------
@@ -1200,10 +1303,6 @@ void MDS::boot_create()
 
   // initialize tables
   if (mdsmap->get_tableserver() == whoami) {
-    dout(10) << "boot_create creating fresh anchortable" << dendl;
-    anchorserver->reset();
-    anchorserver->save(fin.new_sub());
-
     dout(10) << "boot_create creating fresh snaptable" << dendl;
     snapserver->reset();
     snapserver->save(fin.new_sub());
@@ -1262,16 +1361,14 @@ void MDS::boot_start(int step, int r)
       dout(2) << "boot_start " << step << ": opening sessionmap" << dendl;
       sessionmap.load(gather.new_sub());
 
-      if (mdsmap->get_tableserver() == whoami) {
-	dout(2) << "boot_start " << step << ": opening anchor table" << dendl;
-	anchorserver->load(gather.new_sub());
-
-	dout(2) << "boot_start " << step << ": opening snap table" << dendl;	
-	snapserver->load(gather.new_sub());
-      }
-      
       dout(2) << "boot_start " << step << ": opening mds log" << dendl;
       mdlog->open(gather.new_sub());
+
+      if (mdsmap->get_tableserver() == whoami) {
+	dout(2) << "boot_start " << step << ": opening snap table" << dendl;
+	snapserver->load(gather.new_sub());
+      }
+
       gather.activate();
     }
     break;
@@ -1571,13 +1668,10 @@ void MDS::recovery_done(int oldstate)
   dout(1) << "recovery_done -- successful recovery!" << dendl;
   assert(is_clientreplay() || is_active());
   
-  // kick anchortable (resent AGREEs)
+  // kick snaptable (resent AGREEs)
   if (mdsmap->get_tableserver() == whoami) {
     set<int> active;
-    mdsmap->get_mds_set(active, MDSMap::STATE_CLIENTREPLAY);
-    mdsmap->get_mds_set(active, MDSMap::STATE_ACTIVE);
-    mdsmap->get_mds_set(active, MDSMap::STATE_STOPPING);
-    anchorserver->finish_recovery(active);
+    mdsmap->get_clientreplay_or_active_or_stopping_mds_set(active);
     snapserver->finish_recovery(active);
   }
 
@@ -1602,7 +1696,6 @@ void MDS::handle_mds_recovery(int who)
   mdcache->handle_mds_recovery(who);
 
   if (mdsmap->get_tableserver() == whoami) {
-    anchorserver->handle_mds_recovery(who);
     snapserver->handle_mds_recovery(who);
   }
 
@@ -1620,7 +1713,6 @@ void MDS::handle_mds_failure(int who)
 
   mdcache->handle_mds_failure(who);
 
-  anchorclient->handle_mds_failure(who);
   snapclient->handle_mds_failure(who);
 }
 
@@ -1675,6 +1767,8 @@ void MDS::suicide()
   //timer.join();
   timer.shutdown();
   
+  clean_up_admin_socket();
+
   // shut down cache
   mdcache->shutdown();
 
@@ -1682,6 +1776,8 @@ void MDS::suicide()
     objecter->shutdown_locked();
 
   monc->shutdown();
+
+  op_tracker.on_shutdown();
 
   // shut down messenger
   messenger->shutdown();
@@ -2239,7 +2335,7 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
   }
 
   return true;  // we made a decision (see is_valid)
-};
+}
 
 
 void MDS::ms_handle_accept(Connection *con)

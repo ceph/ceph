@@ -664,6 +664,11 @@ namespace librbd {
 					  ictx->header_oid,
 					  snap_id,
 					  RBD_PROTECTION_STATUS_UNPROTECTED);
+    if (r < 0) {
+      lderr(ictx->cct) << "snap_unprotect: error setting unprotected status"
+		       << dendl;
+      goto reprotect_and_return_err;
+    }
     notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
     return 0;
 
@@ -832,6 +837,9 @@ reprotect_and_return_err:
 	     bool old_format, uint64_t features, int *order,
 	     uint64_t stripe_unit, uint64_t stripe_count)
   {
+    if (!order)
+      return -EINVAL;
+
     CephContext *cct = (CephContext *)io_ctx.cct();
     ldout(cct, 20) << "create " << &io_ctx << " name = " << imgname
 		   << " size = " << size << " old_format = " << old_format
@@ -856,9 +864,6 @@ reprotect_and_return_err:
       lderr(cct) << "rbd image " << imgname << " already exists" << dendl;
       return -EEXIST;
     }
-
-    if (!order)
-      return -EINVAL;
 
     if (!*order)
       *order = cct->_conf->rbd_default_order;
@@ -1504,7 +1509,9 @@ reprotect_and_return_err:
     if (size < ictx->size && ictx->object_cacher) {
       // need to invalidate since we're deleting objects, and
       // ObjectCacher doesn't track non-existent objects
-      ictx->invalidate_cache();
+      r = ictx->invalidate_cache();
+      if (r < 0)
+	return r;
     }
     resize_helper(ictx, size, prog_ctx);
 
@@ -1847,7 +1854,9 @@ reprotect_and_return_err:
     // need to flush any pending writes before resizing and rolling back -
     // writes might create new snapshots. Rolling back will replace
     // the current version, so we have to invalidate that too.
-    ictx->invalidate_cache();
+    r = ictx->invalidate_cache();
+    if (r < 0)
+      return r;
 
     ldout(cct, 2) << "resizing to snapshot size..." << dendl;
     NoOpProgressContext no_op;
@@ -2875,6 +2884,19 @@ reprotect_and_return_err:
       lderr(cct) << "_flush " << ictx << " r = " << r << dendl;
 
     return r;
+  }
+
+  int invalidate_cache(ImageCtx *ictx)
+  {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << "invalidate_cache " << ictx << dendl;
+
+    int r = ictx_check(ictx);
+    if (r < 0)
+      return r;
+
+    RWLock::WLocker l(ictx->md_lock);
+    return ictx->invalidate_cache();
   }
 
   int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,

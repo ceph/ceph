@@ -36,35 +36,107 @@ double DispatchQueue::get_max_age(utime_t now) {
     return (now - marrival.begin()->first);
 }
 
+uint64_t DispatchQueue::pre_dispatch(Message *m)
+{
+  ldout(cct,1) << "<== " << m->get_source_inst()
+	       << " " << m->get_seq()
+	       << " ==== " << *m
+	       << " ==== " << m->get_payload().length()
+	       << "+" << m->get_middle().length()
+	       << "+" << m->get_data().length()
+	       << " (" << m->get_footer().front_crc << " "
+	       << m->get_footer().middle_crc
+	       << " " << m->get_footer().data_crc << ")"
+	       << " " << m << " con " << m->get_connection()
+	       << dendl;
+  uint64_t msize = m->get_dispatch_throttle_size();
+  m->set_dispatch_throttle_size(0); // clear it out, in case we requeue this message.
+  return msize;
+}
+
+void DispatchQueue::post_dispatch(Message *m, uint64_t msize)
+{
+  msgr->dispatch_throttle_release(msize);
+  ldout(cct,20) << "done calling dispatch on " << m << dendl;
+}
+
+bool DispatchQueue::can_fast_dispatch(Message *m)
+{
+  return msgr->ms_can_fast_dispatch(m);
+}
+
+void DispatchQueue::fast_dispatch(Message *m)
+{
+  uint64_t msize = pre_dispatch(m);
+  msgr->ms_fast_dispatch(m);
+  post_dispatch(m, msize);
+}
+
+void DispatchQueue::fast_preprocess(Message *m)
+{
+  msgr->ms_fast_preprocess(m);
+}
+
 void DispatchQueue::enqueue(Message *m, int priority, uint64_t id)
 {
+
   Mutex::Locker l(lock);
   ldout(cct,20) << "queue " << m << " prio " << priority << dendl;
   add_arrival(m);
   if (priority >= CEPH_MSG_PRIO_LOW) {
     mqueue.enqueue_strict(
-      id, priority, QueueItem(m));
+        id, priority, QueueItem(m));
   } else {
     mqueue.enqueue(
-      id, priority, m->get_cost(), QueueItem(m));
+        id, priority, m->get_cost(), QueueItem(m));
   }
   cond.Signal();
 }
 
 void DispatchQueue::local_delivery(Message *m, int priority)
 {
-  Mutex::Locker l(lock);
   m->set_connection(msgr->local_connection.get());
   m->set_recv_stamp(ceph_clock_now(msgr->cct));
-  add_arrival(m);
-  if (priority >= CEPH_MSG_PRIO_LOW) {
-    mqueue.enqueue_strict(
-      0, priority, QueueItem(m));
-  } else {
-    mqueue.enqueue(
-      0, priority, m->get_cost(), QueueItem(m));
+  Mutex::Locker l(local_delivery_lock);
+  if (local_messages.empty())
+    local_delivery_cond.Signal();
+  local_messages.push_back(make_pair(m, priority));
+  return;
+}
+
+void DispatchQueue::run_local_delivery()
+{
+  local_delivery_lock.Lock();
+  while (true) {
+    if (stop_local_delivery)
+      break;
+    if (local_messages.empty()) {
+      local_delivery_cond.Wait(local_delivery_lock);
+      continue;
+    }
+    pair<Message *, int> mp = local_messages.front();
+    local_messages.pop_front();
+    local_delivery_lock.Unlock();
+    Message *m = mp.first;
+    int priority = mp.second;
+    fast_preprocess(m);
+    if (can_fast_dispatch(m)) {
+      fast_dispatch(m);
+    } else {
+      Mutex::Locker l(lock);
+      add_arrival(m);
+      if (priority >= CEPH_MSG_PRIO_LOW) {
+        mqueue.enqueue_strict(
+            0, priority, QueueItem(m));
+      } else {
+        mqueue.enqueue(
+            0, priority, m->get_cost(), QueueItem(m));
+      }
+      cond.Signal();
+    }
+    local_delivery_lock.Lock();
   }
-  cond.Signal();
+  local_delivery_lock.Unlock();
 }
 
 /*
@@ -109,23 +181,9 @@ void DispatchQueue::entry()
 	  ldout(cct,10) << " stop flag set, discarding " << m << " " << *m << dendl;
 	  m->put();
 	} else {
-	  uint64_t msize = m->get_dispatch_throttle_size();
-	  m->set_dispatch_throttle_size(0);  // clear it out, in case we requeue this message.
-
-	  ldout(cct,1) << "<== " << m->get_source_inst()
-		       << " " << m->get_seq()
-		       << " ==== " << *m
-		       << " ==== " << m->get_payload().length() << "+" << m->get_middle().length()
-		       << "+" << m->get_data().length()
-		       << " (" << m->get_footer().front_crc << " " << m->get_footer().middle_crc
-		       << " " << m->get_footer().data_crc << ")"
-		       << " " << m << " con " << m->get_connection()
-		       << dendl;
+	  uint64_t msize = pre_dispatch(m);
 	  msgr->ms_deliver_dispatch(m);
-
-	  msgr->dispatch_throttle_release(msize);
-
-	  ldout(cct,20) << "done calling dispatch on " << m << dendl;
+	  post_dispatch(m, msize);
 	}
       }
 
@@ -160,15 +218,23 @@ void DispatchQueue::start()
   assert(!stop);
   assert(!dispatch_thread.is_started());
   dispatch_thread.create();
+  local_delivery_thread.create();
 }
 
 void DispatchQueue::wait()
 {
+  local_delivery_thread.join();
   dispatch_thread.join();
 }
 
 void DispatchQueue::shutdown()
 {
+  // stop my local delivery thread
+  local_delivery_lock.Lock();
+  stop_local_delivery = true;
+  local_delivery_cond.Signal();
+  local_delivery_lock.Unlock();
+
   // stop my dispatch thread
   lock.Lock();
   stop = true;

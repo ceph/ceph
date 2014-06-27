@@ -34,7 +34,7 @@ struct Subscription {
   bool incremental_onetime;  // has CEPH_FEATURE_INCSUBOSDMAP
   
   Subscription(MonSession *s, const string& t) : session(s), type(t), type_item(this),
-						 next(0), onetime(false), incremental_onetime(false) {};
+						 next(0), onetime(false), incremental_onetime(false) {}
 };
 
 struct MonSession : public RefCountedObject {
@@ -94,6 +94,10 @@ struct MonSessionMap {
       delete subs.begin()->second;
       subs.erase(subs.begin());
     }
+  }
+
+  unsigned get_size() const {
+    return sessions.size();
   }
 
   void remove_session(MonSession *s) {

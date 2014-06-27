@@ -221,7 +221,6 @@ private:
 
   off64_t max_size;
   size_t block_size;
-  bool is_bdev;
   bool directio, aio, force_aio;
   bool must_write_header;
   off64_t write_pos;      // byte where the next entry to be written will go
@@ -362,7 +361,7 @@ private:
     fn(f),
     zero_buf(NULL),
     max_size(0), block_size(0),
-    is_bdev(false), directio(dio), aio(ai), force_aio(faio),
+    directio(dio), aio(ai), force_aio(faio),
     must_write_header(false),
     write_pos(0), read_pos(0),
 #ifdef HAVE_LIBAIO

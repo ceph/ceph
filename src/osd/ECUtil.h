@@ -58,9 +58,9 @@ public:
     return offset - (offset % stripe_width);
   }
   uint64_t logical_to_next_stripe_offset(uint64_t offset) const {
-    return offset % stripe_width ?
-      offset - (offset % stripe_width) + stripe_width :
-      offset;
+    return ((offset % stripe_width) ?
+      (offset - (offset % stripe_width) + stripe_width) :
+      offset);
   }
   uint64_t aligned_logical_offset_to_chunk_offset(uint64_t offset) const {
     assert(offset % stripe_width == 0);
@@ -149,6 +149,6 @@ typedef ceph::shared_ptr<HashInfo> HashInfoRef;
 bool is_hinfo_key_string(const string &key);
 const string &get_hinfo_key();
 
-};
+}
 WRITE_CLASS_ENCODER(ECUtil::HashInfo)
 #endif

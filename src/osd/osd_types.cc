@@ -48,6 +48,8 @@ const char *ceph_osd_flag_name(unsigned flag)
   case CEPH_OSD_FLAG_FLUSH: return "flush";
   case CEPH_OSD_FLAG_MAP_SNAP_CLONE: return "map_snap_clone";
   case CEPH_OSD_FLAG_ENFORCE_SNAPC: return "enforce_snapc";
+  case CEPH_OSD_FLAG_REDIRECTED: return "redirected";
+  case CEPH_OSD_FLAG_KNOWN_REDIR: return "known_if_redirected";
   default: return "???";
   }
 }
@@ -86,7 +88,7 @@ ostream &operator<<(ostream &lhs, const pg_shard_t &rhs)
 {
   if (rhs.is_undefined())
     return lhs << "?";
-  if (rhs.shard == ghobject_t::NO_SHARD)
+  if (rhs.shard == shard_id_t::NO_SHARD)
     return lhs << rhs.osd;
   return lhs << rhs.osd << '(' << (unsigned)(rhs.shard) << ')';
 }
@@ -354,7 +356,7 @@ bool pg_t::parse(const char *s)
 bool spg_t::parse(const char *s)
 {
   pgid.set_preferred(-1);
-  shard = ghobject_t::NO_SHARD;
+  shard = shard_id_t::NO_SHARD;
   uint64_t ppool;
   uint32_t pseed;
   int32_t pref;
@@ -379,7 +381,7 @@ bool spg_t::parse(const char *s)
   if (p) {
     r = sscanf(p, "s%d", &pshard);
     if (r == 1) {
-      shard = pshard;
+      shard = shard_id_t(pshard);
     } else {
       return false;
     }
@@ -770,6 +772,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("pg_placement_num", get_pgp_num());
   f->dump_unsigned("crash_replay_interval", get_crash_replay_interval());
   f->dump_stream("last_change") << get_last_change();
+  f->dump_stream("last_force_op_resend") << get_last_force_op_resend();
   f->dump_unsigned("auid", get_auid());
   f->dump_string("snap_mode", is_pool_snaps_mode() ? "pool" : "selfmanaged");
   f->dump_unsigned("snap_seq", get_snap_seq());
@@ -1058,7 +1061,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   }
 
   __u8 encode_compat = 5;
-  ENCODE_START(14, encode_compat, bl);
+  ENCODE_START(15, encode_compat, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -1097,12 +1100,13 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(cache_min_flush_age, bl);
   ::encode(cache_min_evict_age, bl);
   ::encode(erasure_code_profile, bl);
+  ::encode(last_force_op_resend, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(14, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(15, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
@@ -1199,7 +1203,11 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 14) {
     ::decode(erasure_code_profile, bl);
   }
-
+  if (struct_v >= 15) {
+    ::decode(last_force_op_resend, bl);
+  } else {
+    last_force_op_resend = 0;
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
 }
@@ -1216,6 +1224,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.pg_num = 6;
   a.pgp_num = 5;
   a.last_change = 9;
+  a.last_force_op_resend = 123823;
   a.snap_seq = 10;
   a.snap_epoch = 11;
   a.auid = 12;
@@ -1264,8 +1273,11 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
       << " object_hash " << p.get_object_hash_name()
       << " pg_num " << p.get_pg_num()
       << " pgp_num " << p.get_pgp_num()
-      << " last_change " << p.get_last_change()
-      << " owner " << p.get_auid();
+      << " last_change " << p.get_last_change();
+  if (p.get_last_force_op_resend())
+    out << " lfor " << p.get_last_force_op_resend();
+  if (p.get_auid())
+    out << " owner " << p.get_auid();
   if (p.flags)
     out << " flags " << p.get_flags_string();
   if (p.crash_replay_interval)
@@ -2003,7 +2015,7 @@ void pg_info_t::decode(bufferlist::iterator &bl)
   if (struct_v >= 30)
     ::decode(pgid.shard, bl);
   else
-    pgid.shard = ghobject_t::no_shard();
+    pgid.shard = shard_id_t::NO_SHARD;
   DECODE_FINISH(bl);
 }
 
@@ -2042,7 +2054,7 @@ void pg_info_t::generate_test_instances(list<pg_info_t*>& o)
   list<pg_history_t*> h;
   pg_history_t::generate_test_instances(h);
   o.back()->history = *h.back();
-  o.back()->pgid = spg_t(pg_t(1, 2, -1), ghobject_t::no_shard());
+  o.back()->pgid = spg_t(pg_t(1, 2, -1), shard_id_t::NO_SHARD);
   o.back()->last_update = eversion_t(3, 4);
   o.back()->last_complete = eversion_t(5, 6);
   o.back()->last_user_version = 2;
@@ -2082,8 +2094,8 @@ void pg_notify_t::decode(bufferlist::iterator &bl)
     ::decode(to, bl);
     ::decode(from, bl);
   } else {
-    to = ghobject_t::NO_SHARD;
-    from = ghobject_t::NO_SHARD;
+    to = shard_id_t::NO_SHARD;
+    from = shard_id_t::NO_SHARD;
   }
   DECODE_FINISH(bl);
 }
@@ -2092,8 +2104,8 @@ void pg_notify_t::dump(Formatter *f) const
 {
   f->dump_int("from", from);
   f->dump_int("to", to);
-  f->dump_stream("query_epoch") << query_epoch;
-  f->dump_stream("epoch_sent") << epoch_sent;
+  f->dump_unsigned("query_epoch", query_epoch);
+  f->dump_unsigned("epoch_sent", epoch_sent);
   {
     f->open_object_section("info");
     info.dump(f);
@@ -2103,8 +2115,8 @@ void pg_notify_t::dump(Formatter *f) const
 
 void pg_notify_t::generate_test_instances(list<pg_notify_t*>& o)
 {
-  o.push_back(new pg_notify_t(3, ghobject_t::NO_SHARD, 1 ,1 , pg_info_t()));
-  o.push_back(new pg_notify_t(0, 0, 3, 10, pg_info_t()));
+  o.push_back(new pg_notify_t(shard_id_t(3), shard_id_t::NO_SHARD, 1, 1, pg_info_t()));
+  o.push_back(new pg_notify_t(shard_id_t(0), shard_id_t(0), 3, 10, pg_info_t()));
 }
 
 ostream &operator<<(ostream &lhs, const pg_notify_t &notify)
@@ -2112,8 +2124,8 @@ ostream &operator<<(ostream &lhs, const pg_notify_t &notify)
   lhs << "(query_epoch:" << notify.query_epoch
       << ", epoch_sent:" << notify.epoch_sent
       << ", info:" << notify.info;
-  if (notify.from != ghobject_t::NO_SHARD ||
-      notify.to != ghobject_t::NO_SHARD)
+  if (notify.from != shard_id_t::NO_SHARD ||
+      notify.to != shard_id_t::NO_SHARD)
     lhs << " " << (unsigned)notify.from
 	<< "->" << (unsigned)notify.to;
   return lhs << ")";
@@ -2186,6 +2198,29 @@ void pg_interval_t::generate_test_instances(list<pg_interval_t*>& o)
   o.back()->maybe_went_rw = true;
 }
 
+bool pg_interval_t::is_new_interval(
+  int old_acting_primary,
+  int new_acting_primary,
+  const vector<int> &old_acting,
+  const vector<int> &new_acting,
+  int old_up_primary,
+  int new_up_primary,
+  const vector<int> &old_up,
+  const vector<int> &new_up,
+  OSDMapRef osdmap,
+  OSDMapRef lastmap,
+  pg_t pgid) {
+  return old_acting_primary != new_acting_primary ||
+    new_acting != old_acting ||
+    old_up_primary != new_up_primary ||
+    new_up != old_up ||
+    (!(lastmap->get_pools().count(pgid.pool()))) ||
+    (lastmap->get_pools().find(pgid.pool())->second.min_size !=
+     osdmap->get_pools().find(pgid.pool())->second.min_size)  ||
+    pgid.is_split(lastmap->get_pg_num(pgid.pool()),
+		  osdmap->get_pg_num(pgid.pool()), 0);
+}
+
 bool pg_interval_t::check_new_interval(
   int old_acting_primary,
   int new_acting_primary,
@@ -2199,7 +2234,6 @@ bool pg_interval_t::check_new_interval(
   epoch_t last_epoch_clean,
   OSDMapRef osdmap,
   OSDMapRef lastmap,
-  int64_t pool_id,
   pg_t pgid,
   map<epoch_t, pg_interval_t> *past_intervals,
   std::ostream *out)
@@ -2208,15 +2242,18 @@ bool pg_interval_t::check_new_interval(
   //  NOTE: a change in the up set primary triggers an interval
   //  change, even though the interval members in the pg_interval_t
   //  do not change.
-  if (old_acting_primary != new_acting_primary ||
-      new_acting != old_acting ||
-      old_up_primary != new_up_primary ||
-      new_up != old_up ||
-      (!(lastmap->get_pools().count(pool_id))) ||
-      (lastmap->get_pools().find(pool_id)->second.min_size !=
-       osdmap->get_pools().find(pool_id)->second.min_size)  ||
-      pgid.is_split(lastmap->get_pg_num(pgid.pool()),
-        osdmap->get_pg_num(pgid.pool()), 0)) {
+  if (is_new_interval(
+	old_acting_primary,
+	new_acting_primary,
+	old_acting,
+	new_acting,
+	old_up_primary,
+	new_up_primary,
+	old_up,
+	new_up,
+	osdmap,
+	lastmap,
+	pgid)) {
     pg_interval_t& i = (*past_intervals)[same_interval_since];
     i.first = same_interval_since;
     i.last = osdmap->get_epoch() - 1;
@@ -2227,7 +2264,7 @@ bool pg_interval_t::check_new_interval(
 
     if (!i.acting.empty() && i.primary != -1 &&
 	i.acting.size() >=
-	lastmap->get_pools().find(pool_id)->second.min_size) {
+	lastmap->get_pools().find(pgid.pool())->second.min_size) {
       if (out)
 	*out << "generate_past_intervals " << i
 	     << ": not rw,"
@@ -2323,8 +2360,8 @@ void pg_query_t::decode(bufferlist::iterator &bl) {
       ::decode(to, bl);
       ::decode(from, bl);
     } else {
-      to = ghobject_t::NO_SHARD;
-      from = ghobject_t::NO_SHARD;
+      to = shard_id_t::NO_SHARD;
+      from = shard_id_t::NO_SHARD;
     }
     DECODE_FINISH(bl);
   } catch (...) {
@@ -2351,12 +2388,12 @@ void pg_query_t::generate_test_instances(list<pg_query_t*>& o)
   o.push_back(new pg_query_t());
   list<pg_history_t*> h;
   pg_history_t::generate_test_instances(h);
-  o.push_back(new pg_query_t(pg_query_t::INFO, 1, 2, *h.back(), 4));
-  o.push_back(new pg_query_t(pg_query_t::MISSING, 2, 3, *h.back(), 4));
-  o.push_back(new pg_query_t(pg_query_t::LOG, 0, 0,
+  o.push_back(new pg_query_t(pg_query_t::INFO, shard_id_t(1), shard_id_t(2), *h.back(), 4));
+  o.push_back(new pg_query_t(pg_query_t::MISSING, shard_id_t(2), shard_id_t(3), *h.back(), 4));
+  o.push_back(new pg_query_t(pg_query_t::LOG, shard_id_t(0), shard_id_t(0),
 			     eversion_t(4, 5), *h.back(), 4));
   o.push_back(new pg_query_t(pg_query_t::FULLLOG,
-			     ghobject_t::NO_SHARD, ghobject_t::NO_SHARD,
+			     shard_id_t::NO_SHARD, shard_id_t::NO_SHARD,
 			     *h.back(), 5));
 }
 
@@ -2451,8 +2488,8 @@ struct DumpVisitor : public ObjectModDesc::Visitor {
 void ObjectModDesc::dump(Formatter *f) const
 {
   f->open_object_section("object_mod_desc");
-  f->dump_stream("can_local_rollback") << can_local_rollback;
-  f->dump_stream("stashed") << stashed;
+  f->dump_bool("can_local_rollback", can_local_rollback);
+  f->dump_bool("stashed", stashed);
   {
     f->open_array_section("ops");
     DumpVisitor vis(f);
@@ -2614,7 +2651,7 @@ void pg_log_entry_t::dump(Formatter *f) const
   f->dump_string("op", get_op_name());
   f->dump_stream("object") << soid;
   f->dump_stream("version") << version;
-  f->dump_stream("prior_version") << version;
+  f->dump_stream("prior_version") << prior_version;
   f->dump_stream("reqid") << reqid;
   f->dump_stream("mtime") << mtime;
   if (snaps.length() > 0) {

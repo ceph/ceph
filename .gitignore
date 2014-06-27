@@ -3,6 +3,7 @@
 *.a
 *~
 *.co
+*.diff
 *.deb
 *.tar.gz
 *.tar.bz2
@@ -17,6 +18,8 @@
 *.swp
 *.swo
 *.tmp
+*.orig
+*.patch
 *.pyc
 *.pyo
 .cproject
@@ -55,7 +58,7 @@ vgcore.*
 /build-doc
 /config.*
 /Makefile
-/*.patch
+/tags
 
 # temporary directory used by e.g. "make distcheck", e.g. ceph-0.42
 /ceph-[0-9]*/

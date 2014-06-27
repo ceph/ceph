@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
- * Ceph - scalable distributed file system
+ * Ceph distributed storage system
  *
  * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
  *
@@ -75,14 +75,10 @@ int __erasure_code_init(char *plugin_name)
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   int w[] = { 4, 8, 16, 32 };
   for(int i = 0; i < 4; i++) {
-    if (gfp_array[w[i]] == NULL) {
-      gfp_array[w[i]] = (gf_t*)malloc(sizeof(gf_t));
-      assert(gfp_array[w[i]]);
-      gfp_is_composite[w[i]] = 0;
-      if (!gf_init_easy(gfp_array[w[i]], w[i])) {
-	derr << "failed to gf_init_easy(" << w[i] << ")" << dendl;
-	return -EINVAL;
-      }
+    int r = galois_init_default_field(w[i]);
+    if (r) {
+      derr << "failed to gf_init_easy(" << w[i] << ")" << dendl;
+      return -r;
     }
   }
   return instance.add(plugin_name, new ErasureCodePluginJerasure());

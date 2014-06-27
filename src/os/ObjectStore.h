@@ -563,16 +563,16 @@ public:
        * stream. There is no checking that the encoded data is of the
        * correct type.
        */
-      int get_op() {
+      int decode_op() {
 	__u32 op;
 	::decode(op, p);
 	return op;
       }
-      void get_bl(bufferlist& bl) {
+      void decode_bl(bufferlist& bl) {
 	::decode(bl, p);
       }
       /// Get an oid, recognize various legacy forms and update them.
-      ghobject_t get_oid() {
+      ghobject_t decode_oid() {
 	ghobject_t oid;
 	if (sobject_encoding) {
 	  sobject_t soid;
@@ -580,7 +580,7 @@ public:
 	  oid.hobj.snap = soid.snap;
 	  oid.hobj.oid = soid.oid;
 	  oid.generation = ghobject_t::NO_GEN;
-	  oid.shard_id = ghobject_t::NO_SHARD;
+	  oid.shard_id = shard_id_t::NO_SHARD;
 	} else {
 	  ::decode(oid, p);
 	  if (use_pool_override && pool_override != -1 &&
@@ -590,36 +590,36 @@ public:
 	}
 	return oid;
       }
-      coll_t get_cid() {
+      coll_t decode_cid() {
 	coll_t c;
 	::decode(c, p);
 	return c;
       }
-      uint64_t get_length() {
+      uint64_t decode_length() {
 	uint64_t len;
 	::decode(len, p);
 	return len;
       }
-      string get_attrname() {
+      string decode_attrname() {
 	string s;
 	::decode(s, p);
 	return s;
       }
-      string get_key() {
+      string decode_key() {
 	string s;
 	::decode(s, p);
 	return s;
       }
-      void get_attrset(map<string,bufferptr>& aset) {
+      void decode_attrset(map<string,bufferptr>& aset) {
 	::decode(aset, p);
       }
-      void get_attrset(map<string,bufferlist>& aset) {
+      void decode_attrset(map<string,bufferlist>& aset) {
 	::decode(aset, p);
       }
-      void get_keyset(set<string> &keys) {
+      void decode_keyset(set<string> &keys) {
 	::decode(keys, p);
       }
-      uint32_t get_u32() {
+      uint32_t decode_u32() {
 	uint32_t bits;
 	::decode(bits, p);
 	return bits;
@@ -1200,6 +1200,8 @@ public:
 
   virtual int statfs(struct statfs *buf) = 0;
 
+  virtual void collect_metadata(map<string,string> *pm) { }
+
   /**
    * get the most recent "on-disk format version" supported
    */
@@ -1353,7 +1355,7 @@ public:
   }
   int getattr(
     coll_t cid, const ghobject_t& oid,
-    const string name, bufferlist& value) {
+    const string& name, bufferlist& value) {
     bufferptr bp;
     int r = getattr(cid, oid, name.c_str(), bp);
     value.push_back(bp);
@@ -1366,10 +1368,9 @@ public:
    * @param cid collection for object
    * @param oid oid of object
    * @param aset place to put output result.
-   * @param user_only true -> only user attributes are return else all attributes are returned
    * @returns 0 on success, negative error code on failure.
    */
-  virtual int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset, bool user_only = false) = 0;
+  virtual int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset) = 0;
 
   /**
    * getattrs -- get all of the xattrs of an object
@@ -1377,12 +1378,11 @@ public:
    * @param cid collection for object
    * @param oid oid of object
    * @param aset place to put output result.
-   * @param user_only true -> only user attributes are return else all attributes are returned
    * @returns 0 on success, negative error code on failure.
    */
-  int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferlist>& aset, bool user_only = false) {
+  int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferlist>& aset) {
     map<string,bufferptr> bmap;
-    int r = getattrs(cid, oid, bmap, user_only);
+    int r = getattrs(cid, oid, bmap);
     for (map<string,bufferptr>::iterator i = bmap.begin();
 	i != bmap.end();
 	++i) {

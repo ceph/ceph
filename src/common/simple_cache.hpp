@@ -62,6 +62,16 @@ public:
     }
   }
 
+  void clear(K key) {
+    Mutex::Locker l(lock);
+    typename map<K, typename list<pair<K, V> >::iterator>::iterator i =
+      contents.find(key);
+    if (i == contents.end())
+      return;
+    lru.erase(i->second);
+    contents.erase(i);
+  }
+
   void set_size(size_t new_size) {
     Mutex::Locker l(lock);
     max_size = new_size;

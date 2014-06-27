@@ -578,7 +578,7 @@ TEST(TestRGWAdmin, meta_list){
   vector<string> l;
   l = parser.get_array_elements();
   for(vector<string>::iterator it = l.begin();
-      it != l.end(); it++) {
+      it != l.end(); ++it) {
     if((*it).compare("\"user\"") == 0) {
       found = true;
       break;
@@ -600,7 +600,7 @@ TEST(TestRGWAdmin, meta_list){
   l = parser.get_array_elements();
   EXPECT_EQ(1U, l.size());
   for(vector<string>::iterator it = l.begin();
-      it != l.end(); it++) {
+      it != l.end(); ++it) {
     if((*it).compare(string("\"") + uid + string("\"")) == 0) {
       found = true;
       break;
@@ -622,7 +622,7 @@ TEST(TestRGWAdmin, meta_list){
   EXPECT_EQ(2U, l.size());
   bool found2 = false;
   for(vector<string>::iterator it = l.begin();
-      it != l.end(); it++) {
+      it != l.end(); ++it) {
     if((*it).compare(string("\"") + uid + string("\"")) == 0) {
       found = true;
     }
