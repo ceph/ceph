@@ -617,7 +617,7 @@ private:
   /**
    *  map to up and acting. Fills in whatever fields are non-NULL.
    */
-  void _pg_to_up_acting_osds(pg_t pg, vector<int> *up, int *up_primary,
+  void _pg_to_up_acting_osds(const pg_t& pg, vector<int> *up, int *up_primary,
                              vector<int> *acting, int *acting_primary) const;
 
 public:
@@ -629,7 +629,7 @@ public:
    */
   int pg_to_osds(pg_t pg, vector<int> *raw, int *primary) const;
   /// map a pg to its acting set. @return acting set size
-  int pg_to_acting_osds(pg_t pg, vector<int> *acting,
+  int pg_to_acting_osds(const pg_t& pg, vector<int> *acting,
                         int *acting_primary) const {
     _pg_to_up_acting_osds(pg, NULL, NULL, acting, acting_primary);
     return acting->size();
@@ -664,7 +664,7 @@ public:
     assert(i != pools.end());
     return i->second.ec_pool();
   }
-  bool get_primary_shard(pg_t pgid, spg_t *out) const {
+  bool get_primary_shard(const pg_t& pgid, spg_t *out) const {
     map<int64_t, pg_pool_t>::const_iterator i = get_pools().find(pgid.pool());
     if (i == get_pools().end()) {
       return false;
@@ -766,7 +766,7 @@ public:
     return calc_pg_rank(osd, group, nrep);
   }
   /* role is -1 (stray), 0 (primary), 1 (replica) */
-  int get_pg_acting_role(pg_t pg, int osd) const {
+  int get_pg_acting_role(const pg_t& pg, int osd) const {
     vector<int> group;
     int nrep = pg_to_acting_osds(pg, group);
     return calc_pg_role(osd, group, nrep);
