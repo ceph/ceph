@@ -326,7 +326,7 @@ private:
   static void generate_test_instances(list<EMetaBlob*>& ls);
   // soft stateadd
   uint64_t last_subtree_map;
-  uint64_t my_offset;
+  uint64_t event_seq;
 
   // for replay, in certain cases
   //LogSegment *_segment;
@@ -425,7 +425,7 @@ private:
       in = dn->get_projected_linkage()->get_inode();
 
     // make note of where this inode was last journaled
-    in->last_journaled = my_offset;
+    in->last_journaled = event_seq;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
     inode_t *pi = in->get_projected_inode();
@@ -478,7 +478,7 @@ private:
 
   void add_root(bool dirty, CInode *in, inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
 		    map<string,bufferptr> *px=0) {
-    in->last_journaled = my_offset;
+    in->last_journaled = event_seq;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
     if (!pi) pi = in->get_projected_inode();
