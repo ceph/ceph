@@ -1,0 +1,8 @@
+workload:
+  sequential:
+    - workunit:
+        branch: firefly
+        clients:
+          client.0:
+            - cls
+
