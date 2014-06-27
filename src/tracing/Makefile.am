@@ -1,6 +1,5 @@
 %.c %.h: %.tp
-	$(LTTNG_GEN_TP_PROG) $<
-	rm -f $<.o
+	$(LTTNG_GEN_TP_PROG) $< -o $*.c -o $*.h
 
 dist_noinst_DATA = \
 	librados.tp \
