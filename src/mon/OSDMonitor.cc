@@ -2676,6 +2676,45 @@ stats_out:
     rdata.append("\n");
     r = 0;
 
+  } else if (prefix == "osd pool get-quota") {
+    string pool_name;
+    cmd_getval(g_ceph_context, cmdmap, "pool", pool_name);
+
+    int64_t poolid = osdmap.lookup_pg_pool_name(pool_name);
+    if (poolid < 0) {
+      assert(poolid == -ENOENT);
+      ss << "unrecognized pool '" << pool_name << "'";
+      r = -ENOENT;
+      goto reply;
+    }
+    const pg_pool_t *p = osdmap.get_pg_pool(poolid);
+
+    if (f) {
+      f->open_object_section("pool_quotas");
+      f->dump_string("pool_name", pool_name);
+      f->dump_unsigned("pool_id", poolid);
+      f->dump_unsigned("quota_max_objects", p->quota_max_objects);
+      f->dump_unsigned("quota_max_bytes", p->quota_max_bytes);
+      f->close_section();
+      f->flush(rdata);
+    } else {
+      stringstream rs;
+      rs << "quotas for pool '" << pool_name << "':\n"
+         << "  max objects: ";
+      if (p->quota_max_objects == 0)
+        rs << "N/A";
+      else
+        rs << si_t(p->quota_max_objects) << " objects";
+      rs << "\n"
+         << "  max bytes  : ";
+      if (p->quota_max_bytes == 0)
+        rs << "N/A";
+      else
+        rs << si_t(p->quota_max_bytes) << "B";
+      rdata.append(rs.str());
+    }
+    rdata.append("\n");
+    r = 0;
   } else if (prefix == "osd crush rule list" ||
 	     prefix == "osd crush rule ls") {
     string format;
