@@ -1074,7 +1074,7 @@ void ReplicatedPG::get_src_oloc(const object_t& oid, const object_locator_t& olo
 }
 
 void ReplicatedPG::do_request(
-  OpRequestRef op,
+  OpRequestRef& op,
   ThreadPool::TPHandle &handle)
 {
   if (!op_has_sufficient_caps(op)) {
@@ -1184,7 +1184,7 @@ bool ReplicatedPG::check_src_targ(const hobject_t& soid, const hobject_t& toid) 
  * pg lock will be held (if multithreaded)
  * osd_lock NOT held.
  */
-void ReplicatedPG::do_op(OpRequestRef op)
+void ReplicatedPG::do_op(OpRequestRef& op)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
