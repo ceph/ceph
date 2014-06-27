@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+#include "common/module.h"
 #include "common/secret.h"
 #include "include/addr_parsing.h"
 
@@ -153,6 +154,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 		} else if (strncmp(data, "secretfile", 10) == 0) {
 			if (!value || !*value) {
 				printf("keyword secretfile found, but no secret file specified\n");
+				free(saw_name);
 				return NULL;
 			}
 
@@ -185,9 +187,8 @@ static char *parse_options(const char *data, int *filesys_flags)
 			}
 
 			/* take a copy of the name, to be used for
-			   naming the keys that we add to kernel;
-			   ignore memleak as mount.ceph is
-			   short-lived */
+			   naming the keys that we add to kernel; */
+			free(saw_name);
 			saw_name = strdup(value);
 			if (!saw_name) {
 				printf("out of memory.\n");
@@ -228,6 +229,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 		char secret_option[MAX_SECRET_OPTION_LEN];
 		ret = get_secret_option(saw_secret, name, secret_option, sizeof(secret_option));
 		if (ret < 0) {
+			free(saw_name);
 			return NULL;
 		} else {
 			if (pos) {
@@ -237,6 +239,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 		}
 	}
 
+	free(saw_name);
 	if (!out)
 		return strdup(EMPTY_STRING);
 	return out;
@@ -290,28 +293,13 @@ static int parse_arguments(int argc, char *const *const argv,
 
 /* modprobe failing doesn't necessarily prevent from working, so this
    returns void */
-static void modprobe(void) {
-	int status;
-	status = system("/sbin/modprobe ceph");
-	if (status < 0) {
-		char error_buf[80];
-		fprintf(stderr, "mount.ceph: cannot run modprobe: %s\n",
-				strerror_r(errno, error_buf, sizeof(error_buf)));
-	} else if (WIFEXITED(status)) {
-		status = WEXITSTATUS(status);
-		if (status != 0) {
-			fprintf(stderr,
-				"mount.ceph: modprobe failed, exit status %d\n",
-				status);
-		}
-	} else if (WIFSIGNALED(status)) {
-		fprintf(stderr,
-			"mount.ceph: modprobe failed with signal %d\n",
-			WTERMSIG(status));
-	} else {
-		fprintf(stderr, "mount.ceph: weird status from modprobe: %d\n",
-			status);
-	}
+static void modprobe(void)
+{
+	int r;
+
+	r = module_load("ceph", NULL);
+	if (r)
+		printf("failed to load ceph kernel module (%d)\n", r);
 }
 
 static void usage(const char *prog_name)

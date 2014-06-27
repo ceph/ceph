@@ -243,12 +243,6 @@ Monitor::~Monitor()
 }
 
 
-enum {
-  l_mon_first = 456000,
-  l_mon_last,
-};
-
-
 class AdminHook : public AdminSocketHook {
   Monitor *mon;
 public:
@@ -386,16 +380,75 @@ void Monitor::write_features(MonitorDBStore::Transaction &t)
   t.put(MONITOR_NAME, COMPAT_SET_LOC, bl);
 }
 
+const char** Monitor::get_tracked_conf_keys() const
+{
+  static const char* KEYS[] = {
+    "mon_lease",
+    "mon_lease_renew_interval",
+    "mon_lease_ack_timeout",
+    NULL
+  };
+  return KEYS;
+}
+
+void Monitor::handle_conf_change(const struct md_config_t *conf,
+                                 const std::set<std::string> &changed)
+{
+  sanitize_options();
+}
+
+int Monitor::sanitize_options()
+{
+  int r = 0;
+
+  // mon_lease must be greater than mon_lease_renewal; otherwise we
+  // may incur in leases expiring before they are renewed.
+  if (g_conf->mon_lease <= g_conf->mon_lease_renew_interval) {
+    clog.error() << "mon_lease (" << g_conf->mon_lease
+                 << ") must be greater "
+                 << "than mon_lease_renew_interval ("
+                 << g_conf->mon_lease_renew_interval << ")";
+    r = -EINVAL;
+  }
+
+  // mon_lease_ack_timeout must be greater than mon_lease to make sure we've
+  // got time to renew the lease and get an ack for it. Having both options
+  // with the same value, for a given small vale, could mean timing out if
+  // the monitors happened to be overloaded -- or even under normal load for
+  // a small enough value.
+  if (g_conf->mon_lease_ack_timeout <= g_conf->mon_lease) {
+    clog.error() << "mon_lease_ack_timeout ("
+                 << g_conf->mon_lease_ack_timeout
+                 << ") must be greater than mon_lease ("
+                 << g_conf->mon_lease << ")";
+    r = -EINVAL;
+  }
+  return r;
+}
+
 int Monitor::preinit()
 {
   lock.Lock();
 
   dout(1) << "preinit fsid " << monmap->fsid << dendl;
-  
+
+  int r = sanitize_options();
+  if (r < 0) {
+    derr << "option sanitization failed!" << dendl;
+    return r;
+  }
+
   assert(!logger);
   {
     PerfCountersBuilder pcb(g_ceph_context, "mon", l_mon_first, l_mon_last);
-    // ...
+    pcb.add_u64(l_mon_num_sessions, "num_sessions");
+    pcb.add_u64_counter(l_mon_session_add, "session_add");
+    pcb.add_u64_counter(l_mon_session_rm, "session_rm");
+    pcb.add_u64_counter(l_mon_session_trim, "session_trim");
+    pcb.add_u64_counter(l_mon_num_elections, "num_elections");
+    pcb.add_u64_counter(l_mon_election_call, "election_call");
+    pcb.add_u64_counter(l_mon_election_win, "election_win");
+    pcb.add_u64_counter(l_mon_election_lose, "election_lose");
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
   }
@@ -499,8 +552,6 @@ int Monitor::preinit()
   init_paxos();
   health_monitor->init();
 
-  int r;
-
   if (is_keyring_required()) {
     // we need to bootstrap authentication keys so we can form an
     // initial quorum.
@@ -574,6 +625,9 @@ int Monitor::preinit()
                                      "force monitor out of the quorum");
   assert(r == 0);
   lock.Lock();
+
+  // add ourselves as a conf observer
+  g_conf->add_observer(this);
 
   lock.Unlock();
   return 0;
@@ -675,18 +729,6 @@ void Monitor::shutdown()
   }
 
   elector.shutdown();
-
-  if (logger) {
-    cct->get_perfcounters_collection()->remove(logger);
-    delete logger;
-    logger = NULL;
-  }
-  if (cluster_logger) {
-    if (cluster_logger_registered)
-      cct->get_perfcounters_collection()->remove(cluster_logger);
-    delete cluster_logger;
-    cluster_logger = NULL;
-  }
   
   // clean up
   paxos->shutdown();
@@ -700,6 +742,18 @@ void Monitor::shutdown()
   timer.shutdown();
 
   remove_all_sessions();
+
+  if (logger) {
+    cct->get_perfcounters_collection()->remove(logger);
+    delete logger;
+    logger = NULL;
+  }
+  if (cluster_logger) {
+    if (cluster_logger_registered)
+      cct->get_perfcounters_collection()->remove(cluster_logger);
+    delete cluster_logger;
+    cluster_logger = NULL;
+  }
 
   // unlock before msgr shutdown...
   lock.Unlock();
@@ -1582,6 +1636,9 @@ void Monitor::join_election()
 {
   dout(10) << __func__ << dendl;
   state = STATE_ELECTING;
+
+  logger->inc(l_mon_num_elections);
+
   _reset();
 }
 
@@ -1590,6 +1647,9 @@ void Monitor::start_election()
   dout(10) << "start_election" << dendl;
   state = STATE_ELECTING;
   _reset();
+
+  logger->inc(l_mon_num_elections);
+  logger->inc(l_mon_election_call);
 
   cancel_probe_timeout();
 
@@ -1662,6 +1722,8 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   }
   health_monitor->start(epoch);
 
+  logger->inc(l_mon_election_win);
+
   finish_election();
   if (monmap->size() > 1 &&
       monmap->get_epoch() > 0)
@@ -1683,6 +1745,8 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     (*p)->election_finished();
   health_monitor->start(epoch);
+
+  logger->inc(l_mon_election_win);
 
   finish_election();
 }
@@ -1889,6 +1953,8 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
     s->get_health(summary, detailbl ? &detail : NULL);
   }
 
+  health_monitor->get_health(f, summary, (detailbl ? &detail : NULL));
+
   if (f)
     f->open_array_section("summary");
   stringstream ss;
@@ -1915,7 +1981,7 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
 
   if (f) {
     f->open_object_section("timechecks");
-    f->dump_int("epoch", get_epoch());
+    f->dump_unsigned("epoch", get_epoch());
     f->dump_int("round", timecheck_round);
     f->dump_stream("round_status")
       << ((timecheck_round%2) ? "on-going" : "finished");
@@ -1973,10 +2039,6 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
   }
   if (f)
     f->close_section();
-
-  health_status_t hmstatus = health_monitor->get_health(f, (detailbl ? &detail : NULL));
-  if (overall > hmstatus)
-    overall = hmstatus;
 
   stringstream fss;
   fss << overall;
@@ -2776,6 +2838,8 @@ void Monitor::remove_session(MonSession *s)
   }
   s->con->set_priv(NULL);
   session_map.remove_session(s);
+  logger->set(l_mon_num_sessions, session_map.get_size());
+  logger->inc(l_mon_session_rm);
 }
 
 void Monitor::remove_all_sessions()
@@ -2783,7 +2847,9 @@ void Monitor::remove_all_sessions()
   while (!session_map.sessions.empty()) {
     MonSession *s = session_map.sessions.front();
     remove_session(s);
+    logger->inc(l_mon_session_rm);
   }
+  logger->set(l_mon_num_sessions, session_map.get_size());
 }
 
 void Monitor::send_command(const entity_inst_t& inst,
@@ -2881,6 +2947,9 @@ bool Monitor::_ms_dispatch(Message *m)
     s = session_map.new_session(m->get_source_inst(), m->get_connection().get());
     m->get_connection()->set_priv(s->get());
     dout(10) << "ms_dispatch new session " << s << " for " << s->inst << dendl;
+
+    logger->set(l_mon_num_sessions, session_map.get_size());
+    logger->inc(l_mon_session_add);
 
     if (!src_is_mon) {
       dout(10) << "setting timeout on session" << dendl;
@@ -3576,10 +3645,13 @@ void Monitor::handle_get_version(MMonGetVersion *m)
       svc->wait_for_readable(new C_RetryMessage(this, m));
       goto out;
     }
+
     MMonGetVersionReply *reply = new MMonGetVersionReply();
     reply->handle = m->handle;
     reply->version = svc->get_last_committed();
     reply->oldest_version = svc->get_first_committed();
+    reply->set_tid(m->get_tid());
+
     messenger->send_message(reply, m->get_source_inst());
   }
 
@@ -3819,6 +3891,10 @@ void Monitor::tick()
   // trim sessions
   utime_t now = ceph_clock_now(g_ceph_context);
   xlist<MonSession*>::iterator p = session_map.sessions.begin();
+
+  bool out_for_too_long = (!exited_quorum.is_zero()
+      && now > (exited_quorum + 2*g_conf->mon_lease));
+
   while (!p.end()) {
     MonSession *s = *p;
     ++p;
@@ -3830,17 +3906,17 @@ void Monitor::tick()
     if (!s->until.is_zero() && s->until < now) {
       dout(10) << " trimming session " << s->con << " " << s->inst
 	       << " (until " << s->until << " < now " << now << ")" << dendl;
-      messenger->mark_down(s->con);
-      remove_session(s);
-    } else if (!exited_quorum.is_zero()) {
-      if (now > (exited_quorum + 2 * g_conf->mon_lease)) {
-        // boot the client Session because we've taken too long getting back in
-        dout(10) << " trimming session " << s->con << " " << s->inst
-		 << " because we've been out of quorum too long" << dendl;
-        messenger->mark_down(s->con);
-        remove_session(s);
-      }
+    } else if (out_for_too_long) {
+      // boot the client Session because we've taken too long getting back in
+      dout(10) << " trimming session " << s->con << " " << s->inst
+        << " because we've been out of quorum too long" << dendl;
+    } else {
+      continue;
     }
+
+    messenger->mark_down(s->con);
+    remove_session(s);
+    logger->inc(l_mon_session_trim);
   }
 
   sync_trim_providers();
@@ -4128,7 +4204,7 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
     isvalid = true;
   }
   return true;
-};
+}
 
 #undef dout_prefix
 #define dout_prefix *_dout

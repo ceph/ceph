@@ -36,8 +36,12 @@ int HashIndex::cleanup() {
   InProgressOp in_progress(i);
   subdir_info_s info;
   r = get_info(in_progress.path, &info);
-  if (r < 0)
+  if (r == -ENOENT) {
+    return end_split_or_merge(in_progress.path);
+  } else if (r < 0) {
     return r;
+  }
+
   if (in_progress.is_split())
     return complete_split(in_progress.path, info);
   else if (in_progress.is_merge())

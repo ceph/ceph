@@ -213,7 +213,7 @@ public:
     bool dirty_info = false;
     bool dirty_big_info = false;
     merge_log(
-      t, oinfo, olog, pg_shard_t(1, 0), info,
+      t, oinfo, olog, pg_shard_t(1, shard_id_t(0)), info,
       &h, dirty_info, dirty_big_info);
 
     ASSERT_EQ(info.last_update, oinfo.last_update);
@@ -233,7 +233,7 @@ public:
     pg_info_t oinfo = tcase.get_divinfo();
 
     proc_replica_log(
-      t, oinfo, olog, omissing, pg_shard_t(1, 0));
+       t, oinfo, olog, omissing, pg_shard_t(1, shard_id_t(0)));
 
     if (!tcase.base.empty()) {
       ASSERT_EQ(tcase.base.rbegin()->version, oinfo.last_update);

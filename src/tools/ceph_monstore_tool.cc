@@ -10,31 +10,19 @@
 * License version 2.1, as published by the Free Software
 * Foundation. See file COPYING.
 */
-#include <boost/scoped_ptr.hpp>
-#include <boost/lexical_cast.hpp>
-#include <boost/program_options/option.hpp>
-#include <boost/program_options/options_description.hpp>
 #include <boost/program_options/variables_map.hpp>
-#include <boost/program_options/cmdline.hpp>
 #include <boost/program_options/parsers.hpp>
-#include <iostream>
-#include <set>
-#include <sstream>
+
 #include <stdlib.h>
-#include <fstream>
 #include <string>
-#include <sstream>
-#include <map>
-#include <set>
-#include <boost/scoped_ptr.hpp>
+
+#include "common/Formatter.h"
+#include "common/errno.h"
 
 #include "global/global_init.h"
-#include "os/LevelDBStore.h"
+#include "include/stringify.h"
 #include "mon/MonitorDBStore.h"
 #include "mon/Paxos.h"
-#include "common/Formatter.h"
-#include "include/stringify.h"
-#include "common/errno.h"
 
 namespace po = boost::program_options;
 using namespace std;

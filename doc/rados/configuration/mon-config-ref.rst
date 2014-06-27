@@ -152,15 +152,15 @@ Bootstrapping Monitors
 
 In most configuration and deployment cases, tools that deploy Ceph may help
 bootstrap the Ceph Monitors by generating a monitor map for you (e.g.,
-``mkcephfs``, ``ceph-deploy``, etc). A Ceph Monitor requires a few explicit
+``ceph-deploy``, etc). A Ceph Monitor requires a few explicit
 settings:
 
-- **Filesystem ID**: The ``fsid`` is the unique identifier for your object
-  store. Since you can run multiple clusters on the same hardware, you must 
-  specify the unique ID of the object store when bootstrapping a monitor. 
-  Deployment tools usually do this for you (e.g., ``mkcephfs`` or 
-  ``ceph-deploy`` can call a tool like ``uuidgen``), but you may specify the 
-  ``fsid`` manually too.
+- **Filesystem ID**: The ``fsid`` is the unique identifier for your
+  object store. Since you can run multiple clusters on the same
+  hardware, you must specify the unique ID of the object store when
+  bootstrapping a monitor.  Deployment tools usually do this for you
+  (e.g., ``ceph-deploy`` can call a tool like ``uuidgen``), but you
+  may specify the ``fsid`` manually too.
   
 - **Monitor ID**: A monitor ID is a unique ID assigned to each monitor within 
   the cluster. It is an alphanumeric value, and by convention the identifier 
@@ -169,7 +169,7 @@ settings:
   by a deployment tool, or using the ``ceph`` commandline.
 
 - **Keys**: The monitor must have secret keys. A deployment tool such as 
-  ``mkcephfs`` or ``ceph-deploy`` usually does this for you, but you may
+  ``ceph-deploy`` usually does this for you, but you may
   perform this step manually too. See `Monitor Keyrings`_ for details.
 
 For additional details on bootstrapping, see `Bootstrapping a Monitor`_.
@@ -247,6 +247,7 @@ possible to run daemons for multiple clusters on the same hardware.
 
 .. note:: Do not set this value if you use a deployment tool that does
    it for you.
+
 
 .. index:: Ceph Monitor; initial members
 
@@ -563,7 +564,9 @@ Trimming requires that the placement groups are ``active + clean``.
 
 ``paxos propose interval``
 
-:Description: Gather updates for this time interval before proposing a map update. 
+:Description: Gather updates for this time interval before proposing 
+              a map update. 
+
 :Type: Double
 :Default: ``1.0``
 
@@ -678,6 +681,30 @@ will not work, because there is a single Paxos instance for all services.
 
 Clock
 -----
+
+Ceph daemons pass critical messages to each other, which must be processed
+before daemons reach a timeout threshold. If the clocks in Ceph monitors
+are not synchronized, it can lead to a number of anomalies. For example:
+
+- Daemons ignoring received messages (e.g., timestamps outdated)
+- Timeouts triggered too soon/late when a message wasn't received in time.
+
+See `Monitor Store Synchronization`_ and `Slurp`_ for details.
+
+
+.. tip:: You SHOULD install NTP on your Ceph monitor hosts to 
+         ensure that the monitor cluster operates with synchronized clocks.
+
+Clock drift may still be noticeable with NTP even though the discrepancy isn't
+yet harmful. Ceph's clock drift / clock skew warnings may get triggered even 
+though NTP maintains a reasonable level of synchronization. Increasing your 
+clock drift may be tolerable under such circumstances; however, a number of 
+factors such as workload, network latency, configuring overrides to default 
+timeouts and the `Monitor Store Synchronization`_ settings may influence 
+the level of acceptable clock drift without compromising Paxos guarantees.
+
+Ceph provides the following tunable options to allow you to find 
+acceptable values.
 
 
 ``clock offset``

@@ -32,6 +32,7 @@ Build-Depends: autoconf,
                libnss3-dev,
                libsnappy-dev,
                libtool,
+               libudev-dev,
                libxml2-dev,
                pkg-config,
                python (>= 2.6.6-3~),
@@ -57,7 +58,7 @@ Depends: binutils,
          xfsprogs,
          ${misc:Depends},
          ${shlibs:Depends}
-Recommends: btrfs-tools, ceph-mds, librados2, librbd1
+Recommends: btrfs-tools, ceph-mds, librados2, libradosstriper1, librbd1
 Replaces: ceph-common (<< 0.78-500)
 X-Python-Version: >= 2.6
 Description: distributed storage and file system
@@ -275,6 +276,39 @@ Description: RADOS distributed object store client library (development files)
  .
  This package contains development files needed for building applications that
  link against librados.
+
+Package: libradosstriper1
+Architecture: linux-any
+Section: libs
+Depends: librados2 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
+Description: RADOS striping interface
+ Striping interface built on top of the rados library, allowing
+ to stripe bigger objects onto several standard rados objects using
+ an interface very similar to the rados one.
+
+Package: libradosstriper1-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: libradosstriper1 (= ${binary:Version}), ${misc:Depends}
+Description: debugging symbols for libradosstriper
+ libradosstriper is a striping interface built on top of the rados
+ library, allowing to stripe bigger objects onto several standard
+ rados objects using an interface very similar to the rados one.
+ .
+ This package contains debugging symbols for libradosstriper.
+
+Package: libradosstriper-dev
+Architecture: linux-any
+Section: libdevel
+Depends: libradosstriper1 (= ${binary:Version}), ${misc:Depends}
+Description: RADOS striping interface (development files)
+ libradosstriper is a striping interface built on top of the rados
+ library, allowing to stripe bigger objects onto several standard
+ rados objects using an interface very similar to the rados one.
+ .
+ This package contains development files needed for building applications that
+ link against libradosstriper.
 
 Package: librbd1
 Architecture: linux-any

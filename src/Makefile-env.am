@@ -131,6 +131,7 @@ endif # PROFILER
 
 LIBGLOBAL = libglobal.la
 LIBCOMMON = libcommon.la
+LIBSECRET = libsecret.la
 LIBARCH = libarch.la
 LIBPERFGLUE = libperfglue.la
 LIBAUTH = libauth.la
@@ -146,8 +147,10 @@ LIBMDS = libmds.la
 LIBCLIENT = libclient.la
 LIBCLIENT_FUSE = libclient_fuse.la
 LIBRADOS = librados.la
+LIBRADOSSTRIPER = libradosstriper.la
 LIBRGW = librgw.la
 LIBRBD = librbd.la
+LIBKRBD = libkrbd.la
 LIBCEPHFS = libcephfs.la
 LIBERASURE_CODE = liberasure_code.la
 

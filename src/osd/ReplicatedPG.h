@@ -191,7 +191,7 @@ public:
 
   public:
     /// Provide the final size of the copied object to the CopyCallback
-    virtual ~CopyCallback() {};
+    virtual ~CopyCallback() {}
   };
 
   friend class CopyFromCallback;
@@ -389,7 +389,7 @@ public:
     info.stats = stat;
   }
 
-  void schedule_work(
+  void schedule_recovery_work(
     GenContext<ThreadPool::TPHandle&> *c);
 
   pg_shard_t whoami_shard() const {
@@ -810,7 +810,7 @@ protected:
   friend class C_HitSetFlushing;
 
   void agent_setup();       ///< initialize agent state
-  void agent_work(int max); ///< entry point to do some agent work
+  bool agent_work(int max); ///< entry point to do some agent work
   bool agent_maybe_flush(ObjectContextRef& obc);  ///< maybe flush
   bool agent_maybe_evict(ObjectContextRef& obc);  ///< maybe evict
 
@@ -826,11 +826,13 @@ protected:
 
   /// stop the agent
   void agent_stop();
+  void agent_delay();
 
   /// clear agent state
   void agent_clear();
 
-  void agent_choose_mode();  ///< choose (new) agent mode(s)
+  void agent_choose_mode(bool restart = false);  ///< choose (new) agent mode(s)
+  void agent_choose_mode_restart();
 
   /// true if we can send an ondisk/commit for v
   bool already_complete(eversion_t v) {

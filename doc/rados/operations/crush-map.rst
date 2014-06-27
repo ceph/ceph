@@ -27,7 +27,7 @@ possibility of concurrent failures, it may be desirable to ensure that data
 replicas are on devices using different shelves, racks, power supplies,
 controllers, and/or physical locations.
 
-When you create a configuration file and deploy Ceph with ``mkcephfs``, Ceph
+When you create a configuration file and deploy Ceph with `ceph-deploy``, Ceph
 generates a default CRUSH map for your configuration. The default CRUSH map is
 fine for your Ceph sandbox environment. However, when you deploy a large-scale
 data cluster, you should give significant consideration to developing a custom
@@ -54,25 +54,27 @@ with a failed host are in a degraded state.
 .. note:: Lines of code in example boxes may extend past the edge of the box. 
    Please scroll when reading or copying longer examples.
 
+
 CRUSH Location
 ==============
 
 The location of an OSD in terms of the CRUSH map's hierarchy is referred to
 as a 'crush location'.  This location specifier takes the form of a list of
 key and value pairs describing a position.  For example, if an OSD is in a
-particular row, rack, and host, and is part of the 'default' CRUSH tree, its
-crush location could be described as::
+particular row, rack, chassis and host, and is part of the 'default' CRUSH 
+tree, its crush location could be described as::
 
-  root=default row=a rack=a12 host=foohost
+  root=default row=a rack=a2 chassis=a2a host=a2a1
 
 Note:
 
 #. Note that the order of the keys does not matter.
 #. The key name (left of ``=``) must be a valid CRUSH ``type``.  By default
-   these include root, datacenter, row, rack, and host, but those types can be
-   customized to be anything appropriate by modifying the CRUSH map.
+   these include root, datacenter, room, row, pod, pdu, rack, chassis and host, 
+   but those types can be customized to be anything appropriate by modifying 
+   the CRUSH map.
 #. Not all keys need to be specified.  For example, by default, Ceph
-   automatically sets a ceph-osd daemon's location to be
+   automatically sets a ``ceph-osd`` daemon's location to be
    ``root=default host=HOSTNAME`` (based on the output from ``hostname -s``).
 
 ceph-crush-location hook
@@ -198,7 +200,8 @@ There are four main sections to a CRUSH Map.
    
 #. **Bucket Types**: Bucket ``types`` define the types of buckets used in your 
    CRUSH hierarchy. Buckets consist of a hierarchical aggregation of storage 
-   locations (e.g., rows, racks, hosts, etc.) and their assigned weights.
+   locations (e.g., rows, racks, chassis, hosts, etc.) and their assigned 
+   weights.
 
 #. **Bucket Instances:** Once you define bucket types, you must declare bucket 
    instances for your hosts, and any other failure domain partitioning
@@ -216,7 +219,8 @@ to better ensure data safety and availability.
 
 .. note:: The generated CRUSH map doesn't take your larger grained failure 
    domains into account. So you should modify your CRUSH map to account for
-   larger grained failure domains such as racks, rows, data centers, etc.
+   larger grained failure domains such as chassis, racks, rows, data 
+   centers, etc.
 
 
 
@@ -274,7 +278,15 @@ For example::
 	# types
 	type 0 osd
 	type 1 host
-	type 2 rack
+	type 2 chassis
+	type 3 rack
+	type 4 row
+	type 5 pdu
+	type 6 pod
+	type 7 room
+	type 8 datacenter
+	type 9 region
+	type 10 root
 
 
 
@@ -292,9 +304,10 @@ devices and the logical elements that contain them.
 To map placement groups to OSDs across failure domains, a CRUSH map defines a
 hierarchical list of bucket types (i.e., under ``#types`` in the generated CRUSH
 map). The purpose of creating a bucket hierarchy is to segregate the
-leaf nodes by their failure domains, such as hosts, racks, rows, rooms, and data
-centers. With the exception of the leaf nodes representing OSDs, the rest of the
-hierarchy is arbitrary, and you may define it according to your own needs.
+leaf nodes by their failure domains, such as hosts, chassis, racks, power 
+distribution units, pods, rows, rooms, and data centers. With the exception of 
+the leaf nodes representing OSDs, the rest of the hierarchy is arbitrary, and 
+you may define it according to your own needs.
 
 We recommend adapting your CRUSH map to your firms's hardware naming conventions
 and using instances names that reflect the physical hardware. Your naming
@@ -328,12 +341,15 @@ and two node buckets named ``host`` and ``rack`` respectively.
 .. note:: The higher numbered ``rack`` bucket type aggregates the lower 
    numbered ``host`` bucket type. 
 
-Since leaf nodes reflect storage devices declared under the ``#devices`` list at
-the beginning of the CRUSH map, you do not need to declare them as bucket
+Since leaf nodes reflect storage devices declared under the ``#devices`` list 
+at the beginning of the CRUSH map, you do not need to declare them as bucket
 instances. The second lowest bucket type in your hierarchy usually aggregates
 the devices (i.e., it's usually the computer containing the storage media, and
 uses whatever term you prefer to describe it, such as  "node", "computer",
-"server," "host", "machine", etc.).
+"server," "host", "machine", etc.). In high density environments, it is
+increasingly common to see multiple hosts/nodes per chassis. You should account
+for chassis failure too--e.g., the need to pull a chassis if a node fails may 
+result in bringing down numerous hosts/nodes and their OSDs.
 
 When declaring a bucket instance, you must specify its type, give it a unique
 name (string), assign it a unique ID expressed as a negative integer (optional),
@@ -496,7 +512,9 @@ A rule takes the following form::
 
 ``ruleset``
 
-:Description: A means of classifying a rule as belonging to a set of rules. Activated by `setting the ruleset in a pool`_. 
+:Description: A means of classifying a rule as belonging to a set of rules. 
+              Activated by `setting the ruleset in a pool`_.
+
 :Purpose: A component of the rule mask.
 :Type: Integer
 :Required: Yes
@@ -507,7 +525,9 @@ A rule takes the following form::
 
 ``type``
 
-:Description: Describes a rule for either a storage drive (replicated) or a RAID.
+:Description: Describes a rule for either a storage drive (replicated) 
+              or a RAID.
+              
 :Purpose: A component of the rule mask. 
 :Type: String
 :Required: Yes
@@ -516,7 +536,9 @@ A rule takes the following form::
 
 ``min_size``
 
-:Description: If a pool makes fewer replicas than this number, CRUSH will NOT select this rule.
+:Description: If a pool makes fewer replicas than this number, CRUSH will 
+              **NOT** select this rule.
+
 :Type: Integer
 :Purpose: A component of the rule mask.
 :Required: Yes
@@ -524,7 +546,9 @@ A rule takes the following form::
 
 ``max_size``
 
-:Description: If a pool makes more replicas than this number, CRUSH will NOT select this rule.
+:Description: If a pool makes more replicas than this number, CRUSH will 
+              **NOT** select this rule.
+              
 :Type: Integer
 :Purpose: A component of the rule mask.
 :Required: Yes
@@ -541,7 +565,8 @@ A rule takes the following form::
 
 ``step choose firstn {num} type {bucket-type}``
 
-:Description: Selects the number of buckets of the given type. The number is usually the number of replicas in the pool (i.e., pool size). 
+:Description: Selects the number of buckets of the given type. The number is 
+              usually the number of replicas in the pool (i.e., pool size). 
 
               - If ``{num} == 0``, choose ``pool-num-replicas`` buckets (all available).
               - If ``{num} > 0 && < pool-num-replicas``, choose that many buckets.
@@ -554,7 +579,10 @@ A rule takes the following form::
 
 ``step chooseleaf firstn {num} type {bucket-type}``
 
-:Description: Selects a set of buckets of ``{bucket-type}`` and chooses a leaf node from the subtree of each bucket in the set of buckets. The number of buckets in the set is usually the number of replicas in the pool (i.e., pool size).
+:Description: Selects a set of buckets of ``{bucket-type}`` and chooses a leaf 
+              node from the subtree of each bucket in the set of buckets. The 
+              number of buckets in the set is usually the number of replicas in
+              the pool (i.e., pool size).
 
               - If ``{num} == 0``, choose ``pool-num-replicas`` buckets (all available).
               - If ``{num} > 0 && < pool-num-replicas``, choose that many buckets.
@@ -568,13 +596,37 @@ A rule takes the following form::
 
 ``step emit`` 
 
-:Description: Outputs the current value and empties the stack. Typically used at the end of a rule, but may also be used to pick from different trees in the same rule.
+:Description: Outputs the current value and empties the stack. Typically used 
+              at the end of a rule, but may also be used to pick from different
+              trees in the same rule.
+              
 :Purpose: A component of the rule.
 :Prerequisite: Follows ``step choose``.
 :Example: ``step emit``
 
-.. important:: To activate one or more rules with a common ruleset number to a pool, set the ruleset number of the pool.
+.. important:: To activate one or more rules with a common ruleset number to a 
+   pool, set the ruleset number of the pool.
 
+
+
+Primary Affinity
+================
+
+When a Ceph Client reads or writes data, it always contacts the primary OSD in
+the acting set. For set ``[2, 3, 4]``, ``osd.2`` is the primary. Sometimes an
+OSD isn't well suited to act as a primary compared to other OSDs (e.g., it has 
+a slow disk or a slow controller). To prevent performance bottlenecks 
+(especially on read operations) while maximizing utilization of your hardware,
+you can set a Ceph OSD's primary affinity so that CRUSH is less likely to use 
+the OSD as a primary in an acting set. ::
+
+	ceph osd primary-affinity <osd-id> <weight>
+
+Primary affinity is ``1`` by default (*i.e.,* an OSD may act as a primary). You
+may set the OSD primary range from ``0-1``, where ``0`` means that the OSD may
+**NOT** be used as a primary and ``1`` means that an OSD may be used as a
+primary.  When the weight is ``< 1``, it is less likely that CRUSH will select
+the Ceph OSD Daemon to act as a primary.
 
 
 Placing Different Pools on Different OSDS:
