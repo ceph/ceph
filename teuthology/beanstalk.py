@@ -21,11 +21,16 @@ def connect():
 
 
 def watch_tube(connection, tube_name):
+    """
+    Watch a given tube, potentially correcting to 'multi' if necessary. Returns
+    the tube_name that was actually used.
+    """
     if ',' in tube_name:
         log.debug("Correcting tube name to 'multi'")
         tube_name = 'multi'
     connection.watch(tube_name)
     connection.ignore('default')
+    return tube_name
 
 
 def walk_jobs(connection, tube_name, processor, pattern=None):
