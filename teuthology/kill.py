@@ -110,9 +110,9 @@ def remove_beanstalk_jobs(run_name, tube_name):
                 conf_path=config.teuthology_yaml))
     log.info("Checking Beanstalk Queue...")
     beanstalk_conn = beanstalk.connect()
-    beanstalk.watch_tube(beanstalk_conn, tube_name)
+    real_tube_name = beanstalk.watch_tube(beanstalk_conn, tube_name)
 
-    curjobs = beanstalk_conn.stats_tube(tube_name)['current-jobs-ready']
+    curjobs = beanstalk_conn.stats_tube(real_tube_name)['current-jobs-ready']
     if curjobs != 0:
         x = 1
         while x != curjobs:
