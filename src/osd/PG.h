@@ -1381,6 +1381,8 @@ public:
 
   TrivialEvent(AllReplicasActivated)
 
+  TrivialEvent(IntervalFlush)
+
   /* Encapsulates PG recovery process */
   class RecoveryState {
     void start_handle(RecoveryCtx *new_ctx);
@@ -1499,12 +1501,14 @@ public:
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< NullEvt >,
 	boost::statechart::custom_reaction< FlushedEvt >,
+	boost::statechart::custom_reaction< IntervalFlush >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const FlushedEvt&);
+      boost::statechart::result react(const IntervalFlush&);
       boost::statechart::result react(const boost::statechart::event_base&) {
 	return discard_event();
       }
@@ -1521,11 +1525,13 @@ public:
 	boost::statechart::custom_reaction< AdvMap >,
 	boost::statechart::custom_reaction< NullEvt >,
 	boost::statechart::custom_reaction< FlushedEvt >,
+	boost::statechart::custom_reaction< IntervalFlush >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const AdvMap&);
       boost::statechart::result react(const FlushedEvt&);
+      boost::statechart::result react(const IntervalFlush&);
       boost::statechart::result react(const boost::statechart::event_base&) {
 	return discard_event();
       }
@@ -2099,6 +2105,7 @@ public:
   /// share new pg log entries after a pg is active
   void share_pg_log();
 
+  void reset_interval_flush();
   void start_peering_interval(
     const OSDMapRef lastmap,
     const vector<int>& newup, int up_primary,
