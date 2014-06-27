@@ -31,6 +31,7 @@ static void log_on_exit(void *p)
   Log *l = *(Log **)p;
   if (l)
     l->flush();
+  delete (Log **)p;// Delete allocated pointer (not Log object, the pointer only!)
 }
 
 Log::Log(SubsystemMap *s)
