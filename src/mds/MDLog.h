@@ -151,12 +151,7 @@ protected:
   friend class C_MDS_WroteImportMap;
   friend class MDCache;
 
-public:
   uint64_t get_last_segment_seq() {
-    assert(!segments.empty());
-    return segments.rbegin()->first;
-  }
-  uint64_t get_last_segment_offset() {
     assert(!segments.empty());
     return segments.rbegin()->first;
   }
@@ -275,11 +270,13 @@ public:
   void submit_entry(LogEvent *e, Context *c = 0) {
     Mutex::Locker l(submit_mutex);
     _submit_entry(e, c);
+    submit_cond.Signal();
   }
   void start_submit_entry(LogEvent *e, Context *c = 0) {
     Mutex::Locker l(submit_mutex);
     _start_entry(e);
     _submit_entry(e, c);
+    submit_cond.Signal();
   }
   bool entry_is_open() { return cur_event != NULL; }
 
