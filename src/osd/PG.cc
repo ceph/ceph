@@ -1651,7 +1651,7 @@ void PG::activate(ObjectStore::Transaction& t,
   }
 }
 
-bool PG::op_has_sufficient_caps(OpRequestRef op)
+bool PG::op_has_sufficient_caps(OpRequestRef& op)
 {
   // only check MOSDOp
   if (op->get_req()->get_type() != CEPH_MSG_OSD_OP)
@@ -1705,7 +1705,7 @@ void PG::take_op_map_waiters()
   }
 }
 
-void PG::queue_op(OpRequestRef op)
+void PG::queue_op(OpRequestRef& op)
 {
   Mutex::Locker l(map_lock);
   if (!waiting_for_map.empty()) {
@@ -4734,7 +4734,7 @@ ostream& operator<<(ostream& out, const PG& pg)
   return out;
 }
 
-bool PG::can_discard_op(OpRequestRef op)
+bool PG::can_discard_op(OpRequestRef& op)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   if (OSD::op_is_discardable(m)) {
@@ -4784,7 +4784,7 @@ bool PG::can_discard_op(OpRequestRef op)
 }
 
 template<typename T, int MSGTYPE>
-bool PG::can_discard_replica_op(OpRequestRef op)
+bool PG::can_discard_replica_op(OpRequestRef& op)
 {
   T *m = static_cast<T *>(op->get_req());
   assert(m->get_header().type == MSGTYPE);
@@ -4835,7 +4835,7 @@ bool PG::can_discard_backfill(OpRequestRef op)
 
 }
 
-bool PG::can_discard_request(OpRequestRef op)
+bool PG::can_discard_request(OpRequestRef& op)
 {
   switch (op->get_req()->get_type()) {
   case CEPH_MSG_OSD_OP:
