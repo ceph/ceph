@@ -7,7 +7,7 @@ class KeystoneToken {
 public:
   class Metadata {
   public:
-    Metadata() : is_admin(false) { };
+    Metadata() : is_admin(false) { }
     bool is_admin;
     void decode_json(JSONObj *obj);
   };
@@ -31,10 +31,10 @@ public:
 
   class Token {
   public:
-    Token() : expires(0) { };
+    Token() : expires(0) { }
     class Tenant {
     public:
-      Tenant() : enabled(false) { };
+      Tenant() : enabled(false) { }
       string id;
       string name;
       string description;

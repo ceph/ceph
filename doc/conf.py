@@ -9,7 +9,7 @@ release = 'dev'
 templates_path = ['_templates']
 source_suffix = '.rst'
 master_doc = 'index'
-exclude_patterns = ['**/.#*', '**/*~']
+exclude_patterns = ['**/.#*', '**/*~', 'start/quick-common.rst']
 pygments_style = 'sphinx'
 
 html_theme = 'ceph'

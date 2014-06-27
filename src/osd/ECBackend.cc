@@ -105,13 +105,13 @@ ostream &operator<<(ostream &lhs, const ECBackend::ReadOp &rhs)
 
 void ECBackend::ReadOp::dump(Formatter *f) const
 {
-  f->dump_stream("tid") << tid;
+  f->dump_unsigned("tid", tid);
   if (op && op->get_req()) {
     f->dump_stream("op") << *(op->get_req());
   }
   f->dump_stream("to_read") << to_read;
   f->dump_stream("complete") << complete;
-  f->dump_stream("priority") << priority;
+  f->dump_int("priority", priority);
   f->dump_stream("obj_to_source") << obj_to_source;
   f->dump_stream("source_to_obj") << source_to_obj;
   f->dump_stream("in_progress") << in_progress;
@@ -158,7 +158,7 @@ void ECBackend::RecoveryOp::dump(Formatter *f) const
   f->dump_stream("missing_on_shards") << missing_on_shards;
   f->dump_stream("recovery_info") << recovery_info;
   f->dump_stream("recovery_progress") << recovery_progress;
-  f->dump_stream("pending_read") << pending_read;
+  f->dump_bool("pending_read", pending_read);
   f->dump_stream("state") << tostr(state);
   f->dump_stream("waiting_on_pushes") << waiting_on_pushes;
   f->dump_stream("extent_requested") << extent_requested;
@@ -1091,11 +1091,11 @@ void ECBackend::filter_read_op(
   }
 
   if (op.in_progress.empty()) {
-    get_parent()->schedule_work(
+    get_parent()->schedule_recovery_work(
       get_parent()->bless_gencontext(
 	new FinishReadOp(this, op.tid)));
   }
-};
+}
 
 void ECBackend::check_recovery_sources(const OSDMapRef osdmap)
 {
@@ -1346,8 +1346,8 @@ int ECBackend::get_min_avail_to_read_shards(
   for (set<int>::iterator i = need.begin();
        i != need.end();
        ++i) {
-    assert(shards.count(*i));
-    to_read->insert(shards[*i]);
+    assert(shards.count(shard_id_t(*i)));
+    to_read->insert(shards[shard_id_t(*i)]);
   }
   return 0;
 }

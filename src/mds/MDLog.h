@@ -48,6 +48,7 @@ enum {
 #include <list>
 
 class Journaler;
+class JournalPointer;
 class LogEvent;
 class MDS;
 class LogSegment;
@@ -97,6 +98,20 @@ protected:
   void _replay();         // old way
   void _replay_thread();  // new way
 
+  // Journal recovery/rewrite logic
+  class RecoveryThread : public Thread {
+    MDLog *log;
+    Context *completion;
+  public:
+    void set_completion(Context *c) {completion = c;}
+    RecoveryThread(MDLog *l) : log(l), completion(NULL) {}
+    void* entry() {
+      log->_recovery_thread(completion);
+      return 0;
+    }
+  } recovery_thread;
+  void _recovery_thread(Context *completion);
+  void _reformat_journal(JournalPointer const &jp, Journaler *old_journal, Context *completion);
 
   // -- segments --
   map<uint64_t,LogSegment*> segments;
@@ -126,8 +141,6 @@ public:
 
 
 private:
-  void init_journaler();
-
   struct C_MDL_WriteError : public Context {
     MDLog *mdlog;
     C_MDL_WriteError(MDLog *m) : mdlog(m) {}
@@ -154,6 +167,7 @@ public:
 		  logger(0),
 		  replay_thread(this),
 		  already_replayed(false),
+		  recovery_thread(this),
 		  expiring_events(0), expired_events(0),
 		  cur_event(NULL) { }		  
   ~MDLog();
@@ -202,6 +216,7 @@ private:
   LogEvent *cur_event;
 public:
   void start_entry(LogEvent *e);
+  void cancel_entry(LogEvent *e);
   void submit_entry(LogEvent *e, Context *c = 0);
   void start_submit_entry(LogEvent *e, Context *c = 0) {
     start_entry(e);

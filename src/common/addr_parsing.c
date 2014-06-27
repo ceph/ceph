@@ -31,11 +31,13 @@ int safe_cat(char **pstr, int *plen, int pos, const char *str2)
   //printf("safe_cat '%s' max %d pos %d '%s' len %d\n", *pstr, *plen, pos, str2, len2);
   while (*plen < pos + len2 + 1) {
     *plen += BUF_SIZE;
-    *pstr = (char *)realloc(*pstr, (size_t)*plen);
 
-    if (!*pstr) {
+    void *_realloc = NULL;
+    if ((_realloc = realloc(*pstr, (size_t)*plen)) == NULL) {
       printf("Out of memory\n");
       exit(1);
+    } else {
+      *pstr = (char *)_realloc;
     }
     //printf("safe_cat '%s' max %d pos %d '%s' len %d\n", *pstr, *plen, pos, str2, len2);
   }

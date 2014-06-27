@@ -6,7 +6,7 @@
  * Copyright (C) 2011 New Dream Network
  *
  * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public
+ * modify it under the terms of the GNU Lesser General Public
  * License version 2.1, as published by the Free Software
  * Foundation.	See file COPYING.
  *
@@ -512,6 +512,12 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     return librbd::aio_flush(ictx, (librbd::AioCompletion *)c->pc);
+  }
+
+  int Image::invalidate_cache()
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::invalidate_cache(ictx);
   }
 
 } // namespace librbd
@@ -1128,6 +1134,12 @@ extern "C" int rbd_aio_flush(rbd_image_t image, rbd_completion_t c)
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   return librbd::aio_flush(ictx, (librbd::AioCompletion *)comp->pc);
+}
+
+extern "C" int rbd_invalidate_cache(rbd_image_t image)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::invalidate_cache(ictx);
 }
 
 extern "C" int rbd_aio_is_complete(rbd_completion_t c)

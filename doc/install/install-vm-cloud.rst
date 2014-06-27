@@ -57,30 +57,21 @@ To install QEMU, execute the following:
 	[main]
 	enabled = 1
 
-#. Create a ``/etc/yum.repos.d/ceph-qemu.conf`` file with the following 
+#. Create a ``/etc/yum.repos.d/ceph-extras.repo`` file with the following 
    contents, and replace ``{distro}`` with your Linux distribution. Follow
    the ``baseurl`` path below to see which distributions Ceph supports:: 
 
-	[ceph-qemu]
-	name=Ceph Packages for QEMU
+	[ceph-extras]
+	name=Ceph Extras
 	baseurl=http://ceph.com/packages/ceph-extras/rpm/{distro}/$basearch
 	enabled=1
 	priority=2
 	gpgcheck=1
 	type=rpm-md
 	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
-	
-	[ceph-qemu-noarch]
-	name=Ceph QEMU noarch
-	baseurl=http://ceph.com/packages/ceph-extras/rpm/{distro}/noarch
-	enabled=1
-	priority=2	
-	gpgcheck=1
-	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
-	
+		
 	[ceph-qemu-source]
-	name=Ceph QEMU Sources
+	name=Ceph Extras Sources
 	baseurl=http://ceph.com/packages/ceph-extras/rpm/{distro}/SRPMS
 	enabled=1
 	priority=2
@@ -91,6 +82,11 @@ To install QEMU, execute the following:
 #. Update your repositories. :: 
 
 	sudo yum update
+
+#. Ensure that non-priority versions are removed. ::
+
+	sudo yum remove qemu-kvm qemu-kvm-tools qemu-img
+	sudo yum clean all
 
 #. Install QEMU for Ceph. :: 
 

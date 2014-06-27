@@ -33,6 +33,7 @@ class ThreadPool : public md_config_obs_t {
   int _pause;
   int _draining;
   Cond _wait_cond;
+  int ioprio_class, ioprio_priority;
 
 public:
   class TPHandle {
@@ -41,13 +42,13 @@ public:
     heartbeat_handle_d *hb;
     time_t grace;
     time_t suicide_grace;
+  public:
     TPHandle(
       CephContext *cct,
       heartbeat_handle_d *hb,
       time_t grace,
       time_t suicide_grace)
       : cct(cct), hb(hb), grace(grace), suicide_grace(suicide_grace) {}
-  public:
     void reset_tp_timeout();
     void suspend_tp_timeout();
   };
@@ -388,6 +389,9 @@ public:
   void unpause();
   /// wait for all work to complete
   void drain(WorkQueue_* wq = 0);
+
+  /// set io priority
+  void set_ioprio(int cls, int priority);
 };
 
 class GenContextWQ :
@@ -400,7 +404,7 @@ public:
   
   void _enqueue(GenContext<ThreadPool::TPHandle&> *c) {
     _queue.push_back(c);
-  };
+  }
   void _enqueue_front(GenContext<ThreadPool::TPHandle&> *c) {
     _queue.push_front(c);
   }
@@ -428,5 +432,109 @@ public:
     wq->queue(c);
   }
 };
+
+class ShardedThreadPool {
+
+  CephContext *cct;
+  string name;
+  string lockname;
+  Mutex shardedpool_lock;
+  Cond shardedpool_cond;
+  Cond wait_cond;
+  uint32_t num_threads;
+  atomic_t stop_threads;
+  atomic_t pause_threads;
+  atomic_t drain_threads;
+  uint32_t num_paused;
+  uint32_t num_drained;
+
+public:
+
+  class BaseShardedWQ {
+  
+  public:
+    time_t timeout_interval, suicide_interval;
+    BaseShardedWQ(time_t ti, time_t sti):timeout_interval(ti), suicide_interval(sti) {}
+    virtual ~BaseShardedWQ() {}
+
+    virtual void _process(uint32_t thread_index, heartbeat_handle_d *hb ) = 0;
+    virtual void return_waiting_threads() = 0;
+    virtual bool is_shard_empty(uint32_t thread_index) = 0;
+  };      
+
+  template <typename T>
+  class ShardedWQ: public BaseShardedWQ {
+  
+    ShardedThreadPool* sharded_pool;
+
+  protected:
+    virtual void _enqueue(T) = 0;
+    virtual void _enqueue_front(T) = 0;
+
+
+  public:
+    ShardedWQ(time_t ti, time_t sti, ShardedThreadPool* tp): BaseShardedWQ(ti, sti), 
+                                                                 sharded_pool(tp) {
+      tp->set_wq(this);
+    }
+    virtual ~ShardedWQ() {}
+
+    void queue(T item) {
+      _enqueue(item);
+    }
+    void queue_front(T item) {
+      _enqueue_front(item);
+    }
+    void drain() {
+      sharded_pool->drain();
+    }
+    
+  };
+
+private:
+
+  BaseShardedWQ* wq;
+  // threads
+  struct WorkThreadSharded : public Thread {
+    ShardedThreadPool *pool;
+    uint32_t thread_index;
+    WorkThreadSharded(ShardedThreadPool *p, uint32_t pthread_index): pool(p),
+      thread_index(pthread_index) {}
+    void *entry() {
+      pool->shardedthreadpool_worker(thread_index);
+      return 0;
+    }
+  };
+
+  vector<WorkThreadSharded*> threads_shardedpool;
+  void start_threads();
+  void shardedthreadpool_worker(uint32_t thread_index);
+  void set_wq(BaseShardedWQ* swq) {
+    wq = swq;
+  }
+
+
+
+public:
+
+  ShardedThreadPool(CephContext *cct_, string nm, uint32_t pnum_threads);
+
+  ~ShardedThreadPool(){};
+
+  /// start thread pool thread
+  void start();
+  /// stop thread pool thread
+  void stop();
+  /// pause thread pool (if it not already paused)
+  void pause();
+  /// pause initiation of new work
+  void pause_new();
+  /// resume work in thread pool.  must match each pause() call 1:1 to resume.
+  void unpause();
+  /// wait for all work to complete
+  void drain();
+
+};
+
 
 #endif

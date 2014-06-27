@@ -2,33 +2,88 @@
  Troubleshooting PGs
 =====================
 
-
 Placement Groups Never Get Clean
 ================================
 
-There are a few cases where Ceph placement groups never get clean: 
+When you create a cluster and your cluster remains in ``active``, 
+``active+remapped`` or ``active+degraded`` status and never achieve an 
+``active+clean`` status, you likely have a problem with your configuration.
 
-#. **One OSD:** If you deviate from the quick start and use only one OSD, you
-   will likely run into problems. OSDs report other OSDs to the monitor, and 
-   also interact with other OSDs when replicating data. If you have only one 
-   OSD, a second OSD cannot check its heartbeat. Also, if you remove an OSD 
-   and have only one OSD remaining, you may encounter problems. An secondary 
-   or tertiary OSD expects another OSD to tell it which placement groups it 
-   should have. The lack of another OSD prevents this from occurring. So a 
-   placement group can remain stuck “stale” forever.
-
-#. **Pool Size = 1**: If you have only one copy of an object, no other OSD will
-   tell the OSD which objects it should have. For each placement group mapped 
-   to the remaining OSD (see ``ceph pg dump``), you can force the OSD to notice 
-   the placement groups it needs by running::
-   
-   	ceph pg force_create_pg <pgid>
-   	
-#. **CRUSH Rules:** Another candidate for placement groups remaining
-   unclean involves errors in your CRUSH map.
+You may need to review settings in the `Pool, PG and CRUSH Config Reference`_
+and make appropriate adjustments.
 
 As a general rule, you should run your cluster with more than one OSD and a
 pool size greater than 1 object replica.
+
+One Node Cluster
+----------------
+
+Ceph no longer provides documentation for operating on a single node, because
+you would never deploy a system designed for distributed computing on a single
+node. Additionally, mounting client kernel modules on a single node containing a
+Ceph  daemon may cause a deadlock due to issues with the Linux kernel itself
+(unless you use VMs for the clients). You can experiment with Ceph in a 1-node
+configuration, in spite of the limitations as described herein.
+
+If you are trying to create a cluster on a single node, you must change the
+default of the ``osd crush chooseleaf type`` setting from ``1`` (meaning 
+``host`` or ``node``) to ``0`` (meaning ``osd``) in your Ceph configuration
+file before you create your monitors and OSDs. This tells Ceph that an OSD
+can peer with another OSD on the same host. If you are trying to set up a
+1-node cluster and ``osd crush chooseleaf type`` is greater than ``0``, 
+Ceph will try to peer the PGs of one OSD with the PGs of another OSD on 
+another node, chassis, rack, row, or even datacenter depending on the setting.
+
+.. tip:: DO NOT mount kernel clients directly on the same node as your 
+   Ceph Storage Cluster, because kernel conflicts can arise. However, you 
+   can mount kernel clients within virtual machines (VMs) on a single node.
+
+If you are creating OSDs using a single disk, you must create directories
+for the data manually first. For example:: 
+
+	mkdir /var/local/osd0 /var/local/osd1
+	ceph-deploy osd prepare {localhost-name}:/var/local/osd0 {localhost-name}:/var/local/osd1
+	ceph-deploy osd activate {localhost-name}:/var/local/osd0 {localhost-name}:/var/local/osd1
+
+
+Fewer OSDs than Replicas
+------------------------
+
+If you've brought up two OSDs to an ``up`` and ``in`` state, but you still 
+don't see ``active + clean`` placement groups, you may have an 
+``osd pool default size`` set to greater than ``2``.
+
+There are a few ways to address this situation. If you want to operate your
+cluster in an ``active + degraded`` state with two replicas, you can set the 
+``osd pool default min size`` to ``2`` so that you can write objects in 
+an ``active + degraded`` state. You may also set the ``osd pool default size``
+setting to ``2`` so that you only have two stored replicas (the original and 
+one replica), in which case the cluster should achieve an ``active + clean`` 
+state.
+
+.. note:: You can make the changes at runtime. If you make the changes in 
+   your Ceph configuration file, you may need to restart your cluster.
+
+
+Pool Size = 1
+-------------
+
+If you have the ``osd pool default size`` set to ``1``, you will only have 
+one copy of the object. OSDs rely on other OSDs to tell them which objects 
+they should have. If a first OSD has a copy of an object and there is no
+second copy, then no second OSD can tell the first OSD that it should have
+that copy. For each placement group mapped to the first OSD (see 
+``ceph pg dump``), you can force the first OSD to notice the placement groups
+it needs by running::
+   
+   	ceph pg force_create_pg <pgid>
+   	
+
+CRUSH Map Errors
+----------------
+
+Another candidate for placement groups remaining unclean involves errors 
+in your CRUSH map.
 
 
 Stuck Placement Groups
@@ -283,7 +338,30 @@ that Ceph can replicate your data. See ``osd pool default min size``
 in the `Pool, PG and CRUSH Config Reference`_ for details.
 
 
+PGs Inconsistent
+================
+
+If you receive an ``active + clean + inconsistent`` state, this may happen
+due to an error during scrubbing. If the inconsistency is due to disk errors,
+check your disks.
+
+You can repair the inconsistent placement group by executing:: 
+
+	ceph pg repair {placement-group-ID}
+
+If you receive ``active + clean + inconsistent`` states periodically due to 
+clock skew, you may consider configuring your `NTP`_ daemons on your 
+monitor hosts to act as peers. See `The Network Time Protocol`_ and Ceph 
+`Clock Settings`_ for additional details.
+
+
+
 .. _check: ../../operations/placement-groups#get-the-number-of-placement-groups
 .. _here: ../../configuration/pool-pg-config-ref
 .. _Placement Groups: ../../operations/placement-groups
 .. _Pool, PG and CRUSH Config Reference: ../../configuration/pool-pg-config-ref
+.. _NTP: http://en.wikipedia.org/wiki/Network_Time_Protocol
+.. _The Network Time Protocol: http://www.ntp.org/
+.. _Clock Settings: ../../configuration/mon-config-ref/#clock
+
+

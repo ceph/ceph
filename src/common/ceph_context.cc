@@ -247,7 +247,7 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
   delete f;
   lgeneric_dout(this, 1) << "do_command '" << command << "' '" << ss.str()
 		         << "result is " << out->length() << " bytes" << dendl;
-};
+}
 
 
 CephContext::CephContext(uint32_t module_type_)

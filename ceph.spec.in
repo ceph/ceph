@@ -30,7 +30,6 @@ Requires:	util-linux
 Requires:	hdparm
 Requires:       redhat-lsb-core
 Requires(post):	binutils
-BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 BuildRequires:	make
 BuildRequires:	gcc-c++
 BuildRequires:	libtool
@@ -47,10 +46,11 @@ BuildRequires:  libcurl-devel
 BuildRequires:  libxml2-devel
 BuildRequires:  libuuid-devel
 BuildRequires:  libblkid-devel >= 2.17
+BuildRequires:  libudev-devel
 BuildRequires:  leveldb-devel > 1.2
 BuildRequires:  xfsprogs-devel
 BuildRequires:  yasm
-%if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
+%if 0%{?rhel} || 0%{?centos_version} || 0%{?fedora}
 BuildRequires:  snappy-devel
 %endif
 
@@ -118,6 +118,7 @@ Group:		Development/Libraries
 License:	LGPL-2.0
 Requires:	%{name} = %{version}-%{release}
 Requires:	librados2 = %{version}
+Requires:	libradosstriper1 = %{version}
 Requires:	librbd1 = %{version}
 Requires:	libcephfs1 = %{version}
 %description devel
@@ -158,7 +159,7 @@ managers such as Pacemaker.
 Summary:	RADOS distributed object store client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-%if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
+%if 0%{?rhel} || 0%{?centos_version} || 0%{?fedora}
 Obsoletes:	ceph-libs
 %endif
 %description -n librados2
@@ -167,11 +168,21 @@ developed as part of the Ceph distributed storage system. This is a
 shared library allowing applications to access the distributed object
 store using a simple file-like interface.
 
+%package -n libradosstriper1
+Summary:	RADOS striping interface
+Group:		System Environment/Libraries
+License:	LGPL-2.0
+Requires:	librados2 = %{version}
+%description -n libradosstriper1
+Striping interface built on top of the rados library, allowing
+to stripe bigger objects onto several standard rados objects using
+an interface very similar to the rados one.
+
 %package -n librbd1
 Summary:	RADOS block device client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-%if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
+%if 0%{?rhel} || 0%{?centos_version} || 0%{?fedora}
 Obsoletes:	ceph-libs
 %endif
 %description -n librbd1
@@ -184,7 +195,7 @@ shared library allowing applications to manage these block devices.
 Summary:	Ceph distributed file system client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-%if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
+%if 0%{?rhel} || 0%{?centos_version} || 0%{?fedora}
 Obsoletes:	ceph-libs
 %endif
 %description -n libcephfs1
@@ -410,6 +421,7 @@ fi
 %{_bindir}/rados
 %{_bindir}/rbd
 %{_bindir}/ceph-client-debug
+%{_bindir}/cephfs-journal-tool
 %{_bindir}/ceph-debugpack
 %{_bindir}/ceph-coverage
 %{_bindir}/ceph_mon_store_converter
@@ -420,7 +432,6 @@ fi
 %{_sbindir}/ceph-disk-udev
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/rcceph
-/sbin/mkcephfs
 /sbin/mount.ceph
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/ceph_common.sh
@@ -459,7 +470,6 @@ fi
 %{_mandir}/man8/ceph-mon.8*
 %{_mandir}/man8/ceph-mds.8*
 %{_mandir}/man8/ceph-osd.8*
-%{_mandir}/man8/mkcephfs.8*
 %{_mandir}/man8/ceph-run.8*
 %{_mandir}/man8/ceph-syn.8*
 %{_mandir}/man8/ceph-post-file.8*
@@ -518,6 +528,9 @@ fi
 %{_includedir}/rados/rados_types.h
 %{_includedir}/rados/rados_types.hpp
 %{_includedir}/rados/memory.h
+%dir %{_includedir}/radosstriper
+%{_includedir}/radosstriper/libradosstriper.h
+%{_includedir}/radosstriper/libradosstriper.hpp
 %dir %{_includedir}/rbd
 %{_includedir}/rbd/librbd.h
 %{_includedir}/rbd/librbd.hpp
@@ -525,6 +538,7 @@ fi
 %{_libdir}/libcephfs.so
 %{_libdir}/librbd.so
 %{_libdir}/librados.so
+%{_libdir}/libradosstriper.so
 %{_libdir}/libcephfs_jni.so
 
 #################################################################################
@@ -580,6 +594,17 @@ fi
 /sbin/ldconfig
 
 %postun -n librados2
+/sbin/ldconfig
+
+#################################################################################
+%files -n libradosstriper1
+%defattr(-,root,root,-)
+%{_libdir}/libradosstriper.so.*
+
+%post -n libradosstriper1
+/sbin/ldconfig
+
+%postun -n libradosstriper1
 /sbin/ldconfig
 
 #################################################################################

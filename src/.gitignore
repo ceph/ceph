@@ -10,6 +10,7 @@ Makefile
 /crushtool
 /ceph-authtool
 /ceph-client-debug
+/cephfs-journal-tool
 /ceph-conf
 /ceph-coverage
 /ceph-crush-location
@@ -55,7 +56,6 @@ Makefile
 /keyring
 /librados-config
 /massif.out.*
-/mkcephfs
 /mnt
 /monmaptool
 /mount.ceph
@@ -79,3 +79,4 @@ Makefile
 
 # old dir, may in use by older branches
 /leveldb
+/mkcephfs

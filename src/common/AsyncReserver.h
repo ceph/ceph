@@ -33,6 +33,7 @@ template <typename T>
 class AsyncReserver {
   Finisher *f;
   unsigned max_allowed;
+  unsigned min_priority;
   Mutex lock;
 
   map<unsigned, list<pair<T, Context*> > > queues;
@@ -42,7 +43,9 @@ class AsyncReserver {
   void do_queues() {
     typename map<unsigned, list<pair<T, Context*> > >::reverse_iterator it;
     for (it = queues.rbegin();
-         it != queues.rend() && in_progress.size() < max_allowed;
+         it != queues.rend() &&
+	   in_progress.size() < max_allowed &&
+	   it->first >= min_priority;
          ++it) {
       while (in_progress.size() < max_allowed &&
              !it->second.empty()) {
@@ -57,12 +60,22 @@ class AsyncReserver {
 public:
   AsyncReserver(
     Finisher *f,
-    unsigned max_allowed)
-    : f(f), max_allowed(max_allowed), lock("AsyncReserver::lock") {}
+    unsigned max_allowed,
+    unsigned min_priority = 0)
+    : f(f),
+      max_allowed(max_allowed),
+      min_priority(min_priority),
+      lock("AsyncReserver::lock") {}
 
   void set_max(unsigned max) {
     Mutex::Locker l(lock);
     max_allowed = max;
+    do_queues();
+  }
+
+  void set_min_priority(unsigned min) {
+    Mutex::Locker l(lock);
+    min_priority = min;
     do_queues();
   }
 

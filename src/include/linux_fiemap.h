@@ -10,8 +10,6 @@
 #ifndef _LINUX_FIEMAP_H
 #define _LINUX_FIEMAP_H
 
-#include "include/int_types.h"
-
 #if defined(__linux__)
 #include <linux/types.h>
 #elif defined(__FreeBSD_)

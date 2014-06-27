@@ -80,7 +80,7 @@ public:
 
   int lower_bound(const string &prefix, const string &to) {
     it = db->db.lower_bound(make_pair(prefix,to));
-    if ((db->db.size() == 0) || (it == db->db.end())) {
+    if ((db->db.empty()) || (it == db->db.end())) {
       it = db->db.end();
       ready = false;
       return 0;
@@ -94,7 +94,7 @@ public:
 
   int upper_bound(const string &prefix, const string &after) {
     it = db->db.upper_bound(make_pair(prefix,after));
-    if ((db->db.size() == 0) || (it == db->db.end())) {
+    if ((db->db.empty()) || (it == db->db.end())) {
       it = db->db.end();
       ready = false;
       return 0;

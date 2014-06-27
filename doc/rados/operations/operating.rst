@@ -256,7 +256,7 @@ To stop a Ceph daemon on another node, use the following syntax::
 Running Ceph as a Service
 -------------------------
 
-When you deploy Ceph Argonaut or Bobtail with ``mkcephfs``, you operate
+When you deploy Ceph Argonaut or Bobtail with ``ceph-deploy``, you operate
 Ceph as a service (you may also use sysvinit).
 
 

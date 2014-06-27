@@ -74,12 +74,10 @@ class MDiscoverReply : public Message {
   frag_t base_dir_frag;  
   bool wanted_base_dir;
   bool wanted_xlocked;
-  inodeno_t wanted_ino;
   snapid_t wanted_snapid;
 
   // and the response
   bool flag_error_dn;
-  bool flag_error_ino;
   bool flag_error_dir;
   string error_dentry;   // dentry that was not found (to trigger waiters on asker)
   bool unsolicited;
@@ -97,11 +95,9 @@ class MDiscoverReply : public Message {
   frag_t get_base_dir_frag() { return base_dir_frag; }
   bool get_wanted_base_dir() { return wanted_base_dir; }
   bool get_wanted_xlocked() { return wanted_xlocked; }
-  inodeno_t get_wanted_ino() { return wanted_ino; }
   snapid_t get_wanted_snapid() { return wanted_snapid; }
 
   bool is_flag_error_dn() { return flag_error_dn; }
-  bool is_flag_error_ino() { return flag_error_ino; }
   bool is_flag_error_dir() { return flag_error_dir; }
   string& get_error_dentry() { return error_dentry; }
 
@@ -122,10 +118,8 @@ class MDiscoverReply : public Message {
     base_dir_frag(dis->get_base_dir_frag()),
     wanted_base_dir(dis->wants_base_dir()),
     wanted_xlocked(dis->wants_xlocked()),
-    wanted_ino(dis->get_want_ino()),
     wanted_snapid(dis->get_snapid()),
     flag_error_dn(false),
-    flag_error_ino(false),
     flag_error_dir(false),
     unsolicited(false),
     dir_auth_hint(CDIR_AUTH_UNKNOWN),
@@ -139,10 +133,8 @@ class MDiscoverReply : public Message {
     base_dir_frag(df.frag),
     wanted_base_dir(false),
     wanted_xlocked(false),
-    wanted_ino(inodeno_t()),
     wanted_snapid(CEPH_NOSNAP),
     flag_error_dn(false),
-    flag_error_ino(false),
     flag_error_dir(false),
     unsolicited(false),
     dir_auth_hint(CDIR_AUTH_UNKNOWN),
@@ -163,7 +155,6 @@ public:
   bool is_empty() {
     return trace.length() == 0 &&
       !flag_error_dn &&
-      !flag_error_ino &&
       !flag_error_dir &&
       dir_auth_hint == CDIR_AUTH_UNKNOWN;
   }
@@ -172,9 +163,6 @@ public:
   void set_flag_error_dn(const string& dn) { 
     flag_error_dn = true; 
     error_dentry = dn; 
-  }
-  void set_flag_error_ino() {
-    flag_error_ino = true;
   }
   void set_flag_error_dir() { 
     flag_error_dir = true; 
@@ -196,7 +184,6 @@ public:
     ::decode(wanted_xlocked, p);
     ::decode(wanted_snapid, p);
     ::decode(flag_error_dn, p);
-    ::decode(flag_error_ino, p);
     ::decode(flag_error_dir, p);
     ::decode(error_dentry, p);
     ::decode(dir_auth_hint, p);
@@ -204,8 +191,6 @@ public:
 
     ::decode(starts_with, p);
     ::decode(trace, p);
-    if (header.version >= 2)
-      ::decode(wanted_ino, p);
   }
   void encode_payload(uint64_t features) {
     ::encode(base_ino, payload);
@@ -214,7 +199,6 @@ public:
     ::encode(wanted_xlocked, payload);
     ::encode(wanted_snapid, payload);
     ::encode(flag_error_dn, payload);
-    ::encode(flag_error_ino, payload);
     ::encode(flag_error_dir, payload);
     ::encode(error_dentry, payload);
     ::encode(dir_auth_hint, payload);
@@ -222,9 +206,7 @@ public:
 
     ::encode(starts_with, payload);
     ::encode(trace, payload);
-    ::encode(wanted_ino, payload);
   }
-
 };
 
 #endif

@@ -1423,7 +1423,7 @@ int get_id(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   ::encode(id, *out);
   return 0;
-};
+}
 
 /**
  * Set the id of an image. The object must already exist.

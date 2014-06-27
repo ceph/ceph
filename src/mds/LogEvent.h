@@ -39,10 +39,8 @@
 #define EVENT_TABLESERVER  43
 
 #define EVENT_SUBTREEMAP_TEST   50
+#define EVENT_NOOP        51
 
-
-#include <string>
-using namespace std;
 
 #include "include/buffer.h"
 #include "include/Context.h"
@@ -50,28 +48,34 @@ using namespace std;
 
 class MDS;
 class LogSegment;
+class EMetaBlob;
 
 // generic log event
 class LogEvent {
- private:
-  __u32 _type;
+public:
+ typedef __u32 EventType;
+
+private:
+  EventType _type;
   uint64_t _start_off;
-  static LogEvent *decode_event(bufferlist& bl, bufferlist::iterator& p, __u32 type);
+  static LogEvent *decode_event(bufferlist& bl, bufferlist::iterator& p, EventType type);
 
 protected:
   utime_t stamp;
 
   friend class MDLog;
 
- public:
+public:
   LogSegment *_segment;
 
   LogEvent(int t)
     : _type(t), _start_off(0), _segment(0) { }
   virtual ~LogEvent() { }
 
-  int get_type() const { return _type; }
-  void set_type(int t) { _type = t; }
+  string get_type_str() const;
+  static EventType str_to_type(std::string const &str);
+  EventType get_type() const { return _type; }
+  void set_type(EventType t) { _type = t; }
 
   uint64_t get_start_off() const { return _start_off; }
   void set_start_off(uint64_t o) { _start_off = o; }
@@ -107,7 +111,11 @@ protected:
    */
   virtual void replay(MDS *m) { assert(0); }
 
-
+  /**
+   * If the subclass embeds a MetaBlob, return it here so that
+   * tools can examine metablobs while traversing lists of LogEvent.
+   */
+  virtual EMetaBlob const *get_metablob() const {return NULL;}
 };
 
 inline ostream& operator<<(ostream& out, LogEvent& le) {

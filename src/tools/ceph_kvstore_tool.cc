@@ -10,22 +10,20 @@
 * License version 2.1, as published by the Free Software
 * Foundation. See file COPYING.
 */
-#include <iostream>
-#include <string>
-#include <sstream>
 #include <map>
 #include <set>
+#include <string>
+
 #include <boost/scoped_ptr.hpp>
 
-#include "os/LevelDBStore.h"
-
 #include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "common/errno.h"
-#include "common/safe_io.h"
 #include "common/config.h"
+#include "common/errno.h"
 #include "common/strtol.h"
+
+#include "global/global_init.h"
 #include "include/stringify.h"
+#include "os/LevelDBStore.h"
 
 using namespace std;
 

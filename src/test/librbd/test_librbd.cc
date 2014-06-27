@@ -225,7 +225,7 @@ int test_ls(rados_ioctx_t io_ctx, size_t num_expected, ...)
   va_list ap;
   size_t max_size = 1024;
 
-  names = (char *) malloc(sizeof(char *) * 1024);
+  names = (char *) malloc(sizeof(char) * 1024);
   int len = rbd_list(io_ctx, names, &max_size);
 
   for (i = 0, num_images = 0, cur_name = names; cur_name < names + len; i++) {

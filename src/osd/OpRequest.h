@@ -75,6 +75,7 @@ struct OpRequest : public TrackedOp {
   void _dump(utime_t now, Formatter *f) const;
 
 private:
+  Message *request; /// the logical request we are tracking
   osd_reqid_t reqid;
   uint8_t hit_flag_points;
   uint8_t latest_flag_point;
@@ -88,7 +89,17 @@ private:
 
   OpRequest(Message *req, OpTracker *tracker);
 
+protected:
+  void _dump_op_descriptor(ostream& stream) const;
+  void _unregistered();
+
 public:
+  ~OpRequest() {
+    request->put();
+  }
+  bool send_map_update;
+  epoch_t sent_epoch;
+  Message *get_req() const { return request; }
   bool been_queued_for_pg() { return hit_flag_points & flag_queued_for_pg; }
   bool been_reached_pg() { return hit_flag_points & flag_reached_pg; }
   bool been_delayed() { return hit_flag_points & flag_delayed; }
@@ -162,8 +173,6 @@ public:
   osd_reqid_t get_reqid() const {
     return reqid;
   }
-
-  void init_from_message();
 
   typedef ceph::shared_ptr<OpRequest> Ref;
 };

@@ -36,7 +36,6 @@ using namespace std;
 
 #include "common/Mutex.h"
 #include "GenericObjectMap.h"
-#include "SequencerPosition.h"
 #include "KeyValueDB.h"
 
 #include "include/uuid.h"
@@ -47,6 +46,8 @@ enum kvstore_types {
     KV_TYPE_OTHER
 };
 
+
+static uint64_t default_strip_size = 1024;
 
 class StripObjectMap: public GenericObjectMap {
  public:
@@ -65,7 +66,6 @@ class StripObjectMap: public GenericObjectMap {
     uint64_t strip_size;
     uint64_t max_size;
     vector<char> bits;
-    SequencerPosition spos;
 
     // soft state
     Header header; // FIXME: Hold lock to avoid concurrent operations, it will
@@ -82,7 +82,6 @@ class StripObjectMap: public GenericObjectMap {
       ::encode(strip_size, bl);
       ::encode(max_size, bl);
       ::encode(bits, bl);
-      ::encode(spos, bl);
       ENCODE_FINISH(bl);
     }
 
@@ -91,23 +90,15 @@ class StripObjectMap: public GenericObjectMap {
       ::decode(strip_size, bl);
       ::decode(max_size, bl);
       ::decode(bits, bl);
-      ::decode(spos, bl);
       DECODE_FINISH(bl);
     }
   };
-
-  bool check_spos(const StripObjectHeader &header,
-                  const SequencerPosition &spos);
-  void sync_wrap(StripObjectHeader &strip_header, KeyValueDB::Transaction t,
-                 const SequencerPosition &spos);
 
   static int file_to_extents(uint64_t offset, size_t len, uint64_t strip_size,
                              vector<StripExtent> &extents);
   int lookup_strip_header(const coll_t & cid, const ghobject_t &oid,
                           StripObjectHeader &header);
-  int save_strip_header(StripObjectHeader &header,
-                        const SequencerPosition &spos,
-                        KeyValueDB::Transaction t);
+  int save_strip_header(StripObjectHeader &header, KeyValueDB::Transaction t);
   int create_strip_header(const coll_t &cid, const ghobject_t &oid,
                           StripObjectHeader &strip_header,
                           KeyValueDB::Transaction t);
@@ -139,17 +130,37 @@ class StripObjectMap: public GenericObjectMap {
     );
 
   StripObjectMap(KeyValueDB *db): GenericObjectMap(db) {}
-
-  static const uint64_t default_strip_size = 1024;
 };
 
 
 class KeyValueStore : public ObjectStore,
                       public md_config_obs_t {
  public:
+  struct KVPerfTracker {
+    PerfCounters::avg_tracker<uint64_t> os_commit_latency;
+    PerfCounters::avg_tracker<uint64_t> os_apply_latency;
+
+    objectstore_perf_stat_t get_cur_stats() const {
+      objectstore_perf_stat_t ret;
+      ret.filestore_commit_latency = os_commit_latency.avg();
+      ret.filestore_apply_latency = os_apply_latency.avg();
+      return ret;
+    }
+
+    void update_from_perfcounters(PerfCounters &logger) {
+      os_commit_latency.consume_next(
+        logger.get_tavg_ms(
+          l_os_commit_lat));
+      os_apply_latency.consume_next(
+        logger.get_tavg_ms(
+          l_os_apply_lat));
+    }
+
+  } perf_tracker;
+
   objectstore_perf_stat_t get_cur_stats() {
-    objectstore_perf_stat_t ret;
-    return ret;
+    perf_tracker.update_from_perfcounters(*perf_logger);
+    return perf_tracker.get_cur_stats();
   }
 
   static const uint32_t target_version = 1;
@@ -161,7 +172,7 @@ class KeyValueStore : public ObjectStore,
   std::string current_op_seq_fn;
   uuid_d fsid;
 
-  int fsid_fd, op_fd, current_fd;
+  int fsid_fd, current_fd;
 
   enum kvstore_types kv_type;
 
@@ -217,7 +228,6 @@ class KeyValueStore : public ObjectStore,
 
     KeyValueStore *store;
 
-    SequencerPosition spos;
     KeyValueDB::Transaction t;
 
     int lookup_cached_header(const coll_t &cid, const ghobject_t &oid,
@@ -239,8 +249,7 @@ class KeyValueStore : public ObjectStore,
                        const coll_t &cid, const ghobject_t &oid);
     int submit_transaction();
 
-    BufferTransaction(KeyValueStore *store,
-                      SequencerPosition &spos): store(store), spos(spos) {
+    BufferTransaction(KeyValueStore *store): store(store) {
       t = store->backend->get_transaction();
     }
   };
@@ -257,9 +266,9 @@ class KeyValueStore : public ObjectStore,
   class OpSequencer : public Sequencer_impl {
     Mutex qlock; // to protect q, for benefit of flush (peek/dequeue also protected by lock)
     list<Op*> q;
-    list<uint64_t> jq;
     Cond cond;
     list<pair<uint64_t, Context*> > flush_commit_waiters;
+    uint64_t op; // used by flush() to know the sequence of op
    public:
     Sequencer *parent;
     Mutex apply_lock;  // for apply mutual exclusion
@@ -310,6 +319,8 @@ class KeyValueStore : public ObjectStore,
     void queue(Op *o) {
       Mutex::Locker l(qlock);
       q.push_back(o);
+      op++;
+      o->op = op;
     }
     Op *peek_queue() {
       assert(apply_lock.is_locked());
@@ -335,14 +346,11 @@ class KeyValueStore : public ObjectStore,
       uint64_t seq = 0;
       if (!q.empty())
         seq = q.back()->op;
-      if (!jq.empty() && jq.back() > seq)
-        seq = jq.back();
 
       if (seq) {
         // everything prior to our watermark to drain through either/both
         // queues
-        while ((!q.empty() && q.front()->op <= seq) ||
-                (!jq.empty() && jq.front() <= seq))
+        while (!q.empty() && q.front()->op <= seq)
           cond.Wait(qlock);
       }
     }
@@ -360,7 +368,7 @@ class KeyValueStore : public ObjectStore,
 
     OpSequencer()
       : qlock("KeyValueStore::OpSequencer::qlock", false, false),
-	parent(0),
+        op(0), parent(0),
 	apply_lock("KeyValueStore::OpSequencer::apply_lock", false, false) {}
     ~OpSequencer() {
       assert(q.empty());
@@ -425,7 +433,7 @@ class KeyValueStore : public ObjectStore,
   void op_queue_release_throttle(Op *o);
   void _finish_op(OpSequencer *osr);
 
-  PerfCounters *logger;
+  PerfCounters *perf_logger;
 
  public:
 
@@ -477,7 +485,6 @@ class KeyValueStore : public ObjectStore,
   }
   unsigned _do_transaction(Transaction& transaction,
                            BufferTransaction &bt,
-                           SequencerPosition& spos,
                            ThreadPool::TPHandle *handle);
 
   int queue_transactions(Sequencer *osr, list<Transaction*>& tls,
@@ -516,7 +523,10 @@ class KeyValueStore : public ObjectStore,
                    const ghobject_t& newoid, uint64_t srcoff,
                    uint64_t len, uint64_t dstoff, BufferTransaction &t);
   int _remove(coll_t cid, const ghobject_t& oid, BufferTransaction &t);
-
+  int _set_alloc_hint(coll_t cid, const ghobject_t& oid,
+                      uint64_t expected_object_size,
+                      uint64_t expected_write_size,
+                      BufferTransaction &t);
 
   void start_sync() {}
   void sync() {}
@@ -529,8 +539,7 @@ class KeyValueStore : public ObjectStore,
   // attrs
   int getattr(coll_t cid, const ghobject_t& oid, const char *name,
               bufferptr &bp);
-  int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset,
-               bool user_only = false);
+  int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset);
 
   int _setattrs(coll_t cid, const ghobject_t& oid,
                 map<string, bufferptr>& aset, BufferTransaction &t);
@@ -620,9 +629,9 @@ class KeyValueStore : public ObjectStore,
   std::string m_osd_rollback_to_cluster_snap;
   int m_keyvaluestore_queue_max_ops;
   int m_keyvaluestore_queue_max_bytes;
-
+  int m_keyvaluestore_strip_size;
+  uint64_t m_keyvaluestore_max_expected_write_size;
   int do_update;
-
 
   static const string OBJECT_STRIP_PREFIX;
   static const string OBJECT_XATTR;
@@ -632,26 +641,6 @@ class KeyValueStore : public ObjectStore,
   static const string COLLECTION;
   static const string COLLECTION_ATTR;
   static const uint32_t COLLECTION_VERSION = 1;
-
-  class SubmitManager {
-    Mutex lock;
-    uint64_t op_seq;
-    uint64_t op_submitted;
-   public:
-    SubmitManager() :
-        lock("JOS::SubmitManager::lock", false, true, false, g_ceph_context),
-        op_seq(0), op_submitted(0)
-    {}
-    uint64_t op_submit_start();
-    void op_submit_finish(uint64_t op);
-    void set_op_seq(uint64_t seq) {
-        Mutex::Locker l(lock);
-        op_submitted = op_seq = seq;
-    }
-    uint64_t get_op_seq() {
-        return op_seq;
-    }
-  } submit_manager;
 };
 
 WRITE_CLASS_ENCODER(StripObjectMap::StripObjectHeader)

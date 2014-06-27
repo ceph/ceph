@@ -92,8 +92,8 @@ public:
       ::decode(to, p);
       ::decode(from, p);
     } else {
-      to = ghobject_t::NO_SHARD;
-      from = ghobject_t::NO_SHARD;
+      to = shard_id_t::NO_SHARD;
+      from = shard_id_t::NO_SHARD;
     }
   }
 };

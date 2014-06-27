@@ -11,11 +11,11 @@
 # published by the Free Software Foundation version 2.
 
 # Usage:
-# run_xfs_tests -t /dev/<testdev> -s /dev/<scratchdev> -f <fstype> <tests>
+# run_xfstests -t /dev/<testdev> -s /dev/<scratchdev> [-f <fstype>] -- <tests>
 #   - test device and scratch device will both get trashed
 #   - fstypes can be xfs, ext4, or btrfs (xfs default)
-#   - tests can be listed individually or in ranges:  1 3-5 8
-#     tests can also be specified by group:           -g quick
+#   - tests can be listed individually: generic/001 xfs/008 xfs/009
+#     tests can also be specified by group: -g quick
 #
 # Exit status:
 #     0:  success
@@ -37,6 +37,8 @@ XFSTESTS_REPO="git://ceph.com/git/xfstests.git"
 
 # Default command line option values
 COUNT="1"
+EXPUNGE_FILE=""
+DO_RANDOMIZE=""	# false
 FS_TYPE="xfs"
 SCRATCH_DEV=""	# MUST BE SPECIFIED
 TEST_DEV=""	# MUST BE SPECIFIED
@@ -45,44 +47,6 @@ TESTS="-g auto"	# The "auto" group is supposed to be "known good"
 # rbd presents geometry information that causes mkfs.xfs to
 # issue a warning.  This option avoids this class of problems.
 XFS_MKFS_OPTIONS="-l su=32k"
-
-# Override the default test list with a list of tests known to pass
-# until we can work through getting them all passing reliably.
-TESTS="1-7 9 11-15 17 19-21 26-29 31-34 41 46-48 50-54 56 61 63-67 69-70 74-76"
-TESTS="${TESTS} 78 79 84-89 91-92 100 103 105 108 110 116-121 124 126"
-TESTS="${TESTS} 129-135 137-141 164-167 182 184 187-190 192 194"
-TESTS="${TESTS} 196 199 201 203 214-216 220-227 234 236-238 241 243-249"
-TESTS="${TESTS} 253 257-259 261 262 269 273 275 277 278 280 285 286"
-# 275 was the highest available test as of 4/10/12.
-# 289 was the highest available test as of 11/15/12.
-
-######
-# Some explanation of why tests have been excluded above:
-#
-# Test 008 was pulled because it contained a race condition leading to
-#          spurious failures.
-#
-# Test 049 was pulled because it caused a kernel fault.
-#	http://tracker.newdream.net/issues/2260
-# Test 232 was pulled because it caused an XFS error
-#	http://tracker.newdream.net/issues/2302
-#
-# This test passes but takes a LONG time (1+ hours):  127
-#
-# These were not run for one (anticipated) reason or another:
-# 010 016 030 035 040 044 057 058-060 072 077 090 093-095 097-099 104
-# 112 113 122 123 125 128 142 147-163 168 175-178 180 185 191 193
-# 195 197 198 207-213 217 228 230-233 235 239 240 252 254 255 264-266
-# 270-272 276 278-279 281-284 288 289
-#
-# These tests all failed (produced output different from golden):
-# 042 073 083 096 109 169 170 200 202 204-206 218 229 240 242 250
-# 263 276 277 279 287
-#
-# The rest were not part of the "auto" group:
-# 018 022 023 024 025 036 037 038 039 043 055 071 080 081 082 101
-# 102 106 107 111 114 115 136 171 172 173 251 267 268
-######
 
 # print an error message and quit with non-zero status
 function err() {
@@ -138,6 +102,13 @@ function device_valid() {
 	test -b "$1"
 }
 
+# validation function for expunge file argument
+function expunge_file_valid() {
+	arg_count 1 $#
+
+	test -s "$1"
+}
+
 # print a usage message and quit
 #
 # if a message is supplied, print that first, and then exit
@@ -149,7 +120,7 @@ function usage() {
 	fi
 
 	echo "" >&2
-	echo "Usage: ${PROGNAME} <options> <tests>" >&2
+	echo "Usage: ${PROGNAME} <options> -- <tests>" >&2
 	echo "" >&2
 	echo "    options:" >&2
 	echo "        -h or --help" >&2
@@ -159,13 +130,17 @@ function usage() {
 	echo "        -f or --fs-type" >&2
 	echo "            one of: xfs, ext4, btrfs" >&2
 	echo "            (default fs-type: xfs)" >&2
+	echo "        -r or --randomize" >&2
+	echo "            randomize test order" >&2
 	echo "        -s or --scratch-dev     (REQUIRED)" >&2
 	echo "            name of device used for scratch filesystem" >&2
 	echo "        -t or --test-dev        (REQUIRED)" >&2
 	echo "            name of device used for test filesystem" >&2
+	echo "        -x or --expunge-file" >&2
+	echo "            name of file with list of tests to skip" >&2
 	echo "    tests:" >&2
-	echo "        list of test numbers or ranges, e.g.:" >&2
-	echo "            1-9 11-15 17 19-21 26-28 31-34 41" >&2
+	echo "        list of test numbers, e.g.:" >&2
+	echo "            generic/001 xfs/008 shared/032 btrfs/009" >&2
 	echo "        or possibly an xfstests test group, e.g.:" >&2
 	echo "            -g quick" >&2
 	echo "        (default tests: -g auto)" >&2
@@ -183,16 +158,20 @@ function parseargs() {
 	SHORT_OPTS="${SHORT_OPTS},h"
 	SHORT_OPTS="${SHORT_OPTS},c:"
 	SHORT_OPTS="${SHORT_OPTS},f:"
+	SHORT_OPTS="${SHORT_OPTS},r"
 	SHORT_OPTS="${SHORT_OPTS},s:"
 	SHORT_OPTS="${SHORT_OPTS},t:"
+	SHORT_OPTS="${SHORT_OPTS},x:"
 
-	# Short option flags
+	# Long option flags
 	LONG_OPTS=""
 	LONG_OPTS="${LONG_OPTS},help"
 	LONG_OPTS="${LONG_OPTS},count:"
 	LONG_OPTS="${LONG_OPTS},fs-type:"
+	LONG_OPTS="${LONG_OPTS},randomize"
 	LONG_OPTS="${LONG_OPTS},scratch-dev:"
 	LONG_OPTS="${LONG_OPTS},test-dev:"
+	LONG_OPTS="${LONG_OPTS},expunge-file:"
 
 	TEMP=$(getopt --name "${PROGNAME}" \
 		--options "${SHORT_OPTS}" \
@@ -217,6 +196,9 @@ function parseargs() {
 				FS_TYPE="$2"
 				shift
 				;;
+			-r|--randomize)
+				DO_RANDOMIZE="t"
+				;;
 			-s|--scratch-dev)
 				device_valid "$2" ||
 					usage "invalid scratch-dev '$2'"
@@ -227,6 +209,12 @@ function parseargs() {
 				device_valid "$2" ||
 					usage "invalid test-dev '$2'"
 				TEST_DEV="$2"
+				shift
+				;;
+			-x|--expunge-file)
+				expunge_file_valid "$2" ||
+					usage "invalid expunge-file '$2'"
+				EXPUNGE_FILE="$2"
 				shift
 				;;
 			*)
@@ -245,7 +233,7 @@ function parseargs() {
 
 ################################################################
 
-[ -z "$TESTDIR" ] && export TESTDIR="/tmp/cephtest"
+[ -n "${TESTDIR}" ] || usage "TESTDIR env variable must be set"
 
 # Set up some environment for normal teuthology test setup.
 # This really should not be necessary but I found it was.
@@ -278,9 +266,6 @@ function install_xfstests() {
 	git clone "${XFSTESTS_REPO}"
 
 	cd xfstests
-
-	# FIXME: use an older version before the tests were rearranged!
-	git reset --hard e5f1a13792f20cfac097fef98007610b422f2cac
 
 	ncpu=$(getconf _NPROCESSORS_ONLN 2>&1)
 	[ -n "${ncpu}" -a "${ncpu}" -gt 1 ] && multiple="-j ${ncpu}"
@@ -442,7 +427,14 @@ pushd "${XFSTESTS_DIR}"
 for (( i = 1 ; i <= "${COUNT}" ; i++ )); do
 	[ "${COUNT}" -gt 1 ] && echo "=== Iteration "$i" starting at:  $(date)"
 
-	./check ${TESTS}	# Here we actually run the tests
+	EXPUNGE=""
+	[ -n "${EXPUNGE_FILE}" ] && EXPUNGE="-E ${EXPUNGE_FILE}"
+
+	RANDOMIZE=""
+	[ -n "${DO_RANDOMIZE}" ] && RANDOMIZE="-r"
+
+	# -T output timestamps
+	./check -T ${RANDOMIZE} ${EXPUNGE} ${TESTS}
 	status=$?
 
 	[ "${COUNT}" -gt 1 ] && echo "=== Iteration "$i" complete at:  $(date)"

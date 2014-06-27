@@ -113,7 +113,7 @@ int SimpleMessenger::_send_message(Message *m, const entity_inst_t& dest,
   lock.Lock();
   Pipe *pipe = _lookup_pipe(dest.addr);
   submit_message(m, (pipe ? pipe->connection_state.get() : NULL),
-                 dest.addr, dest.name.type(), lazy);
+                 dest.addr, dest.name.type(), lazy, true);
   lock.Unlock();
   return 0;
 }
@@ -131,9 +131,7 @@ int SimpleMessenger::_send_message(Message *m, Connection *con, bool lazy)
       << " " << m << " con " << con
       << dendl;
 
-  lock.Lock();
-  submit_message(m, con, con->get_peer_addr(), con->get_peer_type(), lazy);
-  lock.Unlock();
+  submit_message(m, con, con->get_peer_addr(), con->get_peer_type(), lazy, false);
   return 0;
 }
 
@@ -397,9 +395,9 @@ ConnectionRef SimpleMessenger::get_loopback_connection()
 }
 
 void SimpleMessenger::submit_message(Message *m, Connection *con,
-				     const entity_addr_t& dest_addr, int dest_type, bool lazy)
+				     const entity_addr_t& dest_addr, int dest_type,
+				     bool lazy, bool already_locked)
 {
-
   if (cct->_conf->ms_dump_on_send) {
     m->encode(-1, true);
     ldout(cct, 0) << "submit_message " << *m << "\n";
@@ -422,8 +420,9 @@ void SimpleMessenger::submit_message(Message *m, Connection *con,
       m->put();
       return;
     }
-    if (pipe) {
-      pipe->pipe_lock.Lock();
+    while (pipe && ok) {
+      // we loop in case of a racing reconnect, either from us or them
+      pipe->pipe_lock.Lock(); // can't use a Locker because of the Pipe ref
       if (pipe->state != Pipe::STATE_CLOSED) {
 	ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", have pipe." << dendl;
 	pipe->_send(m);
@@ -431,12 +430,20 @@ void SimpleMessenger::submit_message(Message *m, Connection *con,
 	pipe->put();
 	return;
       }
+      Pipe *current_pipe;
+      ok = con->try_get_pipe((RefCountedObject**)&current_pipe);
       pipe->pipe_lock.Unlock();
-      pipe->put();
-      ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr
-		    << ", had pipe " << pipe << ", but it closed." << dendl;
-      m->put();
-      return;
+      if (current_pipe == pipe) {
+	ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr
+		      << ", had pipe " << pipe << ", but it closed." << dendl;
+	pipe->put();
+	current_pipe->put();
+	m->put();
+	return;
+      } else {
+	pipe->put();
+	pipe = current_pipe;
+      }
     }
   }
 
@@ -459,7 +466,15 @@ void SimpleMessenger::submit_message(Message *m, Connection *con,
     m->put();
   } else {
     ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
-    connect_rank(dest_addr, dest_type, con, m);
+    if (!already_locked) {
+      /** We couldn't handle the Message without reference to global data, so
+       *  grab the lock and do it again. If we got here, we know it's a non-lossy
+       *  Connection, so we can use our existing pointer without doing another lookup. */
+      Mutex::Locker l(lock);
+      submit_message(m, con, dest_addr, dest_type, lazy, true);
+    } else {
+      connect_rank(dest_addr, dest_type, con, m);
+    }
   }
 }
 
@@ -556,7 +571,7 @@ void SimpleMessenger::wait()
       Pipe *p = rank_pipe.begin()->second;
       p->unregister_pipe();
       p->pipe_lock.Lock();
-      p->stop();
+      p->stop_and_wait();
       p->pipe_lock.Unlock();
     }
 
@@ -584,7 +599,7 @@ void SimpleMessenger::mark_down_all()
     Pipe *p = *q;
     ldout(cct,5) << "mark_down_all accepting_pipe " << p << dendl;
     p->pipe_lock.Lock();
-    p->stop();
+    p->stop_and_wait();
     ConnectionRef con = p->connection_state;
     if (con && con->clear_pipe(p))
       dispatch_queue.queue_reset(con.get());
@@ -599,7 +614,7 @@ void SimpleMessenger::mark_down_all()
     rank_pipe.erase(it);
     p->unregister_pipe();
     p->pipe_lock.Lock();
-    p->stop();
+    p->stop_and_wait();
     ConnectionRef con = p->connection_state;
     if (con && con->clear_pipe(p))
       dispatch_queue.queue_reset(con.get());
@@ -616,7 +631,7 @@ void SimpleMessenger::mark_down(const entity_addr_t& addr)
     ldout(cct,1) << "mark_down " << addr << " -- " << p << dendl;
     p->unregister_pipe();
     p->pipe_lock.Lock();
-    p->stop();
+    p->stop_and_wait();
     if (p->connection_state) {
       // generate a reset event for the caller in this case, even
       // though they asked for it, since this is the addr-based (and
@@ -643,7 +658,7 @@ void SimpleMessenger::mark_down(Connection *con)
     assert(p->msgr == this);
     p->unregister_pipe();
     p->pipe_lock.Lock();
-    p->stop();
+    p->stop_and_wait();
     if (p->connection_state) {
       // do not generate a reset event for the caller in this case,
       // since they asked for it.
@@ -667,7 +682,7 @@ void SimpleMessenger::mark_down_on_empty(Connection *con)
     p->unregister_pipe();
     if (p->out_q.empty()) {
       ldout(cct,1) << "mark_down_on_empty " << con << " -- " << p << " closing (queue is empty)" << dendl;
-      p->stop();
+      p->stop_and_wait();
     } else {
       ldout(cct,1) << "mark_down_on_empty " << con << " -- " << p << " marking (queue is not empty)" << dendl;
       p->close_on_empty = true;
@@ -731,4 +746,5 @@ void SimpleMessenger::init_local_connection()
 {
   local_connection->peer_addr = my_inst.addr;
   local_connection->peer_type = my_type;
+  ms_deliver_handle_fast_connect(local_connection.get());
 }

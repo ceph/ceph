@@ -197,9 +197,9 @@ bool MDRequestImpl::has_more()
   return _more;
 }
 
-bool MDRequestImpl::are_slaves()
+bool MDRequestImpl::has_witnesses()
 {
-  return _more && !_more->slaves.empty();
+  return _more && !_more->witnessed.empty();
 }
 
 bool MDRequestImpl::slave_did_prepare()
@@ -288,3 +288,72 @@ void MDRequestImpl::print(ostream &out)
   out << ")";
 }
 
+void MDRequestImpl::_dump(utime_t now, Formatter *f) const
+{
+  f->dump_string("flag_point", state_string());
+  f->dump_stream("reqid") << reqid;
+  {
+    if (client_request) {
+      f->dump_string("op_type", "client_request");
+      f->open_object_section("client_info");
+      f->dump_stream("client") << client_request->get_orig_source();
+      f->dump_int("tid", client_request->get_tid());
+      f->close_section(); // client_info
+    } else if (slave_request) {
+      assert(!slave_request->is_reply()); // replies go to an existing mdr
+      f->dump_string("op_type", "slave_request");
+      f->open_object_section("master_info");
+      f->dump_stream("master") << slave_request->get_orig_source();
+      f->close_section(); // master_info
+
+      f->open_object_section("request_info");
+      f->dump_int("attempt", slave_request->get_attempt());
+      f->dump_string("op_type",
+                     slave_request->get_opname(slave_request->get_op()));
+      f->dump_int("lock_type", slave_request->get_lock_type());
+      f->dump_stream("object_info") << slave_request->get_object_info();
+      f->dump_stream("srcdnpath") << slave_request->srcdnpath;
+      f->dump_stream("destdnpath") << slave_request->destdnpath;
+      f->dump_stream("witnesses") << slave_request->witnesses;
+      f->dump_bool("has_inode_export",
+                   slave_request->inode_export.length() != 0);
+      f->dump_int("inode_export_v", slave_request->inode_export_v);
+      f->dump_bool("has_srci_replica",
+                   slave_request->srci_replica.length() != 0);
+      f->dump_stream("op_stamp") << slave_request->op_stamp;
+      f->close_section(); // request_info
+    }
+    else { // internal request
+      assert(internal_op != -1);
+      f->dump_string("op_type", "internal_op");
+      f->dump_int("internal_op", internal_op);
+    }
+  }
+  {
+    f->open_array_section("events");
+    for (list<pair<utime_t, string> >::const_iterator i = events.begin();
+         i != events.end();
+         ++i) {
+      f->open_object_section("event");
+      f->dump_stream("time") << i->first;
+      f->dump_string("event", i->second);
+      f->close_section();
+    }
+    f->close_section(); // events
+  }
+}
+
+void MDRequestImpl::_dump_op_descriptor(ostream& stream) const
+{
+  if (client_request) {
+    client_request->print(stream);
+  } else if (slave_request) {
+    slave_request->print(stream);
+  } else if (internal_op >= 0) {
+    stream << "internal op " << ceph_mds_op_name(internal_op) << ":" << reqid;
+  } else {
+    // drat, it's triggered by a slave request, but we don't have a message
+    // FIXME
+    stream << "rejoin:" << reqid;
+  }
+}

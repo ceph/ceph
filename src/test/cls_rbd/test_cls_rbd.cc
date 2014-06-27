@@ -79,7 +79,7 @@ TEST(cls_rbd, copyup)
   size_t l = 4 << 20;
   char *b = random_buf(l);
   inbl.append(b, l);
-  delete b;
+  delete [] b;
   ASSERT_EQ(l, inbl.length());
 
   // copyup to nonexistent object should create new object
@@ -94,7 +94,7 @@ TEST(cls_rbd, copyup)
   bufferlist inbl2;
   b = random_buf(l);
   inbl2.append(b, l);
-  delete b;
+  delete [] b;
   ASSERT_EQ(l, inbl2.length());
 
   // should still succeed

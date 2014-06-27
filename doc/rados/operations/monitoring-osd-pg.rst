@@ -17,6 +17,7 @@ finding the `placement group`_ and the underlying OSDs at root of the problem.
 Ceph is generally self-repairing. However, when problems persist, monitoring
 OSDs and placement groups will help you identify the problem.
 
+
 Monitoring OSDs
 ===============
 
@@ -96,7 +97,6 @@ If an OSD is ``down``, start it::
 
 See `OSD Not Running`_ for problems associated with OSDs that stopped, or won't
 restart.
-
 	
 
 PG Sets
@@ -196,6 +196,7 @@ number of placement group peering-related circumstances:
 #. You have just modified your CRUSH map and your placement groups are migrating.
 #. There is inconsistent data in different replicas of a placement group.
 #. Ceph is scrubbing a placement group's replicas.
+#. Ceph doesn't have enough storage capacity to complete backfilling operations.
 
 If one of the foregoing circumstances causes Ceph to echo ``HEALTH WARN``, don't
 panic. In many cases, the cluster will recover on its own. In some cases, you
@@ -490,7 +491,8 @@ During the backfill operations, you may see one of several states:
 ``backfill_wait`` indicates that a backfill operation is pending, but isn't
 underway yet; ``backfill`` indicates that a backfill operation is underway;
 and, ``backfill_too_full`` indicates that a backfill operation was requested,
-but couldn't be completed due to insufficient storage capacity. 
+but couldn't be completed due to insufficient storage capacity. When a 
+placement group can't be backfilled, it may be considered ``incomplete``.
 
 Ceph provides a number of settings to manage the load spike associated with
 reassigning placement groups to an OSD (especially a new OSD). By default,

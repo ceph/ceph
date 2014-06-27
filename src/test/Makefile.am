@@ -238,13 +238,17 @@ check_SCRIPTS += \
 	test/mon/osd-crush.sh \
 	test/mon/osd-erasure-code-profile.sh \
 	test/mon/mkfs.sh \
+	test/osd/osd-config.sh \
+	test/osd/osd-bench.sh \
 	test/ceph-disk.sh \
 	test/mon/mon-handle-forward.sh \
 	test/vstart_wrapped_tests.sh
 
 EXTRA_DIST += \
 	$(srcdir)/test/mon/mon-test-helpers.sh \
-	$(srcdir)/test/osd/osd-test-helpers.sh
+	$(srcdir)/test/osd/osd-test-helpers.sh \
+        $(srcdir)/test/coverage.sh \
+	$(patsubst %,$(srcdir)/%,$(check_SCRIPTS))
 
 # target to build but not run the unit tests
 unittests:: $(check_PROGRAMS)
@@ -377,6 +381,11 @@ unittest_hitset_SOURCES = test/osd/hitset.cc
 unittest_hitset_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_hitset_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_hitset
+
+unittest_lru_SOURCES = test/common/test_lru.cc
+unittest_lru_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_lru_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_lru
 
 if LINUX
 unittest_pglog_LDADD += -ldl
@@ -629,6 +638,12 @@ noinst_LTLIBRARIES += libradostest.la
 libradostest_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 RADOS_TEST_LDADD = libradostest.la
 
+libradosstripertest_la_SOURCES = test/libradosstriper/TestCase.cc
+noinst_LTLIBRARIES += libradosstripertest.la
+libradosstripertest_la_LIBADD = $(RADOS_TEST_LDADD)
+libradosstripertest_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+RADOS_STRIPER_TEST_LDADD = libradosstripertest.la
+
 ceph_multi_stress_watch_SOURCES = test/multi_stress_watch.cc
 ceph_multi_stress_watch_LDADD = $(LIBRADOS) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 bin_DEBUGPROGRAMS += ceph_multi_stress_watch
@@ -639,8 +654,9 @@ ceph_test_librbd_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_librbd
 
 if LINUX
-ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.c
-ceph_test_librbd_fsx_LDADD = $(LIBRBD) $(LIBRADOS) -lm
+# Force use of C++ linker with dummy.cc - LIBKRBD is a C++ library
+ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.c common/dummy.cc
+ceph_test_librbd_fsx_LDADD = $(LIBKRBD) $(LIBRBD) $(LIBRADOS)
 ceph_test_librbd_fsx_CFLAGS = ${AM_CFLAGS} -Wno-format
 bin_DEBUGPROGRAMS += ceph_test_librbd_fsx
 endif
@@ -774,6 +790,21 @@ ceph_test_rados_api_lock_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDAD
 ceph_test_rados_api_lock_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_lock
 
+ceph_test_rados_striper_api_io_SOURCES = test/libradosstriper/io.cc
+ceph_test_rados_striper_api_io_LDADD = $(LIBRADOS) $(LIBRADOSSTRIPER) $(UNITTEST_LDADD) $(RADOS_STRIPER_TEST_LDADD)
+ceph_test_rados_striper_api_io_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_rados_striper_api_io
+
+ceph_test_rados_striper_api_aio_SOURCES = test/libradosstriper/aio.cc
+ceph_test_rados_striper_api_aio_LDADD = $(LIBRADOS) $(LIBRADOSSTRIPER) $(UNITTEST_LDADD) $(RADOS_STRIPER_TEST_LDADD)
+ceph_test_rados_striper_api_aio_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_rados_striper_api_aio
+
+ceph_test_rados_striper_api_striping_SOURCES = test/libradosstriper/striping.cc
+ceph_test_rados_striper_api_striping_LDADD = $(LIBRADOS) $(LIBRADOSSTRIPER) $(UNITTEST_LDADD) $(RADOS_STRIPER_TEST_LDADD)
+ceph_test_rados_striper_api_striping_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_rados_striper_api_striping
+
 ceph_test_libcephfs_SOURCES = \
 	test/libcephfs/test.cc \
 	test/libcephfs/readdir_r_cb.cc \
@@ -788,6 +819,11 @@ ceph_test_objectstore_SOURCES = test/objectstore/store_test.cc
 ceph_test_objectstore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_objectstore_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_objectstore
+
+ceph_test_filestore_SOURCES = test/filestore/TestFileStore.cc
+ceph_test_filestore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_filestore_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_filestore
 endif
 
 ceph_test_objectstore_workloadgen_SOURCES = \
@@ -887,6 +923,7 @@ noinst_HEADERS += \
 	test/kv_store_bench.h \
 	test/librados/test.h \
 	test/librados/TestCase.h \
+	test/libradosstriper/TestCase.h \
 	test/ObjectMap/KeyValueDBMemory.h \
 	test/omap_bench.h \
 	test/osdc/FakeWriteback.h \

@@ -551,6 +551,11 @@ public:
   }
   void reweight(CephContext *cct);
 
+  int adjust_subtree_weight(CephContext *cct, int id, int weight);
+  int adjust_subtree_weightf(CephContext *cct, int id, float weight) {
+    return adjust_subtree_weight(cct, id, (int)(weight * (float)0x10000));
+  }
+
   /// check if item id is present in the map hierarchy
   bool check_item_present(int id);
 
@@ -630,6 +635,18 @@ public:
     if (IS_ERR(s)) return PTR_ERR(s);
     return s->arg2;
   }
+
+  /**
+   * calculate a map of osds to weights for a given rule
+   *
+   * Generate a map of which OSDs get how much relative weight for a
+   * given rule.
+   *
+   * @param ruleno [in] rule id
+   * @param pmap [out] map of osd to weight
+   * @return 0 for success, or negative error code
+   */
+  int get_rule_weight_map(unsigned ruleno, map<int,float> *pmap);
 
   /* modifiers */
   int add_rule(int len, int ruleset, int type, int minsize, int maxsize, int ruleno) {
@@ -863,6 +880,36 @@ public:
     if (!crush) return -1;
     return crush_find_rule(crush, ruleset, type, size);
   }
+
+  bool ruleset_exists(int const ruleset) const {
+    for (size_t i = 0; i < crush->max_rules; ++i) {
+     if (crush->rules[i]->mask.ruleset == ruleset) {
+       return true;
+     }
+    }
+
+    return false;
+  }
+
+  /**
+   * Return the lowest numbered ruleset of type `type`
+   *
+   * @returns a ruleset ID, or -1 if no matching rulesets found.
+   */
+  int find_first_ruleset(int type) const {
+    int result = -1;
+
+    for (size_t i = 0; i < crush->max_rules; ++i) {
+      if (crush->rules[i]
+          && crush->rules[i]->mask.type == type
+          && (crush->rules[i]->mask.ruleset < result || result == -1)) {
+        result = crush->rules[i]->mask.ruleset;
+      }
+    }
+
+    return result;
+  }
+
   void do_rule(int rule, int x, vector<int>& out, int maxout,
 	       const vector<__u32>& weight) const {
     Mutex::Locker l(mapper_lock);
@@ -902,7 +949,7 @@ public:
   void dump_tree(const vector<__u32>& w, ostream *out, Formatter *f) const;
   static void generate_test_instances(list<CrushWrapper*>& o);
 
-  static int get_osd_pool_default_crush_replicated_ruleset(CephContext *cct);
+  int get_osd_pool_default_crush_replicated_ruleset(CephContext *cct);
 
   static bool is_valid_crush_name(const string& s);
   static bool is_valid_crush_loc(CephContext *cct,

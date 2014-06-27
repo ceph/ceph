@@ -56,9 +56,11 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_SHARDS CompatSet::Feature(11, "sharded objects")
 
 
-typedef hobject_t collection_list_handle_t;
+/// max recovery priority for MBackfillReserve
+#define OSD_RECOVERY_PRIORITY_MAX 255u
 
-typedef uint8_t shard_id_t;
+
+typedef hobject_t collection_list_handle_t;
 
 /// convert a single CPEH_OSD_FLAG_* to a string
 const char *ceph_osd_flag_name(unsigned flag);
@@ -67,13 +69,13 @@ const char *ceph_osd_flag_name(unsigned flag);
 string ceph_osd_flag_string(unsigned flags);
 
 struct pg_shard_t {
-  int osd;
+  int32_t osd;
   shard_id_t shard;
-  pg_shard_t() : osd(-1), shard(ghobject_t::NO_SHARD) {}
-  explicit pg_shard_t(int osd) : osd(osd), shard(ghobject_t::NO_SHARD) {}
+  pg_shard_t() : osd(-1), shard(shard_id_t::NO_SHARD) {}
+  explicit pg_shard_t(int osd) : osd(osd), shard(shard_id_t::NO_SHARD) {}
   pg_shard_t(int osd, shard_id_t shard) : osd(osd), shard(shard) {}
   static pg_shard_t undefined_shard() {
-    return pg_shard_t(-1, ghobject_t::NO_SHARD);
+    return pg_shard_t(-1, shard_id_t::NO_SHARD);
   }
   bool is_undefined() const {
     return osd == -1;
@@ -395,9 +397,9 @@ CEPH_HASH_NAMESPACE_END
 struct spg_t {
   pg_t pgid;
   shard_id_t shard;
-  spg_t() : shard(ghobject_t::NO_SHARD) {}
+  spg_t() : shard(shard_id_t::NO_SHARD) {}
   spg_t(pg_t pgid, shard_id_t shard) : pgid(pgid), shard(shard) {}
-  explicit spg_t(pg_t pgid) : pgid(pgid), shard(ghobject_t::NO_SHARD) {}
+  explicit spg_t(pg_t pgid) : pgid(pgid), shard(shard_id_t::NO_SHARD) {}
   unsigned get_split_bits(unsigned pg_num) const {
     return pgid.get_split_bits(pg_num);
   }
@@ -429,7 +431,7 @@ struct spg_t {
     return is_split;
   }
   bool is_no_shard() const {
-    return shard == ghobject_t::NO_SHARD;
+    return shard == shard_id_t::NO_SHARD;
   }
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
@@ -637,7 +639,7 @@ inline bool operator>(const eversion_t& l, const eversion_t& r) {
 inline bool operator>=(const eversion_t& l, const eversion_t& r) {
   return (l.epoch == r.epoch) ? (l.version >= r.version):(l.epoch >= r.epoch);
 }
-inline ostream& operator<<(ostream& out, const eversion_t e) {
+inline ostream& operator<<(ostream& out, const eversion_t& e) {
   return out << e.epoch << "'" << e.version;
 }
 
@@ -882,6 +884,7 @@ public:
   map<string,string> properties;  ///< OBSOLETE
   string erasure_code_profile; ///< name of the erasure code profile in OSDMap
   epoch_t last_change;      ///< most recent epoch changed, exclusing snapshot changes
+  epoch_t last_force_op_resend; ///< last epoch that forced clients to resend
   snapid_t snap_seq;        ///< seq for per-pool snapshot
   epoch_t snap_epoch;       ///< osdmap epoch of last snap
   uint64_t auid;            ///< who owns the pg
@@ -914,6 +917,7 @@ public:
   cache_mode_t cache_mode;  ///< cache pool mode
 
   bool is_tier() const { return tier_of >= 0; }
+  bool has_tiers() const { return !tiers.empty(); }
   void clear_tier() { tier_of = -1; }
   bool has_read_tier() const { return read_tier >= 0; }
   void clear_read_tier() { read_tier = -1; }
@@ -940,6 +944,7 @@ public:
       crush_ruleset(0), object_hash(0),
       pg_num(0), pgp_num(0),
       last_change(0),
+      last_force_op_resend(0),
       snap_seq(0), snap_epoch(0),
       auid(0),
       crash_replay_interval(0),
@@ -979,6 +984,7 @@ public:
     return ceph_str_hash_name(get_object_hash());
   }
   epoch_t get_last_change() const { return last_change; }
+  epoch_t get_last_force_op_resend() const { return last_force_op_resend; }
   epoch_t get_snap_epoch() const { return snap_epoch; }
   snapid_t get_snap_seq() const { return snap_seq; }
   uint64_t get_auid() const { return auid; }
@@ -1334,8 +1340,8 @@ struct pg_stat_t {
   bool hitset_stats_invalid;
 
   /// up, acting primaries
-  int up_primary;
-  int acting_primary;
+  int32_t up_primary;
+  int32_t acting_primary;
 
   pg_stat_t()
     : reported_seq(0),
@@ -1658,8 +1664,8 @@ struct pg_notify_t {
   shard_id_t to;
   shard_id_t from;
   pg_notify_t() :
-    query_epoch(0), epoch_sent(0), to(ghobject_t::no_shard()),
-    from(ghobject_t::no_shard()) {}
+    query_epoch(0), epoch_sent(0), to(shard_id_t::NO_SHARD),
+    from(shard_id_t::NO_SHARD) {}
   pg_notify_t(
     shard_id_t to,
     shard_id_t from,
@@ -1685,11 +1691,11 @@ ostream &operator<<(ostream &lhs, const pg_notify_t &notify);
  */
 class OSDMap;
 struct pg_interval_t {
-  vector<int> up, acting;
+  vector<int32_t> up, acting;
   epoch_t first, last;
   bool maybe_went_rw;
-  int primary;
-  int up_primary;
+  int32_t primary;
+  int32_t up_primary;
 
   pg_interval_t()
     : first(0), last(0),
@@ -1704,12 +1710,29 @@ struct pg_interval_t {
   static void generate_test_instances(list<pg_interval_t*>& o);
 
   /**
+   * Determines whether there is an interval change
+   */
+  static bool is_new_interval(
+    int old_acting_primary,                     ///< [in] primary as of lastmap
+    int new_acting_primary,                     ///< [in] primary as of lastmap
+    const vector<int> &old_acting,              ///< [in] acting as of lastmap
+    const vector<int> &new_acting,              ///< [in] acting as of osdmap
+    int old_up_primary,                         ///< [in] up primary of lastmap
+    int new_up_primary,                         ///< [in] up primary of osdmap
+    const vector<int> &old_up,                  ///< [in] up as of lastmap
+    const vector<int> &new_up,                  ///< [in] up as of osdmap
+    ceph::shared_ptr<const OSDMap> osdmap,  ///< [in] current map
+    ceph::shared_ptr<const OSDMap> lastmap, ///< [in] last map
+    pg_t pgid                                   ///< [in] pgid for pg
+    );
+
+  /**
    * Integrates a new map into *past_intervals, returns true
    * if an interval was closed out.
    */
   static bool check_new_interval(
     int old_acting_primary,                     ///< [in] primary as of lastmap
-    int new_acting_primary,                     ///< [in] primary as of lastmap
+    int new_acting_primary,                     ///< [in] primary as of osdmap
     const vector<int> &old_acting,              ///< [in] acting as of lastmap
     const vector<int> &new_acting,              ///< [in] acting as of osdmap
     int old_up_primary,                         ///< [in] up primary of lastmap
@@ -1720,7 +1743,6 @@ struct pg_interval_t {
     epoch_t last_epoch_clean,                   ///< [in] current
     ceph::shared_ptr<const OSDMap> osdmap,  ///< [in] current map
     ceph::shared_ptr<const OSDMap> lastmap, ///< [in] last map
-    int64_t poolid,                             ///< [in] pool for pg
     pg_t pgid,                                  ///< [in] pgid for pg
     map<epoch_t, pg_interval_t> *past_intervals,///< [out] intervals
     ostream *out = 0                            ///< [out] debug ostream
@@ -1762,8 +1784,8 @@ struct pg_query_t {
   shard_id_t to;
   shard_id_t from;
 
-  pg_query_t() : type(-1), epoch_sent(0), to(ghobject_t::NO_SHARD),
-		 from(ghobject_t::NO_SHARD) {}
+  pg_query_t() : type(-1), epoch_sent(0), to(shard_id_t::NO_SHARD),
+		 from(shard_id_t::NO_SHARD) {}
   pg_query_t(
     int t,
     shard_id_t to,

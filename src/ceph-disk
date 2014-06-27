@@ -280,7 +280,7 @@ def command(arguments, **kwargs):
     process in a tuple: (output, returncode).
     """
     arguments = _get_command_executable(arguments)
-
+    LOG.info('Running command: %s' % ' '.join(arguments))
     process = subprocess.Popen(
         arguments,
         stdout=subprocess.PIPE,
@@ -300,6 +300,7 @@ def command_check_call(arguments):
     otherwise.
     """
     arguments = _get_command_executable(arguments)
+    LOG.info('Running command: %s' % ' '.join(arguments))
     return subprocess.check_call(arguments)
 
 
@@ -359,11 +360,35 @@ def get_dev_path(name):
     """
     return '/dev/' + name.replace('!', '/')
 
+
 def get_dev_relpath(name):
     """
     get a relative path to /dev from a name (cciss!c0d1)
     """
     return name.replace('!', '/')
+
+
+def get_dev_size(dev, size='megabytes'):
+    """
+    Attempt to get the size of a device so that we can prevent errors
+    from actions to devices that are smaller, and improve error reporting.
+
+    Because we want to avoid breakage in case this approach is not robust, we
+    will issue a warning if we failed to get the size.
+
+    :param size: bytes or megabytes
+    :param dev: the device to calculate the size
+    """
+    fd = os.open(dev, os.O_RDONLY)
+    dividers = {'bytes': 1, 'megabytes': 1024*1024}
+    try:
+        device_size = os.lseek(fd, 0, os.SEEK_END)
+        divider = dividers.get(size, 1024*1024)  # default to megabytes
+        return device_size/divider
+    except Exception as error:
+        LOG.warning('failed to get size of %s: %s' % (dev, str(error)))
+    finally:
+        os.close(fd)
 
 
 def get_partition_dev(dev, pnum):
@@ -791,6 +816,12 @@ def mount(
     Mounts a device with given filessystem type and
     mount options to a tempfile path under /var/lib/ceph/tmp.
     """
+    # sanity check: none of the arguments are None
+    if dev is None:
+        raise ValueError('dev may not be None')
+    if fstype is None:
+        raise ValueError('fstype may not be None')
+
     # pick best-of-breed mount options based on fs type
     if options is None:
         options = MOUNT_OPTIONS.get(fstype, '')
@@ -965,6 +996,17 @@ def prepare_journal_dev(
             size=journal_size,
             )
         LOG.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
+
+    dev_size = get_dev_size(journal)
+
+    if journal_size > dev_size:
+        LOG.error('refusing to create journal on %s' % journal)
+        LOG.error('journal size (%sM) is bigger than device (%sM)' % (journal_size, dev_size))
+        raise Error('%s device size (%sM) is not big enough for journal' % (
+        journal,
+        dev_size)
+        )
+
 
     try:
         LOG.debug('Creating journal partition num %d size %d on %s', num, journal_size, journal)
@@ -1182,6 +1224,9 @@ def prepare_dev(
         LOG.debug('OSD data device %s is a partition', data)
         rawdev = data
     else:
+        if journal_dmcrypt is not None:
+            dmcrypt_unmap(journal)
+
         LOG.debug('Creating osd partition on %s', data)
         try:
             command_check_call(
@@ -1197,6 +1242,12 @@ def prepare_dev(
                     data,
                 ],
             )
+            command(
+                [
+                    'partprobe',
+                    data,
+                    ],
+                )
             command(
                 [
                     # wait for udev event queue to clear
@@ -1257,6 +1308,8 @@ def prepare_dev(
     finally:
         if rawdev != dev:
             dmcrypt_unmap(osd_uuid)
+        if journal_dmcrypt is not None:
+            dmcrypt_unmap(journal)
 
     if not is_partition(data):
         try:
@@ -2010,8 +2063,14 @@ def main_activate_all(args):
         if name.find('.') < 0:
             continue
         (tag, uuid) = name.split('.')
-        if tag == OSD_UUID:
-            path = os.path.join(dir, name)
+
+        if tag == OSD_UUID or tag == DMCRYPT_OSD_UUID:
+
+            if tag == DMCRYPT_OSD_UUID:
+                path = os.path.join('/dev/mapper', uuid)
+            else:
+                path = os.path.join(dir, name)
+
             LOG.info('Activating %s', path)
             activate_lock.acquire()
             try:
@@ -2193,16 +2252,17 @@ def main_list(args):
             ptype = get_partition_type(dev)
             if ptype == 'ceph data':
                 fs_type = get_dev_fs(dev)
-                try:
-                    tpath = mount(dev=dev, fstype=fs_type, options='')
+                if fs_type is not None:
                     try:
-                        journal_uuid = get_oneliner(tpath, 'journal_uuid')
-                        if journal_uuid:
-                            journal_map[journal_uuid.lower()] = dev
-                    finally:
-                        unmount(tpath)
-                except MountError:
-                    pass
+                        tpath = mount(dev=dev, fstype=fs_type, options='')
+                        try:
+                            journal_uuid = get_oneliner(tpath, 'journal_uuid')
+                            if journal_uuid:
+                                journal_map[journal_uuid.lower()] = dev
+                        finally:
+                            unmount(tpath)
+                    except MountError:
+                        pass
 
     for base, parts in sorted(partmap.iteritems()):
         if parts:
