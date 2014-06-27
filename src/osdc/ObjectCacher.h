@@ -415,17 +415,17 @@ class ObjectCacher {
     bh_set_state(bh2, bh1->get_state());
   }
   
-  void mark_missing(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_MISSING); };
-  void mark_clean(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_CLEAN); };
-  void mark_zero(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_ZERO); };
-  void mark_rx(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_RX); };
-  void mark_tx(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_TX); };
-  void mark_error(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_ERROR); };
+  void mark_missing(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_MISSING); }
+  void mark_clean(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_CLEAN); }
+  void mark_zero(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_ZERO); }
+  void mark_rx(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_RX); }
+  void mark_tx(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_TX); }
+  void mark_error(BufferHead *bh) { bh_set_state(bh, BufferHead::STATE_ERROR); }
   void mark_dirty(BufferHead *bh) { 
     bh_set_state(bh, BufferHead::STATE_DIRTY); 
     bh_lru_dirty.lru_touch(bh);
     //bh->set_dirty_stamp(ceph_clock_now(g_ceph_context));
-  };
+  }
 
   void bh_add(Object *ob, BufferHead *bh);
   void bh_remove(Object *ob, BufferHead *bh);

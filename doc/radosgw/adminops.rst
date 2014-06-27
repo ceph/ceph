@@ -1812,6 +1812,78 @@ Special Error Responses
 None.
 
 
+Quotas
+======
+
+The Admin Operations API enables you to set quotas on users and on bucket owned
+by users. See `Quota Management`_ for additional details. Quotas include the
+maximum number of objects in a bucket and the maximum storage size in megabytes.
+
+To view quotas, the user must have a ``users=read`` capability. To set,
+modify or disable a quota, the user must have ``users=write`` capability.
+See the `Admin Guide`_ for details.
+
+Valid parameters for quotas include:
+
+- **Bucket:** The ``bucket`` option allows you to specify a quota for
+  buckets owned by a user.
+
+- **Maximum Objects:** The ``max-objects`` setting allows you to specify
+  the maximum number of objects. A negative value disables this setting.
+  
+- **Maximum Size:** The ``max-size`` option allows you to specify a quota
+  for the maximum number of bytes. A negative value disables this setting.
+  
+- **Quota Scope:** The ``quota-scope`` option sets the scope for the quota.
+  The options are ``bucket`` and ``user``.
+
+
+
+Get User Quota
+~~~~~~~~~~~~~~
+
+To get a quota, the user must have ``users`` capability set with ``read`` 
+permission. ::
+
+	GET /admin/user?quota&uid=<uid>&quota-type=user
+
+
+Set User Quota
+~~~~~~~~~~~~~~
+
+To set a quota, the user must have ``users`` capability set with ``write`` 
+permission. ::
+
+	PUT /admin/user?quota&uid=<uid>&quota-type=user
+
+
+The content must include a JSON representation of the quota settings
+as encoded in the corresponding read operation.
+
+
+Get Bucket Quota
+~~~~~~~~~~~~~~~~
+
+To get a quota, the user must have ``users`` capability set with ``read`` 
+permission. ::
+
+	GET /admin/user?quota&uid=<uid>&quota-type=bucket
+
+
+Set Bucket Quota
+~~~~~~~~~~~~~~~~
+
+To set a quota, the user must have ``users`` capability set with ``write`` 
+permission. ::
+
+	PUT /admin/user?quota&uid=<uid>&quota-type=bucket
+
+The content must include a JSON representation of the quota settings
+as encoded in the corresponding read operation.
+
+
+
+
 Standard Error Responses
 ========================
 
@@ -1839,3 +1911,8 @@ Standard Error Responses
 
 :Description: No such access key.
 :Code: 404 Not Found
+
+
+
+.. _Admin Guide: ../admin
+.. _Quota Management: ../admin#quota-management

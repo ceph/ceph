@@ -28,13 +28,13 @@ Building Ceph
 
 To prepare the source tree after it has been git cloned,
 
-	$ git submodule update --init
+	git submodule update --init
 
 To build the server daemons, and FUSE client, execute the following:
 
-	$ ./autogen.sh
-	$ ./configure
-	$ make
+	./autogen.sh
+	./configure
+	make
 
 (Note that the FUSE client will only be built if libfuse is present.)
 
@@ -47,9 +47,9 @@ package build dependencies on those platforms.  In many cases,
 dependencies can be avoided with --with-foo or --without-bar switches.
 For example,
 
-$ ./configure --with-nss         # use libnss instead of libcrypto++
-$ ./configure --without-radosgw  # do not build radosgw and avoid libfcgi-dev
-$ ./configure --without-tcmalloc # avoid google-perftools dependency
+	./configure --with-nss         # use libnss instead of libcrypto++
+	./configure --without-radosgw  # do not build radosgw
+	./configure --without-tcmalloc # avoid google-perftools dependency
 
 
 Building packages
@@ -58,42 +58,13 @@ Building packages
 You can build packages for Debian or Debian-derived (e.g., Ubuntu)
 systems with
 
-$ sudo apt-get install dpkg-dev
-$ dpkg-checkbuilddeps        # make sure we have all dependencies
-$ dpkg-buildpackage
+	sudo apt-get install dpkg-dev
+	dpkg-checkbuilddeps        # make sure we have all dependencies
+	dpkg-buildpackage
 
-For RPM-based systems (Redhat, Suse, etc.),
+For RPM-based systems (Red Hat, SUSE, etc.),
 
-$ rpmbuild
-
-
-Building the Documentation
-==========================
-
-Prerequisites
--------------
-To build the documentation, you must install the following:
-
-- python-dev
-- python-pip
-- python-virtualenv
-- doxygen
-- ditaa
-- libxml2-dev
-- libxslt-dev
-- dot
-- graphviz
-
-For example:
-
-	sudo apt-get install python-dev python-pip python-virtualenv doxygen ditaa libxml2-dev libxslt-dev dot graphviz
-
-Building the Documentation
---------------------------
-
-To build the documentation, ensure that you are in the top-level `/ceph directory, and execute the build script. For example:
-
-	$ admin/build-doc
+	rpmbuild
 
 
 Build Prerequisites
@@ -101,77 +72,36 @@ Build Prerequisites
 
 debian-based
 ------------
-To build the source code, you must install the following:
 
-- automake
-- autoconf
-- pkg-config
-- gcc
-- g++
-- make
-- libboost-dev
-- libedit-dev
-- libssl-dev
-- libtool
-- libfcgi
-- libfcgi-dev
-- xfslibs-dev
-- libfuse-dev
-- linux-kernel-headers
-- libcrypto++-dev
-- libaio-dev
-- libgoogle-perftools-dev
-- libkeyutils-dev
-- uuid-dev
-- libblkid-dev
-- libatomic-ops-dev
-- libboost-program-options-dev
-- libboost-system-dev
-- libboost-thread-dev
-- libexpat1-dev
-- libleveldb-dev
-- libsnappy-dev
-- libcurl4-gnutls-dev
-- python-argparse
-- python-flask
+The list of debian package dependencies can be found in deps.deb.txt:
 
-For example:
-
-	$ apt-get install automake autoconf pkg-config gcc g++ make libboost-dev libedit-dev libssl-dev libtool libfcgi libfcgi-dev xfslibs-dev libfuse-dev linux-kernel-headers libcrypto++-dev libaio-dev libgoogle-perftools-dev libkeyutils-dev uuid-dev libblkid-dev libatomic-ops-dev libboost-program-options-dev libboost-system-dev libboost-thread-dev libexpat1-dev libleveldb-dev libsnappy-dev libcurl4-gnutls-dev python-argparse python-flask python-nose
+	sudo apt-get install `cat deps.deb.txt`
 
 Note: libsnappy-dev and libleveldb-dev are not available upstream for natty, oneiric, and squeeze.  Backports for Ceph can be found at ceph.com/debian-leveldb.
 
 rpm-based
 ---------
-These are the rpm packages needed to install in an rpm-based OS:
 
-    autoconf
-    automake
-    gcc
-    gcc-c++
-    make
-    libtool
-    python-argparse
-    python-flask
-    libuuid-devel
-    libblkid-devel
-    keyutils-libs-devel
-    cryptopp-devel
-    nss-devel
-    fcgi-devel
-    expat-devel
-    libcurl-devel
-    xfsprogs-devel
-    fuse-devel
-    gperftools-devel
-    libedit-devel
-    libatomic_ops-devel
-    snappy-devel
-    leveldb-devel
-    libaio-devel
-    boost-devel
+The list of RPM package dependencies can be found in deps.rpm.txt:
 
-For example:
+	sudo yum install `cat deps.rpm.txt`
 
-	$ yum install autoconf automake gcc gcc-c++ make libtool python-argparse python-flask libuuid-devel libblkid-devel keyutils-libs-devel cryptopp-devel nss-devel fcgi-devel expat-devel libcurl-devel xfsprogs-devel fuse-devel gperftools-devel libedit-devel libatomic_ops-devel snappy-devel leveldb-devel libaio-devel boost-devel python-nose
+
+Building the Documentation
+==========================
+
+Prerequisites
+-------------
+
+The list of package dependencies for building the documentation can be found
+in doc_deps.deb.txt:
+
+	sudo apt-get install `cat doc_deps.deb.txt`
+
+Building the Documentation
+--------------------------
+
+To build the documentation, ensure that you are in the top-level `/ceph directory, and execute the build script. For example:
+
+	admin/build-doc
 

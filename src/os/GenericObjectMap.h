@@ -371,6 +371,12 @@ protected:
     return GenericObjectMapIterator(new GenericObjectMapIteratorImpl(this, header, prefix));
   }
 
+  Header generate_new_header(const coll_t &cid, const ghobject_t &oid,
+                             Header parent, KeyValueDB::Transaction t) {
+    Mutex::Locker l(header_lock);
+    return _generate_new_header(cid, oid, parent, t);
+  }
+
   // Scan keys in header into out_keys and out_values (if nonnull)
   int scan(Header header, const string &prefix, const set<string> &in_keys,
            set<string> *out_keys, map<string, bufferlist> *out_values);
@@ -394,11 +400,6 @@ protected:
    */
   Header _generate_new_header(const coll_t &cid, const ghobject_t &oid,
                               Header parent, KeyValueDB::Transaction t);
-  Header generate_new_header(const coll_t &cid, const ghobject_t &oid,
-                             Header parent, KeyValueDB::Transaction t) {
-    Mutex::Locker l(header_lock);
-    return _generate_new_header(cid, oid, parent, t);
-  }
 
   // Lookup leaf header for c oid
   Header _lookup_header(const coll_t &cid, const ghobject_t &oid);

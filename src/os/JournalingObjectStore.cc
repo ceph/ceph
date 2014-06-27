@@ -43,8 +43,10 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
   uint64_t op_seq = fs_op_seq;
   apply_manager.init_seq(fs_op_seq);
 
-  if (!journal)
+  if (!journal) {
+    submit_manager.set_op_seq(op_seq);
     return 0;
+  }
 
   int err = journal->open(op_seq);
   if (err < 0) {

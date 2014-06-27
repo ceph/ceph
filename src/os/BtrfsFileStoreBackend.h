@@ -30,7 +30,10 @@ private:
   bool m_filestore_btrfs_snap;
 public:
   BtrfsFileStoreBackend(FileStore *fs);
-  ~BtrfsFileStoreBackend() {};
+  ~BtrfsFileStoreBackend() {}
+  const char *get_name() {
+    return "btrfs";
+  }
   int detect_features();
   bool can_checkpoint();
   int create_current();

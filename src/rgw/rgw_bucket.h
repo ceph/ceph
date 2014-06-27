@@ -147,24 +147,29 @@ struct RGWBucketAdminOpState {
     object_name = object_str;
   }
 
-  std::string& get_user_id() { return uid; };
-  std::string& get_user_display_name() { return display_name; };
-  std::string& get_bucket_name() { return bucket_name; };
-  std::string& get_object_name() { return object_name; };
+  std::string& get_user_id() { return uid; }
+  std::string& get_user_display_name() { return display_name; }
+  std::string& get_bucket_name() { return bucket_name; }
+  std::string& get_object_name() { return object_name; }
 
-  rgw_bucket& get_bucket() { return bucket; };
+  rgw_bucket& get_bucket() { return bucket; }
   void set_bucket(rgw_bucket& _bucket) {
     bucket = _bucket; 
     bucket_stored = true;
   }
 
-  bool will_fetch_stats() { return stat_buckets; };
-  bool will_fix_index() { return fix_index; };
-  bool will_delete_children() { return delete_child_objects; };
-  bool will_check_objects() { return check_objects; };
-  bool is_user_op() { return !uid.empty(); };
-  bool is_system_op() { return uid.empty(); }; 
-  bool has_bucket_stored() { return bucket_stored; };
+  void set_bucket_id(const string& bi) {
+    bucket_id = bi;
+  }
+  const string& get_bucket_id() { return bucket_id; }
+
+  bool will_fetch_stats() { return stat_buckets; }
+  bool will_fix_index() { return fix_index; }
+  bool will_delete_children() { return delete_child_objects; }
+  bool will_check_objects() { return check_objects; }
+  bool is_user_op() { return !uid.empty(); }
+  bool is_system_op() { return uid.empty(); }
+  bool has_bucket_stored() { return bucket_stored; }
 
   RGWBucketAdminOpState() : list_buckets(false), stat_buckets(false), check_objects(false), 
                             fix_index(false), delete_child_objects(false),
@@ -213,7 +218,7 @@ public:
   int policy_bl_to_stream(bufferlist& bl, ostream& o);
   int get_policy(RGWBucketAdminOpState& op_state, ostream& o);
 
-  void clear_failure() { failure = false; };
+  void clear_failure() { failure = false; }
 };
 
 class RGWBucketAdminOp
@@ -226,7 +231,7 @@ public:
 
 
   static int unlink(RGWRados *store, RGWBucketAdminOpState& op_state);
-  static int link(RGWRados *store, RGWBucketAdminOpState& op_state);
+  static int link(RGWRados *store, RGWBucketAdminOpState& op_state, string *err_msg = NULL);
 
   static int check_index(RGWRados *store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher);

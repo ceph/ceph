@@ -166,6 +166,19 @@ void Locker::include_snap_rdlocks_wlayout(set<SimpleLock*>& rdlocks, CInode *in,
   }
 }
 
+struct MarkEventOnDestruct {
+  MDRequestRef& mdr;
+  const char* message;
+  bool mark_event;
+  MarkEventOnDestruct(MDRequestRef& _mdr,
+                      const char *_message) : mdr(_mdr),
+                          message(_message),
+                          mark_event(true) {}
+  ~MarkEventOnDestruct() {
+    if (mark_event)
+      mdr->mark_event(message);
+  }
+};
 
 /* If this function returns false, the mdr has been placed
  * on the appropriate wait list */
@@ -184,15 +197,18 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
   }
   dout(10) << "acquire_locks " << *mdr << dendl;
 
+  MarkEventOnDestruct marker(mdr, "failed to acquire_locks");
+
   client_t client = mdr->get_client();
 
   set<SimpleLock*, SimpleLock::ptr_lt> sorted;  // sort everything we will lock
-  set<SimpleLock*> mustpin = xlocks;            // items to authpin
+  set<MDSCacheObject*> mustpin;            // items to authpin
 
   // xlocks
   for (set<SimpleLock*>::iterator p = xlocks.begin(); p != xlocks.end(); ++p) {
     dout(20) << " must xlock " << **p << " " << *(*p)->get_parent() << dendl;
     sorted.insert(*p);
+    mustpin.insert((*p)->get_parent());
 
     // augment xlock with a versionlock?
     if ((*p)->get_type() == CEPH_LOCK_DN) {
@@ -232,26 +248,28 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 
   // wrlocks
   for (set<SimpleLock*>::iterator p = wrlocks.begin(); p != wrlocks.end(); ++p) {
-    dout(20) << " must wrlock " << **p << " " << *(*p)->get_parent() << dendl;
+    MDSCacheObject *object = (*p)->get_parent();
+    dout(20) << " must wrlock " << **p << " " << *object << dendl;
     sorted.insert(*p);
-    if ((*p)->get_parent()->is_auth())
-      mustpin.insert(*p);
-    else if (!(*p)->get_parent()->is_auth() &&
+    if (object->is_auth())
+      mustpin.insert(object);
+    else if (!object->is_auth() &&
 	     !(*p)->can_wrlock(client) &&  // we might have to request a scatter
 	     !mdr->is_slave()) {           // if we are slave (remote_wrlock), the master already authpinned
-      dout(15) << " will also auth_pin " << *(*p)->get_parent()
+      dout(15) << " will also auth_pin " << *object
 	       << " in case we need to request a scatter" << dendl;
-      mustpin.insert(*p);
+      mustpin.insert(object);
     }
   }
 
   // remote_wrlocks
   if (remote_wrlocks) {
     for (map<SimpleLock*,int>::iterator p = remote_wrlocks->begin(); p != remote_wrlocks->end(); ++p) {
+      MDSCacheObject *object = p->first->get_parent();
       dout(20) << " must remote_wrlock on mds." << p->second << " "
-	       << *p->first << " " << *(p->first)->get_parent() << dendl;
+	       << *p->first << " " << *object << dendl;
       sorted.insert(p->first);
-      mustpin.insert(p->first);
+      mustpin.insert(object);
     }
   }
 
@@ -259,15 +277,16 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
   for (set<SimpleLock*>::iterator p = rdlocks.begin();
 	 p != rdlocks.end();
        ++p) {
-    dout(20) << " must rdlock " << **p << " " << *(*p)->get_parent() << dendl;
+    MDSCacheObject *object = (*p)->get_parent();
+    dout(20) << " must rdlock " << **p << " " << *object << dendl;
     sorted.insert(*p);
-    if ((*p)->get_parent()->is_auth())
-      mustpin.insert(*p);
-    else if (!(*p)->get_parent()->is_auth() &&
+    if (object->is_auth())
+      mustpin.insert(object);
+    else if (!object->is_auth() &&
 	     !(*p)->can_rdlock(client)) {      // we might have to request an rdlock
-      dout(15) << " will also auth_pin " << *(*p)->get_parent()
+      dout(15) << " will also auth_pin " << *object
 	       << " in case we need to request a rdlock" << dendl;
-      mustpin.insert(*p);
+      mustpin.insert(object);
     }
   }
 
@@ -276,10 +295,11 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
   map<int, set<MDSCacheObject*> > mustpin_remote;  // mds -> (object set)
   
   // can i auth pin them all now?
-  for (set<SimpleLock*>::iterator p = mustpin.begin();
+  marker.message = "failed to authpin local pins";
+  for (set<MDSCacheObject*>::iterator p = mustpin.begin();
        p != mustpin.end();
        ++p) {
-    MDSCacheObject *object = (*p)->get_parent();
+    MDSCacheObject *object = *p;
 
     dout(10) << " must authpin " << *object << dendl;
 
@@ -315,10 +335,10 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
   }
 
   // ok, grab local auth pins
-  for (set<SimpleLock*>::iterator p = mustpin.begin();
+  for (set<MDSCacheObject*>::iterator p = mustpin.begin();
        p != mustpin.end();
        ++p) {
-    MDSCacheObject *object = (*p)->get_parent();
+    MDSCacheObject *object = *p;
     if (mdr->is_auth_pinned(object)) {
       dout(10) << " already auth_pinned " << *object << dendl;
     } else if (object->is_auth()) {
@@ -329,6 +349,17 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 
   // request remote auth_pins
   if (!mustpin_remote.empty()) {
+    marker.message = "requesting remote authpins";
+    for (map<MDSCacheObject*,int>::iterator p = mdr->remote_auth_pins.begin();
+	 p != mdr->remote_auth_pins.end();
+	 ++p) {
+      if (mustpin.count(p->first)) {
+	assert(p->second == p->first->authority().first);
+	map<int, set<MDSCacheObject*> >::iterator q = mustpin_remote.find(p->second);
+	if (q != mustpin_remote.end())
+	  q->second.insert(p->first);
+      }
+    }
     for (map<int, set<MDSCacheObject*> >::iterator p = mustpin_remote.begin();
 	 p != mustpin_remote.end();
 	 ++p) {
@@ -453,16 +484,20 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       cancel_locking(mdr.get(), &issue_set);
     }
     if (xlocks.count(*p)) {
+      marker.message = "failed to xlock, waiting";
       if (!xlock_start(*p, mdr)) 
 	goto out;
       dout(10) << " got xlock on " << **p << " " << *(*p)->get_parent() << dendl;
     } else if (need_wrlock || need_remote_wrlock) {
       if (need_remote_wrlock && !mdr->remote_wrlocks.count(*p)) {
+        marker.message = "waiting for remote wrlocks";
 	remote_wrlock_start(*p, (*remote_wrlocks)[*p], mdr);
 	goto out;
       }
       if (need_wrlock && !mdr->wrlocks.count(*p)) {
+        marker.message = "failed to wrlock, waiting";
 	if (need_remote_wrlock && !(*p)->can_wrlock(mdr->get_client())) {
+	  marker.message = "failed to wrlock, dropping remote wrlock and waiting";
 	  // can't take the wrlock because the scatter lock is gathering. need to
 	  // release the remote wrlock, so that the gathering process can finish.
 	  remote_wrlock_finish(*p, mdr->remote_wrlocks[*p], mdr.get());
@@ -474,6 +509,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	dout(10) << " got wrlock on " << **p << " " << *(*p)->get_parent() << dendl;
       }
     } else {
+      marker.message = "failed to rdlock, waiting";
       if (!rdlock_start(*p, mdr)) 
 	goto out;
       dout(10) << " got rdlock on " << **p << " " << *(*p)->get_parent() << dendl;
@@ -502,7 +538,9 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
   }
 
   mdr->done_locking = true;
+  mdr->set_mds_stamp(ceph_clock_now(NULL));
   result = true;
+  marker.message = "acquired locks";
 
  out:
   issue_caps_set(issue_set);
@@ -515,10 +553,12 @@ void Locker::set_xlocks_done(MutationImpl *mut, bool skip_dentry)
   for (set<SimpleLock*>::iterator p = mut->xlocks.begin();
        p != mut->xlocks.end();
        ++p) {
+    MDSCacheObject *object = (*p)->get_parent();
+    assert(object->is_auth());
     if (skip_dentry &&
 	((*p)->get_type() == CEPH_LOCK_DN || (*p)->get_type() == CEPH_LOCK_DVERSION))
       continue;
-    dout(10) << "set_xlocks_done on " << **p << " " << *(*p)->get_parent() << dendl;
+    dout(10) << "set_xlocks_done on " << **p << " " << *object << dendl;
     (*p)->set_xlock_done();
   }
 }
@@ -3859,7 +3899,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   EUpdate *le = new EUpdate(mds->mdlog, "scatter_writebehind");
   mds->mdlog->start_entry(le);
 
-  mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
+  mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
   mdcache->journal_dirty_inode(mut.get(), &le->metablob, in);
   
   in->finish_scatter_gather_update_accounted(lock->get_type(), mut, &le->metablob);

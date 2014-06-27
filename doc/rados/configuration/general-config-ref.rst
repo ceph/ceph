@@ -23,13 +23,16 @@
 
 ``pid file``
 
-:Description: Each running Ceph daemon has a running 
-              process identifier (PID) file.
-
+:Description: The file in which the mon, osd or mds will write its
+              PID.  For instance, ``/var/run/$cluster/$type.$id.pid``
+              will create /var/run/ceph/mon.a.pid for the ``mon`` with
+              id ``a`` running in the ``ceph`` cluster. The ``pid
+              file`` is removed when the daemon stops gracefully. If
+              the process is not daemonized (i.e. runs with the ``-f``
+              or ``-d`` option), the ``pid file`` is not created. 
 :Type: String
 :Required: No
-:Default: N/A. The default path is ``/var/run/$cluster/$name.pid``. The 
-          PID file is generated upon start-up. 
+:Default: No
 
 
 ``chdir``

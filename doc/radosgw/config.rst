@@ -2,41 +2,245 @@
  Configuring Ceph Object Gateway
 =================================
 
-Before you can start using the :term:`Ceph Object Gateway`, you must modify your
-Ceph configuration file to include a section for the Ceph Object Gateway. You
-must also create an ``rgw.conf``  file in the ``/etc/apache2/sites-enabled``
-directory. The ``rgw.conf``  file configures Apache to interact with FastCGI.
+Configuring a Ceph Object Gateway requires a running Ceph Storage Cluster, 
+and an Apache web server with the FastCGI module.
+
+The Ceph Object Gateway is a client of the Ceph Storage Cluster. As a 
+Ceph Storage Cluster client, it requires:
+
+- A name for the gateway instance. We use ``gateway`` in this guide.
+- A storage cluster user name with appropriate permissions in a keyring.
+- Pools to store its data.
+- A data directory for the gateway instance.
+- An instance entry in the Ceph Configuration file.
+- A configuration file for the web server to interact with FastCGI.
+
+
+Create a User and Keyring
+=========================
+
+Each instance must have a user name and key to communicate with a Ceph Storage
+Cluster. In the following steps, we use an admin node to create a keyring. 
+Then, we create a client user name and key. Next, we add the 
+key to the Ceph Storage Cluster. Finally, we distribute the key ring to 
+the node containing the gateway instance.
+
+.. topic:: Monitor Key CAPS
+
+   When you provide CAPS to the key, you MUST provide read capability.
+   However, you have the option of providing write capability for the monitor. 
+   This is an important choice. If you provide write capability to the key, 
+   the Ceph Object Gateway will have the ability to create pools automatically; 
+   however, it will create pools with either the default number of placement 
+   groups (not ideal) or the number of placement groups you specified in your 
+   Ceph configuration file. If you allow the Ceph Object Gateway to create 
+   pools automatically, ensure that you have reasonable defaults for the number
+   of placement groups first. See `Pool Configuration`_ for details.
+
+
+See the `Cephx Guide`_ for additional details on Ceph authentication.
+
+#. Create a keyring for the gateway. ::
+
+	sudo ceph-authtool --create-keyring /etc/ceph/ceph.client.radosgw.keyring
+	sudo chmod +r /etc/ceph/ceph.client.radosgw.keyring
+	
+
+#. Generate a Ceph Object Gateway user name and key for each instance. For
+   exemplary purposes, we will use the name ``gateway`` after ``client.radosgw``:: 
+
+	sudo ceph-authtool /etc/ceph/ceph.client.radosgw.keyring -n client.radosgw.gateway --gen-key
+
+
+#. Add capabilities to the key. See `Configuration Reference - Pools`_ for details
+   on the effect of write permissions for the monitor and creating pools. ::
+
+	sudo ceph-authtool -n client.radosgw.gateway --cap osd 'allow rwx' --cap mon 'allow rw' /etc/ceph/ceph.client.radosgw.keyring
+
+
+#. Once you have created a keyring and key to enable the Ceph Object Gateway 
+   with access to the Ceph Storage Cluster, add the key to your 
+   Ceph Storage Cluster. For example::
+
+	sudo ceph -k /etc/ceph/ceph.client.admin.keyring auth add client.radosgw.gateway -i /etc/ceph/ceph.client.radosgw.keyring
+
+
+#. Distribute the keyring to the node with the gateway instance. ::
+
+	sudo scp /etc/ceph/ceph.client.radosgw.keyring  ceph@{hostname}:/home/ceph
+	ssh {hostname}
+	sudo mv ceph.client.radosgw.keyring /etc/ceph/ceph.client.radosgw.keyring
+
+
+
+Create Pools
+============
+
+Ceph Object Gateways require Ceph Storage Cluster pools to store specific
+gateway data.  If the user you created has permissions, the gateway
+will create the pools automatically. However, you should ensure that you have
+set an appropriate default number of placement groups per pool into your Ceph
+configuration file.
+
+When configuring a gateway with the default region and zone, the naming
+convention for pools typically omits region and zone naming, but you can use any
+naming convention you prefer. For example:
+
+
+- ``.rgw``
+- ``.rgw.root``
+- ``.rgw.control``
+- ``.rgw.gc``
+- ``.rgw.buckets``
+- ``.rgw.buckets.index``
+- ``.log``
+- ``.intent-log``
+- ``.usage``
+- ``.users``
+- ``.users.email``
+- ``.users.swift``
+- ``.users.uid``
+
+
+See `Configuration Reference - Pools`_ for details on the default pools for
+gateways. See `Pools`_ for details on creating pools. Execute the following 
+to create a pool:: 
+
+	ceph osd pool create {poolname} {pg-num} {pgp-num}
+
+
+.. tip:: When adding a large number of pools, it may take some time for your 
+   cluster to return to a ``active + clean`` state.
+
+When you have completed this step, execute the following to ensure that
+you have created all of the foregoing pools::
+
+	rados lspools
 
 
 Add a Gateway Configuration to Ceph
 ===================================
 
-Add the Ceph Object Gateway configuration to your Ceph Configuration file.  The
-Ceph Object Gateway configuration requires you to specify the host name where
-you installed the Ceph Object Gateway daemon, a keyring (for use with cephx),
-the socket path and a log file.  For example::  
+Add the Ceph Object Gateway configuration to your Ceph Configuration file. The
+Ceph Object Gateway configuration requires you to identify the Ceph Object
+Gateway instance. Then, you must specify the host name where you installed the
+Ceph Object Gateway daemon, a keyring (for use with cephx), the socket path for 
+FastCGI and a log file. For example::  
+
+	[client.radosgw.{instance-name}]
+	host = {host-name}
+	keyring = /etc/ceph/ceph.client.radosgw.keyring
+	rgw socket path = /var/run/ceph/ceph.radosgw.{instance-name}.fastcgi.sock
+	log file = /var/log/ceph/client.radosgw.{instance-name}.log
+
+The ``[client.radosgw.*]`` portion of the gateway instance identifies this
+portion of the Ceph configuration file as configuring a Ceph Storage Cluster
+client where the client type is  a Ceph Object Gateway (i.e., ``radosgw``). The
+instance name follows. For example:: 
 
 	[client.radosgw.gateway]
-		host = {host-name}
-		keyring = /etc/ceph/keyring.radosgw.gateway
-		rgw socket path = /tmp/radosgw.sock
-		log file = /var/log/ceph/radosgw.log
+	host = ceph-gateway
+	keyring = /etc/ceph/ceph.client.radosgw.keyring
+	rgw socket path = /var/run/ceph/ceph.radosgw.gateway.fastcgi.sock
+	log file = /var/log/ceph/client.radosgw.gateway.log
 
-.. note:: ``host`` must be your machine hostname, not FQDN.
+.. note:: The ``host`` must be your machine hostname, not the FQDN. Make sure 
+   that the name you use for the FastCGI socket is not the same as the one 
+   used for the object gateway, which is 
+   ``ceph-client.radosgw.{instance-name}.asok`` by default. You must use the 
+   same name in your S3 FastCGI file too. See `Add a Ceph Object Gateway 
+   Script`_ for details.
+
+Configuring Print Continue
+--------------------------
+
+On CentOS/RHEL distributions, turn off ``print continue``. If you have it set
+to ``true``, you may encounter problems with ``PUT`` operations. ::
+
+	rgw print continue = false
+
+Configuring Operations Logging
+------------------------------
+
+In early releases of Ceph (v0.66 and earlier), the Ceph Object Gateway will log
+every successful operation in the Ceph Object Gateway backend by default. This
+means that every request, whether it is a read request or a write request will
+generate a gateway operation that writes data. This does not come without cost,
+and may affect overall performance. Turning off logging completely can be done
+by adding the following config option to the Ceph configuration file::
+
+        rgw enable ops log = false
+
+Another way to reduce the logging load is to send operations logging data to a
+UNIX domain socket, instead of writing it to the Ceph Object Gateway backend::
+
+        rgw ops log rados = false
+        rgw enable ops log = true
+        rgw ops log socket path = <path to socket>
+
+When specifying a UNIX domain socket, it is also possible to specify the maximum
+amount of memory that will be used to keep the data backlog::
+
+        rgw ops log data backlog = <size in bytes>
+
+Any backlogged data in excess to the specified size will be lost, so the socket
+needs to be read constantly.
+
+
+Enabling Subdomain S3 Calls
+---------------------------
+
+To use a Ceph Object Gateway with subdomain S3 calls (e.g.,
+``http://bucketname.hostname``), you must add the Ceph Object Gateway DNS name
+under the ``[client.radosgw.gateway]`` section of your Ceph configuration file::
+
+	[client.radosgw.gateway]
+		...
+		rgw dns name = {hostname}
+
+You should also consider installing a DNS server such as `Dnsmasq`_ on your
+client machine(s) when using ``http://{bucketname}.{hostname}`` syntax. The
+``dnsmasq.conf`` file should include the following settings:: 
+
+	address=/{hostname}/{host-ip-address}
+	listen-address={client-loopback-ip}
+
+Then, add the ``{client-loopback-ip}`` IP address as the first DNS nameserver
+on client the machine(s).
+
+See `Add Wildcard to DNS`_ for details.
+
 
 Redeploy Ceph Configuration
-===========================
+---------------------------
 
-If you deploy Ceph with ``mkcephfs``, manually redeploy ``ceph.conf`` to the 
-hosts in your cluster. For example:: 
-
-	cd /etc/ceph
-	ssh {host-name} sudo tee /etc/ceph/ceph.conf < ceph.conf
-
-If you used ``ceph-deploy``, push a new copy to the hosts in your cluster.
-For example:: 
+To use ``ceph-deploy`` to push a new copy of the configuration file to the hosts
+in your cluster, execute the following::
 
 	ceph-deploy config push {host-name [host-name]...}
+
+
+Add a Ceph Object Gateway Script
+================================
+
+Add a ``s3gw.fcgi`` file (use the same name referenced in the first line 
+of ``rgw.conf``). For Debian/Ubuntu distributions, save the file to the 
+``/var/www`` directory. For CentOS/RHEL distributions, save the file to the
+``/var/www/html`` directory. Assuming a cluster named ``ceph`` (default), 
+and the user created in previous steps, the contents of the file should 
+include::
+
+	#!/bin/sh
+	exec /usr/bin/radosgw -c /etc/ceph/ceph.conf -n client.radosgw.gateway
+
+Ensure that you apply execute permissions to ``s3gw.fcgi``. ::
+
+	sudo chmod +x s3gw.fcgi
+
+On some distributions, you must also change the ownership to ``apache``. :: 
+
+	sudo chown apache:apache s3gw.fcgi
+
 
 
 Create Data Directory
@@ -56,81 +260,58 @@ Using the exemplary ``ceph.conf`` settings above, you would execute the followin
 	sudo mkdir -p /var/lib/ceph/radosgw/ceph-radosgw.gateway
 
 
+
 Create a Gateway Configuration
 ==============================
 
-Create an ``rgw.conf`` file under the ``/etc/apache2/sites-available`` directory
-on the host where you installed the Ceph Object Gateway.
+On the host where you installed the Ceph Object Gateway, create an ``rgw.conf``
+file. For Debian/Ubuntu systems, place the file in the
+``/etc/apache2/sites-available`` directory. For CentOS/RHEL systems, place the
+file in the ``/etc/httpd/conf.d`` directory. 
 
-We recommend deploying FastCGI as an external server, because allowing
-Apache to manage FastCGI sometimes introduces high latency. To manage FastCGI 
-as an external server, use the ``FastCgiExternalServer`` directive. 
-See `FastCgiExternalServer`_ for details on this directive. 
-See `Module mod_fastcgi`_ for general details. :: 
+We recommend deploying FastCGI as an external server, because allowing Apache to
+manage FastCGI sometimes introduces high latency. To manage FastCGI as an
+external server, use the ``FastCgiExternalServer`` directive.  See
+`FastCgiExternalServer`_ for details on this directive.  See `Module
+mod_fastcgi`_ for general details. See `Apache Virtual Host documentation`_ for
+details on ``<VirtualHost>`` format  and settings. See `<IfModule> Directive`_
+for additional details. 
 
-	FastCgiExternalServer /var/www/s3gw.fcgi -socket /tmp/radosgw.sock
+Ceph Object Gateway requires a rewrite rule for the Amazon S3-compatible
+interface. It's required for passing in the ``HTTP_AUTHORIZATION env`` for S3,
+which is filtered out by Apache. The rewrite rule is not necessary for the
+OpenStack Swift-compatible interface.
 
-.. _Module mod_fastcgi: http://www.fastcgi.com/drupal/node/25
-.. _FastCgiExternalServer: http://www.fastcgi.com/drupal/node/25#FastCgiExternalServer
+You should configure Apache to allow encoded slashes, provide paths for log
+files and to turn off server signatures. See below for an exemplary embodiment 
+of a gateway configuration for Debian/Ubuntu and CentOS/RHEL.
 
-Once you have configured FastCGI as an external server, you must 
-create the virtual host configuration within your ``rgw.conf`` file. See 
-`Apache Virtual Host documentation`_ for details on ``<VirtualHost>`` format 
-and settings. Replace the values in brackets. ::
+.. rubric:: Debian/Ubuntu
 
-	<VirtualHost *:80>
-		ServerName {fqdn}
-		ServerAdmin {email.address}
-		DocumentRoot /var/www
-	</VirtualHost>
+.. literalinclude:: rgw-debian.conf
+   :language: ini
 
-.. _Apache Virtual Host documentation: http://httpd.apache.org/docs/2.2/vhosts/
+.. rubric:: CentOS/RHEL
 
-Ceph Object Gateway requires a rewrite rule for the Amazon S3-compatible interface. 
-It's required for passing in the ``HTTP_AUTHORIZATION env`` for S3, which is 
-filtered out by Apache. The rewrite rule is not necessary for the OpenStack 
-Swift-compatible interface. Turn on the rewrite engine and add the following
-rewrite rule to your Virtual Host configuration. :: 
+.. literalinclude:: rgw-centos.conf
+   :language: ini
 
-	RewriteEngine On
-	RewriteRule ^/([a-zA-Z0-9-_.]*)([/]?.*) /s3gw.fcgi?page=$1&params=$2&%{QUERY_STRING} [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
-	
-Since the ``<VirtualHost>`` is running ``mod_fastcgi.c``, you must include a
-section in your ``<VirtualHost>`` configuration for the ``mod_fastcgi.c`` module. 
 
-::
+#. Replace the ``/{path}/{socket-name}`` entry with path to the socket and
+   the socket name. For example, 
+   ``/var/run/ceph/ceph.radosgw.gateway.fastcgi.sock``. Ensure that you use the 
+   same path and socket name in your ``ceph.conf`` entry.
 
-	<VirtualHost *:80>
-		...
-		<IfModule mod_fastcgi.c>
-			<Directory /var/www>
-				Options +ExecCGI
-				AllowOverride All
-				SetHandler fastcgi-script
-				Order allow,deny
-				Allow from all
-				AuthBasicAuthoritative Off
-			</Directory>
-		</IfModule>
-		...
-	</VirtualHost>
-	
-See `<IfModule> Directive`_ for additional details. 
+#. Replace the ``{fqdn}`` entry with the fully-qualified domain name of the 
+   server. 
+   
+#. Replace the ``{email.address}`` entry with the email address for the 
+   server administrator.
+   
+#. Add a ``ServerAlias`` if you wish to use S3-style subdomains 
+   (of course you do).
 
-.. _<IfModule> Directive: http://httpd.apache.org/docs/2.2/mod/core.html#ifmodule
-	
-You should configure Apache to allow encoded slashes, provide paths for
-log files and to turn off server signatures. :: 	
-
-	<VirtualHost *:80>	
-	...	
-		AllowEncodedSlashes On
-		ErrorLog /var/log/apache2/error.log
-		CustomLog /var/log/apache2/access.log combined
-		ServerSignature Off
-	</VirtualHost>
-	
-.. important:: If you are using CentOS or similar, make sure that ``FastCgiWrapper`` is turned off in ``/etc/httpd/conf.d/fastcgi.conf``.
+#. Save the configuration to a file (e.g., ``rgw.conf``).
 
 Finally, if you enabled SSL, make sure that you set the port to your SSL port
 (usually 443) and your configuration file includes the following::
@@ -141,91 +322,46 @@ Finally, if you enabled SSL, make sure that you set the port to your SSL port
 	SetEnv SERVER_PORT_SECURE 443
 
 
-Enable the Configuration
-========================
+.. _Module mod_fastcgi: http://www.fastcgi.com/drupal/node/25
+.. _FastCgiExternalServer: http://www.fastcgi.com/drupal/node/25#FastCgiExternalServer
+.. _Apache Virtual Host documentation: http://httpd.apache.org/docs/2.2/vhosts/
+.. _<IfModule> Directive: http://httpd.apache.org/docs/2.2/mod/core.html#ifmodule
+	
+	
+.. important:: If you are using CentOS, RHEL or a similar distribution, make 
+   sure that ``FastCgiWrapper`` is turned ``off`` in 
+   ``/etc/httpd/conf.d/fastcgi.conf``. It is usually ``on`` by default.
 
-Enable the site for ``rgw.conf``. :: 
+For Debian/Ubuntu distributions, enable the site for ``rgw.conf``. :: 
 
 	sudo a2ensite rgw.conf
 
-Disable the default site. :: 
+Then, disable the default site. :: 
 
 	sudo a2dissite default
 	
 
-Add a Ceph Object Gateway Script
-================================
+Adjust Path Ownership/Permissions
+=================================
 
-Add a ``s3gw.fcgi`` file (use the same name referenced in the first line 
-of ``rgw.conf``) to ``/var/www``. The contents of the file should include:: 
+On some distributions, you must change ownership for ``/var/log/httpd`` or 
+``/var/log/apache2`` and ``/var/run/ceph`` to ensure that Apache has permissions 
+to create a socket or log file. ::
 
-	#!/bin/sh
-	exec /usr/bin/radosgw -c /etc/ceph/ceph.conf -n client.radosgw.gateway
+	sudo chown apache:apache /path/to/file   
+
+On some systems, you may need to set SELinux to ``Permissive``. If you are
+unable to communicate with the gateway after attempting to start it, try 
+executing::
+
+	getenforce
 	
-Ensure that you apply execute permissions to ``s3gw.fcgi``. ::
+If the result is ``1`` or ``Enforcing``, execute::
 
-	sudo chmod +x s3gw.fcgi
+	sudo setenforce 0
 
-
-Generate a Keyring and Key for the Gateway
-==========================================
-
-You must create a keyring for the Ceph Object Gateway. For example:: 
-
-	sudo ceph-authtool --create-keyring /etc/ceph/keyring.radosgw.gateway
-	sudo chmod +r /etc/ceph/keyring.radosgw.gateway
-	
-
-.. topic:: Monitor Key CAPS
-
-   When you provide CAPS to the monitor key, you MUST provide read capability.
-   However, you have the option of providing write capability. This is an
-   important choice. If you provide write capability to the monitor key, 
-   the Ceph Object Gateway will have the ability to create pools automatically; 
-   however, it will create pools with either the default number of placement 
-   groups (not ideal) or the number of placement groups you specified in your 
-   Ceph configuration file. If you allow the Ceph Object Gateway to create 
-   pools automatically, ensure that you have reasonable defaults for the number
-   of placement groups first. See `Pool Configuration`_ for details.
-
-Generate a key so that the Ceph Object Gateway can identify a user name and authenticate 
-the user with the cluster. Then, add capabilities to the key. For example:: 
-
-	sudo ceph-authtool /etc/ceph/keyring.radosgw.gateway -n client.radosgw.gateway --gen-key
-	sudo ceph-authtool -n client.radosgw.gateway --cap osd 'allow rwx' --cap mon 'allow rw' /etc/ceph/keyring.radosgw.gateway
-	
-
-See the `Cephx Guide`_ for additional details on Ceph authentication.
-
-Add to Ceph Keyring Entries 
-===========================
-
-Once you have created a keyring and key for the Ceph Object Gateway to access
-the Ceph Storage Cluster, add it as an entry in the Ceph keyring. For example::
-
-	sudo ceph -k /etc/ceph/ceph.client.admin.keyring auth add client.radosgw.gateway -i /etc/ceph/keyring.radosgw.gateway
-	
-
-Create Default Pools
-====================
-
-If the key that provides Ceph Object Gateway with access to the  Ceph Storage
-Cluster does not have write capability to the Ceph Monitor, you must create the
-default pools manually. The default pools for the Ceph Object Gateway include:
-
-- ``.rgw``
-- ``.rgw.control``
-- ``.rgw.gc``
-- ``.log``
-- ``.intent-log``
-- ``.usage``
-- ``.users``
-- ``.users.email``
-- ``.users.swift``
-- ``.users.uid``
-
-
-See `Pools`_ for details on creating pools.
+Then, restart Apache and the gateway daemon to see if that resolves the issue. 
+If it does, you can configure your system to disable SELinux.
 
 
 Restart Services and Start the Gateway
@@ -233,232 +369,72 @@ Restart Services and Start the Gateway
 
 To ensure that all components have reloaded their configurations,  we recommend
 restarting your ``ceph`` and ``apache`` services. Then,  start up the
-``radosgw`` service. For example:: 
+``radosgw`` service.
 
-	sudo service ceph restart
+For the Ceph Storage Cluster, see `Operating a Cluster`_ for details. Some 
+versions of Ceph use different methods for starting and stopping clusters.
+
+
+Restart Apache
+--------------
+
+On Debian/Ubuntu systems, use ``apache2``. For example::
+
 	sudo service apache2 restart
+	sudo /etc/init.d/apache2 restart
+
+On CentOS/RHEL systems, use ``httpd``. For example:: 
+
+	sudo /etc/init.d/httpd restart
+
+
+Start the Gateway
+-----------------
+
+On Debian/Ubuntu systems, use ``radosgw``. For example:: 
+
 	sudo /etc/init.d/radosgw start
-
-.. note:: The service name on RPM based distribution is ceph-radosgw.
-
-See `Operating a Cluster`_ for details. Some versions of Ceph use different
-methods for starting and stopping clusters.
-
-
-Create a Gateway User
-=====================
-
-To use the REST interfaces, first create an initial Ceph Object Gateway user.
-The Ceph Object Gateway user is not the same user as the
-``client.rados.gateway`` user, which identifies the Ceph Object Gateway as a
-user of the Ceph Storage Cluster. The Ceph Object Gateway user is a user of the
-Ceph Object Gateway. ::
-
-	sudo radosgw-admin user create --uid="{username}" --display-name="{Display Name}"
-
-For example:: 	
 	
-  radosgw-admin user create --uid=johndoe --display-name="John Doe" --email=john@example.com
-  
-.. code-block:: javascript
-  
-  { "user_id": "johndoe",
-    "rados_uid": 0,
-    "display_name": "John Doe",
-    "email": "john@example.com",
-    "suspended": 0,
-    "subusers": [],
-    "keys": [
-      { "user": "johndoe",
-        "access_key": "QFAMEDSJP5DEKJO0DDXY",
-        "secret_key": "iaSFLDVvDdQt6lkNzHyW4fPLZugBAI1g17LO0+87"}],
-    "swift_keys": []}
+On CentOS/RHEL systems, use ``ceph-radosgw``. For example::
 
-Creating a user also creates an ``access_key`` and ``secret_key`` entry for use
-with any S3 API-compatible client. For details on Ceph Object Gateway
-administration, see `radosgw-admin`_. 
-
-.. _radosgw-admin: ../../man/8/radosgw-admin/ 
-
-.. important:: Check the key output. Sometimes ``radosgw-admin``
-   generates a key with an escape (``\``) character, and some clients
-   do not know how to handle escape characters. Remedies include 
-   removing the escape character (``\``), encapsulating the string
-   in quotes, or simply regenerating the key and ensuring that it 
-   does not have an escape character.
-
-Configuring Operations Logging
-==============================
-
-By default, Ceph Object Gateway will log every successful operation in the Ceph
-Object Gateway backend. This means that every request, whether it is a read
-request or a write request will generate a gateway operation that writes data.
-This does not come without cost, and may affect overall performance. Turning off
-logging completely can be done by adding the following config option to the Ceph
-configuration file::
-
-        rgw enable ops log = false
-
-Another way to reduce the logging load is to send operations logging data to a UNIX domain
-socket, instead of writing it to the Ceph Object Gateway backend::
-
-        rgw ops log rados = false
-        rgw enable ops log = true
-        rgw ops log socket path = <path to socket>
-
-When specifying a UNIX domain socket, it is also possible to specify the maximum amount
-of memory that will be used to keep the data backlog::
-
-        rgw ops log data backlog = <size in bytes>
-
-Any backlogged data in excess to the specified size will be lost, so the socket
-needs to be read constantly.
+	sudo /etc/init.d/ceph-radosgw start
 
 
-Enabling Swift Access
-=====================
+Verify the Runtime
+------------------
 
-Allowing access to the object store with Swift (OpenStack Object Storage)
-compatible clients requires an additional step; namely, the creation of a
-subuser and a Swift access key.
+Once the service is up and running, you can make an anonymous GET request to see
+if the gateway returns a response. A simple HTTP request to the domain name
+should return the following:
 
-::
+.. code-block:: xml
 
-  sudo radosgw-admin subuser create --uid=johndoe --subuser=johndoe:swift --access=full
-
-.. code-block:: javascript
-
-  { "user_id": "johndoe",
-    "rados_uid": 0,
-    "display_name": "John Doe",
-    "email": "john@example.com",
-    "suspended": 0,
-    "subusers": [
-      { "id": "johndoe:swift",
-        "permissions": "full-control"}],
-    "keys": [
-      { "user": "johndoe",
-        "access_key": "QFAMEDSJP5DEKJO0DDXY",
-        "secret_key": "iaSFLDVvDdQt6lkNzHyW4fPLZugBAI1g17LO0+87"}],
-    "swift_keys": []}
-
-::
-
-  sudo radosgw-admin key create --subuser=johndoe:swift --key-type=swift --gen-secret
-
-.. code-block:: javascript
-
-  { "user_id": "johndoe",
-    "rados_uid": 0,
-    "display_name": "John Doe",
-    "email": "john@example.com",
-    "suspended": 0,
-    "subusers": [
-       { "id": "johndoe:swift",
-         "permissions": "full-control"}],
-    "keys": [
-      { "user": "johndoe",
-        "access_key": "QFAMEDSJP5DEKJO0DDXY",
-        "secret_key": "iaSFLDVvDdQt6lkNzHyW4fPLZugBAI1g17LO0+87"}],
-    "swift_keys": [
-      { "user": "johndoe:swift",
-        "secret_key": "E9T2rUZNu2gxUjcwUBO8n\/Ev4KX6\/GprEuH4qhu1"}]}
-
-This step enables you to use any Swift client to connect to and use the Ceph
-Object Gateway via the Swift-compatible API. As an example, you might use the
-``swift`` command-line client utility that ships with the OpenStack Object
-Storage packages.
-
-::
-
-  swift -V 1.0 -A http://radosgw.example.com/auth -U johndoe:swift -K E9T2rUZNu2gxUjcwUBO8n\/Ev4KX6\/GprEuH4qhu1 post test  
-  swift -V 1.0 -A http://radosgw.example.com/auth -U johndoe:swift -K E9T2rUZNu2gxUjcwUBO8n\/Ev4KX6\/GprEuH4qhu1 upload test myfile
-
-Ceph Object Gateway's ``user:subuser`` tuple maps to the ``tenant:user`` tuple expected by Swift.
-
-.. note:: Ceph Object Gateway's Swift authentication service only supports 
-   built-in Swift authentication (``-V 1.0``). To make the gateway authenticate
-   users via OpenStack Identity Service (Keystone), see below.
+   <ListAllMyBucketsResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+	   <Owner>
+		   <ID>anonymous</ID>
+		   <DisplayName/>
+	   </Owner>
+	   <Buckets/>
+   </ListAllMyBucketsResult>
 
 
-Integrating with OpenStack Keystone
-===================================
+If you receive an error, check your settings and try again. See 
+`Adjust Path Ownership/Permissions`_ for details.
 
-It is possible to integrate the Ceph Object Gateway with Keystone, the OpenStack
-identity service. This sets up the gateway to accept Keystone as the users
-authority. A user that Keystone authorizes to access the gateway will also be
-automatically created on the Ceph Object Gateway (if didn't exist beforehand). A
-token that Keystone validates will be considered as valid by the gateway.
+Using The Gateway
+=================
 
-The following configuration options are available for Keystone integration::
-
-	[client.radosgw.gateway]
-		rgw keystone url = {keystone server url:keystone server admin port}
-		rgw keystone admin token = {keystone admin token}
-		rgw keystone accepted roles = {accepted user roles}
-		rgw keystone token cache size = {number of tokens to cache}
-		rgw keystone revocation interval = {number of seconds before checking revoked tickets}
-		rgw s3 auth use keystone = true
-		nss db path = {path to nss db}
-
-A Ceph Object Gateway user is mapped into a Keystone ``tenant``. A Keystone user
-has different roles assigned to it on possibly more than a single tenant. When
-the Ceph Object Gateway gets the ticket, it looks at the tenant, and the user
-roles that are assigned to that ticket, and accepts/rejects the request
-according to the ``rgw keystone accepted roles`` configurable.
-
-Keystone itself needs to be configured to point to the Ceph Object Gateway as an
-object-storage endpoint::
-
-	keystone service-create --name swift --type object-store
-	keystone endpoint-create --service-id <id> --publicurl http://radosgw.example.com/swift/v1 \
-		--internalurl http://radosgw.example.com/swift/v1 --adminurl http://radosgw.example.com/swift/v1
+To use the REST interfaces, first create an initial Ceph Object Gateway user for
+the S3 interface. Then, create a subuser for the swift interface. See the `Admin
+Guide`_ for details.
 
 
-The keystone URL is the Keystone admin RESTful API URL. The admin token is the
-token that is configured internally in Keystone for admin requests.
-
-The Ceph Object Gateway will query Keystone periodically for a list of revoked
-tokens. These requests are encoded and signed. Also, Keystone may be configured
-to provide self-signed tokens, which are also encoded and signed. The gateway
-needs to be able to decode and verify these signed messages, and the process
-requires that the gateway be set up appropriately. Currently, the Ceph Object
-Gateway will only be able to perform the procedure if it was compiled with
-``--with-nss``. Configuring the Ceph Object Gateway to work with Keystone also
-requires converting the OpenSSL certificates that Keystone uses for creating the
-requests to the nss db format, for example::
-
-	mkdir /var/ceph/nss
-
-	openssl x509 -in /etc/keystone/ssl/certs/ca.pem -pubkey | \
-		certutil -d /var/ceph/nss -A -n ca -t "TCu,Cu,Tuw"
-	openssl x509 -in /etc/keystone/ssl/certs/signing_cert.pem -pubkey | \
-		certutil -A -d /var/ceph/nss -n signing_cert -t "P,P,P"
-
-
-Enabling Subdomain S3 Calls
-===========================
-
-To use a Ceph Object Gateway with subdomain S3 calls (e.g.,
-``http://bucketname.hostname``), you must add the Ceph Object Gateway DNS name
-under the ``[client.radosgw.gateway]`` section of your Ceph configuration file::
-
-	[client.radosgw.gateway]
-		...
-		rgw dns name = {hostname}
-
-You should also consider installing `Dnsmasq`_ on your client machine(s) when
-using ``http://{bucketname}.{hostname}`` syntax. The  ``dnsmasq.conf`` file
-should include the following settings:: 
-
-	address=/{hostname}/{host-ip-address}
-	listen-address={client-loopback-ip}
-
-Then, add the ``{client-loopback-ip}`` IP address as the first DNS nameserver
-on client the machine(s).
 
 .. _Dnsmasq: https://help.ubuntu.com/community/Dnsmasq
+.. _Configuration Reference - Pools: ../config-ref#pools
 .. _Pool Configuration: ../../rados/configuration/pool-pg-config-ref/
 .. _Pools: ../../rados/operations/pools
 .. _Cephx Guide: ../../rados/operations/authentication/#cephx-guide
 .. _Operating a Cluster: ../../rados/rados/operations/operating
+.. _Admin Guide: ../admin
+.. _Add Wildcard to DNS: ../../install/install-ceph-gateway#add-wildcard-to-dns

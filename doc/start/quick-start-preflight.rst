@@ -4,32 +4,17 @@
 
 .. versionadded:: 0.60
 
-Thank you for trying Ceph! We recommend setting up a ``ceph-deploy`` admin node
+Thank you for trying Ceph! We recommend setting up a ``ceph-deploy`` admin :term:`node`
 and a 3-node :term:`Ceph Storage Cluster` to explore the basics of Ceph. This
 **Preflight Checklist** will help you prepare a ``ceph-deploy`` admin node and
 three Ceph Nodes (or virtual machines) that will host your Ceph Storage Cluster.
 Before proceeding any further, see `OS Recommendations`_ to verify that you have
 a supported distribution and version of Linux.
 
+In the descriptions below, :term:`Node` refers to a single machine.
 
-.. ditaa:: 
-           /------------------\         /----------------\
-           |    Admin Node    |         |     node1      |
-           |                  +-------->+                |
-           |    ceph–deploy   |         | cCCC           |
-           \---------+--------/         \----------------/
-                     |
-                     |                  /----------------\
-                     |                  |     node2      |
-                     +----------------->+                |
-                     |                  | cCCC           |
-                     |                  \----------------/
-                     |
-                     |                  /----------------\
-                     |                  |     node3      |
-                     +----------------->|                |
-                                        | cCCC           |
-                                        \----------------/
+.. include:: quick-common.rst
+
 
 
 Ceph Deploy Setup
@@ -37,11 +22,6 @@ Ceph Deploy Setup
 
 Add Ceph repositories to the ``ceph-deploy`` admin node. Then, install
 ``ceph-deploy``. 
-
-.. important:: Do not call ``ceph-deploy`` with ``sudo`` or run it as ``root`` 
-   if you are logged in as a different user, because it will not issue ``sudo`` 
-   commands needed on the remote host.
-
 
 Advanced Package Tool (APT)
 ---------------------------
@@ -53,7 +33,8 @@ For Debian and Ubuntu distributions, perform the following steps:
 	wget -q -O- 'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc' | sudo apt-key add -
 
 #. Add the Ceph packages to your repository. Replace ``{ceph-stable-release}``
-   with a stable Ceph release (e.g., ``cuttlefish``, ``dumpling``, etc.). 
+   with a stable Ceph release (e.g., ``cuttlefish``, ``dumpling``,
+   ``emperor``, ``firefly``, etc.). 
    For example::
 	
 	echo deb http://ceph.com/debian-{ceph-stable-release}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
@@ -104,14 +85,30 @@ following steps:
 
 Ceph Node Setup
 ===============
+.. important:: Do not call ``ceph-deploy`` with ``sudo`` or run it as ``root`` 
+   if you are logged in as a different user, because it will not issue ``sudo`` 
+   commands needed on the remote host.
 
 If you are using ``ceph-deploy`` version 1.1.3 and beyond, ``ceph-deploy``
 will attempt to create the SSH key and copy it to the initial monitor nodes 
-automatically when you create the new cluster. For example:: 
+automatically when you create the new cluster.
+
+Start from your ``ceph-deploy`` admin node. The admin node needs to
+have password-less SSH access to each Ceph Node listed below.
+
+For example:: 
 
 	ceph-deploy new node1
 
-For other Ceph Nodes (and for initial monitors prior to ``ceph-deploy`` v1.1.3)
+This command will create the following files in the current directory
+of the admin node:
+
+- ``ceph.conf``
+- ``ceph.log``
+- ``ceph.mon.keyring``
+
+For other Ceph Nodes in this example
+(and for initial monitors prior to ``ceph-deploy`` v1.1.3)
 perform the following steps:
 
 #. Create a user on each Ceph Node. :: 
@@ -120,7 +117,7 @@ perform the following steps:
 	sudo useradd -d /home/ceph -m ceph
 	sudo passwd ceph
 
-#. Add ``root`` privileges for the user on each Ceph Node. :: 
+#. Add ``sudo`` privileges for the user on each Ceph Node. :: 
 
 	echo "ceph ALL = (root) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/ceph
 	sudo chmod 0440 /etc/sudoers.d/ceph
@@ -129,6 +126,9 @@ perform the following steps:
 #. Install an SSH server (if necessary) on each Ceph Node:: 
 
 	sudo apt-get install openssh-server
+
+   or:: 
+
 	sudo yum install openssh-server
 	
 	

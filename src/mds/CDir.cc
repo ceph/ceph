@@ -85,8 +85,6 @@ ostream& operator<<(ostream& out, CDir& dir)
     out << " ap=" << dir.get_auth_pins() 
 	<< "+" << dir.get_dir_auth_pins()
 	<< "+" << dir.get_nested_auth_pins();
-  if (dir.get_nested_anchors())
-    out << " na=" << dir.get_nested_anchors();
 
   out << " state=" << dir.get_state();
   if (dir.state_test(CDir::STATE_COMPLETE)) out << "|complete";
@@ -200,8 +198,6 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   dir_auth_pins = 0;
   request_pins = 0;
 
-  nested_anchors = 0;
-  
   dir_rep = REP_NONE;
 }
 
@@ -529,9 +525,6 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
   if (in->auth_pins + in->nested_auth_pins)
     dn->adjust_nested_auth_pins(in->auth_pins + in->nested_auth_pins, in->auth_pins, NULL);
 
-  if (in->inode.anchored + in->nested_anchors)
-    dn->adjust_nested_anchors(in->nested_anchors + in->inode.anchored);
-
   // verify open snaprealm parent
   if (in->snaprealm)
     in->snaprealm->adjust_parent();
@@ -602,9 +595,6 @@ void CDir::unlink_inode_work( CDentry *dn )
     if (in->auth_pins + in->nested_auth_pins)
       dn->adjust_nested_auth_pins(0 - (in->auth_pins + in->nested_auth_pins), 0 - in->auth_pins, NULL);
     
-    if (in->inode.anchored + in->nested_anchors)
-      dn->adjust_nested_anchors(0 - (in->nested_anchors + in->inode.anchored));
-
     // detach inode
     in->remove_primary_parent(dn);
     dn->get_linkage()->inode = 0;
@@ -743,8 +733,7 @@ void CDir::steal_dentry(CDentry *dn)
       fnode.rstat.rbytes += pi->accounted_rstat.rbytes;
       fnode.rstat.rfiles += pi->accounted_rstat.rfiles;
       fnode.rstat.rsubdirs += pi->accounted_rstat.rsubdirs;
-      fnode.rstat.ranchors += pi->accounted_rstat.ranchors;
-      fnode.rstat.rsnaprealms += pi->accounted_rstat.ranchors;
+      fnode.rstat.rsnaprealms += pi->accounted_rstat.rsnaprealms;
       if (pi->accounted_rstat.rctime > fnode.rstat.rctime)
 	fnode.rstat.rctime = pi->accounted_rstat.rctime;
 
@@ -768,7 +757,6 @@ void CDir::steal_dentry(CDentry *dn)
     dn->dir->adjust_nested_auth_pins(-ap, -dap, NULL);
   }
 
-  nested_anchors += dn->nested_anchors;
   if (dn->is_dirty()) 
     num_dirty++;
 
@@ -857,15 +845,17 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   
   double fac = 1.0 / (double)(1 << bits);  // for scaling load vecs
 
-  dout(15) << "           rstat " << fnode.rstat << dendl;
-  dout(15) << " accounted_rstat " << fnode.accounted_rstat << dendl;
+  version_t rstat_version = inode->get_projected_inode()->rstat.version;
+  version_t dirstat_version = inode->get_projected_inode()->dirstat.version;
+
   nest_info_t rstatdiff;
-  rstatdiff.add_delta(fnode.accounted_rstat, fnode.rstat);
-  dout(15) << "           fragstat " << fnode.fragstat << dendl;
-  dout(15) << " accounted_fragstat " << fnode.accounted_fragstat << dendl;
   frag_info_t fragstatdiff;
-  bool touched_mtime;
-  fragstatdiff.add_delta(fnode.accounted_fragstat, fnode.fragstat, touched_mtime);
+  if (fnode.accounted_rstat.version == rstat_version)
+    rstatdiff.add_delta(fnode.accounted_rstat, fnode.rstat);
+  if (fnode.accounted_fragstat.version == dirstat_version) {
+    bool touched_mtime;
+    fragstatdiff.add_delta(fnode.accounted_fragstat, fnode.fragstat, touched_mtime);
+  }
   dout(10) << " rstatdiff " << rstatdiff << " fragstatdiff " << fragstatdiff << dendl;
 
   prepare_old_fragment(replay);
@@ -917,9 +907,9 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   // fix up new frag fragstats
   for (int i=0; i<n; i++) {
     CDir *f = subfrags[i];
-    f->fnode.rstat.version = fnode.rstat.version;
+    f->fnode.rstat.version = rstat_version;
     f->fnode.accounted_rstat = f->fnode.rstat;
-    f->fnode.fragstat.version = fnode.fragstat.version;
+    f->fnode.fragstat.version = dirstat_version;
     f->fnode.accounted_fragstat = f->fnode.fragstat;
     dout(10) << " rstat " << f->fnode.rstat << " fragstat " << f->fnode.fragstat
 	     << " on " << *f << dendl;
@@ -1117,27 +1107,6 @@ void CDir::take_dentry_waiting(const string& dname, snapid_t first, snapid_t las
     put(PIN_DNWAITER);
 }
 
-void CDir::add_ino_waiter(inodeno_t ino, Context *c) 
-{
-  if (waiting_on_ino.empty())
-    get(PIN_INOWAITER);
-  waiting_on_ino[ino].push_back(c);
-  dout(10) << "add_ino_waiter ino " << ino << " " << c << " on " << *this << dendl;
-}
-
-void CDir::take_ino_waiting(inodeno_t ino, list<Context*>& ls)
-{
-  if (waiting_on_ino.empty()) return;
-  if (waiting_on_ino.count(ino) == 0) return;
-  dout(10) << "take_ino_waiting ino " << ino
-	   << " x " << waiting_on_ino[ino].size() 
-	   << " on " << *this << dendl;
-  ls.splice(ls.end(), waiting_on_ino[ino]);
-  waiting_on_ino.erase(ino);
-  if (waiting_on_ino.empty())
-    put(PIN_INOWAITER);
-}
-
 void CDir::take_sub_waiting(list<Context*>& ls)
 {
   dout(10) << "take_sub_waiting" << dendl;
@@ -1148,14 +1117,6 @@ void CDir::take_sub_waiting(list<Context*>& ls)
       ls.splice(ls.end(), p->second);
     waiting_on_dentry.clear();
     put(PIN_DNWAITER);
-  }
-  if (!waiting_on_ino.empty()) {
-    for (map<inodeno_t, list<Context*> >::iterator p = waiting_on_ino.begin(); 
-	 p != waiting_on_ino.end();
-	 ++p) 
-      ls.splice(ls.end(), p->second);
-    waiting_on_ino.clear();
-    put(PIN_INOWAITER);
   }
 }
 
@@ -1616,20 +1577,9 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     else if (type == 'I') {
       // inode
       
-      // parse out inode
-      inode_t inode;
-      string symlink;
-      fragtree_t fragtree;
-      map<string, bufferptr> xattrs;
-      bufferlist snapbl;
-      map<snapid_t,old_inode_t> old_inodes;
-      ::decode(inode, q);
-      if (inode.is_symlink())
-        ::decode(symlink, q);
-      ::decode(fragtree, q);
-      ::decode(xattrs, q);
-      ::decode(snapbl, q);
-      ::decode(old_inodes, q);
+      // Load inode data before looking up or constructing CInode
+      InodeStore inode_data;
+      inode_data.decode_bare(q);
       
       if (stale)
 	continue;
@@ -1649,30 +1599,27 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 
       if (!dn || undef_inode) {
 	// add inode
-	CInode *in = cache->get_inode(inode.ino, last);
+	CInode *in = cache->get_inode(inode_data.inode.ino, last);
 	if (!in || undef_inode) {
 	  if (undef_inode && in)
 	    in->first = first;
 	  else
 	    in = new CInode(cache, true, first, last);
 	  
-	  in->inode = inode;
+	  in->inode = inode_data.inode;
 	  // symlink?
 	  if (in->is_symlink()) 
-	    in->symlink = symlink;
+	    in->symlink = inode_data.symlink;
 	  
-	  in->dirfragtree.swap(fragtree);
-	  in->xattrs.swap(xattrs);
-	  in->decode_snap_blob(snapbl);
-	  in->old_inodes.swap(old_inodes);
+	  in->dirfragtree.swap(inode_data.dirfragtree);
+	  in->xattrs.swap(inode_data.xattrs);
+	  in->decode_snap_blob(inode_data.snap_blob);
+	  in->old_inodes.swap(inode_data.old_inodes);
 	  if (snaps)
 	    in->purge_stale_snap_data(*snaps);
 
-	  if (undef_inode) {
-	    if (inode.anchored)
-	      dn->adjust_nested_anchors(1);
-	  } else {
-	    cache->add_inode( in ); // add
+	  if (!undef_inode) {
+	    cache->add_inode(in); // add
 	    dn = add_primary_dentry(dname, in, first, last); // link
 	  }
 	  dout(12) << "_fetched  got " << *dn << " " << *in << dendl;
@@ -1696,8 +1643,8 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 	  string dirpath, inopath;
 	  this->inode->make_path_string(dirpath);
 	  in->make_path_string(inopath);
-	  clog.error() << "loaded dup inode " << inode.ino
-	    << " [" << first << "," << last << "] v" << inode.version
+	  clog.error() << "loaded dup inode " << inode_data.inode.ino
+	    << " [" << first << "," << last << "] v" << inode_data.inode.version
 	    << " at " << dirpath << "/" << dname
 	    << ", but inode " << in->vino() << " v" << in->inode.version
 	    << " already exists at " << inopath << "\n";
@@ -1951,23 +1898,11 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
     
     // marker, name, inode, [symlink string]
     bl.append('I');         // inode
-    ::encode(in->inode, bl);
-    
-    if (in->is_symlink()) {
-      // include symlink destination!
-      dout(18) << "    including symlink ptr " << in->symlink << dendl;
-      ::encode(in->symlink, bl);
-    }
-    
-    ::encode(in->dirfragtree, bl);
-    ::encode(in->xattrs, bl);
-    bufferlist snapbl;
-    in->encode_snap_blob(snapbl);
-    ::encode(snapbl, bl);
-    
+
     if (in->is_multiversion() && snaps)
       in->purge_stale_snap_data(*snaps);
-    ::encode(in->old_inodes, bl);
+
+    in->encode_bare(bl);
   }
 }
 
@@ -2387,15 +2322,6 @@ void CDir::adjust_nested_auth_pins(int inc, int dirinc, void *by)
     else if (newcum == inc)      
       inode->adjust_nested_auth_pins(1, by);
   }
-}
-
-void CDir::adjust_nested_anchors(int by)
-{
-  assert(by);
-  nested_anchors += by;
-  dout(20) << "adjust_nested_anchors by " << by << " -> " << nested_anchors << dendl;
-  assert(nested_anchors >= 0);
-  inode->adjust_nested_anchors(by);
 }
 
 #ifdef MDS_VERIFY_FRAGSTAT

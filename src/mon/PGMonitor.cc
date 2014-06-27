@@ -1215,11 +1215,13 @@ inline string percentify(const float& a) {
 
 //void PGMonitor::dump_object_stat_sum(stringstream& ss, Formatter *f,
 void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
-    object_stat_sum_t &sum, bool verbose)
+				     object_stat_sum_t &sum, uint64_t avail,
+				     bool verbose)
 {
   if (f) {
     f->dump_int("kb_used", SHIFT_ROUND_UP(sum.num_bytes, 10));
     f->dump_int("bytes_used", sum.num_bytes);
+    f->dump_unsigned("max_avail", avail);
     f->dump_int("objects", sum.num_objects);
     if (verbose) {
       f->dump_int("dirty", sum.num_objects_dirty);
@@ -1232,6 +1234,7 @@ void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
     tbl << stringify(si_t(sum.num_bytes));
     int64_t kb_used = SHIFT_ROUND_UP(sum.num_bytes, 10);
     tbl << percentify(((float)kb_used / pg_map.osd_sum.kb)*100);
+    tbl << si_t(avail);
     tbl << sum.num_objects;
     if (verbose) {
       tbl << stringify(si_t(sum.num_objects_dirty))
@@ -1239,6 +1242,22 @@ void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
           << stringify(si_t(sum.num_wr));
     }
   }
+}
+
+int64_t PGMonitor::get_rule_avail(OSDMap& osdmap, int ruleno)
+{
+  map<int,float> wm;
+  int r = osdmap.crush->get_rule_weight_map(ruleno, &wm);
+  if (r < 0)
+    return r;
+  int64_t min = -1;
+  for (map<int,float>::iterator p = wm.begin(); p != wm.end(); ++p) {
+    int64_t proj = (float)(pg_map.osd_sum.kb_avail * 1024ull) /
+      (double)p->second;
+    if (min < 0 || proj < min)
+      min = proj;
+  }
+  return min;
 }
 
 void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
@@ -1252,16 +1271,18 @@ void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
     tbl.define_column("ID", TextTable::LEFT, TextTable::LEFT);
     if (verbose)
       tbl.define_column("CATEGORY", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("USED", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("\%USED", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("OBJECTS", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("%%USED", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("MAX AVAIL", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
     if (verbose) {
-      tbl.define_column("DIRTY", TextTable::LEFT, TextTable::LEFT);
-      tbl.define_column("READ", TextTable::LEFT, TextTable::LEFT);
-      tbl.define_column("WRITE", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("DIRTY", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("READ", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("WRITE", TextTable::LEFT, TextTable::RIGHT);
     }
   }
 
+  map<int,uint64_t> avail_by_rule;
   OSDMap &osdmap = mon->osdmon()->osdmap;
   for (map<int64_t,pg_pool_t>::const_iterator p = osdmap.get_pools().begin();
        p != osdmap.get_pools().end(); ++p) {
@@ -1270,6 +1291,38 @@ void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
       continue;
     string pool_name = osdmap.get_pool_name(pool_id);
     pool_stat_t &stat = pg_map.pg_pool_sum[pool_id];
+
+    const pg_pool_t *pool = osdmap.get_pg_pool(pool_id);
+    int ruleno = osdmap.crush->find_rule(pool->get_crush_ruleset(),
+					 pool->get_type(),
+					 pool->get_size());
+    uint64_t avail;
+    if (avail_by_rule.count(ruleno) == 0) {
+      avail = get_rule_avail(osdmap, ruleno);
+      avail_by_rule[ruleno] = avail;
+    } else {
+      avail = avail_by_rule[ruleno];
+    }
+    switch (pool->get_type()) {
+    case pg_pool_t::TYPE_REPLICATED:
+      avail /= pool->get_size();
+      break;
+    case pg_pool_t::TYPE_ERASURE:
+      {
+	const map<string,string>& ecp =
+	  osdmap.get_erasure_code_profile(pool->erasure_code_profile);
+	map<string,string>::const_iterator pm = ecp.find("m");
+	map<string,string>::const_iterator pk = ecp.find("k");
+	if (pm != ecp.end() && pk != ecp.end()) {
+	  int k = atoi(pk->second.c_str());
+	  int m = atoi(pm->second.c_str());
+	  avail = avail * k / (m + k);
+	}
+      }
+      break;
+    default:
+      assert(0 == "unrecognized pool type");
+    }
 
     if (f) {
       f->open_object_section("pool");
@@ -1282,7 +1335,7 @@ void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
       if (verbose)
         tbl << "-";
     }
-    dump_object_stat_sum(tbl, f, stat.stats.sum, verbose);
+    dump_object_stat_sum(tbl, f, stat.stats.sum, avail, verbose);
     if (f)
       f->close_section(); // stats
     else
@@ -1301,7 +1354,7 @@ void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
               << ""
               << it->first;
         }
-        dump_object_stat_sum(tbl, f, it->second, verbose);
+        dump_object_stat_sum(tbl, f, it->second, avail, verbose);
         if (f)
           f->close_section(); // category name
         else
@@ -1335,12 +1388,12 @@ void PGMonitor::dump_fs_stats(stringstream &ss, Formatter *f, bool verbose)
     f->close_section();
   } else {
     TextTable tbl;
-    tbl.define_column("SIZE", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("AVAIL", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("RAW USED", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("\%RAW USED", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("SIZE", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("RAW USED", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("%%RAW USED", TextTable::LEFT, TextTable::RIGHT);
     if (verbose) {
-      tbl.define_column("OBJECTS", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
     }
     tbl << stringify(si_t(pg_map.osd_sum.kb*1024))
         << stringify(si_t(pg_map.osd_sum.kb_avail*1024))
@@ -1513,7 +1566,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     mon->osdmon()->osdmap.pg_to_up_acting_osds(pgid, up, acting);
     if (f) {
       f->open_object_section("pg_map");
-      f->dump_stream("epoch") << mon->osdmon()->osdmap.get_epoch();
+      f->dump_unsigned("epoch", mon->osdmon()->osdmap.get_epoch());
       f->dump_stream("raw_pgid") << pgid;
       f->dump_stream("pgid") << mpgid;
 

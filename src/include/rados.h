@@ -334,6 +334,25 @@ static inline int ceph_osd_op_mode_cache(int op)
 {
 	return op & CEPH_OSD_OP_MODE_CACHE;
 }
+static inline int ceph_osd_op_uses_extent(int op)
+{
+	switch(op) {
+	case CEPH_OSD_OP_READ:
+	case CEPH_OSD_OP_MAPEXT:
+	case CEPH_OSD_OP_MASKTRUNC:
+	case CEPH_OSD_OP_SPARSE_READ:
+	case CEPH_OSD_OP_SYNC_READ:
+	case CEPH_OSD_OP_WRITE:
+	case CEPH_OSD_OP_WRITEFULL:
+	case CEPH_OSD_OP_TRUNCATE:
+	case CEPH_OSD_OP_ZERO:
+	case CEPH_OSD_OP_APPEND:
+	case CEPH_OSD_OP_TRIMTRUNC:
+		return true;
+	default:
+		return false;
+	}
+}
 
 /*
  * note that the following tmap stuff is also defined in the ceph librados.h
@@ -376,6 +395,8 @@ enum {
 						 */
 	CEPH_OSD_FLAG_ENFORCE_SNAPC    =0x100000,  /* use snapc provided even if
 						      pool uses pool snaps */
+	CEPH_OSD_FLAG_REDIRECTED   = 0x200000,  /* op has been redirected */
+	CEPH_OSD_FLAG_KNOWN_REDIR = 0x400000,  /* redirect bit is authoritative */
 };
 
 enum {

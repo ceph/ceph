@@ -63,8 +63,44 @@ struct cinode_lock_info_t {
 extern cinode_lock_info_t cinode_lock_info[];
 extern int num_cinode_locks;
 
+
+/**
+ * Base class for CInode, containing the backing store data and
+ * serialization methods.  This exists so that we can read and
+ * handle CInodes from the backing store without hitting all
+ * the business logic in CInode proper.
+ */
+class InodeStore {
+public:
+  inode_t                    inode;        // the inode itself
+  string                     symlink;      // symlink dest, if symlink
+  map<string, bufferptr>     xattrs;
+  fragtree_t                 dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
+  map<snapid_t, old_inode_t> old_inodes;   // key = last, value.first = first
+  bufferlist		     snap_blob;    // Encoded copy of SnapRealm, because we can't
+                                           // rehydrate it without full MDCache
+
+  /* Helpers */
+  bool is_file() const    { return inode.is_file(); }
+  bool is_symlink() const { return inode.is_symlink(); }
+  bool is_dir() const     { return inode.is_dir(); }
+  static object_t get_object_name(inodeno_t ino, frag_t fg, const char *suffix);
+
+  /* Full serialization for use in ".inode" root inode objects */
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+
+  /* Serialization without ENCODE_START/FINISH blocks for use embedded in dentry */
+  void encode_bare(bufferlist &bl) const;
+  void decode_bare(bufferlist::iterator &bl, __u8 struct_v=4);
+
+  /* For use in debug and ceph-dencoder */
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<InodeStore*>& ls);
+};
+
 // cached inode wrapper
-class CInode : public MDSCacheObject {
+class CInode : public MDSCacheObject, public InodeStore {
   /*
    * This class uses a boost::pool to handle allocation. This is *not*
    * thread-safe, so don't do allocations from multiple threads!
@@ -91,8 +127,6 @@ public:
   static const int PIN_DIRFRAG =         -1; 
   static const int PIN_CAPS =             2;  // client caps
   static const int PIN_IMPORTING =       -4;  // importing
-  static const int PIN_ANCHORING =        5;
-  static const int PIN_UNANCHORING =      6;
   static const int PIN_OPENINGDIR =       7;
   static const int PIN_REMOTEPARENT =     8;
   static const int PIN_BATCHOPENJOURNAL = 9;
@@ -117,8 +151,6 @@ public:
     case PIN_DIRFRAG: return "dirfrag";
     case PIN_CAPS: return "caps";
     case PIN_IMPORTING: return "importing";
-    case PIN_ANCHORING: return "anchoring";
-    case PIN_UNANCHORING: return "unanchoring";
     case PIN_OPENINGDIR: return "openingdir";
     case PIN_REMOTEPARENT: return "remoteparent";
     case PIN_BATCHOPENJOURNAL: return "batchopenjournal";
@@ -143,8 +175,6 @@ public:
 
   // -- state --
   static const int STATE_EXPORTING =   (1<<2);   // on nonauth bystander.
-  static const int STATE_ANCHORING =   (1<<3);
-  static const int STATE_UNANCHORING = (1<<4);
   static const int STATE_OPENINGDIR =  (1<<5);
   static const int STATE_FREEZING =    (1<<7);
   static const int STATE_FROZEN =      (1<<8);
@@ -168,11 +198,9 @@ public:
 
   // -- waiters --
   static const uint64_t WAIT_DIR         = (1<<0);
-  static const uint64_t WAIT_ANCHORED    = (1<<1);
-  static const uint64_t WAIT_UNANCHORED  = (1<<2);
-  static const uint64_t WAIT_FROZEN      = (1<<3);
-  static const uint64_t WAIT_TRUNC       = (1<<4);
-  static const uint64_t WAIT_FLOCK       = (1<<5);
+  static const uint64_t WAIT_FROZEN      = (1<<1);
+  static const uint64_t WAIT_TRUNC       = (1<<2);
+  static const uint64_t WAIT_FLOCK       = (1<<3);
   
   static const uint64_t WAIT_ANY_MASK	= (uint64_t)(-1);
 
@@ -184,16 +212,9 @@ public:
  public:
   MDCache *mdcache;
 
-  // inode contents proper
-  inode_t          inode;        // the inode itself
-  string           symlink;      // symlink dest, if symlink
-  map<string, bufferptr> xattrs;
-  fragtree_t       dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
   SnapRealm        *snaprealm;
-
   SnapRealm        *containing_realm;
   snapid_t          first, last;
-  map<snapid_t, old_inode_t> old_inodes;  // key = last, value.first = first
   set<snapid_t> dirty_old_rstats;
 
   bool is_multiversion() {
@@ -416,10 +437,6 @@ public:
 #endif
   int auth_pin_freeze_allowance;
 
-private:
-  int nested_anchors;   // _NOT_ including me!
-
- public:
   inode_load_vec_t pop;
 
   // friends
@@ -430,7 +447,6 @@ private:
   friend class CDir;
   friend class CInodeExport;
 
- public:
   // ---------------------------
   CInode(MDCache *c, bool auth=true, snapid_t f=2, snapid_t l=CEPH_NOSNAP) : 
     mdcache(c),
@@ -448,7 +464,6 @@ private:
     item_dirty_dirfrag_dirfragtree(this), 
     auth_pins(0), nested_auth_pins(0),
     auth_pin_freeze_allowance(0),
-    nested_anchors(0),
     pop(ceph_clock_now(g_ceph_context)),
     versionlock(this, &versionlock_type),
     authlock(this, &authlock_type),
@@ -466,7 +481,7 @@ private:
     g_num_inoa++;
     state = 0;  
     if (auth) state_set(STATE_AUTH);
-  };
+  }
   ~CInode() {
     g_num_ino--;
     g_num_inos++;
@@ -476,14 +491,6 @@ private:
   
 
   // -- accessors --
-  bool is_file()    { return inode.is_file(); }
-  bool is_symlink() { return inode.is_symlink(); }
-  bool is_dir()     { return inode.is_dir(); }
-
-  bool is_anchored() { return inode.anchored; }
-  bool is_anchoring() { return state_test(STATE_ANCHORING); }
-  bool is_unanchoring() { return state_test(STATE_UNANCHORING); }
-  
   bool is_root() { return inode.ino == MDS_INO_ROOT; }
   bool is_stray() { return MDS_INO_IS_STRAY(inode.ino); }
   bool is_mdsdir() { return MDS_INO_IS_MDSDIR(inode.ino); }
@@ -525,12 +532,7 @@ private:
   void make_path_string(string& s, bool force=false, CDentry *use_parent=NULL);
   void make_path_string_projected(string& s);  
   void make_path(filepath& s);
-  void make_anchor_trace(vector<class Anchor>& trace);
   void name_stray_dentry(string& dname);
-
-
-  static object_t get_object_name(inodeno_t ino, frag_t fg, const char *suffix);
-
   
   // -- dirtyness --
   version_t get_version() { return inode.version; }
@@ -546,13 +548,15 @@ private:
   void _fetched(bufferlist& bl, bufferlist& bl2, Context *fin);  
 
   void build_backtrace(int64_t pool, inode_backtrace_t& bt);
-  void store_backtrace(Context *fin);
+  void store_backtrace(Context *fin, int op_prio=-1);
   void _stored_backtrace(version_t v, Context *fin);
   void _mark_dirty_parent(LogSegment *ls, bool dirty_pool=false);
   void clear_dirty_parent();
   bool is_dirty_parent() { return state_test(STATE_DIRTYPARENT); }
   bool is_dirty_pool() { return state_test(STATE_DIRTYPOOL); }
 
+  void encode_snap_blob(bufferlist &bl);
+  void decode_snap_blob(bufferlist &bl);
   void encode_store(bufferlist& bl);
   void decode_store(bufferlist::iterator& bl);
 
@@ -679,8 +683,6 @@ public:
   void open_snaprealm(bool no_split=false);
   void close_snaprealm(bool no_join=false);
   SnapRealm *find_snaprealm();
-  void encode_snap_blob(bufferlist &bl);
-  void decode_snap_blob(bufferlist &bl);
   void encode_snap(bufferlist& bl);
   void decode_snap(bufferlist::iterator& p);
 
@@ -785,9 +787,6 @@ public:
   bool can_auth_pin();
   void auth_pin(void *by);
   void auth_unpin(void *by);
-
-  void adjust_nested_anchors(int by);
-  int get_nested_anchors() { return nested_anchors; }
 
   // -- freeze --
   bool is_freezing_inode() { return state_test(STATE_FREEZING); }

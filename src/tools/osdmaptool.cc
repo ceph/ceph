@@ -12,22 +12,16 @@
  * 
  */
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <errno.h>
-
-#include <iostream>
 #include <string>
-using namespace std;
+#include <sys/stat.h>
 
-#include "common/config.h"
-
-#include "common/errno.h"
-#include "osd/OSDMap.h"
-#include "mon/MonMap.h"
 #include "common/ceph_argparse.h"
+#include "common/errno.h"
+
 #include "global/global_init.h"
+#include "osd/OSDMap.h"
+
+using namespace std;
 
 void usage()
 {
