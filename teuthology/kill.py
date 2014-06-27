@@ -1,7 +1,6 @@
 #!/usr/bin/python
 import os
 import sys
-import beanstalkc
 import yaml
 import psutil
 import subprocess
@@ -9,6 +8,7 @@ import tempfile
 import logging
 import getpass
 
+from . import beanstalk
 from . import report
 from .config import config
 
@@ -109,16 +109,15 @@ def remove_beanstalk_jobs(run_name, tube_name):
             'Beanstalk queue information not found in {conf_path}'.format(
                 conf_path=config.teuthology_yaml))
     log.info("Checking Beanstalk Queue...")
-    beanstalk = beanstalkc.Connection(host=qhost, port=qport)
-    beanstalk.watch(tube_name)
-    beanstalk.ignore('default')
+    beanstalk_conn = beanstalk.connect()
+    beanstalk.watch_tube(beanstalk_conn, tube_name)
 
-    curjobs = beanstalk.stats_tube(tube_name)['current-jobs-ready']
+    curjobs = beanstalk_conn.stats_tube(tube_name)['current-jobs-ready']
     if curjobs != 0:
         x = 1
         while x != curjobs:
             x += 1
-            job = beanstalk.reserve(timeout=20)
+            job = beanstalk_conn.reserve(timeout=20)
             if job is None:
                 continue
             job_config = yaml.safe_load(job.body)
@@ -134,7 +133,7 @@ def remove_beanstalk_jobs(run_name, tube_name):
                 job.delete()
     else:
         print "No jobs in Beanstalk Queue"
-    beanstalk.close()
+    beanstalk_conn.close()
 
 
 def kill_processes(run_name, pids=None):
