@@ -21,10 +21,66 @@
 #endif
 
 #include <stdlib.h>
+#include "include/Spinlock.h"
+
+namespace ceph {
+  template <class T>
+  class atomic_spinlock_t {
+    mutable ceph_spinlock_t lock;
+    T val;
+  public:
+    atomic_spinlock_t(T i=0)
+      : val(i) {
+      ceph_spin_init(&lock);
+    }
+    ~atomic_spinlock_t() {
+      ceph_spin_destroy(&lock);
+    }
+    void set(size_t v) {
+      ceph_spin_lock(&lock);
+      val = v;
+      ceph_spin_unlock(&lock);
+    }
+    T inc() {
+      ceph_spin_lock(&lock);
+      T r = ++val;
+      ceph_spin_unlock(&lock);
+      return r;
+    }
+    T dec() {
+      ceph_spin_lock(&lock);
+      T r = --val;
+      ceph_spin_unlock(&lock);
+      return r;
+    }
+    void add(T d) {
+      ceph_spin_lock(&lock);
+      val += d;
+      ceph_spin_unlock(&lock);
+    }
+    void sub(T d) {
+      ceph_spin_lock(&lock);
+      val -= d;
+      ceph_spin_unlock(&lock);
+    }
+    T read() const {
+      signed long ret;
+      ceph_spin_lock(&lock);
+      ret = val;
+      ceph_spin_unlock(&lock);
+      return ret;
+    }
+  private:
+    // forbid copying
+    atomic_spinlock_t(const atomic_spinlock_t<T> &other);
+    atomic_spinlock_t &operator=(const atomic_spinlock_t<T> &rhs);
+  };
+}
 
 #ifndef NO_ATOMIC_OPS
 
 // libatomic_ops implementation
+#define AO_REQUIRE_CAS
 #include <atomic_ops.h>
 
 // reinclude our assert to clobber the system one
@@ -62,7 +118,15 @@ namespace ceph {
     atomic_t(const atomic_t &other);
     atomic_t &operator=(const atomic_t &rhs);
   };
+
+#if SIZEOF_AO_T == 8
+  typedef atomic_t atomic64_t;
+#else
+  typedef atomic_spinlock_t<unsigned long long> atomic64_t;
+#endif
+
 }
+
 #else
 /*
  * crappy slow implementation that uses a pthreads spinlock.
@@ -70,56 +134,9 @@ namespace ceph {
 #include "include/Spinlock.h"
 
 namespace ceph {
-  class atomic_t {
-    mutable ceph_spinlock_t lock;
-    signed long val;
-  public:
-    atomic_t(int i=0)
-      : val(i) {
-      ceph_spin_init(&lock);
-    }
-    ~atomic_t() {
-      ceph_spin_destroy(&lock);
-    }
-    void set(size_t v) {
-      ceph_spin_lock(&lock);
-      val = v;
-      ceph_spin_unlock(&lock);
-    }
-    int inc() {
-      ceph_spin_lock(&lock);
-      int r = ++val;
-      ceph_spin_unlock(&lock);
-      return r;
-    }
-    int dec() {
-      ceph_spin_lock(&lock);
-      int r = --val;
-      ceph_spin_unlock(&lock);
-      return r;
-    }
-    void add(int d) {
-      ceph_spin_lock(&lock);
-      val += d;
-      ceph_spin_unlock(&lock);
-    }
-    void sub(int d) {
-      ceph_spin_lock(&lock);
-      val -= d;
-      ceph_spin_unlock(&lock);
-    }
-    int read() const {
-      signed long ret;
-      ceph_spin_lock(&lock);
-      ret = val;
-      ceph_spin_unlock(&lock);
-      return ret;
-    }
-  private:
-    // forbid copying
-    atomic_t(const atomic_t &other);
-    atomic_t &operator=(const atomic_t &rhs);
-  };
+  typedef atomic_spinlock_t<int> atomic_t;
+  typedef atomic_spinlock_t<long long> atomic64_t;
 }
+
 #endif
 #endif

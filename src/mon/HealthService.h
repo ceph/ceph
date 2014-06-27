@@ -37,8 +37,9 @@ struct HealthService : public QuorumService
   virtual bool service_dispatch(MMonHealth *m) = 0;
 
 public:
-  virtual health_status_t get_health(Formatter *f,
-                          list<pair<health_status_t,string> > *detail) = 0;
+  virtual void get_health(Formatter *f,
+			  list<pair<health_status_t,string> >& summary,
+			  list<pair<health_status_t,string> > *detail) = 0;
   virtual int get_type() = 0;
   virtual string get_name() const = 0;
 };

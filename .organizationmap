@@ -46,7 +46,6 @@ Inktank <contact@inktank.com> Eleanor Cawthon <eleanor.cawthon@inktank.com>
 Inktank <contact@inktank.com> Neil Levine <neil.levine@inktank.com>
 Inktank <contact@inktank.com> Patrick McGarry <patrick@inktank.com>
 Inktank <contact@inktank.com> Mark Nelson <mark.nelson@inktank.com>
-Inktank <contact@inktank.com> Alexandre Maragone <alexandre.marangone@inktank.com>
 Inktank <contact@inktank.com> Tyler Brekke <tyler.brekke@inktank.com>
 Inktank <contact@inktank.com> Ken Dreyer <ken.dreyer@inktank.com>
 Inktank <contact@inktank.com> Joe Buck <joe.buck@inktank.com>
@@ -66,18 +65,59 @@ DreamHost <contact@dreamhost.com> Andrew Farmer <andrewf@hq.newdream.net>
 DreamHost <contact@dreamhost.com> Emily Popper <emily.popper@dreamhost.com>
 DreamHost <contact@dreamhost.com> Peter Vinson <peter@hq.newdream.net>
 DreamHost <contact@dreamhost.com> Wesley Spikes <wesley.spikes@dreamhost.com>
+Red Hat <contact@redhat.com> Sage Weil <sweil@redhat.com>
+Red Hat <contact@redhat.com> Noah Watkins <nwatkins@redhat.com>
+Red Hat <contact@redhat.com> Yehuda Sadeh <ysadey@redhat.com>
+Red Hat <contact@redhat.com> Greg Farnum <gfarnum@redhat.com>
+Red Hat <contact@redhat.com> Samuel Just <sjust@redhat.com>
+Red Hat <contact@redhat.com> Josh Durgin <jdurgin@redhat.com>
+Red Hat <contact@redhat.com> John Wilkins <jwilkins@redhat.com>
+Red Hat <contact@redhat.com> Dan Mick <dmick@redhat.com>
+Red Hat <contact@redhat.com> João Eduardo Luís <jluis@redhat.com>
+Red Hat <contact@redhat.com> Tommi Virtanen <tvirtanen@redhat.com>
+Red Hat <contact@redhat.com> Gary Lowell <glowell@redhat.com>
+Red Hat <contact@redhat.com> David Zafman <dzafman@redhat.com>
+Red Hat <contact@redhat.com> Sam Lang <slang@redhat.com>
+Red Hat <contact@redhat.com> Alex Elder <aelder@redhat.com>
+Red Hat <contact@redhat.com> Tamil Muthamizhan <tmuthamizhan@redhat.com>
+Red Hat <contact@redhat.com> Alfredo Deza <adeza@redhat.com>
+Red Hat <contact@redhat.com> Alexandre Marangone <amarangone@redhat.com>
+Red Hat <contact@redhat.com> Ilya Dryomov <idryomov@redhat.com>
+Red Hat <contact@redhat.com> Ross Turk <rturk@redhat.com>
+Red Hat <contact@redhat.com> Neil Levine <nlevine@redhat.com>
+Red Hat <contact@redhat.com> Mark Nelson <mnelson@redhat.com>
+Red Hat <contact@redhat.com> Tyler Brekke <tbrekke@redhat.com>
+Red Hat <contact@redhat.com> Ken Dreyer <kdreyer@redhat.com>
+Red Hat <contact@redhat.com> John Spray <jspray@redhat.com>
+Red Hat <contact@redhat.com> Warren Usui <wusui@redhat.com>
+Red Hat <contact@redhat.com> Tom Callaway <spot@redhat.com>
+Red Hat <contact@redhat.com> Venky Shankar <vshankar@redhat.com>
+Unaffiliated <no@organization.net> Dominik Hannen <cantares1+github@gmail.com>
 Unaffiliated <no@organization.net> Huang Jun <hjwsm1989@gmail.com>
 Unaffiliated <no@organization.net> Dan Chai <tengweicai@gmail.com>
 Unaffiliated <no@organization.net> (no author) <(no author)@29311d96-e01e-0410-9327-a35deaab8ce9>
+Unaffiliated <no@organization.net> Colin Mattson <colinmattson@gmail.com>
 Unaffiliated <no@organization.net> Steve Stock <steve@technolope.org>
 Unaffiliated <no@organization.net> Michael Nelson <mikenel@tnld.net>
+Unaffiliated <no@organization.net> Florent Bautista <florent@coppint.com>
+Unaffiliated <no@organization.net> koleosfuscus <koleosfuscus@yahoo.com>
+Unaffiliated <no@organization.net> Ailing Zhang <zhangal1992@gmail.com> 
+Unaffiliated <no@organization.net> Stephen F Taylor <steveftaylor@gmail.com>
+Unaffiliated <no@organization.net> Michael Riederer <michael@riederer.org>
+Unaffiliated <no@organization.net> Shawn Edwards <lesser.evil@gmail.com>
+Unaffiliated <no@organization.net> Stephen F Taylor <steveftaylor@gmail.com>
+Karlsruhe Institute of Technology <ceph@lists.kit.edu> Daniel J. Hofmann <daniel@trvx.org>
 SUSE <contact@suse.com> Holger Macht <hmacht@suse.de>
 SUSE <contact@suse.com> Hannes Reinecke <hare@suse.de>
 SUSE <contact@suse.com> David Disseldorp <ddiss@suse.de>
 Intel <contact@intel.com> Yan, Zheng <zheng.z.yan@intel.com>
 Intel <contact@intel.com> Wang, Yaguang <yaguang.wang@intel.com>
+HGST <contact@hgst.com> Kevin Dalley <kevin@kelphead.org>
+HGST <contact@hgst.com> Lluis Pamies-Juarez <lluis.pamies-juarez@hgst.com>
 Cloudwatt <libre.licensing@cloudwatt.com> Loic Dachary <loic@dachary.org>
 Cloudwatt <libre.licensing@cloudwatt.com> Christophe Courtaut <christophe.courtaut@gmail.com>
+Cloudwatt <libre.licensing@cloudwatt.com> Sahid Orentino Ferdjaoui <sahid.ferdjaoui@cloudwatt.com>
+Cloudwatt <libre.licensing@cloudwatt.com> Florent Flament <florent.flament@cloudwatt.com>
 Wido 42on <contact@42on.com> Wido den Hollander <wido@42on.com>
 eNovance <contact@enovance.com> Babu Shanmugam <anbu@enovance.com>
 eNovance <contact@enovance.com> Sebastien Han <sebastien.han@enovance.com>
@@ -86,18 +126,19 @@ Debian GNU/Linux <contact@debian.org> Bastian Blank <waldi@debian.org>
 Debian GNU/Linux <contact@debian.org> Dmitry Smirnov <onlyjob@member.fsf.org>
 SanDisk <contact@sandisk.com> Somnath Roy <somnath.roy@sandisk.com>
 SanDisk <contact@sandisk.com> Allen Samuels <allen.samuels@sandisk.com>
+SanDisk <contact@sandisk.com> Sushma Gurram <sushma.gurram@sandisk.com>
 Bigpoint.com <contact@bigpoint.net> Moritz Möller <mm@mxs.de>
 Credit Mutuel Arkea <contact@arkea.com> Eric Mourgaya <eric.mourgaya@arkea.com>
 GNU <contact@gnu.org> Alexandre Oliva <oliva@gnu.org>
 Hastexo <contact@hastexo.com> Florian Haas <florian@hastexo.com>
 Canonical <contact@canonical.com> James Page <james.page@ubuntu.com>
 Canonical <contact@canonical.com> Jonathan Davies <jonathan.davies@canonical.com>
+Canonical <contact@canonical.com> Chris Glass <tribaal@gmail.com>
 Ubuntu Kylin <contact@ubuntukylin.com> Li Wang <liwang@ubuntukylin.com>
 GRNet <contact@grnet.gr> Filippos Giannakos <philipgian@grnet.gr>
 GRNet <contact@grnet.gr> Stratos Psomadakis <psomas@grnet.gr>
 GRNet <contact@grnet.gr> Vangelis Koukis <vkoukis@cslab.ece.ntua.gr>
 IWeb <contact@iweb.com> David Moreau Simard <dmsimard@iweb.com>
-RedHat <contact@redhat.com> Tom Callaway <spot@redhat.com>
 Gentoo <contact@gentoo.org> Robin H. Johnson <robbat2@gentoo.org>
 Gentoo <contact@gentoo.org> Kacper Kowalik <xarthisius@gentoo.org>
 YouScribe <contact@youscribe.fr> Guilhem Lettron <guilhem@lettron.fr>
@@ -107,12 +148,14 @@ TCloud Computing <contact@tcloudcomputing.com> Paul Chiang <paul_chiang@tcloudco
 TCloud Computing <contact@tcloudcomputing.com> Herb Shiu <herb_shiu@tcloudcomputing.com>
 CERN <contact@cern.ch> Andreas Peters <andreas.joachim.peters@cern.ch>
 CERN <contact@cern.ch> Dan van der Ster <daniel.vanderster@cern.ch>
+CERN <contact@cern.ch> Sebastien Ponce <sebastien.ponce@cern.ch>
 SWITCH <contact@switch.ch> Jens-Christian Fischer <jens-christian.fischer@switch.ch>
 SWITCH <contact@switch.ch> Simon Leinen <simon.leinen@switch.ch>
 Yahoo! <contact@yahoo-inc.com> Haifeng Liu <haifeng@yahoo-inc.com>
 Yahoo! <contact@yahoo-inc.com> Xihui He <xihuihe@gmail.com>
 Yahoo! <contact@yahoo-inc.com> Ray Lv <xiangyulv@gmail.com>
 Yahoo! <contact@yahoo-inc.com> Guang Yang <yguang@yahoo-inc.com>
+Yahoo! <contact@yahoo-inc.com> Wei Luo <luowei@yahoo-inc.com>
 UnitedStack <contact@unitedstack.com> Guangliang Zhao <guangliang@unitedstack.com>
 UnitedStack <contact@unitedstack.com> Haomai Wang <haomaiwang@gmail.com>
 UnitedStack <contact@unitedstack.com> Kun Huang <academicgareth@gmail.com>
@@ -161,6 +204,13 @@ SendFaster <contact@sendfaster.com> Christopher O'Connell <jwriteclub@gmail.com>
 iNic <contact@inic.no> Bjørnar Ness <bjornar.ness@gmail.com>
 Pogoapp <contact@pogoapp.com> Paul Meserve <paul@pogodan.com>
 Commerce Guys <contact@commerceguys.com> Nikola Kotur <kotnick@gmail.com>
+École polytechnique fédérale de Lausanne <contact@epfl.ch> Stefan Eilemann <Stefan.Eilemann@epfl.ch>
+Corvisa LLC <contact@corvisa.com> Walter Huf <hufman@gmail.com>
+VRT <contact@vrt.com.au> Stuart Longland <stuartl@vrt.com.au>
+gocept gmbh & co. kg <mail@gocept.com> Christian Theune <ct@gocept.com>
+Web Drive <contact@webdrive.co.nz> Aristoteles Neto <aristoteles.neto@webdrive.co.nz>
+Whatever <contact@whatever-company.com> Sylvain Munaut <s.munaut@whatever-company.com>
+Iron Systems Inc. <info@ironsystems.com> Harpreet Dhillon <harpreet@ironsystems.com>
 #
 # Local Variables:
 # compile-command: "git log --pretty='%aN <%aE>' | \

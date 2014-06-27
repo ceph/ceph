@@ -879,7 +879,7 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
   switch (opt->type) {
     case OPT_INT: {
       std::string err;
-      int f = strict_strtol(val, 10, &err);
+      int f = strict_sistrtoll(val, &err);
       if (!err.empty())
 	return -EINVAL;
       *(int*)opt->conf_ptr(this) = f;
@@ -887,7 +887,7 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
     }
     case OPT_LONGLONG: {
       std::string err;
-      long long f = strict_strtoll(val, 10, &err);
+      long long f = strict_sistrtoll(val, &err);
       if (!err.empty())
 	return -EINVAL;
       *(long long*)opt->conf_ptr(this) = f;
@@ -917,7 +917,7 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
       return 0;
     case OPT_U32: {
       std::string err;
-      int f = strict_strtol(val, 10, &err);
+      int f = strict_sistrtoll(val, &err);
       if (!err.empty())
 	return -EINVAL;
       *(uint32_t*)opt->conf_ptr(this) = f;
@@ -925,7 +925,7 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
     }
     case OPT_U64: {
       std::string err;
-      long long f = strict_strtoll(val, 10, &err);
+      long long f = strict_sistrtoll(val, &err);
       if (!err.empty())
 	return -EINVAL;
       *(uint64_t*)opt->conf_ptr(this) = f;

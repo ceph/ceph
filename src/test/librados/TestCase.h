@@ -92,8 +92,8 @@ protected:
 
 class RadosTestECPP : public ::testing::Test {
 public:
-  RadosTestECPP() : cluster(s_cluster) {};
-  virtual ~RadosTestECPP() {};
+  RadosTestECPP() : cluster(s_cluster) {}
+  virtual ~RadosTestECPP() {}
 protected:
   static void SetUpTestCase();
   static void TearDownTestCase();

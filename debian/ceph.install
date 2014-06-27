@@ -5,7 +5,6 @@ usr/sbin/ceph-create-keys
 usr/sbin/ceph-disk
 usr/sbin/ceph-disk-activate
 usr/sbin/ceph-disk-prepare
-sbin/mkcephfs
 usr/bin/ceph-clsinfo
 usr/bin/ceph-debugpack
 usr/bin/ceph-mon
@@ -28,6 +27,5 @@ usr/share/man/man8/ceph-osd.8
 usr/share/man/man8/ceph-run.8
 usr/share/man/man8/ceph-rest-api.8
 usr/share/man/man8/crushtool.8
-usr/share/man/man8/mkcephfs.8
 usr/share/man/man8/monmaptool.8
 usr/share/man/man8/osdmaptool.8

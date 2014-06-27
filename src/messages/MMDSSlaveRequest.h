@@ -98,6 +98,7 @@ class MMDSSlaveRequest : public Message {
 
   static const unsigned FLAG_NONBLOCK	= 1;
   static const unsigned FLAG_WOULDBLOCK	= 2;
+  static const unsigned FLAG_NOTJOURNALED = 4;
 
   // for locking
   __u16 lock_type;  // lock object type
@@ -114,7 +115,7 @@ class MMDSSlaveRequest : public Message {
   bufferlist inode_export;
   version_t inode_export_v;
   bufferlist srci_replica;
-  utime_t now;
+  utime_t op_stamp;
 
   bufferlist stray;  // stray dir + dentry
 
@@ -133,6 +134,8 @@ public:
   bool is_nonblock() { return (flags & FLAG_NONBLOCK); }
   void mark_error_wouldblock() { flags |= FLAG_WOULDBLOCK; }
   bool is_error_wouldblock() { return (flags & FLAG_WOULDBLOCK); }
+  void mark_not_journaled() { flags |= FLAG_NOTJOURNALED; }
+  bool is_not_journaled() { return (flags & FLAG_NOTJOURNALED); }
 
   void set_lock_type(int t) { lock_type = t; }
 
@@ -158,7 +161,7 @@ public:
     ::encode(srcdnpath, payload);
     ::encode(destdnpath, payload);
     ::encode(witnesses, payload);
-    ::encode(now, payload);
+    ::encode(op_stamp, payload);
     ::encode(inode_export, payload);
     ::encode(inode_export_v, payload);
     ::encode(srci_replica, payload);
@@ -176,7 +179,7 @@ public:
     ::decode(srcdnpath, p);
     ::decode(destdnpath, p);
     ::decode(witnesses, p);
-    ::decode(now, p);
+    ::decode(op_stamp, p);
     ::decode(inode_export, p);
     ::decode(inode_export_v, p);
     ::decode(srci_replica, p);

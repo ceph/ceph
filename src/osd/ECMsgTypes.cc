@@ -73,13 +73,13 @@ std::ostream &operator<<(
 
 void ECSubWrite::dump(Formatter *f) const
 {
-  f->dump_stream("tid") << tid;
+  f->dump_unsigned("tid", tid);
   f->dump_stream("reqid") << reqid;
   f->dump_stream("at_version") << at_version;
   f->dump_stream("trim_to") << trim_to;
   f->dump_stream("trim_rollback_to") << trim_rollback_to;
-  f->dump_stream("has_updated_hit_set_history")
-    << static_cast<bool>(updated_hit_set_history);
+  f->dump_bool("has_updated_hit_set_history",
+      static_cast<bool>(updated_hit_set_history));
 }
 
 void ECSubWrite::generate_test_instances(list<ECSubWrite*> &o)
@@ -135,10 +135,10 @@ std::ostream &operator<<(
 
 void ECSubWriteReply::dump(Formatter *f) const
 {
-  f->dump_stream("tid") << tid;
+  f->dump_unsigned("tid", tid);
   f->dump_stream("last_complete") << last_complete;
-  f->dump_stream("committed") << committed;
-  f->dump_stream("applied") << applied;
+  f->dump_bool("committed", committed);
+  f->dump_bool("applied", applied);
 }
 
 void ECSubWriteReply::generate_test_instances(list<ECSubWriteReply*>& o)
@@ -185,7 +185,7 @@ std::ostream &operator<<(
 void ECSubRead::dump(Formatter *f) const
 {
   f->dump_stream("from") << from;
-  f->dump_stream("tid") << tid;
+  f->dump_unsigned("tid", tid);
   f->open_array_section("objects");
   for (map<hobject_t, list<pair<uint64_t, uint64_t> > >::const_iterator i =
 	 to_read.begin();
@@ -224,14 +224,14 @@ void ECSubRead::generate_test_instances(list<ECSubRead*>& o)
   hobject_t hoid1(sobject_t("asdf", 1));
   hobject_t hoid2(sobject_t("asdf2", CEPH_NOSNAP));
   o.push_back(new ECSubRead());
-  o.back()->from = pg_shard_t(2, 255);
+  o.back()->from = pg_shard_t(2, shard_id_t(255));
   o.back()->tid = 1;
   o.back()->to_read[hoid1].push_back(make_pair(100, 200));
   o.back()->to_read[hoid1].push_back(make_pair(400, 600));
   o.back()->to_read[hoid2].push_back(make_pair(400, 600));
   o.back()->attrs_to_read.insert(hoid1);
   o.push_back(new ECSubRead());
-  o.back()->from = pg_shard_t(2, 255);
+  o.back()->from = pg_shard_t(2, shard_id_t(255));
   o.back()->tid = 300;
   o.back()->to_read[hoid1].push_back(make_pair(300, 200));
   o.back()->to_read[hoid2].push_back(make_pair(400, 600));
@@ -273,7 +273,7 @@ std::ostream &operator<<(
 void ECSubReadReply::dump(Formatter *f) const
 {
   f->dump_stream("from") << from;
-  f->dump_stream("tid") << tid;
+  f->dump_unsigned("tid", tid);
   f->open_array_section("buffers_read");
   for (map<hobject_t, list<pair<uint64_t, bufferlist> > >::const_iterator i =
 	 buffers_read.begin();
@@ -338,7 +338,7 @@ void ECSubReadReply::generate_test_instances(list<ECSubReadReply*>& o)
   bufferlist bl2;
   bl2.append_zero(200);
   o.push_back(new ECSubReadReply());
-  o.back()->from = pg_shard_t(2, 255);
+  o.back()->from = pg_shard_t(2, shard_id_t(255));
   o.back()->tid = 1;
   o.back()->buffers_read[hoid1].push_back(make_pair(20, bl));
   o.back()->buffers_read[hoid1].push_back(make_pair(2000, bl2));
@@ -346,7 +346,7 @@ void ECSubReadReply::generate_test_instances(list<ECSubReadReply*>& o)
   o.back()->attrs_read[hoid1]["foo"] = bl;
   o.back()->attrs_read[hoid1]["_"] = bl2;
   o.push_back(new ECSubReadReply());
-  o.back()->from = pg_shard_t(2, 255);
+  o.back()->from = pg_shard_t(2, shard_id_t(255));
   o.back()->tid = 300;
   o.back()->buffers_read[hoid2].push_back(make_pair(0, bl2));
   o.back()->attrs_read[hoid2]["foo"] = bl;

@@ -248,8 +248,6 @@ protected:
   int nested_auth_pins, dir_auth_pins;
   int request_pins;
 
-  int nested_anchors;
-
   // cache control  (defined for authority; hints for replicas)
   __s32      dir_rep;
   set<__s32> dir_rep_by;      // if dir_rep == REP_LIST
@@ -533,7 +531,6 @@ public:
   // -- waiters --
 protected:
   map< string_snap_t, list<Context*> > waiting_on_dentry;
-  map< inodeno_t, list<Context*> > waiting_on_ino;
 
 public:
   bool is_waiting_for_dentry(const string& dname, snapid_t snap) {
@@ -541,13 +538,6 @@ public:
   }
   void add_dentry_waiter(const string& dentry, snapid_t snap, Context *c);
   void take_dentry_waiting(const string& dentry, snapid_t first, snapid_t last, list<Context*>& ls);
-
-  bool is_waiting_for_ino(inodeno_t ino) {
-    return waiting_on_ino.count(ino);
-  }
-  void add_ino_waiter(inodeno_t ino, Context *c);
-  void take_ino_waiting(inodeno_t ino, list<Context*>& ls);
-
   void take_sub_waiting(list<Context*>& ls);  // dentry or ino
 
   void add_waiter(uint64_t mask, Context *c);
@@ -575,9 +565,6 @@ public:
 
   void adjust_nested_auth_pins(int inc, int dirinc, void *by);
   void verify_fragstat();
-
-  int get_nested_anchors() { return nested_anchors; }
-  void adjust_nested_anchors(int by);
 
   // -- freezing --
   bool freeze_tree();

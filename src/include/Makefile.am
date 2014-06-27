@@ -18,6 +18,11 @@ rados_include_DATA = \
 	$(srcdir)/include/crc32c.h \
 	$(srcdir)/include/memory.h
 
+radosstriper_includedir = $(includedir)/radosstriper
+radosstriper_include_DATA = \
+	$(srcdir)/include/radosstriper/libradosstriper.h \
+	$(srcdir)/include/radosstriper/libradosstriper.hpp
+
 noinst_HEADERS += \
 	include/Context.h \
 	include/CompatSet.h \
@@ -49,6 +54,7 @@ noinst_HEADERS += \
 	include/interval_set.h \
 	include/int_types.h \
 	include/ipaddr.h \
+	include/krbd.h \
 	include/linux_fiemap.h \
 	include/lru.h \
 	include/msgr.h \
@@ -76,6 +82,8 @@ noinst_HEADERS += \
 	include/rados/page.h \
 	include/rados/crc32c.h \
 	include/rados/buffer.h \
+	include/radosstriper/libradosstriper.h \
+	include/radosstriper/libradosstriper.hpp \
 	include/rbd/features.h \
 	include/rbd/librbd.h \
 	include/rbd/librbd.hpp\

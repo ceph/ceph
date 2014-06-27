@@ -17,12 +17,9 @@ There are two ways to get packages:
   software for you in most cases. However, to use this approach, each 
   :term:`Ceph Node` in your cluster must have internet access.
   
-- **Download Packages Manually:** Retrieving packages to install Ceph provides
-  high security environments that do not allow a :term:`Ceph Node` to access 
-  the internet to download packages. You may also download packages to mirror
-  the Ceph repository. This approach is not as convenient, but provides a means
-  of installing Ceph in high security environments (e.g., banking, health care,
-  etc.).
+- **Download Packages Manually:** Downloading packages manually is a convenient
+  way to install Ceph if your environment does not allow a :term:`Ceph Node` to
+  access the internet.
 
 
 Requirements
@@ -71,7 +68,7 @@ Add Keys
 ========
 
 Add a key to your system's list of trusted keys to avoid a security warning. For
-major releases (e.g., ``cuttlefish``, ``dumpling``, ``emperor``) and development
+major releases (e.g., ``dumpling``, ``emperor``, ``firefly``) and development
 releases (``release-name-rc1``, ``release-name-rc2``), use the ``release.asc``
 key. For development testing packages, use the ``autobuild.asc`` key (developers
 and QA).
@@ -174,9 +171,13 @@ You may find releases for CentOS/RHEL and others (installed with YUM) at::
 
 	http://ceph.com/rpm-{release-name}
 
-The major releases of Ceph include: 
+The major releases of Ceph include:
 
-- **Emperor:** Emperor is the most recent major release of Ceph. These packages
+- **Firefly:** Firefly is the most recent major release of Ceph. These packages
+  are recommended for anyone deploying Ceph in a production environment. 
+  Critical bug fixes are backported and point releases are made as necessary.
+
+- **Emperor:** Emperor is the fifth major release of Ceph. These packages
   are recommended for anyone deploying Ceph in a production environment. 
   Critical bug fixes are backported and point releases are made as necessary.
   
@@ -207,11 +208,11 @@ Add a Ceph package repository to your system's list of APT sources. For newer
 versions of Debian/Ubuntu, call ``lsb_release -sc`` on the command line to 
 get the short codename, and replace ``{codename}`` in the following command. :: 
 
-	sudo apt-add-repository 'deb http://ceph.com/debian-emperor/ {codename} main'
+	sudo apt-add-repository 'deb http://ceph.com/debian-firefly/ {codename} main'
 
 For early Linux distributions, you may execute the following command:: 
 
-	echo deb http://ceph.com/debian-emperor/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://ceph.com/debian-firefly/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 For earlier Ceph releases, replace ``{release-name}`` with the name  with the
 name of the Ceph release. You may call ``lsb_release -sc`` on the command  line
@@ -496,15 +497,15 @@ platforms. The repository package installs the repository details on your local
 system for use with ``yum`` or ``up2date``. Replace ``{distro}`` with your
 distribution. ::
 
-    su -c 'rpm -Uvh http://ceph.com/rpm-emperor/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
+    su -c 'rpm -Uvh http://ceph.com/rpm-firefly/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
 
 For example, for CentOS 6  (``el6``)::
 
-    su -c 'rpm -Uvh http://ceph.com/rpm-emperor/el6/noarch/ceph-release-1-0.el6.noarch.rpm'
+    su -c 'rpm -Uvh http://ceph.com/rpm-firefly/el6/noarch/ceph-release-1-0.el6.noarch.rpm'
 
 You can download the RPMs directly from::
 
-	http://ceph.com/rpm-emperor
+	http://ceph.com/rpm-firefly
 
 
 For earlier Ceph releases, replace ``{release-name}`` with the name 

@@ -829,7 +829,7 @@ def validate(args, signature, partial=False):
                 break
 
             # out of arguments for a required param?
-            # Either return (if partial validation) or raise 
+            # Either return (if partial validation) or raise
             if not myarg and desc.req:
                 if desc.N and desc.numseen < 1:
                     # wanted N, didn't even get 1
@@ -1013,7 +1013,7 @@ def find_cmd_target(childargs):
 
     return 'mon', ''
 
-def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0, 
+def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0,
                  verbose=False):
     """
     Send a command to a daemon using librados's

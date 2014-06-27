@@ -274,7 +274,7 @@ def show_human_help(prefix):
     # XXX There ought to be a better discovery mechanism than an HTML table
     s = '<html><body><table border=1><th>Possible commands:</th><th>Method</th><th>Description</th>'
 
-    permmap = {'r':'GET', 'rw':'PUT'}
+    permmap = {'r':'GET', 'rw':'PUT', 'rx':'GET', 'rwx':'PUT'}
     line = ''
     for cmdsig in sorted(app.ceph_sigdict.itervalues(), cmp=descsort):
         concise = concise_sig(cmdsig['sig'])
@@ -361,7 +361,7 @@ def handler(catchall_path=None, fmt=None, target=None):
     Main endpoint handler; generic for every endpoint, including catchall.
     Handles the catchall, anything with <.fmt>, anything with embedded
     <target>.  Partial match or ?help cause the HTML-table
-    "show_human_help" output.  
+    "show_human_help" output.
     '''
 
     ep = catchall_path or flask.request.endpoint

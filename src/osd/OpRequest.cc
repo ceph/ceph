@@ -15,13 +15,23 @@
 
 
 OpRequest::OpRequest(Message *req, OpTracker *tracker) :
-  TrackedOp(req, tracker),
-  rmw_flags(0),
-  hit_flag_points(0), latest_flag_point(0) {
+  TrackedOp(tracker, req->get_recv_stamp()),
+  rmw_flags(0), request(req),
+  hit_flag_points(0), latest_flag_point(0),
+  send_map_update(false), sent_epoch(0) {
   if (req->get_priority() < tracker->cct->_conf->osd_client_op_priority) {
     // don't warn as quickly for low priority ops
     warn_interval_multiplier = tracker->cct->_conf->osd_recovery_op_warn_multiple;
   }
+  if (req->get_type() == CEPH_MSG_OSD_OP) {
+    reqid = static_cast<MOSDOp*>(req)->get_reqid();
+  } else if (req->get_type() == MSG_OSD_SUBOP) {
+    reqid = static_cast<MOSDSubOp*>(req)->reqid;
+  }
+  tracker->_mark_event(this, "header_read", request->get_recv_stamp());
+  tracker->_mark_event(this, "throttled", request->get_throttle_stamp());
+  tracker->_mark_event(this, "all_read", request->get_recv_complete_stamp());
+  tracker->_mark_event(this, "dispatched", request->get_dispatch_stamp());
 }
 
 void OpRequest::_dump(utime_t now, Formatter *f) const
@@ -33,7 +43,7 @@ void OpRequest::_dump(utime_t now, Formatter *f) const
     stringstream client_name;
     client_name << m->get_orig_source();
     f->dump_string("client", client_name.str());
-    f->dump_int("tid", m->get_tid());
+    f->dump_unsigned("tid", m->get_tid());
     f->close_section(); // client_info
   }
   {
@@ -50,13 +60,14 @@ void OpRequest::_dump(utime_t now, Formatter *f) const
   }
 }
 
-void OpRequest::init_from_message()
+void OpRequest::_dump_op_descriptor(ostream& stream) const
 {
-  if (request->get_type() == CEPH_MSG_OSD_OP) {
-    reqid = static_cast<MOSDOp*>(request)->get_reqid();
-  } else if (request->get_type() == MSG_OSD_SUBOP) {
-    reqid = static_cast<MOSDSubOp*>(request)->reqid;
-  }
+  get_req()->print(stream);
+}
+
+void OpRequest::_unregistered() {
+  request->clear_data();
+  request->clear_payload();
 }
 
 bool OpRequest::check_rmw(int flag) {

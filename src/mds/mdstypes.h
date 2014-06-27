@@ -51,8 +51,12 @@ using namespace std;
 #define MDS_INO_CEPH              2
 
 #define MDS_INO_MDSDIR_OFFSET     (1*MAX_MDS)
-#define MDS_INO_LOG_OFFSET        (2*MAX_MDS)
 #define MDS_INO_STRAY_OFFSET      (6*MAX_MDS)
+
+// Locations for journal data
+#define MDS_INO_LOG_OFFSET        (2*MAX_MDS)
+#define MDS_INO_LOG_BACKUP_OFFSET (3*MAX_MDS)
+#define MDS_INO_LOG_POINTER_OFFSET    (4*MAX_MDS)
 
 #define MDS_INO_SYSTEM_BASE       ((6*MAX_MDS) + (MAX_MDS * NUM_STRAY))
 
@@ -172,11 +176,9 @@ struct nest_info_t : public scatter_info_t {
   int64_t rsubdirs;
   int64_t rsize() const { return rfiles + rsubdirs; }
 
-  int64_t ranchors;  // for dirstat, includes inode's anchored flag.
   int64_t rsnaprealms;
 
-  nest_info_t() : rbytes(0), rfiles(0), rsubdirs(0),
-		  ranchors(0), rsnaprealms(0) {}
+  nest_info_t() : rbytes(0), rfiles(0), rsubdirs(0), rsnaprealms(0) {}
 
   void zero() {
     *this = nest_info_t();
@@ -191,7 +193,6 @@ struct nest_info_t : public scatter_info_t {
     rbytes += fac*other.rbytes;
     rfiles += fac*other.rfiles;
     rsubdirs += fac*other.rsubdirs;
-    ranchors += fac*other.ranchors;
     rsnaprealms += fac*other.rsnaprealms;
   }
 
@@ -202,7 +203,6 @@ struct nest_info_t : public scatter_info_t {
     rbytes += cur.rbytes - acc.rbytes;
     rfiles += cur.rfiles - acc.rfiles;
     rsubdirs += cur.rsubdirs - acc.rsubdirs;
-    ranchors += cur.ranchors - acc.ranchors;
     rsnaprealms += cur.rsnaprealms - acc.rsnaprealms;
   }
 
@@ -326,7 +326,6 @@ struct inode_t {
 
   // nlink
   int32_t    nlink;  
-  bool       anchored;          // auth only?
 
   // file (data access)
   ceph_dir_layout  dir_layout;    // [dir only]
@@ -358,8 +357,7 @@ struct inode_t {
   version_t backtrace_version;
 
   inode_t() : ino(0), rdev(0),
-	      mode(0), uid(0), gid(0),
-	      nlink(0), anchored(false),
+	      mode(0), uid(0), gid(0), nlink(0),
 	      size(0), max_size_ever(0),
 	      truncate_seq(0), truncate_size(0), truncate_from(0),
 	      truncate_pending(0),
@@ -486,7 +484,7 @@ struct fnode_t {
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<fnode_t*>& ls);
-  fnode_t() : version(0) {};
+  fnode_t() : version(0) {}
 };
 WRITE_CLASS_ENCODER(fnode_t)
 

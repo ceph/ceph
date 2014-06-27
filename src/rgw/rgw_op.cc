@@ -657,7 +657,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAc
   perfcounter->inc(l_rgw_get_b, cur_end - cur_ofs);
   while (cur_ofs <= cur_end) {
     bufferlist bl;
-    ret = store->get_obj(obj_ctx, NULL, &handle, part, bl, cur_ofs, cur_end);
+    ret = store->get_obj(obj_ctx, NULL, &handle, part, bl, cur_ofs, cur_end, NULL);
     if (ret < 0)
       goto done_err;
 
@@ -685,8 +685,11 @@ done_err:
   return ret;
 }
 
-int RGWGetObj::iterate_user_manifest_parts(rgw_bucket& bucket, string& obj_prefix, RGWAccessControlPolicy *bucket_policy,
-                                           uint64_t *ptotal_len, bool read_data)
+static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t ofs, off_t end,
+                                       rgw_bucket& bucket, string& obj_prefix, RGWAccessControlPolicy *bucket_policy,
+                                       uint64_t *ptotal_len,
+                                       int (*cb)(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy,
+                                                 off_t start_ofs, off_t end_ofs, void *param), void *cb_param)
 {
   uint64_t obj_ofs = 0, len_count = 0;
   bool found_start = false, found_end = false;
@@ -697,7 +700,7 @@ int RGWGetObj::iterate_user_manifest_parts(rgw_bucket& bucket, string& obj_prefi
   map<string, bool> common_prefixes;
   vector<RGWObjEnt> objs;
 
-  utime_t start_time = ceph_clock_now(s->cct);
+  utime_t start_time = ceph_clock_now(cct);
 
   do {
 #define MAX_LIST_OBJS 100
@@ -727,20 +730,20 @@ int RGWGetObj::iterate_user_manifest_parts(rgw_bucket& bucket, string& obj_prefi
       }
 
       perfcounter->tinc(l_rgw_get_lat,
-                       (ceph_clock_now(s->cct) - start_time));
+                       (ceph_clock_now(cct) - start_time));
 
       if (found_start) {
         len_count += end_ofs - start_ofs;
 
-        if (read_data) {
-          r = read_user_manifest_part(bucket, ent, bucket_policy, start_ofs, end_ofs);
+        if (cb) {
+          r = cb(bucket, ent, bucket_policy, start_ofs, end_ofs, cb_param);
           if (r < 0)
             return r;
         }
       }
       marker = ent.name;
 
-      start_time = ceph_clock_now(s->cct);
+      start_time = ceph_clock_now(cct);
     }
   } while (is_truncated && !found_end);
 
@@ -748,6 +751,13 @@ int RGWGetObj::iterate_user_manifest_parts(rgw_bucket& bucket, string& obj_prefi
     *ptotal_len = len_count;
 
   return 0;
+}
+
+static int get_obj_user_manifest_iterate_cb(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs,
+                                       void *param)
+{
+  RGWGetObj *op = static_cast<RGWGetObj *>(param);
+  return op->read_user_manifest_part(bucket, ent, bucket_policy, start_ofs, end_ofs);
 }
 
 int RGWGetObj::handle_user_manifest(const char *prefix)
@@ -789,13 +799,13 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   }
 
   /* dry run to find out total length */
-  int r = iterate_user_manifest_parts(bucket, obj_prefix, bucket_policy, &total_len, false);
+  int r = iterate_user_manifest_parts(s->cct, store, ofs, end, bucket, obj_prefix, bucket_policy, &total_len, NULL, NULL);
   if (r < 0)
     return r;
 
   s->obj_size = total_len;
 
-  r = iterate_user_manifest_parts(bucket, obj_prefix, bucket_policy, NULL, true);
+  r = iterate_user_manifest_parts(s->cct, store, ofs, end, bucket, obj_prefix, bucket_policy, NULL, get_obj_user_manifest_iterate_cb, (void *)this);
   if (r < 0)
     return r;
 
@@ -1160,7 +1170,6 @@ void RGWCreateBucket::execute()
   bufferlist aclbl;
   bufferlist corsbl;
   bool existed;
-  int r;
   rgw_obj obj(store->zone.domain_root, s->bucket_name_str);
   obj_version objv, *pobjv = NULL;
 
@@ -1184,8 +1193,8 @@ void RGWCreateBucket::execute()
   s->bucket_owner.set_id(s->user.user_id);
   s->bucket_owner.set_name(s->user.display_name);
   if (s->bucket_exists) {
-    r = get_policy_from_attr(s->cct, store, s->obj_ctx, s->bucket_info, s->bucket_attrs,
-                             &old_policy, obj);
+    int r = get_policy_from_attr(s->cct, store, s->obj_ctx, s->bucket_info, s->bucket_attrs,
+                                 &old_policy, obj);
     if (r >= 0)  {
       if (old_policy.get_owner().get_id().compare(s->user.user_id) != 0) {
         ret = -EEXIST;
@@ -1357,22 +1366,26 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
   string upload_id;
 
 protected:
-  bool immutable_head() { return true; }
-  int prepare(RGWRados *store, void *obj_ctx);
+  int prepare(RGWRados *store, void *obj_ctx, string *oid_rand);
   int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
 
 public:
+  bool immutable_head() { return true; }
   RGWPutObjProcessor_Multipart(const string& bucket_owner, uint64_t _p, req_state *_s) :
                    RGWPutObjProcessor_Atomic(bucket_owner, _s->bucket, _s->object_str, _p, _s->req_id), s(_s) {}
 };
 
-int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx)
+int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx, string *oid_rand)
 {
-  RGWPutObjProcessor::prepare(store, obj_ctx);
+  RGWPutObjProcessor::prepare(store, obj_ctx, NULL);
 
   string oid = obj_str;
   upload_id = s->info.args.get("uploadId");
-  mp.init(oid, upload_id);
+  if (!oid_rand) {
+    mp.init(oid, upload_id);
+  } else {
+    mp.init(oid, upload_id, *oid_rand);
+  }
 
   part_num = s->info.args.get("partNumber");
   if (part_num.empty()) {
@@ -1388,7 +1401,13 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx)
     return -EINVAL;
   }
 
-  string upload_prefix = oid + "." + upload_id;
+  string upload_prefix = oid + ".";
+
+  if (!oid_rand) {
+    upload_prefix.append(upload_id);
+  } else {
+    upload_prefix.append(*oid_rand);
+  }
 
   rgw_obj target_obj;
   target_obj.init(bucket, oid);
@@ -1466,7 +1485,7 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_
 }
 
 
-RGWPutObjProcessor *RGWPutObj::select_processor()
+RGWPutObjProcessor *RGWPutObj::select_processor(bool *is_multipart)
 {
   RGWPutObjProcessor *processor;
 
@@ -1482,6 +1501,10 @@ RGWPutObjProcessor *RGWPutObj::select_processor()
     processor = new RGWPutObjProcessor_Multipart(bucket_owner, part_size, s);
   }
 
+  if (is_multipart) {
+    *is_multipart = multipart;
+  }
+
   return processor;
 }
 
@@ -1493,6 +1516,45 @@ void RGWPutObj::dispose_processor(RGWPutObjProcessor *processor)
 void RGWPutObj::pre_exec()
 {
   rgw_bucket_object_pre_exec(s);
+}
+
+static int put_obj_user_manifest_iterate_cb(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs,
+                                       void *param)
+{
+  RGWPutObj *op = static_cast<RGWPutObj *>(param);
+  return op->user_manifest_iterate_cb(bucket, ent, bucket_policy, start_ofs, end_ofs);
+}
+
+int RGWPutObj::user_manifest_iterate_cb(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs)
+{
+  rgw_obj part(bucket, ent.name);
+
+  map<string, bufferlist> attrs;
+
+  int ret = get_obj_attrs(store, s, part, attrs, NULL, NULL);
+  if (ret < 0) {
+    return ret;
+  }
+  map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
+  if (iter == attrs.end()) {
+    return 0;
+  }
+  bufferlist& bl = iter->second;
+  const char *buf = bl.c_str();
+  int len = bl.length();
+  while (len > 0 && buf[len - 1] == '\0') {
+    len--;
+  }
+  if (len > 0) {
+    user_manifest_parts_hash->Update((const byte *)bl.c_str(), len);
+  }
+
+  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    string e(bl.c_str(), bl.length());
+    ldout(s->cct, 20) << __func__ << ": appending user manifest etag: " << e << dendl;
+  }
+
+  return 0;
 }
 
 void RGWPutObj::execute()
@@ -1507,6 +1569,9 @@ void RGWPutObj::execute()
   map<string, bufferlist> attrs;
   int len;
   map<string, string>::iterator iter;
+  bool multipart;
+
+  bool need_calc_md5 = (obj_manifest == NULL);
 
 
   perfcounter->inc(l_rgw_put);
@@ -1520,6 +1585,8 @@ void RGWPutObj::execute()
     goto done;
 
   if (supplied_md5_b64) {
+    need_calc_md5 = true;
+
     ldout(s->cct, 15) << "supplied_md5_b64=" << supplied_md5_b64 << dendl;
     ret = ceph_unarmor(supplied_md5_bin, &supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1],
                        supplied_md5_b64, supplied_md5_b64 + strlen(supplied_md5_b64));
@@ -1547,9 +1614,9 @@ void RGWPutObj::execute()
     supplied_md5[sizeof(supplied_md5) - 1] = '\0';
   }
 
-  processor = select_processor();
+  processor = select_processor(&multipart);
 
-  ret = processor->prepare(store, s->obj_ctx);
+  ret = processor->prepare(store, s->obj_ctx, NULL);
   if (ret < 0)
     goto done;
 
@@ -1570,11 +1637,52 @@ void RGWPutObj::execute()
     if (ret < 0)
       goto done;
 
-    hash.Update(data_ptr, len);
+    if (need_calc_md5) {
+      hash.Update(data_ptr, len);
+    }
 
-    ret = processor->throttle_data(handle);
-    if (ret < 0)
-      goto done;
+    /* do we need this operation to be synchronous? if we're dealing with an object with immutable
+     * head, e.g., multipart object we need to make sure we're the first one writing to this object
+     */
+    bool need_to_wait = (ofs == 0) && multipart;
+
+    ret = processor->throttle_data(handle, need_to_wait);
+    if (ret < 0) {
+      if (!need_to_wait || ret != -EEXIST) {
+        ldout(s->cct, 20) << "processor->thottle_data() returned ret=" << ret << dendl;
+        goto done;
+      }
+
+      ldout(s->cct, 5) << "NOTICE: processor->throttle_data() returned -EEXIST, need to restart write" << dendl;
+
+      /* restart processing with different oid suffix */
+
+      dispose_processor(processor);
+      processor = select_processor(&multipart);
+
+      string oid_rand;
+      char buf[33];
+      gen_rand_alphanumeric(store->ctx(), buf, sizeof(buf) - 1);
+      oid_rand.append(buf);
+
+      ret = processor->prepare(store, s->obj_ctx, &oid_rand);
+      if (ret < 0) {
+        ldout(s->cct, 0) << "ERROR: processor->prepare() returned " << ret << dendl;
+        goto done;
+      }
+
+      ret = processor->handle_data(data, ofs, &handle);
+      if (ret < 0) {
+        ldout(s->cct, 0) << "ERROR: processor->handle_data() returned " << ret << dendl;
+        goto done;
+      }
+
+      ret = processor->throttle_data(handle, false);
+      if (ret < 0) {
+        ldout(s->cct, 0) << "ERROR: processor->throttle_data() returned " << ret << dendl;
+        goto done;
+      }
+    }
 
     ofs += len;
   } while (len > 0);
@@ -1592,30 +1700,66 @@ void RGWPutObj::execute()
     goto done;
   }
 
-  hash.Final(m);
+  if (need_calc_md5) {
+    hash.Final(m);
 
-  buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+    buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+    etag = calc_md5;
 
-  if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
-     ret = -ERR_BAD_DIGEST;
-     goto done;
+    if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
+      ret = -ERR_BAD_DIGEST;
+      goto done;
+    }
   }
+
   policy.encode(aclbl);
 
-  etag = calc_md5;
+  attrs[RGW_ATTR_ACL] = aclbl;
+  if (obj_manifest) {
+    bufferlist manifest_bl;
+    string manifest_obj_prefix;
+    string manifest_bucket;
+    RGWBucketInfo bucket_info;
 
+    char etag_buf[CEPH_CRYPTO_MD5_DIGESTSIZE];
+    char etag_buf_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
+
+    manifest_bl.append(obj_manifest, strlen(obj_manifest) + 1);
+    attrs[RGW_ATTR_USER_MANIFEST] = manifest_bl;
+    user_manifest_parts_hash = &hash;
+    string prefix_str = obj_manifest;
+    int pos = prefix_str.find('/');
+    if (pos < 0) {
+      ldout(s->cct, 0) << "bad user manifest, missing slash separator: " << obj_manifest << dendl;
+      goto done;
+    }
+
+    manifest_bucket = prefix_str.substr(0, pos);
+    manifest_obj_prefix = prefix_str.substr(pos + 1);
+
+    ret = store->get_bucket_info(NULL, manifest_bucket, bucket_info, NULL, NULL);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "could not get bucket info for bucket=" << manifest_bucket << dendl;
+    }
+    ret = iterate_user_manifest_parts(s->cct, store, 0, -1, bucket_info.bucket, manifest_obj_prefix,
+                                      NULL, NULL, put_obj_user_manifest_iterate_cb, (void *)this);
+    if (ret < 0) {
+      goto done;
+    }
+
+    hash.Final((byte *)etag_buf);
+    buf_to_hex((const unsigned char *)etag_buf, CEPH_CRYPTO_MD5_DIGESTSIZE, etag_buf_str);
+
+    ldout(s->cct, 0) << __func__ << ": calculated md5 for user manifest: " << etag_buf_str << dendl;
+
+    etag = etag_buf_str;
+  }
   if (supplied_etag && etag.compare(supplied_etag) != 0) {
     ret = -ERR_UNPROCESSABLE_ENTITY;
     goto done;
   }
   bl.append(etag.c_str(), etag.size() + 1);
   attrs[RGW_ATTR_ETAG] = bl;
-  attrs[RGW_ATTR_ACL] = aclbl;
-  if (obj_manifest) {
-    bufferlist manifest_bl;
-    manifest_bl.append(obj_manifest, strlen(obj_manifest) + 1);
-    attrs[RGW_ATTR_USER_MANIFEST] = manifest_bl;
-  }
 
   for (iter = s->generic_attrs.begin(); iter != s->generic_attrs.end(); ++iter) {
     bufferlist& attrbl = attrs[iter->first];
@@ -1683,7 +1827,7 @@ void RGWPostObj::execute()
 
   processor = select_processor();
 
-  ret = processor->prepare(store, s->obj_ctx);
+  ret = processor->prepare(store, s->obj_ctx, NULL);
   if (ret < 0)
     goto done;
 
@@ -1708,7 +1852,7 @@ void RGWPostObj::execute()
 
      hash.Update(data_ptr, len);
 
-     ret = processor->throttle_data(handle);
+     ret = processor->throttle_data(handle, false);
      if (ret < 0)
        goto done;
 
@@ -1752,8 +1896,13 @@ done:
 
 int RGWPutMetadata::verify_permission()
 {
-  if (!verify_object_permission(s, RGW_PERM_WRITE))
-    return -EACCES;
+  if (s->object) {
+    if (!verify_object_permission(s, RGW_PERM_WRITE))
+      return -EACCES;
+  } else {
+    if (!verify_bucket_permission(s, RGW_PERM_WRITE))
+      return -EACCES;
+  }
 
   return 0;
 }
@@ -2397,7 +2546,6 @@ void RGWInitMultipart::execute()
 static int get_multipart_info(RGWRados *store, struct req_state *s, string& meta_oid,
                               RGWAccessControlPolicy *policy, map<string, bufferlist>& attrs)
 {
-  map<string, bufferlist> parts_map;
   map<string, bufferlist>::iterator iter;
   bufferlist header;
 
@@ -2597,6 +2745,15 @@ void RGWCompleteMultipart::execute()
 
   iter = parts->parts.begin();
 
+  meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
+  meta_obj.set_in_extra_data(true);
+
+  ret = get_obj_attrs(store, s, meta_obj, attrs, NULL, NULL);
+  if (ret < 0) {
+    ldout(s->cct, 0) << "ERROR: failed to get obj attrs, obj=" << meta_obj << " ret=" << ret << dendl;
+    return;
+  }
+
   do {
     ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts, marker, obj_parts, &marker, &truncated);
     if (ret == -ENOENT) {
@@ -2686,8 +2843,6 @@ void RGWCompleteMultipart::execute()
     return;
 
   // remove the upload obj
-  meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
-  meta_obj.set_in_extra_data(true);
   store->delete_obj(s->obj_ctx, s->bucket_owner.get_id(), meta_obj);
 }
 

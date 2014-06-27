@@ -39,6 +39,7 @@ class Timer;
 class Messenger {
 private:
   list<Dispatcher*> dispatchers;
+  list <Dispatcher*> fast_dispatchers;
 
 protected:
   /// the "name" of the local daemon. eg client.99
@@ -301,6 +302,8 @@ public:
   void add_dispatcher_head(Dispatcher *d) { 
     bool first = dispatchers.empty();
     dispatchers.push_front(d);
+    if (d->ms_can_fast_dispatch_any())
+      fast_dispatchers.push_front(d);
     if (first)
       ready();
   }
@@ -314,6 +317,8 @@ public:
   void add_dispatcher_tail(Dispatcher *d) { 
     bool first = dispatchers.empty();
     dispatchers.push_back(d);
+    if (d->ms_can_fast_dispatch_any())
+      fast_dispatchers.push_back(d);
     if (first)
       ready();
   }
@@ -572,6 +577,50 @@ protected:
    */
 public:
   /**
+   * Determine whether a message can be fast-dispatched. We will
+   * query each Dispatcher in sequence to determine if they are
+   * capable of handling a particular message via "fast dispatch".
+   *
+   * @param m The Message we are testing.
+   */
+  bool ms_can_fast_dispatch(Message *m) {
+    for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
+	 p != fast_dispatchers.end();
+	 ++p) {
+      if ((*p)->ms_can_fast_dispatch(m))
+	return true;
+    }
+    return false;
+  }
+
+  /**
+   * Deliver a single Message via "fast dispatch".
+   *
+   * @param m The Message we are fast dispatching. We take ownership
+   * of one reference to it.
+   */
+  void ms_fast_dispatch(Message *m) {
+    for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
+	 p != fast_dispatchers.end();
+	 ++p) {
+      if ((*p)->ms_can_fast_dispatch(m)) {
+	(*p)->ms_fast_dispatch(m);
+	return;
+      }
+    }
+    assert(0);
+  }
+  /**
+   *
+   */
+  void ms_fast_preprocess(Message *m) {
+    for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
+	 p != fast_dispatchers.end();
+	 ++p) {
+      (*p)->ms_fast_preprocess(m);
+    }
+  }
+  /**
    *  Deliver a single Message. Send it to each Dispatcher
    *  in sequence until one of them handles it.
    *  If none of our Dispatchers can handle it, assert(0).
@@ -594,7 +643,8 @@ public:
   }
   /**
    * Notify each Dispatcher of a new Connection. Call
-   * this function whenever a new Connection is initiated.
+   * this function whenever a new Connection is initiated or
+   * reconnects.
    *
    * @param con Pointer to the new Connection.
    */
@@ -603,6 +653,20 @@ public:
 	 p != dispatchers.end();
 	 ++p)
       (*p)->ms_handle_connect(con);
+  }
+
+  /**
+   * Notify each fast Dispatcher of a new Connection. Call
+   * this function whenever a new Connection is initiated or
+   * reconnects.
+   *
+   * @param con Pointer to the new Connection.
+   */
+  void ms_deliver_handle_fast_connect(Connection *con) {
+    for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
+         p != fast_dispatchers.end();
+         ++p)
+      (*p)->ms_handle_fast_connect(con);
   }
 
   /**
@@ -616,6 +680,19 @@ public:
 	 p != dispatchers.end();
 	 ++p)
       (*p)->ms_handle_accept(con);
+  }
+
+  /**
+   * Notify each fast Dispatcher of a new incoming Connection. Call
+   * this function whenever a new Connection is accepted.
+   *
+   * @param con Pointer to the new Connection.
+   */
+  void ms_deliver_handle_fast_accept(Connection *con) {
+    for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
+         p != fast_dispatchers.end();
+         ++p)
+      (*p)->ms_handle_fast_accept(con);
   }
 
   /**

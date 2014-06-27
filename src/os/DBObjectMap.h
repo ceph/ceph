@@ -16,6 +16,7 @@
 #include "osd/osd_types.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "common/simple_cache.hpp"
 
 /**
  * DBObjectMap: Implements ObjectMap in terms of KeyValueDB
@@ -68,8 +69,9 @@ public:
   set<uint64_t> in_use;
   set<ghobject_t> map_header_in_use;
 
-  DBObjectMap(KeyValueDB *db) : db(db),
-				header_lock("DBOBjectMap")
+  DBObjectMap(KeyValueDB *db) : db(db), header_lock("DBOBjectMap"),
+                                cache_lock("DBObjectMap::CacheLock"),
+                                caches(g_conf->filestore_omap_header_cache_size)
     {}
 
   int set_keys(
@@ -281,6 +283,8 @@ public:
 private:
   /// Implicit lock on Header->seq
   typedef ceph::shared_ptr<_Header> Header;
+  Mutex cache_lock;
+  SimpleLRU<ghobject_t, _Header> caches;
 
   string map_header_key(const ghobject_t &oid);
   string header_key(uint64_t seq);

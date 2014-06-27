@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
- * Ceph - scalable distributed file system
+ * Ceph distributed storage system
  *
  * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
  *
@@ -349,8 +349,8 @@ namespace ceph {
      * @param [out] decoded concatenante of the data chunks
      * @return **0** on success or a negative errno on error.
      */
-    int decode_concat(const map<int, bufferlist> &chunks,
-		      bufferlist *decoded) {
+    virtual int decode_concat(const map<int, bufferlist> &chunks,
+			      bufferlist *decoded) {
       set<int> want_to_read;
       for (unsigned int i = 0; i < get_data_chunk_count(); i++)
 	want_to_read.insert(i);

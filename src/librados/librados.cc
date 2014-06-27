@@ -27,6 +27,7 @@
 #include "librados/IoCtxImpl.h"
 #include "librados/PoolAsyncCompletionImpl.h"
 #include "librados/RadosClient.h"
+#include "librados/RadosXattrIter.h"
 #include <cls/lock/cls_lock_client.h>
 
 #include <string>
@@ -2058,10 +2059,10 @@ extern "C" int rados_pool_list(rados_t cluster, char *buf, size_t len)
   std::list<std::string>::const_iterator i = pools.begin();
   std::list<std::string>::const_iterator p_end = pools.end();
   for (; i != p_end; ++i) {
-    if (len == 0)
-      break;
     int rl = i->length() + 1;
-    strncat(b, i->c_str(), len - 2); // leave space for two NULLs
+    if (len < (unsigned)rl)
+      break;
+    strncat(b, i->c_str(), rl);
     needed += rl;
     len -= rl;
     b += rl;
@@ -2602,27 +2603,10 @@ extern "C" int rados_getxattr(rados_ioctx_t io, const char *o, const char *name,
   return ret;
 }
 
-class RadosXattrsIter {
-public:
-  RadosXattrsIter()
-    : val(NULL)
-  {
-    i = attrset.end();
-  }
-  ~RadosXattrsIter()
-  {
-    free(val);
-    val = NULL;
-  }
-  std::map<std::string, bufferlist> attrset;
-  std::map<std::string, bufferlist>::iterator i;
-  char *val;
-};
-
 extern "C" int rados_getxattrs(rados_ioctx_t io, const char *oid,
 			       rados_xattrs_iter_t *iter)
 {
-  RadosXattrsIter *it = new RadosXattrsIter();
+  librados::RadosXattrsIter *it = new librados::RadosXattrsIter();
   if (!it)
     return -ENOMEM;
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
@@ -2634,7 +2618,7 @@ extern "C" int rados_getxattrs(rados_ioctx_t io, const char *oid,
   }
   it->i = it->attrset.begin();
 
-  RadosXattrsIter **iret = (RadosXattrsIter**)iter;
+  librados::RadosXattrsIter **iret = (librados::RadosXattrsIter**)iter;
   *iret = it;
   *iter = it;
   return 0;
@@ -2643,7 +2627,7 @@ extern "C" int rados_getxattrs(rados_ioctx_t io, const char *oid,
 extern "C" int rados_getxattrs_next(rados_xattrs_iter_t iter,
 				    const char **name, const char **val, size_t *len)
 {
-  RadosXattrsIter *it = static_cast<RadosXattrsIter*>(iter);
+  librados::RadosXattrsIter *it = static_cast<librados::RadosXattrsIter*>(iter);
   if (it->i == it->attrset.end()) {
     *name = NULL;
     *val = NULL;
@@ -2667,7 +2651,7 @@ extern "C" int rados_getxattrs_next(rados_xattrs_iter_t iter,
 
 extern "C" void rados_getxattrs_end(rados_xattrs_iter_t iter)
 {
-  RadosXattrsIter *it = static_cast<RadosXattrsIter*>(iter);
+  librados::RadosXattrsIter *it = static_cast<librados::RadosXattrsIter*>(iter);
   delete it;
 }
 
@@ -3480,9 +3464,9 @@ public:
 };
 
 class C_XattrsIter : public Context {
-  RadosXattrsIter *iter;
+  librados::RadosXattrsIter *iter;
 public:
-  C_XattrsIter(RadosXattrsIter *iter) : iter(iter) {}
+  C_XattrsIter(librados::RadosXattrsIter *iter) : iter(iter) {}
   void finish(int r) {
     iter->i = iter->attrset.begin();
   }
@@ -3492,7 +3476,7 @@ extern "C" void rados_read_op_getxattrs(rados_read_op_t read_op,
 					rados_xattrs_iter_t *iter,
 					int *prval)
 {
-  RadosXattrsIter *xattrs_iter = new RadosXattrsIter;
+  librados::RadosXattrsIter *xattrs_iter = new librados::RadosXattrsIter;
   ((::ObjectOperation *)read_op)->getxattrs(&xattrs_iter->attrset, prval);
   ((::ObjectOperation *)read_op)->add_handler(new C_XattrsIter(xattrs_iter));
   *iter = xattrs_iter;

@@ -43,9 +43,13 @@ across your cluster. We recommend approximately 50-100 placement groups per OSD
 to balance out memory and CPU requirements and per-OSD load. For a single pool
 of objects, you can use the following formula::
 
-               (OSDs * 100)
-   Total PGs = ------------
-                 Replicas
+                (OSDs * 100)
+   Total PGs =  ------------
+               OSD per object
+
+Where **OSD per object** is the number of replicas (or pool size) for
+replicated pools or the K+M sum for erasure coded pools (as returned
+by **ceph osd erasure-code-profile get**).
 
 The result should be **rounded up to the nearest power of two.**
 Rounding up is optional, but recommended if you want to ensure that

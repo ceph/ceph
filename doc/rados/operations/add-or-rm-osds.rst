@@ -53,7 +53,7 @@ and root permissions.
 Adding an OSD (Manual)
 ----------------------
 
-This procedure sets up an ``ceph-osd`` daemon, configures it to use one drive,
+This procedure sets up a ``ceph-osd`` daemon, configures it to use one drive,
 and configures the cluster to distribute data to the OSD. If your host has
 multiple drives, you may add an OSD for each drive by repeating this procedure.
 
@@ -104,12 +104,14 @@ weight).
 	ceph auth add osd.{osd-num} osd 'allow *' mon 'allow rwx' -i /var/lib/ceph/osd/ceph-{osd-num}/keyring
 
 
-#. Add the OSD to the CRUSH map so that it can begin receiving data. You may
-   also decompile the CRUSH map, add the OSD to the device list, add the host as a
-   bucket (if it's not already in the CRUSH map), add the device as an item in the
-   host, assign it a weight, recompile it and set it. See `Add/Move an OSD`_ for
-   details.
-   
+#. Add the OSD to the CRUSH map so that the OSD can begin receiving data. The 
+   ``ceph osd crush add`` command allows you to add OSDs to the CRUSH hierarchy 
+   wherever you wish. If you specify at least one bucket, the command 
+   will place the OSD into the most specific bucket you specify, *and* it will 
+   move that bucket underneath any other buckets you specify. **Important:** If 
+   you specify only the root bucket, the command will attach the OSD directly 
+   to the root, but CRUSH rules expect OSDs to be inside of hosts.
+      
    For Argonaut (v 0.48), execute the following::
 
 	ceph osd crush add {id} {name} {weight}  [{bucket-type}={bucket-name} ...]
@@ -117,6 +119,11 @@ weight).
    For Bobtail (v 0.56) and later releases, execute the following:: 
 
 	ceph osd crush add {id-or-name} {weight}  [{bucket-type}={bucket-name} ...]
+
+   You may also decompile the CRUSH map, add the OSD to the device list, add the 
+   host as a bucket (if it's not already in the CRUSH map), add the device as an 
+   item in the host, assign it a weight, recompile it and set it. See 
+   `Add/Move an OSD`_ for details.
 
 
 .. topic:: Argonaut (v0.48) Best Practices

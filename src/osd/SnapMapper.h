@@ -151,7 +151,7 @@ private:
 
 public:
   static string make_shard_prefix(shard_id_t shard) {
-    if (shard == ghobject_t::NO_SHARD)
+    if (shard == shard_id_t::NO_SHARD)
       return string();
     char buf[20];
     int r = snprintf(buf, sizeof(buf), ".%x", (int)shard);
@@ -206,7 +206,7 @@ public:
   /// Add mapping for oid, must not already be mapped
   void add_oid(
     const hobject_t &oid,       ///< [in] oid to add
-    std::set<snapid_t> new_snaps, ///< [in] snaps
+    const std::set<snapid_t>& new_snaps, ///< [in] snaps
     MapCacher::Transaction<std::string, bufferlist> *t ///< [out] transaction
     );
 

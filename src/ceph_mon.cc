@@ -198,6 +198,28 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
+  // We need to specify some default values that may be overridden by the
+  // user, that are specific to the monitor.  The options we are overriding
+  // are also used on the OSD (or in any other component that uses leveldb),
+  // so changing them directly in common/config_opts.h is not an option.
+  // This is not the prettiest way of doing this, especially since it has us
+  // having a different place than common/config_opts.h defining default
+  // values, but it's not horribly wrong enough to prevent us from doing it :)
+  //
+  // NOTE: user-defined options will take precedence over ours.
+  //
+  //  leveldb_write_buffer_size = 32*1024*1024  = 33554432  // 32MB
+  //  leveldb_cache_size        = 512*1024*1204 = 536870912 // 512MB
+  //  leveldb_block_size        = 64*1024       = 65536     // 64KB
+  //  leveldb_compression       = false
+  //  leveldb_log               = ""
+  vector<const char*> def_args;
+  def_args.push_back("--leveldb-write-buffer-size=33554432");
+  def_args.push_back("--leveldb-cache-size=536870912");
+  def_args.push_back("--leveldb-block-size=65536");
+  def_args.push_back("--leveldb-compression=false");
+  def_args.push_back("--leveldb-log=");
+
   int flags = 0;
   {
     vector<const char*> args_copy = args;
@@ -218,7 +240,8 @@ int main(int argc, const char **argv)
     }
   }
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON, flags);
+  global_init(&def_args, args,
+              CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON, flags);
 
   uuid_d fsid;
   std::string val;
@@ -452,7 +475,7 @@ int main(int argc, const char **argv)
   bufferlist magicbl;
   err = store->get(Monitor::MONITOR_NAME, "magic", magicbl);
   if (!magicbl.length()) {
-    derr << "unable to read magic from mon data.. did you run mkcephfs?" << dendl;
+    derr << "unable to read magic from mon data" << dendl;
     prefork.exit(1);
   }
   string magic(magicbl.c_str(), magicbl.length()-1);  // ignore trailing \n

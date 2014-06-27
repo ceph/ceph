@@ -46,8 +46,12 @@
 // metadata ops.
 
 class MClientRequest : public Message {
+  static const int HEAD_VERSION = 2;
+  static const int COMPAT_VERSION = 1;
+
 public:
   struct ceph_mds_request_head head;
+  utime_t stamp;
 
   struct Release {
     mutable ceph_mds_request_release item;
@@ -76,8 +80,10 @@ public:
 
  public:
   // cons
-  MClientRequest() : Message(CEPH_MSG_CLIENT_REQUEST) {}
-  MClientRequest(int op) : Message(CEPH_MSG_CLIENT_REQUEST) {
+  MClientRequest()
+    : Message(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {}
+  MClientRequest(int op)
+    : Message(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = op;
   }
@@ -110,6 +116,7 @@ public:
   }
 
   // normal fields
+  void set_stamp(utime_t t) { stamp = t; }
   void set_oldest_client_tid(ceph_tid_t t) { head.oldest_client_tid = t; }
   void inc_num_fwd() { head.num_fwd = head.num_fwd + 1; }
   void set_retry_attempt(int a) { head.num_retry = a; }
@@ -124,7 +131,8 @@ public:
   void set_replayed_op() {
     head.flags = head.flags | CEPH_MDS_FLAG_REPLAY;
   }
-    
+
+  utime_t get_stamp() const { return stamp; }
   ceph_tid_t get_oldest_client_tid() const { return head.oldest_client_tid; }
   int get_num_fwd() const { return head.num_fwd; }
   int get_retry_attempt() const { return head.num_retry; }
@@ -145,6 +153,8 @@ public:
     ::decode(path, p);
     ::decode(path2, p);
     ::decode_nohead(head.num_releases, releases, p);
+    if (header.version >= 2)
+      ::decode(stamp, p);
   }
 
   void encode_payload(uint64_t features) {
@@ -153,6 +163,7 @@ public:
     ::encode(path, payload);
     ::encode(path2, payload);
     ::encode_nohead(releases, payload);
+    ::encode(stamp, payload);
   }
 
   const char *get_type_name() const { return "creq"; }
@@ -190,6 +201,8 @@ public:
     out << " " << get_filepath();
     if (!get_filepath2().empty())
       out << " " << get_filepath2();
+    if (stamp != utime_t())
+      out << " " << stamp;
     if (head.num_retry)
       out << " RETRY=" << (int)head.num_retry;
     if (get_flags() & CEPH_MDS_FLAG_REPLAY)

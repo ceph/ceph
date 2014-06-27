@@ -80,10 +80,10 @@ void HealthMonitor::service_shutdown()
   services.clear();
 }
 
-health_status_t HealthMonitor::get_health(Formatter *f,
-					  list<pair<health_status_t,string> > *detail)
+void HealthMonitor::get_health(Formatter *f,
+			       list<pair<health_status_t,string> >& summary,
+			       list<pair<health_status_t,string> > *detail)
 {
-  health_status_t overall = HEALTH_OK;
   if (f) {
     f->open_object_section("health");
     f->open_array_section("health_services");
@@ -92,16 +92,12 @@ health_status_t HealthMonitor::get_health(Formatter *f,
   for (map<int,HealthService*>::iterator it = services.begin();
        it != services.end();
        ++it) {
-    health_status_t h = it->second->get_health(f, detail);
-    if (overall > h)
-      overall = h;
+    it->second->get_health(f, summary, detail);
   }
 
   if (f) {
     f->close_section(); // health_services
     f->close_section(); // health
   }
-
-  return overall;
 }
 

@@ -190,7 +190,7 @@ commands, refer to `Virsh Command Reference`_.
 		<source protocol='rbd' name='libvirt-pool/new-libvirt-image'>
 			<host name='{monitor-host}' port='6789'/>
 		</source>
-		<target dev='hdb' bus='ide'/>
+		<target dev='vda' bus='virtio'/>
 	</disk>
 
    Replace ``{monitor-host}`` with the name of your host, and replace the 
@@ -223,8 +223,7 @@ commands, refer to `Virsh Command Reference`_.
 
 #. Get the ``client.libvirt`` key and save the key string to a file. ::
 
-	sudo ceph auth list
-	vim client.libvirt.key
+	ceph auth get-key client.libvirt | sudo tee client.libvirt.key
 
 #. Set the UUID of the secret. :: 
 

@@ -6,7 +6,7 @@
  * Copyright (C) 2011 New Dream Network
  *
  * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public
+ * modify it under the terms of the GNU Lesser General Public
  * License version 2.1, as published by the Free Software
  * Foundation.	See file COPYING.
  *
@@ -215,6 +215,14 @@ public:
    * @returns 0 on success, negative error code on failure
    */
   int aio_flush(RBD::AioCompletion *c);
+
+  /**
+   * Drop any cached data for an image
+   *
+   * @param image the image to invalidate cached data for
+   * @returns 0 on success, negative error code on failure
+   */
+  int invalidate_cache();
 
 private:
   friend class RBD;

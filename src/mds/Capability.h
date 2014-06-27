@@ -285,7 +285,7 @@ public:
     //check_rdcaps_list();
   }
 
-  void inc_last_seq() { last_sent++; };
+  void inc_last_seq() { last_sent++; }
   ceph_seq_t get_last_seq() { return last_sent; }
   ceph_seq_t get_last_issue() { return last_issue; }
 
