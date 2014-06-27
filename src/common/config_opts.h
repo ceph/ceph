@@ -313,6 +313,7 @@ OPTION(mds_default_dir_hash, OPT_INT, CEPH_STR_HASH_RJENKINS)
 OPTION(mds_log, OPT_BOOL, true)
 OPTION(mds_log_skip_corrupt_events, OPT_BOOL, false)
 OPTION(mds_log_max_events, OPT_INT, -1)
+OPTION(mds_log_events_per_segment, OPT_INT, 1024)
 OPTION(mds_log_segment_size, OPT_INT, 0)  // segment size for mds log,
 	      // defaults to g_default_file_layout.fl_object_size (4MB)
 OPTION(mds_log_max_segments, OPT_INT, 30)
