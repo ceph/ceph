@@ -18,8 +18,7 @@ libtracepoints_la_SOURCES = \
 	osd.c \
 	osd.h \
 	pg.h \
-	pg.c \
-	tracing-common.h
+	pg.c
 
 libtracepoints_la_LIBADD = -llttng-ust -ldl
 libtracepoints_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
