@@ -5944,12 +5944,17 @@ void OSD::handle_osd_map(MOSDMap *m)
     service.pre_publish_map(newmap);
 
     // kill connections to newly down osds
+    bool waited_for_reservations = false;
     set<int> old;
     osdmap->get_all_osds(old);
     for (set<int>::iterator p = old.begin(); p != old.end(); ++p) {
       if (*p != whoami &&
 	  osdmap->have_inst(*p) &&                        // in old map
 	  (!newmap->exists(*p) || !newmap->is_up(*p))) {  // but not the new one
+        if (!waited_for_reservations) {
+          service.await_reserved_maps();
+          waited_for_reservations = true;
+        }
 	note_down_osd(*p);
       }
     }
