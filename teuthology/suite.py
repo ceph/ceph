@@ -105,6 +105,12 @@ def fetch_suite_repo(branch, test_name):
     Fetch the suite repo (and also the teuthology repo) so that we can use it
     to build jobs. Repos are stored in ~/src/.
 
+    The reason the teuthology repo is also fetched is that currently we use
+    subprocess to call teuthology-schedule to schedule jobs so we need to make
+    sure it is up-to-date. For that reason we always fetch the master branch
+    for test scheduling, regardless of what teuthology branch is requested for
+    testing.
+
     :returns: The path to the repo on disk
     """
     src_base_path = os.path.expanduser('~/src')
