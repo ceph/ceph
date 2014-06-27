@@ -1,6 +1,7 @@
 tasks:
 - install:
 - ceph:
+    fs: ext4
 - ceph-fuse:
 - workunit:
     clients:

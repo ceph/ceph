@@ -1,6 +1,7 @@
 tasks:
 - install:
 - ceph:
+    fs: btrfs
 - kclient:
 - workunit:
     clients:

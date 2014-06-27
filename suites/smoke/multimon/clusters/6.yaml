@@ -1,4 +1,0 @@
-roles:
-- [mon.a, mon.d, osd.0]
-- [mon.b, mon.e, mds.a]
-- [mon.c, mon.f, osd.1]
