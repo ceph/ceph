@@ -8,22 +8,35 @@ dist_noinst_DATA = \
 	osd.tp \
 	pg.tp
 
-libtracepoints_la_SOURCES = \
-	librados.c \
-	librados.h \
+libcommon_tp_la_SOURCES = \
 	mutex.c \
-	mutex.h \
+	mutex.h
+libcommon_tp_la_LIBADD = -llttng-ust -ldl
+libcommon_tp_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
+libcommon_tp_la_LDFLAGS =
+
+libosd_tp_la_SOURCES = \
 	oprequest.c \
 	oprequest.h \
 	osd.c \
 	osd.h \
 	pg.h \
 	pg.c
+libosd_tp_la_LIBADD = -llttng-ust -ldl
+libosd_tp_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
+libosd_tp_la_LDFLAGS =
 
-libtracepoints_la_LIBADD = -llttng-ust -ldl
-libtracepoints_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
-libtracepoints_la_LDFLAGS =
-noinst_LTLIBRARIES = libtracepoints.la
+librados_tp_la_SOURCES = \
+	librados.c \
+	librados.h
+librados_tp_la_LIBADD = -llttng-ust -ldl
+librados_tp_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
+librados_tp_la_LDFLAGS =
+
+noinst_LTLIBRARIES = \
+	libcommon_tp.la \
+	libosd_tp.la \
+	librados_tp.la
 
 BUILT_SOURCES = \
 	librados.h \
@@ -32,4 +45,7 @@ BUILT_SOURCES = \
 	osd.h \
 	pg.h
 
-CLEANFILES = $(libtracepoints_la_SOURCES)
+CLEANFILES = \
+	$(libcommon_tp_la_SOURCES) \
+	$(libosd_tp_la_SOURCES) \
+	$(librados_tp_la_SOURCES)
