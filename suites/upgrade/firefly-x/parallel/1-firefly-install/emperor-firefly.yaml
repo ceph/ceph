@@ -1,0 +1,15 @@
+tasks:
+- install:
+    branch: emperor
+- print: "**** done emperor install"
+- ceph:
+    fs: xfs
+- print: "**** done ceph"
+- install.upgrade:
+    all:
+      branch: firefly
+- ceph.restart:
+- parallel:
+    - workload
+    - upgrade-sequence
+- print: "**** done parallel"
