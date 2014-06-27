@@ -1,5 +1,5 @@
 
-v0.82
+v0.83
 -----
 
 * The experimental keyvaluestore-dev OSD backend had an on-disk format
