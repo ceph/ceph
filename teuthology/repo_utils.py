@@ -8,6 +8,16 @@ log = logging.getLogger(__name__)
 
 
 def checkout_repo(repo_url, dest_path, branch):
+    """
+    Use git to either clone or update a given repo, forcing it to switch to the
+    specified branch.
+
+    :param repo_url:  The full URL to the repo (not including the branch)
+    :param dest_path: The full path to the destination directory
+    :param branch:    The branch.
+    :raises:          BranchNotFoundError if the branch is not found;
+                      RuntimeError for other errors
+    """
     if not os.path.isdir(dest_path):
         log.info("Cloning %s %s from upstream", repo_url, branch)
         proc = subprocess.Popen(
