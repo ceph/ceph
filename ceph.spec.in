@@ -101,46 +101,15 @@ block and file system storage.
 Summary:	Ceph Common
 Group:		System Environment/Base
 Requires:	librbd1 = %{version}-%{release}
-Requires:	librados2 = %{version}-%{release}
-Requires:	libcephfs1 = %{version}-%{release}
-Requires:	python
-Requires:	python-argparse
 Requires:	python-ceph
 Requires:	python-requests
-Requires:       xfsprogs
-Requires:	cryptsetup
-Requires:	parted
-Requires:	util-linux
-Requires:	hdparm
-Requires:       redhat-lsb-core
-Requires(post):	binutils
-BuildRequires:	make
-BuildRequires:	gcc-c++
-BuildRequires:	libtool
-BuildRequires:	boost-devel
-BuildRequires:	libedit-devel
-BuildRequires:	perl
-BuildRequires:	gdbm
-BuildRequires:	pkgconfig
-BuildRequires:	python
-BuildRequires:	python-nose
-BuildRequires:	python-argparse
-BuildRequires:  libaio-devel
-BuildRequires:  libcurl-devel
-BuildRequires:  libxml2-devel
-BuildRequires:  libuuid-devel
-BuildRequires:  libblkid-devel >= 2.17
-BuildRequires:  libudev-devel
-BuildRequires:  leveldb-devel > 1.2
-BuildRequires:  xfsprogs-devel
-BuildRequires:  yasm
 %description -n ceph-common
 common utilities to mount and interact with a ceph storage cluster
 
 %package fuse
 Summary:	Ceph fuse-based client
 Group:		System Environment/Base
-Requires:	ceph-common
+Requires:	%{name}
 BuildRequires:	fuse-devel
 %description fuse
 FUSE based client for Ceph distributed network file system
@@ -148,7 +117,7 @@ FUSE based client for Ceph distributed network file system
 %package -n rbd-fuse
 Summary:	Ceph fuse-based client
 Group:		System Environment/Base
-Requires:	ceph-common
+Requires:	%{name}
 BuildRequires:	fuse-devel
 %description -n rbd-fuse
 FUSE based client to map Ceph rbd images to files
@@ -157,7 +126,7 @@ FUSE based client to map Ceph rbd images to files
 Summary:	Ceph headers
 Group:		Development/Libraries
 License:	LGPL-2.0
-Requires:	ceph-common = %{version}-%{release}
+Requires:	%{name} = %{version}-%{release}
 Requires:	librados2 = %{version}
 Requires:	librbd1 = %{version}
 Requires:	libcephfs1 = %{version}
@@ -187,7 +156,7 @@ conjunction with any FastCGI capable web server.
 Summary:	OCF-compliant resource agents for Ceph daemons
 Group:		System Environment/Base
 License:	LGPL-2.0
-Requires:	ceph-common = %{version}
+Requires:	%{name} = %{version}
 Requires:	resource-agents
 %description resource-agents
 Resource agents for monitoring and managing Ceph daemons
@@ -240,7 +209,6 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	librados2 = %{version}-%{release}
 Requires:	librbd1 = %{version}-%{release}
-Requires:	libcephfs1 = %{version}-%{release}
 Requires:	python-flask
 %if 0%{defined suse_version}
 %py_requires
@@ -253,9 +221,7 @@ object storage.
 Summary:	RESTful benchmark
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-Requires:	librados2 = %{version}-%{release}
-Requires:	librbd1 = %{version}-%{release}
-Requires:	libcephfs1 = %{version}-%{release}
+Requires:	ceph-common = %{version}-%{release}
 %description -n rest-bench
 RESTful bencher that can be used to benchmark radosgw performance.
 
@@ -449,6 +415,7 @@ fi
 %{_sbindir}/ceph-disk-udev
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/rcceph
+/sbin/mount.ceph
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/ceph_common.sh
 %dir %{_libdir}/rados-classes
@@ -526,10 +493,8 @@ fi
 %{_datadir}/ceph/known_hosts_drop.ceph.com
 %{_datadir}/ceph/id_dsa_drop.ceph.com
 %{_datadir}/ceph/id_dsa_drop.ceph.com.pub
-/sbin/mount.ceph
-/lib/udev/rules.d/50-rbd.rules
+
 %config %{_sysconfdir}/bash_completion.d/rados
-%config %{_sysconfdir}/bash_completion.d/radosgw-admin
 %config %{_sysconfdir}/bash_completion.d/rbd
 %config(noreplace) %{_sysconfdir}/ceph/rbdmap
 %{_initrddir}/rbdmap
@@ -579,6 +544,7 @@ fi
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw-admin.8*
 %{_sbindir}/rcceph-radosgw
+%config %{_sysconfdir}/bash_completion.d/radosgw-admin
 %dir %{_localstatedir}/log/radosgw/
 
 %post radosgw
@@ -629,6 +595,7 @@ fi
 %files -n librbd1
 %defattr(-,root,root,-)
 %{_libdir}/librbd.so.*
+/lib/udev/rules.d/50-rbd.rules
 
 %post -n librbd1
 /sbin/ldconfig
