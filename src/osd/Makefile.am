@@ -25,7 +25,7 @@ libosd_la_SOURCES = \
 	objclass/class_api.cc
 
 libosd_la_CXXFLAGS = ${AM_CXXFLAGS}
-libosd_la_LIBADD = $(LIBOSDC) $(LIBOS) $(LIBOSD_TYPES) $(LIBOS_TYPES)
+libosd_la_LIBADD = $(LIBOSDC) $(LIBOS) $(LIBOSD_TYPES) $(LIBOS_TYPES) $(LIBOSD_TP)
 noinst_LTLIBRARIES += libosd.la
 
 noinst_HEADERS += \
