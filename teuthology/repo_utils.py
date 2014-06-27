@@ -8,13 +8,6 @@ log = logging.getLogger(__name__)
 
 
 def checkout_repo(repo_url, dest_path, branch):
-    # if os.path.isdir(path):
-    #     p = subprocess.Popen('git status', shell=True, cwd=path)
-    #     if p.wait() == 128:
-    #         log.info("Repo at %s appears corrupt; removing",
-    #                  branch)
-    #         shutil.rmtree(path)
-
     if not os.path.isdir(dest_path):
         log.info("Cloning %s %s from upstream", repo_url, branch)
         proc = subprocess.Popen(
