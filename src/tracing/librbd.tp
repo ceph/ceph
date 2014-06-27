@@ -1,0 +1,164 @@
+#include "tracing/tracing-common.h"
+#include "include/rbd/librbd.h"
+
+TRACEPOINT_EVENT(librbd, read_enter,
+    TP_ARGS(
+        const char*, name,
+        const char*, id),
+    TP_FIELDS(
+        ctf_string(name, name)
+        ctf_string(id, id)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, read_extent,
+    TP_ARGS(
+        uint64_t, offset,
+        uint64_t, length),
+    TP_FIELDS(
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(uint64_t, length, length)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, read_exit,
+    TP_ARGS(
+        ssize_t, retval),
+    TP_FIELDS(
+        ctf_integer(ssize_t, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, write_enter,
+    TP_ARGS(
+        const char*, name,
+        const char*, id,
+        uint64_t, off,
+        size_t, len,
+        const char*, buf),
+    TP_FIELDS(
+        ctf_string(name, name)
+        ctf_string(id, id)
+        ctf_integer(uint64_t, off, off)
+        ceph_ctf_sequence(unsigned char, buf, buf, size_t, len)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, write_exit,
+    TP_ARGS(
+        ssize_t, retval),
+    TP_FIELDS(
+        ctf_integer(ssize_t, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, open_image_enter,
+    TP_ARGS(
+        const char*, name,
+        const char*, id),
+    TP_FIELDS(
+        ctf_string(name, name)
+        ctf_string(id, id)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, open_image_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, close_image_enter,
+    TP_ARGS(
+        const char*, name,
+        const char*, id),
+    TP_FIELDS(
+        ctf_string(name, name)
+        ctf_string(id, id)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, close_image_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librbd, create_v1_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, id,
+        const char*, imgname,
+        uint64_t, bid,
+        uint64_t, size,
+        int, order),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, id, id)
+        ctf_string(imgname, imgname)
+        ctf_integer(uint64_t, bid, bid)
+        ctf_integer(uint64_t, size, size)
+        ctf_integer(int, order, order)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, create_v1_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, create_v2_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, id,
+        const char*, imgname,
+        uint64_t, bid,
+        uint64_t, size,
+        int, order,
+        uint64_t, features,
+        uint64_t, stripe_unit,
+        uint64_t, stripe_count),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, id, id)
+        ctf_string(imgname, imgname)
+        ctf_integer(uint64_t, bid, bid)
+        ctf_integer(uint64_t, size, size)
+        ctf_integer(int, order, order)
+        ctf_integer(uint64_t, features, features)
+        ctf_integer(uint64_t, stripe_unit, stripe_unit)
+        ctf_integer(uint64_t, stripe_count, stripe_count)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, create_v2_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, remove_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, id,
+        const char*, imgname),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, id, id)
+        ctf_string(imgname, imgname)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, remove_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
