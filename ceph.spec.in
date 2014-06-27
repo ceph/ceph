@@ -440,7 +440,6 @@ fi
 %{_libdir}/ceph/erasure-code/libec_missing_entry_point.so*
 /lib/udev/rules.d/60-ceph-partuuid-workaround.rules
 /lib/udev/rules.d/95-ceph-osd.rules
-%dir %{_sysconfdir}/ceph/
 %config %{_sysconfdir}/bash_completion.d/ceph
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %config(noreplace) %{_sysconfdir}/logrotate.d/radosgw
@@ -466,9 +465,7 @@ fi
 %dir %{_localstatedir}/lib/ceph/mds
 %dir %{_localstatedir}/lib/ceph/bootstrap-osd
 %dir %{_localstatedir}/lib/ceph/bootstrap-mds
-%dir %{_localstatedir}/log/ceph/
 %ghost %dir %{_localstatedir}/run/ceph/
-
 
 #################################################################################
 %files -n ceph-common
@@ -493,7 +490,8 @@ fi
 %{_datadir}/ceph/known_hosts_drop.ceph.com
 %{_datadir}/ceph/id_dsa_drop.ceph.com
 %{_datadir}/ceph/id_dsa_drop.ceph.com.pub
-
+%dir %{_sysconfdir}/ceph/
+%dir %{_localstatedir}/log/ceph/
 %config %{_sysconfdir}/bash_completion.d/rados
 %config %{_sysconfdir}/bash_completion.d/rbd
 %config(noreplace) %{_sysconfdir}/ceph/rbdmap
