@@ -510,6 +510,52 @@ function test_mon_osd_pool()
   ceph osd pool delete replicated replicated --yes-i-really-really-mean-it
 }
 
+function test_mon_osd_pool_quota()
+{
+  #
+  # test osd pool set/get quota
+  #
+
+  # create tmp pool
+  ceph osd pool create tmp-quota-pool 36
+  #
+  # set erroneous quotas
+  #
+  expect_false ceph osd pool set-quota tmp-quota-pool max_fooness 10
+  expect_false ceph osd pool set-quota tmp-quota-pool max_bytes -1
+  expect_false ceph osd pool set-quota tmp-quota-pool max_objects aaa
+  #
+  # set valid quotas
+  #
+  ceph osd pool set-quota tmp-quota-pool max_bytes 10
+  ceph osd pool set-quota tmp-quota-pool max_objects 10M
+  #
+  # get quotas
+  #
+  ceph osd pool get-quota tmp-quota-pool | grep 'max bytes.*10B'
+  ceph osd pool get-quota tmp-quota-pool | grep 'max objects.*10240k objects'
+  #
+  # get quotas in json-pretty format
+  #
+  ceph osd pool get-quota tmp-quota-pool --format=json-pretty | \
+    grep '"quota_max_objects":.*10485760'
+  ceph osd pool get-quota tmp-quota-pool --format=json-pretty | \
+    grep '"quota_max_bytes":.*10'
+  #
+  # reset pool quotas
+  #
+  ceph osd pool set-quota tmp-quota-pool max_bytes 0
+  ceph osd pool set-quota tmp-quota-pool max_objects 0
+  #
+  # test N/A quotas
+  #
+  ceph osd pool get-quota tmp-quota-pool | grep 'max bytes.*N/A'
+  ceph osd pool get-quota tmp-quota-pool | grep 'max objects.*N/A'
+  #
+  # cleanup tmp pool
+  ceph osd pool delete tmp-quota-pool tmp-quota-pool --yes-i-really-really-mean-it
+}
+
 function test_mon_pg()
 {
   ceph pg debug unfound_objects_exist
@@ -776,6 +822,7 @@ TESTS=(
   mon_mon
   mon_osd
   mon_osd_pool
+  mon_osd_pool_quota
   mon_pg
   mon_osd_pool_set
   mon_osd_erasure_code
