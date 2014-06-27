@@ -376,11 +376,7 @@ fi
 %restart_on_update ceph
 %insserv_cleanup
 %endif
-# Package removal cleanup
-if [ "$1" -eq "0" ] ; then
-    rm -rf /var/log/ceph
-    rm -rf /etc/ceph
-fi
+
 
 #################################################################################
 # files
@@ -496,6 +492,13 @@ fi
 %config %{_sysconfdir}/bash_completion.d/rbd
 %config(noreplace) %{_sysconfdir}/ceph/rbdmap
 %{_initrddir}/rbdmap
+
+%postun -n ceph-common
+# Package removal cleanup
+if [ "$1" -eq "0" ] ; then
+    rm -rf /var/log/ceph
+    rm -rf /etc/ceph
+fi
 
 #################################################################################
 %files fuse
