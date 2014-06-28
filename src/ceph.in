@@ -20,6 +20,7 @@ Foundation.  See file COPYING.
 
 import os
 import sys
+import platform
 
 # Make life easier on developers:
 # If in src/, and .libs and pybind exist here, assume we're running
@@ -33,14 +34,20 @@ DEVMODEMSG = '*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH *
 if MYDIR.endswith('src') and \
    os.path.exists(os.path.join(MYDIR, '.libs')) and \
    os.path.exists(os.path.join(MYDIR, 'pybind')):
+
+    if platform.system() == "Darwin":
+        lib_path_var = "DYLD_LIBRARY_PATH"
+    else:
+        lib_path_var = "LD_LIBRARY_PATH"
+
     MYLIBPATH = os.path.join(MYDIR, '.libs')
-    if 'LD_LIBRARY_PATH' in os.environ:
-        if MYLIBPATH not in os.environ['LD_LIBRARY_PATH']:
-            os.environ['LD_LIBRARY_PATH'] += ':' + MYLIBPATH
+    if lib_path_var in os.environ:
+        if MYLIBPATH not in os.environ[lib_path_var]:
+            os.environ[lib_path_var] += ':' + MYLIBPATH
             print >> sys.stderr, DEVMODEMSG
             os.execvp('python', ['python'] + sys.argv)
     else:
-        os.environ['LD_LIBRARY_PATH'] = MYLIBPATH
+        os.environ[lib_path_var] = MYLIBPATH
         print >> sys.stderr, DEVMODEMSG
         os.execvp('python', ['python'] + sys.argv)
     sys.path.insert(0, os.path.join(MYDIR, 'pybind'))
