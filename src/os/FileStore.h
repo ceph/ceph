@@ -57,10 +57,9 @@ static const __SWORD_TYPE BTRFS_SUPER_MAGIC(0x9123683E);
 # ifndef XFS_SUPER_MAGIC
 static const __SWORD_TYPE XFS_SUPER_MAGIC(0x58465342);
 # endif
-#endif
-
 #ifndef ZFS_SUPER_MAGIC
 static const __SWORD_TYPE ZFS_SUPER_MAGIC(0x2fc12fc1);
+#endif
 #endif
 
 
