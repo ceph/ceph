@@ -74,10 +74,6 @@ struct FDCloser {
 
 /* Public methods */
 
-void LFNIndex::set_ref(ceph::shared_ptr<CollectionIndex> ref)
-{
-  self_ref = ref;
-}
 
 int LFNIndex::init()
 {
@@ -142,7 +138,7 @@ int LFNIndex::lookup(const ghobject_t &oid,
   } else {
     *exist = 1;
   }
-  *out_path = IndexedPath(new Path(full_path, self_ref));
+  *out_path = IndexedPath(new Path(full_path, this));
   r = 0;
   );
 }

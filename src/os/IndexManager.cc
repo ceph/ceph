@@ -61,12 +61,17 @@ static int get_version(const char *path, uint32_t *version) {
   return 0;
 }
 
-void IndexManager::put_index(coll_t c) {
-  Mutex::Locker l(lock);
-  assert(col_indices.count(c));
-  col_indices.erase(c);
-  cond.Signal();
+IndexManager::~IndexManager() {
+
+  for(map<coll_t, CollectionIndex* > ::iterator it = col_indices.begin(); 
+                                it != col_indices.end(); it++) {
+
+    delete it->second;
+    it->second = NULL;
+  }
+  col_indices.clear();
 }
+
 
 int IndexManager::init_index(coll_t c, const char *path, uint32_t version) {
   Mutex::Locker l(lock);
@@ -80,7 +85,7 @@ int IndexManager::init_index(coll_t c, const char *path, uint32_t version) {
   return index.init();
 }
 
-int IndexManager::build_index(coll_t c, const char *path, Index *index) {
+int IndexManager::build_index(coll_t c, const char *path, CollectionIndex **index) {
   if (upgrade) {
     // Need to check the collection generation
     int r;
@@ -91,17 +96,15 @@ int IndexManager::build_index(coll_t c, const char *path, Index *index) {
 
     switch (version) {
     case CollectionIndex::FLAT_INDEX_TAG: {
-      *index = Index(new FlatIndex(c, path),
-		     RemoveOnDelete(c, this));
+      *index = new FlatIndex(c, path);
       return 0;
     }
     case CollectionIndex::HASH_INDEX_TAG: // fall through
     case CollectionIndex::HASH_INDEX_TAG_2: // fall through
     case CollectionIndex::HOBJECT_WITH_POOL: {
       // Must be a HashIndex
-      *index = Index(new HashIndex(c, path, g_conf->filestore_merge_threshold,
-				   g_conf->filestore_split_multiple, version), 
-		     RemoveOnDelete(c, this));
+      *index = new HashIndex(c, path, g_conf->filestore_merge_threshold,
+				   g_conf->filestore_split_multiple, version);
       return 0;
     }
     default: assert(0);
@@ -109,28 +112,29 @@ int IndexManager::build_index(coll_t c, const char *path, Index *index) {
 
   } else {
     // No need to check
-    *index = Index(new HashIndex(c, path, g_conf->filestore_merge_threshold,
+    *index = new HashIndex(c, path, g_conf->filestore_merge_threshold,
 				 g_conf->filestore_split_multiple,
 				 CollectionIndex::HOBJECT_WITH_POOL,
-				 g_conf->filestore_index_retry_probability),
-		   RemoveOnDelete(c, this));
+				 g_conf->filestore_index_retry_probability);
     return 0;
   }
 }
 
-int IndexManager::get_index(coll_t c, const char *path, Index *index) {
+int IndexManager::get_index(coll_t c, const string& baseDir, Index *index) {
+
   Mutex::Locker l(lock);
-  while (1) {
-    if (!col_indices.count(c)) {
-      int r = build_index(c, path, index);
-      if (r < 0)
-	return r;
-      (*index)->set_ref(*index);
-      col_indices[c] = (*index);
-      break;
-    } else {
-      cond.Wait(lock);
-    }
+  map<coll_t, CollectionIndex* > ::iterator it = col_indices.find(c);
+  if (it == col_indices.end()) {
+    char path[PATH_MAX];
+    snprintf(path, sizeof(path), "%s/current/%s", baseDir.c_str(), c.to_str().c_str());
+    CollectionIndex* colIndex = NULL;
+    int r = build_index(c, path, &colIndex);
+    if (r < 0)
+      return r;
+    col_indices[c] = colIndex;
+    index->index = colIndex;
+  } else {
+    index->index = it->second;
   }
   return 0;
 }
