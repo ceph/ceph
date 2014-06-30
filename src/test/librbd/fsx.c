@@ -118,7 +118,6 @@ char	dirpath[1024];
 
 off_t		file_size = 0;
 off_t		biggest = 0;
-char		state[256];
 unsigned long	testcalls = 0;		/* calls to function "test" */
 
 unsigned long	simulatedopcount = 0;	/* -b flag */
@@ -227,8 +226,30 @@ simple_err(const char *msg, int err)
 }
 
 /*
+ * random
+ */
+
+#define RND_STATE_LEN	256
+char	rnd_state[RND_STATE_LEN];
+struct random_data rnd_data;
+
+int32_t
+get_random(void)
+{
+	int32_t val;
+
+	if (random_r(&rnd_data, &val) < 0) {
+		prterr("random_r");
+		exit(1);
+	}
+
+	return val;
+}
+
+/*
  * rbd
  */
+
 struct rbd_ctx {
 	const char *name;	/* image name */
 	rbd_image_t image;	/* image handle */
@@ -1306,9 +1327,9 @@ do_clone()
 	int order = 0, stripe_unit = 0, stripe_count = 0;
 
 	if (randomize_striping) {
-		order = 18 + rand() % 8;
-		stripe_unit = 1ull << (order - 1 - (rand() % 8));
-		stripe_count = 2 + rand() % 14;
+		order = 18 + get_random() % 8;
+		stripe_unit = 1ull << (order - 1 - (get_random() % 8));
+		stripe_count = 2 + get_random() % 14;
 	}
 
 	log4(OP_CLONE, 0, 0, 0);
@@ -1508,7 +1529,7 @@ test(void)
 {
 	unsigned long	offset;
 	unsigned long	size = maxoplen;
-	unsigned long	rv = random();
+	unsigned long	rv = get_random();
 	unsigned long	op;
 
 	if (simulatedopcount > 0 && testcalls == simulatedopcount)
@@ -1525,9 +1546,9 @@ test(void)
 	if (!quiet && testcalls < simulatedopcount && testcalls % 100000 == 0)
 		prt("%lu...\n", testcalls);
 
-	offset = random();
+	offset = get_random();
 	if (randomoplen)
-		size = random() % (maxoplen + 1);
+		size = get_random() % (maxoplen + 1);
 
 	/* calculate appropriate op to run */
 	if (lite)
@@ -1557,7 +1578,7 @@ test(void)
 		}
 		break;
 	case OP_CLONE:
-		if (!clone_calls || random() % 100 > 5 || file_size == 0) {
+		if (!clone_calls || get_random() % 100 > 5 || file_size == 0) {
 			log4(OP_SKIPPED, OP_CLONE, 0, 0);
 			goto out;
 		}
@@ -1587,7 +1608,7 @@ test(void)
 
 	case OP_TRUNCATE:
 		if (!style)
-			size = random() % maxfilelen;
+			size = get_random() % maxfilelen;
 		dotruncate(size);
 		break;
 
@@ -2027,8 +2048,14 @@ main(int argc, char **argv)
 	signal(SIGUSR1,	cleanup);
 	signal(SIGUSR2,	cleanup);
 
-	initstate(seed, state, 256);
-	setstate(state);
+	if (initstate_r(seed, rnd_state, RND_STATE_LEN, &rnd_data) < 0) {
+		prterr("initstate_r");
+		exit(1);
+	}
+	if (setstate_r(rnd_state, &rnd_data) < 0) {
+		prterr("setstate_r");
+		exit(1);
+	}
 
 	ret = create_image();
 	if (ret < 0) {
@@ -2064,7 +2091,7 @@ main(int argc, char **argv)
 
 	original_buf = (char *) malloc(maxfilelen);
 	for (i = 0; i < (int)maxfilelen; i++)
-		original_buf[i] = random() % 256;
+		original_buf[i] = get_random() % 256;
 
 	ret = posix_memalign((void **)&good_buf,
 			     MAX(writebdy, (int)sizeof(void *)), maxfilelen);
