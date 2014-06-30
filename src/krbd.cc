@@ -28,6 +28,7 @@
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/module.h"
+#include "common/run_cmd.h"
 #include "common/safe_io.h"
 #include "common/secret.h"
 #include "common/TextTable.h"
@@ -419,18 +420,26 @@ static int do_unmap(struct udev *udev, dev_t devno, const string& id)
    * On final device close(), kernel sends a block change event, in
    * response to which udev apparently runs blkid on the device.  This
    * makes unmap fail with EBUSY, if issued right after final close().
-   * Circumvent this with a retry loop.
+   * Try to circumvent this with a retry before turning to udev.
    */
-  {
-    int tries = 0;
-
-  again:
+  for (int tries = 0; ; tries++) {
     r = sysfs_write_rbd_remove(id);
-    if (r < 0) {
-      if (r == -EBUSY && tries++ < 5) {
-        usleep(200 * 1000);
-        goto again;
+    if (r >= 0) {
+      break;
+    } else if (r == -EBUSY && tries < 2) {
+      if (!tries) {
+        usleep(250 * 1000);
+      } else {
+        /*
+         * libudev does not provide the "wait until the queue is empty"
+         * API or the sufficient amount of primitives to build it from.
+         */
+        string err = run_cmd("udevadm", "settle", "--timeout", "10", "--quiet",
+                             NULL);
+        if (!err.empty())
+          cerr << "rbd: " << err << std::endl;
       }
+    } else {
       cerr << "rbd: sysfs write failed" << std::endl;
       goto out_mon;
     }
