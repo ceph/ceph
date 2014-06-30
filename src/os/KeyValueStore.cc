@@ -1029,7 +1029,8 @@ void KeyValueStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
 
 void KeyValueStore::_finish_op(OpSequencer *osr)
 {
-  Op *o = osr->dequeue();
+  list<Context*> to_queue;
+  Op *o = osr->dequeue(&to_queue);
 
   dout(10) << "_finish_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << dendl;
   osr->apply_lock.Unlock();  // locked in _do_op
@@ -1044,6 +1045,7 @@ void KeyValueStore::_finish_op(OpSequencer *osr)
     o->onreadable_sync->complete(0);
   }
   op_finisher.queue(o->onreadable);
+  op_finisher.queue(to_queue);
   delete o;
 }
 
