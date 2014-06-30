@@ -3629,7 +3629,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
    case CEPH_OSD_OP_NOTIFY:
       ++ctx->num_read;
       {
-	uint32_t ver;
+	uint32_t ver; // obsolete
 	uint32_t timeout;
         bufferlist bl;
 
@@ -3640,7 +3640,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	} catch (const buffer::error &e) {
 	  timeout = 0;
 	}
-	tracepoint(osd, do_osd_op_pre_notify, soid.oid.name.c_str(), soid.snap.val, ver, timeout);
+	tracepoint(osd, do_osd_op_pre_notify, soid.oid.name.c_str(), soid.snap.val, timeout);
 	if (!timeout)
 	  timeout = cct->_conf->osd_default_notify_timeout;
 
