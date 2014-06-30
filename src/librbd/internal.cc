@@ -23,6 +23,7 @@
 #include "include/util.h"
 
 #include "librados/snap_set_diff.h"
+#include "tracing/librbd.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -706,12 +707,14 @@ reprotect_and_return_err:
   int create_v1(IoCtx& io_ctx, const char *imgname, uint64_t bid,
 		uint64_t size, int order)
   {
+    tracepoint(librbd, create_v1_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), imgname, bid, size, order);
     CephContext *cct = (CephContext *)io_ctx.cct();
     ldout(cct, 2) << "adding rbd image to directory..." << dendl;
     int r = tmap_set(io_ctx, imgname);
     if (r < 0) {
       lderr(cct) << "error adding image to directory: " << cpp_strerror(r)
 		 << dendl;
+      tracepoint(librbd, create_v1_exit, r);
       return r;
     }
 
@@ -733,10 +736,12 @@ reprotect_and_return_err:
 		   << "header creation failed: "
 		   << cpp_strerror(r) << dendl;
       }
+      tracepoint(librbd, create_v1_exit, r);
       return r;
     }
 
     ldout(cct, 2) << "done." << dendl;
+    tracepoint(librbd, create_v1_exit, 0);
     return 0;
   }
 
@@ -744,6 +749,7 @@ reprotect_and_return_err:
 		int order, uint64_t features, uint64_t stripe_unit,
 		uint64_t stripe_count)
   {
+    tracepoint(librbd, create_v2_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), imgname, bid, size, order, features, stripe_unit, stripe_count);
     ostringstream bid_ss;
     uint32_t extra;
     string id, id_obj, header_oid;
@@ -757,6 +763,7 @@ reprotect_and_return_err:
     if (r < 0) {
       lderr(cct) << "error creating rbd id object: " << cpp_strerror(r)
 		 << dendl;
+      tracepoint(librbd, create_v2_exit, r);
       return r;
     }
 
@@ -798,6 +805,7 @@ reprotect_and_return_err:
     }
 
     ldout(cct, 2) << "done." << dendl;
+    tracepoint(librbd, create_v2_exit, 0);
     return 0;
 
   err_remove_header:
@@ -821,6 +829,7 @@ reprotect_and_return_err:
 		 << cpp_strerror(remove_r) << dendl;
     }
 
+    tracepoint(librbd, create_v2_exit, r);
     return r;
   }
 
@@ -1347,6 +1356,7 @@ reprotect_and_return_err:
 
   int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
   {
+    tracepoint(librbd, remove_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), imgname);
     CephContext *cct((CephContext *)io_ctx.cct());
     ldout(cct, 20) << "remove " << &io_ctx << " " << imgname << dendl;
 
@@ -1366,6 +1376,7 @@ reprotect_and_return_err:
       if (ictx->snaps.size()) {
 	lderr(cct) << "image has snapshots - not removing" << dendl;
 	close_image(ictx);
+	tracepoint(librbd, remove_exit, -ENOTEMPTY);
 	return -ENOTEMPTY;
       }
 
@@ -1374,11 +1385,13 @@ reprotect_and_return_err:
       if (r < 0) {
         lderr(cct) << "error listing watchers" << dendl;
         close_image(ictx);
+	tracepoint(librbd, remove_exit, r);
         return r;
       }
       if (watchers.size() > 1) {
         lderr(cct) << "image has watchers - not removing" << dendl;
         close_image(ictx);
+	tracepoint(librbd, remove_exit, -EBUSY);
         return -EBUSY;
       }
       assert(watchers.size() == 1);
@@ -1397,6 +1410,7 @@ reprotect_and_return_err:
       if (r < 0 && r != -ENOENT) {
 	lderr(cct) << "error removing child from children list" << dendl;
         close_image(ictx);
+	tracepoint(librbd, remove_exit, r);
 	return r;
       }
       close_image(ictx);
@@ -1405,6 +1419,7 @@ reprotect_and_return_err:
       r = io_ctx.remove(header_oid);
       if (r < 0 && r != -ENOENT) {
 	lderr(cct) << "error removing header: " << cpp_strerror(-r) << dendl;
+	tracepoint(librbd, remove_exit, r);
 	return r;
       }
     }
@@ -1416,6 +1431,7 @@ reprotect_and_return_err:
       if (r < 0 && !unknown_format) {
 	lderr(cct) << "error removing img from old-style directory: "
 		   << cpp_strerror(-r) << dendl;
+	tracepoint(librbd, remove_exit, r);
 	return r;
       }
     }
@@ -1424,12 +1440,14 @@ reprotect_and_return_err:
       r = io_ctx.remove(id_obj_name(imgname));
       if (r < 0 && r != -ENOENT) {
 	lderr(cct) << "error removing id object: " << cpp_strerror(r) << dendl;
+	tracepoint(librbd, remove_exit, r);
 	return r;
       }
 
       r = cls_client::dir_get_id(&io_ctx, RBD_DIRECTORY, imgname, &id);
       if (r < 0 && r != -ENOENT) {
 	lderr(cct) << "error getting id of image" << dendl;
+	tracepoint(librbd, remove_exit, r);
 	return r;
       }
 
@@ -1438,11 +1456,13 @@ reprotect_and_return_err:
       if (r < 0) {
 	lderr(cct) << "error removing img from new-style directory: "
 		   << cpp_strerror(-r) << dendl;
+	tracepoint(librbd, remove_exit, r);
 	return r;
       }
     } 
 
     ldout(cct, 2) << "done." << dendl;
+    tracepoint(librbd, remove_exit, 0);
     return 0;
   }
 
@@ -2073,14 +2093,17 @@ reprotect_and_return_err:
 
   int open_image(ImageCtx *ictx)
   {
+    tracepoint(librbd, open_image_enter, ictx->name.c_str(), ictx->id.c_str());
     ldout(ictx->cct, 20) << "open_image: ictx = " << ictx
 			 << " name = '" << ictx->name
 			 << "' id = '" << ictx->id
 			 << "' snap_name = '"
 			 << ictx->snap_name << "'" << dendl;
     int r = ictx->init();
-    if (r < 0)
+    if (r < 0) {
+      tracepoint(librbd, open_image_exit, r);
       return r;
+    }
 
     if (!ictx->read_only) {
       r = ictx->register_watch();
@@ -2100,15 +2123,18 @@ reprotect_and_return_err:
     if ((r = _snap_set(ictx, ictx->snap_name.c_str())) < 0)
       goto err_close;
 
+    tracepoint(librbd, open_image_exit, 0);
     return 0;
 
   err_close:
     close_image(ictx);
+    tracepoint(librbd, open_image_exit, r);
     return r;
   }
 
   void close_image(ImageCtx *ictx)
   {
+    tracepoint(librbd, close_image_enter, ictx->name.c_str(), ictx->id.c_str());
     ldout(ictx->cct, 20) << "close_image " << ictx << dendl;
     if (ictx->object_cacher)
       ictx->shutdown_cache(); // implicitly flushes
@@ -2124,6 +2150,7 @@ reprotect_and_return_err:
       ictx->unregister_watch();
 
     delete ictx;
+    tracepoint(librbd, close_image_exit);
   }
 
   // 'flatten' child image by copying all parent's blocks
@@ -2624,6 +2651,12 @@ reprotect_and_return_err:
 
   ssize_t read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents, char *buf, bufferlist *pbl)
   {
+    tracepoint(librbd, read_enter, ictx->name.c_str(), ictx->id.c_str());
+    for (vector<pair<uint64_t,uint64_t> >::const_iterator r = image_extents.begin();
+	 r != image_extents.end();
+	 ++r) {
+      tracepoint(librbd, read_extent, r->first, r->second);
+    }
     Mutex mylock("IoCtxImpl::write::mylock");
     Cond cond;
     bool done;
@@ -2635,6 +2668,7 @@ reprotect_and_return_err:
     if (r < 0) {
       c->release();
       delete ctx;
+      tracepoint(librbd, read_exit, r);
       return r;
     }
 
@@ -2643,11 +2677,13 @@ reprotect_and_return_err:
       cond.Wait(mylock);
     mylock.Unlock();
 
+    tracepoint(librbd, read_exit, ret);
     return ret;
   }
 
   ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
   {
+    tracepoint(librbd, write_enter, ictx->name.c_str(), ictx->id.c_str(), off, len, buf);
     utime_t start_time, elapsed;
     ldout(ictx->cct, 20) << "write " << ictx << " off = " << off << " len = "
 			 << len << dendl;
@@ -2660,8 +2696,10 @@ reprotect_and_return_err:
 
     uint64_t mylen = len;
     int r = clip_io(ictx, off, &mylen);
-    if (r < 0)
+    if (r < 0) {
+      tracepoint(librbd, write_exit, r);
       return r;
+    }
 
     Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
     AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
@@ -2669,6 +2707,7 @@ reprotect_and_return_err:
     if (r < 0) {
       c->release();
       delete ctx;
+      tracepoint(librbd, write_exit, r);
       return r;
     }
 
@@ -2677,13 +2716,16 @@ reprotect_and_return_err:
       cond.Wait(mylock);
     mylock.Unlock();
 
-    if (ret < 0)
+    if (ret < 0) {
+      tracepoint(librbd, write_exit, ret);
       return ret;
+    }
 
     elapsed = ceph_clock_now(ictx->cct) - start_time;
     ictx->perfcounter->tinc(l_librbd_wr_latency, elapsed);
     ictx->perfcounter->inc(l_librbd_wr);
     ictx->perfcounter->inc(l_librbd_wr_bytes, mylen);
+    tracepoint(librbd, write_exit, mylen);
     return mylen;
   }
 
