@@ -3076,12 +3076,12 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
     return prepare_new_pool(m->name, m->auid, m->crush_rule, ruleset_name,
 			    0, 0,
                             erasure_code_profile,
-			    pg_pool_t::TYPE_REPLICATED, ss);
+			    pg_pool_t::TYPE_REPLICATED, 0, ss);
   else
     return prepare_new_pool(m->name, session->auid, m->crush_rule, ruleset_name,
 			    0, 0,
                             erasure_code_profile,
-			    pg_pool_t::TYPE_REPLICATED, ss);
+			    pg_pool_t::TYPE_REPLICATED, 0, ss);
 }
 
 int OSDMonitor::crush_ruleset_create_erasure(const string &name,
@@ -3372,6 +3372,7 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
  * @param pgp_num The pgp_num to use. If set to 0, will use the system default
  * @param erasure_code_profile The profile name in OSDMap to be used for erasure code
  * @param pool_type TYPE_ERASURE, TYPE_REP or TYPE_RAID4
+ * @param expected_num_objects expected number of objects on the pool
  * @param ss human readable error message, if any.
  *
  * @return 0 on success, negative errno on failure.
@@ -3382,6 +3383,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
                                  unsigned pg_num, unsigned pgp_num,
 				 const string &erasure_code_profile,
                                  const unsigned pool_type,
+                                 const uint64_t expected_num_objects,
 				 stringstream &ss)
 {
   int r;
@@ -3418,6 +3420,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   pi->size = size;
   pi->min_size = min_size;
   pi->crush_ruleset = crush_ruleset;
+  pi->expected_num_objects = expected_num_objects;
   pi->object_hash = CEPH_STR_HASH_RJENKINS;
   pi->set_pg_num(pg_num ? pg_num : g_conf->osd_pool_default_pg_num);
   pi->set_pgp_num(pgp_num ? pgp_num : g_conf->osd_pool_default_pgp_num);
@@ -5169,11 +5172,19 @@ done:
       }
     }
 
+    int64_t expected_num_objects;
+    cmd_getval(g_ceph_context, cmdmap, "expected_num_objects", expected_num_objects, int64_t(0));
+    if (expected_num_objects < 0) {
+      ss << "'expected_num_objects' must be non-negative";
+      err = -EINVAL;
+      goto reply;
+    }
     err = prepare_new_pool(poolstr, 0, // auid=0 for admin created pool
 			   -1, // default crush rule
 			   ruleset_name,
 			   pg_num, pgp_num,
 			   erasure_code_profile, pool_type,
+                           (uint64_t)expected_num_objects,
 			   ss);
     if (err < 0) {
       switch(err) {
