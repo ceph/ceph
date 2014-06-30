@@ -18,6 +18,7 @@ def enforce_repo_state(repo_url, dest_path, branch):
     :raises:          BranchNotFoundError if the branch is not found;
                       RuntimeError for other errors
     """
+    validate_branch(branch)
     try:
         if not os.path.isdir(dest_path):
             clone_repo(repo_url, dest_path, branch)
@@ -46,6 +47,7 @@ def clone_repo(repo_url, dest_path, branch):
     :raises:          BranchNotFoundError if the branch is not found;
                       RuntimeError for other errors
     """
+    validate_branch(branch)
     log.info("Cloning %s %s from upstream", repo_url, branch)
     proc = subprocess.Popen(
         ('git', 'clone', '--branch', branch, repo_url, dest_path),
@@ -71,6 +73,7 @@ def fetch_branch(dest_path, branch):
     :raises:          BranchNotFoundError if the branch is not found;
                       RuntimeError for other errors
     """
+    validate_branch(branch)
     log.info("Fetching %s from upstream", branch)
     proc = subprocess.Popen(
         ('git', 'fetch', '-p', 'origin', branch),
@@ -96,6 +99,7 @@ def reset_repo(repo_url, dest_path, branch):
     :raises:          BranchNotFoundError if the branch is not found;
                       RuntimeError for other errors
     """
+    validate_branch(branch)
     # This try/except block will notice if the requested branch doesn't
     # exist, whether it was cloned or fetched.
     try:
@@ -119,3 +123,8 @@ class BranchNotFoundError(ValueError):
             repo_str = ""
         return "Branch {branch} not found{repo_str}!".format(
             branch=self.branch, repo_str=repo_str)
+
+
+def validate_branch(branch):
+    if ' ' in branch:
+        raise ValueError("Illegal branch name: '%s'" % branch)

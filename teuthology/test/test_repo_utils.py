@@ -13,20 +13,22 @@ class TestRepoUtils(object):
     repo_url = 'file://' + src_path
     dest_path = '/tmp/empty_dest'
 
-    def setup(self):
+    def setup_method(self, method):
         assert not os.path.exists(self.dest_path)
         proc = subprocess.Popen(
             ('git', 'init', self.src_path),
+            stdout=subprocess.PIPE,
         )
         assert proc.wait() == 0
         proc = subprocess.Popen(
             ('git', 'commit', '--allow-empty', '--allow-empty-message',
              '--no-edit'),
             cwd=self.src_path,
+            stdout=subprocess.PIPE,
         )
         assert proc.wait() == 0
 
-    def teardown(self):
+    def teardown_method(self, method):
         shutil.rmtree(self.dest_path, ignore_errors=True)
 
     def test_existing_branch(self):
@@ -69,3 +71,7 @@ class TestRepoUtils(object):
         repo_utils.enforce_repo_state(self.repo_url, self.dest_path,
                                       'master')
         assert os.path.exists(self.dest_path)
+
+    def test_invalid_branch(self):
+        with raises(ValueError):
+            repo_utils.enforce_repo_state(self.repo_url, self.dest_path, 'a b')
