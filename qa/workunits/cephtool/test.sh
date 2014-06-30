@@ -644,17 +644,30 @@ function test_mon_osd_pool_set()
   ceph osd pool get rbd hit_set_fpp | grep "hit_set_fpp: 0.01"
 
   ceph osd pool set rbd target_max_objects 123
+  ceph osd pool get rbd target_max_objects | \
+    grep 'target_max_objects:[ \t]\+123'
   ceph osd pool set rbd target_max_bytes 123456
+  ceph osd pool get rbd target_max_bytes | \
+    grep 'target_max_bytes:[ \t]\+123456'
   ceph osd pool set rbd cache_target_dirty_ratio .123
+  ceph osd pool get rbd cache_target_dirty_ratio | \
+    grep 'cache_target_dirty_ratio:[ \t]\+0.123'
   expect_false ceph osd pool set rbd cache_target_dirty_ratio -.2
   expect_false ceph osd pool set rbd cache_target_dirty_ratio 1.1
   ceph osd pool set rbd cache_target_full_ratio .123
+  ceph osd pool get rbd cache_target_full_ratio | \
+    grep 'cache_target_full_ratio:[ \t]\+0.123'
   ceph osd dump -f json-pretty | grep '"cache_target_full_ratio_micro": 123000'
   ceph osd pool set rbd cache_target_full_ratio 1.0
   ceph osd pool set rbd cache_target_full_ratio 0
   expect_false ceph osd pool set rbd cache_target_full_ratio 1.1
   ceph osd pool set rbd cache_min_flush_age 123
+  ceph osd pool get rbd cache_min_flush_age | \
+    grep 'cache_min_flush_age:[ \t]\+123'
   ceph osd pool set rbd cache_min_evict_age 234
+  ceph osd pool get rbd cache_min_evict_age | \
+    grep 'cache_min_evict_age:[ \t]\+234'
+
 
   ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 0'
 }
