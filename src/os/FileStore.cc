@@ -225,8 +225,23 @@ int FileStore::lfn_open(coll_t cid,
 	 ( oid.shard_id == shard_id_t::NO_SHARD &&
 	   oid.generation == ghobject_t::NO_GEN ));
   assert(outfd);
+  int r = 0;
 
   bool need_lock = true;
+  if (!replaying) {
+    *outfd = fdcache.lookup(oid);
+    if (*outfd) {
+      if (!index) {
+        return 0;
+      } else {
+        if (!((*index).index)) {
+          r = get_index(cid, index);
+          return r;
+        }
+      }
+    }
+  }
+
   int flags = O_RDWR;
   if (create)
     flags |= O_CREAT;
@@ -235,7 +250,7 @@ int FileStore::lfn_open(coll_t cid,
   if (!index) {
     index = &index2;
   }
-  int r = 0;
+
   if (!((*index).index)) {
     r = get_index(cid, index);
   } else {
@@ -243,11 +258,6 @@ int FileStore::lfn_open(coll_t cid,
   }
 
   int fd, exist;
-  if (!replaying) {
-    *outfd = fdcache.lookup(oid);
-    if (*outfd)
-      return 0;
-  }
 
   
   assert(NULL != (*index).index);
