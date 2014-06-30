@@ -18,7 +18,6 @@
 #endif
 
 #include "FlatIndex.h"
-#include "CollectionIndex.h"
 #include "common/ceph_crypto.h"
 #include "osd/osd_types.h"
 #include <errno.h>
@@ -49,9 +48,6 @@ using ceph::crypto::SHA1;
 
 #define FILENAME_PREFIX_LEN (FILENAME_SHORT_LEN - FILENAME_HASH_LEN - (sizeof(FILENAME_COOKIE) - 1) - FILENAME_EXTRA)
 
-void FlatIndex::set_ref(ceph::shared_ptr<CollectionIndex> ref) {
-  self_ref = ref;
-}
 
 int FlatIndex::cleanup() {
   return 0;
@@ -356,7 +352,7 @@ int FlatIndex::lookup(const ghobject_t &hoid, IndexedPath *path, int *exist) {
 	      sizeof(long_fn), exist, &is_lfn);
   if (r < 0)
     return r;
-  *path = IndexedPath(new Path(string(short_fn), self_ref));
+  *path = IndexedPath(new Path(string(short_fn), this));
   return 0;
 }
 
