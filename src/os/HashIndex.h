@@ -156,7 +156,7 @@ public:
   int _split(
     uint32_t match,
     uint32_t bits,
-    ceph::shared_ptr<CollectionIndex> dest
+    CollectionIndex* dest
     );
 	
 protected:

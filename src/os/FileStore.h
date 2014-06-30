@@ -382,7 +382,8 @@ private:
   PerfCounters *logger;
 
 public:
-  int lfn_find(coll_t cid, const ghobject_t& oid, IndexedPath *path);
+  int lfn_find(const ghobject_t& oid, const Index& index, 
+                                  IndexedPath *path = NULL);
   int lfn_truncate(coll_t cid, const ghobject_t& oid, off_t length);
   int lfn_stat(coll_t cid, const ghobject_t& oid, struct stat *buf);
   int lfn_open(
@@ -390,8 +391,8 @@ public:
     const ghobject_t& oid,
     bool create,
     FDRef *outfd,
-    IndexedPath *path = 0,
     Index *index = 0);
+
   void lfn_close(FDRef fd);
   int lfn_link(coll_t c, coll_t newcid, const ghobject_t& o, const ghobject_t& newoid) ;
   int lfn_unlink(coll_t cid, const ghobject_t& o, const SequencerPosition &spos,
