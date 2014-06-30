@@ -25,7 +25,7 @@
 
 class MOSDSubOp : public Message {
 
-  static const int HEAD_VERSION = 10;
+  static const int HEAD_VERSION = 11;
   static const int COMPAT_VERSION = 1;
 
 public:
@@ -63,6 +63,8 @@ public:
 
   // piggybacked osd/og state
   eversion_t pg_trim_to;   // primary->replica: trim to here
+  eversion_t pg_trim_rollback_to;   // primary->replica: trim rollback
+                                    // info to here
   osd_peer_stat_t peer_stat;
 
   map<string,bufferlist> attrset;
@@ -175,6 +177,11 @@ public:
     if (header.version >= 10) {
       ::decode(updated_hit_set_history, p);
     }
+    if (header.version >= 11) {
+      ::decode(pg_trim_rollback_to, p);
+    } else {
+      pg_trim_rollback_to = pg_trim_to;
+    }
   }
 
   virtual void encode_payload(uint64_t features) {
@@ -224,6 +231,7 @@ public:
     ::encode(from, payload);
     ::encode(pgid.shard, payload);
     ::encode(updated_hit_set_history, payload);
+    ::encode(pg_trim_rollback_to, payload);
   }
 
   MOSDSubOp()
