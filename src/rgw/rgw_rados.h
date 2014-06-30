@@ -374,6 +374,7 @@ public:
     void init() {
       part_ofs = 0;
       stripe_ofs = 0;
+      ofs = 0;
       stripe_size = 0;
       cur_part_id = 0;
       cur_stripe = 0;
