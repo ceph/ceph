@@ -19,7 +19,7 @@ from tempfile import NamedTemporaryFile
 import teuthology
 from . import lock
 from .config import config
-from .repo_utils import checkout_repo, BranchNotFoundError
+from .repo_utils import enforce_repo_state, BranchNotFoundError
 
 log = logging.getLogger(__name__)
 
@@ -119,11 +119,11 @@ def fetch_suite_repo(branch, test_name):
     suite_repo_path = os.path.join(src_base_path,
                                    'ceph-qa-suite_' + branch)
     try:
-        checkout_repo(
+        enforce_repo_state(
             repo_url=os.path.join(config.ceph_git_base_url, 'teuthology.git'),
             dest_path=os.path.join(src_base_path, 'teuthology'),
             branch='master')
-        checkout_repo(
+        enforce_repo_state(
             repo_url=os.path.join(config.ceph_git_base_url,
                                   'ceph-qa-suite.git'),
             dest_path=suite_repo_path,

@@ -18,32 +18,42 @@ class TestRepoUtils(object):
         shutil.rmtree(self.local_dir, ignore_errors=True)
 
     def test_existing_branch(self):
-        repo_utils.checkout_repo(self.empty_repo, self.local_dir, 'master')
+        repo_utils.enforce_repo_state(self.empty_repo, self.local_dir,
+                                      'master')
         assert os.path.exists(self.local_dir)
 
     def test_non_existing_branch(self):
         with raises(repo_utils.BranchNotFoundError):
-            repo_utils.checkout_repo(self.empty_repo, self.local_dir, 'blah')
+            repo_utils.enforce_repo_state(self.empty_repo, self.local_dir,
+                                          'blah')
         assert not os.path.exists(self.local_dir)
 
     def test_multiple_calls_same_branch(self):
-        repo_utils.checkout_repo(self.empty_repo, self.local_dir, 'master')
+        repo_utils.enforce_repo_state(self.empty_repo, self.local_dir,
+                                      'master')
         assert os.path.exists(self.local_dir)
-        repo_utils.checkout_repo(self.empty_repo, self.local_dir, 'master')
+        repo_utils.enforce_repo_state(self.empty_repo, self.local_dir,
+                                      'master')
         assert os.path.exists(self.local_dir)
-        repo_utils.checkout_repo(self.empty_repo, self.local_dir, 'master')
+        repo_utils.enforce_repo_state(self.empty_repo, self.local_dir,
+                                      'master')
         assert os.path.exists(self.local_dir)
 
     def test_multiple_calls_different_branches(self):
         with raises(repo_utils.BranchNotFoundError):
-            repo_utils.checkout_repo(self.empty_repo, self.local_dir, 'blah')
+            repo_utils.enforce_repo_state(self.empty_repo, self.local_dir,
+                                          'blah1')
         assert not os.path.exists(self.local_dir)
-        repo_utils.checkout_repo(self.empty_repo, self.local_dir, 'master')
+        repo_utils.enforce_repo_state(self.empty_repo, self.local_dir,
+                                      'master')
         assert os.path.exists(self.local_dir)
-        repo_utils.checkout_repo(self.empty_repo, self.local_dir, 'master')
+        repo_utils.enforce_repo_state(self.empty_repo, self.local_dir,
+                                      'master')
         assert os.path.exists(self.local_dir)
         with raises(repo_utils.BranchNotFoundError):
-            repo_utils.checkout_repo(self.empty_repo, self.local_dir, 'blah')
+            repo_utils.enforce_repo_state(self.empty_repo, self.local_dir,
+                                          'blah2')
         assert not os.path.exists(self.local_dir)
-        repo_utils.checkout_repo(self.empty_repo, self.local_dir, 'master')
+        repo_utils.enforce_repo_state(self.empty_repo, self.local_dir,
+                                      'master')
         assert os.path.exists(self.local_dir)

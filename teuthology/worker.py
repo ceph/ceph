@@ -17,7 +17,7 @@ from . import safepath
 from .config import config as teuth_config
 from .kill import kill_job
 from .misc import read_config
-from .repo_utils import checkout_repo, BranchNotFoundError
+from .repo_utils import enforce_repo_state, BranchNotFoundError
 
 log = logging.getLogger(__name__)
 start_time = datetime.utcnow()
@@ -85,7 +85,7 @@ def fetch_teuthology_branch(dest_path, branch='master'):
     try:
         teuthology_git_upstream = teuth_config.ceph_git_base_url + \
             'teuthology.git'
-        checkout_repo(teuthology_git_upstream, dest_path, branch)
+        enforce_repo_state(teuthology_git_upstream, dest_path, branch)
 
         log.debug("Bootstrapping %s", dest_path)
         # This magic makes the bootstrap script not attempt to clobber an
