@@ -4,12 +4,12 @@ Background task
 
 import contextlib
 import logging
-import os
 
 from teuthology import misc
 from ..orchestra import run
 
 log = logging.getLogger(__name__)
+
 
 @contextlib.contextmanager
 def task(ctx, config):
@@ -48,7 +48,8 @@ def task(ctx, config):
     tasks = {}
     for role, cmd in config.iteritems():
         (remote,) = ctx.cluster.only(role).remotes.iterkeys()
-        log.info('Running background command on role %s host %s', role, remote.name)
+        log.info('Running background command on role %s host %s', role,
+                 remote.name)
         if isinstance(cmd, list):
             cmd = '; '.join(cmd)
         cmd.replace('$TESTDIR', testdir)
