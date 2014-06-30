@@ -2079,6 +2079,10 @@ struct pg_log_t {
   // We can rollback rollback-able entries > can_rollback_to
   eversion_t can_rollback_to;
 
+  // always <= can_rollback_to, indicates how far stashed rollback
+  // data can be found
+  eversion_t rollback_info_trimmed_to;
+
   list<pg_log_entry_t> log;  // the actual log.
   
   pg_log_t() {}
