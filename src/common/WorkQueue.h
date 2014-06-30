@@ -33,6 +33,7 @@ class ThreadPool : public md_config_obs_t {
   int _pause;
   int _draining;
   Cond _wait_cond;
+  int ioprio_class, ioprio_priority;
 
 public:
   class TPHandle {
@@ -388,6 +389,9 @@ public:
   void unpause();
   /// wait for all work to complete
   void drain(WorkQueue_* wq = 0);
+
+  /// set io priority
+  void set_ioprio(int cls, int priority);
 };
 
 

@@ -1533,6 +1533,7 @@ libcommon_files = \
 	common/MemoryModel.cc \
 	common/armor.c \
 	common/fd.cc \
+	common/io_priority.cc \
 	common/xattr.c \
 	common/safe_io.c \
 	common/snap_types.cc \
@@ -1809,6 +1810,7 @@ noinst_HEADERS = \
 	common/dout.h\
 	common/escape.h\
 	common/fd.h\
+	common/io_priority.h\
 	common/version.h\
 	common/hex.h\
 	common/entity_name.h\
