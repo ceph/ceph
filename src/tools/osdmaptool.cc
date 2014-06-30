@@ -76,13 +76,13 @@ int main(int argc, const char **argv)
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "-h", "--help")) {
       usage();
-    } else if (ceph_argparse_flag(args, i, "-p", "--print", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "-p", "--print")) {
       print = true;
-    } else if (ceph_argparse_flag(args, i, "--dump-json", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--dump-json")) {
       print_json = true;
-    } else if (ceph_argparse_flag(args, i, "--tree", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--tree")) {
       tree = true;
     } else if (ceph_argparse_withint(args, i, &num_osd, &err, "--createsimple", (char*)NULL)) {
       if (!err.str().empty()) {
@@ -90,17 +90,17 @@ int main(int argc, const char **argv)
 	exit(EXIT_FAILURE);
       }
       createsimple = true;
-    } else if (ceph_argparse_flag(args, i, "--create-from-conf", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--create-from-conf")) {
       create_from_conf = true;
-    } else if (ceph_argparse_flag(args, i, "--mark-up-in", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--mark-up-in")) {
       mark_up_in = true;
-    } else if (ceph_argparse_flag(args, i, "--clear-temp", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--clear-temp")) {
       clear_temp = true;
-    } else if (ceph_argparse_flag(args, i, "--test-map-pgs", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--test-map-pgs")) {
       test_map_pgs = true;
-    } else if (ceph_argparse_flag(args, i, "--test-random", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--test-random")) {
       test_random = true;
-    } else if (ceph_argparse_flag(args, i, "--clobber", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--clobber")) {
       clobber = true;
     } else if (ceph_argparse_withint(args, i, &pg_bits, &err, "--pg_bits", (char*)NULL)) {
       if (!err.str().empty()) {
@@ -120,7 +120,7 @@ int main(int argc, const char **argv)
       test_map_pg = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--test_map_object", (char*)NULL)) {
       test_map_object = val;
-    } else if (ceph_argparse_flag(args, i, "--test_crush", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--test_crush")) {
       test_crush = true;
     } else if (ceph_argparse_withint(args, i, &range_first, &err, "--range_first", (char*)NULL)) {
     } else if (ceph_argparse_withint(args, i, &range_last, &err, "--range_last", (char*)NULL)) {

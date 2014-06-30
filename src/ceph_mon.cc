@@ -228,11 +228,11 @@ int main(int argc, const char **argv)
 	 i != args_copy.end(); ) {
       if (ceph_argparse_double_dash(args_copy, i)) {
 	break;
-      } else if (ceph_argparse_flag(args_copy, i, "--mkfs", (char*)NULL)) {
+      } else if (ceph_argparse_flag(args_copy, i, "--mkfs")) {
 	flags |= CINIT_FLAG_NO_DAEMON_ACTIONS;
-      } else if (ceph_argparse_witharg(args_copy, i, &val, "--inject_monmap", (char*)NULL)) {
+      } else if (ceph_argparse_witharg(args_copy, i, &val, "--inject-monmap", (char*)NULL)) {
 	flags |= CINIT_FLAG_NO_DAEMON_ACTIONS;
-      } else if (ceph_argparse_witharg(args_copy, i, &val, "--extract-monmap", (char*)NULL)) {
+      } else if (ceph_argparse_witharg(args_copy, i, &val, "--extract-monmap")) {
 	flags |= CINIT_FLAG_NO_DAEMON_ACTIONS;
       } else {
 	++i;
@@ -248,16 +248,16 @@ int main(int argc, const char **argv)
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "-h", "--help")) {
       usage();
       exit(0);
-    } else if (ceph_argparse_flag(args, i, "--mkfs", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--mkfs")) {
       mkfs = true;
-    } else if (ceph_argparse_flag(args, i, "--compact", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--compact")) {
       compact = true;
-    } else if (ceph_argparse_flag(args, i, "--force-sync", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--force-sync")) {
       force_sync = true;
-    } else if (ceph_argparse_flag(args, i, "--yes-i-really-mean-it", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--yes-i-really-mean-it")) {
       yes_really = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--osdmap", (char*)NULL)) {
       osdmapfn = val;

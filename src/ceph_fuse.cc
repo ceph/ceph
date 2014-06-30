@@ -56,7 +56,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    } else if (ceph_argparse_flag(args, i, "--localize-reads", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--localize-reads")) {
       cerr << "setting CEPH_OSD_FLAG_LOCALIZE_READS" << std::endl;
       filer_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
     } else {

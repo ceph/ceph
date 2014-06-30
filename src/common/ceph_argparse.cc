@@ -30,6 +30,7 @@
 #include <string.h>
 #include <sstream>
 #include <vector>
+#include <boost/preprocessor/repetition/repeat.hpp>
 
 /*
  * Ceph argument parsing library
@@ -194,31 +195,38 @@ bool ceph_argparse_double_dash(std::vector<const char*> &args,
   return false;
 }
 
-bool ceph_argparse_flag(std::vector<const char*> &args,
-	std::vector<const char*>::iterator &i, ...)
+static bool ceph_argparse_flag_impl(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, const char* first, const char* s)
 {
-  const char *first = *i;
-  char tmp[strlen(first)+1];
-  dashes_to_underscores(first, tmp);
-  first = tmp;
-  va_list ap;
+  char tmp[strlen(s)+1];
+  dashes_to_underscores(s, tmp);
 
-  va_start(ap, i);
-  while (1) {
-    const char *a = va_arg(ap, char*);
-    if (a == NULL) {
-      va_end(ap);
-      return false;
-    }
-    char a2[strlen(a)+1];
-    dashes_to_underscores(a, a2);
-    if (strcmp(a2, first) == 0) {
-      i = args.erase(i);
-      va_end(ap);
-      return true;
-    }
+  if (strcmp(tmp, first) == 0) {
+    i = args.erase(i);
+    return true;
   }
+  return false;
 }
+
+#define CEPH_ARGPARSE_FLAG_call(z_, n_, unused_) \
+  if (ceph_argparse_flag_impl(args, i, tmp, BOOST_PP_CAT(s, n_)))	\
+    return true;
+
+#define CEPH_ARGPARSE_FLAG_make(z_, n_, unused_) \
+bool ceph_argparse_flag( \
+    std::vector<const char*> &args, \
+    std::vector<const char*>::iterator &i, \
+    BOOST_PP_ENUM_PARAMS(n_, const char* s) ) \
+{ \
+  const char *first = *i; \
+  char tmp[strlen(first)+1]; \
+  dashes_to_underscores(first, tmp); \
+  \
+  BOOST_PP_REPEAT(n_, CEPH_ARGPARSE_FLAG_call, ~) \
+  return false;					  \
+}
+BOOST_PP_REPEAT_FROM_TO(1, CEPH_ARGPARSE_MAX_ARGS,
+                        CEPH_ARGPARSE_FLAG_make, ~)
 
 static bool va_ceph_argparse_binary_flag(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, int *ret,
@@ -410,7 +418,7 @@ CephInitParameters ceph_argparse_early_args
        * argument parses will still need to see it. */
       break;
     }
-    else if (ceph_argparse_flag(args, i, "--version", "-v", (char*)NULL)) {
+    else if (ceph_argparse_flag(args, i, "--version", "-v")) {
       cout << pretty_version_to_str() << std::endl;
       _exit(0);
     }
@@ -435,7 +443,7 @@ CephInitParameters ceph_argparse_early_args
 	_exit(1);
       }
     }
-    else if (ceph_argparse_flag(args, i, "--show_args", (char*)NULL)) {
+    else if (ceph_argparse_flag(args, i, "--show_args")) {
       cout << "args: ";
       for (std::vector<const char *>::iterator ci = orig_args.begin(); ci != orig_args.end(); ++ci) {
         if (ci != orig_args.begin())

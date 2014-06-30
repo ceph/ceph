@@ -27,9 +27,16 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
+#include <boost/preprocessor/repetition/repeat_from_to.hpp>
+#include <boost/preprocessor/repetition/enum_params.hpp>
 
 #include "common/entity_name.h"
 #include "msg/msg_types.h"
+
+/////////////////////// Macros ///////////////////////
+#ifndef CEPH_ARGPARSE_MAX_ARGS
+# define CEPH_ARGPARSE_MAX_ARGS 4
+#endif
 
 /////////////////////// Types ///////////////////////
 class CephInitParameters
@@ -53,8 +60,17 @@ extern void vec_to_argv(const char *argv0, std::vector<const char*>& args,
 extern bool parse_ip_port_vec(const char *s, std::vector<entity_addr_t>& vec);
 bool ceph_argparse_double_dash(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i);
-bool ceph_argparse_flag(std::vector<const char*> &args,
-	std::vector<const char*>::iterator &i, ...);
+
+#define CEPH_ARGPARSE_FLAG_protomake(z_, n_, unused_) \
+bool ceph_argparse_flag( \
+    std::vector<const char*> &args, \
+    std::vector<const char*>::iterator &i, \
+    BOOST_PP_ENUM_PARAMS(n_, const char* s) );
+BOOST_PP_REPEAT_FROM_TO(1, CEPH_ARGPARSE_MAX_ARGS,
+                        CEPH_ARGPARSE_FLAG_protomake, ~)
+
+#undef CEPH_ARGPARSE_FLAG_protomake
+
 bool ceph_argparse_witharg(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, std::string *ret, ...);
 bool ceph_argparse_binary_flag(std::vector<const char*> &args,
