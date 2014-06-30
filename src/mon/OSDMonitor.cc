@@ -2501,6 +2501,24 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	  BloomHitSet::Params *bloomp = static_cast<BloomHitSet::Params*>(p->hit_set_params.impl.get());
 	  f->dump_float("hit_set_fpp", bloomp->get_fpp());
 	}
+      } else if (var == "target_max_objects") {
+        f->dump_unsigned("target_max_objects", p->target_max_objects);
+      } else if (var == "target_max_bytes") {
+        f->dump_unsigned("target_max_bytes", p->target_max_bytes);
+      } else if (var == "cache_target_dirty_ratio") {
+        f->dump_unsigned("cache_target_dirty_ratio_micro",
+                         p->cache_target_dirty_ratio_micro);
+        f->dump_float("cache_target_dirty_ratio",
+                      ((float)p->cache_target_dirty_ratio_micro/1000000));
+      } else if (var == "cache_target_full_ratio") {
+        f->dump_unsigned("cache_target_full_ratio_micro",
+                         p->cache_target_full_ratio_micro);
+        f->dump_float("cache_target_full_ratio",
+                      ((float)p->cache_target_full_ratio_micro/1000000));
+      } else if (var == "cache_min_flush_age") {
+        f->dump_unsigned("cache_min_flush_age", p->cache_min_flush_age);
+      } else if (var == "cache_min_evict_age") {
+        f->dump_unsigned("cache_min_evict_age", p->cache_min_evict_age);
       }
 
       f->close_section();
@@ -2534,7 +2552,22 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	}
 	BloomHitSet::Params *bloomp = static_cast<BloomHitSet::Params*>(p->hit_set_params.impl.get());
 	ss << "hit_set_fpp: " << bloomp->get_fpp();
+      } else if (var == "target_max_objects") {
+        ss << "target_max_objects: " << p->target_max_objects;
+      } else if (var == "target_max_bytes") {
+        ss << "target_max_bytes: " << p->target_max_bytes;
+      } else if (var == "cache_target_dirty_ratio") {
+        ss << "cache_target_dirty_ratio: "
+          << ((float)p->cache_target_dirty_ratio_micro/1000000);
+      } else if (var == "cache_target_full_ratio") {
+        ss << "cache_target_full_ratio: "
+          << ((float)p->cache_target_full_ratio_micro/1000000);
+      } else if (var == "cache_min_flush_age") {
+        ss << "cache_min_flush_age: " << p->cache_min_flush_age;
+      } else if (var == "cache_min_evict_age") {
+        ss << "cache_min_evict_age: " << p->cache_min_evict_age;
       }
+
       rdata.append(ss);
       ss.str("");
     }
