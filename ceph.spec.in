@@ -52,7 +52,7 @@ BuildRequires:	leveldb-devel > 1.2
 BuildRequires:	xfsprogs-devel
 BuildRequires:	yasm
 %if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
-BuildRequires:  snappy-devel
+BuildRequires:	snappy-devel
 %endif
 
 #################################################################################
@@ -75,7 +75,7 @@ BuildRequires:	%insserv_prereq
 BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
 BuildRequires:	libatomic-ops-devel
-BuildRequires:  fdupes
+BuildRequires:	fdupes
 %else
 Requires:	gdisk
 BuildRequires:	nss-devel
