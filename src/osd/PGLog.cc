@@ -136,7 +136,7 @@ void PGLog::reset_backfill()
 void PGLog::clear() {
   divergent_priors.clear();
   missing.clear();
-  log.zero();
+  log.clear();
   log_keys_debug.clear();
   undirty();
 }
