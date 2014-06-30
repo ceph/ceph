@@ -97,6 +97,7 @@ public:
     const eversion_t &at_version,
     PGTransaction *t,
     const eversion_t &trim_to,
+    const eversion_t &trim_rollback_to,
     vector<pg_log_entry_t> &log_entries,
     boost::optional<pg_hit_set_history_t> &hset_history,
     Context *on_local_applied_sync,
@@ -326,6 +327,7 @@ public:
     hobject_t hoid;
     eversion_t version;
     eversion_t trim_to;
+    eversion_t trim_rollback_to;
     vector<pg_log_entry_t> log_entries;
     boost::optional<pg_hit_set_history_t> updated_hit_set_history;
     Context *on_local_applied_sync;

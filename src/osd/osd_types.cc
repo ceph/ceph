@@ -2707,17 +2707,18 @@ ostream& operator<<(ostream& out, const pg_log_entry_t& e)
 
 void pg_log_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(5, 3, bl);
+  ENCODE_START(6, 3, bl);
   ::encode(head, bl);
   ::encode(tail, bl);
   ::encode(log, bl);
   ::encode(can_rollback_to, bl);
+  ::encode(rollback_info_trimmed_to, bl);
   ENCODE_FINISH(bl);
 }
  
 void pg_log_t::decode(bufferlist::iterator &bl, int64_t pool)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
   ::decode(head, bl);
   ::decode(tail, bl);
   if (struct_v < 2) {
@@ -2727,6 +2728,11 @@ void pg_log_t::decode(bufferlist::iterator &bl, int64_t pool)
   ::decode(log, bl);
   if (struct_v >= 5)
     ::decode(can_rollback_to, bl);
+
+  if (struct_v >= 6)
+    ::decode(rollback_info_trimmed_to, bl);
+  else
+    rollback_info_trimmed_to = tail;
   DECODE_FINISH(bl);
 
   // handle hobject_t format change
