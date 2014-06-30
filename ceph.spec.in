@@ -29,7 +29,6 @@ Requires:	cryptsetup
 Requires:	parted
 Requires:	util-linux
 Requires:	hdparm
-Requires:	redhat-lsb-core
 Requires(post):	binutils
 BuildRequires:	make
 BuildRequires:	gcc-c++
@@ -103,6 +102,7 @@ Group:		System Environment/Base
 Requires:	librbd1 = %{version}-%{release}
 Requires:	python-ceph
 Requires:	python-requests
+Requires:	redhat-lsb-core
 %description -n ceph-common
 common utilities to mount and interact with a ceph storage cluster
 
