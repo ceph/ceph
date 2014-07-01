@@ -8383,6 +8383,11 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
       changed.count("osd_disk_thread_ioprio_priority")) {
     set_disk_tp_priority();
   }
+  if (changed.count("osd_map_cache_size")) {
+    service.map_cache.set_size(cct->_conf->osd_map_cache_size);
+    service.map_bl_cache.set_size(cct->_conf->osd_map_cache_size);
+    service.map_bl_inc_cache.set_size(cct->_conf->osd_map_cache_size);
+  }
 
   check_config();
 }
