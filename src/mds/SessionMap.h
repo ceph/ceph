@@ -253,6 +253,10 @@ public:
     
   // sessions
   bool empty() { return session_map.empty(); }
+  const ceph::unordered_map<entity_name_t, Session*> &get_sessions() const
+  {
+    return session_map;
+  }
 
   bool is_any_state(int state) {
     map<int,xlist<Session*>* >::iterator p = by_state.find(state);

@@ -241,6 +241,9 @@ protected:
 public:
   int get_num_client_requests();
 
+  typedef std::map<entity_name_t, int> RequestCountMap;
+  void get_client_request_counts(RequestCountMap *result);
+
   MDRequestRef request_start(MClientRequest *req);
   MDRequestRef request_start_slave(metareqid_t rid, __u32 attempt, Message *m);
   MDRequestRef request_start_internal(int op);

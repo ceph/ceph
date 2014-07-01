@@ -8620,6 +8620,28 @@ int MDCache::get_num_client_requests()
   return count;
 }
 
+
+/**
+ * Populate a map of client ID to number of outstanding requests.
+ *
+ * Use this during client_replay to discover which clients are responsible
+ * for outstanding requests.
+ */
+void MDCache::get_client_request_counts(MDCache::RequestCountMap *result)
+{
+  assert(result != NULL);
+
+  for (ceph::unordered_map<metareqid_t, MDRequestRef>::iterator p = active_requests.begin();
+      p != active_requests.end();
+      ++p) {
+    MDRequestRef& mdr = p->second;
+    if (mdr->reqid.name.is_client() && !mdr->is_slave()) {
+      (*result)[mdr->reqid.name]++;
+    }
+  }
+}
+
+
 /* This function takes over the reference to the passed Message */
 MDRequestRef MDCache::request_start(MClientRequest *req)
 {

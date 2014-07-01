@@ -7580,3 +7580,8 @@ void Server::_rmsnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid)
 }
 
 
+bool Server::is_reconnecting(client_t c) const
+{
+  return client_reconnect_gather.count(c) > 0;
+}
+

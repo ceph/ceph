@@ -73,6 +73,7 @@ public:
   // -- sessions and recovery --
   utime_t  reconnect_start;
   set<client_t> client_reconnect_gather;  // clients i need a reconnect msg from.
+  bool is_reconnecting(client_t c) const;
 
   Session *get_session(Message *m);
   void handle_client_session(class MClientSession *m);

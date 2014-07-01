@@ -228,8 +228,37 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
     op_tracker.dump_historic_ops(f);
   } else if (command == "session ls") {
     mds_lock.Lock();
-    sessionmap.dump(f);
+
+    // Find out how many outstanding requests are for each client, if
+    // the MDS state is reconnect.
+    MDCache::RequestCountMap request_counts;
+    if (is_clientreplay()) {
+      mdcache->get_client_request_counts(&request_counts);
+    }
+
+    // Dump sessions, decorated with recovery/replay status
+    f->open_array_section("sessions");
+    const ceph::unordered_map<entity_name_t, Session*> session_map = sessionmap.get_sessions();
+    for (ceph::unordered_map<entity_name_t,Session*>::const_iterator p = session_map.begin();
+         p != session_map.end();
+         ++p)  {
+      if (!p->first.is_client()) {
+        continue;
+      }
+
+      f->open_object_section("session");
+      f->dump_int("id", p->first.num());
+      f->dump_string("state", p->second->get_state_name());
+      f->dump_int("replay_requests", request_counts[p->first]);
+      f->dump_bool("reconnecting", server->is_reconnecting(p->first.num()));
+      f->dump_stream("inst") << p->second->info.inst;
+      f->close_section(); //session
+    }
+    f->close_section(); //sessions
+
     mds_lock.Unlock();
+
+
   } else if (command == "session evict") {
     std::string client_id;
     const bool got_arg = cmd_getval(g_ceph_context, cmdmap, "client_id", client_id);
