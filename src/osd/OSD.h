@@ -1152,7 +1152,8 @@ public:
     Mutex received_map_lock;
     epoch_t received_map_epoch; // largest epoch seen in MOSDMap from here
 
-    Session() :
+    Session(CephContext *cct) :
+      RefCountedObject(cct),
       auid(-1), con(0),
       session_dispatch_lock("Session::session_dispatch_lock"),
       sent_epoch_lock("Session::sent_epoch_lock"), last_sent_epoch(0),
