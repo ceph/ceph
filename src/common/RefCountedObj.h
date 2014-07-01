@@ -21,8 +21,10 @@
 #include "common/ceph_context.h"
 
 struct RefCountedObject {
+private:
   atomic_t nref;
   CephContext *cct;
+public:
   RefCountedObject(CephContext *c = NULL, int n=1) : nref(n), cct(c) {}
   virtual ~RefCountedObject() {
     assert(nref.read() == 0);
@@ -44,6 +46,9 @@ struct RefCountedObject {
 			     << dendl;
     if (v == 0)
       delete this;
+  }
+  void set_cct(CephContext *c) {
+    cct = c;
   }
 };
 
