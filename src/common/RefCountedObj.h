@@ -24,7 +24,9 @@ struct RefCountedObject {
   atomic_t nref;
   CephContext *cct;
   RefCountedObject(CephContext *c = NULL, int n=1) : nref(n), cct(c) {}
-  virtual ~RefCountedObject() {}
+  virtual ~RefCountedObject() {
+    assert(nref.read() == 0);
+  }
   
   RefCountedObject *get() {
     int v = nref.inc();
