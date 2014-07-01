@@ -1790,6 +1790,10 @@ static void note_stuck_detail(enum PGMap::StuckPG what,
       since = p->second.last_clean;
       whatname = "unclean";
       break;
+    case PGMap::STUCK_DEGRADED:
+      since = p->second.last_undegraded;
+      whatname = "degraded";
+      break;
     case PGMap::STUCK_STALE:
       since = p->second.last_unstale;
       whatname = "stale";
@@ -1882,6 +1886,14 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
     note["stuck unclean"] = stuck_pgs.size();
     if (detail)
       note_stuck_detail(PGMap::STUCK_UNCLEAN, stuck_pgs, detail);
+  }
+  stuck_pgs.clear();
+
+  pg_map.get_stuck_stats(PGMap::STUCK_DEGRADED, cutoff, stuck_pgs);
+  if (!stuck_pgs.empty()) {
+    note["stuck degraded"] = stuck_pgs.size();
+    if (detail)
+      note_stuck_detail(PGMap::STUCK_DEGRADED, stuck_pgs, detail);
   }
   stuck_pgs.clear();
 
@@ -2113,6 +2125,8 @@ int PGMonitor::dump_stuck_pg_stats(stringstream &ds,
     stuck_type = PGMap::STUCK_INACTIVE;
   else if (type == "unclean")
     stuck_type = PGMap::STUCK_UNCLEAN;
+  else if (type == "degraded")
+    stuck_type = PGMap::STUCK_DEGRADED;
   else if (type == "stale")
     stuck_type = PGMap::STUCK_STALE;
   else {
