@@ -722,7 +722,7 @@ class CephManager:
             self.create_pool(
                 name,
                 pg_num,
-                erasure_code_profile=erasure_code_profile_name)
+                erasure_code_profile_name=erasure_code_profile_name)
         return name
 
     def create_pool(self, pool_name, pg_num=16, erasure_code_profile_name=None):
