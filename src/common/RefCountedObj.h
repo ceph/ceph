@@ -23,7 +23,7 @@
 struct RefCountedObject {
   atomic_t nref;
   CephContext *cct;
-  RefCountedObject(CephContext *c = NULL) : nref(1), cct(c) {}
+  RefCountedObject(CephContext *c = NULL, int n=1) : nref(n), cct(c) {}
   virtual ~RefCountedObject() {}
   
   RefCountedObject *get() {
