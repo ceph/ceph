@@ -910,6 +910,11 @@ void PGMonitor::check_osd_map(epoch_t epoch)
         if (report != last_osd_report.end()) {
           last_osd_report.erase(report);
         }
+
+	// clear out osd_stat slow request histogram
+	dout(20) << __func__ << " clearing osd." << p->first
+		 << " request histogram" << dendl;
+	pending_inc.stat_osd_down_up(p->first, pg_map);
       }
 
       if (p->second & CEPH_OSD_EXISTS) {
