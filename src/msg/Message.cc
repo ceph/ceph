@@ -687,6 +687,8 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
     return 0;
   }
 
+  m->set_cct(cct);
+
   // m->header.version, if non-zero, should be populated with the
   // newest version of the encoding the code supports.  If set, check
   // it against compat_version.
