@@ -25,6 +25,6 @@ while read line ; do
   fi
   echo "================ STOP ================="  
 done <<EOF
-../qa/workunits/cephtool/test.sh
+../qa/workunits/cephtool/test.sh --asok-does-not-need-root
 EOF
 exit $code
