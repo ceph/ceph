@@ -100,7 +100,8 @@ block and file system storage.
 Summary:	Ceph Common
 Group:		System Environment/Base
 Requires:	librbd1 = %{version}-%{release}
-Requires:	python-ceph
+Requires:	librados2 = %{version}-%{release}
+Requires:	python-ceph = %{version}-%{release}
 Requires:	python-requests
 Requires:	redhat-lsb-core
 %description -n ceph-common
@@ -118,6 +119,8 @@ FUSE based client for Ceph distributed network file system
 Summary:	Ceph fuse-based client
 Group:		System Environment/Base
 Requires:	%{name}
+Requires:	librados2 = %{version}-%{release}
+Requires:	librbd1 = %{version}-%{release}
 BuildRequires:	fuse-devel
 %description -n rbd-fuse
 FUSE based client to map Ceph rbd images to files
@@ -127,9 +130,10 @@ Summary:	Ceph headers
 Group:		Development/Libraries
 License:	LGPL-2.0
 Requires:	%{name} = %{version}-%{release}
-Requires:	librados2 = %{version}
-Requires:	librbd1 = %{version}
-Requires:	libcephfs1 = %{version}
+Requires:	librados2 = %{version}-%{release}
+Requires:	librbd1 = %{version}-%{release}
+Requires:	libcephfs1 = %{version}-%{release}
+Requires:	libcephfs_jni1 = %{version}-%{release}
 %description devel
 This package contains libraries and headers needed to develop programs
 that use Ceph.
@@ -138,6 +142,7 @@ that use Ceph.
 Summary:	Rados REST gateway
 Group:		Development/Libraries
 Requires:	ceph-common = %{version}-%{release}
+Requires:	librados2 = %{version}-%{release}
 %if 0%{defined suse_version}
 BuildRequires:	libexpat-devel
 BuildRequires:	FastCGI-devel
@@ -181,6 +186,7 @@ store using a simple file-like interface.
 Summary:	RADOS block device client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
+Requires:	librados2 = %{version}-%{release}
 %if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
 Obsoletes:	ceph-libs
 %endif
@@ -326,7 +332,9 @@ chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
 install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rules
 install -m 0644 -D udev/60-ceph-partuuid-workaround.rules $RPM_BUILD_ROOT/lib/udev/rules.d/60-ceph-partuuid-workaround.rules
 
-%if (0%{?rhel} || 0%{?rhel} < 7)
+%if 0%{?rhel} >= 7
+install -m 0644 -D udev/95-ceph-osd-alt.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/95-ceph-osd.rules
+%elseif 0%{?rhel} < 7
 install -m 0644 -D udev/95-ceph-osd-alt.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
 %else
 install -m 0644 -D udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
@@ -411,7 +419,11 @@ fi
 %{_sbindir}/ceph-disk-udev
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/rcceph
+%if 0%{?rhel} >= 7
+%{_sbindir}/mount.ceph
+%else
 /sbin/mount.ceph
+%endif
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/ceph_common.sh
 %dir %{_libdir}/rados-classes
@@ -434,8 +446,13 @@ fi
 %{_libdir}/ceph/erasure-code/libec_jerasure*.so*
 %{_libdir}/ceph/erasure-code/libec_test_jerasure*.so*
 %{_libdir}/ceph/erasure-code/libec_missing_entry_point.so*
+%if 0%{?rhel} >= 7
+/usr/lib/udev/rules.d/60-ceph-partuuid-workaround.rules
+/usr/lib/udev/rules.d/95-ceph-osd.rules
+%else
 /lib/udev/rules.d/60-ceph-partuuid-workaround.rules
 /lib/udev/rules.d/95-ceph-osd.rules
+%endif
 %config %{_sysconfdir}/bash_completion.d/ceph
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %config(noreplace) %{_sysconfdir}/logrotate.d/radosgw
@@ -506,7 +523,11 @@ fi
 %defattr(-,root,root,-)
 %{_bindir}/ceph-fuse
 %{_mandir}/man8/ceph-fuse.8*
+%if 0%{?rhel} >= 7
+%{_sbindir}/mount.fuse.ceph
+%else
 /sbin/mount.fuse.ceph
+%endif
 
 #################################################################################
 %files -n rbd-fuse
@@ -597,7 +618,11 @@ fi
 %files -n librbd1
 %defattr(-,root,root,-)
 %{_libdir}/librbd.so.*
+%if 0%{?rhel} >= 7
+/usr/lib/udev/rules.d/50-rbd.rules
+%else
 /lib/udev/rules.d/50-rbd.rules
+%endif
 
 %post -n librbd1
 /sbin/ldconfig
