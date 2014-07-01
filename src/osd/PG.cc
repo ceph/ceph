@@ -2334,6 +2334,8 @@ void PG::publish_stats_to_osd()
     if (info.stats.state & PG_STATE_ACTIVE)
       info.stats.last_active = now;
     info.stats.last_unstale = now;
+    if ((info.stats.state & PG_STATE_DEGRADED) == 0)
+      info.stats.last_undegraded = now;
 
     _update_calc_stats();
     _update_blocked_by();
