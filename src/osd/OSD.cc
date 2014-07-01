@@ -1764,6 +1764,10 @@ int OSD::shutdown()
   service.shutdown();
   op_tracker.on_shutdown();
 
+  // zap the Sessions for any loopback Connections
+  client_messenger->get_loopback_connection()->set_priv(NULL);
+  cluster_messenger->get_loopback_connection()->set_priv(NULL);
+
   class_handler->shutdown();
   client_messenger->shutdown();
   cluster_messenger->shutdown();
@@ -3690,7 +3694,7 @@ void OSD::ms_handle_fast_connect(Connection *con)
       s = new Session;
       con->set_priv(s->get());
       s->con = con;
-      dout(10) << " new session (outgoing)" << s << " con=" << s->con
+      dout(10) << " new session (outgoing) " << s << " con=" << s->con
           << " addr=" << s->con->get_peer_addr() << dendl;
       // we don't connect to clients
       assert(con->get_peer_type() == CEPH_ENTITY_TYPE_OSD);
