@@ -908,8 +908,8 @@ bool MDSMonitor::management_command(
 {
   if (prefix == "mds newfs") {
     /* Legacy `newfs` command, takes pool numbers instead of
-     * names, assumes fs name to be 'default', and can
-     * overwrite existing filesystem settings */
+     * names, assumes fs name to be MDS_FS_NAME_DEFAULT, and
+     * can overwrite existing filesystem settings */
     MDSMap newmap;
     int64_t metadata, data;
 
@@ -966,7 +966,7 @@ bool MDSMonitor::management_command(
       newmap.inc = pending_mdsmap.inc;
       pending_mdsmap = newmap;
       pending_mdsmap.epoch = mdsmap.epoch + 1;
-      create_new_fs(pending_mdsmap, "default", metadata, data);
+      create_new_fs(pending_mdsmap, MDS_FS_NAME_DEFAULT, metadata, data);
       ss << "new fs with metadata pool " << metadata << " and data pool " << data;
       r = 0;
       return true;
@@ -989,15 +989,7 @@ bool MDSMonitor::management_command(
       ss << "pool '" << data_name << "' does not exist";
       return true;
     }
-
-    // Warn if crash_replay_interval is not set on the data pool
-    //  (on creation should have done pools[pool].crash_replay_interval =
-    //  cct->_conf->osd_default_data_pool_replay_window;)
-    pg_pool_t const *data_pool = mon->osdmon()->osdmap.get_pg_pool(data);
-    if (data_pool->get_crash_replay_interval() == 0) {
-      ss << "warning: crash_replay_interval not set on data pool '" << data << "', ";
-    }
-    
+   
     string fs_name;
     cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
     if (fs_name.empty()) {
@@ -1021,6 +1013,31 @@ bool MDSMonitor::management_command(
       /* We currently only support one filesystem, so cannot create a second */
       ss << "A filesystem already exists, use `ceph fs rm` if you wish to delete it";
       r = -EINVAL;
+    }
+
+    pg_pool_t const *data_pool = mon->osdmon()->osdmap.get_pg_pool(data);
+    assert(data_pool != NULL);  // Checked it existed above
+    pg_pool_t const *metadata_pool = mon->osdmon()->osdmap.get_pg_pool(metadata);
+    assert(metadata_pool != NULL);  // Checked it existed above
+
+    // Automatically set crash_replay_interval on data pool if it
+    // isn't already set.
+    if (data_pool->get_crash_replay_interval() == 0) {
+      r = mon->osdmon()->set_crash_replay_interval(data, g_conf->osd_default_data_pool_replay_window);
+      assert(r == 0);  // We just did get_pg_pool so it must exist and be settable
+      request_proposal(mon->osdmon());
+    }
+
+    if (data_pool->is_erasure()) {
+      ss << "data pool '" << data_name << " is an erasure-code pool";
+      r = -EINVAL;
+      return true;
+    }
+
+    if (metadata_pool->is_erasure()) {
+      ss << "metadata pool '" << metadata_name << " is an erasure-code pool";
+      r = -EINVAL;
+      return true;
     }
 
     // All checks passed, go ahead and create.
