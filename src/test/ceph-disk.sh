@@ -21,6 +21,7 @@ export PATH=:$PATH # make sure program from sources are prefered
 DIR=test-ceph-disk
 MON_ID=a
 MONA=127.0.0.1:7451
+TEST_POOL=rbd
 FSID=$(uuidgen)
 export CEPH_CONF=/dev/null
 export CEPH_ARGS="--fsid $FSID"
@@ -192,13 +193,13 @@ function test_activate_dir() {
                       activate \
                      --mark-init=none \
                     $osd_data || return 1
-    $timeout $TIMEOUT ./ceph osd pool set data size 1 || return 1
+    $timeout $TIMEOUT ./ceph osd pool set $TEST_POOL size 1 || return 1
     local id=$($cat $osd_data/whoami)
     local weight=1
     ./ceph osd crush add osd.$id $weight root=default host=localhost || return 1
     echo FOO > $DIR/BAR
-    $timeout $TIMEOUT ./rados --pool data put BAR $DIR/BAR || return 1
-    $timeout $TIMEOUT ./rados --pool data get BAR $DIR/BAR.copy || return 1
+    $timeout $TIMEOUT ./rados --pool $TEST_POOL put BAR $DIR/BAR || return 1
+    $timeout $TIMEOUT ./rados --pool $TEST_POOL get BAR $DIR/BAR.copy || return 1
     $diff $DIR/BAR $DIR/BAR.copy || return 1
 }
 

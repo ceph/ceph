@@ -115,7 +115,7 @@ public:
       data_lock("OmapBench::data_lock"),
       busythreads_count(0),
       comp(NULL), safe(aio_is_safe),
-      pool_name("data"),
+      pool_name("rbd"),
       rados_id("admin"),
       prefix(rados_id+".obj."),
       threads(3), objects(100), entries_per_omap(10), key_size(10),
