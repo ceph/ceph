@@ -39,6 +39,8 @@ def main(args):
     teuthology_branch = args['--teuthology-branch']
     machine_type = args['--machine-type']
     distro = args['--distro']
+    suite_branch = args['--suite-branch'] or ceph_branch
+    suite_base = args['--suite-base']
 
     limit = int(args['--limit'])
     priority = int(args['--priority'])
@@ -53,7 +55,10 @@ def main(args):
     name = make_run_name(nice_suite, ceph_branch, kernel_branch, kernel_flavor,
                          machine_type)
 
-    suite_repo_path = fetch_suite_repo(ceph_branch, test_name=name)
+    if suite_base:
+        suite_repo_path = suite_base
+    else:
+        suite_repo_path = fetch_suite_repo(suite_branch, test_name=name)
 
     config_string = create_initial_config(nice_suite, ceph_branch,
                                           teuthology_branch, kernel_branch,
