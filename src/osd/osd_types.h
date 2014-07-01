@@ -1358,6 +1358,8 @@ struct pg_stat_t {
   utime_t last_active;  // state & PG_STATE_ACTIVE
   utime_t last_clean;   // state & PG_STATE_CLEAN
   utime_t last_unstale; // (state & PG_STATE_STALE) == 0
+  utime_t last_undegraded; // (state & PG_STATE_DEGRADED) == 0
+  utime_t last_fullsized; // (state & PG_STATE_UNDERSIZED) == 0
 
   eversion_t log_start;         // (log_start,version]
   eversion_t ondisk_log_start;  // there may be more on disk
