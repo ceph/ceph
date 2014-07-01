@@ -37,7 +37,7 @@ libos_la_SOURCES += os/ZFSFileStoreBackend.cc
 endif
 
 libos_la_CXXFLAGS = ${AM_CXXFLAGS}
-libos_la_LIBADD = $(LIBOS_TYPES)
+libos_la_LIBADD = $(LIBOS_TYPES) $(LIBOS_TP)
 noinst_LTLIBRARIES += libos.la
 
 noinst_HEADERS += \
