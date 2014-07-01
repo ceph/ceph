@@ -239,11 +239,15 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
     Session *session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT,
 							    strtol(client_id.c_str(), 0, 10)));
     if (session) {
-      server->kill_session(session);
+      C_SaferCond on_safe;
+      server->kill_session(session, &on_safe);
+
+      mds_lock.Unlock();
+      on_safe.wait();
     } else {
       dout(15) << "session " << session << " not in sessionmap!" << dendl;
+      mds_lock.Unlock();
     }
-    mds_lock.Unlock();
   }
   f->flush(ss);
   delete f;

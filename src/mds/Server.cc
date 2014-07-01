@@ -148,14 +148,18 @@ class C_MDS_session_finish : public Context {
   version_t cmapv;
   interval_set<inodeno_t> inos;
   version_t inotablev;
+  Context *fin;
 public:
-  C_MDS_session_finish(MDS *m, Session *se, uint64_t sseq, bool s, version_t mv) :
-    mds(m), session(se), state_seq(sseq), open(s), cmapv(mv), inotablev(0) { }
-  C_MDS_session_finish(MDS *m, Session *se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t>& i, version_t iv) :
-    mds(m), session(se), state_seq(sseq), open(s), cmapv(mv), inos(i), inotablev(iv) { }
+  C_MDS_session_finish(MDS *m, Session *se, uint64_t sseq, bool s, version_t mv, Context *fin_ = NULL) :
+    mds(m), session(se), state_seq(sseq), open(s), cmapv(mv), inotablev(0), fin(fin_) { }
+  C_MDS_session_finish(MDS *m, Session *se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t>& i, version_t iv, Context *fin_ = NULL) :
+    mds(m), session(se), state_seq(sseq), open(s), cmapv(mv), inos(i), inotablev(iv), fin(fin_) { }
   void finish(int r) {
     assert(r == 0);
     mds->server->_session_logged(session, state_seq, open, cmapv, inos, inotablev);
+    if (fin) {
+      fin->complete(r);
+    }
   }
 };
 
@@ -504,24 +508,27 @@ void Server::find_idle_sessions()
   }
 }
 
-void Server::kill_session(Session *session)
+void Server::kill_session(Session *session, Context *on_safe)
 {
   if ((session->is_opening() ||
        session->is_open() ||
        session->is_stale()) &&
       !session->is_importing()) {
     dout(10) << "kill_session " << session << dendl;
-    journal_close_session(session, Session::STATE_KILLING);
+    journal_close_session(session, Session::STATE_KILLING, on_safe);
   } else {
     dout(10) << "kill_session importing or already closing/killing " << session << dendl;
     assert(session->is_closing() || 
 	   session->is_closed() || 
 	   session->is_killing() ||
 	   session->is_importing());
+    if (on_safe) {
+      on_safe->complete(0);
+    }
   }
 }
 
-void Server::journal_close_session(Session *session, int state)
+void Server::journal_close_session(Session *session, int state, Context *on_safe)
 {
   uint64_t sseq = mds->sessionmap.set_state(session, state);
   version_t pv = ++mds->sessionmap.projected;
@@ -540,7 +547,7 @@ void Server::journal_close_session(Session *session, int state)
     piv = 0;
 
   mdlog->start_submit_entry(new ESession(session->info.inst, false, pv, both, piv),
-			    new C_MDS_session_finish(mds, session, sseq, false, pv, both, piv));
+			    new C_MDS_session_finish(mds, session, sseq, false, pv, both, piv, on_safe));
   mdlog->flush();
 
   // clean up requests, too

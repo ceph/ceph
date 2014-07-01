@@ -87,8 +87,8 @@ public:
   void finish_flush_session(Session *session, version_t seq);
   void terminate_sessions();
   void find_idle_sessions();
-  void kill_session(Session *session);
-  void journal_close_session(Session *session, int state);
+  void kill_session(Session *session, Context *on_safe = NULL);
+  void journal_close_session(Session *session, int state, Context *on_safe = NULL);
   void reconnect_clients();
   void handle_client_reconnect(class MClientReconnect *m);
   //void process_reconnect_cap(CInode *in, int from, ceph_mds_cap_reconnect& capinfo);
