@@ -17,8 +17,9 @@ from email.mime.text import MIMEText
 from tempfile import NamedTemporaryFile
 
 import teuthology
-from teuthology import lock as lock
-from teuthology.config import config
+from . import lock
+from .config import config
+from .repo_utils import enforce_repo_state, BranchNotFoundError
 
 log = logging.getLogger(__name__)
 
@@ -30,9 +31,6 @@ def main(args):
     dry_run = args['--dry-run']
 
     base_yaml_paths = args['<config_yaml>']
-    base = os.path.expanduser(args['--base'])
-    if not os.path.exists(base):
-        schedule_fail("Base directory not found: {dir}".format(dir=base))
     suite = args['--suite']
     nice_suite = suite.replace('/', ':')
     ceph_branch = args['--ceph']
@@ -41,6 +39,8 @@ def main(args):
     teuthology_branch = args['--teuthology-branch']
     machine_type = args['--machine-type']
     distro = args['--distro']
+    suite_branch = args['--suite-branch'] or ceph_branch
+    suite_dir = args['--suite-dir']
 
     limit = int(args['--limit'])
     priority = int(args['--priority'])
@@ -54,6 +54,12 @@ def main(args):
 
     name = make_run_name(nice_suite, ceph_branch, kernel_branch, kernel_flavor,
                          machine_type)
+
+    if suite_dir:
+        suite_repo_path = suite_dir
+    else:
+        suite_repo_path = fetch_suite_repo(suite_branch, test_name=name)
+
     config_string = create_initial_config(nice_suite, ceph_branch,
                                           teuthology_branch, kernel_branch,
                                           kernel_flavor, distro, machine_type)
@@ -64,19 +70,19 @@ def main(args):
         base_yaml_path = base_yaml.name
     base_yaml_paths.insert(0, base_yaml_path)
     prepare_and_schedule(owner=owner,
-                            name=name,
-                            suite=suite,
-                            machine_type=machine_type,
-                            base=base,
-                            base_yaml_paths=base_yaml_paths,
-                            email=email,
-                            priority=priority,
-                            limit=limit,
-                            num=num,
-                            timeout=timeout,
-                            dry_run=dry_run,
-                            verbose=verbose,
-                            )
+                         name=name,
+                         suite=suite,
+                         machine_type=machine_type,
+                         suite_repo_path=suite_repo_path,
+                         base_yaml_paths=base_yaml_paths,
+                         email=email,
+                         priority=priority,
+                         limit=limit,
+                         num=num,
+                         timeout=timeout,
+                         dry_run=dry_run,
+                         verbose=verbose,
+                         )
     os.remove(base_yaml_path)
 
 
@@ -99,6 +105,39 @@ def make_run_name(suite, ceph_branch, kernel_branch, kernel_flavor,
     )
 
 
+def fetch_suite_repo(branch, test_name):
+    """
+    Fetch the suite repo (and also the teuthology repo) so that we can use it
+    to build jobs. Repos are stored in ~/src/.
+
+    The reason the teuthology repo is also fetched is that currently we use
+    subprocess to call teuthology-schedule to schedule jobs so we need to make
+    sure it is up-to-date. For that reason we always fetch the master branch
+    for test scheduling, regardless of what teuthology branch is requested for
+    testing.
+
+    :returns: The path to the repo on disk
+    """
+    src_base_path = os.path.expanduser('~/src')
+    if not os.path.exists(src_base_path):
+        os.mkdir(src_base_path)
+    suite_repo_path = os.path.join(src_base_path,
+                                   'ceph-qa-suite_' + branch)
+    try:
+        enforce_repo_state(
+            repo_url=os.path.join(config.ceph_git_base_url, 'teuthology.git'),
+            dest_path=os.path.join(src_base_path, 'teuthology'),
+            branch='master')
+        enforce_repo_state(
+            repo_url=os.path.join(config.ceph_git_base_url,
+                                  'ceph-qa-suite.git'),
+            dest_path=suite_repo_path,
+            branch=branch)
+    except BranchNotFoundError as exc:
+        schedule_fail(message=str(exc), name=test_name)
+    return suite_repo_path
+
+
 def create_initial_config(nice_suite, ceph_branch, teuthology_branch,
                           kernel_branch, kernel_flavor, distro, machine_type):
     """
@@ -119,12 +158,13 @@ def create_initial_config(nice_suite, ceph_branch, teuthology_branch,
         kernel_hash = get_hash('kernel', kernel_branch, kernel_flavor,
                                machine_type)
         if not kernel_hash:
-            schedule_fail(message="Kernel branch '{branch} not found".format(
+            schedule_fail(message="Kernel branch '{branch}' not found".format(
                 branch=kernel_branch))
     if kernel_hash:
         log.info("kernel sha1: {hash}".format(hash=kernel_hash))
         kernel_dict = dict(kernel=dict(kdb=True, sha1=kernel_hash))
-        kernel_stanza = yaml.dump(kernel_dict, default_flow_style=False).strip()
+        kernel_stanza = yaml.dump(kernel_dict,
+                                  default_flow_style=False).strip()
     else:
         kernel_stanza = ''
 
@@ -175,7 +215,7 @@ def create_initial_config(nice_suite, ceph_branch, teuthology_branch,
     return config_template.format(**config_input)
 
 
-def prepare_and_schedule(owner, name, suite, machine_type, base,
+def prepare_and_schedule(owner, name, suite, machine_type, suite_repo_path,
                          base_yaml_paths, email, priority, limit, num, timeout,
                          dry_run, verbose):
     """
@@ -199,7 +239,7 @@ def prepare_and_schedule(owner, name, suite, machine_type, base,
     if owner:
         base_args.extend(['--owner', owner])
 
-    suite_path = os.path.join(base, suite)
+    suite_path = os.path.join(suite_repo_path, 'suites', suite)
 
     num_jobs = schedule_suite(
         name=suite,
@@ -227,7 +267,7 @@ def prepare_and_schedule(owner, name, suite, machine_type, base,
             )
 
 
-def schedule_fail(message, name=None):
+def schedule_fail(message, name=''):
     """
     If an email address has been specified anywhere, send an alert there. Then
     raise a ScheduleFailError.
@@ -279,9 +319,9 @@ def get_hash(project='ceph', branch='master', flavor='basic',
     """
     # Alternate method for github-hosted projects - left here for informational
     # purposes
-    #resp = requests.get(
-    #    'https://api.github.com/repos/ceph/ceph/git/refs/heads/master')
-    #hash = .json()['object']['sha']
+    # resp = requests.get(
+    #     'https://api.github.com/repos/ceph/ceph/git/refs/heads/master')
+    # hash = .json()['object']['sha']
     (arch, release, pkg_type) = get_distro_defaults(distro, machine_type)
     base_url = get_gitbuilder_url(project, release, pkg_type, arch, flavor)
     url = os.path.join(base_url, 'ref', branch, 'sha1')

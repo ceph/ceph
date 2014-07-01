@@ -4,8 +4,7 @@ import teuthology.suite
 
 doc = """
 usage: teuthology-suite [-h]
-       teuthology-suite --suite <suite> [options]
-       teuthology-suite  -s <suite> [options] [<config_yaml>...]
+       teuthology-suite  --suite <suite> [options] [<config_yaml>...]
 
 Run a suite of ceph integration tests. A suite is a directory containing
 facets. A facet is a directory containing config snippets. Running a suite
@@ -23,8 +22,6 @@ Miscellaneous arguments:
 
 Standard arguments:
   <config_yaml>               Optional extra job yaml to include
-  --base <base>               Base directory for the suite
-                              e.g. ~/src/ceph-qa-suite/suites
   -s <suite>, --suite <suite>
                               The suite to schedule
   -c <ceph>, --ceph <ceph>    The ceph branch to run against
@@ -44,6 +41,11 @@ Standard arguments:
   -d <distro>, --distro <distro>
                               Distribution to run against
                               [default: ubuntu]
+  --suite-branch <suite_branch>
+                              Use this suite branch instead of the ceph branch
+  --suite-dir <suite_dir>     Use this alternative directory as-is when
+                              assembling jobs from yaml fragments. This causes
+                              <suite_branch> to be ignored.
 
 Scheduler arguments:
   --owner <owner>             Job owner
