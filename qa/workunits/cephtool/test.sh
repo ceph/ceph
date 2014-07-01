@@ -296,7 +296,11 @@ function test_mon_mds()
 {
   ceph osd pool create fs_data 10
   ceph osd pool create fs_metadata 10
-  ceph fs new default fs_metadata fs_data
+  ceph fs new cephfs fs_metadata fs_data
+
+  # Check for default crash_replay_interval set automatically in 'fs new'
+  ceph osd dump | grep fs_data > $TMPFILE
+  check_response "crash_replay_interval 45 "
 
   ceph mds cluster_down
   ceph mds cluster_up
@@ -356,13 +360,24 @@ function test_mon_mds()
   ceph mds add_data_pool mds-ec-pool 2>$TMPFILE
   check_response 'erasure-code' $? 22
   set -e
-  poolnum=$(ceph osd dump | grep 'pool.*mds-ec-pool' | awk '{print $2;}')
+  ec_poolnum=$(ceph osd dump | grep 'pool.*mds-ec-pool' | awk '{print $2;}')
+  data_poolnum=$(ceph osd dump | grep 'pool.*fs_data' | awk '{print $2;}')
+  metadata_poolnum=$(ceph osd dump | grep 'pool.*fs_metadata' | awk '{print $2;}')
   set +e
-  ceph mds newfs 0 $poolnum --yes-i-really-mean-it 2>$TMPFILE
+
+  ceph fs rm cephfs --yes-i-really-mean-it
+
+  ceph mds newfs $metadata_poolnum $ec_poolnum --yes-i-really-mean-it 2>$TMPFILE
   check_response 'erasure-code' $? 22
-  ceph mds newfs $poolnum 1 --yes-i-really-mean-it 2>$TMPFILE
+  ceph mds newfs $ec_poolnum $data_poolnum --yes-i-really-mean-it 2>$TMPFILE
   check_response 'erasure-code' $? 22
-  ceph mds newfs $poolnum $poolnum --yes-i-really-mean-it 2>$TMPFILE
+  ceph mds newfs $ec_poolnum $ec_poolnum --yes-i-really-mean-it 2>$TMPFILE
+  check_response 'erasure-code' $? 22
+  ceph fs new cephfs fs_metadata mds-ec-pool 2>$TMPFILE
+  check_response 'erasure-code' $? 22
+  ceph fs new cephfs mds-ec-pool fs_data 2>$TMPFILE
+  check_response 'erasure-code' $? 22
+  ceph fs new cephfs mds-ec-pool mds-ec-pool 2>$TMPFILE
   check_response 'erasure-code' $? 22
   set -e
   ceph osd pool delete mds-ec-pool mds-ec-pool --yes-i-really-really-mean-it
@@ -374,7 +389,6 @@ function test_mon_mds()
   # ceph mds set_state
   # ceph mds stop
 
-  ceph fs rm default --yes-i-really-mean-it
   ceph osd pool delete fs_data fs_data --yes-i-really-really-mean-it
   ceph osd pool delete fs_metadata fs_metadata --yes-i-really-really-mean-it
 }
