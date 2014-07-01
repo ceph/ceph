@@ -24,7 +24,7 @@ def rados(ctx, remote, cmd, wait=True, check_status=False):
     else:
         return proc
 
-def create_ec_pool(remote, name, profile_name, pgnum, profile):
+def create_ec_pool(remote, name, profile_name, pgnum, profile={}):
     remote.run(args=['ceph'] + cmd_erasure_code_profile(profile_name, profile))
     remote.run(args=[
         'ceph', 'osd', 'pool', 'create', name,
