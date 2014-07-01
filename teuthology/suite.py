@@ -40,7 +40,7 @@ def main(args):
     machine_type = args['--machine-type']
     distro = args['--distro']
     suite_branch = args['--suite-branch'] or ceph_branch
-    suite_base = args['--suite-base']
+    suite_dir = args['--suite-dir']
 
     limit = int(args['--limit'])
     priority = int(args['--priority'])
@@ -55,8 +55,8 @@ def main(args):
     name = make_run_name(nice_suite, ceph_branch, kernel_branch, kernel_flavor,
                          machine_type)
 
-    if suite_base:
-        suite_repo_path = suite_base
+    if suite_dir:
+        suite_repo_path = suite_dir
     else:
         suite_repo_path = fetch_suite_repo(suite_branch, test_name=name)
 

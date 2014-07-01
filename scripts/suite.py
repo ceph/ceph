@@ -43,7 +43,7 @@ Standard arguments:
                               [default: ubuntu]
   --suite-branch <suite_branch>
                               Use this suite branch instead of the ceph branch
-  --suite-base <suite_base>   Use this alternative directory as-is when
+  --suite-dir <suite_dir>     Use this alternative directory as-is when
                               assembling jobs from yaml fragments. This causes
                               <suite_branch> to be ignored.
 
