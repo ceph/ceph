@@ -1,7 +1,11 @@
-Tue Jul  1 11:45:47 UTC 2014 - osynge@suse.com
+Tue Jul  1 17:27:09 UTC 2014 - osynge@suse.com
+- Moved debug tools to debug package.
+  * Reorganized spec file Requires, BuildRequires, and files to 
+    minimize the differences with Devel:Cloud:4
 - Resolved ceph Changelog conflicts 
   * Was cased by Devel:Cloud:4 and Devel:Storage:0.5:Staging based
     upon different branch of ceph packaging from engineering team.
+- Renamed logrotate.d/radosgw to logrotate.d/ceph-radosgw
 
 -------------------------------------------------------------------
 Wed Jun 25 18:16:51 UTC 2014 - osynge@suse.com

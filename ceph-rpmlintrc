@@ -1,2 +1,3 @@
 addFilter("missing-call-to-setgroups-before-setuid .*radosgw")
 addFilter("devel-file-in-non-devel-package .*ceph/erasure-code")
+addFilter("devel-file-in-non-devel-package .*rados-classes/libcls_user.so")
