@@ -5581,14 +5581,6 @@ int OSDMonitor::_check_remove_pool(int64_t pool, const pg_pool_t *p,
 {
   string poolstr = osdmap.get_pool_name(pool);
 
-  // If the Pool is in use by CephFS, refuse to delete it
-  MDSMap const &pending_mdsmap = mon->mdsmon()->pending_mdsmap;
-  if (pending_mdsmap.is_data_pool(pool) ||
-      pending_mdsmap.get_metadata_pool() == pool) {
-    *ss << "pool '" << poolstr << "' is in use by CephFS";
-    return -EBUSY;
-  }
-
   if (p->tier_of >= 0) {
     *ss << "pool '" << poolstr << "' is a tier of '"
 	<< osdmap.get_pool_name(p->tier_of) << "'";
