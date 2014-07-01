@@ -21,6 +21,18 @@ class TestRepoUtils(object):
         )
         assert proc.wait() == 0
         proc = subprocess.Popen(
+            ('git', 'config', 'user.email', 'test@ceph.com'),
+            cwd=self.src_path,
+            stdout=subprocess.PIPE,
+        )
+        assert proc.wait() == 0
+        proc = subprocess.Popen(
+            ('git', 'config', 'user.name', 'Test User'),
+            cwd=self.src_path,
+            stdout=subprocess.PIPE,
+        )
+        assert proc.wait() == 0
+        proc = subprocess.Popen(
             ('git', 'commit', '--allow-empty', '--allow-empty-message',
              '--no-edit'),
             cwd=self.src_path,
