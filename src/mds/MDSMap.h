@@ -144,6 +144,8 @@ public:
 protected:
   // base map
   epoch_t epoch;
+  bool enabled;
+  std::string fs_name;
   uint32_t flags;        // flags
   epoch_t last_failure;  // mds epoch of last failure
   epoch_t last_failure_osd_epoch; // osd epoch of last failure; any mds entering replay needs
@@ -191,7 +193,10 @@ public:
 
 public:
   MDSMap() 
-    : epoch(0), flags(0), last_failure(0), last_failure_osd_epoch(0), tableserver(0), root(0),
+    : epoch(0), enabled(false), fs_name("default"),
+      flags(0), last_failure(0),
+      last_failure_osd_epoch(0),
+      tableserver(0), root(0),
       session_timeout(0),
       session_autoclose(0),
       max_file_size(0),
@@ -226,6 +231,8 @@ public:
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
+
+  bool get_enabled() const { return enabled; }
 
   const utime_t& get_created() const { return created; }
   void set_created(utime_t ct) { modified = created = ct; }
