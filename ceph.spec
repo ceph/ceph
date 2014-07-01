@@ -100,7 +100,7 @@ Requires(preun):initscripts
 %endif
 BuildRequires:  libcurl-devel
 %ifnarch ppc ppc64 s390 s390x ia64
-%if 0%{?suse_version} >= 1200
+%if 0%{?suse_version} >= 1310
 %if 0%{with tcmalloc}
 # use isa so this will not be satisfied by
 # google-perftools-devel.i686 on a x86_64 box
@@ -319,7 +319,7 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
                 --without-system-leveldb \
 %endif
 %ifnarch ppc ppc64 s390 s390x ia64
-%if 0%{?suse_version} >= 1200
+%if 0%{?suse_version} >= 1310
 %if 0%{with tcmalloc}
                 --with-tcmalloc \
 %else
