@@ -29,6 +29,8 @@ if WITH_LIBZFS
 libos_la_SOURCES += os/ZFSFileStoreBackend.cc
 endif
 
+libos_la_LIBADD = $(LIBOS_TP)
+
 noinst_LTLIBRARIES += libos.la
 
 noinst_HEADERS += \

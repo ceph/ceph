@@ -7,7 +7,8 @@ dist_noinst_DATA = \
 	mutex.tp \
 	oprequest.tp \
 	osd.tp \
-	pg.tp
+	pg.tp \
+	objectstore.tp
 
 libcommon_tp_la_SOURCES = \
 	mutex.c \
@@ -41,11 +42,19 @@ librbd_tp_la_LIBADD = -llttng-ust -ldl
 librbd_tp_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
 librbd_tp_la_LDFLAGS =
 
+libos_tp_la_SOURCES = \
+	objectstore.c \
+	objectstore.h
+libos_tp_la_LIBADD = -llttng-ust -ldl
+libos_tp_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
+libos_tp_la_LDFLAGS =
+
 noinst_LTLIBRARIES = \
 	libcommon_tp.la \
 	libosd_tp.la \
 	librados_tp.la \
-	librbd_tp.la
+	librbd_tp.la \
+	libos_tp.la
 
 BUILT_SOURCES = \
 	librados.h \
@@ -53,9 +62,11 @@ BUILT_SOURCES = \
 	mutex.h \
 	oprequest.h \
 	osd.h \
-	pg.h
+	pg.h \
+	objectstore.h
 
 CLEANFILES = \
 	$(libcommon_tp_la_SOURCES) \
 	$(libosd_tp_la_SOURCES) \
-	$(librados_tp_la_SOURCES)
+	$(librados_tp_la_SOURCES) \
+	$(libos_tp_la_SOURCES)

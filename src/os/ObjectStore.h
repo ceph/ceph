@@ -354,6 +354,7 @@ public:
     bool use_pool_override;
     bool replica;
     bool tolerate_collection_add_enoent;
+    void *osr; // NULL on replay
 
     list<Context *> on_applied;
     list<Context *> on_commit;
@@ -494,6 +495,14 @@ public:
     /// Number of operations in the transation
     int get_num_ops() {
       return ops;
+    }
+
+    void set_osr(void *s) {
+      osr = s;
+    }
+
+    void *get_osr() {
+      return osr;
     }
 
     /**
@@ -1001,13 +1010,13 @@ public:
       ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
       sobject_encoding(false), pool_override(-1), use_pool_override(false),
       replica(false),
-      tolerate_collection_add_enoent(false) {}
+      tolerate_collection_add_enoent(false), osr(NULL) {}
 
     Transaction(bufferlist::iterator &dp) :
       ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
       sobject_encoding(false), pool_override(-1), use_pool_override(false),
       replica(false),
-      tolerate_collection_add_enoent(false) {
+      tolerate_collection_add_enoent(false), osr(NULL) {
       decode(dp);
     }
 
@@ -1015,7 +1024,7 @@ public:
       ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
       sobject_encoding(false), pool_override(-1), use_pool_override(false),
       replica(false),
-      tolerate_collection_add_enoent(false) {
+      tolerate_collection_add_enoent(false), osr(NULL) {
       bufferlist::iterator dp = nbl.begin();
       decode(dp);
     }
