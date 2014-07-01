@@ -18,21 +18,29 @@
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "include/atomic.h"
-
+#include "common/ceph_context.h"
 
 struct RefCountedObject {
   atomic_t nref;
-  RefCountedObject() : nref(1) {}
+  CephContext *cct;
+  RefCountedObject(CephContext *c = NULL) : nref(1), cct(c) {}
   virtual ~RefCountedObject() {}
   
   RefCountedObject *get() {
-    //generic_dout(0) << "RefCountedObject::get " << this << " " << nref.read() << " -> " << (nref.read() + 1) << dendl;
-    nref.inc();
+    int v = nref.inc();
+    if (cct)
+      lsubdout(cct, refs, 1) << "RefCountedObject::get " << this << " "
+			     << (v - 1) << " -> " << v
+			     << dendl;
     return this;
   }
   void put() {
-    //generic_dout(0) << "RefCountedObject::put " << this << " " << nref.read() << " -> " << (nref.read() - 1) << dendl;
-    if (nref.dec() == 0)
+    int v = nref.dec();
+    if (cct)
+      lsubdout(cct, refs, 1) << "RefCountedObject::put " << this << " "
+			     << (v + 1) << " -> " << v
+			     << dendl;
+    if (v == 0)
       delete this;
   }
 };
