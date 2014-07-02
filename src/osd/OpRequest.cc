@@ -28,10 +28,10 @@ OpRequest::OpRequest(Message *req, OpTracker *tracker) :
   } else if (req->get_type() == MSG_OSD_SUBOP) {
     reqid = static_cast<MOSDSubOp*>(req)->reqid;
   }
-  tracker->_mark_event(this, "header_read", request->get_recv_stamp());
-  tracker->_mark_event(this, "throttled", request->get_throttle_stamp());
-  tracker->_mark_event(this, "all_read", request->get_recv_complete_stamp());
-  tracker->_mark_event(this, "dispatched", request->get_dispatch_stamp());
+  tracker->mark_event(this, "header_read", request->get_recv_stamp());
+  tracker->mark_event(this, "throttled", request->get_throttle_stamp());
+  tracker->mark_event(this, "all_read", request->get_recv_complete_stamp());
+  tracker->mark_event(this, "dispatched", request->get_dispatch_stamp());
 }
 
 void OpRequest::_dump(utime_t now, Formatter *f) const
