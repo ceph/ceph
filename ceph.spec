@@ -1,3 +1,4 @@
+#
 # spec file for package ceph
 #
 # Copyright (c) 2014 SUSE LINUX Products GmbH, Nuernberg, Germany.
@@ -46,17 +47,17 @@ Release:        0%{?dist}
 Summary:        A Scalable Distributed File System
 License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
 Group:          System/Filesystems
-URL:            http://ceph.com/
+Url:            http://ceph.com/
 Source0:        %{name}-%{version}.tar.xz
 Source1:        README.SUSE.v0.2
 Source2:        mkinitrd-root.on.rbd.tar.xz
 Source3:        ceph-tmpfiles.d.conf
 # filter spurious setgid warning - mongoose/civetweb is not trying to relinquish suid
 Source4:        ceph-rpmlintrc
-Requires:       librbd1 = %{version}-%{release}
-Requires:       librados2 = %{version}-%{release}
 Requires:       cryptsetup
 Requires:       libcephfs1 = %{version}-%{release}
+Requires:       librados2 = %{version}-%{release}
+Requires:       librbd1 = %{version}-%{release}
 # python-ceph is used for client tools.
 Requires:       python-ceph = %{version}-%{release}
 # util-linux because we need mount
@@ -131,16 +132,13 @@ Summary:        Ceph fuse-based client
 Group:          System/Filesystems
 Requires:       %{name} = %{version}-%{release}
 BuildRequires:  fuse-devel
+
 %description fuse
 FUSE based client for Ceph distributed network file system
-
-
 
 %if 0%{?rbd_fuse}
 
 %package -n rbd-fuse
-
-
 Summary:        RBD fuse-based client
 Group:          System/Filesystems
 Requires:       %{name} = %{version}-%{release}
@@ -159,6 +157,7 @@ Requires:       %{name} = %{version}-%{release}
 Requires:       librados2 = %{version}
 Requires:       librbd1 = %{version}
 Requires:       libcephfs1 = %{version}
+
 %description devel
 This package contains libraries and headers needed to develop programs
 that use Ceph.
@@ -191,6 +190,7 @@ Group:          System/Filesystems
 License:        GPL-2.0 and LGPL-2.1
 Requires:       %{name} = %{version}
 Requires:       resource-agents
+
 %description resource-agents
 Resource agents for monitoring and managing Ceph daemons
 under Open Cluster Framework (OCF) compliant resource
@@ -201,6 +201,7 @@ managers such as Pacemaker.
 Summary:        RADOS distributed object store client library
 Group:          System/Filesystems
 License:        GPL-2.0 and LGPL-2.1
+
 %description -n librados2
 RADOS is a reliable, autonomic distributed object storage cluster
 developed as part of the Ceph distributed storage system. This is a
@@ -212,6 +213,7 @@ Summary:        RADOS Block Device Client Library
 Group:          System/Filesystems
 License:        GPL-2.0 and LGPL-2.1
 Requires:       librados2 = %{version}-%{release}
+
 %description -n librbd1
 RBD is a block device striped across multiple distributed objects in
 RADOS, a reliable, autonomic distributed object storage cluster
@@ -222,6 +224,7 @@ shared library allowing applications to manage these block devices.
 Summary:        Ceph distributed file system client library
 Group:          System/Filesystems
 License:        GPL-2.0 and LGPL-2.1
+
 %description -n libcephfs1
 Ceph is a distributed network file system designed to provide excellent
 performance, reliability, and scalability. This is a shared library
@@ -230,8 +233,6 @@ POSIX-like interface.
 
 %if 0%{?cephfs_java}
 %package -n libcephfs_jni1
-
-
 Summary:        Java Native Interface library for CephFS Java bindings
 Group:          System/Filesystems
 Requires:       java
@@ -244,13 +245,12 @@ BuildRequires:  java-1.7.0-openjdk-devel
 BuildRequires:  java-devel
 %endif
 %endif
+
 %description -n libcephfs_jni1
 This package contains the Java Native Interface library for CephFS Java
 bindings.
 
 %package -n cephfs-java
-
-
 Summary:        Java libraries for the Ceph File System
 Group:          System/Filesystems
 Requires:       java
@@ -274,8 +274,6 @@ This package contains the Java libraries for the Ceph File System.
 
 %endif
 
-
-
 %package -n python-ceph
 Summary:        Python Libraries for the Ceph Distributed Filesystem
 Group:          System/Filesystems
@@ -286,13 +284,12 @@ Requires:       librbd1 = %{version}-%{release}
 %if 0%{defined suse_version}
 %py_requires
 %endif
+
 %description -n python-ceph
 This package contains Python libraries for interacting with Cephs RADOS
 object storage.
 
 %package -n ceph-test
-
-
 Summary:        Ceph benchmarks and test tools
 Group:          System/Filesystems
 Requires:       libcephfs1 = %{version}-%{release}
@@ -311,13 +308,11 @@ This package contains Ceph benchmarks and test tools.
 
 %build
 
-
 # Find jni.h
 for i in /usr/{lib64,lib}/jvm/java/include{,/linux}; do
     echo $i
     [ -d $i ] && java_inc="$java_inc -I$i"
 done
-
 
 ./autogen.sh
 
@@ -371,7 +366,6 @@ sed -i -e "s/-lcurses/-lncurses/g" man/Makefile
 sed -i -e "s/-lcurses/-lncurses/g" src/ocf/Makefile
 sed -i -e "s/-lcurses/-lncurses/g" src/java/Makefile
 grep "\-lcurses" * -R
-
 %endif
 
 make %{?jobs:-j%{jobs}}
@@ -494,10 +488,8 @@ fi
 %{_sbindir}/ceph-disk-activate
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/ceph-disk-udev
-/sbin/mount.fuse.ceph
-
-
 %{_sbindir}/rcceph
+
 %dir %{_libdir}/rados-classes
 %{_libdir}/rados-classes/libcls_kvs.so*
 %{_libdir}/rados-classes/libcls_lock.so*
@@ -558,13 +550,14 @@ fi
 %files fuse
 %defattr(-,root,root,-)
 %{_bindir}/ceph-fuse
-%{_bindir}/rbd-fuse
 %{_mandir}/man8/ceph-fuse.8*
-%{_mandir}/man8/rbd-fuse.8*
+/sbin/mount.fuse.ceph
+
 %if 0%{?rbd_fuse}
 %files -n rbd-fuse
 %defattr(-,root,root,-)
 %{_bindir}/rbd-fuse
+%{_mandir}/man8/rbd-fuse.8*
 %endif
 
 
@@ -678,7 +671,6 @@ fi
 /sbin/ldconfig
 
 #################################################################################
-
 %files -n cephfs-java
 %defattr(-,root,root,-)
 %if 0%{?suse_version} > 1220 
@@ -701,6 +693,7 @@ fi
 %{_bindir}/rest-bench
 %{_bindir}/ceph_bench_log
 %{_bindir}/ceph_dupstore
+%{_bindir}/ceph_erasure_code_benchmark
 %{_bindir}/ceph_kvstorebench
 %{_bindir}/ceph_multi_stress_watch
 %{_bindir}/ceph_omapbench
@@ -747,6 +740,8 @@ fi
 %{_bindir}/ceph_test_object_map
 %{_bindir}/ceph_test_objectcacher_stress
 %{_bindir}/ceph_test_rados_api_aio
+%{_bindir}/ceph_test_rados_api_c_read_operations
+%{_bindir}/ceph_test_rados_api_c_write_operations
 %{_bindir}/ceph_test_rados_api_cls
 %{_bindir}/ceph_test_rados_api_io
 %{_bindir}/ceph_test_rados_api_list
@@ -754,32 +749,30 @@ fi
 %{_bindir}/ceph_test_rados_api_pool
 %{_bindir}/ceph_test_rados_api_snapshots
 %{_bindir}/ceph_test_rados_api_stat
+%{_bindir}/ceph_test_rados_api_tier
 %{_bindir}/ceph_test_rados_api_watch_notify
 %{_bindir}/ceph_test_rewrite_latency
 %{_bindir}/ceph_test_stress_watch
 %{_bindir}/ceph_test_trans
+%{_bindir}/ceph_test_c_headers
 %{_bindir}/ceph_test_cors
 %{_bindir}/ceph_test_crypto
+%{_bindir}/ceph_test_get_blkdev_size
 %{_bindir}/ceph_test_keys
+%{_bindir}/ceph_test_objectstore
+%{_bindir}/ceph_test_objectstore_workloadgen
 %{_bindir}/ceph_test_rados_delete_pools_parallel
 %{_bindir}/ceph_test_rados_list_parallel
 %{_bindir}/ceph_test_rados_open_pools_parallel
 %{_bindir}/ceph_test_rados_watch_notify
+%{_bindir}/ceph_test_rgw_manifest
 %{_bindir}/ceph_test_signal_handlers
 %{_bindir}/ceph_test_timers
 %{_bindir}/ceph_tpbench
 %{_bindir}/ceph_xattr_bench
 %{_bindir}/ceph-kvstore-tool
-%{_bindir}/ceph_test_c_headers
-%{_bindir}/ceph_test_get_blkdev_size
-%{_bindir}/ceph_test_objectstore
-%{_bindir}/ceph_test_rados_api_c_read_operations
-%{_bindir}/ceph_test_rados_api_c_write_operations
-%{_bindir}/ceph_test_rados_api_tier
-%{_bindir}/ceph_test_rgw_manifest
-%{_bindir}/ceph_test_objectstore_workloadgen
 %{_bindir}/ceph-debugpack
 %{_bindir}/ceph-client-debug
-%{_bindir}/ceph_erasure_code_benchmark
 %{_mandir}/man8/ceph-debugpack.8*
+
 %changelog

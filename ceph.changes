@@ -1094,6 +1094,7 @@ Fri Jun  1 12:39:32 UTC 2012 - dkukawka@suse.de
 - updated patches:
   * rcfiles-remove-init-2.patch
   * ceph-init-create-dirs-only-on-startup.diff
+
 -------------------------------------------------------------------
 Tue May  8 14:11:10 UTC 2012 - dkukawka@suse.de
 
@@ -1108,6 +1109,7 @@ Tue May  8 13:14:41 UTC 2012 - dkukawka@suse.de
 - add new patch:
   - ceph-common_sh.dont.exit.on.ssh-error.diff: don't exit on 
     errors from ssh calls, simply continue. Fix for bnc#752662
+
 -------------------------------------------------------------------
 Fri May  4 16:13:53 UTC 2012 - dkukawka@suse.de
 
