@@ -84,7 +84,7 @@ int main(int argc, const char **argv)
       gen_print_key = true;
     } else if (ceph_argparse_witharg(args, i, &val, "-a", "--add-key", (char*)NULL)) {
       add_key = val;
-    } else if (ceph_argparse_flag(args, i, &val, "-l", "--list", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "-l", "--list", (char*)NULL)) {
       list = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
       caps_fn = val;
