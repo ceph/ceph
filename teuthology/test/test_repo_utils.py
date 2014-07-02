@@ -5,6 +5,7 @@ import shutil
 import subprocess
 
 from .. import repo_utils
+from .. import parallel
 repo_utils.log.setLevel(logging.WARNING)
 
 
@@ -108,3 +109,13 @@ class TestRepoUtils(object):
     def test_enforce_invalid_branch(self):
         with raises(ValueError):
             repo_utils.enforce_repo_state(self.repo_url, self.dest_path, 'a b')
+
+    def test_simultaneous_access(self):
+        count = 5
+        with parallel.parallel() as p:
+            for i in range(count):
+                print "starting %s" % i
+                p.spawn(repo_utils.enforce_repo_state, self.repo_url,
+                        self.dest_path, 'master')
+            for result in p:
+                print "result %s %s" % (i, result)
