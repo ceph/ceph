@@ -426,11 +426,12 @@ systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
 %if %{defined suse_version}
 %stop_on_removal ceph
 %endif
+%if 0%{?suse_version} < 1310
 if [ $1 = 0 ] ; then
     /sbin/service ceph stop >/dev/null 2>&1
 #    /sbin/chkconfig --del ceph
 fi
-
+%endif
 %postun
 /sbin/ldconfig
 if [ "$1" -ge "1" ] ; then
@@ -550,10 +551,11 @@ fi
 %files fuse
 %defattr(-,root,root,-)
 %{_bindir}/ceph-fuse
-%{_bindir}/rbd-fuse
-%{_mandir}/man8/rbd-fuse.8*
 %{_mandir}/man8/ceph-fuse.8*
 /sbin/mount.fuse.ceph
+%{_bindir}/rbd-fuse
+%{_mandir}/man8/rbd-fuse.8*
+
 %if 0%{?rbd_fuse}
 %files -n rbd-fuse
 %defattr(-,root,root,-)
