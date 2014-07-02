@@ -550,15 +550,16 @@ fi
 %files fuse
 %defattr(-,root,root,-)
 %{_bindir}/ceph-fuse
+%{_bindir}/rbd-fuse
+%{_mandir}/man8/rbd-fuse.8*
 %{_mandir}/man8/ceph-fuse.8*
 /sbin/mount.fuse.ceph
-
 %if 0%{?rbd_fuse}
 %files -n rbd-fuse
 %defattr(-,root,root,-)
-%{_bindir}/rbd-fuse
-%{_mandir}/man8/rbd-fuse.8*
 %endif
+
+
 
 
 #################################################################################
