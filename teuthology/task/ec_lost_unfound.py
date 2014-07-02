@@ -33,11 +33,14 @@ def task(ctx, config):
     manager.raw_cluster_cmd('tell', 'osd.3', 'flush_pg_stats')
     manager.wait_for_clean()
 
-
-    pool = manager.create_pool_with_unique_name(
-        ec_pool=True,
-        ec_m=2,
-        ec_k=2)
+    profile = config.get('erasure_code_profile', {
+        'k': '2',
+        'm': '2',
+        'ruleset-failure-domain': 'osd'
+    })
+    profile_name = profile.get('name', 'lost_unfound')
+    manager.create_erasure_code_profile(profile_name, profile)
+    pool = manager.create_pool_with_unique_name(erasure_code_profile_name=profile_name)
 
     # something that is always there
     dummyfile = '/etc/fstab'
