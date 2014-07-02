@@ -776,6 +776,11 @@ void PGMap::get_stuck_stats(PGMap::StuckPG type, utime_t cutoff,
 	continue;
       val = i->second.last_undegraded;
       break;
+    case STUCK_UNDERSIZED:
+      if ((i->second.state & PG_STATE_UNDERSIZED) == 0)
+	continue;
+      val = i->second.last_fullsized;
+      break;
     case STUCK_STALE:
       if ((i->second.state & PG_STATE_STALE) == 0)
 	continue;
