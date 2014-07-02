@@ -749,7 +749,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_SPLITTING    (1<<7)  // i am splitting
 #define PG_STATE_SCRUBBING    (1<<8)  // scrubbing
 #define PG_STATE_SCRUBQ       (1<<9)  // queued for scrub
-#define PG_STATE_DEGRADED     (1<<10) // pg membership not complete
+#define PG_STATE_DEGRADED     (1<<10) // pg contains objects with reduced redundancy
 #define PG_STATE_INCONSISTENT (1<<11) // pg replicas are inconsistent (but shouldn't be)
 #define PG_STATE_PEERING      (1<<12) // pg is (re)peering
 #define PG_STATE_REPAIR       (1<<13) // pg should repair on next scrub
@@ -762,6 +762,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_BACKFILL  (1<<20) // [active] backfilling pg content
 #define PG_STATE_BACKFILL_TOOFULL (1<<21) // backfill can't proceed: too full
 #define PG_STATE_RECOVERY_WAIT (1<<22) // waiting for recovery reservations
+#define PG_STATE_UNDERSIZED    (1<<23) // pg acting < pool size
 
 std::string pg_state_string(int state);
 
