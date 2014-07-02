@@ -831,35 +831,6 @@ def wait_until_osds_up(ctx, cluster, remote):
         time.sleep(1)
 
 
-def wait_until_fuse_mounted(remote, fuse, mountpoint):
-    """
-    Check to make sure that fuse is mounted on mountpoint.  If not,
-    sleep for 5 seconds and check again.
-    """
-    while True:
-        proc = remote.run(
-            args=[
-                'stat',
-                '--file-system',
-                '--printf=%T\n',
-                '--',
-                mountpoint,
-                ],
-            stdout=StringIO(),
-            )
-        fstype = proc.stdout.getvalue().rstrip('\n')
-        if fstype == 'fuseblk':
-            break
-        log.debug('ceph-fuse not yet mounted, got fs type {fstype!r}'.format(
-            fstype=fstype))
-
-        # it shouldn't have exited yet; exposes some trivial problems
-        assert not fuse.poll()
-
-        time.sleep(5)
-    log.info('ceph-fuse is mounted on %s', mountpoint)
-
-
 def reboot(node, timeout=300, interval=30):
     """
     Reboots a given system, then waits for it to come back up and
