@@ -1,0 +1,11 @@
+tasks:
+- rados:
+    clients: [client.0]
+    ops: 4000
+    objects: 500
+    ec_pool: true
+    op_weights:
+      read: 45
+      write: 0
+      append: 45
+      delete: 10
