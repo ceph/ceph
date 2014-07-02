@@ -730,6 +730,7 @@ class CephManager:
         Create a pool named from the pool_name parameter.
         :param pool_name: name of the pool being created.
         :param pg_num: initial number of pgs.
+        :param erasure_code_profile_name: if set and !None create an erasure coded pool using the profile 
         """
         with self.lock:
             assert isinstance(pool_name, str)
