@@ -2,7 +2,6 @@
 from StringIO import StringIO
 import json
 import logging
-import os
 
 from teuthology import misc
 from teuthology.task import ceph_manager
@@ -41,8 +40,6 @@ class Filesystem(object):
         self.client_id = client_list[0]
         self.client_remote = list(misc.get_clients(ctx=ctx, roles=["client.{0}".format(self.client_id)]))[0][1]
 
-        self.test_files = ['a', 'b', 'c']
-
     def mds_stop(self):
         mds = self._ctx.daemons.get_daemon('mds', self.mds_id)
         mds.stop()
@@ -59,29 +56,6 @@ class Filesystem(object):
         self.mds_manager.raw_cluster_cmd_result('mds', 'fail', self.mds_id)
         self.mds_manager.raw_cluster_cmd_result('fs', 'rm', "default", "--yes-i-really-mean-it")
         self.mds_manager.raw_cluster_cmd_result('fs', 'new', "default", "metadata", "data")
-
-    @property
-    def _mount_path(self):
-        return os.path.join(misc.get_testdir(self._ctx), 'mnt.{0}'.format(self.client_id))
-
-    def create_files(self):
-        for suffix in self.test_files:
-            log.info("Creating file {0}".format(suffix))
-            self.client_remote.run(args=[
-                'sudo', 'touch', os.path.join(self._mount_path, suffix)
-            ])
-
-    def check_files(self):
-        """
-        This will raise a CommandFailedException if expected files are not present
-        """
-        for suffix in self.test_files:
-            log.info("Checking file {0}".format(suffix))
-            r = self.client_remote.run(args=[
-                'sudo', 'ls', os.path.join(self._mount_path, suffix)
-            ], check_status=False)
-            if r.exitstatus != 0:
-                raise RuntimeError("Expected file {0} not found".format(suffix))
 
     def get_metadata_object(self, object_type, object_id):
         """

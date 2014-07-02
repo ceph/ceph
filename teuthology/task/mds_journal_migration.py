@@ -1,6 +1,7 @@
 
 import contextlib
 import logging
+from teuthology import misc
 
 from teuthology.task.ceph import write_conf
 from teuthology.task.ceph_fuse import task as ceph_fuse_ctx
@@ -21,6 +22,13 @@ def task(ctx, config):
     successful completion the filesystem will be running with a journal
     in the new format.
     """
+    # Pick one client to use
+    client_list = list(misc.all_roles_of_type(ctx.cluster, 'client'))
+    try:
+        client_id = client_list[0]
+    except IndexError:
+        raise RuntimeError("This task requires at least one client")
+
     fs = Filesystem(ctx, config)
     old_journal_version = JOURNAL_FORMAT_LEGACY
     new_journal_version = JOURNAL_FORMAT_RESILIENT
@@ -41,9 +49,10 @@ def task(ctx, config):
     fs.mds_restart()
 
     # Do some client work so that the log is populated with something.
-    with ceph_fuse_ctx(ctx, None):
-        fs.create_files()
-        fs.check_files()  # sanity, this should always pass
+    with ceph_fuse_ctx(ctx, None) as client_mounts:
+        mount = client_mounts[client_id]
+        mount.create_files()
+        mount.check_files()  # sanity, this should always pass
 
     # Modify the ceph.conf to ask the MDS to use the new journal format.
     ctx.ceph.conf['mds']['mds journal format'] = new_journal_version
@@ -54,8 +63,9 @@ def task(ctx, config):
 
     # Check that files created in the initial client workload are still visible
     # in a client mount.
-    with ceph_fuse_ctx(ctx, None):
-        fs.check_files()
+    with ceph_fuse_ctx(ctx, None) as client_mounts:
+        mount = client_mounts[client_id]
+        mount.check_files()
 
     # Verify that the journal really has been rewritten.
     journal_version = fs.get_journal_version()

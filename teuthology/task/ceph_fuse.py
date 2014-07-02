@@ -77,28 +77,29 @@ def task(ctx, config):
 
     clients = list(teuthology.get_clients(ctx=ctx, roles=config.keys()))
 
-    fuse_mounts = []
+    fuse_mounts = {}
     for id_, remote in clients:
         client_config = config.get("client.%s" % id_)
         if client_config is None:
             client_config = {}
 
         fuse_mount = FuseMount(client_config, testdir, id_, remote)
-        fuse_mounts.append(fuse_mount)
+        fuse_mounts[id_] = fuse_mount
 
         fuse_mount.mount()
 
-    for mount in fuse_mounts:
+    for mount in fuse_mounts.values():
         mount.wait_until_mounted()
 
+    ctx.mounts = fuse_mounts
     try:
-        yield
+        yield fuse_mounts
     finally:
         log.info('Unmounting ceph-fuse clients...')
-        for mount in fuse_mounts:
+        for mount in fuse_mounts.values():
             mount.umount()
 
         run.wait([m.fuse_daemon for m in fuse_mounts.values()], timeout=600)
 
-        for mount in fuse_mounts:
+        for mount in fuse_mounts.values():
             mount.cleanup()

@@ -6,27 +6,17 @@ import logging
 
 from teuthology import misc
 from ...orchestra import run
+from teuthology.task.cephfs.mount import CephFSMount
 
 log = logging.getLogger(__name__)
 
 
-class FuseMount(object):
+class FuseMount(CephFSMount):
     def __init__(self, client_config, test_dir, client_id, client_remote):
-        """
-        :param client_config: Configuration dictionary for this particular client
-        :param test_dir: Global teuthology test dir
-        :param client_id: Client ID, the 'foo' in client.foo
-        :param client_remote: Remote instance for the host where client will run
-        """
+        super(FuseMount, self).__init__(test_dir, client_id, client_remote)
 
         self.client_config = client_config
-        self.test_dir = test_dir
-        self.client_id = client_id
-        self.client_remote = client_remote
         self.fuse_daemon = None
-
-        self.mountpoint = os.path.join(self.test_dir, 'mnt.{id}'.format(id=self.client_id))
-
 
     def mount(self):
         log.info("Client client.%s config is %s" % (self.client_id, self.client_config))
