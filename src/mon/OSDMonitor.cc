@@ -5235,7 +5235,10 @@ done:
       goto reply;
     }
     if (tp->tier_of != pool_id) {
-      ss << "tier pool '" << tierpoolstr << "' is a tier of '" << tp->tier_of << "'";
+      ss << "tier pool '" << tierpoolstr << "' is a tier of '"
+         << osdmap.get_pool_name(tp->tier_of) << "': "
+         // be scary about it; this is an inconsistency and bells must go off
+         << "THIS SHOULD NOT HAVE HAPPENED AT ALL";
       err = -EINVAL;
       goto reply;
     }
