@@ -168,6 +168,7 @@ License:        GPL-2.0 and LGPL-2.1
 Summary:        Rados REST Gateway
 Group:          System/Filesystems
 Requires:       librados2 = %{version}-%{release}
+Requires:       logrotate
 %if 0%{defined suse_version}
 BuildRequires:  FastCGI-devel
 BuildRequires:  libexpat-devel
@@ -176,7 +177,6 @@ Requires:       apache2-mod_fcgid
 BuildRequires:  expat-devel
 BuildRequires:  fcgi-devel
 Requires:       mod_fcgid
-Requires:       logrotate
 
 %endif
 %description radosgw
@@ -390,9 +390,9 @@ find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
 install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
 install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
-mkdir -p $RPM_BUILD_ROOT/usr/sbin
-ln -sf ../../etc/init.d/ceph %{buildroot}/usr/sbin/rcceph
-ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/usr/sbin/rcceph-radosgw
+mkdir -p $RPM_BUILD_ROOT/%{_sbindir}
+ln -sf ../../etc/init.d/ceph %{buildroot}/%{_sbindir}/rcceph
+ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/%{_sbindir}/rcceph-radosgw
 install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
 install -m 0644 -D src/rgw/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph-radosgw
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
@@ -482,13 +482,11 @@ fi
 %{_bindir}/ceph-dencoder
 %{_bindir}/ceph-brag
 %{_bindir}/ceph-crush-location
-%{_bindir}/rbd-fuse
 %{_bindir}/ceph-monstore-tool
 %{_bindir}/ceph-osdomap-tool
 %{_bindir}/ceph_mon_store_converter
 %{_bindir}/ceph_erasure_code
 %{_initrddir}/ceph
-%dir %{_libdir}/rados-classes
 /sbin/mkcephfs
 /sbin/mount.ceph
 %{_sbindir}/ceph-disk
@@ -560,13 +558,13 @@ fi
 %files fuse
 %defattr(-,root,root,-)
 %{_bindir}/ceph-fuse
+%{_bindir}/rbd-fuse
 %{_mandir}/man8/ceph-fuse.8*
-
+%{_mandir}/man8/rbd-fuse.8*
 %if 0%{?rbd_fuse}
 %files -n rbd-fuse
 %defattr(-,root,root,-)
 %{_bindir}/rbd-fuse
-%{_mandir}/man8/rbd-fuse.8*
 %endif
 
 

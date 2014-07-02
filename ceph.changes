@@ -1,5 +1,5 @@
 -------------------------------------------------------------------
-Wed Jul  2 11:34:46 UTC 2014 - osynge@suse.com
+Wed Jul  2 12:34:46 UTC 2014 - osynge@suse.com
 
 - Readded runtime dependency on logrotate
   * as we provide config file for logrotate for ceph, ceph-radosgw
