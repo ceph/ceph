@@ -2470,6 +2470,19 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     string var;
     cmd_getval(g_ceph_context, cmdmap, "var", var);
 
+    if (!p->is_tier() &&
+        (var == "hit_set_type" || var == "hit_set_period" ||
+         var == "hit_set_count" || var == "hit_set_fpp" ||
+         var == "target_max_objects" || var == "target_max_bytes" ||
+         var == "cache_target_full_ratio" ||
+         var == "cache_target_dirty_ratio" ||
+         var == "cache_min_flush_age" || var == "cache_min_evict_age")) {
+      ss << "pool '" << poolstr
+         << "' is not a tier pool: variable not applicable";
+      r = -EACCES;
+      goto reply;
+    }
+
     if (f) {
       f->open_object_section("pool");
       f->dump_string("pool", poolstr);
@@ -3468,6 +3481,16 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     f = strict_strtod(val.c_str(), &floaterr);
   }
 
+  if (!p.is_tier() &&
+      (var == "hit_set_type" || var == "hit_set_period" ||
+       var == "hit_set_count" || var == "hit_set_fpp" ||
+       var == "target_max_objects" || var == "target_max_bytes" ||
+       var == "cache_target_full_ratio" || var == "cache_target_dirty_ratio" ||
+       var == "cache_min_flush_age" || var == "cache_min_evict_age")) {
+    ss << "pool '" << poolstr << "' is not a tier pool: variable not applicable";
+    return -EACCES;
+  }
+
   if (var == "size") {
     if (p.type == pg_pool_t::TYPE_ERASURE) {
       ss << "can not change the size of an erasure-coded pool";
@@ -3608,6 +3631,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     p.hit_set_period = n;
   } else if (var == "hit_set_count") {
+
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
