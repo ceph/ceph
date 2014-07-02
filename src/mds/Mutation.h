@@ -297,11 +297,11 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
     waited_for_osdmap(false), _more(NULL) {
     in[0] = in[1] = NULL;
     if (!params.throttled.is_zero())
-      tracker->_mark_event(this, "throttled", params.throttled);
+      tracker->mark_event(this, "throttled", params.throttled);
     if (!params.all_read.is_zero())
-      tracker->_mark_event(this, "all_read", params.all_read);
+      tracker->mark_event(this, "all_read", params.all_read);
     if (!params.dispatched.is_zero())
-      tracker->_mark_event(this, "dispatched", params.dispatched);
+      tracker->mark_event(this, "dispatched", params.dispatched);
   }
   ~MDRequestImpl();
   
