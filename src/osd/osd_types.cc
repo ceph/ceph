@@ -669,6 +669,8 @@ std::string pg_state_string(int state)
     oss << "replay+";
   if (state & PG_STATE_SPLITTING)
     oss << "splitting+";
+  if (state & PG_STATE_UNDERSIZED)
+    oss << "undersized+";
   if (state & PG_STATE_DEGRADED)
     oss << "degraded+";
   if (state & PG_STATE_REMAPPED)
