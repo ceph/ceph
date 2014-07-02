@@ -78,7 +78,7 @@ case "$1" in
             fi
 
             echo "Starting $name..."
-	     /sbin/startproc -u $user $RADOSGW
+	     /sbin/startproc -u $user $RADOSGW -n $name
         done
         daemon_is_running $RADOSGW
         ;;
