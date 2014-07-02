@@ -1,4 +1,14 @@
 -------------------------------------------------------------------
+Wed Jul  2 17:09:10 UTC 2014 - tbehrens@suse.com
+
+- Switch git branch to distro/suse11-0-80-1 for storage 0.5
+- Update tarball to latest git
+- Fix bnc#885304: Fixup radosgw daemon init.    
+  * This is a fixup for 2cd29db16497917e2e5737b7f1b52dbb77b038c2
+    (the late radosgw-init-opensuse.patch), radosgw needs the config
+    section name.
+
+-------------------------------------------------------------------
 Wed Jul  2 12:34:46 UTC 2014 - osynge@suse.com
 
 - Readded runtime dependency on logrotate
