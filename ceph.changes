@@ -1,4 +1,5 @@
 Tue Jul  1 17:27:09 UTC 2014 - osynge@suse.com
+
 - Moved debug tools to debug package.
   * Reorganized spec file Requires, BuildRequires, and files to 
     minimize the differences with Devel:Cloud:4
@@ -9,11 +10,13 @@ Tue Jul  1 17:27:09 UTC 2014 - osynge@suse.com
 
 -------------------------------------------------------------------
 Wed Jun 25 18:16:51 UTC 2014 - osynge@suse.com
+
 - disable static builds at configure stage.
   * Add the '--disable-static' to configure options.
 
 -------------------------------------------------------------------
 Fri Jun 20 16:45:23 UTC 2014 - osynge@suse.com
+
 - Fixing untracked changes that came from merging many ceph builds.
   * Re added %preun and %postun functions.
   * Re added udev rules.
@@ -34,6 +37,7 @@ Wed Jun 11 17:05:02 CEST 2014 - osynge@suse.com
 
 -------------------------------------------------------------------
 Thu Jun  5 15:15:48 CEST 2014 - osynge@suse.com
+
 - ceph-mon core-dumps on SLES 11 SP3 if linked to tcmalloc.
   * Prevent tcmalloc use on less than SLE 12
     https://bugzilla.novell.com/show_bug.cgi?id=880676
