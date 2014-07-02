@@ -7,6 +7,7 @@ import requests
 import subprocess
 import sys
 import time
+import uuid
 import xml.etree.ElementTree
 
 BASEURL = os.environ.get('BASEURL', 'http://localhost:5000/api/v0.1')
@@ -293,7 +294,8 @@ if __name__ == '__main__':
     r = expect('osd/getmaxosd', 'GET', 200, 'json', JSONHDR)
     assert(r.myjson['output']['max_osd'] == saved_maxosd)
 
-    r = expect('osd/create', 'PUT', 200, 'json', JSONHDR)
+    osd_uuid=uuid.uuid1()
+    r = expect('osd/create?uuid={0}'.format(osd_uuid), 'PUT', 200, 'json', JSONHDR)
     assert('osdid' in r.myjson['output'])
     osdid = r.myjson['output']['osdid']
     expect('osd/lost?id={0}'.format(osdid), 'PUT', 400, '')
