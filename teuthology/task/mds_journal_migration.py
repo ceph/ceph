@@ -21,13 +21,30 @@ def task(ctx, config):
     of the CephFS journal from an older format to the latest format.  On
     successful completion the filesystem will be running with a journal
     in the new format.
+
+    Optionally specify which client to use like this:
+
+    - mds-journal_migration:
+        client: client.0
+
     """
-    # Pick one client to use
-    client_list = list(misc.all_roles_of_type(ctx.cluster, 'client'))
-    try:
-        client_id = client_list[0]
-    except IndexError:
-        raise RuntimeError("This task requires at least one client")
+    if config and 'client' in config:
+        # Use client specified in config
+        client_role = config['client']
+        client_list = list(misc.get_clients(ctx, [client_role]))
+        try:
+            client_id = client_list[0][0]
+        except IndexError:
+            raise RuntimeError("Client role '{0}' not found".format(client_role))
+    else:
+        # Pick one arbitrary client to use
+        client_list = list(misc.all_roles_of_type(ctx.cluster, 'client'))
+        try:
+            client_id = client_list[0]
+        except IndexError:
+            raise RuntimeError("This task requires at least one client")
+        else:
+            client_role = "client.{0}".format(client_id)
 
     fs = Filesystem(ctx, config)
     old_journal_version = JOURNAL_FORMAT_LEGACY
@@ -49,7 +66,7 @@ def task(ctx, config):
     fs.mds_restart()
 
     # Do some client work so that the log is populated with something.
-    with ceph_fuse_ctx(ctx, None) as client_mounts:
+    with ceph_fuse_ctx(ctx, [client_role]) as client_mounts:
         mount = client_mounts[client_id]
         mount.create_files()
         mount.check_files()  # sanity, this should always pass
@@ -63,7 +80,7 @@ def task(ctx, config):
 
     # Check that files created in the initial client workload are still visible
     # in a client mount.
-    with ceph_fuse_ctx(ctx, None) as client_mounts:
+    with ceph_fuse_ctx(ctx, [client_role]) as client_mounts:
         mount = client_mounts[client_id]
         mount.check_files()
 
