@@ -1,4 +1,5 @@
 import logging
+import os
 import os.path
 from pytest import raises
 import shutil
@@ -11,8 +12,17 @@ repo_utils.log.setLevel(logging.WARNING)
 
 class TestRepoUtils(object):
     src_path = '/tmp/empty_src'
-    repo_url = 'file://' + src_path
+    online_repo_url = 'https://github.com/ceph/empty.git'
+    offline_repo_url = 'file://' + src_path
+    repo_url = None
     dest_path = '/tmp/empty_dest'
+
+    @classmethod
+    def setup_class(cls):
+        if 'TEST_ONLINE' in os.environ:
+            cls.repo_url = cls.online_repo_url
+        else:
+            cls.repo_url = cls.offline_repo_url
 
     def setup_method(self, method):
         assert not os.path.exists(self.dest_path)
@@ -114,8 +124,7 @@ class TestRepoUtils(object):
         count = 5
         with parallel.parallel() as p:
             for i in range(count):
-                print "starting %s" % i
                 p.spawn(repo_utils.enforce_repo_state, self.repo_url,
                         self.dest_path, 'master')
             for result in p:
-                print "result %s %s" % (i, result)
+                assert result is None
