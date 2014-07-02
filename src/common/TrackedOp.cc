@@ -253,6 +253,9 @@ void OpTracker::RemoveOnDelete::operator()(TrackedOp *op) {
 
 void TrackedOp::mark_event(const string &event)
 {
+  if (!tracker->tracking_enabled)
+    return;
+
   utime_t now = ceph_clock_now(g_ceph_context);
   {
     Mutex::Locker l(lock);
