@@ -918,11 +918,27 @@ public:
 
   bool is_tier() const { return tier_of >= 0; }
   bool has_tiers() const { return !tiers.empty(); }
-  void clear_tier() { tier_of = -1; }
+  void clear_tier() {
+    tier_of = -1;
+    clear_read_tier();
+    clear_write_tier();
+    clear_tier_tunables();
+  }
   bool has_read_tier() const { return read_tier >= 0; }
   void clear_read_tier() { read_tier = -1; }
   bool has_write_tier() const { return write_tier >= 0; }
   void clear_write_tier() { write_tier = -1; }
+  void clear_tier_tunables() {
+    cache_mode = CACHEMODE_NONE;
+
+    target_max_bytes = 0;
+    target_max_objects = 0;
+    cache_target_dirty_ratio_micro = 0;
+    cache_target_full_ratio_micro = 0;
+    hit_set_params = HitSet::Params();
+    hit_set_period = 0;
+    hit_set_count = 0;
+  }
 
   uint64_t target_max_bytes;   ///< tiering: target max pool size
   uint64_t target_max_objects; ///< tiering: target max pool size
