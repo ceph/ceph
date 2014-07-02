@@ -1,3 +1,19 @@
+-------------------------------------------------------------------
+Wed Jul  2 11:34:46 UTC 2014 - osynge@suse.com
+
+- Readded runtime dependency on logrotate
+  * as we provide config file for logrotate for ceph, ceph-radosgw
+- Readded runtime dependency on cryptsetup
+  * used in udev rules for ceph.
+- Readded runtime dependency on util-linux
+  * we need the mount command for ceph.
+- Readded cephfs-java package.
+  * But not by default.
+- Moved ceph_erasure_code_benchmark to test rpm.
+- Moved rbd-fuse to fuse rpm.
+- Removed duplicate rbd-fuse.8 man page.
+
+-------------------------------------------------------------------
 Tue Jul  1 17:27:09 UTC 2014 - osynge@suse.com
 
 - Moved debug tools to debug package.

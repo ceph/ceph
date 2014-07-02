@@ -53,12 +53,14 @@ Source2:        mkinitrd-root.on.rbd.tar.xz
 Source3:        ceph-tmpfiles.d.conf
 # filter spurious setgid warning - mongoose/civetweb is not trying to relinquish suid
 Source4:        ceph-rpmlintrc
-
 Requires:       librbd1 = %{version}-%{release}
 Requires:       librados2 = %{version}-%{release}
+Requires:       cryptsetup
 Requires:       libcephfs1 = %{version}-%{release}
 # python-ceph is used for client tools.
-Requires:	python-ceph = %{version}-%{release}
+Requires:       python-ceph = %{version}-%{release}
+# util-linux because we need mount
+Requires:       util-linux
 Requires(post): binutils
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 %if ! 0%{?rhel}
@@ -115,7 +117,6 @@ BuildRequires:  gperftools-devel%{?_isa}
 %endif
 %endif
 %endif
-Recommends:     logrotate
 
 %description
 Ceph is a distributed network file system designed to provide excellent
@@ -175,7 +176,7 @@ Requires:       apache2-mod_fcgid
 BuildRequires:  expat-devel
 BuildRequires:  fcgi-devel
 Requires:       mod_fcgid
-Recommends:     logrotate
+Requires:       logrotate
 
 %endif
 %description radosgw
@@ -227,9 +228,7 @@ performance, reliability, and scalability. This is a shared library
 allowing applications to access a Ceph distributed file system via a
 POSIX-like interface.
 
-
 %if 0%{?cephfs_java}
-
 %package -n libcephfs_jni1
 
 
@@ -245,6 +244,34 @@ BuildRequires:  java-1.7.0-openjdk-devel
 BuildRequires:  java-devel
 %endif
 %endif
+%description -n libcephfs_jni1
+This package contains the Java Native Interface library for CephFS Java
+bindings.
+
+%package -n cephfs-java
+
+
+Summary:        Java libraries for the Ceph File System
+Group:          System/Filesystems
+Requires:       java
+%if 0%{?suse_version} > 1220
+Requires:       junit4
+BuildRequires:  junit4
+%endif
+Requires:       libcephfs_jni1 = %{version}-%{release}
+%if 0%{?rhel_version} || 0%{?centos_version}
+BuildRequires:  java-1.6.0-openjdk-devel
+%else
+%if 0%{?fedora}
+BuildRequires:  java-1.7.0-openjdk-devel
+%else
+BuildRequires:  java-devel
+%endif
+%endif
+
+%description -n cephfs-java
+This package contains the Java libraries for the Ceph File System.
+
 %endif
 
 
@@ -283,6 +310,15 @@ This package contains Ceph benchmarks and test tools.
 %setup -q
 
 %build
+
+
+# Find jni.h
+for i in /usr/{lib64,lib}/jvm/java/include{,/linux}; do
+    echo $i
+    [ -d $i ] && java_inc="$java_inc -I$i"
+done
+
+
 ./autogen.sh
 
 export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
@@ -332,6 +368,10 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 sed -i -e "s/-lcurses/-lncurses/g" Makefile
 sed -i -e "s/-lcurses/-lncurses/g" src/Makefile
 sed -i -e "s/-lcurses/-lncurses/g" man/Makefile
+sed -i -e "s/-lcurses/-lncurses/g" src/ocf/Makefile
+sed -i -e "s/-lcurses/-lncurses/g" src/java/Makefile
+grep "\-lcurses" * -R
+
 %endif
 
 make %{?jobs:-j%{jobs}}
@@ -447,7 +487,6 @@ fi
 %{_bindir}/ceph-osdomap-tool
 %{_bindir}/ceph_mon_store_converter
 %{_bindir}/ceph_erasure_code
-%{_bindir}/ceph_erasure_code_benchmark
 %{_initrddir}/ceph
 %dir %{_libdir}/rados-classes
 /sbin/mkcephfs
@@ -499,7 +538,6 @@ fi
 %{_mandir}/man8/mount.ceph.8*
 %{_mandir}/man8/rados.8*
 %{_mandir}/man8/rbd.8*
-%{_mandir}/man8/rbd-fuse.8*
 %{_mandir}/man8/ceph-authtool.8*
 %{_mandir}/man8/ceph-clsinfo.8.gz
 %{_mandir}/man8/librados-config.8.gz
@@ -618,6 +656,7 @@ fi
 /sbin/ldconfig
 
 #################################################################################
+
 %files -n libcephfs1
 %defattr(-,root,root,-)
 %{_libdir}/libcephfs.so.*
@@ -627,6 +666,28 @@ fi
 
 %postun -n libcephfs1
 /sbin/ldconfig
+
+#################################################################################
+%if 0%{?cephfs_java}
+%files -n libcephfs_jni1
+%defattr(-,root,root,-)
+%{_libdir}/libcephfs_jni.so.*
+
+%post -n libcephfs_jni1
+/sbin/ldconfig
+
+%postun -n libcephfs_jni1
+/sbin/ldconfig
+
+#################################################################################
+
+%files -n cephfs-java
+%defattr(-,root,root,-)
+%if 0%{?suse_version} > 1220 
+%{_javadir}/libcephfs-test.jar
+%endif
+%{_javadir}/libcephfs.jar
+%endif
 
 #################################################################################
 %files -n python-ceph
@@ -721,5 +782,6 @@ fi
 %{_bindir}/ceph_test_objectstore_workloadgen
 %{_bindir}/ceph-debugpack
 %{_bindir}/ceph-client-debug
+%{_bindir}/ceph_erasure_code_benchmark
 %{_mandir}/man8/ceph-debugpack.8*
 %changelog
