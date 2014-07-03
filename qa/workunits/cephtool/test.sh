@@ -710,6 +710,11 @@ function test_mon_osd_pool_set()
 
   ceph osd pool delete $TEST_POOL_GETSET $TEST_POOL_GETSET --yes-i-really-really-mean-it
 
+  ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 0'
+}
+
+function test_mon_osd_tiered_pool_set()
+{
   ceph osd pool set rbd hit_set_type explicit_hash
   ceph osd pool get rbd hit_set_type | grep "hit_set_type: explicit_hash"
   ceph osd pool set rbd hit_set_type explicit_object
@@ -749,8 +754,6 @@ function test_mon_osd_pool_set()
   ceph osd pool get rbd cache_min_evict_age | \
     grep 'cache_min_evict_age:[ \t]\+234'
 
-
-  ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 0'
 }
 
 function test_mon_osd_erasure_code()
