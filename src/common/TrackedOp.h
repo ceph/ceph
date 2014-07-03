@@ -65,6 +65,7 @@ class OpTracker {
   OpHistory history;
   float complaint_time;
   int log_threshold;
+  void _mark_event(TrackedOp *op, const string &evt, utime_t now);
 
 public:
   bool tracking_enabled;
@@ -95,8 +96,8 @@ public:
    * @return True if there are any Ops to warn on, false otherwise.
    */
   bool check_ops_in_flight(std::vector<string> &warning_strings);
-  void mark_event(TrackedOp *op, const string &evt);
-  void _mark_event(TrackedOp *op, const string &evt, utime_t now);
+  void mark_event(TrackedOp *op, const string &evt,
+                          utime_t time = ceph_clock_now(g_ceph_context));
 
   void on_shutdown() {
     Mutex::Locker l(ops_in_flight_lock);
