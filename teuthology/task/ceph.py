@@ -1494,4 +1494,5 @@ def task(ctx, config):
                 healthy(ctx=ctx, config=None)
             yield
         finally:
-            osd_scrub_pgs(ctx, config)
+            if config.get('wait-for-scrub', True):
+                osd_scrub_pgs(ctx, config)
