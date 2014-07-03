@@ -166,8 +166,8 @@ def main(ctx):
         teuthology_branch = job_config.get('teuthology_branch', 'master')
         job_config['teuthology_branch'] = teuthology_branch
 
-        teuth_path = os.path.join(os.getenv("HOME"),
-                                  'teuthology-' + teuthology_branch)
+        teuth_path = os.path.join(os.getenv("HOME"), 'src',
+                                  'teuthology_' + teuthology_branch)
 
         try:
             fetch_teuthology_branch(dest_path=teuth_path,
