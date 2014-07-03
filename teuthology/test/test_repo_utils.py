@@ -12,6 +12,8 @@ repo_utils.log.setLevel(logging.WARNING)
 
 class TestRepoUtils(object):
     src_path = '/tmp/empty_src'
+    # online_repo_url = 'https://github.com/ceph/teuthology.git'
+    # online_repo_url = 'git://ceph.newdream.net/git/teuthology.git'
     online_repo_url = 'https://github.com/ceph/empty.git'
     offline_repo_url = 'file://' + src_path
     repo_url = None
@@ -128,3 +130,27 @@ class TestRepoUtils(object):
                         self.dest_path, 'master')
             for result in p:
                 assert result is None
+
+    def test_simultaneous_access_different_branches(self):
+        branches = ['master', 'master', 'nobranch',
+                    'nobranch', 'master', 'nobranch']
+
+        with parallel.parallel() as p:
+            for branch in branches:
+                if branch == 'master':
+                    p.spawn(repo_utils.enforce_repo_state, self.repo_url,
+                            self.dest_path, branch)
+                else:
+                    dest_path = self.dest_path + '_' + branch
+
+                    def func():
+                        repo_utils.enforce_repo_state(
+                            self.repo_url, dest_path,
+                            branch)
+                    p.spawn(
+                        raises,
+                        repo_utils.BranchNotFoundError,
+                        func,
+                    )
+            for result in p:
+                pass
