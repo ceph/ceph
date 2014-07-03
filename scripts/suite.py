@@ -50,7 +50,9 @@ Standard arguments:
 Scheduler arguments:
   --owner <owner>             Job owner
   -e <email>, --email <email>
-                              When tests finish or time out, send an email here
+                              When tests finish or time out, send an email
+                              here. May also be specified in ~/.teuthology.yaml
+                              as 'results_email'
   -N <num>, --num <num>       Number of times to run/queue the job
                               [default: 1]
   -l <jobs>, --limit <jobs>   Queue at most this many jobs

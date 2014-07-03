@@ -48,7 +48,6 @@ def main(args):
     owner = args['--owner']
     email = args['--email']
     if email:
-        config.email_specified = True
         config.results_email = email
     timeout = args['--timeout']
 
@@ -75,7 +74,6 @@ def main(args):
                          machine_type=machine_type,
                          suite_repo_path=suite_repo_path,
                          base_yaml_paths=base_yaml_paths,
-                         email=email,
                          priority=priority,
                          limit=limit,
                          num=num,
@@ -219,14 +217,15 @@ def create_initial_config(nice_suite, ceph_branch, teuthology_branch,
 
 
 def prepare_and_schedule(owner, name, suite, machine_type, suite_repo_path,
-                         base_yaml_paths, email, priority, limit, num, timeout,
+                         base_yaml_paths, priority, limit, num, timeout,
                          dry_run, verbose):
     """
     Puts together some "base arguments" with which to execute
     teuthology-schedule for each job, then passes them and other parameters to
     schedule_suite(). Finally, schedules a "last-in-suite" job that sends an
-    email to the specified address (if one is specified).
+    email to the specified address (if one is configured).
     """
+    email = config.results_email
     arch = get_arch(machine_type)
 
     base_args = [
@@ -258,8 +257,7 @@ def prepare_and_schedule(owner, name, suite, machine_type, suite_repo_path,
     if email and num_jobs:
         arg = copy.deepcopy(base_args)
         arg.append('--last-in-suite')
-        if email:
-            arg.extend(['--email', email])
+        arg.extend(['--email', email])
         if timeout:
             arg.extend(['--timeout', timeout])
         if dry_run:
