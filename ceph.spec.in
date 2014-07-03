@@ -340,13 +340,25 @@ chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
 
 # udev rules
+%if 0%{?rhel} >= 7
+install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/50-rbd.rules
+install -m 0644 -D udev/60-ceph-partuuid-workaround.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/60-ceph-partuuid-workaround.rules
+%else
 install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rules
 install -m 0644 -D udev/60-ceph-partuuid-workaround.rules $RPM_BUILD_ROOT/lib/udev/rules.d/60-ceph-partuuid-workaround.rules
+%endif
 
 %if (0%{?rhel} || 0%{?rhel} < 7)
 install -m 0644 -D udev/95-ceph-osd-alt.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
 %else
 install -m 0644 -D udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
+%endif
+
+%if 0%{?rhel} >= 7
+mv $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/95-ceph-osd.rules
+mv $RPM_BUILD_ROOT/sbin/mkcephfs $RPM_BUILD_ROOT/usr/sbin/mkcephfs
+mv $RPM_BUILD_ROOT/sbin/mount.ceph $RPM_BUILD_ROOT/usr/sbin/mount.ceph
+mv $RPM_BUILD_ROOT/sbin/mount.fuse.ceph $RPM_BUILD_ROOT/usr/sbin/mount.fuse.ceph
 %endif
 
 #set up placeholder directories
@@ -428,7 +440,11 @@ fi
 %{_sbindir}/ceph-disk-udev
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/rcceph
+%if 0%{?rhel} >= 7
+%{_sbindir}/mount.ceph
+%else
 /sbin/mount.ceph
+%endif
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/ceph_common.sh
 %dir %{_libdir}/rados-classes
@@ -451,8 +467,13 @@ fi
 %{_libdir}/ceph/erasure-code/libec_jerasure*.so*
 %{_libdir}/ceph/erasure-code/libec_test_jerasure*.so*
 %{_libdir}/ceph/erasure-code/libec_missing_entry_point.so*
+%if 0%{?rhel} >= 7
+/usr/lib/udev/rules.d/60-ceph-partuuid-workaround.rules
+/usr/lib/udev/rules.d/95-ceph-osd.rules
+%else
 /lib/udev/rules.d/60-ceph-partuuid-workaround.rules
 /lib/udev/rules.d/95-ceph-osd.rules
+%endif
 %config %{_sysconfdir}/bash_completion.d/ceph
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %config(noreplace) %{_sysconfdir}/logrotate.d/radosgw
@@ -523,7 +544,11 @@ fi
 %defattr(-,root,root,-)
 %{_bindir}/ceph-fuse
 %{_mandir}/man8/ceph-fuse.8*
+%if 0%{?rhel} >= 7
+%{_sbindir}/mount.fuse.ceph
+%else
 /sbin/mount.fuse.ceph
+%endif
 
 #################################################################################
 %files -n rbd-fuse
@@ -628,6 +653,11 @@ fi
 %files -n librbd1
 %defattr(-,root,root,-)
 %{_libdir}/librbd.so.*
+%if 0%{?rhel} >= 7
+/usr/lib/udev/rules.d/50-rbd.rules
+%else
+/lib/udev/rules.d/50-rbd.rules
+%endif
 
 %post -n librbd1
 /sbin/ldconfig
