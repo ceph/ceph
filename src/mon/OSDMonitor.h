@@ -186,6 +186,15 @@ private:
 
   void update_msgr_features();
   int check_cluster_features(uint64_t features, stringstream &ss);
+  /**
+   * check if the cluster supports the features required by the
+   * given crush map. Outputs the daemons which don't support it
+   * to the stringstream.
+   *
+   * @returns true if the map is passable, false otherwise
+   */
+  bool validate_crush_against_features(const CrushWrapper *newcrush,
+                                      stringstream &ss);
 
   void share_map_with_random_osd();
 
