@@ -1883,7 +1883,6 @@ PG *OSD::_open_lock_pg(
     pg->get("PGMap");  // because it's in pg_map
     service.pg_add_epoch(pg->info.pgid, createmap->get_epoch());
   }
-  wake_pg_waiters(pg, pgid);
   return pg;
 }
 
@@ -2169,6 +2168,7 @@ void OSD::load_pgs()
     epoch_t map_epoch = PG::peek_map_epoch(store, coll_t(pgid), service.infos_oid, &bl);
 
     PG *pg = _open_lock_pg(map_epoch == 0 ? osdmap : service.get_map(map_epoch), pgid);
+    // there can be no waiters here, so we don't call wake_pg_waiters
 
     // read pg state, log
     pg->read_state(store, bl);
@@ -2469,6 +2469,7 @@ void OSD::handle_pg_peering_evt(
 
       pg->queue_peering_event(evt);
       pg->unlock();
+      wake_pg_waiters(pg, pgid);
       return;
     }
     case RES_SELF: {
@@ -2504,6 +2505,7 @@ void OSD::handle_pg_peering_evt(
 
       pg->queue_peering_event(evt);
       pg->unlock();
+      wake_pg_waiters(pg, resurrected);
       return;
     }
     case RES_PARENT: {
@@ -2545,6 +2547,7 @@ void OSD::handle_pg_peering_evt(
       //parent->queue_peering_event(evt);
       parent->queue_null(osdmap->get_epoch(), osdmap->get_epoch());
       parent->unlock();
+      wake_pg_waiters(parent, resurrected);
       return;
     }
     }
@@ -6875,6 +6878,7 @@ void OSD::handle_pg_create(OpRequestRef op)
       pg->publish_stats_to_osd();
       pg->unlock();
       num_created++;
+      wake_pg_waiters(pg, pgid);
     }
     dispatch_context(rctx, pg, osdmap);
   }
