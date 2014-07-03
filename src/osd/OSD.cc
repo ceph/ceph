@@ -1119,6 +1119,15 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     }
 
     f->close_section(); //watches
+  } else if (command == "dump_reservations") {
+    f->open_object_section("reservations");
+    f->open_object_section("local_reservations");
+    service.local_reserver.dump(f);
+    f->close_section();
+    f->open_object_section("remote_reservations");
+    service.remote_reserver.dump(f);
+    f->close_section();
+    f->close_section();
   } else {
     assert(0 == "broken asok registration");
   }
@@ -1374,6 +1383,10 @@ void OSD::final_init()
 				     asok_hook,
 				     "show clients which have active watches,"
 				     " and on which objects");
+  assert(r == 0);
+  r = admin_socket->register_command("dump_reservations", "dump_reservations",
+				     asok_hook,
+				     "show recovery reservations");
   assert(r == 0);
 
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
@@ -1656,6 +1669,7 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("dump_op_pq_state");
   cct->get_admin_socket()->unregister_command("dump_blacklist");
   cct->get_admin_socket()->unregister_command("dump_watchers");
+  cct->get_admin_socket()->unregister_command("dump_reservations");
   delete asok_hook;
   asok_hook = NULL;
 
