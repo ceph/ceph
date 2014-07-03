@@ -67,7 +67,11 @@ BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 %if ! 0%{?rhel}
 BuildRequires:  sharutils
 %endif
+%if 0%{?suse_version} < 1310
+BuildRequires:  boost49-devel
+%else
 BuildRequires:  boost-devel > 1.48
+%endif
 BuildRequires:  gcc-c++
 BuildRequires:  gdbm
 BuildRequires:  libaio-devel

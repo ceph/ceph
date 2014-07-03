@@ -1,4 +1,9 @@
 -------------------------------------------------------------------
+Thu Jul  3 11:58:04 UTC 2014 - osynge@suse.com
+
+- depend upon boost49-devel for SLE11.
+
+-------------------------------------------------------------------
 Wed Jul  2 17:09:10 UTC 2014 - tbehrens@suse.com
 
 - Switch git branch to distro/suse11-0-80-1 for storage 0.5
