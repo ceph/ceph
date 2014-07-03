@@ -1642,12 +1642,15 @@ void PG::activate(ObjectStore::Transaction& t,
       }
 
       build_might_have_unfound();
+
+      state_set(PG_STATE_DEGRADED);
     }
 
     // degraded?
-    if (get_osdmap()->get_pg_size(info.pgid.pgid) > acting.size())
+    if (get_osdmap()->get_pg_size(info.pgid.pgid) > acting.size()) {
       state_set(PG_STATE_DEGRADED);
-
+      state_set(PG_STATE_UNDERSIZED);
+    }
   }
 }
 
@@ -1884,10 +1887,15 @@ unsigned PG::get_backfill_priority()
 {
   // a higher value -> a higher priority
 
-  // degraded: 200 + num missing replicas
-  if (is_degraded()) {
+  // undersized: 200 + num missing replicas
+  if (is_undersized()) {
     assert(pool.info.size > acting.size());
     return 200 + (pool.info.size - acting.size());
+  }
+
+  // degraded: baseline degraded
+  if (is_degraded()) {
+    return 200;
   }
 
   // baseline
@@ -2211,7 +2219,7 @@ void PG::_update_calc_stats()
   info.stats.stats.calc_copies(MAX(target, actingbackfill.size()));
   info.stats.stats.sum.num_objects_degraded = 0;
   info.stats.stats.sum.num_objects_misplaced = 0;
-  if ((is_degraded() || !is_clean()) && is_active()) {
+  if ((is_degraded() || is_undersized() || !is_clean()) && is_active()) {
     // NOTE: we only generate copies, degraded, unfound values for
     // the summation, not individual stat categories.
     uint64_t num_objects = info.stats.stats.sum.num_objects;
@@ -6083,8 +6091,10 @@ PG::RecoveryState::Recovered::Recovered(my_context ctx)
   PG *pg = context< RecoveryMachine >().pg;
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
 
+  assert(!pg->needs_recovery());
+
   // if we finished backfill, all acting are active; recheck if
-  // DEGRADED is appropriate.
+  // DEGRADED | UNDERSIZED is appropriate.
   assert(!pg->actingbackfill.empty());
   if (pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid) <=
       pg->actingbackfill.size())
@@ -6093,8 +6103,6 @@ PG::RecoveryState::Recovered::Recovered(my_context ctx)
   // adjust acting set?  (e.g. because backfill completed...)
   if (pg->acting != pg->up && !pg->choose_acting(auth_log_shard))
     assert(pg->want_acting.size());
-
-  assert(!pg->needs_recovery());
 
   if (context< Active >().all_replicas_activated)
     post_event(GoClean());
@@ -6194,10 +6202,17 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
    * this does not matter) */
   if (advmap.lastmap->get_pg_size(pg->info.pgid.pgid) !=
       pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid)) {
-    if (pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid) <= pg->acting.size())
-      pg->state_clear(PG_STATE_DEGRADED);
-    else
+    if (pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid) <= pg->acting.size()) {
+      pg->state_clear(PG_STATE_UNDERSIZED);
+      if (pg->needs_recovery()) {
+	pg->state_set(PG_STATE_DEGRADED);
+      } else {
+	pg->state_clear(PG_STATE_DEGRADED);
+      }
+    } else {
+      pg->state_set(PG_STATE_UNDERSIZED);
       pg->state_set(PG_STATE_DEGRADED);
+    }
     pg->publish_stats_to_osd(); // degraded may have changed
   }
 
@@ -6400,6 +6415,7 @@ void PG::RecoveryState::Active::exit()
   pg->backfill_reserved = false;
   pg->backfill_reserving = false;
   pg->state_clear(PG_STATE_DEGRADED);
+  pg->state_clear(PG_STATE_UNDERSIZED);
   pg->state_clear(PG_STATE_BACKFILL_TOOFULL);
   pg->state_clear(PG_STATE_BACKFILL_WAIT);
   pg->state_clear(PG_STATE_RECOVERY_WAIT);
