@@ -1648,6 +1648,11 @@ protected:
   };
   res_result _try_resurrect_pg(
     OSDMapRef curmap, spg_t pgid, spg_t *resurrected, PGRef *old_pg_state);
+
+  /**
+   * After unlocking the pg, the user must ensure that wake_pg_waiters
+   * is called.
+   */
   PG   *_create_lock_pg(
     OSDMapRef createmap,
     spg_t pgid,
