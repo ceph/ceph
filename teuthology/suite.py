@@ -122,12 +122,16 @@ def fetch_suite_repo(branch, test_name):
     suite_repo_path = os.path.join(src_base_path,
                                    'ceph-qa-suite_' + branch)
     try:
-        enforce_repo_state(
-            repo_url=os.path.join(config.ceph_git_base_url, 'teuthology.git'),
-            dest_path=os.path.join(src_base_path, 'teuthology'),
-            branch='master',
-            remove_on_error=False,
-        )
+        # When a user is scheduling a test run from their own copy of
+        # teuthology, let's not wreak havoc on it.
+        if config.automated_scheduling:
+            enforce_repo_state(
+                repo_url=os.path.join(config.ceph_git_base_url,
+                                      'teuthology.git'),
+                dest_path=os.path.join(src_base_path, 'teuthology'),
+                branch='master',
+                remove_on_error=False,
+            )
         enforce_repo_state(
             repo_url=os.path.join(config.ceph_git_base_url,
                                   'ceph-qa-suite.git'),

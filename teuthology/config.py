@@ -14,6 +14,7 @@ class Config(object):
     teuthology_yaml = os.path.join(os.environ['HOME'], '.teuthology.yaml')
     defaults = {
         'archive_base': '/var/lib/teuthworker/archive',
+        'automated_scheduling': False,
         'ceph_git_base_url': 'https://github.com/ceph/',
         'lock_server': 'http://teuthology.front.sepia.ceph.com/locker/lock',
         'max_job_time': 259200,  # 3 days
