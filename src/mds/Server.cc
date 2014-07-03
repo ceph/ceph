@@ -327,6 +327,15 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       dout(20) << " killing client lease of " << *dn << dendl;
       dn->remove_client_lease(r, mds->locker);
     }
+    if (client_reconnect_gather.count(session->info.get_client())) {
+      dout(20) << " removing client from reconnect set" << dendl;
+      client_reconnect_gather.erase(session->info.get_client());
+
+      if (client_reconnect_gather.empty()) {
+        dout(7) << " client " << session->info.inst << " was last reconnect, finishing" << dendl;
+        reconnect_gather_finish();
+      }
+    }
     
     if (session->is_closing()) {
       // mark con disposable.  if there is a fault, we will get a
