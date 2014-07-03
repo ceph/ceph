@@ -2996,7 +2996,7 @@ int OSDMonitor::check_cluster_features(uint64_t features,
 {
   stringstream unsupported_ss;
   int unsupported_count = 0;
-  if (!(mon->get_quorum_features() & features)) {
+  if ((mon->get_quorum_features() & features) != features) {
     unsupported_ss << "the monitor cluster";
     ++unsupported_count;
   }
