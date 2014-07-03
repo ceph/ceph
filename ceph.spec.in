@@ -24,12 +24,11 @@ Requires:	python
 Requires:	python-argparse
 Requires:	python-ceph
 Requires:	python-requests
-Requires:       xfsprogs
+Requires:	xfsprogs
 Requires:	cryptsetup
 Requires:	parted
 Requires:	util-linux
 Requires:	hdparm
-Requires:       redhat-lsb-core
 Requires(post):	binutils
 BuildRequires:	make
 BuildRequires:	gcc-c++
@@ -42,42 +41,42 @@ BuildRequires:	pkgconfig
 BuildRequires:	python
 BuildRequires:	python-nose
 BuildRequires:	python-argparse
-BuildRequires:  libaio-devel
-BuildRequires:  libcurl-devel
-BuildRequires:  libxml2-devel
-BuildRequires:  libuuid-devel
-BuildRequires:  libblkid-devel >= 2.17
-BuildRequires:  libudev-devel
-BuildRequires:  leveldb-devel > 1.2
-BuildRequires:  xfsprogs-devel
-BuildRequires:  yasm
-%if 0%{?rhel} || 0%{?centos_version} || 0%{?fedora}
-BuildRequires:  snappy-devel
+BuildRequires:	libaio-devel
+BuildRequires:	libcurl-devel
+BuildRequires:	libxml2-devel
+BuildRequires:	libuuid-devel
+BuildRequires:	libblkid-devel >= 2.17
+BuildRequires:	libudev-devel
+BuildRequires:	leveldb-devel > 1.2
+BuildRequires:	xfsprogs-devel
+BuildRequires:	yasm
+%if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
+BuildRequires:	snappy-devel
 %endif
 
 #################################################################################
 # specific
 #################################################################################
 %if ! 0%{?rhel}
-BuildRequires:  sharutils
+BuildRequires:	sharutils
 %endif
 
 %if 0%{defined suse_version}
 %if 0%{?suse_version} > 1210
-Requires:       gptfdisk
-BuildRequires:  gperftools-devel
+Requires:	gptfdisk
+BuildRequires:	gperftools-devel
 %else
-Requires:       scsirastools
-BuildRequires:  google-perftools-devel
+Requires:	scsirastools
+BuildRequires:	google-perftools-devel
 %endif
 Recommends:	logrotate
 BuildRequires:	%insserv_prereq
 BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
 BuildRequires:	libatomic-ops-devel
-BuildRequires:  fdupes
+BuildRequires:	fdupes
 %else
-Requires:       gdisk
+Requires:	gdisk
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
 BuildRequires:	libatomic_ops-devel
@@ -85,7 +84,7 @@ Requires:	gdisk
 Requires(post):	chkconfig
 Requires(preun):chkconfig
 Requires(preun):initscripts
-BuildRequires:  gperftools-devel
+BuildRequires:	gperftools-devel
 %endif
 
 %description
@@ -256,7 +255,7 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	java
 Requires:	libcephfs1 = %{version}-%{release}
-BuildRequires:  java-devel
+BuildRequires:	java-devel
 %description -n libcephfs_jni1
 This package contains the Java Native Interface library for CephFS Java
 bindings.
@@ -267,9 +266,9 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	java
 Requires:	libcephfs_jni1 = %{version}-%{release}
-BuildRequires:  java-devel
-Requires:       junit4
-BuildRequires:  junit4
+BuildRequires:	java-devel
+Requires:	junit4
+BuildRequires:	junit4
 %description -n cephfs-java
 This package contains the Java libraries for the Ceph File System.
 
