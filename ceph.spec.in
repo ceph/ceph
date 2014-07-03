@@ -119,6 +119,8 @@ FUSE based client for Ceph distributed network file system
 Summary:	Ceph fuse-based client
 Group:		System Environment/Base
 Requires:	%{name}
+Requires:	librados2 = %{version}-%{release}
+Requires:	librbd1 = %{version}-%{release}
 BuildRequires:	fuse-devel
 %description -n rbd-fuse
 FUSE based client to map Ceph rbd images to files
@@ -128,9 +130,10 @@ Summary:	Ceph headers
 Group:		Development/Libraries
 License:	LGPL-2.0
 Requires:	%{name} = %{version}-%{release}
-Requires:	librados2 = %{version}
-Requires:	librbd1 = %{version}
-Requires:	libcephfs1 = %{version}
+Requires:	librados2 = %{version}-%{release}
+Requires:	librbd1 = %{version}-%{release}
+Requires:	libcephfs1 = %{version}-%{release}
+Requires:	libcephfs_jni1 = %{version}-%{release}
 %description devel
 This package contains libraries and headers needed to develop programs
 that use Ceph.
@@ -183,6 +186,7 @@ store using a simple file-like interface.
 Summary:	RADOS block device client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
+Requires:	librados2 = %{version}-%{release}
 %if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
 Obsoletes:	ceph-libs
 %endif
@@ -211,7 +215,6 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	librados2 = %{version}-%{release}
 Requires:	librbd1 = %{version}-%{release}
-Requires:	libcephfs1 = %{version}-%{release}
 Requires:	python-flask
 %if 0%{defined suse_version}
 %py_requires
