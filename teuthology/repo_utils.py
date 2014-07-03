@@ -7,7 +7,7 @@ import time
 log = logging.getLogger(__name__)
 
 
-def enforce_repo_state(repo_url, dest_path, branch):
+def enforce_repo_state(repo_url, dest_path, branch, remove_on_error=True):
     """
     Use git to either clone or update a given repo, forcing it to switch to the
     specified branch.
@@ -15,6 +15,7 @@ def enforce_repo_state(repo_url, dest_path, branch):
     :param repo_url:  The full URL to the repo (not including the branch)
     :param dest_path: The full path to the destination directory
     :param branch:    The branch.
+    :param remove:    Whether or not to remove dest_dir when an error occurs
     :raises:          BranchNotFoundError if the branch is not found;
                       RuntimeError for other errors
     """
@@ -33,7 +34,8 @@ def enforce_repo_state(repo_url, dest_path, branch):
 
         reset_repo(repo_url, dest_path, branch)
     except BranchNotFoundError:
-        shutil.rmtree(dest_path, ignore_errors=True)
+        if remove_on_error:
+            shutil.rmtree(dest_path, ignore_errors=True)
         raise
 
 
