@@ -127,12 +127,15 @@ def fetch_suite_repo(branch, test_name):
         enforce_repo_state(
             repo_url=os.path.join(config.ceph_git_base_url, 'teuthology.git'),
             dest_path=os.path.join(src_base_path, 'teuthology'),
-            branch='master')
+            branch='master',
+            remove_on_error=False,
+        )
         enforce_repo_state(
             repo_url=os.path.join(config.ceph_git_base_url,
                                   'ceph-qa-suite.git'),
             dest_path=suite_repo_path,
-            branch=branch)
+            branch=branch,
+        )
     except BranchNotFoundError as exc:
         schedule_fail(message=str(exc), name=test_name)
     return suite_repo_path
