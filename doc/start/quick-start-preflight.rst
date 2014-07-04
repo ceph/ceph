@@ -78,7 +78,7 @@ following steps:
 
 
 .. note:: Some distributions (e.g., RHEL) require you to comment out 
-   ``Default requiretty`` in the ``/etc/sudoers`` file for ``ceph-deploy`` to 
+   ``Defaults requiretty`` in the ``/etc/sudoers`` file for ``ceph-deploy`` to 
    work properly. If editing, ``/etc/sudoers``, ensure that you use 
    ``sudo visudo`` rather than a text editor.
 
