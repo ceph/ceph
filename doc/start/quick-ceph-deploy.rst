@@ -30,7 +30,7 @@ are in this directory when executing ``ceph-deploy``.
    On some distributions (e.g., CentOS), you may receive an error while trying 
    to execute ``ceph-deploy`` commands. If ``requiretty`` is set
    by default, disable it by executing ``sudo visudo`` and locate the 
-   ``Default requiretty`` setting. Change it to ``Default:ceph !requiretty`` to
+   ``Defaults requiretty`` setting. Change it to ``Defaults:ceph !requiretty`` to
    ensure that ``ceph-deploy`` can connect using the ``ceph`` user and execute 
    commands with ``sudo``.
 
