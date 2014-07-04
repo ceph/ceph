@@ -3708,7 +3708,7 @@ void OSD::ms_handle_fast_connect(Connection *con)
   if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON) {
     Session *s = static_cast<Session*>(con->get_priv());
     if (!s) {
-      s = new Session;
+      s = new Session(cct);
       con->set_priv(s->get());
       s->con = con;
       dout(10) << " new session (outgoing)" << s << " con=" << s->con
@@ -3726,7 +3726,7 @@ void OSD::ms_handle_fast_accept(Connection *con)
   if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON) {
     Session *s = static_cast<Session*>(con->get_priv());
     if (!s) {
-      s = new Session();
+      s = new Session(cct);
       con->set_priv(s->get());
       s->con = con;
       dout(10) << "new session (incoming)" << s << " con=" << con
@@ -5161,7 +5161,7 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
   if (isvalid) {
     Session *s = static_cast<Session *>(con->get_priv());
     if (!s) {
-      s = new Session;
+      s = new Session(cct);
       con->set_priv(s->get());
       s->con = con;
       dout(10) << " new session " << s << " con=" << s->con << " addr=" << s->con->get_peer_addr() << dendl;
