@@ -190,8 +190,11 @@ public:
   friend class boost::intrusive_ptr<Connection>;
 
 public:
-  Connection(Messenger *m)
-    : lock("Connection::lock"),
+  Connection(CephContext *cct, Messenger *m)
+    // we are managed exlusively by ConnectionRef; make it so you can
+    //   ConnectionRef foo = new Connection;
+    : RefCountedObject(cct, 0),
+      lock("Connection::lock"),
       msgr(m),
       priv(NULL),
       peer_type(-1),
@@ -199,9 +202,6 @@ public:
       pipe(NULL),
       failed(false),
       rx_buffers_version(0) {
-    // we are managed exlusively by ConnectionRef; make it so you can
-    //   ConnectionRef foo = new Connection;
-    nref.set(0);
   }
   ~Connection() {
     //generic_dout(0) << "~Connection " << this << dendl;
@@ -371,7 +371,6 @@ public:
 
 protected:
   virtual ~Message() { 
-    assert(nref.read() == 0);
     if (byte_throttler)
       byte_throttler->put(payload.length() + middle.length() + data.length());
     if (msg_throttler)
