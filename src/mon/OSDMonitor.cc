@@ -3029,7 +3029,7 @@ int OSDMonitor::check_cluster_features(uint64_t features,
 {
   stringstream unsupported_ss;
   int unsupported_count = 0;
-  if (!(mon->get_quorum_features() & features)) {
+  if ((mon->get_quorum_features() & features) != features) {
     unsupported_ss << "the monitor cluster";
     ++unsupported_count;
   }
@@ -3066,6 +3066,27 @@ int OSDMonitor::check_cluster_features(uint64_t features,
   }
 
   return 0;
+}
+
+bool OSDMonitor::validate_crush_against_features(const CrushWrapper *newcrush,
+                                                 stringstream& ss)
+{
+  OSDMap::Incremental new_pending = pending_inc;
+  ::encode(*newcrush, new_pending.crush);
+  OSDMap newmap;
+  newmap.deepish_copy_from(osdmap);
+  newmap.apply_incremental(new_pending);
+  uint64_t features = newmap.get_features(CEPH_ENTITY_TYPE_MON, NULL);
+
+  stringstream features_ss;
+
+  int r = check_cluster_features(features, features_ss);
+
+  if (!r)
+    return true;
+
+  ss << "Could not change CRUSH: " << features_ss.str();
+  return false;
 }
 
 bool OSDMonitor::erasure_code_profile_in_use(const map<int64_t, pg_pool_t> &pools,
@@ -3711,6 +3732,11 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       goto reply;
     }
 
+    if (!validate_crush_against_features(&crush, ss)) {
+      err = -EINVAL;
+      goto reply;
+    }
+
     // sanity check: test some inputs to make sure this map isn't totally broken
     dout(10) << " testing map" << dendl;
     stringstream ess;
@@ -4128,6 +4154,12 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       err = -EINVAL;
       goto reply;
     }
+
+    if (!validate_crush_against_features(&newcrush, ss)) {
+      err = -EINVAL;
+      goto reply;
+    }
+
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush);
     ss << "adjusted tunables profile to " << profile;
