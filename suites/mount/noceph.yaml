@@ -1,5 +1,0 @@
-tasks:
-- localdir: [client.0]
-- samba:
-    samba.0:
-      ceph: "{testdir}/mnt.0"
