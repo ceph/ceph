@@ -1,6 +1,0 @@
-tasks:
-- install:
-- install:
-    project: samba
-    extra_packages: ['samba']
-- ceph:
