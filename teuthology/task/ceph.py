@@ -438,6 +438,9 @@ def write_conf(ctx, conf_path=DEFAULT_CONF_PATH):
 
 @contextlib.contextmanager
 def cephfs_setup(ctx, config):
+    testdir = teuthology.get_testdir(ctx)
+    coverage_dir = '{tdir}/archive/coverage'.format(tdir=testdir)
+
     first_mon = teuthology.get_first_mon(ctx, config)
     (mon_remote,) = ctx.cluster.only(first_mon).remotes.iterkeys()
     mdss = ctx.cluster.only(teuthology.is_type('mds'))
@@ -447,7 +450,7 @@ def cephfs_setup(ctx, config):
         log.info('Setting up CephFS filesystem...')
 
         proc = mon_remote.run(args=['sudo', 'ceph', '--format=json-pretty', 'osd', 'lspools'],
-                           stdout=StringIO())
+                              stdout=StringIO())
         pools = json.loads(proc.stdout.getvalue())
 
         # In case we are using an older Ceph which creates FS by default
@@ -461,6 +464,16 @@ def cephfs_setup(ctx, config):
             # stuff is all landed.
             mon_remote.run(args=['sudo', 'ceph', 'mds', 'newfs', '1', '2'])
             # mon_remote.run(args=['sudo', 'ceph', 'fs', 'new', 'default', 'metadata', 'data'])
+
+        is_active_mds = lambda role: role.startswith('mds.') and not role.endswith('-s') and role.find('-s-') == -1
+        all_roles = [item for remote_roles in mdss.remotes.values() for item in remote_roles]
+        num_active = len([r for r in all_roles if is_active_mds(r)])
+        mon_remote.run(args=[
+            'adjust-ulimits',
+            'ceph-coverage',
+            coverage_dir,
+            'ceph',
+            'mds', 'set_max_mds', str(num_active)])
 
     yield
 
@@ -1177,13 +1190,9 @@ def run_daemon(ctx, config, type_):
     if config.get('coverage') or config.get('valgrind') is not None:
         daemon_signal = 'term'
 
-    num_active = 0
     for remote, roles_for_host in daemons.remotes.iteritems():
         for id_ in teuthology.roles_of_type(roles_for_host, type_):
             name = '%s.%s' % (type_, id_)
-
-            if not (id_.endswith('-s')) and (id_.find('-s-') == -1):
-                num_active += 1
 
             run_cmd = [
                 'sudo',
@@ -1220,17 +1229,6 @@ def run_daemon(ctx, config, type_):
                                    stdin=run.PIPE,
                                    wait=False,
                                    )
-
-    if type_ == 'mds':
-        firstmon = teuthology.get_first_mon(ctx, config)
-        (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
-
-        mon0_remote.run(args=[
-            'adjust-ulimits',
-            'ceph-coverage',
-            coverage_dir,
-            'ceph',
-            'mds', 'set_max_mds', str(num_active)])
 
     try:
         yield
