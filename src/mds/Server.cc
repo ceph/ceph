@@ -3279,8 +3279,6 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
 
   pi = cur->project_inode();
 
-  utime_t now = ceph_clock_now(g_ceph_context);
-
   if (mask & CEPH_SETATTR_MODE)
     pi->mode = (pi->mode & ~07777) | (req->head.args.setattr.mode & 07777);
   if (mask & CEPH_SETATTR_UID)
@@ -3302,7 +3300,7 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
       pi->size = req->head.args.setattr.size;
       pi->rstat.rbytes = pi->size;
     }
-    pi->mtime = now;
+    pi->mtime = mdr->get_op_stamp();
 
     // adjust client's max_size?
     map<client_t,client_writeable_range_t> new_ranges;
@@ -3315,7 +3313,7 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
   }
 
   pi->version = cur->pre_dirty();
-  pi->ctime = now;
+  pi->ctime = mdr->get_op_stamp();
 
   // log + wait
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
@@ -3348,8 +3346,8 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
 
   // prepare
   inode_t *pi = in->project_inode();
-  pi->mtime = pi->ctime = ceph_clock_now(g_ceph_context);
   pi->version = in->pre_dirty();
+  pi->mtime = pi->ctime = mdr->get_op_stamp();
 
   uint64_t old_size = MAX(pi->size, mdr->client_request->head.args.open.old_size);
   if (old_size > 0) {
@@ -3455,7 +3453,7 @@ void Server::handle_client_setlayout(MDRequestRef& mdr)
   // add the old pool to the inode
   pi->add_old_pool(old_pool);
   pi->version = cur->pre_dirty();
-  pi->ctime = ceph_clock_now(g_ceph_context);
+  pi->ctime = mdr->get_op_stamp();
   
   // log + wait
   mdr->ls = mdlog->get_current_segment();
@@ -3715,7 +3713,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
       old_pool = pi->layout.fl_pg_pool;
       pi->add_old_pool(old_pool);
       pi->layout = layout;
-      pi->ctime = ceph_clock_now(g_ceph_context);
+      pi->ctime = mdr->get_op_stamp();
     }
 
     pi->version = cur->pre_dirty();
@@ -3857,7 +3855,7 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
   map<string,bufferptr> *px = new map<string,bufferptr>;
   inode_t *pi = cur->project_inode(px);
   pi->version = cur->pre_dirty();
-  pi->ctime = ceph_clock_now(g_ceph_context);
+  pi->ctime = mdr->get_op_stamp();
   pi->xattr_version++;
   px->erase(name);
   if (!(flags & CEPH_XATTR_REMOVE)) {
@@ -3918,7 +3916,7 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
   map<string,bufferptr> *px = new map<string,bufferptr>;
   inode_t *pi = cur->project_inode(px);
   pi->version = cur->pre_dirty();
-  pi->ctime = ceph_clock_now(g_ceph_context);
+  pi->ctime = mdr->get_op_stamp();
   pi->xattr_version++;
   px->erase(name);
 
@@ -7528,8 +7526,8 @@ void Server::handle_client_rmsnap(MDRequestRef& mdr)
 
   // journal
   inode_t *pi = diri->project_inode();
-  pi->ctime = ceph_clock_now(g_ceph_context);
   pi->version = diri->pre_dirty();
+  pi->ctime = mdr->get_op_stamp();
   
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "rmsnap");
