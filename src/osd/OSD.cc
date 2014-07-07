@@ -1226,7 +1226,7 @@ int OSD::init()
 
   // make sure info object exists
   if (!store->exists(coll_t::META_COLL, service.infos_oid)) {
-    dout(10) << "init creating/touching snapmapper object" << dendl;
+    dout(10) << "init creating/touching infos object" << dendl;
     ObjectStore::Transaction t;
     t.touch(coll_t::META_COLL, service.infos_oid);
     r = store->apply_transaction(t);
@@ -1236,7 +1236,7 @@ int OSD::init()
 
   // make sure snap mapper object exists
   if (!store->exists(coll_t::META_COLL, OSD::make_snapmapper_oid())) {
-    dout(10) << "init creating/touching infos object" << dendl;
+    dout(10) << "init creating/touching snapmapper object" << dendl;
     ObjectStore::Transaction t;
     t.touch(coll_t::META_COLL, OSD::make_snapmapper_oid());
     r = store->apply_transaction(t);
