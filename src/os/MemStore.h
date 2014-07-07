@@ -207,6 +207,8 @@ private:
 		       const string& first, const string& last);
   int _omap_setheader(coll_t cid, const ghobject_t &oid, const bufferlist &bl);
 
+  int _collection_hint_expected_num_objs(coll_t cid, uint32_t pg_num,
+      uint64_t num_objs) const { return 0; }
   int _create_collection(coll_t c);
   int _destroy_collection(coll_t c);
   int _collection_add(coll_t cid, coll_t ocid, const ghobject_t& oid);
