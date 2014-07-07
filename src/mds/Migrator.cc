@@ -1567,8 +1567,7 @@ void Migrator::handle_export_ack(MExportDirAck *m)
   }
 
   // log export completion, then finish (unfreeze, trigger finish context, etc.)
-  mds->mdlog->submit_entry(le);
-  mds->mdlog->wait_for_safe(new C_MDS_ExportFinishLogged(this, dir));
+  mds->mdlog->submit_entry(le, new C_MDS_ExportFinishLogged(this, dir));
   mds->mdlog->flush();
   assert (g_conf->mds_kill_export_at != 10);
   
@@ -2252,8 +2251,7 @@ void Migrator::handle_export_dir(MExportDir *m)
   assert (g_conf->mds_kill_import_at != 6);
 
   // log it
-  mds->mdlog->submit_entry(le);
-  mds->mdlog->wait_for_safe(onlogged);
+  mds->mdlog->submit_entry(le, onlogged);
   mds->mdlog->flush();
 
   // some stats
@@ -3031,9 +3029,7 @@ void Migrator::handle_export_caps(MExportCaps *ex)
   version_t pv = mds->server->prepare_force_open_sessions(finish->client_map, finish->sseqmap);
   
   ESessions *le = new ESessions(pv, ex->client_map);
-  mds->mdlog->start_entry(le);
-  mds->mdlog->submit_entry(le);
-  mds->mdlog->wait_for_safe(finish);
+  mds->mdlog->start_submit_entry(le, finish);
   mds->mdlog->flush();
 
   ex->put();
