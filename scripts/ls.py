@@ -9,7 +9,7 @@ def main():
 def parse_args():
     parser = argparse.ArgumentParser(description='List teuthology job results')
     parser.add_argument(
-        '--archive-dir',
+        'archive_dir',
         metavar='DIR',
         default='.',
         help='path under which to archive results',
