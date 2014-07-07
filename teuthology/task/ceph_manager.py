@@ -521,15 +521,18 @@ class CephManager:
                 ]
             )
 
-    def osd_admin_socket(self, osdnum, command, check_status=True):
+    def osd_admin_socket(self, osd_id, command, check_status=True):
+        return self.admin_socket('osd', osd_id, command, check_status)
+
+    def admin_socket(self, service_type, service_id, command, check_status=True):
         """
         Remotely start up ceph specifying the admin socket
         """
         testdir = teuthology.get_testdir(self.ctx)
         remote = None
         for _remote, roles_for_host in self.ctx.cluster.remotes.iteritems():
-            for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
-                if int(id_) == int(osdnum):
+            for id_ in teuthology.roles_of_type(roles_for_host, service_type):
+                if int(id_) == int(service_id):
                     remote = _remote
         assert remote is not None
         args = [
@@ -539,7 +542,9 @@ class CephManager:
             '{tdir}/archive/coverage'.format(tdir=testdir),
             'ceph',
             '--admin-daemon',
-            '/var/run/ceph/ceph-osd.{id}.asok'.format(id=osdnum),
+            '/var/run/ceph/ceph-{type}.{id}.asok'.format(
+                type=service_type,
+                id=service_id),
             ]
         args.extend(command)
         return remote.run(
@@ -621,25 +626,26 @@ class CephManager:
             'kick_recovery_wq',
             '0')
 
-    def wait_run_admin_socket(self, osdnum, args=['version'], timeout=75):
+    def wait_run_admin_socket(self, service_type, service_id, args=['version'], timeout=75):
         """
         If osd_admin_socket call suceeds, return.  Otherwise wait
         five seconds and try again.
         """
         tries = 0
         while True:
-            proc = self.osd_admin_socket(
-                osdnum, args,
-                check_status=False)
+            proc = self.admin_socket(service_type, service_id, args, check_status=False)
             if proc.exitstatus is 0:
                 break
             else:
                 tries += 1
                 if (tries * 5) > timeout:
-                    raise Exception('timed out waiting for admin_socket to appear after osd.{o} restart'.format(o=osdnum))
+                    raise Exception('timed out waiting for admin_socket to appear after {type}.{id} restart'.format(
+                        type=service_type,
+                        id=service_id))
                 self.log(
-                    "waiting on admin_socket for {osdnum}, {command}".format(
-                        osdnum=osdnum,
+                    "waiting on admin_socket for {type}-{id}, {command}".format(
+                        type=service_type,
+                        id=service_id,
                         command=args))
                 time.sleep(5)
 
@@ -650,7 +656,7 @@ class CephManager:
         """
         for k, v in argdict.iteritems():
             self.wait_run_admin_socket(
-                osdnum,
+                'osd', osdnum,
                 ['config', 'set', str(k), str(v)])
 
     def raw_cluster_status(self):
@@ -1262,7 +1268,7 @@ class CephManager:
         # until after the signal handler is installed and it is safe
         # to stop the osd again without making valgrind leak checks
         # unhappy.  see #5924.
-        self.wait_run_admin_socket(osd,
+        self.wait_run_admin_socket('osd', osd,
                                    args=['dump_ops_in_flight'],
                                    timeout=timeout)
 

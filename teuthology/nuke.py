@@ -34,7 +34,7 @@ def shutdown_daemons(ctx):
                 'grep', 'ceph-fuse', '/etc/mtab', run.Raw('|'),
                 'grep', '-o', " /.* fuse", run.Raw('|'),
                 'grep', '-o', "/.* ", run.Raw('|'),
-                'xargs', 'sudo', 'fusermount', '-u', run.Raw(';'),
+                'xargs', '-n', '1', 'sudo', 'fusermount', '-u', run.Raw(';'),
                 'fi',
                 run.Raw(';'),
                 'sudo',
