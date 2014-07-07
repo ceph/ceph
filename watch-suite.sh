@@ -1,4 +1,4 @@
 #!/bin/sh
 
-watch "pwd ; echo \`teuthology-ls --archive-dir . | grep -c pass\` passes ; teuthology-ls --archive-dir . | grep -v pass"
+watch "pwd ; echo \`teuthology-ls . | grep -c pass\` passes ; teuthology-ls . | grep -v pass"
 
