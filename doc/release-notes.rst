@@ -265,10 +265,15 @@ Upgrading from v0.72 Emperor
 
 * The 'osd pool create ...' syntax has changed for erasure pools.
 
-* The default CRUSH rules and layouts are now using the latest and
-  greatest tunables and defaults.  Clusters using the old values will
+* The default CRUSH rules and layouts are now using the 'bobtail'
+  tunables and defaults.  Upgaded clusters using the old values will
   now present with a health WARN state.  This can be disabled by
-  adding 'mon warn on legacy crush tunables = false' to ceph.conf.
+  adding 'mon warn on legacy crush tunables = false' to ceph.conf and
+  restarting the monitors.  Alternatively, you can switch to the new
+  tunables with 'ceph osd crush tunables firefly,' but keep in mind
+  that this will involve moving a significant portion of the data
+  already stored in the cluster and in a large cluster may take
+  several days to complete.
 
 * We now default to the 'bobtail' CRUSH tunable values that are first supported
   by Ceph clients in bobtail (v0.56) and Linux kernel version v3.9.  If you
