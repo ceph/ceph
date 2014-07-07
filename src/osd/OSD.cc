@@ -1626,7 +1626,9 @@ int OSD::shutdown()
   cct->_conf->set_val("debug_filestore", "100");
   cct->_conf->set_val("debug_ms", "100");
   cct->_conf->apply_changes(NULL);
-  
+
+  dispatch_sessions_waiting_on_map();
+
   // Shutdown PGs
   {
     RWLock::RLocker l(pg_map_lock);
@@ -4981,6 +4983,10 @@ void OSD::dispatch_session_waiting(Session *session, OSDMapRef osdmap)
 
 void OSD::ms_fast_dispatch(Message *m)
 {
+  if (service.is_stopping()) {
+    m->put();
+    return;
+  }
   OpRequestRef op = op_tracker.create_request<OpRequest>(m);
   OSDMapRef nextmap = service.get_nextmap_reserved();
   Session *session = static_cast<Session*>(m->get_connection()->get_priv());
@@ -6249,16 +6255,7 @@ void OSD::consume_map()
   service.await_reserved_maps();
   service.publish_map(osdmap);
 
-  set<Session*> sessions_to_check;
-  get_sessions_waiting_for_map(&sessions_to_check);
-  for (set<Session*>::iterator i = sessions_to_check.begin();
-       i != sessions_to_check.end();
-       sessions_to_check.erase(i++)) {
-    (*i)->session_dispatch_lock.Lock();
-    dispatch_session_waiting(*i, osdmap);
-    (*i)->session_dispatch_lock.Unlock();
-    (*i)->put();
-  }
+  dispatch_sessions_waiting_on_map();
 
   // remove any PGs which we no longer host from the waiting_for_pg list
   set<spg_t> pgs_to_delete;
