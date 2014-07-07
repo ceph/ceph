@@ -62,7 +62,7 @@ Scheduler arguments:
                               [default: 1000]
   --timeout <timeout>         How long, in seconds, to wait for jobs to finish
                               before sending email. This does not kill jobs.
-                              [default: 21600]
+                              [default: 32400]
 
 """
 
