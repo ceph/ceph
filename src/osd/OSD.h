@@ -1166,8 +1166,10 @@ public:
   }
   void register_session_waiting_on_map(Session *session) {
     Mutex::Locker l(session_waiting_for_map_lock);
-    session->get();
-    session_waiting_for_map.insert(session);
+    if (session_waiting_for_map.count(session) == 0) {
+      session->get();
+      session_waiting_for_map.insert(session);
+    }
   }
   void clear_session_waiting_on_map(Session *session) {
     Mutex::Locker l(session_waiting_for_map_lock);
