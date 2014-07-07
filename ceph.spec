@@ -144,6 +144,7 @@ FUSE based client for Ceph distributed network file system
 
 %package -n rbd-fuse
 Summary:        RBD fuse-based client
+License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-
 Group:          System/Filesystems
 Requires:       %{name} = %{version}-%{release}
 BuildRequires:  fuse-devel
@@ -238,6 +239,7 @@ POSIX-like interface.
 %if 0%{?cephfs_java}
 %package -n libcephfs_jni1
 Summary:        Java Native Interface library for CephFS Java bindings
+License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-
 Group:          System/Filesystems
 Requires:       java
 %if 0%{?rhel_version} || 0%{?centos_version}
@@ -256,6 +258,7 @@ bindings.
 
 %package -n cephfs-java
 Summary:        Java libraries for the Ceph File System
+License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-
 Group:          System/Filesystems
 Requires:       java
 %if 0%{?suse_version} > 1220
@@ -295,6 +298,7 @@ object storage.
 
 %package -n ceph-test
 Summary:        Ceph benchmarks and test tools
+License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-w
 Group:          System/Filesystems
 Requires:       libcephfs1 = %{version}-%{release}
 Requires:       librados2 = %{version}-%{release}
