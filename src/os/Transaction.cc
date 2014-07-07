@@ -205,6 +205,16 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
       }
       break;
 
+    case Transaction::OP_COLL_HINT:
+      {
+        coll_t cid = i.decode_cid();
+        uint32_t type = i.decode_u32();
+        f->dump_string("op_name", "coll_hint");
+        f->dump_stream("collection") << cid;
+        f->dump_unsigned("type", type);
+      }
+      break;
+
     case Transaction::OP_RMCOLL:
       {
 	coll_t cid = i.decode_cid();
