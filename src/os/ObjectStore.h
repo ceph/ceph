@@ -371,6 +371,11 @@ public:
       OP_COLL_HINT = 40, // cid, type, bl
     };
 
+    // Transaction hint type
+    enum {
+      COLL_HINT_EXPECTED_NUM_OBJECTS = 1,
+    };
+
   private:
     uint64_t ops;
     uint64_t pad_unused_bytes;

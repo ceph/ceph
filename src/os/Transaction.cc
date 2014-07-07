@@ -212,6 +212,17 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
         f->dump_string("op_name", "coll_hint");
         f->dump_stream("collection") << cid;
         f->dump_unsigned("type", type);
+        bufferlist hint;
+        i.decode_bl(hint);
+        bufferlist::iterator hiter = hint.begin();
+        if (type == Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS) {
+          uint32_t pg_num;
+          uint64_t num_objs;
+          ::decode(pg_num, hiter);
+          ::decode(num_objs, hiter);
+          f->dump_unsigned("pg_num", pg_num);
+          f->dump_unsigned("expected_num_objects", num_objs);
+        }
       }
       break;
 

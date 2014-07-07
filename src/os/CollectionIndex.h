@@ -182,6 +182,18 @@ protected:
 
   CollectionIndex():access_lock("CollectionIndex::access_lock"){}
 
+  /*
+   * Pre-hash the collection, this collection should map to a PG folder.
+   *
+   * @param pg_num            - pg number of the pool this collection belongs to.
+   * @param expected_num_objs - expected number of objects in this collection.
+   * @Return 0 on success, an error code otherwise.
+   */
+  virtual int pre_hash_collection(
+      uint32_t pg_num,            ///< [in] pg number of the pool this collection belongs to
+      uint64_t expected_num_objs  ///< [in] expected number of objects this collection has
+      ) { assert(0); return 0; }
+
   /// Virtual destructor
   virtual ~CollectionIndex() {}
 };
