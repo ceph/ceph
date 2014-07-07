@@ -1179,6 +1179,18 @@ public:
       session_waiting_for_map.erase(i);
     }
   }
+  void dispatch_sessions_waiting_on_map() {
+    set<Session*> sessions_to_check;
+    get_sessions_waiting_for_map(&sessions_to_check);
+    for (set<Session*>::iterator i = sessions_to_check.begin();
+	 i != sessions_to_check.end();
+	 sessions_to_check.erase(i++)) {
+      (*i)->session_dispatch_lock.Lock();
+      dispatch_session_waiting(*i, osdmap);
+      (*i)->session_dispatch_lock.Unlock();
+      (*i)->put();
+    }
+  }
 
 private:
   /**
