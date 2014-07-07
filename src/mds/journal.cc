@@ -67,7 +67,7 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld, int op_pri
 {
   set<CDir*> commit;
 
-  dout(6) << "LogSegment(" << offset << ").try_to_expire" << dendl;
+  dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire" << dendl;
 
   assert(g_conf->mds_kill_journal_expire_at != 1);
 
@@ -275,11 +275,11 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld, int op_pri
   }
   
   if (gather_bld.has_subs()) {
-    dout(6) << "LogSegment(" << offset << ").try_to_expire waiting" << dendl;
+    dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire waiting" << dendl;
     mds->mdlog->flush();
   } else {
     assert(g_conf->mds_kill_journal_expire_at != 5);
-    dout(6) << "LogSegment(" << offset << ").try_to_expire success" << dendl;
+    dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire success" << dendl;
   }
 }
 
@@ -291,10 +291,8 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld, int op_pri
 // EMetaBlob
 
 EMetaBlob::EMetaBlob(MDLog *mdlog) : opened_ino(0), renamed_dirino(0),
-				     inotablev(0), sessionmapv(0),
-				     allocated_ino(0),
-				     last_subtree_map(mdlog ? mdlog->get_last_segment_offset() : 0),
-				     my_offset(mdlog ? mdlog->get_write_pos() : 0) //, _segment(0)
+				     inotablev(0), sessionmapv(0), allocated_ino(0),
+				     last_subtree_map(0), event_seq(0)
 { }
 
 void EMetaBlob::add_dir_context(CDir *dir, int mode)
@@ -339,7 +337,7 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
       }
       
       // was the inode journaled in this blob?
-      if (my_offset && diri->last_journaled == my_offset) {
+      if (event_seq && diri->last_journaled == event_seq) {
 	dout(20) << "EMetaBlob::add_dir_context(" << dir << ") already have diri this blob " << *diri << dendl;
 	break;
       }
@@ -2415,18 +2413,19 @@ void ESlaveUpdate::replay(MDS *mds)
 
 void ESubtreeMap::encode(bufferlist& bl) const
 {
-  ENCODE_START(5, 5, bl);
+  ENCODE_START(6, 5, bl);
   ::encode(stamp, bl);
   ::encode(metablob, bl);
   ::encode(subtrees, bl);
   ::encode(ambiguous_subtrees, bl);
   ::encode(expire_pos, bl);
+  ::encode(event_seq, bl);
   ENCODE_FINISH(bl);
 }
  
 void ESubtreeMap::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
   if (struct_v >= 2)
     ::decode(stamp, bl);
   ::decode(metablob, bl);
@@ -2435,6 +2434,8 @@ void ESubtreeMap::decode(bufferlist::iterator &bl)
     ::decode(ambiguous_subtrees, bl);
   if (struct_v >= 3)
     ::decode(expire_pos, bl);
+  if (struct_v >= 6)
+    ::decode(event_seq, bl);
   DECODE_FINISH(bl);
 }
 

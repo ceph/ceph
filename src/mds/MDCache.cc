@@ -468,8 +468,7 @@ void MDCache::_create_system_file(CDir *dir, const char *name, CInode *in, Conte
   if (mdir)
     le->metablob.add_new_dir(mdir); // dirty AND complete AND new
 
-  mds->mdlog->submit_entry(le);
-  mds->mdlog->wait_for_safe(new C_MDC_CreateSystemFile(this, mut, dn, dpv, fin));
+  mds->mdlog->submit_entry(le, new C_MDC_CreateSystemFile(this, mut, dn, dpv, fin));
   mds->mdlog->flush();
 }
 
@@ -876,8 +875,7 @@ void MDCache::try_subtree_merge_at(CDir *dir, bool do_eval)
       le->metablob.add_dir_context(in->get_parent_dn()->get_dir());
       journal_dirty_inode(mut.get(), &le->metablob, in);
       
-      mds->mdlog->submit_entry(le);
-      mds->mdlog->wait_for_safe(new C_MDC_SubtreeMergeWB(this, in, mut));
+      mds->mdlog->submit_entry(le, new C_MDC_SubtreeMergeWB(this, in, mut));
       mds->mdlog->flush();
     }
   } 
@@ -2275,7 +2273,7 @@ ESubtreeMap *MDCache::create_subtree_map()
   show_subtrees();
 
   ESubtreeMap *le = new ESubtreeMap();
-  mds->mdlog->start_entry(le);
+  mds->mdlog->_start_entry(le);
   
   CDir *mydir = 0;
   if (myin) {
@@ -3096,8 +3094,8 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
 
       // log commit
       mds->mdlog->start_submit_entry(new ESlaveUpdate(mds->mdlog, "unknown", p->first, from,
-						      ESlaveUpdate::OP_COMMIT, su->origop));
-      mds->mdlog->wait_for_safe(new C_MDC_SlaveCommit(this, from, p->first));
+						      ESlaveUpdate::OP_COMMIT, su->origop),
+				     new C_MDC_SlaveCommit(this, from, p->first));
       mds->mdlog->flush();
 
       finish_uncommitted_slave_update(p->first, from);
@@ -6117,7 +6115,7 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
   CDentry *dn = in->get_projected_parent_dn();
   le->metablob.add_dir_context(dn->get_dir());
   le->metablob.add_primary_dentry(dn, in, true);
-  le->metablob.add_truncate_finish(in->ino(), ls->offset);
+  le->metablob.add_truncate_finish(in->ino(), ls->seq);
 
   journal_dirty_inode(mut.get(), &le->metablob, in);
   mds->mdlog->submit_entry(le, new C_MDC_TruncateLogged(this, in, mut));
@@ -6145,14 +6143,16 @@ void MDCache::truncate_inode_logged(CInode *in, MutationRef& mut)
 
 void MDCache::add_recovered_truncate(CInode *in, LogSegment *ls)
 {
-  dout(20) << "add_recovered_truncate " << *in << " in " << ls << " offset " << ls->offset << dendl;
+  dout(20) << "add_recovered_truncate " << *in << " in log segment "
+	   << ls->seq << "/" << ls->offset << dendl;
   ls->truncating_inodes.insert(in);
   in->get(CInode::PIN_TRUNCATING);
 }
 
 void MDCache::remove_recovered_truncate(CInode *in, LogSegment *ls)
 {
-  dout(20) << "remove_recovered_truncate " << *in << " in " << ls << " offset " << ls->offset << dendl;
+  dout(20) << "remove_recovered_truncate " << *in << " in log segment "
+	   << ls->seq << "/" << ls->offset << dendl;
   // if we have the logseg the truncate started in, it must be in our list.
   set<CInode*>::iterator p = ls->truncating_inodes.find(in);
   assert(p != ls->truncating_inodes.end());
