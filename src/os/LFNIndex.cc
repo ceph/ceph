@@ -148,6 +148,11 @@ int LFNIndex::collection_list(vector<ghobject_t> *ls)
   return _collection_list(ls);
 }
 
+int LFNIndex::pre_hash_collection(uint32_t pg_num, uint64_t expected_num_objs)
+{
+  return _pre_hash_collection(pg_num, expected_num_objs);
+}
+
 
 int LFNIndex::collection_list_partial(const ghobject_t &start,
 				      int min_count,

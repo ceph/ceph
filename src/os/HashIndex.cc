@@ -344,6 +344,152 @@ int HashIndex::prep_delete() {
   return recursive_remove(vector<string>());
 }
 
+int HashIndex::_pre_hash_collection(uint32_t pg_num, uint64_t expected_num_objs) {
+  int ret;
+  vector<string> path;
+  subdir_info_s root_info;
+  // Make sure there is neither objects nor sub-folders
+  // in this collection
+  ret = get_info(path, &root_info);
+  if (ret < 0)
+    return ret;
+
+  // Do the folder splitting first
+  ret = pre_split_folder(pg_num, expected_num_objs);
+  if (ret < 0)
+    return ret;
+  // Initialize the folder info starting from root
+  return init_split_folder(path, 0);
+}
+
+int HashIndex::pre_split_folder(uint32_t pg_num, uint64_t expected_num_objs)
+{
+  // If folder merging is enabled (by setting the threshold positive),
+  // no need to split
+  if (merge_threshold > 0)
+    return 0;
+  const coll_t c = coll();
+  // Do not split if the expected number of objects in this collection is zero (by default)
+  if (expected_num_objs == 0)
+    return 0;
+
+  // Calculate the number of leaf folders (which actually store files)
+  // need to be created
+  const uint64_t objs_per_folder = (unsigned)(abs(merge_threshold)) * 16 * split_multiplier;
+  uint64_t leavies = expected_num_objs / objs_per_folder ;
+  // No need to split
+  if (leavies == 0 || expected_num_objs == objs_per_folder)
+    return 0;
+
+  spg_t spgid;
+  if (!c.is_pg_prefix(spgid))
+    return -EINVAL;
+  const ps_t ps = spgid.pgid.ps();
+
+  // the most significant bits of pg_num
+  const int pg_num_bits = calc_num_bits(pg_num - 1);
+  ps_t tmp_id = ps;
+  // calculate the number of levels we only create one sub folder
+  int num = pg_num_bits / 4;
+  // pg num's hex value is like 1xxx,xxxx,xxxx but not 1111,1111,1111,
+  // so that splitting starts at level 3
+  if (pg_num_bits % 4 == 0 && pg_num < ((uint32_t)1 << pg_num_bits)) {
+    --num;
+  }
+
+  int ret;
+  // Start with creation that only has one subfolder
+  vector<string> paths;
+  int dump_num = num;
+  while (num-- > 0) {
+    ps_t v = tmp_id & 0x0000000f;
+    paths.push_back(to_hex(v));
+    ret = create_path(paths);
+    if (ret < 0 && ret != -EEXIST)
+      return ret;
+    tmp_id = tmp_id >> 4;
+  }
+
+  // Starting from here, we can split by creating multiple subfolders
+  const int left_bits = pg_num_bits - dump_num * 4;
+  // this variable denotes how many bits (for this level) that can be
+  // used for sub folder splitting
+  int split_bits = 4 - left_bits;
+  // the below logic is inspired by rados.h#ceph_stable_mod,
+  // it basically determines how many sub-folders should we
+  // create for splitting
+  if (((1 << (pg_num_bits - 1)) | ps) >= pg_num) {
+    ++split_bits;
+  }
+  const uint32_t subs = (1 << split_bits);
+  // Calculate how many levels we create starting from here
+  int level  = 0;
+  leavies /= subs;
+  while (leavies > 1) {
+    ++level;
+    leavies = leavies >> 4;
+  }
+  for (uint32_t i = 0; i < subs; ++i) {
+    int v = tmp_id | (i << ((4 - split_bits) % 4));
+    paths.push_back(to_hex(v));
+    ret = create_path(paths);
+    if (ret < 0 && ret != -EEXIST)
+      return ret;
+    ret = recursive_create_path(paths, level);
+    if (ret < 0)
+      return ret;
+    paths.pop_back();
+  }
+  return 0;
+}
+
+int HashIndex::init_split_folder(vector<string> &path, uint32_t hash_level)
+{
+  // Get the number of sub directories for the current path
+  set<string> subdirs;
+  int ret = list_subdirs(path, &subdirs);
+  if (ret < 0)
+    return ret;
+  subdir_info_s info;
+  info.subdirs = subdirs.size();
+  info.hash_level = hash_level;
+  ret = set_info(path, info);
+  if (ret < 0)
+    return ret;
+  ret = fsync_dir(path);
+  if (ret < 0)
+    return ret;
+
+  // Do the same for subdirs
+  set<string>::const_iterator iter;
+  for (iter = subdirs.begin(); iter != subdirs.end(); ++iter) {
+    path.push_back(*iter);
+    ret = init_split_folder(path, hash_level + 1);
+    if (ret < 0)
+      return ret;
+    path.pop_back();
+  }
+  return 0;
+}
+
+int HashIndex::recursive_create_path(vector<string>& path, int level)
+{
+  if (level == 0)
+    return 0;
+  int ret;
+  for (int i = 0; i < 16; ++i) {
+    path.push_back(to_hex(i));
+    ret = create_path(path);
+    if (ret < 0 && ret != -EEXIST)
+      return ret;
+    ret = recursive_create_path(path, level - 1);
+    if (ret < 0)
+      return ret;
+    path.pop_back();
+  }
+  return 0;
+}
+
 int HashIndex::recursive_remove(const vector<string> &path) {
   set<string> subdirs;
   int r = list_subdirs(path, &subdirs);

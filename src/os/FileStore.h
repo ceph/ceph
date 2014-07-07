@@ -623,6 +623,19 @@ public:
   int _create_collection(coll_t c);
   int _create_collection(coll_t c, const SequencerPosition &spos);
   int _destroy_collection(coll_t c);
+  /**
+   * Give an expected number of objects hint to the collection.
+   *
+   * @param c                 - collection id.
+   * @param pg_num            - pg number of the pool this collection belongs to
+   * @param expected_num_objs - expected number of objects in this collection
+   * @param spos              - sequence position
+   *
+   * @Return 0 on success, an error code otherwise
+   */
+  int _collection_hint_expected_num_objs(coll_t c, uint32_t pg_num,
+      uint64_t expected_num_objs,
+      const SequencerPosition &spos);
   int _collection_add(coll_t c, coll_t ocid, const ghobject_t& oid,
 		      const SequencerPosition& spos);
   int _collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,
