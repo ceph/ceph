@@ -11,8 +11,8 @@ def parse_args():
     parser.add_argument(
         '--archive-dir',
         metavar='DIR',
+        default='.',
         help='path under which to archive results',
-        required=True,
     )
     parser.add_argument(
         '-v', '--verbose',
