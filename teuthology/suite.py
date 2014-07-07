@@ -526,7 +526,7 @@ def build_matrix(path):
     that concatenates all files/subdirs.
 
     For a directory with a magic '%' file, we generate a result set
-    for each tiem in the directory, and then do a product to generate
+    for each item in the directory, and then do a product to generate
     a result list with all combinations.
 
     The final description (after recursion) for each item will look
