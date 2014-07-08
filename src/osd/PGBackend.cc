@@ -80,7 +80,7 @@ void PGBackend::rollback(
 }
 
 
-void PGBackend::on_change(ObjectStore::Transaction *t)
+void PGBackend::on_change_cleanup(ObjectStore::Transaction *t)
 {
   dout(10) << __func__ << dendl;
   // clear temp
@@ -94,7 +94,6 @@ void PGBackend::on_change(ObjectStore::Transaction *t)
       ghobject_t(*i, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
   }
   temp_contents.clear();
-  _on_change(t);
 }
 
 coll_t PGBackend::get_temp_coll(ObjectStore::Transaction *t)
