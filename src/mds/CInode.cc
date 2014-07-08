@@ -1113,6 +1113,17 @@ void CInode::_stored_backtrace(version_t v, Context *fin)
     fin->complete(0);
 }
 
+void CInode::fetch_backtrace(Context *fin, bufferlist *backtrace)
+{
+  int64_t pool;
+  if (is_dir())
+    pool = mdcache->mds->mdsmap->get_metadata_pool();
+  else
+    pool = inode.layout.fl_pg_pool;
+
+  mdcache->fetch_backtrace(inode.ino, pool, *backtrace, fin);
+}
+
 void CInode::_mark_dirty_parent(LogSegment *ls, bool dirty_pool)
 {
   if (!state_test(STATE_DIRTYPARENT)) {

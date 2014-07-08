@@ -864,9 +864,11 @@ public:
 	dn->get_dir()->get_inode()->is_stray())
       eval_stray(dn, delay);
   }
+
+  void fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Context *fin);
+
 protected:
   void scan_stray_dir(dirfrag_t next=dirfrag_t());
-  void fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Context *fin);
   void purge_stray(CDentry *dn);
   void _purge_stray_purged(CDentry *dn, int r=0);
   void _purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls);
