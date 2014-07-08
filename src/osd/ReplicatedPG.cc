@@ -1624,6 +1624,33 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     // crap, there was a failure of some kind
     return false;
 
+  case pg_pool_t::CACHEMODE_READFORWARD:
+    if (obc.get() && obc->obs.exists) {
+      return false;
+    }
+
+    // Do writeback to the cache tier for writes
+    if (op->may_write()) {
+      if (agent_state &&
+	  agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
+	dout(20) << __func__ << " cache pool full, waiting" << dendl;
+	waiting_for_cache_not_full.push_back(op);
+	return true;
+      }
+      if (!must_promote && can_skip_promote(op, obc)) {
+	return false;
+      }
+      promote_object(op, obc, missing_oid);
+      return true;
+    }
+
+    // If it is a read, we can read, we need to forward it
+    if (must_promote)
+      promote_object(op, obc, missing_oid);
+    else
+      do_cache_redirect(op, obc);
+    return true;
+
   default:
     assert(0 == "unrecognized cache_mode");
   }
@@ -5899,6 +5926,7 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
   if (r == -ENOENT &&
       soid.snap == CEPH_NOSNAP &&
       (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK ||
+       pool.info.cache_mode == pg_pool_t::CACHEMODE_READFORWARD ||
        pool.info.cache_mode == pg_pool_t::CACHEMODE_READONLY)) {
     dout(10) << __func__ << " whiteout " << soid << dendl;
     whiteout = true;
