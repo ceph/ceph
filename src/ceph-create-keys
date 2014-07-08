@@ -101,6 +101,7 @@ def get_key(cluster, mon_id):
                     continue
 
             os.rename(tmp, path)
+            os.chmod(path, 0644)
             break
         finally:
             try:
