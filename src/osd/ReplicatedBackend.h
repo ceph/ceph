@@ -69,7 +69,7 @@ public:
     OpRequestRef op
     );
 
-  void _on_change(ObjectStore::Transaction *t);
+  void on_change();
   void clear_state();
   void on_flushed();
 

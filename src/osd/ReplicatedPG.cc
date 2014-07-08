@@ -9218,7 +9218,7 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
   while (!repop_queue.empty()) {
     RepGather *repop = repop_queue.front();
     repop_queue.pop_front();
-    dout(10) << " applying repop tid " << repop->rep_tid << dendl;
+    dout(10) << " canceling repop tid " << repop->rep_tid << dendl;
     repop->rep_aborted = true;
     if (repop->on_applied) {
       delete repop->on_applied;
@@ -9315,6 +9315,9 @@ void ReplicatedPG::on_shutdown()
   cancel_copy_ops(false);
   cancel_flush_ops(false);
   apply_and_flush_repops(false);
+
+  pgbackend->on_change();
+
   context_registry_on_change();
 
   osd->remote_reserver.cancel_reservation(info.pgid);
@@ -9438,7 +9441,8 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
   // any dups
   apply_and_flush_repops(is_primary());
 
-  pgbackend->on_change(t);
+  pgbackend->on_change_cleanup(t);
+  pgbackend->on_change();
 
   // clear snap_trimmer state
   snap_trimmer_machine.process_event(Reset());
