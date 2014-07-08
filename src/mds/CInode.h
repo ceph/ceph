@@ -547,6 +547,7 @@ public:
   void build_backtrace(int64_t pool, inode_backtrace_t& bt);
   void store_backtrace(MDSInternalContextBase *fin, int op_prio=-1);
   void _stored_backtrace(version_t v, Context *fin);
+  void fetch_backtrace(Context *fin, bufferlist *backtrace);
   void _mark_dirty_parent(LogSegment *ls, bool dirty_pool=false);
   void clear_dirty_parent();
   bool is_dirty_parent() { return state_test(STATE_DIRTYPARENT); }
