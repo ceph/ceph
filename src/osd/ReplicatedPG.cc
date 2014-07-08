@@ -9315,6 +9315,9 @@ void ReplicatedPG::on_shutdown()
   cancel_copy_ops(false);
   cancel_flush_ops(false);
   apply_and_flush_repops(false);
+
+  pgbackend->on_change();
+
   context_registry_on_change();
 
   osd->remote_reserver.cancel_reservation(info.pgid);
