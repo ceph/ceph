@@ -256,7 +256,7 @@ void Server::handle_client_session(MClientSession *m)
 		<< ", BUGGY!" << dendl;
 	assert(0);
       }
-      journal_close_session(session, Session::STATE_CLOSING);
+      journal_close_session(session, Session::STATE_CLOSING, NULL);
     }
     break;
 
@@ -448,7 +448,7 @@ void Server::terminate_sessions()
 	session->is_killing() ||
 	session->is_closed())
       continue;
-    journal_close_session(session, Session::STATE_CLOSING);
+    journal_close_session(session, Session::STATE_CLOSING, NULL);
   }
 
   mdlog->wait_for_safe(new C_MDS_TerminatedSessions(this));
@@ -513,7 +513,7 @@ void Server::find_idle_sessions()
     mds->clog.info() << "closing stale session " << session->info.inst
 	<< " after " << age << "\n";
     dout(10) << "autoclosing stale session " << session->info.inst << " last " << session->last_cap_renew << dendl;
-    kill_session(session);
+    kill_session(session, NULL);
   }
 }
 
@@ -719,7 +719,7 @@ void Server::reconnect_tick()
       Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
       assert(session);
       dout(1) << "reconnect gave up on " << session->info.inst << dendl;
-      kill_session(session);
+      kill_session(session, NULL);
       failed_reconnects++;
     }
     client_reconnect_gather.clear();
