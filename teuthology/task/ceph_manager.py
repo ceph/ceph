@@ -532,7 +532,7 @@ class CephManager:
         remote = None
         for _remote, roles_for_host in self.ctx.cluster.remotes.iteritems():
             for id_ in teuthology.roles_of_type(roles_for_host, service_type):
-                if int(id_) == int(service_id):
+                if id_ == str(service_id):
                     remote = _remote
         assert remote is not None
         args = [
