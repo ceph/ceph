@@ -82,7 +82,7 @@ public:
   /// @see ReadOp below
   void check_recovery_sources(const OSDMapRef osdmap);
 
-  void _on_change(ObjectStore::Transaction *t);
+  void on_change();
   void clear_state();
 
   void on_flushed();

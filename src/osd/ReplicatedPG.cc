@@ -9440,7 +9440,8 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
   // any dups
   apply_and_flush_repops(is_primary());
 
-  pgbackend->on_change(t);
+  pgbackend->on_change_cleanup(t);
+  pgbackend->on_change();
 
   // clear snap_trimmer state
   snap_trimmer_machine.process_event(Reset());
