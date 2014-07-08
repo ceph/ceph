@@ -796,16 +796,25 @@ extern "C" int rbd_get_parent_info(rbd_image_t image,
   if (r < 0)
     return r;
 
-  // compare against input bufferlen, leaving room for \0
-  if (p_pool_name.length() + 1 > ppool_namelen ||
-      p_name.length() + 1 > pnamelen ||
-      p_snap_name.length() + 1 > psnap_namelen) {
-    return -ERANGE;
+  if (parent_pool_name) {
+    if (p_pool_name.length() + 1 > ppool_namelen)
+      return -ERANGE;
+
+    strcpy(parent_pool_name, p_pool_name.c_str());
+  }
+  if (parent_name) {
+    if (p_name.length() + 1 > pnamelen)
+      return -ERANGE;
+
+    strcpy(parent_name, p_name.c_str());
+  }
+  if (parent_snap_name) {
+    if (p_snap_name.length() + 1 > psnap_namelen)
+      return -ERANGE;
+
+    strcpy(parent_snap_name, p_snap_name.c_str());
   }
 
-  strcpy(parent_pool_name, p_pool_name.c_str());
-  strcpy(parent_name, p_name.c_str());
-  strcpy(parent_snap_name, p_snap_name.c_str());
   return 0;
 }
 
