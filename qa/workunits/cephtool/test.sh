@@ -222,6 +222,37 @@ function test_tiering()
   ceph health detail | grep cache4 | grep 'target max' | grep objects
   ceph health detail | grep cache4 | grep 'target max' | grep 'B'
   ceph osd pool delete cache4 cache4 --yes-i-really-really-mean-it
+
+  # make sure 'tier remove' behaves as we expect
+  # i.e., removing a tier from a pool that's not its base pool only
+  # results in a 'pool foo is now (or already was) not a tier of bar'
+  #
+  ceph osd pool create basepoolA 2
+  ceph osd pool create basepoolB 2
+  poolA_id=$(ceph osd dump | grep 'pool.*basepoolA' | awk '{print $2;}')
+  poolB_id=$(ceph osd dump | grep 'pool.*basepoolB' | awk '{print $2;}')
+
+  ceph osd pool create cache5 2
+  ceph osd pool create cache6 2
+  ceph osd tier add basepoolA cache5
+  ceph osd tier add basepoolB cache6
+  ceph osd tier remove basepoolB cache5 2>&1 | grep 'not a tier of'
+  ceph osd dump | grep "pool.*'cache5'" 2>&1 | grep "tier_of[ \t]\+$poolA_id"
+  ceph osd tier remove basepoolA cache6 2>&1 | grep 'not a tier of'
+  ceph osd dump | grep "pool.*'cache6'" 2>&1 | grep "tier_of[ \t]\+$poolB_id"
+
+  ceph osd tier remove basepoolA cache5 2>&1 | grep 'not a tier of'
+  ! ceph osd dump | grep "pool.*'cache5'" 2>&1 | grep "tier_of"
+  ceph osd tier remove basepoolB cache6 2>&1 | grep 'not a tier of'
+  ! ceph osd dump | grep "pool.*'cache6'" 2>&1 | grep "tier_of"
+
+  ! ceph osd dump | grep "pool.*'basepoolA'" 2>&1 | grep "tiers"
+  ! ceph osd dump | grep "pool.*'basepoolB'" 2>&1 | grep "tiers"
+
+  ceph osd pool delete cache6 cache6 --yes-i-really-really-mean-it
+  ceph osd pool delete cache5 cache5 --yes-i-really-really-mean-it
+  ceph osd pool delete basepoolB basepoolB --yes-i-really-really-mean-it
+  ceph osd pool delete basepoolA basepoolA --yes-i-really-really-mean-it
 }
 
 
@@ -781,14 +812,13 @@ function test_mon_osd_tiered_pool_set()
   expect_false ceph osd pool get fake-tier target_max_bytes
   expect_false ceph osd pool set fake-tier cache_target_dirty_ratio .123
   expect_false ceph osd pool get fake-tier cache_target_dirty_ratio
-  expect_false expect_false ceph osd pool set fake-tier cache_target_dirty_ratio -.2
-  expect_false expect_false ceph osd pool set fake-tier cache_target_dirty_ratio 1.1
+  expect_false ceph osd pool set fake-tier cache_target_dirty_ratio -.2
+  expect_false ceph osd pool set fake-tier cache_target_dirty_ratio 1.1
   expect_false ceph osd pool set fake-tier cache_target_full_ratio .123
   expect_false ceph osd pool get fake-tier cache_target_full_ratio
-  expect_false ceph osd dump -f json-pretty
   expect_false ceph osd pool set fake-tier cache_target_full_ratio 1.0
   expect_false ceph osd pool set fake-tier cache_target_full_ratio 0
-  expect_false expect_false ceph osd pool set fake-tier cache_target_full_ratio 1.1
+  expect_false ceph osd pool set fake-tier cache_target_full_ratio 1.1
   expect_false ceph osd pool set fake-tier cache_min_flush_age 123
   expect_false ceph osd pool get fake-tier cache_min_flush_age
   expect_false ceph osd pool set fake-tier cache_min_evict_age 234
