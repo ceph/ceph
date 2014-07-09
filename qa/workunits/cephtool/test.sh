@@ -3,7 +3,7 @@
 set -e
 set -o functrace
 PS4=' ${FUNCNAME[0]}: $LINENO: '
-SUDO=sudo
+SUDO=${SUDO:-sudo}
 
 function get_pg()
 {
@@ -330,11 +330,33 @@ function test_mon_misc()
 }
 
 
+function fail_all_mds()
+{
+  ceph mds cluster_down
+  mds_gids=`ceph mds dump | grep up: | while read line ; do echo $line | awk '{print substr($1, 0, length($1)-1);}' ; done`
+  for mds_gid in $mds_gids ; do
+      ceph mds fail $mds_gid
+  done
+}
+
 function test_mon_mds()
 {
+  existing_fs=$(ceph fs ls | grep "name:" | awk '{print substr($2,0,length($2)-1);}')
+  num_mds=$(ceph mds stat | awk '{print $2;}' | cut -f1 -d'/')
+  if [ -n "$existing_fs" ] ; then
+      fail_all_mds
+      echo "Removing existing filesystem '${existing_fs}'..."
+      ceph fs rm $existing_fs --yes-i-really-mean-it
+      echo "Removed '${existing_fs}'."
+  fi
+
   ceph osd pool create fs_data 10
   ceph osd pool create fs_metadata 10
   ceph fs new cephfs fs_metadata fs_data
+
+  # We don't want any MDSs to be up, their activity can interfere with
+  # the "current_epoch + 1" checking below if they're generating updates
+  fail_all_mds
 
   # Check for default crash_replay_interval set automatically in 'fs new'
   ceph osd dump | grep fs_data > $TMPFILE
@@ -398,13 +420,14 @@ function test_mon_mds()
   ceph mds add_data_pool mds-ec-pool 2>$TMPFILE
   check_response 'erasure-code' $? 22
   set -e
-  ec_poolnum=$(ceph osd dump | grep 'pool.*mds-ec-pool' | awk '{print $2;}')
-  data_poolnum=$(ceph osd dump | grep 'pool.*fs_data' | awk '{print $2;}')
-  metadata_poolnum=$(ceph osd dump | grep 'pool.*fs_metadata' | awk '{print $2;}')
-  set +e
+  ec_poolnum=$(ceph osd dump | grep "pool.* 'mds-ec-pool" | awk '{print $2;}')
+  data_poolnum=$(ceph osd dump | grep "pool.* 'fs_data" | awk '{print $2;}')
+  metadata_poolnum=$(ceph osd dump | grep "pool.* 'fs_metadata" | awk '{print $2;}')
 
+  fail_all_mds
   ceph fs rm cephfs --yes-i-really-mean-it
 
+  set +e
   ceph mds newfs $metadata_poolnum $ec_poolnum --yes-i-really-mean-it 2>$TMPFILE
   check_response 'erasure-code' $? 22
   ceph mds newfs $ec_poolnum $data_poolnum --yes-i-really-mean-it 2>$TMPFILE
