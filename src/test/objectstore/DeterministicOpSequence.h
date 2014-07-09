@@ -42,9 +42,10 @@ class DeterministicOpSequence : public TestObjectStoreState {
     DSOP_COLL_RENAME = 5,
     DSOP_COLL_ADD = 6,
     DSOP_SET_ATTRS = 7,
+    DSOP_COLL_CREATE = 8,
 
     DSOP_FIRST = DSOP_TOUCH,
-    DSOP_LAST = DSOP_SET_ATTRS,
+    DSOP_LAST = DSOP_COLL_CREATE,
   };
 
   int32_t txn;
@@ -66,6 +67,7 @@ class DeterministicOpSequence : public TestObjectStoreState {
   bool do_coll_rename(rngen_t& gen);
   bool do_coll_add(rngen_t& gen);
   bool do_set_attrs(rngen_t& gen);
+  bool do_coll_create(rngen_t& gen);
 
   virtual void _do_touch(coll_t coll, hobject_t& obj);
   virtual void _do_remove(coll_t coll, hobject_t& obj);
@@ -82,6 +84,7 @@ class DeterministicOpSequence : public TestObjectStoreState {
       uint64_t dstoff, bufferlist& bl);
   virtual void _do_coll_add(coll_t orig_coll, coll_t new_coll, hobject_t& obj);
   virtual void _do_coll_rename(coll_t orig_coll, coll_t new_coll);
+  virtual void _do_coll_create(coll_t cid, uint32_t pg_num, uint64_t num_objs);
 
   int _gen_coll_id(rngen_t& gen);
   int _gen_obj_id(rngen_t& gen);
