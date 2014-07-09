@@ -28,8 +28,9 @@
 #include <err.h>
 #endif
 #include <signal.h>
-#include <stdio.h>
+#include <stdbool.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
@@ -718,6 +719,19 @@ const struct rbd_operations krbd_operations = {
 
 struct rbd_ctx ctx = RBD_CTX_INIT;
 const struct rbd_operations *ops = &librbd_operations;
+
+static bool rbd_image_has_parent(struct rbd_ctx *ctx)
+{
+	int ret;
+
+	ret = rbd_get_parent_info(ctx->image, NULL, 0, NULL, 0, NULL, 0);
+	if (ret < 0 && ret != -ENOENT) {
+		prterrcode("rbd_get_parent_info", ret);
+		exit(1);
+	}
+
+	return !ret;
+}
 
 /*
  * fsx
@@ -1470,8 +1484,7 @@ do_flatten()
 {
 	int ret;
 
-	if (num_clones == 0 ||
-	    (rbd_get_parent_info(ctx.image, NULL, 0, NULL, 0, NULL, 0) == -ENOENT)) {
+	if (!rbd_image_has_parent(&ctx)) {
 		log4(OP_SKIPPED, OP_FLATTEN, 0, 0);
 		return;
 	}
