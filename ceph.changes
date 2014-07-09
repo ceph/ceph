@@ -1,4 +1,4 @@
-Wed Jul  9 11:00:07 UTC 2014 - osynge@suse.com
+Wed Jul  9 15:00:07 UTC 2014 - osynge@suse.com
 
 - Added /var/lib/ceph/osd fixing bug 885210
 - Fixed licencing to match upstream README.
