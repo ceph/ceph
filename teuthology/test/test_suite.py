@@ -1,6 +1,5 @@
 import os
 import requests
-import yaml
 from datetime import datetime
 from pytest import raises, skip
 
@@ -76,12 +75,18 @@ class TestSuiteOnline(object):
     def test_config_substitution(self):
         # Don't attempt to send email
         config.results_email = None
-        job_config_str = suite.create_initial_config('MY_SUITE', 'master',
-                                                     'master', 'testing',
-                                                     'basic', 'centos',
-                                                     'plana')
-        job_config = yaml.safe_load(job_config_str)
+        job_config = suite.create_initial_config('MY_SUITE', 'master',
+                                                 'master', 'testing', 'basic',
+                                                 'centos', 'plana')
         assert job_config['suite'] == 'MY_SUITE'
+
+    def test_config_kernel_section(self):
+        # Don't attempt to send email
+        config.results_email = None
+        job_config = suite.create_initial_config('MY_SUITE', 'master',
+                                                 'master', 'testing', 'basic',
+                                                 'centos', 'plana')
+        assert job_config['kernel']['kdb'] is True
 
 
 # maybe use notario for the above?
