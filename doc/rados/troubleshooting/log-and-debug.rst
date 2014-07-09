@@ -261,7 +261,7 @@ settings:
 
 ``log file``
 
-:Desription: The location of the logging file for your cluster.
+:Description: The location of the logging file for your cluster.
 :Type: String
 :Required: No
 :Default: ``/var/log/ceph/$cluster-$name.log``
