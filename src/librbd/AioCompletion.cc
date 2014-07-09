@@ -10,6 +10,7 @@
 #include "librbd/internal.h"
 
 #include "librbd/AioCompletion.h"
+#include "tracing/librbd.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -28,6 +29,16 @@ namespace librbd {
       complete();
     }
     lock.Unlock();
+  }
+
+  int AioCompletion::wait_for_complete() {
+    tracepoint(librbd, aio_wait_for_complete_enter, this);
+    lock.Lock();
+    while (!done)
+      cond.Wait(lock);
+    lock.Unlock();
+    tracepoint(librbd, aio_wait_for_complete_exit, 0);
+    return 0;
   }
 
   void AioCompletion::finalize(CephContext *cct, ssize_t rval)
@@ -54,6 +65,32 @@ namespace librbd {
     }
   }
 
+  void AioCompletion::complete() {
+    tracepoint(librbd, aio_complete_enter, this, rval);
+    utime_t elapsed;
+    assert(lock.is_locked());
+    elapsed = ceph_clock_now(ictx->cct) - start_time;
+    switch (aio_type) {
+    case AIO_TYPE_READ:
+      ictx->perfcounter->tinc(l_librbd_aio_rd_latency, elapsed); break;
+    case AIO_TYPE_WRITE:
+      ictx->perfcounter->tinc(l_librbd_aio_wr_latency, elapsed); break;
+    case AIO_TYPE_DISCARD:
+      ictx->perfcounter->tinc(l_librbd_aio_discard_latency, elapsed); break;
+    case AIO_TYPE_FLUSH:
+      ictx->perfcounter->tinc(l_librbd_aio_flush_latency, elapsed); break;
+    default:
+      lderr(ictx->cct) << "completed invalid aio_type: " << aio_type << dendl;
+      break;
+    }
+    if (complete_cb) {
+      complete_cb(rbd_comp, complete_arg);
+    }
+    done = true;
+    cond.Signal();
+    tracepoint(librbd, aio_complete_exit);
+  }
+
   void AioCompletion::complete_request(CephContext *cct, ssize_t r)
   {
     ldout(cct, 20) << "AioCompletion::complete_request() "
@@ -73,6 +110,26 @@ namespace librbd {
       complete();
     }
     put_unlock();
+  }
+
+  bool AioCompletion::is_complete() {
+    tracepoint(librbd, aio_is_complete_enter, this);
+    bool done;
+    {
+      Mutex::Locker l(lock);
+      done = this->done;
+    }
+    tracepoint(librbd, aio_is_complete_exit, done);
+    return done;
+  }
+
+  ssize_t AioCompletion::get_return_value() {
+    tracepoint(librbd, aio_get_return_value_enter, this);
+    lock.Lock();
+    ssize_t r = rval;
+    lock.Unlock();
+    tracepoint(librbd, aio_get_return_value_exit, r);
+    return r;
   }
 
   void C_AioRead::finish(int r)
