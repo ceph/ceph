@@ -647,7 +647,7 @@ the default pool names. For example:
 
 Ceph Object Gateways store data for the bucket index (``index_pool``) and bucket
 data (``data_pool``) in placement pools. These may overlap--i.e., you may use
-the same pool for the the index and the data. The index pool for default
+the same pool for the index and the data. The index pool for default
 placement is ``.rgw.buckets.index`` and for the data pool for default placement
 is ``.rgw.buckets``. See `Zones`_ for details on specifying pools in a zone
 configuration.
