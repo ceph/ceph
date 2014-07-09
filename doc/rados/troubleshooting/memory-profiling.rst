@@ -19,7 +19,7 @@ Refer to `Google Heap Profiler`_ for additional details.
 
 Once you have the heap profiler installed, start your cluster and begin using
 the heap profiler. You may enable or disable the heap profiler at runtime, or
-ensure that it runs continously. For the following commandline usage, replace
+ensure that it runs continuously. For the following commandline usage, replace
 ``{daemon-type}`` with ``osd`` or ``mds``, and replace ``daemon-id`` with the
 OSD number or metadata server letter.
 

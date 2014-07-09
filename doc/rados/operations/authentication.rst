@@ -41,7 +41,7 @@ See the `Cephx Configuration Reference`_ for additional details.
 .. tip:: This guide is for manual configuration. If you use a deployment tool 
    such as ``ceph-deploy``, it is very likely that the tool will perform at 
    least the first two steps for you. Verify that your deployment tool
-   addresses these steps so that you don't overwrite your keys inadvertantly. 
+   addresses these steps so that you don't overwrite your keys inadvertently. 
 
 
 .. _client-admin-key:

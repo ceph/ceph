@@ -12,7 +12,7 @@ Create an Admin Host
 ====================
 
 To enable a host to execute ceph commands with administrator
-priveleges, use the ``admin`` command. ::
+privileges, use the ``admin`` command. ::
 
 	ceph-deploy admin {host-name [host-name]...}
 	

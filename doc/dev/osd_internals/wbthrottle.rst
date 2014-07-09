@@ -10,7 +10,7 @@ The flusher was not an adequate solution to this problem since it
 forced writeback of small writes too eagerly killing performance.
 
 WBThrottle tracks unflushed io per hobject_t and ::fsyncs in lru
-order once the start_flusher threshhold is exceeded for any of
+order once the start_flusher threshold is exceeded for any of
 dirty bytes, dirty ios, or dirty inodes.  While any of these exceed
 the hard_limit, we block on throttle() in _do_op.
 

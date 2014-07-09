@@ -821,7 +821,7 @@ If successful, the response contains the subuser information.
 
 ``permissions``
 
-:Description: Subuser access to user acount.
+:Description: Subuser access to user account.
 :Type: String
 :Parent: ``subusers``
 
@@ -931,7 +931,7 @@ If successful, the response contains the subuser information.
 
 ``permissions``
 
-:Description: Subuser access to user acount.
+:Description: Subuser access to user account.
 :Type: String
 :Parent: ``subusers``
 

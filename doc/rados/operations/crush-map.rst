@@ -90,7 +90,7 @@ string for a given daemon.  The location is based on, in order of preference:
    generated with the ``hostname -s`` command.
 
 In a typical deployment scenario, provisioning software (or the system
-adminstrator) can simply set the 'crush location' field in a host's
+administrator) can simply set the 'crush location' field in a host's
 ceph.conf to describe that machine's location within the datacenter or
 cluster.  This will be provide location awareness to both Ceph daemons
 and clients alike.
@@ -104,7 +104,7 @@ correct.)::
 
   osd crush location hook = /path/to/script
 
-This hook is is passed several arguments (below) and should output a single line
+This hook is passed several arguments (below) and should output a single line
 to stdout with the CRUSH location description.::
 
   $ ceph-crush-location --cluster CLUSTER --id ID --type TYPE
@@ -635,7 +635,7 @@ Placing Different Pools on Different OSDS:
 Suppose you want to have most pools default to OSDs backed by large hard drives,
 but have some pools mapped to OSDs backed by fast solid-state drives (SSDs).
 It's possible to have multiple independent CRUSH heirarchies within the same
-CRUSH map. Define two hierachies with two different root nodes--one for hard
+CRUSH map. Define two hierarchies with two different root nodes--one for hard
 disks (e.g., "root platter") and one for SSDs (e.g., "root ssd") as shown
 below::
 
@@ -1044,7 +1044,7 @@ A few important points
    required to support the feature.  However, the OSD peering process
    requires examining and understanding old maps.  Therefore, you
    should not run old versions of the ``ceph-osd`` daemon
-   if the cluster has previosly used non-legacy CRUSH values, even if
+   if the cluster has previously used non-legacy CRUSH values, even if
    the latest version of the map has been switched back to using the
    legacy defaults.
 
