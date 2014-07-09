@@ -36,7 +36,7 @@ steps:
 Get the Source
 --------------
 
-Ceph documentation lives in the Ceph repository right along side the Ceph source
+Ceph documentation lives in the Ceph repository right alongside the Ceph source
 code under the ``ceph/doc`` directory. For details on github and ceph,
 see :ref:`Get Involved`.
 
