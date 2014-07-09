@@ -2,7 +2,7 @@
  Install Ceph Deploy
 =====================
 
-The ``ceph-deploy`` tool is a enables you to set up and tear down Ceph clusters
+The ``ceph-deploy`` tool enables you to set up and tear down Ceph clusters
 for development, testing and proof-of-concept projects.
 
 
