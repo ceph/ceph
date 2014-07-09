@@ -196,7 +196,7 @@ MDS Unique Names
 ----------------
 
 The monitor now enforces that MDS names be unique. If you have multiple metadata
-server daemons that start with with the same ID (e.g., mds.a) the second
+server daemons that start with the same ID (e.g., mds.a) the second
 metadata server will implicitly mark the first metadata server as ``failed``.
 Multi-MDS configurations with identical names must be adjusted accordingly to
 give daemons unique names. If you run your cluster with one  metadata server,
