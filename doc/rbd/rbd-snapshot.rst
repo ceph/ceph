@@ -220,7 +220,7 @@ clone snapshots  from one pool to images in another pool.
 
 #. **Template Pool:** One way to use block device layering is to create a 
    pool that contains master images that act as templates, and snapshots of those
-   templates. You may then extend read-only priveleges to users so that they 
+   templates. You may then extend read-only privileges to users so that they 
    may clone the snapshots without the ability to write or execute within the pool.
 
 #. **Image Migration/Recovery:** One way to use block device layering is to migrate
@@ -229,7 +229,7 @@ clone snapshots  from one pool to images in another pool.
 Protecting a Snapshot
 ---------------------
 
-Clones access the parent snapshots. All clones would break if a user inadvertantly 
+Clones access the parent snapshots. All clones would break if a user inadvertently 
 deleted the parent snapshot. To prevent data loss, you **MUST** protect the
 snapshot before you can clone it. ::
 
