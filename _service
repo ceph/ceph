@@ -1,14 +1,3 @@
 <services>
-  <service name="tar_scm" mode="disabled">
-    <param name="versionformat">0.80.1_suse+git.%h</param>
-    <param name="url">git://github.com/SUSE/ceph.git</param>
-    <param name="revision">distro/suse-0-80-1</param>
-    <param name="filename">ceph</param>
-    <param name="scm">git</param>
-  </service>
-  <service name="recompress" mode="disabled">
-    <param name="compression">xz</param>
-    <param name="file">*.tar</param>
-  </service>
-  <service name="set_version" mode="disabled"/>
+  <service name="download_files" mode="disabled"/>
 </services>

@@ -1,0 +1,38 @@
+From: Danny Al-Gaaf <dalgaaf@suse.de>
+Date: Thu, 5 Jun 2014 00:08:11 +0200
+Subject: [PATCH] Fix runlevels for start scripts
+
+Merge distro patches to git.
+
+This was 0001-fix-runlevels-for-start-scripts.patch
+---
+ src/init-ceph.in | 2 +-
+ src/init-radosgw | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/init-ceph.in b/src/init-ceph.in
+index 7cb2a39..d66d5a7 100644
+--- a/src/init-ceph.in
++++ b/src/init-ceph.in
+@@ -4,7 +4,7 @@
+ 
+ ### BEGIN INIT INFO
+ # Provides:          ceph
+-# Default-Start:     3 4 5
++# Default-Start:     3 5
+ # Default-Stop:      0 1 6
+ # Required-Start:    $remote_fs $named $network $time
+ # Required-Stop:     $remote_fs $named $network $time
+diff --git a/src/init-radosgw b/src/init-radosgw
+index 26ebff7..ecc8314 100644
+--- a/src/init-radosgw
++++ b/src/init-radosgw
+@@ -3,7 +3,7 @@
+ # Provides:          radosgw
+ # Required-Start:    $remote_fs $named $network $time
+ # Required-Stop:     $remote_fs $named $network $time
+-# Default-Start:     3 4 5
++# Default-Start:     3 5
+ # Default-Stop:      0 1 6
+ # Short-Description: radosgw RESTful rados gateway
+ # Description: radosgw RESTful rados gateway

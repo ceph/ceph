@@ -1,0 +1,24 @@
+From: Michal Jura <mjura@suse.com>
+Date: Wed, 2 Jul 2014 14:58:37 +0200
+Subject: [PATCH] Fixup radosgw daemon init.
+
+This is a fixup for 2cd29db16497917e2e5737b7f1b52dbb77b038c2
+(the late radosgw-init-opensuse.patch), radosgw needs the config
+section name.
+---
+ src/init-radosgw | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/init-radosgw b/src/init-radosgw
+index ecc8314..24f13ce 100644
+--- a/src/init-radosgw
++++ b/src/init-radosgw
+@@ -78,7 +78,7 @@ case "$1" in
+             fi
+ 
+             echo "Starting $name..."
+-	     /sbin/startproc -u $user $RADOSGW
++	     /sbin/startproc -u $user $RADOSGW -- -n $name
+         done
+         daemon_is_running $RADOSGW
+         ;;

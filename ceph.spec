@@ -1,3 +1,4 @@
+#
 # spec file for package ceph
 #
 # Copyright (c) 2014 SUSE LINUX Products GmbH, Nuernberg, Germany.
@@ -41,66 +42,88 @@
 # common
 #################################################################################
 Name:           ceph
-Version:        0.80.1_suse+git.3217378
+Version:        0.80.1
 Release:        0%{?dist}
 Summary:        A Scalable Distributed File System
-License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
+License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
 Group:          System/Filesystems
-URL:            http://ceph.com/
-Source0:        %{name}-%{version}.tar.xz
+Url:            http://ceph.com/
+Source0:        http://ceph.com/download/%{name}-%{version}.tar.bz2
 Source1:        README.SUSE.v0.2
 Source2:        mkinitrd-root.on.rbd.tar.xz
 Source3:        ceph-tmpfiles.d.conf
 # filter spurious setgid warning - mongoose/civetweb is not trying to relinquish suid
 Source4:        ceph-rpmlintrc
-
-Requires:       librbd1 = %{version}-%{release}
-Requires:       librados2 = %{version}-%{release}
+Requires:       cryptsetup
 Requires:       libcephfs1 = %{version}-%{release}
+Requires:       librados2 = %{version}-%{release}
+Requires:       librbd1 = %{version}-%{release}
 # python-ceph is used for client tools.
-Requires:	python-ceph = %{version}-%{release}
+Requires:       python-ceph = %{version}-%{release}
+# util-linux because we need mount
+Requires:       util-linux
 Requires(post): binutils
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
-BuildRequires:  gcc-c++
-BuildRequires:  libtool
+%if ! 0%{?rhel}
+BuildRequires:  sharutils
+%endif
+%if 0%{?suse_version} < 1310
+BuildRequires:  boost49-devel
+%else
 BuildRequires:  boost-devel > 1.48
-BuildRequires:  libedit-devel
-BuildRequires:  perl
+%endif
+BuildRequires:  gcc-c++
 BuildRequires:  gdbm
+BuildRequires:  libaio-devel
+BuildRequires:  libcurl-devel
+BuildRequires:  libedit-devel
+BuildRequires:  libtool
+BuildRequires:  libuuid-devel
+BuildRequires:  libxml2-devel
+BuildRequires:  perl
 BuildRequires:  pkgconfig
 BuildRequires:  python
-BuildRequires:  libuuid-devel
-BuildRequires:  libaio-devel
 BuildRequires:  libblkid-devel
 BuildRequires:  snappy-devel
 BuildRequires:  leveldb-devel
 BuildRequires:  xfsprogs-devel
-BuildRequires:  libxml2-devel
 BuildRequires:  xz
 %if 0%{?suse_version} >= 1310
 BuildRequires:  systemd
 %endif
+# This patch queue is auto-generated from https://github.com/SUSE/ceph
+Patch0001:      0001-Rcfiles-remove-from-runlevel-2.patch
+Patch0002:      0002-init-radosgw-adjust-for-opensuse.patch
+Patch0003:      0003-mkcephfs-add-xfs-support.patch
+Patch0004:      0004-init-ceph-add-xfs-support.patch
+Patch0005:      0005-Fix-runlevels-for-start-scripts.patch
+Patch0006:      0006-Drop-ceph-keys-into-install.patch
+Patch0007:      0007-add-syncfs-support-v3.patch
+Patch0008:      0008-Fixup-radosgw-daemon-init.patch
+# Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
 # specific
 #################################################################################
 %if 0%{defined suse_version}
+# ceph-disk uses gptfdisk to format OSD disks
+Requires:       gptfdisk
 BuildRequires:  %insserv_prereq
 Recommends:     logrotate
-BuildRequires:  mozilla-nss-devel
 BuildRequires:  keyutils-devel
 BuildRequires:  libatomic-ops-devel
+BuildRequires:  mozilla-nss-devel
 %else
-BuildRequires:  nss-devel
 BuildRequires:  keyutils-libs-devel
 BuildRequires:  libatomic_ops-devel
+BuildRequires:  nss-devel
+Requires:       gdisk
 Requires(post): chkconfig
 Requires(preun):chkconfig
 Requires(preun):initscripts
 %endif
-BuildRequires:  libcurl-devel
 %ifnarch ppc ppc64 s390 s390x ia64
-%if 0%{?suse_version} >= 1200
+%if 0%{?suse_version} >= 1310
 %if 0%{with tcmalloc}
 # use isa so this will not be satisfied by
 # google-perftools-devel.i686 on a x86_64 box
@@ -109,8 +132,6 @@ BuildRequires:  gperftools-devel%{?_isa}
 %endif
 %endif
 %endif
-# ceph-disk uses gptfdisk to format OSD disks
-Requires: gptfdisk
 
 %description
 Ceph is a distributed network file system designed to provide excellent
@@ -120,22 +141,20 @@ performance, reliability, and scalability.
 # packages
 #################################################################################
 %package fuse
-License:        GPL-2.0
+License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
 Summary:        Ceph fuse-based client
 Group:          System/Filesystems
 Requires:       %{name} = %{version}-%{release}
 BuildRequires:  fuse-devel
+
 %description fuse
 FUSE based client for Ceph distributed network file system
-
-
 
 %if 0%{?rbd_fuse}
 
 %package -n rbd-fuse
-
-
 Summary:        RBD fuse-based client
+License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
 Group:          System/Filesystems
 Requires:       %{name} = %{version}-%{release}
 BuildRequires:  fuse-devel
@@ -148,54 +167,45 @@ FUSE based client for Ceph distributed network file system
 %package devel
 Summary:        Ceph headers
 Group:          Development/Libraries/C and C++
-License:        GPL-2.0
+License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
 Requires:       %{name} = %{version}-%{release}
 Requires:       librados2 = %{version}
 Requires:       librbd1 = %{version}
 Requires:       libcephfs1 = %{version}
+
 %description devel
 This package contains libraries and headers needed to develop programs
 that use Ceph.
 
 %package radosgw
-License:        GPL-2.0
+License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
 Summary:        Rados REST Gateway
 Group:          System/Filesystems
 Requires:       librados2 = %{version}-%{release}
+Requires:       logrotate
 %if 0%{defined suse_version}
-BuildRequires:  libexpat-devel
 BuildRequires:  FastCGI-devel
+BuildRequires:  libexpat-devel
 Requires:       apache2-mod_fcgid
 %else
 BuildRequires:  expat-devel
 BuildRequires:  fcgi-devel
 Requires:       mod_fcgid
+
 %endif
 %description radosgw
 radosgw is an S3 HTTP REST gateway for the RADOS object store. It is
 implemented as a FastCGI module using libfcgi, and can be used in
 conjunction with any FastCGI capable web server.
 
-%if %{with gtk2}
-
-%package gcephtool
-Summary:        Graphical Monitoring Tool for Ceph
-Group:          System/Filesystems
-License:        GPL-2.0
-Requires:       gtk2 gtkmm24
-BuildRequires:  gtk2-devel gtkmm24-devel
-%description gcephtool
-gcephtool is a graphical monitor for the clusters running the Ceph distributed
-file system.
-%endif
-
 %if 0%{?suse_version}
 %package resource-agents
 Summary:        OCF-compliant Resource Agents for Ceph Daemons
 Group:          System/Filesystems
-License:        GPL-2.0
+License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
 Requires:       %{name} = %{version}
 Requires:       resource-agents
+
 %description resource-agents
 Resource agents for monitoring and managing Ceph daemons
 under Open Cluster Framework (OCF) compliant resource
@@ -205,7 +215,8 @@ managers such as Pacemaker.
 %package -n librados2
 Summary:        RADOS distributed object store client library
 Group:          System/Filesystems
-License:        GPL-2.0
+License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
+
 %description -n librados2
 RADOS is a reliable, autonomic distributed object storage cluster
 developed as part of the Ceph distributed storage system. This is a
@@ -215,8 +226,9 @@ store using a simple file-like interface.
 %package -n librbd1
 Summary:        RADOS Block Device Client Library
 Group:          System/Filesystems
-License:        GPL-2.0
+License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
 Requires:       librados2 = %{version}-%{release}
+
 %description -n librbd1
 RBD is a block device striped across multiple distributed objects in
 RADOS, a reliable, autonomic distributed object storage cluster
@@ -226,20 +238,18 @@ shared library allowing applications to manage these block devices.
 %package -n libcephfs1
 Summary:        Ceph distributed file system client library
 Group:          System/Filesystems
-License:        GPL-2.0
+License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
+
 %description -n libcephfs1
 Ceph is a distributed network file system designed to provide excellent
 performance, reliability, and scalability. This is a shared library
 allowing applications to access a Ceph distributed file system via a
 POSIX-like interface.
 
-
 %if 0%{?cephfs_java}
-
 %package -n libcephfs_jni1
-
-
 Summary:        Java Native Interface library for CephFS Java bindings
+License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
 Group:          System/Filesystems
 Requires:       java
 %if 0%{?rhel_version} || 0%{?centos_version}
@@ -251,28 +261,54 @@ BuildRequires:  java-1.7.0-openjdk-devel
 BuildRequires:  java-devel
 %endif
 %endif
+
+%description -n libcephfs_jni1
+This package contains the Java Native Interface library for CephFS Java
+bindings.
+
+%package -n cephfs-java
+Summary:        Java libraries for the Ceph File System
+License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
+Group:          System/Filesystems
+Requires:       java
+%if 0%{?suse_version} > 1220
+Requires:       junit4
+BuildRequires:  junit4
+%endif
+Requires:       libcephfs_jni1 = %{version}-%{release}
+%if 0%{?rhel_version} || 0%{?centos_version}
+BuildRequires:  java-1.6.0-openjdk-devel
+%else
+%if 0%{?fedora}
+BuildRequires:  java-1.7.0-openjdk-devel
+%else
+BuildRequires:  java-devel
+%endif
 %endif
 
+%description -n cephfs-java
+This package contains the Java libraries for the Ceph File System.
 
+%endif
 
 %package -n python-ceph
 Summary:        Python Libraries for the Ceph Distributed Filesystem
 Group:          System/Filesystems
-License:        GPL-2.0
+License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
+Requires:       libcephfs1 = %{version}-%{release}
 Requires:       librados2 = %{version}-%{release}
 Requires:       librbd1 = %{version}-%{release}
-Requires:       libcephfs1 = %{version}-%{release}
 %if 0%{defined suse_version}
 %py_requires
 %endif
+
 %description -n python-ceph
 This package contains Python libraries for interacting with Cephs RADOS
 object storage.
 
 %package -n ceph-test
-
-
 Summary:        Ceph benchmarks and test tools
+License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
 Group:          System/Filesystems
 Requires:       libcephfs1 = %{version}-%{release}
 Requires:       librados2 = %{version}-%{release}
@@ -287,8 +323,23 @@ This package contains Ceph benchmarks and test tools.
 #################################################################################
 %prep
 %setup -q
+%patch0001 -p1
+%patch0002 -p1
+%patch0003 -p1
+%patch0004 -p1
+%patch0005 -p1
+%patch0006 -p1
+%patch0007 -p1
+%patch0008 -p1
 
 %build
+
+# Find jni.h
+for i in /usr/{lib64,lib}/jvm/java/include{,/linux}; do
+    echo $i
+    [ -d $i ] && java_inc="$java_inc -I$i"
+done
+
 ./autogen.sh
 
 export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
@@ -298,6 +349,7 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 #
 # Prefix with CXXFLAGS="-g -pg" to remove optimisation.
 %{configure}    CPPFLAGS="$java_inc" \
+                --disable-static \
                 --localstatedir=/var \
                 --sysconfdir=/etc \
                 --docdir=%{_docdir}/ceph \
@@ -318,7 +370,7 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
                 --without-system-leveldb \
 %endif
 %ifnarch ppc ppc64 s390 s390x ia64
-%if 0%{?suse_version} >= 1200
+%if 0%{?suse_version} >= 1310
 %if 0%{with tcmalloc}
                 --with-tcmalloc \
 %else
@@ -337,9 +389,20 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 sed -i -e "s/-lcurses/-lncurses/g" Makefile
 sed -i -e "s/-lcurses/-lncurses/g" src/Makefile
 sed -i -e "s/-lcurses/-lncurses/g" man/Makefile
+sed -i -e "s/-lcurses/-lncurses/g" src/ocf/Makefile
+sed -i -e "s/-lcurses/-lncurses/g" src/java/Makefile
+grep "\-lcurses" * -R
 %endif
 
 make %{?jobs:-j%{jobs}}
+
+#cd src/gtest
+#echo "------ MAKE GTEST ------"
+#make -j$(getconf _NPROCESSORS_ONLN)
+#cd ..
+#echo "------ MAKE UNITTEST ------"
+#make unittests -j$(getconf _NPROCESSORS_ONLN)
+#echo "------ MAKE ... DONE ------"
 
 %install
 make DESTDIR=$RPM_BUILD_ROOT install
@@ -347,12 +410,19 @@ find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
 install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
 install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
-mkdir -p $RPM_BUILD_ROOT/usr/sbin
-ln -sf ../../etc/init.d/ceph %{buildroot}/usr/sbin/rcceph
-ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/usr/sbin/rcceph-radosgw
+mkdir -p $RPM_BUILD_ROOT/%{_sbindir}
+ln -sf ../../etc/init.d/ceph %{buildroot}/%{_sbindir}/rcceph
+ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/%{_sbindir}/rcceph-radosgw
 install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
+install -m 0644 -D src/rgw/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph-radosgw
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
+
+# udev rules
+install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rules
+install -m 0644 -D udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
+
+#set up placeholder directories
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
 %if 0%{?suse_version} >= 1310
@@ -367,6 +437,7 @@ rm $RPM_BUILD_ROOT%{python_sitelib}/*.pyo
 rm -f $RPM_BUILD_ROOT/usr/share/ceph/id_dsa_drop.ceph.com
 rm -f $RPM_BUILD_ROOT/usr/share/ceph/id_dsa_drop.ceph.com.pub
 rm -f $RPM_BUILD_ROOT/usr/share/ceph/known_hosts_drop.ceph.com
+mkdir $RPM_BUILD_ROOT/var/lib/ceph/osd
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -378,24 +449,25 @@ systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
 %endif
 #/sbin/chkconfig --add ceph
 
-#%preun
-#%if %{defined suse_version}
-#%stop_on_removal ceph
-#%endif
-#if [ $1 = 0 ] ; then
-#    /sbin/service ceph stop >/dev/null 2>&1
+%preun
+%if %{defined suse_version}
+%stop_on_removal ceph
+%endif
+%if 0%{?suse_version} < 1310
+if [ $1 = 0 ] ; then
+    /sbin/service ceph stop >/dev/null 2>&1
 #    /sbin/chkconfig --del ceph
-#fi
-
-#%postun
-#/sbin/ldconfig
-#if [ "$1" -ge "1" ] ; then
-#    /sbin/service ceph condrestart >/dev/null 2>&1 || :
-#fi
-#%if %{defined suse_version}
-#%restart_on_update ceph
-#%insserv_cleanup
-#%endif
+fi
+%endif
+%postun
+/sbin/ldconfig
+if [ "$1" -ge "1" ] ; then
+    /sbin/service ceph condrestart >/dev/null 2>&1 || :
+fi
+%if %{defined suse_version}
+%restart_on_update ceph
+%insserv_cleanup
+%endif
 
 #################################################################################
 # files
@@ -420,38 +492,50 @@ systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
 %{_bindir}/ceph-mon
 %{_bindir}/ceph-mds
 %{_bindir}/ceph-osd
+%{_bindir}/ceph-post-file
+%{_bindir}/ceph-rest-api
 %{_bindir}/ceph-rbdnamer
+%{_bindir}/ceph_filestore_dump
+%{_bindir}/ceph_filestore_tool
 %{_bindir}/librados-config
-%{_bindir}/ceph_test_objectstore_workloadgen
 %{_bindir}/rados
 %{_bindir}/rbd
-%{_bindir}/ceph-debugpack
-%{_bindir}/ceph-client-debug
 %{_bindir}/ceph-coverage
 %{_bindir}/ceph-dencoder
 %{_bindir}/ceph-brag
 %{_bindir}/ceph-crush-location
-%{_bindir}/ceph-post-file
-%{_bindir}/ceph-rest-api
-%{_bindir}/ceph_filestore_dump
-%{_bindir}/ceph_filestore_tool
-%{_bindir}/ceph_mon_store_converter
-%{_bindir}/rbd-fuse
 %{_bindir}/ceph-monstore-tool
 %{_bindir}/ceph-osdomap-tool
+%{_bindir}/ceph_mon_store_converter
 %{_bindir}/ceph_erasure_code
-%{_bindir}/ceph_erasure_code_benchmark
 %{_initrddir}/ceph
-%dir %{_libdir}/rados-classes
 /sbin/mkcephfs
 /sbin/mount.ceph
-%{_sbindir}/ceph-create-keys
 %{_sbindir}/ceph-disk
-%{_sbindir}/ceph-disk-activate
 %{_sbindir}/ceph-disk-prepare
+%{_sbindir}/ceph-disk-activate
+%{_sbindir}/ceph-create-keys
 %{_sbindir}/ceph-disk-udev
-/sbin/mount.fuse.ceph
+%{_sbindir}/rcceph
+
+%dir %{_libdir}/rados-classes
+%{_libdir}/rados-classes/libcls_kvs.so*
+%{_libdir}/rados-classes/libcls_lock.so*
+%{_libdir}/rados-classes/libcls_log.so*
+%{_libdir}/rados-classes/libcls_rbd.so*
+%{_libdir}/rados-classes/libcls_refcount.so*
+%{_libdir}/rados-classes/libcls_replica_log.so*
+%{_libdir}/rados-classes/libcls_rgw.so*
+%{_libdir}/rados-classes/libcls_statelog.so*
+%{_libdir}/rados-classes/libcls_version.so*
+%{_libdir}/rados-classes/libcls_hello.so*
+%{_libdir}/rados-classes/libcls_user.so*
+
 %{_libdir}/ceph
+%dir /lib/udev
+%dir /lib/udev/rules.d
+/lib/udev/rules.d/50-rbd.rules
+/lib/udev/rules.d/95-ceph-osd.rules
 %config %{_sysconfdir}/bash_completion.d/ceph
 %config %{_sysconfdir}/bash_completion.d/rados
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin
@@ -469,14 +553,10 @@ systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
 %{_mandir}/man8/ceph-conf.8*
 %{_mandir}/man8/ceph.8*
 %{_mandir}/man8/cephfs.8*
-%{_mandir}/man8/ceph-post-file.8.gz
-%{_mandir}/man8/ceph-rest-api.8.gz
 %{_mandir}/man8/mount.ceph.8*
 %{_mandir}/man8/rados.8*
 %{_mandir}/man8/rbd.8*
-%{_mandir}/man8/rbd-fuse.8*
 %{_mandir}/man8/ceph-authtool.8*
-%{_mandir}/man8/ceph-debugpack.8*
 %{_mandir}/man8/ceph-clsinfo.8.gz
 %{_mandir}/man8/librados-config.8.gz
 %{_mandir}/man8/ceph-dencoder.8.gz
@@ -493,32 +573,24 @@ systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
 %{_tmpfilesdir}/%{name}.conf
 %endif
 %dir %{_sysconfdir}/ceph/
-/usr/sbin/rcceph
-%{_libdir}/rados-classes/libcls_rbd.so*
-%{_libdir}/rados-classes/libcls_rgw.so*
-%{_libdir}/rados-classes/libcls_hello.so
-%{_libdir}/rados-classes/libcls_kvs.so
-%{_libdir}/rados-classes/libcls_lock.so
-%{_libdir}/rados-classes/libcls_log.so
-%{_libdir}/rados-classes/libcls_refcount.so
-%{_libdir}/rados-classes/libcls_replica_log.so
-%{_libdir}/rados-classes/libcls_statelog.so
-%{_libdir}/rados-classes/libcls_user.so
-%{_libdir}/rados-classes/libcls_user.so.1
-%{_libdir}/rados-classes/libcls_user.so.1.0.0
-%{_libdir}/rados-classes/libcls_version.so
+# osd mounting directory
+%dir /var/lib/ceph/osd
+
 #################################################################################
 %files fuse
 %defattr(-,root,root,-)
 %{_bindir}/ceph-fuse
 %{_mandir}/man8/ceph-fuse.8*
+/sbin/mount.fuse.ceph
+%{_bindir}/rbd-fuse
+%{_mandir}/man8/rbd-fuse.8*
 
 %if 0%{?rbd_fuse}
 %files -n rbd-fuse
 %defattr(-,root,root,-)
-%{_bindir}/rbd-fuse
-%{_mandir}/man8/rbd-fuse.8*
 %endif
+
+
 
 
 #################################################################################
@@ -528,13 +600,13 @@ systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
 %{_includedir}/cephfs/libcephfs.h
 %dir %{_includedir}/rados
 %{_includedir}/rados/memory.h
-%{_includedir}/rados/rados_types.h
-%{_includedir}/rados/rados_types.hpp
 %{_includedir}/rados/librados.h
 %{_includedir}/rados/librados.hpp
+%{_includedir}/rados/rados_types.h
 %{_includedir}/rados/buffer.h
 %{_includedir}/rados/page.h
 %{_includedir}/rados/crc32c.h
+%{_includedir}/rados/rados_types.hpp
 %dir %{_includedir}/rbd
 %{_includedir}/rbd/librbd.h
 %{_includedir}/rbd/librbd.hpp
@@ -552,6 +624,7 @@ systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw-admin.8*
 %{_sbindir}/rcceph-radosgw
+%config(noreplace) %{_sysconfdir}/logrotate.d/ceph-radosgw
 
 %post radosgw
 /sbin/ldconfig
@@ -573,18 +646,13 @@ systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
 
 
 #################################################################################
-
 %if 0%{?suse_version}
+
 %files resource-agents
 %defattr(0755,root,root,-)
 %dir /usr/lib/ocf
 %dir /usr/lib/ocf/resource.d
 %dir /usr/lib/ocf/resource.d/ceph
-/usr/lib/ocf/resource.d/ceph/ceph
-/usr/lib/ocf/resource.d/ceph/mds
-/usr/lib/ocf/resource.d/ceph/mon
-/usr/lib/ocf/resource.d/ceph/osd
-/usr/lib/ocf/resource.d/ceph/rbd
 /usr/lib/ocf/resource.d/%{name}/*
 %endif
 
@@ -611,6 +679,7 @@ systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
 /sbin/ldconfig
 
 #################################################################################
+
 %files -n libcephfs1
 %defattr(-,root,root,-)
 %{_libdir}/libcephfs.so.*
@@ -622,21 +691,41 @@ systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
 /sbin/ldconfig
 
 #################################################################################
+%if 0%{?cephfs_java}
+%files -n libcephfs_jni1
+%defattr(-,root,root,-)
+%{_libdir}/libcephfs_jni.so.*
+
+%post -n libcephfs_jni1
+/sbin/ldconfig
+
+%postun -n libcephfs_jni1
+/sbin/ldconfig
+
+#################################################################################
+%files -n cephfs-java
+%defattr(-,root,root,-)
+%if 0%{?suse_version} > 1220 
+%{_javadir}/libcephfs-test.jar
+%endif
+%{_javadir}/libcephfs.jar
+%endif
+
+#################################################################################
 %files -n python-ceph
 %defattr(-,root,root,-)
-%{python_sitelib}/rados.py*
-%{python_sitelib}/rbd.py*
 %{python_sitelib}/ceph_argparse.py*
 %{python_sitelib}/ceph_rest_api.py*
 %{python_sitelib}/cephfs.py*
-%changelog
-
+%{python_sitelib}/rados.py*
+%{python_sitelib}/rbd.py*
 
 %files -n ceph-test
 %defattr(-,root,root,-)
 %{_bindir}/rest-bench
 %{_bindir}/ceph_bench_log
 %{_bindir}/ceph_dupstore
+%{_bindir}/ceph_erasure_code_benchmark
 %{_bindir}/ceph_kvstorebench
 %{_bindir}/ceph_multi_stress_watch
 %{_bindir}/ceph_omapbench
@@ -683,6 +772,8 @@ systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
 %{_bindir}/ceph_test_object_map
 %{_bindir}/ceph_test_objectcacher_stress
 %{_bindir}/ceph_test_rados_api_aio
+%{_bindir}/ceph_test_rados_api_c_read_operations
+%{_bindir}/ceph_test_rados_api_c_write_operations
 %{_bindir}/ceph_test_rados_api_cls
 %{_bindir}/ceph_test_rados_api_io
 %{_bindir}/ceph_test_rados_api_list
@@ -690,27 +781,30 @@ systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
 %{_bindir}/ceph_test_rados_api_pool
 %{_bindir}/ceph_test_rados_api_snapshots
 %{_bindir}/ceph_test_rados_api_stat
+%{_bindir}/ceph_test_rados_api_tier
 %{_bindir}/ceph_test_rados_api_watch_notify
 %{_bindir}/ceph_test_rewrite_latency
 %{_bindir}/ceph_test_stress_watch
 %{_bindir}/ceph_test_trans
+%{_bindir}/ceph_test_c_headers
 %{_bindir}/ceph_test_cors
 %{_bindir}/ceph_test_crypto
+%{_bindir}/ceph_test_get_blkdev_size
 %{_bindir}/ceph_test_keys
+%{_bindir}/ceph_test_objectstore
+%{_bindir}/ceph_test_objectstore_workloadgen
 %{_bindir}/ceph_test_rados_delete_pools_parallel
 %{_bindir}/ceph_test_rados_list_parallel
 %{_bindir}/ceph_test_rados_open_pools_parallel
 %{_bindir}/ceph_test_rados_watch_notify
+%{_bindir}/ceph_test_rgw_manifest
 %{_bindir}/ceph_test_signal_handlers
 %{_bindir}/ceph_test_timers
 %{_bindir}/ceph_tpbench
 %{_bindir}/ceph_xattr_bench
 %{_bindir}/ceph-kvstore-tool
-%{_bindir}/ceph_test_c_headers
-%{_bindir}/ceph_test_get_blkdev_size
-%{_bindir}/ceph_test_objectstore
-%{_bindir}/ceph_test_rados_api_c_read_operations
-%{_bindir}/ceph_test_rados_api_c_write_operations
-%{_bindir}/ceph_test_rados_api_tier
-%{_bindir}/ceph_test_rgw_manifest
+%{_bindir}/ceph-debugpack
+%{_bindir}/ceph-client-debug
+%{_mandir}/man8/ceph-debugpack.8*
 
+%changelog

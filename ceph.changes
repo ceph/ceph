@@ -1,8 +1,74 @@
+Wed Jul  9 15:00:07 UTC 2014 - osynge@suse.com
+
+- Added /var/lib/ceph/osd fixing bug 885210
+- Fixed licencing to match upstream README.
+
+-------------------------------------------------------------------
+Tue Jul  8 14:57:47 UTC 2014 - tbehrens@suse.com
+
+- Revert Thu Jun 5 10:00:00 CEST 2014 change, auto-generate patches
+  from git branch, use update_git.sh to amend spec file
+- this fixes bnc#885203 en passant
+
+-------------------------------------------------------------------
+Thu Jul  3 11:58:04 UTC 2014 - osynge@suse.com
+
+- depend upon boost49-devel for SLE11.
+
+-------------------------------------------------------------------
+Wed Jul  2 17:09:10 UTC 2014 - tbehrens@suse.com
+
+- Switch git branch to distro/suse11-0-80-1 for storage 0.5
+- Update tarball to latest git
+- Fix bnc#885304: Fixup radosgw daemon init.    
+  * This is a fixup for 2cd29db16497917e2e5737b7f1b52dbb77b038c2
+    (the late radosgw-init-opensuse.patch), radosgw needs the config
+    section name.
+
+-------------------------------------------------------------------
+Wed Jul  2 12:34:46 UTC 2014 - osynge@suse.com
+
+- Readded runtime dependency on logrotate
+  * as we provide config file for logrotate for ceph, ceph-radosgw
+- Readded runtime dependency on cryptsetup
+  * used in udev rules for ceph.
+- Readded runtime dependency on util-linux
+  * we need the mount command for ceph.
+- Readded cephfs-java package.
+  * But not by default.
+- Moved ceph_erasure_code_benchmark to test rpm.
+- Moved rbd-fuse to fuse rpm.
+- Removed duplicate rbd-fuse.8 man page.
+
+-------------------------------------------------------------------
+Tue Jul  1 17:27:09 UTC 2014 - osynge@suse.com
+
+- Moved debug tools to debug package.
+  * Reorganized spec file Requires, BuildRequires, and files to 
+    minimize the differences with Devel:Cloud:4
+- Resolved ceph Changelog conflicts 
+  * Was cased by Devel:Cloud:4 and Devel:Storage:0.5:Staging based
+    upon different branch of ceph packaging from engineering team.
+- Renamed logrotate.d/radosgw to logrotate.d/ceph-radosgw
+
+-------------------------------------------------------------------
+Wed Jun 25 18:16:51 UTC 2014 - osynge@suse.com
+
+- disable static builds at configure stage.
+  * Add the '--disable-static' to configure options.
+
+-------------------------------------------------------------------
+Fri Jun 20 16:45:23 UTC 2014 - osynge@suse.com
+
+- Fixing untracked changes that came from merging many ceph builds.
+  * Re added %preun and %postun functions.
+  * Re added udev rules.
+
 -------------------------------------------------------------------
 Wed Jun 18 15:35:04 CEST 2014 - osynge@suse.com
 
 - Removed ceph-keys from the spec file.
-  * These upstream keys are removed for security and 
+  * These upstream keys are removed for security and
     privacy reasons.
 
 -------------------------------------------------------------------
@@ -14,6 +80,7 @@ Wed Jun 11 17:05:02 CEST 2014 - osynge@suse.com
 
 -------------------------------------------------------------------
 Thu Jun  5 15:15:48 CEST 2014 - osynge@suse.com
+
 - ceph-mon core-dumps on SLES 11 SP3 if linked to tcmalloc.
   * Prevent tcmalloc use on less than SLE 12
     https://bugzilla.novell.com/show_bug.cgi?id=880676
@@ -120,7 +187,7 @@ Tue May 16 14:50:17 CEST 2014 - osynge@suse.com
 Wed Feb  5 14:22:27 UTC 2014 - ddiss@suse.com
 
 - Updated to v0.72.2
-  + mon: \u2018osd pool set ...\u2019 syntax change
+  + mon: 'osd pool set ...' syntax change
   + osd: added test for missing on-disk HEAD object
   + osd: fix osd bench block size argument
   + rgw: fix hang on large object GET
@@ -981,7 +1048,7 @@ Wed Jul  4 09:59:32 UTC 2012 - dkukawka@suse.de
 - updated to 0.48 (argonaut):
   - osd: stability improvements
   - osd: capability model simplification
-  - osd: simpler/safer \u2013mkfs (no longer removes all files; safe
+  - osd: simpler/safer -mkfs (no longer removes all files; safe
          to re-run on active osd)
   - osd: potentially buggy FIEMAP behavior disabled by default
   - rbd: caching improvements
@@ -995,8 +1062,8 @@ Wed Jul  4 09:59:32 UTC 2012 - dkukawka@suse.de
   - doc: improved documentation (ceph, rbd, radosgw, chef, etc.)
   - config: new default locations for daemon keyrings
   - config: arbitrary variable substitutions
-  - improved \u2018admin socket\u2019 daemon admin interface
-    (ceph \u2013admin-daemon ...)
+  - improved 'admin socket' daemon admin interface
+    (ceph -admin-daemon ...)
   - chef: support for multiple monitor clusters
   - upstart: basic support for monitors, mds, radosgw; osd support
     still a work in progress.
@@ -1041,10 +1108,10 @@ Fri Jun  1 12:39:32 UTC 2012 - dkukawka@suse.de
   * osd: reduced memory footprint for peering/thrashing
   * librbd: write-thru cache mode
   * librbd: improved error handling
-  * osd: removal of ill-conceived \u2018localized pg\u2019 feature (those
-    annoying PGs with \u2018p\u2019 in them)
+  * osd: removal of ill-conceived 'localized pg' feature (those
+    annoying PGs with 'p' in them)
   * rest-bench: simple tool to benchmark radosgw (or S3) (based
-    on \u2018rados bench\u2019 command)
+    on 'rados bench' command)
   * rbd: new caching mode
   * rbd: trim/discard support
   * cluster naming
@@ -1056,10 +1123,19 @@ Fri Jun  1 12:39:32 UTC 2012 - dkukawka@suse.de
   * ceph-init-create-dirs-only-on-startup.diff
 
 -------------------------------------------------------------------
-Tue May  8 09:58:56 CEST 2012 - hmacht@suse.de
+Tue May  8 14:11:10 UTC 2012 - dkukawka@suse.de
 
-- add rpmlintrc: libcls_*.so needs to be shipped in base package,
-  not in -devel package
+- add new patch: 
+  - ceph-init-create-dirs-only-on-startup.diff: create log/pid
+    directories only on startup and not e.g. also on stop.
+    bnc#761180 
+
+-------------------------------------------------------------------
+Tue May  8 13:14:41 UTC 2012 - dkukawka@suse.de
+
+- add new patch:
+  - ceph-common_sh.dont.exit.on.ssh-error.diff: don't exit on 
+    errors from ssh calls, simply continue. Fix for bnc#752662
 
 -------------------------------------------------------------------
 Fri May  4 16:13:53 UTC 2012 - dkukawka@suse.de
@@ -1072,17 +1148,6 @@ Fri May  4 16:13:53 UTC 2012 - dkukawka@suse.de
     or make sure you call mkcephfs/rcceph from / or another
     well known directory to prevent stange placing of core dumps
     (bnc#759972)
-
--------------------------------------------------------------------
-Thu May  3 09:08:56 CEST 2012 - hmacht@suse.de
-
-- udpate to 0.46:
-  * rbd: new caching mode (see below)
-  * rbd: trim/discard support
-  * cluster naming
-  * osd: new default locations (slimmer .conf files, see below)
-  * osd: various journal replay fixes for non-btrfs file systems
-  * log: async and multi-level logging (see below)
 
 -------------------------------------------------------------------
 Thu Apr 12 09:01:58 UTC 2012 - dkukawka@suse.de

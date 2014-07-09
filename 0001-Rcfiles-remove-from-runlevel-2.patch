@@ -1,0 +1,38 @@
+From: Danny Kukawka <dkukawka@suse.de>
+Date: Thu, 5 Jun 2014 00:02:26 +0200
+Subject: [PATCH] Rcfiles: remove from runlevel 2
+
+Merge distro patches to git.
+
+This was rcfiles-remove-init-2.patch
+---
+ src/init-ceph.in | 2 +-
+ src/init-radosgw | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/init-ceph.in b/src/init-ceph.in
+index 846bd57..9ccf474 100644
+--- a/src/init-ceph.in
++++ b/src/init-ceph.in
+@@ -4,7 +4,7 @@
+ 
+ ### BEGIN INIT INFO
+ # Provides:          ceph
+-# Default-Start:     2 3 4 5
++# Default-Start:     3 4 5
+ # Default-Stop:      0 1 6
+ # Required-Start:    $remote_fs $named $network $time
+ # Required-Stop:     $remote_fs $named $network $time
+diff --git a/src/init-radosgw b/src/init-radosgw
+index c38ddad..325b877 100644
+--- a/src/init-radosgw
++++ b/src/init-radosgw
+@@ -3,7 +3,7 @@
+ # Provides:          radosgw
+ # Required-Start:    $remote_fs $named $network $time
+ # Required-Stop:     $remote_fs $named $network $time
+-# Default-Start:     2 3 4 5
++# Default-Start:     3 4 5
+ # Default-Stop:      0 1 6
+ # Short-Description: radosgw RESTful rados gateway
+ # Description: radosgw RESTful rados gateway

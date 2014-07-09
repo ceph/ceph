@@ -1,0 +1,36 @@
+From: Danny Kukawka <dkukawka@suse.de>
+Date: Thu, 5 Jun 2014 00:07:40 +0200
+Subject: [PATCH] init-ceph: add xfs support
+
+Merge distro patches to git.
+
+This was ceph-init-ceph.add.xfs.support.diff
+---
+ src/init-ceph.in | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/src/init-ceph.in b/src/init-ceph.in
+index 9ccf474..7cb2a39 100644
+--- a/src/init-ceph.in
++++ b/src/init-ceph.in
+@@ -139,12 +139,20 @@ case $1 in
+     --btrfs | --fsmount)
+ 	    dofsmount=1
+ 	    ;;
++    --xfs)
++	    doxfs=1
++	    dobtrfs=0
++	    ;;
+     --nobtrfs | --nofsmount)
+ 	    dofsmount=0
+ 	    ;;
+     --btrfsumount | --fsumount)
+ 	    dofsumount=1
+ 	    ;;
++    --xfsumount)
++	    doxfsumount=1
++	    dobtrfsumount=0
++	    ;;
+     --conf | -c)
+ 	    [ -z "$2" ] && usage_exit
+ 	    options="$options $1"
