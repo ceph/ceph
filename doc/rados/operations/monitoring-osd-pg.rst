@@ -498,7 +498,7 @@ Ceph provides a number of settings to manage the load spike associated with
 reassigning placement groups to an OSD (especially a new OSD). By default,
 ``osd_max_backfills`` sets the maximum number of concurrent backfills to or from
 an OSD to 10. The ``osd backfill full ratio`` enables an OSD to refuse a
-backfill request if the OSD is approaching its its full ratio (85%, by default).
+backfill request if the OSD is approaching its full ratio (85%, by default).
 If an OSD refuses a backfill request, the ``osd backfill retry interval``
 enables an OSD to retry the request (after 10 seconds, by default). OSDs can
 also set ``osd backfill scan min`` and ``osd backfill scan max`` to manage scan
@@ -573,7 +573,7 @@ location, all you need is the object name and the pool name. For example::
 
 	ceph osd map {poolname} {object-name}
 
-.. topic:: Excercise: Locate an Object
+.. topic:: Exercise: Locate an Object
 
 	As an exercise, lets create an object. Specify an object name, a path to a
 	test file containing some object data and a pool name using the 

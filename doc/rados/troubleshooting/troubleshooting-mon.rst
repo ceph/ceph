@@ -175,7 +175,7 @@ How to troubleshoot this?
   all your monitor nodes and make sure you're not dropping/rejecting
   connections.
 
-  If this intial troubleshooting doesn't solve your problems, then it's
+  If this initial troubleshooting doesn't solve your problems, then it's
   time to go deeper.
 
   First, check the problematic monitor's ``mon_status`` via the admin

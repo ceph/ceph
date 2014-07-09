@@ -18,7 +18,7 @@ of the following terms:
    responsible for a particular placement group.
 
 *Up Set*
-   The ordered list of OSDs responsible for a particular placment
+   The ordered list of OSDs responsible for a particular placement
    group for a particular epoch according to CRUSH. Normally this
    is the same as the *Acting Set*, except when the *Acting Set* has 
    been explicitly overridden via ``pg_temp`` in the OSD Map.
