@@ -45,7 +45,7 @@ Name:           ceph
 Version:        0.80.1_suse+git.827c966
 Release:        0%{?dist}
 Summary:        A Scalable Distributed File System
-License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
+License:        LGPL-2.1 and BSD and GPL-2.0
 Group:          System/Filesystems
 Url:            http://ceph.com/
 Source0:        %{name}-%{version}.tar.xz
@@ -131,7 +131,7 @@ performance, reliability, and scalability.
 # packages
 #################################################################################
 %package fuse
-License:        GPL-2.0 and LGPL-2.1
+License:        LGPL-2.1 and BSD and GPL-2.0
 Summary:        Ceph fuse-based client
 Group:          System/Filesystems
 Requires:       %{name} = %{version}-%{release}
@@ -144,7 +144,7 @@ FUSE based client for Ceph distributed network file system
 
 %package -n rbd-fuse
 Summary:        RBD fuse-based client
-License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-
+License:        LGPL-2.1 and BSD and GPL-2.0
 Group:          System/Filesystems
 Requires:       %{name} = %{version}-%{release}
 BuildRequires:  fuse-devel
@@ -157,7 +157,7 @@ FUSE based client for Ceph distributed network file system
 %package devel
 Summary:        Ceph headers
 Group:          Development/Libraries/C and C++
-License:        GPL-2.0 and LGPL-2.1
+License:        LGPL-2.1 and BSD and GPL-2.0
 Requires:       %{name} = %{version}-%{release}
 Requires:       librados2 = %{version}
 Requires:       librbd1 = %{version}
@@ -168,7 +168,7 @@ This package contains libraries and headers needed to develop programs
 that use Ceph.
 
 %package radosgw
-License:        GPL-2.0 and LGPL-2.1
+License:        LGPL-2.1 and BSD and GPL-2.0
 Summary:        Rados REST Gateway
 Group:          System/Filesystems
 Requires:       librados2 = %{version}-%{release}
@@ -192,7 +192,7 @@ conjunction with any FastCGI capable web server.
 %package resource-agents
 Summary:        OCF-compliant Resource Agents for Ceph Daemons
 Group:          System/Filesystems
-License:        GPL-2.0 and LGPL-2.1
+License:        LGPL-2.1 and BSD and GPL-2.0
 Requires:       %{name} = %{version}
 Requires:       resource-agents
 
@@ -205,7 +205,7 @@ managers such as Pacemaker.
 %package -n librados2
 Summary:        RADOS distributed object store client library
 Group:          System/Filesystems
-License:        GPL-2.0 and LGPL-2.1
+License:        LGPL-2.1 and BSD and GPL-2.0
 
 %description -n librados2
 RADOS is a reliable, autonomic distributed object storage cluster
@@ -216,7 +216,7 @@ store using a simple file-like interface.
 %package -n librbd1
 Summary:        RADOS Block Device Client Library
 Group:          System/Filesystems
-License:        GPL-2.0 and LGPL-2.1
+License:        LGPL-2.1 and BSD and GPL-2.0
 Requires:       librados2 = %{version}-%{release}
 
 %description -n librbd1
@@ -228,7 +228,7 @@ shared library allowing applications to manage these block devices.
 %package -n libcephfs1
 Summary:        Ceph distributed file system client library
 Group:          System/Filesystems
-License:        GPL-2.0 and LGPL-2.1
+License:        LGPL-2.1 and BSD and GPL-2.0
 
 %description -n libcephfs1
 Ceph is a distributed network file system designed to provide excellent
@@ -239,7 +239,7 @@ POSIX-like interface.
 %if 0%{?cephfs_java}
 %package -n libcephfs_jni1
 Summary:        Java Native Interface library for CephFS Java bindings
-License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-
+License:        LGPL-2.1 and BSD and GPL-2.0
 Group:          System/Filesystems
 Requires:       java
 %if 0%{?rhel_version} || 0%{?centos_version}
@@ -258,7 +258,7 @@ bindings.
 
 %package -n cephfs-java
 Summary:        Java libraries for the Ceph File System
-License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-
+License:        LGPL-2.1 and BSD and GPL-2.0
 Group:          System/Filesystems
 Requires:       java
 %if 0%{?suse_version} > 1220
@@ -284,7 +284,7 @@ This package contains the Java libraries for the Ceph File System.
 %package -n python-ceph
 Summary:        Python Libraries for the Ceph Distributed Filesystem
 Group:          System/Filesystems
-License:        GPL-2.0 and LGPL-2.1
+License:        LGPL-2.1 and BSD and GPL-2.0
 Requires:       libcephfs1 = %{version}-%{release}
 Requires:       librados2 = %{version}-%{release}
 Requires:       librbd1 = %{version}-%{release}
@@ -298,7 +298,7 @@ object storage.
 
 %package -n ceph-test
 Summary:        Ceph benchmarks and test tools
-License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-w
+License:        LGPL-2.1 and BSD and GPL-2.0
 Group:          System/Filesystems
 Requires:       libcephfs1 = %{version}-%{release}
 Requires:       librados2 = %{version}-%{release}
@@ -419,7 +419,7 @@ rm $RPM_BUILD_ROOT%{python_sitelib}/*.pyo
 rm -f $RPM_BUILD_ROOT/usr/share/ceph/id_dsa_drop.ceph.com
 rm -f $RPM_BUILD_ROOT/usr/share/ceph/id_dsa_drop.ceph.com.pub
 rm -f $RPM_BUILD_ROOT/usr/share/ceph/known_hosts_drop.ceph.com
-
+mkdir $RPM_BUILD_ROOT/var/lib/ceph/osd
 %clean
 rm -rf $RPM_BUILD_ROOT
 
@@ -554,6 +554,10 @@ fi
 %{_tmpfilesdir}/%{name}.conf
 %endif
 %dir %{_sysconfdir}/ceph/
+# osd mounting directory
+%dir /var/lib/ceph/osd
+
+
 
 #################################################################################
 %files fuse
