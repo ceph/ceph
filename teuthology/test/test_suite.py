@@ -1,5 +1,6 @@
 import os
 import requests
+import yaml
 from datetime import datetime
 from pytest import raises, skip
 
@@ -72,6 +73,15 @@ class TestSuiteOnline(object):
             suite.create_initial_config('s', 'bogus_ceph_branch', 't', 'k',
                                         'f', 'd', 'm')
 
+    def test_config_substitution(self):
+        # Don't attempt to send email
+        config.results_email = None
+        job_config_str = suite.create_initial_config('MY_SUITE', 'master',
+                                                     'master', 'testing',
+                                                     'basic', 'centos',
+                                                     'plana')
+        job_config = yaml.safe_load(job_config_str)
+        assert job_config['suite'] == 'MY_SUITE'
 
-# add other tests that use create_initial_config, deserialize the yaml stream
+
 # maybe use notario for the above?
