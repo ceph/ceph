@@ -2,16 +2,101 @@ import os
 import yaml
 import logging
 
-log = logging.getLogger(__name__)
+
+def init_logging():
+    log = logging.getLogger(__name__)
+    return log
+
+log = init_logging()
 
 
-class Config(object):
+class YamlConfig(object):
+    defaults = dict()
+
+    def __init__(self, yaml_path=None):
+        self.yaml_path = yaml_path
+        if self.yaml_path:
+            self.load()
+        else:
+            self.__conf = dict()
+
+    def load(self):
+        if os.path.exists(self.yaml_path):
+            self.__conf = yaml.safe_load(file(self.yaml_path))
+        else:
+            log.debug("%s not found", self.yaml_path)
+            self.__conf = dict()
+
+    def update(self, in_dict):
+        """
+        Update an existing configuration using dict.update()
+
+        :param in_dict: The dict to use to update
+        """
+        self.__conf.update(in_dict)
+
+    @classmethod
+    def from_dict(cls, in_dict):
+        """
+        Build a config object from a dict.
+
+        :param in_dict: The dict to use
+        :returns:       The config object
+        """
+        conf_obj = cls()
+        conf_obj.__conf = in_dict
+        return conf_obj
+
+    def to_dict(self):
+        """
+        :returns: A shallow copy of the configuration as a dict
+        """
+        return dict(self.__conf)
+
+    @classmethod
+    def from_str(cls, in_str):
+        """
+        Build a config object from a string or yaml stream.
+
+        :param in_str: The stream or string
+        :returns:      The config object
+        """
+        conf_obj = cls()
+        conf_obj.__conf = yaml.safe_load(in_str)
+        return conf_obj
+
+    def to_str(self):
+        """
+        :returns: str(self)
+        """
+        return str(self)
+
+    def __str__(self):
+        return yaml.safe_dump(self.__conf, default_flow_style=False).strip()
+
+    def __getitem__(self, name):
+        return self.__conf.__getitem__(name)
+
+    def __getattr__(self, name):
+        return self.__conf.get(name, self.defaults.get(name))
+
+    def __setattr__(self, name, value):
+        if name.endswith('__conf') or name in ('yaml_path'):
+            object.__setattr__(self, name, value)
+        else:
+            self.__conf[name] = value
+
+    def __delattr__(self, name):
+        del self.__conf[name]
+
+
+class TeuthologyConfig(YamlConfig):
     """
     This class is intended to unify teuthology's many configuration files and
     objects. Currently it serves as a convenient interface to
     ~/.teuthology.yaml and nothing else.
     """
-    teuthology_yaml = os.path.join(os.environ['HOME'], '.teuthology.yaml')
+    yaml_path = os.path.join(os.environ['HOME'], '.teuthology.yaml')
     defaults = {
         'archive_base': '/var/lib/teuthworker/archive',
         'automated_scheduling': False,
@@ -24,22 +109,11 @@ class Config(object):
     }
 
     def __init__(self):
-        self.load_files()
+        super(TeuthologyConfig, self).__init__(self.yaml_path)
 
-    def load_files(self):
-        if os.path.exists(self.teuthology_yaml):
-            self.__conf = yaml.safe_load(file(self.teuthology_yaml))
-        else:
-            log.debug("%s not found", self.teuthology_yaml)
-            self.__conf = {}
 
-    def __getattr__(self, name):
-        return self.__conf.get(name, self.defaults.get(name))
+class JobConfig(YamlConfig):
+    pass
 
-    def __setattribute__(self, name, value):
-        if name.endswith('__conf'):
-            setattr(self, name, value)
-        else:
-            self.__conf[name] = value
 
-config = Config()
+config = TeuthologyConfig()
