@@ -38,7 +38,7 @@ mode, set ``rbd cache max dirty`` to 0. This means writes return only
 when the data is on disk on all replicas, but reads may come from the
 cache. The cache is in memory on the client, and each RBD image has
 its own.  Since the cache is local to the client, there's no coherency
-if there are others accesing the image. Running GFS or OCFS on top of
+if there are others accessing the image. Running GFS or OCFS on top of
 RBD will not work with caching enabled.
 
 The ``ceph.conf`` file settings for RBD should be set in the ``[client]``
