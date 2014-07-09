@@ -295,7 +295,7 @@ bottleneck when individual images get large or busy.
 The striping is controlled by three parameters:
 
 .. option:: order
-  The size of objects we stripe over is a power of two, specifially 2^[*order*] bytes.  The default
+  The size of objects we stripe over is a power of two, specifically 2^[*order*] bytes.  The default
   is 22, or 4 MB.
 
 .. option:: stripe_unit
