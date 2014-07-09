@@ -203,7 +203,8 @@ noinst_HEADERS += \
 	common/cmdparse.h \
 	common/hobject.h \
 	common/linux_version.h \
-	common/module.h
+	common/module.h \
+	common/Continuation.h
 
 noinst_LTLIBRARIES += libcommon.la
 
