@@ -46,7 +46,7 @@ OSD::_create_lock_pg must handle two cases:
   1. Either there is no DeletingStateRef for the pg, or it failed to cancel
   2. We succeeded in canceling the deletion.
 
-In case 1., we proceed as if there were no deletion occuring, except that
+In case 1., we proceed as if there were no deletion occurring, except that
 we avoid writing to the PG until the deletion finishes.  In case 2., we
 proceed as in case 1., except that we first mark the PG as backfilling.
 
