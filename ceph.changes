@@ -4,6 +4,13 @@ Wed Jul  9 11:00:07 UTC 2014 - osynge@suse.com
 - Fixed licencing to match upstream README.
 
 -------------------------------------------------------------------
+Tue Jul  8 14:57:47 UTC 2014 - tbehrens@suse.com
+
+- Revert Thu Jun 5 10:00:00 CEST 2014 change, auto-generate patches
+  from git branch, use update_git.sh to amend spec file
+- this fixes bnc#885203 en passant
+
+-------------------------------------------------------------------
 Thu Jul  3 11:58:04 UTC 2014 - osynge@suse.com
 
 - depend upon boost49-devel for SLE11.

@@ -42,13 +42,13 @@
 # common
 #################################################################################
 Name:           ceph
-Version:        0.80.1_suse+git.827c966
+Version:        0.80.1
 Release:        0%{?dist}
 Summary:        A Scalable Distributed File System
 License:        LGPL-2.1 and BSD and GPL-2.0
 Group:          System/Filesystems
 Url:            http://ceph.com/
-Source0:        %{name}-%{version}.tar.xz
+Source0:        http://ceph.com/download/%{name}-%{version}.tar.bz2
 Source1:        README.SUSE.v0.2
 Source2:        mkinitrd-root.on.rbd.tar.xz
 Source3:        ceph-tmpfiles.d.conf
@@ -91,6 +91,16 @@ BuildRequires:  xz
 %if 0%{?suse_version} >= 1310
 BuildRequires:  systemd
 %endif
+# This patch queue is auto-generated from https://github.com/SUSE/ceph
+Patch0001:      0001-Rcfiles-remove-from-runlevel-2.patch
+Patch0002:      0002-init-radosgw-adjust-for-opensuse.patch
+Patch0003:      0003-mkcephfs-add-xfs-support.patch
+Patch0004:      0004-init-ceph-add-xfs-support.patch
+Patch0005:      0005-Fix-runlevels-for-start-scripts.patch
+Patch0006:      0006-Drop-ceph-keys-into-install.patch
+Patch0007:      0007-add-syncfs-support-v3.patch
+Patch0008:      0008-Fixup-radosgw-daemon-init.patch
+# Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
 # specific
@@ -313,6 +323,14 @@ This package contains Ceph benchmarks and test tools.
 #################################################################################
 %prep
 %setup -q
+%patch0001 -p1
+%patch0002 -p1
+%patch0003 -p1
+%patch0004 -p1
+%patch0005 -p1
+%patch0006 -p1
+%patch0007 -p1
+%patch0008 -p1
 
 %build
 
@@ -420,6 +438,7 @@ rm -f $RPM_BUILD_ROOT/usr/share/ceph/id_dsa_drop.ceph.com
 rm -f $RPM_BUILD_ROOT/usr/share/ceph/id_dsa_drop.ceph.com.pub
 rm -f $RPM_BUILD_ROOT/usr/share/ceph/known_hosts_drop.ceph.com
 mkdir $RPM_BUILD_ROOT/var/lib/ceph/osd
+
 %clean
 rm -rf $RPM_BUILD_ROOT
 
@@ -556,8 +575,6 @@ fi
 %dir %{_sysconfdir}/ceph/
 # osd mounting directory
 %dir /var/lib/ceph/osd
-
-
 
 #################################################################################
 %files fuse

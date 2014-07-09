@@ -1,0 +1,34 @@
+From: Danny Kukawka <dkukawka@suse.de>
+Date: Thu, 5 Jun 2014 00:23:42 +0200
+Subject: [PATCH] add syncfs support v3
+
+Merge distro patches into git.
+
+This was ceph-add-syncfs-support.v3.diff
+---
+ src/common/sync_filesystem.h | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/src/common/sync_filesystem.h b/src/common/sync_filesystem.h
+index eff18d2..df357cc 100644
+--- a/src/common/sync_filesystem.h
++++ b/src/common/sync_filesystem.h
+@@ -25,6 +25,18 @@
+ # endif
+ #endif
+ 
++#ifndef __NR_syncfs
++# if defined(__i386__)
++#  define __NR_syncfs 344
++#  define USE_SYNCFS_NR
++# elif defined(__x86_64__)
++#  define __NR_syncfs 306
++#  define USE_SYNCFS_NR
++# else
++#  error please define __NR_syncfs for your architecture
++# endif
++#endif
++
+ inline int sync_filesystem(int fd)
+ {
+   /* On Linux, newer versions of glibc have a function called syncfs that
