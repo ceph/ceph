@@ -59,13 +59,13 @@ def main(args):
     else:
         suite_repo_path = fetch_suite_repo(suite_branch, test_name=name)
 
-    config_string = create_initial_config(nice_suite, ceph_branch,
-                                          teuthology_branch, kernel_branch,
-                                          kernel_flavor, distro, machine_type)
+    job_config = create_initial_config(nice_suite, ceph_branch,
+                                       teuthology_branch, kernel_branch,
+                                       kernel_flavor, distro, machine_type)
 
     with NamedTemporaryFile(prefix='schedule_suite_',
                             delete=False) as base_yaml:
-        base_yaml.write(config_string)
+        base_yaml.write(yaml.safe_dump(job_config))
         base_yaml_path = base_yaml.name
     base_yaml_paths.insert(0, base_yaml_path)
     prepare_and_schedule(owner=owner,
@@ -168,10 +168,8 @@ def create_initial_config(nice_suite, ceph_branch, teuthology_branch,
     if kernel_hash:
         log.info("kernel sha1: {hash}".format(hash=kernel_hash))
         kernel_dict = dict(kernel=dict(kdb=True, sha1=kernel_hash))
-        kernel_stanza = yaml.dump(kernel_dict,
-                                  default_flow_style=False).strip()
     else:
-        kernel_stanza = ''
+        kernel_dict = dict()
 
     # Get the ceph hash
     ceph_hash = get_hash('ceph', ceph_branch, kernel_flavor, machine_type)
@@ -213,11 +211,12 @@ def create_initial_config(nice_suite, ceph_branch, teuthology_branch,
         ceph_hash=ceph_hash,
         teuthology_branch=teuthology_branch,
         machine_type=machine_type,
-        kernel_stanza=kernel_stanza,
         distro=distro,
         s3_branch=s3_branch,
     )
-    return config_template.format(**config_input)
+    job_config = substitute_placeholders(dict_templ, config_input)
+    job_config.update(kernel_dict)
+    return job_config
 
 
 def prepare_and_schedule(owner, name, suite, machine_type, suite_repo_path,
@@ -592,52 +591,96 @@ def get_arch(machine_type):
             return arch
     return None
 
-# yaml template for the config that becomes the base for each generated job
-# config
-config_template = """
-teuthology_branch: {teuthology_branch}
-{kernel_stanza}
-nuke-on-error: true
-machine_type: {machine_type}
-os_type: {distro}
-branch: {ceph_branch}
-suite: {nice_suite}
-tasks:
-- chef:
-- clock.check:
-overrides:
-  workunit:
-    sha1: {ceph_hash}
-  s3tests:
-    branch: {s3_branch}
-  install:
-    ceph:
-      sha1: {ceph_hash}
-  ceph:
-    sha1: {ceph_hash}
-    conf:
-      mon:
-        debug ms: 1
-        debug mon: 20
-        debug paxos: 20
-      osd:
-        debug ms: 1
-        debug osd: 20
-        debug filestore: 20
-        debug journal: 20
-    log-whitelist:
-    - slow request
-  ceph-deploy:
-    branch:
-      dev: {ceph_branch}
-    conf:
-      mon:
-        osd default pool size: 2
-        debug mon: 1
-        debug paxos: 20
-        debug ms: 20
-      client:
-        log file: /var/log/ceph/ceph-$name.$pid.log
-  admin_socket:
-    branch: {ceph_branch}
-""".strip()
+
+class Placeholder(object):
+    """
+    A placeholder for use with substitute_placeholders. Simply has a 'name'
+    attribute.
+    """
+    def __init__(self, name):
+        self.name = name
+
+
+def substitute_placeholders(input_dict, values_dict):
+    """
+    Replace any Placeholder instances with values named in values_dict.
+    Searches through nested dicts.
+
+    :param input_dict:  A dict which may contain one or more Placeholder
+                        instances as values.
+    :param values_dict: A dict, with keys matching the 'name' attributes of all
+                        of the Placeholder instances in the input_dict, and
+                        values to be substituted.
+    :returns:           The modified input_dict
+    """
+    for (key, value) in input_dict.iteritems():
+        if isinstance(value, dict):
+            substitute_placeholders(value, values_dict)
+        elif isinstance(value, Placeholder):
+            # If there is a Placeholder without a corresponding entry in
+            # values_dict, we will hit a KeyError - we want this.
+            input_dict[key] = values_dict[value.name]
+    return input_dict
+
+
+# Template for the config that becomes the base for each generated job config
+dict_templ = {
+    'branch': Placeholder('ceph_branch'),
+    'machine_type': Placeholder('machine_type'),
+    'nuke-on-error': True,
+    'os_type': {'distro': None},
+    'overrides': {
+        'admin_socket': {
+            'branch': Placeholder('ceph_branch'),
+        },
+        'ceph': {
+            'conf': {
+                'mon': {
+                    'debug mon': 20,
+                    'debug ms': 1,
+                    'debug paxos': 20},
+                'osd': {
+                    'debug filestore': 20,
+                    'debug journal': 20,
+                    'debug ms': 1,
+                    'debug osd': 20
+                }
+            },
+            'log-whitelist': ['slow request'],
+            'sha1': Placeholder('ceph_hash'),
+        },
+        'ceph-deploy': {
+            'branch': {
+                'dev': Placeholder('ceph_branch'),
+            },
+            'conf': {
+                'client': {
+                    'log file': '/var/log/ceph/ceph-$name.$pid.log'
+                },
+                'mon': {
+                    'debug mon': 1,
+                    'debug ms': 20,
+                    'debug paxos': 20,
+                    'osd default pool size': 2
+                }
+            }
+        },
+        'install': {
+            'ceph': {
+                'sha1': Placeholder('ceph_hash'),
+            }
+        },
+        's3tests': {
+            'branch': Placeholder('s3_branch'),
+        },
+        'workunit': {
+            'sha1': Placeholder('ceph_hash'),
+        }
+    },
+    'suite': Placeholder('nice_suite'),
+    'tasks': [
+        {'chef': None},
+        {'clock.check': None}
+    ],
+    'teuthology_branch': Placeholder('teuthology_branch'),
+}
