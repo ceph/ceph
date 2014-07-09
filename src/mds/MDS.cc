@@ -243,7 +243,7 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
       f->dump_int("id", p->first.num());
       f->dump_string("state", p->second->get_state_name());
       f->dump_int("replay_requests", is_clientreplay() ? p->second->get_request_count() : 0);
-      f->dump_bool("reconnecting", server->is_reconnecting(p->first.num()));
+      f->dump_bool("reconnecting", server->waiting_for_reconnect(p->first.num()));
       f->dump_stream("inst") << p->second->info.inst;
       f->close_section(); //session
     }
