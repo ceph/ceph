@@ -117,6 +117,60 @@ TEST_P(StoreTest, SimpleColTest) {
   }
 }
 
+TEST_P(StoreTest, SimpleColPreHashTest) {
+  // Firstly we will need to revert the value making sure
+  // collection hint actually works
+  int merge_threshold = g_ceph_context->_conf->filestore_merge_threshold;
+  std::ostringstream oss;
+  if (merge_threshold > 0) {
+    oss << "-" << merge_threshold;
+    g_ceph_context->_conf->set_val("filestore_merge_threshold", oss.str().c_str());
+  }
+
+  uint32_t pg_num = 128;
+
+  boost::uniform_int<> pg_id_range(0, pg_num);
+  gen_type rng(time(NULL));
+  int pg_id = pg_id_range(rng);
+
+  int objs_per_folder = abs(merge_threshold) * 16 * g_ceph_context->_conf->filestore_split_multiple;
+  boost::uniform_int<> folders_range(5, 256);
+  uint64_t expected_num_objs = (uint64_t)(objs_per_folder * folders_range(rng));
+
+  char buf[100];
+  snprintf(buf, 100, "1.%x_head", pg_id);
+
+  coll_t cid(buf);
+  int r;
+  {
+    // Create a collection along with a hint
+    ObjectStore::Transaction t;
+    t.create_collection(cid);
+    cerr << "create collection" << std::endl;
+    bufferlist hint;
+    ::encode(pg_num, hint);
+    ::encode(expected_num_objs, hint);
+    t.collection_hint(cid, ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS, hint);
+    cerr << "collection hint" << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    // Remove the collection
+    ObjectStore::Transaction t;
+    t.remove_collection(cid);
+    cerr << "remove collection" << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  // Revert the config change so that it does not affect the split/merge tests
+  if (merge_threshold > 0) {
+    oss.str("");
+    oss << merge_threshold;
+    g_ceph_context->_conf->set_val("filestore_merge_threshold", oss.str().c_str());
+  }
+}
+
 TEST_P(StoreTest, SimpleObjectTest) {
   int r;
   coll_t cid = coll_t("coll");
