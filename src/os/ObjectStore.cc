@@ -610,7 +610,11 @@ int ObjectStore::collection_list_range(coll_t c, hobject_t start, hobject_t end,
 			    snapid_t seq, vector<hobject_t> *ls)
 {
   vector<ghobject_t> go;
-  ghobject_t gstart(start), gend(end);
+  // Starts with the smallest shard id and generation to
+  // make sure the result list has the marker object
+  ghobject_t gstart(start, 0, shard_id_t(0));
+  // Exclusive end, choose the smallest end ghobject
+  ghobject_t gend(end, 0, shard_id_t(0));
   int ret = collection_list_range(c, gstart, gend, seq, &go);
   if (ret == 0) {
     ls->reserve(go.size());
