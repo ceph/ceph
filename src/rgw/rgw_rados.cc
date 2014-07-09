@@ -1693,8 +1693,7 @@ int RGWRados::open_bucket_data_ctx(rgw_bucket& bucket, librados::IoCtx& data_ctx
 
 int RGWRados::open_bucket_data_extra_ctx(rgw_bucket& bucket, librados::IoCtx& data_ctx)
 {
-  string& pool = (!bucket.data_extra_pool.empty() ? bucket.data_extra_pool : bucket.data_pool);
-  int r = open_bucket_pool_ctx(bucket.name, pool, data_ctx);
+  int r = open_bucket_pool_ctx(bucket.name, bucket.data_extra_pool, data_ctx);
   if (r < 0)
     return r;
 
