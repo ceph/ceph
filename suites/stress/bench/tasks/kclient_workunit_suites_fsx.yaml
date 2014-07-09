@@ -5,4 +5,4 @@ tasks:
 - workunit:
     clients:
       all:
-        - suites/fsx_debug.sh
+        - suites/fsx.sh
