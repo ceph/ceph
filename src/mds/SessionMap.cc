@@ -14,6 +14,7 @@
 
 #include "MDS.h"
 #include "MDCache.h"
+#include "Mutation.h"
 #include "SessionMap.h"
 #include "osdc/Filer.h"
 
@@ -268,3 +269,17 @@ void SessionMap::wipe_ino_prealloc()
   }
   projected = ++version;
 }
+
+size_t Session::get_request_count()
+{
+  size_t result = 0;
+
+  elist<MDRequestImpl*>::iterator p = requests.begin(
+      member_offset(MDRequestImpl, item_session_request));
+  while (!p.end()) {
+    ++result;
+  }
+
+  return result;
+}
+

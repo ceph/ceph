@@ -229,13 +229,6 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
   } else if (command == "session ls") {
     mds_lock.Lock();
 
-    // Find out how many outstanding requests are for each client, if
-    // the MDS state is reconnect.
-    MDCache::RequestCountMap request_counts;
-    if (is_clientreplay()) {
-      mdcache->get_client_request_counts(&request_counts);
-    }
-
     // Dump sessions, decorated with recovery/replay status
     f->open_array_section("sessions");
     const ceph::unordered_map<entity_name_t, Session*> session_map = sessionmap.get_sessions();
@@ -249,7 +242,7 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
       f->open_object_section("session");
       f->dump_int("id", p->first.num());
       f->dump_string("state", p->second->get_state_name());
-      f->dump_int("replay_requests", request_counts[p->first]);
+      f->dump_int("replay_requests", is_clientreplay() ? p->second->get_request_count() : 0);
       f->dump_bool("reconnecting", server->is_reconnecting(p->first.num()));
       f->dump_stream("inst") << p->second->info.inst;
       f->close_section(); //session
