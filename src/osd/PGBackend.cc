@@ -116,7 +116,11 @@ int PGBackend::objects_list_partial(
   hobject_t *next)
 {
   assert(ls);
-  ghobject_t _next(begin);
+  // Starts with the smallest shard id and generation to
+  // make sure the result list has the marker object (
+  // it might have multiple generations though, which would
+  // be filtered).
+  ghobject_t _next(begin, 0, shard_id_t(0));
   ls->reserve(max);
   int r = 0;
   while (!_next.is_max() && ls->size() < (unsigned)min) {
