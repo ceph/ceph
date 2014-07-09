@@ -139,7 +139,7 @@ The 'readonly' mode is intended for read-only workloads that do not
 require consistency to be enforced by the storage system.  Writes will
 be forwarded to the base tier, but objects that are read will get
 promoted to the cache.  No attempt is made by Ceph to ensure that the
-contents of the cache tier(s) are consistent in the presense of object
+contents of the cache tier(s) are consistent in the presence of object
 updates.
 
 Cache sizing

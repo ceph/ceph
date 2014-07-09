@@ -50,7 +50,7 @@ The *head* object contains a *SnapSet* encoded in an attribute, which tracks
 If the *head* is deleted while there are still clones, a *snapdir* object
 is created instead to house the *SnapSet*.
 
-Addionally, the *object_info_t* on each clone includes a vector of snaps
+Additionally, the *object_info_t* on each clone includes a vector of snaps
 for which clone is defined.
 
 Snap Removal
