@@ -857,6 +857,63 @@ public:
 
   void print(ostream& out);
 
+  /**
+   * @defgroup Scrubbing and fsck
+   * @{
+   */
+
+  /**
+   * Report the results of validation against a particular inode.
+   * Each member is a pair of bools.
+   * <member>.first represents if validation was performed against the member.
+   * <member.second represents if the member passed validation.
+   * performed_validation is set to true if the validation was actually
+   * run. It might not be run if, for instance, the inode is marked as dirty.
+   * passed_validation is set to true if everything that was checked
+   * passed its validation.
+   */
+  struct validated_data {
+    template<typename T>struct member_status {
+      bool checked;
+      bool passed;
+      int ondisk_read_retval;
+      T ondisk_value;
+      T memory_value;
+      std::stringstream error_str;
+      member_status() : checked(false), passed(false),
+          ondisk_read_retval(0) {}
+    };
+
+    bool performed_validation;
+    bool passed_validation;
+
+    member_status<inode_backtrace_t> backtrace;
+    member_status<inode_t> inode;
+    member_status<nest_info_t> raw_rstats;
+
+    validated_data() : performed_validation(false),
+        passed_validation(false) {}
+  };
+
+  /**
+   * Validate that the on-disk state of an inode matches what
+   * we expect from our memory state. Currently this checks that:
+   * 1) The backtrace associated with the file data exists and is correct
+   * 2) For directories, the actual inode metadata matches our memory state,
+   * 3) For directories, the rstats match
+   *
+   * @param results A freshly-created validated_data struct, with values set
+   * as described in the struct documentation.
+   * @param Context The callback to activate once the validation has
+   * been completed.
+   */
+  void validate_disk_state(validated_data *results,
+                           Context *fin);
+private:
+  bool _validate_disk_state(class ValidationContinuation *c,
+                            int rval, int stage);
+  friend class ValidationContinuation;
+  /** @} Scrubbing and fsck */
 };
 
 #endif
