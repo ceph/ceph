@@ -8,7 +8,6 @@ import time
 import yaml
 
 from datetime import datetime
-from traceback import format_tb
 
 from teuthology import setup_log_file
 from . import beanstalk
