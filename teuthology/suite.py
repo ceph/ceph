@@ -68,6 +68,8 @@ def main(args):
         job_config.email = email
     if owner:
         job_config.owner = owner
+    if suite_branch:
+        job_config.suite_branch = suite_branch
 
     with NamedTemporaryFile(prefix='schedule_suite_',
                             delete=False) as base_yaml:
