@@ -194,6 +194,9 @@ function test_tiering()
   ceph osd tier remove data cache3
   ceph osd pool delete cache3 cache3 --yes-i-really-really-mean-it
 
+  ceph osd pool delete slow2 slow2 --yes-i-really-really-mean-it
+  ceph osd pool delete slow slow --yes-i-really-really-mean-it
+
   # protection against pool removal when used as tiers
   ceph osd pool create datapool 2
   ceph osd pool create cachepool 2
