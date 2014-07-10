@@ -46,15 +46,11 @@ def install_except_hook():
     Install an exception hook that first logs any uncaught exception, then
     raises it.
     """
-    def log_exception(exception_class, exception, traceback):
-        logging.critical(''.join(format_tb(traceback)))
-        if not exception.message:
-            logging.critical(exception_class.__name__)
-        else:
-            logging.critical('{0}: {1}'.format(
-                exception_class.__name__, exception))
-        # Now raise the exception like normal
-        sys.__excepthook__(exception_class, exception, traceback)
+    def log_exception(exc_type, exc_value, exc_traceback):
+        if not issubclass(exc_type, KeyboardInterrupt):
+            log.critical("Uncaught exception", exc_info=(exc_type, exc_value,
+                                                         exc_traceback))
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
     sys.excepthook = log_exception
 
 
