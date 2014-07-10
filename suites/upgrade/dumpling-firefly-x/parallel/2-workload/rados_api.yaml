@@ -1,0 +1,8 @@
+workload:
+   sequential:
+   - workunit:
+       branch: dumpling
+       clients:
+         client.0:
+         - rados/test.sh
+         - cls

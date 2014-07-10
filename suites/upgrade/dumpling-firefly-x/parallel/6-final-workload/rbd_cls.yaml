@@ -1,0 +1,7 @@
+tasks:
+- workunit:
+    branch: dumpling
+    clients:
+      client.1:
+      - cls/test_cls_rbd.sh
+
