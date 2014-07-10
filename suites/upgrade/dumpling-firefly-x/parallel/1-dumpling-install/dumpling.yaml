@@ -1,0 +1,10 @@
+tasks:
+- install:
+   branch: dumpling
+- print: "**** done dumpling install"
+- ceph:
+   fs: xfs
+- parallel:
+   - workload
+   - upgrade-sequence
+- print: "**** done parallel"
