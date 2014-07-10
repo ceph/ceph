@@ -1,5 +1,5 @@
-workload:
-  sequential:
+tasks:
+- sequential:
   - rgw: [client.0]
   - s3tests:
       client.0:
