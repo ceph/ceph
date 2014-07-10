@@ -44,6 +44,8 @@
 #include "global/global_context.h"
 #include "include/assert.h"
 
+#include "common/Continuation.h"
+
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mdcache->mds->get_nodeid() << ".cache.ino(" << inode.ino << ") "
@@ -3443,3 +3445,215 @@ void InodeStore::generate_test_instances(list<InodeStore*> &ls)
   ls.push_back(populated);
 }
 
+void CInode::validate_disk_state(CInode::validated_data *results,
+                                 Context *fin)
+{
+  class ValidationContinuation : public Continuation {
+  public:
+    CInode *in;
+    CInode::validated_data *results;
+    bufferlist bl;
+    CInode *shadow_in;
+
+    enum {
+      START = 0,
+      BACKTRACE,
+      INODE,
+      DIRFRAGS
+    };
+
+    ValidationContinuation(CInode *i,
+                           CInode::validated_data *data_r,
+                           Context *fin) :
+                             Continuation(fin),
+                             in(i),
+                             results(data_r),
+                             shadow_in(NULL) {
+      set_callback(START, static_cast<Continuation::stagePtr>(&ValidationContinuation::_start));
+      set_callback(BACKTRACE, static_cast<Continuation::stagePtr>(&ValidationContinuation::_backtrace));
+      set_callback(INODE, static_cast<Continuation::stagePtr>(&ValidationContinuation::_inode_disk));
+      set_callback(DIRFRAGS, static_cast<Continuation::stagePtr>(&ValidationContinuation::_dirfrags));
+    }
+
+    ~ValidationContinuation() {
+      delete shadow_in;
+    }
+
+    bool _start(int rval) {
+      if (in->is_dirty()) {
+        MDCache *mdcache = in->mdcache;
+        inode_t& inode = in->inode;
+        dout(20) << "validating a dirty CInode; results will be inconclusive"
+                 << dendl;
+      }
+
+      results->passed_validation = false; // we haven't finished it yet
+
+      MDSIOContextWrapper *mdsioc =
+          new MDSIOContextWrapper(in->mdcache->mds, get_callback(BACKTRACE));
+      C_OnFinisher *conf = new C_OnFinisher(mdsioc,
+                                            &in->mdcache->mds->finisher);
+
+      in->fetch_backtrace(conf, &bl);
+      return false;
+    }
+
+    bool _backtrace(int rval) {
+      // set up basic result reporting and make sure we got the data
+      results->performed_validation = true; // at least, some of it!
+      results->backtrace.checked = true;
+      results->backtrace.ondisk_read_retval = rval;
+      results->backtrace.passed = false; // we'll set it true if we make it
+      if (rval != 0) {
+        results->backtrace.error_str << "failed to read off disk; see retval";
+        return true;
+      }
+
+      // extract the backtrace, and compare it to a newly-constructed one
+      try {
+        bufferlist::iterator p = bl.begin();
+        ::decode(results->backtrace.ondisk_value, p);
+      } catch (buffer::malformed_input) {
+        results->backtrace.passed = false;
+        results->backtrace.error_str << "failed to decode on-disk backtrace!";
+        return true;
+      }
+      int64_t pool;
+      if (in->is_dir())
+        pool = in->mdcache->mds->mdsmap->get_metadata_pool();
+      else
+        pool = in->inode.layout.fl_pg_pool;
+      inode_backtrace_t& memory_backtrace = results->backtrace.memory_value;
+      in->build_backtrace(pool, memory_backtrace);
+      bool equivalent, divergent;
+      int memory_newer =
+          memory_backtrace.compare(results->backtrace.ondisk_value,
+                                   &equivalent, &divergent);
+      if (equivalent) {
+        results->backtrace.passed = true;
+      } else {
+        results->backtrace.passed = false; // we couldn't validate :(
+        if (divergent || memory_newer <= 0) {
+          // we're divergent, or don't have a newer version to write
+          results->backtrace.error_str <<
+              "On-disk backtrace is divergent or newer";
+          return true;
+        }
+      }
+
+      // quit if we're a file, or kick off directory checks otherwise
+      // TODO: validate on-disk inode for non-base directories
+      if (in->is_file() || in->is_symlink()) {
+        results->passed_validation = true;
+        return true;
+      }
+
+      return validate_directory_data();
+    }
+
+    bool validate_directory_data() {
+      assert(in->is_dir());
+
+      if (in->is_base()) {
+        shadow_in = new CInode(in->mdcache);
+        in->mdcache->create_unlinked_system_inode(shadow_in,
+                                                  in->inode.ino,
+                                                  in->inode.mode);
+        shadow_in->fetch(new MDSInternalContextWrapper(in->mdcache->mds,
+                                                       get_callback(INODE)));
+        return false;
+      } else {
+        return fetch_dirfrag_rstats();
+      }
+    }
+
+    bool _inode_disk(int rval) {
+      results->inode.checked = true;
+      results->inode.ondisk_read_retval = rval;
+      results->inode.passed = false;
+      results->inode.ondisk_value = shadow_in->inode;
+      results->inode.memory_value = in->inode;
+
+      inode_t& si = shadow_in->inode;
+      inode_t& i = in->inode;
+      if (si.version > i.version) {
+        // uh, what?
+        results->inode.error_str << "On-disk inode is newer than in-memory one!";
+        return true;
+      } else {
+        bool divergent = false;
+        int r = i.compare(si, &divergent);
+        results->inode.passed = !divergent && r >= 0;
+        if (!results->inode.passed) {
+          results->inode.error_str <<
+              "On-disk inode is divergent or newer than in-memory one!";
+          return true;
+        }
+      }
+      return fetch_dirfrag_rstats();
+    }
+
+    bool fetch_dirfrag_rstats() {
+      MDSGatherBuilder gather(g_ceph_context);
+      std::list<frag_t> frags;
+      in->dirfragtree.get_leaves(frags);
+      for (list<frag_t>::iterator p = frags.begin();
+          p != frags.end();
+          ++p) {
+        CDir *dirfrag = in->get_or_open_dirfrag(in->mdcache, *p);
+        if (!dirfrag->is_complete())
+          dirfrag->fetch(gather.new_sub(), false);
+      }
+      if (gather.has_subs()) {
+        gather.set_finisher(new MDSInternalContextWrapper(in->mdcache->mds,
+                                                          get_callback(DIRFRAGS)));
+        gather.activate();
+        return false;
+      } else {
+        return immediate(DIRFRAGS, 0);
+      }
+    }
+
+    bool _dirfrags(int rval) {
+      // basic reporting setup
+      results->raw_rstats.checked = true;
+      results->raw_rstats.ondisk_read_retval = rval;
+      results->raw_rstats.passed = false; // we'll set it true if we make it
+      if (rval != 0) {
+        results->raw_rstats.error_str << "Failed to read dirfrags off disk";
+        return true;
+      }
+
+      // check each dirfrag...
+      nest_info_t& sub_info = results->raw_rstats.ondisk_value;
+      for (map<frag_t,CDir*>::iterator p = in->dirfrags.begin();
+          p != in->dirfrags.end();
+          ++p) {
+        if (!p->second->is_complete()) {
+          results->raw_rstats.error_str << "dirfrag is INCOMPLETE despite fetching; probably too large compared to MDS cache size?\n";
+          return true;
+        }
+        assert(p->second->check_rstats());
+        sub_info.add(p->second->fnode.accounted_rstat);
+      }
+      // ...and that their sum matches our inode settings
+      results->raw_rstats.memory_value = in->inode.rstat;
+      sub_info.rsubdirs++; // it gets one to account for self
+      if (!sub_info.same_sums(in->inode.rstat)) {
+        results->raw_rstats.error_str
+        << "freshly-calculated rstats don't match existing ones";
+        return true;
+      }
+      results->raw_rstats.passed = true;
+      // Hurray! We made it through!
+      results->passed_validation = true;
+      return true;
+    }
+  };
+
+
+  ValidationContinuation *vc = new ValidationContinuation(this,
+                                                          results,
+                                                          fin);
+  vc->begin();
+}
