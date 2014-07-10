@@ -211,8 +211,9 @@ function test_tiering()
   ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
 
   # check health check
+  ceph osd pool create datapool 2
   ceph osd pool create cache4 2
-  ceph osd tier add data cache4
+  ceph osd tier add datapool cache4
   ceph osd pool set cache4 target_max_objects 5
   ceph osd pool set cache4 target_max_bytes 1000
   for f in `seq 1 5` ; do
@@ -225,8 +226,9 @@ function test_tiering()
   ceph health | grep WARN | grep cache4
   ceph health detail | grep cache4 | grep 'target max' | grep objects
   ceph health detail | grep cache4 | grep 'target max' | grep 'B'
-  ceph osd tier remove data cache4
+  ceph osd tier remove datapool cache4
   ceph osd pool delete cache4 cache4 --yes-i-really-really-mean-it
+  ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
 
   # make sure 'tier remove' behaves as we expect
   # i.e., removing a tier from a pool that's not its base pool only
