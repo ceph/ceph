@@ -70,7 +70,6 @@ noinst_HEADERS += \
 	include/triple.h \
 	include/types.h \
 	include/utime.h \
-	include/dlist.h \
 	include/elist.h \
 	include/uuid.h \
 	include/xlist.h \
