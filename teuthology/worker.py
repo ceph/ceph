@@ -102,6 +102,27 @@ def fetch_teuthology_branch(dest_path, branch='master'):
         lock.release()
 
 
+def fetch_qa_suite(branch):
+    """
+    Make sure ceph-qa-suite is checked out.
+
+    :param branch: The branch to fetch
+    :returns:      The destination path
+    """
+    src_base_path = teuth_config.src_base_path
+    dest_path = os.path.join(src_base_path, 'ceph-qa-suite_' + branch)
+    qa_suite_url = os.path.join(teuth_config.ceph_git_base_url,
+                                'ceph-qa-suite')
+    # only let one worker create/update the checkout at a time
+    lock = filelock('%s/.lock' % dest_path)
+    lock.acquire()
+    try:
+        enforce_repo_state(qa_suite_url, dest_path, branch)
+    finally:
+        lock.release()
+    return dest_path
+
+
 def main(ctx):
     loglevel = logging.INFO
     if ctx.verbose:
@@ -167,6 +188,8 @@ def main(ctx):
         try:
             fetch_teuthology_branch(dest_path=teuth_path,
                                     branch=teuthology_branch)
+            suite_path = fetch_qa_suite(job_config['suite_branch'])
+            job_config['suite_path'] = suite_path
         except BranchNotFoundError:
             log.exception(
                 "Branch not found; throwing job away")
@@ -299,7 +322,8 @@ def run_job(job_config, teuth_bin_path):
         yaml.safe_dump(data=job_config, stream=tmp)
         tmp.flush()
         arg.append(tmp.name)
-        p = subprocess.Popen(args=arg)
+        p = subprocess.Popen(args=arg,
+                             environ=dict(PYTHONPATH=job_config['suite_path']))
         log.info("Job archive: %s", job_config['archive_path'])
         log.info("Job PID: %s", str(p.pid))
 
