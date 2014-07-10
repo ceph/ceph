@@ -1,0 +1,11 @@
+tasks:
+- install:
+    branch: emperor
+- ceph:
+- install.upgrade:
+    all:
+      tag: v0.80.1
+- ceph.restart:
+- parallel:
+   - workload
+   - upgrade-sequence
