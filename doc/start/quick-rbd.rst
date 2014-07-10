@@ -43,6 +43,7 @@ Install Ceph
 
 	ceph-deploy admin ceph-client
 
+.. note:: The keyring will likely be copied over to ``/etc/ceph/ceph.client.admin.keyring`` 
 
 Configure a Block Device
 ========================
