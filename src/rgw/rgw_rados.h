@@ -162,7 +162,8 @@ struct RGWObjManifestRule {
     ::decode(start_ofs, bl);
     ::decode(part_size, bl);
     ::decode(stripe_max_size, bl);
-    ::decode(override_prefix, bl);
+    if (struct_v >= 2)
+      ::decode(override_prefix, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
