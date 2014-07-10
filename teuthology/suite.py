@@ -120,7 +120,7 @@ def fetch_suite_repo(branch, test_name):
 
     :returns: The path to the repo on disk
     """
-    src_base_path = os.path.expanduser('~/src')
+    src_base_path = config.src_base_path
     if not os.path.exists(src_base_path):
         os.mkdir(src_base_path)
     suite_repo_path = os.path.join(src_base_path,
