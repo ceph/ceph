@@ -1060,8 +1060,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  __u8 encode_compat = 5;
-  ENCODE_START(15, encode_compat, bl);
+  ENCODE_START(15, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
