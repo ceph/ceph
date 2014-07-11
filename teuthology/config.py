@@ -18,14 +18,14 @@ class YamlConfig(object):
         if self.yaml_path:
             self.load()
         else:
-            self.__conf = dict()
+            self._conf = dict()
 
     def load(self):
         if os.path.exists(self.yaml_path):
-            self.__conf = yaml.safe_load(file(self.yaml_path))
+            self._conf = yaml.safe_load(file(self.yaml_path))
         else:
             log.debug("%s not found", self.yaml_path)
-            self.__conf = dict()
+            self._conf = dict()
 
     def update(self, in_dict):
         """
@@ -33,7 +33,7 @@ class YamlConfig(object):
 
         :param in_dict: The dict to use to update
         """
-        self.__conf.update(in_dict)
+        self._conf.update(in_dict)
 
     @classmethod
     def from_dict(cls, in_dict):
@@ -44,14 +44,14 @@ class YamlConfig(object):
         :returns:       The config object
         """
         conf_obj = cls()
-        conf_obj.__conf = in_dict
+        conf_obj._conf = in_dict
         return conf_obj
 
     def to_dict(self):
         """
         :returns: A shallow copy of the configuration as a dict
         """
-        return dict(self.__conf)
+        return dict(self._conf)
 
     @classmethod
     def from_str(cls, in_str):
@@ -62,7 +62,7 @@ class YamlConfig(object):
         :returns:      The config object
         """
         conf_obj = cls()
-        conf_obj.__conf = yaml.safe_load(in_str)
+        conf_obj._conf = yaml.safe_load(in_str)
         return conf_obj
 
     def to_str(self):
@@ -72,22 +72,22 @@ class YamlConfig(object):
         return str(self)
 
     def __str__(self):
-        return yaml.safe_dump(self.__conf, default_flow_style=False).strip()
+        return yaml.safe_dump(self._conf, default_flow_style=False).strip()
 
     def __getitem__(self, name):
-        return self.__conf.__getitem__(name)
+        return self._conf.__getitem__(name)
 
     def __getattr__(self, name):
-        return self.__conf.get(name, self.defaults.get(name))
+        return self._conf.get(name, self.defaults.get(name))
 
     def __setattr__(self, name, value):
-        if name.endswith('__conf') or name in ('yaml_path'):
+        if name.endswith('_conf') or name in ('yaml_path'):
             object.__setattr__(self, name, value)
         else:
-            self.__conf[name] = value
+            self._conf[name] = value
 
     def __delattr__(self, name):
-        del self.__conf[name]
+        del self._conf[name]
 
 
 class TeuthologyConfig(YamlConfig):

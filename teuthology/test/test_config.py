@@ -65,7 +65,7 @@ class TestTeuthologyConfig(TestYamlConfig):
 
     def test_set_ceph_git_base_via_private(self):
         conf_obj = self.test_class()
-        conf_obj._YamlConfig__conf['ceph_git_base_url'] = \
+        conf_obj._conf['ceph_git_base_url'] = \
             "git://ceph.com/"
         assert conf_obj.ceph_git_base_url == "git://ceph.com/"
 
