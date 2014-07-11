@@ -15,7 +15,6 @@
 #ifndef CEPH_LOGSEGMENT_H
 #define CEPH_LOGSEGMENT_H
 
-#include "include/dlist.h"
 #include "include/elist.h"
 #include "include/interval_set.h"
 #include "include/Context.h"
