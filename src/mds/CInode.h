@@ -18,7 +18,6 @@
 #define CEPH_CINODE_H
 
 #include "common/config.h"
-#include "include/dlist.h"
 #include "include/elist.h"
 #include "include/types.h"
 #include "include/lru.h"
@@ -417,7 +416,7 @@ protected:
     flock_locks.clear();
   }
 
-  // LogSegment dlists i (may) belong to
+  // LogSegment lists i (may) belong to
 public:
   elist<CInode*>::item item_dirty;
   elist<CInode*>::item item_caps;
