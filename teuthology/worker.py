@@ -191,7 +191,9 @@ def main(ctx):
 
         try:
             teuth_path = fetch_teuthology_branch(branch=teuthology_branch)
-            suite_path = fetch_qa_suite(job_config['suite_branch'])
+            ceph_branch = job_config['branch']
+            suite_branch = job_config.get('suite_branch', ceph_branch)
+            suite_path = fetch_qa_suite(suite_branch)
         except BranchNotFoundError:
             log.exception(
                 "Branch not found; throwing job away")
