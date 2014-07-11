@@ -11493,3 +11493,43 @@ void C_MDS_RetryRequest::finish(int r)
   mdr->retry++;
   cache->dispatch_request(mdr);
 }
+
+class C_scrub_dentry_finish : public Context {
+public:
+  CInode::validated_data results;
+  MDCache *mdcache;
+  MDRequestRef mdr;
+  Context *on_finish;
+  Formatter *formatter;
+  C_scrub_dentry_finish(MDCache *mdc, MDRequestRef& mdr,
+                        Context *fin, Formatter *f) :
+    mdcache(mdc), mdr(mdr), on_finish(fin), formatter(f) {}
+
+  void finish(int r) {
+    CInode::dump_validation_results(results, formatter);
+    mdcache->request_finish(mdr);
+    on_finish->complete(r);
+  }
+};
+
+void MDCache::scrub_dentry(const string& path, Formatter *f, Context *fin)
+{
+  dout(10) << "scrub_dentry " << path << dendl;
+  MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_VALIDATE);
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  filepath fp(path.c_str());
+  mdr->set_filepath(fp);
+
+  // TODO: this is not actually safe with multiple MDSes!
+  CInode *in = mds->server->rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+  assert(in != NULL); // TODO: obviously can't keep this, but it helps ensure authness
+  assert(in->is_auth());
+
+  bool locked = mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+  if (!locked)
+    return;
+  C_scrub_dentry_finish *finisher = new C_scrub_dentry_finish(this, mdr,
+                                                              fin, f);
+  in->validate_disk_state(&finisher->results, finisher);
+  return;
+}
