@@ -1107,7 +1107,7 @@ int main(int argc, const char **argv)
     configs.push_back(config);
 
     string framework = config->get_framework();
-    fe_map.insert(make_pair<string, RGWFrontendConfig *>(framework, config));
+    fe_map.insert(pair<string, RGWFrontendConfig*>(framework, config));
   }
 
   list<RGWFrontend *> fes;
