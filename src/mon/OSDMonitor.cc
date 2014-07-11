@@ -5381,12 +5381,14 @@ done:
      *  forward:    Forward all reads and writes to base pool
      *  writeback:  Cache writes, promote reads from base pool
      *  readonly:   Forward writes to base pool
+     *  readforward: Writes are in writeback mode, Reads and in forward mode
      *
      * Hence, these are the allowed transitions:
      *
      *  none -> any
-     *  forward -> writeback || any IF num_objects_dirty == 0
-     *  writeback -> forward
+     *  forward -> readforward || writeback || any IF num_objects_dirty == 0
+     *  readforward -> forward || writeback || any IF num_objects_dirty == 0
+     *  writeback -> readforward || forward
      *  readonly -> any
      */
 
@@ -5395,17 +5397,25 @@ done:
     // whatever mode is on the pending state.
 
     if (p->cache_mode == pg_pool_t::CACHEMODE_WRITEBACK &&
-        mode != pg_pool_t::CACHEMODE_FORWARD) {
+        (mode != pg_pool_t::CACHEMODE_FORWARD &&
+	  mode != pg_pool_t::CACHEMODE_READFORWARD)) {
       ss << "unable to set cache-mode '" << pg_pool_t::get_cache_mode_name(mode)
          << "' on a '" << pg_pool_t::get_cache_mode_name(p->cache_mode)
          << "' pool; only '"
          << pg_pool_t::get_cache_mode_name(pg_pool_t::CACHEMODE_FORWARD)
+	 << "','"
+         << pg_pool_t::get_cache_mode_name(pg_pool_t::CACHEMODE_READFORWARD)
         << "' allowed.";
       err = -EINVAL;
       goto reply;
     }
-    if (p->cache_mode == pg_pool_t::CACHEMODE_FORWARD &&
-               mode != pg_pool_t::CACHEMODE_WRITEBACK) {
+    if ((p->cache_mode == pg_pool_t::CACHEMODE_READFORWARD &&
+        (mode != pg_pool_t::CACHEMODE_WRITEBACK &&
+	  mode != pg_pool_t::CACHEMODE_FORWARD)) ||
+
+        (p->cache_mode == pg_pool_t::CACHEMODE_FORWARD &&
+        (mode != pg_pool_t::CACHEMODE_WRITEBACK &&
+	  mode != pg_pool_t::CACHEMODE_READFORWARD))) {
 
       const pool_stat_t& tier_stats =
         mon->pgmon()->pg_map.get_pg_pool_sum_stat(pool_id);
@@ -5418,7 +5428,6 @@ done:
         goto reply;
       }
     }
-
     // go
     pending_inc.get_new_pool(pool_id, p)->cache_mode = mode;
     ss << "set cache-mode for pool '" << poolstr
