@@ -97,12 +97,12 @@ void RGWFormatter_Plain::close_section()
 
 void RGWFormatter_Plain::dump_unsigned(const char *name, uint64_t u)
 {
-  dump_value_int(name, "%"PRIu64, u);
+  dump_value_int(name, "%" PRIu64, u);
 }
 
 void RGWFormatter_Plain::dump_int(const char *name, int64_t u)
 {
-  dump_value_int(name, "%"PRId64, u);
+  dump_value_int(name, "%" PRId64, u);
 }
 
 void RGWFormatter_Plain::dump_float(const char *name, double d)
