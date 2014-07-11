@@ -326,7 +326,11 @@ def run_job(job_config, teuth_bin_path, suite_path):
         yaml.safe_dump(data=job_config, stream=tmp)
         tmp.flush()
         arg.append(tmp.name)
-        p = subprocess.Popen(args=arg, env=dict(PYTHONPATH=suite_path))
+        env = os.environ.copy()
+        python_path = env.get('PYTHONPATH', '')
+        python_path = ':'.join([suite_path, python_path]).strip(':')
+        env['PYTHONPATH'] = python_path
+        p = subprocess.Popen(args=arg, env=env)
         log.info("Job archive: %s", job_config['archive_path'])
         log.info("Job PID: %s", str(p.pid))
 
