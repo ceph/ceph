@@ -48,16 +48,16 @@ class MOSDOpReply : public Message {
   request_redirect_t redirect;
 
 public:
-  object_t get_oid() const { return oid; }
-  pg_t     get_pg() const { return pgid; }
+  const object_t& get_oid() const { return oid; }
+  const pg_t&     get_pg() const { return pgid; }
   int      get_flags() const { return flags; }
 
   bool     is_ondisk() const { return get_flags() & CEPH_OSD_FLAG_ONDISK; }
   bool     is_onnvram() const { return get_flags() & CEPH_OSD_FLAG_ONNVRAM; }
   
   int get_result() const { return result; }
-  eversion_t get_replay_version() const { return replay_version; }
-  version_t get_user_version() const { return user_version; }
+  const eversion_t& get_replay_version() const { return replay_version; }
+  const version_t& get_user_version() const { return user_version; }
   
   void set_result(int r) { result = r; }
 
@@ -84,7 +84,7 @@ public:
   }
 
   /* Don't fill in replay_version for non-write ops */
-  void set_enoent_reply_versions(eversion_t v, version_t uv) {
+  void set_enoent_reply_versions(const eversion_t& v, const version_t& uv) {
     user_version = uv;
     bad_replay_version = v;
   }
@@ -126,14 +126,13 @@ public:
   MOSDOpReply()
     : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION) { }
   MOSDOpReply(MOSDOp *req, int r, epoch_t e, int acktype, bool ignore_out_data)
-    : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION) {
+    : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION),
+      oid(req->oid), pgid(req->pgid), ops(req->ops) {
+
     set_tid(req->get_tid());
-    ops = req->ops;
     result = r;
     flags =
       (req->flags & ~(CEPH_OSD_FLAG_ONDISK|CEPH_OSD_FLAG_ONNVRAM|CEPH_OSD_FLAG_ACK)) | acktype;
-    oid = req->oid;
-    pgid = req->pgid;
     osdmap_epoch = e;
     user_version = 0;
     retry_attempt = req->get_retry_attempt();
