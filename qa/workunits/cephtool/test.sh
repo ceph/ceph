@@ -195,6 +195,9 @@ function test_tiering()
   ceph osd tier remove slow cache3
   ceph osd pool delete cache3 cache3 --yes-i-really-really-mean-it
 
+  ceph osd pool delete slow2 slow2 --yes-i-really-really-mean-it
+  ceph osd pool delete slow slow --yes-i-really-really-mean-it
+
   # protection against pool removal when used as tiers
   ceph osd pool create datapool 2
   ceph osd pool create cachepool 2
@@ -208,7 +211,9 @@ function test_tiering()
   ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
 
   # check health check
+  ceph osd pool create datapool 2
   ceph osd pool create cache4 2
+  ceph osd tier add datapool cache4
   ceph osd pool set cache4 target_max_objects 5
   ceph osd pool set cache4 target_max_bytes 1000
   for f in `seq 1 5` ; do
@@ -221,7 +226,40 @@ function test_tiering()
   ceph health | grep WARN | grep cache4
   ceph health detail | grep cache4 | grep 'target max' | grep objects
   ceph health detail | grep cache4 | grep 'target max' | grep 'B'
+  ceph osd tier remove datapool cache4
   ceph osd pool delete cache4 cache4 --yes-i-really-really-mean-it
+  ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
+
+  # make sure 'tier remove' behaves as we expect
+  # i.e., removing a tier from a pool that's not its base pool only
+  # results in a 'pool foo is now (or already was) not a tier of bar'
+  #
+  ceph osd pool create basepoolA 2
+  ceph osd pool create basepoolB 2
+  poolA_id=$(ceph osd dump | grep 'pool.*basepoolA' | awk '{print $2;}')
+  poolB_id=$(ceph osd dump | grep 'pool.*basepoolB' | awk '{print $2;}')
+
+  ceph osd pool create cache5 2
+  ceph osd pool create cache6 2
+  ceph osd tier add basepoolA cache5
+  ceph osd tier add basepoolB cache6
+  ceph osd tier remove basepoolB cache5 2>&1 | grep 'not a tier of'
+  ceph osd dump | grep "pool.*'cache5'" 2>&1 | grep "tier_of[ \t]\+$poolA_id"
+  ceph osd tier remove basepoolA cache6 2>&1 | grep 'not a tier of'
+  ceph osd dump | grep "pool.*'cache6'" 2>&1 | grep "tier_of[ \t]\+$poolB_id"
+
+  ceph osd tier remove basepoolA cache5 2>&1 | grep 'not a tier of'
+  ! ceph osd dump | grep "pool.*'cache5'" 2>&1 | grep "tier_of"
+  ceph osd tier remove basepoolB cache6 2>&1 | grep 'not a tier of'
+  ! ceph osd dump | grep "pool.*'cache6'" 2>&1 | grep "tier_of"
+
+  ! ceph osd dump | grep "pool.*'basepoolA'" 2>&1 | grep "tiers"
+  ! ceph osd dump | grep "pool.*'basepoolB'" 2>&1 | grep "tiers"
+
+  ceph osd pool delete cache6 cache6 --yes-i-really-really-mean-it
+  ceph osd pool delete cache5 cache5 --yes-i-really-really-mean-it
+  ceph osd pool delete basepoolB basepoolB --yes-i-really-really-mean-it
+  ceph osd pool delete basepoolA basepoolA --yes-i-really-really-mean-it
 }
 
 
@@ -710,47 +748,92 @@ function test_mon_osd_pool_set()
 
   ceph osd pool delete $TEST_POOL_GETSET $TEST_POOL_GETSET --yes-i-really-really-mean-it
 
-  ceph osd pool set rbd hit_set_type explicit_hash
-  ceph osd pool get rbd hit_set_type | grep "hit_set_type: explicit_hash"
-  ceph osd pool set rbd hit_set_type explicit_object
-  ceph osd pool get rbd hit_set_type | grep "hit_set_type: explicit_object"
-  ceph osd pool set rbd hit_set_type bloom
-  ceph osd pool get rbd hit_set_type | grep "hit_set_type: bloom"
-  expect_false ceph osd pool set rbd hit_set_type i_dont_exist
-  ceph osd pool set rbd hit_set_period 123
-  ceph osd pool get rbd hit_set_period | grep "hit_set_period: 123"
-  ceph osd pool set rbd hit_set_count 12
-  ceph osd pool get rbd hit_set_count | grep "hit_set_count: 12"
-  ceph osd pool set rbd hit_set_fpp .01
-  ceph osd pool get rbd hit_set_fpp | grep "hit_set_fpp: 0.01"
+  ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 0'
+}
 
-  ceph osd pool set rbd target_max_objects 123
-  ceph osd pool get rbd target_max_objects | \
+function test_mon_osd_tiered_pool_set()
+{
+  # this is really a tier pool
+  ceph osd pool create real-tier 2
+  ceph osd tier add rbd real-tier
+
+  ceph osd pool set real-tier hit_set_type explicit_hash
+  ceph osd pool get real-tier hit_set_type | grep "hit_set_type: explicit_hash"
+  ceph osd pool set real-tier hit_set_type explicit_object
+  ceph osd pool get real-tier hit_set_type | grep "hit_set_type: explicit_object"
+  ceph osd pool set real-tier hit_set_type bloom
+  ceph osd pool get real-tier hit_set_type | grep "hit_set_type: bloom"
+  expect_false ceph osd pool set real-tier hit_set_type i_dont_exist
+  ceph osd pool set real-tier hit_set_period 123
+  ceph osd pool get real-tier hit_set_period | grep "hit_set_period: 123"
+  ceph osd pool set real-tier hit_set_count 12
+  ceph osd pool get real-tier hit_set_count | grep "hit_set_count: 12"
+  ceph osd pool set real-tier hit_set_fpp .01
+  ceph osd pool get real-tier hit_set_fpp | grep "hit_set_fpp: 0.01"
+
+  ceph osd pool set real-tier target_max_objects 123
+  ceph osd pool get real-tier target_max_objects | \
     grep 'target_max_objects:[ \t]\+123'
-  ceph osd pool set rbd target_max_bytes 123456
-  ceph osd pool get rbd target_max_bytes | \
+  ceph osd pool set real-tier target_max_bytes 123456
+  ceph osd pool get real-tier target_max_bytes | \
     grep 'target_max_bytes:[ \t]\+123456'
-  ceph osd pool set rbd cache_target_dirty_ratio .123
-  ceph osd pool get rbd cache_target_dirty_ratio | \
+  ceph osd pool set real-tier cache_target_dirty_ratio .123
+  ceph osd pool get real-tier cache_target_dirty_ratio | \
     grep 'cache_target_dirty_ratio:[ \t]\+0.123'
-  expect_false ceph osd pool set rbd cache_target_dirty_ratio -.2
-  expect_false ceph osd pool set rbd cache_target_dirty_ratio 1.1
-  ceph osd pool set rbd cache_target_full_ratio .123
-  ceph osd pool get rbd cache_target_full_ratio | \
+  expect_false ceph osd pool set real-tier cache_target_dirty_ratio -.2
+  expect_false ceph osd pool set real-tier cache_target_dirty_ratio 1.1
+  ceph osd pool set real-tier cache_target_full_ratio .123
+  ceph osd pool get real-tier cache_target_full_ratio | \
     grep 'cache_target_full_ratio:[ \t]\+0.123'
   ceph osd dump -f json-pretty | grep '"cache_target_full_ratio_micro": 123000'
-  ceph osd pool set rbd cache_target_full_ratio 1.0
-  ceph osd pool set rbd cache_target_full_ratio 0
-  expect_false ceph osd pool set rbd cache_target_full_ratio 1.1
-  ceph osd pool set rbd cache_min_flush_age 123
-  ceph osd pool get rbd cache_min_flush_age | \
+  ceph osd pool set real-tier cache_target_full_ratio 1.0
+  ceph osd pool set real-tier cache_target_full_ratio 0
+  expect_false ceph osd pool set real-tier cache_target_full_ratio 1.1
+  ceph osd pool set real-tier cache_min_flush_age 123
+  ceph osd pool get real-tier cache_min_flush_age | \
     grep 'cache_min_flush_age:[ \t]\+123'
-  ceph osd pool set rbd cache_min_evict_age 234
-  ceph osd pool get rbd cache_min_evict_age | \
+  ceph osd pool set real-tier cache_min_evict_age 234
+  ceph osd pool get real-tier cache_min_evict_age | \
     grep 'cache_min_evict_age:[ \t]\+234'
 
+  # this is not a tier pool
+  ceph osd pool create fake-tier 2
 
-  ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 0'
+  expect_false ceph osd pool set fake-tier hit_set_type explicit_hash
+  expect_false ceph osd pool get fake-tier hit_set_type
+  expect_false ceph osd pool set fake-tier hit_set_type explicit_object
+  expect_false ceph osd pool get fake-tier hit_set_type
+  expect_false ceph osd pool set fake-tier hit_set_type bloom
+  expect_false ceph osd pool get fake-tier hit_set_type
+  expect_false ceph osd pool set fake-tier hit_set_type i_dont_exist
+  expect_false ceph osd pool set fake-tier hit_set_period 123
+  expect_false ceph osd pool get fake-tier hit_set_period
+  expect_false ceph osd pool set fake-tier hit_set_count 12
+  expect_false ceph osd pool get fake-tier hit_set_count
+  expect_false ceph osd pool set fake-tier hit_set_fpp .01
+  expect_false ceph osd pool get fake-tier hit_set_fpp
+
+  expect_false ceph osd pool set fake-tier target_max_objects 123
+  expect_false ceph osd pool get fake-tier target_max_objects
+  expect_false ceph osd pool set fake-tier target_max_bytes 123456
+  expect_false ceph osd pool get fake-tier target_max_bytes
+  expect_false ceph osd pool set fake-tier cache_target_dirty_ratio .123
+  expect_false ceph osd pool get fake-tier cache_target_dirty_ratio
+  expect_false ceph osd pool set fake-tier cache_target_dirty_ratio -.2
+  expect_false ceph osd pool set fake-tier cache_target_dirty_ratio 1.1
+  expect_false ceph osd pool set fake-tier cache_target_full_ratio .123
+  expect_false ceph osd pool get fake-tier cache_target_full_ratio
+  expect_false ceph osd pool set fake-tier cache_target_full_ratio 1.0
+  expect_false ceph osd pool set fake-tier cache_target_full_ratio 0
+  expect_false ceph osd pool set fake-tier cache_target_full_ratio 1.1
+  expect_false ceph osd pool set fake-tier cache_min_flush_age 123
+  expect_false ceph osd pool get fake-tier cache_min_flush_age
+  expect_false ceph osd pool set fake-tier cache_min_evict_age 234
+  expect_false ceph osd pool get fake-tier cache_min_evict_age
+
+  ceph osd tier remove rbd real-tier
+  ceph osd pool delete real-tier real-tier --yes-i-really-really-mean-it
+  ceph osd pool delete fake-tier fake-tier --yes-i-really-really-mean-it
 }
 
 function test_mon_osd_erasure_code()
@@ -876,6 +959,7 @@ TESTS=(
   mon_osd_pool_quota
   mon_pg
   mon_osd_pool_set
+  mon_osd_tiered_pool_set
   mon_osd_erasure_code
   mon_osd_misc
   mon_heap_profiler
