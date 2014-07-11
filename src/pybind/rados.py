@@ -238,7 +238,7 @@ Rados object in state %s." % (self.state))
             # read the default conf file when '' is given
             if conffile == '':
                 conffile = None
-            self.conf_read_file(conffile)
+        self.conf_read_file(conffile)
         if conf:
             for key, value in conf.iteritems():
                 self.conf_set(key, value)
