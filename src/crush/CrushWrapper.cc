@@ -1301,6 +1301,9 @@ void CrushWrapper::dump_tunables(Formatter *f) const
 
   f->dump_int("require_feature_tunables", (int)has_nondefault_tunables());
   f->dump_int("require_feature_tunables2", (int)has_nondefault_tunables2());
+  f->dump_int("require_feature_tunables3", (int)has_nondefault_tunables3());
+  f->dump_int("has_v2_rules", (int)has_v2_rules());
+  f->dump_int("has_v3_rules", (int)has_v3_rules());
 }
 
 void CrushWrapper::dump_rules(Formatter *f) const
