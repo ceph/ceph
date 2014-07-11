@@ -541,8 +541,17 @@ public:
 
   void store(MDSInternalContextBase *fin);
   void _stored(version_t cv, Context *fin);
+  /**
+   * Flush a CInode to disk. This includes the backtrace, the parent
+   * directory's link, and the Inode object itself (if a base directory).
+   * @pre is_auth() on both the inode and its containing directory
+   * @pre can_auth_pin()
+   * @param fin The Context to call when the flush is completed.
+   */
+  void flush(MDSInternalContextBase *fin);
   void fetch(MDSInternalContextBase *fin);
   void _fetched(bufferlist& bl, bufferlist& bl2, Context *fin);  
+
 
   void build_backtrace(int64_t pool, inode_backtrace_t& bt);
   void store_backtrace(MDSInternalContextBase *fin, int op_prio=-1);
