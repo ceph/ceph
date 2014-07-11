@@ -3,4 +3,5 @@ workload:
   - rgw: [client.0]
   - s3tests:
       client.0:
-         rgw_server: client.0
+        force-branch: firefly-original
+        rgw_server: client.0
