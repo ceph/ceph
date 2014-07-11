@@ -952,6 +952,32 @@ void CInode::_stored(version_t v, Context *fin)
   fin->complete(0);
 }
 
+void CInode::flush(MDSInternalContextBase *fin)
+{
+  dout(10) << "flush " << *this << dendl;
+  assert(is_auth() && can_auth_pin());
+
+  MDSGatherBuilder gather(g_ceph_context);
+
+  if (is_dirty_parent()) {
+    store_backtrace(gather.new_sub());
+  }
+  if (is_dirty()) {
+    if (is_base()) {
+      store(gather.new_sub());
+    } else {
+      parent->dir->commit(0, gather.new_sub());
+    }
+  }
+
+  if (gather.has_subs()) {
+    gather.set_finisher(fin);
+    gather.activate();
+  } else {
+    fin->complete(0);
+  }
+}
+
 struct C_IO_Inode_Fetched : public CInodeIOContext {
   bufferlist bl, bl2;
   Context *fin;
