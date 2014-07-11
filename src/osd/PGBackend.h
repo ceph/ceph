@@ -300,12 +300,16 @@
 
    virtual void check_recovery_sources(const OSDMapRef osdmap) = 0;
 
+
+   /**
+    * clean up any temporary on-disk state due to a pg interval change
+    */
+   void on_change_cleanup(ObjectStore::Transaction *t);
    /**
     * implementation should clear itself, contexts blessed prior to on_change
     * won't be called after on_change()
     */
-   void on_change(ObjectStore::Transaction *t);
-   virtual void _on_change(ObjectStore::Transaction *t) = 0;
+   virtual void on_change() = 0;
    virtual void clear_state() = 0;
 
    virtual void on_flushed() = 0;
