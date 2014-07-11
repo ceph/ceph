@@ -80,7 +80,7 @@ def fetch_teuthology_branch(branch):
     src_base_path = teuth_config.src_base_path
     dest_path = os.path.join(src_base_path, 'teuthology_' + branch)
     # only let one worker create/update the checkout at a time
-    lock = filelock('%s.lock' % dest_path)
+    lock = filelock(dest_path.rstrip('/') + '.lock')
     lock.acquire()
     try:
         teuthology_git_upstream = teuth_config.ceph_git_base_url + \
@@ -121,7 +121,7 @@ def fetch_qa_suite(branch):
     qa_suite_url = os.path.join(teuth_config.ceph_git_base_url,
                                 'ceph-qa-suite')
     # only let one worker create/update the checkout at a time
-    lock = filelock('%s/.lock' % dest_path)
+    lock = filelock(dest_path.rstrip('/') + '.lock')
     lock.acquire()
     try:
         enforce_repo_state(qa_suite_url, dest_path, branch)
