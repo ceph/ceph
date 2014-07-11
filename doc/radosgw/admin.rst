@@ -215,7 +215,7 @@ Create a Key
 ------------
 
 To create a key for a user, you must specify ``key create``. For a user, specify
-the user ID and the ``s3` key type. To create a key for subuser, you must
+the user ID and the ``s3`` key type. To create a key for subuser, you must
 specify the subuser ID and the ``swift`` keytype. For example::
 
 	radosgw-admin key create --subuser=johndoe:swift --key-type=swift --gen-secret
