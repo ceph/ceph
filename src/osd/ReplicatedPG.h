@@ -1271,9 +1271,9 @@ public:
 		 bufferlist& odata);
 
   void do_request(
-    OpRequestRef op,
+    OpRequestRef& op,
     ThreadPool::TPHandle &handle);
-  void do_op(OpRequestRef op);
+  void do_op(OpRequestRef& op);
   bool pg_op_must_wait(MOSDOp *op);
   void do_pg_op(OpRequestRef op);
   void do_sub_op(OpRequestRef op);

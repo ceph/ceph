@@ -207,7 +207,7 @@ protected:
   OSDMapRef last_persisted_osdmap_ref;
   PGPool pool;
 
-  void queue_op(OpRequestRef op);
+  void queue_op(OpRequestRef& op);
   void take_op_map_waiters();
 
   void update_osdmap_ref(OSDMapRef newmap) {
@@ -2154,28 +2154,28 @@ public:
     OSDMapRef osdmap);
 
   // OpRequest queueing
-  bool can_discard_op(OpRequestRef op);
+  bool can_discard_op(OpRequestRef& op);
   bool can_discard_scan(OpRequestRef op);
   bool can_discard_backfill(OpRequestRef op);
-  bool can_discard_request(OpRequestRef op);
+  bool can_discard_request(OpRequestRef& op);
 
   template<typename T, int MSGTYPE>
-  bool can_discard_replica_op(OpRequestRef op);
+  bool can_discard_replica_op(OpRequestRef& op);
 
-  static bool op_must_wait_for_map(OSDMapRef curmap, OpRequestRef op);
+  static bool op_must_wait_for_map(epoch_t cur_epoch, OpRequestRef& op);
 
   bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch);
   bool old_peering_evt(CephPeeringEvtRef evt) {
     return old_peering_msg(evt->get_epoch_sent(), evt->get_epoch_requested());
   }
-  static bool have_same_or_newer_map(OSDMapRef osdmap, epoch_t e) {
-    return e <= osdmap->get_epoch();
+  static bool have_same_or_newer_map(epoch_t cur_epoch, epoch_t e) {
+    return e <= cur_epoch;
   }
   bool have_same_or_newer_map(epoch_t e) {
     return e <= get_osdmap()->get_epoch();
   }
 
-  bool op_has_sufficient_caps(OpRequestRef op);
+  bool op_has_sufficient_caps(OpRequestRef& op);
 
 
   // recovery bits
@@ -2207,11 +2207,11 @@ public:
 
   // abstract bits
   virtual void do_request(
-    OpRequestRef op,
+    OpRequestRef& op,
     ThreadPool::TPHandle &handle
   ) = 0;
 
-  virtual void do_op(OpRequestRef op) = 0;
+  virtual void do_op(OpRequestRef& op) = 0;
   virtual void do_sub_op(OpRequestRef op) = 0;
   virtual void do_sub_op_reply(OpRequestRef op) = 0;
   virtual void do_scan(
