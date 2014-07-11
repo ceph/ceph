@@ -2,9 +2,9 @@ upgrade-sequence:
    sequential:
    - install.upgrade:
        mon.a:
-         branch: emperor
+         branch: firefly
        mon.b:
-         branch: emperor
+         branch: firefly
    - ceph.restart:
        daemons: [mon.a]
        wait-for-healthy: false
