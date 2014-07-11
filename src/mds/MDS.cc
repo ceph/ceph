@@ -286,10 +286,25 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
       dout(15) << "session " << session << " not in sessionmap!" << dendl;
       mds_lock.Unlock();
     }
+  } else if (command == "scrub_path") {
+    string path;
+    cmd_getval(g_ceph_context, cmdmap, "path", path);
+    command_scrub_path(f, path);
   }
   f->flush(ss);
   delete f;
   return true;
+}
+
+void MDS::command_scrub_path(Formatter *f, const string& path)
+{
+  C_SaferCond scond;
+  {
+    Mutex::Locker l(mds_lock);
+    mdcache->scrub_dentry(path, f, &scond);
+  }
+  scond.wait();
+  // scrub_dentry() finishers will dump the data for us; we're done!
 }
 
 void MDS::set_up_admin_socket()
@@ -307,6 +322,10 @@ void MDS::set_up_admin_socket()
   r = admin_socket->register_command("dump_historic_ops", "dump_historic_ops",
 				     asok_hook,
 				     "show slowest recent ops");
+  r = admin_socket->register_command("scrub_path",
+                                     "scrub_path name=path,type=CephString",
+                                     asok_hook,
+                                     "scrub an inode and output results");
   assert(0 == r);
   r = admin_socket->register_command("session evict",
 				     "session evict name=client_id,type=CephString",
@@ -326,6 +345,7 @@ void MDS::clean_up_admin_socket()
   admin_socket->unregister_command("status");
   admin_socket->unregister_command("dump_ops_in_flight");
   admin_socket->unregister_command("dump_historic_ops");
+  admin_socket->unregister_command("scrub_path");
   delete asok_hook;
   asok_hook = NULL;
 }
