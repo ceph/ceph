@@ -627,6 +627,7 @@ void FileStore::create_backend(long f_type)
 	  << dendl;
 
   switch (f_type) {
+#if defined(__linux__)
   case BTRFS_SUPER_MAGIC:
     wbthrottle.set_fs(WBThrottle::BTRFS);
     break;
@@ -640,6 +641,7 @@ void FileStore::create_backend(long f_type)
       assert(m_filestore_replica_fadvise == false);
     }
     break;
+#endif
   }
 
   set_xattr_limits_via_conf();
@@ -5001,6 +5003,7 @@ void FileStore::set_xattr_limits_via_conf()
   uint32_t fs_xattrs;
 
   switch (m_fs_type) {
+#if defined(__linux__)
   case XFS_SUPER_MAGIC:
     fs_xattr_size = g_conf->filestore_max_inline_xattr_size_xfs;
     fs_xattrs = g_conf->filestore_max_inline_xattrs_xfs;
@@ -5009,6 +5012,7 @@ void FileStore::set_xattr_limits_via_conf()
     fs_xattr_size = g_conf->filestore_max_inline_xattr_size_btrfs;
     fs_xattrs = g_conf->filestore_max_inline_xattrs_btrfs;
     break;
+#endif
   default:
     fs_xattr_size = g_conf->filestore_max_inline_xattr_size_other;
     fs_xattrs = g_conf->filestore_max_inline_xattrs_other;
