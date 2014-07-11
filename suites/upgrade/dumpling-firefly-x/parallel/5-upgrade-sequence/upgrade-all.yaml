@@ -2,9 +2,9 @@ upgrade-sequence:
    sequential:
    - install.upgrade:
        mon.a:
-         branch: emperor
+         branch: firefly
        mon.b:
-         branch: emperor
+         branch: firefly
    - ceph.restart: [mon.a, mon.b, mon.c, mds.a, osd.0, osd.1, osd.2, osd.3]
    - exec:
        mon.a:
