@@ -104,7 +104,7 @@ class TeuthologyConfig(YamlConfig):
     objects. Currently it serves as a convenient interface to
     ~/.teuthology.yaml and nothing else.
     """
-    yaml_path = os.path.join(os.environ['HOME'], '.teuthology.yaml')
+    yaml_path = os.path.join(os.path.expanduser('~/.teuthology.yaml'))
     _defaults = {
         'archive_base': '/var/lib/teuthworker/archive',
         'automated_scheduling': False,
