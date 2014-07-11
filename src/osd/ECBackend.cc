@@ -1121,8 +1121,9 @@ void ECBackend::check_recovery_sources(const OSDMapRef osdmap)
   }
 }
 
-void ECBackend::_on_change(ObjectStore::Transaction *t)
+void ECBackend::on_change()
 {
+  dout(10) << __func__ << dendl;
   writing.clear();
   tid_to_op_map.clear();
   for (map<ceph_tid_t, ReadOp>::iterator i = tid_to_read_map.begin();

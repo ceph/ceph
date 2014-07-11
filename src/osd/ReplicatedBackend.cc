@@ -192,8 +192,9 @@ void ReplicatedBackend::clear_state()
   pull_from_peer.clear();
 }
 
-void ReplicatedBackend::_on_change(ObjectStore::Transaction *t)
+void ReplicatedBackend::on_change()
 {
+  dout(10) << __func__ << dendl;
   for (map<ceph_tid_t, InProgressOp>::iterator i = in_progress_ops.begin();
        i != in_progress_ops.end();
        in_progress_ops.erase(i++)) {
