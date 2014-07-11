@@ -5,7 +5,7 @@ import teuthology.beanstalk
 
 doc = """
 usage: teuthology-queue -h
-       teuthology-queue [-d] -m MACHINE_TYPE
+       teuthology-queue [-d|-f] -m MACHINE_TYPE
        teuthology-queue [-r] -m MACHINE_TYPE
        teuthology-queue -m MACHINE_TYPE -D PATTERN
 
@@ -22,6 +22,7 @@ optional arguments:
   -D, --delete PATTERN  Delete Jobs with PATTERN in their name
   -d, --description     Show job descriptions
   -r, --runs            Only show run names
+  -f, --full            Print the entire job config. Use with caution.
 """.format(archive_base=teuthology.config.config.archive_base)
 
 

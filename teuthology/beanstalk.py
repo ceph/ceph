@@ -1,6 +1,7 @@
 import beanstalkc
 import yaml
 import logging
+import pprint
 import sys
 from collections import OrderedDict
 
@@ -97,9 +98,10 @@ class JobProcessor(object):
 
 
 class JobPrinter(JobProcessor):
-    def __init__(self, show_desc=False):
+    def __init__(self, show_desc=False, full=False):
         super(JobPrinter, self).__init__()
         self.show_desc = show_desc
+        self.full = full
 
     def process_job(self, job_id):
         job_config = self.jobs[job_id]['job_config']
@@ -111,7 +113,9 @@ class JobPrinter(JobProcessor):
             job_id=job_id,
             job_name=job_name,
             )
-        if job_desc and self.show_desc:
+        if self.full:
+            pprint.pprint(job_config)
+        elif job_desc and self.show_desc:
             for desc in job_desc.split():
                 print '\t {desc}'.format(desc=desc)
 
@@ -156,6 +160,7 @@ def main(args):
     delete = args['--delete']
     runs = args['--runs']
     show_desc = args['--description']
+    full = args['--full']
     try:
         connection = connect()
         watch_tube(connection, machine_type)
@@ -167,7 +172,7 @@ def main(args):
                       RunPrinter())
         else:
             walk_jobs(connection, machine_type,
-                      JobPrinter(show_desc=show_desc))
+                      JobPrinter(show_desc=show_desc, full=full))
     except KeyboardInterrupt:
         log.info("Interrupted.")
     finally:
