@@ -43,6 +43,7 @@ using namespace std;
 enum kvstore_types {
     KV_TYPE_NONE = 0,
     KV_TYPE_LEVELDB,
+    KV_TYPE_KINETIC,
     KV_TYPE_OTHER
 };
 
@@ -442,7 +443,17 @@ class KeyValueStore : public ObjectStore,
                 bool update_to=false);
   ~KeyValueStore();
 
-  int _detect_backend() { kv_type = KV_TYPE_LEVELDB; return 0; }
+  int _detect_backend() {
+    if (g_conf->osd_keyvaluedb == "leveldb")
+      kv_type = KV_TYPE_LEVELDB;
+#ifdef HAVE_KINETIC
+    else if (g_conf->osd_keyvaluedb == "kinetic")
+      kv_type = KV_TYPE_KINETIC;
+#endif
+    else
+      return -EINVAL;
+    return 0;
+  }
   bool test_mount_in_use();
   int version_stamp_is_valid(uint32_t *version);
   int update_version_stamp();

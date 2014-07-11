@@ -19,6 +19,8 @@ libosd_la_SOURCES = \
 	osd/osd_types.cc \
 	osd/ECUtil.cc \
 	objclass/class_api.cc
+
+libosd_la_CXXFLAGS = ${AM_CXXFLAGS}
 libosd_la_LIBADD = $(LIBOSDC) $(LIBOS)
 noinst_LTLIBRARIES += libosd.la
 
@@ -45,3 +47,6 @@ noinst_HEADERS += \
 	osd/Watch.h \
 	osd/osd_types.h
 
+if WITH_KINETIC
+libosd_la_CXXFLAGS += -std=gnu++11
+endif

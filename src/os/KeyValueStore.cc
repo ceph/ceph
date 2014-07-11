@@ -50,6 +50,10 @@
 #include "common/sync_filesystem.h"
 #include "LevelDBStore.h"
 
+#ifdef HAVE_KINETIC
+#include "KineticStore.h"
+#endif
+
 #include "common/ceph_crypto.h"
 using ceph::crypto::SHA1;
 
@@ -590,6 +594,10 @@ int KeyValueStore::mkfs()
     KeyValueDB *store;
     if (kv_type == KV_TYPE_LEVELDB) {
       store = new LevelDBStore(g_ceph_context, current_fn);
+#ifdef HAVE_KINETIC
+    } else if (kv_type == KV_TYPE_KINETIC) {
+      store = new KineticStore(g_ceph_context);
+#endif
     } else {
       derr << "KeyValueStore::mkfs error: unknown backend type" << kv_type << dendl;
       ret = -1;
@@ -790,6 +798,10 @@ int KeyValueStore::mount()
     KeyValueDB *store;
     if (kv_type == KV_TYPE_LEVELDB) {
       store = new LevelDBStore(g_ceph_context, current_fn);
+#ifdef HAVE_KINETIC
+    } else if (kv_type == KV_TYPE_KINETIC) {
+      store = new KineticStore(g_ceph_context);
+#endif
     } else {
       derr << "KeyValueStore::mount error: unknown backend type" << kv_type
            << dendl;
