@@ -2,7 +2,7 @@ upgrade-sequence:
    sequential:
    - install.upgrade:
       all:
-         branch: dumpling
+         branch: firefly
    - ceph.restart: [osd.0]
    - sleep:
        duration: 30
