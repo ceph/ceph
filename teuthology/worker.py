@@ -70,10 +70,15 @@ class filelock(object):
         self.fd = None
 
 
-def fetch_teuthology_branch(dest_path, branch='master'):
+def fetch_teuthology_branch(branch):
     """
     Make sure we have the correct teuthology branch checked out and up-to-date
+
+    :param branch: The branche we want
+    :returns:      The destination path
     """
+    src_base_path = teuth_config.src_base_path
+    dest_path = os.path.join(src_base_path, 'teuthology_' + branch)
     # only let one worker create/update the checkout at a time
     lock = filelock('%s.lock' % dest_path)
     lock.acquire()
@@ -100,6 +105,29 @@ def fetch_teuthology_branch(dest_path, branch='master'):
 
     finally:
         lock.release()
+
+    return dest_path
+
+
+def fetch_qa_suite(branch):
+    """
+    Make sure ceph-qa-suite is checked out.
+
+    :param branch: The branch to fetch
+    :returns:      The destination path
+    """
+    src_base_path = teuth_config.src_base_path
+    dest_path = os.path.join(src_base_path, 'ceph-qa-suite_' + branch)
+    qa_suite_url = os.path.join(teuth_config.ceph_git_base_url,
+                                'ceph-qa-suite')
+    # only let one worker create/update the checkout at a time
+    lock = filelock('%s/.lock' % dest_path)
+    lock.acquire()
+    try:
+        enforce_repo_state(qa_suite_url, dest_path, branch)
+    finally:
+        lock.release()
+    return dest_path
 
 
 def main(ctx):
@@ -161,12 +189,9 @@ def main(ctx):
         teuthology_branch = job_config.get('teuthology_branch', 'master')
         job_config['teuthology_branch'] = teuthology_branch
 
-        teuth_path = os.path.join(os.getenv("HOME"), 'src',
-                                  'teuthology_' + teuthology_branch)
-
         try:
-            fetch_teuthology_branch(dest_path=teuth_path,
-                                    branch=teuthology_branch)
+            teuth_path = fetch_teuthology_branch(branch=teuthology_branch)
+            suite_path = fetch_qa_suite(job_config['suite_branch'])
         except BranchNotFoundError:
             log.exception(
                 "Branch not found; throwing job away")
@@ -206,7 +231,7 @@ def main(ctx):
             log.info('Creating archive dir %s', archive_path_full)
             safepath.makedirs(ctx.archive_dir, safe_archive)
             log.info('Running job %d', job.jid)
-            run_job(job_config, teuth_bin_path)
+            run_job(job_config, teuth_bin_path, suite_path)
         job.delete()
 
 
@@ -265,7 +290,7 @@ def run_with_watchdog(process, job_config):
         report.try_push_job_info(job_info, dict(status='dead'))
 
 
-def run_job(job_config, teuth_bin_path):
+def run_job(job_config, teuth_bin_path, suite_path):
     arg = [
         os.path.join(teuth_bin_path, 'teuthology'),
     ]
@@ -299,7 +324,7 @@ def run_job(job_config, teuth_bin_path):
         yaml.safe_dump(data=job_config, stream=tmp)
         tmp.flush()
         arg.append(tmp.name)
-        p = subprocess.Popen(args=arg)
+        p = subprocess.Popen(args=arg, environ=dict(PYTHONPATH=suite_path))
         log.info("Job archive: %s", job_config['archive_path'])
         log.info("Job PID: %s", str(p.pid))
 

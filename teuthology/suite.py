@@ -18,7 +18,7 @@ from tempfile import NamedTemporaryFile
 
 import teuthology
 from . import lock
-from .config import config
+from .config import config, JobConfig
 from .repo_utils import enforce_repo_state, BranchNotFoundError
 
 log = logging.getLogger(__name__)
@@ -31,8 +31,7 @@ def main(args):
     dry_run = args['--dry-run']
 
     base_yaml_paths = args['<config_yaml>']
-    suite = args['--suite']
-    nice_suite = suite.replace('/', ':')
+    suite = args['--suite'].replace('/', ':')
     ceph_branch = args['--ceph']
     kernel_branch = args['--kernel']
     kernel_flavor = args['--flavor']
@@ -51,7 +50,7 @@ def main(args):
         config.results_email = email
     timeout = args['--timeout']
 
-    name = make_run_name(nice_suite, ceph_branch, kernel_branch, kernel_flavor,
+    name = make_run_name(suite, ceph_branch, kernel_branch, kernel_flavor,
                          machine_type)
 
     if suite_dir:
@@ -59,22 +58,27 @@ def main(args):
     else:
         suite_repo_path = fetch_suite_repo(suite_branch, test_name=name)
 
-    config_string = create_initial_config(nice_suite, ceph_branch,
-                                          teuthology_branch, kernel_branch,
-                                          kernel_flavor, distro, machine_type)
+    job_config = create_initial_config(suite, ceph_branch,
+                                       teuthology_branch, kernel_branch,
+                                       kernel_flavor, distro, machine_type)
+
+    job_config.name = name
+    job_config.priority = priority
+    if email:
+        job_config.email = email
+    if owner:
+        job_config.owner = owner
+    if suite_branch:
+        job_config.suite_branch = suite_branch
 
     with NamedTemporaryFile(prefix='schedule_suite_',
                             delete=False) as base_yaml:
-        base_yaml.write(config_string)
+        base_yaml.write(str(job_config))
         base_yaml_path = base_yaml.name
     base_yaml_paths.insert(0, base_yaml_path)
-    prepare_and_schedule(owner=owner,
-                         name=name,
-                         suite=suite,
-                         machine_type=machine_type,
+    prepare_and_schedule(job_config=job_config,
                          suite_repo_path=suite_repo_path,
                          base_yaml_paths=base_yaml_paths,
-                         priority=priority,
                          limit=limit,
                          num=num,
                          timeout=timeout,
@@ -116,7 +120,7 @@ def fetch_suite_repo(branch, test_name):
 
     :returns: The path to the repo on disk
     """
-    src_base_path = os.path.expanduser('~/src')
+    src_base_path = config.src_base_path
     if not os.path.exists(src_base_path):
         os.mkdir(src_base_path)
     suite_repo_path = os.path.join(src_base_path,
@@ -143,7 +147,7 @@ def fetch_suite_repo(branch, test_name):
     return suite_repo_path
 
 
-def create_initial_config(nice_suite, ceph_branch, teuthology_branch,
+def create_initial_config(suite, ceph_branch, teuthology_branch,
                           kernel_branch, kernel_flavor, distro, machine_type):
     """
     Put together the config file used as the basis for each job in the run.
@@ -168,10 +172,8 @@ def create_initial_config(nice_suite, ceph_branch, teuthology_branch,
     if kernel_hash:
         log.info("kernel sha1: {hash}".format(hash=kernel_hash))
         kernel_dict = dict(kernel=dict(kdb=True, sha1=kernel_hash))
-        kernel_stanza = yaml.dump(kernel_dict,
-                                  default_flow_style=False).strip()
     else:
-        kernel_stanza = ''
+        kernel_dict = dict()
 
     # Get the ceph hash
     ceph_hash = get_hash('ceph', ceph_branch, kernel_flavor, machine_type)
@@ -208,60 +210,60 @@ def create_initial_config(nice_suite, ceph_branch, teuthology_branch,
     log.info("teuthology branch: %s", teuthology_branch)
 
     config_input = dict(
-        nice_suite=nice_suite,
+        suite=suite,
         ceph_branch=ceph_branch,
         ceph_hash=ceph_hash,
         teuthology_branch=teuthology_branch,
         machine_type=machine_type,
-        kernel_stanza=kernel_stanza,
         distro=distro,
         s3_branch=s3_branch,
     )
-    return config_template.format(**config_input)
+    conf_dict = substitute_placeholders(dict_templ, config_input)
+    conf_dict.update(kernel_dict)
+    job_config = JobConfig.from_dict(conf_dict)
+    return job_config
 
 
-def prepare_and_schedule(owner, name, suite, machine_type, suite_repo_path,
-                         base_yaml_paths, priority, limit, num, timeout,
-                         dry_run, verbose):
+def prepare_and_schedule(job_config, suite_repo_path, base_yaml_paths, limit,
+                         num, timeout, dry_run, verbose):
     """
     Puts together some "base arguments" with which to execute
     teuthology-schedule for each job, then passes them and other parameters to
     schedule_suite(). Finally, schedules a "last-in-suite" job that sends an
     email to the specified address (if one is configured).
     """
-    email = config.results_email
-    arch = get_arch(machine_type)
+    arch = get_arch(job_config.machine_type)
 
     base_args = [
         os.path.join(os.path.dirname(sys.argv[0]), 'teuthology-schedule'),
-        '--name', name,
+        '--name', job_config.name,
         '--num', str(num),
-        '--worker', get_worker(machine_type),
+        '--worker', get_worker(job_config.machine_type),
     ]
-    if priority:
-        base_args.extend(['--priority', str(priority)])
+    if job_config.priority:
+        base_args.extend(['--priority', str(job_config.priority)])
     if verbose:
         base_args.append('-v')
-    if owner:
-        base_args.extend(['--owner', owner])
+    if job_config.owner:
+        base_args.extend(['--owner', job_config.owner])
 
-    suite_path = os.path.join(suite_repo_path, 'suites', suite)
+    suite_path = os.path.join(suite_repo_path, 'suites',
+                              job_config.suite.replace(':', '/'))
 
     num_jobs = schedule_suite(
-        name=suite,
+        job_config=job_config,
         path=suite_path,
         base_yamls=base_yaml_paths,
         base_args=base_args,
         arch=arch,
-        machine_type=machine_type,
         limit=limit,
         dry_run=dry_run,
         )
 
-    if email and num_jobs:
+    if job_config.email and num_jobs:
         arg = copy.deepcopy(base_args)
         arg.append('--last-in-suite')
-        arg.extend(['--email', email])
+        arg.extend(['--email', job_config.email])
         if timeout:
             arg.extend(['--timeout', timeout])
         if dry_run:
@@ -420,12 +422,11 @@ def get_branch_info(project, branch, project_owner='ceph'):
         return resp.json()
 
 
-def schedule_suite(name,
+def schedule_suite(job_config,
                    path,
                    base_yamls,
                    base_args,
                    arch,
-                   machine_type,
                    limit=0,
                    dry_run=True,
                    ):
@@ -433,13 +434,15 @@ def schedule_suite(name,
     schedule one suite.
     returns number of jobs scheduled
     """
+    machine_type = job_config.machine_type
+    suite_name = job_config.suite
     count = 0
-    log.debug('Suite %s in %s' % (name, path))
-    configs = [(combine_path(name, item[0]), item[1]) for item in
+    log.debug('Suite %s in %s' % (suite_name, path))
+    configs = [(combine_path(suite_name, item[0]), item[1]) for item in
                build_matrix(path)]
     job_count = len(configs)
     log.info('Suite %s in %s generated %d jobs' % (
-        name, path, len(configs)))
+        suite_name, path, len(configs)))
 
     for description, fragment_paths in configs:
         if limit > 0 and count >= limit:
@@ -592,52 +595,96 @@ def get_arch(machine_type):
             return arch
     return None
 
-# yaml template for the config that becomes the base for each generated job
-# config
-config_template = """
-teuthology_branch: {teuthology_branch}
-{kernel_stanza}
-nuke-on-error: true
-machine_type: {machine_type}
-os_type: {distro}
-branch: {ceph_branch}
-suite: {nice_suite}
-tasks:
-- chef:
-- clock.check:
-overrides:
-  workunit:
-    sha1: {ceph_hash}
-  s3tests:
-    branch: {s3_branch}
-  install:
-    ceph:
-      sha1: {ceph_hash}
-  ceph:
-    sha1: {ceph_hash}
-    conf:
-      mon:
-        debug ms: 1
-        debug mon: 20
-        debug paxos: 20
-      osd:
-        debug ms: 1
-        debug osd: 20
-        debug filestore: 20
-        debug journal: 20
-    log-whitelist:
-    - slow request
-  ceph-deploy:
-    branch:
-      dev: {ceph_branch}
-    conf:
-      mon:
-        osd default pool size: 2
-        debug mon: 1
-        debug paxos: 20
-        debug ms: 20
-      client:
-        log file: /var/log/ceph/ceph-$name.$pid.log
-  admin_socket:
-    branch: {ceph_branch}
-""".strip()
+
+class Placeholder(object):
+    """
+    A placeholder for use with substitute_placeholders. Simply has a 'name'
+    attribute.
+    """
+    def __init__(self, name):
+        self.name = name
+
+
+def substitute_placeholders(input_dict, values_dict):
+    """
+    Replace any Placeholder instances with values named in values_dict.
+    Searches through nested dicts.
+
+    :param input_dict:  A dict which may contain one or more Placeholder
+                        instances as values.
+    :param values_dict: A dict, with keys matching the 'name' attributes of all
+                        of the Placeholder instances in the input_dict, and
+                        values to be substituted.
+    :returns:           The modified input_dict
+    """
+    for (key, value) in input_dict.iteritems():
+        if isinstance(value, dict):
+            substitute_placeholders(value, values_dict)
+        elif isinstance(value, Placeholder):
+            # If there is a Placeholder without a corresponding entry in
+            # values_dict, we will hit a KeyError - we want this.
+            input_dict[key] = values_dict[value.name]
+    return input_dict
+
+
+# Template for the config that becomes the base for each generated job config
+dict_templ = {
+    'branch': Placeholder('ceph_branch'),
+    'teuthology_branch': Placeholder('teuthology_branch'),
+    'machine_type': Placeholder('machine_type'),
+    'nuke-on-error': True,
+    'os_type': {'distro': None},
+    'overrides': {
+        'admin_socket': {
+            'branch': Placeholder('ceph_branch'),
+        },
+        'ceph': {
+            'conf': {
+                'mon': {
+                    'debug mon': 20,
+                    'debug ms': 1,
+                    'debug paxos': 20},
+                'osd': {
+                    'debug filestore': 20,
+                    'debug journal': 20,
+                    'debug ms': 1,
+                    'debug osd': 20
+                }
+            },
+            'log-whitelist': ['slow request'],
+            'sha1': Placeholder('ceph_hash'),
+        },
+        'ceph-deploy': {
+            'branch': {
+                'dev': Placeholder('ceph_branch'),
+            },
+            'conf': {
+                'client': {
+                    'log file': '/var/log/ceph/ceph-$name.$pid.log'
+                },
+                'mon': {
+                    'debug mon': 1,
+                    'debug ms': 20,
+                    'debug paxos': 20,
+                    'osd default pool size': 2
+                }
+            }
+        },
+        'install': {
+            'ceph': {
+                'sha1': Placeholder('ceph_hash'),
+            }
+        },
+        's3tests': {
+            'branch': Placeholder('s3_branch'),
+        },
+        'workunit': {
+            'sha1': Placeholder('ceph_hash'),
+        }
+    },
+    'suite': Placeholder('suite'),
+    'tasks': [
+        {'chef': None},
+        {'clock.check': None}
+    ],
+}

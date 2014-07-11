@@ -107,7 +107,7 @@ def remove_beanstalk_jobs(run_name, tube_name):
     if qhost is None or qport is None:
         raise RuntimeError(
             'Beanstalk queue information not found in {conf_path}'.format(
-                conf_path=config.teuthology_yaml))
+                conf_path=config.yaml_path))
     log.info("Checking Beanstalk Queue...")
     beanstalk_conn = beanstalk.connect()
     real_tube_name = beanstalk.watch_tube(beanstalk_conn, tube_name)

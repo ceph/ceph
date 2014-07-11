@@ -72,6 +72,21 @@ class TestSuiteOnline(object):
             suite.create_initial_config('s', 'bogus_ceph_branch', 't', 'k',
                                         'f', 'd', 'm')
 
+    def test_config_substitution(self):
+        # Don't attempt to send email
+        config.results_email = None
+        job_config = suite.create_initial_config('MY_SUITE', 'master',
+                                                 'master', 'testing', 'basic',
+                                                 'centos', 'plana')
+        assert job_config['suite'] == 'MY_SUITE'
 
-# add other tests that use create_initial_config, deserialize the yaml stream
+    def test_config_kernel_section(self):
+        # Don't attempt to send email
+        config.results_email = None
+        job_config = suite.create_initial_config('MY_SUITE', 'master',
+                                                 'master', 'testing', 'basic',
+                                                 'centos', 'plana')
+        assert job_config['kernel']['kdb'] is True
+
+
 # maybe use notario for the above?

@@ -45,7 +45,9 @@ Standard arguments:
                               Use this suite branch instead of the ceph branch
   --suite-dir <suite_dir>     Use this alternative directory as-is when
                               assembling jobs from yaml fragments. This causes
-                              <suite_branch> to be ignored.
+                              <suite_branch> to be ignored for scheduling
+                              purposes, but it will still be used for test
+                              running.
 
 Scheduler arguments:
   --owner <owner>             Job owner
