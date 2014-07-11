@@ -1,15 +1,13 @@
-overrides:
-  ceph:
+tasks:
+- install:
+    branch: dumpling
+- ceph:
     conf:
       mon:
         mon warn on legacy crush tunables: false
     log-whitelist:
       - scrub mismatch
       - ScrubResult
-tasks:
-- install:
-    branch: dumpling
-- ceph:
 - install.upgrade:
     all:
       tag: v0.80.1
