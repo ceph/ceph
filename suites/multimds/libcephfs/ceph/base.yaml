@@ -1,8 +1,6 @@
-overrides:
-  ceph:
-    conf:
-      client: 
-        fuse_default_permissions: 0
 tasks:
 - install:
 - ceph:
+    conf:
+      client:
+        fuse_default_permissions: 0
