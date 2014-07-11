@@ -3,6 +3,9 @@ overrides:
     conf:
       mon:
         mon warn on legacy crush tunables: false
+    log-whitelist:
+      - scrub mismatch
+      - ScrubResult
 tasks:
 - install:
     branch: dumpling
