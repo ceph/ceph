@@ -1060,6 +1060,55 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
+  if ((features & CEPH_FEATURE_OSD_POOLRESEND) == 0) {
+    // we simply added last_force_op_resend here, which is a fully
+    // backward compatible change.  however, encoding the same map
+    // differently between monitors triggers scrub noise (even though
+    // they are decodable without the feature), so let's be pendantic
+    // about it.
+    ENCODE_START(14, 5, bl);
+    ::encode(type, bl);
+    ::encode(size, bl);
+    ::encode(crush_ruleset, bl);
+    ::encode(object_hash, bl);
+    ::encode(pg_num, bl);
+    ::encode(pgp_num, bl);
+    __u32 lpg_num = 0, lpgp_num = 0;  // tell old code that there are no localized pgs.
+    ::encode(lpg_num, bl);
+    ::encode(lpgp_num, bl);
+    ::encode(last_change, bl);
+    ::encode(snap_seq, bl);
+    ::encode(snap_epoch, bl);
+    ::encode(snaps, bl, features);
+    ::encode(removed_snaps, bl);
+    ::encode(auid, bl);
+    ::encode(flags, bl);
+    ::encode(crash_replay_interval, bl);
+    ::encode(min_size, bl);
+    ::encode(quota_max_bytes, bl);
+    ::encode(quota_max_objects, bl);
+    ::encode(tiers, bl);
+    ::encode(tier_of, bl);
+    __u8 c = cache_mode;
+    ::encode(c, bl);
+    ::encode(read_tier, bl);
+    ::encode(write_tier, bl);
+    ::encode(properties, bl);
+    ::encode(hit_set_params, bl);
+    ::encode(hit_set_period, bl);
+    ::encode(hit_set_count, bl);
+    ::encode(stripe_width, bl);
+    ::encode(target_max_bytes, bl);
+    ::encode(target_max_objects, bl);
+    ::encode(cache_target_dirty_ratio_micro, bl);
+    ::encode(cache_target_full_ratio_micro, bl);
+    ::encode(cache_min_flush_age, bl);
+    ::encode(cache_min_evict_age, bl);
+    ::encode(erasure_code_profile, bl);
+    ENCODE_FINISH(bl);
+    return;
+  }
+
   ENCODE_START(15, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
