@@ -11,7 +11,15 @@ log = init_logging()
 
 
 class YamlConfig(object):
-    defaults = dict()
+    """
+    A configuration object populated by parsing a yaml file, with optional
+    default values.
+
+    Note that modifying the _defaults attribute of an instance can potentially
+    yield confusing results; if you need to do modify defaults, use the class
+    variable or create a subclass.
+    """
+    _defaults = dict()
 
     def __init__(self, yaml_path=None):
         self.yaml_path = yaml_path
@@ -78,7 +86,7 @@ class YamlConfig(object):
         return self._conf.__getitem__(name)
 
     def __getattr__(self, name):
-        return self._conf.get(name, self.defaults.get(name))
+        return self._conf.get(name, self._defaults.get(name))
 
     def __setattr__(self, name, value):
         if name.endswith('_conf') or name in ('yaml_path'):
@@ -97,7 +105,7 @@ class TeuthologyConfig(YamlConfig):
     ~/.teuthology.yaml and nothing else.
     """
     yaml_path = os.path.join(os.environ['HOME'], '.teuthology.yaml')
-    defaults = {
+    _defaults = {
         'archive_base': '/var/lib/teuthworker/archive',
         'automated_scheduling': False,
         'ceph_git_base_url': 'https://github.com/ceph/',

@@ -52,11 +52,6 @@ class TestTeuthologyConfig(TestYamlConfig):
     def setup(self):
         self.test_class = config.TeuthologyConfig
 
-    def test_defaults(self):
-        conf_obj = self.test_class()
-        conf_obj.defaults['archive_base'] = 'bar'
-        assert conf_obj.archive_base == 'bar'
-
     def test_get_ceph_git_base_default(self):
         conf_obj = self.test_class()
         conf_obj.yaml_path = ''
