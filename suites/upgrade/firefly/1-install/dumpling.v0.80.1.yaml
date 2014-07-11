@@ -1,0 +1,20 @@
+tasks:
+- install:
+    branch: dumpling
+- ceph:
+    conf:
+      mon:
+        mon warn on legacy crush tunables: false
+    log-whitelist:
+      - scrub mismatch
+      - ScrubResult
+- install.upgrade:
+    all:
+      tag: v0.80.1
+- ceph.restart:
+- exec:
+    client.0:
+      - ceph osd crush tunables firefly
+- parallel:
+   - workload
+   - upgrade-sequence
