@@ -33,6 +33,8 @@ optional arguments:
   --timeout <timeout>                  How many seconds to wait for jobs to
                                        finish before emailing results. Only
                                        applies to the last job in a suite.
+  --dry-run                            Instead of scheduling, just output the
+                                       job config.
 
 """
 

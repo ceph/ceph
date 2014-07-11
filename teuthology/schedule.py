@@ -1,3 +1,4 @@
+import pprint
 import yaml
 
 import teuthology.beanstalk
@@ -14,7 +15,10 @@ def main(args):
             raise ValueError(
                 '--timeout is only applicable to the last job in a suite')
     job_config = build_config(args)
-    schedule_job(job_config, args['--num'])
+    if args['--dry-run']:
+        pprint.pprint(job_config)
+    else:
+        schedule_job(job_config, args['--num'])
 
 
 def build_config(args):
