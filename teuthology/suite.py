@@ -633,7 +633,7 @@ dict_templ = {
     'teuthology_branch': Placeholder('teuthology_branch'),
     'machine_type': Placeholder('machine_type'),
     'nuke-on-error': True,
-    'os_type': {'distro': None},
+    'os_type': Placeholder('distro'),
     'overrides': {
         'admin_socket': {
             'branch': Placeholder('ceph_branch'),
