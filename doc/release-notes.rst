@@ -124,6 +124,23 @@ Notable Changes
 * test_librbd_fsx: test krbd as well as librbd (Ilya Dryomov)
 
 
+v0.80.3 Firefly
+===============
+
+This is the third Firefly point release.  It includes a single fix
+for a radosgw regression that was discovered in v0.80.2 right after it
+was released.
+
+We recommand that all v0.80.x Firefly users upgrade.
+
+Notable Changes
+---------------
+
+* radosgw: fix regression in manifest decoding (#8804, Sage Weil)
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.3.txt>`.
+
+
 v0.80.2 Firefly
 ===============
 
@@ -139,7 +156,8 @@ package is separated into a ceph and ceph-common package, similar to
 Debian.  The ceph-common package contains just the client libraries
 without any of the server-side daemons.
 
-We recommend that all v0.80.x Firefly users upgrade.
+We recommend that all v0.80.x Firefly users skip this release and use
+v0.80.3.
 
 Notable Changes
 ---------------
