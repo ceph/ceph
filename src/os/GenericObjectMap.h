@@ -74,12 +74,6 @@ class GenericObjectMap {
    * Serializes access to next_seq as well as the in_use set
    */
   Mutex header_lock;
-  Cond header_cond;
-
-  /**
-   * Set of headers currently in use
-   */
-  set<uint64_t> in_use;
 
   GenericObjectMap(KeyValueDB *db) : db(db), header_lock("GenericObjectMap") {}
 
@@ -134,6 +128,9 @@ class GenericObjectMap {
   KeyValueDB::Transaction get_transaction() { return db->get_transaction(); }
   int submit_transaction(KeyValueDB::Transaction t) {
     return db->submit_transaction(t);
+  }
+  int submit_transaction_sync(KeyValueDB::Transaction t) {
+    return db->submit_transaction_sync(t);
   }
 
   /// persistent state for store @see generate_header
@@ -426,26 +423,6 @@ protected:
   // Sets header @see set_header
   void _set_header(Header header, const bufferlist &bl,
                    KeyValueDB::Transaction t);
-
-  /** 
-   * Removes header seq lock once Header is out of scope
-   * @see _lookup_header
-   * @see lookup_parent
-   * @see generate_new_header
-   */
-  class RemoveOnDelete {
-  public:
-    GenericObjectMap *db;
-    RemoveOnDelete(GenericObjectMap *db) :
-      db(db) {}
-    void operator() (_Header *header) {
-      Mutex::Locker l(db->header_lock);
-      db->in_use.erase(header->seq);
-      db->header_cond.Signal();
-      delete header;
-    }
-  };
-  friend class RemoveOnDelete;
 };
 WRITE_CLASS_ENCODER(GenericObjectMap::_Header)
 WRITE_CLASS_ENCODER(GenericObjectMap::State)

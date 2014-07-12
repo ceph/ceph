@@ -159,6 +159,7 @@ noinst_HEADERS += \
 	common/OutputDataSocket.h \
 	common/admin_socket.h \
 	common/admin_socket_client.h \
+	common/random_cache.hpp \
 	common/shared_cache.hpp \
 	common/tracked_int_ptr.hpp \
 	common/simple_cache.hpp \
