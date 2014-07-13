@@ -87,7 +87,18 @@ do_unmap() {
 			MNT=$(findmnt --mtab --source ${DEV} --noheadings | awk '{print $1'})
 			if [ -n "${MNT}" ]; then
 			    log_action_cont_msg "un-mounting '${MNT}'"
-			    UMNT_RV=$(umount "${MNT}" 2>&1)
+			    local ULAZY=""
+			    local RUNLEVEL=$(runlevel | awk '{print $2}')
+			    if [ $? -eq 0 ]; then
+			        if [ "${RUNLEVEL}" -eq 0 ] \
+			        || [ "${RUNLEVEL}" -eq 6 ] ; then
+			            ULAZY="-l"
+			            if [ -x "$(which fuser)" ]; then
+			                fuser -M -m "${MNT}" --kill -TERM
+			            fi
+			        fi
+			    fi
+			    UMNT_RV=$(umount ${ULAZY} "${MNT}" 2>&1)
 			fi
 			if mountpoint -q "${MNT}"; then
 			    ## Un-mounting failed.
