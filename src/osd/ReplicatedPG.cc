@@ -6538,7 +6538,7 @@ void ReplicatedPG::repop_all_committed(RepGather *repop)
 
 void ReplicatedPG::op_applied(const eversion_t &applied_version)
 {
-  dout(10) << "op_applied on primary on version " << applied_version << dendl;
+  dout(10) << "op_applied version " << applied_version << dendl;
   if (applied_version == eversion_t())
     return;
   assert(applied_version > last_update_applied);
@@ -6553,7 +6553,6 @@ void ReplicatedPG::op_applied(const eversion_t &applied_version)
       assert(!scrubber.block_writes);
     }
   } else {
-    dout(10) << "op_applied on replica on version " << applied_version << dendl;
     if (scrubber.active_rep_scrub) {
       if (last_update_applied == scrubber.active_rep_scrub->scrub_to) {
 	osd->rep_scrub_wq.queue(scrubber.active_rep_scrub);
