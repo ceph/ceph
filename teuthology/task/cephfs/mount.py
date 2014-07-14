@@ -1,6 +1,7 @@
 
 import logging
 import datetime
+from textwrap import dedent
 import os
 from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError
@@ -93,16 +94,16 @@ class CephFSMount(object):
 
         path = os.path.join(self.mountpoint, basename)
 
-        pyscript = """
-import time
+        pyscript = dedent("""
+            import time
 
-f = open("{path}", 'w')
-f.write('content')
-f.flush()
-f.write('content2')
-while True:
-    time.sleep(1)
-""".format(path=path)
+            f = open("{path}", 'w')
+            f.write('content')
+            f.flush()
+            f.write('content2')
+            while True:
+                time.sleep(1)
+            """).format(path=path)
 
         rproc = self._run_python(pyscript)
         self.background_procs.append(rproc)
@@ -118,13 +119,13 @@ while True:
 
         path = os.path.join(self.mountpoint, basename)
 
-        pyscript = """
-import time
+        pyscript = dedent("""
+            import time
 
-f = open("{path}", 'w')
-f.write('content')
-f.close()
-""".format(path=path)
+            f = open("{path}", 'w')
+            f.write('content')
+            f.close()
+            """).format(path=path)
 
         rproc = self._run_python(pyscript)
         self.background_procs.append(rproc)
