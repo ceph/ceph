@@ -1613,22 +1613,28 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
 
   // we'll need to wait for all objects to flush!
   C_GatherBuilder gather(cct);
+  set<Object*> waitfor_commit;
 
-  for (xlist<Object*>::iterator i = oset->objects.begin();
-       !i.end(); ++i) {
+  set<BufferHead*>::iterator next, it;
+  next = it = dirty_bh.begin();
+  while (it != dirty_bh.end()) {
+    next++;
+    BufferHead *bh = *it;
+    waitfor_commit.insert(bh->ob);
+    bh_write(bh);
+    it = next;
+  }
+
+  for (set<Object*>::iterator i = waitfor_commit.begin();
+       i != waitfor_commit.end(); ++i) {
     Object *ob = *i;
 
-    if (ob->dirty_or_tx == 0)
-      continue;
-
-    if (!flush(ob, 0, 0)) {
-      // we'll need to gather...
-      ldout(cct, 10) << "flush_set " << oset << " will wait for ack tid " 
-               << ob->last_write_tid 
-               << " on " << *ob
-               << dendl;
-      ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
-    }
+    // we'll need to gather...
+    ldout(cct, 10) << "flush_set " << oset << " will wait for ack tid "
+             << ob->last_write_tid
+             << " on " << *ob
+             << dendl;
+    ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
   }
 
   return _flush_set_finish(&gather, onfinish);
