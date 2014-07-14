@@ -1,10 +1,6 @@
 tasks:
 - install:
     tag: v0.80.3
-- ceph:
-    log-whitelist:
-      - scrub mismatch
-      - ScrubResult
 - parallel:
    - workload
    - upgrade-sequence
