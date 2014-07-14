@@ -273,6 +273,18 @@ Upgrade Sequencing
   upgrading to v0.80 Firefly.  Please refer to the :ref:`Dumpling upgrade`
   documentation.
 
+* We recommand adding the following to the [mon] section of your
+  ceph.conf prior to upgrade::
+
+    mon warn on legacy crush tunables = false
+
+  This will prevent health warnings due to the use of legacy CRUSH
+  placement.  Although it is possible to rebalance existing data
+  across your cluster (see the upgrade notes below), we do not
+  normally recommend it for production environments as a large amount
+  of data will move and there is a significant performance impact from
+  the rebalancing.
+
 * Upgrade daemons in the following order:
 
     #. Monitors
@@ -353,9 +365,10 @@ Upgrading from v0.72 Emperor
   adding 'mon warn on legacy crush tunables = false' to ceph.conf and
   restarting the monitors.  Alternatively, you can switch to the new
   tunables with 'ceph osd crush tunables firefly,' but keep in mind
-  that this will involve moving a significant portion of the data
+  that this will involve moving a *significant* portion of the data
   already stored in the cluster and in a large cluster may take
-  several days to complete.
+  several days to complete.  We do not recommend adjusting tunables on a
+  production cluster.
 
 * We now default to the 'bobtail' CRUSH tunable values that are first supported
   by Ceph clients in bobtail (v0.56) and Linux kernel version v3.9.  If you
