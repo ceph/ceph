@@ -16,6 +16,3 @@ upgrade-sequence:
    - ceph.restart:
        daemons: [osd.0, osd.1, osd.2, osd.3]
        wait-for-healthy: true
-   - exec:
-      mon.a:
-        - ceph osd crush tunables firefly
