@@ -51,8 +51,8 @@ def task(ctx, config):
     # Assemble mon addresses
     remotes_and_roles = ctx.cluster.remotes.items()
     roles = [roles for (remote_, roles) in remotes_and_roles]
-    ips = [host for (host, port) in
-           (remote_.ssh.get_transport().getpeername() for (remote_, roles) in remotes_and_roles)]
+    ips = [remote_.ssh.get_transport().getpeername()[0]
+           for (remote_, _) in remotes_and_roles]
     mons = misc.get_mons(roles, ips).values()
 
     mounts = {}
