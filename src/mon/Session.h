@@ -48,7 +48,6 @@ struct MonSession : public RefCountedObject {
   MonCap caps;
   uint64_t auid;
   uint64_t global_id;
-  uint64_t notified_global_id;
 
   map<string, Subscription*> sub_map;
 
@@ -60,7 +59,7 @@ struct MonSession : public RefCountedObject {
   MonSession(const entity_inst_t& i, Connection *c) :
     con(c), inst(i), closed(false), item(this),
     auid(0),
-    global_id(0), notified_global_id(0), auth_handler(NULL),
+    global_id(0), auth_handler(NULL),
     proxy_con(NULL), proxy_tid(0) {
     time_established = ceph_clock_now(g_ceph_context);
   }
