@@ -11,6 +11,7 @@ usr/bin/ceph-mon
 usr/bin/ceph-osd
 usr/bin/ceph-run
 usr/bin/ceph-rest-api
+usr/bin/ceph-dencoder
 usr/bin/ceph_mon_store_converter
 usr/bin/crushtool
 usr/bin/monmaptool
@@ -29,3 +30,4 @@ usr/share/man/man8/ceph-rest-api.8
 usr/share/man/man8/crushtool.8
 usr/share/man/man8/monmaptool.8
 usr/share/man/man8/osdmaptool.8
+usr/share/man/man8/ceph-dencoder.8

@@ -3,7 +3,6 @@ etc/bash_completion.d/rbd
 usr/bin/ceph
 usr/bin/ceph-authtool
 usr/bin/ceph-conf
-usr/bin/ceph-dencoder
 usr/bin/ceph-syn
 usr/bin/ceph-crush-location
 usr/bin/rados
@@ -12,7 +11,6 @@ usr/bin/ceph-post-file
 usr/bin/ceph-brag
 usr/share/man/man8/ceph-authtool.8
 usr/share/man/man8/ceph-conf.8
-usr/share/man/man8/ceph-dencoder.8
 usr/share/man/man8/ceph-syn.8
 usr/share/man/man8/ceph-post-file.8
 usr/share/man/man8/ceph.8
