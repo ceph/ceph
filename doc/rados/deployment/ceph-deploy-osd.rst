@@ -109,5 +109,5 @@ Destroy OSDs
 
 .. Destroying an OSD will take it ``down`` and ``out`` of the cluster.
 
-.. _Data Storage: ../../../install/hardware-recommendations#data-storage
+.. _Data Storage: ../../../start/hardware-recommendations#data-storage
 .. _Remove OSDs: ../../operations/add-or-rm-osds#removing-osds-manual
