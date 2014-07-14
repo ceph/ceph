@@ -191,7 +191,10 @@ def main(ctx):
 
         try:
             teuth_path = fetch_teuthology_branch(branch=teuthology_branch)
-            ceph_branch = job_config['branch']
+            # For the teuthology tasks, we look for suite_branch, and if we
+            # don't get that, we look for branch, and fall back to 'master'.
+            # last-in-suite jobs don't have suite_branch or branch set.
+            ceph_branch = job_config.get('branch', 'master')
             suite_branch = job_config.get('suite_branch', ceph_branch)
             suite_path = fetch_qa_suite(suite_branch)
         except BranchNotFoundError:
