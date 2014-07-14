@@ -5,7 +5,27 @@ upgrade-sequence:
          branch: firefly
        mon.b:
          branch: firefly
-   - ceph.restart: [mon.a, mon.b, mon.c, mds.a, osd.0, osd.1, osd.2, osd.3]
+   - ceph.restart:
+       daemons: [mon.a]
+       wait-for-healthy: true
+   - ceph.restart:
+       daemons: [mon.b]
+       wait-for-healthy: true
+   - ceph.restart:
+       daemons: [mon.c]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [osd.0]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.1]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.2]
    - exec:
       mon.a:
         - ceph osd crush tunables firefly
