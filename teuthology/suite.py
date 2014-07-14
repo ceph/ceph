@@ -38,7 +38,7 @@ def main(args):
     teuthology_branch = args['--teuthology-branch']
     machine_type = args['--machine-type']
     distro = args['--distro']
-    suite_branch = args['--suite-branch'] or ceph_branch
+    suite_branch = args['--suite-branch']
     suite_dir = args['--suite-dir']
 
     limit = int(args['--limit'])
@@ -53,14 +53,15 @@ def main(args):
     name = make_run_name(suite, ceph_branch, kernel_branch, kernel_flavor,
                          machine_type)
 
+    job_config = create_initial_config(suite, suite_branch, ceph_branch,
+                                       teuthology_branch, kernel_branch,
+                                       kernel_flavor, distro, machine_type)
+
     if suite_dir:
         suite_repo_path = suite_dir
     else:
-        suite_repo_path = fetch_suite_repo(suite_branch, test_name=name)
-
-    job_config = create_initial_config(suite, ceph_branch,
-                                       teuthology_branch, kernel_branch,
-                                       kernel_flavor, distro, machine_type)
+        suite_repo_path = fetch_suite_repo(job_config.suite_branch,
+                                           test_name=name)
 
     job_config.name = name
     job_config.priority = priority
@@ -68,8 +69,6 @@ def main(args):
         job_config.email = email
     if owner:
         job_config.owner = owner
-    if suite_branch:
-        job_config.suite_branch = suite_branch
 
     with NamedTemporaryFile(prefix='schedule_suite_',
                             delete=False) as base_yaml:
@@ -147,7 +146,7 @@ def fetch_suite_repo(branch, test_name):
     return suite_repo_path
 
 
-def create_initial_config(suite, ceph_branch, teuthology_branch,
+def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
                           kernel_branch, kernel_flavor, distro, machine_type):
     """
     Put together the config file used as the basis for each job in the run.
@@ -155,7 +154,7 @@ def create_initial_config(suite, ceph_branch, teuthology_branch,
     branches specified and specifies them so we know exactly what we're
     testing.
 
-    :returns: A yaml-formatted string
+    :returns: A JobConfig object
     """
     # Put together a stanza specifying the kernel hash
     if kernel_branch == 'distro':
@@ -178,8 +177,8 @@ def create_initial_config(suite, ceph_branch, teuthology_branch,
     # Get the ceph hash
     ceph_hash = get_hash('ceph', ceph_branch, kernel_flavor, machine_type)
     if not ceph_hash:
-        schedule_fail("Ceph branch '{branch}' not found".format(
-            branch=ceph_branch))
+        exc = BranchNotFoundError(ceph_branch, 'ceph.git')
+        schedule_fail(message=str(exc))
     log.info("ceph sha1: {hash}".format(hash=ceph_hash))
 
     # Get the ceph package version
@@ -195,22 +194,37 @@ def create_initial_config(suite, ceph_branch, teuthology_branch,
         s3_branch = ceph_branch
     else:
         log.info("branch {0} not in s3-tests.git; will use master for"
-                 "s3-tests".format(ceph_branch))
+                 " s3-tests".format(ceph_branch))
         s3_branch = 'master'
     log.info("s3-tests branch: %s", s3_branch)
 
-    if not teuthology_branch:
+    if teuthology_branch:
+        if not get_branch_info('teuthology', teuthology_branch):
+            exc = BranchNotFoundError(teuthology_branch, 'teuthology.git')
+            raise schedule_fail(message=str(exc))
+    else:
         # Decide what branch of teuthology to use
         if get_branch_info('teuthology', ceph_branch):
             teuthology_branch = ceph_branch
         else:
             log.info("branch {0} not in teuthology.git; will use master for"
-                     "teuthology".format(ceph_branch))
+                     " teuthology".format(ceph_branch))
             teuthology_branch = 'master'
     log.info("teuthology branch: %s", teuthology_branch)
 
+    if not suite_branch:
+        # Decide what branch of ceph-qa-suite to use
+        if get_branch_info('ceph-qa-suite', ceph_branch):
+            suite_branch = ceph_branch
+        else:
+            log.info("branch {0} not in ceph-qa-suite.git; will use master for"
+                     " ceph-qa-suite".format(ceph_branch))
+            suite_branch = 'master'
+    log.info("ceph-qa-suite branch: %s", suite_branch)
+
     config_input = dict(
         suite=suite,
+        suite_branch=suite_branch,
         ceph_branch=ceph_branch,
         ceph_hash=ceph_hash,
         teuthology_branch=teuthology_branch,
@@ -298,7 +312,7 @@ class ScheduleFailError(RuntimeError):
         self.name = name
 
     def __str__(self):
-        return "Job scheduling {name} failed: '{msg}'".format(
+        return "Job scheduling {name} failed: {msg}".format(
             name=self.name,
             msg=self.message,
         ).replace('  ', ' ')
@@ -617,6 +631,7 @@ def substitute_placeholders(input_dict, values_dict):
                         values to be substituted.
     :returns:           The modified input_dict
     """
+    input_dict = dict(input_dict)
     for (key, value) in input_dict.iteritems():
         if isinstance(value, dict):
             substitute_placeholders(value, values_dict)
@@ -683,6 +698,7 @@ dict_templ = {
         }
     },
     'suite': Placeholder('suite'),
+    'suite_branch': Placeholder('suite_branch'),
     'tasks': [
         {'chef': None},
         {'clock.check': None}
