@@ -6,3 +6,6 @@ upgrade-sequence:
        mon.b:
          branch: firefly
    - ceph.restart: [mon.a, mon.b, mon.c, mds.a, osd.0, osd.1, osd.2, osd.3]
+   - exec:
+      mon.a:
+        - ceph osd crush tunables firefly
