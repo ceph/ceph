@@ -102,6 +102,7 @@ def reset_repo(repo_url, dest_path, branch):
                       RuntimeError for other errors
     """
     validate_branch(branch)
+    log.debug('Resetting repo at %s to branch %s', dest_path, branch)
     # This try/except block will notice if the requested branch doesn't
     # exist, whether it was cloned or fetched.
     try:
