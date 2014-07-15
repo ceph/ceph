@@ -10,9 +10,12 @@ upgrade-sequence:
        wait-for-healthy: true
    - sleep:
        duration: 60
-   - ceph.restart: [mds.a]
-   - sleep:
-       duration: 60
    - ceph.restart:
        daemons: [osd.0, osd.1, osd.2, osd.3]
        wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
+
