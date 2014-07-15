@@ -89,6 +89,7 @@ public:
   list<Message*> preopen_out_queue;  ///< messages for client, queued before they connect
 
   elist<MDRequestImpl*> requests;
+  size_t get_request_count();
 
   interval_set<inodeno_t> pending_prealloc_inos; // journaling prealloc, will be added to prealloc_inos
 
@@ -253,6 +254,10 @@ public:
     
   // sessions
   bool empty() { return session_map.empty(); }
+  const ceph::unordered_map<entity_name_t, Session*> &get_sessions() const
+  {
+    return session_map;
+  }
 
   bool is_any_state(int state) {
     map<int,xlist<Session*>* >::iterator p = by_state.find(state);
