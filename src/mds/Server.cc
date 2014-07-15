@@ -2169,8 +2169,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
 				    ceph_file_layout **layout,
 				    bool no_lookup)    // true if we cannot return a null dentry lease
 {
-  MClientRequest *req = mdr->client_request;
-  const filepath& refpath = n ? req->get_filepath2() : req->get_filepath();
+  const filepath& refpath = n ? mdr->get_filepath2() : mdr->get_filepath();
   dout(10) << "rdlock_path_pin_ref " << *mdr << " " << refpath << dendl;
 
   if (mdr->done_locking)
@@ -2262,8 +2261,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
 					  bool okexist, bool mustexist, bool alwaysxlock,
 					  ceph_file_layout **layout)
 {
-  MClientRequest *req = mdr->client_request;
-  const filepath& refpath = n ? req->get_filepath2() : req->get_filepath();
+  const filepath& refpath = n ? mdr->get_filepath2() : mdr->get_filepath();
 
   dout(10) << "rdlock_path_xlock_dentry " << *mdr << " " << refpath << dendl;
 
