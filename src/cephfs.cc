@@ -50,7 +50,7 @@ int main (int argc, char **argv) {
   int stripe_unit = 0;
   int stripe_count = 0;
   int object_size = 0;
-  int64_t pool = 0;
+  int64_t pool = -1;
   int file_offset = 0;
   bool dir = false;
 
@@ -59,6 +59,9 @@ int main (int argc, char **argv) {
     usage();
     return 0;
   }
+
+  cerr << "WARNING: This tool is deprecated.  Use the layout.* xattrs "
+          "to query and modify layouts." << endl;
 
   if (CMD_SHOW_LAYOUT == cmd) {
     struct ceph_ioctl_layout layout;
@@ -97,6 +100,10 @@ int main (int argc, char **argv) {
     struct ceph_ioctl_layout layout;
     memset(&layout, 0, sizeof(layout));
     int ioctl_num = (dir ? CEPH_IOC_SET_LAYOUT_POLICY : CEPH_IOC_SET_LAYOUT);
+    if (pool == -1) {
+      cerr << "Pool not specified (use --pool <name or id>)" << endl;
+      return 1;
+    }
     layout.data_pool = pool;
     layout.object_size = object_size;
     layout.stripe_count = stripe_count;
