@@ -1138,7 +1138,7 @@ def osd_scrub_pgs(ctx, config):
                             'adjust-ulimits',
                             'ceph-coverage',
                             '{tdir}/archive/coverage'.format(tdir=testdir),
-                            'ceph', 'osd', 'scrub', role])
+                            'ceph', 'osd', 'deep-scrub', role])
     prev_good = 0
     gap_cnt = 0
     loop = True
