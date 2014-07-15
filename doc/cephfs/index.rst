@@ -79,6 +79,7 @@ authentication keyring.
 	Using Ceph with Hadoop <hadoop>
 	libcephfs <../../api/libcephfs-java/>
 	cephfs-journal-tool <cephfs-journal-tool>
+	File layouts <file-layouts>
 	Troubleshooting <troubleshooting>
 
 .. raw:: html
