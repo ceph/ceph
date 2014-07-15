@@ -17,6 +17,7 @@
 
 #include "include/interval_set.h"
 #include "include/elist.h"
+#include "include/filepath.h"
 
 #include "mdstypes.h"
 
@@ -263,6 +264,10 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
     CDir* export_dir;
     dirfrag_t fragment_base;
 
+    // for internal ops doing lookup
+    filepath filepath1;
+    filepath filepath2;
+
     More() : 
       has_journaled_slaves(false), slave_update_journaled(false),
       srcdn_auth_mds(-1), inode_import_v(0), rename_inode(0),
@@ -317,6 +322,10 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
   void drop_local_auth_pins();
   void set_ambiguous_auth(CInode *inode);
   void clear_ambiguous_auth();
+  const filepath& get_filepath();
+  const filepath& get_filepath2();
+  void set_filepath(const filepath& fp);
+  void set_filepath2(const filepath& fp);
 
   void print(ostream &out);
 
