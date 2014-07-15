@@ -65,8 +65,8 @@ def main(args):
 
     job_config.name = name
     job_config.priority = priority
-    if email:
-        job_config.email = email
+    if config.results_email:
+        job_config.email = config.results_email
     if owner:
         job_config.owner = owner
 
