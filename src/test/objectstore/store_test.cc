@@ -1117,6 +1117,103 @@ TEST_P(StoreTest, MoveRename) {
   }
 }
 
+TEST_P(StoreTest, BigRGWObjectName) {
+  store->set_allow_sharded_objects();
+  store->sync_and_flush();
+  coll_t temp_cid("mytemp");
+  hobject_t temp_oid("tmp_oid", "", CEPH_NOSNAP, 0, 0, "");
+  coll_t cid("dest");
+  ghobject_t oid(
+    hobject_t(
+      "default.4106.50_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "",
+      CEPH_NOSNAP,
+      0x81920472,
+      3,
+      ""),
+    15,
+    shard_id_t(1));
+  ghobject_t oid2(oid);
+  oid2.generation = 17;
+  ghobject_t oidhead(oid);
+  oidhead.generation = ghobject_t::NO_GEN;
+
+  int r;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid);
+    t.touch(cid, oidhead);
+    t.collection_move_rename(cid, oidhead, cid, oid);
+    t.touch(cid, oidhead);
+    t.collection_move_rename(cid, oidhead, cid, oid2);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, oid);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+
+  {
+    vector<ghobject_t> objects;
+    r = store->collection_list(cid, objects);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(objects.size(), 1);
+    ASSERT_EQ(objects[0], oid2);
+  }
+
+  ASSERT_FALSE(store->exists(cid, oid));
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, oid2);
+    t.remove_collection(cid);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+
+  }
+}
+
+TEST_P(StoreTest, SetAllocHint) {
+  coll_t cid("alloc_hint");
+  ghobject_t hoid(hobject_t("test_hint", "", CEPH_NOSNAP, 0, 0, ""));
+  int r;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid);
+    t.touch(cid, hoid);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.set_alloc_hint(cid, hoid, 4*1024*1024, 1024*4);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.set_alloc_hint(cid, hoid, 4*1024*1024, 1024*4);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove_collection(cid);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+}
+
 INSTANTIATE_TEST_CASE_P(
   ObjectStore,
   StoreTest,
