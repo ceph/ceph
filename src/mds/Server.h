@@ -73,6 +73,7 @@ public:
   // -- sessions and recovery --
   utime_t  reconnect_start;
   set<client_t> client_reconnect_gather;  // clients i need a reconnect msg from.
+  bool waiting_for_reconnect(client_t c) const;
 
   Session *get_session(Message *m);
   void handle_client_session(class MClientSession *m);
@@ -87,8 +88,8 @@ public:
   void finish_flush_session(Session *session, version_t seq);
   void terminate_sessions();
   void find_idle_sessions();
-  void kill_session(Session *session);
-  void journal_close_session(Session *session, int state);
+  void kill_session(Session *session, Context *on_safe);
+  void journal_close_session(Session *session, int state, Context *on_safe);
   void reconnect_clients();
   void handle_client_reconnect(class MClientReconnect *m);
   //void process_reconnect_cap(CInode *in, int from, ceph_mds_cap_reconnect& capinfo);

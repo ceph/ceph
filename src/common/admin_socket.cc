@@ -334,12 +334,6 @@ bool AdminSocket::do_accept()
     format = "json-pretty";
   cmd_getval(m_cct, cmdmap, "prefix", c);
 
-  string firstword;
-  if (c.find(" ") == string::npos)
-    firstword = c;
-  else
-    firstword = c.substr(0, c.find(" "));
-
   m_lock.Lock();
   map<string,AdminSocketHook*>::iterator p;
   string match = c;
