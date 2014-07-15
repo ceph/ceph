@@ -1,0 +1,72 @@
+#!/bin/sh
+cd "$(dirname "$0")"
+cd ..
+TOPDIR=`pwd`
+
+#Check to see if the required packages are installed.
+#Tools and package names vary slightly based upon your distribution.
+#RHEL/CentOS use rpm --verify. 
+if command -v rpm >/dev/null; then	
+	for package in graphviz libxml2-devel libxslt-devel python-devel python-pip python-virtualenv doxygen ant; do
+		if ! rpm -qa | grep $package; then
+			missing="${missing:+$missing }$package"
+			if "$package"="python-pip"; then
+			echo -e "\n The python-pip package requires Extra Packages for Enterprise Linux (or EPEL).
+See https://fedoraproject.org/wiki/EPEL for details.
+For example: 
+\twget http://dl.fedoraproject.org/pub/epel/beta/7/x86_64/epel-release-7.0.2.noarch.rpm
+\tsudo yum --enablerepo=epel install python-pip"
+			fi	
+		fi
+		done
+    	if [ -n "$missing" ]; then
+		echo -e "\nYour system is missing required software. Please execute the following: \n" 1>&2
+		echo -e "\tsudo yum install $missing \n"
+		echo -e "Once you have installed the required software, please execute this script again. \n"
+		exit 1
+    	fi
+
+	for command in virtualenv doxygen ant ditaa; do
+		command -v "$command" > /dev/null;
+		ret_code=$?
+		if [ $ret_code -ne 0 ]; then
+            		missing="${missing:+$missing }$command"
+		fi
+    	done
+
+    	if [ -n "$missing" ]; then
+		echo "$0: missing required command, please install them:" 1>&2
+		echo "$missing"
+		exit 1
+    	fi
+fi
+
+#Build doxygen tree if it doesn't exist.
+if [ ! -e build-doc/doxygen/xml ]; then
+    doxygen
+fi
+
+
+#Some strange hack
+cat src/osd/PG.h src/osd/PG.cc | doc/scripts/gen_state_diagram.py > doc/dev/peering_graph.generated.dot
+
+
+#Navigate to build-doc directory and set up virtualenv.
+cd build-doc
+
+[ -z "$vdir" ] && vdir="./virtualenv"
+
+if [ ! -e $vdir ]; then
+    virtualenv --no-site-packages $vdir
+fi
+$vdir/bin/pip install --quiet -r ../admin/doc-requirements.txt
+
+
+install -d -m0755 \
+    output/html \
+    output/man
+PYTHONPATH=`pwd`/../src/pybind $vdir/bin/sphinx-build -a -n -b dirhtml -d doctrees ../doc output/html
+$vdir/bin/sphinx-build -a -b man -d doctrees ../doc output/man
+
+
+
