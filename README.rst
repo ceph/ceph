@@ -466,7 +466,7 @@ set of tests based off the data in the directory for the suite.
 
 To run a suite, enter::
 
-    ./schedule_suite.sh <suite> <ceph> <kernel> <email> <flavor> <teuth> <mtype> <template>
+    teuthology-suite -s <suite> [-c <ceph>] [-k <kernel>] [-t <teuth>] [-m <mtype>]
 
 where:
 
