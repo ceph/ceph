@@ -54,6 +54,7 @@ public:
     if (nwlock.read() > 0) {
       nwlock.dec();
     } else {
+      assert(nrlock.read() > 0);
       nrlock.dec();
     }
     if (g_lockdep) id = lockdep_will_unlock(name, id);
