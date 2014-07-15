@@ -3,9 +3,9 @@ Mount/unmount a ``kernel`` client.
 """
 import contextlib
 import logging
-import os
 
-from teuthology import misc as teuthology
+from teuthology import misc
+from teuthology.task.cephfs.kernel_mount import KernelMount
 
 log = logging.getLogger(__name__)
 
@@ -43,69 +43,29 @@ def task(ctx, config):
 
     if config is None:
         config = ['client.{id}'.format(id=id_)
-                  for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
-    clients = list(teuthology.get_clients(ctx=ctx, roles=config))
+                  for id_ in misc.all_roles_of_type(ctx.cluster, 'client')]
+    clients = list(misc.get_clients(ctx=ctx, roles=config))
 
-    testdir = teuthology.get_testdir(ctx)
+    test_dir = misc.get_testdir(ctx)
 
+    # Assemble mon addresses
+    remotes_and_roles = ctx.cluster.remotes.items()
+    roles = [roles for (remote_, roles) in remotes_and_roles]
+    ips = [remote_.ssh.get_transport().getpeername()[0]
+           for (remote_, _) in remotes_and_roles]
+    mons = misc.get_mons(roles, ips).values()
+
+    mounts = {}
     for id_, remote in clients:
-        mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
-        log.info('Mounting kclient client.{id} at {remote} {mnt}...'.format(
-                id=id_, remote=remote, mnt=mnt))
+        kernel_mount = KernelMount(mons, test_dir, id_, remote)
+        mounts[id_] = kernel_mount
 
-        # figure mon ips
-        remotes_and_roles = ctx.cluster.remotes.items()
-        roles = [roles for (remote_, roles) in remotes_and_roles]
-        ips = [host for (host, port) in (remote_.ssh.get_transport().getpeername() for (remote_, roles) in remotes_and_roles)]
-        mons = teuthology.get_mons(roles, ips).values()
+        kernel_mount.mount()
 
-        keyring = '/etc/ceph/ceph.client.{id}.keyring'.format(id=id_)
-        secret = '{tdir}/data/client.{id}.secret'.format(tdir=testdir, id=id_)
-        teuthology.write_secret_file(ctx, remote, 'client.{id}'.format(id=id_),
-                                     keyring, secret)
-
-        remote.run(
-            args=[
-                'mkdir',
-                '--',
-                mnt,
-                ],
-            )
-
-        remote.run(
-            args=[
-                'sudo',
-                'adjust-ulimits',
-                'ceph-coverage',
-                '{tdir}/archive/coverage'.format(tdir=testdir),
-                '/sbin/mount.ceph',
-                '{mons}:/'.format(mons=','.join(mons)),
-                mnt,
-                '-v',
-                '-o',
-                'name={id},secretfile={secret}'.format(id=id_,
-                                                       secret=secret),
-                ],
-            )
-
+    ctx.mounts = mounts
     try:
-        yield
+        yield mounts
     finally:
         log.info('Unmounting kernel clients...')
-        for id_, remote in clients:
-            log.debug('Unmounting client client.{id}...'.format(id=id_))
-            mnt = os.path.join(testdir,  'mnt.{id}'.format(id=id_))
-            remote.run(
-                args=[
-                    'sudo',
-                    'umount',
-                    mnt,
-                    ],
-                )
-            remote.run(
-                args=[
-                    'rmdir',
-                    '--',
-                    mnt,
-                    ],
-                )
+        for mount in mounts.values():
+            mount.umount()
