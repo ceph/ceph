@@ -124,6 +124,30 @@ Notable Changes
 * test_librbd_fsx: test krbd as well as librbd (Ilya Dryomov)
 
 
+v0.80.4 Firefly
+===============
+
+This Firefly point release fixes an potential data corruption problem
+when ceph-osd daemons run on top of XFS and service Firefly librbd
+clients.  A recently added allocation hint that RBD utilizes triggers
+an XFS bug on some kernels (Linux 3.2, and likely others) that leads
+to data corruption and deep-scrub errors (and inconsistent PGs).  This
+release avoids the situation by disabling the allocation hint until we
+can validate which kernels are affected and/or are known to be safe to
+use the hint on.
+
+We recommend that all v0.80.x Firefly users urgently upgrade,
+especially if they are using RBD.
+
+Notable Changes
+---------------
+
+* osd: disable XFS extsize hint by default (#8830, Samuel Just)
+* rgw: fix extra data pool default name (Yehuda Sadeh)
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.4.txt>`.
+
+
 v0.80.3 Firefly
 ===============
 
