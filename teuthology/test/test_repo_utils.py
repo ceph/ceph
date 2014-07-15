@@ -65,6 +65,18 @@ class TestRepoUtils(object):
             repo_utils.clone_repo(self.repo_url, self.dest_path, 'nobranch')
         assert not os.path.exists(self.dest_path)
 
+    def test_fetch_no_repo(self):
+        fake_dest_path = '/tmp/not_a_repo'
+        assert not os.path.exists(fake_dest_path)
+        with raises(OSError):
+            repo_utils.fetch(fake_dest_path)
+        assert not os.path.exists(fake_dest_path)
+
+    def test_fetch_noop(self):
+        repo_utils.clone_repo(self.repo_url, self.dest_path, 'master')
+        repo_utils.fetch(self.dest_path)
+        assert os.path.exists(self.dest_path)
+
     def test_fetch_branch_no_repo(self):
         fake_dest_path = '/tmp/not_a_repo'
         assert not os.path.exists(fake_dest_path)

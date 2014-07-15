@@ -25,7 +25,7 @@ def enforce_repo_state(repo_url, dest_path, branch, remove_on_error=True):
             clone_repo(repo_url, dest_path, branch)
         elif time.time() - os.stat('/etc/passwd').st_mtime > 60:
             # only do this at most once per minute
-            fetch_branch(dest_path, branch)
+            fetch(dest_path)
             out = subprocess.check_output(('touch', dest_path))
             if out:
                 log.info(out)
@@ -66,11 +66,30 @@ def clone_repo(repo_url, dest_path, branch):
             raise RuntimeError("git clone failed!")
 
 
-def fetch_branch(dest_path, branch):
+def fetch(repo_path):
+    """
+    Call "git fetch -p origin"
+
+    :param repo_path: The full path to the repository
+    :raises:          RuntimeError if the operation fails
+    """
+    log.debug("Fetching from upstream into %s", repo_path)
+    proc = subprocess.Popen(
+        ('git', 'fetch', '-p', 'origin'),
+        cwd=repo_path,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT)
+    if proc.wait() != 0:
+        out = proc.stdout.read()
+        log.error(out)
+        raise RuntimeError("git fetch failed!")
+
+
+def fetch_branch(repo_path, branch):
     """
     Call "git fetch -p origin <branch>"
 
-    :param dest_path: The full path to the destination directory
+    :param repo_path: The full path to the repository
     :param branch:    The branch.
     :raises:          BranchNotFoundError if the branch is not found;
                       RuntimeError for other errors
@@ -79,7 +98,7 @@ def fetch_branch(dest_path, branch):
     log.info("Fetching %s from upstream", branch)
     proc = subprocess.Popen(
         ('git', 'fetch', '-p', 'origin', branch),
-        cwd=dest_path,
+        cwd=repo_path,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT)
     if proc.wait() != 0:
