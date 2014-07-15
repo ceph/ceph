@@ -5,6 +5,8 @@ upgrade-sequence:
          branch: firefly
        mon.b:
          branch: firefly
+       client.0:
+         branch: firefly
    - ceph.restart:
        daemons: [mon.a, mon.b, mon.c]
        wait-for-healthy: true
