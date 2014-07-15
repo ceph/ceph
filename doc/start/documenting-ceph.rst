@@ -6,14 +6,14 @@ The **easiest way** to help the Ceph project is to contribute to the
 documentation. As the Ceph user base grows and the development pace quickens, an
 increasing number of people are updating the documentation and adding new
 information. Even small contributions like fixing spelling errors or clarifying
-instructions help the Ceph project immensely.
+instructions will help the Ceph project immensely.
 
-When you view Ceph documentation online, the primary link is
-http://ceph.com/docs/master. The documentation source in the ``ceph/docs``
-directory gets rendered to HTML and presented online. The ``master`` portion of
-the path reflects the branch name,  which means you can view documentation for
-older branches (e.g., ``argonaut``) or future branches (e.g., ``next``) as well
-as work-in-progress branches.
+The Ceph documentation source resides in the ``ceph/docs`` directory of the Ceph
+repository, and Python Sphinx renders the source into HTML and manpages. The
+http://ceph.com/docs link currenly displays the  ``master`` branch by default,
+but you may view documentation for older branches (e.g., ``argonaut``) or future
+branches (e.g., ``next``) as well as work-in-progress branches by substituting
+``master`` with the branch name you prefer.
 
 
 Making Contributions
@@ -37,31 +37,41 @@ Get the Source
 --------------
 
 Ceph documentation lives in the Ceph repository right alongside the Ceph source
-code under the ``ceph/doc`` directory. For details on github and ceph,
+code under the ``ceph/doc`` directory. For details on github and Ceph,
 see :ref:`Get Involved`.
 
-The most common way to make contributions
-is to use the `Fork and Pull`_ approach. To use this approach, you must:
+The most common way to make contributions is to use the `Fork and Pull`_ 
+approach. You must:
 
-- Install git locally. :: 
+#. Install git locally. For CentOS/RHEL, execute::
+
+	sudo yum install git
+
+   For Debian/Ubuntu, execute::
 
 	sudo apt-get install git
 
-- Ensure your ``.gitconfig`` file has your name and email address. :: 
+#. Ensure your ``.gitconfig`` file has your name and email address. :: 
 
 	[user]
 	   email = {your-email-address}
 	   name = {your-name}
 
-- Create a  `github`_ account (if you don't have one).
+   For example::
 
-- Fork the Ceph project.
+	git config --global user.name "John Doe"
+	git config --global user.email johndoe@example.com
 
-- Clone your forked project.
 
-All Ceph documentation resides under the ``ceph/doc`` directory and
-subdirectories of the Ceph repository. Ceph organizes documentation into an
-information architecture primarily by its main components.
+#. Create a  `github`_ account (if you don't have one).
+
+#. Fork the Ceph project. See https://github.com/ceph/ceph.
+
+#. Clone your fork of the Ceph project to your local host.
+
+
+Ceph organizes documentation into an information architecture primarily by its
+main components.
 
 - **Ceph Storage Cluster:** The Ceph Storage Cluster documentation resides
   under the ``doc/rados`` directory.
@@ -136,7 +146,7 @@ If it doesn't exist, create your branch::
 Make a Change
 -------------
 
-Modifying a document simply involves opening a restructuredText file, changing
+Modifying a document involves opening a restructuredText file, changing
 its contents, and saving the changes. See `Documentation Style Guide`_ for
 details on syntax requirements.
 
@@ -160,46 +170,30 @@ Deleting a document involves removing it from the repository with ``git rm
 
 	git rm doc/rados/example.rst
 
-You must also remove any reference to the document from other documents.
+You must also remove any reference to a deleted document from other documents.
 
 
 Build the Source
 ----------------
 
-To build the documentation, navigate to the ``ceph`` repository directory;
-then execute the build script:: 
+To build the documentation, navigate to the ``ceph`` repository directory::
 
 	cd ceph
+
+To build the documentation on Debian/Ubuntu, execute::
+
 	admin/build-doc
 
+To build the documentation on CentOS/RHEL, execute:: 
+
+	admin/build-doc-rpm
+
 The build script will produce an output of errors and warnings. You MUST
-fix errors before committing a change, and you SHOULD fix warnings.
+fix errors in documents you modified before committing a change, and you SHOULD
+fix warnings that are related to syntax you modified.
 
 .. important:: You must validate ALL HYPERLINKS. If a hyperlink is broken,
    it automatically breaks the build!
-
-The first time you build the documentation, the script will notify you if
-you do not have the dependencies installed. To run Sphinx, at least 
-the following are required:
-
-- python-dev
-- python-pip
-- python-virtualenv
-- libxml2-dev
-- libxslt-dev
-- doxygen
-- ditaa
-- graphviz
-
-Install each dependency that isn't installed on your host. For Debian/Ubuntu 
-distributions, execute the following::
-
-	sudo apt-get install python-dev python-pip python-virtualenv libxml2-dev libxslt-dev doxygen ditaa graphviz ant
-
-.. For CentOS/RHEL distributions, execute the following:: 
-
-.. 	sudo yum install python-dev python-pip python-virtualenv libxml2-dev libxslt-dev doxygen ditaa graphviz ant
-
 
 Once you build the documentation set, you may navigate to the source directory
 to view it::
@@ -209,15 +203,83 @@ to view it::
 There should be an ``html`` directory and a ``man`` directory containing
 documentation in HTML and manpage formats respectively.
 
+Build the Source (First Time)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Ceph uses Python Sphinx, which is generally distribution agnostic. The first
+time you build Ceph documentation, it will generate a doxygen XML tree, which
+is a bit time consuming.
+
+Python Sphinx does have some dependencies that vary across distributions. The
+first time you build the documentation, the script will notify you if you do not
+have the dependencies installed. To run Sphinx, at least the following are
+required:
+
+.. raw:: html
+
+	<style type="text/css">div.body h3{margin:5px 0px 0px 0px;}</style>
+	<table cellpadding="10"><colgroup><col width="50%"><col width="50%"><col width="50%"></colgroup><tbody valign="top"><tr><td><h3>Debian/Ubuntu</h3>
+
+- python-dev
+- python-pip
+- python-virtualenv
+- libxml2-dev
+- libxslt1-dev
+- doxygen
+- graphviz
+- ant
+- ditaa
+
+.. raw:: html 
+
+	</td><td><h3>CentOS/RHEL</h3>
+
+- python-devel 
+- python-pip 
+- python-virtualenv 
+- libxml2-devel 
+- libxslt1-devel 
+- doxygen
+- graphviz
+- ant
+
+.. raw:: html
+
+	</td></tr></tbody></table>
+
+
+Install each dependency that isn't installed on your host. For Debian/Ubuntu 
+distributions, execute the following::
+
+	sudo apt-get install python-dev python-pip python-virtualenv libxml2-dev libxslt-dev doxygen graphviz ant ditaa
+
+For CentOS/RHEL distributions, execute the following:: 
+
+   sudo yum install python-devel python-pip python-virtualenv libxml2-devel libxslt-devel doxygen graphviz ant
+   sudo pip install html2text
+
+Ceph documentation makes extensive use ``ditaa``, which isn't presently built
+for CentOS/RHEL. You must install ``ditaa`` if you are making changes to
+``ditaa`` diagrams so that you can verify that they render properly before you
+commit new or modified ``ditaa`` diagrams. You may retrieve compatible required
+packages for CentOS/RHEL distributions and install them manually. Use
+http://rpmfind.net/ to find compatible ``ditaa`` and ``jericho-html`` packages.
+Then, download them from a mirror and install them. For example::
+
+	wget ftp://ftp.univie.ac.at/systems/linux/fedora/releases/20/Everything/i386/os/Packages/j/jericho-html-3.2-6.fc20.noarch.rpm
+	sudo yum install jericho-html-3.2-6.fc20.noarch.rpm
+	wget ftp://ftp.univie.ac.at/systems/linux/fedora/releases/20/Everything/i386/os/Packages/d/ditaa-0.9-10.r74.fc20.noarch.rpm
+	sudo yum install ditaa-0.9-10.r74.fc20.noarch.rpm
+
+
+You may also need to create a directory under ``ceph/build-doc`` for output of
+Javadoc files. ::
+
+	mkdir -p output/html/api/libcephfs-java/javadoc
+
 
 Commit the Change
 -----------------
-
-An easy way to manage your documentation commits is to use visual tools for
-``git``. For example, ``gitk`` provides a graphical interface for viewing the
-repository history, and ``git-gui`` provides a graphical interface for viewing
-your uncommitted changes, staging them for commit, committing the changes and
-pushing them to your forked Ceph repository.
 
 Ceph documentation commits are simple, but follow a strict convention:
 
@@ -267,13 +329,28 @@ To commit changes, execute the following::
 
 	git commit -a
 	
-You can also a graphical editor like ``gitk`` and ``git-gui``. :: 
+
+An easy way to manage your documentation commits is to use visual tools for
+``git``. For example, ``gitk`` provides a graphical interface for viewing the
+repository history, and ``git-gui`` provides a graphical interface for viewing
+your uncommitted changes, staging them for commit, committing the changes and
+pushing them to your forked Ceph repository.
+
+
+For Debian/Ubuntu, execute::
 
 	sudo apt-get install gitk git-gui
+
+For CentOS/RHEL, execute::
+   
+	sudo yum install gitk git-gui
+
+Then, execute:: 
+
 	cd {git-ceph-repo-path}
 	gitk
 	
-Then select **File->Start git gui** to activate the graphical user interface.
+Finally, select **File->Start git gui** to activate the graphical user interface.
 
 
 Push the Change
@@ -431,10 +508,6 @@ incorporate the link destination inline; however, we prefer to use the use the
 improves the readability of the document in a command line interface.
 
 
-
-
-
-
 .. _Python Sphinx: http://sphinx-doc.org
 .. _resturcturedText: http://docutils.sourceforge.net/rst.html
 .. _Fork and Pull: https://help.github.com/articles/using-pull-requests
@@ -446,4 +519,4 @@ improves the readability of the document in a command line interface.
 .. _Showing code examples: http://sphinx-doc.org/markup/code.html
 .. _paragraph level markup: http://sphinx-doc.org/markup/para.html
 .. _topic directive: http://docutils.sourceforge.net/docs/ref/rst/directives.html#topic
-.. _John Wilkins: mailto:john.wilkins@inktank.com
+.. _John Wilkins: mailto:jowilkin@redhat.com
