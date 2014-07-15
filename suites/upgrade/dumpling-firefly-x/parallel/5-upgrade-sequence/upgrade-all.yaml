@@ -18,4 +18,6 @@ upgrade-sequence:
    - ceph.restart: [mds.a]
    - sleep:
        duration: 60
-
+   - exec:
+      mon.a:
+        - ceph osd crush tunables firefly
