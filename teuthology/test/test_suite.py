@@ -64,11 +64,15 @@ class TestSuiteOnline(object):
         if 'TEST_ONLINE' not in os.environ:
             skip("To run these sets, set the environment variable TEST_ONLINE")
 
-    def test_ceph_hash(self):
+    def test_ceph_hash_simple(self):
         resp = requests.get(
             'https://api.github.com/repos/ceph/ceph/git/refs/heads/master')
         ref_hash = resp.json()['object']['sha']
         assert suite.get_hash('ceph') == ref_hash
+
+    def test_kernel_hash_saya(self):
+        # We don't currently have these packages.
+        assert suite.get_hash('kernel', 'master', 'basic', 'saya') is None
 
     def test_all_master_branches(self):
         # Don't attempt to send email
