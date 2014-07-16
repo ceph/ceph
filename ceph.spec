@@ -237,8 +237,8 @@ shared library allowing applications to manage these block devices.
 
 %package -n libcephfs1
 Summary:        Ceph distributed file system client library
+License:        GPL-2.0 and LGPL-2.1
 Group:          System/Filesystems
-License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
 
 %description -n libcephfs1
 Ceph is a distributed network file system designed to provide excellent
