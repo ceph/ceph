@@ -134,8 +134,8 @@ performance, reliability, and scalability.
 # packages
 #################################################################################
 %package fuse
-License:        GPL-2.0 and LGPL-2.1
 Summary:        Ceph fuse-based client
+License:        GPL-2.0 and LGPL-2.1
 Group:          System/Filesystems
 Requires:       %{name} = %{version}-%{release}
 BuildRequires:  fuse-devel
@@ -172,7 +172,7 @@ that use Ceph.
 
 %package radosgw
 Summary:        Rados REST Gateway
-License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
+License:        GPL-2.0 and LGPL-2.1
 Group:          System/Filesystems
 Requires:       librados2 = %{version}-%{release}
 Requires:       logrotate
