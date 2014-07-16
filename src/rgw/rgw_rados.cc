@@ -6,6 +6,7 @@
 #include <sys/types.h>
 
 #include "common/ceph_json.h"
+#include "common/utf8.h"
 
 #include "common/errno.h"
 #include "common/Formatter.h"
@@ -2271,7 +2272,28 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
   prefix_obj.set_obj(prefix);
   string cur_prefix = prefix_obj.object;
 
+  string bigger_than_delim;
+
+  if (!delim.empty()) {
+    unsigned long val = decode_utf8((unsigned char *)delim.c_str(), delim.size());
+    char buf[delim.size() + 16];
+    int r = encode_utf8(val + 1, (unsigned char *)buf);
+    if (r < 0) {
+      ldout(cct,0) << "ERROR: encode_utf8() failed" << dendl;
+      return -EINVAL;
+    }
+    buf[r] = '\0';
+
+    bigger_than_delim = buf;
+  }
+
+  string skip_after_delim;
+
   do {
+    if (skip_after_delim > cur_marker) {
+      cur_marker = skip_after_delim;
+      ldout(cct, 20) << "setting cur_marker=" << cur_marker << dendl;
+    }
     std::map<string, RGWObjEnt> ent_map;
     int r = cls_bucket_list(bucket, cur_marker, cur_prefix, max - count, ent_map,
                             &truncated, &cur_marker);
@@ -2307,6 +2329,12 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
 
         if (delim_pos >= 0) {
           common_prefixes[obj.substr(0, delim_pos + 1)] = true;
+
+          skip_after_delim = obj.substr(0, delim_pos);
+          skip_after_delim.append(bigger_than_delim);
+
+          ldout(cct, 20) << "skip_after_delim=" << skip_after_delim << dendl;
+
           continue;
         }
       }
