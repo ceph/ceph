@@ -661,6 +661,12 @@ OPTION(filestore_btrfs_clone_range, OPT_BOOL, true)
 OPTION(filestore_zfs_snap, OPT_BOOL, false) // zfsonlinux is still unstable
 OPTION(filestore_fsync_flushes_journal_data, OPT_BOOL, false)
 OPTION(filestore_fiemap, OPT_BOOL, false)     // (try to) use fiemap
+
+// (try to) use extsize for alloc hint
+// WARNING: extsize seems to trigger data corruption in xfs -- that is why it is
+// off by default, see bug #8830
+OPTION(filestore_xfs_extsize, OPT_BOOL, false)
+
 OPTION(filestore_journal_parallel, OPT_BOOL, false)
 OPTION(filestore_journal_writeahead, OPT_BOOL, false)
 OPTION(filestore_journal_trailing, OPT_BOOL, false)
