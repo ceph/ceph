@@ -32,6 +32,11 @@ typedef enum {
   CLOG_ERROR = 4,
 } clog_type;
 
+static const std::string CLOG_CHANNEL_NONE    = "none";
+static const std::string CLOG_CHANNEL_DEFAULT = "default";
+static const std::string CLOG_CHANNEL_CLUSTER = "cluster";
+static const std::string CLOG_CHANNEL_AUDIT   = "audit";
+
 /*
  * Given a clog log_type, return the equivalent syslog priority
  */
@@ -41,6 +46,7 @@ int string_to_syslog_level(string s);
 int string_to_syslog_facility(string s);
 
 string clog_type_to_string(clog_type t);
+
 
 struct LogEntryKey {
   entity_inst_t who;
@@ -67,6 +73,7 @@ struct LogEntry {
   uint64_t seq;
   clog_type prio;
   string msg;
+  string channel;
 
   LogEntryKey key() const { return LogEntryKey(who, stamp, seq); }
 
@@ -127,7 +134,7 @@ inline ostream& operator<<(ostream& out, clog_type t)
 inline ostream& operator<<(ostream& out, const LogEntry& e)
 {
   return out << e.stamp << " " << e.who << " " << e.seq << " : "
-             << e.prio << " " << e.msg;
+             << e.channel << " " << e.prio << " " << e.msg;
 }
 
 #endif

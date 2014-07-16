@@ -161,19 +161,20 @@ void LogEntry::log_to_syslog(string level, string facility)
 
 void LogEntry::encode(bufferlist& bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   __u16 t = prio;
   ::encode(who, bl);
   ::encode(stamp, bl);
   ::encode(seq, bl);
   ::encode(t, bl);
   ::encode(msg, bl);
+  ::encode(channel, bl);
   ENCODE_FINISH(bl);
 }
 
 void LogEntry::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   __u16 t;
   ::decode(who, bl);
   ::decode(stamp, bl);
@@ -181,6 +182,9 @@ void LogEntry::decode(bufferlist::iterator& bl)
   ::decode(t, bl);
   prio = (clog_type)t;
   ::decode(msg, bl);
+  if (struct_v >= 3) {
+    ::decode(channel, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -189,6 +193,7 @@ void LogEntry::dump(Formatter *f) const
   f->dump_stream("who") << who;
   f->dump_stream("stamp") << stamp;
   f->dump_unsigned("seq", seq);
+  f->dump_string("channel", channel);
   f->dump_stream("priority") << prio;
   f->dump_string("message", msg);
 }
