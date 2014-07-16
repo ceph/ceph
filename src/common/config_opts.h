@@ -745,8 +745,8 @@ OPTION(rbd_localize_parent_reads, OPT_BOOL, true)
  */
 OPTION(rbd_default_format, OPT_INT, 1)
 OPTION(rbd_default_order, OPT_INT, 22)
-OPTION(rbd_default_stripe_count, OPT_U64, 1) // changing requires stripingv2 feature
-OPTION(rbd_default_stripe_unit, OPT_U64, 4194304) // changing to non-object size requires stripingv2 feature
+OPTION(rbd_default_stripe_count, OPT_U64, 0) // changing requires stripingv2 feature
+OPTION(rbd_default_stripe_unit, OPT_U64, 0) // changing to non-object size requires stripingv2 feature
 OPTION(rbd_default_features, OPT_INT, 3) // 1 for layering, 3 for layering+stripingv2. only applies to format 2 images
 
 OPTION(nss_db_path, OPT_STR, "") // path to nss db
