@@ -2598,7 +2598,7 @@ def parse_args():
 def main():
     args = parse_args()
 
-    loglevel = logging.INFO
+    loglevel = logging.WARNING
     if args.verbose:
         loglevel = logging.DEBUG
 
