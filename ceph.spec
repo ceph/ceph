@@ -45,7 +45,7 @@ Name:           ceph
 Version:        0.80.1
 Release:        0%{?dist}
 Summary:        A Scalable Distributed File System
-License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
+License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
 Group:          System/Filesystems
 Url:            http://ceph.com/
 Source0:        http://ceph.com/download/%{name}-%{version}.tar.bz2
@@ -141,7 +141,7 @@ performance, reliability, and scalability.
 # packages
 #################################################################################
 %package fuse
-License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
+License:        GPL-2.0 and LGPL-2.1
 Summary:        Ceph fuse-based client
 Group:          System/Filesystems
 Requires:       %{name} = %{version}-%{release}
@@ -154,7 +154,7 @@ FUSE based client for Ceph distributed network file system
 
 %package -n rbd-fuse
 Summary:        RBD fuse-based client
-License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
+License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
 Group:          System/Filesystems
 Requires:       %{name} = %{version}-%{release}
 BuildRequires:  fuse-devel
@@ -167,7 +167,7 @@ FUSE based client for Ceph distributed network file system
 %package devel
 Summary:        Ceph headers
 Group:          Development/Libraries/C and C++
-License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
+License:        GPL-2.0 and LGPL-2.1
 Requires:       %{name} = %{version}-%{release}
 Requires:       librados2 = %{version}
 Requires:       librbd1 = %{version}
