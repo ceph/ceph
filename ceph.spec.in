@@ -409,6 +409,7 @@ install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rul
 install -m 0644 -D udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
 
 #set up placeholder directories
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/osd
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
 %if 0%{?suse_version} >= 1310
@@ -423,7 +424,7 @@ rm $RPM_BUILD_ROOT%{python_sitelib}/*.pyo
 rm -f $RPM_BUILD_ROOT/usr/share/ceph/id_dsa_drop.ceph.com
 rm -f $RPM_BUILD_ROOT/usr/share/ceph/id_dsa_drop.ceph.com.pub
 rm -f $RPM_BUILD_ROOT/usr/share/ceph/known_hosts_drop.ceph.com
-mkdir $RPM_BUILD_ROOT/var/lib/ceph/osd
+
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -551,6 +552,8 @@ fi
 %{_mandir}/man8/ceph-rest-api.8.gz
 %dir %{_localstatedir}/lib/ceph/
 %dir %{_localstatedir}/lib/ceph/tmp/
+# osd mounting directory
+%dir %{_localstatedir}/lib/ceph/osd
 %dir %{_localstatedir}/log/ceph/
 %if 0%{?suse_version} < 1310
 %ghost %dir %{_localstatedir}/run/ceph/
@@ -559,8 +562,6 @@ fi
 %{_tmpfilesdir}/%{name}.conf
 %endif
 %dir %{_sysconfdir}/ceph/
-# osd mounting directory
-%dir /var/lib/ceph/osd
 
 #################################################################################
 %files fuse
