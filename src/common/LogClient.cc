@@ -169,7 +169,7 @@ Message *LogClient::_get_mon_log_message()
   return log;
 }
 
-void LogClient::handle_log_ack(MLogAck *m)
+bool LogClient::handle_log_ack(MLogAck *m)
 {
   Mutex::Locker l(log_lock);
   ldout(cct,10) << "handle_log_ack " << *m << dendl;
@@ -184,6 +184,6 @@ void LogClient::handle_log_ack(MLogAck *m)
     ldout(cct,10) << " logged " << entry << dendl;
     q = log_queue.erase(q);
   }
-  m->put();
+  return true;
 }
 
