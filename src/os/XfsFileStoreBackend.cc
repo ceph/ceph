@@ -103,15 +103,20 @@ int XfsFileStoreBackend::detect_features()
     goto out_close;
   }
 
-  ret = set_extsize(fd, 1U << 15); // a few pages
-  if (ret) {
-    ret = 0;
-    dout(0) << "detect_feature: failed to set test file extsize, assuming extsize is NOT supported" << dendl;
-    goto out_close;
+  if (g_conf->filestore_xfs_extsize) {
+    ret = set_extsize(fd, 1U << 15); // a few pages
+    if (ret) {
+      ret = 0;
+      dout(0) << "detect_feature: failed to set test file extsize, assuming extsize is NOT supported" << dendl;
+      goto out_close;
+    } else {
+      dout(0) << "detect_feature: extsize is supported" << dendl;
+      m_has_extsize = true;
+    }
+  } else {
+    dout(0) << "detect_feature: extsize is disabled by conf" << dendl;
   }
 
-  dout(0) << "detect_feature: extsize is supported" << dendl;
-  m_has_extsize = true;
 
 out_close:
   TEMP_FAILURE_RETRY(::close(fd));
