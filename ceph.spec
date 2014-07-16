@@ -166,8 +166,8 @@ FUSE based client for Ceph distributed network file system
 
 %package devel
 Summary:        Ceph headers
-Group:          Development/Libraries/C and C++
 License:        GPL-2.0 and LGPL-2.1
+Group:          Development/Libraries/C and C++
 Requires:       %{name} = %{version}-%{release}
 Requires:       librados2 = %{version}
 Requires:       librbd1 = %{version}
@@ -214,7 +214,7 @@ managers such as Pacemaker.
 
 %package -n librados2
 Summary:        RADOS distributed object store client library
-License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
+License:        GPL-2.0 and LGPL-2.1
 Group:          System/Filesystems
 
 %description -n librados2
