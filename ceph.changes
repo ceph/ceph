@@ -1,3 +1,9 @@
+-------------------------------------------------------------------
+Wed Jul 16 14:17:26 UTC 2014 - tbehrens@suse.com
+
+- Fix bnc#885304: Fixup radosgw daemon init some more. In contrast
+  to start-stop-daemon, startproc does not need the double dash.
+
 ------------------------------------------------------------------
 Wed Jul 16 12:38:45 UTC 2014 - osynge@suse.com
 

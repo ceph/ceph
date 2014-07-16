@@ -10,7 +10,7 @@ section name.
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/src/init-radosgw b/src/init-radosgw
-index ecc8314..24f13ce 100644
+index ecc8314..0099c70 100644
 --- a/src/init-radosgw
 +++ b/src/init-radosgw
 @@ -78,7 +78,7 @@ case "$1" in
@@ -18,7 +18,7 @@ index ecc8314..24f13ce 100644
  
              echo "Starting $name..."
 -	     /sbin/startproc -u $user $RADOSGW
-+	     /sbin/startproc -u $user $RADOSGW -- -n $name
++	     /sbin/startproc -u $user $RADOSGW -n $name
          done
          daemon_is_running $RADOSGW
          ;;
