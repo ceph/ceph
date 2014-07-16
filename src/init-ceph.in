@@ -44,6 +44,10 @@ test -f $LIBDIR/ceph_common.sh || exit 0
 
 EXIT_STATUS=0
 
+# detect systemd
+SYSTEMD=0
+grep -qs systemd /proc/1/comm && SYSTEMD=1
+
 signal_daemon() {
     name=$1
     daemon=$2
@@ -272,7 +276,11 @@ for name in $what; do
 	    [ -n "$wrap" ] && runmode="-f &" && runarg="-f"
 	    [ -n "$max_open_files" ] && files="ulimit -n $max_open_files;"
 
-	    cmd="$files $wrap $cmd --cluster $cluster $runmode"
+	    if [ $SYSTEMD -eq 1 ]; then
+		cmd="systemd-run -r bash -c '$files $cmd --cluster $cluster -f'"
+	    else
+		cmd="$files $wrap $cmd --cluster $cluster $runmode"
+	    fi
 
 	    if [ $dofsmount -eq 1 ] && [ -n "$fs_devs" ]; then
 		get_conf pre_mount "true" "pre mount command"
