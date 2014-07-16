@@ -15,9 +15,6 @@
 #include "include/types.h"
 #include "rgw_bucket.h"
 #include "rgw_user.h"
-#include "rgw_string.h"
-
-// until everything is moved from rgw_common
 #include "rgw_common.h"
 
 #include "cls/user/cls_user_types.h"

@@ -9,6 +9,7 @@
 #include "rgw_cache.h"
 #include "rgw_bucket.h"
 #include "rgw_keystone.h"
+#include "rgw_snapshot.h"
 
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
@@ -603,6 +604,13 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("user_uid_pool", user_uid_pool.data_pool, f);
   encode_json_plain("system_key", system_key, f);
   encode_json("placement_pools", placement_pools, f);
+}
+
+void RGWSnapshot::dump(Formatter *f) const
+{
+  encode_json("number", snap_num, f);
+  encode_json("name", snap_name, f);
+  encode_json("created", snap_created, f);
 }
 
 static void decode_json(const char *field, rgw_bucket& bucket, JSONObj *obj)

@@ -31,6 +31,8 @@ using namespace std;
 #include "rgw_formats.h"
 #include "rgw_usage.h"
 #include "rgw_replica_log.h"
+#include "rgw_snapshot.h"
+#include "auth/Crypto.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -110,6 +112,9 @@ void _usage()
   cerr << "  opstate rm                 remove entry (use client_id, op_id, object)\n";
   cerr << "  replicalog get             get replica metadata log entry\n";
   cerr << "  replicalog delete          delete replica metadata log entry\n";
+  cerr << "  mksnap                     create a RGW snapshot\n";
+  cerr << "  lssnap                     list all RGW snapshots\n";
+  cerr << "  rmsnap                     remote a RGW snapshots\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
   cerr << "   --subuser=<name>          subuser name\n";
@@ -150,6 +155,7 @@ void _usage()
   cerr << "                             subuser keys\n";
   cerr << "   --purge-objects           remove a bucket's objects before deleting it\n";
   cerr << "                             (NOTE: required to delete a non-empty bucket)\n";
+  cerr << "   --snap                    name of snapshot, required for --mksnap or --rmsnap\n";
   cerr << "   --sync-stats              option to 'user stats', update user stats with current\n";
   cerr << "                             stats reported by user's buckets indexes\n";
   cerr << "   --show-log-entries=<flag> enable/disable dump of log entries on log show\n";
@@ -255,6 +261,9 @@ enum {
   OPT_OPSTATE_RM,
   OPT_REPLICALOG_GET,
   OPT_REPLICALOG_DELETE,
+  OPT_MKSNAP,
+  OPT_LSSNAP,
+  OPT_RMSNAP,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
@@ -290,8 +299,15 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
     return 0;
   }
 
-  if (strcmp(cmd, "policy") == 0)
+  if (strcmp(cmd, "policy") == 0) {
     return OPT_POLICY;
+  } else if (strcmp(cmd, "mksnap") == 0) {
+    return OPT_MKSNAP;
+  } else if (strcmp(cmd, "lssnap") == 0) {
+    return OPT_LSSNAP;
+  } else if (strcmp(cmd, "rmsnap") == 0) {
+    return OPT_RMSNAP;
+  }
 
   if (!prev_cmd)
     return -EINVAL;
@@ -775,6 +791,7 @@ int main(int argc, char **argv)
   std::string date, subuser, access, format;
   std::string start_date, end_date;
   std::string key_type_str;
+  std::string snap_name;
   int key_type = KEY_TYPE_UNDEFINED;
   rgw_bucket bucket;
   uint32_t perm_mask = 0;
@@ -1000,6 +1017,8 @@ int main(int argc, char **argv)
         cerr << "ERROR: invalid replica log type" << std::endl;
         return EINVAL;
       }
+    } else if (ceph_argparse_witharg(args, i, &val, "--snap", (char*)NULL)) {
+      snap_name = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -1067,7 +1086,9 @@ int main(int argc, char **argv)
                          opt_cmd == OPT_REGIONMAP_GET || opt_cmd == OPT_REGIONMAP_SET ||
                          opt_cmd == OPT_REGIONMAP_UPDATE ||
                          opt_cmd == OPT_ZONE_GET || opt_cmd == OPT_ZONE_SET ||
-                         opt_cmd == OPT_ZONE_LIST);
+                         opt_cmd == OPT_ZONE_LIST ||
+                         opt_cmd == OPT_MKSNAP || opt_cmd == OPT_LSSNAP || 
+                         opt_cmd == OPT_RMSNAP);
 
 
   if (raw_storage_op) {
@@ -1279,6 +1300,94 @@ int main(int argc, char **argv)
       formatter->close_section();
       formatter->flush(cout);
       cout << std::endl;
+    }
+    if (opt_cmd == OPT_MKSNAP) {
+      if (snap_name.empty()) {
+        cerr << "need to specify a snapshot to create!" << std::endl;
+        return usage();
+      }
+
+      RGWSnapshot snap( g_ceph_context, store, snap_name);
+      int ret = snap.create();
+      if( ret < 0) {
+        cerr << "ERROR: could not create snapshot: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+    }
+
+    if (opt_cmd == OPT_LSSNAP) {
+      list<string> rgw_pools;
+      list<RGWSnapshot> snaps;
+      int ret = RGWSnapshot::get_rgw_pools( g_ceph_context, store, rgw_pools);
+      if( ret < 0) {
+        cerr << "ERROR: could not retrieve list RGW pools: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      ret = RGWSnapshot::get_snapshots( g_ceph_context, store, rgw_pools, snaps);
+      if( ret < 0) {
+        cerr << "ERROR: could not retrieve list of snapshots: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      for (list<RGWSnapshot>::iterator i = snaps.begin();
+           i != snaps.end();
+           ++i) {
+        struct tm bdt;
+        localtime_r(&(i->snap_created), &bdt);
+        cout << i->snap_num << "\t" << i->snap_name << "\t";
+
+        cout.setf(std::ios::right);
+        cout.fill('0');
+        cout << std::setw(4) << (bdt.tm_year+1900)
+             << '.' << std::setw(2) << (bdt.tm_mon+1)
+             << '.' << std::setw(2) << bdt.tm_mday
+             << ' '
+             << std::setw(2) << bdt.tm_hour
+             << ':' << std::setw(2) << bdt.tm_min
+             << ':' << std::setw(2) << bdt.tm_sec
+             << std::endl;
+        cout.unsetf(std::ios::right);
+      }
+      cout << snaps.size() << " snaps" << std::endl;
+    }
+
+    if (opt_cmd == OPT_RMSNAP) {
+      list<string> rgw_pools;
+      list<RGWSnapshot> snaps;
+      bool found_snap = false;
+
+      if (snap_name.empty()) {
+        cerr << "need to specify a snapshot to create!" << std::endl;
+        return usage();
+      }
+
+      int ret = RGWSnapshot::get_rgw_pools( g_ceph_context, store, rgw_pools);
+      if( ret < 0) {
+        cerr << "ERROR: could not retrieve list RGW pools: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      ret = RGWSnapshot::get_snapshots( g_ceph_context, store, rgw_pools, snaps);
+      if( ret < 0) {
+        cerr << "ERROR: could not retrieve list of snapshots: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      for (list<RGWSnapshot>::iterator i = snaps.begin();
+           i != snaps.end();
+           ++i) {
+        if( i->snap_name == snap_name) {
+          found_snap = true;
+          i->remove();
+          continue;
+        }
+      }
+
+      if( !found_snap) {
+        cerr << "ERROR: snapshot " << snap_name << " not found" << std::endl;
+        return ENOENT;
+      }
     }
     return 0;
   }
