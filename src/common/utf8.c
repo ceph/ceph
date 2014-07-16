@@ -35,7 +35,7 @@ static int high_bits_set(int c)
  * Assumes buf is of size MAX_UTF8_SZ
  * Returns -1 on failure; number of bytes in the encoded value otherwise.
  */
-static int encode_utf8(unsigned long u, unsigned char *buf)
+int encode_utf8(unsigned long u, unsigned char *buf)
 {
 	int i;
 	unsigned long max_val[MAX_UTF8_SZ] = {
@@ -74,7 +74,7 @@ static int encode_utf8(unsigned long u, unsigned char *buf)
  * Decode a UTF8 character from an array of bytes. Return character code.
  * Upon error, return INVALID_UTF8_CHAR.
  */
-static unsigned long decode_utf8(unsigned char *buf, int nbytes)
+unsigned long decode_utf8(unsigned char *buf, int nbytes)
 {
 	unsigned long code;
 	int i, j;
