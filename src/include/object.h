@@ -30,9 +30,6 @@ using namespace std;
 #include "ceph_hash.h"
 #include "cmp.h"
 
-/// Maximum supported object name length for Ceph, in bytes.
-#define MAX_CEPH_OBJECT_NAME_LEN 4096
-
 struct object_t {
   string name;
 
