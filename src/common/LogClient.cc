@@ -15,6 +15,7 @@
 
 
 #include "include/types.h"
+#include "include/str_map.h"
 
 #include "msg/Messenger.h"
 #include "msg/Message.h"
@@ -38,6 +39,30 @@
 #include "common/config.h"
 
 #define dout_subsys ceph_subsys_monc
+#undef dout_prefix
+#define dout_prefix _prefix(_dout, this)
+static ostream& _prefix(std::ostream *_dout, LogClient *logc) {
+  return *_dout << "log_client ";
+}
+
+static ostream& _prefix(std::ostream *_dout, LogChannel *lc) {
+  return *_dout << "log_channel(" << lc->get_log_channel() << ") ";
+}
+
+LogChannel::LogChannel(CephContext *cct, LogClient *lc, const string &channel)
+  : cct(cct), parent(lc), channel_lock("LogChannel::channel_lock"),
+    log_channel(channel), log_to_syslog(false), log_to_monitors(false)
+{
+}
+
+LogChannel::LogChannel(CephContext *cct, LogClient *lc,
+                       const string &channel, const string &facility,
+                       const string &prio)
+  : cct(cct), parent(lc), channel_lock("LogChannel::channel_lock"),
+    log_channel(channel), log_prio(prio), syslog_facility(facility),
+    log_to_syslog(false), log_to_monitors(false)
+{
+}
 
 LogClient::LogClient(CephContext *cct, Messenger *m, MonMap *mm,
 		     enum logclient_flag_t flags)
@@ -46,7 +71,7 @@ LogClient::LogClient(CephContext *cct, Messenger *m, MonMap *mm,
 {
 }
 
-LogClientTemp::LogClientTemp(clog_type type_, LogClient &parent_)
+LogClientTemp::LogClientTemp(clog_type type_, LogChannel &parent_)
   : type(type_), parent(parent_)
 {
 }
@@ -63,7 +88,7 @@ LogClientTemp::~LogClientTemp()
     parent.do_log(type, ss);
 }
 
-void LogClient::do_log(clog_type prio, std::stringstream& ss)
+void LogChannel::do_log(clog_type prio, std::stringstream& ss)
 {
   while (!ss.eof()) {
     string s;
@@ -73,35 +98,30 @@ void LogClient::do_log(clog_type prio, std::stringstream& ss)
   }
 }
 
-void LogClient::do_log(clog_type prio, const std::string& s)
+void LogChannel::do_log(clog_type prio, const std::string& s)
 {
-  Mutex::Locker l(log_lock);
+  Mutex::Locker l(channel_lock);
   int lvl = (prio == CLOG_ERROR ? -1 : 0);
   ldout(cct,lvl) << "log " << prio << " : " << s << dendl;
   LogEntry e;
-  e.who = messenger->get_myinst();
+  // who will be set when we queue the entry on LogClient
+  //e.who = messenger->get_myinst();
   e.stamp = ceph_clock_now(cct);
-  e.seq = ++last_log;
+  // seq will be set when we queue the entry on LogClient
+  // e.seq = ++last_log;
   e.prio = prio;
   e.msg = s;
+  e.channel = get_log_channel();
 
   // log to syslog?
-  if (cct->_conf->clog_to_syslog) {
-    e.log_to_syslog(cct->_conf->clog_to_syslog_level,
-		    cct->_conf->clog_to_syslog_facility);
+  if (do_log_to_syslog()) {
+    ldout(cct,0) << __func__ << " log to syslog"  << dendl;
+    e.log_to_syslog(get_log_prio(), get_syslog_facility());
   }
 
   // log to monitor?
-  if (cct->_conf->clog_to_monitors) {
-    log_queue.push_back(e);
-
-    // if we are a monitor, queue for ourselves, synchronously
-    if (is_mon) {
-      assert(messenger->get_myname().is_mon());
-      ldout(cct,10) << "send_log to self" << dendl;
-      Message *log = _get_mon_log_message();
-      messenger->get_loopback_connection()->send_message(log);
-    }
+  if (log_to_monitors) {
+    parent->queue(e);
   }
 }
 
@@ -167,6 +187,30 @@ Message *LogClient::_get_mon_log_message()
   log->entries.swap(o);
 
   return log;
+}
+
+void LogClient::_send_to_mon()
+{
+  assert(log_lock.is_locked());
+  assert(is_mon);
+  assert(messenger->get_myname().is_mon());
+  ldout(cct,10) << __func__ << "log to self" << dendl;
+  Message *log = _get_mon_log_message();
+  messenger->get_loopback_connection()->send_message(log);
+}
+
+version_t LogClient::queue(LogEntry &entry)
+{
+  Mutex::Locker l(log_lock);
+  entry.seq = ++last_log;
+  entry.who = messenger->get_myinst();
+  log_queue.push_back(entry);
+
+  if (is_mon) {
+    _send_to_mon();
+  }
+
+  return entry.seq;
 }
 
 bool LogClient::handle_log_ack(MLogAck *m)
