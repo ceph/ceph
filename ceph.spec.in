@@ -373,9 +373,6 @@ fi
 
 %postun
 /sbin/ldconfig
-if [ "$1" -ge "1" ] ; then
-    /sbin/service ceph condrestart >/dev/null 2>&1 || :
-fi
 %if %{defined suse_version}
 %restart_on_update ceph
 %insserv_cleanup
