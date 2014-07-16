@@ -133,7 +133,7 @@ int string_to_syslog_facility(string s)
 void LogEntry::log_to_syslog(string level, string facility)
 {
   int min = string_to_syslog_level(level);
-  int l = clog_type_to_syslog_level(type);
+  int l = clog_type_to_syslog_level(prio);
   if (l <= min) {
     int f = string_to_syslog_facility(facility);
     syslog(l | f, "%s", stringify(*this).c_str());
@@ -143,7 +143,7 @@ void LogEntry::log_to_syslog(string level, string facility)
 void LogEntry::encode(bufferlist& bl) const
 {
   ENCODE_START(2, 2, bl);
-  __u16 t = type;
+  __u16 t = prio;
   ::encode(who, bl);
   ::encode(stamp, bl);
   ::encode(seq, bl);
@@ -160,7 +160,7 @@ void LogEntry::decode(bufferlist::iterator& bl)
   ::decode(stamp, bl);
   ::decode(seq, bl);
   ::decode(t, bl);
-  type = (clog_type)t;
+  prio = (clog_type)t;
   ::decode(msg, bl);
   DECODE_FINISH(bl);
 }
@@ -170,7 +170,7 @@ void LogEntry::dump(Formatter *f) const
   f->dump_stream("who") << who;
   f->dump_stream("stamp") << stamp;
   f->dump_unsigned("seq", seq);
-  f->dump_stream("type") << type;
+  f->dump_stream("priority") << prio;
   f->dump_string("message", msg);
 }
 

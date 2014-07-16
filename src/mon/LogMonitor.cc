@@ -84,7 +84,7 @@ void LogMonitor::create_initial()
   LogEntry e;
   memset(&e.who, 0, sizeof(e.who));
   e.stamp = ceph_clock_now(g_ceph_context);
-  e.type = CLOG_INFO;
+  e.prio = CLOG_INFO;
   std::stringstream ss;
   ss << "mkfs " << mon->monmap->get_fsid();
   e.msg = ss.str();
@@ -137,7 +137,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
       }
       if (g_conf->mon_cluster_log_file.length()) {
 	int min = string_to_syslog_level(g_conf->mon_cluster_log_file_level);
-	int l = clog_type_to_syslog_level(le.type);
+	int l = clog_type_to_syslog_level(le.prio);
 	if (l <= min) {
 	  stringstream ss;
 	  ss << le << "\n";
@@ -378,7 +378,7 @@ bool LogMonitor::prepare_command(MMonCommand *m)
     le.who = m->get_orig_source_inst();
     le.stamp = m->get_recv_stamp();
     le.seq = 0;
-    le.type = CLOG_INFO;
+    le.prio = CLOG_INFO;
     le.msg = str_join(logtext, " ");
     pending_summary.add(le);
     pending_log.insert(pair<utime_t,LogEntry>(le.stamp, le));
@@ -483,7 +483,7 @@ bool LogMonitor::_create_sub_summary(MLog *mlog, int level)
   list<LogEntry>::reverse_iterator it = summary.tail.rbegin();
   for (; it != summary.tail.rend(); ++it) {
     LogEntry e = *it;
-    if (e.type < level)
+    if (e.prio < level)
       continue;
 
     mlog->entries.push_back(e);
@@ -512,7 +512,7 @@ void LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
 	     << " to first_committed " << get_first_committed() << dendl;
     LogEntry le;
     le.stamp = ceph_clock_now(NULL);
-    le.type = CLOG_WARN;
+    le.prio = CLOG_WARN;
     ostringstream ss;
     ss << "skipped log messages from " << sv << " to " << get_first_committed();
     le.msg = ss.str();
@@ -533,9 +533,9 @@ void LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
       LogEntry le;
       le.decode(p);
 
-      if (le.type < level) {
+      if (le.prio < level) {
 	dout(20) << __func__ << " requested " << level 
-		 << " entry " << le.type << dendl;
+		 << " entry " << le.prio << dendl;
 	continue;
       }
 
