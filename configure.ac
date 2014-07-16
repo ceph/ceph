@@ -548,8 +548,8 @@ AS_IF([test "x$with_librocksdb_static" = "xyes"],
             [AC_CONFIG_SUBDIRS([src/rocksdb])])
 AS_IF([test "x$with_librocksdb_static" = "xyes"],
             [AC_DEFINE([HAVE_LIBROCKSDB], [1], [Defined if you have librocksdb enabled])])
-AM_CONDITIONAL(WITH_SLIBROCKSDB, [ test "$with_librocksdb_static" = "yes" ])
-AM_CONDITIONAL(WITH_LIBROCKSDB, [ test "$with_librocksdb_static" = "yes" -o "$with_librocksdb" = "yes" ])
+AM_CONDITIONAL(WITH_SLIBROCKSDB, [ test "x$with_librocksdb_static" = "xyes" ])
+AM_CONDITIONAL(WITH_LIBROCKSDB, [ test "x$with_librocksdb_static" = "xyes" -o "x$with_librocksdb" = "xyes" ])
 
 # use system libs3?
 AC_ARG_WITH([system-libs3],
