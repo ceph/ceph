@@ -179,7 +179,7 @@ Requires:       logrotate
 %if 0%{defined suse_version}
 BuildRequires:  FastCGI-devel
 BuildRequires:  libexpat-devel
-Requires:       apache2-mod_fcgid
+Requires:       apache2-mod_fastcgi
 %else
 BuildRequires:  expat-devel
 BuildRequires:  fcgi-devel
