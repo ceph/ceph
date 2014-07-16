@@ -343,7 +343,7 @@ class ObjectCacher {
 
   ceph_tid_t last_read_tid;
 
-  set<BufferHead*>    dirty_bh;
+  set<BufferHead*>    dirty_or_tx_bh;
   LRU   bh_lru_dirty, bh_lru_rest;
   LRU   ob_lru;
 
