@@ -63,26 +63,26 @@ LogClientTemp::~LogClientTemp()
     parent.do_log(type, ss);
 }
 
-void LogClient::do_log(clog_type type, std::stringstream& ss)
+void LogClient::do_log(clog_type prio, std::stringstream& ss)
 {
   while (!ss.eof()) {
     string s;
     getline(ss, s);
     if (!s.empty())
-      do_log(type, s);
+      do_log(prio, s);
   }
 }
 
-void LogClient::do_log(clog_type type, const std::string& s)
+void LogClient::do_log(clog_type prio, const std::string& s)
 {
   Mutex::Locker l(log_lock);
-  int lvl = (type == CLOG_ERROR ? -1 : 0);
-  ldout(cct,lvl) << "log " << type << " : " << s << dendl;
+  int lvl = (prio == CLOG_ERROR ? -1 : 0);
+  ldout(cct,lvl) << "log " << prio << " : " << s << dendl;
   LogEntry e;
   e.who = messenger->get_myinst();
   e.stamp = ceph_clock_now(cct);
   e.seq = ++last_log;
-  e.type = type;
+  e.prio = prio;
   e.msg = s;
 
   // log to syslog?
