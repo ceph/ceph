@@ -64,11 +64,17 @@ do_map() {
 		log_action_end_msg ${RET_OP} "${MAP_RV}"
 
 		if [ "$newrbd" ]; then
-                        ## Mount new rbd
+			## Mount new rbd
 			MNT_RV=""
 			mount --fake /dev/rbd/$DEV >>/dev/null 2>&1 \
 			&& MNT_RV=$(mount -v /dev/rbd/$DEV 2>&1)
 			[ -n "${MNT_RV}" ] && log_action_msg "mount: ${MNT_RV}"
+
+			## post-mapping
+			if [ -x "/etc/ceph/rbd.d/${DEV}" ]; then
+			    log_action_msg "RBD Running post-map hook '/etc/ceph/rbd.d/${DEV}'"
+			    /etc/ceph/rbd.d/${DEV} map "/dev/rbd/${DEV}"
+			fi
 		fi
 	done < $RBDMAPFILE
 	exit ${RET}
@@ -80,6 +86,17 @@ do_unmap() {
 	## Unmount and unmap all rbd devices
 	if ls /dev/rbd[0-9]* >/dev/null 2>&1; then
 		for DEV in /dev/rbd[0-9]*; do
+			## pre-unmapping
+			for L in $(find /dev/rbd -type l); do
+			    LL="${L##/dev/rbd/}"
+			    if [ "$(readlink -f $L)" = "${DEV}" ] \
+			    && [ -x "/etc/ceph/rbd.d/${LL}" ]; then
+			        log_action_msg "RBD pre-unmap:  '${DEV}' hook '/etc/ceph/rbd.d/${LL}'"
+			        /etc/ceph/rbd.d/${LL} unmap "$L"
+			        break
+			    fi
+			done
+
 			log_action_begin_msg "RBD un-mapping: '${DEV}'"
 			UMNT_RV=""
 			UMAP_RV=""
