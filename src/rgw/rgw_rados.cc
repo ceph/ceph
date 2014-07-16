@@ -1098,6 +1098,9 @@ struct put_obj_aio_info RGWPutObjProcessor_Aio::pop_pending()
 
 int RGWPutObjProcessor_Aio::wait_pending_front()
 {
+  if (pending.empty()) {
+    return 0;
+  }
   struct put_obj_aio_info info = pop_pending();
   int ret = store->aio_wait(info.handle);
   return ret;
@@ -1131,8 +1134,9 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle, bool need_to_wait)
     pending.push_back(info);
   }
   size_t orig_size = pending.size();
-  while (pending_has_completed()
-         || need_to_wait) {
+
+  /* first drain complete IOs */
+  while (pending_has_completed()) {
     int r = wait_pending_front();
     if (r < 0)
       return r;
@@ -1145,10 +1149,14 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle, bool need_to_wait)
     max_chunks++;
   }
 
-  if (pending.size() > max_chunks) {
+  /* now throttle. Note that need_to_wait should only affect the first IO operation */
+  if (pending.size() > max_chunks ||
+      need_to_wait) {
     int r = wait_pending_front();
     if (r < 0)
       return r;
+
+    need_to_wait = false;
   }
   return 0;
 }
