@@ -59,7 +59,7 @@ public:
   LogClient(CephContext *cct, Messenger *m, MonMap *mm,
 	    enum logclient_flag_t flags);
 
-  void handle_log_ack(MLogAck *m);
+  bool handle_log_ack(MLogAck *m);
 
   LogClientTemp debug() {
     return LogClientTemp(CLOG_DEBUG, *this);
