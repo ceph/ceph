@@ -187,6 +187,7 @@ class RGWListBucket : public RGWOp {
 protected:
   string prefix;
   string marker; 
+  string next_marker; 
   string max_keys;
   string delimiter;
   int max;
