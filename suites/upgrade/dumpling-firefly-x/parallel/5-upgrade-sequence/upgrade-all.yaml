@@ -2,11 +2,12 @@ upgrade-sequence:
    sequential:
    - install.upgrade:
        mon.a:
-         branch: firefly
+# upgrade step will be set to 'next' or 'master' from teuthology-suite comman line
+#         branch: firefly
        mon.b:
          branch: firefly
        client.0:
-         branch: firefly
+#         branch: firefly
    - ceph.restart:
        daemons: [mon.a, mon.b, mon.c]
        wait-for-healthy: true
