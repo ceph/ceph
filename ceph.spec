@@ -43,7 +43,7 @@
 # common
 #################################################################################
 Name:           ceph
-Version:        0.80.2
+Version:        0.80.3
 Release:        0%{?dist}
 Summary:        A Scalable Distributed File System
 License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception

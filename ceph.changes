@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Thu Jul 17 20:52:24 UTC 2014 - tbehrens@suse.com
+
+- Update to 0.80.3:
+  + rgw: fix RGWObjManifestRule decoder
+
+-------------------------------------------------------------------
 Thu Jul 17 20:45:47 UTC 2014 - tbehrens@suse.com
 
 - Update to 0.80.2 (note: tarballs got pulled upstream)
