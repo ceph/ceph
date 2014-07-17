@@ -193,7 +193,7 @@ int main(int argc, const char **argv)
 
   CrushWrapper crush;
 
-  CrushTester tester(crush, cerr);
+  CrushTester tester(crush, cout);
 
   // we use -c, don't confuse the generic arg parsing
   // only parse arguments from CEPH_ARGS, if in the environment
@@ -427,13 +427,13 @@ int main(int argc, const char **argv)
   }
 
   if (decompile + compile + build > 1) {
-    cout << "cannot specify more than one of compile, decompile, and build" << std::endl;
+    cerr << "cannot specify more than one of compile, decompile, and build" << std::endl;
     exit(EXIT_FAILURE);
   }
   if (!compile && !decompile && !build && !test && !reweight && !adjust &&
       add_item < 0 &&
       remove_name.empty() && reweight_name.empty()) {
-    cout << "no action specified; -h for help" << std::endl;
+    cerr << "no action specified; -h for help" << std::endl;
     exit(EXIT_FAILURE);
   }
   if ((!build) && (!args.empty())) {
