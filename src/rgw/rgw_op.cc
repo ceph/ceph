@@ -706,7 +706,7 @@ static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t 
 
   do {
 #define MAX_LIST_OBJS 100
-    int r = store->list_objects(bucket, MAX_LIST_OBJS, obj_prefix, delim, marker,
+    int r = store->list_objects(bucket, MAX_LIST_OBJS, obj_prefix, delim, marker, NULL,
                                 objs, common_prefixes,
                                 true, no_ns, true, &is_truncated, NULL);
     if (r < 0)
@@ -1104,7 +1104,9 @@ void RGWListBucket::execute()
   if (ret < 0)
     return;
 
-  ret = store->list_objects(s->bucket, max, prefix, delimiter, marker, objs, common_prefixes,
+  string *pnext_marker = (delimiter.empty() ? NULL : &next_marker);
+
+  ret = store->list_objects(s->bucket, max, prefix, delimiter, marker, pnext_marker, objs, common_prefixes,
                                !!(s->prot_flags & RGW_REST_SWIFT), no_ns, true, &is_truncated, NULL);
 }
 
@@ -2993,7 +2995,7 @@ void RGWListBucketMultiparts::execute()
     }
   }
   marker_meta = marker.get_meta();
-  ret = store->list_objects(s->bucket, max_uploads, prefix, delimiter, marker_meta, objs, common_prefixes,
+  ret = store->list_objects(s->bucket, max_uploads, prefix, delimiter, marker_meta, NULL, objs, common_prefixes,
                                !!(s->prot_flags & RGW_REST_SWIFT), mp_ns, true, &is_truncated, &mp_filter);
   if (!objs.empty()) {
     vector<RGWObjEnt>::iterator iter;
