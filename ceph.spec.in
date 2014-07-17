@@ -352,7 +352,7 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/radosgw
 # Fedora seems to have some problems with this macro, use it only on SUSE
 %fdupes -s $RPM_BUILD_ROOT/%{python_sitelib}
 %fdupes %buildroot
-%endif 
+%endif
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -374,7 +374,6 @@ fi
 %postun
 /sbin/ldconfig
 %if %{defined suse_version}
-%restart_on_update ceph
 %insserv_cleanup
 %endif
 # Package removal cleanup
@@ -611,7 +610,7 @@ fi
 
 %post -n librbd1
 /sbin/ldconfig
-mkdir -p /usr/lib64/qemu/ 
+mkdir -p /usr/lib64/qemu/
 ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 
 %postun -n librbd1
