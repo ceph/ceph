@@ -16,6 +16,8 @@
 #include <boost/foreach.hpp>
 #include <boost/thread/thread.hpp>
 #include <fstream>
+#include "global/global_context.h"
+#include "rbd_replay_debug.hpp"
 
 
 using namespace std;
@@ -51,7 +53,7 @@ void Worker::add_pending(PendingIO::ptr io) {
 }
 
 void Worker::run() {
-  cout << "Worker thread started" << endl;
+  dout(THREAD_LEVEL) << "Worker thread started" << dendl;
   while (!m_done) {
     Action::ptr action;
     m_buffer.pop_back(&action);
@@ -65,7 +67,7 @@ void Worker::run() {
       m_pending_ios_empty.wait(lock);
     }
   }
-  cout << "Worker thread stopped" << endl;
+  dout(THREAD_LEVEL) << "Worker thread stopped" << dendl;
 }
 
 
@@ -117,19 +119,18 @@ void Worker::set_action_complete(action_id_t id) {
 Replayer::Replayer() {
 }
 
-void Replayer::run(const std::string conf_file, const std::string replay_file) {
-  cout << "IO thread started" << endl;
+void Replayer::run(const std::string replay_file) {
   {
     librados::Rados rados;
     rados.init(NULL);
-    int r = rados.conf_read_file(conf_file.c_str());
+    int r = rados.init_with_context(g_ceph_context);
     if (r) {
-      cerr << "Unable to read conf file: " << r << endl;
+      cerr << "Unable to read conf file: " << r << std::endl;
       goto out;
     }
     r = rados.connect();
     if (r) {
-      cerr << "Unable to connect to Rados: " << r << endl;
+      cerr << "Unable to connect to Rados: " << r << std::endl;
       goto out;
     }
     m_ioctx = new librados::IoCtx();
@@ -137,7 +138,7 @@ void Replayer::run(const std::string conf_file, const std::string replay_file) {
       const char* pool_name = "rbd";
       r = rados.ioctx_create(pool_name, *m_ioctx);
       if (r) {
-	cerr << "Unable to create IoCtx: " << r << endl;
+	cerr << "Unable to create IoCtx: " << r << std::endl;
 	goto out2;
       }
       m_rbd = new librbd::RBD();
@@ -145,7 +146,7 @@ void Replayer::run(const std::string conf_file, const std::string replay_file) {
 
       ifstream input(replay_file.c_str(), ios::in | ios::binary);
       if (!input.is_open()) {
-	cerr << "Unable to open " << replay_file << endl;
+	cerr << "Unable to open " << replay_file << std::endl;
 	exit(1);
       }
 
@@ -164,7 +165,7 @@ void Replayer::run(const std::string conf_file, const std::string replay_file) {
 	}
       }
 
-      cout << "Waiting for workers to die" << endl;
+      dout(THREAD_LEVEL) << "Waiting for workers to die" << dendl;
       pair<thread_id_t, Worker*> w;
       BOOST_FOREACH(w, workers) {
 	w.second->join();
@@ -179,7 +180,7 @@ void Replayer::run(const std::string conf_file, const std::string replay_file) {
     m_ioctx = NULL;
   }
  out:
-  cout << "IO thread stopped" << endl;
+  ;
 }
 
 
@@ -201,7 +202,7 @@ void Replayer::erase_image(imagectx_id_t imagectx_id) {
 }
 
 void Replayer::set_action_complete(action_id_t id) {
-  cout << "ActionTracker::set_complete(" << id << ")" << endl;
+  dout(DEPGRAPH_LEVEL) << "ActionTracker::set_complete(" << id << ")" << dendl;
   boost::system_time now(boost::get_system_time());
   boost::unique_lock<boost::shared_mutex> lock(m_actions_complete_mutex);
   assert(m_actions_complete.count(id) == 0);
@@ -217,19 +218,19 @@ bool Replayer::is_action_complete(action_id_t id) {
 void Replayer::wait_for_actions(const vector<dependency_d> &deps) {
   boost::posix_time::ptime release_time(boost::posix_time::neg_infin);
   BOOST_FOREACH(const dependency_d &dep, deps) {
-    cout << "Waiting for " << dep.id << endl;
+    dout(DEPGRAPH_LEVEL) << "Waiting for " << dep.id << dendl;
     boost::system_time start_time(boost::get_system_time());
     boost::shared_lock<boost::shared_mutex> lock(m_actions_complete_mutex);
     while (!_is_action_complete(dep.id)) {
       //m_actions_complete_condition.wait(lock);
       m_actions_complete_condition.timed_wait(lock, boost::posix_time::seconds(1));
-      cout << "Still waiting for " << dep.id << endl;
+      dout(DEPGRAPH_LEVEL) << "Still waiting for " << dep.id << dendl;
     }
     boost::system_time action_completed_time(m_actions_complete[dep.id]);
     lock.unlock();
     boost::system_time end_time(boost::get_system_time());
     long long micros = (end_time - start_time).total_microseconds();
-    cout << "Finished waiting for " << dep.id << " after " << micros << " microseconds" << endl;
+    dout(DEPGRAPH_LEVEL) << "Finished waiting for " << dep.id << " after " << micros << " microseconds" << dendl;
     // Apparently the nanoseconds constructor is optional:
     // http://www.boost.org/doc/libs/1_46_0/doc/html/date_time/details.html#compile_options
     boost::system_time sub_release_time(action_completed_time + boost::posix_time::microseconds(dep.time_delta * m_latency_multiplier / 1000));
@@ -238,7 +239,7 @@ void Replayer::wait_for_actions(const vector<dependency_d> &deps) {
     }
   }
   if (release_time > boost::get_system_time()) {
-    cout << "Sleeping for " << (release_time - boost::get_system_time()).total_microseconds() << " microseconds" << endl;
+    dout(SLEEP_LEVEL) << "Sleeping for " << (release_time - boost::get_system_time()).total_microseconds() << " microseconds" << dendl;
     boost::this_thread::sleep(release_time);
   }
 }

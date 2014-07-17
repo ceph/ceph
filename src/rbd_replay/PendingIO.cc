@@ -13,6 +13,7 @@
  */
 
 #include "PendingIO.hpp"
+#include "rbd_replay_debug.hpp"
 
 
 using namespace std;
@@ -32,6 +33,6 @@ PendingIO::PendingIO(action_id_t id,
     }
 
 void PendingIO::completed(librbd::completion_t cb) {
-  cout << "Completed pending IO #" << m_id << endl;
+  dout(ACTION_LEVEL) << "Completed pending IO #" << m_id << dendl;
   m_worker.remove_pending(shared_from_this());
 }

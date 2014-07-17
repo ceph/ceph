@@ -8,6 +8,7 @@ noinst_HEADERS += rbd_replay/BoundedBuffer.hpp \
 	rbd_replay/actions.hpp \
 	rbd_replay/Deser.hpp \
 	rbd_replay/PendingIO.hpp \
+	rbd_replay/rbd_replay_debug.hpp \
 	rbd_replay/Replayer.hpp
 if LINUX
 bin_PROGRAMS += rbd-replay
