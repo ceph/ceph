@@ -3097,7 +3097,7 @@ void Objecter::ms_handle_reset(Connection *con)
     int osd = osdmap->identify_osd(con->get_peer_addr());
     if (osd >= 0) {
       ldout(cct, 1) << "ms_handle_reset on osd." << osd << dendl;
-      rwlock.get_read();
+      rwlock.get_write();
       map<int,OSDSession*>::iterator p = osd_sessions.find(osd);
       if (p != osd_sessions.end()) {
 	OSDSession *session = p->second;
