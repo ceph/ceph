@@ -1,4 +1,11 @@
 -------------------------------------------------------------------
+Thu Jul 17 10:20:47 UTC 2014 - tbehrens@suse.com
+
+- Add ceph-disk.patch
+  re-adding lost sle11 fix for ceph-disk, that got lost during
+  git-ification. Fixes bnc#887684. 
+
+-------------------------------------------------------------------
 Wed Jul 16 14:17:26 UTC 2014 - tbehrens@suse.com
 
 - Fix bnc#885304: Fixup radosgw daemon init some more. In contrast

@@ -90,6 +90,8 @@ BuildRequires:  xfsprogs-devel
 BuildRequires:  xz
 %if 0%{?suse_version} >= 1310
 BuildRequires:  systemd
+%else
+Patch9999:      ceph-disk.patch
 %endif
 # This patch queue is auto-generated from https://github.com/SUSE/ceph
 PATCH_FILES
@@ -316,6 +318,9 @@ This package contains Ceph benchmarks and test tools.
 #################################################################################
 %prep
 %setup -q
+%if 0%{?suse_version} < 1310
+%patch9999 -p1
+%endif
 PATCH_EXEC
 
 %build

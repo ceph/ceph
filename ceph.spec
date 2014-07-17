@@ -90,6 +90,8 @@ BuildRequires:  xfsprogs-devel
 BuildRequires:  xz
 %if 0%{?suse_version} >= 1310
 BuildRequires:  systemd
+%else
+Patch9999:      ceph-disk.patch
 %endif
 # This patch queue is auto-generated from https://github.com/SUSE/ceph
 Patch0001:      0001-Rcfiles-remove-from-runlevel-2.patch
@@ -323,6 +325,9 @@ This package contains Ceph benchmarks and test tools.
 #################################################################################
 %prep
 %setup -q
+%if 0%{?suse_version} < 1310
+%patch9999 -p1
+%endif
 %patch0001 -p1
 %patch0002 -p1
 %patch0003 -p1
