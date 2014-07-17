@@ -5,9 +5,11 @@ upgrade-sequence:
    - print: "**** done install.upgrade mon.a to the version from teuthology-suite arg"
 # upgrade step will be set to 'next' or 'master' from teuthology-suite comman line
 #         branch: firefly
+   - install.upgrade:
        mon.b:
    - print: "**** done install.upgrade mon.b to the version from teuthology-suite arg"
 #         branch: firefly
+   - install.upgrade:
        client.0:
    - print: "**** done install.upgrade client.0 to the version from teuthology-suite arg"
 #         branch: firefly
