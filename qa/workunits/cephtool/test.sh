@@ -667,7 +667,7 @@ function test_mon_pg()
 
 function test_mon_osd_pool_set()
 {
-  for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset erasure_code_profile; do
+  for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset; do
     ceph osd pool get data $s
   done
 
@@ -682,6 +682,7 @@ function test_mon_osd_pool_set()
   ceph osd pool set pool_erasure size 4444 2>$TMPFILE
   check_response 'not change the size'
   set -e
+  ceph osd pool get pool_erasure erasure_code_profile
 
   auid=5555
   ceph osd pool set data auid $auid
