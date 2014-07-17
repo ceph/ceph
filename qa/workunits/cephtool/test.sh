@@ -667,8 +667,7 @@ function test_mon_pg()
 
 function test_mon_osd_pool_set()
 {
-
-  for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset; do
+  for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset erasure_code_profile; do
     ceph osd pool get data $s
   done
 
