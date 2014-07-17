@@ -6,4 +6,4 @@ workload:
          client.0:
 #         - rados/test.sh
          - cls
-         - print: "**** done cls"
+   - print: "**** done cls"
