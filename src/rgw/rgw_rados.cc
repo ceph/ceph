@@ -2092,7 +2092,7 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
                            bool *is_truncated, RGWAccessListFilter *filter)
 {
   int count = 0;
-  bool truncated;
+  bool truncated = true;
 
   if (bucket_is_system(bucket)) {
     return -EINVAL;
@@ -2125,7 +2125,16 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
 
   string skip_after_delim;
 
-  do {
+  /* if marker points at a common prefix, fast forward it into its upperbound string */
+  if (!delim.empty()) {
+    int delim_pos = cur_marker.find(delim, prefix.size());
+    if (delim_pos >= 0) {
+      cur_marker = cur_marker.substr(0, delim_pos);
+      cur_marker.append(bigger_than_delim);
+    }
+  }
+
+  while (truncated && count < max) {
     if (skip_after_delim > cur_marker) {
       cur_marker = skip_after_delim;
       ldout(cct, 20) << "setting cur_marker=" << cur_marker << dendl;
@@ -2168,12 +2177,21 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
         int delim_pos = obj.find(delim, prefix.size());
 
         if (delim_pos >= 0) {
-          common_prefixes[obj.substr(0, delim_pos + 1)] = true;
+          string prefix_key = obj.substr(0, delim_pos + 1);
 
-          skip_after_delim = obj.substr(0, delim_pos);
-          skip_after_delim.append(bigger_than_delim);
+          if (common_prefixes.find(prefix_key) == common_prefixes.end()) {
+            if (next_marker) {
+              *next_marker = prefix_key;
+            }
+            common_prefixes[prefix_key] = true;
 
-          ldout(cct, 20) << "skip_after_delim=" << skip_after_delim << dendl;
+            skip_after_delim = obj.substr(0, delim_pos);
+            skip_after_delim.append(bigger_than_delim);
+
+            ldout(cct, 20) << "skip_after_delim=" << skip_after_delim << dendl;
+
+            count++;
+          }
 
           continue;
         }
@@ -2185,7 +2203,7 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
       result.push_back(ent);
       count++;
     }
-  } while (truncated && count < max);
+  }
 
 done:
   if (is_truncated)
