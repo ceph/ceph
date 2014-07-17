@@ -7,4 +7,4 @@ workload2:
         - rados/test.sh
         - print: "**** done rados/test.sh 2"
         - cls
-	- print: "**** done cls 2"
+        - print: "**** done cls 2"
