@@ -7,6 +7,7 @@ libmds_la_SOURCES = \
 	mds/Server.cc \
 	mds/Mutation.cc \
 	mds/MDCache.cc \
+	mds/RecoveryQueue.cc \
 	mds/Locker.cc \
 	mds/Migrator.cc \
 	mds/MDBalancer.cc \
@@ -45,6 +46,7 @@ noinst_HEADERS += \
 	mds/LogSegment.h \
 	mds/MDBalancer.h \
 	mds/MDCache.h \
+	mds/RecoveryQueue.h \
 	mds/MDLog.h \
 	mds/MDS.h \
 	mds/MDSMap.h \
