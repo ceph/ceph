@@ -80,7 +80,11 @@ def task(ctx, config):
     write_conf(ctx)
 
     # Restart the MDS.
-    fs.mds_restart()
+    fs.mds_fail_restart()
+    fs.wait_for_daemons()
+
+    # This ensures that all daemons come up into a valid state
+    fs.wait_for_daemons()
 
     # Check that files created in the initial client workload are still visible
     # in a client mount.
@@ -93,8 +97,6 @@ def task(ctx, config):
         raise RuntimeError("Journal was not upgraded, version should be {0} but is {1}".format(
             new_journal_version, journal_version()
         ))
-
-    # Check that all MDS daemons are still up and running an in expected state
 
     # Leave all MDSs and clients running for any child tasks
     for mount in ctx.mounts.values():
