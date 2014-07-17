@@ -70,6 +70,8 @@ typedef __u8 stream_format_t;
 #define JOURNAL_FORMAT_RESILIENT 1
 #define JOURNAL_ENVELOPE_RESILIENT (sizeof(uint32_t) + sizeof(uint64_t) + sizeof(uint64_t))
 
+// Most recent format which we may try to read
+#define JOURNAL_FORMAT_MAX 1
 
 /**
  * Represents a collection of entries serialized in a byte stream.
