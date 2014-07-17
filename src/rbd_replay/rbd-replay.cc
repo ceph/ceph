@@ -14,7 +14,9 @@
 
 #include <vector>
 #include "common/ceph_argparse.h"
+#include "global/global_init.h"
 #include "Replayer.hpp"
+#include "rbd_replay_debug.hpp"
 
 
 using namespace std;
@@ -31,7 +33,7 @@ static const char* get_remainder(const char *string, const char *prefix) {
 }
 
 static void usage(const char* program) {
-  cout << "Usage: " << program << " --conf=<config_file> <replay_file>" << endl;
+  cout << "Usage: " << program << " --conf=<config_file> <replay_file>" << std::endl;
 }
 
 int main(int argc, const char **argv) {
@@ -39,17 +41,15 @@ int main(int argc, const char **argv) {
 
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
 
   std::vector<const char*>::iterator i;
-  string conf;
   float latency_multiplier = 1;
   std::string val;
   std::ostringstream err;
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    } else if (ceph_argparse_witharg(args, i, &val, "-c", "--conf", (char*)NULL)) {
-      conf = val;
     } else if (ceph_argparse_withfloat(args, i, &latency_multiplier, &err, "--latency-multiplier",
 				     (char*)NULL)) {
       if (!err.str().empty()) {
@@ -60,17 +60,14 @@ int main(int argc, const char **argv) {
       usage(argv[0]);
       return 0;
     } else if (get_remainder(*i, "-")) {
-      cerr << "Unrecognized argument: " << *i << endl;
+      cerr << "Unrecognized argument: " << *i << std::endl;
       return 1;
     } else {
       ++i;
     }
   }
 
-  if (conf.empty()) {
-    cerr << "No config file specified.  Use -c or --conf." << endl;
-    return 1;
-  }
+  common_init_finish(g_ceph_context);
 
   string replay_file;
   if (!args.empty()) {
@@ -78,11 +75,11 @@ int main(int argc, const char **argv) {
   }
 
   if (replay_file.empty()) {
-    cerr << "No replay file specified." << endl;
+    cerr << "No replay file specified." << std::endl;
     return 1;
   }
 
   Replayer replayer;
   replayer.set_latency_multiplier(latency_multiplier);
-  replayer.run(conf, replay_file);
+  replayer.run(replay_file);
 }
