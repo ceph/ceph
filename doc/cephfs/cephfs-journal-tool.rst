@@ -54,7 +54,7 @@ Example: journal inspect
 
 ::
 
-    # cephfs-journal-tool inspect
+    # cephfs-journal-tool journal inspect
     Overall journal integrity: DAMAGED
     Objects missing:
       0x1
