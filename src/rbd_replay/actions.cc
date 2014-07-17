@@ -15,6 +15,7 @@
 #include "actions.hpp"
 #include <cstdlib>
 #include "PendingIO.hpp"
+#include "rbd_replay_debug.hpp"
 
 
 using namespace rbd_replay;
@@ -71,7 +72,7 @@ Action::ptr Action::read_from(Deser &d) {
   case 7:
     return CloseImageAction::read_from(dummy, d);
   default:
-    cerr << "Invalid action type: " << type << endl;
+    cerr << "Invalid action type: " << type << std::endl;
     exit(1);
   }
 }
@@ -82,7 +83,7 @@ StartThreadAction::StartThreadAction(Action &src)
 }
 
 void StartThreadAction::perform(ActionCtx &ctx) {
-  cerr << "StartThreadAction should never actually be performed" << endl;
+  cerr << "StartThreadAction should never actually be performed" << std::endl;
   exit(1);
 }
 
@@ -100,7 +101,7 @@ StopThreadAction::StopThreadAction(Action &src)
 }
 
 void StopThreadAction::perform(ActionCtx &ctx) {
-  cout << "Performing stop thread action #" << id() << endl;
+  dout(ACTION_LEVEL) << "Performing stop thread action #" << id() << dendl;
   ctx.stop();
 }
 
@@ -126,7 +127,7 @@ Action::ptr AioReadAction::read_from(Action &src, Deser &d) {
 }
 
 void AioReadAction::perform(ActionCtx &worker) {
-  cout << "Performing AIO read action #" << id() << endl;
+  dout(ACTION_LEVEL) << "Performing AIO read action #" << id() << dendl;
   librbd::Image *image = worker.get_image(m_imagectx_id);
   assert(image);
   PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
@@ -153,7 +154,7 @@ Action::ptr ReadAction::read_from(Action &src, Deser &d) {
 }
 
 void ReadAction::perform(ActionCtx &worker) {
-  cout << "Performing read action #" << id() << endl;
+  dout(ACTION_LEVEL) << "Performing read action #" << id() << dendl;
   librbd::Image *image = worker.get_image(m_imagectx_id);
   PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
   worker.add_pending(io);
@@ -180,7 +181,7 @@ Action::ptr AioWriteAction::read_from(Action &src, Deser &d) {
 }
 
 void AioWriteAction::perform(ActionCtx &worker) {
-  cout << "Performing AIO write action #" << id() << endl;
+  dout(ACTION_LEVEL) << "Performing AIO write action #" << id() << dendl;
   librbd::Image *image = worker.get_image(m_imagectx_id);
   PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
   io->bufferlist().append_zero(m_length);
@@ -207,7 +208,7 @@ Action::ptr WriteAction::read_from(Action &src, Deser &d) {
 }
 
 void WriteAction::perform(ActionCtx &worker) {
-  cout << "Performing write action #" << id() << endl;
+  dout(ACTION_LEVEL) << "Performing write action #" << id() << dendl;
   librbd::Image *image = worker.get_image(m_imagectx_id);
   PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
   worker.add_pending(io);
@@ -238,7 +239,7 @@ Action::ptr OpenImageAction::read_from(Action &src, Deser &d) {
 }
 
 void OpenImageAction::perform(ActionCtx &worker) {
-  cout << "Performing open image action #" << id() << endl;
+  dout(ACTION_LEVEL) << "Performing open image action #" << id() << dendl;
   PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
   worker.add_pending(io);
   librbd::Image *image = new librbd::Image();
@@ -250,7 +251,7 @@ void OpenImageAction::perform(ActionCtx &worker) {
     r = rbd->open(*worker.ioctx(), *image, m_name.c_str(), m_snap_name.c_str());
   }
   if (r) {
-    cerr << "Unable to open image '" << m_name << "' with snap '" << m_snap_name << "' and readonly " << m_readonly << ": " << strerror(-r) << endl;
+    cerr << "Unable to open image '" << m_name << "' with snap '" << m_snap_name << "' and readonly " << m_readonly << ": " << strerror(-r) << std::endl;
     exit(1);
   }
   worker.put_image(m_imagectx_id, image);
@@ -270,7 +271,7 @@ Action::ptr CloseImageAction::read_from(Action &src, Deser &d) {
 }
 
 void CloseImageAction::perform(ActionCtx &worker) {
-  cout << "Performing close image action #" << id() << endl;
+  dout(ACTION_LEVEL) << "Performing close image action #" << id() << dendl;
   worker.erase_image(m_imagectx_id);
   worker.set_action_complete(pending_io_id());
 }
