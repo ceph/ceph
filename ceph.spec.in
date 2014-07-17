@@ -15,6 +15,7 @@
 # Please submit bugfixes or comments via http://bugs.opensuse.org/
 #
 
+
 %if 0%{defined rhel_version}
 %bcond_with gtk2
 %else
@@ -52,6 +53,7 @@ Source0:        http://ceph.com/download/%{name}-%{version}.tar.bz2
 Source1:        README.SUSE.v0.2
 Source2:        mkinitrd-root.on.rbd.tar.xz
 Source3:        ceph-tmpfiles.d.conf
+Source99:       update_git.sh
 # filter spurious setgid warning - mongoose/civetweb is not trying to relinquish suid
 Source4:        ceph-rpmlintrc
 Requires:       cryptsetup
@@ -74,7 +76,9 @@ BuildRequires:  boost-devel > 1.48
 %endif
 BuildRequires:  gcc-c++
 BuildRequires:  gdbm
+BuildRequires:  leveldb-devel
 BuildRequires:  libaio-devel
+BuildRequires:  libblkid-devel
 BuildRequires:  libcurl-devel
 BuildRequires:  libedit-devel
 BuildRequires:  libtool
@@ -83,9 +87,7 @@ BuildRequires:  libxml2-devel
 BuildRequires:  perl
 BuildRequires:  pkgconfig
 BuildRequires:  python
-BuildRequires:  libblkid-devel
 BuildRequires:  snappy-devel
-BuildRequires:  leveldb-devel
 BuildRequires:  xfsprogs-devel
 BuildRequires:  xz
 %if 0%{?suse_version} >= 1310
@@ -164,9 +166,9 @@ Summary:        Ceph headers
 License:        GPL-2.0 and LGPL-2.1
 Group:          Development/Libraries/C and C++
 Requires:       %{name} = %{version}-%{release}
+Requires:       libcephfs1 = %{version}
 Requires:       librados2 = %{version}
 Requires:       librbd1 = %{version}
-Requires:       libcephfs1 = %{version}
 
 %description devel
 This package contains libraries and headers needed to develop programs
@@ -430,7 +432,6 @@ rm -f $RPM_BUILD_ROOT/usr/share/ceph/id_dsa_drop.ceph.com
 rm -f $RPM_BUILD_ROOT/usr/share/ceph/id_dsa_drop.ceph.com.pub
 rm -f $RPM_BUILD_ROOT/usr/share/ceph/known_hosts_drop.ceph.com
 
-
 %clean
 rm -rf $RPM_BUILD_ROOT
 
@@ -582,9 +583,6 @@ fi
 %defattr(-,root,root,-)
 %endif
 
-
-
-
 #################################################################################
 %files devel
 %defattr(-,root,root,-)
@@ -635,7 +633,6 @@ fi
 %restart_on_update ceph-radosgw
 %insserv_cleanup
 %endif
-
 
 #################################################################################
 %if 0%{?suse_version}
