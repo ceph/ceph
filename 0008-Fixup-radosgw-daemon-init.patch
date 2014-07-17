@@ -5,6 +5,8 @@ Subject: [PATCH] Fixup radosgw daemon init.
 This is a fixup for 2cd29db16497917e2e5737b7f1b52dbb77b038c2
 (the late radosgw-init-opensuse.patch), radosgw needs the config
 section name.
+
+(cherry picked from commit 363022a4a2bb90b8bfe640b02e7458048e2940de)
 ---
  src/init-radosgw | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)

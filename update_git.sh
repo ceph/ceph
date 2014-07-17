@@ -14,8 +14,8 @@
 GIT_TREE=https://github.com/SUSE/ceph.git
 # Downloaded repos are cached here. Must be writable by you.
 GIT_LOCAL_TREE=/var/tmp/osbuild-packagecache/ceph
-GIT_BRANCH=distro/suse-0-80-1
-GIT_UPSTREAM_TAG=v0.80.1
+GIT_BRANCH=distro/suse-0-80-2
+GIT_UPSTREAM_TAG=v0.80.2
 GIT_DIR=/dev/shm/ceph-git-dir
 CMP_DIR=/dev/shm/ceph-cmp-dir
 
@@ -33,10 +33,10 @@ fi
 if [ -d "$GIT_LOCAL_TREE" ]; then
     echo "Processing $GIT_BRANCH branch of local git tree, using tag:" \
          "$GIT_UPSTREAM_TAG"
+    (cd $GIT_LOCAL_TREE && git remote update)
     if ! (cd $GIT_LOCAL_TREE && git show-branch $GIT_BRANCH &>/dev/null); then
-        echo "Error: Branch $GIT_BRANCH not found - please create a remote" \
-             "tracking branch of origin/$GIT_BRANCH"
-        exit
+        echo "Branch $GIT_BRANCH not found - creating locally"
+        (cd $GIT_LOCAL_TREE && git checkout -b $GIT_BRANCH upstream/$GIT_BRANCH)
     fi
     git clone -ls $GIT_LOCAL_TREE $GIT_DIR -b $GIT_BRANCH
     if ! (cd $GIT_LOCAL_TREE && git remote show upstream &>/dev/null); then

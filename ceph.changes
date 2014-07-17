@@ -1,4 +1,80 @@
 -------------------------------------------------------------------
+Thu Jul 17 20:45:47 UTC 2014 - tbehrens@suse.com
+
+- Update to 0.80.2 (note: tarballs got pulled upstream)
+  + messages: MForward: fix compat version
+  + ceph.spec.in: add bash completion file for radosgw-admin
+  + ceph.spec.in: rhel7-related changes:
+  + Fix/add missing dependencies:
+  + ceph.spec.in: whitespace fixes
+  + ceph.spec.in: split out ceph-common as in Debian
+  + mon: check changes to the whole CRUSH map and to tunables against cluster features
+  + OSDMonitor: fix quorum_features comparison in check_cluster_features
+  + ceph_test_rados_api_tier: disable LibRadosTierECPP::HitSetWrite
+  + rgw: set a default data extra pool name
+  + rgw: fix uninit ofs in RGWObjManifect::obj_iterator
+  + rgw: extend manifest to avoid old style manifest
+  + rgw: don't allow multiple writers to same multiobject part
+  + mon: ensure HealthService warning(s) include a summary
+  + mon: refactor check_health()
+  + mon: fix typos, punctuation for mon disk space warning(s)
+  + mon/OSDMonitor: make down osd count sensible
+  + Revert "mon: OSDMonitor: Refuse to delete CephFS pools"
+  + rgw: set meta object in extra flag when initializing it
+  + qa/workunits/suites/fsx.sh: don't use zero range
+  + erasure-code: pool create must not create profiles
+  + erasure-code: OSDMonitor::get_erasure_code is a const
+  + mon: fix set cache_target_full_ratio
+  + rgw: allocate enough space for bucket instance id
+  + log the command that is being run with subprocess
+  + rgw: fetch object attrs on multipart completion
+  + rgw: check appropriate entity permission on put_metadata
+  + XfsFileStoreBackend: call ioctl(XFS_IOC_FSSETXATTR) less often
+  + mon: Fix default replicated pool ruleset choice
+  + rgw: calc md5 and compare if user provided appropriate header
+  + rgw: calculate user manifest
+  + librados: simplify/fix rados_pool_list bounds checks
+  + OSD::calc_priors_during: handle CRUSH_ITEM_NONE correctly
+  + OSD::calc_priors_during: fix confusing for loop bracing (cosmetic)
+  + rados.cc: fix pool alignment check
+  + osd: fix filestore perf stats update
+  + FileStore: set XATTR_NO_SPILL_OUT when creating new files.
+  + FileStore: make _clone() copy spill out marker
+  + erasure-code: verify that rados put enforces alignment
+  + enforce rados put aligment
+  + osd/OSDMap: do not require ERASURE_CODE feature of clients
+  + osd/OSDMap: make get_features() take an entity type
+  + Avoid extra check for clean object
+  + Make <poolname> in "ceph osd tier --help" clearer.
+  + mon: pool set <pool> crush_ruleset must not use rule_exists
+  + init-ceph: continue after failure doing osd data mount
+  + Fix for bug #6700
+  + doc: Added Disable requiretty commentary.
+  + ReplicatedPG::start_flush: fix clone deletion case
+  + ReplicatedPG::start_flush: send delete even if there are no snaps
+  + HashIndex: in cleanup, interpret missing dir as completed merge
+  + add backport of collections.Counter for python2.6
+  + rest-api: key missing for per "rx" and "rwx"
+  + cephfs-java: build against older jni headers
+  + OSDMonitor: set next commit in mon primary-affinity reply
+  + prioritise use of `javac` executable (gcj provides it through alternatives).
+  + pass '-classpath' option (gcj/javah ignores CLASSPATH environment variable).
+  + look for "jni.h" in gcj-jdk path, needed to find "jni.h" with gcj-jdk_4.9.0
+  + ceph-disk: partprobe before settle when preparing dev
+  + test: fix some templates to match new output code
+  + OSD: fix an osdmap_subscribe interface misuse
+  + osd: skip out of order op checks on tiered pools
+  + ReplicatedPG: block scrub on blocked object contexts
+  + msg: Fix inconsistent message sequence negotiation during connection reset
+  + Objecter::_op_submit: only replace the tid if it's 0
+  + mon/OSDMonitor: force op resend when pool overlay changes
+  + osd: discard client ops sent before last_force_op_resend
+  + osdc/Objecter: resend ops in the last_force_op_resend epoch
+  + osd/osd_types: add last_force_op_resend to pg_pool_t
+  + osd: handle race between osdmap and prepare_to_stop
+  + osd/ReplicatedPG: do not queue NULL dup_op
+
+-------------------------------------------------------------------
 Thu Jul 17 10:20:47 UTC 2014 - tbehrens@suse.com
 
 - Add ceph-disk.patch

@@ -5,13 +5,15 @@ Subject: [PATCH] Fix runlevels for start scripts
 Merge distro patches to git.
 
 This was 0001-fix-runlevels-for-start-scripts.patch
+
+(cherry picked from commit a3ca39c182bb3ee0d175cdb92d10a86d2ce268ec)
 ---
  src/init-ceph.in | 2 +-
  src/init-radosgw | 2 +-
  2 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/src/init-ceph.in b/src/init-ceph.in
-index 7cb2a39..d66d5a7 100644
+index ffbeda3..2a48940 100644
 --- a/src/init-ceph.in
 +++ b/src/init-ceph.in
 @@ -4,7 +4,7 @@

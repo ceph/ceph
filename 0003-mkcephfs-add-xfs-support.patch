@@ -5,6 +5,8 @@ Subject: [PATCH] mkcephfs: add xfs support
 Merge distro patches to git.
 
 This was ceph-mkcephfs.add.xfs.support.diff
+
+(cherry picked from commit 0b87af80609089c896fe48d26fcc563bbf975014)
 ---
  src/mkcephfs.in | 51 ++++++++++++++++++++++++++-------------------------
  1 file changed, 26 insertions(+), 25 deletions(-)

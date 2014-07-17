@@ -5,6 +5,8 @@ Subject: [PATCH] init-radosgw: adjust for opensuse
 Merge distro patches to git.
 
 This was radosgw-init-opensuse.patch
+
+(cherry picked from commit 5cd81b3241061be1caf9fbe0eda34f4a0d3f945a)
 ---
  src/init-radosgw | 7 ++++---
  1 file changed, 4 insertions(+), 3 deletions(-)
