@@ -1,4 +1,4 @@
-
+from contextlib import contextmanager
 import logging
 import datetime
 from textwrap import dedent
@@ -46,6 +46,22 @@ class CephFSMount(object):
 
     def cleanup(self):
         raise NotImplementedError()
+
+    def wait_until_mounted(self):
+        raise NotImplementedError()
+
+    @contextmanager
+    def mounted(self):
+        """
+        A context manager, from an initially unmounted state, to mount
+        this, yield, and then unmount and clean up.
+        """
+        self.mount()
+        self.wait_until_mounted()
+        try:
+            yield
+        finally:
+            self.umount_wait()
 
     def create_files(self):
         assert(self.is_mounted())
