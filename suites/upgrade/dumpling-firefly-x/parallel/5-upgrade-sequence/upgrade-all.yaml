@@ -5,7 +5,7 @@ upgrade-sequence:
 # upgrade step will be set to 'next' or 'master' from teuthology-suite comman line
 #         branch: firefly
        mon.b:
-         branch: firefly
+#         branch: firefly
        client.0:
 #         branch: firefly
    - ceph.restart:
