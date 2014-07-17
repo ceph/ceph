@@ -1762,13 +1762,13 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
     }
   }
 
-  while (truncated && count < max) {
+  while (truncated && count <= max) {
     if (skip_after_delim > cur_marker) {
       cur_marker = skip_after_delim;
       ldout(cct, 20) << "setting cur_marker=" << cur_marker << dendl;
     }
     std::map<string, RGWObjEnt> ent_map;
-    int r = cls_bucket_list(bucket, cur_marker, cur_prefix, max - count, ent_map,
+    int r = cls_bucket_list(bucket, cur_marker, cur_prefix, max + 1 - count, ent_map,
                             &truncated, &cur_marker);
     if (r < 0)
       return r;
@@ -1791,7 +1791,7 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
         continue;
       }
 
-      if (next_marker) {
+      if (next_marker && count < max) {
         *next_marker = obj;
       }
 
@@ -1808,6 +1808,10 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
           string prefix_key = obj.substr(0, delim_pos + 1);
 
           if (common_prefixes.find(prefix_key) == common_prefixes.end()) {
+            if (count >= max) {
+              truncated = true;
+              goto done;
+            }
             if (next_marker) {
               *next_marker = prefix_key;
             }
@@ -1823,6 +1827,11 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
 
           continue;
         }
+      }
+
+      if (count >= max) {
+        truncated = true;
+        goto done;
       }
 
       RGWObjEnt ent = eiter->second;
