@@ -1,0 +1,40 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
+ * 
+ */
+
+//class C_MDC_Recover;
+//
+#ifndef RECOVERY_QUEUE_H
+#define RECOVERY_QUEUE_H
+
+#include <set>
+
+class CInode;
+class MDS;
+
+class RecoveryQueue {
+  public:
+  void enqueue(CInode *in);
+  void advance();
+  RecoveryQueue(MDS *mds_) : mds(mds_) {}
+
+  private:
+  std::set<CInode*> file_recover_queue;
+  std::set<CInode*> file_recovering;
+  void _recovered(CInode *in, int r, uint64_t size, utime_t mtime);
+  MDS *mds;
+
+  friend class C_MDC_Recover;
+};
+
+#endif // RECOVERY_QUEUE_H
