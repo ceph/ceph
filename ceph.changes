@@ -1,4 +1,11 @@
 -------------------------------------------------------------------
+Thu Jul 17 20:55:11 UTC 2014 - tbehrens@suse.com
+
+- Update to 0.80.4:
+  + XfsFileStoreBackend: default to disabling extsize on xfs
+  + Revert "Revert "rgw: if extra data pool name is empty, use data pool name instead""
+
+-------------------------------------------------------------------
 Thu Jul 17 20:52:24 UTC 2014 - tbehrens@suse.com
 
 - Update to 0.80.3:
