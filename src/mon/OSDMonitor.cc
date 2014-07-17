@@ -2483,6 +2483,13 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       goto reply;
     }
 
+    if (!p->is_erasure() && var == "erasure_code_profile") {
+      ss << "pool '" << poolstr
+         << "' is not a erasure pool: variable not applicable";
+      r = -EACCES;
+      goto reply;
+    }
+
     if (f) {
       f->open_object_section("pool");
       f->dump_string("pool", poolstr);
@@ -2536,6 +2543,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
         f->dump_unsigned("cache_min_flush_age", p->cache_min_flush_age);
       } else if (var == "cache_min_evict_age") {
         f->dump_unsigned("cache_min_evict_age", p->cache_min_evict_age);
+      } else if (var == "erasure_code_profile") {
+       f->dump_string("erasure_code_profile", p->erasure_code_profile);
       }
 
       f->close_section();
@@ -2583,6 +2592,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
         ss << "cache_min_flush_age: " << p->cache_min_flush_age;
       } else if (var == "cache_min_evict_age") {
         ss << "cache_min_evict_age: " << p->cache_min_evict_age;
+      } else if (var == "erasure_code_profile") {
+       ss << "erasure_code_profile: " << p->erasure_code_profile;
       }
 
       rdata.append(ss);
