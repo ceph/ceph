@@ -5,6 +5,5 @@ workload2:
       clients:
         client.0:
         - rados/test.sh
-        - print: "**** done rados/test.sh 2"
         - cls
-        - print: "**** done cls 2"
+  - print: "**** done rados/test.sh and cls 2"
