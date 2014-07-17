@@ -717,7 +717,7 @@ function test_mon_osd_pool_set()
   TEST_POOL_GETSET=pool_getset
   ceph osd pool create $TEST_POOL_GETSET 10
 
-  for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset; do
+  for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset erasure_code_profile; do
     ceph osd pool get $TEST_POOL_GETSET $s
   done
 
