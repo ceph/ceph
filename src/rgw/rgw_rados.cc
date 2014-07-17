@@ -2251,7 +2251,8 @@ int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, 
  *     here.
  */
 int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& delim,
-			   string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
+			   string& marker, string *next_marker, vector<RGWObjEnt>& result,
+                           map<string, bool>& common_prefixes,
 			   bool get_content_type, string& ns, bool enforce_ns,
                            bool *is_truncated, RGWAccessListFilter *filter)
 {
@@ -2316,6 +2317,10 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
 
         /* we're not looking at the namespace this object is in, next! */
         continue;
+      }
+
+      if (next_marker) {
+        *next_marker = obj;
       }
 
       if (filter && !filter->filter(obj, key))

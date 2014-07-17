@@ -257,6 +257,8 @@ void RGWListBucket_ObjStore_S3::send_response()
   if (!prefix.empty())
     s->formatter->dump_string("Prefix", prefix);
   s->formatter->dump_string("Marker", marker);
+  if (is_truncated && !next_marker.empty())
+    s->formatter->dump_string("NextMarker", next_marker);
   s->formatter->dump_int("MaxKeys", max);
   if (!delimiter.empty())
     s->formatter->dump_string("Delimiter", delimiter);
