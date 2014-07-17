@@ -43,6 +43,9 @@ For Debian and Ubuntu distributions, perform the following steps:
 
 	sudo apt-get update && sudo apt-get install ceph-deploy
 
+.. note:: You can also use the EU mirror eu.ceph.com for downloading your packages.
+   Simply replace ``http://ceph.com/`` by ``http://eu.ceph.com/``
+
 
 Red Hat Package Manager (RPM)
 -----------------------------
@@ -81,6 +84,9 @@ following steps:
    ``Defaults requiretty`` in the ``/etc/sudoers`` file for ``ceph-deploy`` to 
    work properly. If editing, ``/etc/sudoers``, ensure that you use 
    ``sudo visudo`` rather than a text editor.
+
+.. note:: You can also use the EU mirror eu.ceph.com for downloading your packages.
+   Simply replace ``http://ceph.com/`` by ``http://eu.ceph.com/``
 
 
 Ceph Node Setup
