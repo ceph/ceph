@@ -955,6 +955,16 @@ bool MDSMonitor::management_command(
       return true;
     }
 
+    // be idempotent.. success if it already exists and matches
+    if (mdsmap.get_enabled() &&
+	mdsmap.get_metadata_pool() == metadata &&
+	mdsmap.get_first_data_pool() == data &&
+	mdsmap.fs_name == MDS_FS_NAME_DEFAULT) {
+      ss << "filesystem '" << MDS_FS_NAME_DEFAULT << "' already exists";
+      r = 0;
+      return true;
+    }
+
     string sure;
     cmd_getval(g_ceph_context, cmdmap, "sure", sure);
     if (pending_mdsmap.get_enabled() && sure != "--yes-i-really-mean-it") {
