@@ -227,10 +227,14 @@ void Replayer::wait_for_actions(const vector<dependency_d> &deps) {
     dout(DEPGRAPH_LEVEL) << "Waiting for " << dep.id << dendl;
     boost::system_time start_time(boost::get_system_time());
     boost::shared_lock<boost::shared_mutex> lock(m_actions_complete_mutex);
+    bool first_time = true;
     while (!_is_action_complete(dep.id)) {
       //m_actions_complete_condition.wait(lock);
+      if (!first_time) {
+	dout(DEPGRAPH_LEVEL) << "Still waiting for " << dep.id << dendl;
+      }
       m_actions_complete_condition.timed_wait(lock, boost::posix_time::seconds(1));
-      dout(DEPGRAPH_LEVEL) << "Still waiting for " << dep.id << dendl;
+      first_time = false;
     }
     boost::system_time action_completed_time(m_actions_complete[dep.id]);
     lock.unlock();
