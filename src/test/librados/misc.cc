@@ -61,6 +61,17 @@ TEST_F(LibRadosMiscPP, LongNamePP) {
   ASSERT_EQ(-ENAMETOOLONG, ioctx.write(string(maxlen*2, 'a').c_str(), bl, bl.length(), 0));
 }
 
+TEST_F(LibRadosMiscPP, LongAttrNamePP) {
+  bufferlist bl;
+  bl.append("content");
+  int maxlen = g_conf->osd_max_attr_name_len;
+  ASSERT_EQ(0, ioctx.setxattr("bigattrobj", string(maxlen/2, 'a').c_str(), bl));
+  ASSERT_EQ(0, ioctx.setxattr("bigattrobj", string(maxlen-1, 'a').c_str(), bl));
+  ASSERT_EQ(0, ioctx.setxattr("bigattrobj", string(maxlen, 'a').c_str(), bl));
+  ASSERT_EQ(-ENAMETOOLONG, ioctx.setxattr("bigattrobj", string(maxlen+1, 'a').c_str(), bl));
+  ASSERT_EQ(-ENAMETOOLONG, ioctx.setxattr("bigattrobj", string(maxlen*2, 'a').c_str(), bl));
+}
+
 static std::string read_key_from_tmap(IoCtx& ioctx, const std::string &obj,
 				      const std::string &key)
 {
