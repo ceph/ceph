@@ -4,6 +4,8 @@ roles:
 overrides:
   ceph:
     fs: xfs
+    conf:
+      filestore xfs extsize: true
 
 tasks:
 - install:
