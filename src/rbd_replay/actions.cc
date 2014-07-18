@@ -131,8 +131,8 @@ void AioReadAction::perform(ActionCtx &worker) {
   librbd::Image *image = worker.get_image(m_imagectx_id);
   assert(image);
   PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
-  image->aio_read(m_offset, m_length, io->bufferlist(), &io->completion());
   worker.add_pending(io);
+  image->aio_read(m_offset, m_length, io->bufferlist(), &io->completion());
 }
 
 
@@ -185,8 +185,8 @@ void AioWriteAction::perform(ActionCtx &worker) {
   librbd::Image *image = worker.get_image(m_imagectx_id);
   PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
   io->bufferlist().append_zero(m_length);
-  image->aio_write(m_offset, m_length, io->bufferlist(), &io->completion());
   worker.add_pending(io);
+  image->aio_write(m_offset, m_length, io->bufferlist(), &io->completion());
 }
 
 
