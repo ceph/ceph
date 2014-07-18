@@ -426,6 +426,7 @@ fi
 %{_bindir}/ceph-mon
 %{_bindir}/ceph-mds
 %{_bindir}/ceph-osd
+%{_bindir}/ceph-dencoder
 %{_bindir}/ceph-rbdnamer
 %{_bindir}/librados-config
 %{_bindir}/ceph-client-debug
@@ -489,6 +490,7 @@ fi
 %{_mandir}/man8/mount.ceph.8*
 %{_mandir}/man8/ceph-rbdnamer.8*
 %{_mandir}/man8/ceph-debugpack.8*
+%{_mandir}/man8/ceph-dencoder.8*
 %{_mandir}/man8/ceph-clsinfo.8.gz
 %{_mandir}/man8/librados-config.8.gz
 #set up placeholder directories
@@ -507,7 +509,6 @@ fi
 %{_bindir}/ceph
 %{_bindir}/ceph-authtool
 %{_bindir}/ceph-conf
-%{_bindir}/ceph-dencoder
 %{_bindir}/ceph-syn
 %{_bindir}/ceph-crush-location
 %{_bindir}/rados
@@ -516,7 +517,6 @@ fi
 %{_bindir}/ceph-brag
 %{_mandir}/man8/ceph-authtool.8*
 %{_mandir}/man8/ceph-conf.8*
-%{_mandir}/man8/ceph-dencoder.8*
 %{_mandir}/man8/ceph-syn.8*
 %{_mandir}/man8/ceph-post-file.8*
 %{_mandir}/man8/ceph.8*
