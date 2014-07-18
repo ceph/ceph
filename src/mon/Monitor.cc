@@ -302,9 +302,11 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
     }
     sync_force(f.get(), ss);
   } else if (command.find("add_bootstrap_peer_hint") == 0) {
-    _add_bootstrap_peer_hint(command, cmdmap, ss);
+    if (!_add_bootstrap_peer_hint(command, cmdmap, ss))
+      goto abort;
   } else if (command.find("osdmonitor_prepare_command") == 0) {
-    _osdmonitor_prepare_command(cmdmap, ss);
+    if (!_osdmonitor_prepare_command(cmdmap, ss))
+      goto abort;
   } else if (command == "quorum enter") {
     elector.start_participating();
     start_election();
@@ -956,33 +958,37 @@ void Monitor::bootstrap()
   }
 }
 
-void Monitor::_osdmonitor_prepare_command(cmdmap_t& cmdmap, ostream& ss)
+bool Monitor::_osdmonitor_prepare_command(cmdmap_t& cmdmap, ostream& ss)
 {
   if (!is_leader()) {
     ss << "mon must be a leader";
-    return;
+    return false;
   }
 
   string cmd;
   cmd_getval(g_ceph_context, cmdmap, "prepare", cmd);
   cmdmap["prefix"] = cmdmap["prepare"];
-  
+
   OSDMonitor *monitor = osdmon();
   MMonCommand *m = static_cast<MMonCommand *>((new MMonCommand())->get());
-  if (monitor->prepare_command_impl(m, cmdmap))
+  bool r = true;
+  if (monitor->prepare_command_impl(m, cmdmap)) {
     ss << "true";
-  else
+  } else {
     ss << "false";
+    r = false;
+  }
   m->put();
+  return r;
 }
 
-void Monitor::_add_bootstrap_peer_hint(string cmd, cmdmap_t& cmdmap, ostream& ss)
+bool Monitor::_add_bootstrap_peer_hint(string cmd, cmdmap_t& cmdmap, ostream& ss)
 {
   string addrstr;
   if (!cmd_getval(g_ceph_context, cmdmap, "addr", addrstr)) {
     ss << "unable to parse address string value '"
          << cmd_vartype_stringify(cmdmap["addr"]) << "'";
-    return;
+    return false;
   }
   dout(10) << "_add_bootstrap_peer_hint '" << cmd << "' '"
            << addrstr << "'" << dendl;
@@ -991,12 +997,12 @@ void Monitor::_add_bootstrap_peer_hint(string cmd, cmdmap_t& cmdmap, ostream& ss
   const char *end = 0;
   if (!addr.parse(addrstr.c_str(), &end)) {
     ss << "failed to parse addr '" << addrstr << "'; syntax is 'add_bootstrap_peer_hint ip[:port]'";
-    return;
+    return false;
   }
 
   if (is_leader() || is_peon()) {
     ss << "mon already active; ignoring bootstrap hint";
-    return;
+    return true;
   }
 
   if (addr.get_port() == 0)
@@ -1004,6 +1010,7 @@ void Monitor::_add_bootstrap_peer_hint(string cmd, cmdmap_t& cmdmap, ostream& ss
 
   extra_probe_peers.insert(addr);
   ss << "adding peer " << addr << " to list: " << extra_probe_peers;
+  return true;
 }
 
 // called by bootstrap(), or on leader|peon -> electing
