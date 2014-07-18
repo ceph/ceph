@@ -1055,6 +1055,7 @@ bool MDSMonitor::management_command(
     newmap.inc = pending_mdsmap.inc;
     pending_mdsmap = newmap;
     pending_mdsmap.epoch = mdsmap.epoch + 1;
+    pending_mdsmap.last_failure_osd_epoch = mdsmap.last_failure_osd_epoch;
     create_new_fs(pending_mdsmap, fs_name, metadata, data);
     ss << "new fs with metadata pool " << metadata << " and data pool " << data;
     r = 0;
