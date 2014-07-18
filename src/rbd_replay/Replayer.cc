@@ -63,8 +63,16 @@ void Worker::run() {
   }
   {
     boost::mutex::scoped_lock lock(m_pending_ios_mutex);
+    bool first_time = true;
     while (!m_pending_ios.empty()) {
-      m_pending_ios_empty.wait(lock);
+      if (!first_time) {
+	dout(THREAD_LEVEL) << "Worker thread trying to stop, still waiting for " << m_pending_ios.size() << " pending IOs to complete:" << dendl;
+	BOOST_FOREACH(PendingIO::ptr p, m_pending_ios) {
+	  dout(THREAD_LEVEL) << "> " << p->id() << dendl;
+	}
+      }
+      m_pending_ios_empty.timed_wait(lock, boost::posix_time::seconds(1));
+      first_time = false;
     }
   }
   dout(THREAD_LEVEL) << "Worker thread stopped" << dendl;
