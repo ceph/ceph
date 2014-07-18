@@ -697,13 +697,15 @@ bool url_decode(string& src_str, string& dest_str)
   int pos = 0;
   char c;
 
+  bool in_query = false;
   while (*src) {
     if (*src != '%') {
-      if (*src != '+') {
-	dest[pos++] = *src++;
+      if (!in_query || *src != '+') {
+        if (*src == '?') in_query = true;
+        dest[pos++] = *src++;
       } else {
-	dest[pos++] = ' ';
-	++src;
+        dest[pos++] = ' ';
+        ++src;
       }
     } else {
       src++;
