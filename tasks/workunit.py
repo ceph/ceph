@@ -5,12 +5,12 @@ import logging
 import pipes
 import os
 
-from teuthology import misc as teuthology
+from teuthology import misc
+from teuthology.orchestra.run import CommandFailedError
 from teuthology.parallel import parallel
 from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
-
 
 CLIENT_PREFIX = 'client.'
 
@@ -66,7 +66,7 @@ def task(ctx, config):
         'configuration must contain a dictionary of clients'
 
     overrides = ctx.config.get('overrides', {})
-    teuthology.deep_merge(config, overrides.get('workunit', {}))
+    misc.deep_merge(config, overrides.get('workunit', {}))
 
     refspec = config.get('branch')
     if refspec is None:
@@ -123,7 +123,7 @@ def _delete_dir(ctx, role, created_mountpoint):
     :param ctx: Context
     :param role: "role.#" where # is used for the role id.
     """
-    testdir = teuthology.get_testdir(ctx)
+    testdir = misc.get_testdir(ctx)
     id_ = role[len(CLIENT_PREFIX):]
     (remote,) = ctx.cluster.only(role).remotes.iterkeys()
     mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
@@ -167,7 +167,7 @@ def _make_scratch_dir(ctx, role, subdir):
     log.debug("getting remote for {id} role {role_}".format(id=id_, role_=role))
     (remote,) = ctx.cluster.only(role).remotes.iterkeys()
     dir_owner = remote.user
-    mnt = os.path.join(teuthology.get_testdir(ctx), 'mnt.{id}'.format(id=id_))
+    mnt = os.path.join(misc.get_testdir(ctx), 'mnt.{id}'.format(id=id_))
     # if neither kclient nor ceph-fuse are required for a workunit,
     # mnt may not exist. Stat and create the directory if it doesn't.
     try:
@@ -176,17 +176,17 @@ def _make_scratch_dir(ctx, role, subdir):
                 'stat',
                 '--',
                 mnt,
-                ],
-            )
+            ],
+        )
         log.info('Did not need to create dir {dir}'.format(dir=mnt))
-    except Exception:
+    except CommandFailedError:
         remote.run(
             args=[
                 'mkdir',
                 '--',
                 mnt,
-                ],
-            )
+            ],
+        )
         log.info('Created dir {dir}'.format(dir=mnt))
         created_mountpoint = True
 
@@ -203,8 +203,8 @@ def _make_scratch_dir(ctx, role, subdir):
                 'mkdir',
                 '--',
                 subdir,
-                ],
-            )
+            ],
+        )
     else:
         remote.run(
             args=[
@@ -222,8 +222,8 @@ def _make_scratch_dir(ctx, role, subdir):
                 '--owner={user}'.format(user=dir_owner),
                 '--',
                 subdir,
-                ],
-            )
+            ],
+        )
 
     return created_mountpoint
 
@@ -235,7 +235,7 @@ def _spawn_on_all_clients(ctx, refspec, tests, env, subdir, timeout=None):
 
     See run_tests() for parameter documentation.
     """
-    client_generator = teuthology.all_roles_of_type(ctx.cluster, 'client')
+    client_generator = misc.all_roles_of_type(ctx.cluster, 'client')
     client_remotes = list()
 
     created_mountpoint = {}
@@ -251,7 +251,7 @@ def _spawn_on_all_clients(ctx, refspec, tests, env, subdir, timeout=None):
                         timeout=timeout)
 
     # cleanup the generated client directories
-    client_generator = teuthology.all_roles_of_type(ctx.cluster, 'client')
+    client_generator = misc.all_roles_of_type(ctx.cluster, 'client')
     for client in client_generator:
         _delete_dir(ctx, 'client.{id}'.format(id=client), created_mountpoint[client])
 
@@ -274,7 +274,7 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
                     hours, or 'd' for days. If '0' or anything that evaluates
                     to False is passed, the 'timeout' command is not used.
     """
-    testdir = teuthology.get_testdir(ctx)
+    testdir = misc.get_testdir(ctx)
     assert isinstance(role, basestring)
     assert role.startswith(CLIENT_PREFIX)
     id_ = role[len(CLIENT_PREFIX):]
@@ -308,12 +308,12 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
             run.Raw('&&'),
             'find', '-executable', '-type', 'f', '-printf', r'%P\0'.format(srcdir=srcdir),
             run.Raw('>{tdir}/workunits.list'.format(tdir=testdir)),
-            ],
-        )
+        ],
+    )
 
-    workunits = sorted(teuthology.get_file(
-                            remote,
-                            '{tdir}/workunits.list'.format(tdir=testdir)).split('\0'))
+    workunits = sorted(misc.get_file(
+        remote,
+        '{tdir}/workunits.list'.format(tdir=testdir)).split('\0'))
     assert workunits
 
     try:
@@ -352,8 +352,8 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
                     '{srcdir}/{workunit}'.format(
                         srcdir=srcdir,
                         workunit=workunit,
-                        ),
-                    ])
+                    ),
+                ])
                 remote.run(
                     logger=log.getChild(role),
                     args=args,
@@ -362,12 +362,12 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
                 remote.run(
                     logger=log.getChild(role),
                     args=['sudo', 'rm', '-rf', '--', scratch_tmp],
-                    )
+                )
     finally:
-        log.info('Stopping %s on %s...', spec, role)
+        log.info('Stopping %s on %s...', tests, role)
         remote.run(
             logger=log.getChild(role),
             args=[
                 'rm', '-rf', '--', '{tdir}/workunits.list'.format(tdir=testdir), srcdir,
-                ],
-            )
+            ],
+        )
