@@ -13,6 +13,7 @@
  */
 
 #include "actions.hpp"
+#include <boost/foreach.hpp>
 #include <cstdlib>
 #include "PendingIO.hpp"
 #include "rbd_replay_debug.hpp"
@@ -77,6 +78,30 @@ Action::ptr Action::read_from(Deser &d) {
   }
 }
 
+std::ostream& Action::dump_action_fields(std::ostream& o) const {
+  o << "id=" << m_id << ", thread_id=" << m_thread_id << ", predecessors=[";
+  bool first = true;
+  BOOST_FOREACH(const dependency_d &d, m_predecessors) {
+    if (!first) {
+      o << ",";
+    }
+    o << d.id;
+    first = false;
+  }
+  return o << "]";
+}
+
+std::ostream& rbd_replay::operator<<(std::ostream& o, const Action& a) {
+  return a.dump(o);
+}
+
+
+std::ostream& DummyAction::dump(std::ostream& o) const {
+  o << "DummyAction[";
+  dump_action_fields(o);
+  return o << "]";
+}
+
 
 StartThreadAction::StartThreadAction(Action &src)
   : Action(src) {
@@ -95,19 +120,32 @@ Action::ptr StartThreadAction::read_from(Action &src, Deser &d) {
   return Action::ptr(new StartThreadAction(src));
 }
 
+std::ostream& StartThreadAction::dump(std::ostream& o) const {
+  o << "StartThreadAction[";
+  dump_action_fields(o);
+  return o << "]";
+}
+
 
 StopThreadAction::StopThreadAction(Action &src)
   : Action(src) {
 }
 
 void StopThreadAction::perform(ActionCtx &ctx) {
-  dout(ACTION_LEVEL) << "Performing stop thread action #" << id() << dendl;
+  dout(ACTION_LEVEL) << "Performing " << *this << dendl;
   ctx.stop();
 }
 
 Action::ptr StopThreadAction::read_from(Action &src, Deser &d) {
   return Action::ptr(new StopThreadAction(src));
 }
+
+std::ostream& StopThreadAction::dump(std::ostream& o) const {
+  o << "StopThreadAction[";
+  dump_action_fields(o);
+  return o << "]";
+}
+
 
 AioReadAction::AioReadAction(const Action &src,
                              imagectx_id_t imagectx_id,
@@ -127,12 +165,18 @@ Action::ptr AioReadAction::read_from(Action &src, Deser &d) {
 }
 
 void AioReadAction::perform(ActionCtx &worker) {
-  dout(ACTION_LEVEL) << "Performing AIO read action #" << id() << dendl;
+  dout(ACTION_LEVEL) << "Performing " << *this << dendl;
   librbd::Image *image = worker.get_image(m_imagectx_id);
   assert(image);
   PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
   worker.add_pending(io);
   image->aio_read(m_offset, m_length, io->bufferlist(), &io->completion());
+}
+
+std::ostream& AioReadAction::dump(std::ostream& o) const {
+  o << "AioReadAction[";
+  dump_action_fields(o);
+  return o << ", imagectx_id=" << m_imagectx_id << ", offset=" << m_offset << ", length=" << m_length << "]";
 }
 
 
@@ -154,12 +198,18 @@ Action::ptr ReadAction::read_from(Action &src, Deser &d) {
 }
 
 void ReadAction::perform(ActionCtx &worker) {
-  dout(ACTION_LEVEL) << "Performing read action #" << id() << dendl;
+  dout(ACTION_LEVEL) << "Performing " << *this << dendl;
   librbd::Image *image = worker.get_image(m_imagectx_id);
   PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
   worker.add_pending(io);
   image->read(m_offset, m_length, io->bufferlist());
   worker.remove_pending(io);
+}
+
+std::ostream& ReadAction::dump(std::ostream& o) const {
+  o << "ReadAction[";
+  dump_action_fields(o);
+  return o << ", imagectx_id=" << m_imagectx_id << ", offset=" << m_offset << ", length=" << m_length << "]";
 }
 
 
@@ -181,12 +231,18 @@ Action::ptr AioWriteAction::read_from(Action &src, Deser &d) {
 }
 
 void AioWriteAction::perform(ActionCtx &worker) {
-  dout(ACTION_LEVEL) << "Performing AIO write action #" << id() << dendl;
+  dout(ACTION_LEVEL) << "Performing " << *this << dendl;
   librbd::Image *image = worker.get_image(m_imagectx_id);
   PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
   io->bufferlist().append_zero(m_length);
   worker.add_pending(io);
   image->aio_write(m_offset, m_length, io->bufferlist(), &io->completion());
+}
+
+std::ostream& AioWriteAction::dump(std::ostream& o) const {
+  o << "AioWriteAction[";
+  dump_action_fields(o);
+  return o << ", imagectx_id=" << m_imagectx_id << ", offset=" << m_offset << ", length=" << m_length << "]";
 }
 
 
@@ -208,13 +264,19 @@ Action::ptr WriteAction::read_from(Action &src, Deser &d) {
 }
 
 void WriteAction::perform(ActionCtx &worker) {
-  dout(ACTION_LEVEL) << "Performing write action #" << id() << dendl;
+  dout(ACTION_LEVEL) << "Performing " << *this << dendl;
   librbd::Image *image = worker.get_image(m_imagectx_id);
   PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
   worker.add_pending(io);
   io->bufferlist().append_zero(m_length);
   image->write(m_offset, m_length, io->bufferlist());
   worker.remove_pending(io);
+}
+
+std::ostream& WriteAction::dump(std::ostream& o) const {
+  o << "WriteAction[";
+  dump_action_fields(o);
+  return o << ", imagectx_id=" << m_imagectx_id << ", offset=" << m_offset << ", length=" << m_length << "]";
 }
 
 
@@ -239,7 +301,7 @@ Action::ptr OpenImageAction::read_from(Action &src, Deser &d) {
 }
 
 void OpenImageAction::perform(ActionCtx &worker) {
-  dout(ACTION_LEVEL) << "Performing open image action #" << id() << dendl;
+  dout(ACTION_LEVEL) << "Performing " << *this << dendl;
   PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
   worker.add_pending(io);
   librbd::Image *image = new librbd::Image();
@@ -258,6 +320,12 @@ void OpenImageAction::perform(ActionCtx &worker) {
   worker.remove_pending(io);
 }
 
+std::ostream& OpenImageAction::dump(std::ostream& o) const {
+  o << "OpenImageAction[";
+  dump_action_fields(o);
+  return o << ", imagectx_id=" << m_imagectx_id << ", name='" << m_name << "', snap_name='" << m_snap_name << "', readonly=" << m_readonly << "]";
+}
+
 
 CloseImageAction::CloseImageAction(Action &src,
                                    imagectx_id_t imagectx_id)
@@ -271,7 +339,13 @@ Action::ptr CloseImageAction::read_from(Action &src, Deser &d) {
 }
 
 void CloseImageAction::perform(ActionCtx &worker) {
-  dout(ACTION_LEVEL) << "Performing close image action #" << id() << dendl;
+  dout(ACTION_LEVEL) << "Performing " << *this << dendl;
   worker.erase_image(m_imagectx_id);
   worker.set_action_complete(pending_io_id());
+}
+
+std::ostream& CloseImageAction::dump(std::ostream& o) const {
+  o << "CloseImageAction[";
+  dump_action_fields(o);
+  return o << ", imagectx_id=" << m_imagectx_id << "]";
 }

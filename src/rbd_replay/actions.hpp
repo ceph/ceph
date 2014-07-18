@@ -105,13 +105,22 @@ public:
 
   static ptr read_from(Deser &d);
 
+protected:
+  std::ostream& dump_action_fields(std::ostream& o) const;
+
 private:
+  friend std::ostream& operator<<(std::ostream&, const Action&);
+
+  virtual std::ostream& dump(std::ostream& o) const = 0;
+
   const action_id_t m_id;
   const thread_id_t m_thread_id;
   const int m_num_successors;
   const int m_num_completion_successors;
   const std::vector<dependency_d> m_predecessors;
 };
+
+std::ostream& operator<<(std::ostream& o, const Action& a);
 
 
 class DummyAction : public Action {
@@ -126,6 +135,9 @@ public:
 
   void perform(ActionCtx &ctx) {
   }
+
+private:
+  std::ostream& dump(std::ostream& o) const;
 };
 
 class StopThreadAction : public Action {
@@ -135,6 +147,9 @@ public:
   void perform(ActionCtx &ctx);
 
   static Action::ptr read_from(Action &src, Deser &d);
+
+private:
+  std::ostream& dump(std::ostream& o) const;
 };
 
 
@@ -150,6 +165,8 @@ public:
   static Action::ptr read_from(Action &src, Deser &d);
 
 private:
+  std::ostream& dump(std::ostream& o) const;
+
   imagectx_id_t m_imagectx_id;
   uint64_t m_offset;
   uint64_t m_length;
@@ -168,6 +185,8 @@ public:
   static Action::ptr read_from(Action &src, Deser &d);
 
 private:
+  std::ostream& dump(std::ostream& o) const;
+
   imagectx_id_t m_imagectx_id;
   uint64_t m_offset;
   uint64_t m_length;
@@ -186,6 +205,8 @@ public:
   static Action::ptr read_from(Action &src, Deser &d);
 
 private:
+  std::ostream& dump(std::ostream& o) const;
+
   imagectx_id_t m_imagectx_id;
   uint64_t m_offset;
   uint64_t m_length;
@@ -204,6 +225,8 @@ public:
   static Action::ptr read_from(Action &src, Deser &d);
 
 private:
+  std::ostream& dump(std::ostream& o) const;
+
   imagectx_id_t m_imagectx_id;
   uint64_t m_offset;
   uint64_t m_length;
@@ -223,6 +246,8 @@ public:
   static Action::ptr read_from(Action &src, Deser &d);
 
 private:
+  std::ostream& dump(std::ostream& o) const;
+
   imagectx_id_t m_imagectx_id;
   std::string m_name;
   std::string m_snap_name;
@@ -240,6 +265,8 @@ public:
   static Action::ptr read_from(Action &src, Deser &d);
 
 private:
+  std::ostream& dump(std::ostream& o) const;
+
   imagectx_id_t m_imagectx_id;
 };
 
@@ -253,6 +280,9 @@ public:
   bool is_start_thread();
 
   static Action::ptr read_from(Action &src, Deser &d);
+
+private:
+  std::ostream& dump(std::ostream& o) const;
 };
 
 }
