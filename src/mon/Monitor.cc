@@ -269,20 +269,36 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
 
   boost::scoped_ptr<Formatter> f(new_formatter(format));
 
+  string args;
+  for (cmdmap_t::iterator p = cmdmap.begin();
+       p != cmdmap.end(); ++p) {
+    if (p->first == "prefix")
+      continue;
+    if (!args.empty())
+      args += ", ";
+    args += cmd_vartype_stringify(p->second);
+  }
+  args = "[" + args + "]";
+
+  audit_clog->info() << "from='admin socket' "
+                    << "entity='admin socket' "
+                    << "cmd=" << command << " "
+                    << "args=" << args << ": dispatch";
+
   if (command == "mon_status") {
     get_mon_status(f.get(), ss);
     if (f)
       f->flush(ss);
-  } else if (command == "quorum_status")
+  } else if (command == "quorum_status") {
     _quorum_status(f.get(), ss);
-  else if (command == "sync_force") {
+  } else if (command == "sync_force") {
     string validate;
     if ((!cmd_getval(g_ceph_context, cmdmap, "validate", validate)) ||
 	(validate != "--yes-i-really-mean-it")) {
       ss << "are you SURE? this will mean the monitor store will be erased "
             "the next time the monitor is restarted.  pass "
             "'--yes-i-really-mean-it' if you really do.";
-      return;
+      goto abort;
     }
     sync_force(f.get(), ss);
   } else if (command.find("add_bootstrap_peer_hint") == 0) {
@@ -297,8 +313,20 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
     start_election();
     elector.stop_participating();
     ss << "stopped responding to quorum, initiated new election";
-  } else
+  } else {
     assert(0 == "bad AdminSocket command binding");
+  }
+  audit_clog->info() << "from='admin socket' "
+                    << "entity='admin socket' "
+                    << "cmd=" << command << " "
+                    << "args=" << args << ": finished";
+  return;
+
+abort:
+  audit_clog->info() << "from='admin socket' "
+                    << "entity='admin socket' "
+                    << "cmd=" << command << " "
+                    << "args=" << args << ": aborted";
 }
 
 void Monitor::handle_signal(int signum)
