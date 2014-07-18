@@ -683,6 +683,14 @@ void MDLog::_recovery_thread(Context *completion)
   // rewrite failed part way through.  Erase the back journal
   // to clean up.
   if (jp.back) {
+    if (mds->is_standby_replay()) {
+      dout(1) << "Journal " << jp.front << " is being rewritten, "
+        << "cannot replay in standby until an active MDS completes rewrite" << dendl;
+      mds->mds_lock.Lock();
+      completion->complete(-EAGAIN);
+      mds->mds_lock.Unlock();
+      return;
+    }
     dout(1) << "Erasing journal " << jp.back << dendl;
     C_SaferCond erase_waiter;
     Journaler back(jp.back, mds->mdsmap->get_metadata_pool(), CEPH_FS_ONDISK_MAGIC,
@@ -735,7 +743,13 @@ void MDLog::_recovery_thread(Context *completion)
   }
 
   /* Check whether the front journal format is acceptable or needs re-write */
-  if (front_journal->get_stream_format() >= g_conf->mds_journal_format) {
+  if (front_journal->get_stream_format() > JOURNAL_FORMAT_MAX) {
+    dout(0) << "Journal " << jp.front << " is in unknown format " << front_journal->get_stream_format()
+            << ", does this MDS daemon require upgrade?" << dendl;
+    mds->mds_lock.Lock();
+    completion->complete(-EINVAL);
+    mds->mds_lock.Unlock();
+  } else if (front_journal->get_stream_format() >= g_conf->mds_journal_format) {
     /* Great, the journal is of current format and ready to rock, hook
      * it into this->journaler and complete */
     journaler = front_journal;
@@ -744,12 +758,22 @@ void MDLog::_recovery_thread(Context *completion)
     completion->complete(0);
     mds->mds_lock.Unlock();
   } else {
-    /* Hand off to reformat routine, which will ultimately set the
-     * completion when it has done its thing */
-    dout(1) << "Journal " << jp.front << " has old format "
-      << front_journal->get_stream_format() << ", it will now be updated" << dendl;
+    if (mds->is_standby_replay()) {
+        /* We must not try to rewrite in standby replay mode, because
+         * we do not have exclusive access to the log */
+        dout(1) << "Journal " << jp.front << " has old format, "
+          << "cannot replay in standby until an active MDS rewrites it" << dendl;
+        mds->mds_lock.Lock();
+        completion->complete(-EAGAIN);
+        mds->mds_lock.Unlock();
+    } else {
+        /* Hand off to reformat routine, which will ultimately set the
+         * completion when it has done its thing */
+        dout(1) << "Journal " << jp.front << " has old format "
+          << front_journal->get_stream_format() << ", it will now be updated" << dendl;
 
-    _reformat_journal(jp, front_journal, completion);
+        _reformat_journal(jp, front_journal, completion);
+    }
   }
 }
 
@@ -923,22 +947,23 @@ void MDLog::_replay_thread()
            * the MDS is going to either shut down or restart when
            * we return this error, doing it synchronously is fine
            * -- as long as we drop the main mds lock--. */
-          Mutex mylock("MDLog::_replay_thread lock");
-          Cond cond;
-          bool done = false;
-          int err = 0;
-          journaler->reread_head(new C_SafeCond(&mylock, &cond, &done, &err));
+          C_SaferCond reread_fin;
+          journaler->reread_head(&reread_fin);
           mds->mds_lock.Unlock();
-	  mylock.Lock();
-          while (!done)
-            cond.Wait(mylock);
-	  mylock.Unlock();
-          if (err) { // well, crap
-            dout(0) << "got error while reading head: " << cpp_strerror(err)
-                    << dendl;
-            mds->suicide();
-          }
+          int err = reread_fin.wait();
           mds->mds_lock.Lock();
+          if (err) {
+            if (err == -ENOENT && mds->is_standby_replay()) {
+              r = -EAGAIN;
+              dout(1) << "Journal header went away while in standby replay, journal rewritten?"
+                      << dendl;
+              break;
+            } else {
+                dout(0) << "got error while reading head: " << cpp_strerror(err)
+                        << dendl;
+                mds->suicide();
+            }
+          }
 	  standby_trim_segments();
           if (journaler->get_read_pos() < journaler->get_expire_pos()) {
             dout(0) << "expire_pos is higher than read_pos, returning EAGAIN" << dendl;
