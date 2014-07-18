@@ -59,7 +59,7 @@ private:
   Replayer &m_replayer;
   BoundedBuffer<Action::ptr> m_buffer;
   boost::shared_ptr<boost::thread> m_thread;
-  std::vector<PendingIO::ptr> m_pending_ios;
+  std::map<action_id_t, PendingIO::ptr> m_pending_ios;
   boost::mutex m_pending_ios_mutex;
   boost::condition m_pending_ios_empty;
   bool m_done;
