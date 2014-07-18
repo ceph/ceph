@@ -27,7 +27,7 @@ static const int THREAD_LEVEL = 10;
 
 }
 
-#define dout_subsys ceph_subsys_rbd
+#define dout_subsys ceph_subsys_rbd_replay
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd_replay: "
 
