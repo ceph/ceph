@@ -170,7 +170,8 @@ void AioReadAction::perform(ActionCtx &worker) {
   assert(image);
   PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
   worker.add_pending(io);
-  image->aio_read(m_offset, m_length, io->bufferlist(), &io->completion());
+  int r = image->aio_read(m_offset, m_length, io->bufferlist(), &io->completion());
+  assertf(r >= 0, "id = %d, r = %d", id(), r);
 }
 
 std::ostream& AioReadAction::dump(std::ostream& o) const {
@@ -202,7 +203,8 @@ void ReadAction::perform(ActionCtx &worker) {
   librbd::Image *image = worker.get_image(m_imagectx_id);
   PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
   worker.add_pending(io);
-  image->read(m_offset, m_length, io->bufferlist());
+  ssize_t r = image->read(m_offset, m_length, io->bufferlist());
+  assertf(r >= 0, "id = %d, r = %d", id(), r);
   worker.remove_pending(io);
 }
 
@@ -236,7 +238,8 @@ void AioWriteAction::perform(ActionCtx &worker) {
   PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
   io->bufferlist().append_zero(m_length);
   worker.add_pending(io);
-  image->aio_write(m_offset, m_length, io->bufferlist(), &io->completion());
+  int r = image->aio_write(m_offset, m_length, io->bufferlist(), &io->completion());
+  assertf(r >= 0, "id = %d, r = %d", id(), r);
 }
 
 std::ostream& AioWriteAction::dump(std::ostream& o) const {
@@ -269,7 +272,8 @@ void WriteAction::perform(ActionCtx &worker) {
   PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
   worker.add_pending(io);
   io->bufferlist().append_zero(m_length);
-  image->write(m_offset, m_length, io->bufferlist());
+  ssize_t r = image->write(m_offset, m_length, io->bufferlist());
+  assertf(r >= 0, "id = %d, r = %d", id(), r);
   worker.remove_pending(io);
 }
 
