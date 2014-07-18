@@ -1161,7 +1161,7 @@ TEST_P(StoreTest, BigRGWObjectName) {
     vector<ghobject_t> objects;
     r = store->collection_list(cid, objects);
     ASSERT_EQ(r, 0);
-    ASSERT_EQ(objects.size(), 1);
+    ASSERT_EQ(objects.size(), 1u);
     ASSERT_EQ(objects[0], oid2);
   }
 
