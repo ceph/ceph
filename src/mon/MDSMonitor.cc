@@ -1055,6 +1055,7 @@ bool MDSMonitor::management_command(
     newmap.inc = pending_mdsmap.inc;
     pending_mdsmap = newmap;
     pending_mdsmap.epoch = mdsmap.epoch + 1;
+    pending_mdsmap.last_failure_osd_epoch = mdsmap.last_failure_osd_epoch;
     create_new_fs(pending_mdsmap, fs_name, metadata, data);
     ss << "new fs with metadata pool " << metadata << " and data pool " << data;
     r = 0;
@@ -1068,7 +1069,8 @@ bool MDSMonitor::management_command(
     if (!pending_mdsmap.get_enabled() || fs_name != pending_mdsmap.fs_name) {
         // Consider absence success to make deletes idempotent
         ss << "filesystem '" << fs_name << "' does not exist";
-        return 0;
+        r = 0;
+        return true;
     }
 
     // Check that no MDS daemons are active
