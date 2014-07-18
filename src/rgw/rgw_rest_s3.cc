@@ -251,8 +251,7 @@ void RGWListBucket_ObjStore_S3::send_response()
   s->formatter->open_object_section_in_ns("ListBucketResult",
 					  "http://s3.amazonaws.com/doc/2006-03-01/");
   s->formatter->dump_string("Name", s->bucket_name_str.c_str());
-  if (!prefix.empty())
-    s->formatter->dump_string("Prefix", prefix);
+  s->formatter->dump_string("Prefix", prefix);
   s->formatter->dump_string("Marker", marker);
   if (is_truncated && !next_marker.empty())
     s->formatter->dump_string("NextMarker", next_marker);
