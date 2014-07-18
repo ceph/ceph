@@ -49,7 +49,8 @@ void Worker::send(Action::ptr action) {
 
 void Worker::add_pending(PendingIO::ptr io) {
   boost::mutex::scoped_lock lock(m_pending_ios_mutex);
-  m_pending_ios.push_back(io);
+  assertf(m_pending_ios.count(io->id()) == 0, "id = %d", io->id());
+  m_pending_ios[io->id()] = io;
 }
 
 void Worker::run() {
@@ -67,8 +68,9 @@ void Worker::run() {
     while (!m_pending_ios.empty()) {
       if (!first_time) {
 	dout(THREAD_LEVEL) << "Worker thread trying to stop, still waiting for " << m_pending_ios.size() << " pending IOs to complete:" << dendl;
-	BOOST_FOREACH(PendingIO::ptr p, m_pending_ios) {
-	  dout(THREAD_LEVEL) << "> " << p->id() << dendl;
+	pair<action_id_t, PendingIO::ptr> p;
+	BOOST_FOREACH(p, m_pending_ios) {
+	  dout(THREAD_LEVEL) << "> " << p.first << dendl;
 	}
       }
       m_pending_ios_empty.timed_wait(lock, boost::posix_time::seconds(1));
@@ -82,12 +84,8 @@ void Worker::run() {
 void Worker::remove_pending(PendingIO::ptr io) {
   m_replayer.set_action_complete(io->id());
   boost::mutex::scoped_lock lock(m_pending_ios_mutex);
-  for (vector<PendingIO::ptr>::iterator itr = m_pending_ios.begin(); itr != m_pending_ios.end(); itr++) {
-    if (*itr == io) {
-      m_pending_ios.erase(itr);
-      break;
-    }
-  }
+  size_t num_erased = m_pending_ios.erase(io->id());
+  assertf(num_erased == 1, "id = %d", io->id());
   if (m_pending_ios.empty()) {
     m_pending_ios_empty.notify_all();
   }
