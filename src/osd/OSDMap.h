@@ -140,7 +140,7 @@ public:
     map<int32_t,uint8_t> new_state;             // XORed onto previous state.
     map<int32_t,uint32_t> new_weight;
     map<pg_t,vector<int32_t> > new_pg_temp;     // [] to remove
-    map<pg_t, int> new_primary_temp;            // [-1] to remove
+    map<pg_t, int32_t> new_primary_temp;            // [-1] to remove
     map<int32_t,uint32_t> new_primary_affinity;
     map<int32_t,epoch_t> new_up_thru;
     map<int32_t,pair<epoch_t,epoch_t> > new_last_clean_interval;
@@ -222,8 +222,8 @@ private:
 
   vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
   vector<osd_info_t> osd_info;
-  ceph::shared_ptr< map<pg_t,vector<int> > > pg_temp;  // temp pg mapping (e.g. while we rebuild)
-  ceph::shared_ptr< map<pg_t,int > > primary_temp;  // temp primary mapping (e.g. while we rebuild)
+  ceph::shared_ptr< map<pg_t,vector<int32_t> > > pg_temp;  // temp pg mapping (e.g. while we rebuild)
+  ceph::shared_ptr< map<pg_t,int32_t > > primary_temp;  // temp primary mapping (e.g. while we rebuild)
   ceph::shared_ptr< vector<__u32> > osd_primary_affinity; ///< 16.16 fixed point, 0x10000 = baseline
 
   map<int64_t,pg_pool_t> pools;
@@ -253,8 +253,8 @@ private:
 	     flags(0),
 	     num_osd(0), max_osd(0),
 	     osd_addrs(new addrs_s),
-	     pg_temp(new map<pg_t,vector<int> >),
-	     primary_temp(new map<pg_t,int>),
+	     pg_temp(new map<pg_t,vector<int32_t> >),
+	     primary_temp(new map<pg_t,int32_t>),
 	     osd_uuid(new vector<uuid_d>),
 	     cluster_snapshot_epoch(0),
 	     new_blacklist_entries(false),
@@ -272,8 +272,8 @@ public:
 
   void deepish_copy_from(const OSDMap& o) {
     *this = o;
-    primary_temp.reset(new map<pg_t,int>(*o.primary_temp));
-    pg_temp.reset(new map<pg_t,vector<int> >(*o.pg_temp));
+    primary_temp.reset(new map<pg_t,int32_t>(*o.primary_temp));
+    pg_temp.reset(new map<pg_t,vector<int32_t> >(*o.pg_temp));
     osd_uuid.reset(new vector<uuid_d>(*o.osd_uuid));
 
     // NOTE: this still references shared entity_addr_t's.
