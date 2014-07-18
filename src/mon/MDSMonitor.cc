@@ -1068,7 +1068,8 @@ bool MDSMonitor::management_command(
     if (!pending_mdsmap.get_enabled() || fs_name != pending_mdsmap.fs_name) {
         // Consider absence success to make deletes idempotent
         ss << "filesystem '" << fs_name << "' does not exist";
-        return 0;
+        r = 0;
+        return true;
     }
 
     // Check that no MDS daemons are active
