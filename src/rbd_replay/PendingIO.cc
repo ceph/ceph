@@ -34,5 +34,7 @@ PendingIO::PendingIO(action_id_t id,
 
 void PendingIO::completed(librbd::completion_t cb) {
   dout(ACTION_LEVEL) << "Completed pending IO #" << m_id << dendl;
+  ssize_t r = m_completion.get_return_value();
+  assertf(r >= 0, "id = %d, r = %d", m_id, r);
   m_worker.remove_pending(shared_from_this());
 }
