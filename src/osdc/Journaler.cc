@@ -216,9 +216,17 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   bufferlist::iterator p = bl.begin();
   ::decode(h, p);
 
+  bool corrupt = false;
   if (h.magic != magic) {
     ldout(cct, 0) << "on disk magic '" << h.magic << "' != my magic '"
 	    << magic << "'" << dendl;
+    corrupt = true;
+  } else if (h.write_pos < h.expire_pos || h.expire_pos < h.trimmed_pos) {
+    ldout(cct, 0) << "Corrupt header (bad offsets): " << h << dendl;
+    corrupt = true;
+  }
+
+  if (corrupt) {
     list<Context*> ls;
     ls.swap(waitfor_recover);
     finish_contexts(cct, ls, -EINVAL);
@@ -349,6 +357,10 @@ void Journaler::write_head(Context *oncommit)
   last_written.stream_format = stream_format;
   ldout(cct, 10) << "write_head " << last_written << dendl;
   
+  // Avoid persisting bad pointers in case of bugs
+  assert(last_written.write_pos >= last_written.expire_pos);
+  assert(last_written.expire_pos >= last_written.trimmed_pos);
+
   last_wrote_head = ceph_clock_now(cct);
 
   bufferlist bl;
