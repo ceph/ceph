@@ -411,6 +411,11 @@ public:
   int mount();
   int umount();
   int get_max_object_name_length();
+  int get_max_attr_name_length() {
+    // xattr limit is 128; leave room for our prefixes (user.ceph._),
+    // some margin, and cap at 100
+    return 100;
+  }
   int mkfs();
   int mkjournal();
 
