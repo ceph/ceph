@@ -1,3 +1,8 @@
+libos_types_la_SOURCES = \
+	os/Transaction.cc
+libos_types_la_CXXFLAGS = ${AM_CXXFLAGS}
+noinst_LTLIBRARIES += libos_types.la
+
 libos_la_SOURCES = \
 	os/chain_xattr.cc \
 	os/DBObjectMap.cc \
@@ -29,6 +34,8 @@ if WITH_LIBZFS
 libos_la_SOURCES += os/ZFSFileStoreBackend.cc
 endif
 
+libos_la_CXXFLAGS = ${AM_CXXFLAGS}
+libos_la_LIBADD = $(LIBOS_TYPES)
 noinst_LTLIBRARIES += libos.la
 
 noinst_HEADERS += \
