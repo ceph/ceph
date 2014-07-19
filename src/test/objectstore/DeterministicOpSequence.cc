@@ -70,8 +70,8 @@ bool DeterministicOpSequence::run_one_op(int op, rngen_t& gen)
   case DSOP_OBJ_REMOVE:
     ok = do_remove(gen);
     break;
-  case DSOP_COLL_ADD:
-    ok = do_coll_add(gen);
+  case DSOP_COLL_MOVE:
+    ok = do_coll_move(gen);
     break;
   case DSOP_COLL_RENAME:
     //do_coll_rename(gen);
@@ -408,7 +408,7 @@ bool DeterministicOpSequence::do_coll_rename(rngen_t& gen)
   return true;
 }
 
-bool DeterministicOpSequence::do_coll_add(rngen_t& gen)
+bool DeterministicOpSequence::do_coll_move(rngen_t& gen)
 {
   coll_entry_t *orig_coll = NULL, *new_coll = NULL;
   if (!_prepare_colls(gen, orig_coll, new_coll))
@@ -421,22 +421,25 @@ bool DeterministicOpSequence::do_coll_add(rngen_t& gen)
   int obj_key = -1;
   hobject_t *obj = orig_coll->get_obj_at(obj_pos, &obj_key);
   if (!obj) {
-    dout(0) << "do_coll_add coll " << orig_coll->m_coll.to_str()
+    dout(0) << "do_coll_move coll " << orig_coll->m_coll.to_str()
         << " has no object as pos #" << obj_pos << " (key " << obj_key << ")"
         << dendl;
     return false;
   }
   if (new_coll->check_for_obj(obj_key)) {
-    dout(0) << "do_coll_add coll " << orig_coll->m_coll.to_str()
+    dout(0) << "do_coll_move coll " << orig_coll->m_coll.to_str()
         << " already has object as pos #" << obj_pos << " (key " << obj_key << ")"
         << dendl;
     return false;
   }
-  dout(0) << "do_coll_add " << orig_coll->m_coll.to_str() << "/" << obj->oid.name
+  dout(0) << "do_coll_move " << orig_coll->m_coll.to_str() << "/" << obj->oid.name
         << " => " << new_coll->m_coll.to_str() << "/" << obj->oid.name << dendl;
   new_coll->touch_obj(obj_key);
 
-  _do_coll_add(orig_coll->m_coll, new_coll->m_coll, *obj);
+  orig_coll->remove_obj(obj_key);
+
+  _do_coll_move(orig_coll->m_coll, new_coll->m_coll, *obj);
+
   return true;
 }
 
@@ -550,13 +553,13 @@ void DeterministicOpSequence::_do_write_and_clone_range(coll_t coll,
   m_store->apply_transaction(t);
 }
 
-void DeterministicOpSequence::_do_coll_add(coll_t orig_coll, coll_t new_coll,
-					   hobject_t& obj)
+void DeterministicOpSequence::_do_coll_move(coll_t orig_coll, coll_t new_coll,
+					    hobject_t& obj)
 {
   ObjectStore::Transaction t;
   note_txn(&t);
   t.remove(new_coll, obj);
-  t.collection_add(new_coll, orig_coll, obj);
+  t.collection_move(new_coll, orig_coll, obj);
   m_store->apply_transaction(t);
 }
 
