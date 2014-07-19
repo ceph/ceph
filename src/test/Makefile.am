@@ -53,7 +53,10 @@ ceph_dencoder_SOURCES = \
 	test/encoding/ceph_dencoder.cc \
 	$(DENCODER_SOURCES)
 ceph_dencoder_LDADD = \
-	$(LIBOSD) $(LIBMDS) $(LIBMON) \
+	$(LIBOSD_TYPES) \
+	$(LIBOS_TYPES) \
+	$(LIBMDS) \
+	$(LIBMON_TYPES) \
 	$(DENCODER_DEPS) $(CEPH_GLOBAL)
 if WITH_RADOSGW
 ceph_dencoder_LDADD += $(LIBRGW) $(LIBRGW_DEPS)
