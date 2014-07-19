@@ -2443,7 +2443,7 @@ void OSD::recursive_remove_collection(ObjectStore *store, coll_t tmp)
     int r = mapper.remove_oid(p->hobj, &_t);
     if (r != 0 && r != -ENOENT)
       assert(0);
-    t.collection_remove(tmp, *p);
+    t.remove(tmp, *p);
     if (removed > 300) {
       int r = store->apply_transaction(t);
       assert(r == 0);
