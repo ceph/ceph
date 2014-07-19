@@ -941,14 +941,6 @@ public:
       ::encode(aset, tbl);
       ops++;
     }
-    /// Change the name of a collection
-    void collection_rename(coll_t cid, coll_t ncid) {
-      __u32 op = OP_COLL_RENAME;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(ncid, tbl);
-      ops++;
-    }
 
     /// Remove omap from oid
     void omap_clear(

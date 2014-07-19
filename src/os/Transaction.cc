@@ -485,6 +485,5 @@ void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transac
   t->collection_setattr(c, "this", bl);
   t->collection_rmattr(c, "foo");
   t->collection_setattrs(c, m);
-  t->collection_rename(c, c2);
   o.push_back(t);  
 }
