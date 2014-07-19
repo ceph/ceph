@@ -57,10 +57,8 @@ ceph_dencoder_LDADD = \
 	$(LIBOS_TYPES) \
 	$(LIBMDS) \
 	$(LIBMON_TYPES) \
-	$(DENCODER_DEPS) $(CEPH_GLOBAL)
-if WITH_RADOSGW
-ceph_dencoder_LDADD += $(LIBRGW) $(LIBRGW_DEPS)
-endif
+	$(DENCODER_DEPS) \
+	$(CEPH_GLOBAL)
 
 # These should always use explicit _CFLAGS/_CXXFLAGS so avoid basename conflicts
 ceph_dencoder_CFLAGS = ${AM_CFLAGS}
