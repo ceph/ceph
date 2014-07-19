@@ -236,13 +236,6 @@ public:
       sharded(false) { }
   ~MemStore() { }
 
-  int update_version_stamp() {
-    return 0;
-  }
-  uint32_t get_target_version() {
-    return 1;
-  }
-
   bool need_journal() { return false; };
   int peek_journal_fsid(uuid_d *fsid);
 
