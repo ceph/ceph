@@ -2732,9 +2732,11 @@ void OSD::load_pgs()
     spg_t pgid;
     snapid_t snap;
     uint64_t seq;
+    char val;
 
     if (it->is_temp(pgid) ||
-	it->is_removal(&seq, &pgid)) {
+	it->is_removal(&seq, &pgid) ||
+	store->collection_getattr(*it, "remove", &val, 1) > 0) {
       dout(10) << "load_pgs " << *it << " clearing temp" << dendl;
       recursive_remove_collection(store, *it);
       continue;
