@@ -1060,7 +1060,7 @@ TEST_P(StoreTest, HashCollisionTest) {
        i != created.end();
        ++i) {
     ObjectStore::Transaction t;
-    t.collection_remove(cid, *i);
+    t.remove(cid, *i);
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
   }
@@ -1134,7 +1134,7 @@ TEST_P(StoreTest, ScrubTest) {
        i != created.end();
        ++i) {
     ObjectStore::Transaction t;
-    t.collection_remove(cid, *i);
+    t.remove(cid, *i);
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
   }
