@@ -2560,9 +2560,7 @@ unsigned FileStore::_do_transaction(
       {
 	coll_t cid(i.decode_cid());
 	coll_t ncid(i.decode_cid());
-        tracepoint(objectstore, coll_rename_enter, osr_name);
-	r = _collection_rename(cid, ncid, spos);
-        tracepoint(objectstore, coll_rename_exit, r);
+	r = -EOPNOTSUPP;
       }
       break;
 
@@ -4320,56 +4318,6 @@ int FileStore::_collection_remove_recursive(const coll_t &cid,
     }
   }
   return _destroy_collection(cid);
-}
-
-int FileStore::_collection_rename(const coll_t &cid, const coll_t &ncid,
-				  const SequencerPosition& spos)
-{
-  char new_coll[PATH_MAX], old_coll[PATH_MAX];
-  get_cdir(cid, old_coll, sizeof(old_coll));
-  get_cdir(ncid, new_coll, sizeof(new_coll));
-
-  if (_check_replay_guard(cid, spos) < 0) {
-    return 0;
-  }
-
-  if (_check_replay_guard(ncid, spos) < 0) {
-    return _collection_remove_recursive(cid, spos);
-  }
-
-  if (!collection_exists(cid)) {
-    if (replaying) {
-      // already happened
-      return 0;
-    } else {
-      return -ENOENT;
-    }
-  }
-  _set_global_replay_guard(cid, spos);
-
-  int ret = 0;
-  if (::rename(old_coll, new_coll)) {
-    if (replaying && !backend->can_checkpoint() &&
-	(errno == EEXIST || errno == ENOTEMPTY))
-      ret = _collection_remove_recursive(cid, spos);
-    else
-      ret = -errno;
-
-    dout(10) << "collection_rename '" << cid << "' to '" << ncid << "'"
-	     << ": ret = " << ret << dendl;
-    return ret;
-  }
-
-  if (ret >= 0) {
-    int fd = ::open(new_coll, O_RDONLY);
-    assert(fd >= 0);
-    _set_replay_guard(fd, spos);
-    VOID_TEMP_FAILURE_RETRY(::close(fd));
-  }
-
-  dout(10) << "collection_rename '" << cid << "' to '" << ncid << "'"
-	   << ": ret = " << ret << dendl;
-  return ret;
 }
 
 // --------------------------
