@@ -410,8 +410,6 @@ public:
   int _sanity_check_fs();
   
   bool test_mount_in_use();
-  int version_stamp_is_valid(uint32_t *version);
-  int update_version_stamp();
   int read_op_seq(uint64_t *seq);
   int write_op_seq(int, uint64_t seq);
   int mount();
@@ -427,6 +425,12 @@ public:
   }
   int mkfs();
   int mkjournal();
+
+  int version_stamp_is_valid(uint32_t *version);
+  int update_version_stamp();
+  int convert_collection(coll_t cid);
+  int upgrade();
+  void recursive_remove_collection(coll_t tmp);
 
   /**
    * set_allow_sharded_objects()
