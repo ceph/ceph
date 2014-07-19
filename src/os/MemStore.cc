@@ -1351,8 +1351,8 @@ int MemStore::_collection_add(coll_t cid, coll_t ocid, const ghobject_t& oid)
   CollectionRef oc = get_collection(ocid);
   if (!oc)
     return -ENOENT;
-  RWLock::WLocker l1(MIN(c, oc)->lock);
-  RWLock::WLocker l2(MAX(c, oc)->lock);
+  RWLock::WLocker l1(MIN(&(*c), &(*oc))->lock);
+  RWLock::WLocker l2(MAX(&(*c), &(*oc))->lock);
 
   if (c->object_hash.count(oid))
     return -EEXIST;
@@ -1475,8 +1475,8 @@ int MemStore::_split_collection(coll_t cid, uint32_t bits, uint32_t match,
   CollectionRef dc = get_collection(dest);
   if (!dc)
     return -ENOENT;
-  RWLock::WLocker l1(MIN(sc, dc)->lock);
-  RWLock::WLocker l2(MAX(sc, dc)->lock);
+  RWLock::WLocker l1(MIN(&(*sc), &(*dc))->lock);
+  RWLock::WLocker l2(MAX(&(*sc), &(*dc))->lock);
 
   map<ghobject_t,ObjectRef>::iterator p = sc->object_map.begin();
   while (p != sc->object_map.end()) {
