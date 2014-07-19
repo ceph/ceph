@@ -480,8 +480,6 @@ void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transac
   t->clone_range(c, o1, o2, 1, 12, 99);
 
   t->create_collection(c);
-  t->collection_add(c, c2, o1);
-  t->collection_add(c, c2, o2);
   t->collection_move(c, c2, o3);
   t->remove_collection(c);
   t->collection_setattr(c, "this", bl);
