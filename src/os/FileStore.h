@@ -595,8 +595,6 @@ public:
   int _collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
   int _collection_remove_recursive(const coll_t &cid,
 				   const SequencerPosition &spos);
-  int _collection_rename(const coll_t &cid, const coll_t &ncid,
-			 const SequencerPosition& spos);
 
   // collections
   int list_collections(vector<coll_t>& ls);

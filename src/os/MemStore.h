@@ -218,7 +218,6 @@ private:
 			  size_t size);
   int _collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
   int _collection_rmattr(coll_t cid, const char *name);
-  int _collection_rename(const coll_t &cid, const coll_t &ncid);
   int _split_collection(coll_t cid, uint32_t bits, uint32_t rem, coll_t dest);
 
   int _save();

@@ -447,22 +447,6 @@ TRACEPOINT_EVENT(objectstore, omap_clear_exit,
     )
 )
 
-TRACEPOINT_EVENT(objectstore, coll_rename_enter,
-    TP_ARGS(
-        const char *, osr_name),
-    TP_FIELDS(
-        ctf_string(osr_name, osr_name)
-    )
-)
-
-TRACEPOINT_EVENT(objectstore, coll_rename_exit,
-    TP_ARGS(
-        int, retval),
-    TP_FIELDS(
-        ctf_integer(int, retval, retval)
-    )
-)
-
 TRACEPOINT_EVENT(objectstore, startsync_enter,
     TP_ARGS(
         const char *, osr_name),

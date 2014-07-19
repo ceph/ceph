@@ -911,7 +911,7 @@ void MemStore::_do_transaction(Transaction& t)
       {
 	coll_t cid(i.decode_cid());
 	coll_t ncid(i.decode_cid());
-	r = _collection_rename(cid, ncid);
+	r = -EOPNOTSUPP;
       }
       break;
 
@@ -1482,19 +1482,6 @@ int MemStore::_collection_rmattr(coll_t cid, const char *name)
   if (cp->second->xattr.count(name) == 0)
     return -ENODATA;
   cp->second->xattr.erase(name);
-  return 0;
-}
-
-int MemStore::_collection_rename(const coll_t &cid, const coll_t &ncid)
-{
-  dout(10) << __func__ << " " << cid << " -> " << ncid << dendl;
-  RWLock::WLocker l(coll_lock);
-  if (coll_map.count(cid) == 0)
-    return -ENOENT;
-  if (coll_map.count(ncid))
-    return -EEXIST;
-  coll_map[ncid] = coll_map[cid];
-  coll_map.erase(cid);
   return 0;
 }
 
