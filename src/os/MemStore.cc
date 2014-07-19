@@ -1195,6 +1195,7 @@ int MemStore::_clone(coll_t cid, const ghobject_t& oldoid,
   no->data = oo->data;
   no->omap_header = oo->omap_header;
   no->omap = oo->omap;
+  no->xattr = oo->xattr;
   return 0;
 }
 
