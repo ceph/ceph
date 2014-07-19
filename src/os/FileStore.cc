@@ -1719,6 +1719,16 @@ int FileStore::mount()
 
   timer.init();
 
+  // upgrade?
+  if (g_conf->filestore_update_to >= (int)get_target_version()) {
+    int err = upgrade();
+    if (err < 0) {
+      derr << "error converting store" << dendl;
+      umount();
+      return err;
+    }
+  }
+
   // all okay.
   return 0;
 
