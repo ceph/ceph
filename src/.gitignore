@@ -24,7 +24,6 @@ Makefile
 /ceph-syn
 /ceph.conf
 /ceph_bench_log
-/ceph_dupstore
 /ceph_objectstore_tool
 /ceph_mon_store_converter
 /ceph_multi_stress_watch
