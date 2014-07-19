@@ -883,15 +883,19 @@ int LFNIndex::lfn_unlink(const vector<string> &path,
       }
     }
   }
+  string full_path = get_full_path(path, mangled_name);
+  int fd = ::open(full_path.c_str(), O_RDONLY);
+  if (fd < 0)
+    return -errno;
+  FDCloser f(fd);
   if (i == removed_index + 1) {
-    string full_path = get_full_path(path, mangled_name);
     maybe_inject_failure();
     int r = ::unlink(full_path.c_str());
     maybe_inject_failure();
     if (r < 0)
       return -errno;
   } else {
-    string rename_to = get_full_path(path, mangled_name);
+    string& rename_to = full_path;
     string rename_from = get_full_path(path, lfn_get_short_name(oid, i - 1));
     maybe_inject_failure();
     int r = ::rename(rename_from.c_str(), rename_to.c_str());
@@ -899,7 +903,15 @@ int LFNIndex::lfn_unlink(const vector<string> &path,
     if (r < 0)
       return -errno;
   }
-  return 0;
+  struct stat st;
+  int r = ::fstat(fd, &st);
+  if (r == 0 && st.st_nlink > 0) {
+    // remove alt attr
+    dout(20) << __func__ << " removing alt attr from " << full_path << dendl;
+    fsync_dir(path);
+    chain_fremovexattr(fd, get_alt_lfn_attr().c_str());
+  }
+  return r;
 }
 
 int LFNIndex::lfn_translate(const vector<string> &path,
