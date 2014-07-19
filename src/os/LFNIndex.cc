@@ -799,6 +799,23 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
     r = chain_getxattr(candidate_path.c_str(), get_alt_lfn_attr().c_str(),
 		       buf, sizeof(buf));
     if (r > 0) {
+      // only consider alt name if nlink > 1
+      struct stat st;
+      int rc = ::stat(candidate_path.c_str(), &st);
+      if (rc < 0)
+	return -errno;
+      if (st.st_nlink <= 1) {
+	// left over from incomplete unlink, remove
+	maybe_inject_failure();
+	dout(20) << __func__ << " found extra alt attr for " << candidate_path
+		 << ", long name " << string(buf, r) << dendl;
+	rc = chain_removexattr(candidate_path.c_str(),
+			       get_alt_lfn_attr().c_str());
+	maybe_inject_failure();
+	if (rc < 0)
+	  return rc;
+	continue;
+      }
       buf[MIN((int)sizeof(buf) - 1, r)] = '\0';
       if (!strcmp(buf, full_name.c_str())) {
 	dout(20) << __func__ << " used alt attr for " << full_name << dendl;
