@@ -1420,7 +1420,7 @@ TEST_P(StoreTest, SetAllocHint) {
 INSTANTIATE_TEST_CASE_P(
   ObjectStore,
   StoreTest,
-  ::testing::Values("filestore", "keyvaluestore-dev"));
+  ::testing::Values("memstore", "filestore", "keyvaluestore-dev"));
 
 #else
 
