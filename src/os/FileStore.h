@@ -377,7 +377,6 @@ private:
   void op_queue_release_throttle(Op *o);
   void _journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk);
   friend struct C_JournaledAhead;
-  int write_version_stamp();
 
   int open_journal();
 
@@ -426,11 +425,10 @@ public:
   int mkfs();
   int mkjournal();
 
+  int write_version_stamp();
   int version_stamp_is_valid(uint32_t *version);
   int update_version_stamp();
-  int convert_collection(coll_t cid);
   int upgrade();
-  void recursive_remove_collection(coll_t tmp);
 
   /**
    * set_allow_sharded_objects()
