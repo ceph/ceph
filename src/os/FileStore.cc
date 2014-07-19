@@ -1164,91 +1164,6 @@ int FileStore::write_version_stamp()
       bl.c_str(), bl.length());
 }
 
-void FileStore::recursive_remove_collection(coll_t tmp)
-{
-  spg_t pg;
-  tmp.is_pg_prefix(pg);
-
-  ObjectStore::Transaction t;
-
-  vector<ghobject_t> objects;
-  collection_list(tmp, objects);
-
-  // delete them.
-  unsigned removed = 0;
-  for (vector<ghobject_t>::iterator p = objects.begin();
-       p != objects.end();
-       ++p, removed++) {
-    t.collection_remove(tmp, *p);
-    if (removed > 300) {
-      int r = apply_transaction(t);
-      assert(r == 0);
-      t = ObjectStore::Transaction();
-      removed = 0;
-    }
-  }
-  t.remove_collection(tmp);
-  int r = apply_transaction(t);
-  assert(r == 0);
-  sync_and_flush();
-}
-
-int FileStore::convert_collection(coll_t cid)
-{
-  coll_t tmp0("convertfs_temp");
-  coll_t tmp1("convertfs_temp1");
-  vector<ghobject_t> objects;
-
-  map<string, bufferptr> aset;
-  int r = collection_getattrs(cid, aset);
-  if (r < 0)
-    return r;
-
-  {
-    ObjectStore::Transaction t;
-    t.create_collection(tmp0);
-    for (map<string, bufferptr>::iterator i = aset.begin();
-	 i != aset.end();
-	 ++i) {
-      bufferlist val;
-      val.push_back(i->second);
-      t.collection_setattr(tmp0, i->first, val);
-    }
-    apply_transaction(t);
-  }
-
-  ghobject_t next;
-  while (!next.is_max()) {
-    objects.clear();
-    ghobject_t start = next;
-    r = collection_list_partial(cid, start,
-				       200, 300, 0,
-				       &objects, &next);
-    if (r < 0)
-      return r;
-
-    ObjectStore::Transaction t;
-    for (vector<ghobject_t>::iterator i = objects.begin();
-	 i != objects.end();
-	 ++i) {
-      t.collection_add(tmp0, cid, *i);
-    }
-    apply_transaction(t);
-  }
-
-  {
-    ObjectStore::Transaction t;
-    t.collection_rename(cid, tmp1);
-    t.collection_rename(tmp0, cid);
-    apply_transaction(t);
-  }
-
-  recursive_remove_collection(tmp1);
-  sync_and_flush();
-  sync();
-  return 0;
-}
-
 int FileStore::upgrade()
 {
   uint32_t version;
@@ -1258,61 +1173,8 @@ int FileStore::upgrade()
   if (r == 1)
     return 0;
 
-  derr << "ObjectStore is old at version " << version << ".  Updating..."  << dendl;
-
-  derr << "Removing tmp pgs" << dendl;
-  vector<coll_t> collections;
-  r = list_collections(collections);
-  if (r < 0)
-    return r;
-  for (vector<coll_t>::iterator i = collections.begin();
-       i != collections.end();
-       ++i) {
-    spg_t pgid;
-    if (i->is_temp(pgid))
-      recursive_remove_collection(*i);
-    else if (i->to_str() == "convertfs_temp" ||
-	     i->to_str() == "convertfs_temp1")
-      recursive_remove_collection(*i);
-  }
-  flush();
-
-
-  derr << "Getting collections" << dendl;
-
-  derr << collections.size() << " to process." << dendl;
-  collections.clear();
-  r = list_collections(collections);
-  if (r < 0)
-    return r;
-  int processed = 0;
-  for (vector<coll_t>::iterator i = collections.begin();
-       i != collections.end();
-       ++i, ++processed) {
-    derr << processed << "/" << collections.size() << " processed" << dendl;
-    uint32_t collection_version;
-    r = collection_version_current(*i, &collection_version);
-    if (r < 0) {
-      return r;
-    } else if (r == 1) {
-      derr << "Collection " << *i << " is up to date" << dendl;
-    } else {
-      derr << "Updating collection " << *i << " current version is "
-	   << collection_version << dendl;
-      r = convert_collection(*i);
-      if (r < 0)
-	return r;
-      derr << "collection " << *i << " updated" << dendl;
-    }
-  }
-  derr << "All collections up to date, updating version stamp..." << dendl;
-  r = update_version_stamp();
-  if (r < 0)
-    return r;
-  sync_and_flush();
-  sync();
-  derr << "Version stamp updated, done with upgrade!" << dendl;
-  return 0;
+  derr << "ObjectStore is old at version " << version << ".  Please upgrade to firefly v0.80.x, convert your store, and then upgrade."  << dendl;
+  return -EINVAL;
 }
 
 int FileStore::read_op_seq(uint64_t *seq)
