@@ -1251,16 +1251,12 @@ int FileStore::convert_collection(coll_t cid)
 
 int FileStore::upgrade()
 {
-  int r = mount();
-  if (r < 0)
-    return r;
-
   uint32_t version;
-  r = version_stamp_is_valid(&version);
+  int r = version_stamp_is_valid(&version);
   if (r < 0)
     return r;
   if (r == 1)
-    return umount();
+    return 0;
 
   derr << "ObjectStore is old at version " << version << ".  Updating..."  << dendl;
 
@@ -1316,7 +1312,7 @@ int FileStore::upgrade()
   sync_and_flush();
   sync();
   derr << "Version stamp updated, done with upgrade!" << dendl;
-  return umount();
+  return 0;
 }
 
 int FileStore::read_op_seq(uint64_t *seq)
