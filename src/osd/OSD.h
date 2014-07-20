@@ -648,18 +648,6 @@ public:
   OSDMap objecter_osdmap;
   Objecter *objecter;
   Finisher objecter_finisher;
-  struct ObjecterDispatcher : public Dispatcher {
-    OSDService *osd;
-    bool ms_dispatch(Message *m);
-    bool ms_handle_reset(Connection *con);
-    void ms_handle_remote_reset(Connection *con) {}
-    void ms_handle_connect(Connection *con);
-    bool ms_get_authorizer(int dest_type,
-			   AuthAuthorizer **authorizer,
-			   bool force_new);
-    ObjecterDispatcher(OSDService *o) : Dispatcher(cct), osd(o) {}
-  } objecter_dispatcher;
-  friend struct ObjecterDispatcher;
 
 
   // -- Watch --

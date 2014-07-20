@@ -210,7 +210,6 @@ OSDService::OSDService(OSD *osd) :
   objecter(new Objecter(osd->client_messenger->cct, osd->objecter_messenger, osd->monc, &objecter_osdmap,
 			0, 0)),
   objecter_finisher(osd->client_messenger->cct),
-  objecter_dispatcher(this),
   watch_lock("OSD::watch_lock"),
   watch_timer(osd->client_messenger->cct, watch_lock),
   next_notif_id(0),
@@ -1271,7 +1270,7 @@ int OSD::init()
   hb_front_server_messenger->add_dispatcher_head(&heartbeat_dispatcher);
   hb_back_server_messenger->add_dispatcher_head(&heartbeat_dispatcher);
 
-  objecter_messenger->add_dispatcher_head(&service.objecter_dispatcher);
+  objecter_messenger->add_dispatcher_head(service.objecter);
 
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
   r = monc->init();
@@ -4898,32 +4897,6 @@ bool OSD::heartbeat_dispatch(Message *m)
 
   return true;
 }
-
-bool OSDService::ObjecterDispatcher::ms_dispatch(Message *m)
-{
-  if (!osd->objecter->ms_dispatch(m))
-    m->put();
-  return true;
-}
-
-bool OSDService::ObjecterDispatcher::ms_handle_reset(Connection *con)
-{
-  osd->objecter->ms_handle_reset(con);
-  return true;
-}
-
-void OSDService::ObjecterDispatcher::ms_handle_connect(Connection *con)
-{
-  return osd->objecter->ms_handle_connect(con);
-}
-
-bool OSDService::ObjecterDispatcher::ms_get_authorizer(int dest_type,
-						       AuthAuthorizer **authorizer,
-						       bool force_new)
-{
-  return osd->objecter->ms_get_authorizer(dest_type, authorizer, force_new);
-}
-
 
 bool OSD::ms_dispatch(Message *m)
 {
