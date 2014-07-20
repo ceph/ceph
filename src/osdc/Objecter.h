@@ -2157,6 +2157,7 @@ public:
 private:
   void pool_op_submit(PoolOp *op);
   void _pool_op_submit(PoolOp *op);
+  void _finish_pool_op(PoolOp *op);
 public:
   int create_pool_snap(int64_t pool, string& snapName, Context *onfinish);
   int allocate_selfmanaged_snap(int64_t pool, snapid_t *psnapid, Context *onfinish);
@@ -2170,7 +2171,6 @@ public:
 
   void handle_pool_op_reply(MPoolOpReply *m);
   int pool_op_cancel(ceph_tid_t tid, int r);
-  void _finish_pool_op(PoolOp *op);
 
   // --------------------------
   // pool stats

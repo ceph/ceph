@@ -2549,6 +2549,7 @@ void Objecter::_list_reply(ListContext *list_context, int r,
 
 int Objecter::create_pool_snap(int64_t pool, string& snap_name, Context *onfinish)
 {
+  RWLock::WLocker wl(rwlock);
   ldout(cct, 10) << "create_pool_snap; pool: " << pool << "; snap: " << snap_name << dendl;
 
   const pg_pool_t *p = osdmap->get_pg_pool(pool);
@@ -2589,6 +2590,7 @@ struct C_SelfmanagedSnap : public Context {
 int Objecter::allocate_selfmanaged_snap(int64_t pool, snapid_t *psnapid,
 					Context *onfinish)
 {
+  RWLock::WLocker wl(rwlock);
   ldout(cct, 10) << "allocate_selfmanaged_snap; pool: " << pool << dendl;
   PoolOp *op = new PoolOp;
   if (!op) return -ENOMEM;
@@ -2606,6 +2608,7 @@ int Objecter::allocate_selfmanaged_snap(int64_t pool, snapid_t *psnapid,
 
 int Objecter::delete_pool_snap(int64_t pool, string& snap_name, Context *onfinish)
 {
+  RWLock::WLocker wl(rwlock);
   ldout(cct, 10) << "delete_pool_snap; pool: " << pool << "; snap: " << snap_name << dendl;
 
   const pg_pool_t *p = osdmap->get_pg_pool(pool);
@@ -2630,7 +2633,9 @@ int Objecter::delete_pool_snap(int64_t pool, string& snap_name, Context *onfinis
 }
 
 int Objecter::delete_selfmanaged_snap(int64_t pool, snapid_t snap,
-				      Context *onfinish) {
+				      Context *onfinish)
+{
+  RWLock::WLocker wl(rwlock);
   ldout(cct, 10) << "delete_selfmanaged_snap; pool: " << pool << "; snap: " 
 	   << snap << dendl;
   PoolOp *op = new PoolOp;
@@ -2650,6 +2655,7 @@ int Objecter::delete_selfmanaged_snap(int64_t pool, snapid_t snap,
 int Objecter::create_pool(string& name, Context *onfinish, uint64_t auid,
 			  int crush_rule)
 {
+  RWLock::WLocker wl(rwlock);
   ldout(cct, 10) << "create_pool name=" << name << dendl;
 
   if (osdmap->lookup_pg_pool_name(name.c_str()) >= 0)
@@ -2674,6 +2680,7 @@ int Objecter::create_pool(string& name, Context *onfinish, uint64_t auid,
 
 int Objecter::delete_pool(int64_t pool, Context *onfinish)
 {
+  RWLock::WLocker wl(rwlock);
   ldout(cct, 10) << "delete_pool " << pool << dendl;
 
   if (!osdmap->have_pg_pool(pool))
@@ -2701,6 +2708,7 @@ int Objecter::delete_pool(int64_t pool, Context *onfinish)
  */
 int Objecter::change_pool_auid(int64_t pool, Context *onfinish, uint64_t auid)
 {
+  RWLock::WLocker wl(rwlock);
   ldout(cct, 10) << "change_pool_auid " << pool << " to " << auid << dendl;
   PoolOp *op = new PoolOp;
   if (!op) return -ENOMEM;
@@ -2732,8 +2740,7 @@ public:
 
 void Objecter::pool_op_submit(PoolOp *op)
 {
-  RWLock::WLocker wl(rwlock);
-
+  assert(rwlock.is_locked());
   if (mon_timeout > 0) {
     op->ontimeout = new C_CancelPoolOp(op->tid, this);
     timer.add_event_after(mon_timeout, op->ontimeout);
