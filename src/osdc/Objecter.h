@@ -1639,6 +1639,21 @@ public:
   // messages
  public:
   bool ms_dispatch(Message *m);
+  bool ms_can_fast_dispatch_any() const {
+    return true;
+  }
+  bool ms_can_fast_dispatch(Message *m) const {
+    switch (m->get_type()) {
+    case CEPH_MSG_OSD_OPREPLY:
+      return true;
+    default:
+      return false;
+    }
+  }
+  void ms_fast_dispatch(Message *m) {
+    ms_dispatch(m);
+  }
+
   void handle_osd_op_reply(class MOSDOpReply *m);
   void handle_osd_map(class MOSDMap *m);
   void wait_for_osd_map();
