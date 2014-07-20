@@ -1006,7 +1006,9 @@ public:
 public:
   Messenger *messenger;
   MonClient *monc;
+private:
   OSDMap    *osdmap;
+public:
   CephContext *cct;
   std::multimap<string,string> crush_location;
 
