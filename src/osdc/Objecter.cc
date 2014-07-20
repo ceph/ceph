@@ -490,37 +490,42 @@ void Objecter::_linger_submit(LingerOp *info)
 
 
 
-void Objecter::dispatch(Message *m)
+bool Objecter::ms_dispatch(Message *m)
 {
+  ldout(cct, 10) << __func__ << " " << cct << " " << *m << dendl;
   switch (m->get_type()) {
+    // these we exlusively handle
   case CEPH_MSG_OSD_OPREPLY:
     handle_osd_op_reply(static_cast<MOSDOpReply*>(m));
-    break;
-    
-  case CEPH_MSG_OSD_MAP:
-    handle_osd_map(static_cast<MOSDMap*>(m));
-    break;
-
-  case MSG_GETPOOLSTATSREPLY:
-    handle_get_pool_stats_reply(static_cast<MGetPoolStatsReply*>(m));
-    break;
-
-  case CEPH_MSG_STATFS_REPLY:
-    handle_fs_stats_reply(static_cast<MStatfsReply*>(m));
-    break;
-
-  case CEPH_MSG_POOLOP_REPLY:
-    handle_pool_op_reply(static_cast<MPoolOpReply*>(m));
-    break;
+    return true;
 
   case MSG_COMMAND_REPLY:
     handle_command_reply(static_cast<MCommandReply*>(m));
-    break;
+    return true;
 
-  default:
-    ldout(cct, 0) << "don't know message type " << m->get_type() << dendl;
-    assert(0);
+  case MSG_GETPOOLSTATSREPLY:
+    handle_get_pool_stats_reply(static_cast<MGetPoolStatsReply*>(m));
+    return true;
+
+  case CEPH_MSG_POOLOP_REPLY:
+    handle_pool_op_reply(static_cast<MPoolOpReply*>(m));
+    return true;
+
+    // these we give others a chance to inspect
+
+    // MDS, OSD
+  case CEPH_MSG_OSD_MAP:
+    m->get();
+    handle_osd_map(static_cast<MOSDMap*>(m));
+    return false;
+
+    // Client
+  case CEPH_MSG_STATFS_REPLY:
+    m->get();
+    handle_fs_stats_reply(static_cast<MStatfsReply*>(m));
+    return false;
   }
+  return false;
 }
 
 void Objecter::_scan_requests(OSDSession *s,
@@ -3090,7 +3095,7 @@ void Objecter::ms_handle_connect(Connection *con)
     resend_mon_ops();
 }
 
-void Objecter::ms_handle_reset(Connection *con)
+bool Objecter::ms_handle_reset(Connection *con)
 {
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
     //
@@ -3115,7 +3120,9 @@ void Objecter::ms_handle_reset(Connection *con)
     } else {
       ldout(cct, 10) << "ms_handle_reset on unknown osd addr " << con->get_peer_addr() << dendl;
     }
+    return true;
   }
+  return false;
 }
 
 void Objecter::ms_handle_remote_reset(Connection *con)
@@ -3124,6 +3131,16 @@ void Objecter::ms_handle_remote_reset(Connection *con)
    * treat these the same.
    */
   ms_handle_reset(con);
+}
+
+bool Objecter::ms_get_authorizer(int dest_type,
+				 AuthAuthorizer **authorizer,
+				 bool force_new)
+{
+  if (dest_type == CEPH_ENTITY_TYPE_MON)
+    return true;
+  *authorizer = monc->auth->build_authorizer(dest_type);
+  return *authorizer != NULL;
 }
 
 
