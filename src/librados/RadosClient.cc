@@ -74,10 +74,7 @@ librados::RadosClient::RadosClient(CephContext *cct_)
     messenger(NULL),
     instance_id(0),
     objecter(NULL),
-    osdmap_epoch(0),
-    pool_cache_epoch(0),
     lock("librados::RadosClient::lock"),
-    pool_cache_rwl("librados::RadosClient::pool_cache_rwl"),
     timer(cct, lock),
     refcnt(1),
     log_last_version(0), log_cb(NULL), log_cb_arg(NULL),
@@ -88,37 +85,9 @@ librados::RadosClient::RadosClient(CephContext *cct_)
 
 int64_t librados::RadosClient::lookup_pool(const char *name)
 {
-  pool_cache_rwl.get_read();
-  if (pool_cache_epoch && pool_cache_epoch == osdmap_epoch) {
-    map<string, int64_t>::iterator iter = pool_cache.find(name);
-    if (iter != pool_cache.end()) {
-      uint64_t val = iter->second;
-      pool_cache_rwl.unlock();
-      return val;
-    }
-  }
-
-  pool_cache_rwl.unlock();
-
-  lock.Lock();
-
-  int r = wait_for_osdmap();
-  if (r < 0)
-    return r;
-  int64_t ret = osdmap.lookup_pg_pool_name(name);
-  pool_cache_rwl.get_write();
-  lock.Unlock();
-  if (ret < 0) {
-    pool_cache_rwl.unlock();
-    return -ENOENT;
-  }
-
-  if (pool_cache_epoch != osdmap_epoch) {
-    pool_cache.clear();
-    pool_cache_epoch = osdmap_epoch;
-  }
-  pool_cache[name] = ret;
-  pool_cache_rwl.unlock();
+  const OSDMap *osdmap = objecter->get_osdmap_read();
+  int64_t ret = osdmap->lookup_pg_pool_name(name);
+  objecter->put_osdmap_read();
   return ret;
 }
 
@@ -382,9 +351,6 @@ bool librados::RadosClient::_dispatch(Message *m)
   // OSD
   case CEPH_MSG_OSD_MAP:
     lock.Lock();
-    pool_cache_rwl.get_write();
-    osdmap_epoch = osdmap.get_epoch();
-    pool_cache_rwl.unlock();
     cond.Signal();
     lock.Unlock();
     break;
