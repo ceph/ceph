@@ -32,7 +32,6 @@
 
 #include "osd/osd_types.h"
 #include "osd/OSD.h"
-#include "osd/OSDMap.h"
 #include "osdc/Objecter.h"
 #include "mon/MonClient.h"
 #include "msg/Dispatcher.h"
@@ -184,7 +183,6 @@ class TestStub : public Dispatcher
 
 class ClientStub : public TestStub
 {
-  OSDMap osdmap;
   ObjecterRef objecter;
   rngen_t gen;
 
@@ -255,7 +253,7 @@ class ClientStub : public TestStub
     dout(10) << "ClientStub::" << __func__ << " starting messenger at "
 	    << messenger->get_myaddr() << dendl;
 
-    objecter.reset(new Objecter(cct, messenger.get(), &monc, &osdmap, 0, 0));
+    objecter.reset(new Objecter(cct, messenger.get(), &monc, 0, 0));
     assert(objecter.get() != NULL);
     objecter->set_balanced_budget();
 

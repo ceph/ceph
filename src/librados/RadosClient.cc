@@ -221,7 +221,7 @@ int librados::RadosClient::connect()
   ldout(cct, 1) << "starting objecter" << dendl;
 
   err = -ENOMEM;
-  objecter = new Objecter(cct, messenger, &monclient, &osdmap,
+  objecter = new Objecter(cct, messenger, &monclient,
 			  cct->_conf->rados_mon_op_timeout,
 			  cct->_conf->rados_osd_op_timeout);
   if (!objecter)

@@ -14,7 +14,6 @@
 #ifndef MDS_UTILITY_H_
 #define MDS_UTILITY_H_
 
-#include "osd/OSDMap.h"
 #include "osdc/Objecter.h"
 #include "mds/MDSMap.h"
 #include "messages/MMDSMap.h"
@@ -31,7 +30,6 @@
 class MDSUtility : public Dispatcher {
 protected:
   Objecter *objecter;
-  OSDMap *osdmap;
   MDSMap *mdsmap;
   Messenger *messenger;
   MonClient *monc;
