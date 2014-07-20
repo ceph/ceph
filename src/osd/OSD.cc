@@ -4901,7 +4901,8 @@ bool OSD::heartbeat_dispatch(Message *m)
 
 bool OSDService::ObjecterDispatcher::ms_dispatch(Message *m)
 {
-  osd->objecter->dispatch(m);
+  if (!osd->objecter->ms_dispatch(m))
+    m->put();
   return true;
 }
 
@@ -4920,10 +4921,7 @@ bool OSDService::ObjecterDispatcher::ms_get_authorizer(int dest_type,
 						       AuthAuthorizer **authorizer,
 						       bool force_new)
 {
-  if (dest_type == CEPH_ENTITY_TYPE_MON)
-    return true;
-  *authorizer = osd->monc->auth->build_authorizer(dest_type);
-  return *authorizer != NULL;
+  return osd->objecter->ms_get_authorizer(dest_type, authorizer, force_new);
 }
 
 
