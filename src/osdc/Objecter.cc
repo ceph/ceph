@@ -2686,18 +2686,33 @@ int Objecter::delete_pool(int64_t pool, Context *onfinish)
   if (!osdmap->have_pg_pool(pool))
     return -ENOENT;
 
+  _do_delete_pool(pool, onfinish);
+  return 0;
+}
+
+int Objecter::delete_pool(const string &pool_name, Context *onfinish)
+{
+  RWLock::WLocker wl(rwlock);
+  ldout(cct, 10) << "delete_pool " << pool_name << dendl;
+
+  int64_t pool = osdmap->lookup_pg_pool_name(pool_name);
+  if (pool < 0)
+    return pool;
+
+  _do_delete_pool(pool, onfinish);
+  return 0;
+}
+
+void Objecter::_do_delete_pool(int64_t pool, Context *onfinish)
+{
   PoolOp *op = new PoolOp;
-  if (!op) return -ENOMEM;
   op->tid = last_tid.inc();
   op->pool = pool;
   op->name = "delete";
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_DELETE;
   pool_ops[op->tid] = op;
-
   pool_op_submit(op);
-
-  return 0;
 }
 
 /**
