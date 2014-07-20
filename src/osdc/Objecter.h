@@ -996,7 +996,7 @@ struct ObjectOperation {
 // ----------------
 
 
-class Objecter : public md_config_obs_t {
+class Objecter : public md_config_obs_t, public Dispatcher {
 public:
   // config observer bits
   virtual const char** get_tracked_conf_keys() const;
@@ -1583,6 +1583,7 @@ public:
   Objecter(CephContext *cct_, Messenger *m, MonClient *mc,
 	   OSDMap *om, double mon_timeout,
 	   double osd_timeout) :
+    Dispatcher(cct),
     messenger(m), monc(mc), osdmap(om), cct(cct_),
     initialized(false),
     last_tid(0), client_inc(-1), max_linger_id(0),
@@ -1637,7 +1638,7 @@ public:
 
   // messages
  public:
-  void dispatch(Message *m);
+  bool ms_dispatch(Message *m);
   void handle_osd_op_reply(class MOSDOpReply *m);
   void handle_osd_map(class MOSDMap *m);
   void wait_for_osd_map();
@@ -2246,8 +2247,12 @@ public:
   }
 
   void ms_handle_connect(Connection *con);
-  void ms_handle_reset(Connection *con);
+  bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con);
+  bool ms_get_authorizer(int dest_type,
+			 AuthAuthorizer **authorizer,
+			 bool force_new);
+
   void blacklist_self(bool set);
 };
 
