@@ -277,9 +277,9 @@ protected:
 
   friend class CDirDiscover;
   friend class CDirExport;
-  friend class C_Dir_TMAP_Fetched;
-  friend class C_Dir_OMAP_Fetched;
-  friend class C_Dir_Committed;
+  friend class C_IO_Dir_TMAP_Fetched;
+  friend class C_IO_Dir_OMAP_Fetched;
+  friend class C_IO_Dir_Committed;
 
   bloom_filter *bloom;
   /* If you set up the bloom filter, you must keep it accurate!

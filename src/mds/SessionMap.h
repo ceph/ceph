@@ -232,8 +232,9 @@ public:
 class MDS;
 
 class SessionMap {
-private:
+public:
   MDS *mds;
+private:
   ceph::unordered_map<entity_name_t, Session*> session_map;
 public:
   map<int,xlist<Session*>* > by_state;

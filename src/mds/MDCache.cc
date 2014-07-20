@@ -7997,14 +7997,15 @@ void MDCache::make_trace(vector<CDentry*>& trace, CInode *in)
 // -------------------------------------------------------------------------------
 // Open inode by inode number
 
-class C_MDC_OpenInoBacktraceFetched : public Context {
+class C_IO_MDC_OpenInoBacktraceFetched : public Context {
   MDCache *cache;
   inodeno_t ino;
   public:
   bufferlist bl;
-  C_MDC_OpenInoBacktraceFetched(MDCache *c, inodeno_t i) :
+  C_IO_MDC_OpenInoBacktraceFetched(MDCache *c, inodeno_t i) :
     cache(c), ino(i) {}
   void finish(int r) {
+    Mutex::Locker l(cache->mds->mds_lock);
     cache->_open_ino_backtrace_fetched(ino, bl, r);
   }
 };
@@ -8051,7 +8052,7 @@ void MDCache::_open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err
       dout(10) << " old object in pool " << info.pool
 	       << ", retrying pool " << backtrace.pool << dendl;
       info.pool = backtrace.pool;
-      C_MDC_OpenInoBacktraceFetched *fin = new C_MDC_OpenInoBacktraceFetched(this, ino);
+      C_IO_MDC_OpenInoBacktraceFetched *fin = new C_IO_MDC_OpenInoBacktraceFetched(this, ino);
       fetch_backtrace(ino, info.pool, fin->bl, fin);
       return;
     }
@@ -8061,7 +8062,7 @@ void MDCache::_open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err
       dout(10) << " no object in pool " << info.pool
 	       << ", retrying pool " << meta_pool << dendl;
       info.pool = meta_pool;
-      C_MDC_OpenInoBacktraceFetched *fin = new C_MDC_OpenInoBacktraceFetched(this, ino);
+      C_IO_MDC_OpenInoBacktraceFetched *fin = new C_IO_MDC_OpenInoBacktraceFetched(this, ino);
       fetch_backtrace(ino, info.pool, fin->bl, fin);
       return;
     }
@@ -8286,7 +8287,7 @@ void MDCache::do_open_ino(inodeno_t ino, open_ino_info_t& info, int err)
     info.checking = mds->get_nodeid();
     info.checked.clear();
     info.checked.insert(mds->get_nodeid());
-    C_MDC_OpenInoBacktraceFetched *fin = new C_MDC_OpenInoBacktraceFetched(this, ino);
+    C_IO_MDC_OpenInoBacktraceFetched *fin = new C_IO_MDC_OpenInoBacktraceFetched(this, ino);
     fetch_backtrace(ino, info.pool, fin->bl, fin);
   } else {
     assert(!info.ancestors.empty());
@@ -9201,13 +9202,14 @@ void MDCache::fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Conte
   mds->objecter->getxattr(oid, object_locator_t(pool), "parent", CEPH_NOSNAP, &bl, 0, fin);
 }
 
-class C_MDC_PurgeStrayPurged : public Context {
+class C_IO_MDC_PurgeStrayPurged : public Context {
   MDCache *cache;
   CDentry *dn;
 public:
-  C_MDC_PurgeStrayPurged(MDCache *c, CDentry *d) : 
+  C_IO_MDC_PurgeStrayPurged(MDCache *c, CDentry *d) : 
     cache(c), dn(d) { }
   void finish(int r) {
+    Mutex::Locker l(cache->mds->mds_lock);
     assert(r == 0 || r == -ENOENT);
     cache->_purge_stray_purged(dn, r);
   }
@@ -9235,7 +9237,7 @@ void MDCache::purge_stray(CDentry *dn)
   // dir.  on recovery, we'll need to re-eval all strays anyway.
   
   SnapContext nullsnapc;
-  C_GatherBuilder gather(g_ceph_context, new C_MDC_PurgeStrayPurged(this, dn));
+  C_GatherBuilder gather(g_ceph_context, new C_IO_MDC_PurgeStrayPurged(this, dn));
 
   if (in->is_dir()) {
     object_locator_t oloc(mds->mdsmap->get_metadata_pool());
@@ -11046,16 +11048,17 @@ public:
   }
 };
 
-class C_MDC_FragmentFinish : public Context {
+class C_IO_MDC_FragmentFinish : public Context {
   MDCache *mdcache;
   dirfrag_t basedirfrag;
   list<CDir*> resultfrags;
 public:
-  C_MDC_FragmentFinish(MDCache *m, dirfrag_t f, list<CDir*>& l) :
+  C_IO_MDC_FragmentFinish(MDCache *m, dirfrag_t f, list<CDir*>& l) :
     mdcache(m), basedirfrag(f) {
     resultfrags.swap(l);
   }
   virtual void finish(int r) {
+    Mutex::Locker l(mdcache->mds->mds_lock);
     assert(r == 0 || r == -ENOENT);
     mdcache->_fragment_finish(basedirfrag, resultfrags);
   }
@@ -11288,7 +11291,7 @@ void MDCache::_fragment_committed(dirfrag_t basedirfrag, list<CDir*>& resultfrag
   ufragment &uf = it->second;
 
   // remove old frags
-  C_GatherBuilder gather(g_ceph_context, new C_MDC_FragmentFinish(this, basedirfrag, resultfrags));
+  C_GatherBuilder gather(g_ceph_context, new C_IO_MDC_FragmentFinish(this, basedirfrag, resultfrags));
 
   SnapContext nullsnapc;
   object_locator_t oloc(mds->mdsmap->get_metadata_pool());

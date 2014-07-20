@@ -820,7 +820,7 @@ protected:
   void do_open_ino_peer(inodeno_t ino, open_ino_info_t& info);
   void handle_open_ino(MMDSOpenIno *m);
   void handle_open_ino_reply(MMDSOpenInoReply *m);
-  friend class C_MDC_OpenInoBacktraceFetched;
+  friend class C_IO_MDC_OpenInoBacktraceFetched;
   friend struct C_MDC_OpenInoTraverseDir;
   friend struct C_MDC_OpenInoParentOpened;
 
@@ -879,10 +879,10 @@ protected:
   void _purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls);
   void _purge_stray_logged_truncate(CDentry *dn, LogSegment *ls);
   friend struct C_MDC_RetryScanStray;
-  friend class C_MDC_FetchedBacktrace;
+  friend class C_IO_MDC_FetchedBacktrace;
   friend class C_MDC_PurgeStrayLogged;
   friend class C_MDC_PurgeStrayLoggedTruncate;
-  friend class C_MDC_PurgeStrayPurged;
+  friend class C_IO_MDC_PurgeStrayPurged;
   void reintegrate_stray(CDentry *dn, CDentry *rlink);
   void migrate_stray(CDentry *dn, int dest);
 
@@ -987,7 +987,7 @@ private:
   friend class C_MDC_FragmentPrep;
   friend class C_MDC_FragmentStore;
   friend class C_MDC_FragmentCommit;
-  friend class C_MDC_FragmentFinish;
+  friend class C_IO_MDC_FragmentFinish;
 
   void handle_fragment_notify(MMDSFragmentNotify *m);
 

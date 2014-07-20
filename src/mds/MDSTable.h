@@ -23,9 +23,9 @@
 class MDS;
 
 class MDSTable {
- protected:
+public:
   MDS *mds;
-
+protected:
   const char *table_name;
   bool per_mds;
 

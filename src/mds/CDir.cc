@@ -1342,15 +1342,16 @@ void CDir::fetch(Context *c, const string& want_dn, bool ignore_authpinnability)
   _omap_fetch(want_dn);
 }
 
-class C_Dir_TMAP_Fetched : public Context {
+class C_IO_Dir_TMAP_Fetched : public Context {
  protected:
   CDir *dir;
   string want_dn;
  public:
   bufferlist bl;
 
-  C_Dir_TMAP_Fetched(CDir *d, const string& w) : dir(d), want_dn(w) { }
+  C_IO_Dir_TMAP_Fetched(CDir *d, const string& w) : dir(d), want_dn(w) { }
   void finish(int r) {
+    Mutex::Locker l(dir->cache->mds->mds_lock);
     dir->_tmap_fetched(bl, want_dn, r);
   }
 };
@@ -1358,7 +1359,7 @@ class C_Dir_TMAP_Fetched : public Context {
 void CDir::_tmap_fetch(const string& want_dn)
 {
   // start by reading the first hunk of it
-  C_Dir_TMAP_Fetched *fin = new C_Dir_TMAP_Fetched(this, want_dn);
+  C_IO_Dir_TMAP_Fetched *fin = new C_IO_Dir_TMAP_Fetched(this, want_dn);
   object_t oid = get_ondisk_object();
   object_locator_t oloc(cache->mds->mdsmap->get_metadata_pool());
   ObjectOperation rd;
@@ -1396,7 +1397,7 @@ void CDir::_tmap_fetched(bufferlist& bl, const string& want_dn, int r)
   _omap_fetched(header, omap, want_dn, r);
 }
 
-class C_Dir_OMAP_Fetched : public Context {
+class C_IO_Dir_OMAP_Fetched : public Context {
  protected:
   CDir *dir;
   string want_dn;
@@ -1405,8 +1406,9 @@ class C_Dir_OMAP_Fetched : public Context {
   map<string, bufferlist> omap;
   int ret1, ret2;
 
-  C_Dir_OMAP_Fetched(CDir *d, const string& w) : dir(d), want_dn(w) { }
+  C_IO_Dir_OMAP_Fetched(CDir *d, const string& w) : dir(d), want_dn(w) { }
   void finish(int r) {
+    Mutex::Locker l(dir->cache->mds->mds_lock);
     if (r >= 0) r = ret1;
     if (r >= 0) r = ret2;
     dir->_omap_fetched(hdrbl, omap, want_dn, r);
@@ -1415,7 +1417,7 @@ class C_Dir_OMAP_Fetched : public Context {
 
 void CDir::_omap_fetch(const string& want_dn)
 {
-  C_Dir_OMAP_Fetched *fin = new C_Dir_OMAP_Fetched(this, want_dn);
+  C_IO_Dir_OMAP_Fetched *fin = new C_IO_Dir_OMAP_Fetched(this, want_dn);
   object_t oid = get_ondisk_object();
   object_locator_t oloc(cache->mds->mdsmap->get_metadata_pool());
   ObjectOperation rd;
@@ -1747,12 +1749,13 @@ void CDir::commit(version_t want, Context *c, bool ignore_authpinnability, int o
   _commit(want, op_prio);
 }
 
-class C_Dir_Committed : public Context {
+class C_IO_Dir_Committed : public Context {
   CDir *dir;
   version_t version;
 public:
-  C_Dir_Committed(CDir *d, version_t v) : dir(d), version(v) { }
+  C_IO_Dir_Committed(CDir *d, version_t v) : dir(d), version(v) { }
   void finish(int r) {
+    Mutex::Locker l(dir->cache->mds->mds_lock);
     assert(r == 0);
     dir->_committed(version);
   }
@@ -1787,7 +1790,8 @@ void CDir::_omap_commit(int op_prio)
   set<string> to_remove;
   map<string, bufferlist> to_set;
 
-  C_GatherBuilder gather(g_ceph_context, new C_Dir_Committed(this, get_version()));
+  C_GatherBuilder gather(g_ceph_context,
+			 new C_IO_Dir_Committed(this, get_version()));
 
   SnapContext snapc;
   object_t oid = get_ondisk_object();
