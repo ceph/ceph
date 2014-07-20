@@ -15,6 +15,7 @@
 #include "SnapServer.h"
 #include "MDS.h"
 #include "osd/OSDMap.h"
+#include "osdc/Objecter.h"
 #include "mon/MonClient.h"
 
 #include "include/types.h"
@@ -201,11 +202,12 @@ void SnapServer::check_osd_map(bool force)
   map<int, vector<snapid_t> > all_purge;
   map<int, vector<snapid_t> > all_purged;
 
+  const OSDMap *osdmap = mds->objecter->get_osdmap_read();
   for (map<int, set<snapid_t> >::iterator p = need_to_purge.begin();
        p != need_to_purge.end();
        ++p) {
     int id = p->first;
-    const pg_pool_t *pi = mds->osdmap->get_pg_pool(id);
+    const pg_pool_t *pi = osdmap->get_pg_pool(id);
     for (set<snapid_t>::iterator q = p->second.begin();
 	 q != p->second.end();
 	 ++q) {
@@ -217,6 +219,7 @@ void SnapServer::check_osd_map(bool force)
       }
     }
   }
+  mds->objecter->put_osdmap_read();
 
   if (!all_purged.empty()) {
     // prepare to remove from need_to_purge list
