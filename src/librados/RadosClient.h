@@ -22,7 +22,6 @@
 #include "include/rados/librados.hpp"
 #include "mon/MonClient.h"
 #include "msg/Dispatcher.h"
-#include "osd/OSDMap.h"
 
 #include "IoCtxImpl.h"
 
@@ -47,7 +46,6 @@ private:
     CONNECTED,
   } state;
 
-  OSDMap osdmap;
   MonClient monclient;
   SimpleMessenger *messenger;
 
