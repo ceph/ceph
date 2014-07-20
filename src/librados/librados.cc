@@ -1382,6 +1382,10 @@ int librados::IoCtx::aio_stat(const std::string& oid, librados::AioCompletion *c
   return io_ctx_impl->aio_stat(oid, c->pc, psize, pmtime);
 }
 
+int librados::IoCtx::aio_cancel(librados::AioCompletion *c)
+{
+  return io_ctx_impl->aio_cancel(c->pc);
+}
 
 int librados::IoCtx::watch(const string& oid, uint64_t ver, uint64_t *cookie,
 			   librados::WatchCtx *ctx)
@@ -2952,6 +2956,11 @@ extern "C" int rados_aio_stat(rados_ioctx_t io, const char *o,
 		       psize, pmtime);
 }
 
+extern "C" int rados_aio_cancel(rados_ioctx_t io, rados_completion_t completion)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  return ctx->aio_cancel((librados::AioCompletionImpl*)completion);
+}
 
 struct C_WatchCB : public librados::WatchCtx {
   rados_watchcb_t wcb;

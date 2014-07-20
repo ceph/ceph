@@ -5586,12 +5586,10 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
     assert(cop->src.snap == CEPH_NOSNAP);
     ObjectOperation op;
     op.list_snaps(&cop->results.snapset, NULL);
-    osd->objecter_lock.Lock();
     ceph_tid_t tid = osd->objecter->read(cop->src.oid, cop->oloc, op,
 				    CEPH_SNAPDIR, NULL,
 				    flags, gather.new_sub(), NULL);
     cop->objecter_tid2 = tid;
-    osd->objecter_lock.Unlock();
   }
 
   ObjectOperation op;
@@ -5614,7 +5612,6 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
   gather.set_finisher(new C_OnFinisher(fin,
 				       &osd->objecter_finisher));
 
-  osd->objecter_lock.Lock();
   ceph_tid_t tid = osd->objecter->read(cop->src.oid, cop->oloc, op,
 				  cop->src.snap, NULL,
 				  flags,
@@ -5624,7 +5621,6 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
   fin->tid = tid;
   cop->objecter_tid = tid;
   gather.activate();
-  osd->objecter_lock.Unlock();
 }
 
 void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
@@ -6040,7 +6036,6 @@ void ReplicatedPG::cancel_copy(CopyOpRef cop, bool requeue)
 
   // cancel objecter op, if we can
   if (cop->objecter_tid) {
-    Mutex::Locker l(osd->objecter_lock);
     osd->objecter->op_cancel(cop->objecter_tid, -ECANCELED);
     cop->objecter_tid = 0;
     if (cop->objecter_tid2) {
@@ -6253,7 +6248,6 @@ int ReplicatedPG::start_flush(
   if (dsnapc.seq > 0) {
     ObjectOperation o;
     o.remove();
-    osd->objecter_lock.Lock();
     osd->objecter->mutate(
       soid.oid,
       base_oloc,
@@ -6265,7 +6259,6 @@ int ReplicatedPG::start_flush(
        CEPH_OSD_FLAG_ENFORCE_SNAPC),
       NULL,
       NULL /* no callback, we'll rely on the ordering w.r.t the next op */);
-    osd->objecter_lock.Unlock();
   }
 
   FlushOpRef fop(new FlushOp);
@@ -6289,16 +6282,15 @@ int ReplicatedPG::start_flush(
   }
   C_Flush *fin = new C_Flush(this, soid, get_last_peering_reset());
 
-  osd->objecter_lock.Lock();
   ceph_tid_t tid = osd->objecter->mutate(
     soid.oid, base_oloc, o, snapc, oi.mtime,
     CEPH_OSD_FLAG_IGNORE_OVERLAY | CEPH_OSD_FLAG_ENFORCE_SNAPC,
     NULL,
     new C_OnFinisher(fin,
 		     &osd->objecter_finisher));
+  /* we're under the pg lock and fin->finish() is grabbing that */
   fin->tid = tid;
   fop->objecter_tid = tid;
-  osd->objecter_lock.Unlock();
 
   flush_ops[soid] = fop;
   return -EINPROGRESS;
@@ -6441,7 +6433,6 @@ void ReplicatedPG::cancel_flush(FlushOpRef fop, bool requeue)
   dout(10) << __func__ << " " << fop->obc->obs.oi.soid << " tid "
 	   << fop->objecter_tid << dendl;
   if (fop->objecter_tid) {
-    Mutex::Locker l(osd->objecter_lock);
     osd->objecter->op_cancel(fop->objecter_tid, -ECANCELED);
     fop->objecter_tid = 0;
   }

@@ -66,13 +66,11 @@ int librados::IoCtxImpl::set_snap_write_context(snapid_t seq, vector<snapid_t>& 
 
 uint32_t librados::IoCtxImpl::get_object_hash_position(const std::string& oid)
 {
-  Mutex::Locker l(*lock);
   return objecter->get_object_hash_position(poolid, oid, oloc.nspace);
 }
 
 uint32_t librados::IoCtxImpl::get_object_pg_hash_position(const std::string& oid)
 {
-  Mutex::Locker l(*lock);
   return objecter->get_object_pg_hash_position(poolid, oid, oloc.nspace);
 }
 
@@ -158,9 +156,7 @@ int librados::IoCtxImpl::snap_create(const char *snapName)
   Cond cond;
   bool done;
   Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &reply);
-  lock->Lock();
   reply = objecter->create_pool_snap(poolid, sName, onfinish);
-  lock->Unlock();
 
   if (reply < 0) {
     delete onfinish;
@@ -182,9 +178,7 @@ int librados::IoCtxImpl::selfmanaged_snap_create(uint64_t *psnapid)
   bool done;
   Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &reply);
   snapid_t snapid;
-  lock->Lock();
   reply = objecter->allocate_selfmanaged_snap(poolid, &snapid, onfinish);
-  lock->Unlock();
 
   if (reply < 0) {
     delete onfinish;
@@ -208,9 +202,7 @@ int librados::IoCtxImpl::snap_remove(const char *snapName)
   Cond cond;
   bool done;
   Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &reply);
-  lock->Lock();
   reply = objecter->delete_pool_snap(poolid, sName, onfinish);
-  lock->Unlock();
 
   if (reply < 0) {
     delete onfinish; 
@@ -238,11 +230,9 @@ int librados::IoCtxImpl::selfmanaged_snap_rollback_object(const object_t& oid,
   ::ObjectOperation op;
   prepare_assert_ops(&op);
   op.rollback(snapid);
-  lock->Lock();
   objecter->mutate(oid, oloc,
 	           op, snapc, ut, 0,
 	           onack, NULL, NULL);
-  lock->Unlock();
 
   mylock.Lock();
   while (!done) cond.Wait(mylock);
@@ -252,26 +242,13 @@ int librados::IoCtxImpl::selfmanaged_snap_rollback_object(const object_t& oid,
 
 int librados::IoCtxImpl::rollback(const object_t& oid, const char *snapName)
 {
-  string sName(snapName);
-
-  lock->Lock();
   snapid_t snap;
-  const map<int64_t, pg_pool_t>& pools = objecter->osdmap->get_pools();
-  const pg_pool_t& pg_pool = pools.find(poolid)->second;
-  map<snapid_t, pool_snap_info_t>::const_iterator p;
-  for (p = pg_pool.snaps.begin();
-       p != pg_pool.snaps.end();
-       ++p) {
-    if (p->second.name == snapName) {
-      snap = p->first;
-      break;
-    }
+
+  int r = objecter->pool_snap_by_name(poolid, snapName, &snap);
+  if (r < 0) {
+    return r;
   }
-  if (p == pg_pool.snaps.end()) {
-    lock->Unlock();
-    return -ENOENT;
-  }
-  lock->Unlock();
+  string sName(snapName);
 
   return selfmanaged_snap_rollback_object(oid, snapc, snap);
 }
@@ -283,10 +260,8 @@ int librados::IoCtxImpl::selfmanaged_snap_remove(uint64_t snapid)
   Mutex mylock("IoCtxImpl::selfmanaged_snap_remove::mylock");
   Cond cond;
   bool done;
-  lock->Lock();
   objecter->delete_selfmanaged_snap(poolid, snapid_t(snapid),
 				    new C_SafeCond(&mylock, &cond, &done, &reply));
-  lock->Unlock();
 
   mylock.Lock();
   while (!done) cond.Wait(mylock);
@@ -301,11 +276,9 @@ int librados::IoCtxImpl::pool_change_auid(unsigned long long auid)
   Mutex mylock("IoCtxImpl::pool_change_auid::mylock");
   Cond cond;
   bool done;
-  lock->Lock();
   objecter->change_pool_auid(poolid,
 			     new C_SafeCond(&mylock, &cond, &done, &reply),
 			     auid);
-  lock->Unlock();
 
   mylock.Lock();
   while (!done) cond.Wait(mylock);
@@ -316,7 +289,6 @@ int librados::IoCtxImpl::pool_change_auid(unsigned long long auid)
 int librados::IoCtxImpl::pool_change_auid_async(unsigned long long auid,
 						  PoolAsyncCompletionImpl *c)
 {
-  Mutex::Locker l(*lock);
   objecter->change_pool_auid(poolid,
 			     new C_PoolAsync_Safe(c),
 			     auid);
@@ -325,49 +297,33 @@ int librados::IoCtxImpl::pool_change_auid_async(unsigned long long auid,
 
 int librados::IoCtxImpl::snap_list(vector<uint64_t> *snaps)
 {
-  Mutex::Locker l(*lock);
-  const pg_pool_t *pi = objecter->osdmap->get_pg_pool(poolid);
-  for (map<snapid_t,pool_snap_info_t>::const_iterator p = pi->snaps.begin();
-       p != pi->snaps.end();
-       ++p)
-    snaps->push_back(p->first);
-  return 0;
+  return objecter->pool_snap_list(poolid, snaps);
 }
 
 int librados::IoCtxImpl::snap_lookup(const char *name, uint64_t *snapid)
 {
-  Mutex::Locker l(*lock);
-  const pg_pool_t *pi = objecter->osdmap->get_pg_pool(poolid);
-  for (map<snapid_t,pool_snap_info_t>::const_iterator p = pi->snaps.begin();
-       p != pi->snaps.end();
-       ++p) {
-    if (p->second.name == name) {
-      *snapid = p->first;
-      return 0;
-    }
-  }
-  return -ENOENT;
+  return objecter->pool_snap_by_name(poolid, name, (snapid_t *)snapid);
 }
 
 int librados::IoCtxImpl::snap_get_name(uint64_t snapid, std::string *s)
 {
-  Mutex::Locker l(*lock);
-  const pg_pool_t *pi = objecter->osdmap->get_pg_pool(poolid);
-  map<snapid_t,pool_snap_info_t>::const_iterator p = pi->snaps.find(snapid);
-  if (p == pi->snaps.end())
-    return -ENOENT;
-  *s = p->second.name.c_str();
+  pool_snap_info_t info;
+  int ret = objecter->pool_snap_get_info(poolid, snapid, &info);
+  if (ret < 0) {
+    return ret;
+  }
+  *s = info.name.c_str();
   return 0;
 }
 
 int librados::IoCtxImpl::snap_get_stamp(uint64_t snapid, time_t *t)
 {
-  Mutex::Locker l(*lock);
-  const pg_pool_t *pi = objecter->osdmap->get_pg_pool(poolid);
-  map<snapid_t,pool_snap_info_t>::const_iterator p = pi->snaps.find(snapid);
-  if (p == pi->snaps.end())
-    return -ENOENT;
-  *t = p->second.stamp.sec();
+  pool_snap_info_t info;
+  int ret = objecter->pool_snap_get_info(poolid, snapid, &info);
+  if (ret < 0) {
+    return ret;
+  }
+  *t = info.stamp.sec();
   return 0;
 }
 
@@ -388,9 +344,7 @@ int librados::IoCtxImpl::list(Objecter::ListContext *context, int max_entries)
   context->max_entries = max_entries;
   context->nspace = oloc.nspace;
 
-  lock->Lock();
   objecter->list_objects(context, new C_SafeCond(&mylock, &cond, &done, &r));
-  lock->Unlock();
 
   mylock.Lock();
   while(!done)
@@ -403,7 +357,6 @@ int librados::IoCtxImpl::list(Objecter::ListContext *context, int max_entries)
 uint32_t librados::IoCtxImpl::list_seek(Objecter::ListContext *context,
 					uint32_t pos)
 {
-  Mutex::Locker l(*lock);
   context->list.clear();
   return objecter->list_objects_seek(context, pos);
 }
@@ -523,9 +476,7 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
   Objecter::Op *objecter_op = objecter->prepare_mutate_op(oid, oloc,
 	                                                  *o, snapc, ut, flags,
 	                                                  NULL, oncommit, &ver);
-  lock->Lock();
   objecter->op_submit(objecter_op);
-  lock->Unlock();
 
   mylock.Lock();
   while (!done)
@@ -560,9 +511,7 @@ int librados::IoCtxImpl::operate_read(const object_t& oid,
   Objecter::Op *objecter_op = objecter->prepare_read_op(oid, oloc,
 	                                      *o, snap_seq, pbl, flags,
 	                                      onack, &ver);
-  lock->Lock();
   objecter->op_submit(objecter_op);
-  lock->Unlock();
 
   mylock.Lock();
   while (!done)
@@ -590,8 +539,7 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
   Objecter::Op *objecter_op = objecter->prepare_read_op(oid, oloc,
 		 *o, snap_seq, pbl, flags,
 		 onack, &c->objver);
-  Mutex::Locker l(*lock);
-  objecter->op_submit(objecter_op);
+  c->tid = objecter->op_submit(objecter_op);
   return 0;
 }
 
@@ -610,9 +558,8 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
   c->io = this;
   queue_aio_write(c);
 
-  Mutex::Locker l(*lock);
-  objecter->mutate(oid, oloc, *o, snap_context, ut, flags, onack, oncommit,
-		   &c->objver);
+  c->tid = objecter->mutate(oid, oloc, *o, snap_context, ut, flags, onack, oncommit,
+		            &c->objver);
 
   return 0;
 }
@@ -630,8 +577,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
   c->io = this;
   c->blp = pbl;
 
-  Mutex::Locker l(*lock);
-  objecter->read(oid, oloc,
+  c->tid = objecter->read(oid, oloc,
 		 off, len, snapid, pbl, 0,
 		 onack, &c->objver);
   return 0;
@@ -652,8 +598,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
   c->bl.push_back(buffer::create_static(len, buf));
   c->blp = &c->bl;
 
-  Mutex::Locker l(*lock);
-  objecter->read(oid, oloc,
+  c->tid = objecter->read(oid, oloc,
 		 off, len, snapid, &c->bl, 0,
 		 onack, &c->objver);
 
@@ -688,8 +633,7 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
 
   onack->m_ops.sparse_read(off, len, m, data_bl, NULL);
 
-  Mutex::Locker l(*lock);
-  objecter->read(oid, oloc,
+  c->tid = objecter->read(oid, oloc,
 		 onack->m_ops, snap_seq, NULL, 0,
 		 onack, &c->objver);
   return 0;
@@ -712,8 +656,7 @@ int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
   Context *onack = new C_aio_Ack(c);
   Context *onsafe = new C_aio_Safe(c);
 
-  Mutex::Locker l(*lock);
-  objecter->write(oid, oloc,
+  c->tid = objecter->write(oid, oloc,
 		  off, len, snapc, bl, ut, 0,
 		  onack, onsafe, &c->objver);
 
@@ -735,8 +678,7 @@ int librados::IoCtxImpl::aio_append(const object_t &oid, AioCompletionImpl *c,
   Context *onack = new C_aio_Ack(c);
   Context *onsafe = new C_aio_Safe(c);
 
-  Mutex::Locker l(*lock);
-  objecter->append(oid, oloc,
+  c->tid = objecter->append(oid, oloc,
 		   len, snapc, bl, ut, 0,
 		   onack, onsafe, &c->objver);
 
@@ -759,8 +701,7 @@ int librados::IoCtxImpl::aio_write_full(const object_t &oid,
   Context *onack = new C_aio_Ack(c);
   Context *onsafe = new C_aio_Safe(c);
 
-  Mutex::Locker l(*lock);
-  objecter->write_full(oid, oloc,
+  c->tid = objecter->write_full(oid, oloc,
 		       snapc, bl, ut, 0,
 		       onack, onsafe, &c->objver);
 
@@ -781,8 +722,7 @@ int librados::IoCtxImpl::aio_remove(const object_t &oid, AioCompletionImpl *c)
   Context *onack = new C_aio_Ack(c);
   Context *onsafe = new C_aio_Safe(c);
 
-  Mutex::Locker l(*lock);
-  objecter->remove(oid, oloc,
+  c->tid = objecter->remove(oid, oloc,
 		   snapc, ut, 0,
 		   onack, onsafe, &c->objver);
 
@@ -796,13 +736,18 @@ int librados::IoCtxImpl::aio_stat(const object_t& oid, AioCompletionImpl *c,
   c->io = this;
   C_aio_stat_Ack *onack = new C_aio_stat_Ack(c, pmtime);
 
-  Mutex::Locker l(*lock);
-  objecter->stat(oid, oloc,
+  c->tid = objecter->stat(oid, oloc,
 		 snap_seq, psize, &onack->mtime, 0,
 		 onack, &c->objver);
 
   return 0;
 }
+
+int librados::IoCtxImpl::aio_cancel(AioCompletionImpl *c)
+{
+  return objecter->op_cancel(c->tid, -ECANCELED);
+}
+
 
 int librados::IoCtxImpl::hit_set_list(uint32_t hash, AioCompletionImpl *c,
 			      std::list< std::pair<time_t, time_t> > *pls)
@@ -811,11 +756,10 @@ int librados::IoCtxImpl::hit_set_list(uint32_t hash, AioCompletionImpl *c,
   c->is_read = true;
   c->io = this;
 
-  Mutex::Locker l(*lock);
   ::ObjectOperation rd;
   rd.hit_set_ls(pls, NULL);
   object_locator_t oloc(poolid);
-  objecter->pg_read(hash, oloc, rd, NULL, 0, onack, NULL);
+  c->tid = objecter->pg_read(hash, oloc, rd, NULL, 0, onack, NULL);
   return 0;
 }
 
@@ -827,11 +771,10 @@ int librados::IoCtxImpl::hit_set_get(uint32_t hash, AioCompletionImpl *c,
   c->is_read = true;
   c->io = this;
 
-  Mutex::Locker l(*lock);
   ::ObjectOperation rd;
   rd.hit_set_get(utime_t(stamp, 0), pbl, 0);
   object_locator_t oloc(poolid);
-  objecter->pg_read(hash, oloc, rd, NULL, 0, onack, NULL);
+  c->tid = objecter->pg_read(hash, oloc, rd, NULL, 0, onack, NULL);
   return 0;
 }
 
@@ -902,11 +845,10 @@ int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
   c->is_read = true;
   c->io = this;
 
-  Mutex::Locker l(*lock);
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
   rd.call(cls, method, inbl);
-  objecter->read(oid, oloc, rd, snap_seq, outbl, 0, onack, &c->objver);
+  c->tid = objecter->read(oid, oloc, rd, snap_seq, outbl, 0, onack, &c->objver);
 
   return 0;
 }
@@ -944,11 +886,9 @@ int librados::IoCtxImpl::mapext(const object_t& oid,
   int r;
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
-  lock->Lock();
   objecter->mapext(oid, oloc,
 		   off, len, snap_seq, &bl, 0,
 		   onack);
-  lock->Unlock();
 
   mylock.Lock();
   while (!done)

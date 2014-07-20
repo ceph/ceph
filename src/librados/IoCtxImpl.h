@@ -185,6 +185,7 @@ struct librados::IoCtxImpl {
   int aio_exec(const object_t& oid, AioCompletionImpl *c, const char *cls,
 	       const char *method, bufferlist& inbl, bufferlist *outbl);
   int aio_stat(const object_t& oid, AioCompletionImpl *c, uint64_t *psize, time_t *pmtime);
+  int aio_cancel(AioCompletionImpl *c);
 
   int pool_change_auid(unsigned long long auid);
   int pool_change_auid_async(unsigned long long auid, PoolAsyncCompletionImpl *c);

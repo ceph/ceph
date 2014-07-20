@@ -207,10 +207,8 @@ OSDService::OSDService(OSD *osd) :
   agent_stop_flag(false),
   agent_timer_lock("OSD::agent_timer_lock"),
   agent_timer(osd->client_messenger->cct, agent_timer_lock),
-  objecter_lock("OSD::objecter_lock"),
-  objecter_timer(osd->client_messenger->cct, objecter_lock),
   objecter(new Objecter(osd->client_messenger->cct, osd->objecter_messenger, osd->monc, &objecter_osdmap,
-			objecter_lock, objecter_timer, 0, 0)),
+			0, 0)),
   objecter_finisher(osd->client_messenger->cct),
   objecter_dispatcher(this),
   watch_lock("OSD::watch_lock"),
@@ -243,7 +241,9 @@ OSDService::OSDService(OSD *osd) :
 #ifdef PG_DEBUG_REFS
   , pgid_lock("OSDService::pgid_lock")
 #endif
-{}
+{
+  objecter->init();
+}
 
 OSDService::~OSDService()
 {
@@ -443,12 +443,7 @@ void OSDService::shutdown()
     watch_timer.shutdown();
   }
 
-  {
-    Mutex::Locker l(objecter_lock);
-    objecter_timer.shutdown();
-    objecter->shutdown_locked();
-  }
-  objecter->shutdown_unlocked();
+  objecter->shutdown();
   objecter_finisher.stop();
 
   {
@@ -462,14 +457,9 @@ void OSDService::shutdown()
 void OSDService::init()
 {
   reserver_finisher.start();
-  {
-    objecter_finisher.start();
-    objecter->init_unlocked();
-    Mutex::Locker l(objecter_lock);
-    objecter_timer.init();
-    objecter->set_client_incarnation(0);
-    objecter->init_locked();
-  }
+  objecter_finisher.start();
+  objecter->set_client_incarnation(0);
+  objecter->start();
   watch_timer.init();
   agent_timer.init();
 
@@ -1281,7 +1271,7 @@ int OSD::init()
   dout(2) << "superblock: i am osd." << superblock.whoami << dendl;
 
   create_logger();
-    
+
   // i'm ready!
   client_messenger->add_dispatcher_head(this);
   cluster_messenger->add_dispatcher_head(this);
@@ -4930,21 +4920,18 @@ bool OSD::heartbeat_dispatch(Message *m)
 
 bool OSDService::ObjecterDispatcher::ms_dispatch(Message *m)
 {
-  Mutex::Locker l(osd->objecter_lock);
   osd->objecter->dispatch(m);
   return true;
 }
 
 bool OSDService::ObjecterDispatcher::ms_handle_reset(Connection *con)
 {
-  Mutex::Locker l(osd->objecter_lock);
   osd->objecter->ms_handle_reset(con);
   return true;
 }
 
 void OSDService::ObjecterDispatcher::ms_handle_connect(Connection *con)
 {
-  Mutex::Locker l(osd->objecter_lock);
   return osd->objecter->ms_handle_connect(con);
 }
 
@@ -5742,7 +5729,6 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // share with the objecter
   {
-    Mutex::Locker l(service.objecter_lock);
     m->get();
     service.objecter->handle_osd_map(m);
   }

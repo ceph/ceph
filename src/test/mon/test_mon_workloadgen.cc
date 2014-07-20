@@ -226,8 +226,7 @@ class ClientStub : public TestStub
 
   virtual int _shutdown() {
     if (objecter) {
-      objecter->shutdown_locked();
-      objecter->shutdown_unlocked();
+      objecter->shutdown();
     }
     return 0;
   }
@@ -256,12 +255,12 @@ class ClientStub : public TestStub
     dout(10) << "ClientStub::" << __func__ << " starting messenger at "
 	    << messenger->get_myaddr() << dendl;
 
-    objecter.reset(new Objecter(cct, messenger.get(), &monc, &osdmap,
-				lock, timer, 0, 0));
+    objecter.reset(new Objecter(cct, messenger.get(), &monc, &osdmap, 0, 0));
     assert(objecter.get() != NULL);
     objecter->set_balanced_budget();
 
     monc.set_messenger(messenger.get());
+    objecter->init();
     messenger->add_dispatcher_head(this);
     messenger->start();
     monc.set_want_keys(CEPH_ENTITY_TYPE_MON|CEPH_ENTITY_TYPE_OSD);
@@ -282,12 +281,11 @@ class ClientStub : public TestStub
     }
     monc.wait_auth_rotating(30.0);
 
-    objecter->init_unlocked();
+    objecter->set_client_incarnation(0);
+    objecter->start();
 
     lock.Lock();
     timer.init();
-    objecter->set_client_incarnation(0);
-    objecter->init_locked();
     monc.renew_subs();
 
     while (osdmap.get_epoch() == 0) {
