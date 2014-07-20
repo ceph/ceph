@@ -32,6 +32,8 @@
 
 #include "msg/Messenger.h"
 
+#include "osdc/Objecter.h"
+
 #include "messages/MClientSession.h"
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
@@ -3569,7 +3571,8 @@ struct keys_and_values
     qi::rule<Iterator, string()> key, value;
 };
 
-int Server::parse_layout_vxattr(string name, string value, ceph_file_layout *layout)
+int Server::parse_layout_vxattr(string name, string value, const OSDMap *osdmap,
+				ceph_file_layout *layout)
 {
   dout(20) << "parse_layout_vxattr name " << name << " value '" << value << "'" << dendl;
   try {
@@ -3586,7 +3589,7 @@ int Server::parse_layout_vxattr(string name, string value, ceph_file_layout *lay
       if (begin != end)
 	return -EINVAL;
       for (map<string,string>::iterator q = m.begin(); q != m.end(); ++q) {
-	int r = parse_layout_vxattr(string("layout.") + q->first, q->second, layout);
+	int r = parse_layout_vxattr(string("layout.") + q->first, q->second, osdmap, layout);
 	if (r < 0)
 	  return r;
       }
@@ -3600,7 +3603,7 @@ int Server::parse_layout_vxattr(string name, string value, ceph_file_layout *lay
       try {
 	layout->fl_pg_pool = boost::lexical_cast<unsigned>(value);
       } catch (boost::bad_lexical_cast const&) {
-	int64_t pool = mds->osdmap->lookup_pg_pool_name(value);
+	int64_t pool = osdmap->lookup_pg_pool_name(value);
 	if (pool < 0) {
 	  dout(10) << " unknown pool " << value << dendl;
 	  return -ENOENT;
@@ -3660,15 +3663,18 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 	layout = mds->mdcache->default_file_layout;
 
       rest = name.substr(name.find("layout"));
-      int r = parse_layout_vxattr(rest, value, &layout);
+      const OSDMap *osdmap = mds->objecter->get_osdmap_read();
+      int r = parse_layout_vxattr(rest, value, osdmap, &layout);
+      mds->objecter->put_osdmap_read();
       if (r < 0) {
 	if (r == -ENOENT) {
 	  if (!mdr->waited_for_osdmap) {
-	    // send request to get latest map, but don't wait if
-	    // we don't get anything newer than what we have
+	    // make sure we have the latest map.
+	    // FIXME: we should get the client's osdmap epoch and just
+	    // make sure we have *that*.
 	    mdr->waited_for_osdmap = true;
-	    mds->request_osdmap(
-		  new C_MDS_RetryRequest(mdcache, mdr));
+	    mds->objecter->wait_for_latest_osdmap(
+	      new C_MDS_RetryRequest(mdcache, mdr));
 	    return;
 	  }
 	  r = -EINVAL;
@@ -3690,15 +3696,18 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
       }
       ceph_file_layout layout = cur->get_projected_inode()->layout;
       rest = name.substr(name.find("layout"));
-      int r = parse_layout_vxattr(rest, value, &layout);
+      const OSDMap *osdmap = mds->objecter->get_osdmap_read();
+      int r = parse_layout_vxattr(rest, value, osdmap, &layout);
+      mds->objecter->put_osdmap_read();
       if (r < 0) {
 	if (r == -ENOENT) {
 	  if (!mdr->waited_for_osdmap) {
-	    // send request to get latest map, but don't wait if
-	    // we don't get anything newer than what we have
+	    // make sure we have the latest map.
+	    // FIXME: we should get the client's osdmap epoch and just
+	    // make sure we have *that*.
 	    mdr->waited_for_osdmap = true;
-	    mds->request_osdmap(
-		  new C_MDS_RetryRequest(mdcache, mdr));
+	    mds->objecter->wait_for_latest_osdmap(
+              new C_MDS_RetryRequest(mdcache, mdr));
 	    return;
 	  }
 	  r = -EINVAL;

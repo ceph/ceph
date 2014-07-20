@@ -829,10 +829,6 @@ void MDS::handle_mds_beacon(MMDSBeacon *m)
   m->put();
 }
 
-void MDS::request_osdmap(Context *c) {
-  objecter->wait_for_new_map(c, osdmap->get_epoch());
-}
-
 /* This function DOES put the passed message before returning*/
 void MDS::handle_command(MMonCommand *m)
 {
@@ -1458,18 +1454,21 @@ void MDS::replay_start()
 
   calc_recovery_set();
 
+  const OSDMap *osdmap = objecter->get_osdmap_read();
+  epoch_t e = osdmap->get_epoch();
+  objecter->put_osdmap_read();
+
   dout(1) << " need osdmap epoch " << mdsmap->get_last_failure_osd_epoch()
-	  <<", have " << osdmap->get_epoch()
-	  << dendl;
+	  << ", have " << e << dendl;
 
   // start?
-  if (osdmap->get_epoch() >= mdsmap->get_last_failure_osd_epoch()) {
+  if (e >= mdsmap->get_last_failure_osd_epoch()) {
     boot_start();
   } else {
     dout(1) << " waiting for osdmap " << mdsmap->get_last_failure_osd_epoch() 
 	    << " (which blacklists prior instance)" << dendl;
-    objecter->wait_for_new_map(new C_MDS_BootStart(this, 0),
-			       mdsmap->get_last_failure_osd_epoch());
+    objecter->wait_for_map(mdsmap->get_last_failure_osd_epoch(),
+			   new C_MDS_BootStart(this, 0));
   }
 }
 
@@ -1501,11 +1500,15 @@ inline void MDS::standby_replay_restart()
 {
   dout(1) << "standby_replay_restart" << (standby_replaying ? " (as standby)":" (final takeover pass)") << dendl;
 
-  if (!standby_replaying && osdmap->get_epoch() < mdsmap->get_last_failure_osd_epoch()) {
+  const OSDMap *osdmap = objecter->get_osdmap_read();
+  epoch_t e = osdmap->get_epoch();
+  objecter->put_osdmap_read();
+  
+  if (!standby_replaying && e < mdsmap->get_last_failure_osd_epoch()) {
     dout(1) << " waiting for osdmap " << mdsmap->get_last_failure_osd_epoch() 
 	    << " (which blacklists prior instance)" << dendl;
-    objecter->wait_for_new_map(new C_MDS_BootStart(this, 3),
-			       mdsmap->get_last_failure_osd_epoch());
+    objecter->wait_for_map(mdsmap->get_last_failure_osd_epoch(),
+			   new C_MDS_BootStart(this, 3));
   } else {
     mdlog->get_journaler()->reread_head_and_probe(
       new C_MDS_StandbyReplayRestartFinish(this, mdlog->get_journaler()->get_read_pos()));
