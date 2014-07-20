@@ -1201,13 +1201,19 @@ void Objecter::close_session(OSDSession *s)
 
 void Objecter::wait_for_osd_map()
 {
-  if (osdmap->get_epoch()) return;
+  rwlock.get_write();
+  if (osdmap->get_epoch()) {
+    rwlock.put_write();
+    return;
+  }
+
   Mutex lock("");
   Cond cond;
   bool done;
   lock.Lock();
   C_SafeCond *context = new C_SafeCond(&lock, &cond, &done, NULL);
   waiting_for_map[0].push_back(pair<Context*, int>(context, 0));
+  rwlock.put_write();
   while (!done)
     cond.Wait(lock);
   lock.Unlock();
