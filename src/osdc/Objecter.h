@@ -1613,6 +1613,14 @@ public:
   void start();
   void shutdown();
 
+  const OSDMap *get_osdmap_read() {
+    rwlock.get_read();
+    return osdmap;
+  }
+  void put_osdmap_read() {
+    rwlock.put_read();
+  }
+
   /**
    * Tell the objecter to throttle outgoing ops according to its
    * budget (in _conf). If you do this, ops can block, in
