@@ -30,6 +30,7 @@
 #include "common/Timer.h"
 #include "common/LogClient.h"
 #include "common/TrackedOp.h"
+#include "common/Finisher.h"
 
 #include "MDSMap.h"
 
@@ -183,6 +184,8 @@ class MDS : public Dispatcher, public md_config_obs_t {
 
   PerfCounters       *logger, *mlogger;
   OpTracker    op_tracker;
+
+  Finisher finisher;
 
   int orig_argc;
   const char **orig_argv;

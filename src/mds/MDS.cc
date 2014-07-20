@@ -104,6 +104,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   monc(mc),
   clog(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
   op_tracker(cct, m->cct->_conf->mds_enable_op_tracker),
+  finisher(cct),
   sessionmap(this), asok_hook(NULL) {
 
   orig_argc = 0;
@@ -549,6 +550,8 @@ int MDS::init(int wanted_state)
 
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD | CEPH_ENTITY_TYPE_MDS);
   monc->init();
+
+  finisher.start();
 
   // tell monc about log_client so it will know about mon session resets
   monc->set_log_client(&clog);
@@ -1753,6 +1756,8 @@ void MDS::suicide()
 
   dout(1) << "suicide.  wanted " << ceph_mds_state_name(want_state)
 	  << ", now " << ceph_mds_state_name(state) << dendl;
+
+  finisher.stop(); // no flushing
 
   // stop timers
   if (beacon_sender) {
