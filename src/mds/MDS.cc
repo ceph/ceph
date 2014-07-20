@@ -584,14 +584,18 @@ int MDS::init(int wanted_state)
   while (true) {
     objecter->maybe_request_map();
     objecter->wait_for_osd_map();
-    uint64_t osd_features = objecter->osdmap->get_up_osd_features();
-    if (osd_features & CEPH_FEATURE_OSD_TMAP2OMAP)
+    const OSDMap *osdmap = objecter->get_osdmap_read();
+    uint64_t osd_features = osdmap->get_up_osd_features();
+    if (osd_features & CEPH_FEATURE_OSD_TMAP2OMAP) {
+      objecter->put_osdmap_read();
       break;
-    if (objecter->osdmap->get_num_up_osds() > 0) {
+    }
+    if (osdmap->get_num_up_osds() > 0) {
         derr << "*** one or more OSDs do not support TMAP2OMAP; upgrade OSDs before starting MDS (or downgrade MDS) ***" << dendl;
     } else {
-        derr << "*** no OSDs are up as of epoch " << objecter->osdmap->get_epoch() << ", waiting" << dendl;
+        derr << "*** no OSDs are up as of epoch " << osdmap->get_epoch() << ", waiting" << dendl;
     }
+    objecter->put_osdmap_read();
     sleep(10);
   }
 
