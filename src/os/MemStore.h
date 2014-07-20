@@ -252,6 +252,9 @@ public:
   int get_max_object_name_length() {
     return 4096;
   }
+  int get_max_attr_name_length() {
+    return 256;  // arbitrary; there is no real limit internally
+  }
 
   int mkfs();
   int mkjournal() {
