@@ -1298,10 +1298,14 @@ void Objecter::_wait_for_new_map(Context *c, epoch_t epoch, int err)
   assert(r == 0);
 }
 
-void Objecter::wait_for_new_map(Context *c, epoch_t epoch, int err)
+bool Objecter::wait_for_map(epoch_t epoch, Context *c, int err)
 {
   RWLock::WLocker wl(rwlock);
+  if (osdmap->get_epoch() >= epoch) {
+    return true;
+  }
   _wait_for_new_map(c, epoch, err);
+  return false;
 }
 
 void Objecter::kick_requests(OSDSession *session)
