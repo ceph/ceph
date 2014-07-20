@@ -686,14 +686,11 @@ public:
     return false;
   }
 
-  int64_t lookup_pg_pool_name(const string& name) {
-    if (name_pool.count(name))
-      return name_pool[name];
-    return -ENOENT;
-  }
-
-  int64_t const_lookup_pg_pool_name(const char *name) const {
-    return const_cast<OSDMap *>(this)->lookup_pg_pool_name(name);
+  int64_t lookup_pg_pool_name(const string& name) const {
+    map<string,int64_t>::const_iterator p = name_pool.find(name);
+    if (p == name_pool.end())
+      return -ENOENT;
+    return p->second;
   }
 
   int64_t get_pool_max() const {

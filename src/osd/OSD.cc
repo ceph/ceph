@@ -3423,7 +3423,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     string poolstr;
 
     cmd_getval(service->cct, cmdmap, "pool", poolstr);
-    pool = curmap->const_lookup_pg_pool_name(poolstr.c_str());
+    pool = curmap->lookup_pg_pool_name(poolstr);
     //If we can't find it by name then maybe id specified
     if (pool < 0 && isdigit(poolstr[0]))
       pool = atoll(poolstr.c_str());
