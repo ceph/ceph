@@ -1193,6 +1193,7 @@ public:
   virtual int mount() = 0;
   virtual int umount() = 0;
   virtual int get_max_object_name_length() = 0;
+  virtual int get_max_attr_name_length() = 0;
   virtual int mkfs() = 0;  // wipe
   virtual int mkjournal() = 0; // journal only
   virtual void set_allow_sharded_objects() = 0;
