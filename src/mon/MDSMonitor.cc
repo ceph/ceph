@@ -1127,8 +1127,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       r = -ENOENT;
       goto out;
     } else if (p->is_erasure()) {
-      const char *pn = mon->osdmon()->osdmap.get_pool_name(data);
-      assert(pn != NULL);
+      const string& pn = mon->osdmon()->osdmap.get_pool_name(data);
       ss << "pool '" << pn << "' (id '" << data << "')"
          << " is an erasure-code pool";
       r = -EINVAL;
@@ -1141,8 +1140,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       r = -ENOENT;
       goto out;
     } else if (p->is_erasure()) {
-      const char *pn = mon->osdmon()->osdmap.get_pool_name(metadata);
-      assert(pn != NULL);
+      const string& pn = mon->osdmon()->osdmap.get_pool_name(metadata);
       ss << "pool '" << pn << "' (id '" << metadata << "')"
          << " is an erasure-code pool";
       r = -EINVAL;

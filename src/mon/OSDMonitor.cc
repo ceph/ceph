@@ -2792,7 +2792,7 @@ bool OSDMonitor::update_pools_status()
     pool_stat_t& stats = mon->pgmon()->pg_map.pg_pool_sum[it->first];
     object_stat_sum_t& sum = stats.stats.sum;
     const pg_pool_t &pool = it->second;
-    const char *pool_name = osdmap.get_pool_name(it->first);
+    const string& pool_name = osdmap.get_pool_name(it->first);
 
     bool pool_is_full =
       (pool.quota_max_bytes > 0 && (uint64_t)sum.num_bytes >= pool.quota_max_bytes) ||
@@ -2843,7 +2843,7 @@ void OSDMonitor::get_pools_health(
     pool_stat_t& stats = mon->pgmon()->pg_map.pg_pool_sum[it->first];
     object_stat_sum_t& sum = stats.stats.sum;
     const pg_pool_t &pool = it->second;
-    const char *pool_name = osdmap.get_pool_name(it->first);
+    const string& pool_name = osdmap.get_pool_name(it->first);
 
     if (pool.get_flags() & pg_pool_t::FLAG_FULL) {
       // uncomment these asserts if/when we update the FULL flag on pg_stat update
@@ -5724,7 +5724,7 @@ bool OSDMonitor::prepare_pool_op_create(MPoolOp *m)
 int OSDMonitor::_check_remove_pool(int64_t pool, const pg_pool_t *p,
 				   ostream *ss)
 {
-  string poolstr = osdmap.get_pool_name(pool);
+  const string& poolstr = osdmap.get_pool_name(pool);
 
   // If the Pool is in use by CephFS, refuse to delete it
   MDSMap const &pending_mdsmap = mon->mdsmon()->pending_mdsmap;
@@ -5742,9 +5742,7 @@ int OSDMonitor::_check_remove_pool(int64_t pool, const pg_pool_t *p,
   if (!p->tiers.empty()) {
     *ss << "pool '" << poolstr << "' has tiers";
     for(std::set<uint64_t>::iterator i = p->tiers.begin(); i != p->tiers.end(); ++i) {
-      const char *name = osdmap.get_pool_name(*i);
-      assert(name != NULL);
-      *ss << " " << name;
+      *ss << " " << osdmap.get_pool_name(*i);
     }
     return -EBUSY;
   }

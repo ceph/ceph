@@ -105,7 +105,7 @@ uint64_t librados::RadosClient::pool_required_alignment(int64_t pool_id)
     osdmap.get_pg_pool(pool_id)->required_alignment() : 0;
 }
 
-const char *librados::RadosClient::get_pool_name(int64_t pool_id)
+std::string librados::RadosClient::get_pool_name(int64_t pool_id)
 {
   Mutex::Locker l(lock);
   return osdmap.get_pool_name(pool_id);
@@ -130,10 +130,9 @@ int librados::RadosClient::pool_get_name(uint64_t pool_id, std::string *s)
   int r = wait_for_osdmap();
   if (r < 0)
     return r;
-  const char *str = osdmap.get_pool_name(pool_id);
-  if (!str)
+  if (!osdmap.have_pg_pool(pool_id))
     return -ENOENT;
-  *s = str;
+  *s = osdmap.get_pool_name(pool_id);
   return 0;
 }
 

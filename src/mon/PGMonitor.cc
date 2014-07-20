@@ -1289,7 +1289,7 @@ void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
     int64_t pool_id = p->first;
     if ((pool_id < 0) || (pg_map.pg_pool_sum.count(pool_id) == 0))
       continue;
-    string pool_name = osdmap.get_pool_name(pool_id);
+    const string& pool_name = osdmap.get_pool_name(pool_id);
     pool_stat_t &stat = pg_map.pg_pool_sum[pool_id];
 
     const pg_pool_t *pool = osdmap.get_pg_pool(pool_id);
@@ -1968,7 +1968,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	!pg_map.pg_pool_sum.count(p->first))
       continue;
     bool nearfull = false;
-    const char *name = mon->osdmon()->osdmap.get_pool_name(p->first);
+    const string& name = mon->osdmon()->osdmap.get_pool_name(p->first);
     const pool_stat_t& st = pg_map.get_pg_pool_sum_stat(p->first);
     uint64_t ratio = p->second.cache_target_full_ratio_micro +
       ((1000000 - p->second.cache_target_full_ratio_micro) *

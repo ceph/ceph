@@ -7419,7 +7419,7 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
 		     (long unsigned)in->layout.fl_object_size);
 	if (osdmap->have_pg_pool(in->layout.fl_pg_pool))
 	  r += snprintf(buf + r, sizeof(buf) - r, "%s",
-			osdmap->get_pool_name(in->layout.fl_pg_pool));
+			osdmap->get_pool_name(in->layout.fl_pg_pool).c_str());
 	else
 	  r += snprintf(buf + r, sizeof(buf) - r, "%lu",
 			(long unsigned)in->layout.fl_pg_pool);
@@ -7432,7 +7432,7 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
       } else if (rest == "layout.pool") {
 	if (osdmap->have_pg_pool(in->layout.fl_pg_pool))
 	  r = snprintf(buf, sizeof(buf), "%s",
-		       osdmap->get_pool_name(in->layout.fl_pg_pool));
+		       osdmap->get_pool_name(in->layout.fl_pg_pool).c_str());
 	else
 	  r = snprintf(buf, sizeof(buf), "%lu",
 		       (long unsigned)in->layout.fl_pg_pool);
