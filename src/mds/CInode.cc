@@ -885,12 +885,13 @@ void CInode::mark_clean()
 // per-inode storage
 // (currently for root inode only)
 
-struct C_Inode_Stored : public Context {
+struct C_IO_Inode_Stored : public Context {
   CInode *in;
   version_t version;
   Context *fin;
-  C_Inode_Stored(CInode *i, version_t v, Context *f) : in(i), version(v), fin(f) {}
+  C_IO_Inode_Stored(CInode *i, version_t v, Context *f) : in(i), version(v), fin(f) {}
   void finish(int r) {
+    Mutex::Locker l(in->mdcache->mds->mds_lock);
     assert(r == 0);
     in->_stored(version, fin);
   }
@@ -923,7 +924,7 @@ void CInode::store(Context *fin)
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
 
   mdcache->mds->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(g_ceph_context), 0,
-				 NULL, new C_Inode_Stored(this, get_version(), fin) );
+				 NULL, new C_IO_Inode_Stored(this, get_version(), fin) );
 }
 
 void CInode::_stored(version_t v, Context *fin)
@@ -935,12 +936,13 @@ void CInode::_stored(version_t v, Context *fin)
   fin->complete(0);
 }
 
-struct C_Inode_Fetched : public Context {
+struct C_IO_Inode_Fetched : public Context {
   CInode *in;
   bufferlist bl, bl2;
   Context *fin;
-  C_Inode_Fetched(CInode *i, Context *f) : in(i), fin(f) {}
+  C_IO_Inode_Fetched(CInode *i, Context *f) : in(i), fin(f) {}
   void finish(int r) {
+    Mutex::Locker l(in->mdcache->mds->mds_lock);
     in->_fetched(bl, bl2, fin);
   }
 };
@@ -949,7 +951,7 @@ void CInode::fetch(Context *fin)
 {
   dout(10) << "fetch" << dendl;
 
-  C_Inode_Fetched *c = new C_Inode_Fetched(this, fin);
+  C_IO_Inode_Fetched *c = new C_IO_Inode_Fetched(this, fin);
   C_GatherBuilder gather(g_ceph_context, c);
 
   object_t oid = CInode::get_object_name(ino(), frag_t(), "");
@@ -1015,12 +1017,13 @@ void CInode::build_backtrace(int64_t pool, inode_backtrace_t& bt)
   }
 }
 
-struct C_Inode_StoredBacktrace : public Context {
+struct C_IO_Inode_StoredBacktrace : public Context {
   CInode *in;
   version_t version;
   Context *fin;
-  C_Inode_StoredBacktrace(CInode *i, version_t v, Context *f) : in(i), version(v), fin(f) {}
+  C_IO_Inode_StoredBacktrace(CInode *i, version_t v, Context *f) : in(i), version(v), fin(f) {}
   void finish(int r) {
+    Mutex::Locker l(in->mdcache->mds->mds_lock);
     assert(r == 0);
     in->_stored_backtrace(version, fin);
   }
@@ -1055,7 +1058,7 @@ void CInode::store_backtrace(Context *fin, int op_prio)
   SnapContext snapc;
   object_t oid = get_object_name(ino(), frag_t(), "");
   object_locator_t oloc(pool);
-  Context *fin2 = new C_Inode_StoredBacktrace(this, inode.backtrace_version, fin);
+  Context *fin2 = new C_IO_Inode_StoredBacktrace(this, inode.backtrace_version, fin);
 
   if (!state_test(STATE_DIRTYPOOL) || inode.old_pools.empty()) {
     mdcache->mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
