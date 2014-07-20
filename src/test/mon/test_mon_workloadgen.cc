@@ -288,14 +288,11 @@ class ClientStub : public TestStub
     timer.init();
     monc.renew_subs();
 
-    while (osdmap.get_epoch() == 0) {
-      dout(1) << "ClientStub::" << __func__ << " waiting for osdmap" << dendl;
-      cond.Wait(lock);
-    }
-
     lock.Unlock();
-    dout(10) << "ClientStub::" << __func__ << " done" << dendl;
 
+    objecter->wait_for_osd_map();
+
+    dout(10) << "ClientStub::" << __func__ << " done" << dendl;
     return 0;
   }
 };
