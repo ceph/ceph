@@ -923,8 +923,12 @@ void CInode::store(Context *fin)
   object_t oid = CInode::get_object_name(ino(), frag_t(), ".inode");
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
 
-  mdcache->mds->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(g_ceph_context), 0,
-				 NULL, new C_IO_Inode_Stored(this, get_version(), fin) );
+  Context *newfin =
+    new C_OnFinisher(new C_IO_Inode_Stored(this, get_version(), fin),
+		     &mdcache->mds->finisher);
+  mdcache->mds->objecter->mutate(oid, oloc, m, snapc,
+				 ceph_clock_now(g_ceph_context), 0,
+				 NULL, newfin);
 }
 
 void CInode::_stored(version_t v, Context *fin)
@@ -952,7 +956,7 @@ void CInode::fetch(Context *fin)
   dout(10) << "fetch" << dendl;
 
   C_IO_Inode_Fetched *c = new C_IO_Inode_Fetched(this, fin);
-  C_GatherBuilder gather(g_ceph_context, c);
+  C_GatherBuilder gather(g_ceph_context, new C_OnFinisher(c, &mdcache->mds->finisher));
 
   object_t oid = CInode::get_object_name(ino(), frag_t(), "");
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
@@ -1058,7 +1062,9 @@ void CInode::store_backtrace(Context *fin, int op_prio)
   SnapContext snapc;
   object_t oid = get_object_name(ino(), frag_t(), "");
   object_locator_t oloc(pool);
-  Context *fin2 = new C_IO_Inode_StoredBacktrace(this, inode.backtrace_version, fin);
+  Context *fin2 = new C_OnFinisher(
+    new C_IO_Inode_StoredBacktrace(this, inode.backtrace_version, fin),
+    &mdcache->mds->finisher);
 
   if (!state_test(STATE_DIRTYPOOL) || inode.old_pools.empty()) {
     mdcache->mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
