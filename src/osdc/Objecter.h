@@ -2158,6 +2158,7 @@ private:
   void pool_op_submit(PoolOp *op);
   void _pool_op_submit(PoolOp *op);
   void _finish_pool_op(PoolOp *op);
+  void _do_delete_pool(int64_t pool, Context *onfinish);
 public:
   int create_pool_snap(int64_t pool, string& snapName, Context *onfinish);
   int allocate_selfmanaged_snap(int64_t pool, snapid_t *psnapid, Context *onfinish);
@@ -2167,6 +2168,7 @@ public:
   int create_pool(string& name, Context *onfinish, uint64_t auid=0,
 		  int crush_rule=-1);
   int delete_pool(int64_t pool, Context *onfinish);
+  int delete_pool(const string& name, Context *onfinish);
   int change_pool_auid(int64_t pool, Context *onfinish, uint64_t auid);
 
   void handle_pool_op_reply(MPoolOpReply *m);
