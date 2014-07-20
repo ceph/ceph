@@ -63,13 +63,7 @@ private:
 
   Objecter *objecter;
 
-  map<string, int64_t> pool_cache;
-
-  epoch_t osdmap_epoch;
-  epoch_t pool_cache_epoch;
-
   Mutex lock;
-  RWLock pool_cache_rwl;
   Cond cond;
   SafeTimer timer;
   int refcnt;
