@@ -27,7 +27,6 @@
 #include "msg/Messenger.h"
 #include "mon/MonClient.h"
 
-#include "osd/OSDMap.h"
 #include "osdc/Objecter.h"
 #include "osdc/Filer.h"
 #include "osdc/Journaler.h"
@@ -115,10 +114,8 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   monc->set_messenger(messenger);
 
   mdsmap = new MDSMap;
-  osdmap = new OSDMap;
 
-  objecter = new Objecter(m->cct, messenger, monc, osdmap,
-			  0, 0);
+  objecter = new Objecter(m->cct, messenger, monc, 0, 0);
   objecter->unset_honor_osdmap_full();
 
   filer = new Filer(objecter);
@@ -171,7 +168,6 @@ MDS::~MDS() {
   if (inotable) { delete inotable; inotable = NULL; }
   if (snapserver) { delete snapserver; snapserver = NULL; }
   if (snapclient) { delete snapclient; snapclient = NULL; }
-  if (osdmap) { delete osdmap; osdmap = 0; }
   if (mdsmap) { delete mdsmap; mdsmap = 0; }
 
   if (server) { delete server; server = 0; }
