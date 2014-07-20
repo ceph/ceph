@@ -244,7 +244,8 @@ int librados::RadosClient::connect()
   monclient.set_messenger(messenger);
 
   objecter->init();
-  messenger->add_dispatcher_head(this);
+  messenger->add_dispatcher_tail(objecter);
+  messenger->add_dispatcher_tail(this);
 
   messenger->start();
 
@@ -379,35 +380,16 @@ bool librados::RadosClient::_dispatch(Message *m)
 {
   switch (m->get_type()) {
   // OSD
-  case CEPH_MSG_OSD_OPREPLY:
-    objecter->handle_osd_op_reply(static_cast<MOSDOpReply*>(m));
-    break;
   case CEPH_MSG_OSD_MAP:
     lock.Lock();
-    objecter->handle_osd_map(static_cast<MOSDMap*>(m));
     pool_cache_rwl.get_write();
     osdmap_epoch = osdmap.get_epoch();
     pool_cache_rwl.unlock();
     cond.Signal();
     lock.Unlock();
     break;
-  case MSG_GETPOOLSTATSREPLY:
-    objecter->handle_get_pool_stats_reply(static_cast<MGetPoolStatsReply*>(m));
-    break;
 
   case CEPH_MSG_MDS_MAP:
-    break;
-
-  case CEPH_MSG_STATFS_REPLY:
-    objecter->handle_fs_stats_reply(static_cast<MStatfsReply*>(m));
-    break;
-
-  case CEPH_MSG_POOLOP_REPLY:
-    objecter->handle_pool_op_reply(static_cast<MPoolOpReply*>(m));
-    break;
-
-  case MSG_COMMAND_REPLY:
-    objecter->handle_command_reply(static_cast<MCommandReply*>(m));
     break;
 
   case CEPH_MSG_WATCH_NOTIFY:
