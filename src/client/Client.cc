@@ -186,9 +186,8 @@ Client::Client(Messenger *m, MonClient *mc)
   messenger = m;
 
   // osd interfaces
-  osdmap = new OSDMap;     // initially blank.. see mount()
   mdsmap = new MDSMap;
-  objecter = new Objecter(cct, messenger, monclient, osdmap,
+  objecter = new Objecter(cct, messenger, monclient,
 			  0, 0);
   objecter->set_client_incarnation(0);  // client always 0, for now.
   writeback_handler = new ObjecterWriteback(objecter);
@@ -216,7 +215,6 @@ Client::~Client()
 
   delete filer;
   delete objecter;
-  delete osdmap;
   delete mdsmap;
 
   delete logger;

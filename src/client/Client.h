@@ -53,7 +53,6 @@ using std::fstream;
 #include "osdc/ObjectCacher.h"
 
 class MDSMap;
-class OSDMap;
 class MonClient;
 
 class CephContext;
@@ -210,7 +209,6 @@ class Client : public Dispatcher {
 
   // cluster descriptors
   MDSMap *mdsmap;
-  OSDMap *osdmap;
 
   SafeTimer timer;
 

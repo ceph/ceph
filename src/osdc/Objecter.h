@@ -1583,10 +1583,12 @@ public:
 
  public:
   Objecter(CephContext *cct_, Messenger *m, MonClient *mc,
-	   OSDMap *om, double mon_timeout,
+	   double mon_timeout,
 	   double osd_timeout) :
     Dispatcher(cct),
-    messenger(m), monc(mc), osdmap(om), cct(cct_),
+    messenger(m), monc(mc),
+    osdmap(new OSDMap),
+    cct(cct_),
     initialized(false),
     last_tid(0), client_inc(-1), max_linger_id(0),
     num_unacked(0), num_uncommitted(0),
@@ -1606,6 +1608,7 @@ public:
     op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops)
   { }
   ~Objecter() {
+    delete osdmap;
     assert(!tick_event);
     assert(!m_request_state_hook);
     assert(!logger);

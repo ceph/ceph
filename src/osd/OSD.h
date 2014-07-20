@@ -645,7 +645,6 @@ public:
 
 
   // -- Objecter, for teiring reads/writes from/to other OSDs --
-  OSDMap objecter_osdmap;
   Objecter *objecter;
   Finisher objecter_finisher;
 

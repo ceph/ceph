@@ -111,7 +111,6 @@ class filepath;
 
 class MonClient;
 
-class OSDMap;
 class Objecter;
 class Filer;
 
@@ -162,7 +161,6 @@ class MDS : public Dispatcher, public md_config_obs_t {
   Messenger    *messenger;
   MonClient    *monc;
   MDSMap       *mdsmap;
-  OSDMap       *osdmap;
   Objecter     *objecter;
   Filer        *filer;       // for reading/writing to/from osds
   LogClient    clog;
@@ -343,7 +341,6 @@ class MDS : public Dispatcher, public md_config_obs_t {
   int get_nodeid() { return whoami; }
   uint64_t get_metadata_pool() { return mdsmap->get_metadata_pool(); }
   MDSMap *get_mds_map() { return mdsmap; }
-  OSDMap *get_osd_map() { return osdmap; }
 
   void send_message_mds(Message *m, int mds);
   void forward_message_mds(Message *req, int mds);
