@@ -30,12 +30,13 @@
 #define dout_prefix *_dout << "mds." << (mds ? mds->get_nodeid() : -1) << "." << table_name << ": "
 
 
-class C_MT_Save : public Context {
+class C_IO_MT_Save : public Context {
   MDSTable *ida;
   version_t version;
 public:
-  C_MT_Save(MDSTable *i, version_t v) : ida(i), version(v) {}
+  C_IO_MT_Save(MDSTable *i, version_t v) : ida(i), version(v) {}
   void finish(int r) {
+    Mutex::Locker l(ida->mds->mds_lock);
     ida->save_2(r, version);
   }
 };
@@ -68,7 +69,7 @@ void MDSTable::save(Context *onfinish, version_t v)
   mds->objecter->write_full(oid, oloc,
 			    snapc,
 			    bl, ceph_clock_now(g_ceph_context), 0,
-			    NULL, new C_MT_Save(this, version));
+			    NULL, new C_IO_MT_Save(this, version));
 }
 
 void MDSTable::save_2(int r, version_t v)
@@ -105,13 +106,14 @@ void MDSTable::reset()
 
 // -----------------------
 
-class C_MT_Load : public Context {
+class C_IO_MT_Load : public Context {
 public:
   MDSTable *ida;
   Context *onfinish;
   bufferlist bl;
-  C_MT_Load(MDSTable *i, Context *o) : ida(i), onfinish(o) {}
+  C_IO_MT_Load(MDSTable *i, Context *o) : ida(i), onfinish(o) {}
   void finish(int r) {
+    Mutex::Locker l(ida->mds->mds_lock);
     ida->load_2(r, bl, onfinish);
   }
 };
@@ -133,7 +135,7 @@ void MDSTable::load(Context *onfinish)
   assert(is_undef());
   state = STATE_OPENING;
 
-  C_MT_Load *c = new C_MT_Load(this, onfinish);
+  C_IO_MT_Load *c = new C_IO_MT_Load(this, onfinish);
   object_t oid = get_object_name();
   object_locator_t oloc(mds->mdsmap->get_metadata_pool());
   mds->objecter->read_full(oid, oloc, CEPH_NOSNAP, &c->bl, 0, c);
