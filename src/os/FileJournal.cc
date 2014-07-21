@@ -565,9 +565,9 @@ int FileJournal::dump(ostream& out)
   JSONFormatter f(true);
 
   f.open_array_section("journal");
+  uint64_t seq = 0;
   while (1) {
     bufferlist bl;
-    uint64_t seq = 0;
     uint64_t pos = read_pos;
     if (!read_entry(bl, seq)) {
       dout(3) << "journal_replay: end of journal, done." << dendl;
