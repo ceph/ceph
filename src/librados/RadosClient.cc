@@ -111,15 +111,6 @@ uint64_t librados::RadosClient::pool_required_alignment(int64_t pool_id)
   return ret;
 }
 
-std::string librados::RadosClient::get_pool_name(int64_t pool_id)
-{
-  Mutex::Locker l(lock);
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  string ret = osdmap->get_pool_name(pool_id);
-  objecter->put_osdmap_read();
-  return ret;
-}
-
 int librados::RadosClient::pool_get_auid(uint64_t pool_id, unsigned long long *auid)
 {
   Mutex::Locker l(lock);
