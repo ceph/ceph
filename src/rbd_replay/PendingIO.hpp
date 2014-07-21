@@ -27,6 +27,8 @@ public:
   PendingIO(action_id_t id,
             ActionCtx &worker);
 
+  ~PendingIO();
+
   void completed(librbd::completion_t cb);
 
   action_id_t id() const {
@@ -38,13 +40,13 @@ public:
   }
 
   librbd::RBD::AioCompletion &completion() {
-    return m_completion;
+    return *m_completion;
   }
 
 private:
   const action_id_t m_id;
   ceph::bufferlist m_bl;
-  librbd::RBD::AioCompletion m_completion;
+  librbd::RBD::AioCompletion *m_completion;
   ActionCtx &m_worker;
 };
 
