@@ -1,6 +1,5 @@
 tasks:
 - workunit:
-     branch: firefly
      clients:
         client.1:
         - rbd/import_export.sh
