@@ -2043,10 +2043,12 @@ void ObjectCacher::bh_add(Object *ob, BufferHead *bh)
   if (bh->is_dirty()) {
     bh_lru_dirty.lru_insert_top(bh);
     dirty_or_tx_bh.insert(bh);
-  } else if (bh->is_tx()) {
-    dirty_or_tx_bh.insert(bh);
   } else {
     bh_lru_rest.lru_insert_top(bh);
+  }
+
+  if (bh->is_tx()) {
+    dirty_or_tx_bh.insert(bh);
   }
   bh_stat_add(bh);
 }
@@ -2059,10 +2061,12 @@ void ObjectCacher::bh_remove(Object *ob, BufferHead *bh)
   if (bh->is_dirty()) {
     bh_lru_dirty.lru_remove(bh);
     dirty_or_tx_bh.erase(bh);
-  } else if (bh->is_tx()) {
-    dirty_or_tx_bh.insert(bh);
   } else {
     bh_lru_rest.lru_remove(bh);
+  }
+
+  if (bh->is_tx()) {
+    dirty_or_tx_bh.erase(bh);
   }
   bh_stat_sub(bh);
 }
