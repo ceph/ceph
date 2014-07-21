@@ -3,29 +3,36 @@ upgrade-sequence:
    - install.upgrade:
        mon.a:
    - print: "**** done install.upgrade mon.a to the version from teuthology-suite arg"
-# upgrade step will be set to 'next' or 'master' from teuthology-suite comman line
-#         branch: firefly
    - install.upgrade:
        mon.b:
    - print: "**** done install.upgrade mon.b to the version from teuthology-suite arg"
-#         branch: firefly
    - install.upgrade:
        client.0:
    - print: "**** done install.upgrade client.0 to the version from teuthology-suite arg"
-#         branch: firefly
    - ceph.restart:
-       daemons: [mon.a, mon.b, mon.c]
-       wait-for-healthy: true
+       daemons: [mon.a]
    - sleep:
        duration: 60
    - ceph.restart:
-       daemons: [osd.0, osd.1, osd.2, osd.3]
-       wait-for-healthy: true
+       daemons: [mon.b]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.c]
+   - sleep:
+       duration: 60
+   - ceph.restart: [osd.0]
+   - sleep:
+       duration: 60
+   - ceph.restart: [osd.1]
+   - sleep:
+       duration: 60
+   - ceph.restart: [osd.2]
+   - sleep:
+       duration: 60
+   - ceph.restart: [osd.3]
    - sleep:
        duration: 60
    - ceph.restart: [mds.a]
-   - sleep:
-       duration: 60
    - exec:
       mon.a:
         - ceph osd crush tunables firefly
