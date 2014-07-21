@@ -2003,20 +2003,29 @@ void ObjectCacher::bh_stat_sub(BufferHead *bh)
 void ObjectCacher::bh_set_state(BufferHead *bh, int s)
 {
   assert(lock.is_locked());
+  int state = bh->get_state();
   // move between lru lists?
-  if (s == BufferHead::STATE_DIRTY && bh->get_state() != BufferHead::STATE_DIRTY) {
+  if (s == BufferHead::STATE_DIRTY && state != BufferHead::STATE_DIRTY) {
     bh_lru_rest.lru_remove(bh);
     bh_lru_dirty.lru_insert_top(bh);
-    dirty_or_tx_bh.insert(bh);
-  } else if (s != BufferHead::STATE_DIRTY && bh->get_state() == BufferHead::STATE_DIRTY) {
+  } else if (s != BufferHead::STATE_DIRTY && state == BufferHead::STATE_DIRTY) {
     bh_lru_dirty.lru_remove(bh);
     bh_lru_rest.lru_insert_top(bh);
-    dirty_or_tx_bh.erase(bh);
-  } else if (s == BufferHead::STATE_TX && bh->get_state() != BufferHead::STATE_TX) {
+  }
+
+  if ((s == BufferHead::STATE_TX ||
+       s == BufferHead::STATE_DIRTY) &&
+      state != BufferHead::STATE_TX &&
+      state != BufferHead::STATE_DIRTY) {
     dirty_or_tx_bh.insert(bh);
-  } else if (s != BufferHead::STATE_TX && bh->get_state() == BufferHead::STATE_TX) {
+  } else if ((state == BufferHead::STATE_TX ||
+	      state == BufferHead::STATE_DIRTY) &&
+	     s != BufferHead::STATE_TX &&
+	     s != BufferHead::STATE_DIRTY) {
     dirty_or_tx_bh.erase(bh);
-  } else if (s != BufferHead::STATE_ERROR && bh->get_state() == BufferHead::STATE_ERROR) {
+  }
+
+  if (s != BufferHead::STATE_ERROR && bh->get_state() == BufferHead::STATE_ERROR) {
     bh->error = 0;
   }
 
