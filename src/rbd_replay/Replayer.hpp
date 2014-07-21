@@ -68,7 +68,9 @@ private:
 
 class Replayer {
 public:
-  Replayer();
+  Replayer(int num_action_trackers);
+
+  ~Replayer();
 
   void run(const std::string replay_file);
 
@@ -95,9 +97,16 @@ public:
   void set_latency_multiplier(float f);
 
 private:
+  struct action_tracker_d {
+    // Maps an action ID to the time the action completed
+    std::map<action_id_t, boost::system_time> actions;
+    boost::shared_mutex mutex;
+    boost::condition condition;
+  };
+
   void clear_images();
 
-  bool _is_action_complete(action_id_t id);
+  action_tracker_d &tracker_for(action_id_t id);
 
   // Disallow assignment and copying
   Replayer(const Replayer& rhs);
@@ -110,10 +119,11 @@ private:
   std::map<imagectx_id_t, librbd::Image*> m_images;
   boost::shared_mutex m_images_mutex;
 
-  // Maps an action ID to the time the action completed
-  std::map<action_id_t, boost::system_time> m_actions_complete;
-  boost::shared_mutex m_actions_complete_mutex;
-  boost::condition m_actions_complete_condition;
+  // Actions are hashed across the trackers by ID.
+  // Number of trackers should probably be larger than the number of cores and prime.
+  // Should definitely be odd.
+  const int m_num_action_trackers;
+  action_tracker_d* m_action_trackers;
 };
 
 }
