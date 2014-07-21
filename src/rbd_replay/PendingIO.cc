@@ -28,13 +28,17 @@ void pending_io_callback(librbd::completion_t cb, void *arg) {
 PendingIO::PendingIO(action_id_t id,
 		     ActionCtx &worker)
   : m_id(id),
-    m_completion(this, pending_io_callback),
+    m_completion(new librbd::RBD::AioCompletion(this, pending_io_callback)),
     m_worker(worker) {
     }
 
+PendingIO::~PendingIO() {
+  m_completion->release();
+}
+
 void PendingIO::completed(librbd::completion_t cb) {
   dout(ACTION_LEVEL) << "Completed pending IO #" << m_id << dendl;
-  ssize_t r = m_completion.get_return_value();
+  ssize_t r = m_completion->get_return_value();
   assertf(r >= 0, "id = %d, r = %d", m_id, r);
   m_worker.remove_pending(shared_from_this());
 }
