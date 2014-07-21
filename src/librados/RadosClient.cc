@@ -315,8 +315,28 @@ librados::RadosClient::~RadosClient()
 int librados::RadosClient::create_ioctx(const char *name, IoCtxImpl **io)
 {
   int64_t poolid = lookup_pool(name);
-  if (poolid < 0)
-    return (int)poolid;
+  if (poolid < 0) {
+    // hmm, first make sure we have *a* map
+    {
+      Mutex::Locker l(lock);
+      int r = wait_for_osdmap();
+      if (r < 0)
+	return r;
+    }
+
+    poolid = lookup_pool(name);
+    if (poolid < 0) {
+      // make sure we have the *latest* map
+      int r = wait_for_latest_osdmap();
+      if (r < 0)
+	return r;
+
+      poolid = lookup_pool(name);
+      if (poolid < 0) {
+	return (int)poolid;
+      }
+    }
+  }
 
   *io = new librados::IoCtxImpl(this, objecter, &lock, poolid, name,
 				CEPH_NOSNAP);
