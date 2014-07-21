@@ -1380,14 +1380,16 @@ void MDS::creating_done()
 
 class C_MDS_BootStart : public Context {
   MDS *mds;
-  int nextstep;
+  MDS::BootStep nextstep;
 public:
-  C_MDS_BootStart(MDS *m, int n) : mds(m), nextstep(n) {}
+  C_MDS_BootStart(MDS *m, MDS::BootStep n) : mds(m), nextstep(n) {}
   void finish(int r) { mds->boot_start(nextstep, r); }
 };
 
-void MDS::boot_start(int step, int r)
+
+void MDS::boot_start(BootStep step, int r)
 {
+  // Handle errors from previous step
   if (r < 0) {
     if (is_standby_replay() && (r == -EAGAIN)) {
       dout(0) << "boot_start encountered an error EAGAIN"
@@ -1400,71 +1402,63 @@ void MDS::boot_start(int step, int r)
     }
   }
 
-  switch (step) {
-  case 0:
-    mdcache->init_layouts();
-    step = 1;  // fall-thru.
+  assert(is_starting() || is_any_replay());
 
-  case 1:
-    {
-      C_GatherBuilder gather(g_ceph_context, new C_MDS_BootStart(this, 2));
-      dout(2) << "boot_start " << step << ": opening inotable" << dendl;
-      inotable->load(gather.new_sub());
+  switch(step) {
+    case MDS_BOOT_INITIAL:
+      {
+        mdcache->init_layouts();
 
-      dout(2) << "boot_start " << step << ": opening sessionmap" << dendl;
-      sessionmap.load(gather.new_sub());
+        C_GatherBuilder gather(g_ceph_context, new C_MDS_BootStart(this, MDS_BOOT_OPEN_ROOT));
+        dout(2) << "boot_start " << step << ": opening inotable" << dendl;
+        inotable->load(gather.new_sub());
 
-      dout(2) << "boot_start " << step << ": opening mds log" << dendl;
-      mdlog->open(gather.new_sub());
+        dout(2) << "boot_start " << step << ": opening sessionmap" << dendl;
+        sessionmap.load(gather.new_sub());
 
-      if (mdsmap->get_tableserver() == whoami) {
-	dout(2) << "boot_start " << step << ": opening snap table" << dendl;
-	snapserver->load(gather.new_sub());
+        dout(2) << "boot_start " << step << ": opening mds log" << dendl;
+        mdlog->open(gather.new_sub());
+
+        if (mdsmap->get_tableserver() == whoami) {
+          dout(2) << "boot_start " << step << ": opening snap table" << dendl;
+          snapserver->load(gather.new_sub());
+        }
+
+        gather.activate();
       }
-
-      gather.activate();
-    }
-    break;
-
-  case 2:
-    {
-      dout(2) << "boot_start " << step << ": loading/discovering base inodes" << dendl;
-
-      C_GatherBuilder gather(g_ceph_context, new C_MDS_BootStart(this, 3));
-
-      mdcache->open_mydir_inode(gather.new_sub());
-
-      if (is_starting() ||
-	  whoami == mdsmap->get_root()) {  // load root inode off disk if we are auth
-	mdcache->open_root_inode(gather.new_sub());
-      } else {
-	// replay.  make up fake root inode to start with
-	mdcache->create_root_inode();
-      }
-      gather.activate();
-    }
-    break;
-
-  case 3:
-    if (is_any_replay()) {
-      dout(2) << "boot_start " << step << ": replaying mds log" << dendl;
-      mdlog->replay(new C_MDS_BootStart(this, 4));
       break;
-    } else {
-      dout(2) << "boot_start " << step << ": positioning at end of old mds log" << dendl;
-      mdlog->append();
-      step++;
-    }
+    case MDS_BOOT_OPEN_ROOT:
+      {
+        dout(2) << "boot_start " << step << ": loading/discovering base inodes" << dendl;
 
-  case 4:
-    if (is_any_replay()) {
+        C_GatherBuilder gather(g_ceph_context, new C_MDS_BootStart(this, MDS_BOOT_PREPARE_LOG));
+
+        mdcache->open_mydir_inode(gather.new_sub());
+
+        if (is_starting() ||
+            whoami == mdsmap->get_root()) {  // load root inode off disk if we are auth
+          mdcache->open_root_inode(gather.new_sub());
+        } else {
+          // replay.  make up fake root inode to start with
+          mdcache->create_root_inode();
+        }
+        gather.activate();
+      }
+      break;
+    case MDS_BOOT_PREPARE_LOG:
+      if (is_any_replay()) {
+        dout(2) << "boot_start " << step << ": replaying mds log" << dendl;
+        mdlog->replay(new C_MDS_BootStart(this, MDS_BOOT_REPLAY_DONE));
+      } else {
+        dout(2) << "boot_start " << step << ": positioning at end of old mds log" << dendl;
+        mdlog->append();
+        starting_done();
+      }
+      break;
+    case MDS_BOOT_REPLAY_DONE:
+      assert(is_any_replay());
       replay_done();
       break;
-    }
-    step++;
-    
-    starting_done();
-    break;
   }
 }
 
@@ -1514,7 +1508,7 @@ void MDS::replay_start()
   } else {
     dout(1) << " waiting for osdmap " << mdsmap->get_last_failure_osd_epoch() 
 	    << " (which blacklists prior instance)" << dendl;
-    objecter->wait_for_new_map(new C_MDS_BootStart(this, 0),
+    objecter->wait_for_new_map(new C_MDS_BootStart(this, MDS_BOOT_INITIAL),
 			       mdsmap->get_last_failure_osd_epoch());
   }
 }
@@ -1539,7 +1533,7 @@ void MDS::_standby_replay_restart_finish(int r, uint64_t old_read_pos)
 		  trying to reset everything in the cache, etc */
   } else {
     mdlog->standby_trim_segments();
-    boot_start(3, r);
+    boot_start(MDS_BOOT_PREPARE_LOG, r);
   }
 }
 
@@ -1550,7 +1544,7 @@ inline void MDS::standby_replay_restart()
   if (!standby_replaying && osdmap->get_epoch() < mdsmap->get_last_failure_osd_epoch()) {
     dout(1) << " waiting for osdmap " << mdsmap->get_last_failure_osd_epoch() 
 	    << " (which blacklists prior instance)" << dendl;
-    objecter->wait_for_new_map(new C_MDS_BootStart(this, 3),
+    objecter->wait_for_new_map(new C_MDS_BootStart(this, MDS_BOOT_PREPARE_LOG),
 			       mdsmap->get_last_failure_osd_epoch());
   } else {
     mdlog->get_journaler()->reread_head_and_probe(
