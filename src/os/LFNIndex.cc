@@ -61,6 +61,17 @@ void LFNIndex::maybe_inject_failure()
   }
 }
 
+// Helper to close fd's when we leave scope.  This is useful when used
+// in combination with RetryException, thrown by the above.
+struct FDCloser {
+  int fd;
+  FDCloser(int f) : fd(f) {}
+  ~FDCloser() {
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
+  }
+};
+
+
 /* Public methods */
 
 void LFNIndex::set_ref(ceph::shared_ptr<CollectionIndex> ref)
