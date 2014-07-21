@@ -60,6 +60,9 @@ public:
   RBD();
   ~RBD();
 
+  // This must be dynamically allocated with new, and
+  // must be released with release().
+  // Do not use delete.
   struct AioCompletion {
     void *pc;
     AioCompletion(void *cb_arg, callback_t complete_cb);
