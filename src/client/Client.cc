@@ -162,6 +162,7 @@ Client::Client(Messenger *m, MonClient *mc)
     getgroups_cb_handle(NULL),
     async_ino_invalidator(m->cct),
     async_dentry_invalidator(m->cct),
+    objecter_finisher(m->cct),
     tick_event(NULL),
     monclient(mc), messenger(m), whoami(m->get_myname().num()),
     initialized(false), mounted(false), unmounting(false),
@@ -205,6 +206,7 @@ Client::Client(Messenger *m, MonClient *mc)
 				  cct->_conf->client_oc_target_dirty,
 				  cct->_conf->client_oc_max_dirty_age,
 				  true);
+  objecter_finisher.start();
   filer = new Filer(objecter);
 }
 
@@ -450,6 +452,10 @@ void Client::shutdown()
   timer.shutdown();
   objecter->shutdown();
   client_lock.Unlock();
+
+  objecter_finisher.wait_for_empty();
+  objecter_finisher.stop();
+
   monclient->shutdown();
 
   if (logger) {
