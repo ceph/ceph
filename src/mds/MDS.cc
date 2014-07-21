@@ -57,8 +57,6 @@
 
 #include "messages/MGenericMessage.h"
 
-#include "messages/MOSDMap.h"
-
 #include "messages/MClientRequest.h"
 #include "messages/MClientRequestForward.h"
 
@@ -539,6 +537,7 @@ int MDS::init(int wanted_state)
 
   objecter->init();
 
+  messenger->add_dispatcher_tail(objecter);
   messenger->add_dispatcher_tail(this);
 
   // get monmap
@@ -1908,13 +1907,8 @@ bool MDS::handle_core_message(Message *m)
     break;    
 
     // OSD
-  case CEPH_MSG_OSD_OPREPLY:
-    ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_OSD);
-    objecter->handle_osd_op_reply((class MOSDOpReply*)m);
-    break;
   case CEPH_MSG_OSD_MAP:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
-    objecter->handle_osd_map((MOSDMap*)m);
     if (is_active() && snapserver)
       snapserver->check_osd_map(true);
     break;
@@ -2212,35 +2206,29 @@ bool MDS::_dispatch(Message *m)
 
 void MDS::ms_handle_connect(Connection *con) 
 {
-  Mutex::Locker l(mds_lock);
-  dout(5) << "ms_handle_connect on " << con->get_peer_addr() << dendl;
-  if (want_state == CEPH_MDS_STATE_DNE)
-    return;
-  objecter->ms_handle_connect(con);
 }
 
 bool MDS::ms_handle_reset(Connection *con) 
 {
+  if (con->get_peer_type() != CEPH_ENTITY_TYPE_CLIENT)
+    return false;
+
   Mutex::Locker l(mds_lock);
   dout(5) << "ms_handle_reset on " << con->get_peer_addr() << dendl;
   if (want_state == CEPH_MDS_STATE_DNE)
     return false;
 
-  if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
-    objecter->ms_handle_reset(con);
-  } else if (con->get_peer_type() == CEPH_ENTITY_TYPE_CLIENT) {
-    Session *session = static_cast<Session *>(con->get_priv());
-    if (session) {
-      if (session->is_closed()) {
-	dout(3) << "ms_handle_reset closing connection for session " << session->info.inst << dendl;
-	messenger->mark_down(con);
-	con->set_priv(NULL);
-	sessionmap.remove_session(session);
-      }
-      session->put();
-    } else {
+  Session *session = static_cast<Session *>(con->get_priv());
+  if (session) {
+    if (session->is_closed()) {
+      dout(3) << "ms_handle_reset closing connection for session " << session->info.inst << dendl;
       messenger->mark_down(con);
+      con->set_priv(NULL);
+      sessionmap.remove_session(session);
     }
+    session->put();
+  } else {
+    messenger->mark_down(con);
   }
   return false;
 }
@@ -2248,27 +2236,23 @@ bool MDS::ms_handle_reset(Connection *con)
 
 void MDS::ms_handle_remote_reset(Connection *con) 
 {
+  if (con->get_peer_type() != CEPH_ENTITY_TYPE_CLIENT)
+    return;
+
   Mutex::Locker l(mds_lock);
   dout(5) << "ms_handle_remote_reset on " << con->get_peer_addr() << dendl;
   if (want_state == CEPH_MDS_STATE_DNE)
     return;
-  switch (con->get_peer_type()) {
-  case CEPH_ENTITY_TYPE_OSD:
-    objecter->ms_handle_remote_reset(con);
-    break;
 
-  case CEPH_ENTITY_TYPE_CLIENT:
-    Session *session = static_cast<Session *>(con->get_priv());
-    if (session) {
-      if (session->is_closed()) {
-	dout(3) << "ms_handle_remote_reset closing connection for session " << session->info.inst << dendl;
-	messenger->mark_down(con);
-	con->set_priv(NULL);
-	sessionmap.remove_session(session);
-      }
-      session->put();
+  Session *session = static_cast<Session *>(con->get_priv());
+  if (session) {
+    if (session->is_closed()) {
+      dout(3) << "ms_handle_remote_reset closing connection for session " << session->info.inst << dendl;
+      messenger->mark_down(con);
+      con->set_priv(NULL);
+      sessionmap.remove_session(session);
     }
-    break;
+    session->put();
   }
 }
 
