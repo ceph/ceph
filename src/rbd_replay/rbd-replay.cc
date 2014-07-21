@@ -35,8 +35,9 @@ static const char* get_remainder(const char *string, const char *prefix) {
 
 static void usage(const char* program) {
   cout << "Usage: " << program << " --conf=<config_file> <replay_file>" << std::endl;
-  cout << "Options:" << endl;
-  cout << "  --latency-multiplier <float>    Multiplies inter-request latencies.  Default: 1" << endl;
+  cout << "Options:" << std::endl;
+  cout << "  --latency-multiplier <float>    Multiplies inter-request latencies.  Default: 1" << std::endl;
+  cout << "  --read-only                     Only perform non-destructive operations." << std::endl;
 }
 
 int main(int argc, const char **argv) {
@@ -48,6 +49,7 @@ int main(int argc, const char **argv) {
 
   std::vector<const char*>::iterator i;
   float latency_multiplier = 1;
+  bool readonly = false;
   std::string val;
   std::ostringstream err;
   for (i = args.begin(); i != args.end(); ) {
@@ -59,6 +61,8 @@ int main(int argc, const char **argv) {
 	cerr << err.str() << std::endl;
 	return 1;
       }
+    } else if (ceph_argparse_flag(args, i, "--read-only", (char*)NULL)) {
+      readonly = true;
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage(argv[0]);
       return 0;
@@ -85,5 +89,6 @@ int main(int argc, const char **argv) {
   unsigned int nthreads = boost::thread::hardware_concurrency();
   Replayer replayer(2 * nthreads + 1);
   replayer.set_latency_multiplier(latency_multiplier);
+  replayer.set_readonly(readonly);
   replayer.run(replay_file);
 }
