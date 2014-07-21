@@ -148,6 +148,23 @@ public:
 };
 
 
+struct C_Lock : public Context {
+  Mutex *lock;
+  Context *fin;
+  C_Lock(Mutex *l, Context *c) : lock(l), fin(c) {}
+  ~C_Lock() {
+    delete fin;
+  }
+  void finish(int r) {
+    if (fin) {
+      lock->Lock();
+      fin->complete(r);
+      fin = NULL;
+      lock->Unlock();
+    }
+  }
+};
+
 /*
  * C_Contexts - set of Contexts
  */
