@@ -171,9 +171,9 @@ int LFNIndex::fsync_dir(const vector<string> &path)
   int fd = ::open(get_full_path_subdir(path).c_str(), O_RDONLY);
   if (fd < 0)
     return -errno;
+  FDCloser f(fd);
   maybe_inject_failure();
   int r = ::fsync(fd);
-  VOID_TEMP_FAILURE_RETRY(::close(fd));
   maybe_inject_failure();
   if (r < 0)
     return -errno;
