@@ -1,0 +1,15 @@
+tasks:
+   - install.upgrade:
+       mon.a:
+         branch: firefly
+       mon.b:
+         branch: firefly
+       client.0:
+         branch: firefly
+   - print: "**** done install.upgrade"
+   - ceph.restart:
+   - print: "**** done restart"
+   - parallel:
+     - workload2
+     - upgrade-sequence
+   - print: "**** done parallel"
