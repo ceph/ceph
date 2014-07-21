@@ -8,7 +8,10 @@
 
 class ObjecterWriteback : public WritebackHandler {
  public:
-  ObjecterWriteback(Objecter *o) : m_objecter(o) {}
+  ObjecterWriteback(Objecter *o, Finisher *fin, Mutex *lock)
+    : m_objecter(o),
+      m_finisher(fin),
+      m_lock(lock) { }
   virtual ~ObjecterWriteback() {}
 
   virtual void read(const object_t& oid, const object_locator_t& oloc,
@@ -16,10 +19,13 @@ class ObjecterWriteback : public WritebackHandler {
 		    bufferlist *pbl, uint64_t trunc_size,  __u32 trunc_seq,
 		    Context *onfinish) {
     m_objecter->read_trunc(oid, oloc, off, len, snapid, pbl, 0,
-			   trunc_size, trunc_seq, onfinish);
+			   trunc_size, trunc_seq,
+			   new C_OnFinisher(new C_Lock(m_lock, onfinish),
+					    m_finisher));
   }
 
-  virtual bool may_copy_on_write(const object_t& oid, uint64_t read_off, uint64_t read_len, snapid_t snapid) {
+  virtual bool may_copy_on_write(const object_t& oid, uint64_t read_off,
+				 uint64_t read_len, snapid_t snapid) {
     return false;
   }
 
@@ -28,16 +34,22 @@ class ObjecterWriteback : public WritebackHandler {
 		      const bufferlist &bl, utime_t mtime, uint64_t trunc_size,
 		      __u32 trunc_seq, Context *oncommit) {
     return m_objecter->write_trunc(oid, oloc, off, len, snapc, bl, mtime, 0,
-				   trunc_size, trunc_seq, NULL, oncommit);
+				   trunc_size, trunc_seq, NULL,
+				   new C_OnFinisher(new C_Lock(m_lock, oncommit),
+						    m_finisher));
   }
 
   virtual ceph_tid_t lock(const object_t& oid, const object_locator_t& oloc, int op,
 		     int flags, Context *onack, Context *oncommit) {
-    return m_objecter->lock(oid, oloc, op, flags, onack, oncommit);
+    return m_objecter->lock(oid, oloc, op, flags, onack,
+			    new C_OnFinisher(new C_Lock(m_lock, oncommit),
+					     m_finisher));
   }
 
  private:
   Objecter *m_objecter;
+  Finisher *m_finisher;
+  Mutex *m_lock;
 };
 
 #endif
