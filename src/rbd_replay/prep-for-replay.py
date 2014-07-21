@@ -13,6 +13,7 @@
 #
 #
 
+import argparse
 from babeltrace import *
 import datetime
 import struct
@@ -288,14 +289,22 @@ class Processor(object):
     def completed(self, io):
 	self.recentCompletions.append(io)
 	self.recentCompletions[:] = [x for x in self.recentCompletions if x.start_time > io.start_time - self.window]
-    def run(self, args):
-	inputFileName = args[0]
-	outputFileName = args[1]
+    def run(self, raw_args):
+	parser = argparse.ArgumentParser(description='convert librbd trace output to an rbd-replay input file.')
+	parser.add_argument('--print-on-read', action="store_true", help='print events as they are read in (for debugging)')
+	parser.add_argument('--print-on-write', action="store_true", help='print events as they are written out (for debugging)')
+	parser.add_argument('--window', default=1, type=float, help='size of the window, in seconds.  Larger values slow down processing, and smaller values may miss dependencies.  Default: 1')
+	parser.add_argument('input', help='trace to read')
+	parser.add_argument('output', help='replay file to write')
+	args = parser.parse_args(raw_args)
+	self.window = 1e9 * args.window
+	inputFileName = args.input
+	outputFileName = args.output
         ios = []
         pendingIOs = {}
         limit = 100000000000
-        printOnRead = False
-        printOnWrite = False
+        printOnRead = args.print_on_read
+        printOnWrite = args.print_on_write
         threads = {}
         traces = TraceCollection()
         traces.add_trace(inputFileName, "ctf")
