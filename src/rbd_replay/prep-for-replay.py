@@ -294,7 +294,6 @@ class Processor(object):
         ios = []
         pendingIOs = {}
         limit = 100000000000
-        ignoreWrites = True
         printOnRead = False
         printOnWrite = False
         threads = {}
@@ -380,26 +379,24 @@ class Processor(object):
                 if printOnRead:
                     print str(thread.pendingIO)
             elif event.name == "librbd:write_enter":
-                if not ignoreWrites:
-                    name = event["name"]
-                    readid = event["id"]
-                    offset = event["off"]
-                    length = event["buf_len"]
-                    imagectx = event["imagectx"]
-                    ionum = self.nextID()
-                    thread.pendingIO = WriteIO(ionum, ts, thread, thread.pendingIO, imagectx, [Extent(offset, length)])
-                    thread.pendingIO.addThreadCompletionDependencies(threads, self.recentCompletions)
-                    thread.issuedIO(thread.pendingIO)
-                    ios.append(thread.pendingIO)
+                name = event["name"]
+                readid = event["id"]
+                offset = event["off"]
+                length = event["buf_len"]
+                imagectx = event["imagectx"]
+                ionum = self.nextID()
+                thread.pendingIO = WriteIO(ionum, ts, thread, thread.pendingIO, imagectx, [Extent(offset, length)])
+                thread.pendingIO.addThreadCompletionDependencies(threads, self.recentCompletions)
+                thread.issuedIO(thread.pendingIO)
+                ios.append(thread.pendingIO)
             elif event.name == "librbd:write_exit":
-                if not ignoreWrites:
-                    thread.pendingIO.end_time = ts
-                    completionIO = CompletionIO(ts, thread, thread.pendingIO)
-                    thread.completedIO(completionIO)
-                    ios.append(completionIO)
-                    completed(completionIO)
-                    if printOnRead:
-                        print str(thread.pendingIO)
+                thread.pendingIO.end_time = ts
+                completionIO = CompletionIO(ts, thread, thread.pendingIO)
+                thread.completedIO(completionIO)
+                ios.append(completionIO)
+                completed(completionIO)
+                if printOnRead:
+                    print str(thread.pendingIO)
             elif event.name == "librbd:aio_read_enter":
                 name = event["name"]
                 readid = event["id"]
@@ -419,21 +416,20 @@ class Processor(object):
                 if printOnRead:
                     print str(thread.pendingIO)
             elif event.name == "librbd:aio_write_enter":
-                if not ignoreWrites:
-                    name = event["name"]
-                    writeid = event["id"]
-                    offset = event["off"]
-                    length = event["len"]
-                    completion = event["completion"]
-                    imagectx = event["imagectx"]
-                    ionum = self.nextID()
-                    thread.pendingIO = AioWriteIO(ionum, ts, thread, thread.pendingIO, imagectx, [Extent(offset, length)])
-                    thread.pendingIO.addThreadCompletionDependencies(threads, self.recentCompletions)
-                    thread.issuedIO(thread.pendingIO)
-                    ios.append(thread.pendingIO)
-                    pendingIOs[completion] = thread.pendingIO
-                    if printOnRead:
-                        print str(thread.pendingIO)
+                name = event["name"]
+                writeid = event["id"]
+                offset = event["off"]
+                length = event["len"]
+                completion = event["completion"]
+                imagectx = event["imagectx"]
+                ionum = self.nextID()
+                thread.pendingIO = AioWriteIO(ionum, ts, thread, thread.pendingIO, imagectx, [Extent(offset, length)])
+                thread.pendingIO.addThreadCompletionDependencies(threads, self.recentCompletions)
+                thread.issuedIO(thread.pendingIO)
+                ios.append(thread.pendingIO)
+                pendingIOs[completion] = thread.pendingIO
+                if printOnRead:
+                    print str(thread.pendingIO)
             elif event.name == "librbd:aio_complete_enter":
                 completion = event["completion"]
                 retval = event["rval"]

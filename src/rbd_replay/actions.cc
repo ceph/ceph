@@ -238,8 +238,12 @@ void AioWriteAction::perform(ActionCtx &worker) {
   PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
   io->bufferlist().append_zero(m_length);
   worker.add_pending(io);
-  int r = image->aio_write(m_offset, m_length, io->bufferlist(), &io->completion());
-  assertf(r >= 0, "id = %d, r = %d", id(), r);
+  if (worker.readonly()) {
+    worker.remove_pending(io);
+  } else {
+    int r = image->aio_write(m_offset, m_length, io->bufferlist(), &io->completion());
+    assertf(r >= 0, "id = %d, r = %d", id(), r);
+  }
 }
 
 std::ostream& AioWriteAction::dump(std::ostream& o) const {
@@ -272,8 +276,10 @@ void WriteAction::perform(ActionCtx &worker) {
   PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
   worker.add_pending(io);
   io->bufferlist().append_zero(m_length);
-  ssize_t r = image->write(m_offset, m_length, io->bufferlist());
-  assertf(r >= 0, "id = %d, r = %d", id(), r);
+  if (!worker.readonly()) {
+    ssize_t r = image->write(m_offset, m_length, io->bufferlist());
+    assertf(r >= 0, "id = %d, r = %d", id(), r);
+  }
   worker.remove_pending(io);
 }
 
@@ -311,7 +317,7 @@ void OpenImageAction::perform(ActionCtx &worker) {
   librbd::Image *image = new librbd::Image();
   librbd::RBD *rbd = worker.rbd();
   int r;
-  if (m_readonly) {
+  if (m_readonly || worker.readonly()) {
     r = rbd->open_read_only(*worker.ioctx(), *image, m_name.c_str(), m_snap_name.c_str());
   } else {
     r = rbd->open(*worker.ioctx(), *image, m_name.c_str(), m_snap_name.c_str());
