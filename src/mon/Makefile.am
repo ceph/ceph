@@ -1,3 +1,7 @@
+libmon_types_la_SOURCES = \
+	mon/PGMap.cc
+noinst_LTLIBRARIES += libmon_types.la
+
 libmon_la_SOURCES = \
 	mon/Monitor.cc \
 	mon/Paxos.cc \
@@ -6,7 +10,6 @@ libmon_la_SOURCES = \
 	mon/MDSMonitor.cc \
 	mon/MonmapMonitor.cc \
 	mon/PGMonitor.cc \
-	mon/PGMap.cc \
 	mon/LogMonitor.cc \
 	mon/AuthMonitor.cc \
 	mon/Elector.cc \
@@ -14,7 +17,7 @@ libmon_la_SOURCES = \
 	mon/HealthMonitor.cc \
 	mon/DataHealthService.cc \
 	mon/ConfigKeyService.cc
-libmon_la_LIBADD = $(LIBAUTH) $(LIBCOMMON) $(LIBOS)
+libmon_la_LIBADD = $(LIBAUTH) $(LIBCOMMON) $(LIBOS) $(LIBMON_TYPES)
 noinst_LTLIBRARIES += libmon.la
 
 noinst_HEADERS += \
