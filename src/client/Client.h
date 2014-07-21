@@ -109,7 +109,7 @@ struct DirEntry {
   DirEntry(const string &n, struct stat& s, int stm) : d_name(n), st(s), stmask(stm) {}
 };
 
-class Inode;
+struct Inode;
 struct Cap;
 class Dir;
 class Dentry;

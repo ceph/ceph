@@ -806,8 +806,8 @@ protected:
   // agent
   boost::scoped_ptr<TierAgentState> agent_state;
 
-  friend class C_AgentFlushStartStop;
-  friend class C_HitSetFlushing;
+  friend struct C_AgentFlushStartStop;
+  friend struct C_HitSetFlushing;
 
   void agent_setup();       ///< initialize agent state
   bool agent_work(int max); ///< entry point to do some agent work
