@@ -223,6 +223,7 @@ class Client : public Dispatcher {
 
   Finisher async_ino_invalidator;
   Finisher async_dentry_invalidator;
+  Finisher objecter_finisher;
 
   Context *tick_event;
   utime_t last_cap_renew;
