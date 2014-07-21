@@ -1579,17 +1579,22 @@ void MDS::replay_done()
   }
 
   if (is_standby_replay()) {
+    // The replay was done in standby state, and we are still in that state
+    assert(standby_replaying);
     dout(10) << "setting replay timer" << dendl;
     timer.add_event_after(g_conf->mds_replay_interval,
                           new C_MDS_StandbyReplayRestart(this));
     return;
-  }
-
-  if (standby_replaying) {
+  } else if (standby_replaying) {
+    // The replay was done in standby state, we have now _left_ that state
     dout(10) << " last replay pass was as a standby; making final pass" << dendl;
     standby_replaying = false;
     standby_replay_restart();
     return;
+  } else {
+    // Not in standby, replay is truly complete
+    assert(mdlog->get_journaler()->get_read_pos() == mdlog->get_journaler()->get_write_pos());
+    assert(!is_standby_replay());
   }
 
   dout(1) << "making mds journal writeable" << dendl;
