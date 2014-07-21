@@ -60,6 +60,8 @@ public:
 
   virtual void add_pending(boost::shared_ptr<PendingIO> io) = 0;
 
+  virtual bool readonly() const = 0;
+
   virtual void remove_pending(boost::shared_ptr<PendingIO> io) = 0;
 
   virtual void set_action_complete(action_id_t id) = 0;
