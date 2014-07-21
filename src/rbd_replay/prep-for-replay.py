@@ -231,7 +231,7 @@ class AioWriteIO(IO):
         if len(self.extents) != 1:
             raise ValueError("Expected read to have 1 extent, but it had " + str(len(self.extents)))
         extent = self.extents[0]
-        f.write(struct.pack("!QQQ", imagectx, extent.offset, extent.length))
+        f.write(struct.pack("!QQQ", self.imagectx, extent.offset, extent.length))
     def __str__(self):
         return str(self.ionum) + ": " + str(self.start_time * 1e-6) + ": aio write, extents = " + str(self.extents) + ", thread = " + str(self.thread.id) + ", deps = " + str(self.depMap()) + ", numSuccessors = " + str(self.numSuccessors) + ", numCompletionSuccessors = " + str(self.numCompletionSuccessors())
 
