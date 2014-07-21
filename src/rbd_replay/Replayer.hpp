@@ -53,6 +53,8 @@ public:
 
   void set_action_complete(action_id_t id);
 
+  bool readonly() const;
+
 private:
   void run();
 
@@ -96,6 +98,10 @@ public:
 
   void set_latency_multiplier(float f);
 
+  bool readonly() const;
+
+  void set_readonly(bool readonly);
+
 private:
   struct action_tracker_d {
     // Maps an action ID to the time the action completed
@@ -115,6 +121,7 @@ private:
   librbd::RBD* m_rbd;
   librados::IoCtx* m_ioctx;
   float m_latency_multiplier;
+  bool m_readonly;
 
   std::map<imagectx_id_t, librbd::Image*> m_images;
   boost::shared_mutex m_images_mutex;
