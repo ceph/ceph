@@ -348,18 +348,15 @@ bool librados::RadosClient::ms_dispatch(Message *m)
 
 void librados::RadosClient::ms_handle_connect(Connection *con)
 {
-  objecter->ms_handle_connect(con);
 }
 
 bool librados::RadosClient::ms_handle_reset(Connection *con)
 {
-  objecter->ms_handle_reset(con);
   return false;
 }
 
 void librados::RadosClient::ms_handle_remote_reset(Connection *con)
 {
-  objecter->ms_handle_remote_reset(con);
 }
 
 
