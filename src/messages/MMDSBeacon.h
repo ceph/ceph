@@ -31,7 +31,7 @@ class MMDSBeacon : public PaxosServiceMessage {
   uint64_t global_id;
   string name;
 
-  __u32 state;
+  MDSMap::DaemonState state;
   version_t seq;
   __s32 standby_for_rank;
   string standby_for_name;
@@ -40,7 +40,7 @@ class MMDSBeacon : public PaxosServiceMessage {
 
  public:
   MMDSBeacon() : PaxosServiceMessage(MSG_MDS_BEACON, 0, HEAD_VERSION) { }
-  MMDSBeacon(const uuid_d &f, uint64_t g, string& n, epoch_t les, int st, version_t se) : 
+  MMDSBeacon(const uuid_d &f, uint64_t g, string& n, epoch_t les, MDSMap::DaemonState st, version_t se) : 
     PaxosServiceMessage(MSG_MDS_BEACON, les, HEAD_VERSION), 
     fsid(f), global_id(g), name(n), state(st), seq(se),
     standby_for_rank(-1) {
@@ -53,7 +53,7 @@ public:
   uint64_t get_global_id() { return global_id; }
   string& get_name() { return name; }
   epoch_t get_last_epoch_seen() { return version; }
-  int get_state() { return state; }
+  MDSMap::DaemonState get_state() { return state; }
   version_t get_seq() { return seq; }
   const char *get_type_name() const { return "mdsbeacon"; }
   int get_standby_for_rank() { return standby_for_rank; }
@@ -75,7 +75,7 @@ public:
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(global_id, payload);
-    ::encode(state, payload);
+    ::encode((__u32)state, payload);
     ::encode(seq, payload);
     ::encode(name, payload);
     ::encode(standby_for_rank, payload);
@@ -87,7 +87,7 @@ public:
     paxos_decode(p);
     ::decode(fsid, p);
     ::decode(global_id, p);
-    ::decode(state, p);
+    ::decode((__u32&)state, p);
     ::decode(seq, p);
     ::decode(name, p);
     ::decode(standby_for_rank, p);

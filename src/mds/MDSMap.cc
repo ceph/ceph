@@ -365,7 +365,7 @@ void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) con
   ::encode(name, bl);
   ::encode(rank, bl);
   ::encode(inc, bl);
-  ::encode(state, bl);
+  ::encode((int32_t)state, bl);
   ::encode(state_seq, bl);
   ::encode(addr, bl);
   ::encode(laggy_since, bl);
@@ -383,7 +383,7 @@ void MDSMap::mds_info_t::encode_unversioned(bufferlist& bl) const
   ::encode(name, bl);
   ::encode(rank, bl);
   ::encode(inc, bl);
-  ::encode(state, bl);
+  ::encode((int32_t)state, bl);
   ::encode(state_seq, bl);
   ::encode(addr, bl);
   ::encode(laggy_since, bl);
@@ -399,7 +399,7 @@ void MDSMap::mds_info_t::decode(bufferlist::iterator& bl)
   ::decode(name, bl);
   ::decode(rank, bl);
   ::decode(inc, bl);
-  ::decode(state, bl);
+  ::decode((int32_t&)(state), bl);
   ::decode(state_seq, bl);
   ::decode(addr, bl);
   ::decode(laggy_since, bl);
