@@ -493,6 +493,9 @@ void Objecter::_linger_submit(LingerOp *info)
 bool Objecter::ms_dispatch(Message *m)
 {
   ldout(cct, 10) << __func__ << " " << cct << " " << *m << dendl;
+  if (!initialized.read())
+    return false;
+
   switch (m->get_type()) {
     // these we exlusively handle
   case CEPH_MSG_OSD_OPREPLY:
@@ -3123,12 +3126,17 @@ void Objecter::_sg_read_finish(vector<ObjectExtent>& extents, vector<bufferlist>
 void Objecter::ms_handle_connect(Connection *con)
 {
   ldout(cct, 10) << "ms_handle_connect " << con << dendl;
+  if (!initialized.read())
+    return;
+
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON)
     resend_mon_ops();
 }
 
 bool Objecter::ms_handle_reset(Connection *con)
 {
+  if (!initialized.read())
+    return false;
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
     //
     int osd = osdmap->identify_osd(con->get_peer_addr());
@@ -3169,6 +3177,8 @@ bool Objecter::ms_get_authorizer(int dest_type,
 				 AuthAuthorizer **authorizer,
 				 bool force_new)
 {
+  if (!initialized.read())
+    return false;
   if (dest_type == CEPH_ENTITY_TYPE_MON)
     return true;
   *authorizer = monc->auth->build_authorizer(dest_type);
