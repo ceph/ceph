@@ -16,7 +16,7 @@
 #include "messages/MClientRequest.h"
 
 class MClientReply;
-class Inode;
+struct Inode;
 class Dentry;
 
 struct MetaRequest {
