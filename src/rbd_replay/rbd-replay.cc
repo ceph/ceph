@@ -34,6 +34,8 @@ static const char* get_remainder(const char *string, const char *prefix) {
 
 static void usage(const char* program) {
   cout << "Usage: " << program << " --conf=<config_file> <replay_file>" << std::endl;
+  cout << "Options:" << endl;
+  cout << "  --latency-multiplier <float>    Multiplies inter-request latencies.  Default: 1" << endl;
 }
 
 int main(int argc, const char **argv) {
