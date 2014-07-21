@@ -16,7 +16,7 @@
 
 namespace libradosstriper
 {
-  struct RadosStriper;
+  class RadosStriper;
 }
 
 namespace librados
