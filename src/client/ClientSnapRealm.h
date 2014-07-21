@@ -8,7 +8,7 @@
 #include "common/snap_types.h"
 #include "include/xlist.h"
 
-class Inode;
+struct Inode;
 
 struct SnapRealm {
   inodeno_t ino;
