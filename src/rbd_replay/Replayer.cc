@@ -116,9 +116,12 @@ librados::IoCtx* Worker::ioctx() {
   return m_replayer.get_ioctx();
 }
 
-
 void Worker::set_action_complete(action_id_t id) {
   m_replayer.set_action_complete(id);
+}
+
+bool Worker::readonly() const {
+  return m_replayer.readonly();
 }
 
 
@@ -277,4 +280,12 @@ void Replayer::clear_images() {
 
 void Replayer::set_latency_multiplier(float f) {
   m_latency_multiplier = f;
+}
+
+bool Replayer::readonly() const {
+  return m_readonly;
+}
+
+void Replayer::set_readonly(bool readonly) {
+  m_readonly = readonly;
 }
