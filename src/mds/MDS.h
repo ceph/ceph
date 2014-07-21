@@ -38,7 +38,6 @@
 
 #define CEPH_MDS_PROTOCOL    24 /* cluster internal */
 
-
 enum {
   l_mds_first = 2000,
   l_mds_req,
@@ -377,9 +376,23 @@ class MDS : public Dispatcher, public md_config_obs_t {
   void bcast_mds_map();  // to mounted clients
 
   void boot_create();             // i am new mds.
-  void boot_start(int step=0, int r=0);    // starting|replay
 
+ private:
+  typedef enum {
+    // The MDSMap is available, configure default layouts and structures
+    MDS_BOOT_INITIAL = 0,
+    // We are ready to open some inodes
+    MDS_BOOT_OPEN_ROOT,
+    // We are ready to do a replay if needed
+    MDS_BOOT_PREPARE_LOG,
+    // Replay is complete
+    MDS_BOOT_REPLAY_DONE
+  } BootStep;
+
+  friend class C_MDS_BootStart;
+  void boot_start(BootStep step=MDS_BOOT_INITIAL, int r=0);    // starting|replay
   void calc_recovery_set();
+ public:
 
   void replay_start();
   void creating_done();
