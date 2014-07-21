@@ -53,11 +53,12 @@ ceph_dencoder_SOURCES = \
 	test/encoding/ceph_dencoder.cc \
 	$(DENCODER_SOURCES)
 ceph_dencoder_LDADD = \
-	$(LIBOSD) $(LIBMDS) $(LIBMON) \
-	$(DENCODER_DEPS) $(CEPH_GLOBAL)
-if WITH_RADOSGW
-ceph_dencoder_LDADD += $(LIBRGW) $(LIBRGW_DEPS)
-endif
+	$(LIBOSD_TYPES) \
+	$(LIBOS_TYPES) \
+	$(LIBMDS) \
+	$(LIBMON_TYPES) \
+	$(DENCODER_DEPS) \
+	$(CEPH_GLOBAL)
 
 # These should always use explicit _CFLAGS/_CXXFLAGS so avoid basename conflicts
 ceph_dencoder_CFLAGS = ${AM_CFLAGS}
