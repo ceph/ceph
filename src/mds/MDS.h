@@ -153,7 +153,7 @@ class MDS : public Dispatcher, public md_config_obs_t {
   int incarnation;
 
   int standby_for_rank;
-  int standby_type;
+  MDSMap::DaemonState standby_type;  // one of STANDBY_REPLAY, ONESHOT_REPLAY
   string standby_for_name;
   bool standby_replaying;  // true if current replay pass is in standby-replay mode
 
@@ -188,9 +188,9 @@ class MDS : public Dispatcher, public md_config_obs_t {
 
  protected:
   // -- MDS state --
-  int last_state;
-  int state;         // my confirmed state
-  int want_state;    // the state i want
+  MDSMap::DaemonState last_state;
+  MDSMap::DaemonState state;         // my confirmed state
+  MDSMap::DaemonState want_state;    // the state i want
 
   list<Context*> waiting_for_active, waiting_for_replay, waiting_for_reconnect, waiting_for_resolve;
   list<Context*> replay_queue;
@@ -245,7 +245,7 @@ class MDS : public Dispatcher, public md_config_obs_t {
 
   bool is_stopped()  { return mdsmap->is_stopped(whoami); }
 
-  void request_state(int s);
+  void request_state(MDSMap::DaemonState s);
 
   ceph_tid_t issue_tid() { return ++last_tid; }
     
@@ -357,7 +357,7 @@ class MDS : public Dispatcher, public md_config_obs_t {
   }
 
   // start up, shutdown
-  int init(int wanted_state=MDSMap::STATE_BOOT);
+  int init(MDSMap::DaemonState wanted_state=MDSMap::STATE_BOOT);
 
   // admin socket handling
   friend class MDSSocketHook;

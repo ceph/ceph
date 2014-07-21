@@ -98,7 +98,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   name(n),
   whoami(-1), incarnation(0),
   standby_for_rank(MDSMap::MDS_NO_STANDBY_PREF),
-  standby_type(0),
+  standby_type(MDSMap::STATE_NULL),
   standby_replaying(false),
   messenger(m),
   monc(mc),
@@ -573,7 +573,7 @@ void MDS::send_message_client(Message *m, Session *session)
   }
 }
 
-int MDS::init(int wanted_state)
+int MDS::init(MDSMap::DaemonState wanted_state)
 {
   dout(10) << sizeof(MDSCacheObject) << "\tMDSCacheObject" << dendl;
   dout(10) << sizeof(CInode) << "\tCInode" << dendl;
@@ -647,14 +647,16 @@ int MDS::init(int wanted_state)
   }
 
   mds_lock.Lock();
-  if (want_state == CEPH_MDS_STATE_DNE) {
+  if (want_state == MDSMap::STATE_DNE) {
     suicide();  // we could do something more graceful here
   }
 
   timer.init();
 
-  if (wanted_state==MDSMap::STATE_BOOT && g_conf->mds_standby_replay)
+  if (wanted_state==MDSMap::STATE_BOOT && g_conf->mds_standby_replay) {
     wanted_state = MDSMap::STATE_STANDBY_REPLAY;
+  }
+
   // starting beacon.  this will induce an MDSMap from the monitor
   want_state = wanted_state;
   if (wanted_state==MDSMap::STATE_STANDBY_REPLAY ||
@@ -681,7 +683,7 @@ int MDS::init(int wanted_state)
       standby_for_rank = MDSMap::MDS_STANDBY_ANY;
     else
       standby_for_rank = MDSMap::MDS_STANDBY_NAME;
-  } else if (!standby_type && !standby_for_name.empty())
+  } else if (standby_type == MDSMap::STATE_NULL && !standby_for_name.empty())
     standby_for_rank = MDSMap::MDS_MATCHED_ACTIVE;
 
   beacon_start();
@@ -1023,7 +1025,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   // keep old map, for a moment
   MDSMap *oldmap = mdsmap;
   int oldwhoami = whoami;
-  int oldstate = state;
+  MDSMap::DaemonState oldstate = state;
   entity_addr_t addr;
 
   // decode and process
@@ -1074,7 +1076,7 @@ void MDS::handle_mds_map(MMDSMap *m)
 
     goto out;
   } else if (state == MDSMap::STATE_STANDBY_REPLAY) {
-    if (standby_type && standby_type != MDSMap::STATE_STANDBY_REPLAY) {
+    if (standby_type != MDSMap::STATE_NULL && standby_type != MDSMap::STATE_STANDBY_REPLAY) {
       want_state = standby_type;
       beacon_send();
       state = oldstate;
@@ -1309,7 +1311,7 @@ void MDS::bcast_mds_map()
 }
 
 
-void MDS::request_state(int s)
+void MDS::request_state(MDSMap::DaemonState s)
 {
   dout(3) << "request_state " << ceph_mds_state_name(s) << dendl;
   want_state = s;
@@ -1494,7 +1496,7 @@ void MDS::replay_start()
   if (is_standby_replay())
     standby_replaying = true;
   
-  standby_type = 0;
+  standby_type = MDSMap::STATE_NULL;
 
   calc_recovery_set();
 
@@ -1801,7 +1803,7 @@ void MDS::handle_signal(int signum)
 void MDS::suicide()
 {
   assert(mds_lock.is_locked());
-  want_state = CEPH_MDS_STATE_DNE; // whatever.
+  want_state = MDSMap::STATE_DNE; // whatever.
 
   dout(1) << "suicide.  wanted " << ceph_mds_state_name(want_state)
 	  << ", now " << ceph_mds_state_name(state) << dendl;
