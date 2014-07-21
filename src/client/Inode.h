@@ -17,7 +17,7 @@ struct MetaSession;
 class Dentry;
 class Dir;
 struct SnapRealm;
-class Inode;
+struct Inode;
 
 struct Cap {
   MetaSession *session;
@@ -71,8 +71,7 @@ struct CapSnap {
 // inode flags
 #define I_COMPLETE 1
 
-class Inode {
- public:
+struct Inode {
   CephContext *cct;
 
   // -- the actual inode --
