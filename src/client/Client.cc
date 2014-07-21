@@ -191,7 +191,8 @@ Client::Client(Messenger *m, MonClient *mc)
   objecter = new Objecter(cct, messenger, monclient,
 			  0, 0);
   objecter->set_client_incarnation(0);  // client always 0, for now.
-  writeback_handler = new ObjecterWriteback(objecter);
+  writeback_handler = new ObjecterWriteback(objecter, &objecter_finisher,
+					    &client_lock);
   objectcacher = new ObjectCacher(cct, "libcephfs", *writeback_handler, client_lock,
 				  client_flush_set_callback,    // all commit callback
 				  (void*)this,
@@ -346,7 +347,9 @@ int Client::init()
   objectcacher->start();
 
   objecter->init();
+
   // ok!
+  messenger->add_dispatcher_head(objecter);
   messenger->add_dispatcher_head(this);
 
   int r = monclient->init();
@@ -1925,18 +1928,6 @@ bool Client::ms_dispatch(Message *m)
   }
 
   switch (m->get_type()) {
-    // osd
-  case CEPH_MSG_OSD_OPREPLY:
-    objecter->handle_osd_op_reply((MOSDOpReply*)m);
-    break;
-  case CEPH_MSG_OSD_MAP:
-    objecter->handle_osd_map((class MOSDMap*)m);
-    break;
-  case CEPH_MSG_STATFS_REPLY:
-    objecter->handle_fs_stats_reply((MStatfsReply*)m);
-    break;
-
-    
     // mounting and mds sessions
   case CEPH_MSG_MDS_MAP:
     handle_mds_map(static_cast<MMDSMap*>(m));
@@ -9027,15 +9018,11 @@ int Client::get_local_osd()
 void Client::ms_handle_connect(Connection *con)
 {
   ldout(cct, 10) << "ms_handle_connect on " << con->get_peer_addr() << dendl;
-  Mutex::Locker l(client_lock);
-  objecter->ms_handle_connect(con);
 }
 
 bool Client::ms_handle_reset(Connection *con)
 {
   ldout(cct, 0) << "ms_handle_reset on " << con->get_peer_addr() << dendl;
-  Mutex::Locker l(client_lock);
-  objecter->ms_handle_reset(con);
   return false;
 }
 
@@ -9044,10 +9031,6 @@ void Client::ms_handle_remote_reset(Connection *con)
   ldout(cct, 0) << "ms_handle_remote_reset on " << con->get_peer_addr() << dendl;
   Mutex::Locker l(client_lock);
   switch (con->get_peer_type()) {
-  case CEPH_ENTITY_TYPE_OSD:
-    objecter->ms_handle_remote_reset(con);
-    break;
-
   case CEPH_ENTITY_TYPE_MDS:
     {
       // kludge to figure out which mds this is; fixme with a Connection* state
