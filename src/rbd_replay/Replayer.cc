@@ -44,10 +44,12 @@ void Worker::join() {
 }
 
 void Worker::send(Action::ptr action) {
+  assert(action);
   m_buffer.push_front(action);
 }
 
 void Worker::add_pending(PendingIO::ptr io) {
+  assert(io);
   boost::mutex::scoped_lock lock(m_pending_ios_mutex);
   assertf(m_pending_ios.count(io->id()) == 0, "id = %d", io->id());
   m_pending_ios[io->id()] = io;
@@ -82,6 +84,7 @@ void Worker::run() {
 
 
 void Worker::remove_pending(PendingIO::ptr io) {
+  assert(io);
   m_replayer.set_action_complete(io->id());
   boost::mutex::scoped_lock lock(m_pending_ios_mutex);
   size_t num_erased = m_pending_ios.erase(io->id());
@@ -98,6 +101,7 @@ librbd::Image* Worker::get_image(imagectx_id_t imagectx_id) {
 
 
 void Worker::put_image(imagectx_id_t imagectx_id, librbd::Image* image) {
+  assert(image);
   m_replayer.put_image(imagectx_id, image);
 }
 
@@ -128,6 +132,7 @@ bool Worker::readonly() const {
 Replayer::Replayer(int num_action_trackers)
   : m_num_action_trackers(num_action_trackers),
     m_action_trackers(new action_tracker_d[m_num_action_trackers]) {
+  assertf(num_action_trackers > 0, "num_action_trackers = %d", num_action_trackers);
 }
 
 Replayer::~Replayer() {
@@ -209,6 +214,7 @@ librbd::Image* Replayer::get_image(imagectx_id_t imagectx_id) {
 }
 
 void Replayer::put_image(imagectx_id_t imagectx_id, librbd::Image *image) {
+  assert(image);
   boost::unique_lock<boost::shared_mutex> lock(m_images_mutex);
   assert(m_images.count(imagectx_id) == 0);
   m_images[imagectx_id] = image;
@@ -279,6 +285,7 @@ void Replayer::clear_images() {
 }
 
 void Replayer::set_latency_multiplier(float f) {
+  assertf(f >= 0, "f = %f", f);
   m_latency_multiplier = f;
 }
 
