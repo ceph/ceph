@@ -392,7 +392,7 @@ int MonClient::init()
 
 void MonClient::shutdown()
 {
-  ldout(cct, 10) << __func__ << "shutdown" << dendl;
+  ldout(cct, 10) << __func__ << dendl;
   monc_lock.Lock();
   while (!version_requests.empty()) {
     version_requests.begin()->second->context->complete(-ECANCELED);
