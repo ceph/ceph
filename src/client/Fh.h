@@ -3,7 +3,7 @@
 
 #include "include/types.h"
 
-class Inode;
+struct Inode;
 class Cond;
 
 // file handle for any open file state
