@@ -911,21 +911,6 @@ int KeyValueStore::umount()
   return 0;
 }
 
-int KeyValueStore::get_max_object_name_length()
-{
-  lock.Lock();
-  int ret = pathconf(basedir.c_str(), _PC_NAME_MAX);
-  if (ret < 0) {
-    int err = errno;
-    lock.Unlock();
-    if (err == 0)
-      return -EDOM;
-    return -err;
-  }
-  lock.Unlock();
-  return ret;
-}
-
 int KeyValueStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
                                       TrackedOpRef osd_op,
                                       ThreadPool::TPHandle *handle)
