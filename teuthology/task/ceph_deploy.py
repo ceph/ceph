@@ -11,7 +11,7 @@ import logging
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from ..config import config as teuth_config
-import ceph as ceph_fn
+import install as install_fn
 from ..orchestra import run
 
 log = logging.getLogger(__name__)
@@ -455,7 +455,7 @@ def task(ctx, config):
         assert isinstance(config['branch'], dict), 'branch must be a dictionary'
 
     with contextutil.nested(
-         lambda: ceph_fn.ship_utilities(ctx=ctx, config=None),
+         lambda: install_fn.ship_utilities(ctx=ctx, config=None),
          lambda: download_ceph_deploy(ctx=ctx, config=config),
          lambda: build_ceph_cluster(ctx=ctx, config=dict(
                  conf=config.get('conf', {}),
