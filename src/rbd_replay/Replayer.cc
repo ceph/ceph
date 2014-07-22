@@ -130,7 +130,8 @@ bool Worker::readonly() const {
 
 
 Replayer::Replayer(int num_action_trackers)
-  : m_num_action_trackers(num_action_trackers),
+  : m_pool_name("rbd"),
+    m_num_action_trackers(num_action_trackers),
     m_action_trackers(new action_tracker_d[m_num_action_trackers]) {
   assertf(num_action_trackers > 0, "num_action_trackers = %d", num_action_trackers);
 }
@@ -159,8 +160,7 @@ void Replayer::run(const std::string replay_file) {
     }
     m_ioctx = new librados::IoCtx();
     {
-      const char* pool_name = "rbd";
-      r = rados.ioctx_create(pool_name, *m_ioctx);
+      r = rados.ioctx_create(m_pool_name.c_str(), *m_ioctx);
       if (r) {
 	cerr << "Unable to create IoCtx: " << r << std::endl;
 	goto out2;
@@ -295,4 +295,12 @@ bool Replayer::readonly() const {
 
 void Replayer::set_readonly(bool readonly) {
   m_readonly = readonly;
+}
+
+string Replayer::pool_name() const {
+  return m_pool_name;
+}
+
+void Replayer::set_pool_name(string pool_name) {
+  m_pool_name = pool_name;
 }

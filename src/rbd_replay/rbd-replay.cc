@@ -36,6 +36,7 @@ static const char* get_remainder(const char *string, const char *prefix) {
 static void usage(const char* program) {
   cout << "Usage: " << program << " --conf=<config_file> <replay_file>" << std::endl;
   cout << "Options:" << std::endl;
+  cout << "  -p, --pool-name <pool>          Name of the pool to use.  Default: rbd" << std::endl;
   cout << "  --latency-multiplier <float>    Multiplies inter-request latencies.  Default: 1" << std::endl;
   cout << "  --read-only                     Only perform non-destructive operations." << std::endl;
 }
@@ -48,6 +49,7 @@ int main(int argc, const char **argv) {
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
 
   std::vector<const char*>::iterator i;
+  string pool_name = "rbd";
   float latency_multiplier = 1;
   bool readonly = false;
   std::string val;
@@ -55,6 +57,8 @@ int main(int argc, const char **argv) {
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
+    } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
+      pool_name = val;
     } else if (ceph_argparse_withfloat(args, i, &latency_multiplier, &err, "--latency-multiplier",
 				     (char*)NULL)) {
       if (!err.str().empty()) {
@@ -89,6 +93,7 @@ int main(int argc, const char **argv) {
   unsigned int nthreads = boost::thread::hardware_concurrency();
   Replayer replayer(2 * nthreads + 1);
   replayer.set_latency_multiplier(latency_multiplier);
+  replayer.set_pool_name(pool_name);
   replayer.set_readonly(readonly);
   replayer.run(replay_file);
 }
