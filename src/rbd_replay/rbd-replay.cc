@@ -18,6 +18,7 @@
 #include "global/global_init.h"
 #include "Replayer.hpp"
 #include "rbd_replay_debug.hpp"
+#include "ImageNameMap.hpp"
 
 
 using namespace std;
@@ -39,6 +40,19 @@ static void usage(const char* program) {
   cout << "  -p, --pool-name <pool>          Name of the pool to use.  Default: rbd" << std::endl;
   cout << "  --latency-multiplier <float>    Multiplies inter-request latencies.  Default: 1" << std::endl;
   cout << "  --read-only                     Only perform non-destructive operations." << std::endl;
+  cout << "  --map-image <rule>              Add a rule to map image names in the trace to" << std::endl;
+  cout << "                                  image names in the replay cluster." << std::endl;
+  cout << std::endl;
+  cout << "Image mapping rules:" << std::endl;
+  cout << "A rule of image1/snap1=image2/snap2 would map snap1 of image1 to snap2 of" << std::endl;
+  cout << "image2. Regular expressions are used, so image/snap_(.*)=image_$1/ would map" << std::endl;
+  cout << "image/snap_1 to image_1/. (Note that an un-snapshotted image has the empty" << std::endl;
+  cout << "string for the snapshot name.)" << std::endl;
+}
+
+static ImageNameMap::Name bad_mapping(ImageNameMap::Name input, string output) {
+  dout(0) << "Bad value returned from mapping.  Image: '" << input.first << "', snap '" << input.second << "', output: '" << output << "'.  Using image: '" << output << ", snap ''." << dendl;
+  return ImageNameMap::Name(output, "");
 }
 
 int main(int argc, const char **argv) {
@@ -52,6 +66,8 @@ int main(int argc, const char **argv) {
   string pool_name = "rbd";
   float latency_multiplier = 1;
   bool readonly = false;
+  ImageNameMap image_name_map;
+  image_name_map.set_bad_mapping_fallback(bad_mapping);
   std::string val;
   std::ostringstream err;
   for (i = args.begin(); i != args.end(); ) {
@@ -67,6 +83,14 @@ int main(int argc, const char **argv) {
       }
     } else if (ceph_argparse_flag(args, i, "--read-only", (char*)NULL)) {
       readonly = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--map-image", (char*)NULL)) {
+      ImageNameMap::Mapping mapping;
+      if (image_name_map.parse_mapping(val, &mapping)) {
+	image_name_map.add_mapping(mapping);
+      } else {
+	cerr << "Unable to parse mapping string: '" << val << "'" << std::endl;
+	return 1;
+      }
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage(argv[0]);
       return 0;
@@ -95,5 +119,6 @@ int main(int argc, const char **argv) {
   replayer.set_latency_multiplier(latency_multiplier);
   replayer.set_pool_name(pool_name);
   replayer.set_readonly(readonly);
+  replayer.set_image_name_map(image_name_map);
   replayer.run(replay_file);
 }

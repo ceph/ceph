@@ -67,6 +67,8 @@ public:
   virtual void set_action_complete(action_id_t id) = 0;
 
   virtual void stop() = 0;
+
+  virtual std::pair<std::string, std::string> map_image_name(std::string image_name, std::string snap_name) const = 0;
 };
 
 
