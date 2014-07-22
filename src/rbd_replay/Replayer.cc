@@ -128,6 +128,10 @@ bool Worker::readonly() const {
   return m_replayer.readonly();
 }
 
+pair<string, string> Worker::map_image_name(string image_name, string snap_name) const {
+  return m_replayer.image_name_map().map(pair<string,string>(image_name, snap_name));
+}
+
 
 Replayer::Replayer(int num_action_trackers)
   : m_pool_name("rbd"),

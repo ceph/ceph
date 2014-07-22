@@ -18,6 +18,7 @@
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/shared_mutex.hpp>
 #include "BoundedBuffer.hpp"
+#include "ImageNameMap.hpp"
 #include "PendingIO.hpp"
 
 namespace rbd_replay {
@@ -54,6 +55,8 @@ public:
   void set_action_complete(action_id_t id);
 
   bool readonly() const;
+
+  std::pair<std::string, std::string> map_image_name(std::string image_name, std::string snap_name) const;
 
 private:
   void run();
@@ -106,6 +109,14 @@ public:
 
   void set_readonly(bool readonly);
 
+  void set_image_name_map(const ImageNameMap &map) {
+    m_image_name_map = map;
+  }
+
+  const ImageNameMap &image_name_map() const {
+    return m_image_name_map;
+  }
+
 private:
   struct action_tracker_d {
     // Maps an action ID to the time the action completed
@@ -127,6 +138,7 @@ private:
   std::string m_pool_name;
   float m_latency_multiplier;
   bool m_readonly;
+  ImageNameMap m_image_name_map;
 
   std::map<imagectx_id_t, librbd::Image*> m_images;
   boost::shared_mutex m_images_mutex;
