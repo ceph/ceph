@@ -537,8 +537,6 @@ public:
   void queue_file_recover(CInode *in);
   void _queued_file_recover_cow(CInode *in, MutationRef& mut);
 
-  void purge_prealloc_ino(inodeno_t ino, Context *fin);
-
   // subsystems
   Migrator *migrator;
 
