@@ -8574,6 +8574,23 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
     out_op->data_included.span_of(recovery_info.copy_subset,
 				 progress.data_recovered_to,
 				 available);
+    if (!out_op->data_included.empty()) {
+      bufferlist bl;
+      int r = store->fiemap(coll, recovery_info.soid, 0,
+                                 out_op->data_included.range_end(), bl);
+      if (r >= 0)  {
+        interval_set<uint64_t> fiemap_included;
+        map<uint64_t, uint64_t> m;
+        bufferlist::iterator iter = bl.begin();
+        ::decode(m, iter);
+        map<uint64_t, uint64_t>::iterator miter;
+        for (miter = m.begin(); miter != m.end(); ++miter) {
+          fiemap_included.insert(miter->first, miter->second);
+        }
+
+        out_op->data_included.intersection_of(fiemap_included);
+      }
+    }
   } else {
     out_op->data_included.clear();
   }
@@ -8796,8 +8813,22 @@ void ReplicatedBackend::handle_pull(pg_shard_t peer, PullOp &op, PushOp *reply)
       // Adjust size and copy_subset
       recovery_info.size = st.st_size;
       recovery_info.copy_subset.clear();
-      if (st.st_size)
-	recovery_info.copy_subset.insert(0, st.st_size);
+      if (st.st_size) {
+        bufferlist bl;
+        r = store->fiemap(coll, soid, 0, st.st_size, bl);
+        if (r < 0)  {
+          recovery_info.copy_subset.insert(0, st.st_size);
+          r = 0;
+        } else {
+          map<uint64_t, uint64_t> m;
+          bufferlist::iterator iter = bl.begin();
+          ::decode(m, iter);
+          map<uint64_t, uint64_t>::iterator miter;
+          for (miter = m.begin(); miter != m.end(); ++miter) {
+            recovery_info.copy_subset.insert(miter->first, miter->second);
+          }
+        }
+      }
       assert(recovery_info.clone_subset.empty());
     }
 
