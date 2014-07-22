@@ -6564,6 +6564,36 @@ bool OSD::require_osd_peer(OpRequestRef op)
   return true;
 }
 
+bool OSD::require_up_osd_peer(OpRequestRef& op, OSDMapRef& map,
+                              epoch_t their_epoch)
+{
+  int from = op->get_req()->get_source().num();
+  if (!require_osd_peer(op)) {
+    return false;
+  } else if (map->get_epoch() >= their_epoch &&
+      (!map->have_inst(from) ||
+      map->get_cluster_addr(from) != op->get_req()->get_source_inst().addr)) {
+    dout(0) << "require_osd_peer_up received from non-up osd "
+            << op->get_req()->get_connection()->get_peer_addr()
+            << " " << *op->get_req() << dendl;
+
+    ConnectionRef con = op->get_req()->get_connection();
+    cluster_messenger->mark_down(con.get());
+    Session *s = static_cast<Session*>(con->get_priv());
+    if (s) {
+      s->session_dispatch_lock.Lock();
+      clear_session_waiting_on_map(s);
+      con->set_priv(NULL);   // break ref <-> session cycle, if any
+      s->session_dispatch_lock.Unlock();
+      s->put();
+    }
+
+    return false;
+  }
+
+  return true;
+}
+
 /*
  * require that we have same (or newer) map, and that
  * the source is the pg primary.
@@ -8003,7 +8033,7 @@ void OSD::handle_replica_op(OpRequestRef& op, OSDMapRef& osdmap)
     return;
   }
 
-  if (!require_osd_peer(op))
+  if (!require_up_osd_peer(op, osdmap, m->map_epoch))
     return;
 
   // must be a rep op.
