@@ -2170,13 +2170,19 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
   vector<PullOp> replies(1);
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   list<hobject_t> to_continue;
+  uint64_t bytes = 0;
   for (vector<PushOp>::iterator i = m->pushes.begin();
        i != m->pushes.end();
        ++i) {
+    bytes += i->data.length();
     bool more = handle_pull_response(from, *i, &(replies.back()), &to_continue, t);
     if (more)
       replies.push_back(PullOp());
   }
+
+  get_parent()->get_logger()->inc(l_osd_push_in);
+  get_parent()->get_logger()->inc(l_osd_push_inb, bytes);
+
   if (!to_continue.empty()) {
     C_ReplicatedBackend_OnPullComplete *c =
       new C_ReplicatedBackend_OnPullComplete(
@@ -2202,6 +2208,7 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
     t->register_on_complete(
       new PG_SendMessageOnConn(
 	get_parent(), reply, m->get_connection()));
+    get_parent()->get_logger()->inc(l_osd_pull);
   }
 
   t->register_on_applied(
@@ -8198,7 +8205,6 @@ int ReplicatedBackend::send_pull_legacy(int prio, pg_shard_t peer,
   get_parent()->send_message_osd_cluster(
     peer.osd, subop, get_osdmap()->get_epoch());
 
-  get_parent()->get_logger()->inc(l_osd_pull);
   return 0;
 }
 
@@ -8390,7 +8396,7 @@ struct C_OnPushCommit : public Context {
   void finish(int) {
     op->mark_event("committed");
     log_subop_stats(pg->osd->logger, op, l_osd_sop_push,
-                    l_osd_push_inb, l_osd_sop_push_lat);
+                    l_osd_sop_push_inb, l_osd_sop_push_lat);
   }
 };
 
@@ -8447,6 +8453,7 @@ void ReplicatedBackend::send_pushes(int prio, map<pg_shard_t, vector<PushOp> > &
 	send_push_op_legacy(prio, i->first, *j);
       }
     } else {
+      uint64_t bytes = 0;
       vector<PushOp>::iterator j = i->second.begin();
       while (j != i->second.end()) {
 	uint64_t cost = 0;
@@ -8465,11 +8472,14 @@ void ReplicatedBackend::send_pushes(int prio, map<pg_shard_t, vector<PushOp> > &
 		   << " to osd." << i->first << dendl;
 	  cost += j->cost(cct);
 	  pushes += 1;
+          bytes += j->data.length();
 	  msg->pushes.push_back(*j);
 	}
 	msg->compute_cost(cct);
 	get_parent()->send_message_osd_cluster(msg, con);
       }
+      get_parent()->get_logger()->inc(l_osd_push);
+      get_parent()->get_logger()->inc(l_osd_push_outb, bytes);
     }
   }
 }
@@ -8507,6 +8517,7 @@ void ReplicatedBackend::send_pulls(int prio, map<pg_shard_t, vector<PullOp> > &p
       msg->pulls.swap(i->second);
       msg->compute_cost(cct);
       get_parent()->send_message_osd_cluster(msg, con);
+      get_parent()->get_logger()->inc(l_osd_pull);
     }
   }
 }
@@ -8628,9 +8639,6 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
     stat->num_bytes_recovered += out_op->data.length();
   }
 
-  get_parent()->get_logger()->inc(l_osd_push);
-  get_parent()->get_logger()->inc(l_osd_push_outb, out_op->data.length());
-  
   // send
   out_op->version = recovery_info.version;
   out_op->soid = recovery_info.soid;
