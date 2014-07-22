@@ -1514,6 +1514,8 @@ protected:
 
   bool require_mon_peer(Message *m);
   bool require_osd_peer(OpRequestRef op);
+  bool require_up_osd_peer(OpRequestRef& Op, OSDMapRef& map,
+                           epoch_t their_epoch);
 
   bool require_same_or_newer_map(OpRequestRef op, epoch_t e);
 
