@@ -316,14 +316,20 @@ void OpenImageAction::perform(ActionCtx &worker) {
   worker.add_pending(io);
   librbd::Image *image = new librbd::Image();
   librbd::RBD *rbd = worker.rbd();
+  pair<string, string> name(worker.map_image_name(m_name, m_snap_name));
   int r;
   if (m_readonly || worker.readonly()) {
-    r = rbd->open_read_only(*worker.ioctx(), *image, m_name.c_str(), m_snap_name.c_str());
+    r = rbd->open_read_only(*worker.ioctx(), *image, name.first.c_str(), name.second.c_str());
   } else {
-    r = rbd->open(*worker.ioctx(), *image, m_name.c_str(), m_snap_name.c_str());
+    r = rbd->open(*worker.ioctx(), *image, name.first.c_str(), name.second.c_str());
   }
   if (r) {
-    cerr << "Unable to open image '" << m_name << "' with snap '" << m_snap_name << "' and readonly " << m_readonly << ": " << strerror(-r) << std::endl;
+    cerr << "Unable to open image '" << m_name
+	 << "' with snap '" << m_snap_name
+	 << "' (mapped to '" << name.first
+	 << "' and '" << name.second
+	 << "') and readonly " << m_readonly
+	 << ": (" << -r << ") " << strerror(-r) << std::endl;
     exit(1);
   }
   worker.put_image(m_imagectx_id, image);
