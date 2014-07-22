@@ -613,6 +613,8 @@ class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
   uint64_t extra_data_len;
   bufferlist extra_data_bl;
   bufferlist pending_data_bl;
+  uint64_t max_chunk_size;
+
 protected:
   rgw_bucket bucket;
   string obj_str;
@@ -631,6 +633,8 @@ protected:
   int complete_parts();
   int complete_writing_data();
 
+  int prepare_init(RGWRados *store, void *obj_ctx, string *oid_rand);
+
 public:
   ~RGWPutObjProcessor_Atomic() {}
   RGWPutObjProcessor_Atomic(const string& bucket_owner, rgw_bucket& _b, const string& _o, uint64_t _p, const string& _t) :
@@ -641,6 +645,7 @@ public:
                                 cur_part_id(0),
                                 data_ofs(0),
                                 extra_data_len(0),
+                                max_chunk_size(0),
                                 bucket(_b),
                                 obj_str(_o),
                                 unique_tag(_t) {}
@@ -1221,8 +1226,6 @@ class RGWRados
   int get_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref, rgw_bucket *bucket, bool ref_system_obj = false);
   uint64_t max_bucket_id;
 
-  uint64_t max_chunk_size;
-
   int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker);
   int append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj,
                          librados::ObjectOperation& op, RGWObjState **state);
@@ -1287,7 +1290,6 @@ public:
                num_watchers(0), watchers(NULL), watch_handles(NULL),
                watch_initialized(false),
                bucket_id_lock("rados_bucket_id"), max_bucket_id(0),
-               max_chunk_size(0),
                cct(NULL), rados(NULL),
                pools_initialized(false),
                quota_handler(NULL),
@@ -1325,9 +1327,8 @@ public:
     }
   }
 
-  uint64_t get_max_chunk_size() {
-    return max_chunk_size;
-  }
+  int get_required_alignment(rgw_bucket& bucket, uint64_t *alignment);
+  int get_max_chunk_size(rgw_bucket& bucket, uint64_t *max_chunk_size);
 
   int list_raw_objects(rgw_bucket& pool, const string& prefix_filter, int max,
                        RGWListRawObjsCtx& ctx, list<string>& oids,
@@ -1563,6 +1564,7 @@ public:
 	       void **handle, off_t end,
                rgw_obj& dest_obj,
                rgw_obj& src_obj,
+               uint64_t max_chunk_size,
 	       time_t *mtime,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,

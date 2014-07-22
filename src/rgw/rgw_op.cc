@@ -1380,7 +1380,10 @@ public:
 
 int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx, string *oid_rand)
 {
-  RGWPutObjProcessor::prepare(store, obj_ctx, NULL);
+  int r = prepare_init(store, obj_ctx, NULL);
+  if (r < 0) {
+    return r;
+  }
 
   string oid = obj_str;
   upload_id = s->info.args.get("uploadId");
@@ -1419,7 +1422,7 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx, string
 
   manifest.set_multipart_part_rule(store->ctx()->_conf->rgw_obj_stripe_size, num);
 
-  int r = manifest_gen.create_begin(store->ctx(), &manifest, bucket, target_obj);
+  r = manifest_gen.create_begin(store->ctx(), &manifest, bucket, target_obj);
   if (r < 0) {
     return r;
   }
