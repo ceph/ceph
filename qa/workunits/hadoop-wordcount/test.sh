@@ -46,7 +46,7 @@ $command5
 $command6
 $command7
 $command8
-#$command9
+$command9
 
 echo "completed hadoop-wordcount test"
 exit 0
