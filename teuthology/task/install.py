@@ -1115,7 +1115,7 @@ def ship_utilities(ctx, config):
                 )
             f.seek(0)
 
-    FILES = ['daemon-helper', 'adjust-ulimits', 'kcon_most']
+    FILES = ['daemon-helper', 'adjust-ulimits']
     destdir = '/usr/bin'
     for filename in FILES:
         log.info('Shipping %r...', filename)
