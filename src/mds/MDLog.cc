@@ -155,6 +155,43 @@ void MDLog::open(Context *c)
   // either append() or replay() will follow.
 }
 
+/**
+ * Final part of reopen() procedure, after recovery_thread
+ * has done its thing we call append()
+ */
+class C_ReopenComplete : public Context {
+  MDLog *mdlog;
+  Context *on_complete;
+public:
+  C_ReopenComplete(MDLog *mdlog_, Context *on_complete_) : mdlog(mdlog_), on_complete(on_complete_) {}
+  void finish(int r) {
+    mdlog->append();
+    on_complete->complete(r);
+  }
+};
+
+/**
+ * Given that open() has been called in the past, go through the journal
+ * recovery procedure again, potentially reformatting the journal if it
+ * was in an old format.
+ */
+void MDLog::reopen(Context *c)
+{
+  dout(5) << "reopen" << dendl;
+
+  // Because we will call append() at the completion of this, check that we have already
+  // read the whole journal.
+  assert(journaler != NULL);
+  assert(journaler->get_read_pos() == journaler->get_write_pos());
+
+  delete journaler;
+  journaler = NULL;
+
+  recovery_thread.set_completion(new C_ReopenComplete(this, c));
+  recovery_thread.create();
+  recovery_thread.detach();
+}
+
 void MDLog::append()
 {
   dout(5) << "append positioning at end and marking writeable" << dendl;
@@ -661,6 +698,11 @@ public:
 void MDLog::_recovery_thread(Context *completion)
 {
   assert(journaler == NULL);
+  if (g_conf->mds_journal_format > JOURNAL_FORMAT_MAX) {
+      dout(0) << "Configuration value for mds_journal_format is out of bounds, max is "
+              << JOURNAL_FORMAT_MAX << dendl;
+      mds->suicide();
+  }
 
   // First, read the pointer object.
   // If the pointer object is not present, then create it with
@@ -749,31 +791,23 @@ void MDLog::_recovery_thread(Context *completion)
     mds->mds_lock.Lock();
     completion->complete(-EINVAL);
     mds->mds_lock.Unlock();
-  } else if (front_journal->get_stream_format() >= g_conf->mds_journal_format) {
-    /* Great, the journal is of current format and ready to rock, hook
-     * it into this->journaler and complete */
+  } else if (mds->is_standby_replay() || front_journal->get_stream_format() >= g_conf->mds_journal_format) {
+    /* The journal is of configured format, or we are in standbyreplay and will
+     * tolerate replaying old journals until we have to go active. Use front_journal as
+     * our journaler attribute and complete */
+    dout(4) << "Recovered journal " << jp.front << " in format " << front_journal->get_stream_format() << dendl;
     journaler = front_journal;
     journaler->set_write_error_handler(new C_MDL_WriteError(this));
     mds->mds_lock.Lock();
     completion->complete(0);
     mds->mds_lock.Unlock();
   } else {
-    if (mds->is_standby_replay()) {
-        /* We must not try to rewrite in standby replay mode, because
-         * we do not have exclusive access to the log */
-        dout(1) << "Journal " << jp.front << " has old format, "
-          << "cannot replay in standby until an active MDS rewrites it" << dendl;
-        mds->mds_lock.Lock();
-        completion->complete(-EAGAIN);
-        mds->mds_lock.Unlock();
-    } else {
-        /* Hand off to reformat routine, which will ultimately set the
-         * completion when it has done its thing */
-        dout(1) << "Journal " << jp.front << " has old format "
-          << front_journal->get_stream_format() << ", it will now be updated" << dendl;
+    /* Hand off to reformat routine, which will ultimately set the
+     * completion when it has done its thing */
+    dout(1) << "Journal " << jp.front << " has old format "
+      << front_journal->get_stream_format() << ", it will now be updated" << dendl;
 
-        _reformat_journal(jp, front_journal, completion);
-    }
+    _reformat_journal(jp, front_journal, completion);
   }
 }
 
