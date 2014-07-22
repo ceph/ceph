@@ -264,6 +264,12 @@ def prepare_and_schedule(job_config, suite_repo_path, base_yaml_paths, limit,
     suite_path = os.path.join(suite_repo_path, 'suites',
                               job_config.suite.replace(':', '/'))
 
+    # Make sure the yaml paths are actually valid
+    for yaml_path in base_yaml_paths:
+        full_yaml_path = os.path.join(suite_repo_path, yaml_path)
+        if not os.path.exists(full_yaml_path):
+            raise IOError("File not found: " + full_yaml_path)
+
     num_jobs = schedule_suite(
         job_config=job_config,
         path=suite_path,
