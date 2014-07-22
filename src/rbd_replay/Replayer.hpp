@@ -96,6 +96,10 @@ public:
 
   void wait_for_actions(const std::vector<dependency_d> &deps);
 
+  std::string pool_name() const;
+
+  void set_pool_name(std::string pool_name);
+
   void set_latency_multiplier(float f);
 
   bool readonly() const;
@@ -120,6 +124,7 @@ private:
 
   librbd::RBD* m_rbd;
   librados::IoCtx* m_ioctx;
+  std::string m_pool_name;
   float m_latency_multiplier;
   bool m_readonly;
 
