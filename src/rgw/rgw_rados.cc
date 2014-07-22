@@ -6,6 +6,7 @@
 #include <sys/types.h>
 
 #include "common/ceph_json.h"
+#include "common/utf8.h"
 
 #include "common/errno.h"
 #include "common/Formatter.h"
@@ -2102,12 +2103,13 @@ int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, 
  *     here.
  */
 int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& delim,
-			   string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
+			   string& marker, string *next_marker, vector<RGWObjEnt>& result,
+                           map<string, bool>& common_prefixes,
 			   bool get_content_type, string& ns, bool enforce_ns,
                            bool *is_truncated, RGWAccessListFilter *filter)
 {
   int count = 0;
-  bool truncated;
+  bool truncated = true;
 
   if (bucket_is_system(bucket)) {
     return -EINVAL;
@@ -2123,9 +2125,39 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
   prefix_obj.set_obj(prefix);
   string cur_prefix = prefix_obj.object;
 
-  do {
+  string bigger_than_delim;
+
+  if (!delim.empty()) {
+    unsigned long val = decode_utf8((unsigned char *)delim.c_str(), delim.size());
+    char buf[delim.size() + 16];
+    int r = encode_utf8(val + 1, (unsigned char *)buf);
+    if (r < 0) {
+      ldout(cct,0) << "ERROR: encode_utf8() failed" << dendl;
+      return -EINVAL;
+    }
+    buf[r] = '\0';
+
+    bigger_than_delim = buf;
+  }
+
+  string skip_after_delim;
+
+  /* if marker points at a common prefix, fast forward it into its upperbound string */
+  if (!delim.empty()) {
+    int delim_pos = cur_marker.find(delim, prefix.size());
+    if (delim_pos >= 0) {
+      cur_marker = cur_marker.substr(0, delim_pos);
+      cur_marker.append(bigger_than_delim);
+    }
+  }
+
+  while (truncated && count <= max) {
+    if (skip_after_delim > cur_marker) {
+      cur_marker = skip_after_delim;
+      ldout(cct, 20) << "setting cur_marker=" << cur_marker << dendl;
+    }
     std::map<string, RGWObjEnt> ent_map;
-    int r = cls_bucket_list(bucket, cur_marker, cur_prefix, max - count, ent_map,
+    int r = cls_bucket_list(bucket, cur_marker, cur_prefix, max + 1 - count, ent_map,
                             &truncated, &cur_marker);
     if (r < 0)
       return r;
@@ -2148,6 +2180,10 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
         continue;
       }
 
+      if (next_marker && count < max) {
+        *next_marker = obj;
+      }
+
       if (filter && !filter->filter(obj, key))
         continue;
 
@@ -2158,9 +2194,33 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
         int delim_pos = obj.find(delim, prefix.size());
 
         if (delim_pos >= 0) {
-          common_prefixes[obj.substr(0, delim_pos + 1)] = true;
+          string prefix_key = obj.substr(0, delim_pos + 1);
+
+          if (common_prefixes.find(prefix_key) == common_prefixes.end()) {
+            if (count >= max) {
+              truncated = true;
+              goto done;
+            }
+            if (next_marker) {
+              *next_marker = prefix_key;
+            }
+            common_prefixes[prefix_key] = true;
+
+            skip_after_delim = obj.substr(0, delim_pos);
+            skip_after_delim.append(bigger_than_delim);
+
+            ldout(cct, 20) << "skip_after_delim=" << skip_after_delim << dendl;
+
+            count++;
+          }
+
           continue;
         }
+      }
+
+      if (count >= max) {
+        truncated = true;
+        goto done;
       }
 
       RGWObjEnt ent = eiter->second;
@@ -2169,7 +2229,7 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
       result.push_back(ent);
       count++;
     }
-  } while (truncated && count < max);
+  }
 
 done:
   if (is_truncated)
