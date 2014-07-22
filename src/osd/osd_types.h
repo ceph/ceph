@@ -2762,19 +2762,21 @@ public:
       }
     }
 
-    bool get_write(OpRequestRef op) {
-      if (get_write_lock()) {
+    bool get_write(OpRequestRef op, bool greedy=false) {
+      if (get_write_lock(greedy)) {
 	return true;
       } // else
       if (op)
 	waiters.push_back(op);
       return false;
     }
-    bool get_write_lock() {
-      // don't starve anybody!
-      if (!waiters.empty() ||
-	  backfill_read_marker) {
-	return false;
+    bool get_write_lock(bool greedy=false) {
+      if (!greedy) {
+	// don't starve anybody!
+	if (!waiters.empty() ||
+	    backfill_read_marker) {
+	  return false;
+	}
       }
       switch (state) {
       case RWNONE:
@@ -2823,7 +2825,10 @@ public:
     return rwstate.get_read(op);
   }
   bool get_write(OpRequestRef op) {
-    return rwstate.get_write(op);
+    return rwstate.get_write(op, false);
+  }
+  bool get_write_greedy(OpRequestRef op) {
+    return rwstate.get_write(op, true);
   }
   bool get_snaptrimmer_write() {
     if (rwstate.get_write_lock()) {
