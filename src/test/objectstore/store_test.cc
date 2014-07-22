@@ -1378,6 +1378,14 @@ TEST_P(StoreTest, MoveRename) {
     ASSERT_TRUE(newomap.count("omap_key"));
     ASSERT_TRUE(newomap["omap_key"].contents_equal(omap["omap_key"]));
   }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, oid);
+    t.remove_collection(cid);
+    t.remove_collection(temp_cid);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
 }
 
 TEST_P(StoreTest, BigRGWObjectName) {
