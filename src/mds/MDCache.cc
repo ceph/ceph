@@ -5913,16 +5913,6 @@ void MDCache::do_file_recover()
   recovery_queue.advance();
 }
 
-void MDCache::purge_prealloc_ino(inodeno_t ino, Context *fin)
-{
-  object_t oid = CInode::get_object_name(ino, frag_t(), "");
-  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
-
-  dout(10) << "purge_prealloc_ino " << ino << " oid " << oid << dendl;
-  SnapContext snapc;
-  mds->objecter->remove(oid, oloc, snapc, ceph_clock_now(g_ceph_context), 0, 0, fin);
-}  
-
 // ===============================================================================
 
 
