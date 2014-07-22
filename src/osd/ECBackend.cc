@@ -414,11 +414,20 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
   for (map<pg_shard_t, vector<PushOp> >::iterator i = m.pushes.begin();
        i != m.pushes.end();
        m.pushes.erase(i++)) {
+    uint64_t bytes = 0;
     MOSDPGPush *msg = new MOSDPGPush();
     msg->set_priority(priority);
     msg->map_epoch = get_parent()->get_epoch();
     msg->from = get_parent()->whoami_shard();
     msg->pgid = spg_t(get_parent()->get_info().pgid.pgid, i->first.shard);
+
+    vector<PushOp>::iterator j = i->second.begin();
+    while (j != i->second.end()) {
+      bytes += j->data.length();
+    }
+    get_parent()->get_logger()->inc(l_osd_push);
+    get_parent()->get_logger()->inc(l_osd_push_outb, bytes);
+
     msg->pushes.swap(i->second);
     msg->compute_cost(cct);
     get_parent()->send_message(
@@ -684,11 +693,15 @@ bool ECBackend::handle_message(
   case MSG_OSD_PG_PUSH: {
     MOSDPGPush *op = static_cast<MOSDPGPush *>(_op->get_req());
     RecoveryMessages rm;
+    uint64_t bytes = 0;
     for (vector<PushOp>::iterator i = op->pushes.begin();
 	 i != op->pushes.end();
 	 ++i) {
       handle_recovery_push(*i, &rm);
+      bytes += i->data.length();
     }
+    get_parent()->get_logger()->inc(l_osd_push_in);
+    get_parent()->get_logger()->inc(l_osd_push_inb, bytes);
     dispatch_recovery_messages(rm, priority);
     return true;
   }
