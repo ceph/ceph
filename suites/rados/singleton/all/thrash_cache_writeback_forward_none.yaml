@@ -1,6 +1,5 @@
 roles:
 - - mon.a
-  - mds.0
   - osd.0
   - osd.1
   - osd.2

@@ -4,7 +4,6 @@ roles:
   - mon.c
   - osd.0
   - osd.1
-  - mds.0
   - client.0
 tasks:
 - install:
