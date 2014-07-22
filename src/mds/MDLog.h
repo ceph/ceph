@@ -312,6 +312,7 @@ private:
 public:
   void create(Context *onfinish);  // fresh, empty log! 
   void open(Context *onopen);      // append() or replay() to follow!
+  void reopen(Context *onopen);
   void append();
   void replay(Context *onfinish);
 
