@@ -491,8 +491,10 @@ class KeyValueStore : public ObjectStore,
   int write_version_stamp();
   int mount();
   int umount();
-  int get_max_object_name_length();
-  int get_max_attr_name_length() {
+  unsigned get_max_object_name_length() {
+    return 4096;  // no real limit for leveldb
+  }
+  unsigned get_max_attr_name_length() {
     return 256;  // arbitrary; there is no real limit internally
   }
   int mkfs();
