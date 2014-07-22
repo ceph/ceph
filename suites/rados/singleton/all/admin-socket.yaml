@@ -1,7 +1,6 @@
 roles:
 - - mon.a
   - osd.0
-  - mds.a
   - osd.1
   - client.a
 tasks:

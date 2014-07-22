@@ -4,8 +4,7 @@ roles:
   - osd.1
   - osd.2
   - client.0
-- - mds.a
-  - osd.3
+- - osd.3
   - osd.4
   - osd.5
 tasks:

@@ -1,2 +1,2 @@
 roles:
-- [mon.a, mon.b, mon.c, osd.0, osd.1, mds.a]
+- [mon.a, mon.b, mon.c, osd.0, osd.1]

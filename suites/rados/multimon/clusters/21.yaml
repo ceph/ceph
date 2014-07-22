@@ -1,4 +1,4 @@
 roles:
 - [mon.a, mon.d, mon.g, mon.j, mon.m, mon.p, mon.s, osd.0]
-- [mon.b, mon.e, mon.h, mon.k, mon.n, mon.q, mon.t, mds.a]
+- [mon.b, mon.e, mon.h, mon.k, mon.n, mon.q, mon.t]
 - [mon.c, mon.f, mon.i, mon.l, mon.o, mon.r, mon.u, osd.1]
