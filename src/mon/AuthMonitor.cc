@@ -247,24 +247,25 @@ void AuthMonitor::encode_pending(MonitorDBStore::Transaction *t)
 void AuthMonitor::encode_full(MonitorDBStore::Transaction *t)
 {
   version_t version = mon->key_server.get_ver();
+  // do not stash full version 0 as it will never be removed nor read
+  if (version == 0)
+    return;
+
   dout(10) << __func__ << " auth v " << version << dendl;
   assert(get_last_committed() == version);
 
   bufferlist full_bl;
   Mutex::Locker l(mon->key_server.get_lock());
-  if (mon->key_server.has_secrets()) {
-    dout(20) << __func__ << " key server has secrets!" << dendl;
-    __u8 v = 1;
-    ::encode(v, full_bl);
-    ::encode(max_global_id, full_bl);
-    ::encode(mon->key_server, full_bl);
+  dout(20) << __func__ << " key server has "
+           << (mon->key_server.has_secrets() ? "" : "no ")
+           << "secrets!" << dendl;
+  __u8 v = 1;
+  ::encode(v, full_bl);
+  ::encode(max_global_id, full_bl);
+  ::encode(mon->key_server, full_bl);
 
-    put_version_full(t, version, full_bl);
-    put_version_latest_full(t, version);
-  } else {
-    dout(20) << __func__
-	     << " key server has no secrets; do not put them in tx" << dendl;
-  }
+  put_version_full(t, version, full_bl);
+  put_version_latest_full(t, version);
 }
 
 version_t AuthMonitor::get_trim_to()
