@@ -1588,9 +1588,16 @@ void MDS::replay_done()
     standby_replay_restart();
     return;
   } else {
-    // Not in standby, replay is truly complete
+    // Replay is complete, journal read should be up to date
     assert(mdlog->get_journaler()->get_read_pos() == mdlog->get_journaler()->get_write_pos());
     assert(!is_standby_replay());
+
+    // Reformat and come back here
+    if (mdlog->get_journaler()->get_stream_format() < g_conf->mds_journal_format) {
+        dout(4) << "reformatting journal on standbyreplay->replay transition" << dendl;
+        mdlog->reopen(new C_MDS_BootStart(this, MDS_BOOT_REPLAY_DONE));
+        return;
+    }
   }
 
   dout(1) << "making mds journal writeable" << dendl;
