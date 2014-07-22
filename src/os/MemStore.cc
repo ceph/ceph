@@ -1195,6 +1195,7 @@ int MemStore::_clone(coll_t cid, const ghobject_t& oldoid,
   no->data = oo->data;
   no->omap_header = oo->omap_header;
   no->omap = oo->omap;
+  no->xattr = oo->xattr;
   return 0;
 }
 
@@ -1351,8 +1352,8 @@ int MemStore::_collection_add(coll_t cid, coll_t ocid, const ghobject_t& oid)
   CollectionRef oc = get_collection(ocid);
   if (!oc)
     return -ENOENT;
-  RWLock::WLocker l1(MIN(c, oc)->lock);
-  RWLock::WLocker l2(MAX(c, oc)->lock);
+  RWLock::WLocker l1(MIN(&(*c), &(*oc))->lock);
+  RWLock::WLocker l2(MAX(&(*c), &(*oc))->lock);
 
   if (c->object_hash.count(oid))
     return -EEXIST;
@@ -1375,19 +1376,37 @@ int MemStore::_collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,
   CollectionRef oc = get_collection(oldcid);
   if (!oc)
     return -ENOENT;
-  RWLock::WLocker l1(MIN(c, oc)->lock);
-  RWLock::WLocker l2(MAX(c, oc)->lock);
 
+  // note: c and oc may be the same
+  if (&(*c) == &(*oc)) {
+    c->lock.get_write();
+  } else if (&(*c) < &(*oc)) {
+    c->lock.get_write();
+    oc->lock.get_write();
+  } else if (&(*c) > &(*oc)) {
+    oc->lock.get_write();
+    c->lock.get_write();
+  }
+
+  int r = -EEXIST;
   if (c->object_hash.count(oid))
-    return -EEXIST;
+    goto out;
+  r = -ENOENT;
   if (oc->object_hash.count(oldoid) == 0)
-    return -ENOENT;
-  ObjectRef o = oc->object_hash[oldoid];
-  c->object_map[oid] = o;
-  c->object_hash[oid] = o;
-  oc->object_map.erase(oldoid);
-  oc->object_hash.erase(oldoid);
-  return 0; 
+    goto out;
+  {
+    ObjectRef o = oc->object_hash[oldoid];
+    c->object_map[oid] = o;
+    c->object_hash[oid] = o;
+    oc->object_map.erase(oldoid);
+    oc->object_hash.erase(oldoid);
+  }
+  r = 0;
+ out:
+  c->lock.put_write();
+  if (c != oc)
+    oc->lock.put_write();
+  return r;
 }
 
 int MemStore::_collection_setattr(coll_t cid, const char *name,
@@ -1457,8 +1476,8 @@ int MemStore::_split_collection(coll_t cid, uint32_t bits, uint32_t match,
   CollectionRef dc = get_collection(dest);
   if (!dc)
     return -ENOENT;
-  RWLock::WLocker l1(MIN(sc, dc)->lock);
-  RWLock::WLocker l2(MAX(sc, dc)->lock);
+  RWLock::WLocker l1(MIN(&(*sc), &(*dc))->lock);
+  RWLock::WLocker l2(MAX(&(*sc), &(*dc))->lock);
 
   map<ghobject_t,ObjectRef>::iterator p = sc->object_map.begin();
   while (p != sc->object_map.end()) {
