@@ -4854,7 +4854,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
       if (pool.info.require_rollback())
 	ctx->clone_obc->attr_cache = ctx->obc->attr_cache;
       snap_oi = &ctx->clone_obc->obs.oi;
-      bool got = ctx->clone_obc->get_write(ctx->op);
+      bool got = ctx->clone_obc->get_write_greedy(ctx->op);
       assert(got);
     } else {
       snap_oi = &static_snap_oi;
@@ -5160,7 +5160,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 					0, osd_reqid_t(), ctx->mtime));
 
       ctx->snapset_obc = get_object_context(snapoid, true);
-      bool got = ctx->snapset_obc->get_write(ctx->op);
+      bool got = ctx->snapset_obc->get_write_greedy(ctx->op);
       assert(got);
       ctx->release_snapset_obc = true;
       if (pool.info.require_rollback() && !ctx->snapset_obc->obs.exists) {
