@@ -59,6 +59,7 @@
 class CephContext;
 class Context;
 class PerfCounters;
+class Finisher;
 
 typedef __u8 stream_format_t;
 
@@ -194,12 +195,14 @@ public:
     return stream_format;
   }
 
+  Header last_committed;
+
 private:
   // me
   CephContext *cct;
   Mutex lock;
+  Finisher *finisher;
   Header last_written;
-  Header last_committed;
   inodeno_t ino;
   int64_t pg_pool;
   bool readonly;
@@ -266,8 +269,9 @@ private:
   void read_head(Context *on_finish, bufferlist *bl);
   void _finish_read_head(int r, bufferlist& bl);
   void _finish_reread_head(int r, bufferlist& bl, Context *finish);
-  void probe(Context *finish, uint64_t *end);
+  void _probe(Context *finish, uint64_t *end);
   void _finish_probe_end(int r, uint64_t end);
+  void _reprobe(Context *onfinish);
   void _finish_reprobe(int r, uint64_t end, Context *onfinish);
   void _finish_reread_head_and_probe(int r, Context *onfinish);
   class C_ReadHead;
@@ -364,9 +368,10 @@ private:
   friend class C_EraseFinish;
 
 public:
-  Journaler(inodeno_t ino_, int64_t pool, const char *mag, Objecter *obj, PerfCounters *l, int lkey, SafeTimer *tim) : 
-    cct(obj->cct), lock("Journaler"),
-    last_written(mag), last_committed(mag), 
+  Journaler(inodeno_t ino_, int64_t pool, const char *mag, Objecter *obj, PerfCounters *l, int lkey, SafeTimer *tim, Finisher *f=NULL) : 
+    last_committed(mag),
+    cct(obj->cct), lock("Journaler"), finisher(f),
+    last_written(mag),
     ino(ino_), pg_pool(pool), readonly(true),
     stream_format(-1), journal_stream(-1),
     magic(mag),
@@ -418,7 +423,6 @@ public:
   void create(ceph_file_layout *layout, stream_format_t const sf);
   void recover(Context *onfinish);
   void reread_head(Context *onfinish);
-  void reprobe(Context *onfinish);
   void reread_head_and_probe(Context *onfinish);
   void write_head(Context *onsave=0);
   void wait_for_flush(Context *onsafe = 0);
@@ -479,6 +483,7 @@ public:
 
   // Synchronous getters
   // ===================
+  // TODO: need some locks on reads for true safety
   uint64_t get_layout_period() const { return (uint64_t)layout.fl_stripe_count * (uint64_t)layout.fl_object_size; }
   ceph_file_layout& get_layout() { return layout; }
   bool is_active() { return state == STATE_ACTIVE; }
