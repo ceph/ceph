@@ -79,8 +79,6 @@ protected:
 
 
   // -- replay --
-  Cond replay_cond;
-
   class ReplayThread : public Thread {
     MDLog *log;
   public:
