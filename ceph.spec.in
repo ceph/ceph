@@ -15,7 +15,6 @@
 # Please submit bugfixes or comments via http://bugs.opensuse.org/
 #
 
-
 %if 0%{defined rhel_version}
 %bcond_with gtk2
 %else
@@ -313,7 +312,6 @@ Requires:       librbd1 = %{version}-%{release}
 
 %description -n ceph-test
 This package contains Ceph benchmarks and test tools.
-
 
 #################################################################################
 # common

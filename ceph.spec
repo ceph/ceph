@@ -321,7 +321,6 @@ Requires:       librbd1 = %{version}-%{release}
 %description -n ceph-test
 This package contains Ceph benchmarks and test tools.
 
-
 #################################################################################
 # common
 #################################################################################
