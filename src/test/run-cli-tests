@@ -35,6 +35,8 @@ fi
 
 SRCDIR_ABS="$(readlink -f "$SRCDIR")"
 BUILDDIR_ABS="$(readlink -f "$BUILDDIR")"
+FAKE_HOME="$BUILDDIR_ABS/fake_home"
+mkdir -p "$FAKE_HOME"
 
 # cram doesn't like seeing the same foo.t basename twice on the same
 # run, so run it once per directory
@@ -48,6 +50,7 @@ for tool in "$SRCDIR"/cli/*; do
 	CCACHE_DIR="$CCACHE_DIR" \
 	CC="$CC" \
 	CXX="$CXX" \
+	HOME="$FAKE_HOME" \
 	"$SRCDIR/run-cli-tests-maybe-unset-ccache" \
 	"$CRAM_BIN" -v "$@"  --error-dir="$BUILDDIR/cli/$toolname" -- "$tool"/*.t; then
 	FAILED=1
