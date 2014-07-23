@@ -118,11 +118,16 @@ Requires(post): chkconfig
 Requires(preun):chkconfig
 Requires(preun):initscripts
 %endif
-
+%ifnarch ppc ppc64 s390 s390x ia64
+%if 0%{?suse_version} >= 1310
+%if 0%{with tcmalloc}
 # use isa so this will not be satisfied by
 # google-perftools-devel.i686 on a x86_64 box
 # http://rpm.org/wiki/PackagerDocs/ArchDependencies
 BuildRequires:  gperftools-devel%{?_isa}
+%endif
+%endif
+%endif
 
 %description
 Ceph is a distributed network file system designed to provide excellent
