@@ -40,21 +40,17 @@ std::string JournalPointer::get_object_id() const
 /**
  * Blocking read of JournalPointer for this MDS
  */
-int JournalPointer::load(Objecter *objecter, Mutex *lock)
+int JournalPointer::load(Objecter *objecter)
 {
-  assert(lock != NULL);
   assert(objecter != NULL);
-  assert(!lock->is_locked_by_me());
 
   // Blocking read of data
   std::string const object_id = get_object_id();
   dout(4) << "Reading journal pointer '" << object_id << "'" << dendl;
   bufferlist data;
   C_SaferCond waiter;
-  lock->Lock();
   objecter->read_full(object_t(object_id), object_locator_t(pool_id),
       CEPH_NOSNAP, &data, 0, &waiter);
-  lock->Unlock();
   int r = waiter.wait();
 
   // Construct JournalPointer result, null or decoded data
@@ -73,11 +69,9 @@ int JournalPointer::load(Objecter *objecter, Mutex *lock)
  *
  * @return objecter write op status code
  */
-int JournalPointer::save(Objecter *objecter, Mutex *lock) const
+int JournalPointer::save(Objecter *objecter) const
 {
-  assert(lock != NULL);
   assert(objecter != NULL);
-  assert(!lock->is_locked_by_me());
   // It is not valid to persist a null pointer
   assert(!is_null());
 
@@ -91,10 +85,8 @@ int JournalPointer::save(Objecter *objecter, Mutex *lock) const
     << std::hex << front << ":0x" << back << std::dec << dendl;
 
   C_SaferCond waiter;
-  lock->Lock();
   objecter->write_full(object_t(object_id), object_locator_t(pool_id),
       SnapContext(), data, ceph_clock_now(g_ceph_context), 0, NULL, &waiter);
-  lock->Unlock();
   int write_result = waiter.wait();
   if (write_result < 0) {
     derr << "Error writing pointer object '" << object_id << "': " << cpp_strerror(write_result) << dendl;

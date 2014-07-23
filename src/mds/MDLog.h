@@ -59,6 +59,8 @@ class PerfCounters;
 #include <map>
 using std::map;
 
+#include "common/Finisher.h"
+
 
 class MDLog {
 public:
