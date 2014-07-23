@@ -825,16 +825,18 @@ void Server::journal_and_reply(MDRequestRef& mdr, CInode *in, CDentry *dn, LogEv
 
 class C_MarkEvent : public Context
 {
+  MDS *mds;
   Context *true_finisher;
   MDRequestRef mdr;
   string event_str;
 public:
-  C_MarkEvent(Context *f, MDRequestRef& _mdr,
+  C_MarkEvent(MDS *mds_, Context *f, MDRequestRef& _mdr,
               const char *evt) :
-                true_finisher(f), mdr(_mdr), event_str("journal_committed: ") {
+                mds(mds_), true_finisher(f), mdr(_mdr), event_str("journal_committed: ") {
     event_str += evt;
   }
   virtual void finish(int r) {
+    Mutex::Locker l(mds->mds_lock);
     mdr->mark_event(event_str);
     true_finisher->complete(r);
   }
@@ -847,7 +849,7 @@ void Server::submit_mdlog_entry(LogEvent *le, Context *fin, MDRequestRef& mdr,
     string event_str("submit entry: ");
     event_str += event;
     mdr->mark_event(event_str);
-    mdlog->submit_entry(le, new C_MarkEvent(fin, mdr, event));
+    mdlog->submit_entry(le, new C_MarkEvent(mds, fin, mdr, event));
   } else
     mdlog->submit_entry(le, fin);
 }
