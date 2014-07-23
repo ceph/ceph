@@ -5941,6 +5941,7 @@ struct C_MDC_TruncateFinish : public Context {
     mdc(c), in(i), ls(l) {}
   void finish(int r) {
     assert(r == 0 || r == -ENOENT);
+    Mutex::Locker l(mdc->mds->mds_lock);
     mdc->truncate_inode_finish(in, ls);
   }
 };
@@ -5973,7 +5974,7 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
   dout(10) << "_truncate_inode  snapc " << snapc << " on " << *in << dendl;
   mds->filer->truncate(in->inode.ino, &in->inode.layout, *snapc,
 		       pi->truncate_size, pi->truncate_from-pi->truncate_size, pi->truncate_seq, utime_t(), 0,
-		       0, new C_MDC_TruncateFinish(this, in, ls));
+		       0, new C_OnFinisher(new C_MDC_TruncateFinish(this, in, ls), &mds->finisher));
 }
 
 struct C_MDC_TruncateLogged : public Context {
