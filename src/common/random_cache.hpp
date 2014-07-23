@@ -77,7 +77,7 @@ class RandomCache {
 
   void clear(K key) {
     Mutex::Locker l(lock);
-    contents.erase(key)
+    contents.erase(key);
   }
 
   void set_size(size_t new_size) {
