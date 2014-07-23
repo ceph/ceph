@@ -700,11 +700,11 @@ void MDLog::_recovery_thread(Context *completion)
   // If the pointer object is not present, then create it with
   // front = default ino and back = null
   JournalPointer jp(mds->get_nodeid(), mds->mdsmap->get_metadata_pool());
-  int const read_result = jp.load(mds->objecter, &(mds->mds_lock));
+  int const read_result = jp.load(mds->objecter);
   if (read_result == -ENOENT) {
     inodeno_t const default_log_ino = MDS_INO_LOG_OFFSET + mds->get_nodeid();
     jp.front = default_log_ino;
-    int write_result = jp.save(mds->objecter, &(mds->mds_lock));
+    int write_result = jp.save(mds->objecter);
     // Nothing graceful we can do for this
     assert(write_result >= 0);
   } else if (read_result != 0) {
@@ -753,7 +753,7 @@ void MDLog::_recovery_thread(Context *completion)
     } else {
       dout(1) << "Successfully erased journal, updating journal pointer" << dendl;
       jp.back = 0;
-      int write_result = jp.save(mds->objecter, &(mds->mds_lock));
+      int write_result = jp.save(mds->objecter);
       // Nothing graceful we can do for this
       assert(write_result >= 0);
     }
@@ -823,7 +823,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
   inodeno_t primary_ino = MDS_INO_LOG_OFFSET + mds->get_nodeid();
   inodeno_t secondary_ino = MDS_INO_LOG_BACKUP_OFFSET + mds->get_nodeid();
   jp.back = (jp.front == primary_ino ? secondary_ino : primary_ino);
-  int write_result = jp.save(mds->objecter, &(mds->mds_lock));
+  int write_result = jp.save(mds->objecter);
   assert(write_result == 0);
 
   /* Create the new Journaler file */
@@ -907,7 +907,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
   inodeno_t const tmp = jp.front;
   jp.front = jp.back;
   jp.back = tmp;
-  write_result = jp.save(mds->objecter, &(mds->mds_lock));
+  write_result = jp.save(mds->objecter);
   assert(write_result == 0);
 
   /* Delete the old journal to free space */
@@ -922,7 +922,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
 
   /* Update the pointer to reflect we're back in clean single journal state. */
   jp.back = 0;
-  write_result = jp.save(mds->objecter, &(mds->mds_lock));
+  write_result = jp.save(mds->objecter);
   assert(write_result == 0);
 
   /* Reset the Journaler object to its default state */

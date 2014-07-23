@@ -31,7 +31,7 @@ void Resetter::reset(int rank)
   int r;
 
   JournalPointer jp(rank, mdsmap->get_metadata_pool());
-  int jp_load_result = jp.load(objecter, &lock);
+  int jp_load_result = jp.load(objecter);
   if (jp_load_result != 0) {
     std::cerr << "Error loading journal: " << cpp_strerror(jp_load_result) << std::endl;
     return;
