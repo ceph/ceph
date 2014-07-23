@@ -4856,6 +4856,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
       snap_oi = &ctx->clone_obc->obs.oi;
       bool got = ctx->clone_obc->get_write_greedy(ctx->op);
       assert(got);
+      dout(20) << " got greedy write on clone_obc " << *ctx->clone_obc << dendl;
     } else {
       snap_oi = &static_snap_oi;
     }
@@ -5162,6 +5163,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
       ctx->snapset_obc = get_object_context(snapoid, true);
       bool got = ctx->snapset_obc->get_write_greedy(ctx->op);
       assert(got);
+      dout(20) << " got greedy write on snapset_obc " << *ctx->snapset_obc << dendl;
       ctx->release_snapset_obc = true;
       if (pool.info.require_rollback() && !ctx->snapset_obc->obs.exists) {
 	ctx->log.back().mod_desc.create();
@@ -6841,6 +6843,12 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContextRe
 void ReplicatedPG::remove_repop(RepGather *repop)
 {
   dout(20) << __func__ << " " << *repop << dendl;
+  if (repop->ctx->obc)
+    dout(20) << " obc " << *repop->ctx->obc << dendl;
+  if (repop->ctx->clone_obc)
+    dout(20) << " clone_obc " << *repop->ctx->clone_obc << dendl;
+  if (repop->ctx->snapset_obc)
+    dout(20) << " snapset_obc " << *repop->ctx->snapset_obc << dendl;
   release_op_ctx_locks(repop->ctx);
   repop->ctx->finish(0);  // FIXME: return value here is sloppy
   repop_map.erase(repop->rep_tid);
