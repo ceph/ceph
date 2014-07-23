@@ -975,6 +975,9 @@ class C_Locker_Eval : public Context {
   int mask;
 public:
   C_Locker_Eval(Locker *l, MDSCacheObject *pp, int m) : locker(l), p(pp), mask(m) {
+    // We are used as an MDSCacheObject waiter, so should
+    // only be invoked by someone already holding the big lock.
+    assert(locker->mds->mds_lock.is_locked_by_me());
     p->get(MDSCacheObject::PIN_PTRWAITER);    
   }
   void finish(int r) {
@@ -1668,6 +1671,7 @@ struct C_Locker_FileUpdate_finish : public Context {
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) {
+    Mutex::Locker l(locker->mds->mds_lock);
     locker->file_update_finish(in, mut, share, client, cap, ack);
   }
 };
@@ -2009,6 +2013,7 @@ public:
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) {
+    assert(locker->mds->mds_lock.is_locked_by_me());
     in->put(CInode::PIN_PTRWAITER);
     if (!in->is_auth())
       locker->request_inode_file_caps(in);
@@ -2091,6 +2096,8 @@ public:
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) {
+    assert(locker->mds->mds_lock.is_locked_by_me());
+
     in->put(CInode::PIN_PTRWAITER);
     if (in->is_auth())
       locker->check_inode_max_size(in, false, update_size, newsize,
@@ -2234,7 +2241,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
     metablob->add_dir_context(in->get_projected_parent_dn()->get_dir());
     mdcache->journal_dirty_inode(mut.get(), metablob, in);
   }
-  mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, true));
+  mds->mdlog->submit_entry(le,
+          new C_Locker_FileUpdate_finish(this, in, mut, true));
   wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
   mut->auth_pin(in);
 
