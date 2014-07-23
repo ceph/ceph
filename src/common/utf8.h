@@ -44,6 +44,18 @@ int check_for_control_characters(const char *buf, int len);
  */
 int check_for_control_characters_cstr(const char *buf);
 
+/* Encode a 31-bit UTF8 code point to 'buf'.
+ * Assumes buf is of size MAX_UTF8_SZ
+ * Returns -1 on failure; number of bytes in the encoded value otherwise.
+ */
+int encode_utf8(unsigned long u, unsigned char *buf);
+
+/*
+ * Decode a UTF8 character from an array of bytes. Return character code.
+ * Upon error, return INVALID_UTF8_CHAR.
+ */
+unsigned long decode_utf8(unsigned char *buf, int nbytes);
+
 #ifdef __cplusplus
 }
 #endif
