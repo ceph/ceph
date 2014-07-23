@@ -186,6 +186,7 @@ protected:
     C_Locker_ScatterWB(Locker *l, ScatterLock *sl, MutationRef& m) :
       locker(l), lock(sl), mut(m) {}
     void finish(int r) { 
+      Mutex::Locker l(locker->mds->mds_lock);
       locker->scatter_writebehind_finish(lock, mut); 
     }
   };
@@ -285,6 +286,7 @@ private:
   friend class C_MDL_RequestInodeFileCaps;
   friend struct C_Locker_FileUpdate_finish;
   friend class C_Locker_RetryCapRelease;
+  friend class C_Locker_Eval;
 
   
   // -- client leases --
