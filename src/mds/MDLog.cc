@@ -22,6 +22,7 @@
 
 #include "common/entity_name.h"
 #include "common/perf_counters.h"
+#include "common/Cond.h"
 
 #include "events/ESubtreeMap.h"
 
@@ -673,15 +674,6 @@ void MDLog::replay(Context *c)
   replay_thread.detach();
 }
 
-class C_MDL_Replay : public Context {
-  MDLog *mdlog;
-public:
-  C_MDL_Replay(MDLog *l) : mdlog(l) {}
-  void finish(int r) { 
-    mdlog->replay_cond.Signal();
-  }
-};
-
 
 /**
  * Resolve the JournalPointer object to a journal file, and
@@ -959,8 +951,9 @@ void MDLog::_replay_thread()
     while (!journaler->is_readable() &&
 	   journaler->get_read_pos() < journaler->get_write_pos() &&
 	   !journaler->get_error()) {
-      journaler->wait_for_readable(new C_MDL_Replay(this));
-      replay_cond.Wait(mds->mds_lock);
+      C_SaferCond readable_waiter;
+      journaler->wait_for_readable(&readable_waiter);
+      readable_waiter.wait();
     }
     if (journaler->get_error()) {
       r = journaler->get_error();
