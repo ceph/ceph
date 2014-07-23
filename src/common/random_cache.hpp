@@ -31,7 +31,7 @@ class RandomCache {
   // The first element of pair is the frequency of item, it's used to evict item
   ceph::unordered_map<K, pair<uint64_t, V> > contents;
   Mutex lock;
-  uint64_t max_size, count;
+  uint64_t max_size;
   K last_trim_key;
 
   // When cache reach full, consider to evict a certain number of items
@@ -62,7 +62,6 @@ class RandomCache {
 
     for (typename map<uint64_t, K>::iterator j = candidates.begin(); j != candidates.end(); j++) {
       contents.erase(j->second);
-      count--;
       evict_count--;
       if (!evict_count)
         break;
@@ -71,23 +70,21 @@ class RandomCache {
 
  public:
   RandomCache(size_t max_size=20) : lock("RandomCache::lock"),
-                                    max_size(max_size), count(0) {}
+                                    max_size(max_size) {}
   ~RandomCache() {
     contents.clear();
-    count = 0;
   }
 
   void clear(K key) {
     Mutex::Locker l(lock);
-    contents.erase(key);
-    count--;
+    contents.erase(key)
   }
 
   void set_size(size_t new_size) {
     Mutex::Locker l(lock);
     max_size = new_size;
-    if (max_size <= count) {
-      trim_cache(count - max_size);
+    if (max_size <= contents.size()) {
+      trim_cache(contents.size() - max_size);
     }
   }
 
@@ -104,11 +101,10 @@ class RandomCache {
 
   void add(K key, V value) {
     Mutex::Locker l(lock);
-    if (max_size <= count) {
+    if (max_size <= contents.size()) {
       trim_cache(EVICT_COUNT);
     }
     contents[key] = make_pair(1, value);
-    count++;
   }
 };
 
