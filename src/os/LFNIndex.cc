@@ -61,6 +61,17 @@ void LFNIndex::maybe_inject_failure()
   }
 }
 
+// Helper to close fd's when we leave scope.  This is useful when used
+// in combination with RetryException, thrown by the above.
+struct FDCloser {
+  int fd;
+  FDCloser(int f) : fd(f) {}
+  ~FDCloser() {
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
+  }
+};
+
+
 /* Public methods */
 
 void LFNIndex::set_ref(ceph::shared_ptr<CollectionIndex> ref)
@@ -160,9 +171,9 @@ int LFNIndex::fsync_dir(const vector<string> &path)
   int fd = ::open(get_full_path_subdir(path).c_str(), O_RDONLY);
   if (fd < 0)
     return -errno;
+  FDCloser f(fd);
   maybe_inject_failure();
   int r = ::fsync(fd);
-  VOID_TEMP_FAILURE_RETRY(::close(fd));
   maybe_inject_failure();
   if (r < 0)
     return -errno;
@@ -753,7 +764,8 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
   for ( ; ; ++i) {
     candidate = lfn_get_short_name(oid, i);
     candidate_path = get_full_path(path, candidate);
-    r = chain_getxattr(candidate_path.c_str(), get_lfn_attr().c_str(), buf, sizeof(buf));
+    r = chain_getxattr(candidate_path.c_str(), get_lfn_attr().c_str(),
+		       buf, sizeof(buf));
     if (r < 0) {
       if (errno != ENODATA && errno != ENOENT)
 	return -errno;
@@ -784,6 +796,38 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
 	*exists = 1;
       return 0;
     }
+    r = chain_getxattr(candidate_path.c_str(), get_alt_lfn_attr().c_str(),
+		       buf, sizeof(buf));
+    if (r > 0) {
+      // only consider alt name if nlink > 1
+      struct stat st;
+      int rc = ::stat(candidate_path.c_str(), &st);
+      if (rc < 0)
+	return -errno;
+      if (st.st_nlink <= 1) {
+	// left over from incomplete unlink, remove
+	maybe_inject_failure();
+	dout(20) << __func__ << " found extra alt attr for " << candidate_path
+		 << ", long name " << string(buf, r) << dendl;
+	rc = chain_removexattr(candidate_path.c_str(),
+			       get_alt_lfn_attr().c_str());
+	maybe_inject_failure();
+	if (rc < 0)
+	  return rc;
+	continue;
+      }
+      buf[MIN((int)sizeof(buf) - 1, r)] = '\0';
+      if (!strcmp(buf, full_name.c_str())) {
+	dout(20) << __func__ << " used alt attr for " << full_name << dendl;
+	if (mangled_name)
+	  *mangled_name = candidate;
+	if (out_path)
+	  *out_path = candidate_path;
+	if (exists)
+	  *exists = 1;
+	return 0;
+      }
+    }
   }
   assert(0); // Unreachable
   return 0;
@@ -798,7 +842,24 @@ int LFNIndex::lfn_created(const vector<string> &path,
   string full_path = get_full_path(path, mangled_name);
   string full_name = lfn_generate_object_name(oid);
   maybe_inject_failure();
-  return chain_setxattr(full_path.c_str(), get_lfn_attr().c_str(), 
+
+  // if the main attr exists and is different, move it to the alt attr.
+  char buf[FILENAME_MAX_LEN + 1];
+  int r = chain_getxattr(full_path.c_str(), get_lfn_attr().c_str(),
+			 buf, sizeof(buf));
+  if (r >= 0 && (r != (int)full_name.length() ||
+		 memcmp(buf, full_name.c_str(), full_name.length()))) {
+    dout(20) << __func__ << " " << mangled_name
+	     << " moving old name to alt attr "
+	     << string(buf, r)
+	     << ", new name is " << full_name << dendl;
+    r = chain_setxattr(full_path.c_str(), get_alt_lfn_attr().c_str(),
+		       buf, r);
+    if (r < 0)
+      return r;
+  }
+
+  return chain_setxattr(full_path.c_str(), get_lfn_attr().c_str(),
 		     full_name.c_str(), full_name.size());
 }
 
@@ -839,26 +900,35 @@ int LFNIndex::lfn_unlink(const vector<string> &path,
       }
     }
   }
+  string full_path = get_full_path(path, mangled_name);
+  int fd = ::open(full_path.c_str(), O_RDONLY);
+  if (fd < 0)
+    return -errno;
+  FDCloser f(fd);
   if (i == removed_index + 1) {
-    string full_path = get_full_path(path, mangled_name);
     maybe_inject_failure();
     int r = ::unlink(full_path.c_str());
     maybe_inject_failure();
     if (r < 0)
       return -errno;
-    else
-      return 0;
   } else {
-    string rename_to = get_full_path(path, mangled_name);
+    string& rename_to = full_path;
     string rename_from = get_full_path(path, lfn_get_short_name(oid, i - 1));
     maybe_inject_failure();
     int r = ::rename(rename_from.c_str(), rename_to.c_str());
     maybe_inject_failure();
     if (r < 0)
       return -errno;
-    else
-      return 0;
   }
+  struct stat st;
+  int r = ::fstat(fd, &st);
+  if (r == 0 && st.st_nlink > 0) {
+    // remove alt attr
+    dout(20) << __func__ << " removing alt attr from " << full_path << dendl;
+    fsync_dir(path);
+    chain_fremovexattr(fd, get_alt_lfn_attr().c_str());
+  }
+  return r;
 }
 
 int LFNIndex::lfn_translate(const vector<string> &path,
