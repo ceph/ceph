@@ -6444,7 +6444,7 @@ void ReplicatedPG::cancel_flush_ops(bool requeue)
 
 bool ReplicatedPG::is_present_clone(hobject_t coid)
 {
-  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE)
+  if (!pool.info.allow_incomplete_clones())
     return true;
   if (is_missing_object(coid))
     return true;
