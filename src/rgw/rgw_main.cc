@@ -724,8 +724,8 @@ int usage()
 {
   cerr << "usage: radosgw [options...]" << std::endl;
   cerr << "options:\n";
-  cerr << "   --rgw-region=<region>     region in which radosgw runs\n";
-  cerr << "   --rgw-zone=<zone>         zone in which radosgw runs\n";
+  cerr << "  --rgw-region=<region>     region in which radosgw runs\n";
+  cerr << "  --rgw-zone=<zone>         zone in which radosgw runs\n";
   generic_server_usage();
   return 0;
 }
