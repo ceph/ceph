@@ -32,9 +32,37 @@ Options
    Connect to specified monitor (instead of looking through
    ``ceph.conf``).
 
+.. option:: -i ID, --id ID
+
+   Set the ID portion of name for radosgw
+
+.. option:: -n TYPE.ID, --name TYPE.ID
+
+   Set the rados user name for the gateway (eg. client.radosgw.gateway)
+
+.. option:: --cluster NAME
+
+   Set the cluster name (default: ceph)
+
+.. option:: -d
+
+   Run in foreground, log to stderr
+
+.. option:: -f
+
+   Run in foreground, log to usual location
+
 .. option:: --rgw-socket-path=path
 
    Specify a unix domain socket path.
+
+.. option:: --rgw-region=region
+
+   The region where radosgw runs
+
+.. option:: --rgw-zone=zone
+
+   The zone where radosgw runs
 
 
 Configuration
