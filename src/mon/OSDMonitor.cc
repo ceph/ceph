@@ -5186,7 +5186,9 @@ done:
     }
 
     // pool already has this cache-mode set and there are no pending changes
-    if (p->cache_mode == mode && pending_inc.new_pools.count(pool_id) == 0) {
+    if (p->cache_mode == mode &&
+	(pending_inc.new_pools.count(pool_id) == 0 ||
+	 pending_inc.new_pools[pool_id].cache_mode == p->cache_mode)) {
       ss << "set cache-mode for pool '" << poolstr << "'"
          << " to " << pg_pool_t::get_cache_mode_name(mode);
       err = 0;
