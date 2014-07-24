@@ -4,12 +4,14 @@ Samba
 import contextlib
 import logging
 import sys
+import time
 
 from teuthology import misc as teuthology
 from ..orchestra import run
 from ..orchestra.daemon import DaemonGroup
 
 log = logging.getLogger(__name__)
+
 
 def get_sambas(ctx, roles):
     """
@@ -26,6 +28,7 @@ def get_sambas(ctx, roles):
         id_ = role[len(PREFIX):]
         (remote,) = ctx.cluster.only(role).remotes.iterkeys()
         yield (id_, remote)
+
 
 @contextlib.contextmanager
 def task(ctx, config):
@@ -93,7 +96,6 @@ def task(ctx, config):
 
     testdir = teuthology.get_testdir(ctx)
 
-    from teuthology.task.ceph import DaemonGroup
     if not hasattr(ctx, 'daemons'):
         ctx.daemons = DaemonGroup()
 
@@ -175,7 +177,6 @@ def task(ctx, config):
                                )
 
         # let smbd initialize, probably a better way...
-        import time
         seconds_to_sleep = 100
         log.info('Sleeping for %s  seconds...' % seconds_to_sleep)
         time.sleep(seconds_to_sleep)
