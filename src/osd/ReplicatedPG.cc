@@ -7736,8 +7736,8 @@ void ReplicatedBackend::calc_head_subsets(
   if (size)
     data_subset.insert(0, size);
 
-  if (get_parent()->get_pool().cache_mode != pg_pool_t::CACHEMODE_NONE) {
-    dout(10) << __func__ << ": caching enabled, skipping clone subsets" << dendl;
+  if (get_parent()->get_pool().allow_incomplete_clones()) {
+    dout(10) << __func__ << ": caching (was) enabled, skipping clone subsets" << dendl;
     return;
   }
 
@@ -7796,8 +7796,8 @@ void ReplicatedBackend::calc_clone_subsets(
   if (size)
     data_subset.insert(0, size);
 
-  if (get_parent()->get_pool().cache_mode != pg_pool_t::CACHEMODE_NONE) {
-    dout(10) << __func__ << ": caching enabled, skipping clone subsets" << dendl;
+  if (get_parent()->get_pool().allow_incomplete_clones()) {
+    dout(10) << __func__ << ": caching (was) enabled, skipping clone subsets" << dendl;
     return;
   }
 
