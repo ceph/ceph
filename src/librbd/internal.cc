@@ -1280,6 +1280,19 @@ reprotect_and_return_err:
       return r;
     }
     ictx->parent->snap_set(ictx->parent->snap_name);
+    ictx->parent->parent_lock.get_write();
+    r = refresh_parent(ictx->parent);
+    if (r < 0) {
+      lderr(ictx->cct) << "error refreshing parent snapshot "
+		       << ictx->parent->id << " "
+		       << ictx->parent->snap_name << dendl;
+      ictx->parent->parent_lock.put_write();
+      ictx->parent->snap_lock.put_write();
+      close_image(ictx->parent);
+      ictx->parent = NULL;
+      return r;
+    }
+    ictx->parent->parent_lock.put_write();
     ictx->parent->snap_lock.put_write();
 
     return 0;
