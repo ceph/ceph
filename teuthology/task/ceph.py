@@ -17,62 +17,11 @@ from teuthology import contextutil
 from ..orchestra import run
 import ceph_client as cclient
 from teuthology.orchestra.run import CommandFailedError
-from teuthology.orchestra.daemon import DaemonState
+from teuthology.orchestra.daemon import DaemonGroup
 
 DEFAULT_CONF_PATH = '/etc/ceph/ceph.conf'
 
 log = logging.getLogger(__name__)
-
-
-class CephState(object):
-    """
-    Collection of daemon state instances
-    """
-    def __init__(self):
-        """
-        self.daemons is a dictionary indexed by role.  Each entry is a dictionary of
-        DaemonState values indexcd by an id parameter.
-        """
-        self.daemons = {}
-
-    def add_daemon(self, remote, role, id_, *args, **kwargs):
-        """
-        Add a daemon.  If there already is a daemon for this id_ and role, stop that
-        daemon and.  Restart the damon once the new value is set.
-
-        :param remote: Remote site
-        :param role: Role (osd, mds, mon, rgw,  for example)
-        :param id_: Id (index into role dictionary)
-        :param args: Daemonstate positional parameters
-        :param kwargs: Daemonstate keyword parameters
-        """
-        if role not in self.daemons:
-            self.daemons[role] = {}
-        if id_ in self.daemons[role]:
-            self.daemons[role][id_].stop()
-            self.daemons[role][id_] = None
-        self.daemons[role][id_] = DaemonState(remote, role, id_, *args, **kwargs)
-        self.daemons[role][id_].restart()
-
-    def get_daemon(self, role, id_):
-        """
-        get the daemon associated with this id_ for this role.
-
-        :param role: Role (osd, mds, mon, rgw,  for example)
-        :param id_: Id (index into role dictionary)
-        """
-        if role not in self.daemons:
-            return None
-        return self.daemons[role].get(str(id_), None)
-
-    def iter_daemons_of_role(self, role):
-        """
-        Iterate through all daemon instances for this role.  Return dictionary of
-        daemon values.
-
-        :param role: Role (osd, mds, mon, rgw,  for example)
-        """
-        return self.daemons.get(role, {}).values()
 
 
 @contextlib.contextmanager
@@ -1285,7 +1234,7 @@ def task(ctx, config):
     overrides = ctx.config.get('overrides', {})
     teuthology.deep_merge(config, overrides.get('ceph', {}))
 
-    ctx.daemons = CephState()
+    ctx.daemons = DaemonGroup()
 
     testdir = teuthology.get_testdir(ctx)
     if config.get('coverage'):

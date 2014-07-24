@@ -7,14 +7,15 @@ import sys
 
 from teuthology import misc as teuthology
 from ..orchestra import run
+from ..orchestra.daemon import DaemonGroup
 
 log = logging.getLogger(__name__)
 
 def get_sambas(ctx, roles):
     """
     Scan for roles that are samba.  Yield the id of the the samba role
-    (samba.0, samba.1...)  and the associated remote site 
-    
+    (samba.0, samba.1...)  and the associated remote site
+
     :param ctx: Context
     :param roles: roles for this test (extracted from yaml files)
     """
@@ -92,9 +93,9 @@ def task(ctx, config):
 
     testdir = teuthology.get_testdir(ctx)
 
-    from teuthology.task.ceph import CephState
+    from teuthology.task.ceph import DaemonGroup
     if not hasattr(ctx, 'daemons'):
-        ctx.daemons = CephState()
+        ctx.daemons = DaemonGroup()
 
     for id_, remote in samba_servers:
 
@@ -175,7 +176,7 @@ def task(ctx, config):
 
         # let smbd initialize, probably a better way...
         import time
-        seconds_to_sleep = 100        
+        seconds_to_sleep = 100
         log.info('Sleeping for %s  seconds...' % seconds_to_sleep)
         time.sleep(seconds_to_sleep)
         log.info('Sleeping stopped...')
