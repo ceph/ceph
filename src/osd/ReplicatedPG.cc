@@ -11694,7 +11694,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 
       // did we finish the last oid?
       if (head != hobject_t() &&
-	  pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE) {
+	  !pool.info.allow_incomplete_clones()) {
 	osd->clog.error() << mode << " " << info.pgid << " " << head
 			  << " missing clones";
         ++scrubber.shallow_errors;
@@ -11755,7 +11755,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
     //
 
     if (!next_clone.is_min() && next_clone != soid &&
-	pool.info.cache_mode != pg_pool_t::CACHEMODE_NONE) {
+	pool.info.allow_incomplete_clones()) {
       // it is okay to be missing one or more clones in a cache tier.
       // skip higher-numbered clones in the list.
       while (curclone != snapset.clones.rend() &&
@@ -11843,7 +11843,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
   }
 
   if (!next_clone.is_min() &&
-      pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE) {
+      !pool.info.allow_incomplete_clones()) {
     osd->clog.error() << mode << " " << info.pgid
 		      << " expected clone " << next_clone;
     ++scrubber.shallow_errors;
