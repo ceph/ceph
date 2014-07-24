@@ -805,3 +805,31 @@ class TestClone(object):
                 after_flatten = clone2.read(IMG_SIZE / 2, 256)
                 eq(data, after_flatten)
         self.rbd.remove(ioctx, 'clone2')
+
+    def test_flatten_multi_level(self):
+        self.clone.create_snap('snap2')
+        self.clone.protect_snap('snap2')
+        self.rbd.clone(ioctx, 'clone', 'snap2', ioctx, 'clone3', features)
+        self.clone.flatten()
+        with Image(ioctx, 'clone3') as clone3:
+            clone3.flatten()
+        self.clone.unprotect_snap('snap2')
+        self.clone.remove_snap('snap2')
+        self.rbd.remove(ioctx, 'clone3')
+
+    def test_resize_flatten_multi_level(self):
+        self.clone.create_snap('snap2')
+        self.clone.protect_snap('snap2')
+        self.rbd.clone(ioctx, 'clone', 'snap2', ioctx, 'clone3', features)
+        self.clone.resize(1)
+        orig_data = self.image.read(0, 256)
+        with Image(ioctx, 'clone3') as clone3:
+            clone3_data = clone3.read(0, 256)
+            eq(orig_data, clone3_data)
+        self.clone.flatten()
+        with Image(ioctx, 'clone3') as clone3:
+            clone3_data = clone3.read(0, 256)
+            eq(orig_data, clone3_data)
+        self.rbd.remove(ioctx, 'clone3')
+        self.clone.unprotect_snap('snap2')
+        self.clone.remove_snap('snap2')
