@@ -1044,11 +1044,13 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **pha
     }
   }
 
+  uint64_t max_write_size = MIN(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
+
   pending_data_bl.claim_append(bl);
-  if (pending_data_bl.length() < max_chunk_size)
+  if (pending_data_bl.length() < max_write_size)
     return 0;
 
-  pending_data_bl.splice(0, max_chunk_size, &bl);
+  pending_data_bl.splice(0, max_write_size, &bl);
 
   if (!data_ofs && !immutable_head()) {
     first_chunk.claim(bl);
