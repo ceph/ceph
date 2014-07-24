@@ -811,9 +811,10 @@ struct pg_pool_t {
   }
 
   enum {
-    FLAG_HASHPSPOOL = 1, // hash pg seed and pool together (instead of adding)
-    FLAG_FULL       = 2, // pool is full
+    FLAG_HASHPSPOOL = 1<<0, // hash pg seed and pool together (instead of adding)
+    FLAG_FULL       = 1<<1, // pool is full
     FLAG_DEBUG_FAKE_EC_POOL = 1<<2, // require ReplicatedPG to act like an EC pg
+    FLAG_INCOMPLETE_CLONES = 1<<3, // may have incomplete clones (bc we are/were an overlay)
   };
 
   static const char *get_flag_name(int f) {
@@ -821,6 +822,7 @@ struct pg_pool_t {
     case FLAG_HASHPSPOOL: return "hashpspool";
     case FLAG_FULL: return "full";
     case FLAG_DEBUG_FAKE_EC_POOL: return "require_local_rollback";
+    case FLAG_INCOMPLETE_CLONES: return "incomplete_clones";
     default: return "???";
     }
   }
@@ -927,6 +929,8 @@ public:
   bool has_write_tier() const { return write_tier >= 0; }
   void clear_write_tier() { write_tier = -1; }
   void clear_tier_tunables() {
+    if (cache_mode != CACHEMODE_NONE)
+      flags |= FLAG_INCOMPLETE_CLONES;
     cache_mode = CACHEMODE_NONE;
 
     target_max_bytes = 0;
@@ -980,6 +984,7 @@ public:
   void dump(Formatter *f) const;
 
   uint64_t get_flags() const { return flags; }
+  bool has_flag(uint64_t f) const { return flags & f; }
 
   /// This method will later return true for ec pools as well
   bool ec_pool() const {
@@ -987,6 +992,11 @@ public:
   }
   bool require_rollback() const {
     return ec_pool() || flags & FLAG_DEBUG_FAKE_EC_POOL;
+  }
+
+  /// true if incomplete clones may be present
+  bool allow_incomplete_clones() const {
+    return cache_mode != CACHEMODE_NONE || has_flag(FLAG_INCOMPLETE_CLONES);
   }
 
   unsigned get_type() const { return type; }
