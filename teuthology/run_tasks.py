@@ -8,6 +8,19 @@ from copy import deepcopy
 log = logging.getLogger(__name__)
 
 
+def import_task(name):
+    internal_pkg = __import__('teuthology.task', globals(), locals(),
+                         [name], 0)
+    if hasattr(internal_pkg, name):
+        return getattr(internal_pkg, name)
+    else:
+        external_pkg = __import__('tasks', globals(), locals(),
+                                  [name], 0)
+    if hasattr(external_pkg, name):
+        return getattr(external_pkg, name)
+    raise ImportError("Could not find task '%'" % name)
+
+
 def run_one_task(taskname, **kwargs):
     submod = taskname
     subtask = 'task'
@@ -17,14 +30,9 @@ def run_one_task(taskname, **kwargs):
     # Teuthology configs may refer to modules like ceph_deploy as ceph-deploy
     submod = submod.replace('-', '_')
 
-    parent = __import__('teuthology.task', globals(), locals(), [submod], 0)
+    task = import_task(submod)
     try:
-        mod = getattr(parent, submod)
-    except AttributeError:
-        log.error("No task named %s was found", submod)
-        raise
-    try:
-        fn = getattr(mod, subtask)
+        fn = getattr(task, subtask)
     except AttributeError:
         log.error("No subtask of %s named %s was found", mod, subtask)
         raise
