@@ -39,13 +39,14 @@ public:
     return this;
   }
   void put() {
+    CephContext *local_cct = cct;
     int v = nref.dec();
-    if (cct)
-      lsubdout(cct, refs, 1) << "RefCountedObject::put " << this << " "
-			     << (v + 1) << " -> " << v
-			     << dendl;
     if (v == 0)
       delete this;
+    if (local_cct)
+      lsubdout(local_cct, refs, 1) << "RefCountedObject::put " << this << " "
+				   << (v + 1) << " -> " << v
+				   << dendl;
   }
   void set_cct(CephContext *c) {
     cct = c;
