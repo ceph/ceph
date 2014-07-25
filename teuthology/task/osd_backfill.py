@@ -76,7 +76,7 @@ def task(ctx, config):
     manager.wait_for_recovery()
 
     # write some new data
-    p = rados_start(ctx, mon, ['-p', 'data', 'bench', '30', 'write', '-b', '4096',
+    p = rados_start(ctx, mon, ['-p', 'rbd', 'bench', '30', 'write', '-b', '4096',
                           '--no-cleanup'])
 
     time.sleep(15)
