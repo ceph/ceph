@@ -13,3 +13,6 @@ tasks:
      - workload2
      - upgrade-sequence
    - print: "**** done parallel"
+   - install.upgrade:
+       client.0:
+   - print: "**** done install.upgrade client.0 to the version from teuthology-suite arg"
