@@ -2278,7 +2278,10 @@ reprotect_and_return_err:
     if (ictx->image_watcher != NULL) {
       ictx->image_watcher->flush_aio_operations();
     }
-    if (ictx->object_cacher) {
+    if (ictx->cor_completions)
+      ictx->wait_last_completions();//copy-on-read: wait for unfinished AioCompletion requests
+
+    if (ictx->object_cacher)
       ictx->shutdown_cache(); // implicitly flushes
     } else {
       flush(ictx);
