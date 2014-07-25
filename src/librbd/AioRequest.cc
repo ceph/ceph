@@ -71,6 +71,38 @@ namespace librbd {
 
   /** read **/
 
+  //copy-on-read: after read entire object, just write it into child
+  ssize_t AioRead::write_cor()
+  {
+    ldout(m_ictx->cct, 20) << "write_cor" << dendl;
+    int ret = 0;
+
+    m_ictx->snap_lock.get_read();
+    ::SnapContext snapc = m_ictx->snapc;
+    m_ictx->snap_lock.put_read();
+
+    librados::ObjectWriteOperation copyup_cor;
+    copyup_cor.exec("rbd", "copyup", m_entire_object);
+
+    std::vector<librados::snap_t> m_snaps;
+    for (std::vector<snapid_t>::const_iterator it = snapc.snaps.begin();
+                it != snapc.snaps.end(); ++it) {
+      m_snaps.push_back(it->val);
+    }
+
+    librados::AioCompletion *cor_completion =
+        librados::Rados::aio_create_completion(m_ictx, librbd::cor_completion_callback, NULL);
+
+    xlist<librados::AioCompletion *>::item *comp =
+       new xlist<librados::AioCompletion *>::item(cor_completion);
+
+    m_ictx->add_cor_completion(comp);//add cor_completion to xlist
+    //asynchronously write object
+    ret = m_ictx->md_ctx.aio_operate(m_oid, cor_completion, &copyup_cor, snapc.seq.val, m_snaps);
+
+    return ret;
+  }
+
   bool AioRead::should_complete(int r)
   {
     ldout(m_ictx->cct, 20) << "should_complete " << this << " " << m_oid << " " << m_object_off << "~" << m_object_len
@@ -128,6 +160,7 @@ namespace librbd {
 	m_ictx->prune_parent_extents(image_extents, image_overlap);
 	// copy the read range to m_read_data
 	m_read_data.substr_of(m_entire_object, m_object_off, m_object_len);
+	write_cor();
       }
     }
 
