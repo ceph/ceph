@@ -8,6 +8,7 @@ overrides:
         debug monc: 20
 tasks:
 - workunit:
+    timeout: 6h
     clients:
       client.0:
         - rados/test.sh
