@@ -7789,15 +7789,16 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 
 class C_SendMap : public GenContext<ThreadPool::TPHandle&> {
   OSD *osd;
-  Message *m;
+  entity_name_t name;
   ConnectionRef con;
   OSDMapRef osdmap;
   epoch_t map_epoch;
 
 public:
-  C_SendMap(OSD *osd, Message *m, const ConnectionRef& con,
+  C_SendMap(OSD *osd, entity_name_t n, const ConnectionRef& con,
             OSDMapRef& osdmap, epoch_t map_epoch) :
-    osd(osd), m(m), con(con), osdmap(osdmap), map_epoch(map_epoch) {}
+    osd(osd), name(n), con(con), osdmap(osdmap), map_epoch(map_epoch) {
+  }
 
   void finish(ThreadPool::TPHandle& tp) {
     OSD::Session *session = static_cast<OSD::Session *>(
@@ -7806,7 +7807,7 @@ public:
       session->sent_epoch_lock.Lock();
     }
     osd->service.share_map(
-        m->get_source(),
+	name,
         con.get(),
         map_epoch,
         osdmap,
@@ -7820,20 +7821,21 @@ public:
 
 struct send_map_on_destruct {
   OSD *osd;
-  Message *m;
+  entity_name_t name;
   ConnectionRef con;
   OSDMapRef osdmap;
   epoch_t map_epoch;
   bool should_send;
   send_map_on_destruct(OSD *osd, Message *m,
-                       OSDMapRef& osdmap, epoch_t map_epoch) :
-                         osd(osd), m(m), con(m->get_connection()),
-                         osdmap(osdmap), map_epoch(map_epoch),
-                         should_send(true) {}
+                       OSDMapRef& osdmap, epoch_t map_epoch)
+    : osd(osd), name(m->get_source()), con(m->get_connection()),
+      osdmap(osdmap), map_epoch(map_epoch),
+      should_send(true) { }
   ~send_map_on_destruct() {
     if (!should_send)
       return;
-    osd->service.op_gen_wq.queue(new C_SendMap(osd, m, con, osdmap, map_epoch));
+    osd->service.op_gen_wq.queue(new C_SendMap(osd, name, con,
+					       osdmap, map_epoch));
   }
 };
 
@@ -8027,7 +8029,8 @@ void OSD::handle_replica_op(OpRequestRef& op, OSDMapRef& osdmap)
     op->sent_epoch = m->map_epoch;
     enqueue_op(pg, op);
   } else if (should_share_map) {
-    C_SendMap *send_map = new C_SendMap(this, m, m->get_connection(),
+    C_SendMap *send_map = new C_SendMap(this, m->get_source(),
+					m->get_connection(),
                                         osdmap, m->map_epoch);
     service.op_gen_wq.queue(send_map);
   }
