@@ -1634,8 +1634,16 @@ test(void)
 		}
 		break;
 	case OP_CLONE:
-		if (!clone_calls || get_random() % 100 > 5 || file_size == 0) {
+		/* clone, 8% chance */
+		if (!clone_calls || file_size == 0 || get_random() % 100 >= 8) {
 			log4(OP_SKIPPED, OP_CLONE, 0, 0);
+			goto out;
+		}
+		break;
+	case OP_FLATTEN:
+		/* flatten four times as rarely as clone, 2% chance */
+		if (get_random() % 100 >= 2) {
+			log4(OP_SKIPPED, OP_FLATTEN, 0, 0);
 			goto out;
 		}
 		break;
