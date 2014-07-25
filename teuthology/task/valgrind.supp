@@ -1,4 +1,11 @@
 {
+   osd: ignore ec plugin loading (FIXME SOMEDAY)
+   Memcheck:Leak
+   ...
+   fun:*ErasureCodePluginRegistry*load*
+   ...
+}
+{
    tcmalloc: msync heap allocation points to uninit bytes (precise)
    Memcheck:Param
    msync(start)
