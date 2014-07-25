@@ -1970,7 +1970,8 @@ int main(int argc, const char **argv)
   const char *poolname = NULL;
   uint64_t size = 0;  // in bytes
   int order = 0;
-  bool format_specified = false, output_format_specified = false;
+  bool format_specified = false,
+    output_format_specified = false;
   int format = 1;
   uint64_t features = RBD_FEATURE_LAYERING;
   const char *imgname = NULL, *snapname = NULL, *destname = NULL,
@@ -1984,7 +1985,7 @@ int main(int argc, const char **argv)
   long long bench_io_size = 4096, bench_io_threads = 16, bench_bytes = 1 << 30;
   string bench_pattern = "seq";
 
-  std::string val;
+  std::string val, parse_err;
   std::ostringstream err;
   long long sizell = 0;
   std::vector<const char*>::iterator i;
@@ -2000,13 +2001,15 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_flag(args, i, "--new-format", (char*)NULL)) {
       format = 2;
       format_specified = true;
-    } else if (ceph_argparse_withint(args, i, &format, &err, "--image-format",
+    } else if (ceph_argparse_witharg(args, i, &val, "--image-format",
 				     (char*)NULL)) {
-      if (!err.str().empty()) {
-	cerr << "rbd: " << err.str() << std::endl;
+      format = strict_strtol(val.c_str(), 10, &parse_err);
+      if (!parse_err.empty()) {
+	cerr << "rbd: error parsing --image-format: " << parse_err << std::endl;
 	return EXIT_FAILURE;
       }
       format_specified = true;
+      g_conf->set_val_or_die("rbd_default_format", val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       poolname = strdup(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--dest-pool", (char*)NULL)) {
@@ -2049,7 +2052,6 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_withlonglong(args, i, &bench_io_threads, &err, "--io-threads", (char*)NULL)) {
     } else if (ceph_argparse_withlonglong(args, i, &bench_bytes, &err, "--io-total", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &bench_pattern, &err, "--io-pattern", (char*)NULL)) {
-    } else if (ceph_argparse_withlonglong(args, i, &stripe_count, &err, "--stripe-count", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &val, "--path", (char*)NULL)) {
       path = strdup(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--dest", (char*)NULL)) {
@@ -2074,9 +2076,9 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_flag(args, i , "--allow-shrink", (char *)NULL)) {
       resize_allow_shrink = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char *) NULL)) {
-      std::string err;
-      long long ret = strict_strtoll(val.c_str(), 10, &err);
-      if (err.empty()) {
+      long long ret = strict_strtoll(val.c_str(), 10, &parse_err);
+      if (parse_err.empty()) {
+	g_conf->set_val_or_die("rbd_default_format", val.c_str());
 	format = ret;
 	format_specified = true;
 	cerr << "rbd: using --format for specifying the rbd image format is"
@@ -2189,6 +2191,17 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 	break;
     }
   }
+
+  /* get defaults from rbd_default_* options to keep behavior consistent with
+     manual short-form options */
+  if (!format_specified)
+    format = g_conf->rbd_default_format;
+  if (!order)
+    order = g_conf->rbd_default_order;
+  if (!stripe_unit)
+    stripe_unit = g_conf->rbd_default_stripe_unit;
+  if (!stripe_count)
+    stripe_count = g_conf->rbd_default_stripe_count;
 
   if (format_specified && opt_cmd != OPT_IMPORT && opt_cmd != OPT_CREATE) {
     cerr << "rbd: image format can only be set when "
