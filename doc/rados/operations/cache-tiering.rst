@@ -115,6 +115,9 @@ have the high performance drives while omitting the hosts that don't. See
 In subsequent examples, we will refer to the cache pool as ``hot-storage`` and
 the backing pool as ``cold-storage``.
 
+For cache tier configuration and default values, see 
+`Pools - Set Pool Values`_.
+
 
 Creating a Cache Tier
 =====================
