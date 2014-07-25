@@ -1500,21 +1500,19 @@ void MDS::replay_start()
 
   calc_recovery_set();
 
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  epoch_t e = osdmap->get_epoch();
-  objecter->put_osdmap_read();
+  // Check if we need to wait for a newer OSD map before starting
+  Context *fin = new C_OnFinisher(new C_MDS_BootStart(this, MDS_BOOT_INITIAL),
+				  &finisher);
+  bool const ready = objecter->wait_for_map(
+      mdsmap->get_last_failure_osd_epoch(),
+      fin);
 
-  dout(1) << " need osdmap epoch " << mdsmap->get_last_failure_osd_epoch()
-	  << ", have " << e << dendl;
-
-  // start?
-  if (e >= mdsmap->get_last_failure_osd_epoch()) {
+  if (ready) {
+    delete fin;
     boot_start();
   } else {
     dout(1) << " waiting for osdmap " << mdsmap->get_last_failure_osd_epoch() 
 	    << " (which blacklists prior instance)" << dendl;
-    objecter->wait_for_map(mdsmap->get_last_failure_osd_epoch(),
-			   new C_OnFinisher(C_MDS_BootStart(this, MDS_BOOT_INITIAL)));
   }
 }
 
@@ -1544,20 +1542,33 @@ void MDS::_standby_replay_restart_finish(int r, uint64_t old_read_pos)
 
 inline void MDS::standby_replay_restart()
 {
-  dout(1) << "standby_replay_restart" << (standby_replaying ? " (as standby)":" (final takeover pass)") << dendl;
-
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  epoch_t e = osdmap->get_epoch();
-  objecter->put_osdmap_read();
-  
-  if (!standby_replaying && e < mdsmap->get_last_failure_osd_epoch()) {
-    dout(1) << " waiting for osdmap " << mdsmap->get_last_failure_osd_epoch() 
-	    << " (which blacklists prior instance)" << dendl;
-    objecter->wait_for_map(mdsmap->get_last_failure_osd_epoch(),
-			   new C_OnFinisher(new C_MDS_BootStart(this, MDS_BOOT_PREPARE_LOG)));
-  } else {
+  dout(1) << "standby_replay_restart"
+	  << (standby_replaying ? " (as standby)":" (final takeover pass)")
+	  << dendl;
+  if (standby_replaying) {
+    /* Go around for another pass of replaying in standby */
     mdlog->get_journaler()->reread_head_and_probe(
-      new C_MDS_StandbyReplayRestartFinish(this, mdlog->get_journaler()->get_read_pos()));
+      new C_MDS_StandbyReplayRestartFinish(
+        this,
+	mdlog->get_journaler()->get_read_pos()));
+  } else {
+    /* We are transitioning out of standby: wait for OSD map update
+       before making final pass */
+    Context *fin = new C_OnFinisher(
+      new C_MDS_BootStart(this, MDS_BOOT_PREPARE_LOG),
+      &finisher);
+    bool const ready =
+      objecter->wait_for_map(mdsmap->get_last_failure_osd_epoch(), fin);
+    if (ready) {
+      delete fin;
+      mdlog->get_journaler()->reread_head_and_probe(
+        new C_MDS_StandbyReplayRestartFinish(
+          this,
+	  mdlog->get_journaler()->get_read_pos()));
+    } else {
+      dout(1) << " waiting for osdmap " << mdsmap->get_last_failure_osd_epoch() 
+              << " (which blacklists prior instance)" << dendl;
+    }
   }
 }
 
