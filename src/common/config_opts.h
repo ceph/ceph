@@ -711,6 +711,7 @@ OPTION(rbd_balance_snap_reads, OPT_BOOL, false)
 OPTION(rbd_localize_snap_reads, OPT_BOOL, false)
 OPTION(rbd_balance_parent_reads, OPT_BOOL, false)
 OPTION(rbd_localize_parent_reads, OPT_BOOL, true)
+OPTION(rbd_clone_copy_on_read, OPT_BOOL, false)//copy-on-read option for rbd clones
 
 /*
  * The following options change the behavior for librbd's image creation methods that
