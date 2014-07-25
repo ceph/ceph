@@ -33,7 +33,7 @@ def test_rados_init():
 
 def test_ioctx_context_manager():
     with Rados(conffile='', rados_id='admin') as conn:
-        with conn.open_ioctx('data') as ioctx:
+        with conn.open_ioctx('rbd') as ioctx:
             pass
 
 class TestRados(object):
