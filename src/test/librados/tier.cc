@@ -2047,8 +2047,10 @@ TEST_F(LibRadosTierPP, HitSetWrite) {
 
   ioctx.set_namespace("");
 
+  int num = 200;
+
   // do a bunch of writes
-  for (int i=0; i<1000; ++i) {
+  for (int i=0; i<num; ++i) {
     bufferlist bl;
     bl.append("a");
     ASSERT_EQ(0, ioctx.write(stringify(i), bl, 1, 0));
@@ -2084,7 +2086,7 @@ TEST_F(LibRadosTierPP, HitSetWrite) {
       num_pg = _get_pg_num(cluster, pool_name);
   }
 
-  for (int i=0; i<1000; ++i) {
+  for (int i=0; i<num; ++i) {
     string n = stringify(i);
     uint32_t hash = ioctx.get_object_hash_position(n);
     hobject_t oid(sobject_t(n, CEPH_NOSNAP), "", hash,
