@@ -161,9 +161,9 @@ def test_incomplete_pgs(ctx, config):
                      '--no-cleanup'])
     p.wait()
 
-    # few objects in metadata pool (with pg log, normal recovery)
+    # few objects in rbd pool (with pg log, normal recovery)
     for f in range(1, 20):
-        p = rados_start(testdir, mon, ['-p', 'metadata', 'put',
+        p = rados_start(testdir, mon, ['-p', 'rbd', 'put',
                               'foo.%d' % f, '/etc/passwd'])
         p.wait()
 
