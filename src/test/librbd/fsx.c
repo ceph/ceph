@@ -149,6 +149,7 @@ int     fallocate_calls = 0;            /* -F flag disables */
 int     punch_hole_calls = 1;           /* -H flag disables */
 int	clone_calls = 1;                /* -C flag disables */
 int	randomize_striping = 1;		/* -U flag disables */
+int	randomize_parent_overlap = 1;
 int 	mapped_reads = 0;		/* -R flag disables it */
 int	fsxgoodfd = 0;
 int	o_direct = 0;			/* -Z flag */
@@ -662,6 +663,8 @@ int
 krbd_resize(struct rbd_ctx *ctx, uint64_t size)
 {
 	int ret;
+
+	assert(size % truncbdy == 0);
 
 	/*
 	 * This is essential: when krbd detects a size change, it calls
@@ -1339,6 +1342,10 @@ do_clone()
 	char lastimagename[1024];
 	int ret, fd;
 	int order = 0, stripe_unit = 0, stripe_count = 0;
+	uint64_t newsize = file_size;
+
+	log4(OP_CLONE, 0, 0, 0);
+	++num_clones;
 
 	if (randomize_striping) {
 		order = 18 + get_random() % 8;
@@ -1346,20 +1353,8 @@ do_clone()
 		stripe_count = 2 + get_random() % 14;
 	}
 
-	log4(OP_CLONE, 0, 0, 0);
-	++num_clones;
-	prt("%lu clone\t%d order %d su %d sc %d\n", testcalls, num_clones, order, stripe_unit, stripe_count);
-
-	clone_filename(filename, sizeof(filename), num_clones);
-	if ((fd = open(filename, O_WRONLY|O_CREAT|O_TRUNC, 0666)) < 0) {
-		simple_err("do_clone: open", -errno);
-		exit(162);
-	}
-	save_buffer(good_buf, file_size, fd);
-	if ((ret = close(fd)) < 0) {
-		simple_err("do_clone: close", -errno);
-		exit(163);
-	}
+	prt("%lu clone\t%d order %d su %d sc %d\n", testcalls, num_clones,
+	    order, stripe_unit, stripe_count);
 
 	clone_imagename(imagename, sizeof(imagename), num_clones);
 	clone_imagename(lastimagename, sizeof(lastimagename),
@@ -1373,11 +1368,59 @@ do_clone()
 		exit(165);
 	}
 
+	if (randomize_parent_overlap && rbd_image_has_parent(&ctx)) {
+		int rand = get_random() % 15;
+		uint64_t overlap;
+
+		ret = rbd_get_overlap(ctx.image, &overlap);
+		if (ret < 0) {
+			prterrcode("do_clone: rbd_get_overlap", ret);
+			exit(1);
+		}
+
+		if (rand < 3) {
+			newsize = 0;
+		} else if (rand < 12) {
+			newsize = overlap * (((double)rand - 2) / 10);
+			newsize -= newsize % truncbdy;
+		}
+
+		if (newsize != (uint64_t)file_size) {
+			prt("truncating image %s from 0x%llx (overlap 0x%llx) to 0x%llx\n",
+			    ctx.name, file_size, overlap, newsize);
+
+			ret = ops->resize(&ctx, newsize);
+			if (ret < 0) {
+				prterrcode("do_clone: ops->resize", ret);
+				exit(1);
+			}
+		} else {
+			prt("leaving image %s intact\n", ctx.name);
+		}
+	}
+
+	clone_filename(filename, sizeof(filename), num_clones);
+	if ((fd = open(filename, O_WRONLY|O_CREAT|O_TRUNC, 0666)) < 0) {
+		simple_err("do_clone: open", -errno);
+		exit(162);
+	}
+	save_buffer(good_buf, newsize, fd);
+	if ((ret = close(fd)) < 0) {
+		simple_err("do_clone: close", -errno);
+		exit(163);
+	}
+
+	/*
+	 * Close parent.
+	 */
 	if ((ret = ops->close(&ctx)) < 0) {
 		prterrcode("do_clone: ops->close", ret);
 		exit(174);
 	}
 
+	/*
+	 * Open freshly made clone.
+	 */
 	if ((ret = ops->open(imagename, &ctx)) < 0) {
 		prterrcode("do_clone: ops->open", ret);
 		exit(166);
