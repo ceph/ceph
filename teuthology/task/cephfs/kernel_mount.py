@@ -80,3 +80,19 @@ class KernelMount(CephFSMount):
                 mnt,
             ],
         )
+
+    def cleanup(self):
+        pass
+
+    def umount_wait(self):
+        pass
+
+    def is_mounted(self):
+        return True
+
+    def wait_until_mounted(self):
+        pass
+
+    def teardown(self):
+        super(KernelMount, self).teardown()
+        self.umount()
