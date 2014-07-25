@@ -2152,6 +2152,8 @@ reprotect_and_return_err:
     ldout(ictx->cct, 20) << "close_image " << ictx << dendl;
 
     ictx->readahead.wait_for_pending();
+    if (ictx->cor_completions)
+      ictx->wait_last_completions();//copy-on-read: wait for unfinished AioCompletion requests
 
     if (ictx->object_cacher)
       ictx->shutdown_cache(); // implicitly flushes

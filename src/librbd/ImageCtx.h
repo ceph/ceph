@@ -70,6 +70,7 @@ namespace librbd {
     RWLock snap_lock; // protects snapshot-related member variables:
     RWLock parent_lock; // protects parent_md and parent
     Mutex refresh_lock; // protects refresh_seq and last_refresh
+    Mutex cor_lock; //protects cor_completions for copy-on-read
 
     unsigned extra_read_flags;
 
@@ -93,6 +94,7 @@ namespace librbd {
 
     Readahead readahead;
     uint64_t total_bytes_read;
+    xlist<librados::AioCompletion*> *cor_completions; //copy-on-read AioCompletions
 
     /**
      * Either image_name or image_id must be set.
@@ -158,7 +160,10 @@ namespace librbd {
     uint64_t prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
 				  uint64_t overlap);
 
+    void add_cor_completion(xlist<librados::AioCompletion*>::item *comp);
+    void wait_last_completions();//wait for uncompleted asynchronous write which is still in xlist
   };
+  void cor_completion_callback(librados::completion_t aio_completion_impl, void *arg);
 }
 
 #endif
