@@ -22,7 +22,7 @@ namespace librbd {
     m_ictx(NULL), m_ioctx(NULL),
     m_object_no(0), m_object_off(0), m_object_len(0),
     m_snap_id(CEPH_NOSNAP), m_completion(NULL), m_parent_completion(NULL),
-    m_hide_enoent(false) {}
+    m_hide_enoent(false), m_parent_completion_cor(NULL){}
   AioRequest::AioRequest(ImageCtx *ictx, const std::string &oid,
 			 uint64_t objectno, uint64_t off, uint64_t len,
 			 librados::snap_t snap_id,
@@ -31,12 +31,16 @@ namespace librbd {
     m_ictx(ictx), m_ioctx(&ictx->data_ctx), m_oid(oid), m_object_no(objectno),
     m_object_off(off), m_object_len(len), m_snap_id(snap_id),
     m_completion(completion), m_parent_completion(NULL),
-    m_hide_enoent(hide_enoent) {}
+    m_hide_enoent(hide_enoent), m_parent_completion_cor(NULL) {}
 
   AioRequest::~AioRequest() {
     if (m_parent_completion) {
       m_parent_completion->release();
       m_parent_completion = NULL;
+    }
+    if (m_parent_completion_cor) {
+      m_parent_completion_cor->release();
+      m_parent_completion_cor = NULL;
     }
   }
 
@@ -50,6 +54,19 @@ namespace librbd {
 			   << dendl;
     aio_read(m_ictx->parent, image_extents, NULL, &m_read_data,
 	     m_parent_completion, 0);
+  }
+
+  //copy-on-read : read the entire object from parent, using bufferlist m_entire_object
+  void AioRequest::read_from_parent_cor(vector<pair<uint64_t,uint64_t> >& image_extents)
+  {
+    assert(!m_parent_completion_cor);
+    m_parent_completion_cor = aio_create_completion_internal(this, rbd_req_cb);
+    ldout(m_ictx->cct, 20) << "read_from_parent_cor this = " << this
+                          << " parent completion cor " << m_parent_completion_cor
+                          << " extents " << image_extents
+                          << dendl;
+    aio_read(m_ictx->parent, image_extents, NULL, &m_entire_object,
+            m_parent_completion_cor);
   }
 
   /** read **/
@@ -81,8 +98,36 @@ namespace librbd {
       uint64_t object_overlap = m_ictx->prune_parent_extents(image_extents, image_overlap);
       if (object_overlap) {
 	m_tried_parent = true;
-	read_from_parent(image_extents);
+       if (cor) {//copy-on-read option  
+           vector<pair<uint64_t,uint64_t> > extend_image_extents;
+           //extend range to entire object
+           Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
+                           m_object_no, 0, m_ictx->layout.fl_object_size,
+                           extend_image_extents);
+           //read entire object from parent , and put it in m_entire_object
+           read_from_parent_cor(extend_image_extents);
+       } else {
+           read_from_parent(image_extents);
+       }
 	return false;
+      }
+    }
+
+    if (cor) {//copy-on-read option
+      //if read entire object from parent success
+      if (m_tried_parent && r > 0) {
+        vector<pair<uint64_t,uint64_t> > image_extents;
+        Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
+                            m_object_no, m_object_off, m_object_len,
+                            image_extents);
+        uint64_t image_overlap = 0;
+        int r = m_ictx->get_parent_overlap(m_snap_id, &image_overlap);
+        if (r < 0) {
+          assert(0 == "FIXME");
+        }
+	m_ictx->prune_parent_extents(image_extents, image_overlap);
+	// copy the read range to m_read_data
+	m_read_data.substr_of(m_entire_object, m_object_off, m_object_len);
       }
     }
 
