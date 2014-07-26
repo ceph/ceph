@@ -900,8 +900,10 @@ int RGWPutObjProcessor_Plain::prepare(RGWRados *store, void *obj_ctx, string *oi
   return 0;
 }
 
-int RGWPutObjProcessor_Plain::handle_data(bufferlist& bl, off_t _ofs, void **phandle)
+int RGWPutObjProcessor_Plain::handle_data(bufferlist& bl, off_t _ofs, void **phandle, bool *again)
 {
+  *again = false;
+
   if (ofs != _ofs)
     return -EINVAL;
 
@@ -1026,8 +1028,10 @@ int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phan
   return RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle, exclusive);
 }
 
-int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **phandle)
+int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **phandle, bool *again)
 {
+  *again = false;
+
   *phandle = NULL;
   if (extra_data_len) {
     size_t extra_len = bl.length();
@@ -1051,6 +1055,9 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **pha
     return 0;
 
   pending_data_bl.splice(0, max_write_size, &bl);
+
+  /* do we have enough data pending accumulated that needs to be written? */
+  *again = (pending_data_bl.length() >= max_chunk_size);
 
   if (!data_ofs && !immutable_head()) {
     first_chunk.claim(bl);
@@ -3023,25 +3030,33 @@ public:
   int handle_data(bufferlist& bl, off_t ofs, off_t len) {
     progress_cb(ofs, progress_data);
 
-    void *handle;
-    int ret = processor->handle_data(bl, ofs, &handle);
-    if (ret < 0)
-      return ret;
+    bool again;
 
-    if (opstate) {
-      /* need to update opstate repository with new state. This is ratelimited, so we're not
-       * really doing it every time
-       */
-      ret = opstate->renew_state();
-      if (ret < 0) {
-        /* could not renew state! might have been marked as cancelled */
+    bool need_opstate = true;
+
+    do {
+      void *handle;
+      int ret = processor->handle_data(bl, ofs, &handle, &again);
+      if (ret < 0)
         return ret;
-      }
-    }
 
-    ret = processor->throttle_data(handle, false);
-    if (ret < 0)
-      return ret;
+      if (need_opstate && opstate) {
+        /* need to update opstate repository with new state. This is ratelimited, so we're not
+         * really doing it every time
+         */
+        ret = opstate->renew_state();
+        if (ret < 0) {
+          /* could not renew state! might have been marked as cancelled */
+          return ret;
+        }
+
+        need_opstate = false;
+      }
+
+      ret = processor->throttle_data(handle, false);
+      if (ret < 0)
+        return ret;
+    } while (again);
 
     return 0;
   }
