@@ -133,6 +133,7 @@ def _delete_dir(ctx, role, created_mountpoint):
     # Remove the directory inside the mount where the workunit ran
     remote.run(
         args=[
+            'sudo',
             'rm',
             '-rf',
             '--',
