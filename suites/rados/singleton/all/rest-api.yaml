@@ -5,6 +5,7 @@ roles:
   - osd.0
   - osd.1
   - osd.2
+  - mds.a
   - client.0
 tasks:
 - install:
