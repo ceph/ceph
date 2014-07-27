@@ -1621,7 +1621,10 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
     next++;
     BufferHead *bh = *it;
     waitfor_commit.insert(bh->ob);
-    bh_write(bh);
+
+    if (bh->is_dirty())
+      bh_write(bh);
+
     it = next;
   }
 
