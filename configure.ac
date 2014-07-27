@@ -626,9 +626,15 @@ AC_CHECK_LIB(boost_system-mt, main, [],
         AC_MSG_NOTICE(["Boost system library not found."]))])
 
 # Find the right boost_thread library.
+BOOST_THREAD_LIBS=""
+saved_LIBS="${LIBS}"
+LIBS=""
 AC_CHECK_LIB(boost_thread-mt, main, [],
     [AC_CHECK_LIB(boost_thread, main, [],
         AC_MSG_FAILURE(["Boost thread library not found."]))])
+BOOST_THREAD_LIBS="${LIBS}"
+LIBS="${saved_LIBS}"
+AC_SUBST(BOOST_THREAD_LIBS)
 
 #
 # Check for boost_program_options library (defines BOOST_PROGRAM_OPTIONS_LIBS).
