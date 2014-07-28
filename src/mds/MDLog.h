@@ -148,7 +148,6 @@ protected:
 
   // -- subtreemaps --
   friend class ESubtreeMap;
-  friend class C_MDS_WroteImportMap;
   friend class MDCache;
 
   uint64_t get_last_segment_seq() {
