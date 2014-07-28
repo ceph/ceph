@@ -10,7 +10,10 @@
 #include "librbd/internal.h"
 
 #include "librbd/AioCompletion.h"
+
+#ifdef WITH_LTTNG
 #include "tracing/librbd.h"
+#endif
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
