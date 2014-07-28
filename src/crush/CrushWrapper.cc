@@ -849,14 +849,13 @@ int CrushWrapper::get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap)
 	  assert(b);
 	  for (unsigned j=0; j<b->size; ++j) {
 	    int item_id = b->items[j];
-	    if (item_id >= 0) //it's an OSD
-	    {
+	    if (item_id >= 0) { //it's an OSD
 	      float w = crush_get_bucket_item_weight(b, j);
 	      m[item_id] = w;
 	      sum += w;
-	    }
-	    else //not an OSD, expand the child later
+	    } else { //not an OSD, expand the child later
 	      q.push_back(item_id);
+	    }
 	  }
 	}
       }
