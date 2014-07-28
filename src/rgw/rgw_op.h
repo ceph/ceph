@@ -258,6 +258,24 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
+class RGWSetBucketVersioning : public RGWOp {
+protected:
+  bool enable_versioning;
+  int ret;
+public:
+  RGWSetBucketVersioning() : enable_versioning(false), ret(0) {}
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual int get_params() { return 0; }
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "set_bucket_versioning"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
 class RGWStatBucket : public RGWOp {
 protected:
   int ret;

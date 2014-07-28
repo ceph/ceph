@@ -316,6 +316,81 @@ void RGWGetBucketVersioning_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+class RGWSetBucketVersioningParser : public RGWXMLParser
+{
+  XMLObj *alloc_obj(const char *el) {
+    return new XMLObj;
+  }
+
+public:
+  RGWSetBucketVersioningParser() {}
+  ~RGWSetBucketVersioningParser() {}
+
+  int get_versioning_status(bool *status) {
+    XMLObj *config = find_first("VersioningConfiguration");
+    if (!config)
+      return -EINVAL;
+
+    *status = false;
+
+    XMLObj *field = config->find_first("Status");
+    if (!field)
+      return 0;
+
+    string& s = field->get_data();
+
+    if (stringcasecmp(s, "Enabled") == 0) {
+      *status = true;
+    } else if (stringcasecmp(s, "Suspended") != 0) {
+      return -EINVAL;
+    }
+
+    return 0;
+  }
+};
+
+int RGWSetBucketVersioning_ObjStore_S3::get_params()
+{
+#define GET_BUCKET_VERSIONING_BUF_MAX (128 * 1024)
+
+  char *data;
+  int len = 0;
+  int r = rgw_rest_read_all_input(s, &data, &len, GET_BUCKET_VERSIONING_BUF_MAX);
+  if (r < 0) {
+    return r;
+  }
+
+  RGWSetBucketVersioningParser parser;
+
+  if (!parser.init()) {
+    ldout(s->cct, 0) << "ERROR: failed to initialize parser" << dendl;
+    r = -EIO;
+    goto done;
+  }
+
+  if (!parser.parse(data, len, 1)) {
+    ldout(s->cct, 10) << "failed to parse data: " << data << dendl;
+    r = -EINVAL;
+    goto done;
+  }
+
+  r = parser.get_versioning_status(&enable_versioning);
+
+done:
+  free(data);
+
+  return r;
+}
+
+void RGWSetBucketVersioning_ObjStore_S3::send_response()
+{
+  if (ret)
+    set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s);
+}
+
+
 static void dump_bucket_metadata(struct req_state *s, RGWBucketEnt& bucket)
 {
   char buf[32];
