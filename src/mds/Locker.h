@@ -178,12 +178,12 @@ protected:
   void scatter_tempsync(ScatterLock *lock, bool *need_issue=0);
 
   void scatter_writebehind(ScatterLock *lock);
-  class C_Locker_ScatterWB : public Context {
+  class C_IO_Locker_ScatterWB : public Context {
     Locker *locker;
     ScatterLock *lock;
     MutationRef mut;
   public:
-    C_Locker_ScatterWB(Locker *l, ScatterLock *sl, MutationRef& m) :
+    C_IO_Locker_ScatterWB(Locker *l, ScatterLock *sl, MutationRef& m) :
       locker(l), lock(sl), mut(m) {}
     void finish(int r) { 
       Mutex::Locker l(locker->mds->mds_lock);
@@ -284,7 +284,7 @@ public:
 private:
   friend class C_MDL_CheckMaxSize;
   friend class C_MDL_RequestInodeFileCaps;
-  friend struct C_Locker_FileUpdate_finish;
+  friend struct C_IO_Locker_FileUpdate_finish;
   friend class C_Locker_RetryCapRelease;
   friend class C_Locker_Eval;
 

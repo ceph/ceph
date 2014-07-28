@@ -5933,11 +5933,11 @@ void MDCache::truncate_inode(CInode *in, LogSegment *ls)
   _truncate_inode(in, ls);
 }
 
-struct C_MDC_TruncateFinish : public Context {
+struct C_IO_MDC_TruncateFinish : public Context {
   MDCache *mdc;
   CInode *in;
   LogSegment *ls;
-  C_MDC_TruncateFinish(MDCache *c, CInode *i, LogSegment *l) :
+  C_IO_MDC_TruncateFinish(MDCache *c, CInode *i, LogSegment *l) :
     mdc(c), in(i), ls(l) {}
   void finish(int r) {
     assert(r == 0 || r == -ENOENT);
@@ -5973,15 +5973,18 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
   }
   dout(10) << "_truncate_inode  snapc " << snapc << " on " << *in << dendl;
   mds->filer->truncate(in->inode.ino, &in->inode.layout, *snapc,
-		       pi->truncate_size, pi->truncate_from-pi->truncate_size, pi->truncate_seq, utime_t(), 0,
-		       0, new C_OnFinisher(new C_MDC_TruncateFinish(this, in, ls), &mds->finisher));
+		       pi->truncate_size, pi->truncate_from-pi->truncate_size,
+		       pi->truncate_seq, utime_t(), 0,
+		       0, new C_OnFinisher(new C_IO_MDC_TruncateFinish(this, in,
+								       ls),
+					   &mds->finisher));
 }
 
-struct C_MDC_TruncateLogged : public Context {
+struct C_IO_MDC_TruncateLogged : public Context {
   MDCache *mdc;
   CInode *in;
   MutationRef mut;
-  C_MDC_TruncateLogged(MDCache *m, CInode *i, MutationRef& mu) :
+  C_IO_MDC_TruncateLogged(MDCache *m, CInode *i, MutationRef& mu) :
     mdc(m), in(i), mut(mu) {}
   void finish(int r) {
     mdc->truncate_inode_logged(in, mut);
@@ -6014,7 +6017,7 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
   le->metablob.add_truncate_finish(in->ino(), ls->seq);
 
   journal_dirty_inode(mut.get(), &le->metablob, in);
-  mds->mdlog->submit_entry(le, new C_MDC_TruncateLogged(this, in, mut));
+  mds->mdlog->submit_entry(le, new C_IO_MDC_TruncateLogged(this, in, mut));
 
   // flush immediately if there are readers/writers waiting
   if (in->get_caps_wanted() & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR))
