@@ -717,8 +717,7 @@ unsigned get_datalog_shard_id(const char *bucket_name, int max_shards) {
 
 TEST(TestRGWAdmin, datalog_list) {
   string start_time, 
-         end_time,
-         start_time_2;
+         end_time;
   const char *cname = "datalog",
              *perm = "*";
   string rest_req;
@@ -1220,8 +1219,7 @@ TEST(TestRGWAdmin, mdlog_list) {
 
 TEST(TestRGWAdmin, mdlog_trim) {
   string start_time, 
-         end_time,
-         start_time_2;
+         end_time;
   const char *cname = "mdlog",
              *perm = "*";
   string rest_req;
