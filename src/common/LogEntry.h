@@ -40,6 +40,7 @@ int clog_type_to_syslog_level(clog_type t);
 int string_to_syslog_level(string s);
 int string_to_syslog_facility(string s);
 
+string clog_type_to_string(clog_type t);
 
 struct LogEntryKey {
   entity_inst_t who;
