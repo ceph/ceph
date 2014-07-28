@@ -545,6 +545,8 @@ AC_ARG_WITH([librocksdb-static],
             [],
             [with_librocksdb_static=no])
 AS_IF([test "x$with_librocksdb_static" = "xyes"],
+            [AX_CXX_COMPILE_STDCXX_11])
+AS_IF([test "x$with_librocksdb_static" = "xyes"],
             [AC_CONFIG_SUBDIRS([src/rocksdb])])
 AS_IF([test "x$with_librocksdb_static" = "xyes"],
             [AC_DEFINE([HAVE_LIBROCKSDB], [1], [Defined if you have librocksdb enabled])])
