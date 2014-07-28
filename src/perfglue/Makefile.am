@@ -2,7 +2,7 @@ libperfglue_la_SOURCES =
 
 if WITH_TCMALLOC
 libperfglue_la_SOURCES += perfglue/heap_profiler.cc
-libperfglue_la_LIBADD = -ltcmalloc
+libperfglue_la_LIBADD = -ltcmalloc_minimal
 AM_CFLAGS += -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free
 AM_CXXFLAGS += -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free
 else

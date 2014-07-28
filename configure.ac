@@ -348,8 +348,8 @@ AC_ARG_WITH([tcmalloc],
 	    [with_tcmalloc=yes])
 TCMALLOC=
 AS_IF([test "x$with_tcmalloc" != xno],
-	    [AC_CHECK_LIB([tcmalloc], [malloc],
-	     [AC_SUBST([LIBTCMALLOC], ["-ltcmalloc"])
+	    [AC_CHECK_LIB([tcmalloc_minimal], [malloc],
+	     [AC_SUBST([LIBTCMALLOC], ["-ltcmalloc_minimal"])
 	       AC_DEFINE([HAVE_LIBTCMALLOC], [1],
 	       		 [Define if you have tcmalloc])
 	       HAVE_LIBTCMALLOC=1
