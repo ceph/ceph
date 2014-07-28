@@ -1,9 +1,9 @@
   $ osdmaptool --create-from-conf om -c $TESTDIR/ceph.conf.withracks
-  osdmaptool: osdmap file 'om'
-  osdmaptool: writing epoch 1 to om
+  *osdmaptool: osdmap file 'om' (glob)
+  *osdmaptool: writing epoch 1 to om (glob)
   $ osdmaptool --export-crush oc om
-  osdmaptool: osdmap file 'om'
-  osdmaptool: exported crush map to oc
+  *osdmaptool: osdmap file 'om' (glob)
+  *osdmaptool: exported crush map to oc (glob)
   $ crushtool --decompile oc
   # begin crush map
   tunable choose_local_tries 0
@@ -777,11 +777,11 @@
   # end crush map
   $ rm oc
   $ osdmaptool --test-map-pg 0.0 om
-  osdmaptool: osdmap file 'om'
+  *osdmaptool: osdmap file 'om' (glob)
    parsed '0.0' -> 0.0
   0.0 raw ([], p-1) up ([], p-1) acting ([], p-1)
   $ osdmaptool --print om
-  osdmaptool: osdmap file 'om'
+  *osdmaptool: osdmap file 'om' (glob)
   epoch 1
   fsid [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} (re)
   created \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ (re)
@@ -794,23 +794,23 @@
   
 
   $ osdmaptool --clobber --create-from-conf --osd_pool_default_crush_replicated_ruleset 55 om -c $TESTDIR/ceph.conf.withracks  
-  osdmaptool: osdmap file 'om'
-  osdmaptool: writing epoch 1 to om
+  *osdmaptool: osdmap file 'om' (glob)
+  *osdmaptool: writing epoch 1 to om (glob)
   $ osdmaptool --print om | grep 'pool 0'
-  osdmaptool: osdmap file 'om'
+  *osdmaptool: osdmap file 'om' (glob)
   pool 0 'rbd' replicated size 3 min_size 2 crush_ruleset 55 object_hash rjenkins pg_num 15296 pgp_num 15296 last_change 0 flags hashpspool stripe_width 0
   $ osdmaptool --clobber --create-from-conf --osd_pool_default_crush_rule 55 om -c $TESTDIR/ceph.conf.withracks 2>&1 >/dev/null | sed -e 's/^.* 0 osd_pool_//'
-  osdmaptool: osdmap file 'om'
+  *osdmaptool: osdmap file 'om' (glob)
   default_crush_rule is deprecated use osd_pool_default_crush_replicated_ruleset instead
   default_crush_rule = 55 overrides osd_pool_default_crush_replicated_ruleset = 0
   $ osdmaptool --print om | grep 'pool 0'
-  osdmaptool: osdmap file 'om'
+  *osdmaptool: osdmap file 'om' (glob)
   pool 0 'rbd' replicated size 3 min_size 2 crush_ruleset 55 object_hash rjenkins pg_num 15296 pgp_num 15296 last_change 0 flags hashpspool stripe_width 0
   $ osdmaptool --clobber --create-from-conf --osd_pool_default_crush_replicated_ruleset 66 --osd_pool_default_crush_rule 55 om -c $TESTDIR/ceph.conf.withracks 2>&1 >/dev/null | sed -e 's/^.* 0 osd_pool_//'
-  osdmaptool: osdmap file 'om'
+  *osdmaptool: osdmap file 'om' (glob)
   default_crush_rule is deprecated use osd_pool_default_crush_replicated_ruleset instead
   default_crush_rule = 55 overrides osd_pool_default_crush_replicated_ruleset = 66
   $ osdmaptool --print om | grep 'pool 0'
-  osdmaptool: osdmap file 'om'
+  *osdmaptool: osdmap file 'om' (glob)
   pool 0 'rbd' replicated size 3 min_size 2 crush_ruleset 55 object_hash rjenkins pg_num 15296 pgp_num 15296 last_change 0 flags hashpspool stripe_width 0
   $ rm -f om

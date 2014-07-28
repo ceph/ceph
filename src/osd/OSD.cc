@@ -137,6 +137,8 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, whoami, get_osdmap())
 
+static coll_t META_COLL("meta");
+
 static ostream& _prefix(std::ostream* _dout, int whoami, OSDMapRef osdmap) {
   return *_dout << "osd." << whoami << " "
 		<< (osdmap ? osdmap->get_epoch():0)
@@ -735,7 +737,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
 
     OSDSuperblock sb;
     bufferlist sbbl;
-    ret = store->read(coll_t::META_COLL, OSD_SUPERBLOCK_POBJECT, 0, 0, sbbl);
+    ret = store->read(META_COLL, OSD_SUPERBLOCK_POBJECT, 0, 0, sbbl);
     if (ret >= 0) {
       dout(0) << " have superblock" << dendl;
       if (whoami != sb.whoami) {
@@ -772,7 +774,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
 	object_t oid("disk_bw_test");
 	for (int i=0; i<1000; i++) {
 	  ObjectStore::Transaction *t = new ObjectStore::Transaction;
-	  t->write(coll_t::META_COLL, hobject_t(sobject_t(oid, 0)), i*bl.length(), bl.length(), bl);
+	  t->write(META_COLL, hobject_t(sobject_t(oid, 0)), i*bl.length(), bl.length(), bl);
 	  store->queue_transaction_and_cleanup(NULL, t);
 	}
 	store->sync();
@@ -780,7 +782,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
 	end -= start;
 	dout(0) << "measured " << (1000.0 / (double)end) << " mb/sec" << dendl;
 	ObjectStore::Transaction tr;
-	tr.remove(coll_t::META_COLL, hobject_t(sobject_t(oid, 0)));
+	tr.remove(META_COLL, hobject_t(sobject_t(oid, 0)));
 	ret = store->apply_transaction(tr);
 	if (ret) {
 	  derr << "OSD::mkfs: error while benchmarking: apply_transaction returned "
@@ -796,8 +798,8 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
       ::encode(sb, bl);
 
       ObjectStore::Transaction t;
-      t.create_collection(coll_t::META_COLL);
-      t.write(coll_t::META_COLL, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
+      t.create_collection(META_COLL);
+      t.write(META_COLL, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
       ret = store->apply_transaction(t);
       if (ret) {
 	derr << "OSD::mkfs: error while writing OSD_SUPERBLOCK_POBJECT: "
@@ -1230,20 +1232,20 @@ int OSD::init()
   }
 
   // make sure info object exists
-  if (!store->exists(coll_t::META_COLL, service.infos_oid)) {
+  if (!store->exists(META_COLL, service.infos_oid)) {
     dout(10) << "init creating/touching infos object" << dendl;
     ObjectStore::Transaction t;
-    t.touch(coll_t::META_COLL, service.infos_oid);
+    t.touch(META_COLL, service.infos_oid);
     r = store->apply_transaction(t);
     if (r < 0)
       goto out;
   }
 
   // make sure snap mapper object exists
-  if (!store->exists(coll_t::META_COLL, OSD::make_snapmapper_oid())) {
+  if (!store->exists(META_COLL, OSD::make_snapmapper_oid())) {
     dout(10) << "init creating/touching snapmapper object" << dendl;
     ObjectStore::Transaction t;
-    t.touch(coll_t::META_COLL, OSD::make_snapmapper_oid());
+    t.touch(META_COLL, OSD::make_snapmapper_oid());
     r = store->apply_transaction(t);
     if (r < 0)
       goto out;
@@ -1813,13 +1815,13 @@ void OSD::write_superblock(ObjectStore::Transaction& t)
 
   bufferlist bl;
   ::encode(superblock, bl);
-  t.write(coll_t::META_COLL, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
+  t.write(META_COLL, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
 }
 
 int OSD::read_superblock()
 {
   bufferlist bl;
-  int r = store->read(coll_t::META_COLL, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
+  int r = store->read(META_COLL, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
   if (r < 0)
     return r;
 
@@ -4599,9 +4601,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       object_t oid(nm);
       hobject_t soid(sobject_t(oid, 0));
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      t->write(coll_t::META_COLL, soid, 0, bsize, bl);
+      t->write(META_COLL, soid, 0, bsize, bl);
       store->queue_transaction_and_cleanup(NULL, t);
-      cleanupt->remove(coll_t::META_COLL, soid);
+      cleanupt->remove(META_COLL, soid);
     }
     store->sync_and_flush();
     utime_t end = ceph_clock_now(cct);
@@ -5819,7 +5821,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       pinned_maps.push_back(add_map(o));
 
       hobject_t fulloid = get_osdmap_pobject_name(e);
-      t.write(coll_t::META_COLL, fulloid, 0, bl.length(), bl);
+      t.write(META_COLL, fulloid, 0, bl.length(), bl);
       pin_map_bl(e, bl);
       continue;
     }
@@ -5829,7 +5831,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       dout(10) << "handle_osd_map  got inc map for epoch " << e << dendl;
       bufferlist& bl = p->second;
       hobject_t oid = get_inc_osdmap_pobject_name(e);
-      t.write(coll_t::META_COLL, oid, 0, bl.length(), bl);
+      t.write(META_COLL, oid, 0, bl.length(), bl);
       pin_map_inc_bl(e, bl);
 
       OSDMap *o = new OSDMap;
@@ -5856,7 +5858,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       o->encode(fbl);
 
       hobject_t fulloid = get_osdmap_pobject_name(e);
-      t.write(coll_t::META_COLL, fulloid, 0, fbl.length(), fbl);
+      t.write(META_COLL, fulloid, 0, fbl.length(), fbl);
       pin_map_bl(e, fbl);
       continue;
     }
@@ -5871,8 +5873,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 	  service.map_cache.cached_key_lower_bound()));
     for (epoch_t e = superblock.oldest_map; e < min; ++e) {
       dout(20) << " removing old osdmap epoch " << e << dendl;
-      t.remove(coll_t::META_COLL, get_osdmap_pobject_name(e));
-      t.remove(coll_t::META_COLL, get_inc_osdmap_pobject_name(e));
+      t.remove(META_COLL, get_osdmap_pobject_name(e));
+      t.remove(META_COLL, get_inc_osdmap_pobject_name(e));
       superblock.oldest_map = e+1;
       num++;
       if (num >= cct->_conf->osd_target_transaction_size &&
@@ -6454,7 +6456,7 @@ bool OSDService::_get_map_bl(epoch_t e, bufferlist& bl)
   if (found)
     return true;
   found = store->read(
-    coll_t::META_COLL, OSD::get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
+    META_COLL, OSD::get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
   if (found)
     _add_map_bl(e, bl);
   return found;
@@ -6467,7 +6469,7 @@ bool OSDService::get_inc_map_bl(epoch_t e, bufferlist& bl)
   if (found)
     return true;
   found = store->read(
-    coll_t::META_COLL, OSD::get_inc_osdmap_pobject_name(e), 0, 0, bl) >= 0;
+    META_COLL, OSD::get_inc_osdmap_pobject_name(e), 0, 0, bl) >= 0;
   if (found)
     _add_map_inc_bl(e, bl);
   return found;

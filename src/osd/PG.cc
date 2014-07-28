@@ -47,6 +47,9 @@
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
+
+static coll_t META_COLL("meta");
+
 template <class T>
 static ostream& _prefix(std::ostream *_dout, T *t)
 {
@@ -2533,7 +2536,7 @@ int PG::_write_info(ObjectStore::Transaction& t, epoch_t epoch,
     //dout(20) << "write_info bigbl " << bigbl.length() << dendl;
   }
 
-  t.omap_setkeys(coll_t::META_COLL, infos_oid, v);
+  t.omap_setkeys(META_COLL, infos_oid, v);
 
   return 0;
 }
@@ -2577,7 +2580,7 @@ epoch_t PG::peek_map_epoch(ObjectStore *store, coll_t coll, hobject_t &infos_oid
     set<string> keys;
     keys.insert(get_epoch_key(pgid));
     map<string,bufferlist> values;
-    store->omap_get_values(coll_t::META_COLL, infos_oid, keys, &values);
+    store->omap_get_values(META_COLL, infos_oid, keys, &values);
     assert(values.size() == 1);
     tmpbl = values[ek];
     bufferlist::iterator p = tmpbl.begin();
@@ -2683,7 +2686,7 @@ void PG::append_log(
   }
 
   dout(10) << "append_log  adding " << keys.size() << " keys" << dendl;
-  t.omap_setkeys(coll_t::META_COLL, log_oid, keys);
+  t.omap_setkeys(META_COLL, log_oid, keys);
 
   pg_log.trim(&handler, trim_to, info);
 
@@ -2742,7 +2745,7 @@ int PG::read_info(
     ::decode(struct_v, p);
   } else {
     if (struct_v < 6) {
-      int r = store->read(coll_t::META_COLL, biginfo_oid, 0, 0, lbl);
+      int r = store->read(META_COLL, biginfo_oid, 0, 0, lbl);
       if (r < 0)
         return r;
       p = lbl.begin();
@@ -2755,7 +2758,7 @@ int PG::read_info(
       keys.insert(k);
       keys.insert(bk);
       map<string,bufferlist> values;
-      store->omap_get_values(coll_t::META_COLL, infos_oid, keys, &values);
+      store->omap_get_values(META_COLL, infos_oid, keys, &values);
       assert(values.size() == 2);
       lbl = values[k];
       p = lbl.begin();
