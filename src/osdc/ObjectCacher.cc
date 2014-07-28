@@ -1618,7 +1618,7 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
   set<BufferHead*>::iterator next, it;
   next = it = dirty_or_tx_bh.begin();
   while (it != dirty_or_tx_bh.end()) {
-    next++;
+    ++next;
     BufferHead *bh = *it;
     waitfor_commit.insert(bh->ob);
 
