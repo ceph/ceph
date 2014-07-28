@@ -6668,7 +6668,7 @@ bool OSD::require_mon_peer(Message *m)
   return true;
 }
 
-bool OSD::require_osd_peer(OpRequestRef op)
+bool OSD::require_osd_peer(OpRequestRef& op)
 {
   if (!op->get_req()->get_connection()->peer_is_osd()) {
     dout(0) << "require_osd_peer received from non-osd " << op->get_req()->get_connection()->get_peer_addr()
@@ -6712,7 +6712,7 @@ bool OSD::require_up_osd_peer(OpRequestRef& op, OSDMapRef& map,
  * require that we have same (or newer) map, and that
  * the source is the pg primary.
  */
-bool OSD::require_same_or_newer_map(OpRequestRef op, epoch_t epoch)
+bool OSD::require_same_or_newer_map(OpRequestRef& op, epoch_t epoch)
 {
   Message *m = op->get_req();
   dout(15) << "require_same_or_newer_map " << epoch << " (i am " << osdmap->get_epoch() << ") " << m << dendl;
