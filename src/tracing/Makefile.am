@@ -1,3 +1,5 @@
+if WITH_LTTNG
+
 %.c %.h: %.tp
 	$(LTTNG_GEN_TP_PROG) $< -o $*.c -o $*.h
 
@@ -69,4 +71,7 @@ CLEANFILES = \
 	$(libcommon_tp_la_SOURCES) \
 	$(libosd_tp_la_SOURCES) \
 	$(librados_tp_la_SOURCES) \
+	$(librbd_tp_la_SOURCES) \
 	$(libos_tp_la_SOURCES)
+
+endif # WITH_LTTNG
