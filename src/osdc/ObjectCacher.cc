@@ -530,7 +530,7 @@ ObjectCacher::~ObjectCacher()
   assert(bh_lru_rest.lru_get_size() == 0);
   assert(bh_lru_dirty.lru_get_size() == 0);
   assert(ob_lru.lru_get_size() == 0);
-  assert(dirty_bh.empty());
+  assert(dirty_or_tx_bh.empty());
 }
 
 void ObjectCacher::perf_start()
@@ -1613,22 +1613,31 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
 
   // we'll need to wait for all objects to flush!
   C_GatherBuilder gather(cct);
+  set<Object*> waitfor_commit;
 
-  for (xlist<Object*>::iterator i = oset->objects.begin();
-       !i.end(); ++i) {
+  set<BufferHead*>::iterator next, it;
+  next = it = dirty_or_tx_bh.begin();
+  while (it != dirty_or_tx_bh.end()) {
+    next++;
+    BufferHead *bh = *it;
+    waitfor_commit.insert(bh->ob);
+
+    if (bh->is_dirty())
+      bh_write(bh);
+
+    it = next;
+  }
+
+  for (set<Object*>::iterator i = waitfor_commit.begin();
+       i != waitfor_commit.end(); ++i) {
     Object *ob = *i;
 
-    if (ob->dirty_or_tx == 0)
-      continue;
-
-    if (!flush(ob, 0, 0)) {
-      // we'll need to gather...
-      ldout(cct, 10) << "flush_set " << oset << " will wait for ack tid " 
-               << ob->last_write_tid 
-               << " on " << *ob
-               << dendl;
-      ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
-    }
+    // we'll need to gather...
+    ldout(cct, 10) << "flush_set " << oset << " will wait for ack tid "
+             << ob->last_write_tid
+             << " on " << *ob
+             << dendl;
+    ob->waitfor_commit[ob->last_write_tid].push_back(gather.new_sub());
   }
 
   return _flush_set_finish(&gather, onfinish);
@@ -1997,17 +2006,28 @@ void ObjectCacher::bh_stat_sub(BufferHead *bh)
 void ObjectCacher::bh_set_state(BufferHead *bh, int s)
 {
   assert(lock.is_locked());
+  int state = bh->get_state();
   // move between lru lists?
-  if (s == BufferHead::STATE_DIRTY && bh->get_state() != BufferHead::STATE_DIRTY) {
+  if (s == BufferHead::STATE_DIRTY && state != BufferHead::STATE_DIRTY) {
     bh_lru_rest.lru_remove(bh);
     bh_lru_dirty.lru_insert_top(bh);
-    dirty_bh.insert(bh);
-  }
-  if (s != BufferHead::STATE_DIRTY && bh->get_state() == BufferHead::STATE_DIRTY) {
+  } else if (s != BufferHead::STATE_DIRTY && state == BufferHead::STATE_DIRTY) {
     bh_lru_dirty.lru_remove(bh);
     bh_lru_rest.lru_insert_top(bh);
-    dirty_bh.erase(bh);
   }
+
+  if ((s == BufferHead::STATE_TX ||
+       s == BufferHead::STATE_DIRTY) &&
+      state != BufferHead::STATE_TX &&
+      state != BufferHead::STATE_DIRTY) {
+    dirty_or_tx_bh.insert(bh);
+  } else if ((state == BufferHead::STATE_TX ||
+	      state == BufferHead::STATE_DIRTY) &&
+	     s != BufferHead::STATE_TX &&
+	     s != BufferHead::STATE_DIRTY) {
+    dirty_or_tx_bh.erase(bh);
+  }
+
   if (s != BufferHead::STATE_ERROR && bh->get_state() == BufferHead::STATE_ERROR) {
     bh->error = 0;
   }
@@ -2025,9 +2045,13 @@ void ObjectCacher::bh_add(Object *ob, BufferHead *bh)
   ob->add_bh(bh);
   if (bh->is_dirty()) {
     bh_lru_dirty.lru_insert_top(bh);
-    dirty_bh.insert(bh);
+    dirty_or_tx_bh.insert(bh);
   } else {
     bh_lru_rest.lru_insert_top(bh);
+  }
+
+  if (bh->is_tx()) {
+    dirty_or_tx_bh.insert(bh);
   }
   bh_stat_add(bh);
 }
@@ -2039,9 +2063,13 @@ void ObjectCacher::bh_remove(Object *ob, BufferHead *bh)
   ob->remove_bh(bh);
   if (bh->is_dirty()) {
     bh_lru_dirty.lru_remove(bh);
-    dirty_bh.erase(bh);
+    dirty_or_tx_bh.erase(bh);
   } else {
     bh_lru_rest.lru_remove(bh);
+  }
+
+  if (bh->is_tx()) {
+    dirty_or_tx_bh.erase(bh);
   }
   bh_stat_sub(bh);
 }
