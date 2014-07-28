@@ -1259,10 +1259,15 @@ int64_t PGMonitor::get_rule_avail(OSDMap& osdmap, int ruleno)
     return 0;
   int64_t min = -1;
   for (map<int,float>::iterator p = wm.begin(); p != wm.end(); ++p) {
-    int64_t proj = (float)(pg_map.osd_stat[p->first].kb_avail * 1024ull) /
-      (double)p->second;
-    if (min < 0 || proj < min)
-      min = proj;
+    ceph::unordered_map<int32_t,osd_stat_t>::const_iterator osd_info = pg_map.osd_stat.find(p->first);
+    if (osd_info != pg_map.osd_stat.end()) {
+      int64_t proj = (float)((osd_info->second).kb_avail * 1024ull) /
+        (double)p->second;
+      if (min < 0 || proj < min)
+        min = proj;
+    } else {
+      dout(0) << "Cannot get stat of OSD " << p->first << dendl;
+    }
   }
   return min;
 }
