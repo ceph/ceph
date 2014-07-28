@@ -57,6 +57,14 @@ public:
   void send_response();
 };
 
+class RGWGetBucketVersioning_ObjStore_S3 : public RGWGetBucketVersioning {
+public:
+  RGWGetBucketVersioning_ObjStore_S3() {}
+  ~RGWGetBucketVersioning_ObjStore_S3() {}
+
+  void send_response();
+};
+
 class RGWStatBucket_ObjStore_S3 : public RGWStatBucket_ObjStore {
 public:
   RGWStatBucket_ObjStore_S3() {}

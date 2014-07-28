@@ -1031,6 +1031,26 @@ void RGWStatAccount::execute()
   } while (!done);
 }
 
+int RGWGetBucketVersioning::verify_permission()
+{
+  if (s->user.user_id.compare(s->bucket_owner.get_id()) != 0)
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWGetBucketVersioning::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetBucketVersioning::execute()
+{
+  versioning_enabled = s->bucket_info.versioning_enabled;
+
+  send_response();
+}
+
 int RGWStatBucket::verify_permission()
 {
   if (!verify_bucket_permission(s, RGW_PERM_READ))

@@ -243,6 +243,21 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
+class RGWGetBucketVersioning : public RGWOp {
+protected:
+  bool versioning_enabled;
+public:
+  RGWGetBucketVersioning() : versioning_enabled(false) {}
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "get_bucket_versioning"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+};
+
 class RGWStatBucket : public RGWOp {
 protected:
   int ret;

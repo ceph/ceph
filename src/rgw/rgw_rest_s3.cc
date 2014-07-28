@@ -302,6 +302,20 @@ void RGWGetBucketLogging_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+void RGWGetBucketVersioning_ObjStore_S3::send_response()
+{
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  s->formatter->open_object_section_in_ns("VersioningConfiguration",
+					  "http://doc.s3.amazonaws.com/doc/2006-03-01/");
+  const char *status = (versioning_enabled ? "Enabled" : "Suspended");
+  s->formatter->dump_string("Status", status);
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
 static void dump_bucket_metadata(struct req_state *s, RGWBucketEnt& bucket)
 {
   char buf[32];
