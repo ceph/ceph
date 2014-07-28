@@ -794,7 +794,7 @@ int CrushWrapper::add_simple_ruleset(string name, string root_name,
   return rno;
 }
 
-int CrushWrapper::get_rule_weight_map(unsigned ruleno, map<int,float> *pmap)
+int CrushWrapper::get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap)
 {
   if (ruleno >= crush->max_rules)
     return -ENOENT;
@@ -814,15 +814,22 @@ int CrushWrapper::get_rule_weight_map(unsigned ruleno, map<int,float> *pmap)
       } else {
 	list<int> q;
 	q.push_back(n);
+	//breadth first iterate the OSD tree
 	while (!q.empty()) {
 	  int bno = q.front();
 	  q.pop_front();
 	  crush_bucket *b = crush->buckets[-1-bno];
 	  assert(b);
 	  for (unsigned j=0; j<b->size; ++j) {
-	    float w = crush_get_bucket_item_weight(b, j);
-	    m[b->items[j]] = w;
-	    sum += w;
+	    int item_id = b->items[j];
+	    if (item_id >= 0) //it's an OSD
+	    {
+	      float w = crush_get_bucket_item_weight(b, j);
+	      m[item_id] = w;
+	      sum += w;
+	    }
+	    else //not an OSD, expand the child later
+	      q.push_back(item_id);
 	  }
 	}
       }
