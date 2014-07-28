@@ -800,6 +800,7 @@ protected:
   void hit_set_persist();   ///< persist hit info
   bool hit_set_apply_log(); ///< apply log entries to update in-memory HitSet
   void hit_set_trim(RepGather *repop, unsigned max); ///< discard old HitSets
+  void hit_set_in_memory_trim();                     ///< discard old in memory HitSets
 
   hobject_t get_hit_set_current_object(utime_t stamp);
   hobject_t get_hit_set_archive_object(utime_t start, utime_t end);
@@ -1054,7 +1055,8 @@ protected:
 				 bool write_ordered,
 				 ObjectContextRef obc, int r,
 				 const hobject_t& missing_oid,
-				 bool must_promote);
+				 bool must_promote,
+				 bool in_hit_set = false);
   /**
    * This helper function tells the client to redirect their request elsewhere.
    */
