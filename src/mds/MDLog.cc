@@ -123,7 +123,8 @@ void MDLog::create(Context *c)
   assert(journaler == NULL);
   journaler = new Journaler(ino, mds->mdsmap->get_metadata_pool(), CEPH_FS_ONDISK_MAGIC, mds->objecter,
 			    logger, l_mdl_jlat,
-			    &mds->timer);
+			    &mds->timer,
+                            &mds->finisher);
   assert(journaler->is_readonly());
   journaler->set_write_error_handler(new C_MDL_WriteError(this));
   journaler->set_writeable();
@@ -728,7 +729,7 @@ void MDLog::_recovery_thread(Context *completion)
     dout(1) << "Erasing journal " << jp.back << dendl;
     C_SaferCond erase_waiter;
     Journaler back(jp.back, mds->mdsmap->get_metadata_pool(), CEPH_FS_ONDISK_MAGIC,
-        mds->objecter, logger, l_mdl_jlat, &mds->timer);
+        mds->objecter, logger, l_mdl_jlat, &mds->timer, &mds->finisher);
 
     // Read all about this journal (header + extents)
     mds->mds_lock.Lock();
@@ -761,7 +762,7 @@ void MDLog::_recovery_thread(Context *completion)
 
   /* Read the header from the front journal */
   Journaler *front_journal = new Journaler(jp.front, mds->mdsmap->get_metadata_pool(),
-      CEPH_FS_ONDISK_MAGIC, mds->objecter, logger, l_mdl_jlat, &mds->timer);
+      CEPH_FS_ONDISK_MAGIC, mds->objecter, logger, l_mdl_jlat, &mds->timer, &mds->finisher);
   C_SaferCond recover_wait;
   mds->mds_lock.Lock();
   front_journal->recover(&recover_wait);
@@ -828,7 +829,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
 
   /* Create the new Journaler file */
   Journaler *new_journal = new Journaler(jp.back, mds->mdsmap->get_metadata_pool(),
-      CEPH_FS_ONDISK_MAGIC, mds->objecter, logger, l_mdl_jlat, &mds->timer);
+      CEPH_FS_ONDISK_MAGIC, mds->objecter, logger, l_mdl_jlat, &mds->timer, &mds->finisher);
   dout(4) << "Writing new journal header " << jp.back << dendl;
   ceph_file_layout new_layout = old_journal->get_layout();
   new_journal->set_writeable();
