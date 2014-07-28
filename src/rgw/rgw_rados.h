@@ -1270,6 +1270,9 @@ class RGWRados
 
   Mutex bucket_id_lock;
 
+  // This field represents the number of bucket index object shards
+  uint32_t bucket_index_max_shards;
+
   int get_obj_ioctx(const rgw_obj& obj, librados::IoCtx *ioctx);
   int get_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref, rgw_bucket *bucket, bool ref_system_obj = false);
   uint64_t max_bucket_id;
@@ -1338,6 +1341,7 @@ public:
                num_watchers(0), watchers(NULL), watch_handles(NULL),
                watch_initialized(false),
                bucket_id_lock("rados_bucket_id"), max_bucket_id(0),
+               bucket_index_max_shards(0),
                cct(NULL), rados(NULL),
                pools_initialized(false),
                quota_handler(NULL),

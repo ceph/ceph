@@ -1287,6 +1287,9 @@ int RGWRados::init_rados()
 {
   int ret;
 
+  bucket_index_max_shards = cct->_conf->rgw_bucket_index_max_shards;
+  ldout(cct, 20) << __func__ << " bucket index max shards: " << bucket_index_max_shards << dendl;
+
   rados = new Rados();
   if (!rados)
     return -ENOMEM;

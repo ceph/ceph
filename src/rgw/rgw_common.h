@@ -138,6 +138,10 @@ using ceph::crypto::MD5;
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 
+#ifndef UINT32_MAX
+#define UINT32_MAX (4294967295)
+#endif
+
 typedef void *RGWAccessHandle;
 
 
@@ -730,8 +734,17 @@ struct RGWBucketInfo
   obj_version ep_objv; /* entry point object version, for runtime tracking only */
   RGWQuotaInfo quota;
 
+  // Represents the number of bucket index object shards:
+  //   - value of 0 indicates there is no sharding (this is by default before this
+  //     feature is implemented).
+  //   - value of UINT32_T::MAX indicates this is a blind bucket.
+  uint32_t num_shards;
+
+  // Represents the shard number for blind bucket.
+  const static uint32_t NUM_SHARDS_BLIND_BUCKET;
+
   void encode(bufferlist& bl) const {
-     ENCODE_START(9, 4, bl);
+     ENCODE_START(10, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner, bl);
      ::encode(flags, bl);
@@ -741,6 +754,7 @@ struct RGWBucketInfo
      ::encode(placement_rule, bl);
      ::encode(has_instance_obj, bl);
      ::encode(quota, bl);
+     ::encode(num_shards, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -763,6 +777,8 @@ struct RGWBucketInfo
        ::decode(has_instance_obj, bl);
      if (struct_v >= 9)
        ::decode(quota, bl);
+     if (struct_v >= 10)
+       ::decode(num_shards, bl);
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
