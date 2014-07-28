@@ -130,6 +130,25 @@ int string_to_syslog_facility(string s)
   return LOG_USER;
 }
 
+string clog_type_to_string(clog_type t)
+{
+  switch (t) {
+    case CLOG_DEBUG:
+      return "debug";
+    case CLOG_INFO:
+      return "info";
+    case CLOG_WARN:
+      return "warn";
+    case CLOG_ERROR:
+      return "err";
+    case CLOG_SEC:
+      return "crit";
+    default:
+      assert(0);
+      return 0;
+  }
+}
+
 void LogEntry::log_to_syslog(string level, string facility)
 {
   int min = string_to_syslog_level(level);
