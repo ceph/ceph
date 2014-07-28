@@ -6137,11 +6137,28 @@ bool OSD::require_osd_peer(OpRequestRef& op)
   return true;
 }
 
+bool OSD::require_self_aliveness(OpRequestRef& op, epoch_t epoch)
+{
+  if (epoch < up_epoch) {
+    dout(7) << "from pre-up epoch " << epoch << " < " << up_epoch << dendl;
+    return false;
+  }
+
+  if (!is_active()) {
+    dout(7) << "still in boot state, dropping message " << *op->get_req() << dendl;
+    return false;
+  }
+
+  return true;
+}
+
 bool OSD::require_up_osd_peer(OpRequestRef& op, OSDMapRef& map,
                               epoch_t their_epoch)
 {
   int from = op->get_req()->get_source().num();
-  if (!require_osd_peer(op)) {
+  if (!require_self_aliveness(op, their_epoch)) {
+    return false;
+  } else if (!require_osd_peer(op)) {
     return false;
   } else if (map->get_epoch() >= their_epoch &&
       (!map->have_inst(from) ||
@@ -6185,8 +6202,7 @@ bool OSD::require_same_or_newer_map(OpRequestRef& op, epoch_t epoch)
     return false;
   }
 
-  if (epoch < up_epoch) {
-    dout(7) << "from pre-up epoch " << epoch << " < " << up_epoch << dendl;
+  if (!require_self_aliveness(op, epoch)) {
     return false;
   }
 
@@ -6204,12 +6220,6 @@ bool OSD::require_same_or_newer_map(OpRequestRef& op, epoch_t epoch)
       cluster_messenger->mark_down(con.get());
       return false;
     }
-  }
-
-  // ok, we have at least as new a map as they do.  are we (re)booting?
-  if (!is_active()) {
-    dout(7) << "still in boot state, dropping message " << *m << dendl;
-    return false;
   }
 
   return true;

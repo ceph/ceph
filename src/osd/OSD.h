@@ -1514,6 +1514,11 @@ protected:
 
   bool require_mon_peer(Message *m);
   bool require_osd_peer(OpRequestRef& op);
+  /***
+   * Verifies that we were alive in the given epoch, and that
+   * still are.
+   */
+  bool require_self_aliveness(OpRequestRef& op, epoch_t alive_since);
   bool require_up_osd_peer(OpRequestRef& Op, OSDMapRef& map,
                            epoch_t their_epoch);
 
