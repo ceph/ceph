@@ -1480,7 +1480,7 @@ public:
   map<ceph_tid_t,PoolOp*>        pool_ops;
   atomic_t                  num_homeless_ops;
 
-  OSDSession homeless_session;
+  OSDSession *homeless_session;
 
   // ops waiting for an osdmap with a new pool or confirmation that
   // the pool does not exist (may be expanded to other uses later)
@@ -1601,7 +1601,7 @@ public:
     logger(NULL), tick_event(NULL),
     m_request_state_hook(NULL),
     num_homeless_ops(0),
-    homeless_session(cct, -1),
+    homeless_session(new OSDSession(cct, -1)),
     mon_timeout(mon_timeout),
     osd_timeout(osd_timeout),
     op_throttle_bytes(cct, "objecter_bytes", cct->_conf->objecter_inflight_op_bytes),
@@ -1612,6 +1612,7 @@ public:
     assert(!tick_event);
     assert(!m_request_state_hook);
     assert(!logger);
+    homeless_session->put();
   }
 
   void init();
