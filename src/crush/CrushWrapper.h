@@ -646,7 +646,7 @@ public:
    * @param pmap [out] map of osd to weight
    * @return 0 for success, or negative error code
    */
-  int get_rule_weight_map(unsigned ruleno, map<int,float> *pmap);
+  int get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap);
 
   /* modifiers */
   int add_rule(int len, int ruleset, int type, int minsize, int maxsize, int ruleno) {
