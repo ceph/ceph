@@ -1809,11 +1809,11 @@ protected:
   void repeer(PG *pg, map< int, map<spg_t,pg_query_t> >& query_map);
 
   bool require_mon_peer(Message *m);
-  bool require_osd_peer(OpRequestRef op);
+  bool require_osd_peer(OpRequestRef& op);
   bool require_up_osd_peer(OpRequestRef& Op, OSDMapRef& map,
                            epoch_t their_epoch);
 
-  bool require_same_or_newer_map(OpRequestRef op, epoch_t e);
+  bool require_same_or_newer_map(OpRequestRef& op, epoch_t e);
 
   void handle_pg_query(OpRequestRef op);
   void handle_pg_notify(OpRequestRef op);
