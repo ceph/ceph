@@ -708,7 +708,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	logger->set(l_osdc_map_epoch, osdmap->get_epoch());
 
 	was_full = was_full || osdmap_full_flag();
-	_scan_requests(&homeless_session, skipped_map, was_full,
+	_scan_requests(homeless_session, skipped_map, was_full,
 		       need_resend, need_resend_linger,
 		       need_resend_command);
 
@@ -743,7 +743,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 		      << m->get_last() << dendl;
 	osdmap->decode(m->maps[m->get_last()]);
 
-	_scan_requests(&homeless_session, false, false,
+	_scan_requests(homeless_session, false, false,
 		       need_resend, need_resend_linger,
 		       need_resend_command);
       } else {
@@ -1138,7 +1138,7 @@ int Objecter::_get_session(int osd, OSDSession **session, RWLock::Context& lc)
   assert(rwlock.is_locked());
 
   if (osd < 0) {
-    *session = &homeless_session;
+    *session = homeless_session;
     return 0;
   }
 
@@ -1747,8 +1747,8 @@ start:
     s->lock.unlock();
   }
 
-  if (homeless_session.ops.find(tid) != homeless_session.ops.end()) {
-    ret = op_cancel(&homeless_session, tid, r);
+  if (homeless_session->ops.find(tid) != homeless_session->ops.end()) {
+    ret = op_cancel(homeless_session, tid, r);
   }
   rwlock.unlock();
 
@@ -3219,7 +3219,7 @@ void Objecter::_dump_active()
     _dump_active(s);
     s->lock.unlock();
   }
-  _dump_active(&homeless_session);
+  _dump_active(homeless_session);
 }
 
 void Objecter::dump_active()
@@ -3279,7 +3279,7 @@ void Objecter::dump_ops(Formatter *fmt)
     s->lock.unlock();
   }
   rwlock.unlock();
-  _dump_ops(&homeless_session, fmt);
+  _dump_ops(homeless_session, fmt);
   fmt->close_section(); // ops array
 }
 
@@ -3309,7 +3309,7 @@ void Objecter::dump_linger_ops(Formatter *fmt)
     s->lock.unlock();
   }
   rwlock.unlock();
-  _dump_linger_ops(&homeless_session, fmt);
+  _dump_linger_ops(homeless_session, fmt);
   fmt->close_section(); // linger_ops array
 }
 
@@ -3345,7 +3345,7 @@ void Objecter::dump_command_ops(Formatter *fmt)
     s->lock.unlock();
   }
   rwlock.unlock();
-  _dump_command_ops(&homeless_session, fmt);
+  _dump_command_ops(homeless_session, fmt);
   fmt->close_section(); // command_ops array
 }
 
@@ -3514,9 +3514,9 @@ int Objecter::submit_command(CommandOp *c, ceph_tid_t *ptid)
   ceph_tid_t tid = last_tid.inc();
   ldout(cct, 10) << "_submit_command " << tid << " " << c->cmd << dendl;
   c->tid = tid;
-  homeless_session.command_ops[tid] = c;
+  homeless_session->command_ops[tid] = c;
   num_homeless_ops.inc();
-  c->session = &homeless_session;
+  c->session = homeless_session;
   (void)_calc_command_target(c);
   _assign_command_session(c);
   if (osd_timeout > 0) {
