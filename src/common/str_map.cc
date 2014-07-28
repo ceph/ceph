@@ -66,3 +66,44 @@ int get_str_map(const string &str,
   }
   return 0;
 }
+
+string get_str_map_value(
+    const map<string,string> &str_map,
+    const string &key,
+    const string *def_val)
+{
+  map<string,string>::const_iterator p = str_map.find(key);
+
+  // key exists in str_map
+  if (p != str_map.end()) {
+    // but value is empty
+    if (p->second.empty())
+      return p->first;
+    // and value is not empty
+    return p->second;
+  }
+
+  // key DNE in str_map and def_val was specified
+  if (def_val != NULL)
+    return *def_val;
+
+  // key DNE in str_map, no def_val was specified
+  return string();
+}
+
+string get_str_map_key(
+    const map<string,string> &str_map,
+    const string &key,
+    const string *fallback_key)
+{
+  map<string,string>::const_iterator p = str_map.find(key);
+  if (p != str_map.end())
+    return p->second;
+
+  if (fallback_key != NULL) {
+    p = str_map.find(*fallback_key);
+    if (p != str_map.end())
+      return p->second;
+  }
+  return string();
+}
