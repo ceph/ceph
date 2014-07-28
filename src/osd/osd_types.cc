@@ -809,6 +809,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->close_section(); // hit_set_params
   f->dump_unsigned("hit_set_period", hit_set_period);
   f->dump_unsigned("hit_set_count", hit_set_count);
+  f->dump_unsigned("min_read_recency_for_promote", min_read_recency_for_promote);
   f->dump_unsigned("stripe_width", get_stripe_width());
 }
 
@@ -1109,7 +1110,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(15, 5, bl);
+  ENCODE_START(16, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -1149,12 +1150,13 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(cache_min_evict_age, bl);
   ::encode(erasure_code_profile, bl);
   ::encode(last_force_op_resend, bl);
+  ::encode(min_read_recency_for_promote, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(15, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(16, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
@@ -1256,6 +1258,12 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   } else {
     last_force_op_resend = 0;
   }
+  if (struct_v >= 16) {
+    ::decode(min_read_recency_for_promote, bl);
+  } else {
+    pg_pool_t def;
+    min_read_recency_for_promote = def.min_read_recency_for_promote;
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
 }
@@ -1301,6 +1309,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.hit_set_params = HitSet::Params(new BloomHitSet::Params);
   a.hit_set_period = 3600;
   a.hit_set_count = 8;
+  a.min_read_recency_for_promote = 1;
   a.set_stripe_width(12345);
   a.target_max_bytes = 1238132132;
   a.target_max_objects = 1232132;
@@ -1353,6 +1362,8 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
 	<< " " << p.hit_set_period << "s"
 	<< " x" << p.hit_set_count;
   }
+  if (p.min_read_recency_for_promote)
+    out << " min_read_recency_for_promote " << p.min_read_recency_for_promote;
   out << " stripe_width " << p.get_stripe_width();
   return out;
 }
