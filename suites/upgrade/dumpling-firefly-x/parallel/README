@@ -23,7 +23,7 @@ Generally the flow is:
 ---------
 
 Defines the cluster layout - two nodes run ceph daemons, and a third
-acts as a client.
+acts as a client.  (This is under 'roles:' section in the finial yaml)
 
 1-dumpling-install
 ------------------
