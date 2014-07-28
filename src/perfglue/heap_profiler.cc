@@ -46,65 +46,25 @@ void ceph_heap_release_free_memory()
 
 bool ceph_heap_profiler_running()
 {
-  return IsHeapProfilerRunning();
-}
-
-static void get_profile_name(char *profile_name, int profile_name_len)
-{
-  char path[PATH_MAX];
-  snprintf(path, sizeof(path), "%s", g_conf->log_file.c_str());
-  char *last_slash = rindex(path, '/');
-
-  if (last_slash == NULL) {
-    snprintf(profile_name, profile_name_len, "./%s.profile",
-	     g_conf->name.to_cstr());
-  }
-  else {
-    last_slash[1] = '\0';
-    snprintf(profile_name, profile_name_len, "%s/%s.profile",
-	     path, g_conf->name.to_cstr());
-  }
+  return false;
 }
 
 void ceph_heap_profiler_start()
 {
-  char profile_name[PATH_MAX];
-  get_profile_name(profile_name, sizeof(profile_name)); 
-  generic_dout(0) << "turning on heap profiler with prefix "
-		  << profile_name << dendl;
-  HeapProfilerStart(profile_name);
 }
 
 void ceph_heap_profiler_stop()
 {
-  HeapProfilerStop();
 }
 
 void ceph_heap_profiler_dump(const char *reason)
 {
-  HeapProfilerDump(reason);
 }
 
 void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
                                        ostream& out)
 {
-  if (cmd.size() == 1 && cmd[0] == "dump") {
-    if (!ceph_heap_profiler_running()) {
-      out << "heap profiler not running; can't dump";
-      return;
-    }
-    char *heap_stats = new char[1024];
-    ceph_heap_profiler_stats(heap_stats, 1024);
-    out << g_conf->name << "dumping heap profile now.\n"
-	<< heap_stats;
-    ceph_heap_profiler_dump("admin request");
-  } else if (cmd.size() == 1 && cmd[0] == "start_profiler") {
-    ceph_heap_profiler_start();
-    out << g_conf->name << " started profiler";
-  } else if (cmd.size() == 1 && cmd[0] == "stop_profiler") {
-    ceph_heap_profiler_stop();
-    out << g_conf->name << " stopped profiler";
-  } else if (cmd.size() == 1 && cmd[0] == "release") {
+  if (cmd.size() == 1 && cmd[0] == "release") {
     ceph_heap_release_free_memory();
     out << g_conf->name << " releasing free RAM back to system.";
   } else if (cmd.size() == 1 && cmd[0] == "stats") {

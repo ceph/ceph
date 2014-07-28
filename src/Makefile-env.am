@@ -164,7 +164,7 @@ LIBOS += libos_zfs.a -lzfs
 endif # WITH_LIBZFS
 
 if WITH_TCMALLOC
-LIBPERFGLUE += -ltcmalloc
+LIBPERFGLUE += -ltcmalloc_minimal
 endif # WITH_TCMALLOC
 
 if ENABLE_COVERAGE
