@@ -1654,7 +1654,7 @@ version_t Locker::issue_file_data_version(CInode *in)
   return in->inode.file_data_version;
 }
 
-struct C_Locker_FileUpdate_finish : public Context {
+struct C_IO_Locker_FileUpdate_finish : public Context {
   Locker *locker;
   CInode *in;
   MutationRef mut;
@@ -1662,12 +1662,12 @@ struct C_Locker_FileUpdate_finish : public Context {
   client_t client;
   Capability *cap;
   MClientCaps *ack;
-  C_Locker_FileUpdate_finish(Locker *l, CInode *i, MutationRef& m,
-                             bool e=false, client_t c=-1,
-			     Capability *cp = 0,
-			     MClientCaps *ac = 0) : 
-    locker(l), in(i), mut(m), share(e), client(c), cap(cp),
-    ack(ac) {
+  C_IO_Locker_FileUpdate_finish(Locker *l, CInode *i, MutationRef& m,
+				bool e=false, client_t c=-1,
+				Capability *cp = 0,
+				MClientCaps *ac = 0)
+    : locker(l), in(i), mut(m), share(e), client(c), cap(cp),
+      ack(ac) {
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) {
@@ -2242,7 +2242,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
     mdcache->journal_dirty_inode(mut.get(), metablob, in);
   }
   mds->mdlog->submit_entry(le,
-          new C_Locker_FileUpdate_finish(this, in, mut, true));
+          new C_IO_Locker_FileUpdate_finish(this, in, mut, true));
   wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
   mut->auth_pin(in);
 
@@ -2803,8 +2803,10 @@ void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t foll
   mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, 0, follows);
   mdcache->journal_dirty_inode(mut.get(), &le->metablob, in, follows);
 
-  mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, false,
-							      client, NULL, ack));
+  mds->mdlog->submit_entry(le, new C_IO_Locker_FileUpdate_finish(this, in, mut,
+								 false,
+								 client, NULL,
+								 ack));
 }
 
 
@@ -3040,8 +3042,10 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, 0, follows);
   mdcache->journal_dirty_inode(mut.get(), &le->metablob, in, follows);
 
-  mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, change_max,
-							      client, cap, ack));
+  mds->mdlog->submit_entry(le, new C_IO_Locker_FileUpdate_finish(this, in, mut,
+								 change_max,
+								 client, cap,
+								 ack));
   // only flush immediately if the lock is unstable, or unissued caps are wanted, or max_size is 
   // changing
   if (((dirty & (CEPH_CAP_FILE_EXCL|CEPH_CAP_FILE_WR)) && !in->filelock.is_stable()) ||
@@ -3910,7 +3914,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   
   in->finish_scatter_gather_update_accounted(lock->get_type(), mut, &le->metablob);
 
-  mds->mdlog->submit_entry(le, new C_Locker_ScatterWB(this, lock, mut));
+  mds->mdlog->submit_entry(le, new C_IO_Locker_ScatterWB(this, lock, mut));
 }
 
 void Locker::scatter_writebehind_finish(ScatterLock *lock, MutationRef& mut)

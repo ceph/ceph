@@ -1383,8 +1383,8 @@ class C_MDS_BootStart : public Context {
 public:
   C_MDS_BootStart(MDS *m, MDS::BootStep n) : mds(m), nextstep(n) {}
   void finish(int r) {
-      Mutex::Locker l(mds->mds_lock);
-      mds->boot_start(nextstep, r);
+    Mutex::Locker l(mds->mds_lock);
+    mds->boot_start(nextstep, r);
   }
 };
 
