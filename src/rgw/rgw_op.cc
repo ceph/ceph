@@ -1055,6 +1055,38 @@ void RGWGetBucketVersioning::execute()
   send_response();
 }
 
+int RGWSetBucketVersioning::verify_permission()
+{
+  if (s->user.user_id.compare(s->bucket_owner.get_id()) != 0)
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWSetBucketVersioning::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWSetBucketVersioning::execute()
+{
+  ret = get_params();
+
+  if (ret < 0)
+    goto done;
+
+  s->bucket_info.versioning_enabled = true;
+
+  ret = store->put_bucket_instance_info(s->bucket_info, false, 0, &s->bucket_attrs);
+  if (ret < 0) {
+    ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name << " returned err=" << ret << dendl;
+    goto done;
+  }
+
+done:
+  send_response();
+}
+
 int RGWStatBucket::verify_permission()
 {
   if (!verify_bucket_permission(s, RGW_PERM_READ))
