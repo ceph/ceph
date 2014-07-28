@@ -19,7 +19,10 @@
 #include "common/config.h"
 #include "include/utime.h"
 #include "common/Clock.h"
+
+#ifdef WITH_LTTNG
 #include "tracing/mutex.h"
+#endif
 
 Mutex::Mutex(const char *n, bool r, bool ld,
 	     bool bt,

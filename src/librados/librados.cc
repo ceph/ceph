@@ -12,7 +12,6 @@
  *
  */
 
-#include "tracing/librados.h"
 #include <limits.h>
 
 #include "common/config.h"
@@ -37,6 +36,10 @@
 #include <vector>
 #include <list>
 #include <stdexcept>
+
+#ifdef WITH_LTTNG
+#include "tracing/librados.h"
+#endif
 
 using std::string;
 using std::map;

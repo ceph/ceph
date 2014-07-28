@@ -76,7 +76,10 @@ using ceph::crypto::SHA1;
 #include "include/assert.h"
 
 #include "common/config.h"
+
+#ifdef WITH_LTTNG
 #include "tracing/objectstore.h"
+#endif
 
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
