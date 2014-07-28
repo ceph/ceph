@@ -1252,12 +1252,14 @@ void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
 int64_t PGMonitor::get_rule_avail(OSDMap& osdmap, int ruleno)
 {
   map<int,float> wm;
-  int r = osdmap.crush->get_rule_weight_map(ruleno, &wm);
+  int r = osdmap.crush->get_rule_weight_osd_map(ruleno, &wm);
   if (r < 0)
     return r;
+  if(wm.size() == 0)
+    return 0;
   int64_t min = -1;
   for (map<int,float>::iterator p = wm.begin(); p != wm.end(); ++p) {
-    int64_t proj = (float)(pg_map.osd_sum.kb_avail * 1024ull) /
+    int64_t proj = (float)(pg_map.osd_stat[p->first].kb_avail * 1024ull) /
       (double)p->second;
     if (min < 0 || proj < min)
       min = proj;
