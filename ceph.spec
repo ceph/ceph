@@ -104,6 +104,10 @@ Patch0005:      0005-Fix-runlevels-for-start-scripts.patch
 Patch0006:      0006-Drop-ceph-keys-into-install.patch
 Patch0007:      0007-add-syncfs-support-v3.patch
 Patch0008:      0008-Fixup-radosgw-daemon-init.patch
+Patch0009:      0009-ceph_argparse_flag-has-no-regular-3.patch
+Patch0010:      0010-Variable-length-array-of-std-string.patch
+Patch0011:      0011-warning-Fix-deprecation-warning-fro.patch
+Patch0012:      0012-Hack-fix-crashing-tcmalloc-on-sle11.patch
 # Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
@@ -337,6 +341,10 @@ This package contains Ceph benchmarks and test tools.
 %patch0006 -p1
 %patch0007 -p1
 %patch0008 -p1
+%patch0009 -p1
+%patch0010 -p1
+%patch0011 -p1
+%patch0012 -p1
 
 %build
 

@@ -1,4 +1,16 @@
 -------------------------------------------------------------------
+Mon Jul 28 23:35:16 UTC 2014 - tbehrens@suse.com
+
+ - Add 0009-ceph_argparse_flag-has-no-regular-3.patch
+   * backport from upstream
+ - Add 0010-Variable-length-array-of-std-string.patch
+   * backport from upstream
+ - Add 0011-warning-Fix-deprecation-warning-fro.patch
+   * google/ header locations are deprecated
+ - Add 0012-Hack-fix-crashing-tcmalloc-on-sle11.patch
+   * fix bug bnc#882430, link against tcmalloc_minimal
+
+-------------------------------------------------------------------
 Thu Jul 17 20:55:11 UTC 2014 - tbehrens@suse.com
 
 - Update to 0.80.4:

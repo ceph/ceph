@@ -1,0 +1,26 @@
+From: Thorsten Behrens <tbehrens@suse.com>
+Date: Thu, 3 Jul 2014 00:15:03 +0200
+Subject: [PATCH] ceph_argparse_flag has no regular 3rd parameter.
+
+With clang warning: 'va_start' has undefined behavior with reference
+types, noticing copy-paste mistake on ceph_argparse_flag.
+
+Signed-off-by: Thorsten Behrens <tbehrens@suse.com>
+(cherry picked from commit 0c7c7223a2beb4ffb953d89d316f87d350677063)
+---
+ src/tools/ceph_authtool.cc | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/tools/ceph_authtool.cc b/src/tools/ceph_authtool.cc
+index f66a3c6..1b6b90a 100644
+--- a/src/tools/ceph_authtool.cc
++++ b/src/tools/ceph_authtool.cc
+@@ -84,7 +84,7 @@ int main(int argc, const char **argv)
+       gen_print_key = true;
+     } else if (ceph_argparse_witharg(args, i, &val, "-a", "--add-key", (char*)NULL)) {
+       add_key = val;
+-    } else if (ceph_argparse_flag(args, i, &val, "-l", "--list", (char*)NULL)) {
++    } else if (ceph_argparse_flag(args, i, "-l", "--list", (char*)NULL)) {
+       list = true;
+     } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
+       caps_fn = val;
