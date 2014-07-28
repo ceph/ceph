@@ -267,6 +267,12 @@ TESTS = \
 check-local:
 	$(srcdir)/test/encoding/readable.sh ../ceph-object-corpus
 
+if WITH_LTTNG
+# TODO: If we're running the parallel test harness (the preferred harness), this should be AM_TESTS_ENVIRONMENT instead.
+# See: https://www.gnu.org/software/automake/manual/html_node/Scripts_002dbased-Testsuites.html
+# I don't see the serial-tests Automake option anywhere, but my AM_TESTS_ENVIRONMENT was being ignored.
+TESTS_ENVIRONMENT = LD_PRELOAD=liblttng-ust-fork.so; export LD_PRELOAD; echo "LD_PRELOAD=$${LD_PRELOAD}";
+endif
 
 # base targets
 
