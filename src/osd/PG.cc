@@ -41,7 +41,10 @@
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDSubOpReply.h"
 #include "common/BackTrace.h"
+
+#ifdef WITH_LTTNG
 #include "tracing/pg.h"
+#endif
 
 #include <sstream>
 

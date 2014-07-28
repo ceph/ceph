@@ -742,40 +742,50 @@ AC_CHECK_HEADERS([linux/types.h])
 AC_CHECK_TYPES([__u8, __s8, __u16, __s16, __u32, __s32, __u64, __s64, __le16,
   __be16, __le32, __be32, __le64, __be64], [], [], [[#include <linux/types.h>]])
 
-AC_CHECK_HEADER([lttng/tracepoint.h], [],
-  AC_MSG_ERROR([lttng/tracepoint.h not found (liblttng-ust-dev)]))
 
-AC_CHECK_PROG([LTTNG_GEN_TP_CHECK], [lttng-gen-tp], [yes])
-if test x"$LTTNG_GEN_TP_CHECK" != "xyes"; then
-    AC_MSG_FAILURE([lttng-gen-tp not found])
-fi
-AC_SUBST([LTTNG_GEN_TP_PROG], [lttng-gen-tp])
+AC_ARG_WITH([lttng],
+	[AS_HELP_STRING([--with-lttng], [Trace with LTTng])])
+AM_CONDITIONAL([WITH_LTTNG], test x"$with_lttng" = x"yes")
+AM_COND_IF([WITH_LTTNG], [
+  AC_DEFINE([WITH_LTTNG], [1], [Define if you want to use LTTng])
 
-AC_MSG_CHECKING([if time_t is an integer])
-AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <time.h>]], [[
-    struct {
-        unsigned int time_t_is_integer: ((time_t) 1.5 == 1) ? 1 : -1;
-    } x;
-    return 0;
-]])], [
-   AC_MSG_RESULT([yes])
+  AC_CHECK_HEADER([lttng/tracepoint.h], [],
+    AC_MSG_ERROR([lttng/tracepoint.h not found (liblttng-ust-dev)]))
+
+  AC_CHECK_PROG([LTTNG_GEN_TP_CHECK], [lttng-gen-tp], [yes])
+  if test x"$LTTNG_GEN_TP_CHECK" != "xyes"; then
+      AC_MSG_FAILURE([lttng-gen-tp not found])
+  fi
+  AC_SUBST([LTTNG_GEN_TP_PROG], [lttng-gen-tp])
+
+  AC_MSG_CHECKING([if time_t is an integer])
+  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <time.h>]], [[
+      struct {
+          unsigned int time_t_is_integer: ((time_t) 1.5 == 1) ? 1 : -1;
+      } x;
+      return 0;
+  ]])], [
+     AC_MSG_RESULT([yes])
+  ], [
+     AC_MSG_RESULT([no])
+     AC_MSG_FAILURE([time_t is not an integer.  We assume this for tracing.])
+  ])
+
+  AC_MSG_CHECKING([if time_t fits in uint64_t])
+  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <time.h>
+  #include <inttypes.h>]], [[
+      struct {
+          unsigned int time_t_fits_in_uin64_t: (sizeof(time_t) <= sizeof(uint64_t)) ? 1 : -1;
+      } x;
+      return 0;
+  ]])], [
+     AC_MSG_RESULT([yes])
+  ], [
+     AC_MSG_RESULT([no])
+     AC_MSG_FAILURE([time_t is larger than uint64_t.  We assume it can be cast to uint64_t, for tracing.])
+  ])
 ], [
-   AC_MSG_RESULT([no])
-   AC_MSG_FAILURE([time_t is not an integer.  We assume this for tracing.])
-])
-
-AC_MSG_CHECKING([if time_t fits in uint64_t])
-AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <time.h>
-#include <inttypes.h>]], [[
-    struct {
-        unsigned int time_t_fits_in_uin64_t: (sizeof(time_t) <= sizeof(uint64_t)) ? 1 : -1;
-    } x;
-    return 0;
-]])], [
-   AC_MSG_RESULT([yes])
-], [
-   AC_MSG_RESULT([no])
-   AC_MSG_FAILURE([time_t is larger than uint64_t.  We assume it can be cast to uint64_t, for tracing.])
+  AC_DEFINE([tracepoint(...)], [], [LTTng is disabled, so define this macro to be nothing.])
 ])
 
 

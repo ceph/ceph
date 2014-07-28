@@ -23,7 +23,10 @@
 #include "include/util.h"
 
 #include "librados/snap_set_diff.h"
+
+#ifdef WITH_LTTNG
 #include "tracing/librbd.h"
+#endif
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

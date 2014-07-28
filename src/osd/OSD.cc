@@ -131,7 +131,10 @@
 
 #include "include/assert.h"
 #include "common/config.h"
+
+#ifdef WITH_LTTNG
 #include "tracing/osd.h"
+#endif
 
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix

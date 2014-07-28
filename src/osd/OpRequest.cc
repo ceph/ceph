@@ -1,6 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 
-#include "tracing/oprequest.h"
 #include "OpRequest.h"
 #include "common/Formatter.h"
 #include <iostream>
@@ -12,6 +11,10 @@
 #include "messages/MOSDSubOp.h"
 #include "include/assert.h"
 #include "osd/osd_types.h"
+
+#ifdef WITH_LTTNG
+#include "tracing/oprequest.h"
+#endif
 
 
 OpRequest::OpRequest(Message *req, OpTracker *tracker) :
