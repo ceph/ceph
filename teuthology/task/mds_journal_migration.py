@@ -101,5 +101,6 @@ def task(ctx, config):
     # Leave all MDSs and clients running for any child tasks
     for mount in ctx.mounts.values():
         mount.mount()
+        mount.wait_until_mounted()
 
     yield
