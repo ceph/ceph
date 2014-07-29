@@ -28,10 +28,65 @@ using namespace std;
 
 class MMonCommand;
 
+static const string LOG_META_CHANNEL = "$channel";
+
 class LogMonitor : public PaxosService {
 private:
   multimap<utime_t,LogEntry> pending_log;
   LogSummary pending_summary, summary;
+
+  struct log_channel_info {
+
+    map<string,string> log_to_syslog;
+    map<string,string> syslog_level;
+    map<string,string> syslog_facility;
+    map<string,string> log_file;
+    map<string,string> log_file_level;
+
+    void clear() {
+      log_to_syslog.clear();
+      syslog_level.clear();
+      syslog_facility.clear();
+      log_file.clear();
+      log_file_level.clear();
+    }
+
+    void expand_channel_meta() {
+      expand_channel_meta(log_to_syslog);
+      expand_channel_meta(syslog_level);
+      expand_channel_meta(syslog_facility);
+      expand_channel_meta(log_file);
+      expand_channel_meta(log_file_level);
+    }
+    void expand_channel_meta(map<string,string> &m);
+
+    bool do_log_to_syslog(const string &channel) {
+      return (get_str_map_key(log_to_syslog, channel,
+                              &CLOG_CHANNEL_DEFAULT) == "true");
+    }
+
+    string get_facility(const string &channel) {
+      return get_str_map_key(syslog_facility, channel,
+                             &CLOG_CHANNEL_DEFAULT);
+    }
+
+    string get_level(const string &channel) {
+      return get_str_map_key(syslog_level, channel,
+                             &CLOG_CHANNEL_DEFAULT);
+    }
+
+    string get_log_file(const string &channel) {
+      return get_str_map_key(log_file, channel,
+                             &CLOG_CHANNEL_DEFAULT);
+    }
+
+    string get_log_file_level(const string &channel) {
+      return get_str_map_key(log_file_level, channel,
+                             &CLOG_CHANNEL_DEFAULT);
+    }
+  } channels;
+
+  void update_log_channels();
 
   void create_initial();
   void update_from_paxos(bool *need_bootstrap);
@@ -95,5 +150,4 @@ private:
   int sub_name_to_id(const string& n);
 
 };
-
 #endif
