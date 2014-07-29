@@ -9507,6 +9507,17 @@ void ReplicatedPG::on_role_change()
 void ReplicatedPG::on_pool_change()
 {
   dout(10) << __func__ << dendl;
+  // requeue cache full waiters just in case the cache_mode is
+  // changing away from writeback mode.  note that if we are not
+  // active the normal requeuing machinery is sufficient (and properly
+  // ordered).
+  if (is_active() &&
+      pool.info.cache_mode != pg_pool_t::CACHEMODE_WRITEBACK &&
+      !waiting_for_cache_not_full.empty()) {
+    dout(10) << __func__ << " requeuing full waiters (not in writeback) "
+	     << dendl;
+    requeue_ops(waiting_for_cache_not_full);
+  }
   hit_set_setup();
   agent_setup();
 }
@@ -11573,8 +11584,10 @@ void ReplicatedPG::agent_choose_mode(bool restart)
 	    << " -> "
 	    << TierAgentState::get_evict_mode_name(evict_mode)
 	    << dendl;
-    if (agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
+    if (agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL &&
+	is_active()) {
       requeue_ops(waiting_for_cache_not_full);
+      requeue_ops(waiting_for_active);
     }
     agent_state->evict_mode = evict_mode;
   }
