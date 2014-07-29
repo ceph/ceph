@@ -44,10 +44,15 @@ OPTION(err_to_syslog, OPT_BOOL, false)
 OPTION(log_flush_on_exit, OPT_BOOL, true) // default changed by common_preinit()
 OPTION(log_stop_at_utilization, OPT_FLOAT, .97)  // stop logging at (near) full
 
-OPTION(clog_to_monitors, OPT_BOOL, true)
-OPTION(clog_to_syslog, OPT_BOOL, false)
-OPTION(clog_to_syslog_level, OPT_STR, "info")         // this level and above
-OPTION(clog_to_syslog_facility, OPT_STR, "daemon")
+// options will take k/v pairs, or single-item that will be assumed as general
+// default for all, regardless of channel.
+// e.g., "info" would be taken as the same as "default=info"
+// also, "default=daemon audit=local0" would mean
+//    "default all to 'daemon', override 'audit' with 'local0'
+OPTION(clog_to_monitors, OPT_STR, "default=true")
+OPTION(clog_to_syslog, OPT_STR, "false")
+OPTION(clog_to_syslog_level, OPT_STR, "info") // this level and above
+OPTION(clog_to_syslog_facility, OPT_STR, "default=daemon audit=local0")
 
 OPTION(mon_cluster_log_to_syslog, OPT_BOOL, false)
 OPTION(mon_cluster_log_to_syslog_level, OPT_STR, "info")   // this level and above
