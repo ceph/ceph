@@ -6152,35 +6152,41 @@ bool OSD::require_self_aliveness(OpRequestRef& op, epoch_t epoch)
   return true;
 }
 
+bool OSD::require_same_peer_instance(OpRequestRef& op, OSDMapRef& map)
+{
+  Message *m = op->get_req();
+  int from = m->get_source().num();
+
+  if (!map->have_inst(from) ||
+      (map->get_cluster_addr(from) != m->get_source_inst().addr)) {
+    dout(5) << "from dead osd." << from << ", marking down, "
+	    << " msg was " << m->get_source_inst().addr
+	    << " expected " << (map->have_inst(from) ?
+				map->get_cluster_addr(from) : entity_addr_t())
+	    << dendl;
+    ConnectionRef con = m->get_connection();
+    cluster_messenger->mark_down(con.get());
+    Session *s = static_cast<Session*>(con->get_priv());
+    if (s) {
+      con->set_priv(NULL);   // break ref <-> session cycle, if any
+      s->put();
+    }
+    return false;
+  }
+  return true;
+}
+
 bool OSD::require_up_osd_peer(OpRequestRef& op, OSDMapRef& map,
                               epoch_t their_epoch)
 {
-  int from = op->get_req()->get_source().num();
   if (!require_self_aliveness(op, their_epoch)) {
     return false;
   } else if (!require_osd_peer(op)) {
     return false;
   } else if (map->get_epoch() >= their_epoch &&
-      (!map->have_inst(from) ||
-      map->get_cluster_addr(from) != op->get_req()->get_source_inst().addr)) {
-    dout(0) << "require_osd_peer_up received from non-up osd "
-            << op->get_req()->get_connection()->get_peer_addr()
-            << " " << *op->get_req() << dendl;
-
-    ConnectionRef con = op->get_req()->get_connection();
-    cluster_messenger->mark_down(con.get());
-    Session *s = static_cast<Session*>(con->get_priv());
-    if (s) {
-      s->session_dispatch_lock.Lock();
-      clear_session_waiting_on_map(s);
-      con->set_priv(NULL);   // break ref <-> session cycle, if any
-      s->session_dispatch_lock.Unlock();
-      s->put();
-    }
-
+	     !require_same_peer_instance(op, map)) {
     return false;
   }
-
   return true;
 }
 
@@ -6207,19 +6213,9 @@ bool OSD::require_same_or_newer_map(OpRequestRef& op, epoch_t epoch)
   }
 
   // ok, our map is same or newer.. do they still exist?
-  if (m->get_connection()->get_messenger() == cluster_messenger) {
-    int from = m->get_source().num();
-    if (!osdmap->have_inst(from) ||
-	osdmap->get_cluster_addr(from) != m->get_source_inst().addr) {
-      dout(5) << "from dead osd." << from << ", marking down, "
-	      << " msg was " << m->get_source_inst().addr
-	      << " expected " << (osdmap->have_inst(from) ? osdmap->get_cluster_addr(from) : entity_addr_t())
-	      << dendl;
-      ConnectionRef con = m->get_connection();
-      con->set_priv(NULL);   // break ref <-> session cycle, if any
-      cluster_messenger->mark_down(con.get());
-      return false;
-    }
+  if (m->get_connection()->get_messenger() == cluster_messenger &&
+      !require_same_peer_instance(op, osdmap)) {
+    return false;
   }
 
   return true;

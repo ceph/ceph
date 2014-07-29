@@ -1519,6 +1519,12 @@ protected:
    * still are.
    */
   bool require_self_aliveness(OpRequestRef& op, epoch_t alive_since);
+  /**
+   * Verifies that the OSD who sent the given op has the same
+   * address as in the given map.
+   * @pre op was sent by an OSD using the cluster messenger
+   */
+  bool require_same_peer_instance(OpRequestRef& op, OSDMapRef& map);
   bool require_up_osd_peer(OpRequestRef& Op, OSDMapRef& map,
                            epoch_t their_epoch);
 
