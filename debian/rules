@@ -24,6 +24,9 @@ extraopts += --with-ocf --with-rest-bench --with-nss
 extraopts += --with-debug
 extraopts += --enable-cephfs-java
 
+# rocksdb is not packaged by anyone.  build it if we can.
+extraopts += --with-librocksdb-static=check
+
 ifeq ($(DEB_HOST_ARCH), armel)
   # armel supports ARMv4t or above instructions sets.
   # libatomic-ops is only usable with Ceph for ARMv6 or above.
