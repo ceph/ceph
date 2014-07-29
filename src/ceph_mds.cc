@@ -94,7 +94,7 @@ int main(int argc, const char **argv)
   global_init(NULL, args, CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON, 0);
 
   // mds specific args
-  int shadow = 0;
+  MDSMap::DaemonState shadow = MDSMap::STATE_NULL;
   std::string dump_file;
 
   std::string val, action;
@@ -104,7 +104,7 @@ int main(int argc, const char **argv)
     }
     else if (ceph_argparse_witharg(args, i, &val, "--journal-check", (char*)NULL)) {
       int r = parse_rank("journal-check", val);
-      if (shadow) {
+      if (shadow != MDSMap::STATE_NULL) {
         dout(0) << "Error: can only select one standby state" << dendl;
         return -1;
       }
