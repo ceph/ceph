@@ -19,7 +19,6 @@
 
 #include <string>
 #include <set>
-using namespace std;
 
 #include "include/types.h"
 #include "include/buffer.h"
@@ -101,7 +100,7 @@ public:
   }
 
 public:
-  string name;
+  std::string name;
   __u32 hash;
   snapid_t first, last;
 
@@ -169,7 +168,7 @@ public:
 
  public:
   // cons
-  CDentry(const string& n, __u32 h,
+  CDentry(const std::string& n, __u32 h,
 	  snapid_t f, snapid_t l) :
     name(n), hash(h),
     first(f), last(l),
@@ -182,7 +181,7 @@ public:
     g_num_dn++;
     g_num_dna++;
   }
-  CDentry(const string& n, __u32 h, inodeno_t ino, unsigned char dt,
+  CDentry(const std::string& n, __u32 h, inodeno_t ino, unsigned char dt,
 	  snapid_t f, snapid_t l) :
     name(n), hash(h),
     first(f), last(l),
@@ -204,7 +203,7 @@ public:
 
 
   CDir *get_dir() const { return dir; }
-  const string& get_name() const { return name; }
+  const std::string& get_name() const { return name; }
 
   __u32 get_hash() const { return hash; }
 
@@ -275,7 +274,7 @@ public:
   const CDentry& operator= (const CDentry& right);
 
   // misc
-  void make_path_string(string& s);
+  void make_path_string(std::string& s);
   void make_path(filepath& fp);
 
   // -- version --
