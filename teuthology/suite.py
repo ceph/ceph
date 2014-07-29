@@ -183,7 +183,7 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
 
     # Get the ceph package version
     ceph_version = package_version_for_hash(ceph_hash, kernel_flavor,
-                                            machine_type)
+                                            distro, machine_type)
     if not ceph_version:
         schedule_fail("Packages for ceph version '{ver}' not found".format(
             ver=ceph_version))
