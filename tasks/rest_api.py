@@ -8,7 +8,7 @@ import time
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.orchestra import run
-from tasks.ceph import CephState
+from tasks.ceph import DaemonGroup
 
 log = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ def run_rest_api_daemon(ctx, api_clients):
     Wrapper starts the rest api daemons
     """
     if not hasattr(ctx, 'daemons'):
-        ctx.daemons = CephState()
+        ctx.daemons = DaemonGroup()
     remotes = ctx.cluster.only(teuthology.is_type('client')).remotes
     for rems, roles in remotes.iteritems():
         for whole_id_ in roles:

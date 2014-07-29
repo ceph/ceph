@@ -92,9 +92,9 @@ def task(ctx, config):
 
     testdir = teuthology.get_testdir(ctx)
 
-    from tasks.ceph import CephState
+    from tasks.ceph import DaemonGroup
     if not hasattr(ctx, 'daemons'):
-        ctx.daemons = CephState()
+        ctx.daemons = DaemonGroup()
 
     for id_, remote in samba_servers:
 
