@@ -139,7 +139,7 @@ Notable Changes
 
 * ceph-dencoder: do not needlessly link to librgw, librados, etc. (Sage Weil)
 * do not needlessly link binaries to leveldb (Sage Weil)
-* mon: fix mon crash when no auth keys are present (#8851, Joao Eduaro Luis)
+* mon: fix mon crash when no auth keys are present (#8851, Joao Eduardo Luis)
 * osd: fix cleanup (and avoid occasional crash) during shutdown (#7981, Sage Weil)
 * osd: fix log rotation under upstart (Sage Weil)
 * rgw: fix multipart upload when object has irregular size (#8846, Yehuda Sadeh, Sylvain Munaut)
