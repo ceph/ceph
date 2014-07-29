@@ -422,6 +422,11 @@ const char** Monitor::get_tracked_conf_keys() const
     "mon_lease",
     "mon_lease_renew_interval",
     "mon_lease_ack_timeout",
+    // clog & admin clog
+    "clog_to_monitors",
+    "clog_to_syslog",
+    "clog_to_syslog_facility",
+    "clog_to_syslog_level",
     NULL
   };
   return KEYS;
@@ -431,6 +436,15 @@ void Monitor::handle_conf_change(const struct md_config_t *conf,
                                  const std::set<std::string> &changed)
 {
   sanitize_options();
+
+  dout(10) << __func__ << " " << changed << dendl;
+
+  if (changed.count("clog_to_monitors") ||
+      changed.count("clog_to_syslog") ||
+      changed.count("clog_to_syslog_level") ||
+      changed.count("clog_to_syslog_facility")) {
+    update_log_clients();
+  }
 }
 
 void Monitor::update_log_client(
