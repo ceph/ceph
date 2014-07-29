@@ -1,0 +1,40 @@
+From: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date: Wed, 25 Jun 2014 09:56:52 +0200
+Subject: [PATCH] osdmaptool/test-map-pgs.t: fix escaping to fix run
+
+Run failed always running into the '|| cat $OUT' case due
+to bad escaping of '\t'. This is caused by different shells
+on different distros (e.g. bash on SUSE vs dash on Ubuntu).
+
+Use 'grep -P ' and fix the regex to make it shell independet.
+
+Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+(cherry picked from commit be70c1ffe36cea56e3213bd71a47c27d7fa2a068)
+---
+ src/test/cli/osdmaptool/test-map-pgs.t | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/src/test/cli/osdmaptool/test-map-pgs.t b/src/test/cli/osdmaptool/test-map-pgs.t
+index b64f2d9..3496a86 100644
+--- a/src/test/cli/osdmaptool/test-map-pgs.t
++++ b/src/test/cli/osdmaptool/test-map-pgs.t
+@@ -24,8 +24,7 @@
+   pool 1 pg_num 8000
+   pool 2 pg_num 8000
+   $ TOTAL=$((POOL_COUNT * $PG_NUM))
+-  $ PATTERN=$(echo "size $SIZE\t$TOTAL")
+-  $ grep "$PATTERN" $OUT || cat "$OUT"
++  $ grep -P "size $SIZE\t$TOTAL" $OUT || cat $OUT
+   size 3\t24000 (esc)
+   $ STATS_CRUSH=$(grep '^ avg ' "$OUT")
+ # 
+@@ -39,8 +38,7 @@
+   pool 1 pg_num 8000
+   pool 2 pg_num 8000
+   $ TOTAL=$((POOL_COUNT * $PG_NUM))
+-  $ PATTERN=$(echo "size $SIZE\t$TOTAL")
+-  $ grep "$PATTERN" $OUT || cat "$OUT"
++  $ grep -P "size $SIZE\t$TOTAL" $OUT || cat $OUT
+   size 3\t24000 (esc)
+   $ STATS_RANDOM=$(grep '^ avg ' "$OUT")
+ # it is almost impossible to get the same stats with random and crush

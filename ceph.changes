@@ -1,4 +1,15 @@
 -------------------------------------------------------------------
+Tue Jul 29 15:49:17 UTC 2014 - tbehrens@suse.com
+
+- Add 0013-osd-OSD.cc-parse-lsb-release-data-v.patch
+  * backport from upstream
+- Add 0014-osdmaptool-test-map-pgs.t-fix-escap.patch
+  * make unit tests work, backport from upstream
+- enable very basic set of unit tests to run in %check
+  section (needs virtualenv as prereq). More would be
+  desirable, sadly upstream tarballs are incomplete
+
+-------------------------------------------------------------------
 Mon Jul 28 23:35:16 UTC 2014 - tbehrens@suse.com
 
  - Add 0009-ceph_argparse_flag-has-no-regular-3.patch

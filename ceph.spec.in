@@ -15,6 +15,7 @@
 # Please submit bugfixes or comments via http://bugs.opensuse.org/
 #
 
+
 %if 0%{defined rhel_version}
 %bcond_with gtk2
 %else
@@ -86,6 +87,7 @@ BuildRequires:  libxml2-devel
 BuildRequires:  perl
 BuildRequires:  pkgconfig
 BuildRequires:  python
+BuildRequires:  python-virtualenv
 BuildRequires:  snappy-devel
 BuildRequires:  xfsprogs-devel
 BuildRequires:  xz
@@ -387,13 +389,11 @@ grep "\-lcurses" * -R
 
 make %{?jobs:-j%{jobs}}
 
-#cd src/gtest
-#echo "------ MAKE GTEST ------"
-#make -j$(getconf _NPROCESSORS_ONLN)
-#cd ..
-#echo "------ MAKE UNITTEST ------"
-#make unittests -j$(getconf _NPROCESSORS_ONLN)
-#echo "------ MAKE ... DONE ------"
+%check
+# run in-tree unittests
+make %{?jobs:-j%{jobs}} check-local
+# use make check for a more complete set - which unfortunately does
+# not have all ingredients shipped in the tarball...
 
 %install
 make DESTDIR=$RPM_BUILD_ROOT install

@@ -87,6 +87,7 @@ BuildRequires:  libxml2-devel
 BuildRequires:  perl
 BuildRequires:  pkgconfig
 BuildRequires:  python
+BuildRequires:  python-virtualenv
 BuildRequires:  snappy-devel
 BuildRequires:  xfsprogs-devel
 BuildRequires:  xz
@@ -108,6 +109,8 @@ Patch0009:      0009-ceph_argparse_flag-has-no-regular-3.patch
 Patch0010:      0010-Variable-length-array-of-std-string.patch
 Patch0011:      0011-warning-Fix-deprecation-warning-fro.patch
 Patch0012:      0012-Hack-fix-crashing-tcmalloc-on-sle11.patch
+Patch0013:      0013-osd-OSD.cc-parse-lsb-release-data-v.patch
+Patch0014:      0014-osdmaptool-test-map-pgs.t-fix-escap.patch
 # Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
@@ -345,6 +348,8 @@ This package contains Ceph benchmarks and test tools.
 %patch0010 -p1
 %patch0011 -p1
 %patch0012 -p1
+%patch0013 -p1
+%patch0014 -p1
 
 %build
 
@@ -410,13 +415,11 @@ grep "\-lcurses" * -R
 
 make %{?jobs:-j%{jobs}}
 
-#cd src/gtest
-#echo "------ MAKE GTEST ------"
-#make -j$(getconf _NPROCESSORS_ONLN)
-#cd ..
-#echo "------ MAKE UNITTEST ------"
-#make unittests -j$(getconf _NPROCESSORS_ONLN)
-#echo "------ MAKE ... DONE ------"
+%check
+# run in-tree unittests
+make %{?jobs:-j%{jobs}} check-local
+# use make check for a more complete set - which unfortunately does
+# not have all ingredients shipped in the tarball...
 
 %install
 make DESTDIR=$RPM_BUILD_ROOT install
