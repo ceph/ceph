@@ -34,6 +34,7 @@ BuildRequires:	make
 BuildRequires:	gcc-c++
 BuildRequires:	libtool
 BuildRequires:	boost-devel
+BuildRequires:  bzip2-devel
 BuildRequires:	libedit-devel
 BuildRequires:	perl
 BuildRequires:	gdbm

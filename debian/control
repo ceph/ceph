@@ -9,6 +9,7 @@ Uploaders: Sage Weil <sage@newdream.net>
 Build-Depends: autoconf,
                automake,
                autotools-dev,
+	       libbz2-dev,
                debhelper (>= 6.0.7~),
                default-jdk,
                git,
