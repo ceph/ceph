@@ -52,6 +52,7 @@
 
 #include <memory>
 #include "include/memory.h"
+#include "include/str_map.h"
 #include <errno.h>
 
 
@@ -147,7 +148,9 @@ public:
 
   set<entity_addr_t> extra_probe_peers;
 
-  LogClient clog;
+  LogClient log_client;
+  LogChannelRef clog;
+  LogChannelRef audit_clog;
   KeyRing keyring;
   KeyServer key_server;
 
@@ -724,8 +727,31 @@ public:
     C_Command(Monitor *_mm, MMonCommand *_m, int r, string s, bufferlist rd, version_t v) :
       mon(_mm), m(_m), rc(r), rs(s), rdata(rd), version(v){}
     void finish(int r) {
-      if (r >= 0)
+      if (r >= 0) {
+        ostringstream ss;
+        if (!m->get_connection()) {
+          ss << "connection dropped for command ";
+        } else {
+          MonSession *s = m->get_session();
+
+          // if client drops we may not have a session to draw information from.
+          if (s) {
+            ss << "from='" << s->inst << "' "
+              << "entity='";
+            if (s->auth_handler)
+              ss << s->auth_handler->get_entity_name();
+            else
+              ss << "forwarded-request";
+            ss << "' ";
+          } else {
+            ss << "session dropped for command ";
+          }
+        }
+        ss << "cmd='" << m->cmd << "': finished";
+
+        mon->audit_clog->info() << ss.str();
 	mon->reply_command(m, rc, rs, rdata, version);
+      }
       else if (r == -ECANCELED)
 	m->put();
       else if (r == -EAGAIN)
@@ -794,6 +820,12 @@ public:
   virtual void handle_conf_change(const struct md_config_t *conf,
                                   const std::set<std::string> &changed);
 
+  void update_log_client(LogChannelRef lc, const string &name,
+                         map<string,string> &log_to_monitors,
+                         map<string,string> &log_to_syslog,
+                         map<string,string> &log_channels,
+                         map<string,string> &log_prios);
+  void update_log_clients();
   int sanitize_options();
   int preinit();
   int init();
@@ -982,5 +1014,48 @@ struct MonCommand {
   }
 };
 WRITE_CLASS_ENCODER(MonCommand)
+
+// Having this here is less than optimal, but we needed to keep it
+// somewhere as to avoid code duplication, as it will be needed both
+// on the Monitor class and the LogMonitor class.
+//
+// We are attempting to avoid code duplication in the event that
+// changing how the mechanisms currently work will lead to unnecessary
+// issues, resulting from the need of changing this function in multiple
+// places.
+//
+// This function is just a helper to perform a task that should not be
+// needed anywhere else besides the two functions that shall call it.
+//
+// This function's only purpose is to check whether a given map has only
+// ONE key with an empty value (which would mean that 'get_str_map()' read
+// a map in the form of 'VALUE', without any KEY/VALUE pairs) and, in such
+// event, to assign said 'VALUE' to a given 'def_key', such that we end up
+// with a map of the form "m = { 'def_key' : 'VALUE' }" instead of the
+// original "m = { 'VALUE' : '' }".
+static inline int get_conf_str_map_helper(
+    const string &str,
+    ostringstream &oss,
+    map<string,string> *m,
+    const string &def_key)
+{
+  int r = get_str_map(str, m);
+
+  if (r < 0) {
+    generic_derr << __func__ << " error: " << oss.str() << dendl;
+    return r;
+  }
+
+  if (r >= 0 && m->size() == 1) {
+    map<string,string>::iterator p = m->begin();
+    if (p->second.empty()) {
+      string s = p->first;
+      m->erase(s);
+      (*m)[def_key] = s;
+    }
+  }
+  return r;
+}
+
 
 #endif

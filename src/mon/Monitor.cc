@@ -65,6 +65,7 @@
 #include "include/color.h"
 #include "include/ceph_fs.h"
 #include "include/str_list.h"
+#include "include/str_map.h"
 
 #include "OSDMonitor.h"
 #include "MDSMonitor.h"
@@ -141,7 +142,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   has_ever_joined(false),
   logger(NULL), cluster_logger(NULL), cluster_logger_registered(false),
   monmap(map),
-  clog(cct_, messenger, monmap, LogClient::FLAG_MON),
+  log_client(cct_, messenger, monmap, LogClient::FLAG_MON),
   key_server(cct, &keyring),
   auth_cluster_required(cct,
 			cct->_conf->auth_supported.length() ?
@@ -180,6 +181,11 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   routed_request_tid(0)
 {
   rank = -1;
+
+  clog = log_client.create_channel(CLOG_CHANNEL_CLUSTER);
+  audit_clog = log_client.create_channel(CLOG_CHANNEL_AUDIT);
+
+  update_log_clients();
 
   paxos = new Paxos(this, "paxos");
 
@@ -397,6 +403,78 @@ void Monitor::handle_conf_change(const struct md_config_t *conf,
   sanitize_options();
 }
 
+void Monitor::update_log_client(
+    LogChannelRef lc, const string &name,
+    map<string,string> &log_to_monitors,
+    map<string,string> &log_to_syslog,
+    map<string,string> &log_channels,
+    map<string,string> &log_prios)
+{
+  bool to_monitors = (get_str_map_key(log_to_monitors, name,
+                                      &CLOG_CHANNEL_DEFAULT) == "true");
+  bool to_syslog = (get_str_map_key(log_to_syslog, name,
+                                    &CLOG_CHANNEL_DEFAULT) == "true");
+  string syslog_facility = get_str_map_key(log_channels, name,
+                                           &CLOG_CHANNEL_DEFAULT);
+  string prio = get_str_map_key(log_prios, name, &CLOG_CHANNEL_DEFAULT);
+
+  lc->set_log_to_monitors(to_monitors);
+  lc->set_log_to_syslog(to_syslog);
+  lc->set_syslog_facility(syslog_facility);
+  lc->set_log_channel(name);
+  lc->set_log_prio(prio);
+
+  dout(15) << __func__ << " " << name << "("
+           << " to_monitors: " << (to_monitors ? "true" : "false")
+           << " to_syslog: " << (to_syslog ? "true" : "false")
+           << " syslog_facility: " << syslog_facility
+           << " prio: " << prio << ")" << dendl;
+}
+
+void Monitor::update_log_clients()
+{
+  map<string,string> log_to_monitors;
+  map<string,string> log_to_syslog;
+  map<string,string> log_channel;
+  map<string,string> log_prio;
+  ostringstream oss;
+
+  int r = get_conf_str_map_helper(g_conf->clog_to_monitors, oss,
+                                  &log_to_monitors, CLOG_CHANNEL_DEFAULT);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'clog_to_monitors'" << dendl;
+    return;
+  }
+
+  r = get_conf_str_map_helper(g_conf->clog_to_syslog, oss,
+                              &log_to_syslog, CLOG_CHANNEL_DEFAULT);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'clog_to_syslog'" << dendl;
+    return;
+  }
+
+  r = get_conf_str_map_helper(g_conf->clog_to_syslog_facility, oss,
+                              &log_channel, CLOG_CHANNEL_DEFAULT);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'clog_to_syslog_facility'" << dendl;
+    return;
+  }
+
+  r = get_conf_str_map_helper(g_conf->clog_to_syslog_level, oss,
+                              &log_prio, CLOG_CHANNEL_DEFAULT);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'clog_to_syslog_level'" << dendl;
+    return;
+  }
+
+  update_log_client(clog, CLOG_CHANNEL_CLUSTER,
+                    log_to_monitors, log_to_syslog,
+                    log_channel, log_prio);
+  update_log_client(audit_clog, CLOG_CHANNEL_AUDIT,
+                    log_to_monitors, log_to_syslog,
+                    log_channel, log_prio);
+}
+
 int Monitor::sanitize_options()
 {
   int r = 0;
@@ -404,7 +482,7 @@ int Monitor::sanitize_options()
   // mon_lease must be greater than mon_lease_renewal; otherwise we
   // may incur in leases expiring before they are renewed.
   if (g_conf->mon_lease <= g_conf->mon_lease_renew_interval) {
-    clog.error() << "mon_lease (" << g_conf->mon_lease
+    clog->error() << "mon_lease (" << g_conf->mon_lease
                  << ") must be greater "
                  << "than mon_lease_renew_interval ("
                  << g_conf->mon_lease_renew_interval << ")";
@@ -417,7 +495,7 @@ int Monitor::sanitize_options()
   // the monitors happened to be overloaded -- or even under normal load for
   // a small enough value.
   if (g_conf->mon_lease_ack_timeout <= g_conf->mon_lease) {
-    clog.error() << "mon_lease_ack_timeout ("
+    clog->error() << "mon_lease_ack_timeout ("
                  << g_conf->mon_lease_ack_timeout
                  << ") must be greater than mon_lease ("
                  << g_conf->mon_lease << ")";
@@ -772,6 +850,8 @@ void Monitor::shutdown()
     delete cluster_logger;
     cluster_logger = NULL;
   }
+
+  log_client.shutdown();
 
   // unlock before msgr shutdown...
   lock.Unlock();
@@ -1671,7 +1751,7 @@ void Monitor::start_election()
 
   cancel_probe_timeout();
 
-  clog.info() << "mon." << name << " calling new monitor election\n";
+  clog->info() << "mon." << name << " calling new monitor election\n";
   elector.call_election();
 }
 
@@ -1719,7 +1799,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   quorum_features = features;
   outside_quorum.clear();
 
-  clog.info() << "mon." << name << "@" << rank
+  clog->info() << "mon." << name << "@" << rank
 		<< " won leader election with quorum " << quorum << "\n";
 
   set_leader_supported_commands(cmdset, cmdsize);
@@ -2330,9 +2410,19 @@ void Monitor::handle_command(MMonCommand *m)
   if (!_allowed_command(session, module, prefix, cmdmap,
                         param_str_map, mon_cmd)) {
     dout(1) << __func__ << " access denied" << dendl;
+    audit_clog->info() << "from='" << session->inst << "' "
+                      << "entity='" << session->auth_handler->get_entity_name()
+                      << "' cmd=" << m->cmd << ":  access denied";
     reply_command(m, -EACCES, "access denied", 0);
     return;
   }
+
+  audit_clog->info() << "from='" << session->inst << "' "
+    << "entity='"
+    << (session->auth_handler ?
+        stringify(session->auth_handler->get_entity_name())
+        : "forwarded-request")
+    << "' cmd=" << m->cmd << ": dispatch";
 
   if (module == "mds" || module == "fs") {
     mdsmon()->dispatch(m);
@@ -3094,7 +3184,7 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
       break;
 
     case MSG_LOGACK:
-      clog.handle_log_ack((MLogAck*)m);
+      log_client.handle_log_ack((MLogAck*)m);
       m->put();
       break;
 
@@ -3488,9 +3578,9 @@ void Monitor::handle_timecheck_leader(MTimeCheck *m)
   ostringstream ss;
   health_status_t status = timecheck_status(ss, skew_bound, latency);
   if (status == HEALTH_ERR)
-    clog.error() << other << " " << ss.str() << "\n";
+    clog->error() << other << " " << ss.str() << "\n";
   else if (status == HEALTH_WARN)
-    clog.warn() << other << " " << ss.str() << "\n";
+    clog->warn() << other << " " << ss.str() << "\n";
 
   dout(10) << __func__ << " from " << other << " ts " << m->timestamp
 	   << " delta " << delta << " skew_bound " << skew_bound
@@ -3759,12 +3849,12 @@ int Monitor::scrub()
   assert(is_leader());
 
   if ((get_quorum_features() & CEPH_FEATURE_MON_SCRUB) == 0) {
-    clog.warn() << "scrub not supported by entire quorum\n";
+    clog->warn() << "scrub not supported by entire quorum\n";
     return -EOPNOTSUPP;
   }
 
   if (!scrub_result.empty()) {
-    clog.info() << "scrub already in progress\n";
+    clog->info() << "scrub already in progress\n";
     return -EBUSY;
   }
 
@@ -3859,13 +3949,13 @@ void Monitor::scrub_finish()
       continue;
     if (p->second != mine) {
       ++errors;
-      clog.error() << "scrub mismatch" << "\n";
-      clog.error() << " mon." << rank << " " << mine << "\n";
-      clog.error() << " mon." << p->first << " " << p->second << "\n";
+      clog->error() << "scrub mismatch" << "\n";
+      clog->error() << " mon." << rank << " " << mine << "\n";
+      clog->error() << " mon." << p->first << " " << p->second << "\n";
     }
   }
   if (!errors)
-    clog.info() << "scrub ok on " << quorum << ": " << mine << "\n";
+    clog->info() << "scrub ok on " << quorum << ": " << mine << "\n";
 
   scrub_reset();
 }
