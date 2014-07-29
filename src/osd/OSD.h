@@ -1163,22 +1163,23 @@ public:
     {}
   };
   void dispatch_session_waiting(Session *session, OSDMapRef osdmap);
-  Mutex session_waiting_for_map_lock;
+
+  Mutex session_waiting_lock;
   set<Session*> session_waiting_for_map;
   /// Caller assumes refs for included Sessions
   void get_sessions_waiting_for_map(set<Session*> *out) {
-    Mutex::Locker l(session_waiting_for_map_lock);
+    Mutex::Locker l(session_waiting_lock);
     out->swap(session_waiting_for_map);
   }
   void register_session_waiting_on_map(Session *session) {
-    Mutex::Locker l(session_waiting_for_map_lock);
+    Mutex::Locker l(session_waiting_lock);
     if (session_waiting_for_map.count(session) == 0) {
       session->get();
       session_waiting_for_map.insert(session);
     }
   }
   void clear_session_waiting_on_map(Session *session) {
-    Mutex::Locker l(session_waiting_for_map_lock);
+    Mutex::Locker l(session_waiting_lock);
     set<Session*>::iterator i = session_waiting_for_map.find(session);
     if (i != session_waiting_for_map.end()) {
       (*i)->put();
