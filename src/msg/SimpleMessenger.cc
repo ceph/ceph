@@ -86,6 +86,9 @@ int SimpleMessenger::shutdown()
   ldout(cct,10) << "shutdown " << get_myaddr() << dendl;
   mark_down_all();
   dispatch_queue.shutdown();
+
+  // break ref cycles on the loopback connection
+  local_connection->set_priv(NULL);
   return 0;
 }
 
