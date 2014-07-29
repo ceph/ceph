@@ -4,8 +4,10 @@ Ceph FUSE client task
 import contextlib
 import logging
 import os
+import time
+from cStringIO import StringIO
 
-from teuthology import misc as teuthology
+from teuthology import misc
 from ..orchestra import run
 
 log = logging.getLogger(__name__)
@@ -50,18 +52,18 @@ def task(ctx, config):
     log.info('Mounting ceph-fuse clients...')
     fuse_daemons = {}
 
-    testdir = teuthology.get_testdir(ctx)
+    testdir = misc.get_testdir(ctx)
 
     if config is None:
         config = dict(('client.{id}'.format(id=id_), None)
-                  for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client'))
+                  for id_ in misc.all_roles_of_type(ctx.cluster, 'client'))
     elif isinstance(config, list):
         config = dict((name, None) for name in config)
 
     overrides = ctx.config.get('overrides', {})
-    teuthology.deep_merge(config, overrides.get('ceph-fuse', {}))
+    misc.deep_merge(config, overrides.get('ceph-fuse', {}))
 
-    clients = list(teuthology.get_clients(ctx=ctx, roles=config.keys()))
+    clients = list(misc.get_clients(ctx=ctx, roles=config.keys()))
 
     for id_, remote in clients:
         client_config = config.get("client.%s" % id_)
@@ -102,7 +104,7 @@ def task(ctx, config):
             ]
 
         if client_config.get('valgrind') is not None:
-            run_cmd = teuthology.get_valgrind_args(
+            run_cmd = misc.get_valgrind_args(
                 testdir,
                 'client.{id}'.format(id=id_),
                 run_cmd,
@@ -121,7 +123,7 @@ def task(ctx, config):
 
     for id_, remote in clients:
         mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
-        teuthology.wait_until_fuse_mounted(
+        wait_until_fuse_mounted(
             remote=remote,
             fuse=fuse_daemons[id_],
             mountpoint=mnt,
@@ -179,3 +181,27 @@ def task(ctx, config):
                     mnt,
                     ],
                 )
+
+
+def wait_until_fuse_mounted(remote, fuse, mountpoint):
+    while True:
+        proc = remote.run(
+            args=[
+                'stat',
+                '--file-system',
+                '--printf=%T\n',
+                '--',
+                mountpoint,
+                ],
+            stdout=StringIO(),
+            )
+        fstype = proc.stdout.getvalue().rstrip('\n')
+        if fstype == 'fuseblk':
+            break
+        log.debug('ceph-fuse not yet mounted, got fs type {fstype!r}'.format(fstype=fstype))
+
+        # it shouldn't have exited yet; exposes some trivial problems
+        assert not fuse.exitstatus.ready()
+
+        time.sleep(5)
+    log.info('ceph-fuse is mounted on %s', mountpoint)
