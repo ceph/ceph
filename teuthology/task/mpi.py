@@ -1,11 +1,35 @@
 """
 Start mpi processes (and allow commands to be run inside process)
 """
+from StringIO import StringIO
 import logging
+import re
 
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
+
+
+def _check_mpi_version(remotes):
+    """
+    Retrieve the MPI version from each of `remotes` and raise an exception
+    if they are not all the same version.
+    """
+    versions = set()
+    for remote in remotes:
+        version_str = remote.run(args=["mpiexec", "--version"], stdout=StringIO()).stdout.getvalue()
+        try:
+            version = re.search("^\s+Version:\s+(.+)$", version_str, re.MULTILINE).group(1)
+        except AttributeError:
+            raise RuntimeError("Malformed MPI version output: {0}".format(version_str))
+        else:
+            versions.add(version)
+
+    if len(versions) != 1:
+        raise RuntimeError("MPI version mismatch.  Versions are: {0}".format(", ".join(versions)))
+    else:
+        log.info("MPI version {0}".format(list(versions)[0]))
+
 
 def task(ctx, config):
     """
@@ -90,6 +114,9 @@ def task(ctx, config):
             ip,port = remote.ssh.get_transport().getpeername()
             hosts.append(ip)
             remotes.append(remote)
+
+    # mpich is sensitive to different versions on different nodes
+    _check_mpi_version(remotes)
 
     workdir = []
     if 'workdir' in config:
