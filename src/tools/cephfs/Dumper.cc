@@ -102,10 +102,12 @@ void Dumper::dump(const char *dump_file)
     // include an informative header
     char buf[200];
     memset(buf, 0, sizeof(buf));
-    sprintf(buf, "Ceph mds%d journal dump\n start offset %llu (0x%llx)\n       length %llu (0x%llx)\n%c",
+    sprintf(buf, "Ceph mds%d journal dump\n start offset %llu (0x%llx)\n       length %llu (0x%llx)\n    write_pos %llu (0x%llx)\n    format %llu\n%c",
 	    rank, 
 	    (unsigned long long)start, (unsigned long long)start,
 	    (unsigned long long)bl.length(), (unsigned long long)bl.length(),
+	    (unsigned long long)journaler.last_committed.write_pos, (unsigned long long)journaler.last_committed.write_pos,
+	    (unsigned long long)journaler.last_committed.stream_format,
 	    4);
     int r = safe_write(fd, buf, sizeof(buf));
     if (r)
@@ -148,16 +150,19 @@ void Dumper::undump(const char *dump_file)
     return;
   }
 
-  long long unsigned start, len;
+  long long unsigned start, len, write_pos, format;
   sscanf(strstr(buf, "start offset"), "start offset %llu", &start);
   sscanf(strstr(buf, "length"), "length %llu", &len);
+  sscanf(strstr(buf, "write_pos"), "write_pos %llu", &write_pos);
+  sscanf(strstr(buf, "format"), "format %llu", &format);
 
   cout << "start " << start << " len " << len << std::endl;
   
   Journaler::Header h;
   h.trimmed_pos = start;
   h.expire_pos = start;
-  h.write_pos = start+len;
+  h.write_pos = write_pos;
+  h.stream_format = format;
   h.magic = CEPH_FS_ONDISK_MAGIC;
 
   h.layout = g_default_file_layout;
