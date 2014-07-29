@@ -26,6 +26,7 @@
 #include "CDir.h"
 #include "include/Context.h"
 #include "events/EMetaBlob.h"
+#include "RecoveryQueue.h"
 
 #include "messages/MClientRequest.h"
 #include "messages/MMDSSlaveRequest.h"
@@ -526,25 +527,15 @@ public:
   friend class MDBalancer;
 
 
-  // file size recovery
-  set<CInode*> file_recover_queue;
-  set<CInode*> file_recovering;
-
-  void queue_file_recover(CInode *in);
-  void unqueue_file_recover(CInode *in);
-  void _queued_file_recover_cow(CInode *in, MutationRef& mut);
-  void _queue_file_recover(CInode *in);
+  // File size recovery
+private:
+  RecoveryQueue recovery_queue;
   void identify_files_to_recover(vector<CInode*>& recover_q, vector<CInode*>& check_q);
   void start_files_to_recover(vector<CInode*>& recover_q, vector<CInode*>& check_q);
-
+public:
   void do_file_recover();
-  void _recovered(CInode *in, int r, uint64_t size, utime_t mtime);
-
-  void purge_prealloc_ino(inodeno_t ino, Context *fin);
-
-
-
- public:
+  void queue_file_recover(CInode *in);
+  void _queued_file_recover_cow(CInode *in, MutationRef& mut);
 
   // subsystems
   Migrator *migrator;
