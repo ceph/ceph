@@ -29,7 +29,6 @@
 #include <set>
 #include <map>
 #include <string>
-using namespace std;
 
 
 #include "CInode.h"
@@ -171,7 +170,7 @@ public:
 
   fnode_t fnode;
   snapid_t first;
-  map<snapid_t,old_rstat_t> dirty_old_rstat;  // [value.first,key]
+  std::map<snapid_t,old_rstat_t> dirty_old_rstat;  // [value.first,key]
 
   // my inodes with dirty rstat data
   elist<CInode*> dirty_rstat_inodes;     
@@ -183,7 +182,7 @@ public:
 
 protected:
   version_t projected_version;
-  list<fnode_t*> projected_fnode;
+  std::list<fnode_t*> projected_fnode;
 
 public:
   elist<CDir*>::item item_dirty, item_new;
@@ -223,7 +222,7 @@ public:
   void mark_new(LogSegment *ls);
 
 public:
-  typedef map<dentry_key_t, CDentry*> map_t;
+  typedef std::map<dentry_key_t, CDentry*> map_t;
 protected:
 
   // contents of this directory
@@ -250,7 +249,7 @@ protected:
 
   // cache control  (defined for authority; hints for replicas)
   __s32      dir_rep;
-  set<__s32> dir_rep_by;      // if dir_rep == REP_LIST
+  std::set<__s32> dir_rep_by;      // if dir_rep == REP_LIST
 
   // popularity
   dirfrag_load_vec_t pop_me;
@@ -327,22 +326,22 @@ protected:
 
   // -- dentries and inodes --
  public:
-  CDentry* lookup_exact_snap(const string& dname, snapid_t last) {
+  CDentry* lookup_exact_snap(const std::string& dname, snapid_t last) {
     map_t::iterator p = items.find(dentry_key_t(last, dname.c_str()));
     if (p == items.end())
       return NULL;
     return p->second;
   }
-  CDentry* lookup(const string& n, snapid_t snap=CEPH_NOSNAP) {
+  CDentry* lookup(const std::string& n, snapid_t snap=CEPH_NOSNAP) {
     return lookup(n.c_str(), snap);
   }
   CDentry* lookup(const char *n, snapid_t snap=CEPH_NOSNAP);
 
-  CDentry* add_null_dentry(const string& dname, 
+  CDentry* add_null_dentry(const std::string& dname, 
 			   snapid_t first=2, snapid_t last=CEPH_NOSNAP);
-  CDentry* add_primary_dentry(const string& dname, CInode *in, 
+  CDentry* add_primary_dentry(const std::string& dname, CInode *in, 
 			      snapid_t first=2, snapid_t last=CEPH_NOSNAP);
-  CDentry* add_remote_dentry(const string& dname, inodeno_t ino, unsigned char d_type, 
+  CDentry* add_remote_dentry(const std::string& dname, inodeno_t ino, unsigned char d_type, 
 			     snapid_t first=2, snapid_t last=CEPH_NOSNAP);
   void remove_dentry( CDentry *dn );         // delete dentry
   void link_remote_inode( CDentry *dn, inodeno_t ino, unsigned char d_type);
@@ -352,17 +351,17 @@ protected:
   void try_remove_unlinked_dn(CDentry *dn);
 
   void add_to_bloom(CDentry *dn);
-  bool is_in_bloom(const string& name);
+  bool is_in_bloom(const std::string& name);
   bool has_bloom() { return (bloom ? true : false); }
   void remove_bloom();
 private:
   void link_inode_work( CDentry *dn, CInode *in );
   void unlink_inode_work( CDentry *dn );
   void remove_null_dentries();
-  void purge_stale_snap_data(const set<snapid_t>& snaps);
+  void purge_stale_snap_data(const std::set<snapid_t>& snaps);
 public:
   void touch_dentries_bottom();
-  bool try_trim_snap_dentry(CDentry *dn, const set<snapid_t>& snaps);
+  bool try_trim_snap_dentry(CDentry *dn, const std::set<snapid_t>& snaps);
 
 
 public:
@@ -416,9 +415,9 @@ private:
 
 
   // for giving to clients
-  void get_dist_spec(set<int>& ls, int auth) {
+  void get_dist_spec(std::set<int>& ls, int auth) {
     if (is_rep()) {
-      for (map<int,unsigned>::iterator p = replicas_begin();
+      for (std::map<int,unsigned>::iterator p = replicas_begin();
 	   p != replicas_end(); 
 	   ++p)
 	ls.insert(p->first);
@@ -432,7 +431,7 @@ private:
      */
     frag_t frag = get_frag();
     __s32 auth;
-    set<__s32> dist;
+    std::set<__s32> dist;
     
     auth = dir_auth.first;
     if (is_auth()) 
@@ -486,19 +485,19 @@ private:
     return file_object_t(ino(), frag);
   }
   void fetch(Context *c, bool ignore_authpinnability=false);
-  void fetch(Context *c, const string& want_dn, bool ignore_authpinnability=false);
+  void fetch(Context *c, const std::string& want_dn, bool ignore_authpinnability=false);
 protected:
-  void _omap_fetch(const string& want_dn);
-  void _omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
-		     const string& want_dn, int r);
-  void _tmap_fetch(const string& want_dn);
-  void _tmap_fetched(bufferlist &bl, const string& want_dn, int r);
+  void _omap_fetch(const std::string& want_dn);
+  void _omap_fetched(bufferlist& hdrbl, std::map<std::string, bufferlist>& omap,
+		     const std::string& want_dn, int r);
+  void _tmap_fetch(const std::string& want_dn);
+  void _tmap_fetched(bufferlist &bl, const std::string& want_dn, int r);
 
   // -- commit --
-  map<version_t, list<Context*> > waiting_for_commit;
+  std::map<version_t, std::list<Context*> > waiting_for_commit;
   void _commit(version_t want, int op_prio);
   void _omap_commit(int op_prio);
-  void _encode_dentry(CDentry *dn, bufferlist& bl, const set<snapid_t> *snaps);
+  void _encode_dentry(CDentry *dn, bufferlist& bl, const std::set<snapid_t> *snaps);
   void _committed(version_t v);
 public:
   void wait_for_commit(Context *c, version_t v=0);
@@ -530,18 +529,18 @@ public:
     
   // -- waiters --
 protected:
-  map< string_snap_t, list<Context*> > waiting_on_dentry;
+  std::map< string_snap_t, std::list<Context*> > waiting_on_dentry;
 
 public:
-  bool is_waiting_for_dentry(const string& dname, snapid_t snap) {
+  bool is_waiting_for_dentry(const std::string& dname, snapid_t snap) {
     return waiting_on_dentry.count(string_snap_t(dname, snap));
   }
-  void add_dentry_waiter(const string& dentry, snapid_t snap, Context *c);
-  void take_dentry_waiting(const string& dentry, snapid_t first, snapid_t last, list<Context*>& ls);
-  void take_sub_waiting(list<Context*>& ls);  // dentry or ino
+  void add_dentry_waiter(const std::string& dentry, snapid_t snap, Context *c);
+  void take_dentry_waiting(const std::string& dentry, snapid_t first, snapid_t last, std::list<Context*>& ls);
+  void take_sub_waiting(std::list<Context*>& ls);  // dentry or ino
 
   void add_waiter(uint64_t mask, Context *c);
-  void take_waiting(uint64_t mask, list<Context*>& ls);  // may include dentry waiters
+  void take_waiting(uint64_t mask, std::list<Context*>& ls);  // may include dentry waiters
   void finish_waiting(uint64_t mask, int result = 0);    // ditto
   
 

@@ -33,11 +33,9 @@
 #include "SnapRealm.h"
 
 #include <list>
-#include <vector>
 #include <set>
 #include <map>
-#include <iostream>
-using namespace std;
+//#include <iostream>
 
 class Context;
 class CDentry;
@@ -72,10 +70,10 @@ extern int num_cinode_locks;
 class InodeStore {
 public:
   inode_t                    inode;        // the inode itself
-  string                     symlink;      // symlink dest, if symlink
-  map<string, bufferptr>     xattrs;
+  std::string                symlink;      // symlink dest, if symlink
+  std::map<std::string, bufferptr> xattrs;
   fragtree_t                 dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
-  map<snapid_t, old_inode_t> old_inodes;   // key = last, value.first = first
+  std::map<snapid_t, old_inode_t> old_inodes;   // key = last, value.first = first
   bufferlist		     snap_blob;    // Encoded copy of SnapRealm, because we can't
                                            // rehydrate it without full MDCache
 
@@ -95,7 +93,7 @@ public:
 
   /* For use in debug and ceph-dencoder */
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<InodeStore*>& ls);
+  static void generate_test_instances(std::list<InodeStore*>& ls);
 };
 
 // cached inode wrapper
@@ -214,7 +212,7 @@ public:
   SnapRealm        *snaprealm;
   SnapRealm        *containing_realm;
   snapid_t          first, last;
-  set<snapid_t> dirty_old_rstats;
+  std::set<snapid_t> dirty_old_rstats;
 
   bool is_multiversion() {
     return snaprealm ||  // other snaprealms will link to me
@@ -256,19 +254,19 @@ public:
 
   struct projected_inode_t {
     inode_t *inode;
-    map<string,bufferptr> *xattrs;
+    std::map<std::string,bufferptr> *xattrs;
     sr_t *snapnode;
 
     projected_inode_t()
       : inode(NULL), xattrs(NULL), snapnode(NULL) {}
     projected_inode_t(inode_t *in, sr_t *sn)
       : inode(in), xattrs(NULL), snapnode(sn) {}
-    projected_inode_t(inode_t *in, map<string, bufferptr> *xp = NULL, sr_t *sn = NULL)
+    projected_inode_t(inode_t *in, std::map<std::string, bufferptr> *xp = NULL, sr_t *sn = NULL)
       : inode(in), xattrs(xp), snapnode(sn) {}
   };
-  list<projected_inode_t*> projected_nodes;   // projected values (only defined while dirty)
+  std::list<projected_inode_t*> projected_nodes;   // projected values (only defined while dirty)
   
-  inode_t *project_inode(map<string,bufferptr> *px=0);
+  inode_t *project_inode(std::map<std::string,bufferptr> *px=0);
   void pop_and_dirty_projected_inode(LogSegment *ls);
 
   projected_inode_t *get_projected_node() {
@@ -296,7 +294,7 @@ public:
   }
   inode_t *get_previous_projected_inode() {
     assert(!projected_nodes.empty());
-    list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
+    std::list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
     ++p;
     if (p != projected_nodes.rend())
       return (*p)->inode;
@@ -304,16 +302,16 @@ public:
       return &inode;
   }
 
-  map<string,bufferptr> *get_projected_xattrs() {
-    for (list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
+  std::map<std::string,bufferptr> *get_projected_xattrs() {
+    for (std::list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
 	 p != projected_nodes.rend();
 	 ++p)
       if ((*p)->xattrs)
 	return (*p)->xattrs;
     return &xattrs;
   }
-  map<string,bufferptr> *get_previous_projected_xattrs() {
-    list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
+  std::map<std::string,bufferptr> *get_previous_projected_xattrs() {
+      std::list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
     for (p++;  // skip the most recent projected value
 	 p != projected_nodes.rend();
 	 ++p)
@@ -330,7 +328,7 @@ public:
       else
 	return NULL;
     } else {
-      for (list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
+      for (std::list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
           p != projected_nodes.rend();
           ++p)
         if ((*p)->snapnode)
@@ -347,16 +345,16 @@ public:
   old_inode_t& cow_old_inode(snapid_t follows, bool cow_head);
   old_inode_t *pick_old_inode(snapid_t last);
   void pre_cow_old_inode();
-  void purge_stale_snap_data(const set<snapid_t>& snaps);
+  void purge_stale_snap_data(const std::set<snapid_t>& snaps);
 
   // -- cache infrastructure --
 private:
-  map<frag_t,CDir*> dirfrags; // cached dir fragments under this Inode
+  std::map<frag_t,CDir*> dirfrags; // cached dir fragments under this Inode
   int stickydir_ref;
 
 public:
-  __u32 hash_dentry_name(const string &dn);
-  frag_t pick_dirfrag(const string &dn);
+  __u32 hash_dentry_name(const std::string &dn);
+  frag_t pick_dirfrag(const std::string &dn);
   bool has_dirfrags() { return !dirfrags.empty(); }
   CDir* get_dirfrag(frag_t fg) {
     if (dirfrags.count(fg)) {
@@ -365,11 +363,11 @@ public:
     } else
       return NULL;
   }
-  bool get_dirfrags_under(frag_t fg, list<CDir*>& ls);
+  bool get_dirfrags_under(frag_t fg, std::list<CDir*>& ls);
   CDir* get_approx_dirfrag(frag_t fg);
-  void get_dirfrags(list<CDir*>& ls);
-  void get_nested_dirfrags(list<CDir*>& ls);
-  void get_subtree_dirfrags(list<CDir*>& ls);
+  void get_dirfrags(std::list<CDir*>& ls);
+  void get_nested_dirfrags(std::list<CDir*>& ls);
+  void get_subtree_dirfrags(std::list<CDir*>& ls);
   CDir *get_or_open_dirfrag(MDCache *mdcache, frag_t fg);
   CDir *add_dirfrag(CDir *dir);
   void close_dirfrag(frag_t fg);
@@ -386,22 +384,22 @@ public:
  protected:
   // parent dentries in cache
   CDentry         *parent;             // primary link
-  set<CDentry*>    remote_parents;     // if hard linked
+  std::set<CDentry*>    remote_parents;     // if hard linked
 
-  list<CDentry*>   projected_parent;   // for in-progress rename, (un)link, etc.
+  std::list<CDentry*>   projected_parent;   // for in-progress rename, (un)link, etc.
 
   pair<int,int> inode_auth;
 
   // -- distributed state --
 protected:
   // file capabilities
-  map<client_t, Capability*> client_caps;         // client -> caps
-  map<int32_t, int32_t>      mds_caps_wanted;     // [auth] mds -> caps wanted
+  std::map<client_t, Capability*> client_caps;         // client -> caps
+  std::map<int32_t, int32_t>      mds_caps_wanted;     // [auth] mds -> caps wanted
   int                   replica_caps_wanted; // [replica] what i've requested from auth
 
-  map<int, set<client_t> > client_snap_caps;     // [auth] [snap] dirty metadata we still need from the head
+  std::map<int, std::set<client_t> > client_snap_caps;     // [auth] [snap] dirty metadata we still need from the head
 public:
-  map<snapid_t, set<client_t> > client_need_snapflush;
+  std::map<snapid_t, std::set<client_t> > client_need_snapflush;
 
   void add_need_snapflush(CInode *snapin, snapid_t snapid, client_t client);
   void remove_need_snapflush(CInode *snapin, snapid_t snapid, client_t client);
@@ -506,7 +504,7 @@ public:
   void set_ambiguous_auth() {
     state_set(STATE_AMBIGUOUSAUTH);
   }
-  void clear_ambiguous_auth(list<Context*>& finished);
+  void clear_ambiguous_auth(std::list<Context*>& finished);
   void clear_ambiguous_auth();
 
   inodeno_t ino() const { return inode.ino; }
@@ -528,10 +526,10 @@ public:
 
   // -- misc -- 
   bool is_projected_ancestor_of(CInode *other);
-  void make_path_string(string& s, bool force=false, CDentry *use_parent=NULL);
-  void make_path_string_projected(string& s);  
+  void make_path_string(std::string& s, bool force=false, CDentry *use_parent=NULL);
+  void make_path_string_projected(std::string& s);  
   void make_path(filepath& s);
-  void name_stray_dentry(string& dname);
+  void name_stray_dentry(std::string& dname);
   
   // -- dirtyness --
   version_t get_version() { return inode.version; }
@@ -583,15 +581,15 @@ public:
 
   // -- waiting --
 protected:
-  map<frag_t, list<Context*> > waiting_on_dir;
+  std::map<frag_t, std::list<Context*> > waiting_on_dir;
 public:
   void add_dir_waiter(frag_t fg, Context *c);
-  void take_dir_waiting(frag_t fg, list<Context*>& ls);
+  void take_dir_waiting(frag_t fg, std::list<Context*>& ls);
   bool is_waiting_for_dir(frag_t fg) {
     return waiting_on_dir.count(fg);
   }
   void add_waiter(uint64_t tag, Context *c);
-  void take_waiting(uint64_t tag, list<Context*>& ls);
+  void take_waiting(uint64_t tag, std::list<Context*>& ls);
 
   // -- encode/decode helpers --
   void _encode_base(bufferlist& bl);
@@ -601,8 +599,8 @@ public:
   void _encode_locks_state_for_replica(bufferlist& bl);
   void _encode_locks_state_for_rejoin(bufferlist& bl, int rep);
   void _decode_locks_state(bufferlist::iterator& p, bool is_new);
-  void _decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waiters,
-			    list<SimpleLock*>& eval_locks);
+  void _decode_locks_rejoin(bufferlist::iterator& p, std::list<Context*>& waiters,
+			    std::list<SimpleLock*>& eval_locks);
 
   // -- import/export --
   void encode_export(bufferlist& bl);
@@ -712,7 +710,7 @@ public:
 
   int count_nonstale_caps() {
     int n = 0;
-    for (map<client_t,Capability*>::iterator it = client_caps.begin();
+    for (std::map<client_t,Capability*>::iterator it = client_caps.begin();
          it != client_caps.end();
          ++it) 
       if (!it->second->is_stale())
@@ -721,7 +719,7 @@ public:
   }
   bool multiple_nonstale_caps() {
     int n = 0;
-    for (map<client_t,Capability*>::iterator it = client_caps.begin();
+    for (std::map<client_t,Capability*>::iterator it = client_caps.begin();
          it != client_caps.end();
          ++it) 
       if (!it->second->is_stale()) {
@@ -735,9 +733,9 @@ public:
   bool is_any_caps() { return !client_caps.empty(); }
   bool is_any_nonstale_caps() { return count_nonstale_caps(); }
 
-  map<int32_t,int32_t>& get_mds_caps_wanted() { return mds_caps_wanted; }
+  std::map<int32_t,int32_t>& get_mds_caps_wanted() { return mds_caps_wanted; }
 
-  map<client_t,Capability*>& get_client_caps() { return client_caps; }
+  std::map<client_t,Capability*>& get_client_caps() { return client_caps; }
   Capability *get_client_cap(client_t client) {
     if (client_caps.count(client))
       return client_caps[client];
@@ -755,7 +753,7 @@ public:
 
   Capability *reconnect_cap(client_t client, ceph_mds_cap_reconnect& icr, Session *session);
   void clear_client_caps_after_export();
-  void export_client_caps(map<client_t,Capability::Export>& cl);
+  void export_client_caps(std::map<client_t,Capability::Export>& cl);
 
   // caps allowed
   int get_caps_liked();
@@ -798,7 +796,7 @@ public:
   /* Freeze the inode. auth_pin_allowance lets the caller account for any
    * auth_pins it is itself holding/responsible for. */
   bool freeze_inode(int auth_pin_allowance=0);
-  void unfreeze_inode(list<Context*>& finished);
+  void unfreeze_inode(std::list<Context*>& finished);
   void unfreeze_inode();
 
   void freeze_auth_pin();

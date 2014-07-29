@@ -201,7 +201,7 @@ void MDSMonitor::_note_beacon(MMDSBeacon *m)
 
 bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 {
-  int state = m->get_state();
+  MDSMap::DaemonState state = m->get_state();
   uint64_t gid = m->get_global_id();
   version_t seq = m->get_seq();
   MDSMap::mds_info_t info;
@@ -377,7 +377,7 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
   dout(12) << "prepare_beacon " << *m << " from " << m->get_orig_source_inst() << dendl;
   entity_addr_t addr = m->get_orig_source_inst().addr;
   uint64_t gid = m->get_global_id();
-  int state = m->get_state();
+  MDSMap::DaemonState state = m->get_state();
   version_t seq = m->get_seq();
 
   // Ignore beacons if filesystem is disabled
@@ -1261,7 +1261,7 @@ bool MDSMonitor::filesystem_command(
       r = -EINVAL;
       return true;
     }
-    int64_t state;
+    int32_t state;
     if (!cmd_getval(g_ceph_context, cmdmap, "state", state)) {
       ss << "error parsing 'state' string value '"
          << cmd_vartype_stringify(cmdmap["state"]) << "'";
@@ -1270,7 +1270,7 @@ bool MDSMonitor::filesystem_command(
     }
     if (!pending_mdsmap.is_dne_gid(gid)) {
       MDSMap::mds_info_t& info = pending_mdsmap.get_info_gid(gid);
-      info.state = state;
+      info.state = MDSMap::DaemonState(state);
       stringstream ss;
       ss << "set mds gid " << gid << " to state " << state << " " << ceph_mds_state_name(state);
       r = 0;
