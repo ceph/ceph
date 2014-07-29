@@ -529,6 +529,11 @@ AS_IF([test "x$with_kinetic" = "xyes"],
             [AC_DEFINE([HAVE_KINETIC], [1], [Defined if you have kinetic enabled])])
 AM_CONDITIONAL(WITH_KINETIC, [ test "$with_kinetic" = "yes" ])
 
+# check for c++11 (but do not enable it)
+old_cxxflags="$CXXFLAGS"
+AX_CXX_COMPILE_STDCXX_11([], [optional])
+CXXFLAGS="$old_cxxflags"
+
 # use rocksdb
 AC_ARG_WITH([librocksdb],
             [AS_HELP_STRING([--with-librocksdb], [build rocksdb support])],
@@ -544,8 +549,8 @@ AC_ARG_WITH([librocksdb-static],
             [AS_HELP_STRING([--with-librocksdb-static], [build rocksdb support])],
             [],
             [with_librocksdb_static=no])
-AS_IF([test "x$with_librocksdb_static" = "xyes"],
-            [AX_CXX_COMPILE_STDCXX_11])
+AS_IF([test "x$with_librocksdb_static" = "xcheck" -a "x$HAVE_CXX11" = "x1" ],
+            [with_librocksdb_static="yes"])
 AS_IF([test "x$with_librocksdb_static" = "xyes"],
             [AC_CONFIG_SUBDIRS([src/rocksdb])])
 AS_IF([test "x$with_librocksdb_static" = "xyes"],
