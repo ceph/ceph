@@ -41,14 +41,6 @@ using namespace std;
 
 #include "include/uuid.h"
 
-enum kvstore_types {
-    KV_TYPE_NONE = 0,
-    KV_TYPE_LEVELDB,
-    KV_TYPE_KINETIC,
-    KV_TYPE_OTHER
-};
-
-
 static uint64_t default_strip_size = 1024;
 
 class StripObjectMap: public GenericObjectMap {
@@ -185,8 +177,6 @@ class KeyValueStore : public ObjectStore,
   uuid_d fsid;
 
   int fsid_fd, current_fd;
-
-  enum kvstore_types kv_type;
 
   deque<uint64_t> snaps;
 
@@ -466,17 +456,6 @@ class KeyValueStore : public ObjectStore,
                 bool update_to=false);
   ~KeyValueStore();
 
-  int _detect_backend() {
-    if (g_conf->osd_keyvaluedb == "leveldb")
-      kv_type = KV_TYPE_LEVELDB;
-#ifdef HAVE_KINETIC
-    else if (g_conf->osd_keyvaluedb == "kinetic")
-      kv_type = KV_TYPE_KINETIC;
-#endif
-    else
-      return -EINVAL;
-    return 0;
-  }
   bool test_mount_in_use();
   int version_stamp_is_valid(uint32_t *version);
   int update_version_stamp();
