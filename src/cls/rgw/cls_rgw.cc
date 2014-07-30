@@ -670,7 +670,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     unaccount_entry(header, remove_entry);
 
     if (op.log_op) {
-      rc = log_index_operation(hctx, op.name, CLS_RGW_OP_DEL, op.tag, remove_entry.meta.mtime,
+      rc = log_index_operation(hctx, remove_oid_name, CLS_RGW_OP_DEL, op.tag, remove_entry.meta.mtime,
                                remove_entry.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker);
       if (rc < 0)
         continue;
