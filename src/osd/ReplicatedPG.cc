@@ -1116,6 +1116,12 @@ void ReplicatedPG::do_request(
       waiting_for_active.push_back(op);
       return;
     }
+    // verify client features
+    if ((pool.info.has_tiers() || pool.info.is_tier()) &&
+	!op->has_feature(CEPH_FEATURE_OSD_CACHEPOOL)) {
+      osd->reply_op_error(op, -EOPNOTSUPP);
+      return;
+    }
     do_op(op); // do it now
     break;
 
