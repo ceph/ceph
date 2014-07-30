@@ -409,9 +409,9 @@ static int get_fd_data(int fd, bufferlist &bl)
   return 0;
 }
 
-static void invalid_path(string &path)
+static void invalid_filestore_path(string &path)
 {
-  cerr << "Invalid path to osd store specified: " << path << "\n";
+  cerr << "Invalid filestore path specified: " << path << "\n";
   exit(1);
 }
 
@@ -1479,36 +1479,38 @@ void usage(po::options_description &desc)
     cerr << std::endl;
     cerr << "Positional syntax:" << std::endl;
     cerr << std::endl;
-    cerr << "(requires --filestore-path, --journal-path and --pgid to be specified)" << std::endl;
+    cerr << "(requires --data, --journal (for filestore type) and --pgid to be specified)" << std::endl;
     cerr << "(optional [file] argument will read stdin or write stdout if not specified or if '-' specified)" << std::endl;
-    cerr << "ceph-filestore-dump ... <object> (get|set)-bytes [file]" << std::endl;
-    cerr << "ceph-filestore-dump ... <object> (set-(attr|omap) <key> [file]" << std::endl;
-    cerr << "ceph-filestore-dump ... <object> (set-omaphdr) [file]" << std::endl;
-    cerr << "ceph-filestore-dump ... <object> (get|rm)-(attr|omap) <key>" << std::endl;
-    cerr << "ceph-filestore-dump ... <object> (get-omaphdr)" << std::endl;
-    cerr << "ceph-filestore-dump ... <object> list-attrs" << std::endl;
-    cerr << "ceph-filestore-dump ... <object> list-omap" << std::endl;
-    cerr << "ceph-filestore-dump ... <object> remove" << std::endl;
+    cerr << "ceph_objectstore_tool ... <object> (get|set)-bytes [file]" << std::endl;
+    cerr << "ceph_objectstore_tool ... <object> (set-(attr|omap) <key> [file]" << std::endl;
+    cerr << "ceph_objectstore_tool ... <object> (set-omaphdr) [file]" << std::endl;
+    cerr << "ceph_objectstore_tool ... <object> (get|rm)-(attr|omap) <key>" << std::endl;
+    cerr << "ceph_objectstore_tool ... <object> (get-omaphdr)" << std::endl;
+    cerr << "ceph_objectstore_tool ... <object> list-attrs" << std::endl;
+    cerr << "ceph_objectstore_tool ... <object> list-omap" << std::endl;
+    cerr << "ceph_objectstore_tool ... <object> remove" << std::endl;
     cerr << std::endl;
     exit(1);
 }
 
 int main(int argc, char **argv)
 {
-  string fspath, jpath, pgidstr, type, file, object, objcmd, arg1, arg2;
+  string dpath, jpath, pgidstr, op, file, object, objcmd, arg1, arg2, type;
   ghobject_t ghobj;
 
   po::options_description desc("Allowed options");
   desc.add_options()
     ("help", "produce help message")
-    ("filestore-path", po::value<string>(&fspath),
-     "path to filestore directory, mandatory")
-    ("journal-path", po::value<string>(&jpath),
-     "path to journal, mandatory")
-    ("pgid", po::value<string>(&pgidstr),
-     "PG id, mandatory except for import")
     ("type", po::value<string>(&type),
-     "Arg is one of [info, log, remove, export, import, list]")
+     "Arg is one of [filestore (default), memstore, keyvaluestore-dev]")
+    ("data-path", po::value<string>(&dpath),
+     "path to object store, mandatory")
+    ("journal-path", po::value<string>(&jpath),
+     "path to journal, mandatory for filestore type")
+    ("pgid", po::value<string>(&pgidstr),
+     "PG id, mandatory except for import, list-lost, fix-lost")
+    ("op", po::value<string>(&op),
+     "Arg is one of [info, log, remove, export, import, list, list-lost, fix-lost]")
     ("file", po::value<string>(&file),
      "path of file to export or import")
     ("debug", "Enable diagnostic output to stderr")
@@ -1545,11 +1547,14 @@ int main(int argc, char **argv)
     usage(desc);
   }
 
-  if (!vm.count("filestore-path")) {
-    cerr << "Must provide --filestore-path" << std::endl;
+  if (!vm.count("data-path")) {
+    cerr << "Must provide --data-path" << std::endl;
     usage(desc);
   }
-  if (!vm.count("journal-path")) {
+  if (!vm.count("type")) {
+    type = "filestore";
+  }
+  if (type == "filestore" && !vm.count("journal-path")) {
     cerr << "Must provide --journal-path" << std::endl;
     usage(desc);
   }
@@ -1557,16 +1562,16 @@ int main(int argc, char **argv)
     cerr << "Invalid syntax, missing command" << std::endl;
     usage(desc);
   }
-  if (!vm.count("type") && !(vm.count("object") && vm.count("objcmd"))) {
-    cerr << "Must provide --type or object command..."
-      << std::endl;
+  if (!vm.count("op") && !(vm.count("object") && vm.count("objcmd"))) {
+    cerr << "Must provide --op or object command..." << std::endl;
     usage(desc);
   }
-  if (vm.count("type") && vm.count("object")) {
-    cerr << "Can't specify both --type and object command syntax" << std::endl;
+  if (vm.count("op") && vm.count("object")) {
+    cerr << "Can't specify both --op and object command syntax" << std::endl;
     usage(desc);
   }
-  if (type != "import" && !vm.count("pgid")) {
+  if (op != "import" && op != "list-lost" && op != "fix-lost"
+      && !vm.count("pgid")) {
     cerr << "Must provide pgid" << std::endl;
     usage(desc);
   }
@@ -1586,7 +1591,7 @@ int main(int argc, char **argv)
   outistty = isatty(STDOUT_FILENO);
 
   file_fd = fd_none;
-  if (type == "export") {
+  if (op == "export") {
     if (!vm.count("file")) {
       if (outistty) {
         cerr << "stdout is a tty and no --file option specified" << std::endl;
@@ -1596,7 +1601,7 @@ int main(int argc, char **argv)
     } else {
       file_fd = open(file.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666);
     }
-  } else if (type == "import") {
+  } else if (op == "import") {
     if (!vm.count("file")) {
       if (isatty(STDIN_FILENO)) {
         cerr << "stdin is a tty and no --file option specified" << std::endl;
@@ -1618,13 +1623,12 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  if ((fspath.length() == 0 || jpath.length() == 0) ||
-      (type != "import" && pgidstr.length() == 0)) {
+  if (dpath.length() == 0) {
     cerr << "Invalid params" << std::endl;
     return 1;
   }
 
-  if (type == "import" && pgidstr.length()) {
+  if (op == "import" && pgidstr.length()) {
     cerr << "--pgid option invalid with import" << std::endl;
     return 1;
   }
@@ -1663,30 +1667,33 @@ int main(int argc, char **argv)
   }
   g_conf->apply_changes(NULL);
 
-  //Verify that fspath really is an osd store
+  //Verify that data-path really exists
   struct stat st;
-  if (::stat(fspath.c_str(), &st) == -1) {
-     perror("fspath");
-     invalid_path(fspath);
+  if (::stat(dpath.c_str(), &st) == -1) {
+     perror("data-path");
+     exit(1);
   }
-  if (!S_ISDIR(st.st_mode)) {
-    invalid_path(fspath);
-  }
-  string check = fspath + "/whoami";
-  if (::stat(check.c_str(), &st) == -1) {
-     perror("whoami");
-     invalid_path(fspath);
-  }
-  if (!S_ISREG(st.st_mode)) {
-    invalid_path(fspath);
-  }
-  check = fspath + "/current";
-  if (::stat(check.c_str(), &st) == -1) {
-     perror("current");
-     invalid_path(fspath);
-  }
-  if (!S_ISDIR(st.st_mode)) {
-    invalid_path(fspath);
+  //Verify data data-path really is a filestore
+  if (type == "filestore") {
+    if (!S_ISDIR(st.st_mode)) {
+      invalid_filestore_path(dpath);
+    }
+    string check = dpath + "/whoami";
+    if (::stat(check.c_str(), &st) == -1) {
+       perror("whoami");
+       invalid_filestore_path(dpath);
+    }
+    if (!S_ISREG(st.st_mode)) {
+      invalid_filestore_path(dpath);
+    }
+    check = dpath + "/current";
+    if (::stat(check.c_str(), &st) == -1) {
+       perror("current");
+       invalid_filestore_path(dpath);
+    }
+    if (!S_ISDIR(st.st_mode)) {
+      invalid_filestore_path(dpath);
+    }
   }
 
   spg_t pgid;
@@ -1695,7 +1702,11 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  ObjectStore *fs = ObjectStore::create(NULL, "filestore", fspath, jpath, flags);
+  ObjectStore *fs = ObjectStore::create(NULL, type, dpath, jpath, flags);
+  if (fs == NULL) {
+    cerr << "Must provide --type (filestore, memstore, keyvaluestore-dev)" << std::endl;
+    exit(1);
+  }
 
   int r = fs->mount();
   if (r < 0) {
@@ -1764,7 +1775,7 @@ int main(int argc, char **argv)
     goto out;
   }
 
-  if (type == "import") {
+  if (op == "import") {
 
     try {
       ret = do_import(fs, superblock);
@@ -1784,7 +1795,7 @@ int main(int argc, char **argv)
   log_oid = OSD::make_pg_log_oid(pgid);
   biginfo_oid = OSD::make_pg_biginfo_oid(pgid);
 
-  if (type == "remove") {
+  if (op == "remove") {
     uint64_t next_removal_seq = 0;	//My local seq
     finish_remove_pgs(fs, &next_removal_seq);
     int r = initiate_new_remove_pg(fs, pgid, &next_removal_seq);
@@ -1795,6 +1806,104 @@ int main(int argc, char **argv)
     }
     finish_remove_pgs(fs, &next_removal_seq);
     cout << "Remove successful" << std::endl;
+    goto out;
+  }
+
+  if (op == "list-lost" || op == "fix-lost") {
+    unsigned LIST_AT_A_TIME = 100;
+    unsigned scanned = 0;
+    int r;
+    vector<coll_t> colls_to_check;
+    if (pgidstr.length()) {
+      colls_to_check.push_back(coll_t(pgid));
+    } else {
+      vector<coll_t> candidates;
+      r = fs->list_collections(candidates);
+      if (r < 0) {
+        cerr << "Error listing collections: " << cpp_strerror(r) << std::endl;
+        goto UMOUNT;
+      }
+      for (vector<coll_t>::iterator i = candidates.begin();
+           i != candidates.end();
+           ++i) {
+        spg_t pgid;
+        snapid_t snap;
+        if (i->is_pg(pgid, snap)) {
+          colls_to_check.push_back(*i);
+        }
+      }
+    }
+
+    cerr << colls_to_check.size() << " pgs to scan" << std::endl;
+    for (vector<coll_t>::iterator i = colls_to_check.begin();
+         i != colls_to_check.end();
+         ++i, ++scanned) {
+      cerr << "Scanning " << *i << ", " << scanned << "/"
+           << colls_to_check.size() << " completed" << std::endl;
+      ghobject_t next;
+      while (!next.is_max()) {
+        vector<ghobject_t> list;
+        r = fs->collection_list_partial(
+          *i,
+          next,
+          LIST_AT_A_TIME,
+          LIST_AT_A_TIME,
+          CEPH_NOSNAP,
+          &list,
+          &next);
+        if (r < 0) {
+          cerr << "Error listing collection: " << *i << ", "
+               << cpp_strerror(r) << std::endl;
+          goto UMOUNT;
+        }
+        for (vector<ghobject_t>::iterator obj = list.begin();
+             obj != list.end();
+             ++obj) {
+          bufferlist attr;
+          r = fs->getattr(*i, *obj, OI_ATTR, attr);
+          if (r < 0) {
+            cerr << "Error getting attr on : " << make_pair(*i, *obj) << ", "
+                 << cpp_strerror(r) << std::endl;
+            goto UMOUNT;
+          }
+          object_info_t oi;
+          bufferlist::iterator bp = attr.begin();
+          try {
+            ::decode(oi, bp);
+          } catch (...) {
+            r = -EINVAL;
+            cerr << "Error getting attr on : " << make_pair(*i, *obj) << ", "
+                 << cpp_strerror(r) << std::endl;
+            goto UMOUNT;
+          }
+          if (oi.is_lost()) {
+            if (op == "list-lost") {
+              cout << *i << "/" << *obj << " is lost" << std::endl;
+            }
+            if (op == "fix-lost") {
+              cerr << *i << "/" << *obj << " is lost, fixing" << std::endl;
+              oi.clear_flag(object_info_t::FLAG_LOST);
+              bufferlist bl2;
+              ::encode(oi, bl2);
+              ObjectStore::Transaction t;
+              t.setattr(*i, *obj, OI_ATTR, bl2);
+              r = fs->apply_transaction(t);
+              if (r < 0) {
+                cerr << "Error getting fixing attr on : " << make_pair(*i, *obj)
+                     << ", "
+                     << cpp_strerror(r) << std::endl;
+                goto UMOUNT;
+              }
+            }
+          }
+        }
+      }
+    }
+    cerr << "Completed" << std::endl;
+
+   UMOUNT:
+    fs->sync_and_flush();
+    ret = r;
     goto out;
   }
 
@@ -1995,7 +2104,7 @@ int main(int argc, char **argv)
       usage(desc);
     }
 
-    if (type == "list") {
+    if (op == "list") {
       Formatter *formatter = new JSONFormatter(false);
       r = do_list(fs, coll, formatter);
       if (r) {
@@ -2027,17 +2136,17 @@ int main(int argc, char **argv)
     if (debug)
       cerr << "struct_v " << (int)struct_ver << std::endl;
 
-    if (type == "export") {
+    if (op == "export") {
       ret = do_export(fs, coll, pgid, info, map_epoch, struct_ver, superblock);
       if (ret == 0 && file_fd != STDOUT_FILENO)
         cout << "Export successful" << std::endl;
-    } else if (type == "info") {
+    } else if (op == "info") {
       formatter->open_object_section("info");
       info.dump(formatter);
       formatter->close_section();
       formatter->flush(cout);
       cout << std::endl;
-    } else if (type == "log") {
+    } else if (op == "log") {
       PGLog::IndexedLog log;
       pg_missing_t missing;
       ret = get_log(fs, coll, pgid, info, log, missing);
@@ -2055,7 +2164,7 @@ int main(int argc, char **argv)
       formatter->flush(cout);
       cout << std::endl;
     } else {
-      cerr << "Must provide --type (info, log, remove, export, import, list)"
+      cerr << "Must provide --op (info, log, remove, export, import, list, list-lost, fix-lost)"
 	<< std::endl;
       usage(desc);
     }
