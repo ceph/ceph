@@ -9258,6 +9258,40 @@ Inode *Client::get_quota_root(Inode *in)
   return ancestor->in();
 }
 
+bool Client::is_quota_files_exceeded(Inode *in)
+{
+  if (!cct->_conf->client_quota)
+    return false;
+
+  while (in != root_ancestor) {
+    quota_info_t *quota = &in->quota;
+    nest_info_t *rstat = &in->rstat;
+
+    if (quota->max_files && rstat->rsize() >= quota->max_files)
+      return true;
+
+    in = get_quota_root(in);
+  }
+  return false;
+}
+
+bool Client::is_quota_bytes_exceeded(Inode *in)
+{
+  if (!cct->_conf->client_quota)
+    return false;
+
+  while (in != root_ancestor) {
+    quota_info_t *quota = &in->quota;
+    nest_info_t *rstat = &in->rstat;
+
+    if (quota->max_bytes && rstat->rbytes >= quota->max_bytes)
+      return true;
+
+    in = get_quota_root(in);
+  }
+  return false;
+}
+
 void Client::set_filer_flags(int flags)
 {
   Mutex::Locker l(client_lock);
