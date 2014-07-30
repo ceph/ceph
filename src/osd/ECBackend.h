@@ -149,10 +149,8 @@ public:
 private:
   friend struct ECRecoveryHandle;
   uint64_t get_recovery_chunk_size() const {
-    uint64_t max = cct->_conf->osd_recovery_max_chunk;
-    max -= max % sinfo.get_stripe_width();
-    max += sinfo.get_stripe_width();
-    return max;
+    return ROUND_UP_TO(cct->_conf->osd_recovery_max_chunk,
+			sinfo.get_stripe_width());
   }
 
   /**
