@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Wed Jul 30 23:28:50 UTC 2014 - tbehrens@suse.com
+
+- Add 0015-Convert-remaining-init-script-actio.patch
+  * this fixes bnc#887880 
+
+-------------------------------------------------------------------
 Tue Jul 29 15:49:17 UTC 2014 - tbehrens@suse.com
 
 - Add 0013-osd-OSD.cc-parse-lsb-release-data-v.patch
