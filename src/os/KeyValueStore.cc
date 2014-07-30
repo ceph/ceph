@@ -478,7 +478,6 @@ KeyValueStore::KeyValueStore(const std::string &base,
   internal_name(name),
   basedir(base),
   fsid_fd(-1), current_fd(-1),
-  kv_type(KV_TYPE_NONE),
   backend(NULL),
   ondisk_finisher(g_ceph_context),
   lock("KeyValueStore::lock"),
@@ -616,26 +615,18 @@ int KeyValueStore::mkfs()
     goto close_fsid_fd;
   }
 
-  if (_detect_backend()) {
-    derr << "KeyValueStore::mkfs error in _detect_backend" << dendl;
-    ret = -1;
-    goto close_fsid_fd;
-  }
-
   {
-    KeyValueDB *store;
-    if (kv_type == KV_TYPE_LEVELDB) {
-      store = new LevelDBStore(g_ceph_context, current_fn);
-#ifdef HAVE_KINETIC
-    } else if (kv_type == KV_TYPE_KINETIC) {
-      store = new KineticStore(g_ceph_context);
-#endif
-    } else {
-      derr << "KeyValueStore::mkfs error: unknown backend type" << kv_type << dendl;
+    KeyValueDB *store = KeyValueDB::create(g_ceph_context,
+					   g_conf->keyvaluestore_backend,
+					   current_fn.c_str());
+    if(! store)
+    {
+      derr << "KeyValueStore::mkfs backend type "
+	   << g_conf->keyvaluestore_backend << " error" << dendl;
       ret = -1;
       goto close_fsid_fd;
-    }
 
+    }
     store->init();
     stringstream err;
     if (store->create_and_open(err)) {
@@ -820,25 +811,18 @@ int KeyValueStore::mount()
 
   assert(current_fd >= 0);
 
-  if (_detect_backend()) {
-    derr << "KeyValueStore::mount error in _detect_backend" << dendl;
-    ret = -1;
-    goto close_current_fd;
-  }
-
   {
-    KeyValueDB *store;
-    if (kv_type == KV_TYPE_LEVELDB) {
-      store = new LevelDBStore(g_ceph_context, current_fn);
-#ifdef HAVE_KINETIC
-    } else if (kv_type == KV_TYPE_KINETIC) {
-      store = new KineticStore(g_ceph_context);
-#endif
-    } else {
-      derr << "KeyValueStore::mount error: unknown backend type" << kv_type
-           << dendl;
+
+    KeyValueDB *store = KeyValueDB::create(g_ceph_context,
+					   g_conf->keyvaluestore_backend,
+					   current_fn.c_str());
+    if(! store)
+    {
+      derr << "KeyValueStore::mount backend type "
+	   << g_conf->keyvaluestore_backend << " error" << dendl;
       ret = -1;
-      goto close_current_fd;
+      goto close_fsid_fd;
+
     }
 
     store->init();

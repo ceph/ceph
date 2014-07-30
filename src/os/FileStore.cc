@@ -68,7 +68,7 @@
 #include "common/fd.h"
 #include "HashIndex.h"
 #include "DBObjectMap.h"
-#include "LevelDBStore.h"
+#include "KeyValueDB.h"
 
 #include "common/ceph_crypto.h"
 using ceph::crypto::SHA1;
@@ -724,6 +724,8 @@ int FileStore::mkfs()
     goto close_fsid_fd;
   }
 
+  // superblock
+  superblock.omap_backend = g_conf->filestore_omap_backend;
   ret = write_superblock();
   if (ret < 0) {
     derr << "mkfs: write_superblock() failed: "
@@ -783,21 +785,13 @@ int FileStore::mkfs()
     }
     VOID_TEMP_FAILURE_RETRY(::close(fd));  
   }
-
-  {
-    leveldb::Options options;
-    options.create_if_missing = true;
-    leveldb::DB *db;
-    leveldb::Status status = leveldb::DB::Open(options, omap_dir, &db);
-    if (status.ok()) {
-      delete db;
-      dout(1) << "leveldb db exists/created" << dendl;
-    } else {
-      derr << "mkfs failed to create leveldb: " << status.ToString() << dendl;
-      ret = -1;
-      goto close_fsid_fd;
-    }
+  ret = KeyValueDB::test_init(superblock.omap_backend, omap_dir);
+  if (ret < 0) {
+    derr << "mkfs failed to create " << g_conf->filestore_omap_backend << dendl;
+    ret = -1;
+    goto close_fsid_fd;
   }
+  dout(1) << g_conf->filestore_omap_backend << " db exists/created" << dendl;
 
   // journal?
   ret = mkjournal();
@@ -1359,22 +1353,25 @@ int FileStore::mount()
   }
 
   {
-    LevelDBStore *omap_store = new LevelDBStore(g_ceph_context, omap_dir);
+    KeyValueDB * omap_store = KeyValueDB::create(g_ceph_context,
+						 superblock.omap_backend,
+						 omap_dir);
+    if (omap_store == NULL)
+    {
+      derr << "Error creating " << superblock.omap_backend << dendl;
+      ret = -1;
+      goto close_current_fd;
+    }
 
     omap_store->init();
 
     stringstream err;
     if (omap_store->create_and_open(err)) {
       delete omap_store;
-      derr << "Error initializing leveldb: " << err.str() << dendl;
+      derr << "Error initializing " << superblock.omap_backend
+	   << " : " << err.str() << dendl;
       ret = -1;
       goto close_current_fd;
-    }
-
-    if (g_conf->osd_compact_leveldb_on_mount) {
-      derr << "Compacting store..." << dendl;
-      omap_store->compact();
-      derr << "...finished compacting store" << dendl;
     }
 
     DBObjectMap *dbomap = new DBObjectMap(omap_store);
@@ -5021,15 +5018,20 @@ void FileStore::set_xattr_limits_via_conf()
 
 void FSSuperblock::encode(bufferlist &bl) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   compat_features.encode(bl);
+  ::encode(omap_backend, bl);
   ENCODE_FINISH(bl);
 }
 
 void FSSuperblock::decode(bufferlist::iterator &bl)
 {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   compat_features.decode(bl);
+  if (struct_v >= 2)
+    ::decode(omap_backend, bl);
+  else
+    omap_backend = "leveldb";
   DECODE_FINISH(bl);
 }
 
@@ -5037,6 +5039,7 @@ void FSSuperblock::dump(Formatter *f) const
 {
   f->open_object_section("compat");
   compat_features.dump(f);
+  f->dump_string("omap_backend", omap_backend);
   f->close_section();
 }
 
@@ -5050,5 +5053,7 @@ void FSSuperblock::generate_test_instances(list<FSSuperblock*>& o)
   feature_incompat.insert(CEPH_FS_FEATURE_INCOMPAT_SHARDS);
   z.compat_features = CompatSet(feature_compat, feature_ro_compat,
                                 feature_incompat);
+  o.push_back(new FSSuperblock(z));
+  z.omap_backend = "rocksdb";
   o.push_back(new FSSuperblock(z));
 }
