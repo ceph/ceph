@@ -80,14 +80,16 @@ case "$1" in
         ;;
     reload)
         echo "Reloading $name..."
-        start-stop-daemon --stop --signal HUP -x $RADOSGW --oknodo
+        /sbin/killproc -x -SIGHUP $RADOSGW
+        true
         ;;
     restart|force-reload)
         $0 stop
         $0 start
         ;;
     stop)
-        start-stop-daemon --stop -x $RADOSGW --oknodo
+        /sbin/killproc -x $RADOSGW
+        true
         ;;
     status)
         daemon_is_running $RADOSGW
