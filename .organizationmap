@@ -214,6 +214,7 @@ gocept gmbh & co. kg <mail@gocept.com> Christian Theune <ct@gocept.com>
 Web Drive <contact@webdrive.co.nz> Aristoteles Neto <aristoteles.neto@webdrive.co.nz>
 Whatever <contact@whatever-company.com> Sylvain Munaut <s.munaut@whatever-company.com>
 Iron Systems Inc. <info@ironsystems.com> Harpreet Dhillon <harpreet@ironsystems.com>
+MIT Computer Science and Artificial Intelligence Laboratory <webmaster@csail.mit.edu> Stephen Jahl <stephenjahl@gmail.com>
 #
 # Local Variables:
 # compile-command: "git log --pretty='%aN <%aE>' | \
