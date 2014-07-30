@@ -30,4 +30,14 @@ new_ms=$(${CEPH} daemon mon.a config get debug_ms | \
 # unregistered/non-existent command
 expect_false ${CEPH} daemon mon.a bogus_command_blah foo
 
+set +e
+OUTPUT=$(${CEPH} -c /not/a/ceph.conf daemon mon.a help 2>&1)
+# look for EINVAL
+if [ $? != 22 ] ; then exit 1; fi
+if ! echo "$OUTPUT" | grep -q '.*open.*/not/a/ceph.conf'; then 
+	echo "didn't find expected error in bad conf search"
+	exit 1
+fi
+set -e
+
 echo OK
