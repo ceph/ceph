@@ -419,7 +419,7 @@ static void invalid_path(string &path)
 
 int get_log(ObjectStore *fs, coll_t coll, spg_t pgid, const pg_info_t &info,
    PGLog::IndexedLog &log, pg_missing_t &missing)
-{ 
+{
   map<eversion_t, hobject_t> divergent_priors;
   try {
     ostringstream oss;
@@ -892,10 +892,10 @@ int get_attrs(ObjectStore *store, coll_t coll, ghobject_t hoid,
       bufferlist attr_bl;
       attr_bl.push_back(mi->second);
       object_info_t oi(attr_bl);
-  
+
       if (debug)
         cerr << "object_info " << oi << std::endl;
-  
+
       OSDriver::OSTransaction _t(driver.get_transaction(t));
       set<snapid_t> oi_snaps(oi.snaps.begin(), oi.snaps.end());
       snap_mapper.add_oid(hoid.hobj, oi_snaps, &_t);
@@ -1010,7 +1010,7 @@ int get_pg_metadata(ObjectStore *store, coll_t coll, bufferlist &bl)
   formatter->close_section();
   formatter->flush(cout);
   cout << std::endl;
-  
+
   formatter->open_object_section("log");
   ms.log.dump(formatter);
   formatter->close_section();
@@ -1550,11 +1550,11 @@ int main(int argc, char **argv)
   if (!vm.count("filestore-path")) {
     cerr << "Must provide --filestore-path" << std::endl;
     usage(desc);
-  } 
+  }
   if (!vm.count("journal-path")) {
     cerr << "Must provide --journal-path" << std::endl;
     usage(desc);
-  } 
+  }
   if (vm.count("object") && !vm.count("objcmd")) {
     cerr << "Invalid syntax, missing command" << std::endl;
     usage(desc);
@@ -1563,7 +1563,7 @@ int main(int argc, char **argv)
     cerr << "Must provide --type or object command..."
       << std::endl;
     usage(desc);
-  } 
+  }
   if (vm.count("type") && vm.count("object")) {
     cerr << "Can't specify both --type and object command syntax" << std::endl;
     usage(desc);
@@ -1571,7 +1571,7 @@ int main(int argc, char **argv)
   if (type != "import" && !vm.count("pgid")) {
     cerr << "Must provide pgid" << std::endl;
     usage(desc);
-  } 
+  }
 
   if (vm.count("object")) {
     json_spirit::Value v;
@@ -1619,7 +1619,7 @@ int main(int argc, char **argv)
     perror("open");
     return 1;
   }
-  
+
   if ((fspath.length() == 0 || jpath.length() == 0) ||
       (type != "import" && pgidstr.length() == 0)) {
     cerr << "Invalid params" << std::endl;
@@ -1698,7 +1698,7 @@ int main(int argc, char **argv)
   }
 
   ObjectStore *fs = ObjectStore::create(NULL, "filestore", fspath, jpath, flags);
-  
+
   int r = fs->mount();
   if (r < 0) {
     if (r == -EBUSY) {
@@ -1835,9 +1835,9 @@ int main(int argc, char **argv)
   epoch_t map_epoch;
 // The following code for export, info, log require omap or !skip-mount-omap
   if (it != ls.end()) {
-  
+
     coll_t coll = *it;
-  
+
     if (vm.count("objcmd")) {
       ret = 0;
       if (objcmd == "remove") {
@@ -2017,7 +2017,7 @@ int main(int argc, char **argv)
     map<epoch_t,pg_interval_t> past_intervals;
     hobject_t biginfo_oid = OSD::make_pg_biginfo_oid(pgid);
     interval_set<snapid_t> snap_collections;
-  
+
     __u8 struct_ver;
     r = PG::read_info(fs, coll, bl, info, past_intervals, biginfo_oid,
       infos_oid, snap_collections, struct_ver);
@@ -2045,7 +2045,7 @@ int main(int argc, char **argv)
       ret = get_log(fs, coll, pgid, info, log, missing);
       if (ret > 0)
           goto out;
-  
+
       formatter->open_object_section("log");
       log.dump(formatter);
       formatter->close_section();
@@ -2074,4 +2074,3 @@ out:
 
   return (ret != 0);
 }
-
