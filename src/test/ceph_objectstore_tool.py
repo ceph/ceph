@@ -139,7 +139,7 @@ def main():
     pid = os.getpid()
     TESTDIR = "/tmp/test.{pid}".format(pid=pid)
     DATADIR = "/tmp/data.{pid}".format(pid=pid)
-    CFSD_PREFIX = "./ceph_filestore_dump --filestore-path dev/{osd} --journal-path dev/{osd}.journal "
+    CFSD_PREFIX = "./ceph_objectstore_tool --data-path dev/{osd} --journal-path dev/{osd}.journal "
     DATALINECOUNT = 10000
     PROFNAME = "testecprofile"
 
@@ -307,7 +307,7 @@ def main():
 
     print "Test invalid parameters"
     # On export can't use stdout to a terminal
-    cmd = (CFSD_PREFIX + "--type export --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
+    cmd = (CFSD_PREFIX + "--op export --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure(cmd, "stdout is a tty and no --file option specified")
 
     OTHERFILE = "/tmp/foo.{pid}".format(pid=pid)
@@ -315,30 +315,42 @@ def main():
     foofd.close()
 
     # On import can't specify a PG
-    cmd = (CFSD_PREFIX + "--type import --pgid {pg} --file {FOO}").format(osd=ONEOSD, pg=ONEPG, FOO=OTHERFILE)
+    cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file {FOO}").format(osd=ONEOSD, pg=ONEPG, FOO=OTHERFILE)
     ERRORS += test_failure(cmd, "--pgid option invalid with import")
 
     os.unlink(OTHERFILE)
-    cmd = (CFSD_PREFIX + "--type import --file {FOO}").format(osd=ONEOSD, FOO=OTHERFILE)
+    cmd = (CFSD_PREFIX + "--op import --file {FOO}").format(osd=ONEOSD, FOO=OTHERFILE)
     ERRORS += test_failure(cmd, "open: No such file or directory")
 
     # On import can't use stdin from a terminal
-    cmd = (CFSD_PREFIX + "--type import --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
+    cmd = (CFSD_PREFIX + "--op import --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure(cmd, "stdin is a tty and no --file option specified")
 
-    # Test --type list and generate json for all objects
-    print "Test --type list by generating json for all objects"
+    # Specify a bad --type
+    cmd = (CFSD_PREFIX + "--type foobar --op list --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure(cmd, "Must provide --type (filestore, memstore, keyvaluestore-dev)")
+
+    # Don't specify a data-path
+    cmd = "./ceph_objectstore_tool --journal-path dev/{osd}.journal --type memstore --op list --pgid {pg}".format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure(cmd, "Must provide --data-path")
+
+    # Don't specify a journal-path for filestore
+    cmd = "./ceph_objectstore_tool --type filestore --data-path dev/{osd} --op list --pgid {pg}".format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure(cmd, "Must provide --journal-path")
+
+    # Test --op list and generate json for all objects
+    print "Test --op list by generating json for all objects"
     TMPFILE = r"/tmp/tmp.{pid}".format(pid=pid)
     ALLPGS = OBJREPPGS + OBJECPGS
     for pg in ALLPGS:
         OSDS = get_osds(pg, OSDDIR)
         for osd in OSDS:
-            cmd = (CFSD_PREFIX + "--type list --pgid {pg}").format(osd=osd, pg=pg)
+            cmd = (CFSD_PREFIX + "--op list --pgid {pg}").format(osd=osd, pg=pg)
             tmpfd = open(TMPFILE, "a")
             logging.debug(cmd)
             ret = call(cmd, shell=True, stdout=tmpfd)
             if ret != 0:
-                logging.error("Bad exit status {ret} from --type list request".format(ret=ret))
+                logging.error("Bad exit status {ret} from --op list request".format(ret=ret))
                 ERRORS += 1
 
     tmpfd.close()
@@ -487,7 +499,7 @@ def main():
     print "Test pg info"
     for pg in ALLREPPGS + ALLECPGS:
         for osd in get_osds(pg, OSDDIR):
-            cmd = (CFSD_PREFIX + "--type info --pgid {pg} | grep '\"pgid\": \"{pg}\"'").format(osd=osd, pg=pg)
+            cmd = (CFSD_PREFIX + "--op info --pgid {pg} | grep '\"pgid\": \"{pg}\"'").format(osd=osd, pg=pg)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stdout=nullfd)
             if ret != 0:
@@ -498,7 +510,7 @@ def main():
     for pg in ALLREPPGS + ALLECPGS:
         for osd in get_osds(pg, OSDDIR):
             tmpfd = open(TMPFILE, "w")
-            cmd = (CFSD_PREFIX + "--type log --pgid {pg}").format(osd=osd, pg=pg)
+            cmd = (CFSD_PREFIX + "--op log --pgid {pg}").format(osd=osd, pg=pg)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stdout=tmpfd)
             if ret != 0:
@@ -530,7 +542,7 @@ def main():
         for osd in get_osds(pg, OSDDIR):
             mydir = os.path.join(TESTDIR, osd)
             fname = os.path.join(mydir, pg)
-            cmd = (CFSD_PREFIX + "--type export --pgid {pg} --file {file}").format(osd=osd, pg=pg, file=fname)
+            cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file {file}").format(osd=osd, pg=pg, file=fname)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
             if ret != 0:
@@ -543,7 +555,7 @@ def main():
     RM_ERRORS = 0
     for pg in ALLREPPGS + ALLECPGS:
         for osd in get_osds(pg, OSDDIR):
-            cmd = (CFSD_PREFIX + "--type remove --pgid {pg}").format(pg=pg, osd=osd)
+            cmd = (CFSD_PREFIX + "--op remove --pgid {pg}").format(pg=pg, osd=osd)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stdout=nullfd)
             if ret != 0:
@@ -559,7 +571,7 @@ def main():
             dir = os.path.join(TESTDIR, osd)
             for pg in [f for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f))]:
                 file = os.path.join(dir, pg)
-                cmd = (CFSD_PREFIX + "--type import --file {file}").format(osd=osd, file=file)
+                cmd = (CFSD_PREFIX + "--op import --file {file}").format(osd=osd, file=file)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
                 if ret != 0:
