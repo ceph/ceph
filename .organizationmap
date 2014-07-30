@@ -216,6 +216,7 @@ Whatever <contact@whatever-company.com> Sylvain Munaut <s.munaut@whatever-compan
 Iron Systems Inc. <info@ironsystems.com> Harpreet Dhillon <harpreet@ironsystems.com>
 MIT Computer Science and Artificial Intelligence Laboratory <webmaster@csail.mit.edu> Stephen Jahl <stephenjahl@gmail.com>
 Science & Technology Facilities Council <contact@stfc.ac.uk> George Ryall <george.ryall@stfc.ac.uk>
+GameServers.com <contact@gameservers.com> Brian Rak <dn@devicenull.org>
 #
 # Local Variables:
 # compile-command: "git log --pretty='%aN <%aE>' | \
