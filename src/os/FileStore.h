@@ -70,6 +70,7 @@ class FileStoreBackend;
 class FSSuperblock {
 public:
   CompatSet compat_features;
+  string omap_backend;
 
   FSSuperblock() { }
 
