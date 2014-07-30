@@ -418,6 +418,9 @@ protected:
   void ms_handle_remote_reset(Connection *con);
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
 
+  void put_qtree(Inode *in);
+  void invalidate_quota_tree(Inode *in);
+  Inode* get_quota_root(Inode *in);
 
  public:
   void set_filer_flags(int flags);

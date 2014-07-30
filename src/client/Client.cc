@@ -9103,6 +9103,88 @@ bool Client::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool 
   return true;
 }
 
+void Client::put_qtree(Inode *in)
+{
+  QuotaTree *qtree = in->qtree;
+  if (qtree) {
+    qtree->invalidate();
+    in->qtree = NULL;
+  }
+}
+
+void Client::invalidate_quota_tree(Inode *in)
+{
+  QuotaTree *qtree = in->qtree;
+  if (qtree) {
+    ldout(cct, 10) << "invalidate quota tree node " << *in << dendl;
+    if (qtree->parent_ref()) {
+      assert(in->is_dir());
+      ldout(cct, 15) << "invalidate quota tree ancestor " << *in << dendl;
+      Inode *ancestor = qtree->ancestor()->in();
+      if (ancestor)
+        put_qtree(ancestor);
+    }
+    put_qtree(in);
+  }
+}
+
+Inode *Client::get_quota_root(Inode *in)
+{
+  if (!cct->_conf->client_quota)
+    return NULL;
+
+  QuotaTree *ancestor = NULL;
+  QuotaTree *parent = NULL;
+
+  vector<Inode*> inode_list;
+  while (in) {
+    if (in->qtree && in->qtree->ancestor()->in()) {
+      ancestor = in->qtree->ancestor();
+      parent = in->qtree;
+      break;
+    }
+
+    inode_list.push_back(in);
+
+    if (!in->dn_set.empty())
+      in = in->get_first_parent()->dir->parent_inode;
+    else if (root_parents.count(in))
+      in = root_parents[in];
+    else
+      in = NULL;
+  }
+
+  if (!in) {
+    assert(!parent && !ancestor);
+    assert(root_ancestor->qtree == NULL);
+    root_ancestor->qtree = ancestor = new QuotaTree(root_ancestor);
+    ancestor->set_ancestor(ancestor);
+    parent = ancestor;
+  }
+  assert(parent && ancestor);
+
+  for (vector<Inode*>::reverse_iterator iter = inode_list.rbegin();
+       iter != inode_list.rend(); ++iter) {
+    Inode *cur = *iter;
+
+    if (!cur->qtree)
+      cur->qtree = new QuotaTree(cur);
+
+    ldout(cct, 20) << "link quota tree " << cur->ino 
+                   << " to parent (" << parent->in()->ino << ")"
+                   << " ancestor (" << ancestor->in()->ino << ")" << dendl;
+
+    cur->qtree->set_ancestor(ancestor);
+    if (cur->quota.is_enable())
+      ancestor = cur->qtree;
+
+    cur->qtree->set_parent(parent);
+    parent = cur->qtree;
+  }
+
+  return ancestor->in();
+}
+
 void Client::set_filer_flags(int flags)
 {
   Mutex::Locker l(client_lock);
