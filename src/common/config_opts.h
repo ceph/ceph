@@ -570,8 +570,6 @@ OPTION(leveldb_paranoid, OPT_BOOL, false) // leveldb paranoid flag
 OPTION(leveldb_log, OPT_STR, "/dev/null")  // enable leveldb log file
 OPTION(leveldb_compact_on_mount, OPT_BOOL, false)
 
-OPTION(osd_keyvaluedb, OPT_STR, "leveldb")
-
 OPTION(kinetic_host, OPT_STR, "") // hostname or ip address of a kinetic drive to use
 OPTION(kinetic_port, OPT_INT, 8123) // port number of the kinetic drive
 OPTION(kinetic_user_id, OPT_INT, 1) // kinetic user to authenticate as
@@ -708,6 +706,7 @@ OPTION(keyvaluestore_op_thread_suicide_timeout, OPT_INT, 180)
 OPTION(keyvaluestore_default_strip_size, OPT_INT, 4096) // Only affect new object
 OPTION(keyvaluestore_max_expected_write_size, OPT_U64, 1ULL << 24) // bytes
 OPTION(keyvaluestore_header_cache_size, OPT_INT, 4096)    // Header cache size
+OPTION(keyvaluestore_backend, OPT_STR, "leveldb")
 
 // max bytes to search ahead in journal searching for corruption
 OPTION(journal_max_corrupt_search, OPT_U64, 10<<20)
