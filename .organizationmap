@@ -215,6 +215,7 @@ Web Drive <contact@webdrive.co.nz> Aristoteles Neto <aristoteles.neto@webdrive.c
 Whatever <contact@whatever-company.com> Sylvain Munaut <s.munaut@whatever-company.com>
 Iron Systems Inc. <info@ironsystems.com> Harpreet Dhillon <harpreet@ironsystems.com>
 MIT Computer Science and Artificial Intelligence Laboratory <webmaster@csail.mit.edu> Stephen Jahl <stephenjahl@gmail.com>
+Science & Technology Facilities Council <contact@stfc.ac.uk> George Ryall <george.ryall@stfc.ac.uk>
 #
 # Local Variables:
 # compile-command: "git log --pretty='%aN <%aE>' | \
