@@ -6756,9 +6756,13 @@ success:
     in->size = totalwritten + offset;
     mark_caps_dirty(in, CEPH_CAP_FILE_WR);
 
-    if ((in->size << 1) >= in->max_size &&
-	(in->reported_size << 1) < in->max_size)
-      check_caps(in, false);
+    if (is_quota_bytes_approaching(in)) {
+      check_caps(in, true);
+    } else {
+      if ((in->size << 1) >= in->max_size &&
+          (in->reported_size << 1) < in->max_size)
+        check_caps(in, false);
+    }
 
     ldout(cct, 7) << "wrote to " << totalwritten+offset << ", extending file size" << dendl;
   } else {
@@ -8870,9 +8874,13 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
       in->mtime = ceph_clock_now(cct);
       mark_caps_dirty(in, CEPH_CAP_FILE_WR);
 
-      if ((in->size << 1) >= in->max_size &&
-          (in->reported_size << 1) < in->max_size)
-        check_caps(in, false);
+      if (is_quota_bytes_approaching(in)) {
+        check_caps(in, true);
+      } else {
+        if ((in->size << 1) >= in->max_size &&
+            (in->reported_size << 1) < in->max_size)
+          check_caps(in, false);
+      }
     }
   }
 
@@ -9320,6 +9328,31 @@ bool Client::is_quota_bytes_exceeded(Inode *in)
 
     if (quota->max_bytes && rstat->rbytes >= quota->max_bytes)
       return true;
+
+    in = get_quota_root(in);
+  }
+  return false;
+}
+
+bool Client::is_quota_bytes_approaching(Inode *in)
+{
+  if (!cct->_conf->client_quota)
+    return false;
+
+  while (in != root_ancestor) {
+    quota_info_t *quota = &in->quota;
+    nest_info_t *rstat = &in->rstat;
+
+    if (quota->max_bytes) {
+      if (rstat->rbytes >= quota->max_bytes)
+        return true;
+
+      assert(in->size >= in->reported_size);
+      uint64_t space = quota->max_bytes - rstat->rbytes;
+      uint64_t size = in->size - in->reported_size;
+      if (space >> 4 < size)
+        return true;
+    }
 
     in = get_quota_root(in);
   }

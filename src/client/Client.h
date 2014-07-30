@@ -423,6 +423,7 @@ protected:
   Inode* get_quota_root(Inode *in);
   bool is_quota_files_exceeded(Inode *in);
   bool is_quota_bytes_exceeded(Inode *in);
+  bool is_quota_bytes_approaching(Inode *in);
 
  public:
   void set_filer_flags(int flags);
