@@ -347,6 +347,17 @@ def build_ceph_cluster(ctx, config):
         ctx.cluster.run(args=['sudo', 'stop', 'ceph-all', run.Raw('||'),
                               'sudo', 'service', 'ceph', 'stop' ])
 
+        # Are you really not running anymore?
+        # try first with the init tooling
+        ctx.cluster.run(args=['sudo', 'status', 'ceph-all', run.Raw('||'),
+                              'sudo', 'service',  'status', 'ceph-all'])
+
+        # and now just check for the processes themselves, as if upstart/sysvinit
+        # is lying to us
+        ctx.cluster.run(args=['sudo', 'ps', 'aux', run.Raw('|'),
+                              'grep', '-v', 'grep', run.Raw('|'),
+                              'grep', 'ceph'])
+
         if ctx.archive is not None:
             # archive mon data, too
             log.info('Archiving mon data...')
