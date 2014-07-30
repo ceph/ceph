@@ -347,6 +347,9 @@ def build_ceph_cluster(ctx, config):
         ctx.cluster.run(args=['sudo', 'stop', 'ceph-all', run.Raw('||'),
                               'sudo', 'service', 'ceph', 'stop' ])
 
+        # Are you really not running anymore?
+        ctx.cluster.run(args=['sudo', 'status', 'ceph-all', run.Raw('||'),
+                              'sudo', 'service',  'status', 'ceph-all'])
         if ctx.archive is not None:
             # archive mon data, too
             log.info('Archiving mon data...')
