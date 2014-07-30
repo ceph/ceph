@@ -8,7 +8,7 @@ expect_false()
 	if "$@"; then return 1; else return 0; fi
 }
 
-echo note: assuming mon.a is on the currenet host
+echo note: assuming mon.a is on the current host
 
 # can set to 'sudo ./ceph' to execute tests from current dir for development
 CEPH=${CEPH:-'sudo ceph'}
