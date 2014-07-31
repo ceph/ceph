@@ -11343,7 +11343,8 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
     }
   }
 
-  if (agent_state->evict_mode != TierAgentState::EVICT_MODE_FULL) {
+  if (agent_state->evict_mode != TierAgentState::EVICT_MODE_FULL &&
+      hit_set) {
     // is this object old and/or cold enough?
     int atime = -1, temp = 0;
     agent_estimate_atime_temp(soid, &atime, NULL /*FIXME &temp*/);
