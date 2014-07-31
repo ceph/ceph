@@ -5354,6 +5354,7 @@ void ReplicatedPG::complete_read_ctx(int result, OpContext *ctx)
     reply->set_enoent_reply_versions(info.last_update, info.last_user_version);
   }
 
+  reply->set_result(result);
   reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
   osd->send_message_osd_client(reply, m->get_connection());
   close_op_ctx(ctx, 0);
