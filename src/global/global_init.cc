@@ -166,8 +166,16 @@ int global_init_prefork(CephContext *cct, int flags)
   if (g_code_env != CODE_ENVIRONMENT_DAEMON)
     return -1;
   const md_config_t *conf = cct->_conf;
-  if (!conf->daemonize)
+  if (!conf->daemonize) {
+    if (atexit(pidfile_remove_void)) {
+      derr << "global_init_daemonize: failed to set pidfile_remove function "
+	   << "to run at exit." << dendl;
+    }
+
+    pidfile_write(g_conf);
+
     return -1;
+  }
 
   // stop log thread
   g_ceph_context->_log->flush();
