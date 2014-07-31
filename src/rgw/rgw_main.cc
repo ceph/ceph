@@ -931,7 +931,8 @@ public:
     snprintf(thread_pool_buf, sizeof(thread_pool_buf), "%d", (int)g_conf->rgw_thread_pool_size);
     string port_str;
     conf->get_val("port", "80", &port_str);
-    const char *options[] = {"listening_ports", port_str.c_str(), "enable_keep_alive", "yes", "num_threads", thread_pool_buf, NULL};
+    const char *options[] = {"listening_ports", port_str.c_str(), "enable_keep_alive", "yes", "num_threads", thread_pool_buf,
+                             "decode_url", "no", NULL};
 
     struct mg_callbacks cb;
     memset((void *)&cb, 0, sizeof(cb));
