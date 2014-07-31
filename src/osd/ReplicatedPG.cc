@@ -1348,9 +1348,10 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 	hit_set_start_stamp + pool.info.hit_set_period <= m->get_recv_stamp()) {
       hit_set_persist();
     }
+  }
 
-    if (agent_state)
-      agent_choose_mode();
+  if (agent_state) {
+    agent_choose_mode();
   }
 
   if ((m->get_flags() & CEPH_OSD_FLAG_IGNORE_CACHE) == 0 &&
@@ -11342,7 +11343,8 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
     }
   }
 
-  if (agent_state->evict_mode != TierAgentState::EVICT_MODE_FULL) {
+  if (agent_state->evict_mode != TierAgentState::EVICT_MODE_FULL &&
+      hit_set) {
     // is this object old and/or cold enough?
     int atime = -1, temp = 0;
     agent_estimate_atime_temp(soid, &atime, NULL /*FIXME &temp*/);
@@ -11474,7 +11476,11 @@ void ReplicatedPG::agent_choose_mode(bool restart)
       num_dirty = 0;
   }
 
-  dout(10) << __func__ << ": "
+  dout(10) << __func__
+	   << " flush_mode: "
+	   << TierAgentState::get_flush_mode_name(agent_state->flush_mode)
+	   << " evict_mode: "
+	   << TierAgentState::get_evict_mode_name(agent_state->evict_mode)
 	   << " num_objects: " << info.stats.stats.sum.num_objects
 	   << " num_bytes: " << info.stats.stats.sum.num_bytes
 	   << " num_objects_dirty: " << info.stats.stats.sum.num_objects_dirty
