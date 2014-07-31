@@ -20,6 +20,7 @@ Requires:	librbd1 = %{version}-%{release}
 Requires:	librados2 = %{version}-%{release}
 Requires:	libcephfs1 = %{version}-%{release}
 Requires:	ceph-common = %{version}-%{release}
+Requires:	libceph-common1 = %{version}-%{release}
 Requires:	python
 Requires:	python-argparse
 Requires:	python-ceph
@@ -101,16 +102,24 @@ Summary:	Ceph Common
 Group:		System Environment/Base
 Requires:	librbd1 = %{version}-%{release}
 Requires:	librados2 = %{version}-%{release}
+Requires:	libceph-common1 = %{version}-%{release}
 Requires:	python-ceph = %{version}-%{release}
 Requires:	python-requests
 Requires:	redhat-lsb-core
 %description -n ceph-common
 common utilities to mount and interact with a ceph storage cluster
 
+%package -n libceph-common1
+Summary:	Ceph common runtime library
+Group:		System Environment/Base
+%description -n libceph-common1
+common runtime library for ceph utilities, libraries, and daemons
+
 %package fuse
 Summary:	Ceph fuse-based client
 Group:		System Environment/Base
 Requires:	%{name}
+Requires:	libceph-common1 = %{version}-%{release}
 BuildRequires:	fuse-devel
 %description fuse
 FUSE based client for Ceph distributed network file system
@@ -121,6 +130,7 @@ Group:		System Environment/Base
 Requires:	%{name}
 Requires:	librados2 = %{version}-%{release}
 Requires:	librbd1 = %{version}-%{release}
+Requires:	libceph-common1 = %{version}-%{release}
 BuildRequires:	fuse-devel
 %description -n rbd-fuse
 FUSE based client to map Ceph rbd images to files
@@ -135,6 +145,7 @@ Requires:	libradosstriper1 = %{version}-%{release}
 Requires:	librbd1 = %{version}-%{release}
 Requires:	libcephfs1 = %{version}-%{release}
 Requires:	libcephfs_jni1 = %{version}-%{release}
+Requires:	libceph-common1 = %{version}-%{release}
 %description devel
 This package contains libraries and headers needed to develop programs
 that use Ceph.
@@ -144,6 +155,7 @@ Summary:	Rados REST gateway
 Group:		Development/Libraries
 Requires:	ceph-common = %{version}-%{release}
 Requires:	librados2 = %{version}-%{release}
+Requires:	libceph-common1 = %{version}-%{release}
 %if 0%{defined suse_version}
 BuildRequires:	libexpat-devel
 BuildRequires:	FastCGI-devel
@@ -174,6 +186,7 @@ managers such as Pacemaker.
 Summary:	RADOS distributed object store client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
+Requires:	libceph-common1 = %{version}-%{release}
 %if 0%{?rhel} || 0%{?centos_version} || 0%{?fedora}
 Obsoletes:	ceph-libs
 %endif
@@ -198,6 +211,7 @@ Summary:	RADOS block device client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	librados2 = %{version}-%{release}
+Requires:	libceph-common1 = %{version}-%{release}
 %if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
 Obsoletes:	ceph-libs
 %endif
@@ -211,6 +225,7 @@ shared library allowing applications to manage these block devices.
 Summary:	Ceph distributed file system client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
+Requires:	libceph-common1 = %{version}-%{release}
 %if 0%{?rhel} || 0%{?centos_version} || 0%{?fedora}
 Obsoletes:	ceph-libs
 %endif
@@ -226,6 +241,7 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	librados2 = %{version}-%{release}
 Requires:	librbd1 = %{version}-%{release}
+Requires:	libceph-common1 = %{version}-%{release}
 Requires:	python-flask
 %if 0%{defined suse_version}
 %py_requires
@@ -239,6 +255,7 @@ Summary:	RESTful benchmark
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	ceph-common = %{version}-%{release}
+Requires:	libceph-common1 = %{version}-%{release}
 %description -n rest-bench
 RESTful bencher that can be used to benchmark radosgw performance.
 
@@ -249,6 +266,7 @@ License:	LGPL-2.0
 Requires:	librados2 = %{version}-%{release}
 Requires:	librbd1 = %{version}-%{release}
 Requires:	libcephfs1 = %{version}-%{release}
+Requires:	libceph-common1 = %{version}-%{release}
 %description -n ceph-test
 This package contains Ceph benchmarks and test tools.
 
@@ -258,6 +276,7 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	java
 Requires:	libcephfs1 = %{version}-%{release}
+Requires:	libceph-common1 = %{version}-%{release}
 BuildRequires:	java-devel
 %description -n libcephfs_jni1
 This package contains the Java Native Interface library for CephFS Java
@@ -269,6 +288,7 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	java
 Requires:	libcephfs_jni1 = %{version}-%{release}
+Requires:	libceph-common1 = %{version}-%{release}
 BuildRequires:	java-devel
 Requires:	junit4
 BuildRequires:	junit4
@@ -534,6 +554,11 @@ if [ "$1" -eq "0" ] ; then
     rm -rf /var/log/ceph
     rm -rf /etc/ceph
 fi
+
+#################################################################################
+%files -n libceph-common1
+%defattr(-,root,root,-)
+%{_libdir}/libceph-common1.so.*
 
 #################################################################################
 %files fuse
