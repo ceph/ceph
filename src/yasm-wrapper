@@ -9,7 +9,7 @@ while [ -n "$*" ]; do
     case "$1" in
 	-f )
 	    shift
-	    new="-f $1"
+	    new="$new -f $1"
 	    shift
 	    ;;
 	-g* | -f* | -W* | -MD | -MP | -fPIC | -c | -D* | --param* | -O* | -m* | -pipe )
