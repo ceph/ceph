@@ -232,11 +232,25 @@ Action::ptr AioWriteAction::read_from(Action &src, Deser &d) {
   return Action::ptr(new AioWriteAction(src, imagectx_id, offset, length));
 }
 
+static std::string create_fake_data() {
+  char data[1 << 20]; // 1 MB
+  for (unsigned int i = 0; i < sizeof(data); i++) {
+    data[i] = (char) i;
+  }
+  return std::string(data, sizeof(data));
+}
+
 void AioWriteAction::perform(ActionCtx &worker) {
+  static const std::string fake_data(create_fake_data());
   dout(ACTION_LEVEL) << "Performing " << *this << dendl;
   librbd::Image *image = worker.get_image(m_imagectx_id);
   PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
-  io->bufferlist().append_zero(m_length);
+  uint64_t remaining = m_length;
+  while (remaining > 0) {
+    uint64_t n = std::min(remaining, fake_data.length());
+    io->bufferlist().append(fake_data.data(), n);
+    remaining -= n;
+  }
   worker.add_pending(io);
   if (worker.readonly()) {
     worker.remove_pending(io);
