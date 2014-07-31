@@ -1598,41 +1598,41 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     if (!must_promote && can_skip_promote(op, obc)) {
       return false;
     }
-    if (!op->may_read() || must_promote) {
+    if (op->may_write() || must_promote || !hit_set) {
       promote_object(op, obc, missing_oid);
     } else {
       switch (pool.info.min_read_recency_for_promote) {
       case 0:
         promote_object(op, obc, missing_oid);
-	break;
+        break;
       case 1:
-	// Check if in the current hit set
-	if (in_hit_set) {
+        // Check if in the current hit set
+        if (in_hit_set) {
           promote_object(op, obc, missing_oid);
-	} else {
-	  do_cache_redirect(op, obc);
-	}
-	break;
+        } else {
+          do_cache_redirect(op, obc);
+        }
+        break;
       default:
-	if (in_hit_set) {
+        if (in_hit_set) {
           promote_object(op, obc, missing_oid);
-	} else {
-	  // Check if in other hit sets
+        } else {
+          // Check if in other hit sets
           map<time_t,HitSetRef>::iterator itor;
-	  bool in_other_hit_sets = false;
-	  for (itor = agent_state->hit_set_map.begin(); itor != agent_state->hit_set_map.end(); itor++) {
-	    if (itor->second->contains(missing_oid)) {
-	      in_other_hit_sets = true;
-	      break;
-	    }
-	  }
-	  if (in_other_hit_sets) {
+          bool in_other_hit_sets = false;
+          for (itor = agent_state->hit_set_map.begin(); itor != agent_state->hit_set_map.end(); itor++) {
+            if (itor->second->contains(missing_oid)) {
+              in_other_hit_sets = true;
+              break;
+            }
+          }
+          if (in_other_hit_sets) {
             promote_object(op, obc, missing_oid);
-	  } else {
-	    do_cache_redirect(op, obc);
-	  }
-	}
-	break;
+          } else {
+            do_cache_redirect(op, obc);
+          }
+        }
+        break;
       }
     }
     return true;
@@ -10892,9 +10892,10 @@ void ReplicatedPG::hit_set_persist()
   info.hit_set.current_info.end = now;
   dout(20) << __func__ << " archive " << oid << dendl;
 
-  if (agent_state)
+  if (agent_state) {
     agent_state->add_hit_set(info.hit_set.current_info.begin, hit_set);
-  hit_set_in_memory_trim();
+    hit_set_in_memory_trim();
+  }
 
   // hold a ref until it is flushed to disk
   hit_set_flushing[info.hit_set.current_info.begin] = hit_set;
@@ -11045,7 +11046,9 @@ void ReplicatedPG::hit_set_in_memory_trim()
   unsigned max = pool.info.hit_set_count;
   unsigned max_in_memory = pool.info.min_read_recency_for_promote > 0 ? pool.info.min_read_recency_for_promote - 1 : 0;
 
-  if (max_in_memory > max) max_in_memory = max;
+  if (max_in_memory > max) {
+    max_in_memory = max;
+  }
   while (agent_state->hit_set_map.size() > max_in_memory) {
     agent_state->remove_oldest_hit_set();
   }
