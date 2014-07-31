@@ -1,0 +1,7 @@
+
+tasks:
+    - mds_journal_migration:
+    - workunit:
+        clients:
+            all: [fs/misc/trivial_sync.sh]
+
