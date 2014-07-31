@@ -1,6 +1,8 @@
 # ISA
 noinst_HEADERS += \
-	erasure-code/isa/isa-l/erasure_code/ec_base.h
+	erasure-code/isa/ErasureCodeIsa.h \
+	erasure-code/isa/xor_op.h \
+	erasure-code/isa/isa-l/erasure_code/ec_base.h \
 	erasure-code/isa/isa-l/include/erasure_code.h \
 	erasure-code/isa/isa-l/include/reg_sizes.asm \
 	erasure-code/isa/isa-l/include/erasure_code.h \
