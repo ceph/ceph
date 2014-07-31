@@ -44,10 +44,34 @@ Build-Depends: autoconf,
                yasm
 Standards-Version: 3.9.3
 
+Package: libceph-common1
+Architecture: linux-any
+Depends: ${misc:Depends},
+         ${shlibs:Depends}
+Description: common runtime library for ceph
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the shared runtime library used by all
+ Ceph libraries and daemons.
+
+Package: libceph-common1-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: libceph-common1 (= ${binary:Version}), ${misc:Depends}
+Description: debugging symbols for libceph-common1
+ Ceph is a distributed storage system designed to provide excellent
+ performance, reliability, and scalability.
+ .
+ This package contains the debugging symbols for libceph-common1.
+
 Package: ceph
 Architecture: linux-any
 Depends: binutils,
          ceph-common (>= 0.78-500),
+	 libceph-common1 (= ${binary:Version})
          cryptsetup-bin | cryptsetup,
          gdisk,
          parted,
@@ -84,7 +108,10 @@ Description: debugging symbols for ceph
 
 Package: ceph-mds
 Architecture: linux-any
-Depends: ceph, ${misc:Depends}, ${shlibs:Depends}
+Depends: ceph,
+ 	 libceph-common1 (= ${binary:Version})
+	 ${misc:Depends},
+	 ${shlibs:Depends}
 Recommends: ceph-fs-common, ceph-fuse, libcephfs1
 Replaces: ceph (<< 0.58-1)
 Breaks: ceph (<< 0.58-1)
@@ -110,7 +137,9 @@ Description: debugging symbols for ceph-mds
 
 Package: ceph-fuse
 Architecture: linux-any
-Depends: ${misc:Depends}, ${shlibs:Depends}
+Depends: libceph-common1 (= ${binary:Version}),
+	 ${misc:Depends},
+	 ${shlibs:Depends}
 Recommends: fuse
 Description: FUSE-based client for the Ceph distributed file system
  Ceph is a massively scalable, open-source, distributed
@@ -141,7 +170,9 @@ Description: debugging symbols for ceph-fuse
 
 Package: rbd-fuse
 Architecture: linux-any
-Depends: ${misc:Depends}, ${shlibs:Depends}
+Depends: libceph-common1 (= ${binary:Version}),
+	 ${misc:Depends},
+	  ${shlibs:Depends}
 Recommends: fuse
 Description: FUSE-based rbd client for the Ceph distributed file system
  Ceph is a massively scalable, open-source, distributed
@@ -166,8 +197,12 @@ Description: debugging symbols for rbd-fuse
 
 Package: ceph-common
 Architecture: linux-any
-Depends: librbd1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends},
-         python-ceph (= ${binary:Version}), python-requests
+Depends: librbd1 (= ${binary:Version}),
+	 libceph-common1 (= ${binary:Version}),
+	 ${misc:Depends},
+	 ${shlibs:Depends},
+         python-ceph (= ${binary:Version}),
+	 python-requests
 Conflicts: ceph-client-tools
 Replaces: ceph-client-tools, ceph (<< 0.78-500)
 Breaks: ceph (<< 0.78-500)
@@ -195,7 +230,9 @@ Description: debugging symbols for ceph-common
 
 Package: ceph-fs-common
 Architecture: linux-any
-Depends: ${misc:Depends}, ${shlibs:Depends}
+Depends: libceph-common1 (= ${binary:Version}),
+	 ${misc:Depends},
+	 ${shlibs:Depends}
 Conflicts: ceph-client-tools
 Suggests: ceph-mds
 Description: common utilities to mount and interact with a ceph file system
@@ -240,7 +277,9 @@ Conflicts: librados, librados1
 Replaces: librados, librados1
 Architecture: linux-any
 Section: libs
-Depends: ${misc:Depends}, ${shlibs:Depends}
+Depends: libceph-common1 (= ${binary:Version}),
+	 ${misc:Depends},
+	 ${shlibs:Depends}
 Description: RADOS distributed object store client library
  RADOS is a reliable, autonomic distributed object storage cluster
  developed as part of the Ceph distributed storage system.  This is a
@@ -313,7 +352,10 @@ Description: RADOS striping interface (development files)
 Package: librbd1
 Architecture: linux-any
 Section: libs
-Depends: librados2 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
+Depends: librados2 (= ${binary:Version}),
+	 libceph-common1 (= ${binary:Version}),
+	 ${misc:Depends},
+	 ${shlibs:Depends}
 Description: RADOS block device client library
  RBD is a block device striped across multiple distributed objects
  in RADOS, a reliable, autonomic distributed object storage cluster
@@ -353,7 +395,9 @@ Conflicts: libceph, libceph1, libcephfs
 Replaces: libceph, libceph1, libcephfs
 Architecture: linux-any
 Section: libs
-Depends: ${misc:Depends}, ${shlibs:Depends}
+Depends: libceph-common1 (= ${binary:Version}),
+	 ${misc:Depends},
+	 ${shlibs:Depends}
 Description: Ceph distributed file system client library
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -395,7 +439,10 @@ Description: Ceph distributed file system client library (development files)
 
 Package: radosgw
 Architecture: linux-any
-Depends: ceph-common (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
+Depends: libceph-common1 (= ${binary:Version}),
+	 ceph-common (= ${binary:Version}),
+	 ${misc:Depends},
+	 ${shlibs:Depends}
 Description: REST gateway for RADOS distributed object store
  RADOS is a distributed object store used by the Ceph distributed
  storage system.  This package provides a REST gateway to the
@@ -419,7 +466,12 @@ Description: debugging symbols for radosgw
 
 Package: rest-bench
 Architecture: linux-any
-Depends: ceph-common, curl, xml2, ${misc:Depends}, ${shlibs:Depends}
+Depends: libceph-common1 (= ${binary:Version}),
+	 ceph-common,
+	 curl,
+	 xml2,
+	 ${misc:Depends},
+	 ${shlibs:Depends}
 Description: RESTful bencher that can be used to benchmark
  radosgw performance.
 
@@ -435,7 +487,12 @@ Description: debugging symbols for rest-bench
 
 Package: ceph-test
 Architecture: linux-any
-Depends: ceph-common, curl, xml2, ${misc:Depends}, ${shlibs:Depends}
+Depends: libceph-common1 (= ${binary:Version}),
+	 ceph-common,
+	 curl,
+	 xml2,
+	 ${misc:Depends},
+	 ${shlibs:Depends}
 Description: Ceph test and benchmarking tools
  This package contains tools for testing and benchmarking Ceph.
 
