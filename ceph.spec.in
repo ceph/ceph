@@ -213,6 +213,7 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 %if 0%{?rhel} || 0%{?centos_version} || 0%{?fedora}
 Obsoletes:	ceph-libs < 0.80.5
+Obsoletes:	libcephfs
 %endif
 %description -n libcephfs1
 Ceph is a distributed network file system designed to provide excellent
