@@ -4364,6 +4364,24 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     cmd_getval(g_ceph_context, cmdmap, "profile", profile);
     if (profile == "")
       profile = "default";
+    if (profile == "default") {
+      if (!osdmap.has_erasure_code_profile(profile)) {
+	if (pending_inc.has_erasure_code_profile(profile)) {
+	  dout(20) << "erasure code profile " << profile << " already pending" << dendl;
+	  goto wait;
+	}
+
+	map<string,string> profile_map;
+	err = osdmap.get_erasure_code_profile_default(g_ceph_context,
+						      profile_map,
+						      &ss);
+	if (err)
+	  goto reply;
+	dout(20) << "erasure code profile " << profile << " set" << dendl;
+	pending_inc.set_erasure_code_profile(profile, profile_map);
+	goto wait;
+      }
+    }
 
     int ruleset;
     err = crush_ruleset_create_erasure(name, profile, &ruleset, ss);
@@ -5039,6 +5057,25 @@ done:
     cmd_getval(g_ceph_context, cmdmap, "erasure_code_profile", erasure_code_profile);
     if (erasure_code_profile == "")
       erasure_code_profile = "default";
+    if (erasure_code_profile == "default") {
+      if (!osdmap.has_erasure_code_profile(erasure_code_profile)) {
+	if (pending_inc.has_erasure_code_profile(erasure_code_profile)) {
+	  dout(20) << "erasure code profile " << erasure_code_profile << " already pending" << dendl;
+	  goto wait;
+	}
+
+	map<string,string> profile_map;
+	err = osdmap.get_erasure_code_profile_default(g_ceph_context,
+						      profile_map,
+						      &ss);
+	if (err)
+	  goto reply;
+	dout(20) << "erasure code profile " << erasure_code_profile << " set" << dendl;
+	pending_inc.set_erasure_code_profile(erasure_code_profile, profile_map);
+	goto wait;
+      }
+    }
+
     if (ruleset_name == "") {
       if (erasure_code_profile == "default") {
 	ruleset_name = "erasure-code";
