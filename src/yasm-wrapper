@@ -2,6 +2,7 @@
 
 # libtool and yasm do not get along.
 # filter out any crap that libtool feeds us that yasm does not understand.
+echo $0: got $*
 new=""
 touch=""
 while [ -n "$*" ]; do
