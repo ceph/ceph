@@ -1232,7 +1232,7 @@ class CephManager:
         time.sleep(2)
         self.ctx.daemons.get_daemon('osd', osd).stop()
 
-    def revive_osd(self, osd, timeout=75):
+    def revive_osd(self, osd, timeout=150):
         """
         Revive osds by either power cycling (if indicated by the config)
         or by restarting.
