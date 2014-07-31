@@ -137,6 +137,28 @@ class StripObjectMap: public GenericObjectMap {
 };
 
 
+class KVSuperblock {
+public:
+  CompatSet compat_features;
+  string backend;
+
+  KVSuperblock() { }
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<KVSuperblock*>& o);
+};
+WRITE_CLASS_ENCODER(KVSuperblock)
+
+
+inline ostream& operator<<(ostream& out, const KVSuperblock& sb)
+{
+  return out << "sb(" << sb.compat_features << "): "
+             << sb.backend;
+}
+
+
 class KeyValueStore : public ObjectStore,
                       public md_config_obs_t {
  public:
@@ -659,6 +681,25 @@ class KeyValueStore : public ObjectStore,
   static const string COLLECTION;
   static const string COLLECTION_ATTR;
   static const uint32_t COLLECTION_VERSION = 1;
+
+  KVSuperblock superblock;
+  /**
+   * write_superblock()
+   *
+   * Write superblock to persisent storage
+   *
+   * return value: 0 on success, otherwise negative errno
+   */
+  int write_superblock();
+
+  /**
+   * read_superblock()
+   *
+   * Fill in KeyValueStore::superblock by reading persistent storage
+   *
+   * return value: 0 on success, otherwise negative errno
+   */
+  int read_superblock();
 };
 
 WRITE_CLASS_ENCODER(StripObjectMap::StripObjectHeader)
