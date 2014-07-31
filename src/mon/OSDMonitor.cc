@@ -2078,6 +2078,32 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       }
     }
 
+    // hit_set-less cache_mode?
+    if (g_conf->mon_warn_on_cache_pools_without_hit_sets) {
+      int problem_cache_pools = 0;
+      for (map<int64_t, pg_pool_t>::const_iterator p = osdmap.pools.begin();
+	   p != osdmap.pools.end();
+	   ++p) {
+	const pg_pool_t& info = p->second;
+	if (info.cache_mode_requires_hit_set() &&
+	    info.hit_set_params.get_type() == HitSet::TYPE_NONE) {
+	  ++problem_cache_pools;
+	  if (detail) {
+	    ostringstream ss;
+	    ss << "pool '" << osdmap.get_pool_name(p->first)
+	       << "' with cache_mode " << info.get_cache_mode_name()
+	       << " needs hit_set_type to be set but it is not";
+	    detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+	  }
+	}
+      }
+      if (problem_cache_pools) {
+	ostringstream ss;
+	ss << problem_cache_pools << " cache pools are missing hit_sets";
+	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
+    }
+
     // Warn if 'mon_osd_down_out_interval' is set to zero.
     // Having this option set to zero on the leader acts much like the
     // 'noout' flag.  It's hard to figure out what's going wrong with clusters
