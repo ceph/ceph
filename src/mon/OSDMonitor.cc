@@ -3684,7 +3684,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "value must be in the range 0..1";
       return -ERANGE;
     }
-    p.cache_target_dirty_ratio_micro = f * 1000000;
+    p.cache_target_dirty_ratio_micro = f * (double)1000000.0;
   } else if (var == "cache_target_full_ratio") {
     if (floaterr.length()) {
       ss << "error parsing float '" << val << "': " << floaterr;
@@ -3694,7 +3694,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "value must be in the range 0..1";
       return -ERANGE;
     }
-    p.cache_target_full_ratio_micro = f * 1000000;
+    p.cache_target_full_ratio_micro = f * (double)1000000.0;
   } else if (var == "cache_min_flush_age") {
     if (interr.length()) {
       ss << "error parsing int '" << val << "': " << interr;
