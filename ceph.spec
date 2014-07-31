@@ -87,7 +87,9 @@ BuildRequires:  libxml2-devel
 BuildRequires:  perl
 BuildRequires:  pkgconfig
 BuildRequires:  python
+%if 0%{?suse_version} >= 1310
 BuildRequires:  python-virtualenv
+%endif
 BuildRequires:  snappy-devel
 BuildRequires:  xfsprogs-devel
 BuildRequires:  xz
@@ -417,11 +419,14 @@ grep "\-lcurses" * -R
 
 make %{?jobs:-j%{jobs}}
 
+# tests need python-virtualenv
+%if 0%{?suse_version} >= 1310
 %check
 # run in-tree unittests
 make %{?jobs:-j%{jobs}} check-local
 # use make check for a more complete set - which unfortunately does
 # not have all ingredients shipped in the tarball...
+%endif
 
 %install
 make DESTDIR=$RPM_BUILD_ROOT install

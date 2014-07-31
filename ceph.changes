@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Thu Jul 31 09:21:07 UTC 2014 - tbehrens@suse.com
+
+- make unit tests run conditional to newer suse versions, since
+  they require python-virtualenv 
+
+-------------------------------------------------------------------
 Thu Jul 31 08:02:41 UTC 2014 - tbehrens@suse.com
 
 - Update to 0.80.5:
