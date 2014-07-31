@@ -1,4 +1,18 @@
 -------------------------------------------------------------------
+Thu Jul 31 08:02:41 UTC 2014 - tbehrens@suse.com
+
+- Update to 0.80.5:
+  * ceph-dencoder: do not needlessly link to librgw, librados, etc.
+  * do not needlessly link binaries to leveldb
+  * mon: fix mon crash when no auth keys are present
+  * osd: fix cleanup (and avoid occasional crash) during shutdown
+  * osd: fix log rotation under upstart
+  * rgw: fix multipart upload when object has irregular size
+  * rgw: improve bucket listing S3 compatibility
+  * rgw: improve delimited bucket listing
+  * rpm: do not restart daemons on upgrade
+
+-------------------------------------------------------------------
 Wed Jul 30 23:28:50 UTC 2014 - tbehrens@suse.com
 
 - Add 0015-Convert-remaining-init-script-actio.patch

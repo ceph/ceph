@@ -16,10 +16,10 @@ Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
  2 files changed, 50 insertions(+), 28 deletions(-)
 
 diff --git a/src/osd/OSD.cc b/src/osd/OSD.cc
-index 418c188..9e65dbc 100644
+index 5c8f0d6..d747f96 100644
 --- a/src/osd/OSD.cc
 +++ b/src/osd/OSD.cc
-@@ -3745,6 +3745,53 @@ void OSD::_send_boot()
+@@ -3752,6 +3752,53 @@ void OSD::_send_boot()
    monc->send_mon_message(mboot);
  }
  
@@ -73,7 +73,7 @@ index 418c188..9e65dbc 100644
  void OSD::_collect_metadata(map<string,string> *pm)
  {
    (*pm)["ceph_version"] = pretty_version_to_str();
-@@ -3814,34 +3861,7 @@ void OSD::_collect_metadata(map<string,string> *pm)
+@@ -3821,34 +3868,7 @@ void OSD::_collect_metadata(map<string,string> *pm)
    }
  
    // distro info
@@ -110,10 +110,10 @@ index 418c188..9e65dbc 100644
    dout(10) << __func__ << " " << *pm << dendl;
  }
 diff --git a/src/osd/OSD.h b/src/osd/OSD.h
-index ce8b74c..85ee65d 100644
+index ae8d74e..b689d14 100644
 --- a/src/osd/OSD.h
 +++ b/src/osd/OSD.h
-@@ -1432,6 +1432,8 @@ protected:
+@@ -1433,6 +1433,8 @@ protected:
    void _maybe_boot(epoch_t oldest, epoch_t newest);
    void _send_boot();
    void _collect_metadata(map<string,string> *pmeta);

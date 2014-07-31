@@ -13,7 +13,7 @@ This was 0001-fix-runlevels-for-start-scripts.patch
  2 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/src/init-ceph.in b/src/init-ceph.in
-index ffbeda3..2a48940 100644
+index 739c445..f25238f 100644
 --- a/src/init-ceph.in
 +++ b/src/init-ceph.in
 @@ -4,7 +4,7 @@

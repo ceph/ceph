@@ -4,6 +4,8 @@ Subject: [PATCH] Convert remaining init script actions over to suse.
 
 Fix for bnc#887880 - both restart and stop now employ
 killproc instead of the debian-ish start-stop-daemon.
+
+(cherry picked from commit 1cd68c0dccec39e5e86588bf16306df69d351e8c)
 ---
  src/init-radosgw | 6 ++++--
  1 file changed, 4 insertions(+), 2 deletions(-)

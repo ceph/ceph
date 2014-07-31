@@ -13,7 +13,7 @@ This was rcfiles-remove-init-2.patch
  2 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/src/init-ceph.in b/src/init-ceph.in
-index 1effb56..fb997c1 100644
+index 95723b0..9890ae7 100644
 --- a/src/init-ceph.in
 +++ b/src/init-ceph.in
 @@ -4,7 +4,7 @@

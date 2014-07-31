@@ -2,6 +2,7 @@ From: Thorsten Behrens <tbehrens@suse.com>
 Date: Tue, 29 Jul 2014 01:28:24 +0200
 Subject: [PATCH] [warning] Fix deprecation warning from gperftools.
 
+(cherry picked from commit f927e487d2b5053c5653c51ebcdf0ed4bb2932fb)
 ---
  src/perfglue/heap_profiler.cc | 4 ++--
  1 file changed, 2 insertions(+), 2 deletions(-)

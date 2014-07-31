@@ -4,6 +4,8 @@ Subject: [PATCH] Hack-fix crashing tcmalloc on sle11.
 
 This fixes bnc#882430 in a not-so-nice way. Needs configure
 rework with a --tcmalloc-minimal option or somesuch.
+
+(cherry picked from commit 0b617bf660fb0baee10bc749bc7b430a0a794ffe)
 ---
  configure.ac                  |  4 ++--
  src/Makefile-env.am           |  2 +-
@@ -12,7 +14,7 @@ rework with a --tcmalloc-minimal option or somesuch.
  4 files changed, 6 insertions(+), 46 deletions(-)
 
 diff --git a/configure.ac b/configure.ac
-index 87c9d54..0c95be9 100644
+index fb54df1..b7c5ce4 100644
 --- a/configure.ac
 +++ b/configure.ac
 @@ -348,8 +348,8 @@ AC_ARG_WITH([tcmalloc],
@@ -27,10 +29,10 @@ index 87c9d54..0c95be9 100644
  	       		 [Define if you have tcmalloc])
  	       HAVE_LIBTCMALLOC=1
 diff --git a/src/Makefile-env.am b/src/Makefile-env.am
-index e1ba4a8..cf53f29 100644
+index d62247b..44d84e7 100644
 --- a/src/Makefile-env.am
 +++ b/src/Makefile-env.am
-@@ -160,7 +160,7 @@ LIBOS += libos_zfs.a -lzfs
+@@ -163,7 +163,7 @@ LIBOS += libos_zfs.a -lzfs
  endif # WITH_LIBZFS
  
  if WITH_TCMALLOC
