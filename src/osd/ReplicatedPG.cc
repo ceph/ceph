@@ -11446,7 +11446,11 @@ void ReplicatedPG::agent_choose_mode(bool restart)
       num_dirty = 0;
   }
 
-  dout(10) << __func__ << ": "
+  dout(10) << __func__
+	   << " flush_mode: "
+	   << TierAgentState::get_flush_mode_name(agent_state->flush_mode)
+	   << " evict_mode: "
+	   << TierAgentState::get_evict_mode_name(agent_state->evict_mode)
 	   << " num_objects: " << info.stats.stats.sum.num_objects
 	   << " num_bytes: " << info.stats.stats.sum.num_bytes
 	   << " num_objects_dirty: " << info.stats.stats.sum.num_objects_dirty
