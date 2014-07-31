@@ -1527,7 +1527,7 @@ reprotect_and_return_err:
 
   int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
   {
-    tracepoint(librbd, resize_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), size);
+    tracepoint(librbd, resize_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, size);
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "resize " << ictx << " " << ictx->size << " -> "
 		   << size << dendl;
@@ -2031,7 +2031,7 @@ reprotect_and_return_err:
 
   int copy(ImageCtx *src, ImageCtx *dest, ProgressContext &prog_ctx)
   {
-    tracepoint(librbd, copy_enter, src, src->name.c_str(), src->id.c_str(), dest, dest->name.c_str(), dest->id.c_str());
+    tracepoint(librbd, copy_enter, src, src->name.c_str(), src->snap_name.c_str(), src->read_only, dest, dest->name.c_str(), dest->snap_name.c_str(), dest->read_only);
     src->md_lock.get_read();
     src->snap_lock.get_read();
     uint64_t src_size = src->get_image_size(src->snap_id);
@@ -2674,7 +2674,7 @@ reprotect_and_return_err:
 
   ssize_t read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents, char *buf, bufferlist *pbl)
   {
-    tracepoint(librbd, read_enter, ictx, ictx->name.c_str(), ictx->id.c_str());
+    tracepoint(librbd, read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
     for (vector<pair<uint64_t,uint64_t> >::const_iterator r = image_extents.begin();
 	 r != image_extents.end();
 	 ++r) {
@@ -2706,7 +2706,7 @@ reprotect_and_return_err:
 
   ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
   {
-    tracepoint(librbd, write_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), off, len, buf);
+    tracepoint(librbd, write_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, off, len, buf);
     utime_t start_time, elapsed;
     ldout(ictx->cct, 20) << "write " << ictx << " off = " << off << " len = "
 			 << len << dendl;
@@ -2754,7 +2754,7 @@ reprotect_and_return_err:
 
   int discard(ImageCtx *ictx, uint64_t off, uint64_t len)
   {
-    tracepoint(librbd, discard_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), off, len);
+    tracepoint(librbd, discard_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, off, len);
     utime_t start_time, elapsed;
     ldout(ictx->cct, 20) << "discard " << ictx << " off = " << off << " len = "
 			 << len << dendl;
@@ -2896,7 +2896,7 @@ reprotect_and_return_err:
 
   int aio_flush(ImageCtx *ictx, AioCompletion *c)
   {
-    tracepoint(librbd, aio_flush_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), c);
+    tracepoint(librbd, aio_flush_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, c);
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "aio_flush " << ictx << " completion " << c <<  dendl;
 
@@ -2930,7 +2930,7 @@ reprotect_and_return_err:
 
   int flush(ImageCtx *ictx)
   {
-    tracepoint(librbd, flush_enter, ictx, ictx->name.c_str(), ictx->id.c_str());
+    tracepoint(librbd, flush_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "flush " << ictx << dendl;
 
@@ -2966,7 +2966,7 @@ reprotect_and_return_err:
 
   int invalidate_cache(ImageCtx *ictx)
   {
-    tracepoint(librbd, invalidate_cache_enter, ictx, ictx->name.c_str(), ictx->id.c_str());
+    tracepoint(librbd, invalidate_cache_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "invalidate_cache " << ictx << dendl;
 
@@ -2985,7 +2985,7 @@ reprotect_and_return_err:
   int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
 		AioCompletion *c)
   {
-    tracepoint(librbd, aio_write_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), off, len, buf, c);
+    tracepoint(librbd, aio_write_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, off, len, buf, c);
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "aio_write " << ictx << " off = " << off << " len = "
 		   << len << " buf = " << (void*)buf << dendl;
@@ -3074,7 +3074,7 @@ reprotect_and_return_err:
 
   int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c)
   {
-    tracepoint(librbd, aio_discard_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), off, len, c);
+    tracepoint(librbd, aio_discard_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, off, len, c);
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "aio_discard " << ictx << " off = " << off << " len = "
 		   << len << dendl;
@@ -3185,7 +3185,7 @@ reprotect_and_return_err:
   int aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
 	       char *buf, bufferlist *pbl, AioCompletion *c)
   {
-    tracepoint(librbd, aio_read_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), buf, c);
+    tracepoint(librbd, aio_read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, buf, c);
     for (vector<pair<uint64_t,uint64_t> >::const_iterator r = image_extents.begin();
 	 r != image_extents.end();
 	 ++r) {
