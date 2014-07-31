@@ -5,11 +5,13 @@ TRACEPOINT_EVENT(librbd, read_enter,
     TP_ARGS(
         void*, imagectx,
         const char*, name,
-        const char*, id),
+        const char*, snap_name,
+        char, read_only),
     TP_FIELDS(
         ctf_integer_hex(void*, imagectx, imagectx)
         ctf_string(name, name)
-        ctf_string(id, id)
+        ctf_string(snap_name, snap_name)
+        ctf_integer(char, read_only, read_only)
     )
 )
 
@@ -35,14 +37,16 @@ TRACEPOINT_EVENT(librbd, write_enter,
     TP_ARGS(
         void*, imagectx,
         const char*, name,
-        const char*, id,
+        const char*, snap_name,
+        char, read_only,
         uint64_t, off,
         size_t, len,
         const char*, buf),
     TP_FIELDS(
         ctf_integer_hex(void*, imagectx, imagectx)
         ctf_string(name, name)
-        ctf_string(id, id)
+        ctf_string(snap_name, snap_name)
+        ctf_integer(char, read_only, read_only)
         ctf_integer(uint64_t, off, off)
         ceph_ctf_sequence(unsigned char, buf, buf, size_t, len)
     )
@@ -179,7 +183,8 @@ TRACEPOINT_EVENT(librbd, aio_write_enter,
     TP_ARGS(
         void*, imagectx,
         const char*, name,
-        const char*, id,
+        const char*, snap_name,
+        char, read_only,
         uint64_t, off,
         size_t, len,
         const char*, buf,
@@ -187,7 +192,8 @@ TRACEPOINT_EVENT(librbd, aio_write_enter,
     TP_FIELDS(
         ctf_integer_hex(void*, imagectx, imagectx)
         ctf_string(name, name)
-        ctf_string(id, id)
+        ctf_string(snap_name, snap_name)
+        ctf_integer(char, read_only, read_only)
         ctf_integer(uint64_t, off, off)
         ctf_integer(size_t, len, len)
         ceph_ctf_sequence(unsigned char, buf, buf, size_t, len)
@@ -207,13 +213,15 @@ TRACEPOINT_EVENT(librbd, aio_read_enter,
     TP_ARGS(
         void*, imagectx,
         const char*, name,
-        const char*, id,
+        const char*, snap_name,
+        char, read_only,
         const char*, buf,
         const void*, completion),
     TP_FIELDS(
         ctf_integer_hex(void*, imagectx, imagectx)
         ctf_string(name, name)
-        ctf_string(id, id)
+        ctf_string(snap_name, snap_name)
+        ctf_integer(char, read_only, read_only)
         ctf_integer_hex(const void*, completion, completion)
     )
 )
@@ -240,14 +248,16 @@ TRACEPOINT_EVENT(librbd, aio_discard_enter,
     TP_ARGS(
         void*, imagectx,
         const char*, name,
-        const char*, id,
+        const char*, snap_name,
+        char, read_only,
         uint64_t, off,
         uint64_t, len,
         void*, completion),
     TP_FIELDS(
         ctf_integer_hex(void*, imagectx, imagectx)
         ctf_string(name, name)
-        ctf_string(id, id)
+        ctf_string(snap_name, snap_name)
+        ctf_integer(char, read_only, read_only)
         ctf_integer(uint64_t, off, off)
         ctf_integer(uint64_t, len, len)
         ctf_integer_hex(void*, completion, completion)
@@ -266,11 +276,13 @@ TRACEPOINT_EVENT(librbd, invalidate_cache_enter,
     TP_ARGS(
         void*, imagectx,
         const char*, name,
-        const char*, id),
+        const char*, snap_name,
+        char, read_only),
     TP_FIELDS(
         ctf_integer_hex(void*, imagectx, imagectx)
         ctf_string(name, name)
-        ctf_string(id, id)
+        ctf_string(snap_name, snap_name)
+        ctf_integer(char, read_only, read_only)
     )
 )
 
@@ -286,11 +298,13 @@ TRACEPOINT_EVENT(librbd, flush_enter,
     TP_ARGS(
         void*, imagectx,
         const char*, name,
-        const char*, id),
+        const char*, snap_name,
+        char, read_only),
     TP_FIELDS(
         ctf_integer_hex(void*, imagectx, imagectx)
         ctf_string(name, name)
-        ctf_string(id, id)
+        ctf_string(snap_name, snap_name)
+        ctf_integer(char, read_only, read_only)
     )
 )
 
@@ -306,12 +320,14 @@ TRACEPOINT_EVENT(librbd, aio_flush_enter,
     TP_ARGS(
         void*, imagectx,
         const char*, name,
-        const char*, id,
+        const char*, snap_name,
+        char, read_only,
         const void*, completion),
     TP_FIELDS(
         ctf_integer_hex(void*, imagectx, imagectx)
         ctf_string(name, name)
-        ctf_string(id, id)
+        ctf_string(snap_name, snap_name)
+        ctf_integer(char, read_only, read_only)
         ctf_integer_hex(const void*, completion, completion)
     )
 )
@@ -328,17 +344,21 @@ TRACEPOINT_EVENT(librbd, copy_enter,
     TP_ARGS(
         void*, src_imagectx,
         const char*, src_name,
-        const char*, src_id,
+        const char*, src_snap_name,
+        char, src_read_only,
         void*, dst_imagectx,
         const char*, dst_name,
-        const char*, dst_id),
+        const char*, dst_snap_name,
+        char, dst_read_only),
     TP_FIELDS(
         ctf_integer_hex(void*, src_imagectx, src_imagectx)
         ctf_string(src_name, src_name)
-        ctf_string(src_id, src_id)
+        ctf_string(src_snap_name, src_snap_name)
+        ctf_integer(char, src_read_only, src_read_only)
         ctf_integer_hex(void*, dst_imagectx, dst_imagectx)
         ctf_string(dst_name, dst_name)
-        ctf_string(dst_id, dst_id)
+        ctf_string(dst_snap_name, dst_snap_name)
+        ctf_integer(char, dst_read_only, dst_read_only)
     )
 )
 
@@ -354,12 +374,14 @@ TRACEPOINT_EVENT(librbd, resize_enter,
     TP_ARGS(
         void*, imagectx,
         const char*, name,
-        const char*, id,
+        const char*, snap_name,
+        char, read_only,
         uint64_t, size),
     TP_FIELDS(
         ctf_integer_hex(void*, imagectx, imagectx)
         ctf_string(name, name)
-        ctf_string(id, id)
+        ctf_string(snap_name, snap_name)
+        ctf_integer(char, read_only, read_only)
         ctf_integer(uint64_t, size, size)
     )
 )
@@ -398,13 +420,15 @@ TRACEPOINT_EVENT(librbd, discard_enter,
     TP_ARGS(
         void*, imagectx,
         const char*, name,
-        const char*, id,
+        const char*, snap_name,
+        char, read_only,
         uint64_t, off,
         uint64_t, len),
     TP_FIELDS(
         ctf_integer_hex(void*, imagectx, imagectx)
         ctf_string(name, name)
-        ctf_string(id, id)
+        ctf_string(snap_name, snap_name)
+        ctf_integer(char, read_only, read_only)
         ctf_integer(uint64_t, off, off)
         ctf_integer(uint64_t, len, len)
     )
