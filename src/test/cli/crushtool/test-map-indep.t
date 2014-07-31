@@ -1,5 +1,5 @@
   $ crushtool -i "$TESTDIR/test-map-indep.crushmap" --test --show-statistics --rule 1 --set-choose-local-tries 0 --set-choose-local-fallback-tries 0 --set-choose-total-tries 50 --set-chooseleaf-descend-once 2
-  crushtool successfully built or modified map.  Use '-o <file>' to write it out.
+  *crushtool successfully built or modified map.  Use '-o <file>' to write it out. (glob)
   rule 1 (metadata), x = 0..1023, numrep = 1..10
   CRUSH rule 1 x 0 [36]
   CRUSH rule 1 x 1 [876]
