@@ -175,7 +175,7 @@ Summary:	RADOS distributed object store client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 %if 0%{?rhel} || 0%{?centos_version} || 0%{?fedora}
-Obsoletes:	ceph-libs
+Obsoletes:	ceph-libs < 0.80.5
 %endif
 %description -n librados2
 RADOS is a reliable, autonomic distributed object storage cluster
@@ -199,7 +199,7 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	librados2 = %{version}-%{release}
 %if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
-Obsoletes:	ceph-libs
+Obsoletes:	ceph-libs < 0.80.5
 %endif
 %description -n librbd1
 RBD is a block device striped across multiple distributed objects in
@@ -212,7 +212,7 @@ Summary:	Ceph distributed file system client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 %if 0%{?rhel} || 0%{?centos_version} || 0%{?fedora}
-Obsoletes:	ceph-libs
+Obsoletes:	ceph-libs < 0.80.5
 %endif
 %description -n libcephfs1
 Ceph is a distributed network file system designed to provide excellent
@@ -274,6 +274,23 @@ Requires:	junit4
 BuildRequires:	junit4
 %description -n cephfs-java
 This package contains the Java libraries for the Ceph File System.
+
+%package libs-compat
+Summary:	Meta package to include ceph libraries.
+Group:		System Environment/Libraries
+License:	LGPL-2.0
+Obsoletes:	ceph-libs < 0.80.5
+Requires:	librados2 = %{version}-%{release}
+Requires:	librbd1 = %{version}-%{release}
+Requires:	libcephfs1 = %{version}-%{release}
+Provides:	ceph-libs
+
+%description libs-compat
+This is a meta package, that pulls in librados2, librbd1 and libcephfs1. It
+is included for backwards compatibility with distributions that depend on the
+former ceph-libs package, which is now split up into these three subpackages.
+Packages still depending on ceph-libs should be fixed to depend on librados2,
+librbd1 or libcephfs1 instead.
 
 %if 0%{?opensuse} || 0%{?suse_version}
 %debug_package
@@ -727,5 +744,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %defattr(-,root,root,-)
 %{_javadir}/libcephfs.jar
 %{_javadir}/libcephfs-test.jar
+
+%files libs-compat
 
 %changelog
