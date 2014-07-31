@@ -48,7 +48,6 @@
 #include "common/safe_io.h"
 #include "common/perf_counters.h"
 #include "common/sync_filesystem.h"
-#include "LevelDBStore.h"
 
 #ifdef HAVE_KINETIC
 #include "KineticStore.h"
@@ -616,29 +615,17 @@ int KeyValueStore::mkfs()
   }
 
   {
-    KeyValueDB *store = KeyValueDB::create(g_ceph_context,
-					   g_conf->keyvaluestore_backend,
-					   current_fn.c_str());
-    if(! store)
+    ret = KeyValueDB::test_init(g_conf->keyvaluestore_backend,
+                                              current_fn.c_str());
+    if(ret < 0)
     {
-      derr << "KeyValueStore::mkfs backend type "
-	   << g_conf->keyvaluestore_backend << " error" << dendl;
+      derr << __func__ " failed to create backend type "
+	   << g_conf->keyvaluestore_backend << "." << dendl;
       ret = -1;
       goto close_fsid_fd;
 
     }
-    store->init();
-    stringstream err;
-    if (store->create_and_open(err)) {
-      derr << "KeyValueStore::mkfs failed to create keyvaluestore backend: "
-           << err.str() << dendl;
-      ret = -1;
-      delete store;
-      goto close_fsid_fd;
-    } else {
-      delete store;
-      dout(1) << "keyvaluestore backend exists/created" << dendl;
-    }
+    dout(1) << g_conf->keyvaluestore_backend << " backend exists/created" << dendl;
   }
 
   dout(1) << "mkfs done in " << basedir << dendl;
@@ -816,7 +803,7 @@ int KeyValueStore::mount()
     KeyValueDB *store = KeyValueDB::create(g_ceph_context,
 					   g_conf->keyvaluestore_backend,
 					   current_fn.c_str());
-    if(! store)
+    if(!store)
     {
       derr << "KeyValueStore::mount backend type "
 	   << g_conf->keyvaluestore_backend << " error" << dendl;
@@ -828,8 +815,8 @@ int KeyValueStore::mount()
     store->init();
     stringstream err;
     if (store->open(err)) {
-      derr << "KeyValueStore::mount Error initializing keyvaluestore backend: "
-           << err.str() << dendl;
+      derr << "KeyValueStore::mount Error initializing keyvaluestore backend "
+           << g_conf->keyvaluestore_backend << ": " << err.str() << dendl;
       ret = -1;
       delete store;
       goto close_current_fd;
