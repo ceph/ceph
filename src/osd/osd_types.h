@@ -870,6 +870,18 @@ struct pg_pool_t {
   const char *get_cache_mode_name() const {
     return get_cache_mode_name(cache_mode);
   }
+  bool cache_mode_requires_hit_set() const {
+    switch (cache_mode) {
+    case CACHEMODE_NONE:
+    case CACHEMODE_FORWARD:
+    case CACHEMODE_READONLY:
+      return false;
+    case CACHEMODE_WRITEBACK:
+      return true;
+    default:
+      assert(0 == "implement me");
+    }
+  }
 
   uint64_t flags;           ///< FLAG_*
   __u8 type;                ///< TYPE_*
