@@ -4248,7 +4248,7 @@ int FileStore::collection_version_current(coll_t c, uint32_t *version)
     return r;
 
   assert(NULL != index.index);
-  RWLock::WLocker l((index.index)->access_lock);
+  RWLock::RLocker l((index.index)->access_lock);
 
   *version = index->collection_version();
   if (*version == target_version)
