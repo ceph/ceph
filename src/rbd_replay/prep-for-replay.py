@@ -282,6 +282,9 @@ class Processor(object):
 	self.threads = {}
 	self.ioCount = 0
 	self.recentCompletions = []
+	self.openImages = {}
+	self.threads = {}
+	self.ios = []
     def nextID(self):
 	val = self.ioCount
 	self.ioCount = self.ioCount + 2
@@ -289,6 +292,22 @@ class Processor(object):
     def completed(self, io):
 	self.recentCompletions.append(io)
 	self.recentCompletions[:] = [x for x in self.recentCompletions if x.start_time > io.start_time - self.window]
+    def requireImage(self, ts, thread, imagectx, name, snap_name, readonly):
+	if imagectx in self.openImages:
+	    return
+	ionum = self.nextID()
+	thread.pendingIO = OpenImageIO(ionum, ts, thread, thread.pendingIO, imagectx, name, snap_name, readonly)
+	thread.pendingIO.addThreadCompletionDependencies(self.threads, self.recentCompletions)
+	thread.issuedIO(thread.pendingIO)
+	self.ios.append(thread.pendingIO)
+	thread.pendingIO.end_time = ts
+	completionIO = CompletionIO(ts, thread, thread.pendingIO)
+	thread.completedIO(completionIO)
+	self.ios.append(completionIO)
+	self.completed(completionIO)
+	self.openImages[thread.pendingIO.imagectx] = thread.pendingIO.imagectx
+	if self.printOnRead:
+	    print str(thread.pendingIO)
     def run(self, raw_args):
 	parser = argparse.ArgumentParser(description='convert librbd trace output to an rbd-replay input file.')
 	parser.add_argument('--print-on-read', action="store_true", help='print events as they are read in (for debugging)')
@@ -300,12 +319,10 @@ class Processor(object):
 	self.window = 1e9 * args.window
 	inputFileName = args.input
 	outputFileName = args.output
-        ios = []
         pendingIOs = {}
         limit = 100000000000
-        printOnRead = args.print_on_read
+        self.printOnRead = args.print_on_read
         printOnWrite = args.print_on_write
-        threads = {}
         traces = TraceCollection()
         traces.add_trace(inputFileName, "ctf")
 
@@ -321,26 +338,28 @@ class Processor(object):
                 trace_start = ts
             ts = ts - trace_start
             threadID = event["pthread_id"]
-            if threadID in threads:
-                thread = threads[threadID]
+            if threadID in self.threads:
+                thread = self.threads[threadID]
             else:
-                thread = Thread(threadID, threads, self.window)
-                threads[threadID] = thread
+                thread = Thread(threadID, self.threads, self.window)
+                self.threads[threadID] = thread
                 ionum = self.nextID()
                 io = StartThreadIO(ionum, ts, thread)
-                ios.append(io)
-                if printOnRead:
+                self.ios.append(io)
+                if self.printOnRead:
                     print str(io)
             thread.insertTS(ts)
             if event.name == "librbd:read_enter":
                 name = event["name"]
-                readid = event["id"]
+                snap_name = event["snap_name"]
+                readonly = event["read_only"]
                 imagectx = event["imagectx"]
+		self.requireImage(ts, thread, imagectx, name, snap_name, readonly)
                 ionum = self.nextID()
                 thread.pendingIO = ReadIO(ionum, ts, thread, thread.pendingIO, imagectx, [])
-                thread.pendingIO.addThreadCompletionDependencies(threads, self.recentCompletions)
+                thread.pendingIO.addThreadCompletionDependencies(self.threads, self.recentCompletions)
                 thread.issuedIO(thread.pendingIO)
-                ios.append(thread.pendingIO)
+                self.ios.append(thread.pendingIO)
             elif event.name == "librbd:open_image_enter":
                 imagectx = event["imagectx"]
                 name = event["name"]
@@ -349,31 +368,33 @@ class Processor(object):
                 readonly = event["read_only"]
                 ionum = self.nextID()
                 thread.pendingIO = OpenImageIO(ionum, ts, thread, thread.pendingIO, imagectx, name, snap_name, readonly)
-                thread.pendingIO.addThreadCompletionDependencies(threads, self.recentCompletions)
+                thread.pendingIO.addThreadCompletionDependencies(self.threads, self.recentCompletions)
                 thread.issuedIO(thread.pendingIO)
-                ios.append(thread.pendingIO)
+                self.ios.append(thread.pendingIO)
             elif event.name == "librbd:open_image_exit":
                 thread.pendingIO.end_time = ts
                 completionIO = CompletionIO(ts, thread, thread.pendingIO)
                 thread.completedIO(completionIO)
-                ios.append(completionIO)
+                self.ios.append(completionIO)
                 self.completed(completionIO)
-                if printOnRead:
+		self.openImages[thread.pendingIO.imagectx] = thread.pendingIO.imagectx
+                if self.printOnRead:
                     print str(thread.pendingIO)
             elif event.name == "librbd:close_image_enter":
                 imagectx = event["imagectx"]
                 ionum = self.nextID()
                 thread.pendingIO = CloseImageIO(ionum, ts, thread, thread.pendingIO, imagectx)
-                thread.pendingIO.addThreadCompletionDependencies(threads, self.recentCompletions)
+                thread.pendingIO.addThreadCompletionDependencies(self.threads, self.recentCompletions)
                 thread.issuedIO(thread.pendingIO)
-                ios.append(thread.pendingIO)
+                self.ios.append(thread.pendingIO)
             elif event.name == "librbd:close_image_exit":
                 thread.pendingIO.end_time = ts
                 completionIO = CompletionIO(ts, thread, thread.pendingIO)
                 thread.completedIO(completionIO)
-                ios.append(completionIO)
+                self.ios.append(completionIO)
                 self.completed(completionIO)
-                if printOnRead:
+		del self.openImages[thread.pendingIO.imagectx]
+                if self.printOnRead:
                     print str(thread.pendingIO)
             elif event.name == "librbd:read_extent":
                 offset = event["offset"]
@@ -383,38 +404,42 @@ class Processor(object):
                 thread.pendingIO.end_time = ts
                 completionIO = CompletionIO(ts, thread, thread.pendingIO)
                 thread.completedIO(completionIO)
-                ios.append(completionIO)
+                self.ios.append(completionIO)
                 completed(completionIO)
-                if printOnRead:
+                if self.printOnRead:
                     print str(thread.pendingIO)
             elif event.name == "librbd:write_enter":
                 name = event["name"]
-                readid = event["id"]
+                snap_name = event["snap_name"]
+                readonly = event["read_only"]
                 offset = event["off"]
                 length = event["buf_len"]
                 imagectx = event["imagectx"]
+		self.requireImage(ts, thread, imagectx, name, snap_name, readonly)
                 ionum = self.nextID()
                 thread.pendingIO = WriteIO(ionum, ts, thread, thread.pendingIO, imagectx, [Extent(offset, length)])
-                thread.pendingIO.addThreadCompletionDependencies(threads, self.recentCompletions)
+                thread.pendingIO.addThreadCompletionDependencies(self.threads, self.recentCompletions)
                 thread.issuedIO(thread.pendingIO)
-                ios.append(thread.pendingIO)
+                self.ios.append(thread.pendingIO)
             elif event.name == "librbd:write_exit":
                 thread.pendingIO.end_time = ts
                 completionIO = CompletionIO(ts, thread, thread.pendingIO)
                 thread.completedIO(completionIO)
-                ios.append(completionIO)
+                self.ios.append(completionIO)
                 completed(completionIO)
-                if printOnRead:
+                if self.printOnRead:
                     print str(thread.pendingIO)
             elif event.name == "librbd:aio_read_enter":
                 name = event["name"]
-                readid = event["id"]
+                snap_name = event["snap_name"]
+                readonly = event["read_only"]
                 completion = event["completion"]
                 imagectx = event["imagectx"]
+		self.requireImage(ts, thread, imagectx, name, snap_name, readonly)
                 ionum = self.nextID()
                 thread.pendingIO = AioReadIO(ionum, ts, thread, thread.pendingIO, imagectx, [])
-                thread.pendingIO.addThreadCompletionDependencies(threads, self.recentCompletions)
-                ios.append(thread.pendingIO)
+                thread.pendingIO.addThreadCompletionDependencies(self.threads, self.recentCompletions)
+                self.ios.append(thread.pendingIO)
                 thread.issuedIO(thread.pendingIO)
                 pendingIOs[completion] = thread.pendingIO
             elif event.name == "librbd:aio_read_extent":
@@ -422,22 +447,24 @@ class Processor(object):
                 length = event["length"]
                 thread.pendingIO.extents.append(Extent(offset, length))
             elif event.name == "librbd:aio_read_exit":
-                if printOnRead:
+                if self.printOnRead:
                     print str(thread.pendingIO)
             elif event.name == "librbd:aio_write_enter":
                 name = event["name"]
-                writeid = event["id"]
+                snap_name = event["snap_name"]
+                readonly = event["read_only"]
                 offset = event["off"]
                 length = event["len"]
                 completion = event["completion"]
                 imagectx = event["imagectx"]
+		self.requireImage(ts, thread, imagectx, name, snap_name, readonly)
                 ionum = self.nextID()
                 thread.pendingIO = AioWriteIO(ionum, ts, thread, thread.pendingIO, imagectx, [Extent(offset, length)])
-                thread.pendingIO.addThreadCompletionDependencies(threads, self.recentCompletions)
+                thread.pendingIO.addThreadCompletionDependencies(self.threads, self.recentCompletions)
                 thread.issuedIO(thread.pendingIO)
-                ios.append(thread.pendingIO)
+                self.ios.append(thread.pendingIO)
                 pendingIOs[completion] = thread.pendingIO
-                if printOnRead:
+                if self.printOnRead:
                     print str(thread.pendingIO)
             elif event.name == "librbd:aio_complete_enter":
                 completion = event["completion"]
@@ -448,18 +475,18 @@ class Processor(object):
                     completedIO.end_time = ts
                     completionIO = CompletionIO(ts, thread, completedIO)
                     completedIO.thread.completedIO(completionIO)
-                    ios.append(completionIO)
+                    self.ios.append(completionIO)
                     self.completed(completionIO)
-                    if printOnRead:
+                    if self.printOnRead:
                         print str(completionIO)
 
         # Insert-thread-stop phase
-        ios = sorted(ios, key = lambda io: io.start_time)
-        for threadID in threads:
-            thread = threads[threadID]
+        self.ios = sorted(self.ios, key = lambda io: io.start_time)
+        for threadID in self.threads:
+            thread = self.threads[threadID]
             ionum = None
             maxIONum = 0 # only valid if ionum is None
-            for io in ios:
+            for io in self.ios:
                 if io.ionum > maxIONum:
                     maxIONum = io.ionum
                 if io.start_time > thread.lastTS:
@@ -471,14 +498,14 @@ class Processor(object):
                 if maxIONum % 2 == 1:
                     maxIONum = maxIONum - 1
                 ionum = maxIONum + 2
-            for io in ios:
+            for io in self.ios:
                 if io.ionum >= ionum:
                     io.ionum = io.ionum + 2
             # TODO: Insert in the right place, don't append and re-sort
-            ios.append(StopThreadIO(ionum, thread.lastTS, thread))
-            ios = sorted(ios, key = lambda io: io.start_time)
+            self.ios.append(StopThreadIO(ionum, thread.lastTS, thread))
+            self.ios = sorted(self.ios, key = lambda io: io.start_time)
 
-        for io in ios:
+        for io in self.ios:
             if io.prev and io.prev in io.dependencies:
                 io.dependencies.remove(io.prev)
             if io.isCompletion:
@@ -486,11 +513,11 @@ class Processor(object):
             for dep in io.dependencies:
                 dep.numSuccessors = dep.numSuccessors + 1
 
-        if printOnRead and printOnWrite:
+        if self.printOnRead and printOnWrite:
 	    print
 
         with open(outputFileName, "wb") as f:
-            for io in ios:
+            for io in self.ios:
                 if printOnWrite and not io.isCompletion:
                     print str(io)
                 io.writeTo(f)
