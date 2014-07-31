@@ -20,7 +20,7 @@ Upgrading
   affects developers and testers only.
 
 * mon-specific and osd-specific leveldb options have been removed.
-  From this point onward users should use 'leveldb_' generic options and add
+  From this point onward users should use `leveldb_' generic options and add
   the options in the appropriate sections of their configuration files.
   Monitors will still maintain the following monitor-specific defaults:
 
