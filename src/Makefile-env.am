@@ -130,7 +130,7 @@ EXTRALIBS += -lprofiler
 endif # PROFILER
 
 LIBGLOBAL = libglobal.la
-LIBCOMMON = libcommon.la
+LIBCOMMON = libceph_common.la
 LIBSECRET = libsecret.la
 LIBARCH = libarch.la
 LIBPERFGLUE = libperfglue.la

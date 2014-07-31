@@ -1,5 +1,5 @@
   $ crushtool -i "$TESTDIR/test-map-vary-r.crushmap" --test --show-statistics --rule 3 --set-chooseleaf-vary-r 1 --weight 0 0 --weight 4 0 --weight 9 0
-  crushtool successfully built or modified map.  Use '-o <file>' to write it out.
+  *crushtool successfully built or modified map.  Use '-o <file>' to write it out. (glob)
   rule 3 (delltestrule), x = 0..1023, numrep = 2..4
   CRUSH rule 3 x 0 [94,6]
   CRUSH rule 3 x 1 [73,52]
