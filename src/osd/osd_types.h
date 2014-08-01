@@ -467,8 +467,6 @@ ostream& operator<<(ostream& out, const spg_t &pg);
 
 class coll_t {
 public:
-  const static coll_t META_COLL;
-
   coll_t()
     : str("meta")
   { }

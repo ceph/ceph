@@ -31,6 +31,8 @@
 namespace po = boost::program_options;
 using namespace std;
 
+static coll_t META_COLL("meta");
+
 enum {
     TYPE_NONE = 0,
     TYPE_PG_BEGIN,
@@ -491,10 +493,10 @@ int initiate_new_remove_pg(ObjectStore *store, spg_t r_pgid,
     return ENOENT;
   }
 
-  cout << "remove " << coll_t::META_COLL << " " << log_oid.oid << std::endl;
-  rmt->remove(coll_t::META_COLL, log_oid);
-  cout << "remove " << coll_t::META_COLL << " " << biginfo_oid.oid << std::endl;
-  rmt->remove(coll_t::META_COLL, biginfo_oid);
+  cout << "remove " << META_COLL << " " << log_oid.oid << std::endl;
+  rmt->remove(META_COLL, log_oid);
+  cout << "remove " << META_COLL << " " << biginfo_oid.oid << std::endl;
+  rmt->remove(META_COLL, biginfo_oid);
 
   store->apply_transaction(*rmt);
 
@@ -1250,7 +1252,7 @@ int main(int argc, char **argv)
   bufferlist bl;
   OSDSuperblock superblock;
   bufferlist::iterator p;
-  r = fs->read(coll_t::META_COLL, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
+  r = fs->read(META_COLL, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
   if (r < 0) {
     cout << "Failure to read OSD superblock error= " << r << std::endl;
     goto out;

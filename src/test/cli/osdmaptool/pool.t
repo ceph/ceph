@@ -1,6 +1,6 @@
   $ osdmaptool --createsimple 3 myosdmap
-  osdmaptool: osdmap file 'myosdmap'
-  osdmaptool: writing epoch 1 to myosdmap
+  *osdmaptool: osdmap file 'myosdmap' (glob)
+  *osdmaptool: writing epoch 1 to myosdmap (glob)
 
 #
 # --test-map-object / --pool
@@ -14,17 +14,17 @@
   [1]
 
   $ osdmaptool myosdmap --test-map-object foo --pool 123
-  osdmaptool: osdmap file 'myosdmap'
+  *osdmaptool: osdmap file 'myosdmap' (glob)
   There is no pool 123
   [1]
 
   $ osdmaptool myosdmap --test-map-object foo --pool 0
-  osdmaptool: osdmap file 'myosdmap'
+  *osdmaptool: osdmap file 'myosdmap' (glob)
    object 'foo' \-\> 0\..* (re)
 
   $ osdmaptool myosdmap --test-map-object foo
-  osdmaptool: osdmap file 'myosdmap'
-  osdmaptool: assuming pool 0 (use --pool to override)
+  *osdmaptool: osdmap file 'myosdmap' (glob)
+  *osdmaptool: assuming pool 0 (use --pool to override) (glob)
    object 'foo' \-\> 0\..* (re)
 
 #
@@ -39,14 +39,14 @@
   [1]
 
   $ osdmaptool myosdmap --test-map-pgs --pool 123
-  osdmaptool: osdmap file 'myosdmap'
+  *osdmaptool: osdmap file 'myosdmap' (glob)
   There is no pool 123
   [1]
 
   $ osdmaptool myosdmap --mark-up-in --test-map-pgs --pool 0 | grep pool
-  osdmaptool: osdmap file 'myosdmap'
+  *osdmaptool: osdmap file 'myosdmap' (glob)
   pool 0 pg_num .* (re)
 
   $ osdmaptool myosdmap --mark-up-in --test-map-pgs | grep pool
-  osdmaptool: osdmap file 'myosdmap'
+  *osdmaptool: osdmap file 'myosdmap' (glob)
   pool 0 pg_num .* (re)

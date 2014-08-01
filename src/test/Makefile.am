@@ -82,7 +82,7 @@ noinst_PROGRAMS += get_command_descriptions
 if WITH_BUILD_TESTS
 test_build_libcommon_SOURCES = \
 	test/buildtest_skeleton.cc \
-	$(libcommon_la_SOURCES)
+	$(libceph_common_la_SOURCES)
 test_build_libcommon_LDADD = \
 	$(LIBCOMMON_DEPS) \
 	$(PTHREAD_LIBS) $(CRYPTO_LIBS) $(EXTRALIBS)
@@ -264,7 +264,7 @@ UNITTEST_LDADD = \
 	$(PTHREAD_LIBS)
 
 unittest_encoding_SOURCES = test/encoding.cc
-unittest_encoding_LDADD = $(LIBCEPHFS) $(LIBRADOS) -lm $(UNITTEST_LDADD)
+unittest_encoding_LDADD = $(LIBCEPHFS) $(LIBRADOS) -lm $(UNITTEST_LDADD) $(LIBCOMMON)
 unittest_encoding_CXXFLAGS = $(UNITTEST_CXXFLAGS) -fno-strict-aliasing
 check_PROGRAMS += unittest_encoding
 
@@ -349,7 +349,7 @@ unittest_crush_wrapper_CXXFLAGS = $(UNITTEST_CXXFLAGS) -O2
 check_PROGRAMS += unittest_crush_wrapper
 
 unittest_base64_SOURCES = test/base64.cc
-unittest_base64_LDADD = $(LIBCEPHFS) -lm $(UNITTEST_LDADD)
+unittest_base64_LDADD = $(LIBCEPHFS) -lm $(UNITTEST_LDADD) $(LIBCOMMON)
 unittest_base64_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_base64
 
@@ -398,7 +398,7 @@ unittest_gather_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_gather
 
 unittest_run_cmd_SOURCES = test/run_cmd.cc
-unittest_run_cmd_LDADD = $(LIBCEPHFS) $(UNITTEST_LDADD)
+unittest_run_cmd_LDADD = $(LIBCEPHFS) $(UNITTEST_LDADD) $(LIBCOMMON)
 unittest_run_cmd_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_run_cmd
 
@@ -408,7 +408,7 @@ unittest_signals_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_signals
 
 unittest_simple_spin_SOURCES = test/simple_spin.cc
-unittest_simple_spin_LDADD = $(LIBCEPHFS) $(UNITTEST_LDADD)
+unittest_simple_spin_LDADD = $(LIBCEPHFS) $(UNITTEST_LDADD) $(LIBCOMMON)
 unittest_simple_spin_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_simple_spin
 
