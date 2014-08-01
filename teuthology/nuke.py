@@ -387,15 +387,12 @@ def nuke_one(ctx, targets, should_unlock, synch_clocks, reboot_all,
 
 def nuke_helper(ctx):
     # ensure node is up with ipmi
-
     (target,) = ctx.config['targets'].keys()
     host = target.split('@')[-1]
     shortname = host.split('.')[0]
-    if 'vpm' in shortname:
-        return
     log.debug('shortname: %s' % shortname)
     log.debug('{ctx}'.format(ctx=ctx))
-    if not ctx.noipmi and 'ipmi_user' in ctx.teuthology_config:
+    if not ctx.noipmi and 'ipmi_user' in ctx.teuthology_config and 'vpm' not in shortname:
         console = orchestra.remote.getRemoteConsole(
             name=host,
             ipmiuser=ctx.teuthology_config['ipmi_user'],
