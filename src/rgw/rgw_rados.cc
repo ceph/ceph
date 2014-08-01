@@ -2366,13 +2366,10 @@ int RGWRados::init_bucket_index(rgw_bucket& bucket)
   string dir_oid =  dir_oid_prefix;
   dir_oid.append(bucket.marker);
 
-  librados::ObjectWriteOperation op;
-  op.create(true);
-  r = cls_rgw_init_index(index_ctx, op, dir_oid);
-  if (r < 0 && r != -EEXIST)
-    return r;
+  vector<string> bucket_objs;
+  get_bucket_index_objects(dir_oid, bucket_index_max_shards, bucket_objs);
 
-  return 0;
+  return cls_rgw_bucket_index_init_op(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio);
 }
 
 /**
@@ -2439,6 +2436,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     info.owner = owner.user_id;
     info.region = region_name;
     info.placement_rule = selected_placement_rule;
+    info.num_shards = bucket_index_max_shards;
     if (!creation_time)
       time(&info.creation_time);
     else
@@ -2467,11 +2465,16 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
 
         /* remove bucket index */
         librados::IoCtx index_ctx; // context for new bucket
-        int r = open_bucket_index_ctx(bucket, index_ctx);
+        vector<string> bucket_objs;
+        int r = open_bucket_index(bucket, index_ctx, bucket_objs);
         if (r < 0)
           return r;
 
-        index_ctx.remove(dir_oid);
+        vector<string>::const_iterator biter;
+        for (biter = bucket_objs.begin(); biter != bucket_objs.end(); ++biter) {
+          // Do best effort removal
+          index_ctx.remove(*biter);
+        }
       }
       /* ret == -ENOENT here */
     }
@@ -3759,6 +3762,44 @@ int RGWRados::open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx, 
   bucket_oid = dir_oid_prefix;
   bucket_oid.append(bucket.marker);
 
+  return 0;
+}
+
+int RGWRados::open_bucket_index_base(rgw_bucket& bucket, librados::IoCtx& index_ctx,
+    string& bucket_oid_base) {
+  if (bucket_is_system(bucket))
+    return -EINVAL;
+
+  int r = open_bucket_index_ctx(bucket, index_ctx);
+  if (r < 0)
+    return r;
+
+  if (bucket.marker.empty()) {
+    ldout(cct, 0) << "ERROR: empty marker for bucket operation" << dendl;
+    return -EIO;
+  }
+
+  bucket_oid_base = dir_oid_prefix;
+  bucket_oid_base.append(bucket.marker);
+
+  return 0;
+
+}
+
+int RGWRados::open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
+    vector<string>& bucket_objs) {
+  string bucket_oid_base;
+  int ret = open_bucket_index_base(bucket, index_ctx, bucket_oid_base);
+  if (ret < 0)
+    return ret;
+
+  // Get the bucket info
+  RGWBucketInfo binfo;
+  ret = get_bucket_instance_info(NULL, bucket, binfo, NULL, NULL);
+  if (ret < 0)
+    return ret;
+
+  get_bucket_index_objects(bucket_oid_base, binfo.num_shards, bucket_objs);
   return 0;
 }
 
@@ -6710,6 +6751,20 @@ int RGWRados::remove_temp_objects(string date, string time)
   } while (is_truncated);
 
   return 0;
+}
+
+void RGWRados::get_bucket_index_objects(const string& bucket_oid_base,
+    const uint32_t num_shards, vector<string>& bucket_objects)
+{
+  if (!num_shards) {
+    bucket_objects.push_back(bucket_oid_base);
+  } else {
+    char buf[bucket_oid_base.size() + 32];
+    for (uint32_t i = 0; i < num_shards; ++i) {
+      snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), i);
+      bucket_objects.push_back(string(buf));
+    }
+  }
 }
 
 int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
