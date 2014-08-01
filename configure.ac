@@ -529,6 +529,35 @@ AS_IF([test "x$with_kinetic" = "xyes"],
             [AC_DEFINE([HAVE_KINETIC], [1], [Defined if you have kinetic enabled])])
 AM_CONDITIONAL(WITH_KINETIC, [ test "$with_kinetic" = "yes" ])
 
+# check for c++11 (but do not enable it)
+old_cxxflags="$CXXFLAGS"
+AX_CXX_COMPILE_STDCXX_11([], [optional])
+CXXFLAGS="$old_cxxflags"
+
+# use rocksdb
+AC_ARG_WITH([librocksdb],
+            [AS_HELP_STRING([--with-librocksdb], [build rocksdb support])],
+            [],
+            [with_librocksdb=no])
+AS_IF([test "x$with_librocksdb" = "xyes"],
+            [PKG_CHECK_MODULES([LIBROCKSDB], [rocksdb], [], [true])])
+AS_IF([test "x$with_librocksdb" = "xyes"],
+            [AC_DEFINE([HAVE_LIBROCKSDB], [1], [Defined if you have librocksdb enabled])])
+AM_CONDITIONAL(WITH_DLIBROCKSDB, [ test "$with_librocksdb" = "yes" ])
+
+AC_ARG_WITH([librocksdb-static],
+            [AS_HELP_STRING([--with-librocksdb-static], [build rocksdb support])],
+            [],
+            [with_librocksdb_static=no])
+AS_IF([test "x$with_librocksdb_static" = "xcheck" -a "x$HAVE_CXX11" = "x1" ],
+            [with_librocksdb_static="yes"])
+AS_IF([test "x$with_librocksdb_static" = "xyes"],
+            [AC_CONFIG_SUBDIRS([src/rocksdb])])
+AS_IF([test "x$with_librocksdb_static" = "xyes"],
+            [AC_DEFINE([HAVE_LIBROCKSDB], [1], [Defined if you have librocksdb enabled])])
+AM_CONDITIONAL(WITH_SLIBROCKSDB, [ test "x$with_librocksdb_static" = "xyes" ])
+AM_CONDITIONAL(WITH_LIBROCKSDB, [ test "x$with_librocksdb_static" = "xyes" -o "x$with_librocksdb" = "xyes" ])
+
 # use system libs3?
 AC_ARG_WITH([system-libs3],
 	[AS_HELP_STRING([--with-system-libs3], [use system libs3])],

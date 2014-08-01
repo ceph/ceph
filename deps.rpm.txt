@@ -1,6 +1,7 @@
 autoconf
 automake
 boost-devel
+bzip2-devel
 cryptopp-devel
 expat-devel
 fcgi-devel
@@ -13,6 +14,7 @@ leveldb-devel
 libaio-devel
 libatomic_ops-devel
 libblkid-devel
+libbz2-devel
 libcurl-devel
 libedit-devel
 libtool
