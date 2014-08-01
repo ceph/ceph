@@ -973,6 +973,7 @@ public:
   HitSet::Params hit_set_params; ///< The HitSet params to use on this pool
   uint32_t hit_set_period;      ///< periodicity of HitSet segments (seconds)
   uint32_t hit_set_count;       ///< number of periods to retain
+  uint32_t min_read_recency_for_promote;   ///< minimum number of HitSet to check before promote
 
   uint32_t stripe_width;        ///< erasure coded stripe size in bytes
 
@@ -997,6 +998,7 @@ public:
       hit_set_params(),
       hit_set_period(0),
       hit_set_count(0),
+      min_read_recency_for_promote(0),
       stripe_width(0)
   { }
 
