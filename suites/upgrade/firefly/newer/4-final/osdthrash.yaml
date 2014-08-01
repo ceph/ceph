@@ -13,6 +13,6 @@ tasks:
   - ceph-fuse: [client.0]
   - workunit:
       clients:
-        client.0
+        client.0:
           - suites/iogen.sh
 
