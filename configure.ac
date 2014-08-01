@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
 
-AC_INIT([ceph], [0.81], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [0.83], [ceph-devel@vger.kernel.org])
 
 # Create release string.  Used with VERSION for RPMs.
 RPM_RELEASE=0
@@ -139,13 +139,13 @@ if test x"$linux" = x"yes"; then
   # libblkid
   AC_CHECK_HEADER([blkid/blkid.h], [],
     AC_MSG_ERROR([blkid/blkid.h not found (libblkid-dev, libblkid-devel)]))
-  AC_CHECK_LIB([blkid], [blkid_devno_to_wholedisk], [],
+  AC_CHECK_LIB([blkid], [blkid_devno_to_wholedisk], [true],
     AC_MSG_FAILURE([libblkid not found]))
 
   # libudev
   AC_CHECK_HEADER([libudev.h], [],
     AC_MSG_ERROR([libudev.h not found (libudev-dev, libudev-devel)]))
-  AC_CHECK_LIB([udev], [udev_monitor_receive_device], [],
+  AC_CHECK_LIB([udev], [udev_monitor_receive_device], [true],
     AC_MSG_FAILURE([libudev not found]))
 fi
 
@@ -506,9 +506,9 @@ AC_ARG_WITH([ocf],
 AM_CONDITIONAL(WITH_OCF, [ test "$with_ocf" = "yes" ])
 
 # check is snappy-devel is installed, needed by leveldb
-AC_CHECK_LIB([snappy], [snappy_compress], [], [AC_MSG_FAILURE([libsnappy not found])])
+AC_CHECK_LIB([snappy], [snappy_compress], [true], [AC_MSG_FAILURE([libsnappy not found])])
 # use system leveldb
-AC_CHECK_LIB([leveldb], [leveldb_open], [], [AC_MSG_FAILURE([libleveldb not found])], [-lsnappy -lpthread])
+AC_CHECK_LIB([leveldb], [leveldb_open], [true], [AC_MSG_FAILURE([libleveldb not found])], [-lsnappy -lpthread])
 # see if we can use bloom filters with leveldb
 AC_LANG_PUSH([C++])
 AC_CHECK_HEADER([leveldb/filter_policy.h], [AC_DEFINE([HAVE_LEVELDB_FILTER_POLICY], [1], [Defined if LevelDB supports bloom filters ])])
@@ -516,6 +516,47 @@ AC_LANG_POP([C++])
 
 # Find supported SIMD / SSE extensions supported by the compiler
 AX_INTEL_FEATURES()
+
+# kinetic osd backend?
+AC_ARG_WITH([kinetic],
+            [AS_HELP_STRING([--with-kinetic], [build kinetic support])],
+            [],
+            [with_kinetic=no])
+# no pkg-config support yet
+#AS_IF([test "x$with_kinetic" = "xyes"],
+#            [PKG_CHECK_MODULES([KINETIC], [kinetic_client], [], [true])])
+AS_IF([test "x$with_kinetic" = "xyes"],
+            [AC_DEFINE([HAVE_KINETIC], [1], [Defined if you have kinetic enabled])])
+AM_CONDITIONAL(WITH_KINETIC, [ test "$with_kinetic" = "yes" ])
+
+# check for c++11 (but do not enable it)
+old_cxxflags="$CXXFLAGS"
+AX_CXX_COMPILE_STDCXX_11([], [optional])
+CXXFLAGS="$old_cxxflags"
+
+# use rocksdb
+AC_ARG_WITH([librocksdb],
+            [AS_HELP_STRING([--with-librocksdb], [build rocksdb support])],
+            [],
+            [with_librocksdb=no])
+AS_IF([test "x$with_librocksdb" = "xyes"],
+            [PKG_CHECK_MODULES([LIBROCKSDB], [rocksdb], [], [true])])
+AS_IF([test "x$with_librocksdb" = "xyes"],
+            [AC_DEFINE([HAVE_LIBROCKSDB], [1], [Defined if you have librocksdb enabled])])
+AM_CONDITIONAL(WITH_DLIBROCKSDB, [ test "$with_librocksdb" = "yes" ])
+
+AC_ARG_WITH([librocksdb-static],
+            [AS_HELP_STRING([--with-librocksdb-static], [build rocksdb support])],
+            [],
+            [with_librocksdb_static=no])
+AS_IF([test "x$with_librocksdb_static" = "xcheck" -a "x$HAVE_CXX11" = "x1" ],
+            [with_librocksdb_static="yes"])
+AS_IF([test "x$with_librocksdb_static" = "xyes"],
+            [AC_CONFIG_SUBDIRS([src/rocksdb])])
+AS_IF([test "x$with_librocksdb_static" = "xyes"],
+            [AC_DEFINE([HAVE_LIBROCKSDB], [1], [Defined if you have librocksdb enabled])])
+AM_CONDITIONAL(WITH_SLIBROCKSDB, [ test "x$with_librocksdb_static" = "xyes" ])
+AM_CONDITIONAL(WITH_LIBROCKSDB, [ test "x$with_librocksdb_static" = "xyes" -o "x$with_librocksdb" = "xyes" ])
 
 # use system libs3?
 AC_ARG_WITH([system-libs3],
@@ -614,9 +655,15 @@ AC_CHECK_LIB(boost_system-mt, main, [],
         AC_MSG_NOTICE(["Boost system library not found."]))])
 
 # Find the right boost_thread library.
+BOOST_THREAD_LIBS=""
+saved_LIBS="${LIBS}"
+LIBS=""
 AC_CHECK_LIB(boost_thread-mt, main, [],
     [AC_CHECK_LIB(boost_thread, main, [],
         AC_MSG_FAILURE(["Boost thread library not found."]))])
+BOOST_THREAD_LIBS="${LIBS}"
+LIBS="${saved_LIBS}"
+AC_SUBST(BOOST_THREAD_LIBS)
 
 #
 # Check for boost_program_options library (defines BOOST_PROGRAM_OPTIONS_LIBS).

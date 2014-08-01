@@ -68,7 +68,7 @@
 #include "common/fd.h"
 #include "HashIndex.h"
 #include "DBObjectMap.h"
-#include "LevelDBStore.h"
+#include "KeyValueDB.h"
 
 #include "common/ceph_crypto.h"
 using ceph::crypto::SHA1;
@@ -278,6 +278,14 @@ int FileStore::lfn_open(coll_t cid,
 	derr << "error creating " << oid << " (" << (*path)->path()
 	     << ") in index: " << cpp_strerror(-r) << dendl;
 	goto fail;
+      }
+      r = chain_fsetxattr(fd, XATTR_SPILL_OUT_NAME,
+                          XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT));
+      if (r < 0) {
+        VOID_TEMP_FAILURE_RETRY(::close(fd));
+        derr << "error setting spillout xattr for oid " << oid << " (" << (*path)->path()
+                       << "):" << cpp_strerror(-r) << dendl;
+        goto fail;
       }
     }
   }
@@ -623,6 +631,7 @@ void FileStore::create_backend(long f_type)
 	  << dendl;
 
   switch (f_type) {
+#if defined(__linux__)
   case BTRFS_SUPER_MAGIC:
     wbthrottle.set_fs(WBThrottle::BTRFS);
     break;
@@ -636,6 +645,7 @@ void FileStore::create_backend(long f_type)
       assert(m_filestore_replica_fadvise == false);
     }
     break;
+#endif
   }
 
   set_xattr_limits_via_conf();
@@ -718,6 +728,8 @@ int FileStore::mkfs()
     goto close_fsid_fd;
   }
 
+  // superblock
+  superblock.omap_backend = g_conf->filestore_omap_backend;
   ret = write_superblock();
   if (ret < 0) {
     derr << "mkfs: write_superblock() failed: "
@@ -777,21 +789,13 @@ int FileStore::mkfs()
     }
     VOID_TEMP_FAILURE_RETRY(::close(fd));  
   }
-
-  {
-    leveldb::Options options;
-    options.create_if_missing = true;
-    leveldb::DB *db;
-    leveldb::Status status = leveldb::DB::Open(options, omap_dir, &db);
-    if (status.ok()) {
-      delete db;
-      dout(1) << "leveldb db exists/created" << dendl;
-    } else {
-      derr << "mkfs failed to create leveldb: " << status.ToString() << dendl;
-      ret = -1;
-      goto close_fsid_fd;
-    }
+  ret = KeyValueDB::test_init(superblock.omap_backend, omap_dir);
+  if (ret < 0) {
+    derr << "mkfs failed to create " << g_conf->filestore_omap_backend << dendl;
+    ret = -1;
+    goto close_fsid_fd;
   }
+  dout(1) << g_conf->filestore_omap_backend << " db exists/created" << dendl;
 
   // journal?
   ret = mkjournal();
@@ -1353,38 +1357,25 @@ int FileStore::mount()
   }
 
   {
-    LevelDBStore *omap_store = new LevelDBStore(g_ceph_context, omap_dir);
-
-    omap_store->init();
-    if (g_conf->osd_leveldb_write_buffer_size)
-      omap_store->options.write_buffer_size = g_conf->osd_leveldb_write_buffer_size;
-    if (g_conf->osd_leveldb_cache_size)
-      omap_store->options.cache_size = g_conf->osd_leveldb_cache_size;
-    if (g_conf->osd_leveldb_block_size)
-      omap_store->options.block_size = g_conf->osd_leveldb_block_size;
-    if (g_conf->osd_leveldb_bloom_size)
-      omap_store->options.bloom_size = g_conf->osd_leveldb_bloom_size;
-    if (g_conf->osd_leveldb_compression)
-      omap_store->options.compression_enabled = g_conf->osd_leveldb_compression;
-    if (g_conf->osd_leveldb_paranoid)
-      omap_store->options.paranoid_checks = g_conf->osd_leveldb_paranoid;
-    if (g_conf->osd_leveldb_max_open_files)
-      omap_store->options.max_open_files = g_conf->osd_leveldb_max_open_files;
-    if (g_conf->osd_leveldb_log.length())
-      omap_store->options.log_file = g_conf->osd_leveldb_log;
-
-    stringstream err;
-    if (omap_store->create_and_open(err)) {
-      delete omap_store;
-      derr << "Error initializing leveldb: " << err.str() << dendl;
+    KeyValueDB * omap_store = KeyValueDB::create(g_ceph_context,
+						 superblock.omap_backend,
+						 omap_dir);
+    if (omap_store == NULL)
+    {
+      derr << "Error creating " << superblock.omap_backend << dendl;
       ret = -1;
       goto close_current_fd;
     }
 
-    if (g_conf->osd_compact_leveldb_on_mount) {
-      derr << "Compacting store..." << dendl;
-      omap_store->compact();
-      derr << "...finished compacting store" << dendl;
+    omap_store->init();
+
+    stringstream err;
+    if (omap_store->create_and_open(err)) {
+      delete omap_store;
+      derr << "Error initializing " << superblock.omap_backend
+	   << " : " << err.str() << dendl;
+      ret = -1;
+      goto close_current_fd;
     }
 
     DBObjectMap *dbomap = new DBObjectMap(omap_store);
@@ -1572,21 +1563,6 @@ int FileStore::umount()
 }
 
 
-int FileStore::get_max_object_name_length()
-{
-  lock.Lock();
-  int ret = pathconf(basedir.c_str(), _PC_NAME_MAX);
-  if (ret < 0) {
-    int err = errno;
-    lock.Unlock();
-    if (err == 0)
-      return -EDOM;
-    return -err;
-  }
-  lock.Unlock();
-  return ret;
-}
-
 
 
 /// -----------------------------
@@ -1713,7 +1689,8 @@ void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
 
 void FileStore::_finish_op(OpSequencer *osr)
 {
-  Op *o = osr->dequeue();
+  list<Context*> to_queue;
+  Op *o = osr->dequeue(&to_queue);
   
   dout(10) << "_finish_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << dendl;
   osr->apply_lock.Unlock();  // locked in _do_op
@@ -1731,6 +1708,7 @@ void FileStore::_finish_op(OpSequencer *osr)
   if (o->onreadable) {
     op_finisher.queue(o->onreadable);
   }
+  op_finisher.queue(to_queue);
   delete o;
 }
 
@@ -1871,7 +1849,8 @@ void FileStore::_journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk)
   // this should queue in order because the journal does it's completions in order.
   queue_op(osr, o);
 
-  osr->dequeue_journal();
+  list<Context*> to_queue;
+  osr->dequeue_journal(&to_queue);
 
   // do ondisk completions async, to prevent any onreadable_sync completions
   // getting blocked behind an ondisk completion.
@@ -1879,6 +1858,7 @@ void FileStore::_journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk)
     dout(10) << " queueing ondisk " << ondisk << dendl;
     ondisk_finisher.queue(ondisk);
   }
+  ondisk_finisher.queue(to_queue);
 }
 
 int FileStore::_do_transactions(
@@ -3014,8 +2994,20 @@ int FileStore::_clone(coll_t cid, const ghobject_t& oldoid, const ghobject_t& ne
   }
 
   {
+    char buf[2];
     map<string, bufferptr> aset;
-    r = _fgetattrs(**o, aset, false);
+    r = _fgetattrs(**o, aset);
+    if (r < 0)
+      goto out3;
+
+    r = chain_fgetxattr(**o, XATTR_SPILL_OUT_NAME, buf, sizeof(buf));
+    if (r >= 0 && !strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT))) {
+      r = chain_fsetxattr(**n, XATTR_SPILL_OUT_NAME, XATTR_NO_SPILL_OUT,
+                          sizeof(XATTR_NO_SPILL_OUT));
+    } else {
+      r = chain_fsetxattr(**n, XATTR_SPILL_OUT_NAME, XATTR_SPILL_OUT,
+                          sizeof(XATTR_SPILL_OUT));
+    }
     if (r < 0)
       goto out3;
 
@@ -3595,7 +3587,7 @@ int FileStore::_fgetattr(int fd, const char *name, bufferptr& bp)
   return l;
 }
 
-int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset, bool user_only)
+int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset)
 {
   // get attr list
   char names1[100];
@@ -3629,17 +3621,9 @@ int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset, bool user_only)
   while (name < end) {
     char *attrname = name;
     if (parse_attrname(&name)) {
-      char *set_name = name;
-      bool can_get = true;
-      if (user_only) {
-	if (*set_name =='_')
-	  set_name++;
-	else
-	  can_get = false;
-      }
-      if (*set_name && can_get) {
+      if (*name) {
         dout(20) << "fgetattrs " << fd << " getting '" << name << "'" << dendl;
-        int r = _fgetattr(fd, attrname, aset[set_name]);
+        int r = _fgetattr(fd, attrname, aset[name]);
         if (r < 0)
 	  return r;
       }
@@ -3760,7 +3744,7 @@ int FileStore::getattr(coll_t cid, const ghobject_t& oid, const char *name, buff
   }
 }
 
-int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset, bool user_only)
+int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset)
 {
   tracepoint(objectstore, getattrs_enter, cid.c_str());
   set<string> omap_attrs;
@@ -3780,7 +3764,7 @@ int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>
   if (r >= 0 && !strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT)))
     spill_out = false;
 
-  r = _fgetattrs(**fd, aset, user_only);
+  r = _fgetattrs(**fd, aset);
   if (r < 0) {
     goto out;
   }
@@ -3813,16 +3797,7 @@ int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>
   for (map<string, bufferlist>::iterator i = omap_aset.begin();
 	 i != omap_aset.end();
 	 ++i) {
-    string key;
-    if (user_only) {
-	if (i->first[0] != '_')
-	  continue;
-	if (i->first == "_")
-	  continue;
-	key = i->first.substr(1, i->first.size());
-    } else {
-	key = i->first;
-    }
+    string key(i->first);
     aset.insert(make_pair(key,
 			    bufferptr(i->second.c_str(), i->second.length())));
   }
@@ -3861,7 +3836,7 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
   else
     spill_out = 1;
 
-  r = _fgetattrs(**fd, inline_set, false);
+  r = _fgetattrs(**fd, inline_set);
   assert(!m_filestore_fail_eio || r != -EIO);
   dout(15) << "setattrs " << cid << "/" << oid << dendl;
 
@@ -3884,12 +3859,6 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
 
     if (!inline_set.count(p->first) &&
 	  inline_set.size() >= m_filestore_max_inline_xattrs) {
-	if (inline_set.count(p->first)) {
-	  inline_set.erase(p->first);
-	  r = chain_fremovexattr(**fd, n);
-	  if (r < 0)
-	    goto out_close;
-	}
 	omap_set[p->first].push_back(p->second);
 	continue;
     }
@@ -4002,7 +3971,7 @@ int FileStore::_rmattrs(coll_t cid, const ghobject_t& oid,
     spill_out = false;
   }
 
-  r = _fgetattrs(**fd, aset, false);
+  r = _fgetattrs(**fd, aset);
   if (r >= 0) {
     for (map<string,bufferptr>::iterator p = aset.begin(); p != aset.end(); ++p) {
       char n[CHAIN_XATTR_MAX_NAME_LEN];
@@ -4107,7 +4076,7 @@ int FileStore::collection_getattrs(coll_t cid, map<string,bufferptr>& aset)
     r = -errno;
     goto out;
   }
-  r = _fgetattrs(fd, aset, true);
+  r = _fgetattrs(fd, aset);
   VOID_TEMP_FAILURE_RETRY(::close(fd));
  out:
   dout(10) << "collection_getattrs " << fn << " = " << r << dendl;
@@ -5125,6 +5094,7 @@ void FileStore::set_xattr_limits_via_conf()
   uint32_t fs_xattrs;
 
   switch (m_fs_type) {
+#if defined(__linux__)
   case XFS_SUPER_MAGIC:
     fs_xattr_size = g_conf->filestore_max_inline_xattr_size_xfs;
     fs_xattrs = g_conf->filestore_max_inline_xattrs_xfs;
@@ -5133,6 +5103,7 @@ void FileStore::set_xattr_limits_via_conf()
     fs_xattr_size = g_conf->filestore_max_inline_xattr_size_btrfs;
     fs_xattrs = g_conf->filestore_max_inline_xattrs_btrfs;
     break;
+#endif
   default:
     fs_xattr_size = g_conf->filestore_max_inline_xattr_size_other;
     fs_xattrs = g_conf->filestore_max_inline_xattrs_other;
@@ -5156,15 +5127,20 @@ void FileStore::set_xattr_limits_via_conf()
 
 void FSSuperblock::encode(bufferlist &bl) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   compat_features.encode(bl);
+  ::encode(omap_backend, bl);
   ENCODE_FINISH(bl);
 }
 
 void FSSuperblock::decode(bufferlist::iterator &bl)
 {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   compat_features.decode(bl);
+  if (struct_v >= 2)
+    ::decode(omap_backend, bl);
+  else
+    omap_backend = "leveldb";
   DECODE_FINISH(bl);
 }
 
@@ -5172,6 +5148,7 @@ void FSSuperblock::dump(Formatter *f) const
 {
   f->open_object_section("compat");
   compat_features.dump(f);
+  f->dump_string("omap_backend", omap_backend);
   f->close_section();
 }
 
@@ -5185,5 +5162,7 @@ void FSSuperblock::generate_test_instances(list<FSSuperblock*>& o)
   feature_incompat.insert(CEPH_FS_FEATURE_INCOMPAT_SHARDS);
   z.compat_features = CompatSet(feature_compat, feature_ro_compat,
                                 feature_incompat);
+  o.push_back(new FSSuperblock(z));
+  z.omap_backend = "rocksdb";
   o.push_back(new FSSuperblock(z));
 }

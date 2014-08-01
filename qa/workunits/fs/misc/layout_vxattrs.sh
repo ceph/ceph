@@ -22,9 +22,13 @@ getfattr -n ceph.dir.layout file    2>&1 | grep -q 'No such attribute'
 setfattr -n ceph.file.layout.stripe_unit -v 1048576 file2
 setfattr -n ceph.file.layout.stripe_count -v 8 file2
 setfattr -n ceph.file.layout.object_size -v 10485760 file2
+
+# Assumption: that the data pool is called 'data' and has ID '2'
+# (see teuthology.task.ceph.cephfs_setup)
 setfattr -n ceph.file.layout.pool -v data file2
-setfattr -n ceph.file.layout.pool -v 0 file2
+setfattr -n ceph.file.layout.pool -v 2 file2
 getfattr -n ceph.file.layout.pool file2 | grep -q data
+
 getfattr -n ceph.file.layout.stripe_unit file2 | grep -q 1048576
 getfattr -n ceph.file.layout.stripe_count file2 | grep -q 8
 getfattr -n ceph.file.layout.object_size file2 | grep -q 10485760
@@ -52,8 +56,12 @@ getfattr -d -m - dir | grep -q ceph.file.layout      && exit 1 || true
 setfattr -n ceph.dir.layout.stripe_unit -v 1048576 dir
 setfattr -n ceph.dir.layout.stripe_count -v 8 dir
 setfattr -n ceph.dir.layout.object_size -v 10485760 dir
+
+# Assumption: that the data pool is called 'data' and has ID '2'
+# (see teuthology.task.ceph.cephfs_setup)
 setfattr -n ceph.dir.layout.pool -v data dir
-setfattr -n ceph.dir.layout.pool -v 0 dir
+setfattr -n ceph.dir.layout.pool -v 2 dir
+
 getfattr -n ceph.dir.layout dir
 getfattr -n ceph.dir.layout dir | grep -q object_size=10485760
 getfattr -n ceph.dir.layout dir | grep -q stripe_count=8

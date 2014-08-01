@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #include <string.h>
 
@@ -167,6 +169,6 @@ int RGWMongoose::send_content_length(uint64_t len)
 {
   has_content_length = true;
   char buf[21];
-  snprintf(buf, sizeof(buf), "%"PRIu64, len);
+  snprintf(buf, sizeof(buf), "%" PRIu64, len);
   return print("Content-Length: %s\n", buf);
 }

@@ -1,5 +1,5 @@
   $ NUM_OSDS=500
-  $ POOL_COUNT=3 # data + metadata + rbd
+  $ POOL_COUNT=1 # data + metadata + rbd
   $ SIZE=3
   $ PG_BITS=4
 #
@@ -21,12 +21,9 @@
   $ PG_NUM=$(($NUM_OSDS << $PG_BITS))
   $ grep "pg_num $PG_NUM" "$OUT" || cat $OUT
   pool 0 pg_num 8000
-  pool 1 pg_num 8000
-  pool 2 pg_num 8000
   $ TOTAL=$((POOL_COUNT * $PG_NUM))
-  $ PATTERN=$(echo "size $SIZE\t$TOTAL")
-  $ grep "$PATTERN" $OUT || cat "$OUT"
-  size 3\t24000 (esc)
+  $ grep -P "size $SIZE\t$TOTAL" $OUT || cat $OUT
+  size 3\t8000 (esc)
   $ STATS_CRUSH=$(grep '^ avg ' "$OUT")
 # 
 # --test-map-pgs --test-random is expected to change nothing regarding the totals
@@ -36,12 +33,9 @@
   $ PG_NUM=$(($NUM_OSDS << $PG_BITS))
   $ grep "pg_num $PG_NUM" "$OUT" || cat $OUT
   pool 0 pg_num 8000
-  pool 1 pg_num 8000
-  pool 2 pg_num 8000
   $ TOTAL=$((POOL_COUNT * $PG_NUM))
-  $ PATTERN=$(echo "size $SIZE\t$TOTAL")
-  $ grep "$PATTERN" $OUT || cat "$OUT"
-  size 3\t24000 (esc)
+  $ grep -P "size $SIZE\t$TOTAL" $OUT || cat $OUT
+  size 3\t8000 (esc)
   $ STATS_RANDOM=$(grep '^ avg ' "$OUT")
 # it is almost impossible to get the same stats with random and crush
 # if they are, it most probably means something went wrong somewhere

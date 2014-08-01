@@ -18,9 +18,9 @@
   There is no pool 123
   [1]
 
-  $ osdmaptool myosdmap --test-map-object foo --pool 2
+  $ osdmaptool myosdmap --test-map-object foo --pool 0
   osdmaptool: osdmap file 'myosdmap'
-   object 'foo' \-\> 2\..* (re)
+   object 'foo' \-\> 0\..* (re)
 
   $ osdmaptool myosdmap --test-map-object foo
   osdmaptool: osdmap file 'myosdmap'
@@ -43,12 +43,10 @@
   There is no pool 123
   [1]
 
-  $ osdmaptool myosdmap --mark-up-in --test-map-pgs --pool 2 | grep pool
+  $ osdmaptool myosdmap --mark-up-in --test-map-pgs --pool 0 | grep pool
   osdmaptool: osdmap file 'myosdmap'
-  pool 2 pg_num .* (re)
+  pool 0 pg_num .* (re)
 
   $ osdmaptool myosdmap --mark-up-in --test-map-pgs | grep pool
   osdmaptool: osdmap file 'myosdmap'
   pool 0 pg_num .* (re)
-  pool 1 pg_num .* (re)
-  pool 2 pg_num .* (re)

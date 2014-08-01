@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include <errno.h>
 #include <iostream>
 #include <sstream>
@@ -1515,7 +1518,7 @@ int main(int argc, char **argv)
       do {
         list<rgw_bi_log_entry> entries;
         ret = store->list_objects(bucket, max_entries - count, prefix, delim,
-                                  marker, result, common_prefixes, true,
+                                  marker, NULL, result, common_prefixes, true,
                                   ns, false, &truncated, NULL);
         if (ret < 0) {
           cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
@@ -1629,7 +1632,7 @@ int main(int argc, char **argv)
       oid += "-";
       oid += bucket_id;
       oid += "-";
-      oid += string(bucket.name);
+      oid += bucket_name;
     }
 
     if (opt_cmd == OPT_LOG_SHOW) {

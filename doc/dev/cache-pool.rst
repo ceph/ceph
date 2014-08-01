@@ -139,7 +139,7 @@ The 'readonly' mode is intended for read-only workloads that do not
 require consistency to be enforced by the storage system.  Writes will
 be forwarded to the base tier, but objects that are read will get
 promoted to the cache.  No attempt is made by Ceph to ensure that the
-contents of the cache tier(s) are consistent in the presense of object
+contents of the cache tier(s) are consistent in the presence of object
 updates.
 
 Cache sizing
@@ -161,7 +161,7 @@ evicting clean objects when we reach 80% of the target size.
 The target size can be specified either in terms of objects or bytes::
 
  ceph osd pool set foo-hot target_max_bytes 1000000000000  # 1 TB
- ceph osd pool set foo-hot target_max_objets 1000000       # 1 million objects
+ ceph osd pool set foo-hot target_max_objects 1000000       # 1 million objects
 
 Note that if both limits are specified, Ceph will begin flushing or
 evicting when either threshold is triggered.

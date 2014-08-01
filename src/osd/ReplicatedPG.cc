@@ -1080,14 +1080,14 @@ void ReplicatedPG::get_src_oloc(const object_t& oid, const object_locator_t& olo
 }
 
 void ReplicatedPG::do_request(
-  OpRequestRef op,
+  OpRequestRef& op,
   ThreadPool::TPHandle &handle)
 {
   if (!op_has_sufficient_caps(op)) {
     osd->reply_op_error(op, -EPERM);
     return;
   }
-  assert(!op_must_wait_for_map(get_osdmap(), op));
+  assert(!op_must_wait_for_map(get_osdmap()->get_epoch(), op));
   if (can_discard_request(op)) {
     return;
   }
@@ -1190,7 +1190,7 @@ bool ReplicatedPG::check_src_targ(const hobject_t& soid, const hobject_t& toid) 
  * pg lock will be held (if multithreaded)
  * osd_lock NOT held.
  */
-void ReplicatedPG::do_op(OpRequestRef op)
+void ReplicatedPG::do_op(OpRequestRef& op)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
@@ -1354,9 +1354,10 @@ void ReplicatedPG::do_op(OpRequestRef op)
 	hit_set_start_stamp + pool.info.hit_set_period <= m->get_recv_stamp()) {
       hit_set_persist();
     }
+  }
 
-    if (agent_state)
-      agent_choose_mode();
+  if (agent_state) {
+    agent_choose_mode();
   }
 
   if ((m->get_flags() & CEPH_OSD_FLAG_IGNORE_CACHE) == 0 &&
@@ -1629,6 +1630,33 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     }
     // crap, there was a failure of some kind
     return false;
+
+  case pg_pool_t::CACHEMODE_READFORWARD:
+    if (obc.get() && obc->obs.exists) {
+      return false;
+    }
+
+    // Do writeback to the cache tier for writes
+    if (op->may_write()) {
+      if (agent_state &&
+	  agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
+	dout(20) << __func__ << " cache pool full, waiting" << dendl;
+	waiting_for_cache_not_full.push_back(op);
+	return true;
+      }
+      if (!must_promote && can_skip_promote(op, obc)) {
+	return false;
+      }
+      promote_object(op, obc, missing_oid);
+      return true;
+    }
+
+    // If it is a read, we can read, we need to forward it
+    if (must_promote)
+      promote_object(op, obc, missing_oid);
+    else
+      do_cache_redirect(op, obc);
+    return true;
 
   default:
     assert(0 == "unrecognized cache_mode");
@@ -2997,7 +3025,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     }
 
     // munge -1 truncate to 0 truncate
-    if (op.extent.truncate_seq == 1 && op.extent.truncate_size == (-1ULL)) {
+    if (ceph_osd_op_uses_extent(op.op) &&
+        op.extent.truncate_seq == 1 &&
+        op.extent.truncate_size == (-1ULL)) {
       op.extent.truncate_size = 0;
       op.extent.truncate_seq = 0;
     }
@@ -4063,6 +4093,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EFBIG;
 	  break;
 	}
+	unsigned max_name_len = MIN(osd->store->get_max_attr_name_length(),
+				    cct->_conf->osd_max_attr_name_len);
+	if (op.xattr.name_len > max_name_len) {
+	  result = -ENAMETOOLONG;
+	  break;
+	}
 	if (!obs.exists) {
 	  ctx->mod_desc.create();
 	  t->touch(soid);
@@ -4961,8 +4997,9 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
       if (pool.info.require_rollback())
 	ctx->clone_obc->attr_cache = ctx->obc->attr_cache;
       snap_oi = &ctx->clone_obc->obs.oi;
-      bool got = ctx->clone_obc->get_write(ctx->op);
+      bool got = ctx->clone_obc->get_write_greedy(ctx->op);
       assert(got);
+      dout(20) << " got greedy write on clone_obc " << *ctx->clone_obc << dendl;
     } else {
       snap_oi = &static_snap_oi;
     }
@@ -5267,8 +5304,9 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 					0, osd_reqid_t(), ctx->mtime));
 
       ctx->snapset_obc = get_object_context(snapoid, true);
-      bool got = ctx->snapset_obc->get_write(ctx->op);
+      bool got = ctx->snapset_obc->get_write_greedy(ctx->op);
       assert(got);
+      dout(20) << " got greedy write on snapset_obc " << *ctx->snapset_obc << dendl;
       ctx->release_snapset_obc = true;
       if (pool.info.require_rollback() && !ctx->snapset_obc->obs.exists) {
 	ctx->log.back().mod_desc.create();
@@ -6008,6 +6046,7 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
   if (r == -ENOENT &&
       soid.snap == CEPH_NOSNAP &&
       (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK ||
+       pool.info.cache_mode == pg_pool_t::CACHEMODE_READFORWARD ||
        pool.info.cache_mode == pg_pool_t::CACHEMODE_READONLY)) {
     dout(10) << __func__ << " whiteout " << soid << dendl;
     whiteout = true;
@@ -6554,7 +6593,7 @@ void ReplicatedPG::cancel_flush_ops(bool requeue)
 
 bool ReplicatedPG::is_present_clone(hobject_t coid)
 {
-  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE)
+  if (!pool.info.allow_incomplete_clones())
     return true;
   if (is_missing_object(coid))
     return true;
@@ -6619,7 +6658,7 @@ void ReplicatedPG::repop_all_committed(RepGather *repop)
 
 void ReplicatedPG::op_applied(const eversion_t &applied_version)
 {
-  dout(10) << "op_applied on primary on version " << applied_version << dendl;
+  dout(10) << "op_applied version " << applied_version << dendl;
   if (applied_version == eversion_t())
     return;
   assert(applied_version > last_update_applied);
@@ -6634,7 +6673,6 @@ void ReplicatedPG::op_applied(const eversion_t &applied_version)
       assert(!scrubber.block_writes);
     }
   } else {
-    dout(10) << "op_applied on replica on version " << applied_version << dendl;
     if (scrubber.active_rep_scrub) {
       if (last_update_applied == scrubber.active_rep_scrub->scrub_to) {
 	osd->rep_scrub_wq.queue(scrubber.active_rep_scrub);
@@ -6842,6 +6880,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now)
     repop->ctx->at_version,
     repop->ctx->op_t,
     pg_trim_to,
+    min_last_complete_ondisk,
     repop->ctx->log,
     repop->ctx->updated_hset_history,
     onapplied_sync,
@@ -6859,6 +6898,7 @@ void ReplicatedBackend::issue_op(
   ceph_tid_t tid,
   osd_reqid_t reqid,
   eversion_t pg_trim_to,
+  eversion_t pg_trim_rollback_to,
   hobject_t new_temp_oid,
   hobject_t discard_temp_oid,
   vector<pg_log_entry_t> &log_entries,
@@ -6914,6 +6954,7 @@ void ReplicatedBackend::issue_op(
       wr->pg_stats = get_info().stats;
     
     wr->pg_trim_to = pg_trim_to;
+    wr->pg_trim_rollback_to = pg_trim_rollback_to;
 
     wr->new_temp_oid = new_temp_oid;
     wr->discard_temp_oid = discard_temp_oid;
@@ -6948,6 +6989,12 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContextRe
 void ReplicatedPG::remove_repop(RepGather *repop)
 {
   dout(20) << __func__ << " " << *repop << dendl;
+  if (repop->ctx->obc)
+    dout(20) << " obc " << *repop->ctx->obc << dendl;
+  if (repop->ctx->clone_obc)
+    dout(20) << " clone_obc " << *repop->ctx->clone_obc << dendl;
+  if (repop->ctx->snapset_obc)
+    dout(20) << " snapset_obc " << *repop->ctx->snapset_obc << dendl;
   release_op_ctx_locks(repop->ctx);
   repop->ctx->finish(0);  // FIXME: return value here is sloppy
   repop_map.erase(repop->rep_tid);
@@ -7220,7 +7267,6 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
     obc->ssc = get_snapset_context(
       soid, true,
       soid.has_snapset() ? attrs : 0);
-    register_snapset_context(obc->ssc);
 
     populate_obc_watchers(obc);
 
@@ -7714,6 +7760,7 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
       log,
       m->updated_hit_set_history,
       m->pg_trim_to,
+      m->pg_trim_rollback_to,
       update_snaps,
       &(rm->localt));
       
@@ -7809,8 +7856,8 @@ void ReplicatedBackend::calc_head_subsets(
   if (size)
     data_subset.insert(0, size);
 
-  if (get_parent()->get_pool().cache_mode != pg_pool_t::CACHEMODE_NONE) {
-    dout(10) << __func__ << ": caching enabled, skipping clone subsets" << dendl;
+  if (get_parent()->get_pool().allow_incomplete_clones()) {
+    dout(10) << __func__ << ": caching (was) enabled, skipping clone subsets" << dendl;
     return;
   }
 
@@ -7869,8 +7916,8 @@ void ReplicatedBackend::calc_clone_subsets(
   if (size)
     data_subset.insert(0, size);
 
-  if (get_parent()->get_pool().cache_mode != pg_pool_t::CACHEMODE_NONE) {
-    dout(10) << __func__ << ": caching enabled, skipping clone subsets" << dendl;
+  if (get_parent()->get_pool().allow_incomplete_clones()) {
+    dout(10) << __func__ << ": caching (was) enabled, skipping clone subsets" << dendl;
     return;
   }
 
@@ -9327,7 +9374,7 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
   while (!repop_queue.empty()) {
     RepGather *repop = repop_queue.front();
     repop_queue.pop_front();
-    dout(10) << " applying repop tid " << repop->rep_tid << dendl;
+    dout(10) << " canceling repop tid " << repop->rep_tid << dendl;
     repop->rep_aborted = true;
     if (repop->on_applied) {
       delete repop->on_applied;
@@ -9424,6 +9471,9 @@ void ReplicatedPG::on_shutdown()
   cancel_copy_ops(false);
   cancel_flush_ops(false);
   apply_and_flush_repops(false);
+
+  pgbackend->on_change();
+
   context_registry_on_change();
 
   osd->remote_reserver.cancel_reservation(info.pgid);
@@ -9547,7 +9597,8 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
   // any dups
   apply_and_flush_repops(is_primary());
 
-  pgbackend->on_change(t);
+  pgbackend->on_change_cleanup(t);
+  pgbackend->on_change();
 
   // clear snap_trimmer state
   snap_trimmer_machine.process_event(Reset());
@@ -9568,6 +9619,17 @@ void ReplicatedPG::on_role_change()
 void ReplicatedPG::on_pool_change()
 {
   dout(10) << __func__ << dendl;
+  // requeue cache full waiters just in case the cache_mode is
+  // changing away from writeback mode.  note that if we are not
+  // active the normal requeuing machinery is sufficient (and properly
+  // ordered).
+  if (is_active() &&
+      pool.info.cache_mode != pg_pool_t::CACHEMODE_WRITEBACK &&
+      !waiting_for_cache_not_full.empty()) {
+    dout(10) << __func__ << " requeuing full waiters (not in writeback) "
+	     << dendl;
+    requeue_ops(waiting_for_cache_not_full);
+  }
   hit_set_setup();
   agent_setup();
 }
@@ -11392,7 +11454,8 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
     }
   }
 
-  if (agent_state->evict_mode != TierAgentState::EVICT_MODE_FULL) {
+  if (agent_state->evict_mode != TierAgentState::EVICT_MODE_FULL &&
+      hit_set) {
     // is this object old and/or cold enough?
     int atime = -1, temp = 0;
     agent_estimate_atime_temp(soid, &atime, NULL /*FIXME &temp*/);
@@ -11524,7 +11587,11 @@ void ReplicatedPG::agent_choose_mode(bool restart)
       num_dirty = 0;
   }
 
-  dout(10) << __func__ << ": "
+  dout(10) << __func__
+	   << " flush_mode: "
+	   << TierAgentState::get_flush_mode_name(agent_state->flush_mode)
+	   << " evict_mode: "
+	   << TierAgentState::get_evict_mode_name(agent_state->evict_mode)
 	   << " num_objects: " << info.stats.stats.sum.num_objects
 	   << " num_bytes: " << info.stats.stats.sum.num_bytes
 	   << " num_objects_dirty: " << info.stats.stats.sum.num_objects_dirty
@@ -11634,8 +11701,10 @@ void ReplicatedPG::agent_choose_mode(bool restart)
 	    << " -> "
 	    << TierAgentState::get_evict_mode_name(evict_mode)
 	    << dendl;
-    if (agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
+    if (agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL &&
+	is_active()) {
       requeue_ops(waiting_for_cache_not_full);
+      requeue_ops(waiting_for_active);
     }
     agent_state->evict_mode = evict_mode;
   }
@@ -11763,7 +11832,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 
       // did we finish the last oid?
       if (head != hobject_t() &&
-	  pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE) {
+	  !pool.info.allow_incomplete_clones()) {
 	osd->clog.error() << mode << " " << info.pgid << " " << head
 			  << " missing clones";
         ++scrubber.shallow_errors;
@@ -11795,7 +11864,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       osd->clog.error() << mode << " " << info.pgid << " " << soid
 			<< " on disk size (" << p->second.size
 			<< ") does not match object info size ("
-			<< oi.size << ") ajusted for ondisk to ("
+			<< oi.size << ") adjusted for ondisk to ("
 			<< pgbackend->be_get_ondisk_size(oi.size)
 			<< ")";
       ++scrubber.shallow_errors;
@@ -11824,7 +11893,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
     //
 
     if (!next_clone.is_min() && next_clone != soid &&
-	pool.info.cache_mode != pg_pool_t::CACHEMODE_NONE) {
+	pool.info.allow_incomplete_clones()) {
       // it is okay to be missing one or more clones in a cache tier.
       // skip higher-numbered clones in the list.
       while (curclone != snapset.clones.rend() &&
@@ -11912,7 +11981,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
   }
 
   if (!next_clone.is_min() &&
-      pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE) {
+      !pool.info.allow_incomplete_clones()) {
     osd->clog.error() << mode << " " << info.pgid
 		      << " expected clone " << next_clone;
     ++scrubber.shallow_errors;

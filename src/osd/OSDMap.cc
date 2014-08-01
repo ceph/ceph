@@ -698,7 +698,7 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("new_pg_temp");
-  for (map<pg_t,vector<int> >::const_iterator p = new_pg_temp.begin();
+  for (map<pg_t,vector<int32_t> >::const_iterator p = new_pg_temp.begin();
        p != new_pg_temp.end();
        ++p) {
     f->open_object_section("pg");
@@ -712,7 +712,7 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("primary_temp");
-  for (map<pg_t, int>::const_iterator p = new_primary_temp.begin();
+  for (map<pg_t, int32_t>::const_iterator p = new_primary_temp.begin();
       p != new_primary_temp.end();
       ++p) {
     f->dump_stream("pgid") << p->first;
@@ -958,7 +958,7 @@ bool OSDMap::find_osd_on_ip(const entity_addr_t& ip) const
 }
 
 
-uint64_t OSDMap::get_features(uint64_t *pmask) const
+uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
 {
   uint64_t features = 0;  // things we actually have
   uint64_t mask = 0;      // things we could have
@@ -978,7 +978,8 @@ uint64_t OSDMap::get_features(uint64_t *pmask) const
     if (p->second.flags & pg_pool_t::FLAG_HASHPSPOOL) {
       features |= CEPH_FEATURE_OSDHASHPSPOOL;
     }
-    if (p->second.is_erasure()) {
+    if (p->second.is_erasure() &&
+	entity_type != CEPH_ENTITY_TYPE_CLIENT) { // not for clients
       features |= CEPH_FEATURE_OSD_ERASURE_CODES;
     }
     if (!p->second.tiers.empty() ||
@@ -986,8 +987,9 @@ uint64_t OSDMap::get_features(uint64_t *pmask) const
       features |= CEPH_FEATURE_OSD_CACHEPOOL;
     }
   }
-  mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL |
-          CEPH_FEATURE_OSD_ERASURE_CODES;
+  mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL;
+  if (entity_type != CEPH_ENTITY_TYPE_CLIENT)
+    mask |= CEPH_FEATURE_OSD_ERASURE_CODES;
 
   if (osd_primary_affinity) {
     for (int i = 0; i < max_osd; ++i) {
@@ -1090,7 +1092,7 @@ void OSDMap::remove_redundant_temporaries(CephContext *cct, const OSDMap& osdmap
 {
   ldout(cct, 10) << "remove_redundant_temporaries" << dendl;
 
-  for (map<pg_t,vector<int> >::iterator p = osdmap.pg_temp->begin();
+  for (map<pg_t,vector<int32_t> >::iterator p = osdmap.pg_temp->begin();
        p != osdmap.pg_temp->end();
        ++p) {
     if (pending_inc->new_pg_temp.count(p->first) == 0) {
@@ -1107,7 +1109,7 @@ void OSDMap::remove_redundant_temporaries(CephContext *cct, const OSDMap& osdmap
     OSDMap templess;
     templess.deepish_copy_from(osdmap);
     templess.primary_temp->clear();
-    for (map<pg_t,int>::iterator p = osdmap.primary_temp->begin();
+    for (map<pg_t,int32_t>::iterator p = osdmap.primary_temp->begin();
         p != osdmap.primary_temp->end();
         ++p) {
       if (pending_inc->new_primary_temp.count(p->first) == 0) {
@@ -1133,11 +1135,11 @@ void OSDMap::remove_down_temps(CephContext *cct,
   tmpmap.deepish_copy_from(osdmap);
   tmpmap.apply_incremental(*pending_inc);
 
-  for (map<pg_t,vector<int> >::iterator p = tmpmap.pg_temp->begin();
+  for (map<pg_t,vector<int32_t> >::iterator p = tmpmap.pg_temp->begin();
        p != tmpmap.pg_temp->end();
        ++p) {
     unsigned num_up = 0;
-    for (vector<int>::iterator i = p->second.begin();
+    for (vector<int32_t>::iterator i = p->second.begin();
 	 i != p->second.end();
 	 ++i) {
       if (!tmpmap.is_down(*i))
@@ -1146,7 +1148,7 @@ void OSDMap::remove_down_temps(CephContext *cct,
     if (num_up == 0)
       pending_inc->new_pg_temp[p->first].clear();
   }
-  for (map<pg_t,int>::iterator p = tmpmap.primary_temp->begin();
+  for (map<pg_t,int32_t>::iterator p = tmpmap.primary_temp->begin();
       p != tmpmap.primary_temp->end();
       ++p) {
     if (tmpmap.is_down(p->second))
@@ -1305,7 +1307,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
       (*pg_temp)[p->first] = p->second;
   }
 
-  for (map<pg_t,int>::const_iterator p = inc.new_primary_temp.begin();
+  for (map<pg_t,int32_t>::const_iterator p = inc.new_primary_temp.begin();
       p != inc.new_primary_temp.end();
       ++p) {
     if (p->second == -1)
@@ -1519,7 +1521,7 @@ void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
                             vector<int> *temp_pg, int *temp_primary) const
 {
   pg = pool.raw_pg_to_pg(pg);
-  map<pg_t,vector<int> >::const_iterator p = pg_temp->find(pg);
+  map<pg_t,vector<int32_t> >::const_iterator p = pg_temp->find(pg);
   temp_pg->clear();
   if (p != pg_temp->end()) {
     for (unsigned i=0; i<p->second.size(); i++) {
@@ -1534,7 +1536,7 @@ void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
       }
     }
   }
-  map<pg_t,int>::const_iterator pp = primary_temp->find(pg);
+  map<pg_t,int32_t>::const_iterator pp = primary_temp->find(pg);
   *temp_primary = -1;
   if (pp != primary_temp->end()) {
     *temp_primary = pp->second;
@@ -1576,7 +1578,7 @@ void OSDMap::pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const
   _apply_primary_affinity(pps, *pool, up, primary);
 }
   
-void OSDMap::_pg_to_up_acting_osds(pg_t pg, vector<int> *up, int *up_primary,
+void OSDMap::_pg_to_up_acting_osds(const pg_t& pg, vector<int> *up, int *up_primary,
                                    vector<int> *acting, int *acting_primary) const
 {
   const pg_pool_t *pool = get_pg_pool(pg.pool());
@@ -2124,7 +2126,7 @@ void OSDMap::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("pg_temp");
-  for (map<pg_t,vector<int> >::const_iterator p = pg_temp->begin();
+  for (map<pg_t,vector<int32_t> >::const_iterator p = pg_temp->begin();
        p != pg_temp->end();
        ++p) {
     f->open_object_section("osds");
@@ -2138,7 +2140,7 @@ void OSDMap::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("primary_temp");
-  for (map<pg_t, int>::const_iterator p = primary_temp->begin();
+  for (map<pg_t, int32_t>::const_iterator p = primary_temp->begin();
       p != primary_temp->end();
       ++p) {
     f->dump_stream("pgid") << p->first;
@@ -2272,12 +2274,12 @@ void OSDMap::print(ostream& out) const
   }
   out << std::endl;
 
-  for (map<pg_t,vector<int> >::const_iterator p = pg_temp->begin();
+  for (map<pg_t,vector<int32_t> >::const_iterator p = pg_temp->begin();
        p != pg_temp->end();
        ++p)
     out << "pg_temp " << p->first << " " << p->second << "\n";
 
-  for (map<pg_t,int>::const_iterator p = primary_temp->begin();
+  for (map<pg_t,int32_t>::const_iterator p = primary_temp->begin();
       p != primary_temp->end();
       ++p)
     out << "primary_temp " << p->first << " " << p->second << "\n";
@@ -2516,8 +2518,6 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     pgp_bits = pg_bits;
 
   vector<string> pool_names;
-  pool_names.push_back("data");
-  pool_names.push_back("metadata");
   pool_names.push_back("rbd");
 
   stringstream ss;
@@ -2546,8 +2546,6 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     pools[pool].set_pg_num(poolbase << pg_bits);
     pools[pool].set_pgp_num(poolbase << pgp_bits);
     pools[pool].last_change = epoch;
-    if (*p == "data")
-      pools[pool].crash_replay_interval = cct->_conf->osd_default_data_pool_replay_window;
     pool_name[pool] = *p;
     name_pool[*p] = pool;
   }
@@ -2560,13 +2558,25 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     set_weight(i, CEPH_OSD_OUT);
   }
 
-  map<string,string> erasure_code_profile_map;
-  r = get_str_map(cct->_conf->osd_pool_default_erasure_code_profile,
-		  ss,
-		  &erasure_code_profile_map);
-  erasure_code_profile_map["directory"] =
+  map<string,string> profile_map;
+  r = get_erasure_code_profile_default(cct, profile_map, &ss);
+  if (r < 0) {
+    lderr(cct) << ss.str() << dendl;
+    return r;
+  }
+  set_erasure_code_profile("default", profile_map);
+  return 0;
+}
+
+int OSDMap::get_erasure_code_profile_default(CephContext *cct,
+					     map<string,string> &profile_map,
+					     ostream *ss)
+{
+  int r = get_str_map(cct->_conf->osd_pool_default_erasure_code_profile,
+		      *ss,
+		      &profile_map);
+  profile_map["directory"] =
     cct->_conf->osd_pool_default_erasure_code_directory;
-  set_erasure_code_profile("default", erasure_code_profile_map);
   return r;
 }
 

@@ -87,7 +87,7 @@ goes down, the whole system goes down, too).
 
 Ceph eliminates the centralized gateway to enable clients to interact with 
 Ceph OSD Daemons directly. Ceph OSD Daemons create object replicas on other
-Ceph Nodes to ensure data safety and high availabilty. Ceph also uses a cluster 
+Ceph Nodes to ensure data safety and high availability. Ceph also uses a cluster
 of monitors to ensure high availability. To eliminate centralization, Ceph 
 uses an algorithm called CRUSH.
 
@@ -721,7 +721,7 @@ as ``D2v2`` ) while others are acknowledged and on disk ( such as ``C1v1`` and
           |           +------+------+
           |           |    OSD 2    |
           |  +------+ |         log |
-          +->| D1v2 | |  +----+     | 
+          +->| D2v2 | |  +----+     |
           |  +------+ |  |D2v1| 1,1 |
           |           |  +----+     |
           |           +-------------+
@@ -1111,7 +1111,7 @@ filesystem directories) into objects for storage in the Ceph Storage Cluster.
 .. tip:: The objects Ceph stores in the Ceph Storage Cluster are not striped. 
    Ceph Object Storage, Ceph Block Device, and the Ceph Filesystem stripe their 
    data over multiple Ceph Storage Cluster objects. Ceph Clients that write 
-   directly to the Ceph Storage Cluster via ``librados`` must perform the the 
+   directly to the Ceph Storage Cluster via ``librados`` must perform the
    striping (and parallel I/O) for themselves to obtain these benefits.
 
 The simplest Ceph striping format involves a stripe count of 1 object. Ceph
@@ -1397,7 +1397,7 @@ a Filesystem in User Space (FUSE).
 
 
 The Ceph Filesystem service includes the Ceph Metadata Server (MDS) deployed
-with the Ceph Storage cluster. The purpose of the MDS is to to store all the
+with the Ceph Storage cluster. The purpose of the MDS is to store all the
 filesystem metadata (directories, file ownership, access modes, etc) in
 high-availability Ceph Metadata Servers where the metadata resides in memory.
 The reason for the MDS (a daemon called ``ceph-mds``) is that simple filesystem

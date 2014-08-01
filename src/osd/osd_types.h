@@ -56,6 +56,10 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_SHARDS CompatSet::Feature(11, "sharded objects")
 
 
+/// max recovery priority for MBackfillReserve
+#define OSD_RECOVERY_PRIORITY_MAX 255u
+
+
 typedef hobject_t collection_list_handle_t;
 
 /// convert a single CPEH_OSD_FLAG_* to a string
@@ -65,7 +69,7 @@ const char *ceph_osd_flag_name(unsigned flag);
 string ceph_osd_flag_string(unsigned flags);
 
 struct pg_shard_t {
-  int osd;
+  int32_t osd;
   shard_id_t shard;
   pg_shard_t() : osd(-1), shard(shard_id_t::NO_SHARD) {}
   explicit pg_shard_t(int osd) : osd(osd), shard(shard_id_t::NO_SHARD) {}
@@ -809,9 +813,10 @@ struct pg_pool_t {
   }
 
   enum {
-    FLAG_HASHPSPOOL = 1, // hash pg seed and pool together (instead of adding)
-    FLAG_FULL       = 2, // pool is full
+    FLAG_HASHPSPOOL = 1<<0, // hash pg seed and pool together (instead of adding)
+    FLAG_FULL       = 1<<1, // pool is full
     FLAG_DEBUG_FAKE_EC_POOL = 1<<2, // require ReplicatedPG to act like an EC pg
+    FLAG_INCOMPLETE_CLONES = 1<<3, // may have incomplete clones (bc we are/were an overlay)
   };
 
   static const char *get_flag_name(int f) {
@@ -819,6 +824,7 @@ struct pg_pool_t {
     case FLAG_HASHPSPOOL: return "hashpspool";
     case FLAG_FULL: return "full";
     case FLAG_DEBUG_FAKE_EC_POOL: return "require_local_rollback";
+    case FLAG_INCOMPLETE_CLONES: return "incomplete_clones";
     default: return "???";
     }
   }
@@ -842,6 +848,7 @@ struct pg_pool_t {
     CACHEMODE_WRITEBACK = 1,             ///< write to cache, flush later
     CACHEMODE_FORWARD = 2,               ///< forward if not in cache
     CACHEMODE_READONLY = 3,              ///< handle reads, forward writes [not strongly consistent]
+    CACHEMODE_READFORWARD = 4            ///< forward reads, write to cache flush later
   } cache_mode_t;
   static const char *get_cache_mode_name(cache_mode_t m) {
     switch (m) {
@@ -849,6 +856,7 @@ struct pg_pool_t {
     case CACHEMODE_WRITEBACK: return "writeback";
     case CACHEMODE_FORWARD: return "forward";
     case CACHEMODE_READONLY: return "readonly";
+    case CACHEMODE_READFORWARD: return "readforward";
     default: return "unknown";
     }
   }
@@ -861,10 +869,25 @@ struct pg_pool_t {
       return CACHEMODE_FORWARD;
     if (s == "readonly")
       return CACHEMODE_READONLY;
+    if (s == "readforward")
+      return CACHEMODE_READFORWARD;
     return (cache_mode_t)-1;
   }
   const char *get_cache_mode_name() const {
     return get_cache_mode_name(cache_mode);
+  }
+  bool cache_mode_requires_hit_set() const {
+    switch (cache_mode) {
+    case CACHEMODE_NONE:
+    case CACHEMODE_FORWARD:
+    case CACHEMODE_READONLY:
+      return false;
+    case CACHEMODE_WRITEBACK:
+    case CACHEMODE_READFORWARD:
+      return true;
+    default:
+      assert(0 == "implement me");
+    }
   }
 
   uint64_t flags;           ///< FLAG_*
@@ -914,11 +937,29 @@ public:
 
   bool is_tier() const { return tier_of >= 0; }
   bool has_tiers() const { return !tiers.empty(); }
-  void clear_tier() { tier_of = -1; }
+  void clear_tier() {
+    tier_of = -1;
+    clear_read_tier();
+    clear_write_tier();
+    clear_tier_tunables();
+  }
   bool has_read_tier() const { return read_tier >= 0; }
   void clear_read_tier() { read_tier = -1; }
   bool has_write_tier() const { return write_tier >= 0; }
   void clear_write_tier() { write_tier = -1; }
+  void clear_tier_tunables() {
+    if (cache_mode != CACHEMODE_NONE)
+      flags |= FLAG_INCOMPLETE_CLONES;
+    cache_mode = CACHEMODE_NONE;
+
+    target_max_bytes = 0;
+    target_max_objects = 0;
+    cache_target_dirty_ratio_micro = 0;
+    cache_target_full_ratio_micro = 0;
+    hit_set_params = HitSet::Params();
+    hit_set_period = 0;
+    hit_set_count = 0;
+  }
 
   uint64_t target_max_bytes;   ///< tiering: target max pool size
   uint64_t target_max_objects; ///< tiering: target max pool size
@@ -962,6 +1003,7 @@ public:
   void dump(Formatter *f) const;
 
   uint64_t get_flags() const { return flags; }
+  bool has_flag(uint64_t f) const { return flags & f; }
 
   /// This method will later return true for ec pools as well
   bool ec_pool() const {
@@ -969,6 +1011,11 @@ public:
   }
   bool require_rollback() const {
     return ec_pool() || flags & FLAG_DEBUG_FAKE_EC_POOL;
+  }
+
+  /// true if incomplete clones may be present
+  bool allow_incomplete_clones() const {
+    return cache_mode != CACHEMODE_NONE || has_flag(FLAG_INCOMPLETE_CLONES);
   }
 
   unsigned get_type() const { return type; }
@@ -1336,8 +1383,8 @@ struct pg_stat_t {
   bool hitset_stats_invalid;
 
   /// up, acting primaries
-  int up_primary;
-  int acting_primary;
+  int32_t up_primary;
+  int32_t acting_primary;
 
   pg_stat_t()
     : reported_seq(0),
@@ -1687,11 +1734,11 @@ ostream &operator<<(ostream &lhs, const pg_notify_t &notify);
  */
 class OSDMap;
 struct pg_interval_t {
-  vector<int> up, acting;
+  vector<int32_t> up, acting;
   epoch_t first, last;
   bool maybe_went_rw;
-  int primary;
-  int up_primary;
+  int32_t primary;
+  int32_t up_primary;
 
   pg_interval_t()
     : first(0), last(0),
@@ -2074,6 +2121,10 @@ struct pg_log_t {
 
   // We can rollback rollback-able entries > can_rollback_to
   eversion_t can_rollback_to;
+
+  // always <= can_rollback_to, indicates how far stashed rollback
+  // data can be found
+  eversion_t rollback_info_trimmed_to;
 
   list<pg_log_entry_t> log;  // the actual log.
   
@@ -2776,19 +2827,21 @@ public:
       }
     }
 
-    bool get_write(OpRequestRef op) {
-      if (get_write_lock()) {
+    bool get_write(OpRequestRef op, bool greedy=false) {
+      if (get_write_lock(greedy)) {
 	return true;
       } // else
       if (op)
 	waiters.push_back(op);
       return false;
     }
-    bool get_write_lock() {
-      // don't starve anybody!
-      if (!waiters.empty() ||
-	  backfill_read_marker) {
-	return false;
+    bool get_write_lock(bool greedy=false) {
+      if (!greedy) {
+	// don't starve anybody!
+	if (!waiters.empty() ||
+	    backfill_read_marker) {
+	  return false;
+	}
       }
       switch (state) {
       case RWNONE:
@@ -2837,7 +2890,10 @@ public:
     return rwstate.get_read(op);
   }
   bool get_write(OpRequestRef op) {
-    return rwstate.get_write(op);
+    return rwstate.get_write(op, false);
+  }
+  bool get_write_greedy(OpRequestRef op) {
+    return rwstate.get_write(op, true);
   }
   bool get_snaptrimmer_write() {
     if (rwstate.get_write_lock()) {

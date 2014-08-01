@@ -551,6 +551,11 @@ public:
   }
   void reweight(CephContext *cct);
 
+  int adjust_subtree_weight(CephContext *cct, int id, int weight);
+  int adjust_subtree_weightf(CephContext *cct, int id, float weight) {
+    return adjust_subtree_weight(cct, id, (int)(weight * (float)0x10000));
+  }
+
   /// check if item id is present in the map hierarchy
   bool check_item_present(int id);
 
@@ -641,7 +646,7 @@ public:
    * @param pmap [out] map of osd to weight
    * @return 0 for success, or negative error code
    */
-  int get_rule_weight_map(unsigned ruleno, map<int,float> *pmap);
+  int get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap);
 
   /* modifiers */
   int add_rule(int len, int ruleset, int type, int minsize, int maxsize, int ruleno) {

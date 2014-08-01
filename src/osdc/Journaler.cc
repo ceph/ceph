@@ -40,7 +40,6 @@ void Journaler::set_writeable()
 void Journaler::create(ceph_file_layout *l, stream_format_t const sf)
 {
   assert(!readonly);
-  ldout(cct, 1) << "create blank journal" << dendl;
   state = STATE_ACTIVE;
 
   stream_format = sf;
@@ -50,6 +49,9 @@ void Journaler::create(ceph_file_layout *l, stream_format_t const sf)
   prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos =
     read_pos = requested_pos = received_pos =
     expire_pos = trimming_pos = trimmed_pos = layout.fl_stripe_count * layout.fl_object_size;
+
+  ldout(cct, 1) << "created blank journal at inode 0x" << std::hex << ino << std::dec
+    << ", format=" << stream_format << dendl;
 }
 
 void Journaler::set_layout(ceph_file_layout *l)
@@ -76,6 +78,7 @@ ostream& operator<<(ostream& out, Journaler::Header &h)
   return out << "loghead(trim " << h.trimmed_pos
 	     << ", expire " << h.expire_pos
 	     << ", write " << h.write_pos
+	     << ", stream_format " << (int)(h.stream_format)
 	     << ")";
 }
 
@@ -213,9 +216,17 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   bufferlist::iterator p = bl.begin();
   ::decode(h, p);
 
+  bool corrupt = false;
   if (h.magic != magic) {
     ldout(cct, 0) << "on disk magic '" << h.magic << "' != my magic '"
 	    << magic << "'" << dendl;
+    corrupt = true;
+  } else if (h.write_pos < h.expire_pos || h.expire_pos < h.trimmed_pos) {
+    ldout(cct, 0) << "Corrupt header (bad offsets): " << h << dendl;
+    corrupt = true;
+  }
+
+  if (corrupt) {
     list<Context*> ls;
     ls.swap(waitfor_recover);
     finish_contexts(cct, ls, -EINVAL);
@@ -346,6 +357,10 @@ void Journaler::write_head(Context *oncommit)
   last_written.stream_format = stream_format;
   ldout(cct, 10) << "write_head " << last_written << dendl;
   
+  // Avoid persisting bad pointers in case of bugs
+  assert(last_written.write_pos >= last_written.expire_pos);
+  assert(last_written.expire_pos >= last_written.trimmed_pos);
+
   last_wrote_head = ceph_clock_now(cct);
 
   bufferlist bl;

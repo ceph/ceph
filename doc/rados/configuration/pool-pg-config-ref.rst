@@ -20,7 +20,7 @@ Ceph configuration file.
 
 ``mon max pool pg num``
 
-:Description: The maximium number of placement groups per pool.
+:Description: The maximum number of placement groups per pool.
 :Type: Integer
 :Default: ``65536``
 

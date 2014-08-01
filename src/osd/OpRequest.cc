@@ -31,10 +31,10 @@ OpRequest::OpRequest(Message *req, OpTracker *tracker) :
   } else if (req->get_type() == MSG_OSD_SUBOP) {
     reqid = static_cast<MOSDSubOp*>(req)->reqid;
   }
-  tracker->_mark_event(this, "header_read", request->get_recv_stamp());
-  tracker->_mark_event(this, "throttled", request->get_throttle_stamp());
-  tracker->_mark_event(this, "all_read", request->get_recv_complete_stamp());
-  tracker->_mark_event(this, "dispatched", request->get_dispatch_stamp());
+  tracker->mark_event(this, "header_read", request->get_recv_stamp());
+  tracker->mark_event(this, "throttled", request->get_throttle_stamp());
+  tracker->mark_event(this, "all_read", request->get_recv_complete_stamp());
+  tracker->mark_event(this, "dispatched", request->get_dispatch_stamp());
 }
 
 void OpRequest::_dump(utime_t now, Formatter *f) const
@@ -46,7 +46,7 @@ void OpRequest::_dump(utime_t now, Formatter *f) const
     stringstream client_name;
     client_name << m->get_orig_source();
     f->dump_string("client", client_name.str());
-    f->dump_int("tid", m->get_tid());
+    f->dump_unsigned("tid", m->get_tid());
     f->close_section(); // client_info
   }
   {

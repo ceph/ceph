@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -x
 
 set -e
 
@@ -28,6 +28,14 @@ else
   exit 1
 fi
 
+if test -d ".git" ; then
+  if ! git submodule update --init; then
+    echo "Error: could not initialize submodule projects"
+    echo "  Network connectivity might be required."
+    exit 1
+  fi
+fi
+
 rm -f config.cache
 aclocal -I m4 --install
 check_for_pkg_config
@@ -37,4 +45,5 @@ autoconf
 autoheader
 automake -a --add-missing -Wall
 ( cd src/gtest && autoreconf -fvi; )
+( cd src/rocksdb && autoreconf -fvi; )
 exit

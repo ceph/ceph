@@ -215,7 +215,7 @@ Create a Key
 ------------
 
 To create a key for a user, you must specify ``key create``. For a user, specify
-the user ID and the ``s3` key type. To create a key for subuser, you must
+the user ID and the ``s3`` key type. To create a key for subuser, you must
 specify the subuser ID and the ``swift`` keytype. For example::
 
 	radosgw-admin key create --subuser=johndoe:swift --key-type=swift --gen-secret
@@ -258,7 +258,7 @@ secret. You may also remove an access key and secret. Options include:
 
 To add a key, specify the user. ::
 
-	radosgw-admin key create --uid=johndoe --key-type=s3 --gen-key --gen-secret
+	radosgw-admin key create --uid=johndoe --key-type=s3 --gen-access-key --gen-secret
 
 You may also specify a key and a secret.
 
@@ -352,7 +352,7 @@ Set Bucket Quota
 Bucket quotas apply to the buckets owned by the specified ``uid``. They are
 independent of the user. ::
 
-	radosgw-admin quota set --uid=<uid> --bucket-scope=bucket [--max-objects=<num objects>] [--max-size=<max size]
+	radosgw-admin quota set --uid=<uid> --quota-scope=bucket [--max-objects=<num objects>] [--max-size=<max size]
 
 A negative value for num objects and / or max size means that the
 specific quota attribute check is disabled.

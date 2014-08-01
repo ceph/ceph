@@ -192,8 +192,9 @@ void ReplicatedBackend::clear_state()
   pull_from_peer.clear();
 }
 
-void ReplicatedBackend::_on_change(ObjectStore::Transaction *t)
+void ReplicatedBackend::on_change()
 {
+  dout(10) << __func__ << dendl;
   for (map<ceph_tid_t, InProgressOp>::iterator i = in_progress_ops.begin();
        i != in_progress_ops.end();
        in_progress_ops.erase(i++)) {
@@ -493,6 +494,7 @@ void ReplicatedBackend::submit_transaction(
   const eversion_t &at_version,
   PGTransaction *_t,
   const eversion_t &trim_to,
+  const eversion_t &trim_rollback_to,
   vector<pg_log_entry_t> &log_entries,
   boost::optional<pg_hit_set_history_t> &hset_history,
   Context *on_local_applied_sync,
@@ -533,6 +535,7 @@ void ReplicatedBackend::submit_transaction(
     tid,
     reqid,
     trim_to,
+    trim_rollback_to,
     t->get_temp_added().size() ? *(t->get_temp_added().begin()) : hobject_t(),
     t->get_temp_cleared().size() ?
       *(t->get_temp_cleared().begin()) :hobject_t(),
@@ -548,7 +551,13 @@ void ReplicatedBackend::submit_transaction(
   }
   clear_temp_objs(t->get_temp_cleared());
 
-  parent->log_operation(log_entries, hset_history, trim_to, true, &local_t);
+  parent->log_operation(
+    log_entries,
+    hset_history,
+    trim_to,
+    trim_rollback_to,
+    true,
+    &local_t);
   local_t.append(*op_t);
   local_t.swap(*op_t);
   

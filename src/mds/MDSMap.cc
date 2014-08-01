@@ -144,6 +144,8 @@ void MDSMap::dump(Formatter *f) const
     f->dump_int("pool", *p);
   f->close_section();
   f->dump_int("metadata_pool", metadata_pool);
+  f->dump_bool("enabled", enabled);
+  f->dump_string("fs_name", fs_name);
 }
 
 void MDSMap::generate_test_instances(list<MDSMap*>& ls)
@@ -363,7 +365,7 @@ void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) con
   ::encode(name, bl);
   ::encode(rank, bl);
   ::encode(inc, bl);
-  ::encode(state, bl);
+  ::encode((int32_t)state, bl);
   ::encode(state_seq, bl);
   ::encode(addr, bl);
   ::encode(laggy_since, bl);
@@ -381,7 +383,7 @@ void MDSMap::mds_info_t::encode_unversioned(bufferlist& bl) const
   ::encode(name, bl);
   ::encode(rank, bl);
   ::encode(inc, bl);
-  ::encode(state, bl);
+  ::encode((int32_t)state, bl);
   ::encode(state_seq, bl);
   ::encode(addr, bl);
   ::encode(laggy_since, bl);
@@ -397,7 +399,7 @@ void MDSMap::mds_info_t::decode(bufferlist::iterator& bl)
   ::decode(name, bl);
   ::decode(rank, bl);
   ::decode(inc, bl);
-  ::decode(state, bl);
+  ::decode((int32_t&)(state), bl);
   ::decode(state_seq, bl);
   ::decode(addr, bl);
   ::decode(laggy_since, bl);
@@ -476,7 +478,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(stopped, bl);
     ::encode(last_failure_osd_epoch, bl);
   } else {// have MDS encoding feature!
-    ENCODE_START(4, 4, bl);
+    ENCODE_START(5, 5, bl);
     ::encode(epoch, bl);
     ::encode(flags, bl);
     ::encode(last_failure, bl);
@@ -488,6 +490,8 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(mds_info, bl, features);
     ::encode(data_pools, bl);
     ::encode(cas_pool, bl);
+    ::encode(enabled, bl);
+    ::encode(fs_name, bl);
 
     // kclient ignores everything from here
     __u16 ev = 7;
@@ -512,7 +516,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
 
 void MDSMap::decode(bufferlist::iterator& p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN_16(4, 4, 4, p);
+  DECODE_START_LEGACY_COMPAT_LEN_16(5, 4, 4, p);
   ::decode(epoch, p);
   ::decode(flags, p);
   ::decode(last_failure, p);
@@ -536,6 +540,20 @@ void MDSMap::decode(bufferlist::iterator& p)
   } else {
     ::decode(data_pools, p);
     ::decode(cas_pool, p);
+  }
+  if (struct_v >= 5) {
+    ::decode(enabled, p);
+    ::decode(fs_name, p);
+  } else {
+    if (epoch > 1) {
+      // If an MDS has ever been started, epoch will be greater than 1,
+      // assume filesystem is enabled.
+      enabled = true;
+    } else {
+      // Upgrading from a cluster that never used an MDS, switch off
+      // filesystem until it's explicitly enabled.
+      enabled = false;
+    }
   }
 
   // kclient ignores everything from here

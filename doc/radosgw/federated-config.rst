@@ -146,7 +146,7 @@ to create a pool::
 .. topic:: CRUSH Maps
 
 	When deploying a Ceph Storage Cluster for the entire region, consider 
-	using a CRUSH rule for the the zone such that you do NOT	have overlapping 
+	using a CRUSH rule for the zone such that you do NOT have overlapping
 	failure domains. See `CRUSH Map`_ for details.
 
 When you have completed this step, execute the following to ensure that

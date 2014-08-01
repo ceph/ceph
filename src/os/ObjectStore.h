@@ -128,6 +128,22 @@ public:
    */
   struct Sequencer_impl {
     virtual void flush() = 0;
+
+    /**
+     * Async flush_commit
+     *
+     * There are two cases:
+     * 1) sequencer is currently idle: the method returns true and
+     *    c is deleted
+     * 2) sequencer is not idle: the method returns false and c is
+     *    called asyncronously with a value of 0 once all transactions
+     *    queued on this sequencer prior to the call have been applied
+     *    and committed.
+     */
+    virtual bool flush_commit(
+      Context *c ///< [in] context to call upon flush/commit
+      ) = 0; ///< @return true if idle, false otherwise
+
     virtual ~Sequencer_impl() {}
   };
 
@@ -152,6 +168,16 @@ public:
     void flush() {
       if (p)
 	p->flush();
+    }
+
+    /// @see Sequencer_impl::flush_commit()
+    bool flush_commit(Context *c) {
+      if (!p) {
+	delete c;
+	return true;
+      } else {
+	return p->flush_commit(c);
+      }
     }
   };
 
@@ -1175,7 +1201,8 @@ public:
   virtual bool test_mount_in_use() = 0;
   virtual int mount() = 0;
   virtual int umount() = 0;
-  virtual int get_max_object_name_length() = 0;
+  virtual unsigned get_max_object_name_length() = 0;
+  virtual unsigned get_max_attr_name_length() = 0;
   virtual int mkfs() = 0;  // wipe
   virtual int mkjournal() = 0; // journal only
   virtual void set_allow_sharded_objects() = 0;
@@ -1351,10 +1378,9 @@ public:
    * @param cid collection for object
    * @param oid oid of object
    * @param aset place to put output result.
-   * @param user_only true -> only user attributes are return else all attributes are returned
    * @returns 0 on success, negative error code on failure.
    */
-  virtual int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset, bool user_only = false) = 0;
+  virtual int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset) = 0;
 
   /**
    * getattrs -- get all of the xattrs of an object
@@ -1362,12 +1388,11 @@ public:
    * @param cid collection for object
    * @param oid oid of object
    * @param aset place to put output result.
-   * @param user_only true -> only user attributes are return else all attributes are returned
    * @returns 0 on success, negative error code on failure.
    */
-  int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferlist>& aset, bool user_only = false) {
+  int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferlist>& aset) {
     map<string,bufferptr> bmap;
-    int r = getattrs(cid, oid, bmap, user_only);
+    int r = getattrs(cid, oid, bmap);
     for (map<string,bufferptr>::iterator i = bmap.begin();
 	i != bmap.end();
 	++i) {

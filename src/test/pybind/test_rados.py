@@ -33,7 +33,7 @@ def test_rados_init():
 
 def test_ioctx_context_manager():
     with Rados(conffile='', rados_id='admin') as conn:
-        with conn.open_ioctx('data') as ioctx:
+        with conn.open_ioctx('rbd') as ioctx:
             pass
 
 class TestRados(object):
@@ -43,6 +43,9 @@ class TestRados(object):
         self.rados.conf_parse_env('FOO_DOES_NOT_EXIST_BLAHBLAH')
         self.rados.conf_parse_env()
         self.rados.connect()
+
+        # Assume any pre-existing pools are the cluster's defaults
+        self.default_pools = self.rados.list_pools()
 
     def tearDown(self):
         self.rados.shutdown()
@@ -63,9 +66,8 @@ class TestRados(object):
 
     def list_non_default_pools(self):
         pools = self.rados.list_pools()
-        pools.remove('data')
-        pools.remove('metadata')
-        pools.remove('rbd')
+        for p in self.default_pools:
+            pools.remove(p)
         return set(pools)
 
     def test_list_pools(self):

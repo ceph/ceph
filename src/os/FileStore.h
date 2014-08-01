@@ -57,10 +57,9 @@ static const __SWORD_TYPE BTRFS_SUPER_MAGIC(0x9123683E);
 # ifndef XFS_SUPER_MAGIC
 static const __SWORD_TYPE XFS_SUPER_MAGIC(0x58465342);
 # endif
-#endif
-
 #ifndef ZFS_SUPER_MAGIC
 static const __SWORD_TYPE ZFS_SUPER_MAGIC(0x2fc12fc1);
+#endif
 #endif
 
 
@@ -71,6 +70,7 @@ class FileStoreBackend;
 class FSSuperblock {
 public:
   CompatSet compat_features;
+  string omap_backend;
 
   FSSuperblock() { }
 
@@ -186,19 +186,70 @@ private:
     Mutex qlock; // to protect q, for benefit of flush (peek/dequeue also protected by lock)
     list<Op*> q;
     list<uint64_t> jq;
+    list<pair<uint64_t, Context*> > flush_commit_waiters;
     Cond cond;
   public:
     Sequencer *parent;
     Mutex apply_lock;  // for apply mutual exclusion
     
+    /// get_max_uncompleted
+    bool _get_max_uncompleted(
+      uint64_t *seq ///< [out] max uncompleted seq
+      ) {
+      assert(qlock.is_locked());
+      assert(seq);
+      *seq = 0;
+      if (q.empty() && jq.empty())
+	return true;
+
+      if (!q.empty())
+	*seq = q.back()->op;
+      if (!jq.empty() && jq.back() > *seq)
+	*seq = jq.back();
+
+      return false;
+    } /// @returns true if both queues are empty
+
+    /// get_min_uncompleted
+    bool _get_min_uncompleted(
+      uint64_t *seq ///< [out] min uncompleted seq
+      ) {
+      assert(qlock.is_locked());
+      assert(seq);
+      *seq = 0;
+      if (q.empty() && jq.empty())
+	return true;
+
+      if (!q.empty())
+	*seq = q.front()->op;
+      if (!jq.empty() && jq.front() < *seq)
+	*seq = jq.front();
+
+      return false;
+    } /// @returns true if both queues are empty
+
+    void _wake_flush_waiters(list<Context*> *to_queue) {
+      uint64_t seq;
+      if (_get_min_uncompleted(&seq))
+	seq = -1;
+
+      for (list<pair<uint64_t, Context*> >::iterator i =
+	     flush_commit_waiters.begin();
+	   i != flush_commit_waiters.end() && i->first < seq;
+	   flush_commit_waiters.erase(i++)) {
+	to_queue->push_back(i->second);
+      }
+    }
+
     void queue_journal(uint64_t s) {
       Mutex::Locker l(qlock);
       jq.push_back(s);
     }
-    void dequeue_journal() {
+    void dequeue_journal(list<Context*> *to_queue) {
       Mutex::Locker l(qlock);
       jq.pop_front();
       cond.Signal();
+      _wake_flush_waiters(to_queue);
     }
     void queue(Op *o) {
       Mutex::Locker l(qlock);
@@ -208,19 +259,25 @@ private:
       assert(apply_lock.is_locked());
       return q.front();
     }
-    Op *dequeue() {
+
+    Op *dequeue(list<Context*> *to_queue) {
+      assert(to_queue);
       assert(apply_lock.is_locked());
       Mutex::Locker l(qlock);
       Op *o = q.front();
       q.pop_front();
       cond.Signal();
+
+      _wake_flush_waiters(to_queue);
       return o;
     }
+
     void flush() {
       Mutex::Locker l(qlock);
 
       while (g_conf->filestore_blackhole)
 	cond.Wait(qlock);  // wait forever
+
 
       // get max for journal _or_ op queues
       uint64_t seq = 0;
@@ -234,6 +291,17 @@ private:
 	while ((!q.empty() && q.front()->op <= seq) ||
 	       (!jq.empty() && jq.front() <= seq))
 	  cond.Wait(qlock);
+      }
+    }
+    bool flush_commit(Context *c) {
+      Mutex::Locker l(qlock);
+      uint64_t seq = 0;
+      if (_get_max_uncompleted(&seq)) {
+	delete c;
+	return true;
+      } else {
+	flush_commit_waiters.push_back(make_pair(seq, c));
+	return false;
       }
     }
 
@@ -343,7 +411,15 @@ public:
   int write_op_seq(int, uint64_t seq);
   int mount();
   int umount();
-  int get_max_object_name_length();
+  unsigned get_max_object_name_length() {
+    // not safe for all file systems, btw!  use the tunable to limit this.
+    return 4096;
+  }
+  unsigned get_max_attr_name_length() {
+    // xattr limit is 128; leave room for our prefixes (user.ceph._),
+    // some margin, and cap at 100
+    return 100;
+  }
   int mkfs();
   int mkjournal();
 
@@ -461,7 +537,7 @@ public:
   int _remove(coll_t cid, const ghobject_t& oid, const SequencerPosition &spos);
 
   int _fgetattr(int fd, const char *name, bufferptr& bp);
-  int _fgetattrs(int fd, map<string,bufferptr>& aset, bool user_only);
+  int _fgetattrs(int fd, map<string,bufferptr>& aset);
   int _fsetattrs(int fd, map<string, bufferptr> &aset);
 
   void _start_sync();
@@ -494,7 +570,7 @@ public:
 
   // attrs
   int getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr &bp);
-  int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset, bool user_only = false);
+  int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset);
 
   int _setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset,
 		const SequencerPosition &spos);

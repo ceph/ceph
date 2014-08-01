@@ -242,7 +242,10 @@ void WBThrottle::clear_object(const ghobject_t &hoid)
     return;
 
   cur_ios -= i->second.first.ios;
+  logger->dec(l_wbthrottle_ios_dirtied, i->second.first.ios);
   cur_size -= i->second.first.size;
+  logger->dec(l_wbthrottle_bytes_dirtied, i->second.first.size);
+  logger->dec(l_wbthrottle_inodes_dirtied);
 
   pending_wbs.erase(i);
   remove_object(hoid);

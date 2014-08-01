@@ -80,7 +80,7 @@ void PGBackend::rollback(
 }
 
 
-void PGBackend::on_change(ObjectStore::Transaction *t)
+void PGBackend::on_change_cleanup(ObjectStore::Transaction *t)
 {
   dout(10) << __func__ << dendl;
   // clear temp
@@ -94,7 +94,6 @@ void PGBackend::on_change(ObjectStore::Transaction *t)
       ghobject_t(*i, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
   }
   temp_contents.clear();
-  _on_change(t);
 }
 
 coll_t PGBackend::get_temp_coll(ObjectStore::Transaction *t)
@@ -116,7 +115,11 @@ int PGBackend::objects_list_partial(
   hobject_t *next)
 {
   assert(ls);
-  ghobject_t _next(begin);
+  // Starts with the smallest shard id and generation to
+  // make sure the result list has the marker object (
+  // it might have multiple generations though, which would
+  // be filtered).
+  ghobject_t _next(begin, 0, shard_id_t(0));
   ls->reserve(max);
   int r = 0;
   while (!_next.is_max() && ls->size() < (unsigned)min) {
@@ -148,7 +151,8 @@ int PGBackend::objects_list_range(
   const hobject_t &start,
   const hobject_t &end,
   snapid_t seq,
-  vector<hobject_t> *ls)
+  vector<hobject_t> *ls,
+  vector<ghobject_t> *gen_obs)
 {
   assert(ls);
   vector<ghobject_t> objects;
@@ -164,6 +168,8 @@ int PGBackend::objects_list_range(
        ++i) {
     if (i->is_no_gen()) {
       ls->push_back(i->hobj);
+    } else if (gen_obs) {
+      gen_obs->push_back(*i);
     }
   }
   return r;

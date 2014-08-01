@@ -1,9 +1,13 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_RGWRADOS_H
 #define CEPH_RGWRADOS_H
 
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
 #include "common/RefCountedObj.h"
+#include "common/RWLock.h"
 #include "rgw_common.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/version/cls_version_types.h"
@@ -161,7 +165,8 @@ struct RGWObjManifestRule {
     ::decode(start_ofs, bl);
     ::decode(part_size, bl);
     ::decode(stripe_max_size, bl);
-    ::decode(override_prefix, bl);
+    if (struct_v >= 2)
+      ::decode(override_prefix, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -373,6 +378,7 @@ public:
     void init() {
       part_ofs = 0;
       stripe_ofs = 0;
+      ofs = 0;
       stripe_size = 0;
       cur_part_id = 0;
       cur_stripe = 0;
@@ -393,11 +399,15 @@ public:
     }
     obj_iterator(RGWObjManifest *_m) : manifest(_m) {
       init();
-      seek(0);
+      if (!manifest->empty()) {
+        seek(0);
+      }
     }
     obj_iterator(RGWObjManifest *_m, uint64_t _ofs) : manifest(_m) {
       init();
-      seek(_ofs);
+      if (!manifest->empty()) {
+        seek(_ofs);
+      }
     }
     void seek(uint64_t ofs);
 
@@ -546,7 +556,7 @@ public:
     obj_ctx = _o;
     return 0;
   }
-  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle) = 0;
+  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, bool *again) = 0;
   virtual int throttle_data(void *handle, bool need_to_wait) = 0;
   virtual int complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
 };
@@ -562,7 +572,7 @@ class RGWPutObjProcessor_Plain : public RGWPutObjProcessor
 
 protected:
   int prepare(RGWRados *store, void *obj_ctx, string *oid_rand);
-  int handle_data(bufferlist& bl, off_t ofs, void **phandle);
+  int handle_data(bufferlist& bl, off_t ofs, void **phandle, bool *again);
   int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
 
 public:
@@ -611,6 +621,8 @@ class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
   uint64_t extra_data_len;
   bufferlist extra_data_bl;
   bufferlist pending_data_bl;
+  uint64_t max_chunk_size;
+
 protected:
   rgw_bucket bucket;
   string obj_str;
@@ -629,6 +641,8 @@ protected:
   int complete_parts();
   int complete_writing_data();
 
+  int prepare_init(RGWRados *store, void *obj_ctx, string *oid_rand);
+
 public:
   ~RGWPutObjProcessor_Atomic() {}
   RGWPutObjProcessor_Atomic(const string& bucket_owner, rgw_bucket& _b, const string& _o, uint64_t _p, const string& _t) :
@@ -639,6 +653,7 @@ public:
                                 cur_part_id(0),
                                 data_ofs(0),
                                 extra_data_len(0),
+                                max_chunk_size(0),
                                 bucket(_b),
                                 obj_str(_o),
                                 unique_tag(_t) {}
@@ -647,7 +662,7 @@ public:
   void set_extra_data_len(uint64_t len) {
     extra_data_len = len;
   }
-  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle);
+  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, bool *again);
   bufferlist& get_extra_data() { return extra_data_bl; }
 };
 
@@ -675,6 +690,31 @@ struct RGWObjState {
   RGWObjState() : is_atomic(false), has_attrs(0), exists(false),
                   size(0), mtime(0), epoch(0), fake_tag(false), has_manifest(false),
                   has_data(false), prefetch_data(false), keep_tail(false) {}
+  RGWObjState(const RGWObjState& rhs) {
+    is_atomic = rhs.is_atomic;
+    has_attrs = rhs.has_attrs;
+    exists = rhs.exists;
+    size = rhs.size;
+    mtime = rhs.mtime;
+    epoch = rhs.epoch;
+    if (rhs.obj_tag.length()) {
+      obj_tag = rhs.obj_tag;
+    }
+    write_tag = rhs.write_tag;
+    fake_tag = rhs.fake_tag;
+    if (rhs.has_manifest) {
+      manifest = rhs.manifest;
+    }
+    has_manifest = rhs.has_manifest;
+    shadow_obj = rhs.shadow_obj;
+    has_data = rhs.has_data;
+    if (rhs.data.length()) {
+      data = rhs.data;
+    }
+    prefetch_data = rhs.prefetch_data;
+    keep_tail = rhs.keep_tail;
+    objv_tracker = rhs.objv_tracker;
+  }
 
   bool get_attr(string name, bufferlist& dest) {
     map<string, bufferlist>::iterator iter = attrset.find(name);
@@ -1166,6 +1206,21 @@ struct rgw_rados_ref {
   librados::IoCtx ioctx;
 };
 
+class RGWChainedCache {
+public:
+  virtual ~RGWChainedCache() {}
+  virtual void chain_cb(const string& key, void *data) = 0;
+  virtual void invalidate(const string& key) = 0;
+
+  struct Entry {
+    RGWChainedCache *cache;
+    const string& key;
+    void *data;
+
+    Entry(RGWChainedCache *_c, const string& _k, void *_d) : cache(_c), key(_k), data(_d) {}
+  };
+};
+
 
 class RGWRados
 {
@@ -1218,8 +1273,6 @@ class RGWRados
   int get_obj_ioctx(const rgw_obj& obj, librados::IoCtx *ioctx);
   int get_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref, rgw_bucket *bucket, bool ref_system_obj = false);
   uint64_t max_bucket_id;
-
-  uint64_t max_chunk_size;
 
   int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker);
   int append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj,
@@ -1285,7 +1338,6 @@ public:
                num_watchers(0), watchers(NULL), watch_handles(NULL),
                watch_initialized(false),
                bucket_id_lock("rados_bucket_id"), max_bucket_id(0),
-               max_chunk_size(0),
                cct(NULL), rados(NULL),
                pools_initialized(false),
                quota_handler(NULL),
@@ -1323,9 +1375,8 @@ public:
     }
   }
 
-  uint64_t get_max_chunk_size() {
-    return max_chunk_size;
-  }
+  int get_required_alignment(rgw_bucket& bucket, uint64_t *alignment);
+  int get_max_chunk_size(rgw_bucket& bucket, uint64_t *max_chunk_size);
 
   int list_raw_objects(rgw_bucket& pool, const string& prefix_filter, int max,
                        RGWListRawObjsCtx& ctx, list<string>& oids,
@@ -1390,8 +1441,9 @@ public:
    *     here.
    */
   virtual int list_objects(rgw_bucket& bucket, int max, std::string& prefix, std::string& delim,
-                   std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
-		   bool get_content_type, string& ns, bool enforce_ns, bool *is_truncated, RGWAccessListFilter *filter);
+                   std::string& marker, std::string *next_marker, std::vector<RGWObjEnt>& result,
+                   map<string, bool>& common_prefixes, bool get_content_type, string& ns, bool enforce_ns,
+                   bool *is_truncated, RGWAccessListFilter *filter);
 
   virtual int create_pool(rgw_bucket& bucket);
 
@@ -1561,6 +1613,7 @@ public:
 	       void **handle, off_t end,
                rgw_obj& dest_obj,
                rgw_obj& src_obj,
+               uint64_t max_chunk_size,
 	       time_t *mtime,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
@@ -1647,9 +1700,11 @@ public:
             struct rgw_err *err);
 
   virtual int get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **handle, rgw_obj& obj,
-                      bufferlist& bl, off_t ofs, off_t end);
+                      bufferlist& bl, off_t ofs, off_t end, rgw_cache_entry_info *cache_info);
 
   virtual void finish_get_obj(void **handle);
+
+  virtual bool chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry) { return false; }
 
   int iterate_obj(void *ctx, rgw_obj& obj,
                   off_t ofs, off_t end,
@@ -1732,10 +1787,11 @@ public:
                                  map<string, bufferlist> *pattrs);
   int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, time_t mtime, map<string, bufferlist> *pattrs);
   int get_bucket_entrypoint_info(void *ctx, const string& bucket_name, RGWBucketEntryPoint& entry_point, RGWObjVersionTracker *objv_tracker, time_t *pmtime,
-                                 map<string, bufferlist> *pattrs);
+                                 map<string, bufferlist> *pattrs, rgw_cache_entry_info *cache_info = NULL);
   int get_bucket_instance_info(void *ctx, const string& meta_key, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs);
   int get_bucket_instance_info(void *ctx, rgw_bucket& bucket, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs);
-  int get_bucket_instance_from_oid(void *ctx, string& oid, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs);
+  int get_bucket_instance_from_oid(void *ctx, string& oid, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs,
+                                   rgw_cache_entry_info *cache_info = NULL);
 
   int convert_old_bucket_info(void *ctx, string& bucket_name);
   virtual int get_bucket_info(void *ctx, const string& bucket_name, RGWBucketInfo& info,
@@ -1918,6 +1974,44 @@ public:
 
 };
 
+template <class T>
+class RGWChainedCacheImpl : public RGWChainedCache {
+  RWLock lock;
+
+  map<string, T> entries;
+
+public:
+  RGWChainedCacheImpl() : lock("RGWChainedCacheImpl::lock") {}
+
+  bool find(const string& key, T *entry) {
+    RWLock::RLocker rl(lock);
+    typename map<string, T>::iterator iter = entries.find(key);
+    if (iter == entries.end()) {
+      return false;
+    }
+
+    *entry = iter->second;
+    return true;
+  }
+
+  bool put(RGWRados *store, const string& key, T *entry, list<rgw_cache_entry_info *>& cache_info_entries) {
+    Entry chain_entry(this, key, entry);
+
+    /* we need the store cache to call us under its lock to maintain lock ordering */
+    return store->chain_cache_entry(cache_info_entries, &chain_entry);
+  }
+
+  void chain_cb(const string& key, void *data) {
+    T *entry = static_cast<T *>(data);
+    RWLock::WLocker wl(lock);
+    entries[key] = *entry;
+  }
+
+  void invalidate(const string& key) {
+    RWLock::WLocker wl(lock);
+    entries.erase(key);
+  }
+};
 
 
 #endif

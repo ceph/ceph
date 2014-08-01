@@ -73,7 +73,7 @@ ostream& Pipe::_pipe_prefix(std::ostream *_dout) {
  */
 
 Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
-  : reader_thread(this), writer_thread(this),
+  : RefCountedObject(r->cct), reader_thread(this), writer_thread(this),
     delay_thread(NULL),
     msgr(r),
     conn_id(r->dispatch_queue.get_id()),
@@ -95,7 +95,7 @@ Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
     connection_state = con;
     connection_state->reset_pipe(this);
   } else {
-    connection_state = new Connection(msgr);
+    connection_state = new Connection(msgr->cct, msgr);
     connection_state->pipe = get();
   }
 

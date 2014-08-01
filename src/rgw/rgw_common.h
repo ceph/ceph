@@ -1083,10 +1083,13 @@ public:
   }
 
   void set_obj(const string& o) {
+    object.reserve(128);
+
     orig_obj = o;
     if (ns.empty()) {
-      if (o.empty())
+      if (o.empty()) {
         return;
+      }
       if (o.size() < 1 || o[0] != '_') {
         object = o;
         return;
@@ -1225,6 +1228,13 @@ public:
   }
 };
 WRITE_CLASS_ENCODER(rgw_obj)
+
+struct rgw_cache_entry_info {
+  string cache_locator;
+  uint64_t gen;
+
+  rgw_cache_entry_info() : gen(0) {}
+};
 
 inline ostream& operator<<(ostream& out, const rgw_obj &o) {
   return out << o.bucket.name << ":" << o.object;

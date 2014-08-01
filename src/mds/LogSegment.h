@@ -15,7 +15,6 @@
 #ifndef CEPH_LOGSEGMENT_H
 #define CEPH_LOGSEGMENT_H
 
-#include "include/dlist.h"
 #include "include/elist.h"
 #include "include/interval_set.h"
 #include "include/Context.h"
@@ -35,9 +34,9 @@ struct MDSlaveUpdate;
 
 class LogSegment {
  public:
+  const uint64_t seq;
   uint64_t offset, end;
   int num_events;
-  uint64_t trimmable_at;
 
   // dirty items
   elist<CDir*>    dirty_dirfrags, new_dirfrags;
@@ -70,8 +69,8 @@ class LogSegment {
   void try_to_expire(MDS *mds, C_GatherBuilder &gather_bld, int op_prio);
 
   // cons
-  LogSegment(loff_t off) :
-    offset(off), end(off), num_events(0), trimmable_at(0),
+  LogSegment(uint64_t _seq, loff_t off=-1) :
+    seq(_seq), offset(off), end(off), num_events(0),
     dirty_dirfrags(member_offset(CDir, item_dirty)),
     new_dirfrags(member_offset(CDir, item_new)),
     dirty_inodes(member_offset(CInode, item_dirty)),

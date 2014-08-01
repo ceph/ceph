@@ -241,7 +241,7 @@ TEST_F(StriperTestPP, TruncTestGrowPP) {
   ASSERT_EQ(0, striper.append("TruncTestGrowPP", bl, sizeof(buf)));
   ASSERT_EQ(0, striper.trunc("TruncTestGrowPP", sizeof(buf) * 2));
   bufferlist bl2;
-  ASSERT_EQ(sizeof(buf)*2, striper.read("TruncTestGrowPP", &bl2, sizeof(buf)*2, 0));
+  ASSERT_EQ(sizeof(buf)*2, (unsigned)striper.read("TruncTestGrowPP", &bl2, sizeof(buf)*2, 0));
   ASSERT_EQ(0, memcmp(bl2.c_str(), buf, sizeof(buf)));
   memset(buf, 0x00, sizeof(buf));
   ASSERT_EQ(0, memcmp(bl2.c_str()+sizeof(buf), buf, sizeof(buf)));
@@ -338,7 +338,7 @@ TEST_F(StriperTest, XattrIter) {
     const char *name;
     const char *val;
     size_t len;
-    ASSERT_EQ(0, rados_getxattrs_next(iter, &name, &val, &len));
+    ASSERT_EQ(0, rados_striper_getxattrs_next(iter, &name, &val, &len));
     if (name == NULL) {
       break;
     }
@@ -355,7 +355,7 @@ TEST_F(StriperTest, XattrIter) {
       ASSERT_EQ(0, 1) << "Unexpected attribute : " << name;;
     }
   }
-  rados_getxattrs_end(iter);
+  rados_striper_getxattrs_end(iter);
 }
 
 TEST_F(StriperTestPP, XattrListPP) {

@@ -292,8 +292,22 @@ COMMAND("mds newfs " \
 	"name=metadata,type=CephInt,range=0 " \
 	"name=data,type=CephInt,range=0 " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
-	"make new filesystom using pools <metadata> and <data>", \
+	"make new filesystem using pools <metadata> and <data>", \
 	"mds", "rw", "cli,rest")
+COMMAND("fs new " \
+	"name=fs_name,type=CephString " \
+	"name=metadata,type=CephString " \
+	"name=data,type=CephString ", \
+	"make new filesystem using named pools <metadata> and <data>", \
+	"fs", "rw", "cli,rest")
+COMMAND("fs rm " \
+	"name=fs_name,type=CephString " \
+	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
+	"disable the named filesystem", \
+	"fs", "rw", "cli,rest")
+COMMAND("fs ls ", \
+	"list filesystems", \
+	"fs", "r", "cli,rest")
 /*
  * Monmap commands
  */
@@ -430,6 +444,11 @@ COMMAND("osd crush reweight " \
 	"name=weight,type=CephFloat,range=0.0", \
 	"change <name>'s weight to <weight> in crush map", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd crush reweight-subtree " \
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
+	"name=weight,type=CephFloat,range=0.0", \
+	"change all leaf items beneath <name> to <weight> in crush map", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush tunables " \
 	"name=profile,type=CephChoices,strings=legacy|argonaut|bobtail|firefly|optimal|default", \
 	"set crush tunables values to <profile>", "osd", "rw", "cli,rest")
@@ -537,8 +556,8 @@ COMMAND("osd pool create " \
 	"name=pg_num,type=CephInt,range=0 " \
 	"name=pgp_num,type=CephInt,range=0,req=false " \
         "name=pool_type,type=CephChoices,strings=replicated|erasure,req=false " \
-	"name=erasure_code_profile,type=CephString,req=false,goodchars=[A-Za-z0-9-_.=] " \
-	"name=ruleset,type=CephString,req=false,goodchars=[A-Za-z0-9-_.=]", \
+	"name=erasure_code_profile,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] " \
+	"name=ruleset,type=CephString,req=false", \
 	"create pool", "osd", "rw", "cli,rest")
 COMMAND("osd pool delete " \
 	"name=pool,type=CephPoolname " \
@@ -552,7 +571,7 @@ COMMAND("osd pool rename " \
 	"rename <srcpool> to <destpool>", "osd", "rw", "cli,rest")
 COMMAND("osd pool get " \
 	"name=pool,type=CephPoolname " \
-	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_ruleset|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|auid", \
+	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_ruleset|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|auid|target_max_objects|target_max_bytes|cache_target_dirty_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|erasure_code_profile", \
 	"get pool parameter <var>", "osd", "r", "cli,rest")
 COMMAND("osd pool set " \
 	"name=pool,type=CephPoolname " \
@@ -568,6 +587,10 @@ COMMAND("osd pool set-quota " \
 	"name=field,type=CephChoices,strings=max_objects|max_bytes " \
 	"name=val,type=CephString",
 	"set object or byte limit on pool", "osd", "rw", "cli,rest")
+COMMAND("osd pool get-quota " \
+        "name=pool,type=CephPoolname ",
+        "obtain object or byte limits for pool",
+        "osd", "r", "cli,rest")
 COMMAND("osd pool stats " \
         "name=name,type=CephString,req=false",
         "obtain stats from all pools, or from specified pool",
@@ -585,14 +608,16 @@ COMMAND("osd tier add " \
 	"name=pool,type=CephPoolname " \
 	"name=tierpool,type=CephPoolname " \
 	"name=force_nonempty,type=CephChoices,strings=--force-nonempty,req=false",
-	"add the tier <tierpool> to base pool <pool>", "osd", "rw", "cli,rest")
+	"add the tier <tierpool> (the second one) to base pool <pool> (the first one)", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd tier remove " \
 	"name=pool,type=CephPoolname " \
 	"name=tierpool,type=CephPoolname",
-	"remove the tier <tierpool> from base pool <pool>", "osd", "rw", "cli,rest")
+	"remove the tier <tierpool> (the second one) from base pool <pool> (the first one)", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd tier cache-mode " \
 	"name=pool,type=CephPoolname " \
-	"name=mode,type=CephChoices,strings=none|writeback|forward|readonly", \
+	"name=mode,type=CephChoices,strings=none|writeback|forward|readonly|readforward", \
 	"specify the caching mode for cache tier <pool>", "osd", "rw", "cli,rest")
 COMMAND("osd tier set-overlay " \
 	"name=pool,type=CephPoolname " \
@@ -606,7 +631,7 @@ COMMAND("osd tier add-cache " \
 	"name=pool,type=CephPoolname " \
 	"name=tierpool,type=CephPoolname " \
 	"name=size,type=CephInt,range=0", \
-	"add a cache <tierpool> of size <size> to existing pool <pool>", \
+	"add a cache <tierpool> (the second one) of size <size> to existing pool <pool> (the first one)", \
 	"osd", "rw", "cli,rest")
 
 /*

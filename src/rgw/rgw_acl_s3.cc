@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include <string.h>
 
 #include <iostream>
@@ -242,16 +245,6 @@ bool ACLGrant_S3::group_to_uri(ACLGroupTypeEnum group, string& uri)
   default:
     return false;
   }
-}
-
-ACLGroupTypeEnum ACLGrant_S3::uri_to_group(string& uri)
-{
-  if (uri.compare(rgw_uri_all_users) == 0)
-    return ACL_GROUP_ALL_USERS;
-  else if (uri.compare(rgw_uri_auth_users) == 0)
-    return ACL_GROUP_AUTHENTICATED_USERS;
-
-  return ACL_GROUP_NONE;
 }
 
 bool RGWAccessControlList_S3::xml_end(const char *el) {

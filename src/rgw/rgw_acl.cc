@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include <string.h>
 
 #include <iostream>
@@ -115,8 +118,3 @@ bool RGWAccessControlPolicy::verify_permission(string& uid, int user_perm_mask, 
 }
 
 
-ACLGroupTypeEnum ACLGrant::uri_to_group(string& uri)
-{
-  // this is required for backward compatibility
-  return ACLGrant_S3::uri_to_group(uri);
-}

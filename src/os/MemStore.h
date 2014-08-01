@@ -249,8 +249,11 @@ public:
   int mount();
   int umount();
 
-  int get_max_object_name_length() {
+  unsigned get_max_object_name_length() {
     return 4096;
+  }
+  unsigned get_max_attr_name_length() {
+    return 256;  // arbitrary; there is no real limit internally
   }
 
   int mkfs();
@@ -281,7 +284,7 @@ public:
     bool allow_eio = false);
   int fiemap(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
   int getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr& value);
-  int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset, bool user_only = false);
+  int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset);
 
   int list_collections(vector<coll_t>& ls);
   bool collection_exists(coll_t c);

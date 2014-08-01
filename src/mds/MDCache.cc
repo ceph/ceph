@@ -128,6 +128,7 @@ set<int> SimpleLock::empty_gather_set;
 
 
 MDCache::MDCache(MDS *m) :
+  recovery_queue(m),
   delayed_eval_stray(member_offset(CDentry, item_stray))
 {
   mds = m;
@@ -468,8 +469,7 @@ void MDCache::_create_system_file(CDir *dir, const char *name, CInode *in, Conte
   if (mdir)
     le->metablob.add_new_dir(mdir); // dirty AND complete AND new
 
-  mds->mdlog->submit_entry(le);
-  mds->mdlog->wait_for_safe(new C_MDC_CreateSystemFile(this, mut, dn, dpv, fin));
+  mds->mdlog->submit_entry(le, new C_MDC_CreateSystemFile(this, mut, dn, dpv, fin));
   mds->mdlog->flush();
 }
 
@@ -876,8 +876,7 @@ void MDCache::try_subtree_merge_at(CDir *dir, bool do_eval)
       le->metablob.add_dir_context(in->get_parent_dn()->get_dir());
       journal_dirty_inode(mut.get(), &le->metablob, in);
       
-      mds->mdlog->submit_entry(le);
-      mds->mdlog->wait_for_safe(new C_MDC_SubtreeMergeWB(this, in, mut));
+      mds->mdlog->submit_entry(le, new C_MDC_SubtreeMergeWB(this, in, mut));
       mds->mdlog->flush();
     }
   } 
@@ -2275,7 +2274,7 @@ ESubtreeMap *MDCache::create_subtree_map()
   show_subtrees();
 
   ESubtreeMap *le = new ESubtreeMap();
-  mds->mdlog->start_entry(le);
+  mds->mdlog->_start_entry(le);
   
   CDir *mydir = 0;
   if (myin) {
@@ -3096,8 +3095,8 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
 
       // log commit
       mds->mdlog->start_submit_entry(new ESlaveUpdate(mds->mdlog, "unknown", p->first, from,
-						      ESlaveUpdate::OP_COMMIT, su->origop));
-      mds->mdlog->wait_for_safe(new C_MDC_SlaveCommit(this, from, p->first));
+						      ESlaveUpdate::OP_COMMIT, su->origop),
+				     new C_MDC_SlaveCommit(this, from, p->first));
       mds->mdlog->flush();
 
       finish_uncommitted_slave_update(p->first, from);
@@ -5805,6 +5804,7 @@ struct C_MDC_QueuedCow : public Context {
   }
 };
 
+
 void MDCache::queue_file_recover(CInode *in)
 {
   dout(10) << "queue_file_recover " << *in << dendl;
@@ -5834,7 +5834,7 @@ void MDCache::queue_file_recover(CInode *in)
       CInode *cow_inode = 0;
       journal_cow_inode(mut, &le->metablob, in, snapid-1, &cow_inode);
       assert(cow_inode);
-      _queue_file_recover(cow_inode);
+      recovery_queue.enqueue(cow_inode);
       s.erase(*s.begin());
     }
     
@@ -5844,7 +5844,7 @@ void MDCache::queue_file_recover(CInode *in)
     mds->mdlog->flush();
   }
 
-  _queue_file_recover(in);
+  recovery_queue.enqueue(in);
 }
 
 void MDCache::_queued_file_recover_cow(CInode *in, MutationRef& mut)
@@ -5855,25 +5855,6 @@ void MDCache::_queued_file_recover_cow(CInode *in, MutationRef& mut)
   mut->cleanup();
 }
 
-void MDCache::_queue_file_recover(CInode *in)
-{
-  dout(15) << "_queue_file_recover " << *in << dendl;
-  assert(in->is_auth());
-  in->state_clear(CInode::STATE_NEEDSRECOVER);
-  if (!in->state_test(CInode::STATE_RECOVERING)) {
-    in->state_set(CInode::STATE_RECOVERING);
-    in->auth_pin(this);
-  }
-  file_recover_queue.insert(in);
-}
-
-void MDCache::unqueue_file_recover(CInode *in)
-{
-  dout(15) << "unqueue_file_recover " << *in << dendl;
-  in->state_clear(CInode::STATE_RECOVERING);
-  in->auth_unpin(this);
-  file_recover_queue.erase(in);
-}
 
 /*
  * called after recovery to recover file sizes for previously opened (for write)
@@ -5927,100 +5908,12 @@ void MDCache::start_files_to_recover(vector<CInode*>& recover_q, vector<CInode*>
   }
 }
 
-struct C_MDC_Recover : public Context {
-  MDCache *mdc;
-  CInode *in;
-  uint64_t size;
-  utime_t mtime;
-  C_MDC_Recover(MDCache *m, CInode *i) : mdc(m), in(i), size(0) {}
-  void finish(int r) {
-    mdc->_recovered(in, r, size, mtime);
-  }
-};
-
 void MDCache::do_file_recover()
 {
-  dout(10) << "do_file_recover " << file_recover_queue.size() << " queued, "
-	   << file_recovering.size() << " recovering" << dendl;
-
-  while (file_recovering.size() < 5 &&
-	 !file_recover_queue.empty()) {
-    CInode *in = *file_recover_queue.begin();
-    file_recover_queue.erase(in);
-
-    inode_t *pi = in->get_projected_inode();
-
-    // blech
-    if (pi->client_ranges.size() && !pi->get_max_size()) {
-      mds->clog.warn() << "bad client_range " << pi->client_ranges
-	  << " on ino " << pi->ino << "\n";
-    }
-
-    if (pi->client_ranges.size() && pi->get_max_size()) {
-      dout(10) << "do_file_recover starting " << in->inode.size << " " << pi->client_ranges
-	       << " " << *in << dendl;
-      file_recovering.insert(in);
-      
-      C_MDC_Recover *fin = new C_MDC_Recover(this, in);
-      mds->filer->probe(in->inode.ino, &in->inode.layout, in->last,
-			pi->get_max_size(), &fin->size, &fin->mtime, false,
-			0, fin);    
-    } else {
-      dout(10) << "do_file_recover skipping " << in->inode.size
-	       << " " << *in << dendl;
-      in->state_clear(CInode::STATE_RECOVERING);
-      mds->locker->eval(in, CEPH_LOCK_IFILE);
-      in->auth_unpin(this);
-    }
-  }
+  recovery_queue.advance();
 }
-
-void MDCache::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
-{
-  dout(10) << "_recovered r=" << r << " size=" << size << " mtime=" << mtime
-	   << " for " << *in << dendl;
-
-  if (r != 0) {
-    dout(0) << "recovery error! " << r << dendl;
-    if (r == -EBLACKLISTED) {
-      mds->suicide();
-      return;
-    }
-    assert(0 == "unexpected error from osd during recovery");
-  }
-
-  file_recovering.erase(in);
-  in->state_clear(CInode::STATE_RECOVERING);
-
-  if (!in->get_parent_dn() && !in->get_projected_parent_dn()) {
-    dout(10) << " inode has no parents, killing it off" << dendl;
-    in->auth_unpin(this);
-    remove_inode(in);
-  } else {
-    // journal
-    mds->locker->check_inode_max_size(in, true, true, size, false, 0, mtime);
-    mds->locker->eval(in, CEPH_LOCK_IFILE);
-    in->auth_unpin(this);
-  }
-
-  do_file_recover();
-}
-
-void MDCache::purge_prealloc_ino(inodeno_t ino, Context *fin)
-{
-  object_t oid = CInode::get_object_name(ino, frag_t(), "");
-  object_locator_t oloc(mds->mdsmap->get_metadata_pool());
-
-  dout(10) << "purge_prealloc_ino " << ino << " oid " << oid << dendl;
-  SnapContext snapc;
-  mds->objecter->remove(oid, oloc, snapc, ceph_clock_now(g_ceph_context), 0, 0, fin);
-}  
-
-
-
 
 // ===============================================================================
-
 
 
 // ----------------------------
@@ -6117,7 +6010,7 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
   CDentry *dn = in->get_projected_parent_dn();
   le->metablob.add_dir_context(dn->get_dir());
   le->metablob.add_primary_dentry(dn, in, true);
-  le->metablob.add_truncate_finish(in->ino(), ls->offset);
+  le->metablob.add_truncate_finish(in->ino(), ls->seq);
 
   journal_dirty_inode(mut.get(), &le->metablob, in);
   mds->mdlog->submit_entry(le, new C_MDC_TruncateLogged(this, in, mut));
@@ -6145,14 +6038,16 @@ void MDCache::truncate_inode_logged(CInode *in, MutationRef& mut)
 
 void MDCache::add_recovered_truncate(CInode *in, LogSegment *ls)
 {
-  dout(20) << "add_recovered_truncate " << *in << " in " << ls << " offset " << ls->offset << dendl;
+  dout(20) << "add_recovered_truncate " << *in << " in log segment "
+	   << ls->seq << "/" << ls->offset << dendl;
   ls->truncating_inodes.insert(in);
   in->get(CInode::PIN_TRUNCATING);
 }
 
 void MDCache::remove_recovered_truncate(CInode *in, LogSegment *ls)
 {
-  dout(20) << "remove_recovered_truncate " << *in << " in " << ls << " offset " << ls->offset << dendl;
+  dout(20) << "remove_recovered_truncate " << *in << " in log segment "
+	   << ls->seq << "/" << ls->offset << dendl;
   // if we have the logseg the truncate started in, it must be in our list.
   set<CInode*>::iterator p = ls->truncating_inodes.find(in);
   assert(p != ls->truncating_inodes.end());

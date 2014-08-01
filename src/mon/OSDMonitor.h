@@ -186,6 +186,15 @@ private:
 
   void update_msgr_features();
   int check_cluster_features(uint64_t features, stringstream &ss);
+  /**
+   * check if the cluster supports the features required by the
+   * given crush map. Outputs the daemons which don't support it
+   * to the stringstream.
+   *
+   * @returns true if the map is passable, false otherwise
+   */
+  bool validate_crush_against_features(const CrushWrapper *newcrush,
+                                      stringstream &ss);
 
   void share_map_with_random_osd();
 
@@ -249,7 +258,7 @@ private:
 				   stringstream &ss);
   int get_erasure_code(const string &erasure_code_profile,
 		       ErasureCodeInterfaceRef *erasure_code,
-		       stringstream &ss);
+		       stringstream &ss) const;
   int prepare_pool_crush_ruleset(const unsigned pool_type,
 				 const string &erasure_code_profile,
 				 const string &ruleset_name,
@@ -363,6 +372,7 @@ private:
   bool prepare_command(MMonCommand *m);
   bool prepare_command_impl(MMonCommand *m, map<string,cmd_vartype> &cmdmap);
 
+  int set_crash_replay_interval(const int64_t pool_id, const uint32_t cri);
   int prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
                                stringstream& ss);
 

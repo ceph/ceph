@@ -53,18 +53,11 @@ int Dumper::init(int rank_)
 
 int Dumper::recover_journal(Journaler *journaler)
 {
-  bool done = false;
-  Cond cond;
-  Mutex localLock("dump:recover_journal");
-  int r;
-
+  C_SaferCond cond;
   lock.Lock();
-  journaler->recover(new C_SafeCond(&localLock, &cond, &done, &r));
+  journaler->recover(&cond);
   lock.Unlock();
-  localLock.Lock();
-  while (!done)
-    cond.Wait(localLock);
-  localLock.Unlock();
+  int const r = cond.wait();
 
   if (r < 0) { // Error
     derr << "error on recovery: " << cpp_strerror(r) << dendl;
@@ -78,10 +71,7 @@ int Dumper::recover_journal(Journaler *journaler)
 
 void Dumper::dump(const char *dump_file)
 {
-  bool done = false;
   int r = 0;
-  Cond cond;
-  Mutex localLock("dump:lock");
 
   Journaler journaler(ino, mdsmap->get_metadata_pool(), CEPH_FS_ONDISK_MAGIC,
                                        objecter, 0, 0, &timer);
@@ -98,14 +88,12 @@ void Dumper::dump(const char *dump_file)
   Filer filer(objecter);
   bufferlist bl;
 
+  C_SaferCond cond;
   lock.Lock();
   filer.read(ino, &journaler.get_layout(), CEPH_NOSNAP,
-             start, len, &bl, 0, new C_SafeCond(&localLock, &cond, &done));
+             start, len, &bl, 0, &cond);
   lock.Unlock();
-  localLock.Lock();
-  while (!done)
-    cond.Wait(localLock);
-  localLock.Unlock();
+  r = cond.wait();
 
   cout << "read " << bl.length() << " bytes at offset " << start << std::endl;
 
@@ -114,10 +102,12 @@ void Dumper::dump(const char *dump_file)
     // include an informative header
     char buf[200];
     memset(buf, 0, sizeof(buf));
-    sprintf(buf, "Ceph mds%d journal dump\n start offset %llu (0x%llx)\n       length %llu (0x%llx)\n%c",
+    sprintf(buf, "Ceph mds%d journal dump\n start offset %llu (0x%llx)\n       length %llu (0x%llx)\n    write_pos %llu (0x%llx)\n    format %llu\n%c",
 	    rank, 
 	    (unsigned long long)start, (unsigned long long)start,
 	    (unsigned long long)bl.length(), (unsigned long long)bl.length(),
+	    (unsigned long long)journaler.last_committed.write_pos, (unsigned long long)journaler.last_committed.write_pos,
+	    (unsigned long long)journaler.last_committed.stream_format,
 	    4);
     int r = safe_write(fd, buf, sizeof(buf));
     if (r)
@@ -140,7 +130,7 @@ void Dumper::dump(const char *dump_file)
 
 void Dumper::undump(const char *dump_file)
 {
-  Mutex localLock("undump:lock");
+
   cout << "undump " << dump_file << std::endl;
   
   int fd = ::open(dump_file, O_RDONLY);
@@ -160,16 +150,19 @@ void Dumper::undump(const char *dump_file)
     return;
   }
 
-  long long unsigned start, len;
+  long long unsigned start, len, write_pos, format;
   sscanf(strstr(buf, "start offset"), "start offset %llu", &start);
   sscanf(strstr(buf, "length"), "length %llu", &len);
+  sscanf(strstr(buf, "write_pos"), "write_pos %llu", &write_pos);
+  sscanf(strstr(buf, "format"), "format %llu", &format);
 
   cout << "start " << start << " len " << len << std::endl;
   
   Journaler::Header h;
   h.trimmed_pos = start;
   h.expire_pos = start;
-  h.write_pos = start+len;
+  h.write_pos = write_pos;
+  h.stream_format = format;
   h.magic = CEPH_FS_ONDISK_MAGIC;
 
   h.layout = g_default_file_layout;
@@ -182,41 +175,63 @@ void Dumper::undump(const char *dump_file)
   object_locator_t oloc(mdsmap->get_metadata_pool());
   SnapContext snapc;
 
-  bool done = false;
-  Cond cond;
-  
   cout << "writing header " << oid << std::endl;
+  C_SaferCond header_cond;
   lock.Lock();
   objecter->write_full(oid, oloc, snapc, hbl, ceph_clock_now(g_ceph_context), 0, 
-		       NULL, 
-		       new C_SafeCond(&localLock, &cond, &done));
+		       NULL, &header_cond);
   lock.Unlock();
 
-  localLock.Lock();
-  while (!done)
-    cond.Wait(localLock);
-  localLock.Unlock();
-  
-  // read
+  r = header_cond.wait();
+  if (r != 0) {
+    derr << "Failed to write header: " << cpp_strerror(r) << dendl;
+    return;
+  }
+
   Filer filer(objecter);
+
+  /* Erase any objects at the end of the region to which we shall write
+   * the new log data.  This is to avoid leaving trailing junk after
+   * the newly written data.  Any junk more than one object ahead
+   * will be taken care of during normal operation by Journaler's
+   * prezeroing behaviour */
+  {
+    uint32_t const object_size = h.layout.fl_object_size;
+    assert(object_size > 0);
+    uint64_t const last_obj = h.write_pos / object_size;
+    uint64_t const purge_count = 2;
+    C_SaferCond purge_cond;
+    cout << "Purging " << purge_count << " objects from " << last_obj << std::endl;
+    lock.Lock();
+    filer.purge_range(ino, &h.layout, snapc, last_obj, purge_count, ceph_clock_now(g_ceph_context), 0, &purge_cond);
+    lock.Unlock();
+    purge_cond.wait();
+  }
+  
+  // Stream from `fd` to `filer`
   uint64_t pos = start;
   uint64_t left = len;
   while (left > 0) {
+    // Read
     bufferlist j;
     lseek64(fd, pos, SEEK_SET);
     uint64_t l = MIN(left, 1024*1024);
     j.read_fd(fd, l);
+
+    // Write
     cout << " writing " << pos << "~" << l << std::endl;
+    C_SaferCond write_cond;
     lock.Lock();
-    filer.write(ino, &h.layout, snapc, pos, l, j, ceph_clock_now(g_ceph_context), 0, NULL,
-        new C_SafeCond(&localLock, &cond, &done));
+    filer.write(ino, &h.layout, snapc, pos, l, j, ceph_clock_now(g_ceph_context), 0, NULL, &write_cond);
     lock.Unlock();
 
-    localLock.Lock();
-    while (!done)
-      cond.Wait(localLock);
-    localLock.Unlock();
+    r = write_cond.wait();
+    if (r != 0) {
+      derr << "Failed to write header: " << cpp_strerror(r) << dendl;
+      return;
+    }
       
+    // Advance
     pos += l;
     left -= l;
   }

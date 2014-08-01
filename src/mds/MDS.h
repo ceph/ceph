@@ -38,7 +38,6 @@
 
 #define CEPH_MDS_PROTOCOL    24 /* cluster internal */
 
-
 enum {
   l_mds_first = 2000,
   l_mds_req,
@@ -154,7 +153,7 @@ class MDS : public Dispatcher, public md_config_obs_t {
   int incarnation;
 
   int standby_for_rank;
-  int standby_type;
+  MDSMap::DaemonState standby_type;  // one of STANDBY_REPLAY, ONESHOT_REPLAY
   string standby_for_name;
   bool standby_replaying;  // true if current replay pass is in standby-replay mode
 
@@ -189,9 +188,9 @@ class MDS : public Dispatcher, public md_config_obs_t {
 
  protected:
   // -- MDS state --
-  int last_state;
-  int state;         // my confirmed state
-  int want_state;    // the state i want
+  MDSMap::DaemonState last_state;
+  MDSMap::DaemonState state;         // my confirmed state
+  MDSMap::DaemonState want_state;    // the state i want
 
   list<Context*> waiting_for_active, waiting_for_replay, waiting_for_reconnect, waiting_for_resolve;
   list<Context*> replay_queue;
@@ -246,7 +245,7 @@ class MDS : public Dispatcher, public md_config_obs_t {
 
   bool is_stopped()  { return mdsmap->is_stopped(whoami); }
 
-  void request_state(int s);
+  void request_state(MDSMap::DaemonState s);
 
   ceph_tid_t issue_tid() { return ++last_tid; }
     
@@ -358,7 +357,7 @@ class MDS : public Dispatcher, public md_config_obs_t {
   }
 
   // start up, shutdown
-  int init(int wanted_state=MDSMap::STATE_BOOT);
+  int init(MDSMap::DaemonState wanted_state=MDSMap::STATE_BOOT);
 
   // admin socket handling
   friend class MDSSocketHook;
@@ -377,9 +376,23 @@ class MDS : public Dispatcher, public md_config_obs_t {
   void bcast_mds_map();  // to mounted clients
 
   void boot_create();             // i am new mds.
-  void boot_start(int step=0, int r=0);    // starting|replay
 
+ private:
+  typedef enum {
+    // The MDSMap is available, configure default layouts and structures
+    MDS_BOOT_INITIAL = 0,
+    // We are ready to open some inodes
+    MDS_BOOT_OPEN_ROOT,
+    // We are ready to do a replay if needed
+    MDS_BOOT_PREPARE_LOG,
+    // Replay is complete
+    MDS_BOOT_REPLAY_DONE
+  } BootStep;
+
+  friend class C_MDS_BootStart;
+  void boot_start(BootStep step=MDS_BOOT_INITIAL, int r=0);    // starting|replay
   void calc_recovery_set();
+ public:
 
   void replay_start();
   void creating_done();

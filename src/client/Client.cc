@@ -90,6 +90,11 @@ using namespace std;
 
 #define  tout(cct)       if (!cct->_conf->client_trace.empty()) traceout
 
+// Darwin fails to define this
+#ifndef O_RSYNC
+#define O_RSYNC 0x0
+#endif
+
 
 
 void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
@@ -1231,6 +1236,7 @@ void Client::connect_mds_targets(int mds)
 
 void Client::dump_mds_sessions(Formatter *f)
 {
+  f->dump_int("id", get_nodeid().v);
   f->open_array_section("sessions");
   for (map<int,MetaSession*>::const_iterator p = mds_sessions.begin(); p != mds_sessions.end(); ++p) {
     f->open_object_section("session");

@@ -105,13 +105,13 @@ ostream &operator<<(ostream &lhs, const ECBackend::ReadOp &rhs)
 
 void ECBackend::ReadOp::dump(Formatter *f) const
 {
-  f->dump_stream("tid") << tid;
+  f->dump_unsigned("tid", tid);
   if (op && op->get_req()) {
     f->dump_stream("op") << *(op->get_req());
   }
   f->dump_stream("to_read") << to_read;
   f->dump_stream("complete") << complete;
-  f->dump_stream("priority") << priority;
+  f->dump_int("priority", priority);
   f->dump_stream("obj_to_source") << obj_to_source;
   f->dump_stream("source_to_obj") << source_to_obj;
   f->dump_stream("in_progress") << in_progress;
@@ -158,7 +158,7 @@ void ECBackend::RecoveryOp::dump(Formatter *f) const
   f->dump_stream("missing_on_shards") << missing_on_shards;
   f->dump_stream("recovery_info") << recovery_info;
   f->dump_stream("recovery_progress") << recovery_progress;
-  f->dump_stream("pending_read") << pending_read;
+  f->dump_bool("pending_read", pending_read);
   f->dump_stream("state") << tostr(state);
   f->dump_stream("waiting_on_pushes") << waiting_on_pushes;
   f->dump_stream("extent_requested") << extent_requested;
@@ -829,6 +829,7 @@ void ECBackend::handle_sub_write(
     op.log_entries,
     op.updated_hit_set_history,
     op.trim_to,
+    op.trim_rollback_to,
     !(op.t.empty()),
     localt);
   localt->append(op.t);
@@ -1120,8 +1121,9 @@ void ECBackend::check_recovery_sources(const OSDMapRef osdmap)
   }
 }
 
-void ECBackend::_on_change(ObjectStore::Transaction *t)
+void ECBackend::on_change()
 {
+  dout(10) << __func__ << dendl;
   writing.clear();
   tid_to_op_map.clear();
   for (map<ceph_tid_t, ReadOp>::iterator i = tid_to_read_map.begin();
@@ -1210,6 +1212,7 @@ void ECBackend::submit_transaction(
   const eversion_t &at_version,
   PGTransaction *_t,
   const eversion_t &trim_to,
+  const eversion_t &trim_rollback_to,
   vector<pg_log_entry_t> &log_entries,
   boost::optional<pg_hit_set_history_t> &hset_history,
   Context *on_local_applied_sync,
@@ -1225,6 +1228,7 @@ void ECBackend::submit_transaction(
   op->hoid = hoid;
   op->version = at_version;
   op->trim_to = trim_to;
+  op->trim_rollback_to = trim_rollback_to;
   op->log_entries.swap(log_entries);
   std::swap(op->updated_hit_set_history, hset_history);
   op->on_local_applied_sync = on_local_applied_sync;
@@ -1531,6 +1535,7 @@ void ECBackend::start_write(Op *op) {
       should_send ? iter->second : ObjectStore::Transaction(),
       op->version,
       op->trim_to,
+      op->trim_rollback_to,
       op->log_entries,
       op->updated_hit_set_history,
       op->temp_added,

@@ -43,6 +43,10 @@ Install Ceph
 
 	ceph-deploy admin ceph-client
 
+   The ``ceph-deploy`` utility copies the keyring to the ``/etc/ceph`` 
+   directory. Ensure that the keyring file has appropriate read permissions 
+   (e.g., ``sudo chmod + r /etc/ceph/ceph.client.admin.keyring``).
+
 
 Configure a Block Device
 ========================

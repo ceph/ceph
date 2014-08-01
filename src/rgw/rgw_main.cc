@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -721,9 +724,15 @@ int usage()
 {
   cerr << "usage: radosgw [options...]" << std::endl;
   cerr << "options:\n";
-  cerr << "   --rgw-region=<region>     region in which radosgw runs\n";
-  cerr << "   --rgw-zone=<zone>         zone in which radosgw runs\n";
+  cerr << "  --rgw-region=<region>     region in which radosgw runs\n";
+  cerr << "  --rgw-zone=<zone>         zone in which radosgw runs\n";
+  cerr << "  --rgw-socket-path=<path>  specify a unix domain socket path\n";
   generic_server_usage();
+  cerr << "  -m monaddress[:port]      connect to specified monitor\n";
+  cerr << "  --keyring=<path>          path to radosgw keyring\n";
+  cerr << "  --logfile=<logfile>       file to log debug output\n";
+  cerr << "  --debug-rgw=<log-level>/<memory-level>  set radosgw debug level\n";
+
   return 0;
 }
 
@@ -1104,7 +1113,7 @@ int main(int argc, const char **argv)
     configs.push_back(config);
 
     string framework = config->get_framework();
-    fe_map.insert(make_pair<string, RGWFrontendConfig *>(framework, config));
+    fe_map.insert(pair<string, RGWFrontendConfig*>(framework, config));
   }
 
   list<RGWFrontend *> fes;

@@ -12,7 +12,7 @@ Adding Monitors
 Ceph monitors are light-weight processes that maintain a master copy of the 
 cluster map. You can run a cluster with 1 monitor. We recommend at least 3 
 monitors for a production cluster. Ceph monitors use a variation of the
-`Paxos_` protocol to establish consensus about maps and other critical
+`Paxos`_ protocol to establish consensus about maps and other critical
 information across the cluster. Due to the nature of Paxos, Ceph requires
 a majority of monitors running to establish a quorum (thus establishing
 consensus).
@@ -45,7 +45,7 @@ Deploy your Hardware
 If you are adding a new host when adding a new monitor,  see `Hardware
 Recommendations`_ for details on minimum recommendations for monitor hardware.
 To add a monitor host to your cluster, first make sure you have an up-to-date
-version of Linux installed (typically Ubuntu 12.04 precise). 
+version of Linux installed (typically Ubuntu 14.04 or RHEL 7). 
 
 Add your monitor host to a rack in your cluster, connect it to the network
 and ensure that it has network connectivity.
@@ -56,12 +56,11 @@ Install the Required Software
 -----------------------------
 
 For manually deployed clusters, you must install Ceph packages
-manually. See `Installing Debian/Ubuntu Packages`_ for details.
+manually. See `Installing Packages`_ for details.
 You should configure SSH to a user with password-less authentication
 and root permissions.
 
-.. _Installing Debian/Ubuntu Packages: ../../../install/debian
-
+.. _Installing Packages: ../../../install/install-storage-cluster
 
 
 .. _Adding a Monitor (Manual):
@@ -82,36 +81,37 @@ please take into account that ``{mon-id}`` should be the id you chose,
 without the ``mon.`` prefix (i.e., ``{mon-id}`` should be the ``a`` 
 on ``mon.a``).
 
-#. Create the default directory on your new monitor. :: 
+#. Create the default directory on the machine that will host your 
+   new monitor. :: 
 
 	ssh {new-mon-host}
 	sudo mkdir /var/lib/ceph/mon/ceph-{mon-id}
 
 #. Create a temporary directory ``{tmp}`` to keep the files needed during 
-   this process. This directory should be different from monitor's default 
+   this process. This directory should be different from the monitor's default 
    directory created in the previous step, and can be removed after all the 
-   steps are taken. :: 
+   steps are executed. :: 
 
 	mkdir {tmp}
 
 #. Retrieve the keyring for your monitors, where ``{tmp}`` is the path to 
-   the retrieved keyring, and ``{filename}`` is the name of the file containing
-   the retrieved monitor key. :: 
+   the retrieved keyring, and ``{key-filename}`` is the name of the file 
+   containing the retrieved monitor key. :: 
 
-	ceph auth get mon. -o {tmp}/{filename}
+	ceph auth get mon. -o {tmp}/{key-filename}
 
 #. Retrieve the monitor map, where ``{tmp}`` is the path to 
-   the retrieved monitor map, and ``{filename}`` is the name of the file 
+   the retrieved monitor map, and ``{map-filename}`` is the name of the file 
    containing the retrieved monitor monitor map. :: 
 
-	ceph mon getmap -o {tmp}/{filename}
+	ceph mon getmap -o {tmp}/{map-filename}
 
 #. Prepare the monitor's data directory created in the first step. You must 
    specify the path to the monitor map so that you can retrieve the 
    information about a quorum of monitors and their ``fsid``. You must also 
    specify a path to the monitor keyring:: 
 
-	sudo ceph-mon -i {mon-id} --mkfs --monmap {tmp}/{filename} --keyring {tmp}/{filename}
+	sudo ceph-mon -i {mon-id} --mkfs --monmap {tmp}/{map-filename} --keyring {tmp}/{key-filename}
 	
 
 #. Add the new monitor to the list of monitors for you cluster (runtime). This enables 
@@ -235,12 +235,10 @@ catch up with the current state of the cluster.
 If monitors discovered each other through the Ceph configuration file instead of
 through the monmap, it would introduce additional risks because the Ceph
 configuration files aren't updated and distributed automatically. Monitors
-might inadvertantly use an older ``ceph.conf`` file, fail to recognize a
+might inadvertently use an older ``ceph.conf`` file, fail to recognize a
 monitor, fall out of a quorum, or develop a situation where `Paxos`_ isn't able
 to determine the current state of the system accurately. Consequently,  making
 changes to an existing monitor's IP address must be done with  great care.
-
-.. _Paxos: http://en.wikipedia.org/wiki/Paxos_(computer_science)
 
 
 Changing a Monitor's IP address (The Right Way)
@@ -360,3 +358,4 @@ the monitors should operate successfully.
 
 .. _Manual Deployment: ../../../install/manual-deployment
 .. _Monitor Bootstrap: ../../../dev/mon-bootstrap
+.. _Paxos: http://en.wikipedia.org/wiki/Paxos_(computer_science)

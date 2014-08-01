@@ -20,6 +20,7 @@ Foundation.  See file COPYING.
 
 import os
 import sys
+import platform
 
 # Make life easier on developers:
 # If in src/, and .libs and pybind exist here, assume we're running
@@ -33,14 +34,20 @@ DEVMODEMSG = '*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH *
 if MYDIR.endswith('src') and \
    os.path.exists(os.path.join(MYDIR, '.libs')) and \
    os.path.exists(os.path.join(MYDIR, 'pybind')):
+
+    if platform.system() == "Darwin":
+        lib_path_var = "DYLD_LIBRARY_PATH"
+    else:
+        lib_path_var = "LD_LIBRARY_PATH"
+
     MYLIBPATH = os.path.join(MYDIR, '.libs')
-    if 'LD_LIBRARY_PATH' in os.environ:
-        if MYLIBPATH not in os.environ['LD_LIBRARY_PATH']:
-            os.environ['LD_LIBRARY_PATH'] += ':' + MYLIBPATH
+    if lib_path_var in os.environ:
+        if MYLIBPATH not in os.environ[lib_path_var]:
+            os.environ[lib_path_var] += ':' + MYLIBPATH
             print >> sys.stderr, DEVMODEMSG
             os.execvp('python', ['python'] + sys.argv)
     else:
-        os.environ['LD_LIBRARY_PATH'] = MYLIBPATH
+        os.environ[lib_path_var] = MYLIBPATH
         print >> sys.stderr, DEVMODEMSG
         os.execvp('python', ['python'] + sys.argv)
     sys.path.insert(0, os.path.join(MYDIR, 'pybind'))
@@ -105,6 +112,14 @@ def mdsids():
     for mdsdict in infodict.values():
         l.append(mdsdict['name'])
     return l
+
+# these args must be passed to all child programs
+GLOBAL_ARGS = {
+    'client_id': '--id',
+    'client_name': '--name',
+    'cluster': '--cluster',
+    'cephconf': '--conf',
+}
 
 def parse_cmdargs(args=None, target=''):
     # alias: let the line-wrapping be sane
@@ -339,21 +354,31 @@ def admin_socket(asok_path, cmd, format=''):
     return ret
 
 
-def ceph_conf(field, name):
+def ceph_conf(parsed_args, field, name):
+    args=['ceph-conf']
+
+    if name:
+        args.extend(['--name', name])
+
+    # add any args in GLOBAL_ARGS
+    for key, val in GLOBAL_ARGS.iteritems():
+        # ignore name in favor of argument name, if any
+        if name and key == 'client_name':
+            continue
+        if getattr(parsed_args, key):
+            args.extend([val, getattr(parsed_args, key)])
+
+    args.extend(['--show-config-value', field])
     p = subprocess.Popen(
-        args=[
-            'ceph-conf',
-	    '--show-config-value',
-            field,
-            '-n',
-            name,
-            ],
+        args,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE)
     outdata, errdata = p.communicate()
     if (len(errdata)):
         raise RuntimeError('unable to get conf option %s for %s: %s' % (field, name, errdata))
     return outdata.rstrip()
+
+PROMPT = 'ceph> '
 
 def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
     """
@@ -385,8 +410,14 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
             # do the command-interpreter looping
             # for raw_input to do readline cmd editing
             import readline
+
+            if sys.stdin.isatty():
+                prompt = PROMPT
+            else:
+                prompt = ''
+
             while True:
-                interactive_input = raw_input('ceph> ')
+                interactive_input = raw_input(prompt)
                 if interactive_input in ['q', 'quit', 'Q']:
                     return 0, '', ''
                 cmdargs = parse_cmdargs(interactive_input.split())[2]
@@ -538,7 +569,8 @@ def main():
             else:
                 # try resolve daemon name
                 try:
-                    sockpath = ceph_conf('admin_socket', childargs[1])
+                    sockpath = ceph_conf(parsed_args, 'admin_socket',
+                                         childargs[1])
                 except Exception as e:
                     print >> sys.stderr, \
                         'Can\'t get admin socket path: ' + str(e)

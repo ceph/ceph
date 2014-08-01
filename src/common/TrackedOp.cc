@@ -221,12 +221,11 @@ void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
     h->set_bin(bin, count);
 }
 
-void OpTracker::mark_event(TrackedOp *op, const string &dest)
+void OpTracker::mark_event(TrackedOp *op, const string &dest, utime_t time)
 {
   if (!tracking_enabled)
     return;
-  utime_t now = ceph_clock_now(cct);
-  return _mark_event(op, dest, now);
+  return _mark_event(op, dest, time);
 }
 
 void OpTracker::_mark_event(TrackedOp *op, const string &evt,
@@ -254,6 +253,9 @@ void OpTracker::RemoveOnDelete::operator()(TrackedOp *op) {
 
 void TrackedOp::mark_event(const string &event)
 {
+  if (!tracker->tracking_enabled)
+    return;
+
   utime_t now = ceph_clock_now(g_ceph_context);
   {
     Mutex::Locker l(lock);

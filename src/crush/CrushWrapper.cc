@@ -654,6 +654,33 @@ int CrushWrapper::adjust_item_weight(CephContext *cct, int id, int weight)
   return changed;
 }
 
+int CrushWrapper::adjust_subtree_weight(CephContext *cct, int id, int weight)
+{
+  ldout(cct, 5) << "adjust_item_weight " << id << " weight " << weight << dendl;
+  crush_bucket *b = get_bucket(id);
+  if (IS_ERR(b))
+    return PTR_ERR(b);
+  int changed = 0;
+  list<crush_bucket*> q;
+  q.push_back(b);
+  while (!q.empty()) {
+    b = q.front();
+    q.pop_front();
+    for (unsigned i=0; i<b->size; ++i) {
+      int n = b->items[i];
+      if (n >= 0) {
+	crush_bucket_adjust_item_weight(b, n, weight);
+      } else {
+	crush_bucket *sub = get_bucket(n);
+	if (IS_ERR(sub))
+	  continue;
+	q.push_back(sub);
+      }
+    }
+  }
+  return changed;
+}
+
 bool CrushWrapper::check_item_present(int id)
 {
   bool found = false;
@@ -794,7 +821,7 @@ int CrushWrapper::add_simple_ruleset(string name, string root_name,
   return rno;
 }
 
-int CrushWrapper::get_rule_weight_map(unsigned ruleno, map<int,float> *pmap)
+int CrushWrapper::get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap)
 {
   if (ruleno >= crush->max_rules)
     return -ENOENT;
@@ -814,15 +841,21 @@ int CrushWrapper::get_rule_weight_map(unsigned ruleno, map<int,float> *pmap)
       } else {
 	list<int> q;
 	q.push_back(n);
+	//breadth first iterate the OSD tree
 	while (!q.empty()) {
 	  int bno = q.front();
 	  q.pop_front();
 	  crush_bucket *b = crush->buckets[-1-bno];
 	  assert(b);
 	  for (unsigned j=0; j<b->size; ++j) {
-	    float w = crush_get_bucket_item_weight(b, j);
-	    m[b->items[j]] = w;
-	    sum += w;
+	    int item_id = b->items[j];
+	    if (item_id >= 0) { //it's an OSD
+	      float w = crush_get_bucket_item_weight(b, j);
+	      m[item_id] = w;
+	      sum += w;
+	    } else { //not an OSD, expand the child later
+	      q.push_back(item_id);
+	    }
 	  }
 	}
       }
@@ -1217,6 +1250,9 @@ void CrushWrapper::dump_tunables(Formatter *f) const
 
   f->dump_int("require_feature_tunables", (int)has_nondefault_tunables());
   f->dump_int("require_feature_tunables2", (int)has_nondefault_tunables2());
+  f->dump_int("require_feature_tunables3", (int)has_nondefault_tunables3());
+  f->dump_int("has_v2_rules", (int)has_v2_rules());
+  f->dump_int("has_v3_rules", (int)has_v3_rules());
 }
 
 void CrushWrapper::dump_rules(Formatter *f) const

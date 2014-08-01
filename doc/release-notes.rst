@@ -2,6 +2,144 @@
  Release Notes
 ===============
 
+v0.83
+=====
+
+Another Ceph development release!  This has been a longer cycle, so
+there has been quite a bit of bug fixing and stabilization in this
+round.  There is also a bunch of packaging fixes for RPM distros
+(RHEL/CentOS, Fedora, and SUSE) and for systemd.  We've also added a new
+librados-striper library from Sebastien Ponce that provides a generic
+striping API for applications to code to.
+
+Upgrading
+---------
+
+* The experimental keyvaluestore-dev OSD backend had an on-disk format
+  change that prevents existing OSD data from being upgraded.  This
+  affects developers and testers only.
+
+* mon-specific and osd-specific leveldb options have been removed.
+  From this point onward users should use `leveldb_' generic options and add
+  the options in the appropriate sections of their configuration files.
+  Monitors will still maintain the following monitor-specific defaults:
+
+    leveldb_write_buffer_size = 32*1024*1024  = 33554432  // 32MB
+    leveldb_cache_size        = 512*1024*1204 = 536870912 // 512MB
+    leveldb_block_size        = 64*1024       = 65536     // 64KB
+    leveldb_compression       = false
+    leveldb_log               = ""
+
+  OSDs will still maintain the following osd-specific defaults:
+
+    leveldb_log               = ""
+
+Notable Changes
+---------------
+
+* ceph-disk: fix dmcrypt support (Stephen Taylor)
+* cephtool: fix help (Yilong Zhao)
+* cephtool: test cleanup (Joao Eduardo Luis)
+* doc: librados example fixes (Kevin Dalley)
+* doc: many doc updates (John Wilkins)
+* doc: update erasure docs (Loic Dachary, Venky Shankar)
+* filestore: disable use of XFS hint (buggy on old kernels) (Samuel Just)
+* filestore: fix xattr spillout (Greg Farnum, Haomai Wang)
+* keyvaluestore: header cache (Haomai Wang)
+* librados_striper: striping library for librados (Sebastien Ponce)
+* libs3: update to latest (Danny Al-Gaaf)
+* log: fix derr level (Joao Eduardo Luis)
+* logrotate: fix osd log rotation on ubuntu (Sage Weil)
+* mds: fix xattr bug triggered by ACLs (Yan, Zheng)
+* misc memory leaks, cleanups, fixes (Danny Al-Gaaf, Sahid Ferdjaoui)
+* misc suse fixes (Danny Al-Gaaf)
+* misc word size fixes (Kevin Cox)
+* mon: drop mon- and osd- specific leveldb options (Joao Eduardo Luis)
+* mon: ec pool profile fixes (Loic Dachary)
+* mon: fix health down messages (Sage Weil)
+* mon: fix quorum feature check (#8738, Greg Farnum)
+* mon: 'osd crush reweight-subtree ...' (Sage Weil)
+* mon, osd: relax client EC support requirements (Sage Weil)
+* mon: some instrumentation (Sage Weil)
+* objecter: flag operations that are redirected by caching (Sage Weil)
+* osd: clean up shard_id_t, shard_t (Loic Dachary)
+* osd: fix connection reconnect race (Greg Farnum)
+* osd: fix dumps (Joao Eduardo Luis)
+* osd: fix erasure-code lib initialization (Loic Dachary)
+* osd: fix extent normalization (Adam Crume)
+* osd: fix loopback msgr issue (Ma Jianpeng)
+* osd: fix LSB release parsing (Danny Al-Gaaf)
+* osd: improved backfill priorities (Sage Weil)
+* osd: many many core fixes (Samuel Just)
+* osd, mon: config sanity checks on start (Sage Weil, Joao Eduardo Luis)
+* osd: sharded threadpool to improve parallelism (Somnath Roy)
+* osd: simple io prioritization for scrub (Sage Weil)
+* osd: simple scrub throttling (Sage Weil)
+* osd: tests for bench command (Loic Dachary)
+* osd: use xfs hint less frequently (Ilya Dryomov)
+* pybind/rados: fix small timeouts (John Spray)
+* qa: xfstests updates (Ilya Dryomov)
+* rgw: cache bucket info (Yehuda Sadeh)
+* rgw: cache decoded user info (Yehuda Sadeh)
+* rgw: fix multipart object attr regression (#8452, Yehuda Sadeh)
+* rgw: fix radosgw-admin 'show log' command (#8553, Yehuda Sadeh)
+* rgw: fix URL decoding (#8702, Brian Rak)
+* rgw: handle empty extra pool name (Yehuda Sadeh)
+* rpm: do not restart daemons on upgrade (Alfredo Deza)
+* rpm: misc packaging fixes for rhel7 (Sandon Van Ness)
+* rpm: split ceph-common from ceph (Sandon Van Ness)
+* systemd: wrap started daemons in new systemd environment (Sage Weil, Dan Mick)
+* sysvinit: less sensitive to failures (Sage Weil)
+* upstart: increase max open files limit (Sage Weil)
+
+v0.82
+=====
+
+This is the second post-firefly development release.  It includes a range
+of bug fixes and some usability improvements.  There are some MDS debugging
+and diagnostic tools, an improved 'ceph df', and some OSD backend refactoring
+and cleanup.
+
+Notable Changes
+---------------
+
+* ceph-brag: add tox tests (Alfredo Deza)
+* common: perfcounters now use atomics and go faster (Sage Weil)
+* doc: CRUSH updates (John Wilkins)
+* doc: osd primary affinity (John Wilkins)
+* doc: pool quotas (John Wilkins)
+* doc: pre-flight doc improvements (Kevin Dalley)
+* doc: switch to an unencumbered font (Ross Turk)
+* doc: update openstack docs (Josh Durgin)
+* fix hppa arch build (Dmitry Smirnov)
+* init-ceph: continue starting other daemons on crush or mount failure (#8343, Sage Weil)
+* keyvaluestore: fix hint crash (#8381, Haomai Wang)
+* libcephfs-java: build against older JNI headers (Greg Farnum)
+* librados: fix rados_pool_list bounds checks (Sage Weil)
+* mds: cephfs-journal-tool (John Spray)
+* mds: improve Journaler on-disk format (John Spray)
+* mds, libcephfs: use client timestamp for mtime/ctime (Sage Weil)
+* mds: misc encoding improvements (John Spray)
+* mds: misc fixes for multi-mds (Yan, Zheng)
+* mds: OPTracker integration, dump_ops_in_flight (Greg Farnum)
+* misc cleanup (Christophe Courtaut)
+* mon: fix default replication pool ruleset choice (#8373, John Spray)
+* mon: fix set cache_target_full_ratio (#8440, Geoffrey Hartz)
+* mon: include per-pool 'max avail' in df output (Sage Weil)
+* mon: prevent EC pools from being used with cephfs (Joao Eduardo Luis)
+* mon: restore original weight when auto-marked out OSDs restart (Sage Weil)
+* mon: use msg header tid for MMonGetVersionReply (Ilya Dryomov)
+* osd: fix bogus assert during OSD shutdown (Sage Weil)
+* osd: fix clone deletion case (#8334, Sam Just)
+* osd: fix filestore removal corner case (#8332, Sam Just)
+* osd: fix hang waiting for osdmap (#8338, Greg Farnum)
+* osd: fix interval check corner case during peering (#8104, Sam Just)
+* osd: fix journal-less operation (Sage Weil)
+* osd: include backend information in metadata reported to mon (Sage Weil)
+* rest-api: fix help (Ailing Zhang)
+* rgw: check entity permission for put_metadata (#8428, Yehuda Sadeh)
+
+
 v0.81
 =====
 
@@ -76,6 +214,137 @@ Notable Changes
 * test_librbd_fsx: test krbd as well as librbd (Ilya Dryomov)
 
 
+v0.80.5 Firefly
+===============
+
+This release fixes a few important bugs in the radosgw and fixes
+several packaging and environment issues, including OSD log rotation,
+systemd environments, and daemon restarts on upgrade.
+
+We recommend that all v0.80.x Firefly users upgrade, particularly if they
+are using upstart, systemd, or radosgw.
+
+Notable Changes
+---------------
+
+* ceph-dencoder: do not needlessly link to librgw, librados, etc. (Sage Weil)
+* do not needlessly link binaries to leveldb (Sage Weil)
+* mon: fix mon crash when no auth keys are present (#8851, Joao Eduardo Luis)
+* osd: fix cleanup (and avoid occasional crash) during shutdown (#7981, Sage Weil)
+* osd: fix log rotation under upstart (Sage Weil)
+* rgw: fix multipart upload when object has irregular size (#8846, Yehuda Sadeh, Sylvain Munaut)
+* rgw: improve bucket listing S3 compatibility (#8858, Yehuda Sadeh)
+* rgw: improve delimited bucket listing (Yehuda Sadeh)
+* rpm: do not restart daemons on upgrade (#8849, Alfredo Deza)
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.5.txt>`.
+
+v0.80.4 Firefly
+===============
+
+This Firefly point release fixes an potential data corruption problem
+when ceph-osd daemons run on top of XFS and service Firefly librbd
+clients.  A recently added allocation hint that RBD utilizes triggers
+an XFS bug on some kernels (Linux 3.2, and likely others) that leads
+to data corruption and deep-scrub errors (and inconsistent PGs).  This
+release avoids the situation by disabling the allocation hint until we
+can validate which kernels are affected and/or are known to be safe to
+use the hint on.
+
+We recommend that all v0.80.x Firefly users urgently upgrade,
+especially if they are using RBD.
+
+Notable Changes
+---------------
+
+* osd: disable XFS extsize hint by default (#8830, Samuel Just)
+* rgw: fix extra data pool default name (Yehuda Sadeh)
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.4.txt>`.
+
+
+v0.80.3 Firefly
+===============
+
+This is the third Firefly point release.  It includes a single fix
+for a radosgw regression that was discovered in v0.80.2 right after it
+was released.
+
+We recommand that all v0.80.x Firefly users upgrade.
+
+Notable Changes
+---------------
+
+* radosgw: fix regression in manifest decoding (#8804, Sage Weil)
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.3.txt>`.
+
+
+v0.80.2 Firefly
+===============
+
+This is the second Firefly point release.  It contains a range of
+important fixes, including several bugs in the OSD cache tiering, some
+compatibility checks that affect upgrade situations, several radosgw
+bugs, and an irritating and unnecessary feature bit check that
+prevents older clients from communicating with a cluster with any
+erasure coded pools.
+
+One someone large change in this point release is that the ceph RPM
+package is separated into a ceph and ceph-common package, similar to
+Debian.  The ceph-common package contains just the client libraries
+without any of the server-side daemons.
+
+We recommend that all v0.80.x Firefly users skip this release and use
+v0.80.3.
+
+Notable Changes
+---------------
+
+* ceph-disk: better debug logging (Alfredo Deza)
+* ceph-disk: fix preparation of OSDs with dmcrypt (#6700, Stephen F Taylor)
+* ceph-disk: partprobe on prepare to fix dm-crypt (#6966, Eric Eastman)
+* do not require ERASURE_CODE feature from clients (#8556, Sage Weil)
+* libcephfs-java: build with older JNI headers (Greg Farnum)
+* libcephfs-java: fix build with gcj-jdk (Dmitry Smirnov)
+* librados: fix osd op tid for redirected ops (#7588, Samuel Just)
+* librados: fix rados_pool_list buffer bounds checks (#8447, Sage Weil)
+* librados: resend ops when pool overlay changes (#8305, Sage Weil)
+* librbd, ceph-fuse: reduce CPU overhead for clean object check in cache (Haomai Wang)
+* mon: allow deletion of cephfs pools (John Spray)
+* mon: fix default pool ruleset choice (#8373, John Spray)
+* mon: fix health summary for mon low disk warning (Sage Weil)
+* mon: fix 'osd pool set <pool> cache_target_full_ratio' (Geoffrey Hartz)
+* mon: fix quorum feature check (Greg Farnum)
+* mon: fix request forwarding in mixed firefly+dumpling clusters 9#8727, Joao Eduardo Luis)
+* mon: fix rule vs ruleset check in 'osd pool set ... crush_ruleset' command (John Spray)
+* mon: make osd 'down' count accurate (Sage Weil)
+* mon: set 'next commit' in primary-affinity reply (Ilya Dryomov)
+* mon: verify CRUSH features are supported by all mons (#8738, Greg Farnum)
+* msgr: fix sequence negotiation during connection reset (Guang Yang)
+* osd: block scrub on blocked objects (#8011, Samuel Just)
+* osd: call XFS hint ioctl less often (#8241, Ilya Dryomov)
+* osd: copy xattr spill out marker on clone (Haomai Wang)
+* osd: fix flush of snapped objects (#8334, Samuel Just)
+* osd: fix hashindex restart of merge operation (#8332, Samuel Just)
+* osd: fix osdmap subscription bug causing startup hang (Greg Farnum)
+* osd: fix potential null deref (#8328, Sage Weil)
+* osd: fix shutdown race (#8319, Sage Weil)
+* osd: handle 'none' in CRUSH results properly during peering (#8507, Samuel Just)
+* osd: set no spill out marker on new objects (Greg Farnum)
+* osd: skip op ordering debug checks on tiered pools (#8380, Sage Weil)
+* rados: enforce 'put' alignment (Lluis Pamies-Juarez)
+* rest-api: fix for 'rx' commands (Ailing Zhang)
+* rgw: calc user manifest etag and fix check (#8169, #8436, Yehuda Sadeh)
+* rgw: fetch attrs on multipart completion (#8452, Yehuda Sadeh, Sylvain Munaut)
+* rgw: fix buffer overflow for long instance ids (#8608, Yehuda Sadeh)
+* rgw: fix entity permission check on metadata put (#8428, Yehuda Sadeh)
+* rgw: fix multipart retry race (#8269, Yehuda Sadeh)
+* rpm: split ceph into ceph and ceph-common RPMs (Sandon Van Ness, Dan Mick)
+* sysvinit: continue startin daemons after failure doing mount (#8554, Sage Weil)
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.2.txt>`.
+
 v0.80.1 Firefly
 ===============
 
@@ -142,6 +411,18 @@ Upgrade Sequencing
   Dumpling, please first upgrade to the latest Dumpling release before
   upgrading to v0.80 Firefly.  Please refer to the :ref:`Dumpling upgrade`
   documentation.
+
+* We recommand adding the following to the [mon] section of your
+  ceph.conf prior to upgrade::
+
+    mon warn on legacy crush tunables = false
+
+  This will prevent health warnings due to the use of legacy CRUSH
+  placement.  Although it is possible to rebalance existing data
+  across your cluster (see the upgrade notes below), we do not
+  normally recommend it for production environments as a large amount
+  of data will move and there is a significant performance impact from
+  the rebalancing.
 
 * Upgrade daemons in the following order:
 
@@ -217,10 +498,16 @@ Upgrading from v0.72 Emperor
 
 * The 'osd pool create ...' syntax has changed for erasure pools.
 
-* The default CRUSH rules and layouts are now using the latest and
-  greatest tunables and defaults.  Clusters using the old values will
+* The default CRUSH rules and layouts are now using the 'bobtail'
+  tunables and defaults.  Upgaded clusters using the old values will
   now present with a health WARN state.  This can be disabled by
-  adding 'mon warn on legacy crush tunables = false' to ceph.conf.
+  adding 'mon warn on legacy crush tunables = false' to ceph.conf and
+  restarting the monitors.  Alternatively, you can switch to the new
+  tunables with 'ceph osd crush tunables firefly,' but keep in mind
+  that this will involve moving a *significant* portion of the data
+  already stored in the cluster and in a large cluster may take
+  several days to complete.  We do not recommend adjusting tunables on a
+  production cluster.
 
 * We now default to the 'bobtail' CRUSH tunable values that are first supported
   by Ceph clients in bobtail (v0.56) and Linux kernel version v3.9.  If you

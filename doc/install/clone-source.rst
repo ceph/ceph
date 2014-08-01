@@ -15,9 +15,15 @@ To clone the entire git repository, install and configure ``git``.
 Install Git
 ===========
 
-To install ``git``, execute::
+To install ``git`` on Debian/Ubuntu, execute::
 
 	sudo apt-get install git
+
+
+To install ``git`` on CentOS/RHEL, execute::
+
+	sudo yum install git
+
 
 You must also have a ``github`` account. If you do not have a
 ``github`` account, go to `github.com`_ and register.

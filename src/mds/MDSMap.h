@@ -71,31 +71,47 @@ extern CompatSet get_mdsmap_compat_set_base(); // pre v0.20
 #define MDS_FEATURE_INCOMPAT_INLINE CompatSet::Feature(7, "mds uses inline data")
 #define MDS_FEATURE_INCOMPAT_NOANCHOR CompatSet::Feature(8, "no anchor table")
 
+#define MDS_FS_NAME_DEFAULT "cephfs"
+
 class MDSMap {
 public:
-  // mds states
-  /*
-  static const int STATE_DNE =        CEPH_MDS_STATE_DNE;  // down, never existed.
-  static const int STATE_DESTROYING = CEPH_MDS_STATE_DESTROYING;  // down, existing, semi-destroyed.
-  static const int STATE_FAILED =     CEPH_MDS_STATE_FAILED;  // down, active subtrees; needs to be recovered.
-  */
-  static const int STATE_STOPPED =    CEPH_MDS_STATE_STOPPED;  // down, once existed, but no subtrees. empty log.
-  static const int STATE_BOOT     =   CEPH_MDS_STATE_BOOT;  // up, boot announcement.  destiny unknown.
+  /* These states are the union of the set of possible states of an MDS daemon,
+   * and the set of possible states of an MDS rank */
+  typedef enum {
+    // States of an MDS daemon not currently holding a rank
+    // ====================================================
+    STATE_NULL     =   0,                                  // null value for fns returning this type.
+    STATE_BOOT     =   CEPH_MDS_STATE_BOOT,                // up, boot announcement.  destiny unknown.
+    STATE_STANDBY  =   CEPH_MDS_STATE_STANDBY,             // up, idle.  waiting for assignment by monitor.
+    STATE_STANDBY_REPLAY = CEPH_MDS_STATE_STANDBY_REPLAY,  // up, replaying active node, ready to take over.
 
-  static const int STATE_STANDBY  =   CEPH_MDS_STATE_STANDBY;  // up, idle.  waiting for assignment by monitor.
-  static const int STATE_STANDBY_REPLAY = CEPH_MDS_STATE_STANDBY_REPLAY;  // up, replaying active node; ready to take over.
-  static const int STATE_ONESHOT_REPLAY = CEPH_MDS_STATE_REPLAYONCE; //up, replaying active node journal to verify it, then shutting down
+    // States of an MDS rank, and of any MDS daemon holding that rank
+    // ==============================================================
+    STATE_STOPPED  =   CEPH_MDS_STATE_STOPPED,        // down, once existed, but no subtrees. empty log.  may not be held by a daemon.
+    STATE_ONESHOT_REPLAY = CEPH_MDS_STATE_REPLAYONCE, // up, replaying active node journal to verify it, then shutting down
 
-  static const int STATE_CREATING  =  CEPH_MDS_STATE_CREATING;  // up, creating MDS instance (new journal, idalloc..).
-  static const int STATE_STARTING  =  CEPH_MDS_STATE_STARTING;  // up, starting prior stopped MDS instance.
+    STATE_CREATING  =  CEPH_MDS_STATE_CREATING,       // up, creating MDS instance (new journal, idalloc..).
+    STATE_STARTING  =  CEPH_MDS_STATE_STARTING,       // up, starting prior stopped MDS instance.
 
-  static const int STATE_REPLAY    =  CEPH_MDS_STATE_REPLAY;  // up, starting prior failed instance. scanning journal.
-  static const int STATE_RESOLVE   =  CEPH_MDS_STATE_RESOLVE;  // up, disambiguating distributed operations (import, rename, etc.)
-  static const int STATE_RECONNECT =  CEPH_MDS_STATE_RECONNECT;  // up, reconnect to clients
-  static const int STATE_REJOIN    =  CEPH_MDS_STATE_REJOIN; // up, replayed journal, rejoining distributed cache
-  static const int STATE_CLIENTREPLAY = CEPH_MDS_STATE_CLIENTREPLAY; // up, active
-  static const int STATE_ACTIVE =     CEPH_MDS_STATE_ACTIVE; // up, active
-  static const int STATE_STOPPING  =  CEPH_MDS_STATE_STOPPING; // up, exporting metadata (-> standby or out)
+    STATE_REPLAY    =  CEPH_MDS_STATE_REPLAY,         // up, starting prior failed instance. scanning journal.
+    STATE_RESOLVE   =  CEPH_MDS_STATE_RESOLVE,        // up, disambiguating distributed operations (import, rename, etc.)
+    STATE_RECONNECT =  CEPH_MDS_STATE_RECONNECT,      // up, reconnect to clients
+    STATE_REJOIN    =  CEPH_MDS_STATE_REJOIN,         // up, replayed journal, rejoining distributed cache
+    STATE_CLIENTREPLAY = CEPH_MDS_STATE_CLIENTREPLAY, // up, active
+    STATE_ACTIVE =     CEPH_MDS_STATE_ACTIVE,         // up, active
+    STATE_STOPPING  =  CEPH_MDS_STATE_STOPPING,       // up, exporting metadata (-> standby or out)
+    STATE_DNE       =  CEPH_MDS_STATE_DNE             // down, rank does not exist
+
+    /*
+     * In addition to explicit states, an MDS rank implicitly in state:
+     *  - STOPPED if it is not currently associated with an MDS daemon gid but it
+     *    is in MDSMap::stopped
+     *  - FAILED if it is not currently associated with an MDS daemon gid but it
+     *    is in MDSMap::failed
+     *  - DNE if it is not currently associated with an MDS daemon gid and it is
+     *    missing from both MDSMap::failed and MDSMap::stopped
+     */
+  } DaemonState;
 
   // indicate startup standby preferences for MDS
   // of course, if they have a specific rank to follow, they just set that!
@@ -112,7 +128,7 @@ public:
     string name;
     int32_t rank;
     int32_t inc;
-    int32_t state;
+    MDSMap::DaemonState state;
     version_t state_seq;
     entity_addr_t addr;
     utime_t laggy_since;
@@ -144,6 +160,8 @@ public:
 protected:
   // base map
   epoch_t epoch;
+  bool enabled;
+  std::string fs_name;
   uint32_t flags;        // flags
   epoch_t last_failure;  // mds epoch of last failure
   epoch_t last_failure_osd_epoch; // osd epoch of last failure; any mds entering replay needs
@@ -191,7 +209,10 @@ public:
 
 public:
   MDSMap() 
-    : epoch(0), flags(0), last_failure(0), last_failure_osd_epoch(0), tableserver(0), root(0),
+    : epoch(0), enabled(false), fs_name(MDS_FS_NAME_DEFAULT),
+      flags(0), last_failure(0),
+      last_failure_osd_epoch(0),
+      tableserver(0), root(0),
       session_timeout(0),
       session_autoclose(0),
       max_file_size(0),
@@ -226,6 +247,8 @@ public:
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
+
+  bool get_enabled() const { return enabled; }
 
   const utime_t& get_created() const { return created; }
   void set_created(utime_t ct) { modified = created = ct; }
@@ -338,7 +361,7 @@ public:
       if (p->second.state >= STATE_CLIENTREPLAY && p->second.state <= STATE_STOPPING)
 	s.insert(p->second.rank);
   }
-  void get_mds_set(set<int>& s, int state) {
+  void get_mds_set(set<int>& s, DaemonState state) {
     for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p)
@@ -423,16 +446,23 @@ public:
   bool is_dne(int m) const      { return in.count(m) == 0; }
   bool is_dne_gid(uint64_t gid) const     { return mds_info.count(gid) == 0; }
 
-  int get_state(int m) const {
+  /**
+   * Get MDS rank state if the rank is up, else STATE_NULL
+   */
+  DaemonState get_state(int m) const {
     map<int32_t,uint64_t>::const_iterator u = up.find(m);
     if (u == up.end())
-      return 0;
+      return STATE_NULL;
     return get_state_gid(u->second);
   }
-  int get_state_gid(uint64_t gid) const {
+
+  /**
+   * Get MDS daemon status by GID
+   */
+  DaemonState get_state_gid(uint64_t gid) const {
     map<uint64_t,mds_info_t>::const_iterator i = mds_info.find(gid);
     if (i == mds_info.end())
-      return 0;
+      return STATE_NULL;
     return i->second.state;
   }
 

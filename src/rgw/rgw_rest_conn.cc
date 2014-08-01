@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include "rgw_rados.h"
 #include "rgw_rest_conn.h"
 
@@ -34,13 +37,13 @@ int RGWRESTConn::forward(const string& uid, req_info& info, obj_version *objv, s
   if (ret < 0)
     return ret;
   list<pair<string, string> > params;
-  params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
-  params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
+  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
+  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
   if (objv) {
-    params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "tag", objv->tag));
+    params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "tag", objv->tag));
     char buf[16];
     snprintf(buf, sizeof(buf), "%lld", (long long)objv->ver);
-    params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "ver", buf));
+    params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "ver", buf));
   }
   RGWRESTSimpleRequest req(cct, url, NULL, &params);
   return req.forward_request(key, info, max_response, inbl, outbl);
@@ -61,8 +64,8 @@ int RGWRESTConn::put_obj_init(const string& uid, rgw_obj& obj, uint64_t obj_size
     return ret;
 
   list<pair<string, string> > params;
-  params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
-  params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
+  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
+  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
   *req = new RGWRESTStreamWriteRequest(cct, url, NULL, &params);
   return (*req)->put_obj_init(key, obj, obj_size, attrs);
 }
@@ -84,10 +87,10 @@ int RGWRESTConn::get_obj(const string& uid, req_info *info /* optional */, rgw_o
     return ret;
 
   list<pair<string, string> > params;
-  params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
-  params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
+  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
+  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
   if (prepend_metadata) {
-    params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "prepend-metadata", region));
+    params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "prepend-metadata", region));
   }
   *req = new RGWRESTStreamReadRequest(cct, url, cb, NULL, &params);
   map<string, string> extra_headers;

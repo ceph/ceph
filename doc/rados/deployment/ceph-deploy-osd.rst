@@ -46,8 +46,9 @@ may prepare the OSDs and deploy them to the OSD node(s). If you need to
 identify a disk or zap it prior to preparing it for use as an OSD, 
 see `List Disks`_ and `Zap Disks`_. ::
 
-	ceph-deploy osd prepare {node-name}:{disk}[:{path/to/journal}]
-	ceph-deploy osd prepare osdserver1:sdb:/dev/ssd1
+	ceph-deploy osd prepare {node-name}:{data-disk}[:{journal-disk}]
+	ceph-deploy osd prepare osdserver1:sdb:/dev/ssd
+	ceph-deploy osd prepare osdserver1:sdc:/dev/ssd
 
 The ``prepare`` command only prepares the OSD. It does not activate it. To
 activate a prepared OSD, use the ``activate`` command. See `Activate OSDs`_ 
@@ -58,7 +59,7 @@ a path to an SSD journal partition. We recommend storing the journal on
 a separate drive to maximize throughput. You may dedicate a single drive
 for the journal too (which may be expensive) or place the journal on the 
 same disk as the OSD (not recommended as it impairs performance). In the
-foregoing example we store the journal on a partioned solid state drive.
+foregoing example we store the journal on a partitioned solid state drive.
 
 .. note:: When running multiple Ceph OSD daemons on a single node, and 
    sharing a partioned journal with each OSD daemon, you should consider
@@ -72,8 +73,9 @@ Activate OSDs
 
 Once you prepare an OSD you may activate it with the following command.  ::
 
-	ceph-deploy osd activate {node-name}:{path/to/disk}[:{path/to/journal}]
+	ceph-deploy osd activate {node-name}:{data-disk-partition}[:{journal-disk-partition}]
 	ceph-deploy osd activate osdserver1:/dev/sdb1:/dev/ssd1
+	ceph-deploy osd activate osdserver1:/dev/sdc1:/dev/ssd2
 
 The ``activate`` command will cause your OSD to come ``up`` and be placed
 ``in`` the cluster. The ``activate`` command uses the path to the partition
@@ -109,5 +111,5 @@ Destroy OSDs
 
 .. Destroying an OSD will take it ``down`` and ``out`` of the cluster.
 
-.. _Data Storage: ../../../install/hardware-recommendations#data-storage
+.. _Data Storage: ../../../start/hardware-recommendations#data-storage
 .. _Remove OSDs: ../../operations/add-or-rm-osds#removing-osds-manual

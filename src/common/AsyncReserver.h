@@ -21,6 +21,7 @@
 
 #include "common/Mutex.h"
 #include "common/Finisher.h"
+#include "common/Formatter.h"
 
 /**
  * Manages a configurable number of asyncronous reservations.
@@ -33,6 +34,7 @@ template <typename T>
 class AsyncReserver {
   Finisher *f;
   unsigned max_allowed;
+  unsigned min_priority;
   Mutex lock;
 
   map<unsigned, list<pair<T, Context*> > > queues;
@@ -42,7 +44,9 @@ class AsyncReserver {
   void do_queues() {
     typename map<unsigned, list<pair<T, Context*> > >::reverse_iterator it;
     for (it = queues.rbegin();
-         it != queues.rend() && in_progress.size() < max_allowed;
+         it != queues.rend() &&
+	   in_progress.size() < max_allowed &&
+	   it->first >= min_priority;
          ++it) {
       while (in_progress.size() < max_allowed &&
              !it->second.empty()) {
@@ -57,13 +61,50 @@ class AsyncReserver {
 public:
   AsyncReserver(
     Finisher *f,
-    unsigned max_allowed)
-    : f(f), max_allowed(max_allowed), lock("AsyncReserver::lock") {}
+    unsigned max_allowed,
+    unsigned min_priority = 0)
+    : f(f),
+      max_allowed(max_allowed),
+      min_priority(min_priority),
+      lock("AsyncReserver::lock") {}
 
   void set_max(unsigned max) {
     Mutex::Locker l(lock);
     max_allowed = max;
     do_queues();
+  }
+
+  void set_min_priority(unsigned min) {
+    Mutex::Locker l(lock);
+    min_priority = min;
+    do_queues();
+  }
+
+  void dump(Formatter *f) {
+    Mutex::Locker l(lock);
+    f->dump_unsigned("max_allowed", max_allowed);
+    f->dump_unsigned("min_priority", min_priority);
+    f->open_array_section("queues");
+    for (typename map<unsigned, list<pair<T, Context*> > > ::const_iterator p =
+	   queues.begin(); p != queues.end(); ++p) {
+      f->open_object_section("queue");
+      f->dump_unsigned("priority", p->first);
+      f->open_array_section("items");
+      for (typename list<pair<T, Context*> >::const_iterator q =
+	     p->second.begin(); q != p->second.end(); ++q) {
+	f->dump_stream("item") << q->first;
+      }
+      f->close_section();
+      f->close_section();
+    }
+    f->close_section();
+    f->open_array_section("in_progress");
+    for (typename set<T>::const_iterator p = in_progress.begin();
+	 p != in_progress.end();
+	 ++p) {
+      f->dump_stream("item") << *p;
+    }
+    f->close_section();
   }
 
   /**

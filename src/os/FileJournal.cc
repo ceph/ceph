@@ -544,6 +544,7 @@ void FileJournal::close()
 
   // close
   assert(writeq_empty());
+  assert(!must_write_header);
   assert(fd >= 0);
   VOID_TEMP_FAILURE_RETRY(::close(fd));
   fd = -1;
@@ -1102,7 +1103,7 @@ void FileJournal::write_thread_entry()
   while (1) {
     {
       Mutex::Locker locker(writeq_lock);
-      if (writeq.empty()) {
+      if (writeq.empty() && !must_write_header) {
 	if (write_stop)
 	  break;
 	dout(20) << "write_thread_entry going to sleep" << dendl;
@@ -1758,7 +1759,12 @@ FileJournal::read_entry_result FileJournal::do_read_entry(
   // ok!
   if (seq)
     *seq = h->seq;
-  journalq.push_back(pair<uint64_t,off64_t>(h->seq, pos));
+
+  // works around an apparent GCC 4.8(?) compiler bug about unaligned
+  // bind by reference to (packed) h->seq
+  journalq.push_back(
+    pair<uint64_t,off64_t>(static_cast<uint64_t>(h->seq),
+			   static_cast<off64_t>(pos)));
 
   if (next_pos)
     *next_pos = pos;

@@ -1,0 +1,10 @@
+[Unit]
+Description=Ceph metadata server daemon
+
+[Service]
+EnvironmentFile=-/etc/sysconfig/ceph
+Environment=CLUSTER=ceph
+ExecStart=/usr/bin/ceph-mds -f --cluster ${CLUSTER} --id %i
+
+[Install]
+WantedBy=multi-user.target

@@ -53,11 +53,12 @@ ceph_dencoder_SOURCES = \
 	test/encoding/ceph_dencoder.cc \
 	$(DENCODER_SOURCES)
 ceph_dencoder_LDADD = \
-	$(LIBOSD) $(LIBMDS) $(LIBMON) \
-	$(DENCODER_DEPS) $(CEPH_GLOBAL)
-if WITH_RADOSGW
-ceph_dencoder_LDADD += $(LIBRGW) $(LIBRGW_DEPS)
-endif
+	$(LIBOSD_TYPES) \
+	$(LIBOS_TYPES) \
+	$(LIBMDS) \
+	$(LIBMON_TYPES) \
+	$(DENCODER_DEPS) \
+	$(CEPH_GLOBAL)
 
 # These should always use explicit _CFLAGS/_CXXFLAGS so avoid basename conflicts
 ceph_dencoder_CFLAGS = ${AM_CFLAGS}
@@ -238,13 +239,17 @@ check_SCRIPTS += \
 	test/mon/osd-crush.sh \
 	test/mon/osd-erasure-code-profile.sh \
 	test/mon/mkfs.sh \
+	test/osd/osd-config.sh \
+	test/osd/osd-bench.sh \
 	test/ceph-disk.sh \
 	test/mon/mon-handle-forward.sh \
 	test/vstart_wrapped_tests.sh
 
 EXTRA_DIST += \
 	$(srcdir)/test/mon/mon-test-helpers.sh \
-	$(srcdir)/test/osd/osd-test-helpers.sh
+	$(srcdir)/test/osd/osd-test-helpers.sh \
+        $(srcdir)/test/coverage.sh \
+	$(patsubst %,$(srcdir)/%,$(check_SCRIPTS))
 
 # target to build but not run the unit tests
 unittests:: $(check_PROGRAMS)
@@ -377,6 +382,11 @@ unittest_hitset_SOURCES = test/osd/hitset.cc
 unittest_hitset_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_hitset_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_hitset
+
+unittest_lru_SOURCES = test/common/test_lru.cc
+unittest_lru_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_lru_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_lru
 
 if LINUX
 unittest_pglog_LDADD += -ldl

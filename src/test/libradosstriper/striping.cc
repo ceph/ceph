@@ -40,10 +40,12 @@ protected:
     ASSERT_LT(0, ioctx.getxattr(firstOid, "striper.layout.stripe_unit", xattrbl));
     std::string s_xattr(xattrbl.c_str(), xattrbl.length()); // adds 0 byte at the end
     uint64_t stripe_unit = strtoll(s_xattr.c_str(), NULL, 10);
+    ASSERT_LT((unsigned)0, stripe_unit);
     ASSERT_EQ(stripe_unit, exp_stripe_unit);
     ASSERT_LT(0, ioctx.getxattr(firstOid, "striper.layout.stripe_count", xattrbl));
     s_xattr = std::string(xattrbl.c_str(), xattrbl.length()); // adds 0 byte at the end
     uint64_t stripe_count = strtoll(s_xattr.c_str(), NULL, 10);
+    ASSERT_LT(0U, stripe_count);
     ASSERT_EQ(stripe_count, exp_stripe_count);
     ASSERT_LT(0, ioctx.getxattr(firstOid, "striper.layout.object_size", xattrbl));
     s_xattr = std::string(xattrbl.c_str(), xattrbl.length()); // adds 0 byte at the end
@@ -135,7 +137,8 @@ protected:
     // check we do not have an extra object behind
     uint64_t rados_size;
     time_t mtime;
-    ASSERT_EQ(-ENOENT, ioctx.stat(getObjName(soid, nb_objects), &rados_size, &mtime));
+    std::string oid = getObjName(soid, nb_objects);
+    ASSERT_EQ(-ENOENT, ioctx.stat(oid, &rados_size, &mtime));
   }
 };
   

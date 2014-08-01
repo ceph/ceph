@@ -140,7 +140,7 @@ public:
     map<int32_t,uint8_t> new_state;             // XORed onto previous state.
     map<int32_t,uint32_t> new_weight;
     map<pg_t,vector<int32_t> > new_pg_temp;     // [] to remove
-    map<pg_t, int> new_primary_temp;            // [-1] to remove
+    map<pg_t, int32_t> new_primary_temp;            // [-1] to remove
     map<int32_t,uint32_t> new_primary_affinity;
     map<int32_t,epoch_t> new_up_thru;
     map<int32_t,pair<epoch_t,epoch_t> > new_last_clean_interval;
@@ -222,8 +222,8 @@ private:
 
   vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
   vector<osd_info_t> osd_info;
-  ceph::shared_ptr< map<pg_t,vector<int> > > pg_temp;  // temp pg mapping (e.g. while we rebuild)
-  ceph::shared_ptr< map<pg_t,int > > primary_temp;  // temp primary mapping (e.g. while we rebuild)
+  ceph::shared_ptr< map<pg_t,vector<int32_t> > > pg_temp;  // temp pg mapping (e.g. while we rebuild)
+  ceph::shared_ptr< map<pg_t,int32_t > > primary_temp;  // temp primary mapping (e.g. while we rebuild)
   ceph::shared_ptr< vector<__u32> > osd_primary_affinity; ///< 16.16 fixed point, 0x10000 = baseline
 
   map<int64_t,pg_pool_t> pools;
@@ -253,8 +253,8 @@ private:
 	     flags(0),
 	     num_osd(0), max_osd(0),
 	     osd_addrs(new addrs_s),
-	     pg_temp(new map<pg_t,vector<int> >),
-	     primary_temp(new map<pg_t,int>),
+	     pg_temp(new map<pg_t,vector<int32_t> >),
+	     primary_temp(new map<pg_t,int32_t>),
 	     osd_uuid(new vector<uuid_d>),
 	     cluster_snapshot_epoch(0),
 	     new_blacklist_entries(false),
@@ -272,8 +272,8 @@ public:
 
   void deepish_copy_from(const OSDMap& o) {
     *this = o;
-    primary_temp.reset(new map<pg_t,int>(*o.primary_temp));
-    pg_temp.reset(new map<pg_t,vector<int> >(*o.pg_temp));
+    primary_temp.reset(new map<pg_t,int32_t>(*o.primary_temp));
+    pg_temp.reset(new map<pg_t,vector<int32_t> >(*o.pg_temp));
     osd_uuid.reset(new vector<uuid_d>(*o.osd_uuid));
 
     // NOTE: this still references shared entity_addr_t's.
@@ -381,6 +381,9 @@ public:
       erasure_code_profiles.find(name);
     return i != erasure_code_profiles.end();
   }
+  int get_erasure_code_profile_default(CephContext *cct,
+				       map<string,string> &profile_map,
+				       ostream *ss);
   void set_erasure_code_profile(const string &name,
 				const map<string,string> &profile) {
     erasure_code_profiles[name] = profile;
@@ -393,9 +396,6 @@ public:
       return empty;
     else
       return i->second;
-  }
-  map<string,string> &get_erasure_code_profile(const string &name) {
-    return erasure_code_profiles[name];
   }
   const map<string,map<string,string> > &get_erasure_code_profiles() const {
     return erasure_code_profiles;
@@ -534,10 +534,11 @@ public:
   /**
    * get feature bits required by the current structure
    *
+   * @param entity_type [in] what entity type we are asking about
    * @param mask [out] set of all possible map-related features we could set
    * @return feature bits used by this map
    */
-  uint64_t get_features(uint64_t *mask) const;
+  uint64_t get_features(int entity_type, uint64_t *mask) const;
 
   /**
    * get intersection of features supported by up osds
@@ -619,7 +620,7 @@ private:
   /**
    *  map to up and acting. Fills in whatever fields are non-NULL.
    */
-  void _pg_to_up_acting_osds(pg_t pg, vector<int> *up, int *up_primary,
+  void _pg_to_up_acting_osds(const pg_t& pg, vector<int> *up, int *up_primary,
                              vector<int> *acting, int *acting_primary) const;
 
 public:
@@ -631,7 +632,7 @@ public:
    */
   int pg_to_osds(pg_t pg, vector<int> *raw, int *primary) const;
   /// map a pg to its acting set. @return acting set size
-  int pg_to_acting_osds(pg_t pg, vector<int> *acting,
+  int pg_to_acting_osds(const pg_t& pg, vector<int> *acting,
                         int *acting_primary) const {
     _pg_to_up_acting_osds(pg, NULL, NULL, acting, acting_primary);
     return acting->size();
@@ -666,7 +667,7 @@ public:
     assert(i != pools.end());
     return i->second.ec_pool();
   }
-  bool get_primary_shard(pg_t pgid, spg_t *out) const {
+  bool get_primary_shard(const pg_t& pgid, spg_t *out) const {
     map<int64_t, pg_pool_t>::const_iterator i = get_pools().find(pgid.pool());
     if (i == get_pools().end()) {
       return false;
@@ -768,7 +769,7 @@ public:
     return calc_pg_rank(osd, group, nrep);
   }
   /* role is -1 (stray), 0 (primary), 1 (replica) */
-  int get_pg_acting_role(pg_t pg, int osd) const {
+  int get_pg_acting_role(const pg_t& pg, int osd) const {
     vector<int> group;
     int nrep = pg_to_acting_osds(pg, group);
     return calc_pg_role(osd, group, nrep);

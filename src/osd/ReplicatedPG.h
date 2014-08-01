@@ -347,13 +347,14 @@ public:
     vector<pg_log_entry_t> &logv,
     boost::optional<pg_hit_set_history_t> &hset_history,
     const eversion_t &trim_to,
+    const eversion_t &trim_rollback_to,
     bool transaction_applied,
     ObjectStore::Transaction *t) {
     if (hset_history) {
       info.hit_set = *hset_history;
       dirty_info = true;
     }
-    append_log(logv, trim_to, *t, transaction_applied);
+    append_log(logv, trim_to, trim_rollback_to, *t, transaction_applied);
   }
 
   void op_applied(
@@ -805,8 +806,8 @@ protected:
   // agent
   boost::scoped_ptr<TierAgentState> agent_state;
 
-  friend class C_AgentFlushStartStop;
-  friend class C_HitSetFlushing;
+  friend struct C_AgentFlushStartStop;
+  friend struct C_HitSetFlushing;
 
   void agent_setup();       ///< initialize agent state
   bool agent_work(int max); ///< entry point to do some agent work
@@ -1270,9 +1271,9 @@ public:
 		 bufferlist& odata);
 
   void do_request(
-    OpRequestRef op,
+    OpRequestRef& op,
     ThreadPool::TPHandle &handle);
-  void do_op(OpRequestRef op);
+  void do_op(OpRequestRef& op);
   bool pg_op_must_wait(MOSDOp *op);
   void do_pg_op(OpRequestRef op);
   void do_sub_op(OpRequestRef op);

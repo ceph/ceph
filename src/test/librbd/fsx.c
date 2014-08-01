@@ -28,8 +28,9 @@
 #include <err.h>
 #endif
 #include <signal.h>
-#include <stdio.h>
+#include <stdbool.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
@@ -118,7 +119,6 @@ char	dirpath[1024];
 
 off_t		file_size = 0;
 off_t		biggest = 0;
-char		state[256];
 unsigned long	testcalls = 0;		/* calls to function "test" */
 
 unsigned long	simulatedopcount = 0;	/* -b flag */
@@ -149,6 +149,7 @@ int     fallocate_calls = 0;            /* -F flag disables */
 int     punch_hole_calls = 1;           /* -H flag disables */
 int	clone_calls = 1;                /* -C flag disables */
 int	randomize_striping = 1;		/* -U flag disables */
+int	randomize_parent_overlap = 1;
 int 	mapped_reads = 0;		/* -R flag disables it */
 int	fsxgoodfd = 0;
 int	o_direct = 0;			/* -Z flag */
@@ -227,8 +228,30 @@ simple_err(const char *msg, int err)
 }
 
 /*
+ * random
+ */
+
+#define RND_STATE_LEN	256
+char	rnd_state[RND_STATE_LEN];
+struct random_data rnd_data;
+
+int32_t
+get_random(void)
+{
+	int32_t val;
+
+	if (random_r(&rnd_data, &val) < 0) {
+		prterr("random_r");
+		exit(1);
+	}
+
+	return val;
+}
+
+/*
  * rbd
  */
+
 struct rbd_ctx {
 	const char *name;	/* image name */
 	rbd_image_t image;	/* image handle */
@@ -641,6 +664,8 @@ krbd_resize(struct rbd_ctx *ctx, uint64_t size)
 {
 	int ret;
 
+	assert(size % truncbdy == 0);
+
 	/*
 	 * This is essential: when krbd detects a size change, it calls
 	 * revalidate_disk(), which ends up calling invalidate_bdev(),
@@ -697,6 +722,19 @@ const struct rbd_operations krbd_operations = {
 
 struct rbd_ctx ctx = RBD_CTX_INIT;
 const struct rbd_operations *ops = &librbd_operations;
+
+static bool rbd_image_has_parent(struct rbd_ctx *ctx)
+{
+	int ret;
+
+	ret = rbd_get_parent_info(ctx->image, NULL, 0, NULL, 0, NULL, 0);
+	if (ret < 0 && ret != -ENOENT) {
+		prterrcode("rbd_get_parent_info", ret);
+		exit(1);
+	}
+
+	return !ret;
+}
 
 /*
  * fsx
@@ -1304,27 +1342,19 @@ do_clone()
 	char lastimagename[1024];
 	int ret, fd;
 	int order = 0, stripe_unit = 0, stripe_count = 0;
-
-	if (randomize_striping) {
-		order = 18 + rand() % 8;
-		stripe_unit = 1ull << (order - 1 - (rand() % 8));
-		stripe_count = 2 + rand() % 14;
-	}
+	uint64_t newsize = file_size;
 
 	log4(OP_CLONE, 0, 0, 0);
 	++num_clones;
-	prt("%lu clone\t%d order %d su %d sc %d\n", testcalls, num_clones, order, stripe_unit, stripe_count);
 
-	clone_filename(filename, sizeof(filename), num_clones);
-	if ((fd = open(filename, O_WRONLY|O_CREAT|O_TRUNC, 0666)) < 0) {
-		simple_err("do_clone: open", -errno);
-		exit(162);
+	if (randomize_striping) {
+		order = 18 + get_random() % 8;
+		stripe_unit = 1ull << (order - 1 - (get_random() % 8));
+		stripe_count = 2 + get_random() % 14;
 	}
-	save_buffer(good_buf, file_size, fd);
-	if ((ret = close(fd)) < 0) {
-		simple_err("do_clone: close", -errno);
-		exit(163);
-	}
+
+	prt("%lu clone\t%d order %d su %d sc %d\n", testcalls, num_clones,
+	    order, stripe_unit, stripe_count);
 
 	clone_imagename(imagename, sizeof(imagename), num_clones);
 	clone_imagename(lastimagename, sizeof(lastimagename),
@@ -1338,11 +1368,59 @@ do_clone()
 		exit(165);
 	}
 
+	if (randomize_parent_overlap && rbd_image_has_parent(&ctx)) {
+		int rand = get_random() % 15;
+		uint64_t overlap;
+
+		ret = rbd_get_overlap(ctx.image, &overlap);
+		if (ret < 0) {
+			prterrcode("do_clone: rbd_get_overlap", ret);
+			exit(1);
+		}
+
+		if (rand < 3) {
+			newsize = 0;
+		} else if (rand < 12) {
+			newsize = overlap * (((double)rand - 2) / 10);
+			newsize -= newsize % truncbdy;
+		}
+
+		if (newsize != (uint64_t)file_size) {
+			prt("truncating image %s from 0x%llx (overlap 0x%llx) to 0x%llx\n",
+			    ctx.name, file_size, overlap, newsize);
+
+			ret = ops->resize(&ctx, newsize);
+			if (ret < 0) {
+				prterrcode("do_clone: ops->resize", ret);
+				exit(1);
+			}
+		} else {
+			prt("leaving image %s intact\n", ctx.name);
+		}
+	}
+
+	clone_filename(filename, sizeof(filename), num_clones);
+	if ((fd = open(filename, O_WRONLY|O_CREAT|O_TRUNC, 0666)) < 0) {
+		simple_err("do_clone: open", -errno);
+		exit(162);
+	}
+	save_buffer(good_buf, newsize, fd);
+	if ((ret = close(fd)) < 0) {
+		simple_err("do_clone: close", -errno);
+		exit(163);
+	}
+
+	/*
+	 * Close parent.
+	 */
 	if ((ret = ops->close(&ctx)) < 0) {
 		prterrcode("do_clone: ops->close", ret);
 		exit(174);
 	}
 
+	/*
+	 * Open freshly made clone.
+	 */
 	if ((ret = ops->open(imagename, &ctx)) < 0) {
 		prterrcode("do_clone: ops->open", ret);
 		exit(166);
@@ -1382,7 +1460,8 @@ check_clone(int clonenum)
 	}
 
 	good_buf = NULL;
-	ret = posix_memalign((void **)&good_buf, MAX(writebdy, sizeof(void *)),
+	ret = posix_memalign((void **)&good_buf,
+			     MAX(writebdy, (int)sizeof(void *)),
 			     file_info.st_size);
 	if (ret > 0) {
 		prterrcode("check_clone: posix_memalign(good_buf)", -ret);
@@ -1390,7 +1469,8 @@ check_clone(int clonenum)
 	}
 
 	temp_buf = NULL;
-	ret = posix_memalign((void **)&temp_buf, MAX(readbdy, sizeof(void *)),
+	ret = posix_memalign((void **)&temp_buf,
+			     MAX(readbdy, (int)sizeof(void *)),
 			     file_info.st_size);
 	if (ret > 0) {
 		prterrcode("check_clone: posix_memalign(temp_buf)", -ret);
@@ -1447,8 +1527,7 @@ do_flatten()
 {
 	int ret;
 
-	if (num_clones == 0 ||
-	    (rbd_get_parent_info(ctx.image, NULL, 0, NULL, 0, NULL, 0) == -ENOENT)) {
+	if (!rbd_image_has_parent(&ctx)) {
 		log4(OP_SKIPPED, OP_FLATTEN, 0, 0);
 		return;
 	}
@@ -1506,7 +1585,7 @@ test(void)
 {
 	unsigned long	offset;
 	unsigned long	size = maxoplen;
-	unsigned long	rv = random();
+	unsigned long	rv = get_random();
 	unsigned long	op;
 
 	if (simulatedopcount > 0 && testcalls == simulatedopcount)
@@ -1523,9 +1602,9 @@ test(void)
 	if (!quiet && testcalls < simulatedopcount && testcalls % 100000 == 0)
 		prt("%lu...\n", testcalls);
 
-	offset = random();
+	offset = get_random();
 	if (randomoplen)
-		size = random() % (maxoplen + 1);
+		size = get_random() % (maxoplen + 1);
 
 	/* calculate appropriate op to run */
 	if (lite)
@@ -1555,8 +1634,16 @@ test(void)
 		}
 		break;
 	case OP_CLONE:
-		if (!clone_calls || random() % 100 > 5 || file_size == 0) {
+		/* clone, 8% chance */
+		if (!clone_calls || file_size == 0 || get_random() % 100 >= 8) {
 			log4(OP_SKIPPED, OP_CLONE, 0, 0);
+			goto out;
+		}
+		break;
+	case OP_FLATTEN:
+		/* flatten four times as rarely as clone, 2% chance */
+		if (get_random() % 100 >= 2) {
+			log4(OP_SKIPPED, OP_FLATTEN, 0, 0);
 			goto out;
 		}
 		break;
@@ -1585,7 +1672,7 @@ test(void)
 
 	case OP_TRUNCATE:
 		if (!style)
-			size = random() % maxfilelen;
+			size = get_random() % maxfilelen;
 		dotruncate(size);
 		break;
 
@@ -2025,8 +2112,14 @@ main(int argc, char **argv)
 	signal(SIGUSR1,	cleanup);
 	signal(SIGUSR2,	cleanup);
 
-	initstate(seed, state, 256);
-	setstate(state);
+	if (initstate_r(seed, rnd_state, RND_STATE_LEN, &rnd_data) < 0) {
+		prterr("initstate_r");
+		exit(1);
+	}
+	if (setstate_r(rnd_state, &rnd_data) < 0) {
+		prterr("setstate_r");
+		exit(1);
+	}
 
 	ret = create_image();
 	if (ret < 0) {
@@ -2062,10 +2155,10 @@ main(int argc, char **argv)
 
 	original_buf = (char *) malloc(maxfilelen);
 	for (i = 0; i < (int)maxfilelen; i++)
-		original_buf[i] = random() % 256;
+		original_buf[i] = get_random() % 256;
 
-	ret = posix_memalign((void **)&good_buf, MAX(writebdy, sizeof(void *)),
-			     maxfilelen);
+	ret = posix_memalign((void **)&good_buf,
+			     MAX(writebdy, (int)sizeof(void *)), maxfilelen);
 	if (ret > 0) {
 		if (ret == EINVAL)
 			prt("writebdy is not a suitable power of two\n");
@@ -2075,8 +2168,8 @@ main(int argc, char **argv)
 	}
 	memset(good_buf, '\0', maxfilelen);
 
-	ret = posix_memalign((void **)&temp_buf, MAX(readbdy, sizeof(void *)),
-			     maxfilelen);
+	ret = posix_memalign((void **)&temp_buf,
+			     MAX(readbdy, (int)sizeof(void *)), maxfilelen);
 	if (ret > 0) {
 		if (ret == EINVAL)
 			prt("readbdy is not a suitable power of two\n");

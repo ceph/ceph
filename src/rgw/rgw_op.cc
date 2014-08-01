@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #include <errno.h>
 #include <stdlib.h>
@@ -657,7 +659,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAc
   perfcounter->inc(l_rgw_get_b, cur_end - cur_ofs);
   while (cur_ofs <= cur_end) {
     bufferlist bl;
-    ret = store->get_obj(obj_ctx, NULL, &handle, part, bl, cur_ofs, cur_end);
+    ret = store->get_obj(obj_ctx, NULL, &handle, part, bl, cur_ofs, cur_end, NULL);
     if (ret < 0)
       goto done_err;
 
@@ -704,7 +706,7 @@ static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t 
 
   do {
 #define MAX_LIST_OBJS 100
-    int r = store->list_objects(bucket, MAX_LIST_OBJS, obj_prefix, delim, marker,
+    int r = store->list_objects(bucket, MAX_LIST_OBJS, obj_prefix, delim, marker, NULL,
                                 objs, common_prefixes,
                                 true, no_ns, true, &is_truncated, NULL);
     if (r < 0)
@@ -1102,7 +1104,9 @@ void RGWListBucket::execute()
   if (ret < 0)
     return;
 
-  ret = store->list_objects(s->bucket, max, prefix, delimiter, marker, objs, common_prefixes,
+  string *pnext_marker = (delimiter.empty() ? NULL : &next_marker);
+
+  ret = store->list_objects(s->bucket, max, prefix, delimiter, marker, pnext_marker, objs, common_prefixes,
                                !!(s->prot_flags & RGW_REST_SWIFT), no_ns, true, &is_truncated, NULL);
 }
 
@@ -1377,7 +1381,10 @@ public:
 
 int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx, string *oid_rand)
 {
-  RGWPutObjProcessor::prepare(store, obj_ctx, NULL);
+  int r = prepare_init(store, obj_ctx, NULL);
+  if (r < 0) {
+    return r;
+  }
 
   string oid = obj_str;
   upload_id = s->info.args.get("uploadId");
@@ -1416,7 +1423,7 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx, string
 
   manifest.set_multipart_part_rule(store->ctx()->_conf->rgw_obj_stripe_size, num);
 
-  int r = manifest_gen.create_begin(store->ctx(), &manifest, bucket, target_obj);
+  r = manifest_gen.create_begin(store->ctx(), &manifest, bucket, target_obj);
   if (r < 0) {
     return r;
   }
@@ -1557,6 +1564,36 @@ int RGWPutObj::user_manifest_iterate_cb(rgw_bucket& bucket, RGWObjEnt& ent, RGWA
   return 0;
 }
 
+static int put_data_and_throttle(RGWPutObjProcessor *processor, bufferlist& data, off_t ofs,
+                                 MD5 *hash, bool need_to_wait)
+{
+  const unsigned char *data_ptr = (hash ? (const unsigned char *)data.c_str() : NULL);
+  bool again;
+  uint64_t len = data.length();
+
+  do {
+    void *handle;
+
+    int ret = processor->handle_data(data, ofs, &handle, &again);
+    if (ret < 0)
+      return ret;
+
+    if (hash) {
+      hash->Update(data_ptr, len);
+      hash = NULL; /* only calculate hash once */
+    }
+
+    ret = processor->throttle_data(handle, false);
+    if (ret < 0)
+      return ret;
+
+    need_to_wait = false; /* the need to wait only applies to the first iteration */
+  } while (again);
+
+  return 0;
+}
+
+
 void RGWPutObj::execute()
 {
   RGWPutObjProcessor *processor = NULL;
@@ -1630,23 +1667,12 @@ void RGWPutObj::execute()
     if (!len)
       break;
 
-    void *handle;
-    const unsigned char *data_ptr = (const unsigned char *)data.c_str();
-
-    ret = processor->handle_data(data, ofs, &handle);
-    if (ret < 0)
-      goto done;
-
-    if (need_calc_md5) {
-      hash.Update(data_ptr, len);
-    }
-
     /* do we need this operation to be synchronous? if we're dealing with an object with immutable
      * head, e.g., multipart object we need to make sure we're the first one writing to this object
      */
     bool need_to_wait = (ofs == 0) && multipart;
 
-    ret = processor->throttle_data(handle, need_to_wait);
+    ret = put_data_and_throttle(processor, data, ofs, (need_calc_md5 ? &hash : NULL), need_to_wait);
     if (ret < 0) {
       if (!need_to_wait || ret != -EEXIST) {
         ldout(s->cct, 20) << "processor->thottle_data() returned ret=" << ret << dendl;
@@ -1671,15 +1697,8 @@ void RGWPutObj::execute()
         goto done;
       }
 
-      ret = processor->handle_data(data, ofs, &handle);
+      ret = put_data_and_throttle(processor, data, ofs, NULL, false);
       if (ret < 0) {
-        ldout(s->cct, 0) << "ERROR: processor->handle_data() returned " << ret << dendl;
-        goto done;
-      }
-
-      ret = processor->throttle_data(handle, false);
-      if (ret < 0) {
-        ldout(s->cct, 0) << "ERROR: processor->throttle_data() returned " << ret << dendl;
         goto done;
       }
     }
@@ -1843,18 +1862,7 @@ void RGWPostObj::execute()
      if (!len)
        break;
 
-     void *handle;
-     const unsigned char *data_ptr = (const unsigned char *)data.c_str();
-
-     ret = processor->handle_data(data, ofs, &handle);
-     if (ret < 0)
-       goto done;
-
-     hash.Update(data_ptr, len);
-
-     ret = processor->throttle_data(handle, false);
-     if (ret < 0)
-       goto done;
+     ret = put_data_and_throttle(processor, data, ofs, &hash, false);
 
      ofs += len;
 
@@ -2746,6 +2754,7 @@ void RGWCompleteMultipart::execute()
   iter = parts->parts.begin();
 
   meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
+  meta_obj.set_in_extra_data(true);
 
   ret = get_obj_attrs(store, s, meta_obj, attrs, NULL, NULL);
   if (ret < 0) {
@@ -2842,7 +2851,6 @@ void RGWCompleteMultipart::execute()
     return;
 
   // remove the upload obj
-  meta_obj.set_in_extra_data(true);
   store->delete_obj(s->obj_ctx, s->bucket_owner.get_id(), meta_obj);
 }
 
@@ -2991,7 +2999,7 @@ void RGWListBucketMultiparts::execute()
     }
   }
   marker_meta = marker.get_meta();
-  ret = store->list_objects(s->bucket, max_uploads, prefix, delimiter, marker_meta, objs, common_prefixes,
+  ret = store->list_objects(s->bucket, max_uploads, prefix, delimiter, marker_meta, NULL, objs, common_prefixes,
                                !!(s->prot_flags & RGW_REST_SWIFT), mp_ns, true, &is_truncated, &mp_filter);
   if (!objs.empty()) {
     vector<RGWObjEnt>::iterator iter;

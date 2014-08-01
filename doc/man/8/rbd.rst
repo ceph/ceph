@@ -55,7 +55,7 @@ Parameters
      does not support newer features like cloning.
 
    * format 2 - Use the second rbd format, which is supported by
-     librbd (but not the kernel rbd module) at this time. This adds
+     librbd and kernel since version 3.11 (except for striping). This adds
      support for cloning and is more easily extensible to allow more
      features in the future.
 
@@ -295,7 +295,7 @@ bottleneck when individual images get large or busy.
 The striping is controlled by three parameters:
 
 .. option:: order
-  The size of objects we stripe over is a power of two, specifially 2^[*order*] bytes.  The default
+  The size of objects we stripe over is a power of two, specifically 2^[*order*] bytes.  The default
   is 22, or 4 MB.
 
 .. option:: stripe_unit

@@ -474,6 +474,19 @@ class TestMDS(TestArgparse):
                                                     '--yes-i-really-mean-it']))
 
 
+class TestFS(TestArgparse):
+    def test_fs_new(self):
+        self.assert_valid_command(['fs', 'new', 'default', 'metadata', 'data'])
+
+    def test_fs_rm(self):
+        self.assert_valid_command(['fs', 'rm', 'default'])
+        self.assert_valid_command(['fs', 'rm', 'default', '--yes-i-really-mean-it'])
+        assert_equal({}, validate_command(sigdict, ['fs', 'rm', 'default', '--yes-i-really-mean-it', 'toomany']))
+
+    def test_fs_ls(self):
+        self.assert_valid_command(['fs', 'ls'])
+        assert_equal({}, validate_command(sigdict, ['fs', 'ls', 'toomany']))
+
 class TestMon(TestArgparse):
 
     def test_dump(self):
@@ -947,7 +960,7 @@ class TestOSD(TestArgparse):
                                    'replicated'])
         self.assert_valid_command(['osd', 'pool', 'create',
                                    'poolname', '128', '128',
-                                   'erasure', 'profile', 'ruleset'])
+                                   'erasure', 'A-Za-z0-9-_.', 'ruleset^^'])
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname']))
@@ -956,12 +969,14 @@ class TestOSD(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname',
                                                     '128', '128',
-                                                    'erasure', '^^^']))
+                                                    'erasure', '^^^', 
+													'ruleset']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname',
                                                     '128', '128',
                                                     'erasure', 'profile',
-                                                    '^^^']))
+                                                    'ruleset',
+												    'toomany']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname',
                                                     '128', '128',
@@ -1079,7 +1094,7 @@ class TestOSD(TestArgparse):
                                                         'toomany']))
 
     def test_tier_cache_mode(self):
-        for mode in ('none', 'writeback', 'forward', 'readonly'):
+        for mode in ('none', 'writeback', 'forward', 'readonly', 'readforward'):
             self.assert_valid_command(['osd', 'tier', 'cache-mode',
                                        'poolname', mode])
         assert_equal({}, validate_command(sigdict, ['osd', 'tier',

@@ -77,6 +77,15 @@ class Finisher {
     if (logger)
       logger->inc(l_finisher_queue_len);
   }
+  void queue(list<Context*>& ls) {
+    finisher_lock.Lock();
+    finisher_queue.insert(finisher_queue.end(), ls.begin(), ls.end());
+    finisher_cond.Signal();
+    finisher_lock.Unlock();
+    ls.clear();
+    if (logger)
+      logger->inc(l_finisher_queue_len);
+  }
   
   void start();
   void stop();

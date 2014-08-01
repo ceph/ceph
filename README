@@ -26,10 +26,6 @@ contributed under the terms of the applicable license.
 Building Ceph
 =============
 
-To prepare the source tree after it has been git cloned,
-
-	git submodule update --init
-
 To build the server daemons, and FUSE client, execute the following:
 
 	./autogen.sh

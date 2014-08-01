@@ -31,7 +31,7 @@ struct MForward : public Message {
   uint64_t con_features;
 
   static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 0;
+  static const int COMPAT_VERSION = 1;
 
   MForward() : Message(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
                tid(0), msg(NULL), con_features(0) {}
