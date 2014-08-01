@@ -1384,10 +1384,13 @@ void FileJournal::check_aio_completion()
   while (p != aio_queue.end() && p->done) {
     dout(20) << "check_aio_completion completed seq " << p->seq << " "
 	     << p->off << "~" << p->len << dendl;
-    if (p->seq) {
-      new_journaled_seq = p->seq;
-      completed_something = true;
-    }
+    /*
+     *Now we can only update journal header w/o other data.
+     *The seq of for write journal header is 0.So we don't check the p->seq
+     */
+    new_journaled_seq = p->seq;
+    completed_something = true;
+
     aio_num--;
     aio_bytes -= p->len;
     aio_queue.erase(p++);
