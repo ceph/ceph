@@ -3507,6 +3507,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
   string interr, floaterr;
   int64_t n = 0;
   double f = 0;
+  int64_t uf = 0;  // micro-f
   if (!cmd_getval(g_ceph_context, cmdmap, "val", val)) {
     // wasn't a string; maybe an older mon forwarded json with an int?
     if (!cmd_getval(g_ceph_context, cmdmap, "val", n))
@@ -3516,6 +3517,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     n = strict_strtoll(val.c_str(), 10, &interr);
     // or a float
     f = strict_strtod(val.c_str(), &floaterr);
+    uf = llrintl(f * (double)1000000.0);
   }
 
   if (!p.is_tier() &&
@@ -3710,7 +3712,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "value must be in the range 0..1";
       return -ERANGE;
     }
-    p.cache_target_dirty_ratio_micro = f * (double)1000000.0;
+    p.cache_target_dirty_ratio_micro = uf;
   } else if (var == "cache_target_full_ratio") {
     if (floaterr.length()) {
       ss << "error parsing float '" << val << "': " << floaterr;
@@ -3720,7 +3722,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "value must be in the range 0..1";
       return -ERANGE;
     }
-    p.cache_target_full_ratio_micro = f * (double)1000000.0;
+    p.cache_target_full_ratio_micro = uf;
   } else if (var == "cache_min_flush_age") {
     if (interr.length()) {
       ss << "error parsing int '" << val << "': " << interr;
