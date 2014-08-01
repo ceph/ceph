@@ -1260,7 +1260,10 @@ class RGWRados
   int open_bucket_data_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx);
   int open_bucket_data_extra_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx);
   int open_bucket_index(rgw_bucket& bucket, librados::IoCtx&  index_ctx, string& bucket_oid);
-
+  int open_bucket_index_base(rgw_bucket& bucket, librados::IoCtx&  index_ctx,
+      string& bucket_oid_base);
+  int open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
+      vector<string>& bucket_objs);
   struct GetObjState {
     librados::IoCtx io_ctx;
     bool sent_data;
@@ -1367,8 +1370,9 @@ public:
                gc(NULL), use_gc_thread(false), quota_threads(false),
                num_watchers(0), watchers(NULL), watch_handles(NULL),
                watch_initialized(false),
-               bucket_id_lock("rados_bucket_id"), max_bucket_id(0),
+               bucket_id_lock("rados_bucket_id"),
                bucket_index_max_shards(0),
+               max_bucket_id(0),
                cct(NULL), rados(NULL),
                pools_initialized(false),
                quota_handler(NULL),
@@ -1948,6 +1952,17 @@ public:
   }
 
  private:
+  /**
+   * This is a helper method, it generates a list of bucket index objects with the given
+   * bucket base oid and number of shards.
+   *
+   * bucket_oid_base [in] - base name of the bucket index object;
+   * num_shards [in] - number of bucket index object shards.
+   * bucket_objs [out] - filled by this method, a list of bucket index objects.
+   */
+  void get_bucket_index_objects(const string& bucket_oid_base, const uint32_t num_shards,
+      vector<string>& bucket_objs);
+
   int process_intent_log(rgw_bucket& bucket, string& oid,
 			 time_t epoch, int flags, bool purge);
   /**
