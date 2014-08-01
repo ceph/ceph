@@ -10,8 +10,7 @@ tasks:
       timeout: 1200
       chance_pgnum_grow: 1
       chance_pgpnum_fix: 1
-  - ceph-fuse:
-      client.0
+  - ceph-fuse: [client.0]
   - workunit:
       clients:
         client.0
