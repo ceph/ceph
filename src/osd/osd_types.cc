@@ -3682,6 +3682,7 @@ void object_info_t::copy_user_bits(const object_info_t& other)
   // these bits are copied from head->clone.
   size = other.size;
   mtime = other.mtime;
+  local_mtime = other.local_mtime;
   last_reqid = other.last_reqid;
   truncate_seq = other.truncate_seq;
   truncate_size = other.truncate_size;
@@ -3713,7 +3714,7 @@ void object_info_t::encode(bufferlist& bl) const
        ++i) {
     old_watchers.insert(make_pair(i->first.second, i->second));
   }
-  ENCODE_START(13, 8, bl);
+  ENCODE_START(14, 8, bl);
   ::encode(soid, bl);
   ::encode(myoloc, bl);	//Retained for compatibility
   ::encode(category, bl);
@@ -3738,6 +3739,7 @@ void object_info_t::encode(bufferlist& bl) const
   ::encode(watchers, bl);
   __u32 _flags = flags;
   ::encode(_flags, bl);
+  ::encode(local_mtime, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -3816,6 +3818,11 @@ void object_info_t::decode(bufferlist::iterator& bl)
     ::decode(_flags, bl);
     flags = (flag_t)_flags;
   }
+  if (struct_v >= 14) {
+    ::decode(local_mtime, bl);
+  } else {
+    local_mtime = utime_t();
+  }
   DECODE_FINISH(bl);
 }
 
@@ -3831,6 +3838,7 @@ void object_info_t::dump(Formatter *f) const
   f->dump_unsigned("user_version", user_version);
   f->dump_unsigned("size", size);
   f->dump_stream("mtime") << mtime;
+  f->dump_stream("local_mtime") << local_mtime;
   f->dump_unsigned("lost", (int)is_lost());
   f->dump_unsigned("flags", (int)flags);
   f->dump_stream("wrlock_by") << wrlock_by;
