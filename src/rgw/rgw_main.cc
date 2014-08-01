@@ -699,6 +699,11 @@ static int civetweb_callback(struct mg_connection *conn) {
   return 1;
 }
 
+static int civetweb_log_callback(const struct mg_connection *conn, const char *buf) {
+  dout(10) << "civetweb: " << (void *)conn << ": " << buf << dendl;
+  return 0;
+}
+
 #ifdef HAVE_CURL_MULTI_WAIT
 static void check_curl()
 {
@@ -937,6 +942,7 @@ public:
     struct mg_callbacks cb;
     memset((void *)&cb, 0, sizeof(cb));
     cb.begin_request = civetweb_callback;
+    cb.log_message = civetweb_log_callback;
     ctx = mg_start(&cb, &env, (const char **)&options);
 
     if (!ctx) {
