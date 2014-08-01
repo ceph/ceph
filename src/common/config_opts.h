@@ -851,6 +851,11 @@ OPTION(rgw_max_chunk_size, OPT_INT, 512 * 1024)
  */
 OPTION(rgw_bucket_index_max_shards, OPT_U32, 0)
 
+/**
+ * Represents the maximum AIO pending requests for the bucket index object shards.
+ */
+OPTION(rgw_bucket_index_max_aio, OPT_U32, 8)
+
 OPTION(rgw_data, OPT_STR, "/var/lib/ceph/radosgw/$cluster-$id")
 OPTION(rgw_enable_apis, OPT_STR, "s3, swift, swift_auth, admin")
 OPTION(rgw_cache_enabled, OPT_BOOL, true)   // rgw cache enabled
