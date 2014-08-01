@@ -381,6 +381,12 @@ $DAEMONOPTS
         osd class dir = .libs
         osd scrub load threshold = 5.0
         osd debug op order = true
+        filestore wbthrottle xfs ios start flusher = 10
+        filestore wbthrottle xfs ios hard limit = 20
+        filestore wbthrottle xfs inodes hard limit = 30
+        filestore wbthrottle btrfs ios start flusher = 10
+        filestore wbthrottle btrfs ios hard limit = 20
+        filestore wbthrottle btrfs inodes hard limit = 30
 $COSDDEBUG
 $COSDMEMSTORE
 $extra_conf

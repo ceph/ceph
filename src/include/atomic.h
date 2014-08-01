@@ -36,7 +36,7 @@ namespace ceph {
     ~atomic_spinlock_t() {
       ceph_spin_destroy(&lock);
     }
-    void set(size_t v) {
+    void set(T v) {
       ceph_spin_lock(&lock);
       val = v;
       ceph_spin_unlock(&lock);
@@ -64,7 +64,7 @@ namespace ceph {
       ceph_spin_unlock(&lock);
     }
     T read() const {
-      signed long ret;
+      T ret;
       ceph_spin_lock(&lock);
       ret = val;
       ceph_spin_unlock(&lock);
@@ -91,7 +91,7 @@ namespace ceph {
     AO_t val;
   public:
     atomic_t(AO_t i=0) : val(i) {}
-    void set(size_t v) {
+    void set(AO_t v) {
       AO_store(&val, v);
     }
     AO_t inc() {
@@ -103,8 +103,8 @@ namespace ceph {
     void add(AO_t add_me) {
       AO_fetch_and_add(&val, add_me);
     }
-    void sub(int sub_me) {
-      int negsub = 0 - sub_me;
+    void sub(AO_t sub_me) {
+      AO_t negsub = 0 - sub_me;
       AO_fetch_and_add_write(&val, (AO_t)negsub);
     }
     AO_t read() const {
@@ -134,8 +134,8 @@ namespace ceph {
 #include "include/Spinlock.h"
 
 namespace ceph {
-  typedef atomic_spinlock_t<int> atomic_t;
-  typedef atomic_spinlock_t<long long> atomic64_t;
+  typedef atomic_spinlock_t<unsigned> atomic_t;
+  typedef atomic_spinlock_t<unsigned long long> atomic64_t;
 }
 
 #endif

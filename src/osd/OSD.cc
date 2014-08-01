@@ -3855,8 +3855,13 @@ void OSD::_send_boot()
     cluster_addr.set_port(port);
     cluster_messenger->set_addr_unknowns(cluster_addr);
     dout(10) << " assuming cluster_addr ip matches client_addr" << dendl;
-  } else if (local_connection->get_priv() == NULL)
+  } else {
+    Session *s = static_cast<Session*>(local_connection->get_priv());
+    if (s)
+      s->put();
+    else
       cluster_messenger->ms_deliver_handle_fast_connect(local_connection);
+  }
 
   entity_addr_t hb_back_addr = hb_back_server_messenger->get_myaddr();
   local_connection = hb_back_server_messenger->get_loopback_connection().get();
@@ -3866,8 +3871,13 @@ void OSD::_send_boot()
     hb_back_addr.set_port(port);
     hb_back_server_messenger->set_addr_unknowns(hb_back_addr);
     dout(10) << " assuming hb_back_addr ip matches cluster_addr" << dendl;
-  } else if (local_connection->get_priv() == NULL)
+  } else {
+    Session *s = static_cast<Session*>(local_connection->get_priv());
+    if (s)
+      s->put();
+    else
       hb_back_server_messenger->ms_deliver_handle_fast_connect(local_connection);
+  }
 
   entity_addr_t hb_front_addr = hb_front_server_messenger->get_myaddr();
   local_connection = hb_front_server_messenger->get_loopback_connection().get();
@@ -3877,8 +3887,13 @@ void OSD::_send_boot()
     hb_front_addr.set_port(port);
     hb_front_server_messenger->set_addr_unknowns(hb_front_addr);
     dout(10) << " assuming hb_front_addr ip matches client_addr" << dendl;
-  } else if (local_connection->get_priv() == NULL)
+  } else {
+    Session *s = static_cast<Session*>(local_connection->get_priv());
+    if (s)
+      s->put();
+    else
       hb_front_server_messenger->ms_deliver_handle_fast_connect(local_connection);
+  }
 
   MOSDBoot *mboot = new MOSDBoot(superblock, service.get_boot_epoch(),
                                  hb_back_addr, hb_front_addr, cluster_addr);
