@@ -9,10 +9,110 @@
 
 using namespace librados;
 
+/*
+ * Callback implementation for AIO request.
+ */
+static void bucket_index_op_completion_cb(void* cb, void* arg) {
+  BucketIndexAioArg* cb_arg = (BucketIndexAioArg*) arg;
+  cb_arg->manager->do_completion(cb_arg->id);
+  cb_arg->put();
+}
+
+void BucketIndexAioManager::do_completion(int id) {
+  Mutex::Locker l(lock);
+
+  map<int, librados::AioCompletion*>::iterator iter = pendings.find(id);
+  assert(iter != pendings.end());
+  completions.push_back(iter->second);
+  pendings.erase(iter);
+
+  cond.Signal();
+}
+
+bool BucketIndexAioManager::wait_for_completions(int valid_ret_code,
+    int *num_completions, int *ret_code) {
+  lock.Lock();
+  if (pendings.empty() && completions.empty()) {
+    lock.Unlock();
+    return false;
+  }
+  // Wait for AIO completion
+  cond.Wait(lock);
+
+  // Clear the completed AIOs
+  list<librados::AioCompletion*>::iterator iter = completions.begin();
+  for (; iter != completions.end(); ++iter) {
+    int r = (*iter)->get_return_value();
+    if (ret_code && (r < 0 && r != valid_ret_code))
+      (*ret_code) = r;
+    (*iter)->release();
+  }
+  if (num_completions)
+    (*num_completions) = completions.size();
+  completions.clear();
+  lock.Unlock();
+
+  return true;
+}
+
 void cls_rgw_bucket_init(ObjectWriteOperation& o)
 {
   bufferlist in;
   o.exec("rgw", "bucket_init_index", in);
+}
+
+static bool issue_bucket_index_init_op(librados::IoCtx& io_ctx,
+    const string& oid, BucketIndexAioManager *manager) {
+  bufferlist in;
+  librados::ObjectWriteOperation op;
+  op.create(true);
+  op.exec("rgw", "bucket_init_index", in);
+  BucketIndexAioArg *arg = new BucketIndexAioArg(manager->get_next(), manager);
+  AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, NULL, bucket_index_op_completion_cb);
+  int r = io_ctx.aio_operate(oid, c, &op);
+  if (r >= 0)
+    manager->add_pending(arg->id, c);
+  return r;
+}
+
+int cls_rgw_bucket_index_init_op(librados::IoCtx& io_ctx,
+        const vector<string>& bucket_objs, uint32_t max_aio)
+{
+  int ret = 0;
+  vector<string>::const_iterator iter = bucket_objs.begin();
+  BucketIndexAioManager manager;
+  // Issue *max_aio* requests, all subsequent requests are issued upon
+  // pending request finishing
+  for (; iter != bucket_objs.end() && max_aio-- > 0; ++iter) {
+    ret = issue_bucket_index_init_op(io_ctx, *iter, &manager);
+    if (ret < 0)
+      break;
+  }
+
+  int num_completions, r;
+  while (manager.wait_for_completions(-EEXIST, &num_completions, &r)) {
+    if (r >= 0 && ret >= 0) {
+      for(int i = 0; i < num_completions && iter != bucket_objs.end(); ++i, ++iter) {
+        int issue_ret = issue_bucket_index_init_op(io_ctx, *iter, &manager);
+        if(issue_ret < 0) {
+          ret = issue_ret;
+          break;
+        }
+      }
+    } else if (ret >= 0) {
+      ret = r;
+    }
+  }
+
+  if (ret < 0) {
+    // Do best effort removal
+    vector<string>::const_iterator citer = bucket_objs.begin();
+    for(; citer != iter; ++citer) {
+      io_ctx.remove(*citer);
+    }
+  }
+
+  return ret;
 }
 
 void cls_rgw_bucket_set_tag_timeout(ObjectWriteOperation& o, uint64_t tag_timeout)
