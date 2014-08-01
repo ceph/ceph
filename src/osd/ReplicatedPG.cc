@@ -5147,6 +5147,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
   dout(20) << __func__ << " " << soid << " " << ctx
 	   << " op " << pg_log_entry_t::get_op_name(log_op_type)
 	   << dendl;
+  utime_t now = ceph_clock_now(cct);
 
   // snapset
   bufferlist bss;
@@ -5205,6 +5206,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
       ctx->snapset_obc->obs.oi.version = ctx->at_version;
       ctx->snapset_obc->obs.oi.last_reqid = ctx->reqid;
       ctx->snapset_obc->obs.oi.mtime = ctx->mtime;
+      ctx->snapset_obc->obs.oi.local_mtime = now;
 
       bufferlist bv(sizeof(ctx->new_obs.oi));
       ::encode(ctx->snapset_obc->obs.oi, bv);
@@ -5245,6 +5247,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
     if (ctx->mtime != utime_t()) {
       ctx->new_obs.oi.mtime = ctx->mtime;
       dout(10) << " set mtime to " << ctx->new_obs.oi.mtime << dendl;
+      ctx->new_obs.oi.local_mtime = now;
     } else {
       dout(10) << " mtime unchanged at " << ctx->new_obs.oi.mtime << dendl;
     }
@@ -11278,7 +11281,13 @@ bool ReplicatedPG::agent_maybe_flush(ObjectContextRef& obc)
   }
 
   utime_t now = ceph_clock_now(NULL);
-  if (obc->obs.oi.mtime + utime_t(pool.info.cache_min_flush_age, 0) > now) {
+  utime_t ob_local_mtime;
+  if (obc->obs.oi.local_mtime != utime_t()) {
+    ob_local_mtime = obc->obs.oi.local_mtime;
+  } else {
+    ob_local_mtime = obc->obs.oi.mtime;
+  }
+  if (ob_local_mtime + utime_t(pool.info.cache_min_flush_age, 0) > now) {
     dout(20) << __func__ << " skip (too young) " << obc->obs.oi << dendl;
     osd->logger->inc(l_osd_agent_skip);
     return false;
