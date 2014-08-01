@@ -31,7 +31,7 @@
 
 // val should have type char**
 #define ceph_ctf_stringp(field, val) \
-    ctf_string(field, ((val) == NULL || *(val) == NULL) ? "" : (val)) \
+    ctf_string(field, ((val) == NULL || *(val) == NULL) ? "" : *(val)) \
     ctf_integer(uint8_t, field##_isnull, (val) == NULL) \
     ctf_integer(uint8_t, field##_data_isnull, (val) == NULL || *(val) == NULL)
 
