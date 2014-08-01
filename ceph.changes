@@ -1,3 +1,9 @@
+-------------------------------------------------------------------
+Fri Aug  1 12:03:42 UTC 2014 - osynge@suse.com
+
+- Small patch to test deployment - delete after
+
+-------------------------------------------------------------------
 Wed Jul  9 15:00:07 UTC 2014 - osynge@suse.com
 
 - Added /var/lib/ceph/osd fixing bug 885210

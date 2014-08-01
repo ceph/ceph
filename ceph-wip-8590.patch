@@ -1,0 +1,146 @@
+diff --git a/src/ceph-disk b/src/ceph-disk
+index e3c8102..c146070 100755
+@@ -204,27 +204,6 @@
+     """
+     pass
+ 
+-class CommandCheckCall(Error):
+-    """
+-    Exception to report on Exceptions in command_check_call()
+-    when the process returns a non zero return code.
+-    The exit status will be stored. The standard ouput and 
+-    error may also be stored.
+-    """
+-    def __init__(self, returncode, cmd, stdout=None, stderr=None):
+-        self.returncode = returncode
+-        self.cmd = cmd
+-        self.stdout = stdout
+-        self.stderr = stderr
+-    def __str__(self):
+-        as_string = "Command '%s' returned non-zero exit status %d" % (self.cmd, self.returncode)
+-        if ((self.stdout != None) and (len(self.stdout) > 0)):
+-            as_string += "stdout:\n%s" % (self.stdout)
+-        if ((self.stderr != None) and (len(self.stderr) > 0)):
+-            as_string += "stderr:\n%s" % (self.stderr)
+-        return
+-
+-
+ ####### utils
+ 
+ 
+@@ -320,13 +299,9 @@
+     of making sure that executables *will* be found and will error nicely
+     otherwise.
+     """
+-    proccess = subprocess.Popen(arguments, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+-    stdout, stderr = proccess.communicate()
+-    if proccess.returncode != 0:
+-        error = CommandCheckCall(proccess.returncode, " ".join(arguments), stdout, stderr)
+-        error.stderr = stderr
+-        raise error
+-    return stdout, stderr
++    arguments = _get_command_executable(arguments)
++    return subprocess.check_call(arguments)
++
+ 
+ def platform_distro():
+     """
+@@ -784,7 +759,7 @@
+         command_check_call(args)
+         return dev
+ 
+-    except CommandCheckCall as e:
++    except subprocess.CalledProcessError as e:
+         raise Error('unable to map device', rawdev, e)
+ 
+ 
+@@ -803,7 +778,7 @@
+     try:
+         command_check_call(args)
+ 
+-    except CommandCheckCall as e:
++    except subprocess.CalledProcessError as e:
+         raise Error('unable to unmap device', _uuid, e)
+ 
+ 
+@@ -837,7 +812,7 @@
+                 path,
+                 ],
+             )
+-    except CommandCheckCall as e:
++    except subprocess.CalledProcessError as e:
+         try:
+             os.rmdir(path)
+         except (OSError, IOError):
+@@ -862,7 +837,7 @@
+                 path,
+                 ],
+             )
+-    except CommandCheckCall as e:
++    except subprocess.CalledProcessError as e:
+         raise UnmountError(e)
+ 
+     os.rmdir(path)
+@@ -946,7 +921,7 @@
+                 dev,
+             ],
+         )
+-    except CommandCheckCall as e:
++    except subprocess.CalledProcessError as e:
+         raise Error(e)
+ 
+ 
+@@ -1059,7 +1034,7 @@
+         LOG.debug('Journal is GPT partition %s', journal_symlink)
+         return (journal_symlink, journal_dmcrypt, journal_uuid)
+ 
+-    except CommandCheckCall as e:
++    except subprocess.CalledProcessError as e:
+         raise Error(e)
+ 
+ 
+@@ -1229,7 +1204,7 @@
+                     'settle',
+                     ],
+                 )
+-        except CommandCheckCall as e:
++        except subprocess.CalledProcessError as e:
+             raise Error(e)
+ 
+         rawdev = get_partition_dev(data, 1)
+@@ -1259,7 +1234,7 @@
+         try:
+             LOG.debug('Creating %s fs on %s', fstype, dev)
+             command_check_call(args)
+-        except CommandCheckCall as e:
++        except subprocess.CalledProcessError as e:
+             raise Error(e)
+ 
+         #remove whitespaces from mount_options
+@@ -1293,7 +1268,7 @@
+                     data,
+                 ],
+             )
+-        except CommandCheckCall as e:
++        except subprocess.CalledProcessError as e:
+             raise Error(e)
+ 
+ 
+@@ -1533,7 +1508,7 @@
+                 'mon', 'allow profile osd',
+                 ],
+             )
+-    except CommandCheckCall as err:
++    except subprocess.CalledProcessError as err:
+         if err.returncode == errno.EACCES:
+             # try old cap scheme
+             command_check_call(
+@@ -1645,7 +1620,7 @@
+                     cluster=cluster,
+                     osd_id=osd_id,
+                     ))
+-    except CommandCheckCall as e:
++    except subprocess.CalledProcessError as e:
+         raise Error('ceph osd start failed', e)
+ 
+ def detect_fstype(
