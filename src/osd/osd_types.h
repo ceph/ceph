@@ -2590,6 +2590,7 @@ struct object_info_t {
 
   uint64_t size;
   utime_t mtime;
+  utime_t local_mtime; // local mtime
 
   // note: these are currently encoded into a total 16 bits; see
   // encode()/decode() for the weirdness.
