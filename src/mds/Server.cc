@@ -901,9 +901,9 @@ void Server::submit_mdlog_entry(LogEvent *le, MDSInternalContextBase *fin, MDReq
 /*
  * send generic response (just an error code), clean up mdr
  */
-void Server::reply_request(MDRequestRef& mdr, int r, CInode *tracei, CDentry *tracedn)
+void Server::reply_request(MDRequestRef& mdr, int r)
 {
-  reply_request(mdr, new MClientReply(mdr->client_request, r), tracei, tracedn);
+  reply_request(mdr, new MClientReply(mdr->client_request, r));
 }
 
 void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
@@ -977,7 +977,7 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
  * include a trace to tracei
  * Clean up mdr
  */
-void Server::reply_request(MDRequestRef& mdr, MClientReply *reply, CInode *tracei, CDentry *tracedn)
+void Server::reply_request(MDRequestRef& mdr, MClientReply *reply)
 {
   assert(mdr.get());
   MClientRequest *req = mdr->client_request;
@@ -997,10 +997,8 @@ void Server::reply_request(MDRequestRef& mdr, MClientReply *reply, CInode *trace
 
   // get tracei/tracedn from mdr?
   snapid_t snapid = mdr->snapid;
-  if (!tracei)
-    tracei = mdr->tracei;
-  if (!tracedn)
-    tracedn = mdr->tracedn;
+  CInode *tracei = mdr->tracei;
+  CDentry *tracedn = mdr->tracedn;
 
   bool is_replay = mdr->client_request->is_replay();
   bool did_early_reply = mdr->did_early_reply;
@@ -2181,7 +2179,9 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
     return NULL; // delayed
   if (r < 0) {  // error
     if (r == -ENOENT && n == 0 && mdr->dn[n].size()) {
-      reply_request(mdr, r, NULL, no_lookup ? NULL : mdr->dn[n][mdr->dn[n].size()-1]);
+      if (!no_lookup)
+	mdr->tracedn = mdr->dn[n][mdr->dn[n].size()-1];
+      reply_request(mdr, r);
     } else if (r == -ESTALE) {
       dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
       MDSInternalContextBase *c = new C_MDS_TryFindInode(this, mdr);
@@ -2447,8 +2447,10 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
 
   // reply
   dout(10) << "reply to stat on " << *req << dendl;
-  reply_request(mdr, 0, ref,
-		is_lookup ? mdr->dn[0].back() : 0);
+  mdr->tracei = ref;
+  if (is_lookup)
+    mdr->tracedn = mdr->dn[0].back();
+  reply_request(mdr, 0);
 }
 
 struct C_MDS_LookupIno2 : public ServerContext {
@@ -2499,7 +2501,8 @@ void Server::handle_client_lookup_ino(MDRequestRef& mdr,
       return;
     }
     dout(10) << "reply to lookup_parent " << *in << dendl;
-    reply_request(mdr, 0, diri);
+    mdr->tracei = diri;
+    reply_request(mdr, 0);
   } else {
     if (want_dentry) {
       inodeno_t dirino = req->get_filepath2().get_ino();
@@ -2511,7 +2514,10 @@ void Server::handle_client_lookup_ino(MDRequestRef& mdr,
     } else
       dout(10) << "reply to lookup_ino " << *in << dendl;
 
-    reply_request(mdr, 0, in, want_dentry ? dn : NULL);
+    mdr->tracei = in;
+    if (want_dentry)
+      mdr->tracedn = dn;
+    reply_request(mdr, 0);
   }
 }
 
@@ -2687,7 +2693,9 @@ void Server::handle_client_open(MDRequestRef& mdr)
     dn = mdr->dn[0].back();
   }
 
-  reply_request(mdr, 0, cur, dn);
+  mdr->tracei = cur;
+  mdr->tracedn = dn;
+  reply_request(mdr, 0);
 }
 
 class C_MDS_openc_finish : public MDSInternalContext {
@@ -2819,7 +2827,9 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     // it existed.  
     assert(req->head.args.open.flags & O_EXCL);
     dout(10) << "O_EXCL, target exists, failing with -EEXIST" << dendl;
-    reply_request(mdr, -EEXIST, dnl->get_inode(), dn);
+    mdr->tracei = dnl->get_inode();
+    mdr->tracedn = dn;
+    reply_request(mdr, -EEXIST);
     return;
   }
 
@@ -3098,7 +3108,8 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   mds->balancer->hit_dir(ceph_clock_now(g_ceph_context), dir, META_POP_IRD, -1, numfiles);
   
   // reply
-  reply_request(mdr, reply, diri);
+  mdr->tracei = diri;
+  reply_request(mdr, reply);
 }
 
 
@@ -7353,7 +7364,8 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
   
   MClientReply *reply = new MClientReply(req);
   reply->set_extra_bl(dirbl);
-  reply_request(mdr, reply, diri);
+  mdr->tracei = diri;
+  reply_request(mdr, reply);
 }
 
 
@@ -7504,7 +7516,8 @@ void Server::_mksnap_finish(MDRequestRef& mdr, CInode *diri, SnapInfo &info)
   mdr->snapid = info.snapid;
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
   reply->snapbl = diri->snaprealm->get_snap_trace();
-  reply_request(mdr, reply, diri);
+  mdr->tracei = diri;
+  reply_request(mdr, reply);
 }
 
 

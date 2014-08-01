@@ -112,8 +112,8 @@ public:
                           MDRequestRef& mdr, const char *evt);
   void dispatch_client_request(MDRequestRef& mdr);
   void early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);
-  void reply_request(MDRequestRef& mdr, int r = 0, CInode *tracei = 0, CDentry *tracedn = 0);
-  void reply_request(MDRequestRef& mdr, MClientReply *reply, CInode *tracei = 0, CDentry *tracedn = 0);
+  void reply_request(MDRequestRef& mdr, int r = 0);
+  void reply_request(MDRequestRef& mdr, MClientReply *reply);
   void set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn,
 		      snapid_t snapid,
 		      int num_dentries_wanted,
