@@ -91,11 +91,21 @@ if yasm -f elf64 src/common/crc32c_intel_fast_asm.S -o /dev/null; then
       echo 'we are x86_64'
       AC_DEFINE([HAVE_GOOD_YASM_ELF64], [1], [we have a recent yasm and are x86_64])
       with_good_yasm=yes
+
+      if yasm -f elf64 -i src/ceph/src/ceph/src/erasure-code/isa/isa-l/include/ src/erasure-code/isa/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm.s -o /dev/null 2> /dev/null ; then
+         echo 'yasm can also build the isa-l stuff'
+	 with_better_yasm=yes
+      else
+         echo "yasm doesn't build the isa-l stuff"
+      fi
    fi
 else
    echo 'we do not have a modern/working yasm'
 fi
 AM_CONDITIONAL(WITH_GOOD_YASM_ELF64, test "$with_good_yasm" = "yes")
+AM_CONDITIONAL(WITH_BETTER_YASM_ELF64, test "$with_better_yasm" = "yes")
+
+# check for better yasm
 
 # Checks for compiler warning types
 
