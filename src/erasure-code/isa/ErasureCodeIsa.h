@@ -138,7 +138,7 @@ public:
   }
 
   // we implement an LRU cache for coding matrix - the cache size is sufficient up to (10,4) decodings
-  typedef typename std::pair<std::list<std::string>::iterator, bufferptr> lru_entry_t;
+  typedef std::pair<std::list<std::string>::iterator, bufferptr> lru_entry_t;
 
   std::map<std::string, lru_entry_t> g_decode_tbls_map;
   std::list<std::string> g_decode_tbls_lru;
