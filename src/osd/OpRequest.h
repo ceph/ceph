@@ -74,6 +74,10 @@ struct OpRequest : public TrackedOp {
 
   void _dump(utime_t now, Formatter *f) const;
 
+  bool has_feature(uint64_t f) const {
+    return request->get_connection()->has_feature(f);
+  }
+
 private:
   Message *request; /// the logical request we are tracking
   osd_reqid_t reqid;
