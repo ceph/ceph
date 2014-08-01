@@ -11,8 +11,9 @@ tasks:
       chance_pgnum_grow: 1
       chance_pgpnum_fix: 1
   - ceph-fuse:
+      client.0
   - workunit:
       clients:
-        all:
+        client.0
           - suites/iogen.sh
 
