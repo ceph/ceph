@@ -622,7 +622,7 @@ bin_DEBUGPROGRAMS += ceph_test_cls_rgw_log
 
 ceph_test_cls_rgw_opstate_SOURCES = test/test_rgw_admin_opstate.cc
 ceph_test_cls_rgw_opstate_LDADD = \
-	$(LIBRADOS) $(LIBRGW) $(CEPH_GLOBAL) \
+	$(LIBRGW) $(CEPH_GLOBAL) $(LIBRADOS) \
 	$(UNITTEST_LDADD) $(CRYPTO_LIBS) \
 	-lcurl -luuid -lexpat \
 	libcls_version_client.a libcls_log_client.a \
@@ -637,7 +637,7 @@ libradostest_la_SOURCES = \
 	test/librados/TestCase.cc
 noinst_LTLIBRARIES += libradostest.la
 libradostest_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-RADOS_TEST_LDADD = libradostest.la
+RADOS_TEST_LDADD = libradostest.la $(LIBCOMMON)
 
 libradosstripertest_la_SOURCES = test/libradosstriper/TestCase.cc
 noinst_LTLIBRARIES += libradosstripertest.la
@@ -657,7 +657,7 @@ bin_DEBUGPROGRAMS += ceph_test_librbd
 if LINUX
 # Force use of C++ linker with dummy.cc - LIBKRBD is a C++ library
 ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.c common/dummy.cc
-ceph_test_librbd_fsx_LDADD = $(LIBKRBD) $(LIBRBD) $(LIBRADOS)
+ceph_test_librbd_fsx_LDADD = $(LIBKRBD) $(LIBRBD) $(LIBRADOS) $(LIBCOMMON)
 ceph_test_librbd_fsx_CFLAGS = ${AM_CFLAGS} -Wno-format
 bin_DEBUGPROGRAMS += ceph_test_librbd_fsx
 endif
