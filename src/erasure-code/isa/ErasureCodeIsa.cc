@@ -310,7 +310,7 @@ ErasureCodeIsaDefault::put_decoding_table_to_cache(std::string &signature, unsig
   Mutex::Locker lock(g_decode_tbls_guard);
 
   // evt. shrink the LRU queue/map
-  if (g_decode_tbls_lru.size() >= g_decode_tbls_lru_length) {
+  if ((int)g_decode_tbls_lru.size() >= g_decode_tbls_lru_length) {
     dout(12) << "[ shrink lru   ] = " << signature << dendl;
     // reuse old buffer
     cachetable = g_decode_tbls_map[g_decode_tbls_lru.front()].second;
