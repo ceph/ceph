@@ -88,7 +88,10 @@ def connect(user_at_host, host_key=None, keep_alive=False,
         }
         for opt_name, arg_name in opts_to_args.items():
             if opt_name in opts:
-                connect_args[arg_name] = opts[opt_name]
+                value = opts[opt_name]
+                if arg_name == 'key_filename' and '~' in value:
+                    value = os.path.expanduser(value)
+                connect_args[arg_name] = value
 
     log.info(connect_args)
 
