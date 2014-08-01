@@ -105,6 +105,7 @@ unittest_erasure_code_plugin_jerasure_LDADD += -ldl
 endif
 check_PROGRAMS += unittest_erasure_code_plugin_jerasure
 
+if WITH_BETTER_YASM_ELF64
 unittest_erasure_code_isa_SOURCES = test/erasure-code/TestErasureCodeIsa.cc
 unittest_erasure_code_isa_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 unittest_erasure_code_isa_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL) .libs/libec_isa.la .libs/liberasure_code.la
@@ -121,6 +122,7 @@ if LINUX
 unittest_erasure_code_plugin_isa_LDADD += -ldl
 endif
 check_PROGRAMS += unittest_erasure_code_plugin_isa
+endif
 
 unittest_erasure_code_example_SOURCES = test/erasure-code/TestErasureCodeExample.cc 
 
