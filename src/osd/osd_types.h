@@ -1849,7 +1849,7 @@ inline ostream& operator<<(ostream& out, const pg_query_t& q) {
 class PGBackend;
 class ObjectModDesc {
   bool can_local_rollback;
-  bool stashed;
+  bool rollback_info_completed;
 public:
   class Visitor {
   public:
@@ -1869,22 +1869,22 @@ public:
     CREATE = 4,
     UPDATE_SNAPS = 5
   };
-  ObjectModDesc() : can_local_rollback(true), stashed(false) {}
+  ObjectModDesc() : can_local_rollback(true), rollback_info_completed(false) {}
   void claim(ObjectModDesc &other) {
     bl.clear();
     bl.claim(other.bl);
     can_local_rollback = other.can_local_rollback;
-    stashed = other.stashed;
+    rollback_info_completed = other.rollback_info_completed;
   }
   void claim_append(ObjectModDesc &other) {
-    if (!can_local_rollback || stashed)
+    if (!can_local_rollback || rollback_info_completed)
       return;
     if (!other.can_local_rollback) {
       mark_unrollbackable();
       return;
     }
     bl.claim_append(other.bl);
-    stashed = other.stashed;
+    rollback_info_completed = other.rollback_info_completed;
   }
   void swap(ObjectModDesc &other) {
     bl.swap(other.bl);
@@ -1893,16 +1893,16 @@ public:
     other.can_local_rollback = can_local_rollback;
     can_local_rollback = temp;
 
-    temp = other.stashed;
-    other.stashed = stashed;
-    stashed = temp;
+    temp = other.rollback_info_completed;
+    other.rollback_info_completed = rollback_info_completed;
+    rollback_info_completed = temp;
   }
   void append_id(ModID id) {
     uint8_t _id(id);
     ::encode(_id, bl);
   }
   void append(uint64_t old_size) {
-    if (!can_local_rollback || stashed)
+    if (!can_local_rollback || rollback_info_completed)
       return;
     ENCODE_START(1, 1, bl);
     append_id(APPEND);
@@ -1910,7 +1910,7 @@ public:
     ENCODE_FINISH(bl);
   }
   void setattrs(map<string, boost::optional<bufferlist> > &old_attrs) {
-    if (!can_local_rollback || stashed)
+    if (!can_local_rollback || rollback_info_completed)
       return;
     ENCODE_START(1, 1, bl);
     append_id(SETATTRS);
@@ -1918,24 +1918,25 @@ public:
     ENCODE_FINISH(bl);
   }
   bool rmobject(version_t deletion_version) {
-    if (!can_local_rollback || stashed)
+    if (!can_local_rollback || rollback_info_completed)
       return false;
     ENCODE_START(1, 1, bl);
     append_id(DELETE);
     ::encode(deletion_version, bl);
     ENCODE_FINISH(bl);
-    stashed = true;
+    rollback_info_completed = true;
     return true;
   }
   void create() {
-    if (!can_local_rollback || stashed)
+    if (!can_local_rollback || rollback_info_completed)
       return;
+    rollback_info_completed = true;
     ENCODE_START(1, 1, bl);
     append_id(CREATE);
     ENCODE_FINISH(bl);
   }
   void update_snaps(set<snapid_t> &old_snaps) {
-    if (!can_local_rollback || stashed)
+    if (!can_local_rollback || rollback_info_completed)
       return;
     ENCODE_START(1, 1, bl);
     append_id(UPDATE_SNAPS);

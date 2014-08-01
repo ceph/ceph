@@ -2462,7 +2462,7 @@ void ObjectModDesc::dump(Formatter *f) const
 {
   f->open_object_section("object_mod_desc");
   f->dump_bool("can_local_rollback", can_local_rollback);
-  f->dump_bool("stashed", stashed);
+  f->dump_bool("rollback_info_completed", rollback_info_completed);
   {
     f->open_array_section("ops");
     DumpVisitor vis(f);
@@ -2497,7 +2497,7 @@ void ObjectModDesc::encode(bufferlist &_bl) const
 {
   ENCODE_START(1, 1, _bl);
   ::encode(can_local_rollback, _bl);
-  ::encode(stashed, _bl);
+  ::encode(rollback_info_completed, _bl);
   ::encode(bl, _bl);
   ENCODE_FINISH(_bl);
 }
@@ -2505,7 +2505,7 @@ void ObjectModDesc::decode(bufferlist::iterator &_bl)
 {
   DECODE_START(1, _bl);
   ::decode(can_local_rollback, _bl);
-  ::decode(stashed, _bl);
+  ::decode(rollback_info_completed, _bl);
   ::decode(bl, _bl);
   DECODE_FINISH(_bl);
 }
