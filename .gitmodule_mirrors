@@ -7,3 +7,4 @@ src/mongoose git://apt-mirror.front.sepia.ceph.com/mongoose.git
 src/leveldb git://apt-mirror.front.sepia.ceph.com/leveldb.git
 src/erasure-code/jerasure/jerasure git://apt-mirror.front.sepia.ceph.com/jerasure.git
 src/erasure-code/jerasure/gf-complete git://apt-mirror.front.sepia.ceph.com/gf-complete.git
+src/rocksdb git://apt-mirror.front.sepia.ceph.com/rocksdb.git
