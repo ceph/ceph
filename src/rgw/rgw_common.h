@@ -863,7 +863,7 @@ struct req_state {
    string decoded_uri;
    string relative_uri;
    const char *length;
-   uint64_t content_length;
+   int64_t content_length;
    map<string, string> generic_attrs;
    struct rgw_err err;
    bool expect_cont;
