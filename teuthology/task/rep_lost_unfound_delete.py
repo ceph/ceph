@@ -14,6 +14,7 @@ def task(ctx, config):
 
     A pretty rigid cluseter is brought up andtested by this task
     """
+    POOL = 'unfounddel_pool'
     if config is None:
         config = {}
     assert isinstance(config, dict), \
@@ -34,6 +35,8 @@ def task(ctx, config):
     manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
     manager.wait_for_clean()
 
+    manager.create_pool(POOL)
+
     # something that is always there
     dummyfile = '/etc/fstab'
 
@@ -43,7 +46,7 @@ def task(ctx, config):
     manager.mark_out_osd(2)
 
     # kludge to make sure they get a map
-    rados(ctx, mon, ['-p', 'data', 'put', 'dummy', dummyfile])
+    rados(ctx, mon, ['-p', POOL, 'put', 'dummy', dummyfile])
 
     manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
     manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
@@ -51,9 +54,9 @@ def task(ctx, config):
 
     # create old objects
     for f in range(1, 10):
-        rados(ctx, mon, ['-p', 'data', 'put', 'existing_%d' % f, dummyfile])
-        rados(ctx, mon, ['-p', 'data', 'put', 'existed_%d' % f, dummyfile])
-        rados(ctx, mon, ['-p', 'data', 'rm', 'existed_%d' % f])
+        rados(ctx, mon, ['-p', POOL, 'put', 'existing_%d' % f, dummyfile])
+        rados(ctx, mon, ['-p', POOL, 'put', 'existed_%d' % f, dummyfile])
+        rados(ctx, mon, ['-p', POOL, 'rm', 'existed_%d' % f])
 
     # delay recovery, and make the pg log very long (to prevent backfill)
     manager.raw_cluster_cmd(
@@ -66,9 +69,9 @@ def task(ctx, config):
     manager.mark_down_osd(0)
     
     for f in range(1, 10):
-        rados(ctx, mon, ['-p', 'data', 'put', 'new_%d' % f, dummyfile])
-        rados(ctx, mon, ['-p', 'data', 'put', 'existed_%d' % f, dummyfile])
-        rados(ctx, mon, ['-p', 'data', 'put', 'existing_%d' % f, dummyfile])
+        rados(ctx, mon, ['-p', POOL, 'put', 'new_%d' % f, dummyfile])
+        rados(ctx, mon, ['-p', POOL, 'put', 'existed_%d' % f, dummyfile])
+        rados(ctx, mon, ['-p', POOL, 'put', 'existing_%d' % f, dummyfile])
 
     # bring osd.0 back up, let it peer, but don't replicate the new
     # objects...
@@ -139,11 +142,11 @@ def task(ctx, config):
 
     # verify result
     for f in range(1, 10):
-        err = rados(ctx, mon, ['-p', 'data', 'get', 'new_%d' % f, '-'])
+        err = rados(ctx, mon, ['-p', POOL, 'get', 'new_%d' % f, '-'])
         assert err
-        err = rados(ctx, mon, ['-p', 'data', 'get', 'existed_%d' % f, '-'])
+        err = rados(ctx, mon, ['-p', POOL, 'get', 'existed_%d' % f, '-'])
         assert err
-        err = rados(ctx, mon, ['-p', 'data', 'get', 'existing_%d' % f, '-'])
+        err = rados(ctx, mon, ['-p', POOL, 'get', 'existing_%d' % f, '-'])
         assert err
 
     # see if osd.1 can cope
