@@ -154,8 +154,7 @@ WRITE_CLASS_ENCODER(KVSuperblock)
 
 inline ostream& operator<<(ostream& out, const KVSuperblock& sb)
 {
-  return out << "sb(" << sb.compat_features << "): "
-             << sb.backend;
+  return out << "sb(" << sb.compat_features << " " << sb.backend << ")";
 }
 
 
