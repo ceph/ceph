@@ -1,0 +1,7 @@
+tasks:
+- install:
+   branch: firefly 
+- install.upgrade:
+   client.0:
+    branch: master
+- ceph:
