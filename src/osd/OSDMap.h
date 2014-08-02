@@ -380,6 +380,9 @@ public:
       erasure_code_profiles.find(name);
     return i != erasure_code_profiles.end();
   }
+  int get_erasure_code_profile_default(CephContext *cct,
+				       map<string,string> &profile_map,
+				       ostream *ss);
   void set_erasure_code_profile(const string &name,
 				const map<string,string> &profile) {
     erasure_code_profiles[name] = profile;
