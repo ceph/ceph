@@ -20,9 +20,10 @@ Upgrading
   affects developers and testers only.
 
 * mon-specific and osd-specific leveldb options have been removed.
-  From this point onward users should use `leveldb_' generic options and add
-  the options in the appropriate sections of their configuration files.
-  Monitors will still maintain the following monitor-specific defaults:
+  From this point onward users should use the `leveldb_*' generic
+  options and add the options in the appropriate sections of their
+  configuration files.  Monitors will still maintain the following
+  monitor-specific defaults:
 
     leveldb_write_buffer_size = 32*1024*1024  = 33554432  // 32MB
     leveldb_cache_size        = 512*1024*1204 = 536870912 // 512MB
