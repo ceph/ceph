@@ -14,5 +14,5 @@ tasks:
   - workunit:
       clients:
         client.0:
-          - suites/iogen.sh
+           - suites/iogen.sh
 
