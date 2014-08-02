@@ -447,6 +447,25 @@ public:
   eversion_t  last_complete_ondisk;  // last_complete that has committed.
   eversion_t  last_update_applied;
 
+
+  struct C_UpdateLastRollbackInfoTrimmedToApplied : Context {
+    PGRef pg;
+    epoch_t e;
+    eversion_t v;
+    C_UpdateLastRollbackInfoTrimmedToApplied(PG *pg, epoch_t e, eversion_t v)
+      : pg(pg), e(e), v(v) {}
+    void finish(int) {
+      pg->lock();
+      if (!pg->pg_has_reset_since(e)) {
+	pg->last_rollback_info_trimmed_to_applied = v;
+      }
+      pg->unlock();
+    }
+  };
+  // entries <= last_rollback_info_trimmed_to_applied have been trimmed,
+  // and the transaction has applied
+  eversion_t  last_rollback_info_trimmed_to_applied;
+
   // primary state
  public:
   pg_shard_t primary;
@@ -1156,6 +1175,9 @@ public:
   void scrub_clear_state();
   bool scrub_gather_replica_maps();
   void _scan_snaps(ScrubMap &map);
+  void _scan_rollback_obs(
+    const vector<ghobject_t> &rollback_obs,
+    ThreadPool::TPHandle &handle);
   void _request_scrub_map_classic(pg_shard_t replica, eversion_t version);
   void _request_scrub_map(pg_shard_t replica, eversion_t version,
                           hobject_t start, hobject_t end, bool deep);
@@ -2075,7 +2097,10 @@ public:
 
   void add_log_entry(pg_log_entry_t& e, bufferlist& log_bl);
   void append_log(
-    vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t,
+    vector<pg_log_entry_t>& logv,
+    eversion_t trim_to,
+    eversion_t trim_rollback_to,
+    ObjectStore::Transaction &t,
     bool transaction_applied = true);
   bool check_log_for_corruption(ObjectStore *store);
   void trim_peers();
