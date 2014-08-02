@@ -83,7 +83,8 @@ WRITE_CLASS_ENCODER(FSSuperblock)
 
 inline ostream& operator<<(ostream& out, const FSSuperblock& sb)
 {
-  return out << "sb(" << sb.compat_features << ")";
+  return out << "sb(" << sb.compat_features << "): "
+             << sb.omap_backend;
 }
 
 class FileStore : public JournalingObjectStore,

@@ -48,7 +48,6 @@
 #include "common/safe_io.h"
 #include "common/perf_counters.h"
 #include "common/sync_filesystem.h"
-#include "LevelDBStore.h"
 
 #ifdef HAVE_KINETIC
 #include "KineticStore.h"
@@ -70,6 +69,24 @@ const string KeyValueStore::OBJECT_OMAP_HEADER = "__OBJOMAP_HEADER__";
 const string KeyValueStore::OBJECT_OMAP_HEADER_KEY = "__OBJOMAP_HEADER__KEY_";
 const string KeyValueStore::COLLECTION = "__COLLECTION__";
 const string KeyValueStore::COLLECTION_ATTR = "__COLL_ATTR__";
+
+
+//Initial features in new superblock.
+static CompatSet get_kv_initial_compat_set() {
+  CompatSet::FeatureSet ceph_osd_feature_compat;
+  CompatSet::FeatureSet ceph_osd_feature_ro_compat;
+  CompatSet::FeatureSet ceph_osd_feature_incompat;
+  return CompatSet(ceph_osd_feature_compat, ceph_osd_feature_ro_compat,
+		   ceph_osd_feature_incompat);
+}
+
+//Features are added here that this KeyValueStore supports.
+static CompatSet get_kv_supported_compat_set() {
+  CompatSet compat =  get_kv_initial_compat_set();
+  //Any features here can be set in code, but not in initial superblock
+  return compat;
+}
+
 
 // ============== StripObjectMap Implementation =================
 
@@ -521,6 +538,8 @@ KeyValueStore::KeyValueStore(const std::string &base,
 
   g_ceph_context->get_perfcounters_collection()->add(perf_logger);
   g_ceph_context->_conf->add_observer(this);
+
+  superblock.compat_features = get_kv_initial_compat_set();
 }
 
 KeyValueStore::~KeyValueStore()
@@ -615,30 +634,26 @@ int KeyValueStore::mkfs()
     goto close_fsid_fd;
   }
 
+  // superblock
+  superblock.backend = g_conf->keyvaluestore_backend;
+  ret = write_superblock();
+  if (ret < 0) {
+    derr << "KeyValueStore::mkfs write_superblock() failed: "
+	 << cpp_strerror(ret) << dendl;
+    goto close_fsid_fd;
+  }
+
   {
-    KeyValueDB *store = KeyValueDB::create(g_ceph_context,
-					   g_conf->keyvaluestore_backend,
-					   current_fn.c_str());
-    if(! store)
+    ret = KeyValueDB::test_init(superblock.backend, current_fn.c_str());
+    if(ret < 0)
     {
-      derr << "KeyValueStore::mkfs backend type "
-	   << g_conf->keyvaluestore_backend << " error" << dendl;
+      derr << __func__  << " failed to create backend type "
+	   << g_conf->keyvaluestore_backend << "." << dendl;
       ret = -1;
       goto close_fsid_fd;
 
     }
-    store->init();
-    stringstream err;
-    if (store->create_and_open(err)) {
-      derr << "KeyValueStore::mkfs failed to create keyvaluestore backend: "
-           << err.str() << dendl;
-      ret = -1;
-      delete store;
-      goto close_fsid_fd;
-    } else {
-      delete store;
-      dout(1) << "keyvaluestore backend exists/created" << dendl;
-    }
+    dout(1) << g_conf->keyvaluestore_backend << " backend exists/created" << dendl;
   }
 
   dout(1) << "mkfs done in " << basedir << dendl;
@@ -706,6 +721,36 @@ bool KeyValueStore::test_mount_in_use()
   return inuse;
 }
 
+int KeyValueStore::write_superblock()
+{
+  bufferlist bl;
+  ::encode(superblock, bl);
+  return safe_write_file(basedir.c_str(), "superblock",
+      bl.c_str(), bl.length());
+}
+
+int KeyValueStore::read_superblock()
+{
+  bufferptr bp(PATH_MAX);
+  int ret = safe_read_file(basedir.c_str(), "superblock",
+      bp.c_str(), bp.length());
+  if (ret < 0) {
+    if (ret == -ENOENT) {
+      // If the file doesn't exist write initial CompatSet
+      return write_superblock();
+    }
+    return ret;
+  }
+
+  bufferlist bl;
+  bl.push_back(bp);
+  bufferlist::iterator i = bl.begin();
+  ::decode(superblock, i);
+  return 0;
+}
+
+
+
 int KeyValueStore::update_version_stamp()
 {
   return write_version_stamp();
@@ -744,6 +789,7 @@ int KeyValueStore::mount()
 {
   int ret;
   char buf[PATH_MAX];
+  CompatSet supported_compat_set = get_kv_supported_compat_set();
 
   dout(5) << "basedir " << basedir << dendl;
 
@@ -800,6 +846,20 @@ int KeyValueStore::mount()
       goto close_fsid_fd;
     }
   }
+  
+  ret = read_superblock();
+  if (ret < 0) {
+    ret = -EINVAL;
+    goto close_fsid_fd;
+  }
+
+  // Check if this KeyValueStore supports all the necessary features to mount
+  if (supported_compat_set.compare(superblock.compat_features) == -1) {
+    derr << "KeyValueStore::mount : Incompatible features set "
+	   << superblock.compat_features << dendl;
+    ret = -EINVAL;
+    goto close_fsid_fd;
+  }
 
   current_fd = ::open(current_fn.c_str(), O_RDONLY);
   if (current_fd < 0) {
@@ -814,12 +874,12 @@ int KeyValueStore::mount()
   {
 
     KeyValueDB *store = KeyValueDB::create(g_ceph_context,
-					   g_conf->keyvaluestore_backend,
+					   superblock.backend,
 					   current_fn.c_str());
-    if(! store)
+    if(!store)
     {
       derr << "KeyValueStore::mount backend type "
-	   << g_conf->keyvaluestore_backend << " error" << dendl;
+	   << superblock.backend << " error" << dendl;
       ret = -1;
       goto close_fsid_fd;
 
@@ -828,8 +888,8 @@ int KeyValueStore::mount()
     store->init();
     stringstream err;
     if (store->open(err)) {
-      derr << "KeyValueStore::mount Error initializing keyvaluestore backend: "
-           << err.str() << dendl;
+      derr << "KeyValueStore::mount Error initializing keyvaluestore backend "
+           << superblock.backend << ": " << err.str() << dendl;
       ret = -1;
       delete store;
       goto close_current_fd;
@@ -3038,4 +3098,45 @@ void KeyValueStore::handle_conf_change(const struct md_config_t *conf,
 
 void KeyValueStore::dump_transactions(list<ObjectStore::Transaction*>& ls, uint64_t seq, OpSequencer *osr)
 {
+}
+
+
+// -- KVSuperblock --
+
+void KVSuperblock::encode(bufferlist &bl) const
+{
+  ENCODE_START(1, 1, bl);
+  compat_features.encode(bl);
+  ::encode(backend, bl);
+  ENCODE_FINISH(bl);
+}
+
+void KVSuperblock::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  compat_features.decode(bl);
+  ::decode(backend, bl);
+  DECODE_FINISH(bl);
+}
+
+void KVSuperblock::dump(Formatter *f) const
+{
+  f->open_object_section("compat");
+  compat_features.dump(f);
+  f->dump_string("backend", backend);
+  f->close_section();
+}
+
+void KVSuperblock::generate_test_instances(list<KVSuperblock*>& o)
+{
+  KVSuperblock z;
+  o.push_back(new KVSuperblock(z));
+  CompatSet::FeatureSet feature_compat;
+  CompatSet::FeatureSet feature_ro_compat;
+  CompatSet::FeatureSet feature_incompat;
+  z.compat_features = CompatSet(feature_compat, feature_ro_compat,
+                                feature_incompat);
+  o.push_back(new KVSuperblock(z));
+  z.backend = "rocksdb";
+  o.push_back(new KVSuperblock(z));
 }
