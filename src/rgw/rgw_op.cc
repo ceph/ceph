@@ -1583,7 +1583,7 @@ static int put_data_and_throttle(RGWPutObjProcessor *processor, bufferlist& data
       hash = NULL; /* only calculate hash once */
     }
 
-    ret = processor->throttle_data(handle, false);
+    ret = processor->throttle_data(handle, need_to_wait);
     if (ret < 0)
       return ret;
 
