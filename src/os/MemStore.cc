@@ -1404,7 +1404,7 @@ int MemStore::_collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,
   r = 0;
  out:
   c->lock.put_write();
-  if (c != oc)
+  if (&(*c) != &(*oc))
     oc->lock.put_write();
   return r;
 }
