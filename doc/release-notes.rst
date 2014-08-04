@@ -466,6 +466,11 @@ Upgrading from v0.79
   always has.  This includes the C++ interface equivalents and AIO return
   values for the aio variants.
 
+* The radosgw init script (sysvinit) how requires that the 'host = ...' line in
+  ceph.conf, if present, match the short hostname (the output of 'hostname -s'),
+  not the fully qualified hostname or the (occasionally non-short) output of
+  'hostname'.  Failure to adjust this when upgrading from emperor or dumpling
+  may prevent the radosgw daemon from starting.
 
 Upgrading from v0.72 Emperor
 ----------------------------
@@ -1487,6 +1492,12 @@ Upgrading
 
 - The 'osd dump' command now dumps pool snaps as an array instead of an
   object.
+
+- The radosgw init script (sysvinit) how requires that the 'host = ...' line in
+  ceph.conf, if present, match the short hostname (the output of 'hostname -s'),
+  not the fully qualified hostname or the (occasionally non-short) output of
+  'hostname'.  Failure to adjust this when upgrading from emperor or dumpling
+  may prevent the radosgw daemon from starting.
 
 
 Notable Changes
