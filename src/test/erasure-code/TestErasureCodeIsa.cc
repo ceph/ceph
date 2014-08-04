@@ -607,6 +607,104 @@ TYPED_TEST(IsaErasureCodeTest, isa_cauchy_exhaustive)
   EXPECT_EQ(2516, Isa.get_tbls_lru_size());
 }
 
+TYPED_TEST(IsaErasureCodeTest, isa_xor_codec)
+{
+  // Test all possible failure scenarios and reconstruction cases for
+  // a (4,1) RAID-5 like configuration 
+
+  TypeParam Isa;
+  map<std::string, std::string> parameters;
+  parameters["k"] = "4";
+  parameters["m"] = "1";
+  Isa.init(parameters);
+
+  int k = 4;
+  int m = 1;
+
+#define LARGE_ENOUGH 2048
+  bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
+  in_ptr.zero();
+  in_ptr.set_length(0);
+  const char *payload =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  in_ptr.append(payload, strlen(payload));
+  bufferlist in;
+  in.push_front(in_ptr);
+
+  set<int>want_to_encode;
+
+  map<int, bufferlist> encoded;
+  for (int i = 0; i < (k + m); i++) {
+    want_to_encode.insert(i);
+  }
+
+
+  EXPECT_EQ(0, Isa.encode(want_to_encode,
+                          in,
+                          &encoded));
+
+  EXPECT_EQ((unsigned) (k + m), encoded.size());
+
+  unsigned length = encoded[0].length();
+
+  for (int i = 0; i < k; i++) {
+    EXPECT_EQ(0, strncmp(encoded[i].c_str(), in.c_str() + (i * length), length));
+  }
+
+  buffer::ptr enc[k + m];
+  // create buffers with a copy of the original data to be able to compare it after decoding
+  {
+    for (int i = 0; i < (k + m); i++) {
+      buffer::ptr newenc(buffer::create_page_aligned(LARGE_ENOUGH));
+      enc[i] = newenc;
+      enc[i].zero();
+      enc[i].set_length(0);
+      enc[i].append(encoded[i].c_str(), length);
+    }
+  }
+
+  // loop through all possible loss scenarios
+  bool err = true;
+  int cnt_cf = 0;
+
+  for (int l1 = 0; l1 < (k + m); l1++) {
+    map<int, bufferlist> degraded = encoded;
+    set<int> want_to_decode;
+    degraded.erase(l1);
+    want_to_decode.insert(l1);
+    err = DecodeAndVerify(Isa, degraded, want_to_decode, enc, length);
+    EXPECT_EQ(0, err);
+    cnt_cf++;
+    degraded[l1] = encoded[l1];
+    want_to_decode.erase(l1);
+  }
+  EXPECT_EQ(5, cnt_cf);
+}
+
 int main(int argc, char **argv)
 {
   vector<const char*> args;
