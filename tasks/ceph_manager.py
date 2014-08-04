@@ -7,6 +7,7 @@ import time
 import gevent
 import json
 import threading
+import os
 from teuthology import misc as teuthology
 from tasks.scrub import Scrubber
 
@@ -74,6 +75,7 @@ class Thrasher:
             self.revive_timeout += 120
         self.clean_wait = self.config.get('clean_wait', 0)
         self.minin = self.config.get("min_in", 3)
+        self.ceph_objectstore_tool = self.config.get('ceph_objectstore_tool', True)
 
         num_osds = self.in_osds + self.out_osds
         self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * num_osds
@@ -114,6 +116,42 @@ class Thrasher:
             self.ceph_manager.mark_down_osd(osd)
         if mark_out and osd in self.in_osds:
             self.out_osd(osd)
+        if self.ceph_objectstore_tool:
+            self.log("Testing ceph_objectstore_tool on down osd")
+            (remote,) = self.ceph_manager.ctx.cluster.only('osd.{o}'.format(o=osd)).remotes.iterkeys()
+            FSPATH = self.ceph_manager.get_filepath()
+            JPATH = os.path.join(FSPATH, "journal")
+            prefix = "sudo ceph_objectstore_tool --data-path {fpath} --journal-path {jpath} ".format(fpath=FSPATH, jpath=JPATH)
+            cmd = (prefix + "--op list-pgs").format(id=osd)
+            proc = remote.run(args=cmd, wait=True, check_status=True, stdout=StringIO())
+            if proc.exitstatus != 0:
+                self.log("Failed to get pg list for osd.{osd}".format(osd=osd))
+                return
+            pgs = proc.stdout.getvalue().split('\n')[:-1]
+            if len(pgs) == 0:
+                self.log("No PGs found for osd.{osd}".format(osd=osd))
+                return
+            pg = random.choice(pgs)
+            fpath = os.path.join(os.path.join(teuthology.get_testdir(self.ceph_manager.ctx), "data"), "exp.{pg}.{id}".format(pg=pg,id=osd))
+            # export
+            success = False
+            cmd = (prefix + "--op export --pgid {pg} --file {file}").format(id=osd, pg=pg, file=fpath)
+            proc = remote.run(args=cmd)
+            if proc.exitstatus == 0:
+                # remove
+                cmd = (prefix + "--op remove --pgid {pg}").format(id=osd, pg=pg)
+                proc = remote.run(args=cmd)
+                if proc.exitstatus == 0:
+                    # import
+                    cmd = (prefix + "--op import --file {file}").format(id=osd, file=fpath)
+                    remote.run(args=cmd)
+                    if proc.exitstatus == 0:
+                        success = True
+            cmd = "rm -f {file}".format(file=fpath)
+            remote.run(args=cmd)
+            if not success:
+                raise Exception("ceph_objectstore_tool: failure with status {ret}".format(ret=proc.exitstatus))
+
 
     def blackhole_kill_osd(self, osd=None):
         """
@@ -1467,3 +1505,9 @@ class CephManager:
         out = self.raw_cluster_cmd('mds', 'dump', '--format=json')
         j = json.loads(' '.join(out.splitlines()[1:]))
         return j
+
+    def get_filepath(self):
+        """
+        Return path to osd data with {id} needing to be replaced
+        """
+        return "/var/lib/ceph/osd/ceph-{id}"
