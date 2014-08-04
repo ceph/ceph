@@ -135,12 +135,10 @@
 
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
-#define dout_prefix _prefix(_dout, whoami, get_osdmap())
+#define dout_prefix _prefix(_dout, whoami, get_osdmap_epoch())
 
-static ostream& _prefix(std::ostream* _dout, int whoami, OSDMapRef osdmap) {
-  return *_dout << "osd." << whoami << " "
-		<< (osdmap ? osdmap->get_epoch():0)
-		<< " ";
+static ostream& _prefix(std::ostream* _dout, int whoami, epoch_t epoch) {
+  return *_dout << "osd." << whoami << " " << epoch << " ";
 }
 
 //Initial features in new superblock.
@@ -1610,7 +1608,7 @@ int OSD::peek_meta(ObjectStore *store, std::string& magic,
 
 
 #undef dout_prefix
-#define dout_prefix _prefix(_dout, whoami, osdmap)
+#define dout_prefix _prefix(_dout, whoami, get_osdmap_epoch())
 
 // cons/des
 
