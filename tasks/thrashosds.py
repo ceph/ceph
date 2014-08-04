@@ -94,6 +94,8 @@ def task(ctx, config):
     chance_test_map_discontinuity: (0) chance to test map discontinuity
     map_discontinuity_sleep_time: (40) time to wait for map trims
 
+    ceph_objectstore_tool: (true) whether to export/import a pg while an osd is down
+
     example:
 
     tasks:
