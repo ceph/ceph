@@ -602,6 +602,10 @@ COMMAND("osd reweight-by-utilization " \
 	"name=oload,type=CephInt,range=100,req=false", \
 	"reweight OSDs by utilization [overload-percentage-for-consideration, default 120]", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd reweight-by-pg " \
+	"name=oload,type=CephInt,range=100,req=false", \
+	"reweight OSDs by PG distribution [overload-percentage-for-consideration, default 120]", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd thrash " \
 	"name=num_epochs,type=CephInt,range=0", \
 	"thrash OSDs for <num_epochs>", "osd", "rw", "cli,rest")
