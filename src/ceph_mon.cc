@@ -100,24 +100,31 @@ int obtain_monmap(MonitorDBStore &store, bufferlist &bl)
   return -ENOENT;
 }
 
-int mon_data_exists(bool *r)
+int check_mon_data_exists()
 {
   string mon_data = g_conf->mon_data;
   struct stat buf;
   if (::stat(mon_data.c_str(), &buf)) {
-    if (errno == ENOENT) {
-      *r = false;
-    } else {
+    if (errno != ENOENT) {
       cerr << "stat(" << mon_data << ") " << cpp_strerror(errno) << std::endl;
-      return -errno;
     }
-  } else {
-    *r = true;
+    return -errno;
   }
   return 0;
 }
 
-int mon_data_empty(bool *r)
+/** Check whether **mon data** is empty.
+ *
+ * Being empty means mkfs has not been run and there's no monitor setup
+ * at **g_conf->mon_data**.
+ *
+ * If the directory g_conf->mon_data is not empty we will return -ENOTEMPTY.
+ * Otherwise we will return 0.  Any other negative returns will represent
+ * a failure to be handled by the caller.
+ *
+ * @return **0** on success, -ENOTEMPTY if not empty or **-errno** otherwise.
+ */
+int check_mon_data_empty()
 {
   string mon_data = g_conf->mon_data;
 
@@ -128,7 +135,6 @@ int mon_data_empty(bool *r)
   }
   char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
 
-  *r = false;
   int code = 0;
   struct dirent *de;
   errno = 0;
@@ -142,7 +148,7 @@ int mon_data_empty(bool *r)
     }
     if (string(".") != de->d_name &&
 	string("..") != de->d_name) {
-      *r = true;
+      code = -ENOTEMPTY;
       break;
     }
   }
@@ -150,14 +156,6 @@ int mon_data_empty(bool *r)
   ::closedir(dir);
 
   return code;
-}
-
-int mon_exists(bool *r)
-{
-  int code = mon_data_exists(r);
-  if (code || *r == false)
-    return code;
-  return mon_data_empty(r);
 }
 
 void usage()
@@ -290,27 +288,32 @@ int main(int argc, const char **argv)
     usage();
   }
 
-  bool exists;
-  if (mon_exists(&exists))
-    exit(1);
-
-  if (mkfs && exists) {
-    cerr << g_conf->mon_data << " already exists" << std::endl;
-    exit(0);
-  }
-
   // -- mkfs --
   if (mkfs) {
 
-    if (mon_data_exists(&exists))
-      exit(1);
-
-    if (!exists) {
+    int err = check_mon_data_exists();
+    if (err == -ENOENT) {
       if (::mkdir(g_conf->mon_data.c_str(), 0755)) {
 	cerr << "mkdir(" << g_conf->mon_data << ") : "
 	     << cpp_strerror(errno) << std::endl;
 	exit(1);
       }
+    } else if (err < 0) {
+      cerr << "error opening '" << g_conf->mon_data << "': "
+           << cpp_strerror(-err) << std::endl;
+      exit(-err);
+    }
+
+    err = check_mon_data_empty();
+    if (err == -ENOTEMPTY) {
+      // Mon may exist.  Let the user know and exit gracefully.
+      cerr << "'" << g_conf->mon_data << "' already exists and is not empty"
+           << ": monitor may already exist" << std::endl;
+      exit(0);
+    } else if (err < 0) {
+      cerr << "error checking if '" << g_conf->mon_data << "' is empty: "
+           << cpp_strerror(-err) << std::endl;
+      exit(-err);
     }
 
     // resolve public_network -> public_addr
@@ -425,6 +428,29 @@ int main(int argc, const char **argv)
     return 0;
   }
 
+  err = check_mon_data_exists();
+  if (err < 0 && err == -ENOENT) {
+    cerr << "monitor data directory at '" << g_conf->mon_data << "'"
+         << " does not exist: have you run 'mkfs'?" << std::endl;
+    exit(1);
+  } else if (err < 0) {
+    cerr << "error accessing monitor data directory at '"
+         << g_conf->mon_data << "': " << cpp_strerror(-err) << std::endl;
+    exit(1);
+  }
+
+  err = check_mon_data_empty();
+  if (err == 0) {
+    derr << "monitor data directory at '" << g_conf->mon_data
+      << "' is empty: have you run 'mkfs'?" << dendl;
+    exit(1);
+  } else if (err < 0 && err != -ENOTEMPTY) {
+    // we don't want an empty data dir by now
+    cerr << "error accessing '" << g_conf->mon_data << "': "
+         << cpp_strerror(-err) << std::endl;
+    exit(1);
+  }
+
   // we fork early to prevent leveldb's environment static state from
   // screwing us over
   Preforker prefork;
@@ -445,19 +471,26 @@ int main(int argc, const char **argv)
 
   Monitor::StoreConverter converter(g_conf->mon_data, store);
   if (store->open(std::cerr) < 0) {
+    int needs_conversion = converter.needs_conversion();
+    if (needs_conversion < 0) {
+      if (needs_conversion == -ENOENT) {
+        derr << "monitor data directory at '" << g_conf->mon_data
+             << "' is not empty but has no valid store nor legacy monitor"
+             << " store." << dendl;
+      } else {
+        derr << "found errors while validating legacy unconverted"
+             << " monitor store: " << cpp_strerror(needs_conversion) << dendl;
+      }
+      prefork.exit(1);
+    }
+
     int ret = store->create_and_open(std::cerr);
     if (ret < 0) {
       derr << "failed to create new leveldb store" << dendl;
       prefork.exit(1);
     }
 
-    ret = converter.needs_conversion();
-    if (ret < 0) {
-      derr << "found errors while validating legacy unconverted monitor store: "
-           << cpp_strerror(ret) << dendl;
-      prefork.exit(1);
-    }
-    if (ret > 0) {
+    if (needs_conversion > 0) {
       dout(0) << "converting monitor store, please do not interrupt..." << dendl;
       int r = converter.convert();
       if (r) {
