@@ -5,6 +5,9 @@ monkey.patch_all()
 
 import logging
 
+
+__version__ = '0.1.0'
+
 # We don't need to see log entries for each connection opened
 logging.getLogger('requests.packages.urllib3.connectionpool').setLevel(
     logging.WARN)

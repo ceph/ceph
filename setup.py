@@ -1,8 +1,14 @@
 from setuptools import setup, find_packages
+import re
+
+module_file = open("teuthology/__init__.py").read()
+metadata = dict(re.findall(r"__([a-z]+)__\s*=\s*['\"]([^'\"]*)['\"]", module_file))
+long_description = open('README.rst').read()
+
 
 setup(
     name='teuthology',
-    version='0.1.0',
+    version=metadata['version'],
     packages=find_packages(),
 
     author='Inktank Storage, Inc.',
@@ -11,6 +17,7 @@ setup(
     license='MIT',
     keywords='teuthology test ceph cluster',
     url='https://github.com/ceph/teuthology',
+    long_description=long_description,
     classifiers=[
         'Intended Audience :: Developers',
         'License :: OSI Approved :: MIT License',
