@@ -598,6 +598,7 @@ OPTION(rocksdb_disableDataSync, OPT_BOOL, true) // if true, data files are not s
 OPTION(rocksdb_disableWAL, OPT_BOOL, false)  // diable write ahead log
 OPTION(rocksdb_num_levels, OPT_INT, 0) // number of levels for this database
 OPTION(rocksdb_wal_dir, OPT_STR, "")  //  rocksdb write ahead log file
+OPTION(rocksdb_info_log_level, OPT_STR, "info")  // info log level : debug , info , warn, error, fatal
 
 /**
  * osd_client_op_priority and osd_recovery_op_priority adjust the relative
