@@ -2767,20 +2767,30 @@ PG *OSD::_create_lock_pg(
 
 PG *OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op)
 {
-  {
-    RWLock::RLocker l(pg_map_lock);
-    ceph::unordered_map<spg_t, PG*>::iterator i = pg_map.find(pgid);
-    if (i != pg_map.end())
-      return i->second;
-  }
-  RWLock::WLocker l(pg_map_lock);
+  Session *session = static_cast<Session*>(
+    op->get_req()->get_connection()->get_priv());
+  assert(session);
+  // get_pg_or_queue_for_pg is only called from the fast_dispatch path where
+  // the session_dispatch_lock must already be held.
+  assert(session->session_dispatch_lock.is_locked());
+  RWLock::RLocker l(pg_map_lock);
+
   ceph::unordered_map<spg_t, PG*>::iterator i = pg_map.find(pgid);
-  if (i != pg_map.end()) {
-    return i->second;
+  if (i == pg_map.end())
+    session->waiting_for_pg[pgid];
+
+  map<spg_t, list<OpRequestRef> >::iterator wlistiter =
+    session->waiting_for_pg.find(pgid);
+
+  PG *out = NULL;
+  if (wlistiter == session->waiting_for_pg.end()) {
+    out = i->second;
   } else {
-    waiting_for_pg[pgid].push_back(op);
-    return NULL;
+    wlistiter->second.push_back(op);
+    register_session_waiting_on_pg(session, pgid);
   }
+  session->put();
+  return out;
 }
 
 bool OSD::_have_pg(spg_t pgid)
@@ -5399,6 +5409,8 @@ bool OSD::ms_dispatch(Message *m)
 
 void OSD::dispatch_session_waiting(Session *session, OSDMapRef osdmap)
 {
+  assert(session->session_dispatch_lock.is_locked());
+  assert(session->osdmap == osdmap);
   for (list<OpRequestRef>::iterator i = session->waiting_on_map.begin();
        i != session->waiting_on_map.end() && dispatch_op_fast(*i, osdmap);
        session->waiting_on_map.erase(i++));
@@ -5408,6 +5420,85 @@ void OSD::dispatch_session_waiting(Session *session, OSDMapRef osdmap)
   } else {
     register_session_waiting_on_map(session);
   }
+}
+
+
+void OSD::update_waiting_for_pg(Session *session, OSDMapRef newmap)
+{
+  assert(session->session_dispatch_lock.is_locked());
+  if (!session->osdmap) {
+    session->osdmap = newmap;
+    return;
+  }
+
+  if (newmap->get_epoch() == session->osdmap->get_epoch())
+    return;
+
+  assert(newmap->get_epoch() > session->osdmap->get_epoch());
+
+  map<spg_t, list<OpRequestRef> > from;
+  from.swap(session->waiting_for_pg);
+
+  for (map<spg_t, list<OpRequestRef> >::iterator i = from.begin();
+       i != from.end();
+       from.erase(i++)) {
+    set<spg_t> children;
+    if (!newmap->have_pg_pool(i->first.pool())) {
+      // drop this wait list on the ground
+      i->second.clear();
+    } else {
+      assert(session->osdmap->have_pg_pool(i->first.pool()));
+      if (i->first.is_split(
+	    session->osdmap->get_pg_num(i->first.pool()),
+	    newmap->get_pg_num(i->first.pool()),
+	    &children)) {
+	for (set<spg_t>::iterator child = children.begin();
+	     child != children.end();
+	     ++child) {
+	  unsigned split_bits = child->get_split_bits(
+	    newmap->get_pg_num(child->pool()));
+	  list<OpRequestRef> child_ops;
+	  OSD::split_list(&i->second, &child_ops, child->ps(), split_bits);
+	  if (!child_ops.empty()) {
+	    session->waiting_for_pg[*child].swap(child_ops);
+	    register_session_waiting_on_pg(session, *child);
+	  }
+	}
+      }
+    }
+    if (i->second.empty()) {
+      clear_session_waiting_on_pg(session, i->first);
+    } else {
+      session->waiting_for_pg[i->first].swap(i->second);
+    }
+  }
+
+  session->osdmap = newmap;
+}
+
+void OSD::session_notify_pg_create(
+  Session *session, OSDMapRef osdmap, spg_t pgid)
+{
+  assert(session->session_dispatch_lock.is_locked());
+  update_waiting_for_pg(session, osdmap);
+  map<spg_t, list<OpRequestRef> >::iterator i =
+    session->waiting_for_pg.find(pgid);
+  if (i != session->waiting_for_pg.end()) {
+    session->waiting_on_map.splice(
+      session->waiting_on_map.end(),
+      i->second);
+    session->waiting_for_pg.erase(i);
+  }
+  clear_session_waiting_on_pg(session, pgid);
+}
+
+void OSD::session_notify_pg_cleared(
+  Session *session, OSDMapRef osdmap, spg_t pgid)
+{
+  assert(session->session_dispatch_lock.is_locked());
+  update_waiting_for_pg(session, osdmap);
+  session->waiting_for_pg.erase(pgid);
+  clear_session_waiting_on_pg(session, pgid);
 }
 
 void OSD::ms_fast_dispatch(Message *m)
@@ -5422,6 +5513,7 @@ void OSD::ms_fast_dispatch(Message *m)
   assert(session);
   {
     Mutex::Locker l(session->session_dispatch_lock);
+    update_waiting_for_pg(session, nextmap);
     session->waiting_on_map.push_back(op);
     dispatch_session_waiting(session, nextmap);
   }
@@ -6562,43 +6654,30 @@ void OSD::consume_map()
 
   dispatch_sessions_waiting_on_map();
 
-  // remove any PGs which we no longer host from the waiting_for_pg list
-  set<spg_t> pgs_to_delete;
-  {
-    RWLock::RLocker l(pg_map_lock);
-    map<spg_t, list<OpRequestRef> >::iterator p = waiting_for_pg.begin();
-    while (p != waiting_for_pg.end()) {
-      spg_t pgid = p->first;
+  // remove any PGs which we no longer host from the session waiting_for_pg lists
+  set<spg_t> pgs_to_check;
+  get_pgs_with_waiting_sessions(&pgs_to_check);
+  for (set<spg_t>::iterator p = pgs_to_check.begin();
+       p != pgs_to_check.end();
+       ++p) {
+    vector<int> acting;
+    int nrep = osdmap->pg_to_acting_osds(p->pgid, acting);
+    int role = osdmap->calc_pg_role(whoami, acting, nrep);
 
-      vector<int> acting;
-      int nrep = osdmap->pg_to_acting_osds(pgid.pgid, acting);
-      int role = osdmap->calc_pg_role(whoami, acting, nrep);
-
-      if (role < 0) {
-        pgs_to_delete.insert(p->first);
-        /* we can delete list contents under the read lock because
-         * nobody will be adding to them -- everybody is now using a map
-         * new enough that they will simply drop ops instead of adding
-         * them to the list. */
-        dout(10) << " discarding waiting ops for " << pgid << dendl;
-        while (!p->second.empty()) {
-          p->second.pop_front();
-        }
+    if (role < 0) {
+      set<Session*> concerned_sessions;
+      get_sessions_possibly_interested_in_pg(*p, &concerned_sessions);
+      for (set<Session*>::iterator i = concerned_sessions.begin();
+	   i != concerned_sessions.end();
+	   ++i) {
+	{
+	  Mutex::Locker l((*i)->session_dispatch_lock);
+	  session_notify_pg_cleared(*i, osdmap, *p);
+	}
+	(*i)->put();
       }
-      ++p;
     }
   }
-  {
-    RWLock::WLocker l(pg_map_lock);
-    for (set<spg_t>::iterator i = pgs_to_delete.begin();
-        i != pgs_to_delete.end();
-        ++i) {
-      map<spg_t, list<OpRequestRef> >::iterator p = waiting_for_pg.find(*i);
-      assert(p->second.empty());
-      waiting_for_pg.erase(p);
-    }
-  }
-
 
   // scan pg's
   {
