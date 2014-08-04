@@ -560,6 +560,7 @@ def build_matrix(path):
     if os.path.isfile(path):
         if path.endswith('.yaml'):
             return [(None, [path])]
+        return []
     if os.path.isdir(path):
         files = sorted(os.listdir(path))
         if '+' in files:
@@ -579,8 +580,9 @@ def build_matrix(path):
             sublists = []
             for fn in files:
                 raw = build_matrix(os.path.join(path, fn))
-                sublists.append([(combine_path(fn, item[0]), item[1])
-                                for item in raw])
+                if raw:
+                    sublists.append([(combine_path(fn, item[0]), item[1])
+                                     for item in raw])
             out = []
             if sublists:
                 for sublist in itertools.product(*sublists):
