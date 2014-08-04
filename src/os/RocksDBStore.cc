@@ -41,6 +41,7 @@ int RocksDBStore::init()
   options.num_levels = g_conf->rocksdb_num_levels;
   options.disableWAL = g_conf->rocksdb_disableWAL;
   options.wal_dir = g_conf->rocksdb_wal_dir;
+  options.info_log_level = g_conf->rocksdb_info_log_level;
   return 0;
 }
 
@@ -87,10 +88,12 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   ldoptions.error_if_exists = options.error_if_exists;
   ldoptions.paranoid_checks = options.paranoid_checks;
   ldoptions.create_if_missing = create_if_missing;
-
   if (options.log_file.length()) {
     rocksdb::Env *env = rocksdb::Env::Default();
     env->NewLogger(options.log_file, &ldoptions.info_log);
+    ldoptions.info_log->SetInfoLogLevel((rocksdb::InfoLogLevel)get_info_log_level(options.info_log_level));
+  } else {
+    ldoptions.info_log_level = (rocksdb::InfoLogLevel)get_info_log_level(options.info_log_level);
   }
   if(options.disableDataSync)
     ldoptions.disableDataSync = options.disableDataSync;
@@ -190,6 +193,22 @@ int RocksDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
   rocksdb::Status s = db->Write(woptions, _t->bat);
   logger->inc(l_rocksdb_txns);
   return s.ok() ? 0 : -1;
+}
+int RocksDBStore::get_info_log_level(string info_log_level)
+{
+  if (info_log_level == "debug") {
+    return 0;
+  } else if (info_log_level == "info") {
+    return 1;
+  } else if (info_log_level == "warn") {
+    return 2;
+  } else if (info_log_level == "error") {
+    return 3;
+  } else if (info_log_level == "fatal") {
+    return 4;
+  } else {
+    return 1;
+  }
 }
 
 RocksDBStore::RocksDBTransactionImpl::RocksDBTransactionImpl(RocksDBStore *_db)
