@@ -3,7 +3,7 @@
 /*
  * Ceph distributed storage system
  *
- * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2013, 2014 Cloudwatt <libre.licensing@cloudwatt.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -17,25 +17,36 @@
 #ifndef CEPH_ERASURE_CODE_JERASURE_H
 #define CEPH_ERASURE_CODE_JERASURE_H
 
-#include "erasure-code/ErasureCodeInterface.h"
+#include "erasure-code/ErasureCode.h"
 
-class ErasureCodeJerasure : public ErasureCodeInterface {
+class ErasureCodeJerasure : public ErasureCode {
 public:
   int k;
+  int DEFAULT_K;
   int m;
+  int DEFAULT_M;
   int w;
+  int DEFAULT_W;
   const char *technique;
   string ruleset_root;
   string ruleset_failure_domain;
+  bool per_chunk_alignment;
 
   ErasureCodeJerasure(const char *_technique) :
+    DEFAULT_K(2),
+    DEFAULT_M(1),
+    DEFAULT_W(8),
     technique(_technique),
     ruleset_root("default"),
-    ruleset_failure_domain("host")
+    ruleset_failure_domain("host"),
+    per_chunk_alignment(false)
   {}
 
   virtual ~ErasureCodeJerasure() {}
   
+  virtual int parse(const map<std::string,std::string> &parameters,
+		    ostream *ss);
+
   virtual int create_ruleset(const string &name,
 			     CrushWrapper &crush,
 			     ostream *ss) const;
@@ -50,21 +61,12 @@ public:
 
   virtual unsigned int get_chunk_size(unsigned int object_size) const;
 
-  virtual int minimum_to_decode(const set<int> &want_to_read,
-                                const set<int> &available_chunks,
-                                set<int> *minimum);
+  virtual int encode_chunks(const set<int> &want_to_encode,
+			    map<int, bufferlist> *encoded);
 
-  virtual int minimum_to_decode_with_cost(const set<int> &want_to_read,
-                                          const map<int, int> &available,
-                                          set<int> *minimum);
-
-  virtual int encode(const set<int> &want_to_encode,
-                     const bufferlist &in,
-                     map<int, bufferlist> *encoded);
-
-  virtual int decode(const set<int> &want_to_read,
-                     const map<int, bufferlist> &chunks,
-                     map<int, bufferlist> *decoded);
+  virtual int decode_chunks(const set<int> &want_to_read,
+			    const map<int, bufferlist> &chunks,
+			    map<int, bufferlist> *decoded);
 
   void init(const map<std::string,std::string> &parameters);
   virtual void jerasure_encode(char **data,
@@ -75,25 +77,22 @@ public:
                                char **coding,
                                int blocksize) = 0;
   virtual unsigned get_alignment() const = 0;
-  virtual void parse(const map<std::string,std::string> &parameters) = 0;
   virtual void prepare() = 0;
-  static int to_int(const std::string &name,
-                    const map<std::string,std::string> &parameters,
-                    int default_value);
   static bool is_prime(int value);
 };
 
 class ErasureCodeJerasureReedSolomonVandermonde : public ErasureCodeJerasure {
 public:
-  static const int DEFAULT_K = 7;
-  static const int DEFAULT_M = 3;
-  static const int DEFAULT_W = 8;
   int *matrix;
 
   ErasureCodeJerasureReedSolomonVandermonde() :
     ErasureCodeJerasure("reed_sol_van"),
     matrix(0)
-  { }
+  {
+    DEFAULT_K = 7;
+    DEFAULT_M = 3;
+    DEFAULT_W = 8;
+  }
   virtual ~ErasureCodeJerasureReedSolomonVandermonde() {
     if (matrix)
       free(matrix);
@@ -107,20 +106,22 @@ public:
                                char **coding,
                                int blocksize);
   virtual unsigned get_alignment() const;
-  virtual void parse(const map<std::string,std::string> &parameters);
+  virtual int parse(const map<std::string,std::string> &parameters,
+		    ostream *ss);
   virtual void prepare();
 };
 
 class ErasureCodeJerasureReedSolomonRAID6 : public ErasureCodeJerasure {
 public:
-  static const int DEFAULT_K = 7;
-  static const int DEFAULT_W = 8;
   int *matrix;
 
   ErasureCodeJerasureReedSolomonRAID6() :
     ErasureCodeJerasure("reed_sol_r6_op"),
     matrix(0)
-  { }
+  {
+    DEFAULT_K = 7;
+    DEFAULT_W = 8;
+  }
   virtual ~ErasureCodeJerasureReedSolomonRAID6() {
     if (matrix)
       free(matrix);
@@ -134,15 +135,13 @@ public:
                                char **coding,
                                int blocksize);
   virtual unsigned get_alignment() const;
-  virtual void parse(const map<std::string,std::string> &parameters);
+  virtual int parse(const map<std::string,std::string> &parameters,
+		    ostream *ss);
   virtual void prepare();
 };
 
 class ErasureCodeJerasureCauchy : public ErasureCodeJerasure {
 public:
-  static const int DEFAULT_K = 7;
-  static const int DEFAULT_M = 3;
-  static const int DEFAULT_W = 8;
   static const int DEFAULT_PACKETSIZE = 2048;
   int *bitmatrix;
   int **schedule;
@@ -152,7 +151,11 @@ public:
     ErasureCodeJerasure(technique),
     bitmatrix(0),
     schedule(0)
-  { }
+  {
+    DEFAULT_K = 7;
+    DEFAULT_M = 3;
+    DEFAULT_W = 8;
+  }
   virtual ~ErasureCodeJerasureCauchy() {
     if (bitmatrix)
       free(bitmatrix);
@@ -168,7 +171,8 @@ public:
                                char **coding,
                                int blocksize);
   virtual unsigned get_alignment() const;
-  virtual void parse(const map<std::string,std::string> &parameters);
+  virtual int parse(const map<std::string,std::string> &parameters,
+		    ostream *ss);
   void prepare_schedule(int *matrix);
 };
 
@@ -192,9 +196,6 @@ public:
 
 class ErasureCodeJerasureLiberation : public ErasureCodeJerasure {
 public:
-  static const int DEFAULT_K = 2;
-  static const int DEFAULT_M = 2;
-  static const int DEFAULT_W = 7;
   static const int DEFAULT_PACKETSIZE = 2048;
   int *bitmatrix;
   int **schedule;
@@ -204,7 +205,11 @@ public:
     ErasureCodeJerasure(technique),
     bitmatrix(0),
     schedule(0)
-  { }
+  {
+    DEFAULT_K = 2;
+    DEFAULT_M = 2;
+    DEFAULT_W = 7;
+  }
   virtual ~ErasureCodeJerasureLiberation();
 
   virtual void jerasure_encode(char **data,
@@ -215,7 +220,8 @@ public:
                                char **coding,
                                int blocksize);
   virtual unsigned get_alignment() const;
-  virtual void parse(const map<std::string,std::string> &parameters);
+  virtual int parse(const map<std::string,std::string> &parameters,
+		    ostream *ss);
   virtual void prepare();
 };
 
@@ -230,15 +236,16 @@ public:
 
 class ErasureCodeJerasureLiber8tion : public ErasureCodeJerasureLiberation {
 public:
-  static const int DEFAULT_K = 2;
-  static const int DEFAULT_M = 2;
-  static const int DEFAULT_W = 8;
-
   ErasureCodeJerasureLiber8tion() :
     ErasureCodeJerasureLiberation("liber8tion")
-  {}
+  {
+    DEFAULT_K = 2;
+    DEFAULT_M = 2;
+    DEFAULT_W = 8;
+  }
 
-  virtual void parse(const map<std::string,std::string> &parameters);
+  virtual int parse(const map<std::string,std::string> &parameters,
+		    ostream *ss);
   virtual void prepare();
 };
 

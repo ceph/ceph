@@ -1656,9 +1656,11 @@ void ECBackend::objects_read_async(
       sinfo.offset_len_to_stripe_bounds(i->first));
   }
 
+  const vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
   set<int> want_to_read;
   for (int i = 0; i < (int)ec_impl->get_data_chunk_count(); ++i) {
-    want_to_read.insert(i);
+    int chunk = (int)chunk_mapping.size() > i ? chunk_mapping[i] : i;
+    want_to_read.insert(chunk);
   }
   set<pg_shard_t> shards;
   int r = get_min_avail_to_read_shards(
