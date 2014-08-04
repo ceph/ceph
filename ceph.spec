@@ -100,7 +100,6 @@ Patch0005:      0005-Fix-runlevels-for-start-scripts.patch
 Patch0006:      0006-Drop-ceph-keys-into-install.patch
 Patch0007:      0007-add-syncfs-support-v3.patch
 Patch0008:      0008-Fixup-radosgw-daemon-init.patch
-Patch0009:      ceph-wip-8590.patch
 # Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
@@ -332,8 +331,6 @@ This package contains Ceph benchmarks and test tools.
 %patch0006 -p1
 %patch0007 -p1
 %patch0008 -p1
-%patch0009 -p1
-
 
 %build
 
