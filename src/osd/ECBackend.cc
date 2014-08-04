@@ -481,7 +481,6 @@ void ECBackend::continue_recovery_op(
 	recovery_ops.erase(op.hoid);
 	return;
       }
-      assert(r == 0);
       m->read(
 	this,
 	op.hoid,
