@@ -470,6 +470,7 @@ void ECBackend::continue_recovery_op(
       assert(!op.recovery_progress.data_complete);
       set<int> want(op.missing_on_shards.begin(), op.missing_on_shards.end());
       set<pg_shard_t> to_read;
+      uint64_t recovery_max_chunk = get_recovery_chunk_size();
       int r = get_min_avail_to_read_shards(
 	op.hoid, want, true, &to_read);
       if (r != 0) {
@@ -485,11 +486,11 @@ void ECBackend::continue_recovery_op(
 	this,
 	op.hoid,
 	op.recovery_progress.data_recovered_to,
-	get_recovery_chunk_size(),
+	recovery_max_chunk,
 	to_read,
 	op.recovery_progress.first);
       op.extent_requested = make_pair(op.recovery_progress.data_recovered_to,
-				      get_recovery_chunk_size());
+				      recovery_max_chunk);
       dout(10) << __func__ << ": IDLE return " << op << dendl;
       return;
     }
@@ -499,7 +500,7 @@ void ECBackend::continue_recovery_op(
       assert(op.returned_data.size());
       op.state = RecoveryOp::WRITING;
       ObjectRecoveryProgress after_progress = op.recovery_progress;
-      after_progress.data_recovered_to += get_recovery_chunk_size();
+      after_progress.data_recovered_to += op.extent_requested.second;
       after_progress.first = false;
       if (after_progress.data_recovered_to >= op.obc->obs.oi.size) {
 	after_progress.data_recovered_to =
