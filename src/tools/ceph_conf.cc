@@ -206,6 +206,7 @@ int main(int argc, const char **argv)
     }
   }
 
+  g_ceph_context->_log->flush();
   if (action == "help") {
     usage();
     exit(0);
