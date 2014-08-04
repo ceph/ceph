@@ -204,7 +204,9 @@ void SimpleMessenger::reaper_entry()
   ldout(cct,10) << "reaper_entry start" << dendl;
   lock.Lock();
   while (!reaper_stop) {
-    reaper();
+    reaper();  // may drop and retake the lock
+    if (reaper_stop)
+      break;
     reaper_cond.Wait(lock);
   }
   lock.Unlock();
@@ -236,7 +238,14 @@ void SimpleMessenger::reaper()
     p->unregister_pipe();
     assert(pipes.count(p));
     pipes.erase(p);
+
+    // drop msgr lock while joining thread; the delay through could be
+    // trying to fast dispatch, preventing it from joining without
+    // blocking and deadlocking.
+    lock.Unlock();
     p->join();
+    lock.Lock();
+
     if (p->sd >= 0)
       ::close(p->sd);
     ldout(cct,10) << "reaper reaped pipe " << p << " " << p->get_peer_addr() << dendl;
