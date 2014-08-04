@@ -3,8 +3,8 @@ import docopt
 import teuthology.suite
 
 doc = """
-usage: teuthology-suite [-h]
-       teuthology-suite  --suite <suite> [options] [<config_yaml>...]
+usage: teuthology-suite --help
+       teuthology-suite --suite <suite> [options] [<config_yaml>...]
 
 Run a suite of ceph integration tests. A suite is a directory containing
 facets. A facet is a directory containing config snippets. Running a suite
