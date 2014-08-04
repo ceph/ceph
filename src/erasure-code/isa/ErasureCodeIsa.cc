@@ -248,8 +248,13 @@ ErasureCodeIsaDefault::isa_encode(char **data,
                                   char **coding,
                                   int blocksize)
 {
-  ec_encode_data(blocksize, k, m, g_encode_tbls,
-                 (unsigned char**) data, (unsigned char**) coding);
+  
+  if (m==1)
+    // single parity stripe
+    region_xor( (unsigned char**) data, (unsigned char*) coding[0], k, blocksize );
+  else
+    ec_encode_data(blocksize, k, m, g_encode_tbls,
+		   (unsigned char**) data, (unsigned char**) coding);
 }
 
 // -----------------------------------------------------------------------------
@@ -381,6 +386,15 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
       }
     }
   }
+
+  if (m==1) {
+    // single parity decoding
+    assert (1 == nerrs);
+    dout(20) << "isa_decode: reconstruct using region xor [" << erasures[0] << "]" << dendl;
+    region_xor(recover_source, recover_target[0], k, blocksize);
+    return 0;
+  }
+
 
   if ((matrixtype == kVandermonde) &&
       (nerrs == 1) &&
