@@ -1374,6 +1374,8 @@ struct pg_stat_t {
   vector<int> up, acting;
   epoch_t mapping_epoch;
 
+  vector<int> blocked_by;  ///< osds on which the pg is blocked
+
   utime_t last_became_active;
 
   /// true if num_objects_dirty is not accurate (because it was not
