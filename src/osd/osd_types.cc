@@ -1632,6 +1632,11 @@ void pg_stat_t::dump(Formatter *f) const
   for (vector<int>::const_iterator p = acting.begin(); p != acting.end(); ++p)
     f->dump_int("osd", *p);
   f->close_section();
+  f->open_array_section("blocked_by");
+  for (vector<int>::const_iterator p = blocked_by.begin();
+       p != blocked_by.end(); ++p)
+    f->dump_int("osd", *p);
+  f->close_section();
   f->dump_int("up_primary", up_primary);
   f->dump_int("acting_primary", acting_primary);
 }
@@ -1653,7 +1658,7 @@ void pg_stat_t::dump_brief(Formatter *f) const
 
 void pg_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(17, 8, bl);
+  ENCODE_START(18, 8, bl);
   ::encode(version, bl);
   ::encode(reported_seq, bl);
   ::encode(reported_epoch, bl);
@@ -1687,12 +1692,13 @@ void pg_stat_t::encode(bufferlist &bl) const
   ::encode(acting_primary, bl);
   ::encode(omap_stats_invalid, bl);
   ::encode(hitset_stats_invalid, bl);
+  ::encode(blocked_by, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_stat_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(17, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(18, 8, 8, bl);
   ::decode(version, bl);
   ::decode(reported_seq, bl);
   ::decode(reported_epoch, bl);
@@ -1800,6 +1806,11 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
     // encoder may not have supported num_objects_hit_set_archive accounting.
     hitset_stats_invalid = true;
   }
+  if (struct_v >= 18) {
+    ::decode(blocked_by, bl);
+  } else {
+    blocked_by.clear();
+  }
   DECODE_FINISH(bl);
 }
 
@@ -1844,6 +1855,8 @@ void pg_stat_t::generate_test_instances(list<pg_stat_t*>& o)
   a.up_primary = 124;
   a.acting.push_back(124);
   a.acting_primary = 124;
+  a.blocked_by.push_back(155);
+  a.blocked_by.push_back(156);
   o.push_back(new pg_stat_t(a));
 }
 
