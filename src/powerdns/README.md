@@ -49,3 +49,13 @@ Should return something like:
 }
 
 ## WSGI
+You can run this backend directly behind an Apache server with mod_wsgi
+
+    WSGIScriptAlias / /var/www/pdns-backend-rgw.py
+
+Placing that in your virtualhost should be sufficient.
+
+Afterwards point PowerDNS to localhost on port 80:
+
+launch=remote
+remote-connection-string=http:url=http://localhost/dns

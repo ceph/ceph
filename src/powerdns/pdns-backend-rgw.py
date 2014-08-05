@@ -277,3 +277,7 @@ app.debug = config['debug']
 # Only run the App if this script is invoked from a Shell
 if __name__ == '__main__':
     app.run(host=config['listen']['addr'], port=config['listen']['port'])
+
+# Otherwise provide a variable called 'application' for mod_wsgi
+else:
+    application = app
