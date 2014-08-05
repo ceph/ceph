@@ -27,11 +27,13 @@ public:
   const char *technique;
   string ruleset_root;
   string ruleset_failure_domain;
+  bool per_chunk_alignment;
 
   ErasureCodeJerasure(const char *_technique) :
     technique(_technique),
     ruleset_root("default"),
-    ruleset_failure_domain("host")
+    ruleset_failure_domain("host"),
+    per_chunk_alignment(false)
   {}
 
   virtual ~ErasureCodeJerasure() {}
@@ -80,6 +82,9 @@ public:
   static int to_int(const std::string &name,
                     const map<std::string,std::string> &parameters,
                     int default_value);
+  static bool to_bool(const std::string &name,
+		      const map<std::string,std::string> &parameters,
+		      bool default_value);
   static bool is_prime(int value);
 };
 
