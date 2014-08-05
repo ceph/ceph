@@ -61,9 +61,10 @@ For example::
 
 To create a pool, execute:: 
 
-	ceph osd pool create {pool-name} {pg-num} [{pgp-num}] [replicated]
+	ceph osd pool create {pool-name} {pg-num} [{pgp-num}] [replicated] \
+             [crush-ruleset-name]
 	ceph osd pool create {pool-name} {pg-num}  {pgp-num}   erasure \
-             {erasure-code-profile}
+             [erasure-code-profile] [crush-ruleset-name]
 
 Where: 
 
@@ -107,7 +108,18 @@ Where:
 :Required: No. 
 :Default: replicated
 
-``{erasure-code-profile=profile}``
+``[crush-ruleset-name]``
+
+:Description: The name of the crush ruleset for this pool. If specified ruleset doesn't
+              exists, the creation of **replicated** pool will fail with -ENOENT. But 
+              **replicated** pool will create a new erasure ruleset with specified name.
+
+:Type: String
+:Required: No. 
+:Default: "erasure-code" for **erasure pool**. Pick up Ceph configuraion variable
+**osd_pool_default_crush_replicated_ruleset** for **replicated** pool.
+
+``[erasure-code-profile=profile]``
 
 :Description: For **erasure** pools only. Use the erasure code
               **profile**. It must be an existing profile as
