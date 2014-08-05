@@ -2821,6 +2821,8 @@ public:
     inode->get();
   }
   void finish(int r) {
+    // _async_invalidate takes the lock when it needs to, call this back from outside of lock.
+    assert(!client->client_lock.is_locked_by_me());
     client->_async_invalidate(inode, offset, length, keep_caps);
   }
 };
@@ -2889,6 +2891,9 @@ public:
     in->get();
   }
   void finish(int) {
+    // I am used via ObjectCacher, which is responsible for taking
+    // the client lock before calling me back.
+    assert(client->client_lock.is_locked_by_me());
     client->put_inode(in);
   }
 };
@@ -3786,6 +3791,8 @@ public:
 	ino.ino = inodeno_t();
   }
   void finish(int r) {
+    // _async_dentry_invalidate is responsible for its own locking
+    assert(!client->client_lock.is_locked_by_me());
     client->_async_dentry_invalidate(dirino, ino, name);
   }
 };
@@ -4141,6 +4148,8 @@ class C_C_Tick : public Context {
 public:
   C_C_Tick(Client *c) : client(c) {}
   void finish(int r) {
+    // Called back via Timer, which takes client_lock for us
+    assert(client->client_lock.is_locked_by_me());
     client->tick();
   }
 };
@@ -6449,12 +6458,16 @@ public:
     in->get();
   }
   void finish(int) {
+    // Called back by Filter, then Client is responsible for taking its own lock
+    assert(!cl->client_lock.is_locked_by_me()); 
     cl->sync_write_commit(in);
   }
 };
 
 void Client::sync_write_commit(Inode *in)
 {
+  Mutex::Locker l(client_lock);
+
   assert(unsafe_sync_write > 0);
   unsafe_sync_write--;
 
@@ -6626,7 +6639,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
     r = filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
 			   offset, size, bl, ceph_clock_now(cct), 0,
 			   in->truncate_size, in->truncate_seq,
-			   onfinish, onsafe);
+			   onfinish, new C_OnFinisher(onsafe, &objecter_finisher));
     if (r < 0)
       goto done;
 
@@ -8704,7 +8717,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
                       in->snaprealm->get_snap_context(),
                       offset, length,
                       ceph_clock_now(cct),
-                      0, true, onfinish, onsafe);
+                      0, true, onfinish, new C_OnFinisher(onsafe, &objecter_finisher));
       if (r < 0)
         goto done;
 

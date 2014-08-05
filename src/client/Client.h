@@ -373,6 +373,8 @@ protected:
   friend class C_Client_CacheInvalidate;  // calls ino_invalidate_cb
   friend class C_Client_DentryInvalidate;  // calls dentry_invalidate_cb
   friend class C_Block_Sync; // Calls block map and protected helpers
+  friend class C_C_Tick; // Asserts on client_lock
+  friend class C_Client_SyncCommit; // Asserts on client_lock
 
   //int get_cache_size() { return lru.lru_get_size(); }
   //void set_cache_size(int m) { lru.lru_set_max(m); }
