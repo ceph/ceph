@@ -390,6 +390,10 @@ public:
     Mutex::Locker l(publish_lock);
     return osdmap;
   }
+  epoch_t get_osdmap_epoch() {
+    Mutex::Locker l(publish_lock);
+    return osdmap ? osdmap->get_epoch() : 0;
+  }
   void publish_map(OSDMapRef map) {
     Mutex::Locker l(publish_lock);
     osdmap = map;
@@ -1531,6 +1535,10 @@ private:
   OSDMapRef get_osdmap() {
     return osdmap;
   }
+  epoch_t get_osdmap_epoch() {
+    return osdmap ? osdmap->get_epoch() : 0;
+  }
+
   utime_t         had_map_since;
   RWLock          map_lock;
   list<OpRequestRef>  waiting_for_osdmap;
