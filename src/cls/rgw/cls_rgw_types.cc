@@ -41,6 +41,7 @@ void rgw_bucket_dir_entry_meta::dump(Formatter *f) const
   f->dump_string("owner", owner);
   f->dump_string("owner_display_name", owner_display_name);
   f->dump_string("content_type", content_type);
+  f->dump_unsigned("accounted_size", accounted_size);
 }
 
 void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& o)

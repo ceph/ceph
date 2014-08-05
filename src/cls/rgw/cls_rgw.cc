@@ -300,8 +300,8 @@ static int check_index(cls_method_context_t hctx, struct rgw_bucket_dir_header *
       }
       struct rgw_bucket_category_stats& stats = calc_header->stats[entry.meta.category];
       stats.num_entries++;
-      stats.total_size += entry.meta.size;
-      stats.total_size_rounded += get_rounded_size(entry.meta.size);
+      stats.total_size += entry.meta.accounted_size;
+      stats.total_size_rounded += get_rounded_size(entry.meta.accounted_size);
 
       start_obj = kiter->first;
     }
@@ -494,8 +494,8 @@ static void unaccount_entry(struct rgw_bucket_dir_header& header, struct rgw_buc
 {
   struct rgw_bucket_category_stats& stats = header.stats[entry.meta.category];
   stats.num_entries--;
-  stats.total_size -= entry.meta.size;
-  stats.total_size_rounded -= get_rounded_size(entry.meta.size);
+  stats.total_size -= entry.meta.accounted_size;
+  stats.total_size_rounded -= get_rounded_size(entry.meta.accounted_size);
 }
 
 static int read_index_entry(cls_method_context_t hctx, string& name, struct rgw_bucket_dir_entry *entry)
@@ -637,8 +637,8 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       entry.exists = true;
       entry.tag = op.tag;
       stats.num_entries++;
-      stats.total_size += meta.size;
-      stats.total_size_rounded += get_rounded_size(meta.size);
+      stats.total_size += meta.accounted_size;
+      stats.total_size_rounded += get_rounded_size(meta.accounted_size);
       bufferlist new_key_bl;
       ::encode(entry, new_key_bl);
       int ret = cls_cxx_map_set_val(hctx, op.name, &new_key_bl);
@@ -757,8 +757,8 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
         struct rgw_bucket_category_stats& old_stats = header.stats[cur_disk.meta.category];
         CLS_LOG(10, "total_entries: %" PRId64 " -> %" PRId64 "\n", old_stats.num_entries, old_stats.num_entries - 1);
         old_stats.num_entries--;
-        old_stats.total_size -= cur_disk.meta.size;
-        old_stats.total_size_rounded -= get_rounded_size(cur_disk.meta.size);
+        old_stats.total_size -= cur_disk.meta.accounted_size;
+        old_stats.total_size_rounded -= get_rounded_size(cur_disk.meta.accounted_size);
         header_changed = true;
       }
       struct rgw_bucket_category_stats& stats =
@@ -773,8 +773,8 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
       case CEPH_RGW_UPDATE:
         CLS_LOG(10, "CEPH_RGW_UPDATE name=%s total_entries: %" PRId64 " -> %" PRId64 "\n", cur_change.name.c_str(), stats.num_entries, stats.num_entries + 1);
         stats.num_entries++;
-        stats.total_size += cur_change.meta.size;
-        stats.total_size_rounded += get_rounded_size(cur_change.meta.size);
+        stats.total_size += cur_change.meta.accounted_size;
+        stats.total_size_rounded += get_rounded_size(cur_change.meta.accounted_size);
         header_changed = true;
         cur_change.index_ver = header.ver;
         bufferlist cur_state_bl;
