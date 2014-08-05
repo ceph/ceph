@@ -635,7 +635,7 @@ void OSDMonitor::share_map_with_random_osd()
   dout(10) << "committed, telling random " << s->inst << " all about it" << dendl;
   // whatev, they'll request more if they need it
   MOSDMap *m = build_incremental(osdmap.get_epoch() - 1, osdmap.get_epoch());
-  mon->messenger->send_message(m, s->inst);
+  s->con->send_message(m);
 }
 
 version_t OSDMonitor::get_trim_to()
@@ -1800,8 +1800,7 @@ void OSDMonitor::check_sub(Subscription *sub)
     if (sub->next >= 1)
       send_incremental(sub->next, sub->session->inst, sub->incremental_onetime);
     else
-      mon->messenger->send_message(build_latest_full(),
-				   sub->session->inst);
+      sub->session->con->send_message(build_latest_full());
     if (sub->onetime)
       mon->session_map.remove_sub(sub);
     else

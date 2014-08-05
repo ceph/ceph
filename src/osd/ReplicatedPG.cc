@@ -1728,7 +1728,7 @@ void ReplicatedPG::do_cache_redirect(OpRequestRef op, ObjectContextRef obc)
   reply->set_redirect(redir);
   dout(10) << "sending redirect to pool " << pool.info.tier_of << " for op "
 	   << op << dendl;
-  m->get_connection()->get_messenger()->send_message(reply, m->get_connection());
+  m->get_connection()->send_message(reply);
   return;
 }
 

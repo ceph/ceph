@@ -232,7 +232,7 @@ void Paxos::handle_collect(MMonPaxos *collect)
   }
 
   // send reply
-  mon->messenger->send_message(last, collect->get_source_inst());
+  collect->get_connection()->send_message(last);
   collect->put();
 }
 
@@ -660,7 +660,7 @@ void Paxos::handle_begin(MMonPaxos *begin)
 				    ceph_clock_now(g_ceph_context));
   accept->pn = accepted_pn;
   accept->last_committed = last_committed;
-  mon->messenger->send_message(accept, begin->get_source_inst());
+  begin->get_connection()->send_message(accept);
   
   begin->put();
 }
@@ -966,7 +966,7 @@ void Paxos::handle_lease(MMonPaxos *lease)
   ack->last_committed = last_committed;
   ack->first_committed = first_committed;
   ack->lease_timestamp = ceph_clock_now(g_ceph_context);
-  mon->messenger->send_message(ack, lease->get_source_inst());
+  lease->get_connection()->send_message(ack);
 
   // (re)set timeout event.
   reset_lease_timeout();

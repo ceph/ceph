@@ -365,7 +365,7 @@ void Elector::nak_old_peer(MMonElection *m)
 					   mon->monmap);
     reply->quorum_features = required_features;
     mon->features.encode(reply->sharing_bl);
-    mon->messenger->send_message(reply, m->get_connection());
+    m->get_connection()->send_message(reply);
   }
   m->put();
 }
