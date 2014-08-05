@@ -1512,7 +1512,7 @@ int main(int argc, char **argv)
     ("pgid", po::value<string>(&pgidstr),
      "PG id, mandatory except for import, list-lost, fix-lost")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, export, import, list, list-lost, fix-lost]")
+     "Arg is one of [info, log, remove, export, import, list, list-lost, fix-lost, list-pgs]")
     ("file", po::value<string>(&file),
      "path of file to export or import")
     ("debug", "Enable diagnostic output to stderr")
@@ -1573,7 +1573,7 @@ int main(int argc, char **argv)
     usage(desc);
   }
   if (op != "import" && op != "list-lost" && op != "fix-lost"
-      && !vm.count("pgid")) {
+      && op != "list-pgs" && !vm.count("pgid")) {
     cerr << "Must provide pgid" << std::endl;
     usage(desc);
   }
@@ -1916,6 +1916,10 @@ int main(int argc, char **argv)
     goto out;
   }
 
+  if (debug && op == "list-pgs")
+    cout << "Performing list-pgs operation" << std::endl;
+
+  // Find pg
   for (it = ls.begin(); it != ls.end(); ++it) {
     snapid_t snap;
     spg_t tmppgid;
@@ -1928,7 +1932,7 @@ int main(int argc, char **argv)
       continue;
     }
 
-    if (tmppgid != pgid) {
+    if (op != "list-pgs" && tmppgid != pgid) {
       continue;
     }
     if (snap != CEPH_NOSNAP && debug) {
@@ -1937,8 +1941,17 @@ int main(int argc, char **argv)
       continue;
     }
 
-    //Found!
-    break;
+    if (op != "list-pgs") {
+      //Found!
+      break;
+    }
+
+    cout << tmppgid << std::endl;
+  }
+
+  if (op == "list-pgs") {
+    ret = 0;
+    goto out;
   }
 
   epoch_t map_epoch;
@@ -2166,7 +2179,7 @@ int main(int argc, char **argv)
       formatter->flush(cout);
       cout << std::endl;
     } else {
-      cerr << "Must provide --op (info, log, remove, export, import, list, list-lost, fix-lost)"
+      cerr << "Must provide --op (info, log, remove, export, import, list, list-lost, fix-lost, list-pgs)"
 	<< std::endl;
       usage(desc);
     }
