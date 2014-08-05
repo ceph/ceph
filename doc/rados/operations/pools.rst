@@ -5,7 +5,7 @@
 When you first deploy a cluster without creating a pool, Ceph uses the default
 pools for storing data. A pool provides you with:
 
-- **Resilience**: You can set how many OSD are allowed to fail without loosing data.
+- **Resilience**: You can set how many OSD are allowed to fail without losing data.
   For replicated pools, it is the desired number of copies/replicas of an object. 
   A typical configuration stores an object and one additional copy
   (i.e., ``size = 2``), but you can determine the number of copies/replicas.
