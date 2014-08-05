@@ -5,6 +5,8 @@ Subject: [PATCH] Drop ceph keys into install
 Merge distro patches to git.
 
 This was remove-ceph-drop.diff
+
+(cherry picked from commit fab58b206e9244acbd2253194f7ec6b4227a6d04)
 ---
  Makefile.am | 7 +++++++
  1 file changed, 7 insertions(+)

@@ -5,13 +5,15 @@ Subject: [PATCH] Rcfiles: remove from runlevel 2
 Merge distro patches to git.
 
 This was rcfiles-remove-init-2.patch
+
+(cherry picked from commit ab16e3056e8fc7f26855ca0c58c88ed716443dc1)
 ---
  src/init-ceph.in | 2 +-
  src/init-radosgw | 2 +-
  2 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/src/init-ceph.in b/src/init-ceph.in
-index 846bd57..9ccf474 100644
+index 1effb56..fb997c1 100644
 --- a/src/init-ceph.in
 +++ b/src/init-ceph.in
 @@ -4,7 +4,7 @@

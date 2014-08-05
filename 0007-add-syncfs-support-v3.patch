@@ -5,6 +5,8 @@ Subject: [PATCH] add syncfs support v3
 Merge distro patches into git.
 
 This was ceph-add-syncfs-support.v3.diff
+
+(cherry picked from commit 4f977492d8ff1ee8eb1966c2b5444762b8ddaca0)
 ---
  src/common/sync_filesystem.h | 12 ++++++++++++
  1 file changed, 12 insertions(+)

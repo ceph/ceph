@@ -5,12 +5,14 @@ Subject: [PATCH] init-ceph: add xfs support
 Merge distro patches to git.
 
 This was ceph-init-ceph.add.xfs.support.diff
+
+(cherry picked from commit b61e60686ad17bd0e842c9f87040344b70d04a59)
 ---
  src/init-ceph.in | 8 ++++++++
  1 file changed, 8 insertions(+)
 
 diff --git a/src/init-ceph.in b/src/init-ceph.in
-index 9ccf474..7cb2a39 100644
+index fb997c1..ffbeda3 100644
 --- a/src/init-ceph.in
 +++ b/src/init-ceph.in
 @@ -139,12 +139,20 @@ case $1 in
