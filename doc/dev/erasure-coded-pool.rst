@@ -103,7 +103,7 @@ Display the default erasure code profile::
   plugin=jerasure
   technique=reed_sol_van
 
-Create a profile to set the data to be distributed on six OSDs (k+m=6) and sustain the loss of three OSDs (m=3) without loosing data::
+Create a profile to set the data to be distributed on six OSDs (k+m=6) and sustain the loss of three OSDs (m=3) without losing data::
 
   $ ceph osd erasure-code-profile set myprofile k=3 m=3
   $ ceph osd erasure-code-profile get myprofile
