@@ -93,6 +93,7 @@ about Ceph, see our `Architecture`_ section.
    start/intro
    start/index
    install/index
+   dev/quick_guide
    rados/index
    cephfs/index
    rbd/rbd
