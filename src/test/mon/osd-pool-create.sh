@@ -109,6 +109,20 @@ function TEST_erasure_crush_rule_pending() {
     grep "$crush_ruleset try again" $dir/a/log || return 1
 }
 
+function TEST_simple_crush_rule_pending() {
+    local dir=$1
+    run_mon $dir a --public-addr 127.0.0.1
+    # try again if the ruleset creation is pending
+    crush_ruleset=simple_ruleset
+    ./ceph osd crush add-bucket host1 host
+    # add to the pending OSD map without triggering a paxos proposal
+    result=$(echo '{"prefix":"osdmonitor_prepare_command","prepare":"osd crush rule create-simple","name":"'$crush_ruleset'","root":"host1","type":"host"}' | nc -U $dir/a/ceph-mon.a.asok | cut --bytes=5-)
+    test $result = true || return 1
+    ./ceph osd pool create pool_simple 12 12 replicated $crush_ruleset || return 1
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
+    grep "$crush_ruleset is pending, try again" $dir/a/log || return 1
+}
+
 function TEST_erasure_code_profile_default() {
     local dir=$1
     run_mon $dir a --public-addr 127.0.0.1
@@ -177,17 +191,43 @@ function TEST_erasure_code_pool() {
         grep 'cannot change to type replicated' || return 1
 }
 
+function TEST_replicated_pool_with_ruleset() {
+    local dir=$1
+    run_mon $dir a --public-addr 127.0.0.1
+    local ruleset=ruleset0
+    local root=host1
+    ./ceph osd crush add-bucket $root host
+    local failure_domain=osd
+    local poolname=mypool
+    ./ceph osd crush rule create-simple $ruleset $root $failure_domain || return 1
+    ./ceph osd crush rule ls | grep $ruleset
+    ./ceph osd pool create $poolname 12 12 replicated $ruleset 2>&1 | \
+        grep "pool 'mypool' created" || return 1
+    rule_id=`./ceph osd crush rule dump $ruleset | grep "rule_id" | awk -F[' ':,] '{print $4}'`
+    ./ceph osd pool get $poolname crush_ruleset  2>&1 | \
+        grep "crush_ruleset: $rule_id" || return 1
+    #non-existent crush ruleset
+    ./ceph osd pool create newpool 12 12 replicated non-existent 2>&1 | \
+        grep "doesn't exist" || return 1
+}
+
 function TEST_replicated_pool() {
     local dir=$1
     run_mon $dir a --public-addr 127.0.0.1
-    ./ceph osd pool create replicated 12 12 replicated
+    ./ceph osd pool create replicated 12 12 replicated 2>&1 | \
+        grep "pool 'replicated' created" || return 1
     ./ceph osd pool create replicated 12 12 replicated 2>&1 | \
         grep 'already exists' || return 1
-    ./ceph osd pool create replicated 12 12 # default is replicated
-    ./ceph osd pool create replicated 12    # default is replicated, pgp_num = pg_num
+    # default is replicated
+    ./ceph osd pool create replicated1 12 12 2>&1 | \
+        grep "pool 'replicated1' created" || return 1
+    # default is replicated, pgp_num = pg_num
+    ./ceph osd pool create replicated2 12 2>&1 | \
+        grep "pool 'replicated2' created" || return 1
     ./ceph osd pool create replicated 12 12 erasure 2>&1 | \
         grep 'cannot change to type erasure' || return 1
 }
+
 
 main osd-pool-create
 
