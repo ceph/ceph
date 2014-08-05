@@ -231,7 +231,6 @@ void OpTracker::mark_event(TrackedOp *op, const string &dest, utime_t time)
 void OpTracker::_mark_event(TrackedOp *op, const string &evt,
 			    utime_t time)
 {
-  Mutex::Locker locker(ops_in_flight_lock);
   stringstream ss;
   op->_dump_op_descriptor(ss);
   dout(5) << //"reqid: " << op->get_reqid() <<
