@@ -2635,15 +2635,6 @@ void Client::check_caps(Inode *in, bool is_delayed)
   }
 }
 
-struct C_SnapFlush : public Context {
-  Client *client;
-  Inode *in;
-  snapid_t seq;
-  C_SnapFlush(Client *c, Inode *i, snapid_t s) : client(c), in(i), seq(s) {}
-  void finish(int r) {
-    client->_flushed_cap_snap(in, seq);
-  }
-};
 
 void Client::queue_cap_snap(Inode *in, snapid_t seq)
 {
