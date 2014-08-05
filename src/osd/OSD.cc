@@ -2616,7 +2616,6 @@ PG *OSD::_open_lock_pg(
     pg_map[pgid] = pg;
     pg->get("PGMap");  // because it's in pg_map
     service.pg_add_epoch(pg->info.pgid, createmap->get_epoch());
-    wake_pg_waiters(pg, pgid);
   }
   return pg;
 }
