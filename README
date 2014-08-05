@@ -23,10 +23,31 @@ We do not require assignment of copyright to contribute code; code is
 contributed under the terms of the applicable license.
 
 
+Build Prerequisites
+===================
+
+debian-based
+------------
+
+The list of debian package dependencies can be found in deps.deb.txt:
+
+	sudo apt-get install `cat deps.deb.txt`
+
+Note: libsnappy-dev and libleveldb-dev are not available upstream for natty, oneiric, and squeeze.  Backports for Ceph can be found at ceph.com/debian-leveldb.
+
+rpm-based
+---------
+
+The list of RPM package dependencies can be found in deps.rpm.txt:
+
+	sudo yum install `cat deps.rpm.txt`
+
 Building Ceph
 =============
 
-To build the server daemons, and FUSE client, execute the following:
+Developers, please refer to the [Developer Guide](doc/dev/quick_guide.rst)
+for more information, otherwise, you can build the server daemons, and FUSE client,
+by executing the following:
 
 	./autogen.sh
 	./configure
@@ -61,27 +82,6 @@ systems with
 For RPM-based systems (Red Hat, SUSE, etc.),
 
 	rpmbuild
-
-
-Build Prerequisites
-===================
-
-debian-based
-------------
-
-The list of debian package dependencies can be found in deps.deb.txt:
-
-	sudo apt-get install `cat deps.deb.txt`
-
-Note: libsnappy-dev and libleveldb-dev are not available upstream for natty, oneiric, and squeeze.  Backports for Ceph can be found at ceph.com/debian-leveldb.
-
-rpm-based
----------
-
-The list of RPM package dependencies can be found in deps.rpm.txt:
-
-	sudo yum install `cat deps.rpm.txt`
-
 
 Building the Documentation
 ==========================
