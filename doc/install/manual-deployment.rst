@@ -245,6 +245,17 @@ The procedure is as follows:
 
 	sudo start ceph-mon id=node1
 
+   In this case, to allow the start of the daemon at each reboot you
+   must create two empty files like this::
+
+	sudo touch /var/lib/ceph/mon/{cluster-name}-{hostname}/done
+	sudo touch /var/lib/ceph/mon/{cluster-name}-{hostname}/upstart
+
+   For example::
+
+	sudo touch /var/lib/ceph/mon/ceph-node1/done
+	sudo touch /var/lib/ceph/mon/ceph-node1/upstart
+
    For Debian/CentOS/RHEL, use sysvinit::
 
 	sudo /etc/init.d/ceph start mon.node1
