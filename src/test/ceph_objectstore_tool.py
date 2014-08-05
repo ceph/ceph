@@ -25,16 +25,24 @@ def get_pool_id(name, nullfd):
     return check_output(cmd, stderr=nullfd).split()[3]
 
 
+# return a list of unique PGS given an osd subdirectory
+def get_osd_pgs(SUBDIR, ID):
+    PGS = []
+    if ID:
+        endhead = re.compile("{id}.*_head$".format(id=ID))
+    DIR = os.path.join(SUBDIR, "current")
+    PGS += [f for f in os.listdir(DIR) if os.path.isdir(os.path.join(DIR, f)) and (ID == None or endhead.match(f))]
+    PGS = [re.sub("_head", "", p) for p in PGS if "_head" in p]
+    return PGS
+
+
 # return a sorted list of unique PGs given a directory
 def get_pgs(DIR, ID):
     OSDS = [f for f in os.listdir(DIR) if os.path.isdir(os.path.join(DIR, f)) and string.find(f, "osd") == 0]
     PGS = []
-    endhead = re.compile("{id}.*_head$".format(id=ID))
     for d in OSDS:
-        DIRL2 = os.path.join(DIR, d)
-        SUBDIR = os.path.join(DIRL2, "current")
-        PGS += [f for f in os.listdir(SUBDIR) if os.path.isdir(os.path.join(SUBDIR, f)) and endhead.match(f)]
-    PGS = [re.sub("_head", "", p) for p in PGS]
+        SUBDIR = os.path.join(DIR, d)
+        PGS += get_osd_pgs(SUBDIR, ID)
     return sorted(set(PGS))
 
 
@@ -532,6 +540,23 @@ def main():
         os.unlink(TMPFILE)
     except:
         pass
+
+    print "Test list-pgs"
+    for osd in [f for f in os.listdir(OSDDIR) if os.path.isdir(os.path.join(OSDDIR, f)) and string.find(f, "osd") == 0]:
+
+        CHECK_PGS = get_osd_pgs(os.path.join(OSDDIR, osd), None)
+        CHECK_PGS = sorted(CHECK_PGS)
+
+        cmd = (CFSD_PREFIX + "--op list-pgs").format(osd=osd)
+        logging.debug(cmd)
+        TEST_PGS = check_output(cmd, shell=True).split("\n")
+        TEST_PGS = sorted(TEST_PGS)[1:] # Skip extra blank line
+
+        if TEST_PGS != CHECK_PGS:
+            logging.error("list-pgs got wrong result for osd.{osd}".format(osd=osd))
+            logging.error("Expected {pgs}".format(pgs=CHECK_PGS))
+            logging.error("Got {pgs}".format(pgs=TEST_PGS))
+            ERRORS += 1
 
     print "Test pg export"
     EXP_ERRORS = 0
