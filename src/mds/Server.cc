@@ -221,8 +221,7 @@ void Server::handle_client_session(MClientSession *m)
 	mds->locker->resume_stale_caps(session);
 	mds->sessionmap.touch_session(session);
       }
-      mds->messenger->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->get_seq()), 
-				   m->get_connection());
+      m->get_connection()->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->get_seq()));
     } else {
       dout(10) << "ignoring renewcaps on non open|stale session (" << session->get_state_name() << ")" << dendl;
     }
@@ -311,7 +310,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
     assert(session->is_opening());
     mds->sessionmap.set_state(session, Session::STATE_OPEN);
     mds->sessionmap.touch_session(session);
-    mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), session->connection);
+    session->connection->send_message(new MClientSession(CEPH_SESSION_OPEN));
   } else if (session->is_closing() ||
 	     session->is_killing()) {
     // kill any lingering capabilities, leases, requests
@@ -344,7 +343,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       // ms_handle_remote_reset() and realize they had in fact closed.
       // do this *before* sending the message to avoid a possible
       // race.
-      mds->messenger->mark_disposable(session->connection.get());
+      session->connection->mark_disposable();
 
       // reset session
       mds->send_message_client(new MClientSession(CEPH_SESSION_CLOSE), session);
@@ -352,7 +351,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       session->clear();
     } else if (session->is_killing()) {
       // destroy session, close connection
-      mds->messenger->mark_down(session->connection);
+      session->connection->mark_down();
       mds->sessionmap.remove_session(session);
     } else {
       assert(0);
@@ -411,7 +410,7 @@ void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm,
 	mds->sessionmap.touch_session(session);
 	Message *m = new MClientSession(CEPH_SESSION_OPEN);
 	if (session->connection)
-	  messenger->send_message(m, session->connection);
+	  session->connection->send_message(m);
 	else
 	  session->preopen_out_queue.push_back(m);
       }
@@ -614,7 +613,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
        << ceph_mds_state_name(mds->get_state())
        << ") from " << m->get_source_inst()
        << " after " << delay << " (allowed interval " << g_conf->mds_reconnect_timeout << ")\n";
-    mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), m->get_connection());
+    m->get_connection()->send_message(new MClientSession(CEPH_SESSION_CLOSE));
     m->put();
     return;
   }
@@ -624,13 +623,13 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     mds->clog.info() << "denied reconnect attempt (mds is "
 	<< ceph_mds_state_name(mds->get_state())
 	<< ") from " << m->get_source_inst() << " (session is closed)\n";
-    mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), m->get_connection());
+    m->get_connection()->send_message(new MClientSession(CEPH_SESSION_CLOSE));
     m->put();
     return;
   }
 
   // notify client of success with an OPEN
-  mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), m->get_connection());
+  m->get_connection()->send_message(new MClientSession(CEPH_SESSION_OPEN));
   mds->clog.debug() << "reconnect by " << session->info.inst << " after " << delay << "\n";
   
   // snaprealms
@@ -913,7 +912,7 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
   }
 
   reply->set_extra_bl(mdr->reply_extra_bl);
-  messenger->send_message(reply, req->get_connection());
+  req->get_connection()->send_message(reply);
 
   mdr->did_early_reply = true;
 
@@ -1000,7 +999,7 @@ void Server::reply_request(MDRequestRef& mdr, MClientReply *reply, CInode *trace
     }
 
     reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
-    messenger->send_message(reply, client_con);
+    client_con->send_message(reply);
   }
   
   // clean up request
@@ -1173,7 +1172,7 @@ void Server::handle_client_request(MClientRequest *req)
 	::encode(created, extra);
 	reply->set_extra_bl(extra);
       }
-      mds->messenger->send_message(reply, req->get_connection());
+      req->get_connection()->send_message(reply);
 
       if (req->is_replay())
 	mds->queue_one_replay();

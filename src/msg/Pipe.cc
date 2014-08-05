@@ -72,8 +72,10 @@ ostream& Pipe::_pipe_prefix(std::ostream *_dout) {
  * Pipe
  */
 
-Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
-  : RefCountedObject(r->cct), reader_thread(this), writer_thread(this),
+Pipe::Pipe(SimpleMessenger *r, int st, PipeConnection *con)
+  : RefCountedObject(r->cct),
+    reader_thread(this),
+    writer_thread(this),
     delay_thread(NULL),
     msgr(r),
     conn_id(r->dispatch_queue.get_id()),
@@ -88,14 +90,13 @@ Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
     in_q(&(r->dispatch_queue)),
     send_keepalive(false),
     send_keepalive_ack(false),
-    close_on_empty(false),
     connect_seq(0), peer_global_seq(0),
     out_seq(0), in_seq(0), in_seq_acked(0) {
   if (con) {
     connection_state = con;
     connection_state->reset_pipe(this);
   } else {
-    connection_state = new Connection(msgr->cct, msgr);
+    connection_state = new PipeConnection(msgr->cct, msgr);
     connection_state->pipe = get();
   }
 
@@ -127,11 +128,6 @@ void Pipe::handle_ack(uint64_t seq)
     lsubdout(msgr->cct, ms, 10) << "reader got ack seq "
 				<< seq << " >= " << m->get_seq() << " on " << m << " " << *m << dendl;
     m->put();
-  }
-
-  if (sent.empty() && close_on_empty) {
-    lsubdout(msgr->cct, ms, 10) << "reader got last ack, queue empty, closing" << dendl;
-    stop();
   }
 }
 
@@ -937,7 +933,7 @@ int Pipe::connect()
 
     ceph_msg_connect connect;
     connect.features = policy.features_supported;
-    connect.host_type = msgr->my_type;
+    connect.host_type = msgr->get_myinst().name.type();
     connect.global_seq = gseq;
     connect.connect_seq = cseq;
     connect.protocol_version = msgr->get_proto_version(peer_type, true);
@@ -1694,7 +1690,7 @@ void Pipe::writer()
       Message *m = _get_next_outgoing();
       if (m) {
 	m->set_seq(++out_seq);
-	if (!policy.lossy || close_on_empty) {
+	if (!policy.lossy) {
 	  // put on sent list
 	  sent.push_back(m); 
 	  m->get();
@@ -1755,12 +1751,6 @@ void Pipe::writer()
       continue;
     }
     
-    if (sent.empty() && close_on_empty) {
-      ldout(msgr->cct,10) << "writer out and sent queues empty, closing" << dendl;
-      stop();
-      continue;
-    }
-
     // wait
     ldout(msgr->cct,20) << "writer sleeping" << dendl;
     cond.Wait(pipe_lock);

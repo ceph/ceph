@@ -1168,7 +1168,7 @@ void PGMonitor::send_pg_creates(int osd, Connection *con)
   }
 
   if (con) {
-    mon->messenger->send_message(m, con);
+    con->send_message(m);
   } else {
     assert(mon->osdmon()->osdmap.is_up(osd));
     mon->messenger->send_message(m, mon->osdmon()->osdmap.get_inst(osd));

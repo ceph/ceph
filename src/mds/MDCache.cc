@@ -8259,7 +8259,7 @@ void MDCache::handle_open_ino(MMDSOpenIno *m)
       return;
     reply = new MMDSOpenInoReply(m->get_tid(), ino, hint, ret);
   }
-  mds->messenger->send_message(reply, m->get_connection());
+  m->get_connection()->send_message(reply);
   m->put();
 }
 
@@ -8435,7 +8435,7 @@ void MDCache::handle_find_ino(MMDSFindIno *m)
     in->make_path(r->path);
     dout(10) << " have " << r->path << " " << *in << dendl;
   }
-  mds->messenger->send_message(r, m->get_connection());
+  m->get_connection()->send_message(r);
   m->put();
 }
 

@@ -20,6 +20,7 @@
 #include "msg_types.h"
 #include "Messenger.h"
 #include "auth/AuthSessionHandler.h"
+#include "PipeConnection.h"
 
 
 class SimpleMessenger;
@@ -119,12 +120,16 @@ class DispatchQueue;
     friend class DelayedDelivery;
 
   public:
-    Pipe(SimpleMessenger *r, int st, Connection *con);
+    Pipe(SimpleMessenger *r, int st, PipeConnection *con);
     ~Pipe();
 
     SimpleMessenger *msgr;
     uint64_t conn_id;
     ostream& _pipe_prefix(std::ostream *_dout);
+
+    Pipe* get() {
+      return static_cast<Pipe*>(RefCountedObject::get());
+    }
 
     enum {
       STATE_ACCEPTING,
@@ -168,7 +173,7 @@ class DispatchQueue;
 
   protected:
     friend class SimpleMessenger;
-    ConnectionRef connection_state;
+    PipeConnectionRef connection_state;
 
     utime_t backoff;         // backoff time
 
@@ -184,7 +189,6 @@ class DispatchQueue;
     bool send_keepalive_ack;
     utime_t keepalive_ack_stamp;
     bool halt_delivery; //if a pipe's queue is destroyed, stop adding to it
-    bool close_on_empty;
     
     __u32 connect_seq, peer_global_seq;
     uint64_t out_seq;
