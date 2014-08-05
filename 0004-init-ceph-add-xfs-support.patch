@@ -12,10 +12,10 @@ This was ceph-init-ceph.add.xfs.support.diff
  1 file changed, 8 insertions(+)
 
 diff --git a/src/init-ceph.in b/src/init-ceph.in
-index fb997c1..ffbeda3 100644
+index 9890ae7..739c445 100644
 --- a/src/init-ceph.in
 +++ b/src/init-ceph.in
-@@ -139,12 +139,20 @@ case $1 in
+@@ -143,12 +143,20 @@ case $1 in
      --btrfs | --fsmount)
  	    dofsmount=1
  	    ;;

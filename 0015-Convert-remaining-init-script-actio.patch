@@ -1,0 +1,35 @@
+From: Thorsten Behrens <tbehrens@suse.com>
+Date: Thu, 31 Jul 2014 00:17:11 +0200
+Subject: [PATCH] Convert remaining init script actions over to suse.
+
+Fix for bnc#887880 - both restart and stop now employ
+killproc instead of the debian-ish start-stop-daemon.
+
+(cherry picked from commit 1cd68c0dccec39e5e86588bf16306df69d351e8c)
+---
+ src/init-radosgw | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/src/init-radosgw b/src/init-radosgw
+index 0099c70..b0f6a9a 100644
+--- a/src/init-radosgw
++++ b/src/init-radosgw
+@@ -84,14 +84,16 @@ case "$1" in
+         ;;
+     reload)
+         echo "Reloading $name..."
+-        start-stop-daemon --stop --signal HUP -x $RADOSGW --oknodo
++        /sbin/killproc -x -SIGHUP $RADOSGW
++        true
+         ;;
+     restart|force-reload)
+         $0 stop
+         $0 start
+         ;;
+     stop)
+-        start-stop-daemon --stop -x $RADOSGW --oknodo
++        /sbin/killproc -x $RADOSGW
++        true
+         ;;
+     status)
+ 	 /sbin/checkproc $RADOSGW

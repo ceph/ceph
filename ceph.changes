@@ -1,4 +1,59 @@
 -------------------------------------------------------------------
+Tue Aug  5 08:05:47 UTC 2014 - tbehrens@suse.com
+
+- Add 0016-Fix-bnc-890345-wrong-service-name-f.patch
+  * fix bnc#890345 wrong service name in logrotate config 
+
+-------------------------------------------------------------------
+Thu Jul 31 09:21:07 UTC 2014 - tbehrens@suse.com
+
+- make unit tests run conditional to newer suse versions, since
+  they require python-virtualenv 
+
+-------------------------------------------------------------------
+Thu Jul 31 08:02:41 UTC 2014 - tbehrens@suse.com
+
+- Update to 0.80.5:
+  * ceph-dencoder: do not needlessly link to librgw, librados, etc.
+  * do not needlessly link binaries to leveldb
+  * mon: fix mon crash when no auth keys are present
+  * osd: fix cleanup (and avoid occasional crash) during shutdown
+  * osd: fix log rotation under upstart
+  * rgw: fix multipart upload when object has irregular size
+  * rgw: improve bucket listing S3 compatibility
+  * rgw: improve delimited bucket listing
+  * rpm: do not restart daemons on upgrade
+
+-------------------------------------------------------------------
+Wed Jul 30 23:28:50 UTC 2014 - tbehrens@suse.com
+
+- Add 0015-Convert-remaining-init-script-actio.patch
+  * this fixes bnc#887880 
+
+-------------------------------------------------------------------
+Tue Jul 29 15:49:17 UTC 2014 - tbehrens@suse.com
+
+- Add 0013-osd-OSD.cc-parse-lsb-release-data-v.patch
+  * backport from upstream
+- Add 0014-osdmaptool-test-map-pgs.t-fix-escap.patch
+  * make unit tests work, backport from upstream
+- enable very basic set of unit tests to run in %check
+  section (needs virtualenv as prereq). More would be
+  desirable, sadly upstream tarballs are incomplete
+
+-------------------------------------------------------------------
+Mon Jul 28 23:35:16 UTC 2014 - tbehrens@suse.com
+
+ - Add 0009-ceph_argparse_flag-has-no-regular-3.patch
+   * backport from upstream
+ - Add 0010-Variable-length-array-of-std-string.patch
+   * backport from upstream
+ - Add 0011-warning-Fix-deprecation-warning-fro.patch
+   * google/ header locations are deprecated
+ - Add 0012-Hack-fix-crashing-tcmalloc-on-sle11.patch
+   * fix bug bnc#882430, link against tcmalloc_minimal
+
+-------------------------------------------------------------------
 Thu Jul 17 20:55:11 UTC 2014 - tbehrens@suse.com
 
 - Update to 0.80.4:

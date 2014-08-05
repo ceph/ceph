@@ -1,0 +1,24 @@
+From: "Daniel J. Hofmann" <daniel@trvx.org>
+Date: Mon, 5 May 2014 16:06:45 +0200
+Subject: [PATCH] Variable length array of std::strings (not legal in C++)
+ changed to std::vector<std::string>
+
+Signed-off-by: Daniel J. Hofmann <daniel@trvx.org>
+(cherry picked from commit 08a4e8889783673436972a979c2fc780466893c8)
+---
+ src/rgw/rgw_main.cc | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/rgw/rgw_main.cc b/src/rgw/rgw_main.cc
+index 9614b07..afe4537 100644
+--- a/src/rgw/rgw_main.cc
++++ b/src/rgw/rgw_main.cc
+@@ -360,7 +360,7 @@ void RGWLoadGenProcess::run()
+   int num_buckets;
+   conf->get_val("num_buckets", 1, &num_buckets);
+ 
+-  string buckets[num_buckets];
++  vector<string> buckets(num_buckets);
+ 
+   atomic_t failed;
+ 

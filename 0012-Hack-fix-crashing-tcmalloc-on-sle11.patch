@@ -1,0 +1,128 @@
+From: Thorsten Behrens <tbehrens@suse.com>
+Date: Tue, 29 Jul 2014 01:28:58 +0200
+Subject: [PATCH] Hack-fix crashing tcmalloc on sle11.
+
+This fixes bnc#882430 in a not-so-nice way. Needs configure
+rework with a --tcmalloc-minimal option or somesuch.
+
+(cherry picked from commit 0b617bf660fb0baee10bc749bc7b430a0a794ffe)
+---
+ configure.ac                  |  4 ++--
+ src/Makefile-env.am           |  2 +-
+ src/perfglue/Makefile.am      |  2 +-
+ src/perfglue/heap_profiler.cc | 44 ++-----------------------------------------
+ 4 files changed, 6 insertions(+), 46 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index fb54df1..b7c5ce4 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -348,8 +348,8 @@ AC_ARG_WITH([tcmalloc],
+ 	    [with_tcmalloc=yes])
+ TCMALLOC=
+ AS_IF([test "x$with_tcmalloc" != xno],
+-	    [AC_CHECK_LIB([tcmalloc], [malloc],
+-	     [AC_SUBST([LIBTCMALLOC], ["-ltcmalloc"])
++	    [AC_CHECK_LIB([tcmalloc_minimal], [malloc],
++	     [AC_SUBST([LIBTCMALLOC], ["-ltcmalloc_minimal"])
+ 	       AC_DEFINE([HAVE_LIBTCMALLOC], [1],
+ 	       		 [Define if you have tcmalloc])
+ 	       HAVE_LIBTCMALLOC=1
+diff --git a/src/Makefile-env.am b/src/Makefile-env.am
+index d62247b..44d84e7 100644
+--- a/src/Makefile-env.am
++++ b/src/Makefile-env.am
+@@ -163,7 +163,7 @@ LIBOS += libos_zfs.a -lzfs
+ endif # WITH_LIBZFS
+ 
+ if WITH_TCMALLOC
+-LIBPERFGLUE += -ltcmalloc
++LIBPERFGLUE += -ltcmalloc_minimal
+ endif # WITH_TCMALLOC
+ 
+ if ENABLE_COVERAGE
+diff --git a/src/perfglue/Makefile.am b/src/perfglue/Makefile.am
+index f2b8d50..1de4a7b 100644
+--- a/src/perfglue/Makefile.am
++++ b/src/perfglue/Makefile.am
+@@ -2,7 +2,7 @@ libperfglue_la_SOURCES =
+ 
+ if WITH_TCMALLOC
+ libperfglue_la_SOURCES += perfglue/heap_profiler.cc
+-libperfglue_la_LIBADD = -ltcmalloc
++libperfglue_la_LIBADD = -ltcmalloc_minimal
+ AM_CFLAGS += -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free
+ AM_CXXFLAGS += -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free
+ else
+diff --git a/src/perfglue/heap_profiler.cc b/src/perfglue/heap_profiler.cc
+index cdd5ccb..c951acf 100644
+--- a/src/perfglue/heap_profiler.cc
++++ b/src/perfglue/heap_profiler.cc
+@@ -46,65 +46,25 @@ void ceph_heap_release_free_memory()
+ 
+ bool ceph_heap_profiler_running()
+ {
+-  return IsHeapProfilerRunning();
+-}
+-
+-static void get_profile_name(char *profile_name, int profile_name_len)
+-{
+-  char path[PATH_MAX];
+-  snprintf(path, sizeof(path), "%s", g_conf->log_file.c_str());
+-  char *last_slash = rindex(path, '/');
+-
+-  if (last_slash == NULL) {
+-    snprintf(profile_name, profile_name_len, "./%s.profile",
+-	     g_conf->name.to_cstr());
+-  }
+-  else {
+-    last_slash[1] = '\0';
+-    snprintf(profile_name, profile_name_len, "%s/%s.profile",
+-	     path, g_conf->name.to_cstr());
+-  }
++  return false;
+ }
+ 
+ void ceph_heap_profiler_start()
+ {
+-  char profile_name[PATH_MAX];
+-  get_profile_name(profile_name, sizeof(profile_name)); 
+-  generic_dout(0) << "turning on heap profiler with prefix "
+-		  << profile_name << dendl;
+-  HeapProfilerStart(profile_name);
+ }
+ 
+ void ceph_heap_profiler_stop()
+ {
+-  HeapProfilerStop();
+ }
+ 
+ void ceph_heap_profiler_dump(const char *reason)
+ {
+-  HeapProfilerDump(reason);
+ }
+ 
+ void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
+                                        ostream& out)
+ {
+-  if (cmd.size() == 1 && cmd[0] == "dump") {
+-    if (!ceph_heap_profiler_running()) {
+-      out << "heap profiler not running; can't dump";
+-      return;
+-    }
+-    char *heap_stats = new char[1024];
+-    ceph_heap_profiler_stats(heap_stats, 1024);
+-    out << g_conf->name << "dumping heap profile now.\n"
+-	<< heap_stats;
+-    ceph_heap_profiler_dump("admin request");
+-  } else if (cmd.size() == 1 && cmd[0] == "start_profiler") {
+-    ceph_heap_profiler_start();
+-    out << g_conf->name << " started profiler";
+-  } else if (cmd.size() == 1 && cmd[0] == "stop_profiler") {
+-    ceph_heap_profiler_stop();
+-    out << g_conf->name << " stopped profiler";
+-  } else if (cmd.size() == 1 && cmd[0] == "release") {
++  if (cmd.size() == 1 && cmd[0] == "release") {
+     ceph_heap_release_free_memory();
+     out << g_conf->name << " releasing free RAM back to system.";
+   } else if (cmd.size() == 1 && cmd[0] == "stats") {

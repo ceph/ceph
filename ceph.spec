@@ -43,7 +43,7 @@
 # common
 #################################################################################
 Name:           ceph
-Version:        0.80.4
+Version:        0.80.5
 Release:        0%{?dist}
 Summary:        A Scalable Distributed File System
 License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
@@ -87,6 +87,9 @@ BuildRequires:  libxml2-devel
 BuildRequires:  perl
 BuildRequires:  pkgconfig
 BuildRequires:  python
+%if 0%{?suse_version} >= 1310
+BuildRequires:  python-virtualenv
+%endif
 BuildRequires:  snappy-devel
 BuildRequires:  xfsprogs-devel
 BuildRequires:  xz
@@ -104,6 +107,14 @@ Patch0005:      0005-Fix-runlevels-for-start-scripts.patch
 Patch0006:      0006-Drop-ceph-keys-into-install.patch
 Patch0007:      0007-add-syncfs-support-v3.patch
 Patch0008:      0008-Fixup-radosgw-daemon-init.patch
+Patch0009:      0009-ceph_argparse_flag-has-no-regular-3.patch
+Patch0010:      0010-Variable-length-array-of-std-string.patch
+Patch0011:      0011-warning-Fix-deprecation-warning-fro.patch
+Patch0012:      0012-Hack-fix-crashing-tcmalloc-on-sle11.patch
+Patch0013:      0013-osd-OSD.cc-parse-lsb-release-data-v.patch
+Patch0014:      0014-osdmaptool-test-map-pgs.t-fix-escap.patch
+Patch0015:      0015-Convert-remaining-init-script-actio.patch
+Patch0016:      0016-Fix-bnc-890345-wrong-service-name-f.patch
 # Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
@@ -321,7 +332,6 @@ Requires:       librbd1 = %{version}-%{release}
 %description -n ceph-test
 This package contains Ceph benchmarks and test tools.
 
-
 #################################################################################
 # common
 #################################################################################
@@ -338,6 +348,14 @@ This package contains Ceph benchmarks and test tools.
 %patch0006 -p1
 %patch0007 -p1
 %patch0008 -p1
+%patch0009 -p1
+%patch0010 -p1
+%patch0011 -p1
+%patch0012 -p1
+%patch0013 -p1
+%patch0014 -p1
+%patch0015 -p1
+%patch0016 -p1
 
 %build
 
@@ -403,13 +421,14 @@ grep "\-lcurses" * -R
 
 make %{?jobs:-j%{jobs}}
 
-#cd src/gtest
-#echo "------ MAKE GTEST ------"
-#make -j$(getconf _NPROCESSORS_ONLN)
-#cd ..
-#echo "------ MAKE UNITTEST ------"
-#make unittests -j$(getconf _NPROCESSORS_ONLN)
-#echo "------ MAKE ... DONE ------"
+# tests need python-virtualenv
+%if 0%{?suse_version} >= 1310
+%check
+# run in-tree unittests
+make %{?jobs:-j%{jobs}} check-local
+# use make check for a more complete set - which unfortunately does
+# not have all ingredients shipped in the tarball...
+%endif
 
 %install
 make DESTDIR=$RPM_BUILD_ROOT install
