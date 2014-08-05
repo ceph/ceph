@@ -37,7 +37,7 @@ Glossary
 *M* 
    the number of coding *chunks*, i.e. the number of additional *chunks*
    computed by the encoding functions. If there are 2 coding *chunks*, 
-   it means 2 OSDs can be out without loosing data.
+   it means 2 OSDs can be out without losing data.
 
 *N*
    the number of data *chunks* plus the number of coding *chunks*, 
