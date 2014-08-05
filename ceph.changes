@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Tue Aug  5 08:05:47 UTC 2014 - tbehrens@suse.com
+
+- Add 0016-Fix-bnc-890345-wrong-service-name-f.patch
+  * fix bnc#890345 wrong service name in logrotate config 
+
+-------------------------------------------------------------------
 Thu Jul 31 09:21:07 UTC 2014 - tbehrens@suse.com
 
 - make unit tests run conditional to newer suse versions, since

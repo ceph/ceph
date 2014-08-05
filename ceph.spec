@@ -114,6 +114,7 @@ Patch0012:      0012-Hack-fix-crashing-tcmalloc-on-sle11.patch
 Patch0013:      0013-osd-OSD.cc-parse-lsb-release-data-v.patch
 Patch0014:      0014-osdmaptool-test-map-pgs.t-fix-escap.patch
 Patch0015:      0015-Convert-remaining-init-script-actio.patch
+Patch0016:      0016-Fix-bnc-890345-wrong-service-name-f.patch
 # Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
@@ -354,6 +355,7 @@ This package contains Ceph benchmarks and test tools.
 %patch0013 -p1
 %patch0014 -p1
 %patch0015 -p1
+%patch0016 -p1
 
 %build
 
