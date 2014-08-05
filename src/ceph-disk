@@ -1333,9 +1333,10 @@ def main_prepare(args):
         prepare_lock.acquire()
         if not os.path.exists(args.data):
             if args.data_dev:
-                raise Error('data path does not exist', args.data)
-            else:
-                os.mkdir(args.data)
+                raise Error('data path for device does not exist', args.data)
+            if args.data_dir:
+                raise Error('data path for directory does not exist', args.data)
+            raise Error('data path does not exist', args.data)
 
         # in use?
         dmode = os.stat(args.data).st_mode
