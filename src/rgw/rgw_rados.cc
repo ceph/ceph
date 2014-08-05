@@ -1187,6 +1187,17 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
   extra_params.set_mtime = set_mtime;
   extra_params.owner = bucket_owner;
 
+  if (versioned_object) {
+    rgw_obj ver_head_obj(head_obj.bucket, head_obj.object, "ver");
+
+    r = store->put_obj_meta(NULL, ver_head_obj, obj_len, attrs,
+                            RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
+                            extra_params);
+    if (r < 0) {
+      return r;
+    }
+  }
+
   r = store->put_obj_meta(obj_ctx, head_obj, obj_len, attrs,
                           RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
                           extra_params);
@@ -3222,7 +3233,7 @@ int RGWRados::copy_obj(void *ctx,
     append_rand_alpha(cct, tag, tag, 32);
 
     RGWPutObjProcessor_Atomic processor(dest_bucket_info.owner, dest_obj.bucket, dest_obj.object,
-                                        cct->_conf->rgw_obj_stripe_size, tag);
+                                        cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled);
     ret = processor.prepare(this, ctx, NULL);
     if (ret < 0)
       return ret;
@@ -5940,6 +5951,7 @@ int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, RGWModifyOp op, string& ta
   ObjectWriteOperation o;
   rgw_bucket_dir_entry_meta dir_meta;
   dir_meta.size = ent.size;
+  dir_meta.accounted_size = ent.size;
   dir_meta.mtime = utime_t(ent.mtime, 0);
   dir_meta.etag = ent.etag;
   dir_meta.owner = ent.owner;

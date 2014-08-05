@@ -1428,7 +1428,7 @@ protected:
 public:
   bool immutable_head() { return true; }
   RGWPutObjProcessor_Multipart(const string& bucket_owner, uint64_t _p, req_state *_s) :
-                   RGWPutObjProcessor_Atomic(bucket_owner, _s->bucket, _s->object_str, _p, _s->req_id), s(_s) {}
+                   RGWPutObjProcessor_Atomic(bucket_owner, _s->bucket, _s->object_str, _p, _s->req_id, false), s(_s) {}
 };
 
 int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx, string *oid_rand)
@@ -1555,7 +1555,7 @@ RGWPutObjProcessor *RGWPutObj::select_processor(bool *is_multipart)
   const string& bucket_owner = s->bucket_owner.get_id();
 
   if (!multipart) {
-    processor = new RGWPutObjProcessor_Atomic(bucket_owner, s->bucket, s->object_str, part_size, s->req_id);
+    processor = new RGWPutObjProcessor_Atomic(bucket_owner, s->bucket, s->object_str, part_size, s->req_id, s->bucket_info.versioning_enabled);
   } else {
     processor = new RGWPutObjProcessor_Multipart(bucket_owner, part_size, s);
   }
@@ -1858,7 +1858,7 @@ RGWPutObjProcessor *RGWPostObj::select_processor()
 
   uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
 
-  processor = new RGWPutObjProcessor_Atomic(s->bucket_owner.get_id(), s->bucket, s->object_str, part_size, s->req_id);
+  processor = new RGWPutObjProcessor_Atomic(s->bucket_owner.get_id(), s->bucket, s->object_str, part_size, s->req_id, s->bucket_info.versioning_enabled);
 
   return processor;
 }
