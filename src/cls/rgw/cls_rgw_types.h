@@ -64,12 +64,13 @@ struct rgw_bucket_dir_entry_meta {
   string owner;
   string owner_display_name;
   string content_type;
+  uint64_t accounted_size;
 
   rgw_bucket_dir_entry_meta() :
-  category(0), size(0) { mtime.set_from_double(0); }
+  category(0), size(0), accounted_size(0) { mtime.set_from_double(0); }
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(3, 3, bl);
+    ENCODE_START(4, 3, bl);
     ::encode(category, bl);
     ::encode(size, bl);
     ::encode(mtime, bl);
@@ -77,10 +78,11 @@ struct rgw_bucket_dir_entry_meta {
     ::encode(owner, bl);
     ::encode(owner_display_name, bl);
     ::encode(content_type, bl);
+    ::encode(accounted_size, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
     ::decode(category, bl);
     ::decode(size, bl);
     ::decode(mtime, bl);
@@ -89,6 +91,10 @@ struct rgw_bucket_dir_entry_meta {
     ::decode(owner_display_name, bl);
     if (struct_v >= 2)
       ::decode(content_type, bl);
+    if (struct_v >= 4)
+      ::decode(accounted_size, bl);
+    else
+      accounted_size = size;
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;

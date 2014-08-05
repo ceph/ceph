@@ -644,6 +644,8 @@ class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
   bufferlist pending_data_bl;
   uint64_t max_chunk_size;
 
+  bool versioned_object;
+
 protected:
   rgw_bucket bucket;
   string obj_str;
@@ -668,7 +670,7 @@ protected:
 
 public:
   ~RGWPutObjProcessor_Atomic() {}
-  RGWPutObjProcessor_Atomic(const string& bucket_owner, rgw_bucket& _b, const string& _o, uint64_t _p, const string& _t) :
+  RGWPutObjProcessor_Atomic(const string& bucket_owner, rgw_bucket& _b, const string& _o, uint64_t _p, const string& _t, bool versioned) :
                                 RGWPutObjProcessor_Aio(bucket_owner),
                                 part_size(_p),
                                 cur_part_ofs(0),
@@ -677,6 +679,7 @@ public:
                                 data_ofs(0),
                                 extra_data_len(0),
                                 max_chunk_size(0),
+                                versioned_object(versioned),
                                 bucket(_b),
                                 obj_str(_o),
                                 unique_tag(_t) {}
