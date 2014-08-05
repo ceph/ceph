@@ -100,5 +100,7 @@ Run unit tests
 
 The tests are located in `src/tests`.  To run them type:
 
+.. code::
+
 	$ make check
 
