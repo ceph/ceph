@@ -15,6 +15,7 @@
 # Please submit bugfixes or comments via http://bugs.opensuse.org/
 #
 
+
 %if 0%{defined rhel_version}
 %bcond_with gtk2
 %else
@@ -45,13 +46,14 @@ Name:           ceph
 Version:        0.80.4
 Release:        0%{?dist}
 Summary:        A Scalable Distributed File System
-License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
+License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
 Group:          System/Filesystems
 Url:            http://ceph.com/
 Source0:        http://ceph.com/download/%{name}-%{version}.tar.bz2
 Source1:        README.SUSE.v0.2
 Source2:        mkinitrd-root.on.rbd.tar.xz
 Source3:        ceph-tmpfiles.d.conf
+Source99:       update_git.sh
 # filter spurious setgid warning - mongoose/civetweb is not trying to relinquish suid
 Source4:        ceph-rpmlintrc
 Requires:       cryptsetup
@@ -74,7 +76,9 @@ BuildRequires:  boost-devel > 1.48
 %endif
 BuildRequires:  gcc-c++
 BuildRequires:  gdbm
+BuildRequires:  leveldb-devel
 BuildRequires:  libaio-devel
+BuildRequires:  libblkid-devel
 BuildRequires:  libcurl-devel
 BuildRequires:  libedit-devel
 BuildRequires:  libtool
@@ -83,13 +87,13 @@ BuildRequires:  libxml2-devel
 BuildRequires:  perl
 BuildRequires:  pkgconfig
 BuildRequires:  python
-BuildRequires:  libblkid-devel
 BuildRequires:  snappy-devel
-BuildRequires:  leveldb-devel
 BuildRequires:  xfsprogs-devel
 BuildRequires:  xz
 %if 0%{?suse_version} >= 1310
 BuildRequires:  systemd
+%else
+Patch9999:      ceph-disk.patch
 %endif
 # This patch queue is auto-generated from https://github.com/SUSE/ceph
 Patch0001:      0001-Rcfiles-remove-from-runlevel-2.patch
@@ -141,8 +145,8 @@ performance, reliability, and scalability.
 # packages
 #################################################################################
 %package fuse
-License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
 Summary:        Ceph fuse-based client
+License:        GPL-2.0 and LGPL-2.1
 Group:          System/Filesystems
 Requires:       %{name} = %{version}-%{release}
 BuildRequires:  fuse-devel
@@ -154,7 +158,7 @@ FUSE based client for Ceph distributed network file system
 
 %package -n rbd-fuse
 Summary:        RBD fuse-based client
-License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
+License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
 Group:          System/Filesystems
 Requires:       %{name} = %{version}-%{release}
 BuildRequires:  fuse-devel
@@ -166,27 +170,27 @@ FUSE based client for Ceph distributed network file system
 
 %package devel
 Summary:        Ceph headers
+License:        GPL-2.0 and LGPL-2.1
 Group:          Development/Libraries/C and C++
-License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
 Requires:       %{name} = %{version}-%{release}
+Requires:       libcephfs1 = %{version}
 Requires:       librados2 = %{version}
 Requires:       librbd1 = %{version}
-Requires:       libcephfs1 = %{version}
 
 %description devel
 This package contains libraries and headers needed to develop programs
 that use Ceph.
 
 %package radosgw
-License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
 Summary:        Rados REST Gateway
+License:        GPL-2.0 and LGPL-2.1
 Group:          System/Filesystems
 Requires:       librados2 = %{version}-%{release}
 Requires:       logrotate
 %if 0%{defined suse_version}
 BuildRequires:  FastCGI-devel
 BuildRequires:  libexpat-devel
-Requires:       apache2-mod_fcgid
+Requires:       apache2-mod_fastcgi
 %else
 BuildRequires:  expat-devel
 BuildRequires:  fcgi-devel
@@ -201,8 +205,8 @@ conjunction with any FastCGI capable web server.
 %if 0%{?suse_version}
 %package resource-agents
 Summary:        OCF-compliant Resource Agents for Ceph Daemons
+License:        GPL-2.0 and LGPL-2.1
 Group:          System/Filesystems
-License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
 Requires:       %{name} = %{version}
 Requires:       resource-agents
 
@@ -214,8 +218,8 @@ managers such as Pacemaker.
 
 %package -n librados2
 Summary:        RADOS distributed object store client library
+License:        GPL-2.0 and LGPL-2.1
 Group:          System/Filesystems
-License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
 
 %description -n librados2
 RADOS is a reliable, autonomic distributed object storage cluster
@@ -225,8 +229,8 @@ store using a simple file-like interface.
 
 %package -n librbd1
 Summary:        RADOS Block Device Client Library
+License:        GPL-2.0 and LGPL-2.1
 Group:          System/Filesystems
-License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
 Requires:       librados2 = %{version}-%{release}
 
 %description -n librbd1
@@ -237,8 +241,8 @@ shared library allowing applications to manage these block devices.
 
 %package -n libcephfs1
 Summary:        Ceph distributed file system client library
+License:        GPL-2.0 and LGPL-2.1
 Group:          System/Filesystems
-License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
 
 %description -n libcephfs1
 Ceph is a distributed network file system designed to provide excellent
@@ -249,7 +253,7 @@ POSIX-like interface.
 %if 0%{?cephfs_java}
 %package -n libcephfs_jni1
 Summary:        Java Native Interface library for CephFS Java bindings
-License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
+License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
 Group:          System/Filesystems
 Requires:       java
 %if 0%{?rhel_version} || 0%{?centos_version}
@@ -268,7 +272,7 @@ bindings.
 
 %package -n cephfs-java
 Summary:        Java libraries for the Ceph File System
-License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
+License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
 Group:          System/Filesystems
 Requires:       java
 %if 0%{?suse_version} > 1220
@@ -293,8 +297,8 @@ This package contains the Java libraries for the Ceph File System.
 
 %package -n python-ceph
 Summary:        Python Libraries for the Ceph Distributed Filesystem
+License:        GPL-2.0 and LGPL-2.1
 Group:          System/Filesystems
-License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
 Requires:       libcephfs1 = %{version}-%{release}
 Requires:       librados2 = %{version}-%{release}
 Requires:       librbd1 = %{version}-%{release}
@@ -308,7 +312,7 @@ object storage.
 
 %package -n ceph-test
 Summary:        Ceph benchmarks and test tools
-License:        LGPL-2.1 and BSD-2-Clause and GPL-2.0
+License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
 Group:          System/Filesystems
 Requires:       libcephfs1 = %{version}-%{release}
 Requires:       librados2 = %{version}-%{release}
@@ -323,6 +327,9 @@ This package contains Ceph benchmarks and test tools.
 #################################################################################
 %prep
 %setup -q
+%if 0%{?suse_version} < 1310
+%patch9999 -p1
+%endif
 %patch0001 -p1
 %patch0002 -p1
 %patch0003 -p1
@@ -423,6 +430,7 @@ install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rul
 install -m 0644 -D udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
 
 #set up placeholder directories
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/osd
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
 %if 0%{?suse_version} >= 1310
@@ -437,7 +445,6 @@ rm $RPM_BUILD_ROOT%{python_sitelib}/*.pyo
 rm -f $RPM_BUILD_ROOT/usr/share/ceph/id_dsa_drop.ceph.com
 rm -f $RPM_BUILD_ROOT/usr/share/ceph/id_dsa_drop.ceph.com.pub
 rm -f $RPM_BUILD_ROOT/usr/share/ceph/known_hosts_drop.ceph.com
-mkdir $RPM_BUILD_ROOT/var/lib/ceph/osd
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -565,6 +572,8 @@ fi
 %{_mandir}/man8/ceph-rest-api.8.gz
 %dir %{_localstatedir}/lib/ceph/
 %dir %{_localstatedir}/lib/ceph/tmp/
+# osd mounting directory
+%dir %{_localstatedir}/lib/ceph/osd
 %dir %{_localstatedir}/log/ceph/
 %if 0%{?suse_version} < 1310
 %ghost %dir %{_localstatedir}/run/ceph/
@@ -573,8 +582,6 @@ fi
 %{_tmpfilesdir}/%{name}.conf
 %endif
 %dir %{_sysconfdir}/ceph/
-# osd mounting directory
-%dir /var/lib/ceph/osd
 
 #################################################################################
 %files fuse
@@ -589,9 +596,6 @@ fi
 %files -n rbd-fuse
 %defattr(-,root,root,-)
 %endif
-
-
-
 
 #################################################################################
 %files devel
@@ -643,7 +647,6 @@ fi
 %restart_on_update ceph-radosgw
 %insserv_cleanup
 %endif
-
 
 #################################################################################
 %if 0%{?suse_version}
