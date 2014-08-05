@@ -149,6 +149,11 @@ public:
                            uint64_t nonce);
 
   /**
+   * create a anonymous Connection instance
+   */
+  virtual Connection *create_anon_connection() = 0;
+
+  /**
    * @defgroup Accessors
    * @{
    */
@@ -399,51 +404,6 @@ public:
    * @return 0 on success, or -errno on failure.
    */
   virtual int send_message(Message *m, const entity_inst_t& dest) = 0;
-  /**
-   * Queue the given Message to send out on the given Connection.
-   * Success in this function does not guarantee Message delivery, only
-   * success in queueing the Message. Other guarantees may be provided based
-   * on the Connection policy.
-   *
-   * @param m The Message to send. The Messenger consumes a single reference
-   * when you pass it in.
-   * @param con The Connection to send the Message out on.
-   *
-   * @return 0 on success, or -errno on failure.
-   */
-  virtual int send_message(Message *m, Connection *con) = 0;
-  int send_message(Message *m, const ConnectionRef& con) {
-    return send_message(m, con.get());
-  }
-  /**
-   * Lazily queue the given Message for the given entity. Unlike with
-   * send_message(), lazy_send_message() will not establish a
-   * Connection if none exists, re-establish the connection if it
-   * has broken, or queue the Message if the connection is broken.
-   *
-   * @param m The Message to send. The Messenger consumes a single reference
-   * when you pass it in.
-   * @param dest The entity to send the Message to.
-   *
-   * DEPRECATED: please do not use this interface for any new code;
-   * use the Connection* variant.
-   *
-   * @return 0.
-   */
-  virtual int lazy_send_message(Message *m, const entity_inst_t& dest) = 0;
-  /**
-   * Lazily queue the given Message for the given Connection. Unlike with
-   * send_message(), lazy_send_message() does not necessarily re-establish
-   * the connection if it has broken, or even queue the Message if the
-   * connection is broken.
-   *
-   * @param m The Message to send. The Messenger consumes a single reference
-   * when you pass it in.
-   * @param dest The entity to send the Message to.
-   *
-   * @return 0.
-   */
-  virtual int lazy_send_message(Message *m, Connection *con) = 0;
 
   /**
    * @} // Messaging
@@ -466,23 +426,6 @@ public:
    */
   virtual ConnectionRef get_loopback_connection() = 0;
   /**
-   * Send a "keepalive" ping to the given dest, if it has a working Connection.
-   * If the Messenger doesn't already have a Connection, or if the underlying
-   * connection has broken, this function does nothing.
-   *
-   * @param dest The entity to send the keepalive to.
-   * @return 0, or implementation-defined error numbers.
-   */
-  virtual int send_keepalive(const entity_inst_t& dest) = 0;
-  /**
-   * Send a "keepalive" ping along the given Connection, if it's working.
-   * If the underlying connection has broken, this function does nothing.
-   *
-   * @param dest The entity to send the keepalive to.
-   * @return 0, or implementation-defined error numbers.
-   */
-  virtual int send_keepalive(Connection *con) = 0;
-  /**
    * Mark down a Connection to a remote.
    *
    * This will cause us to discard our outgoing queue for them, and if
@@ -501,24 +444,6 @@ public:
    */
   virtual void mark_down(const entity_addr_t& a) = 0;
   /**
-   * Mark down the given Connection.
-   *
-   * This will cause us to discard its outgoing queue, and if reset
-   * detection is enabled in the policy and the endpoint tries to
-   * reconnect they will discard their queue when we inform them of
-   * the session reset.
-   *
-   * If the Connection* is NULL, this is a no-op.
-   *
-   * It does not generate any notifications to the Dispatcher.
-   *
-   * @param con The Connection to mark down.
-   */
-  virtual void mark_down(Connection *con) = 0;
-  void mark_down(const ConnectionRef& con) {
-    mark_down(con.get());
-  }
-  /**
    * Mark all the existing Connections down. This is equivalent
    * to iterating over all Connections and calling mark_down()
    * on each.
@@ -526,35 +451,6 @@ public:
    * This will generate a RESET event for each closed connections.
    */
   virtual void mark_down_all() = 0;
-  /**
-   * Unlike mark_down, this function will try and deliver
-   * all messages before ending the connection, and it will use
-   * the Pipe's existing semantics to do so. Once the Messages
-   * all been sent out the Connection will be closed and
-   * generate an ms_handle_reset notification to the
-   * Dispatcher.
-   * This function means that you will get standard delivery to endpoints,
-   * and then the Connection will be cleaned up.
-   *
-   * @param con The Connection to mark down.
-   */
-  virtual void mark_down_on_empty(Connection *con) = 0;
-  /**
-   * Mark a Connection as "disposable", setting it to lossy
-   * (regardless of initial Policy). Unlike mark_down_on_empty()
-   * this does not immediately close the Connection once
-   * Messages have been delivered, so as long as there are no errors you can
-   * continue to receive responses; but it will not attempt
-   * to reconnect for message delivery or preserve your old
-   * delivery semantics, either.
-   *
-   * TODO: There's some odd stuff going on in our SimpleMessenger
-   * implementation during connect that looks unused; is there
-   * more of a contract that that's enforcing?
-   *
-   * @param con The Connection to mark as disposable.
-   */
-  virtual void mark_disposable(Connection *con) = 0;
   /**
    * @} // Connection Management
    */
