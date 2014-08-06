@@ -11,3 +11,11 @@ v0.84
   with corresponding *_bytes fields.  Similarly, the 'total_space', 'total_used',
   and 'total_avail' fields are replaced with 'total_bytes', 'total_used_bytes',
   and 'total_avail_bytes' fields.
+
+* The client-side caching for librbd is now enabled by default (rbd
+  cache = true).  A safety option (rbd cache writethrough until flush
+  = true) is also enabled so that writeback caching is not used until
+  the library observes a 'flush' command, indicating that the librbd
+  users is passing that operation through from the guest VM.  This
+  avoids potential data loss when used with older versions of qemu
+  that do not support flush.
