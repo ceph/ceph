@@ -96,6 +96,7 @@ public:
   void compact_range_async(const string& prefix, const string& start, const string& end) {
     compact_range_async(combine_strings(prefix, start), combine_strings(prefix, end));
   }
+  int get_info_log_level(string info_log_level);
 
   /**
    * options_t: Holds options which are minimally interpreted
@@ -132,6 +133,7 @@ public:
 
     string log_file;
     string wal_dir;
+    string info_log_level;
 
     options_t() :
       write_buffer_size(0), //< 0 means default
@@ -148,7 +150,8 @@ public:
       level0_stop_writes_trigger(0),
       disableDataSync(false),
       disableWAL(false),
-      num_levels(0)
+      num_levels(0),
+      info_log_level("info")
     {}
   } options;
 
