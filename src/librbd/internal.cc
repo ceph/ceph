@@ -1002,7 +1002,7 @@ reprotect_and_return_err:
       order = p_imctx->order;
 
     r = create(c_ioctx, c_name, size, false, features, &order,
-	       stripe_unit, stripe_count);
+	       stripe_unit, stripe_count, p_imctx->flags);
     if (r < 0) {
       lderr(cct) << "error creating child: " << cpp_strerror(r) << dendl;
       goto err_close_parent;
