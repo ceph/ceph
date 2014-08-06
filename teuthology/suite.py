@@ -19,7 +19,8 @@ from tempfile import NamedTemporaryFile
 import teuthology
 from . import lock
 from .config import config, JobConfig
-from .repo_utils import enforce_repo_state, BranchNotFoundError
+from .repo_utils import enforce_repo_state
+from .exceptions import BranchNotFoundError
 
 log = logging.getLogger(__name__)
 

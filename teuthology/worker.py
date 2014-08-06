@@ -13,9 +13,9 @@ from . import beanstalk
 from . import report
 from . import safepath
 from .config import config as teuth_config
+from .exceptions import BranchNotFoundError
 from .kill import kill_job
 from .misc import read_config
-from .repo_utils import BranchNotFoundError
 from .repo_utils import fetch_qa_suite, fetch_teuthology_branch
 
 log = logging.getLogger(__name__)

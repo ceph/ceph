@@ -5,6 +5,7 @@ from pytest import raises
 import shutil
 import subprocess
 
+from ..exceptions import BranchNotFoundError
 from .. import repo_utils
 from .. import parallel
 repo_utils.log.setLevel(logging.WARNING)
@@ -61,7 +62,7 @@ class TestRepoUtils(object):
         assert os.path.exists(self.dest_path)
 
     def test_clone_repo_non_existing_branch(self):
-        with raises(repo_utils.BranchNotFoundError):
+        with raises(BranchNotFoundError):
             repo_utils.clone_repo(self.repo_url, self.dest_path, 'nobranch')
         assert not os.path.exists(self.dest_path)
 
@@ -86,7 +87,7 @@ class TestRepoUtils(object):
 
     def test_fetch_branch_fake_branch(self):
         repo_utils.clone_repo(self.repo_url, self.dest_path, 'master')
-        with raises(repo_utils.BranchNotFoundError):
+        with raises(BranchNotFoundError):
             repo_utils.fetch_branch(self.dest_path, 'nobranch')
 
     def test_enforce_existing_branch(self):
@@ -95,7 +96,7 @@ class TestRepoUtils(object):
         assert os.path.exists(self.dest_path)
 
     def test_enforce_non_existing_branch(self):
-        with raises(repo_utils.BranchNotFoundError):
+        with raises(BranchNotFoundError):
             repo_utils.enforce_repo_state(self.repo_url, self.dest_path,
                                           'blah')
         assert not os.path.exists(self.dest_path)
@@ -112,7 +113,7 @@ class TestRepoUtils(object):
         assert os.path.exists(self.dest_path)
 
     def test_enforce_multiple_calls_different_branches(self):
-        with raises(repo_utils.BranchNotFoundError):
+        with raises(BranchNotFoundError):
             repo_utils.enforce_repo_state(self.repo_url, self.dest_path,
                                           'blah1')
         assert not os.path.exists(self.dest_path)
@@ -122,7 +123,7 @@ class TestRepoUtils(object):
         repo_utils.enforce_repo_state(self.repo_url, self.dest_path,
                                       'master')
         assert os.path.exists(self.dest_path)
-        with raises(repo_utils.BranchNotFoundError):
+        with raises(BranchNotFoundError):
             repo_utils.enforce_repo_state(self.repo_url, self.dest_path,
                                           'blah2')
         assert not os.path.exists(self.dest_path)
@@ -161,7 +162,7 @@ class TestRepoUtils(object):
                             branch)
                     p.spawn(
                         raises,
-                        repo_utils.BranchNotFoundError,
+                        BranchNotFoundError,
                         func,
                     )
             for result in p:

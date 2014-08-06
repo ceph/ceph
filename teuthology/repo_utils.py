@@ -6,6 +6,7 @@ import subprocess
 import time
 
 from .config import config
+from .exceptions import BranchNotFoundError
 
 log = logging.getLogger(__name__)
 
@@ -134,20 +135,6 @@ def reset_repo(repo_url, dest_path, branch):
         )
     except subprocess.CalledProcessError:
         raise BranchNotFoundError(branch, repo_url)
-
-
-class BranchNotFoundError(ValueError):
-    def __init__(self, branch, repo=None):
-        self.branch = branch
-        self.repo = repo
-
-    def __str__(self):
-        if self.repo:
-            repo_str = " in repo: %s" % self.repo
-        else:
-            repo_str = ""
-        return "Branch '{branch}' not found{repo_str}!".format(
-            branch=self.branch, repo_str=repo_str)
 
 
 def validate_branch(branch):
