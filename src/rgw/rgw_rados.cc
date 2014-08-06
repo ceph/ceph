@@ -6076,7 +6076,7 @@ int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, RGWModifyOp op, string& tag
     return r;
 
   ObjectWriteOperation o;
-  cls_rgw_bucket_prepare_op(o, op, tag, obj.get_index_key(), obj.get_instance(), obj.get_key(), zone_public_config.log_data);
+  cls_rgw_bucket_prepare_op(o, op, tag, obj.get_index_key(), obj.get_instance(), obj.get_loc(), zone_public_config.log_data);
   r = index_ctx.operate(oid, &o);
   return r;
 }
