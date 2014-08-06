@@ -69,18 +69,18 @@ TEST(RBDReplay, ImageNameMap) {
   typedef ImageNameMap::Name Name;
   ImageNameMap m;
   m.set_bad_mapping_fallback(bad_mapping);
-  add_mapping(&m, "x/y=y/x");
-  add_mapping(&m, "a\\=b/c=h/i");
-  add_mapping(&m, "a/b\\=c=j/k");
-  add_mapping(&m, "a\\\\/b/c=d/e");
-  add_mapping(&m, "a/b\\\\/c=f/g");
-  add_mapping(&m, "image/snap_(.*)=image_$1/");
-  add_mapping(&m, "bad/=///");
+  add_mapping(&m, "x@y=y@x");
+  add_mapping(&m, "a\\=b@c=h@i");
+  add_mapping(&m, "a@b\\=c=j@k");
+  add_mapping(&m, "a\\\\@b@c=d@e");
+  add_mapping(&m, "a@b\\\\@c=f@g");
+  add_mapping(&m, "image@snap_(.*)=image_$1@");
+  add_mapping(&m, "bad@=@@@");
   EXPECT_EQ(Name("y", "x"), m.map(Name("x", "y")));
   EXPECT_EQ(Name("h", "i"), m.map(Name("a=b", "c")));
   EXPECT_EQ(Name("j", "k"), m.map(Name("a", "b=c")));
-  EXPECT_EQ(Name("d", "e"), m.map(Name("a/b", "c")));
-  EXPECT_EQ(Name("f", "g"), m.map(Name("a", "b/c")));
+  EXPECT_EQ(Name("d", "e"), m.map(Name("a@b", "c")));
+  EXPECT_EQ(Name("f", "g"), m.map(Name("a", "b@c")));
   EXPECT_EQ(Name("image_1", ""), m.map(Name("image", "snap_1")));
   EXPECT_EQ(Name("xxx", "xxx"), m.map(Name("bad", "")));
 }

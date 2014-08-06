@@ -26,10 +26,10 @@ static ImageNameMap::Name bad_mapping_abort(ImageNameMap::Name input, string out
 }
 
 ImageNameMap::ImageNameMap()
-  : m_name("((?:[^/\\\\]|\\\\.)*)/((?:[^/\\\\]|\\\\.)*)"),
-    m_escaped_slash("\\\\/"),
+  : m_name("((?:[^@\\\\]|\\\\.)*)@((?:[^@\\\\]|\\\\.)*)"),
+    m_escaped_at("\\\\@"),
     m_escaped_backslash("\\\\\\\\"),
-    m_slash("/"),
+    m_at("@"),
     m_backslash("\\\\"),
     m_bad_mapping_fallback(bad_mapping_abort) {
 }
@@ -42,21 +42,21 @@ void ImageNameMap::add_mapping(Mapping mapping) {
   m_map.add_mapping(mapping);
 }
 
-string ImageNameMap::unescape_slash(string s) const {
-  s = boost::regex_replace(s, m_escaped_slash, "/");
+string ImageNameMap::unescape_at(string s) const {
+  s = boost::regex_replace(s, m_escaped_at, "@");
   return  boost::regex_replace(s, m_escaped_backslash, "\\\\");
 }
 
-string ImageNameMap::escape_slash(string s) const {
+string ImageNameMap::escape_at(string s) const {
   string result = boost::regex_replace(s, m_backslash, "\\\\");
-  return boost::regex_replace(result, m_slash, "\\\\/");
+  return boost::regex_replace(result, m_at, "\\\\@");
 }
 
 bool ImageNameMap::parse_name(string name_string, Name *name) const {
   boost::smatch what;
   if (boost::regex_match(name_string, what, m_name)) {
-    string image(unescape_slash(what[1]));
-    string snap(unescape_slash(what[2]));
+    string image(unescape_at(what[1]));
+    string snap(unescape_at(what[2]));
     *name = Name(image, snap);
     return true;
   } else {
@@ -65,7 +65,7 @@ bool ImageNameMap::parse_name(string name_string, Name *name) const {
 }
 
 string ImageNameMap::format_name(ImageNameMap::Name name) const {
-  return escape_slash(name.first) + "/" + escape_slash(name.second);
+  return escape_at(name.first) + "@" + escape_at(name.second);
 }
 
 ImageNameMap::Name ImageNameMap::map(ImageNameMap::Name name) const {
