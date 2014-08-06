@@ -34,6 +34,10 @@ namespace ceph {
 
     virtual ~ErasureCode() {}
 
+    virtual unsigned int get_coding_chunk_count() const {
+      return get_chunk_count() - get_data_chunk_count();
+    }
+
     virtual int minimum_to_decode(const set<int> &want_to_read,
                                   const set<int> &available_chunks,
                                   set<int> *minimum);
