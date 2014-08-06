@@ -560,7 +560,7 @@ enum cls_rgw_gc_op {
 struct cls_rgw_obj {
   string pool;
   string oid;
-  string key;
+  string loc;
 
   cls_rgw_obj() {}
   cls_rgw_obj(string& _p, string& _o) : pool(_p), oid(_o) {}
@@ -569,7 +569,7 @@ struct cls_rgw_obj {
     ENCODE_START(1, 1, bl);
     ::encode(pool, bl);
     ::encode(oid, bl);
-    ::encode(key, bl);
+    ::encode(loc, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -577,21 +577,21 @@ struct cls_rgw_obj {
     DECODE_START(1, bl);
     ::decode(pool, bl);
     ::decode(oid, bl);
-    ::decode(key, bl);
+    ::decode(loc, bl);
     DECODE_FINISH(bl);
   }
 
   void dump(Formatter *f) const {
     f->dump_string("pool", pool);
     f->dump_string("oid", oid);
-    f->dump_string("key", key);
+    f->dump_string("key", loc);
   }
   static void generate_test_instances(list<cls_rgw_obj*>& ls) {
     ls.push_back(new cls_rgw_obj);
     ls.push_back(new cls_rgw_obj);
     ls.back()->pool = "mypool";
     ls.back()->oid = "myoid";
-    ls.back()->key = "mykey";
+    ls.back()->loc = "mykey";
   }
 };
 WRITE_CLASS_ENCODER(cls_rgw_obj)
@@ -601,11 +601,11 @@ struct cls_rgw_obj_chain {
 
   cls_rgw_obj_chain() {}
 
-  void push_obj(string& pool, string& oid, string& key) {
+  void push_obj(string& pool, string& oid, string& loc) {
     cls_rgw_obj obj;
     obj.pool = pool;
     obj.oid = oid;
-    obj.key = key;
+    obj.loc = loc;
     objs.push_back(obj);
   }
 
