@@ -58,15 +58,13 @@ ostream& operator<<(ostream& out, const SnapRealm& realm)
 }
 
 
-
-
 void SnapRealm::add_open_past_parent(SnapRealm *parent)
 {
   open_past_parents[parent->inode->ino()] = parent;
   parent->inode->get(CInode::PIN_PASTSNAPPARENT);
 }
 
-bool SnapRealm::_open_parents(Context *finish, snapid_t first, snapid_t last)
+bool SnapRealm::_open_parents(MDSInternalContextBase *finish, snapid_t first, snapid_t last)
 {
   dout(10) << "open_parents [" << first << "," << last << "]" << dendl;
   if (open) 

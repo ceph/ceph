@@ -27,6 +27,7 @@
 #include "include/Context.h"
 #include "events/EMetaBlob.h"
 #include "RecoveryQueue.h"
+#include "MDSContext.h"
 
 #include "messages/MClientRequest.h"
 #include "messages/MMDSSlaveRequest.h"
@@ -157,14 +158,14 @@ public:
   }
 
   // waiters
-  map<int, map<inodeno_t, list<Context*> > > waiting_for_base_ino;
+  map<int, map<inodeno_t, list<MDSInternalContextBase*> > > waiting_for_base_ino;
 
-  void discover_base_ino(inodeno_t want_ino, Context *onfinish, int from=-1);
-  void discover_dir_frag(CInode *base, frag_t approx_fg, Context *onfinish,
+  void discover_base_ino(inodeno_t want_ino, MDSInternalContextBase *onfinish, int from=-1);
+  void discover_dir_frag(CInode *base, frag_t approx_fg, MDSInternalContextBase *onfinish,
 			 int from=-1);
-  void discover_path(CInode *base, snapid_t snap, filepath want_path, Context *onfinish,
+  void discover_path(CInode *base, snapid_t snap, filepath want_path, MDSInternalContextBase *onfinish,
 		     bool want_xlocked=false, int from=-1);
-  void discover_path(CDir *base, snapid_t snap, filepath want_path, Context *onfinish,
+  void discover_path(CDir *base, snapid_t snap, filepath want_path, MDSInternalContextBase *onfinish,
 		     bool want_xlocked=false);
   void kick_discovers(int who);  // after a failure.
 
@@ -287,7 +288,7 @@ public:
     uncommitted_masters[reqid].slaves = slaves;
     uncommitted_masters[reqid].safe = safe;
   }
-  void wait_for_uncommitted_master(metareqid_t reqid, Context *c) {
+  void wait_for_uncommitted_master(metareqid_t reqid, MDSInternalContextBase *c) {
     uncommitted_masters[reqid].waiters.push_back(c);
   }
   void log_master_commit(metareqid_t reqid);
@@ -322,7 +323,7 @@ protected:
   struct umaster {
     set<int> slaves;
     LogSegment *ls;
-    list<Context*> waiters;
+    list<MDSInternalContextBase*> waiters;
     bool safe;
     bool committing;
     bool recovering;
@@ -428,7 +429,7 @@ protected:
 
   vector<CInode*> rejoin_recover_q, rejoin_check_q;
   list<SimpleLock*> rejoin_eval_locks;
-  list<Context*> rejoin_waiters;
+  list<MDSInternalContextBase*> rejoin_waiters;
 
   void rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin);
   void handle_cache_rejoin(MMDSCacheRejoin *m);
@@ -690,34 +691,34 @@ protected:
 
 private:
   bool opening_root, open;
-  list<Context*> waiting_for_open;
+  list<MDSInternalContextBase*> waiting_for_open;
 
 public:
   void init_layouts();
   CInode *create_system_inode(inodeno_t ino, int mode);
   CInode *create_root_inode();
 
-  void create_empty_hierarchy(C_Gather *gather);
-  void create_mydir_hierarchy(C_Gather *gather);
+  void create_empty_hierarchy(MDSGather *gather);
+  void create_mydir_hierarchy(MDSGather *gather);
 
   bool is_open() { return open; }
-  void wait_for_open(Context *c) {
+  void wait_for_open(MDSInternalContextBase *c) {
     waiting_for_open.push_back(c);
   }
 
-  void open_root_inode(Context *c);
+  void open_root_inode(MDSInternalContextBase *c);
   void open_root();
-  void open_mydir_inode(Context *c);
+  void open_mydir_inode(MDSInternalContextBase *c);
   void populate_mydir();
 
-  void _create_system_file(CDir *dir, const char *name, CInode *in, Context *fin);
+  void _create_system_file(CDir *dir, const char *name, CInode *in, MDSInternalContextBase *fin);
   void _create_system_file_finish(MutationRef& mut, CDentry *dn,
-                                  version_t dpv, Context *fin);
+                                  version_t dpv, MDSInternalContextBase *fin);
 
-  void open_foreign_mdsdir(inodeno_t ino, Context *c);
+  void open_foreign_mdsdir(inodeno_t ino, MDSInternalContextBase *c);
   CDentry *get_or_create_stray_dentry(CInode *in);
 
-  Context *_get_waiter(MDRequestRef& mdr, Message *req, Context *fin);
+  MDSInternalContextBase *_get_waiter(MDRequestRef& mdr, Message *req, MDSInternalContextBase *fin);
 
   /**
    * Find the given dentry (and whether it exists or not), its ancestors,
@@ -753,7 +754,7 @@ public:
    * If it returns 2 the request has been forwarded, and again the requester
    * should unwind itself and back out.
    */
-  int path_traverse(MDRequestRef& mdr, Message *req, Context *fin, const filepath& path,
+  int path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBase *fin, const filepath& path,
 		    vector<CDentry*> *pdnvec, CInode **pin, int onfail);
   bool path_is_mine(filepath& path);
   bool path_is_mine(string& p) {
@@ -763,7 +764,7 @@ public:
 
   CInode *cache_traverse(const filepath& path);
 
-  void open_remote_dirfrag(CInode *diri, frag_t fg, Context *fin);
+  void open_remote_dirfrag(CInode *diri, frag_t fg, MDSInternalContextBase *fin);
   CInode *get_dentry_inode(CDentry *dn, MDRequestRef& mdr, bool projected=false);
 
   bool parallel_fetch(map<inodeno_t,filepath>& pathmap, set<inodeno_t>& missing);
@@ -771,9 +772,9 @@ public:
 				   set<CDir*>& fetch_queue, set<inodeno_t>& missing,
 				   C_GatherBuilder &gather_bld);
 
-  void open_remote_dentry(CDentry *dn, bool projected, Context *fin,
+  void open_remote_dentry(CDentry *dn, bool projected, MDSInternalContextBase *fin,
 			  bool want_xlocked=false);
-  void _open_remote_dentry_finish(CDentry *dn, inodeno_t ino, Context *fin,
+  void _open_remote_dentry_finish(CDentry *dn, inodeno_t ino, MDSInternalContextBase *fin,
 				  bool want_xlocked, int r);
 
   void make_trace(vector<CDentry*>& trace, CInode *in);
@@ -791,7 +792,7 @@ protected:
     bool want_xlocked;
     version_t tid;
     int64_t pool;
-    list<Context*> waiters;
+    list<MDSInternalContextBase*> waiters;
     open_ino_info_t() : checking(-1), auth_hint(-1),
       check_peers(true), fetch_backtrace(true), discover(false) {}
   };
@@ -802,7 +803,7 @@ protected:
   void _open_ino_parent_opened(inodeno_t ino, int ret);
   void _open_ino_traverse_dir(inodeno_t ino, open_ino_info_t& info, int err);
   void _open_ino_fetch_dir(inodeno_t ino, MMDSOpenIno *m, CDir *dir);
-  Context* _open_ino_get_waiter(inodeno_t ino, MMDSOpenIno *m);
+  MDSInternalContextBase* _open_ino_get_waiter(inodeno_t ino, MMDSOpenIno *m);
   int open_ino_traverse_dir(inodeno_t ino, MMDSOpenIno *m,
 			    vector<inode_backpointer_t>& ancestors,
 			    bool discover, bool want_xlocked, int *hint);
@@ -817,14 +818,14 @@ protected:
 
 public:
   void kick_open_ino_peers(int who);
-  void open_ino(inodeno_t ino, int64_t pool, Context *fin,
+  void open_ino(inodeno_t ino, int64_t pool, MDSInternalContextBase *fin,
 		bool want_replica=true, bool want_xlocked=false);
   
   // -- find_ino_peer --
   struct find_ino_peer_info_t {
     inodeno_t ino;
     ceph_tid_t tid;
-    Context *fin;
+    MDSInternalContextBase *fin;
     int hint;
     int checking;
     set<int> checked;
@@ -835,7 +836,7 @@ public:
   map<ceph_tid_t, find_ino_peer_info_t> find_ino_peer;
   ceph_tid_t find_ino_peer_last_tid;
 
-  void find_ino_peers(inodeno_t ino, Context *c, int hint=-1);
+  void find_ino_peers(inodeno_t ino, MDSInternalContextBase *c, int hint=-1);
   void _do_find_ino_peer(find_ino_peer_info_t& fip);
   void handle_find_ino(MMDSFindIno *m);
   void handle_find_ino_reply(MMDSFindInoReply *m);
@@ -905,10 +906,10 @@ public:
     in->encode_replica(to, bl);
   }
   
-  CDir* add_replica_dir(bufferlist::iterator& p, CInode *diri, int from, list<Context*>& finished);
+  CDir* add_replica_dir(bufferlist::iterator& p, CInode *diri, int from, list<MDSInternalContextBase*>& finished);
   CDir* forge_replica_dir(CInode *diri, frag_t fg, int from);
-  CDentry *add_replica_dentry(bufferlist::iterator& p, CDir *dir, list<Context*>& finished);
-  CInode *add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<Context*>& finished);
+  CDentry *add_replica_dentry(bufferlist::iterator& p, CDir *dir, list<MDSInternalContextBase*>& finished);
+  CInode *add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<MDSInternalContextBase*>& finished);
 
   void replicate_stray(CDentry *straydn, int who, bufferlist& bl);
   CDentry *add_replica_stray(bufferlist &bl, int from);
@@ -928,7 +929,7 @@ private:
     int bits;
     bool committed;
     LogSegment *ls;
-    list<Context*> waiters;
+    list<MDSInternalContextBase*> waiters;
     list<frag_t> old_frags;
     bufferlist rollback;
     ufragment() : bits(0), committed(false), ls(NULL) {}
@@ -951,12 +952,12 @@ private:
   map<dirfrag_t,fragment_info_t> fragments;
 
   void adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
-			    list<CDir*>& frags, list<Context*>& waiters, bool replay);
+			    list<CDir*>& frags, list<MDSInternalContextBase*>& waiters, bool replay);
   void adjust_dir_fragments(CInode *diri,
 			    list<CDir*>& srcfrags,
 			    frag_t basefrag, int bits,
 			    list<CDir*>& resultfrags, 
-			    list<Context*>& waiters,
+			    list<MDSInternalContextBase*>& waiters,
 			    bool replay);
   CDir *force_dir_fragment(CInode *diri, frag_t fg, bool replay=true);
   void get_force_dirfrag_bound_set(vector<dirfrag_t>& dfs, set<CDir*>& bounds);
@@ -987,7 +988,7 @@ private:
   void finish_uncommitted_fragment(dirfrag_t basedirfrag, int op);
   void rollback_uncommitted_fragment(dirfrag_t basedirfrag, list<frag_t>& old_frags);
 public:
-  void wait_for_uncommitted_fragment(dirfrag_t dirfrag, Context *c) {
+  void wait_for_uncommitted_fragment(dirfrag_t dirfrag, MDSInternalContextBase *c) {
     assert(uncommitted_fragments.count(dirfrag));
     uncommitted_fragments[dirfrag].waiters.push_back(c);
   }
@@ -1029,7 +1030,7 @@ public:
 
 };
 
-class C_MDS_RetryRequest : public Context {
+class C_MDS_RetryRequest : public MDSInternalContext {
   MDCache *cache;
   MDRequestRef mdr;
  public:

@@ -95,27 +95,15 @@ public:
   void drop_non_rdlocks(MutationImpl *mut, set<CInode*> *pneed_issue=0);
   void drop_rdlocks(MutationImpl *mut, set<CInode*> *pneed_issue=0);
 
-  void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0, list<Context*> *pfinishers=0);
+  void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0, list<MDSInternalContextBase*> *pfinishers=0);
   void eval(SimpleLock *lock, bool *need_issue);
-  void eval_any(SimpleLock *lock, bool *need_issue, list<Context*> *pfinishers=0, bool first=false) {
+  void eval_any(SimpleLock *lock, bool *need_issue, list<MDSInternalContextBase*> *pfinishers=0, bool first=false) {
     if (!lock->is_stable())
       eval_gather(lock, first, need_issue, pfinishers);
     else if (lock->get_parent()->is_auth())
       eval(lock, need_issue);
   }
 
-  class C_EvalScatterGathers : public Context {
-    Locker *locker;
-    CInode *in;
-  public:
-    C_EvalScatterGathers(Locker *l, CInode *i) : locker(l), in(i) {
-      in->get(CInode::PIN_PTRWAITER);    
-    }
-    void finish(int r) {
-      in->put(CInode::PIN_PTRWAITER);
-      locker->eval_scatter_gathers(in);
-    }
-  };
   void eval_scatter_gathers(CInode *in);
 
   void eval_cap_gather(CInode *in, set<CInode*> *issue_set=0);
@@ -125,7 +113,7 @@ public:
   void try_eval(SimpleLock *lock, bool *pneed_issue);
 
   bool _rdlock_kick(SimpleLock *lock, bool as_anon);
-  bool rdlock_try(SimpleLock *lock, client_t client, Context *c);
+  bool rdlock_try(SimpleLock *lock, client_t client, MDSInternalContextBase *c);
   bool rdlock_start(SimpleLock *lock, MDRequestRef& mut, bool as_anon=false);
   void rdlock_finish(SimpleLock *lock, MutationImpl *mut, bool *pneed_issue);
   bool can_rdlock_set(set<SimpleLock*>& locks);
@@ -150,7 +138,7 @@ public:
   // simple
 public:
   void try_simple_eval(SimpleLock *lock);
-  bool simple_rdlock_try(SimpleLock *lock, Context *con);
+  bool simple_rdlock_try(SimpleLock *lock, MDSInternalContextBase *con);
 protected:
   void simple_eval(SimpleLock *lock, bool *need_issue);
   void handle_simple_lock(SimpleLock *lock, MLock *m);
@@ -168,7 +156,7 @@ public:
   void scatter_eval(ScatterLock *lock, bool *need_issue);        // public for MDCache::adjust_subtree_auth()
 
   void scatter_tick();
-  void scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange=false);
+  void scatter_nudge(ScatterLock *lock, MDSInternalContextBase *c, bool forcelockchange=false);
 
 protected:
   void handle_scatter_lock(ScatterLock *lock, MLock *m);
@@ -178,18 +166,7 @@ protected:
   void scatter_tempsync(ScatterLock *lock, bool *need_issue=0);
 
   void scatter_writebehind(ScatterLock *lock);
-  class C_IO_Locker_ScatterWB : public Context {
-    Locker *locker;
-    ScatterLock *lock;
-    MutationRef mut;
-  public:
-    C_IO_Locker_ScatterWB(Locker *l, ScatterLock *sl, MutationRef& m) :
-      locker(l), lock(sl), mut(m) {}
-    void finish(int r) { 
-      Mutex::Locker l(locker->mds->mds_lock);
-      locker->scatter_writebehind_finish(lock, mut); 
-    }
-  };
+
   void scatter_writebehind_finish(ScatterLock *lock, MutationRef& mut);
 
   xlist<ScatterLock*> updated_scatterlocks;
@@ -284,9 +261,11 @@ public:
 private:
   friend class C_MDL_CheckMaxSize;
   friend class C_MDL_RequestInodeFileCaps;
-  friend struct C_IO_Locker_FileUpdate_finish;
+  friend class C_Locker_FileUpdate_finish;
   friend class C_Locker_RetryCapRelease;
   friend class C_Locker_Eval;
+  friend class LockerContext;
+  friend class C_Locker_ScatterWB;
 
   
   // -- client leases --

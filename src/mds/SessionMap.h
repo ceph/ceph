@@ -144,7 +144,7 @@ public:
   // -- caps --
 private:
   version_t cap_push_seq;        // cap push seq #
-  map<version_t, list<Context*> > waitfor_flush; // flush session messages
+  map<version_t, list<MDSInternalContextBase*> > waitfor_flush; // flush session messages
 public:
   xlist<Capability*> caps;     // inodes with caps; front=most recently used
   xlist<ClientLease*> leases;  // metadata leases to clients
@@ -154,11 +154,11 @@ public:
   version_t inc_push_seq() { return ++cap_push_seq; }
   version_t get_push_seq() const { return cap_push_seq; }
 
-  version_t wait_for_flush(Context* c) {
+  version_t wait_for_flush(MDSInternalContextBase* c) {
     waitfor_flush[get_push_seq()].push_back(c);
     return get_push_seq();
   }
-  void finish_flush(version_t seq, list<Context*>& ls) {
+  void finish_flush(version_t seq, list<MDSInternalContextBase*>& ls) {
     while (!waitfor_flush.empty()) {
       if (waitfor_flush.begin()->first > seq)
 	break;
@@ -242,7 +242,7 @@ public:
   
 public:  // i am lazy
   version_t version, projected, committing, committed;
-  map<version_t, list<Context*> > commit_waiters;
+  map<version_t, list<MDSInternalContextBase*> > commit_waiters;
 
 public:
   SessionMap(MDS *m) : mds(m), 
@@ -387,7 +387,7 @@ public:
 
   // -- loading, saving --
   inodeno_t ino;
-  list<Context*> waiting_for_load;
+  list<MDSInternalContextBase*> waiting_for_load;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& blp);
@@ -396,9 +396,9 @@ public:
 
   object_t get_object_name();
 
-  void load(Context *onload);
+  void load(MDSInternalContextBase *onload);
   void _load_finish(int r, bufferlist &bl);
-  void save(Context *onsave, version_t needv=0);
+  void save(MDSInternalContextBase *onsave, version_t needv=0);
   void _save_finish(version_t v);
  
 };

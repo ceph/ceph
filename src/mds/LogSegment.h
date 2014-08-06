@@ -22,6 +22,7 @@
 #include "CInode.h"
 #include "CDentry.h"
 #include "CDir.h"
+#include "MDSContext.h"
 
 #include "include/unordered_set.h"
 using ceph::unordered_set;
@@ -66,7 +67,7 @@ class LogSegment {
   map<int,version_t> tablev;
 
   // try to expire
-  void try_to_expire(MDS *mds, C_GatherBuilder &gather_bld, int op_prio);
+  void try_to_expire(MDS *mds, MDSGatherBuilder &gather_bld, int op_prio);
 
   // cons
   LogSegment(uint64_t _seq, loff_t off=-1) :
