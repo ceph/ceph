@@ -18,6 +18,7 @@
 #include <boost/shared_ptr.hpp>
 #include "include/rbd/librbd.hpp"
 #include "Deser.hpp"
+#include "ImageName.hpp"
 
 namespace rbd_replay {
 
@@ -68,7 +69,7 @@ public:
 
   virtual void stop() = 0;
 
-  virtual std::pair<std::string, std::string> map_image_name(std::string image_name, std::string snap_name) const = 0;
+  virtual rbd_replay::ImageName map_image_name(std::string image_name, std::string snap_name) const = 0;
 };
 
 
