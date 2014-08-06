@@ -6,6 +6,7 @@ import logging
 import os
 
 from teuthology import misc as teuthology
+from teuthology.task_util.kclient import write_secret_file
 
 log = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ def task(ctx, config):
 
         keyring = '/etc/ceph/ceph.client.{id}.keyring'.format(id=id_)
         secret = '{tdir}/data/client.{id}.secret'.format(tdir=testdir, id=id_)
-        teuthology.write_secret_file(ctx, remote, 'client.{id}'.format(id=id_),
+        write_secret_file(ctx, remote, 'client.{id}'.format(id=id_),
                                      keyring, secret)
 
         remote.run(

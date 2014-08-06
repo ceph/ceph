@@ -958,26 +958,6 @@ def reconnect(ctx, timeout, remotes=None):
         time.sleep(1)
 
 
-def write_secret_file(ctx, remote, role, keyring, filename):
-    """
-    Stash the kerying in the filename specified.
-    """
-    testdir = get_testdir(ctx)
-    remote.run(
-        args=[
-            'adjust-ulimits',
-            'ceph-coverage',
-            '{tdir}/archive/coverage'.format(tdir=testdir),
-            'ceph-authtool',
-            '--name={role}'.format(role=role),
-            '--print-key',
-            keyring,
-            run.Raw('>'),
-            filename,
-            ],
-        )
-
-
 def get_clients(ctx, roles):
     """
     return all remote roles that are clients.
