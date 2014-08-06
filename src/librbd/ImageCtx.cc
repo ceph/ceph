@@ -156,7 +156,7 @@ namespace librbd {
       }
 
       r = cls_client::get_flags(&md_ctx, header_oid, &flags);
-      if (r < 0 && r != -ENOEXEC && r != -EINVAL) {
+      if (r < 0 && r != -ENOEXEC && r != -EINVAL && r != -EOPNOTSUPP) {
 	lderr(cct) << "error reading flags metadata: "
 		   << cpp_strerror(r) << dendl;
 	return r;
