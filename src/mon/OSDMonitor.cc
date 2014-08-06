@@ -2201,6 +2201,18 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     }
     rdata.append(ds);
   }
+  else if (prefix == "osd blocked-by") {
+    const PGMap &pgm = mon->pgmon()->pg_map;
+    if (f) {
+      f->open_object_section("osd_blocked_by");
+      pgm.dump_osd_blocked_by_stats(f.get());
+      f->close_section();
+      f->flush(ds);
+    } else {
+      pgm.print_osd_blocked_by_stats(&ds);
+    }
+    rdata.append(ds);
+  }
   else if (prefix == "osd dump" ||
 	   prefix == "osd tree" ||
 	   prefix == "osd ls" ||

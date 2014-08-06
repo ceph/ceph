@@ -843,6 +843,34 @@ void PGMap::print_osd_perf_stats(std::ostream *ss) const
   (*ss) << tab;
 }
 
+void PGMap::dump_osd_blocked_by_stats(Formatter *f) const
+{
+  f->open_array_section("osd_blocked_by_infos");
+  for (ceph::unordered_map<int,int>::const_iterator i = blocked_by_sum.begin();
+       i != blocked_by_sum.end();
+       ++i) {
+    f->open_object_section("osd");
+    f->dump_int("id", i->first);
+    f->dump_int("num_blocked", i->second);
+    f->close_section();
+  }
+  f->close_section();
+}
+void PGMap::print_osd_blocked_by_stats(std::ostream *ss) const
+{
+  TextTable tab;
+  tab.define_column("osd", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("num_blocked", TextTable::LEFT, TextTable::RIGHT);
+  for (ceph::unordered_map<int,int>::const_iterator i = blocked_by_sum.begin();
+       i != blocked_by_sum.end();
+       ++i) {
+    tab << i->first;
+    tab << i->second;
+    tab << TextTable::endrow;
+  }
+  (*ss) << tab;
+}
+
 void PGMap::recovery_summary(Formatter *f, ostream *out,
                              const pool_stat_t& delta_sum) const
 {
