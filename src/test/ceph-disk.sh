@@ -185,6 +185,7 @@ function test_activate_dir() {
 
     local osd_data=$DIR/osd
 
+    /bin/mkdir -p $osd_data
     ./ceph-disk $CEPH_DISK_ARGS \
         prepare $osd_data || return 1
 
