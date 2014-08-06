@@ -433,6 +433,11 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s)
     if (s.acting_primary >= 0)
       creating_pgs_by_osd[s.acting_primary].insert(pgid);
   }
+  for (vector<int>::const_iterator p = s.blocked_by.begin();
+       p != s.blocked_by.end();
+       ++p) {
+    ++blocked_by_sum[*p];
+  }
 }
 
 void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s)
@@ -454,6 +459,16 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s)
       if (creating_pgs_by_osd[s.acting_primary].size() == 0)
         creating_pgs_by_osd.erase(s.acting_primary);
     }
+  }
+
+  for (vector<int>::const_iterator p = s.blocked_by.begin();
+       p != s.blocked_by.end();
+       ++p) {
+    ceph::unordered_map<int,int>::iterator q = blocked_by_sum.find(*p);
+    assert(q != blocked_by_sum.end());
+    --q->second;
+    if (q->second == 0)
+      blocked_by_sum.erase(q);
   }
 }
 
