@@ -150,6 +150,8 @@ def fetch_qa_suite(branch, lock=True):
     :returns:      The destination path
     """
     src_base_path = config.src_base_path
+    if not os.path.exists(src_base_path):
+        os.mkdir(src_base_path)
     dest_path = os.path.join(src_base_path, 'ceph-qa-suite_' + branch)
     qa_suite_url = os.path.join(config.ceph_git_base_url, 'ceph-qa-suite')
     # only let one worker create/update the checkout at a time
@@ -159,14 +161,16 @@ def fetch_qa_suite(branch, lock=True):
     return dest_path
 
 
-def fetch_teuthology_branch(branch, lock=True):
+def fetch_teuthology(branch, lock=True):
     """
     Make sure we have the correct teuthology branch checked out and up-to-date
 
-    :param branch: The branche we want
+    :param branch: The branch we want
     :returns:      The destination path
     """
     src_base_path = config.src_base_path
+    if not os.path.exists(src_base_path):
+        os.mkdir(src_base_path)
     dest_path = os.path.join(src_base_path, 'teuthology_' + branch)
     # only let one worker create/update the checkout at a time
     lock_path = dest_path.rstrip('/') + '.lock'

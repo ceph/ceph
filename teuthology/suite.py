@@ -19,8 +19,8 @@ from tempfile import NamedTemporaryFile
 import teuthology
 from . import lock
 from .config import config, JobConfig
-from .repo_utils import enforce_repo_state
 from .exceptions import BranchNotFoundError
+from .repo_utils import fetch_qa_suite, fetch_teuthology
 
 log = logging.getLogger(__name__)
 
@@ -61,8 +61,7 @@ def main(args):
     if suite_dir:
         suite_repo_path = suite_dir
     else:
-        suite_repo_path = fetch_suite_repo(job_config.suite_branch,
-                                           test_name=name)
+        suite_repo_path = fetch_repos(job_config.suite_branch, test_name=name)
 
     job_config.name = name
     job_config.priority = priority
@@ -107,7 +106,7 @@ def make_run_name(suite, ceph_branch, kernel_branch, kernel_flavor,
     )
 
 
-def fetch_suite_repo(branch, test_name):
+def fetch_repos(branch, test_name):
     """
     Fetch the suite repo (and also the teuthology repo) so that we can use it
     to build jobs. Repos are stored in ~/src/.
@@ -118,30 +117,15 @@ def fetch_suite_repo(branch, test_name):
     for test scheduling, regardless of what teuthology branch is requested for
     testing.
 
-    :returns: The path to the repo on disk
+    :returns: The path to the suite repo on disk
     """
-    src_base_path = config.src_base_path
-    if not os.path.exists(src_base_path):
-        os.mkdir(src_base_path)
-    suite_repo_path = os.path.join(src_base_path,
-                                   'ceph-qa-suite_' + branch)
     try:
         # When a user is scheduling a test run from their own copy of
         # teuthology, let's not wreak havoc on it.
         if config.automated_scheduling:
-            enforce_repo_state(
-                repo_url=os.path.join(config.ceph_git_base_url,
-                                      'teuthology.git'),
-                dest_path=os.path.join(src_base_path, 'teuthology'),
-                branch='master',
-                remove_on_error=False,
-            )
-        enforce_repo_state(
-            repo_url=os.path.join(config.ceph_git_base_url,
-                                  'ceph-qa-suite.git'),
-            dest_path=suite_repo_path,
-            branch=branch,
-        )
+            # We use teuthology's master branch in all cases right now
+            fetch_teuthology('master')
+        suite_repo_path = fetch_qa_suite(branch)
     except BranchNotFoundError as exc:
         schedule_fail(message=str(exc), name=test_name)
     return suite_repo_path

@@ -16,7 +16,7 @@ from .config import config as teuth_config
 from .exceptions import BranchNotFoundError
 from .kill import kill_job
 from .misc import read_config
-from .repo_utils import fetch_qa_suite, fetch_teuthology_branch
+from .repo_utils import fetch_qa_suite, fetch_teuthology
 
 log = logging.getLogger(__name__)
 start_time = datetime.utcnow()
@@ -113,7 +113,7 @@ def main(ctx):
         job_config['teuthology_branch'] = teuthology_branch
 
         try:
-            teuth_path = fetch_teuthology_branch(branch=teuthology_branch)
+            teuth_path = fetch_teuthology(branch=teuthology_branch)
             # For the teuthology tasks, we look for suite_branch, and if we
             # don't get that, we look for branch, and fall back to 'master'.
             # last-in-suite jobs don't have suite_branch or branch set.
