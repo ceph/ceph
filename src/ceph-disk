@@ -1623,6 +1623,8 @@ def start_daemon(
                 [
                     svc,
                     'ceph',
+                    '-c',
+                    '/etc/ceph/{cluster}.conf'.format(cluster=cluster),
                     'start',
                     'osd.{osd_id}'.format(osd_id=osd_id),
                     ],
