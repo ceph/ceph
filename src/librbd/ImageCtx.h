@@ -232,13 +232,13 @@ namespace librbd {
       void resize_image_index(uint64_t size) {
         Mutex::Locker l(state_lock);
         state_map.resize(size);
+        num_obj = size;
         if (!enable)
           return ;
 
         for (uint64_t i = num_obj; i < size; i++) {
           state_map[i] = OBJ_LOCAL;
         }
-        num_obj = size;
       }
 
       bool is_full_local() {

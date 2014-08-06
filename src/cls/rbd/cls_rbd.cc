@@ -826,8 +826,11 @@ int get_image_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   string key;
   index_key_from_snap_id(snap_id, &key);
   r = read_key(hctx, key, &index_bl);
-  if (r < 0 && r != ENOENT)
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("failed to read the image index off of disk: %s",
+            cpp_strerror(r).c_str());
     return r;
+  }
 
   ::encode(index_bl, *out);
   return 0;

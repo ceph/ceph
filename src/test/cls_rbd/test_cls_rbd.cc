@@ -23,6 +23,9 @@ using ::librbd::cls_client::get_object_prefix;
 using ::librbd::cls_client::set_size;
 using ::librbd::cls_client::get_flags;
 using ::librbd::cls_client::set_flags;
+using ::librbd::cls_client::get_image_index;
+using ::librbd::cls_client::set_image_index;
+using ::librbd::cls_client::remove_image_index;
 using ::librbd::cls_client::get_parent;
 using ::librbd::cls_client::set_parent;
 using ::librbd::cls_client::remove_parent;
@@ -493,6 +496,80 @@ TEST(cls_rbd, set_flags)
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }
 
+TEST(cls_rbd, get_image_index)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  bufferlist bl;
+  ASSERT_EQ(-ENOENT, get_image_index(&ioctx, "foo", CEPH_NOSNAP, &bl));
+
+  ASSERT_EQ(0, create_image(&ioctx, "foo", 0, 22, 0, "foo"));
+  ASSERT_EQ(0, get_image_index(&ioctx, "foo", CEPH_NOSNAP, &bl));
+  ASSERT_EQ(0u, bl.length());
+  ASSERT_EQ(0, ioctx.remove("foo"));
+
+  ASSERT_EQ(-ENOENT, get_image_index(&ioctx, "foo", CEPH_NOSNAP, &bl));
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
+TEST(cls_rbd, set_image_index)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  bufferlist bl, input;
+  ASSERT_EQ(-ENOENT, set_image_index(&ioctx, "foo", CEPH_NOSNAP, bl));
+
+  ASSERT_EQ(0, create_image(&ioctx, "foo", 0, 22, 0, "foo"));
+  input.append("dummy index");
+  ASSERT_EQ(0, set_image_index(&ioctx, "foo", CEPH_NOSNAP, input));
+  ASSERT_EQ(0, get_image_index(&ioctx, "foo", CEPH_NOSNAP, &bl));
+  ASSERT_TRUE(bl.length());
+  ASSERT_EQ(0, ioctx.remove("foo"));
+  ASSERT_EQ(-ENOENT, get_image_index(&ioctx, "foo", CEPH_NOSNAP, &bl));
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
+TEST(cls_rbd, remove_image_index)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  bufferlist bl, input;
+  ASSERT_EQ(-ENOENT, remove_image_index(&ioctx, "foo", CEPH_NOSNAP));
+
+  ASSERT_EQ(0, create_image(&ioctx, "foo", 0, 22, 0, "foo"));
+  ASSERT_EQ(0, remove_image_index(&ioctx, "foo", CEPH_NOSNAP));
+  input.append("dummy index");
+  ASSERT_EQ(0, set_image_index(&ioctx, "foo", CEPH_NOSNAP, input));
+  ASSERT_EQ(0, get_image_index(&ioctx, "foo", CEPH_NOSNAP, &bl));
+  ASSERT_TRUE(bl.length());
+  ASSERT_EQ(0, remove_image_index(&ioctx, "foo", CEPH_NOSNAP));
+  ASSERT_EQ(0, get_image_index(&ioctx, "foo", CEPH_NOSNAP, &bl));
+  ASSERT_EQ(0u, bl.length());
+  ASSERT_EQ(0, ioctx.remove("foo"));
+  ASSERT_EQ(-ENOENT, get_image_index(&ioctx, "foo", CEPH_NOSNAP, &bl));
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
 
 TEST(cls_rbd, protection_status)
 {

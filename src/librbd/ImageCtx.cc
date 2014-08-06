@@ -275,8 +275,6 @@ namespace librbd {
       snap_id = it->second.id;
       snap_exists = true;
       data_ctx.snap_set_read(snap_id);
-      // Need more smart
-      image_index.invalidate_image_index();
       return 0;
     }
     return -ENOENT;
@@ -288,8 +286,6 @@ namespace librbd {
     snap_name = "";
     snap_exists = true;
     data_ctx.snap_set_read(snap_id);
-    // Need more smart
-    image_index.invalidate_image_index();
   }
 
   snap_t ImageCtx::get_snap_id(string in_snap_name) const
