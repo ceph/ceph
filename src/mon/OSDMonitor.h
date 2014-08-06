@@ -219,7 +219,8 @@ private:
   void send_incremental(PaxosServiceMessage *m, epoch_t first);
   void send_incremental(epoch_t first, entity_inst_t& dest, bool onetime);
 
-  int reweight_by_utilization(int oload, std::string& out_str, bool by_pg);
+  int reweight_by_utilization(int oload, std::string& out_str, bool by_pg,
+			      const set<int64_t> *pools);
 
   bool check_source(PaxosServiceMessage *m, uuid_d fsid);
  

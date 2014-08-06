@@ -603,7 +603,8 @@ COMMAND("osd reweight-by-utilization " \
 	"reweight OSDs by utilization [overload-percentage-for-consideration, default 120]", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd reweight-by-pg " \
-	"name=oload,type=CephInt,range=100,req=false", \
+	"name=oload,type=CephInt,range=100 " \
+	"name=pools,type=CephPoolname,n=N,req=false", \
 	"reweight OSDs by PG distribution [overload-percentage-for-consideration, default 120]", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd thrash " \
