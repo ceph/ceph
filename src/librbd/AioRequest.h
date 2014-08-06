@@ -187,7 +187,7 @@ namespace librbd {
 		      objectx, object_overlap,
 		      snapc, snap_id, completion,
 		      true) {
-      if (!m_ictx->image_index.is_local(m_object_no))
+      if (!m_ictx->image_index.is_local(m_object_no) && has_parent())
 	m_write.truncate(0);
       else
 	m_write.remove();
