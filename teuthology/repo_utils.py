@@ -1,8 +1,11 @@
+import fcntl
 import logging
 import os
 import shutil
 import subprocess
 import time
+
+from .config import config
 
 log = logging.getLogger(__name__)
 
@@ -150,3 +153,79 @@ class BranchNotFoundError(ValueError):
 def validate_branch(branch):
     if ' ' in branch:
         raise ValueError("Illegal branch name: '%s'" % branch)
+
+
+def fetch_qa_suite(branch):
+    """
+    Make sure ceph-qa-suite is checked out.
+
+    :param branch: The branch to fetch
+    :returns:      The destination path
+    """
+    src_base_path = config.src_base_path
+    dest_path = os.path.join(src_base_path, 'ceph-qa-suite_' + branch)
+    qa_suite_url = os.path.join(config.ceph_git_base_url, 'ceph-qa-suite')
+    # only let one worker create/update the checkout at a time
+    lock = filelock(dest_path.rstrip('/') + '.lock')
+    lock.acquire()
+    try:
+        enforce_repo_state(qa_suite_url, dest_path, branch)
+    finally:
+        lock.release()
+    return dest_path
+
+
+def fetch_teuthology_branch(branch):
+    """
+    Make sure we have the correct teuthology branch checked out and up-to-date
+
+    :param branch: The branche we want
+    :returns:      The destination path
+    """
+    src_base_path = config.src_base_path
+    dest_path = os.path.join(src_base_path, 'teuthology_' + branch)
+    # only let one worker create/update the checkout at a time
+    lock = filelock(dest_path.rstrip('/') + '.lock')
+    lock.acquire()
+    try:
+        teuthology_git_upstream = config.ceph_git_base_url + \
+            'teuthology.git'
+        enforce_repo_state(teuthology_git_upstream, dest_path, branch)
+
+        log.debug("Bootstrapping %s", dest_path)
+        # This magic makes the bootstrap script not attempt to clobber an
+        # existing virtualenv. But the branch's bootstrap needs to actually
+        # check for the NO_CLOBBER variable.
+        env = os.environ.copy()
+        env['NO_CLOBBER'] = '1'
+        cmd = './bootstrap'
+        boot_proc = subprocess.Popen(cmd, shell=True, cwd=dest_path, env=env,
+                                     stdout=subprocess.PIPE,
+                                     stderr=subprocess.STDOUT)
+        returncode = boot_proc.wait()
+        if returncode != 0:
+            for line in boot_proc.stdout.readlines():
+                log.warn(line.strip())
+        log.info("Bootstrap exited with status %s", returncode)
+
+    finally:
+        lock.release()
+
+    return dest_path
+
+
+class filelock(object):
+    # simple flock class
+    def __init__(self, fn):
+        self.fn = fn
+        self.fd = None
+
+    def acquire(self):
+        assert not self.fd
+        self.fd = file(self.fn, 'w')
+        fcntl.lockf(self.fd, fcntl.LOCK_EX)
+
+    def release(self):
+        assert self.fd
+        fcntl.lockf(self.fd, fcntl.LOCK_UN)
+        self.fd = None
