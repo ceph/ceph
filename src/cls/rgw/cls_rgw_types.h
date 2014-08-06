@@ -199,9 +199,48 @@ struct rgw_bucket_entry_ver {
 };
 WRITE_CLASS_ENCODER(rgw_bucket_entry_ver)
 
+struct cls_rgw_obj_key {
+  string name;
+  string instance;
+
+  bool operator==(const cls_rgw_obj_key& k) const {
+    return (name.compare(k.name) == 0) &&
+           (instance.compare(k.instance) == 0);
+  }
+  bool operator<(const cls_rgw_obj_key& k) const {
+    int r = name.compare(k.name);
+    if (r == 0) {
+      r = instance.compare(k.instance);
+    }
+    return (r < 0);
+  }
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(name, bl);
+    ::encode(instance, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    ::decode(name, bl);
+    ::decode(instance, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const {
+    f->dump_string("name", name);
+    f->dump_string("instance", instance);
+  }
+  static void generate_test_instances(list<cls_rgw_obj_key*>& ls) {
+    ls.push_back(new cls_rgw_obj_key);
+    ls.push_back(new cls_rgw_obj_key);
+    ls.back()->name = "name";
+    ls.back()->instance = "instance";
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_obj_key)
 
 struct rgw_bucket_dir_entry {
-  std::string name;
+  cls_rgw_obj_key key;
   rgw_bucket_entry_ver ver;
   std::string locator;
   bool exists;
@@ -209,14 +248,13 @@ struct rgw_bucket_dir_entry {
   map<string, struct rgw_bucket_pending_info> pending_map;
   uint64_t index_ver;
   string tag;
-  std::string instance;
 
   rgw_bucket_dir_entry() :
     exists(false), index_ver(0) {}
 
   void encode(bufferlist &bl) const {
     ENCODE_START(6, 3, bl);
-    ::encode(name, bl);
+    ::encode(key.name, bl);
     ::encode(ver.epoch, bl);
     ::encode(exists, bl);
     ::encode(meta, bl);
@@ -225,12 +263,12 @@ struct rgw_bucket_dir_entry {
     ::encode(ver, bl);
     ::encode_packed_val(index_ver, bl);
     ::encode(tag, bl);
-    ::encode(instance, bl);
+    ::encode(key.instance, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
-    ::decode(name, bl);
+    ::decode(key.name, bl);
     ::decode(ver.epoch, bl);
     ::decode(exists, bl);
     ::decode(meta, bl);
@@ -248,7 +286,7 @@ struct rgw_bucket_dir_entry {
       ::decode(tag, bl);
     }
     if (struct_v >= 6) {
-      ::decode(instance, bl);
+      ::decode(key.instance, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -260,6 +298,7 @@ WRITE_CLASS_ENCODER(rgw_bucket_dir_entry)
 struct rgw_bi_log_entry {
   string id;
   string object;
+  string instance;
   utime_t timestamp;
   rgw_bucket_entry_ver ver;
   RGWModifyOp op;
@@ -270,7 +309,7 @@ struct rgw_bi_log_entry {
   rgw_bi_log_entry() : op(CLS_RGW_OP_UNKNOWN), state(CLS_RGW_STATE_PENDING_MODIFY), index_ver(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(id, bl);
     ::encode(object, bl);
     ::encode(timestamp, bl);
@@ -281,10 +320,11 @@ struct rgw_bi_log_entry {
     c = (uint8_t)state;
     ::encode(c, bl);
     encode_packed_val(index_ver, bl);
+    ::encode(instance, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(id, bl);
     ::decode(object, bl);
     ::decode(timestamp, bl);
@@ -296,6 +336,7 @@ struct rgw_bi_log_entry {
     ::decode(c, bl);
     state = (RGWPendingState)c;
     decode_packed_val(index_ver, bl);
+    ::decode(instance, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -373,18 +414,29 @@ WRITE_CLASS_ENCODER(rgw_bucket_dir_header)
 
 struct rgw_bucket_dir {
   struct rgw_bucket_dir_header header;
-  std::map<string, struct rgw_bucket_dir_entry> m;
+  std::map<cls_rgw_obj_key, struct rgw_bucket_dir_entry> m;
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(2, 2, bl);
+    ENCODE_START(3, 3, bl);
     ::encode(header, bl);
     ::encode(m, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
     ::decode(header, bl);
-    ::decode(m, bl);
+    if (struct_v < 3) {
+      std::map<string, struct rgw_bucket_dir_entry> oldm;
+      std::map<string, struct rgw_bucket_dir_entry>::iterator iter;
+      ::decode(oldm, bl);
+      for (iter = oldm.begin(); iter != oldm.end(); ++iter) {
+        cls_rgw_obj_key k;
+        k.name = iter->first;
+        m[k] = iter->second;
+      }
+    } else {
+      ::decode(m, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -559,38 +611,42 @@ enum cls_rgw_gc_op {
 
 struct cls_rgw_obj {
   string pool;
-  string oid;
+  cls_rgw_obj_key key;
   string loc;
 
   cls_rgw_obj() {}
-  cls_rgw_obj(string& _p, string& _o) : pool(_p), oid(_o) {}
+  cls_rgw_obj(string& _p, cls_rgw_obj_key& _k) : pool(_p), key(_k) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(pool, bl);
-    ::encode(oid, bl);
+    ::encode(key.name, bl);
     ::encode(loc, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(pool, bl);
-    ::decode(oid, bl);
+    ::decode(key.name, bl);
     ::decode(loc, bl);
+    if (struct_v >= 2) {
+      ::decode(key.instance, bl);
+    }
     DECODE_FINISH(bl);
   }
 
   void dump(Formatter *f) const {
     f->dump_string("pool", pool);
-    f->dump_string("oid", oid);
+    f->dump_string("oid", key.name);
     f->dump_string("key", loc);
+    f->dump_string("instance", key.instance);
   }
   static void generate_test_instances(list<cls_rgw_obj*>& ls) {
     ls.push_back(new cls_rgw_obj);
     ls.push_back(new cls_rgw_obj);
     ls.back()->pool = "mypool";
-    ls.back()->oid = "myoid";
+    ls.back()->key.name = "myoid";
     ls.back()->loc = "mykey";
   }
 };
@@ -601,10 +657,10 @@ struct cls_rgw_obj_chain {
 
   cls_rgw_obj_chain() {}
 
-  void push_obj(string& pool, string& oid, string& loc) {
+  void push_obj(string& pool, cls_rgw_obj_key& key, string& loc) {
     cls_rgw_obj obj;
     obj.pool = pool;
-    obj.oid = oid;
+    obj.key = key;
     obj.loc = loc;
     objs.push_back(obj);
   }

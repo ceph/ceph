@@ -30,23 +30,21 @@ WRITE_CLASS_ENCODER(rgw_cls_tag_timeout_op)
 struct rgw_cls_obj_prepare_op
 {
   RGWModifyOp op;
-  string name;
+  cls_rgw_obj_key key;
   string tag;
   string locator;
   bool log_op;
-  string instance;
 
   rgw_cls_obj_prepare_op() : op(CLS_RGW_OP_UNKNOWN), log_op(false) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(5, 3, bl);
+    ENCODE_START(5, 5, bl);
     uint8_t c = (uint8_t)op;
     ::encode(c, bl);
-    ::encode(name, bl);
     ::encode(tag, bl);
     ::encode(locator, bl);
     ::encode(log_op, bl);
-    ::encode(instance, bl);
+    ::encode(key, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -54,7 +52,9 @@ struct rgw_cls_obj_prepare_op
     uint8_t c;
     ::decode(c, bl);
     op = (RGWModifyOp)c;
-    ::decode(name, bl);
+    if (struct_v < 5) {
+      ::decode(key.name, bl);
+    }
     ::decode(tag, bl);
     if (struct_v >= 2) {
       ::decode(locator, bl);
@@ -63,7 +63,7 @@ struct rgw_cls_obj_prepare_op
       ::decode(log_op, bl);
     }
     if (struct_v >= 5) {
-      ::decode(instance, bl);
+      ::decode(key, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -75,23 +75,21 @@ WRITE_CLASS_ENCODER(rgw_cls_obj_prepare_op)
 struct rgw_cls_obj_complete_op
 {
   RGWModifyOp op;
-  string name;
+  cls_rgw_obj_key key;
   string locator;
   rgw_bucket_entry_ver ver;
   struct rgw_bucket_dir_entry_meta meta;
   string tag;
   bool log_op;
-  string instance;
 
-  list<string> remove_objs;
+  list<cls_rgw_obj_key> remove_objs;
 
   rgw_cls_obj_complete_op() : op(CLS_RGW_OP_ADD), log_op(false) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(7, 3, bl);
+    ENCODE_START(7, 7, bl);
     uint8_t c = (uint8_t)op;
     ::encode(c, bl);
-    ::encode(name, bl);
     ::encode(ver.epoch, bl);
     ::encode(meta, bl);
     ::encode(tag, bl);
@@ -99,22 +97,34 @@ struct rgw_cls_obj_complete_op
     ::encode(remove_objs, bl);
     ::encode(ver, bl);
     ::encode(log_op, bl);
-    ::encode(instance, bl);
+    ::encode(key, bl);
     ENCODE_FINISH(bl);
  }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(7, 3, 3, bl);
     uint8_t c;
     ::decode(c, bl);
     op = (RGWModifyOp)c;
-    ::decode(name, bl);
+    if (struct_v < 7) {
+      ::decode(key.name, bl);
+    }
     ::decode(ver.epoch, bl);
     ::decode(meta, bl);
     ::decode(tag, bl);
     if (struct_v >= 2) {
       ::decode(locator, bl);
     }
-    if (struct_v >= 4) {
+    if (struct_v >= 4 && struct_v < 7) {
+      list<string> old_remove_objs;
+      ::decode(old_remove_objs, bl);
+
+      for (list<string>::iterator iter = old_remove_objs.begin();
+           iter != old_remove_objs.end(); ++iter) {
+        cls_rgw_obj_key k;
+        k.name = *iter;
+        remove_objs.push_back(k);
+      }
+    } else {
       ::decode(remove_objs, bl);
     }
     if (struct_v >= 5) {
@@ -126,7 +136,7 @@ struct rgw_cls_obj_complete_op
       ::decode(log_op, bl);
     }
     if (struct_v >= 7) {
-      ::decode(instance, bl);
+      ::decode(key, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -137,29 +147,29 @@ WRITE_CLASS_ENCODER(rgw_cls_obj_complete_op)
 
 struct rgw_cls_list_op
 {
-  string start_obj;
-  string start_instance;
+  cls_rgw_obj_key start_obj;
   uint32_t num_entries;
   string filter_prefix;
 
   rgw_cls_list_op() : num_entries(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(4, 2, bl);
-    ::encode(start_obj, bl);
+    ENCODE_START(4, 4, bl);
     ::encode(num_entries, bl);
     ::encode(filter_prefix, bl);
-    ::encode(start_instance, bl);
+    ::encode(start_obj, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
-    ::decode(start_obj, bl);
+    if (struct_v < 4) {
+      ::decode(start_obj.name, bl);
+    }
     ::decode(num_entries, bl);
     if (struct_v >= 3)
       ::decode(filter_prefix, bl);
     if (struct_v >= 4)
-      ::decode(start_instance, bl);
+      ::decode(start_obj, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
