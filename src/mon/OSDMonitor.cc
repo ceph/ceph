@@ -444,7 +444,7 @@ void OSDMonitor::update_logger()
  * percentage 'oload' percent greater than the average utilization.
  */
 int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
-					bool by_pg)
+					bool by_pg, const set<int64_t> *pools)
 {
   if (oload <= 100) {
     ostringstream oss;
@@ -470,6 +470,8 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
 	   pgm.pg_stat.begin();
 	 p != pgm.pg_stat.end();
 	 ++p) {
+      if (pools && pools->count(p->first.pool()) == 0)
+	continue;
       for (vector<int>::const_iterator q = p->second.acting.begin();
 	   q != p->second.acting.end();
 	   ++q) {
@@ -5772,7 +5774,7 @@ done:
     int64_t oload;
     cmd_getval(g_ceph_context, cmdmap, "oload", oload, int64_t(120));
     string out_str;
-    err = reweight_by_utilization(oload, out_str, false);
+    err = reweight_by_utilization(oload, out_str, false, NULL);
     if (err < 0) {
       ss << "FAILED reweight-by-utilization: " << out_str;
     } else if (err == 0) {
@@ -5787,8 +5789,21 @@ done:
   } else if (prefix == "osd reweight-by-pg") {
     int64_t oload;
     cmd_getval(g_ceph_context, cmdmap, "oload", oload, int64_t(120));
+    set<int64_t> pools;
+    vector<string> poolnamevec;
+    cmd_getval(g_ceph_context, cmdmap, "pools", poolnamevec);
+    for (unsigned j = 0; j < poolnamevec.size(); j++) {
+      int64_t pool = osdmap.lookup_pg_pool_name(poolnamevec[j]);
+      if (pool < 0) {
+	ss << "pool '" << poolnamevec[j] << "' does not exist";
+	err = -ENOENT;
+	goto reply;
+      }
+      pools.insert(pool);
+    }
     string out_str;
-    err = reweight_by_utilization(oload, out_str, true);
+    err = reweight_by_utilization(oload, out_str, true,
+				  pools.size() ? &pools : NULL);
     if (err < 0) {
       ss << "FAILED reweight-by-pg: " << out_str;
     } else if (err == 0) {
