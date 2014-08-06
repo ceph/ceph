@@ -23,3 +23,7 @@ v0.83
 
 * The 'rados df --format=json' output 'read_bytes' and 'write_bytes'
   fields were incorrectly reporting ops; this is now fixed.
+
+* The 'rados df --format=json' output previously included 'read_kb' and
+  'write_kb' fields; these have been removed.  Please use 'read_bytes' and
+  'write_bytes' instead (and divide by 1024 if appropriate).
