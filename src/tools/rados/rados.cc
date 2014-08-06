@@ -1641,15 +1641,22 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
   }
   else if (strcmp(nargs[0], "setxattr") == 0) {
-    if (!pool_name || nargs.size() < 4)
+    if (!pool_name || nargs.size() < 3 || nargs.size() > 4)
       usage_exit();
 
     string oid(nargs[1]);
     string attr_name(nargs[2]);
-    string attr_val(nargs[3]);
-
     bufferlist bl;
-    bl.append(attr_val.c_str(), attr_val.length());
+    if (nargs.size() == 4) {
+      string attr_val(nargs[3]);
+      bl.append(attr_val.c_str(), attr_val.length());
+    } else {
+      do {
+	ret = bl.read_fd(0, 1024); // from stdin
+	if (ret < 0)
+	  goto out;
+      } while (ret > 0);
+    }
 
     ret = io_ctx.setxattr(oid, attr_name.c_str(), bl);
     if (ret < 0) {
