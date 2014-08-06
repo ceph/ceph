@@ -101,7 +101,7 @@ cls_method_handle_t h_old_snapshot_remove;
 
 #define RBD_MAX_KEYS_READ 64
 #define RBD_SNAP_KEY_PREFIX "snapshot_"
-#define RBD_SNAP_INDEX_KEY_PREFIX "snapshot_index_"
+#define RBD_SNAP_INDEX_KEY_PREFIX "snapindex_"
 #define RBD_DIR_ID_KEY_PREFIX "id_"
 #define RBD_DIR_NAME_KEY_PREFIX "name_"
 
@@ -153,7 +153,7 @@ static void index_key_from_snap_id(snapid_t snap_id, string *out)
 {
   ostringstream oss;
   oss << RBD_SNAP_INDEX_KEY_PREFIX
-      << std::setw(24) << std::setfill('0') << std::hex << snap_id;
+      << std::setw(16) << std::setfill('0') << std::hex << snap_id;
   *out = oss.str();
 }
 
