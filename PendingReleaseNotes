@@ -5,3 +5,9 @@ v0.84
 * The *_kb perf counters on the monitor have been removed.  These are
   replaced with a new set of *_bytes counters (e.g., cluster_osd_kb is
   replaced by cluster_osd_bytes).
+
+* The rd_kb and wr_kb fields in the JSON dumps for pool stats (accessed via
+  the 'ceph df detail -f json-pretty' and related commands) have been replaced
+  with corresponding *_bytes fields.  Similarly, the 'total_space', 'total_used',
+  and 'total_avail' fields are replaced with 'total_bytes', 'total_used_bytes',
+  and 'total_avail_bytes' fields.
