@@ -16,6 +16,7 @@
 #include "MDS.h"
 #include "MDCache.h"
 #include "LogEvent.h"
+#include "MDSContext.h"
 
 #include "osdc/Journaler.h"
 #include "mds/JournalPointer.h"
@@ -76,20 +77,35 @@ void MDLog::create_logger()
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
 
-void MDLog::handle_journaler_write_error(int r)
-{
-  if (r == -EBLACKLISTED) {
-    derr << "we have been blacklisted (fenced), respawning..." << dendl;
-    mds->respawn();
-  } else {
-    derr << "unhandled error " << cpp_strerror(r) << ", shutting down..." << dendl;
-    mds->suicide();
-  }
-}
+class C_MDL_WriteError : public MDSIOContextBase {
+  protected:
+  MDLog *mdlog;
+  MDS *get_mds() {return mdlog->mds;}
 
-void MDLog::write_head(Context *c) 
+  void finish(int r) {
+    MDS *mds = get_mds();
+
+    if (r == -EBLACKLISTED) {
+      derr << "we have been blacklisted (fenced), respawning..." << dendl;
+      mds->respawn();
+    } else {
+      derr << "unhandled error " << cpp_strerror(r) << ", shutting down..." << dendl;
+      mds->suicide();
+    }
+  }
+
+  public:
+  C_MDL_WriteError(MDLog *m) : mdlog(m) {}
+};
+
+
+void MDLog::write_head(MDSInternalContextBase *c) 
 {
-  journaler->write_head(c);
+  MDSIOContext *fin = NULL;
+  if (c != NULL) {
+    fin = new C_IO_Wrapper(mds, c);
+  }
+  journaler->write_head(fin);
 }
 
 uint64_t MDLog::get_read_pos()
@@ -109,12 +125,12 @@ uint64_t MDLog::get_safe_pos()
 
 
 
-void MDLog::create(Context *c)
+void MDLog::create(MDSInternalContextBase *c)
 {
   dout(5) << "create empty log" << dendl;
 
   C_GatherBuilder gather(g_ceph_context);
-  gather.set_finisher(c);
+  gather.set_finisher(new C_IO_Wrapper(mds, c));
 
   // The inode of the default Journaler we will create
   ino = MDS_INO_LOG_OFFSET + mds->get_nodeid();
@@ -145,7 +161,7 @@ void MDLog::create(Context *c)
   submit_thread.create();
 }
 
-void MDLog::open(Context *c)
+void MDLog::open(MDSInternalContextBase *c)
 {
   dout(5) << "open discovering log bounds" << dendl;
 
@@ -161,11 +177,11 @@ void MDLog::open(Context *c)
  * Final part of reopen() procedure, after recovery_thread
  * has done its thing we call append()
  */
-class C_ReopenComplete : public Context {
+class C_ReopenComplete : public MDSInternalContext {
   MDLog *mdlog;
-  Context *on_complete;
+  MDSInternalContextBase *on_complete;
 public:
-  C_ReopenComplete(MDLog *mdlog_, Context *on_complete_) : mdlog(mdlog_), on_complete(on_complete_) {}
+  C_ReopenComplete(MDLog *mdlog_, MDSInternalContextBase *on_complete_) : MDSInternalContext(mdlog->mds), mdlog(mdlog_), on_complete(on_complete_) {}
   void finish(int r) {
     mdlog->append();
     on_complete->complete(r);
@@ -177,7 +193,7 @@ public:
  * recovery procedure again, potentially reformatting the journal if it
  * was in an old format.
  */
-void MDLog::reopen(Context *c)
+void MDLog::reopen(MDSInternalContextBase *c)
 {
   dout(5) << "reopen" << dendl;
 
@@ -233,7 +249,7 @@ void MDLog::cancel_entry(LogEvent *le)
   delete le;
 }
 
-void MDLog::_submit_entry(LogEvent *le, Context *c)
+void MDLog::_submit_entry(LogEvent *le, MDSInternalContextBase *c)
 {
   assert(submit_mutex.is_locked_by_me());
   assert(!mds->is_any_replay());
@@ -339,7 +355,7 @@ void MDLog::_submit_thread()
       ls->end = journaler->get_write_pos();
 
       if (data.fin)
-	journaler->wait_for_flush(data.fin);
+	journaler->wait_for_flush(new C_IO_Wrapper(mds, data.fin));
       if (data.flush)
 	journaler->flush();
 
@@ -352,7 +368,7 @@ void MDLog::_submit_thread()
     } else {
       mds->mds_lock.Lock();
       if (data.fin)
-	journaler->wait_for_flush(data.fin);
+	journaler->wait_for_flush(new C_IO_Wrapper(mds, data.fin));
       if (data.flush)
 	journaler->flush();
       mds->mds_lock.Unlock();
@@ -368,7 +384,7 @@ void MDLog::_submit_thread()
   submit_mutex.Unlock();
 }
 
-void MDLog::wait_for_safe(Context *c)
+void MDLog::wait_for_safe(MDSInternalContextBase *c)
 {
   if (!g_conf->mds_log) {
     // hack: bypass.
@@ -388,7 +404,7 @@ void MDLog::wait_for_safe(Context *c)
   submit_mutex.Unlock();
 
   if (no_pending && c)
-    journaler->wait_for_flush(c);
+    journaler->wait_for_flush(new C_IO_Wrapper(mds, c));
 }
 
 void MDLog::flush()
@@ -460,7 +476,7 @@ void MDLog::_prepare_new_segment()
   mds->mdcache->advance_stray();
 }
 
-void MDLog::_journal_segment_subtree_map(Context *onsync)
+void MDLog::_journal_segment_subtree_map(MDSInternalContextBase *onsync)
 {
   assert(submit_mutex.is_locked_by_me());
 
@@ -552,7 +568,7 @@ void MDLog::trim(int m)
 
 void MDLog::try_expire(LogSegment *ls, int op_prio)
 {
-  C_GatherBuilder gather_bld(g_ceph_context);
+  MDSGatherBuilder gather_bld(g_ceph_context);
   ls->try_to_expire(mds, gather_bld, op_prio);
 
   if (gather_bld.has_subs()) {
@@ -646,7 +662,7 @@ void MDLog::_expired(LogSegment *ls)
 
 
 
-void MDLog::replay(Context *c)
+void MDLog::replay(MDSInternalContextBase *c)
 {
   assert(journaler->is_active());
   assert(journaler->is_readonly());
@@ -688,7 +704,7 @@ void MDLog::replay(Context *c)
  * When this function completes, the `journaler` attribute will be set to
  * a Journaler instance using the latest available serialization format.
  */
-void MDLog::_recovery_thread(Context *completion)
+void MDLog::_recovery_thread(MDSInternalContextBase *completion)
 {
   assert(journaler == NULL);
   if (g_conf->mds_journal_format > JOURNAL_FORMAT_MAX) {
@@ -773,7 +789,9 @@ void MDLog::_recovery_thread(Context *completion)
 
   if (recovery_result != 0) {
     derr << "Error recovering journal " << jp.front << ": " << cpp_strerror(recovery_result) << dendl;
+    mds->mds_lock.Lock();
     completion->complete(recovery_result);
+    mds->mds_lock.Unlock();
     return;
   }
 
@@ -812,7 +830,7 @@ void MDLog::_recovery_thread(Context *completion)
  * swapping pointers to make that one the front journal only when we have
  * safely completed.
  */
-void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journal, Context *completion)
+void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journal, MDSInternalContextBase *completion)
 {
   assert(!jp_in.is_null());
   assert(completion != NULL);

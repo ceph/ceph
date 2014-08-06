@@ -36,7 +36,6 @@
 class CDentry;
 class MDCache;
 class MDCluster;
-class Context;
 class bloom_filter;
 
 struct ObjectOperation;
@@ -365,8 +364,8 @@ public:
 
 
 public:
-  void split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool replay);
-  void merge(list<CDir*>& subs, list<Context*>& waiters, bool replay);
+  void split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool replay);
+  void merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool replay);
 
   bool should_split() {
     return (int)get_frag_size() > g_conf->mds_bal_split_size;
@@ -379,7 +378,7 @@ private:
   void prepare_new_fragment(bool replay);
   void prepare_old_fragment(bool replay);
   void steal_dentry(CDentry *dn);  // from another dir.  used by merge/split.
-  void finish_old_fragment(list<Context*>& waiters, bool replay);
+  void finish_old_fragment(list<MDSInternalContextBase*>& waiters, bool replay);
   void init_fragment_pins();
 
 
@@ -484,8 +483,8 @@ private:
   object_t get_ondisk_object() { 
     return file_object_t(ino(), frag);
   }
-  void fetch(Context *c, bool ignore_authpinnability=false);
-  void fetch(Context *c, const std::string& want_dn, bool ignore_authpinnability=false);
+  void fetch(MDSInternalContextBase *c, bool ignore_authpinnability=false);
+  void fetch(MDSInternalContextBase *c, const std::string& want_dn, bool ignore_authpinnability=false);
 protected:
   void _omap_fetch(const std::string& want_dn);
   void _omap_fetched(bufferlist& hdrbl, std::map<std::string, bufferlist>& omap,
@@ -494,15 +493,17 @@ protected:
   void _tmap_fetched(bufferlist &bl, const std::string& want_dn, int r);
 
   // -- commit --
-  std::map<version_t, std::list<Context*> > waiting_for_commit;
+  std::map<version_t, std::list<MDSInternalContextBase*> > waiting_for_commit;
   void _commit(version_t want, int op_prio);
   void _omap_commit(int op_prio);
   void _encode_dentry(CDentry *dn, bufferlist& bl, const std::set<snapid_t> *snaps);
   void _committed(version_t v);
 public:
+#if 0  // unused?
   void wait_for_commit(Context *c, version_t v=0);
+#endif
   void commit_to(version_t want);
-  void commit(version_t want, Context *c,
+  void commit(version_t want, MDSInternalContextBase *c,
 	      bool ignore_authpinnability=false, int op_prio=-1);
 
   // -- dirtyness --
@@ -529,18 +530,18 @@ public:
     
   // -- waiters --
 protected:
-  std::map< string_snap_t, std::list<Context*> > waiting_on_dentry;
+  std::map< string_snap_t, std::list<MDSInternalContextBase*> > waiting_on_dentry;
 
 public:
   bool is_waiting_for_dentry(const std::string& dname, snapid_t snap) {
     return waiting_on_dentry.count(string_snap_t(dname, snap));
   }
-  void add_dentry_waiter(const std::string& dentry, snapid_t snap, Context *c);
-  void take_dentry_waiting(const std::string& dentry, snapid_t first, snapid_t last, std::list<Context*>& ls);
-  void take_sub_waiting(std::list<Context*>& ls);  // dentry or ino
+  void add_dentry_waiter(const std::string& dentry, snapid_t snap, MDSInternalContextBase *c);
+  void take_dentry_waiting(const std::string& dentry, snapid_t first, snapid_t last, std::list<MDSInternalContextBase*>& ls);
+  void take_sub_waiting(std::list<MDSInternalContextBase*>& ls);  // dentry or ino
 
-  void add_waiter(uint64_t mask, Context *c);
-  void take_waiting(uint64_t mask, std::list<Context*>& ls);  // may include dentry waiters
+  void add_waiter(uint64_t mask, MDSInternalContextBase *c);
+  void take_waiting(uint64_t mask, std::list<MDSInternalContextBase*>& ls);  // may include dentry waiters
   void finish_waiting(uint64_t mask, int result = 0);    // ditto
   
 

@@ -41,7 +41,10 @@ enum {
 };
 
 class Server {
+public:
+  // XXX FIXME: can probably friend enough contexts to make this not need to be public
   MDS *mds;
+private:
   MDCache *mdcache;
   MDLog *mdlog;
   Messenger *messenger;
@@ -85,7 +88,7 @@ public:
   void finish_force_open_sessions(map<client_t,entity_inst_t> &cm,
 				  map<client_t,uint64_t>& sseqmap,
 				  bool dec_import=true);
-  void flush_client_sessions(set<client_t>& client_set, C_GatherBuilder& gather);
+  void flush_client_sessions(set<client_t>& client_set, MDSGatherBuilder& gather);
   void finish_flush_session(Session *session, version_t seq);
   void terminate_sessions();
   void find_idle_sessions();
@@ -104,8 +107,8 @@ public:
   void handle_client_request(MClientRequest *m);
 
   void journal_and_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn,
-			 LogEvent *le, Context *fin);
-  void submit_mdlog_entry(LogEvent *le, Context *fin,
+			 LogEvent *le, MDSInternalContextBase *fin);
+  void submit_mdlog_entry(LogEvent *le, MDSInternalContextBase *fin,
                           MDRequestRef& mdr, const char *evt);
   void dispatch_client_request(MDRequestRef& mdr);
   void early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);

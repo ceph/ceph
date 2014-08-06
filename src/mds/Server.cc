@@ -73,6 +73,22 @@ using namespace std;
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".server "
 
+
+class C_ServerContext : public MDSInternalContextBase {
+  protected:
+  Server *server;
+  MDS *get_mds()
+  {
+    return server->mds;
+  }
+
+  public:
+  C_ServerContext(Server *s) : server(s) {
+    assert(server != NULL);
+  }
+};
+
+
 void Server::create_logger()
 {
   PerfCountersBuilder plb(g_ceph_context, "mds_server", l_mdss_first, l_mdss_last);
@@ -142,8 +158,7 @@ void Server::dispatch(Message *m)
 // ----------------------------------------------------------
 // SESSION management
 
-class C_MDS_session_finish : public Context {
-  MDS *mds;
+class C_MDS_session_finish : public MDSInternalContext {
   Session *session;
   uint64_t state_seq;
   bool open;
@@ -153,9 +168,9 @@ class C_MDS_session_finish : public Context {
   Context *fin;
 public:
   C_MDS_session_finish(MDS *m, Session *se, uint64_t sseq, bool s, version_t mv, Context *fin_ = NULL) :
-    mds(m), session(se), state_seq(sseq), open(s), cmapv(mv), inotablev(0), fin(fin_) { }
+    MDSInternalContext(m), session(se), state_seq(sseq), open(s), cmapv(mv), inotablev(0), fin(fin_) { }
   C_MDS_session_finish(MDS *m, Session *se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t>& i, version_t iv, Context *fin_ = NULL) :
-    mds(m), session(se), state_seq(sseq), open(s), cmapv(mv), inos(i), inotablev(iv), fin(fin_) { }
+    MDSInternalContext(m), session(se), state_seq(sseq), open(s), cmapv(mv), inos(i), inotablev(iv), fin(fin_) { }
   void finish(int r) {
     assert(r == 0);
     mds->server->_session_logged(session, state_seq, open, cmapv, inos, inotablev);
@@ -271,7 +286,7 @@ void Server::handle_client_session(MClientSession *m)
   m->put();
 }
 
-void Server::flush_client_sessions(set<client_t>& client_set, C_GatherBuilder& gather)
+void Server::flush_client_sessions(set<client_t>& client_set, MDSGatherBuilder& gather)
 {
   for (set<client_t>::iterator p = client_set.begin(); p != client_set.end(); ++p) {
     Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
@@ -287,7 +302,7 @@ void Server::flush_client_sessions(set<client_t>& client_set, C_GatherBuilder& g
 
 void Server::finish_flush_session(Session *session, version_t seq)
 {
-  list<Context*> finished;
+  list<MDSInternalContextBase*> finished;
   session->finish_flush(seq, finished);
   mds->queue_waiters(finished);
 }
@@ -426,12 +441,12 @@ void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm,
   mds->sessionmap.version++;
 }
 
-struct C_MDS_TerminatedSessions : public Context {
-  Server *server;
-  C_MDS_TerminatedSessions(Server *s) : server(s) {}
+class C_MDS_TerminatedSessions : public C_ServerContext {
   void finish(int r) {
     server->terminating_sessions = false;
   }
+  public:
+  C_MDS_TerminatedSessions(Server *s) : C_ServerContext(s) {}
 };
 
 void Server::terminate_sessions()
@@ -518,6 +533,10 @@ void Server::find_idle_sessions()
   }
 }
 
+/*
+ * XXX bump in the interface here, not using an MDSInternalContextBase here
+ * because all the callers right now happen to use a SaferCond
+ */
 void Server::kill_session(Session *session, Context *on_safe)
 {
   if ((session->is_opening() ||
@@ -792,7 +811,7 @@ void Server::recall_client_state(float ratio)
 /*******
  * some generic stuff for finishing off requests
  */
-void Server::journal_and_reply(MDRequestRef& mdr, CInode *in, CDentry *dn, LogEvent *le, Context *fin)
+void Server::journal_and_reply(MDRequestRef& mdr, CInode *in, CDentry *dn, LogEvent *le, MDSInternalContextBase *fin)
 {
   dout(10) << "journal_and_reply tracei " << in << " tracedn " << dn << dendl;
 
@@ -823,34 +842,33 @@ void Server::journal_and_reply(MDRequestRef& mdr, CInode *in, CDentry *dn, LogEv
     mdlog->flush();
 }
 
-class C_IO_MarkEvent : public Context
+class C_MarkEvent : public MDSInternalContext
 {
-  MDS *mds;
   Context *true_finisher;
   MDRequestRef mdr;
   string event_str;
 public:
-  C_IO_MarkEvent(MDS *mds_, Context *f, MDRequestRef& _mdr,
+  C_MarkEvent(MDS *mds_, Context *f, MDRequestRef& _mdr,
 		 const char *evt)
-    : mds(mds_), true_finisher(f), mdr(_mdr),
+    : MDSInternalContext(mds_), true_finisher(f), mdr(_mdr),
       event_str("journal_committed: ") {
     event_str += evt;
   }
   virtual void finish(int r) {
-    Mutex::Locker l(mds->mds_lock);
     mdr->mark_event(event_str);
     true_finisher->complete(r);
   }
 };
 
-void Server::submit_mdlog_entry(LogEvent *le, Context *fin, MDRequestRef& mdr,
+
+void Server::submit_mdlog_entry(LogEvent *le, MDSInternalContextBase *fin, MDRequestRef& mdr,
                                 const char *event)
 {
   if (mdr) {
     string event_str("submit entry: ");
     event_str += event;
     mdr->mark_event(event_str);
-    mdlog->submit_entry(le, new C_IO_MarkEvent(mds, fin, mdr, event));
+    mdlog->submit_entry(le, new C_MarkEvent(mds, fin, mdr, event));
   } else
     mdlog->submit_entry(le, fin);
 }
@@ -2101,11 +2119,10 @@ CDir *Server::traverse_to_auth_dir(MDRequestRef& mdr, vector<CDentry*> &trace, f
   return dir;
 }
 
-class C_MDS_TryFindInode : public Context {
-  Server *server;
+class C_MDS_TryFindInode : public C_ServerContext {
   MDRequestRef mdr;
 public:
-  C_MDS_TryFindInode(Server *s, MDRequestRef& r) : server(s), mdr(r) {}
+  C_MDS_TryFindInode(Server *s, MDRequestRef& r) : C_ServerContext(s), mdr(r) {}
   virtual void finish(int r) {
     if (r == -ESTALE) // :( find_ino_peers failed
       server->reply_request(mdr, r);
@@ -2140,7 +2157,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
       reply_request(mdr, r, NULL, no_lookup ? NULL : mdr->dn[n][mdr->dn[n].size()-1]);
     } else if (r == -ESTALE) {
       dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
-      Context *c = new C_MDS_TryFindInode(this, mdr);
+      MDSInternalContextBase *c = new C_MDS_TryFindInode(this, mdr);
       mdcache->find_ino_peers(refpath.get_ino(), c);
     } else {
       dout(10) << "FAIL on error " << r << dendl;
@@ -2408,10 +2425,9 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
 		is_lookup ? mdr->dn[0].back() : 0);
 }
 
-struct C_MDS_LookupIno2 : public Context {
-  Server *server;
+struct C_MDS_LookupIno2 : public C_ServerContext {
   MDRequestRef mdr;
-  C_MDS_LookupIno2(Server *s, MDRequestRef& r) : server(s), mdr(r) {}
+  C_MDS_LookupIno2(Server *s, MDRequestRef& r) : C_ServerContext(s), mdr(r) {}
   void finish(int r) {
     server->_lookup_ino_2(mdr, r);
   }
@@ -2648,15 +2664,14 @@ void Server::handle_client_open(MDRequestRef& mdr)
   reply_request(mdr, 0, cur, dn);
 }
 
-class C_MDS_openc_finish : public Context {
-  MDS *mds;
+class C_MDS_openc_finish : public MDSInternalContext {
   MDRequestRef mdr;
   CDentry *dn;
   CInode *newi;
   snapid_t follows;
 public:
   C_MDS_openc_finish(MDS *m, MDRequestRef& r, CDentry *d, CInode *ni, snapid_t f) :
-    mds(m), mdr(r), dn(d), newi(ni), follows(f) {}
+    MDSInternalContext(m), mdr(r), dn(d), newi(ni), follows(f) {}
   void finish(int r) {
     assert(r == 0);
 
@@ -2710,7 +2725,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     if (r < 0 && r != -ENOENT) {
       if (r == -ESTALE) {
 	dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
-	Context *c = new C_MDS_TryFindInode(this, mdr);
+	MDSInternalContextBase *c = new C_MDS_TryFindInode(this, mdr);
 	mdcache->find_ino_peers(req->get_filepath().get_ino(), c);
       } else {
 	dout(10) << "FAIL on error " << r << dendl;
@@ -2987,7 +3002,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
 
 	// already issued caps and leases, reply immediately.
 	if (dnbl.length() > 0) {
-	  mdcache->open_remote_dentry(dn, dnp, new C_NoopContext);
+	  mdcache->open_remote_dentry(dn, dnp, new C_MDSInternalNoop);
 	  dout(10) << " open remote dentry after caps were issued, stopping at "
 		   << dnbl.length() << " < " << bytes_left << dendl;
 	  break;
@@ -3069,15 +3084,14 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
 /* 
  * finisher for basic inode updates
  */
-class C_MDS_inode_update_finish : public Context {
-  MDS *mds;
+class C_MDS_inode_update_finish : public MDSInternalContext {
   MDRequestRef mdr;
   CInode *in;
   bool truncating_smaller, changed_ranges;
 public:
   C_MDS_inode_update_finish(MDS *m, MDRequestRef& r, CInode *i,
 			    bool sm=false, bool cr=false) :
-    mds(m), mdr(r), in(i), truncating_smaller(sm), changed_ranges(cr) { }
+    MDSInternalContext(m), mdr(r), in(i), truncating_smaller(sm), changed_ranges(cr) { }
   void finish(int r) {
     assert(r == 0);
 
@@ -3152,7 +3166,7 @@ void Server::handle_client_file_setlock(MDRequestRef& mdr)
   dout(10) << " state prior to lock change: " << *lock_state << dendl;
   if (CEPH_LOCK_UNLOCK == set_lock.type) {
     list<ceph_filelock> activated_locks;
-    list<Context*> waiters;
+    list<MDSInternalContextBase*> waiters;
     if (lock_state->is_waiting(set_lock)) {
       dout(10) << " unlock removing waiting lock " << set_lock << dendl;
       lock_state->remove_waiting(set_lock);
@@ -3809,14 +3823,13 @@ void Server::handle_remove_vxattr(MDRequestRef& mdr, CInode *cur,
   reply_request(mdr, -ENODATA);
 }
 
-class C_MDS_inode_xattr_update_finish : public Context {
-  MDS *mds;
+class C_MDS_inode_xattr_update_finish : public MDSInternalContext {
   MDRequestRef mdr;
   CInode *in;
 public:
 
   C_MDS_inode_xattr_update_finish(MDS *m, MDRequestRef& r, CInode *i) :
-    mds(m), mdr(r), in(i) { }
+    MDSInternalContext(m), mdr(r), in(i) { }
   void finish(int r) {
     assert(r == 0);
 
@@ -3967,15 +3980,14 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
 
 // MKNOD
 
-class C_MDS_mknod_finish : public Context {
-  MDS *mds;
+class C_MDS_mknod_finish : public MDSInternalContext {
   MDRequestRef mdr;
   CDentry *dn;
   CInode *newi;
   snapid_t follows;
 public:
   C_MDS_mknod_finish(MDS *m, MDRequestRef& r, CDentry *d, CInode *ni, snapid_t f) :
-    mds(m), mdr(r), dn(d), newi(ni), follows(f) {}
+    MDSInternalContext(m), mdr(r), dn(d), newi(ni), follows(f) {}
   void finish(int r) {
     assert(r == 0);
 
@@ -4283,8 +4295,7 @@ void Server::handle_client_link(MDRequestRef& mdr)
 }
 
 
-class C_MDS_link_local_finish : public Context {
-  MDS *mds;
+class C_MDS_link_local_finish : public MDSInternalContext {
   MDRequestRef mdr;
   CDentry *dn;
   CInode *targeti;
@@ -4293,7 +4304,7 @@ class C_MDS_link_local_finish : public Context {
 public:
   C_MDS_link_local_finish(MDS *m, MDRequestRef& r, CDentry *d, CInode *ti,
 			  version_t dnpv_, version_t tipv_) :
-    mds(m), mdr(r), dn(d), targeti(ti),
+    MDSInternalContext(m), mdr(r), dn(d), targeti(ti),
     dnpv(dnpv_), tipv(tipv_) { }
   void finish(int r) {
     assert(r == 0);
@@ -4366,8 +4377,7 @@ void Server::_link_local_finish(MDRequestRef& mdr, CDentry *dn, CInode *targeti,
 
 // link / unlink remote
 
-class C_MDS_link_remote_finish : public Context {
-  MDS *mds;
+class C_MDS_link_remote_finish : public MDSInternalContext {
   MDRequestRef mdr;
   bool inc;
   CDentry *dn;
@@ -4375,7 +4385,7 @@ class C_MDS_link_remote_finish : public Context {
   version_t dpv;
 public:
   C_MDS_link_remote_finish(MDS *m, MDRequestRef& r, bool i, CDentry *d, CInode *ti) :
-    mds(m), mdr(r), inc(i), dn(d), targeti(ti),
+    MDSInternalContext(m), mdr(r), inc(i), dn(d), targeti(ti),
     dpv(d->get_projected_version()) {}
   void finish(int r) {
     assert(r == 0);
@@ -4494,26 +4504,24 @@ void Server::_link_remote_finish(MDRequestRef& mdr, bool inc,
 
 // remote linking/unlinking
 
-class C_MDS_SlaveLinkPrep : public Context {
-  Server *server;
+class C_MDS_SlaveLinkPrep : public C_ServerContext {
   MDRequestRef mdr;
   CInode *targeti;
 public:
   C_MDS_SlaveLinkPrep(Server *s, MDRequestRef& r, CInode *t) :
-    server(s), mdr(r), targeti(t) { }
+    C_ServerContext(s), mdr(r), targeti(t) { }
   void finish(int r) {
     assert(r == 0);
     server->_logged_slave_link(mdr, targeti);
   }
 };
 
-class C_MDS_SlaveLinkCommit : public Context {
-  Server *server;
+class C_MDS_SlaveLinkCommit : public C_ServerContext {
   MDRequestRef mdr;
   CInode *targeti;
 public:
   C_MDS_SlaveLinkCommit(Server *s, MDRequestRef& r, CInode *t) :
-    server(s), mdr(r), targeti(t) { }
+    C_ServerContext(s), mdr(r), targeti(t) { }
   void finish(int r) {
     server->_commit_slave_link(mdr, r, targeti);
   }
@@ -4619,10 +4627,9 @@ void Server::_logged_slave_link(MDRequestRef& mdr, CInode *targeti)
 }
 
 
-struct C_MDS_CommittedSlave : public Context {
-  Server *server;
+struct C_MDS_CommittedSlave : public C_ServerContext {
   MDRequestRef mdr;
-  C_MDS_CommittedSlave(Server *s, MDRequestRef& m) : server(s), mdr(m) {}
+  C_MDS_CommittedSlave(Server *s, MDRequestRef& m) : C_ServerContext(s), mdr(m) {}
   void finish(int r) {
     server->_committed_slave(mdr);
   }
@@ -4662,11 +4669,10 @@ void Server::_committed_slave(MDRequestRef& mdr)
   mds->mdcache->request_finish(mdr);
 }
 
-struct C_MDS_LoggedLinkRollback : public Context {
-  Server *server;
+struct C_MDS_LoggedLinkRollback : public C_ServerContext {
   MutationRef mut;
   MDRequestRef mdr;
-  C_MDS_LoggedLinkRollback(Server *s, MutationRef& m, MDRequestRef& r) : server(s), mut(m), mdr(r) {}
+  C_MDS_LoggedLinkRollback(Server *s, MutationRef& m, MDRequestRef& r) : C_ServerContext(s), mut(m), mdr(r) {}
   void finish(int r) {
     server->_link_rollback_finish(mut, mdr);
   }
@@ -4916,15 +4922,14 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
     _unlink_local(mdr, dn, straydn);
 }
 
-class C_MDS_unlink_local_finish : public Context {
-  MDS *mds;
+class C_MDS_unlink_local_finish : public MDSInternalContext {
   MDRequestRef mdr;
   CDentry *dn;
   CDentry *straydn;
   version_t dnpv;  // deleted dentry
 public:
   C_MDS_unlink_local_finish(MDS *m, MDRequestRef& r, CDentry *d, CDentry *sd) :
-    mds(m), mdr(r), dn(d), straydn(sd),
+    MDSInternalContext(m), mdr(r), dn(d), straydn(sd),
     dnpv(d->get_projected_version()) {}
   void finish(int r) {
     assert(r == 0);
@@ -5087,12 +5092,11 @@ bool Server::_rmdir_prepare_witness(MDRequestRef& mdr, int who, CDentry *dn, CDe
   return true;
 }
 
-struct C_MDS_SlaveRmdirPrep : public Context {
-  Server *server;
+struct C_MDS_SlaveRmdirPrep : public C_ServerContext {
   MDRequestRef mdr;
   CDentry *dn, *straydn;
   C_MDS_SlaveRmdirPrep(Server *s, MDRequestRef& r, CDentry *d, CDentry *st)
-    : server(s), mdr(r), dn(d), straydn(st) {}
+    : C_ServerContext(s), mdr(r), dn(d), straydn(st) {}
   void finish(int r) {
     server->_logged_slave_rmdir(mdr, dn, straydn);
   }
@@ -5266,14 +5270,13 @@ void Server::_commit_slave_rmdir(MDRequestRef& mdr, int r)
   }
 }
 
-struct C_MDS_LoggedRmdirRollback : public Context {
-  Server *server;
+struct C_MDS_LoggedRmdirRollback : public C_ServerContext {
   MDRequestRef mdr;
   metareqid_t reqid;
   CDentry *dn;
   CDentry *straydn;
   C_MDS_LoggedRmdirRollback(Server *s, MDRequestRef& m, metareqid_t mr, CDentry *d, CDentry *st)
-    : server(s), mdr(m), reqid(mr), dn(d), straydn(st) {}
+    : C_ServerContext(s), mdr(m), reqid(mr), dn(d), straydn(st) {}
   void finish(int r) {
     server->_rmdir_rollback_finish(mdr, reqid, dn, straydn);
   }
@@ -5431,8 +5434,7 @@ bool Server::_dir_is_nonempty(MDRequestRef& mdr, CInode *in)
 // ======================================================
 
 
-class C_MDS_rename_finish : public Context {
-  MDS *mds;
+class C_MDS_rename_finish : public MDSInternalContext {
   MDRequestRef mdr;
   CDentry *srcdn;
   CDentry *destdn;
@@ -5440,7 +5442,7 @@ class C_MDS_rename_finish : public Context {
 public:
   C_MDS_rename_finish(MDS *m, MDRequestRef& r,
 		      CDentry *sdn, CDentry *ddn, CDentry *stdn) :
-    mds(m), mdr(r),
+    MDSInternalContext(m), mdr(r),
     srcdn(sdn), destdn(ddn), straydn(stdn) { }
   void finish(int r) {
     assert(r == 0);
@@ -5498,8 +5500,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   if (r < 0) {
     if (r == -ESTALE) {
       dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
-      Context *c = new C_MDS_TryFindInode(this, mdr);
-      mdcache->find_ino_peers(srcpath.get_ino(), c);
+      mdcache->find_ino_peers(srcpath.get_ino(), new C_MDS_TryFindInode(this, mdr));
     } else {
       dout(10) << "FAIL on error " << r << dendl;
       reply_request(mdr, r);
@@ -6431,41 +6432,36 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
 
 
 
-
-
 // ------------
 // SLAVE
 
-class C_MDS_SlaveRenamePrep : public Context {
-  Server *server;
+class C_MDS_SlaveRenamePrep : public C_ServerContext {
   MDRequestRef mdr;
   CDentry *srcdn, *destdn, *straydn;
 public:
   C_MDS_SlaveRenamePrep(Server *s, MDRequestRef& m, CDentry *sr, CDentry *de, CDentry *st) :
-    server(s), mdr(m), srcdn(sr), destdn(de), straydn(st) {}
+    C_ServerContext(s), mdr(m), srcdn(sr), destdn(de), straydn(st) {}
   void finish(int r) {
     server->_logged_slave_rename(mdr, srcdn, destdn, straydn);
   }
 };
 
-class C_MDS_SlaveRenameCommit : public Context {
-  Server *server;
+class C_MDS_SlaveRenameCommit : public C_ServerContext {
   MDRequestRef mdr;
   CDentry *srcdn, *destdn, *straydn;
 public:
   C_MDS_SlaveRenameCommit(Server *s, MDRequestRef& m, CDentry *sr, CDentry *de, CDentry *st) :
-    server(s), mdr(m), srcdn(sr), destdn(de), straydn(st) {}
+    C_ServerContext(s), mdr(m), srcdn(sr), destdn(de), straydn(st) {}
   void finish(int r) {
     server->_commit_slave_rename(mdr, r, srcdn, destdn, straydn);
   }
 };
 
-class C_MDS_SlaveRenameSessionsFlushed : public Context {
-  Server *server;
+class C_MDS_SlaveRenameSessionsFlushed : public C_ServerContext {
   MDRequestRef mdr;
 public:
   C_MDS_SlaveRenameSessionsFlushed(Server *s, MDRequestRef& r) :
-    server(s), mdr(r) {}
+    C_ServerContext(s), mdr(r) {}
   void finish(int r) {
     server->_slave_rename_sessions_flushed(mdr);
   }
@@ -6576,7 +6572,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
       set<client_t> export_client_set;
       mdcache->migrator->get_export_client_set(srcdnl->get_inode(), export_client_set);
 
-      C_GatherBuilder gather(g_ceph_context);
+      MDSGatherBuilder gather(g_ceph_context);
       flush_client_sessions(export_client_set, gather);
       if (gather.has_subs()) {
 	mdr->more()->waiting_on_slave.insert(-1);
@@ -6758,7 +6754,7 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
 
   CDentry::linkage_t *destdnl = destdn->get_linkage();
 
-  list<Context*> finished;
+  list<MDSInternalContextBase*> finished;
   if (r == 0) {
     // unfreeze+singleauth inode
     //  hmm, do i really need to delay this?
@@ -6875,8 +6871,7 @@ void _rollback_repair_dir(MutationRef& mut, CDir *dir, rename_rollback::drec &r,
   mut->add_updated_lock(&dir->get_inode()->nestlock);
 }
 
-struct C_MDS_LoggedRenameRollback : public Context {
-  Server *server;
+struct C_MDS_LoggedRenameRollback : public C_ServerContext {
   MutationRef mut;
   MDRequestRef mdr;
   CDentry *srcdn;
@@ -6886,8 +6881,8 @@ struct C_MDS_LoggedRenameRollback : public Context {
   bool finish_mdr;
   C_MDS_LoggedRenameRollback(Server *s, MutationRef& m, MDRequestRef& r,
 			     CDentry *sd, version_t pv, CDentry *dd,
-			    CDentry *st, bool f) :
-    server(s), mut(m), mdr(r), srcdn(sd), srcdnpv(pv), destdn(dd),
+			     CDentry *st, bool f) :
+    C_ServerContext(s), mut(m), mdr(r), srcdn(sd), srcdnpv(pv), destdn(dd),
     straydn(st), finish_mdr(f) {}
   void finish(int r) {
     server->_rename_rollback_finish(mut, mdr, srcdn, srcdnpv,
@@ -7121,7 +7116,7 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequestRef& mdr,
     assert(!le->commit.empty());
     if (mdr)
       mdr->more()->slave_update_journaled = false;
-    Context *fin = new C_MDS_LoggedRenameRollback(this, mut, mdr, srcdn, srcdnpv,
+    MDSInternalContextBase *fin = new C_MDS_LoggedRenameRollback(this, mut, mdr, srcdn, srcdnpv,
 						  destdn, straydn, finish_mdr);
     submit_mdlog_entry(le, fin, mdr, __func__);
     mdlog->flush();
@@ -7181,7 +7176,7 @@ void Server::_rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentr
   }
 
   if (mdr) {
-    list<Context*> finished;
+    list<MDSInternalContextBase*> finished;
     if (mdr->more()->is_ambiguous_auth) {
       if (srcdn->is_auth())
 	mdr->more()->rename_inode->unfreeze_inode(finished);
@@ -7339,13 +7334,12 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
 
 // MKSNAP
 
-struct C_MDS_mksnap_finish : public Context {
-  MDS *mds;
+struct C_MDS_mksnap_finish : public MDSInternalContext {
   MDRequestRef mdr;
   CInode *diri;
   SnapInfo info;
   C_MDS_mksnap_finish(MDS *m, MDRequestRef& r, CInode *di, SnapInfo &i) :
-    mds(m), mdr(r), diri(di), info(i) {}
+    MDSInternalContext(m), mdr(r), diri(di), info(i) {}
   void finish(int r) {
     mds->server->_mksnap_finish(mdr, diri, info);
   }
@@ -7491,13 +7485,12 @@ void Server::_mksnap_finish(MDRequestRef& mdr, CInode *diri, SnapInfo &info)
 
 // RMSNAP
 
-struct C_MDS_rmsnap_finish : public Context {
-  MDS *mds;
+struct C_MDS_rmsnap_finish : public MDSInternalContext {
   MDRequestRef mdr;
   CInode *diri;
   snapid_t snapid;
   C_MDS_rmsnap_finish(MDS *m, MDRequestRef& r, CInode *di, snapid_t sn) :
-    mds(m), mdr(r), diri(di), snapid(sn) {}
+    MDSInternalContext(m), mdr(r), diri(di), snapid(sn) {}
   void finish(int r) {
     mds->server->_rmsnap_finish(mdr, diri, snapid);
   }

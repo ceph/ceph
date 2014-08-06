@@ -37,6 +37,18 @@ void MDSTableServer::handle_request(MMDSTableRequest *req)
   }
 }
 
+class C_Prepare : public MDSInternalContext {
+  MDSTableServer *server;
+  MMDSTableRequest *req;
+  version_t tid;
+public:
+
+  C_Prepare(MDSTableServer *s, MMDSTableRequest *r, version_t v) : MDSInternalContext(s->mds), server(s), req(r), tid(v) {}
+  void finish(int r) {
+    server->_prepare_logged(req, tid);
+  }
+};
+
 // prepare
 /* This function DOES put the passed message before returning */
 void MDSTableServer::handle_prepare(MMDSTableRequest *req)
@@ -69,6 +81,15 @@ void MDSTableServer::_prepare_logged(MMDSTableRequest *req, version_t tid)
   req->put();
 }
 
+class C_Commit : public MDSInternalContext {
+  MDSTableServer *server;
+  MMDSTableRequest *req;
+public:
+  C_Commit(MDSTableServer *s, MMDSTableRequest *r) : MDSInternalContext(s->mds), server(s), req(r) {}
+  void finish(int r) {
+    server->_commit_logged(req);
+  }
+};
 
 // commit
 /* This function DOES put the passed message before returning */

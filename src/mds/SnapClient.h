@@ -18,7 +18,7 @@
 #include "MDSTableClient.h"
 #include "snap.h"
 
-class Context;
+class MDSInternalContextBase;
 class MDS;
 class LogSegment;
 
@@ -30,7 +30,7 @@ public:
   void handle_query_result(MMDSTableRequest *m) {}
 
   void prepare_create(inodeno_t dirino, const string& name, utime_t stamp,
-		      version_t *pstid, bufferlist *pbl, Context *onfinish) {
+		      version_t *pstid, bufferlist *pbl, MDSInternalContextBase *onfinish) {
     bufferlist bl;
     __u32 op = TABLE_OP_CREATE;
     ::encode(op, bl);
@@ -40,7 +40,7 @@ public:
     _prepare(bl, pstid, pbl, onfinish);
   }
 
-  void prepare_create_realm(inodeno_t ino, version_t *pstid, bufferlist *pbl, Context *onfinish) {
+  void prepare_create_realm(inodeno_t ino, version_t *pstid, bufferlist *pbl, MDSInternalContextBase *onfinish) {
     bufferlist bl;
     __u32 op = TABLE_OP_CREATE;
     ::encode(op, bl);
@@ -48,7 +48,7 @@ public:
     _prepare(bl, pstid, pbl, onfinish);
   }
 
-  void prepare_destroy(inodeno_t ino, snapid_t snapid, version_t *pstid, bufferlist *pbl, Context *onfinish) {
+  void prepare_destroy(inodeno_t ino, snapid_t snapid, version_t *pstid, bufferlist *pbl, MDSInternalContextBase *onfinish) {
     bufferlist bl;
     __u32 op = TABLE_OP_DESTROY;
     ::encode(op, bl);

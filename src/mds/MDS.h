@@ -118,6 +118,7 @@ class Locker;
 class MDCache;
 class MDLog;
 class MDBalancer;
+class MDSInternalContextBase;
 
 class CInode;
 class CDir;
@@ -193,36 +194,36 @@ class MDS : public Dispatcher, public md_config_obs_t {
   MDSMap::DaemonState state;         // my confirmed state
   MDSMap::DaemonState want_state;    // the state i want
 
-  list<Context*> waiting_for_active, waiting_for_replay, waiting_for_reconnect, waiting_for_resolve;
-  list<Context*> replay_queue;
-  map<int, list<Context*> > waiting_for_active_peer;
+  list<MDSInternalContextBase*> waiting_for_active, waiting_for_replay, waiting_for_reconnect, waiting_for_resolve;
+  list<MDSInternalContextBase*> replay_queue;
+  map<int, list<MDSInternalContextBase*> > waiting_for_active_peer;
   list<Message*> waiting_for_nolaggy;
-  map<epoch_t, list<Context*> > waiting_for_mdsmap;
+  map<epoch_t, list<MDSInternalContextBase*> > waiting_for_mdsmap;
 
   map<int,version_t> peer_mdsmap_epoch;
 
   ceph_tid_t last_tid;    // for mds-initiated requests (e.g. stray rename)
 
  public:
-  void wait_for_active(Context *c) { 
+  void wait_for_active(MDSInternalContextBase *c) { 
     waiting_for_active.push_back(c); 
   }
-  void wait_for_active_peer(int who, Context *c) { 
+  void wait_for_active_peer(int who, MDSInternalContextBase *c) { 
     waiting_for_active_peer[who].push_back(c);
   }
-  void wait_for_replay(Context *c) { 
+  void wait_for_replay(MDSInternalContextBase *c) { 
     waiting_for_replay.push_back(c); 
   }
-  void wait_for_reconnect(Context *c) {
+  void wait_for_reconnect(MDSInternalContextBase *c) {
     waiting_for_reconnect.push_back(c);
   }
-  void wait_for_resolve(Context *c) {
+  void wait_for_resolve(MDSInternalContextBase *c) {
     waiting_for_resolve.push_back(c);
   }
-  void wait_for_mdsmap(epoch_t e, Context *c) {
+  void wait_for_mdsmap(epoch_t e, MDSInternalContextBase *c) {
     waiting_for_mdsmap[e].push_back(c);
   }
-  void enqueue_replay(Context *c) {
+  void enqueue_replay(MDSInternalContextBase *c) {
     replay_queue.push_back(c);
   }
 
@@ -252,12 +253,12 @@ class MDS : public Dispatcher, public md_config_obs_t {
     
 
   // -- waiters --
-  list<Context*> finished_queue;
+  list<MDSInternalContextBase*> finished_queue;
 
-  void queue_waiter(Context *c) {
+  void queue_waiter(MDSInternalContextBase *c) {
     finished_queue.push_back(c);
   }
-  void queue_waiters(list<Context*>& ls) {
+  void queue_waiters(list<MDSInternalContextBase*>& ls) {
     finished_queue.splice( finished_queue.end(), ls );
   }
   bool queue_one_replay() {
@@ -278,10 +279,9 @@ class MDS : public Dispatcher, public md_config_obs_t {
   bool is_laggy();
   utime_t get_laggy_until() { return laggy_until; }
 
-  class C_MDS_BeaconSender : public Context {
-    MDS *mds;
+  class C_MDS_BeaconSender : public MDSInternalContext {
   public:
-    C_MDS_BeaconSender(MDS *m) : mds(m) {}
+    C_MDS_BeaconSender(MDS *m) : MDSInternalContext(m) {}
     void finish(int r) {
       mds->beacon_sender = 0;
       mds->beacon_send();
@@ -289,10 +289,9 @@ class MDS : public Dispatcher, public md_config_obs_t {
   } *beacon_sender;
 
   // tick and other timer fun
-  class C_MDS_Tick : public Context {
-    MDS *mds;
+  class C_MDS_Tick : public MDSInternalContext {
   public:
-    C_MDS_Tick(MDS *m) : mds(m) {}
+    C_MDS_Tick(MDS *m) : MDSInternalContext(m) {}
     void finish(int r) {
       mds->tick_event = 0;
       mds->tick();
@@ -390,6 +389,7 @@ class MDS : public Dispatcher, public md_config_obs_t {
   } BootStep;
 
   friend class C_MDS_BootStart;
+  friend class C_MDS_InternalBootStart;
   void boot_start(BootStep step=MDS_BOOT_INITIAL, int r=0);    // starting|replay
   void calc_recovery_set();
  public:
@@ -451,14 +451,12 @@ class MDS : public Dispatcher, public md_config_obs_t {
 /* This expects to be given a reference which it is responsible for.
  * The finish function calls functions which
  * will put the Message exactly once.*/
-class C_MDS_RetryMessage : public Context {
+class C_MDS_RetryMessage : public MDSInternalContext {
   Message *m;
-  MDS *mds;
 public:
-  C_MDS_RetryMessage(MDS *mds, Message *m) {
+  C_MDS_RetryMessage(MDS *mds, Message *m) : MDSInternalContext(mds) {
     assert(m);
     this->m = m;
-    this->mds = mds;
   }
   virtual void finish(int r) {
     mds->inc_dispatch_depth();

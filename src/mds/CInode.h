@@ -504,7 +504,7 @@ public:
   void set_ambiguous_auth() {
     state_set(STATE_AMBIGUOUSAUTH);
   }
-  void clear_ambiguous_auth(std::list<Context*>& finished);
+  void clear_ambiguous_auth(std::list<MDSInternalContextBase*>& finished);
   void clear_ambiguous_auth();
 
   inodeno_t ino() const { return inode.ino; }
@@ -539,13 +539,13 @@ public:
   void mark_dirty(version_t projected_dirv, LogSegment *ls);
   void mark_clean();
 
-  void store(Context *fin);
+  void store(MDSInternalContextBase *fin);
   void _stored(version_t cv, Context *fin);
-  void fetch(Context *fin);
+  void fetch(MDSInternalContextBase *fin);
   void _fetched(bufferlist& bl, bufferlist& bl2, Context *fin);  
 
   void build_backtrace(int64_t pool, inode_backtrace_t& bt);
-  void store_backtrace(Context *fin, int op_prio=-1);
+  void store_backtrace(MDSInternalContextBase *fin, int op_prio=-1);
   void _stored_backtrace(version_t v, Context *fin);
   void _mark_dirty_parent(LogSegment *ls, bool dirty_pool=false);
   void clear_dirty_parent();
@@ -581,15 +581,15 @@ public:
 
   // -- waiting --
 protected:
-  std::map<frag_t, std::list<Context*> > waiting_on_dir;
+  std::map<frag_t, std::list<MDSInternalContextBase*> > waiting_on_dir;
 public:
-  void add_dir_waiter(frag_t fg, Context *c);
-  void take_dir_waiting(frag_t fg, std::list<Context*>& ls);
+  void add_dir_waiter(frag_t fg, MDSInternalContextBase *c);
+  void take_dir_waiting(frag_t fg, std::list<MDSInternalContextBase*>& ls);
   bool is_waiting_for_dir(frag_t fg) {
     return waiting_on_dir.count(fg);
   }
-  void add_waiter(uint64_t tag, Context *c);
-  void take_waiting(uint64_t tag, std::list<Context*>& ls);
+  void add_waiter(uint64_t tag, MDSInternalContextBase *c);
+  void take_waiting(uint64_t tag, std::list<MDSInternalContextBase*>& ls);
 
   // -- encode/decode helpers --
   void _encode_base(bufferlist& bl);
@@ -599,7 +599,7 @@ public:
   void _encode_locks_state_for_replica(bufferlist& bl);
   void _encode_locks_state_for_rejoin(bufferlist& bl, int rep);
   void _decode_locks_state(bufferlist::iterator& p, bool is_new);
-  void _decode_locks_rejoin(bufferlist::iterator& p, std::list<Context*>& waiters,
+  void _decode_locks_rejoin(bufferlist::iterator& p, std::list<MDSInternalContextBase*>& waiters,
 			    std::list<SimpleLock*>& eval_locks);
 
   // -- import/export --
@@ -796,7 +796,7 @@ public:
   /* Freeze the inode. auth_pin_allowance lets the caller account for any
    * auth_pins it is itself holding/responsible for. */
   bool freeze_inode(int auth_pin_allowance=0);
-  void unfreeze_inode(std::list<Context*>& finished);
+  void unfreeze_inode(std::list<MDSInternalContextBase*>& finished);
   void unfreeze_inode();
 
   void freeze_auth_pin();

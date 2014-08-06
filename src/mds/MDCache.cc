@@ -127,6 +127,43 @@ long g_num_caps = 0;
 set<int> SimpleLock::empty_gather_set;
 
 
+/**
+ * All non-I/O contexts that require a reference
+ * to an MDCache instance descend from this.
+ */
+class MDCacheContext : public virtual MDSInternalContextBase {
+protected:
+  MDCache *mdcache;
+  virtual MDS *get_mds()
+  {
+    assert(mdcache != NULL);
+    return mdcache->mds;
+  }
+public:
+  MDCacheContext(MDCache *mdc_) : mdcache(mdc_) {}
+};
+
+
+/**
+ * Only for contexts called back from an I/O completion
+ *
+ * Note: duplication of members wrt MDCacheContext, because
+ * it'ls the lesser of two evils compared with introducing
+ * yet another piece of (multiple) inheritance.
+ */
+class MDCacheIOContext : public virtual MDSIOContextBase {
+protected:
+  MDCache *mdcache;
+  virtual MDS *get_mds()
+  {
+    assert(mdcache != NULL);
+    return mdcache->mds;
+  }
+public:
+  MDCacheIOContext(MDCache *mdc_) : mdcache(mdc_) {}
+};
+
+
 MDCache::MDCache(MDS *m) :
   recovery_queue(m),
   delayed_eval_stray(member_offset(CDentry, item_stray))
@@ -334,7 +371,7 @@ CInode *MDCache::create_root_inode()
   return i;
 }
 
-void MDCache::create_empty_hierarchy(C_Gather *gather)
+void MDCache::create_empty_hierarchy(MDSGather *gather)
 {
   // create root dir
   CInode *root = create_root_inode();
@@ -359,7 +396,7 @@ void MDCache::create_empty_hierarchy(C_Gather *gather)
   root->store(gather->new_sub());
 }
 
-void MDCache::create_mydir_hierarchy(C_Gather *gather)
+void MDCache::create_mydir_hierarchy(MDSGather *gather)
 {
   // create mds dir
   char myname[10];
@@ -411,20 +448,19 @@ void MDCache::create_mydir_hierarchy(C_Gather *gather)
   myin->store(gather->new_sub());
 }
 
-struct C_MDC_CreateSystemFile : public Context {
-  MDCache *cache;
+struct C_MDC_CreateSystemFile : public MDCacheContext {
   MutationRef mut;
   CDentry *dn;
   version_t dpv;
-  Context *fin;
-  C_MDC_CreateSystemFile(MDCache *c, MutationRef& mu, CDentry *d, version_t v, Context *f) :
-    cache(c), mut(mu), dn(d), dpv(v), fin(f) {}
+  MDSInternalContextBase *fin;
+  C_MDC_CreateSystemFile(MDCache *c, MutationRef& mu, CDentry *d, version_t v, MDSInternalContextBase *f) :
+    MDCacheContext(c), mut(mu), dn(d), dpv(v), fin(f) {}
   void finish(int r) {
-    cache->_create_system_file_finish(mut, dn, dpv, fin);
+    mdcache->_create_system_file_finish(mut, dn, dpv, fin);
   }
 };
 
-void MDCache::_create_system_file(CDir *dir, const char *name, CInode *in, Context *fin)
+void MDCache::_create_system_file(CDir *dir, const char *name, CInode *in, MDSInternalContextBase *fin)
 {
   dout(10) << "_create_system_file " << name << " in " << *dir << dendl;
   CDentry *dn = dir->add_null_dentry(name);
@@ -473,7 +509,7 @@ void MDCache::_create_system_file(CDir *dir, const char *name, CInode *in, Conte
   mds->mdlog->flush();
 }
 
-void MDCache::_create_system_file_finish(MutationRef& mut, CDentry *dn, version_t dpv, Context *fin)
+void MDCache::_create_system_file_finish(MutationRef& mut, CDentry *dn, version_t dpv, MDSInternalContextBase *fin)
 {
   dout(10) << "_create_system_file_finish " << *dn << dendl;
   
@@ -503,9 +539,9 @@ void MDCache::_create_system_file_finish(MutationRef& mut, CDentry *dn, version_
 
 
 
-struct C_MDS_RetryOpenRoot : public Context {
+struct C_MDS_RetryOpenRoot : public MDSInternalContext {
   MDCache *cache;
-  C_MDS_RetryOpenRoot(MDCache *c) : cache(c) {}
+  C_MDS_RetryOpenRoot(MDCache *c) : MDSInternalContext(c->mds), cache(c) {}
   void finish(int r) {
     if (r < 0)
       cache->mds->suicide();
@@ -514,7 +550,7 @@ struct C_MDS_RetryOpenRoot : public Context {
   }
 };
 
-void MDCache::open_root_inode(Context *c)
+void MDCache::open_root_inode(MDSInternalContextBase *c)
 {
   if (mds->whoami == mds->mdsmap->get_root()) {
     CInode *in;
@@ -525,7 +561,7 @@ void MDCache::open_root_inode(Context *c)
   }
 }
 
-void MDCache::open_mydir_inode(Context *c)
+void MDCache::open_mydir_inode(MDSInternalContextBase *c)
 {
   CInode *in = create_system_inode(MDS_INO_MDSDIR(mds->whoami), S_IFDIR|0755);  // initially inaccurate!
   in->fetch(c);
@@ -641,7 +677,7 @@ void MDCache::populate_mydir()
   scan_stray_dir();
 }
 
-void MDCache::open_foreign_mdsdir(inodeno_t ino, Context *fin)
+void MDCache::open_foreign_mdsdir(inodeno_t ino, MDSInternalContextBase *fin)
 {
   discover_base_ino(ino, fin, ino & (MAX_MDS-1));
 }
@@ -796,12 +832,11 @@ void MDCache::try_subtree_merge(CDir *dir)
     try_subtree_merge_at(*p);
 }
 
-class C_MDC_SubtreeMergeWB : public Context {
-  MDCache *mdcache;
+class C_MDC_SubtreeMergeWB : public MDCacheContext {
   CInode *in;
   MutationRef mut;
 public:
-  C_MDC_SubtreeMergeWB(MDCache *mdc, CInode *i, MutationRef& m) : mdcache(mdc), in(i), mut(m) {}
+  C_MDC_SubtreeMergeWB(MDCache *mdc, CInode *i, MutationRef& m) : MDCacheContext(mdc), in(i), mut(m) {}
   void finish(int r) { 
     mdcache->subtree_merge_writebehind_finish(in, mut);
   }
@@ -2143,12 +2178,11 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
  * remove them from the uncommitted_masters map (used during recovery
  * to commit|abort slaves).
  */
-struct C_MDC_CommittedMaster : public Context {
-  MDCache *cache;
+struct C_MDC_CommittedMaster : public MDCacheContext {
   metareqid_t reqid;
-  C_MDC_CommittedMaster(MDCache *s, metareqid_t r) : cache(s), reqid(r) {}
+  C_MDC_CommittedMaster(MDCache *s, metareqid_t r) : MDCacheContext(s), reqid(r) {}
   void finish(int r) {
-    cache->_logged_master_commit(reqid);
+    mdcache->_logged_master_commit(reqid);
   }
 };
 
@@ -2219,13 +2253,12 @@ void MDCache::finish_committed_masters()
  * masters when it reaches up:active (all other recovering nodes must
  * complete resolve before that happens).
  */
-struct C_MDC_SlaveCommit : public Context {
-  MDCache *cache;
+struct C_MDC_SlaveCommit : public MDCacheContext {
   int from;
   metareqid_t reqid;
-  C_MDC_SlaveCommit(MDCache *c, int f, metareqid_t r) : cache(c), from(f), reqid(r) {}
+  C_MDC_SlaveCommit(MDCache *c, int f, metareqid_t r) : MDCacheContext(c), from(f), reqid(r) {}
   void finish(int r) {
-    cache->_logged_slave_commit(from, reqid);
+    mdcache->_logged_slave_commit(from, reqid);
   }
 };
 
@@ -2780,7 +2813,7 @@ void MDCache::handle_mds_recovery(int who)
   static const uint64_t i_mask = CInode::WAIT_ANY_MASK & ~CInode::WAIT_DIR;
   static const uint64_t d_mask = CDir::WAIT_ANY_MASK & ~CDir::WAIT_DENTRY;
 
-  list<Context*> waiters;
+  list<MDSInternalContextBase*> waiters;
 
   // wake up any waiters in their subtrees
   for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
@@ -4177,12 +4210,11 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
   }
 }
 
-class C_MDC_RejoinGatherFinish : public Context {
-  MDCache *cache;
+class C_MDC_RejoinGatherFinish : public MDCacheContext {
 public:
-  C_MDC_RejoinGatherFinish(MDCache *c) : cache(c) {}
+  C_MDC_RejoinGatherFinish(MDCache *c) : MDCacheContext(c) {}
   void finish(int r) {
-    cache->rejoin_gather_finish();
+    mdcache->rejoin_gather_finish();
   }
 };
 
@@ -4997,13 +5029,12 @@ void MDCache::rejoin_gather_finish()
   }
 }
 
-class C_MDC_RejoinOpenInoFinish: public Context {
-  MDCache *cache;
+class C_MDC_RejoinOpenInoFinish: public MDCacheContext {
   inodeno_t ino;
 public:
-  C_MDC_RejoinOpenInoFinish(MDCache *c, inodeno_t i) : cache(c), ino(i) {}
+  C_MDC_RejoinOpenInoFinish(MDCache *c, inodeno_t i) : MDCacheContext(c), ino(i) {}
   void finish(int r) {
-    cache->rejoin_open_ino_finish(ino, r);
+    mdcache->rejoin_open_ino_finish(ino, r);
   }
 };
 
@@ -5040,17 +5071,16 @@ void MDCache::rejoin_open_ino_finish(inodeno_t ino, int ret)
   }
 }
 
-class C_MDC_RejoinSessionsOpened : public Context {
-  MDCache *cache;
+class C_MDC_RejoinSessionsOpened : public MDCacheContext {
 public:
   map<client_t,entity_inst_t> client_map;
   map<client_t,uint64_t> sseqmap;
 
   C_MDC_RejoinSessionsOpened(MDCache *c, map<client_t,entity_inst_t>& cm) :
-    cache(c), client_map(cm) {}
+    MDCacheContext(c), client_map(cm) {}
   void finish(int r) {
     assert(r == 0);
-    cache->rejoin_open_sessions_finish(client_map, sseqmap);
+    mdcache->rejoin_open_sessions_finish(client_map, sseqmap);
   }
 };
 
@@ -5463,9 +5493,8 @@ void MDCache::do_delayed_cap_imports()
 #endif
 }
 
-struct C_MDC_OpenSnapParents : public Context {
-  MDCache *mdcache;
-  C_MDC_OpenSnapParents(MDCache *c) : mdcache(c) {}
+struct C_MDC_OpenSnapParents : public MDCacheContext {
+  C_MDC_OpenSnapParents(MDCache *c) : MDCacheContext(c) {}
   void finish(int r) {
     mdcache->open_snap_parents();
   }
@@ -5476,7 +5505,7 @@ void MDCache::open_snap_parents()
   dout(10) << "open_snap_parents" << dendl;
   
   map<client_t,MClientSnap*> splits;
-  C_GatherBuilder gather(g_ceph_context);
+  MDSGatherBuilder gather(g_ceph_context);
 
   map<CInode*,map<client_t,set<inodeno_t> > >::iterator p = missing_snap_parents.begin();
   while (p != missing_snap_parents.end()) {
@@ -5564,7 +5593,7 @@ bool MDCache::open_undef_inodes_dirfrags()
   if (fetch_queue.empty())
     return false;
 
-  C_GatherBuilder gather(g_ceph_context, new C_MDC_RejoinGatherFinish(this));
+  MDSGatherBuilder gather(g_ceph_context, new C_MDC_RejoinGatherFinish(this));
   for (set<CDir*>::iterator p = fetch_queue.begin();
        p != fetch_queue.end();
        ++p) {
@@ -5793,12 +5822,11 @@ void MDCache::reissue_all_caps()
 
 // ===============================================================================
 
-struct C_MDC_QueuedCow : public Context {
-  MDCache *mdcache;
+struct C_MDC_QueuedCow : public MDCacheContext {
   CInode *in;
   MutationRef mut;
   C_MDC_QueuedCow(MDCache *mdc, CInode *i, MutationRef& m) :
-    mdcache(mdc), in(i), mut(m) {}
+    MDCacheContext(mdc), in(i), mut(m) {}
   void finish(int r) {
     mdcache->_queued_file_recover_cow(in, mut);
   }
@@ -5933,16 +5961,14 @@ void MDCache::truncate_inode(CInode *in, LogSegment *ls)
   _truncate_inode(in, ls);
 }
 
-struct C_IO_MDC_TruncateFinish : public Context {
-  MDCache *mdc;
+struct C_IO_MDC_TruncateFinish : public MDCacheIOContext {
   CInode *in;
   LogSegment *ls;
   C_IO_MDC_TruncateFinish(MDCache *c, CInode *i, LogSegment *l) :
-    mdc(c), in(i), ls(l) {}
+    MDCacheIOContext(c), in(i), ls(l) {}
   void finish(int r) {
     assert(r == 0 || r == -ENOENT);
-    Mutex::Locker l(mdc->mds->mds_lock);
-    mdc->truncate_inode_finish(in, ls);
+    mdcache->truncate_inode_finish(in, ls);
   }
 };
 
@@ -5980,14 +6006,13 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
 					   &mds->finisher));
 }
 
-struct C_IO_MDC_TruncateLogged : public Context {
-  MDCache *mdc;
+struct C_MDC_TruncateLogged : public MDCacheContext {
   CInode *in;
   MutationRef mut;
-  C_IO_MDC_TruncateLogged(MDCache *m, CInode *i, MutationRef& mu) :
-    mdc(m), in(i), mut(mu) {}
+  C_MDC_TruncateLogged(MDCache *m, CInode *i, MutationRef& mu) :
+    MDCacheContext(m), in(i), mut(mu) {}
   void finish(int r) {
-    mdc->truncate_inode_logged(in, mut);
+    mdcache->truncate_inode_logged(in, mut);
   }
 };
 
@@ -6017,7 +6042,7 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
   le->metablob.add_truncate_finish(in->ino(), ls->seq);
 
   journal_dirty_inode(mut.get(), &le->metablob, in);
-  mds->mdlog->submit_entry(le, new C_IO_MDC_TruncateLogged(this, in, mut));
+  mds->mdlog->submit_entry(le, new C_MDC_TruncateLogged(this, in, mut));
 
   // flush immediately if there are readers/writers waiting
   if (in->get_caps_wanted() & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR))
@@ -6034,7 +6059,7 @@ void MDCache::truncate_inode_logged(CInode *in, MutationRef& mut)
   in->put(CInode::PIN_TRUNCATING);
   in->auth_unpin(this);
 
-  list<Context*> waiters;
+  list<MDSInternalContextBase*> waiters;
   in->take_waiting(CInode::WAIT_TRUNC, waiters);
   mds->queue_waiters(waiters);
 }
@@ -6994,12 +7019,11 @@ void MDCache::check_memory_usage()
 // =========================================================================================
 // shutdown
 
-class C_MDC_ShutdownCheck : public Context {
-  MDCache *mdc;
+class C_MDC_ShutdownCheck : public MDCacheContext {
 public:
-  C_MDC_ShutdownCheck(MDCache *m) : mdc(m) {}
+  C_MDC_ShutdownCheck(MDCache *m) : MDCacheContext(m) {}
   void finish(int) {
-    mdc->shutdown_check();
+    mdcache->shutdown_check();
   }
 };
 
@@ -7357,7 +7381,7 @@ void MDCache::dispatch(Message *m)
   }
 }
 
-Context *MDCache::_get_waiter(MDRequestRef& mdr, Message *req, Context *fin)
+MDSInternalContextBase *MDCache::_get_waiter(MDRequestRef& mdr, Message *req, MDSInternalContextBase *fin)
 {
   if (mdr) {
     dout(20) << "_get_waiter retryrequest" << dendl;
@@ -7370,7 +7394,7 @@ Context *MDCache::_get_waiter(MDRequestRef& mdr, Message *req, Context *fin)
   }
 }
 
-int MDCache::path_traverse(MDRequestRef& mdr, Message *req, Context *fin,     // who
+int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBase *fin,     // who
 			   const filepath& path,                   // what
                            vector<CDentry*> *pdnvec,         // result
 			   CInode **pin,
@@ -7787,7 +7811,7 @@ CInode *MDCache::cache_traverse(const filepath& fp)
  * @param approxfg approximate fragment.
  * @param fin completion callback
  */
-void MDCache::open_remote_dirfrag(CInode *diri, frag_t approxfg, Context *fin) 
+void MDCache::open_remote_dirfrag(CInode *diri, frag_t approxfg, MDSInternalContextBase *fin) 
 {
   dout(10) << "open_remote_dir on " << *diri << dendl;
   
@@ -7843,30 +7867,29 @@ CInode *MDCache::get_dentry_inode(CDentry *dn, MDRequestRef& mdr, bool projected
   }
 }
 
-struct C_MDC_OpenRemoteDentry : public Context {
-  MDCache *mdc;
+struct C_MDC_OpenRemoteDentry : public MDCacheContext {
   CDentry *dn;
   inodeno_t ino;
-  Context *onfinish;
+  MDSInternalContextBase *onfinish;
   bool want_xlocked;
-  C_MDC_OpenRemoteDentry(MDCache *m, CDentry *d, inodeno_t i, Context *f, bool wx) :
-    mdc(m), dn(d), ino(i), onfinish(f), want_xlocked(wx) {}
+  C_MDC_OpenRemoteDentry(MDCache *m, CDentry *d, inodeno_t i, MDSInternalContextBase *f, bool wx) :
+    MDCacheContext(m), dn(d), ino(i), onfinish(f), want_xlocked(wx) {}
   void finish(int r) {
-    mdc->_open_remote_dentry_finish(dn, ino, onfinish, want_xlocked, r);
+    mdcache->_open_remote_dentry_finish(dn, ino, onfinish, want_xlocked, r);
   }
 };
 
-void MDCache::open_remote_dentry(CDentry *dn, bool projected, Context *fin, bool want_xlocked)
+void MDCache::open_remote_dentry(CDentry *dn, bool projected, MDSInternalContextBase *fin, bool want_xlocked)
 {
   dout(10) << "open_remote_dentry " << *dn << dendl;
   CDentry::linkage_t *dnl = projected ? dn->get_projected_linkage() : dn->get_linkage();
   inodeno_t ino = dnl->get_remote_ino();
   uint64_t pool = dnl->get_remote_d_type() == DT_DIR ? mds->mdsmap->get_metadata_pool() : -1;
-  Context *fin2 = new C_MDC_OpenRemoteDentry(this, dn, ino, fin, want_xlocked);
-  open_ino(ino, pool, fin2, true, want_xlocked); // backtrace
+  open_ino(ino, pool,
+      new C_MDC_OpenRemoteDentry(this, dn, ino, fin, want_xlocked), true, want_xlocked); // backtrace
 }
 
-void MDCache::_open_remote_dentry_finish(CDentry *dn, inodeno_t ino, Context *fin,
+void MDCache::_open_remote_dentry_finish(CDentry *dn, inodeno_t ino, MDSInternalContextBase *fin,
 					 bool want_xlocked, int r)
 {
   if (r < 0) {
@@ -7896,37 +7919,33 @@ void MDCache::make_trace(vector<CDentry*>& trace, CInode *in)
 // -------------------------------------------------------------------------------
 // Open inode by inode number
 
-class C_IO_MDC_OpenInoBacktraceFetched : public Context {
-  MDCache *cache;
+class C_IO_MDC_OpenInoBacktraceFetched : public MDCacheIOContext {
   inodeno_t ino;
   public:
   bufferlist bl;
   C_IO_MDC_OpenInoBacktraceFetched(MDCache *c, inodeno_t i) :
-    cache(c), ino(i) {}
+    MDCacheIOContext(c), ino(i) {}
   void finish(int r) {
-    Mutex::Locker l(cache->mds->mds_lock);
-    cache->_open_ino_backtrace_fetched(ino, bl, r);
+    mdcache->_open_ino_backtrace_fetched(ino, bl, r);
   }
 };
 
-struct C_MDC_OpenInoTraverseDir : public Context {
-  MDCache *cache;
+struct C_MDC_OpenInoTraverseDir : public MDCacheContext {
   inodeno_t ino;
   public:
-  C_MDC_OpenInoTraverseDir(MDCache *c, inodeno_t i) : cache(c), ino(i) {}
+  C_MDC_OpenInoTraverseDir(MDCache *c, inodeno_t i) : MDCacheContext(c), ino(i) {}
   void finish(int r) {
-    assert(cache->opening_inodes.count(ino));
-    cache->_open_ino_traverse_dir(ino, cache->opening_inodes[ino], r);
+    assert(mdcache->opening_inodes.count(ino));
+    mdcache->_open_ino_traverse_dir(ino, mdcache->opening_inodes[ino], r);
   }
 };
 
-struct C_MDC_OpenInoParentOpened : public Context {
-  MDCache *cache;
+struct C_MDC_OpenInoParentOpened : public MDCacheContext {
   inodeno_t ino;
   public:
-  C_MDC_OpenInoParentOpened(MDCache *c, inodeno_t i) : cache(c), ino(i) {}
+  C_MDC_OpenInoParentOpened(MDCache *c, inodeno_t i) : MDCacheContext(c), ino(i) {}
   void finish(int r) {
-    cache->_open_ino_parent_opened(ino, r);
+    mdcache->_open_ino_parent_opened(ino, r);
   }
 };
 
@@ -8020,7 +8039,7 @@ void MDCache::_open_ino_parent_opened(inodeno_t ino, int ret)
   }
 }
 
-Context* MDCache::_open_ino_get_waiter(inodeno_t ino, MMDSOpenIno *m)
+MDSInternalContextBase* MDCache::_open_ino_get_waiter(inodeno_t ino, MMDSOpenIno *m)
 {
   if (m)
     return new C_MDS_RetryMessage(mds, m);
@@ -8160,7 +8179,7 @@ void MDCache::open_ino_finish(inodeno_t ino, open_ino_info_t& info, int ret)
 {
   dout(10) << "open_ino_finish ino " << ino << " ret " << ret << dendl;
 
-  list<Context*> waiters;
+  list<MDSInternalContextBase*> waiters;
   waiters.swap(info.waiters);
   opening_inodes.erase(ino);
   finish_contexts(g_ceph_context, waiters, ret);
@@ -8336,7 +8355,7 @@ void MDCache::kick_open_ino_peers(int who)
   }
 }
 
-void MDCache::open_ino(inodeno_t ino, int64_t pool, Context* fin,
+void MDCache::open_ino(inodeno_t ino, int64_t pool, MDSInternalContextBase* fin,
 		       bool want_replica, bool want_xlocked)
 {
   dout(10) << "open_ino " << ino << " pool " << pool << " want_replica "
@@ -8385,7 +8404,7 @@ void MDCache::open_ino(inodeno_t ino, int64_t pool, Context* fin,
   - traverse path
 
  */
-void MDCache::find_ino_peers(inodeno_t ino, Context *c, int hint)
+void MDCache::find_ino_peers(inodeno_t ino, MDSInternalContextBase *c, int hint)
 {
   dout(5) << "find_ino_peers " << ino << " hint " << hint << dendl;
   assert(!have_inode(ino));
@@ -8792,16 +8811,15 @@ void MDCache::request_kill(MDRequestRef& mdr)
 // -------------------------------------------------------------------------------
 // SNAPREALMS
 
-struct C_MDC_snaprealm_create_finish : public Context {
-  MDCache *cache;
+struct C_MDC_snaprealm_create_finish : public MDCacheContext {
   MDRequestRef mdr;
   MutationRef mut;
   CInode *in;
   C_MDC_snaprealm_create_finish(MDCache *c, MDRequestRef& m,
                                 MutationRef& mu, CInode *i) :
-    cache(c), mdr(m), mut(mu), in(i) {}
+    MDCacheContext(c), mdr(m), mut(mu), in(i) {}
   void finish(int r) {
-    cache->_snaprealm_create_finish(mdr, mut, in);
+    mdcache->_snaprealm_create_finish(mdr, mut, in);
   }
 };
 
@@ -8947,12 +8965,11 @@ void MDCache::_snaprealm_create_finish(MDRequestRef& mdr, MutationRef& mut, CIno
 // -------------------------------------------------------------------------------
 // STRAYS
 
-struct C_MDC_RetryScanStray : public Context {
-  MDCache *cache;
+struct C_MDC_RetryScanStray : public MDCacheContext {
   dirfrag_t next;
-  C_MDC_RetryScanStray(MDCache *c,  dirfrag_t n) : cache(c), next(n) { }
+  C_MDC_RetryScanStray(MDCache *c,  dirfrag_t n) : MDCacheContext(c), next(n) { }
   void finish(int r) {
-    cache->scan_stray_dir(next);
+    mdcache->scan_stray_dir(next);
   }
 };
 
@@ -8984,10 +9001,9 @@ void MDCache::scan_stray_dir(dirfrag_t next)
   }
 }
 
-struct C_MDC_EvalStray : public Context {
-  MDCache *mdcache;
+struct C_MDC_EvalStray : public MDCacheContext {
   CDentry *dn;
-  C_MDC_EvalStray(MDCache *c, CDentry *d) : mdcache(c), dn(d) {}
+  C_MDC_EvalStray(MDCache *c, CDentry *d) : MDCacheContext(c), dn(d) {}
   void finish(int r) {
     mdcache->eval_stray(dn);
   }
@@ -9107,16 +9123,14 @@ void MDCache::fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Conte
   mds->objecter->getxattr(oid, object_locator_t(pool), "parent", CEPH_NOSNAP, &bl, 0, fin);
 }
 
-class C_IO_MDC_PurgeStrayPurged : public Context {
-  MDCache *cache;
+class C_IO_MDC_PurgeStrayPurged : public MDCacheIOContext {
   CDentry *dn;
 public:
   C_IO_MDC_PurgeStrayPurged(MDCache *c, CDentry *d) : 
-    cache(c), dn(d) { }
+    MDCacheIOContext(c), dn(d) { }
   void finish(int r) {
-    Mutex::Locker l(cache->mds->mds_lock);
     assert(r == 0 || r == -ENOENT);
-    cache->_purge_stray_purged(dn, r);
+    mdcache->_purge_stray_purged(dn, r);
   }
 };
 
@@ -9219,27 +9233,25 @@ void MDCache::purge_stray(CDentry *dn)
   gather.activate();
 }
 
-class C_MDC_PurgeStrayLogged : public Context {
-  MDCache *cache;
+class C_MDC_PurgeStrayLogged : public MDCacheContext {
   CDentry *dn;
   version_t pdv;
   LogSegment *ls;
 public:
   C_MDC_PurgeStrayLogged(MDCache *c, CDentry *d, version_t v, LogSegment *s) : 
-    cache(c), dn(d), pdv(v), ls(s) { }
+    MDCacheContext(c), dn(d), pdv(v), ls(s) { }
   void finish(int r) {
-    cache->_purge_stray_logged(dn, pdv, ls);
+    mdcache->_purge_stray_logged(dn, pdv, ls);
   }
 };
-class C_MDC_PurgeStrayLoggedTruncate : public Context {
-  MDCache *cache;
+class C_MDC_PurgeStrayLoggedTruncate : public MDCacheContext {
   CDentry *dn;
   LogSegment *ls;
 public:
   C_MDC_PurgeStrayLoggedTruncate(MDCache *c, CDentry *d, LogSegment *s) : 
-    cache(c), dn(d), ls(s) { }
+    MDCacheContext(c), dn(d), ls(s) { }
   void finish(int r) {
-    cache->_purge_stray_logged_truncate(dn, ls);
+    mdcache->_purge_stray_logged_truncate(dn, ls);
   }
 };
 
@@ -9410,7 +9422,7 @@ void MDCache::_send_discover(discover_info_t& d)
 }
 
 void MDCache::discover_base_ino(inodeno_t want_ino,
-				Context *onfinish,
+				MDSInternalContextBase *onfinish,
 				int from) 
 {
   dout(7) << "discover_base_ino " << want_ino << " from mds." << from << dendl;
@@ -9425,7 +9437,7 @@ void MDCache::discover_base_ino(inodeno_t want_ino,
 
 void MDCache::discover_dir_frag(CInode *base,
 				frag_t approx_fg,
-				Context *onfinish,
+				MDSInternalContextBase *onfinish,
 				int from)
 {
   if (from < 0)
@@ -9447,23 +9459,22 @@ void MDCache::discover_dir_frag(CInode *base,
     base->add_dir_waiter(approx_fg, onfinish);
 }
 
-struct C_MDC_RetryDiscoverPath : public Context {
-  MDCache *mdc;
+struct C_MDC_RetryDiscoverPath : public MDCacheContext {
   CInode *base;
   snapid_t snapid;
   filepath path;
   int from;
   C_MDC_RetryDiscoverPath(MDCache *c, CInode *b, snapid_t s, filepath &p, int f) :
-    mdc(c), base(b), snapid(s), path(p), from(f)  {}
+    MDCacheContext(c), base(b), snapid(s), path(p), from(f)  {}
   void finish(int r) {
-    mdc->discover_path(base, snapid, path, 0, from);
+    mdcache->discover_path(base, snapid, path, 0, from);
   }
 };
 
 void MDCache::discover_path(CInode *base,
 			    snapid_t snap,
 			    filepath want_path,
-			    Context *onfinish,
+			    MDSInternalContextBase *onfinish,
 			    bool want_xlocked,
 			    int from)
 {
@@ -9481,7 +9492,7 @@ void MDCache::discover_path(CInode *base,
     base->add_waiter(CInode::WAIT_SINGLEAUTH, onfinish);
     return;
   } else if (from == mds->get_nodeid()) {
-    list<Context*> finished;
+    list<MDSInternalContextBase*> finished;
     base->take_waiting(CInode::WAIT_DIR, finished);
     mds->queue_waiters(finished);
     return;
@@ -9505,22 +9516,21 @@ void MDCache::discover_path(CInode *base,
     base->add_dir_waiter(fg, onfinish);
 }
 
-struct C_MDC_RetryDiscoverPath2 : public Context {
-  MDCache *mdc;
+struct C_MDC_RetryDiscoverPath2 : public MDCacheContext {
   CDir *base;
   snapid_t snapid;
   filepath path;
   C_MDC_RetryDiscoverPath2(MDCache *c, CDir *b, snapid_t s, filepath &p) :
-    mdc(c), base(b), snapid(s), path(p) {}
+    MDCacheContext(c), base(b), snapid(s), path(p) {}
   void finish(int r) {
-    mdc->discover_path(base, snapid, path, 0);
+    mdcache->discover_path(base, snapid, path, 0);
   }
 };
 
 void MDCache::discover_path(CDir *base,
 			    snapid_t snap,
 			    filepath want_path,
-			    Context *onfinish,
+			    MDSInternalContextBase *onfinish,
 			    bool want_xlocked)
 {
   int from = base->authority().first;
@@ -9536,7 +9546,7 @@ void MDCache::discover_path(CDir *base,
     base->add_waiter(CDir::WAIT_SINGLEAUTH, onfinish);
     return;
   } else if (from == mds->get_nodeid()) {
-    list<Context*> finished;
+    list<MDSInternalContextBase*> finished;
     base->take_sub_waiting(finished);
     mds->queue_waiters(finished);
     return;
@@ -9868,7 +9878,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
   if (m->is_flag_error_dn()) 
     dout(7) << " flag error, dentry = " << m->get_error_dentry() << dendl;
 
-  list<Context*> finished, error;
+  list<MDSInternalContextBase*> finished, error;
   int from = m->get_source().num();
 
   // starting point
@@ -9999,7 +10009,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 // REPLICAS
 
 CDir *MDCache::add_replica_dir(bufferlist::iterator& p, CInode *diri, int from,
-			       list<Context*>& finished)
+			       list<MDSInternalContextBase*>& finished)
 {
   dirfrag_t df;
   ::decode(df, p);
@@ -10055,7 +10065,7 @@ CDir *MDCache::forge_replica_dir(CInode *diri, frag_t fg, int from)
   return dir;
 }
 
-CDentry *MDCache::add_replica_dentry(bufferlist::iterator& p, CDir *dir, list<Context*>& finished)
+CDentry *MDCache::add_replica_dentry(bufferlist::iterator& p, CDir *dir, list<MDSInternalContextBase*>& finished)
 {
   string name;
   snapid_t last;
@@ -10079,7 +10089,7 @@ CDentry *MDCache::add_replica_dentry(bufferlist::iterator& p, CDir *dir, list<Co
   return dn;
 }
 
-CInode *MDCache::add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<Context*>& finished)
+CInode *MDCache::add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<MDSInternalContextBase*>& finished)
 {
   inodeno_t ino;
   snapid_t last;
@@ -10125,7 +10135,7 @@ void MDCache::replicate_stray(CDentry *straydn, int who, bufferlist& bl)
    
 CDentry *MDCache::add_replica_stray(bufferlist &bl, int from)
 {
-  list<Context*> finished;
+  list<MDSInternalContextBase*> finished;
   bufferlist::iterator p = bl.begin();
 
   CInode *mdsin = add_replica_inode(p, NULL, finished);
@@ -10280,7 +10290,7 @@ void MDCache::handle_dentry_link(MDentryLink *m)
   }
 
   bufferlist::iterator p = m->bl.begin();
-  list<Context*> finished;
+  list<MDSInternalContextBase*> finished;
   if (dn) {
     if (m->get_is_primary()) {
       // primary link.
@@ -10423,7 +10433,7 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
  */
 void MDCache::adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
 				   list<CDir*>& resultfrags, 
-				   list<Context*>& waiters,
+				   list<MDSInternalContextBase*>& waiters,
 				   bool replay)
 {
   dout(10) << "adjust_dir_fragments " << basefrag << " " << bits 
@@ -10444,7 +10454,7 @@ CDir *MDCache::force_dir_fragment(CInode *diri, frag_t fg, bool replay)
   dout(10) << "force_dir_fragment " << fg << " on " << *diri << dendl;
 
   list<CDir*> src, result;
-  list<Context*> waiters;
+  list<MDSInternalContextBase*> waiters;
 
   // split a parent?
   frag_t parent = diri->dirfragtree.get_branch_or_leaf(fg);
@@ -10489,7 +10499,7 @@ void MDCache::adjust_dir_fragments(CInode *diri,
 				   list<CDir*>& srcfrags,
 				   frag_t basefrag, int bits,
 				   list<CDir*>& resultfrags, 
-				   list<Context*>& waiters,
+				   list<MDSInternalContextBase*>& waiters,
 				   bool replay)
 {
   dout(10) << "adjust_dir_fragments " << basefrag << " bits " << bits
@@ -10602,12 +10612,12 @@ void MDCache::adjust_dir_fragments(CInode *diri,
 }
 
 
-class C_MDC_FragmentFrozen : public Context {
+class C_MDC_FragmentFrozen : public MDSInternalContext {
   MDCache *mdcache;
   MDRequestRef mdr;
 public:
   C_MDC_FragmentFrozen(MDCache *m, MDRequestRef& r) :
-    mdcache(m), mdr(r) {}
+    MDSInternalContext(m->mds), mdcache(m), mdr(r) {}
   virtual void finish(int r) {
     mdcache->fragment_frozen(mdr, r);
   }
@@ -10725,11 +10735,10 @@ void MDCache::fragment_freeze_dirs(list<CDir*>& dirs)
   }
 }
 
-class C_MDC_FragmentMarking : public Context {
-  MDCache *mdcache;
+class C_MDC_FragmentMarking : public MDCacheContext {
   MDRequestRef mdr;
 public:
-  C_MDC_FragmentMarking(MDCache *m, MDRequestRef& r) : mdcache(m), mdr(r) {}
+  C_MDC_FragmentMarking(MDCache *m, MDRequestRef& r) : MDCacheContext(m), mdr(r) {}
   virtual void finish(int r) {
     mdcache->fragment_mark_and_complete(mdr);
   }
@@ -10749,7 +10758,7 @@ void MDCache::fragment_mark_and_complete(MDRequestRef& mdr)
   CInode *diri = info.dirs.front()->get_inode();
   dout(10) << "fragment_mark_and_complete " << info.dirs << " on " << *diri << dendl;
 
-  C_GatherBuilder gather(g_ceph_context);
+  MDSGatherBuilder gather(g_ceph_context);
   
   for (list<CDir*>::iterator p = info.dirs.begin();
        p != info.dirs.end();
@@ -10923,49 +10932,47 @@ void MDCache::find_stale_fragment_freeze()
   }
 }
 
-class C_MDC_FragmentPrep : public Context {
+class C_MDC_FragmentPrep : public MDSInternalContext {
   MDCache *mdcache;
   MDRequestRef mdr;
 public:
-  C_MDC_FragmentPrep(MDCache *m, MDRequestRef& r) : mdcache(m), mdr(r) {}
+  C_MDC_FragmentPrep(MDCache *m, MDRequestRef& r) : MDSInternalContext(m->mds), mdcache(m), mdr(r) {}
   virtual void finish(int r) {
     mdcache->_fragment_logged(mdr);
   }
 };
 
-class C_MDC_FragmentStore : public Context {
+class C_MDC_FragmentStore : public MDSInternalContext {
   MDCache *mdcache;
   MDRequestRef mdr;
 public:
-  C_MDC_FragmentStore(MDCache *m, MDRequestRef& r) : mdcache(m), mdr(r) {}
+  C_MDC_FragmentStore(MDCache *m, MDRequestRef& r) : MDSInternalContext(m->mds), mdcache(m), mdr(r) {}
   virtual void finish(int r) {
     mdcache->_fragment_stored(mdr);
   }
 };
 
-class C_MDC_FragmentCommit : public Context {
+class C_MDC_FragmentCommit : public MDSInternalContext {
   MDCache *mdcache;
   dirfrag_t basedirfrag;
   list<CDir*> resultfrags;
 public:
   C_MDC_FragmentCommit(MDCache *m, dirfrag_t df, list<CDir*>& l) :
-    mdcache(m), basedirfrag(df), resultfrags(l) {}
+    MDSInternalContext(m->mds), mdcache(m), basedirfrag(df), resultfrags(l) {}
   virtual void finish(int r) {
     mdcache->_fragment_committed(basedirfrag, resultfrags);
   }
 };
 
-class C_IO_MDC_FragmentFinish : public Context {
-  MDCache *mdcache;
+class C_IO_MDC_FragmentFinish : public MDCacheIOContext {
   dirfrag_t basedirfrag;
   list<CDir*> resultfrags;
 public:
   C_IO_MDC_FragmentFinish(MDCache *m, dirfrag_t f, list<CDir*>& l) :
-    mdcache(m), basedirfrag(f) {
+    MDCacheIOContext(m), basedirfrag(f) {
     resultfrags.swap(l);
   }
   virtual void finish(int r) {
-    Mutex::Locker l(mdcache->mds->mds_lock);
     assert(r == 0 || r == -ENOENT);
     mdcache->_fragment_finish(basedirfrag, resultfrags);
   }
@@ -11041,7 +11048,7 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
   }
 
   // refragment
-  list<Context*> waiters;
+  list<MDSInternalContextBase*> waiters;
   adjust_dir_fragments(diri, info.dirs, basedirfrag.frag, info.bits,
 		       info.resultfrags, waiters, false);
   if (g_conf->mds_debug_frag)
@@ -11110,7 +11117,7 @@ void MDCache::_fragment_logged(MDRequestRef& mdr)
   mdr->apply();  // mark scatterlock
 
   // store resulting frags
-  C_GatherBuilder gather(g_ceph_context, new C_MDC_FragmentStore(this, mdr));
+  MDSGatherBuilder gather(g_ceph_context, new C_MDC_FragmentStore(this, mdr));
 
   for (list<CDir*>::iterator p = info.resultfrags.begin();
        p != info.resultfrags.end();
@@ -11273,7 +11280,7 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
 */
 
     // refragment
-    list<Context*> waiters;
+    list<MDSInternalContextBase*> waiters;
     list<CDir*> resultfrags;
     adjust_dir_fragments(diri, base, bits, resultfrags, waiters, false);
     if (g_conf->mds_debug_frag)
@@ -11378,7 +11385,7 @@ void MDCache::rollback_uncommitted_fragments()
     list<CDir*> resultfrags;
     if (uf.old_frags.empty()) {
       // created by old format EFragment
-      list<Context*> waiters;
+      list<MDSInternalContextBase*> waiters;
       adjust_dir_fragments(diri, p->first.frag, -uf.bits, resultfrags, waiters, true);
     } else {
       bufferlist::iterator bp = uf.rollback.begin();
@@ -11677,7 +11684,7 @@ void MDCache::dump_cache(const char *fn)
 
 
 C_MDS_RetryRequest::C_MDS_RetryRequest(MDCache *c, MDRequestRef& r)
-  : cache(c), mdr(r)
+  : MDSInternalContext(c->mds), cache(c), mdr(r)
 {}
 
 void C_MDS_RetryRequest::finish(int r)
