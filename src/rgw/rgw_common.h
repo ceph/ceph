@@ -1022,15 +1022,6 @@ public:
   bool in_extra_data; /* in-memory only member, does not serialize */
 
   rgw_obj() : in_extra_data(false) {}
-  rgw_obj(const char *b, const char *o) : in_extra_data(false) {
-    rgw_bucket _b(b);
-    std::string _o(o);
-    init(_b, _o);
-  }
-  rgw_obj(rgw_bucket& b, const char *o) : in_extra_data(false) {
-    std::string _o(o);
-    init(b, _o);
-  }
   rgw_obj(rgw_bucket& b, const std::string& o) : in_extra_data(false) {
     init(b, o);
   }
@@ -1110,13 +1101,6 @@ public:
       set_key(orig_key);
     else
       set_key(orig_obj);
-  }
-
-  string loc() {
-    if (orig_key.empty())
-      return orig_obj;
-    else
-      return orig_key;
   }
 
   /**
