@@ -12,6 +12,7 @@ from .misc import get_user
 from .misc import read_config
 from .nuke import nuke
 from .run_tasks import run_tasks
+from .repo_utils import fetch_qa_suite
 from .results import email_results
 
 
@@ -63,6 +64,25 @@ def write_initial_metadata(ctx):
 
         with file(os.path.join(ctx.archive, 'info.yaml'), 'w') as f:
             yaml.safe_dump(info, f, default_flow_style=False)
+
+
+def fetch_tasks_if_needed(job_config):
+    """
+    Fetch the suite repo (and include it in sys.path) so that we can use its
+    tasks.
+    """
+    # Any scheduled job will already have the suite checked out and its
+    # $PYTHONPATH set. We can check for this by looking for 'suite_path'
+    # in its config.
+    suite_path = job_config.get('suite_path')
+    if suite_path:
+        return
+
+    ceph_branch = job_config.get('branch', 'master')
+    suite_branch = job_config.get('suite_branch', ceph_branch)
+    suite_path = fetch_qa_suite(suite_branch)
+    sys.path.insert(1, suite_path)
+    job_config['suite_path'] = suite_path
 
 
 def main(ctx):
@@ -147,6 +167,8 @@ def main(ctx):
     ])
 
     ctx.config['tasks'][:0] = init_tasks
+
+    fetch_tasks_if_needed(ctx.config)
 
     try:
         run_tasks(tasks=ctx.config['tasks'], ctx=ctx)

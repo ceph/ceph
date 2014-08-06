@@ -119,7 +119,7 @@ def main(ctx):
             # last-in-suite jobs don't have suite_branch or branch set.
             ceph_branch = job_config.get('branch', 'master')
             suite_branch = job_config.get('suite_branch', ceph_branch)
-            suite_path = fetch_qa_suite(suite_branch)
+            job_config['suite_path'] = fetch_qa_suite(suite_branch)
         except BranchNotFoundError:
             log.exception(
                 "Branch not found; throwing job away")
@@ -159,7 +159,7 @@ def main(ctx):
             log.info('Creating archive dir %s', archive_path_full)
             safepath.makedirs(ctx.archive_dir, safe_archive)
             log.info('Running job %d', job.jid)
-            run_job(job_config, teuth_bin_path, suite_path)
+            run_job(job_config, teuth_bin_path)
         job.delete()
 
 
@@ -218,7 +218,8 @@ def run_with_watchdog(process, job_config):
         report.try_push_job_info(job_info, dict(status='dead'))
 
 
-def run_job(job_config, teuth_bin_path, suite_path):
+def run_job(job_config, teuth_bin_path):
+    suite_path = job_config['suite_path']
     arg = [
         os.path.join(teuth_bin_path, 'teuthology'),
     ]
