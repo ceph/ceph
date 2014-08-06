@@ -142,7 +142,7 @@ def validate_branch(branch):
         raise ValueError("Illegal branch name: '%s'" % branch)
 
 
-def fetch_qa_suite(branch):
+def fetch_qa_suite(branch, lock=True):
     """
     Make sure ceph-qa-suite is checked out.
 
@@ -153,16 +153,13 @@ def fetch_qa_suite(branch):
     dest_path = os.path.join(src_base_path, 'ceph-qa-suite_' + branch)
     qa_suite_url = os.path.join(config.ceph_git_base_url, 'ceph-qa-suite')
     # only let one worker create/update the checkout at a time
-    lock = filelock(dest_path.rstrip('/') + '.lock')
-    lock.acquire()
-    try:
+    lock_path = dest_path.rstrip('/') + '.lock'
+    with FileLock(lock_path, noop=not lock):
         enforce_repo_state(qa_suite_url, dest_path, branch)
-    finally:
-        lock.release()
     return dest_path
 
 
-def fetch_teuthology_branch(branch):
+def fetch_teuthology_branch(branch, lock=True):
     """
     Make sure we have the correct teuthology branch checked out and up-to-date
 
@@ -172,9 +169,8 @@ def fetch_teuthology_branch(branch):
     src_base_path = config.src_base_path
     dest_path = os.path.join(src_base_path, 'teuthology_' + branch)
     # only let one worker create/update the checkout at a time
-    lock = filelock(dest_path.rstrip('/') + '.lock')
-    lock.acquire()
-    try:
+    lock_path = dest_path.rstrip('/') + '.lock'
+    with FileLock(lock_path, noop=not lock):
         teuthology_git_upstream = config.ceph_git_base_url + \
             'teuthology.git'
         enforce_repo_state(teuthology_git_upstream, dest_path, branch)
@@ -195,24 +191,27 @@ def fetch_teuthology_branch(branch):
                 log.warn(line.strip())
         log.info("Bootstrap exited with status %s", returncode)
 
-    finally:
-        lock.release()
-
     return dest_path
 
 
-class filelock(object):
-    # simple flock class
-    def __init__(self, fn):
-        self.fn = fn
-        self.fd = None
+class FileLock(object):
+    def __init__(self, filename, noop=False):
+        self.filename = filename
+        self.file = None
+        self.noop = noop
 
-    def acquire(self):
-        assert not self.fd
-        self.fd = file(self.fn, 'w')
-        fcntl.lockf(self.fd, fcntl.LOCK_EX)
+    def __enter__(self):
+        if not self.noop:
+            assert self.file is None
+            self.file = file(self.filename, 'w')
+            fcntl.lockf(self.file, fcntl.LOCK_EX)
+        return self
 
-    def release(self):
-        assert self.fd
-        fcntl.lockf(self.fd, fcntl.LOCK_UN)
-        self.fd = None
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if not self.noop:
+            assert self.file is not None
+            fcntl.lockf(self.file, fcntl.LOCK_UN)
+            self.file.close()
+            self.file = None
+            if os.path.exists(self.filename):
+                os.remove(self.filename)
