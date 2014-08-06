@@ -56,7 +56,7 @@ public:
 
   bool readonly() const;
 
-  std::pair<std::string, std::string> map_image_name(std::string image_name, std::string snap_name) const;
+  rbd_replay::ImageName map_image_name(std::string image_name, std::string snap_name) const;
 
 private:
   void run();

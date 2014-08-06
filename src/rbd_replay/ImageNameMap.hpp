@@ -20,6 +20,7 @@
 #include <vector>
 #include <boost/function.hpp>
 #include <boost/regex.hpp>
+#include "ImageName.hpp"
 #include "NameMap.hpp"
 
 namespace rbd_replay {
@@ -28,9 +29,7 @@ class ImageNameMap {
 public:
   typedef std::pair<boost::regex, std::string> Mapping;
 
-  typedef std::pair<std::string, std::string> Name;
-
-  typedef boost::function<Name (Name input, std::string output)> BadMappingFallback;
+  typedef boost::function<rbd_replay::ImageName (const rbd_replay::ImageName& input, std::string output)> BadMappingFallback;
 
   ImageNameMap();
 
@@ -38,33 +37,12 @@ public:
 
   void add_mapping(Mapping mapping);
 
-  bool parse_name(std::string name_string, Name *name) const;
-
-  std::string format_name(Name name) const;
-
-  Name map(Name name) const;
+  rbd_replay::ImageName map(const rbd_replay::ImageName& name) const;
 
   void set_bad_mapping_fallback(BadMappingFallback bad_mapping_fallback);
 
 private:
-  std::string escape_at(std::string s) const;
-
-  std::string unescape_at(std::string s) const;
-
   NameMap m_map;
-
-  // Split "a@b" into "a" and "b", allowing for escaped at sign
-  boost::regex m_name;
-
-  // We don't have to worry about an even number of backslahes followed by an at sign,
-  // because that at sign would have already been matched and removed.
-  boost::regex m_escaped_at;
-
-  boost::regex m_escaped_backslash;
-
-  boost::regex m_at;
-
-  boost::regex m_backslash;
 
   BadMappingFallback m_bad_mapping_fallback;
 };
