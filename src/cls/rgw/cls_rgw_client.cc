@@ -25,7 +25,7 @@ void cls_rgw_bucket_set_tag_timeout(ObjectWriteOperation& o, uint64_t tag_timeou
 }
 
 void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, string& tag,
-                               string& name, string& locator, bool log_op)
+                               const string& name, const string& instance, const string& locator, bool log_op)
 {
   struct rgw_cls_obj_prepare_op call;
   call.op = op;
@@ -33,13 +33,16 @@ void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, string& 
   call.name = name;
   call.locator = locator;
   call.log_op = log_op;
+  call.instance = instance;
   bufferlist in;
   ::encode(call, in);
   o.exec("rgw", "bucket_prepare_op", in);
 }
 
 void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, string& tag,
-                                rgw_bucket_entry_ver& ver, string& name, rgw_bucket_dir_entry_meta& dir_meta,
+                                rgw_bucket_entry_ver& ver,
+                                const string& name, const string& instance,
+                                rgw_bucket_dir_entry_meta& dir_meta,
 				list<string> *remove_objs, bool log_op)
 {
 
@@ -51,6 +54,7 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, string&
   call.ver = ver;
   call.meta = dir_meta;
   call.log_op = log_op;
+  call.instance = instance;
   if (remove_objs)
     call.remove_objs = *remove_objs;
   ::encode(call, in);

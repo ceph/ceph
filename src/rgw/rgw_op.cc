@@ -244,7 +244,7 @@ static int get_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx,
     return 0;
   }
 
-  if (obj.object.empty()) {
+  if (obj.get_object().empty()) {
     rgw_obj instance_obj;
     store->get_bucket_instance_obj(bucket_info.bucket, instance_obj);
     return get_bucket_policy_from_attr(cct, store, ctx, bucket_info, bucket_attrs,
@@ -2867,7 +2867,7 @@ void RGWCompleteMultipart::execute()
         manifest.append(obj_part.manifest);
       }
 
-      remove_objs.push_back(src_obj.object);
+      remove_objs.push_back(src_obj.get_index_key());
 
       ofs += obj_part.size;
     }

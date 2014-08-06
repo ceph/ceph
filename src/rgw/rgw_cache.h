@@ -172,7 +172,7 @@ class RGWCache  : public T
     return T::list_objects_raw_next(obj, handle);
   }
 
-  string normal_name(rgw_bucket& bucket, std::string& oid) {
+  string normal_name(rgw_bucket& bucket, const std::string& oid) {
     string& bucket_name = bucket.name;
     char buf[bucket_name.size() + 1 + oid.size() + 1];
     const char *bucket_str = bucket_name.c_str();
@@ -181,9 +181,9 @@ class RGWCache  : public T
     return string(buf);
   }
 
-  void normalize_bucket_and_obj(rgw_bucket& src_bucket, string& src_obj, rgw_bucket& dst_bucket, string& dst_obj);
+  void normalize_bucket_and_obj(rgw_bucket& src_bucket, const string& src_obj, rgw_bucket& dst_bucket, string& dst_obj);
   string normal_name(rgw_obj& obj) {
-    return normal_name(obj.bucket, obj.object);
+    return normal_name(obj.bucket, obj.get_object());
   }
 
   int init_rados() {
@@ -233,7 +233,7 @@ public:
 };
 
 template <class T>
-void RGWCache<T>::normalize_bucket_and_obj(rgw_bucket& src_bucket, string& src_obj, rgw_bucket& dst_bucket, string& dst_obj)
+void RGWCache<T>::normalize_bucket_and_obj(rgw_bucket& src_bucket, const string& src_obj, rgw_bucket& dst_bucket, string& dst_obj)
 {
   if (src_obj.size()) {
     dst_bucket = src_bucket;
@@ -249,7 +249,7 @@ int RGWCache<T>::delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj&
 {
   rgw_bucket bucket;
   string oid;
-  normalize_bucket_and_obj(obj.bucket, obj.object, bucket, oid);
+  normalize_bucket_and_obj(obj.bucket, obj.get_object(), bucket, oid);
   if (bucket.name[0] != '.')
     return T::delete_obj_impl(ctx, bucket_owner, obj, objv_tracker);
 
@@ -268,7 +268,7 @@ int RGWCache<T>::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **h
 {
   rgw_bucket bucket;
   string oid;
-  normalize_bucket_and_obj(obj.bucket, obj.object, bucket, oid);
+  normalize_bucket_and_obj(obj.bucket, obj.get_object(), bucket, oid);
   if (bucket.name[0] != '.' || ofs != 0)
     return T::get_obj(ctx, objv_tracker, handle, obj, obl, ofs, end, cache_info);
 
@@ -328,7 +328,7 @@ int RGWCache<T>::set_attr(void *ctx, rgw_obj& obj, const char *attr_name, buffer
 {
   rgw_bucket bucket;
   string oid;
-  normalize_bucket_and_obj(obj.bucket, obj.object, bucket, oid);
+  normalize_bucket_and_obj(obj.bucket, obj.get_object(), bucket, oid);
   ObjectCacheInfo info;
   bool cacheable = false;
   if (bucket.name[0] == '.') {
@@ -365,7 +365,7 @@ int RGWCache<T>::set_attrs(void *ctx, rgw_obj& obj,
 {
   rgw_bucket bucket;
   string oid;
-  normalize_bucket_and_obj(obj.bucket, obj.object, bucket, oid);
+  normalize_bucket_and_obj(obj.bucket, obj.get_object(), bucket, oid);
   ObjectCacheInfo info;
   bool cacheable = false;
   if (bucket.name[0] == '.') {
@@ -406,7 +406,7 @@ int RGWCache<T>::put_obj_meta_impl(void *ctx, rgw_obj& obj, uint64_t size, time_
 {
   rgw_bucket bucket;
   string oid;
-  normalize_bucket_and_obj(obj.bucket, obj.object, bucket, oid);
+  normalize_bucket_and_obj(obj.bucket, obj.get_object(), bucket, oid);
   ObjectCacheInfo info;
   bool cacheable = false;
   if (bucket.name[0] == '.') {
@@ -446,7 +446,7 @@ int RGWCache<T>::put_obj_data(void *ctx, rgw_obj& obj, const char *data,
 {
   rgw_bucket bucket;
   string oid;
-  normalize_bucket_and_obj(obj.bucket, obj.object, bucket, oid);
+  normalize_bucket_and_obj(obj.bucket, obj.get_object(), bucket, oid);
   ObjectCacheInfo info;
   bool cacheable = false;
   if ((bucket.name[0] == '.') && ((ofs == 0) || (ofs == -1))) {
@@ -482,7 +482,7 @@ int RGWCache<T>::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmti
 {
   rgw_bucket bucket;
   string oid;
-  normalize_bucket_and_obj(obj.bucket, obj.object, bucket, oid);
+  normalize_bucket_and_obj(obj.bucket, obj.get_object(), bucket, oid);
   if (bucket.name[0] != '.')
     return T::obj_stat(ctx, obj, psize, pmtime, pepoch, attrs, first_chunk, objv_tracker);
 
@@ -571,7 +571,7 @@ int RGWCache<T>::watch_cb(int opcode, uint64_t ver, bufferlist& bl)
 
   rgw_bucket bucket;
   string oid;
-  normalize_bucket_and_obj(info.obj.bucket, info.obj.object, bucket, oid);
+  normalize_bucket_and_obj(info.obj.bucket, info.obj.get_object(), bucket, oid);
   string name = normal_name(bucket, oid);
   
   switch (info.op) {

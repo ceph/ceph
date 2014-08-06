@@ -940,6 +940,7 @@ struct RGWObjEnt {
   string etag;
   string content_type;
   string tag;
+  string instance;
 
   RGWObjEnt() : size(0) {}
 
@@ -1013,11 +1014,15 @@ WRITE_CLASS_ENCODER(RGWBucketEnt)
 class rgw_obj {
   std::string orig_obj;
   std::string orig_key;
-public:
-  rgw_bucket bucket;
   std::string key;
-  std::string ns;
   std::string object;
+  std::string instance;
+public:
+  const std::string& get_object() const { return object; }
+  const std::string& get_key() const { return key; }
+  const std::string& get_instance() const { return instance; }
+  rgw_bucket bucket;
+  std::string ns;
 
   bool in_extra_data; /* in-memory only member, does not serialize */
 
@@ -1066,6 +1071,12 @@ public:
     set_obj(orig_obj);
     return 0;
   }
+  void set_instance(const string& i) {
+    if (i[0] == '_')
+      return -EINVAL;
+    instance = i;
+    set_obj(orig_obj);
+  }
 
   void set_key(const string& k) {
     orig_key = k;
@@ -1094,6 +1105,9 @@ public:
     } else {
       object = "_";
       object.append(ns);
+      if (!instance.empty()) {
+        object.append(string(":") + instance);
+      }
       object.append("_");
       object.append(o);
     }
@@ -1101,6 +1115,34 @@ public:
       set_key(orig_key);
     else
       set_key(orig_obj);
+  }
+
+  /*
+   * get the object's key name as being referred to by the bucket index. Note that
+   * this doesn't include the object version portion, as it's passed separately to the
+   * index.
+   */
+  string get_index_key() {
+    if (ns.empty()) {
+      if (orig_obj.size() < 1 || orig_obj[0] != '_') {
+        return orig_obj;
+      }
+      return string("_") + orig_obj;
+    };
+
+    char buf[ns.size() + 16];
+    snprintf(buf, sizeof(buf), "_%s_", ns.c_str());
+    return string(buf) + orig_obj;
+  };
+
+  static void parse_ns_field(string& ns, string& instance) {
+    int pos = ns.find(':');
+    if (pos >= 0) {
+      instance = ns.substr(pos + 1);
+      ns = ns.substr(0, pos);
+    } else {
+      instance.clear();
+    }
   }
 
   /**
@@ -1111,7 +1153,7 @@ public:
    * and cuts down the name to the unmangled version. If it is not
    * part of the given namespace, it returns false.
    */
-  static bool translate_raw_obj_to_obj_in_ns(string& obj, string& ns) {
+  static bool translate_raw_obj_to_obj_in_ns(string& obj, string& instance, string& ns) {
     if (ns.empty()) {
       if (obj[0] != '_')
         return true;
@@ -1132,6 +1174,7 @@ public:
       return false;
 
     string obj_ns = obj.substr(1, pos - 1);
+    parse_ns_field(obj_ns, instance);
     if (obj_ns.compare(ns) != 0)
         return false;
 
@@ -1147,8 +1190,9 @@ public:
    * It returns true after successfully doing so, or
    * false if it fails.
    */
-  static bool strip_namespace_from_object(string& obj, string& ns) {
+  static bool strip_namespace_from_object(string& obj, string& ns, string& instance) {
     ns.clear();
+    instance.clear();
     if (obj[0] != '_') {
       return true;
     }
@@ -1165,6 +1209,8 @@ public:
 
     ns = obj.substr(1, pos-1);
     obj = obj.substr(pos+1, string::npos);
+
+    parse_ns_field(ns, instance);
     return true;
   }
 
@@ -1177,22 +1223,25 @@ public:
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 3, bl);
+    ENCODE_START(4, 3, bl);
     ::encode(bucket.name, bl);
     ::encode(key, bl);
     ::encode(ns, bl);
     ::encode(object, bl);
     ::encode(bucket, bl);
+    ::encode(instance, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
     ::decode(bucket.name, bl);
     ::decode(key, bl);
     ::decode(ns, bl);
     ::decode(object, bl);
     if (struct_v >= 2)
       ::decode(bucket, bl);
+    if (struct_v >= 4)
+      ::decode(instance, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -1201,7 +1250,8 @@ public:
   bool operator==(const rgw_obj& o) const {
     return (object.compare(o.object) == 0) &&
            (bucket.name.compare(o.bucket.name) == 0) &&
-           (ns.compare(o.ns) == 0);
+           (ns.compare(o.ns) == 0) &&
+           (instance.compare(o.instance) == 0);
   }
   bool operator<(const rgw_obj& o) const {
     int r = bucket.name.compare(o.bucket.name);
@@ -1209,6 +1259,9 @@ public:
      r = object.compare(o.object);
      if (r == 0) {
        r = ns.compare(o.ns);
+       if (r == 0) {
+         r = instance.compare(o.instance);
+       }
      }
     }
 
@@ -1225,7 +1278,7 @@ struct rgw_cache_entry_info {
 };
 
 inline ostream& operator<<(ostream& out, const rgw_obj &o) {
-  return out << o.bucket.name << ":" << o.object;
+  return out << o.bucket.name << ":" << o.get_object();
 }
 
 static inline bool str_startswith(const string& str, const string& prefix)
@@ -1287,7 +1340,7 @@ static inline int rgw_str_to_bool(const char *s, int def_val)
           strcasecmp(s, "1") == 0);
 }
 
-static inline void append_rand_alpha(CephContext *cct, string& src, string& dest, int len)
+static inline void append_rand_alpha(CephContext *cct, const string& src, string& dest, int len)
 {
   dest = src;
   char buf[len + 1];

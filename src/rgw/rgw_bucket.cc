@@ -332,8 +332,9 @@ void check_bad_user_bucket_mapping(RGWRados *store, const string& user_id, bool 
 static bool bucket_object_check_filter(const string& name)
 {
   string ns;
+  string ver;
   string obj = name;
-  return rgw_obj::translate_raw_obj_to_obj_in_ns(obj, ns);
+  return rgw_obj::translate_raw_obj_to_obj_in_ns(obj, ns, ver);
 }
 
 int rgw_remove_object(RGWRados *store, const string& bucket_owner, rgw_bucket& bucket, std::string& object)
@@ -657,10 +658,11 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
     for (iter = result.begin(); iter != result.end(); ++iter) {
       RGWObjEnt& ent = *iter;
 
-      rgw_obj obj(bucket, ent.name);
-      obj.set_ns(ns);
+      rgw_obj obj(bucket, ent.name, ns);
+      obj.set_instance(ent.instance);
 
-      string& oid = obj.object;
+      string oid = obj.get_index_key();
+#warning missing marker_ver
       marker = oid;
 
       int pos = oid.find_last_of('.');
