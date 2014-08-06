@@ -45,14 +45,13 @@ static void usage(const char* program) {
   cout << std::endl;
   cout << "Image mapping rules:" << std::endl;
   cout << "A rule of image1@snap1=image2@snap2 would map snap1 of image1 to snap2 of" << std::endl;
-  cout << "image2. Regular expressions are used, so image@snap_(.*)=image_$1@ would map" << std::endl;
-  cout << "image@snap_1 to image_1@. (Note that an un-snapshotted image has the empty" << std::endl;
-  cout << "string for the snapshot name.)" << std::endl;
+  cout << "image2. Regular expressions are used, so image@snap_(.*)=image_$1 would map" << std::endl;
+  cout << "image@snap_1 to image_1." << std::endl;
 }
 
-static ImageNameMap::Name bad_mapping(ImageNameMap::Name input, string output) {
-  dout(0) << "Bad value returned from mapping.  Image: '" << input.first << "', snap '" << input.second << "', output: '" << output << "'.  Using image: '" << output << ", snap ''." << dendl;
-  return ImageNameMap::Name(output, "");
+static ImageName bad_mapping(ImageName input, string output) {
+  dout(0) << "Bad value returned from mapping.  Input: '" << input.str() << "', output: '" << output << "'.  Using image: '" << output << ", snap ''." << dendl;
+  return ImageName("", output, "");
 }
 
 int main(int argc, const char **argv) {

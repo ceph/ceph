@@ -128,8 +128,8 @@ bool Worker::readonly() const {
   return m_replayer.readonly();
 }
 
-pair<string, string> Worker::map_image_name(string image_name, string snap_name) const {
-  return m_replayer.image_name_map().map(pair<string,string>(image_name, snap_name));
+ImageName Worker::map_image_name(string image_name, string snap_name) const {
+  return m_replayer.image_name_map().map(ImageName("", image_name, snap_name));
 }
 
 

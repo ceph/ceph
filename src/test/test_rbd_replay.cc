@@ -25,12 +25,12 @@ using rbd_replay::ImageNameMap;
 using rbd_replay::NameMap;
 using rbd_replay::rbd_loc;
 
-std::ostream& operator<<(std::ostream& o, const ImageNameMap::Name& name) {
-  return o << "('" << name.first << "', '" << name.second << "')";
+std::ostream& operator<<(std::ostream& o, const ImageName& name) {
+  return o << "('" << name.pool() << "', '" << name.image() << "', '" << name.snap() << "')";
 }
 
-static ImageNameMap::Name bad_mapping(ImageNameMap::Name input, std::string output) {
-  return ImageNameMap::Name("xxx", "xxx");
+static ImageName bad_mapping(ImageName input, std::string output) {
+  return ImageName("xxx", "xxx", "xxx");
 }
 
 static void add_mapping(ImageNameMap *map, std::string mapping_string) {
@@ -68,7 +68,6 @@ TEST(RBDReplay, Deser) {
 }
 
 TEST(RBDReplay, ImageNameMap) {
-  typedef ImageNameMap::Name Name;
   ImageNameMap m;
   m.set_bad_mapping_fallback(bad_mapping);
   add_mapping(&m, "x@y=y@x");
@@ -77,14 +76,14 @@ TEST(RBDReplay, ImageNameMap) {
   add_mapping(&m, "a\\\\@b@c=d@e");
   add_mapping(&m, "a@b\\\\@c=f@g");
   add_mapping(&m, "image@snap_(.*)=image_$1@");
-  add_mapping(&m, "bad@=@@@");
-  EXPECT_EQ(Name("y", "x"), m.map(Name("x", "y")));
-  EXPECT_EQ(Name("h", "i"), m.map(Name("a=b", "c")));
-  EXPECT_EQ(Name("j", "k"), m.map(Name("a", "b=c")));
-  EXPECT_EQ(Name("d", "e"), m.map(Name("a@b", "c")));
-  EXPECT_EQ(Name("f", "g"), m.map(Name("a", "b@c")));
-  EXPECT_EQ(Name("image_1", ""), m.map(Name("image", "snap_1")));
-  EXPECT_EQ(Name("xxx", "xxx"), m.map(Name("bad", "")));
+  add_mapping(&m, "bad=@@@");
+  EXPECT_EQ(ImageName("", "y", "x"), m.map(ImageName("", "x", "y")));
+  EXPECT_EQ(ImageName("", "h", "i"), m.map(ImageName("", "a=b", "c")));
+  EXPECT_EQ(ImageName("", "j", "k"), m.map(ImageName("", "a", "b=c")));
+  EXPECT_EQ(ImageName("", "d", "e"), m.map(ImageName("", "a@b", "c")));
+  EXPECT_EQ(ImageName("", "f", "g"), m.map(ImageName("", "a", "b@c")));
+  EXPECT_EQ(ImageName("", "image_1", ""), m.map(ImageName("", "image", "snap_1")));
+  EXPECT_EQ(ImageName("xxx", "xxx", "xxx"), m.map(ImageName("", "bad", "")));
 }
 
 TEST(RBDReplay, NameMap) {
