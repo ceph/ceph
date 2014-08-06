@@ -465,6 +465,9 @@ int Monitor::preinit()
     pcb.add_u64(l_cluster_osd_kb, "osd_kb");
     pcb.add_u64(l_cluster_osd_kb_used, "osd_kb_used");
     pcb.add_u64(l_cluster_osd_kb_avail, "osd_kb_avail");
+    pcb.add_u64(l_cluster_osd_bytes, "osd_bytes");
+    pcb.add_u64(l_cluster_osd_bytes_used, "osd_bytes_used");
+    pcb.add_u64(l_cluster_osd_bytes_avail, "osd_bytes_avail");
     pcb.add_u64(l_cluster_num_pool, "num_pool");
     pcb.add_u64(l_cluster_num_pg, "num_pg");
     pcb.add_u64(l_cluster_num_pg_active_clean, "num_pg_active_clean");
