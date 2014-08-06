@@ -31,6 +31,8 @@
 #include "json_spirit/json_spirit_value.h"
 #include "json_spirit/json_spirit_reader.h"
 
+#include "include/rados/librados.hpp"
+
 namespace po = boost::program_options;
 using namespace std;
 
@@ -347,6 +349,7 @@ hobject_t biginfo_oid, log_oid;
 int file_fd = fd_none;
 bool debug = false;
 super_header sh;
+uint64_t testalign;
 
 template <typename T>
 int write_section(sectiontype_t type, const T& obj, int fd) {
@@ -938,6 +941,175 @@ int get_omap(ObjectStore *store, coll_t coll, ghobject_t hoid,
   return 0;
 }
 
+int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
+{
+  bufferlist::iterator ebliter = bl.begin();
+  object_begin ob;
+  ob.decode(ebliter);
+  map<string,bufferptr>::iterator i;
+  bufferlist abl;
+
+  data_section ds;
+  attr_section as;
+  omap_hdr_section oh;
+  omap_section os;
+
+  if (!ob.hoid.hobj.is_head()) {
+    cout << "Skipping non-head for " << ob.hoid << std::endl;
+  }
+
+  ioctx.set_namespace(ob.hoid.hobj.get_namespace());
+
+  string msg("Write");
+  int ret = ioctx.create(ob.hoid.hobj.oid.name, true);
+  if (ret && ret != -EEXIST) {
+    cerr << "create failed: " << cpp_strerror(ret) << std::endl;
+    return ret;
+  }
+  if (ret == -EEXIST) {
+    msg = "***Overwrite***";
+    ret = ioctx.remove(ob.hoid.hobj.oid.name);
+    if (ret < 0) {
+      cerr << "remove failed: " << cpp_strerror(ret) << std::endl;
+      return ret;
+    }
+    ret = ioctx.create(ob.hoid.hobj.oid.name, true);
+    if (ret < 0) {
+      cerr << "create failed: " << cpp_strerror(ret) << std::endl;
+      return ret;
+    }
+  }
+
+  cout << msg << " " << ob.hoid << std::endl;
+
+  bool need_align = false;
+  uint64_t alignment = 0;
+  if (testalign) {
+    need_align = true;
+    alignment = testalign;
+  } else {
+    if ((need_align = ioctx.pool_requires_alignment()))
+      alignment = ioctx.pool_required_alignment();
+  }
+
+  if (debug && need_align)
+    cerr << "alignment = " << alignment << std::endl;
+
+  bufferlist ebl, databl;
+  uint64_t in_offset = 0, out_offset = 0;
+  bool done = false;
+  while(!done) {
+    sectiontype_t type;
+    int ret = read_section(file_fd, &type, &ebl);
+    if (ret)
+      return ret;
+
+    ebliter = ebl.begin();
+    //cout << "\tdo_object: Section type " << hex << type << dec << std::endl;
+    //cout << "\t\tsection size " << ebl.length() << std::endl;
+    if (type >= END_OF_TYPES) {
+      cout << "Skipping unknown object section type" << std::endl;
+      continue;
+    }
+    switch(type) {
+    case TYPE_DATA:
+      ds.decode(ebliter);
+      if (debug)
+        cerr << "\tdata: offset " << ds.offset << " len " << ds.len << std::endl;
+      if (need_align) {
+        if (ds.offset != in_offset) {
+          cerr << "Discontiguous object data in export" << std::endl;
+          return EFAULT;
+        }
+        assert(ds.databl.length() == ds.len);
+        databl.claim_append(ds.databl);
+        in_offset += ds.len;
+        if (databl.length() >= alignment) {
+          uint64_t rndlen = uint64_t(databl.length() / alignment) * alignment;
+          if (debug) cerr << "write offset=" << out_offset << " len=" << rndlen << std::endl;
+          ret = ioctx.write(ob.hoid.hobj.oid.name, databl, rndlen, out_offset);
+          if (ret) {
+            cerr << "write failed: " << cpp_strerror(ret) << std::endl;
+            return ret;
+          }
+          out_offset += rndlen;
+          bufferlist n;
+          if (databl.length() > rndlen) {
+            assert(databl.length() - rndlen < alignment);
+	    n.substr_of(databl, rndlen, databl.length() - rndlen);
+          }
+          databl = n;
+        }
+        break;
+      }
+      ret = ioctx.write(ob.hoid.hobj.oid.name, ds.databl, ds.len, ds.offset);
+      if (ret) {
+        cerr << "write failed: " << cpp_strerror(ret) << std::endl;
+        return ret;
+      }
+      break;
+    case TYPE_ATTRS:
+      as.decode(ebliter);
+
+      if (debug)
+        cerr << "\tattrs: len " << as.data.size() << std::endl;
+      for (i = as.data.begin(); i != as.data.end(); i++) {
+        if (i->first == "_" || i->first == "snapset")
+          continue;
+        abl.clear();
+        abl.push_front(i->second);
+        ret = ioctx.setxattr(ob.hoid.hobj.oid.name, i->first.substr(1).c_str(), abl);
+        if (ret) {
+          cerr << "setxattr failed: " << cpp_strerror(ret) << std::endl;
+          if (ret != -EOPNOTSUPP)
+            return ret;
+        }
+      }
+      break;
+    case TYPE_OMAP_HDR:
+      oh.decode(ebliter);
+
+      if (debug)
+        cerr << "\tomap header: " << string(oh.hdr.c_str(), oh.hdr.length())
+          << std::endl;
+      ret = ioctx.omap_set_header(ob.hoid.hobj.oid.name, oh.hdr);
+      if (ret) {
+        cerr << "omap_set_header failed: " << cpp_strerror(ret) << std::endl;
+        if (ret != -EOPNOTSUPP)
+          return ret;
+      }
+      break;
+    case TYPE_OMAP:
+      os.decode(ebliter);
+
+      if (debug)
+        cerr << "\tomap: size " << os.omap.size() << std::endl;
+      ret = ioctx.omap_set(ob.hoid.hobj.oid.name, os.omap);
+      if (ret) {
+        cerr << "omap_set failed: " << cpp_strerror(ret) << std::endl;
+        if (ret != -EOPNOTSUPP)
+          return ret;
+      }
+      break;
+    case TYPE_OBJECT_END:
+      if (need_align && databl.length() > 0) {
+        assert(databl.length() < alignment);
+        if (debug) cerr << "END write offset=" << out_offset << " len=" << databl.length() << std::endl;
+        ret = ioctx.write(ob.hoid.hobj.oid.name, databl, databl.length(), out_offset);
+        if (ret) {
+           cerr << "write failed: " << cpp_strerror(ret) << std::endl;
+          return ret;
+        }
+      }
+      done = true;
+      break;
+    default:
+      return EFAULT;
+    }
+  }
+  return 0;
+}
+
 int get_object(ObjectStore *store, coll_t coll, bufferlist &bl)
 {
   ObjectStore::Transaction tran;
@@ -1031,6 +1203,125 @@ int get_pg_metadata(ObjectStore *store, coll_t coll, bufferlist &bl)
   if (ret) return ret;
 
   store->apply_transaction(*t);
+
+  return 0;
+}
+
+int do_import_rados(string pool)
+{
+  bufferlist ebl;
+  pg_info_t info;
+  PGLog::IndexedLog log;
+
+  int ret = sh.read_super();
+  if (ret)
+    return ret;
+
+  if (sh.magic != super_header::super_magic) {
+    cerr << "Invalid magic number" << std::endl;
+    return EFAULT;
+  }
+
+  if (sh.version > super_header::super_ver) {
+    cerr << "Can't handle export format version=" << sh.version << std::endl;
+    return EINVAL;
+  }
+
+  //First section must be TYPE_PG_BEGIN
+  sectiontype_t type;
+  ret = read_section(file_fd, &type, &ebl);
+  if (ret)
+    return ret;
+  if (type != TYPE_PG_BEGIN) {
+    return EFAULT;
+  }
+
+  bufferlist::iterator ebliter = ebl.begin();
+  pg_begin pgb;
+  pgb.decode(ebliter);
+  spg_t pgid = pgb.pgid;
+
+  if (!pgid.is_no_shard()) {
+    cerr << "Importing Erasure Coded shard is not supported" << std::endl;
+    exit(1);
+  }
+
+  if (debug) {
+    cerr << "Exported features: " << pgb.superblock.compat_features << std::endl;
+  }
+
+  // XXX: How to check export features?
+#if 0
+  if (sb.compat_features.compare(pgb.superblock.compat_features) == -1) {
+    cerr << "Export has incompatible features set "
+      << pgb.superblock.compat_features << std::endl;
+    return 1;
+  }
+#endif
+
+  librados::IoCtx ioctx;
+  librados::Rados cluster;
+
+  char *id = getenv("CEPH_CLIENT_ID");
+  if (id) cerr << "Client id is: " << id << std::endl;
+  ret = cluster.init(id);
+  if (ret) {
+    cerr << "Error " << ret << " in cluster.init" << std::endl;
+    return ret;
+  }
+  ret = cluster.conf_read_file(NULL);
+  if (ret) {
+    cerr << "Error " << ret << " in cluster.conf_read_file" << std::endl;
+    return ret;
+  }
+  ret = cluster.conf_parse_env(NULL);
+  if (ret) {
+    cerr << "Error " << ret << " in cluster.conf_read_env" << std::endl;
+    return ret;
+  }
+  cluster.connect();
+
+  ret = cluster.ioctx_create(pool.c_str(), ioctx);
+  if (ret < 0) {
+    cerr << "ioctx_create " << pool << " failed with " << ret << std::endl;
+    return ret;
+  }
+
+  cout << "Importing from pgid " << pgid << std::endl;
+
+  bool done = false;
+  bool found_metadata = false;
+  while(!done) {
+    ret = read_section(file_fd, &type, &ebl);
+    if (ret)
+      return ret;
+
+    //cout << "do_import: Section type " << hex << type << dec << std::endl;
+    if (type >= END_OF_TYPES) {
+      cout << "Skipping unknown section type" << std::endl;
+      continue;
+    }
+    switch(type) {
+    case TYPE_OBJECT_BEGIN:
+      ret = get_object_rados(ioctx, ebl);
+      if (ret) return ret;
+      break;
+    case TYPE_PG_METADATA:
+      if (debug)
+        cout << "Don't care about the old metadata" << std::endl;
+      found_metadata = true;
+      break;
+    case TYPE_PG_END:
+      done = true;
+      break;
+    default:
+      return EFAULT;
+    }
+  }
+
+  if (!found_metadata) {
+    cerr << "Missing metadata section, ignored" << std::endl;
+  }
 
   return 0;
 }
@@ -1498,6 +1789,8 @@ void usage(po::options_description &desc)
     cerr << "ceph_objectstore_tool ... <object> list-omap" << std::endl;
     cerr << "ceph_objectstore_tool ... <object> remove" << std::endl;
     cerr << std::endl;
+    cerr << "ceph_objectstore_tool import-rados <pool> [file]" << std::endl;
+    cerr << std::endl;
     exit(1);
 }
 
@@ -1532,6 +1825,7 @@ int main(int argc, char **argv)
     ("objcmd", po::value<string>(&objcmd), "command [(get|set)-bytes, (get|set|rm)-(attr|omap), list-attrs, list-omap, remove]")
     ("arg1", po::value<string>(&arg1), "arg1 based on cmd")
     ("arg2", po::value<string>(&arg2), "arg2 based on cmd")
+    ("test-align", po::value<uint64_t>(&testalign)->default_value(0), "hidden align option for testing")
     ;
 
   po::options_description all("All options");
@@ -1553,6 +1847,47 @@ int main(int argc, char **argv)
 
   if (vm.count("help")) {
     usage(desc);
+  }
+
+  if (!vm.count("debug")) {
+    debug = false;
+  } else {
+    debug = true;
+  }
+
+  // Handle completely different operation "import-rados"
+  if (object == "import-rados") {
+    if (vm.count("objcmd") == 0) {
+      cerr << "ceph_objectstore_tool import-rados <pool> [file]" << std::endl;
+      exit(1);
+    }
+
+    string pool = objcmd;
+    // positional argument takes precendence, but accept
+    // --file option too
+    if (!vm.count("arg1")) {
+      if (!vm.count("file"))
+        arg1 = "-";
+      else
+        arg1 = file;
+    }
+    if (arg1 == "-") {
+      if (isatty(STDIN_FILENO)) {
+        cerr << "stdin is a tty and no file specified" << std::endl;
+        exit(1);
+      }
+      file_fd = STDIN_FILENO;
+    } else {
+      file_fd = open(arg1.c_str(), O_RDONLY);
+      if (file_fd < 0) {
+        perror("open");
+        return 1;
+      }
+    }
+    int ret = do_import_rados(pool);
+    if (ret == 0)
+      cout << "Import successful" << std::endl;
+    return ret != 0;
   }
 
   if (!vm.count("data-path")) {
@@ -1649,12 +1984,6 @@ int main(int argc, char **argv)
        i != ceph_option_strings.end();
        ++i) {
     ceph_options.push_back(i->c_str());
-  }
-
-  if (!vm.count("debug")) {
-    debug = false;
-  } else {
-    debug = true;
   }
 
   osflagbits_t flags = 0;
