@@ -6812,6 +6812,10 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx)
       auth_log_shard.shard, pg->pg_whoami.shard,
       request_log_from, pg->info.history,
       pg->get_osdmap()->get_epoch()));
+
+  assert(pg->blocked_by.empty());
+  pg->blocked_by.insert(auth_log_shard.osd);
+  pg->publish_stats_to_osd();
 }
 
 boost::statechart::result PG::RecoveryState::GetLog::react(const AdvMap& advmap)
@@ -6878,6 +6882,8 @@ void PG::RecoveryState::GetLog::exit()
   PG *pg = context< RecoveryMachine >().pg;
   utime_t dur = ceph_clock_now(pg->cct) - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_getlog_latency, dur);
+  pg->blocked_by.clear();
+  pg->publish_stats_to_osd();
 }
 
 /*------WaitActingChange--------*/
