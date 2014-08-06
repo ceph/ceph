@@ -50,7 +50,7 @@ namespace librbd {
       order(0), size(0), features(0),
       format_string(NULL),
       id(image_id), parent(NULL),
-      stripe_unit(0), stripe_count(0),
+      stripe_unit(0), stripe_count(0), flags(LIBRBD_CREATE_NOFLAG),
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       image_index(this)
   {
