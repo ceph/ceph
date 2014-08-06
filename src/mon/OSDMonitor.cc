@@ -5091,35 +5091,40 @@ done:
     string ruleset_name;
     cmd_getval(g_ceph_context, cmdmap, "ruleset", ruleset_name);
     string erasure_code_profile;
-    cmd_getval(g_ceph_context, cmdmap, "erasure_code_profile", erasure_code_profile);
-    if (erasure_code_profile == "")
-      erasure_code_profile = "default";
-    if (erasure_code_profile == "default") {
-      if (!osdmap.has_erasure_code_profile(erasure_code_profile)) {
-	if (pending_inc.has_erasure_code_profile(erasure_code_profile)) {
-	  dout(20) << "erasure code profile " << erasure_code_profile << " already pending" << dendl;
+
+    if (pool_type == pg_pool_t::TYPE_ERASURE) {
+      cmd_getval(g_ceph_context, cmdmap, "erasure_code_profile", erasure_code_profile);
+      if (erasure_code_profile == "")
+	erasure_code_profile = "default";
+      dout(1) << __func__ << erasure_code_profile << dendl;
+      if (erasure_code_profile == "default") {
+        if (!osdmap.has_erasure_code_profile(erasure_code_profile)) {
+	  if (pending_inc.has_erasure_code_profile(erasure_code_profile)) {
+	    dout(20) << "erasure code profile " << erasure_code_profile
+	      << " already pending" << dendl;
+	    goto wait;
+	  }
+
+	  map<string,string> profile_map;
+	  err = osdmap.get_erasure_code_profile_default(g_ceph_context,
+							profile_map,
+							&ss);
+	  if (err)
+	    goto reply;
+	  dout(20) << "erasure code profile " << erasure_code_profile << " set" << dendl;
+	  pending_inc.set_erasure_code_profile(erasure_code_profile, profile_map);
 	  goto wait;
 	}
-
-	map<string,string> profile_map;
-	err = osdmap.get_erasure_code_profile_default(g_ceph_context,
-						      profile_map,
-						      &ss);
-	if (err)
-	  goto reply;
-	dout(20) << "erasure code profile " << erasure_code_profile << " set" << dendl;
-	pending_inc.set_erasure_code_profile(erasure_code_profile, profile_map);
-	goto wait;
       }
-    }
 
-    if (ruleset_name == "") {
-      if (erasure_code_profile == "default") {
-	ruleset_name = "erasure-code";
-      } else {
-	dout(1) << "implicitly use ruleset named after the pool: "
-		<< poolstr << dendl;
-	ruleset_name = poolstr;
+      if (ruleset_name == "") {
+	if (erasure_code_profile == "default") {
+	    ruleset_name = "erasure-code";
+	} else {
+	    dout(1) << "implicitly use ruleset named after the pool: "
+	      << poolstr << dendl;
+	    ruleset_name = poolstr;
+	}
       }
     }
 
