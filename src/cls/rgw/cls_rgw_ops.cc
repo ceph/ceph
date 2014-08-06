@@ -139,6 +139,7 @@ void rgw_cls_obj_complete_op::dump(Formatter *f) const
   meta.dump(f);
   f->close_section();
   f->dump_string("tag", tag);
+  f->dump_string("instance", instance);
 }
 
 void rgw_cls_list_op::generate_test_instances(list<rgw_cls_list_op*>& o)
