@@ -19,198 +19,202 @@
 #     9	     27 TCloud Computing <contact@tcloudcomputing.com>
 #    10	     22 GNU <contact@gnu.org>
 #
-Inktank <contact@inktank.com> Sage Weil <sage@inktank.com>
-Inktank <contact@inktank.com> Noah Watkins <noah.watkins@inktank.com>
-Inktank <contact@inktank.com> Yehuda Sadeh <yehuda@inktank.com>
-Inktank <contact@inktank.com> Greg Farnum <greg@inktank.com>
-Inktank <contact@inktank.com> Samuel Just <sam.just@inktank.com>
-Inktank <contact@inktank.com> Josh Durgin <josh.durgin@inktank.com>
-Inktank <contact@inktank.com> John Wilkins <john.wilkins@inktank.com>
-Inktank <contact@inktank.com> Dan Mick <dan.mick@inktank.com>
-Inktank <contact@inktank.com> João Eduardo Luís <joao.luis@inktank.com>
-Inktank <contact@inktank.com> Tommi Virtanen <tv@inktank.com>
-Inktank <contact@inktank.com> Gary Lowell <gary.lowell@inktank.com>
-Inktank <contact@inktank.com> David Zafman <david.zafman@inktank.com>
-Inktank <contact@inktank.com> Sam Lang <sam.lang@inktank.com>
-Inktank <contact@inktank.com> Caleb Miles <caleb.miles@inktank.com>
-Inktank <contact@inktank.com> Mike Ryan <mike.ryan@inktank.com>
-Inktank <contact@inktank.com> Alex Elder <elder@inktank.com>
-Inktank <contact@inktank.com> Tamil Muthamizhan <tamil.muthamizhan@inktank.com>
-Inktank <contact@inktank.com> Alfredo Deza <alfredo.deza@inktank.com>
-Inktank <contact@inktank.com> Alexandre Marangone <alexandre.marangone@inktank.com>
-Inktank <contact@inktank.com> Ilya Dryomov <ilya.dryomov@inktank.com>
-Inktank <contact@inktank.com> Ross Turk <ross.turk@inktank.com>
-Inktank <contact@inktank.com> Peter Reiher <reiher@inktank.com>
-Inktank <contact@inktank.com> Sandon Van Ness <sandon@inktank.com>
-Inktank <contact@inktank.com> Eleanor Cawthon <eleanor.cawthon@inktank.com>
-Inktank <contact@inktank.com> Neil Levine <neil.levine@inktank.com>
-Inktank <contact@inktank.com> Patrick McGarry <patrick@inktank.com>
-Inktank <contact@inktank.com> Mark Nelson <mark.nelson@inktank.com>
-Inktank <contact@inktank.com> Tyler Brekke <tyler.brekke@inktank.com>
-Inktank <contact@inktank.com> Ken Dreyer <ken.dreyer@inktank.com>
-Inktank <contact@inktank.com> Joe Buck <joe.buck@inktank.com>
-Inktank <contact@inktank.com> John Spray <john.spray@inktank.com>
-Inktank <contact@inktank.com> Warren Usui <warren.usui@inktank.com>
-Inktank <contact@inktank.com> Jenkins <jenkins@inktank.com>
-DreamHost <contact@dreamhost.com> Patience Warnick <patience@cranium.pelton.net>
-DreamHost <contact@dreamhost.com> Colin P. McCabe <colinm@hq.newdream.net>
-DreamHost <contact@dreamhost.com> Michael Rodriguez <michael@newdream.net>
-DreamHost <contact@dreamhost.com> Sondra.Menthers <sondra.menthers@dreamhost.com>
-DreamHost <contact@dreamhost.com> Mark Kampe <mark.kampe@dreamhost.com>
-DreamHost <contact@dreamhost.com> Kyle Marsh <kyle.marsh@dreamhost.com>
-DreamHost <contact@dreamhost.com> Pete V <peter@squid.newdream.net>
-DreamHost <contact@dreamhost.com> Kyle Bader <kyle.bader@dreamhost.com>
-DreamHost <contact@dreamhost.com> Matthew Wodrich <matthew.wodrich@dreamhost.com>
-DreamHost <contact@dreamhost.com> Andrew Farmer <andrewf@hq.newdream.net>
-DreamHost <contact@dreamhost.com> Emily Popper <emily.popper@dreamhost.com>
-DreamHost <contact@dreamhost.com> Peter Vinson <peter@hq.newdream.net>
-DreamHost <contact@dreamhost.com> Wesley Spikes <wesley.spikes@dreamhost.com>
-Red Hat <contact@redhat.com> Sage Weil <sweil@redhat.com>
-Red Hat <contact@redhat.com> Noah Watkins <nwatkins@redhat.com>
-Red Hat <contact@redhat.com> Yehuda Sadeh <ysadey@redhat.com>
-Red Hat <contact@redhat.com> Greg Farnum <gfarnum@redhat.com>
-Red Hat <contact@redhat.com> Samuel Just <sjust@redhat.com>
-Red Hat <contact@redhat.com> Josh Durgin <jdurgin@redhat.com>
-Red Hat <contact@redhat.com> John Wilkins <jwilkins@redhat.com>
-Red Hat <contact@redhat.com> Dan Mick <dmick@redhat.com>
-Red Hat <contact@redhat.com> João Eduardo Luís <jluis@redhat.com>
-Red Hat <contact@redhat.com> Tommi Virtanen <tvirtanen@redhat.com>
-Red Hat <contact@redhat.com> Gary Lowell <glowell@redhat.com>
-Red Hat <contact@redhat.com> David Zafman <dzafman@redhat.com>
-Red Hat <contact@redhat.com> Sam Lang <slang@redhat.com>
-Red Hat <contact@redhat.com> Alex Elder <aelder@redhat.com>
-Red Hat <contact@redhat.com> Tamil Muthamizhan <tmuthamizhan@redhat.com>
-Red Hat <contact@redhat.com> Alfredo Deza <adeza@redhat.com>
-Red Hat <contact@redhat.com> Alexandre Marangone <amarangone@redhat.com>
-Red Hat <contact@redhat.com> Ilya Dryomov <idryomov@redhat.com>
-Red Hat <contact@redhat.com> Ross Turk <rturk@redhat.com>
-Red Hat <contact@redhat.com> Neil Levine <nlevine@redhat.com>
-Red Hat <contact@redhat.com> Mark Nelson <mnelson@redhat.com>
-Red Hat <contact@redhat.com> Tyler Brekke <tbrekke@redhat.com>
-Red Hat <contact@redhat.com> Ken Dreyer <kdreyer@redhat.com>
-Red Hat <contact@redhat.com> John Spray <jspray@redhat.com>
-Red Hat <contact@redhat.com> Warren Usui <wusui@redhat.com>
-Red Hat <contact@redhat.com> Tom Callaway <spot@redhat.com>
-Red Hat <contact@redhat.com> Venky Shankar <vshankar@redhat.com>
-Unaffiliated <no@organization.net> Dominik Hannen <cantares1+github@gmail.com>
-Unaffiliated <no@organization.net> Huang Jun <hjwsm1989@gmail.com>
-Unaffiliated <no@organization.net> Dan Chai <tengweicai@gmail.com>
-Unaffiliated <no@organization.net> (no author) <(no author)@29311d96-e01e-0410-9327-a35deaab8ce9>
-Unaffiliated <no@organization.net> Colin Mattson <colinmattson@gmail.com>
-Unaffiliated <no@organization.net> Steve Stock <steve@technolope.org>
-Unaffiliated <no@organization.net> Michael Nelson <mikenel@tnld.net>
-Unaffiliated <no@organization.net> Florent Bautista <florent@coppint.com>
-Unaffiliated <no@organization.net> koleosfuscus <koleosfuscus@yahoo.com>
-Unaffiliated <no@organization.net> Ailing Zhang <zhangal1992@gmail.com> 
-Unaffiliated <no@organization.net> Stephen F Taylor <steveftaylor@gmail.com>
-Unaffiliated <no@organization.net> Michael Riederer <michael@riederer.org>
-Unaffiliated <no@organization.net> Shawn Edwards <lesser.evil@gmail.com>
-Unaffiliated <no@organization.net> Stephen F Taylor <steveftaylor@gmail.com>
-Karlsruhe Institute of Technology <ceph@lists.kit.edu> Daniel J. Hofmann <daniel@trvx.org>
-SUSE <contact@suse.com> Holger Macht <hmacht@suse.de>
-SUSE <contact@suse.com> Hannes Reinecke <hare@suse.de>
-SUSE <contact@suse.com> David Disseldorp <ddiss@suse.de>
-Intel <contact@intel.com> Yan, Zheng <zheng.z.yan@intel.com>
-Intel <contact@intel.com> Wang, Yaguang <yaguang.wang@intel.com>
-HGST <contact@hgst.com> Kevin Dalley <kevin@kelphead.org>
-HGST <contact@hgst.com> Lluis Pamies-Juarez <lluis.pamies-juarez@hgst.com>
-Cloudwatt <libre.licensing@cloudwatt.com> Loic Dachary <loic@dachary.org>
-Cloudwatt <libre.licensing@cloudwatt.com> Christophe Courtaut <christophe.courtaut@gmail.com>
-Cloudwatt <libre.licensing@cloudwatt.com> Sahid Orentino Ferdjaoui <sahid.ferdjaoui@cloudwatt.com>
-Cloudwatt <libre.licensing@cloudwatt.com> Florent Flament <florent.flament@cloudwatt.com>
-Wido 42on <contact@42on.com> Wido den Hollander <wido@42on.com>
-eNovance <contact@enovance.com> Babu Shanmugam <anbu@enovance.com>
-eNovance <contact@enovance.com> Sebastien Han <sebastien.han@enovance.com>
-Debian GNU/Linux <contact@debian.org> Laszlo Boszormenyi <gcs@debian.hu>
-Debian GNU/Linux <contact@debian.org> Bastian Blank <waldi@debian.org>
-Debian GNU/Linux <contact@debian.org> Dmitry Smirnov <onlyjob@member.fsf.org>
-SanDisk <contact@sandisk.com> Somnath Roy <somnath.roy@sandisk.com>
-SanDisk <contact@sandisk.com> Allen Samuels <allen.samuels@sandisk.com>
-SanDisk <contact@sandisk.com> Sushma Gurram <sushma.gurram@sandisk.com>
+Anchor Hosting <contact@anchor.com.au> Christian Marie <pingu@anchor.net.au>
+Anchor Hosting <contact@anchor.com.au> Sharif Olorin <sio@tesser.org>
+ArtiBit <contact@artibit.com> Rutger ter Borg <rutger@terborg.net>
+Bayan <contact@bayan.co.ir> Mohammad Salehe <salehe+dev@gmail.com>
 Bigpoint.com <contact@bigpoint.net> Moritz Möller <mm@mxs.de>
-Credit Mutuel Arkea <contact@arkea.com> Eric Mourgaya <eric.mourgaya@arkea.com>
-GNU <contact@gnu.org> Alexandre Oliva <oliva@gnu.org>
-Hastexo <contact@hastexo.com> Florian Haas <florian@hastexo.com>
+Canonical <contact@canonical.com> Chris Glass <tribaal@gmail.com>
 Canonical <contact@canonical.com> James Page <james.page@ubuntu.com>
 Canonical <contact@canonical.com> Jonathan Davies <jonathan.davies@canonical.com>
-Canonical <contact@canonical.com> Chris Glass <tribaal@gmail.com>
-Ubuntu Kylin <contact@ubuntukylin.com> Li Wang <liwang@ubuntukylin.com>
-GRNet <contact@grnet.gr> Filippos Giannakos <philipgian@grnet.gr>
-GRNet <contact@grnet.gr> Stratos Psomadakis <psomas@grnet.gr>
-GRNet <contact@grnet.gr> Vangelis Koukis <vkoukis@cslab.ece.ntua.gr>
-IWeb <contact@iweb.com> David Moreau Simard <dmsimard@iweb.com>
-Gentoo <contact@gentoo.org> Robin H. Johnson <robbat2@gentoo.org>
-Gentoo <contact@gentoo.org> Kacper Kowalik <xarthisius@gentoo.org>
-YouScribe <contact@youscribe.fr> Guilhem Lettron <guilhem@lettron.fr>
-TCloud Computing <contact@tcloudcomputing.com> CC Lien <cc_lien@tcloudcomputing.com>
-TCloud Computing <contact@tcloudcomputing.com> Henry C Chang <henry_c_chang@tcloudcomputing.com>
-TCloud Computing <contact@tcloudcomputing.com> Paul Chiang <paul_chiang@tcloudcomputing.com>
-TCloud Computing <contact@tcloudcomputing.com> Herb Shiu <herb_shiu@tcloudcomputing.com>
+Carnegie Mellon University <contact@cmu.edu> Jan Harkes <jaharkes@cs.cmu.edu>
+CCM Benchmark <contact@ccmbenchmark.com> Laurent Barbe <laurent@ksperis.com>
 CERN <contact@cern.ch> Andreas Peters <andreas.joachim.peters@cern.ch>
 CERN <contact@cern.ch> Dan van der Ster <daniel.vanderster@cern.ch>
 CERN <contact@cern.ch> Sebastien Ponce <sebastien.ponce@cern.ch>
+Choopa, LLC <contact@choopa.com> Adam Twardowski <adam.twardowski@gmail.com>
+CISCO <contact@cisco.com> Kai Zhang <zakir.exe@gmail.com>
+Cloudwatt <libre.licensing@cloudwatt.com> Christophe Courtaut <christophe.courtaut@gmail.com>
+Cloudwatt <libre.licensing@cloudwatt.com> Florent Flament <florent.flament@cloudwatt.com>
+Cloudwatt <libre.licensing@cloudwatt.com> Loic Dachary <loic@dachary.org>
+Cloudwatt <libre.licensing@cloudwatt.com> Sahid Orentino Ferdjaoui <sahid.ferdjaoui@cloudwatt.com>
+Commerce Guys <contact@commerceguys.com> Nikola Kotur <kotnick@gmail.com>
+Corvisa LLC <contact@corvisa.com> Walter Huf <hufman@gmail.com>
+Credit Mutuel Arkea <contact@arkea.com> Eric Mourgaya <eric.mourgaya@arkea.com>
+Debian GNU/Linux <contact@debian.org> Bastian Blank <waldi@debian.org>
+Debian GNU/Linux <contact@debian.org> Dmitry Smirnov <onlyjob@member.fsf.org>
+Debian GNU/Linux <contact@debian.org> Laszlo Boszormenyi <gcs@debian.hu>
+Deutsche Telekom <contact@telekom.de> Daniel Gollub <d.gollub@telekom.de>
+Deutsche Telekom <contact@telekom.de> Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Deutsche Telekom <contact@telekom.de> Thomas Bechtold <t.bechtold@telekom.de>
+DreamHost <contact@dreamhost.com> Andrew Farmer <andrewf@hq.newdream.net>
+DreamHost <contact@dreamhost.com> Colin P. McCabe <colinm@hq.newdream.net>
+DreamHost <contact@dreamhost.com> Emily Popper <emily.popper@dreamhost.com>
+DreamHost <contact@dreamhost.com> Kyle Bader <kyle.bader@dreamhost.com>
+DreamHost <contact@dreamhost.com> Kyle Marsh <kyle.marsh@dreamhost.com>
+DreamHost <contact@dreamhost.com> Mark Kampe <mark.kampe@dreamhost.com>
+DreamHost <contact@dreamhost.com> Matthew Wodrich <matthew.wodrich@dreamhost.com>
+DreamHost <contact@dreamhost.com> Michael Rodriguez <michael@newdream.net>
+DreamHost <contact@dreamhost.com> Patience Warnick <patience@cranium.pelton.net>
+DreamHost <contact@dreamhost.com> Peter Vinson <peter@hq.newdream.net>
+DreamHost <contact@dreamhost.com> Pete V <peter@squid.newdream.net>
+DreamHost <contact@dreamhost.com> Sondra.Menthers <sondra.menthers@dreamhost.com>
+DreamHost <contact@dreamhost.com> Wesley Spikes <wesley.spikes@dreamhost.com>
+École polytechnique fédérale de Lausanne <contact@epfl.ch> Stefan Eilemann <Stefan.Eilemann@epfl.ch>
+eNovance <contact@enovance.com> Babu Shanmugam <anbu@enovance.com>
+eNovance <contact@enovance.com> Sebastien Han <sebastien.han@enovance.com>
+EPAM <contact@epam.com> Andrey Kuznetsov <Andrey_Kuznetsov@epam.com>
+GameServers.com <contact@gameservers.com> Brian Rak <dn@devicenull.org>
+Gentoo <contact@gentoo.org> Kacper Kowalik <xarthisius@gentoo.org>
+Gentoo <contact@gentoo.org> Robin H. Johnson <robbat2@gentoo.org>
+GNU <contact@gnu.org> Alexandre Oliva <oliva@gnu.org>
+gocept gmbh & co. kg <mail@gocept.com> Christian Theune <ct@gocept.com>
+GRNet <contact@grnet.gr> Filippos Giannakos <philipgian@grnet.gr>
+GRNet <contact@grnet.gr> Stratos Psomadakis <psomas@grnet.gr>
+GRNet <contact@grnet.gr> Vangelis Koukis <vkoukis@cslab.ece.ntua.gr>
+Hastexo <contact@hastexo.com> Florian Haas <florian@hastexo.com>
+HGST <contact@hgst.com> Kevin Dalley <kevin@kelphead.org>
+HGST <contact@hgst.com> Lluis Pamies-Juarez <lluis.pamies-juarez@hgst.com>
+Hostplex Hosting <contact@hostplex.net> Andras Elso <elso.andras@gmail.com>
+iNic <contact@inic.no> Bjørnar Ness <bjornar.ness@gmail.com>
+Inktank <contact@inktank.com> Alexandre Marangone <alexandre.marangone@inktank.com>
+Inktank <contact@inktank.com> Alex Elder <elder@inktank.com>
+Inktank <contact@inktank.com> Alfredo Deza <alfredo.deza@inktank.com>
+Inktank <contact@inktank.com> Caleb Miles <caleb.miles@inktank.com>
+Inktank <contact@inktank.com> Dan Mick <dan.mick@inktank.com>
+Inktank <contact@inktank.com> David Zafman <david.zafman@inktank.com>
+Inktank <contact@inktank.com> Eleanor Cawthon <eleanor.cawthon@inktank.com>
+Inktank <contact@inktank.com> Gary Lowell <gary.lowell@inktank.com>
+Inktank <contact@inktank.com> Greg Farnum <greg@inktank.com>
+Inktank <contact@inktank.com> Ilya Dryomov <ilya.dryomov@inktank.com>
+Inktank <contact@inktank.com> Jenkins <jenkins@inktank.com>
+Inktank <contact@inktank.com> João Eduardo Luís <joao.luis@inktank.com>
+Inktank <contact@inktank.com> Joe Buck <joe.buck@inktank.com>
+Inktank <contact@inktank.com> John Spray <john.spray@inktank.com>
+Inktank <contact@inktank.com> John Wilkins <john.wilkins@inktank.com>
+Inktank <contact@inktank.com> Josh Durgin <josh.durgin@inktank.com>
+Inktank <contact@inktank.com> Ken Dreyer <ken.dreyer@inktank.com>
+Inktank <contact@inktank.com> Mark Nelson <mark.nelson@inktank.com>
+Inktank <contact@inktank.com> Mike Ryan <mike.ryan@inktank.com>
+Inktank <contact@inktank.com> Neil Levine <neil.levine@inktank.com>
+Inktank <contact@inktank.com> Noah Watkins <noah.watkins@inktank.com>
+Inktank <contact@inktank.com> Patrick McGarry <patrick@inktank.com>
+Inktank <contact@inktank.com> Peter Reiher <reiher@inktank.com>
+Inktank <contact@inktank.com> Ross Turk <ross.turk@inktank.com>
+Inktank <contact@inktank.com> Sage Weil <sage@inktank.com>
+Inktank <contact@inktank.com> Sam Lang <sam.lang@inktank.com>
+Inktank <contact@inktank.com> Samuel Just <sam.just@inktank.com>
+Inktank <contact@inktank.com> Sandon Van Ness <sandon@inktank.com>
+Inktank <contact@inktank.com> Tamil Muthamizhan <tamil.muthamizhan@inktank.com>
+Inktank <contact@inktank.com> Tommi Virtanen <tv@inktank.com>
+Inktank <contact@inktank.com> Tyler Brekke <tyler.brekke@inktank.com>
+Inktank <contact@inktank.com> Warren Usui <warren.usui@inktank.com>
+Inktank <contact@inktank.com> Yehuda Sadeh <yehuda@inktank.com>
+Intel <contact@intel.com> Ma Jianpeng <jianpeng.ma@intel.com>
+Intel <contact@intel.com> Wang, Yaguang <yaguang.wang@intel.com>
+Intel <contact@intel.com> Yan, Zheng <zheng.z.yan@intel.com>
+Iron Systems Inc. <info@ironsystems.com> Harpreet Dhillon <harpreet@ironsystems.com>
+IT Refined <contact@itrefined.com> Ron Allred <rallred@itrefined.com>
+IWeb <contact@iweb.com> David Moreau Simard <dmsimard@iweb.com>
+Karlsruhe Institute of Technology <ceph@lists.kit.edu> Daniel J. Hofmann <daniel@trvx.org>
+Lebanon Evangelical School <contact@lesbg.com> Jonathan Dieter <jdieter@lesbg.com>
+Los Alamos National Laboratory <contact@lanl.gov> Esteban Molina-Estolano <eestolan@lanl.gov>
+Mirantis <contact@mirantis.com> Andrew Woodward <awoodward@mirantis.com>
+MIT Computer Science and Artificial Intelligence Laboratory <webmaster@csail.mit.edu> Stephen Jahl <stephenjahl@gmail.com>
+Pacific Northwest National Laboratory <contact@pnl.gov> Brown, David M JR <david.brown@pnl.gov>
+Pacific Northwest National Laboratory <contact@pnl.gov> Erwin, Brock A <Brock.Erwin@pnl.gov>
+Pacific Northwest National Laboratory <contact@pnl.gov> Evan Felix <evan.felix@pnnl.gov>
+Pacific Northwest National Laboratory <contact@pnl.gov> Scott Devoid <devoid@anl.gov>
+Piston Cloud Computing <info@pistoncloud.com> Mike Lundy <mike@fluffypenguin.org>
+Pogoapp <contact@pogoapp.com> Paul Meserve <paul@pogodan.com>
+Red Hat <contact@redhat.com> Alexandre Marangone <amarangone@redhat.com>
+Red Hat <contact@redhat.com> Alex Elder <aelder@redhat.com>
+Red Hat <contact@redhat.com> Alfredo Deza <adeza@redhat.com>
+Red Hat <contact@redhat.com> Dan Mick <dmick@redhat.com>
+Red Hat <contact@redhat.com> David Zafman <dzafman@redhat.com>
+Red Hat <contact@redhat.com> Gary Lowell <glowell@redhat.com>
+Red Hat <contact@redhat.com> Greg Farnum <gfarnum@redhat.com>
+Red Hat <contact@redhat.com> Ilya Dryomov <idryomov@redhat.com>
+Red Hat <contact@redhat.com> João Eduardo Luís <joao@redhat.com>
+Red Hat <contact@redhat.com> John Spray <jspray@redhat.com>
+Red Hat <contact@redhat.com> John Wilkins <jwilkins@redhat.com>
+Red Hat <contact@redhat.com> Josh Durgin <jdurgin@redhat.com>
+Red Hat <contact@redhat.com> Ken Dreyer <kdreyer@redhat.com>
+Red Hat <contact@redhat.com> Mark Nelson <mnelson@redhat.com>
+Red Hat <contact@redhat.com> Neil Levine <nlevine@redhat.com>
+Red Hat <contact@redhat.com> Noah Watkins <nwatkins@redhat.com>
+Red Hat <contact@redhat.com> Ross Turk <rturk@redhat.com>
+Red Hat <contact@redhat.com> Sage Weil <sweil@redhat.com>
+Red Hat <contact@redhat.com> Sam Lang <slang@redhat.com>
+Red Hat <contact@redhat.com> Samuel Just <sjust@redhat.com>
+Red Hat <contact@redhat.com> Tamil Muthamizhan <tmuthamizhan@redhat.com>
+Red Hat <contact@redhat.com> Tom Callaway <spot@redhat.com>
+Red Hat <contact@redhat.com> Tyler Brekke <tbrekke@redhat.com>
+Red Hat <contact@redhat.com> Venky Shankar <vshankar@redhat.com>
+Red Hat <contact@redhat.com> Warren Usui <wusui@redhat.com>
+Red Hat <contact@redhat.com> Yehuda Sadeh <ysadey@redhat.com>
+Roald van Loon Consultancy <roald@roaldvanloon.nl> Roald J. van Loon <roald@roaldvanloon.nl>
+Sandia National Laboratories <contact@sandia.gov> Jim Schutt <jaschut@sandia.gov>
+SanDisk <contact@sandisk.com> Allen Samuels <allen.samuels@sandisk.com>
+SanDisk <contact@sandisk.com> Somnath Roy <somnath.roy@sandisk.com>
+SanDisk <contact@sandisk.com> Sushma Gurram <sushma.gurram@sandisk.com>
+Science & Technology Facilities Council <contact@stfc.ac.uk> George Ryall <george.ryall@stfc.ac.uk>
+SendFaster <contact@sendfaster.com> Christopher O'Connell <jwriteclub@gmail.com>
+Spectra Logic <contact@spectralogic.com> Alan Somers <asomers@gmail.com>
+SUSE <contact@suse.com> David Disseldorp <ddiss@suse.de>
+SUSE <contact@suse.com> Hannes Reinecke <hare@suse.de>
+SUSE <contact@suse.com> Holger Macht <hmacht@suse.de>
 SWITCH <contact@switch.ch> Jens-Christian Fischer <jens-christian.fischer@switch.ch>
 SWITCH <contact@switch.ch> Simon Leinen <simon.leinen@switch.ch>
-Yahoo! <contact@yahoo-inc.com> Haifeng Liu <haifeng@yahoo-inc.com>
-Yahoo! <contact@yahoo-inc.com> Xihui He <xihuihe@gmail.com>
-Yahoo! <contact@yahoo-inc.com> Ray Lv <xiangyulv@gmail.com>
-Yahoo! <contact@yahoo-inc.com> Guang Yang <yguang@yahoo-inc.com>
-Yahoo! <contact@yahoo-inc.com> Wei Luo <luowei@yahoo-inc.com>
+TCloud Computing <contact@tcloudcomputing.com> CC Lien <cc_lien@tcloudcomputing.com>
+TCloud Computing <contact@tcloudcomputing.com> Henry C Chang <henry_c_chang@tcloudcomputing.com>
+TCloud Computing <contact@tcloudcomputing.com> Herb Shiu <herb_shiu@tcloudcomputing.com>
+TCloud Computing <contact@tcloudcomputing.com> Paul Chiang <paul_chiang@tcloudcomputing.com>
+The Linux Box <contact@linuxbox.com> Adam C. Emerson <aemerson@linuxbox.com>
+The Linux Box <contact@linuxbox.com> Casey Bodley <casey@linuxbox.com>
+The Linux Box <contact@linuxbox.com> Matt Benjamin <matt@linuxbox.com>
+The University of Arizona <contact@arizona.edu> James Ryan Cresawn <jrcresawn@gmail.com>
+Ubuntu Kylin <contact@ubuntukylin.com> Li Wang <liwang@ubuntukylin.com>
+Unaffiliated <no@organization.net> Accela Zhao <accelazh@gmail.com>
+Unaffiliated <no@organization.net> Ailing Zhang <zhangal1992@gmail.com> 
+Unaffiliated <no@organization.net> Colin Mattson <colinmattson@gmail.com>
+Unaffiliated <no@organization.net> Dan Chai <tengweicai@gmail.com>
+Unaffiliated <no@organization.net> Dominik Hannen <cantares1+github@gmail.com>
+Unaffiliated <no@organization.net> Florent Bautista <florent@coppint.com>
+Unaffiliated <no@organization.net> Huang Jun <hjwsm1989@gmail.com>
+Unaffiliated <no@organization.net> Kevin Cox <kevincox@kevincox.ca>
+Unaffiliated <no@organization.net> koleosfuscus <koleosfuscus@yahoo.com>
+Unaffiliated <no@organization.net> Michael Nelson <mikenel@tnld.net>
+Unaffiliated <no@organization.net> Michael Riederer <michael@riederer.org>
+Unaffiliated <no@organization.net> (no author) <(no author)@29311d96-e01e-0410-9327-a35deaab8ce9>
+Unaffiliated <no@organization.net> Shawn Edwards <lesser.evil@gmail.com>
+Unaffiliated <no@organization.net> Stephen F Taylor <steveftaylor@gmail.com>
+Unaffiliated <no@organization.net> Steve Stock <steve@technolope.org>
+Unilogic Networks B.V <contact@unilogicnetworks.net> Pascal de Bruijn <pascal@unilogicnetworks.net> 
 UnitedStack <contact@unitedstack.com> Guangliang Zhao <guangliang@unitedstack.com>
 UnitedStack <contact@unitedstack.com> Haomai Wang <haomaiwang@gmail.com>
 UnitedStack <contact@unitedstack.com> Kun Huang <academicgareth@gmail.com>
-Deutsche Telekom <contact@telekom.de> Danny Al-Gaaf <danny.al-gaaf@bisect.de>
-Deutsche Telekom <contact@telekom.de> Daniel Gollub <d.gollub@telekom.de>
-Deutsche Telekom <contact@telekom.de> Thomas Bechtold <t.bechtold@telekom.de>
-Mirantis <contact@mirantis.com> Andrew Woodward <awoodward@mirantis.com>
+University of California, Santa Cruz <contact@cs.ucsc.edu> Adam Crume <adamcrume@gmail.com>
 University of California, Santa Cruz <contact@cs.ucsc.edu> Andrew Leung <aleung@cs.ucsc.edu>
 University of California, Santa Cruz <contact@cs.ucsc.edu> Carlos Maltzahn <carlosm@cs.ucsc.edu>
-University of California, Santa Cruz <contact@cs.ucsc.edu> Noah Watkins <noahwatkins@gmail.com>
 University of California, Santa Cruz <contact@cs.ucsc.edu> Joe Buck <jbbuck@gmail.com>
-Roald van Loon Consultancy <roald@roaldvanloon.nl> Roald J. van Loon <roald@roaldvanloon.nl>
-University of Utah <contact@utah.edu> Xing Lin <xinglin@cs.utah.edu>
-Carnegie Mellon University <contact@cmu.edu> Jan Harkes <jaharkes@cs.cmu.edu>
+University of California, Santa Cruz <contact@cs.ucsc.edu> Noah Watkins <noahwatkins@gmail.com>
+University of Mississippi <contact@umd.edu> Derek Yarnell <derek@umiacs.umd.edu>
 University of Mississippi <contact@umd.edu> Liam Monahan <liam@umiacs.umd.edu>
 University of Mississippi <contact@umd.edu> Padraig O'Sullivan <posulliv@umd.edu>
-University of Mississippi <contact@umd.edu> Derek Yarnell <derek@umiacs.umd.edu>
-Sandia National Laboratories <contact@sandia.gov> Jim Schutt <jaschut@sandia.gov>
-Pacific Northwest National Laboratory <contact@pnl.gov> Erwin, Brock A <Brock.Erwin@pnl.gov>
-Pacific Northwest National Laboratory <contact@pnl.gov> Brown, David M JR <david.brown@pnl.gov>
-Pacific Northwest National Laboratory <contact@pnl.gov> Evan Felix <evan.felix@pnnl.gov>
-Pacific Northwest National Laboratory <contact@pnl.gov> Scott Devoid <devoid@anl.gov>
-Unilogic Networks B.V <contact@unilogicnetworks.net> Pascal de Bruijn <pascal@unilogicnetworks.net> 
-Los Alamos National Laboratory <contact@lanl.gov> Esteban Molina-Estolano <eestolan@lanl.gov>
-Choopa, LLC <contact@choopa.com> Adam Twardowski <adam.twardowski@gmail.com>
-CISCO <contact@cisco.com> Kai Zhang <zakir.exe@gmail.com>
-Anchor Hosting <contact@anchor.com.au> Christian Marie <pingu@anchor.net.au>
-Anchor Hosting <contact@anchor.com.au> Sharif Olorin <sio@tesser.org>
-Lebanon Evangelical School <contact@lesbg.com> Jonathan Dieter <jdieter@lesbg.com>
-Spectra Logic <contact@spectralogic.com> Alan Somers <asomers@gmail.com>
-Kedacom <contact@kedacom.com> Ma Jianpeng <majianpeng@gmail.com>
-Hostplex Hosting <contact@hostplex.net> Andras Elso <elso.andras@gmail.com>
-CCM Benchmark <contact@ccmbenchmark.com> Laurent Barbe <laurent@ksperis.com>
-Bayan <contact@bayan.co.ir> Mohammad Salehe <salehe+dev@gmail.com>
-ArtiBit <contact@artibit.com> Rutger ter Borg <rutger@terborg.net>
-IT Refined <contact@itrefined.com> Ron Allred <rallred@itrefined.com>
-The Linux Box <contact@linuxbox.com> Matt Benjamin <matt@linuxbox.com>
-The Linux Box <contact@linuxbox.com> Adam C. Emerson <aemerson@linuxbox.com>
-The Linux Box <contact@linuxbox.com> Casey Bodley <casey@linuxbox.com>
-The University of Arizona <contact@arizona.edu> James Ryan Cresawn <jrcresawn@gmail.com>
-EPAM <contact@epam.com> Andrey Kuznetsov <Andrey_Kuznetsov@epam.com>
-X-ION <contact@x-ion.de> Mouad Benchchaoui <m.benchchaoui@x-ion.de>
-X-ION <contact@x-ion.de> Stephan Renatus <s.renatus@x-ion.de>
-Piston Cloud Computing <info@pistoncloud.com> Mike Lundy <mike@fluffypenguin.org>
-SendFaster <contact@sendfaster.com> Christopher O'Connell <jwriteclub@gmail.com>
-iNic <contact@inic.no> Bjørnar Ness <bjornar.ness@gmail.com>
-Pogoapp <contact@pogoapp.com> Paul Meserve <paul@pogodan.com>
-Commerce Guys <contact@commerceguys.com> Nikola Kotur <kotnick@gmail.com>
-École polytechnique fédérale de Lausanne <contact@epfl.ch> Stefan Eilemann <Stefan.Eilemann@epfl.ch>
-Corvisa LLC <contact@corvisa.com> Walter Huf <hufman@gmail.com>
+University of Utah <contact@utah.edu> Xing Lin <xinglin@cs.utah.edu>
 VRT <contact@vrt.com.au> Stuart Longland <stuartl@vrt.com.au>
-gocept gmbh & co. kg <mail@gocept.com> Christian Theune <ct@gocept.com>
 Web Drive <contact@webdrive.co.nz> Aristoteles Neto <aristoteles.neto@webdrive.co.nz>
 Whatever <contact@whatever-company.com> Sylvain Munaut <s.munaut@whatever-company.com>
-Iron Systems Inc. <info@ironsystems.com> Harpreet Dhillon <harpreet@ironsystems.com>
+Wido 42on <contact@42on.com> Wido den Hollander <wido@42on.com>
+X-ION <contact@x-ion.de> Mouad Benchchaoui <m.benchchaoui@x-ion.de>
+X-ION <contact@x-ion.de> Stephan Renatus <s.renatus@x-ion.de>
+Yahoo! <contact@yahoo-inc.com> Guang Yang <yguang@yahoo-inc.com>
+Yahoo! <contact@yahoo-inc.com> Haifeng Liu <haifeng@yahoo-inc.com>
+Yahoo! <contact@yahoo-inc.com> Ray Lv <xiangyulv@gmail.com>
+Yahoo! <contact@yahoo-inc.com> Wei Luo <luowei@yahoo-inc.com>
+Yahoo! <contact@yahoo-inc.com> Xihui He <xihuihe@gmail.com>
+YouScribe <contact@youscribe.fr> Guilhem Lettron <guilhem@lettron.fr>
 #
 # Local Variables:
 # compile-command: "git log --pretty='%aN <%aE>' | \
