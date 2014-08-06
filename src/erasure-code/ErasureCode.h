@@ -66,6 +66,9 @@ namespace ceph {
 		       bool *value,
 		       bool default_value,
 		       ostream *ss);
+
+    virtual int decode_concat(const map<int, bufferlist> &chunks,
+			      bufferlist *decoded);
   };
 }
 
