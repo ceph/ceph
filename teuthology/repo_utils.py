@@ -37,6 +37,7 @@ def enforce_repo_state(repo_url, dest_path, branch, remove_on_error=True):
             log.info("%s was just updated; assuming it is current", branch)
 
         reset_repo(repo_url, dest_path, branch)
+        remove_pyc_files(dest_path)
     except BranchNotFoundError:
         if remove_on_error:
             shutil.rmtree(dest_path, ignore_errors=True)
@@ -135,6 +136,12 @@ def reset_repo(repo_url, dest_path, branch):
         )
     except subprocess.CalledProcessError:
         raise BranchNotFoundError(branch, repo_url)
+
+
+def remove_pyc_files(dest_path):
+    subprocess.check_call(
+        ['find', dest_path, '-name', '*.pyc', '-exec', 'rm', '{}', ';']
+    )
 
 
 def validate_branch(branch):
