@@ -2275,6 +2275,12 @@ void PG::publish_stats_to_osd()
 
     _update_calc_stats();
 
+    info.stats.blocked_by.clear();
+    info.stats.blocked_by.resize(blocked_by.size());
+    unsigned pos = 0;
+    for (set<int>::iterator p = blocked_by.begin(); p != blocked_by.end(); ++p)
+      info.stats.blocked_by[pos++] = *p;
+
     pg_stats_publish_valid = true;
     pg_stats_publish = info.stats;
     pg_stats_publish.stats.add(unstable_stats);

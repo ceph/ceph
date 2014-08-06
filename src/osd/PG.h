@@ -477,6 +477,8 @@ public:
   eversion_t  min_last_complete_ondisk;  // up: min over last_complete_ondisk, peer_last_complete_ondisk
   eversion_t  pg_trim_to;
 
+  set<int> blocked_by; ///< osds we are blocked by (for pg stats)
+
   // [primary only] content recovery state
  protected:
   struct PriorSet {
