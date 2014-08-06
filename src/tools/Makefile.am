@@ -12,7 +12,7 @@ ceph_kvstore_tool_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph-kvstore-tool
 
 ceph_objectstore_tool_SOURCES = tools/ceph_objectstore_tool.cc
-ceph_objectstore_tool_LDADD = $(LIBOSD) $(LIBOS) $(CEPH_GLOBAL) $(BOOST_PROGRAM_OPTIONS_LIBS)
+ceph_objectstore_tool_LDADD = $(LIBOSD) $(LIBOS) $(CEPH_GLOBAL) $(BOOST_PROGRAM_OPTIONS_LIBS) $(LIBRADOS)
 if LINUX
 ceph_objectstore_tool_LDADD += -ldl
 endif # LINUX
