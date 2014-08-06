@@ -6956,6 +6956,10 @@ PG::RecoveryState::Incomplete::Incomplete(my_context ctx)
 
   pg->state_clear(PG_STATE_PEERING);
   pg->state_set(PG_STATE_INCOMPLETE);
+
+  auto_ptr<PriorSet> &prior_set = context< Peering >().prior_set;
+  assert(pg->blocked_by.empty());
+  pg->blocked_by.insert(prior_set->down.begin(), prior_set->down.end());
   pg->publish_stats_to_osd();
 }
 
@@ -6996,6 +7000,8 @@ void PG::RecoveryState::Incomplete::exit()
   pg->state_clear(PG_STATE_INCOMPLETE);
   utime_t dur = ceph_clock_now(pg->cct) - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_incomplete_latency, dur);
+
+  pg->blocked_by.clear();
 }
 
 /*------GetMissing--------*/
