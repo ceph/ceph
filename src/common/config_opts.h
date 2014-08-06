@@ -591,13 +591,14 @@ OPTION(rocksdb_max_open_files, OPT_INT, 0) // rocksdb max open files
 OPTION(rocksdb_compression, OPT_STR, "") // rocksdb uses compression : none, snappy, zlib, bzip2
 OPTION(rocksdb_paranoid, OPT_BOOL, false) // rocksdb paranoid flag
 OPTION(rocksdb_log, OPT_STR, "/dev/null")  // enable rocksdb log file
-OPTION(rocksdb_level0_file_num_compaction_trigger, OPT_U64, 0)
-OPTION(rocksdb_level0_slowdown_writes_trigger, OPT_U64, 0)
-OPTION(rocksdb_level0_stop_writes_trigger, OPT_U64, 0)
-OPTION(rocksdb_disableDataSync, OPT_BOOL, true)
-OPTION(rocksdb_disableWAL, OPT_BOOL, false)
-OPTION(rocksdb_num_levels, OPT_INT, 0)
+OPTION(rocksdb_level0_file_num_compaction_trigger, OPT_U64, 0) // Number of files to trigger level-0 compaction
+OPTION(rocksdb_level0_slowdown_writes_trigger, OPT_U64, 0)  // number of level-0 files at which we start slowing down write.
+OPTION(rocksdb_level0_stop_writes_trigger, OPT_U64, 0)  // number of level-0 files at which we stop writes
+OPTION(rocksdb_disableDataSync, OPT_BOOL, true) // if true, data files are not synced to stable storage
+OPTION(rocksdb_disableWAL, OPT_BOOL, false)  // diable write ahead log
+OPTION(rocksdb_num_levels, OPT_INT, 0) // number of levels for this database
 OPTION(rocksdb_wal_dir, OPT_STR, "")  //  rocksdb write ahead log file
+OPTION(rocksdb_info_log_level, OPT_STR, "info")  // info log level : debug , info , warn, error, fatal
 
 /**
  * osd_client_op_priority and osd_recovery_op_priority adjust the relative
