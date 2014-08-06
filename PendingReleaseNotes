@@ -2,3 +2,6 @@
 v0.84
 -----
 
+* The *_kb perf counters on the monitor have been removed.  These are
+  replaced with a new set of *_bytes counters (e.g., cluster_osd_kb is
+  replaced by cluster_osd_bytes).

@@ -87,10 +87,6 @@ void PGMonitor::update_logger()
 {
   dout(10) << "update_logger" << dendl;
 
-  mon->cluster_logger->set(l_cluster_osd_kb, pg_map.osd_sum.kb);
-  mon->cluster_logger->set(l_cluster_osd_kb_used, pg_map.osd_sum.kb_used);
-  mon->cluster_logger->set(l_cluster_osd_kb_avail, pg_map.osd_sum.kb_avail);
-
   mon->cluster_logger->set(l_cluster_osd_bytes, pg_map.osd_sum.kb * 1024ull);
   mon->cluster_logger->set(l_cluster_osd_bytes_used,
 			   pg_map.osd_sum.kb_used * 1024ull);
