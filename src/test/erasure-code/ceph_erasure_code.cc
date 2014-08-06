@@ -49,10 +49,12 @@ int ErasureCodeCommand::setup(int argc, char** argv) {
     ("all", "implies "
      "--get_chunk_size 1024 "
      "--get_data_chunk_count "
+     "--get_coding_chunk_count "
      "--get_chunk_count ")
     ("get_chunk_size", po::value<unsigned int>(),
      "display get_chunk_size(<object size>)")
     ("get_data_chunk_count", "display get_data_chunk_count()")
+    ("get_coding_chunk_count", "display get_coding_chunk_count()")
     ("get_chunk_count", "display get_chunk_count()")
     ("parameter,P", po::value<vector<string> >(),
      "parameters")
@@ -133,6 +135,9 @@ int ErasureCodeCommand::run() {
   if (vm.count("all") || vm.count("get_data_chunk_count"))
     cout << "get_data_chunk_count\t"
       	 << erasure_code->get_data_chunk_count() << endl;
+  if (vm.count("all") || vm.count("get_coding_chunk_count"))
+    cout << "get_coding_chunk_count\t"
+      	 << erasure_code->get_coding_chunk_count() << endl;
   if (vm.count("all") || vm.count("get_chunk_count"))
     cout << "get_chunk_count\t"
       	 << erasure_code->get_chunk_count() << endl;
@@ -160,6 +165,7 @@ int main(int argc, char** argv) {
  *      --parameter m=2 \
  *      --get_chunk_size 1024 \
  *      --get_data_chunk_count \
+ *      --get_coding_chunk_count \
  *      --get_chunk_count \
  * "
  * End:

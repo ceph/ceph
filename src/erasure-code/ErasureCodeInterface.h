@@ -198,6 +198,18 @@ namespace ceph {
     virtual unsigned int get_data_chunk_count() const = 0;
 
     /**
+     * Return the number of coding chunks created by a call to the
+     * **encode** method. The coding chunks are used to recover from
+     * the loss of one or more chunks. If there is one coding chunk,
+     * it is possible to recover from the loss of exactly one
+     * chunk. If there are two coding chunks, it is possible to
+     * recover from the loss of at most two chunks, etc.
+     *
+     * @return the number of coding chunks created by encode()
+     */
+    virtual unsigned int get_coding_chunk_count() const = 0;
+
+    /**
      * Return the size (in bytes) of a single chunk created by a call
      * to the **decode** method. The returned size multiplied by
      * **get_chunk_count()** is greater or equal to **object_size**.
