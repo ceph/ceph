@@ -122,7 +122,10 @@ class C_OnFinisher : public Context {
   Context *con;
   Finisher *fin;
 public:
-  C_OnFinisher(Context *c, Finisher *f) : con(c), fin(f) {}
+  C_OnFinisher(Context *c, Finisher *f) : con(c), fin(f) {
+    assert(fin != NULL);
+    assert(con != NULL);
+  }
   void finish(int r) {
     fin->queue(con, r);
   }
