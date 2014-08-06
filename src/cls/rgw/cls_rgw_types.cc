@@ -53,7 +53,7 @@ void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& 
   for (iter = l.begin(); iter != l.end(); ++iter) {
     rgw_bucket_dir_entry_meta *m = *iter;
     rgw_bucket_dir_entry *e = new rgw_bucket_dir_entry;
-    e->name = "name";
+    e->key.name = "name";
     e->ver.pool = 1;
     e->ver.epoch = 1234;
     e->locator = "locator";
@@ -85,7 +85,8 @@ void rgw_bucket_entry_ver::generate_test_instances(list<rgw_bucket_entry_ver*>& 
 
 void rgw_bucket_dir_entry::dump(Formatter *f) const
 {
-  f->dump_string("name", name);
+  f->dump_string("name", key.name);
+  f->dump_string("instance", key.instance);
   f->open_object_section("ver");
   ver.dump(f);
   f->close_section();
@@ -231,7 +232,7 @@ void rgw_bucket_dir::generate_test_instances(list<rgw_bucket_dir*>& o)
     list<rgw_bucket_dir_entry *>::iterator eiter;
     for (eiter = el.begin(); eiter != el.end(); ++eiter) {
       rgw_bucket_dir_entry *e = *eiter;
-      d->m[e->name] = *e;
+      d->m[e->key] = *e;
 
       delete e;
     }
@@ -249,10 +250,11 @@ void rgw_bucket_dir::dump(Formatter *f) const
   f->open_object_section("header");
   header.dump(f);
   f->close_section();
-  map<string, struct rgw_bucket_dir_entry>::const_iterator iter = m.begin();
+  map<cls_rgw_obj_key, struct rgw_bucket_dir_entry>::const_iterator iter = m.begin();
   f->open_array_section("map");
   for (; iter != m.end(); ++iter) {
-    f->dump_string("obj", iter->first);
+    f->dump_string("obj", iter->first.name);
+    f->dump_string("instance", iter->first.instance);
     f->open_object_section("dir_entry");
     iter->second.dump(f);
     f->close_section();
