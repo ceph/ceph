@@ -353,10 +353,10 @@ def build_ceph_cluster(ctx, config):
                               'sudo', 'service',  'status', 'ceph-all'])
 
         # and now just check for the processes themselves, as if upstart/sysvinit
-        # is lying to us
+        # is lying to us. Ignore errors if the grep fails
         ctx.cluster.run(args=['sudo', 'ps', 'aux', run.Raw('|'),
                               'grep', '-v', 'grep', run.Raw('|'),
-                              'grep', 'ceph'])
+                              'grep', 'ceph'], check_status=False)
 
         if ctx.archive is not None:
             # archive mon data, too
