@@ -4,6 +4,7 @@ librbd_replay_la_SOURCES = rbd_replay/actions.cc \
 	rbd_replay/ImageNameMap.cc \
 	rbd_replay/NameMap.cc \
 	rbd_replay/PendingIO.cc \
+	rbd_replay/rbd_loc.cc \
 	rbd_replay/Replayer.cc
 librbd_replay_la_LIBADD = $(LIBRBD) \
 	$(LIBRADOS) \
@@ -16,6 +17,7 @@ noinst_HEADERS += rbd_replay/BoundedBuffer.hpp \
 	rbd_replay/ImageNameMap.hpp \
 	rbd_replay/NameMap.hpp \
 	rbd_replay/PendingIO.hpp \
+	rbd_replay/rbd_loc.hpp \
 	rbd_replay/rbd_replay_debug.hpp \
 	rbd_replay/Replayer.hpp
 
