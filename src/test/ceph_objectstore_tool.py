@@ -140,6 +140,34 @@ def get_nspace(num):
     return "ns{num}".format(num=num)
 
 
+def verify(DATADIR, POOL, NAME_PREFIX):
+    TMPFILE = r"/tmp/tmp.{pid}".format(pid=os.getpid())
+    nullfd = open(os.devnull, "w")
+    ERRORS = 0
+    for nsfile in [f for f in os.listdir(DATADIR) if f.split('-')[1].find(NAME_PREFIX) == 0]:
+        nspace = nsfile.split("-")[0]
+        file = nsfile.split("-")[1]
+        path = os.path.join(DATADIR, nsfile)
+        try:
+            os.unlink(TMPFILE)
+        except:
+            pass
+        cmd = "./rados -p {pool} -N '{nspace}' get {file} {out}".format(pool=POOL, file=file, out=TMPFILE, nspace=nspace)
+        logging.debug(cmd)
+        call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+        cmd = "diff -q {src} {result}".format(src=path, result=TMPFILE)
+        logging.debug(cmd)
+        ret = call(cmd, shell=True)
+        if ret != 0:
+            logging.error("{file} data not imported properly".format(file=file))
+            ERRORS += 1
+        try:
+            os.unlink(TMPFILE)
+        except:
+            pass
+    return ERRORS
+
+
 def main():
     sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
     nullfd = open(os.devnull, "w")
@@ -630,7 +658,6 @@ def main():
 
     ERRORS += IMP_ERRORS
     logging.debug(cmd)
-    call("/bin/rm -rf {dir}".format(dir=TESTDIR), shell=True)
 
     if EXP_ERRORS == 0 and RM_ERRORS == 0 and IMP_ERRORS == 0:
         print "Verify replicated import data"
@@ -657,37 +684,43 @@ def main():
                 if ret != 0:
                     logging.error("{file} data not imported properly into {obj}".format(file=file, obj=obj_loc))
                     ERRORS += 1
-
-        vstart(new=False)
-        wait_for_health()
-
-        print "Verify erasure coded import data"
-        for nsfile in [f for f in os.listdir(DATADIR) if f.split('-')[1].find(EC_NAME) == 0]:
-            nspace = nsfile.split("-")[0]
-            file = nsfile.split("-")[1]
-            path = os.path.join(DATADIR, nsfile)
-            try:
-                os.unlink(TMPFILE)
-            except:
-                pass
-            cmd = "./rados -p {pool} -N '{nspace}' get {file} {out}".format(pool=EC_POOL, file=file, out=TMPFILE, nspace=nspace)
-            logging.debug(cmd)
-            call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
-            cmd = "diff -q {src} {result}".format(src=path, result=TMPFILE)
-            logging.debug(cmd)
-            ret = call(cmd, shell=True)
-            if ret != 0:
-                logging.error("{file} data not imported properly".format(file=file))
-                ERRORS += 1
-            try:
-                os.unlink(TMPFILE)
-            except:
-                pass
-
-        call("./stop.sh", stderr=nullfd)
     else:
         logging.warning("SKIPPING CHECKING IMPORT DATA DUE TO PREVIOUS FAILURES")
 
+    vstart(new=False)
+    wait_for_health()
+
+    if EXP_ERRORS == 0 and RM_ERRORS == 0 and IMP_ERRORS == 0:
+        print "Verify erasure coded import data"
+        ERRORS += verify(DATADIR, EC_POOL, EC_NAME)
+
+    if EXP_ERRORS == 0:
+        NEWPOOL = "import-rados-pool"
+        cmd = "./rados mkpool {pool}".format(pool=NEWPOOL)
+        logging.debug(cmd)
+        ret = call(cmd, shell=True, stdout=nullfd)
+
+        print "Test import-rados"
+        for osd in [f for f in os.listdir(OSDDIR) if os.path.isdir(os.path.join(OSDDIR, f)) and string.find(f, "osd") == 0]:
+            dir = os.path.join(TESTDIR, osd)
+            for pg in [f for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f))]:
+                if string.find(pg, "{id}.".format(id=REPID)) != 0:
+                    continue
+                file = os.path.join(dir, pg)
+                cmd = "./ceph_objectstore_tool import-rados {pool} {file}".format(pool=NEWPOOL, file=file)
+                logging.debug(cmd)
+                ret = call(cmd, shell=True, stdout=nullfd)
+                if ret != 0:
+                    logging.error("Import-rados failed from {file} with {ret}".format(file=file, ret=ret))
+                    ERRORS += 1
+
+        ERRORS += verify(DATADIR, NEWPOOL, REP_NAME)
+    else:
+        logging.warning("SKIPPING IMPORT-RADOS TESTS DUE TO PREVIOUS FAILURES")
+
+    call("./stop.sh", stderr=nullfd)
+
+    call("/bin/rm -rf {dir}".format(dir=TESTDIR), shell=True)
     call("/bin/rm -rf {dir}".format(dir=DATADIR), shell=True)
 
     if ERRORS == 0:
