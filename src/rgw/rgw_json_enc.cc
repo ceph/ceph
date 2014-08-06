@@ -586,7 +586,7 @@ void RGWUploadPartInfo::dump(Formatter *f) const
 void rgw_obj::dump(Formatter *f) const
 {
   encode_json("bucket", bucket, f);
-  encode_json("key", key, f);
+  encode_json("key", loc, f);
   encode_json("ns", ns, f);
   encode_json("object", object, f);
 }

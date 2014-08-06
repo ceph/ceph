@@ -1013,13 +1013,13 @@ WRITE_CLASS_ENCODER(RGWBucketEnt)
 
 class rgw_obj {
   std::string orig_obj;
-  std::string orig_key;
-  std::string key;
+  std::string orig_loc;
+  std::string loc;
   std::string object;
   std::string instance;
 public:
   const std::string& get_object() const { return object; }
-  const std::string& get_key() const { return key; }
+  const std::string& get_loc() const { return loc; }
   const std::string& get_instance() const { return instance; }
   rgw_bucket bucket;
   std::string ns;
@@ -1040,23 +1040,23 @@ public:
     bucket = b;
     set_ns(n);
     set_obj(o);
-    set_key(k);
+    set_loc(k);
   }
   void init(rgw_bucket& b, const std::string& o, const std::string& k) {
     bucket = b;
     set_obj(o);
-    set_key(k);
+    set_loc(k);
   }
   void init(rgw_bucket& b, const std::string& o) {
     bucket = b;
     set_obj(o);
-    orig_key = key = o;
+    orig_loc = loc = o;
   }
   void init_ns(rgw_bucket& b, const std::string& o, const std::string& n) {
     bucket = b;
     set_ns(n);
     set_obj(o);
-    reset_key();
+    reset_loc();
   }
   int set_ns(const char *n) {
     if (!n)
@@ -1071,21 +1071,22 @@ public:
     set_obj(orig_obj);
     return 0;
   }
-  void set_instance(const string& i) {
+  int set_instance(const string& i) {
     if (i[0] == '_')
       return -EINVAL;
     instance = i;
     set_obj(orig_obj);
+    return 0;
   }
 
-  void set_key(const string& k) {
-    orig_key = k;
-    key = k;
+  void set_loc(const string& k) {
+    orig_loc = k;
+    loc = k;
   }
 
-  void reset_key() {
-    orig_key.clear();
-    key.clear();
+  void reset_loc() {
+    orig_loc.clear();
+    loc.clear();
   }
 
   void set_obj(const string& o) {
@@ -1111,10 +1112,10 @@ public:
       object.append("_");
       object.append(o);
     }
-    if (orig_key.size())
-      set_key(orig_key);
+    if (orig_loc.size())
+      set_loc(orig_loc);
     else
-      set_key(orig_obj);
+      set_loc(orig_obj);
   }
 
   /*
@@ -1225,7 +1226,7 @@ public:
   void encode(bufferlist& bl) const {
     ENCODE_START(4, 3, bl);
     ::encode(bucket.name, bl);
-    ::encode(key, bl);
+    ::encode(loc, bl);
     ::encode(ns, bl);
     ::encode(object, bl);
     ::encode(bucket, bl);
@@ -1235,7 +1236,7 @@ public:
   void decode(bufferlist::iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
     ::decode(bucket.name, bl);
-    ::decode(key, bl);
+    ::decode(loc, bl);
     ::decode(ns, bl);
     ::decode(object, bl);
     if (struct_v >= 2)
