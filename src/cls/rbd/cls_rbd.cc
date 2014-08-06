@@ -468,6 +468,18 @@ int set_size(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 }
 
 /**
+ * verify that the header object exists
+ *
+ * @return 0 if the object exists, -ENOENT if it does not, or other error
+ */
+int check_exists(cls_method_context_t hctx)
+{
+  uint64_t size;
+  time_t mtime;
+  return cls_cxx_stat(hctx, &size, &mtime);
+}
+
+/**
  * Input:
  *
  * Output:
@@ -476,14 +488,17 @@ int set_size(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
  */
 int get_flags(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  uint64_t flags;
-
-  CLS_LOG(20, "get_flags");
-
-  int r = read_key(hctx, "flags", &flags);
-  if (r < 0) {
-    CLS_ERR("failed to read the flags off of disk: %s", cpp_strerror(r).c_str());
+  int r = check_exists(hctx);
+  if (r < 0)
     return r;
+
+  uint64_t flags = 0;
+  r = read_key(hctx, "flags", &flags);
+  if (r < 0) {
+    if (r != -ENOENT) {
+      CLS_ERR("failed to read the flags off of disk: %s", cpp_strerror(r).c_str());
+      return r;
+    }
   }
 
   ::encode(flags, *out);
@@ -500,7 +515,11 @@ int get_flags(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
  */
 int set_flags(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  uint64_t flags;
+  int r = check_exists(hctx);
+  if (r < 0)
+    return r;
+
+  uint64_t flags = 0;
 
   bufferlist::iterator iter = in->begin();
   try {
@@ -512,10 +531,12 @@ int set_flags(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   // check that flags exists to make sure this is a header object
   // that was created correctly
   uint64_t orig_flags;
-  int r = read_key(hctx, "flags", &orig_flags);
+  r = read_key(hctx, "flags", &orig_flags);
   if (r < 0) {
-    CLS_ERR("Could not read image's flags off disk: %s", cpp_strerror(r).c_str());
-    return r;
+    if (r != -ENOENT) {
+      CLS_ERR("Could not read image's flags off disk: %s", cpp_strerror(r).c_str());
+      return r;
+    }
   }
 
   CLS_LOG(20, "set_flags flags=%llu orig_flags=%llu", (unsigned long long)flags,
@@ -530,19 +551,6 @@ int set_flags(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
 
   return 0;
-}
-
-
-/**
- * verify that the header object exists
- *
- * @return 0 if the object exists, -ENOENT if it does not, or other error
- */
-int check_exists(cls_method_context_t hctx)
-{
-  uint64_t size;
-  time_t mtime;
-  return cls_cxx_stat(hctx, &size, &mtime);
 }
 
 /**
@@ -1635,7 +1643,7 @@ int set_id(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   int r = check_exists(hctx);
   if (r < 0)
     return r;
-
+  
   string id;
   try {
     bufferlist::iterator iter = in->begin();
@@ -2203,7 +2211,7 @@ void __cls_init()
 			  get_flags, &h_get_flags);
   cls_register_cxx_method(h_class, "set_flags",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  set_size, &h_set_flags);
+			  set_flags, &h_set_flags);
   cls_register_cxx_method(h_class, "get_snapcontext",
 			  CLS_METHOD_RD,
 			  get_snapcontext, &h_get_snapcontext);

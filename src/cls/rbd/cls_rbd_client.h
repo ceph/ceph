@@ -42,15 +42,15 @@ namespace librbd {
 		 uint64_t size);
     int set_size(librados::IoCtx *ioctx, const std::string &oid,
 		 uint64_t size);
+    int get_flags(librados::IoCtx *ioctx, const std::string &oid,
+		  uint64_t *flags);
+    int set_flags(librados::IoCtx *ioctx, const std::string &oid,
+		  uint64_t flags);
     int get_parent(librados::IoCtx *ioctx, const std::string &oid,
 		   snapid_t snap_id, parent_spec *pspec,
 		   uint64_t *parent_overlap);
     int set_parent(librados::IoCtx *ioctx, const std::string &oid,
 		   parent_spec pspec, uint64_t parent_overlap);
-    int get_flags(librados::IoCtx *ioctx, const std::string &oid,
-		   uint64_t *flags);
-    int set_flags(librados::IoCtx *ioctx, const std::string &oid,
-		   uint64_t flags);
     int remove_parent(librados::IoCtx *ioctx, const std::string &oid);
     int add_child(librados::IoCtx *ioctx, const std::string &oid,
 		  parent_spec pspec, const std::string &c_imageid);
