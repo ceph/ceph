@@ -92,7 +92,7 @@ void rgw_cls_obj_prepare_op::generate_test_instances(list<rgw_cls_obj_prepare_op
 {
   rgw_cls_obj_prepare_op *op = new rgw_cls_obj_prepare_op;
   op->op = CLS_RGW_OP_ADD;
-  op->name = "name";
+  op->key.name = "name";
   op->tag = "tag";
   op->locator = "locator";
   o.push_back(op);
@@ -102,7 +102,7 @@ void rgw_cls_obj_prepare_op::generate_test_instances(list<rgw_cls_obj_prepare_op
 void rgw_cls_obj_prepare_op::dump(Formatter *f) const
 {
   f->dump_int("op", op);
-  f->dump_string("name", name);
+  f->dump_string("name", key.name);
   f->dump_string("tag", tag);
   f->dump_string("locator", locator);
 }
@@ -111,7 +111,7 @@ void rgw_cls_obj_complete_op::generate_test_instances(list<rgw_cls_obj_complete_
 {
   rgw_cls_obj_complete_op *op = new rgw_cls_obj_complete_op;
   op->op = CLS_RGW_OP_DEL;
-  op->name = "name";
+  op->key.name = "name";
   op->locator = "locator";
   op->ver.pool = 2;
   op->ver.epoch = 100;
@@ -130,7 +130,8 @@ void rgw_cls_obj_complete_op::generate_test_instances(list<rgw_cls_obj_complete_
 void rgw_cls_obj_complete_op::dump(Formatter *f) const
 {
   f->dump_int("op", (int)op);
-  f->dump_string("name", name);
+  f->dump_string("name", key.name);
+  f->dump_string("instance", key.instance);
   f->dump_string("locator", locator);
   f->open_object_section("ver");
   ver.dump(f);
@@ -139,13 +140,12 @@ void rgw_cls_obj_complete_op::dump(Formatter *f) const
   meta.dump(f);
   f->close_section();
   f->dump_string("tag", tag);
-  f->dump_string("instance", instance);
 }
 
 void rgw_cls_list_op::generate_test_instances(list<rgw_cls_list_op*>& o)
 {
   rgw_cls_list_op *op = new rgw_cls_list_op;
-  op->start_obj = "start_obj";
+  op->start_obj.name = "start_obj";
   op->num_entries = 100;
   op->filter_prefix = "filter_prefix";
   o.push_back(op);
@@ -154,7 +154,7 @@ void rgw_cls_list_op::generate_test_instances(list<rgw_cls_list_op*>& o)
 
 void rgw_cls_list_op::dump(Formatter *f) const
 {
-  f->dump_string("start_obj", start_obj);
+  f->dump_string("start_obj", start_obj.name);
   f->dump_unsigned("num_entries", num_entries);
 }
 
