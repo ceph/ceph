@@ -143,24 +143,25 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
   while (iter != objs.end() || pref_iter != common_prefixes.end()) {
     bool do_pref = false;
     bool do_objs = false;
+    rgw_obj_key& key = iter->key;
     if (pref_iter == common_prefixes.end())
       do_objs = true;
     else if (iter == objs.end())
       do_pref = true;
-    else if (iter->name.compare(pref_iter->first) == 0) {
+    else if (key.name.compare(pref_iter->first) == 0) {
       do_objs = true;
       ++pref_iter;
-    } else if (iter->name.compare(pref_iter->first) <= 0)
+    } else if (key.name.compare(pref_iter->first) <= 0)
       do_objs = true;
     else
       do_pref = true;
 
-    if (do_objs && (marker.empty() || iter->name.compare(marker) > 0)) {
-      if (iter->name.compare(path) == 0)
+    if (do_objs && (marker.empty() || marker < key)) {
+      if (key.name.compare(path) == 0)
         goto next;
 
       s->formatter->open_object_section("object");
-      s->formatter->dump_string("name", iter->name);
+      s->formatter->dump_string("name", key.name);
       s->formatter->dump_string("hash", iter->etag);
       s->formatter->dump_int("bytes", iter->size);
       string single_content_type = iter->content_type;
@@ -180,7 +181,7 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
       s->formatter->close_section();
     }
 
-    if (do_pref &&  (marker.empty() || pref_iter->first.compare(marker) > 0)) {
+    if (do_pref &&  (marker.empty() || pref_iter->first.compare(marker.name) > 0)) {
       const string& name = pref_iter->first;
       if (name.compare(delimiter) == 0)
         goto next;
