@@ -7068,6 +7068,7 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
 	  pg->info.history, pg->get_osdmap()->get_epoch()));
     }
     peer_missing_requested.insert(*i);
+    pg->blocked_by.insert(i->osd);
   }
 
   if (peer_missing_requested.empty()) {
@@ -7079,6 +7080,8 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
 
     // all good!
     post_event(Activate(pg->get_osdmap()->get_epoch()));
+  } else {
+    pg->publish_stats_to_osd();
   }
 }
 
@@ -7135,6 +7138,8 @@ void PG::RecoveryState::GetMissing::exit()
   PG *pg = context< RecoveryMachine >().pg;
   utime_t dur = ceph_clock_now(pg->cct) - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_getmissing_latency, dur);
+  pg->blocked_by.clear();
+  pg->publish_stats_to_osd();
 }
 
 /*------WaitUpThru--------*/
