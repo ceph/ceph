@@ -1722,9 +1722,9 @@ int RGWRados::list_buckets_next(RGWObjEnt& obj, RGWAccessHandle *handle)
       return -ENOENT;
     }
 
-    obj.name = (*state)->get_oid();
+    obj.key.set((*state)->get_oid());
     (*state)++;
-  } while (obj.name[0] == '.'); /* skip all entries starting with '.' */
+  } while (obj.key.name[0] == '.'); /* skip all entries starting with '.' */
 
   return 0;
 }
@@ -2209,7 +2209,7 @@ int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, 
  *     here.
  */
 int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& delim,
-			   string& marker, string *next_marker, vector<RGWObjEnt>& result,
+			   const rgw_obj_key& marker, rgw_obj_key *next_marker, vector<RGWObjEnt>& result,
                            map<string, bool>& common_prefixes,
 			   bool get_content_type, string& ns, bool enforce_ns,
                            bool *is_truncated, RGWAccessListFilter *filter)
@@ -2224,13 +2224,14 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
 
   rgw_obj marker_obj, prefix_obj;
   marker_obj.set_ns(ns);
-  marker_obj.set_obj(marker);
+  marker_obj.set_obj(marker.name);
 #warning missing marker_ver
-  string cur_marker = marker_obj.get_index_key();
+  rgw_obj_key cur_marker;
+  marker_obj.get_index_key(&cur_marker);
 
   prefix_obj.set_ns(ns);
   prefix_obj.set_obj(prefix);
-  string cur_prefix = prefix_obj.get_index_key();
+  string cur_prefix = prefix_obj.get_index_key_name();
 
   string bigger_than_delim;
 
@@ -2251,31 +2252,32 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
 
   /* if marker points at a common prefix, fast forward it into its upperbound string */
   if (!delim.empty()) {
-    int delim_pos = cur_marker.find(delim, prefix.size());
+    int delim_pos = cur_marker.name.find(delim, prefix.size());
     if (delim_pos >= 0) {
-      cur_marker = cur_marker.substr(0, delim_pos);
-      cur_marker.append(bigger_than_delim);
+      string s = cur_marker.name.substr(0, delim_pos);
+      s.append(bigger_than_delim);
+      cur_marker.set(s);
     }
   }
 
   while (truncated && count <= max) {
-    if (skip_after_delim > cur_marker) {
-      cur_marker = skip_after_delim;
-      ldout(cct, 20) << "setting cur_marker=" << cur_marker << dendl;
+    if (skip_after_delim > cur_marker.name) {
+      cur_marker.set(skip_after_delim);
+      ldout(cct, 20) << "setting cur_marker=" << cur_marker.name << "[" << cur_marker.instance << "]" << dendl;
     }
-    std::map<string, RGWObjEnt> ent_map;
+    std::map<rgw_obj_key, RGWObjEnt> ent_map;
     int r = cls_bucket_list(bucket, cur_marker, cur_prefix, max + 1 - count, ent_map,
                             &truncated, &cur_marker);
     if (r < 0)
       return r;
 
-    std::map<string, RGWObjEnt>::iterator eiter;
+    std::map<rgw_obj_key, RGWObjEnt>::iterator eiter;
     for (eiter = ent_map.begin(); eiter != ent_map.end(); ++eiter) {
-      string obj = eiter->first;
-      string key = obj;
+      rgw_obj_key obj = eiter->first;
+      rgw_obj_key key = obj;
       string instance;
 
-      bool check_ns = rgw_obj::translate_raw_obj_to_obj_in_ns(obj, instance, ns);
+      bool check_ns = rgw_obj::translate_raw_obj_to_obj_in_ns(obj.name, instance, ns);
 
       if (enforce_ns && !check_ns) {
         if (!ns.empty()) {
@@ -2292,17 +2294,17 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
         *next_marker = obj;
       }
 
-      if (filter && !filter->filter(obj, key))
+      if (filter && !filter->filter(obj.name, key.name))
         continue;
 
-      if (prefix.size() &&  ((obj).compare(0, prefix.size(), prefix) != 0))
+      if (prefix.size() &&  (obj.name.compare(0, prefix.size(), prefix) != 0))
         continue;
 
       if (!delim.empty()) {
-        int delim_pos = obj.find(delim, prefix.size());
+        int delim_pos = obj.name.find(delim, prefix.size());
 
         if (delim_pos >= 0) {
-          string prefix_key = obj.substr(0, delim_pos + 1);
+          string prefix_key = obj.name.substr(0, delim_pos + 1);
 
           if (common_prefixes.find(prefix_key) == common_prefixes.end()) {
             if (count >= max) {
@@ -2314,7 +2316,7 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
             }
             common_prefixes[prefix_key] = true;
 
-            skip_after_delim = obj.substr(0, delim_pos);
+            skip_after_delim = obj.name.substr(0, delim_pos);
             skip_after_delim.append(bigger_than_delim);
 
             ldout(cct, 20) << "skip_after_delim=" << skip_after_delim << dendl;
@@ -2332,7 +2334,7 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
       }
 
       RGWObjEnt ent = eiter->second;
-      ent.name = obj;
+      ent.key = obj;
       ent.ns = ns;
       result.push_back(ent);
       count++;
@@ -3636,8 +3638,9 @@ int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_track
   if (r < 0)
     return r;
 
-  std::map<string, RGWObjEnt> ent_map;
-  string marker, prefix;
+  std::map<rgw_obj_key, RGWObjEnt> ent_map;
+  rgw_obj_key marker;
+  string prefix;
   bool is_truncated;
 
   do {
@@ -3648,13 +3651,13 @@ int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_track
       return r;
 
     string ns;
-    std::map<string, RGWObjEnt>::iterator eiter;
-    string obj;
+    std::map<rgw_obj_key, RGWObjEnt>::iterator eiter;
+    rgw_obj_key obj;
     string instance;
     for (eiter = ent_map.begin(); eiter != ent_map.end(); ++eiter) {
       obj = eiter->first;
 
-      if (rgw_obj::translate_raw_obj_to_obj_in_ns(obj, instance, ns))
+      if (rgw_obj::translate_raw_obj_to_obj_in_ns(obj.name, instance, ns))
         return -ENOTEMPTY;
     }
   } while (is_truncated);
@@ -4556,8 +4559,7 @@ int RGWRados::complete_update_index(rgw_bucket& bucket, rgw_obj& obj, string& ta
     return 0;
 
   RGWObjEnt ent;
-  ent.name = obj.get_index_key();
-  ent.instance = obj.get_instance();
+  obj.get_index_key(&ent.key);
   ent.size = size;
   ent.mtime = ut;
   ent.etag = etag;
@@ -5942,7 +5944,7 @@ int RGWRados::pool_iterate(RGWPoolIterCtx& ctx, uint32_t num, vector<RGWObjEnt>&
     if (filter && !filter->filter(oid, oid))
       continue;
 
-    e.name = oid;
+    e.key.set(oid);
     objs.push_back(e);
   }
 
@@ -5984,7 +5986,7 @@ int RGWRados::list_raw_objects(rgw_bucket& pool, const string& prefix_filter,
 
   vector<RGWObjEnt>::iterator iter;
   for (iter = objs.begin(); iter != objs.end(); ++iter) {
-    oids.push_back(iter->name);
+    oids.push_back(iter->key.name);
   }
 
   return oids.size();
@@ -6076,7 +6078,7 @@ int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, RGWModifyOp op, string& tag
     return r;
 
   ObjectWriteOperation o;
-  cls_rgw_bucket_prepare_op(o, op, tag, obj.get_index_key(), obj.get_instance(), obj.get_loc(), zone_public_config.log_data);
+  cls_rgw_bucket_prepare_op(o, op, tag, obj.get_index_key_name(), obj.get_instance(), obj.get_loc(), zone_public_config.log_data);
   r = index_ctx.operate(oid, &o);
   return r;
 }
@@ -6107,7 +6109,8 @@ int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, RGWModifyOp op, string& ta
   rgw_bucket_entry_ver ver;
   ver.pool = pool;
   ver.epoch = epoch;
-  cls_rgw_bucket_complete_op(o, op, tag, ver, ent.name, ent.instance, dir_meta, remove_objs, zone_public_config.log_data);
+  cls_rgw_bucket_complete_op(o, op, tag, ver, ent.key.name, ent.key.instance,
+                             dir_meta, remove_objs, zone_public_config.log_data);
 
   AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
   r = index_ctx.aio_operate(oid, c, &o);
@@ -6128,16 +6131,14 @@ int RGWRados::cls_obj_complete_del(rgw_bucket& bucket, string& tag,
                                    rgw_obj& obj)
 {
   RGWObjEnt ent;
-  ent.name = obj.get_index_key();
-  ent.instance =  obj.get_instance();
+  obj.get_index_key(&ent.key);
   return cls_obj_complete_op(bucket, CLS_RGW_OP_DEL, tag, pool, epoch, ent, RGW_OBJ_CATEGORY_NONE, NULL);
 }
 
 int RGWRados::cls_obj_complete_cancel(rgw_bucket& bucket, string& tag, rgw_obj& obj)
 {
   RGWObjEnt ent;
-  ent.name = obj.get_index_key();
-  ent.instance = obj.get_instance();
+  obj.get_index_key(&ent.key);
   return cls_obj_complete_op(bucket, CLS_RGW_OP_ADD, tag, -1 /* pool id */, 0, ent, RGW_OBJ_CATEGORY_NONE, NULL);
 }
 
@@ -6158,12 +6159,12 @@ int RGWRados::cls_obj_set_bucket_tag_timeout(rgw_bucket& bucket, uint64_t timeou
   return r;
 }
 
-int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, string prefix,
-		              uint32_t num, map<string, RGWObjEnt>& m,
-			      bool *is_truncated, string *last_entry,
+int RGWRados::cls_bucket_list(rgw_bucket& bucket, rgw_obj_key& start, const string& prefix,
+		              uint32_t num, map<rgw_obj_key, RGWObjEnt>& m,
+			      bool *is_truncated, rgw_obj_key *last_entry,
 			      bool (*force_check_filter)(const string&  name))
 {
-  ldout(cct, 10) << "cls_bucket_list " << bucket << " start " << start << " num " << num << dendl;
+  ldout(cct, 10) << "cls_bucket_list " << bucket << " start " << start.name << "[" << start.instance << "] num " << num << dendl;
 
   librados::IoCtx index_ctx;
   string oid;
@@ -6172,7 +6173,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, string prefix,
     return r;
 
   struct rgw_bucket_dir dir;
-  r = cls_rgw_list_op(index_ctx, oid, start, prefix, num, &dir, is_truncated);
+  r = cls_rgw_list_op(index_ctx, oid, start.name, start.instance, prefix, num, &dir, is_truncated);
   if (r < 0)
     return r;
 
@@ -6183,7 +6184,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, string prefix,
     rgw_bucket_dir_entry& dirent = miter->second;
 
     // fill it in with initial values; we may correct later
-    e.name = dirent.name;
+    e.key.set(dirent.name, dirent.instance);
     e.size = dirent.meta.size;
     e.mtime = dirent.meta.mtime;
     e.etag = dirent.meta.etag;
@@ -6193,7 +6194,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, string prefix,
     e.tag = dirent.tag;
 
     /* oh, that shouldn't happen! */
-    if (e.name.empty()) {
+    if (e.key.empty()) {
       ldout(cct, 0) << "WARNING: got empty dirent name, skipping" << dendl;
       continue;
     }
@@ -6213,8 +6214,8 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, string prefix,
           return r;
       }
     }
-    m[e.name] = e;
-    ldout(cct, 10) << "RGWRados::cls_bucket_list: got " << e.name << dendl;
+    m[e.key] = e;
+    ldout(cct, 10) << "RGWRados::cls_bucket_list: got " << e.key.name << "[" << e.key.instance << "]" << dendl;
   }
 
   if (dir.m.size()) {
@@ -6729,7 +6730,7 @@ int RGWRados::remove_temp_objects(string date, string time)
     }
     vector<RGWObjEnt>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
-      process_intent_log(zone.intent_log_pool, (*iter).name, epoch, I_DEL_OBJ | I_DEL_DIR, true);
+      process_intent_log(zone.intent_log_pool, (*iter).key.name, epoch, I_DEL_OBJ | I_DEL_DIR, true);
     }
   } while (is_truncated);
 
