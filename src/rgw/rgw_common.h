@@ -929,9 +929,47 @@ struct req_state {
    ~req_state();
 };
 
+struct rgw_obj_key {
+  string name;
+  string instance;
+
+  rgw_obj_key() {}
+  rgw_obj_key(const string& n) {
+    set(n);
+  }
+  rgw_obj_key(const string& n, const string& i) {
+    set(n, i);
+  }
+
+  void set(const string& n) {
+    name = n;
+    instance.clear();
+  }
+
+  void set(const string& n, const string& i) {
+    name = n;
+    instance = i;
+  }
+
+  bool empty() {
+    return name.empty();
+  }
+  bool operator==(const rgw_obj_key& k) const {
+    return (name.compare(k.name) == 0) &&
+           (instance.compare(k.instance) == 0);
+  }
+  bool operator<(const rgw_obj_key& k) const {
+    int r = name.compare(k.name);
+    if (r == 0) {
+      r = instance.compare(k.instance);
+    }
+    return (r < 0);
+  }
+};
+
 /** Store basic data on an object */
 struct RGWObjEnt {
-  std::string name;
+  rgw_obj_key key;
   std::string ns;
   std::string owner;
   std::string owner_display_name;
@@ -940,7 +978,6 @@ struct RGWObjEnt {
   string etag;
   string content_type;
   string tag;
-  string instance;
 
   RGWObjEnt() : size(0) {}
 
@@ -1036,6 +1073,10 @@ public:
   rgw_obj(rgw_bucket& b, const std::string& o, const std::string& k, const std::string& n) : in_extra_data(false) {
     init(b, o, k, n);
   }
+  rgw_obj(rgw_bucket& b, const rgw_obj_key& k) {
+    init(b, k.name);
+    set_instance(k.instance);
+  }
   void init(rgw_bucket& b, const std::string& o, const std::string& k, const std::string& n) {
     bucket = b;
     set_ns(n);
@@ -1119,11 +1160,9 @@ public:
   }
 
   /*
-   * get the object's key name as being referred to by the bucket index. Note that
-   * this doesn't include the object version portion, as it's passed separately to the
-   * index.
+   * get the object's key name as being referred to by the bucket index.
    */
-  string get_index_key() {
+  string get_index_key_name() {
     if (ns.empty()) {
       if (orig_obj.size() < 1 || orig_obj[0] != '_') {
         return orig_obj;
@@ -1135,6 +1174,11 @@ public:
     snprintf(buf, sizeof(buf), "_%s_", ns.c_str());
     return string(buf) + orig_obj;
   };
+
+  void get_index_key(rgw_obj_key *key) {
+    key->name = get_index_key_name();
+    key->instance = instance;
+  }
 
   static void parse_ns_field(string& ns, string& instance) {
     int pos = ns.find(':');

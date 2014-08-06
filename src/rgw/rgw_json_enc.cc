@@ -555,7 +555,8 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
 
 void RGWObjEnt::dump(Formatter *f) const
 {
-  encode_json("name", name, f);
+  encode_json("name", key.name, f);
+  encode_json("instance", key.instance, f);
   encode_json("namespace", ns, f);
   encode_json("owner", owner, f);
   encode_json("owner_display_name", owner_display_name, f);

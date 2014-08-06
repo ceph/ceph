@@ -616,14 +616,14 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
 
 int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs)
 {
-  ldout(s->cct, 0) << "user manifest obj=" << ent.name << dendl;
+  ldout(s->cct, 20) << "user manifest obj=" << ent.key.name << "[" << ent.key.instance << "]" << dendl;
 
   void *handle = NULL;
   off_t cur_ofs = start_ofs;
   off_t cur_end = end_ofs;
   utime_t start_time = s->time;
 
-  rgw_obj part(bucket, ent.name);
+  rgw_obj part(bucket, ent.key);
 
   map<string, bufferlist> attrs;
 
@@ -696,7 +696,7 @@ static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t 
   uint64_t obj_ofs = 0, len_count = 0;
   bool found_start = false, found_end = false;
   string delim;
-  string marker;
+  rgw_obj_key marker;
   bool is_truncated;
   string no_ns;
   map<string, bool> common_prefixes;
@@ -743,7 +743,7 @@ static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t 
             return r;
         }
       }
-      marker = ent.name;
+      marker = ent.key;
 
       start_time = ceph_clock_now(cct);
     }
@@ -1156,7 +1156,7 @@ void RGWListBucket::execute()
   if (ret < 0)
     return;
 
-  string *pnext_marker = (delimiter.empty() ? NULL : &next_marker);
+  rgw_obj_key *pnext_marker = (delimiter.empty() ? NULL : &next_marker);
 
   ret = store->list_objects(s->bucket, max, prefix, delimiter, marker, pnext_marker, objs, common_prefixes,
                                !!(s->prot_flags & RGW_REST_SWIFT), no_ns, true, &is_truncated, NULL);
@@ -1586,7 +1586,7 @@ static int put_obj_user_manifest_iterate_cb(rgw_bucket& bucket, RGWObjEnt& ent, 
 
 int RGWPutObj::user_manifest_iterate_cb(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs)
 {
-  rgw_obj part(bucket, ent.name);
+  rgw_obj part(bucket, ent.key);
 
   map<string, bufferlist> attrs;
 
@@ -2867,7 +2867,7 @@ void RGWCompleteMultipart::execute()
         manifest.append(obj_part.manifest);
       }
 
-      remove_objs.push_back(src_obj.get_index_key());
+      remove_objs.push_back(src_obj.get_index_key_name());
 
       ofs += obj_part.size;
     }
@@ -3057,8 +3057,8 @@ void RGWListBucketMultiparts::execute()
     vector<RGWObjEnt>::iterator iter;
     RGWMultipartUploadEntry entry;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
-      string name = iter->name;
-      if (!entry.mp.from_meta(name))
+      rgw_obj_key& key = iter->key;
+      if (!entry.mp.from_meta(key.name))
         continue;
       entry.obj = *iter;
       uploads.push_back(entry);

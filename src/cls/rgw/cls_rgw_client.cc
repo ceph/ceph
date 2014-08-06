@@ -62,8 +62,9 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, string&
 }
 
 
-int cls_rgw_list_op(IoCtx& io_ctx, string& oid, string& start_obj,
-                    string& filter_prefix, uint32_t num_entries,
+int cls_rgw_list_op(IoCtx& io_ctx, const string& oid,
+                    const string& start_obj, const string& start_instance,
+                    const string& filter_prefix, uint32_t num_entries,
                     rgw_bucket_dir *dir, bool *is_truncated)
 {
   bufferlist in, out;
@@ -71,6 +72,7 @@ int cls_rgw_list_op(IoCtx& io_ctx, string& oid, string& start_obj,
   call.start_obj = start_obj;
   call.filter_prefix = filter_prefix;
   call.num_entries = num_entries;
+  call.start_instance = start_instance;
   ::encode(call, in);
   int r = io_ctx.exec(oid, "rgw", "bucket_list", in, out);
   if (r < 0)

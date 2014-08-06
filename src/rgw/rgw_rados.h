@@ -1455,7 +1455,7 @@ public:
    *     here.
    */
   virtual int list_objects(rgw_bucket& bucket, int max, std::string& prefix, std::string& delim,
-                   std::string& marker, std::string *next_marker, std::vector<RGWObjEnt>& result,
+                   const rgw_obj_key& marker, rgw_obj_key *next_marker, std::vector<RGWObjEnt>& result,
                    map<string, bool>& common_prefixes, bool get_content_type, string& ns, bool enforce_ns,
                    bool *is_truncated, RGWAccessListFilter *filter);
 
@@ -1824,9 +1824,9 @@ public:
   int cls_obj_complete_del(rgw_bucket& bucket, string& tag, int64_t pool, uint64_t epoch, rgw_obj& obj);
   int cls_obj_complete_cancel(rgw_bucket& bucket, string& tag, rgw_obj& obj);
   int cls_obj_set_bucket_tag_timeout(rgw_bucket& bucket, uint64_t timeout);
-  int cls_bucket_list(rgw_bucket& bucket, string start, string prefix, uint32_t num,
-                      map<string, RGWObjEnt>& m, bool *is_truncated,
-                      string *last_entry, bool (*force_check_filter)(const string&  name) = NULL);
+  int cls_bucket_list(rgw_bucket& bucket, rgw_obj_key& start, const string& prefix, uint32_t num,
+                      map<rgw_obj_key, RGWObjEnt>& m, bool *is_truncated,
+                      rgw_obj_key *last_entry, bool (*force_check_filter)(const string&  name) = NULL);
   int cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header);
   int cls_bucket_head_async(rgw_bucket& bucket, RGWGetDirHeader_CB *ctx);
   int prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
