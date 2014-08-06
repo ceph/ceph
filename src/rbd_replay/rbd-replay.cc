@@ -44,9 +44,9 @@ static void usage(const char* program) {
   cout << "                                  image names in the replay cluster." << std::endl;
   cout << std::endl;
   cout << "Image mapping rules:" << std::endl;
-  cout << "A rule of image1/snap1=image2/snap2 would map snap1 of image1 to snap2 of" << std::endl;
-  cout << "image2. Regular expressions are used, so image/snap_(.*)=image_$1/ would map" << std::endl;
-  cout << "image/snap_1 to image_1/. (Note that an un-snapshotted image has the empty" << std::endl;
+  cout << "A rule of image1@snap1=image2@snap2 would map snap1 of image1 to snap2 of" << std::endl;
+  cout << "image2. Regular expressions are used, so image@snap_(.*)=image_$1@ would map" << std::endl;
+  cout << "image@snap_1 to image_1@. (Note that an un-snapshotted image has the empty" << std::endl;
   cout << "string for the snapshot name.)" << std::endl;
 }
 

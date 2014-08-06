@@ -47,22 +47,22 @@ public:
   void set_bad_mapping_fallback(BadMappingFallback bad_mapping_fallback);
 
 private:
-  std::string escape_slash(std::string s) const;
+  std::string escape_at(std::string s) const;
 
-  std::string unescape_slash(std::string s) const;
+  std::string unescape_at(std::string s) const;
 
   NameMap m_map;
 
-  // Split "a/b" into "a" and "b", allowing for escaped slashes
+  // Split "a@b" into "a" and "b", allowing for escaped at sign
   boost::regex m_name;
 
-  // We don't have to worry about an even number of backslahes followed by a slash,
-  // because that slash would have already been matched and removed.
-  boost::regex m_escaped_slash;
+  // We don't have to worry about an even number of backslahes followed by an at sign,
+  // because that at sign would have already been matched and removed.
+  boost::regex m_escaped_at;
 
   boost::regex m_escaped_backslash;
 
-  boost::regex m_slash;
+  boost::regex m_at;
 
   boost::regex m_backslash;
 
