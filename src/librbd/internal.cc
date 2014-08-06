@@ -742,7 +742,7 @@ reprotect_and_return_err:
 
   int create_v2(IoCtx& io_ctx, const char *imgname, uint64_t bid, uint64_t size,
 		int order, uint64_t features, uint64_t stripe_unit,
-		uint64_t stripe_count)
+		uint64_t stripe_count, uint64_t flags)
   {
     ostringstream bid_ss;
     uint32_t extra;
@@ -797,6 +797,12 @@ reprotect_and_return_err:
       }
     }
 
+    r = cls_client::set_flags(&io_ctx, header_oid, flags);
+    if (r < 0) {
+      lderr(cct) << "error writing flags: " << cpp_strerror(r) << dendl;
+      goto err_remove_header;
+    }
+
     ldout(cct, 2) << "done." << dendl;
     return 0;
 
@@ -835,7 +841,7 @@ reprotect_and_return_err:
 
   int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     bool old_format, uint64_t features, int *order,
-	     uint64_t stripe_unit, uint64_t stripe_count)
+	     uint64_t stripe_unit, uint64_t stripe_count, int flags)
   {
     if (!order)
       return -EINVAL;
@@ -908,7 +914,7 @@ reprotect_and_return_err:
       return create_v1(io_ctx, imgname, bid, size, *order);
     } else {
       return create_v2(io_ctx, imgname, bid, size, *order, features,
-		       stripe_unit, stripe_count);
+		       stripe_unit, stripe_count, flags);
     }
   }
 

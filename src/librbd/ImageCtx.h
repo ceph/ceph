@@ -82,6 +82,7 @@ namespace librbd {
     parent_info parent_md;
     ImageCtx *parent;
     uint64_t stripe_unit, stripe_count;
+    uint64_t flags;
 
     ceph_file_layout layout;
 
@@ -152,7 +153,9 @@ namespace librbd {
     // -- ImageIndex related --
     //
     // ImageIndex is aimed to hold each object's location info which avoid
-    // extra checking for none-existing object.
+    // extra checking for none-existing object. It's only used when image flags
+    // exists LIBRBD_CREATE_SHARED. Otherwise, ImageIndex will become gawp and
+    // has no effect.
     //
     // Each object has three state:
     // 1. UNKNOWN: default value, it will follow origin path
@@ -194,13 +197,15 @@ namespace librbd {
       Mutex state_lock;   // protects image_index
       vector<int> state_map;
       uint64_t num_obj;
+      bool enable;
 
       ImageCtx *image;
       CephContext *cct;
 
     public:
       ImageIndex(ImageCtx *image): state_lock("librbd::ImageIndex::state_lock"),
-                                   image(image), cct(image->cct) {
+                                   enable(false), image(image),
+                                   cct(image->cct) {
 
       }
       ~ImageIndex() {}
@@ -227,6 +232,9 @@ namespace librbd {
       void resize_image_index(uint64_t size) {
         Mutex::Locker l(state_lock);
         state_map.resize(size);
+        if (!enable)
+          return ;
+
         for (uint64_t i = num_obj; i < size; i++) {
           state_map[i] = OBJ_LOCAL;
         }
@@ -234,6 +242,10 @@ namespace librbd {
       }
 
       bool is_full_local() {
+        Mutex::Locker l(state_lock);
+        if (!enable)
+          return true;
+
         for (uint64_t i = 0; i < num_obj; ++i)
           if (state_map[i] != OBJ_LOCAL)
             return false;
@@ -255,20 +267,30 @@ namespace librbd {
       }
 
       void mark_all_parent() {
+        Mutex::Locker l(state_lock);
+        if (!enable)
+          return;
+
         for (uint64_t i = 0; i < num_obj; ++i)
           state_map[i] = OBJ_PARENT;
       }
       void mark_all_local() {
+        Mutex::Locker l(state_lock);
+        if (!enable)
+          return;
+
         for (uint64_t i = 0; i < num_obj; ++i)
           state_map[i] = OBJ_LOCAL;
       }
       void mark_local(uint64_t objno) {
         Mutex::Locker l(state_lock);
-        state_map[objno] = OBJ_LOCAL;
+        if (enable)
+          state_map[objno] = OBJ_LOCAL;
       }
       void mark_parent(uint64_t objno) {
         Mutex::Locker l(state_lock);
-        state_map[objno] = OBJ_PARENT;
+        if (enable)
+          state_map[objno] = OBJ_PARENT;
       }
     } image_index;
     WRITE_CLASS_ENCODER(ImageIndex)

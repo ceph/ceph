@@ -65,6 +65,8 @@ cls_method_handle_t h_create;
 cls_method_handle_t h_get_features;
 cls_method_handle_t h_get_size;
 cls_method_handle_t h_set_size;
+cls_method_handle_t h_get_flags;
+cls_method_handle_t h_set_flags;
 cls_method_handle_t h_get_parent;
 cls_method_handle_t h_set_parent;
 cls_method_handle_t h_get_protection_status;
@@ -466,6 +468,72 @@ int set_size(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 }
 
 /**
+ * Input:
+ *
+ * Output:
+ * @param flags the flags of this image
+ * @returns 0 on success, negative error code on failure
+ */
+int get_flags(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t flags;
+
+  CLS_LOG(20, "get_flags");
+
+  int r = read_key(hctx, "flags", &flags);
+  if (r < 0) {
+    CLS_ERR("failed to read the flags off of disk: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  ::encode(flags, *out);
+
+  return 0;
+}
+
+/**
+ * Input:
+ * @param flags the new flags of this image
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int set_flags(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t flags;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(flags, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  // check that flags exists to make sure this is a header object
+  // that was created correctly
+  uint64_t orig_flags;
+  int r = read_key(hctx, "flags", &orig_flags);
+  if (r < 0) {
+    CLS_ERR("Could not read image's flags off disk: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  CLS_LOG(20, "set_flags flags=%llu orig_flags=%llu", (unsigned long long)flags,
+          (unsigned long long)orig_flags);
+
+  bufferlist flagbl;
+  ::encode(flags, flagbl);
+  r = cls_cxx_map_set_val(hctx, "flags", &flagbl);
+  if (r < 0) {
+    CLS_ERR("error writing flag metadata: %d", r);
+    return r;
+  }
+
+  return 0;
+}
+
+
+/**
  * verify that the header object exists
  *
  * @return 0 if the object exists, -ENOENT if it does not, or other error
@@ -740,10 +808,6 @@ int get_image_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  r = require_feature(hctx, RBD_FEATURE_STRIPINGV2);
-  if (r < 0)
-    return r;
-
   int r = check_exists(hctx);
   if (r < 0)
     return r;
@@ -752,7 +816,7 @@ int get_image_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   bufferlist index_bl;
   string key;
-  index_key_from_snap_id(snapid, &key);
+  index_key_from_snap_id(snap_id, &key);
   r = read_key(hctx, key, &index_bl);
   if (r < 0 && r != ENOENT)
     return r;
@@ -784,10 +848,6 @@ int set_image_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  r = require_feature(hctx, RBD_FEATURE_STRIPINGV2);
-  if (r < 0)
-    return r;
-
   int r = check_exists(hctx);
   if (r < 0)
     return r;
@@ -795,7 +855,7 @@ int set_image_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   CLS_LOG(20, "set_image_index");
 
   bufferlist bl;
-  ::encode(index, bl);
+  ::encode(index_bl, bl);
 
   string key;
   index_key_from_snap_id(snapid, &key);
@@ -831,12 +891,8 @@ int remove_image_index(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
   if (r < 0)
     return r;
 
-  r = require_feature(hctx, RBD_FEATURE_IMAGEINDEX);
-  if (r < 0)
-    return r;
-
   string key;
-  index_key_from_snap_id(snapid, &key);
+  index_key_from_snap_id(snap_id, &key);
   r = cls_cxx_map_remove_key(hctx, key);
   if (r < 0) {
     CLS_ERR("error removing image index: %d", r);
@@ -2142,6 +2198,12 @@ void __cls_init()
   cls_register_cxx_method(h_class, "set_size",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  set_size, &h_set_size);
+  cls_register_cxx_method(h_class, "get_flags",
+			  CLS_METHOD_RD,
+			  get_flags, &h_get_flags);
+  cls_register_cxx_method(h_class, "set_flags",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  set_size, &h_set_flags);
   cls_register_cxx_method(h_class, "get_snapcontext",
 			  CLS_METHOD_RD,
 			  get_snapcontext, &h_get_snapcontext);
