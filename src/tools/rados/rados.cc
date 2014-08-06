@@ -1488,8 +1488,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
           formatter->dump_format("num_objects_degraded", "%lld", s.num_objects_degraded);
           formatter->dump_format("read_ops", "%lld", s.num_rd);
           formatter->dump_format("read_bytes", "%lld", s.num_rd_kb * 1024ull);
-          formatter->dump_format("read_kb", "%lld", s.num_rd_kb);
-          formatter->dump_format("write_kb", "%lld", s.num_wr_kb);
           formatter->dump_format("write_ops", "%lld", s.num_wr);
           formatter->dump_format("write_bytes", "%lld", s.num_wr_kb * 1024ull);
           formatter->flush(cout);
