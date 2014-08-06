@@ -814,7 +814,7 @@ void PGMap::dump_osd_perf_stats(Formatter *f) const
 void PGMap::print_osd_perf_stats(std::ostream *ss) const
 {
   TextTable tab;
-  tab.define_column("osdid", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("osd", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("fs_commit_latency(ms)", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("fs_apply_latency(ms)", TextTable::LEFT, TextTable::RIGHT);
   for (ceph::unordered_map<int32_t, osd_stat_t>::const_iterator i = osd_stat.begin();
