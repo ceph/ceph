@@ -6576,10 +6576,10 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx)
   pg->generate_past_intervals();
   auto_ptr<PriorSet> &prior_set = context< Peering >().prior_set;
 
+  assert(pg->blocked_by.empty());
+
   if (!prior_set.get())
     pg->build_prior(prior_set);
-
-  pg->publish_stats_to_osd();
 
   get_infos();
   if (peer_info_requested.empty() && !prior_set->pg_down) {
@@ -6592,6 +6592,7 @@ void PG::RecoveryState::GetInfo::get_infos()
   PG *pg = context< RecoveryMachine >().pg;
   auto_ptr<PriorSet> &prior_set = context< Peering >().prior_set;
 
+  pg->blocked_by.clear();
   for (set<pg_shard_t>::const_iterator it = prior_set->probe.begin();
        it != prior_set->probe.end();
        ++it) {
@@ -6605,6 +6606,7 @@ void PG::RecoveryState::GetInfo::get_infos()
     }
     if (peer_info_requested.count(peer)) {
       dout(10) << " already requested info from osd." << peer << dendl;
+      pg->blocked_by.insert(peer.osd);
     } else if (!pg->get_osdmap()->is_up(peer.osd)) {
       dout(10) << " not querying info from down osd." << peer << dendl;
     } else {
@@ -6615,17 +6617,23 @@ void PG::RecoveryState::GetInfo::get_infos()
 			 pg->info.history,
 			 pg->get_osdmap()->get_epoch()));
       peer_info_requested.insert(peer);
+      pg->blocked_by.insert(peer.osd);
     }
   }
+
+  pg->publish_stats_to_osd();
 }
 
 boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& infoevt) 
 {
-  set<pg_shard_t>::iterator p = peer_info_requested.find(infoevt.from);
-  if (p != peer_info_requested.end())
-    peer_info_requested.erase(p);
-
   PG *pg = context< RecoveryMachine >().pg;
+
+  set<pg_shard_t>::iterator p = peer_info_requested.find(infoevt.from);
+  if (p != peer_info_requested.end()) {
+    peer_info_requested.erase(p);
+    pg->blocked_by.erase(infoevt.from.osd);
+  }
+
   epoch_t old_start = pg->info.history.last_epoch_started;
   if (pg->proc_replica_info(infoevt.from, infoevt.notify.info)) {
     // we got something new ...
@@ -6744,6 +6752,7 @@ void PG::RecoveryState::GetInfo::exit()
   PG *pg = context< RecoveryMachine >().pg;
   utime_t dur = ceph_clock_now(pg->cct) - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_getinfo_latency, dur);
+  pg->blocked_by.clear();
 }
 
 /*------GetLog------------*/
