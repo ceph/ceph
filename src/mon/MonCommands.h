@@ -352,6 +352,9 @@ COMMAND("osd perf", \
         "osd", \
         "r", \
         "cli,rest")
+COMMAND("osd blocked-by", \
+	"print histogram of which OSDs are blocking their peers", \
+	"osd", "r", "cli,rest")
 COMMAND("osd getmaxosd", "show largest OSD id", "osd", "r", "cli,rest")
 COMMAND("osd find " \
 	"name=id,type=CephInt,range=0", \
