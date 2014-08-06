@@ -457,13 +457,13 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
   }
 
   const PGMap &pgm = mon->pgmon()->pg_map;
-  double average_util, overload_util;
   vector<int> pgs_by_osd(osdmap.get_max_osd());
   unsigned num_pg_copies = 0;
   unsigned num_osds = pgm.osd_stat.size();
 
   // Avoid putting a small number (or 0) in the denominator when calculating
   // average_util
+  double average_util;
   if (by_pg) {
     // by pg mapping
     for (ceph::unordered_map<pg_t,pg_stat_t>::const_iterator p =
@@ -489,7 +489,6 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
     }
 
     average_util = (double)num_pg_copies / (double)num_osds;
-    overload_util = average_util * (double)oload / 100.0;
   } else {
     // by osd utilization
     if (pgm.osd_sum.kb < 1024) {
@@ -509,8 +508,13 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
     }
 
     average_util = (double)pgm.osd_sum.kb_used / (double)pgm.osd_sum.kb;
-    overload_util = average_util * (double)oload / 100.0;
   }
+
+  // adjust down only if we are above the threshold
+  double overload_util = average_util * (double)oload / 100.0;
+
+  // but aggressively adjust weights up whenever possible.
+  double underload_util = average_util;
 
   ostringstream oss;
   char buf[128];
@@ -544,6 +548,23 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
 	       (float)new_weight / (float)0x10000);
       oss << buf << sep;
       changed = true;
+    }
+    if (util <= underload_util) {
+      // assign a higher weight.. if we can.
+      unsigned weight = osdmap.get_weight(p->first);
+      unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
+      if (new_weight > 0x10000)
+	new_weight = 0x10000;
+      if (new_weight > weight) {
+	sep = ", ";
+	pending_inc.new_weight[p->first] = new_weight;
+	char buf[128];
+	snprintf(buf, sizeof(buf), "%d [%04f -> %04f]", p->first,
+		 (float)weight / (float)0x10000,
+		 (float)new_weight / (float)0x10000);
+	oss << buf << sep;
+	changed = true;
+      }
     }
   }
   if (sep.empty()) {
