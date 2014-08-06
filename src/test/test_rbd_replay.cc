@@ -18,10 +18,12 @@
 #include <boost/foreach.hpp>
 #include "rbd_replay/Deser.hpp"
 #include "rbd_replay/ImageNameMap.hpp"
+#include "rbd_replay/rbd_loc.hpp"
 
 
 using rbd_replay::ImageNameMap;
 using rbd_replay::NameMap;
+using rbd_replay::rbd_loc;
 
 std::ostream& operator<<(std::ostream& o, const ImageNameMap::Name& name) {
   return o << "('" << name.first << "', '" << name.second << "')";
@@ -92,4 +94,81 @@ TEST(RBDReplay, NameMap) {
   EXPECT_EQ("y", m.map("x"));
   EXPECT_EQ("ab_image", m.map("image_ab"));
   EXPECT_EQ("asdf", m.map("asdf"));
+}
+
+TEST(RBDReplay, rbd_loc_str) {
+  EXPECT_EQ("", rbd_loc("", "", "").str());
+  EXPECT_EQ("a/", rbd_loc("a", "", "").str());
+  EXPECT_EQ("b", rbd_loc("", "b", "").str());
+  EXPECT_EQ("a/b", rbd_loc("a", "b", "").str());
+  EXPECT_EQ("@c", rbd_loc("", "", "c").str());
+  EXPECT_EQ("a/@c", rbd_loc("a", "", "c").str());
+  EXPECT_EQ("b@c", rbd_loc("", "b", "c").str());
+  EXPECT_EQ("a/b@c", rbd_loc("a", "b", "c").str());
+  EXPECT_EQ("a\\@x/b\\@y@c\\@z", rbd_loc("a@x", "b@y", "c@z").str());
+  EXPECT_EQ("a\\/x/b\\/y@c\\/z", rbd_loc("a/x", "b/y", "c/z").str());
+  EXPECT_EQ("a\\\\x/b\\\\y@c\\\\z", rbd_loc("a\\x", "b\\y", "c\\z").str());
+}
+
+TEST(RBDReplay, rbd_loc_parse) {
+  rbd_loc m("x", "y", "z");
+
+  EXPECT_EQ(true, m.parse(""));
+  EXPECT_EQ("", m.pool);
+  EXPECT_EQ("", m.image);
+  EXPECT_EQ("", m.snap);
+
+  EXPECT_EQ(true, m.parse("a/"));
+  EXPECT_EQ("a", m.pool);
+  EXPECT_EQ("", m.image);
+  EXPECT_EQ("", m.snap);
+
+  EXPECT_EQ(true, m.parse("b"));
+  EXPECT_EQ("", m.pool);
+  EXPECT_EQ("b", m.image);
+  EXPECT_EQ("", m.snap);
+
+  EXPECT_EQ(true, m.parse("a/b"));
+  EXPECT_EQ("a", m.pool);
+  EXPECT_EQ("b", m.image);
+  EXPECT_EQ("", m.snap);
+
+  EXPECT_EQ(true, m.parse("@c"));
+  EXPECT_EQ("", m.pool);
+  EXPECT_EQ("", m.image);
+  EXPECT_EQ("c", m.snap);
+
+  EXPECT_EQ(true, m.parse("a/@c"));
+  EXPECT_EQ("a", m.pool);
+  EXPECT_EQ("", m.image);
+  EXPECT_EQ("c", m.snap);
+
+  EXPECT_EQ(true, m.parse("b@c"));
+  EXPECT_EQ("", m.pool);
+  EXPECT_EQ("b", m.image);
+  EXPECT_EQ("c", m.snap);
+
+  EXPECT_EQ(true, m.parse("a/b@c"));
+  EXPECT_EQ("a", m.pool);
+  EXPECT_EQ("b", m.image);
+  EXPECT_EQ("c", m.snap);
+
+  EXPECT_EQ(true, m.parse("a\\@x/b\\@y@c\\@z"));
+  EXPECT_EQ("a@x", m.pool);
+  EXPECT_EQ("b@y", m.image);
+  EXPECT_EQ("c@z", m.snap);
+
+  EXPECT_EQ(true, m.parse("a\\/x/b\\/y@c\\/z"));
+  EXPECT_EQ("a/x", m.pool);
+  EXPECT_EQ("b/y", m.image);
+  EXPECT_EQ("c/z", m.snap);
+
+  EXPECT_EQ(true, m.parse("a\\\\x/b\\\\y@c\\\\z"));
+  EXPECT_EQ("a\\x", m.pool);
+  EXPECT_EQ("b\\y", m.image);
+  EXPECT_EQ("c\\z", m.snap);
+
+  EXPECT_EQ(false, m.parse("a@b@c"));
+  EXPECT_EQ(false, m.parse("a/b/c"));
+  EXPECT_EQ(false, m.parse("a@b/c"));
 }
