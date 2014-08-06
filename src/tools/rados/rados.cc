@@ -1675,7 +1675,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     else
       ret = 0;
     string s(bl.c_str(), bl.length());
-    cout << s << std::endl;
+    cout << s;
   } else if (strcmp(nargs[0], "rmxattr") == 0) {
     if (!pool_name || nargs.size() < 3)
       usage_exit();
