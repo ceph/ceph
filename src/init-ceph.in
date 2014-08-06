@@ -193,7 +193,7 @@ for name in $what; do
     num=$id
     name="$type.$id"
 
-    check_host || continue
+    check_host $cluster || continue
 
     binary="$BINDIR/ceph-$type"
     cmd="$binary -i $id"
@@ -235,7 +235,7 @@ for name in $what; do
     cmd="$cmd -c $conf"
 
     if echo $name | grep -q ^osd; then
-	get_conf osd_data "/var/lib/ceph/osd/ceph-$id" "osd data"
+	get_conf osd_data "/var/lib/ceph/osd/$cluster-$id" "osd data"
 	get_conf fs_path "$osd_data" "fs path"  # mount point defaults so osd data
         get_conf fs_devs "" "devs"
 	if [ -z "$fs_devs" ]; then
@@ -335,7 +335,7 @@ for name in $what; do
 		if [ "${update_crush:-1}" = "1" -o "${update_crush:-1}" = "true" ]; then
 		    # update location in crush
 		    get_conf osd_location_hook "$BINDIR/ceph-crush-location" "osd crush location hook"
-		    osd_location=`$osd_location_hook --cluster ceph --id $id --type osd`
+		    osd_location=`$osd_location_hook --cluster $cluster --id $id --type osd`
 		    get_conf osd_weight "" "osd crush initial weight"
 		    defaultweight="$(df -P -k $osd_data/. | tail -1 | awk '{ print sprintf("%.2f",$2/1073741824) }')"
 		    get_conf osd_keyring "$osd_data/keyring" "keyring"
@@ -371,7 +371,7 @@ for name in $what; do
 		get_conf mon_data "/var/lib/ceph/mon/ceph-$id" "mon data"
 		if [ "$mon_data" = "/var/lib/ceph/mon/ceph-$id" -a "$asok" = "/var/run/ceph/ceph-mon.$id.asok" ]; then
 		    echo Starting ceph-create-keys on $host...
-		    cmd2="$SBINDIR/ceph-create-keys -i $id 2> /dev/null &"
+		    cmd2="$SBINDIR/ceph-create-keys --cluster $cluster -i $id 2> /dev/null &"
 		    do_cmd "$cmd2"
 		fi
 	    fi
