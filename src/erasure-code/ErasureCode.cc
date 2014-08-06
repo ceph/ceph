@@ -183,3 +183,17 @@ int ErasureCode::to_bool(const std::string &name,
   *value = (p == "yes") || (p == "true");
   return 0;
 }
+
+int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
+			       bufferlist *decoded)
+{
+  set<int> want_to_read;
+  for (unsigned int i = 0; i < get_data_chunk_count(); i++)
+    want_to_read.insert(i);
+  map<int, bufferlist> decoded_map;
+  int r = decode(want_to_read, chunks, &decoded_map);
+  if (r == 0)
+    for (unsigned int i = 0; i < get_data_chunk_count(); i++)
+      decoded->claim_append(decoded_map[i]);
+  return r;
+}
