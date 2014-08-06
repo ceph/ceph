@@ -148,6 +148,131 @@ namespace librbd {
     uint64_t prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
 				  uint64_t overlap);
 
+
+    // -- ImageIndex related --
+    //
+    // ImageIndex is aimed to hold each object's location info which avoid
+    // extra checking for none-existing object.
+    //
+    // Each object has three state:
+    // 1. UNKNOWN: default value, it will follow origin path
+    // 2. LOCAL: imply this object is local, don't need to lookup parent image
+    // 3. PARENT: imply this object is in the parent image, don't need to read
+    // from local image
+    //
+    // Note: ImageIndex isn't full sync to real data all the time. Because the
+    // transformation {"unknown" -> "local", "unknown" -> "parent"} are safe.
+    // So We only need to handle with the exception when ImageIndex implies
+    // this object is "parent" but the real data is "local". There exists three
+    // methods to solve it:
+    // 1. flush `state_map` every time when "parent" -> "local" happened
+    // 2. as we know, parent image is frozen and never change `state_map`, so
+    // we will read current image object all the time in sprint of the object
+    // state and trust the parent image's state. In other word, when opening
+    // the *current* image, all "parent" objects will be transformed to
+    // "unknown".
+    //
+    // Here choose to implement method 2. This method only allow 2 read ops
+    // in one read request at max and without overhead.
+    //
+    // 1. When creating new image, it will mark all objects as "local"
+    // 2. When clone from image, it will mark all objects as "parent"
+    // 3. When write(or modified op) a object, it will mark this object as
+    // "local"
+    // 4. When creating snapshot, image index will be freeze and save it as the
+    // index of the snapshot
+    // 5. When reading object, the current image object will be always read in
+    // spite of the state. And the parent image's object will be checked and
+    // trust the state.
+
+    class ImageIndex {
+    private:
+      static const int OBJ_UNKNOWN = 0;
+      static const int OBJ_PARENT = 1;
+      static const int OBJ_LOCAL = 2;
+
+      Mutex state_lock;   // protects image_index
+      vector<int> state_map;
+      uint64_t num_obj;
+
+      ImageCtx *image;
+      CephContext *cct;
+
+    public:
+      ImageIndex(ImageCtx *image): state_lock("librbd::ImageIndex::state_lock"),
+                                   image(image), cct(image->cct) {
+
+      }
+      ~ImageIndex() {}
+      int load();
+      void encode(bufferlist &bl) const {
+        ENCODE_START(1, 1, bl);
+        ::encode(state_map, bl);
+        ::encode(num_obj, bl);
+        ENCODE_FINISH(bl);
+      }
+      void decode(bufferlist::iterator &bl) {
+        DECODE_START(1, bl);
+        ::decode(state_map, bl);
+        ::decode(num_obj, bl);
+        DECODE_FINISH(bl);
+      }
+
+      void invalidate_image_index() {
+        Mutex::Locker l(state_lock);
+        for (uint64_t i = 0; i < num_obj; ++i)
+          state_map[i] = OBJ_UNKNOWN;
+      }
+
+      void resize_image_index(uint64_t size) {
+        Mutex::Locker l(state_lock);
+        state_map.resize(size);
+        for (uint64_t i = num_obj; i < size; i++) {
+          state_map[i] = OBJ_LOCAL;
+        }
+        num_obj = size;
+      }
+
+      bool is_full_local() {
+        for (uint64_t i = 0; i < num_obj; ++i)
+          if (state_map[i] != OBJ_LOCAL)
+            return false;
+
+        return true;
+      }
+
+      bool is_unknown(uint64_t objno) {
+        Mutex::Locker l(state_lock);
+        return state_map[objno] == OBJ_UNKNOWN;
+      }
+      bool is_local(uint64_t objno) {
+        Mutex::Locker l(state_lock);
+        return state_map[objno] == OBJ_LOCAL;
+      }
+      bool is_parent(uint64_t objno) {
+        Mutex::Locker l(state_lock);
+        return state_map[objno] == OBJ_PARENT;
+      }
+
+      void mark_all_parent() {
+        for (uint64_t i = 0; i < num_obj; ++i)
+          state_map[i] = OBJ_PARENT;
+      }
+      void mark_all_local() {
+        for (uint64_t i = 0; i < num_obj; ++i)
+          state_map[i] = OBJ_LOCAL;
+      }
+      void mark_local(uint64_t objno) {
+        Mutex::Locker l(state_lock);
+        state_map[objno] = OBJ_LOCAL;
+      }
+      void mark_parent(uint64_t objno) {
+        Mutex::Locker l(state_lock);
+        state_map[objno] = OBJ_PARENT;
+      }
+    } image_index;
+    WRITE_CLASS_ENCODER(ImageIndex)
+
   };
 }
 

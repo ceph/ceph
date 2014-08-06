@@ -71,6 +71,9 @@ cls_method_handle_t h_get_protection_status;
 cls_method_handle_t h_set_protection_status;
 cls_method_handle_t h_get_stripe_unit_count;
 cls_method_handle_t h_set_stripe_unit_count;
+cls_method_handle_t h_get_image_index;
+cls_method_handle_t h_set_image_index;
+cls_method_handle_t h_remove_image_index;
 cls_method_handle_t h_remove_parent;
 cls_method_handle_t h_add_child;
 cls_method_handle_t h_remove_child;
@@ -96,6 +99,7 @@ cls_method_handle_t h_old_snapshot_remove;
 
 #define RBD_MAX_KEYS_READ 64
 #define RBD_SNAP_KEY_PREFIX "snapshot_"
+#define RBD_SNAP_INDEX_KEY_PREFIX "snapshot_index_"
 #define RBD_DIR_ID_KEY_PREFIX "id_"
 #define RBD_DIR_NAME_KEY_PREFIX "name_"
 
@@ -140,6 +144,14 @@ static void key_from_snap_id(snapid_t snap_id, string *out)
   ostringstream oss;
   oss << RBD_SNAP_KEY_PREFIX
       << std::setw(16) << std::setfill('0') << std::hex << snap_id;
+  *out = oss.str();
+}
+
+static void index_key_from_snap_id(snapid_t snap_id, string *out)
+{
+  ostringstream oss;
+  oss << RBD_SNAP_INDEX_KEY_PREFIX
+      << std::setw(24) << std::setfill('0') << std::hex << snap_id;
   *out = oss.str();
 }
 
@@ -706,6 +718,133 @@ int set_stripe_unit_count(cls_method_context_t hctx, bufferlist *in, bufferlist 
   return 0;
 }
 
+/**
+ * get image index parameters
+ *
+ * Input:
+ * @param snap_id which snapshot to query, or CEPH_NOSNAP (uint64_t)
+ *
+ * Output:
+ * @param image index
+ *
+ * @returns 0 on success
+ */
+int get_image_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t snap_id;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(snap_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  r = require_feature(hctx, RBD_FEATURE_STRIPINGV2);
+  if (r < 0)
+    return r;
+
+  int r = check_exists(hctx);
+  if (r < 0)
+    return r;
+
+  CLS_LOG(20, "get_image_index");
+
+  bufferlist index_bl;
+  string key;
+  index_key_from_snap_id(snapid, &key);
+  r = read_key(hctx, key, &index_bl);
+  if (r < 0 && r != ENOENT)
+    return r;
+
+  ::encode(index_bl, *out);
+  return 0;
+}
+
+/**
+ * set image index parameters
+ *
+ * Input:
+ * @param snap_id
+ * @param image index(bufferlist)
+ *
+ * @returns 0 on success
+ */
+int set_image_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist index_bl;
+  snapid_t snapid;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(snapid, iter);
+    ::decode(index_bl, iter);
+  } catch (const buffer::error &err) {
+    CLS_LOG(20, "set_image_index: invalid decode");
+    return -EINVAL;
+  }
+
+  r = require_feature(hctx, RBD_FEATURE_STRIPINGV2);
+  if (r < 0)
+    return r;
+
+  int r = check_exists(hctx);
+  if (r < 0)
+    return r;
+
+  CLS_LOG(20, "set_image_index");
+
+  bufferlist bl;
+  ::encode(index, bl);
+
+  string key;
+  index_key_from_snap_id(snapid, &key);
+  r = cls_cxx_map_set_val(hctx, key, &bl);
+  if (r < 0) {
+    CLS_ERR("error writing image index metadata: %d", r);
+    return r;
+  }
+
+  return 0;
+}
+
+/**
+ * remove the image index
+ *
+ * Input:
+ * @param snap_id which snapshot to query, or CEPH_NOSNAP (uint64_t)
+ *
+ * @returns 0 on success, negative error code on failure.
+ */
+int remove_image_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t snap_id;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(snap_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = check_exists(hctx);
+  if (r < 0)
+    return r;
+
+  r = require_feature(hctx, RBD_FEATURE_IMAGEINDEX);
+  if (r < 0)
+    return r;
+
+  string key;
+  index_key_from_snap_id(snapid, &key);
+  r = cls_cxx_map_remove_key(hctx, key);
+  if (r < 0) {
+    CLS_ERR("error removing image index: %d", r);
+    return r;
+  }
+
+  return 0;
+}
 
 /**
  * get the current parent, if any
@@ -2045,6 +2184,15 @@ void __cls_init()
   cls_register_cxx_method(h_class, "set_stripe_unit_count",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  set_stripe_unit_count, &h_set_stripe_unit_count);
+  cls_register_cxx_method(h_class, "get_image_index",
+			  CLS_METHOD_RD,
+			  get_image_index, &h_get_image_index);
+  cls_register_cxx_method(h_class, "set_image_index",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  set_image_index, &h_set_image_index);
+  cls_register_cxx_method(h_class, "remove_image_index",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  remove_image_index, &h_remove_image_index);
 
   /* methods for the rbd_children object */
   cls_register_cxx_method(h_class, "add_child",

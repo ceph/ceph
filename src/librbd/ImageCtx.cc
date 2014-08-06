@@ -51,6 +51,7 @@ namespace librbd {
       format_string(NULL),
       id(image_id), parent(NULL),
       stripe_unit(0), stripe_count(0),
+      image_index(this),
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL)
   {
     md_ctx.dup(p);
@@ -267,6 +268,8 @@ namespace librbd {
       snap_id = it->second.id;
       snap_exists = true;
       data_ctx.snap_set_read(snap_id);
+      // Need more smart
+      image_index.invalidate_image_index();
       return 0;
     }
     return -ENOENT;
@@ -278,6 +281,8 @@ namespace librbd {
     snap_name = "";
     snap_exists = true;
     data_ctx.snap_set_read(snap_id);
+    // Need more smart
+    image_index.invalidate_image_index();
   }
 
   snap_t ImageCtx::get_snap_id(string in_snap_name) const
@@ -655,5 +660,43 @@ namespace librbd {
 		   << ", object overlap " << len
 		   << " from image extents " << objectx << dendl;
     return len;
- }
+  }
+
+  // -- ImageIndex --
+  int ImageCtx::ImageIndex::load()
+  {
+    Mutex::Locker l(state_lock);
+
+    bufferlist index_bl;
+    int r = cls_client::get_image_index(&image->md_ctx, image->header_oid,
+                                        image->snap_id, &index_bl);
+    if (r < 0) {
+      // no problem
+      lderr(cct) << "error reading image index metadata: "
+                  << cpp_strerror(r) << dendl;
+      r = 0;
+    } else {
+      bufferlist::iterator iter = index_bl.begin();
+      decode(iter);
+    }
+
+    uint64_t current_num = image->get_num_objects();
+    if (num_obj == state_map.size() && current_num != num_obj) {
+      ldout(cct, 10) << __func__ << " don't need to change, size is "
+                     << num_obj << dendl;
+      return 0;
+    } else if (num_obj) {
+      ldout(cct, 1) << __func__ << " restore origin state failed, "
+                    << "num_obj is " << num_obj << " the size of state_map is "
+                    << state_map.size() << ", current obj number is "
+                    << current_num << ". Try to rebuld."<< dendl;
+    }
+
+    num_obj = current_num;
+    state_map.resize(num_obj);
+    for (int i = 0; i < num_obj; ++i)
+      state_map[i] = false;
+
+    return 0;
+  }
 }

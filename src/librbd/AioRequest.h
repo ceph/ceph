@@ -11,6 +11,7 @@
 #include "include/buffer.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
+#include "librbd/ImageCtx.h"
 
 namespace librbd {
 
@@ -186,7 +187,7 @@ namespace librbd {
 		      objectx, object_overlap,
 		      snapc, snap_id, completion,
 		      true) {
-      if (has_parent())
+      if (!m_ictx->image_index.is_local(m_object_no))
 	m_write.truncate(0);
       else
 	m_write.remove();

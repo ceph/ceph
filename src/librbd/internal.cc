@@ -1036,6 +1036,8 @@ reprotect_and_return_err:
       goto err_remove_child;
     }
 
+    p_imctx->image_index.mark_all_parent();
+
     ldout(cct, 2) << "done." << dendl;
     close_image(c_imctx);
     close_image(p_imctx);
@@ -1399,6 +1401,15 @@ reprotect_and_return_err:
         close_image(ictx);
 	return r;
       }
+
+      r = cls_client::remove_image_index(&ictx->md_ctx, ictx->header_oid,
+			                 CEPH_NOSNAP);
+      if (r < 0) {
+        lderr(ictx->cct) << "removing image index from header failed: "
+                         << cpp_strerror(r) << dendl;
+        return r;
+      }
+
       close_image(ictx);
 
       ldout(cct, 2) << "removing header..." << dendl;
@@ -1486,6 +1497,7 @@ reprotect_and_return_err:
       lderr(cct) << "error writing header: " << cpp_strerror(-r) << dendl;
       return r;
     } else {
+      ictx->image_index.resize_image_index(ictx->get_num_objects());
       notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
     }
 
@@ -1581,6 +1593,18 @@ reprotect_and_return_err:
       return r;
     }
 
+    if (!ictx->old_format) {
+      bufferlist index_bl;
+      ictx->image_index.encode(index_bl);
+      r = cls_client::set_image_index(&ictx->md_ctx, ictx->header_oid,
+                                      snap_id, index_bl);
+      if (r < 0) {
+        lderr(ictx->cct) << "set_image_index  to header failed: "
+                         << cpp_strerror(r) << dendl;
+        return r;
+      }
+    }
+
     return 0;
   }
 
@@ -1601,6 +1625,17 @@ reprotect_and_return_err:
       lderr(ictx->cct) << "removing snapshot from header failed: "
 		       << cpp_strerror(r) << dendl;
       return r;
+    }
+
+    if (!ictx->old_format) {
+      RWLock::RLocker l(ictx->snap_lock);
+      r = cls_client::remove_image_index(&ictx->md_ctx, ictx->header_oid,
+			                 ictx->get_snap_id(snap_name));
+      if (r < 0) {
+        lderr(ictx->cct) << "removing image index from header failed: "
+                         << cpp_strerror(r) << dendl;
+        return r;
+      }
     }
 
     return 0;
@@ -1644,6 +1679,7 @@ reprotect_and_return_err:
 	ictx->clear_nonexistence_cache();
 	close_image(ictx->parent);
 	ictx->parent = NULL;
+        assert(ictx->image_index.is_full_local());
       }
     }
 
@@ -1873,6 +1909,9 @@ reprotect_and_return_err:
       return r;
     }
 
+    // TODO need to load snapshot index
+    ictx->image_index.invalidate_image_index();
+
     notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
 
     ictx->perfcounter->inc(l_librbd_snap_rollback);
@@ -2100,6 +2139,9 @@ reprotect_and_return_err:
     if ((r = _snap_set(ictx, ictx->snap_name.c_str())) < 0)
       goto err_close;
 
+    if ((r = ictx->image_index.load()) < 0)
+      goto err_close;
+
     return 0;
 
   err_close:
@@ -2122,6 +2164,17 @@ reprotect_and_return_err:
 
     if (ictx->wctx)
       ictx->unregister_watch();
+
+    if (!ictx->old_format) {
+      bufferlist index_bl;
+      ictx->image_index.encode(index_bl);
+      int r = cls_client::set_image_index(&ictx->md_ctx, ictx->header_oid,
+                                          ictx->snap_id, index_bl);
+      if (r < 0) {
+        lderr(ictx->cct) << "set_image_index  to header failed: "
+                         << cpp_strerror(r) << dendl;
+      }
+    }
 
     delete ictx;
   }

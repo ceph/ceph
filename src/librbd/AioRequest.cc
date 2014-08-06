@@ -7,7 +7,6 @@
 #include "common/RWLock.h"
 
 #include "librbd/AioCompletion.h"
-#include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 
 #include "librbd/AioRequest.h"
@@ -48,7 +47,16 @@ namespace librbd {
 			   << " parent completion " << m_parent_completion
 			   << " extents " << image_extents
 			   << dendl;
-    aio_read(m_ictx->parent, image_extents, NULL, &m_read_data,
+
+    ImageCtx *next = m_ictx->parent;
+    while (!ictx_check(next)) {
+      if (next->image_index.is_parent(m_object_no))
+        next = next->parent;
+      else
+        break;
+    }
+
+    aio_read(next, image_extents, NULL, &m_read_data,
 	     m_parent_completion);
   }
 
@@ -60,6 +68,9 @@ namespace librbd {
 			   << " r = " << r << dendl;
 
     if (!m_tried_parent && r == -ENOENT) {
+      // Only when image index don't know the object location info, read op
+      // will reach here and popluate it
+      
       RWLock::RLocker l(m_ictx->snap_lock);
       RWLock::RLocker l2(m_ictx->parent_lock);
 
@@ -79,6 +90,8 @@ namespace librbd {
 	m_tried_parent = true;
 	read_from_parent(image_extents);
 	return false;
+      } else {
+        m_ictx->image_index.mark_local(m_object_no);
       }
     }
 
@@ -134,7 +147,7 @@ namespace librbd {
 
   void AbstractWrite::guard_write()
   {
-    if (has_parent()) {
+    if (!m_ictx->image_index.is_local(m_object_no)) {
       m_state = LIBRBD_AIO_WRITE_GUARD;
       m_write.assert_exists();
       ldout(m_ictx->cct, 20) << __func__ << " guarding write" << dendl;
@@ -220,6 +233,9 @@ namespace librbd {
       lderr(m_ictx->cct) << "invalid request state: " << m_state << dendl;
       assert(0);
     }
+
+    if (finished)
+      m_ictx->image_index.mark_local(m_object_no);
 
     return finished;
   }
