@@ -103,8 +103,10 @@ int64_t librados::RadosClient::lookup_pool(const char *name)
   lock.Lock();
 
   int r = wait_for_osdmap();
-  if (r < 0)
+  if (r < 0) {
+    lock.Unlock();
     return r;
+  }
   int64_t ret = osdmap.lookup_pg_pool_name(name);
   pool_cache_rwl.get_write();
   lock.Unlock();
@@ -582,8 +584,10 @@ int librados::RadosClient::pool_delete(const char *name)
 {
   lock.Lock();
   int r = wait_for_osdmap();
-  if (r < 0)
+  if (r < 0) {
+    lock.Unlock();
     return r;
+  }
   int tmp_pool_id = osdmap.lookup_pg_pool_name(name);
   if (tmp_pool_id < 0) {
     lock.Unlock();
