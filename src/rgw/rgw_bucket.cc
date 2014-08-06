@@ -337,11 +337,11 @@ static bool bucket_object_check_filter(const string& name)
   return rgw_obj::translate_raw_obj_to_obj_in_ns(obj, ns, ver);
 }
 
-int rgw_remove_object(RGWRados *store, const string& bucket_owner, rgw_bucket& bucket, std::string& object)
+int rgw_remove_object(RGWRados *store, const string& bucket_owner, rgw_bucket& bucket, rgw_obj_key& key)
 {
   RGWRadosCtx rctx(store);
 
-  rgw_obj obj(bucket, object);
+  rgw_obj obj(bucket, key);
 
   int ret = store->delete_obj((void *)&rctx, bucket_owner, obj);
 
@@ -353,7 +353,8 @@ int rgw_remove_bucket(RGWRados *store, const string& bucket_owner, rgw_bucket& b
   int ret;
   map<RGWObjCategory, RGWStorageStats> stats;
   std::vector<RGWObjEnt> objs;
-  std::string prefix, delim, marker, ns;
+  std::string prefix, delim, ns;
+  rgw_obj_key marker;
   map<string, bool> common_prefixes;
   rgw_obj obj;
   RGWBucketInfo info;
@@ -383,7 +384,7 @@ int rgw_remove_bucket(RGWRados *store, const string& bucket_owner, rgw_bucket& b
     while (!objs.empty()) {
       std::vector<RGWObjEnt>::iterator it = objs.begin();
       for (it = objs.begin(); it != objs.end(); ++it) {
-        ret = rgw_remove_object(store, bucket_owner, bucket, (*it).name);
+        ret = rgw_remove_object(store, bucket_owner, bucket, (*it).key);
         if (ret < 0)
           return ret;
       }
@@ -574,7 +575,9 @@ int RGWBucket::remove_object(RGWBucketAdminOpState& op_state, std::string *err_m
   rgw_bucket bucket = op_state.get_bucket();
   std::string object_name = op_state.get_object_name();
 
-  int ret = rgw_remove_object(store, bucket_info.owner, bucket, object_name);
+  rgw_obj_key key(object_name);
+
+  int ret = rgw_remove_object(store, bucket_info.owner, bucket, key);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to remove object" + cpp_strerror(-ret));
     return ret;
@@ -630,8 +633,8 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
 
   int max = 1000;
   string prefix;
-  string marker;
   string delim;
+  rgw_obj_key marker;
 
   map<string, bool> common_prefixes;
   string ns = "multipart";
@@ -658,12 +661,12 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
     for (iter = result.begin(); iter != result.end(); ++iter) {
       RGWObjEnt& ent = *iter;
 
-      rgw_obj obj(bucket, ent.name, ns);
-      obj.set_instance(ent.instance);
+      rgw_obj obj(bucket, ent.key);
+      obj.set_ns(ns);
 
-      string oid = obj.get_index_key();
-#warning missing marker_ver
-      marker = oid;
+      obj.get_index_key(&marker);
+
+      string oid = marker.name;
 
       int pos = oid.find_last_of('.');
       if (pos < 0)
@@ -725,11 +728,11 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
   store->cls_obj_set_bucket_tag_timeout(bucket, BUCKET_TAG_TIMEOUT);
 
   string prefix;
-  string marker;
+  rgw_obj_key marker;
   bool is_truncated = true;
 
   while (is_truncated) {
-    map<string, RGWObjEnt> result;
+    map<rgw_obj_key, RGWObjEnt> result;
 
     int r = store->cls_bucket_list(bucket, marker, prefix, 1000, result,
              &is_truncated, &marker,
@@ -1047,9 +1050,9 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
     if (store->list_buckets_init(&handle) >= 0) {
       RGWObjEnt obj;
       while (store->list_buckets_next(obj, &handle) >= 0) {
-	formatter->dump_string("bucket", obj.name);
+	formatter->dump_string("bucket", obj.key.name);
         if (show_stats)
-          bucket_stats(store, obj.name, formatter);
+          bucket_stats(store, obj.key.name, formatter);
       }
     }
 

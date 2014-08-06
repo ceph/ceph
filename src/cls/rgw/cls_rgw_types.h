@@ -209,12 +209,13 @@ struct rgw_bucket_dir_entry {
   map<string, struct rgw_bucket_pending_info> pending_map;
   uint64_t index_ver;
   string tag;
+  std::string instance;
 
   rgw_bucket_dir_entry() :
     exists(false), index_ver(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(5, 3, bl);
+    ENCODE_START(6, 3, bl);
     ::encode(name, bl);
     ::encode(ver.epoch, bl);
     ::encode(exists, bl);
@@ -224,10 +225,11 @@ struct rgw_bucket_dir_entry {
     ::encode(ver, bl);
     ::encode_packed_val(index_ver, bl);
     ::encode(tag, bl);
+    ::encode(instance, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
     ::decode(name, bl);
     ::decode(ver.epoch, bl);
     ::decode(exists, bl);
@@ -244,6 +246,9 @@ struct rgw_bucket_dir_entry {
     if (struct_v >= 5) {
       ::decode_packed_val(index_ver, bl);
       ::decode(tag, bl);
+    }
+    if (struct_v >= 6) {
+      ::decode(instance, bl);
     }
     DECODE_FINISH(bl);
   }

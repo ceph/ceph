@@ -255,9 +255,9 @@ void RGWListBucket_ObjStore_S3::send_response()
 					  "http://s3.amazonaws.com/doc/2006-03-01/");
   s->formatter->dump_string("Name", s->bucket_name_str);
   s->formatter->dump_string("Prefix", prefix);
-  s->formatter->dump_string("Marker", marker);
+  s->formatter->dump_string("Marker", marker.name);
   if (is_truncated && !next_marker.empty())
-    s->formatter->dump_string("NextMarker", next_marker);
+    s->formatter->dump_string("NextMarker", next_marker.name);
   s->formatter->dump_int("MaxKeys", max);
   if (!delimiter.empty())
     s->formatter->dump_string("Delimiter", delimiter);
@@ -268,7 +268,7 @@ void RGWListBucket_ObjStore_S3::send_response()
     vector<RGWObjEnt>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       s->formatter->open_array_section("Contents");
-      s->formatter->dump_string("Key", iter->name);
+      s->formatter->dump_string("Key", iter->key.name);
       time_t mtime = iter->mtime.sec();
       dump_time(s, "LastModified", &mtime);
       s->formatter->dump_format("ETag", "\"%s\"", iter->etag.c_str());

@@ -138,24 +138,28 @@ WRITE_CLASS_ENCODER(rgw_cls_obj_complete_op)
 struct rgw_cls_list_op
 {
   string start_obj;
+  string start_instance;
   uint32_t num_entries;
   string filter_prefix;
 
   rgw_cls_list_op() : num_entries(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(3, 2, bl);
+    ENCODE_START(4, 2, bl);
     ::encode(start_obj, bl);
     ::encode(num_entries, bl);
     ::encode(filter_prefix, bl);
+    ::encode(start_instance, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
     ::decode(start_obj, bl);
     ::decode(num_entries, bl);
     if (struct_v >= 3)
       ::decode(filter_prefix, bl);
+    if (struct_v >= 4)
+      ::decode(start_instance, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
