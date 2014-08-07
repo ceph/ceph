@@ -5,9 +5,9 @@ import contextlib
 import logging
 import argparse
 
-from ..orchestra import run
+from teuthology.orchestra import run
 from teuthology import misc as teuthology
-import teuthology.task_util.rgw as rgw_utils
+import util.rgw as rgw_utils
 
 log = logging.getLogger(__name__)
 

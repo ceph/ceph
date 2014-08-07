@@ -6,7 +6,7 @@ import logging
 import os
 
 from teuthology import misc as teuthology
-from teuthology.task_util.kclient import write_secret_file
+from util.kclient import write_secret_file
 
 log = logging.getLogger(__name__)
 

@@ -7,8 +7,8 @@ import time
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
-from ..orchestra import run
-from teuthology.task.ceph import CephState
+from teuthology.orchestra import run
+from tasks.ceph import CephState
 
 log = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ import time
 from cStringIO import StringIO
 
 from teuthology import misc
-from ..orchestra import run
+from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 

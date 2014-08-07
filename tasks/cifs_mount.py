@@ -6,7 +6,7 @@ import logging
 import os
 
 from teuthology import misc as teuthology
-from ..orchestra import run
+from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ def task(ctx, config):
 
     clients = list(teuthology.get_clients(ctx=ctx, roles=config.keys()))
 
-    from teuthology.task.samba import get_sambas
+    from .samba import get_sambas
     samba_roles = ['samba.{id_}'.format(id_=id_) for id_ in teuthology.all_roles_of_type(ctx.cluster, 'samba')]
     sambas = list(get_sambas(ctx=ctx, roles=samba_roles))
     (ip, _) = sambas[0][1].ssh.get_transport().getpeername()

@@ -6,7 +6,7 @@ import logging
 import sys
 
 from teuthology import misc as teuthology
-from ..orchestra import run
+from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ def task(ctx, config):
 
     testdir = teuthology.get_testdir(ctx)
 
-    from teuthology.task.ceph import CephState
+    from tasks.ceph import CephState
     if not hasattr(ctx, 'daemons'):
         ctx.daemons = CephState()
 

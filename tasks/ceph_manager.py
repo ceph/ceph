@@ -8,8 +8,8 @@ import gevent
 import json
 import threading
 from teuthology import misc as teuthology
-from teuthology.task import ceph as ceph_task
-from teuthology.task.scrub import Scrubber
+from . import ceph as ceph_task
+from tasks.scrub import Scrubber
 
 class Thrasher:
     """
