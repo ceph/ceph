@@ -25,15 +25,14 @@ void cls_rgw_bucket_set_tag_timeout(ObjectWriteOperation& o, uint64_t tag_timeou
 }
 
 void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, string& tag,
-                               const string& name, const string& instance, const string& locator, bool log_op)
+                               const cls_rgw_obj_key& key, const string& locator, bool log_op)
 {
   struct rgw_cls_obj_prepare_op call;
   call.op = op;
   call.tag = tag;
-  call.name = name;
+  call.key = key;
   call.locator = locator;
   call.log_op = log_op;
-  call.instance = instance;
   bufferlist in;
   ::encode(call, in);
   o.exec("rgw", "bucket_prepare_op", in);
@@ -41,20 +40,19 @@ void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, string& 
 
 void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, string& tag,
                                 rgw_bucket_entry_ver& ver,
-                                const string& name, const string& instance,
+                                const cls_rgw_obj_key& key,
                                 rgw_bucket_dir_entry_meta& dir_meta,
-				list<string> *remove_objs, bool log_op)
+				list<cls_rgw_obj_key> *remove_objs, bool log_op)
 {
 
   bufferlist in;
   struct rgw_cls_obj_complete_op call;
   call.op = op;
   call.tag = tag;
-  call.name = name;
+  call.key = key;
   call.ver = ver;
   call.meta = dir_meta;
   call.log_op = log_op;
-  call.instance = instance;
   if (remove_objs)
     call.remove_objs = *remove_objs;
   ::encode(call, in);
@@ -63,7 +61,7 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, string&
 
 
 int cls_rgw_list_op(IoCtx& io_ctx, const string& oid,
-                    const string& start_obj, const string& start_instance,
+                    const cls_rgw_obj_key& start_obj,
                     const string& filter_prefix, uint32_t num_entries,
                     rgw_bucket_dir *dir, bool *is_truncated)
 {
@@ -72,7 +70,6 @@ int cls_rgw_list_op(IoCtx& io_ctx, const string& oid,
   call.start_obj = start_obj;
   call.filter_prefix = filter_prefix;
   call.num_entries = num_entries;
-  call.start_instance = start_instance;
   ::encode(call, in);
   int r = io_ctx.exec(oid, "rgw", "bucket_list", in, out);
   if (r < 0)

@@ -203,6 +203,9 @@ struct cls_rgw_obj_key {
   string name;
   string instance;
 
+  cls_rgw_obj_key() {}
+  cls_rgw_obj_key(const string& n, const string& i) : name(n), instance(i) {}
+
   bool operator==(const cls_rgw_obj_key& k) const {
     return (name.compare(k.name) == 0) &&
            (instance.compare(k.instance) == 0);

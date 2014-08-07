@@ -1493,7 +1493,7 @@ public:
     const bufferlist *data;
     RGWObjManifest *manifest;
     const string *ptag;
-    list<string> *remove_objs;
+    list<rgw_obj_key> *remove_objs;
     bool modify_version;
     RGWObjVersionTracker *objv_tracker;
     time_t set_mtime;
@@ -1509,7 +1509,7 @@ public:
   virtual int put_obj_meta_impl(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
               map<std::string, bufferlist>& attrs, RGWObjCategory category, int flags,
               map<std::string, bufferlist>* rmattrs, const bufferlist *data,
-              RGWObjManifest *manifest, const string *ptag, list<string> *remove_objs,
+              RGWObjManifest *manifest, const string *ptag, list<rgw_obj_key> *remove_objs,
               bool modify_version, RGWObjVersionTracker *objv_tracker,
               time_t set_mtime /* 0 for don't set */,
               const string& owner);
@@ -1819,8 +1819,8 @@ public:
   int cls_obj_prepare_op(rgw_bucket& bucket, RGWModifyOp op, string& tag,
                          rgw_obj& obj);
   int cls_obj_complete_op(rgw_bucket& bucket, RGWModifyOp op, string& tag, int64_t pool, uint64_t epoch,
-                          RGWObjEnt& ent, RGWObjCategory category, list<string> *remove_objs);
-  int cls_obj_complete_add(rgw_bucket& bucket, string& tag, int64_t pool, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category, list<string> *remove_objs);
+                          RGWObjEnt& ent, RGWObjCategory category, list<rgw_obj_key> *remove_objs);
+  int cls_obj_complete_add(rgw_bucket& bucket, string& tag, int64_t pool, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category, list<rgw_obj_key> *remove_objs);
   int cls_obj_complete_del(rgw_bucket& bucket, string& tag, int64_t pool, uint64_t epoch, rgw_obj& obj);
   int cls_obj_complete_cancel(rgw_bucket& bucket, string& tag, rgw_obj& obj);
   int cls_obj_set_bucket_tag_timeout(rgw_bucket& bucket, uint64_t timeout);
@@ -1833,7 +1833,7 @@ public:
                            RGWModifyOp op, rgw_obj& oid, string& tag);
   int complete_update_index(rgw_bucket& bucket, rgw_obj& obj, string& tag, int64_t poolid, uint64_t epoch, uint64_t size,
                             utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category,
-			    list<string> *remove_objs);
+			    list<rgw_obj_key> *remove_objs);
   int complete_update_index_del(rgw_bucket& bucket, rgw_obj& obj, string& tag, int64_t pool, uint64_t epoch) {
     if (bucket_is_system(bucket))
       return 0;
@@ -1883,7 +1883,7 @@ public:
                          map<RGWObjCategory, RGWStorageStats> *existing_stats,
                          map<RGWObjCategory, RGWStorageStats> *calculated_stats);
   int bucket_rebuild_index(rgw_bucket& bucket);
-  int remove_objs_from_index(rgw_bucket& bucket, list<string>& oid_list);
+  int remove_objs_from_index(rgw_bucket& bucket, list<rgw_obj_key>& oid_list);
 
   int cls_user_get_header(const string& user_id, cls_user_header *header);
   int cls_user_get_header_async(const string& user_id, RGWGetUserHeader_CB *ctx);

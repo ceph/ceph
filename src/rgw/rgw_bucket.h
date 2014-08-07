@@ -203,7 +203,7 @@ public:
   int init(RGWRados *storage, RGWBucketAdminOpState& op_state);
 
   int check_bad_index_multipart(RGWBucketAdminOpState& op_state,
-          list<std::string>& objs_to_unlink, std::string *err_msg = NULL);
+          list<rgw_obj_key>& objs_to_unlink, std::string *err_msg = NULL);
 
   int check_object_index(RGWBucketAdminOpState& op_state,
           map<string, RGWObjEnt> result, std::string *err_msg = NULL);

@@ -259,16 +259,16 @@ int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
                                     obj, attrs, rmattrs, objv_tracker);
 }
 
-static void dump_mulipart_index_results(list<std::string>& objs_to_unlink,
+static void dump_mulipart_index_results(list<rgw_obj_key>& objs_to_unlink,
         Formatter *f)
 {
   // make sure that an appropiately titled header has been opened previously
-  list<std::string>::iterator oiter = objs_to_unlink.begin();
+  list<rgw_obj_key>::iterator oiter = objs_to_unlink.begin();
 
   f->open_array_section("invalid_multipart_entries");
 
   for ( ; oiter != objs_to_unlink.end(); ++oiter) {
-    f->dump_string("object",  *oiter);
+    f->dump_string("object",  oiter->name);
   }
 
   f->close_section();
@@ -626,7 +626,7 @@ static void dump_index_check(map<RGWObjCategory, RGWStorageStats> existing_stats
 }
 
 int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
-        list<std::string>& objs_to_unlink, std::string *err_msg)
+        list<rgw_obj_key>& objs_to_unlink, std::string *err_msg)
 {
   bool fix_index = op_state.will_fix_index();
   rgw_bucket bucket = op_state.get_bucket();
@@ -641,7 +641,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
 
   bool is_truncated;
   map<string, bool> meta_objs;
-  map<string, string> all_objs;
+  map<rgw_obj_key, string> all_objs;
 
   do {
     vector<RGWObjEnt> result;
@@ -664,9 +664,12 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
       rgw_obj obj(bucket, ent.key);
       obj.set_ns(ns);
 
-      obj.get_index_key(&marker);
+      rgw_obj_key key;
+      obj.get_index_key(&key);
 
-      string oid = marker.name;
+      marker = key;
+
+      string oid = key.name;
 
       int pos = oid.find_last_of('.');
       if (pos < 0)
@@ -678,13 +681,13 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
       if (suffix.compare("meta") == 0) {
         meta_objs[name] = true;
       } else {
-        all_objs[oid] = name;
+        all_objs[key] = name;
       }
     }
 
   } while (is_truncated);
 
-  map<string, string>::iterator aiter;
+  map<rgw_obj_key, string>::iterator aiter;
   for (aiter = all_objs.begin(); aiter != all_objs.end(); ++aiter) {
     string& name = aiter->second;
 
@@ -892,7 +895,7 @@ int RGWBucketAdminOp::check_index(RGWRados *store, RGWBucketAdminOpState& op_sta
   map<string, RGWObjEnt> result;
   map<RGWObjCategory, RGWStorageStats> existing_stats;
   map<RGWObjCategory, RGWStorageStats> calculated_stats;
-  list<std::string> objs_to_unlink;
+  list<rgw_obj_key> objs_to_unlink;
 
   RGWBucket bucket;
 

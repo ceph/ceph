@@ -33,6 +33,7 @@
 #include "rgw_string.h"
 #include "cls/version/cls_version_types.h"
 #include "cls/user/cls_user_types.h"
+#include "cls/rgw/cls_rgw_types.h"
 #include "include/rados/librados.hpp"
 
 using namespace std;
@@ -939,6 +940,16 @@ struct rgw_obj_key {
   }
   rgw_obj_key(const string& n, const string& i) {
     set(n, i);
+  }
+
+  void set(const cls_rgw_obj_key& k) {
+    name = k.name;
+    instance = k.instance;
+  }
+
+  void transform(cls_rgw_obj_key *k) {
+    k->name = name;
+    k->instance = instance;
   }
 
   void set(const string& n) {
