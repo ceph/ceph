@@ -7,8 +7,7 @@ librbd_replay_la_SOURCES = rbd_replay/actions.cc \
 	rbd_replay/Replayer.cc
 librbd_replay_la_LIBADD = $(LIBRBD) \
 	$(LIBRADOS) \
-	$(CEPH_GLOBAL) \
-	-lboost_regex
+	$(CEPH_GLOBAL)
 noinst_LTLIBRARIES += librbd_replay.la
 noinst_HEADERS += rbd_replay/BoundedBuffer.hpp \
 	rbd_replay/actions.hpp \
@@ -23,7 +22,6 @@ rbd_replay_SOURCES = rbd_replay/rbd-replay.cc
 rbd_replay_LDADD = $(LIBRBD) \
 	$(LIBRADOS) \
 	$(CEPH_GLOBAL) \
-	-lboost_regex \
 	librbd_replay.la
 
 if LINUX
