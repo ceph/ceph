@@ -111,8 +111,9 @@ Pipe::Pipe(SimpleMessenger *r, int st, PipeConnection *con)
   if (msgr->timeout == 0)
     msgr->timeout = -1;
 
-  recv_max_prefetch = MIN(MAX_RECV_LEN, msgr->cct->_conf->ms_tcp_prefetch_max_size);
-  recv_buf = (char *)malloc(recv_max_prefetch);
+  recv_max_prefetch = MIN(MAX_RECV_LEN,
+			  msgr->cct->_conf->ms_tcp_prefetch_max_size);
+  recv_buf = new char[recv_max_prefetch];
 }
 
 Pipe::~Pipe()
@@ -120,7 +121,7 @@ Pipe::~Pipe()
   assert(out_q.empty());
   assert(sent.empty());
   delete delay_thread;
-  free(recv_buf);
+  delete[] recv_buf;
 }
 
 void Pipe::handle_ack(uint64_t seq)
