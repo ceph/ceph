@@ -2223,9 +2223,9 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
   result.clear();
 
   rgw_obj marker_obj, prefix_obj;
+  marker_obj.set_instance(marker.instance);
   marker_obj.set_ns(ns);
   marker_obj.set_obj(marker.name);
-#warning missing marker_ver
   rgw_obj_key cur_marker;
   marker_obj.get_index_key(&cur_marker);
 
@@ -2842,7 +2842,7 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
                   const bufferlist *data,
                   RGWObjManifest *manifest,
 		  const string *ptag,
-                  list<string> *remove_objs,
+                  list<rgw_obj_key> *remove_objs,
                   bool modify_version,
                   RGWObjVersionTracker *objv_tracker,
                   time_t set_mtime,
@@ -3752,10 +3752,11 @@ int RGWRados::complete_atomic_overwrite(RGWRadosCtx *rctx, RGWObjState *state, r
     const rgw_obj& mobj = iter.get_location();
     if (mobj == obj)
       continue;
-    string oid, key;
+    string oid, loc;
     rgw_bucket bucket;
-    get_obj_bucket_and_oid_key(mobj, bucket, oid, key);
-    chain.push_obj(bucket.data_pool, oid, key);
+    get_obj_bucket_and_oid_key(mobj, bucket, oid, loc);
+    cls_rgw_obj_key key(obj.get_index_key_name(), obj.get_instance());
+    chain.push_obj(bucket.data_pool, key, loc);
   }
 
   string tag = state->obj_tag.c_str();
@@ -4553,7 +4554,7 @@ int RGWRados::prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
 
 int RGWRados::complete_update_index(rgw_bucket& bucket, rgw_obj& obj, string& tag, int64_t poolid, uint64_t epoch, uint64_t size,
                                     utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category,
-                                    list<string> *remove_objs)
+                                    list<rgw_obj_key> *remove_objs)
 {
   if (bucket_is_system(bucket))
     return 0;
@@ -6078,7 +6079,8 @@ int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, RGWModifyOp op, string& tag
     return r;
 
   ObjectWriteOperation o;
-  cls_rgw_bucket_prepare_op(o, op, tag, obj.get_index_key_name(), obj.get_instance(), obj.get_loc(), zone_public_config.log_data);
+  cls_rgw_obj_key key(obj.get_index_key_name(), obj.get_instance());
+  cls_rgw_bucket_prepare_op(o, op, tag, key, obj.get_loc(), zone_public_config.log_data);
   r = index_ctx.operate(oid, &o);
   return r;
 }
@@ -6086,7 +6088,7 @@ int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, RGWModifyOp op, string& tag
 int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, RGWModifyOp op, string& tag,
                                   int64_t pool, uint64_t epoch,
                                   RGWObjEnt& ent, RGWObjCategory category,
-				  list<string> *remove_objs)
+				  list<rgw_obj_key> *remove_objs)
 {
   librados::IoCtx index_ctx;
   string oid;
@@ -6094,6 +6096,18 @@ int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, RGWModifyOp op, string& ta
   int r = open_bucket_index(bucket, index_ctx, oid);
   if (r < 0)
     return r;
+
+  list<cls_rgw_obj_key> *pro = NULL;
+  list<cls_rgw_obj_key> ro;
+
+  if (remove_objs) {
+    for (list<rgw_obj_key>::iterator iter = remove_objs->begin(); iter != remove_objs->end(); ++iter) {
+      cls_rgw_obj_key k;
+      iter->transform(&k);
+      ro.push_back(k);
+    }
+    pro = &ro;
+  }
 
   ObjectWriteOperation o;
   rgw_bucket_dir_entry_meta dir_meta;
@@ -6109,8 +6123,9 @@ int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, RGWModifyOp op, string& ta
   rgw_bucket_entry_ver ver;
   ver.pool = pool;
   ver.epoch = epoch;
-  cls_rgw_bucket_complete_op(o, op, tag, ver, ent.key.name, ent.key.instance,
-                             dir_meta, remove_objs, zone_public_config.log_data);
+  cls_rgw_obj_key key(ent.key.name, ent.key.instance);
+  cls_rgw_bucket_complete_op(o, op, tag, ver, key, dir_meta, pro,
+                             zone_public_config.log_data);
 
   AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
   r = index_ctx.aio_operate(oid, c, &o);
@@ -6121,7 +6136,7 @@ int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, RGWModifyOp op, string& ta
 int RGWRados::cls_obj_complete_add(rgw_bucket& bucket, string& tag,
                                    int64_t pool, uint64_t epoch,
                                    RGWObjEnt& ent, RGWObjCategory category,
-                                   list<string> *remove_objs)
+                                   list<rgw_obj_key> *remove_objs)
 {
   return cls_obj_complete_op(bucket, CLS_RGW_OP_ADD, tag, pool, epoch, ent, category, remove_objs);
 }
@@ -6173,18 +6188,19 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, rgw_obj_key& start, const stri
     return r;
 
   struct rgw_bucket_dir dir;
-  r = cls_rgw_list_op(index_ctx, oid, start.name, start.instance, prefix, num, &dir, is_truncated);
+  cls_rgw_obj_key start_key(start.name, start.instance);
+  r = cls_rgw_list_op(index_ctx, oid, start_key, prefix, num, &dir, is_truncated);
   if (r < 0)
     return r;
 
-  map<string, struct rgw_bucket_dir_entry>::iterator miter;
+  map<cls_rgw_obj_key, struct rgw_bucket_dir_entry>::iterator miter;
   bufferlist updates;
   for (miter = dir.m.begin(); miter != dir.m.end(); ++miter) {
     RGWObjEnt e;
     rgw_bucket_dir_entry& dirent = miter->second;
 
     // fill it in with initial values; we may correct later
-    e.key.set(dirent.name, dirent.instance);
+    e.key.set(dirent.key.name, dirent.key.instance);
     e.size = dirent.meta.size;
     e.mtime = dirent.meta.mtime;
     e.etag = dirent.meta.etag;
@@ -6199,7 +6215,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, rgw_obj_key& start, const stri
       continue;
     }
 
-    bool force_check = force_check_filter && force_check_filter(dirent.name);
+    bool force_check = force_check_filter && force_check_filter(dirent.key.name);
 
     if (!dirent.exists || !dirent.pending_map.empty() || force_check) {
       /* there are uncommitted ops. We need to check the current state,
@@ -6219,7 +6235,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, rgw_obj_key& start, const stri
   }
 
   if (dir.m.size()) {
-    *last_entry = dir.m.rbegin()->first;
+    last_entry->set(dir.m.rbegin()->first);
   }
 
   if (updates.length()) {
@@ -6292,7 +6308,7 @@ int RGWRados::cls_obj_usage_log_trim(string& oid, string& user, uint64_t start_e
   return r;
 }
 
-int RGWRados::remove_objs_from_index(rgw_bucket& bucket, list<string>& oid_list)
+int RGWRados::remove_objs_from_index(rgw_bucket& bucket, list<rgw_obj_key>& oid_list)
 {
   librados::IoCtx index_ctx;
   string dir_oid;
@@ -6303,14 +6319,14 @@ int RGWRados::remove_objs_from_index(rgw_bucket& bucket, list<string>& oid_list)
 
   bufferlist updates;
 
-  list<string>::iterator iter;
+  list<rgw_obj_key>::iterator iter;
 
   for (iter = oid_list.begin(); iter != oid_list.end(); ++iter) {
-    string& oid = *iter;
-    dout(2) << "RGWRados::remove_objs_from_index bucket=" << bucket << " oid=" << oid << dendl;
+    rgw_obj_key& key = *iter;
+    dout(2) << "RGWRados::remove_objs_from_index bucket=" << bucket << " obj=" << key.name << ":" << key.instance << dendl;
     rgw_bucket_dir_entry entry;
     entry.ver.epoch = (uint64_t)-1; // ULLONG_MAX, needed to that objclass doesn't skip out request
-    entry.name = oid;
+    key.transform(&entry.key);
     updates.append(CEPH_RGW_REMOVE);
     ::encode(entry, updates);
   }
@@ -6329,16 +6345,18 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
                                bufferlist& suggested_updates)
 {
   rgw_obj obj;
-  std::string oid, instance, key, ns;
-  oid = list_state.name;
+  std::string oid, instance, loc, ns;
+  rgw_obj_key key;
+  key.set(list_state.key);
+  oid = key.name;
   if (!rgw_obj::strip_namespace_from_object(oid, ns, instance)) {
     // well crap
     assert(0 == "got bad object name off disk");
   }
   obj.init(bucket, oid, list_state.locator, ns);
-  obj.set_instance(instance);
-  get_obj_bucket_and_oid_key(obj, bucket, oid, key);
-  io_ctx.locator_set_key(key);
+  obj.set_instance(key.instance);
+  get_obj_bucket_and_oid_key(obj, bucket, oid, loc);
+  io_ctx.locator_set_key(loc);
 
   RGWObjState *astate = NULL;
   RGWRadosCtx rctx(this);
