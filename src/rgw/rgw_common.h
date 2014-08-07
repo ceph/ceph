@@ -1061,12 +1061,12 @@ WRITE_CLASS_ENCODER(RGWBucketEnt)
 
 class rgw_obj {
   std::string orig_obj;
-  std::string orig_loc;
   std::string loc;
   std::string object;
   std::string instance;
 public:
   const std::string& get_object() const { return object; }
+  const std::string& get_orig_obj() const { return orig_obj; }
   const std::string& get_loc() const { return loc; }
   const std::string& get_instance() const { return instance; }
   rgw_bucket bucket;
@@ -1078,31 +1078,14 @@ public:
   rgw_obj(rgw_bucket& b, const std::string& o) : in_extra_data(false) {
     init(b, o);
   }
-  rgw_obj(rgw_bucket& b, const std::string& o, const std::string& k) : in_extra_data(false) {
-    init(b, o, k);
-  }
-  rgw_obj(rgw_bucket& b, const std::string& o, const std::string& k, const std::string& n) : in_extra_data(false) {
-    init(b, o, k, n);
-  }
   rgw_obj(rgw_bucket& b, const rgw_obj_key& k) {
     init(b, k.name);
     set_instance(k.instance);
   }
-  void init(rgw_bucket& b, const std::string& o, const std::string& k, const std::string& n) {
-    bucket = b;
-    set_ns(n);
-    set_obj(o);
-    set_loc(k);
-  }
-  void init(rgw_bucket& b, const std::string& o, const std::string& k) {
-    bucket = b;
-    set_obj(o);
-    set_loc(k);
-  }
   void init(rgw_bucket& b, const std::string& o) {
     bucket = b;
     set_obj(o);
-    orig_loc = loc = o;
+    reset_loc();
   }
   void init_ns(rgw_bucket& b, const std::string& o, const std::string& n) {
     bucket = b;
@@ -1132,12 +1115,10 @@ public:
   }
 
   void set_loc(const string& k) {
-    orig_loc = k;
     loc = k;
   }
 
   void reset_loc() {
-    orig_loc.clear();
     loc.clear();
   }
 
@@ -1145,7 +1126,7 @@ public:
     object.reserve(128);
 
     orig_obj = o;
-    if (ns.empty()) {
+    if (ns.empty() && instance.empty()) {
       if (o.empty()) {
         return;
       }
@@ -1164,10 +1145,6 @@ public:
       object.append("_");
       object.append(o);
     }
-    if (orig_loc.size())
-      set_loc(orig_loc);
-    else
-      set_loc(orig_obj);
   }
 
   /*

@@ -43,11 +43,16 @@ static inline void prepend_bucket_marker(rgw_bucket& bucket, const string& orig_
   }
 }
 
-static inline void get_obj_bucket_and_oid_key(const rgw_obj& obj, rgw_bucket& bucket, string& oid, string& key)
+static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, rgw_bucket& bucket, string& oid, string& locator)
 {
   bucket = obj.bucket;
   prepend_bucket_marker(bucket, obj.get_object(), oid);
-  prepend_bucket_marker(bucket, obj.get_loc(), key);
+  const string& loc = obj.get_loc();
+  if (!loc.empty()) {
+    prepend_bucket_marker(bucket, obj.get_loc(), locator);
+  } else {
+    locator.clear();
+  }
 }
 
 int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, RGWAccessControlPolicy *policy);
