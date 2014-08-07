@@ -71,12 +71,13 @@ class LockerContext : public MDSInternalContextBase {
   Locker *locker;
   MDS *get_mds()
   {
-    assert(locker != NULL);
     return locker->mds;
   }
 
   public:
-  LockerContext(Locker *locker_) : locker(locker_) {}
+  LockerContext(Locker *locker_) : locker(locker_) {
+    assert(locker != NULL);
+  }
 };
 
 

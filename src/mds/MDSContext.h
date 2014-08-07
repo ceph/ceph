@@ -55,7 +55,9 @@ protected:
   virtual MDS* get_mds();
 
 public:
-  MDSInternalContext(MDS *mds_) : mds(mds_) {}
+  MDSInternalContext(MDS *mds_) : mds(mds_) {
+    assert(mds != NULL);
+  }
 };
 
 
@@ -75,17 +77,19 @@ protected:
   virtual MDS* get_mds();
 
 public:
-  MDSIOContext(MDS *mds_) : mds(mds_) {}
+  MDSIOContext(MDS *mds_) : mds(mds_) {
+    assert(mds != NULL);
+  }
 };
 
 
 /**
  * No-op for callers expecting MDSInternalContextBase
  */
-class C_MDSInternalNoop : public MDSInternalContext
+class C_MDSInternalNoop : public MDSInternalContextBase
 {
+  virtual MDS* get_mds() {assert(0);}
 public:
-  C_MDSInternalNoop() : MDSInternalContext(NULL) {}
   void finish(int r) {}
   void complete(int r) {}
 };
