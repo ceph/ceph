@@ -1063,6 +1063,13 @@ def zap(dev):
             [
                 'sgdisk',
                 '--zap-all',
+                '--',
+                dev,
+            ],
+        )
+        command_check_call(
+            [
+                'sgdisk',
                 '--clear',
                 '--mbrtogpt',
                 '--',
