@@ -37,6 +37,8 @@ if [ -d "$GIT_LOCAL_TREE" ]; then
     if ! (cd $GIT_LOCAL_TREE && git show-branch $GIT_BRANCH &>/dev/null); then
         echo "Branch $GIT_BRANCH not found - creating locally"
         (cd $GIT_LOCAL_TREE && git checkout -b $GIT_BRANCH upstream/$GIT_BRANCH)
+    else
+        (cd $GIT_LOCAL_TREE && git merge upstream/$GIT_BRANCH)
     fi
     git clone -ls $GIT_LOCAL_TREE $GIT_DIR -b $GIT_BRANCH
     if ! (cd $GIT_LOCAL_TREE && git remote show upstream &>/dev/null); then

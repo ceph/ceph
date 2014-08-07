@@ -1,4 +1,11 @@
 -------------------------------------------------------------------
+Thu Aug  7 08:45:27 UTC 2014 - tbehrens@suse.com
+
+- Fix update_git.sh, to properly pull remote changes into existing
+  local branch in git cache (it was fetching, but not merging
+  before) 
+
+-------------------------------------------------------------------
 Tue Aug  5 08:05:47 UTC 2014 - tbehrens@suse.com
 
 - Add 0016-Fix-bnc-890345-wrong-service-name-f.patch
