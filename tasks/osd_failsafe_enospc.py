@@ -6,8 +6,8 @@ import logging
 import time
 
 import ceph_manager
-from ..orchestra import run
-from teuthology.task_util.rados import rados
+from teuthology.orchestra import run
+from util.rados import rados
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)

@@ -4,7 +4,7 @@ Raise exceptions on osd coredumps or test err directories
 import contextlib
 import logging
 import time
-from ..orchestra import run
+from teuthology.orchestra import run
 
 import ceph_manager
 from teuthology import misc as teuthology

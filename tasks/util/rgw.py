@@ -4,7 +4,7 @@ import json
 import requests
 from urlparse import urlparse
 
-from ..orchestra.connection import split_user
+from teuthology.orchestra.connection import split_user
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)

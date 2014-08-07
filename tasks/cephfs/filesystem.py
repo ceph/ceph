@@ -6,7 +6,7 @@ import time
 
 from teuthology import misc
 from teuthology.parallel import parallel
-from teuthology.task import ceph_manager
+from tasks import ceph_manager
 
 
 log = logging.getLogger(__name__)

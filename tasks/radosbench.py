@@ -4,7 +4,7 @@ Rados benchmarking
 import contextlib
 import logging
 
-from ..orchestra import run
+from teuthology.orchestra import run
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)

@@ -18,10 +18,10 @@ import boto.exception
 import boto.s3.connection
 import boto.s3.acl
 
-import teuthology.task_util.rgw as rgw_utils
+import util.rgw as rgw_utils
 
 from teuthology import misc as teuthology
-from teuthology.task_util.rgw import rgwadmin
+from util.rgw import rgwadmin
 
 log = logging.getLogger(__name__)
 

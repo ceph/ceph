@@ -14,7 +14,7 @@ import time
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
-from ..orchestra import run
+from teuthology.orchestra import run
 import ceph_client as cclient
 from teuthology.orchestra.run import CommandFailedError
 from teuthology.orchestra.daemon import DaemonGroup

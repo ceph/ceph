@@ -6,7 +6,7 @@ import logging
 import os
 
 from cStringIO import StringIO
-from ..orchestra import run
+from teuthology.orchestra import run
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.parallel import parallel

@@ -7,7 +7,7 @@ import pipes
 from teuthology import misc as teuthology
 from teuthology.orchestra import run as tor
 
-from ..orchestra import run
+from teuthology.orchestra import run
 log = logging.getLogger(__name__)
 
 def restart_daemon(ctx, config, role, id_, *args):

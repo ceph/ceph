@@ -9,8 +9,8 @@ import os
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
-from teuthology.task import rbd
-from ..orchestra import run
+from tasks import rbd
+from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 

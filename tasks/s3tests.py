@@ -10,13 +10,13 @@ import os
 import random
 import string
 
-import teuthology.task_util.rgw as rgw_utils
+import util.rgw as rgw_utils
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
-from ..config import config as teuth_config
-from ..orchestra import run
-from ..orchestra.connection import split_user
+from teuthology.config import config as teuth_config
+from teuthology.orchestra import run
+from teuthology.orchestra.connection import split_user
 
 log = logging.getLogger(__name__)
 

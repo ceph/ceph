@@ -120,7 +120,7 @@ def task(ctx, config):
             for t, key in ctx.config['targets'].iteritems():
                 host = t.split('@')[-1]
                 shortname = host.split('.')[0]
-                from ..orchestra import remote as oremote
+                from teuthology.orchestra import remote as oremote
                 console = oremote.getRemoteConsole(
                     name=host,
                     ipmiuser=ctx.teuthology_config['ipmi_user'],

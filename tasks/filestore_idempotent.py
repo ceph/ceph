@@ -2,7 +2,7 @@
 Filestore/filejournal handler
 """
 import logging
-from ..orchestra import run
+from teuthology.orchestra import run
 import random
 
 from teuthology import misc as teuthology

@@ -6,9 +6,9 @@ import textwrap
 from configparser import ConfigParser
 import time
 
-from ..orchestra import run
-from .. import misc
-from ..contextutil import nested
+from teuthology.orchestra import run
+from teuthology import misc
+from teuthology.contextutil import nested
 
 log = logging.getLogger(__name__)
 

@@ -4,7 +4,7 @@ Lost_unfound
 import logging
 import ceph_manager
 from teuthology import misc as teuthology
-from teuthology.task_util.rados import rados
+from util.rados import rados
 
 log = logging.getLogger(__name__)
 

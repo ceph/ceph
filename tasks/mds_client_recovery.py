@@ -11,8 +11,8 @@ import unittest
 from teuthology import misc
 from teuthology.orchestra.run import CommandFailedError
 from teuthology.task import interactive
-from teuthology.task.cephfs.filesystem import Filesystem
-from teuthology.task.ceph_fuse import get_client_configs, FuseMount
+from cephfs.filesystem import Filesystem
+from tasks.ceph_fuse import get_client_configs, FuseMount
 
 
 log = logging.getLogger(__name__)
