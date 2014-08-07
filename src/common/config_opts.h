@@ -383,6 +383,8 @@ OPTION(mds_op_history_size, OPT_U32, 20)    // Max number of completed ops to tr
 OPTION(mds_op_history_duration, OPT_U32, 600) // Oldest completed op to track
 OPTION(mds_op_complaint_time, OPT_FLOAT, 30) // how many seconds old makes an op complaint-worthy
 OPTION(mds_op_log_threshold, OPT_INT, 5) // how many op log messages to show in one go
+OPTION(mds_snap_min_uid, OPT_U32, 0) // The minimum UID required to create a snapshot
+OPTION(mds_snap_max_uid, OPT_U32, 65536) // The maximum UID allowed to create a snapshot
 
 // If true, compact leveldb store on mount
 OPTION(osd_compact_leveldb_on_mount, OPT_BOOL, false)
