@@ -1925,6 +1925,7 @@ next:
     }
 
     rgw_obj obj(bucket, object);
+    obj.set_instance(object_version);
     bool need_rewrite = true;
     if (min_rewrite_stripe_size > 0) {
       ret = check_min_obj_stripe_size(store, obj, min_rewrite_stripe_size, &need_rewrite);
@@ -2069,6 +2070,7 @@ next:
       return -ret;
     }
     rgw_obj obj(bucket, object);
+    obj.set_instance(object_version);
 
     void *handle;
     uint64_t obj_size;
