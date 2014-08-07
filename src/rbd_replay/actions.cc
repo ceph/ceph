@@ -330,12 +330,12 @@ void OpenImageAction::perform(ActionCtx &worker) {
   worker.add_pending(io);
   librbd::Image *image = new librbd::Image();
   librbd::RBD *rbd = worker.rbd();
-  ImageName name(worker.map_image_name(m_name, m_snap_name));
+  rbd_loc name(worker.map_image_name(m_name, m_snap_name));
   int r;
   if (m_readonly || worker.readonly()) {
-    r = rbd->open_read_only(*worker.ioctx(), *image, name.image().c_str(), name.snap().c_str());
+    r = rbd->open_read_only(*worker.ioctx(), *image, name.image.c_str(), name.snap.c_str());
   } else {
-    r = rbd->open(*worker.ioctx(), *image, name.image().c_str(), name.snap().c_str());
+    r = rbd->open(*worker.ioctx(), *image, name.image.c_str(), name.snap.c_str());
   }
   if (r) {
     cerr << "Unable to open image '" << m_name
