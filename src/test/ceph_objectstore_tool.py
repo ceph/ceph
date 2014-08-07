@@ -8,6 +8,7 @@ import sys
 import re
 import string
 import logging
+import json
 
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING)
 
@@ -133,6 +134,12 @@ def test_failure(cmd, errmsg):
         return 1
 
 
+def get_nspace(num):
+    if num == 0:
+        return ""
+    return "ns{num}".format(num=num)
+
+
 def main():
     sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
     nullfd = open(os.devnull, "w")
@@ -142,13 +149,14 @@ def main():
     REP_NAME = "REPobject"
     EC_POOL = "ec_pool"
     EC_NAME = "ECobject"
-    NUM_OBJECTS = 40
+    NUM_OBJECTS = 10
+    NUM_NSPACES = 4
     ERRORS = 0
     pid = os.getpid()
     TESTDIR = "/tmp/test.{pid}".format(pid=pid)
     DATADIR = "/tmp/data.{pid}".format(pid=pid)
     CFSD_PREFIX = "./ceph_objectstore_tool --data-path dev/{osd} --journal-path dev/{osd}.journal "
-    DATALINECOUNT = 10000
+    DATALINECOUNT = 50000
     PROFNAME = "testecprofile"
 
     vstart(new=True)
@@ -174,7 +182,7 @@ def main():
 
     print "Created Erasure coded pool #{ecid}".format(ecid=ECID)
 
-    print "Creating {objs} objects in replicated pool".format(objs=NUM_OBJECTS)
+    print "Creating {objs} objects in replicated pool".format(objs=(NUM_OBJECTS*NUM_NSPACES))
     cmd = "mkdir -p {datadir}".format(datadir=DATADIR)
     logging.debug(cmd)
     call(cmd, shell=True)
@@ -182,114 +190,126 @@ def main():
     db = {}
 
     objects = range(1, NUM_OBJECTS + 1)
-    for i in objects:
-        NAME = REP_NAME + "{num}".format(num=i)
-        DDNAME = os.path.join(DATADIR, NAME)
+    nspaces = range(NUM_NSPACES)
+    for n in nspaces:
+        nspace = get_nspace(n)
 
-        cmd = "rm -f " + DDNAME
-        logging.debug(cmd)
-        call(cmd, shell=True)
+        db[nspace] = {}
 
-        dataline = range(DATALINECOUNT)
-        fd = open(DDNAME, "w")
-        data = "This is the replicated data for " + NAME + "\n"
-        for _ in dataline:
-            fd.write(data)
-        fd.close()
+        for i in objects:
+            NAME = REP_NAME + "{num}".format(num=i)
+            LNAME = nspace + "-" + NAME
+            DDNAME = os.path.join(DATADIR, LNAME)
 
-        cmd = "./rados -p {pool} put {name} {ddname}".format(pool=REP_POOL, name=NAME, ddname=DDNAME)
-        logging.debug(cmd)
-        ret = call(cmd, shell=True, stderr=nullfd)
-        if ret != 0:
-            logging.critical("Replicated pool creation failed with {ret}".format(ret=ret))
-            sys.exit(1)
-
-        db[NAME] = {}
-
-        keys = range(i)
-        db[NAME]["xattr"] = {}
-        for k in keys:
-            if k == 0:
-                continue
-            mykey = "key{i}-{k}".format(i=i, k=k)
-            myval = "val{i}-{k}".format(i=i, k=k)
-            cmd = "./rados -p {pool} setxattr {name} {key} {val}".format(pool=REP_POOL, name=NAME, key=mykey, val=myval)
+            cmd = "rm -f " + DDNAME
             logging.debug(cmd)
-            ret = call(cmd, shell=True)
-            if ret != 0:
-                logging.error("setxattr failed with {ret}".format(ret=ret))
-                ERRORS += 1
-            db[NAME]["xattr"][mykey] = myval
+            call(cmd, shell=True)
 
-        # Create omap header in all objects but REPobject1
-        if i != 1:
-            myhdr = "hdr{i}".format(i=i)
-            cmd = "./rados -p {pool} setomapheader {name} {hdr}".format(pool=REP_POOL, name=NAME, hdr=myhdr)
+            dataline = range(DATALINECOUNT)
+            fd = open(DDNAME, "w")
+            data = "This is the replicated data for " + LNAME + "\n"
+            for _ in dataline:
+                fd.write(data)
+            fd.close()
+
+            cmd = "./rados -p {pool} -N '{nspace}' put {name} {ddname}".format(pool=REP_POOL, name=NAME, ddname=DDNAME, nspace=nspace)
             logging.debug(cmd)
-            ret = call(cmd, shell=True)
+            ret = call(cmd, shell=True, stderr=nullfd)
             if ret != 0:
-                logging.critical("setomapheader failed with {ret}".format(ret=ret))
-                ERRORS += 1
-            db[NAME]["omapheader"] = myhdr
+                logging.critical("Replicated pool object creation failed with {ret}".format(ret=ret))
+                sys.exit(1)
 
-        db[NAME]["omap"] = {}
-        for k in keys:
-            if k == 0:
-                continue
-            mykey = "okey{i}-{k}".format(i=i, k=k)
-            myval = "oval{i}-{k}".format(i=i, k=k)
-            cmd = "./rados -p {pool} setomapval {name} {key} {val}".format(pool=REP_POOL, name=NAME, key=mykey, val=myval)
+            db[nspace][NAME] = {}
+
+            keys = range(i)
+            db[nspace][NAME]["xattr"] = {}
+            for k in keys:
+                if k == 0:
+                    continue
+                mykey = "key{i}-{k}".format(i=i, k=k)
+                myval = "val{i}-{k}".format(i=i, k=k)
+                cmd = "./rados -p {pool} -N '{nspace}' setxattr {name} {key} {val}".format(pool=REP_POOL, name=NAME, key=mykey, val=myval, nspace=nspace)
+                logging.debug(cmd)
+                ret = call(cmd, shell=True)
+                if ret != 0:
+                    logging.error("setxattr failed with {ret}".format(ret=ret))
+                    ERRORS += 1
+                db[nspace][NAME]["xattr"][mykey] = myval
+
+            # Create omap header in all objects but REPobject1
+            if i != 1:
+                myhdr = "hdr{i}".format(i=i)
+                cmd = "./rados -p {pool} -N '{nspace}' setomapheader {name} {hdr}".format(pool=REP_POOL, name=NAME, hdr=myhdr, nspace=nspace)
+                logging.debug(cmd)
+                ret = call(cmd, shell=True)
+                if ret != 0:
+                    logging.critical("setomapheader failed with {ret}".format(ret=ret))
+                    ERRORS += 1
+                db[nspace][NAME]["omapheader"] = myhdr
+
+            db[nspace][NAME]["omap"] = {}
+            for k in keys:
+                if k == 0:
+                    continue
+                mykey = "okey{i}-{k}".format(i=i, k=k)
+                myval = "oval{i}-{k}".format(i=i, k=k)
+                cmd = "./rados -p {pool} -N '{nspace}' setomapval {name} {key} {val}".format(pool=REP_POOL, name=NAME, key=mykey, val=myval, nspace=nspace)
+                logging.debug(cmd)
+                ret = call(cmd, shell=True)
+                if ret != 0:
+                    logging.critical("setomapval failed with {ret}".format(ret=ret))
+                db[nspace][NAME]["omap"][mykey] = myval
+
+    print "Creating {objs} objects in erasure coded pool".format(objs=(NUM_OBJECTS*NUM_NSPACES))
+
+    objects = range(1, NUM_OBJECTS + 1)
+    nspaces = range(NUM_NSPACES)
+    for n in nspaces:
+        nspace = get_nspace(n)
+
+        for i in objects:
+            NAME = EC_NAME + "{num}".format(num=i)
+            LNAME = nspace + "-" + NAME
+            DDNAME = os.path.join(DATADIR, LNAME)
+
+            cmd = "rm -f " + DDNAME
             logging.debug(cmd)
-            ret = call(cmd, shell=True)
-            if ret != 0:
-                logging.critical("setomapval failed with {ret}".format(ret=ret))
-            db[NAME]["omap"][mykey] = myval
+            call(cmd, shell=True)
 
-    print "Creating {objs} objects in erasure coded pool".format(objs=NUM_OBJECTS)
+            fd = open(DDNAME, "w")
+            data = "This is the erasure coded data for " + LNAME + "\n"
+            for j in dataline:
+                fd.write(data)
+            fd.close()
 
-    for i in objects:
-        NAME = EC_NAME + "{num}".format(num=i)
-        DDNAME = os.path.join(DATADIR, NAME)
-
-        cmd = "rm -f " + DDNAME
-        logging.debug(cmd)
-        call(cmd, shell=True)
-
-        fd = open(DDNAME, "w")
-        data = "This is the erasure coded data for " + NAME + "\n"
-        for j in dataline:
-            fd.write(data)
-        fd.close()
-
-        cmd = "./rados -p {pool} put {name} {ddname}".format(pool=EC_POOL, name=NAME, ddname=DDNAME)
-        logging.debug(cmd)
-        ret = call(cmd, shell=True, stderr=nullfd)
-        if ret != 0:
-            logging.critical("Erasure coded pool creation failed with {ret}".format(ret=ret))
-            sys.exit(1)
-
-        db[NAME] = {}
-
-        db[NAME]["xattr"] = {}
-        keys = range(i)
-        for k in keys:
-            if k == 0:
-                continue
-            mykey = "key{i}-{k}".format(i=i, k=k)
-            myval = "val{i}-{k}".format(i=i, k=k)
-            cmd = "./rados -p {pool} setxattr {name} {key} {val}".format(pool=EC_POOL, name=NAME, key=mykey, val=myval)
+            cmd = "./rados -p {pool} -N '{nspace}' put {name} {ddname}".format(pool=EC_POOL, name=NAME, ddname=DDNAME, nspace=nspace)
             logging.debug(cmd)
-            ret = call(cmd, shell=True)
+            ret = call(cmd, shell=True, stderr=nullfd)
             if ret != 0:
-                logging.error("setxattr failed with {ret}".format(ret=ret))
-                ERRORS += 1
-            db[NAME]["xattr"][mykey] = myval
+                logging.critical("Erasure coded pool creation failed with {ret}".format(ret=ret))
+                sys.exit(1)
 
-        # Omap isn't supported in EC pools
-        db[NAME]["omap"] = {}
+            db[nspace][NAME] = {}
+
+            db[nspace][NAME]["xattr"] = {}
+            keys = range(i)
+            for k in keys:
+                if k == 0:
+                    continue
+                mykey = "key{i}-{k}".format(i=i, k=k)
+                myval = "val{i}-{k}".format(i=i, k=k)
+                cmd = "./rados -p {pool} -N '{nspace}' setxattr {name} {key} {val}".format(pool=EC_POOL, name=NAME, key=mykey, val=myval, nspace=nspace)
+                logging.debug(cmd)
+                ret = call(cmd, shell=True)
+                if ret != 0:
+                    logging.error("setxattr failed with {ret}".format(ret=ret))
+                    ERRORS += 1
+                db[nspace][NAME]["xattr"][mykey] = myval
+
+            # Omap isn't supported in EC pools
+            db[nspace][NAME]["omap"] = {}
 
     logging.debug(db)
-
 
     call("./stop.sh", stderr=nullfd)
 
@@ -364,79 +384,82 @@ def main():
     tmpfd.close()
     lines = get_lines(TMPFILE)
     JSONOBJ = sorted(set(lines))
+    for JSON in JSONOBJ:
+        jsondict = json.loads(JSON)
+        db[jsondict['namespace']][jsondict['oid']]['json'] = JSON
 
     # Test get-bytes
     print "Test get-bytes and set-bytes"
-    for basename in db.keys():
-        file = os.path.join(DATADIR, basename)
-        JSON = [l for l in JSONOBJ if l.find("\"" + basename + "\"") != -1]
-        JSON = JSON[0]
-        GETNAME = "/tmp/getbytes.{pid}".format(pid=pid)
-        TESTNAME = "/tmp/testbytes.{pid}".format(pid=pid)
-        SETNAME = "/tmp/setbytes.{pid}".format(pid=pid)
-        for pg in OBJREPPGS:
-            OSDS = get_osds(pg, OSDDIR)
-            for osd in OSDS:
-                DIR = os.path.join(OSDDIR, os.path.join(osd, os.path.join("current", "{pg}_head".format(pg=pg))))
-                fname = [f for f in os.listdir(DIR) if os.path.isfile(os.path.join(DIR, f)) and string.find(f, basename + "_") == 0]
-                if not fname:
-                    continue
-                fname = fname[0]
-                try:
-                    os.unlink(GETNAME)
-                except:
-                    pass
-                cmd = (CFSD_PREFIX + " --pgid {pg} '{json}' get-bytes {fname}").format(osd=osd, pg=pg, json=JSON, fname=GETNAME)
-                logging.debug(cmd)
-                ret = call(cmd, shell=True)
-                if ret != 0:
-                    logging.error("Bad exit status {ret}".format(ret=ret))
-                    ERRORS += 1
-                    continue
-                cmd = "diff -q {file} {getfile}".format(file=file, getfile=GETNAME)
-                ret = call(cmd, shell=True)
-                if ret != 0:
-                    logging.error("Data from get-bytes differ")
-                    logging.debug("Got:")
-                    cat_file(logging.DEBUG, GETNAME)
-                    logging.debug("Expected:")
-                    cat_file(logging.DEBUG, file)
-                    ERRORS += 1
-                fd = open(SETNAME, "w")
-                data = "put-bytes going into {file}\n".format(file=file)
-                fd.write(data)
-                fd.close()
-                cmd = (CFSD_PREFIX + "--pgid {pg} '{json}' set-bytes {sname}").format(osd=osd, pg=pg, json=JSON, sname=SETNAME)
-                logging.debug(cmd)
-                ret = call(cmd, shell=True)
-                if ret != 0:
-                    logging.error("Bad exit status {ret} from set-bytes".format(ret=ret))
-                    ERRORS += 1
-                fd = open(TESTNAME, "w")
-                cmd = (CFSD_PREFIX + "--pgid {pg} '{json}' get-bytes -").format(osd=osd, pg=pg, json=JSON)
-                logging.debug(cmd)
-                ret = call(cmd, shell=True, stdout=fd)
-                fd.close()
-                if ret != 0:
-                    logging.error("Bad exit status {ret} from get-bytes".format(ret=ret))
-                    ERRORS += 1
-                cmd = "diff -q {setfile} {testfile}".format(setfile=SETNAME, testfile=TESTNAME)
-                logging.debug(cmd)
-                ret = call(cmd, shell=True)
-                if ret != 0:
-                    logging.error("Data after set-bytes differ")
-                    logging.debug("Got:")
-                    cat_file(logging.DEBUG, TESTNAME)
-                    logging.debug("Expected:")
-                    cat_file(logging.DEBUG, SETNAME)
-                    ERRORS += 1
-                fd = open(file, "r")
-                cmd = (CFSD_PREFIX + "--pgid {pg} '{json}' set-bytes").format(osd=osd, pg=pg, json=JSON)
-                logging.debug(cmd)
-                ret = call(cmd, shell=True, stdin=fd)
-                if ret != 0:
-                    logging.error("Bad exit status {ret} from set-bytes to restore object".format(ret=ret))
-                    ERRORS += 1
+    for nspace in db.keys():
+        for basename in db[nspace].keys():
+            file = os.path.join(DATADIR, nspace + "-" + basename)
+            JSON = db[nspace][basename]['json']
+            GETNAME = "/tmp/getbytes.{pid}".format(pid=pid)
+            TESTNAME = "/tmp/testbytes.{pid}".format(pid=pid)
+            SETNAME = "/tmp/setbytes.{pid}".format(pid=pid)
+            for pg in OBJREPPGS:
+                OSDS = get_osds(pg, OSDDIR)
+                for osd in OSDS:
+                    DIR = os.path.join(OSDDIR, os.path.join(osd, os.path.join("current", "{pg}_head".format(pg=pg))))
+                    fnames = [f for f in os.listdir(DIR) if os.path.isfile(os.path.join(DIR, f))
+                              and f.split("_")[0] == basename and f.split("_")[4] == nspace]
+                    if not fnames:
+                        continue
+                    try:
+                        os.unlink(GETNAME)
+                    except:
+                        pass
+                    cmd = (CFSD_PREFIX + " --pgid {pg} '{json}' get-bytes {fname}").format(osd=osd, pg=pg, json=JSON, fname=GETNAME)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True)
+                    if ret != 0:
+                        logging.error("Bad exit status {ret}".format(ret=ret))
+                        ERRORS += 1
+                        continue
+                    cmd = "diff -q {file} {getfile}".format(file=file, getfile=GETNAME)
+                    ret = call(cmd, shell=True)
+                    if ret != 0:
+                        logging.error("Data from get-bytes differ")
+                        logging.debug("Got:")
+                        cat_file(logging.DEBUG, GETNAME)
+                        logging.debug("Expected:")
+                        cat_file(logging.DEBUG, file)
+                        ERRORS += 1
+                    fd = open(SETNAME, "w")
+                    data = "put-bytes going into {file}\n".format(file=file)
+                    fd.write(data)
+                    fd.close()
+                    cmd = (CFSD_PREFIX + "--pgid {pg} '{json}' set-bytes {sname}").format(osd=osd, pg=pg, json=JSON, sname=SETNAME)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True)
+                    if ret != 0:
+                        logging.error("Bad exit status {ret} from set-bytes".format(ret=ret))
+                        ERRORS += 1
+                    fd = open(TESTNAME, "w")
+                    cmd = (CFSD_PREFIX + "--pgid {pg} '{json}' get-bytes -").format(osd=osd, pg=pg, json=JSON)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True, stdout=fd)
+                    fd.close()
+                    if ret != 0:
+                        logging.error("Bad exit status {ret} from get-bytes".format(ret=ret))
+                        ERRORS += 1
+                    cmd = "diff -q {setfile} {testfile}".format(setfile=SETNAME, testfile=TESTNAME)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True)
+                    if ret != 0:
+                        logging.error("Data after set-bytes differ")
+                        logging.debug("Got:")
+                        cat_file(logging.DEBUG, TESTNAME)
+                        logging.debug("Expected:")
+                        cat_file(logging.DEBUG, SETNAME)
+                        ERRORS += 1
+                    fd = open(file, "r")
+                    cmd = (CFSD_PREFIX + "--pgid {pg} '{json}' set-bytes").format(osd=osd, pg=pg, json=JSON)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True, stdin=fd)
+                    if ret != 0:
+                        logging.error("Bad exit status {ret} from set-bytes to restore object".format(ret=ret))
+                        ERRORS += 1
 
     try:
         os.unlink(GETNAME)
@@ -454,55 +477,55 @@ def main():
     print "Test list-attrs get-attr"
     ATTRFILE = r"/tmp/attrs.{pid}".format(pid=pid)
     VALFILE = r"/tmp/val.{pid}".format(pid=pid)
-    for basename in db.keys():
-        file = os.path.join(DATADIR, basename)
-        JSON = [l for l in JSONOBJ if l.find("\"" + basename + "\"") != -1]
-        JSON = JSON[0]
-        for pg in OBJREPPGS:
-            OSDS = get_osds(pg, OSDDIR)
-            for osd in OSDS:
-                DIR = os.path.join(OSDDIR, os.path.join(osd, os.path.join("current", "{pg}_head".format(pg=pg))))
-                fname = [f for f in os.listdir(DIR) if os.path.isfile(os.path.join(DIR, f)) and string.find(f, basename + "_") == 0]
-                if not fname:
-                    continue
-                fname = fname[0]
-                afd = open(ATTRFILE, "w")
-                cmd = (CFSD_PREFIX + "--pgid {pg} '{json}' list-attrs").format(osd=osd, pg=pg, json=JSON)
-                logging.debug(cmd)
-                ret = call(cmd, shell=True, stdout=afd)
-                afd.close()
-                if ret != 0:
-                    logging.error("list-attrs failed with {ret}".format(ret=ret))
-                    ERRORS += 1
-                    continue
-                keys = get_lines(ATTRFILE)
-                values = dict(db[basename]["xattr"])
-                for key in keys:
-                    if key == "_" or key == "snapset":
+    for nspace in db.keys():
+        for basename in db[nspace].keys():
+            file = os.path.join(DATADIR, nspace + "-" + basename)
+            JSON = db[nspace][basename]['json']
+            for pg in OBJREPPGS:
+                OSDS = get_osds(pg, OSDDIR)
+                for osd in OSDS:
+                    DIR = os.path.join(OSDDIR, os.path.join(osd, os.path.join("current", "{pg}_head".format(pg=pg))))
+                    fnames = [f for f in os.listdir(DIR) if os.path.isfile(os.path.join(DIR, f))
+                              and f.split("_")[0] == basename and f.split("_")[4] == nspace]
+                    if not fnames:
                         continue
-                    key = key.strip("_")
-                    if key not in values:
-                        logging.error("The key {key} should be present".format(key=key))
-                        ERRORS += 1
-                        continue
-                    exp = values.pop(key)
-                    vfd = open(VALFILE, "w")
-                    cmd = (CFSD_PREFIX + "--pgid {pg} '{json}' get-attr {key}").format(osd=osd, pg=pg, json=JSON, key="_" + key)
+                    afd = open(ATTRFILE, "w")
+                    cmd = (CFSD_PREFIX + "--pgid {pg} '{json}' list-attrs").format(osd=osd, pg=pg, json=JSON)
                     logging.debug(cmd)
-                    ret = call(cmd, shell=True, stdout=vfd)
-                    vfd.close()
+                    ret = call(cmd, shell=True, stdout=afd)
+                    afd.close()
                     if ret != 0:
-                        logging.error("get-attr failed with {ret}".format(ret=ret))
+                        logging.error("list-attrs failed with {ret}".format(ret=ret))
                         ERRORS += 1
                         continue
-                    lines = get_lines(VALFILE)
-                    val = lines[0]
-                    if exp != val:
-                        logging.error("For key {key} got value {got} instead of {expected}".format(key=key, got=val, expected=exp))
-                        ERRORS += 1
-                if len(values) != 0:
-                    logging.error("Not all keys found, remaining keys:")
-                    print values
+                    keys = get_lines(ATTRFILE)
+                    values = dict(db[nspace][basename]["xattr"])
+                    for key in keys:
+                        if key == "_" or key == "snapset":
+                            continue
+                        key = key.strip("_")
+                        if key not in values:
+                            logging.error("The key {key} should be present".format(key=key))
+                            ERRORS += 1
+                            continue
+                        exp = values.pop(key)
+                        vfd = open(VALFILE, "w")
+                        cmd = (CFSD_PREFIX + "--pgid {pg} '{json}' get-attr {key}").format(osd=osd, pg=pg, json=JSON, key="_" + key)
+                        logging.debug(cmd)
+                        ret = call(cmd, shell=True, stdout=vfd)
+                        vfd.close()
+                        if ret != 0:
+                            logging.error("get-attr failed with {ret}".format(ret=ret))
+                            ERRORS += 1
+                            continue
+                        lines = get_lines(VALFILE)
+                        val = lines[0]
+                        if exp != val:
+                            logging.error("For key {key} got value {got} instead of {expected}".format(key=key, got=val, expected=exp))
+                            ERRORS += 1
+                    if len(values) != 0:
+                        logging.error("Not all keys found, remaining keys:")
+                        print values
 
     print "Test pg info"
     for pg in ALLREPPGS + ALLECPGS:
@@ -611,10 +634,12 @@ def main():
 
     if EXP_ERRORS == 0 and RM_ERRORS == 0 and IMP_ERRORS == 0:
         print "Verify replicated import data"
-        for file in [f for f in os.listdir(DATADIR) if f.find(REP_NAME) == 0]:
-            path = os.path.join(DATADIR, file)
+        for nsfile in [f for f in os.listdir(DATADIR) if f.split('-')[1].find(REP_NAME) == 0]:
+            nspace = nsfile.split("-")[0]
+            file = nsfile.split("-")[1]
+            path = os.path.join(DATADIR, nsfile)
             tmpfd = open(TMPFILE, "w")
-            cmd = "find {dir} -name '{file}_*'".format(dir=OSDDIR, file=file)
+            cmd = "find {dir} -name '{file}_*_{nspace}_*'".format(dir=OSDDIR, file=file, nspace=nspace)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stdout=tmpfd)
             if ret:
@@ -637,13 +662,15 @@ def main():
         wait_for_health()
 
         print "Verify erasure coded import data"
-        for file in [f for f in os.listdir(DATADIR) if f.find(EC_NAME) == 0]:
-            path = os.path.join(DATADIR, file)
+        for nsfile in [f for f in os.listdir(DATADIR) if f.split('-')[1].find(EC_NAME) == 0]:
+            nspace = nsfile.split("-")[0]
+            file = nsfile.split("-")[1]
+            path = os.path.join(DATADIR, nsfile)
             try:
                 os.unlink(TMPFILE)
             except:
                 pass
-            cmd = "./rados -p {pool} get {file} {out}".format(pool=EC_POOL, file=file, out=TMPFILE)
+            cmd = "./rados -p {pool} -N '{nspace}' get {file} {out}".format(pool=EC_POOL, file=file, out=TMPFILE, nspace=nspace)
             logging.debug(cmd)
             call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
             cmd = "diff -q {src} {result}".format(src=path, result=TMPFILE)
