@@ -3704,7 +3704,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 	    // make sure we have *that*.
 	    mdr->waited_for_osdmap = true;
 	    mds->objecter->wait_for_latest_osdmap(
-	      new C_MDS_RetryRequest(mdcache, mdr));
+	      new C_OnFinisher(new C_IO_Wrapper(mds, new C_MDS_RetryRequest(mdcache, mdr)), &mds->finisher));
 	    return;
 	  }
 	  r = -EINVAL;
@@ -3737,7 +3737,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 	    // make sure we have *that*.
 	    mdr->waited_for_osdmap = true;
 	    mds->objecter->wait_for_latest_osdmap(
-              new C_MDS_RetryRequest(mdcache, mdr));
+	      new C_OnFinisher(new C_IO_Wrapper(mds, new C_MDS_RetryRequest(mdcache, mdr)), &mds->finisher));
 	    return;
 	  }
 	  r = -EINVAL;
