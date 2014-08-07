@@ -22,27 +22,14 @@
 
 
 using rbd_replay::ImageNameMap;
-using rbd_replay::NameMap;
 using rbd_replay::rbd_loc;
 
-std::ostream& operator<<(std::ostream& o, const ImageName& name) {
-  return o << "('" << name.pool() << "', '" << name.image() << "', '" << name.snap() << "')";
-}
-
-static ImageName bad_mapping(ImageName input, std::string output) {
-  return ImageName("xxx", "xxx", "xxx");
+std::ostream& operator<<(std::ostream& o, const rbd_loc& name) {
+  return o << "('" << name.pool << "', '" << name.image << "', '" << name.snap << "')";
 }
 
 static void add_mapping(ImageNameMap *map, std::string mapping_string) {
   ImageNameMap::Mapping mapping;
-  if (!map->parse_mapping(mapping_string, &mapping)) {
-    ASSERT_TRUE(false) << "Failed to parse mapping string '" << mapping_string << "'";
-  }
-  map->add_mapping(mapping);
-}
-
-static void add_mapping(NameMap *map, std::string mapping_string) {
-  NameMap::Mapping mapping;
   if (!map->parse_mapping(mapping_string, &mapping)) {
     ASSERT_TRUE(false) << "Failed to parse mapping string '" << mapping_string << "'";
   }
@@ -69,30 +56,21 @@ TEST(RBDReplay, Deser) {
 
 TEST(RBDReplay, ImageNameMap) {
   ImageNameMap m;
-  m.set_bad_mapping_fallback(bad_mapping);
   add_mapping(&m, "x@y=y@x");
   add_mapping(&m, "a\\=b@c=h@i");
   add_mapping(&m, "a@b\\=c=j@k");
-  add_mapping(&m, "a\\\\@b@c=d@e");
-  add_mapping(&m, "a@b\\\\@c=f@g");
-  add_mapping(&m, "image@snap_(.*)=image_$1@");
-  add_mapping(&m, "bad=@@@");
-  EXPECT_EQ(ImageName("", "y", "x"), m.map(ImageName("", "x", "y")));
-  EXPECT_EQ(ImageName("", "h", "i"), m.map(ImageName("", "a=b", "c")));
-  EXPECT_EQ(ImageName("", "j", "k"), m.map(ImageName("", "a", "b=c")));
-  EXPECT_EQ(ImageName("", "d", "e"), m.map(ImageName("", "a@b", "c")));
-  EXPECT_EQ(ImageName("", "f", "g"), m.map(ImageName("", "a", "b@c")));
-  EXPECT_EQ(ImageName("", "image_1", ""), m.map(ImageName("", "image", "snap_1")));
-  EXPECT_EQ(ImageName("xxx", "xxx", "xxx"), m.map(ImageName("", "bad", "")));
-}
-
-TEST(RBDReplay, NameMap) {
-  NameMap m;
-  add_mapping(&m, "x=y");
-  add_mapping(&m, "image_(.*)=$1_image");
-  EXPECT_EQ("y", m.map("x"));
-  EXPECT_EQ("ab_image", m.map("image_ab"));
-  EXPECT_EQ("asdf", m.map("asdf"));
+  add_mapping(&m, "a\\@b@c=d@e");
+  add_mapping(&m, "a@b\\@c=f@g");
+  add_mapping(&m, "image@snap_1=image_1");
+  ImageNameMap::Mapping mapping;
+  EXPECT_EQ(false, m.parse_mapping("bad=@@@", &mapping));
+  EXPECT_EQ(false, m.parse_mapping("bad==stuff", &mapping));
+  EXPECT_EQ(rbd_loc("", "y", "x"), m.map(rbd_loc("", "x", "y")));
+  EXPECT_EQ(rbd_loc("", "h", "i"), m.map(rbd_loc("", "a=b", "c")));
+  EXPECT_EQ(rbd_loc("", "j", "k"), m.map(rbd_loc("", "a", "b=c")));
+  EXPECT_EQ(rbd_loc("", "d", "e"), m.map(rbd_loc("", "a@b", "c")));
+  EXPECT_EQ(rbd_loc("", "f", "g"), m.map(rbd_loc("", "a", "b@c")));
+  EXPECT_EQ(rbd_loc("", "image_1", ""), m.map(rbd_loc("", "image", "snap_1")));
 }
 
 TEST(RBDReplay, rbd_loc_str) {

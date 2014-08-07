@@ -49,11 +49,6 @@ static void usage(const char* program) {
   cout << "image@snap_1 to image_1." << std::endl;
 }
 
-static ImageName bad_mapping(ImageName input, string output) {
-  dout(0) << "Bad value returned from mapping.  Input: '" << input.str() << "', output: '" << output << "'.  Using image: '" << output << ", snap ''." << dendl;
-  return ImageName("", output, "");
-}
-
 int main(int argc, const char **argv) {
   vector<const char*> args;
 
@@ -66,7 +61,6 @@ int main(int argc, const char **argv) {
   float latency_multiplier = 1;
   bool readonly = false;
   ImageNameMap image_name_map;
-  image_name_map.set_bad_mapping_fallback(bad_mapping);
   std::string val;
   std::ostringstream err;
   for (i = args.begin(); i != args.end(); ) {
