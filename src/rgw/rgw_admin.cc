@@ -758,7 +758,8 @@ static bool bucket_object_check_filter(const string& name)
 {
   string ns;
   string obj = name;
-  return rgw_obj::translate_raw_obj_to_obj_in_ns(obj, ns);
+  string instance;
+  return rgw_obj::translate_raw_obj_to_obj_in_ns(obj, instance, ns);
 }
 
 int check_min_obj_stripe_size(RGWRados *store, rgw_obj& obj, uint64_t min_stripe_size, bool *need_rewrite)
@@ -873,6 +874,7 @@ int main(int argc, char **argv)
   ReplicaLogType replica_log_type = ReplicaLog_Invalid;
   string op_mask_str;
   string quota_scope;
+  string object_version;
 
   int64_t max_objects = -1;
   int64_t max_size = -1;
@@ -914,6 +916,8 @@ int main(int argc, char **argv)
       pool_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--object", (char*)NULL)) {
       object = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "-o", "--object-version", (char*)NULL)) {
+      object_version = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--client-id", (char*)NULL)) {
       client_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--op-id", (char*)NULL)) {
@@ -1566,11 +1570,13 @@ int main(int argc, char **argv)
       vector<RGWObjEnt> result;
       map<string, bool> common_prefixes;
       string ns;
+
+      rgw_obj_key marker_key(marker);
       
       do {
         list<rgw_bi_log_entry> entries;
         ret = store->list_objects(bucket, max_entries - count, prefix, delim,
-                                  marker, NULL, result, common_prefixes, true,
+                                  marker_key, NULL, result, common_prefixes, true,
                                   ns, false, &truncated, NULL);
         if (ret < 0) {
           cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
@@ -1583,7 +1589,7 @@ int main(int argc, char **argv)
           RGWObjEnt& entry = *iter;
           encode_json("entry", entry, formatter);
 
-          marker = entry.name;
+          marker_key = entry.key;
         }
         formatter->flush(cout);
       } while (truncated && count < max_entries);
@@ -1882,7 +1888,8 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    ret = rgw_remove_object(store, bucket_info.owner, bucket, object);
+    rgw_obj_key key(object, object_version);
+    ret = rgw_remove_object(store, bucket_info.owner, bucket, key);
 
     if (ret < 0) {
       cerr << "ERROR: object remove returned: " << cpp_strerror(-ret) << std::endl;
@@ -1959,14 +1966,14 @@ next:
 
     bool is_truncated = true;
 
-    string marker;
+    rgw_obj_key marker;
     string prefix;
 
     formatter->open_object_section("result");
     formatter->dump_string("bucket", bucket_name);
     formatter->open_array_section("objects");
     while (is_truncated) {
-      map<string, RGWObjEnt> result;
+      map<rgw_obj_key, RGWObjEnt> result;
       int r = store->cls_bucket_list(bucket, marker, prefix, 1000, 
                                      result, &is_truncated, &marker,
                                      bucket_object_check_filter);
@@ -1978,13 +1985,14 @@ next:
       if (r == -ENOENT)
         break;
 
-      map<string, RGWObjEnt>::iterator iter;
+      map<rgw_obj_key, RGWObjEnt>::iterator iter;
       for (iter = result.begin(); iter != result.end(); ++iter) {
-        string name = iter->first;
+        rgw_obj_key key = iter->first;
         RGWObjEnt& entry = iter->second;
 
         formatter->open_object_section("object");
-        formatter->dump_string("name", name);
+        formatter->dump_string("name", key.name);
+        formatter->dump_string("instance", key.instance);
         formatter->dump_int("size", entry.size);
         utime_t ut(entry.mtime, 0);
         ut.gmtime(formatter->dump_stream("mtime"));
@@ -1995,7 +2003,8 @@ next:
             (end_epoch > 0 && end_epoch < (uint64_t)ut.sec())) {
           formatter->dump_string("status", "Skipped");
         } else {
-          rgw_obj obj(bucket, name);
+          rgw_obj obj(bucket, key.name);
+          obj.set_instance(key.instance);
 
           bool need_rewrite = true;
           if (min_rewrite_stripe_size > 0) {
@@ -2032,8 +2041,9 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    list<string> oid_list;
-    oid_list.push_back(object);
+    list<rgw_obj_key> oid_list;
+    rgw_obj_key key(object, object_version);
+    oid_list.push_back(key);
     ret = store->remove_objs_from_index(bucket, oid_list);
     if (ret < 0) {
       cerr << "ERROR: remove_obj_from_index() returned error: " << cpp_strerror(-ret) << std::endl;
