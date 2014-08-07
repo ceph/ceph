@@ -56,21 +56,21 @@ Action::ptr Action::read_from(Deser &d) {
   }
   DummyAction dummy(ionum, thread_id, num_successors, num_completion_successors, deps);
   switch (type) {
-  case 0:
+  case IO_START_THREAD:
     return StartThreadAction::read_from(dummy, d);
-  case 1:
+  case IO_STOP_THREAD:
     return StopThreadAction::read_from(dummy, d);
-  case 2:
+  case IO_READ:
     return ReadAction::read_from(dummy, d);
-  case 3:
+  case IO_WRITE:
     return WriteAction::read_from(dummy, d);
-  case 4:
+  case IO_ASYNC_READ:
     return AioReadAction::read_from(dummy, d);
-  case 5:
+  case IO_ASYNC_WRITE:
     return AioWriteAction::read_from(dummy, d);
-  case 6:
+  case IO_OPEN_IMAGE:
     return OpenImageAction::read_from(dummy, d);
-  case 7:
+  case IO_CLOSE_IMAGE:
     return CloseImageAction::read_from(dummy, d);
   default:
     cerr << "Invalid action type: " << type << std::endl;
