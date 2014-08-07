@@ -121,6 +121,7 @@ namespace librbd {
     info.obj_size = 1ULL << obj_order;
     info.num_objs = rbd_howmany(info.size, ictx->get_object_size());
     info.order = obj_order;
+    info.flags = ictx->get_flags();
     memcpy(&info.block_name_prefix, ictx->object_prefix.c_str(),
 	   min((size_t)RBD_MAX_BLOCK_NAME_SIZE,
 	       ictx->object_prefix.length() + 1));
@@ -1220,6 +1221,11 @@ reprotect_and_return_err:
     RWLock::RLocker l(ictx->md_lock);
     RWLock::RLocker l2(ictx->snap_lock);
     return ictx->get_features(ictx->snap_id, features);
+  }
+
+  int get_flags(ImageCtx *ictx, uint64_t *flags)
+  {
+    return ictx->get_flags();
   }
 
   int get_overlap(ImageCtx *ictx, uint64_t *overlap)

@@ -429,6 +429,11 @@ namespace librbd {
     return 0;
   }
 
+  uint64_t ImageCtx::get_flags() const
+  {
+    return flags;
+  }
+
   int64_t ImageCtx::get_parent_pool_id(snap_t in_snap_id) const
   {
     if (in_snap_id == CEPH_NOSNAP) {
@@ -674,7 +679,7 @@ namespace librbd {
   {
     Mutex::Locker l(state_lock);
 
-    if (image->flags & LIBRBD_CREATE_SHARED) {
+    if (image->flags & LIBRBD_CREATE_NONSHARED) {
       enable = true;
 
       bufferlist index_bl;

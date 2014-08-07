@@ -57,7 +57,7 @@ public:
     if (features & RBD_FEATURE_IMAGEINDEX) {
       cout << "using new format with image index!" << std::endl;
       return rbd.create4(ioctx, name, size, features, order, 0, 0,
-                         LIBRBD_CREATE_SHARED);
+                         LIBRBD_CREATE_NONSHARED);
     } else if (features & RBD_FEATURE_LAYERING) {
       cout << "using new format!" << std::endl;
       return rbd.create2(ioctx, name, size, features, order);
@@ -77,7 +77,7 @@ public:
     if (features & RBD_FEATURE_IMAGEINDEX) {
       cout << "using new format with image index!" << std::endl;
       return rbd_create4(ioctx, name, size, features, order, 0, 0,
-                         LIBRBD_CREATE_SHARED);
+                         LIBRBD_CREATE_NONSHARED);
     } else if (features & RBD_FEATURE_LAYERING) {
       cout << "using new format!" << std::endl;
       return rbd_create2(ioctx, name, size, features, order);

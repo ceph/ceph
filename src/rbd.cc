@@ -150,7 +150,8 @@ void usage()
 "  --no-progress                      do not show progress for long-running commands\n"
 "  -o, --options <map-options>        options to use when mapping an image\n"
 "  --read-only                        set device readonly when mapping image\n"
-"  --allow-shrink                     allow shrinking of an image when resizing\n";
+"  --allow-shrink                     allow shrinking of an image when resizing\n"
+"  --single-client                    this image is only used by one client(performance hint)\n";
 }
 
 static string feature_str(uint64_t feature)
@@ -160,6 +161,8 @@ static string feature_str(uint64_t feature)
     return "layering";
   case RBD_FEATURE_STRIPINGV2:
     return "striping";
+  case RBD_FEATURE_IMAGEINDEX:
+    return "imageindex";
   default:
     return "";
   }
@@ -169,7 +172,7 @@ static string features_str(uint64_t features)
 {
   string s = "";
 
-  for (uint64_t feature = 1; feature <= RBD_FEATURE_STRIPINGV2;
+  for (uint64_t feature = 1; feature <= RBD_FEATURE_IMAGEINDEX;
        feature <<= 1) {
     if (feature & features) {
       if (s.size())
@@ -183,9 +186,44 @@ static string features_str(uint64_t features)
 static void format_features(Formatter *f, uint64_t features)
 {
   f->open_array_section("features");
-  for (uint64_t feature = 1; feature <= RBD_FEATURE_STRIPINGV2;
+  for (uint64_t feature = 1; feature <= RBD_FEATURE_IMAGEINDEX;
        feature <<= 1) {
     f->dump_string("feature", feature_str(feature));
+  }
+  f->close_section();
+}
+
+static string flag_str(uint64_t flag)
+{
+  switch (flag) {
+  case LIBRBD_CREATE_NONSHARED:
+    return "singleclient";
+  default:
+    return "";
+  }
+}
+
+static string flags_str(uint64_t flags)
+{
+  string s = "";
+
+  for (uint64_t flag = 1; flag <= LIBRBD_CREATE_NONSHARED;
+       flag <<= 1) {
+    if (flag & flags) {
+      if (s.size())
+	s += ", ";
+      s += flag_str(flag);
+    }
+  }
+  return s;
+}
+
+static void format_flags(Formatter *f, uint64_t flags)
+{
+  f->open_array_section("flags");
+  for (uint64_t flag = 1; flag <= LIBRBD_CREATE_NONSHARED;
+       flag <<= 1) {
+    f->dump_string("flag", flag_str(flag));
   }
   f->close_section();
 }
@@ -406,9 +444,9 @@ static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
 }
 
 static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
-		     const char *imgname, uint64_t size, int *order,
-		     int format, uint64_t features,
-		     uint64_t stripe_unit, uint64_t stripe_count)
+                     const char *imgname, uint64_t size, int *order,
+                     int format, uint64_t features,
+                     uint64_t stripe_unit, uint64_t stripe_count, uint64_t flags)
 {
   int r;
 
@@ -417,6 +455,12 @@ static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     if ((stripe_unit || stripe_count) &&
 	(stripe_unit != (1ull << *order) && stripe_count != 1)) {
       cerr << "non-default striping not allowed with format 1; use --format 2"
+	   << std::endl;
+      return -EINVAL;
+    }
+    
+    if (flags) {
+      cerr << "non-default flags not allowed with format 2; use --format 2"
 	   << std::endl;
       return -EINVAL;
     }
@@ -429,8 +473,11 @@ static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 	(stripe_unit != (1ull << *order) && stripe_count != 1)) {
       features |= RBD_FEATURE_STRIPINGV2;
     }
-    r = rbd.create3(io_ctx, imgname, size, features, order,
-		    stripe_unit, stripe_count);
+    if (flags & LIBRBD_CREATE_NONSHARED)
+      features |= RBD_FEATURE_IMAGEINDEX;
+
+    r = rbd.create4(io_ctx, imgname, size, features, order,
+                    stripe_unit, stripe_count, flags);
   }
   if (r < 0)
     return r;
@@ -532,10 +579,13 @@ static int do_show_info(const char *imgname, librbd::Image& image,
   }
 
   if (!old_format) {
-    if (f)
+    if (f) {
       format_features(f, features);
-    else
+      format_flags(f, info.flags);
+    } else {
       cout << "\tfeatures: " << features_str(features) << std::endl;
+      cout << "\tflags: " << flags_str(info.flags) << std::endl;
+    }
   }
 
   // snapshot info, if present
@@ -1289,8 +1339,9 @@ done_img:
 }
 
 static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
-		     const char *imgname, int *order, const char *path,
-		     int format, uint64_t features, uint64_t size)
+                     const char *imgname, int *order, const char *path,
+                     int format, uint64_t features, uint64_t size,
+                     uint64_t flags)
 {
   int fd, r;
   struct stat stat_buf;
@@ -1346,7 +1397,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
       size = (uint64_t) bdev_size;
     }
   }
-  r = do_create(rbd, io_ctx, imgname, size, order, format, features, 0, 0);
+  r = do_create(rbd, io_ctx, imgname, size, order, format, features, 0, 0, flags);
   if (r < 0) {
     cerr << "rbd: image creation failed" << std::endl;
     goto done;
@@ -1980,6 +2031,7 @@ int main(int argc, const char **argv)
     *lock_tag = NULL, *output_format = "plain",
     *fromsnapname = NULL;
   bool lflag = false;
+  uint64_t flags = LIBRBD_CREATE_NOFLAG;
   int pretty_format = 0;
   long long stripe_unit = 0, stripe_count = 0;
   long long bench_io_size = 4096, bench_io_threads = 16, bench_bytes = 1 << 30;
@@ -2035,6 +2087,8 @@ int main(int argc, const char **argv)
       lflag = true;
     } else if (ceph_argparse_withlonglong(args, i, &stripe_unit, &err, "--stripe-unit", (char*)NULL)) {
     } else if (ceph_argparse_withlonglong(args, i, &stripe_count, &err, "--stripe-count", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--single-client", (char*)NULL)) {
+      flags |= LIBRBD_CREATE_NONSHARED;
     } else if (ceph_argparse_withint(args, i, &order, &err, "--order", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << "rbd: " << err.str() << std::endl;
@@ -2450,7 +2504,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       return EINVAL;
     }
     r = do_create(rbd, io_ctx, imgname, size, &order, format, features,
-		  stripe_unit, stripe_count);
+		  stripe_unit, stripe_count, flags);
     if (r < 0) {
       cerr << "rbd: create error: " << cpp_strerror(-r) << std::endl;
       return -r;
@@ -2676,7 +2730,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       return EINVAL;
     }
     r = do_import(rbd, dest_io_ctx, destname, &order, path,
-		  format, features, size);
+                  format, features, size, flags);
     if (r < 0) {
       cerr << "rbd: import failed: " << cpp_strerror(-r) << std::endl;
       return -r;

@@ -64,7 +64,7 @@ typedef struct {
 /** @cond TODO_enums_not_yet_in_asphyxiate */
 enum {
   LIBRBD_CREATE_NOFLAG             = 0,
-  LIBRBD_CREATE_SHARED             = 1,
+  LIBRBD_CREATE_NONSHARED          = 1,
 };
 /** @endcond */
 /** @} */
@@ -75,6 +75,7 @@ typedef struct {
   uint64_t num_objs;
   int order;
   char block_name_prefix[RBD_MAX_BLOCK_NAME_SIZE];
+  uint64_t flags;
   int64_t parent_pool;			      /* deprecated */
   char parent_name[RBD_MAX_IMAGE_NAME_SIZE];  /* deprecated */
 } rbd_image_info_t;

@@ -119,6 +119,7 @@ namespace librbd {
     uint64_t get_stripe_unit() const;
     uint64_t get_stripe_count() const;
     uint64_t get_stripe_period() const;
+    uint64_t get_flags() const;
 
     void add_snap(std::string in_snap_name, librados::snap_t id,
 		  uint64_t in_size, uint64_t features,
@@ -154,7 +155,7 @@ namespace librbd {
     //
     // ImageIndex is aimed to hold each object's location info which avoid
     // extra checking for none-existing object. It's only used when image flags
-    // exists LIBRBD_CREATE_SHARED. Otherwise, ImageIndex will become gawp and
+    // exists LIBRBD_CREATE_NONSHARED. Otherwise, ImageIndex will become gawp and
     // has no effect.
     //
     // Each object has three state:
