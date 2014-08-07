@@ -60,6 +60,7 @@ class CephContext;
 class Context;
 class PerfCounters;
 class Finisher;
+class C_OnFinisher;
 
 typedef __u8 stream_format_t;
 
@@ -259,21 +260,21 @@ private:
 
   // header
   utime_t last_wrote_head;
-  void _finish_write_head(int r, Header &wrote, Context *oncommit);
+  void _finish_write_head(int r, Header &wrote, C_OnFinisher *oncommit);
   class C_WriteHead;
   friend class C_WriteHead;
 
   void _reread_head(Context *onfinish);
   void _set_layout(ceph_file_layout const *l);
   list<Context*> waitfor_recover;
-  void read_head(Context *on_finish, bufferlist *bl);
+  void _read_head(Context *on_finish, bufferlist *bl);
   void _finish_read_head(int r, bufferlist& bl);
   void _finish_reread_head(int r, bufferlist& bl, Context *finish);
   void _probe(Context *finish, uint64_t *end);
   void _finish_probe_end(int r, uint64_t end);
-  void _reprobe(Context *onfinish);
-  void _finish_reprobe(int r, uint64_t end, Context *onfinish);
-  void _finish_reread_head_and_probe(int r, Context *onfinish);
+  void _reprobe(C_OnFinisher *onfinish);
+  void _finish_reprobe(int r, uint64_t end, C_OnFinisher *onfinish);
+  void _finish_reread_head_and_probe(int r, C_OnFinisher *onfinish);
   class C_ReadHead;
   friend class C_ReadHead;
   class C_ProbeEnd;
@@ -296,9 +297,11 @@ private:
   bool waiting_for_zero;
   interval_set<uint64_t> pending_zero;  // non-contig bits we've zeroed
   std::set<uint64_t> pending_safe;
+  // XXX this would be C_OnFinisher reather than Context if it weren't for use of C_RetryRead here
+  // FIXME but oh dear, these are called back inside lock and RetryRead takes the lock!!!
   std::map<uint64_t, std::list<Context*> > waitfor_safe; // when safe through given offset
 
-  void _flush(Context *onsafe);
+  void _flush(C_OnFinisher *onsafe);
   void _do_flush(unsigned amount=0);
   void _finish_flush(int r, uint64_t start, utime_t stamp);
   class C_Flush;
@@ -316,9 +319,8 @@ private:
   uint64_t temp_fetch_len;
 
   // for wait_for_readable()
-  Context    *on_readable;
-
-  Context    *on_write_error;
+  C_OnFinisher    *on_readable;
+  C_OnFinisher    *on_write_error;
 
   void _finish_read(int r, uint64_t offset, bufferlist &bl); // read completion callback
   void _finish_retry_read(int r);
@@ -362,9 +364,11 @@ private:
 
   bool _is_readable();
 
-  void _finish_erase(int data_result, Context *completion);
+  void _finish_erase(int data_result, C_OnFinisher *completion);
   class C_EraseFinish;
   friend class C_EraseFinish;
+
+  C_OnFinisher *wrap_finisher(Context *c);
 
 public:
   Journaler(inodeno_t ino_, int64_t pool, const char *mag, Objecter *obj, PerfCounters *l, int lkey, SafeTimer *tim, Finisher *f=NULL) : 
@@ -460,25 +464,8 @@ public:
     assert(!readonly);
     _issue_prezero();
   }
-  /**
-   * set write error callback
-   *
-   * Set a callback/context to trigger if we get a write error from
-   * the objecter.  This may be from an explicit request (e.g., flush)
-   * or something async the journaler did on its own (e.g., journal
-   * header update).
-   *
-   * It is only used once; if the caller continues to use the
-   * Journaler and wants to hear about errors, it needs to reset the
-   * error_handler.
-   *
-   * @param c callback/context to trigger on error
-   */
-  void set_write_error_handler(Context *c) {
-    Mutex::Locker l(lock);
-    assert(!on_write_error);
-    on_write_error = c;
-  }
+
+  void set_write_error_handler(Context *c);
 
   // Synchronous getters
   // ===================
