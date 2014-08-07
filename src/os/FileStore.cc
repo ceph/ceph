@@ -4065,20 +4065,30 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
   set<string> omap_remove;
   map<string, bufferptr> inline_set;
   map<string, bufferptr> inline_to_set;
+  bool incomplete_inline = false;
   FDRef fd;
   int r = lfn_open(cid, oid, false, &fd);
   if (r < 0) {
     goto out;
   }
   r = _fgetattrs(**fd, inline_set, false);
+  incomplete_inline = (r == -E2BIG);
   assert(!m_filestore_fail_eio || r != -EIO);
-  dout(15) << "setattrs " << cid << "/" << oid << dendl;
+  dout(15) << "setattrs " << cid << "/" << oid
+	   << (incomplete_inline ? " (incomplete_inline, forcing omap)" : "")
+	   << dendl;
   r = 0;
   for (map<string,bufferptr>::iterator p = aset.begin();
        p != aset.end();
        ++p) {
     char n[CHAIN_XATTR_MAX_NAME_LEN];
     get_attrname(p->first.c_str(), n, CHAIN_XATTR_MAX_NAME_LEN);
+
+    if (incomplete_inline) {
+      chain_fremovexattr(**fd, n); // ignore any error
+      omap_set[p->first].push_back(p->second);
+      continue;
+    }
 
     if (p->second.length() > g_conf->filestore_max_inline_xattr_size) {
 	if (inline_set.count(p->first)) {
