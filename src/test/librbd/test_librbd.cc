@@ -55,6 +55,7 @@ public:
                       uint64_t size, int *order) {
     uint64_t features = GetParam();
     if (features & RBD_FEATURE_IMAGEINDEX) {
+      cout << "using new format with image index!" << std::endl;
       return rbd.create4(ioctx, name, size, features, order, 0, 0,
                          LIBRBD_CREATE_SHARED);
     } else if (features & RBD_FEATURE_LAYERING) {
@@ -74,6 +75,7 @@ public:
   int create_image_full(rados_ioctx_t ioctx, const char *name,
                         uint64_t size, int *order, uint64_t features) {
     if (features & RBD_FEATURE_IMAGEINDEX) {
+      cout << "using new format with image index!" << std::endl;
       return rbd_create4(ioctx, name, size, features, order, 0, 0,
                          LIBRBD_CREATE_SHARED);
     } else if (features & RBD_FEATURE_LAYERING) {

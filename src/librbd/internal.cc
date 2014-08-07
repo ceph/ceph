@@ -1799,6 +1799,9 @@ reprotect_and_return_err:
 	  } while (r == -ENOENT);
 	}
 
+        // Keep sync with image size!
+        ictx->image_index.resize_image_index(ictx->get_num_objects());
+
 	for (size_t i = 0; i < new_snapc.snaps.size(); ++i) {
 	  uint64_t features = ictx->old_format ? 0 : snap_features[i];
 	  parent_info parent;

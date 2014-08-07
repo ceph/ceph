@@ -277,6 +277,8 @@ namespace librbd {
       data_ctx.snap_set_read(snap_id);
       return 0;
     }
+
+    image_index.load();
     return -ENOENT;
   }
 
@@ -286,6 +288,8 @@ namespace librbd {
     snap_name = "";
     snap_exists = true;
     data_ctx.snap_set_read(snap_id);
+
+    image_index.load();
   }
 
   snap_t ImageCtx::get_snap_id(string in_snap_name) const
@@ -670,7 +674,6 @@ namespace librbd {
   {
     Mutex::Locker l(state_lock);
 
-    uint64_t current_num = image->get_num_objects();
     if (image->flags & LIBRBD_CREATE_SHARED) {
       enable = true;
 
@@ -678,31 +681,18 @@ namespace librbd {
       int r = cls_client::get_image_index(&image->md_ctx, image->header_oid,
                                           image->snap_id, &index_bl);
       if (r < 0) {
-        // no problem
         lderr(cct) << "error reading image index metadata: "
                     << cpp_strerror(r) << dendl;
-        r = 0;
-      } else {
+        return r;
+      } else if (index_bl.length()) {
         bufferlist::iterator iter = index_bl.begin();
-        decode(iter);
-      }
-
-      if (num_obj == state_map.size() && current_num != num_obj) {
-        ldout(cct, 10) << __func__ << " don't need to change, size is "
-                      << num_obj << dendl;
-        return 0;
-      } else if (num_obj) {
-        ldout(cct, 1) << __func__ << " restore origin state failed, "
-                      << "num_obj is " << num_obj << " the size of state_map is "
-                      << state_map.size() << ", current obj number is "
-                      << current_num << ". Try to rebuld."<< dendl;
+        try {
+          decode(iter);
+        } catch (const buffer::error &err) {
+          lderr(cct) << "decode image index metadata failed: " << dendl;
+        }
       }
     }
-
-    num_obj = current_num;
-    state_map.resize(num_obj);
-    for (uint64_t i = 0; i < num_obj; ++i)
-      state_map[i] = OBJ_UNKNOWN;
 
     return 0;
   }

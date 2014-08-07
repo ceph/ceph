@@ -231,13 +231,14 @@ namespace librbd {
 
       void resize_image_index(uint64_t size) {
         Mutex::Locker l(state_lock);
+        uint64_t origin = num_obj;
         state_map.resize(size);
         num_obj = size;
         if (!enable)
           return ;
 
-        for (uint64_t i = num_obj; i < size; i++) {
-          state_map[i] = OBJ_LOCAL;
+        for (uint64_t i = origin; i < size; i++) {
+          state_map[i] = OBJ_UNKNOWN;
         }
       }
 
@@ -254,14 +255,17 @@ namespace librbd {
       }
 
       bool is_unknown(uint64_t objno) {
+        assert(objno < num_obj);
         Mutex::Locker l(state_lock);
         return state_map[objno] == OBJ_UNKNOWN;
       }
       bool is_local(uint64_t objno) {
+        assert(objno < num_obj);
         Mutex::Locker l(state_lock);
         return state_map[objno] == OBJ_LOCAL;
       }
       bool is_parent(uint64_t objno) {
+        assert(objno < num_obj);
         Mutex::Locker l(state_lock);
         return state_map[objno] == OBJ_PARENT;
       }
@@ -283,11 +287,13 @@ namespace librbd {
           state_map[i] = OBJ_LOCAL;
       }
       void mark_local(uint64_t objno) {
+        assert(objno < num_obj);
         Mutex::Locker l(state_lock);
         if (enable)
           state_map[objno] = OBJ_LOCAL;
       }
       void mark_parent(uint64_t objno) {
+        assert(objno < num_obj);
         Mutex::Locker l(state_lock);
         if (enable)
           state_map[objno] = OBJ_PARENT;
