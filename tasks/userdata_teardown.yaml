@@ -1,0 +1,11 @@
+- |
+  #!/bin/bash
+  cp /var/log/cloud-init-output.log /mnt/log
+
+- |
+  #!/bin/bash
+  umount /mnt/log
+
+- |
+  #!/bin/bash
+  shutdown -h -P now
