@@ -49,6 +49,18 @@
 #define dout_prefix *_dout << "mds." << mdcache->mds->get_nodeid() << ".cache.ino(" << inode.ino << ") "
 
 
+class CInodeIOContext : public MDSIOContextBase
+{
+protected:
+  CInode *in;
+  MDS *get_mds() {return in->mdcache->mds;}
+public:
+  CInodeIOContext(CInode *in_) : in(in_) {
+    assert(in != NULL);
+  }
+};
+
+
 boost::pool<> CInode::pool(sizeof(CInode));
 boost::pool<> Capability::pool(sizeof(Capability));
 
@@ -885,13 +897,11 @@ void CInode::mark_clean()
 // per-inode storage
 // (currently for root inode only)
 
-struct C_IO_Inode_Stored : public Context {
-  CInode *in;
+struct C_IO_Inode_Stored : public CInodeIOContext {
   version_t version;
   Context *fin;
-  C_IO_Inode_Stored(CInode *i, version_t v, Context *f) : in(i), version(v), fin(f) {}
+  C_IO_Inode_Stored(CInode *i, version_t v, Context *f) : CInodeIOContext(i), version(v), fin(f) {}
   void finish(int r) {
-    Mutex::Locker l(in->mdcache->mds->mds_lock);
     assert(r == 0);
     in->_stored(version, fin);
   }
@@ -940,13 +950,11 @@ void CInode::_stored(version_t v, Context *fin)
   fin->complete(0);
 }
 
-struct C_IO_Inode_Fetched : public Context {
-  CInode *in;
+struct C_IO_Inode_Fetched : public CInodeIOContext {
   bufferlist bl, bl2;
   Context *fin;
-  C_IO_Inode_Fetched(CInode *i, Context *f) : in(i), fin(f) {}
+  C_IO_Inode_Fetched(CInode *i, Context *f) : CInodeIOContext(i), fin(f) {}
   void finish(int r) {
-    Mutex::Locker l(in->mdcache->mds->mds_lock);
     in->_fetched(bl, bl2, fin);
   }
 };
@@ -1021,13 +1029,11 @@ void CInode::build_backtrace(int64_t pool, inode_backtrace_t& bt)
   }
 }
 
-struct C_IO_Inode_StoredBacktrace : public Context {
-  CInode *in;
+struct C_IO_Inode_StoredBacktrace : public CInodeIOContext {
   version_t version;
   Context *fin;
-  C_IO_Inode_StoredBacktrace(CInode *i, version_t v, Context *f) : in(i), version(v), fin(f) {}
+  C_IO_Inode_StoredBacktrace(CInode *i, version_t v, Context *f) : CInodeIOContext(i), version(v), fin(f) {}
   void finish(int r) {
-    Mutex::Locker l(in->mdcache->mds->mds_lock);
     assert(r == 0);
     in->_stored_backtrace(version, fin);
   }
@@ -1693,15 +1699,18 @@ void CInode::start_scatter(ScatterLock *lock)
 }
 
 
-struct C_Inode_FragUpdate : public MDSInternalContext {
+class C_Inode_FragUpdate : public MDSInternalContextBase {
+protected:
   CInode *in;
   CDir *dir;
   MutationRef mut;
-
-  C_Inode_FragUpdate(CInode *i, CDir *d, MutationRef& m) : MDSInternalContext(i->mdcache->mds), in(i), dir(d), mut(m) {}
+  MDS *get_mds() {return in->mdcache->mds;}
   void finish(int r) {
     in->_finish_frag_update(dir, mut);
   }    
+
+public:
+  C_Inode_FragUpdate(CInode *i, CDir *d, MutationRef& m) : in(i), dir(d), mut(m) {}
 };
 
 void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,

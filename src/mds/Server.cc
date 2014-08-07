@@ -74,7 +74,7 @@ using namespace std;
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".server "
 
 
-class C_ServerContext : public MDSInternalContextBase {
+class ServerContext : public MDSInternalContextBase {
   protected:
   Server *server;
   MDS *get_mds()
@@ -83,7 +83,7 @@ class C_ServerContext : public MDSInternalContextBase {
   }
 
   public:
-  C_ServerContext(Server *s) : server(s) {
+  ServerContext(Server *s) : server(s) {
     assert(server != NULL);
   }
 };
@@ -441,12 +441,12 @@ void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm,
   mds->sessionmap.version++;
 }
 
-class C_MDS_TerminatedSessions : public C_ServerContext {
+class C_MDS_TerminatedSessions : public ServerContext {
   void finish(int r) {
     server->terminating_sessions = false;
   }
   public:
-  C_MDS_TerminatedSessions(Server *s) : C_ServerContext(s) {}
+  C_MDS_TerminatedSessions(Server *s) : ServerContext(s) {}
 };
 
 void Server::terminate_sessions()
@@ -2119,10 +2119,10 @@ CDir *Server::traverse_to_auth_dir(MDRequestRef& mdr, vector<CDentry*> &trace, f
   return dir;
 }
 
-class C_MDS_TryFindInode : public C_ServerContext {
+class C_MDS_TryFindInode : public ServerContext {
   MDRequestRef mdr;
 public:
-  C_MDS_TryFindInode(Server *s, MDRequestRef& r) : C_ServerContext(s), mdr(r) {}
+  C_MDS_TryFindInode(Server *s, MDRequestRef& r) : ServerContext(s), mdr(r) {}
   virtual void finish(int r) {
     if (r == -ESTALE) // :( find_ino_peers failed
       server->reply_request(mdr, r);
@@ -2425,9 +2425,9 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
 		is_lookup ? mdr->dn[0].back() : 0);
 }
 
-struct C_MDS_LookupIno2 : public C_ServerContext {
+struct C_MDS_LookupIno2 : public ServerContext {
   MDRequestRef mdr;
-  C_MDS_LookupIno2(Server *s, MDRequestRef& r) : C_ServerContext(s), mdr(r) {}
+  C_MDS_LookupIno2(Server *s, MDRequestRef& r) : ServerContext(s), mdr(r) {}
   void finish(int r) {
     server->_lookup_ino_2(mdr, r);
   }
@@ -4504,24 +4504,24 @@ void Server::_link_remote_finish(MDRequestRef& mdr, bool inc,
 
 // remote linking/unlinking
 
-class C_MDS_SlaveLinkPrep : public C_ServerContext {
+class C_MDS_SlaveLinkPrep : public ServerContext {
   MDRequestRef mdr;
   CInode *targeti;
 public:
   C_MDS_SlaveLinkPrep(Server *s, MDRequestRef& r, CInode *t) :
-    C_ServerContext(s), mdr(r), targeti(t) { }
+    ServerContext(s), mdr(r), targeti(t) { }
   void finish(int r) {
     assert(r == 0);
     server->_logged_slave_link(mdr, targeti);
   }
 };
 
-class C_MDS_SlaveLinkCommit : public C_ServerContext {
+class C_MDS_SlaveLinkCommit : public ServerContext {
   MDRequestRef mdr;
   CInode *targeti;
 public:
   C_MDS_SlaveLinkCommit(Server *s, MDRequestRef& r, CInode *t) :
-    C_ServerContext(s), mdr(r), targeti(t) { }
+    ServerContext(s), mdr(r), targeti(t) { }
   void finish(int r) {
     server->_commit_slave_link(mdr, r, targeti);
   }
@@ -4627,9 +4627,9 @@ void Server::_logged_slave_link(MDRequestRef& mdr, CInode *targeti)
 }
 
 
-struct C_MDS_CommittedSlave : public C_ServerContext {
+struct C_MDS_CommittedSlave : public ServerContext {
   MDRequestRef mdr;
-  C_MDS_CommittedSlave(Server *s, MDRequestRef& m) : C_ServerContext(s), mdr(m) {}
+  C_MDS_CommittedSlave(Server *s, MDRequestRef& m) : ServerContext(s), mdr(m) {}
   void finish(int r) {
     server->_committed_slave(mdr);
   }
@@ -4669,10 +4669,10 @@ void Server::_committed_slave(MDRequestRef& mdr)
   mds->mdcache->request_finish(mdr);
 }
 
-struct C_MDS_LoggedLinkRollback : public C_ServerContext {
+struct C_MDS_LoggedLinkRollback : public ServerContext {
   MutationRef mut;
   MDRequestRef mdr;
-  C_MDS_LoggedLinkRollback(Server *s, MutationRef& m, MDRequestRef& r) : C_ServerContext(s), mut(m), mdr(r) {}
+  C_MDS_LoggedLinkRollback(Server *s, MutationRef& m, MDRequestRef& r) : ServerContext(s), mut(m), mdr(r) {}
   void finish(int r) {
     server->_link_rollback_finish(mut, mdr);
   }
@@ -5092,21 +5092,20 @@ bool Server::_rmdir_prepare_witness(MDRequestRef& mdr, int who, CDentry *dn, CDe
   return true;
 }
 
-struct C_MDS_SlaveRmdirPrep : public C_ServerContext {
+struct C_MDS_SlaveRmdirPrep : public ServerContext {
   MDRequestRef mdr;
   CDentry *dn, *straydn;
   C_MDS_SlaveRmdirPrep(Server *s, MDRequestRef& r, CDentry *d, CDentry *st)
-    : C_ServerContext(s), mdr(r), dn(d), straydn(st) {}
+    : ServerContext(s), mdr(r), dn(d), straydn(st) {}
   void finish(int r) {
     server->_logged_slave_rmdir(mdr, dn, straydn);
   }
 };
 
-struct C_MDS_SlaveRmdirCommit : public Context {
-  Server *server;
+struct C_MDS_SlaveRmdirCommit : public ServerContext {
   MDRequestRef mdr;
   C_MDS_SlaveRmdirCommit(Server *s, MDRequestRef& r)
-    : server(s), mdr(r) { }
+    : ServerContext(s), mdr(r) { }
   void finish(int r) {
     server->_commit_slave_rmdir(mdr, r);
   }
@@ -5270,13 +5269,13 @@ void Server::_commit_slave_rmdir(MDRequestRef& mdr, int r)
   }
 }
 
-struct C_MDS_LoggedRmdirRollback : public C_ServerContext {
+struct C_MDS_LoggedRmdirRollback : public ServerContext {
   MDRequestRef mdr;
   metareqid_t reqid;
   CDentry *dn;
   CDentry *straydn;
   C_MDS_LoggedRmdirRollback(Server *s, MDRequestRef& m, metareqid_t mr, CDentry *d, CDentry *st)
-    : C_ServerContext(s), mdr(m), reqid(mr), dn(d), straydn(st) {}
+    : ServerContext(s), mdr(m), reqid(mr), dn(d), straydn(st) {}
   void finish(int r) {
     server->_rmdir_rollback_finish(mdr, reqid, dn, straydn);
   }
@@ -6435,33 +6434,33 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
 // ------------
 // SLAVE
 
-class C_MDS_SlaveRenamePrep : public C_ServerContext {
+class C_MDS_SlaveRenamePrep : public ServerContext {
   MDRequestRef mdr;
   CDentry *srcdn, *destdn, *straydn;
 public:
   C_MDS_SlaveRenamePrep(Server *s, MDRequestRef& m, CDentry *sr, CDentry *de, CDentry *st) :
-    C_ServerContext(s), mdr(m), srcdn(sr), destdn(de), straydn(st) {}
+    ServerContext(s), mdr(m), srcdn(sr), destdn(de), straydn(st) {}
   void finish(int r) {
     server->_logged_slave_rename(mdr, srcdn, destdn, straydn);
   }
 };
 
-class C_MDS_SlaveRenameCommit : public C_ServerContext {
+class C_MDS_SlaveRenameCommit : public ServerContext {
   MDRequestRef mdr;
   CDentry *srcdn, *destdn, *straydn;
 public:
   C_MDS_SlaveRenameCommit(Server *s, MDRequestRef& m, CDentry *sr, CDentry *de, CDentry *st) :
-    C_ServerContext(s), mdr(m), srcdn(sr), destdn(de), straydn(st) {}
+    ServerContext(s), mdr(m), srcdn(sr), destdn(de), straydn(st) {}
   void finish(int r) {
     server->_commit_slave_rename(mdr, r, srcdn, destdn, straydn);
   }
 };
 
-class C_MDS_SlaveRenameSessionsFlushed : public C_ServerContext {
+class C_MDS_SlaveRenameSessionsFlushed : public ServerContext {
   MDRequestRef mdr;
 public:
   C_MDS_SlaveRenameSessionsFlushed(Server *s, MDRequestRef& r) :
-    C_ServerContext(s), mdr(r) {}
+    ServerContext(s), mdr(r) {}
   void finish(int r) {
     server->_slave_rename_sessions_flushed(mdr);
   }
@@ -6871,7 +6870,7 @@ void _rollback_repair_dir(MutationRef& mut, CDir *dir, rename_rollback::drec &r,
   mut->add_updated_lock(&dir->get_inode()->nestlock);
 }
 
-struct C_MDS_LoggedRenameRollback : public C_ServerContext {
+struct C_MDS_LoggedRenameRollback : public ServerContext {
   MutationRef mut;
   MDRequestRef mdr;
   CDentry *srcdn;
@@ -6882,7 +6881,7 @@ struct C_MDS_LoggedRenameRollback : public C_ServerContext {
   C_MDS_LoggedRenameRollback(Server *s, MutationRef& m, MDRequestRef& r,
 			     CDentry *sd, version_t pv, CDentry *dd,
 			     CDentry *st, bool f) :
-    C_ServerContext(s), mut(m), mdr(r), srcdn(sd), srcdnpv(pv), destdn(dd),
+    ServerContext(s), mut(m), mdr(r), srcdn(sd), srcdnpv(pv), destdn(dd),
     straydn(st), finish_mdr(f) {}
   void finish(int r) {
     server->_rename_rollback_finish(mut, mdr, srcdn, srcdnpv,

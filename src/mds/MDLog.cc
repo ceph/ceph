@@ -130,7 +130,9 @@ void MDLog::create(MDSInternalContextBase *c)
   dout(5) << "create empty log" << dendl;
 
   C_GatherBuilder gather(g_ceph_context);
-  gather.set_finisher(new C_IO_Wrapper(mds, c));
+  // This requires an OnFinisher wrapper because Journaler will call back the completion for write_head inside its own lock
+  // XXX but should maybe that be handled inside Journaler?
+  gather.set_finisher(new C_OnFinisher(new C_IO_Wrapper(mds, c), &(mds->finisher)));
 
   // The inode of the default Journaler we will create
   ino = MDS_INO_LOG_OFFSET + mds->get_nodeid();
