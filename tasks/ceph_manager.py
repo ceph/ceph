@@ -8,9 +8,9 @@ import gevent
 import json
 import threading
 from teuthology import misc as teuthology
-from teuthology.task import ceph as ceph_task
-from teuthology.task.scrub import Scrubber
-from teuthology.task_util.rados import cmd_erasure_code_profile
+from . import ceph as ceph_task
+from tasks.scrub import Scrubber
+from util.rados import cmd_erasure_code_profile
 
 class Thrasher:
     """

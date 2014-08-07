@@ -6,9 +6,9 @@ import os
 import logging
 
 from teuthology import misc
-from ...orchestra import run
+from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError
-from teuthology.task.cephfs.mount import CephFSMount
+from .mount import CephFSMount
 
 log = logging.getLogger(__name__)
 

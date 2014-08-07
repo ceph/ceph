@@ -7,8 +7,8 @@ import sys
 import time
 
 from teuthology import misc as teuthology
-from ..orchestra import run
-from ..orchestra.daemon import DaemonGroup
+from teuthology.orchestra import run
+from teuthology.orchestra.daemon import DaemonGroup
 
 log = logging.getLogger(__name__)
 

@@ -2,7 +2,7 @@
 Force pg creation on all osds
 """
 from teuthology import misc as teuthology
-from ..orchestra import run
+from teuthology.orchestra import run
 import logging
 
 log = logging.getLogger(__name__)

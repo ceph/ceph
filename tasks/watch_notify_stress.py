@@ -5,7 +5,7 @@ import contextlib
 import logging
 import proc_thrasher
 
-from ..orchestra import run
+from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 

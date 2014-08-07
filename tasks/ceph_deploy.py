@@ -10,9 +10,9 @@ import logging
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
-from ..config import config as teuth_config
-import install as install_fn
-from ..orchestra import run
+from teuthology.config import config as teuth_config
+from teuthology.task import install as install_fn
+from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 

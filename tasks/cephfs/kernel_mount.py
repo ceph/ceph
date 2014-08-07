@@ -2,7 +2,7 @@ import logging
 import os
 
 from teuthology.orchestra import run
-from teuthology.task.cephfs.mount import CephFSMount
+from .mount import CephFSMount
 
 log = logging.getLogger(__name__)
 

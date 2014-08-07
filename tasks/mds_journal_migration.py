@@ -3,8 +3,8 @@ import contextlib
 import logging
 from teuthology import misc
 
-from teuthology.task.ceph import write_conf
-from teuthology.task.cephfs.filesystem import Filesystem
+from tasks.ceph import write_conf
+from cephfs.filesystem import Filesystem
 
 log = logging.getLogger(__name__)
 

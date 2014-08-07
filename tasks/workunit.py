@@ -8,7 +8,7 @@ import os
 from teuthology import misc
 from teuthology.orchestra.run import CommandFailedError
 from teuthology.parallel import parallel
-from ..orchestra import run
+from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 

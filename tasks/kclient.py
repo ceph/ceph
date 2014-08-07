@@ -5,7 +5,7 @@ import contextlib
 import logging
 
 from teuthology import misc
-from teuthology.task.cephfs.kernel_mount import KernelMount
+from cephfs.kernel_mount import KernelMount
 
 log = logging.getLogger(__name__)
 
