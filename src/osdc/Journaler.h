@@ -297,8 +297,6 @@ private:
   bool waiting_for_zero;
   interval_set<uint64_t> pending_zero;  // non-contig bits we've zeroed
   std::set<uint64_t> pending_safe;
-  // XXX this would be C_OnFinisher reather than Context if it weren't for use of C_RetryRead here
-  // FIXME but oh dear, these are called back inside lock and RetryRead takes the lock!!!
   std::map<uint64_t, std::list<Context*> > waitfor_safe; // when safe through given offset
 
   void _flush(C_OnFinisher *onsafe);
