@@ -40,6 +40,18 @@ struct dependency_d {
   }
 };
 
+// These are written to files, so don't change existing assignments.
+enum io_type {
+  IO_START_THREAD,
+  IO_STOP_THREAD,
+  IO_READ,
+  IO_WRITE,
+  IO_ASYNC_READ,
+  IO_ASYNC_WRITE,
+  IO_OPEN_IMAGE,
+  IO_CLOSE_IMAGE,
+};
+
 
 class PendingIO;
 
