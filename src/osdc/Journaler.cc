@@ -1156,13 +1156,6 @@ void Journaler::_finish_trim(int r, uint64_t to)
   assert(to <= trimming_pos);
   assert(to > trimmed_pos);
   trimmed_pos = to;
-
-  // finishers?
-  while (!waitfor_trim.empty() &&
-	 waitfor_trim.begin()->first <= trimmed_pos) {
-    finish_contexts(cct, waitfor_trim.begin()->second, 0);
-    waitfor_trim.erase(waitfor_trim.begin());
-  }
 }
 
 void Journaler::handle_write_error(int r)

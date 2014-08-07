@@ -334,7 +334,6 @@ private:
   uint64_t expire_pos;    // what we're allowed to trim to
   uint64_t trimming_pos;      // what we've requested to trim through
   uint64_t trimmed_pos;   // what has been trimmed
-  map<uint64_t, list<Context*> > waitfor_trim;
 
   void _finish_trim(int r, uint64_t to);
   class C_Trim;
