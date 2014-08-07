@@ -42,6 +42,32 @@
 
 
 
+class CDirContext : public MDSInternalContextBase
+{
+protected:
+  CDir *dir;
+  MDS* get_mds() {return dir->cache->mds;}
+
+public:
+  CDirContext(CDir *d) : dir(d) {
+    assert(dir != NULL);
+  }
+};
+
+
+class CDirIOContext : public MDSIOContextBase
+{
+protected:
+  CDir *dir;
+  MDS* get_mds() {return dir->cache->mds;}
+
+public:
+  CDirIOContext(CDir *d) : dir(d) {
+    assert(dir != NULL);
+  }
+};
+
+
 // PINS
 //int cdir_pins[CDIR_NUM_PINS] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
 
@@ -1263,11 +1289,10 @@ void CDir::mark_clean()
 }
 
 
-struct C_Dir_Dirty : public MDSInternalContext {
-  CDir *dir;
+struct C_Dir_Dirty : public CDirContext {
   version_t pv;
   LogSegment *ls;
-  C_Dir_Dirty(CDir *d, version_t p, LogSegment *l) : MDSInternalContext(d->cache->mds), dir(d), pv(p), ls(l) {}
+  C_Dir_Dirty(CDir *d, version_t p, LogSegment *l) : CDirContext(d), pv(p), ls(l) {}
   void finish(int r) {
     dir->mark_dirty(pv, ls);
   }
@@ -1342,16 +1367,14 @@ void CDir::fetch(MDSInternalContextBase *c, const string& want_dn, bool ignore_a
   _omap_fetch(want_dn);
 }
 
-class C_IO_Dir_TMAP_Fetched : public Context {
+class C_IO_Dir_TMAP_Fetched : public CDirIOContext {
  protected:
-  CDir *dir;
   string want_dn;
  public:
   bufferlist bl;
 
-  C_IO_Dir_TMAP_Fetched(CDir *d, const string& w) : dir(d), want_dn(w) { }
+  C_IO_Dir_TMAP_Fetched(CDir *d, const string& w) : CDirIOContext(d), want_dn(w) { }
   void finish(int r) {
-    Mutex::Locker l(dir->cache->mds->mds_lock);
     dir->_tmap_fetched(bl, want_dn, r);
   }
 };
@@ -1398,18 +1421,16 @@ void CDir::_tmap_fetched(bufferlist& bl, const string& want_dn, int r)
   _omap_fetched(header, omap, want_dn, r);
 }
 
-class C_IO_Dir_OMAP_Fetched : public Context {
+class C_IO_Dir_OMAP_Fetched : public CDirIOContext {
  protected:
-  CDir *dir;
   string want_dn;
  public:
   bufferlist hdrbl;
   map<string, bufferlist> omap;
   int ret1, ret2;
 
-  C_IO_Dir_OMAP_Fetched(CDir *d, const string& w) : dir(d), want_dn(w) { }
+  C_IO_Dir_OMAP_Fetched(CDir *d, const string& w) : CDirIOContext(d), want_dn(w) { }
   void finish(int r) {
-    Mutex::Locker l(dir->cache->mds->mds_lock);
     if (r >= 0) r = ret1;
     if (r >= 0) r = ret2;
     dir->_omap_fetched(hdrbl, omap, want_dn, r);
@@ -1751,13 +1772,11 @@ void CDir::commit(version_t want, MDSInternalContextBase *c, bool ignore_authpin
   _commit(want, op_prio);
 }
 
-class C_IO_Dir_Committed : public Context {
-  CDir *dir;
+class C_IO_Dir_Committed : public CDirIOContext {
   version_t version;
 public:
-  C_IO_Dir_Committed(CDir *d, version_t v) : dir(d), version(v) { }
+  C_IO_Dir_Committed(CDir *d, version_t v) : CDirIOContext(d), version(v) { }
   void finish(int r) {
-    Mutex::Locker l(dir->cache->mds->mds_lock);
     assert(r == 0);
     dir->_committed(version);
   }
@@ -2483,11 +2502,9 @@ CDir *CDir::get_frozen_tree_root()
   }
 }
 
-class C_Dir_AuthUnpin : public MDSInternalContext {
-  CDir *dir;
-
+class C_Dir_AuthUnpin : public CDirContext {
   public:
-  C_Dir_AuthUnpin(CDir *d) : MDSInternalContext(dir->cache->mds), dir(d) {}
+  C_Dir_AuthUnpin(CDir *d) : CDirContext(d) {}
   void finish(int r) {
     dir->auth_unpin(dir->get_inode());
   }

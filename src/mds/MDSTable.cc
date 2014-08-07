@@ -32,13 +32,23 @@
 #define dout_prefix *_dout << "mds." << (mds ? mds->get_nodeid() : -1) << "." << table_name << ": "
 
 
-class C_IO_MT_Save : public Context {
-  MDSTable *ida;
+class MDSTableIOContext : public MDSIOContextBase
+{
+  protected:
+    MDSTable *ida;
+    MDS *get_mds() {return ida->mds;}
+  public:
+    MDSTableIOContext(MDSTable *ida_) : ida(ida_) {
+      assert(ida != NULL);
+    }
+};
+
+
+class C_IO_MT_Save : public MDSTableIOContext {
   version_t version;
 public:
-  C_IO_MT_Save(MDSTable *i, version_t v) : ida(i), version(v) {}
+  C_IO_MT_Save(MDSTable *i, version_t v) : MDSTableIOContext(i), version(v) {}
   void finish(int r) {
-    Mutex::Locker l(ida->mds->mds_lock);
     ida->save_2(r, version);
   }
 };
@@ -110,14 +120,12 @@ void MDSTable::reset()
 
 // -----------------------
 
-class C_IO_MT_Load : public Context {
+class C_IO_MT_Load : public MDSTableIOContext {
 public:
-  MDSTable *ida;
   Context *onfinish;
   bufferlist bl;
-  C_IO_MT_Load(MDSTable *i, Context *o) : ida(i), onfinish(o) {}
+  C_IO_MT_Load(MDSTable *i, Context *o) : MDSTableIOContext(i), onfinish(o) {}
   void finish(int r) {
-    Mutex::Locker l(ida->mds->mds_lock);
     ida->load_2(r, bl, onfinish);
   }
 };

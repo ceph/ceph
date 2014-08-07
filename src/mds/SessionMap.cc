@@ -27,6 +27,19 @@
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".sessionmap "
 
 
+class SessionMapIOContext : public MDSIOContextBase
+{
+  protected:
+    SessionMap *sessionmap;
+    MDS *get_mds() {return sessionmap->mds;}
+  public:
+    SessionMapIOContext(SessionMap *sessionmap_) : sessionmap(sessionmap_) {
+      assert(sessionmap != NULL);
+    }
+};
+
+
+
 void SessionMap::dump()
 {
   dout(10) << "dump" << dendl;
@@ -53,13 +66,11 @@ object_t SessionMap::get_object_name()
   return object_t(s);
 }
 
-class C_IO_SM_Load : public Context {
-  SessionMap *sessionmap;
+class C_IO_SM_Load : public SessionMapIOContext {
 public:
   bufferlist bl;
-  C_IO_SM_Load(SessionMap *cm) : sessionmap(cm) {}
+  C_IO_SM_Load(SessionMap *cm) : SessionMapIOContext(cm) {}
   void finish(int r) {
-    Mutex::Locker l(sessionmap->mds->mds_lock);
     sessionmap->_load_finish(r, bl);
   }
 };
@@ -100,13 +111,11 @@ void SessionMap::_load_finish(int r, bufferlist &bl)
 // ----------------
 // SAVE
 
-class C_IO_SM_Save : public Context {
-  SessionMap *sessionmap;
+class C_IO_SM_Save : public SessionMapIOContext {
   version_t version;
 public:
-  C_IO_SM_Save(SessionMap *cm, version_t v) : sessionmap(cm), version(v) {}
+  C_IO_SM_Save(SessionMap *cm, version_t v) : SessionMapIOContext(cm), version(v) {}
   void finish(int r) {
-    Mutex::Locker l(sessionmap->mds->mds_lock);
     assert(r == 0);
     sessionmap->_save_finish(version);
   }
