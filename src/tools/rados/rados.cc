@@ -195,7 +195,7 @@ static int dump_data(std::string const &filename, bufferlist const &data)
 {
   int fd;
   if (filename == "-") {
-    fd = 1;
+    fd = STDOUT_FILENO;
   } else {
     fd = TEMP_FAILURE_RETRY(::open(filename.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0644));
     if (fd < 0) {
@@ -221,7 +221,7 @@ static int do_get(IoCtx& io_ctx, const char *objname, const char *outfile, unsig
 
   int fd;
   if (strcmp(outfile, "-") == 0) {
-    fd = 1;
+    fd = STDOUT_FILENO;
   } else {
     fd = TEMP_FAILURE_RETRY(::open(outfile, O_WRONLY|O_CREAT|O_TRUNC, 0644));
     if (fd < 0) {
@@ -411,7 +411,7 @@ static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op
     stdio = true;
 
   int ret;
-  int fd = 0;
+  int fd = STDIN_FILENO;
   if (!stdio)
     fd = open(infile, O_RDONLY);
   if (fd < 0) {
@@ -1652,7 +1652,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       bl.append(attr_val.c_str(), attr_val.length());
     } else {
       do {
-	ret = bl.read_fd(0, 1024); // from stdin
+	ret = bl.read_fd(STDIN_FILENO, 1024); // from stdin
 	if (ret < 0)
 	  goto out;
       } while (ret > 0);
