@@ -1711,8 +1711,6 @@ void Pipe::writer()
 
 	uint64_t features = connection_state->get_features();
 
-        pipe_lock.Unlock();
-
 	if (m->empty_payload())
 	  ldout(msgr->cct,20) << "writer encoding " << m->get_seq() << " features " << features
 			      << " " << m << " " << *m << dendl;
@@ -1747,6 +1745,8 @@ void Pipe::writer()
 	bufferlist blist = m->get_payload();
 	blist.append(m->get_middle());
 	blist.append(m->get_data());
+
+        pipe_lock.Unlock();
 
         ldout(msgr->cct,20) << "writer sending " << m->get_seq() << " " << m << dendl;
 	int rc = write_message(header, footer, blist);
