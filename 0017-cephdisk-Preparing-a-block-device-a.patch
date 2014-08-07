@@ -1,0 +1,24 @@
+From: Owen Synge <osynge@suse.com>
+Date: Thu, 7 Aug 2014 10:21:18 +0200
+Subject: [PATCH] cephdisk:Preparing a block device add --mbrtogpt to sgdisk.
+
+Convert an MBR or BSD disklabel disk to a GPT disk. As a  safety
+measure,  use of this option is required on MBR or BSD disklabel
+disks if you intend to save your changes, in  order  to  prevent
+accidentally damaging such disks.
+---
+ src/ceph-disk | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/ceph-disk b/src/ceph-disk
+index c67f2f3..0920b68 100755
+--- a/src/ceph-disk
++++ b/src/ceph-disk
+@@ -1191,6 +1191,7 @@ def prepare_dev(
+             command_check_call(
+                 [
+                     'sgdisk',
++                    '--mbrtogpt',
+                     '--largest-new=1',
+                     '--change-name=1:ceph data',
+                     '--partition-guid=1:{osd_uuid}'.format(

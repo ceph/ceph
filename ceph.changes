@@ -1,4 +1,14 @@
 -------------------------------------------------------------------
+Thu Aug  7 10:37:32 UTC 2014 - osynge@suse.com
+
+- Work around MBR breaking ceph-disk
+  + Fix bnc#890738
+  + Accepted patch from Dirk Mueller <dmueller@suse.com>
+- Install 95-ceph-osd-alt.rules on older suse versions.
+  + Fix bnc#890736
+  + Suggestion from Dirk Mueller <dmueller@suse.com>
+
+-------------------------------------------------------------------
 Thu Aug  7 08:45:27 UTC 2014 - tbehrens@suse.com
 
 - Fix update_git.sh, to properly pull remote changes into existing
