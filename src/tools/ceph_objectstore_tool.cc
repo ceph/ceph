@@ -641,7 +641,7 @@ int export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
   if (ret < 0)
     return ret;
 
-  cerr << "read " << obj << std::endl;
+  cout << "Read " << obj << std::endl;
 
   total = st.st_size;
   if (debug)
@@ -783,7 +783,7 @@ int do_export(ObjectStore *fs, coll_t coll, spg_t pgid, pg_info_t &info,
   PGLog::IndexedLog log;
   pg_missing_t missing;
 
-  cerr << "Exporting " << pgid << std::endl;
+  cout << "Exporting " << pgid << std::endl;
 
   int ret = get_log(fs, coll, pgid, info, log, missing);
   if (ret > 0)
@@ -1834,11 +1834,11 @@ int main(int argc, char **argv)
       }
     }
 
-    cerr << colls_to_check.size() << " pgs to scan" << std::endl;
+    cout << colls_to_check.size() << " pgs to scan" << std::endl;
     for (vector<coll_t>::iterator i = colls_to_check.begin();
          i != colls_to_check.end();
          ++i, ++scanned) {
-      cerr << "Scanning " << *i << ", " << scanned << "/"
+      cout << "Scanning " << *i << ", " << scanned << "/"
            << colls_to_check.size() << " completed" << std::endl;
       ghobject_t next;
       while (!next.is_max()) {
@@ -1881,7 +1881,7 @@ int main(int argc, char **argv)
               cout << *i << "/" << *obj << " is lost" << std::endl;
             }
             if (op == "fix-lost") {
-              cerr << *i << "/" << *obj << " is lost, fixing" << std::endl;
+              cout << *i << "/" << *obj << " is lost, fixing" << std::endl;
               oi.clear_flag(object_info_t::FLAG_LOST);
               bufferlist bl2;
               ::encode(oi, bl2);
@@ -1899,7 +1899,7 @@ int main(int argc, char **argv)
         }
       }
     }
-    cerr << "Completed" << std::endl;
+    cout << "Completed" << std::endl;
 
    UMOUNT:
     fs->sync_and_flush();
@@ -1934,7 +1934,7 @@ int main(int argc, char **argv)
       continue;
     }
     if (snap != CEPH_NOSNAP && debug) {
-      cerr << "skipping snapped dir " << *it
+      cout << "skipping snapped dir " << *it
 	       << " (pg " << pgid << " snap " << snap << ")" << std::endl;
       continue;
     }
