@@ -15,8 +15,6 @@
  * 
  */
 
-#include <boost/algorithm/string/join.hpp>
-#include <boost/range/adaptors.hpp>
 #include "boost/tuple/tuple.hpp"
 #include "PG.h"
 #include "ReplicatedPG.h"
@@ -2969,6 +2967,30 @@ struct FillInExtent : public Context {
   }
 };
 
+template<typename V>
+static string list_keys(const map<string, V>& m) {
+  string s;
+  for (typename map<string, V>::const_iterator itr = m.begin(); itr != m.end(); ++itr) {
+    if (!s.empty()) {
+      s.push_back(',');
+    }
+    s.append(itr->first);
+  }
+  return s;
+}
+
+template<typename T>
+static string list_entries(const T& m) {
+  string s;
+  for (typename T::const_iterator itr = m.begin(); itr != m.end(); ++itr) {
+    if (!s.empty()) {
+      s.push_back(',');
+    }
+    s.append(*itr);
+  }
+  return s;
+}
+
 int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 {
   int result = 0;
@@ -4378,7 +4400,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  tracepoint(osd, do_osd_op_pre_omapgetvalsbykeys, soid.oid.name.c_str(), soid.snap.val, "???");
 	  goto fail;
 	}
-	tracepoint(osd, do_osd_op_pre_omapgetvalsbykeys, soid.oid.name.c_str(), soid.snap.val, boost::algorithm::join(keys_to_get, ",").c_str());
+	tracepoint(osd, do_osd_op_pre_omapgetvalsbykeys, soid.oid.name.c_str(), soid.snap.val, list_entries(keys_to_get).c_str());
 	map<string, bufferlist> out;
 	if (!pool.info.require_rollback()) {
 	  osd->store->omap_get_values(coll, soid, keys_to_get, &out);
@@ -4406,7 +4428,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  tracepoint(osd, do_osd_op_pre_omap_cmp, soid.oid.name.c_str(), soid.snap.val, "???");
 	  goto fail;
 	}
-	tracepoint(osd, do_osd_op_pre_omap_cmp, soid.oid.name.c_str(), soid.snap.val, boost::algorithm::join(boost::adaptors::keys(assertions), ",").c_str());
+	tracepoint(osd, do_osd_op_pre_omap_cmp, soid.oid.name.c_str(), soid.snap.val, list_keys(assertions).c_str());
 	
 	map<string, bufferlist> out;
 
@@ -4486,7 +4508,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  tracepoint(osd, do_osd_op_pre_omapsetvals, soid.oid.name.c_str(), soid.snap.val, "???");
 	  goto fail;
 	}
-	tracepoint(osd, do_osd_op_pre_omapsetvals, soid.oid.name.c_str(), soid.snap.val, boost::algorithm::join(boost::adaptors::keys(to_set), ",").c_str());
+	tracepoint(osd, do_osd_op_pre_omapsetvals, soid.oid.name.c_str(), soid.snap.val, list_keys(to_set).c_str());
 	dout(20) << "setting vals: " << dendl;
 	for (map<string, bufferlist>::iterator i = to_set.begin();
 	     i != to_set.end();
@@ -4563,7 +4585,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  tracepoint(osd, do_osd_op_pre_omaprmkeys, soid.oid.name.c_str(), soid.snap.val, "???");
 	  goto fail;
 	}
-	tracepoint(osd, do_osd_op_pre_omaprmkeys, soid.oid.name.c_str(), soid.snap.val, boost::algorithm::join(to_rm, ",").c_str());
+	tracepoint(osd, do_osd_op_pre_omaprmkeys, soid.oid.name.c_str(), soid.snap.val, list_entries(to_rm).c_str());
 	t->omap_rmkeys(soid, to_rm);
 	ctx->delta_stats.num_wr++;
       }
