@@ -304,31 +304,39 @@ struct metadata_section {
   epoch_t map_epoch;
   pg_info_t info;
   pg_log_t log;
+  map<epoch_t,pg_interval_t> past_intervals;
 
   metadata_section(__u8 struct_ver, epoch_t map_epoch, const pg_info_t &info,
-		   const pg_log_t &log)
+		   const pg_log_t &log, map<epoch_t,pg_interval_t> &past_intervals)
     : struct_ver(struct_ver),
       map_epoch(map_epoch),
       info(info),
-      log(log) { }
+      log(log),
+      past_intervals(past_intervals) { }
   metadata_section()
     : struct_ver(0),
       map_epoch(0) { }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(struct_ver, bl);
     ::encode(map_epoch, bl);
     ::encode(info, bl);
     ::encode(log, bl);
+    ::encode(past_intervals, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(struct_ver, bl);
     ::decode(map_epoch, bl);
     ::decode(info, bl);
     ::decode(log, bl);
+    if (struct_v > 1) {
+      ::decode(past_intervals, bl);
+    } else {
+      cout << "NOTICE: Older export without past_intervals" << std::endl;
+    }
     DECODE_FINISH(bl);
   }
 };
@@ -588,11 +596,10 @@ int footer::get_footer()
 }
 
 int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
-    __u8 struct_ver)
+    __u8 struct_ver, map<epoch_t,pg_interval_t> &past_intervals)
 {
   //Empty for this
   interval_set<snapid_t> snap_collections; // obsolete
-  map<epoch_t,pg_interval_t> past_intervals;
   coll_t coll(info.pgid);
 
   int ret = PG::_write_info(t, epoch,
@@ -614,9 +621,9 @@ void write_log(ObjectStore::Transaction &t, pg_log_t &log)
 }
 
 int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
-    pg_log_t &log, __u8 struct_ver)
+    pg_log_t &log, __u8 struct_ver, map<epoch_t,pg_interval_t> &past_intervals)
 {
-  int ret = write_info(t, epoch, info, struct_ver);
+  int ret = write_info(t, epoch, info, struct_ver, past_intervals);
   if (ret) return ret;
   write_log(t, log);
   return 0;
@@ -778,7 +785,8 @@ void write_super()
 }
 
 int do_export(ObjectStore *fs, coll_t coll, spg_t pgid, pg_info_t &info,
-    epoch_t map_epoch, __u8 struct_ver, const OSDSuperblock& superblock)
+    epoch_t map_epoch, __u8 struct_ver, const OSDSuperblock& superblock,
+    map<epoch_t,pg_interval_t> &past_intervals)
 {
   PGLog::IndexedLog log;
   pg_missing_t missing;
@@ -802,7 +810,7 @@ int do_export(ObjectStore *fs, coll_t coll, spg_t pgid, pg_info_t &info,
     return ret;
   }
 
-  metadata_section ms(struct_ver, map_epoch, info, log);
+  metadata_section ms(struct_ver, map_epoch, info, log, past_intervals);
   ret = write_section(TYPE_PG_METADATA, ms, file_fd);
   if (ret)
     return ret;
@@ -1019,7 +1027,7 @@ int get_pg_metadata(ObjectStore *store, coll_t coll, bufferlist &bl)
   coll_t newcoll(ms.info.pgid);
   t->collection_rename(coll, newcoll);
 
-  int ret = write_pg(*t, ms.map_epoch, ms.info, ms.log, ms.struct_ver);
+  int ret = write_pg(*t, ms.map_epoch, ms.info, ms.log, ms.struct_ver, ms.past_intervals);
   if (ret) return ret;
 
   store->apply_transaction(*t);
@@ -2150,7 +2158,7 @@ int main(int argc, char **argv)
       cerr << "struct_v " << (int)struct_ver << std::endl;
 
     if (op == "export") {
-      ret = do_export(fs, coll, pgid, info, map_epoch, struct_ver, superblock);
+      ret = do_export(fs, coll, pgid, info, map_epoch, struct_ver, superblock, past_intervals);
       if (ret == 0 && file_fd != STDOUT_FILENO)
         cout << "Export successful" << std::endl;
     } else if (op == "info") {
