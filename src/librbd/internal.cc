@@ -906,6 +906,11 @@ reprotect_and_return_err:
 	(!stripe_unit && stripe_count))
       return -EINVAL;
 
+    if (flags && (features & RBD_FEATURE_IMAGEINDEX) == 0) {
+      lderr(cct) << "IMAGEINDEX and format 2 or later required for non-default flags" << dendl;
+      return -EINVAL;
+    }
+ 
     if (old_format) {
       if (stripe_unit && stripe_unit != (1ull << *order))
 	return -EINVAL;

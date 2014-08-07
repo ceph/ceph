@@ -7,6 +7,7 @@
 #include "common/RWLock.h"
 
 #include "librbd/AioCompletion.h"
+#include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 
 #include "librbd/AioRequest.h"
@@ -50,10 +51,18 @@ namespace librbd {
 
     ImageCtx *next = m_ictx->parent;
     while (!ictx_check(next)) {
-      if (next->image_index.is_parent(m_object_no))
+      if (next->image_index.is_parent(m_object_no)) {
+        uint64_t image_overlap = 0;
+        int r = next->get_parent_overlap(next->snap_id, &image_overlap);
+        assert(0 == r);
+        uint64_t object_overlap = next->prune_parent_extents(image_extents, image_overlap);
+        if (!object_overlap)
+          break;
+
         next = next->parent;
-      else
+      } else {
         break;
+      }
     }
 
     aio_read(next, image_extents, NULL, &m_read_data,
