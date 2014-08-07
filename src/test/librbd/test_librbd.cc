@@ -48,19 +48,16 @@ class LibRBDTest : public ::testing::TestWithParam<int> {
 public:
   int create_image(rados_ioctx_t ioctx, const char *name, uint64_t size, int *order)
   {
-    uint64_t features = GetParam();
-    if (features & RBD_FEATURE_LAYERING) {
-      cout << "using new format!" << std::endl;
-      return rbd_create2(ioctx, name, size, features, order);
-    } else {
-      cout << "using old format!" << std::endl;
-      return rbd_create(ioctx, name, size, order);
-    }
+    return create_image_full(ioctx, name, size, order, GetParam());
   }
+
   int create_image_pp(librbd::RBD &rbd, librados::IoCtx &ioctx, const char *name,
                       uint64_t size, int *order) {
     uint64_t features = GetParam();
-    if (features & RBD_FEATURE_LAYERING) {
+    if (features & RBD_FEATURE_IMAGEINDEX) {
+      return rbd.create4(ioctx, name, size, features, order, 0, 0,
+                         LIBRBD_CREATE_SHARED);
+    } else if (features & RBD_FEATURE_LAYERING) {
       cout << "using new format!" << std::endl;
       return rbd.create2(ioctx, name, size, features, order);
     } else {
@@ -69,15 +66,22 @@ public:
     }
   }
 
+  int create_imagev2_plus(rados_ioctx_t ioctx, const char *name,
+                          uint64_t size, int *order, uint64_t features) {
+    return create_image_full(ioctx, name, size, order, GetParam()|features);
+  }
+
   int create_image_full(rados_ioctx_t ioctx, const char *name,
-                        uint64_t size, int *order, int old_format,
-                        uint64_t features) {
-    if (old_format) {
-      cout << "using old format!" << std::endl;
-      return rbd_create(ioctx, name, size, order);
-    } else {
+                        uint64_t size, int *order, uint64_t features) {
+    if (features & RBD_FEATURE_IMAGEINDEX) {
+      return rbd_create4(ioctx, name, size, features, order, 0, 0,
+                         LIBRBD_CREATE_SHARED);
+    } else if (features & RBD_FEATURE_LAYERING) {
       cout << "using new format!" << std::endl;
       return rbd_create2(ioctx, name, size, features, order);
+    } else {
+      cout << "using old format!" << std::endl;
+      return rbd_create(ioctx, name, size, order);
     }
   }
 };
@@ -1008,7 +1012,7 @@ TEST_P(LibRBDTest, TestClone)
   int order = 0;
 
   // make a parent to clone from
-  ASSERT_EQ(0, create_image_full(ioctx, "parent", 4<<20, &order, false, features));
+  ASSERT_EQ(0, create_imagev2_plus(ioctx, "parent", 4<<20, &order, features));
   ASSERT_EQ(0, rbd_open(ioctx, "parent", &parent, NULL));
   printf("made parent image \"parent\"\n");
 
@@ -1120,7 +1124,7 @@ TEST_P(LibRBDTest, TestClone2)
   int order = 0;
 
   // make a parent to clone from
-  ASSERT_EQ(0, create_image_full(ioctx, "parent", 4<<20, &order, false, features));
+  ASSERT_EQ(0, create_imagev2_plus(ioctx, "parent", 4<<20, &order, features));
   ASSERT_EQ(0, rbd_open(ioctx, "parent", &parent, NULL));
   printf("made parent image \"parent\"\n");
 
@@ -1250,8 +1254,8 @@ TEST_P(LibRBDTest, ListChildren)
   int order = 0;
 
   // make a parent to clone from
-  ASSERT_EQ(0, create_image_full(ioctx1, "parent", 4<<20, &order,
-				 false, features));
+  ASSERT_EQ(0, create_imagev2_plus(ioctx1, "parent", 4<<20, &order,
+				 features));
   ASSERT_EQ(0, rbd_open(ioctx1, "parent", &parent, NULL));
   // create a snapshot, reopen as the parent we're interested in
   ASSERT_EQ(0, rbd_snap_create(parent, "parent_snap"));
@@ -1840,7 +1844,7 @@ TEST_P(LibRBDTest, ZeroLengthRead)
 INSTANTIATE_TEST_CASE_P(
   LibRBD,
   LibRBDTest,
-  ::testing::Values(0, RBD_FEATURE_LAYERING));
+  ::testing::Values(0, RBD_FEATURE_LAYERING, RBD_FEATURE_LAYERING|RBD_FEATURE_IMAGEINDEX));
 
 #else
 
