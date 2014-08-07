@@ -31,6 +31,7 @@ fi
 usage_exit() {
     echo "usage: $0 [options] {start|stop|restart|condrestart} [mon|osd|mds]..."
     printf "\t-c ceph.conf\n"
+    printf "\t--cluster [cluster name]\tdefine the cluster name\n"
     printf "\t--valgrind\trun via valgrind\n"
     printf "\t--hostname [hostname]\toverride hostname lookup\n"
     exit
@@ -155,6 +156,12 @@ case $1 in
 	    shift
 	    conf=$1
 	    ;;
+    --cluster )
+	    [ -z "$2" ] && usage_exit
+	    options="$options $1"
+	    shift
+	    cluster=$1
+	    ;;
     --hostname )
 	    [ -z "$2" ] && usage_exit
 	    options="$options $1"
@@ -189,7 +196,11 @@ fi
 for name in $what; do
     type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $item is 'mon1'
     id=`echo $name | cut -c 4- | sed 's/^\\.//'`
-    cluster=`echo $conf | awk -F'/' '{print $(NF)}' | cut -d'.' -f 1`
+
+    # if `--cluster` was not passed in, fallback to looking at the config name
+    if ! [[ -n "$cluster" ]]; then
+        cluster=`echo $conf | awk -F'/' '{print $(NF)}' | cut -d'.' -f 1`
+    fi
     num=$id
     name="$type.$id"
 
