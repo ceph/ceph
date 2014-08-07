@@ -7,10 +7,10 @@
 Running Ceph with Upstart
 =========================
 
-When deploying Ceph Cuttlefish and beyond with ``ceph-deploy`` on Debian/Ubuntu
-distributions, you may start and stop Ceph daemons on a :term:`Ceph Node` using
-the event-based `Upstart`_.  Upstart does not require you to define daemon
-instances in the Ceph configuration file.
+When deploying Ceph Cuttlefish and beyond with ``ceph-deploy`` on Ubuntu, you 
+may start and stop Ceph daemons on a :term:`Ceph Node` using the event-based 
+`Upstart`_.  Upstart does not require you to define daemon instances in the 
+Ceph configuration file.
 
 To list the Ceph Upstart jobs and instances on a node, execute:: 
 
@@ -157,8 +157,8 @@ Running Ceph with sysvinit
 --------------------------
 
 Using traditional ``sysvinit`` is the recommended way to run  Ceph with CentOS,
-Red Hat, Fedora, and SLES distributions. You may also use it for older
-distributions of Debian/Ubuntu.
+Red Hat, Fedora, Debian and SLES distributions. You may also use it for older
+distributions of Ubuntu.
 
 
 Starting all Daemons
@@ -256,7 +256,7 @@ To stop a Ceph daemon on another node, use the following syntax::
 Running Ceph as a Service
 -------------------------
 
-When you deploy Ceph Argonaut or Bobtail with ``ceph-deploy``, you operate
+When you deploy Ceph Argonaut or Bobtail with ``ceph-deploy``, you may operate
 Ceph as a service (you may also use sysvinit).
 
 
