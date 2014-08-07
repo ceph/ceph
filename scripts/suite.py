@@ -34,8 +34,8 @@ Standard arguments:
                               'gcov', 'notcmalloc')
                               [default: basic]
   -t <branch>, --teuthology-branch <branch>
-                              The teuthology branch to run against. Defaults to
-                              using the ceph branch.
+                              The teuthology branch to run against.
+                              [default: master]
   -m <type>, --machine-type <type>
                               Machine type [default: plana]
   -d <distro>, --distro <distro>
