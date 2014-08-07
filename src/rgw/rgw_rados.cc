@@ -1216,8 +1216,8 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
   extra_params.owner = bucket_owner;
 
   if (versioned_object) {
-    rgw_obj ver_head_obj = head_obj;
-
+    rgw_obj ver_head_obj(head_obj.bucket, head_obj.get_orig_obj());
+    ver_head_obj.set_ns(head_obj.ns);
     ver_head_obj.set_instance("instance");
 
     r = store->put_obj_meta(NULL, ver_head_obj, obj_len, attrs,
@@ -2783,7 +2783,7 @@ int RGWRados::get_obj_ioctx(const rgw_obj& obj, librados::IoCtx *ioctx)
 {
   rgw_bucket bucket;
   string oid, key;
-  get_obj_bucket_and_oid_key(obj, bucket, oid, key);
+  get_obj_bucket_and_oid_loc(obj, bucket, oid, key);
 
   int r;
 
@@ -2802,7 +2802,7 @@ int RGWRados::get_obj_ioctx(const rgw_obj& obj, librados::IoCtx *ioctx)
 
 int RGWRados::get_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref, rgw_bucket *bucket, bool ref_system_obj)
 {
-  get_obj_bucket_and_oid_key(obj, *bucket, ref->oid, ref->key);
+  get_obj_bucket_and_oid_loc(obj, *bucket, ref->oid, ref->key);
 
   int r;
 
@@ -3488,7 +3488,7 @@ set_err_state:
       ObjectWriteOperation op;
       cls_refcount_get(op, tag, true);
       const rgw_obj& loc = miter.get_location();
-      get_obj_bucket_and_oid_key(loc, bucket, oid, key);
+      get_obj_bucket_and_oid_loc(loc, bucket, oid, key);
       ref.ioctx.locator_set_key(key);
 
       ret = ref.ioctx.operate(oid, &op);
@@ -3545,7 +3545,7 @@ done_ret:
       ObjectWriteOperation op;
       cls_refcount_put(op, tag, true);
 
-      get_obj_bucket_and_oid_key(*riter, bucket, oid, key);
+      get_obj_bucket_and_oid_loc(*riter, bucket, oid, key);
       ref.ioctx.locator_set_key(key);
 
       int r = ref.ioctx.operate(oid, &op);
@@ -3754,7 +3754,7 @@ int RGWRados::complete_atomic_overwrite(RGWRadosCtx *rctx, RGWObjState *state, r
       continue;
     string oid, loc;
     rgw_bucket bucket;
-    get_obj_bucket_and_oid_key(mobj, bucket, oid, loc);
+    get_obj_bucket_and_oid_loc(mobj, bucket, oid, loc);
     cls_rgw_obj_key key(obj.get_index_key_name(), obj.get_instance());
     chain.push_obj(bucket.data_pool, key, loc);
   }
@@ -3841,7 +3841,7 @@ int RGWRados::defer_gc(void *ctx, rgw_obj& obj)
   RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
   rgw_bucket bucket;
   std::string oid, key;
-  get_obj_bucket_and_oid_key(obj, bucket, oid, key);
+  get_obj_bucket_and_oid_loc(obj, bucket, oid, key);
   if (!rctx)
     return 0;
 
@@ -3968,7 +3968,7 @@ int RGWRados::delete_obj_index(rgw_obj& obj)
 {
   rgw_bucket bucket;
   std::string oid, key;
-  get_obj_bucket_and_oid_key(obj, bucket, oid, key);
+  get_obj_bucket_and_oid_loc(obj, bucket, oid, key);
 
   string tag;
   int r = complete_update_index_del(bucket, obj, tag, -1 /* pool */, 0);
@@ -4592,7 +4592,7 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
 {
   rgw_bucket bucket;
   std::string dst_oid, dst_key;
-  get_obj_bucket_and_oid_key(dst_obj, bucket, dst_oid, dst_key);
+  get_obj_bucket_and_oid_loc(dst_obj, bucket, dst_oid, dst_key);
   librados::IoCtx io_ctx;
   RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
   uint64_t size = 0;
@@ -4653,12 +4653,12 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
         << " range.src_ofs=" << range.src_ofs << " range.len=" << range.len << dendl;
       if (xattr_cond) {
         string src_cmp_obj, src_cmp_key;
-        get_obj_bucket_and_oid_key(range.src, bucket, src_cmp_obj, src_cmp_key);
+        get_obj_bucket_and_oid_loc(range.src, bucket, src_cmp_obj, src_cmp_key);
         op.src_cmpxattr(src_cmp_obj, xattr_cond->first.c_str(),
                         LIBRADOS_CMPXATTR_OP_EQ, xattr_cond->second);
       }
       string src_oid, src_key;
-      get_obj_bucket_and_oid_key(range.src, bucket, src_oid, src_key);
+      get_obj_bucket_and_oid_loc(range.src, bucket, src_oid, src_key);
       if (range.dst_ofs + range.len > size)
         size = range.dst_ofs + range.len;
       op.clone_range(range.dst_ofs, src_oid, range.src_ofs, range.len);
@@ -4749,7 +4749,7 @@ int RGWRados::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **hand
   uint64_t max_chunk_size;
 
 
-  get_obj_bucket_and_oid_key(obj, bucket, oid, key);
+  get_obj_bucket_and_oid_loc(obj, bucket, oid, key);
 
   if (!rctx) {
     new_ctx = new RGWRadosCtx(this);
@@ -4776,7 +4776,7 @@ int RGWRados::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **hand
     reading_from_head = (read_obj == obj);
 
     if (!reading_from_head) {
-      get_obj_bucket_and_oid_key(read_obj, bucket, oid, key);
+      get_obj_bucket_and_oid_loc(read_obj, bucket, oid, key);
     }
   }
 
@@ -5163,7 +5163,7 @@ int RGWRados::get_obj_iterate_cb(void *ctx, RGWObjState *astate,
   if (r < 0)
     return r;
 
-  get_obj_bucket_and_oid_key(obj, bucket, oid, key);
+  get_obj_bucket_and_oid_loc(obj, bucket, oid, key);
 
   d->throttle.get(len);
   if (d->is_cancelled()) {
@@ -6353,9 +6353,11 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
     // well crap
     assert(0 == "got bad object name off disk");
   }
-  obj.init(bucket, oid, list_state.locator, ns);
+  obj.init(bucket, oid);
+  obj.set_loc(list_state.locator);
+  obj.set_ns(ns);
   obj.set_instance(key.instance);
-  get_obj_bucket_and_oid_key(obj, bucket, oid, loc);
+  get_obj_bucket_and_oid_loc(obj, bucket, oid, loc);
   io_ctx.locator_set_key(loc);
 
   RGWObjState *astate = NULL;
