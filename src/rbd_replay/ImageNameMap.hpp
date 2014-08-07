@@ -17,34 +17,22 @@
 
 #include <map>
 #include <string>
-#include <vector>
-#include <boost/function.hpp>
-#include <boost/regex.hpp>
-#include "ImageName.hpp"
-#include "NameMap.hpp"
+#include "rbd_loc.hpp"
 
 namespace rbd_replay {
 
 class ImageNameMap {
 public:
-  typedef std::pair<boost::regex, std::string> Mapping;
-
-  typedef boost::function<rbd_replay::ImageName (const rbd_replay::ImageName& input, std::string output)> BadMappingFallback;
-
-  ImageNameMap();
+  typedef std::pair<rbd_loc, rbd_loc> Mapping;
 
   bool parse_mapping(std::string mapping_string, Mapping *mapping) const;
 
-  void add_mapping(Mapping mapping);
+  void add_mapping(const Mapping& mapping);
 
-  rbd_replay::ImageName map(const rbd_replay::ImageName& name) const;
-
-  void set_bad_mapping_fallback(BadMappingFallback bad_mapping_fallback);
+  rbd_loc map(const rbd_loc& name) const;
 
 private:
-  NameMap m_map;
-
-  BadMappingFallback m_bad_mapping_fallback;
+  std::map<rbd_loc, rbd_loc> m_map;
 };
 
 }
