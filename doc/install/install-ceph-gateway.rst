@@ -363,6 +363,24 @@ following::
 
 	sudo yum install radosgw-agent
 	
+	
+Configure The Gateway
+=====================
+
+Once you have installed the Ceph Object Gateway packages, the next step is
+to configure your Ceph Object Gateway. There are two approaches: 
+
+- **Simple:** A `simple`_ Ceph Object Gateway configuration implies that you 
+  are running a Ceph Object Storage service in a single data center. So you can
+  configure the Ceph Object Gateway without regard to regions and zones.
+
+- **Federated:** A `federated`_ Ceph Object Gateway configuration implies that
+  you are running a Ceph Object Storage service in a geographically distributed 
+  manner for fault tolerance and failover. This involves configuring your
+  Ceph Object Gateway instances with regions and zones.
+
+Choose the approach that best reflects your cluster.
+	
 
 .. _Get Packages: ../get-packages
 .. _Ubuntu Server Guide: https://help.ubuntu.com/12.04/serverguide/httpd.html
@@ -370,3 +388,5 @@ following::
 .. _RFC 2616, Section 8: http://www.w3.org/Protocols/rfc2616/rfc2616-sec8.html
 .. _gitbuilder.ceph.com: http://gitbuilder.ceph.com
 .. _Installing YUM Priorities: ../yum-priorities
+.. _simple: ../../radosgw/config
+.. _federated: ../../radosgw/federated-config
