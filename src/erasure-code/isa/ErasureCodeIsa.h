@@ -28,6 +28,7 @@
 // -----------------------------------------------------------------------------
 #include "common/Mutex.h"
 #include "erasure-code/ErasureCode.h"
+#include "ErasureCodeIsaTableCache.h"
 // -----------------------------------------------------------------------------
 #include <list>
 // -----------------------------------------------------------------------------
@@ -105,7 +106,7 @@ public:
 // -----------------------------------------------------------------------------
 
 class ErasureCodeIsaDefault : public ErasureCodeIsa {
-
+private:
   int matrixtype;
 
 public:
@@ -118,24 +119,17 @@ public:
   unsigned char* g_encode_tbls; // encoding table
 
 
-  // we create a cache for decoding tables
-  Mutex g_decode_tbls_guard;
+  // shared guard mutex for decoding tables cache
+  Mutex* g_decode_tbls_guard;
 
-  int get_tbls_lru_size()
-  {
-    Mutex::Locker lock(g_decode_tbls_guard);
-    return g_decode_tbls_lru.size();
-  }
+  // return the current used size of the LRU decoding tables cache
+  int get_tbls_lru_size();
 
-  // we implement an LRU cache for coding matrix - the cache size is
-  // sufficient up to (12,4) decodings
-  typedef std::pair<std::list<std::string>::iterator, bufferptr> lru_entry_t;
-
-  std::map<std::string, lru_entry_t> g_decode_tbls_map;
-  std::list<std::string> g_decode_tbls_lru;
+  ErasureCodeIsaTableCache::lru_map_t* g_decode_tbls_map;
+  ErasureCodeIsaTableCache::lru_list_t* g_decode_tbls_lru;
 
   ErasureCodeIsaDefault(int matrix = kVandermonde) : ErasureCodeIsa("default"),
-    a(0), g_encode_tbls(0), g_decode_tbls_guard("isa-lru-cache")
+    a(0), g_encode_tbls(0), g_decode_tbls_guard(0), g_decode_tbls_map(0), g_decode_tbls_lru(0)
   {
     matrixtype = matrix;
   }
@@ -143,12 +137,7 @@ public:
   virtual
   ~ErasureCodeIsaDefault()
   {
-    if (a) {
-      free(a);
-    }
-    if (g_encode_tbls) {
-      free(g_encode_tbls);
-    }
+
   }
 
   virtual void isa_encode(char **data,
