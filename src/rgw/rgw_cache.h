@@ -213,7 +213,7 @@ public:
   int put_obj_meta_impl(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
                    map<std::string, bufferlist>& attrs, RGWObjCategory category, int flags,
                    map<std::string, bufferlist>* rmattrs, const bufferlist *data,
-                   RGWObjManifest *manifest, const string *ptag, list<string> *remove_objs,
+                   RGWObjManifest *manifest, const string *ptag, list<rgw_obj_key> *remove_objs,
                    bool modify_version, RGWObjVersionTracker *objv_tracker, time_t set_mtime,
                    const string& owner,
                    const char *if_match = NULL, const char *if_nomatch = NULL);
@@ -401,7 +401,7 @@ template <class T>
 int RGWCache<T>::put_obj_meta_impl(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
                               map<std::string, bufferlist>& attrs, RGWObjCategory category, int flags,
                               map<std::string, bufferlist>* rmattrs, const bufferlist *data,
-                              RGWObjManifest *manifest, const string *ptag, list<string> *remove_objs,
+                              RGWObjManifest *manifest, const string *ptag, list<rgw_obj_key> *remove_objs,
                               bool modify_version, RGWObjVersionTracker *objv_tracker, time_t set_mtime,
                               const string& owner,
                               const char *if_match, const char *if_nomatch)

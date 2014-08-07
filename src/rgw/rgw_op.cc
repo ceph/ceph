@@ -2783,7 +2783,7 @@ void RGWCompleteMultipart::execute()
 
   uint64_t min_part_size = s->cct->_conf->rgw_multipart_min_part_size;
 
-  list<string> remove_objs; /* objects to be removed from index listing */
+  list<rgw_obj_key> remove_objs; /* objects to be removed from index listing */
 
   iter = parts->parts.begin();
 
@@ -2849,7 +2849,10 @@ void RGWCompleteMultipart::execute()
         manifest.append(obj_part.manifest);
       }
 
-      remove_objs.push_back(src_obj.get_index_key_name());
+      rgw_obj_key remove_key;
+      src_obj.get_index_key(&remove_key);
+
+      remove_objs.push_back(remove_key);
 
       ofs += obj_part.size;
     }
