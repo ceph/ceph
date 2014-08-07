@@ -795,7 +795,8 @@ class Journaler::C_RetryRead : public Context {
 public:
   C_RetryRead(Journaler *l) : ls(l) {}
   void finish(int r) {
-    Mutex::Locker l(ls->lock);
+    // Should only be called from waitfor_safe i.e. already inside lock
+    assert(ls->lock.is_locked_by_me());
     ls->_prefetch();
   }  
 };
