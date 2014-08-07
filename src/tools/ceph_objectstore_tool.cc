@@ -1520,7 +1520,7 @@ int main(int argc, char **argv)
     ("pgid", po::value<string>(&pgidstr),
      "PG id, mandatory except for import, list-lost, fix-lost")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, export, import, list, list-lost, fix-lost, list-pgs]")
+     "Arg is one of [info, log, remove, export, import, list, list-lost, fix-lost, list-pgs, rm-past-intervals]")
     ("file", po::value<string>(&file),
      "path of file to export or import")
     ("debug", "Enable diagnostic output to stderr")
@@ -2186,8 +2186,21 @@ int main(int argc, char **argv)
       formatter->close_section();
       formatter->flush(cout);
       cout << std::endl;
+    } else if (op == "rm-past-intervals") {
+      ObjectStore::Transaction tran;
+      ObjectStore::Transaction *t = &tran;
+
+      cout << "Remove past-intervals " << past_intervals << std::endl;
+
+      past_intervals.clear();
+      ret = write_info(*t, map_epoch, info, struct_ver, past_intervals);
+
+      if (ret == 0) {
+        fs->apply_transaction(*t);
+        cout << "Removal succeeded" << std::endl;
+      }
     } else {
-      cerr << "Must provide --op (info, log, remove, export, import, list, list-lost, fix-lost, list-pgs)"
+      cerr << "Must provide --op (info, log, remove, export, import, list, list-lost, fix-lost, list-pgs, rm-past-intervals)"
 	<< std::endl;
       usage(desc);
     }
