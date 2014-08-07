@@ -9,8 +9,8 @@ log = logging.getLogger(__name__)
 
 
 def import_task(name):
-    internal_pkg = __import__('teuthology.task', globals(), locals(),
-                         [name], 0)
+    internal_pkg = __import__('teuthology.task', globals(), locals(), [name],
+                              0)
     if hasattr(internal_pkg, name):
         return getattr(internal_pkg, name)
     else:
@@ -34,7 +34,7 @@ def run_one_task(taskname, **kwargs):
     try:
         fn = getattr(task, subtask)
     except AttributeError:
-        log.error("No subtask of %s named %s was found", mod, subtask)
+        log.error("No subtask of %s named %s was found", task, subtask)
         raise
     return fn(**kwargs)
 
