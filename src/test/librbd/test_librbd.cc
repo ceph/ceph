@@ -42,65 +42,47 @@
 
 using namespace std;
 
-static int get_features(bool *old_format, uint64_t *features)
-{
-  const char *c = getenv("RBD_FEATURES");
-  if (c) {
-    stringstream ss;
-    ss << c;
-    ss >> *features;
-    if (ss.fail())
-      return -EINVAL;
-    *old_format = false;
-    cout << "using new format!" << std::endl;
-  } else {
-    *old_format = true;
-    cout << "using old format" << std::endl;
+#if GTEST_HAS_PARAM_TEST
+
+class LibRBDTest : public ::testing::TestWithParam<int> {
+public:
+  int create_image(rados_ioctx_t ioctx, const char *name, uint64_t size, int *order)
+  {
+    uint64_t features = GetParam();
+    if (features & RBD_FEATURE_LAYERING) {
+      cout << "using new format!" << std::endl;
+      return rbd_create2(ioctx, name, size, features, order);
+    } else {
+      cout << "using old format!" << std::endl;
+      return rbd_create(ioctx, name, size, order);
+    }
+  }
+  int create_image_pp(librbd::RBD &rbd, librados::IoCtx &ioctx, const char *name,
+                      uint64_t size, int *order) {
+    uint64_t features = GetParam();
+    if (features & RBD_FEATURE_LAYERING) {
+      cout << "using new format!" << std::endl;
+      return rbd.create2(ioctx, name, size, features, order);
+    } else {
+      cout << "using old format!" << std::endl;
+      return rbd.create(ioctx, name, size, order);
+    }
   }
 
-  return 0;
-}
-
-static int create_image_full(rados_ioctx_t ioctx, const char *name,
-			      uint64_t size, int *order, int old_format,
-			      uint64_t features)
-{
-  if (old_format) {
-    return rbd_create(ioctx, name, size, order);
-  } else {
-    return rbd_create2(ioctx, name, size, features, order);
+  int create_image_full(rados_ioctx_t ioctx, const char *name,
+                        uint64_t size, int *order, int old_format,
+                        uint64_t features) {
+    if (old_format) {
+      cout << "using old format!" << std::endl;
+      return rbd_create(ioctx, name, size, order);
+    } else {
+      cout << "using new format!" << std::endl;
+      return rbd_create2(ioctx, name, size, features, order);
+    }
   }
-}
+};
 
-static int create_image(rados_ioctx_t ioctx, const char *name,
-			uint64_t size, int *order)
-{
-  bool old_format;
-  uint64_t features;
-
-  int r = get_features(&old_format, &features);
-  if (r < 0)
-    return r;
-  return create_image_full(ioctx, name, size, order, old_format, features);
-}
-
-static int create_image_pp(librbd::RBD &rbd,
-			   librados::IoCtx &ioctx,
-			   const char *name,
-			   uint64_t size, int *order) {
-  bool old_format;
-  uint64_t features;
-  int r = get_features(&old_format, &features);
-  if (r < 0)
-    return r;
-  if (old_format) {
-    return rbd.create(ioctx, name, size, order);
-  } else {
-    return rbd.create2(ioctx, name, size, features, order);
-  }
-}
-
-TEST(LibRBD, CreateAndStat)
+TEST_P(LibRBDTest, CreateAndStat)
 {
   rados_t cluster;
   rados_ioctx_t ioctx;
@@ -126,7 +108,7 @@ TEST(LibRBD, CreateAndStat)
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
-TEST(LibRBD, CreateAndStatPP)
+TEST_P(LibRBDTest, CreateAndStatPP)
 {
   librados::Rados rados;
   librados::IoCtx ioctx;
@@ -154,7 +136,7 @@ TEST(LibRBD, CreateAndStatPP)
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }
 
-TEST(LibRBD, ResizeAndStat)
+TEST_P(LibRBDTest, ResizeAndStat)
 {
   rados_t cluster;
   rados_ioctx_t ioctx;
@@ -185,7 +167,7 @@ TEST(LibRBD, ResizeAndStat)
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
-TEST(LibRBD, ResizeAndStatPP)
+TEST_P(LibRBDTest, ResizeAndStatPP)
 {
   librados::Rados rados;
   librados::IoCtx ioctx;
@@ -264,7 +246,7 @@ int test_ls(rados_ioctx_t io_ctx, size_t num_expected, ...)
   return num_images;
 }
 
-TEST(LibRBD, TestCreateLsDelete)
+TEST_P(LibRBDTest, TestCreateLsDelete)
 {
   rados_t cluster;
   rados_ioctx_t ioctx;
@@ -321,7 +303,7 @@ int test_ls_pp(librbd::RBD& rbd, librados::IoCtx& io_ctx, size_t num_expected, .
   return num;
 }
 
-TEST(LibRBD, TestCreateLsDeletePP)
+TEST_P(LibRBDTest, TestCreateLsDeletePP)
 {
   librados::Rados rados;
   librados::IoCtx ioctx;
@@ -359,7 +341,7 @@ static int print_progress_percent(uint64_t offset, uint64_t src_size,
   return 0; 
 }
 
-TEST(LibRBD, TestCopy)
+TEST_P(LibRBDTest, TestCopy)
 {
   rados_t cluster;
   rados_ioctx_t ioctx;
@@ -400,7 +382,7 @@ public:
   }
 };
 
-TEST(LibRBD, TestCopyPP)
+TEST_P(LibRBDTest, TestCopyPP)
 {
   librados::Rados rados;
   librados::IoCtx ioctx;
@@ -472,7 +454,7 @@ int test_ls_snaps(rbd_image_t image, int num_expected, ...)
   return num_snaps;
 }
 
-TEST(LibRBD, TestCreateLsDeleteSnap)
+TEST_P(LibRBDTest, TestCreateLsDeleteSnap)
 {
   rados_t cluster;
   rados_ioctx_t ioctx;
@@ -547,7 +529,7 @@ int test_ls_snaps(librbd::Image& image, size_t num_expected, ...)
   return snaps.size();
 }
 
-TEST(LibRBD, TestCreateLsDeleteSnapPP)
+TEST_P(LibRBDTest, TestCreateLsDeleteSnapPP)
 {
   librados::Rados rados;
   librados::IoCtx ioctx;
@@ -685,7 +667,7 @@ void read_test_data(rbd_image_t image, const char *expected, uint64_t off, size_
   free(result);
 }
 
-TEST(LibRBD, TestIO)
+TEST_P(LibRBDTest, TestIO)
 {
   rados_t cluster;
   rados_ioctx_t ioctx;
@@ -754,7 +736,7 @@ TEST(LibRBD, TestIO)
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
-TEST(LibRBD, TestEmptyDiscard)
+TEST_P(LibRBDTest, TestEmptyDiscard)
 {
   rados_t cluster;
   rados_ioctx_t ioctx;
@@ -863,7 +845,7 @@ void read_test_data(librbd::Image& image, const char *expected, off_t off, size_
   assert(strncmp(bl.c_str(), expected, expected_len) == 0);
 }
 
-TEST(LibRBD, TestIOPP) 
+TEST_P(LibRBDTest, TestIOPP) 
 {
   librados::Rados rados;
   librados::IoCtx ioctx;
@@ -921,7 +903,7 @@ TEST(LibRBD, TestIOPP)
 }
 
 
-TEST(LibRBD, TestIOToSnapshot)
+TEST_P(LibRBDTest, TestIOToSnapshot)
 {
   rados_t cluster;
   rados_ioctx_t ioctx;
@@ -1012,7 +994,7 @@ TEST(LibRBD, TestIOToSnapshot)
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
-TEST(LibRBD, TestClone)
+TEST_P(LibRBDTest, TestClone)
 {
   rados_t cluster;
   rados_ioctx_t ioctx;
@@ -1125,7 +1107,7 @@ TEST(LibRBD, TestClone)
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
-TEST(LibRBD, TestClone2)
+TEST_P(LibRBDTest, TestClone2)
 {
   rados_t cluster;
   rados_ioctx_t ioctx;
@@ -1252,7 +1234,7 @@ static void test_list_children(rbd_image_t image, ssize_t num_expected, ...)
     free(children);
 }
 
-TEST(LibRBD, ListChildren)
+TEST_P(LibRBDTest, ListChildren)
 {
   rados_t cluster;
   rados_ioctx_t ioctx1, ioctx2;
@@ -1330,7 +1312,7 @@ TEST(LibRBD, ListChildren)
   ASSERT_EQ(0, destroy_one_pool(pool_name2, &cluster));
 }
 
-TEST(LibRBD, LockingPP)
+TEST_P(LibRBDTest, LockingPP)
 {
   librados::Rados rados;
   librados::IoCtx ioctx;
@@ -1401,7 +1383,7 @@ TEST(LibRBD, LockingPP)
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }
 
-TEST(LibRBD, FlushAio)
+TEST_P(LibRBDTest, FlushAio)
 {
   rados_t cluster;
   rados_ioctx_t ioctx;
@@ -1450,7 +1432,7 @@ TEST(LibRBD, FlushAio)
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
-TEST(LibRBD, FlushAioPP)
+TEST_P(LibRBDTest, FlushAioPP)
 {
   librados::Rados rados;
   librados::IoCtx ioctx;
@@ -1554,7 +1536,7 @@ void scribble(librbd::Image& image, int n, int max, interval_set<uint64_t> *exis
   }
 }
 
-TEST(LibRBD, DiffIterate)
+TEST_P(LibRBDTest, DiffIterate)
 {
   librados::Rados rados;
   librados::IoCtx ioctx;
@@ -1624,7 +1606,7 @@ int vector_iterate_cb(uint64_t off, size_t len, int exists, void *arg)
   return 0;
 }
 
-TEST(LibRBD, DiffIterateDiscard)
+TEST_P(LibRBDTest, DiffIterateDiscard)
 {
   librados::Rados rados;
   librados::IoCtx ioctx;
@@ -1703,7 +1685,7 @@ TEST(LibRBD, DiffIterateDiscard)
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }
 
-TEST(LibRBD, DiffIterateStress)
+TEST_P(LibRBDTest, DiffIterateStress)
 {
   librados::Rados rados;
   librados::IoCtx ioctx;
@@ -1773,7 +1755,7 @@ TEST(LibRBD, DiffIterateStress)
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }
 
-TEST(LibRBD, ZeroLengthWrite)
+TEST_P(LibRBDTest, ZeroLengthWrite)
 {
   rados_t cluster;
   rados_ioctx_t ioctx;
@@ -1801,7 +1783,7 @@ TEST(LibRBD, ZeroLengthWrite)
 }
 
 
-TEST(LibRBD, ZeroLengthDiscard)
+TEST_P(LibRBDTest, ZeroLengthDiscard)
 {
   rados_t cluster;
   rados_ioctx_t ioctx;
@@ -1830,7 +1812,7 @@ TEST(LibRBD, ZeroLengthDiscard)
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
-TEST(LibRBD, ZeroLengthRead)
+TEST_P(LibRBDTest, ZeroLengthRead)
 {
   rados_t cluster;
   rados_ioctx_t ioctx;
@@ -1854,6 +1836,24 @@ TEST(LibRBD, ZeroLengthRead)
   rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
+
+INSTANTIATE_TEST_CASE_P(
+  LibRBD,
+  LibRBDTest,
+  ::testing::Values(0, RBD_FEATURE_LAYERING));
+
+#else
+
+// Google Test may not support value-parameterized tests with some
+// compilers. If we use conditional compilation to compile out all
+// code referring to the gtest_main library, MSVC linker will not link
+// that library at all and consequently complain about missing entry
+// point defined in that library (fatal error LNK1561: entry point
+// must be defined). This dummy test keeps gtest_main linked in.
+TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
+
+#endif
+
 
 int main(int argc, char **argv)
 {
