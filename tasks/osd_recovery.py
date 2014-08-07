@@ -82,7 +82,7 @@ def task(ctx, config):
     manager.revive_osd(1)
 
     # wait for our writes to complete + succeed
-    err = p.exitstatus.get()
+    err = p.wait()
     log.info('err is %d' % err)
 
     # cluster must repeer
@@ -92,7 +92,7 @@ def task(ctx, config):
 
     # write some more (make sure osd.2 really is divergent)
     p = rados_start(testdir, mon, ['-p', 'rbd', 'bench', '15', 'write', '-b', '4096'])
-    p.exitstatus.get();
+    p.wait();
 
     # revive divergent osd
     manager.revive_osd(2)
@@ -159,13 +159,13 @@ def test_incomplete_pgs(ctx, config):
     p = rados_start(testdir, mon,
                     ['-p', 'rbd', 'bench', '60', 'write', '-b', '1',
                      '--no-cleanup'])
-    p.exitstatus.get()
+    p.wait()
 
     # few objects in metadata pool (with pg log, normal recovery)
     for f in range(1, 20):
         p = rados_start(testdir, mon, ['-p', 'metadata', 'put',
                               'foo.%d' % f, '/etc/passwd'])
-        p.exitstatus.get()
+        p.wait()
 
     # move it back
     manager.raw_cluster_cmd('osd', 'in', '0', '1')

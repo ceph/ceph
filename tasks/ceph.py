@@ -278,7 +278,7 @@ def valgrind_post(ctx, config):
 
         valgrind_exception = None
         for (proc, remote) in lookup_procs:
-            proc.exitstatus.get()
+            proc.wait()
             out = proc.stdout.getvalue()
             for line in out.split('\n'):
                 if line == '':

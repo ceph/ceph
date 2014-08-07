@@ -60,7 +60,7 @@ def task(ctx, config):
     # write some data
     p = rados_start(ctx, mon, ['-p', 'rbd', 'bench', '15', 'write', '-b', '4096',
                           '--no-cleanup'])
-    err = p.exitstatus.get();
+    err = p.wait();
     log.info('err is %d' % err)
 
     # mark osd.0 out to trigger a rebalance/backfill
@@ -88,7 +88,7 @@ def task(ctx, config):
     manager.revive_osd(1)
 
     # wait for our writes to complete + succeed
-    err = p.exitstatus.get()
+    err = p.wait()
     log.info('err is %d' % err)
 
     # cluster must recover

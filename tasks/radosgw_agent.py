@@ -199,7 +199,7 @@ def task(ctx, config):
             for client, proc in procs:
                 log.info("shutting down sync agent on %s", client)
                 proc.stdin.close()
-                proc.exitstatus.get()
+                proc.wait()
         finally:
             for client, proc in procs:
                 ctx.cluster.only(client).run(

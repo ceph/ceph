@@ -201,7 +201,7 @@ def wait_until_fuse_mounted(remote, fuse, mountpoint):
         log.debug('ceph-fuse not yet mounted, got fs type {fstype!r}'.format(fstype=fstype))
 
         # it shouldn't have exited yet; exposes some trivial problems
-        assert not fuse.exitstatus.ready()
+        assert not fuse.poll()
 
         time.sleep(5)
     log.info('ceph-fuse is mounted on %s', mountpoint)

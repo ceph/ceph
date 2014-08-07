@@ -97,8 +97,8 @@ def task(ctx, config):
             wait=False
             )
         
-        hostresult = hostproc.exitstatus.get()
-        clientresult = clientproc.exitstatus.get()
+        hostresult = hostproc.wait()
+        clientresult = clientproc.wait()
         if (hostresult != 0) or (clientresult != 0):
             raise Exception("Did not pass locking test!")
         log.info('finished locktest executable with results {r} and {s}'. \
