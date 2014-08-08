@@ -184,6 +184,8 @@ void usage(ostream& out)
     ;
 }
 
+unsigned default_op_size = 1 << 22;
+
 static void usage_exit()
 {
   usage(cerr);
@@ -1175,7 +1177,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   const char *target_pool_name = NULL;
   string oloc, target_oloc, nspace;
   int concurrent_ios = 16;
-  int op_size = 1 << 22;
+  unsigned op_size = default_op_size;
   bool cleanup = true;
   const char *snapname = NULL;
   snap_t snapid = CEPH_NOSNAP;
@@ -1363,9 +1365,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     // align op_size
     if (io_ctx.pool_requires_alignment()) {
       const uint64_t align = io_ctx.pool_required_alignment();
-      const bool wrn = (op_size != (1<<22));
+      const uint64_t prev_op_size = op_size;
       op_size = uint64_t((op_size + align - 1) / align) * align;
-      if (wrn)
+      // Warn: if user specified and it was rounded
+      if (prev_op_size != default_op_size && prev_op_size != op_size)
 	cerr << "INFO: op_size has been rounded to " << op_size << std::endl;
     }
   }
