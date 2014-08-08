@@ -544,13 +544,19 @@ bool librados::RadosClient::put() {
 int librados::RadosClient::pool_create(string& name, unsigned long long auid,
 				       __u8 crush_rule)
 {
-  int reply;
+  lock.Lock();
+
+  int r = wait_for_osdmap();
+  if (r < 0) {
+    lock.Unlock();
+    return r;
+  }
 
   Mutex mylock ("RadosClient::pool_create::mylock");
+  int reply;
   Cond cond;
   bool done;
   Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &reply);
-  lock.Lock();
   reply = objecter->create_pool(name, onfinish, auid, crush_rule);
   lock.Unlock();
 
@@ -570,8 +576,13 @@ int librados::RadosClient::pool_create_async(string& name, PoolAsyncCompletionIm
 					     __u8 crush_rule)
 {
   Mutex::Locker l(lock);
+
+  int r = wait_for_osdmap();
+  if (r < 0)
+    return r;
+
   Context *onfinish = new C_PoolAsync_Safe(c);
-  int r = objecter->create_pool(name, onfinish, auid, crush_rule);
+  r = objecter->create_pool(name, onfinish, auid, crush_rule);
   if (r < 0) {
     delete onfinish;
   }
