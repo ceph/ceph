@@ -78,7 +78,7 @@ def fetch(repo_path):
     :param repo_path: The full path to the repository
     :raises:          RuntimeError if the operation fails
     """
-    log.debug("Fetching from upstream into %s", repo_path)
+    log.info("Fetching from upstream into %s", repo_path)
     proc = subprocess.Popen(
         ('git', 'fetch', '-p', 'origin'),
         cwd=repo_path,
@@ -126,7 +126,7 @@ def reset_repo(repo_url, dest_path, branch):
                       RuntimeError for other errors
     """
     validate_branch(branch)
-    log.debug('Resetting repo at %s to branch %s', dest_path, branch)
+    log.info('Resetting repo at %s to branch %s', dest_path, branch)
     # This try/except block will notice if the requested branch doesn't
     # exist, whether it was cloned or fetched.
     try:
@@ -186,7 +186,7 @@ def fetch_teuthology(branch, lock=True):
             'teuthology.git'
         enforce_repo_state(teuthology_git_upstream, dest_path, branch)
 
-        log.debug("Bootstrapping %s", dest_path)
+        log.info("Bootstrapping %s", dest_path)
         # This magic makes the bootstrap script not attempt to clobber an
         # existing virtualenv. But the branch's bootstrap needs to actually
         # check for the NO_CLOBBER variable.
