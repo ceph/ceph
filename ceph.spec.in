@@ -720,6 +720,8 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_bindir}/ceph-monstore-tool
 %{_bindir}/ceph-osdomap-tool
 %{_bindir}/ceph-kvstore-tool
+%{_mandir}/man8/rbd-replay.8*
+%{_bindir}/rbd-replay
 
 %files -n libcephfs_jni1
 %defattr(-,root,root,-)
