@@ -45,11 +45,21 @@ public:
       assert(size == 0);
     }
 
-    // TODO: handle this error.
-    if (r != 0)
-      probe->err = r;
+    bool probe_complete;
+    {
+      Mutex::Locker l(probe->lock);
 
-    filer->_probed(probe, oid, size, mtime);
+      // TODO: handle this error.
+      if (r != 0) {
+        probe->err = r;
+      }
+
+      probe_complete = filer->_probed(probe, oid, size, mtime);
+    }
+    if (probe_complete) {
+      probe->onfinish->complete(probe->err);
+      delete probe;
+    }
   }  
 };
 
@@ -87,13 +97,20 @@ int Filer::probe(inodeno_t ino,
     probe->probing_off -= probe->probing_len;
   }
   
-  _probe(probe);
+  // Take lock before starting any I/Os, to protect us from concurrent calls
+  // back into C_Probe from OSD op completions from different OSDs
+  {
+    Mutex::Locker l(probe->lock);
+    _probe(probe);
+  }
   return 0;
 }
 
 
 void Filer::_probe(Probe *probe)
 {
+  assert(probe->lock.is_locked_by_me());
+
   ldout(cct, 10) << "_probe " << hex << probe->ino << dec 
 	   << " " << probe->probing_off << "~" << probe->probing_len 
 	   << dendl;
@@ -115,8 +132,13 @@ void Filer::_probe(Probe *probe)
   }
 }
 
-void Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mtime)
+/**
+ * @return true if probe is complete and Probe object may be freed.
+ */
+bool Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mtime)
 {
+  assert(probe->lock.is_locked_by_me());
+
   ldout(cct, 10) << "_probed " << probe->ino << " object " << oid
 	   << " has size " << size << " mtime " << mtime << dendl;
 
@@ -128,12 +150,10 @@ void Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mt
   probe->ops.erase(oid);
 
   if (!probe->ops.empty()) 
-    return;  // waiting for more!
+    return false;  // waiting for more!
 
   if (probe->err) { // we hit an error, propagate back up
-    probe->onfinish->complete(probe->err);
-    delete probe;
-    return;
+    return true;
   }
 
   // analyze!
@@ -206,7 +226,7 @@ void Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mt
       probe->probing_off -= period;
     }
     _probe(probe);
-    return;
+    return false;
   }
 
   if (probe->pmtime) {
@@ -214,9 +234,8 @@ void Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mt
     *probe->pmtime = probe->max_mtime;
   }
 
-  // done!  finish and clean up.
-  probe->onfinish->complete(probe->err);
-  delete probe;
+  // done!
+  return true;
 }
 
 
