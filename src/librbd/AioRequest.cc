@@ -6,6 +6,7 @@
 #include "common/Mutex.h"
 #include "common/RWLock.h"
 
+#include "include/interval_set.h"
 #include "librbd/AioCompletion.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
@@ -45,36 +46,84 @@ namespace librbd {
     assert(!m_parent_completion);
     m_parent_completion = aio_create_completion_internal(this, rbd_req_cb);
     ldout(m_ictx->cct, 20) << "read_from_parent this = " << this
-			   << " parent completion " << m_parent_completion
+                           << " parent completion " << m_parent_completion
 			   << " extents " << image_extents
 			   << dendl;
 
-    ImageCtx *next = m_ictx->parent;
-    while (!ictx_check(next)) {
-      if (next->image_index.is_parent(m_object_no)) {
-        uint64_t image_overlap = 0;
-        int r = next->get_parent_overlap(next->snap_id, &image_overlap);
-        assert(0 == r);
-        uint64_t object_overlap = next->prune_parent_extents(image_extents, image_overlap);
-        if (!object_overlap)
-          break;
+    m_parent_completion->read_bl = &m_read_data; 
+    m_parent_completion->get();
+    m_parent_completion->init_time(m_ictx->cct, AIO_TYPE_READ);
 
-        next = next->parent;
-      } else {
-        break;
-      }
+    interval_set<uint64_t> read_subsets;
+    for (vector<pair<uint64_t,uint64_t> >::const_iterator p = image_extents.begin();
+         p != image_extents.end();
+         ++p) {
+      read_subsets.insert(p->first, p->second);
     }
 
-    aio_read(next, image_extents, NULL, &m_read_data,
-	     m_parent_completion);
+    ImageCtx *parent = m_ictx->parent;
+    ldout(m_ictx->cct, 20) << " read_subsets size " << read_subsets.size() << dendl;
+    while (!ictx_check(parent)) {
+      map<object_t,vector<ObjectExtent> > object_extents;
+
+      // reverse map this object extent onto the parent
+      uint64_t buffer_ofs = 0;
+      for (interval_set<uint64_t>::const_iterator p = read_subsets.begin();
+           p != read_subsets.end(); ++p) {
+        ldout(m_ictx->cct, 20) << " read_subsets start " << p.get_start() << " len " << p.get_len() << dendl;
+        Striper::file_to_extents(parent->cct, parent->format_string, &parent->layout,
+                                 p.get_start(), p.get_len(), 0, object_extents, buffer_ofs);
+        buffer_ofs += p.get_len();
+      }
+
+      for (map<object_t, vector<ObjectExtent> >::iterator p = object_extents.begin();
+           p != object_extents.end(); ++p) {
+        assert(!p->second.empty());
+        uint64_t objectno;
+        uint64_t count = 0;
+        vector<pair<uint64_t, uint64_t> > file_extents;
+        for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
+          objectno = q->objectno;
+          count += q->length;
+          file_extents.insert(file_extents.end(), q->file_extents.begin(), q->file_extents.end());
+        }
+        
+        if (parent->image_index.is_parent(objectno)) {
+          uint64_t image_overlap = 0;
+          int r = parent->get_parent_overlap(parent->snap_id, &image_overlap);
+          assert(0 == r);
+          uint64_t object_overlap = parent->prune_parent_extents(file_extents, image_overlap);
+          // Need read from parent again, continue loop
+          if (object_overlap) {
+            continue;
+          }
+        }
+
+        send_aio_read(parent, p->second, m_parent_completion);
+        parent->perfcounter->inc(l_librbd_aio_rd);
+        parent->perfcounter->inc(l_librbd_aio_rd_bytes, count);
+        for (vector<pair<uint64_t, uint64_t> >::iterator q = file_extents.begin();
+             q != file_extents.end(); ++q) {
+          ldout(m_ictx->cct, 0) << " read_subsets erase start " << q->first << " len " << q->second << dendl;
+          read_subsets.erase(q->first, q->second);
+        }
+      }
+
+      if (read_subsets.empty())
+        break;
+      parent = parent->parent;
+    }
+
+    m_parent_completion->finish_adding_requests(m_ictx->cct);
+    m_parent_completion->put();
   }
 
   /** read **/
 
   bool AioRead::should_complete(int r)
   {
-    ldout(m_ictx->cct, 20) << "should_complete " << this << " " << m_oid << " " << m_object_off << "~" << m_object_len
-			   << " r = " << r << dendl;
+    ldout(m_ictx->cct, 20) << "should_complete " << this << " oid " << m_oid << " objectno " << m_object_no << " off " << m_object_off << "~" << m_object_len
+		           << " m_tried_parent " << m_tried_parent << " r = " << r << dendl;
 
     if (!m_tried_parent && r == -ENOENT) {
       // Only when image index don't know the object location info, read op
@@ -83,27 +132,21 @@ namespace librbd {
       RWLock::RLocker l(m_ictx->snap_lock);
       RWLock::RLocker l2(m_ictx->parent_lock);
 
-      // calculate reverse mapping onto the image
-      vector<pair<uint64_t,uint64_t> > image_extents;
-      Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
-			    m_object_no, m_object_off, m_object_len,
-			    image_extents);
-
       uint64_t image_overlap = 0;
       r = m_ictx->get_parent_overlap(m_snap_id, &image_overlap);
       if (r < 0) {
 	assert(0 == "FIXME");
       }
-      uint64_t object_overlap = m_ictx->prune_parent_extents(image_extents, image_overlap);
+      uint64_t object_overlap = m_ictx->prune_parent_extents(m_file_extents, image_overlap);
       if (object_overlap) {
 	m_tried_parent = true;
-	read_from_parent(image_extents);
+	read_from_parent(m_file_extents);
 	return false;
-      } else {
-        m_ictx->image_index.mark_local(m_object_no);
       }
     }
 
+    if (!m_tried_parent && r >= 0)
+      m_ictx->image_index.mark_local(m_object_no);
     return true;
   }
 

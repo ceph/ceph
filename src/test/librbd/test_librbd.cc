@@ -86,6 +86,10 @@ public:
       return rbd_create(ioctx, name, size, order);
     }
   }
+
+  int get_features() {
+    return GetParam();
+  }
 };
 
 TEST_P(LibRBDTest, CreateAndStat)
@@ -1000,6 +1004,77 @@ TEST_P(LibRBDTest, TestIOToSnapshot)
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
+TEST_P(LibRBDTest, TestCloneIO)
+{
+  rados_t cluster;
+  rados_ioctx_t ioctx;
+  string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
+  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
+
+  int features = get_features() | RBD_FEATURE_LAYERING;
+  rbd_image_t parent, child, child2;
+  int order = 14;
+  int parent_size = 1 << 24;
+  int period_size = 1 << 16;
+  char full1[17] = "1111111111111111";
+  char full2[17] = "2222222222222222";
+
+  ASSERT_EQ(0, create_imagev2_plus(ioctx, "parent", parent_size, &order, features));
+  ASSERT_EQ(0, rbd_open(ioctx, "parent", &parent, NULL));
+
+  for (int i = 0; i < parent_size; i += period_size) {
+    ASSERT_EQ((ssize_t)strlen(full1), rbd_write(parent, i, strlen(full1), full1));
+  }
+
+  ASSERT_EQ(0, rbd_snap_create(parent, "parent_snap"));
+  ASSERT_EQ(0, rbd_snap_protect(parent, "parent_snap"));
+  order = 20;
+  ASSERT_EQ(0, rbd_clone(ioctx, "parent", "parent_snap", ioctx, "child",
+           features, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, "child", &child, NULL));
+
+  int size = parent_size * 2;
+  ASSERT_EQ(0, rbd_resize(child, size));
+  for (int i = parent_size; i < size; i += period_size) {
+    ASSERT_EQ((ssize_t)strlen(full2), rbd_write(child, i, strlen(full2), full2));
+  }
+
+  ASSERT_EQ(0, rbd_snap_create(child, "child_snap"));
+  ASSERT_EQ(0, rbd_snap_protect(child, "child_snap"));
+  order = 22;
+  ASSERT_EQ(0, rbd_clone(ioctx, "child", "child_snap", ioctx, "child2",
+           features, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, "child2", &child2, NULL));
+
+  for (int i = 0; i < parent_size; i += period_size) {
+    char test[17];
+    ASSERT_EQ(16, rbd_read(child2, i, 16, test));
+    ASSERT_EQ(0, memcmp(test, full1, 16));
+  }
+  for (int i = parent_size; i < size; i += period_size) {
+    char test[17];
+    ASSERT_EQ(16, rbd_read(child2, i, 16, test));
+    ASSERT_EQ(0, memcmp(test, full2, 16));
+  }
+
+  ASSERT_EQ(0, rbd_flatten(child2));
+  for (int i = 0; i < parent_size; i += period_size) {
+    char test[17];
+    ASSERT_EQ(16, rbd_read(child2, i, 16, test));
+    ASSERT_EQ(0, memcmp(test, full1, 16));
+  }
+  for (int i = parent_size; i < size; i += period_size) {
+    char test[17];
+    ASSERT_EQ(16, rbd_read(child2, i, 16, test));
+    ASSERT_EQ(0, memcmp(test, full2, 16));
+  }
+
+  ASSERT_EQ(0, rbd_close(parent));
+  ASSERT_EQ(0, rbd_close(child2));
+  ASSERT_EQ(0, rbd_close(child));
+}
+
 TEST_P(LibRBDTest, TestClone)
 {
   rados_t cluster;
@@ -1009,7 +1084,7 @@ TEST_P(LibRBDTest, TestClone)
   ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
 
-  int features = RBD_FEATURE_LAYERING;
+  int features = get_features() | RBD_FEATURE_LAYERING;
   rbd_image_t parent, child;
   int order = 0;
 
@@ -1121,7 +1196,7 @@ TEST_P(LibRBDTest, TestClone2)
   ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
 
-  int features = RBD_FEATURE_LAYERING;
+  int features = get_features() | RBD_FEATURE_LAYERING;
   rbd_image_t parent, child;
   int order = 0;
 
@@ -1251,7 +1326,7 @@ TEST_P(LibRBDTest, ListChildren)
   rados_ioctx_create(cluster, pool_name1.c_str(), &ioctx1);
   rados_ioctx_create(cluster, pool_name2.c_str(), &ioctx2);
 
-  int features = RBD_FEATURE_LAYERING;
+  int features = get_features() | RBD_FEATURE_LAYERING;
   rbd_image_t parent;
   int order = 0;
 

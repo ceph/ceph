@@ -115,6 +115,7 @@ namespace librbd {
     uint64_t get_current_size() const;
     uint64_t get_object_size() const;
     string get_object_name(uint64_t num) const;
+    uint64_t calc_num_objects(uint64_t s) const;
     uint64_t get_num_objects() const;
     uint64_t get_stripe_unit() const;
     uint64_t get_stripe_count() const;
@@ -132,11 +133,12 @@ namespace librbd {
     uint64_t get_parent_snap_id(librados::snap_t in_snap_id) const;
     int get_parent_overlap(librados::snap_t in_snap_id,
 			   uint64_t *overlap) const;
-    void aio_read_from_cache(object_t o, bufferlist *bl, size_t len,
-			     uint64_t off, Context *onfinish);
+    void aio_read_from_cache(object_t o, bufferlist *bl, size_t len, uint64_t off,
+                             vector<pair<uint64_t, uint64_t> > &file_extents, Context *onfinish);
     void write_to_cache(object_t o, bufferlist& bl, size_t len, uint64_t off,
-			Context *onfinish);
-    int read_from_cache(object_t o, bufferlist *bl, size_t len, uint64_t off);
+                        vector<pair<uint64_t, uint64_t> > &file_extents, Context *onfinish);
+    int read_from_cache(object_t o, bufferlist *bl, size_t len, uint64_t off,
+                        vector<pair<uint64_t, uint64_t> > &file_extents);
     void user_flushed();
     void flush_cache_aio(Context *onfinish);
     int flush_cache();
@@ -170,24 +172,33 @@ namespace librbd {
     // this object is "parent" but the real data is "local". There exists three
     // methods to solve it:
     // 1. flush `state_map` every time when "parent" -> "local" happened
-    // 2. as we know, parent image is frozen and never change `state_map`, so
-    // we will read current image object all the time in sprint of the object
-    // state and trust the parent image's state. In other word, when opening
-    // the *current* image, all "parent" objects will be transformed to
-    // "unknown".
+    // 2. mark all objects from "parent" state to "unknown“ state when loading
+    // image index(not including snapshot which has frozen index).
     //
     // Here choose to implement method 2. This method only allow 2 read ops
-    // in one read request at max and without overhead.
+    // in one read request at max and without overhead. Usually, librbd will
+    // open image for many days(months) for normal use case such as VM usage.
+    // So the image index will be warmed up and became smart when processing
+    // ops.
     //
-    // 1. When creating new image, it will mark all objects as "local"
-    // 2. When clone from image, it will mark all objects as "parent"
-    // 3. When write(or modified op) a object, it will mark this object as
-    // "local"
-    // 4. When creating snapshot, image index will be freeze and save it as the
-    // index of the snapshot
-    // 5. When reading object, the current image object will be always read in
+    // Except image state changed problem, another concern is size. Image
+    // index only permit single client write, but resize/flatten/rollback ops
+    // are allowed to happen concurrently. For simply, now these ops don't
+    // change and save states into rados. Resize op will affect "size" and
+    // current write client will be notified.
+    //
+    // Below listing object state change scenes:
+    // 1. When clone from image, it will mark all objects as "parent"
+    // 2. When creating snapshot, image index will be freeze and save it as the
+    // index of the snapshot. All "parent" state objects will be marked as
+    // "unknown" for safe
+    // 3. When write(including modified op) a object, it will mark this object
+    // as "local"
+    // 4. When reading object, the current image object will be always read in
     // spite of the state. And the parent image's object will be checked and
-    // trust the state.
+    // trust the state. If exists parent image but read local object
+    // successfully, the local object will be marked "local"
+    // 5. Image index will be periodically save into rados
 
     class ImageIndex {
     private:
@@ -205,7 +216,7 @@ namespace librbd {
 
     public:
       ImageIndex(ImageCtx *image): state_lock("librbd::ImageIndex::state_lock"),
-                                   enable(false), image(image),
+                                   num_obj(0), enable(false), image(image),
                                    cct(image->cct) {
 
       }
@@ -271,6 +282,16 @@ namespace librbd {
         return state_map[objno] == OBJ_PARENT;
       }
 
+      void mark_all_parent_to_unknown() {
+        Mutex::Locker l(state_lock);
+        if (!enable)
+          return;
+
+        for (uint64_t i = 0; i < num_obj; ++i)
+          if (state_map[i] == OBJ_PARENT)
+            state_map[i] = OBJ_UNKNOWN;
+      }
+
       void mark_all_parent() {
         Mutex::Locker l(state_lock);
         if (!enable)
@@ -292,12 +313,6 @@ namespace librbd {
         Mutex::Locker l(state_lock);
         if (enable)
           state_map[objno] = OBJ_LOCAL;
-      }
-      void mark_parent(uint64_t objno) {
-        assert(objno < num_obj);
-        Mutex::Locker l(state_lock);
-        if (enable)
-          state_map[objno] = OBJ_PARENT;
       }
     } image_index;
     WRITE_CLASS_ENCODER(ImageIndex)

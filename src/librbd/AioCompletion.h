@@ -52,7 +52,7 @@ namespace librbd {
     bool building;       ///< true if we are still building this completion
     int ref;
     bool released;
-    ImageCtx *ictx;
+    set<ImageCtx*> requests;
     utime_t start_time;
     aio_type_t aio_type;
 
@@ -65,7 +65,7 @@ namespace librbd {
 		      done(false), rval(0), complete_cb(NULL),
 		      complete_arg(NULL), rbd_comp(NULL),
 		      pending_count(0), building(true),
-		      ref(1), released(false), ictx(NULL),
+		      ref(1), released(false),
 		      aio_type(AIO_TYPE_NONE),
 		      read_bl(NULL), read_buf(NULL), read_buf_len(0) {
     }
@@ -80,9 +80,10 @@ namespace librbd {
       return 0;
     }
 
-    void add_request() {
+    void add_request(ImageCtx *ctx) {
       lock.Lock();
       pending_count++;
+      requests.insert(ctx);
       lock.Unlock();
       get();
     }
@@ -91,28 +92,30 @@ namespace librbd {
 
     void finish_adding_requests(CephContext *cct);
 
-    void init_time(ImageCtx *i, aio_type_t t) {
-      ictx = i;
+    void init_time(CephContext *cct, aio_type_t t) {
       aio_type = t;
-      start_time = ceph_clock_now(ictx->cct);
+      start_time = ceph_clock_now(cct);
     }
 
-    void complete() {
+    void complete(CephContext *cct) {
       utime_t elapsed;
       assert(lock.is_locked());
-      elapsed = ceph_clock_now(ictx->cct) - start_time;
-      switch (aio_type) {
-      case AIO_TYPE_READ:
-	ictx->perfcounter->tinc(l_librbd_aio_rd_latency, elapsed); break;
-      case AIO_TYPE_WRITE:
-	ictx->perfcounter->tinc(l_librbd_aio_wr_latency, elapsed); break;
-      case AIO_TYPE_DISCARD:
-	ictx->perfcounter->tinc(l_librbd_aio_discard_latency, elapsed); break;
-      case AIO_TYPE_FLUSH:
-	ictx->perfcounter->tinc(l_librbd_aio_flush_latency, elapsed); break;
-      default:
-	lderr(ictx->cct) << "completed invalid aio_type: " << aio_type << dendl;
-	break;
+      elapsed = ceph_clock_now(cct) - start_time;
+      for (set<ImageCtx*>::iterator it = requests.begin();
+           it != requests.end(); ++it) {
+        switch (aio_type) {
+        case AIO_TYPE_READ:
+          (*it)->perfcounter->tinc(l_librbd_aio_rd_latency, elapsed); break;
+        case AIO_TYPE_WRITE:
+          (*it)->perfcounter->tinc(l_librbd_aio_wr_latency, elapsed); break;
+        case AIO_TYPE_DISCARD:
+          (*it)->perfcounter->tinc(l_librbd_aio_discard_latency, elapsed); break;
+        case AIO_TYPE_FLUSH:
+          (*it)->perfcounter->tinc(l_librbd_aio_flush_latency, elapsed); break;
+        default:
+          lderr((*it)->cct) << "completed invalid aio_type: " << aio_type << dendl;
+          break;
+        }
       }
       if (complete_cb) {
 	complete_cb(rbd_comp, complete_arg);

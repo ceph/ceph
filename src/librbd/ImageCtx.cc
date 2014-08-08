@@ -275,10 +275,10 @@ namespace librbd {
       snap_id = it->second.id;
       snap_exists = true;
       data_ctx.snap_set_read(snap_id);
+      image_index.load();
       return 0;
     }
 
-    image_index.load();
     return -ENOENT;
   }
 
@@ -357,11 +357,16 @@ namespace librbd {
     return stripe_count * (1ull << order);
   }
 
-  uint64_t ImageCtx::get_num_objects() const
+  uint64_t ImageCtx::calc_num_objects(uint64_t s) const
   {
     uint64_t period = get_stripe_period();
-    uint64_t num_periods = (size + period - 1) / period;
+    uint64_t num_periods = (s + period - 1) / period;
     return num_periods * stripe_count;
+  }
+
+  uint64_t ImageCtx::get_num_objects() const
+  {
+    return calc_num_objects(size);
   }
 
   int ImageCtx::is_snap_protected(string in_snap_name, bool *is_protected) const
@@ -496,14 +501,16 @@ namespace librbd {
     return 0;
   }
 
-  void ImageCtx::aio_read_from_cache(object_t o, bufferlist *bl, size_t len,
-				     uint64_t off, Context *onfinish) {
+  void ImageCtx::aio_read_from_cache(object_t o, bufferlist *bl, size_t len, uint64_t off,
+                                     vector<pair<uint64_t, uint64_t> > &file_extents,
+                                     Context *onfinish) {
     snap_lock.get_read();
     ObjectCacher::OSDRead *rd = object_cacher->prepare_read(snap_id, bl, 0);
     snap_lock.put_read();
     ObjectExtent extent(o, 0 /* a lie */, off, len, 0);
     extent.oloc.pool = data_ctx.get_id();
     extent.buffer_extents.push_back(make_pair(0, len));
+    extent.file_extents = file_extents;
     rd->extents.push_back(extent);
     cache_lock.Lock();
     int r = object_cacher->readx(rd, object_set, onfinish);
@@ -512,8 +519,9 @@ namespace librbd {
       onfinish->complete(r);
   }
 
-  void ImageCtx::write_to_cache(object_t o, bufferlist& bl, size_t len,
-				uint64_t off, Context *onfinish) {
+  void ImageCtx::write_to_cache(object_t o, bufferlist& bl, size_t len, uint64_t off,
+                                vector<pair<uint64_t, uint64_t> > &file_extents,
+                                Context *onfinish) {
     snap_lock.get_read();
     ObjectCacher::OSDWrite *wr = object_cacher->prepare_write(snapc, bl,
 							      utime_t(), 0);
@@ -523,6 +531,7 @@ namespace librbd {
     // XXX: nspace is always default, io_ctx_impl field private
     //extent.oloc.nspace = data_ctx.io_ctx_impl->oloc.nspace;
     extent.buffer_extents.push_back(make_pair(0, len));
+    extent.file_extents = file_extents;
     wr->extents.push_back(extent);
     {
       Mutex::Locker l(cache_lock);
@@ -530,14 +539,14 @@ namespace librbd {
     }
   }
 
-  int ImageCtx::read_from_cache(object_t o, bufferlist *bl, size_t len,
-				uint64_t off) {
+  int ImageCtx::read_from_cache(object_t o, bufferlist *bl, size_t len, uint64_t off,
+                                vector<pair<uint64_t, uint64_t> > &file_extents) {
     int r;
     Mutex mylock("librbd::ImageCtx::read_from_cache");
     Cond cond;
     bool done;
     Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &r);
-    aio_read_from_cache(o, bl, len, off, onfinish);
+    aio_read_from_cache(o, bl, len, off, file_extents, onfinish);
     mylock.Lock();
     while (!done)
       cond.Wait(mylock);
@@ -677,14 +686,16 @@ namespace librbd {
   // -- ImageIndex --
   int ImageCtx::ImageIndex::load()
   {
-    Mutex::Locker l(state_lock);
+    Mutex::Locker l2(state_lock);
+    uint64_t snap_id = image->snap_id;
+    int r = 0;
 
     if (image->flags & LIBRBD_CREATE_NONSHARED) {
       enable = true;
 
       bufferlist index_bl;
-      int r = cls_client::get_image_index(&image->md_ctx, image->header_oid,
-                                          image->snap_id, &index_bl);
+      r = cls_client::get_image_index(&image->md_ctx, image->header_oid,
+                                      snap_id, &index_bl);
       if (r < 0) {
         lderr(cct) << "error reading image index metadata: "
                     << cpp_strerror(r) << dendl;
@@ -697,6 +708,27 @@ namespace librbd {
           lderr(cct) << "decode image index metadata failed: " << dendl;
         }
       }
+    }
+
+    uint64_t current_objects;
+    if (snap_id == CEPH_NOSNAP) {
+      current_objects = image->get_num_objects();
+    } else {
+      string snap_name;
+      image->get_snap_name(snap_id, &snap_name);
+      map<string, SnapInfo>::const_iterator p = image->snaps_by_name.find(snap_name);
+      assert(p != image->snaps_by_name.end());
+      current_objects = image->calc_num_objects(p->second.size);
+    }
+
+    if (!num_obj || current_objects != num_obj || num_obj != state_map.size()) {
+      lderr(cct) << __func__ << " initialize index: image's object number is " << current_objects
+                 << " num_obj is " << num_obj << " state_map size is "
+                 << state_map.size() << dendl;
+      num_obj = current_objects;
+      state_map.resize(num_obj);
+      for (uint64_t i = 0; i < num_obj; ++i)
+        state_map[i] = OBJ_UNKNOWN;
     }
 
     return 0;

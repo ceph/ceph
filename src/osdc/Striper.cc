@@ -119,6 +119,7 @@ void Striper::file_to_extents(CephContext *cct, const char *object_format,
       ex->length += x_len;
     }
     ex->buffer_extents.push_back(make_pair(cur - offset + buffer_offset, x_len));
+    ex->file_extents.push_back(make_pair(cur, x_len));
         
     ldout(cct, 15) << "file_to_extents  " << *ex << " in " << ex->oloc << dendl;
     //ldout(cct, 0) << "map: ino " << ino << " oid " << ex.oid << " osd " << ex.osd << " offset " << ex.offset << " len " << ex.len << " ... left " << left << dendl;

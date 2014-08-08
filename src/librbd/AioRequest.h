@@ -46,6 +46,7 @@ namespace librbd {
     virtual bool should_complete(int r) = 0;
     virtual int send() = 0;
 
+
   protected:
     void read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents);
 
@@ -62,14 +63,15 @@ namespace librbd {
 
   class AioRead : public AioRequest {
   public:
-    AioRead(ImageCtx *ictx, const std::string &oid,
-	    uint64_t objectno, uint64_t offset, uint64_t len,
+    AioRead(ImageCtx *ictx, const std::string &oid, uint64_t objectno,
+            uint64_t offset, uint64_t len,
 	    vector<pair<uint64_t,uint64_t> >& be,
+	    vector<pair<uint64_t,uint64_t> >& fe,
 	    librados::snap_t snap_id, bool sparse,
 	    Context *completion)
       : AioRequest(ictx, oid, objectno, offset, len, snap_id, completion,
 		   false),
-	m_buffer_extents(be),
+	m_buffer_extents(be), m_file_extents(fe),
 	m_tried_parent(false), m_sparse(sparse) {
     }
     virtual ~AioRead() {}
@@ -85,6 +87,7 @@ namespace librbd {
 
   private:
     vector<pair<uint64_t,uint64_t> > m_buffer_extents;
+    vector<pair<uint64_t,uint64_t> > m_file_extents;
     bool m_tried_parent;
     bool m_sparse;
   };
@@ -187,7 +190,7 @@ namespace librbd {
 		      objectx, object_overlap,
 		      snapc, snap_id, completion,
 		      true) {
-      if (!m_ictx->image_index.is_local(m_object_no) && has_parent())
+      if (has_parent())
 	m_write.truncate(0);
       else
 	m_write.remove();
