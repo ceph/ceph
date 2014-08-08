@@ -132,11 +132,12 @@ namespace librbd {
     uint64_t get_parent_snap_id(librados::snap_t in_snap_id) const;
     int get_parent_overlap(librados::snap_t in_snap_id,
 			   uint64_t *overlap) const;
-    void aio_read_from_cache(object_t o, bufferlist *bl, size_t len,
-			     uint64_t off, Context *onfinish);
+    void aio_read_from_cache(object_t o, bufferlist *bl, size_t len, uint64_t off,
+                             uint64_t f_off, Context *onfinish);
     void write_to_cache(object_t o, bufferlist& bl, size_t len, uint64_t off,
-			Context *onfinish);
-    int read_from_cache(object_t o, bufferlist *bl, size_t len, uint64_t off);
+                        uint64_t f_off, Context *onfinish);
+    int read_from_cache(object_t o, bufferlist *bl, size_t len, uint64_t off,
+                        uint64_t f_off);
     void user_flushed();
     void flush_cache_aio(Context *onfinish);
     int flush_cache();
@@ -205,7 +206,7 @@ namespace librbd {
 
     public:
       ImageIndex(ImageCtx *image): state_lock("librbd::ImageIndex::state_lock"),
-                                   enable(false), image(image),
+                                   num_obj(0), enable(false), image(image),
                                    cct(image->cct) {
 
       }
@@ -292,12 +293,6 @@ namespace librbd {
         Mutex::Locker l(state_lock);
         if (enable)
           state_map[objno] = OBJ_LOCAL;
-      }
-      void mark_parent(uint64_t objno) {
-        assert(objno < num_obj);
-        Mutex::Locker l(state_lock);
-        if (enable)
-          state_map[objno] = OBJ_PARENT;
       }
     } image_index;
     WRITE_CLASS_ENCODER(ImageIndex)

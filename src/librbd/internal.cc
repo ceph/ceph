@@ -3025,7 +3025,7 @@ reprotect_and_return_err:
       C_AioWrite *req_comp = new C_AioWrite(cct, c);
       if (ictx->object_cacher) {
 	c->add_request();
-	ictx->write_to_cache(p->oid, bl, p->length, p->offset, req_comp);
+	ictx->write_to_cache(p->oid, bl, p->length, p->offset, p->file_offset, req_comp);
       } else {
 	// reverse map this object extent onto the parent
 	vector<pair<uint64_t,uint64_t> > objectx;
@@ -3144,6 +3144,7 @@ reprotect_and_return_err:
   {
     AioRequest *req = reinterpret_cast<AioRequest *>(arg);
     AioCompletion *comp = reinterpret_cast<AioCompletion *>(cb);
+    req->finish_completion(comp);
     req->complete(comp->get_return_value());
   }
 
@@ -3202,10 +3203,11 @@ reprotect_and_return_err:
 			     << " from " << q->buffer_extents << dendl;
 
 	C_AioRead *req_comp = new C_AioRead(ictx->cct, c);
-	AioRead *req = new AioRead(ictx, q->oid.name, 
-				   q->objectno, q->offset, q->length,
-				   q->buffer_extents,
-				   snap_id, true, req_comp);
+	AioRead *req = new AioRead(ictx, q->oid.name,
+                                   q->objectno, q->offset, q->length,
+                                   q->file_offset,
+                                   q->buffer_extents,
+                                   snap_id, true, req_comp);
 	req_comp->set_req(req);
 	c->add_request();
 
@@ -3213,7 +3215,7 @@ reprotect_and_return_err:
 	  C_CacheRead *cache_comp = new C_CacheRead(req);
 	  ictx->aio_read_from_cache(q->oid, &req->data(),
 				    q->length, q->offset,
-				    cache_comp);
+				    q->file_offset, cache_comp);
 	} else {
 	  r = req->send();
 	  if (r < 0 && r == -ENOENT)

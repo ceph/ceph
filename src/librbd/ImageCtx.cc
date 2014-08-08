@@ -497,11 +497,11 @@ namespace librbd {
   }
 
   void ImageCtx::aio_read_from_cache(object_t o, bufferlist *bl, size_t len,
-				     uint64_t off, Context *onfinish) {
+				     uint64_t off, uint64_t f_off, Context *onfinish) {
     snap_lock.get_read();
     ObjectCacher::OSDRead *rd = object_cacher->prepare_read(snap_id, bl, 0);
     snap_lock.put_read();
-    ObjectExtent extent(o, 0 /* a lie */, off, len, 0);
+    ObjectExtent extent(o, 0 /* a lie */, off, len, 0, f_off);
     extent.oloc.pool = data_ctx.get_id();
     extent.buffer_extents.push_back(make_pair(0, len));
     rd->extents.push_back(extent);
@@ -512,13 +512,13 @@ namespace librbd {
       onfinish->complete(r);
   }
 
-  void ImageCtx::write_to_cache(object_t o, bufferlist& bl, size_t len,
-				uint64_t off, Context *onfinish) {
+  void ImageCtx::write_to_cache(object_t o, bufferlist& bl, size_t len, uint64_t off,
+                                uint64_t f_off, Context *onfinish) {
     snap_lock.get_read();
     ObjectCacher::OSDWrite *wr = object_cacher->prepare_write(snapc, bl,
 							      utime_t(), 0);
     snap_lock.put_read();
-    ObjectExtent extent(o, 0, off, len, 0);
+    ObjectExtent extent(o, 0, off, len, 0, f_off);
     extent.oloc.pool = data_ctx.get_id();
     // XXX: nspace is always default, io_ctx_impl field private
     //extent.oloc.nspace = data_ctx.io_ctx_impl->oloc.nspace;
@@ -531,13 +531,13 @@ namespace librbd {
   }
 
   int ImageCtx::read_from_cache(object_t o, bufferlist *bl, size_t len,
-				uint64_t off) {
+				uint64_t off, uint64_t f_off) {
     int r;
     Mutex mylock("librbd::ImageCtx::read_from_cache");
     Cond cond;
     bool done;
     Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &r);
-    aio_read_from_cache(o, bl, len, off, onfinish);
+    aio_read_from_cache(o, bl, len, off, f_off, onfinish);
     mylock.Lock();
     while (!done)
       cond.Wait(mylock);

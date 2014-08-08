@@ -21,8 +21,8 @@ namespace librbd {
   AioRequest::AioRequest() :
     m_ictx(NULL), m_ioctx(NULL),
     m_object_no(0), m_object_off(0), m_object_len(0),
-    m_snap_id(CEPH_NOSNAP), m_completion(NULL), m_parent_completion(NULL),
-    m_hide_enoent(false) {}
+    m_snap_id(CEPH_NOSNAP), m_completion(NULL),
+    m_hide_enoent(false), inflight(0) {}
   AioRequest::AioRequest(ImageCtx *ictx, const std::string &oid,
 			 uint64_t objectno, uint64_t off, uint64_t len,
 			 librados::snap_t snap_id,
@@ -30,43 +30,76 @@ namespace librbd {
 			 bool hide_enoent) :
     m_ictx(ictx), m_ioctx(&ictx->data_ctx), m_oid(oid), m_object_no(objectno),
     m_object_off(off), m_object_len(len), m_snap_id(snap_id),
-    m_completion(completion), m_parent_completion(NULL),
-    m_hide_enoent(hide_enoent) {}
+    m_completion(completion),
+    m_hide_enoent(hide_enoent), inflight(0) {}
 
   AioRequest::~AioRequest() {
-    if (m_parent_completion) {
-      m_parent_completion->release();
-      m_parent_completion = NULL;
+    if (!waitfor_commit.empty()) {
+      for (map<AioCompletion*, bool>::iterator it = waitfor_commit.begin();
+           it != waitfor_commit.end(); ++it) {
+        it->first->release();
+      }
     }
   }
 
   void AioRequest::read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents)
   {
-    assert(!m_parent_completion);
-    m_parent_completion = aio_create_completion_internal(this, rbd_req_cb);
     ldout(m_ictx->cct, 20) << "read_from_parent this = " << this
-			   << " parent completion " << m_parent_completion
 			   << " extents " << image_extents
 			   << dendl;
 
-    ImageCtx *next = m_ictx->parent;
-    while (!ictx_check(next)) {
-      if (next->image_index.is_parent(m_object_no)) {
-        uint64_t image_overlap = 0;
-        int r = next->get_parent_overlap(next->snap_id, &image_overlap);
-        assert(0 == r);
-        uint64_t object_overlap = next->prune_parent_extents(image_extents, image_overlap);
-        if (!object_overlap)
-          break;
+    ImageCtx *parent = m_ictx->parent;
+    while (!ictx_check(parent)) {
+      map<object_t,vector<ObjectExtent> > object_extents;
 
-        next = next->parent;
-      } else {
-        break;
+      // reverse map this object extent onto the parent
+      uint64_t buffer_ofs = 0;
+      for (vector<pair<uint64_t,uint64_t> >::const_iterator p = image_extents.begin();
+           p != image_extents.end();
+           ++p) {
+        Striper::file_to_extents(parent->cct, parent->format_string, &parent->layout,
+                                 p->first, p->second, 0, object_extents, buffer_ofs);
+        buffer_ofs += p->second;
       }
-    }
 
-    aio_read(next, image_extents, NULL, &m_read_data,
-	     m_parent_completion);
+      map<object_t, vector<ObjectExtent> >::iterator p = object_extents.begin();
+      map<object_t, vector<ObjectExtent> >::iterator next = p;
+      while (p != object_extents.end()) {
+        next++;
+
+        assert(!p->second.empty());
+        uint64_t objectno;
+        vector<pair<uint64_t, uint64_t> > obj_extents;
+        for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
+          objectno = q->objectno;
+          obj_extents.push_back(make_pair(q->file_offset, q->length));
+        }
+
+        if (parent->image_index.is_parent(objectno)) {
+          uint64_t image_overlap = 0;
+          int r = parent->get_parent_overlap(parent->snap_id, &image_overlap);
+          assert(0 == r);
+          uint64_t object_overlap = parent->prune_parent_extents(obj_extents, image_overlap);
+          // Need read from parent again, continue loop
+          if (object_overlap) {
+            p = next;
+            continue;
+          }
+        }
+
+        AioCompletion *comp = aio_create_completion_internal(this, rbd_req_cb);
+        waitfor_commit[comp] = true;
+        inflight++;
+        aio_read(parent, obj_extents, NULL, &m_read_data, comp);
+
+        object_extents.erase(p);
+        p = next;
+      }
+
+      if (object_extents.empty())
+        break;
+      parent = parent->parent;
+    }
   }
 
   /** read **/
@@ -84,10 +117,9 @@ namespace librbd {
       RWLock::RLocker l2(m_ictx->parent_lock);
 
       // calculate reverse mapping onto the image
-      vector<pair<uint64_t,uint64_t> > image_extents;
-      Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
-			    m_object_no, m_object_off, m_object_len,
-			    image_extents);
+      vector<pair<uint64_t,uint64_t> > image_extents(1);
+      // It must be only one extent
+      image_extents[0] = make_pair(m_file_offset, m_object_len);
 
       uint64_t image_overlap = 0;
       r = m_ictx->get_parent_overlap(m_snap_id, &image_overlap);
@@ -99,11 +131,11 @@ namespace librbd {
 	m_tried_parent = true;
 	read_from_parent(image_extents);
 	return false;
-      } else {
-        m_ictx->image_index.mark_local(m_object_no);
       }
     }
 
+    if (!m_tried_parent)
+      m_ictx->image_index.mark_local(m_object_no);
     return true;
   }
 
