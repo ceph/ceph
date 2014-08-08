@@ -79,6 +79,9 @@ def main(ctx):
     beanstalk.watch_tube(connection, ctx.tube)
     result_proc = None
 
+    fetch_teuthology('master')
+    fetch_qa_suite('master')
+
     while True:
         # Check to see if we have a teuthology-results process hanging around
         # and if so, read its return code so that it can exit.
