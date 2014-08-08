@@ -3295,9 +3295,9 @@ int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_pr
 					   map<string,string> *erasure_code_profile_map,
 					   stringstream &ss)
 {
-  int r = get_str_map(g_conf->osd_pool_default_erasure_code_profile,
-		      ss,
-		      erasure_code_profile_map);
+  int r = get_json_str_map(g_conf->osd_pool_default_erasure_code_profile,
+		           ss,
+		           erasure_code_profile_map);
   if (r)
     return r;
   (*erasure_code_profile_map)["directory"] =

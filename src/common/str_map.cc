@@ -23,9 +23,11 @@
 
 using namespace std;
 
-int get_str_map(const string &str,
-                ostream &ss,
-                map<string,string> *str_map)
+int get_json_str_map(
+    const string &str,
+    ostream &ss,
+    map<string,string> *str_map,
+    bool fallback_to_plain)
 {
   json_spirit::mValue json;
   try {
@@ -46,25 +48,44 @@ int get_str_map(const string &str,
 	 ++i) {
       (*str_map)[i->first] = i->second.get_str();
     }
-    
   } catch (json_spirit::Error_position &e) {
-    // fallback to key=value format
-
-    list<string> pairs;
-    get_str_list(str, "\t\n ", pairs);
-    for (list<string>::iterator i = pairs.begin(); i != pairs.end(); ++i) {
-      size_t equal = i->find('=');
-      if (equal == string::npos)
-	(*str_map)[*i] = string();
-      else {
-	const string key = i->substr(0, equal);
-	equal++;
-	const string value = i->substr(equal);
-	(*str_map)[key] = value;
-      }
+    if (fallback_to_plain) {
+      // fallback to key=value format
+      get_str_map(str, "\t\n ", str_map);
+    } else {
+      return -EINVAL;
     }
   }
   return 0;
+}
+
+int get_str_map(
+    const string &str,
+    const char *delims,
+    map<string,string> *str_map)
+{
+  list<string> pairs;
+  get_str_list(str, delims, pairs);
+  for (list<string>::iterator i = pairs.begin(); i != pairs.end(); ++i) {
+    size_t equal = i->find('=');
+    if (equal == string::npos)
+      (*str_map)[*i] = string();
+    else {
+      const string key = i->substr(0, equal);
+      equal++;
+      const string value = i->substr(equal);
+      (*str_map)[key] = value;
+    }
+  }
+  return 0;
+}
+
+int get_str_map(
+    const string &str,
+    map<string,string> *str_map)
+{
+  const char *delims = ",;\t\n ";
+  return get_str_map(str, delims, str_map);
 }
 
 string get_str_map_value(

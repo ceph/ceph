@@ -31,30 +31,70 @@
  * string, integer etc. ), -EINVAL is returned and **ss** is set to
  * a human readable error message.
  *
- * If **str** is no valid JSON, it is assumed to be a string
- * containing white space separated key=value pairs. A white space is
- * either space, tab or newline. The value is optional, in which case
- * it defaults to an empty string. For example:
+ * If **str** is no valid JSON and if **fallback_to_plain** is set to true
+ * (default: true) it is assumed to be a string containing white space
+ * separated key=value pairs. A white space is either space, tab or newline.
+ * Function **get_str_map** will be leveraged to parse the plain-text
+ * key/value pairs.
  * 
- *     insert your own=political    statement=here 
+ * @param [in] str JSON or plain text key/value pairs
+ * @param [out] ss human readable message on error
+ * @param [out] str_map key/value pairs read from str
+ * @param [in] fallback_to_plain attempt parsing as plain-text if json fails
+ * @return **0** on success or a -EINVAL on error.
+ */
+extern int get_json_str_map(
+    const std::string &str,
+    std::ostream &ss,
+    std::map<std::string,std::string> *str_map,
+    bool fallback_to_plain = true);
+
+/**
+ * Parse **str** and set **str_map** with the key/value pairs read from
+ * it.  The format of **str** is a number of custom key[=value] pairs in
+ * plain text format.
+ *
+ * The string will be parsed taking **delims** as field delimiters for
+ * key/values.  The value is optional resulting in an empty string when
+ * not provided.  For example, using white space as delimiters:
+ *
+ *     insert your own=political/ideological    statement=here 
  *
  * will be parsed into:
  *
  *     { "insert": "", 
  *       "your": "", 
- *       "own": "policital",
+ *       "own": "political/ideological",
  *       "statement": "here" }
  *
- * Returns 0 on success.
+ * Alternative delimiters may be provided.  For instance, specifying
+ * "white space and slash", for the above statement, would be parsed
+ * into:
  *
- * @param [in] str JSON or plain text key/value pairs
- * @param [out] ss human readable message on error
- * @param [out] str_map key/value pairs read from str
- * @return **0** on success or a -EINVAL on error.
+ *     { "insert": "",
+ *       "your": "",
+ *       "own": "political",
+ *       "ideological": "",
+ *       "statement": "here" }
+ *
+ * See how adding '/' to the delimiters field will spawn a new key without
+ * a set value.
+ *
+ * Always returns 0, as there is no condition for failure.
+ *
+ * @param [in] str plain text key/value pairs
+ * @param [out] str_map key/value pairs parsed from str
+ * @param [in] delim field delimiters to be used for parsing str
+ * @return **0**
  */
-extern int get_str_map(const std::string &str,
-		       std::ostream &ss,
-		       std::map<std::string,std::string> *str_map);
+extern int get_str_map(
+    const std::string &str,
+    const char *delims,
+    std::map<std::string,std::string> *str_map);
+
+extern int get_str_map(
+    const std::string &str,
+    std::map<std::string,std::string> *str_map);
 
 /**
  * Returns the value of **key** in **str_map** if available.
