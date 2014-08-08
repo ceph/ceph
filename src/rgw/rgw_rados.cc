@@ -1220,6 +1220,13 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
     ver_head_obj.set_ns(head_obj.ns);
     ver_head_obj.set_instance("instance");
 
+#define OBJ_INSTANCE_LEN 32
+    char buf[OBJ_INSTANCE_LEN + 1];
+
+    gen_rand_base64(store->ctx(), buf, OBJ_INSTANCE_LEN);
+
+    ver_head_obj.set_instance(buf);
+
     r = store->put_obj_meta(NULL, ver_head_obj, obj_len, attrs,
                             RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
                             extra_params);
