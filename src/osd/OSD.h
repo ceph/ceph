@@ -351,7 +351,7 @@ public:
     Mutex::Locker l(pg_epoch_lock);
     map<spg_t,epoch_t>::iterator t = pg_epoch.find(pgid);
     assert(t != pg_epoch.end());
-    pg_epochs.erase(t->second);
+    pg_epochs.erase(pg_epochs.find(t->second));
     t->second = epoch;
     pg_epochs.insert(epoch);
   }
@@ -359,7 +359,7 @@ public:
     Mutex::Locker l(pg_epoch_lock);
     map<spg_t,epoch_t>::iterator t = pg_epoch.find(pgid);
     if (t != pg_epoch.end()) {
-      pg_epochs.erase(t->second);
+      pg_epochs.erase(pg_epochs.find(t->second));
       pg_epoch.erase(t);
     }
   }
