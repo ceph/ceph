@@ -699,6 +699,20 @@ namespace librbd {
       }
     }
 
+    if (!num_obj) {
+      resize_image_index(image->get_num_objects());
+      ldout(cct, 20) << __func__ << ": initialize image index." << dendl;
+      return 0;
+    }
+
+    if (image->get_num_objects() != num_obj || num_obj != state_map.size()) {
+      lderr(cct) << __func__ << " incorrect size: image's object number is " << image->get_num_objects()
+                << " num_obj is " << num_obj << " state_map size is "
+                << state_map.size() << dendl;
+      resize_image_index(image->get_num_objects());
+      invalidate_image_index();
+    }
+
     return 0;
   }
 }

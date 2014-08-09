@@ -21,8 +21,8 @@ namespace librbd {
   AioRequest::AioRequest() :
     m_ictx(NULL), m_ioctx(NULL),
     m_object_no(0), m_object_off(0), m_object_len(0),
-    m_snap_id(CEPH_NOSNAP), m_completion(NULL),
-    m_hide_enoent(false), inflight(0) {}
+    m_snap_id(CEPH_NOSNAP), m_completion(NULL), m_parent_completion(NULL),
+    m_hide_enoent(false) {}
   AioRequest::AioRequest(ImageCtx *ictx, const std::string &oid,
 			 uint64_t objectno, uint64_t off, uint64_t len,
 			 librados::snap_t snap_id,
@@ -30,23 +30,28 @@ namespace librbd {
 			 bool hide_enoent) :
     m_ictx(ictx), m_ioctx(&ictx->data_ctx), m_oid(oid), m_object_no(objectno),
     m_object_off(off), m_object_len(len), m_snap_id(snap_id),
-    m_completion(completion),
-    m_hide_enoent(hide_enoent), inflight(0) {}
+    m_completion(completion), m_parent_completion(NULL),
+    m_hide_enoent(hide_enoent) {}
 
   AioRequest::~AioRequest() {
-    if (!waitfor_commit.empty()) {
-      for (map<AioCompletion*, bool>::iterator it = waitfor_commit.begin();
-           it != waitfor_commit.end(); ++it) {
-        it->first->release();
-      }
+    if (m_parent_completion) {
+      m_parent_completion->release();
+      m_parent_completion = NULL;
     }
   }
 
   void AioRequest::read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents)
   {
+    assert(!m_parent_completion);
+    m_parent_completion = aio_create_completion_internal(this, rbd_req_cb);
     ldout(m_ictx->cct, 20) << "read_from_parent this = " << this
+                           << " parent completion " << m_parent_completion
 			   << " extents " << image_extents
 			   << dendl;
+
+    m_parent_completion->read_bl = &m_read_data; 
+    m_parent_completion->get();
+    m_parent_completion->init_time(m_ictx->cct, AIO_TYPE_READ);
 
     ImageCtx *parent = m_ictx->parent;
     while (!ictx_check(parent)) {
@@ -69,9 +74,11 @@ namespace librbd {
 
         assert(!p->second.empty());
         uint64_t objectno;
+        uint64_t count = 0;
         vector<pair<uint64_t, uint64_t> > obj_extents;
         for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
           objectno = q->objectno;
+          count += q->length;
           obj_extents.push_back(make_pair(q->file_offset, q->length));
         }
 
@@ -87,10 +94,9 @@ namespace librbd {
           }
         }
 
-        AioCompletion *comp = aio_create_completion_internal(this, rbd_req_cb);
-        waitfor_commit[comp] = true;
-        inflight++;
-        aio_read(parent, obj_extents, NULL, &m_read_data, comp);
+        send_aio_read(parent, p->second, m_parent_completion);
+        parent->perfcounter->inc(l_librbd_aio_rd);
+        parent->perfcounter->inc(l_librbd_aio_rd_bytes, count);
 
         object_extents.erase(p);
         p = next;
@@ -100,6 +106,9 @@ namespace librbd {
         break;
       parent = parent->parent;
     }
+
+    m_parent_completion->finish_adding_requests(m_ictx->cct);
+    m_parent_completion->put();
   }
 
   /** read **/

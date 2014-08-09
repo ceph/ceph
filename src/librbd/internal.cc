@@ -2909,8 +2909,8 @@ reprotect_and_return_err:
     ictx->user_flushed();
 
     c->get();
-    c->add_request();
-    c->init_time(ictx, AIO_TYPE_FLUSH);
+    c->add_request(ictx);
+    c->init_time(ictx->cct, AIO_TYPE_FLUSH);
     C_AioWrite *req_comp = new C_AioWrite(cct, c);
     if (ictx->object_cacher) {
       ictx->flush_cache_aio(req_comp);
@@ -3010,7 +3010,7 @@ reprotect_and_return_err:
     }
 
     c->get();
-    c->init_time(ictx, AIO_TYPE_WRITE);
+    c->init_time(ictx->cct, AIO_TYPE_WRITE);
     for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
       ldout(cct, 20) << " oid " << p->oid << " " << p->offset << "~" << p->length
 		     << " from " << p->buffer_extents << dendl;
@@ -3024,7 +3024,7 @@ reprotect_and_return_err:
 
       C_AioWrite *req_comp = new C_AioWrite(cct, c);
       if (ictx->object_cacher) {
-	c->add_request();
+	c->add_request(ictx);
 	ictx->write_to_cache(p->oid, bl, p->length, p->offset, p->file_offset, req_comp);
       } else {
 	// reverse map this object extent onto the parent
@@ -3037,7 +3037,7 @@ reprotect_and_return_err:
 	AioWrite *req = new AioWrite(ictx, p->oid.name, p->objectno, p->offset,
 				     objectx, object_overlap,
 				     bl, snapc, snap_id, req_comp);
-	c->add_request();
+	c->add_request(ictx);
 	r = req->send();
 	if (r < 0)
 	  goto done;
@@ -3089,13 +3089,13 @@ reprotect_and_return_err:
     }
 
     c->get();
-    c->init_time(ictx, AIO_TYPE_DISCARD);
+    c->init_time(ictx->cct, AIO_TYPE_DISCARD);
     for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
       ldout(cct, 20) << " oid " << p->oid << " " << p->offset << "~" << p->length
 		     << " from " << p->buffer_extents << dendl;
       C_AioWrite *req_comp = new C_AioWrite(cct, c);
       AbstractWrite *req;
-      c->add_request();
+      c->add_request(ictx);
 
       // reverse map this object extent onto the parent
       vector<pair<uint64_t,uint64_t> > objectx;
@@ -3144,7 +3144,6 @@ reprotect_and_return_err:
   {
     AioRequest *req = reinterpret_cast<AioRequest *>(arg);
     AioCompletion *comp = reinterpret_cast<AioCompletion *>(cb);
-    req->finish_completion(comp);
     req->complete(comp->get_return_value());
   }
 
@@ -3157,6 +3156,41 @@ reprotect_and_return_err:
     return aio_read(ictx, image_extents, buf, bl, c);
   }
 
+  int send_aio_read(ImageCtx *ictx, vector<ObjectExtent> &extents, AioCompletion *c)
+  {
+    ictx->snap_lock.get_read();
+    snap_t snap_id = ictx->snap_id;
+    ictx->snap_lock.put_read();
+
+    for (vector<ObjectExtent>::iterator q = extents.begin(); q != extents.end(); ++q) {
+      ldout(ictx->cct, 20) << " oid " << q->oid << " " << q->offset << "~" << q->length
+                            << " from " << q->buffer_extents << dendl;
+
+      C_AioRead *req_comp = new C_AioRead(ictx->cct, c);
+      AioRead *req = new AioRead(ictx, q->oid.name,
+                                 q->objectno, q->offset, q->length,
+                                 q->file_offset,
+                                 q->buffer_extents,
+                                 snap_id, true, req_comp);
+      req_comp->set_req(req);
+      c->add_request(ictx);
+
+      if (ictx->object_cacher) {
+        C_CacheRead *cache_comp = new C_CacheRead(req);
+        ictx->aio_read_from_cache(q->oid, &req->data(),
+                                  q->length, q->offset,
+                                  q->file_offset, cache_comp);
+      } else {
+        int r = req->send();
+        if (r < 0 && r == -ENOENT)
+          r = 0;
+        if (r < 0) {
+          return r;
+        }
+      }
+    }
+  }
+
   int aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
 	       char *buf, bufferlist *pbl, AioCompletion *c)
   {
@@ -3165,10 +3199,6 @@ reprotect_and_return_err:
     int r = ictx_check(ictx);
     if (r < 0)
       return r;
-
-    ictx->snap_lock.get_read();
-    snap_t snap_id = ictx->snap_id;
-    ictx->snap_lock.put_read();
 
     // map
     map<object_t,vector<ObjectExtent> > object_extents;
@@ -3189,45 +3219,21 @@ reprotect_and_return_err:
       buffer_ofs += len;
     }
 
-    int64_t ret;
 
     c->read_buf = buf;
     c->read_buf_len = buffer_ofs;
     c->read_bl = pbl;
 
     c->get();
-    c->init_time(ictx, AIO_TYPE_READ);
-    for (map<object_t,vector<ObjectExtent> >::iterator p = object_extents.begin(); p != object_extents.end(); ++p) {
-      for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
-	ldout(ictx->cct, 20) << " oid " << q->oid << " " << q->offset << "~" << q->length
-			     << " from " << q->buffer_extents << dendl;
-
-	C_AioRead *req_comp = new C_AioRead(ictx->cct, c);
-	AioRead *req = new AioRead(ictx, q->oid.name,
-                                   q->objectno, q->offset, q->length,
-                                   q->file_offset,
-                                   q->buffer_extents,
-                                   snap_id, true, req_comp);
-	req_comp->set_req(req);
-	c->add_request();
-
-	if (ictx->object_cacher) {
-	  C_CacheRead *cache_comp = new C_CacheRead(req);
-	  ictx->aio_read_from_cache(q->oid, &req->data(),
-				    q->length, q->offset,
-				    q->file_offset, cache_comp);
-	} else {
-	  r = req->send();
-	  if (r < 0 && r == -ENOENT)
-	    r = 0;
-	  if (r < 0) {
-	    ret = r;
-	    goto done;
-	  }
-	}
+    c->init_time(ictx->cct, AIO_TYPE_READ);
+    for (map<object_t,vector<ObjectExtent> >::iterator p = object_extents.begin();
+         p != object_extents.end(); ++p) {
+      r = send_aio_read(ictx, p->second, c);
+      if (r < 0) {
+        goto done;
       }
     }
-    ret = buffer_ofs;
+    r = buffer_ofs;
   done:
     c->finish_adding_requests(ictx->cct);
     c->put();
@@ -3235,7 +3241,7 @@ reprotect_and_return_err:
     ictx->perfcounter->inc(l_librbd_aio_rd);
     ictx->perfcounter->inc(l_librbd_aio_rd_bytes, buffer_ofs);
 
-    return ret;
+    return r;
   }
 
   AioCompletion *aio_create_completion() {

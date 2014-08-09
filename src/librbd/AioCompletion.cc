@@ -25,7 +25,7 @@ namespace librbd {
     building = false;
     if (!pending_count) {
       finalize(cct, rval);
-      complete();
+      complete(cct);
     }
     lock.Unlock();
   }
@@ -70,7 +70,7 @@ namespace librbd {
     int count = --pending_count;
     if (!count && !building) {
       finalize(cct, rval);
-      complete();
+      complete(cct);
     }
     put_unlock();
   }

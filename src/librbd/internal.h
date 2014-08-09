@@ -13,6 +13,7 @@
 #include "include/buffer.h"
 #include "include/rbd/librbd.hpp"
 #include "include/rbd_types.h"
+#include "osd/osd_types.h"
 
 enum {
   l_librbd_first = 26000,
@@ -181,6 +182,7 @@ namespace librbd {
   int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
 		AioCompletion *c);
   int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c);
+  int send_aio_read(ImageCtx *ictx, vector<ObjectExtent> &extents, AioCompletion *c);
   int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
 	       char *buf, bufferlist *pbl, AioCompletion *c);
   int aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,

@@ -35,18 +35,12 @@ namespace librbd {
 
     void complete(int r)
     {
-      if (!inflight && should_complete(r)) {
+      if (should_complete(r)) {
 	if (m_hide_enoent && r == -ENOENT)
 	  r = 0;
 	m_completion->complete(r);
 	delete this;
       }
-    }
-
-    void finish_completion(AioCompletion *cmp) {
-      assert(waitfor_commit[cmp]);
-      waitfor_commit[cmp] = false;
-      inflight--;
     }
 
     virtual bool should_complete(int r) = 0;
@@ -62,10 +56,9 @@ namespace librbd {
     uint64_t m_object_no, m_object_off, m_object_len;
     librados::snap_t m_snap_id;
     Context *m_completion;
+    AioCompletion *m_parent_completion;
     ceph::bufferlist m_read_data;
     bool m_hide_enoent;
-    uint64_t inflight;
-    map<AioCompletion*, bool> waitfor_commit;
   };
 
   class AioRead : public AioRequest {
