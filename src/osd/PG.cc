@@ -2245,6 +2245,27 @@ void PG::_update_calc_stats()
   }
 }
 
+void PG::_update_blocked_by()
+{
+  // set a max on the number of blocking peers we report. if we go
+  // over, report a random subset.  keep the result sorted.
+  unsigned keep = MIN(blocked_by.size(), g_conf->osd_max_pg_blocked_by);
+  unsigned skip = blocked_by.size() - keep;
+  info.stats.blocked_by.clear();
+  info.stats.blocked_by.resize(keep);
+  unsigned pos = 0;
+  for (set<int>::iterator p = blocked_by.begin();
+       p != blocked_by.end() && keep > 0;
+       ++p) {
+    if (skip > 0 && (rand() % (skip + keep) < skip)) {
+      --skip;
+    } else {
+      info.stats.blocked_by[pos++] = *p;
+      --keep;
+    }
+  }
+}
+
 void PG::publish_stats_to_osd()
 {
   pg_stats_publish_lock.Lock();
@@ -2274,12 +2295,7 @@ void PG::publish_stats_to_osd()
     info.stats.last_unstale = now;
 
     _update_calc_stats();
-
-    info.stats.blocked_by.clear();
-    info.stats.blocked_by.resize(blocked_by.size());
-    unsigned pos = 0;
-    for (set<int>::iterator p = blocked_by.begin(); p != blocked_by.end(); ++p)
-      info.stats.blocked_by[pos++] = *p;
+    _update_blocked_by();
 
     pg_stats_publish_valid = true;
     pg_stats_publish = info.stats;
