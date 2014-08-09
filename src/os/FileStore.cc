@@ -2903,11 +2903,12 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	f.close_section();
 	f.flush(*_dout);
 	*_dout << dendl;
-	assert(0 == "unexpected error");
 
 	if (r == -EMFILE) {
 	  dump_open_fds(g_ceph_context);
 	}
+
+	assert(0 == "unexpected error");
       }
     }
 
