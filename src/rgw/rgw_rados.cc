@@ -900,8 +900,10 @@ int RGWPutObjProcessor_Plain::prepare(RGWRados *store, void *obj_ctx, string *oi
   return 0;
 };
 
-int RGWPutObjProcessor_Plain::handle_data(bufferlist& bl, off_t _ofs, void **phandle)
+int RGWPutObjProcessor_Plain::handle_data(bufferlist& bl, off_t _ofs, void **phandle, bool *again)
 {
+  *again = false;
+
   if (ofs != _ofs)
     return -EINVAL;
 
@@ -1026,8 +1028,10 @@ int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phan
   return RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle, exclusive);
 }
 
-int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **phandle)
+int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **phandle, bool *again)
 {
+  *again = false;
+
   *phandle = NULL;
   if (extra_data_len) {
     size_t extra_len = bl.length();
@@ -1044,13 +1048,16 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **pha
     }
   }
 
-  uint64_t max_chunk_size = store->get_max_chunk_size();
+  uint64_t max_write_size = MIN(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
 
   pending_data_bl.claim_append(bl);
-  if (pending_data_bl.length() < max_chunk_size)
+  if (pending_data_bl.length() < max_write_size)
     return 0;
 
-  pending_data_bl.splice(0, max_chunk_size, &bl);
+  pending_data_bl.splice(0, max_write_size, &bl);
+
+  /* do we have enough data pending accumulated that needs to be written? */
+  *again = (pending_data_bl.length() >= max_chunk_size);
 
   if (!data_ofs && !immutable_head()) {
     first_chunk.claim(bl);
@@ -1070,17 +1077,30 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **pha
   return write_data(bl, write_ofs, phandle, exclusive);
 }
 
-int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, void *obj_ctx, string *oid_rand)
+
+int RGWPutObjProcessor_Atomic::prepare_init(RGWRados *store, void *obj_ctx, string *oid_rand)
 {
   RGWPutObjProcessor::prepare(store, obj_ctx, oid_rand);
 
-  head_obj.init(bucket, obj_str);
+  int r = store->get_max_chunk_size(bucket, &max_chunk_size);
+  if (r < 0) {
+    return r;
+  }
 
-  uint64_t max_chunk_size = store->get_max_chunk_size();
+  return 0;
+}
+
+int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, void *obj_ctx, string *oid_rand)
+{
+  int r = prepare_init(store, obj_ctx, oid_rand);
+  if (r < 0) {
+    return r;
+  }
+  head_obj.init(bucket, obj_str);
 
   manifest.set_trivial_rule(max_chunk_size, store->ctx()->_conf->rgw_obj_stripe_size);
 
-  int r = manifest_gen.create_begin(store->ctx(), &manifest, bucket, head_obj);
+  r = manifest_gen.create_begin(store->ctx(), &manifest, bucket, head_obj);
   if (r < 0) {
     return r;
   }
@@ -1201,6 +1221,44 @@ void RGWRadosCtx::set_prefetch_data(rgw_obj& obj) {
   }
 }
 
+int RGWRados::get_required_alignment(rgw_bucket& bucket, uint64_t *alignment)
+{
+  IoCtx ioctx;
+  int r = open_bucket_data_ctx(bucket, ioctx);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: open_bucket_data_ctx() returned " << r << dendl;
+    return r;
+  }
+
+  *alignment = ioctx.pool_required_alignment();
+  return 0;
+}
+
+int RGWRados::get_max_chunk_size(rgw_bucket& bucket, uint64_t *max_chunk_size)
+{
+  uint64_t alignment;
+  int r = get_required_alignment(bucket, &alignment);
+  if (r < 0) {
+    return r;
+  }
+
+  uint64_t config_chunk_size = cct->_conf->rgw_max_chunk_size;
+
+  if (alignment == 0) {
+    *max_chunk_size = config_chunk_size;
+    return 0;
+  }
+
+  if (config_chunk_size <= alignment) {
+    *max_chunk_size = alignment;
+    return 0;
+  }
+
+  *max_chunk_size = config_chunk_size - (config_chunk_size % alignment);
+
+  return 0;
+}
+
 void RGWRados::finalize()
 {
   if (need_watch_notify()) {
@@ -1235,8 +1293,6 @@ void RGWRados::finalize()
 int RGWRados::init_rados()
 {
   int ret;
-
-  max_chunk_size = cct->_conf->rgw_max_chunk_size;
 
   rados = new Rados();
   if (!rados)
@@ -2957,25 +3013,33 @@ public:
   int handle_data(bufferlist& bl, off_t ofs, off_t len) {
     progress_cb(ofs, progress_data);
 
-    void *handle;
-    int ret = processor->handle_data(bl, ofs, &handle);
-    if (ret < 0)
-      return ret;
+    bool again;
 
-    if (opstate) {
-      /* need to update opstate repository with new state. This is ratelimited, so we're not
-       * really doing it every time
-       */
-      ret = opstate->renew_state();
-      if (ret < 0) {
-        /* could not renew state! might have been marked as cancelled */
+    bool need_opstate = true;
+
+    do {
+      void *handle;
+      int ret = processor->handle_data(bl, ofs, &handle, &again);
+      if (ret < 0)
         return ret;
-      }
-    }
 
-    ret = processor->throttle_data(handle, false);
-    if (ret < 0)
-      return ret;
+      if (need_opstate && opstate) {
+        /* need to update opstate repository with new state. This is ratelimited, so we're not
+         * really doing it every time
+         */
+        ret = opstate->renew_state();
+        if (ret < 0) {
+          /* could not renew state! might have been marked as cancelled */
+          return ret;
+        }
+
+        need_opstate = false;
+      }
+
+      ret = processor->throttle_data(handle, false);
+      if (ret < 0)
+        return ret;
+    } while (again);
 
     return 0;
   }
@@ -3192,24 +3256,6 @@ set_err_state:
 
   vector<rgw_obj> ref_objs;
 
-  bool copy_data = !astate->has_manifest;
-  bool copy_first = false;
-  if (astate->has_manifest) {
-    if (!astate->manifest.has_tail()) {
-      copy_data = true;
-    } else {
-      uint64_t head_size = astate->manifest.get_head_size();
-
-      if (head_size > 0) {
-	if (head_size > max_chunk_size)  // should never happen
-	  copy_data = true;
-	else
-          copy_first = true;
-      }
-    }
-  }
-
-
   if (remote_dest) {
     /* dest is in a different region, copy it there */
 
@@ -3230,8 +3276,35 @@ set_err_state:
       return ret;
 
     return 0;
-  } else if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
-    return copy_obj_data(ctx, dest_bucket_info.owner, &handle, end, dest_obj, src_obj, mtime, src_attrs, category, ptag, err);
+  }
+  
+  uint64_t max_chunk_size;
+
+  ret = get_max_chunk_size(dest_obj.bucket, &max_chunk_size);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: failed to get max_chunk_size() for bucket " << dest_obj.bucket << dendl;
+    return ret;
+  }
+
+  bool copy_data = !astate->has_manifest;
+  bool copy_first = false;
+  if (astate->has_manifest) {
+    if (!astate->manifest.has_tail()) {
+      copy_data = true;
+    } else {
+      uint64_t head_size = astate->manifest.get_head_size();
+
+      if (head_size > 0) {
+	if (head_size > max_chunk_size)
+	  copy_data = true;
+	else
+          copy_first = true;
+      }
+    }
+  }
+
+  if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
+    return copy_obj_data(ctx, dest_bucket_info.owner, &handle, end, dest_obj, src_obj, max_chunk_size, mtime, src_attrs, category, ptag, err);
   }
 
   RGWObjManifest::obj_iterator miter = astate->manifest.obj_begin();
@@ -3341,6 +3414,7 @@ int RGWRados::copy_obj_data(void *ctx,
 	       void **handle, off_t end,
                rgw_obj& dest_obj,
                rgw_obj& src_obj,
+               uint64_t max_chunk_size,
 	       time_t *mtime,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
@@ -4473,6 +4547,8 @@ int RGWRados::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **hand
   bool merge_bl = false;
   bufferlist *pbl = &bl;
   bufferlist read_bl;
+  uint64_t max_chunk_size;
+
 
   get_obj_bucket_and_oid_key(obj, bucket, oid, key);
 
@@ -4503,6 +4579,12 @@ int RGWRados::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **hand
     if (!reading_from_head) {
       get_obj_bucket_and_oid_key(read_obj, bucket, oid, key);
     }
+  }
+
+  r = get_max_chunk_size(bucket, &max_chunk_size);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to get max_chunk_size() for bucket " << bucket << dendl;
+    goto done_ret;
   }
 
   if (len > max_chunk_size)

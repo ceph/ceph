@@ -1380,7 +1380,10 @@ public:
 
 int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx, string *oid_rand)
 {
-  RGWPutObjProcessor::prepare(store, obj_ctx, NULL);
+  int r = prepare_init(store, obj_ctx, NULL);
+  if (r < 0) {
+    return r;
+  }
 
   string oid = obj_str;
   upload_id = s->info.args.get("uploadId");
@@ -1419,7 +1422,7 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx, string
 
   manifest.set_multipart_part_rule(store->ctx()->_conf->rgw_obj_stripe_size, num);
 
-  int r = manifest_gen.create_begin(store->ctx(), &manifest, bucket, target_obj);
+  r = manifest_gen.create_begin(store->ctx(), &manifest, bucket, target_obj);
   if (r < 0) {
     return r;
   }
@@ -1560,6 +1563,36 @@ int RGWPutObj::user_manifest_iterate_cb(rgw_bucket& bucket, RGWObjEnt& ent, RGWA
   return 0;
 }
 
+static int put_data_and_throttle(RGWPutObjProcessor *processor, bufferlist& data, off_t ofs,
+                                 MD5 *hash, bool need_to_wait)
+{
+  const unsigned char *data_ptr = (hash ? (const unsigned char *)data.c_str() : NULL);
+  bool again;
+  uint64_t len = data.length();
+
+  do {
+    void *handle;
+
+    int ret = processor->handle_data(data, ofs, &handle, &again);
+    if (ret < 0)
+      return ret;
+
+    if (hash) {
+      hash->Update(data_ptr, len);
+      hash = NULL; /* only calculate hash once */
+    }
+
+    ret = processor->throttle_data(handle, false);
+    if (ret < 0)
+      return ret;
+
+    need_to_wait = false; /* the need to wait only applies to the first iteration */
+  } while (again);
+
+  return 0;
+}
+
+
 void RGWPutObj::execute()
 {
   RGWPutObjProcessor *processor = NULL;
@@ -1633,23 +1666,12 @@ void RGWPutObj::execute()
     if (!len)
       break;
 
-    void *handle;
-    const unsigned char *data_ptr = (const unsigned char *)data.c_str();
-
-    ret = processor->handle_data(data, ofs, &handle);
-    if (ret < 0)
-      goto done;
-
-    if (need_calc_md5) {
-      hash.Update(data_ptr, len);
-    }
-
     /* do we need this operation to be synchronous? if we're dealing with an object with immutable
      * head, e.g., multipart object we need to make sure we're the first one writing to this object
      */
     bool need_to_wait = (ofs == 0) && multipart;
 
-    ret = processor->throttle_data(handle, need_to_wait);
+    ret = put_data_and_throttle(processor, data, ofs, (need_calc_md5 ? &hash : NULL), need_to_wait);
     if (ret < 0) {
       if (!need_to_wait || ret != -EEXIST) {
         ldout(s->cct, 20) << "processor->thottle_data() returned ret=" << ret << dendl;
@@ -1674,15 +1696,8 @@ void RGWPutObj::execute()
         goto done;
       }
 
-      ret = processor->handle_data(data, ofs, &handle);
+      ret = put_data_and_throttle(processor, data, ofs, NULL, false);
       if (ret < 0) {
-        ldout(s->cct, 0) << "ERROR: processor->handle_data() returned " << ret << dendl;
-        goto done;
-      }
-
-      ret = processor->throttle_data(handle, false);
-      if (ret < 0) {
-        ldout(s->cct, 0) << "ERROR: processor->throttle_data() returned " << ret << dendl;
         goto done;
       }
     }
@@ -1846,18 +1861,7 @@ void RGWPostObj::execute()
      if (!len)
        break;
 
-     void *handle;
-     const unsigned char *data_ptr = (const unsigned char *)data.c_str();
-
-     ret = processor->handle_data(data, ofs, &handle);
-     if (ret < 0)
-       goto done;
-
-     hash.Update(data_ptr, len);
-
-     ret = processor->throttle_data(handle, false);
-     if (ret < 0)
-       goto done;
+     ret = put_data_and_throttle(processor, data, ofs, &hash, false);
 
      ofs += len;
 
