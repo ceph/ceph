@@ -751,6 +751,7 @@ protected:
   ceph::shared_ptr<ObjectStore::Sequencer> osr;
 
   void _update_calc_stats();
+  void _update_blocked_by();
   void publish_stats_to_osd();
   void clear_publish_stats();
 
