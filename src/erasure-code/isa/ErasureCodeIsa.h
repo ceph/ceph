@@ -27,12 +27,12 @@
 
 // -----------------------------------------------------------------------------
 #include "common/Mutex.h"
-#include "erasure-code/ErasureCodeInterface.h"
+#include "erasure-code/ErasureCode.h"
 // -----------------------------------------------------------------------------
 #include <list>
 // -----------------------------------------------------------------------------
 
-class ErasureCodeIsa : public ErasureCodeInterface {
+class ErasureCodeIsa : public ErasureCode {
 public:
   enum eMatrix {kVandermonde=0, kCauchy=1};
 
@@ -73,21 +73,12 @@ public:
 
   virtual unsigned int get_chunk_size(unsigned int object_size) const;
 
-  virtual int minimum_to_decode(const set<int> &want_to_read,
-                                const set<int> &available_chunks,
-                                set<int> *minimum);
+  virtual int encode_chunks(const set<int> &want_to_encode,
+			    map<int, bufferlist> *encoded);
 
-  virtual int minimum_to_decode_with_cost(const set<int> &want_to_read,
-                                          const map<int, int> &available,
-                                          set<int> *minimum);
-
-  virtual int encode(const set<int> &want_to_encode,
-                     const bufferlist &in,
-                     map<int, bufferlist> *encoded);
-
-  virtual int decode(const set<int> &want_to_read,
-                     const map<int, bufferlist> &chunks,
-                     map<int, bufferlist> *decoded);
+  virtual int decode_chunks(const set<int> &want_to_read,
+			    const map<int, bufferlist> &chunks,
+			    map<int, bufferlist> *decoded);
 
   void init(const map<std::string, std::string> &parameters);
 
@@ -103,13 +94,12 @@ public:
 
   virtual unsigned get_alignment() const = 0;
 
-  virtual void parse(const map<std::string, std::string> &parameters) = 0;
+  virtual int parse(const map<std::string,
+                    std::string> &parameters,
+                    ostream *ss) = 0;
 
   virtual void prepare() = 0;
 
-  static int to_int(const std::string &name,
-                    const map<std::string, std::string> &parameters,
-                    int default_value);
 };
 
 // -----------------------------------------------------------------------------
@@ -137,7 +127,8 @@ public:
     return g_decode_tbls_lru.size();
   }
 
-  // we implement an LRU cache for coding matrix - the cache size is sufficient up to (12,4) decodings
+  // we implement an LRU cache for coding matrix - the cache size is
+  // sufficient up to (12,4) decodings
   typedef std::pair<std::list<std::string>::iterator, bufferptr> lru_entry_t;
 
   std::map<std::string, lru_entry_t> g_decode_tbls_map;
@@ -173,7 +164,9 @@ public:
 
   virtual unsigned get_alignment() const;
 
-  virtual void parse(const map<std::string, std::string> &parameters);
+  virtual int parse(const map<std::string,
+                    std::string> &parameters,
+                    ostream *ss);
 
   virtual void prepare();
 

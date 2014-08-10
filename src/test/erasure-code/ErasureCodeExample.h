@@ -24,7 +24,7 @@
 
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
-#include "erasure-code/ErasureCodeInterface.h"
+#include "erasure-code/ErasureCode.h"
 
 #define FIRST_DATA_CHUNK 0
 #define SECOND_DATA_CHUNK 1
@@ -35,7 +35,7 @@
 
 #define MINIMUM_TO_RECOVER 2u
 
-class ErasureCodeExample : public ErasureCodeInterface {
+class ErasureCodeExample : public ErasureCode {
 public:
   virtual ~ErasureCodeExample() {}
 
@@ -138,6 +138,12 @@ public:
     return 0;
   }
 
+  virtual int encode_chunks(const set<int> &want_to_encode,
+			    map<int, bufferlist> *encoded) {
+    assert(0);
+    return 0;
+  }
+
   virtual int decode(const set<int> &want_to_read,
                      const map<int, bufferlist> &chunks,
                      map<int, bufferlist> *decoded) {
@@ -179,6 +185,14 @@ public:
     }
     return 0;
   }
+
+  virtual int decode_chunks(const set<int> &want_to_read,
+			    const map<int, bufferlist> &chunks,
+			    map<int, bufferlist> *decoded) {
+    assert(0);
+    return 0;
+  }
+
 };
 
 #endif

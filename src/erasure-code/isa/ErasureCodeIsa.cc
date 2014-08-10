@@ -63,7 +63,9 @@ ErasureCodeIsa::init(const map<string, string> &parameters)
   parameter = parameters.find("ruleset-failure-domain");
   if (parameter != parameters.end())
     ruleset_failure_domain = parameter->second;
-  parse(parameters);
+  ostringstream ss;
+  if (parse(parameters, &ss))
+    derr << ss.str() << dendl;
   prepare();
 }
 
@@ -81,164 +83,38 @@ ErasureCodeIsa::get_chunk_size(unsigned int object_size) const
 
 // -----------------------------------------------------------------------------
 
-int
-ErasureCodeIsa::minimum_to_decode(const set<int> &want_to_read,
-                                  const set<int> &available_chunks,
-                                  set<int> *minimum)
+int ErasureCodeIsa::encode_chunks(const set<int> &want_to_encode,
+                                  map<int, bufferlist> *encoded)
 {
-  if (includes(available_chunks.begin(), available_chunks.end(),
-               want_to_read.begin(), want_to_read.end())) {
-    *minimum = want_to_read;
-  } else {
-    if (available_chunks.size() < (unsigned) k)
-      return -EIO;
-    set<int>::iterator i;
-    unsigned j;
-    for (i = available_chunks.begin(), j = 0; j < (unsigned) k; ++i, j++)
-      minimum->insert(*i);
-  }
-  return 0;
-}
-
-// -----------------------------------------------------------------------------
-
-int
-ErasureCodeIsa::minimum_to_decode_with_cost(const set<int> &want_to_read,
-                                            const map<int, int> &available,
-                                            set<int> *minimum)
-{
-  set <int> available_chunks;
-  for (map<int, int>::const_iterator i = available.begin();
-       i != available.end();
-       ++i)
-    available_chunks.insert(i->first);
-  return minimum_to_decode(want_to_read, available_chunks, minimum);
-}
-
-// -----------------------------------------------------------------------------
-
-int
-ErasureCodeIsa::encode(const set<int> &want_to_encode,
-                       const bufferlist &in,
-                       map<int, bufferlist> *encoded)
-{
-  unsigned blocksize = get_chunk_size(in.length());
-  unsigned padded_length = blocksize * k;
-  dout(10) << "encode adjusted buffer length from " << in.length()
-    << " to " << padded_length << dendl;
-  assert(padded_length % k == 0);
-  bufferlist out(in);
-
-  if (padded_length - in.length() > 0) {
-    bufferptr pad(padded_length - in.length());
-    pad.zero();
-    out.push_back(pad);
-  }
-  unsigned coding_length = blocksize * m;
-  bufferptr coding(buffer::create_page_aligned(coding_length));
-  out.push_back(coding);
-  out.rebuild_page_aligned();
   char *chunks[k + m];
-
-  for (int i = 0; i < k + m; i++) {
-    bufferlist &chunk = (*encoded)[i];
-    chunk.substr_of(out, i * blocksize, blocksize);
-    chunks[i] = chunk.c_str();
-  }
-
-  isa_encode(&chunks[0], &chunks[k], blocksize);
-
-  for (int i = 0; i < k + m; i++) {
-    if (want_to_encode.count(i) == 0)
-      encoded->erase(i);
-  }
-
+  for (int i = 0; i < k + m; i++)
+    chunks[i] = (*encoded)[i].c_str();
+  isa_encode(&chunks[0], &chunks[k], (*encoded)[0].length());
   return 0;
 }
 
-// -----------------------------------------------------------------------------
-
-int
-ErasureCodeIsa::decode(const set<int> &want_to_read,
-                       const map<int, bufferlist> &chunks,
-                       map<int, bufferlist> *decoded)
+int ErasureCodeIsa::decode_chunks(const set<int> &want_to_read,
+                                  const map<int, bufferlist> &chunks,
+                                  map<int, bufferlist> *decoded)
 {
-  vector<int> have;
-  have.reserve(chunks.size());
-
-  for (map<int, bufferlist>::const_iterator i = chunks.begin();
-       i != chunks.end();
-       ++i) {
-    have.push_back(i->first);
-  }
-
-  if (includes(
-               have.begin(),
-               have.end(),
-               want_to_read.begin(),
-               want_to_read.end())) {
-    for (set<int>::iterator i = want_to_read.begin();
-         i != want_to_read.end();
-         ++i) {
-      (*decoded)[*i] = chunks.find(*i)->second;
-    }
-    return 0;
-  }
   unsigned blocksize = (*chunks.begin()).second.length();
   int erasures[k + m + 1];
   int erasures_count = 0;
   char *data[k];
   char *coding[m];
-
-  for (int i = 0; i < k + m; i++) {
+  for (int i =  0; i < k + m; i++) {
     if (chunks.find(i) == chunks.end()) {
       erasures[erasures_count] = i;
       erasures_count++;
-      bufferptr ptr(buffer::create_page_aligned(blocksize));
-      (*decoded)[i].push_front(ptr);
-    } else {
-      (*decoded)[i] = chunks.find(i)->second;
-      (*decoded)[i].rebuild_page_aligned();
     }
-    if (i < k) {
+    if (i < k)
       data[i] = (*decoded)[i].c_str();
-    } else {
+    else
       coding[i - k] = (*decoded)[i].c_str();
-    }
   }
   erasures[erasures_count] = -1;
-
-  if (erasures_count > 0) {
-    int retc = isa_decode(erasures, data, coding, blocksize);
-    return retc;
-  } else
-    return 0;
-}
-
-// -----------------------------------------------------------------------------
-
-int
-ErasureCodeIsa::to_int(const std::string &name,
-                       const map<std::string, std::string> &parameters,
-                       int default_value)
-{
-  if (parameters.find(name) == parameters.end() ||
-      parameters.find(name)->second.size() == 0) {
-    dout(10) << name << " defaults to " << default_value << dendl;
-    return default_value;
-  }
-  const std::string value = parameters.find(name)->second;
-  std::string p = value;
-  std::string err;
-  int r = strict_strtol(p.c_str(), 10, &err);
-  if (!err.empty()) {
-    derr << "could not convert " << name << "=" << value
-      << " to int because " << err
-      << ", set to default " << default_value << dendl;
-    return default_value;
-  }
-  dout(10) << name << " set to " << r << dendl;
-  return r;
+  assert(erasures_count > 0);
+  return isa_decode(erasures, data, coding, blocksize);
 }
 
 // -----------------------------------------------------------------------------
@@ -511,38 +387,47 @@ ErasureCodeIsaDefault::get_alignment() const
 
 // -----------------------------------------------------------------------------
 
-void
-ErasureCodeIsaDefault::parse(const map<std::string,
-                             std::string> &parameters)
+int ErasureCodeIsaDefault::parse(const map<std::string,
+                                 std::string> &parameters,
+                                 ostream *ss)
 {
-  k = to_int("k", parameters, DEFAULT_K);
-  m = to_int("m", parameters, DEFAULT_M);
+  int err = ErasureCode::parse(parameters, ss);
+  err |= to_int("k", parameters, &k, DEFAULT_K, ss);
+  err |= to_int("m", parameters, &m, DEFAULT_M, ss);
 
   if (matrixtype == kVandermonde) {
-    // these are verified safe values evaluted using the benchmarktool and 10*(combinatoric for maximum loss) random full erasures
+    // these are verified safe values evaluated using the
+    // benchmarktool and 10*(combinatoric for maximum loss) random
+    // full erasures
     if (k > 32) {
-      derr << "Vandermonde: m=" << m
-        << " should be less/equal than 32 : revert to k=32" << dendl;
+      *ss << "Vandermonde: m=" << m
+          << " should be less/equal than 32 : revert to k=32" << std::endl;
       k = 32;
+      err = -EINVAL;
     }
 
     if (m > 4) {
-      derr << "Vandermonde: m=" << m
-        << " should be less than 5 to guarantee an MDS codec: revert to m=4" << dendl;
+      *ss << "Vandermonde: m=" << m
+          << " should be less than 5 to guarantee an MDS codec:"
+          << " revert to m=4" << std::endl;
       m = 4;
+      err = -EINVAL;
     }
     switch (m) {
     case 4:
       if (k > 21) {
-        derr << "Vandermonde: K=" << k
-          << " should be less than 22 to guarantee an MDS codec with m=4: revert to k=21" << dendl;
+        *ss << "Vandermonde: k=" << k
+            << " should be less than 22 to guarantee an MDS"
+            << " codec with m=4: revert to k=21" << std::endl;
         k = 21;
+        err = -EINVAL;
       }
       break;
     default:
       ;
     }
   }
+  return err;
 }
 
 // -----------------------------------------------------------------------------
