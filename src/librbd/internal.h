@@ -13,6 +13,7 @@
 #include "include/buffer.h"
 #include "include/rbd/librbd.hpp"
 #include "include/rbd_types.h"
+#include "osd/osd_types.h"
 
 enum {
   l_librbd_first = 26000,
@@ -84,7 +85,7 @@ namespace librbd {
 	     int *order);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     bool old_format, uint64_t features, int *order,
-	     uint64_t stripe_unit, uint64_t stripe_count);
+	     uint64_t stripe_unit, uint64_t stripe_count, int flags=0);
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
 	    IoCtx& c_ioctx, const char *c_name,
 	    uint64_t features, int *c_order,
@@ -182,6 +183,7 @@ namespace librbd {
   int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
 		AioCompletion *c);
   int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c);
+  int send_aio_read(ImageCtx *ictx, vector<ObjectExtent> &extents, AioCompletion *c);
   int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
 	       char *buf, bufferlist *pbl, AioCompletion *c);
   int aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,

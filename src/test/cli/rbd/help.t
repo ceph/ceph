@@ -78,3 +78,4 @@
     -o, --options <map-options>        options to use when mapping an image
     --read-only                        set device readonly when mapping image
     --allow-shrink                     allow shrinking of an image when resizing
+    --single-client                    this image is only used by one client(performance hint)

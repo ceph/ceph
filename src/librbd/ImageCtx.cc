@@ -50,8 +50,9 @@ namespace librbd {
       order(0), size(0), features(0),
       format_string(NULL),
       id(image_id), parent(NULL),
-      stripe_unit(0), stripe_count(0),
-      object_cacher(NULL), writeback_handler(NULL), object_set(NULL)
+      stripe_unit(0), stripe_count(0), flags(LIBRBD_CREATE_NOFLAG),
+      object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
+      image_index(this)
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -150,6 +151,13 @@ namespace librbd {
 					    &stripe_unit, &stripe_count);
       if (r < 0 && r != -ENOEXEC && r != -EINVAL) {
 	lderr(cct) << "error reading striping metadata: "
+		   << cpp_strerror(r) << dendl;
+	return r;
+      }
+
+      r = cls_client::get_flags(&md_ctx, header_oid, &flags);
+      if (r < 0 && r != -ENOEXEC && r != -EINVAL && r != -EOPNOTSUPP) {
+	lderr(cct) << "error reading flags metadata: "
 		   << cpp_strerror(r) << dendl;
 	return r;
       }
@@ -269,6 +277,8 @@ namespace librbd {
       data_ctx.snap_set_read(snap_id);
       return 0;
     }
+
+    image_index.load();
     return -ENOENT;
   }
 
@@ -278,6 +288,8 @@ namespace librbd {
     snap_name = "";
     snap_exists = true;
     data_ctx.snap_set_read(snap_id);
+
+    image_index.load();
   }
 
   snap_t ImageCtx::get_snap_id(string in_snap_name) const
@@ -430,6 +442,11 @@ namespace librbd {
     return NULL;
   }
 
+  uint64_t ImageCtx::get_flags() const
+  {
+    return flags;
+  }
+
   int64_t ImageCtx::get_parent_pool_id(snap_t in_snap_id) const
   {
     const parent_info *info = get_parent_info(in_snap_id);
@@ -465,11 +482,11 @@ namespace librbd {
   }
 
   void ImageCtx::aio_read_from_cache(object_t o, bufferlist *bl, size_t len,
-				     uint64_t off, Context *onfinish) {
+				     uint64_t off, uint64_t f_off, Context *onfinish) {
     snap_lock.get_read();
     ObjectCacher::OSDRead *rd = object_cacher->prepare_read(snap_id, bl, 0);
     snap_lock.put_read();
-    ObjectExtent extent(o, 0 /* a lie */, off, len, 0);
+    ObjectExtent extent(o, 0 /* a lie */, off, len, 0, f_off);
     extent.oloc.pool = data_ctx.get_id();
     extent.buffer_extents.push_back(make_pair(0, len));
     rd->extents.push_back(extent);
@@ -480,13 +497,13 @@ namespace librbd {
       onfinish->complete(r);
   }
 
-  void ImageCtx::write_to_cache(object_t o, bufferlist& bl, size_t len,
-				uint64_t off, Context *onfinish) {
+  void ImageCtx::write_to_cache(object_t o, bufferlist& bl, size_t len, uint64_t off,
+                                uint64_t f_off, Context *onfinish) {
     snap_lock.get_read();
     ObjectCacher::OSDWrite *wr = object_cacher->prepare_write(snapc, bl,
 							      utime_t(), 0);
     snap_lock.put_read();
-    ObjectExtent extent(o, 0, off, len, 0);
+    ObjectExtent extent(o, 0, off, len, 0, f_off);
     extent.oloc.pool = data_ctx.get_id();
     // XXX: nspace is always default, io_ctx_impl field private
     //extent.oloc.nspace = data_ctx.io_ctx_impl->oloc.nspace;
@@ -499,13 +516,13 @@ namespace librbd {
   }
 
   int ImageCtx::read_from_cache(object_t o, bufferlist *bl, size_t len,
-				uint64_t off) {
+				uint64_t off, uint64_t f_off) {
     int r;
     Mutex mylock("librbd::ImageCtx::read_from_cache");
     Cond cond;
     bool done;
     Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &r);
-    aio_read_from_cache(o, bl, len, off, onfinish);
+    aio_read_from_cache(o, bl, len, off, f_off, onfinish);
     mylock.Lock();
     while (!done)
       cond.Wait(mylock);
@@ -640,5 +657,47 @@ namespace librbd {
 		   << ", object overlap " << len
 		   << " from image extents " << objectx << dendl;
     return len;
- }
+  }
+
+  // -- ImageIndex --
+  int ImageCtx::ImageIndex::load()
+  {
+    Mutex::Locker l(state_lock);
+
+    if (image->flags & LIBRBD_CREATE_NONSHARED) {
+      enable = true;
+
+      bufferlist index_bl;
+      int r = cls_client::get_image_index(&image->md_ctx, image->header_oid,
+                                          image->snap_id, &index_bl);
+      if (r < 0) {
+        lderr(cct) << "error reading image index metadata: "
+                    << cpp_strerror(r) << dendl;
+        return r;
+      } else if (index_bl.length()) {
+        bufferlist::iterator iter = index_bl.begin();
+        try {
+          decode(iter);
+        } catch (const buffer::error &err) {
+          lderr(cct) << "decode image index metadata failed: " << dendl;
+        }
+      }
+    }
+
+    if (!num_obj) {
+      resize_image_index(image->get_num_objects());
+      ldout(cct, 20) << __func__ << ": initialize image index." << dendl;
+      return 0;
+    }
+
+    if (image->get_num_objects() != num_obj || num_obj != state_map.size()) {
+      lderr(cct) << __func__ << " incorrect size: image's object number is " << image->get_num_objects()
+                << " num_obj is " << num_obj << " state_map size is "
+                << state_map.size() << dendl;
+      resize_image_index(image->get_num_objects());
+      invalidate_image_index();
+    }
+
+    return 0;
+  }
 }

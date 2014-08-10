@@ -198,6 +198,35 @@ namespace librbd {
       return ioctx->exec(oid, "rbd", "set_size", bl, bl2);
     }
 
+    int get_flags(librados::IoCtx *ioctx, const std::string &oid,
+		  uint64_t *flags)
+    {
+      bufferlist inbl, outbl;
+
+      int r = ioctx->exec(oid, "rbd", "get_flags", inbl, outbl);
+      if (r < 0)
+	return r;
+
+      try {
+	bufferlist::iterator iter = outbl.begin();
+	::decode(*flags, iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
+      return 0;
+    }
+
+    int set_flags(librados::IoCtx *ioctx, const std::string &oid,
+		  uint64_t flags)
+    {
+      bufferlist bl, bl2;
+      ::encode(flags, bl);
+
+      return ioctx->exec(oid, "rbd", "set_flags", bl, bl2);
+    }
+
+
     int get_parent(librados::IoCtx *ioctx, const std::string &oid,
 		   snapid_t snap_id, parent_spec *pspec, 
 		   uint64_t *parent_overlap)
@@ -515,6 +544,47 @@ namespace librbd {
       return ioctx->exec(oid, "rbd", "set_stripe_unit_count", in, out);
     }
 
+    int get_image_index(librados::IoCtx *ioctx, const std::string &oid,
+                        snapid_t snap_id, bufferlist *index)
+    {
+      assert(index);
+
+      librados::ObjectReadOperation op;
+      bufferlist inbl;
+      ::encode(snap_id, inbl);
+      op.exec("rbd", "get_image_index", inbl);
+
+      bufferlist outbl;
+      int r = ioctx->operate(oid, &op, &outbl);
+      if (r < 0)
+        return r;
+
+      try {
+        bufferlist::iterator iter = outbl.begin();
+        ::decode(*index, iter);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+
+      return 0;
+    }
+
+    int set_image_index(librados::IoCtx *ioctx, const std::string &oid,
+                        snapid_t snap_id, bufferlist &index)
+    {
+      bufferlist in, out;
+      ::encode(snap_id, in);
+      ::encode(index, in);
+      return ioctx->exec(oid, "rbd", "set_image_index", in, out);
+    }
+
+    int remove_image_index(librados::IoCtx *ioctx, const std::string &oid,
+                        snapid_t snap_id)
+    {
+      bufferlist in, out;
+      ::encode(snap_id, in);
+      return ioctx->exec(oid, "rbd", "remove_image_index", in, out);
+    }
 
     /************************ rbd_id object methods ************************/
 

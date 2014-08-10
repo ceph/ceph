@@ -154,6 +154,7 @@ int 	mapped_reads = 0;		/* -R flag disables it */
 int	fsxgoodfd = 0;
 int	o_direct = 0;			/* -Z flag */
 int	aio = 0;
+int singleclient = 0;
 
 int num_clones = 0;
 
@@ -1047,7 +1048,11 @@ create_image()
 		simple_err("Error creating ioctx", r);
 		goto failed_krbd;
 	}
-	if (clone_calls) {
+    if (singleclient) {
+        r = rbd_create4(ioctx, iname, 0,
+                        RBD_FEATURE_LAYERING|RBD_FEATURE_IMAGEINDEX,
+                        &order, 0, 0, LIBRBD_CREATE_NONSHARED);
+    } else if (clone_calls) {
 		r = rbd_create2(ioctx, iname, 0, RBD_FEATURE_LAYERING, &order);
 	} else {
 		r = rbd_create(ioctx, iname, 0, &order);
@@ -1735,7 +1740,8 @@ usage(void)
 	-t truncbdy: 4096 would make truncates page aligned (default 1)\n\
 	-w writebdy: 4096 would make writes page aligned (default 1)\n\
 	-x: preallocate file space before starting, XFS only (default 0)\n\
-	-y: synchronize changes to a file\n"
+	-y: synchronize changes to a file\n\
+	-z: use single client flag\n"
 
 #ifdef AIO
 "	-A: Use the AIO system calls\n"
@@ -1933,7 +1939,7 @@ main(int argc, char **argv)
 
 	setvbuf(stdout, (char *)0, _IOLBF, 0); /* line buffered stdout */
 
-	while ((ch = getopt(argc, argv, "b:c:dfh:l:m:no:p:qr:s:t:w:xyACD:FHKLN:OP:RS:UWZ"))
+	while ((ch = getopt(argc, argv, "b:c:dfh:l:m:no:p:qr:s:t:w:xyzACD:FHKLN:OP:RS:UWZ"))
 	       != EOF)
 		switch (ch) {
 		case 'b':
@@ -2025,6 +2031,9 @@ main(int argc, char **argv)
 		case 'y':
 			do_fsync = 1;
 			break;
+        case 'z':
+            singleclient = 1;
+            break;
 		case 'A':
 		        aio = 1;
 			break;

@@ -11,6 +11,7 @@
 #include "include/buffer.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
+#include "librbd/ImageCtx.h"
 
 namespace librbd {
 
@@ -45,6 +46,7 @@ namespace librbd {
     virtual bool should_complete(int r) = 0;
     virtual int send() = 0;
 
+
   protected:
     void read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents);
 
@@ -61,15 +63,15 @@ namespace librbd {
 
   class AioRead : public AioRequest {
   public:
-    AioRead(ImageCtx *ictx, const std::string &oid,
-	    uint64_t objectno, uint64_t offset, uint64_t len,
+    AioRead(ImageCtx *ictx, const std::string &oid, uint64_t objectno,
+            uint64_t offset, uint64_t len, uint64_t f_offset,
 	    vector<pair<uint64_t,uint64_t> >& be,
 	    librados::snap_t snap_id, bool sparse,
 	    Context *completion)
       : AioRequest(ictx, oid, objectno, offset, len, snap_id, completion,
 		   false),
 	m_buffer_extents(be),
-	m_tried_parent(false), m_sparse(sparse) {
+	m_tried_parent(false), m_sparse(sparse), m_file_offset(f_offset) {
     }
     virtual ~AioRead() {}
     virtual bool should_complete(int r);
@@ -86,6 +88,7 @@ namespace librbd {
     vector<pair<uint64_t,uint64_t> > m_buffer_extents;
     bool m_tried_parent;
     bool m_sparse;
+    uint64_t m_file_offset;
   };
 
   class AbstractWrite : public AioRequest {

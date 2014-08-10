@@ -55,12 +55,27 @@ typedef struct {
 #define RBD_MAX_IMAGE_NAME_SIZE 96
 #define RBD_MAX_BLOCK_NAME_SIZE 24
 
+/**
+ * @defgroup librbd_h_flags
+ * Flags for rbd_create4()
+ * See librados.hpp for details.
+ * @{
+ */
+/** @cond TODO_enums_not_yet_in_asphyxiate */
+enum {
+  LIBRBD_CREATE_NOFLAG             = 0,
+  LIBRBD_CREATE_NONSHARED          = 1,
+};
+/** @endcond */
+/** @} */
+
 typedef struct {
   uint64_t size;
   uint64_t obj_size;
   uint64_t num_objs;
   int order;
   char block_name_prefix[RBD_MAX_BLOCK_NAME_SIZE];
+  uint64_t flags;
   int64_t parent_pool;			      /* deprecated */
   char parent_name[RBD_MAX_IMAGE_NAME_SIZE];  /* deprecated */
 } rbd_image_info_t;
@@ -72,6 +87,9 @@ int rbd_list(rados_ioctx_t io, char *names, size_t *size);
 int rbd_create(rados_ioctx_t io, const char *name, uint64_t size, int *order);
 int rbd_create2(rados_ioctx_t io, const char *name, uint64_t size,
 		uint64_t features, int *order);
+int rbd_create3(rados_ioctx_t io, const char *name, uint64_t size,
+		uint64_t features, int *order,
+		uint64_t stripe_unit, uint64_t stripe_count);
 /**
  * create new rbd image
  *
@@ -87,11 +105,12 @@ int rbd_create2(rados_ioctx_t io, const char *name, uint64_t size,
  * @param order object/block size, as a power of two (object size == 1 << order)
  * @param stripe_unit stripe unit size, in bytes.
  * @param stripe_count number of objects to stripe over before looping
+ * @param shared indicate whether used by multi client
  * @return 0 on success, or negative error code
  */
-int rbd_create3(rados_ioctx_t io, const char *name, uint64_t size,
+int rbd_create4(rados_ioctx_t io, const char *name, uint64_t size,
 		uint64_t features, int *order,
-		uint64_t stripe_unit, uint64_t stripe_count);
+		uint64_t stripe_unit, uint64_t stripe_count, int flags);
 int rbd_clone(rados_ioctx_t p_ioctx, const char *p_name,
 	      const char *p_snapname, rados_ioctx_t c_ioctx,
 	      const char *c_name, uint64_t features, int *c_order);

@@ -65,12 +65,17 @@ cls_method_handle_t h_create;
 cls_method_handle_t h_get_features;
 cls_method_handle_t h_get_size;
 cls_method_handle_t h_set_size;
+cls_method_handle_t h_get_flags;
+cls_method_handle_t h_set_flags;
 cls_method_handle_t h_get_parent;
 cls_method_handle_t h_set_parent;
 cls_method_handle_t h_get_protection_status;
 cls_method_handle_t h_set_protection_status;
 cls_method_handle_t h_get_stripe_unit_count;
 cls_method_handle_t h_set_stripe_unit_count;
+cls_method_handle_t h_get_image_index;
+cls_method_handle_t h_set_image_index;
+cls_method_handle_t h_remove_image_index;
 cls_method_handle_t h_remove_parent;
 cls_method_handle_t h_add_child;
 cls_method_handle_t h_remove_child;
@@ -96,6 +101,7 @@ cls_method_handle_t h_old_snapshot_remove;
 
 #define RBD_MAX_KEYS_READ 64
 #define RBD_SNAP_KEY_PREFIX "snapshot_"
+#define RBD_SNAP_INDEX_KEY_PREFIX "snapindex_"
 #define RBD_DIR_ID_KEY_PREFIX "id_"
 #define RBD_DIR_NAME_KEY_PREFIX "name_"
 
@@ -139,6 +145,14 @@ static void key_from_snap_id(snapid_t snap_id, string *out)
 {
   ostringstream oss;
   oss << RBD_SNAP_KEY_PREFIX
+      << std::setw(16) << std::setfill('0') << std::hex << snap_id;
+  *out = oss.str();
+}
+
+static void index_key_from_snap_id(snapid_t snap_id, string *out)
+{
+  ostringstream oss;
+  oss << RBD_SNAP_INDEX_KEY_PREFIX
       << std::setw(16) << std::setfill('0') << std::hex << snap_id;
   *out = oss.str();
 }
@@ -466,6 +480,80 @@ int check_exists(cls_method_context_t hctx)
 }
 
 /**
+ * Input:
+ *
+ * Output:
+ * @param flags the flags of this image
+ * @returns 0 on success, negative error code on failure
+ */
+int get_flags(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  int r = check_exists(hctx);
+  if (r < 0)
+    return r;
+
+  uint64_t flags = 0;
+  r = read_key(hctx, "flags", &flags);
+  if (r < 0) {
+    if (r != -ENOENT) {
+      CLS_ERR("failed to read the flags off of disk: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+  }
+
+  ::encode(flags, *out);
+
+  return 0;
+}
+
+/**
+ * Input:
+ * @param flags the new flags of this image
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int set_flags(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  int r = check_exists(hctx);
+  if (r < 0)
+    return r;
+
+  uint64_t flags = 0;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(flags, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  // check that flags exists to make sure this is a header object
+  // that was created correctly
+  uint64_t orig_flags;
+  r = read_key(hctx, "flags", &orig_flags);
+  if (r < 0) {
+    if (r != -ENOENT) {
+      CLS_ERR("Could not read image's flags off disk: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+  }
+
+  CLS_LOG(20, "set_flags flags=%llu orig_flags=%llu", (unsigned long long)flags,
+          (unsigned long long)orig_flags);
+
+  bufferlist flagbl;
+  ::encode(flags, flagbl);
+  r = cls_cxx_map_set_val(hctx, "flags", &flagbl);
+  if (r < 0) {
+    CLS_ERR("error writing flag metadata: %d", r);
+    return r;
+  }
+
+  return 0;
+}
+
+/**
  * get the current protection status of the specified snapshot
  *
  * Input:
@@ -706,6 +794,124 @@ int set_stripe_unit_count(cls_method_context_t hctx, bufferlist *in, bufferlist 
   return 0;
 }
 
+/**
+ * get image index parameters
+ *
+ * Input:
+ * @param snap_id which snapshot to query, or CEPH_NOSNAP (uint64_t)
+ *
+ * Output:
+ * @param image index
+ *
+ * @returns 0 on success
+ */
+int get_image_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t snap_id;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(snap_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = check_exists(hctx);
+  if (r < 0)
+    return r;
+
+  CLS_LOG(20, "get_image_index");
+
+  bufferlist index_bl;
+  string key;
+  index_key_from_snap_id(snap_id, &key);
+  r = read_key(hctx, key, &index_bl);
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("failed to read the image index off of disk: %s",
+            cpp_strerror(r).c_str());
+    return r;
+  }
+
+  ::encode(index_bl, *out);
+  return 0;
+}
+
+/**
+ * set image index parameters
+ *
+ * Input:
+ * @param snap_id
+ * @param image index(bufferlist)
+ *
+ * @returns 0 on success
+ */
+int set_image_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist index_bl;
+  snapid_t snapid;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(snapid, iter);
+    ::decode(index_bl, iter);
+  } catch (const buffer::error &err) {
+    CLS_LOG(20, "set_image_index: invalid decode");
+    return -EINVAL;
+  }
+
+  int r = check_exists(hctx);
+  if (r < 0)
+    return r;
+
+  CLS_LOG(20, "set_image_index");
+
+  bufferlist bl;
+  ::encode(index_bl, bl);
+
+  string key;
+  index_key_from_snap_id(snapid, &key);
+  r = cls_cxx_map_set_val(hctx, key, &bl);
+  if (r < 0) {
+    CLS_ERR("error writing image index metadata: %d", r);
+    return r;
+  }
+
+  return 0;
+}
+
+/**
+ * remove the image index
+ *
+ * Input:
+ * @param snap_id which snapshot to query, or CEPH_NOSNAP (uint64_t)
+ *
+ * @returns 0 on success, negative error code on failure.
+ */
+int remove_image_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t snap_id;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(snap_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = check_exists(hctx);
+  if (r < 0)
+    return r;
+
+  string key;
+  index_key_from_snap_id(snap_id, &key);
+  r = cls_cxx_map_remove_key(hctx, key);
+  if (r < 0) {
+    CLS_ERR("error removing image index: %d", r);
+    return r;
+  }
+
+  return 0;
+}
 
 /**
  * get the current parent, if any
@@ -1440,7 +1646,7 @@ int set_id(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   int r = check_exists(hctx);
   if (r < 0)
     return r;
-
+  
   string id;
   try {
     bufferlist::iterator iter = in->begin();
@@ -2003,6 +2209,12 @@ void __cls_init()
   cls_register_cxx_method(h_class, "set_size",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  set_size, &h_set_size);
+  cls_register_cxx_method(h_class, "get_flags",
+			  CLS_METHOD_RD,
+			  get_flags, &h_get_flags);
+  cls_register_cxx_method(h_class, "set_flags",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  set_flags, &h_set_flags);
   cls_register_cxx_method(h_class, "get_snapcontext",
 			  CLS_METHOD_RD,
 			  get_snapcontext, &h_get_snapcontext);
@@ -2045,6 +2257,15 @@ void __cls_init()
   cls_register_cxx_method(h_class, "set_stripe_unit_count",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  set_stripe_unit_count, &h_set_stripe_unit_count);
+  cls_register_cxx_method(h_class, "get_image_index",
+			  CLS_METHOD_RD,
+			  get_image_index, &h_get_image_index);
+  cls_register_cxx_method(h_class, "set_image_index",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  set_image_index, &h_set_image_index);
+  cls_register_cxx_method(h_class, "remove_image_index",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  remove_image_index, &h_remove_image_index);
 
   /* methods for the rbd_children object */
   cls_register_cxx_method(h_class, "add_child",

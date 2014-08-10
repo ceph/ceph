@@ -121,6 +121,7 @@ namespace librbd {
     info.obj_size = 1ULL << obj_order;
     info.num_objs = rbd_howmany(info.size, ictx->get_object_size());
     info.order = obj_order;
+    info.flags = ictx->get_flags();
     memcpy(&info.block_name_prefix, ictx->object_prefix.c_str(),
 	   min((size_t)RBD_MAX_BLOCK_NAME_SIZE,
 	       ictx->object_prefix.length() + 1));
@@ -745,7 +746,7 @@ reprotect_and_return_err:
 
   int create_v2(IoCtx& io_ctx, const char *imgname, uint64_t bid, uint64_t size,
 		int order, uint64_t features, uint64_t stripe_unit,
-		uint64_t stripe_count)
+		uint64_t stripe_count, uint64_t flags)
   {
     ostringstream bid_ss;
     uint32_t extra;
@@ -800,6 +801,12 @@ reprotect_and_return_err:
       }
     }
 
+    r = cls_client::set_flags(&io_ctx, header_oid, flags);
+    if (r < 0) {
+      lderr(cct) << "error writing flags: " << cpp_strerror(r) << dendl;
+      goto err_remove_header;
+    }
+
     ldout(cct, 2) << "done." << dendl;
     return 0;
 
@@ -838,7 +845,7 @@ reprotect_and_return_err:
 
   int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     bool old_format, uint64_t features, int *order,
-	     uint64_t stripe_unit, uint64_t stripe_count)
+	     uint64_t stripe_unit, uint64_t stripe_count, int flags)
   {
     if (!order)
       return -EINVAL;
@@ -902,6 +909,11 @@ reprotect_and_return_err:
 	(!stripe_unit && stripe_count))
       return -EINVAL;
 
+    if (flags && (features & RBD_FEATURE_IMAGEINDEX) == 0) {
+      lderr(cct) << "IMAGEINDEX and format 2 or later required for non-default flags" << dendl;
+      return -EINVAL;
+    }
+ 
     if (old_format) {
       if (stripe_unit && stripe_unit != (1ull << *order))
 	return -EINVAL;
@@ -911,7 +923,7 @@ reprotect_and_return_err:
       return create_v1(io_ctx, imgname, bid, size, *order);
     } else {
       return create_v2(io_ctx, imgname, bid, size, *order, features,
-		       stripe_unit, stripe_count);
+		       stripe_unit, stripe_count, flags);
     }
   }
 
@@ -999,7 +1011,7 @@ reprotect_and_return_err:
       order = p_imctx->order;
 
     r = create(c_ioctx, c_name, size, false, features, &order,
-	       stripe_unit, stripe_count);
+	       stripe_unit, stripe_count, p_imctx->flags);
     if (r < 0) {
       lderr(cct) << "error creating child: " << cpp_strerror(r) << dendl;
       goto err_close_parent;
@@ -1038,6 +1050,8 @@ reprotect_and_return_err:
       r = -EINVAL;
       goto err_remove_child;
     }
+
+    p_imctx->image_index.mark_all_parent();
 
     ldout(cct, 2) << "done." << dendl;
     close_image(c_imctx);
@@ -1215,6 +1229,11 @@ reprotect_and_return_err:
     RWLock::RLocker l(ictx->md_lock);
     RWLock::RLocker l2(ictx->snap_lock);
     return ictx->get_features(ictx->snap_id, features);
+  }
+
+  int get_flags(ImageCtx *ictx, uint64_t *flags)
+  {
+    return ictx->get_flags();
   }
 
   int get_overlap(ImageCtx *ictx, uint64_t *overlap)
@@ -1415,6 +1434,15 @@ reprotect_and_return_err:
         close_image(ictx);
 	return r;
       }
+
+      r = cls_client::remove_image_index(&ictx->md_ctx, ictx->header_oid,
+			                 CEPH_NOSNAP);
+      if (r < 0) {
+        lderr(ictx->cct) << "removing image index from header failed: "
+                         << cpp_strerror(r) << dendl;
+        return r;
+      }
+
       close_image(ictx);
 
       ldout(cct, 2) << "removing header..." << dendl;
@@ -1502,6 +1530,7 @@ reprotect_and_return_err:
       lderr(cct) << "error writing header: " << cpp_strerror(-r) << dendl;
       return r;
     } else {
+      ictx->image_index.resize_image_index(ictx->get_num_objects());
       notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
     }
 
@@ -1597,6 +1626,18 @@ reprotect_and_return_err:
       return r;
     }
 
+    if (!ictx->old_format) {
+      bufferlist index_bl;
+      ictx->image_index.encode(index_bl);
+      r = cls_client::set_image_index(&ictx->md_ctx, ictx->header_oid,
+                                      snap_id, index_bl);
+      if (r < 0) {
+        lderr(ictx->cct) << "set_image_index  to header failed: "
+                         << cpp_strerror(r) << dendl;
+        return r;
+      }
+    }
+
     return 0;
   }
 
@@ -1617,6 +1658,17 @@ reprotect_and_return_err:
       lderr(ictx->cct) << "removing snapshot from header failed: "
 		       << cpp_strerror(r) << dendl;
       return r;
+    }
+
+    if (!ictx->old_format) {
+      RWLock::RLocker l(ictx->snap_lock);
+      r = cls_client::remove_image_index(&ictx->md_ctx, ictx->header_oid,
+			                 ictx->get_snap_id(snap_name));
+      if (r < 0) {
+        lderr(ictx->cct) << "removing image index from header failed: "
+                         << cpp_strerror(r) << dendl;
+        return r;
+      }
     }
 
     return 0;
@@ -1660,6 +1712,7 @@ reprotect_and_return_err:
 	ictx->clear_nonexistence_cache();
 	close_image(ictx->parent);
 	ictx->parent = NULL;
+        assert(ictx->image_index.is_full_local());
       }
     }
 
@@ -1772,6 +1825,9 @@ reprotect_and_return_err:
 	    }
 	  } while (r == -ENOENT);
 	}
+
+        // Keep sync with image size!
+        ictx->image_index.resize_image_index(ictx->get_num_objects());
 
 	for (size_t i = 0; i < new_snapc.snaps.size(); ++i) {
 	  uint64_t features = ictx->old_format ? 0 : snap_features[i];
@@ -1889,6 +1945,9 @@ reprotect_and_return_err:
       lderr(cct) << "Error rolling back image: " << cpp_strerror(-r) << dendl;
       return r;
     }
+
+    // TODO need to load snapshot index
+    ictx->image_index.invalidate_image_index();
 
     notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
 
@@ -2117,6 +2176,9 @@ reprotect_and_return_err:
     if ((r = _snap_set(ictx, ictx->snap_name.c_str())) < 0)
       goto err_close;
 
+    if ((r = ictx->image_index.load()) < 0)
+      goto err_close;
+
     return 0;
 
   err_close:
@@ -2139,6 +2201,17 @@ reprotect_and_return_err:
 
     if (ictx->wctx)
       ictx->unregister_watch();
+
+    if (!ictx->old_format) {
+      bufferlist index_bl;
+      ictx->image_index.encode(index_bl);
+      int r = cls_client::set_image_index(&ictx->md_ctx, ictx->header_oid,
+                                          ictx->snap_id, index_bl);
+      if (r < 0) {
+        lderr(ictx->cct) << "set_image_index  to header failed: "
+                         << cpp_strerror(r) << dendl;
+      }
+    }
 
     delete ictx;
   }
@@ -2853,8 +2926,8 @@ reprotect_and_return_err:
     ictx->user_flushed();
 
     c->get();
-    c->add_request();
-    c->init_time(ictx, AIO_TYPE_FLUSH);
+    c->add_request(ictx);
+    c->init_time(ictx->cct, AIO_TYPE_FLUSH);
     C_AioWrite *req_comp = new C_AioWrite(cct, c);
     if (ictx->object_cacher) {
       ictx->flush_cache_aio(req_comp);
@@ -2954,7 +3027,7 @@ reprotect_and_return_err:
     }
 
     c->get();
-    c->init_time(ictx, AIO_TYPE_WRITE);
+    c->init_time(ictx->cct, AIO_TYPE_WRITE);
     for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
       ldout(cct, 20) << " oid " << p->oid << " " << p->offset << "~" << p->length
 		     << " from " << p->buffer_extents << dendl;
@@ -2968,8 +3041,8 @@ reprotect_and_return_err:
 
       C_AioWrite *req_comp = new C_AioWrite(cct, c);
       if (ictx->object_cacher) {
-	c->add_request();
-	ictx->write_to_cache(p->oid, bl, p->length, p->offset, req_comp);
+	c->add_request(ictx);
+	ictx->write_to_cache(p->oid, bl, p->length, p->offset, p->file_offset, req_comp);
       } else {
 	// reverse map this object extent onto the parent
 	vector<pair<uint64_t,uint64_t> > objectx;
@@ -2981,7 +3054,7 @@ reprotect_and_return_err:
 	AioWrite *req = new AioWrite(ictx, p->oid.name, p->objectno, p->offset,
 				     objectx, object_overlap,
 				     bl, snapc, snap_id, req_comp);
-	c->add_request();
+	c->add_request(ictx);
 	r = req->send();
 	if (r < 0)
 	  goto done;
@@ -3033,13 +3106,13 @@ reprotect_and_return_err:
     }
 
     c->get();
-    c->init_time(ictx, AIO_TYPE_DISCARD);
+    c->init_time(ictx->cct, AIO_TYPE_DISCARD);
     for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
       ldout(cct, 20) << " oid " << p->oid << " " << p->offset << "~" << p->length
 		     << " from " << p->buffer_extents << dendl;
       C_AioWrite *req_comp = new C_AioWrite(cct, c);
       AbstractWrite *req;
-      c->add_request();
+      c->add_request(ictx);
 
       // reverse map this object extent onto the parent
       vector<pair<uint64_t,uint64_t> > objectx;
@@ -3100,6 +3173,41 @@ reprotect_and_return_err:
     return aio_read(ictx, image_extents, buf, bl, c);
   }
 
+  int send_aio_read(ImageCtx *ictx, vector<ObjectExtent> &extents, AioCompletion *c)
+  {
+    ictx->snap_lock.get_read();
+    snap_t snap_id = ictx->snap_id;
+    ictx->snap_lock.put_read();
+
+    for (vector<ObjectExtent>::iterator q = extents.begin(); q != extents.end(); ++q) {
+      ldout(ictx->cct, 20) << " oid " << q->oid << " " << q->offset << "~" << q->length
+                            << " from " << q->buffer_extents << dendl;
+
+      C_AioRead *req_comp = new C_AioRead(ictx->cct, c);
+      AioRead *req = new AioRead(ictx, q->oid.name,
+                                 q->objectno, q->offset, q->length,
+                                 q->file_offset,
+                                 q->buffer_extents,
+                                 snap_id, true, req_comp);
+      req_comp->set_req(req);
+      c->add_request(ictx);
+
+      if (ictx->object_cacher) {
+        C_CacheRead *cache_comp = new C_CacheRead(req);
+        ictx->aio_read_from_cache(q->oid, &req->data(),
+                                  q->length, q->offset,
+                                  q->file_offset, cache_comp);
+      } else {
+        int r = req->send();
+        if (r < 0 && r == -ENOENT)
+          r = 0;
+        if (r < 0) {
+          return r;
+        }
+      }
+    }
+  }
+
   int aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
 	       char *buf, bufferlist *pbl, AioCompletion *c)
   {
@@ -3108,10 +3216,6 @@ reprotect_and_return_err:
     int r = ictx_check(ictx);
     if (r < 0)
       return r;
-
-    ictx->snap_lock.get_read();
-    snap_t snap_id = ictx->snap_id;
-    ictx->snap_lock.put_read();
 
     // map
     map<object_t,vector<ObjectExtent> > object_extents;
@@ -3132,44 +3236,21 @@ reprotect_and_return_err:
       buffer_ofs += len;
     }
 
-    int64_t ret;
 
     c->read_buf = buf;
     c->read_buf_len = buffer_ofs;
     c->read_bl = pbl;
 
     c->get();
-    c->init_time(ictx, AIO_TYPE_READ);
-    for (map<object_t,vector<ObjectExtent> >::iterator p = object_extents.begin(); p != object_extents.end(); ++p) {
-      for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
-	ldout(ictx->cct, 20) << " oid " << q->oid << " " << q->offset << "~" << q->length
-			     << " from " << q->buffer_extents << dendl;
-
-	C_AioRead *req_comp = new C_AioRead(ictx->cct, c);
-	AioRead *req = new AioRead(ictx, q->oid.name, 
-				   q->objectno, q->offset, q->length,
-				   q->buffer_extents,
-				   snap_id, true, req_comp);
-	req_comp->set_req(req);
-	c->add_request();
-
-	if (ictx->object_cacher) {
-	  C_CacheRead *cache_comp = new C_CacheRead(req);
-	  ictx->aio_read_from_cache(q->oid, &req->data(),
-				    q->length, q->offset,
-				    cache_comp);
-	} else {
-	  r = req->send();
-	  if (r < 0 && r == -ENOENT)
-	    r = 0;
-	  if (r < 0) {
-	    ret = r;
-	    goto done;
-	  }
-	}
+    c->init_time(ictx->cct, AIO_TYPE_READ);
+    for (map<object_t,vector<ObjectExtent> >::iterator p = object_extents.begin();
+         p != object_extents.end(); ++p) {
+      r = send_aio_read(ictx, p->second, c);
+      if (r < 0) {
+        goto done;
       }
     }
-    ret = buffer_ofs;
+    r = buffer_ofs;
   done:
     c->finish_adding_requests(ictx->cct);
     c->put();
@@ -3177,7 +3258,7 @@ reprotect_and_return_err:
     ictx->perfcounter->inc(l_librbd_aio_rd);
     ictx->perfcounter->inc(l_librbd_aio_rd_bytes, buffer_ofs);
 
-    return ret;
+    return r;
   }
 
   AioCompletion *aio_create_completion() {

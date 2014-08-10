@@ -42,6 +42,10 @@ namespace librbd {
 		 uint64_t size);
     int set_size(librados::IoCtx *ioctx, const std::string &oid,
 		 uint64_t size);
+    int get_flags(librados::IoCtx *ioctx, const std::string &oid,
+		  uint64_t *flags);
+    int set_flags(librados::IoCtx *ioctx, const std::string &oid,
+		  uint64_t flags);
     int get_parent(librados::IoCtx *ioctx, const std::string &oid,
 		   snapid_t snap_id, parent_spec *pspec,
 		   uint64_t *parent_overlap);
@@ -77,6 +81,12 @@ namespace librbd {
 			      uint64_t *stripe_unit, uint64_t *stripe_count);
     int set_stripe_unit_count(librados::IoCtx *ioctx, const std::string &oid,
 			      uint64_t stripe_unit, uint64_t stripe_count);
+    int get_image_index(librados::IoCtx *ioctx, const std::string &oid,
+                        snapid_t snap_id, bufferlist *index);
+    int set_image_index(librados::IoCtx *ioctx, const std::string &oid,
+                        snapid_t snap_id, bufferlist &index);
+    int remove_image_index(librados::IoCtx *ioctx, const std::string &oid,
+                           snapid_t snap_id);
 
     // operations on rbd_id objects
     int get_id(librados::IoCtx *ioctx, const std::string &oid, std::string *id);

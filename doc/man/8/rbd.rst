@@ -123,6 +123,11 @@ Parameters
 
    Map the image read-only.  Equivalent to -o ro.
 
+.. option:: --single-client
+
+   Specifies this image is used by only one client. Librbd will pick up
+   useful optimization for this.
+
 
 Commands
 ========

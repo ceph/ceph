@@ -110,6 +110,7 @@ void Striper::file_to_extents(CephContext *cct, const char *object_format,
       ex->offset = x_offset;
       ex->length = x_len;
       ex->truncate_size = object_truncate_size(cct, layout, objectno, trunc_size);
+      ex->file_offset = cur;
 
       ldout(cct, 20) << " added new " << *ex << dendl;
     } else {

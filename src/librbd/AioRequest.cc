@@ -45,11 +45,70 @@ namespace librbd {
     assert(!m_parent_completion);
     m_parent_completion = aio_create_completion_internal(this, rbd_req_cb);
     ldout(m_ictx->cct, 20) << "read_from_parent this = " << this
-			   << " parent completion " << m_parent_completion
+                           << " parent completion " << m_parent_completion
 			   << " extents " << image_extents
 			   << dendl;
-    aio_read(m_ictx->parent, image_extents, NULL, &m_read_data,
-	     m_parent_completion);
+
+    m_parent_completion->read_bl = &m_read_data; 
+    m_parent_completion->get();
+    m_parent_completion->init_time(m_ictx->cct, AIO_TYPE_READ);
+
+    ImageCtx *parent = m_ictx->parent;
+    while (!ictx_check(parent)) {
+      map<object_t,vector<ObjectExtent> > object_extents;
+
+      // reverse map this object extent onto the parent
+      uint64_t buffer_ofs = 0;
+      for (vector<pair<uint64_t,uint64_t> >::const_iterator p = image_extents.begin();
+           p != image_extents.end();
+           ++p) {
+        Striper::file_to_extents(parent->cct, parent->format_string, &parent->layout,
+                                 p->first, p->second, 0, object_extents, buffer_ofs);
+        buffer_ofs += p->second;
+      }
+
+      map<object_t, vector<ObjectExtent> >::iterator p = object_extents.begin();
+      map<object_t, vector<ObjectExtent> >::iterator next = p;
+      while (p != object_extents.end()) {
+        next++;
+
+        assert(!p->second.empty());
+        uint64_t objectno;
+        uint64_t count = 0;
+        vector<pair<uint64_t, uint64_t> > obj_extents;
+        for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
+          objectno = q->objectno;
+          count += q->length;
+          obj_extents.push_back(make_pair(q->file_offset, q->length));
+        }
+
+        if (parent->image_index.is_parent(objectno)) {
+          uint64_t image_overlap = 0;
+          int r = parent->get_parent_overlap(parent->snap_id, &image_overlap);
+          assert(0 == r);
+          uint64_t object_overlap = parent->prune_parent_extents(obj_extents, image_overlap);
+          // Need read from parent again, continue loop
+          if (object_overlap) {
+            p = next;
+            continue;
+          }
+        }
+
+        send_aio_read(parent, p->second, m_parent_completion);
+        parent->perfcounter->inc(l_librbd_aio_rd);
+        parent->perfcounter->inc(l_librbd_aio_rd_bytes, count);
+
+        object_extents.erase(p);
+        p = next;
+      }
+
+      if (object_extents.empty())
+        break;
+      parent = parent->parent;
+    }
+
+    m_parent_completion->finish_adding_requests(m_ictx->cct);
+    m_parent_completion->put();
   }
 
   /** read **/
@@ -60,14 +119,16 @@ namespace librbd {
 			   << " r = " << r << dendl;
 
     if (!m_tried_parent && r == -ENOENT) {
+      // Only when image index don't know the object location info, read op
+      // will reach here and popluate it
+      
       RWLock::RLocker l(m_ictx->snap_lock);
       RWLock::RLocker l2(m_ictx->parent_lock);
 
       // calculate reverse mapping onto the image
-      vector<pair<uint64_t,uint64_t> > image_extents;
-      Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
-			    m_object_no, m_object_off, m_object_len,
-			    image_extents);
+      vector<pair<uint64_t,uint64_t> > image_extents(1);
+      // It must be only one extent
+      image_extents[0] = make_pair(m_file_offset, m_object_len);
 
       uint64_t image_overlap = 0;
       r = m_ictx->get_parent_overlap(m_snap_id, &image_overlap);
@@ -82,6 +143,8 @@ namespace librbd {
       }
     }
 
+    if (!m_tried_parent)
+      m_ictx->image_index.mark_local(m_object_no);
     return true;
   }
 
@@ -134,7 +197,7 @@ namespace librbd {
 
   void AbstractWrite::guard_write()
   {
-    if (has_parent()) {
+    if (!m_ictx->image_index.is_local(m_object_no)) {
       m_state = LIBRBD_AIO_WRITE_GUARD;
       m_write.assert_exists();
       ldout(m_ictx->cct, 20) << __func__ << " guarding write" << dendl;
@@ -220,6 +283,9 @@ namespace librbd {
       lderr(m_ictx->cct) << "invalid request state: " << m_state << dendl;
       assert(0);
     }
+
+    if (finished)
+      m_ictx->image_index.mark_local(m_object_no);
 
     return finished;
   }
