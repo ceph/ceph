@@ -206,24 +206,6 @@ void RadosTestEC::TearDown()
   rados_ioctx_destroy(ioctx);
 }
 
-void RadosTestEC::cleanup_default_namespace(rados_ioctx_t ioctx)
-{
-  // remove all objects from the default namespace to avoid polluting
-  // other tests
-  rados_ioctx_set_namespace(ioctx, "");
-  rados_list_ctx_t list_ctx;
-  ASSERT_EQ(0, rados_objects_list_open(ioctx, &list_ctx));
-  int r;
-  const char *entry = NULL;
-  const char *key = NULL;
-  while ((r = rados_objects_list_next(list_ctx, &entry, &key)) != -ENOENT) {
-    ASSERT_EQ(0, r);
-    rados_ioctx_locator_set_key(ioctx, key);
-    ASSERT_EQ(0, rados_remove(ioctx, entry));
-  }
-  rados_objects_list_close(list_ctx);
-}
-
 std::string RadosTestECPP::pool_name;
 Rados RadosTestECPP::s_cluster;
 
@@ -254,14 +236,3 @@ void RadosTestECPP::TearDown()
   ioctx.close();
 }
 
-void RadosTestECPP::cleanup_default_namespace(librados::IoCtx ioctx)
-{
-  // remove all objects from the default namespace to avoid polluting
-  // other tests
-  ioctx.set_namespace("");
-  for (ObjectIterator it = ioctx.objects_begin();
-       it != ioctx.objects_end(); ++it) {
-    ioctx.locator_set_key(it->second);
-    ASSERT_EQ(0, ioctx.remove(it->first));
-  }
-}
