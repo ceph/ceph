@@ -120,7 +120,7 @@ void MDSMonitor::create_pending()
   dout(10) << "create_pending e" << pending_mdsmap.epoch << dendl;
 }
 
-void MDSMonitor::encode_pending(MonitorDBStore::Transaction *t)
+void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   dout(10) << "encode_pending e" << pending_mdsmap.epoch << dendl;
 
