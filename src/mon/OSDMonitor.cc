@@ -2925,15 +2925,18 @@ int OSDMonitor::crush_ruleset_create_erasure(const string &name,
 					     int *ruleset,
 					     stringstream &ss)
 {
-  *ruleset = osdmap.crush->get_rule_id(name);
-  if (*ruleset != -ENOENT)
+  int ruleid = osdmap.crush->get_rule_id(name);
+  if (ruleid != -ENOENT) {
+    *ruleset = osdmap.crush->get_rule_mask_ruleset(ruleid);
     return -EEXIST;
+  }
 
   CrushWrapper newcrush;
   _get_pending_crush(newcrush);
 
-  *ruleset = newcrush.get_rule_id(name);
-  if (*ruleset != -ENOENT) {
+  ruleid = newcrush.get_rule_id(name);
+  if (ruleid != -ENOENT) {
+    *ruleset = newcrush.get_rule_mask_ruleset(ruleid);
     return -EALREADY;
   } else {
     ErasureCodeInterfaceRef erasure_code;
