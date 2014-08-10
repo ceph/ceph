@@ -2103,9 +2103,29 @@ protected:
   }
   virtual void TearDown() {
     RadosTestECPP::TearDown();
+
+    // flush + evict cache
+    flush_evict_all(cluster, cache_ioctx);
+
+    bufferlist inbl;
+    // tear down tiers
+    ASSERT_EQ(0, cluster.mon_command(
+      "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
+      "\"}",
+      inbl, NULL, NULL));
+    ASSERT_EQ(0, cluster.mon_command(
+      "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
+      "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+
+    // wait for maps to settle before next test
+    cluster.wait_for_latest_osdmap();
+
     cleanup_default_namespace(cache_ioctx);
+
     cache_ioctx.close();
   }
+
   librados::IoCtx cache_ioctx;
 };
 
@@ -2224,19 +2244,6 @@ TEST_F(LibRadosTwoPoolsECPP, Overlay) {
     completion->release();
     ASSERT_EQ('b', bl[0]);
   }
-
-  // tear down tiers
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
-    "\"}",
-    inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
-
-  // wait for maps to settle before next test
-  cluster.wait_for_latest_osdmap();
 }
 
 TEST_F(LibRadosTwoPoolsECPP, Promote) {
@@ -2291,19 +2298,6 @@ TEST_F(LibRadosTwoPoolsECPP, Promote) {
     ++it;
     ASSERT_TRUE(it == cache_ioctx.objects_end());
   }
-
-  // tear down tiers
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
-    "\"}",
-    inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
-
-  // wait for maps to settle before next test
-  cluster.wait_for_latest_osdmap();
 }
 
 TEST_F(LibRadosTwoPoolsECPP, PromoteSnap) {
@@ -2468,19 +2462,6 @@ TEST_F(LibRadosTwoPoolsECPP, PromoteSnap) {
     bufferlist bl;
     ASSERT_EQ(-ENOENT, ioctx.read("baz", bl, 1, 0));
   }
-
-  // tear down tiers
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
-    "\"}",
-    inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
-
-  // wait for maps to settle before next test
-  cluster.wait_for_latest_osdmap();
 }
 
 TEST_F(LibRadosTwoPoolsECPP, PromoteSnapTrimRace) {
@@ -2535,19 +2516,6 @@ TEST_F(LibRadosTwoPoolsECPP, PromoteSnapTrimRace) {
     bufferlist bl;
     ASSERT_EQ(-ENOENT, ioctx.read("foo", bl, 1, 0));
   }
-
-  // tear down tiers
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
-    "\"}",
-    inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
-
-  // wait for maps to settle before next test
-  cluster.wait_for_latest_osdmap();
 }
 
 TEST_F(LibRadosTwoPoolsECPP, Whiteout) {
@@ -2611,19 +2579,6 @@ TEST_F(LibRadosTwoPoolsECPP, Whiteout) {
     ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
     ASSERT_EQ('h', bl[0]);
   }
-
-  // tear down tiers
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
-    "\"}",
-    inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
-
-  // wait for maps to settle before next test
-  cluster.wait_for_latest_osdmap();
 }
 
 TEST_F(LibRadosTwoPoolsECPP, Evict) {
@@ -2714,19 +2669,6 @@ TEST_F(LibRadosTwoPoolsECPP, Evict) {
     ASSERT_EQ(-EBUSY, completion->get_return_value());
     completion->release();
   }
-
-  // tear down tiers
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
-    "\"}",
-    inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
-
-  // wait for maps to settle before next test
-  cluster.wait_for_latest_osdmap();
 }
 
 TEST_F(LibRadosTwoPoolsECPP, EvictSnap) {
@@ -2962,19 +2904,6 @@ TEST_F(LibRadosTwoPoolsECPP, EvictSnap) {
     ASSERT_EQ(0, completion->get_return_value());
     completion->release();
   }
-
-  // tear down tiers
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
-    "\"}",
-    inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
-
-  // wait for maps to settle before next test
-  cluster.wait_for_latest_osdmap();
 }
 
 TEST_F(LibRadosTwoPoolsECPP, TryFlush) {
@@ -3083,19 +3012,6 @@ TEST_F(LibRadosTwoPoolsECPP, TryFlush) {
     ObjectIterator it = cache_ioctx.objects_begin();
     ASSERT_TRUE(it == cache_ioctx.objects_end());
   }
-
-  // tear down tiers
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
-    "\"}",
-    inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
-
-  // wait for maps to settle before next test
-  cluster.wait_for_latest_osdmap();
 }
 
 TEST_F(LibRadosTwoPoolsECPP, Flush) {
@@ -3256,19 +3172,6 @@ TEST_F(LibRadosTwoPoolsECPP, Flush) {
     ObjectIterator it = ioctx.objects_begin();
     ASSERT_TRUE(it == ioctx.objects_end());
   }
-
-  // tear down tiers
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
-    "\"}",
-    inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
-
-  // wait for maps to settle before next test
-  cluster.wait_for_latest_osdmap();
 }
 
 TEST_F(LibRadosTwoPoolsECPP, FlushSnap) {
@@ -3433,10 +3336,6 @@ TEST_F(LibRadosTwoPoolsECPP, FlushSnap) {
     "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
     "\"}",
     inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -3460,6 +3359,11 @@ TEST_F(LibRadosTwoPoolsECPP, FlushSnap) {
     ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
     ASSERT_EQ('a', bl[0]);
   }
+
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
 }
 
 TEST_F(LibRadosTierECPP, FlushWriteRaces) {
@@ -3744,19 +3648,6 @@ TEST_F(LibRadosTwoPoolsECPP, FlushTryFlushRaces) {
     completion->release();
     completion2->release();
   }
-
-  // tear down tiers
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
-    "\"}",
-    inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
-
-  // wait for maps to settle before next test
-  cluster.wait_for_latest_osdmap();
 }
 
 TEST_F(LibRadosTwoPoolsECPP, TryFlushReadRace) {
@@ -3819,19 +3710,6 @@ TEST_F(LibRadosTwoPoolsECPP, TryFlushReadRace) {
   while (num_reads > 0)
     cond.Wait(test_lock);
   test_lock.Unlock();
-
-  // tear down tiers
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
-    "\"}",
-    inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
-
-  // wait for maps to settle before next test
-  cluster.wait_for_latest_osdmap();
 }
 
 TEST_F(LibRadosTierECPP, HitSetNone) {
@@ -3914,11 +3792,6 @@ TEST_F(LibRadosTwoPoolsECPP, HitSetRead) {
 
     sleep(1);
   }
-
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
 }
 
 // disable this test until hitset-get reliably works on EC pools
@@ -4068,11 +3941,6 @@ TEST_F(LibRadosTwoPoolsECPP, HitSetTrim) {
     sleep(1);
   }
   delete[] buf;
-
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
 }
 
 int main(int argc, char **argv)
