@@ -486,7 +486,7 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
 }
 
 
-void PGMonitor::encode_pending(MonitorDBStore::Transaction *t)
+void PGMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   version_t version = pending_inc.version;
   dout(10) << __func__ << " v " << version << dendl;

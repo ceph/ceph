@@ -30,15 +30,16 @@ using namespace std;
 class TraceIter {
   int fd;
   unsigned idx;
-  MonitorDBStore::Transaction t;
+  MonitorDBStore::TransactionRef t;
 public:
   TraceIter(string fname) : fd(-1), idx(-1) {
     fd = ::open(fname.c_str(), O_RDONLY);
+    t.reset(new MonitorDBStore::Transaction);
   }
   bool valid() {
     return fd != -1;
   }
-  const MonitorDBStore::Transaction &cur() {
+  MonitorDBStore::TransactionRef cur() {
     assert(valid());
     return t;
   }
@@ -79,7 +80,8 @@ public:
       return;
     }
     bliter = bl.begin();
-    t.decode(bliter);
+    t.reset(new MonitorDBStore::Transaction);
+    t->decode(bliter);
   }
   void init() {
     next();
@@ -252,10 +254,10 @@ int main(int argc, char **argv) {
       if (bl.length() == 0)
 	break;
       cout << "\n--- " << v << " ---" << std::endl;
-      MonitorDBStore::Transaction tx;
+      MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
       Paxos::decode_append_transaction(tx, bl);
       JSONFormatter f(true);
-      tx.dump(&f);
+      tx->dump(&f);
       f.flush(cout);
     }
   } else if (cmd == "dump-trace") {
@@ -274,7 +276,7 @@ int main(int argc, char **argv) {
       }
       if (iter.num() >= dstart) {
 	JSONFormatter f(true);
-	iter.cur().dump(&f, false);
+	iter.cur()->dump(&f, false);
 	f.flush(std::cout);
 	std::cout << std::endl;
       }
@@ -315,7 +317,7 @@ int main(int argc, char **argv) {
     unsigned num = 0;
     for (unsigned i = 0; i < ntrans; ++i) {
       std::cerr << "Applying trans " << i << std::endl;
-      MonitorDBStore::Transaction t;
+      MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
       string prefix;
       prefix.push_back((i%26)+'a');
       for (unsigned j = 0; j < tsize; ++j) {
@@ -323,10 +325,10 @@ int main(int argc, char **argv) {
 	os << num;
 	bufferlist bl;
 	for (unsigned k = 0; k < tvalsize; ++k) bl.append(rand());
-	t.put(prefix, os.str(), bl);
+	t->put(prefix, os.str(), bl);
 	++num;
       }
-      t.compact_prefix(prefix);
+      t->compact_prefix(prefix);
       st.apply_transaction(t);
     }
   } else if (cmd == "store-copy") {
@@ -366,12 +368,12 @@ int main(int argc, char **argv) {
     do {
       uint64_t num_keys = 0;
 
-      MonitorDBStore::Transaction tx;
+      MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
 
       while (it->valid() && num_keys < 128) {
         pair<string,string> k = it->raw_key();
         bufferlist v = it->value();
-        tx.put(k.first, k.second, v);
+        tx->put(k.first, k.second, v);
 
         num_keys ++;
         total_tx ++;
@@ -382,7 +384,7 @@ int main(int argc, char **argv) {
 
       total_keys += num_keys;
 
-      if (!tx.empty())
+      if (!tx->empty())
         out_store.apply_transaction(tx);
 
       std::cout << "copied " << total_keys << " keys so far ("
