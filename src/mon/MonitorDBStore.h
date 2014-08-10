@@ -84,6 +84,8 @@ class MonitorDBStore
     }
   };
 
+  struct Transaction;
+  typedef ceph::shared_ptr<Transaction> TransactionRef;
   struct Transaction {
     list<Op> ops;
     uint64_t bytes, keys;
@@ -163,16 +165,16 @@ class MonitorDBStore
       ls.back()->compact_range("prefix4", "from", "to");
     }
 
-    void append(Transaction& other) {
-      ops.splice(ops.end(), other.ops);
-      keys += other.keys;
-      bytes += other.bytes;
+    void append(TransactionRef other) {
+      ops.splice(ops.end(), other->ops);
+      keys += other->keys;
+      bytes += other->bytes;
     }
 
     void append_from_encoded(bufferlist& bl) {
-      Transaction other;
+      TransactionRef other(new Transaction);
       bufferlist::iterator it = bl.begin();
-      other.decode(it);
+      other->decode(it);
       append(other);
     }
 
@@ -244,17 +246,19 @@ class MonitorDBStore
     }
   };
 
-  int apply_transaction(const MonitorDBStore::Transaction& t) {
+  int apply_transaction(MonitorDBStore::TransactionRef t) {
     KeyValueDB::Transaction dbt = db->get_transaction();
 
     if (do_dump) {
       bufferlist bl;
-      t.encode(bl);
+      t->encode(bl);
       bl.write_fd(dump_fd);
     }
 
     list<pair<string, pair<string,string> > > compact;
-    for (list<Op>::const_iterator it = t.ops.begin(); it != t.ops.end(); ++it) {
+    for (list<Op>::const_iterator it = t->ops.begin();
+	 it != t->ops.end();
+	 ++it) {
       const Op& op = *it;
       switch (op.type) {
       case Transaction::OP_PUT:
@@ -295,26 +299,26 @@ class MonitorDBStore
     StoreIteratorImpl() : done(false) { }
     virtual ~StoreIteratorImpl() { }
 
-    bool add_chunk_entry(Transaction &tx,
+    bool add_chunk_entry(TransactionRef tx,
 			 string &prefix,
 			 string &key,
 			 bufferlist &value,
 			 uint64_t max) {
-      Transaction tmp;
+      TransactionRef tmp(new Transaction);
       bufferlist tmp_bl;
-      tmp.put(prefix, key, value);
-      tmp.encode(tmp_bl);
+      tmp->put(prefix, key, value);
+      tmp->encode(tmp_bl);
 
       bufferlist tx_bl;
-      tx.encode(tx_bl);
+      tx->encode(tx_bl);
 
       size_t len = tx_bl.length() + tmp_bl.length();
 
-      if (!tx.empty() && (len > max)) {
+      if (!tx->empty() && (len > max)) {
 	return false;
       }
 
-      tx.append(tmp);
+      tx->append(tmp);
       last_key.first = prefix;
       last_key.second = key;
 
@@ -341,7 +345,7 @@ class MonitorDBStore
     virtual bool has_next_chunk() {
       return !done && _is_valid();
     }
-    virtual void get_chunk_tx(Transaction &tx, uint64_t max) = 0;
+    virtual void get_chunk_tx(TransactionRef tx, uint64_t max) = 0;
     virtual pair<string,string> get_next_key() = 0;
   };
   typedef ceph::shared_ptr<StoreIteratorImpl> Synchronizer;
@@ -369,7 +373,7 @@ class MonitorDBStore
      *			    differ from the one passed on to the function)
      * @param last_key[out] Last key in the chunk
      */
-    virtual void get_chunk_tx(Transaction &tx, uint64_t max) {
+    virtual void get_chunk_tx(TransactionRef tx, uint64_t max) {
       assert(done == false);
       assert(iter->valid() == true);
 

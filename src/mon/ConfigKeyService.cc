@@ -48,10 +48,9 @@ int ConfigKeyService::store_get(string key, bufferlist &bl)
 void ConfigKeyService::store_put(string key, bufferlist &bl, Context *cb)
 {
   bufferlist proposal_bl;
-  MonitorDBStore::Transaction t;
-  t.put(STORE_PREFIX, key, bl);
-  t.encode(proposal_bl);
-
+  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  t->put(STORE_PREFIX, key, bl);
+  t->encode(proposal_bl);
   paxos->propose_new_value(proposal_bl, cb);
 }
 

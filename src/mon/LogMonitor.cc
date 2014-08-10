@@ -170,7 +170,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
   check_subs();
 }
 
-void LogMonitor::store_do_append(MonitorDBStore::Transaction *t,
+void LogMonitor::store_do_append(MonitorDBStore::TransactionRef t,
     const string& key, bufferlist& bl)
 {
   bufferlist existing_bl;
@@ -188,7 +188,7 @@ void LogMonitor::create_pending()
   dout(10) << "create_pending v " << (get_last_committed() + 1) << dendl;
 }
 
-void LogMonitor::encode_pending(MonitorDBStore::Transaction *t)
+void LogMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   version_t version = get_last_committed() + 1;
   bufferlist bl;
@@ -203,7 +203,7 @@ void LogMonitor::encode_pending(MonitorDBStore::Transaction *t)
   put_last_committed(t, version);
 }
 
-void LogMonitor::encode_full(MonitorDBStore::Transaction *t)
+void LogMonitor::encode_full(MonitorDBStore::TransactionRef t)
 {
   dout(10) << __func__ << " log v " << summary.version << dendl;
   assert(get_last_committed() == summary.version);

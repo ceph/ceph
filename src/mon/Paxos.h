@@ -1071,7 +1071,8 @@ public:
 
   void dispatch(PaxosServiceMessage *m);
 
-  void read_and_prepare_transactions(MonitorDBStore::Transaction *tx, version_t from, version_t last);
+  void read_and_prepare_transactions(MonitorDBStore::TransactionRef tx,
+				     version_t from, version_t last);
 
   void init();
 
@@ -1159,12 +1160,12 @@ public:
    * @param t The transaction to which we will append the operations
    * @param bl A bufferlist containing an encoded transaction
    */
-  static void decode_append_transaction(MonitorDBStore::Transaction& t,
-				 bufferlist& bl) {
-    MonitorDBStore::Transaction vt;
+  static void decode_append_transaction(MonitorDBStore::TransactionRef t,
+					bufferlist& bl) {
+    MonitorDBStore::TransactionRef vt(new MonitorDBStore::Transaction);
     bufferlist::iterator it = bl.begin();
-    vt.decode(it);
-    t.append(vt);
+    vt->decode(it);
+    t->append(vt);
   }
 
   /**
@@ -1353,11 +1354,11 @@ inline ostream& operator<<(ostream& out, Paxos::C_Proposal& p)
   out << " " << proposed
       << " queued " << (ceph_clock_now(NULL) - p.proposal_time)
       << " tx dump:\n";
-  MonitorDBStore::Transaction t;
+  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
   bufferlist::iterator p_it = p.bl.begin();
-  t.decode(p_it);
+  t->decode(p_it);
   JSONFormatter f(true);
-  t.dump(&f);
+  t->dump(&f);
   f.flush(out);
   return out;
 }

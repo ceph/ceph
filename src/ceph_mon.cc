@@ -554,11 +554,11 @@ int main(int argc, const char **argv)
     ::encode(v, final);
     ::encode(mapbl, final);
 
-    MonitorDBStore::Transaction t;
+    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
     // save it
-    t.put("monmap", v, mapbl);
-    t.put("monmap", "latest", final);
-    t.put("monmap", "last_committed", v);
+    t->put("monmap", v, mapbl);
+    t->put("monmap", "latest", final);
+    t->put("monmap", "last_committed", v);
     store->apply_transaction(t);
 
     dout(0) << "done." << dendl;

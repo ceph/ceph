@@ -174,8 +174,8 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     // state, and we shouldn't want to work around it without knowing what
     // exactly happened.
     assert(latest_full > 0);
-    MonitorDBStore::Transaction t;
-    put_version_latest_full(&t, latest_full);
+    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    put_version_latest_full(t, latest_full);
     mon->store->apply_transaction(t);
     dout(10) << __func__ << " updated the on-disk full map version to "
              << latest_full << dendl;
@@ -190,7 +190,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   }
 
   // walk through incrementals
-  MonitorDBStore::Transaction *t = NULL;
+  MonitorDBStore::TransactionRef t;
   size_t tx_size = 0;
   while (version > osdmap.epoch) {
     bufferlist inc_bl;
@@ -203,8 +203,8 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     err = osdmap.apply_incremental(inc);
     assert(err == 0);
 
-    if (t == NULL)
-      t = new MonitorDBStore::Transaction;
+    if (!t)
+      t.reset(new MonitorDBStore::Transaction);
 
     // Write out the full map for all past epochs.  Encode the full
     // map with the same features as the incremental.  If we don't
@@ -230,16 +230,14 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     }
 
     if (tx_size > g_conf->mon_sync_max_payload_size*2) {
-      mon->store->apply_transaction(*t);
-      delete t;
-      t = NULL;
+      mon->store->apply_transaction(t);
+      t = MonitorDBStore::TransactionRef();
       tx_size = 0;
     }
   }
 
-  if (t != NULL) {
-    mon->store->apply_transaction(*t);
-    delete t;
+  if (t) {
+    mon->store->apply_transaction(t);
   }
 
   for (int o = 0; o < osdmap.get_max_osd(); o++) {
@@ -602,7 +600,7 @@ void OSDMonitor::create_pending()
  * @note receiving a transaction in this function gives a fair amount of
  * freedom to the service implementation if it does need it. It shouldn't.
  */
-void OSDMonitor::encode_pending(MonitorDBStore::Transaction *t)
+void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   dout(10) << "encode_pending e " << pending_inc.epoch
 	   << dendl;
@@ -728,7 +726,8 @@ version_t OSDMonitor::get_trim_to()
   return 0;
 }
 
-void OSDMonitor::encode_trim_extra(MonitorDBStore::Transaction *tx, version_t first)
+void OSDMonitor::encode_trim_extra(MonitorDBStore::TransactionRef tx,
+				   version_t first)
 {
   dout(10) << __func__ << " including full map for e " << first << dendl;
   bufferlist bl;
