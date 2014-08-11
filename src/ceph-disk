@@ -500,7 +500,7 @@ def is_held(dev):
     return []
 
 
-def verify_not_in_use(dev):
+def verify_not_in_use(dev, check_partitions=False):
     """
     Verify if a given device (path) is in use (e.g. mounted or
     in use by device-mapper).
@@ -508,13 +508,13 @@ def verify_not_in_use(dev):
     :raises: Error if device is in use.
     """
     assert os.path.exists(dev)
-    if is_partition(dev):
-        if is_mounted(dev):
-            raise Error('Device is mounted', dev)
-        holders = is_held(dev)
-        if holders:
-            raise Error('Device is in use by a device-mapper mapping (dm-crypt?)' % dev, ','.join(holders))
-    else:
+    if is_mounted(dev):
+        raise Error('Device is mounted', dev)
+    holders = is_held(dev)
+    if holders:
+        raise Error('Device is in use by a device-mapper mapping (dm-crypt?)' % dev, ','.join(holders))
+
+    if check_partitions and not is_partition(dev):
         basename = get_dev_name(os.path.realpath(dev))
         for partname in list_partitions(basename):
             partition = get_dev_path(partname)
@@ -1340,12 +1340,12 @@ def main_prepare(args):
         # in use?
         dmode = os.stat(args.data).st_mode
         if stat.S_ISBLK(dmode):
-            verify_not_in_use(args.data)
+            verify_not_in_use(args.data, True)
 
         if args.journal and os.path.exists(args.journal):
             jmode = os.stat(args.journal).st_mode
             if stat.S_ISBLK(jmode):
-                verify_not_in_use(args.journal)
+                verify_not_in_use(args.journal, False)
 
         if args.zap_disk is not None:
             if stat.S_ISBLK(dmode) and not is_partition(args.data):
