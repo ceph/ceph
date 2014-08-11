@@ -16,9 +16,10 @@ from teuthology import lockstatus
 from teuthology import lock
 from teuthology import misc as teuthology
 from teuthology.parallel import parallel
-from ..orchestra import run
+from ..orchestra import cluster, remote, run
 
 log = logging.getLogger(__name__)
+
 
 @contextlib.contextmanager
 def base(ctx, config):
@@ -201,8 +202,6 @@ def connect(ctx, config):
     Open a connection to a remote host.
     """
     log.info('Opening connections...')
-    from ..orchestra import remote
-    from ..orchestra import cluster
     remotes = []
     machs = []
     for name in ctx.config['targets'].iterkeys():
