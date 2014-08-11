@@ -18,7 +18,7 @@ def import_task(name):
                                   [name], 0)
     if hasattr(external_pkg, name):
         return getattr(external_pkg, name)
-    raise ImportError("Could not find task '%'" % name)
+    raise ImportError("Could not find task '%s'" % name)
 
 
 def run_one_task(taskname, **kwargs):
