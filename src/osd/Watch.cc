@@ -39,6 +39,7 @@ Notify::Notify(
     in_progress_watchers(num_watchers),
     complete(false),
     discarded(false),
+    timed_out(false),
     payload(payload),
     timeout(timeout),
     cookie(cookie),
@@ -97,7 +98,8 @@ void Notify::do_timeout()
     return;
   }
 
-  in_progress_watchers = 0; // we give up TODO: we should return an error code
+  in_progress_watchers = 0; // we give up
+  timed_out = true;         // we will send the client and error code
   maybe_complete_notify();
   assert(complete);
   set<WatchRef> _watchers;
@@ -170,6 +172,8 @@ void Notify::maybe_complete_notify()
   if (!in_progress_watchers) {
     MWatchNotify *reply(new MWatchNotify(cookie, version, notify_id,
 					 WATCH_NOTIFY, payload));
+    if (timed_out)
+      reply->return_code = -ETIMEDOUT;
     osd->send_message_osd_client(reply, client.get());
     unregister_cb();
     complete = true;
