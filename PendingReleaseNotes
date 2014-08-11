@@ -20,3 +20,10 @@ v0.83
   OSDs will still maintain the following osd-specific defaults:
 
     leveldb_log               = ""
+
+* The 'rados df --format=json' output 'read_bytes' and 'write_bytes'
+  fields were incorrectly reporting ops; this is now fixed.
+
+* The 'rados df --format=json' output previously included 'read_kb' and
+  'write_kb' fields; these have been removed.  Please use 'read_bytes' and
+  'write_bytes' instead (and divide by 1024 if appropriate).
