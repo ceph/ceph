@@ -115,6 +115,8 @@ Patch0013:      0013-osd-OSD.cc-parse-lsb-release-data-v.patch
 Patch0014:      0014-osdmaptool-test-map-pgs.t-fix-escap.patch
 Patch0015:      0015-Convert-remaining-init-script-actio.patch
 Patch0016:      0016-Fix-bnc-890345-wrong-service-name-f.patch
+Patch0017:      0017-Fix-disk-zap-sgdisk-invocation.patch
+Patch0018:      0018-MultiPatch-taken-from-trunk.patch
 # Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
@@ -356,6 +358,8 @@ This package contains Ceph benchmarks and test tools.
 %patch0014 -p1
 %patch0015 -p1
 %patch0016 -p1
+%patch0017 -p1
+%patch0018 -p1
 
 %build
 

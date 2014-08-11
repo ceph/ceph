@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Mon Aug 11 11:36:31 UTC 2014 - osynge@suse.com
+
+- Applied patch from upstream to detect systemd
+- Better erorr handling in ceph-disk
+
+-------------------------------------------------------------------
 Tue Aug  5 08:05:47 UTC 2014 - tbehrens@suse.com
 
 - Add 0016-Fix-bnc-890345-wrong-service-name-f.patch

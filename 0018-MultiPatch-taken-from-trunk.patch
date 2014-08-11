@@ -1,0 +1,83 @@
+From: Owen Synge <osynge@suse.com>
+Date: Mon, 11 Aug 2014 11:26:04 +0200
+Subject: [PATCH] MultiPatch taken from trunk
+
+THis patxh shodul be a series of cherry picks but it wall went wrong.
+Do this patch again from original patches.
+---
+ src/init-ceph.in | 21 +++++++++------------
+ 1 file changed, 9 insertions(+), 12 deletions(-)
+
+diff --git a/src/init-ceph.in b/src/init-ceph.in
+index f25238f..12706c2 100644
+--- a/src/init-ceph.in
++++ b/src/init-ceph.in
+@@ -4,7 +4,7 @@
+ 
+ ### BEGIN INIT INFO
+ # Provides:          ceph
+-# Default-Start:     3 5
++# Default-Start:     2 3 4 5
+ # Default-Stop:      0 1 6
+ # Required-Start:    $remote_fs $named $network $time
+ # Required-Stop:     $remote_fs $named $network $time
+@@ -14,7 +14,7 @@
+ 
+ . /lib/lsb/init-functions
+ 
+-# if we start up as ./mkcephfs, assume everything else is in the
++# if we start up as ./init-ceph, assume everything else is in the
+ # current directory too.
+ if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
+     BINDIR=.
+@@ -143,20 +143,12 @@ case $1 in
+     --btrfs | --fsmount)
+ 	    dofsmount=1
+ 	    ;;
+-    --xfs)
+-	    doxfs=1
+-	    dobtrfs=0
+-	    ;;
+     --nobtrfs | --nofsmount)
+ 	    dofsmount=0
+ 	    ;;
+     --btrfsumount | --fsumount)
+ 	    dofsumount=1
+ 	    ;;
+-    --xfsumount)
+-	    doxfsumount=1
+-	    dobtrfsumount=0
+-	    ;;
+     --conf | -c)
+ 	    [ -z "$2" ] && usage_exit
+ 	    options="$options $1"
+@@ -347,7 +339,11 @@ for name in $what; do
+ 		    get_conf osd_weight "" "osd crush initial weight"
+ 		    defaultweight="$(df -P -k $osd_data/. | tail -1 | awk '{ print sprintf("%.2f",$2/1073741824) }')"
+ 		    get_conf osd_keyring "$osd_data/keyring" "keyring"
+-		    do_cmd "timeout 30 $BINDIR/ceph -c $conf --name=osd.$id --keyring=$osd_keyring osd crush create-or-move -- $id ${osd_weight:-${defaultweight:-1}} $osd_location"
++		    do_cmd_okfail "timeout 30 $BINDIR/ceph -c $conf --name=osd.$id --keyring=$osd_keyring osd crush create-or-move -- $id ${osd_weight:-${defaultweight:-1}} $osd_location"
++		    if [ "$ERR" != "0" ]; then
++			EXIT_STATUS=$ERR
++			continue
++		    fi
+ 		fi
+ 	    fi
+ 
+@@ -361,6 +357,7 @@ for name in $what; do
+ 	    do_cmd_okfail "$cmd" $runarg
+ 	    if [ "$ERR" != "0" ]; then
+ 		EXIT_STATUS=$ERR
++		continue
+ 	    fi
+ 
+ 	    if [ "$type" = "mon" ]; then
+@@ -368,7 +365,7 @@ for name in $what; do
+ 		# for the mon data and admin socket.  if so, run
+ 		# ceph-create-keys.  this is the case for (normal)
+ 		# chef and ceph-deploy clusters, which is who needs
+-		# these keys.  it's also true for default installs
++		# these keys.  it's also true for legacy installs
+ 		# via mkcephfs, which is fine too; there is no harm
+ 		# in creating these keys.
+ 		get_conf mon_data "/var/lib/ceph/mon/ceph-$id" "mon data"
