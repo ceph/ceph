@@ -113,7 +113,7 @@ public:
   void register_watch_notify_callback(librados::WatchContext *wc,
 				      uint64_t *cookie);
   void unregister_watch_notify_callback(uint64_t cookie);
-  void watch_notify(MWatchNotify *m);
+  void handle_watch_notify(MWatchNotify *m);
   int mon_command(const vector<string>& cmd, const bufferlist &inbl,
 	          bufferlist *outbl, string *outs);
   int mon_command(int rank,
