@@ -7,8 +7,8 @@ doc = """
 usage: teuthology-kill -h
        teuthology-kill [-a ARCHIVE] [-p] -r RUN
        teuthology-kill [-a ARCHIVE] [-p] -m MACHINE_TYPE -r RUN
-       teuthology-kill [-a ARCHIVE] -r RUN -j JOB ...
-       teuthology-kill [-a ARCHIVE] -J JOBSPEC
+       teuthology-kill [-a ARCHIVE] [-o OWNER] -r RUN -j JOB ...
+       teuthology-kill [-a ARCHIVE] [-o OWNER] -J JOBSPEC
        teuthology-kill [-p] -o OWNER -m MACHINE_TYPE -r RUN
 
 Kill running teuthology jobs:
