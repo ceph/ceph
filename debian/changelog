@@ -1,3 +1,9 @@
+ceph (0.67.10-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Alfredo Deza <alfredo.deza@inktank.com>  Mon, 11 Aug 2014 05:30:10 -0700
+
 ceph (0.67.9-1) stable; urgency=low
 
   * New upstream release
