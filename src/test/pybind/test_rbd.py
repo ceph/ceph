@@ -189,6 +189,16 @@ def test_open_read_only():
             RBD().remove(ioctx, IMG_NAME)
             eq(data, read)
 
+def test_open_dne():
+    for i in xrange(100):
+        assert_raises(ImageNotFound, Image, ioctx, IMG_NAME + 'dne')
+        assert_raises(ImageNotFound, Image, ioctx, IMG_NAME, 'snap')
+
+def test_open_readonly_dne():
+    for i in xrange(100):
+        assert_raises(ImageNotFound, Image, ioctx, IMG_NAME + 'dne', read_only=True)
+        assert_raises(ImageNotFound, Image, ioctx, IMG_NAME, 'snap', read_only=True)
+
 def test_remove_dne():
     assert_raises(ImageNotFound, remove_image)
 
