@@ -6212,8 +6212,6 @@ int ReplicatedPG::start_flush(
       ++p;
     snapc.snaps = vector<snapid_t>(p, snapset.snaps.end());
 
-    while (p != snapset.snaps.end() && *p >= oi.snaps.back())
-      ++p;
     vector<snapid_t>::iterator dnewest = p;
 
     // we may need to send a delete first
