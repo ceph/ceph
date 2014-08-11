@@ -239,7 +239,7 @@ def serialize_remote_roles(ctx, config):
         with file(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
             info_yaml = yaml.safe_load(info_file)
             info_file.seek(0)
-            info_yaml['cluster'] = dict([(remote.name, {'roles': roles}) for remote, roles in ctx.cluster.remotes.iteritems()])
+            info_yaml['cluster'] = dict([(rem.name, {'roles': roles}) for rem, roles in ctx.cluster.remotes.iteritems()])
             yaml.safe_dump(info_yaml, info_file, default_flow_style=False)
 
 
