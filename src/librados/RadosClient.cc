@@ -416,7 +416,7 @@ bool librados::RadosClient::_dispatch(Message *m)
     break;
 
   case CEPH_MSG_WATCH_NOTIFY:
-    watch_notify(static_cast<MWatchNotify *>(m));
+    handle_watch_notify(static_cast<MWatchNotify *>(m));
     break;
 
   case MSG_LOG:
@@ -693,7 +693,7 @@ public:
   }
 };
 
-void librados::RadosClient::watch_notify(MWatchNotify *m)
+void librados::RadosClient::handle_watch_notify(MWatchNotify *m)
 {
   assert(lock.is_locked());
   map<uint64_t, WatchContext *>::iterator iter = watchers.find(m->cookie);
