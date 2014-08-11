@@ -110,8 +110,9 @@ public:
   uint64_t max_watch_cookie;
   map<uint64_t, librados::WatchContext *> watchers;
 
-  void register_watcher(librados::WatchContext *wc, uint64_t *cookie);
-  void unregister_watcher(uint64_t cookie);
+  void register_watch_notify_callback(librados::WatchContext *wc,
+				      uint64_t *cookie);
+  void unregister_watch_notify_callback(uint64_t cookie);
   void watch_notify(MWatchNotify *m);
   int mon_command(const vector<string>& cmd, const bufferlist &inbl,
 	          bufferlist *outbl, string *outs);

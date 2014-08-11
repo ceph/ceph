@@ -607,14 +607,16 @@ int librados::RadosClient::pool_delete_async(const char *name, PoolAsyncCompleti
   return r;
 }
 
-void librados::RadosClient::register_watcher(WatchContext *wc, uint64_t *cookie)
+void librados::RadosClient::register_watch_notify_callback(
+  WatchContext *wc,
+  uint64_t *cookie)
 {
   assert(lock.is_locked_by_me());
   wc->cookie = *cookie = ++max_watch_cookie;
   watchers[wc->cookie] = wc;
 }
 
-void librados::RadosClient::unregister_watcher(uint64_t cookie)
+void librados::RadosClient::unregister_watch_notify_callback(uint64_t cookie)
 {
   assert(lock.is_locked_by_me());
   map<uint64_t, WatchContext *>::iterator iter = watchers.find(cookie);
@@ -625,9 +627,9 @@ void librados::RadosClient::unregister_watcher(uint64_t cookie)
 
     watchers.erase(iter);
     lock.Unlock();
-    ldout(cct, 10) << "unregister_watcher, dropping reference, waiting ctx=" << (void *)ctx << dendl;
+    ldout(cct, 10) << __func__ << " dropping reference, waiting ctx=" << (void *)ctx << dendl;
     ctx->put_wait();
-    ldout(cct, 10) << "unregister_watcher, done ctx=" << (void *)ctx << dendl;
+    ldout(cct, 10) << __func__ << " done ctx=" << (void *)ctx << dendl;
     lock.Lock();
   }
 }

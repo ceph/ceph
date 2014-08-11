@@ -1014,7 +1014,7 @@ int librados::IoCtxImpl::watch(const object_t& oid, uint64_t ver,
   lock->Lock();
 
   WatchContext *wc = new WatchContext(this, oid, ctx);
-  client->register_watcher(wc, cookie);
+  client->register_watch_notify_callback(wc, cookie);
   prepare_assert_ops(&wr);
   wr.watch(*cookie, ver, 1);
   bufferlist bl;
@@ -1033,7 +1033,7 @@ int librados::IoCtxImpl::watch(const object_t& oid, uint64_t ver,
 
   if (r < 0) {
     lock->Lock();
-    client->unregister_watcher(*cookie);
+    client->unregister_watch_notify_callback(*cookie);
     lock->Unlock();
   }
 
@@ -1067,7 +1067,7 @@ int librados::IoCtxImpl::unwatch(const object_t& oid, uint64_t cookie)
   version_t ver;
   lock->Lock();
 
-  client->unregister_watcher(cookie);
+  client->unregister_watch_notify_callback(cookie);
 
   ::ObjectOperation wr;
   prepare_assert_ops(&wr);
@@ -1104,7 +1104,7 @@ int librados::IoCtxImpl::notify(const object_t& oid, uint64_t ver, bufferlist& b
 
   lock->Lock();
   WatchContext *wc = new WatchContext(this, oid, ctx);
-  client->register_watcher(wc, &cookie);
+  client->register_watch_notify_callback(wc, &cookie);
   uint32_t prot_ver = 1;
   uint32_t timeout = notify_timeout;
   ::encode(prot_ver, inbl);
@@ -1128,7 +1128,7 @@ int librados::IoCtxImpl::notify(const object_t& oid, uint64_t ver, bufferlist& b
   mylock_all.Unlock();
 
   lock->Lock();
-  client->unregister_watcher(cookie);
+  client->unregister_watch_notify_callback(cookie);
   lock->Unlock();
 
   set_sync_op_version(objver);
