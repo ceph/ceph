@@ -1407,8 +1407,14 @@ void Pipe::stop_and_wait()
   if (state != STATE_CLOSED)
     stop();
   
+  // HACK: we work around an annoying deadlock here.  If the fast
+  // dispatch method calls mark_down() on itself, it can block here
+  // waiting for the reader_dispatching flag to clear... which will
+  // clearly never happen.  Avoid the situation by skipping the wait
+  // if we are marking our *own* connect down.
   while (reader_running &&
-	 reader_dispatching)
+	 reader_dispatching &&
+	 !reader_thread.am_self())
     cond.Wait(pipe_lock);
 }
 
