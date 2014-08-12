@@ -15,3 +15,6 @@ class BranchNotFoundError(ValueError):
 
 class GitError(RuntimeError):
     pass
+
+class BootstrapError(RuntimeError):
+    pass
