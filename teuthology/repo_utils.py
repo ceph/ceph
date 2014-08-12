@@ -171,7 +171,7 @@ def fetch_qa_suite(branch, lock=True):
                     enforce_repo_state(qa_suite_url, dest_path, branch)
                     break
                 except GitError:
-                    log.exception()
+                    log.exception("Git error encountered; retrying")
     return dest_path
 
 
