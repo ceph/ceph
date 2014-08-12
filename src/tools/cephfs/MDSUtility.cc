@@ -22,6 +22,7 @@ MDSUtility::MDSUtility() :
   objecter(NULL),
   lock("MDSUtility::lock"),
   timer(g_ceph_context, lock),
+  finisher(g_ceph_context, "MDSUtility"),
   waiting_for_mds_map(NULL)
 {
   monc = new MonClient(g_ceph_context);
@@ -48,11 +49,18 @@ int MDSUtility::init()
   if (r < 0)
     return r;
 
-  messenger->add_dispatcher_head(this);
   messenger->start();
+
+  objecter->set_client_incarnation(0);
+  objecter->init();
+
+  // Connect dispatchers before starting objecter
+  messenger->add_dispatcher_tail(objecter);
+  messenger->add_dispatcher_tail(this);
 
   // Initialize MonClient
   if (monc->build_initial_monmap() < 0) {
+    objecter->shutdown();
     messenger->shutdown();
     messenger->wait();
     return -1;
@@ -65,6 +73,7 @@ int MDSUtility::init()
   if (r < 0) {
     derr << "Authentication failed, did you specify an MDS ID with a valid keyring?" << dendl;
     monc->shutdown();
+    objecter->shutdown();
     messenger->shutdown();
     messenger->wait();
     return r;
@@ -73,9 +82,8 @@ int MDSUtility::init()
   client_t whoami = monc->get_global_id();
   messenger->set_myname(entity_name_t::CLIENT(whoami.v));
 
-  // Initialize Objecter and wait for OSD map
-  objecter->set_client_incarnation(0);
-  objecter->init();
+  // Start Objecter and wait for OSD map
+  objecter->start();
   objecter->wait_for_osd_map();
   timer.init();
 
@@ -98,12 +106,16 @@ int MDSUtility::init()
   init_lock.Unlock();
   dout(4) << "Got MDS map " << mdsmap->get_epoch() << dendl;
 
+  finisher.start();
+
   return 0;
 }
 
 
 void MDSUtility::shutdown()
 {
+  finisher.stop();
+
   lock.Lock();
   timer.shutdown();
   objecter->shutdown();
@@ -118,14 +130,10 @@ bool MDSUtility::ms_dispatch(Message *m)
 {
    Mutex::Locker locker(lock);
    switch (m->get_type()) {
-   case CEPH_MSG_OSD_OPREPLY:
-     objecter->handle_osd_op_reply((MOSDOpReply *)m);
-     break;
-   case CEPH_MSG_OSD_MAP:
-     objecter->handle_osd_map((MOSDMap*)m);
-     break;
    case CEPH_MSG_MDS_MAP:
      handle_mds_map((MMDSMap*)m);
+     break;
+   case CEPH_MSG_OSD_MAP:
      break;
    default:
      return false;

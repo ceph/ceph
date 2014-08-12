@@ -369,7 +369,7 @@ private:
   C_OnFinisher *wrap_finisher(Context *c);
 
 public:
-  Journaler(inodeno_t ino_, int64_t pool, const char *mag, Objecter *obj, PerfCounters *l, int lkey, SafeTimer *tim, Finisher *f=NULL) : 
+  Journaler(inodeno_t ino_, int64_t pool, const char *mag, Objecter *obj, PerfCounters *l, int lkey, SafeTimer *tim, Finisher *f) : 
     last_committed(mag),
     cct(obj->cct), lock("Journaler"), finisher(f),
     last_written(mag),
