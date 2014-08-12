@@ -300,7 +300,7 @@ def command_check_call(arguments):
     otherwise.
     """
     arguments = _get_command_executable(arguments)
-    LOG.info('Running command: %s' % ' '.join(arguments))
+    LOG.info('Running command: %s', ' '.join(arguments))
     return subprocess.check_call(arguments)
 
 
