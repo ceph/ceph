@@ -16,7 +16,7 @@ License:	GPL-2.0
 Group:		System Environment/Base
 URL:		http://ceph.com/
 Source0:	http://ceph.com/download/%{name}-%{version}.tar.bz2
-%if 0%{?fedora} || 0%{?centos_version} || 0%{?rhel_version}
+%if 0%{?fedora} || 0%{?centos} || 0%{?rhel}
 Patch0:		init-ceph.in-fedora.patch
 %endif
 Requires:	librbd1 = %{version}-%{release}
@@ -54,7 +54,7 @@ BuildRequires:	libudev-devel
 BuildRequires:	leveldb-devel > 1.2
 BuildRequires:	xfsprogs-devel
 BuildRequires:	yasm
-%if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
+%if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
 BuildRequires:	snappy-devel
 %endif
 
@@ -178,7 +178,7 @@ managers such as Pacemaker.
 Summary:	RADOS distributed object store client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-%if 0%{?rhel} || 0%{?centos_version} || 0%{?fedora}
+%if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
 Obsoletes:	ceph-libs < %{version}-%{release}
 %endif
 %description -n librados2
@@ -202,7 +202,7 @@ Summary:	RADOS block device client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	librados2 = %{version}-%{release}
-%if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
+%if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
 Obsoletes:	ceph-libs < %{version}-%{release}
 %endif
 %description -n librbd1
@@ -215,7 +215,7 @@ shared library allowing applications to manage these block devices.
 Summary:	Ceph distributed file system client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-%if 0%{?rhel} || 0%{?centos_version} || 0%{?fedora}
+%if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
 Obsoletes:	ceph-libs < %{version}-%{release}
 Obsoletes:	ceph-libcephfs
 %endif
@@ -310,7 +310,7 @@ librbd1 or libcephfs1 instead.
 #################################################################################
 %prep
 %setup -q
-%if 0%{?fedora} || 0%{?rhel_version} || 0%{?centos_version}
+%if 0%{?fedora} || 0%{?rhel} || 0%{?centos}
 %patch0 -p1 -b .init
 %endif
 
