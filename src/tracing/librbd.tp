@@ -101,61 +101,89 @@ TRACEPOINT_EVENT(librbd, close_image_exit,
     TP_FIELDS()
 )
 
-TRACEPOINT_EVENT(librbd, create_v1_enter,
+TRACEPOINT_EVENT(librbd, create_enter,
     TP_ARGS(
         const char*, pool_name,
         int64_t, id,
         const char*, imgname,
-        uint64_t, bid,
         uint64_t, size,
         int, order),
     TP_FIELDS(
         ctf_string(pool_name, pool_name)
         ctf_integer(int64_t, id, id)
         ctf_string(imgname, imgname)
-        ctf_integer(uint64_t, bid, bid)
         ctf_integer(uint64_t, size, size)
         ctf_integer(int, order, order)
     )
 )
 
-TRACEPOINT_EVENT(librbd, create_v1_exit,
+TRACEPOINT_EVENT(librbd, create_exit,
     TP_ARGS(
-        int, retval),
+        int, retval,
+        int, order),
     TP_FIELDS(
         ctf_integer(int, retval, retval)
+        ctf_integer(int, order, order)
     )
 )
 
-TRACEPOINT_EVENT(librbd, create_v2_enter,
+TRACEPOINT_EVENT(librbd, create2_enter,
     TP_ARGS(
         const char*, pool_name,
         int64_t, id,
         const char*, imgname,
-        uint64_t, bid,
         uint64_t, size,
-        int, order,
         uint64_t, features,
+        int, order),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, id, id)
+        ctf_string(imgname, imgname)
+        ctf_integer(uint64_t, size, size)
+        ctf_integer(uint64_t, features, features)
+        ctf_integer(int, order, order)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, create2_exit,
+    TP_ARGS(
+        int, retval,
+        int, order),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(int, order, order)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, create3_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, id,
+        const char*, imgname,
+        uint64_t, size,
+        uint64_t, features,
+        int, order,
         uint64_t, stripe_unit,
         uint64_t, stripe_count),
     TP_FIELDS(
         ctf_string(pool_name, pool_name)
         ctf_integer(int64_t, id, id)
         ctf_string(imgname, imgname)
-        ctf_integer(uint64_t, bid, bid)
         ctf_integer(uint64_t, size, size)
-        ctf_integer(int, order, order)
         ctf_integer(uint64_t, features, features)
+        ctf_integer(int, order, order)
         ctf_integer(uint64_t, stripe_unit, stripe_unit)
         ctf_integer(uint64_t, stripe_count, stripe_count)
     )
 )
 
-TRACEPOINT_EVENT(librbd, create_v2_exit,
+TRACEPOINT_EVENT(librbd, create3_exit,
     TP_ARGS(
-        int, retval),
+        int, retval,
+        int, order),
     TP_FIELDS(
         ctf_integer(int, retval, retval)
+        ctf_integer(int, order, order)
     )
 )
 
@@ -346,6 +374,30 @@ TRACEPOINT_EVENT(librbd, copy_enter,
         const char*, src_name,
         const char*, src_snap_name,
         char, src_read_only,
+        const char*, dst_name),
+    TP_FIELDS(
+        ctf_integer_hex(void*, src_imagectx, src_imagectx)
+        ctf_string(src_name, src_name)
+        ctf_string(src_snap_name, src_snap_name)
+        ctf_integer(char, src_read_only, src_read_only)
+        ctf_string(dst_name, dst_name)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, copy_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, copy2_enter,
+    TP_ARGS(
+        void*, src_imagectx,
+        const char*, src_name,
+        const char*, src_snap_name,
+        char, src_read_only,
         void*, dst_imagectx,
         const char*, dst_name,
         const char*, dst_snap_name,
@@ -362,7 +414,7 @@ TRACEPOINT_EVENT(librbd, copy_enter,
     )
 )
 
-TRACEPOINT_EVENT(librbd, copy_exit,
+TRACEPOINT_EVENT(librbd, copy2_exit,
     TP_ARGS(
         int, retval),
     TP_FIELDS(
