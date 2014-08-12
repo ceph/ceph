@@ -44,23 +44,75 @@ function run() {
 function create_erasure_coded_pool() {
     ./ceph osd erasure-code-profile set myprofile \
         ruleset-failure-domain=osd || return 1
-    ./ceph osd erasure-code-profile get myprofile
     ./ceph osd pool create ecpool 12 12 erasure myprofile \
         || return 1
 }
 
-function TEST_rados_put() {
+function delete_pool() {
+    local poolname=$1
+
+    ./ceph osd pool delete $poolname $poolname --yes-i-really-really-mean-it
+}
+
+function rados_put_get() {
     local dir=$1
+    local poolname=$2
+
     local payload=ABC
     echo "$payload" > $dir/ORIGINAL
 
-    ./rados --pool ecpool put SOMETHING $dir/ORIGINAL || return 1
-    ./rados --pool ecpool get SOMETHING $dir/COPY || return 1
+    ./rados --pool $poolname put SOMETHING $dir/ORIGINAL || return 1
+    ./rados --pool $poolname get SOMETHING $dir/COPY || return 1
 
     diff $dir/ORIGINAL $dir/COPY || return 1
 
     rm $dir/ORIGINAL $dir/COPY
+}
 
+function plugin_exists() {
+    local plugin=$1
+
+    local status
+    ./ceph osd erasure-code-profile set TESTPROFILE plugin=$plugin
+    if ./ceph osd crush rule create-erasure TESTRULE TESTPROFILE 2>&1 |
+        grep "$plugin.*No such file" ; then
+        status=1
+    else
+        ./ceph osd crush rule rm TESTRULE
+        status=0
+    fi
+    ./ceph osd erasure-code-profile rm TESTPROFILE 
+    return $status
+}
+
+function TEST_rados_put_get_isa() {
+    if ! plugin_exists isa ; then
+        echo "SKIP because plugin isa has not been built"
+        return 0
+    fi
+    local dir=$1
+    local poolname=pool-isa
+
+    ./ceph osd erasure-code-profile set profile-isa \
+        plugin=isa \
+        ruleset-failure-domain=osd || return 1
+    ./ceph osd pool create $poolname 12 12 erasure profile-isa \
+        || return 1
+
+    rados_put_get $dir $poolname || return 1
+
+    delete_pool $poolname
+}
+
+function TEST_rados_put_get_jerasure() {
+    local dir=$1
+
+    rados_put_get $dir ecpool || return 1
+}
+
+function TEST_alignment_constraints() {
+    local payload=ABC
+    echo "$payload" > $dir/ORIGINAL
     # 
     # Verify that the rados command enforces alignment constraints
     # imposed by the stripe width
