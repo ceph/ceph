@@ -7,7 +7,7 @@ import time
 
 from .config import config
 from .contextutil import safe_while
-from .exceptions import BranchNotFoundError, GitError
+from .exceptions import BootstrapError, BranchNotFoundError, GitError
 
 log = logging.getLogger(__name__)
 
@@ -188,11 +188,24 @@ def fetch_teuthology(branch, lock=True):
     dest_path = os.path.join(src_base_path, 'teuthology_' + branch)
     # only let one worker create/update the checkout at a time
     lock_path = dest_path.rstrip('/') + '.lock'
+    teuthology_git_upstream = config.ceph_git_base_url + \
+        'teuthology.git'
     with FileLock(lock_path, noop=not lock):
-        teuthology_git_upstream = config.ceph_git_base_url + \
-            'teuthology.git'
-        enforce_repo_state(teuthology_git_upstream, dest_path, branch)
+        with safe_while() as proceed:
+            while proceed():
+                try:
+                    enforce_repo_state(teuthology_git_upstream, dest_path,
+                                       branch)
+                    bootstrap_teuthology(dest_path)
+                    break
+                except GitError:
+                    log.exception("Git error encountered; retrying")
+                except BootstrapError:
+                    log.exception("Bootstrap error encountered; retrying")
+    return dest_path
 
+
+def bootstrap_teuthology(dest_path):
         log.info("Bootstrapping %s", dest_path)
         # This magic makes the bootstrap script not attempt to clobber an
         # existing virtualenv. But the branch's bootstrap needs to actually
@@ -204,15 +217,14 @@ def fetch_teuthology(branch, lock=True):
                                      stdout=subprocess.PIPE,
                                      stderr=subprocess.STDOUT)
         returncode = boot_proc.wait()
+        log.info("Bootstrap exited with status %s", returncode)
         if returncode != 0:
             for line in boot_proc.stdout.readlines():
                 log.warn(line.strip())
-        log.info("Bootstrap exited with status %s", returncode)
-        venv_path = os.path.join(dest_path, 'virtualenv')
-        log.info("Removing %s", venv_path)
-        shutil.rmtree(venv_path, ignore_errors=True)
-
-    return dest_path
+            venv_path = os.path.join(dest_path, 'virtualenv')
+            log.info("Removing %s", venv_path)
+            shutil.rmtree(venv_path, ignore_errors=True)
+            raise BootstrapError("Bootstrap failed!")
 
 
 class FileLock(object):
