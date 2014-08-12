@@ -1615,6 +1615,7 @@ public:
                rgw_obj& src_obj,
                uint64_t max_chunk_size,
 	       time_t *mtime,
+	       time_t set_mtime,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
                string *ptag,
