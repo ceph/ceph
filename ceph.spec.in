@@ -272,7 +272,7 @@ This package contains the Java libraries for the Ceph File System.
 Summary:	Meta package to include ceph libraries.
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-Obsoletes:	ceph-libs < 0.80.5
+Obsoletes:	ceph-libs
 Requires:	librados2 = %{version}-%{release}
 Requires:	librbd1 = %{version}-%{release}
 Requires:	libcephfs1 = %{version}-%{release}
