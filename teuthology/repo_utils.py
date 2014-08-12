@@ -6,7 +6,7 @@ import subprocess
 import time
 
 from .config import config
-from .exceptions import BranchNotFoundError
+from .exceptions import BranchNotFoundError, GitError
 
 log = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ def enforce_repo_state(repo_url, dest_path, branch, remove_on_error=True):
     :param branch:    The branch.
     :param remove:    Whether or not to remove dest_dir when an error occurs
     :raises:          BranchNotFoundError if the branch is not found;
-                      RuntimeError for other errors
+                      GitError for other errors
     """
     validate_branch(branch)
     try:
@@ -38,7 +38,7 @@ def enforce_repo_state(repo_url, dest_path, branch, remove_on_error=True):
 
         reset_repo(repo_url, dest_path, branch)
         # remove_pyc_files(dest_path)
-    except (BranchNotFoundError, RuntimeError):
+    except (BranchNotFoundError, GitError):
         if remove_on_error:
             shutil.rmtree(dest_path, ignore_errors=True)
         raise
@@ -52,7 +52,7 @@ def clone_repo(repo_url, dest_path, branch):
     :param dest_path: The full path to the destination directory
     :param branch:    The branch.
     :raises:          BranchNotFoundError if the branch is not found;
-                      RuntimeError for other errors
+                      GitError for other errors
     """
     validate_branch(branch)
     log.info("Cloning %s %s from upstream", repo_url, branch)
@@ -68,7 +68,7 @@ def clone_repo(repo_url, dest_path, branch):
         if not_found_str in out:
             raise BranchNotFoundError(branch, repo_url)
         else:
-            raise RuntimeError("git clone failed!")
+            raise GitError("git clone failed!")
 
 
 def fetch(repo_path):
@@ -76,7 +76,7 @@ def fetch(repo_path):
     Call "git fetch -p origin"
 
     :param repo_path: The full path to the repository
-    :raises:          RuntimeError if the operation fails
+    :raises:          GitError if the operation fails
     """
     log.info("Fetching from upstream into %s", repo_path)
     proc = subprocess.Popen(
@@ -87,7 +87,7 @@ def fetch(repo_path):
     if proc.wait() != 0:
         out = proc.stdout.read()
         log.error(out)
-        raise RuntimeError("git fetch failed!")
+        raise GitError("git fetch failed!")
 
 
 def fetch_branch(repo_path, branch):
@@ -97,7 +97,7 @@ def fetch_branch(repo_path, branch):
     :param repo_path: The full path to the repository
     :param branch:    The branch.
     :raises:          BranchNotFoundError if the branch is not found;
-                      RuntimeError for other errors
+                      GitError for other errors
     """
     validate_branch(branch)
     log.info("Fetching %s from upstream", branch)
@@ -113,7 +113,7 @@ def fetch_branch(repo_path, branch):
         if not_found_str in out:
             raise BranchNotFoundError(branch)
         else:
-            raise RuntimeError("git fetch failed!")
+            raise GitError("git fetch failed!")
 
 
 def reset_repo(repo_url, dest_path, branch):
@@ -123,7 +123,7 @@ def reset_repo(repo_url, dest_path, branch):
     :param dest_path: The full path to the destination directory
     :param branch:    The branch.
     :raises:          BranchNotFoundError if the branch is not found;
-                      RuntimeError for other errors
+                      GitError for other errors
     """
     validate_branch(branch)
     log.info('Resetting repo at %s to branch %s', dest_path, branch)
