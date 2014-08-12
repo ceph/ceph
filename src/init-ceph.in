@@ -48,6 +48,8 @@ EXIT_STATUS=0
 # detect systemd
 SYSTEMD=0
 grep -qs systemd /proc/1/comm && SYSTEMD=1
+# dont detect on SLE12
+SYSTEMD=0
 
 signal_daemon() {
     name=$1
