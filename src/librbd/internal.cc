@@ -24,10 +24,6 @@
 
 #include "librados/snap_set_diff.h"
 
-#ifdef WITH_LTTNG
-#include "tracing/librbd.h"
-#endif
-
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd: "
@@ -710,14 +706,12 @@ reprotect_and_return_err:
   int create_v1(IoCtx& io_ctx, const char *imgname, uint64_t bid,
 		uint64_t size, int order)
   {
-    tracepoint(librbd, create_v1_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), imgname, bid, size, order);
     CephContext *cct = (CephContext *)io_ctx.cct();
     ldout(cct, 2) << "adding rbd image to directory..." << dendl;
     int r = tmap_set(io_ctx, imgname);
     if (r < 0) {
       lderr(cct) << "error adding image to directory: " << cpp_strerror(r)
 		 << dendl;
-      tracepoint(librbd, create_v1_exit, r);
       return r;
     }
 
@@ -739,12 +733,10 @@ reprotect_and_return_err:
 		   << "header creation failed: "
 		   << cpp_strerror(r) << dendl;
       }
-      tracepoint(librbd, create_v1_exit, r);
       return r;
     }
 
     ldout(cct, 2) << "done." << dendl;
-    tracepoint(librbd, create_v1_exit, 0);
     return 0;
   }
 
@@ -752,7 +744,6 @@ reprotect_and_return_err:
 		int order, uint64_t features, uint64_t stripe_unit,
 		uint64_t stripe_count)
   {
-    tracepoint(librbd, create_v2_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), imgname, bid, size, order, features, stripe_unit, stripe_count);
     ostringstream bid_ss;
     uint32_t extra;
     string id, id_obj, header_oid;
@@ -766,7 +757,6 @@ reprotect_and_return_err:
     if (r < 0) {
       lderr(cct) << "error creating rbd id object: " << cpp_strerror(r)
 		 << dendl;
-      tracepoint(librbd, create_v2_exit, r);
       return r;
     }
 
@@ -808,7 +798,6 @@ reprotect_and_return_err:
     }
 
     ldout(cct, 2) << "done." << dendl;
-    tracepoint(librbd, create_v2_exit, 0);
     return 0;
 
   err_remove_header:
@@ -832,7 +821,6 @@ reprotect_and_return_err:
 		 << cpp_strerror(remove_r) << dendl;
     }
 
-    tracepoint(librbd, create_v2_exit, r);
     return r;
   }
 
@@ -1075,7 +1063,6 @@ reprotect_and_return_err:
 
   int rename(IoCtx& io_ctx, const char *srcname, const char *dstname)
   {
-    tracepoint(librbd, rename_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), srcname, dstname);
     CephContext *cct = (CephContext *)io_ctx.cct();
     ldout(cct, 20) << "rename " << &io_ctx << " " << srcname << " -> "
 		   << dstname << dendl;
@@ -1098,7 +1085,6 @@ reprotect_and_return_err:
       r = cls_client::get_id(&io_ctx, src_oid, &id);
       if (r < 0) {
 	lderr(cct) << "error reading image id: " << cpp_strerror(r) << dendl;
-	tracepoint(librbd, rename_exit, r);
 	return r;
       }
     }
@@ -1109,7 +1095,6 @@ reprotect_and_return_err:
     if (r < 0) {
       lderr(cct) << "error reading source object: " << src_oid << ": "
 		 << cpp_strerror(r) << dendl;
-      tracepoint(librbd, rename_exit, r);
       return r;
     }
 
@@ -1121,7 +1106,6 @@ reprotect_and_return_err:
       if (r < 0) {
 	lderr(cct) << "error reading source object omap values: "
 		   << cpp_strerror(r) << dendl;
-	tracepoint(librbd, rename_exit, r);
 	return r;
       }
       omap_values.insert(outbl.begin(), outbl.end());
@@ -1133,12 +1117,10 @@ reprotect_and_return_err:
     if (r < 0 && r != -ENOENT) {
       lderr(cct) << "error checking for existing image called "
 		 << dstname << ":" << cpp_strerror(r) << dendl;
-      tracepoint(librbd, rename_exit, r);
       return r;
     }
     if (r == 0) {
       lderr(cct) << "rbd image " << dstname << " already exists" << dendl;
-      tracepoint(librbd, rename_exit, -EEXIST);
       return -EEXIST;
     }
 
@@ -1151,7 +1133,6 @@ reprotect_and_return_err:
     if (r < 0) {
       lderr(cct) << "error writing destination object: " << dst_oid << ": "
 		 << cpp_strerror(r) << dendl;
-      tracepoint(librbd, rename_exit, r);
       return r;
     }
 
@@ -1161,7 +1142,6 @@ reprotect_and_return_err:
 	io_ctx.remove(dst_oid);
 	lderr(cct) << "couldn't add " << dstname << " to directory: "
 		   << cpp_strerror(r) << dendl;
-        tracepoint(librbd, rename_exit, r);
 	return r;
       }
       r = tmap_rm(io_ctx, srcname);
@@ -1174,7 +1154,6 @@ reprotect_and_return_err:
 				       srcname, dstname, id);
       if (r < 0) {
 	lderr(cct) << "error updating directory: " << cpp_strerror(r) << dendl;
-        tracepoint(librbd, rename_exit, r);
 	return r;
       }
     }
@@ -1189,7 +1168,6 @@ reprotect_and_return_err:
       notify_change(io_ctx, old_header_name(srcname), NULL, NULL);
     }
 
-    tracepoint(librbd, rename_exit, 0);
     return 0;
   }
 
@@ -1369,7 +1347,6 @@ reprotect_and_return_err:
 
   int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
   {
-    tracepoint(librbd, remove_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), imgname);
     CephContext *cct((CephContext *)io_ctx.cct());
     ldout(cct, 20) << "remove " << &io_ctx << " " << imgname << dendl;
 
@@ -1389,7 +1366,6 @@ reprotect_and_return_err:
       if (ictx->snaps.size()) {
 	lderr(cct) << "image has snapshots - not removing" << dendl;
 	close_image(ictx);
-	tracepoint(librbd, remove_exit, -ENOTEMPTY);
 	return -ENOTEMPTY;
       }
 
@@ -1398,13 +1374,11 @@ reprotect_and_return_err:
       if (r < 0) {
         lderr(cct) << "error listing watchers" << dendl;
         close_image(ictx);
-	tracepoint(librbd, remove_exit, r);
         return r;
       }
       if (watchers.size() > 1) {
         lderr(cct) << "image has watchers - not removing" << dendl;
         close_image(ictx);
-	tracepoint(librbd, remove_exit, -EBUSY);
         return -EBUSY;
       }
       assert(watchers.size() == 1);
@@ -1423,7 +1397,6 @@ reprotect_and_return_err:
       if (r < 0 && r != -ENOENT) {
 	lderr(cct) << "error removing child from children list" << dendl;
         close_image(ictx);
-	tracepoint(librbd, remove_exit, r);
 	return r;
       }
       close_image(ictx);
@@ -1432,7 +1405,6 @@ reprotect_and_return_err:
       r = io_ctx.remove(header_oid);
       if (r < 0 && r != -ENOENT) {
 	lderr(cct) << "error removing header: " << cpp_strerror(-r) << dendl;
-	tracepoint(librbd, remove_exit, r);
 	return r;
       }
     }
@@ -1444,7 +1416,6 @@ reprotect_and_return_err:
       if (r < 0 && !unknown_format) {
 	lderr(cct) << "error removing img from old-style directory: "
 		   << cpp_strerror(-r) << dendl;
-	tracepoint(librbd, remove_exit, r);
 	return r;
       }
     }
@@ -1453,14 +1424,12 @@ reprotect_and_return_err:
       r = io_ctx.remove(id_obj_name(imgname));
       if (r < 0 && r != -ENOENT) {
 	lderr(cct) << "error removing id object: " << cpp_strerror(r) << dendl;
-	tracepoint(librbd, remove_exit, r);
 	return r;
       }
 
       r = cls_client::dir_get_id(&io_ctx, RBD_DIRECTORY, imgname, &id);
       if (r < 0 && r != -ENOENT) {
 	lderr(cct) << "error getting id of image" << dendl;
-	tracepoint(librbd, remove_exit, r);
 	return r;
       }
 
@@ -1469,13 +1438,11 @@ reprotect_and_return_err:
       if (r < 0) {
 	lderr(cct) << "error removing img from new-style directory: "
 		   << cpp_strerror(-r) << dendl;
-	tracepoint(librbd, remove_exit, r);
 	return r;
       }
     } 
 
     ldout(cct, 2) << "done." << dendl;
-    tracepoint(librbd, remove_exit, 0);
     return 0;
   }
 
@@ -1527,19 +1494,16 @@ reprotect_and_return_err:
 
   int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
   {
-    tracepoint(librbd, resize_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, size);
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "resize " << ictx << " " << ictx->size << " -> "
 		   << size << dendl;
 
     if (ictx->read_only) {
-      tracepoint(librbd, resize_exit, -EROFS);
       return -EROFS;
     }
 
     int r = ictx_check(ictx);
     if (r < 0) {
-      tracepoint(librbd, resize_exit, r);
       return r;
     }
 
@@ -1549,7 +1513,6 @@ reprotect_and_return_err:
       // ObjectCacher doesn't track non-existent objects
       r = ictx->invalidate_cache();
       if (r < 0) {
-        tracepoint(librbd, resize_exit, r);
 	return r;
       }
     }
@@ -1558,7 +1521,6 @@ reprotect_and_return_err:
     ldout(cct, 2) << "done." << dendl;
 
     ictx->perfcounter->inc(l_librbd_resize);
-    tracepoint(librbd, resize_exit, 0);
     return 0;
   }
 
@@ -2031,7 +1993,6 @@ reprotect_and_return_err:
 
   int copy(ImageCtx *src, ImageCtx *dest, ProgressContext &prog_ctx)
   {
-    tracepoint(librbd, copy_enter, src, src->name.c_str(), src->snap_name.c_str(), src->read_only, dest, dest->name.c_str(), dest->snap_name.c_str(), dest->read_only);
     src->md_lock.get_read();
     src->snap_lock.get_read();
     uint64_t src_size = src->get_image_size(src->snap_id);
@@ -2048,7 +2009,6 @@ reprotect_and_return_err:
     if (dest_size < src_size) {
       lderr(cct) << " src size " << src_size << " >= dest size "
 		 << dest_size << dendl;
-      tracepoint(librbd, copy_exit, -EINVAL);
       return -EINVAL;
     }
     int r;
@@ -2067,7 +2027,6 @@ reprotect_and_return_err:
 	lderr(cct) << "could not read from source image from "
 		   << offset << " to " << offset + len << ": "
 		   << cpp_strerror(r) << dendl;
-	tracepoint(librbd, copy_exit, r);
 	return r;
       }
       prog_ctx.update_progress(offset, src_size);
@@ -2076,7 +2035,6 @@ reprotect_and_return_err:
     r = throttle.wait_for_ret();
     if (r >= 0)
       prog_ctx.update_progress(src_size, src_size);
-    tracepoint(librbd, copy_exit, r);
     return r;
   }
 
@@ -2118,7 +2076,6 @@ reprotect_and_return_err:
 
   int open_image(ImageCtx *ictx)
   {
-    tracepoint(librbd, open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only);
     ldout(ictx->cct, 20) << "open_image: ictx = " << ictx
 			 << " name = '" << ictx->name
 			 << "' id = '" << ictx->id
@@ -2126,7 +2083,6 @@ reprotect_and_return_err:
 			 << ictx->snap_name << "'" << dendl;
     int r = ictx->init();
     if (r < 0) {
-      tracepoint(librbd, open_image_exit, r);
       return r;
     }
 
@@ -2148,18 +2104,15 @@ reprotect_and_return_err:
     if ((r = _snap_set(ictx, ictx->snap_name.c_str())) < 0)
       goto err_close;
 
-    tracepoint(librbd, open_image_exit, 0);
     return 0;
 
   err_close:
     close_image(ictx);
-    tracepoint(librbd, open_image_exit, r);
     return r;
   }
 
   void close_image(ImageCtx *ictx)
   {
-    tracepoint(librbd, close_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str());
     ldout(ictx->cct, 20) << "close_image " << ictx << dendl;
     if (ictx->object_cacher)
       ictx->shutdown_cache(); // implicitly flushes
@@ -2175,7 +2128,6 @@ reprotect_and_return_err:
       ictx->unregister_watch();
 
     delete ictx;
-    tracepoint(librbd, close_image_exit);
   }
 
   // 'flatten' child image by copying all parent's blocks
@@ -2676,12 +2628,6 @@ reprotect_and_return_err:
 
   ssize_t read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents, char *buf, bufferlist *pbl)
   {
-    tracepoint(librbd, read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
-    for (vector<pair<uint64_t,uint64_t> >::const_iterator r = image_extents.begin();
-	 r != image_extents.end();
-	 ++r) {
-      tracepoint(librbd, read_extent, r->first, r->second);
-    }
     Mutex mylock("IoCtxImpl::write::mylock");
     Cond cond;
     bool done;
@@ -2693,7 +2639,6 @@ reprotect_and_return_err:
     if (r < 0) {
       c->release();
       delete ctx;
-      tracepoint(librbd, read_exit, r);
       return r;
     }
 
@@ -2702,13 +2647,11 @@ reprotect_and_return_err:
       cond.Wait(mylock);
     mylock.Unlock();
 
-    tracepoint(librbd, read_exit, ret);
     return ret;
   }
 
   ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
   {
-    tracepoint(librbd, write_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, off, len, buf);
     utime_t start_time, elapsed;
     ldout(ictx->cct, 20) << "write " << ictx << " off = " << off << " len = "
 			 << len << dendl;
@@ -2722,7 +2665,6 @@ reprotect_and_return_err:
     uint64_t mylen = len;
     int r = clip_io(ictx, off, &mylen);
     if (r < 0) {
-      tracepoint(librbd, write_exit, r);
       return r;
     }
 
@@ -2732,7 +2674,6 @@ reprotect_and_return_err:
     if (r < 0) {
       c->release();
       delete ctx;
-      tracepoint(librbd, write_exit, r);
       return r;
     }
 
@@ -2742,7 +2683,6 @@ reprotect_and_return_err:
     mylock.Unlock();
 
     if (ret < 0) {
-      tracepoint(librbd, write_exit, ret);
       return ret;
     }
 
@@ -2750,13 +2690,11 @@ reprotect_and_return_err:
     ictx->perfcounter->tinc(l_librbd_wr_latency, elapsed);
     ictx->perfcounter->inc(l_librbd_wr);
     ictx->perfcounter->inc(l_librbd_wr_bytes, mylen);
-    tracepoint(librbd, write_exit, mylen);
     return mylen;
   }
 
   int discard(ImageCtx *ictx, uint64_t off, uint64_t len)
   {
-    tracepoint(librbd, discard_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, off, len);
     utime_t start_time, elapsed;
     ldout(ictx->cct, 20) << "discard " << ictx << " off = " << off << " len = "
 			 << len << dendl;
@@ -2773,7 +2711,6 @@ reprotect_and_return_err:
     if (r < 0) {
       c->release();
       delete ctx;
-      tracepoint(librbd, discard_exit, r);
       return r;
     }
 
@@ -2783,7 +2720,6 @@ reprotect_and_return_err:
     mylock.Unlock();
 
     if (ret < 0) {
-      tracepoint(librbd, discard_exit, ret);
       return ret;
     }
 
@@ -2791,7 +2727,6 @@ reprotect_and_return_err:
     ictx->perfcounter->inc(l_librbd_discard_latency, elapsed);
     ictx->perfcounter->inc(l_librbd_discard);
     ictx->perfcounter->inc(l_librbd_discard_bytes, len);
-    tracepoint(librbd, discard_exit, len);
     return len;
   }
 
@@ -2898,13 +2833,11 @@ reprotect_and_return_err:
 
   int aio_flush(ImageCtx *ictx, AioCompletion *c)
   {
-    tracepoint(librbd, aio_flush_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, c);
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "aio_flush " << ictx << " completion " << c <<  dendl;
 
     int r = ictx_check(ictx);
     if (r < 0) {
-      tracepoint(librbd, aio_flush_exit, r);
       return r;
     }
 
@@ -2926,26 +2859,22 @@ reprotect_and_return_err:
     c->put();
     ictx->perfcounter->inc(l_librbd_aio_flush);
 
-    tracepoint(librbd, aio_flush_exit, 0);
     return 0;
   }
 
   int flush(ImageCtx *ictx)
   {
-    tracepoint(librbd, flush_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "flush " << ictx << dendl;
 
     int r = ictx_check(ictx);
     if (r < 0) {
-      tracepoint(librbd, flush_exit, r);
       return r;
     }
 
     ictx->user_flushed();
     r = _flush(ictx);
     ictx->perfcounter->inc(l_librbd_flush);
-    tracepoint(librbd, flush_exit, r);
     return r;
   }
 
@@ -2968,40 +2897,34 @@ reprotect_and_return_err:
 
   int invalidate_cache(ImageCtx *ictx)
   {
-    tracepoint(librbd, invalidate_cache_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "invalidate_cache " << ictx << dendl;
 
     int r = ictx_check(ictx);
     if (r < 0) {
-      tracepoint(librbd, invalidate_cache_exit, r);
       return r;
     }
 
     RWLock::WLocker l(ictx->md_lock);
     r = ictx->invalidate_cache();
-    tracepoint(librbd, invalidate_cache_exit, r);
     return r;
   }
 
   int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
 		AioCompletion *c)
   {
-    tracepoint(librbd, aio_write_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, off, len, buf, c);
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "aio_write " << ictx << " off = " << off << " len = "
 		   << len << " buf = " << (void*)buf << dendl;
 
     int r = ictx_check(ictx);
     if (r < 0) {
-      tracepoint(librbd, aio_write_exit, r);
       return r;
     }
 
     uint64_t mylen = len;
     r = clip_io(ictx, off, &mylen);
     if (r < 0) {
-      tracepoint(librbd, aio_write_exit, r);
       return r;
     }
 
@@ -3015,7 +2938,6 @@ reprotect_and_return_err:
     ictx->snap_lock.put_read();
 
     if (snap_id != CEPH_NOSNAP || ictx->read_only) {
-      tracepoint(librbd, aio_write_exit, -EROFS);
       return -EROFS;
     }
 
@@ -3070,26 +2992,22 @@ reprotect_and_return_err:
     ictx->perfcounter->inc(l_librbd_aio_wr_bytes, mylen);
 
     /* FIXME: cleanup all the allocated stuff */
-    tracepoint(librbd, aio_write_exit, r);
     return r;
   }
 
   int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c)
   {
-    tracepoint(librbd, aio_discard_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, off, len, c);
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "aio_discard " << ictx << " off = " << off << " len = "
 		   << len << dendl;
 
     int r = ictx_check(ictx);
     if (r < 0) {
-      tracepoint(librbd, aio_discard_exit, r);
       return r;
     }
 
     r = clip_io(ictx, off, &len);
     if (r < 0) {
-      tracepoint(librbd, aio_discard_exit, r);
       return r;
     }
 
@@ -3104,7 +3022,6 @@ reprotect_and_return_err:
     ictx->snap_lock.put_read();
 
     if (snap_id != CEPH_NOSNAP || ictx->read_only) {
-      tracepoint(librbd, aio_discard_exit, -EROFS);
       return -EROFS;
     }
 
@@ -3164,7 +3081,6 @@ reprotect_and_return_err:
     ictx->perfcounter->inc(l_librbd_aio_discard_bytes, len);
 
     /* FIXME: cleanup all the allocated stuff */
-    tracepoint(librbd, aio_discard_exit, r);
     return r;
   }
 
@@ -3187,17 +3103,10 @@ reprotect_and_return_err:
   int aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
 	       char *buf, bufferlist *pbl, AioCompletion *c)
   {
-    tracepoint(librbd, aio_read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, buf, c);
-    for (vector<pair<uint64_t,uint64_t> >::const_iterator r = image_extents.begin();
-	 r != image_extents.end();
-	 ++r) {
-      tracepoint(librbd, aio_read_extent, r->first, r->second);
-    }
     ldout(ictx->cct, 20) << "aio_read " << ictx << " completion " << c << " " << image_extents << dendl;
 
     int r = ictx_check(ictx);
     if (r < 0) {
-      tracepoint(librbd, aio_read_exit, r);
       return r;
     }
 
@@ -3215,7 +3124,6 @@ reprotect_and_return_err:
       uint64_t len = p->second;
       r = clip_io(ictx, p->first, &len);
       if (r < 0) {
-	tracepoint(librbd, aio_read_exit, r);
 	return r;
       }
       if (len == 0)
@@ -3271,7 +3179,6 @@ reprotect_and_return_err:
     ictx->perfcounter->inc(l_librbd_aio_rd);
     ictx->perfcounter->inc(l_librbd_aio_rd_bytes, buffer_ofs);
 
-    tracepoint(librbd, aio_read_exit, ret);
     return ret;
   }
 
