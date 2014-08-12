@@ -208,6 +208,9 @@ def fetch_teuthology(branch, lock=True):
             for line in boot_proc.stdout.readlines():
                 log.warn(line.strip())
         log.info("Bootstrap exited with status %s", returncode)
+        venv_path = os.path.join(dest_path, 'virtualenv')
+        log.info("Removing %s", venv_path)
+        shutil.rmtree(venv_path, ignore_errors=True)
 
     return dest_path
 
