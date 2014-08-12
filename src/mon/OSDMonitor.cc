@@ -459,13 +459,14 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
   const PGMap &pgm = mon->pgmon()->pg_map;
   vector<int> pgs_by_osd(osdmap.get_max_osd());
   unsigned num_pg_copies = 0;
-  unsigned num_osds = pgm.osd_stat.size();
 
   // Avoid putting a small number (or 0) in the denominator when calculating
   // average_util
   double average_util;
   if (by_pg) {
     // by pg mapping
+    double weight_sum = 0.0;      // sum up the crush weights
+    int num_osds = 0;
     for (ceph::unordered_map<pg_t,pg_stat_t>::const_iterator p =
 	   pgm.pg_stat.begin();
 	 p != pgm.pg_stat.end();
@@ -477,6 +478,10 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
 	   ++q) {
 	if (*q >= (int)pgs_by_osd.size())
 	  pgs_by_osd.resize(*q);
+	if (pgs_by_osd[*q] == 0) {
+	  weight_sum += osdmap.crush->get_item_weightf(*q);
+	  ++num_osds;
+	}
 	++pgs_by_osd[*q];
 	++num_pg_copies;
       }
@@ -490,7 +495,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
       return -EDOM;
     }
 
-    average_util = (double)num_pg_copies / (double)num_osds;
+    average_util = (double)num_pg_copies / weight_sum;
   } else {
     // by osd utilization
     if (pgm.osd_sum.kb < 1024) {
@@ -532,7 +537,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
        ++p) {
     float util;
     if (by_pg) {
-      util = pgs_by_osd[p->first];
+      util = pgs_by_osd[p->first] / osdmap.crush->get_item_weightf(p->first);
     } else {
       util = (double)p->second.kb_used / (double)p->second.kb;
     }
