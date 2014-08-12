@@ -1,0 +1,22 @@
+From: Owen Synge <osynge@suse.com>
+Date: Tue, 12 Aug 2014 10:00:08 +0200
+Subject: [PATCH] Switch off systemd detection
+
+Currently systemd on ceph breaks shutting down ceph.
+---
+ src/init-ceph.in | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/init-ceph.in b/src/init-ceph.in
+index 12706c2..d912c4f 100644
+--- a/src/init-ceph.in
++++ b/src/init-ceph.in
+@@ -47,6 +47,8 @@ EXIT_STATUS=0
+ # detect systemd
+ SYSTEMD=0
+ grep -qs systemd /proc/1/comm && SYSTEMD=1
++# dont detect on SLE12
++SYSTEMD=0
+ 
+ signal_daemon() {
+     name=$1
