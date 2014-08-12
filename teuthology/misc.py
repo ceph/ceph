@@ -1006,7 +1006,7 @@ def get_valgrind_args(testdir, name, preamble, v):
     v - valgrind arguments
     """
     if v is None:
-        return []
+        return preamble
     if not isinstance(v, list):
         v = [v]
     val_path = '/var/log/ceph/valgrind'.format(tdir=testdir)
