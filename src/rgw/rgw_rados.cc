@@ -3313,7 +3313,7 @@ set_err_state:
     return ret;
   }
 
-  bool copy_data = !astate->has_manifest;
+  bool copy_data = !astate->has_manifest || (src_obj.bucket.data_pool != dest_obj.bucket.data_pool);
   bool copy_first = false;
   if (astate->has_manifest) {
     if (!astate->manifest.has_tail()) {
