@@ -158,6 +158,31 @@ ostream& operator<<(ostream &out, const nest_info_t &n)
   return out;
 }
 
+/*
+ * quota_info_t
+ */
+void quota_info_t::dump(Formatter *f) const
+{
+  f->dump_int("max_bytes", max_bytes);
+  f->dump_int("max_files", max_files);
+}
+
+void quota_info_t::generate_test_instances(list<quota_info_t *>& ls)
+{
+  ls.push_back(new quota_info_t);
+  ls.push_back(new quota_info_t);
+  ls.back()->max_bytes = 16;
+  ls.back()->max_files = 16;
+}
+
+ostream& operator<<(ostream &out, const quota_info_t &n)
+{
+  out << "quota("
+      << "max_bytes = " << n.max_bytes
+      << " max_files = " << n.max_files
+      << ")";
+  return out;
+}
 
 /*
  * client_writeable_range_t
