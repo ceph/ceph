@@ -179,7 +179,7 @@ Summary:	RADOS distributed object store client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 %if 0%{?rhel} || 0%{?centos_version} || 0%{?fedora}
-Obsoletes:	ceph-libs < 0.80.5
+Obsoletes:	ceph-libs < %{version}-%{release}
 %endif
 %description -n librados2
 RADOS is a reliable, autonomic distributed object storage cluster
@@ -203,7 +203,7 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	librados2 = %{version}-%{release}
 %if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
-Obsoletes:	ceph-libs < 0.80.5
+Obsoletes:	ceph-libs < %{version}-%{release}
 %endif
 %description -n librbd1
 RBD is a block device striped across multiple distributed objects in
@@ -216,7 +216,7 @@ Summary:	Ceph distributed file system client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 %if 0%{?rhel} || 0%{?centos_version} || 0%{?fedora}
-Obsoletes:	ceph-libs < 0.80.5
+Obsoletes:	ceph-libs < %{version}-%{release}
 Obsoletes:	ceph-libcephfs
 %endif
 %description -n libcephfs1
