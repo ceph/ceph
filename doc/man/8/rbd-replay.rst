@@ -64,5 +64,5 @@ the Ceph documentation at http://ceph.com/docs for more information.
 See also
 ========
 
-:doc:`ceph <ceph>`\(8),
+:doc:`rbd-replay-prep <rbd-replay-prep>`\(8),
 :doc:`rbd <rbd>`\(8)
