@@ -3471,18 +3471,17 @@ int RGWRados::copy_obj_data(void *ctx,
   bufferlist first_chunk;
   RGWObjManifest manifest;
   map<uint64_t, RGWObjManifestPart> objs;
-  RGWObjManifestPart *first_part;
-  map<string, bufferlist>::iterator iter;
 
-  rgw_obj shadow_obj = dest_obj;
-  string shadow_oid;
+  string tag;
+  append_rand_alpha(cct, tag, tag, 32);
 
-  append_rand_alpha(cct, dest_obj.object, shadow_oid, 32);
-  shadow_obj.init_ns(dest_obj.bucket, shadow_oid, shadow_ns);
+  RGWPutObjProcessor_Atomic processor(owner, dest_obj.bucket, dest_obj.object,
+                                      cct->_conf->rgw_obj_stripe_size, tag);
+  int ret = processor.prepare(this, ctx, NULL);
+  if (ret < 0)
+    return ret;
 
-  int ret, r;
   off_t ofs = 0;
-  PutObjMetaExtraParams ep;
 
   do {
     bufferlist bl;
@@ -3490,55 +3489,37 @@ int RGWRados::copy_obj_data(void *ctx,
     if (ret < 0)
       return ret;
 
-    const char *data = bl.c_str();
+    uint64_t read_len = ret;
+    bool again;
 
-    if ((uint64_t)ofs < max_chunk_size) {
-      uint64_t len = min(max_chunk_size - ofs, (uint64_t)ret);
-      first_chunk.append(data, len);
-      ofs += len;
-      ret -= len;
-      data += len;
-    }
+    do {
+      void *handle;
 
-    // In the first call to put_obj_data, we pass ofs == -1 so that it will do
-    // a write_full, wiping out whatever was in the object before this
-    r = 0;
-    if (ret > 0) {
-      r = put_obj_data(ctx, shadow_obj, data, ((ofs == 0) ? -1 : ofs), ret, false);
-    }
-    if (r < 0)
-      goto done_err;
+      ret = processor.handle_data(bl, ofs, &handle, &again);
+      if (ret < 0) {
+        return ret;
+      }
+      ret = processor.throttle_data(handle, false);
+      if (ret < 0)
+        return ret;
+    } while (again);
 
-    ofs += ret;
+    ofs += read_len;
   } while (ofs <= end);
 
-  first_part = &objs[0];
-  first_part->loc = dest_obj;
-  first_part->loc_ofs = 0;
-  first_part->size = first_chunk.length();
-
-  if ((uint64_t)ofs > max_chunk_size) {
-    RGWObjManifestPart& tail = objs[max_chunk_size];
-    tail.loc = shadow_obj;
-    tail.loc_ofs = max_chunk_size;
-    tail.size = ofs - max_chunk_size;
+  string etag;
+  map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
+  if (iter != attrs.end()) {
+    bufferlist& bl = iter->second;
+    etag = string(bl.c_str(), bl.length());
   }
 
-  manifest.set_explicit(ofs, objs);
+  ret = processor.complete(etag, NULL, 0, attrs);
 
-  ep.data = &first_chunk;
-  ep.manifest = &manifest;
-  ep.ptag = ptag;
-  ep.owner = owner;
-
-  ret = put_obj_meta(ctx, dest_obj, end + 1, attrs, category, PUT_OBJ_CREATE, ep);
   if (mtime)
     obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL, NULL, NULL);
 
   return ret;
-done_err:
-  delete_obj(ctx, owner, shadow_obj);
-  return r;
 }
 
 /**
