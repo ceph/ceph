@@ -317,7 +317,7 @@ def archive(ctx, config):
                 os.mkdir(logdir)
             for rem in ctx.cluster.remotes.iterkeys():
                 path = os.path.join(logdir, rem.shortname)
-                teuthology.pull_directory(remote, archive_dir, path)
+                teuthology.pull_directory(rem, archive_dir, path)
 
         log.info('Removing archive directory...')
         run.wait(
