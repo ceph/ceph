@@ -33,15 +33,6 @@ using namespace rbd_replay;
 // Allows us to easily expose all the functions to make debugging easier.
 #define STATIC static
 
-struct extent {
-  extent() : offset(0), length(0) {
-  }
-  extent(uint64_t offset, uint64_t length) : offset(offset), length(length) {
-  }
-  uint64_t offset;
-  uint64_t length;
-};
-
 class IO;
 
 typedef set<boost::shared_ptr<IO> > io_set_t;
@@ -260,42 +251,31 @@ public:
 	 uint64_t start_time,
 	 thread_id_t thread_id,
 	 IO::ptr prev,
-	 imagectx_id_t imagectx)
+	 imagectx_id_t imagectx,
+	 uint64_t offset,
+	 uint64_t length)
     : IO(ionum, start_time, thread_id, prev),
       m_imagectx(imagectx),
-      m_extents(vector<extent>()) {
+      m_offset(offset),
+      m_length(length) {
   }
 
   void write_to(Ser& out) const {
     IO::write_to(out, IO_READ);
-    // TODO: figure out how to handle empty IO, i.e. reads/writes with no extents.
-    // These happen if the trace cuts off mid-IO.  We should just toss it, but it
-    // might mess up the dependency graph.
-    assertf(m_extents.size() == 1, "m_extents.size() = %d", m_extents.size());
     out.write_uint64_t(m_imagectx);
-    out.write_uint64_t(m_extents[0].offset);
-    out.write_uint64_t(m_extents[0].length);
-  }
-
-  void add_extent(const extent& e) {
-    m_extents.push_back(e);
+    out.write_uint64_t(m_offset);
+    out.write_uint64_t(m_length);
   }
 
   void write_debug(ostream& out) {
     write_debug_base(out, "read");
-    out << ", imagectx=" << m_imagectx << ", extents=[";
-    for (int i = 0, n = m_extents.size(); i < n; i++) {
-      if (i > 0) {
-	out << ", ";
-      }
-      out << m_extents[i].offset << "+" << m_extents[i].length;
-    }
-    out << "]";
+    out << ", imagectx=" << m_imagectx << ", offset=" << m_offset << ", length=" << m_length << "]";
   }
 
 private:
   imagectx_id_t m_imagectx;
-  vector<extent> m_extents;
+  uint64_t m_offset;
+  uint64_t m_length;
 };
 
 class WriteIO : public IO {
@@ -305,35 +285,30 @@ public:
 	  thread_id_t thread_id,
 	  IO::ptr prev,
 	  imagectx_id_t imagectx,
-	  const vector<extent>& extents)
+	  uint64_t offset,
+	  uint64_t length)
     : IO(ionum, start_time, thread_id, prev),
       m_imagectx(imagectx),
-      m_extents(extents) {
+      m_offset(offset),
+      m_length(length) {
   }
 
   void write_to(Ser& out) const {
     IO::write_to(out, IO_WRITE);
-    assertf(m_extents.size() == 1, "m_extents.size() = %d", m_extents.size());
     out.write_uint64_t(m_imagectx);
-    out.write_uint64_t(m_extents[0].offset);
-    out.write_uint64_t(m_extents[0].length);
+    out.write_uint64_t(m_offset);
+    out.write_uint64_t(m_length);
   }
 
   void write_debug(ostream& out) {
     write_debug_base(out, "write");
-    out << ", imagectx=" << m_imagectx << ", extents=[";
-    for (int i = 0, n = m_extents.size(); i < n; i++) {
-      if (i > 0) {
-	out << ", ";
-      }
-      out << m_extents[i].offset << "+" << m_extents[i].length;
-    }
-    out << "]";
+    out << ", imagectx=" << m_imagectx << ", offset=" << m_offset << ", length=" << m_length << "]";
   }
 
 private:
   imagectx_id_t m_imagectx;
-  vector<extent> m_extents;
+  uint64_t m_offset;
+  uint64_t m_length;
 };
 
 class AioReadIO : public IO {
@@ -342,39 +317,30 @@ public:
 	    uint64_t start_time,
 	    thread_id_t thread_id,
 	    IO::ptr prev,
-	    imagectx_id_t imagectx)
+	    imagectx_id_t imagectx,
+	    uint64_t offset,
+	    uint64_t length)
     : IO(ionum, start_time, thread_id, prev),
       m_imagectx(imagectx),
-      m_extents(vector<extent>()) {
+      m_offset(offset),
+      m_length(length) {
   }
 
   void write_to(Ser& out) const {
     IO::write_to(out, IO_ASYNC_READ);
-    assertf(m_extents.size() == 1, "m_extents.size() = %d", m_extents.size());
     out.write_uint64_t(m_imagectx);
-    out.write_uint64_t(m_extents[0].offset);
-    out.write_uint64_t(m_extents[0].length);
+    out.write_uint64_t(m_offset);
+    out.write_uint64_t(m_length);
   }
-
-  void add_extent(const extent& e) {
-    m_extents.push_back(e);
-  }
-
 
   void write_debug(ostream& out) {
     write_debug_base(out, "aio read");
-    out << ", imagectx=" << m_imagectx << ", extents=[";
-    for (int i = 0, n = m_extents.size(); i < n; i++) {
-      if (i > 0) {
-	out << ", ";
-      }
-      out << m_extents[i].offset << "+" << m_extents[i].length;
-    }
-    out << "]";
+    out << ", imagectx=" << m_imagectx << ", offset=" << m_offset << ", length=" << m_length << "]";
   }
 private:
   imagectx_id_t m_imagectx;
-  vector<extent> m_extents;
+  uint64_t m_offset;
+  uint64_t m_length;
 };
 
 class AioWriteIO : public IO {
@@ -384,35 +350,30 @@ public:
 	     thread_id_t thread_id,
 	     IO::ptr prev,
 	     imagectx_id_t imagectx,
-	     const vector<extent>& extents)
+	     uint64_t offset,
+	     uint64_t length)
     : IO(ionum, start_time, thread_id, prev),
       m_imagectx(imagectx),
-      m_extents(extents) {
+      m_offset(offset),
+      m_length(length) {
   }
 
   void write_to(Ser& out) const {
     IO::write_to(out, IO_ASYNC_WRITE);
-    assertf(m_extents.size() == 1, "m_extents.size() = %d", m_extents.size());
     out.write_uint64_t(m_imagectx);
-    out.write_uint64_t(m_extents[0].offset);
-    out.write_uint64_t(m_extents[0].length);
+    out.write_uint64_t(m_offset);
+    out.write_uint64_t(m_length);
   }
 
   void write_debug(ostream& out) {
     write_debug_base(out, "aio write");
-    out << ", imagectx=" << m_imagectx << ", extents=[";
-    for (int i = 0, n = m_extents.size(); i < n; i++) {
-      if (i > 0) {
-	out << ", ";
-      }
-      out << m_extents[i].offset << "+" << m_extents[i].length;
-    }
-    out << "]";
+    out << ", imagectx=" << m_imagectx << ", offset=" << m_offset << ", length=" << m_length << "]";
   }
 
 private:
   imagectx_id_t m_imagectx;
-  vector<extent> m_extents;
+  uint64_t m_offset;
+  uint64_t m_length;
 };
 
 class OpenImageIO : public IO {
@@ -874,9 +835,11 @@ private:
       string snap_name(fields.string("snap_name"));
       bool readonly = fields.int64("read_only");
       imagectx_id_t imagectx = fields.uint64("imagectx");
+      uint64_t offset = fields.uint64("offset");
+      uint64_t length = fields.uint64("length");
       require_image(ts, thread, imagectx, name, snap_name, readonly);
       action_id_t ionum = next_id();
-      IO::ptr io(new ReadIO(ionum, ts, threadID, thread->pending_io(), imagectx));
+      IO::ptr io(new ReadIO(ionum, ts, threadID, thread->pending_io(), imagectx, offset, length));
       io->add_dependencies(m_recent_completions);
       thread->issued_io(io, m_threads);
       m_ios.push_back(io);
@@ -910,12 +873,6 @@ private:
       boost::shared_ptr<CloseImageIO> io(boost::dynamic_pointer_cast<CloseImageIO>(thread->pending_io()));
       assert(io);
       m_open_images.erase(io->imagectx());
-    } else if (strcmp(event_name, "librbd:read_extent") == 0) {
-      boost::shared_ptr<ReadIO> io(boost::dynamic_pointer_cast<ReadIO>(thread->pending_io()));
-      assert(io);
-      uint64_t offset = fields.uint64("offset");
-      uint64_t length = fields.uint64("length");
-      io->add_extent(extent(offset, length));
     } else if (strcmp(event_name, "librbd:read_exit") == 0) {
       IO::ptr completionIO(thread->pending_io()->create_completion(ts, threadID));
       m_ios.push_back(completionIO);
@@ -929,9 +886,7 @@ private:
       imagectx_id_t imagectx = fields.uint64("imagectx");
       require_image(ts, thread, imagectx, name, snap_name, readonly);
       action_id_t ionum = next_id();
-      vector<extent> extents;
-      extents.push_back(extent(offset, length));
-      IO::ptr io(new WriteIO(ionum, ts, threadID, thread->pending_io(), imagectx, extents));
+      IO::ptr io(new WriteIO(ionum, ts, threadID, thread->pending_io(), imagectx, offset, length));
       io->add_dependencies(m_recent_completions);
       thread->issued_io(io, m_threads);
       m_ios.push_back(io);
@@ -945,19 +900,15 @@ private:
       bool readonly = fields.int64("read_only");
       uint64_t completion = fields.uint64("completion");
       imagectx_id_t imagectx = fields.uint64("imagectx");
+      uint64_t offset = fields.uint64("offset");
+      uint64_t length = fields.uint64("length");
       require_image(ts, thread, imagectx, name, snap_name, readonly);
       action_id_t ionum = next_id();
-      IO::ptr io(new AioReadIO(ionum, ts, threadID, thread->pending_io(), imagectx));
+      IO::ptr io(new AioReadIO(ionum, ts, threadID, thread->pending_io(), imagectx, offset, length));
       io->add_dependencies(m_recent_completions);
       m_ios.push_back(io);
       thread->issued_io(io, m_threads);
       m_pending_ios[completion] = io;
-    } else if (strcmp(event_name, "librbd:aio_read_extent") == 0) {
-      boost::shared_ptr<AioReadIO> io(boost::dynamic_pointer_cast<AioReadIO>(thread->pending_io()));
-      assert(io);
-      uint64_t offset = fields.uint64("offset");
-      uint64_t length = fields.uint64("length");
-      io->add_extent(extent(offset, length));
     } else if (strcmp(event_name, "librbd:aio_write_enter") == 0) {
       string name(fields.string("name"));
       string snap_name(fields.string("snap_name"));
@@ -968,9 +919,7 @@ private:
       imagectx_id_t imagectx = fields.uint64("imagectx");
       require_image(ts, thread, imagectx, name, snap_name, readonly);
       action_id_t ionum = next_id();
-      vector<extent> extents;
-      extents.push_back(extent(offset, length));
-      IO::ptr io(new AioWriteIO(ionum, ts, threadID, thread->pending_io(), imagectx, extents));
+      IO::ptr io(new AioWriteIO(ionum, ts, threadID, thread->pending_io(), imagectx, offset, length));
       io->add_dependencies(m_recent_completions);
       thread->issued_io(io, m_threads);
       m_ios.push_back(io);
