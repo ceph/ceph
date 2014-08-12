@@ -246,5 +246,3 @@ class FileLock(object):
             fcntl.lockf(self.file, fcntl.LOCK_UN)
             self.file.close()
             self.file = None
-            if os.path.exists(self.filename):
-                os.remove(self.filename)
