@@ -1605,7 +1605,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     if (!must_promote && can_skip_promote(op, obc)) {
       return false;
     }
-    if (op->may_write() || must_promote || !hit_set) {
+    if (op->may_write() || write_ordered || must_promote || !hit_set) {
       promote_object(op, obc, missing_oid);
     } else {
       switch (pool.info.min_read_recency_for_promote) {
