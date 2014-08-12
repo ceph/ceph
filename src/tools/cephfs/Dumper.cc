@@ -74,7 +74,7 @@ void Dumper::dump(const char *dump_file)
   int r = 0;
 
   Journaler journaler(ino, mdsmap->get_metadata_pool(), CEPH_FS_ONDISK_MAGIC,
-                                       objecter, 0, 0, &timer);
+                                       objecter, 0, 0, &timer, &finisher);
   r = recover_journal(&journaler);
   if (r) {
     return;

@@ -40,7 +40,7 @@ void Resetter::reset(int rank)
   Journaler journaler(jp.front,
       mdsmap->get_metadata_pool(),
       CEPH_FS_ONDISK_MAGIC,
-      objecter, 0, 0, &timer);
+      objecter, 0, 0, &timer, &finisher);
 
   lock.Lock();
   journaler.recover(new C_SafeCond(&mylock, &cond, &done, &r));

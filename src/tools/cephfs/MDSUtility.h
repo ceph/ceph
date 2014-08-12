@@ -20,6 +20,7 @@
 #include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
 #include "auth/Auth.h"
+#include "common/Finisher.h"
 
 /// MDS Utility
 /**
@@ -36,6 +37,7 @@ protected:
 
   Mutex lock;
   SafeTimer timer;
+  Finisher finisher;
 
   Context *waiting_for_mds_map;
 
