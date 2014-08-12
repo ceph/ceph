@@ -187,6 +187,8 @@ void LogEntry::decode(bufferlist::iterator& bl)
   ::decode(msg, bl);
   if (struct_v >= 3) {
     ::decode(channel, bl);
+  } else {
+    channel = CLOG_CHANNEL_DEFAULT;
   }
   DECODE_FINISH(bl);
 }
