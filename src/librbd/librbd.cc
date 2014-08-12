@@ -477,9 +477,7 @@ namespace librbd {
   ssize_t Image::read(uint64_t ofs, size_t len, bufferlist& bl)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    // TODO: Should these be merged?
-    tracepoint(librbd, read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
-    tracepoint(librbd, read_extent, ofs, len);
+    tracepoint(librbd, read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
     bufferptr ptr(len);
     bl.push_back(ptr);
     int r = librbd::read(ictx, ofs, len, bl.c_str());
@@ -565,9 +563,7 @@ namespace librbd {
 		      RBD::AioCompletion *c)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    // TODO: See if these tracepoints should be merged
-    tracepoint(librbd, aio_read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, bl.c_str(), c->pc);
-    tracepoint(librbd, aio_read_extent, off, len);
+    tracepoint(librbd, aio_read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, off, len, bl.c_str(), c->pc);
     ldout(ictx->cct, 10) << "Image::aio_read() buf=" << (void *)bl.c_str() << "~"
 			 << (void *)(bl.c_str() + len - 1) << dendl;
     int r = librbd::aio_read(ictx, off, len, NULL, &bl, (librbd::AioCompletion *)c->pc);
@@ -1163,9 +1159,7 @@ extern "C" ssize_t rbd_read(rbd_image_t image, uint64_t ofs, size_t len,
 			    char *buf)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  // TODO: Should these tracepoints be combined?
-  tracepoint(librbd, read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
-  tracepoint(librbd, read_extent, ofs, len);
+  tracepoint(librbd, read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
   int r = librbd::read(ictx, ofs, len, buf);
   tracepoint(librbd, read_exit, r);
   return r;
@@ -1257,9 +1251,7 @@ extern "C" int rbd_aio_read(rbd_image_t image, uint64_t off, size_t len,
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
-  // TODO: See if these tracepoints can be combined
-  tracepoint(librbd, aio_read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, buf, comp->pc);
-  tracepoint(librbd, aio_read_extent, off, len);
+  tracepoint(librbd, aio_read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, off, len, buf, comp->pc);
   int r = librbd::aio_read(ictx, off, len, buf, NULL,
 			  (librbd::AioCompletion *)comp->pc);
   tracepoint(librbd, aio_read_exit, r);
