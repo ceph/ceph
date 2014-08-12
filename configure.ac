@@ -472,8 +472,13 @@ AS_IF([test "x$with_libatomic_ops" != xno],
                    [no libatomic-ops found (use --without-libatomic-ops to disable)])
               ])])
 AS_IF([test "$HAVE_ATOMIC_OPS" = "1"],
-	[],
+	[
+         AC_CHECK_SIZEOF(AO_t, [], [
+                                #include <atomic_ops.h>
+                                ])
+         ],
 	[AC_DEFINE([NO_ATOMIC_OPS], [1], [Defined if you do not have atomic_ops])])
+
 
 AM_CONDITIONAL(WITH_LIBATOMIC, [test "$HAVE_ATOMIC_OPS" = "1"])
 

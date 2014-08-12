@@ -259,9 +259,53 @@ class KeyValueStore : public ObjectStore,
     list<Op*> q;
     list<uint64_t> jq;
     Cond cond;
+    list<pair<uint64_t, Context*> > flush_commit_waiters;
    public:
     Sequencer *parent;
     Mutex apply_lock;  // for apply mutual exclusion
+    
+    /// get_max_uncompleted
+    bool _get_max_uncompleted(
+      uint64_t *seq ///< [out] max uncompleted seq
+      ) {
+      assert(qlock.is_locked());
+      assert(seq);
+      *seq = 0;
+      if (q.empty()) {
+	return true;
+      } else {
+	*seq = q.back()->op;
+	return false;
+      }
+    } /// @returns true if the queue is empty
+
+    /// get_min_uncompleted
+    bool _get_min_uncompleted(
+      uint64_t *seq ///< [out] min uncompleted seq
+      ) {
+      assert(qlock.is_locked());
+      assert(seq);
+      *seq = 0;
+      if (q.empty()) {
+	return true;
+      } else {
+	*seq = q.front()->op;
+	return false;
+      }
+    } /// @returns true if both queues are empty
+
+    void _wake_flush_waiters(list<Context*> *to_queue) {
+      uint64_t seq;
+      if (_get_min_uncompleted(&seq))
+	seq = -1;
+
+      for (list<pair<uint64_t, Context*> >::iterator i =
+	     flush_commit_waiters.begin();
+	   i != flush_commit_waiters.end() && i->first < seq;
+	   flush_commit_waiters.erase(i++)) {
+	to_queue->push_back(i->second);
+      }
+    }
 
     void queue(Op *o) {
       Mutex::Locker l(qlock);
@@ -271,14 +315,19 @@ class KeyValueStore : public ObjectStore,
       assert(apply_lock.is_locked());
       return q.front();
     }
-    Op *dequeue() {
+
+    Op *dequeue(list<Context*> *to_queue) {
+      assert(to_queue);
       assert(apply_lock.is_locked());
       Mutex::Locker l(qlock);
       Op *o = q.front();
       q.pop_front();
       cond.Signal();
+
+      _wake_flush_waiters(to_queue);
       return o;
     }
+
     void flush() {
       Mutex::Locker l(qlock);
 
@@ -295,6 +344,17 @@ class KeyValueStore : public ObjectStore,
         while ((!q.empty() && q.front()->op <= seq) ||
                 (!jq.empty() && jq.front() <= seq))
           cond.Wait(qlock);
+      }
+    }
+    bool flush_commit(Context *c) {
+      Mutex::Locker l(qlock);
+      uint64_t seq = 0;
+      if (_get_max_uncompleted(&seq)) {
+	delete c;
+	return true;
+      } else {
+	flush_commit_waiters.push_back(make_pair(seq, c));
+	return false;
       }
     }
 

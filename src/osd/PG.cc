@@ -1443,7 +1443,7 @@ void PG::activate(ObjectStore::Transaction& t,
     min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
   }
   last_update_applied = info.last_update;
-
+  last_rollback_info_trimmed_to_applied = pg_log.get_rollback_trimmed_to();
 
   need_up_thru = false;
 
@@ -2641,7 +2641,10 @@ void PG::add_log_entry(pg_log_entry_t& e, bufferlist& log_bl)
 
 
 void PG::append_log(
-  vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t,
+  vector<pg_log_entry_t>& logv,
+  eversion_t trim_to,
+  eversion_t trim_rollback_to,
+  ObjectStore::Transaction &t,
   bool transaction_applied)
 {
   if (transaction_applied)
@@ -2655,13 +2658,33 @@ void PG::append_log(
     p->offset = 0;
     add_log_entry(*p, keys[p->get_key_name()]);
   }
-  if (!transaction_applied)
-    pg_log.clear_can_rollback_to();
+
+  PGLogEntryHandler handler;
+  if (!transaction_applied) {
+    pg_log.clear_can_rollback_to(&handler);
+    t.register_on_applied(
+      new C_UpdateLastRollbackInfoTrimmedToApplied(
+	this,
+	get_osdmap()->get_epoch(),
+	info.last_update));
+  } else if (trim_rollback_to > pg_log.get_rollback_trimmed_to()) {
+    pg_log.trim_rollback_info(
+      trim_rollback_to,
+      &handler);
+    t.register_on_applied(
+      new C_UpdateLastRollbackInfoTrimmedToApplied(
+	this,
+	get_osdmap()->get_epoch(),
+	trim_rollback_to));
+  }
 
   dout(10) << "append_log  adding " << keys.size() << " keys" << dendl;
   t.omap_setkeys(coll_t::META_COLL, log_oid, keys);
-  PGLogEntryHandler handler;
+
   pg_log.trim(&handler, trim_to, info);
+
+  dout(10) << __func__ << ": trimming to " << trim_rollback_to
+	   << " entries " << handler.to_trim << dendl;
   handler.apply(this, &t);
 
   // update the local pg, pg log
@@ -3262,6 +3285,34 @@ void PG::scrub_unreserve_replicas()
   }
 }
 
+void PG::_scan_rollback_obs(
+  const vector<ghobject_t> &rollback_obs,
+  ThreadPool::TPHandle &handle)
+{
+  ObjectStore::Transaction *t = NULL;
+  eversion_t trimmed_to = last_rollback_info_trimmed_to_applied;
+  for (vector<ghobject_t>::const_iterator i = rollback_obs.begin();
+       i != rollback_obs.end();
+       ++i) {
+    if (i->generation < trimmed_to.version) {
+      osd->clog.error() << "osd." << osd->whoami
+			<< " pg " << info.pgid
+			<< " found obsolete rollback obj "
+			<< *i << " generation < trimmed_to "
+			<< trimmed_to
+			<< "...repaired";
+      if (!t)
+	t = new ObjectStore::Transaction;
+      t->remove(coll, *i);
+    }
+  }
+  if (t) {
+    derr << __func__ << ": queueing trans to clean up obsolete rollback objs"
+	 << dendl;
+    osd->store->queue_transaction_and_cleanup(osr.get(), t);
+  }
+}
+
 void PG::_scan_snaps(ScrubMap &smap) 
 {
   for (map<hobject_t, ScrubMap::object>::iterator i = smap.objects.begin();
@@ -3349,13 +3400,21 @@ int PG::build_scrub_map_chunk(
 
   // objects
   vector<hobject_t> ls;
-  int ret = get_pgbackend()->objects_list_range(start, end, 0, &ls);
+  vector<ghobject_t> rollback_obs;
+  int ret = get_pgbackend()->objects_list_range(
+    start,
+    end,
+    0,
+    &ls,
+    &rollback_obs);
   if (ret < 0) {
     dout(5) << "objects_list_range error: " << ret << dendl;
     return ret;
   }
 
+
   get_pgbackend()->be_scan_list(map, ls, deep, handle);
+  _scan_rollback_obs(rollback_obs, handle);
   _scan_snaps(map);
 
   // pg attrs
@@ -4631,6 +4690,21 @@ void PG::start_flush(ObjectStore::Transaction *t,
   on_safe->push_back(new ContainerContext<FlushStateRef>(flush_trigger));
 }
 
+void PG::reset_interval_flush()
+{
+  dout(10) << "Clearing blocked outgoing recovery messages" << dendl;
+  recovery_state.clear_blocked_outgoing();
+  
+  if (!osr->flush_commit(
+      new QueuePeeringEvt<IntervalFlush>(
+	this, get_osdmap()->get_epoch(), IntervalFlush()))) {
+    dout(10) << "Beginning to block outgoing recovery messages" << dendl;
+    recovery_state.begin_block_outgoing();
+  } else {
+    dout(10) << "Not blocking outgoing recovery messages" << dendl;
+  }
+}
+
 /* Called before initializing peering during advance_map */
 void PG::start_peering_interval(
   const OSDMapRef lastmap,
@@ -4641,6 +4715,7 @@ void PG::start_peering_interval(
   const OSDMapRef osdmap = get_osdmap();
 
   set_last_peering_reset();
+  reset_interval_flush();
 
   vector<int> oldacting, oldup;
   int oldrole = get_role();
@@ -5386,6 +5461,15 @@ PG::RecoveryState::Started::Started(my_context ctx)
 }
 
 boost::statechart::result
+PG::RecoveryState::Started::react(const IntervalFlush&)
+{
+  dout(10) << "Ending blocked outgoing recovery messages" << dendl;
+  context< RecoveryMachine >().pg->recovery_state.end_block_outgoing();
+  return discard_event();
+}
+
+
+boost::statechart::result
 PG::RecoveryState::Started::react(const FlushedEvt&)
 {
   PG *pg = context< RecoveryMachine >().pg;
@@ -5436,6 +5520,7 @@ PG::RecoveryState::Reset::Reset(my_context ctx)
 {
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
+
   pg->flushes_in_progress = 0;
   pg->set_last_peering_reset();
 }
@@ -5445,6 +5530,14 @@ PG::RecoveryState::Reset::react(const FlushedEvt&)
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->on_flushed();
+  return discard_event();
+}
+
+boost::statechart::result
+PG::RecoveryState::Reset::react(const IntervalFlush&)
+{
+  dout(10) << "Ending blocked outgoing recovery messages" << dendl;
+  context< RecoveryMachine >().pg->recovery_state.end_block_outgoing();
   return discard_event();
 }
 
@@ -6588,6 +6681,7 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
   MOSDPGLog *msg = logevt.msg.get();
   dout(10) << "got info+log from osd." << logevt.from << " " << msg->info << " " << msg->log << dendl;
 
+  ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
   if (msg->info.last_backfill == hobject_t()) {
     // restart backfill
     pg->unreg_next_scrub();
@@ -6595,10 +6689,13 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
     pg->reg_next_scrub();
     pg->dirty_info = true;
     pg->dirty_big_info = true;  // maybe.
-    pg->pg_log.claim_log(msg->log);
+
+    PGLogEntryHandler rollbacker;
+    pg->pg_log.claim_log_and_clear_rollback_info(msg->log, &rollbacker);
+    rollbacker.apply(pg, t);
+
     pg->pg_log.reset_backfill();
   } else {
-    ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
     pg->merge_log(*t, msg->info, msg->log, logevt.from);
   }
 
@@ -7492,9 +7589,40 @@ bool PG::PriorSet::affected_by_map(const OSDMapRef osdmap, const PG *debug_pg) c
 
 void PG::RecoveryState::start_handle(RecoveryCtx *new_ctx) {
   assert(!rctx);
-  rctx = new_ctx;
-  if (rctx)
+  assert(!orig_ctx);
+  orig_ctx = new_ctx;
+  if (new_ctx) {
+    if (messages_pending_flush) {
+      rctx = RecoveryCtx(*messages_pending_flush, *new_ctx);
+    } else {
+      rctx = *new_ctx;
+    }
     rctx->start_time = ceph_clock_now(pg->cct);
+  }
+}
+
+void PG::RecoveryState::begin_block_outgoing() {
+  assert(!messages_pending_flush);
+  assert(orig_ctx);
+  assert(rctx);
+  messages_pending_flush = BufferedRecoveryMessages();
+  rctx = RecoveryCtx(*messages_pending_flush, *orig_ctx);
+}
+
+void PG::RecoveryState::clear_blocked_outgoing() {
+  assert(orig_ctx);
+  assert(rctx);
+  messages_pending_flush = boost::optional<BufferedRecoveryMessages>();
+}
+
+void PG::RecoveryState::end_block_outgoing() {
+  assert(messages_pending_flush);
+  assert(orig_ctx);
+  assert(rctx);
+
+  rctx = RecoveryCtx(*orig_ctx);
+  rctx->accept_buffered_messages(*messages_pending_flush);
+  messages_pending_flush = boost::optional<BufferedRecoveryMessages>();
 }
 
 void PG::RecoveryState::end_handle() {
@@ -7502,8 +7630,10 @@ void PG::RecoveryState::end_handle() {
     utime_t dur = ceph_clock_now(pg->cct) - rctx->start_time;
     machine.event_time += dur;
   }
+
   machine.event_count++;
-  rctx = 0;
+  rctx = boost::optional<RecoveryCtx>();
+  orig_ctx = NULL;
 }
 
 void intrusive_ptr_add_ref(PG *pg) { pg->get("intptr"); }

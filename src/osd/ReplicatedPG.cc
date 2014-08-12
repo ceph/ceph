@@ -4854,8 +4854,9 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
       if (pool.info.require_rollback())
 	ctx->clone_obc->attr_cache = ctx->obc->attr_cache;
       snap_oi = &ctx->clone_obc->obs.oi;
-      bool got = ctx->clone_obc->get_write(ctx->op);
+      bool got = ctx->clone_obc->get_write_greedy(ctx->op);
       assert(got);
+      dout(20) << " got greedy write on clone_obc " << *ctx->clone_obc << dendl;
     } else {
       snap_oi = &static_snap_oi;
     }
@@ -5160,8 +5161,9 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 					0, osd_reqid_t(), ctx->mtime));
 
       ctx->snapset_obc = get_object_context(snapoid, true);
-      bool got = ctx->snapset_obc->get_write(ctx->op);
+      bool got = ctx->snapset_obc->get_write_greedy(ctx->op);
       assert(got);
+      dout(20) << " got greedy write on snapset_obc " << *ctx->snapset_obc << dendl;
       ctx->release_snapset_obc = true;
       if (pool.info.require_rollback() && !ctx->snapset_obc->obs.exists) {
 	ctx->log.back().mod_desc.create();
@@ -6442,7 +6444,7 @@ void ReplicatedPG::cancel_flush_ops(bool requeue)
 
 bool ReplicatedPG::is_present_clone(hobject_t coid)
 {
-  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE)
+  if (!pool.info.allow_incomplete_clones())
     return true;
   if (is_missing_object(coid))
     return true;
@@ -6735,6 +6737,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now)
     repop->ctx->at_version,
     repop->ctx->op_t,
     pg_trim_to,
+    min_last_complete_ondisk,
     repop->ctx->log,
     repop->ctx->updated_hset_history,
     onapplied_sync,
@@ -6752,6 +6755,7 @@ void ReplicatedBackend::issue_op(
   ceph_tid_t tid,
   osd_reqid_t reqid,
   eversion_t pg_trim_to,
+  eversion_t pg_trim_rollback_to,
   hobject_t new_temp_oid,
   hobject_t discard_temp_oid,
   vector<pg_log_entry_t> &log_entries,
@@ -6807,6 +6811,7 @@ void ReplicatedBackend::issue_op(
       wr->pg_stats = get_info().stats;
     
     wr->pg_trim_to = pg_trim_to;
+    wr->pg_trim_rollback_to = pg_trim_rollback_to;
 
     wr->new_temp_oid = new_temp_oid;
     wr->discard_temp_oid = discard_temp_oid;
@@ -6841,6 +6846,12 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContextRe
 void ReplicatedPG::remove_repop(RepGather *repop)
 {
   dout(20) << __func__ << " " << *repop << dendl;
+  if (repop->ctx->obc)
+    dout(20) << " obc " << *repop->ctx->obc << dendl;
+  if (repop->ctx->clone_obc)
+    dout(20) << " clone_obc " << *repop->ctx->clone_obc << dendl;
+  if (repop->ctx->snapset_obc)
+    dout(20) << " snapset_obc " << *repop->ctx->snapset_obc << dendl;
   release_op_ctx_locks(repop->ctx);
   repop->ctx->finish(0);  // FIXME: return value here is sloppy
   repop_map.erase(repop->rep_tid);
@@ -7607,6 +7618,7 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
       log,
       m->updated_hit_set_history,
       m->pg_trim_to,
+      m->pg_trim_rollback_to,
       update_snaps,
       &(rm->localt));
       
@@ -7702,8 +7714,8 @@ void ReplicatedBackend::calc_head_subsets(
   if (size)
     data_subset.insert(0, size);
 
-  if (get_parent()->get_pool().cache_mode != pg_pool_t::CACHEMODE_NONE) {
-    dout(10) << __func__ << ": caching enabled, skipping clone subsets" << dendl;
+  if (get_parent()->get_pool().allow_incomplete_clones()) {
+    dout(10) << __func__ << ": caching (was) enabled, skipping clone subsets" << dendl;
     return;
   }
 
@@ -7762,8 +7774,8 @@ void ReplicatedBackend::calc_clone_subsets(
   if (size)
     data_subset.insert(0, size);
 
-  if (get_parent()->get_pool().cache_mode != pg_pool_t::CACHEMODE_NONE) {
-    dout(10) << __func__ << ": caching enabled, skipping clone subsets" << dendl;
+  if (get_parent()->get_pool().allow_incomplete_clones()) {
+    dout(10) << __func__ << ": caching (was) enabled, skipping clone subsets" << dendl;
     return;
   }
 
@@ -9465,6 +9477,17 @@ void ReplicatedPG::on_role_change()
 void ReplicatedPG::on_pool_change()
 {
   dout(10) << __func__ << dendl;
+  // requeue cache full waiters just in case the cache_mode is
+  // changing away from writeback mode.  note that if we are not
+  // active the normal requeuing machinery is sufficient (and properly
+  // ordered).
+  if (is_active() &&
+      pool.info.cache_mode != pg_pool_t::CACHEMODE_WRITEBACK &&
+      !waiting_for_cache_not_full.empty()) {
+    dout(10) << __func__ << " requeuing full waiters (not in writeback) "
+	     << dendl;
+    requeue_ops(waiting_for_cache_not_full);
+  }
   hit_set_setup();
   agent_setup();
 }
@@ -11531,8 +11554,10 @@ void ReplicatedPG::agent_choose_mode(bool restart)
 	    << " -> "
 	    << TierAgentState::get_evict_mode_name(evict_mode)
 	    << dendl;
-    if (agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
+    if (agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL &&
+	is_active()) {
       requeue_ops(waiting_for_cache_not_full);
+      requeue_ops(waiting_for_active);
     }
     agent_state->evict_mode = evict_mode;
   }
@@ -11660,7 +11685,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 
       // did we finish the last oid?
       if (head != hobject_t() &&
-	  pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE) {
+	  !pool.info.allow_incomplete_clones()) {
 	osd->clog.error() << mode << " " << info.pgid << " " << head
 			  << " missing clones";
         ++scrubber.shallow_errors;
@@ -11721,7 +11746,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
     //
 
     if (!next_clone.is_min() && next_clone != soid &&
-	pool.info.cache_mode != pg_pool_t::CACHEMODE_NONE) {
+	pool.info.allow_incomplete_clones()) {
       // it is okay to be missing one or more clones in a cache tier.
       // skip higher-numbered clones in the list.
       while (curclone != snapset.clones.rend() &&
@@ -11809,7 +11834,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
   }
 
   if (!next_clone.is_min() &&
-      pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE) {
+      !pool.info.allow_incomplete_clones()) {
     osd->clog.error() << mode << " " << info.pgid
 		      << " expected clone " << next_clone;
     ++scrubber.shallow_errors;

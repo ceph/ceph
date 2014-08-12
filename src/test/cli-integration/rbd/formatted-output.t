@@ -1,5 +1,7 @@
 ls on empty pool never containing images
 ========================================
+  $ ceph osd pool create rbd_other 8
+  pool 'rbd_other' created
   $ rados -p rbd rm rbd_directory >/dev/null 2>&1 || true
   $ rbd ls
   $ rbd ls --format json
@@ -26,9 +28,9 @@ snapshot
 clone
 =====
   $ rbd snap protect bar@snap
-  $ rbd clone bar@snap data/child
-  $ rbd snap create data/child@snap
-  $ rbd flatten data/child 2> /dev/null
+  $ rbd clone bar@snap rbd_other/child
+  $ rbd snap create rbd_other/child@snap
+  $ rbd flatten rbd_other/child 2> /dev/null
 
 lock
 ====
@@ -41,7 +43,7 @@ test formatting
 ===============
   $ rbd children foo@snap
   $ rbd children bar@snap
-  data/child
+  rbd_other/child
   $ rbd children bar@snap2
 TODO: figure out why .* does not match the block_name_prefix line in rbd info.
 For now, use a more inclusive regex.
@@ -51,7 +53,7 @@ For now, use a more inclusive regex.
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 1 (esc)
-  $ rbd info foo --format json | python -mjson.tool
+  $ rbd info foo --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rb.0.*",  (glob)
       "format": 1, 
@@ -80,7 +82,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   [^^]+ (re)
   \tformat: 1 (esc)
   \tprotected: False (esc)
-  $ rbd info foo@snap --format json | python -mjson.tool
+  $ rbd info foo@snap --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rb.0.*",  (glob)
       "format": 1, 
@@ -109,7 +111,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering (esc)
-  $ rbd info bar --format json | python -mjson.tool
+  $ rbd info bar --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
@@ -145,7 +147,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \tformat: 2 (esc)
   \tfeatures: layering (esc)
   \tprotected: True (esc)
-  $ rbd info bar@snap --format json | python -mjson.tool
+  $ rbd info bar@snap --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
@@ -183,7 +185,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \tformat: 2 (esc)
   \tfeatures: layering (esc)
   \tprotected: False (esc)
-  $ rbd info bar@snap2 --format json | python -mjson.tool
+  $ rbd info bar@snap2 --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
@@ -220,7 +222,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering (esc)
-  $ rbd info baz --format json | python -mjson.tool
+  $ rbd info baz --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
@@ -254,7 +256,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 1 (esc)
-  $ rbd info quux --format json | python -mjson.tool
+  $ rbd info quux --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rb.0.*",  (glob)
       "format": 1, 
@@ -274,14 +276,14 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <block_name_prefix>rb.0.*</block_name_prefix> (glob)
     <format>1</format>
   </image>
-  $ rbd info data/child
+  $ rbd info rbd_other/child
   rbd image 'child':
   \tsize 512 MB in 128 objects (esc)
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering (esc)
-  $ rbd info data/child --format json | python -mjson.tool
+  $ rbd info rbd_other/child --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
@@ -295,7 +297,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "order": 22, 
       "size": 536870912
   }
-  $ rbd info data/child --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd info rbd_other/child --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <image>
     <name>child</name>
     <size>536870912</size>
@@ -309,7 +311,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <feature>striping</feature>
     </features>
   </image>
-  $ rbd info data/child@snap
+  $ rbd info rbd_other/child@snap
   rbd image 'child':
   \tsize 512 MB in 128 objects (esc)
   \torder 22 (4096 kB objects) (esc)
@@ -319,7 +321,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \tprotected: False (esc)
   \tparent: rbd/bar@snap (esc)
   \toverlap: 512 MB (esc)
-  $ rbd info data/child@snap --format json | python -mjson.tool
+  $ rbd info rbd_other/child@snap --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
@@ -340,7 +342,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "protected": "false", 
       "size": 536870912
   }
-  $ rbd info data/child@snap --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd info rbd_other/child@snap --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <image>
     <name>child</name>
     <size>536870912</size>
@@ -366,7 +368,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   quux
   bar
   baz
-  $ rbd list --format json | python -mjson.tool
+  $ rbd list --format json | python -mjson.tool | sed 's/,$/, /'
   [
       "foo", 
       "quux", 
@@ -389,7 +391,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   bar@snap   512M          2 yes       
   bar@snap2 1024M          2           
   baz       2048M          2      shr  
-  $ rbd list -l --format json | python -mjson.tool
+  $ rbd list -l --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
           "format": 1, 
@@ -481,21 +483,21 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <lock_type>shared</lock_type>
     </image>
   </images>
-  $ rbd list data
+  $ rbd list rbd_other
   child
-  $ rbd list data --format json | python -mjson.tool
+  $ rbd list rbd_other --format json | python -mjson.tool | sed 's/,$/, /'
   [
       "child"
   ]
-  $ rbd list data --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd list rbd_other --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <images>
     <name>child</name>
   </images>
-  $ rbd list data -l
+  $ rbd list rbd_other -l
   NAME       SIZE PARENT       FMT PROT LOCK 
   child      512M                2           
   child@snap 512M rbd/bar@snap   2           
-  $ rbd list data -l --format json | python -mjson.tool
+  $ rbd list rbd_other -l --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
           "format": 2, 
@@ -515,7 +517,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
           "snapshot": "snap"
       }
   ]
-  $ rbd list data -l --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd list rbd_other -l --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <images>
     <image>
       <image>child</image>
@@ -536,7 +538,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </snapshot>
   </images>
   $ rbd lock list foo
-  $ rbd lock list foo --format json | python -mjson.tool
+  $ rbd lock list foo --format json | python -mjson.tool | sed 's/,$/, /'
   {}
   $ rbd lock list foo --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <locks></locks>
@@ -544,7 +546,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   There is 1 exclusive lock on this image.
   Locker*ID*Address* (glob)
   client.* id * (glob)
-  $ rbd lock list quux --format json | python -mjson.tool
+  $ rbd lock list quux --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "id": {
           "address": "*",  (glob)
@@ -565,7 +567,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   client.*id[123].* (re)
   client.*id[123].* (re)
   client.*id[123].* (re)
-  $ rbd lock list baz --format json | python -mjson.tool
+  $ rbd lock list baz --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "id1": {
           "address": "*",  (glob)
@@ -598,7 +600,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   $ rbd snap list foo
   SNAPID NAME    SIZE 
       *snap*1024*MB* (glob)
-  $ rbd snap list foo --format json | python -mjson.tool
+  $ rbd snap list foo --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
           "id": *,  (glob)
@@ -618,7 +620,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   SNAPID NAME     SIZE 
       *snap*512*MB* (glob)
       *snap2*1024*MB* (glob)
-  $ rbd snap list bar --format json | python -mjson.tool
+  $ rbd snap list bar --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
           "id": *,  (glob)
@@ -645,14 +647,14 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </snapshot>
   </snapshots>
   $ rbd snap list baz
-  $ rbd snap list baz --format json | python -mjson.tool
+  $ rbd snap list baz --format json | python -mjson.tool | sed 's/,$/, /'
   []
   $ rbd snap list baz --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <snapshots></snapshots>
-  $ rbd snap list data/child
+  $ rbd snap list rbd_other/child
   SNAPID NAME   SIZE 
       *snap*512*MB* (glob)
-  $ rbd snap list data/child --format json | python -mjson.tool
+  $ rbd snap list rbd_other/child --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
           "id": *,  (glob)
@@ -660,7 +662,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
           "size": 536870912
       }
   ]
-  $ rbd snap list data/child --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd snap list rbd_other/child --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <snapshots>
     <snapshot>
       <id>*</id> (glob)
@@ -670,12 +672,14 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </snapshots>
 
 # cleanup
-  $ rbd snap remove data/child@snap
+  $ rbd snap remove rbd_other/child@snap
   $ rbd snap unprotect bar@snap
   $ rbd snap purge bar 2> /dev/null
   $ rbd snap purge foo 2> /dev/null
-  $ rbd rm data/child 2> /dev/null
+  $ rbd rm rbd_other/child 2> /dev/null
   $ rbd rm foo 2> /dev/null
   $ rbd rm bar 2> /dev/null
   $ rbd rm quux 2> /dev/null
   $ rbd rm baz 2> /dev/null
+  $ ceph osd pool delete rbd_other rbd_other --yes-i-really-really-mean-it
+  pool 'rbd_other' removed

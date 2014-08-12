@@ -24,6 +24,25 @@
 
 //////////////////// PGLog::IndexedLog ////////////////////
 
+void PGLog::IndexedLog::advance_rollback_info_trimmed_to(
+  eversion_t to,
+  LogEntryHandler *h)
+{
+  assert(to <= can_rollback_to);
+
+  if (to > rollback_info_trimmed_to)
+    rollback_info_trimmed_to = to;
+
+  while (rollback_info_trimmed_to_riter != log.rbegin()) {
+    --rollback_info_trimmed_to_riter;
+    if (rollback_info_trimmed_to_riter->version > rollback_info_trimmed_to) {
+      ++rollback_info_trimmed_to_riter;
+      break;
+    }
+    h->trim(*rollback_info_trimmed_to_riter);
+  }
+}
+
 void PGLog::IndexedLog::split_into(
   pg_t child_pgid,
   unsigned split_bits,
@@ -47,9 +66,11 @@ void PGLog::IndexedLog::split_into(
     oldlog.erase(i++);
   }
 
+
+  olog->can_rollback_to = can_rollback_to;
+
   olog->index();
   index();
-  olog->can_rollback_to = can_rollback_to;
 }
 
 void PGLog::IndexedLog::trim(
@@ -59,9 +80,14 @@ void PGLog::IndexedLog::trim(
 {
   if (complete_to != log.end() &&
       complete_to->version <= s) {
-    generic_dout(0) << " bad trim to " << s << " when complete_to is " << complete_to->version
+    generic_dout(0) << " bad trim to " << s << " when complete_to is "
+		    << complete_to->version
 		    << " on " << *this << dendl;
   }
+
+  if (s > can_rollback_to)
+    can_rollback_to = s;
+  advance_rollback_info_trimmed_to(s, handler);
 
   while (!log.empty()) {
     pg_log_entry_t &e = *log.begin();
@@ -70,9 +96,15 @@ void PGLog::IndexedLog::trim(
     generic_dout(20) << "trim " << e << dendl;
     if (trimmed)
       trimmed->insert(e.version);
-    handler->trim(e);
+
     unindex(e);         // remove from index,
-    log.pop_front();    // from log
+
+    if (e.version == rollback_info_trimmed_to_riter->version) {
+      log.pop_front();
+      rollback_info_trimmed_to_riter = log.rend();
+    } else {
+      log.pop_front();
+    }
   }
 
   // raise tail?

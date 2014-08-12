@@ -811,9 +811,10 @@ struct pg_pool_t {
   }
 
   enum {
-    FLAG_HASHPSPOOL = 1, // hash pg seed and pool together (instead of adding)
-    FLAG_FULL       = 2, // pool is full
+    FLAG_HASHPSPOOL = 1<<0, // hash pg seed and pool together (instead of adding)
+    FLAG_FULL       = 1<<1, // pool is full
     FLAG_DEBUG_FAKE_EC_POOL = 1<<2, // require ReplicatedPG to act like an EC pg
+    FLAG_INCOMPLETE_CLONES = 1<<3, // may have incomplete clones (bc we are/were an overlay)
   };
 
   static const char *get_flag_name(int f) {
@@ -821,6 +822,7 @@ struct pg_pool_t {
     case FLAG_HASHPSPOOL: return "hashpspool";
     case FLAG_FULL: return "full";
     case FLAG_DEBUG_FAKE_EC_POOL: return "require_local_rollback";
+    case FLAG_INCOMPLETE_CLONES: return "incomplete_clones";
     default: return "???";
     }
   }
@@ -916,11 +918,29 @@ public:
 
   bool is_tier() const { return tier_of >= 0; }
   bool has_tiers() const { return !tiers.empty(); }
-  void clear_tier() { tier_of = -1; }
+  void clear_tier() {
+    tier_of = -1;
+    clear_read_tier();
+    clear_write_tier();
+    clear_tier_tunables();
+  }
   bool has_read_tier() const { return read_tier >= 0; }
   void clear_read_tier() { read_tier = -1; }
   bool has_write_tier() const { return write_tier >= 0; }
   void clear_write_tier() { write_tier = -1; }
+  void clear_tier_tunables() {
+    if (cache_mode != CACHEMODE_NONE)
+      flags |= FLAG_INCOMPLETE_CLONES;
+    cache_mode = CACHEMODE_NONE;
+
+    target_max_bytes = 0;
+    target_max_objects = 0;
+    cache_target_dirty_ratio_micro = 0;
+    cache_target_full_ratio_micro = 0;
+    hit_set_params = HitSet::Params();
+    hit_set_period = 0;
+    hit_set_count = 0;
+  }
 
   uint64_t target_max_bytes;   ///< tiering: target max pool size
   uint64_t target_max_objects; ///< tiering: target max pool size
@@ -964,6 +984,7 @@ public:
   void dump(Formatter *f) const;
 
   uint64_t get_flags() const { return flags; }
+  bool has_flag(uint64_t f) const { return flags & f; }
 
   /// This method will later return true for ec pools as well
   bool ec_pool() const {
@@ -971,6 +992,11 @@ public:
   }
   bool require_rollback() const {
     return ec_pool() || flags & FLAG_DEBUG_FAKE_EC_POOL;
+  }
+
+  /// true if incomplete clones may be present
+  bool allow_incomplete_clones() const {
+    return cache_mode != CACHEMODE_NONE || has_flag(FLAG_INCOMPLETE_CLONES);
   }
 
   unsigned get_type() const { return type; }
@@ -2061,6 +2087,10 @@ struct pg_log_t {
   // We can rollback rollback-able entries > can_rollback_to
   eversion_t can_rollback_to;
 
+  // always <= can_rollback_to, indicates how far stashed rollback
+  // data can be found
+  eversion_t rollback_info_trimmed_to;
+
   list<pg_log_entry_t> log;  // the actual log.
   
   pg_log_t() {}
@@ -2762,19 +2792,21 @@ public:
       }
     }
 
-    bool get_write(OpRequestRef op) {
-      if (get_write_lock()) {
+    bool get_write(OpRequestRef op, bool greedy=false) {
+      if (get_write_lock(greedy)) {
 	return true;
       } // else
       if (op)
 	waiters.push_back(op);
       return false;
     }
-    bool get_write_lock() {
-      // don't starve anybody!
-      if (!waiters.empty() ||
-	  backfill_read_marker) {
-	return false;
+    bool get_write_lock(bool greedy=false) {
+      if (!greedy) {
+	// don't starve anybody!
+	if (!waiters.empty() ||
+	    backfill_read_marker) {
+	  return false;
+	}
       }
       switch (state) {
       case RWNONE:
@@ -2823,7 +2855,10 @@ public:
     return rwstate.get_read(op);
   }
   bool get_write(OpRequestRef op) {
-    return rwstate.get_write(op);
+    return rwstate.get_write(op, false);
+  }
+  bool get_write_greedy(OpRequestRef op) {
+    return rwstate.get_write(op, true);
   }
   bool get_snaptrimmer_write() {
     if (rwstate.get_write_lock()) {

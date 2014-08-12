@@ -2453,6 +2453,26 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     string var;
     cmd_getval(g_ceph_context, cmdmap, "var", var);
 
+    if (!p->is_tier() &&
+        (var == "hit_set_type" || var == "hit_set_period" ||
+         var == "hit_set_count" || var == "hit_set_fpp" ||
+         var == "target_max_objects" || var == "target_max_bytes" ||
+         var == "cache_target_full_ratio" ||
+         var == "cache_target_dirty_ratio" ||
+         var == "cache_min_flush_age" || var == "cache_min_evict_age")) {
+      ss << "pool '" << poolstr
+         << "' is not a tier pool: variable not applicable";
+      r = -EACCES;
+      goto reply;
+    }
+
+    if (!p->is_erasure() && var == "erasure_code_profile") {
+      ss << "pool '" << poolstr
+         << "' is not a erasure pool: variable not applicable";
+      r = -EACCES;
+      goto reply;
+    }
+
     if (f) {
       f->open_object_section("pool");
       f->dump_string("pool", poolstr);
@@ -2488,6 +2508,26 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	  BloomHitSet::Params *bloomp = static_cast<BloomHitSet::Params*>(p->hit_set_params.impl.get());
 	  f->dump_float("hit_set_fpp", bloomp->get_fpp());
 	}
+      } else if (var == "target_max_objects") {
+        f->dump_unsigned("target_max_objects", p->target_max_objects);
+      } else if (var == "target_max_bytes") {
+        f->dump_unsigned("target_max_bytes", p->target_max_bytes);
+      } else if (var == "cache_target_dirty_ratio") {
+        f->dump_unsigned("cache_target_dirty_ratio_micro",
+                         p->cache_target_dirty_ratio_micro);
+        f->dump_float("cache_target_dirty_ratio",
+                      ((float)p->cache_target_dirty_ratio_micro/1000000));
+      } else if (var == "cache_target_full_ratio") {
+        f->dump_unsigned("cache_target_full_ratio_micro",
+                         p->cache_target_full_ratio_micro);
+        f->dump_float("cache_target_full_ratio",
+                      ((float)p->cache_target_full_ratio_micro/1000000));
+      } else if (var == "cache_min_flush_age") {
+        f->dump_unsigned("cache_min_flush_age", p->cache_min_flush_age);
+      } else if (var == "cache_min_evict_age") {
+        f->dump_unsigned("cache_min_evict_age", p->cache_min_evict_age);
+      } else if (var == "erasure_code_profile") {
+       f->dump_string("erasure_code_profile", p->erasure_code_profile);
       }
 
       f->close_section();
@@ -2521,7 +2561,24 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	}
 	BloomHitSet::Params *bloomp = static_cast<BloomHitSet::Params*>(p->hit_set_params.impl.get());
 	ss << "hit_set_fpp: " << bloomp->get_fpp();
+      } else if (var == "target_max_objects") {
+        ss << "target_max_objects: " << p->target_max_objects;
+      } else if (var == "target_max_bytes") {
+        ss << "target_max_bytes: " << p->target_max_bytes;
+      } else if (var == "cache_target_dirty_ratio") {
+        ss << "cache_target_dirty_ratio: "
+          << ((float)p->cache_target_dirty_ratio_micro/1000000);
+      } else if (var == "cache_target_full_ratio") {
+        ss << "cache_target_full_ratio: "
+          << ((float)p->cache_target_full_ratio_micro/1000000);
+      } else if (var == "cache_min_flush_age") {
+        ss << "cache_min_flush_age: " << p->cache_min_flush_age;
+      } else if (var == "cache_min_evict_age") {
+        ss << "cache_min_evict_age: " << p->cache_min_evict_age;
+      } else if (var == "erasure_code_profile") {
+       ss << "erasure_code_profile: " << p->erasure_code_profile;
       }
+
       rdata.append(ss);
       ss.str("");
     }
@@ -3089,20 +3146,23 @@ int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_pr
 
 int OSDMonitor::prepare_pool_size(const unsigned pool_type,
 				  const string &erasure_code_profile,
-				  unsigned *size,
+				  unsigned *size, unsigned *min_size,
 				  stringstream &ss)
 {
   int err = 0;
   switch (pool_type) {
   case pg_pool_t::TYPE_REPLICATED:
     *size = g_conf->osd_pool_default_size;
+    *min_size = g_conf->get_osd_pool_default_min_size();
     break;
   case pg_pool_t::TYPE_ERASURE:
     {
       ErasureCodeInterfaceRef erasure_code;
       err = get_erasure_code(erasure_code_profile, &erasure_code, ss);
-      if (err == 0)
+      if (err == 0) {
 	*size = erasure_code->get_chunk_count();
+	*min_size = erasure_code->get_data_chunk_count();
+      }
     }
     break;
   default:
@@ -3219,8 +3279,8 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
 				 crush_ruleset_name, &crush_ruleset, ss);
   if (r)
     return r;
-  unsigned size;
-  r = prepare_pool_size(pool_type, erasure_code_profile, &size, ss);
+  unsigned size, min_size;
+  r = prepare_pool_size(pool_type, erasure_code_profile, &size, &min_size, ss);
   if (r)
     return r;
   uint32_t stripe_width = 0;
@@ -3246,7 +3306,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     pi->flags |= pg_pool_t::FLAG_HASHPSPOOL;
 
   pi->size = size;
-  pi->min_size = g_conf->get_osd_pool_default_min_size();
+  pi->min_size = min_size;
   pi->crush_ruleset = crush_ruleset;
   pi->object_hash = CEPH_STR_HASH_RJENKINS;
   pi->set_pg_num(pg_num ? pg_num : g_conf->osd_pool_default_pg_num);
@@ -3347,6 +3407,16 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     // or a float
     f = strict_strtod(val.c_str(), &floaterr);
     uf = llrintl(f * (double)1000000.0);
+  }
+
+  if (!p.is_tier() &&
+      (var == "hit_set_type" || var == "hit_set_period" ||
+       var == "hit_set_count" || var == "hit_set_fpp" ||
+       var == "target_max_objects" || var == "target_max_bytes" ||
+       var == "cache_target_full_ratio" || var == "cache_target_dirty_ratio" ||
+       var == "cache_min_flush_age" || var == "cache_min_evict_age")) {
+    ss << "pool '" << poolstr << "' is not a tier pool: variable not applicable";
+    return -EACCES;
   }
 
   if (var == "size") {
@@ -3489,6 +3559,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     p.hit_set_period = n;
   } else if (var == "hit_set_count") {
+
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
@@ -5093,7 +5164,10 @@ done:
       goto reply;
     }
     if (tp->tier_of != pool_id) {
-      ss << "tier pool '" << tierpoolstr << "' is a tier of '" << tp->tier_of << "'";
+      ss << "tier pool '" << tierpoolstr << "' is a tier of '"
+         << osdmap.get_pool_name(tp->tier_of) << "': "
+         // be scary about it; this is an inconsistency and bells must go off
+         << "THIS SHOULD NOT HAVE HAPPENED AT ALL";
       err = -EINVAL;
       goto reply;
     }
@@ -5221,8 +5295,67 @@ done:
       err = -EINVAL;
       goto reply;
     }
+
+    // pool already has this cache-mode set and there are no pending changes
+    if (p->cache_mode == mode &&
+	(pending_inc.new_pools.count(pool_id) == 0 ||
+	 pending_inc.new_pools[pool_id].cache_mode == p->cache_mode)) {
+      ss << "set cache-mode for pool '" << poolstr << "'"
+         << " to " << pg_pool_t::get_cache_mode_name(mode);
+      err = 0;
+      goto reply;
+    }
+
+    /* Mode description:
+     *
+     *  none:       No cache-mode defined
+     *  forward:    Forward all reads and writes to base pool
+     *  writeback:  Cache writes, promote reads from base pool
+     *  readonly:   Forward writes to base pool
+     *
+     * Hence, these are the allowed transitions:
+     *
+     *  none -> any
+     *  forward -> writeback || any IF num_objects_dirty == 0
+     *  writeback -> forward
+     *  readonly -> any
+     */
+
+    // We check if the transition is valid against the current pool mode, as
+    // it is the only committed state thus far.  We will blantly squash
+    // whatever mode is on the pending state.
+
+    if (p->cache_mode == pg_pool_t::CACHEMODE_WRITEBACK &&
+        mode != pg_pool_t::CACHEMODE_FORWARD) {
+      ss << "unable to set cache-mode '" << pg_pool_t::get_cache_mode_name(mode)
+         << "' on a '" << pg_pool_t::get_cache_mode_name(p->cache_mode)
+         << "' pool; only '"
+         << pg_pool_t::get_cache_mode_name(pg_pool_t::CACHEMODE_FORWARD)
+        << "' allowed.";
+      err = -EINVAL;
+      goto reply;
+    }
+    if (p->cache_mode == pg_pool_t::CACHEMODE_FORWARD &&
+               mode != pg_pool_t::CACHEMODE_WRITEBACK) {
+
+      const pool_stat_t& tier_stats =
+        mon->pgmon()->pg_map.get_pg_pool_sum_stat(pool_id);
+
+      if (tier_stats.stats.sum.num_objects_dirty > 0) {
+        ss << "unable to set cache-mode '"
+           << pg_pool_t::get_cache_mode_name(mode) << "' on pool '" << poolstr
+           << "': dirty objects found";
+        err = -EBUSY;
+        goto reply;
+      }
+    }
+
     // go
-    pending_inc.get_new_pool(pool_id, p)->cache_mode = mode;
+    pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
+    np->cache_mode = mode;
+    // set this both when moving to and from cache_mode NONE.  this is to
+    // capture legacy pools that were set up before this flag existed.
+    np->flags |= pg_pool_t::FLAG_INCOMPLETE_CLONES;
     ss << "set cache-mode for pool '" << poolstr
 	<< "' to " << pg_pool_t::get_cache_mode_name(mode);
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
