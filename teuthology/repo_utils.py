@@ -6,6 +6,7 @@ import subprocess
 import time
 
 from .config import config
+from .contextutil import safe_while
 from .exceptions import BranchNotFoundError, GitError
 
 log = logging.getLogger(__name__)
@@ -164,7 +165,13 @@ def fetch_qa_suite(branch, lock=True):
     # only let one worker create/update the checkout at a time
     lock_path = dest_path.rstrip('/') + '.lock'
     with FileLock(lock_path, noop=not lock):
-        enforce_repo_state(qa_suite_url, dest_path, branch)
+        with safe_while() as proceed:
+            while proceed():
+                try:
+                    enforce_repo_state(qa_suite_url, dest_path, branch)
+                    break
+                except GitError:
+                    log.exception()
     return dest_path
 
 
