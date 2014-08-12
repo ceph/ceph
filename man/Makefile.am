@@ -27,4 +27,5 @@ dist_man_MANS = \
 	ceph-rbdnamer.8 \
 	ceph-post-file.8 \
 	rbd-fuse.8 \
-	rbd-replay.8
+	rbd-replay.8 \
+	rbd-replay-prep.8
