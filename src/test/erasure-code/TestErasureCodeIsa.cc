@@ -705,6 +705,115 @@ TYPED_TEST(IsaErasureCodeTest, isa_xor_codec)
   EXPECT_EQ(5, cnt_cf);
 }
 
+TEST(IsaErasureCodeTest, create_ruleset)
+{
+  CrushWrapper *c = new CrushWrapper;
+  c->create();
+  int root_type = 2;
+  c->set_type_name(root_type, "root");
+  int host_type = 1;
+  c->set_type_name(host_type, "host");
+  int osd_type = 0;
+  c->set_type_name(osd_type, "osd");
+
+  int rootno;
+  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+		root_type, 0, NULL, NULL, &rootno);
+  c->set_item_name(rootno, "default");
+
+  map<string,string> loc;
+  loc["root"] = "default";
+
+  int num_host = 4;
+  int num_osd = 5;
+  int osd = 0;
+  for (int h=0; h<num_host; ++h) {
+    loc["host"] = string("host-") + stringify(h);
+    for (int o=0; o<num_osd; ++o, ++osd) {
+      c->insert_item(g_ceph_context, osd, 1.0, string("osd.") + stringify(osd), loc);
+    }
+  }
+
+  //
+  // The ruleid may be different from the ruleset when a crush rule is
+  // removed because the removed ruleid will be reused but the removed
+  // ruleset will not be reused. 
+  //
+  // This also asserts that the create_ruleset() method returns a
+  // ruleset and not a ruleid http://tracker.ceph.com/issues/9044
+  //
+  {
+    stringstream ss;
+    ErasureCodeIsaDefault isa;
+    map<std::string,std::string> parameters;
+    parameters["k"] = "2";
+    parameters["m"] = "2";
+    parameters["w"] = "8";
+    isa.init(parameters);
+    int FIRST = isa.create_ruleset("FIRST", *c, &ss);
+    int SECOND = isa.create_ruleset("SECOND", *c, &ss);
+    int FIRST_ruleid = c->get_rule_id("FIRST");
+    EXPECT_EQ(0, c->remove_rule(FIRST_ruleid));
+    int ruleset = isa.create_ruleset("myrule", *c, &ss);
+    EXPECT_NE(FIRST, ruleset);
+    EXPECT_NE(SECOND, ruleset);
+    EXPECT_NE(ruleset, c->get_rule_id("myrule"));
+    int SECOND_ruleid = c->get_rule_id("SECOND");
+    EXPECT_EQ(0, c->remove_rule(SECOND_ruleid));
+    int myrule_ruleid = c->get_rule_id("myrule");
+    EXPECT_EQ(0, c->remove_rule(myrule_ruleid));
+  }
+
+  {
+    stringstream ss;
+    ErasureCodeIsaDefault isa;
+    map<std::string,std::string> parameters;
+    parameters["k"] = "2";
+    parameters["m"] = "2";
+    parameters["w"] = "8";
+    isa.init(parameters);
+    int ruleset = isa.create_ruleset("myrule", *c, &ss);
+    EXPECT_EQ(0, ruleset);
+    EXPECT_EQ(-EEXIST, isa.create_ruleset("myrule", *c, &ss));
+    //
+    // the minimum that is expected from the created ruleset is to
+    // successfully map get_chunk_count() devices from the crushmap,
+    // at least once.
+    //
+    vector<__u32> weight(c->get_max_devices(), 0x10000);
+    vector<int> out;
+    int x = 0;
+    c->do_rule(ruleset, x, out, isa.get_chunk_count(), weight);
+    ASSERT_EQ(out.size(), isa.get_chunk_count());
+    for (unsigned i=0; i<out.size(); ++i)
+      ASSERT_NE(CRUSH_ITEM_NONE, out[i]);
+  }
+  {
+    stringstream ss;
+    ErasureCodeIsaDefault isa;
+    map<std::string,std::string> parameters;
+    parameters["k"] = "2";
+    parameters["m"] = "2";
+    parameters["w"] = "8";
+    parameters["ruleset-root"] = "BAD";
+    isa.init(parameters);
+    EXPECT_EQ(-ENOENT, isa.create_ruleset("otherrule", *c, &ss));
+    EXPECT_EQ("root item BAD does not exist", ss.str());
+  }
+  {
+    stringstream ss;
+    ErasureCodeIsaDefault isa;
+    map<std::string,std::string> parameters;
+    parameters["k"] = "2";
+    parameters["m"] = "2";
+    parameters["w"] = "8";
+    parameters["ruleset-failure-domain"] = "WORSE";
+    isa.init(parameters);
+    EXPECT_EQ(-EINVAL, isa.create_ruleset("otherrule", *c, &ss));
+    EXPECT_EQ("unknown type WORSE", ss.str());
+  }
+}
+
 int main(int argc, char **argv)
 {
   vector<const char*> args;

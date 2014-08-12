@@ -2797,13 +2797,13 @@ stats_out:
       osdmap.crush->dump_rules(f.get());
       f->close_section();
     } else {
-      int ruleset = osdmap.crush->get_rule_id(name);
-      if (ruleset < 0) {
+      int ruleno = osdmap.crush->get_rule_id(name);
+      if (ruleno < 0) {
 	ss << "unknown crush ruleset '" << name << "'";
-	r = ruleset;
+	r = ruleno;
 	goto reply;
       }
-      osdmap.crush->dump_rule(ruleset, f.get());
+      osdmap.crush->dump_rule(ruleno, f.get());
     }
     ostringstream rs;
     f->flush(rs);
@@ -3067,15 +3067,18 @@ int OSDMonitor::crush_ruleset_create_erasure(const string &name,
 					     int *ruleset,
 					     stringstream &ss)
 {
-  *ruleset = osdmap.crush->get_rule_id(name);
-  if (*ruleset != -ENOENT)
+  int ruleid = osdmap.crush->get_rule_id(name);
+  if (ruleid != -ENOENT) {
+    *ruleset = osdmap.crush->get_rule_mask_ruleset(ruleid);
     return -EEXIST;
+  }
 
   CrushWrapper newcrush;
   _get_pending_crush(newcrush);
 
-  *ruleset = newcrush.get_rule_id(name);
-  if (*ruleset != -ENOENT) {
+  ruleid = newcrush.get_rule_id(name);
+  if (ruleid != -ENOENT) {
+    *ruleset = newcrush.get_rule_mask_ruleset(ruleid);
     return -EALREADY;
   } else {
     ErasureCodeInterfaceRef erasure_code;
@@ -4289,7 +4292,9 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       mode = "firstn";
 
     if (osdmap.crush->rule_exists(name)) {
-      ss << "rule " << name << " already exists";
+      // The name is uniquely associated to a ruleid and the ruleset it contains
+      // From the user point of view, the ruleset is more meaningfull.
+      ss << "ruleset " << name << " already exists";
       err = 0;
       goto reply;
     }
@@ -4298,13 +4303,15 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     _get_pending_crush(newcrush);
 
     if (newcrush.rule_exists(name)) {
-      ss << "rule " << name << " already exists";
+      // The name is uniquely associated to a ruleid and the ruleset it contains
+      // From the user point of view, the ruleset is more meaningfull.
+      ss << "ruleset " << name << " already exists";
       err = 0;
     } else {
-      int rule = newcrush.add_simple_ruleset(name, root, type, mode,
-					     pg_pool_t::TYPE_REPLICATED, &ss);
-      if (rule < 0) {
-	err = rule;
+      int ruleno = newcrush.add_simple_ruleset(name, root, type, mode,
+					       pg_pool_t::TYPE_REPLICATED, &ss);
+      if (ruleno < 0) {
+	err = ruleno;
 	goto reply;
       }
 
@@ -4471,7 +4478,7 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       // complexity now.
       int ruleset = newcrush.get_rule_mask_ruleset(ruleno);
       if (osdmap.crush_ruleset_in_use(ruleset)) {
-	ss << "crush rule " << name << " ruleset " << ruleset << " is in use";
+	ss << "crush ruleset " << name << " " << ruleset << " is in use";
 	err = -EBUSY;
 	goto reply;
       }

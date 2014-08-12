@@ -167,7 +167,7 @@ namespace ceph {
      * @param [in] name of the ruleset to create
      * @param [in] crush crushmap in which the ruleset is created
      * @param [out] ss contains informative messages when an error occurs
-     * @return **0** on success or a negative errno on error.
+     * @return a ruleset on success or a negative errno on error.
      */
     virtual int create_ruleset(const string &name,
 			       CrushWrapper &crush,
