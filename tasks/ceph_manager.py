@@ -621,7 +621,7 @@ class CephManager:
             'kick_recovery_wq',
             '0')
 
-    def wait_run_admin_socket(self, osdnum, args=['version'], timeout=75):
+    def wait_run_admin_socket(self, osdnum, args=['version'], timeout=300):
         """
         If osd_admin_socket call suceeds, return.  Otherwise wait
         five seconds and try again.
