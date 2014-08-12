@@ -315,8 +315,8 @@ def archive(ctx, config):
             logdir = os.path.join(ctx.archive, 'remote')
             if (not os.path.exists(logdir)):
                 os.mkdir(logdir)
-            for remote in ctx.cluster.remotes.iterkeys():
-                path = os.path.join(logdir, remote.shortname)
+            for rem in ctx.cluster.remotes.iterkeys():
+                path = os.path.join(logdir, rem.shortname)
                 teuthology.pull_directory(remote, archive_dir, path)
 
         log.info('Removing archive directory...')
@@ -403,8 +403,8 @@ def coredump(ctx, config):
 
         # set success=false if the dir is still there = coredumps were
         # seen
-        for remote in ctx.cluster.remotes.iterkeys():
-            r = remote.run(
+        for rem in ctx.cluster.remotes.iterkeys():
+            r = rem.run(
                 args=[
                     'if', 'test', '!', '-e', '{adir}/coredump'.format(adir=archive_dir), run.Raw(';'), 'then',
                     'echo', 'OK', run.Raw(';'),
@@ -413,11 +413,11 @@ def coredump(ctx, config):
                 stdout=StringIO(),
                 )
             if r.stdout.getvalue() != 'OK\n':
-                log.warning('Found coredumps on %s, flagging run as failed', remote)
+                log.warning('Found coredumps on %s, flagging run as failed', rem)
                 ctx.summary['success'] = False
                 if 'failure_reason' not in ctx.summary:
                     ctx.summary['failure_reason'] = \
-                        'Found coredumps on {remote}'.format(remote=remote)
+                        'Found coredumps on {rem}'.format(rem=rem)
 
 @contextlib.contextmanager
 def syslog(ctx, config):
@@ -494,9 +494,9 @@ kern.* -{adir}/syslog/kern.log;RSYSLOG_FileFormat
         # flush the file fully. oh well.
 
         log.info('Checking logs for errors...')
-        for remote in ctx.cluster.remotes.iterkeys():
-            log.debug('Checking %s', remote.name)
-            r = remote.run(
+        for rem in ctx.cluster.remotes.iterkeys():
+            log.debug('Checking %s', rem.name)
+            r = rem.run(
                 args=[
                     'egrep', '--binary-files=text',
                     '\\bBUG\\b|\\bINFO\\b|\\bDEADLOCK\\b',
@@ -530,7 +530,7 @@ kern.* -{adir}/syslog/kern.log;RSYSLOG_FileFormat
                 )
             stdout = r.stdout.getvalue()
             if stdout != '':
-                log.error('Error in syslog on %s: %s', remote.name, stdout)
+                log.error('Error in syslog on %s: %s', rem.name, stdout)
                 ctx.summary['success'] = False
                 if 'failure_reason' not in ctx.summary:
                     ctx.summary['failure_reason'] = \
@@ -564,26 +564,26 @@ def vm_setup(ctx, config):
     """
     with parallel() as p:
         editinfo = os.path.join(os.path.dirname(__file__),'edit_sudoers.sh')
-        for remote in ctx.cluster.remotes.iterkeys():
-            mname = re.match(".*@([^\.]*)\.?.*", str(remote)).group(1)
+        for rem in ctx.cluster.remotes.iterkeys():
+            mname = re.match(".*@([^\.]*)\.?.*", str(rem)).group(1)
             if teuthology.is_vm(mname):
-                r = remote.run(args=['test', '-e', '/ceph-qa-ready',],
+                r = rem.run(args=['test', '-e', '/ceph-qa-ready',],
                         stdout=StringIO(),
                         check_status=False,)
                 if r.returncode != 0:
                     p1 = subprocess.Popen(['cat', editinfo], stdout=subprocess.PIPE)
-                    p2 = subprocess.Popen(['ssh', '-t', '-t', str(remote), 'sudo', 'sh'], stdin=p1.stdout, stdout=subprocess.PIPE)
+                    p2 = subprocess.Popen(['ssh', '-t', '-t', str(rem), 'sudo', 'sh'], stdin=p1.stdout, stdout=subprocess.PIPE)
                     _, err = p2.communicate()
                     if err:
                         log.info("Edit of /etc/sudoers failed: %s", err)
-                    p.spawn(_handle_vm_init, remote)
+                    p.spawn(_handle_vm_init, rem)
 
-def _handle_vm_init(remote):
+def _handle_vm_init(remote_):
     """
     Initialize a remote vm by downloading and running ceph_qa_chef.
     """
-    log.info('Running ceph_qa_chef on %s', remote)
-    remote.run(args=['wget', '-q', '-O-',
+    log.info('Running ceph_qa_chef on %s', remote_)
+    remote_.run(args=['wget', '-q', '-O-',
             'http://ceph.com/git/?p=ceph-qa-chef.git;a=blob_plain;f=solo/solo-from-scratch;hb=HEAD',
             run.Raw('|'),
             'sh',
