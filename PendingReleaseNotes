@@ -12,6 +12,17 @@ v0.84
   and 'total_avail' fields are replaced with 'total_bytes', 'total_used_bytes',
   and 'total_avail_bytes' fields.
 
+* The 'rados df --format=json' output 'read_bytes' and 'write_bytes'
+  fields were incorrectly reporting ops; this is now fixed.
+
+* The 'rados df --format=json' output previously included 'read_kb' and
+  'write_kb' fields; these have been removed.  Please use 'read_bytes' and
+  'write_bytes' instead (and divide by 1024 if appropriate).
+
+
+v0.85
+-----
+
 * The client-side caching for librbd is now enabled by default (rbd
   cache = true).  A safety option (rbd cache writethrough until flush
   = true) is also enabled so that writeback caching is not used until
@@ -19,3 +30,13 @@ v0.84
   users is passing that operation through from the guest VM.  This
   avoids potential data loss when used with older versions of qemu
   that do not support flush.
+
+    leveldb_write_buffer_size = 32*1024*1024  = 33554432  // 32MB
+    leveldb_cache_size        = 512*1024*1204 = 536870912 // 512MB
+    leveldb_block_size        = 64*1024       = 65536     // 64KB
+    leveldb_compression       = false
+    leveldb_log               = ""
+
+  OSDs will still maintain the following osd-specific defaults:
+
+    leveldb_log               = ""
