@@ -6071,6 +6071,11 @@ void ReplicatedPG::cancel_copy(CopyOpRef cop, bool requeue)
   cop->results.should_requeue = requeue;
   CopyCallbackResults result(-ECANCELED, &cop->results);
   cop->cb->complete(result);
+
+  // There may still be an objecter callback referencing this copy op.
+  // That callback will not need the obc since it's been canceled, and
+  // we need the obc reference to go away prior to flush.
+  cop->obc = ObjectContextRef();
 }
 
 void ReplicatedPG::cancel_copy_ops(bool requeue)
