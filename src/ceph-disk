@@ -2205,6 +2205,27 @@ def more_osd_info(path, uuid_map):
 
     return desc
 
+def list_dev_osd(dev, uuid_map):
+    path = is_mounted(dev)
+    fs_type = get_dev_fs(dev)
+    desc = []
+    if path:
+        desc.append('active')
+        desc.extend(more_osd_info(path, uuid_map))
+    elif fs_type:
+        try:
+            tpath = mount(dev=dev, fstype=fs_type, options='')
+            if tpath:
+                try:
+                    magic = get_oneliner(tpath, 'magic')
+                    if magic is not None:
+                        desc.append('prepared')
+                        desc.extend(more_osd_info(tpath, uuid_map))
+                finally:
+                    unmount(tpath)
+        except MountError:
+            pass
+    return desc
 
 def list_dev(dev, uuid_map, journal_map):
     ptype = 'unknown'
@@ -2212,27 +2233,10 @@ def list_dev(dev, uuid_map, journal_map):
     if is_partition(dev):
         ptype = get_partition_type(dev)
         prefix = ' '
-    fs_type = get_dev_fs(dev)
-    path = is_mounted(dev)
 
     desc = []
     if ptype == OSD_UUID:
-        if path:
-            desc.append('active')
-            desc.extend(more_osd_info(path, uuid_map))
-        elif fs_type:
-            try:
-                tpath = mount(dev=dev, fstype=fs_type, options='')
-                if tpath:
-                    try:
-                        magic = get_oneliner(tpath, 'magic')
-                        if magic is not None:
-                            desc.append('prepared')
-                            desc.extend(more_osd_info(tpath, uuid_map))
-                    finally:
-                        unmount(tpath)
-            except MountError:
-                pass
+        desc = list_dev_osd(dev, uuid_map)
         if desc:
             desc = ['ceph data'] + desc
         else:
@@ -2243,6 +2247,8 @@ def list_dev(dev, uuid_map, journal_map):
         if part_uuid and part_uuid in journal_map:
             desc.append('for %s' % journal_map[part_uuid])
     else:
+        path = is_mounted(dev)
+        fs_type = get_dev_fs(dev)
         if is_swap(dev):
             desc.append('swap')
         else:
