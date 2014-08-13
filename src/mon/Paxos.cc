@@ -385,6 +385,7 @@ void Paxos::_sanity_check_store()
 void Paxos::handle_last(MMonPaxos *last)
 {
   bool need_refresh = false;
+  int from = last->get_source().num();
 
   dout(10) << "handle_last " << *last << dendl;
 
@@ -396,12 +397,13 @@ void Paxos::handle_last(MMonPaxos *last)
 
   // note peer's first_ and last_committed, in case we learn a new
   // commit and need to push it to them.
-  peer_first_committed[last->get_source().num()] = last->first_committed;
-  peer_last_committed[last->get_source().num()] = last->last_committed;
+  peer_first_committed[from] = last->first_committed;
+  peer_last_committed[from] = last->last_committed;
 
   if (last->first_committed > last_committed+1) {
     dout(5) << __func__
-            << " peon's lowest version is too high for our last committed"
+            << " mon." << from
+	    << " lowest version is too high for our last committed"
             << " (theirs: " << last->first_committed
             << "; ours: " << last_committed << ") -- bootstrap!" << dendl;
     last->put();
