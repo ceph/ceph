@@ -6721,19 +6721,6 @@ bool OSD::require_same_peer_instance(OpRequestRef& op, OSDMapRef& map)
   return true;
 }
 
-bool OSD::require_up_osd_peer(OpRequestRef& op, OSDMapRef& map,
-                              epoch_t their_epoch)
-{
-  if (!require_self_aliveness(op, their_epoch)) {
-    return false;
-  } else if (!require_osd_peer(op)) {
-    return false;
-  } else if (map->get_epoch() >= their_epoch &&
-	     !require_same_peer_instance(op, map)) {
-    return false;
-  }
-  return true;
-}
 
 /*
  * require that we have same (or newer) map, and that
@@ -8070,8 +8057,13 @@ void OSD::handle_replica_op(OpRequestRef& op, OSDMapRef& osdmap)
     return;
   }
 
-  if (!require_up_osd_peer(op, osdmap, m->map_epoch))
+  if (!require_self_aliveness(op, m->map_epoch))
     return;
+  if (!require_osd_peer(op))
+    return false;
+  if (map->get_epoch() >= m->map_epoch &&
+      !require_same_peer_instance(op, osdmap))
+    return false;
 
   // must be a rep op.
   assert(m->get_source().is_osd());
