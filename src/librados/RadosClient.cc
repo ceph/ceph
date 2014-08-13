@@ -280,7 +280,7 @@ void librados::RadosClient::shutdown()
     finisher.stop();
   }
   bool need_objecter = false;
-  if (objecter && state == CONNECTED) {
+  if (objecter && objecter->initialized.read()) {
     need_objecter = true;
   }
   state = DISCONNECTED;
