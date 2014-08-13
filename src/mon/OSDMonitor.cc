@@ -3640,7 +3640,7 @@ done:
 	pending_inc.new_pools[pool].crash_replay_interval = n;
 	ss << "set pool " << pool << " to crash_replay_interval to " << n;
       } else if (var == "pg_num") {
-	int expected_osds = MIN(p->get_pg_num(), osdmap.get_num_osds());
+	int expected_osds = MAX(1, MIN(p->get_pg_num(), osdmap.get_num_osds()));
 	int64_t new_pgs = n - p->get_pg_num();
 	int64_t pgs_per_osd = new_pgs / expected_osds;
 	if (n <= p->get_pg_num()) {
