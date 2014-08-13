@@ -7370,8 +7370,15 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
     reply_request(mdr, -EPERM);
     return;
   }
-
+  
   const string &snapname = req->get_filepath().last_dentry();
+
+  if (mdr->client_request->get_caller_uid() < g_conf->mds_snap_min_uid || mdr->client_request->get_caller_uid() > g_conf->mds_snap_max_uid) {
+    dout(20) << "mksnap " << snapname << " on " << *diri << " denied to uid " << mdr->client_request->get_caller_uid() << dendl;
+    reply_request(mdr, -EPERM);
+    return;
+  }
+  
   dout(10) << "mksnap " << snapname << " on " << *diri << dendl;
 
   // lock snap
@@ -7504,6 +7511,13 @@ void Server::handle_client_rmsnap(MDRequestRef& mdr)
   }
 
   const string &snapname = req->get_filepath().last_dentry();
+
+  if (mdr->client_request->get_caller_uid() < g_conf->mds_snap_min_uid || mdr->client_request->get_caller_uid() > g_conf->mds_snap_max_uid) {
+    dout(20) << "rmsnap " << snapname << " on " << *diri << " denied to uid " << mdr->client_request->get_caller_uid() << dendl;
+    reply_request(mdr, -EPERM);
+    return;
+  }
+
   dout(10) << "rmsnap " << snapname << " on " << *diri << dendl;
 
   // does snap exist?
