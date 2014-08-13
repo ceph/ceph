@@ -10993,6 +10993,7 @@ void ReplicatedPG::hit_set_persist()
   ctx->delta_stats.num_objects++;
   ctx->delta_stats.num_objects_hit_set_archive++;
   ctx->delta_stats.num_bytes += bl.length();
+  ctx->delta_stats.num_bytes_hit_set_archive += bl.length();
 
   bufferlist bss;
   ::encode(ctx->new_snapset, bss);
@@ -11065,6 +11066,7 @@ void ReplicatedPG::hit_set_trim(RepGather *repop, unsigned max)
     --repop->ctx->delta_stats.num_objects;
     --repop->ctx->delta_stats.num_objects_hit_set_archive;
     repop->ctx->delta_stats.num_bytes -= obc->obs.oi.size;
+    repop->ctx->delta_stats.num_bytes_hit_set_archive -= obc->obs.oi.size;
   }
 }
 
