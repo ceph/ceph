@@ -3592,7 +3592,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "splits in cache pools must be followed by scrubs and leave sufficient free space to avoid overfilling.  use --yes-i-really-mean-it to force.";
       return -EPERM;
     }
-    int expected_osds = MIN(p.get_pg_num(), osdmap.get_num_osds());
+    int expected_osds = MAX(1, MIN(p.get_pg_num(), osdmap.get_num_osds()));
     int64_t new_pgs = n - p.get_pg_num();
     int64_t pgs_per_osd = new_pgs / expected_osds;
     if (pgs_per_osd > g_conf->mon_osd_max_split_count) {
