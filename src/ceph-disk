@@ -119,6 +119,9 @@ STATEDIR = '/var/lib/ceph'
 
 SYSCONFDIR = '/etc/ceph'
 
+# only warn once about some things
+warned_about = {}
+
 # Nuke the TERM variable to avoid confusing any subprocesses we call.
 # For example, libreadline will print weird control sequences for some
 # TERM values.
@@ -2193,6 +2196,9 @@ def get_partition_type(part):
         return None    # GPT, and blkid appears to be new, so we're done.
 
     # bah, fall back to sgdisk.
+    if 'blkid' not in warned_about:
+        LOG.warning('Old blkid does not support ID_PART_ENTRY_* fields, trying sgdisk; may not correctly identify ceph volumes with dmcrypt')
+        warned_about['blkid'] = True
     (base, partnum) = re.match('(\D+)(\d+)', part).group(1, 2)
     sgdisk, _ = command(
         [
@@ -2741,3 +2747,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    warned_about = {}
