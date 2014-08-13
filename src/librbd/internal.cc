@@ -2097,7 +2097,7 @@ reprotect_and_return_err:
 			 << ictx->snap_name << "'" << dendl;
     int r = ictx->init();
     if (r < 0)
-      return r;
+      goto err_close;
 
     if (!ictx->read_only) {
       r = ictx->register_watch();
