@@ -1407,11 +1407,12 @@ void object_stat_sum_t::dump(Formatter *f) const
   f->dump_int("num_keys_recovered", num_keys_recovered);
   f->dump_int("num_objects_omap", num_objects_omap);
   f->dump_int("num_objects_hit_set_archive", num_objects_hit_set_archive);
+  f->dump_int("num_bytes_hit_set_archive", num_bytes_hit_set_archive);
 }
 
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(10, 3, bl);
+  ENCODE_START(11, 3, bl);
   ::encode(num_bytes, bl);
   ::encode(num_objects, bl);
   ::encode(num_object_clones, bl);
@@ -1434,12 +1435,13 @@ void object_stat_sum_t::encode(bufferlist& bl) const
   ::encode(num_objects_omap, bl);
   ::encode(num_objects_hit_set_archive, bl);
   ::encode(num_objects_misplaced, bl);
+  ::encode(num_bytes_hit_set_archive, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_stat_sum_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(10, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(11, 3, 3, bl);
   ::decode(num_bytes, bl);
   if (struct_v < 3) {
     uint64_t num_kb;
@@ -1498,6 +1500,11 @@ void object_stat_sum_t::decode(bufferlist::iterator& bl)
   } else {
     num_objects_misplaced = 0;
   }
+  if (struct_v >= 11) {
+    ::decode(num_bytes_hit_set_archive, bl);
+  } else {
+    num_bytes_hit_set_archive = 0;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -1524,6 +1531,8 @@ void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t*>& o)
   a.num_objects_dirty = 21;
   a.num_whiteouts = 22;
   a.num_objects_misplaced = 1232;
+  o.num_objects_hit_set_archive = 2;
+  o.num_bytes_hit_set_archive = 27;
   o.push_back(new object_stat_sum_t(a));
 }
 
@@ -1551,6 +1560,7 @@ void object_stat_sum_t::add(const object_stat_sum_t& o)
   num_whiteouts += o.num_whiteouts;
   num_objects_omap += o.num_objects_omap;
   num_objects_hit_set_archive += o.num_objects_hit_set_archive;
+  num_bytes_hit_set_archive += o.num_bytes_hit_set_archive;
 }
 
 void object_stat_sum_t::sub(const object_stat_sum_t& o)
@@ -1577,6 +1587,7 @@ void object_stat_sum_t::sub(const object_stat_sum_t& o)
   num_whiteouts -= o.num_whiteouts;
   num_objects_omap -= o.num_objects_omap;
   num_objects_hit_set_archive -= o.num_objects_hit_set_archive;
+  num_bytes_hit_set_archive -= o.num_bytes_hit_set_archive;
 }
 
 
@@ -1693,7 +1704,7 @@ void pg_stat_t::dump_brief(Formatter *f) const
 
 void pg_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(19, 8, bl);
+  ENCODE_START(20, 8, bl);
   ::encode(version, bl);
   ::encode(reported_seq, bl);
   ::encode(reported_epoch, bl);
@@ -1735,7 +1746,7 @@ void pg_stat_t::encode(bufferlist &bl) const
 
 void pg_stat_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(19, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(20, 8, 8, bl);
   ::decode(version, bl);
   ::decode(reported_seq, bl);
   ::decode(reported_epoch, bl);
@@ -1854,6 +1865,13 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
   } else {
     last_undegraded = utime_t();
     last_fullsized = utime_t();
+  }
+  if (struct_v >= 20) {
+    ::decode(hitset_bytes_stats_invalid, bl);
+  } else {
+    // if we are decoding an old encoding of this object, then the
+    // encoder may not have supported num_bytes_hit_set_archive accounting.
+    hitset_bytes_stats_invalid = true;
   }
   DECODE_FINISH(bl);
 }
