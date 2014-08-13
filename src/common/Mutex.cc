@@ -20,10 +20,6 @@
 #include "include/utime.h"
 #include "common/Clock.h"
 
-#ifdef WITH_LTTNG
-#include "tracing/mutex.h"
-#endif
-
 Mutex::Mutex(const char *n, bool r, bool ld,
 	     bool bt,
 	     CephContext *cct) :
@@ -84,8 +80,6 @@ void Mutex::Lock(bool no_lockdep) {
   utime_t start;
   int r;
 
-  tracepoint(mutex, lock_enter, this, name);
-
   if (lockdep && g_lockdep && !no_lockdep) _will_lock();
 
   if (TryLock()) {
@@ -103,7 +97,7 @@ void Mutex::Lock(bool no_lockdep) {
   _post_lock();
 
 out:
-  tracepoint(mutex, lock_exit, this, name);
+  ;
 }
 
 void Mutex::Unlock() {
@@ -111,5 +105,4 @@ void Mutex::Unlock() {
   if (lockdep && g_lockdep) _will_unlock();
   int r = pthread_mutex_unlock(&_m);
   assert(r == 0);
-  tracepoint(mutex, unlock, this, name);
 }
