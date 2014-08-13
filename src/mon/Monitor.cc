@@ -481,6 +481,8 @@ int Monitor::preinit()
     cluster_logger = pcb.create_perf_counters();
   }
 
+  paxos->init_logger();
+
   // verify cluster_uuid
   {
     int r = check_fsid();
