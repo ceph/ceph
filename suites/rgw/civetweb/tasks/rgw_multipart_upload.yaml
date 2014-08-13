@@ -1,0 +1,8 @@
+tasks:
+- install:
+- ceph:
+- rgw: [client.0]
+- workunit:
+    clients:
+      client.0:
+        - rgw/s3_multipart_upload.pl
