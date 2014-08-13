@@ -2161,10 +2161,36 @@ def get_partition_type(part):
             part,
         ]
     )
+    saw_part_entry = False
     for line in blkid.splitlines():
         (key, value) = line.split('=')
         if key == 'ID_PART_ENTRY_TYPE':
             return value
+        if key == 'ID_PART_ENTRY_SCHEME':
+            table_type = value
+        if key.startswith('ID_PART_ENTRY_'):
+            saw_part_entry = True
+
+    # hmm, is it in fact GPT?
+    table_type = None
+    base = get_partition_base(part)
+    blkid, _ = command(
+        [
+            'blkid',
+            '-p',
+            '-o', 'udev',
+            base
+        ]
+    )
+    for line in blkid.splitlines():
+        (key, value) = line.split('=')
+        if key == 'ID_PART_TABLE_TYPE':
+            table_type = value
+    if table_type != 'gpt':
+        return None    # not even GPT
+
+    if saw_part_entry:
+        return None    # GPT, and blkid appears to be new, so we're done.
 
     # bah, fall back to sgdisk.
     (base, partnum) = re.match('(\D+)(\d+)', part).group(1, 2)
