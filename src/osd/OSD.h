@@ -1821,8 +1821,6 @@ protected:
    * @pre op was sent by an OSD using the cluster messenger
    */
   bool require_same_peer_instance(OpRequestRef& op, OSDMapRef& map);
-  bool require_up_osd_peer(OpRequestRef& Op, OSDMapRef& map,
-                           epoch_t their_epoch);
 
   bool require_same_or_newer_map(OpRequestRef& op, epoch_t e);
 
