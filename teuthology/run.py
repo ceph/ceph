@@ -15,6 +15,8 @@ from .run_tasks import run_tasks
 from .repo_utils import fetch_qa_suite
 from .results import email_results
 
+log = logging.getLogger(__name__)
+
 
 def set_up_logging(ctx):
     if ctx.verbose:
@@ -74,7 +76,15 @@ def fetch_tasks_if_needed(job_config):
     # in its config.
     suite_path = job_config.get('suite_path')
     if suite_path:
+        log.info("suite_path is set to %s; not fetching tasks", suite_path)
         return
+
+    try:
+        import tasks
+        log.info("Found tasks at %s", os.path.dirname(tasks.__file__))
+        return
+    except ImportError:
+        pass
 
     ceph_branch = job_config.get('branch', 'master')
     suite_branch = job_config.get('suite_branch', ceph_branch)
@@ -85,7 +95,6 @@ def fetch_tasks_if_needed(job_config):
 
 def main(ctx):
     set_up_logging(ctx)
-    log = logging.getLogger(__name__)
 
     if ctx.owner is None:
         ctx.owner = get_user()
