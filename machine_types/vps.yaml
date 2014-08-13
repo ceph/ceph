@@ -3,3 +3,13 @@ overrides:
     conf:
       global:
         osd heartbeat grace: 100
+  task:
+    rgw:
+      client.0:
+        idle_timeout: 1200
+      client.1:
+        idle_timeout: 1200
+      client.2:
+        idle_timeout: 1200
+      client.3:
+        idle_timeout: 1200
