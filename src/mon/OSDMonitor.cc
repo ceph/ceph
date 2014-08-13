@@ -929,8 +929,13 @@ bool OSDMonitor::can_mark_down(int i)
     dout(5) << "can_mark_down NODOWN flag set, will not mark osd." << i << " down" << dendl;
     return false;
   }
+  int num_osds = osdmap.get_num_osds();
+  if (num_osds == 0) {
+    dout(5) << "can_mark_down no osds" << dendl;
+    return false;
+  }
   int up = osdmap.get_num_up_osds() - pending_inc.get_net_marked_down(&osdmap);
-  float up_ratio = (float)up / (float)osdmap.get_num_osds();
+  float up_ratio = (float)up / (float)num_osds;
   if (up_ratio < g_conf->mon_osd_min_up_ratio) {
     dout(5) << "can_mark_down current up_ratio " << up_ratio << " < min "
 	    << g_conf->mon_osd_min_up_ratio
@@ -959,8 +964,13 @@ bool OSDMonitor::can_mark_out(int i)
     dout(5) << "can_mark_out NOOUT flag set, will not mark osds out" << dendl;
     return false;
   }
+  int num_osds = osdmap.get_num_osds();
+  if (num_osds == 0) {
+    dout(5) << "can_mark_out no osds" << dendl;
+    return false;
+  }
   int in = osdmap.get_num_in_osds() - pending_inc.get_net_marked_out(&osdmap);
-  float in_ratio = (float)in / (float)osdmap.get_num_osds();
+  float in_ratio = (float)in / (float)num_osds;
   if (in_ratio < g_conf->mon_osd_min_in_ratio) {
     if (i >= 0)
       dout(5) << "can_mark_down current in_ratio " << in_ratio << " < min "
