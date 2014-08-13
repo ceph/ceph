@@ -418,6 +418,31 @@ void Paxos::handle_last(MMonPaxos *last)
 
   assert(g_conf->paxos_kill_at != 2);
 
+  // is everyone contiguous and up to date?
+  for (map<int,version_t>::iterator p = peer_last_committed.begin();
+       p != peer_last_committed.end();
+       ++p) {
+    if (p->second < first_committed && first_committed > 1) {
+      dout(5) << __func__
+	      << " peon " << p->first
+	      << " last_committed (" << p->second
+	      << ") is too low for our first_committed (" << first_committed
+	      << ") -- bootstrap!" << dendl;
+      last->put();
+      mon->bootstrap();
+      return;
+    }
+    if (p->second < last_committed) {
+      // share committed values
+      dout(10) << " sending commit to mon." << p->first << dendl;
+      MMonPaxos *commit = new MMonPaxos(mon->get_epoch(),
+					MMonPaxos::OP_COMMIT,
+					ceph_clock_now(g_ceph_context));
+      share_state(commit, peer_first_committed[p->first], p->second);
+      mon->messenger->send_message(commit, mon->monmap->get_inst(p->first));
+    }
+  }
+
   // do they accept your pn?
   if (last->pn > accepted_pn) {
     // no, try again.
@@ -459,31 +484,6 @@ void Paxos::handle_last(MMonPaxos *last)
       // cancel timeout event
       mon->timer.cancel_event(collect_timeout_event);
       collect_timeout_event = 0;
-
-      // is everyone contiguous and up to date?
-      for (map<int,version_t>::iterator p = peer_last_committed.begin();
-	   p != peer_last_committed.end();
-	   ++p) {
-	if (p->second < first_committed && first_committed > 1) {
-	  dout(5) << __func__
-		  << " peon " << p->first
-		  << " last_committed (" << p->second
-		  << ") is too low for our first_committed (" << first_committed
-		  << ") -- bootstrap!" << dendl;
-	  last->put();
-	  mon->bootstrap();
-	  return;
-	}
-	if (p->second < last_committed) {
-	  // share committed values
-	  dout(10) << " sending commit to mon." << p->first << dendl;
-	  MMonPaxos *commit = new MMonPaxos(mon->get_epoch(),
-					    MMonPaxos::OP_COMMIT,
-					    ceph_clock_now(g_ceph_context));
-	  share_state(commit, peer_first_committed[p->first], p->second);
-	  mon->messenger->send_message(commit, mon->monmap->get_inst(p->first));
-	}
-      }
       peer_first_committed.clear();
       peer_last_committed.clear();
 
