@@ -72,14 +72,13 @@ protected:
   std::string ns;
 };
 
-class RadosTestEC : public ::testing::Test {
+class RadosTestEC : public RadosTest {
 public:
   RadosTestEC() {}
   virtual ~RadosTestEC() {}
 protected:
   static void SetUpTestCase();
   static void TearDownTestCase();
-  static void cleanup_default_namespace(rados_ioctx_t ioctx);
   static rados_t s_cluster;
   static std::string pool_name;
 
@@ -90,14 +89,13 @@ protected:
   uint64_t alignment;
 };
 
-class RadosTestECPP : public ::testing::Test {
+class RadosTestECPP : public RadosTestPP {
 public:
   RadosTestECPP() : cluster(s_cluster) {}
   virtual ~RadosTestECPP() {}
 protected:
   static void SetUpTestCase();
   static void TearDownTestCase();
-  static void cleanup_default_namespace(librados::IoCtx ioctx);
   static librados::Rados s_cluster;
   static std::string pool_name;
 
