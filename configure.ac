@@ -802,7 +802,10 @@ AC_CHECK_TYPES([__u8, __s8, __u16, __s16, __u32, __s32, __u64, __s64, __le16,
 
 AC_ARG_WITH([lttng],
 	[AS_HELP_STRING([--with-lttng], [Trace with LTTng])])
-AM_CONDITIONAL([WITH_LTTNG], test x"$with_lttng" = x"yes")
+AS_IF([test "x$with_lttng" = "xno"], [use_lttng=no],
+      [test "x$with_lttng" = "xyes"], [use_lttng=yes],
+      [AC_CHECK_HEADERS([lttng/tracepoint.h], [use_lttng=yes], [use_lttng=no])])
+AM_CONDITIONAL([WITH_LTTNG], test x"$use_lttng" = x"yes")
 AM_COND_IF([WITH_LTTNG], [
   AC_DEFINE([WITH_LTTNG], [1], [Define if you want to use LTTng])
 
