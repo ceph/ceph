@@ -1,10 +1,10 @@
   $ osdmaptool --createsimple 3 myosdmap
-  osdmaptool: osdmap file 'myosdmap'
-  osdmaptool: writing epoch 1 to myosdmap
+  *osdmaptool: osdmap file 'myosdmap' (glob)
+  *osdmaptool: writing epoch 1 to myosdmap (glob)
 
   $ osdmaptool --export-crush oc myosdmap
-  osdmaptool: osdmap file 'myosdmap'
-  osdmaptool: exported crush map to oc
+  *osdmaptool: osdmap file 'myosdmap' (glob)
+  *osdmaptool: exported crush map to oc (glob)
   $ crushtool --decompile oc
   # begin crush map
   tunable choose_local_tries 0
@@ -68,7 +68,7 @@
   
   # end crush map
   $ osdmaptool --print myosdmap
-  osdmaptool: osdmap file 'myosdmap'
+  *osdmaptool: osdmap file 'myosdmap' (glob)
   epoch 1
   fsid [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} (re)
   created \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ (re)
@@ -80,23 +80,23 @@
   max_osd 3
   
   $ osdmaptool --clobber --createsimple 3 --osd_pool_default_crush_replicated_ruleset 66 myosdmap
-  osdmaptool: osdmap file 'myosdmap'
-  osdmaptool: writing epoch 1 to myosdmap
+  *osdmaptool: osdmap file 'myosdmap' (glob)
+  *osdmaptool: writing epoch 1 to myosdmap (glob)
   $ osdmaptool --print myosdmap | grep 'pool 0'
-  osdmaptool: osdmap file 'myosdmap'
+  *osdmaptool: osdmap file 'myosdmap' (glob)
   pool 0 'rbd' replicated size 3 min_size 2 crush_ruleset 66 object_hash rjenkins pg_num 192 pgp_num 192 last_change 0 flags hashpspool stripe_width 0
   $ osdmaptool --clobber --createsimple 3 --osd_pool_default_crush_rule 55 myosdmap 2>&1 >/dev/null | sed -e 's/^.* 0 osd_pool_//'
-  osdmaptool: osdmap file 'myosdmap'
+  *osdmaptool: osdmap file 'myosdmap' (glob)
   default_crush_rule is deprecated use osd_pool_default_crush_replicated_ruleset instead
   default_crush_rule = 55 overrides osd_pool_default_crush_replicated_ruleset = 0
   $ osdmaptool --print myosdmap | grep 'pool 0'
-  osdmaptool: osdmap file 'myosdmap'
+  *osdmaptool: osdmap file 'myosdmap' (glob)
   pool 0 'rbd' replicated size 3 min_size 2 crush_ruleset 55 object_hash rjenkins pg_num 192 pgp_num 192 last_change 0 flags hashpspool stripe_width 0
   $ osdmaptool --clobber --createsimple 3 --osd_pool_default_crush_replicated_ruleset 66 --osd_pool_default_crush_rule 55 myosdmap 2>&1 >/dev/null | sed -e 's/^.* 0 osd_pool_//'
-  osdmaptool: osdmap file 'myosdmap'
+  *osdmaptool: osdmap file 'myosdmap' (glob)
   default_crush_rule is deprecated use osd_pool_default_crush_replicated_ruleset instead
   default_crush_rule = 55 overrides osd_pool_default_crush_replicated_ruleset = 66
   $ osdmaptool --print myosdmap | grep 'pool 0'
-  osdmaptool: osdmap file 'myosdmap'
+  *osdmaptool: osdmap file 'myosdmap' (glob)
   pool 0 'rbd' replicated size 3 min_size 2 crush_ruleset 55 object_hash rjenkins pg_num 192 pgp_num 192 last_change 0 flags hashpspool stripe_width 0
   $ rm -f myosdmap

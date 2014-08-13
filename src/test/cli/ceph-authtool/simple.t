@@ -1,5 +1,5 @@
   $ ceph-authtool
-  ceph-authtool: must specify filename
+  *ceph-authtool: must specify filename (glob)
   usage: ceph-authtool keyringfile [OPTIONS]...
   where the options are:
     -l, --list                    will list all keys and capabilities present in

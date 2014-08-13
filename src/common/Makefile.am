@@ -1,4 +1,4 @@
-libcommon_la_SOURCES = \
+libceph_common_la_SOURCES = \
 	ceph_ver.c \
 	common/DecayCounter.cc \
 	common/LogClient.cc \
@@ -75,7 +75,7 @@ libcommon_la_SOURCES = \
 	common/module.c
 
 # these should go out of libcommon
-libcommon_la_SOURCES += \
+libceph_common_la_SOURCES += \
 	mon/MonCap.cc \
 	mon/MonClient.cc \
 	mon/MonMap.cc \
@@ -112,13 +112,15 @@ noinst_HEADERS += \
 LIBCOMMON_DEPS += \
 	$(LIBERASURE_CODE) \
 	$(LIBMSG) $(LIBAUTH) \
-	$(LIBCRUSH) $(LIBJSON_SPIRIT) $(LIBLOG) $(LIBARCH)
+	$(LIBCRUSH) $(LIBJSON_SPIRIT) $(LIBLOG) $(LIBARCH) \
+	$(CRYPTO_LIBS) -luuid
 
 if LINUX
 LIBCOMMON_DEPS += -lrt
 endif # LINUX
 
-libcommon_la_LIBADD = $(LIBCOMMON_DEPS)
+libceph_common_la_LIBADD = $(LIBCOMMON_DEPS)
+libceph_common_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0
 
 noinst_HEADERS += \
 	common/BackTrace.h \
@@ -205,7 +207,7 @@ noinst_HEADERS += \
 	common/linux_version.h \
 	common/module.h
 
-noinst_LTLIBRARIES += libcommon.la
+lib_LTLIBRARIES += libceph_common.la
 
 
 libsecret_la_SOURCES = common/secret.c
