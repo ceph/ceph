@@ -6660,7 +6660,8 @@ void OSD::activate_map()
 bool OSD::require_mon_peer(Message *m)
 {
   if (!m->get_connection()->peer_is_mon()) {
-    dout(0) << "require_mon_peer received from non-mon " << m->get_connection()->get_peer_addr()
+    dout(0) << "require_mon_peer received from non-mon "
+	    << m->get_connection()->get_peer_addr()
 	    << " " << *m << dendl;
     m->put();
     return false;
@@ -6671,7 +6672,8 @@ bool OSD::require_mon_peer(Message *m)
 bool OSD::require_osd_peer(OpRequestRef& op)
 {
   if (!op->get_req()->get_connection()->peer_is_osd()) {
-    dout(0) << "require_osd_peer received from non-osd " << op->get_req()->get_connection()->get_peer_addr()
+    dout(0) << "require_osd_peer received from non-osd "
+	    << op->get_req()->get_connection()->get_peer_addr()
 	    << " " << *op->get_req() << dendl;
     return false;
   }
@@ -6733,13 +6735,15 @@ bool OSD::require_same_or_newer_map(OpRequestRef& op, epoch_t epoch,
 				    bool is_fast_dispatch)
 {
   Message *m = op->get_req();
-  dout(15) << "require_same_or_newer_map " << epoch << " (i am " << osdmap->get_epoch() << ") " << m << dendl;
+  dout(15) << "require_same_or_newer_map " << epoch
+	   << " (i am " << osdmap->get_epoch() << ") " << m << dendl;
 
   assert(osd_lock.is_locked());
 
   // do they have a newer map?
   if (epoch > osdmap->get_epoch()) {
-    dout(7) << "waiting for newer map epoch " << epoch << " > my " << osdmap->get_epoch() << " with " << m << dendl;
+    dout(7) << "waiting for newer map epoch " << epoch
+	    << " > my " << osdmap->get_epoch() << " with " << m << dendl;
     wait_for_new_map(op);
     return false;
   }
