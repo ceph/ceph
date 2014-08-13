@@ -437,6 +437,23 @@ def list_partitions(basename):
             partitions.append(name)
     return partitions
 
+def get_partition_base(dev):
+    """
+    Get the base device for a partition
+    """
+    dev = os.path.realpath(dev)
+    if not stat.S_ISBLK(os.lstat(dev).st_mode):
+        raise Error('not a block device', dev)
+
+    name = get_dev_name(dev)
+    if os.path.exists(os.path.join('/sys/block', name)):
+        raise Error('not a partition', dev)
+
+    # find the base
+    for basename in os.listdir('/sys/block'):
+        if os.path.exists(os.path.join('/sys/block', basename, name)):
+            return '/dev/' + basename
+    raise Error('no parent device for partition', dev)
 
 def is_partition(dev):
     """
