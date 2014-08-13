@@ -727,11 +727,11 @@ int usage()
   cerr << "  --rgw-region=<region>     region in which radosgw runs\n";
   cerr << "  --rgw-zone=<zone>         zone in which radosgw runs\n";
   cerr << "  --rgw-socket-path=<path>  specify a unix domain socket path\n";
-  generic_server_usage();
   cerr << "  -m monaddress[:port]      connect to specified monitor\n";
   cerr << "  --keyring=<path>          path to radosgw keyring\n";
   cerr << "  --logfile=<logfile>       file to log debug output\n";
   cerr << "  --debug-rgw=<log-level>/<memory-level>  set radosgw debug level\n";
+  generic_server_usage();
 
   return 0;
 }
