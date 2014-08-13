@@ -11844,6 +11844,8 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
     } else {
       stat.num_bytes += oi.size;
     }
+    if (soid.nspace == cct->_conf->osd_hit_set_namespace)
+      stat.num_bytes_hit_set_archive += oi.size;
 
     if (!soid.is_snapdir()) {
       if (oi.is_dirty())
@@ -11982,7 +11984,8 @@ void ReplicatedPG::_scrub_finish()
 	   << scrub_cstat.sum.num_objects_dirty << "/" << info.stats.stats.sum.num_objects_dirty << " dirty, "
 	   << scrub_cstat.sum.num_objects_omap << "/" << info.stats.stats.sum.num_objects_omap << " omap, "
 	   << scrub_cstat.sum.num_objects_hit_set_archive << "/" << info.stats.stats.sum.num_objects_hit_set_archive << " hit_set_archive, "
-	   << scrub_cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes."
+	   << scrub_cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes,"
+	   << scrub_cstat.sum.num_bytes_hit_set_archive << "/" << info.stats.stats.sum.num_bytes_hit_set_archive << " hit_set_archive bytes."
 	   << dendl;
 
   if (scrub_cstat.sum.num_objects != info.stats.stats.sum.num_objects ||
@@ -11993,6 +11996,8 @@ void ReplicatedPG::_scrub_finish()
        !info.stats.omap_stats_invalid) ||
       (scrub_cstat.sum.num_objects_hit_set_archive != info.stats.stats.sum.num_objects_hit_set_archive &&
        !info.stats.hitset_stats_invalid) ||
+      (scrub_cstat.sum.num_bytes_hit_set_archive != info.stats.stats.sum.num_bytes_hit_set_archive &&
+       !info.stats.hitset_bytes_stats_invalid) ||
       scrub_cstat.sum.num_whiteouts != info.stats.stats.sum.num_whiteouts ||
       scrub_cstat.sum.num_bytes != info.stats.stats.sum.num_bytes) {
     osd->clog.error() << info.pgid << " " << mode
@@ -12003,7 +12008,8 @@ void ReplicatedPG::_scrub_finish()
 		      << scrub_cstat.sum.num_objects_omap << "/" << info.stats.stats.sum.num_objects_omap << " omap, "
 		      << scrub_cstat.sum.num_objects_hit_set_archive << "/" << info.stats.stats.sum.num_objects_hit_set_archive << " hit_set_archive, "
 		      << scrub_cstat.sum.num_whiteouts << "/" << info.stats.stats.sum.num_whiteouts << " whiteouts, "
-		      << scrub_cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes.\n";
+		      << scrub_cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes,"
+		      << scrub_cstat.sum.num_bytes_hit_set_archive << "/" << info.stats.stats.sum.num_bytes_hit_set_archive << " hit_set_archive bytes.\n";
     ++scrubber.shallow_errors;
 
     if (repair) {
@@ -12012,6 +12018,7 @@ void ReplicatedPG::_scrub_finish()
       info.stats.dirty_stats_invalid = false;
       info.stats.omap_stats_invalid = false;
       info.stats.hitset_stats_invalid = false;
+      info.stats.hitset_bytes_stats_invalid = false;
       publish_stats_to_osd();
       share_pg_info();
     }
