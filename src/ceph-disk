@@ -2131,6 +2131,25 @@ def get_dev_fs(dev):
         return None
 
 def get_partition_type(part):
+    """
+    Get the GPT partition type UUID.  If we have an old blkid and can't
+    get it that way, use sgdisk and use the description instead (and hope
+    dmcrypt isn't being used).
+    """
+    blkid, _ = command(
+        [
+            'blkid',
+            '-p',
+            '-o', 'udev',
+            part,
+        ]
+    )
+    for line in blkid.splitlines():
+        (key, value) = line.split('=')
+        if key == 'ID_PART_ENTRY_TYPE':
+            return value
+
+    # bah, fall back to sgdisk.
     (base, partnum) = re.match('(\D+)(\d+)', part).group(1, 2)
     sgdisk, _ = command(
         [
@@ -2146,7 +2165,13 @@ def get_partition_type(part):
             num = m.group(1)
             if num != partnum:
                 continue
-            return m.group(2)
+            desc = m.group(2)
+            # assume unencrypted ... blkid has failed us :(
+            if desc == 'ceph data':
+                return OSD_UUID
+            if desc == 'ceph journal':
+                return JOURNAL_UUID
+
     return None
 
 def get_partition_uuid(dev):
@@ -2191,7 +2216,7 @@ def list_dev(dev, uuid_map, journal_map):
     path = is_mounted(dev)
 
     desc = []
-    if ptype == 'ceph data':
+    if ptype == OSD_UUID:
         if path:
             desc.append('active')
             desc.extend(more_osd_info(path, uuid_map))
@@ -2212,7 +2237,7 @@ def list_dev(dev, uuid_map, journal_map):
             desc = ['ceph data'] + desc
         else:
             desc = ['ceph data', 'unprepared']
-    elif ptype == 'ceph journal':
+    elif ptype == JOURNAL_UUID:
         desc.append('ceph journal')
         part_uuid = get_partition_uuid(dev)
         if part_uuid and part_uuid in journal_map:
@@ -2245,7 +2270,7 @@ def main_list(args):
             if part_uuid:
                 uuid_map[part_uuid] = dev
             ptype = get_partition_type(dev)
-            if ptype == 'ceph data':
+            if ptype == OSD_UUID:
                 fs_type = get_dev_fs(dev)
                 if fs_type is not None:
                     try:
