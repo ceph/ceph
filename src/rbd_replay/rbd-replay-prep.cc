@@ -864,7 +864,7 @@ private:
       action_id_t ionum = next_id();
       IO::ptr io(new CloseImageIO(ionum, ts, threadID, thread->pending_io(), imagectx));
       io->add_dependencies(m_recent_completions);
-      thread->issued_io(thread->pending_io(), m_threads);
+      thread->issued_io(io, m_threads);
       m_ios.push_back(thread->pending_io());
     } else if (strcmp(event_name, "librbd:close_image_exit") == 0) {
       IO::ptr completionIO(thread->pending_io()->create_completion(ts, threadID));
