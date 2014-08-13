@@ -477,41 +477,42 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(failed, bl);
     ::encode(stopped, bl);
     ::encode(last_failure_osd_epoch, bl);
-  } else {// have MDS encoding feature!
-    ENCODE_START(5, 5, bl);
-    ::encode(epoch, bl);
-    ::encode(flags, bl);
-    ::encode(last_failure, bl);
-    ::encode(root, bl);
-    ::encode(session_timeout, bl);
-    ::encode(session_autoclose, bl);
-    ::encode(max_file_size, bl);
-    ::encode(max_mds, bl);
-    ::encode(mds_info, bl, features);
-    ::encode(data_pools, bl);
-    ::encode(cas_pool, bl);
-    ::encode(enabled, bl);
-    ::encode(fs_name, bl);
-
-    // kclient ignores everything from here
-    __u16 ev = 7;
-    ::encode(ev, bl);
-    ::encode(compat, bl);
-    ::encode(metadata_pool, bl);
-    ::encode(created, bl);
-    ::encode(modified, bl);
-    ::encode(tableserver, bl);
-    ::encode(in, bl);
-    ::encode(inc, bl);
-    ::encode(up, bl);
-    ::encode(failed, bl);
-    ::encode(stopped, bl);
-    ::encode(last_failure_osd_epoch, bl);
-    ::encode(ever_allowed_snaps, bl);
-    ::encode(explicitly_allowed_snaps, bl);
-    ::encode(inline_data_enabled, bl);
-    ENCODE_FINISH(bl);
+    return;
   }
+
+  ENCODE_START(5, 5, bl);
+  ::encode(epoch, bl);
+  ::encode(flags, bl);
+  ::encode(last_failure, bl);
+  ::encode(root, bl);
+  ::encode(session_timeout, bl);
+  ::encode(session_autoclose, bl);
+  ::encode(max_file_size, bl);
+  ::encode(max_mds, bl);
+  ::encode(mds_info, bl, features);
+  ::encode(data_pools, bl);
+  ::encode(cas_pool, bl);
+  ::encode(enabled, bl);
+  ::encode(fs_name, bl);
+
+  // kclient ignores everything from here
+  __u16 ev = 7;
+  ::encode(ev, bl);
+  ::encode(compat, bl);
+  ::encode(metadata_pool, bl);
+  ::encode(created, bl);
+  ::encode(modified, bl);
+  ::encode(tableserver, bl);
+  ::encode(in, bl);
+  ::encode(inc, bl);
+  ::encode(up, bl);
+  ::encode(failed, bl);
+  ::encode(stopped, bl);
+  ::encode(last_failure_osd_epoch, bl);
+  ::encode(ever_allowed_snaps, bl);
+  ::encode(explicitly_allowed_snaps, bl);
+  ::encode(inline_data_enabled, bl);
+  ENCODE_FINISH(bl);
 }
 
 void MDSMap::decode(bufferlist::iterator& p)
