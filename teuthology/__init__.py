@@ -18,10 +18,18 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-def setup_log_file(logger, log_path):
-    log_formatter = logging.Formatter(
+def setup_log_file(log_path):
+    root_logger = logging.getLogger()
+    handlers = root_logger.handlers
+    for handler in handlers:
+        if isinstance(handler, logging.FileHandler) and \
+                handler.stream.name == log_path:
+            log.debug("Already logging to %s; not adding new handler",
+                      log_path)
+            return
+    formatter = logging.Formatter(
         fmt=u'%(asctime)s.%(msecs)03d %(levelname)s:%(name)s:%(message)s',
         datefmt='%Y-%m-%dT%H:%M:%S')
-    log_handler = logging.FileHandler(filename=log_path)
-    log_handler.setFormatter(log_formatter)
-    logger.addHandler(log_handler)
+    handler = logging.FileHandler(filename=log_path)
+    handler.setFormatter(formatter)
+    root_logger.addHandler(handler)

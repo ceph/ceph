@@ -23,9 +23,7 @@ def set_up_logging(ctx):
     if ctx.archive is not None:
         os.mkdir(ctx.archive)
 
-        teuthology.setup_log_file(
-            logging.getLogger(),
-            os.path.join(ctx.archive, 'teuthology.log'))
+        teuthology.setup_log_file(os.path.join(ctx.archive, 'teuthology.log'))
 
     install_except_hook()
 

@@ -24,7 +24,7 @@ def main(args):
     misc.read_config(args)
 
     log_path = os.path.join(args.archive_dir, 'results.log')
-    teuthology.setup_log_file(log, log_path)
+    teuthology.setup_log_file(log_path)
 
     try:
         results(args)

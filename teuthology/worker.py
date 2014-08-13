@@ -61,7 +61,7 @@ def main(ctx):
 
     log_file_path = os.path.join(ctx.log_dir, 'worker.{tube}.{pid}'.format(
         pid=os.getpid(), tube=ctx.tube,))
-    setup_log_file(log, log_file_path)
+    setup_log_file(log_file_path)
 
     install_except_hook()
 

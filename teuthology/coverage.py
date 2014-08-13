@@ -98,7 +98,7 @@ def main(args):
     read_config(args)
 
     log_path = os.path.join(args.test_dir, 'coverage.log')
-    teuthology.setup_log_file(log, log_path)
+    teuthology.setup_log_file(log_path)
 
     try:
         analyze(args)
