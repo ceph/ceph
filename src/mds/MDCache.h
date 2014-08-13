@@ -276,6 +276,7 @@ public:
   void project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accounted_rstat,
 				   snapid_t ofirst, snapid_t last, 
 				   CInode *pin, bool cow_head);
+  void broadcast_quota_to_client(CInode *in);
   void predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 				CInode *in, CDir *parent,
 				int flags, int linkunlink=0,

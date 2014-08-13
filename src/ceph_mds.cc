@@ -156,7 +156,8 @@ int main(int argc, const char **argv)
     CEPH_FEATURE_MDS_INLINE_DATA |
     CEPH_FEATURE_PGID64 |
     CEPH_FEATURE_MSG_AUTH |
-    CEPH_FEATURE_EXPORT_PEER;
+    CEPH_FEATURE_EXPORT_PEER |
+    CEPH_FEATURE_MDS_QUOTA;
   uint64_t required =
     CEPH_FEATURE_OSDREPLYMUX;
   messenger->set_default_policy(Messenger::Policy::lossy_client(supported, required));

@@ -50,6 +50,7 @@
 
 #include "messages/MExportCaps.h"
 #include "messages/MExportCapsAck.h"
+#include "messages/MGatherCaps.h"
 
 
 /*
@@ -124,6 +125,9 @@ void Migrator::dispatch(Message *m)
     // caps
   case MSG_MDS_EXPORTCAPS:
     handle_export_caps(static_cast<MExportCaps*>(m));
+    break;
+  case MSG_MDS_GATHERCAPS:
+    handle_gather_caps(static_cast<MGatherCaps*>(m));
     break;
 
   default:
@@ -2987,6 +2991,26 @@ void Migrator::export_caps(CInode *in)
   encode_export_inode_caps(in, false, ex->cap_bl, ex->client_map);
 
   mds->send_message_mds(ex, dest);
+}
+
+void Migrator::handle_gather_caps(MGatherCaps *m)
+{
+  CInode *in = cache->get_inode(m->ino);
+
+  if (!in)
+    goto out;
+
+  dout(10) << "handle_gather_caps " << *m << " from " << m->get_source()
+           << " on " << *in
+	   << dendl;
+  if (in->is_any_caps() &&
+      !in->is_auth() &&
+      !in->is_ambiguous_auth() &&
+      !in->state_test(CInode::STATE_EXPORTINGCAPS))
+    export_caps(in);
+
+out:
+  m->put();
 }
 
 class C_M_LoggedImportCaps : public Context {

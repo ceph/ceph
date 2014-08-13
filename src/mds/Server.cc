@@ -3640,6 +3640,47 @@ int Server::parse_layout_vxattr(string name, string value, ceph_file_layout *lay
   return 0;
 }
 
+int Server::parse_quota_vxattr(string name, string value, quota_info_t *quota)
+{
+  dout(20) << "parse_quota_vxattr name " << name << " value '" << value << "'" << dendl;
+  try {
+    if (name == "quota") {
+      string::iterator begin = value.begin();
+      string::iterator end = value.end();
+      keys_and_values<string::iterator> p;    // create instance of parser
+      std::map<string, string> m;             // map to receive results
+      if (!qi::parse(begin, end, p, m)) {     // returns true if successful
+        return -EINVAL;
+      }
+      string left(begin, end);
+      dout(10) << " parsed " << m << " left '" << left << "'" << dendl;
+      if (begin != end)
+        return -EINVAL;
+      for (map<string,string>::iterator q = m.begin(); q != m.end(); ++q) {
+        int r = parse_quota_vxattr(string("quota.") + q->first, q->second, quota);
+        if (r < 0)
+          return r;
+      }
+    } else if (name == "quota.max_bytes") {
+      quota->max_bytes = boost::lexical_cast<unsigned>(value);
+    } else if (name == "quota.max_files") {
+      quota->max_files = boost::lexical_cast<unsigned>(value);
+    } else {
+      dout(10) << " unknown quota vxattr " << name << dendl;
+      return -EINVAL;
+    }
+  } catch (boost::bad_lexical_cast const&) {
+    dout(10) << "bad vxattr value, unable to parse int for " << name << dendl;
+    return -EINVAL;
+  }
+
+  if (!quota->is_valid()) {
+    dout(10) << "bad quota" << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
 void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 			       ceph_file_layout *dir_layout,
 			       set<SimpleLock*> rdlocks,
@@ -3652,9 +3693,10 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
   string value (bl.c_str(), bl.length());
   dout(10) << "handle_set_vxattr " << name << " val " << value.length() << " bytes on " << *cur << dendl;
 
-  // layout?
+  // layout or quota
   if (name.find("ceph.file.layout") == 0 ||
-      name.find("ceph.dir.layout") == 0) {
+      name.find("ceph.dir.layout") == 0 ||
+      name.find("ceph.quota") == 0) {
     inode_t *pi;
     string rest;
     int64_t old_pool = -1;
@@ -3696,7 +3738,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 
       pi = cur->project_inode();
       cur->get_projected_inode()->layout = layout;
-    } else {
+    } else if (name.find("ceph.file.layout") == 0) {
       if (!cur->is_file()) {
 	reply_request(mdr, -EINVAL);
 	return;
@@ -3729,6 +3771,27 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
       pi->add_old_pool(old_pool);
       pi->layout = layout;
       pi->ctime = mdr->get_op_stamp();
+    } else if (name.find("ceph.quota") == 0) {
+      if (!cur->is_dir() || cur->is_root()) {
+        reply_request(mdr, -EINVAL);
+        return;
+      }
+
+      quota_info_t quota = cur->get_projected_inode()->quota;
+
+      rest = name.substr(name.find("quota"));
+      int r = parse_quota_vxattr(rest, value, &quota);
+      if (r < 0) {
+        reply_request(mdr, r);
+        return;
+      }
+
+      xlocks.insert(&cur->policylock);
+      if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+        return;
+
+      pi = cur->project_inode();
+      cur->get_projected_inode()->quota = quota;
     }
 
     pi->version = cur->pre_dirty();

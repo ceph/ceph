@@ -308,6 +308,8 @@ protected:
   // cache
   ceph::unordered_map<vinodeno_t, Inode*> inode_map;
   Inode*                 root;
+  map<Inode*, Inode*>    root_parents;
+  Inode*                 root_ancestor;
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
 
   // all inodes with caps sit on either cap_list or delayed_caps.
@@ -416,6 +418,12 @@ protected:
   void ms_handle_remote_reset(Connection *con);
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
 
+  void put_qtree(Inode *in);
+  void invalidate_quota_tree(Inode *in);
+  Inode* get_quota_root(Inode *in);
+  bool is_quota_files_exceeded(Inode *in);
+  bool is_quota_bytes_exceeded(Inode *in);
+  bool is_quota_bytes_approaching(Inode *in);
 
  public:
   void set_filer_flags(int flags);
@@ -461,6 +469,7 @@ protected:
   void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater, 
 			      vector<snapid_t>& snaps);
 
+  void handle_quota(struct MClientQuota *m);
   void handle_snap(struct MClientSnap *m);
   void handle_caps(class MClientCaps *m);
   void handle_cap_import(MetaSession *session, Inode *in, class MClientCaps *m);

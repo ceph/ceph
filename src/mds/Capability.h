@@ -223,6 +223,7 @@ public:
   snapid_t client_follows;
   version_t client_xattr_version;
   version_t client_inline_version;
+  nest_info_t client_rstat;
   
   xlist<Capability*>::item item_session_caps;
   xlist<Capability*>::item item_snaprealm_caps;
