@@ -199,7 +199,9 @@ void *systest_runnable_pthread_helper(void *arg)
 {
   SysTestRunnable *st = static_cast < SysTestRunnable * >(arg);
   st->update_id_str(true);
+  printf("%s: starting.\n", st->get_id_str());
   int ret = st->run();
+  printf("%s: shutting down.\n", st->get_id_str());
   return (void*)(uintptr_t)ret;
 }
 
