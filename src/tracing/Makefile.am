@@ -6,18 +6,10 @@ if WITH_LTTNG
 dist_noinst_DATA = \
 	librados.tp \
 	librbd.tp \
-	mutex.tp \
 	oprequest.tp \
 	osd.tp \
 	pg.tp \
 	objectstore.tp
-
-libcommon_tp_la_SOURCES = \
-	mutex.c \
-	mutex.h
-libcommon_tp_la_LIBADD = -llttng-ust -ldl
-libcommon_tp_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
-libcommon_tp_la_LDFLAGS =
 
 libosd_tp_la_SOURCES = \
 	oprequest.c \
@@ -52,7 +44,6 @@ libos_tp_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
 libos_tp_la_LDFLAGS =
 
 noinst_LTLIBRARIES = \
-	libcommon_tp.la \
 	libosd_tp.la \
 	librados_tp.la \
 	librbd_tp.la \
@@ -61,14 +52,12 @@ noinst_LTLIBRARIES = \
 BUILT_SOURCES = \
 	librados.h \
 	librbd.h \
-	mutex.h \
 	oprequest.h \
 	osd.h \
 	pg.h \
 	objectstore.h
 
 CLEANFILES = \
-	$(libcommon_tp_la_SOURCES) \
 	$(libosd_tp_la_SOURCES) \
 	$(librados_tp_la_SOURCES) \
 	$(librbd_tp_la_SOURCES) \
