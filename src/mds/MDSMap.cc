@@ -477,41 +477,42 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(failed, bl);
     ::encode(stopped, bl);
     ::encode(last_failure_osd_epoch, bl);
-  } else {// have MDS encoding feature!
-    ENCODE_START(5, 5, bl);
-    ::encode(epoch, bl);
-    ::encode(flags, bl);
-    ::encode(last_failure, bl);
-    ::encode(root, bl);
-    ::encode(session_timeout, bl);
-    ::encode(session_autoclose, bl);
-    ::encode(max_file_size, bl);
-    ::encode(max_mds, bl);
-    ::encode(mds_info, bl, features);
-    ::encode(data_pools, bl);
-    ::encode(cas_pool, bl);
-    ::encode(enabled, bl);
-    ::encode(fs_name, bl);
-
-    // kclient ignores everything from here
-    __u16 ev = 7;
-    ::encode(ev, bl);
-    ::encode(compat, bl);
-    ::encode(metadata_pool, bl);
-    ::encode(created, bl);
-    ::encode(modified, bl);
-    ::encode(tableserver, bl);
-    ::encode(in, bl);
-    ::encode(inc, bl);
-    ::encode(up, bl);
-    ::encode(failed, bl);
-    ::encode(stopped, bl);
-    ::encode(last_failure_osd_epoch, bl);
-    ::encode(ever_allowed_snaps, bl);
-    ::encode(explicitly_allowed_snaps, bl);
-    ::encode(inline_data_enabled, bl);
-    ENCODE_FINISH(bl);
+    return;
   }
+
+  ENCODE_START(5, 4, bl);
+  ::encode(epoch, bl);
+  ::encode(flags, bl);
+  ::encode(last_failure, bl);
+  ::encode(root, bl);
+  ::encode(session_timeout, bl);
+  ::encode(session_autoclose, bl);
+  ::encode(max_file_size, bl);
+  ::encode(max_mds, bl);
+  ::encode(mds_info, bl, features);
+  ::encode(data_pools, bl);
+  ::encode(cas_pool, bl);
+
+  // kclient ignores everything from here
+  __u16 ev = 8;
+  ::encode(ev, bl);
+  ::encode(compat, bl);
+  ::encode(metadata_pool, bl);
+  ::encode(created, bl);
+  ::encode(modified, bl);
+  ::encode(tableserver, bl);
+  ::encode(in, bl);
+  ::encode(inc, bl);
+  ::encode(up, bl);
+  ::encode(failed, bl);
+  ::encode(stopped, bl);
+  ::encode(last_failure_osd_epoch, bl);
+  ::encode(ever_allowed_snaps, bl);
+  ::encode(explicitly_allowed_snaps, bl);
+  ::encode(inline_data_enabled, bl);
+  ::encode(enabled, bl);
+  ::encode(fs_name, bl);
+  ENCODE_FINISH(bl);
 }
 
 void MDSMap::decode(bufferlist::iterator& p)
@@ -540,20 +541,6 @@ void MDSMap::decode(bufferlist::iterator& p)
   } else {
     ::decode(data_pools, p);
     ::decode(cas_pool, p);
-  }
-  if (struct_v >= 5) {
-    ::decode(enabled, p);
-    ::decode(fs_name, p);
-  } else {
-    if (epoch > 1) {
-      // If an MDS has ever been started, epoch will be greater than 1,
-      // assume filesystem is enabled.
-      enabled = true;
-    } else {
-      // Upgrading from a cluster that never used an MDS, switch off
-      // filesystem until it's explicitly enabled.
-      enabled = false;
-    }
   }
 
   // kclient ignores everything from here
@@ -590,5 +577,21 @@ void MDSMap::decode(bufferlist::iterator& p)
   }
   if (ev >= 7)
     ::decode(inline_data_enabled, p);
+
+  if (ev >= 8) {
+    assert(struct_v >= 5);
+    ::decode(enabled, p);
+    ::decode(fs_name, p);
+  } else {
+    if (epoch > 1) {
+      // If an MDS has ever been started, epoch will be greater than 1,
+      // assume filesystem is enabled.
+      enabled = true;
+    } else {
+      // Upgrading from a cluster that never used an MDS, switch off
+      // filesystem until it's explicitly enabled.
+      enabled = false;
+    }
+  }
   DECODE_FINISH(p);
 }
