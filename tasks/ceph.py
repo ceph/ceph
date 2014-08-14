@@ -12,6 +12,7 @@ import os
 import json
 import time
 
+from ceph_manager import CephManager
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.orchestra import run
@@ -1227,6 +1228,13 @@ def task(ctx, config):
         try:
             if config.get('wait-for-healthy', True):
                 healthy(ctx=ctx, config=None)
+            first_mon = teuthology.get_first_mon(ctx, config)
+            (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+            ctx.manager = CephManager(
+                mon,
+                ctx=ctx,
+                logger=log.getChild('ceph_manager'),
+            )
             yield
         finally:
             if config.get('wait-for-scrub', True):
