@@ -460,10 +460,20 @@ void Paxos::handle_last(MMonPaxos *last)
       mon->timer.cancel_event(collect_timeout_event);
       collect_timeout_event = 0;
 
-      // share committed values?
+      // is everyone contiguous and up to date?
       for (map<int,version_t>::iterator p = peer_last_committed.begin();
 	   p != peer_last_committed.end();
 	   ++p) {
+	if (p->second < first_committed && first_committed > 1) {
+	  dout(5) << __func__
+		  << " peon " << p->first
+		  << " last_committed (" << p->second
+		  << ") is too low for our first_committed (" << first_committed
+		  << ") -- bootstrap!" << dendl;
+	  last->put();
+	  mon->bootstrap();
+	  return;
+	}
 	if (p->second < last_committed) {
 	  // share committed values
 	  dout(10) << " sending commit to mon." << p->first << dendl;
