@@ -86,7 +86,7 @@ def ship_apache_configs(ctx, config, role_endpoints):
         system_type = teuthology.get_system_type(remote)
         if not conf:
             conf = {}
-        idle_timeout = conf.get('idle_timeout', 30)
+        idle_timeout = conf.get('idle_timeout', ctx.rgw.default_idle_timeout)
         if system_type == 'deb':
             mod_path = '/usr/lib/apache2/modules'
             print_continue = 'on'
@@ -706,6 +706,7 @@ def task(ctx, config):
                 rgw region root pool: .rgw.rroot.bar
                 rgw zone root pool: .rgw.zroot.bar-secondary
         - rgw:
+            default_idle_timeout: 30
             ec-data-pool: true
             regions:
               foo:
@@ -763,6 +764,10 @@ def task(ctx, config):
     if 'ec-data-pool' in config:
         ctx.rgw.ec_data_pool = bool(config['ec-data-pool'])
         del config['ec-data-pool']
+    ctx.rgw.default_idle_timeout = 30
+    if 'idle_timeout' in config:
+        ctx.rgw.default_idle_timeout = int(config['idle_timeout'])
+        del config['idle_timeout']
     ctx.rgw.cache_pools = False
     if 'cache-pools' in config:
         ctx.rgw.cache_pools = bool(config['cache-pools'])
