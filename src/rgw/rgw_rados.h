@@ -559,6 +559,8 @@ public:
   virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, bool *again) = 0;
   virtual int throttle_data(void *handle, bool need_to_wait) = 0;
   virtual int complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
+
+  CephContext *ctx();
 };
 
 class RGWPutObjProcessor_Plain : public RGWPutObjProcessor
