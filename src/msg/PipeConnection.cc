@@ -69,6 +69,7 @@ void PipeConnection::reset_pipe(Pipe *p)
 
 int PipeConnection::send_message(Message *m)
 {
+  assert(msgr);
   return static_cast<SimpleMessenger*>(msgr)->send_message(m, this);
 }
 
@@ -79,10 +80,12 @@ void PipeConnection::send_keepalive()
 
 void PipeConnection::mark_down()
 {
-  static_cast<SimpleMessenger*>(msgr)->mark_down(this);
+  if (msgr)
+    static_cast<SimpleMessenger*>(msgr)->mark_down(this);
 }
 
 void PipeConnection::mark_disposable()
 {
-  static_cast<SimpleMessenger*>(msgr)->mark_disposable(this);
+  if (msgr)
+    static_cast<SimpleMessenger*>(msgr)->mark_disposable(this);
 }
