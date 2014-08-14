@@ -1184,6 +1184,13 @@ bool Locker::_rdlock_kick(SimpleLock *lock, bool as_anon)
       return false;
     }
   }
+  if (lock->get_type() == CEPH_LOCK_IFILE) {
+    CInode *in = static_cast<CInode *>(lock->get_parent());
+    if (in->state_test(CInode::STATE_RECOVERING)) {
+      mds->mdcache->recovery_queue.prioritize(in);
+    }
+  }
+
   return false;
 }
 
@@ -1370,6 +1377,11 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequestRef& mut, bool nowait)
       return true;
     }
 
+    if (lock->get_type() == CEPH_LOCK_IFILE &&
+	in->state_test(CInode::STATE_RECOVERING)) {
+      mds->mdcache->recovery_queue.prioritize(in);
+    }
+
     if (!lock->is_stable())
       break;
 
@@ -1505,6 +1517,13 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequestRef& mut)
 	return true;
       }
       
+      if (lock->get_type() == CEPH_LOCK_IFILE) {
+	CInode *in = static_cast<CInode*>(lock->get_parent());
+	if (in->state_test(CInode::STATE_RECOVERING)) {
+	  mds->mdcache->recovery_queue.prioritize(in);
+	}
+      }
+
       if (!lock->is_stable() && !(lock->get_state() == LOCK_XLOCKDONE &&
 				  lock->get_xlock_by_client() == client))
 	break;
