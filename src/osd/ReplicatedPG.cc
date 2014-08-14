@@ -1637,7 +1637,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     }
 
     // Do writeback to the cache tier for writes
-    if (op->may_write()) {
+    if (op->may_write() || write_ordered) {
       if (agent_state &&
 	  agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
 	dout(20) << __func__ << " cache pool full, waiting" << dendl;
