@@ -10,6 +10,7 @@ import threading
 import os
 from teuthology import misc as teuthology
 from tasks.scrub import Scrubber
+from teuthology.orchestra.remote import Remote
 
 def make_admin_daemon_dir(ctx, remote):
     """
@@ -76,6 +77,7 @@ class Thrasher:
         self.clean_wait = self.config.get('clean_wait', 0)
         self.minin = self.config.get("min_in", 3)
         self.ceph_objectstore_tool = self.config.get('ceph_objectstore_tool', True)
+        self.chance_move_pg = self.config.get('chance_move_pg', 1.0)
 
         num_osds = self.in_osds + self.out_osds
         self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * num_osds
@@ -121,36 +123,62 @@ class Thrasher:
             (remote,) = self.ceph_manager.ctx.cluster.only('osd.{o}'.format(o=osd)).remotes.iterkeys()
             FSPATH = self.ceph_manager.get_filepath()
             JPATH = os.path.join(FSPATH, "journal")
+            exp_osd = imp_osd = osd
+            exp_remote = imp_remote = remote
+            # If an older osd is available we'll move a pg from there
+            if len(self.dead_osds) > 1 and random.random() < self.chance_move_pg:
+                exp_osd = random.choice(self.dead_osds[:-1])
+                (exp_remote,) = self.ceph_manager.ctx.cluster.only('osd.{o}'.format(o=exp_osd)).remotes.iterkeys()
             prefix = "sudo ceph_objectstore_tool --data-path {fpath} --journal-path {jpath} ".format(fpath=FSPATH, jpath=JPATH)
-            cmd = (prefix + "--op list-pgs").format(id=osd)
-            proc = remote.run(args=cmd, wait=True, check_status=True, stdout=StringIO())
-            if proc.exitstatus != 0:
-                self.log("Failed to get pg list for osd.{osd}".format(osd=osd))
-                return
+            cmd = (prefix + "--op list-pgs").format(id=exp_osd)
+            proc = exp_remote.run(args=cmd, wait=True, check_status=True, stdout=StringIO())
+            if proc.exitstatus:
+                raise Exception("ceph_objectstore_tool: exp list-pgs failure with status {ret}".format(ret=proc.exitstatus))
             pgs = proc.stdout.getvalue().split('\n')[:-1]
             if len(pgs) == 0:
-                self.log("No PGs found for osd.{osd}".format(osd=osd))
+                self.log("No PGs found for osd.{osd}".format(osd=exp_osd))
                 return
             pg = random.choice(pgs)
-            fpath = os.path.join(os.path.join(teuthology.get_testdir(self.ceph_manager.ctx), "data"), "exp.{pg}.{id}".format(pg=pg,id=osd))
+            exp_path = os.path.join(os.path.join(teuthology.get_testdir(self.ceph_manager.ctx), "data"), "exp.{pg}.{id}".format(pg=pg, id=exp_osd))
             # export
-            success = False
-            cmd = (prefix + "--op export --pgid {pg} --file {file}").format(id=osd, pg=pg, file=fpath)
-            proc = remote.run(args=cmd)
-            if proc.exitstatus == 0:
-                # remove
-                cmd = (prefix + "--op remove --pgid {pg}").format(id=osd, pg=pg)
-                proc = remote.run(args=cmd)
-                if proc.exitstatus == 0:
-                    # import
-                    cmd = (prefix + "--op import --file {file}").format(id=osd, file=fpath)
-                    remote.run(args=cmd)
-                    if proc.exitstatus == 0:
-                        success = True
-            cmd = "rm -f {file}".format(file=fpath)
-            remote.run(args=cmd)
-            if not success:
-                raise Exception("ceph_objectstore_tool: failure with status {ret}".format(ret=proc.exitstatus))
+            cmd = (prefix + "--op export --pgid {pg} --file {file}").format(id=exp_osd, pg=pg, file=exp_path)
+            proc = exp_remote.run(args=cmd)
+            if proc.exitstatus:
+                raise Exception("ceph_objectstore_tool: export failure with status {ret}".format(ret=proc.exitstatus))
+            # remove
+            cmd = (prefix + "--op remove --pgid {pg}").format(id=exp_osd, pg=pg)
+            proc = exp_remote.run(args=cmd)
+            if proc.exitstatus:
+                raise Exception("ceph_objectstore_tool: remove failure with status {ret}".format(ret=proc.exitstatus))
+            # If there are at least 2 dead osds we might move the pg
+            if exp_osd != imp_osd:
+                # If pg isn't already on this osd, then we will move it there
+                cmd = (prefix + "--op list-pgs").format(id=imp_osd)
+                proc = imp_remote.run(args=cmd, wait=True, check_status=True, stdout=StringIO())
+                if proc.exitstatus:
+                    raise Exception("ceph_objectstore_tool: imp list-pgs failure with status {ret}".format(ret=proc.exitstatus))
+                pgs = proc.stdout.getvalue().split('\n')[:-1]
+                if pg not in pgs:
+                    self.log("Moving pg {pg} from osd.{fosd} to osd.{tosd}".format(pg=pg, fosd=exp_osd, tosd=imp_osd))
+                    if imp_remote != exp_remote:
+                        # Copy export file to the other machine
+                        self.log("Transfer export file from {srem} to {trem}".format(srem=exp_remote, trem=imp_remote))
+                        tmpexport = Remote.get_file(exp_remote, exp_path)
+                        Remote.put_file(imp_remote, tmpexport, exp_path)
+                        os.remove(tmpexport)
+                else:
+                    # Can't move the pg after all
+                    imp_osd = exp_osd
+                    imp_remote = exp_remote
+            # import
+            cmd = (prefix + "--op import --file {file}").format(id=imp_osd, file=exp_path)
+            imp_remote.run(args=cmd)
+            if proc.exitstatus:
+                raise Exception("ceph_objectstore_tool: import failure with status {ret}".format(ret=proc.exitstatus))
+            cmd = "rm -f {file}".format(file=exp_path)
+            exp_remote.run(args=cmd)
+            if imp_remote != exp_remote:
+                imp_remote.run(args=cmd)
 
 
     def blackhole_kill_osd(self, osd=None):
