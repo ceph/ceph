@@ -5,7 +5,7 @@ import teuthology.schedule
 
 doc = """
 usage: teuthology-schedule -h
-       teuthology-schedule [options] [--] [<conf_file> ...]
+       teuthology-schedule [options] --name <name> [--] [<conf_file> ...]
 
 Schedule ceph integration tests
 
