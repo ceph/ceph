@@ -55,7 +55,7 @@ void RecoveryQueue::advance()
   dout(10) << "RecoveryQueue::advance " << file_recover_queue.size() << " queued, "
 	   << file_recovering.size() << " recovering" << dendl;
 
-  while (file_recovering.size() < 5 &&
+  while (file_recovering.size() < g_conf->mds_max_file_recover &&
 	 !file_recover_queue.empty()) {
     CInode *in = *file_recover_queue.begin();
     file_recover_queue.erase(in);
