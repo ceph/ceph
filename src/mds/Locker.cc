@@ -2356,6 +2356,12 @@ void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
       cur->item_open_file.remove_myself();
     }
   } else {
+    if (cur->state_test(CInode::STATE_RECOVERING) &&
+	(cap->wanted() & (CEPH_CAP_FILE_RD |
+			  CEPH_CAP_FILE_WR))) {
+      mds->mdcache->recovery_queue.prioritize(cur);
+    }
+
     if (!cur->item_open_file.is_on_list()) {
       dout(10) << " adding to open file list " << *cur << dendl;
       assert(cur->last == CEPH_NOSNAP);
