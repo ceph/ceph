@@ -569,6 +569,7 @@ function test_mon_osd()
 
   id=`ceph osd create`
   ceph osd lost $id --yes-i-really-mean-it
+  expect_false ceph osd setmaxosd $id
   ceph osd rm $id
 
   uuid=`uuidgen`
