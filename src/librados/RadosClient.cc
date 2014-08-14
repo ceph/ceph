@@ -85,6 +85,13 @@ librados::RadosClient::RadosClient(CephContext *cct_)
 
 int64_t librados::RadosClient::lookup_pool(const char *name)
 {
+  Mutex::Locker l(lock);
+
+  int r = wait_for_osdmap();
+  if (r < 0) {
+    return r;
+  }
+
   const OSDMap *osdmap = objecter->get_osdmap_read();
   int64_t ret = osdmap->lookup_pg_pool_name(name);
   objecter->put_osdmap_read();
@@ -94,6 +101,12 @@ int64_t librados::RadosClient::lookup_pool(const char *name)
 bool librados::RadosClient::pool_requires_alignment(int64_t pool_id)
 {
   Mutex::Locker l(lock);
+
+  int r = wait_for_osdmap();
+  if (r < 0) {
+    return r;
+  }
+
   const OSDMap *osdmap = objecter->get_osdmap_read();
   bool ret = osdmap->have_pg_pool(pool_id) &&
     osdmap->get_pg_pool(pool_id)->requires_aligned_append();
@@ -104,6 +117,12 @@ bool librados::RadosClient::pool_requires_alignment(int64_t pool_id)
 uint64_t librados::RadosClient::pool_required_alignment(int64_t pool_id)
 {
   Mutex::Locker l(lock);
+
+  int r = wait_for_osdmap();
+  if (r < 0) {
+    return r;
+  }
+
   const OSDMap *osdmap = objecter->get_osdmap_read();
   uint64_t ret = osdmap->have_pg_pool(pool_id) ?
     osdmap->get_pg_pool(pool_id)->required_alignment() : 0;
