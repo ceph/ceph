@@ -3046,6 +3046,11 @@ public:
          */
         ret = opstate->renew_state();
         if (ret < 0) {
+          ldout(store->ctx(), 0) << "ERROR: RGWRadosPutObj::handle_data(): failed to renew op state ret=" << ret << dendl;
+          int r = processor->throttle_data(handle, false);
+          if (r < 0) {
+            ldout(store->ctx(), 0) << "ERROR: RGWRadosPutObj::handle_data(): processor->throttle_data() returned " << r << dendl;
+          }
           /* could not renew state! might have been marked as cancelled */
           return ret;
         }
