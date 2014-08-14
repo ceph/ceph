@@ -4522,6 +4522,23 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       goto reply;
     }
 
+    // Don't allow shrinking OSD number as this will cause data loss
+    // and may cause kernel crashes.
+    // Note: setmaxosd sets the maximum OSD number and not the number of OSDs
+    if (newmax < osdmap.get_max_osd()) {
+      // Check if the OSDs exist between current max and new value.
+      // If there are any OSDs exist, then don't allow shrinking number
+      // of OSDs.
+      for (int i = newmax; i <= osdmap.get_max_osd(); i++) {
+        if (osdmap.exists(i)) {
+          err = -EBUSY;
+          ss << "cannot shrink max_osd to " << newmax
+             << " because osd." << i << " (and possibly others) still in use";
+          goto reply;
+        }
+      }
+    }
+
     pending_inc.new_max_osd = newmax;
     ss << "set new max_osd = " << pending_inc.new_max_osd;
     getline(ss, rs);
