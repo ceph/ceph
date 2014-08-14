@@ -103,3 +103,4 @@ about Ceph, see our `Architecture`_ section.
    Development <dev/index>
    release-notes
    Glossary <glossary>
+   wireshark
