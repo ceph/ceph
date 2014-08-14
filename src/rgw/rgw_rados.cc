@@ -876,6 +876,11 @@ int RGWPutObjProcessor::complete(string& etag, time_t *mtime, time_t set_mtime, 
   return 0;
 }
 
+CephContext *RGWPutObjProcessor::ctx()
+{
+  return store->ctx();
+}
+
 RGWPutObjProcessor::~RGWPutObjProcessor()
 {
   if (is_complete)
@@ -3046,6 +3051,11 @@ public:
          */
         ret = opstate->renew_state();
         if (ret < 0) {
+          ldout(processor->ctx(), 0) << "ERROR: RGWRadosPutObj::handle_data(): failed to renew op state ret=" << ret << dendl;
+          int r = processor->throttle_data(handle, false);
+          if (r < 0) {
+            ldout(processor->ctx(), 0) << "ERROR: RGWRadosPutObj::handle_data(): processor->throttle_data() returned " << r << dendl;
+          }
           /* could not renew state! might have been marked as cancelled */
           return ret;
         }
