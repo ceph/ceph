@@ -14,6 +14,10 @@ def main(args):
         if args['--timeout']:
             raise ValueError(
                 '--timeout is only applicable to the last job in a suite')
+
+    name = args['--name']
+    if not name or name.isdigit():
+        raise ValueError("Please use a more descriptive value for --name")
     job_config = build_config(args)
     if args['--dry-run']:
         pprint.pprint(job_config)
