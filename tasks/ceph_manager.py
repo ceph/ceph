@@ -8,8 +8,51 @@ import gevent
 import json
 import threading
 from teuthology import misc as teuthology
-from . import ceph as ceph_task
 from tasks.scrub import Scrubber
+
+def make_admin_daemon_dir(ctx, remote):
+    """
+    Create /var/run/ceph directory on remote site.
+
+    :param ctx: Context
+    :param remote: Remote site
+    """
+    remote.run(
+            args=[
+                'sudo',
+                'install', '-d', '-m0777', '--', '/var/run/ceph',
+                ],
+            )
+
+
+def mount_osd_data(ctx, remote, osd):
+    """
+    Mount a remote OSD
+
+    :param ctx: Context
+    :param remote: Remote site
+    :param ods: Osd name
+    """
+    log.debug('Mounting data for osd.{o} on {r}'.format(o=osd, r=remote))
+    if remote in ctx.disk_config.remote_to_roles_to_dev and osd in ctx.disk_config.remote_to_roles_to_dev[remote]:
+        dev = ctx.disk_config.remote_to_roles_to_dev[remote][osd]
+        mount_options = ctx.disk_config.remote_to_roles_to_dev_mount_options[remote][osd]
+        fstype = ctx.disk_config.remote_to_roles_to_dev_fstype[remote][osd]
+        mnt = os.path.join('/var/lib/ceph/osd', 'ceph-{id}'.format(id=osd))
+
+        log.info('Mounting osd.{o}: dev: {n}, mountpoint: {p}, type: {t}, options: {v}'.format(
+                 o=osd, n=remote.name, p=mnt, t=fstype, v=mount_options))
+
+        remote.run(
+            args=[
+                'sudo',
+                'mount',
+                '-t', fstype,
+                '-o', ','.join(mount_options),
+                dev,
+                mnt,
+            ]
+            )
 
 class Thrasher:
     """
@@ -1250,8 +1293,8 @@ class CephManager:
             if not remote.console.check_status(300):
                 raise Exception('Failed to revive osd.{o} via ipmi'.format(o=osd))
             teuthology.reconnect(self.ctx, 60, [remote])
-            ceph_task.mount_osd_data(self.ctx, remote, str(osd))
-            ceph_task.make_admin_daemon_dir(self.ctx, remote)
+            mount_osd_data(self.ctx, remote, str(osd))
+            make_admin_daemon_dir(self.ctx, remote)
             self.ctx.daemons.get_daemon('osd', osd).reset()
         self.ctx.daemons.get_daemon('osd', osd).restart()
         # wait for dump_ops_in_flight; this command doesn't appear
@@ -1306,7 +1349,7 @@ class CephManager:
             self.log('revive_mon on mon.{m} doing powercycle of {s}'.format(m=mon, s=remote.name))
             assert remote.console is not None, "powercycling requested but RemoteConsole is not initialized.  Check ipmi config."
             remote.console.power_on()
-            ceph_task.make_admin_daemon_dir(self.ctx, remote)
+            make_admin_daemon_dir(self.ctx, remote)
         self.ctx.daemons.get_daemon('mon', mon).restart()
 
     def get_mon_status(self, mon):
@@ -1379,7 +1422,7 @@ class CephManager:
             self.log('revive_mds on mds.{m} doing powercycle of {s}'.format(m=mds, s=remote.name))
             assert remote.console is not None, "powercycling requested but RemoteConsole is not initialized.  Check ipmi config."
             remote.console.power_on()
-            ceph_task.make_admin_daemon_dir(self.ctx, remote)
+            make_admin_daemon_dir(self.ctx, remote)
         args = []
         if standby_for_rank:
             args.extend(['--hot-standby', standby_for_rank])

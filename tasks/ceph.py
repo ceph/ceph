@@ -140,48 +140,6 @@ def valgrind_post(ctx, config):
             raise valgrind_exception
 
 
-def mount_osd_data(ctx, remote, osd):
-    """
-    Mount a remote OSD
-
-    :param ctx: Context
-    :param remote: Remote site
-    :param ods: Osd name
-    """
-    log.debug('Mounting data for osd.{o} on {r}'.format(o=osd, r=remote))
-    if remote in ctx.disk_config.remote_to_roles_to_dev and osd in ctx.disk_config.remote_to_roles_to_dev[remote]:
-        dev = ctx.disk_config.remote_to_roles_to_dev[remote][osd]
-        mount_options = ctx.disk_config.remote_to_roles_to_dev_mount_options[remote][osd]
-        fstype = ctx.disk_config.remote_to_roles_to_dev_fstype[remote][osd]
-        mnt = os.path.join('/var/lib/ceph/osd', 'ceph-{id}'.format(id=osd))
-
-        log.info('Mounting osd.{o}: dev: {n}, mountpoint: {p}, type: {t}, options: {v}'.format(
-                 o=osd, n=remote.name, p=mnt, t=fstype, v=mount_options))
-
-        remote.run(
-            args=[
-                'sudo',
-                'mount',
-                '-t', fstype,
-                '-o', ','.join(mount_options),
-                dev,
-                mnt,
-            ]
-            )
-
-def make_admin_daemon_dir(ctx, remote):
-    """
-    Create /var/run/ceph directory on remote site.
-
-    :param ctx: Context
-    :param remote: Remote site
-    """
-    remote.run(
-            args=[
-                'sudo',
-                'install', '-d', '-m0777', '--', '/var/run/ceph',
-                ],
-            )
 
 @contextlib.contextmanager
 def cluster(ctx, config):
