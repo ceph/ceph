@@ -142,9 +142,9 @@ def task(ctx, config):
 
     def thread():
         """Thread spawned by gevent"""
+        first_mon = teuthology.get_first_mon(ctx, config)
+        (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
         if not hasattr(ctx, 'manager'):
-            first_mon = teuthology.get_first_mon(ctx, config)
-            (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
             ctx.manager = CephManager(
                 mon,
                 ctx=ctx,
