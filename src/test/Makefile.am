@@ -646,7 +646,7 @@ bin_DEBUGPROGRAMS += ceph_test_librbd
 if LINUX
 ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.c
 ceph_test_librbd_fsx_LDADD = $(LIBRBD) $(LIBRADOS) -lm
-ceph_test_librbd_fsx_CFLAGS = ${AM_CFLAGS} -Wno-format
+ceph_test_librbd_fsx_CFLAGS = ${AM_CFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_librbd_fsx
 endif
 
