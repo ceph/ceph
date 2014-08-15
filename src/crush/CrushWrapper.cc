@@ -10,17 +10,28 @@
 
 bool CrushWrapper::has_v2_rules() const
 {
-  // check rules for use of indep or new SET_* rule steps
   for (unsigned i=0; i<crush->max_rules; i++) {
-    crush_rule *r = crush->rules[i];
-    if (!r)
-      continue;
-    for (unsigned j=0; j<r->len; j++) {
-      if (r->steps[j].op == CRUSH_RULE_CHOOSE_INDEP ||
-	  r->steps[j].op == CRUSH_RULE_CHOOSELEAF_INDEP ||
-	  r->steps[j].op == CRUSH_RULE_SET_CHOOSE_TRIES ||
-	  r->steps[j].op == CRUSH_RULE_SET_CHOOSELEAF_TRIES)
-	return true;
+    if (is_v2_rule(i)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool CrushWrapper::is_v2_rule(unsigned ruleid) const
+{
+  // check rule for use of indep or new SET_* rule steps
+  if (ruleid >= crush->max_rules)
+    return false;
+  crush_rule *r = crush->rules[ruleid];
+  if (!r)
+    return false;
+  for (unsigned j=0; j<r->len; j++) {
+    if (r->steps[j].op == CRUSH_RULE_CHOOSE_INDEP ||
+	r->steps[j].op == CRUSH_RULE_CHOOSELEAF_INDEP ||
+	r->steps[j].op == CRUSH_RULE_SET_CHOOSE_TRIES ||
+	r->steps[j].op == CRUSH_RULE_SET_CHOOSELEAF_TRIES) {
+      return true;
     }
   }
   return false;
@@ -28,14 +39,25 @@ bool CrushWrapper::has_v2_rules() const
 
 bool CrushWrapper::has_v3_rules() const
 {
-  // check rules for use of SET_CHOOSELEAF_VARY_R step
   for (unsigned i=0; i<crush->max_rules; i++) {
-    crush_rule *r = crush->rules[i];
-    if (!r)
-      continue;
-    for (unsigned j=0; j<r->len; j++) {
-      if (r->steps[j].op == CRUSH_RULE_SET_CHOOSELEAF_VARY_R)
-	return true;
+    if (is_v3_rule(i)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool CrushWrapper::is_v3_rule(unsigned ruleid) const
+{
+  // check rule for use of SET_CHOOSELEAF_VARY_R step
+  if (ruleid >= crush->max_rules)
+    return false;
+  crush_rule *r = crush->rules[ruleid];
+  if (!r)
+    return false;
+  for (unsigned j=0; j<r->len; j++) {
+    if (r->steps[j].op == CRUSH_RULE_SET_CHOOSELEAF_VARY_R) {
+      return true;
     }
   }
   return false;

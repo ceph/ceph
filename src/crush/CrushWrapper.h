@@ -216,6 +216,8 @@ public:
   bool has_v2_rules() const;
   bool has_v3_rules() const;
 
+  bool is_v2_rule(unsigned ruleid) const;
+  bool is_v3_rule(unsigned ruleid) const;
 
   // bucket types
   int get_num_type_names() const {
