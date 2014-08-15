@@ -51,6 +51,10 @@ public:
   void set_cct(CephContext *c) {
     cct = c;
   }
+
+  uint64_t get_nref() {
+    return nref.read();
+  }
 };
 
 /**
