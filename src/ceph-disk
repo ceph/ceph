@@ -119,6 +119,9 @@ STATEDIR = '/var/lib/ceph'
 
 SYSCONFDIR = '/etc/ceph'
 
+# only warn once about some things
+warned_about = {}
+
 # Nuke the TERM variable to avoid confusing any subprocesses we call.
 # For example, libreadline will print weird control sequences for some
 # TERM values.
@@ -309,7 +312,7 @@ def command_check_call(arguments):
     otherwise.
     """
     arguments = _get_command_executable(arguments)
-    LOG.info('Running command: %s' % ' '.join(arguments))
+    LOG.info('Running command: %s', ' '.join(arguments))
     return subprocess.check_call(arguments)
 
 
@@ -456,6 +459,23 @@ def list_partitions(basename):
             partitions.append(name)
     return partitions
 
+def get_partition_base(dev):
+    """
+    Get the base device for a partition
+    """
+    dev = os.path.realpath(dev)
+    if not stat.S_ISBLK(os.lstat(dev).st_mode):
+        raise Error('not a block device', dev)
+
+    name = get_dev_name(dev)
+    if os.path.exists(os.path.join('/sys/block', name)):
+        raise Error('not a partition', dev)
+
+    # find the base
+    for basename in os.listdir('/sys/block'):
+        if os.path.exists(os.path.join('/sys/block', basename, name)):
+            return '/dev/' + basename
+    raise Error('no parent device for partition', dev)
 
 def is_partition(dev):
     """
@@ -519,7 +539,7 @@ def is_held(dev):
     return []
 
 
-def verify_not_in_use(dev):
+def verify_not_in_use(dev, check_partitions=False):
     """
     Verify if a given device (path) is in use (e.g. mounted or
     in use by device-mapper).
@@ -527,13 +547,13 @@ def verify_not_in_use(dev):
     :raises: Error if device is in use.
     """
     assert os.path.exists(dev)
-    if is_partition(dev):
-        if is_mounted(dev):
-            raise Error('Device is mounted', dev)
-        holders = is_held(dev)
-        if holders:
-            raise Error('Device is in use by a device-mapper mapping (dm-crypt?)' % dev, ','.join(holders))
-    else:
+    if is_mounted(dev):
+        raise Error('Device is mounted', dev)
+    holders = is_held(dev)
+    if holders:
+        raise Error('Device is in use by a device-mapper mapping (dm-crypt?)' % dev, ','.join(holders))
+
+    if check_partitions and not is_partition(dev):
         basename = get_dev_name(os.path.realpath(dev))
         for partname in list_partitions(basename):
             partition = get_dev_path(partname)
@@ -1244,9 +1264,6 @@ def prepare_dev(
         LOG.debug('OSD data device %s is a partition', data)
         rawdev = data
     else:
-        if journal_dmcrypt is not None:
-            dmcrypt_unmap(journal)
-
         LOG.debug('Creating osd partition on %s', data)
         try:
             command_check_call(
@@ -1328,8 +1345,6 @@ def prepare_dev(
     finally:
         if rawdev != dev:
             dmcrypt_unmap(osd_uuid)
-        if journal_dmcrypt is not None:
-            dmcrypt_unmap(journal)
 
     if not is_partition(data):
         try:
@@ -1361,12 +1376,12 @@ def main_prepare(args):
         # in use?
         dmode = os.stat(args.data).st_mode
         if stat.S_ISBLK(dmode):
-            verify_not_in_use(args.data)
+            verify_not_in_use(args.data, True)
 
         if args.journal and os.path.exists(args.journal):
             jmode = os.stat(args.journal).st_mode
             if stat.S_ISBLK(jmode):
-                verify_not_in_use(args.journal)
+                verify_not_in_use(args.journal, False)
 
         if args.zap_disk is not None:
             if stat.S_ISBLK(dmode) and not is_partition(args.data):
@@ -2167,6 +2182,54 @@ def get_dev_fs(dev):
 
 
 def get_partition_type(part):
+    """
+    Get the GPT partition type UUID.  If we have an old blkid and can't
+    get it that way, use sgdisk and use the description instead (and hope
+    dmcrypt isn't being used).
+    """
+    blkid, _ = command(
+        [
+            'blkid',
+            '-p',
+            '-o', 'udev',
+            part,
+        ]
+    )
+    saw_part_entry = False
+    for line in blkid.splitlines():
+        (key, value) = line.split('=')
+        if key == 'ID_PART_ENTRY_TYPE':
+            return value
+        if key == 'ID_PART_ENTRY_SCHEME':
+            table_type = value
+        if key.startswith('ID_PART_ENTRY_'):
+            saw_part_entry = True
+
+    # hmm, is it in fact GPT?
+    table_type = None
+    base = get_partition_base(part)
+    blkid, _ = command(
+        [
+            'blkid',
+            '-p',
+            '-o', 'udev',
+            base
+        ]
+    )
+    for line in blkid.splitlines():
+        (key, value) = line.split('=')
+        if key == 'ID_PART_TABLE_TYPE':
+            table_type = value
+    if table_type != 'gpt':
+        return None    # not even GPT
+
+    if saw_part_entry:
+        return None    # GPT, and blkid appears to be new, so we're done.
+
+    # bah, fall back to sgdisk.
+    if 'blkid' not in warned_about:
+        LOG.warning('Old blkid does not support ID_PART_ENTRY_* fields, trying sgdisk; may not correctly identify ceph volumes with dmcrypt')
+        warned_about['blkid'] = True
     (base, partnum) = re.match('(\D+)(\d+)', part).group(1, 2)
     sgdisk, _ = command(
         [
@@ -2182,7 +2245,13 @@ def get_partition_type(part):
             num = m.group(1)
             if num != partnum:
                 continue
-            return m.group(2)
+            desc = m.group(2)
+            # assume unencrypted ... blkid has failed us :(
+            if desc == 'ceph data':
+                return OSD_UUID
+            if desc == 'ceph journal':
+                return JOURNAL_UUID
+
     return None
 
 
@@ -2218,6 +2287,27 @@ def more_osd_info(path, uuid_map):
 
     return desc
 
+def list_dev_osd(dev, uuid_map):
+    path = is_mounted(dev)
+    fs_type = get_dev_fs(dev)
+    desc = []
+    if path:
+        desc.append('active')
+        desc.extend(more_osd_info(path, uuid_map))
+    elif fs_type:
+        try:
+            tpath = mount(dev=dev, fstype=fs_type, options='')
+            if tpath:
+                try:
+                    magic = get_oneliner(tpath, 'magic')
+                    if magic is not None:
+                        desc.append('prepared')
+                        desc.extend(more_osd_info(tpath, uuid_map))
+                finally:
+                    unmount(tpath)
+        except MountError:
+            pass
+    return desc
 
 def list_dev(dev, uuid_map, journal_map):
     ptype = 'unknown'
@@ -2225,37 +2315,41 @@ def list_dev(dev, uuid_map, journal_map):
     if is_partition(dev):
         ptype = get_partition_type(dev)
         prefix = ' '
-    fs_type = get_dev_fs(dev)
-    path = is_mounted(dev)
 
     desc = []
-    if ptype == 'ceph data':
-        if path:
-            desc.append('active')
-            desc.extend(more_osd_info(path, uuid_map))
-        elif fs_type:
-            try:
-                tpath = mount(dev=dev, fstype=fs_type, options='')
-                if tpath:
-                    try:
-                        magic = get_oneliner(tpath, 'magic')
-                        if magic is not None:
-                            desc.append('prepared')
-                            desc.extend(more_osd_info(tpath, uuid_map))
-                    finally:
-                        unmount(tpath)
-            except MountError:
-                pass
+    if ptype == OSD_UUID:
+        desc = list_dev_osd(dev, uuid_map)
         if desc:
             desc = ['ceph data'] + desc
         else:
             desc = ['ceph data', 'unprepared']
-    elif ptype == 'ceph journal':
+    elif ptype == DMCRYPT_OSD_UUID:
+        holders = is_held(dev)
+        if not holders:
+            desc = ['ceph data (dmcrypt)', 'not currently mapped']
+        elif len(holders) == 1:
+            holder = '/dev/' + holders[0]
+            fs_desc = list_dev_osd(holder, uuid_map)
+            desc = ['ceph data (dmcrypt %s)' % holder] + fs_desc
+        else:
+            desc = ['ceph data (dmcrypt)', 'holders: ' + ','.join(holders)]
+    elif ptype == JOURNAL_UUID:
         desc.append('ceph journal')
         part_uuid = get_partition_uuid(dev)
         if part_uuid and part_uuid in journal_map:
             desc.append('for %s' % journal_map[part_uuid])
+    elif ptype == DMCRYPT_JOURNAL_UUID:
+        holders = is_held(dev)
+        if len(holders) == 1:
+            desc = ['ceph journal (dmcrypt /dev/%s)' % holders[0]]
+        else:
+            desc = ['ceph journal (dmcrypt)']
+        part_uuid = get_partition_uuid(dev)
+        if part_uuid and part_uuid in journal_map:
+            desc.append('for %s' % journal_map[part_uuid])
     else:
+        path = is_mounted(dev)
+        fs_type = get_dev_fs(dev)
         if is_swap(dev):
             desc.append('swap')
         else:
@@ -2282,7 +2376,7 @@ def main_list(args):
             if part_uuid:
                 uuid_map[part_uuid] = dev
             ptype = get_partition_type(dev)
-            if ptype == 'ceph data':
+            if ptype == OSD_UUID:
                 fs_type = get_dev_fs(dev)
                 if fs_type is not None:
                     try:
@@ -2295,6 +2389,22 @@ def main_list(args):
                             unmount(tpath)
                     except MountError:
                         pass
+            if ptype == DMCRYPT_OSD_UUID:
+                holders = is_held(dev)
+                if len(holders) == 1:
+                    holder = '/dev/' + holders[0]
+                    fs_type = get_dev_fs(holder)
+                    if fs_type is not None:
+                        try:
+                            tpath = mount(dev=holder, fstype=fs_type, options='')
+                            try:
+                                journal_uuid = get_oneliner(tpath, 'journal_uuid')
+                                if journal_uuid:
+                                    journal_map[journal_uuid.lower()] = dev
+                            finally:
+                                unmount(tpath)
+                        except MountError:
+                            pass
 
     for base, parts in sorted(partmap.iteritems()):
         if parts:
@@ -2679,3 +2789,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    warned_about = {}
