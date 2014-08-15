@@ -810,11 +810,13 @@ else
 fi
 rm -rf "$lttng_gen_tp_dir"
 
+AC_CHECK_HEADERS([babeltrace/ctf/events.h babeltrace/babeltrace.h])
 AC_ARG_WITH([lttng],
 	[AS_HELP_STRING([--with-lttng], [Trace with LTTng])])
 AS_IF([test "x$with_lttng" = "xno"], [use_lttng=no],
       [test "x$with_lttng" = "xyes"], [use_lttng=yes],
-      [AC_CHECK_HEADERS([lttng/tracepoint.h], [use_lttng=$have_good_lttng_gen_tp], [use_lttng=no])])
+      [test "x$ac_cv_header_babeltrace_ctf_events_h$ac_cv_header_babeltrace_babeltrace_h$have_good_lttng_gen_tp" = "xyesyesyes"], [use_lttng=yes],
+      [use_lttng=no])
 AM_CONDITIONAL([WITH_LTTNG], test x"$use_lttng" = x"yes")
 AM_COND_IF([WITH_LTTNG], [
   AC_DEFINE([WITH_LTTNG], [1], [Define if you want to use LTTng])
