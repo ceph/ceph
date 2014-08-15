@@ -5,6 +5,7 @@ import copy
 import logging
 import time
 import os
+import subprocess
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -991,43 +992,41 @@ def _upgrade_rpm_packages(ctx, config, remote, pkgs):
     _run_and_log_error_if_fails(remote, args)
 
 
-@contextlib.contextmanager
-def upgrade(ctx, config):
+def upgrade_old_style(ctx, node, remote, pkgs, system_type):
     """
-    Upgrades packages for a given project.
-
-    For example::
-
-        tasks:
-        - install.upgrade:
-             all:
-                branch: end
-
-    or specify specific roles::
-
-        tasks:
-        - install.upgrade:
-             mon.a:
-                branch: end
-             osd.0:
-                branch: other
-
-    or rely on the overrides for the target version::
-
-        overrides:
-          install:
-            ceph:
-              sha1: ...
-        tasks:
-        - install.upgrade:
-            all:
-
-    (HACK: the overrides will *only* apply the sha1/branch/tag if those
-    keys are not present in the config.)
-
-    :param ctx: the argparse.Namespace object
-    :param config: the config dict
+    Handle the upgrade using methods in use prior to ceph-deploy.
     """
+    if system_type == 'deb':
+        _upgrade_deb_packages(ctx, node, remote, pkgs)
+    elif system_type == 'rpm':
+        _upgrade_rpm_packages(ctx, node, remote, pkgs)
+
+def upgrade_with_ceph_deploy(ctx, node, remote, pkgs, sys_type):
+    """
+    Upgrade using ceph-deploy
+    """
+    dev_table = ['branch', 'tag', 'dev']
+    ceph_dev_parm = ''
+    ceph_rel_parm = ''
+    for entry in node.keys():
+        if entry in dev_table:
+            ceph_dev_parm = node[entry]
+        if entry == 'release':
+            ceph_rel_parm = node[entry]
+    params = []
+    if ceph_dev_parm:
+        params += ['--dev', ceph_dev_parm]
+    if ceph_rel_parm:
+        params += ['--release', ceph_rel_parm]
+    params.append(remote.name)
+    subprocess.call(['ceph-deploy', 'install'] + params)
+    remote.run(args=['sudo', 'restart', 'ceph-all'])
+
+def upgrade_common(ctx, config, deploy_style):
+    """
+    Common code for upgrading
+    """
+
     assert config is None or isinstance(config, dict), \
         "install.upgrade only supports a dictionary for configuration"
 
@@ -1081,13 +1080,66 @@ def upgrade(ctx, config):
             # FIXME: again, make extra_pkgs distro-agnostic
         pkgs += extra_pkgs
         node['project'] = project
-        if system_type == 'deb':
-            _upgrade_deb_packages(ctx, node, remote, pkgs)
-        elif system_type == 'rpm':
-            _upgrade_rpm_packages(ctx, node, remote, pkgs)
+        
+        deploy_style(ctx, node, remote, pkgs, system_type)
 
+
+docstring_for_upgrade = """"
+    Upgrades packages for a given project.
+
+    For example::
+
+        tasks:
+        - install.{cmd_parameter}:
+             all:
+                branch: end
+
+    or specify specific roles::
+
+        tasks:
+        - install.{cmd_parameter}:
+             mon.a:
+                branch: end
+             osd.0:
+                branch: other
+
+    or rely on the overrides for the target version::
+
+        overrides:
+          install:
+            ceph:
+              sha1: ...
+        tasks:
+        - install.{cmd_parameter}:
+            all:
+
+    (HACK: the overrides will *only* apply the sha1/branch/tag if those
+    keys are not present in the config.)
+
+    :param ctx: the argparse.Namespace object
+    :param config: the config dict
+    """
+
+#
+# __doc__ strings for upgrade and ceph_deploy_upgrade are set from
+# the same string so that help(upgrade) and help(ceph_deploy_upgrade)
+# look the same.
+#
+
+@contextlib.contextmanager
+def upgrade(ctx, config):
+    upgrade_common(ctx, config, upgrade_old_style)
     yield
 
+upgrade.__doc__ = docstring_for_upgrade.format(cmd_parameter='upgrade')
+
+@contextlib.contextmanager
+def ceph_deploy_upgrade(ctx, config):
+    upgrade_common(ctx, config, upgrade_with_ceph_deploy)
+    yield
+
+ceph_deploy_upgrade.__doc__ = docstring_for_upgrade.format(
+        cmd_parameter='ceph_deploy_upgrade')
 
 @contextlib.contextmanager
 def ship_utilities(ctx, config):
