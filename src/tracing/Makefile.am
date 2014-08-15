@@ -48,13 +48,13 @@ libos_tp_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
 libos_tp_la_CFLAGS = -I$(top_srcdir)/src $(AM_CFLAGS)
 libos_tp_la_LDFLAGS =
 
+if WITH_LTTNG
 noinst_LTLIBRARIES = \
 	libosd_tp.la \
 	librados_tp.la \
 	librbd_tp.la \
 	libos_tp.la
 
-if WITH_LTTNG
 BUILT_SOURCES = \
 	librados.h \
 	librbd.h \
