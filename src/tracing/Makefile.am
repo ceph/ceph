@@ -1,7 +1,9 @@
 EXTRA_DIST = tracing-common.h
 
+if WITH_LTTNG
 %.c %.h: %.tp
 	$(LTTNG_GEN_TP_PROG) $< -o $*.c -o $*.h
+endif
 
 dist_noinst_DATA = \
 	librados.tp \
