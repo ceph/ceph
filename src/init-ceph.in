@@ -182,7 +182,7 @@ done
 
 
 # if `--cluster` was not passed in, fallback to looking at the config name
-if ! [[ -n "$cluster" ]]; then
+if [ -z "$cluster" ]; then
     cluster=`echo $conf | awk -F'/' '{print $(NF)}' | cut -d'.' -f 1`
 else
     # if we were told to use a given cluster name then $conf needs to be updated
