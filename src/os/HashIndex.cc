@@ -228,12 +228,12 @@ int HashIndex::col_split_level(
 int HashIndex::_split(
   uint32_t match,
   uint32_t bits,
-  ceph::shared_ptr<CollectionIndex> dest) {
+  CollectionIndex* dest) {
   assert(collection_version() == dest->collection_version());
   unsigned mkdirred = 0;
   return col_split_level(
     *this,
-    *static_cast<HashIndex*>(dest.get()),
+    *static_cast<HashIndex*>(dest),
     vector<string>(),
     bits,
     match,
