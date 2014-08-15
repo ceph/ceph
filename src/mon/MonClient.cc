@@ -153,6 +153,7 @@ int MonClient::get_monmap_privately()
     if (cur_con) {
       cur_con->mark_down();
       cur_con.reset(NULL);
+      cur_mon.clear();
     }
     monc_lock.Unlock();
     messenger->shutdown();
@@ -165,7 +166,6 @@ int MonClient::get_monmap_privately()
 
   hunting = true;  // reset this to true!
   cur_mon.clear();
-
   cur_con.reset(NULL);
 
   if (!monmap.fsid.is_zero())
@@ -424,6 +424,7 @@ void MonClient::shutdown()
   if (cur_con)
     cur_con->mark_down();
   cur_con.reset(NULL);
+  cur_mon.clear();
 
   monc_lock.Unlock();
 }
