@@ -1092,8 +1092,8 @@ int librados::IoCtxImpl::notify(const object_t& oid, uint64_t ver, bufferlist& b
   // Construct WatchNotifyInfo
   Cond cond_all;
   Mutex mylock_all("IoCtxImpl::notify::mylock_all");
-  bool done_all;
-  int r_notify;
+  bool done_all = false;
+  int r_notify = 0;
   WatchNotifyInfo *wc = new WatchNotifyInfo(this, oid);
   wc->notify_done = &done_all;
   wc->notify_lock = &mylock_all;
