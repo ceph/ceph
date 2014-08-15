@@ -157,17 +157,8 @@ def task(ctx, config):
                             r=remote.name))
 
     log.info('Beginning thrashosds...')
-    first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
-    manager = ceph_manager.CephManager(
-        mon,
-        ctx=ctx,
-        config=config,
-        logger=log.getChild('ceph_manager'),
-        )
-    ctx.manager = manager
     thrash_proc = ceph_manager.Thrasher(
-        manager,
+        ctx.manager,
         config,
         logger=log.getChild('thrasher')
         )
@@ -176,4 +167,4 @@ def task(ctx, config):
     finally:
         log.info('joining thrashosds')
         thrash_proc.do_join()
-        manager.wait_for_recovery(config.get('timeout', 360))
+        ctx.manager.wait_for_recovery(config.get('timeout', 360))
