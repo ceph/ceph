@@ -54,6 +54,7 @@ noinst_LTLIBRARIES = \
 	librbd_tp.la \
 	libos_tp.la
 
+if WITH_LTTNG
 BUILT_SOURCES = \
 	librados.h \
 	librbd.h \
@@ -61,6 +62,7 @@ BUILT_SOURCES = \
 	osd.h \
 	pg.h \
 	objectstore.h
+endif
 
 CLEANFILES = \
 	$(nodist_libosd_tp_la_SOURCES) \
