@@ -13,6 +13,11 @@ tasks:
     log-whitelist:
     - wrongly marked me down
     - had wrong client addr
+    conf:
+      client.rest0:
+        debug ms: 1
+        debug objecter: 20
+        debug rados: 20
 - rest-api: [client.0]
 - workunit:
     clients:

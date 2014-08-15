@@ -1,8 +1,3 @@
-overrides:
-  ceph:
-    log-whitelist:
-    - wrongly marked me down
-
 roles:
 - - mon.a
   - mds.a
@@ -17,6 +12,13 @@ roles:
 tasks:
 - install:
 - ceph:
+    log-whitelist:
+    - wrongly marked me down
+    conf:
+      client.rest0:
+        debug ms: 1
+        debug objecter: 20
+        debug rados: 20
 - rest-api: [client.0]
 - workunit:
     clients:
