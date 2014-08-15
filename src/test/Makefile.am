@@ -658,7 +658,7 @@ if LINUX
 # Force use of C++ linker with dummy.cc - LIBKRBD is a C++ library
 ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.c common/dummy.cc
 ceph_test_librbd_fsx_LDADD = $(LIBKRBD) $(LIBRBD) $(LIBRADOS)
-ceph_test_librbd_fsx_CFLAGS = ${AM_CFLAGS} -Wno-format
+ceph_test_librbd_fsx_CFLAGS = ${AM_CFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_librbd_fsx
 endif
 
