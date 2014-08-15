@@ -1123,13 +1123,18 @@ int librados::IoCtxImpl::notify(const object_t& oid, uint64_t ver, bufferlist& b
 					&onack, &objver);
   lock->Unlock();
 
+  ldout(client->cct, 10) << __func__ << " issued linger op " << wc->linger_id << dendl;
   int r_issue = onack.wait();
+  ldout(client->cct, 10) << __func__ << " linger op " << wc->linger_id << " acked (" << r_issue << ")" << dendl;
+
   if (r_issue == 0) {
+  ldout(client->cct, 10) << __func__ << "waiting for watch_notify message for linger op " << wc->linger_id << dendl;
     mylock_all.Lock();
     while (!done_all)
       cond_all.Wait(mylock_all);
     mylock_all.Unlock();
   }
+  ldout(client->cct, 10) << __func__ << " completed notify (linger op " << wc->linger_id << "), unregistering" << dendl;
 
   lock->Lock();
   client->unregister_watch_notify_callback(cookie);   // destroys wc
