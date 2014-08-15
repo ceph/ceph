@@ -6361,11 +6361,12 @@ void OSD::check_osdmap_features(ObjectStore *fs)
     }
   }
   {
-    Messenger::Policy p = cluster_messenger->get_policy(entity_name_t::TYPE_MON);
+    Messenger::Policy p = client_messenger->get_policy(entity_name_t::TYPE_MON);
     uint64_t mask;
     uint64_t features = osdmap->get_features(entity_name_t::TYPE_MON, &mask);
     if ((p.features_required & mask) != features) {
       dout(0) << "crush map has features " << features
+	      << " was " << p.features_required
 	      << ", adjusting msgr requires for mons" << dendl;
       p.features_required = (p.features_required & ~mask) | features;
       client_messenger->set_policy(entity_name_t::TYPE_MON, p);
