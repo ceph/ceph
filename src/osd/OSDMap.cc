@@ -959,10 +959,7 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     features |= CEPH_FEATURE_CRUSH_TUNABLES;
   if (crush->has_nondefault_tunables2())
     features |= CEPH_FEATURE_CRUSH_TUNABLES2;
-  if (crush->has_v2_rules())
-    features |= CEPH_FEATURE_CRUSH_V2;
-  if (crush->has_nondefault_tunables3() ||
-      crush->has_v3_rules())
+  if (crush->has_nondefault_tunables3())
     features |= CEPH_FEATURE_CRUSH_TUNABLES3;
   mask |= CEPH_FEATURES_CRUSH;
 
@@ -977,6 +974,15 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     if (!p->second.tiers.empty() ||
 	p->second.is_tier()) {
       features |= CEPH_FEATURE_OSD_CACHEPOOL;
+    }
+    int ruleid = crush->find_rule(p->second.get_crush_ruleset(),
+				  p->second.get_type(),
+				  p->second.get_size());
+    if (ruleid >= 0) {
+      if (crush->is_v2_rule(ruleid))
+	features |= CEPH_FEATURE_CRUSH_V2;
+      if (crush->is_v3_rule(ruleid))
+	features |= CEPH_FEATURE_CRUSH_TUNABLES3;
     }
   }
   mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL;
