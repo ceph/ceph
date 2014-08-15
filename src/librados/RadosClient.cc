@@ -703,6 +703,8 @@ void librados::RadosClient::do_watch_notify(MWatchNotify *m)
       ldout(cct,10) << __func__ << " notify done" << dendl;
       wc->put();
     }
+  } else {
+    ldout(cct, 4) << __func__ << " unknown cookie " << m->cookie << dendl;
   }
   m->put();
 }
