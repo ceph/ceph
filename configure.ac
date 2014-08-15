@@ -800,11 +800,21 @@ AC_CHECK_TYPES([__u8, __s8, __u16, __s16, __u32, __s32, __u64, __s64, __le16,
   __be16, __le32, __be32, __le64, __be64], [], [], [[#include <linux/types.h>]])
 
 
+dnl Old versions of lttng-gen-tp leave out includes, and they break our stuff.
+lttng_gen_tp_dir=`mktemp -d`
+echo "#include <foo-inc.h>" > "$lttng_gen_tp_dir/foo.tp"
+if ( ( cd "$lttng_gen_tp_dir" && lttng-gen-tp foo.tp -o foo.h && grep "#include <foo-inc.h>" foo.h ) > /dev/null 2>&1 ) ; then
+  have_good_lttng_gen_tp=yes
+else
+  have_good_lttng_gen_tp=no
+fi
+rm -rf "$lttng_gen_tp_dir"
+
 AC_ARG_WITH([lttng],
 	[AS_HELP_STRING([--with-lttng], [Trace with LTTng])])
 AS_IF([test "x$with_lttng" = "xno"], [use_lttng=no],
       [test "x$with_lttng" = "xyes"], [use_lttng=yes],
-      [AC_CHECK_HEADERS([lttng/tracepoint.h], [use_lttng=yes], [use_lttng=no])])
+      [AC_CHECK_HEADERS([lttng/tracepoint.h], [use_lttng=$have_good_lttng_gen_tp], [use_lttng=no])])
 AM_CONDITIONAL([WITH_LTTNG], test x"$use_lttng" = x"yes")
 AM_COND_IF([WITH_LTTNG], [
   AC_DEFINE([WITH_LTTNG], [1], [Define if you want to use LTTng])
@@ -820,6 +830,10 @@ AM_COND_IF([WITH_LTTNG], [
       AC_MSG_FAILURE([lttng-gen-tp not found])
   fi
   AC_SUBST([LTTNG_GEN_TP_PROG], [lttng-gen-tp])
+
+  if test x"$have_good_lttng_gen_tp" != "xyes"; then
+      AC_MSG_FAILURE([lttng-gen-tp does not behave properly])
+  fi
 
   AC_MSG_CHECKING([if time_t is an integer])
   AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <time.h>]], [[
