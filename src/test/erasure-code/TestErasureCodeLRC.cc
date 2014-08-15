@@ -166,6 +166,81 @@ TEST(ErasureCodeTest, create_ruleset)
   EXPECT_EQ(second_rack, out[9] / num_host / num_osd);
 }
 
+TEST(ErasureCodeLRC, parse_kml)
+{
+  ErasureCodeLRC LRC;
+  map<std::string,std::string> parameters;
+  EXPECT_EQ(0, LRC.parse_kml(parameters, &cerr));
+  parameters["k"] = "4";
+  EXPECT_EQ(ERROR_LRC_ALL_OR_NOTHING, LRC.parse_kml(parameters, &cerr));
+  const char *generated[] = { "mapping",
+			      "layers",
+			      "ruleset-steps" };
+  parameters["m"] = "2";
+  parameters["l"] = "3";
+
+  for (int i = 0; i < 3; i++) {
+    parameters[generated[i]] = "SET";
+    EXPECT_EQ(ERROR_LRC_GENERATED, LRC.parse_kml(parameters, &cerr));
+    parameters.erase(parameters.find(generated[i]));
+  }
+
+  parameters["k"] = "4";
+  parameters["m"] = "2";
+  parameters["l"] = "7";
+  EXPECT_EQ(ERROR_LRC_K_M_MODULO, LRC.parse_kml(parameters, &cerr));
+
+  parameters["k"] = "3";
+  parameters["m"] = "3";
+  parameters["l"] = "3";
+  EXPECT_EQ(ERROR_LRC_K_MODULO, LRC.parse_kml(parameters, &cerr));
+
+  parameters["k"] = "4";
+  parameters["m"] = "2";
+  parameters["l"] = "3";
+  EXPECT_EQ(0, LRC.parse_kml(parameters, &cerr));
+  EXPECT_EQ("[ "
+	    " [ \"DDc_DDc_\", \"\" ],"
+	    " [ \"DDDc____\", \"\" ],"
+	    " [ \"____DDDc\", \"\" ],"
+	    "]", parameters["layers"]);
+  EXPECT_EQ("DD__DD__", parameters["mapping"]);
+  EXPECT_EQ("chooseleaf", LRC.ruleset_steps[0].op);
+  EXPECT_EQ("host", LRC.ruleset_steps[0].type);
+  EXPECT_EQ(0, LRC.ruleset_steps[0].n);
+  EXPECT_EQ(1U, LRC.ruleset_steps.size());
+  parameters.erase(parameters.find("mapping"));
+  parameters.erase(parameters.find("layers"));
+
+  parameters["k"] = "4";
+  parameters["m"] = "2";
+  parameters["l"] = "3";
+  parameters["ruleset-failure-domain"] = "osd";
+  EXPECT_EQ(0, LRC.parse_kml(parameters, &cerr));  
+  EXPECT_EQ("chooseleaf", LRC.ruleset_steps[0].op);
+  EXPECT_EQ("osd", LRC.ruleset_steps[0].type);
+  EXPECT_EQ(0, LRC.ruleset_steps[0].n);
+  EXPECT_EQ(1U, LRC.ruleset_steps.size());
+  parameters.erase(parameters.find("mapping"));
+  parameters.erase(parameters.find("layers"));
+
+  parameters["k"] = "4";
+  parameters["m"] = "2";
+  parameters["l"] = "3";
+  parameters["ruleset-failure-domain"] = "osd";
+  parameters["ruleset-locality"] = "rack";
+  EXPECT_EQ(0, LRC.parse_kml(parameters, &cerr));  
+  EXPECT_EQ("choose", LRC.ruleset_steps[0].op);
+  EXPECT_EQ("rack", LRC.ruleset_steps[0].type);
+  EXPECT_EQ(2, LRC.ruleset_steps[0].n);
+  EXPECT_EQ("chooseleaf", LRC.ruleset_steps[1].op);
+  EXPECT_EQ("osd", LRC.ruleset_steps[1].type);
+  EXPECT_EQ(4, LRC.ruleset_steps[1].n);
+  EXPECT_EQ(2U, LRC.ruleset_steps.size());
+  parameters.erase(parameters.find("mapping"));
+  parameters.erase(parameters.find("layers"));
+}
+
 TEST(ErasureCodeLRC, layers_description)
 {
   ErasureCodeLRC LRC;
@@ -358,6 +433,18 @@ TEST(ErasureCodeLRC, init)
   parameters["layers"] = description_string;
   parameters["directory"] = ".libs";
   EXPECT_EQ(0, LRC.init(parameters, &cerr));
+}
+
+TEST(ErasureCodeLRC, init_kml)
+{
+  ErasureCodeLRC LRC;
+  map<std::string,std::string> parameters;
+  parameters["k"] = "4";
+  parameters["m"] = "2";
+  parameters["l"] = "3";
+  parameters["directory"] = ".libs";
+  EXPECT_EQ(0, LRC.init(parameters, &cerr));
+  EXPECT_EQ((unsigned int)(4 + 2 + (4 + 2) / 3), LRC.get_chunk_count());
 }
 
 TEST(ErasureCodeLRC, minimum_to_decode)

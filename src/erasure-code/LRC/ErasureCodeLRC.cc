@@ -277,6 +277,112 @@ int ErasureCodeLRC::parse(const map<string,string> &parameters,
   return parse_ruleset(parameters, ss);
 }
 
+int ErasureCodeLRC::parse_kml(map<string,string> &parameters,
+			      ostream *ss)
+{
+  int err = ErasureCode::parse(parameters, ss);
+  const int DEFAULT = -1;
+  int k, m, l;
+  err |= to_int("k", parameters, &k, DEFAULT, ss);
+  err |= to_int("m", parameters, &m, DEFAULT, ss);
+  err |= to_int("l", parameters, &l, DEFAULT, ss);
+
+  if (k == DEFAULT && m == DEFAULT && l == DEFAULT)
+    return 0;
+
+  if ((k != DEFAULT || m != DEFAULT || l != DEFAULT) &&
+      (k == DEFAULT || m == DEFAULT || l == DEFAULT)) {
+    *ss << "All of k, m, l must be set or none of them in "
+	<< parameters << std::endl;
+    return ERROR_LRC_ALL_OR_NOTHING;
+  }
+
+  const char *generated[] = { "mapping",
+			      "layers",
+			      "ruleset-steps" };
+
+  for (int i = 0; i < 3; i++) {
+    if (parameters.count(generated[i])) {
+      *ss << "The " << generated[i] << " parameter cannot be set "
+	  << "when k, m, l are set in " << parameters << std::endl;
+      return ERROR_LRC_GENERATED;
+    }
+  }
+
+  if ((k + m) % l) {
+    *ss << "k + m must be a multiple of l in "
+	<< parameters << std::endl;
+    return ERROR_LRC_K_M_MODULO;
+  }
+
+  int local_group_count = (k + m) / l;
+
+  if (k % local_group_count) {
+    *ss << "k must be a multiple of (k + m) / l in "
+	<< parameters << std::endl;
+    return ERROR_LRC_K_MODULO;
+  }
+
+  if (m % local_group_count) {
+    *ss << "m must be a multiple of (k + m) / l in "
+	<< parameters << std::endl;
+    return ERROR_LRC_M_MODULO;
+  }
+  
+  string mapping;
+  for (int i = 0; i < local_group_count; i++) {
+    mapping += string(k / local_group_count, 'D') +
+      string(m / local_group_count, '_') + "_";
+  }
+  parameters["mapping"] = mapping;
+
+  string layers = "[ ";
+
+  // global layer
+  layers += " [ \"";
+  for (int i = 0; i < local_group_count; i++) {
+    layers += string(k / local_group_count, 'D') +
+      string(m / local_group_count, 'c') + "_";
+  }
+  layers += "\", \"\" ],";
+  
+  // local layers
+  for (int i = 0; i < local_group_count; i++) {
+    layers += " [ \"";    
+    for (int j = 0; j < local_group_count; j++) {
+      if (i == j)
+	layers += string(l, 'D') + "c";
+      else
+	layers += string(l + 1, '_');
+    }
+    layers += "\", \"\" ],";
+  }
+  parameters["layers"] = layers + "]";
+
+  map<string,string>::const_iterator parameter;
+  string ruleset_locality;
+  parameter = parameters.find("ruleset-locality");
+  if (parameter != parameters.end())
+    ruleset_locality = parameter->second;
+  string ruleset_failure_domain = "host";
+  parameter = parameters.find("ruleset-failure-domain");
+  if (parameter != parameters.end())
+    ruleset_failure_domain = parameter->second;
+
+  if (ruleset_locality != "") {
+    ruleset_steps.clear();
+    ruleset_steps.push_back(Step("choose", ruleset_locality,
+				 local_group_count));
+    ruleset_steps.push_back(Step("chooseleaf", ruleset_failure_domain,
+				 l + 1));
+  } else if (ruleset_failure_domain != "") {
+    ruleset_steps.clear();
+    ruleset_steps.push_back(Step("chooseleaf", ruleset_failure_domain, 0));
+  }
+
+  return 0;
+}
+
 int ErasureCodeLRC::parse_ruleset(const map<string,string> &parameters,
 				  ostream *ss)
 {
@@ -373,16 +479,21 @@ int ErasureCodeLRC::init(const map<string,string> &parameters,
 {
   int r;
 
-  r = parse(parameters, ss);
+  map<string,string> parameters_rw = parameters;
+  r = parse_kml(parameters_rw, ss);
+  if (r)
+    return r;
+
+  r = parse(parameters_rw, ss);
   if (r)
     return r;
 
   json_spirit::mArray description;
-  r = layers_description(parameters, &description, ss);
+  r = layers_description(parameters_rw, &description, ss);
   if (r)
     return r;
 
-  string description_string = parameters.find("layers")->second;
+  string description_string = parameters_rw.find("layers")->second;
 
   dout(10) << "init(" << description_string << ")" << dendl;
 
@@ -394,11 +505,11 @@ int ErasureCodeLRC::init(const map<string,string> &parameters,
   if (r)
     return r;
 
-  if (parameters.count("mapping") == 0) {
-    *ss << "the 'mapping' parameter is missing from " << parameters;
+  if (parameters_rw.count("mapping") == 0) {
+    *ss << "the 'mapping' parameter is missing from " << parameters_rw;
     return ERROR_LRC_MAPPING;
   }
-  string mapping = parameters.find("mapping")->second;
+  string mapping = parameters_rw.find("mapping")->second;
   data_chunk_count = 0;
   for(std::string::iterator it = mapping.begin(); it != mapping.end(); ++it) {
     if (*it == 'D')

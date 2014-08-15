@@ -37,6 +37,11 @@
 #define ERROR_LRC_RULESET_OP		-(MAX_ERRNO + 14)
 #define ERROR_LRC_RULESET_TYPE		-(MAX_ERRNO + 15)
 #define ERROR_LRC_RULESET_N		-(MAX_ERRNO + 16)
+#define ERROR_LRC_ALL_OR_NOTHING	-(MAX_ERRNO + 17)
+#define ERROR_LRC_GENERATED		-(MAX_ERRNO + 18)
+#define ERROR_LRC_K_M_MODULO		-(MAX_ERRNO + 19)
+#define ERROR_LRC_K_MODULO		-(MAX_ERRNO + 20)
+#define ERROR_LRC_M_MODULO		-(MAX_ERRNO + 21)
 
 class ErasureCodeLRC : public ErasureCode {
 public:
@@ -112,6 +117,8 @@ public:
   int init(const map<string,string> &parameters, ostream *ss);
 
   virtual int parse(const map<string,string> &parameters, ostream *ss);
+
+  int parse_kml(map<string,string> &parameters, ostream *ss);
 
   int parse_ruleset(const map<string,string> &parameters, ostream *ss);
 
