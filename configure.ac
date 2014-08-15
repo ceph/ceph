@@ -822,6 +822,9 @@ AM_COND_IF([WITH_LTTNG], [
   AC_CHECK_HEADER([lttng/tracepoint.h], [],
     AC_MSG_ERROR([lttng/tracepoint.h not found (liblttng-ust-dev, lttng-ust-devel)]))
 
+  AC_CHECK_HEADER([babeltrace/babeltrace.h], [],
+    AC_MSG_ERROR([babeltrace/babeltrac.h not found (libbabeltrace-dev, libbabeltrace-devel)]))
+
   AC_CHECK_HEADER([babeltrace/ctf/events.h], [],
     AC_MSG_ERROR([babeltrace/ctf/events.h not found (libbabeltrace-ctf-dev, libbabeltrace-devel)]))
 
