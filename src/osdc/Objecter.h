@@ -1458,12 +1458,7 @@ public:
       }
     }
 
-    ~OSDSession() {
-      for (int i = 0; i < num_locks; i++) {
-        delete completion_locks[i];
-      }
-      delete[] completion_locks;
-    }
+    ~OSDSession();
 
     bool is_homeless() { return (osd == -1); }
 
@@ -1516,10 +1511,14 @@ public:
   int _calc_target(op_target_t *t);
   int _map_session(op_target_t *op, OSDSession **s,
 		   RWLock::Context& lc);
-  void _session_op_remove(Op *op);
-  void _session_linger_op_remove(LingerOp *info);
-  void _session_command_op_remove(CommandOp *op);
-  void _session_op_assign(Op *op, OSDSession *s);
+
+  void _session_op_assign(OSDSession *s, Op *op);
+  void _session_op_remove(OSDSession *s, Op *op);
+  void _session_linger_op_assign(OSDSession *to, LingerOp *op);
+  void _session_linger_op_remove(OSDSession *from, LingerOp *op);
+  void _session_command_op_assign(OSDSession *to, CommandOp *op);
+  void _session_command_op_remove(OSDSession *from, CommandOp *op);
+
   int _get_osd_session(int osd, RWLock::Context& lc, OSDSession **psession);
   int _assign_op_target_session(Op *op, RWLock::Context& lc, bool src_session_locked, bool dst_session_locked);
   int _get_op_target_session(Op *op, RWLock::Context& lc, OSDSession **psession);
@@ -1546,6 +1545,7 @@ public:
 
   int _get_session(int osd, OSDSession **session, RWLock::Context& lc);
   void put_session(OSDSession *s);
+  void get_session(OSDSession *s);
   void _reopen_session(OSDSession *session);
   void close_session(OSDSession *session);
   
@@ -1607,13 +1607,7 @@ public:
     op_throttle_bytes(cct, "objecter_bytes", cct->_conf->objecter_inflight_op_bytes),
     op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops)
   { }
-  ~Objecter() {
-    delete osdmap;
-    assert(!tick_event);
-    assert(!m_request_state_hook);
-    assert(!logger);
-    homeless_session->put();
-  }
+  ~Objecter();
 
   void init();
   void start();
