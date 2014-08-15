@@ -66,6 +66,7 @@ public:
     p->set_pgp_num(64);
     p->type = pg_pool_t::TYPE_ERASURE;
     p->crush_ruleset = r;
+    new_pool_inc.new_pool_names[pool_id] = "ec";
     osdmap.apply_incremental(new_pool_inc);
   }
   unsigned int get_num_osds() { return num_osds; }
@@ -94,6 +95,48 @@ TEST_F(OSDMapTest, Create) {
   set_up_map();
   ASSERT_EQ(get_num_osds(), (unsigned)osdmap.get_max_osd());
   ASSERT_EQ(get_num_osds(), osdmap.get_num_in_osds());
+}
+
+TEST_F(OSDMapTest, Features) {
+  // with EC pool
+  set_up_map();
+  uint64_t features = osdmap.get_features(CEPH_ENTITY_TYPE_OSD, NULL);
+  ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_TUNABLES);
+  ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_TUNABLES2);
+  ASSERT_FALSE(features & CEPH_FEATURE_CRUSH_TUNABLES3);
+  ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_V2);
+  ASSERT_TRUE(features & CEPH_FEATURE_OSD_ERASURE_CODES);
+  ASSERT_TRUE(features & CEPH_FEATURE_OSDHASHPSPOOL);
+  ASSERT_FALSE(features & CEPH_FEATURE_OSD_PRIMARY_AFFINITY);
+
+  // clients have a slightly different view
+  features = osdmap.get_features(CEPH_ENTITY_TYPE_CLIENT, NULL);
+  ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_TUNABLES);
+  ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_TUNABLES2);
+  ASSERT_FALSE(features & CEPH_FEATURE_CRUSH_TUNABLES3);
+  ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_V2);
+  ASSERT_FALSE(features & CEPH_FEATURE_OSD_ERASURE_CODES);  // dont' need this
+  ASSERT_TRUE(features & CEPH_FEATURE_OSDHASHPSPOOL);
+  ASSERT_FALSE(features & CEPH_FEATURE_OSD_PRIMARY_AFFINITY);
+
+  // remove teh EC pool, but leave the rule.  add primary affinity.
+  {
+    OSDMap::Incremental new_pool_inc(osdmap.get_epoch() + 1);
+    new_pool_inc.old_pools.insert(osdmap.lookup_pg_pool_name("ec"));
+    new_pool_inc.new_primary_affinity[0] = 0x8000;
+    osdmap.apply_incremental(new_pool_inc);
+  }
+
+  features = osdmap.get_features(CEPH_ENTITY_TYPE_MON, NULL);
+  ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_TUNABLES);
+  ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_TUNABLES2);
+  ASSERT_TRUE(features & CEPH_FEATURE_CRUSH_TUNABLES3); // shared bit with primary affinity
+  ASSERT_FALSE(features & CEPH_FEATURE_CRUSH_V2);
+  ASSERT_FALSE(features & CEPH_FEATURE_OSD_ERASURE_CODES);
+  ASSERT_TRUE(features & CEPH_FEATURE_OSDHASHPSPOOL);
+  ASSERT_TRUE(features & CEPH_FEATURE_OSD_PRIMARY_AFFINITY);
+
+  // FIXME: test tiering feature bits
 }
 
 TEST_F(OSDMapTest, MapPG) {
