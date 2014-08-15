@@ -1,4 +1,4 @@
-if WITH_LTTNG
+EXTRA_DIST = tracing-common.h
 
 %.c %.h: %.tp
 	$(LTTNG_GEN_TP_PROG) $< -o $*.c -o $*.h
@@ -11,7 +11,7 @@ dist_noinst_DATA = \
 	pg.tp \
 	objectstore.tp
 
-libosd_tp_la_SOURCES = \
+nodist_libosd_tp_la_SOURCES = \
 	oprequest.c \
 	oprequest.h \
 	osd.c \
@@ -22,25 +22,28 @@ libosd_tp_la_LIBADD = -llttng-ust -ldl
 libosd_tp_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
 libosd_tp_la_LDFLAGS =
 
-librados_tp_la_SOURCES = \
+nodist_librados_tp_la_SOURCES = \
 	librados.c \
 	librados.h
 librados_tp_la_LIBADD = -llttng-ust -ldl
 librados_tp_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
+librados_tp_la_CFLAGS = -I$(top_srcdir)/src $(AM_CFLAGS)
 librados_tp_la_LDFLAGS =
 
-librbd_tp_la_SOURCES = \
+nodist_librbd_tp_la_SOURCES = \
 	librbd.c \
 	librbd.h
 librbd_tp_la_LIBADD = -llttng-ust -ldl
 librbd_tp_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
+librbd_tp_la_CFLAGS = -I$(top_srcdir)/src $(AM_CFLAGS)
 librbd_tp_la_LDFLAGS =
 
-libos_tp_la_SOURCES = \
+nodist_libos_tp_la_SOURCES = \
 	objectstore.c \
 	objectstore.h
 libos_tp_la_LIBADD = -llttng-ust -ldl
 libos_tp_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
+libos_tp_la_CFLAGS = -I$(top_srcdir)/src $(AM_CFLAGS)
 libos_tp_la_LDFLAGS =
 
 noinst_LTLIBRARIES = \
@@ -58,9 +61,7 @@ BUILT_SOURCES = \
 	objectstore.h
 
 CLEANFILES = \
-	$(libosd_tp_la_SOURCES) \
-	$(librados_tp_la_SOURCES) \
-	$(librbd_tp_la_SOURCES) \
-	$(libos_tp_la_SOURCES)
-
-endif # WITH_LTTNG
+	$(nodist_libosd_tp_la_SOURCES) \
+	$(nodist_librados_tp_la_SOURCES) \
+	$(nodist_librbd_tp_la_SOURCES) \
+	$(nodist_libos_tp_la_SOURCES)
