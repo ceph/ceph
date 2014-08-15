@@ -12,8 +12,8 @@
  * 
  */
 
-#include <google/heap-profiler.h>
-#include <google/malloc_extension.h>
+#include <gperftools/heap-profiler.h>
+#include <gperftools/malloc_extension.h>
 #include "heap_profiler.h"
 #include "common/environment.h"
 #include "common/LogClient.h"
