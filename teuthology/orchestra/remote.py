@@ -153,6 +153,14 @@ class Remote(object):
             args=args,
             )
 
+    def _sftp_put_file(self, local_path, remote_path):
+        """
+        Use the paramiko.SFTPClient to put a file. Returns the remote filename.
+        """
+        sftp = self.ssh.open_sftp()
+        sftp.put(local_path, remote_path)
+        return
+
     def _sftp_get_file(self, remote_path, local_path):
         """
         Use the paramiko.SFTPClient to get a file. Returns the local filename.
@@ -171,6 +179,16 @@ class Remote(object):
 
     def remove(self, path):
         self.run(args=['rm', '-fr', path])
+
+    def put_file(self, path, dest_path, sudo=False):
+        """
+        Copy a local filename to a remote file
+        """
+        if sudo:
+            raise NotImplementedError("sudo not supported")
+
+        self._sftp_put_file(path, dest_path)
+        return 
 
     def get_file(self, path, sudo=False, dest_dir='/tmp'):
         """
