@@ -4,7 +4,6 @@ Rados modle-based integration tests
 import contextlib
 import logging
 import gevent
-from ceph_manager import CephManager
 from teuthology import misc as teuthology
 
 from teuthology.orchestra import run
@@ -142,15 +141,6 @@ def task(ctx, config):
 
     def thread():
         """Thread spawned by gevent"""
-        first_mon = teuthology.get_first_mon(ctx, config)
-        (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
-        if not hasattr(ctx, 'manager'):
-            ctx.manager = CephManager(
-                mon,
-                ctx=ctx,
-                logger=log.getChild('ceph_manager'),
-                )
-
         clients = ['client.{id}'.format(id=id_) for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
         log.info('clients are %s' % clients)
         if config.get('ec_pool', False):

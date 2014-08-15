@@ -31,15 +31,6 @@ def task(ctx, config):
         config = {}
     assert isinstance(config, dict), \
         'osd_failsafe_enospc task only accepts a dict for configuration'
-    first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
-
-    manager = ceph_manager.CephManager(
-        mon,
-        ctx=ctx,
-        logger=log.getChild('ceph_manager'),
-        )
-    ctx.manager = manager
 
     # Give 2 seconds for injectargs + osd_op_complaint_time (30) + 2 * osd_heartbeat_interval (6) + 6 padding
     sleep_time = 50
@@ -49,14 +40,14 @@ def task(ctx, config):
     dummyfile2 = '/etc/resolv.conf'
 
     # create 1 pg pool with 1 rep which can only be on osd.0
-    osds = manager.get_osd_dump()
+    osds = ctx.manager.get_osd_dump()
     for osd in osds:
         if osd['osd'] != 0:
-            manager.mark_out_osd(osd['osd'])
+            ctx.manager.mark_out_osd(osd['osd'])
 
     log.info('creating pool foo')
-    manager.create_pool("foo")
-    manager.raw_cluster_cmd('osd', 'pool', 'set', 'foo', 'size', '1')
+    ctx.manager.create_pool("foo")
+    ctx.manager.raw_cluster_cmd('osd', 'pool', 'set', 'foo', 'size', '1')
 
     # State NONE -> NEAR
     log.info('1. Verify warning messages when exceeding nearfull_ratio')
@@ -72,7 +63,7 @@ def task(ctx, config):
              wait=False,
         )
 
-    manager.raw_cluster_cmd('tell', 'osd.0', 'injectargs', '--osd_failsafe_nearfull_ratio .00001')
+    ctx.manager.raw_cluster_cmd('tell', 'osd.0', 'injectargs', '--osd_failsafe_nearfull_ratio .00001')
 
     time.sleep(sleep_time)
     proc.stdin.close() # causes daemon-helper send SIGKILL to ceph -w
@@ -99,7 +90,7 @@ def task(ctx, config):
              wait=False,
         )
 
-    manager.raw_cluster_cmd('tell', 'osd.0', 'injectargs', '--osd_failsafe_full_ratio .00001')
+    ctx.manager.raw_cluster_cmd('tell', 'osd.0', 'injectargs', '--osd_failsafe_full_ratio .00001')
 
     time.sleep(sleep_time)
     proc.stdin.close() # causes daemon-helper send SIGKILL to ceph -w
@@ -117,7 +108,7 @@ def task(ctx, config):
     assert ret != 0, 'Expected write failure but it succeeded with exit status 0'
 
     # Put back default
-    manager.raw_cluster_cmd('tell', 'osd.0', 'injectargs', '--osd_failsafe_full_ratio .97')
+    ctx.manager.raw_cluster_cmd('tell', 'osd.0', 'injectargs', '--osd_failsafe_full_ratio .97')
     time.sleep(10)
 
     # State FULL -> NEAR
@@ -151,7 +142,7 @@ def task(ctx, config):
     count = len(filter(lambda line: '[ERR] OSD full dropping all updates' in line, lines))
     assert count == 0, 'Incorrect number of error messages expected 0 got %d' % count
 
-    manager.raw_cluster_cmd('tell', 'osd.0', 'injectargs', '--osd_failsafe_nearfull_ratio .90')
+    ctx.manager.raw_cluster_cmd('tell', 'osd.0', 'injectargs', '--osd_failsafe_nearfull_ratio .90')
     time.sleep(10)
 
     # State NONE -> FULL
@@ -168,7 +159,7 @@ def task(ctx, config):
              wait=False,
         )
 
-    manager.raw_cluster_cmd('tell', 'osd.0', 'injectargs', '--osd_failsafe_full_ratio .00001')
+    ctx.manager.raw_cluster_cmd('tell', 'osd.0', 'injectargs', '--osd_failsafe_full_ratio .00001')
 
     time.sleep(sleep_time)
     proc.stdin.close() # causes daemon-helper send SIGKILL to ceph -w
@@ -184,7 +175,7 @@ def task(ctx, config):
     # State FULL -> NONE
     log.info('7. Verify no messages settings back to default')
 
-    manager.raw_cluster_cmd('tell', 'osd.0', 'injectargs', '--osd_failsafe_full_ratio .97')
+    ctx.manager.raw_cluster_cmd('tell', 'osd.0', 'injectargs', '--osd_failsafe_full_ratio .97')
     time.sleep(10)
 
     proc = mon.run(
@@ -212,7 +203,7 @@ def task(ctx, config):
     log.info('Test Passed')
 
     # Bring all OSDs back in
-    manager.remove_pool("foo")
+    ctx.manager.remove_pool("foo")
     for osd in osds:
         if osd['osd'] != 0:
-            manager.mark_in_osd(osd['osd'])
+            ctx.manager.mark_in_osd(osd['osd'])

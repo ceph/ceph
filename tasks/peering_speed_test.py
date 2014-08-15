@@ -25,13 +25,6 @@ def setup(ctx, config):
     """
     Setup peering test on remotes.
     """
-    first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
-    ctx.manager = ceph_manager.CephManager(
-        mon,
-        ctx=ctx,
-        logger=log.getChild('ceph_manager'),
-        )
     ctx.manager.clear_pools()
     ctx.manager.create_pool(POOLNAME, config.num_pgs)
     log.info("populating pool")
