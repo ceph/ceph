@@ -38,15 +38,6 @@ def task(ctx, config):
 
     (remote,) = ctx.cluster.only(client).remotes.iterkeys()
 
-    if not hasattr(ctx, 'manager'):
-        first_mon = teuthology.get_first_mon(ctx, config)
-        (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
-        ctx.manager = CephManager(
-            mon,
-            ctx=ctx,
-            logger=log.getChild('ceph_manager'),
-            )
-
     for poolid in range(num_pools):
         poolname = "%s-%s" % (pool_prefix, str(poolid))
         log.info("Creating pool %s" % (poolname,))
