@@ -298,9 +298,9 @@ void librados::RadosClient::shutdown()
   instance_id = 0;
   timer.shutdown();   // will drop+retake lock
   lock.Unlock();
-  monclient.shutdown();
   if (need_objecter)
     objecter->shutdown();
+  monclient.shutdown();
   if (messenger) {
     messenger->shutdown();
     messenger->wait();
