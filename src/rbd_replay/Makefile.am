@@ -40,4 +40,6 @@ rbd_replay_prep_LDADD = $(LIBRBD) \
 	-lbabeltrace \
 	-lbabeltrace-ctf \
 	-lboost_date_time
+if WITH_LTTNG
 bin_PROGRAMS += rbd-replay-prep
+endif

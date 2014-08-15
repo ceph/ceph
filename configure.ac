@@ -810,7 +810,10 @@ AM_COND_IF([WITH_LTTNG], [
   AC_DEFINE([WITH_LTTNG], [1], [Define if you want to use LTTng])
 
   AC_CHECK_HEADER([lttng/tracepoint.h], [],
-    AC_MSG_ERROR([lttng/tracepoint.h not found (liblttng-ust-dev)]))
+    AC_MSG_ERROR([lttng/tracepoint.h not found (liblttng-ust-dev, lttng-ust-devel)]))
+
+  AC_CHECK_HEADER([babeltrace/ctf/events.h], [],
+    AC_MSG_ERROR([babeltrace/ctf/events.h not found (libbabeltrace-ctf-dev, libbabeltrace-devel)]))
 
   AC_CHECK_PROG([LTTNG_GEN_TP_CHECK], [lttng-gen-tp], [yes])
   if test x"$LTTNG_GEN_TP_CHECK" != "xyes"; then
