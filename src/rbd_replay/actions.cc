@@ -247,7 +247,7 @@ void AioWriteAction::perform(ActionCtx &worker) {
   PendingIO::ptr io(new PendingIO(pending_io_id(), worker));
   uint64_t remaining = m_length;
   while (remaining > 0) {
-    uint64_t n = std::min(remaining, fake_data.length());
+    uint64_t n = std::min(remaining, (uint64_t)fake_data.length());
     io->bufferlist().append(fake_data.data(), n);
     remaining -= n;
   }
