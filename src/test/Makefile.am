@@ -582,7 +582,6 @@ unittest_rbd_replay_SOURCES = test/test_rbd_replay.cc
 unittest_rbd_replay_LDADD = $(LIBRBD) \
 	$(LIBRADOS) \
 	$(CEPH_GLOBAL) \
-	-lboost_regex \
 	librbd_replay.la \
 	$(UNITTEST_LDADD)
 unittest_rbd_replay_CXXFLAGS = $(UNITTEST_CXXFLAGS)
