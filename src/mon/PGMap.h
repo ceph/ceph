@@ -120,6 +120,7 @@ public:
   pool_stat_t pg_sum;
   osd_stat_t osd_sum;
   mutable epoch_t min_last_epoch_clean;
+  ceph::unordered_map<int,int> blocked_by_sum;
 
   utime_t stamp;
 
@@ -276,6 +277,9 @@ public:
 
   void dump_osd_perf_stats(Formatter *f) const;
   void print_osd_perf_stats(std::ostream *ss) const;
+
+  void dump_osd_blocked_by_stats(Formatter *f) const;
+  void print_osd_blocked_by_stats(std::ostream *ss) const;
 
   void recovery_summary(Formatter *f, ostream *out,
                         const pool_stat_t& delta_sum) const;
