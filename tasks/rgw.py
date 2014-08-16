@@ -90,9 +90,18 @@ def ship_apache_configs(ctx, config, role_endpoints):
         if system_type == 'deb':
             mod_path = '/usr/lib/apache2/modules'
             print_continue = 'on'
+            user = 'www-data'
+            group = 'www-data'
+            apache24_modconfig = '''
+  IncludeOptional /etc/apache2/mods-enabled/mpm_event.conf
+  IncludeOptional /etc/apache2/mods-enabled/mpm_event.load'''
         else:
             mod_path = '/usr/lib64/httpd/modules'
             print_continue = 'off'
+            user = 'apache'
+            group = 'apache'
+            apache24_modconfig = \
+                'IncludeOptional /etc/httpd/conf.modules.d/00-mpm.conf'
         host, port = role_endpoints[client]
         with file(src, 'rb') as f:
             conf = f.read().format(
@@ -103,6 +112,9 @@ def ship_apache_configs(ctx, config, role_endpoints):
                 port=port,
                 client=client,
                 idle_timeout=idle_timeout,
+                user=user,
+                group=group,
+                apache24_modconfig=apache24_modconfig,
                 )
             teuthology.write_file(
                 remote=remote,
