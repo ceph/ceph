@@ -31,6 +31,7 @@
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMarkMeDown.h"
 #include "messages/MOSDMap.h"
+#include "messages/MMonGetOSDMap.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDAlive.h"
 #include "messages/MPoolOp.h"
@@ -746,6 +747,8 @@ bool OSDMonitor::preprocess_query(PaxosServiceMessage *m)
     // READs
   case MSG_MON_COMMAND:
     return preprocess_command(static_cast<MMonCommand*>(m));
+  case CEPH_MSG_MON_GET_OSDMAP:
+    return preprocess_get_osdmap(static_cast<MMonGetOSDMap*>(m));
 
     // damp updates
   case MSG_OSD_MARK_ME_DOWN:
@@ -831,6 +834,32 @@ bool OSDMonitor::should_propose(double& delay)
 
 // ---------------------------
 // READs
+
+bool OSDMonitor::preprocess_get_osdmap(MMonGetOSDMap *m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+  MOSDMap *reply = new MOSDMap(mon->monmap->fsid);
+  epoch_t first = get_first_committed();
+  epoch_t last = osdmap.get_epoch();
+  int max = g_conf->osd_map_message_max;
+  for (epoch_t e = MAX(first, m->get_full_first());
+       e < MIN(last, m->get_full_last()) && max > 0;
+       ++e, --max) {
+    int r = get_version_full(e, reply->maps[e]);
+    assert(r >= 0);
+  }
+  for (epoch_t e = MAX(first, m->get_inc_first());
+       e < MIN(last, m->get_inc_last()) && max > 0;
+       ++e, --max) {
+    int r = get_version(e, reply->incremental_maps[e]);
+    assert(r >= 0);
+  }
+  reply->oldest_map = get_first_committed();
+  reply->newest_map = osdmap.get_epoch();
+  mon->send_reply(m, reply);
+  m->put();
+  return true;
+}
 
 
 // ---------------------------
