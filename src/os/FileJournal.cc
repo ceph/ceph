@@ -544,7 +544,6 @@ void FileJournal::close()
 
   // close
   assert(writeq_empty());
-  assert(!must_write_header);
   assert(fd >= 0);
   VOID_TEMP_FAILURE_RETRY(::close(fd));
   fd = -1;
@@ -1103,7 +1102,7 @@ void FileJournal::write_thread_entry()
   while (1) {
     {
       Mutex::Locker locker(writeq_lock);
-      if (writeq.empty() && !must_write_header) {
+      if (writeq.empty()) {
 	if (write_stop)
 	  break;
 	dout(20) << "write_thread_entry going to sleep" << dendl;
