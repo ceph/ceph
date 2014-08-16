@@ -14,6 +14,12 @@
 Listen {port}
 ServerName {host}
 
+<IfVersion >= 2.4>
+  User {user}
+  Group {group}
+  {apache24_modconfig}
+</IfVersion>
+
 ServerRoot {testdir}/apache
 ErrorLog {testdir}/archive/apache.{client}/error.log
 LogFormat "%h l %u %t \"%r\" %>s %b \"{{Referer}}i\" \"%{{User-agent}}i\"" combined
