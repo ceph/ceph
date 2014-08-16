@@ -57,13 +57,10 @@ class MOSDMap : public Message {
 
 
   MOSDMap() : Message(CEPH_MSG_OSD_MAP, HEAD_VERSION) { }
-  MOSDMap(const uuid_d &f, OSDMap *oc=0)
+  MOSDMap(const uuid_d &f)
     : Message(CEPH_MSG_OSD_MAP, HEAD_VERSION),
       fsid(f),
-      oldest_map(0), newest_map(0) {
-    if (oc)
-      oc->encode(maps[oc->get_epoch()]);
-  }
+      oldest_map(0), newest_map(0) { }
 private:
   ~MOSDMap() {}
 
