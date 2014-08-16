@@ -1558,6 +1558,8 @@ int FileStore::umount()
     backend = generic_backend;
   }
 
+  force_sync = false;
+
   object_map.reset();
 
   {
