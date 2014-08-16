@@ -6191,6 +6191,11 @@ void OSD::handle_osd_map(MOSDMap *m)
       if (o->test_flag(CEPH_OSDMAP_FULL))
 	last_marked_full = e;
 
+#warning FIXME: we are unsafely encoding a new full OSDMap
+      if (inc.encode_features & ~CEPH_FEATURES_ALL)
+	derr << "WARNING: encoding full OSDMap with fewer features than the mon"
+	     << dendl;
+
       bufferlist fbl;
       o->encode(fbl);
 
