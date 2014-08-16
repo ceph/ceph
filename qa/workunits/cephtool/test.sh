@@ -589,6 +589,8 @@ function test_mon_osd()
   ceph osd unpause
 
   ceph osd tree
+  ceph osd perf
+  ceph osd blocked-by
 
   ceph osd stat | grep up,
 }

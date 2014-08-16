@@ -433,6 +433,11 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s)
     if (s.acting_primary >= 0)
       creating_pgs_by_osd[s.acting_primary].insert(pgid);
   }
+  for (vector<int>::const_iterator p = s.blocked_by.begin();
+       p != s.blocked_by.end();
+       ++p) {
+    ++blocked_by_sum[*p];
+  }
 }
 
 void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s)
@@ -454,6 +459,16 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s)
       if (creating_pgs_by_osd[s.acting_primary].size() == 0)
         creating_pgs_by_osd.erase(s.acting_primary);
     }
+  }
+
+  for (vector<int>::const_iterator p = s.blocked_by.begin();
+       p != s.blocked_by.end();
+       ++p) {
+    ceph::unordered_map<int,int>::iterator q = blocked_by_sum.find(*p);
+    assert(q != blocked_by_sum.end());
+    --q->second;
+    if (q->second == 0)
+      blocked_by_sum.erase(q);
   }
 }
 
@@ -814,7 +829,7 @@ void PGMap::dump_osd_perf_stats(Formatter *f) const
 void PGMap::print_osd_perf_stats(std::ostream *ss) const
 {
   TextTable tab;
-  tab.define_column("osdid", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("osd", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("fs_commit_latency(ms)", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("fs_apply_latency(ms)", TextTable::LEFT, TextTable::RIGHT);
   for (ceph::unordered_map<int32_t, osd_stat_t>::const_iterator i = osd_stat.begin();
@@ -823,6 +838,34 @@ void PGMap::print_osd_perf_stats(std::ostream *ss) const
     tab << i->first;
     tab << i->second.fs_perf_stat.filestore_commit_latency;
     tab << i->second.fs_perf_stat.filestore_apply_latency;
+    tab << TextTable::endrow;
+  }
+  (*ss) << tab;
+}
+
+void PGMap::dump_osd_blocked_by_stats(Formatter *f) const
+{
+  f->open_array_section("osd_blocked_by_infos");
+  for (ceph::unordered_map<int,int>::const_iterator i = blocked_by_sum.begin();
+       i != blocked_by_sum.end();
+       ++i) {
+    f->open_object_section("osd");
+    f->dump_int("id", i->first);
+    f->dump_int("num_blocked", i->second);
+    f->close_section();
+  }
+  f->close_section();
+}
+void PGMap::print_osd_blocked_by_stats(std::ostream *ss) const
+{
+  TextTable tab;
+  tab.define_column("osd", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("num_blocked", TextTable::LEFT, TextTable::RIGHT);
+  for (ceph::unordered_map<int,int>::const_iterator i = blocked_by_sum.begin();
+       i != blocked_by_sum.end();
+       ++i) {
+    tab << i->first;
+    tab << i->second;
     tab << TextTable::endrow;
   }
   (*ss) << tab;

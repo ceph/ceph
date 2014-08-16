@@ -1373,8 +1373,10 @@ struct pg_stat_t {
   int64_t log_size;
   int64_t ondisk_log_size;    // >= active_log_size
 
-  vector<int> up, acting;
+  vector<int32_t> up, acting;
   epoch_t mapping_epoch;
+
+  vector<int32_t> blocked_by;  ///< osds on which the pg is blocked
 
   utime_t last_became_active;
 
