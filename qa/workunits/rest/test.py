@@ -131,9 +131,9 @@ if __name__ == '__main__':
     assert('CATEGORY' in expect('df?detail', 'GET', 200, 'plain').content)
 
     r = expect('df', 'GET', 200, 'json', JSONHDR)
-    assert('total_used' in r.myjson['output']['stats'])
+    assert('total_used_bytes' in r.myjson['output']['stats'])
     r = expect('df', 'GET', 200, 'xml', XMLHDR)
-    assert(r.tree.find('output/stats/stats/total_used') is not None)
+    assert(r.tree.find('output/stats/stats/total_used_bytes') is not None)
 
     r = expect('df?detail', 'GET', 200, 'json', JSONHDR)
     assert('rd_kb' in r.myjson['output']['pools'][0]['stats'])
