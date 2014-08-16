@@ -48,6 +48,8 @@ using namespace librados;
 
 #define dout_subsys ceph_subsys_rgw
 
+#define MAX_BUCKET_INDEX_SHARDS_PRIME 7877
+
 using namespace std;
 
 static RGWCache<RGWRados> cached_rados_provider;
@@ -1326,6 +1328,11 @@ int RGWRados::init_rados()
   int ret;
 
   bucket_index_max_shards = cct->_conf->rgw_bucket_index_max_shards;
+  if (bucket_index_max_shards > MAX_BUCKET_INDEX_SHARDS_PRIME) {
+    bucket_index_max_shards = MAX_BUCKET_INDEX_SHARDS_PRIME;
+    ldout(cct, 1) << __func__ << " bucket index max shards is too large, reset to value: "
+      << MAX_BUCKET_INDEX_SHARDS_PRIME << dendl;
+  }
   ldout(cct, 20) << __func__ << " bucket index max shards: " << bucket_index_max_shards << dendl;
 
   rados = new Rados();
@@ -2437,6 +2444,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     info.region = region_name;
     info.placement_rule = selected_placement_rule;
     info.num_shards = bucket_index_max_shards;
+    info.bucket_index_shard_hash_type = RGWBucketInfo::MOD;
     if (!creation_time)
       time(&info.creation_time);
     else
@@ -3800,6 +3808,25 @@ int RGWRados::open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
     return ret;
 
   get_bucket_index_objects(bucket_oid_base, binfo.num_shards, bucket_objs);
+  return 0;
+}
+
+int RGWRados::open_bucket_index_shard(rgw_bucket& bucket, librados::IoCtx& index_ctx,
+    const string& obj_key, string *bucket_obj)
+{
+  string bucket_oid_base;
+  int ret = open_bucket_index_base(bucket, index_ctx, bucket_oid_base);
+  if (ret < 0)
+    return ret;
+
+  // Get the bucket info
+  RGWBucketInfo binfo;
+  ret = get_bucket_instance_info(NULL, bucket, binfo, NULL, NULL);
+  if (ret < 0)
+    return ret;
+
+  get_bucket_index_object(bucket_oid_base, obj_key, binfo.num_shards,
+      (RGWBucketInfo::BIShardsHashType)binfo.bucket_index_shard_hash_type, bucket_obj);
   return 0;
 }
 
@@ -6090,16 +6117,16 @@ int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, RGWModifyOp op, string& tag
                                  string& name, string& locator)
 {
   librados::IoCtx index_ctx;
-  string oid;
-
-  int r = open_bucket_index(bucket, index_ctx, oid);
-  if (r < 0)
-    return r;
+  string bucket_obj;
+  int ret = open_bucket_index_shard(bucket, index_ctx, name, &bucket_obj);
+  ldout(cct, 20) << " bucket index object: " << bucket_obj << dendl;
+  if (ret < 0)
+    return ret;
 
   ObjectWriteOperation o;
   cls_rgw_bucket_prepare_op(o, op, tag, name, locator, zone_public_config.log_data);
-  r = index_ctx.operate(oid, &o);
-  return r;
+  ret = index_ctx.operate(bucket_obj, &o);
+  return ret;
 }
 
 int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, RGWModifyOp op, string& tag,
@@ -6108,11 +6135,11 @@ int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, RGWModifyOp op, string& ta
 				  list<string> *remove_objs)
 {
   librados::IoCtx index_ctx;
-  string oid;
-
-  int r = open_bucket_index(bucket, index_ctx, oid);
-  if (r < 0)
-    return r;
+  string bucket_obj;
+  int ret = open_bucket_index_shard(bucket, index_ctx, ent.name, &bucket_obj);
+  ldout(cct, 20) << " bucket index object: " << bucket_obj << dendl;
+  if (ret < 0)
+    return ret;
 
   ObjectWriteOperation o;
   rgw_bucket_dir_entry_meta dir_meta;
@@ -6130,9 +6157,9 @@ int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, RGWModifyOp op, string& ta
   cls_rgw_bucket_complete_op(o, op, tag, ver, ent.name, dir_meta, remove_objs, zone_public_config.log_data);
 
   AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
-  r = index_ctx.aio_operate(oid, c, &o);
+  ret = index_ctx.aio_operate(bucket_obj, c, &o);
   c->release();
-  return r;
+  return ret;
 }
 
 int RGWRados::cls_obj_complete_add(rgw_bucket& bucket, string& tag,
@@ -6765,6 +6792,29 @@ void RGWRados::get_bucket_index_objects(const string& bucket_oid_base,
       bucket_objects.push_back(string(buf));
     }
   }
+}
+
+int RGWRados::get_bucket_index_object(const string& bucket_oid_base, const string& obj_key,
+    uint32_t num_shards, RGWBucketInfo::BIShardsHashType hash_type, string *bucket_obj)
+{
+  int r = 0;
+  switch (hash_type) {
+    case RGWBucketInfo::MOD:
+      if (!num_shards) {
+        // By default with no sharding, we use the bucket oid as itself
+        (*bucket_obj) = bucket_oid_base;
+      } else {
+        uint32_t sid = ceph_str_hash_linux(obj_key.c_str(),
+          obj_key.size()) % MAX_BUCKET_INDEX_SHARDS_PRIME % num_shards;
+        char buf[bucket_oid_base.size() + 32];
+        snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), sid);
+        (*bucket_obj) = buf;
+      }
+      break;
+    default:
+      r = -ENOTSUP;
+  }
+  return r;
 }
 
 int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
