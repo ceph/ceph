@@ -543,7 +543,7 @@ public:
 
   void _start_sync();
 
-  void start_sync();
+  void do_force_sync();
   void start_sync(Context *onsafe);
   void sync();
   void _flush_op_queue();
