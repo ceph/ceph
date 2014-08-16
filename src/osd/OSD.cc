@@ -6183,11 +6183,11 @@ void OSD::handle_osd_map(MOSDMap *m)
       o->decode(bl);
       if (o->test_flag(CEPH_OSDMAP_FULL))
 	last_marked_full = e;
-      pinned_maps.push_back(add_map(o));
 
       hobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::META_COLL, fulloid, 0, bl.length(), bl);
       pin_map_bl(e, bl);
+      pinned_maps.push_back(add_map(o));
       continue;
     }
 
@@ -6217,7 +6217,6 @@ void OSD::handle_osd_map(MOSDMap *m)
 
       if (o->test_flag(CEPH_OSDMAP_FULL))
 	last_marked_full = e;
-      pinned_maps.push_back(add_map(o));
 
       bufferlist fbl;
       o->encode(fbl);
@@ -6225,6 +6224,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       hobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::META_COLL, fulloid, 0, fbl.length(), fbl);
       pin_map_bl(e, fbl);
+      pinned_maps.push_back(add_map(o));
       continue;
     }
 
