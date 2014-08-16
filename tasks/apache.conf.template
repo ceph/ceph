@@ -1,3 +1,6 @@
+<IfModule !version_module>
+  LoadModule version_module {mod_path}/mod_version.so
+</IfModule>
 <IfModule !env_module>
   LoadModule env_module {mod_path}/mod_env.so
 </IfModule>
@@ -15,6 +18,12 @@ Listen {port}
 ServerName {host}
 
 <IfVersion >= 2.4>
+  <IfModule !unixd_module>
+    LoadModule unixd_module {mod_path}/mod_unixd.so
+  </IfModule>
+  <IfModule !authz_core_module>
+    LoadModule authz_core_module {mod_path}/mod_authz_core.so
+  </IfModule>
   User {user}
   Group {group}
   {apache24_modconfig}
