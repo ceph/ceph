@@ -1262,6 +1262,8 @@ class RGWRados
   int open_bucket_index(rgw_bucket& bucket, librados::IoCtx&  index_ctx, string& bucket_oid);
   int open_bucket_index_base(rgw_bucket& bucket, librados::IoCtx&  index_ctx,
       string& bucket_oid_base);
+  int open_bucket_index_shard(rgw_bucket& bucket, librados::IoCtx& index_ctx,
+      const string& obj_key, string *bucket_obj);
   int open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
       vector<string>& bucket_objs);
   struct GetObjState {
@@ -1962,6 +1964,21 @@ public:
    */
   void get_bucket_index_objects(const string& bucket_oid_base, const uint32_t num_shards,
       vector<string>& bucket_objs);
+
+  /**
+   * Get the bucket index object with the given base bucket index object and object key,
+   * and the number of bucket index shards.
+   *
+   * bucket_oid_base [in] - bucket object base name.
+   * obj_key [in] - object key.
+   * num_shards [in] - number of bucket index shards.
+   * hash_type [in] - type of hash to find the shard ID.
+   * bucket_obj [out] - the bucket index object for the given object.
+   *
+   * Return 0 on success, a failure code otherwise.
+   */
+  int get_bucket_index_object(const string& bucket_oid_base, const string& obj_key,
+      uint32_t num_shards, RGWBucketInfo::BIShardsHashType hash_type, string *bucket_obj);
 
   int process_intent_log(rgw_bucket& bucket, string& oid,
 			 time_t epoch, int flags, bool purge);
