@@ -761,6 +761,55 @@ static bool bucket_object_check_filter(const string& name)
   return rgw_obj::translate_raw_obj_to_obj_in_ns(obj, ns);
 }
 
+int check_min_obj_stripe_size(RGWRados *store, rgw_obj& obj, uint64_t min_stripe_size, bool *need_rewrite)
+{
+  map<string, bufferlist> attrs;
+  uint64_t obj_size;
+  void *handle;
+
+  void *obj_ctx = store->create_context(NULL);
+  int ret = store->prepare_get_obj(obj_ctx, obj, NULL, NULL, &attrs, NULL,
+                                   NULL, NULL, NULL, NULL, NULL, &obj_size, NULL, &handle, NULL);
+  store->finish_get_obj(&handle);
+  store->destroy_context(obj_ctx);
+  if (ret < 0) {
+    lderr(store->ctx()) << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  map<string, bufferlist>::iterator iter;
+  iter = attrs.find(RGW_ATTR_MANIFEST);
+  if (iter == attrs.end()) {
+    *need_rewrite = (obj_size >= min_stripe_size);
+    return 0;
+  }
+
+  RGWObjManifest manifest;
+
+  try {
+    bufferlist& bl = iter->second;
+    bufferlist::iterator biter = bl.begin();
+    ::decode(manifest, biter);
+  } catch (buffer::error& err) {
+    ldout(store->ctx(), 0) << "ERROR: failed to decode manifest" << dendl;
+    return -EIO;
+  }
+
+  map<uint64_t, RGWObjManifestPart>& objs = manifest.get_explicit_objs();
+  map<uint64_t, RGWObjManifestPart>::iterator oiter;
+  for (oiter = objs.begin(); oiter != objs.end(); ++oiter) {
+    RGWObjManifestPart& part = oiter->second;
+
+    if (part.size >= min_stripe_size) {
+      *need_rewrite = true;
+      return 0;
+    }
+  }
+  *need_rewrite = false;
+
+  return 0;
+}
+
 int main(int argc, char **argv) 
 {
   vector<const char*> args;
@@ -835,6 +884,7 @@ int main(int argc, char **argv)
 
   uint64_t min_rewrite_size = 4 * 1024 * 1024;
   uint64_t max_rewrite_size = ULLONG_MAX;
+  uint64_t min_rewrite_stripe_size = 0;
 
   std::string val;
   std::ostringstream errs;
@@ -903,6 +953,8 @@ int main(int argc, char **argv)
       min_rewrite_size = (uint64_t)atoll(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--max-rewrite-size", (char*)NULL)) {
       max_rewrite_size = (uint64_t)atoll(val.c_str());
+    } else if (ceph_argparse_witharg(args, i, &val, "--min-rewrite-stripe-size", (char*)NULL)) {
+      min_rewrite_stripe_size = (uint64_t)atoll(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--max-buckets", (char*)NULL)) {
       max_buckets = atoi(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--max-entries", (char*)NULL)) {
@@ -1856,11 +1908,21 @@ next:
     }
 
     rgw_obj obj(bucket, object);
-    ret = store->rewrite_obj(bucket_info.owner, obj);
-
-    if (ret < 0) {
-      cerr << "ERROR: object rewrite returned: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
+    bool need_rewrite = true;
+    if (min_rewrite_stripe_size > 0) {
+      ret = check_min_obj_stripe_size(store, obj, min_rewrite_stripe_size, &need_rewrite);
+      if (ret < 0) {
+        ldout(store->ctx(), 0) << "WARNING: check_min_obj_stripe_size failed, r=" << ret << dendl;
+      }
+    }
+    if (need_rewrite) {
+      ret = store->rewrite_obj(bucket_info.owner, obj);
+      if (ret < 0) {
+        cerr << "ERROR: object rewrite returned: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+    } else {
+      ldout(store->ctx(), 20) << "skipped object" << dendl;
     }
   }
 
@@ -1934,11 +1996,23 @@ next:
           formatter->dump_string("status", "Skipped");
         } else {
           rgw_obj obj(bucket, name);
-          r = store->rewrite_obj(bucket_info.owner, obj);
-          if (r == 0) {
-            formatter->dump_string("status", "Success");
+
+          bool need_rewrite = true;
+          if (min_rewrite_stripe_size > 0) {
+            r = check_min_obj_stripe_size(store, obj, min_rewrite_stripe_size, &need_rewrite);
+            if (r < 0) {
+              ldout(store->ctx(), 0) << "WARNING: check_min_obj_stripe_size failed, r=" << r << dendl;
+            }
+          }
+          if (!need_rewrite) {
+            formatter->dump_string("status", "Skipped");
           } else {
-            formatter->dump_string("status", cpp_strerror(-r));
+            r = store->rewrite_obj(bucket_info.owner, obj);
+            if (r == 0) {
+              formatter->dump_string("status", "Success");
+            } else {
+              formatter->dump_string("status", cpp_strerror(-r));
+            }
           }
         }
 
