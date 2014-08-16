@@ -1615,6 +1615,8 @@ int FileStore::umount()
     basedir_fd = -1;
   }
 
+  force_sync = false;
+
   delete backend;
   backend = NULL;
 
