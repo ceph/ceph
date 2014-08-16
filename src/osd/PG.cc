@@ -2245,6 +2245,27 @@ void PG::_update_calc_stats()
   }
 }
 
+void PG::_update_blocked_by()
+{
+  // set a max on the number of blocking peers we report. if we go
+  // over, report a random subset.  keep the result sorted.
+  unsigned keep = MIN(blocked_by.size(), g_conf->osd_max_pg_blocked_by);
+  unsigned skip = blocked_by.size() - keep;
+  info.stats.blocked_by.clear();
+  info.stats.blocked_by.resize(keep);
+  unsigned pos = 0;
+  for (set<int>::iterator p = blocked_by.begin();
+       p != blocked_by.end() && keep > 0;
+       ++p) {
+    if (skip > 0 && (rand() % (skip + keep) < skip)) {
+      --skip;
+    } else {
+      info.stats.blocked_by[pos++] = *p;
+      --keep;
+    }
+  }
+}
+
 void PG::publish_stats_to_osd()
 {
   pg_stats_publish_lock.Lock();
@@ -2274,6 +2295,7 @@ void PG::publish_stats_to_osd()
     info.stats.last_unstale = now;
 
     _update_calc_stats();
+    _update_blocked_by();
 
     pg_stats_publish_valid = true;
     pg_stats_publish = info.stats;
@@ -6570,10 +6592,10 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx)
   pg->generate_past_intervals();
   auto_ptr<PriorSet> &prior_set = context< Peering >().prior_set;
 
+  assert(pg->blocked_by.empty());
+
   if (!prior_set.get())
     pg->build_prior(prior_set);
-
-  pg->publish_stats_to_osd();
 
   get_infos();
   if (peer_info_requested.empty() && !prior_set->pg_down) {
@@ -6586,6 +6608,7 @@ void PG::RecoveryState::GetInfo::get_infos()
   PG *pg = context< RecoveryMachine >().pg;
   auto_ptr<PriorSet> &prior_set = context< Peering >().prior_set;
 
+  pg->blocked_by.clear();
   for (set<pg_shard_t>::const_iterator it = prior_set->probe.begin();
        it != prior_set->probe.end();
        ++it) {
@@ -6599,6 +6622,7 @@ void PG::RecoveryState::GetInfo::get_infos()
     }
     if (peer_info_requested.count(peer)) {
       dout(10) << " already requested info from osd." << peer << dendl;
+      pg->blocked_by.insert(peer.osd);
     } else if (!pg->get_osdmap()->is_up(peer.osd)) {
       dout(10) << " not querying info from down osd." << peer << dendl;
     } else {
@@ -6609,17 +6633,23 @@ void PG::RecoveryState::GetInfo::get_infos()
 			 pg->info.history,
 			 pg->get_osdmap()->get_epoch()));
       peer_info_requested.insert(peer);
+      pg->blocked_by.insert(peer.osd);
     }
   }
+
+  pg->publish_stats_to_osd();
 }
 
 boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& infoevt) 
 {
-  set<pg_shard_t>::iterator p = peer_info_requested.find(infoevt.from);
-  if (p != peer_info_requested.end())
-    peer_info_requested.erase(p);
-
   PG *pg = context< RecoveryMachine >().pg;
+
+  set<pg_shard_t>::iterator p = peer_info_requested.find(infoevt.from);
+  if (p != peer_info_requested.end()) {
+    peer_info_requested.erase(p);
+    pg->blocked_by.erase(infoevt.from.osd);
+  }
+
   epoch_t old_start = pg->info.history.last_epoch_started;
   if (pg->proc_replica_info(infoevt.from, infoevt.notify.info)) {
     // we got something new ...
@@ -6738,6 +6768,7 @@ void PG::RecoveryState::GetInfo::exit()
   PG *pg = context< RecoveryMachine >().pg;
   utime_t dur = ceph_clock_now(pg->cct) - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_getinfo_latency, dur);
+  pg->blocked_by.clear();
 }
 
 /*------GetLog------------*/
@@ -6797,6 +6828,10 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx)
       auth_log_shard.shard, pg->pg_whoami.shard,
       request_log_from, pg->info.history,
       pg->get_osdmap()->get_epoch()));
+
+  assert(pg->blocked_by.empty());
+  pg->blocked_by.insert(auth_log_shard.osd);
+  pg->publish_stats_to_osd();
 }
 
 boost::statechart::result PG::RecoveryState::GetLog::react(const AdvMap& advmap)
@@ -6863,6 +6898,8 @@ void PG::RecoveryState::GetLog::exit()
   PG *pg = context< RecoveryMachine >().pg;
   utime_t dur = ceph_clock_now(pg->cct) - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_getlog_latency, dur);
+  pg->blocked_by.clear();
+  pg->publish_stats_to_osd();
 }
 
 /*------WaitActingChange--------*/
@@ -6935,6 +6972,10 @@ PG::RecoveryState::Incomplete::Incomplete(my_context ctx)
 
   pg->state_clear(PG_STATE_PEERING);
   pg->state_set(PG_STATE_INCOMPLETE);
+
+  auto_ptr<PriorSet> &prior_set = context< Peering >().prior_set;
+  assert(pg->blocked_by.empty());
+  pg->blocked_by.insert(prior_set->down.begin(), prior_set->down.end());
   pg->publish_stats_to_osd();
 }
 
@@ -6975,6 +7016,8 @@ void PG::RecoveryState::Incomplete::exit()
   pg->state_clear(PG_STATE_INCOMPLETE);
   utime_t dur = ceph_clock_now(pg->cct) - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_incomplete_latency, dur);
+
+  pg->blocked_by.clear();
 }
 
 /*------GetMissing--------*/
@@ -7041,6 +7084,7 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
 	  pg->info.history, pg->get_osdmap()->get_epoch()));
     }
     peer_missing_requested.insert(*i);
+    pg->blocked_by.insert(i->osd);
   }
 
   if (peer_missing_requested.empty()) {
@@ -7052,6 +7096,8 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
 
     // all good!
     post_event(Activate(pg->get_osdmap()->get_epoch()));
+  } else {
+    pg->publish_stats_to_osd();
   }
 }
 
@@ -7108,6 +7154,8 @@ void PG::RecoveryState::GetMissing::exit()
   PG *pg = context< RecoveryMachine >().pg;
   utime_t dur = ceph_clock_now(pg->cct) - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_getmissing_latency, dur);
+  pg->blocked_by.clear();
+  pg->publish_stats_to_osd();
 }
 
 /*------WaitUpThru--------*/
