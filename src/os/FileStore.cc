@@ -1961,6 +1961,9 @@ int FileStore::umount()
     TEMP_FAILURE_RETRY(::close(basedir_fd));
     basedir_fd = -1;
   }
+
+  force_sync = false;
+
   object_map.reset();
 
   {
