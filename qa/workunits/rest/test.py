@@ -319,10 +319,6 @@ if __name__ == '__main__':
     assert('nodes' in r.myjson['output'])
     r = expect('osd/tree', 'GET', 200, 'xml', XMLHDR)
     assert(r.tree.find('output/tree/nodes') is not None)
-    expect('osd/pool/mksnap?pool=data&snap=datasnap', 'PUT', 200, '')
-    r = subprocess.call('rados -p data lssnap | grep -q datasnap', shell=True)
-    assert(r == 0)
-    expect('osd/pool/rmsnap?pool=data&snap=datasnap', 'PUT', 200, '')
 
     expect('osd/pool/create?pool=data2&pg_num=10', 'PUT', 200, '')
     r = expect('osd/lspools', 'GET', 200, 'json', JSONHDR)
@@ -330,6 +326,10 @@ if __name__ == '__main__':
     expect('osd/pool/rename?srcpool=data2&destpool=data3', 'PUT', 200, '')
     r = expect('osd/lspools', 'GET', 200, 'json', JSONHDR)
     assert([p for p in r.myjson['output'] if p['poolname'] == 'data3'])
+    expect('osd/pool/mksnap?pool=data3&snap=datasnap', 'PUT', 200, '')
+    r = subprocess.call('rados -p data3 lssnap | grep -q datasnap', shell=True)
+    assert(r == 0)
+    expect('osd/pool/rmsnap?pool=data3&snap=datasnap', 'PUT', 200, '')
     expect('osd/pool/delete?pool=data3', 'PUT', 400, '')
     expect('osd/pool/delete?pool=data3&pool2=data3&sure=--yes-i-really-really-mean-it', 'PUT', 200, '')
 
