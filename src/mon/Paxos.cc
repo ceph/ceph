@@ -666,15 +666,6 @@ void Paxos::begin(bufferlist& v)
   if (mon->get_quorum().size() == 1) {
     // we're alone, take it easy
     commit_start();
-    if (do_refresh()) {
-      assert(is_updating());  // we can't be updating-previous with quorum of 1
-      commit_proposal();
-      finish_round();
-      finish_contexts(g_ceph_context, waiting_for_active);
-      finish_contexts(g_ceph_context, waiting_for_commit);
-      finish_contexts(g_ceph_context, waiting_for_readable);
-      finish_contexts(g_ceph_context, waiting_for_writeable);
-    }
     return;
   }
 
@@ -794,27 +785,6 @@ void Paxos::handle_accept(MMonPaxos *accept)
     // yay, commit!
     dout(10) << " got majority, committing, done with update" << dendl;
     commit_start();
-    if (!do_refresh())
-      goto out;
-    if (is_updating())
-      commit_proposal();
-    finish_contexts(g_ceph_context, waiting_for_commit);
-
-    // cancel timeout event
-    mon->timer.cancel_event(accept_timeout_event);
-    accept_timeout_event = 0;
-
-    // yay!
-    extend_lease();
-
-    assert(g_conf->paxos_kill_at != 10);
-
-    finish_round();
-
-    // wake people up
-    finish_contexts(g_ceph_context, waiting_for_active);
-    finish_contexts(g_ceph_context, waiting_for_readable);
-    finish_contexts(g_ceph_context, waiting_for_writeable);
   }
 
  out:
@@ -905,6 +875,29 @@ void Paxos::commit_finish()
   new_value.clear();
 
   remove_legacy_versions();
+
+  if (do_refresh()) {
+    if (is_updating())
+      commit_proposal();
+
+    finish_contexts(g_ceph_context, waiting_for_commit);
+
+    if (mon->get_quorum().size() > 1) {
+      // cancel timeout event
+      mon->timer.cancel_event(accept_timeout_event);
+      accept_timeout_event = 0;
+      extend_lease();
+    }
+
+    assert(g_conf->paxos_kill_at != 10);
+
+    finish_round();
+
+    // wake (other) people up
+    finish_contexts(g_ceph_context, waiting_for_active);
+    finish_contexts(g_ceph_context, waiting_for_readable);
+    finish_contexts(g_ceph_context, waiting_for_writeable);
+  }
 }
 
 
