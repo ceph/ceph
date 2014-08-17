@@ -320,7 +320,7 @@ private:
   /**
    * Last committed value's time.
    *
-   * When the commit happened.
+   * When the commit finished.
    */
   utime_t last_commit_time;
   /**
@@ -870,6 +870,9 @@ private:
    * @}
    */
 
+
+  utime_t commit_start_stamp;
+
   /**
    * Commit a value throughout the system.
    *
@@ -883,7 +886,8 @@ private:
    * @post Value locally stored
    * @post Quorum members instructed to commit the new value.
    */
-  void commit();
+  void commit_start();
+  void commit_finish();   ///< finish a commit after txn becomes durable
   /**
    * Commit the new value to stable storage as being the latest available
    * version.

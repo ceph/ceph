@@ -665,7 +665,7 @@ void Paxos::begin(bufferlist& v)
 
   if (mon->get_quorum().size() == 1) {
     // we're alone, take it easy
-    commit();
+    commit_start();
     if (do_refresh()) {
       assert(is_updating());  // we can't be updating-previous with quorum of 1
       commit_proposal();
@@ -793,7 +793,7 @@ void Paxos::handle_accept(MMonPaxos *accept)
   if (accepted == mon->get_quorum()) {
     // yay, commit!
     dout(10) << " got majority, committing, done with update" << dendl;
-    commit();
+    commit_start();
     if (!do_refresh())
       goto out;
     if (is_updating())
@@ -831,23 +831,16 @@ void Paxos::accept_timeout()
   mon->bootstrap();
 }
 
-void Paxos::commit()
+void Paxos::commit_start()
 {
-  dout(10) << "commit " << last_committed+1 << dendl;
-
-  // cancel lease - it was for the old value.
-  //  (this would only happen if message layer lost the 'begin', but
-  //   leader still got a majority and committed with out us.)
-  lease_expire = utime_t();  // cancel lease
+  dout(10) << __func__ << " " << (last_committed+1) << dendl;
 
   assert(g_conf->paxos_kill_at != 7);
 
   MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
 
   // commit locally
-  last_committed++;
-  last_commit_time = ceph_clock_now(g_ceph_context);
-  t->put(get_name(), "last_committed", last_committed);
+  t->put(get_name(), "last_committed", last_committed + 1);
 
   // decode the value and apply its transaction to the store.
   // this value can now be read from last_committed.
@@ -862,14 +855,28 @@ void Paxos::commit()
   logger->inc(l_paxos_commit);
   logger->inc(l_paxos_commit_keys, t->get_keys());
   logger->inc(l_paxos_commit_bytes, t->get_bytes());
-  utime_t start = ceph_clock_now(NULL);
+  commit_start_stamp = ceph_clock_now(NULL);
 
   get_store()->apply_transaction(t);
 
+  commit_finish();
+}
+
+void Paxos::commit_finish()
+{
+  dout(20) << __func__ << " " << (last_committed+1) << dendl;
   utime_t end = ceph_clock_now(NULL);
-  logger->tinc(l_paxos_commit_latency, end - start);
+  logger->tinc(l_paxos_commit_latency, end - commit_start_stamp);
 
   assert(g_conf->paxos_kill_at != 8);
+
+  // cancel lease - it was for the old value.
+  //  (this would only happen if message layer lost the 'begin', but
+  //   leader still got a majority and committed with out us.)
+  lease_expire = utime_t();  // cancel lease
+
+  last_committed++;
+  last_commit_time = ceph_clock_now(NULL);
 
   // refresh first_committed; this txn may have trimmed.
   first_committed = get_store()->get(get_name(), "first_committed");
