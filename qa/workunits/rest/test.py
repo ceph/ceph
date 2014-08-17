@@ -136,9 +136,9 @@ if __name__ == '__main__':
     assert(r.tree.find('output/stats/stats/total_used_bytes') is not None)
 
     r = expect('df?detail', 'GET', 200, 'json', JSONHDR)
-    assert('rd_kb' in r.myjson['output']['pools'][0]['stats'])
+    assert('rd_bytes' in r.myjson['output']['pools'][0]['stats'])
     r = expect('df?detail', 'GET', 200, 'xml', XMLHDR)
-    assert(r.tree.find('output/stats/pools/pool/stats/rd_kb') is not None)
+    assert(r.tree.find('output/stats/pools/pool/stats/rd_bytes') is not None)
 
     expect('fsid', 'GET', 200, 'json', JSONHDR)
     expect('health', 'GET', 200, 'json', JSONHDR)
