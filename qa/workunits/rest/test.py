@@ -416,18 +416,18 @@ if __name__ == '__main__':
 
     for v in ['pg_num', 'pgp_num', 'size', 'min_size', 'crash_replay_interval',
               'crush_ruleset']:
-        r = expect('osd/pool/get.json?pool=data&var=' + v, 'GET', 200, 'json')
+        r = expect('osd/pool/get.json?pool=rbd&var=' + v, 'GET', 200, 'json')
         assert(v in r.myjson['output'])
 
-    r = expect('osd/pool/get.json?pool=data&var=size', 'GET', 200, 'json')
-    assert(r.myjson['output']['size'] == 2)
+    r = expect('osd/pool/get.json?pool=rbd&var=size', 'GET', 200, 'json')
+    assert(r.myjson['output']['size'] >= 2)
 
-    expect('osd/pool/set?pool=data&var=size&val=3', 'PUT', 200, 'plain')
-    r = expect('osd/pool/get.json?pool=data&var=size', 'GET', 200, 'json')
+    expect('osd/pool/set?pool=rbd&var=size&val=3', 'PUT', 200, 'plain')
+    r = expect('osd/pool/get.json?pool=rbd&var=size', 'GET', 200, 'json')
     assert(r.myjson['output']['size'] == 3)
 
-    expect('osd/pool/set?pool=data&var=size&val=2', 'PUT', 200, 'plain')
-    r = expect('osd/pool/get.json?pool=data&var=size', 'GET', 200, 'json')
+    expect('osd/pool/set?pool=rbd&var=size&val=2', 'PUT', 200, 'plain')
+    r = expect('osd/pool/get.json?pool=rbd&var=size', 'GET', 200, 'json')
     assert(r.myjson['output']['size'] == 2)
 
     r = expect('osd/pool/get.json?pool=rbd&var=crush_ruleset', 'GET', 200, 'json')
