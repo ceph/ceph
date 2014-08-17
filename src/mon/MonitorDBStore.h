@@ -620,10 +620,6 @@ class MonitorDBStore
       }
     }
   }
-  MonitorDBStore(KeyValueDB *db_ptr) :
-    db(0), do_dump(false), dump_fd(-1) {
-    db.reset(db_ptr);
-  }
   ~MonitorDBStore() {
     if (do_dump)
       ::close(dump_fd);
