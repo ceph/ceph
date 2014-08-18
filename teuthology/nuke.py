@@ -373,7 +373,7 @@ def nuke_one(ctx, targets, should_unlock, synch_clocks, reboot_all,
         noipmi=noipmi,
     )
     try:
-        nuke_helper(ctx)
+        nuke_helper(ctx, should_unlock)
     except Exception:
         log.exception('Could not nuke all targets in %s' % targets)
         # not re-raising the so that parallel calls aren't killed
@@ -385,11 +385,13 @@ def nuke_one(ctx, targets, should_unlock, synch_clocks, reboot_all,
     return ret
 
 
-def nuke_helper(ctx):
+def nuke_helper(ctx, should_unlock):
     # ensure node is up with ipmi
     (target,) = ctx.config['targets'].keys()
     host = target.split('@')[-1]
     shortname = host.split('.')[0]
+    if should_unlock and 'vpm' in shortname:
+        return
     log.debug('shortname: %s' % shortname)
     log.debug('{ctx}'.format(ctx=ctx))
     if not ctx.noipmi and 'ipmi_user' in ctx.teuthology_config and 'vpm' not in shortname:
