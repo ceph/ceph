@@ -19,6 +19,7 @@
 #include "rgw_metadata.h"
 #include "rgw_bucket.h"
 
+#include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/refcount/cls_refcount_client.h"
@@ -2326,6 +2327,10 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
       result.push_back(ent);
       count++;
     }
+
+    // Either the back-end telling us truncated, or we don't consume all
+    // items returned per the amount caller request
+    truncated = (truncated || eiter != ent_map.end());
   }
 
 done:
@@ -3808,6 +3813,22 @@ int RGWRados::open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
     return ret;
 
   get_bucket_index_objects(bucket_oid_base, binfo.num_shards, bucket_objs);
+  return 0;
+}
+
+template<typename T>
+int RGWRados::open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
+    map<string, T>& bucket_objs)
+{
+  vector<string> oids;
+  int ret = open_bucket_index(bucket, index_ctx, oids);
+  if (ret < 0)
+    return ret;
+
+  vector<string>::const_iterator iter = oids.begin();
+  for (; iter != oids.end(); ++iter) {
+    bucket_objs[*iter] = T();
+  }
   return 0;
 }
 
@@ -6203,31 +6224,56 @@ int RGWRados::cls_obj_set_bucket_tag_timeout(rgw_bucket& bucket, uint64_t timeou
   return r;
 }
 
-int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, string prefix,
-		              uint32_t num, map<string, RGWObjEnt>& m,
-			      bool *is_truncated, string *last_entry,
-			      bool (*force_check_filter)(const string&  name))
+int RGWRados::cls_bucket_list(rgw_bucket& bucket, const string& start, const string& prefix,
+		              uint32_t num_entries, map<string, RGWObjEnt>& m, bool *is_truncated,
+			      string *last_entry, bool (*force_check_filter)(const string&  name))
 {
-  ldout(cct, 10) << "cls_bucket_list " << bucket << " start " << start << " num " << num << dendl;
+  ldout(cct, 10) << "cls_bucket_list " << bucket << " start " << start << " num_entries " << num_entries << dendl;
 
   librados::IoCtx index_ctx;
-  string oid;
-  int r = open_bucket_index(bucket, index_ctx, oid);
+  // key   - oid (for different shards if there is any)
+  // value - list result for the corresponding oid (shard), it is filled by the AIO callback
+  map<string, struct rgw_cls_list_ret> list_results;
+  int r = open_bucket_index(bucket, index_ctx, list_results);
   if (r < 0)
     return r;
 
-  struct rgw_bucket_dir dir;
-  r = cls_rgw_list_op(index_ctx, oid, start, prefix, num, &dir, is_truncated);
+  r = cls_rgw_list_op(index_ctx, start, prefix, num_entries, list_results, cct->_conf->rgw_bucket_index_max_aio);
   if (r < 0)
     return r;
 
-  map<string, struct rgw_bucket_dir_entry>::iterator miter;
-  bufferlist updates;
-  for (miter = dir.m.begin(); miter != dir.m.end(); ++miter) {
-    RGWObjEnt e;
-    rgw_bucket_dir_entry& dirent = miter->second;
+  // Create a list of iterators that are used to iterate each shard
+  vector<map<string, struct rgw_bucket_dir_entry>::iterator> vcurrents(list_results.size());
+  vector<map<string, struct rgw_bucket_dir_entry>::iterator> vends(list_results.size());
+  vector<string> vnames(list_results.size());
+  map<string, struct rgw_cls_list_ret>::iterator iter = list_results.begin();
+  *is_truncated = false;
+  for (; iter != list_results.end(); ++iter) {
+    vcurrents.push_back(iter->second.dir.m.begin());
+    vends.push_back(iter->second.dir.m.end());
+    vnames.push_back(iter->first);
+    *is_truncated = (*is_truncated || iter->second.is_truncated);
+  }
+
+  // Create a map to track the next candidate entry from each shard, if the entry
+  // from a specified shard is selected/erased, the next entry from that shard will
+  // be inserted for next round selection
+  map<string, size_t> candidates;
+  for (size_t i = 0; i < vcurrents.size(); ++i) {
+    if (vcurrents[i] != vends[i]) {
+      candidates[vcurrents[i]->second.name] = i;
+    }
+  }
+
+  map<string, bufferlist> updates;
+  uint32_t count = 0;
+  while (count < num_entries && !candidates.empty()) {
+    // Select the next one
+    int pos = candidates.begin()->second;
+    struct rgw_bucket_dir_entry& dirent = vcurrents[pos]->second;
 
     // fill it in with initial values; we may correct later
+    RGWObjEnt e;
     e.name = dirent.name;
     e.size = dirent.meta.size;
     e.mtime = dirent.meta.mtime;
@@ -6237,20 +6283,13 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, string prefix,
     e.content_type = dirent.meta.content_type;
     e.tag = dirent.tag;
 
-    /* oh, that shouldn't happen! */
-    if (e.name.empty()) {
-      ldout(cct, 0) << "WARNING: got empty dirent name, skipping" << dendl;
-      continue;
-    }
-
     bool force_check = force_check_filter && force_check_filter(dirent.name);
-
     if (!dirent.exists || !dirent.pending_map.empty() || force_check) {
       /* there are uncommitted ops. We need to check the current state,
        * and if the tags are old we need to do cleanup as well. */
       librados::IoCtx sub_ctx;
       sub_ctx.dup(index_ctx);
-      r = check_disk_state(sub_ctx, bucket, dirent, e, updates);
+      r = check_disk_state(sub_ctx, bucket, dirent, e, updates[vnames[pos]]);
       if (r < 0) {
         if (r == -ENOENT)
           continue;
@@ -6260,21 +6299,37 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, string start, string prefix,
     }
     m[e.name] = e;
     ldout(cct, 10) << "RGWRados::cls_bucket_list: got " << e.name << dendl;
+
+    // Refresh the candidates map
+    candidates.erase(candidates.begin());
+    ++vcurrents[pos];
+    if (vcurrents[pos] != vends[pos]) {
+      candidates[vcurrents[pos]->second.name] = pos;
+    }
+    ++count;
   }
 
-  if (dir.m.size()) {
-    *last_entry = dir.m.rbegin()->first;
+  // Suggest updates if there is any
+  map<string, bufferlist>::iterator miter = updates.begin();
+  for (; miter != updates.end(); ++miter) {
+    if (miter->second.length()) {
+      ObjectWriteOperation o;
+      cls_rgw_suggest_changes(o, miter->second);
+      // we don't care if we lose suggested updates, send them off blindly
+      AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+      index_ctx.aio_operate(miter->first, c, &o);
+        c->release();
+    }
   }
 
-  if (updates.length()) {
-    ObjectWriteOperation o;
-    cls_rgw_suggest_changes(o, updates);
-    // we don't care if we lose suggested updates, send them off blindly
-    AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
-    r = index_ctx.aio_operate(oid, c, &o);
-    c->release();
+  // Check if all the returned entries are consumed or not
+  for (size_t i = 0; i < vcurrents.size(); ++i) {
+    if (vcurrents[i] != vends[i])
+      *is_truncated = true;
   }
-  return m.size();
+  if (m.size())
+    *last_entry = m.rbegin()->first;
+  return 0;
 }
 
 int RGWRados::cls_obj_usage_log_add(const string& oid, rgw_usage_log_info& info)

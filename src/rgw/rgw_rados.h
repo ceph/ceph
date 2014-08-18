@@ -1266,6 +1266,9 @@ class RGWRados
       const string& obj_key, string *bucket_obj);
   int open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
       vector<string>& bucket_objs);
+  template<typename T>
+  int open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
+      map<string, T>& bucket_objs);
   struct GetObjState {
     librados::IoCtx io_ctx;
     bool sent_data;
@@ -1854,9 +1857,9 @@ public:
   int cls_obj_complete_del(rgw_bucket& bucket, string& tag, int64_t pool, uint64_t epoch, string& name);
   int cls_obj_complete_cancel(rgw_bucket& bucket, string& tag, string& name);
   int cls_obj_set_bucket_tag_timeout(rgw_bucket& bucket, uint64_t timeout);
-  int cls_bucket_list(rgw_bucket& bucket, string start, string prefix, uint32_t num,
-                      map<string, RGWObjEnt>& m, bool *is_truncated,
-                      string *last_entry, bool (*force_check_filter)(const string&  name) = NULL);
+  int cls_bucket_list(rgw_bucket& bucket, const string& start, const string& prefix, uint32_t hint_num,
+                      map<string, RGWObjEnt>& m, bool *is_truncated, string *last_entry,
+                      bool (*force_check_filter)(const string&  name) = NULL);
   int cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header);
   int cls_bucket_head_async(rgw_bucket& bucket, RGWGetDirHeader_CB *ctx);
   int prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
