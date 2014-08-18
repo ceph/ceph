@@ -289,6 +289,8 @@ def unlock_one(ctx, name, user=None):
 def list_locks(keyed_by_name=False, **kwargs):
     uri = os.path.join(config.lock_server, 'nodes', '')
     if kwargs:
+        if 'machine_type' in kwargs:
+            kwargs['machine_type'] = kwargs['machine_type'].replace(',','|')
         uri += '?' + urllib.urlencode(kwargs)
     response = requests.get(uri)
     success = response.ok
@@ -397,7 +399,7 @@ def push_new_keys(keys_dict, reference):
 
 def do_summary(ctx):
     lockd = collections.defaultdict(lambda: [0, 0, 'unknown'])
-    for l in list_locks(ctx.machine_type):
+    for l in list_locks(machine_type=ctx.machine_type):
         who = l['locked_by'] if l['locked'] == 1 \
             else '(free)', l['machine_type']
         lockd[who][0] += 1
