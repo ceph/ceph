@@ -1642,12 +1642,15 @@ void PG::activate(ObjectStore::Transaction& t,
       }
 
       build_might_have_unfound();
+
+      state_set(PG_STATE_DEGRADED);
     }
 
     // degraded?
-    if (get_osdmap()->get_pg_size(info.pgid.pgid) > acting.size())
+    if (get_osdmap()->get_pg_size(info.pgid.pgid) > acting.size()) {
       state_set(PG_STATE_DEGRADED);
-
+      state_set(PG_STATE_UNDERSIZED);
+    }
   }
 }
 
@@ -1884,10 +1887,15 @@ unsigned PG::get_backfill_priority()
 {
   // a higher value -> a higher priority
 
-  // degraded: 200 + num missing replicas
-  if (is_degraded()) {
+  // undersized: 200 + num missing replicas
+  if (is_undersized()) {
     assert(pool.info.size > acting.size());
     return 200 + (pool.info.size - acting.size());
+  }
+
+  // degraded: baseline degraded
+  if (is_degraded()) {
+    return 200;
   }
 
   // baseline
@@ -2207,29 +2215,31 @@ void PG::_update_calc_stats()
   info.stats.ondisk_log_start = pg_log.get_tail();
 
   // calc copies, degraded
-  unsigned target = MAX(
-    get_osdmap()->get_pg_size(info.pgid.pgid), actingbackfill.size());
-  info.stats.stats.calc_copies(target);
+  unsigned target = get_osdmap()->get_pg_size(info.pgid.pgid);
+  info.stats.stats.calc_copies(MAX(target, actingbackfill.size()));
   info.stats.stats.sum.num_objects_degraded = 0;
-  if ((is_degraded() || !is_clean()) && is_active()) {
+  info.stats.stats.sum.num_objects_misplaced = 0;
+  if ((is_degraded() || is_undersized() || !is_clean()) && is_active()) {
     // NOTE: we only generate copies, degraded, unfound values for
     // the summation, not individual stat categories.
     uint64_t num_objects = info.stats.stats.sum.num_objects;
 
+    // a degraded objects has fewer replicas or EC shards than the
+    // pool specifies
     uint64_t degraded = 0;
 
-    // if the actingbackfill set is smaller than we want, add in those missing replicas
-    if (actingbackfill.size() < target)
-      degraded += (target - actingbackfill.size()) * num_objects;
+    // if acting is smaller than desired, add in those missing replicas
+    if (acting.size() < target)
+      degraded += (target - acting.size()) * num_objects;
 
     // missing on primary
     info.stats.stats.sum.num_objects_missing_on_primary =
       pg_log.get_missing().num_missing();
     degraded += pg_log.get_missing().num_missing();
 
-    assert(!actingbackfill.empty());
-    for (set<pg_shard_t>::iterator i = actingbackfill.begin();
-	 i != actingbackfill.end();
+    assert(!acting.empty());
+    for (set<pg_shard_t>::iterator i = actingset.begin();
+	 i != actingset.end();
 	 ++i) {
       if (*i == pg_whoami) continue;
       assert(peer_missing.count(*i));
@@ -2242,6 +2252,37 @@ void PG::_update_calc_stats()
     }
     info.stats.stats.sum.num_objects_degraded = degraded;
     info.stats.stats.sum.num_objects_unfound = get_num_unfound();
+
+    // a misplaced object is not stored on the correct OSD
+    uint64_t misplaced = 0;
+    unsigned i = 0;
+    unsigned in_place = 0;
+    for (vector<int>::iterator p = up.begin(); p != up.end(); ++p, ++i) {
+      pg_shard_t s(*p,
+		   pool.info.ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD);
+      if (actingset.count(s)) {
+	++in_place;
+      } else {
+	// not where it should be
+	misplaced += num_objects;
+	if (actingbackfill.count(s)) {
+	  // ...but partially backfilled
+	  misplaced -= peer_info[s].stats.stats.sum.num_objects;
+	  dout(20) << __func__ << " osd." << *p << " misplaced "
+		   << num_objects << " but partially backfilled "
+		   << peer_info[s].stats.stats.sum.num_objects
+		   << dendl;
+	} else {
+	  dout(20) << __func__ << " osd." << *p << " misplaced "
+		   << num_objects << " but partially backfilled "
+		   << dendl;
+	}
+      }
+    }
+    // count extra replicas in acting but not in up as misplaced
+    if (in_place < actingset.size())
+      misplaced += (actingset.size() - in_place) * num_objects;
+    info.stats.stats.sum.num_objects_misplaced = misplaced;
   }
 }
 
@@ -2293,6 +2334,10 @@ void PG::publish_stats_to_osd()
     if (info.stats.state & PG_STATE_ACTIVE)
       info.stats.last_active = now;
     info.stats.last_unstale = now;
+    if ((info.stats.state & PG_STATE_DEGRADED) == 0)
+      info.stats.last_undegraded = now;
+    if ((info.stats.state & PG_STATE_UNDERSIZED) == 0)
+      info.stats.last_fullsized = now;
 
     _update_calc_stats();
     _update_blocked_by();
@@ -6050,8 +6095,10 @@ PG::RecoveryState::Recovered::Recovered(my_context ctx)
   PG *pg = context< RecoveryMachine >().pg;
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
 
+  assert(!pg->needs_recovery());
+
   // if we finished backfill, all acting are active; recheck if
-  // DEGRADED is appropriate.
+  // DEGRADED | UNDERSIZED is appropriate.
   assert(!pg->actingbackfill.empty());
   if (pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid) <=
       pg->actingbackfill.size())
@@ -6060,8 +6107,6 @@ PG::RecoveryState::Recovered::Recovered(my_context ctx)
   // adjust acting set?  (e.g. because backfill completed...)
   if (pg->acting != pg->up && !pg->choose_acting(auth_log_shard))
     assert(pg->want_acting.size());
-
-  assert(!pg->needs_recovery());
 
   if (context< Active >().all_replicas_activated)
     post_event(GoClean());
@@ -6161,10 +6206,17 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
    * this does not matter) */
   if (advmap.lastmap->get_pg_size(pg->info.pgid.pgid) !=
       pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid)) {
-    if (pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid) <= pg->acting.size())
-      pg->state_clear(PG_STATE_DEGRADED);
-    else
+    if (pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid) <= pg->acting.size()) {
+      pg->state_clear(PG_STATE_UNDERSIZED);
+      if (pg->needs_recovery()) {
+	pg->state_set(PG_STATE_DEGRADED);
+      } else {
+	pg->state_clear(PG_STATE_DEGRADED);
+      }
+    } else {
+      pg->state_set(PG_STATE_UNDERSIZED);
       pg->state_set(PG_STATE_DEGRADED);
+    }
     pg->publish_stats_to_osd(); // degraded may have changed
   }
 
@@ -6367,6 +6419,7 @@ void PG::RecoveryState::Active::exit()
   pg->backfill_reserved = false;
   pg->backfill_reserving = false;
   pg->state_clear(PG_STATE_DEGRADED);
+  pg->state_clear(PG_STATE_UNDERSIZED);
   pg->state_clear(PG_STATE_BACKFILL_TOOFULL);
   pg->state_clear(PG_STATE_BACKFILL_WAIT);
   pg->state_clear(PG_STATE_RECOVERY_WAIT);
