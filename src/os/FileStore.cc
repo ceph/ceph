@@ -2219,7 +2219,9 @@ unsigned FileStore::_do_transaction(
 {
   dout(10) << "_do_transaction on " << &t << dendl;
 
+#ifdef WITH_LTTNG
   const char *osr_name = t.get_osr() ? ((OpSequencer*)t.get_osr())->get_name().c_str() : "<NULL>";
+#endif
 
   Transaction::iterator i = t.begin();
   
@@ -4469,7 +4471,7 @@ bool FileStore::collection_empty(coll_t c)
   }
   bool ret = ls.empty();
   tracepoint(objectstore, collection_empty_exit, ret);
-  return ls.empty();
+  return ret;
 }
 
 int FileStore::collection_list_range(coll_t c, ghobject_t start, ghobject_t end,

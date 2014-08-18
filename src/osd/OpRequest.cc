@@ -94,7 +94,9 @@ bool OpRequest::need_class_write_cap() {
 }
 
 void OpRequest::set_rmw_flags(int flags) {
+#ifdef WITH_LTTNG
   int old_rmw_flags = rmw_flags;
+#endif
   rmw_flags |= flags;
   tracepoint(oprequest, set_rmw_flags, reqid.name._type,
 	     reqid.name._num, reqid.tid, reqid.inc,
@@ -109,7 +111,9 @@ void OpRequest::set_pg_op() { set_rmw_flags(CEPH_OSD_RMW_FLAG_PGOP); }
 void OpRequest::set_cache() { set_rmw_flags(CEPH_OSD_RMW_FLAG_CACHE); }
 
 void OpRequest::mark_flag_point(uint8_t flag, string s) {
+#ifdef WITH_LTTNG
   uint8_t old_flags = hit_flag_points;
+#endif
   mark_event(s);
   current = s;
   hit_flag_points |= flag;
