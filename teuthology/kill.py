@@ -92,7 +92,7 @@ def find_run_info(serializer, run_name):
             continue
         job_num += 1
         beanstalk.print_progress(job_num, job_total, 'Reading Job: ')
-        job_info = serializer.job_info(run_name, job_id)
+        job_info = serializer.job_info(run_name, job_id, simple=True)
         for key in job_info.keys():
             if key in run_info_fields and key not in run_info:
                 run_info[key] = job_info[key]
