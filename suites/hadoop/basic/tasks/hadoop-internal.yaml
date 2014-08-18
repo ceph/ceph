@@ -10,4 +10,4 @@ tasks:
 - hadoop:
 - workunit: 
     clients:
-      client.0: [hadoop-internal-tests] 
+      client.0: [hadoop/internal-tests.sh]
