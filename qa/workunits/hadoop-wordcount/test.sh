@@ -17,7 +17,7 @@ wget http://ceph.com/qa/hadoop_input_files.tar -O $TESTDIR/hadoop_input/files.ta
 cd $TESTDIR/hadoop_input
 tar -xf $TESTDIR/hadoop_input/files.tar
 $HADOOP_HOME/bin/hadoop fs -mkdir /wordcount_input
-$HADOOP_HOME/bin/hadoop fs -rm -r -f /wordcount_output
+$HADOOP_HOME/bin/hadoop fs -rmr /wordcount_output
 $HADOOP_HOME/bin/hadoop fs -put $TESTDIR/hadoop_input/*txt /wordcount_input/
 $HADOOP_HOME/bin/hadoop jar $HADOOP_MR_HOME/hadoop-*examples.jar wordcount /wordcount_input /wordcount_output
 rm -rf $TESTDIR/hadoop_input
