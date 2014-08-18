@@ -109,7 +109,7 @@ class TeuthologyConfig(YamlConfig):
         'archive_base': '/var/lib/teuthworker/archive',
         'automated_scheduling': False,
         'ceph_git_base_url': 'https://github.com/ceph/',
-        'lock_server': 'http://paddles.front.sepia.ceph.com/nodes/',
+        'lock_server': 'http://paddles.front.sepia.ceph.com/',
         'max_job_time': 259200,  # 3 days
         'results_server': 'http://paddles.front.sepia.ceph.com/',
         'src_base_path': os.path.expanduser('~/src'),
