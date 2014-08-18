@@ -5531,7 +5531,9 @@ void OSD::ms_fast_dispatch(Message *m)
   }
   OpRequestRef op = op_tracker.create_request<OpRequest>(m);
   {
+#ifdef WITH_LTTNG
     osd_reqid_t reqid = op->get_reqid();
+#endif
     tracepoint(osd, ms_fast_dispatch, reqid.name._type,
         reqid.name._num, reqid.tid, reqid.inc);
   }
@@ -8291,7 +8293,9 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb ) 
   // osd:opwq_process marks the point at which an operation has been dequeued
   // and will begin to be handled by a worker thread.
   {
+#ifdef WITH_LTTNG
     osd_reqid_t reqid = op->get_reqid();
+#endif
     tracepoint(osd, opwq_process_start, reqid.name._type,
         reqid.name._num, reqid.tid, reqid.inc);
   }
@@ -8308,7 +8312,9 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb ) 
   osd->dequeue_op(item.first, op, tp_handle);
 
   {
+#ifdef WITH_LTTNG
     osd_reqid_t reqid = op->get_reqid();
+#endif
     tracepoint(osd, opwq_process_finish, reqid.name._type,
         reqid.name._num, reqid.tid, reqid.inc);
   }

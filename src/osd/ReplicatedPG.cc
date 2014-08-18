@@ -1846,7 +1846,9 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
   }
 
   {
+#ifdef WITH_LTTNG
     osd_reqid_t reqid = ctx->op->get_reqid();
+#endif
     tracepoint(osd, prepare_tx_enter, reqid.name._type,
         reqid.name._num, reqid.tid, reqid.inc);
   }
@@ -1854,7 +1856,9 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
   int result = prepare_transaction(ctx);
 
   {
+#ifdef WITH_LTTNG
     osd_reqid_t reqid = ctx->op->get_reqid();
+#endif
     tracepoint(osd, prepare_tx_exit, reqid.name._type,
         reqid.name._num, reqid.tid, reqid.inc);
   }

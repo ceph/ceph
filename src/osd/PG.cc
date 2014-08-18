@@ -1727,7 +1727,9 @@ void PG::queue_op(OpRequestRef& op)
   osd->op_wq.queue(make_pair(PGRef(this), op));
   {
     // after queue() to include any locking costs
+#ifdef WITH_LTTNG
     osd_reqid_t reqid = op->get_reqid();
+#endif
     tracepoint(pg, queue_op, reqid.name._type,
         reqid.name._num, reqid.tid, reqid.inc, op->rmw_flags);
   }
