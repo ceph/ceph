@@ -2284,7 +2284,9 @@ extern "C" int rados_ioctx_pool_stat(rados_ioctx_t io, struct rados_pool_stat_t 
   stats->num_object_copies = r.stats.sum.num_object_copies;
   stats->num_objects_missing_on_primary = r.stats.sum.num_objects_missing_on_primary;
   stats->num_objects_unfound = r.stats.sum.num_objects_unfound;
-  stats->num_objects_degraded = r.stats.sum.num_objects_degraded;
+  stats->num_objects_degraded =
+    r.stats.sum.num_objects_degraded +
+    r.stats.sum.num_objects_misplaced; // FIXME: this is imprecise
   stats->num_rd = r.stats.sum.num_rd;
   stats->num_rd_kb = r.stats.sum.num_rd_kb;
   stats->num_wr = r.stats.sum.num_wr;
