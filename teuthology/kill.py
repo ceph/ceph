@@ -84,9 +84,14 @@ def find_run_info(serializer, run_name):
     pids = []
     run_info = {}
     job_info = {}
-    for (job_id, job_dir) in serializer.jobs_for_run(run_name).iteritems():
+    job_num = 0
+    jobs = serializer.jobs_for_run(run_name)
+    job_total = len(jobs)
+    for (job_id, job_dir) in jobs.iteritems():
         if not os.path.isdir(job_dir):
             continue
+        job_num += 1
+        beanstalk.print_progress(job_num, job_total, 'Reading Job: ')
         job_info = serializer.job_info(run_name, job_id)
         for key in job_info.keys():
             if key in run_info_fields and key not in run_info:
