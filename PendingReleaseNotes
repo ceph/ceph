@@ -1,25 +1,3 @@
-
-v0.84
------
-
-* The *_kb perf counters on the monitor have been removed.  These are
-  replaced with a new set of *_bytes counters (e.g., cluster_osd_kb is
-  replaced by cluster_osd_bytes).
-
-* The rd_kb and wr_kb fields in the JSON dumps for pool stats (accessed via
-  the 'ceph df detail -f json-pretty' and related commands) have been replaced
-  with corresponding *_bytes fields.  Similarly, the 'total_space', 'total_used',
-  and 'total_avail' fields are replaced with 'total_bytes', 'total_used_bytes',
-  and 'total_avail_bytes' fields.
-
-* The 'rados df --format=json' output 'read_bytes' and 'write_bytes'
-  fields were incorrectly reporting ops; this is now fixed.
-
-* The 'rados df --format=json' output previously included 'read_kb' and
-  'write_kb' fields; these have been removed.  Please use 'read_bytes' and
-  'write_bytes' instead (and divide by 1024 if appropriate).
-
-
 v0.85
 -----
 
@@ -40,3 +18,6 @@ v0.85
   OSDs will still maintain the following osd-specific defaults:
 
     leveldb_log               = ""
+
+v0.86
+-----
