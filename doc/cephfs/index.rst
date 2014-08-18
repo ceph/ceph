@@ -54,13 +54,14 @@ least one :term:`Ceph Metadata Server` running.
 	</td><td><h3>Step 2: Mount Ceph FS</h3>
 
 Once you have a healthy Ceph Storage Cluster with at least
-one Ceph Metadata Server, you may mount your Ceph Filesystem.
+one Ceph Metadata Server, you may create and mount your Ceph Filesystem.
 Ensure that you client has network connectivity and the proper
 authentication keyring.
 
 .. toctree:: 
 	:maxdepth: 1
 
+	Create Ceph FS <createfs>
 	Mount Ceph FS <kernel>
 	Mount Ceph FS as FUSE <fuse>
 	Mount Ceph FS in fstab <fstab>
