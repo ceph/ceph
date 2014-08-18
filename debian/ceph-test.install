@@ -26,7 +26,5 @@ usr/bin/ceph-monstore-tool
 usr/bin/ceph-osdomap-tool
 usr/bin/ceph-kvstore-tool
 usr/share/java/libcephfs-test.jar
-usr/bin/rbd-replay
-usr/bin/rbd-replay-prep
-usr/share/man/man8/rbd-replay.8
-usr/share/man/man8/rbd-replay-prep.8
+usr/bin/rbd-replay*
+usr/share/man/man8/rbd-replay*.8
