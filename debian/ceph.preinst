@@ -1,0 +1,18 @@
+#!/bin/sh
+# vim: set noet ts=8:
+
+set -e
+
+if [ "$1" = "upgrade" ]; then
+    [ -x /sbin/stop ] && stop ceph-all || true
+    invoke-rc.d ceph stop || {
+	RESULT=$?
+	if [ $RESULT != 100 ]; then
+	    exit $RESULT
+	fi
+    }
+fi
+
+#DEBHELPER#
+
+exit 0
