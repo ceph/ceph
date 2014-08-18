@@ -48,6 +48,8 @@ using namespace std;
 
 #include "include/assert.h"
 
+#include "erasure-code/ErasureCodePlugin.h"
+
 #define dout_subsys ceph_subsys_osd
 
 OSD *osd = NULL;
@@ -64,6 +66,21 @@ void usage()
        << "[--mkfs] [--mkjournal] [--convert-filestore]" << dendl;
   derr << "   --debug_osd N   set debug level (e.g. 10)" << dendl;
   generic_server_usage();
+}
+
+int preload_erasure_code()
+{
+  string directory = g_conf->osd_pool_default_erasure_code_directory;
+  string plugins = g_conf->osd_erasure_code_plugins;
+  stringstream ss;
+  int r = ErasureCodePluginRegistry::instance().preload(plugins,
+							directory,
+							ss);
+  if (r)
+    derr << ss.str() << dendl;
+  else
+    dout(10) << ss.str() << dendl;
+  return r;
 }
 
 int main(int argc, const char **argv) 
@@ -450,6 +467,9 @@ int main(int argc, const char **argv)
   if (mc.build_initial_monmap() < 0)
     return -1;
   global_init_chdir(g_ceph_context);
+
+  if (preload_erasure_code() < -1)
+    return -1;
 
   osd = new OSD(g_ceph_context,
 		store,
