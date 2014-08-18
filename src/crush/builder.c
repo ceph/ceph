@@ -95,6 +95,7 @@ struct crush_rule *crush_make_rule(int len, int ruleset, int type, int minsize, 
                 return NULL;
 	rule->len = len;
 	rule->mask.ruleset = ruleset;
+	assert(rule->mask.ruleset == ruleset);
 	rule->mask.type = type;
 	rule->mask.min_size = minsize;
 	rule->mask.max_size = maxsize;
