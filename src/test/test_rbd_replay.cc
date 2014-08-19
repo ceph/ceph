@@ -16,14 +16,15 @@
 #include "gtest/gtest.h"
 #include <stdint.h>
 #include <boost/foreach.hpp>
+#include <cstdarg>
 #include "rbd_replay/Deser.hpp"
 #include "rbd_replay/ImageNameMap.hpp"
+#include "rbd_replay/ios.hpp"
 #include "rbd_replay/rbd_loc.hpp"
 #include "rbd_replay/Ser.hpp"
 
 
-using rbd_replay::ImageNameMap;
-using rbd_replay::rbd_loc;
+using namespace rbd_replay;
 
 std::ostream& operator<<(std::ostream& o, const rbd_loc& name) {
   return o << "('" << name.pool << "', '" << name.image << "', '" << name.snap << "')";
@@ -166,4 +167,59 @@ TEST(RBDReplay, rbd_loc_parse) {
   EXPECT_FALSE(m.parse("a@b@c"));
   EXPECT_FALSE(m.parse("a/b/c"));
   EXPECT_FALSE(m.parse("a@b/c"));
+}
+
+static IO::ptr mkio(action_id_t ionum, ...) {
+  IO::ptr io(new StartThreadIO(ionum, ionum, 0));
+
+  va_list ap;
+  va_start(ap, ionum);
+  while (true) {
+    IO::ptr* dep = va_arg(ap, IO::ptr*);
+    if (!dep) {
+      break;
+    }
+    io->dependencies().insert(*dep);
+  }
+  va_end(ap);
+
+  return io;
+}
+
+TEST(RBDReplay, batch_unreachable_from) {
+  io_set_t deps;
+  io_set_t base;
+  io_set_t unreachable;
+  IO::ptr io1(mkio(1, NULL));
+  IO::ptr io2(mkio(2, &io1, NULL));
+  IO::ptr io3(mkio(3, &io2, NULL));
+  IO::ptr io4(mkio(4, &io1, NULL));
+  IO::ptr io5(mkio(5, &io2, &io4, NULL));
+  IO::ptr io6(mkio(6, &io3, &io5, NULL));
+  IO::ptr io7(mkio(7, &io4, NULL));
+  IO::ptr io8(mkio(8, &io5, &io7, NULL));
+  IO::ptr io9(mkio(9, &io6, &io8, NULL));
+  // 1 (deps) <-- 2 (deps) <-- 3 (deps)
+  // ^            ^            ^
+  // |            |            |
+  // 4 <--------- 5 (base) <-- 6 (deps)
+  // ^            ^            ^
+  // |            |            |
+  // 7 <--------- 8 <--------- 9
+  deps.insert(io1);
+  deps.insert(io2);
+  deps.insert(io3);
+  deps.insert(io6);
+  base.insert(io5);
+  // Anything in 'deps' which is not reachable from 'base' is added to 'unreachable'
+  batch_unreachable_from(deps, base, &unreachable);
+  EXPECT_EQ(0, unreachable.count(io1));
+  EXPECT_EQ(0, unreachable.count(io2));
+  EXPECT_EQ(1, unreachable.count(io3));
+  EXPECT_EQ(0, unreachable.count(io4));
+  EXPECT_EQ(0, unreachable.count(io5));
+  EXPECT_EQ(1, unreachable.count(io6));
+  EXPECT_EQ(0, unreachable.count(io7));
+  EXPECT_EQ(0, unreachable.count(io8));
+  EXPECT_EQ(0, unreachable.count(io9));
 }

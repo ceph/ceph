@@ -583,6 +583,7 @@ unittest_rbd_replay_LDADD = $(LIBRBD) \
 	$(LIBRADOS) \
 	$(CEPH_GLOBAL) \
 	librbd_replay.la \
+	librbd_replay_ios.la \
 	$(UNITTEST_LDADD)
 unittest_rbd_replay_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_rbd_replay
