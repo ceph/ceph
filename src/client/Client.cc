@@ -1939,6 +1939,10 @@ bool Client::ms_dispatch(Message *m)
     handle_client_session(static_cast<MClientSession*>(m));
     break;
 
+  case CEPH_MSG_OSD_MAP:
+    m->put();
+    break;
+
     // requests
   case CEPH_MSG_CLIENT_REQUEST_FORWARD:
     handle_client_request_forward(static_cast<MClientRequestForward*>(m));
