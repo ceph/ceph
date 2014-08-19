@@ -38,9 +38,6 @@
    fun:_Z13GetStackTracePPvii
    fun:_ZN8tcmalloc8PageHeap8GrowHeapEm
    fun:_ZN8tcmalloc8PageHeap3NewEm
-   fun:_ZN8tcmalloc15CentralFreeList8PopulateEv
-   fun:_ZN8tcmalloc15CentralFreeList18FetchFromSpansSafeEv
-   fun:_ZN8tcmalloc15CentralFreeList11RemoveRangeEPPvS2_i
 }
 {
    tcmalloc: msync heap allocation points to uninit bytes 2 (trusty)
