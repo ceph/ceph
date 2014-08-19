@@ -76,15 +76,16 @@ def fetch_tasks_if_needed(job_config):
     # in its config.
     suite_path = job_config.get('suite_path')
     if suite_path:
-        log.info("suite_path is set to %s; not fetching tasks", suite_path)
-        return
+        log.info("suite_path is set to %s; will attempt to use it", suite_path)
+        if suite_path not in sys.path:
+            sys.path.insert(1, suite_path)
 
     try:
         import tasks
         log.info("Found tasks at %s", os.path.dirname(tasks.__file__))
         return
     except ImportError:
-        pass
+        log.info("Tasks not found; will attempt to fetch")
 
     ceph_branch = job_config.get('branch', 'master')
     suite_branch = job_config.get('suite_branch', ceph_branch)
