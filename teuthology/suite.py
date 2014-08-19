@@ -611,16 +611,15 @@ def build_matrix(path):
 def get_arch(machine_type):
     """
     Based on a given machine_type, return its architecture by querying the lock
-    server. Sound expensive? It is!
+    server.
 
     :returns: A string or None
     """
-    locks = lock.list_locks()
-    for machine in locks:
-        if machine['type'] == machine_type:
-            arch = machine['arch']
-            return arch
-    return None
+    result = lock.list_locks(machine_type=machine_type, count=1)
+    if not result:
+        log.warn("No machines found with machine_type %s!", machine_type)
+    else:
+        return result[0]['arch']
 
 
 class Placeholder(object):

@@ -399,7 +399,11 @@ def push_new_keys(keys_dict, reference):
 
 def do_summary(ctx):
     lockd = collections.defaultdict(lambda: [0, 0, 'unknown'])
-    for l in list_locks(machine_type=ctx.machine_type):
+    if ctx.machine_type:
+        locks = list_locks(machine_type=ctx.machine_type)
+    else:
+        locks = list_locks()
+    for l in locks:
         who = l['locked_by'] if l['locked'] == 1 \
             else '(free)', l['machine_type']
         lockd[who][0] += 1
