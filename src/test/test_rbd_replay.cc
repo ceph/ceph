@@ -19,6 +19,7 @@
 #include "rbd_replay/Deser.hpp"
 #include "rbd_replay/ImageNameMap.hpp"
 #include "rbd_replay/rbd_loc.hpp"
+#include "rbd_replay/Ser.hpp"
 
 
 using rbd_replay::ImageNameMap;
@@ -34,6 +35,23 @@ static void add_mapping(ImageNameMap *map, std::string mapping_string) {
     ASSERT_TRUE(false) << "Failed to parse mapping string '" << mapping_string << "'";
   }
   map->add_mapping(mapping);
+}
+
+TEST(RBDReplay, Ser) {
+  std::ostringstream oss;
+  rbd_replay::Ser ser(oss);
+  ser.write_uint32_t(0x01020304u);
+  ser.write_string("hello");
+  ser.write_bool(true);
+  ser.write_bool(false);
+  std::string s(oss.str());
+  const char* data = s.data();
+  size_t size = s.size();
+  ASSERT_EQ(15, size);
+  const char expected_data[] = {1, 2, 3, 4, 0, 0, 0, 5, 'h', 'e', 'l', 'l', 'o', 1, 0};
+  for (size_t i = 0; i < size; i++) {
+    EXPECT_EQ(expected_data[i], data[i]);
+  }
 }
 
 TEST(RBDReplay, Deser) {
