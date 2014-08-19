@@ -801,6 +801,16 @@ void Paxos::accept_timeout()
   mon->bootstrap();
 }
 
+struct C_Committed : public Context {
+  Paxos *paxos;
+  C_Committed(Paxos *p) : paxos(p) {}
+  void finish(int r) {
+    assert(r >= 0);
+    Mutex::Locker l(paxos->mon->lock);
+    paxos->commit_finish();
+  }
+};
+
 void Paxos::commit_start()
 {
   dout(10) << __func__ << " " << (last_committed+1) << dendl;
@@ -827,9 +837,9 @@ void Paxos::commit_start()
   logger->inc(l_paxos_commit_bytes, t->get_bytes());
   commit_start_stamp = ceph_clock_now(NULL);
 
-  get_store()->apply_transaction(t);
+  get_store()->queue_transaction(t, new C_Committed(this));
 
-  commit_finish();
+  state = STATE_WRITING;
 }
 
 void Paxos::commit_finish()
@@ -876,9 +886,14 @@ void Paxos::commit_finish()
 
   remove_legacy_versions();
 
+  // WRITING -> REFRESH
+  // among other things, this lets do_refresh() -> mon->bootstrap() know
+  // it doesn't need to flush the store queue
+  assert(state == STATE_WRITING);
+  state = STATE_REFRESH;
+
   if (do_refresh()) {
-    if (is_updating())
-      commit_proposal();
+    commit_proposal();
 
     finish_contexts(g_ceph_context, waiting_for_commit);
 
@@ -1010,16 +1025,22 @@ void Paxos::commit_proposal()
 {
   dout(10) << __func__ << dendl;
   assert(mon->is_leader());
-  assert(!proposals.empty());
-  assert(is_updating());
+  assert(is_refresh());
+
+  if (proposals.empty()) {
+    return;  // must have been updating previous
+  }
 
   C_Proposal *proposal = static_cast<C_Proposal*>(proposals.front());
-  assert(proposal->proposed);
-  dout(10) << __func__ << " proposal " << proposal << " took "
-	   << (ceph_clock_now(NULL) - proposal->proposal_time)
-	   << " to finish" << dendl;
-  proposals.pop_front();
-  proposal->complete(0);
+  if (proposal->proposed) {
+    dout(10) << __func__ << " proposal " << proposal << " took "
+	     << (ceph_clock_now(NULL) - proposal->proposal_time)
+	     << " to finish" << dendl;
+    proposals.pop_front();
+    proposal->complete(0);
+  } else {
+    // must have been updating previous.
+  }
 }
 
 void Paxos::finish_round()
