@@ -499,7 +499,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
   } else {
     // by osd utilization
     int num_osd = MIN(1, pgm.osd_stat.size());
-    if (pgm.osd_sum.kb * 1024 / num_osd
+    if ((uint64_t)pgm.osd_sum.kb * 1024 / num_osd
 	< g_conf->mon_reweight_min_bytes_per_osd) {
       ostringstream oss;
       oss << "Refusing to reweight: we only have " << pgm.osd_sum.kb
@@ -507,7 +507,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
       out_str = oss.str();
       return -EDOM;
     }
-    if (pgm.osd_sum.kb_used * 1024 / num_osd
+    if ((uint64_t)pgm.osd_sum.kb_used * 1024 / num_osd
 	< g_conf->mon_reweight_min_bytes_per_osd) {
       ostringstream oss;
       oss << "Refusing to reweight: we only have " << pgm.osd_sum.kb_used
