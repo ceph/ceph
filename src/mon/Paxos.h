@@ -223,6 +223,13 @@ public:
      * Leader proposing an old value
      */
     STATE_UPDATING_PREVIOUS,
+    /*
+     * Leader/Peon is writing a new commit.  readable, but not
+     * writeable.
+     */
+    STATE_WRITING,
+    // leader: refresh following a commit
+    STATE_REFRESH,
   };
 
   /**
@@ -244,6 +251,10 @@ public:
       return "updating";
     case STATE_UPDATING_PREVIOUS:
       return "updating-previous";
+    case STATE_WRITING:
+      return "writing";
+    case STATE_REFRESH:
+      return "refresh";
     default:
       return "UNKNOWN";
     }
@@ -283,6 +294,12 @@ public:
    * previous quorum
    */
   bool is_updating_previous() const { return state == STATE_UPDATING_PREVIOUS; }
+
+  /// @return 'true' if we are writing an update to disk
+  bool is_writing() const { return state == STATE_WRITING; }
+
+  /// @return 'true' if we are refreshing an update just committed
+  bool is_refresh() const { return state == STATE_REFRESH; }
 
 private:
   /**
