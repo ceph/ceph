@@ -666,15 +666,6 @@ bool RGWAccessKeyPool::check_existing_key(RGWUserAdminOpState& op_state)
 
   switch (key_type) {
   case KEY_TYPE_SWIFT:
-    kiter = swift_keys->find(kid);
-
-    existing_key = (kiter != swift_keys->end());
-    if (existing_key)
-      break;
-
-    if (swift_kid.empty())
-      return false;
-
     kiter = swift_keys->find(swift_kid);
 
     existing_key = (kiter != swift_keys->end());
@@ -845,7 +836,7 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
     } while (!rgw_get_user_info_by_access_key(store, id, duplicate_check));
   }
 
-  if (key_type == KEY_TYPE_SWIFT && gen_access) {
+  if (key_type == KEY_TYPE_SWIFT) {
     id = op_state.build_default_swift_kid();
     if (id.empty()) {
       set_err_msg(err_msg, "empty swift access key");
