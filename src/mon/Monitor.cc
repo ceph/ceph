@@ -781,6 +781,12 @@ void Monitor::shutdown()
 
 void Monitor::bootstrap()
 {
+  if (paxos->is_writing()) {
+    dout(10) << "bootstrap flushing pending write" << dendl;
+    lock.Unlock();
+    store->flush();
+    lock.Lock();
+  }
   dout(10) << "bootstrap" << dendl;
 
   sync_reset_requester();
