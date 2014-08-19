@@ -54,6 +54,7 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_LEVELDBLOG CompatSet::Feature(9, "leveldblog")
 #define CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER CompatSet::Feature(10, "snapmapper")
 #define CEPH_OSD_FEATURE_INCOMPAT_SHARDS CompatSet::Feature(11, "sharded objects")
+#define CEPH_OSD_FEATURE_INCOMPAT_HINTS CompatSet::Feature(12, "transaction hints")
 
 
 /// max recovery priority for MBackfillReserve
@@ -978,6 +979,9 @@ public:
 
   uint32_t stripe_width;        ///< erasure coded stripe size in bytes
 
+  uint64_t expected_num_objects; ///< expected number of objects on this pool, a value of 0 indicates
+                                 ///< user does not specify any expected value
+
   pg_pool_t()
     : flags(0), type(0), size(0), min_size(0),
       crush_ruleset(0), object_hash(0),
@@ -1000,7 +1004,8 @@ public:
       hit_set_period(0),
       hit_set_count(0),
       min_read_recency_for_promote(0),
-      stripe_width(0)
+      stripe_width(0),
+      expected_num_objects(0)
   { }
 
   void dump(Formatter *f) const;

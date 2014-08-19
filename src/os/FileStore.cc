@@ -2378,6 +2378,28 @@ unsigned FileStore::_do_transaction(
       }
       break;
 
+    case Transaction::OP_COLL_HINT:
+      {
+        coll_t cid = i.decode_cid();
+        uint32_t type = i.decode_u32();
+        bufferlist hint;
+        i.decode_bl(hint);
+        bufferlist::iterator hiter = hint.begin();
+        if (type == Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS) {
+          uint32_t pg_num;
+          uint64_t num_objs;
+          ::decode(pg_num, hiter);
+          ::decode(num_objs, hiter);
+          if (_check_replay_guard(cid, spos) > 0) {
+            r = _collection_hint_expected_num_objs(cid, pg_num, num_objs, spos);
+          }
+        } else {
+          // Ignore the hint
+          dout(10) << "Unrecognized collection hint type: " << type << dendl;
+        }
+      }
+      break;
+
     case Transaction::OP_RMCOLL:
       {
 	coll_t cid = i.decode_cid();
@@ -4569,6 +4591,34 @@ ObjectMap::ObjectMapIterator FileStore::get_omap_iterator(coll_t c,
       return ObjectMap::ObjectMapIterator();
   }
   return object_map->get_iterator(hoid);
+}
+
+int FileStore::_collection_hint_expected_num_objs(coll_t c, uint32_t pg_num,
+    uint64_t expected_num_objs,
+    const SequencerPosition &spos)
+{
+  dout(15) << __func__ << " collection: " << c << " pg number: "
+     << pg_num << " expected number of objects: " << expected_num_objs << dendl;
+
+  if (!collection_empty(c) && !replaying) {
+    dout(0) << "Failed to give an expected number of objects hint to collection : "
+      << c << ", only empty collection can take such type of hint. " << dendl;
+    return 0;
+  }
+
+  int ret;
+  Index index;
+  ret = get_index(c, &index);
+  if (ret < 0)
+    return ret;
+  // Pre-hash the collection
+  ret = index->pre_hash_collection(pg_num, expected_num_objs);
+  dout(10) << "pre_hash_collection " << c << " = " << ret << dendl;
+  if (ret < 0)
+    return ret;
+  _set_replay_guard(c, spos);
+
+  return 0;
 }
 
 int FileStore::_create_collection(
