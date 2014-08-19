@@ -1290,7 +1290,7 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
       osdmap.get_info(from).up_from > m->version) {
     dout(7) << "prepare_boot msg from before last up_from, ignoring" << dendl;
     send_latest(m, m->sb.current_epoch+1);
-    goto ignore;
+    return true;
   }
 
   // noup?
