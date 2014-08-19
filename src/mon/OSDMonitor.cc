@@ -487,7 +487,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
       }
     }
 
-    if (num_pg_copies / num_osds < 10) {
+    if (num_pg_copies / num_osds < g_conf->mon_reweight_min_pgs_per_osd) {
       ostringstream oss;
       oss << "Refusing to reweight: we only have " << num_pg_copies
 	  << " PGs across " << num_osds << " osds!\n";
@@ -498,18 +498,20 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
     average_util = (double)num_pg_copies / weight_sum;
   } else {
     // by osd utilization
-    if (pgm.osd_sum.kb < 1024) {
+    int num_osd = MIN(1, pgm.osd_stat.size());
+    if (pgm.osd_sum.kb * 1024 / num_osd
+	< g_conf->mon_reweight_min_bytes_per_osd) {
       ostringstream oss;
-      oss << "Refusing to reweight: we only have " << pgm.osd_sum << " kb "
-	"across all osds!\n";
+      oss << "Refusing to reweight: we only have " << pgm.osd_sum.kb
+	  << " kb across all osds!\n";
       out_str = oss.str();
       return -EDOM;
     }
-
-    if (pgm.osd_sum.kb_used < 5 * 1024) {
+    if (pgm.osd_sum.kb_used * 1024 / num_osd
+	< g_conf->mon_reweight_min_bytes_per_osd) {
       ostringstream oss;
-      oss << "Refusing to reweight: we only have " << pgm.osd_sum << " kb "
-	"used across all osds!\n";
+      oss << "Refusing to reweight: we only have " << pgm.osd_sum.kb_used
+	  << " kb used across all osds!\n";
       out_str = oss.str();
       return -EDOM;
     }
