@@ -379,6 +379,7 @@ bool librados::RadosClient::_dispatch(Message *m)
     lock.Lock();
     cond.Signal();
     lock.Unlock();
+    m->put();
     break;
 
   case CEPH_MSG_MDS_MAP:
