@@ -14,6 +14,7 @@ noinst_HEADERS += rbd_replay/BoundedBuffer.hpp \
 	rbd_replay/actions.hpp \
 	rbd_replay/Deser.hpp \
 	rbd_replay/ImageNameMap.hpp \
+	rbd_replay/ios.hpp \
 	rbd_replay/PendingIO.hpp \
 	rbd_replay/rbd_loc.hpp \
 	rbd_replay/rbd_replay_debug.hpp \
@@ -31,12 +32,19 @@ if LINUX
 bin_PROGRAMS += rbd-replay
 endif #LINUX
 
-# TODO: See if we need any new dependencies
+librbd_replay_ios_la_SOURCES = rbd_replay/ios.cc
+librbd_replay_ios_la_LIBADD = $(LIBRBD) \
+	$(LIBRADOS) \
+	$(CEPH_GLOBAL) \
+	librbd_replay.la
+noinst_LTLIBRARIES += librbd_replay_ios.la
+
 rbd_replay_prep_SOURCES = rbd_replay/rbd-replay-prep.cc
 rbd_replay_prep_LDADD = $(LIBRBD) \
 	$(LIBRADOS) \
 	$(CEPH_GLOBAL) \
 	librbd_replay.la \
+	librbd_replay_ios.la \
 	-lbabeltrace \
 	-lbabeltrace-ctf \
 	-lboost_date_time
