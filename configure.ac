@@ -812,12 +812,11 @@ fi
 rm -rf "$lttng_gen_tp_dir"
 AC_MSG_RESULT([$have_good_lttng_gen_tp])
 
-AC_CHECK_HEADERS([babeltrace/ctf/events.h babeltrace/babeltrace.h])
 AC_ARG_WITH([lttng],
 	[AS_HELP_STRING([--with-lttng], [Trace with LTTng])])
 AS_IF([test "x$with_lttng" = "xno"], [use_lttng=no],
       [test "x$with_lttng" = "xyes"], [use_lttng=yes],
-      [test "x$ac_cv_header_babeltrace_ctf_events_h$ac_cv_header_babeltrace_babeltrace_h$have_good_lttng_gen_tp" = "xyesyesyes"], [use_lttng=yes; AC_MSG_NOTICE([lttng auto-enabled])],
+      [test "x$have_good_lttng_gen_tp" = "xyes"], [use_lttng=yes; AC_MSG_NOTICE([lttng auto-enabled])],
       [use_lttng=no; AC_MSG_NOTICE([lttng auto-disabled])])
 AM_CONDITIONAL([WITH_LTTNG], test x"$use_lttng" = x"yes")
 AM_COND_IF([WITH_LTTNG], [
@@ -825,12 +824,6 @@ AM_COND_IF([WITH_LTTNG], [
 
   AC_CHECK_HEADER([lttng/tracepoint.h], [],
     AC_MSG_ERROR([lttng/tracepoint.h not found (liblttng-ust-dev, lttng-ust-devel)]))
-
-  AC_CHECK_HEADER([babeltrace/babeltrace.h], [],
-    AC_MSG_ERROR([babeltrace/babeltrac.h not found (libbabeltrace-dev, libbabeltrace-devel)]))
-
-  AC_CHECK_HEADER([babeltrace/ctf/events.h], [],
-    AC_MSG_ERROR([babeltrace/ctf/events.h not found (libbabeltrace-ctf-dev, libbabeltrace-devel)]))
 
   AC_CHECK_PROG([LTTNG_GEN_TP_CHECK], [lttng-gen-tp], [yes])
   if test x"$LTTNG_GEN_TP_CHECK" != "xyes"; then
@@ -871,6 +864,30 @@ AM_COND_IF([WITH_LTTNG], [
 ], [
   AC_DEFINE([tracepoint(...)], [], [LTTng is disabled, so define this macro to be nothing.])
 ])
+
+
+AC_CHECK_HEADERS([babeltrace/ctf/events.h babeltrace/babeltrace.h])
+AC_CHECK_DECL([BT_CLOCK_REAL],
+              [have_good_babeltrace=yes],
+              [have_good_babeltrace=no],
+              [[#include <babeltrace/babeltrace.h>]])
+AC_ARG_WITH([babeltrace],
+	[AS_HELP_STRING([--with-babeltrace], [Enable Babeltrace])])
+AS_IF([test "x$with_babeltrace" = "xno"], [use_babeltrace=no],
+      [test "x$with_babeltrace" = "xyes"], [use_babeltrace=yes],
+      [test "x$ac_cv_header_babeltrace_ctf_events_h$ac_cv_header_babeltrace_babeltrace_h$have_good_babeltrace" = "xyesyesyes"], [use_babeltrace=yes; AC_MSG_NOTICE([babeltrace auto-enabled])],
+      [use_babeltrace=no; AC_MSG_NOTICE([babeltrace auto-disabled])])
+AM_CONDITIONAL([WITH_BABELTRACE], test x"$use_babeltrace" = x"yes")
+AM_COND_IF([WITH_BABELTRACE], [
+  AC_DEFINE([WITH_BABELTRACE], [1], [Define if you want to use Babeltrace])
+
+  AC_CHECK_HEADER([babeltrace/babeltrace.h], [],
+    AC_MSG_ERROR([babeltrace/babeltrac.h not found (libbabeltrace-dev, libbabeltrace-devel)]))
+
+  AC_CHECK_HEADER([babeltrace/ctf/events.h], [],
+    AC_MSG_ERROR([babeltrace/ctf/events.h not found (libbabeltrace-ctf-dev, libbabeltrace-devel)]))
+])
+
 
 
 # Checks for typedefs, structures, and compiler characteristics.

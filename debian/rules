@@ -34,7 +34,9 @@ ifeq ($(DEB_HOST_ARCH), armel)
 endif
 
 ifeq ($(shell lsb_release -sc | egrep -q '(precise|quantal|raring|saucy|wheezy)' && echo yes),yes)
-  extraopts += --without-lttng
+  extraopts += --without-lttng --without-babeltrace
+else
+  extraopts += --with-lttng --with-babeltrace
 endif
 
 configure: configure-stamp
