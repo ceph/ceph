@@ -796,7 +796,7 @@ void Paxos::accept_timeout()
   dout(1) << "accept timeout, calling fresh election" << dendl;
   accept_timeout_event = 0;
   assert(mon->is_leader());
-  assert(is_updating() || is_updating_previous());
+  assert(is_updating() || is_updating_previous() || is_writing());
   logger->inc(l_paxos_accept_timeout);
   mon->bootstrap();
 }
@@ -1396,7 +1396,7 @@ bool Paxos::is_readable(version_t v)
     return false;
   return 
     (mon->is_peon() || mon->is_leader()) &&
-    (is_active() || is_updating()) &&
+    (is_active() || is_updating() || is_writing()) &&
     last_committed > 0 &&           // must have a value
     (mon->get_quorum().size() == 1 ||  // alone, or
      is_lease_valid()); // have lease

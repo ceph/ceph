@@ -549,7 +549,7 @@ public:
   bool is_active() {
     return
       !is_proposing() &&
-      (paxos->is_active() || paxos->is_updating());
+      (paxos->is_active() || paxos->is_updating() || paxos->is_writing());
   }
 
   /**
@@ -580,7 +580,7 @@ public:
    *
    *  - we are not proposing a new version;
    *  - we are ready to be written to -- i.e., we have a pending value.
-   *  - paxos is (active or updating)
+   *  - paxos is (active or updating or writing or refresh)
    *
    * @returns true if writeable; false otherwise
    */
@@ -588,7 +588,7 @@ public:
     return
       !is_proposing() &&
       is_write_ready() &&
-      (paxos->is_active() || paxos->is_updating());
+      (paxos->is_active() || paxos->is_updating() || paxos->is_writing());
   }
 
   /**
