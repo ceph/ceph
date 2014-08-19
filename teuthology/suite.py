@@ -50,6 +50,8 @@ def main(args):
     if email:
         config.results_email = email
     timeout = args['--timeout']
+    filter_in = args['--filter']
+    filter_out = args['--filter-out']
 
     name = make_run_name(suite, ceph_branch, kernel_branch, kernel_flavor,
                          machine_type)
@@ -83,6 +85,8 @@ def main(args):
                          timeout=timeout,
                          dry_run=dry_run,
                          verbose=verbose,
+                         filter_in=filter_in,
+                         filter_out=filter_out,
                          )
     os.remove(base_yaml_path)
 
@@ -224,7 +228,8 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
 
 
 def prepare_and_schedule(job_config, suite_repo_path, base_yaml_paths, limit,
-                         num, timeout, dry_run, verbose):
+                         num, timeout, dry_run, verbose,
+                         filter_in, filter_out):
     """
     Puts together some "base arguments" with which to execute
     teuthology-schedule for each job, then passes them and other parameters to
@@ -263,6 +268,8 @@ def prepare_and_schedule(job_config, suite_repo_path, base_yaml_paths, limit,
         arch=arch,
         limit=limit,
         dry_run=dry_run,
+        filter_in=filter_in,
+        filter_out=filter_out,
         )
 
     if job_config.email and num_jobs:
@@ -434,6 +441,8 @@ def schedule_suite(job_config,
                    arch,
                    limit=0,
                    dry_run=True,
+                   filter_in=None,
+                   filter_out=None,
                    ):
     """
     schedule one suite.
@@ -455,6 +464,15 @@ def schedule_suite(job_config,
                 'Stopped after {limit} jobs due to --limit={limit}'.format(
                     limit=limit))
             break
+        if filter_in:
+            if not filter_in in description:
+                if all([x.find(filter_in) < 0 for x in fragment_paths]):
+                    continue
+        if filter_out:
+            if filter_out in description or any([filter_out in z
+                    for z in fragment_paths]):
+                continue
+
         raw_yaml = '\n'.join([file(a, 'r').read() for a in fragment_paths])
 
         parsed_yaml = yaml.load(raw_yaml)
