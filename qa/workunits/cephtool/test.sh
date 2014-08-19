@@ -892,7 +892,13 @@ function test_mon_osd_misc()
 
   # expect "not in range" for invalid overload percentage
   ceph osd reweight-by-utilization 80 2>$TMPFILE; check_response 'not in range' $? 22
+
   set -e
+
+  ceph osd reweight-by-utilization 110
+  ceph osd reweight-by-pg 110
+  ceph osd reweight-by-pg 110 rbd
+  expect_false ceph osd reweight-by-pg 110 boguspoolasdfasdfasdf
 }
 
 function test_mon_heap_profiler()
