@@ -26,7 +26,6 @@
 #include <boost/lexical_cast.hpp>
 
 #include "DeterministicOpSequence.h"
-
 #include "common/config.h"
 #include "include/assert.h"
 
@@ -79,6 +78,9 @@ bool DeterministicOpSequence::run_one_op(int op, rngen_t& gen)
     break;
   case DSOP_SET_ATTRS:
     ok = do_set_attrs(gen);
+    break;
+  case DSOP_COLL_CREATE:
+    ok = do_coll_create(gen);
     break;
   default:
     assert(0 == "bad op");
@@ -436,6 +438,47 @@ bool DeterministicOpSequence::do_coll_add(rngen_t& gen)
 
   _do_coll_add(orig_coll->m_coll, new_coll->m_coll, *obj);
   return true;
+}
+
+bool DeterministicOpSequence::do_coll_create(rngen_t& gen)
+{
+  boost::uniform_int<> pg_num_range(0, 512);
+  int pg_num = pg_num_range(gen);
+
+  // Assume there is 7 OSDs in total, the PGs are evenly distributed across those OSDs
+  int pgs = pg_num / 7;
+
+  boost::uniform_int<> num_objs_range(1, 1024);
+  int num_objs = num_objs_range(gen);
+
+  int pool_id = get_next_pool_id();
+  std::set<int> pg_created;
+  for (int i = 0; i < pgs; i++) {
+    boost::uniform_int<> pg_range(0, pg_num - 1);
+    int pg_id = pg_range(gen);
+    if (pg_created.count(pg_id) > 0)
+      continue;
+    char buf[100];
+    snprintf(buf, 100, "%d.%x_head", pool_id, pg_id);
+    _do_coll_create(coll_t(buf), (uint32_t) pg_num, (uint64_t) num_objs);
+    pg_created.insert(pg_id);
+  }
+  return true;
+}
+
+void DeterministicOpSequence::_do_coll_create(coll_t cid, uint32_t pg_num, uint64_t num_objs)
+{
+  ObjectStore::Transaction t;
+  note_txn(&t);
+  t.create_collection(cid);
+  bufferlist hint;
+  ::encode(pg_num, hint);
+  ::encode(num_objs, hint);
+  t.collection_hint(cid, ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS, hint);
+  dout(0) << "Give collection: " << cid << " a hint, pg_num is: " << pg_num << ", num_objs is: "
+    << num_objs << dendl;
+
+  m_store->apply_transaction(t);
 }
 
 void DeterministicOpSequence::_do_touch(coll_t coll, hobject_t& obj)

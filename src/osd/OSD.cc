@@ -157,6 +157,7 @@ CompatSet OSD::get_osd_initial_compat_set() {
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_LEVELDBINFO);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_LEVELDBLOG);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_HINTS);
   return CompatSet(ceph_osd_feature_compat, ceph_osd_feature_ro_compat,
 		   ceph_osd_feature_incompat);
 }
@@ -3193,8 +3194,21 @@ void OSD::handle_pg_peering_evt(
     PG::RecoveryCtx rctx = create_context();
     switch (result) {
     case RES_NONE: {
+      const pg_pool_t* pp = osdmap->get_pg_pool(pgid.pool());
+      coll_t cid(pgid);
+
       // ok, create the pg locally using provided Info and History
-      rctx.transaction->create_collection(coll_t(pgid));
+      rctx.transaction->create_collection(cid);
+
+      // Give a hint to the PG collection
+      bufferlist hint;
+      uint32_t pg_num = pp->get_pg_num();
+      uint64_t expected_num_objects_pg = pp->expected_num_objects / pg_num;
+      ::encode(pg_num, hint);
+      ::encode(expected_num_objects_pg, hint);
+      uint32_t hint_type = ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS;
+      rctx.transaction->collection_hint(cid, hint_type, hint);
+
       PG *pg = _create_lock_pg(
 	get_map(epoch),
 	pgid, create, false, result == RES_SELF,
@@ -7047,8 +7061,20 @@ void OSD::handle_pg_create(OpRequestRef op)
 
     PG *pg = NULL;
     if (can_create_pg(pgid)) {
+      const pg_pool_t* pp = osdmap->get_pg_pool(pgid.pool());
       pg_interval_map_t pi;
-      rctx.transaction->create_collection(coll_t(pgid));
+      coll_t cid(pgid);
+      rctx.transaction->create_collection(cid);
+
+      // Give a hint to the PG collection
+      bufferlist hint;
+      uint32_t pg_num = pp->get_pg_num();
+      uint64_t expected_num_objects_pg = pp->expected_num_objects / pg_num;
+      ::encode(pg_num, hint);
+      ::encode(expected_num_objects_pg, hint);
+      uint32_t hint_type = ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS;
+      rctx.transaction->collection_hint(cid, hint_type, hint);
+
       pg = _create_lock_pg(
 	osdmap, pgid, true, false, false,
 	0, creating_pgs[pgid].acting, whoami,
