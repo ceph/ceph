@@ -30,6 +30,7 @@ CEPH_ARGS+=" --run-dir=$DIR"
 CEPH_ARGS+=" --mon-host=$MONA"
 CEPH_ARGS+=" --log-file=$DIR/\$name.log"
 CEPH_ARGS+=" --pid-file=$DIR/\$name.pidfile"
+CEPH_ARGS+=" --osd-pool-default-erasure-code-directory=.libs"
 CEPH_ARGS+=" --auth-supported=none"
 CEPH_DISK_ARGS=
 CEPH_DISK_ARGS+=" --statedir=$DIR"
