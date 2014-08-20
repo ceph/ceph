@@ -95,6 +95,23 @@ Once you are done, type the following to stop the development ceph deployment:
 
 	$ ./stop.sh
 
+Running a RadosGW development environment
+-----------------------------------------
+Add the ``-r`` to vstart.sh to enable the RadosGW
+
+.. code::
+
+	$ cd src
+	$ ./vstart.sh -d -n -x -r
+
+You can now use the swift python client to communicate with the RadosGW.
+
+.. code::
+    $ swift -A http://localhost:8080/auth -U tester:testing -K asdf list
+    $ swift -A http://localhost:8080/auth -U tester:testing -K asdf upload mycontainer ceph
+    $ swift -A http://localhost:8080/auth -U tester:testing -K asdf list
+
+
 Run unit tests
 --------------
 
