@@ -93,7 +93,7 @@ configuration details, perform the following steps using ``ceph-deploy``.
 #. Add the initial monitor(s) and gather the keys (new in 
    ``ceph-deploy`` v1.1.3). ::
 
-	ceph-deploy mon create-initial
+	ceph-deploy mon create-initial {ceph-node}
 
    **Note:** In earlier versions of ``ceph-deploy``, you must create the
    initial monitor(s) and gather keys in two discrete steps. First, create
