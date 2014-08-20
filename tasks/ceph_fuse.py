@@ -67,6 +67,19 @@ def task(ctx, config):
               valgrind: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
         - interactive:
 
+    Example that stops an already-mounted client:
+
+    ::
+
+        tasks:
+            - ceph:
+            - ceph-fuse: [client.0]
+            - ... do something that requires the FS mounted ...
+            - ceph-fuse:
+                client.0:
+                    mounted: false
+            - ... do something that requires the FS unmounted ...
+
     :param ctx: Context
     :param config: Configuration
     """
@@ -75,31 +88,48 @@ def task(ctx, config):
     testdir = teuthology.get_testdir(ctx)
     config = get_client_configs(ctx, config)
 
+    # List clients we will configure mounts for, default is all clients
     clients = list(teuthology.get_clients(ctx=ctx, roles=config.keys()))
 
-    fuse_mounts = {}
+    all_mounts = getattr(ctx, 'mounts', {})
+    mounted_by_me = {}
+
+    # Construct any new FuseMount instances
     for id_, remote in clients:
         client_config = config.get("client.%s" % id_)
         if client_config is None:
             client_config = {}
 
-        fuse_mount = FuseMount(client_config, testdir, id_, remote)
-        fuse_mounts[id_] = fuse_mount
+        if id_ not in all_mounts:
+            fuse_mount = FuseMount(client_config, testdir, id_, remote)
+            all_mounts[id_] = fuse_mount
+        else:
+            # Catch bad configs where someone has e.g. tried to use ceph-fuse and kcephfs for the same client
+            assert isinstance(all_mounts[id_], FuseMount)
 
-        fuse_mount.mount()
+        if client_config.get('mounted', True):
+            mounted_by_me[id_] = all_mounts[id_]
 
-    for mount in fuse_mounts.values():
+    # Mount any clients we have been asked to (default to mount all)
+    for mount in mounted_by_me.values():
+        mount.mount()
+
+    for mount in mounted_by_me.values():
         mount.wait_until_mounted()
 
-    ctx.mounts = fuse_mounts
+    # Umount any pre-existing clients that we have not been asked to mount
+    for client_id in set(all_mounts.keys()) - set(mounted_by_me.keys()):
+        mount = all_mounts[client_id]
+        if mount.is_mounted():
+            mount.umount_wait()
+
+    ctx.mounts = all_mounts
     try:
-        yield fuse_mounts
+        yield all_mounts
     finally:
         log.info('Unmounting ceph-fuse clients...')
-        for mount in fuse_mounts.values():
-            mount.umount()
 
-        run.wait([m.fuse_daemon for m in fuse_mounts.values()], timeout=600)
-
-        for mount in fuse_mounts.values():
-            mount.cleanup()
+        for mount in mounted_by_me.values():
+            # Conditional because an inner context might have umounted it
+            if mount.is_mounted():
+                mount.umount_wait()
