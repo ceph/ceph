@@ -1377,7 +1377,7 @@ void FileJournal::check_aio_completion()
   assert(aio_lock.is_locked());
   dout(20) << "check_aio_completion" << dendl;
 
-  bool completed_something = false;
+  bool completed_something = false, signal = false;
   uint64_t new_journaled_seq = 0;
 
   list<aio_info>::iterator p = aio_queue.begin();
@@ -1391,6 +1391,7 @@ void FileJournal::check_aio_completion()
     aio_num--;
     aio_bytes -= p->len;
     aio_queue.erase(p++);
+    signal = true;
   }
 
   if (completed_something) {
@@ -1410,7 +1411,8 @@ void FileJournal::check_aio_completion()
 	queue_completions_thru(journaled_seq);
       }
     }
-
+  }
+  if (signal) {
     // maybe write queue was waiting for aio count to drop?
     aio_cond.Signal();
   }
