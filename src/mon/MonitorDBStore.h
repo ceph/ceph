@@ -86,6 +86,9 @@ class MonitorDBStore
 
   struct Transaction {
     list<Op> ops;
+    uint64_t bytes, keys;
+
+    Transaction() : bytes(0), keys(0) {}
 
     enum {
       OP_PUT	= 1,
@@ -95,6 +98,8 @@ class MonitorDBStore
 
     void put(string prefix, string key, bufferlist& bl) {
       ops.push_back(Op(OP_PUT, prefix, key, bl));
+      ++keys;
+      bytes += prefix.length() + key.length() + bl.length();
     }
 
     void put(string prefix, version_t ver, bufferlist& bl) {
@@ -111,6 +116,8 @@ class MonitorDBStore
 
     void erase(string prefix, string key) {
       ops.push_back(Op(OP_ERASE, prefix, key));
+      ++keys;
+      bytes += prefix.length() + key.length();
     }
 
     void erase(string prefix, version_t ver) {
@@ -128,14 +135,20 @@ class MonitorDBStore
     }
 
     void encode(bufferlist& bl) const {
-      ENCODE_START(1, 1, bl);
+      ENCODE_START(2, 1, bl);
       ::encode(ops, bl);
+      ::encode(bytes, bl);
+      ::encode(keys, bl);
       ENCODE_FINISH(bl);
     }
 
     void decode(bufferlist::iterator& bl) {
-      DECODE_START(1, bl);
+      DECODE_START(2, bl);
       ::decode(ops, bl);
+      if (struct_v >= 2) {
+	::decode(bytes, bl);
+	::decode(keys, bl);
+      }
       DECODE_FINISH(bl);
     }
 
@@ -152,6 +165,8 @@ class MonitorDBStore
 
     void append(Transaction& other) {
       ops.splice(ops.end(), other.ops);
+      keys += other.keys;
+      bytes += other.bytes;
     }
 
     void append_from_encoded(bufferlist& bl) {
@@ -167,6 +182,12 @@ class MonitorDBStore
 
     bool size() {
       return ops.size();
+    }
+    uint64_t get_keys() const {
+      return keys;
+    }
+    uint64_t get_bytes() const {
+      return bytes;
     }
 
     void dump(ceph::Formatter *f, bool dump_val=false) const {
@@ -217,6 +238,8 @@ class MonitorDBStore
 	f->close_section();
       }
       f->close_section();
+      f->dump_unsigned("num_keys", keys);
+      f->dump_unsigned("num_bytes", bytes);
       f->close_section();
     }
   };

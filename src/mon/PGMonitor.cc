@@ -114,6 +114,7 @@ void PGMonitor::update_logger()
 
   mon->cluster_logger->set(l_cluster_num_object, pg_map.pg_sum.stats.sum.num_objects);
   mon->cluster_logger->set(l_cluster_num_object_degraded, pg_map.pg_sum.stats.sum.num_objects_degraded);
+  mon->cluster_logger->set(l_cluster_num_object_misplaced, pg_map.pg_sum.stats.sum.num_objects_misplaced);
   mon->cluster_logger->set(l_cluster_num_object_unfound, pg_map.pg_sum.stats.sum.num_objects_unfound);
   mon->cluster_logger->set(l_cluster_num_bytes, pg_map.pg_sum.stats.sum.num_bytes);
 }
@@ -1789,6 +1790,14 @@ static void note_stuck_detail(enum PGMap::StuckPG what,
       since = p->second.last_clean;
       whatname = "unclean";
       break;
+    case PGMap::STUCK_DEGRADED:
+      since = p->second.last_undegraded;
+      whatname = "degraded";
+      break;
+    case PGMap::STUCK_UNDERSIZED:
+      since = p->second.last_fullsized;
+      whatname = "undersized";
+      break;
     case PGMap::STUCK_STALE:
       since = p->second.last_unstale;
       whatname = "stale";
@@ -1840,6 +1849,8 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
       note["stale"] += p->second;
     if (p->first & PG_STATE_DOWN)
       note["down"] += p->second;
+    if (p->first & PG_STATE_UNDERSIZED)
+      note["undersized"] += p->second;
     if (p->first & PG_STATE_DEGRADED)
       note["degraded"] += p->second;
     if (p->first & PG_STATE_INCONSISTENT)
@@ -1884,6 +1895,22 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
   }
   stuck_pgs.clear();
 
+  pg_map.get_stuck_stats(PGMap::STUCK_UNDERSIZED, cutoff, stuck_pgs);
+  if (!stuck_pgs.empty()) {
+    note["stuck undersized"] = stuck_pgs.size();
+    if (detail)
+      note_stuck_detail(PGMap::STUCK_UNDERSIZED, stuck_pgs, detail);
+  }
+  stuck_pgs.clear();
+
+  pg_map.get_stuck_stats(PGMap::STUCK_DEGRADED, cutoff, stuck_pgs);
+  if (!stuck_pgs.empty()) {
+    note["stuck degraded"] = stuck_pgs.size();
+    if (detail)
+      note_stuck_detail(PGMap::STUCK_DEGRADED, stuck_pgs, detail);
+  }
+  stuck_pgs.clear();
+
   pg_map.get_stuck_stats(PGMap::STUCK_STALE, cutoff, stuck_pgs);
   if (!stuck_pgs.empty()) {
     note["stuck stale"] = stuck_pgs.size();
@@ -1903,6 +1930,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	   ++p) {
 	if ((p->second.state & (PG_STATE_STALE |
 			       PG_STATE_DOWN |
+			       PG_STATE_UNDERSIZED |
 			       PG_STATE_DEGRADED |
 			       PG_STATE_INCONSISTENT |
 			       PG_STATE_PEERING |
@@ -2112,6 +2140,10 @@ int PGMonitor::dump_stuck_pg_stats(stringstream &ds,
     stuck_type = PGMap::STUCK_INACTIVE;
   else if (type == "unclean")
     stuck_type = PGMap::STUCK_UNCLEAN;
+  else if (type == "undersized")
+    stuck_type = PGMap::STUCK_UNDERSIZED;
+  else if (type == "degraded")
+    stuck_type = PGMap::STUCK_DEGRADED;
   else if (type == "stale")
     stuck_type = PGMap::STUCK_STALE;
   else {

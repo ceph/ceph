@@ -368,6 +368,12 @@ public:
       OP_COLL_MOVE_RENAME = 38,   // oldcid, oldoid, newcid, newoid
 
       OP_SETALLOCHINT = 39,  // cid, oid, object_size, write_size
+      OP_COLL_HINT = 40, // cid, type, bl
+    };
+
+    // Transaction hint type
+    enum {
+      COLL_HINT_EXPECTED_NUM_OBJECTS = 1,
     };
 
   private:
@@ -823,6 +829,24 @@ public:
       ::encode(cid, tbl);
       ops++;
     }
+
+    /**
+     * Give the collection a hint.
+     *
+     * @param cid  - collection id.
+     * @param type - hint type.
+     * @param hint - the hint payload, which contains the customized
+     *               data along with the hint type.
+     */
+     void collection_hint(coll_t cid, uint32_t type, const bufferlist& hint) {
+       __u32 op = OP_COLL_HINT;
+       ::encode(op, tbl);
+       ::encode(cid, tbl);
+       ::encode(type, tbl);
+       ::encode(hint, tbl);
+       ops++;
+     }
+
     /// remove the collection, the collection must be empty
     void remove_collection(coll_t cid) {
       __u32 op = OP_RMCOLL;

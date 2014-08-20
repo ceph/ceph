@@ -42,7 +42,7 @@ public:
   virtual int _split(
 		     uint32_t match,                           
 		     uint32_t bits,                            
-		     ceph::shared_ptr<CollectionIndex> dest
+		     CollectionIndex* dest
 		     ) { return 0; }
 
   void test_generate_and_parse(const ghobject_t &hoid, const std::string &mangled_expected) {
@@ -87,6 +87,11 @@ protected:
 				       vector<ghobject_t> *ls,
 				       ghobject_t *next
 				       ) { return 0; }
+  virtual int _pre_hash_collection(
+                                   uint32_t pg_num,
+                                   uint64_t expected_num_objs
+                                  ) { return 0; }
+
 };
 
 class TestHASH_INDEX_TAG : public TestWrapLFNIndex, public ::testing::Test {

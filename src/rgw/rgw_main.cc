@@ -699,6 +699,11 @@ static int civetweb_callback(struct mg_connection *conn) {
   return 1;
 }
 
+static int civetweb_log_callback(const struct mg_connection *conn, const char *buf) {
+  dout(10) << "civetweb: " << (void *)conn << ": " << buf << dendl;
+  return 0;
+}
+
 #ifdef HAVE_CURL_MULTI_WAIT
 static void check_curl()
 {
@@ -931,11 +936,13 @@ public:
     snprintf(thread_pool_buf, sizeof(thread_pool_buf), "%d", (int)g_conf->rgw_thread_pool_size);
     string port_str;
     conf->get_val("port", "80", &port_str);
-    const char *options[] = {"listening_ports", port_str.c_str(), "enable_keep_alive", "yes", "num_threads", thread_pool_buf, NULL};
+    const char *options[] = {"listening_ports", port_str.c_str(), "enable_keep_alive", "yes", "num_threads", thread_pool_buf,
+                             "decode_url", "no", NULL};
 
     struct mg_callbacks cb;
     memset((void *)&cb, 0, sizeof(cb));
     cb.begin_request = civetweb_callback;
+    cb.log_message = civetweb_log_callback;
     ctx = mg_start(&cb, &env, (const char **)&options);
 
     if (!ctx) {

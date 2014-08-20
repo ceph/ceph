@@ -43,7 +43,7 @@ class SharedLRU {
     }
   }
 
-  void lru_remove(K key) {
+  void lru_remove(const K& key) {
     typename map<K, typename list<pair<K, VPtr> >::iterator>::iterator i =
       contents.find(key);
     if (i == contents.end())
@@ -53,7 +53,7 @@ class SharedLRU {
     contents.erase(i);
   }
 
-  void lru_add(K key, VPtr val, list<VPtr> *to_release) {
+  void lru_add(const K& key, const VPtr& val, list<VPtr> *to_release) {
     typename map<K, typename list<pair<K, VPtr> >::iterator>::iterator i =
       contents.find(key);
     if (i != contents.end()) {
@@ -66,7 +66,7 @@ class SharedLRU {
     }
   }
 
-  void remove(K key) {
+  void remove(const K& key) {
     Mutex::Locker l(lock);
     weak_refs.erase(key);
     cond.Signal();
@@ -93,7 +93,7 @@ public:
     assert(weak_refs.empty());
   }
 
-  void clear(K key) {
+  void clear(const K& key) {
     VPtr val; // release any ref we have after we drop the lock
     {
       Mutex::Locker l(lock);
@@ -119,7 +119,7 @@ public:
     return weak_refs.begin()->first;
   }
 
-  VPtr lower_bound(K key) {
+  VPtr lower_bound(const K& key) {
     VPtr val;
     list<VPtr> to_release;
     {
@@ -145,7 +145,7 @@ public:
     return val;
   }
 
-  VPtr lookup(K key) {
+  VPtr lookup(const K& key) {
     VPtr val;
     list<VPtr> to_release;
     {
@@ -153,8 +153,9 @@ public:
       bool retry = false;
       do {
 	retry = false;
-	if (weak_refs.count(key)) {
-	  val = weak_refs[key].lock();
+	typename map<K, WeakVPtr>::iterator i = weak_refs.find(key);
+	if (i != weak_refs.end()) {
+	  val = i->second.lock();
 	  if (val) {
 	    lru_add(key, val, &to_release);
 	  } else {
@@ -168,12 +169,35 @@ public:
     return val;
   }
 
-  VPtr add(K key, V *value) {
+  /***
+   * Inserts a key if not present, or bumps it to the front of the LRU if
+   * it is, and then gives you a reference to the value. If the key already
+   * existed, you are responsible for deleting the new value you tried to
+   * insert.
+   *
+   * @param key The key to insert
+   * @param value The value that goes with the key
+   * @param existed Set to true if the value was already in the
+   * map, false otherwise
+   * @return A reference to the map's value for the given key
+   */
+  VPtr add(const K& key, V *value, bool *existed = NULL) {
     VPtr val(value, Cleanup(this, key));
     list<VPtr> to_release;
     {
       Mutex::Locker l(lock);
-      weak_refs.insert(make_pair(key, val));
+      typename map<K, WeakVPtr>::iterator actual = weak_refs.lower_bound(key);
+      if (actual != weak_refs.end() && actual->first == key) {
+        if (existed) 
+          *existed = true;
+
+        return actual->second.lock();
+      }
+
+      if (existed)      
+        *existed = false;
+
+      weak_refs.insert(actual, make_pair(key, val));
       lru_add(key, val, &to_release);
     }
     return val;

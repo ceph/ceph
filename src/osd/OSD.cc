@@ -157,6 +157,7 @@ CompatSet OSD::get_osd_initial_compat_set() {
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_LEVELDBINFO);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_LEVELDBLOG);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_HINTS);
   return CompatSet(ceph_osd_feature_compat, ceph_osd_feature_ro_compat,
 		   ceph_osd_feature_incompat);
 }
@@ -1154,7 +1155,11 @@ OSDMapRef OSDService::_add_map(OSDMap *o)
       OSDMap::dedup(for_dedup.get(), o);
     }
   }
-  OSDMapRef l = map_cache.add(e, o);
+  bool existed;
+  OSDMapRef l = map_cache.add(e, o, &existed);
+  if (existed) {
+    delete o;
+  }
   return l;
 }
 
@@ -3189,8 +3194,21 @@ void OSD::handle_pg_peering_evt(
     PG::RecoveryCtx rctx = create_context();
     switch (result) {
     case RES_NONE: {
+      const pg_pool_t* pp = osdmap->get_pg_pool(pgid.pool());
+      coll_t cid(pgid);
+
       // ok, create the pg locally using provided Info and History
-      rctx.transaction->create_collection(coll_t(pgid));
+      rctx.transaction->create_collection(cid);
+
+      // Give a hint to the PG collection
+      bufferlist hint;
+      uint32_t pg_num = pp->get_pg_num();
+      uint64_t expected_num_objects_pg = pp->expected_num_objects / pg_num;
+      ::encode(pg_num, hint);
+      ::encode(expected_num_objects_pg, hint);
+      uint32_t hint_type = ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS;
+      rctx.transaction->collection_hint(cid, hint_type, hint);
+
       PG *pg = _create_lock_pg(
 	get_map(epoch),
 	pgid, create, false, result == RES_SELF,
@@ -6179,11 +6197,11 @@ void OSD::handle_osd_map(MOSDMap *m)
       o->decode(bl);
       if (o->test_flag(CEPH_OSDMAP_FULL))
 	last_marked_full = e;
-      pinned_maps.push_back(add_map(o));
 
       hobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::META_COLL, fulloid, 0, bl.length(), bl);
       pin_map_bl(e, bl);
+      pinned_maps.push_back(add_map(o));
       continue;
     }
 
@@ -6213,7 +6231,6 @@ void OSD::handle_osd_map(MOSDMap *m)
 
       if (o->test_flag(CEPH_OSDMAP_FULL))
 	last_marked_full = e;
-      pinned_maps.push_back(add_map(o));
 
       bufferlist fbl;
       o->encode(fbl);
@@ -6221,6 +6238,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       hobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::META_COLL, fulloid, 0, fbl.length(), fbl);
       pin_map_bl(e, fbl);
+      pinned_maps.push_back(add_map(o));
       continue;
     }
 
@@ -6447,11 +6465,12 @@ void OSD::check_osdmap_features(ObjectStore *fs)
     }
   }
   {
-    Messenger::Policy p = cluster_messenger->get_policy(entity_name_t::TYPE_MON);
+    Messenger::Policy p = client_messenger->get_policy(entity_name_t::TYPE_MON);
     uint64_t mask;
     uint64_t features = osdmap->get_features(entity_name_t::TYPE_MON, &mask);
     if ((p.features_required & mask) != features) {
       dout(0) << "crush map has features " << features
+	      << " was " << p.features_required
 	      << ", adjusting msgr requires for mons" << dendl;
       p.features_required = (p.features_required & ~mask) | features;
       client_messenger->set_policy(entity_name_t::TYPE_MON, p);
@@ -6733,7 +6752,8 @@ void OSD::activate_map()
 bool OSD::require_mon_peer(Message *m)
 {
   if (!m->get_connection()->peer_is_mon()) {
-    dout(0) << "require_mon_peer received from non-mon " << m->get_connection()->get_peer_addr()
+    dout(0) << "require_mon_peer received from non-mon "
+	    << m->get_connection()->get_peer_addr()
 	    << " " << *m << dendl;
     m->put();
     return false;
@@ -6744,7 +6764,8 @@ bool OSD::require_mon_peer(Message *m)
 bool OSD::require_osd_peer(OpRequestRef& op)
 {
   if (!op->get_req()->get_connection()->peer_is_osd()) {
-    dout(0) << "require_osd_peer received from non-osd " << op->get_req()->get_connection()->get_peer_addr()
+    dout(0) << "require_osd_peer received from non-osd "
+	    << op->get_req()->get_connection()->get_peer_addr()
 	    << " " << *op->get_req() << dendl;
     return false;
   }
@@ -6767,7 +6788,8 @@ bool OSD::require_self_aliveness(OpRequestRef& op, epoch_t epoch)
   return true;
 }
 
-bool OSD::require_same_peer_instance(OpRequestRef& op, OSDMapRef& map)
+bool OSD::require_same_peer_instance(OpRequestRef& op, OSDMapRef& map,
+				     bool is_fast_dispatch)
 {
   Message *m = op->get_req();
   int from = m->get_source().num();
@@ -6783,10 +6805,12 @@ bool OSD::require_same_peer_instance(OpRequestRef& op, OSDMapRef& map)
     con->mark_down();
     Session *s = static_cast<Session*>(con->get_priv());
     if (s) {
-      s->session_dispatch_lock.Lock();
+      if (!is_fast_dispatch)
+	s->session_dispatch_lock.Lock();
       clear_session_waiting_on_map(s);
       con->set_priv(NULL);   // break ref <-> session cycle, if any
-      s->session_dispatch_lock.Unlock();
+      if (!is_fast_dispatch)
+	s->session_dispatch_lock.Unlock();
       s->put();
     }
     return false;
@@ -6794,34 +6818,24 @@ bool OSD::require_same_peer_instance(OpRequestRef& op, OSDMapRef& map)
   return true;
 }
 
-bool OSD::require_up_osd_peer(OpRequestRef& op, OSDMapRef& map,
-                              epoch_t their_epoch)
-{
-  if (!require_self_aliveness(op, their_epoch)) {
-    return false;
-  } else if (!require_osd_peer(op)) {
-    return false;
-  } else if (map->get_epoch() >= their_epoch &&
-	     !require_same_peer_instance(op, map)) {
-    return false;
-  }
-  return true;
-}
 
 /*
  * require that we have same (or newer) map, and that
  * the source is the pg primary.
  */
-bool OSD::require_same_or_newer_map(OpRequestRef& op, epoch_t epoch)
+bool OSD::require_same_or_newer_map(OpRequestRef& op, epoch_t epoch,
+				    bool is_fast_dispatch)
 {
   Message *m = op->get_req();
-  dout(15) << "require_same_or_newer_map " << epoch << " (i am " << osdmap->get_epoch() << ") " << m << dendl;
+  dout(15) << "require_same_or_newer_map " << epoch
+	   << " (i am " << osdmap->get_epoch() << ") " << m << dendl;
 
   assert(osd_lock.is_locked());
 
   // do they have a newer map?
   if (epoch > osdmap->get_epoch()) {
-    dout(7) << "waiting for newer map epoch " << epoch << " > my " << osdmap->get_epoch() << " with " << m << dendl;
+    dout(7) << "waiting for newer map epoch " << epoch
+	    << " > my " << osdmap->get_epoch() << " with " << m << dendl;
     wait_for_new_map(op);
     return false;
   }
@@ -6832,7 +6846,7 @@ bool OSD::require_same_or_newer_map(OpRequestRef& op, epoch_t epoch)
 
   // ok, our map is same or newer.. do they still exist?
   if (m->get_connection()->get_messenger() == cluster_messenger &&
-      !require_same_peer_instance(op, osdmap)) {
+      !require_same_peer_instance(op, osdmap, is_fast_dispatch)) {
     return false;
   }
 
@@ -6949,7 +6963,8 @@ void OSD::handle_pg_create(OpRequestRef op)
   }
   op->get_req()->put();
 
-  if (!require_same_or_newer_map(op, m->epoch)) return;
+  if (!require_same_or_newer_map(op, m->epoch, false))
+    return;
 
   op->mark_started();
 
@@ -7046,8 +7061,20 @@ void OSD::handle_pg_create(OpRequestRef op)
 
     PG *pg = NULL;
     if (can_create_pg(pgid)) {
+      const pg_pool_t* pp = osdmap->get_pg_pool(pgid.pool());
       pg_interval_map_t pi;
-      rctx.transaction->create_collection(coll_t(pgid));
+      coll_t cid(pgid);
+      rctx.transaction->create_collection(cid);
+
+      // Give a hint to the PG collection
+      bufferlist hint;
+      uint32_t pg_num = pp->get_pg_num();
+      uint64_t expected_num_objects_pg = pp->expected_num_objects / pg_num;
+      ::encode(pg_num, hint);
+      ::encode(expected_num_objects_pg, hint);
+      uint32_t hint_type = ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS;
+      rctx.transaction->collection_hint(cid, hint_type, hint);
+
       pg = _create_lock_pg(
 	osdmap, pgid, true, false, false,
 	0, creating_pgs[pgid].acting, whoami,
@@ -7306,7 +7333,8 @@ void OSD::handle_pg_notify(OpRequestRef op)
   if (!require_osd_peer(op))
     return;
 
-  if (!require_same_or_newer_map(op, m->get_epoch())) return;
+  if (!require_same_or_newer_map(op, m->get_epoch(), false))
+    return;
 
   op->mark_started();
 
@@ -7341,7 +7369,8 @@ void OSD::handle_pg_log(OpRequestRef op)
     return;
 
   int from = m->get_source().num();
-  if (!require_same_or_newer_map(op, m->get_epoch())) return;
+  if (!require_same_or_newer_map(op, m->get_epoch(), false))
+    return;
 
   if (m->info.pgid.preferred() >= 0) {
     dout(10) << "ignoring localized pg " << m->info.pgid << dendl;
@@ -7370,7 +7399,8 @@ void OSD::handle_pg_info(OpRequestRef op)
     return;
 
   int from = m->get_source().num();
-  if (!require_same_or_newer_map(op, m->get_epoch())) return;
+  if (!require_same_or_newer_map(op, m->get_epoch(), false))
+    return;
 
   op->mark_started();
 
@@ -7407,7 +7437,8 @@ void OSD::handle_pg_trim(OpRequestRef op)
     return;
 
   int from = m->get_source().num();
-  if (!require_same_or_newer_map(op, m->epoch)) return;
+  if (!require_same_or_newer_map(op, m->epoch, false))
+    return;
 
   if (m->pgid.preferred() >= 0) {
     dout(10) << "ignoring localized pg " << m->pgid << dendl;
@@ -7460,7 +7491,7 @@ void OSD::handle_pg_backfill_reserve(OpRequestRef op)
 
   if (!require_osd_peer(op))
     return;
-  if (!require_same_or_newer_map(op, m->query_epoch))
+  if (!require_same_or_newer_map(op, m->query_epoch, false))
     return;
 
   PG::CephPeeringEvtRef evt;
@@ -7509,7 +7540,7 @@ void OSD::handle_pg_recovery_reserve(OpRequestRef op)
 
   if (!require_osd_peer(op))
     return;
-  if (!require_same_or_newer_map(op, m->query_epoch))
+  if (!require_same_or_newer_map(op, m->query_epoch, false))
     return;
 
   PG::CephPeeringEvtRef evt;
@@ -7569,7 +7600,8 @@ void OSD::handle_pg_query(OpRequestRef op)
   dout(7) << "handle_pg_query from " << m->get_source() << " epoch " << m->get_epoch() << dendl;
   int from = m->get_source().num();
   
-  if (!require_same_or_newer_map(op, m->get_epoch())) return;
+  if (!require_same_or_newer_map(op, m->get_epoch(), false))
+    return;
 
   op->mark_started();
 
@@ -7676,7 +7708,8 @@ void OSD::handle_pg_remove(OpRequestRef op)
   dout(7) << "handle_pg_remove from " << m->get_source() << " on "
 	  << m->pg_list.size() << " pgs" << dendl;
   
-  if (!require_same_or_newer_map(op, m->get_epoch())) return;
+  if (!require_same_or_newer_map(op, m->get_epoch(), false))
+    return;
   
   op->mark_started();
 
@@ -8143,7 +8176,12 @@ void OSD::handle_replica_op(OpRequestRef& op, OSDMapRef& osdmap)
     return;
   }
 
-  if (!require_up_osd_peer(op, osdmap, m->map_epoch))
+  if (!require_self_aliveness(op, m->map_epoch))
+    return;
+  if (!require_osd_peer(op))
+    return;
+  if (osdmap->get_epoch() >= m->map_epoch &&
+      !require_same_peer_instance(op, osdmap, true))
     return;
 
   // must be a rep op.

@@ -321,7 +321,6 @@ private:
 
   friend ostream& operator<<(ostream& out, const OpSequencer& s);
 
-  Mutex fdcache_lock;
   FDCache fdcache;
   WBThrottle wbthrottle;
 
@@ -383,7 +382,8 @@ private:
   PerfCounters *logger;
 
 public:
-  int lfn_find(coll_t cid, const ghobject_t& oid, IndexedPath *path);
+  int lfn_find(const ghobject_t& oid, const Index& index, 
+                                  IndexedPath *path = NULL);
   int lfn_truncate(coll_t cid, const ghobject_t& oid, off_t length);
   int lfn_stat(coll_t cid, const ghobject_t& oid, struct stat *buf);
   int lfn_open(
@@ -391,8 +391,8 @@ public:
     const ghobject_t& oid,
     bool create,
     FDRef *outfd,
-    IndexedPath *path = 0,
     Index *index = 0);
+
   void lfn_close(FDRef fd);
   int lfn_link(coll_t c, coll_t newcid, const ghobject_t& o, const ghobject_t& newoid) ;
   int lfn_unlink(coll_t cid, const ghobject_t& o, const SequencerPosition &spos,
@@ -623,6 +623,19 @@ public:
   int _create_collection(coll_t c);
   int _create_collection(coll_t c, const SequencerPosition &spos);
   int _destroy_collection(coll_t c);
+  /**
+   * Give an expected number of objects hint to the collection.
+   *
+   * @param c                 - collection id.
+   * @param pg_num            - pg number of the pool this collection belongs to
+   * @param expected_num_objs - expected number of objects in this collection
+   * @param spos              - sequence position
+   *
+   * @Return 0 on success, an error code otherwise
+   */
+  int _collection_hint_expected_num_objs(coll_t c, uint32_t pg_num,
+      uint64_t expected_num_objs,
+      const SequencerPosition &spos);
   int _collection_add(coll_t c, coll_t ocid, const ghobject_t& oid,
 		      const SequencerPosition& spos);
   int _collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,

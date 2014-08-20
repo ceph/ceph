@@ -74,10 +74,6 @@ struct FDCloser {
 
 /* Public methods */
 
-void LFNIndex::set_ref(ceph::shared_ptr<CollectionIndex> ref)
-{
-  self_ref = ref;
-}
 
 int LFNIndex::init()
 {
@@ -142,7 +138,7 @@ int LFNIndex::lookup(const ghobject_t &oid,
   } else {
     *exist = 1;
   }
-  *out_path = IndexedPath(new Path(full_path, self_ref));
+  *out_path = IndexedPath(new Path(full_path, this));
   r = 0;
   );
 }
@@ -150,6 +146,11 @@ int LFNIndex::lookup(const ghobject_t &oid,
 int LFNIndex::collection_list(vector<ghobject_t> *ls)
 {
   return _collection_list(ls);
+}
+
+int LFNIndex::pre_hash_collection(uint32_t pg_num, uint64_t expected_num_objs)
+{
+  return _pre_hash_collection(pg_num, expected_num_objs);
 }
 
 

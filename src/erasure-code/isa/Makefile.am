@@ -10,6 +10,7 @@ noinst_HEADERS += \
 	erasure-code/isa/isa-l/include/types.h
 
 isa_sources = \
+	erasure-code/ErasureCode.cc \
 	erasure-code/isa/isa-l/erasure_code/ec_base.c \
 	erasure-code/isa/isa-l/erasure_code/ec_highlevel_func.c \
 	erasure-code/isa/isa-l/erasure_code/ec_multibinary.asm.s \
