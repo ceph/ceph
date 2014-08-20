@@ -35,6 +35,8 @@ class MonitorDBStore
 
   Finisher io_work;
 
+  bool is_open;
+
  public:
 
   struct Op {
@@ -553,6 +555,7 @@ class MonitorDBStore
     if (r < 0)
       return r;
     io_work.start();
+    is_open = true;
     return 0;
   }
 
@@ -562,12 +565,14 @@ class MonitorDBStore
     if (r < 0)
       return r;
     io_work.start();
+    is_open = true;
     return 0;
   }
 
   void close() {
     // there should be no work queued!
     io_work.stop();
+    is_open = false;
   }
 
   void compact() {
@@ -586,7 +591,8 @@ class MonitorDBStore
     : db(0),
       do_dump(false),
       dump_fd(-1),
-      io_work(g_ceph_context, "monstore") {
+      io_work(g_ceph_context, "monstore"),
+      is_open(false) {
     string::const_reverse_iterator rit;
     int pos = 0;
     for (rit = path.rbegin(); rit != path.rend(); ++rit, ++pos) {
@@ -621,6 +627,7 @@ class MonitorDBStore
     }
   }
   ~MonitorDBStore() {
+    assert(!is_open);
     if (do_dump)
       ::close(dump_fd);
   }
