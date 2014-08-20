@@ -169,7 +169,7 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
       stringstream ss;
       ss << "slow request " << age << " seconds old, received at "
          << (*i)->get_initiated() << ": ";
-      (*i)->_dump_op_descriptor(ss);
+      (*i)->_dump_op_descriptor_unlocked(ss);
       ss << " currently "
 	 << ((*i)->current.size() ? (*i)->current : (*i)->state_string());
       warning_vector.push_back(ss.str());
@@ -232,7 +232,7 @@ void OpTracker::_mark_event(TrackedOp *op, const string &evt,
 			    utime_t time)
 {
   stringstream ss;
-  op->_dump_op_descriptor(ss);
+  op->_dump_op_descriptor_unlocked(ss);
   dout(5) << //"reqid: " << op->get_reqid() <<
 	     ", seq: " << op->seq
 	  << ", time: " << time << ", event: " << evt
@@ -267,7 +267,7 @@ void TrackedOp::mark_event(const string &event)
 void TrackedOp::dump(utime_t now, Formatter *f) const
 {
   stringstream name;
-  _dump_op_descriptor(name);
+  _dump_op_descriptor_unlocked(name);
   f->dump_string("description", name.str().c_str()); // this TrackedOp
   f->dump_stream("initiated_at") << get_initiated();
   f->dump_float("age", now - get_initiated());

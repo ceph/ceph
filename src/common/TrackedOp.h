@@ -149,7 +149,7 @@ protected:
   /// if you want something else to happen when events are marked, implement
   virtual void _event_marked() {}
   /// return a unique descriptor of the Op; eg the message it's attached to
-  virtual void _dump_op_descriptor(ostream& stream) const = 0;
+  virtual void _dump_op_descriptor_unlocked(ostream& stream) const = 0;
   /// called when the last non-OpTracker reference is dropped
   virtual void _unregistered() {};
 
