@@ -442,6 +442,7 @@ OPTION(osd_pool_default_erasure_code_profile,
        "k=2 "
        "m=1 "
        ) // default properties of osd pool create
+OPTION(osd_erasure_code_plugins, OPT_STR, "jerasure isa") // list of erasure code plugins
 OPTION(osd_pool_default_flags, OPT_INT, 0)   // default flags for new pools
 OPTION(osd_pool_default_flag_hashpspool, OPT_BOOL, true)   // use new pg hashing to prevent pool/pg overlap
 OPTION(osd_pool_default_hit_set_bloom_fpp, OPT_FLOAT, .05)
