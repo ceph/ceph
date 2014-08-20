@@ -678,6 +678,21 @@ void Monitor::init_paxos()
 void Monitor::refresh_from_paxos(bool *need_bootstrap)
 {
   dout(10) << __func__ << dendl;
+
+  bufferlist bl;
+  int r = store->get(MONITOR_NAME, "cluster_fingerprint", bl);
+  if (r >= 0) {
+    try {
+      bufferlist::iterator p = bl.begin();
+      ::decode(fingerprint, p);
+    }
+    catch (buffer::error& e) {
+      dout(10) << __func__ << " failed to decode cluster_fingerprint" << dendl;
+    }
+  } else {
+    dout(10) << __func__ << " no cluster_fingerprint" << dendl;
+  }
+
   for (int i = 0; i < PAXOS_NUM; ++i) {
     paxos_service[i]->refresh(need_bootstrap);
   }
@@ -2460,6 +2475,7 @@ void Monitor::handle_command(MMonCommand *m)
     if (!f)
       f.reset(new_formatter("json-pretty"));
     f->open_object_section("report");
+    f->dump_stream("cluster_fingerprint") << fingerprint;
     f->dump_string("version", ceph_version_to_str());
     f->dump_string("commit", git_version_to_str());
     f->dump_stream("timestamp") << ceph_clock_now(NULL);
@@ -3930,6 +3946,17 @@ void Monitor::tick()
   }
 
   new_tick();
+}
+
+void Monitor::prepare_new_fingerprint(MonitorDBStore::Transaction *t)
+{
+  uuid_d nf;
+  nf.generate_random();
+  dout(10) << __func__ << " proposing cluster_fingerprint " << nf << dendl;
+
+  bufferlist bl;
+  ::encode(nf, bl);
+  t->put(MONITOR_NAME, "cluster_fingerprint", bl);
 }
 
 int Monitor::check_fsid()

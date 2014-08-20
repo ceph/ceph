@@ -97,6 +97,11 @@ void MonmapMonitor::encode_pending(MonitorDBStore::Transaction *t)
 
   put_version(t, pending_map.epoch, bl);
   put_last_committed(t, pending_map.epoch);
+
+  // generate a cluster fingerprint, too?
+  if (pending_map.epoch == 1) {
+    mon->prepare_new_fingerprint(t);
+  }
 }
 
 void MonmapMonitor::on_active()
