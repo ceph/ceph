@@ -880,9 +880,9 @@ public:
 
   bool ruleset_exists(int ruleset) const {
     for (size_t i = 0; i < crush->max_rules; ++i) {
-     if (crush->rules[i]->mask.ruleset == ruleset) {
-       return true;
-     }
+      if (rule_exists(i) && crush->rules[i]->mask.ruleset == ruleset) {
+	return true;
+      }
     }
 
     return false;
