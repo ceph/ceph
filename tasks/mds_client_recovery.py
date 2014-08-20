@@ -337,34 +337,30 @@ class InteractiveFailureResult(unittest.TextTestResult):
 
 @contextlib.contextmanager
 def task(ctx, config):
+    """
+    Execute CephFS client recovery test suite.
+
+    Requires:
+    - An outer ceph_fuse task with at least two clients
+    - That the clients are on a separate host to the MDS
+    """
     fs = Filesystem(ctx, config)
 
     # Pick out the clients we will use from the configuration
     # =======================================================
-    client_list = list(misc.all_roles_of_type(ctx.cluster, 'client'))
-    if len(client_list) < 2:
+    if len(ctx.mounts) < 2:
         raise RuntimeError("Need at least two clients")
+    mount_a = ctx.mounts.values()[0]
+    mount_b = ctx.mounts.values()[1]
 
-    client_a_id = client_list[0]
-    client_a_role = "client.{0}".format(client_a_id)
-    client_a_remote = list(misc.get_clients(ctx=ctx, roles=["client.{0}".format(client_a_id)]))[0][1]
-
-    client_b_id = client_list[1]
-    client_b_role = "client.{0}".format(client_b_id)
-    client_b_remote = list(misc.get_clients(ctx=ctx, roles=["client.{0}".format(client_b_id)]))[0][1]
+    if not isinstance(mount_a, FuseMount) or not isinstance(mount_b, FuseMount):
+        # TODO: make kclient mount capable of all the same test tricks as ceph_fuse
+        raise RuntimeError("Require FUSE clients")
 
     # Check we have at least one remote client for use with network-dependent tests
     # =============================================================================
-    if client_a_remote.hostname in fs.get_mds_hostnames():
+    if mount_a.client_remote.hostname in fs.get_mds_hostnames():
         raise RuntimeError("Require first client to on separate server from MDSs")
-
-    test_dir = misc.get_testdir(ctx)
-
-    # TODO: enable switching FUSE to kclient here
-    # or perhaps just use external client tasks and consume ctx.mounts here?
-    client_configs = get_client_configs(ctx, config)
-    mount_a = FuseMount(client_configs.get(client_a_role, {}), test_dir, client_a_id, client_a_remote)
-    mount_b = FuseMount(client_configs.get(client_b_role, {}), test_dir, client_b_id, client_b_remote)
 
     # Attach environment references to test case
     # ==========================================
