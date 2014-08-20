@@ -131,7 +131,8 @@ public:
     const char *base_path, ///< [in] path to Index root
     uint32_t index_version,
     double _error_injection_probability=0)
-    : base_path(base_path),
+    : CollectionIndex(collection), 
+      base_path(base_path),
       index_version(index_version),
       error_injection_enabled(false),
       error_injection_on(_error_injection_probability != 0),
