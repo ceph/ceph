@@ -385,7 +385,7 @@ def task(ctx, config):
 
     # Execute test suite
     # ==================
-    if 'test_name' in config:
+    if config and 'test_name' in config:
         suite = unittest.TestLoader().loadTestsFromName(
             "teuthology.task.mds_client_recovery.{0}".format(config['test_name']))
     else:
