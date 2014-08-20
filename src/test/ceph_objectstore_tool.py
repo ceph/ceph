@@ -60,7 +60,7 @@ def get_objs(ALLPGS, prefix, DIR, ID):
                 continue
             FINALDIR = os.path.join(SUBDIR, PGDIR)
             # See if there are any objects there
-            if [f for f in os.listdir(FINALDIR) if os.path.isfile(os.path.join(FINALDIR, f)) and string.find(f, prefix) == 0]:
+            if [ f for f in [ val for  _, _, fl in os.walk(FINALDIR) for val in fl ] if string.find(f, prefix) == 0 ]:
                 PGS += [p]
     return sorted(set(PGS))
 
@@ -177,14 +177,18 @@ def main():
     REP_NAME = "REPobject"
     EC_POOL = "ec_pool"
     EC_NAME = "ECobject"
-    NUM_OBJECTS = 10
+    NUM_REP_OBJECTS = 800
+    NUM_EC_OBJECTS = 12
     NUM_NSPACES = 4
+    # Larger data sets for first object per namespace
+    DATALINECOUNT = 50000
+    # Number of objects to do xattr/omap testing on
+    ATTR_OBJS = 10
     ERRORS = 0
     pid = os.getpid()
     TESTDIR = "/tmp/test.{pid}".format(pid=pid)
     DATADIR = "/tmp/data.{pid}".format(pid=pid)
     CFSD_PREFIX = "./ceph_objectstore_tool --data-path dev/{osd} --journal-path dev/{osd}.journal "
-    DATALINECOUNT = 50000
     PROFNAME = "testecprofile"
 
     vstart(new=True)
@@ -210,14 +214,14 @@ def main():
 
     print "Created Erasure coded pool #{ecid}".format(ecid=ECID)
 
-    print "Creating {objs} objects in replicated pool".format(objs=(NUM_OBJECTS*NUM_NSPACES))
+    print "Creating {objs} objects in replicated pool".format(objs=(NUM_REP_OBJECTS*NUM_NSPACES))
     cmd = "mkdir -p {datadir}".format(datadir=DATADIR)
     logging.debug(cmd)
     call(cmd, shell=True)
 
     db = {}
 
-    objects = range(1, NUM_OBJECTS + 1)
+    objects = range(1, NUM_REP_OBJECTS + 1)
     nspaces = range(NUM_NSPACES)
     for n in nspaces:
         nspace = get_nspace(n)
@@ -233,7 +237,10 @@ def main():
             logging.debug(cmd)
             call(cmd, shell=True)
 
-            dataline = range(DATALINECOUNT)
+            if i == 1:
+                dataline = range(DATALINECOUNT)
+            else:
+                dataline = range(1)
             fd = open(DDNAME, "w")
             data = "This is the replicated data for " + LNAME + "\n"
             for _ in dataline:
@@ -249,7 +256,10 @@ def main():
 
             db[nspace][NAME] = {}
 
-            keys = range(i)
+            if i < ATTR_OBJS:
+                keys = range(i)
+            else:
+                keys = range(0)
             db[nspace][NAME]["xattr"] = {}
             for k in keys:
                 if k == 0:
@@ -265,7 +275,7 @@ def main():
                 db[nspace][NAME]["xattr"][mykey] = myval
 
             # Create omap header in all objects but REPobject1
-            if i != 1:
+            if i < ATTR_OBJS and i != 1:
                 myhdr = "hdr{i}".format(i=i)
                 cmd = "./rados -p {pool} -N '{nspace}' setomapheader {name} {hdr}".format(pool=REP_POOL, name=NAME, hdr=myhdr, nspace=nspace)
                 logging.debug(cmd)
@@ -288,9 +298,9 @@ def main():
                     logging.critical("setomapval failed with {ret}".format(ret=ret))
                 db[nspace][NAME]["omap"][mykey] = myval
 
-    print "Creating {objs} objects in erasure coded pool".format(objs=(NUM_OBJECTS*NUM_NSPACES))
+    print "Creating {objs} objects in erasure coded pool".format(objs=(NUM_EC_OBJECTS*NUM_NSPACES))
 
-    objects = range(1, NUM_OBJECTS + 1)
+    objects = range(1, NUM_EC_OBJECTS + 1)
     nspaces = range(NUM_NSPACES)
     for n in nspaces:
         nspace = get_nspace(n)
@@ -304,6 +314,10 @@ def main():
             logging.debug(cmd)
             call(cmd, shell=True)
 
+            if i == 1:
+                dataline = range(DATALINECOUNT)
+            else:
+                dataline = range(1)
             fd = open(DDNAME, "w")
             data = "This is the erasure coded data for " + LNAME + "\n"
             for j in dataline:
@@ -320,7 +334,10 @@ def main():
             db[nspace][NAME] = {}
 
             db[nspace][NAME]["xattr"] = {}
-            keys = range(i)
+            if i < ATTR_OBJS:
+                keys = range(i)
+            else:
+                keys = range(0)
             for k in keys:
                 if k == 0:
                     continue
@@ -566,6 +583,8 @@ def main():
                 ERRORS += 1
 
     print "Test pg logging"
+    if len(ALLREPPGS + ALLECPGS) == len(OBJREPPGS + OBJECPGS):
+        logging.warning("All PGs have objects, so no log without modify entries")
     for pg in ALLREPPGS + ALLECPGS:
         for osd in get_osds(pg, OSDDIR):
             tmpfd = open(TMPFILE, "w")
