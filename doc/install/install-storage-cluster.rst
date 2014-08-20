@@ -23,14 +23,61 @@ update APT's database and install Ceph::
 Installing with RPM
 ===================
 
-To install pre-requisite packages, execute the following::  
+To install Ceph with RPMs, execute the following steps:
+
+
+#. Install ``yum-plugin-priorities``. ::
+
+	sudo yum install yum-plugin-priorities
+
+#. Ensure ``/etc/yum/pluginconf.d/priorities.conf`` exists.
+
+#. Ensure ``priorities.conf`` enables the plugin. :: 
+
+	[main]
+	enabled = 1
+
+#. Ensure your YUM ``ceph.repo`` entry includes ``priority=2``. See
+   `Get Packages`_ for details::
+
+	[ceph]
+	name=Ceph packages for $basearch
+	baseurl=http://ceph.com/rpm-{ceph-release}/{distro}/$basearch
+	enabled=1
+	priority=2
+	gpgcheck=1
+	type=rpm-md
+	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+
+	[ceph-noarch]
+	name=Ceph noarch packages
+	baseurl=http://ceph.com/rpm-{ceph-release}/{distro}/noarch
+	enabled=1
+	priority=2
+	gpgcheck=1
+	type=rpm-md
+	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+
+	[ceph-source]
+	name=Ceph source packages
+	baseurl=http://ceph.com/rpm-{ceph-release}/{distro}/SRPMS
+	enabled=0
+	priority=2
+	gpgcheck=1
+	type=rpm-md
+	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+
+
+#. Install pre-requisite packages::  
 
 	sudo yum install snappy leveldb gdisk python-argparse gperftools-libs
+
 
 Once you have added either release or development packages, or added a
 ``ceph.repo`` file to ``/etc/yum.repos.d``, you can install Ceph packages. :: 
 
 	sudo yum install ceph
+
 
 Installing a Build
 ==================
@@ -43,3 +90,5 @@ by executing the following::
 If you install Ceph locally, ``make`` will place the executables in
 ``usr/local/bin``. You may add the Ceph configuration file to the
 ``usr/local/bin`` directory to run Ceph from a single directory.
+
+.. _Get Packages: ../get-packages

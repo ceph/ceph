@@ -67,7 +67,7 @@ configuration details, perform the following steps using ``ceph-deploy``.
 
 #. Change the default number of replicas in the Ceph configuration file from 
    ``3`` to ``2`` so that Ceph can achieve an ``active + clean`` state with 
-   just two Ceph OSDs. Add the following line under the ``[default]`` section::
+   just two Ceph OSDs. Add the following line under the ``[global]`` section::
    
 	osd pool default size = 2
 
@@ -93,7 +93,7 @@ configuration details, perform the following steps using ``ceph-deploy``.
 #. Add the initial monitor(s) and gather the keys (new in 
    ``ceph-deploy`` v1.1.3). ::
 
-	ceph-deploy mon create-initial
+	ceph-deploy mon create-initial {ceph-node}
 
    **Note:** In earlier versions of ``ceph-deploy``, you must create the
    initial monitor(s) and gather keys in two discrete steps. First, create

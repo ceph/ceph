@@ -156,9 +156,9 @@ public:
   int _split(
     uint32_t match,
     uint32_t bits,
-    ceph::shared_ptr<CollectionIndex> dest
+    CollectionIndex* dest
     );
-	
+
 protected:
   int _init();
 
@@ -181,6 +181,16 @@ protected:
   int _collection_list(
     vector<ghobject_t> *ls
     );
+
+  /**
+   * Pre-hash the collection to create folders according to the expected number
+   * of objects in this collection.
+   */
+  int _pre_hash_collection(
+      uint32_t pg_num,
+      uint64_t expected_num_objs
+      );
+
   int _collection_list_partial(
     const ghobject_t &start,
     int min_count,
@@ -267,6 +277,14 @@ private:
     vector<string> *path   ///< [out] Path components for hoid.
     );
 
+  /// Pre-hash and split folders to avoid runtime splitting
+  /// according to the given expected object number.
+  int pre_split_folder(uint32_t pg_num, uint64_t expected_num_objs);
+
+  /// Initialize the folder (dir info) with the given hash
+  /// level and number of its subdirs.
+  int init_split_folder(vector<string> &path, uint32_t hash_level);
+
   /// do collection split for path
   static int col_split_level(
     HashIndex &from,            ///< [in] from index
@@ -316,6 +334,25 @@ private:
       *bits = path.size() * 4;
   }
 
+  /// Calculate the number of bits.
+  static int calc_num_bits(uint64_t n) {
+    int ret = 0;
+    while (n > 0) {
+      n = n >> 1;
+      ret++;
+    }
+    return ret;
+  }
+
+  /// Convert a number to hex string (upper case).
+  static string to_hex(int n) {
+    assert(n >= 0 && n < 16);
+    char c = (n <= 9 ? ('0' + n) : ('A' + n - 10));
+    string str;
+    str.append(1, c);
+    return str;
+  }
+
   /// Get path contents by hash
   int get_path_contents_by_hash(
     const vector<string> &path,            /// [in] Path to list
@@ -335,6 +372,10 @@ private:
     ghobject_t *next,            /// [in,out] List objects >= *next
     vector<ghobject_t> *out      /// [out] Listed objects
     ); ///< @return Error Code, 0 on success
+
+  /// Create the given levels of sub directories from the given root.
+  /// The contents of *path* is not changed after calling this function.
+  int recursive_create_path(vector<string>& path, int level);
 };
 
 #endif

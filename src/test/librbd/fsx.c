@@ -1369,23 +1369,25 @@ do_clone()
 	}
 
 	if (randomize_parent_overlap && rbd_image_has_parent(&ctx)) {
-		int rand = get_random() % 15;
-		uint64_t overlap;
+		int rand = get_random() % 16 + 1; // [1..16]
 
-		ret = rbd_get_overlap(ctx.image, &overlap);
-		if (ret < 0) {
-			prterrcode("do_clone: rbd_get_overlap", ret);
-			exit(1);
-		}
+		if (rand < 13) {
+			uint64_t overlap;
 
-		if (rand < 3) {
-			newsize = 0;
-		} else if (rand < 12) {
-			newsize = overlap * (((double)rand - 2) / 10);
-			newsize -= newsize % truncbdy;
-		}
+			ret = rbd_get_overlap(ctx.image, &overlap);
+			if (ret < 0) {
+				prterrcode("do_clone: rbd_get_overlap", ret);
+				exit(1);
+			}
 
-		if (newsize != (uint64_t)file_size) {
+			if (rand < 10) {	// 9/16
+				newsize = overlap * ((double)rand / 10);
+				newsize -= newsize % truncbdy;
+			} else {		// 3/16
+				newsize = 0;
+			}
+
+			assert(newsize != (uint64_t)file_size);
 			prt("truncating image %s from 0x%llx (overlap 0x%llx) to 0x%llx\n",
 			    ctx.name, file_size, overlap, newsize);
 
@@ -1394,7 +1396,15 @@ do_clone()
 				prterrcode("do_clone: ops->resize", ret);
 				exit(1);
 			}
-		} else {
+		} else if (rand < 15) {		// 2/16
+			prt("flattening image %s\n", ctx.name);
+
+			ret = ops->flatten(&ctx);
+			if (ret < 0) {
+				prterrcode("do_clone: ops->flatten", ret);
+				exit(1);
+			}
+		} else {			// 2/16
 			prt("leaving image %s intact\n", ctx.name);
 		}
 	}

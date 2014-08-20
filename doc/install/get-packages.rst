@@ -248,12 +248,15 @@ directory. Create a ``ceph.repo`` file. In the example below, replace
 ``{ceph-release}`` with  a major release of Ceph (e.g., ``dumpling``,
 ``emperor``, etc.) and ``{distro}`` with your Linux distribution (e.g., ``el6``,
 ``rhel6``, etc.).  You may view http://ceph.com/rpm-{ceph-release}/ directory to
-see which  distributions Ceph supports. ::
+see which  distributions Ceph supports. Some Ceph packages (e.g., EPEL) must
+take priority over standard packages, so you must ensure that you set
+``priority=2``. ::
 
 	[ceph]
 	name=Ceph packages for $basearch
 	baseurl=http://ceph.com/rpm-{ceph-release}/{distro}/$basearch
 	enabled=1
+	priority=2
 	gpgcheck=1
 	type=rpm-md
 	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
@@ -262,6 +265,7 @@ see which  distributions Ceph supports. ::
 	name=Ceph noarch packages
 	baseurl=http://ceph.com/rpm-{ceph-release}/{distro}/noarch
 	enabled=1
+	priority=2
 	gpgcheck=1
 	type=rpm-md
 	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
@@ -270,6 +274,7 @@ see which  distributions Ceph supports. ::
 	name=Ceph source packages
 	baseurl=http://ceph.com/rpm-{ceph-release}/{distro}/SRPMS
 	enabled=0
+	priority=2
 	gpgcheck=1
 	type=rpm-md
 	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
@@ -282,6 +287,7 @@ for development releases instead. ::
 	name=Ceph packages for $basearch/$releasever
 	baseurl=http://ceph.com/rpm-testing/{distro}/$basearch
 	enabled=1
+	priority=2
 	gpgcheck=1
 	type=rpm-md
 	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
@@ -290,6 +296,7 @@ for development releases instead. ::
 	name=Ceph noarch packages
 	baseurl=http://ceph.com/rpm-testing/{distro}/noarch
 	enabled=1
+	priority=2
 	gpgcheck=1
 	type=rpm-md
 	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
@@ -298,6 +305,7 @@ for development releases instead. ::
 	name=Ceph source packages
 	baseurl=http://ceph.com/rpm-testing/{distro}/SRPMS
 	enabled=0
+	priority=2
 	gpgcheck=1
 	type=rpm-md
 	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc

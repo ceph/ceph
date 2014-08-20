@@ -1,0 +1,669 @@
+commit 9d446bd416c52cd785ccf048ca67737ceafcdd7f (tag: refs/tags/v0.67.10)
+Author: Jenkins <jenkins@inktank.com>
+Date:   Mon Aug 11 05:30:10 2014 -0700
+
+    0.67.10
+
+commit a86e497a343b24425a1237e65ec2776398d07a95
+Author: Haomai Wang <haomaiwang@gmail.com>
+Date:   Mon Jul 14 14:27:17 2014 +0800
+
+    Add rbdcache max dirty object option
+    
+    Librbd will calculate max dirty object according to rbd_cache_max_size, it
+    doesn't suitable for every case. If user set image order 24, the calculating
+    result is too small for reality. It will increase the overhead of trim call
+    which is called each read/write op.
+    
+    Now we make it as option for tunning, by default this value is calculated.
+    
+    Signed-off-by: Haomai Wang <haomaiwang@gmail.com>
+    (cherry picked from commit 3c7229a2fea98b30627878c86b1410c8eef2b5d7)
+
+commit d02381316ba96746a00b2b6f8c5c665179fe7a79
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Wed Jun 4 23:22:18 2014 +0200
+
+    librbd/internal.cc: check earlier for null pointer
+    
+    Fix potential null ponter deref, move check for 'order != NULL'
+    to the beginning of the function to prevent a) deref in ldout() call
+    and b) to leave function as early as possible if check fails.
+    
+    [src/librbd/internal.cc:843] -> [src/librbd/internal.cc:865]: (warning)
+     Possible null pointer dereference: order - otherwise it is redundant
+     to check it against null.
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 3ee3e66a9520a5fcafa7d8c632586642f7bdbd29)
+
+commit dda98b9afb5d74c8c5f101b792daca9ca344fe87
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Apr 24 14:47:24 2014 -0700
+
+    librbd: add an interface to invalidate cached data
+    
+    This is useful for qemu to guarantee live migration with caching is
+    safe, by invalidating the cache on the destination before starting it.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 5d340d26dd70192eb0e4f3f240e3433fb9a24154)
+
+commit d93579514db74eed61580a6166c2787304a8a9fb
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Apr 24 14:43:35 2014 -0700
+
+    librbd: check return code and error out if invalidate_cache fails
+    
+    This will only happen when shrinking or rolling back an image is done
+    while other I/O is in flight to the same ImageCtx. This is unsafe, so
+    return an error before performing the resize or rollback.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit e08b8b66c77be3a3d7f79d91c20b1619571149ee)
+
+commit 617914209694f67150264358da888c1ca9ff42e1
+Author: Haomai Wang <haomaiwang@gmail.com>
+Date:   Wed May 21 18:12:22 2014 +0800
+
+    Avoid extra check for clean object
+    
+    We needn't to check clean object via buffer state, skip the clean object.
+    
+    Signed-off-by: Haomai Wang <haomaiwang@gmail.com>
+    (cherry picked from commit f51e33bd9c5a8e1cfc7065b30785696dc45918bc)
+
+commit d474443b12b978dbe267e63cd8e34e8c835e4f6c
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Fri Mar 28 18:10:43 2014 -0700
+
+    rbd.cc: yes, cover formatted output as well.  sigh.
+    
+    Fixes: #7577
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    Signed-off-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit bd6e35c1b171e46cc3e026c59b076b73440a8502)
+
+commit 051d1b4e56b37b2293b54d8cdb58a974684c8464
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Tue Mar 25 17:09:48 2014 -0700
+
+    rbd.cc: tolerate lack of NUL-termination on block_name_prefix
+    
+    Fixes: #7577
+    Signed-off-by: Dan Mick <dan.mick@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit fd76fec589be13a4a6362ef388929d3e3d1d21f6)
+
+commit 61e2219dd07ebb856a61f54e8cd992dc1e16f5d9
+Author: Ilya Dryomov <ilya.dryomov@inktank.com>
+Date:   Wed Jan 29 16:12:01 2014 +0200
+
+    rbd: don't forget to call close_image() if remove_child() fails
+    
+    close_image() among other things unregisters a watcher that's been
+    registered by open_image().  Even though it'll timeout in 30 or so
+    seconds, it's not nice now that we check for watchers before starting
+    the removal process.
+    
+    Signed-off-by: Ilya Dryomov <ilya.dryomov@inktank.com>
+    (cherry picked from commit 4ebc32f37a4860bdc676491bf8b042c18fd619cf)
+
+commit 2c6c23cee7ff2a8f56f3986051d43824b7bd3526
+Author: Sage Weil <sage@redhat.com>
+Date:   Sat Aug 9 13:23:06 2014 -0700
+
+    os/FileStore: dump open fds before asserting
+    
+    Backport: firefly, dumpling
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 4e8de1792731cf30f2744ab0659d036adc0565a3)
+
+commit 3663233a63df3a1fb1584d9800e1c6a8feac2fe0
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue Feb 18 16:43:48 2014 -0800
+
+    rgw: return error if accessing object in non-existent bucket
+    
+    Fixes: #7064
+    Instead of trying to access the object, which is impossible as we don't
+    even have a proper bucket info. Up until now we ended up creating an
+    empty pool and eventually returning ENOENT, this fix catches the issue
+    earlier in the process.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 3ed68eb9fac9b3d0bf9111867d609f9ea08fb202)
+
+commit 0a1cea58641c4584b85165755145d8d0288f4f22
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Aug 6 17:04:02 2014 -0700
+
+    os/FileStore: force any new xattr into omap on E2BIG
+    
+    If we have a huge xattr (or many little ones), the _fgetattrs() for the
+    inline_set will fail with E2BIG.  The conditions later where we decide
+    whether to clean up the old xattr will then also fail.  Will *will* put
+    the xattr in omap, but the non-omap version isn't cleaned up.
+    
+    Fix this by setting a flag if we get E2BIG that the inline_set is known
+    to be incomplete.  In that case, take the conservative step of assuming
+    the xattr might be present and chain_fremovexattr().  Ignore any error
+    because it might not be there.
+    
+    This is clearly harmless in the general case because it won't be there.  If
+    it is, we will hopefully remove enough xattrs that the E2BIG condition
+    will go away (usually by removing some really big chained xattr).
+    
+    See bug #7779.
+    
+    This is a backport of 26750fcfe8d766874513e57981565adde2e6d8c7.
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    Signed-off-by: Sage Weil <sage@redhat.com>
+
+commit 64d5c406995bedbb6a4bc9c851f5d25fe94749ee
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri May 23 14:58:54 2014 -0700
+
+    rgw: calc md5 and compare if user provided appropriate header
+    
+    Fixes: #8436
+    Backport: firefly
+    
+    This was broken in ddc2e1a8e39a5c6b9b224c3eebd1c0e762ca5782. The fix
+    resurrects and old check that was dropped.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 9c56c86bdac6bcb8e76c3f04e7d393e4eaadd721)
+
+commit ebecd80d3a082ac87e7cd6a63cbd00259c5a8baf
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Apr 21 15:07:12 2014 -0700
+
+    rgw: calculate user manifest
+    
+    Fixes: #8169
+    Backport: firefly
+    We didn't calculate the user manifest's object etag at all. The etag
+    needs to be the md5 of the contantenation of all the parts' etags.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit ddc2e1a8e39a5c6b9b224c3eebd1c0e762ca5782)
+    
+    Conflicts:
+    	src/rgw/rgw_op.cc
+
+commit 1f3f2982224f68109cce8b5564d99977b22c8f60
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Tue Jul 29 15:25:47 2014 -0700
+
+    rgw: fix crash in swift CORS preflight request
+    
+    Fixes: #8586
+    
+    This fixes error handling, in accordance with commit 6af5a537 that fixed
+    the same issue for the S3 case.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 18ea2a869791b4894f93fdafde140285f2e4fb65)
+
+commit 6e4921500aeb256da0fa20da6ee47fb7d4e171f6
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed Jul 30 11:53:16 2014 -0700
+
+    cls_rgw: fix object name of objects removed on object creation
+    
+    Fixes: #8972
+    Backport: firefly, dumpling
+    
+    Reported-by: Patrycja Szabłowska <szablowska.patrycja@gmail.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 0f8929a68aed9bc3e50cf15765143a9c55826cd2)
+
+commit 4aa2b87385e94be0147401918c332d526029e481
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 2 10:38:43 2014 -0700
+
+    qa/workunits/rest/test.py: make osd create test idempotent
+    
+    Avoid possibility that we create multiple OSDs do to retries by passing in
+    the optional uuid arg.  (A stray osd id will make the osd tell tests a
+    few lines down fail.)
+    
+    Fixes: #8728
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit bb3e1c92b6682ed39968dc5085b69c117f43cbb0)
+
+commit 935e75a850b3363536cc09b68f45f2a497da4bb4
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Thu Apr 10 15:14:19 2014 +0100
+
+    mon: Monitor: suicide on start if mon has been removed from monmap
+    
+    If the monitor has been marked as having been part of an existing quorum
+    and is no longer in the monmap, then it is safe to assume the monitor
+    was removed from the monmap.  In that event, do not allow the monitor
+    to start, as it will try to find its way into the quorum again (and
+    someone clearly stated they don't really want them there), unless
+    'mon force quorum join' is specified.
+    
+    Fixes: 6789
+    Backport: dumpling, emperor
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 86b85947a2148c2e73886c1a7edd09093966ada0)
+    
+    Conflicts:
+    	src/common/config_opts.h
+
+commit 4aca6c0d7540c2bf5fb54df2d70c4649a9b94100
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Jul 16 16:05:58 2014 -0700
+
+    utf8: export encode_utf8() and decode_utf8()
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 49fc68cf8c3122c878ea9503c9c74d7046bc9c6f)
+
+commit ffa1f5200061c48de6315b5e7bd335ab5f718a6f
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Jul 18 14:52:48 2014 -0700
+
+    rgw: dump prefix unconditionally
+    
+    As part of issue #8858, and to be more in line with S3, dump the Prefix
+    field when listing bucket even if bucket is empty.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit d7209c11251d42227608bc54cc69232ef62ffe80)
+    
+    Conflicts:
+    	src/rgw/rgw_rest_s3.cc
+
+commit 6df17a92283da9933bf5a3fca1278b728c79b8ee
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Jul 17 15:48:26 2014 -0700
+
+    rgw: list extra objects to set truncation flag correctly
+    
+    Otherwise we end up returning wrong truncated value, and no data on the
+    next iteration.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit dc417e477d4ad262885c6b5f5987cf06d63b159d)
+
+commit 77c20879d02c9793241da508b5ad59f8b927e9f7
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Jul 17 11:45:44 2014 -0700
+
+    rgw: account common prefixes for MaxKeys in bucket listing
+    
+    To be more in line with the S3 api. Beforehand we didn't account the
+    common prefixes towards the MaxKeys (a single common prefix counts as a
+    single key). Also need to adjust the marker now if it is pointing at a
+    common prefix.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 82d2d612e700f94a0bb2d9fb7555abf327be379b)
+
+commit 7068d8595ff462323dedd9b56bce28a76405585a
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Jul 17 11:24:51 2014 -0700
+
+    rgw: add NextMarker param for bucket listing
+    
+    Partially fixes #8858.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 924686f0b6593deffcd1d4e80ab06b1e7af00dcb)
+
+commit 9604425b86f5839a109faa1f396b0d114e9b9391
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Jul 16 15:21:09 2014 -0700
+
+    rgw: improve delmited listing of bucket
+    
+    If found a prefix, calculate a string greater than that so that next
+    request we can skip to that. This is still not the most efficient way to
+    do it. It'll be better to push it down to the objclass, but that'll
+    require a much bigger change.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit e6cf618c257f26f97f60a4c1df1d23a14496cab0)
+
+commit b287c677ba1a5573e66c8a287f6a1f420c3ba46f
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Jul 16 12:23:31 2014 -0700
+
+    rgw: don't try to wait for pending if list is empty
+    
+    Fixes: #8846
+    Backport: firefly, dumpling
+    
+    This was broken at ea68b9372319fd0bab40856db26528d36359102e. We ended
+    up calling wait_pending_front() when pending list was empty.
+    This commit also moves the need_to_wait check to a different place,
+    where we actually throttle (and not just drain completed IOs).
+    
+    Reported-by: Sylvain Munaut <s.munaut@whatever-company.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit f9f2417d7db01ecf2425039539997901615816a9)
+
+commit 4b13caf5be33d4644811d387d1350f2f11ac5409
+Author: Warren Usui <warren.usui@inktank.com>
+Date:   Thu Apr 24 12:55:26 2014 -0700
+
+    Use new git mirror for qemu-iotests
+    
+    Fixes: 8191
+    Signed-off-by: Warren Usui <warren.usui@inktank.com>
+    (cherry picked from commit ddf37d903f826f3e153d8009c716780453b68b05)
+
+commit 3f251024bf056f5a8c22f29333b3a81589431424
+Author: Warren Usui <warren.usui@inktank.com>
+Date:   Wed Apr 23 13:20:14 2014 -0700
+
+    Support latest qemu iotest code
+    
+    Modified qemu-iotests workunit script to check for versions
+    that use the latest qemu (currently only Trusty).  Limit the
+    tests to those that are applicable to rbd.
+    
+    Fixes: 7882
+    Signed-off-by: Warren Usui <warren.usui@inktank.com>
+    (cherry picked from commit 606e725eb5204e76e602d26ffd113e40af2ee812)
+
+commit d06137841f9911ce4dc0d9ab9be73a131ede879d
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Mar 31 14:53:31 2014 -0700
+
+    librbd: skip zeroes when copying an image
+    
+    This is the simple coarse-grained solution, but it works well in
+    common cases like a small base image resized with a bunch of empty
+    space at the end. Finer-grained sparseness can be copied by using rbd
+    {export,import}-diff.
+    
+    Fixes: #6257
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 824da2029613a6f4b380b6b2f16a0bd0903f7e3c)
+
+commit 8649cbbc96a4de9de169b0203f35e0ac6c36a2ef
+Author: Greg Farnum <greg@inktank.com>
+Date:   Tue Jul 1 15:19:21 2014 -0700
+
+    Revert "qa/workunits/suites/fsx.sh: don't use zero range"
+    
+    This reverts commit 583e6e3ef7f28bf34fe038e8a2391f9325a69adf.
+    
+    We're using a different fsx source, which doesn't support the
+    same options as our git-based one does.
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+
+commit 583e6e3ef7f28bf34fe038e8a2391f9325a69adf
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 30 07:05:04 2014 -0700
+
+    qa/workunits/suites/fsx.sh: don't use zero range
+    
+    Zero range is not supported by cephfs.
+    
+    Fixes: #8542
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 2dec8a810060f65d022c06e82090b4aa5ccec0cb)
+
+commit 49c0b46153f96a94407ef2487b2bd9525dfaa1e6
+Merge: 3c63601 4ca12b4
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Jun 30 19:19:24 2014 +0200
+
+    Merge pull request #2014 from ceph/wip-scrub-dumpling
+    
+    osd: scrub priority updates for dumpling
+    
+    Reviewed-by: Loic Dachary <loic@dachary.org>
+
+commit 3c63601888c5c825f33ffc6797474eb8dc6935a4
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Jun 16 11:48:24 2014 -0700
+
+    rgw: allocate enough space for bucket instance id
+    
+    Fixes: #8608
+    Backport: dumpling, firefly
+    Bucket instance id is a concatenation of zone name, rados instance id,
+    and a running counter. We need to allocate enough space to account zone
+    name length.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit d2e86a66ca55685e04ffbfaa58452af59f381277)
+
+commit 15360a900c8746c28006d6f5c8b093685ddac796
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu May 8 08:52:51 2014 -0700
+
+    ceph-disk: partprobe before settle when preparing dev
+    
+    Two users have reported this fixes a problem with using --dmcrypt.
+    
+    Fixes: #6966
+    Tested-by: Eric Eastman <eric0e@aol.com>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 0f196265f049d432e399197a3af3f90d2e916275)
+
+commit ef736f530405a2c4f9a9a1b4cc98d1160524e1ab
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jun 17 13:33:14 2014 -0700
+
+    osd: fix filestore perf stats update
+    
+    Update the struct we are about to send, not the (unlocked!) one we will
+    send the next time around.
+    
+    Backport: firefly, dumpling
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 4afffb4a10a0bbf7f2018ef3ed6b167c7921e46b)
+
+commit 4ca12b40206f64d32369a78ce443a0dbf5d2b757
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Jun 18 11:02:09 2014 -0700
+
+    common/WorkQueue: allow io priority to be set for wq
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 5e4b3b1f1cb870f39fc7cfb3adeae93e078d9057)
+    
+    Conflicts:
+    	src/common/WorkQueue.cc
+
+commit c9b3067f9b78a65e0b9c2ce2488d8906eb73c869
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Jun 18 11:01:42 2014 -0700
+
+    common/Thread: allow io priority to be set for a Thread
+    
+    Ideally, set this before starting the thread.  If you set it after, we
+    could potentially race with create() itself.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 01533183e7455b713640e001962339907fb6f980)
+
+commit 0796057f1c13c467dd3eadca036e3034da20e500
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Jun 18 11:01:09 2014 -0700
+
+    common/io_priority: wrap ioprio_set() and gettid()
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 705713564bebd84ad31cc91698311cf2fbd51a48)
+    
+    Conflicts:
+    	src/common/Makefile.am
+
+commit c46fe8e9ec54d4decd1f70256a8ab05c9b183f8a
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jun 17 10:47:24 2014 -0700
+
+    osd: introduce simple sleep during scrub
+    
+    This option is similar to osd_snap_trim_sleep: simply inject an optional
+    sleep in the thread that is doing scrub work.  This is a very kludgey and
+    coarse knob for limiting the impact of scrub on the cluster, but can help
+    until we have a more robust and elegant solution.
+    
+    Only sleep if we are in the NEW_CHUNK state to avoid delaying processing of
+    an in-progress chunk.  In this state nothing is blocked on anything.
+    Conveniently, chunky_scrub() requeues itself for each new chunk.
+    
+    Backport: firefly, dumpling
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit c4e8451cc5b4ec5ed07e09c08fb13221e31a7ac6)
+
+commit 3cf01a0e56c5599731e25898c1d9f2d2b3d6a9ba
+Merge: 8fd2fc1 c340085
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 16 09:27:03 2014 -0700
+
+    Merge pull request #1963 from dachary/wip-8599-ruleset-dumpling
+    
+    mon: pool set <pool> crush_ruleset must not use rule_exists (dumpling)
+    
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+commit c34008532362c3afadff6287bc8746c141a221a3
+Author: John Spray <john.spray@inktank.com>
+Date:   Tue May 20 16:50:18 2014 +0100
+
+    mon: pool set <pool> crush_ruleset must not use rule_exists
+    
+    Implement CrushWrapper::ruleset_exists that iterates over the existing
+    rulesets to find the one matching the ruleset argument.
+    
+    ceph osd pool set <pool> crush_ruleset must not use
+    CrushWrapper::rule_exists, which checks for a *rule* existing, whereas
+    the value being set is a *ruleset*. (cherry picked from commit
+    fb504baed98d57dca8ec141bcc3fd021f99d82b0)
+    
+    A test via ceph osd pool set data crush_ruleset verifies the ruleset
+    argument is accepted.
+    
+    http://tracker.ceph.com/issues/8599 fixes: #8599
+    
+    Backport: firefly, emperor, dumpling
+    Signed-off-by: John Spray <john.spray@inktank.com>
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit d02d46e25080d5f7bb8ddd4874d9019a078b816b)
+    
+    Conflicts:
+    	src/mon/OSDMonitor.cc
+
+commit 8fd2fc1aec4ba08c086a7db2208dbdebfcb4e92e
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Mar 3 07:03:01 2014 -0800
+
+    osd: 'status' admin socket command
+    
+    Basic stuff, like what state is the OSD in, and what osdmap epoch are
+    we on.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 09099c9e4c7d2aa31eb8a0b7c18e43272fae7ce2)
+
+commit 323492451c2d29b90c30a4e133dc8ca9780035a5
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jun 8 20:18:49 2014 -0700
+
+    init-ceph: continue after failure doing osd data mount
+    
+    If we are starting many daemons and hit an error, we normally note it and
+    move on.  Do the same when doing the pre-mount step.
+    
+    Fixes: #8554
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 6a7e20147cc39ed4689809ca7d674d3d408f2a17)
+
+commit 558249c519225d5e6d0784da20fe12d8f5d71cd2
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue May 6 11:06:29 2014 -0700
+
+    rgw: cut short object read if a chunk returns error
+    
+    Fixes: #8289
+    Backport: firefly, dumpling
+    When reading an object, if we hit an error when trying to read one of
+    the rados objects then we should just stop. Otherwise we're just going
+    to continue reading the rest of the object, and since it can't be sent
+    back to the client (as we have a hole in the middle), we end up
+    accumulating everything in memory.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 03b0d1cfb7bd30a77fedcf75eb06476b21b14e95)
+
+commit a948ce2f9ccf67d5ccc690b5c326af19b6e6da4d
+Merge: 95a464a 7ad2fbf
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jun 8 21:12:32 2014 -0700
+
+    Merge pull request #1931 from ceph/wip-7068-dumpling
+    
+    Wip 7068 dumpling
+    
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+commit 95a464a443e3a249889151807065736fff44ea3a
+Merge: a79a787 94e6c08
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Jun 6 08:45:58 2014 -0700
+
+    Merge remote-tracking branch 'origin/wip-8269-dumpling' into dumpling
+    
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+
+commit a79a787b924ef7e04efb7f3c13b9559e06bebfd8
+Author: John Wilkins <john.wilkins@inktank.com>
+Date:   Thu Jun 5 11:41:41 2014 -0700
+
+    doc: Added requiretty comment to preflight checklist.
+    
+    Signed-off-by: John Wilkins <john.wilkins@inktank.com>
+
+commit 5c5eb21fd1a12666e1ce79718c8166eb7bdd6748
+Author: John Wilkins <john.wilkins@inktank.com>
+Date:   Thu Jun 5 11:34:46 2014 -0700
+
+    doc: Added Disable requiretty to quick start.
+    
+    Signed-off-by: John Wilkins <john.wilkins@inktank.com>
+
+commit 7ad2fbf3bd3208f47aa2a76d3fd16479e2c845ab
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Wed Oct 2 18:00:04 2013 -0700
+
+    ReplicatedPG: lock snapdir obc during write
+    
+    Otherwise, we won't block properly in prep_push_backfill_object.
+    
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit b87bc2311aa4da065477f402a869e2edc1558e2f)
+    
+    Conflicts:
+    	src/osd/ReplicatedPG.h
+
+commit 94e6c0858fb07c0edb8fc4d08e02542d22823ed2
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri May 2 17:06:05 2014 -0700
+
+    rgw: don't allow multiple writers to same multiobject part
+    
+    Fixes: #8269
+    
+    A client might need to retry a multipart part write. The original thread
+    might race with the new one, trying to clean up after it, clobbering the
+    part's data.
+    The fix is to detect whether an original part already existed, and if so
+    use a different part name for it.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>

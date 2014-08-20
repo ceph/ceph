@@ -219,7 +219,8 @@ private:
   void send_incremental(PaxosServiceMessage *m, epoch_t first);
   void send_incremental(epoch_t first, entity_inst_t& dest, bool onetime);
 
-  int reweight_by_utilization(int oload, std::string& out_str);
+  int reweight_by_utilization(int oload, std::string& out_str, bool by_pg,
+			      const set<int64_t> *pools);
 
   bool check_source(PaxosServiceMessage *m, uuid_d fsid);
  
@@ -284,6 +285,7 @@ private:
                        unsigned pg_num, unsigned pgp_num,
 		       const string &erasure_code_profile,
                        const unsigned pool_type,
+                       const uint64_t expected_num_objects,
 		       stringstream &ss);
   int prepare_new_pool(MPoolOp *m);
 

@@ -477,6 +477,8 @@ public:
   eversion_t  min_last_complete_ondisk;  // up: min over last_complete_ondisk, peer_last_complete_ondisk
   eversion_t  pg_trim_to;
 
+  set<int> blocked_by; ///< osds we are blocked by (for pg stats)
+
   // [primary only] content recovery state
  protected:
   struct PriorSet {
@@ -749,6 +751,7 @@ protected:
   ceph::shared_ptr<ObjectStore::Sequencer> osr;
 
   void _update_calc_stats();
+  void _update_blocked_by();
   void publish_stats_to_osd();
   void clear_publish_stats();
 
@@ -2051,6 +2054,7 @@ public:
   bool       is_replay() const { return state_test(PG_STATE_REPLAY); }
   bool       is_clean() const { return state_test(PG_STATE_CLEAN); }
   bool       is_degraded() const { return state_test(PG_STATE_DEGRADED); }
+  bool       is_undersized() const { return state_test(PG_STATE_UNDERSIZED); }
 
   bool       is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); }
 

@@ -98,8 +98,6 @@ class LFNIndex : public CollectionIndex {
 
   /// Path to Index base.
   const string base_path;
-  /// For reference counting the collection @see Path
-  ceph::weak_ptr<CollectionIndex> self_ref;
 
 protected:
   const uint32_t index_version;
@@ -133,7 +131,8 @@ public:
     const char *base_path, ///< [in] path to Index root
     uint32_t index_version,
     double _error_injection_probability=0)
-    : base_path(base_path),
+    : CollectionIndex(collection), 
+      base_path(base_path),
       index_version(index_version),
       error_injection_enabled(false),
       error_injection_on(_error_injection_probability != 0),
@@ -154,9 +153,6 @@ public:
 
   /// Virtual destructor
   virtual ~LFNIndex() {}
-
-  /// @see CollectionIndex
-  void set_ref(ceph::shared_ptr<CollectionIndex> ref);
 
   /// @see CollectionIndex
   int init();
@@ -187,6 +183,12 @@ public:
     vector<ghobject_t> *ls
     );
 
+  /// @see CollectionIndex;
+  int pre_hash_collection(
+      uint32_t pg_num,
+      uint64_t expected_num_objs
+      );
+
   /// @see CollectionIndex
   int collection_list_partial(
     const ghobject_t &start,
@@ -200,14 +202,14 @@ public:
   virtual int _split(
     uint32_t match,                             //< [in] value to match
     uint32_t bits,                              //< [in] bits to check
-    ceph::shared_ptr<CollectionIndex> dest  //< [in] destination index
+    CollectionIndex* dest                       //< [in] destination index
     ) = 0;
   
   /// @see CollectionIndex
   int split(
     uint32_t match,
     uint32_t bits,
-    ceph::shared_ptr<CollectionIndex> dest
+    CollectionIndex* dest
     ) {
     WRAP_RETRY(
       r = _split(match, bits, dest);
@@ -255,6 +257,13 @@ protected:
   virtual int _collection_list(
     vector<ghobject_t> *ls ///< [out] Listed objects.
     ) = 0;
+
+  /// Pre-hash the collection with the given pg number and
+  /// expected number of objects in the collection.
+  virtual int _pre_hash_collection(
+      uint32_t pg_num,
+      uint64_t expected_num_objs
+      ) = 0;
 
   /// @see CollectionIndex
   virtual int _collection_list_partial(

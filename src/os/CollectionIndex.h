@@ -21,6 +21,7 @@
 
 #include "osd/osd_types.h"
 #include "include/object.h"
+#include "common/RWLock.h"
 
 /**
  * CollectionIndex provides an interface for manipulating indexed collections
@@ -43,14 +44,14 @@ protected:
     /// Returned path
     string full_path;
     /// Ref to parent Index
-    ceph::shared_ptr<CollectionIndex> parent_ref;
+    CollectionIndex* parent_ref;
     /// coll_t for parent Index
     coll_t parent_coll;
 
     /// Normal Constructor
     Path(
       string path,                              ///< [in] Path to return.
-      ceph::weak_ptr<CollectionIndex> ref)  ///< [in] weak_ptr to parent.
+      CollectionIndex* ref)  
       : full_path(path), parent_ref(ref), parent_coll(parent_ref->coll()) {}
 
     /// Debugging Constructor
@@ -66,11 +67,14 @@ protected:
     coll_t coll() const { return parent_coll; }
 
     /// Getter for parent
-    ceph::shared_ptr<CollectionIndex> get_index() const {
+    CollectionIndex* get_index() const {
       return parent_ref;
     }
   };
  public:
+
+  string access_lock_name;
+  RWLock access_lock;
   /// Type of returned paths
   typedef ceph::shared_ptr<Path> IndexedPath;
 
@@ -94,12 +98,6 @@ protected:
    */
   virtual coll_t coll() const = 0;
 
-  /** 
-   * For setting the internal weak_ptr to a shared_ptr to this.
-   *
-   * @see IndexManager
-   */
-  virtual void set_ref(ceph::shared_ptr<CollectionIndex> ref) = 0;
 
   /** 
    * Initializes the index.
@@ -161,7 +159,7 @@ protected:
   virtual int split(
     uint32_t match,                             //< [in] value to match
     uint32_t bits,                              //< [in] bits to check
-    ceph::shared_ptr<CollectionIndex> dest  //< [in] destination index
+    CollectionIndex* dest  //< [in] destination index
     ) { assert(0); return 0; }
 
 
@@ -182,6 +180,22 @@ protected:
 
   /// Call prior to removing directory
   virtual int prep_delete() { return 0; }
+
+  CollectionIndex(coll_t collection):
+    access_lock_name ("CollectionIndex::access_lock::" + collection.to_str()), 
+    access_lock(access_lock_name.c_str()) {}
+
+  /*
+   * Pre-hash the collection, this collection should map to a PG folder.
+   *
+   * @param pg_num            - pg number of the pool this collection belongs to.
+   * @param expected_num_objs - expected number of objects in this collection.
+   * @Return 0 on success, an error code otherwise.
+   */
+  virtual int pre_hash_collection(
+      uint32_t pg_num,            ///< [in] pg number of the pool this collection belongs to
+      uint64_t expected_num_objs  ///< [in] expected number of objects this collection has
+      ) { assert(0); return 0; }
 
   /// Virtual destructor
   virtual ~CollectionIndex() {}

@@ -224,6 +224,10 @@ public:
     return *this;
   }
 
+  map<uint64_t, RGWObjManifestPart>& get_explicit_objs() {
+    return objs;
+  }
+
 
   void set_explicit(uint64_t _size, map<uint64_t, RGWObjManifestPart>& _objs) {
     explicit_objs = true;
@@ -559,6 +563,8 @@ public:
   virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, bool *again) = 0;
   virtual int throttle_data(void *handle, bool need_to_wait) = 0;
   virtual int complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
+
+  CephContext *ctx();
 };
 
 class RGWPutObjProcessor_Plain : public RGWPutObjProcessor
@@ -1615,10 +1621,12 @@ public:
                rgw_obj& src_obj,
                uint64_t max_chunk_size,
 	       time_t *mtime,
+	       time_t set_mtime,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
                string *ptag,
                struct rgw_err *err);
+
   /**
    * Delete a bucket.
    * bucket: the name of the bucket to delete
