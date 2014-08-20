@@ -167,3 +167,58 @@ class DaemonGroup(object):
         :param role: Role (osd, mds, mon, rgw,  for example)
         """
         return self.daemons.get(role, {}).values()
+
+    def resolve_role_list(self, roles, types):
+        """
+        Resolve a configuration setting that may be None or contain wildcards
+        into a list of roles (where a role is e.g. 'mds.a' or 'osd.0').  This
+        is useful for tasks that take user input specifying a flexible subset
+        of the available roles.
+
+        The task calling this must specify what kinds of roles it can can handle using the ``types`` argument, where
+        a role type is 'osd' or 'mds' for example.  When selecting roles this is used as a filter, or when
+        an explicit list of roles is passed, the an exception is raised if any are not of a suitable type.
+
+        Examples:
+
+        ::
+
+            # Passing None (i.e. user left config blank) defaults to all roles (filtered by ``types``)
+            None -> ['osd.0', 'osd.1', 'osd.2', 'mds.a', mds.b', 'mon.a']
+            # Wildcards are expanded
+            ['mds.*', 'osd.0'] -> ['mds.a', 'mds.b', 'osd.0']
+            # Boring lists are unaltered
+            ['osd.0', 'mds.a'] -> ['osd.0', 'mds.a']
+
+        :param roles: List (of roles or wildcards) or None (select all suitable roles)
+        :param types: List of acceptable role types, for example ['osd', 'mds'].
+        :return: List of strings like ["mds.0", "osd.2"]
+        """
+        assert (isinstance(roles, list) or roles is None)
+
+        resolved = []
+        if roles is None:
+            # Handle default: all roles available
+            for type_ in types:
+                for daemon in self.iter_daemons_of_role(type_):
+                    resolved.append(type_ + '.' + daemon.id_)
+        else:
+            # Handle explicit list of roles or wildcards
+            for raw_role in roles:
+                try:
+                    role_type, role_id = raw_role.split(".")
+                except ValueError:
+                    raise RuntimeError("Invalid role '{0}', roles must be of format <type>.<id>".format(raw_role))
+
+                if role_type not in types:
+                    raise RuntimeError("Invalid role type '{0}' in role '{1}'".format(role_type, raw_role))
+
+                if role_id == "*":
+                    # Handle wildcard, all roles of the type
+                    for daemon in self.iter_daemons_of_role(role_type):
+                        resolved.append(role_type + '.' + daemon.id_)
+                else:
+                    # Handle explicit role
+                    resolved.append(raw_role)
+
+        return resolved
