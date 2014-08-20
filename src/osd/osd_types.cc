@@ -1511,7 +1511,6 @@ void object_stat_sum_t::decode(bufferlist::iterator& bl)
 void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t*>& o)
 {
   object_stat_sum_t a;
-  o.push_back(new object_stat_sum_t(a));
 
   a.num_bytes = 1;
   a.num_objects = 3;
@@ -1531,8 +1530,8 @@ void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t*>& o)
   a.num_objects_dirty = 21;
   a.num_whiteouts = 22;
   a.num_objects_misplaced = 1232;
-  o.num_objects_hit_set_archive = 2;
-  o.num_bytes_hit_set_archive = 27;
+  a.num_objects_hit_set_archive = 2;
+  a.num_bytes_hit_set_archive = 27;
   o.push_back(new object_stat_sum_t(a));
 }
 
