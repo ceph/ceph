@@ -54,6 +54,7 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_LEVELDBLOG CompatSet::Feature(9, "leveldblog")
 #define CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER CompatSet::Feature(10, "snapmapper")
 #define CEPH_OSD_FEATURE_INCOMPAT_SHARDS CompatSet::Feature(11, "sharded objects")
+#define CEPH_OSD_FEATURE_INCOMPAT_HINTS CompatSet::Feature(12, "transaction hints")
 
 
 /// max recovery priority for MBackfillReserve
@@ -749,7 +750,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_SPLITTING    (1<<7)  // i am splitting
 #define PG_STATE_SCRUBBING    (1<<8)  // scrubbing
 #define PG_STATE_SCRUBQ       (1<<9)  // queued for scrub
-#define PG_STATE_DEGRADED     (1<<10) // pg membership not complete
+#define PG_STATE_DEGRADED     (1<<10) // pg contains objects with reduced redundancy
 #define PG_STATE_INCONSISTENT (1<<11) // pg replicas are inconsistent (but shouldn't be)
 #define PG_STATE_PEERING      (1<<12) // pg is (re)peering
 #define PG_STATE_REPAIR       (1<<13) // pg should repair on next scrub
@@ -762,6 +763,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_BACKFILL  (1<<20) // [active] backfilling pg content
 #define PG_STATE_BACKFILL_TOOFULL (1<<21) // backfill can't proceed: too full
 #define PG_STATE_RECOVERY_WAIT (1<<22) // waiting for recovery reservations
+#define PG_STATE_UNDERSIZED    (1<<23) // pg acting < pool size
 
 std::string pg_state_string(int state);
 
@@ -977,6 +979,9 @@ public:
 
   uint32_t stripe_width;        ///< erasure coded stripe size in bytes
 
+  uint64_t expected_num_objects; ///< expected number of objects on this pool, a value of 0 indicates
+                                 ///< user does not specify any expected value
+
   pg_pool_t()
     : flags(0), type(0), size(0), min_size(0),
       crush_ruleset(0), object_hash(0),
@@ -999,7 +1004,8 @@ public:
       hit_set_period(0),
       hit_set_count(0),
       min_read_recency_for_promote(0),
-      stripe_width(0)
+      stripe_width(0),
+      expected_num_objects(0)
   { }
 
   void dump(Formatter *f) const;
@@ -1165,6 +1171,7 @@ struct object_stat_sum_t {
   int64_t num_object_copies;  // num_objects * num_replicas
   int64_t num_objects_missing_on_primary;
   int64_t num_objects_degraded;
+  int64_t num_objects_misplaced;
   int64_t num_objects_unfound;
   int64_t num_rd, num_rd_kb;
   int64_t num_wr, num_wr_kb;
@@ -1182,7 +1189,9 @@ struct object_stat_sum_t {
   object_stat_sum_t()
     : num_bytes(0),
       num_objects(0), num_object_clones(0), num_object_copies(0),
-      num_objects_missing_on_primary(0), num_objects_degraded(0), num_objects_unfound(0),
+      num_objects_missing_on_primary(0), num_objects_degraded(0),
+      num_objects_misplaced(0),
+      num_objects_unfound(0),
       num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0),
       num_scrub_errors(0), num_shallow_scrub_errors(0),
       num_deep_scrub_errors(0),
@@ -1203,6 +1212,7 @@ struct object_stat_sum_t {
     FLOOR(num_object_copies);
     FLOOR(num_objects_missing_on_primary);
     FLOOR(num_objects_degraded);
+    FLOOR(num_objects_misplaced);
     FLOOR(num_objects_unfound);
     FLOOR(num_rd);
     FLOOR(num_rd_kb);
@@ -1236,6 +1246,7 @@ struct object_stat_sum_t {
     SPLIT(num_object_copies);
     SPLIT(num_objects_missing_on_primary);
     SPLIT(num_objects_degraded);
+    SPLIT(num_objects_misplaced);
     SPLIT(num_objects_unfound);
     SPLIT(num_rd);
     SPLIT(num_rd_kb);
@@ -1352,6 +1363,8 @@ struct pg_stat_t {
   utime_t last_active;  // state & PG_STATE_ACTIVE
   utime_t last_clean;   // state & PG_STATE_CLEAN
   utime_t last_unstale; // (state & PG_STATE_STALE) == 0
+  utime_t last_undegraded; // (state & PG_STATE_DEGRADED) == 0
+  utime_t last_fullsized; // (state & PG_STATE_UNDERSIZED) == 0
 
   eversion_t log_start;         // (log_start,version]
   eversion_t ondisk_log_start;  // there may be more on disk
@@ -1373,8 +1386,10 @@ struct pg_stat_t {
   int64_t log_size;
   int64_t ondisk_log_size;    // >= active_log_size
 
-  vector<int> up, acting;
+  vector<int32_t> up, acting;
   epoch_t mapping_epoch;
+
+  vector<int32_t> blocked_by;  ///< osds on which the pg is blocked
 
   utime_t last_became_active;
 

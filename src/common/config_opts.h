@@ -190,6 +190,8 @@ OPTION(mon_slurp_bytes, OPT_INT, 256*1024)    // limit size of slurp messages
 OPTION(mon_client_bytes, OPT_U64, 100ul << 20)  // client msg data allowed in memory (in bytes)
 OPTION(mon_daemon_bytes, OPT_U64, 400ul << 20)  // mds, osd message memory cap (in bytes)
 OPTION(mon_max_log_entries_per_event, OPT_INT, 4096)
+OPTION(mon_reweight_min_pgs_per_osd, OPT_U64, 10)   // min pgs per osd for reweight-by-pg command
+OPTION(mon_reweight_min_bytes_per_osd, OPT_U64, 100*1024*1024)   // min bytes per osd for reweight-by-utilization command
 OPTION(mon_health_data_update_interval, OPT_FLOAT, 60.0)
 OPTION(mon_data_avail_crit, OPT_INT, 5)
 OPTION(mon_data_avail_warn, OPT_INT, 30)
@@ -383,6 +385,8 @@ OPTION(mds_op_history_size, OPT_U32, 20)    // Max number of completed ops to tr
 OPTION(mds_op_history_duration, OPT_U32, 600) // Oldest completed op to track
 OPTION(mds_op_complaint_time, OPT_FLOAT, 30) // how many seconds old makes an op complaint-worthy
 OPTION(mds_op_log_threshold, OPT_INT, 5) // how many op log messages to show in one go
+OPTION(mds_snap_min_uid, OPT_U32, 0) // The minimum UID required to create a snapshot
+OPTION(mds_snap_max_uid, OPT_U32, 65536) // The maximum UID allowed to create a snapshot
 
 // If true, compact leveldb store on mount
 OPTION(osd_compact_leveldb_on_mount, OPT_BOOL, false)
@@ -438,6 +442,7 @@ OPTION(osd_pool_default_erasure_code_profile,
        "k=2 "
        "m=1 "
        ) // default properties of osd pool create
+OPTION(osd_erasure_code_plugins, OPT_STR, "jerasure isa") // list of erasure code plugins
 OPTION(osd_pool_default_flags, OPT_INT, 0)   // default flags for new pools
 OPTION(osd_pool_default_flag_hashpspool, OPT_BOOL, true)   // use new pg hashing to prevent pool/pg overlap
 OPTION(osd_pool_default_hit_set_bloom_fpp, OPT_FLOAT, .05)
@@ -540,6 +545,7 @@ OPTION(osd_min_pg_log_entries, OPT_U32, 3000)  // number of entries to keep in t
 OPTION(osd_max_pg_log_entries, OPT_U32, 10000) // max entries, say when degraded, before we trim
 OPTION(osd_op_complaint_time, OPT_FLOAT, 30) // how many seconds old makes an op complaint-worthy
 OPTION(osd_command_max_records, OPT_INT, 256)
+OPTION(osd_max_pg_blocked_by, OPT_U32, 16)    // max peer osds to report that are blocking our progress
 OPTION(osd_op_log_threshold, OPT_INT, 5) // how many op log messages to show in one go
 OPTION(osd_verify_sparse_read_holes, OPT_BOOL, false)  // read fiemap-reported holes and verify they are zeros
 OPTION(osd_debug_drop_ping_probability, OPT_DOUBLE, 0)
@@ -711,6 +717,7 @@ OPTION(filestore_split_multiple, OPT_INT, 2)
 OPTION(filestore_update_to, OPT_INT, 1000)
 OPTION(filestore_blackhole, OPT_BOOL, false)     // drop any new transactions on the floor
 OPTION(filestore_fd_cache_size, OPT_INT, 128)    // FD lru size
+OPTION(filestore_fd_cache_shards, OPT_INT, 16)   // FD number of shards
 OPTION(filestore_dump_file, OPT_STR, "")         // file onto which store transaction dumps
 OPTION(filestore_kill_at, OPT_INT, 0)            // inject a failure at the n'th opportunity
 OPTION(filestore_inject_stall, OPT_INT, 0)       // artificially stall for N seconds in op queue thread

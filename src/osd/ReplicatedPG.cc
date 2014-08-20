@@ -1605,7 +1605,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     if (!must_promote && can_skip_promote(op, obc)) {
       return false;
     }
-    if (op->may_write() || must_promote || !hit_set) {
+    if (op->may_write() || write_ordered || must_promote || !hit_set) {
       promote_object(op, obc, missing_oid);
     } else {
       switch (pool.info.min_read_recency_for_promote) {
@@ -1677,7 +1677,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     }
 
     // Do writeback to the cache tier for writes
-    if (op->may_write()) {
+    if (op->may_write() || write_ordered) {
       if (agent_state &&
 	  agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
 	dout(20) << __func__ << " cache pool full, waiting" << dendl;
@@ -6115,6 +6115,11 @@ void ReplicatedPG::cancel_copy(CopyOpRef cop, bool requeue)
   cop->results.should_requeue = requeue;
   CopyCallbackResults result(-ECANCELED, &cop->results);
   cop->cb->complete(result);
+
+  // There may still be an objecter callback referencing this copy op.
+  // That callback will not need the obc since it's been canceled, and
+  // we need the obc reference to go away prior to flush.
+  cop->obc = ObjectContextRef();
 }
 
 void ReplicatedPG::cancel_copy_ops(bool requeue)
@@ -11565,7 +11570,7 @@ void ReplicatedPG::agent_choose_mode(bool restart)
   // get dirty, full ratios
   uint64_t dirty_micro = 0;
   uint64_t full_micro = 0;
-  if (pool.info.target_max_bytes && info.stats.stats.sum.num_objects) {
+  if (pool.info.target_max_bytes && info.stats.stats.sum.num_objects > 0) {
     uint64_t avg_size = info.stats.stats.sum.num_bytes /
       info.stats.stats.sum.num_objects;
     dirty_micro =
@@ -11575,7 +11580,7 @@ void ReplicatedPG::agent_choose_mode(bool restart)
       num_user_objects * avg_size * 1000000 /
       MAX(pool.info.target_max_bytes / divisor, 1);
   }
-  if (pool.info.target_max_objects) {
+  if (pool.info.target_max_objects > 0) {
     uint64_t dirty_objects_micro =
       num_dirty * 1000000 /
       MAX(pool.info.target_max_objects / divisor, 1);

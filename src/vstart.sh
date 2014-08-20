@@ -340,6 +340,7 @@ if [ "$start_mon" -eq 1 ]; then
         osd pool default erasure code directory = .libs
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd
         rgw frontends = fastcgi, civetweb port=8080
+        filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
 EOF
 if [ "$cephx" -eq 1 ] ; then
@@ -394,6 +395,7 @@ $extra_conf
 [mon]
         mon pg warn min per osd = 10
         mon osd allow primary affinity = true
+        mon reweight min pgs per osd = 4
 $DAEMONOPTS
 $CMONDEBUG
 $extra_conf

@@ -13,12 +13,13 @@ Linux Kernel
 
 - **Ceph Kernel Client:**  We currently recommend:
 
-  - v3.10.0 or later
+  - NOT v3.15 (there is a deadlock regression)
+  - v3.14 or later (but not v3.15)
   - v3.6.6 or later in the v3.6 stable series
   - v3.4.20 or later in the v3.4 stable series
 
 - **btrfs**: If you use the ``btrfs`` file system with Ceph, we recommend using 
-  a recent Linux kernel (v3.5 or later).
+  a recent Linux kernel (v3.14 or later).
 
 glibc
 -----

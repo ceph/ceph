@@ -131,14 +131,14 @@ if __name__ == '__main__':
     assert('CATEGORY' in expect('df?detail', 'GET', 200, 'plain').content)
 
     r = expect('df', 'GET', 200, 'json', JSONHDR)
-    assert('total_used' in r.myjson['output']['stats'])
+    assert('total_used_bytes' in r.myjson['output']['stats'])
     r = expect('df', 'GET', 200, 'xml', XMLHDR)
-    assert(r.tree.find('output/stats/stats/total_used') is not None)
+    assert(r.tree.find('output/stats/stats/total_used_bytes') is not None)
 
     r = expect('df?detail', 'GET', 200, 'json', JSONHDR)
-    assert('rd_kb' in r.myjson['output']['pools'][0]['stats'])
+    assert('rd_bytes' in r.myjson['output']['pools'][0]['stats'])
     r = expect('df?detail', 'GET', 200, 'xml', XMLHDR)
-    assert(r.tree.find('output/stats/pools/pool/stats/rd_kb') is not None)
+    assert(r.tree.find('output/stats/pools/pool/stats/rd_bytes') is not None)
 
     expect('fsid', 'GET', 200, 'json', JSONHDR)
     expect('health', 'GET', 200, 'json', JSONHDR)
@@ -319,10 +319,6 @@ if __name__ == '__main__':
     assert('nodes' in r.myjson['output'])
     r = expect('osd/tree', 'GET', 200, 'xml', XMLHDR)
     assert(r.tree.find('output/tree/nodes') is not None)
-    expect('osd/pool/mksnap?pool=data&snap=datasnap', 'PUT', 200, '')
-    r = subprocess.call('rados -p data lssnap | grep -q datasnap', shell=True)
-    assert(r == 0)
-    expect('osd/pool/rmsnap?pool=data&snap=datasnap', 'PUT', 200, '')
 
     expect('osd/pool/create?pool=data2&pg_num=10', 'PUT', 200, '')
     r = expect('osd/lspools', 'GET', 200, 'json', JSONHDR)
@@ -330,6 +326,10 @@ if __name__ == '__main__':
     expect('osd/pool/rename?srcpool=data2&destpool=data3', 'PUT', 200, '')
     r = expect('osd/lspools', 'GET', 200, 'json', JSONHDR)
     assert([p for p in r.myjson['output'] if p['poolname'] == 'data3'])
+    expect('osd/pool/mksnap?pool=data3&snap=datasnap', 'PUT', 200, '')
+    r = subprocess.call('rados -p data3 lssnap | grep -q datasnap', shell=True)
+    assert(r == 0)
+    expect('osd/pool/rmsnap?pool=data3&snap=datasnap', 'PUT', 200, '')
     expect('osd/pool/delete?pool=data3', 'PUT', 400, '')
     expect('osd/pool/delete?pool=data3&pool2=data3&sure=--yes-i-really-really-mean-it', 'PUT', 200, '')
 
@@ -416,18 +416,18 @@ if __name__ == '__main__':
 
     for v in ['pg_num', 'pgp_num', 'size', 'min_size', 'crash_replay_interval',
               'crush_ruleset']:
-        r = expect('osd/pool/get.json?pool=data&var=' + v, 'GET', 200, 'json')
+        r = expect('osd/pool/get.json?pool=rbd&var=' + v, 'GET', 200, 'json')
         assert(v in r.myjson['output'])
 
-    r = expect('osd/pool/get.json?pool=data&var=size', 'GET', 200, 'json')
-    assert(r.myjson['output']['size'] == 2)
+    r = expect('osd/pool/get.json?pool=rbd&var=size', 'GET', 200, 'json')
+    assert(r.myjson['output']['size'] >= 2)
 
-    expect('osd/pool/set?pool=data&var=size&val=3', 'PUT', 200, 'plain')
-    r = expect('osd/pool/get.json?pool=data&var=size', 'GET', 200, 'json')
+    expect('osd/pool/set?pool=rbd&var=size&val=3', 'PUT', 200, 'plain')
+    r = expect('osd/pool/get.json?pool=rbd&var=size', 'GET', 200, 'json')
     assert(r.myjson['output']['size'] == 3)
 
-    expect('osd/pool/set?pool=data&var=size&val=2', 'PUT', 200, 'plain')
-    r = expect('osd/pool/get.json?pool=data&var=size', 'GET', 200, 'json')
+    expect('osd/pool/set?pool=rbd&var=size&val=2', 'PUT', 200, 'plain')
+    r = expect('osd/pool/get.json?pool=rbd&var=size', 'GET', 200, 'json')
     assert(r.myjson['output']['size'] == 2)
 
     r = expect('osd/pool/get.json?pool=rbd&var=crush_ruleset', 'GET', 200, 'json')

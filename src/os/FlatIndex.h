@@ -29,20 +29,18 @@
  * This class should only be used for converting old filestores.
  */
 class FlatIndex : public CollectionIndex {
-  ceph::weak_ptr<CollectionIndex> self_ref;
   string base_path;
   coll_t collection;
 public:
-  FlatIndex(coll_t collection, string base_path) : base_path(base_path),
-						   collection(collection) {}
+  FlatIndex(coll_t collection, string base_path) : 
+              CollectionIndex(collection),
+              base_path(base_path),
+	      collection(collection) {}
 
   /// @see CollectionIndex
   uint32_t collection_version() { return FLAT_INDEX_TAG; }
 
   coll_t coll() const { return collection; }
-
-  /// @see CollectionIndex
-  void set_ref(ceph::shared_ptr<CollectionIndex> ref);
 
   /// @see CollectionIndex
   int cleanup();

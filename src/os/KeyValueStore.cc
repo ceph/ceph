@@ -1325,6 +1325,26 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
       }
       break;
 
+    case Transaction::OP_COLL_HINT:
+      {
+        coll_t cid = i.decode_cid();
+        uint32_t type = i.decode_u32();
+        bufferlist hint;
+        i.decode_bl(hint);
+        bufferlist::iterator hiter = hint.begin();
+        if (type == Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS) {
+          uint32_t pg_num;
+          uint64_t num_objs;
+          ::decode(pg_num, hiter);
+          ::decode(num_objs, hiter);
+          r = _collection_hint_expected_num_objs(cid, pg_num, num_objs);
+        } else {
+          // Ignore the hint
+          dout(10) << "Unrecognized collection hint type: " << type << dendl;
+        }
+      }
+      break;
+
     case Transaction::OP_RMCOLL:
       {
         coll_t cid = i.decode_cid();

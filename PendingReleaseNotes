@@ -1,16 +1,5 @@
-
-v0.84
+v0.85
 -----
-
-* The *_kb perf counters on the monitor have been removed.  These are
-  replaced with a new set of *_bytes counters (e.g., cluster_osd_kb is
-  replaced by cluster_osd_bytes).
-
-* The rd_kb and wr_kb fields in the JSON dumps for pool stats (accessed via
-  the 'ceph df detail -f json-pretty' and related commands) have been replaced
-  with corresponding *_bytes fields.  Similarly, the 'total_space', 'total_used',
-  and 'total_avail' fields are replaced with 'total_bytes', 'total_used_bytes',
-  and 'total_avail_bytes' fields.
 
 * The client-side caching for librbd is now enabled by default (rbd
   cache = true).  A safety option (rbd cache writethrough until flush
@@ -19,3 +8,16 @@ v0.84
   users is passing that operation through from the guest VM.  This
   avoids potential data loss when used with older versions of qemu
   that do not support flush.
+
+    leveldb_write_buffer_size = 32*1024*1024  = 33554432  // 32MB
+    leveldb_cache_size        = 512*1024*1204 = 536870912 // 512MB
+    leveldb_block_size        = 64*1024       = 65536     // 64KB
+    leveldb_compression       = false
+    leveldb_log               = ""
+
+  OSDs will still maintain the following osd-specific defaults:
+
+    leveldb_log               = ""
+
+v0.86
+-----

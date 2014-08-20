@@ -352,6 +352,9 @@ COMMAND("osd perf", \
         "osd", \
         "r", \
         "cli,rest")
+COMMAND("osd blocked-by", \
+	"print histogram of which OSDs are blocking their peers", \
+	"osd", "r", "cli,rest")
 COMMAND("osd getmaxosd", "show largest OSD id", "osd", "r", "cli,rest")
 COMMAND("osd find " \
 	"name=id,type=CephInt,range=0", \
@@ -557,7 +560,8 @@ COMMAND("osd pool create " \
 	"name=pgp_num,type=CephInt,range=0,req=false " \
         "name=pool_type,type=CephChoices,strings=replicated|erasure,req=false " \
 	"name=erasure_code_profile,type=CephString,req=false,goodchars=[A-Za-z0-9-_.] " \
-	"name=ruleset,type=CephString,req=false", \
+	"name=ruleset,type=CephString,req=false " \
+        "name=expected_num_objects,type=CephInt,req=false", \
 	"create pool", "osd", "rw", "cli,rest")
 COMMAND("osd pool delete " \
 	"name=pool,type=CephPoolname " \
@@ -598,6 +602,11 @@ COMMAND("osd pool stats " \
 COMMAND("osd reweight-by-utilization " \
 	"name=oload,type=CephInt,range=100,req=false", \
 	"reweight OSDs by utilization [overload-percentage-for-consideration, default 120]", \
+	"osd", "rw", "cli,rest")
+COMMAND("osd reweight-by-pg " \
+	"name=oload,type=CephInt,range=100 " \
+	"name=pools,type=CephPoolname,n=N,req=false", \
+	"reweight OSDs by PG distribution [overload-percentage-for-consideration, default 120]", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd thrash " \
 	"name=num_epochs,type=CephInt,range=0", \

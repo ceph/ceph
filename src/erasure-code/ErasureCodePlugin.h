@@ -67,6 +67,9 @@ namespace ceph {
 	     ErasureCodePlugin **plugin,
 	     ostream &ss);
 
+    int preload(const std::string &plugins,
+		const std::string &directory,
+		ostream &ss);
   };
 }
 
