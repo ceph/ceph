@@ -21,6 +21,7 @@ from teuthology.orchestra.run import CommandFailedError
 from teuthology.orchestra.daemon import DaemonGroup
 
 DEFAULT_CONF_PATH = '/etc/ceph/ceph.conf'
+CEPH_ROLE_TYPES = ['mon', 'osd', 'mds', 'rgw']
 
 log = logging.getLogger(__name__)
 
@@ -1049,7 +1050,7 @@ def restart(ctx, config):
 
    For example::
       tasks:
-      - ceph.restart: [osd.0, mon.1]
+      - ceph.restart: [osd.0, mon.1, mds.*]
 
    or::
 
@@ -1064,19 +1065,11 @@ def restart(ctx, config):
     """
     if config is None:
         config = {}
-    if isinstance(config, list):
-        config = { 'daemons': config }
-    if 'daemons' not in config:
-        config['daemons'] = []
-        type_daemon = ['mon', 'osd', 'mds', 'rgw']
-        for d in type_daemon:
-            type_ = d
-            for daemon in ctx.daemons.iter_daemons_of_role(type_):
-                config['daemons'].append(type_ + '.' + daemon.id_)
+    elif isinstance(config, list):
+        config = {'daemons': config}
 
-    assert isinstance(config['daemons'], list)
-    daemons = dict.fromkeys(config['daemons'])
-    for i in daemons.keys():
+    daemons = ctx.daemons.resolve_role_list(config.get('daemons', None), CEPH_ROLE_TYPES)
+    for i in daemons:
         type_ = i.split('.', 1)[0]
         id_ = i.split('.', 1)[1]
         ctx.daemons.get_daemon(type_, id_).stop()
@@ -1087,6 +1080,38 @@ def restart(ctx, config):
     if config.get('wait-for-osds-up', False):
         wait_for_osds_up(ctx=ctx, config=None)
     yield
+
+
+@contextlib.contextmanager
+def stop(ctx, config):
+    """
+    Stop ceph daemons
+
+    For example::
+      tasks:
+      - ceph.stop: [mds.*]
+
+      tasks:
+      - ceph.stop: [osd.0, osd.2]
+
+      tasks:
+      - ceph.stop:
+          daemons: [osd.0, osd.2]
+
+    """
+    if config is None:
+        config = {}
+    elif isinstance(config, list):
+        config = {'daemons': config}
+
+    daemons = ctx.daemons.resolve_role_list(config.get('daemons', None), CEPH_ROLE_TYPES)
+    for i in daemons:
+        type_ = i.split('.', 1)[0]
+        id_ = i.split('.', 1)[1]
+        ctx.daemons.get_daemon(type_, id_).stop()
+
+    yield
+
 
 @contextlib.contextmanager
 def task(ctx, config):
