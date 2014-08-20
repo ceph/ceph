@@ -30,8 +30,10 @@ class TestClientRecovery(unittest.TestCase):
     mount_b = None
     mds_session_timeout = None
     mds_reconnect_timeout = None
+    ms_max_backoff = None
 
     def setUp(self):
+        self.fs.clear_firewall()
         self.fs.mds_restart()
         self.mount_a.mount()
         self.mount_b.mount()
@@ -39,13 +41,9 @@ class TestClientRecovery(unittest.TestCase):
         self.mount_a.wait_until_mounted()
 
     def tearDown(self):
+        self.fs.clear_firewall()
         self.mount_a.teardown()
         self.mount_b.teardown()
-        # mount_a.umount()
-        # mount_b.umount()
-        # run.wait([mount_a.fuse_daemon, mount_b.fuse_daemon], timeout=600)
-        # mount_a.cleanup()
-        # mount_b.cleanup()
 
     def test_basic(self):
         # Check that two clients come up healthy and see each others' files
@@ -89,6 +87,12 @@ class TestClientRecovery(unittest.TestCase):
         self.assertEqual(expected, len(ls_data), "Expected {0} sessions, found {1}".format(
             expected, len(ls_data)
         ))
+
+    def assert_session_state(self, client_id,  expected_state):
+        self.assertEqual(
+            self._session_by_id(
+                self.fs.mds_asok(['session', 'ls'])).get(client_id, {'state': None})['state'],
+            expected_state)
 
     def _session_list(self):
         ls_data = self.fs.mds_asok(['session', 'ls'])
@@ -246,6 +250,52 @@ class TestClientRecovery(unittest.TestCase):
         self.mount_a.mount()
         self.mount_a.wait_until_mounted()
 
+    def test_network_death(self):
+        """
+        Simulate software freeze or temporary network failure.
+
+        Check that the client blocks I/O during failure, and completes
+        I/O after failure.
+        """
+
+        # We only need one client
+        self.mount_b.umount_wait()
+
+        # Initially our one client session should be visible
+        client_id = self.mount_a.get_client_id()
+        ls_data = self._session_list()
+        self.assert_session_count(1, ls_data)
+        self.assertEqual(ls_data[0]['id'], client_id)
+        self.assert_session_state(client_id, "open")
+
+        # ...and capable of doing I/O without blocking
+        self.mount_a.create_files()
+
+        # ...but if we turn off the network
+        self.fs.set_clients_block(True)
+
+        # ...and try and start an I/O
+        write_blocked = self.mount_a.write_background()
+
+        # ...then it should block
+        self.assertFalse(write_blocked.finished)
+        self.assert_session_state(client_id, "open")
+        time.sleep(self.mds_session_timeout * 1.5)  # Long enough for MDS to consider session stale
+        self.assertFalse(write_blocked.finished)
+        self.assert_session_state(client_id, "stale")
+
+        # ...until we re-enable I/O
+        self.fs.set_clients_block(False)
+
+        # ...when it should complete promptly
+        a = time.time()
+        write_blocked.wait()
+        b = time.time()
+        recovery_time = b - a
+        log.info("recovery time: {0}".format(recovery_time))
+        self.assertLess(recovery_time, self.ms_max_backoff * 2)
+        self.assert_session_state(client_id, "open")
+
 
 class LogStream(object):
     def __init__(self):
@@ -301,7 +351,12 @@ def task(ctx, config):
 
     client_b_id = client_list[1]
     client_b_role = "client.{0}".format(client_b_id)
-    client_b_remote = list(misc.get_clients(ctx=ctx, roles=["client.{0}".format(client_a_id)]))[0][1]
+    client_b_remote = list(misc.get_clients(ctx=ctx, roles=["client.{0}".format(client_b_id)]))[0][1]
+
+    # Check we have at least one remote client for use with network-dependent tests
+    # =============================================================================
+    if client_a_remote.hostname in fs.get_mds_hostnames():
+        raise RuntimeError("Require first client to on separate server from MDSs")
 
     test_dir = misc.get_testdir(ctx)
 
@@ -319,6 +374,9 @@ def task(ctx, config):
     TestClientRecovery.mds_session_timeout = int(fs.mds_asok(
         ['config', 'get', 'mds_session_timeout']
     )['mds_session_timeout'])
+    TestClientRecovery.ms_max_backoff = int(fs.mds_asok(
+        ['config', 'get', 'ms_max_backoff']
+    )['ms_max_backoff'])
     TestClientRecovery.fs = fs
     TestClientRecovery.mount_a = mount_a
     TestClientRecovery.mount_b = mount_b
@@ -331,7 +389,12 @@ def task(ctx, config):
 
     # Execute test suite
     # ==================
-    suite = unittest.TestLoader().loadTestsFromTestCase(TestClientRecovery)
+    if 'test_name' in config:
+        suite = unittest.TestLoader().loadTestsFromName(
+            "teuthology.task.mds_client_recovery.{0}".format(config['test_name']))
+    else:
+        suite = unittest.TestLoader().loadTestsFromTestCase(TestClientRecovery)
+
     if ctx.config.get("interactive-on-error", False):
         InteractiveFailureResult.ctx = ctx
         result_class = InteractiveFailureResult
