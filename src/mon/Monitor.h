@@ -128,6 +128,7 @@ public:
   void unregister_cluster_logger();
 
   MonMap *monmap;
+  uuid_d fingerprint;
 
   set<entity_addr_t> extra_probe_peers;
 
@@ -189,6 +190,8 @@ public:
   bool is_peon() const { return state == STATE_PEON; }
 
   const utime_t &get_leader_since() const;
+
+  void prepare_new_fingerprint(MonitorDBStore::Transaction *t);
 
   // -- elector --
 private:
