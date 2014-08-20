@@ -4,6 +4,7 @@
  * Ceph distributed storage system
  *
  * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -19,6 +20,7 @@
 
 #include "ErasureCodePlugin.h"
 #include "common/errno.h"
+#include "include/str_list.h"
 
 #define PLUGIN_PREFIX "libec_"
 #define PLUGIN_SUFFIX ".so"
@@ -130,6 +132,26 @@ int ErasureCodePluginRegistry::load(const std::string &plugin_name,
 
   (*plugin)->library = library;
 
+  ss << __func__ << ": " << plugin_name << " ";
+
   return 0;
 }
 
+int ErasureCodePluginRegistry::preload(const std::string &plugins,
+				       const std::string &directory,
+				       ostream &ss)
+{
+  map<string,string> profile;
+  profile["directory"] = directory;
+  list<string> plugins_list;
+  get_str_list(plugins, plugins_list);
+  for (list<string>::iterator i = plugins_list.begin();
+       i != plugins_list.end();
+       i++) {
+    ErasureCodePlugin *plugin;
+    int r = load(*i, profile, &plugin, ss);
+    if (r)
+      return r;
+  }
+  return 0;
+}
