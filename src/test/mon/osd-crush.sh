@@ -175,6 +175,61 @@ EOF
 
 }
 
+function Check_ruleset_id_match_rule_id() {
+    local rule_name=$1
+    rule_id=`./ceph osd crush rule dump $rule_name | grep "\"rule_id\":" | awk -F ":|," '{print int($2)}'`
+    ruleset_id=`./ceph osd crush rule dump $rule_name | grep "\"ruleset\":"| awk -F ":|," '{print int($2)}'`
+    test $ruleset_id = $rule_id || return 1
+}
+
+function generate_manipulated_rules() {
+    local dir=$1
+    ./ceph osd crush add-bucket $root host
+    ./ceph osd crush rule create-simple test_rule1 $root osd firstn || return 1
+    ./ceph osd crush rule create-simple test_rule2 $root osd firstn || return 1
+    ./ceph osd getcrushmap -o $dir/original_map
+    ./crushtool -d $dir/original_map -o $dir/decoded_original_map
+    #manipulate the rulesets , to make the rule_id != ruleset_id
+    sed -i 's/ruleset 0/ruleset 3/' $dir/decoded_original_map
+    sed -i 's/ruleset 2/ruleset 0/' $dir/decoded_original_map
+    sed -i 's/ruleset 1/ruleset 2/' $dir/decoded_original_map
+
+    ./crushtool -c $dir/decoded_original_map -o $dir/new_map
+    ./ceph osd setcrushmap -i $dir/new_map
+
+    ./ceph osd crush rule dump
+}
+
+function TEST_crush_ruleset_match_rule_when_creating() {
+    local dir=$1
+    local root=host1
+
+    generate_manipulated_rules $dir
+
+    ./ceph osd crush rule create-simple special_rule_simple $root osd firstn || return 1
+
+    ./ceph osd crush rule dump
+    #show special_rule_simple has same rule_id and ruleset_id
+    Check_ruleset_id_match_rule_id special_rule_simple || return 1
+}
+
+function TEST_add_ruleset_failed() {
+    local dir=$1
+    local root=host1
+
+    ./ceph osd crush add-bucket $root host
+    ./ceph osd crush rule create-simple test_rule1 $root osd firstn || return 1
+    ./ceph osd crush rule create-simple test_rule2 $root osd firstn || return 1
+    #./ceph osd crush rule rm test_rule1
+    for i in `seq 3 255`
+    do
+      ./ceph osd crush rule create-simple test_rule$i $root osd firstn || return 1
+      Check_ruleset_id_match_rule_id test_rule$i || return 1
+    done
+
+    ./ceph osd crush rule create-simple test_rule_nospace $root osd firstn 2>&1 | grep "Error ENOSPC" || return 1
+
+}
 main osd-crush
 
 # Local Variables:
