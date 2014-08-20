@@ -454,8 +454,7 @@ def schedule_suite(job_config,
     log.debug('Suite %s in %s' % (suite_name, path))
     configs = [(combine_path(suite_name, item[0]), item[1]) for item in
                build_matrix(path)]
-    job_count = len(configs)
-    log.info('Suite %s in %s generated %d jobs' % (
+    log.info('Suite %s in %s generated %d jobs (not yet filtered)' % (
         suite_name, path, len(configs)))
 
     for description, fragment_paths in configs:
@@ -524,7 +523,10 @@ def schedule_suite(job_config,
                 args=arg,
             )
         count += 1
-    return job_count
+    log.info('Suite %s in %s scheduled %d jobs.' % (suite_name, path, count))
+    log.info('Suite %s in %s -- %d jobs were filtered out.' % (suite_name,
+              path, len(configs) - count))
+    return count
 
 
 def combine_path(left, right):
