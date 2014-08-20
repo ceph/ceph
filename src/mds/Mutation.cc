@@ -343,7 +343,7 @@ void MDRequestImpl::_dump(utime_t now, Formatter *f) const
   }
 }
 
-void MDRequestImpl::_dump_op_descriptor(ostream& stream) const
+void MDRequestImpl::_dump_op_descriptor_unlocked(ostream& stream) const
 {
   if (client_request) {
     client_request->print(stream);

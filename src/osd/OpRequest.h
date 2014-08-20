@@ -94,7 +94,7 @@ private:
   OpRequest(Message *req, OpTracker *tracker);
 
 protected:
-  void _dump_op_descriptor(ostream& stream) const;
+  void _dump_op_descriptor_unlocked(ostream& stream) const;
   void _unregistered();
 
 public:
