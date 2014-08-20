@@ -1,6 +1,7 @@
 
 #include "common/debug.h"
 #include "common/Formatter.h"
+#include "common/errno.h"
 
 #include "CrushWrapper.h"
 
@@ -657,15 +658,14 @@ int CrushWrapper::add_simple_rule(string name, string root_name, string failure_
     }
   }
 
-  int ruleset = 0;
-  for (int i = 0; i < get_max_rules(); i++) {
-    if (rule_exists(i) &&
-	get_rule_mask_ruleset(i) >= ruleset) {
-      ruleset = get_rule_mask_ruleset(i) + 1;
-    }
+  int rno = -1;
+  for (rno = 0; rno < get_max_rules(); rno++) {
+    if (!rule_exists(rno) && !ruleset_exists(rno))
+       break;
   }
 
-  crush_rule *rule = crush_make_rule(3, ruleset, 1 /* pg_pool_t::TYPE_REP */, 1, 10);
+  //set the ruleset the same as rule_id(rno)
+  crush_rule *rule = crush_make_rule(3, rno, 1 /* pg_pool_t::TYPE_REP */, 1, 10);
   assert(rule);
   crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, root, 0);
   if (type)
@@ -679,7 +679,13 @@ int CrushWrapper::add_simple_rule(string name, string root_name, string failure_
 			CRUSH_CHOOSE_N,
 			0);
   crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-  int rno = crush_add_rule(crush, rule, -1);
+  int ret = crush_add_rule(crush, rule, rno);
+  if (ret < 0) {
+    if (err) {
+      *err << "failed to add rule " << rno << " because " << cpp_strerror(ret);
+    }
+    return ret;
+  }
   set_rule_name(rno, name);
   have_rmaps = false;
   return rno;
