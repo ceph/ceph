@@ -454,13 +454,13 @@ void remove_coll(ObjectStore *store, const coll_t &coll)
     OSD::make_snapmapper_oid());
   SnapMapper mapper(&driver, 0, 0, 0, pg.shard);
 
-  vector<ghobject_t> objects;
   ghobject_t next;
   int r = 0;
   int64_t num = 0;
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   cout << "remove_coll " << coll << std::endl;
   while (!next.is_max()) {
+    vector<ghobject_t> objects;
     r = store->collection_list_partial(coll, next, 200, 300, 0,
       &objects, &next);
     if (r < 0)
@@ -745,10 +745,10 @@ int export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
 
 int export_files(ObjectStore *store, coll_t coll)
 {
-  vector<ghobject_t> objects;
   ghobject_t next;
 
   while (!next.is_max()) {
+    vector<ghobject_t> objects;
     int r = store->collection_list_partial(coll, next, 200, 300, 0,
       &objects, &next);
     if (r < 0)
@@ -1432,9 +1432,9 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
 
 int do_list(ObjectStore *store, coll_t coll, Formatter *formatter)
 {
-  vector<ghobject_t> objects;
   ghobject_t next;
   while (!next.is_max()) {
+    vector<ghobject_t> objects;
     int r = store->collection_list_partial(coll, next, 200, 300, 0,
       &objects, &next);
     if (r < 0)
