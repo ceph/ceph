@@ -11526,8 +11526,6 @@ void ReplicatedPG::agent_choose_mode(bool restart)
   uint64_t divisor = pool.info.get_pg_num_divisor(info.pgid.pgid);
   assert(divisor > 0);
 
-  uint64_t num_user_objects = info.stats.stats.sum.num_objects;
-
   // adjust (effective) user objects down based on the number
   // of HitSet objects, which should not count toward our total since
   // they cannot be flushed.
@@ -11539,11 +11537,15 @@ void ReplicatedPG::agent_choose_mode(bool restart)
   if (base_pool->is_erasure())
     unflushable += info.stats.stats.sum.num_objects_omap;
 
-
+  uint64_t num_user_objects = info.stats.stats.sum.num_objects;
   if (num_user_objects > unflushable)
     num_user_objects -= unflushable;
   else
     num_user_objects = 0;
+
+  uint64_t num_user_bytes = info.stats.stats.sum.num_bytes;
+  uint64_t unflushable_bytes = info.stats.stats.sum.num_bytes_hit_set_archive;
+  num_user_bytes -= unflushable_bytes;
 
   // also reduce the num_dirty by num_objects_omap
   int64_t num_dirty = info.stats.stats.sum.num_objects_dirty;
@@ -11565,6 +11567,7 @@ void ReplicatedPG::agent_choose_mode(bool restart)
 	   << " num_objects_omap: " << info.stats.stats.sum.num_objects_omap
 	   << " num_dirty: " << num_dirty
 	   << " num_user_objects: " << num_user_objects
+	   << " num_user_bytes: " << num_user_bytes
 	   << " pool.info.target_max_bytes: " << pool.info.target_max_bytes
 	   << " pool.info.target_max_objects: " << pool.info.target_max_objects
 	   << dendl;
