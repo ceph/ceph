@@ -63,7 +63,7 @@ int crush_add_rule(struct crush_map *map, struct crush_rule *rule, int ruleno)
 		for (r=0; r < map->max_rules; r++)
 			if (map->rules[r] == 0)
 				break;
-		assert(r <= INT_MAX);
+		assert(r < CRUSH_MAX_RULES);
 	}
 	else
 		r = ruleno;
@@ -72,6 +72,8 @@ int crush_add_rule(struct crush_map *map, struct crush_rule *rule, int ruleno)
 		/* expand array */
 		int oldsize;
 		void *_realloc = NULL;
+		if (map->max_rules +1 > CRUSH_MAX_RULES)
+			return -ENOSPC;
 		oldsize = map->max_rules;
 		map->max_rules = r+1;
 		if ((_realloc = realloc(map->rules, map->max_rules * sizeof(map->rules[0]))) == NULL) {
