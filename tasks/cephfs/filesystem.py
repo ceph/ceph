@@ -5,6 +5,7 @@ import logging
 import time
 
 from teuthology import misc
+from teuthology.nuke import clear_firewall
 from teuthology.parallel import parallel
 from tasks import ceph_manager
 
@@ -39,6 +40,14 @@ class Filesystem(object):
         client_list = list(misc.all_roles_of_type(self._ctx.cluster, 'client'))
         self.client_id = client_list[0]
         self.client_remote = list(misc.get_clients(ctx=ctx, roles=["client.{0}".format(self.client_id)]))[0][1]
+
+    def get_mds_hostnames(self):
+        result = set()
+        for mds_id in self.mds_ids:
+            mds_remote = self.mon_manager.find_remote('mds', mds_id)
+            result.add(mds_remote.hostname)
+
+        return list(result)
 
     def are_daemons_healthy(self):
         """
@@ -185,6 +194,27 @@ class Filesystem(object):
             return json.loads(response_data)
         else:
             return None
+
+    def set_clients_block(self, blocked, mds_id=None):
+        """
+        Block (using iptables) client communications to this MDS.  Be careful: if
+        other services are running on this MDS, or other MDSs try to talk to this
+        MDS, their communications may also be blocked as collatoral damage.
+
+        :param mds_id: Optional ID of MDS to block, default to all
+        :return:
+        """
+        da_flag = "-A" if blocked else "-D"
+
+        def set_block(_mds_id):
+            remote = self.mon_manager.find_remote('mds', _mds_id)
+            remote.run(args=["sudo", "iptables", da_flag, "OUTPUT", "-p", "tcp", "--sport", "6800:6900", "-j", "REJECT", "-m", "comment", "--comment", "teuthology"])
+            remote.run(args=["sudo", "iptables", da_flag, "INPUT", "-p", "tcp", "--dport", "6800:6900", "-j", "REJECT", "-m", "comment", "--comment", "teuthology"])
+
+        self._one_or_all(mds_id, set_block)
+
+    def clear_firewall(self):
+        clear_firewall(self._ctx)
 
     def wait_for_state(self, goal_state, reject=None, timeout=None, mds_id=None):
         """
