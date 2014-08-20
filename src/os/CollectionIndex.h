@@ -73,6 +73,7 @@ protected:
   };
  public:
 
+  string access_lock_name;
   RWLock access_lock;
   /// Type of returned paths
   typedef ceph::shared_ptr<Path> IndexedPath;
@@ -180,7 +181,9 @@ protected:
   /// Call prior to removing directory
   virtual int prep_delete() { return 0; }
 
-  CollectionIndex():access_lock("CollectionIndex::access_lock"){}
+  CollectionIndex(coll_t collection):
+    access_lock_name ("CollectionIndex::access_lock::" + collection.to_str()), 
+    access_lock(access_lock_name.c_str()) {}
 
   /*
    * Pre-hash the collection, this collection should map to a PG folder.

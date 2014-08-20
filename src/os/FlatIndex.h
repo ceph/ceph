@@ -32,8 +32,10 @@ class FlatIndex : public CollectionIndex {
   string base_path;
   coll_t collection;
 public:
-  FlatIndex(coll_t collection, string base_path) : base_path(base_path),
-						   collection(collection) {}
+  FlatIndex(coll_t collection, string base_path) : 
+              CollectionIndex(collection),
+              base_path(base_path),
+	      collection(collection) {}
 
   /// @see CollectionIndex
   uint32_t collection_version() { return FLAT_INDEX_TAG; }
