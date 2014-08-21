@@ -1339,6 +1339,13 @@ void Paxos::restart()
   cancel_events();
   new_value.clear();
 
+  if (is_writing()) {
+    dout(10) << __func__ << " flushing" << dendl;
+    mon->lock.Unlock();
+    mon->store->flush();
+    mon->lock.Lock();
+    dout(10) << __func__ << " flushed" << dendl;
+  }
   state = STATE_RECOVERING;
 
   finish_contexts(g_ceph_context, proposals, -EAGAIN);
