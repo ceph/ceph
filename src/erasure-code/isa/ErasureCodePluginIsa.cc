@@ -2,8 +2,10 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2014 CERN (Switzerland)
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Andreas-Joachim Peters <Andreas.Joachim.Peters@cern.ch>
+ * Author: Loic Dachary <loic@dachary.org>
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Lesser General Public
