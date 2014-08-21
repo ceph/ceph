@@ -521,7 +521,8 @@ def create_nonregion_pools(ctx, config, regions):
         (remote,) = ctx.cluster.only(client).remotes.iterkeys()
         data_pool = '.rgw.buckets'
         if ctx.rgw.ec_data_pool:
-            create_ec_pool(remote, data_pool, client, 64)
+            create_ec_pool(remote, data_pool, client, 64,
+                           ctx.rgw.erasure_code_profile)
         else:
             create_replicated_pool(remote, data_pool, 64)
         if ctx.rgw.cache_pools:
@@ -594,7 +595,7 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints):
                                  pool_info['val']['index_pool'], '64', '64'])
                 if ctx.rgw.ec_data_pool:
                     create_ec_pool(remote, pool_info['val']['data_pool'],
-                                   zone, 64)
+                                   zone, 64, ctx.rgw.erasure_code_profile)
                 else:
                     create_replicated_pool(
                         remote, pool_info['val']['data_pool'],
@@ -721,6 +722,10 @@ def task(ctx, config):
         - rgw:
             default_idle_timeout: 30
             ec-data-pool: true
+            erasure_code_profile:
+              k: 2
+              m: 1
+              ruleset-failure-domain: osd
             regions:
               foo:
                 api name: api_name # default: region name
@@ -777,6 +782,10 @@ def task(ctx, config):
     if 'ec-data-pool' in config:
         ctx.rgw.ec_data_pool = bool(config['ec-data-pool'])
         del config['ec-data-pool']
+    ctx.rgw.erasure_code_profile = {}
+    if 'erasure_code_profile' in config:
+        ctx.rgw.erasure_code_profile = config['erasure_code_profile']
+        del config['erasure_code_profile']
     ctx.rgw.default_idle_timeout = 30
     if 'default_idle_timeout' in config:
         ctx.rgw.default_idle_timeout = int(config['default_idle_timeout'])
