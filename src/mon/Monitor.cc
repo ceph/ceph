@@ -3864,6 +3864,15 @@ void Monitor::tick()
     finish_contexts(g_ceph_context, maybe_wait_for_quorum);
   }
 
+  if (is_leader() && paxos->is_active() && fingerprint.is_zero()) {
+    // this is only necessary on upgraded clusters.
+    MonitorDBStore::Transaction t;
+    prepare_new_fingerprint(&t);
+    bufferlist tbl;
+    t.encode(tbl);
+    paxos->propose_new_value(tbl, new C_NoopContext);
+  }
+
   new_tick();
 }
 
