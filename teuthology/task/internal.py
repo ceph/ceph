@@ -66,34 +66,29 @@ def lock_machines(ctx, config):
     log.info('Locking machines...')
     assert isinstance(config[0], int), 'config[0] must be an integer'
     machine_type = config[1]
-    machine_types = teuthology.get_multi_machine_types(machine_type)
     how_many = config[0]
+    # We want to make sure there are always this many machines available
+    to_reserve = 5
 
     while True:
-        # make sure there are enough machines up
-        machines = lock.list_locks()
+        # get a candidate list of machines
+        machines = lock.list_locks(machine_type=machine_type, up=True,
+                                   locked=False, count=how_many + to_reserve)
         if machines is None:
             if ctx.block:
-                log.warn('error listing machines, trying again')
+                log.error('Error listing machines, trying again')
                 time.sleep(20)
                 continue
             else:
-                assert 0, 'error listing machines'
-
-        is_up = lambda machine: machine['up'] and machine['type'] in machine_types  # noqa
-        num_up = len(filter(is_up, machines))
-        assert num_up >= how_many, 'not enough machines are up'
+                raise RuntimeError('Error listing machines')
 
         # make sure there are machines for non-automated jobs to run
-        is_up_and_free = lambda machine: machine['up'] and machine['locked'] == 0 and machine['type'] in machine_types  # noqa
-        up_and_free = filter(is_up_and_free, machines)
-        num_free = len(up_and_free)
-        if num_free < 6 and ctx.owner.startswith('scheduled'):
+        if len(machines) <= to_reserve and ctx.owner.startswith('scheduled'):
             if ctx.block:
                 log.info(
                     'waiting for more machines to be free (need %s see %s)...',
                     how_many,
-                    num_free,
+                    len(machines),
                 )
                 time.sleep(10)
                 continue
@@ -130,7 +125,7 @@ def lock_machines(ctx, config):
                 newscandict = {}
                 for dkey in newly_locked.iterkeys():
                     stats = lockstatus.get_status(dkey)
-                    newscandict[dkey] = stats['sshpubkey']
+                    newscandict[dkey] = stats['ssh_pub_key']
                 ctx.config['targets'] = newscandict
             else:
                 ctx.config['targets'] = newly_locked
