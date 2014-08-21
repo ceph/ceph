@@ -349,8 +349,10 @@ def build_ceph_cluster(ctx, config):
 
         # Are you really not running anymore?
         # try first with the init tooling
+        # ignoring the status so this becomes informational only
         ctx.cluster.run(args=['sudo', 'status', 'ceph-all', run.Raw('||'),
-                              'sudo', 'service',  'ceph', 'status'])
+                              'sudo', 'service',  'ceph', 'status'],
+                              check_status=False)
 
         # and now just check for the processes themselves, as if upstart/sysvinit
         # is lying to us. Ignore errors if the grep fails
