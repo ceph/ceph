@@ -49,6 +49,18 @@ ErasureCodePluginRegistry::~ErasureCodePluginRegistry()
   }
 }
 
+int ErasureCodePluginRegistry::remove(const std::string &name)
+{
+  if (plugins.find(name) == plugins.end())
+    return -ENOENT;
+  std::map<std::string,ErasureCodePlugin*>::iterator plugin = plugins.find(name);
+  void *library = plugin->second->library;
+  delete plugin->second;
+  dlclose(library);
+  plugins.erase(plugin);
+  return 0;
+}
+
 int ErasureCodePluginRegistry::add(const std::string &name,
                                    ErasureCodePlugin* plugin)
 {

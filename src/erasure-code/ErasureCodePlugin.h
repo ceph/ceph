@@ -61,6 +61,7 @@ namespace ceph {
 		ostream &ss);
 
     int add(const std::string &name, ErasureCodePlugin *plugin);
+    int remove(const std::string &name);
     ErasureCodePlugin *get(const std::string &name);
 
     int load(const std::string &plugin_name,
