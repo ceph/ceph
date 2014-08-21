@@ -310,6 +310,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
     assert(session->is_opening());
     mds->sessionmap.set_state(session, Session::STATE_OPEN);
     mds->sessionmap.touch_session(session);
+    assert(session->connection != NULL);
     session->connection->send_message(new MClientSession(CEPH_SESSION_OPEN));
   } else if (session->is_closing() ||
 	     session->is_killing()) {
@@ -343,7 +344,11 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       // ms_handle_remote_reset() and realize they had in fact closed.
       // do this *before* sending the message to avoid a possible
       // race.
-      session->connection->mark_disposable();
+      if (session->connection != NULL) {;
+        // Conditional because terminate_sessions will indiscrimately
+        // put sessions in CLOSING whether they ever had a conn or not.
+        session->connection->mark_disposable();
+      }
 
       // reset session
       mds->send_message_client(new MClientSession(CEPH_SESSION_CLOSE), session);
@@ -351,7 +356,9 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       session->clear();
     } else if (session->is_killing()) {
       // destroy session, close connection
-      session->connection->mark_down();
+      if (session->connection != NULL) {
+        session->connection->mark_down();
+      }
       mds->sessionmap.remove_session(session);
     } else {
       assert(0);
