@@ -18,6 +18,7 @@
 #include <errno.h>
 #include <dlfcn.h>
 
+#include "ceph_ver.h"
 #include "ErasureCodePlugin.h"
 #include "common/errno.h"
 #include "include/str_list.h"
@@ -25,6 +26,7 @@
 #define PLUGIN_PREFIX "libec_"
 #define PLUGIN_SUFFIX ".so"
 #define PLUGIN_INIT_FUNCTION "__erasure_code_init"
+#define PLUGIN_VERSION_FUNCTION "__erasure_code_version"
 
 ErasureCodePluginRegistry ErasureCodePluginRegistry::singleton;
 
@@ -101,6 +103,10 @@ int ErasureCodePluginRegistry::factory(const std::string &plugin_name,
   return plugin->factory(parameters, erasure_code);
 }
 
+static const char *an_older_version() {
+  return "an older version";
+}
+
 int ErasureCodePluginRegistry::load(const std::string &plugin_name,
 				    const std::string &directory,
 				    ErasureCodePlugin **plugin,
@@ -112,6 +118,17 @@ int ErasureCodePluginRegistry::load(const std::string &plugin_name,
   if (!library) {
     ss << "load dlopen(" << fname << "): " << dlerror();
     return -EIO;
+  }
+
+  const char * (*erasure_code_version)() =
+    (const char *(*)())dlsym(library, PLUGIN_VERSION_FUNCTION);
+  if (erasure_code_version == NULL)
+    erasure_code_version = an_older_version;
+  if (erasure_code_version() != string(CEPH_GIT_NICE_VER)) {
+    ss << "expected plugin " << fname << " version " << CEPH_GIT_NICE_VER
+       << " but it claims to be " << erasure_code_version() << " instead";
+    dlclose(library);
+    return -EXDEV;
   }
 
   int (*erasure_code_init)(const char *, const char *) =

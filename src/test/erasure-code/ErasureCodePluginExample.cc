@@ -17,6 +17,7 @@
 
 #include <unistd.h>
 
+#include "ceph_ver.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "ErasureCodeExample.h"
 
@@ -29,6 +30,8 @@ public:
     return 0;
   }
 };
+
+const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
 
 int __erasure_code_init(char *plugin_name, char *directory)
 {

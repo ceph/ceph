@@ -15,6 +15,7 @@
  * 
  */
 
+#include "ceph_ver.h"
 #include "common/debug.h"
 #include "arch/probe.h"
 #include "arch/intel.h"
@@ -73,6 +74,8 @@ public:
     return ret;
   }
 };
+
+const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
 
 int __erasure_code_init(char *plugin_name, char *directory)
 {
