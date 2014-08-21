@@ -68,6 +68,8 @@ struct FailedAssertion {
 extern void register_assert_context(CephContext *cct);
 extern void __ceph_assert_fail(const char *assertion, const char *file, int line, const char *function)
   __attribute__ ((__noreturn__));
+extern void __ceph_assertf_fail(const char *assertion, const char *file, int line, const char *function, const char* msg, ...)
+  __attribute__ ((__noreturn__));
 extern void __ceph_assert_warn(const char *assertion, const char *file, int line, const char *function);
 
 #define ceph_assert(expr)							\
@@ -138,3 +140,9 @@ using namespace ceph;
    ? __CEPH_ASSERT_VOID_CAST (0)					\
    : __ceph_assert_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION))
 
+// Named by analogy with printf.  Along with an expression, takes a format
+// string and parameters which are printed if the assertion fails.
+#define assertf(expr, ...)                  \
+  ((expr)								\
+   ? __CEPH_ASSERT_VOID_CAST (0)					\
+   : __ceph_assertf_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__))
