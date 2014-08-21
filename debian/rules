@@ -33,13 +33,6 @@ ifeq ($(DEB_HOST_ARCH), armel)
   extraopts += --without-libatomic-ops
 endif
 
-ifeq ($(shell dpkg-vendor --derives-from ubuntu && echo yes),yes)
-  codename = $(shell lsb_release -a | sed -rn 's/Codename:\s([^\s]*)/\1/p')
-  ifeq ($(codename),trusty)
-    extraopts += --without-lttng
-  endif
-endif
-
 configure: configure-stamp
 configure-stamp:
 	dh_testdir

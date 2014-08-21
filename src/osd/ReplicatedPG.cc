@@ -58,10 +58,6 @@
 #include "json_spirit/json_spirit_reader.h"
 #include "include/assert.h"  // json_spirit clobbers it
 
-#ifdef WITH_LTTNG
-#include "tracing/osd.h"
-#endif
-
 #define dout_subsys ceph_subsys_osd
 #define DOUT_PREFIX_ARGS this, osd->whoami, get_osdmap()
 #undef dout_prefix
@@ -1845,19 +1841,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
     p->second->ondisk_read_lock();
   }
 
-  {
-    osd_reqid_t reqid = ctx->op->get_reqid();
-    tracepoint(osd, prepare_tx_enter, reqid.name._type,
-        reqid.name._num, reqid.tid, reqid.inc);
-  }
-
   int result = prepare_transaction(ctx);
-
-  {
-    osd_reqid_t reqid = ctx->op->get_reqid();
-    tracepoint(osd, prepare_tx_exit, reqid.name._type,
-        reqid.name._num, reqid.tid, reqid.inc);
-  }
 
   if (op->may_read()) {
     dout(10) << " dropping ondisk_read_lock" << dendl;
@@ -3013,30 +2997,6 @@ struct FillInExtent : public Context {
   }
 };
 
-template<typename V>
-static string list_keys(const map<string, V>& m) {
-  string s;
-  for (typename map<string, V>::const_iterator itr = m.begin(); itr != m.end(); ++itr) {
-    if (!s.empty()) {
-      s.push_back(',');
-    }
-    s.append(itr->first);
-  }
-  return s;
-}
-
-template<typename T>
-static string list_entries(const T& m) {
-  string s;
-  for (typename T::const_iterator itr = m.begin(); itr != m.end(); ++itr) {
-    if (!s.empty()) {
-      s.push_back(',');
-    }
-    s.append(*itr);
-  }
-  return s;
-}
-
 int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 {
   int result = 0;
@@ -3054,13 +3014,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
   for (vector<OSDOp>::iterator p = ops.begin(); p != ops.end(); ++p, ctx->current_osd_subop_num++) {
     OSDOp& osd_op = *p;
     ceph_osd_op& op = osd_op.op;
-
-    // TODO: check endianness (__le32 vs uint32_t, etc.)
-    // The fields in ceph_osd_op are little-endian (according to the definition in rados.h),
-    // but the code in this function seems to treat them as native-endian.  What should the
-    // tracepoints do?
-    tracepoint(osd, do_osd_op_pre, soid.oid.name.c_str(), soid.snap.val, op.op, ceph_osd_op_name(op.op), op.flags);
-
+ 
     dout(10) << "do_osd_op  " << osd_op << dendl;
 
     bufferlist::iterator bp = osd_op.indata.begin();
@@ -3131,7 +3085,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       {
 	__u32 seq = oi.truncate_seq;
 	uint64_t size = oi.size;
-	tracepoint(osd, do_osd_op_pre_read, soid.oid.name.c_str(), soid.snap.val, size, seq, op.extent.offset, op.extent.length, op.extent.truncate_size, op.extent.truncate_seq);
 	bool trimmed_read = false;
 	// are we beyond truncate_size?
 	if ( (seq < op.extent.truncate_seq) &&
@@ -3182,7 +3135,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     /* map extents */
     case CEPH_OSD_OP_MAPEXT:
-      tracepoint(osd, do_osd_op_pre_mapext, soid.oid.name.c_str(), soid.snap.val, op.extent.offset, op.extent.length);
       if (pool.info.require_rollback()) {
 	result = -EOPNOTSUPP;
 	break;
@@ -3203,7 +3155,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     /* map extents */
     case CEPH_OSD_OP_SPARSE_READ:
-      tracepoint(osd, do_osd_op_pre_sparse_read, soid.oid.name.c_str(), soid.snap.val, oi.size, oi.truncate_seq, op.extent.offset, op.extent.length, op.extent.truncate_size, op.extent.truncate_seq);
       if (pool.info.require_rollback()) {
 	result = -EOPNOTSUPP;
 	break;
@@ -3303,10 +3254,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  osd_op.indata.hexdump(*_dout);
 	  *_dout << dendl;
 	  result = -EINVAL;
-	  tracepoint(osd, do_osd_op_pre_call, soid.oid.name.c_str(), soid.snap.val, "???", "???");
 	  break;
 	}
-	tracepoint(osd, do_osd_op_pre_call, soid.oid.name.c_str(), soid.snap.val, cname.c_str(), mname.c_str());
 
 	ClassHandler::ClassData *cls;
 	result = osd->class_handler->open_class(cname, &cls);
@@ -3352,8 +3301,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_STAT:
       // note: stat does not require RD
       {
-	tracepoint(osd, do_osd_op_pre_stat, soid.oid.name.c_str(), soid.snap.val);
-
 	if (obs.exists && !oi.is_whiteout()) {
 	  ::encode(oi.size, osd_op.outdata);
 	  ::encode(oi.mtime, osd_op.outdata);
@@ -3370,7 +3317,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_ISDIRTY:
       ++ctx->num_read;
       {
-	tracepoint(osd, do_osd_op_pre_isdirty, soid.oid.name.c_str(), soid.snap.val);
 	bool is_dirty = obs.oi.is_dirty();
 	::encode(is_dirty, osd_op.outdata);
 	ctx->delta_stats.num_rd++;
@@ -3381,7 +3327,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_UNDIRTY:
       ++ctx->num_write;
       {
-	tracepoint(osd, do_osd_op_pre_undirty, soid.oid.name.c_str(), soid.snap.val);
 	if (oi.is_dirty()) {
 	  ctx->undirty = true;  // see make_writeable()
 	  ctx->modify = true;
@@ -3394,7 +3339,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_CACHE_TRY_FLUSH:
       ++ctx->num_write;
       {
-	tracepoint(osd, do_osd_op_pre_try_flush, soid.oid.name.c_str(), soid.snap.val);
 	if (ctx->lock_to_release != OpContext::NONE) {
 	  dout(10) << "cache-try-flush without SKIPRWLOCKS flag set" << dendl;
 	  result = -EINVAL;
@@ -3421,7 +3365,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_CACHE_FLUSH:
       ++ctx->num_write;
       {
-	tracepoint(osd, do_osd_op_pre_cache_flush, soid.oid.name.c_str(), soid.snap.val);
 	if (ctx->lock_to_release == OpContext::NONE) {
 	  dout(10) << "cache-flush with SKIPRWLOCKS flag set" << dendl;
 	  result = -EINVAL;
@@ -3457,7 +3400,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_CACHE_EVICT:
       ++ctx->num_write;
       {
-	tracepoint(osd, do_osd_op_pre_cache_evict, soid.oid.name.c_str(), soid.snap.val);
 	if (pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE) {
 	  result = -EINVAL;
 	  break;
@@ -3485,7 +3427,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       {
 	string aname;
 	bp.copy(op.xattr.name_len, aname);
-	tracepoint(osd, do_osd_op_pre_getxattr, soid.oid.name.c_str(), soid.snap.val, aname.c_str());
 	string name = "_" + aname;
 	int r = getattr_maybe_cache(
 	  ctx->obc,
@@ -3504,7 +3445,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
    case CEPH_OSD_OP_GETXATTRS:
       ++ctx->num_read;
       {
-	tracepoint(osd, do_osd_op_pre_getxattrs, soid.oid.name.c_str(), soid.snap.val);
 	map<string, bufferlist> out;
 	result = getattrs_maybe_cache(
 	  ctx->obc,
@@ -3525,7 +3465,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       {
 	string aname;
 	bp.copy(op.xattr.name_len, aname);
-	tracepoint(osd, do_osd_op_pre_cmpxattr, soid.oid.name.c_str(), soid.snap.val, aname.c_str());
 	string name = "_" + aname;
 	name[op.xattr.name_len + 1] = 0;
 	
@@ -3597,7 +3536,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ++ctx->num_read;
       {
 	uint64_t ver = op.watch.ver;
-	tracepoint(osd, do_osd_op_pre_assert_ver, soid.oid.name.c_str(), soid.snap.val, ver);
 	if (!ver)
 	  result = -EINVAL;
         else if (ver < oi.user_version)
@@ -3610,7 +3548,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_LIST_WATCHERS:
       ++ctx->num_read;
       {
-	tracepoint(osd, do_osd_op_pre_list_watchers, soid.oid.name.c_str(), soid.snap.val);
         obj_list_watch_response_t resp;
 
         map<pair<uint64_t, entity_name_t>, watch_info_t>::const_iterator oi_iter;
@@ -3637,7 +3574,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_LIST_SNAPS:
       ++ctx->num_read;
       {
-	tracepoint(osd, do_osd_op_pre_list_snaps, soid.oid.name.c_str(), soid.snap.val);
         obj_list_snap_response_t resp;
 
         if (!ssc) {
@@ -3717,7 +3653,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ++ctx->num_read;
       {
 	uint64_t ver = op.assert_ver.ver;
-	tracepoint(osd, do_osd_op_pre_assert_src_version, soid.oid.name.c_str(), soid.snap.val, ver);
 	if (!ver)
 	  result = -EINVAL;
         else if (ver < src_obc->obs.oi.user_version)
@@ -3730,7 +3665,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
    case CEPH_OSD_OP_NOTIFY:
       ++ctx->num_read;
       {
-	uint32_t ver; // obsolete
+	uint32_t ver;
 	uint32_t timeout;
         bufferlist bl;
 
@@ -3741,7 +3676,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	} catch (const buffer::error &e) {
 	  timeout = 0;
 	}
-	tracepoint(osd, do_osd_op_pre_notify, soid.oid.name.c_str(), soid.snap.val, timeout);
 	if (!timeout)
 	  timeout = cct->_conf->osd_default_notify_timeout;
 
@@ -3761,11 +3695,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  uint64_t watch_cookie = 0;
 	  ::decode(notify_id, bp);
 	  ::decode(watch_cookie, bp);
-	  tracepoint(osd, do_osd_op_pre_notify_ack, soid.oid.name.c_str(), soid.snap.val, notify_id, watch_cookie, "Y");
 	  OpContext::NotifyAck ack(notify_id, watch_cookie);
 	  ctx->notify_acks.push_back(ack);
 	} catch (const buffer::error &e) {
-	  tracepoint(osd, do_osd_op_pre_notify_ack, soid.oid.name.c_str(), soid.snap.val, op.watch.cookie, 0, "N");
 	  OpContext::NotifyAck ack(
 	    // op.watch.cookie is actually the notify_id for historical reasons
 	    op.watch.cookie
@@ -3778,7 +3710,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_SETALLOCHINT:
       ++ctx->num_write;
       {
-	tracepoint(osd, do_osd_op_pre_setallochint, soid.oid.name.c_str(), soid.snap.val, op.alloc_hint.expected_object_size, op.alloc_hint.expected_write_size);
         if (!obs.exists) {
           ctx->mod_desc.create();
           t->touch(soid);
@@ -3800,8 +3731,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_WRITE:
       ++ctx->num_write;
       { // write
-        __u32 seq = oi.truncate_seq;
-	tracepoint(osd, do_osd_op_pre_write, soid.oid.name.c_str(), soid.snap.val, oi.size, seq, op.extent.offset, op.extent.length, op.extent.truncate_size, op.extent.truncate_seq);
 	if (op.extent.length != osd_op.indata.length()) {
 	  result = -EINVAL;
 	  break;
@@ -3825,6 +3754,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 	}
 
+        __u32 seq = oi.truncate_seq;
         if (seq && (seq > op.extent.truncate_seq) &&
             (op.extent.offset + op.extent.length > oi.size)) {
 	  // old write, arrived after trimtrunc
@@ -3875,8 +3805,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_WRITEFULL:
       ++ctx->num_write;
       { // write full object
-	tracepoint(osd, do_osd_op_pre_writefull, soid.oid.name.c_str(), soid.snap.val, oi.size, op.extent.offset, op.extent.length);
-
 	if (op.extent.length != osd_op.indata.length()) {
 	  result = -EINVAL;
 	  break;
@@ -3938,12 +3866,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_ROLLBACK :
       ++ctx->num_write;
-      tracepoint(osd, do_osd_op_pre_rollback, soid.oid.name.c_str(), soid.snap.val);
       result = _rollback_to(ctx, op);
       break;
 
     case CEPH_OSD_OP_ZERO:
-      tracepoint(osd, do_osd_op_pre_zero, soid.oid.name.c_str(), soid.snap.val, op.extent.offset, op.extent.length);
       if (pool.info.require_rollback()) {
 	result = -EOPNOTSUPP;
 	break;
@@ -3969,7 +3895,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_CREATE:
       ++ctx->num_write;
       {
-	tracepoint(osd, do_osd_op_pre_create, soid.oid.name.c_str(), soid.snap.val);
         int flags = le32_to_cpu(op.flags);
 	if (obs.exists && !oi.is_whiteout() &&
 	    (flags & CEPH_OSD_OP_FLAG_EXCL)) {
@@ -4012,7 +3937,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       // falling through
 
     case CEPH_OSD_OP_TRUNCATE:
-      tracepoint(osd, do_osd_op_pre_truncate, soid.oid.name.c_str(), soid.snap.val, oi.size, oi.truncate_seq, op.extent.offset, op.extent.length, op.extent.truncate_size, op.extent.truncate_seq);
       if (pool.info.require_rollback()) {
 	result = -EOPNOTSUPP;
 	break;
@@ -4062,7 +3986,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     
     case CEPH_OSD_OP_DELETE:
       ++ctx->num_write;
-      tracepoint(osd, do_osd_op_pre_delete, soid.oid.name.c_str(), soid.snap.val);
       if (ctx->obc->obs.oi.watchers.size()) {
 	// Cannot delete an object with watchers
 	result = -EBUSY;
@@ -4072,7 +3995,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_CLONERANGE:
-      tracepoint(osd, do_osd_op_pre_clonerange, soid.oid.name.c_str(), soid.snap.val, op.clonerange.offset, op.clonerange.length, op.clonerange.src_offset);
       ctx->mod_desc.mark_unrollbackable();
       if (pool.info.require_rollback()) {
 	result = -EOPNOTSUPP;
@@ -4106,7 +4028,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_WATCH:
       ++ctx->num_write;
       {
-	tracepoint(osd, do_osd_op_pre_watch, soid.oid.name.c_str(), soid.snap.val, op.watch.cookie, op.watch.flag);
 	if (!obs.exists) {
 	  result = -ENOENT;
 	  break;
@@ -4157,7 +4078,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       {
 	if (cct->_conf->osd_max_attr_size > 0 &&
 	    op.xattr.value_len > cct->_conf->osd_max_attr_size) {
-	  tracepoint(osd, do_osd_op_pre_setxattr, soid.oid.name.c_str(), soid.snap.val, "???");
 	  result = -EFBIG;
 	  break;
 	}
@@ -4175,7 +4095,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	string aname;
 	bp.copy(op.xattr.name_len, aname);
-	tracepoint(osd, do_osd_op_pre_setxattr, soid.oid.name.c_str(), soid.snap.val, aname.c_str());
 	string name = "_" + aname;
 	if (pool.info.require_rollback()) {
 	  map<string, boost::optional<bufferlist> > to_set;
@@ -4202,7 +4121,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       {
 	string aname;
 	bp.copy(op.xattr.name_len, aname);
-	tracepoint(osd, do_osd_op_pre_rmxattr, soid.oid.name.c_str(), soid.snap.val, aname.c_str());
 	string name = "_" + aname;
 	if (pool.info.require_rollback()) {
 	  map<string, boost::optional<bufferlist> > to_set;
@@ -4226,7 +4144,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       // -- fancy writers --
     case CEPH_OSD_OP_APPEND:
       {
-	tracepoint(osd, do_osd_op_pre_append, soid.oid.name.c_str(), soid.snap.val, oi.size, oi.truncate_seq, op.extent.offset, op.extent.length, op.extent.truncate_size, op.extent.truncate_seq);
 	// just do it inline; this works because we are happy to execute
 	// fancy op on replicas as well.
 	vector<OSDOp> nops(1);
@@ -4242,14 +4159,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_STARTSYNC:
-      tracepoint(osd, do_osd_op_pre_startsync, soid.oid.name.c_str(), soid.snap.val);
       t->nop();
       break;
 
 
       // -- trivial map --
     case CEPH_OSD_OP_TMAPGET:
-      tracepoint(osd, do_osd_op_pre_tmapget, soid.oid.name.c_str(), soid.snap.val);
       if (pool.info.require_rollback()) {
 	result = -EOPNOTSUPP;
 	break;
@@ -4267,7 +4182,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_TMAPPUT:
-      tracepoint(osd, do_osd_op_pre_tmapput, soid.oid.name.c_str(), soid.snap.val);
       if (pool.info.require_rollback()) {
 	result = -EOPNOTSUPP;
 	break;
@@ -4326,7 +4240,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_TMAPUP:
-      tracepoint(osd, do_osd_op_pre_tmapup, soid.oid.name.c_str(), soid.snap.val);
       if (pool.info.require_rollback()) {
 	result = -EOPNOTSUPP;
 	break;
@@ -4337,7 +4250,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_TMAP2OMAP:
       ++ctx->num_write;
-      tracepoint(osd, do_osd_op_pre_tmap2omap, soid.oid.name.c_str(), soid.snap.val);
       result = do_tmap2omap(ctx, op.tmap2omap.flags);
       break;
 
@@ -4353,10 +4265,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	catch (buffer::error& e) {
 	  result = -EINVAL;
-	  tracepoint(osd, do_osd_op_pre_omapgetkeys, soid.oid.name.c_str(), soid.snap.val, "???", 0);
 	  goto fail;
 	}
-	tracepoint(osd, do_osd_op_pre_omapgetkeys, soid.oid.name.c_str(), soid.snap.val, start_after.c_str(), max_return);
 	set<string> out_set;
 
 	if (!pool.info.require_rollback()) {
@@ -4390,10 +4300,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	catch (buffer::error& e) {
 	  result = -EINVAL;
-	  tracepoint(osd, do_osd_op_pre_omapgetvals, soid.oid.name.c_str(), soid.snap.val, "???", 0, "???");
 	  goto fail;
 	}
-	tracepoint(osd, do_osd_op_pre_omapgetvals, soid.oid.name.c_str(), soid.snap.val, start_after.c_str(), max_return, filter_prefix.c_str());
 	map<string, bufferlist> out_set;
 
 	if (!pool.info.require_rollback()) {
@@ -4421,7 +4329,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_OMAPGETHEADER:
-      tracepoint(osd, do_osd_op_pre_omapgetheader, soid.oid.name.c_str(), soid.snap.val);
       if (pool.info.require_rollback()) {
 	// return empty header
 	break;
@@ -4443,10 +4350,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	catch (buffer::error& e) {
 	  result = -EINVAL;
-	  tracepoint(osd, do_osd_op_pre_omapgetvalsbykeys, soid.oid.name.c_str(), soid.snap.val, "???");
 	  goto fail;
 	}
-	tracepoint(osd, do_osd_op_pre_omapgetvalsbykeys, soid.oid.name.c_str(), soid.snap.val, list_entries(keys_to_get).c_str());
 	map<string, bufferlist> out;
 	if (!pool.info.require_rollback()) {
 	  osd->store->omap_get_values(coll, soid, keys_to_get, &out);
@@ -4462,7 +4367,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       {
 	if (!obs.exists || oi.is_whiteout()) {
 	  result = -ENOENT;
-	  tracepoint(osd, do_osd_op_pre_omap_cmp, soid.oid.name.c_str(), soid.snap.val, "???");
 	  break;
 	}
 	map<string, pair<bufferlist, int> > assertions;
@@ -4471,10 +4375,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	catch (buffer::error& e) {
 	  result = -EINVAL;
-	  tracepoint(osd, do_osd_op_pre_omap_cmp, soid.oid.name.c_str(), soid.snap.val, "???");
 	  goto fail;
 	}
-	tracepoint(osd, do_osd_op_pre_omap_cmp, soid.oid.name.c_str(), soid.snap.val, list_keys(assertions).c_str());
 	
 	map<string, bufferlist> out;
 
@@ -4534,7 +4436,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_OMAPSETVALS:
       if (pool.info.require_rollback()) {
 	result = -EOPNOTSUPP;
-	tracepoint(osd, do_osd_op_pre_omapsetvals, soid.oid.name.c_str(), soid.snap.val, "???");
 	break;
       }
       ctx->mod_desc.mark_unrollbackable();
@@ -4551,10 +4452,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	catch (buffer::error& e) {
 	  result = -EINVAL;
-	  tracepoint(osd, do_osd_op_pre_omapsetvals, soid.oid.name.c_str(), soid.snap.val, "???");
 	  goto fail;
 	}
-	tracepoint(osd, do_osd_op_pre_omapsetvals, soid.oid.name.c_str(), soid.snap.val, list_keys(to_set).c_str());
 	dout(20) << "setting vals: " << dendl;
 	for (map<string, bufferlist>::iterator i = to_set.begin();
 	     i != to_set.end();
@@ -4568,7 +4467,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_OMAPSETHEADER:
-      tracepoint(osd, do_osd_op_pre_omapsetheader, soid.oid.name.c_str(), soid.snap.val);
       if (pool.info.require_rollback()) {
 	result = -EOPNOTSUPP;
 	break;
@@ -4588,7 +4486,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_OMAPCLEAR:
-      tracepoint(osd, do_osd_op_pre_omapclear, soid.oid.name.c_str(), soid.snap.val);
       if (pool.info.require_rollback()) {
 	result = -EOPNOTSUPP;
 	break;
@@ -4610,7 +4507,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_OMAPRMKEYS:
       if (pool.info.require_rollback()) {
 	result = -EOPNOTSUPP;
-	tracepoint(osd, do_osd_op_pre_omaprmkeys, soid.oid.name.c_str(), soid.snap.val, "???");
 	break;
       }
       ctx->mod_desc.mark_unrollbackable();
@@ -4618,7 +4514,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       {
 	if (!obs.exists || oi.is_whiteout()) {
 	  result = -ENOENT;
-	  tracepoint(osd, do_osd_op_pre_omaprmkeys, soid.oid.name.c_str(), soid.snap.val, "???");
 	  break;
 	}
 	t->touch(soid);
@@ -4628,10 +4523,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	catch (buffer::error& e) {
 	  result = -EINVAL;
-	  tracepoint(osd, do_osd_op_pre_omaprmkeys, soid.oid.name.c_str(), soid.snap.val, "???");
 	  goto fail;
 	}
-	tracepoint(osd, do_osd_op_pre_omaprmkeys, soid.oid.name.c_str(), soid.snap.val, list_entries(to_rm).c_str());
 	t->omap_rmkeys(soid, to_rm);
 	ctx->delta_stats.num_wr++;
       }
@@ -4640,7 +4533,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_COPY_GET_CLASSIC:
       ++ctx->num_read;
-      tracepoint(osd, do_osd_op_pre_copy_get_classic, soid.oid.name.c_str(), soid.snap.val);
       result = fill_in_copy_get(ctx, bp, osd_op, ctx->obc, true);
       if (result == -EINVAL)
 	goto fail;
@@ -4648,7 +4540,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_COPY_GET:
       ++ctx->num_read;
-      tracepoint(osd, do_osd_op_pre_copy_get, soid.oid.name.c_str(), soid.snap.val);
       result = fill_in_copy_get(ctx, bp, osd_op, ctx->obc, false);
       if (result == -EINVAL)
 	goto fail;
@@ -4667,30 +4558,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	catch (buffer::error& e) {
 	  result = -EINVAL;
-	  tracepoint(osd,
-		     do_osd_op_pre_copy_from,
-		     soid.oid.name.c_str(),
-		     soid.snap.val,
-		     "???",
-		     0,
-		     "???",
-		     "???",
-		     0,
-		     src_snapid,
-		     src_version);
 	  goto fail;
 	}
-	tracepoint(osd,
-		   do_osd_op_pre_copy_from,
-		   soid.oid.name.c_str(),
-		   soid.snap.val,
-		   src_name.name.c_str(),
-		   src_oloc.pool,
-		   src_oloc.key.c_str(),
-		   src_oloc.nspace.c_str(),
-		   src_oloc.hash,
-		   src_snapid,
-		   src_version);
 	if (!ctx->copy_cb) {
 	  // start
 	  pg_t raw_pg;
@@ -4719,7 +4588,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     default:
-      tracepoint(osd, do_osd_op_pre_unknown, soid.oid.name.c_str(), soid.snap.val, op.op, ceph_osd_op_name(op.op));
       dout(1) << "unrecognized osd op " << op.op
 	      << " " << ceph_osd_op_name(op.op)
 	      << dendl;
@@ -4730,7 +4598,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
   fail:
     osd_op.rval = result;
-    tracepoint(osd, do_osd_op_post, soid.oid.name.c_str(), soid.snap.val, op.op, ceph_osd_op_name(op.op), op.flags, result);
     if (result < 0 && (op.flags & CEPH_OSD_OP_FLAG_FAILOK))
       result = 0;
 

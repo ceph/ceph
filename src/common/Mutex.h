@@ -101,7 +101,12 @@ public:
       assert(nlock == 0);
     }
   }
-  void Unlock();
+  void Unlock() {
+    _pre_unlock();
+    if (lockdep && g_lockdep) _will_unlock();
+    int r = pthread_mutex_unlock(&_m);
+    assert(r == 0);
+  }
 
   friend class Cond;
 

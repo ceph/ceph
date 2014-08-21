@@ -1514,23 +1514,20 @@ reprotect_and_return_err:
     ldout(cct, 20) << "resize " << ictx << " " << ictx->size << " -> "
 		   << size << dendl;
 
-    if (ictx->read_only) {
+    if (ictx->read_only)
       return -EROFS;
-    }
 
     int r = ictx_check(ictx);
-    if (r < 0) {
+    if (r < 0)
       return r;
-    }
 
     RWLock::WLocker l(ictx->md_lock);
     if (size < ictx->size && ictx->object_cacher) {
       // need to invalidate since we're deleting objects, and
       // ObjectCacher doesn't track non-existent objects
       r = ictx->invalidate_cache();
-      if (r < 0) {
+      if (r < 0)
 	return r;
-      }
     }
     resize_helper(ictx, size, prog_ctx);
 
@@ -2680,9 +2677,8 @@ reprotect_and_return_err:
 
     uint64_t mylen = len;
     int r = clip_io(ictx, off, &mylen);
-    if (r < 0) {
+    if (r < 0)
       return r;
-    }
 
     Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
     AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
@@ -2698,9 +2694,8 @@ reprotect_and_return_err:
       cond.Wait(mylock);
     mylock.Unlock();
 
-    if (ret < 0) {
+    if (ret < 0)
       return ret;
-    }
 
     elapsed = ceph_clock_now(ictx->cct) - start_time;
     ictx->perfcounter->tinc(l_librbd_wr_latency, elapsed);
@@ -2735,9 +2730,8 @@ reprotect_and_return_err:
       cond.Wait(mylock);
     mylock.Unlock();
 
-    if (ret < 0) {
+    if (ret < 0)
       return ret;
-    }
 
     elapsed = ceph_clock_now(ictx->cct) - start_time;
     ictx->perfcounter->inc(l_librbd_discard_latency, elapsed);
@@ -2853,9 +2847,8 @@ reprotect_and_return_err:
     ldout(cct, 20) << "aio_flush " << ictx << " completion " << c <<  dendl;
 
     int r = ictx_check(ictx);
-    if (r < 0) {
+    if (r < 0)
       return r;
-    }
 
     ictx->user_flushed();
 
@@ -2884,9 +2877,8 @@ reprotect_and_return_err:
     ldout(cct, 20) << "flush " << ictx << dendl;
 
     int r = ictx_check(ictx);
-    if (r < 0) {
+    if (r < 0)
       return r;
-    }
 
     ictx->user_flushed();
     r = _flush(ictx);
@@ -2917,13 +2909,11 @@ reprotect_and_return_err:
     ldout(cct, 20) << "invalidate_cache " << ictx << dendl;
 
     int r = ictx_check(ictx);
-    if (r < 0) {
+    if (r < 0)
       return r;
-    }
 
     RWLock::WLocker l(ictx->md_lock);
-    r = ictx->invalidate_cache();
-    return r;
+    return ictx->invalidate_cache();
   }
 
   int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
@@ -2934,15 +2924,13 @@ reprotect_and_return_err:
 		   << len << " buf = " << (void*)buf << dendl;
 
     int r = ictx_check(ictx);
-    if (r < 0) {
+    if (r < 0)
       return r;
-    }
 
     uint64_t mylen = len;
     r = clip_io(ictx, off, &mylen);
-    if (r < 0) {
+    if (r < 0)
       return r;
-    }
 
     ictx->snap_lock.get_read();
     snapid_t snap_id = ictx->snap_id;
@@ -2953,9 +2941,8 @@ reprotect_and_return_err:
     ictx->parent_lock.put_read();
     ictx->snap_lock.put_read();
 
-    if (snap_id != CEPH_NOSNAP || ictx->read_only) {
+    if (snap_id != CEPH_NOSNAP || ictx->read_only)
       return -EROFS;
-    }
 
     ldout(cct, 20) << "  parent overlap " << overlap << dendl;
 
@@ -3018,14 +3005,12 @@ reprotect_and_return_err:
 		   << len << dendl;
 
     int r = ictx_check(ictx);
-    if (r < 0) {
+    if (r < 0)
       return r;
-    }
 
     r = clip_io(ictx, off, &len);
-    if (r < 0) {
+    if (r < 0)
       return r;
-    }
 
     // TODO: check for snap
     ictx->snap_lock.get_read();
@@ -3037,9 +3022,8 @@ reprotect_and_return_err:
     ictx->parent_lock.put_read();
     ictx->snap_lock.put_read();
 
-    if (snap_id != CEPH_NOSNAP || ictx->read_only) {
+    if (snap_id != CEPH_NOSNAP || ictx->read_only)
       return -EROFS;
-    }
 
     // map
     vector<ObjectExtent> extents;
@@ -3122,9 +3106,8 @@ reprotect_and_return_err:
     ldout(ictx->cct, 20) << "aio_read " << ictx << " completion " << c << " " << image_extents << dendl;
 
     int r = ictx_check(ictx);
-    if (r < 0) {
+    if (r < 0)
       return r;
-    }
 
     ictx->snap_lock.get_read();
     snap_t snap_id = ictx->snap_id;
@@ -3139,9 +3122,8 @@ reprotect_and_return_err:
 	 ++p) {
       uint64_t len = p->second;
       r = clip_io(ictx, p->first, &len);
-      if (r < 0) {
+      if (r < 0)
 	return r;
-      }
       if (len == 0)
 	continue;
 
