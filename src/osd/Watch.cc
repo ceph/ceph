@@ -152,10 +152,23 @@ void Notify::start_watcher(WatchRef watch)
   watchers.insert(watch);
 }
 
-void Notify::complete_watcher(WatchRef watch)
+void Notify::complete_watcher(WatchRef watch, bufferlist& reply_bl)
 {
   Mutex::Locker l(lock);
   dout(10) << "complete_watcher" << dendl;
+  if (is_discarded())
+    return;
+  assert(in_progress_watchers > 0);
+  watchers.erase(watch);
+  --in_progress_watchers;
+  notify_replies[watch->get_watcher_gid()].claim(reply_bl);
+  maybe_complete_notify();
+}
+
+void Notify::complete_watcher_remove(WatchRef watch)
+{
+  Mutex::Locker l(lock);
+  dout(10) << __func__ << dendl;
   if (is_discarded())
     return;
   assert(in_progress_watchers > 0);
@@ -170,8 +183,12 @@ void Notify::maybe_complete_notify()
 	   << in_progress_watchers
 	   << " in progress watchers " << dendl;
   if (!in_progress_watchers) {
+    bufferlist bl;
+    ::encode(notify_replies, bl);
+    bufferlist empty;
     MWatchNotify *reply(new MWatchNotify(cookie, version, notify_id,
-					 WATCH_NOTIFY, payload));
+					 WATCH_NOTIFY, empty));
+    reply->set_data(bl);
     if (timed_out)
       reply->return_code = -ETIMEDOUT;
     osd->send_message_osd_client(reply, client.get());
@@ -383,7 +400,7 @@ void Watch::remove()
   for (map<uint64_t, NotifyRef>::iterator i = in_progress_notifies.begin();
        i != in_progress_notifies.end();
        ++i) {
-    i->second->complete_watcher(self.lock());
+    i->second->complete_watcher_remove(self.lock());
   }
   discard_state();
 }
@@ -414,12 +431,12 @@ void Watch::send_notify(NotifyRef notif)
   osd->send_message_osd_client(notify_msg, conn.get());
 }
 
-void Watch::notify_ack(uint64_t notify_id)
+void Watch::notify_ack(uint64_t notify_id, bufferlist& reply_bl)
 {
   dout(10) << "notify_ack" << dendl;
   map<uint64_t, NotifyRef>::iterator i = in_progress_notifies.find(notify_id);
   if (i != in_progress_notifies.end()) {
-    i->second->complete_watcher(self.lock());
+    i->second->complete_watcher(self.lock(), reply_bl);
     in_progress_notifies.erase(i);
   }
 }
