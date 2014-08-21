@@ -26,7 +26,7 @@ struct CompatSet {
     string name;
 
     Feature(uint64_t _id, const char *_name) : id(_id), name(_name) {}
-    Feature(uint64_t _id, string& _name) : id(_id), name(_name) {}
+    Feature(uint64_t _id, const string& _name) : id(_id), name(_name) {}
   };
 
   struct FeatureSet {
@@ -46,6 +46,14 @@ struct CompatSet {
     }
     bool contains(uint64_t f) const {
       return names.count(f);
+    }
+    /**
+     * Getter instead of using name[] to be const safe
+     */
+    inline std::string get_name(uint64_t const f) const {
+      std::map<uint64_t, std::string>::const_iterator i = names.find(f);
+      assert(i != names.end());
+      return i->second;
     }
     void remove(uint64_t f) {
       if (names.count(f)) {
@@ -174,7 +182,7 @@ struct CompatSet {
   /* Merge features supported by other CompatSet into this one.
    * Return: true if some features were merged
    */
-  bool merge(CompatSet& other) {
+  bool merge(CompatSet const & other) {
     uint64_t other_compat =
       ((other.compat.mask ^ compat.mask) & other.compat.mask);
     uint64_t other_ro_compat =
@@ -186,13 +194,13 @@ struct CompatSet {
     for (int id = 1; id < 64; ++id) {
       uint64_t mask = (uint64_t)1 << id;
       if (mask & other_compat) {
-	compat.insert( Feature(id, other.compat.names[id]));
+	compat.insert( Feature(id, other.compat.get_name(id)));
       }
       if (mask & other_ro_compat) {
-	ro_compat.insert(Feature(id, other.ro_compat.names[id]));
+	ro_compat.insert(Feature(id, other.ro_compat.get_name(id)));
       }
       if (mask & other_incompat) {
-	incompat.insert( Feature(id, other.incompat.names[id]));
+	incompat.insert( Feature(id, other.incompat.get_name(id)));
       }
     }
     return true;
