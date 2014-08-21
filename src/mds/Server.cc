@@ -899,11 +899,11 @@ void Server::submit_mdlog_entry(LogEvent *le, MDSInternalContextBase *fin, MDReq
 }
 
 /*
- * send generic response (just an error code), clean up mdr
+ * send response built from mdr contents and error code; clean up mdr
  */
 void Server::reply_request(MDRequestRef& mdr, int r)
 {
-  reply_request(mdr, new MClientReply(mdr->client_request, r));
+  reply_client_request(mdr, new MClientReply(mdr->client_request, r));
 }
 
 void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
@@ -978,12 +978,12 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
  * include a trace to tracei
  * Clean up mdr
  */
-void Server::reply_request(MDRequestRef& mdr, MClientReply *reply)
+void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
 {
   assert(mdr.get());
   MClientRequest *req = mdr->client_request;
   
-  dout(10) << "reply_request " << reply->get_result() 
+  dout(10) << "reply_client_request " << reply->get_result() 
 	   << " (" << cpp_strerror(reply->get_result())
 	   << ") " << *req << dendl;
 
