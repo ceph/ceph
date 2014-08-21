@@ -176,6 +176,9 @@ def main(ctx):
 
     ctx.config['tasks'][:0] = init_tasks
 
+    if ctx.suite_path is not None:
+        ctx.config['suite_path'] = ctx.suite_path
+
     fetch_tasks_if_needed(ctx.config)
 
     try:

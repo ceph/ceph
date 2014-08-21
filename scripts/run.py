@@ -75,5 +75,9 @@ def parse_args():
         metavar='NAME',
         help='name for this teuthology run',
     )
+    parser.add_argument(
+        '--suite-path',
+        help='Location of ceph-qa-suite on disk. If not specified, it will be fetched',  # noqa
+    )
 
     return parser.parse_args()
