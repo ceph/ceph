@@ -107,6 +107,12 @@ int main(int argc, char **argv) {
   return RUN_ALL_TESTS();
 }
 
-// Local Variables:
-// compile-command: "cd ../.. ; make -j4 && make unittest_erasure_code_plugin && valgrind  --leak-check=full --tool=memcheck ./unittest_erasure_code_plugin --gtest_filter=*.* --log-to-stderr=true --debug-osd=20"
-// End:
+/*
+ * Local Variables:
+ * compile-command: "cd ../.. ; make -j4 && 
+ *   make unittest_erasure_code_plugin && 
+ *   valgrind  --leak-check=full --tool=memcheck \
+ *      ./unittest_erasure_code_plugin \
+ *      --gtest_filter=*.* --log-to-stderr=true --debug-osd=20"
+ * End:
+ */
