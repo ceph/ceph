@@ -15,9 +15,11 @@
  * 
  */
 
-#include "erasure-code/ErasureCodePlugin.h"
+#include "ceph_ver.h"
 
-int __erasure_code_init(char *plugin_name, char *directory)
+extern "C" const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
+
+extern "C" int __erasure_code_init(char *plugin_name, char *directory)
 {
   return -444;
 }

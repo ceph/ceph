@@ -81,6 +81,9 @@ TEST_F(ErasureCodePluginRegistryTest, all)
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(-EIO, instance.factory("invalid", parameters, &erasure_code, ss));
   EXPECT_FALSE(erasure_code);
+  EXPECT_EQ(-EXDEV, instance.factory("missing_version", parameters,
+				     &erasure_code, ss));
+  EXPECT_FALSE(erasure_code);
   EXPECT_EQ(-ENOENT, instance.factory("missing_entry_point", parameters,
 				      &erasure_code, ss));
   EXPECT_FALSE(erasure_code);

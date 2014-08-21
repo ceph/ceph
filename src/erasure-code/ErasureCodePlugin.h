@@ -22,6 +22,7 @@
 #include "ErasureCodeInterface.h"
 
 extern "C" {
+  const char *__erasure_code_version();
   int __erasure_code_init(char *plugin_name, char *directory);
 }
 
