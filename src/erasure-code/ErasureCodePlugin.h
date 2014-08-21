@@ -22,7 +22,7 @@
 #include "ErasureCodeInterface.h"
 
 extern "C" {
-  int __erasure_code_init(char *plugin_name);
+  int __erasure_code_init(char *plugin_name, char *directory);
 }
 
 namespace ceph {
@@ -64,7 +64,7 @@ namespace ceph {
     ErasureCodePlugin *get(const std::string &name);
 
     int load(const std::string &plugin_name,
-	     const map<std::string,std::string> &parameters,
+	     const std::string &directory,
 	     ErasureCodePlugin **plugin,
 	     ostream &ss);
 

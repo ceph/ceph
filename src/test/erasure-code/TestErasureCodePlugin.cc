@@ -72,7 +72,8 @@ TEST_F(ErasureCodePluginRegistryTest, factory_mutex) {
 TEST_F(ErasureCodePluginRegistryTest, all)
 {
   map<std::string,std::string> parameters;
-  parameters["directory"] = ".libs";
+  string directory(".libs");
+  parameters["directory"] = directory;
   ErasureCodeInterfaceRef erasure_code;
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   stringstream ss;
@@ -91,7 +92,7 @@ TEST_F(ErasureCodePluginRegistryTest, all)
   EXPECT_EQ(0, instance.factory("example", parameters, &erasure_code, ss));
   EXPECT_TRUE(erasure_code);
   ErasureCodePlugin *plugin = 0;
-  EXPECT_EQ(-EEXIST, instance.load("example", parameters, &plugin, ss));
+  EXPECT_EQ(-EEXIST, instance.load("example", directory, &plugin, ss));
 }
 
 int main(int argc, char **argv) {

@@ -74,7 +74,7 @@ public:
 
 // -----------------------------------------------------------------------------
 
-int __erasure_code_init(char *plugin_name)
+int __erasure_code_init(char *plugin_name, char *directory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   return instance.add(plugin_name, new ErasureCodePluginIsa());

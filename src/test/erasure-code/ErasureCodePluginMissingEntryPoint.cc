@@ -1,4 +1,4 @@
-// missing int __erasure_code_init(char *plugin_name) {}
+// missing int __erasure_code_init(char *plugin_name, char *directory) {}
 
 // avoid warnings about library containing no symbols
 int __this_is_an_used_variable_to_avoid_warnings;
