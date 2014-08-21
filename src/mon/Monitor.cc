@@ -909,9 +909,6 @@ void Monitor::_reset()
 {
   dout(10) << __func__ << dendl;
 
-  assert(state == STATE_ELECTING ||
-	 state == STATE_PROBING);
-
   cancel_probe_timeout();
   timecheck_finish();
 
@@ -1664,18 +1661,17 @@ void Monitor::handle_probe_reply(MMonProbe *m)
 void Monitor::join_election()
 {
   dout(10) << __func__ << dendl;
+  _reset();
   state = STATE_ELECTING;
 
   logger->inc(l_mon_num_elections);
-
-  _reset();
 }
 
 void Monitor::start_election()
 {
   dout(10) << "start_election" << dendl;
-  state = STATE_ELECTING;
   _reset();
+  state = STATE_ELECTING;
 
   logger->inc(l_mon_num_elections);
   logger->inc(l_mon_election_call);
