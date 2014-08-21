@@ -712,6 +712,17 @@ void librados::RadosClient::do_watch_notify(MWatchNotify *m)
       wc->notify_lock->Lock();
       *wc->notify_done = true;
       *wc->notify_rval = m->return_code;
+      if (wc->notify_reply_bl) {
+	wc->notify_reply_bl->claim(m->get_data());
+      }
+      if (wc->notify_reply_buf) {
+	*wc->notify_reply_buf = (char*)malloc(m->get_data().length());
+	memcpy(*wc->notify_reply_buf, m->get_data().c_str(),
+	       m->get_data().length());
+      }
+      if (wc->notify_reply_buf_len) {
+	*wc->notify_reply_buf_len = m->get_data().length();
+      }
       wc->notify_cond->Signal();
       wc->notify_lock->Unlock();
     } else {

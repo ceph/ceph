@@ -1877,15 +1877,35 @@ int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver, const char *buf,
  * This blocks until all watchers of the object have received and
  * reacted to the notify, or a timeout is reached.
  *
+ * The reply buffer is optional.  If specified, the client will get
+ * back an encoded buffer that includes the ids of the clients that
+ * acknowledged the notify as well as their notify ack payloads (if
+ * any).  Clients that timed out are not included.  Even clients that
+ * do not include a notify ack payload are included in the list but
+ * have a 0-length payload associated with them.  The format:
+ *
+ *    le32 num_acks
+ *    {
+ *      le64 gid     global id for the client (for client.1234 that's 1234)
+ *      le32 buflen  length of reply message buffer
+ *      u8 * buflen  payload
+ *    } * num_acks
+ *
+ * Note that this buffer must be released with rados_buffer_free()
+ * when the user is done with it.
+ *
  * @param io the pool the object is in
  * @param o the name of the object
  * @param buf data to send to watchers
  * @param buf_len length of buf in bytes
  * @param timeout_ms notify timeout (in ms)
+ * @param reply_buffer pointer to reply buffer pointer (free with rados_buffer_free)
+ * @param reply_buffer_len pointer to size of reply buffer
  * @returns 0 on success, negative error code on failure
  */
 int rados_notify2(rados_ioctx_t io, const char *o, const char *buf, int buf_len,
-		  uint64_t timeout_ms);
+		  uint64_t timeout_ms,
+		  char **reply_buffer, size_t *reply_buffer_len);
 
 /**
  * Acknolwedge receipt of a notify

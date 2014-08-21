@@ -199,7 +199,8 @@ struct librados::IoCtxImpl {
   int watch(const object_t& oid, uint64_t *cookie, librados::WatchCtx *ctx,
 	    librados::WatchCtx2 *ctx2);
   int unwatch(const object_t& oid, uint64_t cookie);
-  int notify(const object_t& oid, bufferlist& bl, uint64_t timeout_ms);
+  int notify(const object_t& oid, bufferlist& bl, uint64_t timeout_ms,
+	     bufferlist *preplybl, char **preply_buf, size_t *preply_buf_len);
   int notify_ack(const object_t& oid, uint64_t notify_id, uint64_t cookie,
 		 bufferlist& bl);
 
@@ -235,6 +236,9 @@ struct WatchNotifyInfo : public RefCountedWaitObject {
   Mutex *notify_lock;
   Cond *notify_cond;
   bool *notify_done;
+  bufferlist *notify_reply_bl;
+  char **notify_reply_buf;
+  size_t *notify_reply_buf_len;
   int *notify_rval;
 
   WatchNotifyInfo(IoCtxImpl *io_ctx_impl_,
@@ -248,6 +252,9 @@ struct WatchNotifyInfo : public RefCountedWaitObject {
       notify_lock(NULL),
       notify_cond(NULL),
       notify_done(NULL),
+      notify_reply_bl(NULL),
+      notify_reply_buf(NULL),
+      notify_reply_buf_len(NULL),
       notify_rval(NULL) {
     io_ctx_impl->get();
   }
