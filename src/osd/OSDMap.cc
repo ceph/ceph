@@ -654,6 +654,22 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
   }
 
   DECODE_FINISH(bl); // wrapper
+
+  if (have_crc) {
+    // verify crc
+    uint32_t actual = crc_front.crc32c(-1);
+    if (tail_offset < bl.get_off()) {
+      bufferlist tail;
+      tail.substr_of(bl.get_bl(), tail_offset, bl.get_off() - tail_offset);
+      actual = tail.crc32c(actual);
+    }
+    if (inc_crc != actual) {
+      ostringstream ss;
+      ss << "bad crc, actual " << actual << " != expected " << inc_crc;
+      string s = ss.str();
+      throw buffer::malformed_input(s.c_str());
+    }
+  }
 }
 
 void OSDMap::Incremental::dump(Formatter *f) const
@@ -2134,6 +2150,22 @@ void OSDMap::decode(bufferlist::iterator& bl)
   }
 
   DECODE_FINISH(bl); // wrapper
+
+  if (tail_offset) {
+    // verify crc
+    uint32_t actual = crc_front.crc32c(-1);
+    if (tail_offset < bl.get_off()) {
+      bufferlist tail;
+      tail.substr_of(bl.get_bl(), tail_offset, bl.get_off() - tail_offset);
+      actual = tail.crc32c(actual);
+    }
+    if (crc != actual) {
+      ostringstream ss;
+      ss << "bad crc, actual " << actual << " != expected " << crc;
+      string s = ss.str();
+      throw buffer::malformed_input(s.c_str());
+    }
+  }
 
   post_decode();
 }
