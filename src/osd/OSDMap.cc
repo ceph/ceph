@@ -403,8 +403,12 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   assert(features & CEPH_FEATURE_RESERVED);
   features &= ~CEPH_FEATURE_RESERVED;
 
+  size_t start_offset = bl.length();
+  size_t tail_offset;
+  buffer::list::iterator crc_it;
+
   // meta-encoding: how we include client-used and osd-specific data
-  ENCODE_START(7, 7, bl);
+  ENCODE_START(8, 7, bl);
 
   {
     ENCODE_START(3, 1, bl); // client-usable data
@@ -448,8 +452,26 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
     ENCODE_FINISH(bl); // osd-only data
   }
 
+  ::encode((uint32_t)0, bl); // dummy inc_crc
+  crc_it = bl.end();
+  crc_it.advance(-4);
+  tail_offset = bl.length();
+
+  ::encode(full_crc, bl);
+
   ENCODE_FINISH(bl); // meta-encoding wrapper
 
+  // fill in crc
+  bufferlist front;
+  front.substr_of(bl, start_offset, crc_it.get_off() - start_offset);
+  inc_crc = front.crc32c(-1);
+  bufferlist tail;
+  tail.substr_of(bl, tail_offset, bl.length() - tail_offset);
+  inc_crc = tail.crc32c(inc_crc);
+  ceph_le32 crc_le;
+  crc_le = inc_crc;
+  crc_it.copy_in(4, (char*)&crc_le);
+  have_crc = true;
 }
 
 void OSDMap::Incremental::decode_classic(bufferlist::iterator &p)
@@ -554,7 +576,11 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
    * a struct_v < 7, we must rewind to the beginning and use our
    * classic decoder.
    */
-  DECODE_START_LEGACY_COMPAT_LEN(7, 7, 7, bl); // wrapper
+  size_t start_offset = bl.get_off();
+  size_t tail_offset = 0;
+  bufferlist crc_front, crc_tail;
+
+  DECODE_START_LEGACY_COMPAT_LEN(8, 7, 7, bl); // wrapper
   if (struct_v < 7) {
     int struct_v_size = sizeof(struct_v);
     bl.advance(-struct_v_size);
@@ -613,6 +639,18 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     else
       encode_features = 0;
     DECODE_FINISH(bl); // osd-only data
+  }
+
+  if (struct_v >= 8) {
+    have_crc = true;
+    crc_front.substr_of(bl.get_bl(), start_offset, bl.get_off() - start_offset);
+    ::decode(inc_crc, bl);
+    tail_offset = bl.get_off();
+    ::decode(full_crc, bl);
+  } else {
+    have_crc = false;
+    full_crc = 0;
+    inc_crc = 0;
   }
 
   DECODE_FINISH(bl); // wrapper
@@ -1801,8 +1839,12 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   assert(features & CEPH_FEATURE_RESERVED);
   features &= ~CEPH_FEATURE_RESERVED;
 
+  size_t start_offset = bl.length();
+  size_t tail_offset;
+  buffer::list::iterator crc_it;
+
   // meta-encoding: how we include client-used and osd-specific data
-  ENCODE_START(7, 7, bl);
+  ENCODE_START(8, 7, bl);
 
   {
     ENCODE_START(3, 1, bl); // client-usable data
@@ -1862,7 +1904,26 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     ENCODE_FINISH(bl); // osd-only data
   }
 
+  ::encode((uint32_t)0, bl); // dummy crc
+  crc_it = bl.end();
+  crc_it.advance(-4);
+  tail_offset = bl.length();
+
   ENCODE_FINISH(bl); // meta-encoding wrapper
+
+  // fill in crc
+  bufferlist front;
+  front.substr_of(bl, start_offset, crc_it.get_off() - start_offset);
+  crc = front.crc32c(-1);
+  if (tail_offset < bl.length()) {
+    bufferlist tail;
+    tail.substr_of(bl, tail_offset, bl.length() - tail_offset);
+    crc = tail.crc32c(crc);
+  }
+  ceph_le32 crc_le;
+  crc_le = crc;
+  crc_it.copy_in(4, (char*)&crc_le);
+  crc_defined = true;
 }
 
 void OSDMap::decode(bufferlist& bl)
@@ -1991,7 +2052,11 @@ void OSDMap::decode(bufferlist::iterator& bl)
    * a struct_v < 7, we must rewind to the beginning and use our
    * classic decoder.
    */
-  DECODE_START_LEGACY_COMPAT_LEN(7, 7, 7, bl); // wrapper
+  size_t start_offset = bl.get_off();
+  size_t tail_offset = 0;
+  bufferlist crc_front, crc_tail;
+
+  DECODE_START_LEGACY_COMPAT_LEN(8, 7, 7, bl); // wrapper
   if (struct_v < 7) {
     int struct_v_size = sizeof(struct_v);
     bl.advance(-struct_v_size);
@@ -2056,6 +2121,16 @@ void OSDMap::decode(bufferlist::iterator& bl)
     ::decode(osd_xinfo, bl);
     ::decode(osd_addrs->hb_front_addr, bl);
     DECODE_FINISH(bl); // osd-only data
+  }
+
+  if (struct_v >= 8) {
+    crc_front.substr_of(bl.get_bl(), start_offset, bl.get_off() - start_offset);
+    ::decode(crc, bl);
+    tail_offset = bl.get_off();
+    crc_defined = true;
+  } else {
+    crc_defined = false;
+    crc = 0;
   }
 
   DECODE_FINISH(bl); // wrapper
