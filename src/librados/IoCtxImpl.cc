@@ -1055,12 +1055,12 @@ int librados::IoCtxImpl::watch(const object_t& oid, uint64_t ver,
 /* this is called with IoCtxImpl::lock held */
 int librados::IoCtxImpl::_notify_ack(
   const object_t& oid,
-  uint64_t notify_id, uint64_t ver,
+  uint64_t notify_id,
   uint64_t cookie)
 {
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
-  rd.notify_ack(notify_id, ver, cookie);
+  rd.notify_ack(notify_id, 0, cookie);
   objecter->read(oid, oloc, rd, snap_seq, (bufferlist*)NULL, 0, 0, 0);
   return 0;
 }

@@ -199,9 +199,7 @@ struct librados::IoCtxImpl {
   int watch(const object_t& oid, uint64_t ver, uint64_t *cookie, librados::WatchCtx *ctx);
   int unwatch(const object_t& oid, uint64_t cookie);
   int notify(const object_t& oid, uint64_t ver, bufferlist& bl);
-  int _notify_ack(
-    const object_t& oid, uint64_t notify_id, uint64_t ver,
-    uint64_t cookie);
+  int _notify_ack(const object_t& oid, uint64_t notify_id, uint64_t cookie);
 
   int set_alloc_hint(const object_t& oid,
                      uint64_t expected_object_size,

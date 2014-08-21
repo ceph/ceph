@@ -725,7 +725,7 @@ void librados::RadosClient::do_watch_notify(MWatchNotify *m)
       lock.Lock();
 
       // send ACK back to the OSD
-      wc->io_ctx_impl->_notify_ack(wc->oid, m->notify_id, m->ver, m->cookie);
+      wc->io_ctx_impl->_notify_ack(wc->oid, m->notify_id, m->cookie);
 
       ldout(cct,10) << __func__ << " notify done" << dendl;
       wc->put();
