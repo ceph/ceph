@@ -1010,8 +1010,10 @@ void librados::IoCtxImpl::set_sync_op_version(version_t ver)
   last_objver = ver;
 }
 
-int librados::IoCtxImpl::watch(const object_t& oid, uint64_t ver,
-			       uint64_t *cookie, librados::WatchCtx *ctx)
+int librados::IoCtxImpl::watch(const object_t& oid,
+			       uint64_t *cookie,
+			       librados::WatchCtx *ctx,
+			       librados::WatchCtx2 *ctx2)
 {
   ::ObjectOperation wr;
   Mutex mylock("IoCtxImpl::watch::mylock");
@@ -1025,9 +1027,10 @@ int librados::IoCtxImpl::watch(const object_t& oid, uint64_t ver,
 
   WatchNotifyInfo *wc = new WatchNotifyInfo(this, oid);
   wc->watch_ctx = ctx;
+  wc->watch_ctx2 = ctx2;
   client->register_watch_notify_callback(wc, cookie);
   prepare_assert_ops(&wr);
-  wr.watch(*cookie, ver, 1);
+  wr.watch(*cookie, 0, 1);
   bufferlist bl;
   wc->linger_id = objecter->linger_mutate(oid, oloc, wr,
 					  snapc, ceph_clock_now(NULL), bl,
@@ -1052,15 +1055,16 @@ int librados::IoCtxImpl::watch(const object_t& oid, uint64_t ver,
 }
 
 
-/* this is called with IoCtxImpl::lock held */
-int librados::IoCtxImpl::_notify_ack(
+int librados::IoCtxImpl::notify_ack(
   const object_t& oid,
   uint64_t notify_id,
-  uint64_t cookie)
+  uint64_t cookie,
+  bufferlist& bl)
 {
+  Mutex::Locker l(*lock);
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
-  rd.notify_ack(notify_id, 0, cookie);
+  rd.notify_ack(notify_id, cookie, bl);
   objecter->read(oid, oloc, rd, snap_seq, (bufferlist*)NULL, 0, 0, 0);
   return 0;
 }
@@ -1095,7 +1099,8 @@ int librados::IoCtxImpl::unwatch(const object_t& oid, uint64_t cookie)
   return r;
 }
 
-int librados::IoCtxImpl::notify(const object_t& oid, uint64_t ver, bufferlist& bl)
+int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
+				uint64_t timeout_ms)
 {
   bufferlist inbl, outbl;
 
@@ -1117,6 +1122,8 @@ int librados::IoCtxImpl::notify(const object_t& oid, uint64_t ver, bufferlist& b
   client->register_watch_notify_callback(wc, &cookie);
   uint32_t prot_ver = 1;
   uint32_t timeout = notify_timeout;
+  if (timeout_ms)
+    timeout = timeout_ms / 1000;
   ::encode(prot_ver, inbl);
   ::encode(timeout, inbl);
   ::encode(bl, inbl);
@@ -1124,7 +1131,7 @@ int librados::IoCtxImpl::notify(const object_t& oid, uint64_t ver, bufferlist& b
   // Construct RADOS op
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
-  rd.notify(cookie, ver, inbl);
+  rd.notify(cookie, 0, inbl);
 
   // Issue RADOS op
   C_SaferCond onack;

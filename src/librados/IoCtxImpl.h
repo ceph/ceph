@@ -196,10 +196,12 @@ struct librados::IoCtxImpl {
 		  bufferlist *pbl);
 
   void set_sync_op_version(version_t ver);
-  int watch(const object_t& oid, uint64_t ver, uint64_t *cookie, librados::WatchCtx *ctx);
+  int watch(const object_t& oid, uint64_t *cookie, librados::WatchCtx *ctx,
+	    librados::WatchCtx2 *ctx2);
   int unwatch(const object_t& oid, uint64_t cookie);
-  int notify(const object_t& oid, uint64_t ver, bufferlist& bl);
-  int _notify_ack(const object_t& oid, uint64_t notify_id, uint64_t cookie);
+  int notify(const object_t& oid, bufferlist& bl, uint64_t timeout_ms);
+  int notify_ack(const object_t& oid, uint64_t notify_id, uint64_t cookie,
+		 bufferlist& bl);
 
   int set_alloc_hint(const object_t& oid,
                      uint64_t expected_object_size,
@@ -225,8 +227,9 @@ struct WatchNotifyInfo : public RefCountedWaitObject {
   uint64_t linger_id;      // we use this to unlinger when we are done
   uint64_t cookie;         // callback cookie
 
-  // watcher
+  // watcher.  only one of these will be defined.
   librados::WatchCtx *watch_ctx;
+  librados::WatchCtx2 *watch_ctx2;
 
   // notify that we initiated
   Mutex *notify_lock;
@@ -241,6 +244,7 @@ struct WatchNotifyInfo : public RefCountedWaitObject {
       linger_id(0),
       cookie(0),
       watch_ctx(NULL),
+      watch_ctx2(NULL),
       notify_lock(NULL),
       notify_cond(NULL),
       notify_done(NULL),
