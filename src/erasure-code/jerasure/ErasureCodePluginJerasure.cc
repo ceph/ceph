@@ -15,6 +15,7 @@
  * 
  */
 
+#include "ceph_ver.h"
 #include "common/debug.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "ErasureCodeJerasure.h"
@@ -70,6 +71,8 @@ extern "C" {
 extern gf_t *gfp_array[];
 extern int  gfp_is_composite[];
 }
+
+const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
 
 int __erasure_code_init(char *plugin_name, char *directory)
 {
