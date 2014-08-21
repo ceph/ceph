@@ -145,7 +145,7 @@ def main(ctx):
 
     elif ctx.lock:
         for machine in machines:
-            if not lock_one(machine, user):
+            if not lock_one(machine, user, ctx.desc):
                 ret = 1
                 if not ctx.f:
                     return ret
@@ -161,7 +161,8 @@ def main(ctx):
             else:
                 machines_to_update.append(machine)
     elif ctx.num_to_lock:
-        result = lock_many(ctx, ctx.num_to_lock, ctx.machine_type, user)
+        result = lock_many(ctx, ctx.num_to_lock, ctx.machine_type, user,
+                           ctx.desc)
         if not result:
             ret = 1
         else:
@@ -195,9 +196,9 @@ def main(ctx):
         assert ctx.owner is None, 'only description and status may be updated'
         machines_to_update = machines
 
-    if ctx.desc is not None or ctx.status is not None:
-        for machine in machines_to_update:
-            update_lock(machine, ctx.desc, ctx.status)
+        if ctx.desc is not None or ctx.status is not None:
+            for machine in machines_to_update:
+                update_lock(machine, ctx.desc, ctx.status)
 
     return ret
 
@@ -208,15 +209,16 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
         user = misc.get_user()
     for machinetype in machinetypes:
         uri = os.path.join(config.lock_server, 'nodes', 'lock_many', '')
+        data = dict(
+            locked_by=user,
+            count=num,
+            machine_type=machinetype,
+            description=description,
+        )
         response = requests.post(
             uri,
-            json.dumps(
-                dict(
-                    locked_by=user,
-                    count=num,
-                    machine_type=machinetype,
-                    description=description,
-                ))
+            data=json.dumps(data),
+            headers={'content-type': 'application/json'},
         )
         if response.ok:
             machines = {machine['name']: machine['ssh_pub_key']
