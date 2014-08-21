@@ -113,7 +113,6 @@ public:
   void dispatch_client_request(MDRequestRef& mdr);
   void early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);
   void reply_request(MDRequestRef& mdr, int r = 0);
-  void reply_request(MDRequestRef& mdr, MClientReply *reply);
   void set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn,
 		      snapid_t snapid,
 		      int num_dentries_wanted,
@@ -262,6 +261,8 @@ public:
   void _rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentry *srcdn, version_t srcdnpv,
 			       CDentry *destdn, CDentry *staydn, bool finish_mdr);
 
+private:
+  void reply_client_request(MDRequestRef& mdr, MClientReply *reply);
 };
 
 #endif
