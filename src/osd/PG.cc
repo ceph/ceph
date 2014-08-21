@@ -42,6 +42,10 @@
 #include "messages/MOSDSubOpReply.h"
 #include "common/BackTrace.h"
 
+#ifdef WITH_LTTNG
+#include "tracing/pg.h"
+#endif
+
 #include <sstream>
 
 #define dout_subsys ceph_subsys_osd
@@ -1721,6 +1725,14 @@ void PG::queue_op(OpRequestRef& op)
     return;
   }
   osd->op_wq.queue(make_pair(PGRef(this), op));
+  {
+    // after queue() to include any locking costs
+#ifdef WITH_LTTNG
+    osd_reqid_t reqid = op->get_reqid();
+#endif
+    tracepoint(pg, queue_op, reqid.name._type,
+        reqid.name._num, reqid.tid, reqid.inc, op->rmw_flags);
+  }
 }
 
 void PG::replay_queued_ops()
