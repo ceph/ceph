@@ -1586,8 +1586,7 @@ int FileStore::umount()
 {
   dout(5) << "umount " << basedir << dendl;
   
-
-  start_sync();
+  do_force_sync();
 
   lock.Lock();
   stop = true;
@@ -1618,6 +1617,8 @@ int FileStore::umount()
     VOID_TEMP_FAILURE_RETRY(::close(basedir_fd));
     basedir_fd = -1;
   }
+
+  force_sync = false;
 
   delete backend;
   backend = NULL;
@@ -3552,8 +3553,9 @@ void FileStore::_start_sync()
   }
 }
 
-void FileStore::start_sync()
+void FileStore::do_force_sync()
 {
+  dout(10) << __func__ << dendl;
   Mutex::Locker l(lock);
   force_sync = true;
   sync_cond.Signal();
