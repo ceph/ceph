@@ -133,6 +133,10 @@
 #include "include/assert.h"
 #include "common/config.h"
 
+#ifdef WITH_LTTNG
+#include "tracing/osd.h"
+#endif
+
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, whoami, get_osdmap_epoch())
@@ -5526,6 +5530,13 @@ void OSD::ms_fast_dispatch(Message *m)
     return;
   }
   OpRequestRef op = op_tracker.create_request<OpRequest>(m);
+  {
+#ifdef WITH_LTTNG
+    osd_reqid_t reqid = op->get_reqid();
+#endif
+    tracepoint(osd, ms_fast_dispatch, reqid.name._type,
+        reqid.name._num, reqid.tid, reqid.inc);
+  }
   OSDMapRef nextmap = service.get_nextmap_reserved();
   Session *session = static_cast<Session*>(m->get_connection()->get_priv());
   assert(session);
@@ -8279,6 +8290,16 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb ) 
       sdata->pg_for_processing.erase(&*(item.first));
   }  
 
+  // osd:opwq_process marks the point at which an operation has been dequeued
+  // and will begin to be handled by a worker thread.
+  {
+#ifdef WITH_LTTNG
+    osd_reqid_t reqid = op->get_reqid();
+#endif
+    tracepoint(osd, opwq_process_start, reqid.name._type,
+        reqid.name._num, reqid.tid, reqid.inc);
+  }
+
   lgeneric_subdout(osd->cct, osd, 30) << "dequeue status: ";
   Formatter *f = new_formatter("json");
   f->open_object_section("q");
@@ -8289,8 +8310,16 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb ) 
   *_dout << dendl;
 
   osd->dequeue_op(item.first, op, tp_handle);
-  (item.first)->unlock();
 
+  {
+#ifdef WITH_LTTNG
+    osd_reqid_t reqid = op->get_reqid();
+#endif
+    tracepoint(osd, opwq_process_finish, reqid.name._type,
+        reqid.name._num, reqid.tid, reqid.inc);
+  }
+
+  (item.first)->unlock();
 }
 
 void OSD::ShardedOpWQ::_enqueue(pair<PGRef, OpRequestRef> item) {

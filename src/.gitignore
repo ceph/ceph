@@ -66,6 +66,8 @@ Makefile
 /radosgw-admin
 /rbd
 /rbd-fuse
+/rbd-replay
+/rbd-replay-prep
 /rest-bench
 /sample.fetch_config
 /TAGS
