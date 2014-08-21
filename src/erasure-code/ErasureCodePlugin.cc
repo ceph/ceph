@@ -78,7 +78,8 @@ int ErasureCodePluginRegistry::factory(const std::string &plugin_name,
     plugin = get(plugin_name);
     if (plugin == 0) {
       loading = true;
-      r = load(plugin_name, parameters, &plugin, ss);
+      assert(parameters.count("directory") != 0);
+      r = load(plugin_name, parameters.find("directory")->second, &plugin, ss);
       loading = false;
       if (r != 0)
 	return r;
@@ -89,13 +90,11 @@ int ErasureCodePluginRegistry::factory(const std::string &plugin_name,
 }
 
 int ErasureCodePluginRegistry::load(const std::string &plugin_name,
-				    const map<std::string,std::string> &parameters,
+				    const std::string &directory,
 				    ErasureCodePlugin **plugin,
 				    ostream &ss)
 {
-  assert(parameters.count("directory") != 0);
-  std::string fname = parameters.find("directory")->second
-    + "/" PLUGIN_PREFIX
+  std::string fname = directory + "/" PLUGIN_PREFIX
     + plugin_name + PLUGIN_SUFFIX;
   void *library = dlopen(fname.c_str(), RTLD_NOW);
   if (!library) {
@@ -103,13 +102,14 @@ int ErasureCodePluginRegistry::load(const std::string &plugin_name,
     return -EIO;
   }
 
-  int (*erasure_code_init)(const char *) =
-    (int (*)(const char *))dlsym(library, PLUGIN_INIT_FUNCTION);
+  int (*erasure_code_init)(const char *, const char *) =
+    (int (*)(const char *, const char *))dlsym(library, PLUGIN_INIT_FUNCTION);
   if (erasure_code_init) {
     std::string name = plugin_name;
-    int r = erasure_code_init(name.c_str());
+    int r = erasure_code_init(name.c_str(), directory.c_str());
     if (r != 0) {
       ss << "erasure_code_init(" << plugin_name
+	 << "," << directory 
 	 << "): " << cpp_strerror(r);
       dlclose(library);
       return r;
@@ -141,15 +141,13 @@ int ErasureCodePluginRegistry::preload(const std::string &plugins,
 				       const std::string &directory,
 				       ostream &ss)
 {
-  map<string,string> profile;
-  profile["directory"] = directory;
   list<string> plugins_list;
   get_str_list(plugins, plugins_list);
   for (list<string>::iterator i = plugins_list.begin();
        i != plugins_list.end();
        i++) {
     ErasureCodePlugin *plugin;
-    int r = load(*i, profile, &plugin, ss);
+    int r = load(*i, directory, &plugin, ss);
     if (r)
       return r;
   }
