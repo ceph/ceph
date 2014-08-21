@@ -939,6 +939,7 @@ public:
     memset((void *)&cb, 0, sizeof(cb));
     cb.begin_request = civetweb_callback;
     cb.log_message = rgw_civetweb_log_callback;
+    cb.log_access = rgw_civetweb_log_access_callback;
     ctx = mg_start(&cb, &env, (const char **)&options);
 
     if (!ctx) {
