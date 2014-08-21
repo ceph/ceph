@@ -203,6 +203,7 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
   int getattr_caps;       ///< caps requested by getattr
 
   bufferlist reply_extra_bl;
+  bufferlist reply_snapbl;
 
   // inos we did a embedded cap release on, and may need to eval if we haven't since reissued
   map<vinodeno_t, ceph_seq_t> cap_releases;  
