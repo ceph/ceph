@@ -209,27 +209,11 @@ def build_ceph_cluster(ctx, config):
         if estatus_install != 0:
             raise RuntimeError("ceph-deploy: Failed to install ceph")
 
-        mon_no = None
-        mon_no = config.get('mon_initial_members')
-        if mon_no is not None:
-            i = 0
-            mon1 = []
-            while(i < mon_no):
-                mon1.append(mon_node[i])
-                i = i + 1
-            initial_mons = " ".join(mon1)
-            for k in range(mon_no, len(mon_node)):
-                mon_create_nodes = './ceph-deploy mon create' + " " + \
-                    initial_mons + " " + mon_node[k]
-                estatus_mon = execute_ceph_deploy(ctx, config,
-                                                  mon_create_nodes)
-                if estatus_mon != 0:
-                    raise RuntimeError("ceph-deploy: Failed to create monitor")
-        else:
-            mon_create_nodes = './ceph-deploy mon create-initial'
-            estatus_mon = execute_ceph_deploy(ctx, config, mon_create_nodes)
-            if estatus_mon != 0:
-                raise RuntimeError("ceph-deploy: Failed to create monitors")
+        mon_create_nodes = './ceph-deploy mon create-initial'
+        # If the following fails, it is OK, it might just be that the monitors
+        # are taking way more than a minute/monitor to form quorum, so lets
+        # try the next block which will wait up to 15 minutes to gatherkeys.
+        estatus_mon = execute_ceph_deploy(ctx, config, mon_create_nodes)
 
         estatus_gather = execute_ceph_deploy(ctx, config, gather_keys)
         max_gather_tries = 90
