@@ -1,7 +1,7 @@
 include Makefile-env.am
 
-SUBDIRS += ocf java tracing
-DIST_SUBDIRS += gtest ocf libs3 java tracing
+SUBDIRS += ocf java
+DIST_SUBDIRS += gtest ocf libs3 java
 
 
 
@@ -32,7 +32,6 @@ include librbd/Makefile.am
 include rgw/Makefile.am
 include cls/Makefile.am
 include key_value_store/Makefile.am
-include rbd_replay/Makefile.am
 include test/Makefile.am
 include tools/Makefile.am
 
@@ -644,12 +643,6 @@ TESTS = \
 check-local:
 	$(srcdir)/test/encoding/readable.sh ../ceph-object-corpus
 
-if WITH_LTTNG
-# TODO: If we're running the parallel test harness (the preferred harness), this should be AM_TESTS_ENVIRONMENT instead.
-# See: https://www.gnu.org/software/automake/manual/html_node/Scripts_002dbased-Testsuites.html
-# I don't see the serial-tests Automake option anywhere, but my AM_TESTS_ENVIRONMENT was being ignored.
-TESTS_ENVIRONMENT = LD_PRELOAD=liblttng-ust-fork.so; export LD_PRELOAD; echo "LD_PRELOAD=$${LD_PRELOAD}";
-endif
 
 # base targets
 
