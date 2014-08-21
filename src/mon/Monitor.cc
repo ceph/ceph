@@ -2939,8 +2939,9 @@ bool Monitor::_ms_dispatch(Message *m)
         return dispatch(s, m, false);
       }
       dout(1) << __func__ << " dropping stray message " << *m
-        << " from " << m->get_source_inst() << dendl;
-      return false;
+	      << " from " << m->get_source_inst() << dendl;
+      m->put();
+      return true;
     }
 
     if (!exited_quorum.is_zero() && !src_is_mon) {
