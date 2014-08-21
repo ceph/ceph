@@ -103,12 +103,14 @@ int FileJournal::_open(bool forwrite, bool create)
     goto out_fd;
 
 #ifdef HAVE_LIBAIO
-  aio_ctx = 0;
-  ret = io_setup(128, &aio_ctx);
-  if (ret < 0) {
-    ret = errno;
-    derr << "FileJournal::_open: unable to setup io_context " << cpp_strerror(ret) << dendl;
-    goto out_fd;
+  if (aio) {
+    aio_ctx = 0;
+    ret = io_setup(128, &aio_ctx);
+    if (ret < 0) {
+      ret = errno;
+      derr << "FileJournal::_open: unable to setup io_context " << cpp_strerror(ret) << dendl;
+      goto out_fd;
+    }
   }
 #endif
 
@@ -605,7 +607,8 @@ void FileJournal::start_writer()
   write_stop = false;
   write_thread.create();
 #ifdef HAVE_LIBAIO
-  write_finish_thread.create();
+  if (aio)
+    write_finish_thread.create();
 #endif
 }
 
@@ -614,19 +617,25 @@ void FileJournal::stop_writer()
   {
     Mutex::Locker l(write_lock);
 #ifdef HAVE_LIBAIO
-    Mutex::Locker q(aio_lock);
+    if (aio)
+      aio_lock.Lock();
 #endif
     Mutex::Locker p(writeq_lock);
     write_stop = true;
     writeq_cond.Signal();
 #ifdef HAVE_LIBAIO
-    aio_cond.Signal();
-    write_finish_cond.Signal();
+    if (aio) {
+      aio_cond.Signal();
+      write_finish_cond.Signal();
+      aio_lock.Unlock();
+    }
 #endif
   } 
   write_thread.join();
 #ifdef HAVE_LIBAIO
-  write_finish_thread.join();
+  if (aio) {
+    write_finish_thread.join();
+  }
 #endif
 }
 
