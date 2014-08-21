@@ -29,14 +29,32 @@ static ostream& _prefix(std::ostream* _dout)
   return *_dout << "ErasureCodePluginSelectJerasure: ";
 }
 
+static string get_variant() {
+  ceph_arch_probe();
+    
+  if (ceph_arch_intel_pclmul &&
+      ceph_arch_intel_sse42 &&
+      ceph_arch_intel_sse41 &&
+      ceph_arch_intel_ssse3 &&
+      ceph_arch_intel_sse3 &&
+      ceph_arch_intel_sse2) {
+    return "sse4";
+  } else if (ceph_arch_intel_ssse3 &&
+	     ceph_arch_intel_sse3 &&
+	     ceph_arch_intel_sse2) {
+    return "sse3";
+  } else {
+    return "generic";
+  }
+}
+
 class ErasureCodePluginSelectJerasure : public ErasureCodePlugin {
 public:
-  virtual int factory(const map<std::string,std::string> &parameters,
+  virtual int factory(const map<string,string> &parameters,
 		      ErasureCodeInterfaceRef *erasure_code) {
     ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
     stringstream ss;
     int ret;
-    ceph_arch_probe();
     string name = "jerasure";
     if (parameters.count("jerasure-name"))
       name = parameters.find("jerasure-name")->second;
@@ -46,23 +64,9 @@ public:
       ret = instance.factory(name + "_" + parameters.find("jerasure-variant")->second,
 			     parameters, erasure_code, ss);
     } else {
-      if (ceph_arch_intel_pclmul &&
-	  ceph_arch_intel_sse42 &&
-	  ceph_arch_intel_sse41 &&
-	  ceph_arch_intel_ssse3 &&
-	  ceph_arch_intel_sse3 &&
-	  ceph_arch_intel_sse2) {
-	dout(10) << "SSE4 plugin" << dendl;
-	ret = instance.factory(name + "_sse4", parameters, erasure_code, ss);
-      } else if (ceph_arch_intel_ssse3 &&
-		 ceph_arch_intel_sse3 &&
-		 ceph_arch_intel_sse2) {
-	dout(10) << "SSE3 plugin" << dendl;
-	ret = instance.factory(name + "_sse3", parameters, erasure_code, ss);
-      } else {
-	dout(10) << "generic plugin" << dendl;
-	ret = instance.factory(name + "_generic", parameters, erasure_code, ss);
-      }
+      string variant = get_variant();
+      dout(10) << variant << " plugin" << dendl;
+      ret = instance.factory(name + "_" + variant, parameters, erasure_code, ss);
     }
     if (ret)
       derr << ss.str() << dendl;
@@ -73,5 +77,15 @@ public:
 int __erasure_code_init(char *plugin_name, char *directory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  string variant = get_variant();
+  ErasureCodePlugin *plugin;
+  stringstream ss;
+  int r = instance.load(plugin_name + string("_") + variant,
+			directory, &plugin, ss);
+  if (r) {
+    derr << ss.str() << dendl;
+    return r;
+  }
+  dout(10) << ss.str() << dendl;
   return instance.add(plugin_name, new ErasureCodePluginSelectJerasure());
 }
