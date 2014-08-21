@@ -3159,7 +3159,9 @@ bool Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
       break;
 
     default:
-      ret = false;
+      dout(1) << "dropping unexpected " << *m << dendl;
+      m->put();
+      break;
   }
 
   return ret;
