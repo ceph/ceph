@@ -650,6 +650,13 @@ int FileJournal::read_header()
   buffer::ptr bp = buffer::create_page_aligned(block_size);
   bp.zero();
   int r = ::pread(fd, bp.c_str(), bp.length(), 0);
+
+  if (r < 0) {
+    int err = errno;
+    dout(0) << "read_header got " << cpp_strerror(err) << dendl;
+    return -err;
+  }
+
   bl.push_back(bp);
 
   try {
@@ -661,11 +668,6 @@ int FileJournal::read_header()
     return -EINVAL;
   }
 
-  if (r < 0) {
-    int err = errno;
-    dout(0) << "read_header got " << cpp_strerror(err) << dendl;
-    return -err;
-  }
   
   /*
    * Unfortunately we weren't initializing the flags field for new
