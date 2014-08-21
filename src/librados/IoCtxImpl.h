@@ -211,30 +211,51 @@ struct librados::IoCtxImpl {
   void set_assert_src_version(const object_t& oid, uint64_t ver);
   void set_notify_timeout(uint32_t timeout);
 
-  struct C_NotifyComplete : public librados::WatchCtx {
-    Mutex *lock;
-    Cond *cond;
-    bool *done;
-
-    C_NotifyComplete(Mutex *_l, Cond *_c, bool *_d);
-    void notify(uint8_t opcode, uint64_t ver, bufferlist& bl);
-  };
 };
 
 namespace librados {
-struct WatchContext : public RefCountedWaitObject {
-  IoCtxImpl *io_ctx_impl;
-  const object_t oid;
-  librados::WatchCtx *ctx;
-  uint64_t linger_id;
-  uint64_t cookie;
 
-  WatchContext(IoCtxImpl *io_ctx_impl_,
-	       const object_t& _oc,
-	       librados::WatchCtx *_ctx);
-  ~WatchContext();
+  /**
+   * watch/notify info
+   *
+   * Capture state about a watch or an in-progress notify
+   */
+struct WatchNotifyInfo : public RefCountedWaitObject {
+  IoCtxImpl *io_ctx_impl;  // parent
+  const object_t oid;      // the object
+  uint64_t linger_id;      // we use this to unlinger when we are done
+  uint64_t cookie;         // callback cookie
+
+  // watcher
+  librados::WatchCtx *watch_ctx;
+
+  // notify that we initiated
+  Mutex *notify_lock;
+  Cond *notify_cond;
+  bool *notify_done;
+  int *notify_rval;
+
+  WatchNotifyInfo(IoCtxImpl *io_ctx_impl_,
+		  const object_t& _oc)
+    : io_ctx_impl(io_ctx_impl_),
+      oid(_oc),
+      linger_id(0),
+      cookie(0),
+      watch_ctx(NULL),
+      notify_lock(NULL),
+      notify_cond(NULL),
+      notify_done(NULL),
+      notify_rval(NULL) {
+    io_ctx_impl->get();
+  }
+
+  ~WatchNotifyInfo() {
+    io_ctx_impl->put();
+  }
+
   void notify(Mutex *lock, uint8_t opcode, uint64_t ver, uint64_t notify_id,
-	      bufferlist& payload);
+	      bufferlist& payload,
+	      int return_code);
 };
 }
 #endif
