@@ -35,6 +35,7 @@
 #include "MDSMap.h"
 
 #include "SessionMap.h"
+#include "Beacon.h"
 
 
 #define CEPH_MDS_PROTOCOL    24 /* cluster internal */
@@ -143,6 +144,16 @@ class MDS : public Dispatcher, public md_config_obs_t {
   Mutex        mds_lock;
   SafeTimer    timer;
 
+ private:
+  Beacon  beacon;
+  void set_want_state(MDSMap::DaemonState newstate)
+  {
+    want_state = newstate;
+    beacon.notify_want_state(newstate);
+  }
+ public:
+  utime_t get_laggy_until() {return beacon.get_laggy_until();}
+
   AuthAuthorizeHandlerRegistry *authorize_handler_cluster_registry;
   AuthAuthorizeHandlerRegistry *authorize_handler_service_registry;
 
@@ -224,8 +235,8 @@ class MDS : public Dispatcher, public md_config_obs_t {
     replay_queue.push_back(c);
   }
 
-  int get_state() { return state; } 
-  int get_want_state() { return want_state; } 
+  MDSMap::DaemonState get_state() { return state; } 
+  MDSMap::DaemonState get_want_state() { return want_state; } 
   bool is_creating() { return state == MDSMap::STATE_CREATING; }
   bool is_starting() { return state == MDSMap::STATE_STARTING; }
   bool is_standby()  { return state == MDSMap::STATE_STANDBY; }
@@ -266,25 +277,6 @@ class MDS : public Dispatcher, public md_config_obs_t {
     return true;
   }
   
-  // -- keepalive beacon --
-  version_t               beacon_last_seq;          // last seq sent to monitor
-  map<version_t,utime_t>  beacon_seq_stamp;         // seq # -> time sent
-  utime_t                 beacon_last_acked_stamp;  // last time we sent a beacon that got acked
-  bool was_laggy;
-  utime_t laggy_until;
-
-  bool is_laggy();
-  utime_t get_laggy_until() { return laggy_until; }
-
-  class C_MDS_BeaconSender : public MDSInternalContext {
-  public:
-    C_MDS_BeaconSender(MDS *m) : MDSInternalContext(m) {}
-    void finish(int r) {
-      mds->beacon_sender = 0;
-      mds->beacon_send();
-    }
-  } *beacon_sender;
-
   // tick and other timer fun
   class C_MDS_Tick : public MDSInternalContext {
   public:
@@ -424,9 +416,6 @@ class MDS : public Dispatcher, public md_config_obs_t {
 
   void tick();
   
-  void beacon_start();
-  void beacon_send();
-  void handle_mds_beacon(MMDSBeacon *m);
 
   void inc_dispatch_depth() { ++dispatch_depth; }
   void dec_dispatch_depth() { --dispatch_depth; }

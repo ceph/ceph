@@ -476,7 +476,7 @@ void Server::terminate_sessions()
 
 void Server::find_idle_sessions()
 {
-  dout(10) << "find_idle_sessions.  laggy until " << mds->laggy_until << dendl;
+  dout(10) << "find_idle_sessions.  laggy until " << mds->get_laggy_until() << dendl;
   
   // timeout/stale
   //  (caps go stale, lease die)
@@ -506,8 +506,8 @@ void Server::find_idle_sessions()
   cutoff -= g_conf->mds_session_autoclose;
 
   // don't kick clients if we've been laggy
-  if (mds->laggy_until > cutoff) {
-    dout(10) << " laggy_until " << mds->laggy_until << " > cutoff " << cutoff
+  if (mds->get_laggy_until() > cutoff) {
+    dout(10) << " laggy_until " << mds->get_laggy_until() << " > cutoff " << cutoff
 	     << ", not kicking any clients to be safe" << dendl;
     return;
   }

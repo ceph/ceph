@@ -78,12 +78,12 @@
 #define dout_prefix *_dout << "mds." << whoami << '.' << incarnation << ' '
 
 
-
 // cons/des
 MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) : 
   Dispatcher(m->cct),
   mds_lock("MDS::mds_lock"),
   timer(m->cct, mds_lock),
+  beacon(mc, n),
   authorize_handler_cluster_registry(new AuthAuthorizeHandlerRegistry(m->cct,
 								      m->cct->_conf->auth_supported.length() ?
 								      m->cct->_conf->auth_supported :
@@ -134,11 +134,6 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   // clients
   last_client_mdsmap_bcast = 0;
   
-  // beacon
-  beacon_last_seq = 0;
-  beacon_sender = 0;
-  was_laggy = false;
-
   // tick
   tick_event = 0;
 
@@ -668,7 +663,7 @@ int MDS::init(MDSMap::DaemonState wanted_state)
   } else if (standby_type == MDSMap::STATE_NULL && !standby_for_name.empty())
     standby_for_rank = MDSMap::MDS_MATCHED_ACTIVE;
 
-  beacon_start();
+  beacon.init(mdsmap, want_state, standby_for_rank, standby_for_name);
   whoami = -1;
   messenger->set_myname(entity_name_t::MDS(whoami));
   
@@ -701,7 +696,7 @@ void MDS::tick()
   // reschedule
   reset_tick();
 
-  if (is_laggy()) {
+  if (beacon.is_laggy()) {
     dout(5) << "tick bailing out since we seem laggy" << dendl;
     return;
   }
@@ -763,102 +758,6 @@ void MDS::check_ops_in_flight()
   return;
 }
 
-
-// -----------------------
-// beacons
-
-void MDS::beacon_start()
-{
-  beacon_send();         // send first beacon
-}
-  
-
-
-void MDS::beacon_send()
-{
-  ++beacon_last_seq;
-  dout(10) << "beacon_send " << ceph_mds_state_name(want_state)
-	   << " seq " << beacon_last_seq
-	   << " (currently " << ceph_mds_state_name(state) << ")"
-	   << dendl;
-
-  beacon_seq_stamp[beacon_last_seq] = ceph_clock_now(g_ceph_context);
-  
-  MMDSBeacon *beacon = new MMDSBeacon(monc->get_fsid(), monc->get_global_id(), name, mdsmap->get_epoch(), 
-				      want_state, beacon_last_seq);
-  beacon->set_standby_for_rank(standby_for_rank);
-  beacon->set_standby_for_name(standby_for_name);
-
-  // include _my_ feature set
-  CompatSet mdsmap_compat(get_mdsmap_compat_set_default());
-  mdsmap_compat.merge(mdsmap->compat);
-  beacon->set_compat(mdsmap_compat);
-
-  monc->send_mon_message(beacon);
-
-  // schedule next sender
-  if (beacon_sender) timer.cancel_event(beacon_sender);
-  beacon_sender = new C_MDS_BeaconSender(this);
-  timer.add_event_after(g_conf->mds_beacon_interval, beacon_sender);
-}
-
-
-bool MDS::is_laggy()
-{
-  if (beacon_last_acked_stamp == utime_t())
-    return false;
-
-  utime_t now = ceph_clock_now(g_ceph_context);
-  utime_t since = now - beacon_last_acked_stamp;
-  if (since > g_conf->mds_beacon_grace) {
-    dout(5) << "is_laggy " << since << " > " << g_conf->mds_beacon_grace
-	    << " since last acked beacon" << dendl;
-    was_laggy = true;
-    if (since > (g_conf->mds_beacon_grace*2)) {
-      // maybe it's not us?
-      dout(5) << "initiating monitor reconnect; maybe we're not the slow one"
-              << dendl;
-      monc->reopen_session();
-    }
-    return true;
-  }
-  return false;
-}
-
-
-/* This fuction puts the passed message before returning */
-void MDS::handle_mds_beacon(MMDSBeacon *m)
-{
-  version_t seq = m->get_seq();
-
-  // update lab
-  if (beacon_seq_stamp.count(seq)) {
-    assert(beacon_seq_stamp[seq] > beacon_last_acked_stamp);
-    beacon_last_acked_stamp = beacon_seq_stamp[seq];
-    utime_t now = ceph_clock_now(g_ceph_context);
-    utime_t rtt = now - beacon_last_acked_stamp;
-
-    dout(10) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
-	     << " seq " << m->get_seq() 
-	     << " rtt " << rtt << dendl;
-
-    if (was_laggy && rtt < g_conf->mds_beacon_grace) {
-      dout(0) << "handle_mds_beacon no longer laggy" << dendl;
-      was_laggy = false;
-      laggy_until = now;
-    }
-
-    // clean up seq_stamp map
-    while (!beacon_seq_stamp.empty() &&
-	   beacon_seq_stamp.begin()->first <= seq)
-      beacon_seq_stamp.erase(beacon_seq_stamp.begin());
-  } else {
-    dout(10) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
-	     << " seq " << m->get_seq() << " dne" << dendl;
-  }
-
-  m->put();
-}
 
 /* This function DOES put the passed message before returning*/
 void MDS::handle_command(MMonCommand *m)
@@ -1046,7 +945,8 @@ void MDS::handle_mds_map(MMDSMap *m)
     last_state = oldstate;
 
   if (state == MDSMap::STATE_STANDBY) {
-    want_state = state = MDSMap::STATE_STANDBY;
+    state = MDSMap::STATE_STANDBY;
+    set_want_state(state);
     dout(1) << "handle_mds_map standby" << dendl;
 
     if (standby_type) // we want to be in standby_replay or oneshot_replay!
@@ -1055,8 +955,8 @@ void MDS::handle_mds_map(MMDSMap *m)
     goto out;
   } else if (state == MDSMap::STATE_STANDBY_REPLAY) {
     if (standby_type != MDSMap::STATE_NULL && standby_type != MDSMap::STATE_STANDBY_REPLAY) {
-      want_state = standby_type;
-      beacon_send();
+      set_want_state(standby_type);
+      beacon.send();
       state = oldstate;
       goto out;
     }
@@ -1071,7 +971,8 @@ void MDS::handle_mds_map(MMDSMap *m)
     } else {
       if (want_state == MDSMap::STATE_STANDBY) {
         dout(10) << "dropped out of mdsmap, try to re-add myself" << dendl;
-        want_state = state = MDSMap::STATE_BOOT;
+        state = MDSMap::STATE_BOOT;
+        set_want_state(state);
         goto out;
       }
       if (want_state == MDSMap::STATE_BOOT) {
@@ -1126,7 +1027,7 @@ void MDS::handle_mds_map(MMDSMap *m)
     dout(1) << "handle_mds_map state change "
 	    << ceph_mds_state_name(oldstate) << " --> "
 	    << ceph_mds_state_name(state) << dendl;
-    want_state = state;
+    set_want_state(state);
 
     if (oldstate == MDSMap::STATE_STANDBY_REPLAY) {
         dout(10) << "Monitor activated us! Deactivating replay loop" << dendl;
@@ -1269,6 +1170,8 @@ void MDS::handle_mds_map(MMDSMap *m)
   }
 
  out:
+  beacon.notify_mdsmap(mdsmap);
+
   m->put();
   delete oldmap;
 }
@@ -1291,8 +1194,8 @@ void MDS::bcast_mds_map()
 void MDS::request_state(MDSMap::DaemonState s)
 {
   dout(3) << "request_state " << ceph_mds_state_name(s) << dendl;
-  want_state = s;
-  beacon_send();
+  set_want_state(s);
+  beacon.send();
 }
 
 
@@ -1804,7 +1707,7 @@ void MDS::handle_signal(int signum)
 void MDS::suicide()
 {
   assert(mds_lock.is_locked());
-  want_state = MDSMap::STATE_DNE; // whatever.
+  set_want_state(MDSMap::STATE_DNE); // whatever.
 
   dout(1) << "suicide.  wanted " << ceph_mds_state_name(want_state)
 	  << ", now " << ceph_mds_state_name(state) << dendl;
@@ -1814,10 +1717,7 @@ void MDS::suicide()
   finisher.stop(); // no flushing
 
   // stop timers
-  if (beacon_sender) {
-    timer.cancel_event(beacon_sender);
-    beacon_sender = 0;
-  }
+  beacon.shutdown();
   if (tick_event) {
     timer.cancel_event(tick_event);
     tick_event = 0;
@@ -1949,7 +1849,7 @@ bool MDS::handle_core_message(Message *m)
     break;
   case MSG_MDS_BEACON:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
-    handle_mds_beacon(static_cast<MMDSBeacon*>(m));
+    beacon.handle_mds_beacon(static_cast<MMDSBeacon*>(m));
     break;
     
     // misc
@@ -2081,7 +1981,7 @@ bool MDS::_dispatch(Message *m)
 
   // core
   if (!handle_core_message(m)) {
-    if (is_laggy()) {
+    if (beacon.is_laggy()) {
       dout(10) << " laggy, deferring " << *m << dendl;
       waiting_for_nolaggy.push_back(m);
     } else {
@@ -2110,17 +2010,13 @@ bool MDS::_dispatch(Message *m)
       dout(1) << "          " << this->mds_lock.is_locked_by_me() << dendl;
       ls.front()->complete(0);
       ls.pop_front();
-      
-      // give other threads (beacon!) a chance
-      mds_lock.Unlock();
-      mds_lock.Lock();
     }
   }
 
   while (!waiting_for_nolaggy.empty()) {
 
     // stop if we're laggy now!
-    if (is_laggy())
+    if (beacon.is_laggy())
       return true;
 
     Message *old = waiting_for_nolaggy.front();
@@ -2132,10 +2028,6 @@ bool MDS::_dispatch(Message *m)
       dout(7) << " processing laggy deferred " << *old << dendl;
       handle_deferrable_message(old);
     }
-
-    // give other threads (beacon!) a chance
-    mds_lock.Unlock();
-    mds_lock.Lock();
   }
 
   // done with all client replayed requests?
