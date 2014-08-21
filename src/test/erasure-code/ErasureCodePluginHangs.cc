@@ -17,7 +17,7 @@
 #include <unistd.h>
 #include "erasure-code/ErasureCodePlugin.h"
 
-int __erasure_code_init(char *plugin_name)
+int __erasure_code_init(char *plugin_name, char *directory)
 {
   sleep(1000);
   return 0;

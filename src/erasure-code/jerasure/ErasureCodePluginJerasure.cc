@@ -70,7 +70,7 @@ extern gf_t *gfp_array[];
 extern int  gfp_is_composite[];
 }
 
-int __erasure_code_init(char *plugin_name)
+int __erasure_code_init(char *plugin_name, char *directory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   int w[] = { 4, 8, 16, 32 };
