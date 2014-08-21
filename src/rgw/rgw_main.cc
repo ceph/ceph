@@ -54,6 +54,7 @@
 #include "rgw_resolve.h"
 #include "rgw_loadgen.h"
 #include "rgw_civetweb.h"
+#include "rgw_civetweb_log.h"
 
 #include "civetweb/civetweb.h"
 
@@ -928,6 +929,7 @@ public:
     struct mg_callbacks cb;
     memset((void *)&cb, 0, sizeof(cb));
     cb.begin_request = civetweb_callback;
+    cb.log_message = rgw_civetweb_log_callback;
     ctx = mg_start(&cb, &env, (const char **)&options);
 
     if (!ctx) {
