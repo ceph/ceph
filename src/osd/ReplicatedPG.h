@@ -447,9 +447,12 @@ public:
     struct NotifyAck {
       boost::optional<uint64_t> watch_cookie;
       uint64_t notify_id;
+      bufferlist reply_bl;
       NotifyAck(uint64_t notify_id) : notify_id(notify_id) {}
-      NotifyAck(uint64_t notify_id, uint64_t cookie)
-	: watch_cookie(cookie), notify_id(notify_id) {}
+      NotifyAck(uint64_t notify_id, uint64_t cookie, bufferlist& rbl)
+	: watch_cookie(cookie), notify_id(notify_id) {
+	reply_bl.claim(rbl);
+      }
     };
     list<NotifyAck> notify_acks;
     
