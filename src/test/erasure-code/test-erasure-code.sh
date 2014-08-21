@@ -33,6 +33,7 @@ function run() {
     # check that erasure code plugins are preloaded
     CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
     grep 'load: jerasure' $dir/osd-0.log || return 1
+    grep 'ErasureCodePluginSelectJerasure' $dir/osd-0.log || return 1
     create_erasure_coded_pool || return 1
     FUNCTIONS=${FUNCTIONS:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for TEST_function in $FUNCTIONS ; do
