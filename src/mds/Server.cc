@@ -1044,6 +1044,10 @@ void Server::reply_request(MDRequestRef& mdr, MClientReply *reply)
       }
     }
 
+    // We can set the extra bl unconditionally: if it's already been sent in the
+    // early_reply, set_extra_bl will have claimed it and reply_extra_bl is empty
+    reply->set_extra_bl(mdr->reply_extra_bl);
+
     reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
     client_con->send_message(reply);
   }
@@ -2725,9 +2729,7 @@ public:
 
     mds->balancer->hit_inode(mdr->get_mds_stamp(), newi, META_POP_IWR);
 
-    MClientReply *reply = new MClientReply(mdr->client_request, 0);
-    reply->set_extra_bl(mdr->reply_extra_bl);
-    mds->server->reply_request(mdr, reply);
+    mds->server->reply_request(mdr, 0);
 
     assert(g_conf->mds_kill_openc_at != 1);
   }
@@ -3099,8 +3101,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
 	   << " end=" << (int)end
 	   << " complete=" << (int)complete
 	   << dendl;
-  MClientReply *reply = new MClientReply(req, 0);
-  reply->set_extra_bl(dirbl);
+  mdr->reply_extra_bl = dirbl;
   dout(10) << "reply to " << *req << " readdir num=" << numfiles << " end=" << (int)end
 	   << " complete=" << (int)complete << dendl;
 
@@ -3109,7 +3110,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   
   // reply
   mdr->tracei = diri;
-  reply_request(mdr, reply);
+  reply_request(mdr, 0);
 }
 
 
@@ -3291,9 +3292,8 @@ void Server::handle_client_file_readlock(MDRequestRef& mdr)
   bufferlist lock_bl;
   ::encode(checking_lock, lock_bl);
 
-  MClientReply *reply = new MClientReply(req);
-  reply->set_extra_bl(lock_bl);
-  reply_request(mdr, reply);
+  mdr->reply_extra_bl = lock_bl;
+  reply_request(mdr, 0);
 }
 
 void Server::handle_client_setattr(MDRequestRef& mdr)
@@ -7356,10 +7356,9 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
   ::encode(t, dirbl);  // complete
   dirbl.claim_append(dnbl);
   
-  MClientReply *reply = new MClientReply(req);
-  reply->set_extra_bl(dirbl);
+  mdr->reply_extra_bl = dirbl;
   mdr->tracei = diri;
-  reply_request(mdr, reply);
+  reply_request(mdr, 0);
 }
 
 
