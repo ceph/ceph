@@ -1125,7 +1125,9 @@ void FileJournal::write_thread_entry()
     }
     
 #ifdef HAVE_LIBAIO
-    if (aio) {
+    //We hope write_finish_thread_entry return until the last aios complete
+    //when set write_stop. But it can't. So don't use aio mode when shutdown.
+    if (aio && !write_stop) {
       Mutex::Locker locker(aio_lock);
       // should we back off to limit aios in flight?  try to do this
       // adaptively so that we submit larger aios once we have lots of
@@ -1176,7 +1178,7 @@ void FileJournal::write_thread_entry()
     }
 
 #ifdef HAVE_LIBAIO
-    if (aio)
+    if (aio && !write_stop)
       do_aio_write(bl);
     else
       do_write(bl);
