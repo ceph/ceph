@@ -7,7 +7,7 @@
 Synopsis
 ========
 
-| **rbd-replay-prep** [ --window *seconds* ] *trace_dir* *replay_file*
+| **rbd-replay-prep** [ --window *seconds* ] [ --anonymize ] *trace_dir* *replay_file*
 
 
 Description
@@ -22,6 +22,10 @@ Options
 .. option:: --window seconds
 
    Requests further apart than 'seconds' seconds are assumed to be independent.
+
+.. option:: --anonymize
+
+   Anonymizes image and snap names.
 
 
 Examples
