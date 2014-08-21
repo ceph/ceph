@@ -152,6 +152,12 @@ int ErasureCodePluginRegistry::preload(const std::string &plugins,
     int r = load(*i, profile, &plugin, ss);
     if (r)
       return r;
+
+    ErasureCodeInterfaceRef erasure_code;
+    profile["technique"] = "reed_sol_van";
+    r = plugin->factory(profile, &erasure_code);
+    if (r)
+      return r;
   }
   return 0;
 }
