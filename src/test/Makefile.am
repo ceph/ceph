@@ -578,6 +578,17 @@ unittest_on_exit_SOURCES = test/on_exit.cc
 unittest_on_exit_LDADD = $(PTHREAD_LIBS)
 check_PROGRAMS += unittest_on_exit
 
+unittest_rbd_replay_SOURCES = test/test_rbd_replay.cc
+unittest_rbd_replay_LDADD = $(LIBRBD) \
+	$(LIBRADOS) \
+	$(CEPH_GLOBAL) \
+	librbd_replay.la \
+	librbd_replay_ios.la \
+	$(UNITTEST_LDADD)
+unittest_rbd_replay_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_PROGRAMS += unittest_rbd_replay
+
+
 check_SCRIPTS += test/pybind/test_ceph_argparse.py
 
 if WITH_RADOSGW
