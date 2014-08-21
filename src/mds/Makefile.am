@@ -1,6 +1,7 @@
 libmds_la_SOURCES = \
 	mds/Capability.cc \
 	mds/MDS.cc \
+	mds/Beacon.cc \
 	mds/flock.cc \
 	mds/locks.c \
 	mds/journal.cc \
@@ -50,6 +51,7 @@ noinst_HEADERS += \
 	mds/RecoveryQueue.h \
 	mds/MDLog.h \
 	mds/MDS.h \
+	mds/Beacon.h \
 	mds/MDSContext.h \
 	mds/MDSMap.h \
 	mds/MDSTable.h \
