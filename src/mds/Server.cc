@@ -4059,9 +4059,7 @@ public:
     mds->balancer->hit_inode(mdr->get_mds_stamp(), newi, META_POP_IWR);
 
     // reply
-    MClientReply *reply = new MClientReply(mdr->client_request, 0);
-    reply->set_result(0);
-    mds->server->reply_request(mdr, reply);
+    mds->server->reply_request(mdr, 0);
   }
 };
 
@@ -4407,8 +4405,7 @@ void Server::_link_local_finish(MDRequestRef& mdr, CDentry *dn, CInode *targeti,
   mds->balancer->hit_dir(mdr->get_mds_stamp(), dn->get_dir(), META_POP_IWR);
 
   // reply
-  MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply);
+  reply_request(mdr, 0);
 }
 
 
@@ -4530,8 +4527,7 @@ void Server::_link_remote_finish(MDRequestRef& mdr, bool inc,
   mds->balancer->hit_dir(mdr->get_mds_stamp(), dn->get_dir(), META_POP_IWR);
 
   // reply
-  MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply);
+  reply_request(mdr, 0);
 
   if (!inc)
     // removing a new dn?
@@ -5093,8 +5089,7 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
   mds->balancer->hit_dir(mdr->get_mds_stamp(), dn->get_dir(), META_POP_IWR);
 
   // reply
-  MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply);
+  reply_request(mdr, 0);
   
   // clean up?
   if (straydn)
@@ -5926,8 +5921,7 @@ void Server::_rename_finish(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, 
   assert(g_conf->mds_kill_rename_at != 7);
 
   // reply
-  MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply);
+  reply_request(mdr, 0);
 
   if (need_eval)
     mds->locker->eval(in, CEPH_CAP_LOCKS, true);
@@ -7640,8 +7634,7 @@ void Server::_rmsnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid)
 
   // yay
   mdr->in[0] = diri;
-  MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply);
+  reply_request(mdr, 0);
 }
 
 
