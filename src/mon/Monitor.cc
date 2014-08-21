@@ -2391,6 +2391,11 @@ void Monitor::handle_command(MMonCommand *m)
   }
 
   if (prefix == "scrub") {
+    while (paxos->is_writing()) {
+      lock.Unlock();
+      store->flush();
+      lock.Lock();
+    }
     if (is_leader()) {
       int r = scrub();
       reply_command(m, r, "", rdata, 0);
