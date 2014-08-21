@@ -111,6 +111,8 @@ void OSDMonitor::create_initial()
 
   // encode into pending incremental
   newmap.encode(pending_inc.fullmap, mon->quorum_features | CEPH_FEATURE_RESERVED);
+  pending_inc.full_crc = newmap.get_crc();
+  dout(20) << " full crc " << pending_inc.full_crc << dendl;
 }
 
 void OSDMonitor::update_from_paxos(bool *need_bootstrap)
@@ -643,9 +645,22 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     }
   }
 
+  // determine the new map's crc
+  OSDMap tmp;
+  {
+    tmp.deepish_copy_from(osdmap);
+    tmp.apply_incremental(pending_inc);
+    bufferlist t;
+    ::encode(tmp, t, mon->quorum_features | CEPH_FEATURE_RESERVED);
+    pending_inc.full_crc = tmp.get_crc();
+  }
+
   // encode
   assert(get_last_committed() + 1 == pending_inc.epoch);
   ::encode(pending_inc, bl, mon->quorum_features | CEPH_FEATURE_RESERVED);
+
+  dout(20) << " full_crc " << tmp.get_crc()
+	   << " inc_crc " << pending_inc.inc_crc << dendl;
 
   /* put everything in the transaction */
   put_version(t, pending_inc.epoch, bl);
