@@ -3782,8 +3782,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  uint64_t watch_cookie = 0;
 	  ::decode(notify_id, bp);
 	  ::decode(watch_cookie, bp);
+	  bufferlist reply_bl;
+	  if (!bp.end()) {
+	    ::decode(reply_bl, bp);
+	  }
 	  tracepoint(osd, do_osd_op_pre_notify_ack, soid.oid.name.c_str(), soid.snap.val, notify_id, watch_cookie, "Y");
-	  OpContext::NotifyAck ack(notify_id, watch_cookie);
+	  OpContext::NotifyAck ack(notify_id, watch_cookie, reply_bl);
 	  ctx->notify_acks.push_back(ack);
 	} catch (const buffer::error &e) {
 	  tracepoint(osd, do_osd_op_pre_notify_ack, soid.oid.name.c_str(), soid.snap.val, op.watch.cookie, 0, "N");
@@ -5278,7 +5282,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
       if (p->watch_cookie &&
 	  p->watch_cookie.get() != i->first.first) continue;
       dout(10) << "acking notify on watch " << i->first << dendl;
-      i->second->notify_ack(p->notify_id);
+      i->second->notify_ack(p->notify_id, p->reply_bl);
     }
   }
 }
