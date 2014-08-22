@@ -431,7 +431,8 @@ class VirtualConsole():
         self.shortname = getShortName(name)
         status_info = ls.get_status(self.shortname)
         try:
-            phys_host = status_info['vpshost']
+            if status_info.get('is_vm', False):
+                phys_host = status_info['vm_host']['name'].split('.')[0]
         except TypeError:
             return
         self.connection = libvirt.open(phys_host)
