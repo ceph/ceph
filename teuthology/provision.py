@@ -41,9 +41,9 @@ def create_if_vm(ctx, machine_name):
     Use downburst to create a virtual machine
     """
     status_info = get_status(machine_name)
-    phys_host = status_info['vm_host']
-    if not phys_host:
+    if not status_info.get('is_vm', False):
         return False
+    phys_host = decanonicalize_hostname(status_info['vm_host']['name'])
     os_type = get_distro(ctx)
     os_version = get_distro_version(ctx)
 
@@ -60,8 +60,9 @@ def create_if_vm(ctx, machine_name):
         file_info['disk-size'] = lcnfg.get('disk-size', '100G')
         file_info['ram'] = lcnfg.get('ram', '1.9G')
         file_info['cpus'] = lcnfg.get('cpus', 1)
-        file_info['networks'] = lcnfg.get('networks',
-                 [{'source': 'front', 'mac': status_info['mac']}])
+        file_info['networks'] = lcnfg.get(
+            'networks',
+            [{'source': 'front', 'mac': status_info['mac_address']}])
         file_info['distro'] = distro
         file_info['distroversion'] = distroversion
         file_info['additional-disks'] = lcnfg.get(
@@ -101,9 +102,9 @@ def destroy_if_vm(ctx, machine_name):
     Return False only on vm downburst failures.
     """
     status_info = get_status(machine_name)
-    phys_host = status_info['vm_host']
-    if not phys_host:
+    if not status_info.get('is_vm', False):
         return True
+    phys_host = decanonicalize_hostname(status_info['vm_host']['name'])
     destroyMe = decanonicalize_hostname(machine_name)
     dbrst = _get_downburst_exec()
     if not dbrst:
