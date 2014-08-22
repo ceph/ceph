@@ -553,6 +553,7 @@ kern.* -{adir}/syslog/kern.log;RSYSLOG_FileFormat
                 ),
             )
 
+
 def vm_setup(ctx, config):
     """
     Look for virtual machines and handle their initialization
@@ -560,7 +561,7 @@ def vm_setup(ctx, config):
     with parallel() as p:
         editinfo = os.path.join(os.path.dirname(__file__),'edit_sudoers.sh')
         for rem in ctx.cluster.remotes.iterkeys():
-            mname = re.match(".*@([^\.]*)\.?.*", str(rem)).group(1)
+            mname = rem.shortname
             if teuthology.is_vm(mname):
                 r = rem.run(args=['test', '-e', '/ceph-qa-ready',],
                         stdout=StringIO(),
