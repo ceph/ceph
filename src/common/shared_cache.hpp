@@ -24,6 +24,7 @@
 
 template <class K, class V>
 class SharedLRU {
+  CephContext *cct;
   typedef ceph::shared_ptr<V> VPtr;
   typedef ceph::weak_ptr<V> WeakVPtr;
   Mutex lock;
@@ -84,13 +85,17 @@ class SharedLRU {
   };
 
 public:
-  SharedLRU(size_t max_size = 20)
-    : lock("SharedLRU::lock"), max_size(max_size), size(0) {}
+  SharedLRU(CephContext *cct = NULL, size_t max_size = 20)
+    : cct(cct), lock("SharedLRU::lock"), max_size(max_size), size(0) {}
   
   ~SharedLRU() {
     contents.clear();
     lru.clear();
     assert(weak_refs.empty());
+  }
+
+  void set_cct(CephContext *c) {
+    cct = c;
   }
 
   void clear(const K& key) {
