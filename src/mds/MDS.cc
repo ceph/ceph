@@ -343,61 +343,41 @@ void MDS::create_logger()
   {
     PerfCountersBuilder mds_plb(g_ceph_context, "mds", l_mds_first, l_mds_last);
 
-    mds_plb.add_u64_counter(l_mds_req, "req");
+    mds_plb.add_u64_counter(l_mds_request, "request");
     mds_plb.add_u64_counter(l_mds_reply, "reply");
-    mds_plb.add_time_avg(l_mds_replyl, "replyl");
-    mds_plb.add_u64_counter(l_mds_fw, "fw");
+    mds_plb.add_time_avg(l_mds_reply_latency, "reply_latency");
+    mds_plb.add_u64_counter(l_mds_forward, "forward");
     
-    mds_plb.add_u64_counter(l_mds_dir_f, "dir_f");
-    mds_plb.add_u64_counter(l_mds_dir_c, "dir_c");
-    mds_plb.add_u64_counter(l_mds_dir_sp, "dir_sp");
-    mds_plb.add_u64_counter(l_mds_dir_ffc, "dir_ffc");
-    //mds_plb.add_u64_counter("mkdir");
+    mds_plb.add_u64_counter(l_mds_dir_fetch, "dir_fetch");
+    mds_plb.add_u64_counter(l_mds_dir_commit, "dir_commit");
+    mds_plb.add_u64_counter(l_mds_dir_split, "dir_split");
 
-    /*
-    mds_plb.add_u64_counter("newin"); // new inodes (pre)loaded
-    mds_plb.add_u64_counter("newt");  // inodes first touched/used
-    mds_plb.add_u64_counter("outt");  // trimmed touched
-    mds_plb.add_u64_counter("outut"); // trimmed untouched (wasted effort)
-    mds_plb.add_fl_avg("oututl"); // avg trim latency for untouched
-
-    mds_plb.add_u64_counter("dirt1");
-    mds_plb.add_u64_counter("dirt2");
-    mds_plb.add_u64_counter("dirt3");
-    mds_plb.add_u64_counter("dirt4");
-    mds_plb.add_u64_counter("dirt5");
-    */
-
-    mds_plb.add_u64(l_mds_imax, "imax");
-    mds_plb.add_u64(l_mds_i, "i");
-    mds_plb.add_u64(l_mds_itop, "itop");
-    mds_plb.add_u64(l_mds_ibot, "ibot");
-    mds_plb.add_u64(l_mds_iptail, "iptail");  
-    mds_plb.add_u64(l_mds_ipin, "ipin");
-    mds_plb.add_u64_counter(l_mds_iex, "iex");
-    mds_plb.add_u64_counter(l_mds_icap, "icap");
-    mds_plb.add_u64_counter(l_mds_cap, "cap");
+    mds_plb.add_u64(l_mds_inode_max, "inode_max");
+    mds_plb.add_u64(l_mds_inodes, "inodes");
+    mds_plb.add_u64(l_mds_inodes_top, "inodes_top");
+    mds_plb.add_u64(l_mds_inodes_bottom, "inodes_bottom");
+    mds_plb.add_u64(l_mds_inodes_pin_tail, "inodes_pin_tail");  
+    mds_plb.add_u64(l_mds_inodes_pinned, "inodes_pinned");
+    mds_plb.add_u64_counter(l_mds_inodes_expired, "inodes_expired");
+    mds_plb.add_u64_counter(l_mds_inodes_with_caps, "inodes_with_caps");
+    mds_plb.add_u64_counter(l_mds_caps, "caps");
+    mds_plb.add_u64(l_mds_subtrees, "subtrees");
     
-    mds_plb.add_u64_counter(l_mds_dis, "dis"); // FIXME: unused
-
-    mds_plb.add_u64_counter(l_mds_t, "t"); 
-    mds_plb.add_u64_counter(l_mds_thit, "thit");
-    mds_plb.add_u64_counter(l_mds_tfw, "tfw");
-    mds_plb.add_u64_counter(l_mds_tdis, "tdis");
-    mds_plb.add_u64_counter(l_mds_tdirf, "tdirf");
-    mds_plb.add_u64_counter(l_mds_trino, "trino");
-    mds_plb.add_u64_counter(l_mds_tlock, "tlock");
+    mds_plb.add_u64_counter(l_mds_traverse, "traverse"); 
+    mds_plb.add_u64_counter(l_mds_traverse_hit, "traverse_hit");
+    mds_plb.add_u64_counter(l_mds_traverse_forward, "traverse_forward");
+    mds_plb.add_u64_counter(l_mds_traverse_discover, "traverse_discover");
+    mds_plb.add_u64_counter(l_mds_traverse_dir_fetch, "traverse_dir_fetch");
+    mds_plb.add_u64_counter(l_mds_traverse_remote_ino, "traverse_remote_ino");
+    mds_plb.add_u64_counter(l_mds_traverse_lock, "traverse_lock");
     
-    mds_plb.add_u64(l_mds_l, "l");
-    mds_plb.add_u64(l_mds_q, "q");
-    mds_plb.add_u64(l_mds_popanyd, "popanyd"); // FIXME: unused
-    mds_plb.add_u64(l_mds_popnest, "popnest");
+    mds_plb.add_u64(l_mds_load_cent, "load_cent");
+    mds_plb.add_u64(l_mds_dispatch_queue_len, "q");
     
-    mds_plb.add_u64(l_mds_sm, "sm");
-    mds_plb.add_u64_counter(l_mds_ex, "ex");
-    mds_plb.add_u64_counter(l_mds_iexp, "iexp");
-    mds_plb.add_u64_counter(l_mds_im, "im");
-    mds_plb.add_u64_counter(l_mds_iim, "iim");
+    mds_plb.add_u64_counter(l_mds_exported, "exported");
+    mds_plb.add_u64_counter(l_mds_exported_inodes, "exported_inodes");
+    mds_plb.add_u64_counter(l_mds_imported, "imported");
+    mds_plb.add_u64_counter(l_mds_imported_inodes, "imported_inodes");
     logger = mds_plb.create_perf_counters();
     g_ceph_context->get_perfcounters_collection()->add(logger);
   }
@@ -739,11 +719,11 @@ void MDS::tick()
   mds_load_t load = balancer->get_load(now);
   
   if (logger) {
-    req_rate = logger->get(l_mds_req);
+    req_rate = logger->get(l_mds_request);
     
-    logger->set(l_mds_l, 100 * load.mds_load());
-    logger->set(l_mds_q, messenger->get_dispatch_queue_len());
-    logger->set(l_mds_sm, mdcache->num_subtrees());
+    logger->set(l_mds_load_cent, 100 * load.mds_load());
+    logger->set(l_mds_dispatch_queue_len, messenger->get_dispatch_queue_len());
+    logger->set(l_mds_subtrees, mdcache->num_subtrees());
 
     mdcache->log_stat();
   }
