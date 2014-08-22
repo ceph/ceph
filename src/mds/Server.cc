@@ -918,7 +918,7 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
 
   mds->logger->inc(l_mds_reply);
   utime_t lat = ceph_clock_now(g_ceph_context) - mdr->client_request->get_recv_stamp();
-  mds->logger->tinc(l_mds_replyl, lat);
+  mds->logger->tinc(l_mds_reply_latency, lat);
   dout(20) << "lat " << lat << dendl;
 
   mdr->mark_event("early_replied");
@@ -964,7 +964,7 @@ void Server::reply_request(MDRequestRef& mdr, MClientReply *reply, CInode *trace
 
     mds->logger->inc(l_mds_reply);
     utime_t lat = ceph_clock_now(g_ceph_context) - mdr->client_request->get_recv_stamp();
-    mds->logger->tinc(l_mds_replyl, lat);
+    mds->logger->tinc(l_mds_reply_latency, lat);
     dout(20) << "lat " << lat << dendl;
     
     if (tracei)
@@ -1126,7 +1126,7 @@ void Server::handle_client_request(MClientRequest *req)
   dout(4) << "handle_client_request " << *req << dendl;
 
   if (mds->logger)
-    mds->logger->inc(l_mds_req);
+    mds->logger->inc(l_mds_request);
   if (logger)
     logger->inc(l_mdss_hcreq);
 
