@@ -101,7 +101,7 @@ def main(ctx):
         if statuses:
             if ctx.machine_type:
                 statuses = [_status for _status in statuses
-                            if _status['type'] == ctx.machine_type]
+                            if _status['machine_type'] == ctx.machine_type]
             if not machines and ctx.owner is None and not ctx.all:
                 ctx.owner = misc.get_user()
             if ctx.owner is not None:
