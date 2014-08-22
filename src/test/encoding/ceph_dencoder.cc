@@ -312,7 +312,7 @@ int main(int argc, const char **argv)
 	usage(cerr);
 	exit(1);
       }
-      den->encode(encbl, features);
+      den->encode(encbl, features | CEPH_FEATURE_RESERVED); // hack for OSDMap
     } else if (*i == string("decode")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;

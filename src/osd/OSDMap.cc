@@ -396,6 +396,13 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
+  // only a select set of callers should *ever* be encoding new
+  // OSDMaps.  others should be passing around the canonical encoded
+  // buffers from on high.  select out those callers by passing in an
+  // "impossible" feature bit.
+  assert(features & CEPH_FEATURE_RESERVED);
+  features &= ~CEPH_FEATURE_RESERVED;
+
   // meta-encoding: how we include client-used and osd-specific data
   ENCODE_START(7, 7, bl);
 
@@ -1786,6 +1793,14 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     encode_classic(bl, features);
     return;
   }
+
+  // only a select set of callers should *ever* be encoding new
+  // OSDMaps.  others should be passing around the canonical encoded
+  // buffers from on high.  select out those callers by passing in an
+  // "impossible" feature bit.
+  assert(features & CEPH_FEATURE_RESERVED);
+  features &= ~CEPH_FEATURE_RESERVED;
+
   // meta-encoding: how we include client-used and osd-specific data
   ENCODE_START(7, 7, bl);
 

@@ -109,7 +109,7 @@ void OSDMonitor::create_initial()
   newmap.created = newmap.modified = ceph_clock_now(g_ceph_context);
 
   // encode into pending incremental
-  newmap.encode(pending_inc.fullmap, mon->quorum_features);
+  newmap.encode(pending_inc.fullmap, mon->quorum_features | CEPH_FEATURE_RESERVED);
 }
 
 void OSDMonitor::update_from_paxos(bool *need_bootstrap)
@@ -217,7 +217,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     if (!f)
       f = -1;
     bufferlist full_bl;
-    osdmap.encode(full_bl, f);
+    osdmap.encode(full_bl, f | CEPH_FEATURE_RESERVED);
     tx_size += full_bl.length();
 
     put_version_full(t, osdmap.epoch, full_bl);
@@ -644,7 +644,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   // encode
   assert(get_last_committed() + 1 == pending_inc.epoch);
-  ::encode(pending_inc, bl, mon->quorum_features);
+  ::encode(pending_inc, bl, mon->quorum_features | CEPH_FEATURE_RESERVED);
 
   /* put everything in the transaction */
   put_version(t, pending_inc.epoch, bl);
