@@ -50,14 +50,14 @@ public:
     pthread_rwlock_destroy(&L);
   }
 
-  void unlock() const {
+  void unlock(bool lockdep=true) const {
     if (nwlock.read() > 0) {
       nwlock.dec();
     } else {
       assert(nrlock.read() > 0);
       nrlock.dec();
     }
-    if (g_lockdep) id = lockdep_will_unlock(name, id);
+    if (lockdep && g_lockdep) id = lockdep_will_unlock(name, id);
     int r = pthread_rwlock_unlock(&L);
     assert(r == 0);
   }
@@ -83,17 +83,17 @@ public:
   }
 
   // write
-  void get_write() {
-    if (g_lockdep) id = lockdep_will_lock(name, id);
+  void get_write(bool lockdep=true) {
+    if (lockdep && g_lockdep) id = lockdep_will_lock(name, id);
     int r = pthread_rwlock_wrlock(&L);
     assert(r == 0);
     if (g_lockdep) id = lockdep_locked(name, id);
     nwlock.inc();
 
   }
-  bool try_get_write() {
+  bool try_get_write(bool lockdep=true) {
     if (pthread_rwlock_trywrlock(&L) == 0) {
-      if (g_lockdep) id = lockdep_locked(name, id);
+      if (lockdep && g_lockdep) id = lockdep_locked(name, id);
       nwlock.inc();
       return true;
     }
