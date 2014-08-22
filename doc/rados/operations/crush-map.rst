@@ -80,8 +80,9 @@ Note:
 ceph-crush-location hook
 ------------------------
 
-The ``ceph-crush-location`` utility will generate a default CRUSH location
-string for a given daemon.  The location is based on, in order of preference:
+By default, the ``ceph-crush-location`` utility will generate a CRUSH
+location string for a given daemon.  The location is based on, in order of
+preference:
 
 #. A ``TYPE crush location`` option in ceph.conf.  For example, this
    is ``osd crush location`` for OSD daemons.
@@ -94,6 +95,11 @@ administrator) can simply set the 'crush location' field in a host's
 ceph.conf to describe that machine's location within the datacenter or
 cluster.  This will be provide location awareness to both Ceph daemons
 and clients alike.
+
+It is possible to manage the CRUSH map entirely manually by toggling
+the hook off in the configuration::
+
+  osd crush update on start = false
 
 Custom location hooks
 ---------------------
