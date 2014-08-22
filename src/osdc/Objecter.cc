@@ -1279,6 +1279,8 @@ void Objecter::_reopen_session(OSDSession *s)
 
 void Objecter::close_session(OSDSession *s)
 {
+  assert(rwlock.is_wlocked());
+
   ldout(cct, 10) << "close_session for osd." << s->osd << dendl;
   if (s->con) {
     s->con->mark_down();
@@ -1286,40 +1288,52 @@ void Objecter::close_session(OSDSession *s)
   }
   s->lock.get_write();
 
+  std::list<LingerOp*> homeless_lingers;
+  std::list<CommandOp*> homeless_commands;
+  std::list<Op*> homeless_ops;
+
   while(!s->linger_ops.empty()) {
     std::map<uint64_t, LingerOp*>::iterator i = s->linger_ops.begin();
     ldout(cct, 10) << " linger_op " << i->first << dendl;
     _session_linger_op_remove(s, i->second);
-    {
-      RWLock::WLocker wl(homeless_session->lock);
-      _session_linger_op_assign(homeless_session, i->second);
-    }
+    homeless_lingers.push_back(i->second);
   }
 
   while(!s->ops.empty()) {
     std::map<ceph_tid_t, Op*>::iterator i = s->ops.begin();
     ldout(cct, 10) << " op " << i->first << dendl;
     _session_op_remove(s, i->second);
-    {
-      RWLock::WLocker wl(homeless_session->lock);
-      _session_op_assign(homeless_session, i->second);
-    }
+    homeless_ops.push_back(i->second);
   }
 
   while(!s->command_ops.empty()) {
     std::map<ceph_tid_t, CommandOp*>::iterator i = s->command_ops.begin();
     ldout(cct, 10) << " command_op " << i->first << dendl;
     _session_command_op_remove(s, i->second);
-    {
-      RWLock::WLocker wl(homeless_session->lock);
-      _session_command_op_assign(homeless_session, i->second);
-    }
+    homeless_commands.push_back(i->second);
   }
 
   osd_sessions.erase(s->osd);
   s->lock.unlock();
   assert(s->get_nref() == 1);  // We reassigned any/all ops, so should be last ref
   put_session(s);
+
+  // Assign any leftover ops to the homeless session
+  {
+    RWLock::WLocker wl(homeless_session->lock);
+    for (std::list<LingerOp*>::iterator i = homeless_lingers.begin();
+         i != homeless_lingers.end(); ++i) {
+      _session_linger_op_assign(homeless_session, *i);
+    }
+    for (std::list<Op*>::iterator i = homeless_ops.begin();
+         i != homeless_ops.end(); ++i) {
+      _session_op_assign(homeless_session, *i);
+    }
+    for (std::list<CommandOp*>::iterator i = homeless_commands.begin();
+         i != homeless_commands.end(); ++i) {
+      _session_command_op_assign(homeless_session, *i);
+    }
+  }
 
   logger->set(l_osdc_osd_sessions, osd_sessions.size());
 }
