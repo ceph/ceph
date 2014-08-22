@@ -1125,7 +1125,10 @@ void Server::handle_client_request(MClientRequest *req)
 {
   dout(4) << "handle_client_request " << *req << dendl;
 
-  if (logger) logger->inc(l_mdss_hcreq);
+  if (mds->logger)
+    mds->logger->inc(l_mds_req);
+  if (logger)
+    logger->inc(l_mdss_hcreq);
 
   if (!mdcache->is_open()) {
     dout(5) << "waiting for root" << dendl;
