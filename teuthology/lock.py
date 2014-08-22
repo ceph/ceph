@@ -21,6 +21,8 @@ log = logging.getLogger(__name__)
 logging.getLogger("requests.packages.urllib3.connectionpool").setLevel(
     logging.WARNING)
 
+is_vpm = lambda name: 'vpm' in name
+
 
 def main(ctx):
     if ctx.verbose:
@@ -153,6 +155,10 @@ def main(ctx):
                 machines_to_update.append(machine)
                 provision.create_if_vm(ctx, machine)
     elif ctx.unlock:
+        # If none of them are vpm, do them all in one shot
+        if not filter(is_vpm, machines):
+            res = unlock_many(machines, user)
+            return 0 if res else 1
         for machine in machines:
             if not unlock_one(ctx, machine, user):
                 ret = 1
@@ -264,6 +270,24 @@ def lock_one(name, user=None, description=None):
         log.error('failed to lock {node}. reason: {reason}'.format(
             node=name, reason=reason))
     return response
+
+
+def unlock_many(names, user):
+    uri = os.path.join(config.lock_server, 'nodes', 'unlock_many', '')
+    data = dict(
+        locked_by=user,
+        names=names,
+    )
+    response = requests.post(
+        uri,
+        data=json.dumps(data),
+        headers={'content-type': 'application/json'},
+    )
+    if response.ok:
+        log.debug("Unlocked: %s", ', '.join(names))
+    else:
+        log.error("Failed to unlock: %s", ', '.join(names))
+    return response.ok
 
 
 def unlock_one(ctx, name, user=None):
