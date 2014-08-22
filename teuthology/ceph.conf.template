@@ -41,6 +41,7 @@
 	debug mon = 20
 	debug paxos = 20
 	mon data avail warn = 5
+	mon reweight min pgs per osd = 4
 
 [mds]
         mds debug scatterstat = true
