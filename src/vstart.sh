@@ -339,6 +339,7 @@ if [ "$start_mon" -eq 1 ]; then
         osd pool default min size = 1
         osd pool default erasure code directory = .libs
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd
+        rgw frontends = fastcgi, civetweb port=8080
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
 EOF
@@ -566,88 +567,6 @@ EOF
     $cmd
 fi
 
-
-# rgw
-if [ "$start_rgw" -eq 1 ]; then
-    for rgw in `seq 0 $((CEPH_NUM_RGW-1))`
-    do
-	rgwport=$(( $CEPH_RGW_PORT + $rgw ))
-	if [ "$new" -eq 1 ]; then
-	    if [ $overwrite_conf -eq 1 ]; then
-		    dnsname=`hostname -f`
-		    cat <<EOF >> $conf_fn
-[client.radosgw.rgw$rgw]
-        host = $HOSTNAME
-$DAEMONOPTS
-        keyring = $CEPH_OUT_DIR/keyring.client.radosgw.rgw$rgw
-        rgw socket path = $CEPH_OUT_DIR/sock.client.radosgw.rgw$rgw
-        rgw dns name = $dnsname
-EOF
-		    mkdir -p $CEPH_OUT_DIR/htdocs
-		    mkdir -p $CEPH_OUT_DIR/fastcgi_sock
-		    APACHE2_MODULE_PATH="/usr/lib/apache2/modules"
-		    APACHE2_EXTRA_MODULES_NAME="mpm_prefork authz_core"
-		    for module in $APACHE2_EXTRA_MODULES_NAME
-		    do
-			    if [ -f "${APACHE2_MODULE_PATH}/mod_${module}.so" ]; then
-				    APACHE2_EXTRA_MODULES="${APACHE2_EXTRA_MODULES}LoadModule ${module}_module ${APACHE2_MODULE_PATH}/mod_${module}.so
-"
-			    fi 
-		    done
-		    echo $APACHE2_EXTRA_MODULES
-		    cat <<EOF > $CEPH_OUT_DIR/apache.conf
-LoadModule env_module /usr/lib/apache2/modules/mod_env.so
-LoadModule rewrite_module /usr/lib/apache2/modules/mod_rewrite.so
-LoadModule fastcgi_module /usr/lib/apache2/modules/mod_fastcgi.so
-$APACHE2_EXTRA_MODULES
-
-Listen $rgwport
-ServerName rgwtest.example.com
-
-ServerRoot $CEPH_OUT_DIR
-ErrorLog $CEPH_OUT_DIR/apache.error.log
-LogFormat "%h l %u %t \"%r\" %>s %b \"{Referer}i\" \"%{User-agent}i\"" combined
-CustomLog $CEPH_OUT_DIR/apache.access.log combined
-PidFile $CEPH_OUT_DIR/apache.pid
-DocumentRoot $CEPH_OUT_DIR/htdocs
-FastCgiIPCDir $CEPH_OUT_DIR/fastcgi_sock
-FastCgiExternalServer $CEPH_OUT_DIR/htdocs/rgw.fcgi -socket $CEPH_OUT_DIR/sock.client.radosgw.rgw$rgw
-RewriteEngine On
-
-RewriteRule ^/([a-zA-Z0-9-_.]*)([/]?.*) /rgw.fcgi?page=$1&params=$2&%{QUERY_STRING} [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
-
-# Set fastcgi environment variables.
-# Note that this is separate from Unix environment variables!
-SetEnv RGW_LOG_LEVEL 20
-SetEnv RGW_PRINT_CONTINUE yes
-SetEnv RGW_SHOULD_LOG yes
-
-<Directory $CEPH_OUT_DIR/htdocs>
-  Options +ExecCGI
-  AllowOverride All
-  SetHandler fastcgi-script
-</Directory>
-
-AllowEncodedSlashes On
-ServerSignature Off
-EOF
-		    $SUDO $CEPH_ADM auth get-or-create client.radosgw.rgw$rgw osd 'allow rwx' mon 'allow r' -o $CEPH_OUT_DIR/keyring.client.radosgw.rgw$rgw
-
-		    #akey=`echo $$ | md5sum | cut -c 1-20`
-		    #skey=`dd if=/dev/urandom of=/tmp/random.$$ bs=1 count=40 2>/dev/null ; base64 < /tmp/random.$$ ; rm /tmp/random.$$`
-		    akey='0555b35654ad1656d804'
-		    skey='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
-		    echo access key $akey
-		    echo secret key $skey
-		    $CEPH_BIN/radosgw-admin user create --uid tester --access-key $akey --secret $skey --display-name 'M. Tester' --email tester@ceph.com -c $conf_fn
-	    fi
-	fi
-	echo start rgw$rgw on http://localhost:$rgwport
-	run 'rgw' $SUDO $CEPH_BIN/radosgw -n client.radosgw.rgw$rgw $ARGS
-	run 'apache2' $SUDO apache2 -f $CEPH_OUT_DIR/apache.conf
-    done
-fi
-
 if [ "$ec" -eq 1 ]; then
     $SUDO $CEPH_ADM <<EOF
 osd erasure-code-profile set ec-profile m=2 k=1
@@ -688,6 +607,30 @@ EOF
     done
 }
 do_hitsets $hitset
+
+do_rgw()
+{
+    # Start server
+	echo start rgw on http://localhost:8080
+    RGWDEBUG=""
+    if [ "$debug" -ne 0 ]; then
+        RGWDEBUG="--debug-rgw=20"
+    fi
+    $CEPH_BIN/radosgw --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1
+
+    # Create S3 user
+    local akey='0555b35654ad1656d804'
+    local skey='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
+    echo "setting up user testid"
+    $CEPH_BIN/radosgw-admin user create --uid testid --access-key $akey --secret $skey --display-name 'M. Tester' --email tester@ceph.com -c $conf_fn > /dev/null
+
+    # Create Swift user
+    echo "setting up user tester"
+    $CEPH_BIN/radosgw-admin user create --subuser=tester:testing --display-name=Tester-Subuser --key-type=swift --secret=asdf > /dev/null
+}
+if [ "$start_rgw" -eq 1 ]; then
+    do_rgw
+fi
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
 
