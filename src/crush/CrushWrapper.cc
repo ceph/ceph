@@ -805,20 +805,18 @@ int CrushWrapper::add_simple_ruleset(string name, string root_name,
     return -EINVAL;
   }
 
-  int ruleset = 0;
-  for (int i = 0; i < get_max_rules(); i++) {
-    if (rule_exists(i) &&
-	get_rule_mask_ruleset(i) >= ruleset) {
-      ruleset = get_rule_mask_ruleset(i) + 1;
-    }
+  int rno = -1;
+  for (rno = 0; rno < get_max_rules(); rno++) {
+    if (!rule_exists(rno) && !ruleset_exists(rno))
+       break;
   }
-
   int steps = 3;
   if (mode == "indep")
     steps = 4;
   int min_rep = mode == "firstn" ? 1 : 3;
   int max_rep = mode == "firstn" ? 10 : 20;
-  crush_rule *rule = crush_make_rule(steps, ruleset, rule_type, min_rep, max_rep);
+  //set the ruleset the same as rule_id(rno)
+  crush_rule *rule = crush_make_rule(steps, rno, rule_type, min_rep, max_rep);
   assert(rule);
   int step = 0;
   if (mode == "indep")
@@ -837,7 +835,12 @@ int CrushWrapper::add_simple_ruleset(string name, string root_name,
 			CRUSH_CHOOSE_N,
 			0);
   crush_rule_set_step(rule, step++, CRUSH_RULE_EMIT, 0, 0);
-  int rno = crush_add_rule(crush, rule, -1);
+
+  int ret = crush_add_rule(crush, rule, rno);
+  if(ret < 0) {
+    *err << "failed to add rule " << rno << " because " << cpp_strerror(ret);
+    return ret;
+  }
   set_rule_name(rno, name);
   have_rmaps = false;
   return rno;

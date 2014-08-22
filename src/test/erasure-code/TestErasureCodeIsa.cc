@@ -734,36 +734,6 @@ TEST(IsaErasureCodeTest, create_ruleset)
     }
   }
 
-  //
-  // The ruleid may be different from the ruleset when a crush rule is
-  // removed because the removed ruleid will be reused but the removed
-  // ruleset will not be reused. 
-  //
-  // This also asserts that the create_ruleset() method returns a
-  // ruleset and not a ruleid http://tracker.ceph.com/issues/9044
-  //
-  {
-    stringstream ss;
-    ErasureCodeIsaDefault isa;
-    map<std::string,std::string> parameters;
-    parameters["k"] = "2";
-    parameters["m"] = "2";
-    parameters["w"] = "8";
-    isa.init(parameters);
-    int FIRST = isa.create_ruleset("FIRST", *c, &ss);
-    int SECOND = isa.create_ruleset("SECOND", *c, &ss);
-    int FIRST_ruleid = c->get_rule_id("FIRST");
-    EXPECT_EQ(0, c->remove_rule(FIRST_ruleid));
-    int ruleset = isa.create_ruleset("myrule", *c, &ss);
-    EXPECT_NE(FIRST, ruleset);
-    EXPECT_NE(SECOND, ruleset);
-    EXPECT_NE(ruleset, c->get_rule_id("myrule"));
-    int SECOND_ruleid = c->get_rule_id("SECOND");
-    EXPECT_EQ(0, c->remove_rule(SECOND_ruleid));
-    int myrule_ruleid = c->get_rule_id("myrule");
-    EXPECT_EQ(0, c->remove_rule(myrule_ruleid));
-  }
-
   {
     stringstream ss;
     ErasureCodeIsaDefault isa;
