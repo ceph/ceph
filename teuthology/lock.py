@@ -120,6 +120,14 @@ def main(ctx):
                 statuses = [_status for _status in statuses
                             if _status['description'] is not None and
                             _status['description'].find(ctx.desc_pattern) >= 0]
+
+            # When listing, only show the vm_host's name, not every detail
+            for s in statuses:
+                if not s.get('is_vm', False):
+                    continue
+                vm_host_name = s.get('vm_host', dict())['name']
+                if vm_host_name:
+                    s['vm_host'] = vm_host_name
             if ctx.list:
                     print json.dumps(statuses, indent=4)
 
