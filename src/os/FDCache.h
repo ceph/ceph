@@ -61,6 +61,7 @@ public:
     cct->_conf->add_observer(this);
     registry = new SharedLRU<ghobject_t, FD>[registry_shards];
     for (int i = 0; i < registry_shards; ++i) {
+      registry[i].set_cct(cct);
       registry[i].set_size(
           MAX((cct->_conf->filestore_fd_cache_size / registry_shards), 1));
     }

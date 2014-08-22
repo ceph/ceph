@@ -24,6 +24,7 @@
 
 template <class K, class V>
 class SharedLRU {
+  CephContext *cct;
   typedef ceph::shared_ptr<V> VPtr;
   typedef ceph::weak_ptr<V> WeakVPtr;
   Mutex lock;
@@ -84,13 +85,33 @@ class SharedLRU {
   };
 
 public:
-  SharedLRU(size_t max_size = 20)
-    : lock("SharedLRU::lock"), max_size(max_size), size(0) {}
+  SharedLRU(CephContext *cct = NULL, size_t max_size = 20)
+    : cct(cct), lock("SharedLRU::lock"), max_size(max_size), size(0) {}
   
   ~SharedLRU() {
     contents.clear();
     lru.clear();
-    assert(weak_refs.empty());
+    if (!weak_refs.empty()) {
+      lderr(cct) << "leaked refs:\n";
+      dump_weak_refs(*_dout);
+      *_dout << dendl;
+      assert(weak_refs.empty());
+    }
+  }
+
+  void set_cct(CephContext *c) {
+    cct = c;
+  }
+
+  void dump_weak_refs(ostream& out) {
+    for (typename map<K, WeakVPtr>::iterator p = weak_refs.begin();
+	 p != weak_refs.end();
+	 ++p) {
+      out << __func__ << " " << this << " weak_refs: "
+	  << p->first << " = " << p->second.lock().get()
+	  << " with " << p->second.use_count() << " refs"
+	  << std::endl;
+    }
   }
 
   void clear(const K& key) {
