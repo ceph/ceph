@@ -619,6 +619,7 @@ void Objecter::_scan_requests(OSDSession *s,
   map<ceph_tid_t,LingerOp*>::iterator lp = s->linger_ops.begin();
   while (lp != s->linger_ops.end()) {
     LingerOp *op = lp->second;
+    assert(op->session == s);
     ++lp;   // check_linger_pool_dne() may touch linger_ops; prevent iterator invalidation
     ldout(cct, 10) << " checking linger op " << op->linger_id << dendl;
     bool unregister;
@@ -2226,11 +2227,11 @@ int Objecter::_recalc_linger_op_target(LingerOp *linger_op, RWLock::Context& lc)
     if (linger_op->session != s) {
       // NB locking two sessions (s and linger_op->session) at the same time here
       // is only safe because we are the only one that takes two, and we are
-      // holding rwlock for write.
-      s->lock.get_write();
+      // holding rwlock for write.  Disable lockdep because it doesn't know that.
+      s->lock.get_write(false);
       _session_linger_op_remove(linger_op->session, linger_op);
       _session_linger_op_assign(s, linger_op);
-      s->lock.unlock();
+      s->lock.unlock(false);
     }
 
     put_session(s);
@@ -3873,8 +3874,6 @@ Objecter::OSDSession::~OSDSession()
 Objecter::~Objecter()
 {
   delete osdmap;
-
-
 
   assert(homeless_session->get_nref() == 1);
   assert(num_homeless_ops.read() == 0);
