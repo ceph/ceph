@@ -82,7 +82,7 @@ librados::RadosClient::RadosClient(CephContext *cct_)
     refcnt(1),
     log_last_version(0), log_cb(NULL), log_cb_arg(NULL),
     finisher(cct),
-    max_watch_cookie(0)
+    max_watch_notify_cookie(0)
 {
 }
 
@@ -416,7 +416,7 @@ bool librados::RadosClient::_dispatch(Message *m)
     break;
 
   case CEPH_MSG_WATCH_NOTIFY:
-    watch_notify(static_cast<MWatchNotify *>(m));
+    handle_watch_notify(static_cast<MWatchNotify *>(m));
     break;
 
   case MSG_LOG:
@@ -642,67 +642,104 @@ int librados::RadosClient::pool_delete_async(const char *name, PoolAsyncCompleti
   return r;
 }
 
-void librados::RadosClient::register_watcher(WatchContext *wc, uint64_t *cookie)
-{
-  assert(lock.is_locked());
-  wc->cookie = *cookie = ++max_watch_cookie;
-  watchers[wc->cookie] = wc;
-}
-
-void librados::RadosClient::unregister_watcher(uint64_t cookie)
-{
-  assert(lock.is_locked());
-  map<uint64_t, WatchContext *>::iterator iter = watchers.find(cookie);
-  if (iter != watchers.end()) {
-    WatchContext *ctx = iter->second;
-    if (ctx->linger_id)
-      objecter->unregister_linger(ctx->linger_id);
-
-    watchers.erase(iter);
-    lock.Unlock();
-    ldout(cct, 10) << "unregister_watcher, dropping reference, waiting ctx=" << (void *)ctx << dendl;
-    ctx->put_wait();
-    ldout(cct, 10) << "unregister_watcher, done ctx=" << (void *)ctx << dendl;
-    lock.Lock();
-  }
-}
-
 void librados::RadosClient::blacklist_self(bool set) {
   Mutex::Locker l(lock);
   objecter->blacklist_self(set);
 }
 
-class C_WatchNotify : public Context {
-  librados::WatchContext *ctx;
-  Mutex *client_lock;
-  uint8_t opcode;
-  uint64_t ver;
-  uint64_t notify_id;
-  bufferlist bl;
 
-public:
-  C_WatchNotify(librados::WatchContext *_ctx, Mutex *_client_lock,
-                uint8_t _o, uint64_t _v, uint64_t _n, bufferlist& _bl) : 
-                ctx(_ctx), client_lock(_client_lock), opcode(_o), ver(_v), notify_id(_n), bl(_bl) {}
+// -----------
+// watch/notify
 
+void librados::RadosClient::register_watch_notify_callback(
+  WatchNotifyInfo *wc,
+  uint64_t *cookie)
+{
+  assert(lock.is_locked());
+  wc->cookie = *cookie = ++max_watch_notify_cookie;
+  ldout(cct,10) << __func__ << " cookie " << wc->cookie << dendl;
+  watch_notify_info[wc->cookie] = wc;
+}
+
+void librados::RadosClient::unregister_watch_notify_callback(uint64_t cookie)
+{
+  ldout(cct,10) << __func__ << " cookie " << cookie << dendl;
+  assert(lock.is_locked());
+  map<uint64_t, WatchNotifyInfo *>::iterator iter =
+    watch_notify_info.find(cookie);
+  if (iter != watch_notify_info.end()) {
+    WatchNotifyInfo *ctx = iter->second;
+    if (ctx->linger_id)
+      objecter->unregister_linger(ctx->linger_id);
+
+    watch_notify_info.erase(iter);
+    lock.Unlock();
+    ldout(cct, 10) << __func__ << " dropping reference, waiting ctx="
+		   << (void *)ctx << dendl;
+    ctx->put_wait();
+    ldout(cct, 10) << __func__ << " done ctx=" << (void *)ctx << dendl;
+    lock.Lock();
+  }
+}
+
+struct C_DoWatchNotify : public Context {
+  librados::RadosClient *rados;
+  MWatchNotify *m;
+  C_DoWatchNotify(librados::RadosClient *r, MWatchNotify *m) : rados(r), m(m) {}
   void finish(int r) {
-    ctx->notify(client_lock, opcode, ver, notify_id, bl);
-    ctx->put();
+    rados->do_watch_notify(m);
   }
 };
 
-void librados::RadosClient::watch_notify(MWatchNotify *m)
+void librados::RadosClient::handle_watch_notify(MWatchNotify *m)
 {
   assert(lock.is_locked());
-  map<uint64_t, WatchContext *>::iterator iter = watchers.find(m->cookie);
-  if (iter != watchers.end()) {
-    WatchContext *wc = iter->second;
-    assert(wc);
-    wc->get();
-    finisher.queue(new C_WatchNotify(wc, &lock, m->opcode, m->ver, m->notify_id, m->bl));
+  if (watch_notify_info.count(m->cookie)) {
+    ldout(cct,10) << __func__ << " queueing async " << *m << dendl;
+    // deliver this async via a finisher thread
+    finisher.queue(new C_DoWatchNotify(this, m));
+  } else {
+    // drop it on the floor
+    ldout(cct,10) << __func__ << " cookie " << m->cookie << " unknown" << dendl;
+    m->put();
   }
-  m->put();
 }
+
+void librados::RadosClient::do_watch_notify(MWatchNotify *m)
+{
+  Mutex::Locker l(lock);
+  map<uint64_t, WatchNotifyInfo *>::iterator iter =
+    watch_notify_info.find(m->cookie);
+  if (iter != watch_notify_info.end()) {
+    WatchNotifyInfo *wc = iter->second;
+    assert(wc);
+    if (wc->notify_lock) {
+      // we sent a notify and it completed (or failed)
+      ldout(cct,10) << __func__ << " completed notify " << *m << dendl;
+      wc->notify_lock->Lock();
+      *wc->notify_done = true;
+      *wc->notify_rval = m->return_code;
+      wc->notify_cond->Signal();
+      wc->notify_lock->Unlock();
+    } else {
+      // we are watcher and got a notify
+      ldout(cct,10) << __func__ << " got notify " << *m << dendl;
+      wc->get();
+
+      // trigger the callback
+      lock.Unlock();
+      wc->watch_ctx->notify(m->opcode, m->ver, m->bl);
+      lock.Lock();
+
+      // send ACK back to the OSD
+      wc->io_ctx_impl->_notify_ack(wc->oid, m->notify_id, m->ver, m->cookie);
+
+      ldout(cct,10) << __func__ << " notify done" << dendl;
+      wc->put();
+    }
+  }
+}
+
 
 int librados::RadosClient::mon_command(const vector<string>& cmd,
 				       const bufferlist &inbl,
