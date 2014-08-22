@@ -343,7 +343,7 @@ void MDS::create_logger()
   {
     PerfCountersBuilder mds_plb(g_ceph_context, "mds", l_mds_first, l_mds_last);
 
-    mds_plb.add_u64_counter(l_mds_req, "req"); // FIXME: nobody is actually setting this
+    mds_plb.add_u64_counter(l_mds_req, "req");
     mds_plb.add_u64_counter(l_mds_reply, "reply");
     mds_plb.add_time_avg(l_mds_replyl, "replyl");
     mds_plb.add_u64_counter(l_mds_fw, "fw");
