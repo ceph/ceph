@@ -1450,7 +1450,12 @@ public:
     int num_locks;
     ConnectionRef con;
 
-    OSDSession(CephContext *cct, int o) : lock("OSDSession"), osd(o), incarnation(0), con(NULL) {
+    OSDSession(CephContext *cct, int o) :
+      lock("OSDSession"),
+      osd(o),
+      incarnation(0),
+      con(NULL)
+    {
       num_locks = cct->_conf->objecter_completion_locks_per_session;
       completion_locks = new Mutex *[num_locks];
       for (int i = 0; i < num_locks; i++) {
