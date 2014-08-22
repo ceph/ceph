@@ -1,5 +1,7 @@
 [Unit]
 Description=Ceph object storage daemon
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 EnvironmentFile=-/etc/sysconfig/ceph
