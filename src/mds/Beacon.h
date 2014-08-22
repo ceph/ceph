@@ -19,9 +19,11 @@
 #include "include/types.h"
 #include "include/Context.h"
 #include "common/Mutex.h"
+#include "msg/Dispatcher.h"
 
 class MonClient;
 class MMDSBeacon;
+class Message;
 
 
 /**
@@ -33,8 +35,9 @@ class MMDSBeacon;
  * we keep copies of the data needed to generate beacon messages.  The MDS is
  * responsible for calling Beacon::notify_* when things change.
  */
-class Beacon
+class Beacon : public Dispatcher
 {
+  //CephContext *cct;
   mutable Mutex lock;
   MonClient*    monc;
   SafeTimer     timer;
@@ -71,11 +74,16 @@ class Beacon
   void _send();
 
 public:
-  Beacon(MonClient *monc_, std::string name);
+  Beacon(CephContext *cct_, MonClient *monc_, std::string name);
   ~Beacon();
 
   void init(MDSMap const *mdsmap, MDSMap::DaemonState want_state_, int standby_rank_, std::string const &standby_name_);
   void shutdown();
+
+  bool ms_dispatch(Message *m); 
+  void ms_handle_connect(Connection *c) {}
+  bool ms_handle_reset(Connection *c) {return false;}
+  void ms_handle_remote_reset(Connection *c) {}
 
   void notify_mdsmap(MDSMap const *mdsmap);
   void notify_want_state(MDSMap::DaemonState const newstate);

@@ -24,8 +24,8 @@
 #define dout_prefix *_dout << "mds.beacon." << name << ' '
 
 
-Beacon::Beacon(MonClient *monc_, std::string name_) :
-  lock("Beacon"), monc(monc_), timer(g_ceph_context, lock), name(name_)
+Beacon::Beacon(CephContext *cct_, MonClient *monc_, std::string name_) :
+  Dispatcher(cct_), lock("Beacon"), monc(monc_), timer(g_ceph_context, lock), name(name_)
 {
   last_seq = 0;
   sender = NULL;
@@ -69,6 +69,20 @@ void Beacon::shutdown()
 }
 
 
+bool Beacon::ms_dispatch(Message *m)
+{
+  if (m->get_type() == MSG_MDS_BEACON) {
+    if (m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
+      handle_mds_beacon(static_cast<MMDSBeacon*>(m));
+    }
+  }
+
+  // Let message fall through to MDS so that we get the execution of
+  // his finished_queue and waiting_for_nolaggy stuff.
+  return false;
+}
+
+
 /**
  * Update lagginess state based on response from remote MDSMonitor
  *
@@ -106,8 +120,6 @@ void Beacon::handle_mds_beacon(MMDSBeacon *m)
     dout(10) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
 	     << " seq " << m->get_seq() << " dne" << dendl;
   }
-
-  m->put();
 }
 
 
