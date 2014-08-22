@@ -83,7 +83,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   Dispatcher(m->cct),
   mds_lock("MDS::mds_lock"),
   timer(m->cct, mds_lock),
-  beacon(mc, n),
+  beacon(m->cct, mc, n),
   authorize_handler_cluster_registry(new AuthAuthorizeHandlerRegistry(m->cct,
 								      m->cct->_conf->auth_supported.length() ?
 								      m->cct->_conf->auth_supported :
@@ -567,6 +567,7 @@ int MDS::init(MDSMap::DaemonState wanted_state)
   objecter->init();
 
   messenger->add_dispatcher_tail(objecter);
+  messenger->add_dispatcher_tail(&beacon);
   messenger->add_dispatcher_tail(this);
 
   // get monmap
@@ -1849,9 +1850,12 @@ bool MDS::handle_core_message(Message *m)
     break;
   case MSG_MDS_BEACON:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
-    beacon.handle_mds_beacon(static_cast<MMDSBeacon*>(m));
+    // no-op, Beacon handles this on our behalf but we listen for the
+    // message to get the side effect of handling finished_queue and
+    // waiting_for_nolaggy at end of MDS dispatch.
+    m->put();
     break;
-    
+
     // misc
   case MSG_MON_COMMAND:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
@@ -2295,5 +2299,16 @@ void MDS::ms_handle_accept(Connection *con)
       }
     }
     s->put();
+  }
+}
+
+void MDS::set_want_state(MDSMap::DaemonState newstate)
+{
+  if (want_state != newstate) {
+    dout(10) << __func__ << " "
+      << ceph_mds_state_name(want_state) << " -> "
+      << ceph_mds_state_name(newstate) << dendl;
+    want_state = newstate;
+    beacon.notify_want_state(newstate);
   }
 }
