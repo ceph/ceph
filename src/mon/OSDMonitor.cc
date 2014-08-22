@@ -3251,6 +3251,100 @@ int OSDMonitor::check_cluster_features(uint64_t features,
   return 0;
 }
 
+int OSDMonitor::convert_crush_ruleset_to_rules()
+{
+  map<__u32 ,__u32 > rule_mapping;
+
+
+  CrushWrapper new_crush;
+  CrushWrapper pending_crush;
+  _get_pending_crush(pending_crush);
+  //copy the current crush
+  bufferlist bl;
+  pending_crush.encode(bl);
+  bufferlist::iterator p = bl.begin();
+  new_crush.decode(p);
+
+  //cleanup all the rules in new_crush
+  unsigned max_rules = new_crush.get_max_rules();
+  for (unsigned i=0; i<max_rules; i++)
+    new_crush.remove_rule(i);
+
+  //add rules to new_crush and split the ruleset
+  unsigned new_rule_id = 0;
+  max_rules = pending_crush.get_max_rules();
+  for (unsigned rule_id=0; rule_id<max_rules; rule_id++) {
+    if (!pending_crush.rule_exists(rule_id))
+      continue;
+    int rule_len = pending_crush.get_rule_len(rule_id);
+    int rule_type = pending_crush.get_rule_mask_type(rule_id);
+    int rule_min_size = pending_crush.get_rule_mask_min_size(rule_id);
+    int rule_max_size = pending_crush.get_rule_mask_max_size(rule_id);
+
+    //add rule to new_crush
+    int ret = new_crush.add_rule(rule_len, new_rule_id, rule_type, rule_min_size,
+		  rule_max_size, new_rule_id);
+    dout(10) << " added rule, id= " << new_rule_id << " ret=" << ret << dendl;
+    if (ret<0)
+      return ret;
+    assert((unsigned)ret == new_rule_id);
+    assert((unsigned)new_crush.get_rule_mask_ruleset(new_rule_id) == new_rule_id);
+
+    //copy rule name from old rule to new rule
+    string rule_name(pending_crush.get_rule_name(rule_id));
+    new_crush.set_rule_name(new_rule_id, rule_name);
+
+    //copy rule setps from old rule to new rule
+    for (int step=0; step<rule_len; step++)  {
+      new_crush.set_rule_step(new_rule_id, step,
+			      pending_crush.get_rule_op(rule_id, step),
+			      pending_crush.get_rule_arg1(rule_id, step),
+			      pending_crush.get_rule_arg2(rule_id, step));
+    }
+    rule_mapping[rule_id] = new_rule_id;
+    new_rule_id++;
+  }
+  new_crush.crush->max_rules =  new_rule_id;
+  Formatter *fp = new_formatter("json-pretty");
+  boost::scoped_ptr<Formatter> f(fp);
+  f->open_array_section("rules");
+  new_crush.dump_rules(f.get());
+  f->close_section();
+  ostringstream rs;
+  f->flush(rs);
+  rs << "\n";
+
+  dout(10) << "converted rules:\n" << rs.str() << dendl;
+  dout(10) << " testing map" << dendl;
+  stringstream ess;
+  CrushTester tester(new_crush, ess);
+  tester.test();
+  dout(10) << " result " << ess.str() << dendl;
+
+  pending_inc.crush.clear();
+  new_crush.encode(pending_inc.crush);
+
+  for (map<int64_t,pg_pool_t>::const_iterator p = osdmap.get_pools().begin();
+       p != osdmap.get_pools().end(); ++p) {
+    int64_t pool_id = p->first;
+    pg_pool_t pool = *osdmap.get_pg_pool(pool_id);
+    int old_rule_id = pending_crush.find_rule(pool.get_crush_ruleset(),
+			pool.get_type(),pool.get_size());
+    assert(old_rule_id >= 0);//can a rule be removed when using?
+
+    map<__u32 ,__u32 >::const_iterator it = rule_mapping.find(old_rule_id);
+    assert(it != rule_mapping.end());
+    __u8 new_ruleset = it->second;
+    //currently the ruleset is u8 but rule is u32, make sure it's not over flow
+    assert(new_ruleset == it->second);
+
+    pool.crush_ruleset = new_ruleset;
+    pool.last_change = pending_inc.epoch;
+    pending_inc.new_pools[pool_id] = pool;
+  }
+  return 0;
+}
+
 bool OSDMonitor::validate_crush_against_features(const CrushWrapper *newcrush,
                                                  stringstream& ss)
 {
@@ -4373,6 +4467,16 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
 					      get_last_committed() + 1));
     return true;
 
+  } else if (prefix == "osd crush ruleset convert to rules") {
+    int ret = convert_crush_ruleset_to_rules();
+    if (ret<0) {
+      err = ret;
+      goto reply;
+    }
+    getline(ss, rs);
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+	       get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd crush rule create-simple") {
     string name, root, type, mode;
     cmd_getval(g_ceph_context, cmdmap, "name", name);

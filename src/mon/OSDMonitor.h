@@ -196,6 +196,7 @@ private:
   bool validate_crush_against_features(const CrushWrapper *newcrush,
                                       stringstream &ss);
 
+  int convert_crush_ruleset_to_rules();
   void share_map_with_random_osd();
 
   void update_logger();

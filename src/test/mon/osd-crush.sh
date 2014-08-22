@@ -147,6 +147,53 @@ function TEST_crush_rule_create_erasure_profile_default_exists() {
     ./ceph osd erasure-code-profile ls | grep default || return 1
 }
 
+function Check_ruleset_id_match_rule_id() {
+    local rule_name=$1
+    rule_id=`./ceph osd crush rule dump $rule_name | grep "\"rule_id\":" | awk -F ":|," '{print int($2)}'`
+    ruleset_id=`./ceph osd crush rule dump $rule_name | grep "\"ruleset\":"| awk -F ":|," '{print int($2)}'`
+    test $ruleset_id = $rule_id || return 1
+}
+
+function TEST_crush_ruleset_convert_to_rules() {
+    local dir=$1
+    local root=host1
+    echo $dir
+
+    ./ceph osd crush add-bucket $root host
+    ./ceph osd crush rule create-simple test_rule1 $root osd firstn || return 1
+    ./ceph osd crush rule create-simple test_rule2 $root osd firstn || return 1
+    ./ceph osd getcrushmap -o $dir/original_map
+    ./crushtool -d $dir/original_map -o $dir/decoded_original_map
+    #manipulate the rulesets , to make the rule_id != ruleset_id
+    sed -i 's/ruleset 0/ruleset 3/' $dir/decoded_original_map
+    sed -i 's/ruleset 2/ruleset 0/' $dir/decoded_original_map
+    sed -i 's/ruleset 1/ruleset 2/' $dir/decoded_original_map
+
+    ./crushtool -c $dir/decoded_original_map -o $dir/new_map
+    ./ceph osd setcrushmap -i $dir/new_map
+
+    ./ceph osd crush rule dump
+
+    ! Check_ruleset_id_match_rule_id test_rule2 || return 1
+
+    #add a replicated pool using special_rule_simple
+    ./ceph osd pool create replicated_pool 12 12 replicated || return 1
+    local ruleset_id=`./ceph osd crush rule dump test_rule2 | grep "\"ruleset\":"| awk -F ":|," '{print int($2)}'`
+    ./ceph osd pool set replicated_pool crush_ruleset $ruleset_id || return 1
+    ./ceph osd pool get replicated_pool crush_ruleset  2>&1 | grep "crush_ruleset: $ruleset_id" || return 1
+
+    ./ceph osd crush ruleset convert to rules || return 1
+
+    ./ceph osd crush rule dump
+    #show the rule_id and ruleset_id are the same for rules
+    Check_ruleset_id_match_rule_id test_rule1 || return 1
+    Check_ruleset_id_match_rule_id test_rule2 || return 1
+
+    #chech the replicated_pool's ruleset has changed accordingly
+    ruleset_id=`./ceph osd crush rule dump test_rule2 | grep "\"ruleset\":"| awk -F ":|," '{print int($2)}'`
+    ./ceph osd pool get replicated_pool crush_ruleset  2>&1 | grep "crush_ruleset: $ruleset_id" || return 1
+}
+
 main osd-crush
 
 # Local Variables:

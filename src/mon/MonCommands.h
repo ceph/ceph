@@ -382,6 +382,9 @@ COMMAND("osd lspools " \
 	"list pools", "osd", "r", "cli,rest")
 COMMAND("osd blacklist ls", "show blacklisted clients", "osd", "r", "cli,rest")
 COMMAND("osd crush rule list", "list crush rules", "osd", "r", "cli,rest")
+
+COMMAND("osd crush ruleset convert to rules", "make ruleset and rule 1:1 mapping", "osd", "rw", "cli,rest")
+
 COMMAND("osd crush rule ls", "list crush rules", "osd", "r", "cli,rest")
 COMMAND("osd crush rule dump " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.],req=false", \
