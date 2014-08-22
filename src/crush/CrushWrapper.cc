@@ -805,12 +805,14 @@ int CrushWrapper::add_simple_ruleset(string name, string root_name,
     return -EINVAL;
   }
 
-  int ruleset = 0;
-  for (int i = 0; i < get_max_rules(); i++) {
-    if (rule_exists(i) &&
-	get_rule_mask_ruleset(i) >= ruleset) {
-      ruleset = get_rule_mask_ruleset(i) + 1;
-    }
+  int ruleset;
+  for (ruleset = 0; ruleset < CRUSH_MAX_RULESET; ruleset++) {
+      if (!ruleset_exists(ruleset))
+	break;
+  }
+  if (ruleset == CRUSH_MAX_RULESET) {
+    *err << "too many rulesets (max  " << CRUSH_MAX_RULESET << ")";
+    return -ENOSPC;
   }
 
   int steps = 3;
