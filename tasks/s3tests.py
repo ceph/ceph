@@ -262,7 +262,34 @@ def configure(ctx, config):
             path='{tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
             data=conf_fp.getvalue(),
             )
-    yield
+
+    log.info('Configuring boto...')
+    boto_src = os.path.join(os.path.dirname(__file__), 'boto.cfg.template')
+    for client, properties in config['clients'].iteritems():
+        with file(boto_src, 'rb') as f:
+            (remote,) = ctx.cluster.only(client).remotes.keys()
+            conf = f.read().format(
+                idle_timeout=config.get('idle_timeout', 30)
+                )
+            teuthology.write_file(
+                remote=remote,
+                path='{tdir}/boto.cfg'.format(tdir=testdir),
+                data=conf,
+                )
+
+    try:
+        yield
+
+    finally:
+        log.info('Cleaning up boto...')
+        for client, properties in config['clients'].iteritems():
+            (remote,) = ctx.cluster.only(client).remotes.keys()
+            remote.run(
+                args=[
+                    'rm',
+                    '{tdir}/boto.cfg'.format(tdir=testdir),
+                    ],
+                )
 
 @contextlib.contextmanager
 def sync_users(ctx, config):
@@ -291,13 +318,14 @@ def run_tests(ctx, config):
     testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.iteritems():
         args = [
-                'S3TEST_CONF={tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
-                '{tdir}/s3-tests/virtualenv/bin/nosetests'.format(tdir=testdir),
-                '-w',
-                '{tdir}/s3-tests'.format(tdir=testdir),
-                '-v',
-                '-a', '!fails_on_rgw',
-                ]
+            'S3TEST_CONF={tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
+            'BOTO_CONFIG={tdir}/boto.cfg'.format(tdir=testdir),
+            '{tdir}/s3-tests/virtualenv/bin/nosetests'.format(tdir=testdir),
+            '-w',
+            '{tdir}/s3-tests'.format(tdir=testdir),
+            '-v',
+            '-a', '!fails_on_rgw',
+            ]
         if client_config is not None and 'extra_args' in client_config:
             args.extend(client_config['extra_args'])
 
@@ -325,7 +353,7 @@ def task(ctx, config):
         - rgw: [client.0]
         - s3tests: [client.0]
 
-    To run against a server on client.1::
+    To run against a server on client.1 and increase the boto timeout to 10m::
 
         tasks:
         - ceph:
@@ -333,6 +361,7 @@ def task(ctx, config):
         - s3tests:
             client.0:
               rgw_server: client.1
+              idle_timeout: 600
 
     To pass extra arguments to nose (e.g. to run a certain test)::
 
