@@ -544,6 +544,7 @@ void FileJournal::close()
 
   // close
   assert(writeq_empty());
+  assert(!must_write_header);
   assert(fd >= 0);
   VOID_TEMP_FAILURE_RETRY(::close(fd));
   fd = -1;
@@ -1102,7 +1103,7 @@ void FileJournal::write_thread_entry()
   while (1) {
     {
       Mutex::Locker locker(writeq_lock);
-      if (writeq.empty()) {
+      if (writeq.empty() && !must_write_header) {
 	if (write_stop)
 	  break;
 	dout(20) << "write_thread_entry going to sleep" << dendl;
@@ -1113,7 +1114,9 @@ void FileJournal::write_thread_entry()
     }
     
 #ifdef HAVE_LIBAIO
-    if (aio) {
+    //We hope write_finish_thread_entry return until the last aios complete
+    //when set write_stop. But it can't. So don't use aio mode when shutdown.
+    if (aio && !write_stop) {
       Mutex::Locker locker(aio_lock);
       // should we back off to limit aios in flight?  try to do this
       // adaptively so that we submit larger aios once we have lots of
@@ -1164,7 +1167,7 @@ void FileJournal::write_thread_entry()
     }
 
 #ifdef HAVE_LIBAIO
-    if (aio)
+    if (aio && !write_stop)
       do_aio_write(bl);
     else
       do_write(bl);
@@ -1376,7 +1379,7 @@ void FileJournal::check_aio_completion()
   assert(aio_lock.is_locked());
   dout(20) << "check_aio_completion" << dendl;
 
-  bool completed_something = false;
+  bool completed_something = false, signal = false;
   uint64_t new_journaled_seq = 0;
 
   list<aio_info>::iterator p = aio_queue.begin();
@@ -1390,6 +1393,7 @@ void FileJournal::check_aio_completion()
     aio_num--;
     aio_bytes -= p->len;
     aio_queue.erase(p++);
+    signal = true;
   }
 
   if (completed_something) {
@@ -1409,7 +1413,8 @@ void FileJournal::check_aio_completion()
 	queue_completions_thru(journaled_seq);
       }
     }
-
+  }
+  if (signal) {
     // maybe write queue was waiting for aio count to drop?
     aio_cond.Signal();
   }
