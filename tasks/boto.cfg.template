@@ -1,0 +1,2 @@
+[Boto]
+http_socket_timeout = {idle_timeout}
