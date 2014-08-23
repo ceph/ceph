@@ -53,6 +53,7 @@ ErasureCodePluginRegistry::~ErasureCodePluginRegistry()
 
 int ErasureCodePluginRegistry::remove(const std::string &name)
 {
+  assert(lock.is_locked());
   if (plugins.find(name) == plugins.end())
     return -ENOENT;
   std::map<std::string,ErasureCodePlugin*>::iterator plugin = plugins.find(name);
@@ -66,6 +67,7 @@ int ErasureCodePluginRegistry::remove(const std::string &name)
 int ErasureCodePluginRegistry::add(const std::string &name,
                                    ErasureCodePlugin* plugin)
 {
+  assert(lock.is_locked());
   if (plugins.find(name) != plugins.end())
     return -EEXIST;
   plugins[name] = plugin;
@@ -74,6 +76,7 @@ int ErasureCodePluginRegistry::add(const std::string &name,
 
 ErasureCodePlugin *ErasureCodePluginRegistry::get(const std::string &name)
 {
+  assert(lock.is_locked());
   if (plugins.find(name) != plugins.end())
     return plugins[name];
   else
@@ -112,6 +115,7 @@ int ErasureCodePluginRegistry::load(const std::string &plugin_name,
 				    ErasureCodePlugin **plugin,
 				    ostream &ss)
 {
+  assert(lock.is_locked());
   std::string fname = directory + "/" PLUGIN_PREFIX
     + plugin_name + PLUGIN_SUFFIX;
   void *library = dlopen(fname.c_str(), RTLD_NOW);
@@ -170,6 +174,7 @@ int ErasureCodePluginRegistry::preload(const std::string &plugins,
 				       const std::string &directory,
 				       ostream &ss)
 {
+  Mutex::Locker l(lock);
   list<string> plugins_list;
   get_str_list(plugins, plugins_list);
   for (list<string>::iterator i = plugins_list.begin();
