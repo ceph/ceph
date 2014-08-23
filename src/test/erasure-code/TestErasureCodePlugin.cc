@@ -96,10 +96,13 @@ TEST_F(ErasureCodePluginRegistryTest, all)
   EXPECT_EQ(0, instance.factory("example", parameters, &erasure_code, ss));
   EXPECT_TRUE(erasure_code);
   ErasureCodePlugin *plugin = 0;
-  EXPECT_EQ(-EEXIST, instance.load("example", directory, &plugin, ss));
-  EXPECT_EQ(-ENOENT, instance.remove("does not exist"));
-  EXPECT_EQ(0, instance.remove("example"));
-  EXPECT_EQ(0, instance.load("example", directory, &plugin, ss));
+  {
+    Mutex::Locker l(instance.lock);
+    EXPECT_EQ(-EEXIST, instance.load("example", directory, &plugin, ss));
+    EXPECT_EQ(-ENOENT, instance.remove("does not exist"));
+    EXPECT_EQ(0, instance.remove("example"));
+    EXPECT_EQ(0, instance.load("example", directory, &plugin, ss));
+  }
 }
 
 int main(int argc, char **argv) {
