@@ -1072,9 +1072,6 @@ void Objecter::C_Linger_Map_Latest::finish(int r)
 
   LingerOp *op = iter->second;
   objecter->check_latest_map_lingers.erase(iter);
-  assert(op->get_nref() > 1);  // something other than check_latest_map_lingers should
-                               // have a ref to this guy too
-  op->put();
 
   if (op->map_dne_bound == 0)
     op->map_dne_bound = latest;
@@ -1085,6 +1082,8 @@ void Objecter::C_Linger_Map_Latest::finish(int r)
   if (unregister) {
     objecter->_unregister_linger(op->linger_id);
   }
+
+  op->put();
 }
 
 void Objecter::_check_linger_pool_dne(LingerOp *op, bool *need_unregister)
@@ -1155,12 +1154,13 @@ void Objecter::C_Command_Map_Latest::finish(int r)
 
   CommandOp *c = iter->second;
   objecter->check_latest_map_commands.erase(iter);
-  c->put();
 
   if (c->map_dne_bound == 0)
     c->map_dne_bound = latest;
 
   objecter->_check_command_map_dne(c);
+
+  c->put();
 }
 
 void Objecter::_check_command_map_dne(CommandOp *c)
