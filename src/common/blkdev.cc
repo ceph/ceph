@@ -10,7 +10,7 @@ int get_block_device_size(int fd, int64_t *psize)
 {
 #ifdef BLKGETSIZE64
   int ret = ::ioctl(fd, BLKGETSIZE64, psize);
-#elif BLKGETSIZE
+#elif defined(BLKGETSIZE)
   unsigned long sectors = 0;
   int ret = ::ioctl(fd, BLKGETSIZE, &sectors);
   *psize = sectors * 512ULL;
