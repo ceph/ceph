@@ -1038,6 +1038,17 @@ def wait_for_mon_quorum(ctx, config):
         time.sleep(1)
 
 
+def created_pool(ctx, config):
+    """
+    Add new pools to the dictionary of pools that the ceph-manager
+    knows about.
+    """
+    for new_pool in config:
+        if new_pool not in ctx.manager.pools:
+            ctx.manager.pools[new_pool] = ctx.manager.get_pool_property(
+                                          new_pool, 'pg_num')
+ 
+
 @contextlib.contextmanager
 def restart(ctx, config):
     """
