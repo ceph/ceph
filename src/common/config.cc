@@ -1100,6 +1100,39 @@ bool md_config_t::expand_meta(std::string &origval,
   return found_meta;
 }
 
+void md_config_t::diff(
+    const md_config_t *other,
+    map<string,pair<string,string> > *diff,
+    set<string> *unknown)
+{
+  Mutex::Locker l(lock);
+
+  char local_buf[4096];
+  char other_buf[4096];
+  for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
+    config_option *opt = &config_optionsp[i];
+    memset(local_buf, 0, sizeof(local_buf));
+    memset(other_buf, 0, sizeof(other_buf));
+
+    char *other_val = other_buf;
+    int err = other->get_val(opt->name, &other_val, sizeof(other_buf));
+    if (err < 0) {
+      if (err == -ENOENT) {
+        unknown->insert(opt->name);
+      }
+      continue;
+    }
+
+    char *local_val = local_buf;
+    err = _get_val(opt->name, &local_val, sizeof(local_buf));
+    if (err != 0)
+      continue;
+
+    if (strcmp(local_val, other_val))
+      diff->insert(make_pair(opt->name, make_pair(local_val, other_val)));
+  }
+}
+
 md_config_obs_t::
 ~md_config_obs_t()
 {
