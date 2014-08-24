@@ -4,6 +4,7 @@
  * Ceph distributed storage system
  *
  * Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -83,16 +84,12 @@ int ErasureCode::encode(const set<int> &want_to_encode,
   if (err)
     return err;
   unsigned blocksize = get_chunk_size(in.length());
-  map<int, bufferlist> sorted_encoded;
   for (unsigned int i = 0; i < k + m; i++) {
-    bufferlist &chunk = sorted_encoded[i];
+    int chunk_index = chunk_mapping.size() > 0 ? chunk_mapping[i] : i;
+    bufferlist &chunk = (*encoded)[chunk_index];
     chunk.substr_of(out, i * blocksize, blocksize);
   }
-  encode_chunks(want_to_encode, &sorted_encoded);
-  for (unsigned int i = 0; i < k + m; i++) {
-    int chunk = chunk_mapping.size() > 0 ? chunk_mapping[i] : i;
-    (*encoded)[chunk].claim(sorted_encoded[i]);
-  }
+  encode_chunks(want_to_encode, encoded);
   for (unsigned int i = 0; i < k + m; i++) {
     if (want_to_encode.count(i) == 0)
       encoded->erase(i);
