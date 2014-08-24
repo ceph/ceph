@@ -3192,22 +3192,31 @@ int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_pr
 		      erasure_code_profile_map);
   if (r)
     return r;
-  (*erasure_code_profile_map)["directory"] =
-    g_conf->osd_pool_default_erasure_code_directory;
-
+  assert((*erasure_code_profile_map).count("plugin"));
+  string default_plugin = (*erasure_code_profile_map)["plugin"];
+  map<string,string> user_map;
   for (vector<string>::const_iterator i = erasure_code_profile.begin();
        i != erasure_code_profile.end();
        ++i) {
     size_t equal = i->find('=');
-    if (equal == string::npos)
+    if (equal == string::npos) {
+      user_map[*i] = string();
       (*erasure_code_profile_map)[*i] = string();
-    else {
+    } else {
       const string key = i->substr(0, equal);
       equal++;
       const string value = i->substr(equal);
+      user_map[key] = value;
       (*erasure_code_profile_map)[key] = value;
     }
   }
+
+  if (user_map.count("plugin") && user_map["plugin"] != default_plugin)
+    (*erasure_code_profile_map) = user_map;
+
+  if ((*erasure_code_profile_map).count("directory") == 0)
+    (*erasure_code_profile_map)["directory"] =
+      g_conf->osd_pool_default_erasure_code_directory;
 
   return 0;
 }
