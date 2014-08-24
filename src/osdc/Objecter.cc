@@ -842,11 +842,12 @@ void Objecter::handle_osd_map(MOSDMap *m)
       int r = _map_session(&op->target, &s, lc);
       assert(r == 0);
       mapped_session = true;
+    } else {
+      get_session(s);
     }
     s->lock.get_write();
     if (mapped_session) {
       _session_op_assign(s, op);
-      put_session(s);
     }
     if (op->should_resend) {
       if (!op->session->is_homeless() && !op->target.paused) {
@@ -857,6 +858,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
       _cancel_linger_op(op);
     }
     s->lock.unlock();
+    put_session(s);
   }
   for (list<LingerOp*>::iterator p = need_resend_linger.begin();
        p != need_resend_linger.end(); ++p) {
