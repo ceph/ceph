@@ -1244,7 +1244,6 @@ public:
     context->state_lock.Lock();
     uint64_t snap = context->snaps[to_remove];
     context->remove_snap(to_remove);
-    context->state_lock.Unlock();
 
     if (context->pool_snaps) {
       string snapname;
@@ -1268,6 +1267,7 @@ public:
 	assert(0);
       }
     }
+    context->state_lock.Unlock();
   }
 
   string getType()
