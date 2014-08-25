@@ -38,6 +38,10 @@ Ceph interprets the command like this::
 Alternatively, you may use the ``CEPH_ARGS`` environment variable to avoid 
 re-entry of the user name and secret.
 
+For details on configuring the Ceph Storage Cluster to use authentication, 
+see `Cephx Config Reference`_. For details on the architecture of Cephx, see
+`Architecture - High Availability Authentication`_.
+
 
 Background
 ==========
@@ -194,16 +198,20 @@ namespace such that reads and writes by the user take place only within the
 namespace. Objects written to a namespace within the pool can only be accessed
 by users who have access to the namespace.
 
-The rationale for namespaces is that pools can be computationally expensive. For
-example, a pool should have ~100 placement groups per OSD. So an exemplary
-cluster with 1000 OSDs would have 100,000 placement groups for one pool. Each
-pool would create another 100,000 placement groups in the exemplary cluster. By
-contrast, writing an object to a namespace simply associates the namespace
-to the object name with out the computational overhead of a separate pool.
+.. note:: Currently (i.e., ``firefly``), namespaces are only useful for 
+   applications written on top of ``librados``. Ceph clients such as block 
+   device, object storage and file system do not currently support this 
+   feature.
 
-.. note:: Currently, namespaces are only useful for applications written on top 
-   of ``librados``. Ceph clients such as block device, object storage and file
-   system do not currently support this feature.
+The rationale for namespaces is that pools can be a computationally expensive
+method of segregating data sets for the purposes of authorizing separate sets
+of users. For example, a pool should have ~100 placement groups per OSD. So an 
+exemplary cluster with 1000 OSDs would have 100,000 placement groups for one 
+pool. Each pool would create another 100,000 placement groups in the exemplary 
+cluster. By contrast, writing an object to a namespace simply associates the 
+namespace to the object name with out the computational overhead of a separate 
+pool. Rather than creating a separate pool for a user or set of users, you may
+use a namespace. **Note:** Only available using ``librados`` at this time.
 
 
 Managing Users
@@ -344,7 +352,7 @@ For example::
 
 	ceph auth caps client.john mon 'allow r' osd 'allow rw pool=liverpool'
 	ceph auth caps client.paul mon 'allow rw' osd 'allow rwx pool=liverpool'
-	ceph auth caps client.brian-epstein mon 'allow *' osd 'allow *'
+	ceph auth caps client.brian-manager mon 'allow *' osd 'allow *'
 
 To remove a capability, you may reset the capability. If you want the user
 to have no access to a particular daemon that was previously set, specify 
@@ -403,10 +411,10 @@ For example::
 Keyring Management
 ==================
 
-When you access Ceph via a Ceph client, Ceph will look for a local keyring. Ceph
-populates the ``keyring`` setting with the following four keyring names by
-default so you don't have to set them in your Ceph configuration file unless
-you want to override the defaults (not recommended): 
+When you access Ceph via a Ceph client, the Ceph client will look for a local 
+keyring. Ceph presets the ``keyring`` setting with the following four keyring 
+names by default so you don't have to set them in your Ceph configuration file 
+unless you want to override the defaults (not recommended): 
 
 - ``/etc/ceph/$cluster.$name.keyring``
 - ``/etc/ceph/$cluster.keyring``
@@ -415,8 +423,11 @@ you want to override the defaults (not recommended):
 
 The ``$cluster`` metavariable is your Ceph cluster name as defined by the
 name of the Ceph configuration file (i.e., ``ceph.conf`` means the cluster name
-is ``ceph``). The ``$name`` metavariable is the user type and user ID (e.g.,
-``client.admin``).
+is ``ceph``; thus, ``ceph.keyring``). The ``$name`` metavariable is the user 
+type and user ID (e.g., ``client.admin``; thus, ``ceph.client.admin.keyring``).
+
+.. note:: When executing commands that read or write to ``/etc/ceph``, you may
+   need to use ``sudo`` to execute the command as ``root``.
 
 After you create a user (e.g., ``client.ringo``), you must get the key and add
 it to a keyring on a Ceph client so that the user can access the Ceph Storage
@@ -433,9 +444,8 @@ Create a Keyring
 When you use the procedures in the `Managing Users`_ section to create users, 
 you need to provide user keys to the Ceph client(s) so that the Ceph client 
 can retrieve the key for the specified user and authenticate with the Ceph 
-Storage Cluster.
-
-Ceph Clients access keyrings to lookup a user name and retrieve the user's key.
+Storage Cluster. Ceph Clients access keyrings to lookup a user name and 
+retrieve the user's key.
 
 The ``ceph-authtool`` utility allows you to create a keyring. To create an 
 empty keyring, use ``--create-keyring`` or ``-C``. For example:: 
@@ -474,7 +484,7 @@ When you only want to use one user per keyring, the `Get a User`_ procedure with
 the ``-o`` option will save the output in the keyring file format. For example, 
 to create a keyring for the ``client.admin`` user, execute the following:: 
 
-	ceph auth get client.admin -o ceph.client.admin.keyring
+	sudo ceph auth get client.admin -o /etc/ceph/ceph.client.admin.keyring
 	
 Notice that we use the recommended file format for an individual user.
 
@@ -482,7 +492,7 @@ When you want to import users to a keyring, you can use ``ceph-authtool``
 to specify the destination keyring and the source keyring.
 For example:: 
 
-	ceph-authtool /etc/ceph/ceph.keyring --import-keyring /etc/ceph/ceph.client.admin.keyring
+	sudo ceph-authtool /etc/ceph/ceph.keyring --import-keyring /etc/ceph/ceph.client.admin.keyring
 
 
 Create a User
@@ -502,9 +512,9 @@ For example::
 
 	sudo ceph-authtool -C /etc/ceph/ceph.keyring -n client.ringo --cap osd 'allow rwx' --cap mon 'allow rwx' --gen-key
 
-In this scenario, the new user ``client.ringo`` is only in the keyring. To
-add the new user to the Ceph Storage Cluster, you must still add the
-new user to the Ceph Storage Cluster. ::
+In the foregoing scenarios, the new user ``client.ringo`` is only in the 
+keyring. To add the new user to the Ceph Storage Cluster, you must still add
+the new user to the Ceph Storage Cluster. ::
 
 	sudo ceph auth add client.ringo -i /etc/ceph/ceph.keyring
 
@@ -512,18 +522,22 @@ new user to the Ceph Storage Cluster. ::
 Modify a User
 -------------
 
-To modify the capabilities of a user record in a keyring,  specify the keyring,
+To modify the capabilities of a user record in a keyring, specify the keyring,
 and the user followed by the capabilities. For example::
 
 	sudo ceph-authtool /etc/ceph/ceph.keyring -n client.ringo --cap osd 'allow rwx' --cap mon 'allow rwx'
-
 
 To update the user to the Ceph Storage Cluster, you must update the user
 in the keyring to the user entry in the the Ceph Storage Cluster. ::
 
 	sudo ceph auth import -i /etc/ceph/ceph.keyring
 
-See `Import a User(s)`_ for details.
+See `Import a User(s)`_ for details on updating a Ceph Storage Cluster user
+from a keyring.
+
+You may also `Modify User Capabilities`_ directly in the cluster, store the
+results to a keyring file; then, import the keyring into your main
+``ceph.keyring`` file.
 
 
 Command Line Usage
@@ -570,3 +584,49 @@ Ceph supports the following usage for user name and secret:
 
 
 .. _pools: ../pools
+
+
+Limitations
+===========
+
+The ``cephx`` protocol authenticates Ceph clients and servers to each other.  It
+is not intended to handle authentication of human users or application programs
+run on their behalf.  If that effect is required to handle your access control
+needs, you must have another mechanism, which is likely to be specific to the
+front end used to access the Ceph object store.  This other mechanism has the
+role of ensuring that only acceptable users and programs are able to run on the
+machine that Ceph will permit to access its object store. 
+
+The keys used to authenticate Ceph clients and servers are typically stored in
+a plain text file with appropriate permissions in a trusted host.
+
+.. important:: Storing keys in plaintext files has security shortcomings, but 
+   they are difficult to avoid, given the basic authentication methods Ceph 
+   uses in the background. Those setting up Ceph systems should be aware of 
+   these shortcomings.  
+
+In particular, arbitrary user machines, especially portable machines, should not
+be configured to interact directly with Ceph, since that mode of use would
+require the storage of a plaintext authentication key on an insecure machine.
+Anyone  who stole that machine or obtained surreptitious access to it could
+obtain the key that will allow them to authenticate their own machines to Ceph.
+
+Rather than permitting potentially insecure machines to access a Ceph object
+store directly,  users should be required to sign in to a trusted machine in
+your environment using a method  that provides sufficient security for your
+purposes.  That trusted machine will store the plaintext Ceph keys for the
+human users.  A future version of Ceph may address these particular
+authentication issues more fully.
+
+At the moment, none of the Ceph authentication protocols provide secrecy for
+messages in transit. Thus, an eavesdropper on the wire can hear and understand
+all data sent between clients and servers in Ceph, even if he cannot create or
+alter them. Further, Ceph does not include options to encrypt user data in the
+object store. Users can hand-encrypt and store their own data in the Ceph
+object store, of course, but Ceph provides no features to perform object
+encryption itself. Those storing sensitive data in Ceph should consider
+encrypting their data before providing it  to the Ceph system.
+
+
+.. _Architecture - High Availability Authentication: ../../../architecture#high-availability-authentication
+.. _Cephx Config Reference: ../../configuration/auth-config-ref
