@@ -11,6 +11,7 @@ import getpass
 from . import beanstalk
 from . import report
 from .config import config
+from . import misc
 
 log = logging.getLogger(__name__)
 
@@ -205,7 +206,7 @@ def nuke_targets(targets_dict, owner):
 
     to_nuke = []
     for target in targets:
-        to_nuke.append(target.split('@')[1].split('.')[0])
+        to_nuke.append(misc.decanonicalize_hostname(target))
 
     target_file = tempfile.NamedTemporaryFile(delete=False)
     target_file.write(yaml.safe_dump(targets_dict))

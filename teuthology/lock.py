@@ -75,6 +75,7 @@ def main(ctx):
         if machines:
             statuses = []
             for machine in machines:
+                machine = misc.canonicalize_hostname(machine)
                 status = get_status(machine)
                 if status:
                     statuses.append(status)
