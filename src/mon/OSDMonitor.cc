@@ -403,7 +403,7 @@ void OSDMonitor::on_active()
   }
 
   if (mon->is_leader())
-    mon->clog.info() << "osdmap " << osdmap << "\n"; 
+    mon->clog->info() << "osdmap " << osdmap << "\n"; 
 
   if (!mon->is_leader()) {
     list<MOSDFailure*> ls;
@@ -982,7 +982,7 @@ bool OSDMonitor::prepare_mark_me_down(MOSDMarkMeDown *m)
   assert(osdmap.is_up(target_osd));
   assert(osdmap.get_addr(target_osd) == m->get_target().addr);
 
-  mon->clog.info() << "osd." << target_osd << " marked itself down\n";
+  mon->clog->info() << "osd." << target_osd << " marked itself down\n";
   pending_inc.new_state[target_osd] = CEPH_OSD_UP;
   if (m->request_ack)
     wait_for_finished_proposal(new C_AckMarkedDown(this, m));
@@ -1128,7 +1128,7 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
     dout(1) << " we have enough reports/reporters to mark osd." << target_osd << " down" << dendl;
     pending_inc.new_state[target_osd] = CEPH_OSD_UP;
 
-    mon->clog.info() << osdmap.get_inst(target_osd) << " failed ("
+    mon->clog->info() << osdmap.get_inst(target_osd) << " failed ("
 		     << fi.num_reports << " reports from " << (int)fi.reporters.size() << " peers after "
 		     << failed_for << " >= grace " << grace << ")\n";
     return true;
@@ -1152,7 +1152,7 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
   
   if (m->if_osd_failed()) {
     // add a report
-    mon->clog.debug() << m->get_target() << " reported failed by "
+    mon->clog->debug() << m->get_target() << " reported failed by "
 		      << m->get_orig_source_inst() << "\n";
     failure_info_t& fi = failure_info[target_osd];
     MOSDFailure *old = fi.add_report(reporter, failed_since, m);
@@ -1164,7 +1164,7 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
     return check_failure(now, target_osd, fi);
   } else {
     // remove the report
-    mon->clog.debug() << m->get_target() << " failure report canceled by "
+    mon->clog->debug() << m->get_target() << " failure report canceled by "
 		      << m->get_orig_source_inst() << "\n";
     if (failure_info.count(target_osd)) {
       failure_info_t& fi = failure_info[target_osd];
@@ -1446,7 +1446,7 @@ void OSDMonitor::_booted(MOSDBoot *m, bool logit)
 	  << " w " << m->sb.weight << " from " << m->sb.current_epoch << dendl;
 
   if (logit) {
-    mon->clog.info() << m->get_orig_source_inst() << " boot\n";
+    mon->clog->info() << m->get_orig_source_inst() << " boot\n";
   }
 
   send_latest(m, m->sb.current_epoch+1);
@@ -1497,7 +1497,7 @@ bool OSDMonitor::prepare_alive(MOSDAlive *m)
   int from = m->get_orig_source().num();
 
   if (0) {  // we probably don't care much about these
-    mon->clog.debug() << m->get_orig_source_inst() << " alive\n";
+    mon->clog->debug() << m->get_orig_source_inst() << " alive\n";
   }
 
   dout(7) << "prepare_alive want up_thru " << m->want << " have " << m->version
@@ -1969,7 +1969,7 @@ void OSDMonitor::tick()
 
 	  do_propose = true;
 	
-	  mon->clog.info() << "osd." << o << " out (down for " << down << ")\n";
+	  mon->clog->info() << "osd." << o << " out (down for " << down << ")\n";
 	} else
 	  continue;
       }
@@ -2058,7 +2058,7 @@ void OSDMonitor::handle_osd_timeouts(const utime_t &now,
     } else if (can_mark_down(i)) {
       utime_t diff = now - t->second;
       if (diff > timeo) {
-	mon->clog.info() << "osd." << i << " marked down after no pg stats for " << diff << "seconds\n";
+	mon->clog->info() << "osd." << i << " marked down after no pg stats for " << diff << "seconds\n";
 	derr << "no osd or pg stats from osd." << i << " since " << t->second << ", " << diff
 	     << " seconds ago.  marking down" << dendl;
 	pending_inc.new_state[i] = CEPH_OSD_UP;
@@ -3015,7 +3015,7 @@ bool OSDMonitor::update_pools_status()
       if (pool_is_full)
         continue;
 
-      mon->clog.info() << "pool '" << pool_name
+      mon->clog->info() << "pool '" << pool_name
                        << "' no longer full; removing FULL flag";
 
       update_pool_flags(it->first, pool.get_flags() & ~pg_pool_t::FLAG_FULL);
@@ -3026,12 +3026,12 @@ bool OSDMonitor::update_pools_status()
 
       if (pool.quota_max_bytes > 0 &&
           (uint64_t)sum.num_bytes >= pool.quota_max_bytes) {
-        mon->clog.warn() << "pool '" << pool_name << "' is full"
+        mon->clog->warn() << "pool '" << pool_name << "' is full"
                          << " (reached quota's max_bytes: "
                          << si_t(pool.quota_max_bytes) << ")";
       } else if (pool.quota_max_objects > 0 &&
 		 (uint64_t)sum.num_objects >= pool.quota_max_objects) {
-        mon->clog.warn() << "pool '" << pool_name << "' is full"
+        mon->clog->warn() << "pool '" << pool_name << "' is full"
                          << " (reached quota's max_objects: "
                          << pool.quota_max_objects << ")";
       } else {
