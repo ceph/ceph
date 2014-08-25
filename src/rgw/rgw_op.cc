@@ -1118,6 +1118,14 @@ int RGWGetBucketLogging::verify_permission()
   return 0;
 }
 
+int RGWGetBucketLocation::verify_permission()
+{
+  if (s->user.user_id.compare(s->bucket_owner.get_id()) != 0)
+    return -EACCES;
+
+  return 0;
+}
+
 int RGWCreateBucket::verify_permission()
 {
   if (!rgw_user_is_authenticated(s->user))
