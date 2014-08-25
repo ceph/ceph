@@ -386,13 +386,6 @@ public:
   void learned_addr(const entity_addr_t& peer_addr_for_me);
 
   /**
-   * Tell the SimpleMessenger its address is no longer known
-   *
-   * This happens when we rebind to a new port.
-   */
-  void unlearn_addr();
-
-  /**
    * Release memory accounting back to the dispatch throttler.
    *
    * @param msize The amount of memory to release.

@@ -152,9 +152,6 @@ int Accepter::rebind(const set<int>& avoid_ports)
 {
   ldout(msgr->cct,1) << "accepter.rebind avoid " << avoid_ports << dendl;
   
-  // invalidate our previously learned address.
-  msgr->unlearn_addr();
-
   entity_addr_t addr = msgr->get_myaddr();
   set<int> new_avoid = avoid_ports;
   new_avoid.insert(addr.get_port());
