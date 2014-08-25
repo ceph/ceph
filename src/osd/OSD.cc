@@ -6098,7 +6098,6 @@ void OSD::handle_osd_map(MOSDMap *m)
     session->put();
 
   // share with the objecter
-  m->get();
   service.objecter->handle_osd_map(m);
 
   epoch_t first = m->get_first();
