@@ -1724,7 +1724,10 @@ public:
   void clear_global_op_flag(int flags) { global_op_flags.set(global_op_flags.read() & ~flags); }
 
   /// cancel an in-progress request with the given return code
+private:
   int op_cancel(OSDSession *s, ceph_tid_t tid, int r);
+  friend class C_CancelOp;
+public:
   int op_cancel(ceph_tid_t tid, int r);
 
   // commands
