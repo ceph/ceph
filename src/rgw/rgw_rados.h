@@ -306,6 +306,11 @@ public:
 
   bool has_tail() {
     if (explicit_objs) {
+      if (objs.size() == 1) {
+        map<uint64_t, RGWObjManifestPart>::iterator iter = objs.begin();
+        rgw_obj& obj = iter->second.loc;
+        return head_obj.object != obj.object;
+      }
       return (objs.size() >= 2);
     }
     return (obj_size > head_size);
