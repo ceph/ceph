@@ -123,7 +123,7 @@ void MonmapMonitor::on_active()
   }
 
   if (mon->is_leader())
-    mon->clog.info() << "monmap " << *mon->monmap << "\n";
+    mon->clog->info() << "monmap " << *mon->monmap << "\n";
 }
 
 bool MonmapMonitor::preprocess_query(PaxosServiceMessage *m)
