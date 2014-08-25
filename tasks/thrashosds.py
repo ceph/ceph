@@ -66,7 +66,7 @@ def task(ctx, config):
        to become clean after each cluster change. If this doesn't
        happen within the timeout, an exception will be raised.
 
-    revive_timeout: (75) number of seconds to wait for an osd asok to
+    revive_timeout: (150) number of seconds to wait for an osd asok to
        appear after attempting to revive the osd
 
     thrash_primary_affinity: (true) randomly adjust primary-affinity
