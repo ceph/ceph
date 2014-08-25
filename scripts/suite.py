@@ -37,7 +37,7 @@ Standard arguments:
                               The teuthology branch to run against.
                               [default: master]
   -m <type>, --machine-type <type>
-                              Machine type [default: plana]
+                              Machine type [default: plana,mira,burnupi]
   -d <distro>, --distro <distro>
                               Distribution to run against
                               [default: ubuntu]

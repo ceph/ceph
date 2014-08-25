@@ -14,7 +14,7 @@ If -D is passed, then jobs with PATTERN in the job name are deleted from the
 queue.
 
 Arguments:
-  -m, --machine_type MACHINE_TYPE
+  -m, --machine_type MACHINE_TYPE [default: multi]
                         Which machine type queue to work on.
 
 optional arguments:
