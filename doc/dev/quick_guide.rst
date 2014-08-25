@@ -107,6 +107,7 @@ Add the ``-r`` to vstart.sh to enable the RadosGW
 You can now use the swift python client to communicate with the RadosGW.
 
 .. code::
+
     $ swift -A http://localhost:8080/auth -U tester:testing -K asdf list
     $ swift -A http://localhost:8080/auth -U tester:testing -K asdf upload mycontainer ceph
     $ swift -A http://localhost:8080/auth -U tester:testing -K asdf list
