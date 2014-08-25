@@ -472,7 +472,7 @@ perform well in a degraded state.
               of seconds before starting to recover objects.
 
 :Type: Float
-:Default: ``15`` 
+:Default: ``0`` 
 
 
 ``osd recovery max active`` 
@@ -482,14 +482,14 @@ perform well in a degraded state.
               increased load on the cluster.
 
 :Type: 32-bit Integer
-:Default: ``5``
+:Default: ``15``
 
 
 ``osd recovery max chunk`` 
 
 :Description: The maximum size of a recovered chunk of data to push. 
 :Type: 64-bit Integer Unsigned
-:Default: ``1 << 20`` 
+:Default: ``8 << 20`` 
 
 
 ``osd recovery threads`` 
