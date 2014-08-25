@@ -182,6 +182,12 @@ For details on configuring monitors, see the `Monitor Config Reference`_.
 High Availability Authentication
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+To identify users and protect against man-in-the-middle attacks, Ceph provides
+its ``cephx`` authentication system to authenticate users and daemons.
+
+.. note:: The ``cephx`` protocol does not address data encryption in transport 
+   (e.g., SSL/TLS) or encryption at rest.
+
 Cephx uses shared secret keys for authentication, meaning both the client and
 the monitor cluster have a copy of the client's secret key. The authentication
 protocol is such that both parties are able to prove to each other they have a
@@ -313,6 +319,10 @@ The protection offered by this authentication is between the Ceph client and the
 Ceph server hosts. The authentication is not extended beyond the Ceph client. If
 the user accesses the Ceph client from a remote host, Ceph authentication is not
 applied to the connection between the user's host and the client host.
+
+
+For configuration details, see `Cephx Config Guide`_. For user management 
+details, see `User Management`_.
 
 
 .. index:: architecture; smart daemons and scalability
@@ -1586,3 +1596,5 @@ instance for high availability.
 .. _Cache Tiering: ../rados/operations/cache-tiering
 .. _Set Pool Values: ../rados/operations/pools#set-pool-values
 .. _Kerberos: http://en.wikipedia.org/wiki/Kerberos_(protocol)
+.. _Cephx Config Guide: ../rados/configuration/auth-config-ref
+.. _User Management: ../rados/operations/user-management
