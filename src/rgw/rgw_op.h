@@ -243,6 +243,19 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
+class RGWGetBucketLocation : public RGWOp {
+public:
+  RGWGetBucketLocation() {}
+  ~RGWGetBucketLocation() {}
+  int verify_permission();
+  void execute() {}
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "get_bucket_location"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+};
+
+
 class RGWStatBucket : public RGWOp {
 protected:
   int ret;
