@@ -2,21 +2,18 @@
  Cephx Config Reference
 ========================
 
-To identify users and protect against man-in-the-middle attacks, Ceph provides
-its ``cephx`` authentication system to authenticate users and daemons.
-
-.. note:: The ``cephx`` protocol does not address data encryption in transport 
-   (e.g., SSL/TLS) or encryption at rest.
-
 The ``cephx`` protocol is enabled by default. Cryptographic authentication has
 some computational costs, though they should generally be quite low.  If the
 network environment connecting your client and server hosts is very safe and 
 you cannot afford authentication, you can turn it off. **This is not generally
 recommended**.
 
-.. important:: Remember, if you disable authentication, you are at risk of a 
-   man-in-the-middle attack altering your client/server messages, which could 
-   lead to disastrous security effects.
+.. note:: If you disable authentication, you are at risk of a man-in-the-middle
+   attack altering your client/server messages, which could lead to disastrous 
+   security effects.
+
+For creating users, see `User Management`_. For details on the architecture
+of Cephx, see `Architecture - High Availability Authentication`_.
 
 
 Deployment Scenarios
@@ -53,18 +50,21 @@ key for the  ``client.admin`` user. Additionally, it will also retrieve keyrings
 that give ``ceph-deploy`` and ``ceph-disk`` utilities the ability to prepare and
 activate OSDs and metadata servers.
 
-When you execute ``ceph-deploy admin {node-name}`` (note: Ceph must be installed
-first), you are pushing a Ceph configuration file and the
+When you execute ``ceph-deploy admin {node-name}`` (**note:** Ceph must be 
+installed first), you are pushing a Ceph configuration file and the
 ``ceph.client.admin.keyring`` to the ``/etc/ceph``  directory of the node. You
-will be able to execute Ceph administrative functions on the command line.
+will be able to execute Ceph administrative functions as ``root`` on the command 
+line of that node.
 
 
 Manual Deployment
 -----------------
 
-When you deploy a cluster with manually, you have to bootstrap the
-monitor manually and create the ``client.admin`` user and keyring.
-To bootstrap monitors, follow the steps in `Monitor Bootstrapping`_.
+When you deploy a cluster manually, you have to bootstrap the monitor manually
+and create the ``client.admin`` user and keyring. To bootstrap monitors, follow
+the steps in `Monitor Bootstrapping`_. The steps for monitor bootstrapping are
+the logical steps you must perform when using third party deployment tools like
+Chef, Puppet,  Juju, etc.
 
 
 Enabling/Disabling Cephx
@@ -79,15 +79,16 @@ Enabling Cephx
 --------------
 
 When ``cephx`` is enabled, Ceph will look for the keyring in the default search
-path, which includes ``/etc/ceph/ceph.$name.keyring``.  You can override this
-location by adding a ``keyring`` option in the ``[global]`` section of your
-`Ceph configuration`_ file, but this is not recommended.
+path, which includes ``/etc/ceph/$cluster.$name.keyring``. You can override 
+this location by adding a ``keyring`` option in the ``[global]`` section of 
+your `Ceph configuration`_ file, but this is not recommended.
 
-Execute the following procedures to enable ``cephx`` on a cluster with ``cephx``
-disabled. If you (or your deployment utility) have already generated the keys,
-you may skip the steps related to generating keys.
+Execute the following procedures to enable ``cephx`` on a cluster with
+authentication disabled. If you (or your deployment utility) have already
+generated the keys, you may skip the steps related to generating keys.
 
-#. Create a ``client.admin`` key, and save a copy of the key for your client host::
+#. Create a ``client.admin`` key, and save a copy of the key for your client 
+   host::
 
 	ceph auth get-or-create client.admin mon 'allow *' mds 'allow *' osd 'allow *' -o /etc/ceph/ceph.client.admin.keyring
 
@@ -95,7 +96,8 @@ you may skip the steps related to generating keys.
    ``/etc/ceph/client.admin.keyring`` file. Do not perform this step if a 
    deployment tool has already done it for you. Be careful!
 
-#. Create a keyring for your cluster and generate a monitor secret key. ::
+#. Create a keyring for your monitor cluster and generate a monitor 
+   secret key. ::
 
 	ceph-authtool --create-keyring /tmp/ceph.mon.keyring --gen-key -n mon. --cap mon 'allow *'
 
@@ -145,47 +147,6 @@ during setup and/or troubleshooting to temporarily disable authentication.
 
 #. Start or restart the Ceph cluster. See `Operating a Cluster`_ for details.
 
-
-Cephx Limitations
-=================
-
-The ``cephx`` protocol authenticates Ceph clients and servers to each other.  It
-is not intended to handle authentication of human users or application programs
-run on their behalf.  If that effect is required to handle your access control
-needs, you must have another mechanism, which is likely to be specific to the
-front end used to access the Ceph object store.  This other mechanism has the
-role of ensuring that only acceptable users and programs are able to run on the
-machine that Ceph will permit to access its object store. 
-
-The keys used to authenticate Ceph clients and servers are typically stored in
-a plain text file with appropriate permissions in a trusted host.
-
-.. important:: Storing keys in plaintext files has security shortcomings, but 
-   they are difficult to avoid, given the basic authentication methods Ceph 
-   uses in the background. Those setting up Ceph systems should be aware of 
-   these shortcomings.  
-
-In particular, arbitrary user machines, especially portable machines, should not
-be configured to interact directly with Ceph, since that mode of use would
-require the storage of a plaintext authentication key on an insecure machine.
-Anyone  who stole that machine or obtained surreptitious access to it could
-obtain the key that will allow them to authenticate their own machines to Ceph.
-
-Rather than permitting potentially insecure machines to access a Ceph object
-store directly,  users should be required to sign in to a trusted machine in
-your environment using a method  that provides sufficient security for your
-purposes.  That trusted machine will store the plaintext Ceph keys for the
-human users.  A future version of Ceph may address these particular
-authentication issues more fully.
-
-At the moment, none of the Ceph authentication protocols provide secrecy for
-messages in transit. Thus, an eavesdropper on the wire can hear and understand
-all data sent between clients and servers in Ceph, even if he cannot create or
-alter them. Further, Ceph does not include options to encrypt user data in the
-object store. Users can hand-encrypt and store their own data in the Ceph
-object store, of course, but Ceph provides no features to perform object
-encryption itself. Those storing sensitive data in Ceph should consider
-encrypting their data before providing it  to the Ceph system.
 
 Configuration Settings
 ======================
@@ -464,3 +425,5 @@ of the enhanced authentication.
 .. _Cephx: http://ceph.com/docs/cuttlefish/rados/configuration/auth-config-ref/
 .. _Ceph configuration: ../ceph-conf
 .. _Create an Admin Host: ../../deployment/ceph-deploy-admin
+.. _Architecture - High Availability Authentication: ../../../architecture#high-availability-authentication
+.. _User Management: ../../operations/user-management
