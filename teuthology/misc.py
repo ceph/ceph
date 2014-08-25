@@ -42,12 +42,15 @@ def canonicalize_hostname(hostname, user='ubuntu'):
     if match:
         match_d = match.groupdict()
         shortname = match_d['shortname']
-        user_ = match_d.get('user') or user
+        if user is None:
+            user_ = user
+        else:
+            user_ = match_d.get('user') or user
     else:
         shortname = hostname.split('.')[0]
         user_ = user
 
-    user_at = user_ + '@' if user_ else ''
+    user_at = user_.strip('@') + '@' if user_ else ''
 
     ret = '{user_at}{short}.front.sepia.ceph.com'.format(
         user_at=user_at,
