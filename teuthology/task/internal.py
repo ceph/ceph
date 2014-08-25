@@ -192,6 +192,7 @@ def timer(ctx, config):
         log.info('Duration was %f seconds', duration)
         ctx.summary['duration'] = duration
 
+
 def connect(ctx, config):
     """
     Open a connection to a remote host.
@@ -202,6 +203,7 @@ def connect(ctx, config):
     for name in ctx.config['targets'].iterkeys():
         machs.append(name)
     for t, key in ctx.config['targets'].iteritems():
+        t = teuthology.canonicalize_hostname(t)
         log.debug('connecting to %s', t)
         try:
             if ctx.config['sshkeys'] == 'ignore':
