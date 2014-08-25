@@ -231,7 +231,9 @@ void RWTimer::shutdown()
     lock.Lock();
     cond.Signal();
     lock.Unlock();
+    rwlock.unlock();
     thread->join();
+    rwlock.get_write();
     delete thread;
     thread = NULL;
   }
