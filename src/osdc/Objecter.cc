@@ -1898,11 +1898,19 @@ start:
   }
 
   // Handle case where the op is in homeless session
-  {
-    RWLock::RLocker hs_lc(homeless_session->lock);
-    if (homeless_session->ops.find(tid) != homeless_session->ops.end()) {
-      ret = op_cancel(homeless_session, tid, r);
+  homeless_session->lock.get_read();
+  if (homeless_session->ops.find(tid) != homeless_session->ops.end()) {
+    homeless_session->lock.unlock();
+    ret = op_cancel(homeless_session, tid, r);
+    if (ret == -ENOENT) {
+      /* oh no! raced, maybe tid moved to another session, restarting */
+      goto start;
+    } else {
+      rwlock.unlock();
+      return ret;
     }
+  } else {
+    homeless_session->lock.unlock();
   }
 
   rwlock.unlock();
