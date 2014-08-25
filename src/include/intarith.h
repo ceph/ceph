@@ -28,7 +28,7 @@
 #endif
 
 #ifndef ROUND_UP_TO
-# define ROUND_UP_TO(n, d) (((n)+(d)-1) & ~((d)-1))
+# define ROUND_UP_TO(n, d) ((n)%(d) ? ((n)+(d)-(n)%(d)) : (n))
 #endif
 
 #ifndef SHIFT_ROUND_UP
