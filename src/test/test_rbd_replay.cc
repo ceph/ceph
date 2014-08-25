@@ -48,7 +48,7 @@ TEST(RBDReplay, Ser) {
   std::string s(oss.str());
   const char* data = s.data();
   size_t size = s.size();
-  ASSERT_EQ(15, size);
+  ASSERT_EQ(15U, size);
   const char expected_data[] = {1, 2, 3, 4, 0, 0, 0, 5, 'h', 'e', 'l', 'l', 'o', 1, 0};
   for (size_t i = 0; i < size; i++) {
     EXPECT_EQ(expected_data[i], data[i]);
@@ -213,13 +213,13 @@ TEST(RBDReplay, batch_unreachable_from) {
   base.insert(io5);
   // Anything in 'deps' which is not reachable from 'base' is added to 'unreachable'
   batch_unreachable_from(deps, base, &unreachable);
-  EXPECT_EQ(0, unreachable.count(io1));
-  EXPECT_EQ(0, unreachable.count(io2));
-  EXPECT_EQ(1, unreachable.count(io3));
-  EXPECT_EQ(0, unreachable.count(io4));
-  EXPECT_EQ(0, unreachable.count(io5));
-  EXPECT_EQ(1, unreachable.count(io6));
-  EXPECT_EQ(0, unreachable.count(io7));
-  EXPECT_EQ(0, unreachable.count(io8));
-  EXPECT_EQ(0, unreachable.count(io9));
+  EXPECT_EQ(0U, unreachable.count(io1));
+  EXPECT_EQ(0U, unreachable.count(io2));
+  EXPECT_EQ(1U, unreachable.count(io3));
+  EXPECT_EQ(0U, unreachable.count(io4));
+  EXPECT_EQ(0U, unreachable.count(io5));
+  EXPECT_EQ(1U, unreachable.count(io6));
+  EXPECT_EQ(0U, unreachable.count(io7));
+  EXPECT_EQ(0U, unreachable.count(io8));
+  EXPECT_EQ(0U, unreachable.count(io9));
 }
