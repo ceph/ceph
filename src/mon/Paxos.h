@@ -228,6 +228,10 @@ public:
      * writeable.
      */
     STATE_WRITING,
+    /*
+     * Leader/Peon is writing a new commit from a previous round.
+     */
+    STATE_WRITING_PREVIOUS,
     // leader: refresh following a commit
     STATE_REFRESH,
   };
@@ -253,6 +257,8 @@ public:
       return "updating-previous";
     case STATE_WRITING:
       return "writing";
+    case STATE_WRITING_PREVIOUS:
+      return "writing-previous";
     case STATE_REFRESH:
       return "refresh";
     default:
@@ -297,6 +303,9 @@ public:
 
   /// @return 'true' if we are writing an update to disk
   bool is_writing() const { return state == STATE_WRITING; }
+
+  /// @return 'true' if we are writing an update-previous to disk
+  bool is_writing_previous() const { return state == STATE_WRITING_PREVIOUS; }
 
   /// @return 'true' if we are refreshing an update just committed
   bool is_refresh() const { return state == STATE_REFRESH; }

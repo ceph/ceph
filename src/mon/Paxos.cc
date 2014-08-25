@@ -796,7 +796,8 @@ void Paxos::accept_timeout()
   dout(1) << "accept timeout, calling fresh election" << dendl;
   accept_timeout_event = 0;
   assert(mon->is_leader());
-  assert(is_updating() || is_updating_previous() || is_writing());
+  assert(is_updating() || is_updating_previous() || is_writing() ||
+	 is_writing_previous());
   logger->inc(l_paxos_accept_timeout);
   mon->bootstrap();
 }
@@ -839,7 +840,12 @@ void Paxos::commit_start()
 
   get_store()->queue_transaction(t, new C_Committed(this));
 
-  state = STATE_WRITING;
+  if (is_updating_previous())
+    state = STATE_WRITING_PREVIOUS;
+  else if (is_updating())
+    state = STATE_WRITING;
+  else
+    assert(0);
 }
 
 void Paxos::commit_finish()
@@ -889,7 +895,7 @@ void Paxos::commit_finish()
   // WRITING -> REFRESH
   // among other things, this lets do_refresh() -> mon->bootstrap() know
   // it doesn't need to flush the store queue
-  assert(state == STATE_WRITING);
+  assert(is_writing() || is_writing_previous());
   state = STATE_REFRESH;
 
   if (do_refresh()) {
@@ -1339,7 +1345,7 @@ void Paxos::restart()
   cancel_events();
   new_value.clear();
 
-  if (is_writing()) {
+  if (is_writing() || is_writing_previous()) {
     dout(10) << __func__ << " flushing" << dendl;
     mon->lock.Unlock();
     mon->store->flush();

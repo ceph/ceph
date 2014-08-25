@@ -781,7 +781,7 @@ void Monitor::shutdown()
 
 void Monitor::bootstrap()
 {
-  if (paxos->is_writing()) {
+  if (paxos->is_writing() || paxos->is_writing_previous()) {
     dout(10) << "bootstrap flushing pending write" << dendl;
     lock.Unlock();
     store->flush();
@@ -2387,7 +2387,7 @@ void Monitor::handle_command(MMonCommand *m)
   }
 
   if (prefix == "scrub") {
-    while (paxos->is_writing()) {
+    while (paxos->is_writing() || paxos->is_writing_previous()) {
       lock.Unlock();
       store->flush();
       lock.Lock();
