@@ -175,11 +175,18 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
     summary.version++;
   }
 
+  dout(10) << __func__ << " logging for "
+           << channel_blog.size() << " channels" << dendl;
   for(map<string,bufferlist>::iterator p = channel_blog.begin();
       p != channel_blog.end(); ++p) {
-    if (!p->second.length())
+    if (!p->second.length()) {
+      dout(15) << __func__ << " channel '" << p->first
+               << "': nothing to log" << dendl;
       continue;
+    }
 
+    dout(15) << __func__ << " channel '" << p->first
+             << "' logging " << p->second.length() << " bytes" << dendl;
     string log_file = channels.get_log_file(p->first);
 
     int fd = ::open(log_file.c_str(), O_WRONLY|O_APPEND|O_CREAT, 0600);
