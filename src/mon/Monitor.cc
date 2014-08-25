@@ -732,9 +732,18 @@ void Monitor::update_logger()
 void Monitor::shutdown()
 {
   dout(1) << "shutdown" << dendl;
+
   lock.Lock();
 
   state = STATE_SHUTDOWN;
+
+  if (paxos->is_writing() || paxos->is_writing_previous()) {
+    dout(10) << __func__ << " flushing" << dendl;
+    lock.Unlock();
+    store->flush();
+    lock.Lock();
+    dout(10) << __func__ << " flushed" << dendl;
+  }
 
   if (admin_hook) {
     AdminSocket* admin_socket = cct->get_admin_socket();
