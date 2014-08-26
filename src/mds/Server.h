@@ -32,11 +32,11 @@ typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
 
 enum {
   l_mdss_first = 1000,
-  l_mdss_hcreq,
-  l_mdss_hsreq,
-  l_mdss_hcsess,
-  l_mdss_dcreq,
-  l_mdss_dsreq,
+  l_mdss_handle_client_request,
+  l_mdss_handle_slave_request,
+  l_mdss_handle_client_session,
+  l_mdss_dispatch_client_request,
+  l_mdss_dispatch_slave_request,
   l_mdss_last,
 };
 
