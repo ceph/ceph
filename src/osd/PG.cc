@@ -6021,9 +6021,7 @@ PG::RecoveryState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserve
   PG *pg = context< RecoveryMachine >().pg;
 
   if (remote_recovery_reservation_it != context< Active >().remote_shards_to_reserve_recovery.end()) {
-    // skip myself
-    if (*remote_recovery_reservation_it == pg->pg_whoami)
-      ++remote_recovery_reservation_it;
+    assert(*remote_recovery_reservation_it != pg->pg_whoami);
   }
 
   if (remote_recovery_reservation_it != context< Active >().remote_shards_to_reserve_recovery.end()) {
@@ -6185,16 +6183,34 @@ void PG::RecoveryState::Clean::exit()
   pg->osd->recoverystate_perf->tinc(rs_clean_latency, dur);
 }
 
+template <typename T>
+set<pg_shard_t> unique_osd_shard_set(const pg_shard_t & skip, const T &in)
+{
+  set<int> osds_found;
+  set<pg_shard_t> out;
+  for (typename T::const_iterator i = in.begin();
+       i != in.end();
+       ++i) {
+    if (*i != skip && !osds_found.count(i->osd)) {
+      osds_found.insert(i->osd);
+      out.insert(*i);
+    }
+  }
+  return out;
+}
+
 /*---------Active---------*/
 PG::RecoveryState::Active::Active(my_context ctx)
   : my_base(ctx),
     NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Active"),
     remote_shards_to_reserve_recovery(
-      context< RecoveryMachine >().pg->actingbackfill.begin(),
-      context< RecoveryMachine >().pg->actingbackfill.end()),
+      unique_osd_shard_set(
+	context< RecoveryMachine >().pg->pg_whoami,
+	context< RecoveryMachine >().pg->actingbackfill)),
     remote_shards_to_reserve_backfill(
-      context< RecoveryMachine >().pg->backfill_targets.begin(),
-      context< RecoveryMachine >().pg->backfill_targets.end()),
+      unique_osd_shard_set(
+	context< RecoveryMachine >().pg->pg_whoami,
+	context< RecoveryMachine >().pg->backfill_targets)),
     all_replicas_activated(false)
 {
   context< RecoveryMachine >().log_enter(state_name);
