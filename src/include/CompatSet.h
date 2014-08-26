@@ -120,13 +120,13 @@ struct CompatSet {
 
   /* does this filesystem implementation have the
      features required to read the other? */
-  bool readable(CompatSet& other) {
+  bool readable(CompatSet const& other) const {
     return !((other.incompat.mask ^ incompat.mask) & other.incompat.mask);
   }
 
   /* does this filesystem implementation have the
      features required to write the other? */
-  bool writeable(CompatSet& other) {
+  bool writeable(CompatSet const& other) const {
     return readable(other) &&
       !((other.ro_compat.mask ^ ro_compat.mask) & other.ro_compat.mask);
   }
