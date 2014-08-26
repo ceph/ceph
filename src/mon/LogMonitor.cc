@@ -649,3 +649,14 @@ void LogMonitor::log_channel_info::expand_channel_meta(map<string,string> &m)
   }
   generic_dout(10) << __func__ << " expanded map: " << m << dendl;
 }
+void LogMonitor::handle_conf_change(const struct md_config_t *conf,
+                                    const std::set<std::string> &changed)
+{
+  if (changed.count("mon_cluster_log_to_syslog") ||
+      changed.count("mon_cluster_log_to_syslog_level") ||
+      changed.count("mon_cluster_log_to_syslog_facility") ||
+      changed.count("mon_cluster_log_file") ||
+      changed.count("mon_cluster_log_file_level")) {
+    update_log_channels();
+  }
+}
