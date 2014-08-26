@@ -93,15 +93,17 @@ TEST(Histogram, Position) {
     ASSERT_EQ(500000u, lb);
     ASSERT_EQ(500000u, ub);
   }
-  {
-    pow2_hist_t h;
-    h.h.resize(10, 0);
-    h.h[0] = UINT_MAX;
-    h.h[5] = UINT_MAX;
-    uint64_t lb, ub;
-    ASSERT_EQ(500000u, lb);
-    ASSERT_EQ(500000u, ub);
-  }
+}
+
+TEST(Histogram, Position2) {
+  pow2_hist_t h;
+  h.h.resize(10, 0);
+  h.h[0] = UINT_MAX;
+  h.h[5] = UINT_MAX;
+  uint64_t lb, ub;
+  h.get_position_micro(4, &lb, &ub);
+  ASSERT_EQ(500000u, lb);
+  ASSERT_EQ(500000u, ub);
 }
 
 TEST(Histogram, Decay) {
