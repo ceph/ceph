@@ -14,7 +14,7 @@ using namespace std;
 #include "common/config.h"
 #include "common/Clock.h"
 #include "common/DecayCounter.h"
-#include "include/Context.h"
+#include "MDSContext.h"
 
 #include "include/frag.h"
 #include "include/xlist.h"
@@ -25,6 +25,7 @@ using namespace std;
 #include <boost/pool/pool.hpp>
 #include "include/assert.h"
 #include "include/hash_namespace.h"
+
 
 #define CEPH_FS_ONDISK_MAGIC "ceph fs volume v011"
 
@@ -1343,7 +1344,7 @@ protected:
   // ---------------------------------------------
   // waiting
  protected:
-  multimap<uint64_t, Context*>  waiting;
+  multimap<uint64_t, MDSInternalContextBase*>  waiting;
 
  public:
   bool is_waiter_for(uint64_t mask, uint64_t min=0) {
@@ -1352,7 +1353,7 @@ protected:
       while (min & (min-1))  // if more than one bit is set
 	min &= min-1;        //  clear LSB
     }
-    for (multimap<uint64_t,Context*>::iterator p = waiting.lower_bound(min);
+    for (multimap<uint64_t,MDSInternalContextBase*>::iterator p = waiting.lower_bound(min);
 	 p != waiting.end();
 	 ++p) {
       if (p->first & mask) return true;
@@ -1360,19 +1361,19 @@ protected:
     }
     return false;
   }
-  virtual void add_waiter(uint64_t mask, Context *c) {
+  virtual void add_waiter(uint64_t mask, MDSInternalContextBase *c) {
     if (waiting.empty())
       get(PIN_WAITER);
-    waiting.insert(pair<uint64_t,Context*>(mask, c));
+    waiting.insert(pair<uint64_t,MDSInternalContextBase*>(mask, c));
 //    pdout(10,g_conf->debug_mds) << (mdsco_db_line_prefix(this)) 
 //			       << "add_waiter " << hex << mask << dec << " " << c
 //			       << " on " << *this
 //			       << dendl;
     
   }
-  virtual void take_waiting(uint64_t mask, list<Context*>& ls) {
+  virtual void take_waiting(uint64_t mask, list<MDSInternalContextBase*>& ls) {
     if (waiting.empty()) return;
-    multimap<uint64_t,Context*>::iterator it = waiting.begin();
+    multimap<uint64_t,MDSInternalContextBase*>::iterator it = waiting.begin();
     while (it != waiting.end()) {
       if (it->first & mask) {
 	ls.push_back(it->second);
@@ -1394,7 +1395,7 @@ protected:
       put(PIN_WAITER);
   }
   void finish_waiting(uint64_t mask, int result = 0) {
-    list<Context*> finished;
+    list<MDSInternalContextBase*> finished;
     take_waiting(mask, finished);
     finish_contexts(g_ceph_context, finished, result);
   }
@@ -1408,7 +1409,7 @@ protected:
   virtual void encode_lock_state(int type, bufferlist& bl) { assert(0); }
   virtual void decode_lock_state(int type, bufferlist& bl) { assert(0); }
   virtual void finish_lock_waiters(int type, uint64_t mask, int r=0) { assert(0); }
-  virtual void add_lock_waiter(int type, uint64_t mask, Context *c) { assert(0); }
+  virtual void add_lock_waiter(int type, uint64_t mask, MDSInternalContextBase *c) { assert(0); }
   virtual bool is_lock_waiting(int type, uint64_t mask) { assert(0); return false; }
 
   virtual void clear_dirty_scattered(int type) { assert(0); }

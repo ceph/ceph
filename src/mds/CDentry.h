@@ -91,7 +91,7 @@ public:
   // -- wait --
   //static const int WAIT_LOCK_OFFSET = 8;
 
-  void add_waiter(uint64_t tag, Context *c);
+  void add_waiter(uint64_t tag, MDSInternalContextBase *c);
 
   static const unsigned EXPORT_NONCE = 1;
 

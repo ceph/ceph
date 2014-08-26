@@ -46,6 +46,7 @@ class Filer {
   
   // probes
   struct Probe {
+    Mutex lock;
     inodeno_t ino;
     ceph_file_layout layout;
     snapid_t snapid;
@@ -72,7 +73,7 @@ class Filer {
 
     Probe(inodeno_t i, ceph_file_layout &l, snapid_t sn,
 	  uint64_t f, uint64_t *e, utime_t *m, int fl, bool fw, Context *c) : 
-      ino(i), layout(l), snapid(sn),
+      lock("Filer::Probe"), ino(i), layout(l), snapid(sn),
       psize(e), pmtime(m), flags(fl), fwd(fw), onfinish(c),
       probing_off(f), probing_len(0),
       err(0), found_size(false) {}
@@ -81,7 +82,7 @@ class Filer {
   class C_Probe;
 
   void _probe(Probe *p);
-  void _probed(Probe *p, const object_t& oid, uint64_t size, utime_t mtime);
+  bool _probed(Probe *p, const object_t& oid, uint64_t size, utime_t mtime);
 
  public:
   Filer(const Filer& other);
