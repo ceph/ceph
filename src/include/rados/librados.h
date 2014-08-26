@@ -1713,6 +1713,15 @@ int rados_aio_stat(rados_ioctx_t io, const char *o,
 		   rados_completion_t completion,
 		   uint64_t *psize, time_t *pmtime);
 
+/**
+ * Cancel async operation
+ *
+ * @param io ioctx
+ * @param completion completion handle
+ * @returns 0 on success, negative error code on failure
+ */
+int rados_aio_cancel(rados_ioctx_t io, rados_completion_t completion);
+
 /** @} Asynchronous I/O */
 
 /**

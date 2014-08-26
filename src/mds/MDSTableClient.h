@@ -16,7 +16,7 @@
 #define CEPH_MDSTABLECLIENT_H
 
 #include "include/types.h"
-#include "include/Context.h"
+#include "MDSContext.h"
 #include "mds_table_types.h"
 
 class MDS;
@@ -34,13 +34,13 @@ protected:
 
   // prepares
   struct _pending_prepare {
-    Context *onfinish;
+    MDSInternalContextBase *onfinish;
     version_t *ptid;
     bufferlist *pbl; 
     bufferlist mutation;
 
     _pending_prepare() : onfinish(0), ptid(0), pbl(0) {}
-    _pending_prepare(Context *c, version_t *pt, bufferlist *pb, bufferlist& m) :
+    _pending_prepare(MDSInternalContextBase *c, version_t *pt, bufferlist *pb, bufferlist& m) :
       onfinish(c), ptid(pt), pbl(pb), mutation(m) {}
   };
 
@@ -50,20 +50,11 @@ protected:
 
   // pending commits
   map<version_t, LogSegment*> pending_commit;
-  map<version_t, list<Context*> > ack_waiters;
+  map<version_t, list<MDSInternalContextBase*> > ack_waiters;
 
   void handle_reply(class MMDSTableQuery *m);  
-
-  class C_LoggedAck : public Context {
-    MDSTableClient *tc;
-    version_t tid;
-  public:
-    C_LoggedAck(MDSTableClient *a, version_t t) : tc(a), tid(t) {}
-    void finish(int r) {
-      tc->_logged_ack(tid);
-    }
-  };
   void _logged_ack(version_t tid);
+  friend class C_LoggedAck;
 
 public:
   MDSTableClient(MDS *m, int tab) :
@@ -72,7 +63,7 @@ public:
 
   void handle_request(MMDSTableRequest *m);
 
-  void _prepare(bufferlist& mutation, version_t *ptid, bufferlist *pbl, Context *onfinish);
+  void _prepare(bufferlist& mutation, version_t *ptid, bufferlist *pbl, MDSInternalContextBase *onfinish);
   void commit(version_t tid, LogSegment *ls);
 
   void resend_commits();
@@ -85,7 +76,7 @@ public:
   bool has_committed(version_t tid) {
     return pending_commit.count(tid) == 0;
   }
-  void wait_for_ack(version_t tid, Context *c) {
+  void wait_for_ack(version_t tid, MDSInternalContextBase *c) {
     ack_waiters[tid].push_back(c);
   }
 

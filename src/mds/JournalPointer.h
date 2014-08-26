@@ -57,8 +57,8 @@ class JournalPointer {
 
   JournalPointer() : node_id(-1), pool_id(-1), front(0), back(0) {}
 
-  int load(Objecter *objecter, Mutex *lock);
-  int save(Objecter *objecter, Mutex *lock) const;
+  int load(Objecter *objecter);
+  int save(Objecter *objecter) const;
   void save(Objecter *objecter, Context *completion) const;
 
   bool is_null() const {
