@@ -2122,15 +2122,25 @@ TEST_F(LibRadosTwoPoolsPP, PromoteOn2ndRead) {
   cluster.wait_for_latest_osdmap();
 
   // 1st read, don't trigger a promote
+  utime_t start = ceph_clock_now(NULL);
   {
     bufferlist bl;
     ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
   }
+  utime_t end = ceph_clock_now(NULL);
+  float dur = end - start;
+  cout << "duration " << dur << std::endl;
 
   // verify the object is NOT present in the cache tier
   {
     ObjectIterator it = cache_ioctx.objects_begin();
-    ASSERT_TRUE(it == cache_ioctx.objects_end());
+    if (it != cache_ioctx.objects_end()) {
+      if (dur > 1.0) {
+	cout << " object got promoted, but read was slow, ignoring" << std::endl;
+      } else {
+	ASSERT_TRUE(it == cache_ioctx.objects_end());
+      }
+    }
   }
 
   // Read until the object is present in the cache tier
@@ -4072,15 +4082,25 @@ TEST_F(LibRadosTwoPoolsECPP, PromoteOn2ndRead) {
   cluster.wait_for_latest_osdmap();
 
   // 1st read, don't trigger a promote
+  utime_t start = ceph_clock_now(NULL);
   {
     bufferlist bl;
     ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
   }
+  utime_t end = ceph_clock_now(NULL);
+  float dur = end - start;
+  cout << "duration " << dur << std::endl;
 
   // verify the object is NOT present in the cache tier
   {
     ObjectIterator it = cache_ioctx.objects_begin();
-    ASSERT_TRUE(it == cache_ioctx.objects_end());
+    if (it != cache_ioctx.objects_end()) {
+      if (dur > 1.0) {
+	cout << " object got promoted, but read was slow, ignoring" << std::endl;
+      } else {
+	ASSERT_TRUE(it == cache_ioctx.objects_end());
+      }
+    }
   }
 
   // Read until the object is present in the cache tier
