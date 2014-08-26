@@ -164,6 +164,8 @@ def main(ctx):
                 machines_to_update.append(machine)
                 provision.create_if_vm(ctx, machine)
     elif ctx.unlock:
+        if ctx.owner is None and user is None:
+            user = misc.get_user()
         # If none of them are vpm, do them all in one shot
         if not filter(is_vpm, machines):
             res = unlock_many(machines, user)
