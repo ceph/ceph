@@ -340,7 +340,7 @@ if [ "$start_mon" -eq 1 ]; then
         osd pool default min size = 1
         osd pool default erasure code directory = .libs
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd
-        rgw frontends = fastcgi, civetweb port=8080
+        rgw frontends = fastcgi, civetweb port=$CEPH_RGW_PORT
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
 EOF
@@ -612,7 +612,7 @@ do_hitsets $hitset
 do_rgw()
 {
     # Start server
-	echo start rgw on http://localhost:8080
+    echo start rgw on http://localhost:$CEPH_RGW_PORT
     RGWDEBUG=""
     if [ "$debug" -ne 0 ]; then
         RGWDEBUG="--debug-rgw=20"
