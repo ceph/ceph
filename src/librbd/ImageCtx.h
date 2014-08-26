@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "common/Mutex.h"
+#include "common/Readahead.h"
 #include "common/RWLock.h"
 #include "common/snap_types.h"
 #include "include/buffer.h"
@@ -89,6 +90,9 @@ namespace librbd {
     ObjectCacher *object_cacher;
     LibrbdWriteback *writeback_handler;
     ObjectCacher::ObjectSet *object_set;
+
+    Readahead readahead;
+    uint64_t total_bytes_read;
 
     /**
      * Either image_name or image_id must be set.

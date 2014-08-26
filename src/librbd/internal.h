@@ -47,6 +47,9 @@ enum {
   l_librbd_notify,
   l_librbd_resize,
 
+  l_librbd_readahead,
+  l_librbd_readahead_bytes,
+
   l_librbd_last,
 };
 
