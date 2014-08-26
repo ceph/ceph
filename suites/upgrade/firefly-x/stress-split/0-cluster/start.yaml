@@ -1,6 +1,7 @@
 roles:
 - - mon.a
   - mon.b
+  - mon.c
   - mds.a
   - osd.0
   - osd.1
@@ -8,5 +9,4 @@ roles:
 - - osd.3
   - osd.4
   - osd.5
-  - mon.c
 - - client.0
