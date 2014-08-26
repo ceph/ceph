@@ -5489,7 +5489,7 @@ void OSD::session_notify_pg_create(
     session->waiting_for_pg.find(pgid);
   if (i != session->waiting_for_pg.end()) {
     session->waiting_on_map.splice(
-      session->waiting_on_map.end(),
+      session->waiting_on_map.begin(),
       i->second);
     session->waiting_for_pg.erase(i);
   }
