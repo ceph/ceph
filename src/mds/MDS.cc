@@ -99,7 +99,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   standby_replaying(false),
   messenger(m),
   monc(mc),
-  clog(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
+  log_client(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
   op_tracker(cct, m->cct->_conf->mds_enable_op_tracker),
   finisher(cct),
   sessionmap(this), asok_hook(NULL) {
@@ -108,6 +108,8 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   orig_argv = NULL;
 
   last_tid = 0;
+
+  clog = log_client.create_channel();
 
   monc->set_messenger(messenger);
 
@@ -583,7 +585,7 @@ int MDS::init(MDSMap::DaemonState wanted_state)
   finisher.start();
 
   // tell monc about log_client so it will know about mon session resets
-  monc->set_log_client(&clog);
+  monc->set_log_client(&log_client);
   
   int r = monc->authenticate();
   if (r < 0) {
@@ -757,7 +759,7 @@ void MDS::check_ops_in_flight()
     for (vector<string>::iterator i = warnings.begin();
         i != warnings.end();
         ++i) {
-      clog.warn() << *i;
+      clog->warn() << *i;
     }
   }
   return;
@@ -961,17 +963,17 @@ void MDS::handle_command(MMonCommand *m)
   else if (m->cmd[0] == "cpu_profiler") {
     ostringstream ss;
     cpu_profiler_handle_command(m->cmd, ss);
-    clog.info() << ss.str();
+    clog->info() << ss.str();
   }
  else if (m->cmd[0] == "heap") {
    if (!ceph_using_tcmalloc())
-     clog.info() << "tcmalloc not enabled, can't use heap profiler commands\n";
+     clog->info() << "tcmalloc not enabled, can't use heap profiler commands\n";
    else {
      ostringstream ss;
      vector<std::string> cmdargs;
      cmdargs.insert(cmdargs.begin(), m->cmd.begin()+1, m->cmd.end());
      ceph_heap_profiler_handle_command(cmdargs, ss);
-     clog.info() << ss.str();
+     clog->info() << ss.str();
    }
  } else dout(0) << "unrecognized command! " << m->cmd << dendl;
   m->put();
