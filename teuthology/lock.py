@@ -398,7 +398,7 @@ def updatekeys(ctx):
 
     misc.read_config(ctx)
 
-    machines = [misc.canonicalize_hostname(m) for m in ctx.machines]
+    machines = [misc.canonicalize_hostname(m, user=None) for m in ctx.machines]
 
     if ctx.targets:
         try:
