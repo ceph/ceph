@@ -2360,6 +2360,7 @@ void PG::init(
     dout(10) << __func__ << ": Setting backfill" << dendl;
     info.last_backfill = hobject_t();
     info.last_complete = info.last_update;
+    pg_log.mark_log_for_rewrite();
   }
 
   reg_next_scrub();
