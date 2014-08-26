@@ -11,8 +11,8 @@
   <description>Ceph FS Java API.</description>
   <licenses>
     <license>
-	  <name>The Apache Software License, Version 2.0</name>
-	  <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <name>GNU Lesser General Public License, Version 2.1</name>
+      <url>http://www.gnu.org/licenses/lgpl-2.1.txt</url>
     </license>
   </licenses>
   <developers>
@@ -31,39 +31,39 @@
     </developer>
 
     <developer>
-	  <name>Greg Farnum</name>
-	  <email>greg@inktank.com</email>
-	  <organization>Red Hat</organization>
-	  <organizationUrl>http://www.redhat.com</organizationUrl>
+      <name>Greg Farnum</name>
+      <email>greg@inktank.com</email>
+      <organization>Red Hat</organization>
+      <organizationUrl>http://www.redhat.com</organizationUrl>
     </developer>
 
     <developer>
-	  <name>Joe Buck</name>
-	  <email>jbbuck@gmail.com</email>
+      <name>Joe Buck</name>
+      <email>jbbuck@gmail.com</email>
     </developer>
 
     <developer>
-	  <name>Gary Lowell</name>
-	  <email>glowell@inktank.com</email>
-	  <organization>Red Hat</organization>
-	  <organizationUrl>http://www.redhat.com</organizationUrl>
+      <name>Gary Lowell</name>
+      <email>glowell@inktank.com</email>
+      <organization>Red Hat</organization>
+      <organizationUrl>http://www.redhat.com</organizationUrl>
     </developer>
 
     <developer>
-	  <name>Dmitry Smirnov</name>
-	  <email>onlyjob@member.fsf.org</email>
+      <name>Dmitry Smirnov</name>
+      <email>onlyjob@member.fsf.org</email>
     </developer>
 
     <developer>
-	  <name>Danny Al-Gaaf</name>
-	  <email>danny.al-gaaf@bisect.de</email>
+      <name>Danny Al-Gaaf</name>
+      <email>danny.al-gaaf@bisect.de</email>
     </developer>
 
     <developer>
-	  <name>Huamin Chen</name>
-	  <email>hchen@redhat.com</email>
-	  <organization>Red Hat</organization>
-	  <organizationUrl>http://www.redhat.com</organizationUrl>
+      <name>Huamin Chen</name>
+      <email>hchen@redhat.com</email>
+      <organization>Red Hat</organization>
+      <organizationUrl>http://www.redhat.com</organizationUrl>
     </developer>
   </developers>
   <scm>
@@ -74,8 +74,8 @@
 
   <distributionManagement>
     <snapshotRepository>
-	  <id>ossrh</id>
-	  <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+      <id>ossrh</id>
+      <url>https://oss.sonatype.org/content/repositories/snapshots</url>
     </snapshotRepository>
   </distributionManagement>
 
@@ -93,55 +93,55 @@
         <artifactId>maven-release-plugin</artifactId>
         <version>2.4.1</version>
       </plugin>
-	  <plugin>
-	    <groupId>org.apache.maven.plugins</groupId>
-	    <artifactId>maven-source-plugin</artifactId>
-	    <executions>
-	      <execution>
-		    <id>attach-sources</id>
-		    <goals>
-		      <goal>jar</goal>
-		    </goals>
-	      </execution>
-	    </executions>
-	  </plugin>
-	  <plugin>
-	    <groupId>org.apache.maven.plugins</groupId>
-	    <artifactId>maven-javadoc-plugin</artifactId>
-	    <executions>
-	      <execution>
-		    <id>attach-javadocs</id>
-		    <goals>
-		      <goal>jar</goal>
-		    </goals>
-	      </execution>
-	    </executions>
-	  </plugin>
-	  <plugin>
-	    <groupId>org.sonatype.plugins</groupId>
-	    <artifactId>nexus-staging-maven-plugin</artifactId>
-	    <version>1.6.2</version>
-	    <extensions>true</extensions>
-	    <configuration>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-source-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>attach-sources</id>
+            <goals>
+              <goal>jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>attach-javadocs</id>
+            <goals>
+              <goal>jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.sonatype.plugins</groupId>
+        <artifactId>nexus-staging-maven-plugin</artifactId>
+        <version>1.6.2</version>
+        <extensions>true</extensions>
+        <configuration>
           <serverId>ossrh</serverId>
           <nexusUrl>https://oss.sonatype.org/</nexusUrl>
           <autoReleaseAfterClose>true</autoReleaseAfterClose>
-	    </configuration>
-	  </plugin>
-	  <plugin>
-	    <groupId>org.apache.maven.plugins</groupId>
-	    <artifactId>maven-gpg-plugin</artifactId>
-	    <version>1.5</version>
-	    <executions>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-gpg-plugin</artifactId>
+        <version>1.5</version>
+        <executions>
           <execution>
-		    <id>sign-artifacts</id>
-		    <phase>verify</phase>
-		    <goals>
-		      <goal>sign</goal>
-		    </goals>
+            <id>sign-artifacts</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>sign</goal>
+            </goals>
           </execution>
-	    </executions>
-	  </plugin>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 </project>
