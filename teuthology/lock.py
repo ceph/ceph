@@ -136,7 +136,7 @@ def main(ctx):
                     print json.dumps(statuses, indent=4)
 
             elif ctx.brief:
-                for s in statuses:
+                for s in sorted(statuses, key=lambda s: s.get('name')):
                     locked = "un" if s['locked'] == 0 else "  "
                     mo = re.match('\w+@(\w+?)\..*', s['name'])
                     host = mo.group(1) if mo else s['name']
