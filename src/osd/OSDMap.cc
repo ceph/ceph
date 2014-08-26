@@ -1749,7 +1749,15 @@ void OSDMap::encode_classic(bufferlist& bl, uint64_t features) const
   ::encode(ev, bl);
   ::encode(osd_addrs->hb_back_addr, bl);
   ::encode(osd_info, bl);
-  ::encode(blacklist, bl);
+  {
+    // put this in a sorted, ordered map<> so that we encode in a
+    // deterministic order.
+    map<entity_addr_t,utime_t> blacklist_map;
+    for (ceph::unordered_map<entity_addr_t,utime_t>::const_iterator p =
+	   blacklist.begin(); p != blacklist.end(); ++p)
+      blacklist_map.insert(make_pair(p->first, p->second));
+    ::encode(blacklist_map, bl);
+  }
   ::encode(osd_addrs->cluster_addr, bl);
   ::encode(cluster_snapshot_epoch, bl);
   ::encode(cluster_snapshot, bl);
@@ -2165,6 +2173,7 @@ void OSDMap::generate_test_instances(list<OSDMap*>& o)
   uuid_d fsid;
   o.back()->build_simple(cct, 1, fsid, 16, 7, 8);
   o.back()->created = o.back()->modified = utime_t(1, 2);  // fix timestamp
+  o.back()->blacklist[entity_addr_t()] = utime_t(5, 6);
   cct->put();
 }
 
