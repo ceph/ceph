@@ -417,7 +417,7 @@ public:
 
   ceph_tid_t get_tid() { return osd->get_tid(); }
 
-  LogClientTemp clog_error() { return osd->clog.error(); }
+  LogClientTemp clog_error() { return osd->clog->error(); }
 
   /*
    * Capture all object state associated with an in-progress read or write.

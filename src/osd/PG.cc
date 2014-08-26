@@ -1539,7 +1539,7 @@ void PG::activate(ObjectStore::Transaction& t,
 	 * behind.
 	 */
 	// backfill
-	osd->clog.info() << info.pgid << " restarting backfill on osd." << peer
+	osd->clog->info() << info.pgid << " restarting backfill on osd." << peer
 			 << " from (" << pi.log_tail << "," << pi.last_update << "] " << pi.last_backfill
 			 << " to " << info.last_update;
 
@@ -2886,7 +2886,7 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
     assert(!r);
   }
   if (oss.str().length())
-    osd->clog.error() << oss;
+    osd->clog->error() << oss;
 
   // log any weirdness
   log_weirdness();
@@ -2895,12 +2895,12 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
 void PG::log_weirdness()
 {
   if (pg_log.get_tail() != info.log_tail)
-    osd->clog.error() << info.pgid
+    osd->clog->error() << info.pgid
 		      << " info mismatch, log.tail " << pg_log.get_tail()
 		      << " != info.log_tail " << info.log_tail
 		      << "\n";
   if (pg_log.get_head() != info.last_update)
-    osd->clog.error() << info.pgid
+    osd->clog->error() << info.pgid
 		      << " info mismatch, log.head " << pg_log.get_head()
 		      << " != info.last_update " << info.last_update
 		      << "\n";
@@ -2908,7 +2908,7 @@ void PG::log_weirdness()
   if (!pg_log.get_log().empty()) {
     // sloppy check
     if ((pg_log.get_log().log.begin()->version <= pg_log.get_tail()))
-      osd->clog.error() << info.pgid
+      osd->clog->error() << info.pgid
 			<< " log bound mismatch, info (" << pg_log.get_tail() << ","
 			<< pg_log.get_head() << "]"
 			<< " actual ["
@@ -2918,7 +2918,7 @@ void PG::log_weirdness()
   }
   
   if (pg_log.get_log().caller_ops.size() > pg_log.get_log().log.size()) {
-    osd->clog.error() << info.pgid
+    osd->clog->error() << info.pgid
 		      << " caller_ops.size " << pg_log.get_log().caller_ops.size()
 		      << " > log size " << pg_log.get_log().log.size()
 		      << "\n";
@@ -3352,7 +3352,7 @@ void PG::_scan_rollback_obs(
        i != rollback_obs.end();
        ++i) {
     if (i->generation < trimmed_to.version) {
-      osd->clog.error() << "osd." << osd->whoami
+      osd->clog->error() << "osd." << osd->whoami
 			<< " pg " << info.pgid
 			<< " found obsolete rollback obj "
 			<< *i << " generation < trimmed_to "
@@ -3412,7 +3412,7 @@ void PG::_scan_snaps(ScrubMap &smap)
 		 << dendl;
 	    assert(0);
 	  }
-	  osd->clog.error() << "osd." << osd->whoami
+	  osd->clog->error() << "osd." << osd->whoami
 			    << " found snap mapper error on pg "
 			    << info.pgid
 			    << " oid " << hoid << " snaps in mapper: "
@@ -3420,7 +3420,7 @@ void PG::_scan_snaps(ScrubMap &smap)
 			    << oi_snaps
 			    << "...repaired";
 	} else {
-	  osd->clog.error() << "osd." << osd->whoami
+	  osd->clog->error() << "osd." << osd->whoami
 			    << " found snap mapper error on pg "
 			    << info.pgid
 			    << " oid " << hoid << " snaps missing in mapper"
@@ -4083,7 +4083,7 @@ void PG::scrub_compare_maps()
     dout(2) << ss.str() << dendl;
 
     if (!authoritative.empty() || !scrubber.inconsistent_snapcolls.empty()) {
-      osd->clog.error(ss);
+      osd->clog->error(ss);
     }
 
     for (map<hobject_t, pg_shard_t>::iterator i = authoritative.begin();
@@ -4133,7 +4133,7 @@ void PG::scrub_process_inconsistent()
        << scrubber.missing.size() << " missing, "
        << scrubber.inconsistent.size() << " inconsistent objects\n";
     dout(2) << ss.str() << dendl;
-    osd->clog.error(ss);
+    osd->clog->error(ss);
     if (repair) {
       state_clear(PG_STATE_CLEAN);
       for (map<hobject_t, pair<ScrubMap::object, pg_shard_t> >::iterator i =
@@ -4229,9 +4229,9 @@ void PG::scrub_finish()
       oss << ", " << scrubber.fixed << " fixed";
     oss << "\n";
     if (total_errors)
-      osd->clog.error(oss);
+      osd->clog->error(oss);
     else
-      osd->clog.info(oss);
+      osd->clog->info(oss);
   }
 
   // finish up
@@ -4398,7 +4398,7 @@ void PG::fulfill_log(
     dout(10) << " sending info+missing+log since " << query.since
 	     << dendl;
     if (query.since != eversion_t() && query.since < pg_log.get_tail()) {
-      osd->clog.error() << info.pgid << " got broken pg_query_t::LOG since " << query.since
+      osd->clog->error() << info.pgid << " got broken pg_query_t::LOG since " << query.since
 			<< " when my log.tail is " << pg_log.get_tail()
 			<< ", sending full log instead\n";
       mlog->log = pg_log.get_log();           // primary should not have requested this!!
@@ -6260,11 +6260,11 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
   if (unfound > 0 &&
       pg->all_unfound_are_queried_or_lost(pg->get_osdmap())) {
     if (pg->cct->_conf->osd_auto_mark_unfound_lost) {
-      pg->osd->clog.error() << pg->info.pgid << " has " << unfound
+      pg->osd->clog->error() << pg->info.pgid << " has " << unfound
 			    << " objects unfound and apparently lost, would automatically marking lost but NOT IMPLEMENTED\n";
       //pg->mark_all_unfound_lost(*context< RecoveryMachine >().get_cur_transaction());
     } else
-      pg->osd->clog.error() << pg->info.pgid << " has " << unfound << " objects unfound and apparently lost\n";
+      pg->osd->clog->error() << pg->info.pgid << " has " << unfound << " objects unfound and apparently lost\n";
   }
 
   if (!pg->snap_trimq.empty() &&

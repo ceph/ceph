@@ -1393,7 +1393,7 @@ void CDir::_tmap_fetch(const string& want_dn)
 
 void CDir::_tmap_fetched(bufferlist& bl, const string& want_dn, int r)
 {
-  LogClient &clog = cache->mds->clog;
+  LogChannelRef clog = cache->mds->clog;
   dout(10) << "_tmap_fetched " << bl.length()  << " bytes for " << *this
 	   << " want_dn=" << want_dn << dendl;
 
@@ -1412,7 +1412,7 @@ void CDir::_tmap_fetched(bufferlist& bl, const string& want_dn, int r)
     ::decode(omap, p);
 
     if (!p.end()) {
-      clog.warn() << "tmap buffer of dir " << dirfrag() << " has "
+      clog->warn() << "tmap buffer of dir " << dirfrag() << " has "
 		  << bl.length() - p.get_off() << " extra bytes\n";
     }
     bl.clear();
@@ -1452,7 +1452,7 @@ void CDir::_omap_fetch(const string& want_dn)
 void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 			 const string& want_dn, int r)
 {
-  LogClient &clog = cache->mds->clog;
+  LogChannelRef clog = cache->mds->clog;
   dout(10) << "_fetched header " << hdrbl.length() << " bytes "
 	   << omap.size() << " keys for " << *this
 	   << " want_dn=" << want_dn << dendl;
@@ -1469,7 +1469,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     }
 
     dout(0) << "_fetched missing object for " << *this << dendl;
-    clog.error() << "dir " << dirfrag() << " object missing on disk; some files may be lost\n";
+    clog->error() << "dir " << dirfrag() << " object missing on disk; some files may be lost\n";
 
     log_mark_dirty();
 
@@ -1488,7 +1488,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     bufferlist::iterator p = hdrbl.begin();
     ::decode(got_fnode, p);
     if (!p.end()) {
-      clog.warn() << "header buffer of dir " << dirfrag() << " has "
+      clog->warn() << "header buffer of dir " << dirfrag() << " has "
 		  << hdrbl.length() - p.get_off() << " extra bytes\n";
     }
   }
@@ -1668,7 +1668,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 	  string dirpath, inopath;
 	  this->inode->make_path_string(dirpath);
 	  in->make_path_string(inopath);
-	  clog.error() << "loaded dup inode " << inode_data.inode.ino
+	  clog->error() << "loaded dup inode " << inode_data.inode.ino
 	    << " [" << first << "," << last << "] v" << inode_data.inode.version
 	    << " at " << dirpath << "/" << dname
 	    << ", but inode " << in->vino() << " v" << in->inode.version
