@@ -14,13 +14,13 @@
 #ifndef MDS_UTILITY_H_
 #define MDS_UTILITY_H_
 
-#include "osd/OSDMap.h"
 #include "osdc/Objecter.h"
 #include "mds/MDSMap.h"
 #include "messages/MMDSMap.h"
 #include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
 #include "auth/Auth.h"
+#include "common/Finisher.h"
 
 /// MDS Utility
 /**
@@ -31,13 +31,13 @@
 class MDSUtility : public Dispatcher {
 protected:
   Objecter *objecter;
-  OSDMap *osdmap;
   MDSMap *mdsmap;
   Messenger *messenger;
   MonClient *monc;
 
   Mutex lock;
   SafeTimer timer;
+  Finisher finisher;
 
   Context *waiting_for_mds_map;
 

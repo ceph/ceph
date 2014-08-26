@@ -18,14 +18,15 @@
 #include "mdstypes.h"
 #include "mds_table_types.h"
 #include "include/buffer.h"
-#include "include/Context.h"
 
 class MDS;
+class Context;
+class MDSInternalContextBase;
 
 class MDSTable {
- protected:
+public:
   MDS *mds;
-
+protected:
   const char *table_name;
   bool per_mds;
 
@@ -39,7 +40,7 @@ class MDSTable {
   
   version_t version, committing_version, committed_version, projected_version;
   
-  map<version_t, list<Context*> > waitfor_save;
+  map<version_t, list<MDSInternalContextBase*> > waitfor_save;
   
 public:
   MDSTable(MDS *m, const char *n, bool is_per_mds) :
@@ -66,14 +67,14 @@ public:
   bool is_opening() { return state == STATE_OPENING; }
 
   void reset();
-  void save(Context *onfinish=0, version_t need=0);
+  void save(MDSInternalContextBase *onfinish=0, version_t need=0);
   void save_2(int r, version_t v);
 
   void shutdown() {
     if (is_active()) save(0);
   }
 
-  void load(Context *onfinish);
+  void load(MDSInternalContextBase *onfinish);
   void load_2(int, bufferlist&, Context *onfinish);
 
   // child must overload these

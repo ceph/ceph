@@ -63,7 +63,7 @@
 // -----------------------
 // LogSegment
 
-void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld, int op_prio)
+void LogSegment::try_to_expire(MDS *mds, MDSGatherBuilder &gather_bld, int op_prio)
 {
   set<CDir*> commit;
 
@@ -2610,7 +2610,7 @@ void EFragment::replay(MDS *mds)
   dout(10) << "EFragment.replay " << op_name(op) << " " << ino << " " << basefrag << " by " << bits << dendl;
 
   list<CDir*> resultfrags;
-  list<Context*> waiters;
+  list<MDSInternalContextBase*> waiters;
   list<frag_t> old_frags;
 
   // in may be NULL if it wasn't in our cache yet.  if it's a prepare

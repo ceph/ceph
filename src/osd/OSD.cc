@@ -210,12 +210,8 @@ OSDService::OSDService(OSD *osd) :
   agent_stop_flag(false),
   agent_timer_lock("OSD::agent_timer_lock"),
   agent_timer(osd->client_messenger->cct, agent_timer_lock),
-  objecter_lock("OSD::objecter_lock"),
-  objecter_timer(osd->client_messenger->cct, objecter_lock),
-  objecter(new Objecter(osd->client_messenger->cct, osd->objecter_messenger, osd->monc, &objecter_osdmap,
-			objecter_lock, objecter_timer, 0, 0)),
+  objecter(new Objecter(osd->client_messenger->cct, osd->objecter_messenger, osd->monc, 0, 0)),
   objecter_finisher(osd->client_messenger->cct),
-  objecter_dispatcher(this),
   watch_lock("OSD::watch_lock"),
   watch_timer(osd->client_messenger->cct, watch_lock),
   next_notif_id(0),
@@ -246,7 +242,9 @@ OSDService::OSDService(OSD *osd) :
 #ifdef PG_DEBUG_REFS
   , pgid_lock("OSDService::pgid_lock")
 #endif
-{}
+{
+  objecter->init();
+}
 
 OSDService::~OSDService()
 {
@@ -446,12 +444,7 @@ void OSDService::shutdown()
     watch_timer.shutdown();
   }
 
-  {
-    Mutex::Locker l(objecter_lock);
-    objecter_timer.shutdown();
-    objecter->shutdown_locked();
-  }
-  objecter->shutdown_unlocked();
+  objecter->shutdown();
   objecter_finisher.stop();
 
   {
@@ -465,14 +458,9 @@ void OSDService::shutdown()
 void OSDService::init()
 {
   reserver_finisher.start();
-  {
-    objecter_finisher.start();
-    objecter->init_unlocked();
-    Mutex::Locker l(objecter_lock);
-    objecter_timer.init();
-    objecter->set_client_incarnation(0);
-    objecter->init_locked();
-  }
+  objecter_finisher.start();
+  objecter->set_client_incarnation(0);
+  objecter->start();
   watch_timer.init();
   agent_timer.init();
 
@@ -2001,7 +1989,7 @@ int OSD::init()
   dout(2) << "superblock: i am osd." << superblock.whoami << dendl;
 
   create_logger();
-    
+
   // i'm ready!
   client_messenger->add_dispatcher_head(this);
   cluster_messenger->add_dispatcher_head(this);
@@ -2010,7 +1998,7 @@ int OSD::init()
   hb_front_server_messenger->add_dispatcher_head(&heartbeat_dispatcher);
   hb_back_server_messenger->add_dispatcher_head(&heartbeat_dispatcher);
 
-  objecter_messenger->add_dispatcher_head(&service.objecter_dispatcher);
+  objecter_messenger->add_dispatcher_head(service.objecter);
 
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
   r = monc->init();
@@ -4085,7 +4073,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     string poolstr;
 
     cmd_getval(service->cct, cmdmap, "pool", poolstr);
-    pool = curmap->const_lookup_pg_pool_name(poolstr.c_str());
+    pool = curmap->lookup_pg_pool_name(poolstr);
     //If we can't find it by name then maybe id specified
     if (pool < 0 && isdigit(poolstr[0]))
       pool = atoll(poolstr.c_str());
@@ -5363,37 +5351,6 @@ bool OSD::heartbeat_dispatch(Message *m)
   return true;
 }
 
-bool OSDService::ObjecterDispatcher::ms_dispatch(Message *m)
-{
-  Mutex::Locker l(osd->objecter_lock);
-  osd->objecter->dispatch(m);
-  return true;
-}
-
-bool OSDService::ObjecterDispatcher::ms_handle_reset(Connection *con)
-{
-  Mutex::Locker l(osd->objecter_lock);
-  osd->objecter->ms_handle_reset(con);
-  return true;
-}
-
-void OSDService::ObjecterDispatcher::ms_handle_connect(Connection *con)
-{
-  Mutex::Locker l(osd->objecter_lock);
-  return osd->objecter->ms_handle_connect(con);
-}
-
-bool OSDService::ObjecterDispatcher::ms_get_authorizer(int dest_type,
-						       AuthAuthorizer **authorizer,
-						       bool force_new)
-{
-  if (dest_type == CEPH_ENTITY_TYPE_MON)
-    return true;
-  *authorizer = osd->monc->auth->build_authorizer(dest_type);
-  return *authorizer != NULL;
-}
-
-
 bool OSD::ms_dispatch(Message *m)
 {
   if (m->get_type() == MSG_OSD_MARK_ME_DOWN) {
@@ -6141,11 +6098,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     session->put();
 
   // share with the objecter
-  {
-    Mutex::Locker l(service.objecter_lock);
-    m->get();
-    service.objecter->handle_osd_map(m);
-  }
+  service.objecter->handle_osd_map(m);
 
   epoch_t first = m->get_first();
   epoch_t last = m->get_last();

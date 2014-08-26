@@ -40,7 +40,7 @@ int Dumper::init(int rank_)
   }
 
   JournalPointer jp(rank, mdsmap->get_metadata_pool());
-  int jp_load_result = jp.load(objecter, &lock);
+  int jp_load_result = jp.load(objecter);
   if (jp_load_result != 0) {
     std::cerr << "Error loading journal: " << cpp_strerror(jp_load_result) << std::endl;
     return jp_load_result;
@@ -74,7 +74,7 @@ void Dumper::dump(const char *dump_file)
   int r = 0;
 
   Journaler journaler(ino, mdsmap->get_metadata_pool(), CEPH_FS_ONDISK_MAGIC,
-                                       objecter, 0, 0, &timer);
+                                       objecter, 0, 0, &timer, &finisher);
   r = recover_journal(&journaler);
   if (r) {
     return;

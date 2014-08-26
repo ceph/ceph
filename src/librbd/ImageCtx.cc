@@ -569,10 +569,15 @@ namespace librbd {
     object_cacher->release_set(object_set);
     cache_lock.Unlock();
     int r = flush_cache();
-    if (r)
+    if (r == -EBLACKLISTED) {
+      Mutex::Locker l(cache_lock);
+      lderr(cct) << "Blacklisted during flush!  Purging cache..." << dendl;
+      object_cacher->purge_set(object_set);
+    } else if (r) {
       lderr(cct) << "flush_cache returned " << r << dendl;
+    }
     cache_lock.Lock();
-    bool unclean = object_cacher->release_set(object_set);
+    loff_t unclean = object_cacher->release_set(object_set);
     cache_lock.Unlock();
     if (unclean) {
       lderr(cct) << "could not release all objects from cache: "

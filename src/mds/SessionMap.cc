@@ -27,6 +27,19 @@
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".sessionmap "
 
 
+class SessionMapIOContext : public MDSIOContextBase
+{
+  protected:
+    SessionMap *sessionmap;
+    MDS *get_mds() {return sessionmap->mds;}
+  public:
+    SessionMapIOContext(SessionMap *sessionmap_) : sessionmap(sessionmap_) {
+      assert(sessionmap != NULL);
+    }
+};
+
+
+
 void SessionMap::dump()
 {
   dout(10) << "dump" << dendl;
@@ -53,27 +66,27 @@ object_t SessionMap::get_object_name()
   return object_t(s);
 }
 
-class C_SM_Load : public Context {
-  SessionMap *sessionmap;
+class C_IO_SM_Load : public SessionMapIOContext {
 public:
   bufferlist bl;
-  C_SM_Load(SessionMap *cm) : sessionmap(cm) {}
+  C_IO_SM_Load(SessionMap *cm) : SessionMapIOContext(cm) {}
   void finish(int r) {
     sessionmap->_load_finish(r, bl);
   }
 };
 
-void SessionMap::load(Context *onload)
+void SessionMap::load(MDSInternalContextBase *onload)
 {
   dout(10) << "load" << dendl;
 
   if (onload)
     waiting_for_load.push_back(onload);
   
-  C_SM_Load *c = new C_SM_Load(this);
+  C_IO_SM_Load *c = new C_IO_SM_Load(this);
   object_t oid = get_object_name();
   object_locator_t oloc(mds->mdsmap->get_metadata_pool());
-  mds->objecter->read_full(oid, oloc, CEPH_NOSNAP, &c->bl, 0, c);
+  mds->objecter->read_full(oid, oloc, CEPH_NOSNAP, &c->bl, 0,
+			   new C_OnFinisher(c, &mds->finisher));
 }
 
 void SessionMap::_load_finish(int r, bufferlist &bl)
@@ -98,18 +111,17 @@ void SessionMap::_load_finish(int r, bufferlist &bl)
 // ----------------
 // SAVE
 
-class C_SM_Save : public Context {
-  SessionMap *sessionmap;
+class C_IO_SM_Save : public SessionMapIOContext {
   version_t version;
 public:
-  C_SM_Save(SessionMap *cm, version_t v) : sessionmap(cm), version(v) {}
+  C_IO_SM_Save(SessionMap *cm, version_t v) : SessionMapIOContext(cm), version(v) {}
   void finish(int r) {
     assert(r == 0);
     sessionmap->_save_finish(version);
   }
 };
 
-void SessionMap::save(Context *onsave, version_t needv)
+void SessionMap::save(MDSInternalContextBase *onsave, version_t needv)
 {
   dout(10) << "save needv " << needv << ", v " << version << dendl;
  
@@ -132,7 +144,9 @@ void SessionMap::save(Context *onsave, version_t needv)
   mds->objecter->write_full(oid, oloc,
 			    snapc,
 			    bl, ceph_clock_now(g_ceph_context), 0,
-			    NULL, new C_SM_Save(this, version));
+			    NULL,
+			    new C_OnFinisher(new C_IO_SM_Save(this, version),
+					     &mds->finisher));
 }
 
 void SessionMap::_save_finish(version_t v)

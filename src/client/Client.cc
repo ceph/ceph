@@ -162,6 +162,7 @@ Client::Client(Messenger *m, MonClient *mc)
     getgroups_cb_handle(NULL),
     async_ino_invalidator(m->cct),
     async_dentry_invalidator(m->cct),
+    objecter_finisher(m->cct),
     tick_event(NULL),
     monclient(mc), messenger(m), whoami(m->get_myname().num()),
     initialized(false), mounted(false), unmounting(false),
@@ -191,12 +192,12 @@ Client::Client(Messenger *m, MonClient *mc)
   messenger = m;
 
   // osd interfaces
-  osdmap = new OSDMap;     // initially blank.. see mount()
   mdsmap = new MDSMap;
-  objecter = new Objecter(cct, messenger, monclient, osdmap, client_lock, timer,
+  objecter = new Objecter(cct, messenger, monclient,
 			  0, 0);
   objecter->set_client_incarnation(0);  // client always 0, for now.
-  writeback_handler = new ObjecterWriteback(objecter);
+  writeback_handler = new ObjecterWriteback(objecter, &objecter_finisher,
+					    &client_lock);
   objectcacher = new ObjectCacher(cct, "libcephfs", *writeback_handler, client_lock,
 				  client_flush_set_callback,    // all commit callback
 				  (void*)this,
@@ -206,6 +207,7 @@ Client::Client(Messenger *m, MonClient *mc)
 				  cct->_conf->client_oc_target_dirty,
 				  cct->_conf->client_oc_max_dirty_age,
 				  true);
+  objecter_finisher.start();
   filer = new Filer(objecter);
 }
 
@@ -221,7 +223,6 @@ Client::~Client()
 
   delete filer;
   delete objecter;
-  delete osdmap;
   delete mdsmap;
 
   delete logger;
@@ -350,7 +351,10 @@ int Client::init()
 
   objectcacher->start();
 
+  objecter->init();
+
   // ok!
+  messenger->add_dispatcher_head(objecter);
   messenger->add_dispatcher_head(this);
 
   int r = monclient->init();
@@ -362,12 +366,7 @@ int Client::init()
     monclient->shutdown();
     return r;
   }
-
-  client_lock.Unlock();
-  objecter->init_unlocked();
-  client_lock.Lock();
-
-  objecter->init_locked();
+  objecter->start();
 
   monclient->set_want_keys(CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_OSD);
   monclient->sub_want("mdsmap", 0, 0);
@@ -454,9 +453,12 @@ void Client::shutdown()
   assert(initialized);
   initialized = false;
   timer.shutdown();
-  objecter->shutdown_locked();
+  objecter->shutdown();
   client_lock.Unlock();
-  objecter->shutdown_unlocked();
+
+  objecter_finisher.wait_for_empty();
+  objecter_finisher.stop();
+
   monclient->shutdown();
 
   if (logger) {
@@ -1929,24 +1931,16 @@ bool Client::ms_dispatch(Message *m)
   }
 
   switch (m->get_type()) {
-    // osd
-  case CEPH_MSG_OSD_OPREPLY:
-    objecter->handle_osd_op_reply((MOSDOpReply*)m);
-    break;
-  case CEPH_MSG_OSD_MAP:
-    objecter->handle_osd_map((class MOSDMap*)m);
-    break;
-  case CEPH_MSG_STATFS_REPLY:
-    objecter->handle_fs_stats_reply((MStatfsReply*)m);
-    break;
-
-    
     // mounting and mds sessions
   case CEPH_MSG_MDS_MAP:
     handle_mds_map(static_cast<MMDSMap*>(m));
     break;
   case CEPH_MSG_CLIENT_SESSION:
     handle_client_session(static_cast<MClientSession*>(m));
+    break;
+
+  case CEPH_MSG_OSD_MAP:
+    m->put();
     break;
 
     // requests
@@ -2645,15 +2639,6 @@ void Client::check_caps(Inode *in, bool is_delayed)
   }
 }
 
-struct C_SnapFlush : public Context {
-  Client *client;
-  Inode *in;
-  snapid_t seq;
-  C_SnapFlush(Client *c, Inode *i, snapid_t s) : client(c), in(i), seq(s) {}
-  void finish(int r) {
-    client->_flushed_cap_snap(in, seq);
-  }
-};
 
 void Client::queue_cap_snap(Inode *in, snapid_t seq)
 {
@@ -2840,6 +2825,8 @@ public:
     inode->get();
   }
   void finish(int r) {
+    // _async_invalidate takes the lock when it needs to, call this back from outside of lock.
+    assert(!client->client_lock.is_locked_by_me());
     client->_async_invalidate(inode, offset, length, keep_caps);
   }
 };
@@ -2908,6 +2895,9 @@ public:
     in->get();
   }
   void finish(int) {
+    // I am used via ObjectCacher, which is responsible for taking
+    // the client lock before calling me back.
+    assert(client->client_lock.is_locked_by_me());
     client->put_inode(in);
   }
 };
@@ -3805,6 +3795,8 @@ public:
 	ino.ino = inodeno_t();
   }
   void finish(int r) {
+    // _async_dentry_invalidate is responsible for its own locking
+    assert(!client->client_lock.is_locked_by_me());
     client->_async_dentry_invalidate(dirino, ino, name);
   }
 };
@@ -4002,10 +3994,7 @@ int Client::mount(const std::string &mount_root)
 
   tick(); // start tick
   
-  ldout(cct, 2) << "mounted: have osdmap " << osdmap->get_epoch() 
-	  << " and mdsmap " << mdsmap->get_epoch() 
-	  << dendl;
-
+  ldout(cct, 2) << "mounted: have mdsmap " << mdsmap->get_epoch() << dendl;
 
   // hack: get+pin root inode.
   //  fuse assumes it's always there.
@@ -4163,6 +4152,8 @@ class C_C_Tick : public Context {
 public:
   C_C_Tick(Client *c) : client(c) {}
   void finish(int r) {
+    // Called back via Timer, which takes client_lock for us
+    assert(client->client_lock.is_locked_by_me());
     client->tick();
   }
 };
@@ -6471,12 +6462,16 @@ public:
     in->get();
   }
   void finish(int) {
+    // Called back by Filter, then Client is responsible for taking its own lock
+    assert(!cl->client_lock.is_locked_by_me()); 
     cl->sync_write_commit(in);
   }
 };
 
 void Client::sync_write_commit(Inode *in)
 {
+  Mutex::Locker l(client_lock);
+
   assert(unsafe_sync_write > 0);
   unsafe_sync_write--;
 
@@ -6513,8 +6508,13 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   if ((uint64_t)(offset+size) > mdsmap->get_max_filesize()) //too large!
     return -EFBIG;
 
-  if (osdmap->test_flag(CEPH_OSDMAP_FULL))
-    return -ENOSPC;
+  {
+    const OSDMap *osdmap = objecter->get_osdmap_read();
+    bool full = osdmap->test_flag(CEPH_OSDMAP_FULL);
+    objecter->put_osdmap_read();
+    if (full)
+      return -ENOSPC;
+  }
 
   //ldout(cct, 7) << "write fh " << fh << " size " << size << " offset " << offset << dendl;
   Inode *in = f->inode;
@@ -6643,7 +6643,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
     r = filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
 			   offset, size, bl, ceph_clock_now(cct), 0,
 			   in->truncate_size, in->truncate_seq,
-			   onfinish, onsafe);
+			   onfinish, new C_OnFinisher(onsafe, &objecter_finisher));
     if (r < 0)
       goto done;
 
@@ -7415,6 +7415,7 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
     char buf[256];
 
     r = -ENODATA;
+    const OSDMap *osdmap = objecter->get_osdmap_read();
     if ((in->is_file() && n.find("ceph.file.layout") == 0) ||
 	(in->is_dir() && in->has_dir_layout() && n.find("ceph.dir.layout") == 0)) {
       string rest = n.substr(n.find("layout"));
@@ -7426,7 +7427,7 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
 		     (long unsigned)in->layout.fl_object_size);
 	if (osdmap->have_pg_pool(in->layout.fl_pg_pool))
 	  r += snprintf(buf + r, sizeof(buf) - r, "%s",
-			osdmap->get_pool_name(in->layout.fl_pg_pool));
+			osdmap->get_pool_name(in->layout.fl_pg_pool).c_str());
 	else
 	  r += snprintf(buf + r, sizeof(buf) - r, "%lu",
 			(long unsigned)in->layout.fl_pg_pool);
@@ -7439,12 +7440,13 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
       } else if (rest == "layout.pool") {
 	if (osdmap->have_pg_pool(in->layout.fl_pg_pool))
 	  r = snprintf(buf, sizeof(buf), "%s",
-		       osdmap->get_pool_name(in->layout.fl_pg_pool));
+		       osdmap->get_pool_name(in->layout.fl_pg_pool).c_str());
 	else
 	  r = snprintf(buf, sizeof(buf), "%lu",
 		       (long unsigned)in->layout.fl_pg_pool);
       }
     }
+    objecter->put_osdmap_read();
     if (size != 0) {
       if (r > (int)size) {
 	r = -ERANGE;
@@ -7739,7 +7741,9 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
 
   int64_t pool_id = -1;
   if (data_pool && *data_pool) {
+    const OSDMap * osdmap = objecter->get_osdmap_read();
     pool_id = osdmap->lookup_pg_pool_name(data_pool);
+    objecter->put_osdmap_read();
     if (pool_id < 0)
       return -EINVAL;
     if (pool_id > 0xffffffffll)
@@ -8208,21 +8212,26 @@ int Client::ll_link(Inode *parent, Inode *newparent, const char *newname,
 int Client::ll_num_osds(void)
 {
   Mutex::Locker lock(client_lock);
-  return osdmap->get_num_osds();
+  const OSDMap *osdmap = objecter->get_osdmap_read();
+  int ret = osdmap->get_num_osds();
+  objecter->put_osdmap_read();
+  return ret;
 }
 
 int Client::ll_osdaddr(int osd, uint32_t *addr)
 {
   Mutex::Locker lock(client_lock);
-  entity_addr_t g = osdmap->get_addr(osd);
-  uint32_t nb_addr = (g.in4_addr()).sin_addr.s_addr;
-
-  if (!(osdmap->exists(osd))) {
+  const OSDMap *osdmap = objecter->get_osdmap_read();
+  bool exists = osdmap->exists(osd);
+  entity_addr_t g;
+  if (exists)
+    g = osdmap->get_addr(osd);
+  objecter->put_osdmap_read();
+  if (!exists) {
     return -1;
   }
-
+  uint32_t nb_addr = (g.in4_addr()).sin_addr.s_addr;
   *addr = ntohl(nb_addr);
-
   return 0;
 }
 
@@ -8268,8 +8277,9 @@ int Client::ll_get_stripe_osd(Inode *in, uint64_t blockno,
   uint64_t objectno = objectsetno * stripe_count + stripepos;  // object id
 
   object_t oid = file_object_t(ino, objectno);
-  ceph_object_layout olayout
-    = objecter->osdmap->file_to_object_layout(oid, *layout, "");
+  const OSDMap *osdmap = objecter->get_osdmap_read();
+  ceph_object_layout olayout = osdmap->file_to_object_layout(oid, *layout, "");
+  objecter->put_osdmap_read();
 
   pg_t pg = (pg_t)olayout.ol_pgid;
   vector<int> osds;
@@ -8641,8 +8651,13 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
   if ((mode & FALLOC_FL_PUNCH_HOLE) && !(mode & FALLOC_FL_KEEP_SIZE))
     return -EOPNOTSUPP;
 
-  if (osdmap->test_flag(CEPH_OSDMAP_FULL) && !(mode & FALLOC_FL_PUNCH_HOLE))
-    return -ENOSPC;
+  {
+    const OSDMap *osdmap = objecter->get_osdmap_read();
+    bool full = osdmap->test_flag(CEPH_OSDMAP_FULL);
+    objecter->put_osdmap_read();
+    if (full && !(mode & FALLOC_FL_PUNCH_HOLE))
+      return -ENOSPC;
+  }
 
   Inode *in = fh->inode;
 
@@ -8706,7 +8721,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
                       in->snaprealm->get_snap_context(),
                       offset, length,
                       ceph_clock_now(cct),
-                      0, true, onfinish, onsafe);
+                      0, true, onfinish, new C_OnFinisher(onsafe, &objecter_finisher));
       if (r < 0)
         goto done;
 
@@ -8841,23 +8856,34 @@ int Client::fdescribe_layout(int fd, ceph_file_layout *lp)
 int64_t Client::get_pool_id(const char *pool_name)
 {
   Mutex::Locker lock(client_lock);
-  return osdmap->lookup_pg_pool_name(pool_name);
+  const OSDMap *osdmap = objecter->get_osdmap_read();
+  int64_t pool = osdmap->lookup_pg_pool_name(pool_name);
+  objecter->put_osdmap_read();
+  return pool;
 }
 
 string Client::get_pool_name(int64_t pool)
 {
   Mutex::Locker lock(client_lock);
-  if (!osdmap->have_pg_pool(pool))
-    return string();
-  return osdmap->get_pool_name(pool);
+  const OSDMap *osdmap = objecter->get_osdmap_read();
+  string ret;
+  if (osdmap->have_pg_pool(pool))
+    ret = osdmap->get_pool_name(pool);
+  objecter->put_osdmap_read();
+  return ret;
 }
 
 int Client::get_pool_replication(int64_t pool)
 {
   Mutex::Locker lock(client_lock);
+  const OSDMap *osdmap = objecter->get_osdmap_read();
+  int ret;
   if (!osdmap->have_pg_pool(pool))
-    return -ENOENT;
-  return osdmap->get_pg_pool(pool)->get_size();
+    ret = -ENOENT;
+  else
+    ret = osdmap->get_pg_pool(pool)->get_size();
+  objecter->put_osdmap_read();
+  return ret;
 }
 
 int Client::get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& osds)
@@ -8873,8 +8899,11 @@ int Client::get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& o
   Striper::file_to_extents(cct, in->ino, &in->layout, off, 1, in->truncate_size, extents);
   assert(extents.size() == 1);
 
+  const OSDMap *osdmap = objecter->get_osdmap_read();
   pg_t pg = osdmap->object_locator_to_pg(extents[0].oid, extents[0].oloc);
   osdmap->pg_to_acting_osds(pg, osds);
+  objecter->put_osdmap_read();
+
   if (osds.empty())
     return -EINVAL;
 
@@ -8905,7 +8934,10 @@ int Client::get_osd_crush_location(int id, vector<pair<string, string> >& path)
   Mutex::Locker lock(client_lock);
   if (id < 0)
     return -EINVAL;
-  return osdmap->crush->get_full_location_ordered(id, path);
+  const OSDMap *osdmap = objecter->get_osdmap_read();
+  int ret = osdmap->crush->get_full_location_ordered(id, path);
+  objecter->put_osdmap_read();
+  return ret;
 }
 
 int Client::get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>& address)
@@ -8923,30 +8955,34 @@ int Client::get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>
   assert(extents.size() == 1);
 
   // now we have the object and its 'layout'
+  const OSDMap *osdmap = objecter->get_osdmap_read();
   pg_t pg = osdmap->object_locator_to_pg(extents[0].oid, extents[0].oloc);
   vector<int> osds;
   osdmap->pg_to_acting_osds(pg, osds);
-  if (osds.empty())
-    return -EINVAL;
-
-  for (unsigned i = 0; i < osds.size(); i++) {
-    entity_addr_t addr = osdmap->get_addr(osds[i]);
-    address.push_back(addr);
+  int ret = 0;
+  if (!osds.empty()) {
+    ret = -EINVAL;
+  } else {
+    for (unsigned i = 0; i < osds.size(); i++) {
+      entity_addr_t addr = osdmap->get_addr(osds[i]);
+      address.push_back(addr);
+    }
   }
-
-  return 0;
+  objecter->put_osdmap_read();
+  return ret;
 }
 
 int Client::get_osd_addr(int osd, entity_addr_t& addr)
 {
   Mutex::Locker lock(client_lock);
-
+  const OSDMap *osdmap = objecter->get_osdmap_read();
+  int ret = 0;
   if (!osdmap->exists(osd))
-    return -ENOENT;
-
-  addr = osdmap->get_addr(osd);
-
-  return 0;
+    ret = -ENOENT;
+  else
+    addr = osdmap->get_addr(osd);
+  objecter->put_osdmap_read();
+  return ret;
 }
 
 int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
@@ -8973,11 +9009,12 @@ int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
 int Client::get_local_osd()
 {
   Mutex::Locker lock(client_lock);
-
+  const OSDMap *osdmap = objecter->get_osdmap_read();
   if (osdmap->get_epoch() != local_osd_epoch) {
     local_osd = osdmap->find_osd_on_ip(messenger->get_myaddr());
     local_osd_epoch = osdmap->get_epoch();
   }
+  objecter->put_osdmap_read();
   return local_osd;
 }
 
@@ -8991,15 +9028,11 @@ int Client::get_local_osd()
 void Client::ms_handle_connect(Connection *con)
 {
   ldout(cct, 10) << "ms_handle_connect on " << con->get_peer_addr() << dendl;
-  Mutex::Locker l(client_lock);
-  objecter->ms_handle_connect(con);
 }
 
 bool Client::ms_handle_reset(Connection *con)
 {
   ldout(cct, 0) << "ms_handle_reset on " << con->get_peer_addr() << dendl;
-  Mutex::Locker l(client_lock);
-  objecter->ms_handle_reset(con);
   return false;
 }
 
@@ -9008,10 +9041,6 @@ void Client::ms_handle_remote_reset(Connection *con)
   ldout(cct, 0) << "ms_handle_remote_reset on " << con->get_peer_addr() << dendl;
   Mutex::Locker l(client_lock);
   switch (con->get_peer_type()) {
-  case CEPH_ENTITY_TYPE_OSD:
-    objecter->ms_handle_remote_reset(con);
-    break;
-
   case CEPH_ENTITY_TYPE_MDS:
     {
       // kludge to figure out which mds this is; fixme with a Connection* state

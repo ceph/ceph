@@ -689,14 +689,11 @@ public:
     return false;
   }
 
-  int64_t lookup_pg_pool_name(const string& name) {
-    if (name_pool.count(name))
-      return name_pool[name];
-    return -ENOENT;
-  }
-
-  int64_t const_lookup_pg_pool_name(const char *name) const {
-    return const_cast<OSDMap *>(this)->lookup_pg_pool_name(name);
+  int64_t lookup_pg_pool_name(const string& name) const {
+    map<string,int64_t>::const_iterator p = name_pool.find(name);
+    if (p == name_pool.end())
+      return -ENOENT;
+    return p->second;
   }
 
   int64_t get_pool_max() const {
@@ -705,11 +702,10 @@ public:
   const map<int64_t,pg_pool_t>& get_pools() const {
     return pools;
   }
-  const char *get_pool_name(int64_t p) const {
+  const string& get_pool_name(int64_t p) const {
     map<int64_t, string>::const_iterator i = pool_name.find(p);
-    if (i != pool_name.end())
-      return i->second.c_str();
-    return 0;
+    assert(i != pool_name.end());
+    return i->second;
   }
   bool have_pg_pool(int64_t p) const {
     return pools.count(p);

@@ -27,7 +27,6 @@
 #include "msg/Messenger.h"
 #include "mon/MonClient.h"
 
-#include "osd/OSDMap.h"
 #include "osdc/Objecter.h"
 #include "osdc/Filer.h"
 #include "osdc/Journaler.h"
@@ -57,8 +56,6 @@
 #include "messages/MMDSBeacon.h"
 
 #include "messages/MGenericMessage.h"
-
-#include "messages/MOSDMap.h"
 
 #include "messages/MClientRequest.h"
 #include "messages/MClientRequestForward.h"
@@ -104,6 +101,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   monc(mc),
   clog(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
   op_tracker(cct, m->cct->_conf->mds_enable_op_tracker),
+  finisher(cct),
   sessionmap(this), asok_hook(NULL) {
 
   orig_argc = 0;
@@ -114,10 +112,8 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   monc->set_messenger(messenger);
 
   mdsmap = new MDSMap;
-  osdmap = new OSDMap;
 
-  objecter = new Objecter(m->cct, messenger, monc, osdmap, mds_lock, timer,
-			  0, 0);
+  objecter = new Objecter(m->cct, messenger, monc, 0, 0);
   objecter->unset_honor_osdmap_full();
 
   filer = new Filer(objecter);
@@ -170,7 +166,6 @@ MDS::~MDS() {
   if (inotable) { delete inotable; inotable = NULL; }
   if (snapserver) { delete snapserver; snapserver = NULL; }
   if (snapclient) { delete snapclient; snapclient = NULL; }
-  if (osdmap) { delete osdmap; osdmap = 0; }
   if (mdsmap) { delete mdsmap; mdsmap = 0; }
 
   if (server) { delete server; server = 0; }
@@ -594,6 +589,9 @@ int MDS::init(MDSMap::DaemonState wanted_state)
   dout(10) << sizeof(Capability) << "\tCapability " << dendl;
   dout(10) << sizeof(xlist<void*>::item) << "\t xlist<>::item   *2=" << 2*sizeof(xlist<void*>::item) << dendl;
 
+  objecter->init();
+
+  messenger->add_dispatcher_tail(objecter);
   messenger->add_dispatcher_tail(this);
 
   // get monmap
@@ -601,6 +599,8 @@ int MDS::init(MDSMap::DaemonState wanted_state)
 
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD | CEPH_ENTITY_TYPE_MDS);
   monc->init();
+
+  finisher.start();
 
   // tell monc about log_client so it will know about mon session resets
   monc->set_log_client(&clog);
@@ -616,15 +616,13 @@ int MDS::init(MDSMap::DaemonState wanted_state)
   while (monc->wait_auth_rotating(30.0) < 0) {
     derr << "unable to obtain rotating service keys; retrying" << dendl;
   }
-  objecter->init_unlocked();
+  objecter->start();
 
   mds_lock.Lock();
   if (want_state == CEPH_MDS_STATE_DNE) {
     mds_lock.Unlock();
     return 0;
   }
-
-  objecter->init_locked();
 
   monc->sub_want("mdsmap", 0, 0);
   monc->renew_subs();
@@ -635,14 +633,18 @@ int MDS::init(MDSMap::DaemonState wanted_state)
   while (true) {
     objecter->maybe_request_map();
     objecter->wait_for_osd_map();
-    uint64_t osd_features = objecter->osdmap->get_up_osd_features();
-    if (osd_features & CEPH_FEATURE_OSD_TMAP2OMAP)
+    const OSDMap *osdmap = objecter->get_osdmap_read();
+    uint64_t osd_features = osdmap->get_up_osd_features();
+    if (osd_features & CEPH_FEATURE_OSD_TMAP2OMAP) {
+      objecter->put_osdmap_read();
       break;
-    if (objecter->osdmap->get_num_up_osds() > 0) {
+    }
+    if (osdmap->get_num_up_osds() > 0) {
         derr << "*** one or more OSDs do not support TMAP2OMAP; upgrade OSDs before starting MDS (or downgrade MDS) ***" << dendl;
     } else {
-        derr << "*** no OSDs are up as of epoch " << objecter->osdmap->get_epoch() << ", waiting" << dendl;
+        derr << "*** no OSDs are up as of epoch " << osdmap->get_epoch() << ", waiting" << dendl;
     }
+    objecter->put_osdmap_read();
     sleep(10);
   }
 
@@ -876,10 +878,6 @@ void MDS::handle_mds_beacon(MMDSBeacon *m)
   }
 
   m->put();
-}
-
-void MDS::request_osdmap(Context *c) {
-  objecter->wait_for_new_map(c, osdmap->get_epoch());
 }
 
 /* This function DOES put the passed message before returning*/
@@ -1281,9 +1279,9 @@ void MDS::handle_mds_map(MMDSMap *m)
     balancer->try_rebalance();
 
   {
-    map<epoch_t,list<Context*> >::iterator p = waiting_for_mdsmap.begin();
+    map<epoch_t,list<MDSInternalContextBase*> >::iterator p = waiting_for_mdsmap.begin();
     while (p != waiting_for_mdsmap.end() && p->first <= mdsmap->get_epoch()) {
-      list<Context*> ls;
+      list<MDSInternalContextBase*> ls;
       ls.swap(p->second);
       waiting_for_mdsmap.erase(p++);
       finish_contexts(g_ceph_context, ls);
@@ -1318,10 +1316,9 @@ void MDS::request_state(MDSMap::DaemonState s)
 }
 
 
-class C_MDS_CreateFinish : public Context {
-  MDS *mds;
+class C_MDS_CreateFinish : public MDSInternalContext {
 public:
-  C_MDS_CreateFinish(MDS *m) : mds(m) {}
+  C_MDS_CreateFinish(MDS *m) : MDSInternalContext(m) {}
   void finish(int r) { mds->creating_done(); }
 };
 
@@ -1329,7 +1326,7 @@ void MDS::boot_create()
 {
   dout(3) << "boot_create" << dendl;
 
-  C_GatherBuilder fin(g_ceph_context, new C_MDS_CreateFinish(this));
+  MDSGatherBuilder fin(g_ceph_context, new C_MDS_CreateFinish(this));
 
   mdcache->init_layouts();
 
@@ -1379,12 +1376,13 @@ void MDS::creating_done()
 }
 
 
-class C_MDS_BootStart : public Context {
-  MDS *mds;
+class C_MDS_BootStart : public MDSInternalContext {
   MDS::BootStep nextstep;
 public:
-  C_MDS_BootStart(MDS *m, MDS::BootStep n) : mds(m), nextstep(n) {}
-  void finish(int r) { mds->boot_start(nextstep, r); }
+  C_MDS_BootStart(MDS *m, MDS::BootStep n) : MDSInternalContext(m), nextstep(n) {}
+  void finish(int r) {
+    mds->boot_start(nextstep, r);
+  }
 };
 
 
@@ -1410,7 +1408,8 @@ void MDS::boot_start(BootStep step, int r)
       {
         mdcache->init_layouts();
 
-        C_GatherBuilder gather(g_ceph_context, new C_MDS_BootStart(this, MDS_BOOT_OPEN_ROOT));
+        MDSGatherBuilder gather(g_ceph_context,
+            new C_MDS_BootStart(this, MDS_BOOT_OPEN_ROOT));
         dout(2) << "boot_start " << step << ": opening inotable" << dendl;
         inotable->load(gather.new_sub());
 
@@ -1432,7 +1431,8 @@ void MDS::boot_start(BootStep step, int r)
       {
         dout(2) << "boot_start " << step << ": loading/discovering base inodes" << dendl;
 
-        C_GatherBuilder gather(g_ceph_context, new C_MDS_BootStart(this, MDS_BOOT_PREPARE_LOG));
+        MDSGatherBuilder gather(g_ceph_context,
+            new C_MDS_BootStart(this, MDS_BOOT_PREPARE_LOG));
 
         mdcache->open_mydir_inode(gather.new_sub());
 
@@ -1499,28 +1499,27 @@ void MDS::replay_start()
 
   calc_recovery_set();
 
-  dout(1) << " need osdmap epoch " << mdsmap->get_last_failure_osd_epoch()
-	  <<", have " << osdmap->get_epoch()
-	  << dendl;
+  // Check if we need to wait for a newer OSD map before starting
+  Context *fin = new C_OnFinisher(new C_IO_Wrapper(this, new C_MDS_BootStart(this, MDS_BOOT_INITIAL)), &finisher);
+  bool const ready = objecter->wait_for_map(
+      mdsmap->get_last_failure_osd_epoch(),
+      fin);
 
-  // start?
-  if (osdmap->get_epoch() >= mdsmap->get_last_failure_osd_epoch()) {
+  if (ready) {
+    delete fin;
     boot_start();
   } else {
     dout(1) << " waiting for osdmap " << mdsmap->get_last_failure_osd_epoch() 
 	    << " (which blacklists prior instance)" << dendl;
-    objecter->wait_for_new_map(new C_MDS_BootStart(this, MDS_BOOT_INITIAL),
-			       mdsmap->get_last_failure_osd_epoch());
   }
 }
 
 
-class MDS::C_MDS_StandbyReplayRestartFinish : public Context {
-  MDS *mds;
+class MDS::C_MDS_StandbyReplayRestartFinish : public MDSIOContext {
   uint64_t old_read_pos;
 public:
   C_MDS_StandbyReplayRestartFinish(MDS *mds_, uint64_t old_read_pos_) :
-    mds(mds_), old_read_pos(old_read_pos_) {}
+    MDSIOContext(mds_), old_read_pos(old_read_pos_) {}
   void finish(int r) {
     mds->_standby_replay_restart_finish(r, old_read_pos);
   }
@@ -1540,23 +1539,39 @@ void MDS::_standby_replay_restart_finish(int r, uint64_t old_read_pos)
 
 inline void MDS::standby_replay_restart()
 {
-  dout(1) << "standby_replay_restart" << (standby_replaying ? " (as standby)":" (final takeover pass)") << dendl;
-
-  if (!standby_replaying && osdmap->get_epoch() < mdsmap->get_last_failure_osd_epoch()) {
-    dout(1) << " waiting for osdmap " << mdsmap->get_last_failure_osd_epoch() 
-	    << " (which blacklists prior instance)" << dendl;
-    objecter->wait_for_new_map(new C_MDS_BootStart(this, MDS_BOOT_PREPARE_LOG),
-			       mdsmap->get_last_failure_osd_epoch());
-  } else {
+  dout(1) << "standby_replay_restart"
+	  << (standby_replaying ? " (as standby)":" (final takeover pass)")
+	  << dendl;
+  if (standby_replaying) {
+    /* Go around for another pass of replaying in standby */
     mdlog->get_journaler()->reread_head_and_probe(
-      new C_MDS_StandbyReplayRestartFinish(this, mdlog->get_journaler()->get_read_pos()));
+      new C_MDS_StandbyReplayRestartFinish(
+        this,
+	mdlog->get_journaler()->get_read_pos()));
+  } else {
+    /* We are transitioning out of standby: wait for OSD map update
+       before making final pass */
+    Context *fin = new C_OnFinisher(new C_IO_Wrapper(this,
+          new C_MDS_BootStart(this, MDS_BOOT_PREPARE_LOG)),
+      &finisher);
+    bool const ready =
+      objecter->wait_for_map(mdsmap->get_last_failure_osd_epoch(), fin);
+    if (ready) {
+      delete fin;
+      mdlog->get_journaler()->reread_head_and_probe(
+        new C_MDS_StandbyReplayRestartFinish(
+          this,
+	  mdlog->get_journaler()->get_read_pos()));
+    } else {
+      dout(1) << " waiting for osdmap " << mdsmap->get_last_failure_osd_epoch() 
+              << " (which blacklists prior instance)" << dendl;
+    }
   }
 }
 
-class MDS::C_MDS_StandbyReplayRestart : public Context {
-  MDS *mds;
+class MDS::C_MDS_StandbyReplayRestart : public MDSInternalContext {
 public:
-  C_MDS_StandbyReplayRestart(MDS *m) : mds(m) {}
+  C_MDS_StandbyReplayRestart(MDS *m) : MDSInternalContext(m) {}
   void finish(int r) {
     assert(!r);
     mds->standby_replay_restart();
@@ -1606,18 +1621,18 @@ void MDS::replay_done()
   if (g_conf->mds_wipe_sessions) {
     dout(1) << "wiping out client sessions" << dendl;
     sessionmap.wipe();
-    sessionmap.save(new C_NoopContext);
+    sessionmap.save(new C_MDSInternalNoop);
   }
   if (g_conf->mds_wipe_ino_prealloc) {
     dout(1) << "wiping out ino prealloc from sessions" << dendl;
     sessionmap.wipe_ino_prealloc();
-    sessionmap.save(new C_NoopContext);
+    sessionmap.save(new C_MDSInternalNoop);
   }
   if (g_conf->mds_skip_ino) {
     inodeno_t i = g_conf->mds_skip_ino;
     dout(1) << "skipping " << i << " inodes" << dendl;
     inotable->skip_inos(i);
-    inotable->save(new C_NoopContext);
+    inotable->save(new C_MDSInternalNoop);
   }
 
   if (mdsmap->get_num_in_mds() == 1 &&
@@ -1816,6 +1831,8 @@ void MDS::suicide()
 
   mdlog->shutdown();
 
+  finisher.stop(); // no flushing
+
   // stop timers
   if (beacon_sender) {
     timer.cancel_event(beacon_sender);
@@ -1834,8 +1851,8 @@ void MDS::suicide()
   // shut down cache
   mdcache->shutdown();
 
-  if (objecter->initialized)
-    objecter->shutdown_locked();
+  if (objecter->initialized.read())
+    objecter->shutdown();
 
   monc->shutdown();
 
@@ -1962,13 +1979,8 @@ bool MDS::handle_core_message(Message *m)
     break;    
 
     // OSD
-  case CEPH_MSG_OSD_OPREPLY:
-    ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_OSD);
-    objecter->handle_osd_op_reply((class MOSDOpReply*)m);
-    break;
   case CEPH_MSG_OSD_MAP:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
-    objecter->handle_osd_map((MOSDMap*)m);
     if (is_active() && snapserver)
       snapserver->check_osd_map(true);
     break;
@@ -2108,10 +2120,14 @@ bool MDS::_dispatch(Message *m)
   while (!finished_queue.empty()) {
     dout(7) << "mds has " << finished_queue.size() << " queued contexts" << dendl;
     dout(10) << finished_queue << dendl;
-    list<Context*> ls;
+    list<MDSInternalContextBase*> ls;
     ls.swap(finished_queue);
     while (!ls.empty()) {
       dout(10) << " finish " << ls.front() << dendl;
+
+      dout(1) << "trigger:  " << this << dendl;
+      dout(1) << "          " << this->mds_lock.is_locked() << dendl;
+      dout(1) << "          " << this->mds_lock.is_locked_by_me() << dendl;
       ls.front()->complete(0);
       ls.pop_front();
       
@@ -2266,35 +2282,29 @@ bool MDS::_dispatch(Message *m)
 
 void MDS::ms_handle_connect(Connection *con) 
 {
-  Mutex::Locker l(mds_lock);
-  dout(5) << "ms_handle_connect on " << con->get_peer_addr() << dendl;
-  if (want_state == CEPH_MDS_STATE_DNE)
-    return;
-  objecter->ms_handle_connect(con);
 }
 
 bool MDS::ms_handle_reset(Connection *con) 
 {
+  if (con->get_peer_type() != CEPH_ENTITY_TYPE_CLIENT)
+    return false;
+
   Mutex::Locker l(mds_lock);
   dout(5) << "ms_handle_reset on " << con->get_peer_addr() << dendl;
   if (want_state == CEPH_MDS_STATE_DNE)
     return false;
 
-  if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
-    objecter->ms_handle_reset(con);
-  } else if (con->get_peer_type() == CEPH_ENTITY_TYPE_CLIENT) {
-    Session *session = static_cast<Session *>(con->get_priv());
-    if (session) {
-      if (session->is_closed()) {
-	dout(3) << "ms_handle_reset closing connection for session " << session->info.inst << dendl;
-	con->mark_down();
-	con->set_priv(NULL);
-	sessionmap.remove_session(session);
-      }
-      session->put();
-    } else {
+  Session *session = static_cast<Session *>(con->get_priv());
+  if (session) {
+    if (session->is_closed()) {
+      dout(3) << "ms_handle_reset closing connection for session " << session->info.inst << dendl;
       con->mark_down();
+      con->set_priv(NULL);
+      sessionmap.remove_session(session);
     }
+    session->put();
+  } else {
+    con->mark_down();
   }
   return false;
 }
@@ -2302,27 +2312,23 @@ bool MDS::ms_handle_reset(Connection *con)
 
 void MDS::ms_handle_remote_reset(Connection *con) 
 {
+  if (con->get_peer_type() != CEPH_ENTITY_TYPE_CLIENT)
+    return;
+
   Mutex::Locker l(mds_lock);
   dout(5) << "ms_handle_remote_reset on " << con->get_peer_addr() << dendl;
   if (want_state == CEPH_MDS_STATE_DNE)
     return;
-  switch (con->get_peer_type()) {
-  case CEPH_ENTITY_TYPE_OSD:
-    objecter->ms_handle_remote_reset(con);
-    break;
 
-  case CEPH_ENTITY_TYPE_CLIENT:
-    Session *session = static_cast<Session *>(con->get_priv());
-    if (session) {
-      if (session->is_closed()) {
-	dout(3) << "ms_handle_remote_reset closing connection for session " << session->info.inst << dendl;
-	con->mark_down();
-	con->set_priv(NULL);
-	sessionmap.remove_session(session);
-      }
-      session->put();
+  Session *session = static_cast<Session *>(con->get_priv());
+  if (session) {
+    if (session->is_closed()) {
+      dout(3) << "ms_handle_remote_reset closing connection for session " << session->info.inst << dendl;
+      con->mark_down();
+      con->set_priv(NULL);
+      sessionmap.remove_session(session);
     }
-    break;
+    session->put();
   }
 }
 

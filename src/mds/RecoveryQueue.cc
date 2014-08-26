@@ -24,14 +24,24 @@
 #define dout_subsys ceph_subsys_mds
 
 
-struct C_MDC_Recover : public Context {
+class C_MDC_Recover : public MDSIOContextBase {
+protected:
   RecoveryQueue *rq;
   CInode *in;
-  uint64_t size;
-  utime_t mtime;
-  C_MDC_Recover(RecoveryQueue *rq_, CInode *i) : rq(rq_), in(i), size(0) {}
   void finish(int r) {
     rq->_recovered(in, r, size, mtime);
+  }
+
+  MDS *get_mds() {
+    return rq->mds;
+  }
+
+public:
+  uint64_t size;
+  utime_t mtime;
+
+  C_MDC_Recover(RecoveryQueue *rq_, CInode *i) : rq(rq_), in(i), size(0) {
+    assert(rq != NULL);
   }
 };
 

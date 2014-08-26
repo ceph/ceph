@@ -104,7 +104,7 @@ class Finisher {
     finisher_thread(this) {
     PerfCountersBuilder b(cct, string("finisher-") + name,
 			  l_finisher_first, l_finisher_last);
-    b.add_time_avg(l_finisher_queue_len, "queue_len");
+    b.add_u64(l_finisher_queue_len, "queue_len");
     logger = b.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
     logger->set(l_finisher_queue_len, 0);
@@ -122,7 +122,10 @@ class C_OnFinisher : public Context {
   Context *con;
   Finisher *fin;
 public:
-  C_OnFinisher(Context *c, Finisher *f) : con(c), fin(f) {}
+  C_OnFinisher(Context *c, Finisher *f) : con(c), fin(f) {
+    assert(fin != NULL);
+    assert(con != NULL);
+  }
   void finish(int r) {
     fin->queue(con, r);
   }
