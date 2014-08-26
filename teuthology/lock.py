@@ -186,8 +186,8 @@ def main(ctx):
             machines_to_update = result.keys()
             if ctx.machine_type == 'vps':
                 shortnames = ' '.join(
-                    [name.split('@')[1].split('.')[0]
-                        for name in result.keys()]
+                    [misc.decanonicalize_hostname(name) for name in
+                     result.keys()]
                 )
                 if len(result) < ctx.num_to_lock:
                     log.error("Locking failed.")

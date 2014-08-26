@@ -117,8 +117,9 @@ def lock_machines(ctx, config):
                         for guest in vmlist:
                             if guest not in keys_dict.keys():
                                 log.info('recreating: ' + guest)
-                                provision.destroy_if_vm(ctx, 'ubuntu@' + guest)
-                                provision.create_if_vm(ctx, 'ubuntu@' + guest)
+                                full_name = misc.canonicalize_hostname(guest)
+                                provision.destroy_if_vm(ctx, full_name)
+                                provision.create_if_vm(ctx, full_name)
                 if lock.do_update_keys(keys_dict):
                     log.info("Error in virtual machine keys")
                 newscandict = {}
