@@ -627,28 +627,35 @@ void LogMonitor::update_log_channels()
     return;
   }
 
-  channels.expand_channel_meta();
 }
 
 void LogMonitor::log_channel_info::expand_channel_meta(map<string,string> &m)
 {
   generic_dout(10) << __func__ << " expand map: " << m << dendl;
   for (map<string,string>::iterator p = m.begin(); p != m.end(); ++p) {
-    size_t pos = string::npos;
-    string s = p->second;
-    bool found_meta = false;
-    while ((pos = s.find(LOG_META_CHANNEL)) != string::npos) {
-      found_meta = true;
-      string tmp = s.substr(0, pos-1) + p->first;
-      if (pos+LOG_META_CHANNEL.length() < s.length())
-        tmp = p->second.substr(pos+LOG_META_CHANNEL.length()+1);
-      s = tmp;
-    }
-    if (found_meta)
-      m[p->first] = s;
+    m[p->first] = expand_channel_meta(p->second, p->first);
   }
   generic_dout(10) << __func__ << " expanded map: " << m << dendl;
 }
+
+string LogMonitor::log_channel_info::expand_channel_meta(
+    const string &input,
+    const string &change_to)
+{
+  size_t pos = string::npos;
+  string s(input);
+  while ((pos = s.find(LOG_META_CHANNEL)) != string::npos) {
+    string tmp = s.substr(0, pos) + change_to;
+    if (pos+LOG_META_CHANNEL.length() < s.length())
+      tmp += s.substr(pos+LOG_META_CHANNEL.length());
+    s = tmp;
+  }
+  generic_dout(20) << __func__ << " from '" << input
+                   << "' to '" << s << "'" << dendl;
+
+  return s;
+}
+
 void LogMonitor::handle_conf_change(const struct md_config_t *conf,
                                     const std::set<std::string> &changed)
 {
