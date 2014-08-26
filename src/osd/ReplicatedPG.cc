@@ -2005,9 +2005,10 @@ void ReplicatedPG::log_op_stats(OpContext *ctx)
     osd->logger->inc(l_osd_op_rw);
     osd->logger->inc(l_osd_op_rw_inb, inb);
     osd->logger->inc(l_osd_op_rw_outb, outb);
-    osd->logger->tinc(l_osd_op_rw_rlat, rlatency);
     osd->logger->tinc(l_osd_op_rw_lat, latency);
     osd->logger->tinc(l_osd_op_rw_process_lat, process_latency);
+    if (rlatency != utime_t())
+      osd->logger->tinc(l_osd_op_rw_rlat, rlatency);
   } else if (op->may_read()) {
     osd->logger->inc(l_osd_op_r);
     osd->logger->inc(l_osd_op_r_outb, outb);
@@ -2016,9 +2017,10 @@ void ReplicatedPG::log_op_stats(OpContext *ctx)
   } else if (op->may_write() || op->may_cache()) {
     osd->logger->inc(l_osd_op_w);
     osd->logger->inc(l_osd_op_w_inb, inb);
-    osd->logger->tinc(l_osd_op_w_rlat, rlatency);
     osd->logger->tinc(l_osd_op_w_lat, latency);
     osd->logger->tinc(l_osd_op_w_process_lat, process_latency);
+    if (rlatency != utime_t())
+      osd->logger->tinc(l_osd_op_w_rlat, rlatency);
   } else
     assert(0);
 
