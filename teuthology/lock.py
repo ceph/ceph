@@ -82,6 +82,9 @@ def main(ctx):
                 else:
                     log.error("Lockserver doesn't know about machine: %s" %
                               machine)
+            # Delete this variable to avoid linter errors when we redefine it
+            # in a list comprehension below
+            del machine
         else:
             statuses = list_locks()
         vmachines = []
