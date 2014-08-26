@@ -2119,7 +2119,13 @@ public:
 void Locker::calc_new_client_ranges(CInode *in, uint64_t size, map<client_t,client_writeable_range_t>& new_ranges)
 {
   inode_t *latest = in->get_projected_inode();
-  uint64_t ms = ROUND_UP_TO((size+1)<<1, latest->get_layout_size_increment());
+  uint64_t ms;
+  if(latest->has_layout()) {
+    ms = ROUND_UP_TO((size+1)<<1, latest->get_layout_size_increment());
+  } else {
+    // Layout-less directories like ~mds0/, have zero size
+    ms = 0;
+  }
 
   // increase ranges as appropriate.
   // shrink to 0 if no WR|BUFFER caps issued.
