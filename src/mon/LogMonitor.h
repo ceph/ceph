@@ -60,6 +60,8 @@ private:
       expand_channel_meta(log_file_level);
     }
     void expand_channel_meta(map<string,string> &m);
+    string expand_channel_meta(const string &input,
+                               const string &change_to);
 
     bool do_log_to_syslog(const string &channel) {
       return (get_str_map_key(log_to_syslog, channel,
@@ -77,8 +79,14 @@ private:
     }
 
     string get_log_file(const string &channel) {
-      return get_str_map_key(log_file, channel,
-                             &CLOG_CHANNEL_DEFAULT);
+      string fname;
+      if (log_file.count(channel) == 0) {
+        log_file[channel] = expand_channel_meta(
+                              get_str_map_key(log_file, channel,
+                                              &CLOG_CHANNEL_DEFAULT),
+                              channel);
+      }
+      return log_file[channel];
     }
 
     string get_log_file_level(const string &channel) {
