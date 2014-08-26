@@ -42,6 +42,7 @@
 
 #include "common/ceph_argparse.h"
 #include "common/version.h"
+#include "common/io_priority.h"
 
 #include "os/ObjectStore.h"
 
@@ -191,6 +192,7 @@ OSDService::OSDService(OSD *osd) :
   push_wq("push_wq", cct->_conf->osd_recovery_thread_timeout, &osd->recovery_tp),
   gen_wq("gen_wq", cct->_conf->osd_recovery_thread_timeout, &osd->recovery_tp),
   class_handler(osd->class_handler),
+  pg_epoch_lock("OSDService::pg_epoch_lock"),
   publish_lock("OSDService::publish_lock"),
   pre_publish_lock("OSDService::pre_publish_lock"),
   sched_scrub_lock("OSDService::sched_scrub_lock"), scrubs_pending(0),
@@ -1277,6 +1279,8 @@ int OSD::init()
   disk_tp.start();
   command_tp.start();
 
+  set_disk_tp_priority();
+
   // start the heartbeat
   heartbeat_thread.create();
 
@@ -1304,6 +1308,8 @@ int OSD::init()
   osd_lock.Lock();
   if (is_stopping())
     return 0;
+
+  check_config();
 
   dout(10) << "ensuring pgs have consumed prior maps" << dendl;
   consume_map();
@@ -1854,6 +1860,8 @@ PG *OSD::_open_lock_pg(
 
   pg_map[pgid] = pg;
 
+  service.pg_add_epoch(pg->info.pgid, createmap->get_epoch());
+
   pg->lock(no_lockdep_check);
   pg->get("PGMap");  // because it's in pg_map
   return pg;
@@ -1885,6 +1893,7 @@ void OSD::add_newly_split_pg(PG *pg, PG::RecoveryCtx *rctx)
   epoch_t e(service.get_osdmap()->get_epoch());
   pg->get("PGMap");  // For pg_map
   pg_map[pg->info.pgid] = pg;
+  service.pg_add_epoch(pg->info.pgid, pg->get_osdmap()->get_epoch());
   dout(10) << "Adding newly split pg " << *pg << dendl;
   vector<int> up, acting;
   pg->get_osdmap()->pg_to_up_acting_osds(pg->info.pgid.pgid, up, acting);
@@ -5748,7 +5757,7 @@ void OSD::check_osdmap_features(ObjectStore *fs)
   }
 }
 
-void OSD::advance_pg(
+bool OSD::advance_pg(
   epoch_t osd_epoch, PG *pg,
   ThreadPool::TPHandle &handle,
   PG::RecoveryCtx *rctx,
@@ -5759,11 +5768,19 @@ void OSD::advance_pg(
   OSDMapRef lastmap = pg->get_osdmap();
 
   if (lastmap->get_epoch() == osd_epoch)
-    return;
+    return true;
   assert(lastmap->get_epoch() < osd_epoch);
 
+  epoch_t min_epoch = service.get_min_pg_epoch();
+  epoch_t max;
+  if (min_epoch) {
+    max = min_epoch + g_conf->osd_map_max_advance;
+  } else {
+    max = next_epoch + g_conf->osd_map_max_advance;
+  }
+
   for (;
-       next_epoch <= osd_epoch;
+       next_epoch <= osd_epoch && next_epoch <= max;
        ++next_epoch) {
     OSDMapRef nextmap = service.try_get_map(next_epoch);
     if (!nextmap)
@@ -5795,7 +5812,15 @@ void OSD::advance_pg(
     lastmap = nextmap;
     handle.reset_tp_timeout();
   }
+  service.pg_update_epoch(pg->info.pgid, lastmap->get_epoch());
   pg->handle_activate_map(rctx);
+  if (next_epoch <= osd_epoch) {
+    dout(10) << __func__ << " advanced by max " << g_conf->osd_map_max_advance
+	     << " past min epoch " << min_epoch
+	     << " ... will requeue " << *pg << dendl;
+    return false;
+  }
+  return true;
 }
 
 /** 
@@ -7178,6 +7203,8 @@ void OSD::_remove_pg(PG *pg)
     );
   remove_wq.queue(make_pair(PGRef(pg), deleting));
 
+  service.pg_remove_epoch(pg->info.pgid);
+
   // remove from map
   pg_map.erase(pg->info.pgid);
   pg->put("PGMap"); // since we've taken it out of map
@@ -7806,8 +7833,9 @@ void OSD::process_peering_events(
       pg->unlock();
       continue;
     }
-    advance_pg(curmap->get_epoch(), pg, handle, &rctx, &split_pgs);
-    if (!pg->peering_queue.empty()) {
+    if (!advance_pg(curmap->get_epoch(), pg, handle, &rctx, &split_pgs)) {
+      pg->queue_null(curmap->get_epoch(), curmap->get_epoch());
+    } else if (!pg->peering_queue.empty()) {
       PG::CephPeeringEvtRef evt = pg->peering_queue.front();
       pg->peering_queue.pop_front();
       pg->handle_peering_event(evt, &rctx);
@@ -7844,6 +7872,11 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_max_backfills",
     "osd_op_complaint_time", "osd_op_log_threshold",
     "osd_op_history_size", "osd_op_history_duration",
+    "osd_map_cache_size",
+    "osd_map_max_advance",
+    "osd_pg_epoch_persisted_max_stale",
+    "osd_disk_thread_ioprio_class",
+    "osd_disk_thread_ioprio_priority",
     NULL
   };
   return KEYS;
@@ -7866,6 +7899,38 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
     op_tracker.set_history_size_and_duration(cct->_conf->osd_op_history_size,
                                              cct->_conf->osd_op_history_duration);
   }
+  if (changed.count("osd_disk_thread_ioprio_class") ||
+      changed.count("osd_disk_thread_ioprio_priority")) {
+    set_disk_tp_priority();
+  }
+
+  check_config();
+}
+
+void OSD::check_config()
+{
+  // some sanity checks
+  if (g_conf->osd_map_cache_size <= g_conf->osd_map_max_advance + 2) {
+    clog.warn() << "osd_map_cache_size (" << g_conf->osd_map_cache_size << ")"
+		<< " is not > osd_map_max_advance ("
+		<< g_conf->osd_map_max_advance << ")";
+  }
+  if (g_conf->osd_map_cache_size <= (int)g_conf->osd_pg_epoch_persisted_max_stale + 2) {
+    clog.warn() << "osd_map_cache_size (" << g_conf->osd_map_cache_size << ")"
+		<< " is not > osd_pg_epoch_persisted_max_stale ("
+		<< g_conf->osd_pg_epoch_persisted_max_stale << ")";
+  }
+}
+
+void OSD::set_disk_tp_priority()
+{
+  dout(10) << __func__
+	   << " class " << cct->_conf->osd_disk_thread_ioprio_class
+	   << " priority " << cct->_conf->osd_disk_thread_ioprio_priority
+	   << dendl;
+  int cls =
+    ceph_ioprio_string_to_class(cct->_conf->osd_disk_thread_ioprio_class);
+  disk_tp.set_ioprio(cls, cct->_conf->osd_disk_thread_ioprio_priority);
 }
 
 // --------------------------------

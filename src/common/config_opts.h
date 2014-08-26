@@ -452,6 +452,7 @@ OPTION(osd_tier_default_cache_hit_set_period, OPT_INT, 1200)
 OPTION(osd_tier_default_cache_hit_set_type, OPT_STR, "bloom")
 
 OPTION(osd_map_dedup, OPT_BOOL, true)
+OPTION(osd_map_max_advance, OPT_INT, 200) // make this < cache_size!
 OPTION(osd_map_cache_size, OPT_INT, 500)
 OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
 OPTION(osd_map_share_max_epochs, OPT_INT, 100)  // cap on # of inc maps we send to peers, clients
@@ -460,6 +461,8 @@ OPTION(osd_peering_wq_batch_size, OPT_U64, 20)
 OPTION(osd_op_pq_max_tokens_per_priority, OPT_U64, 4194304)
 OPTION(osd_op_pq_min_cost, OPT_U64, 65536)
 OPTION(osd_disk_threads, OPT_INT, 1)
+OPTION(osd_disk_thread_ioprio_class, OPT_STR, "") // rt realtime be besteffort best effort idle
+OPTION(osd_disk_thread_ioprio_priority, OPT_INT, -1) // 0-7
 OPTION(osd_recovery_threads, OPT_INT, 1)
 OPTION(osd_recover_clone_overlap, OPT_BOOL, true)   // preserve clone_overlap during recovery/migration
 
@@ -512,6 +515,7 @@ OPTION(osd_scrub_min_interval, OPT_FLOAT, 60*60*24)    // if load is low
 OPTION(osd_scrub_max_interval, OPT_FLOAT, 7*60*60*24)  // regardless of load
 OPTION(osd_scrub_chunk_min, OPT_INT, 5)
 OPTION(osd_scrub_chunk_max, OPT_INT, 25)
+OPTION(osd_scrub_sleep, OPT_FLOAT, 0)   // sleep between [deep]scrub ops
 OPTION(osd_deep_scrub_interval, OPT_FLOAT, 60*60*24*7) // once a week
 OPTION(osd_deep_scrub_stride, OPT_INT, 524288)
 OPTION(osd_scan_list_ping_tp_interval, OPT_U64, 100)
