@@ -30,7 +30,8 @@ class MMonCommand;
 
 static const string LOG_META_CHANNEL = "$channel";
 
-class LogMonitor : public PaxosService {
+class LogMonitor : public PaxosService,
+                   public md_config_obs_t {
 private:
   multimap<utime_t,LogEntry> pending_log;
   LogSummary pending_summary, summary;
@@ -135,6 +136,12 @@ private:
  public:
   LogMonitor(Monitor *mn, Paxos *p, const string& service_name) 
     : PaxosService(mn, p, service_name) { }
+
+  void init() {
+    generic_dout(10) << "LogMonitor::init" << dendl;
+    g_conf->add_observer(this);
+    update_log_channels();
+  }
   
   void tick();  // check state, take actions
 
@@ -149,5 +156,22 @@ private:
    */
   int sub_name_to_id(const string& n);
 
+  void on_shutdown() {
+    g_conf->remove_observer(this);
+  }
+
+  const char **get_tracked_conf_keys() const {
+    static const char* KEYS[] = {
+      "mon_cluster_log_to_syslog",
+      "mon_cluster_log_to_syslog_level",
+      "mon_cluster_log_to_syslog_facility",
+      "mon_cluster_log_file",
+      "mon_cluster_log_file_level",
+      NULL
+    };
+    return KEYS;
+  }
+  void handle_conf_change(const struct md_config_t *conf,
+                          const std::set<std::string> &changed);
 };
 #endif
