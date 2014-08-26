@@ -160,7 +160,8 @@ class MDS : public Dispatcher, public md_config_obs_t {
   MDSMap       *mdsmap;
   Objecter     *objecter;
   Filer        *filer;       // for reading/writing to/from osds
-  LogClient    clog;
+  LogClient    log_client;
+  LogChannelRef clog;
 
   // sub systems
   Server       *server;

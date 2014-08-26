@@ -2081,7 +2081,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 	if (pi->dirstat.size() < 0)
 	  assert(!"negative dirstat size" == g_conf->mds_verify_scatter);
 	if (pi->dirstat.size() != pf->fragstat.size()) {
-	  mds->clog.error() << "unmatched fragstat size on single dirfrag "
+	  mds->clog->error() << "unmatched fragstat size on single dirfrag "
 	     << parent->dirfrag() << ", inode has " << pi->dirstat
 	     << ", dirfrag has " << pf->fragstat << "\n";
 	  
@@ -2128,7 +2128,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 
       if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
 	if (pi->rstat.rbytes != pf->rstat.rbytes) { 
-	  mds->clog.error() << "unmatched rstat rbytes on single dirfrag "
+	  mds->clog->error() << "unmatched rstat rbytes on single dirfrag "
 	      << parent->dirfrag() << ", inode has " << pi->rstat
 	      << ", dirfrag has " << pf->rstat << "\n";
 	  
@@ -5396,8 +5396,8 @@ void MDCache::export_remaining_imported_caps()
   cap_imports.clear();
 
   if (warn_str.peek() != EOF) {
-    mds->clog.warn() << "failed to reconnect caps for missing inodes:" << "\n";
-    mds->clog.warn(warn_str);
+    mds->clog->warn() << "failed to reconnect caps for missing inodes:" << "\n";
+    mds->clog->warn(warn_str);
   }
 }
 
@@ -5561,8 +5561,8 @@ void MDCache::open_snap_parents()
 	     ++q)
 	  warn_str << "  client." << q->first << " snapid " << q->second << "\n";
       }
-      mds->clog.warn() << "open_snap_parents has:" << "\n";
-      mds->clog.warn(warn_str);
+      mds->clog->warn() << "open_snap_parents has:" << "\n";
+      mds->clog->warn(warn_str);
     }
     assert(rejoin_waiters.empty());
     assert(missing_snap_parents.empty());

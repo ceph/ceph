@@ -1242,7 +1242,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	    ss << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
 	       << " " << *dn->get_linkage()->get_inode() << " should be " << p->inode.ino;
 	    dout(0) << ss.str() << dendl;
-	    mds->clog.warn(ss);
+	    mds->clog->warn(ss);
 	  }
 	  dir->unlink_inode(dn);
 	}
@@ -1265,7 +1265,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	      ss << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
 		 << " " << *dn->get_linkage()->get_inode() << " should be " << p->inode.ino;
 	      dout(0) << ss.str() << dendl;
-	      mds->clog.warn(ss);
+	      mds->clog->warn(ss);
 	    }
 	    dir->unlink_inode(dn);
 	  }
@@ -1476,7 +1476,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 
       // [repair bad inotable updates]
       if (inotablev > mds->inotable->get_version()) {
-	mds->clog.error() << "journal replay inotablev mismatch "
+	mds->clog->error() << "journal replay inotablev mismatch "
 	    << mds->inotable->get_version() << " -> " << inotablev << "\n";
 	mds->inotable->force_replay_version(inotablev);
       }
@@ -1500,13 +1500,13 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	if (used_preallocated_ino) {
 	  if (session->info.prealloc_inos.empty()) {
 	    // HRM: badness in the journal
-	    mds->clog.warn() << " replayed op " << client_reqs << " on session for "
+	    mds->clog->warn() << " replayed op " << client_reqs << " on session for "
 			     << client_name << " with empty prealloc_inos\n";
 	  } else {
 	    inodeno_t next = session->next_ino();
 	    inodeno_t i = session->take_ino(used_preallocated_ino);
 	    if (next != i)
-	      mds->clog.warn() << " replayed op " << client_reqs << " used ino " << i
+	      mds->clog->warn() << " replayed op " << client_reqs << " used ino " << i
 			       << " but session next is " << next << "\n";
 	    assert(i == used_preallocated_ino);
 	    session->info.used_inos.clear();
@@ -1526,7 +1526,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       }
       assert(sessionmapv == mds->sessionmap.version);
     } else {
-      mds->clog.error() << "journal replay sessionmap v " << sessionmapv
+      mds->clog->error() << "journal replay sessionmap v " << sessionmapv
 			<< " -(1|2) > table " << mds->sessionmap.version << "\n";
       assert(g_conf->mds_wipe_sessions);
       mds->sessionmap.wipe();
@@ -1627,7 +1627,7 @@ void ESession::replay(MDS *mds)
 	  dout(10) << " reset session " << session->info.inst << " (they reconnected)" << dendl;
 	}
       } else {
-	mds->clog.error() << "replayed stray Session close event for " << client_inst
+	mds->clog->error() << "replayed stray Session close event for " << client_inst
 			  << " from time " << stamp << ", ignoring";
       }
     }
@@ -2488,20 +2488,20 @@ void ESubtreeMap::replay(MDS *mds)
 	 ++p) {
       CDir *dir = mds->mdcache->get_dirfrag(p->first);
       if (!dir) {
-	mds->clog.error() << " replayed ESubtreeMap at " << get_start_off()
+	mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
 			  << " subtree root " << p->first << " not in cache";
 	++errors;
 	continue;
       }
       
       if (!mds->mdcache->is_subtree(dir)) {
-	mds->clog.error() << " replayed ESubtreeMap at " << get_start_off()
+	mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
 			  << " subtree root " << p->first << " not a subtree in cache";
 	++errors;
 	continue;
       }
       if (dir->get_dir_auth().first != mds->whoami) {
-	mds->clog.error() << " replayed ESubtreeMap at " << get_start_off()
+	mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
 			  << " subtree root " << p->first
 			  << " is not mine in cache (it's " << dir->get_dir_auth() << ")";
 	++errors;
@@ -2516,13 +2516,13 @@ void ESubtreeMap::replay(MDS *mds)
       for (vector<dirfrag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
 	CDir *b = mds->mdcache->get_dirfrag(*q);
 	if (!b) {
-	  mds->clog.error() << " replayed ESubtreeMap at " << get_start_off()
+	  mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
 			    << " subtree " << p->first << " bound " << *q << " not in cache";
 	++errors;
 	  continue;
 	}
 	if (bounds.count(b) == 0) {
-	  mds->clog.error() << " replayed ESubtreeMap at " << get_start_off()
+	  mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
 			    << " subtree " << p->first << " bound " << *q << " not a bound in cache";
 	++errors;
 	  continue;
@@ -2530,20 +2530,20 @@ void ESubtreeMap::replay(MDS *mds)
 	bounds.erase(b);
       }
       for (set<CDir*>::iterator q = bounds.begin(); q != bounds.end(); ++q) {
-	mds->clog.error() << " replayed ESubtreeMap at " << get_start_off()
+	mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
 			  << " subtree " << p->first << " has extra bound in cache " << (*q)->dirfrag();
 	++errors;
       }
       
       if (ambiguous_subtrees.count(p->first)) {
 	if (!mds->mdcache->have_ambiguous_import(p->first)) {
-	  mds->clog.error() << " replayed ESubtreeMap at " << get_start_off()
+	  mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
 			    << " subtree " << p->first << " is ambiguous but is not in our cache";
 	  ++errors;
 	}
       } else {
 	if (mds->mdcache->have_ambiguous_import(p->first)) {
-	  mds->clog.error() << " replayed ESubtreeMap at " << get_start_off()
+	  mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
 			    << " subtree " << p->first << " is not ambiguous but is in our cache";
 	  ++errors;
 	}
@@ -2557,7 +2557,7 @@ void ESubtreeMap::replay(MDS *mds)
       if (dir->get_dir_auth().first != mds->whoami)
 	continue;
       if (subtrees.count(dir->dirfrag()) == 0) {
-	mds->clog.error() << " replayed ESubtreeMap at " << get_start_off()
+	mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
 			  << " does not include cache subtree " << dir->dirfrag();
 	++errors;
       }

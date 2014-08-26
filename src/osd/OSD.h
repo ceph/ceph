@@ -312,7 +312,8 @@ public:
   SharedPtrRegistry<spg_t, DeletingState> deleting_pgs;
   const int whoami;
   ObjectStore *&store;
-  LogClient &clog;
+  LogClient &log_client;
+  LogChannelRef clog;
   PGRecoveryStats &pg_recovery_stats;
   hobject_t infos_oid;
 private:
@@ -924,7 +925,8 @@ protected:
   PerfCounters      *recoverystate_perf;
   ObjectStore *store;
 
-  LogClient clog;
+  LogClient log_client;
+  LogChannelRef clog;
 
   int whoami;
   std::string dev_path, journal_path;

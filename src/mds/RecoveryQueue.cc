@@ -64,7 +64,7 @@ void RecoveryQueue::advance()
 
     // blech
     if (pi->client_ranges.size() && !pi->get_max_size()) {
-      mds->clog.warn() << "bad client_range " << pi->client_ranges
+      mds->clog->warn() << "bad client_range " << pi->client_ranges
 	  << " on ino " << pi->ino << "\n";
     }
 
