@@ -6781,7 +6781,10 @@ void ReplicatedPG::eval_repop(RepGather *repop)
     // ondisk?
     if (repop->all_committed) {
 
-      log_op_stats(repop->ctx);
+      if (!repop->log_op_stat) {
+        log_op_stats(repop->ctx);
+        repop->log_op_stat = true;
+      }
       publish_stats_to_osd();
 
       // send dup commits, in order
