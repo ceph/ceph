@@ -236,8 +236,8 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
             headers={'content-type': 'application/json'},
         )
         if response.ok:
-            machines = {machine['name']: machine['ssh_pub_key']
-                        for machine in response.json()}
+            machines = {misc.canonicalize_hostname(machine['name']):
+                        machine['ssh_pub_key'] for machine in response.json()}
             log.debug('locked {machines}'.format(
                 machines=', '.join(machines.keys())))
             if machinetype == 'vps':
