@@ -13,9 +13,9 @@ import subprocess
 
 from teuthology import lockstatus
 from teuthology import lock
-from teuthology import misc as teuthology
+from teuthology import misc
 from teuthology import provision
-from teuthology.parallel import parallel
+from misc.parallel import parallel
 from ..orchestra import cluster, remote, run
 
 log = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ def base(ctx, config):
     Create the test directory that we will be using on the remote system
     """
     log.info('Creating test directory...')
-    testdir = teuthology.get_testdir(ctx)
+    testdir = misc.get_testdir(ctx)
     run.wait(
         ctx.cluster.run(
             args=[
@@ -99,7 +99,7 @@ def lock_machines(ctx, config):
         if len(newly_locked) == how_many:
             vmlist = []
             for lmach in newly_locked:
-                if teuthology.is_vm(lmach):
+                if misc.is_vm(lmach):
                     vmlist.append(lmach)
             if vmlist:
                 log.info('Waiting for virtual machines to come up')
@@ -202,7 +202,7 @@ def connect(ctx, config):
     for name in ctx.config['targets'].iterkeys():
         machs.append(name)
     for t, key in ctx.config['targets'].iteritems():
-        t = teuthology.canonicalize_hostname(t)
+        t = misc.canonicalize_hostname(t)
         log.debug('connecting to %s', t)
         try:
             if ctx.config['sshkeys'] == 'ignore':
@@ -210,7 +210,7 @@ def connect(ctx, config):
         except (AttributeError, KeyError):
             pass
         if key.startswith('ssh-rsa ') or key.startswith('ssh-dss '):
-            if teuthology.is_vm(t):
+            if misc.is_vm(t):
                 key = None
         remotes.append(
             remote.Remote(name=t, host_key=key, keep_alive=True, console=None))
@@ -265,7 +265,7 @@ def check_conflict(ctx, config):
     Note directory use conflicts and stale directories.
     """
     log.info('Checking for old test directory...')
-    testdir = teuthology.get_testdir(ctx)
+    testdir = misc.get_testdir(ctx)
     processes = ctx.cluster.run(
         args=[
             'test', '!', '-e', testdir,
@@ -288,7 +288,7 @@ def archive(ctx, config):
     Handle the creation and deletion of the archive directory.
     """
     log.info('Creating archive directory...')
-    archive_dir = teuthology.get_archive_dir(ctx)
+    archive_dir = misc.get_archive_dir(ctx)
     run.wait(
         ctx.cluster.run(
             args=[
@@ -313,7 +313,7 @@ def archive(ctx, config):
                 os.mkdir(logdir)
             for rem in ctx.cluster.remotes.iterkeys():
                 path = os.path.join(logdir, rem.shortname)
-                teuthology.pull_directory(rem, archive_dir, path)
+                misc.pull_directory(rem, archive_dir, path)
 
         log.info('Removing archive directory...')
         run.wait(
@@ -366,7 +366,7 @@ def coredump(ctx, config):
     Stash a coredump of this system if an error occurs.
     """
     log.info('Enabling coredump saving...')
-    archive_dir = teuthology.get_archive_dir(ctx)
+    archive_dir = misc.get_archive_dir(ctx)
     run.wait(
         ctx.cluster.run(
             args=[
@@ -427,7 +427,7 @@ def syslog(ctx, config):
 
     log.info('Starting syslog monitoring...')
 
-    archive_dir = teuthology.get_archive_dir(ctx)
+    archive_dir = misc.get_archive_dir(ctx)
     run.wait(
         ctx.cluster.run(
             args=[
@@ -445,7 +445,7 @@ kern.* -{adir}/syslog/kern.log;RSYSLOG_FileFormat
 '''.format(adir=archive_dir))
     try:
         for rem in ctx.cluster.remotes.iterkeys():
-            teuthology.sudo_write_file(
+            misc.sudo_write_file(
                 remote=rem,
                 path=CONF,
                 data=conf_fp,
@@ -563,7 +563,7 @@ def vm_setup(ctx, config):
         editinfo = os.path.join(os.path.dirname(__file__),'edit_sudoers.sh')
         for rem in ctx.cluster.remotes.iterkeys():
             mname = rem.shortname
-            if teuthology.is_vm(mname):
+            if misc.is_vm(mname):
                 r = rem.run(args=['test', '-e', '/ceph-qa-ready',],
                         stdout=StringIO(),
                         check_status=False,)
