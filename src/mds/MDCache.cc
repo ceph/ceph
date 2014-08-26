@@ -220,14 +220,14 @@ MDCache::~MDCache()
 
 void MDCache::log_stat()
 {
-  mds->logger->set(l_mds_imax, g_conf->mds_cache_size);
-  mds->logger->set(l_mds_i, lru.lru_get_size());
-  mds->logger->set(l_mds_ipin, lru.lru_get_num_pinned());
-  mds->logger->set(l_mds_itop, lru.lru_get_top());
-  mds->logger->set(l_mds_ibot, lru.lru_get_bot());
-  mds->logger->set(l_mds_iptail, lru.lru_get_pintail());
-  mds->logger->set(l_mds_icap, num_inodes_with_caps);
-  mds->logger->set(l_mds_cap, num_caps);
+  mds->logger->set(l_mds_inode_max, g_conf->mds_cache_size);
+  mds->logger->set(l_mds_inodes, lru.lru_get_size());
+  mds->logger->set(l_mds_inodes_pinned, lru.lru_get_num_pinned());
+  mds->logger->set(l_mds_inodes_top, lru.lru_get_top());
+  mds->logger->set(l_mds_inodes_bottom, lru.lru_get_bot());
+  mds->logger->set(l_mds_inodes_pin_tail, lru.lru_get_pintail());
+  mds->logger->set(l_mds_inodes_with_caps, num_inodes_with_caps);
+  mds->logger->set(l_mds_caps, num_caps);
 }
 
 
@@ -6289,7 +6289,7 @@ bool MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
   if (dir->get_num_head_items() == 0 && dir->is_subtree_root())
     migrator->export_empty_import(dir);
   
-  if (mds->logger) mds->logger->inc(l_mds_iex);
+  if (mds->logger) mds->logger->inc(l_mds_inodes_expired);
   return false;
 }
 
@@ -7413,7 +7413,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
 
   client_t client = (mdr && mdr->reqid.name.is_client()) ? mdr->reqid.name.num() : -1;
 
-  if (mds->logger) mds->logger->inc(l_mds_t);
+  if (mds->logger) mds->logger->inc(l_mds_traverse);
 
   dout(7) << "traverse: opening base ino " << path.get_ino() << " snap " << snapid << dendl;
   CInode *cur = get_inode(path.get_ino());
@@ -7486,7 +7486,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
 	dout(10) << "traverse: need dirfrag " << fg << ", doing discover from " << *cur << dendl;
 	discover_path(cur, snapid, path.postfixpath(depth), _get_waiter(mdr, req, fin),
 		      null_okay);
-	if (mds->logger) mds->logger->inc(l_mds_tdis);
+	if (mds->logger) mds->logger->inc(l_mds_traverse_discover);
         return 1;
       }
     }
@@ -7548,7 +7548,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
 	(dnl->is_null() || forward)) {
       dout(10) << "traverse: xlocked dentry at " << *dn << dendl;
       dn->lock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req, fin));
-      if (mds->logger) mds->logger->inc(l_mds_tlock);
+      if (mds->logger) mds->logger->inc(l_mds_traverse_lock);
       mds->mdlog->flush();
       return 1;
     }
@@ -7582,7 +7582,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
 	  assert(mdr);  // we shouldn't hit non-primary dentries doing a non-mdr traversal!
           open_remote_dentry(dn, true, _get_waiter(mdr, req, fin),
 			     (null_okay && depth == path.depth() - 1));
-	  if (mds->logger) mds->logger->inc(l_mds_trino);
+	  if (mds->logger) mds->logger->inc(l_mds_traverse_remote_ino);
           return 1;
         }        
       }
@@ -7670,7 +7670,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
         dout(7) << "traverse: incomplete dir contents for " << *cur << ", fetching" << dendl;
         touch_inode(cur);
         curdir->fetch(_get_waiter(mdr, req, fin), path[depth]);
-	if (mds->logger) mds->logger->inc(l_mds_tdirf);
+	if (mds->logger) mds->logger->inc(l_mds_traverse_dir_fetch);
         return 1;
       }
     } else {
@@ -7690,7 +7690,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
 	dout(7) << "traverse: discover from " << path[depth] << " from " << *curdir << dendl;
 	discover_path(curdir, snapid, path.postfixpath(depth), _get_waiter(mdr, req, fin),
 		      null_okay);
-	if (mds->logger) mds->logger->inc(l_mds_tdis);
+	if (mds->logger) mds->logger->inc(l_mds_traverse_discover);
         return 1;
       } 
       if (forward) {
@@ -7721,7 +7721,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
 	else
 	  mds->forward_message_mds(req, dauth.first);
 	
-	if (mds->logger) mds->logger->inc(l_mds_tfw);
+	if (mds->logger) mds->logger->inc(l_mds_traverse_forward);
 	assert(fin == NULL);
 	return 2;
       }    
@@ -7731,7 +7731,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
   }
   
   // success.
-  if (mds->logger) mds->logger->inc(l_mds_thit);
+  if (mds->logger) mds->logger->inc(l_mds_traverse_hit);
   dout(10) << "path_traverse finish on snapid " << snapid << dendl;
   if (mdr) 
     assert(mdr->snapid == snapid);
@@ -8651,7 +8651,7 @@ void MDCache::request_forward(MDRequestRef& mdr, int who, int port)
             << *mdr->client_request << dendl;
     mds->forward_message_mds(mdr->client_request, who);
     mdr->client_request = 0;
-    if (mds->logger) mds->logger->inc(l_mds_fw);
+    if (mds->logger) mds->logger->inc(l_mds_forward);
   } else {
     dout(7) << "request_forward drop " << *mdr << " req " << *mdr->client_request
             << " was from mds" << dendl;

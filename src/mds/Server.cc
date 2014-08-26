@@ -92,11 +92,11 @@ class ServerContext : public MDSInternalContextBase {
 void Server::create_logger()
 {
   PerfCountersBuilder plb(g_ceph_context, "mds_server", l_mdss_first, l_mdss_last);
-  plb.add_u64_counter(l_mdss_hcreq,"hcreq"); // handle client req
-  plb.add_u64_counter(l_mdss_hsreq, "hsreq"); // slave
-  plb.add_u64_counter(l_mdss_hcsess, "hcsess");    // client session
-  plb.add_u64_counter(l_mdss_dcreq, "dcreq"); // dispatch client req
-  plb.add_u64_counter(l_mdss_dsreq, "dsreq"); // slave
+  plb.add_u64_counter(l_mdss_handle_client_request,"handle_client_request");
+  plb.add_u64_counter(l_mdss_handle_slave_request, "handle_slave_request");
+  plb.add_u64_counter(l_mdss_handle_client_session, "handle_client_session");
+  plb.add_u64_counter(l_mdss_dispatch_client_request, "dispatch_client_request");
+  plb.add_u64_counter(l_mdss_dispatch_slave_request, "dispatch_server_request");
   logger = plb.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
@@ -207,6 +207,9 @@ void Server::handle_client_session(MClientSession *m)
     m->put();
     return;
   }
+
+  if (logger)
+    logger->inc(l_mdss_handle_client_session);
 
   uint64_t sseq = 0;
   switch (m->get_op()) {
@@ -941,7 +944,7 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
 
   mds->logger->inc(l_mds_reply);
   utime_t lat = ceph_clock_now(g_ceph_context) - mdr->client_request->get_recv_stamp();
-  mds->logger->tinc(l_mds_replyl, lat);
+  mds->logger->tinc(l_mds_reply_latency, lat);
   dout(20) << "lat " << lat << dendl;
 
   mdr->mark_event("early_replied");
@@ -987,7 +990,7 @@ void Server::reply_request(MDRequestRef& mdr, MClientReply *reply, CInode *trace
 
     mds->logger->inc(l_mds_reply);
     utime_t lat = ceph_clock_now(g_ceph_context) - mdr->client_request->get_recv_stamp();
-    mds->logger->tinc(l_mds_replyl, lat);
+    mds->logger->tinc(l_mds_reply_latency, lat);
     dout(20) << "lat " << lat << dendl;
     
     if (tracei)
@@ -1148,7 +1151,10 @@ void Server::handle_client_request(MClientRequest *req)
 {
   dout(4) << "handle_client_request " << *req << dendl;
 
-  if (logger) logger->inc(l_mdss_hcreq);
+  if (mds->logger)
+    mds->logger->inc(l_mds_request);
+  if (logger)
+    logger->inc(l_mdss_handle_client_request);
 
   if (!mdcache->is_open()) {
     dout(5) << "waiting for root" << dendl;
@@ -1241,7 +1247,7 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
 {
   MClientRequest *req = mdr->client_request;
 
-  if (logger) logger->inc(l_mdss_dcreq);
+  if (logger) logger->inc(l_mdss_dispatch_client_request);
 
   dout(7) << "dispatch_client_request " << *req << dendl;
 
@@ -1363,7 +1369,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
   dout(4) << "handle_slave_request " << m->get_reqid() << " from " << m->get_source() << dendl;
   int from = m->get_source().num();
 
-  if (logger) logger->inc(l_mdss_hsreq);
+  if (logger) logger->inc(l_mdss_handle_slave_request);
 
   // reply?
   if (m->is_reply())
@@ -1555,7 +1561,7 @@ void Server::dispatch_slave_request(MDRequestRef& mdr)
     return;
   }
 
-  if (logger) logger->inc(l_mdss_dsreq);
+  if (logger) logger->inc(l_mdss_dispatch_slave_request);
 
   int op = mdr->slave_request->get_op();
   switch (op) {

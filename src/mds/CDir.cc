@@ -860,7 +860,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& wai
 {
   dout(10) << "split by " << bits << " bits on " << *this << dendl;
 
-  if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_sp);
+  if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_split);
 
   assert(replay || is_complete() || !is_auth());
 
@@ -1362,7 +1362,7 @@ void CDir::fetch(MDSInternalContextBase *c, const string& want_dn, bool ignore_a
   auth_pin(this);
   state_set(CDir::STATE_FETCHING);
 
-  if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_f);
+  if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_fetch);
 
   _omap_fetch(want_dn);
 }
@@ -1971,9 +1971,9 @@ void CDir::_commit(version_t want, int op_prio)
     state_set(STATE_COMMITTING);
   }
   
-  if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_c);
+  if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_commit);
 
-   _omap_commit(op_prio);
+  _omap_commit(op_prio);
 }
 
 

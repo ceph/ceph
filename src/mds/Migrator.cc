@@ -1241,8 +1241,8 @@ void Migrator::export_go_synced(CDir *dir, uint64_t tid)
   assert(g_conf->mds_kill_export_at != 8);
 
   // stats
-  if (mds->logger) mds->logger->inc(l_mds_ex);
-  if (mds->logger) mds->logger->inc(l_mds_iexp, num_exported_inodes);
+  if (mds->logger) mds->logger->inc(l_mds_exported);
+  if (mds->logger) mds->logger->inc(l_mds_exported_inodes, num_exported_inodes);
 
   cache->show_subtrees();
 }
@@ -2270,8 +2270,8 @@ void Migrator::handle_export_dir(MExportDir *m)
 
   // some stats
   if (mds->logger) {
-    mds->logger->inc(l_mds_im);
-    mds->logger->inc(l_mds_iim, num_imported_inodes);
+    mds->logger->inc(l_mds_imported);
+    mds->logger->inc(l_mds_imported_inodes, num_imported_inodes);
   }
 
   m->put();
