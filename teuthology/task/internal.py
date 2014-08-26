@@ -15,7 +15,7 @@ from teuthology import lockstatus
 from teuthology import lock
 from teuthology import misc
 from teuthology import provision
-from misc.parallel import parallel
+from teuthology.parallel import parallel
 from ..orchestra import cluster, remote, run
 
 log = logging.getLogger(__name__)
