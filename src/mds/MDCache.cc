@@ -8447,12 +8447,15 @@ void MDCache::request_finish(MDRequestRef& mdr)
 void MDCache::request_forward(MDRequestRef& mdr, int who, int port)
 {
   mdr->mark_event("forwarding request");
-  if (mdr->client_request->get_source().is_client()) {
+  if (mdr->client_request && mdr->client_request->get_source().is_client()) {
     dout(7) << "request_forward " << *mdr << " to mds." << who << " req "
             << *mdr->client_request << dendl;
     mds->forward_message_mds(mdr->client_request, who);
     mdr->client_request = 0;
     if (mds->logger) mds->logger->inc(l_mds_forward);
+  } else if (mdr->internal_op >= 0) {
+    dout(10) << "request_forward on internal op; cancelling" << dendl;
+    mdr->internal_op_finish->complete(-EXDEV);
   } else {
     dout(7) << "request_forward drop " << *mdr << " req " << *mdr->client_request
             << " was from mds" << dendl;
