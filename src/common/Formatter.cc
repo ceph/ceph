@@ -255,6 +255,21 @@ void JSONFormatter::dump_format(const char *name, const char *fmt, ...)
   print_quoted_string(buf);
 }
 
+void JSONFormatter:: dump_format_ns(const char *name, const char *ns, const char *fmt, ...)
+{
+  // ignore the namespace for now
+  char buf[LARGE_SIZE];
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(buf, LARGE_SIZE, fmt, ap);
+  va_end(ap);
+
+  print_name(name);
+  print_quoted_string(buf);
+
+}
+
+
 void JSONFormatter::dump_format_unquoted(const char *name, const char *fmt, ...)
 {
   char buf[LARGE_SIZE];
@@ -413,6 +428,26 @@ void XMLFormatter::dump_format(const char *name, const char *fmt, ...)
   std::string e(name);
   print_spaces();
   m_ss << "<" << e << ">" << escape_xml_str(buf) << "</" << e << ">";
+  if (m_pretty)
+    m_ss << "\n";
+}
+
+void XMLFormatter::dump_format_ns(const char* name, const char *ns, const char *fmt, ...)
+{
+  char buf[LARGE_SIZE];
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(buf, LARGE_SIZE, fmt, ap);
+  va_end(ap);
+
+  std::string e(name);
+  print_spaces();
+  if (ns) {
+    m_ss << "<" << e  << " xmlns=\"" << ns << "\">" << buf << "</" << e << ">";
+  } else {
+    m_ss << "<" << e << ">" << buf << "</" << e << ">";
+  }
+
   if (m_pretty)
     m_ss << "\n";
 }
