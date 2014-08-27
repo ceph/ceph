@@ -79,7 +79,7 @@ class ResultsSerializer(object):
 
         :param run_name: The name of the run.
         :param job_id:   The job's id.
-        :param simple(bool): Read less data for speed.
+        :param simple(bool): Read less data for speed (only orig.config.yaml/info.yaml)
         :returns:        A dict.
         """
         job_archive_dir = os.path.join(self.archive_base,
