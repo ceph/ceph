@@ -6874,8 +6874,6 @@ void ReplicatedPG::eval_repop(RepGather *repop)
   if (repop->all_applied && repop->all_committed) {
     repop->rep_done = true;
 
-    release_op_ctx_locks(repop->ctx);
-
     calc_min_last_complete_ondisk();
 
     // kick snap_trimmer if necessary
