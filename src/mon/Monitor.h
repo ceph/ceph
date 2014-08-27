@@ -753,15 +753,15 @@ public:
 
   //ms_dispatch handles a lot of logic and we want to reuse it
   //on forwarded messages, so we create a non-locking version for this class
-  bool _ms_dispatch(Message *m);
+  void _ms_dispatch(Message *m);
   bool ms_dispatch(Message *m) {
     lock.Lock();
-    bool ret = _ms_dispatch(m);
+    _ms_dispatch(m);
     lock.Unlock();
-    return ret;
+    return true;
   }
   // dissociate message handling from session and connection logic
-  bool dispatch(MonSession *s, Message *m, const bool src_is_mon);
+  void dispatch(MonSession *s, Message *m, const bool src_is_mon);
   //mon_caps is used for un-connected messages from monitors
   MonCap * mon_caps;
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
