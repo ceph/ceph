@@ -40,7 +40,7 @@
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, mdsmap)
-static ostream& _prefix(std::ostream *_dout, Monitor *mon, MDSMap& mdsmap) {
+static ostream& _prefix(std::ostream *_dout, Monitor *mon, MDSMap const& mdsmap) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name()
 		<< ").mds e" << mdsmap.get_epoch() << " ";
@@ -137,6 +137,19 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   /* put everything in the transaction */
   put_version(t, pending_mdsmap.epoch, mdsmap_bl);
   put_last_committed(t, pending_mdsmap.epoch);
+
+  // Encode MDSHealth data
+  for (std::map<uint64_t, MDSHealth>::iterator i = pending_daemon_health.begin();
+      i != pending_daemon_health.end(); ++i) {
+    bufferlist bl;
+    i->second.encode(bl);
+    t->put(MDS_HEALTH_PREFIX, stringify(i->first), bl);
+  }
+  for (std::set<uint64_t>::iterator i = pending_daemon_health_rm.begin();
+      i != pending_daemon_health_rm.end(); ++i) {
+    t->erase(MDS_HEALTH_PREFIX, stringify(*i));
+  }
+  pending_daemon_health_rm.clear();
 }
 
 version_t MDSMonitor::get_trim_to()
@@ -386,6 +399,9 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
     return false;
   }
 
+  // Store health
+  pending_daemon_health[gid] = m->get_health();
+
   // boot?
   if (state == MDSMap::STATE_BOOT) {
     // zap previous instance of this name?
@@ -549,6 +565,25 @@ void MDSMonitor::get_health(list<pair<health_status_t, string> >& summary,
 			    list<pair<health_status_t, string> > *detail) const
 {
   mdsmap.get_health(summary, detail);
+
+  // For each MDS GID...
+  for (std::map<uint64_t, MDSMap::mds_info_t>::const_iterator i = pending_mdsmap.mds_info.begin();
+      i != pending_mdsmap.mds_info.end(); ++i) {
+    // Decode MDSHealth
+    bufferlist bl;
+    mon->store->get(MDS_HEALTH_PREFIX, stringify(i->first), bl);
+    if (!bl.length()) {
+      derr << "Missing health data for MDS " << i->first << dendl;
+      continue;
+    }
+    MDSHealth health;
+    bufferlist::iterator bl_i = bl.begin();
+    health.decode(bl_i);
+
+    for (std::list<MDSHealthMetric>::iterator j = health.metrics.begin(); j != health.metrics.end(); ++j) {
+      summary.push_back(std::make_pair(j->sev, j->message));
+    }
+  }
 }
 
 void MDSMonitor::dump_info(Formatter *f)
@@ -1582,6 +1617,8 @@ void MDSMonitor::tick()
 	  propose_osdmap = true;
 	}
 	pending_mdsmap.mds_info.erase(gid);
+        pending_daemon_health.erase(gid);
+        pending_daemon_health_rm.insert(gid);
 	last_beacon.erase(gid);
 	do_propose = true;
       } else if (info.state == MDSMap::STATE_STANDBY_REPLAY) {
@@ -1589,6 +1626,8 @@ void MDSMonitor::tick()
 		 << " " << ceph_mds_state_name(info.state)
 		 << dendl;
 	pending_mdsmap.mds_info.erase(gid);
+        pending_daemon_health.erase(gid);
+        pending_daemon_health_rm.insert(gid);
 	last_beacon.erase(gid);
 	do_propose = true;
       } else {
@@ -1599,6 +1638,8 @@ void MDSMonitor::tick()
 		   << " " << ceph_mds_state_name(info.state)
 		   << " (laggy)" << dendl;
 	  pending_mdsmap.mds_info.erase(gid);
+          pending_daemon_health.erase(gid);
+          pending_daemon_health_rm.insert(gid);
 	  do_propose = true;
 	} else if (!info.laggy()) {
 	  dout(10) << " marking " << gid << " " << info.addr << " mds." << info.rank << "." << info.inc
@@ -1613,9 +1654,7 @@ void MDSMonitor::tick()
 
     if (propose_osdmap)
       request_proposal(mon->osdmon());
-
   }
-
 
   // have a standby take over?
   set<int> failed;
