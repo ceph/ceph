@@ -377,6 +377,8 @@ def ssh_keyscan(hostnames):
     """
     Fetch the SSH public key of one or more hosts
     """
+    hostnames = [misc.canonicalize_hostname(name, user=None) for name in
+                 hostnames]
     args = ['ssh-keyscan', '-t', 'rsa']
     if isinstance(hostnames, basestring):
         args.append(hostnames)
