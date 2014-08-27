@@ -267,6 +267,7 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
 
 
 def lock_one(name, user=None, description=None):
+    name = misc.canonicalize_hostname(name, user=None)
     if user is None:
         user = misc.get_user()
     request = dict(name=name, locked=True, locked_by=user,
@@ -287,6 +288,9 @@ def lock_one(name, user=None, description=None):
 
 
 def unlock_many(names, user):
+    fixed_names = [misc.canonicalize_hostname(name, user=None) for name in
+                   names]
+    names = fixed_names
     uri = os.path.join(config.lock_server, 'nodes', 'unlock_many', '')
     data = dict(
         locked_by=user,
@@ -307,6 +311,7 @@ def unlock_many(names, user):
 def unlock_one(ctx, name, user=None):
     if user is None:
         user = misc.get_user()
+    name = misc.canonicalize_hostname(name, user=None)
     request = dict(name=name, locked=False, locked_by=user, description=None)
     uri = os.path.join(config.lock_server, 'nodes', name, 'lock', '')
     response = requests.put(uri, json.dumps(request))
@@ -344,6 +349,7 @@ def list_locks(keyed_by_name=False, **kwargs):
 
 
 def update_lock(name, description=None, status=None, ssh_pub_key=None):
+    name = misc.canonicalize_hostname(name, user=None)
     status_info = get_status(name)
     if status_info['is_vm']:
         ssh_key = None
