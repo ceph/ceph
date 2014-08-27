@@ -757,6 +757,9 @@ void MDS::tick()
       snapserver->check_osd_map(false);
   }
 
+  // Expose ourselves to Beacon to update health indicators
+  beacon.notify_health(this);
+
   check_ops_in_flight();
 }
 
