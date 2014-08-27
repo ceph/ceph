@@ -477,7 +477,7 @@ TYPED_TEST(IsaErasureCodeTest, isa_vandermonde_exhaustive)
     want_to_decode.erase(l1);
   }
   EXPECT_EQ(2516, cnt_cf);
-  EXPECT_EQ(2503, Isa.get_tbls_lru_size());
+  EXPECT_EQ(2506, Isa.get_tbls_lru_size()); // 3 are from 2+2 test
 }
 
 TYPED_TEST(IsaErasureCodeTest, isa_cauchy_exhaustive)

@@ -19,6 +19,7 @@
 // -----------------------------------------------------------------------------
 #include "common/debug.h"
 #include "ErasureCodeIsa.h"
+#include "ErasureCodePluginIsa.h"
 #include "xor_op.h"
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
@@ -121,6 +122,12 @@ int ErasureCodeIsa::decode_chunks(const set<int> &want_to_read,
   return isa_decode(erasures, data, coding, blocksize);
 }
 
+int
+ErasureCodeIsaDefault::get_tbls_lru_size()
+{
+  return ErasureCodePluginIsa::tcache.getDecodingCacheSize(matrixtype);
+}
+
 // -----------------------------------------------------------------------------
 
 void
@@ -163,14 +170,14 @@ ErasureCodeIsaDefault::get_decoding_table_from_cache(std::string &signature, uns
   // we try to fetch a decoding table from an LRU cache
   bool found = false;
 
-  Mutex::Locker lock(g_decode_tbls_guard);
-  if (g_decode_tbls_map.count(signature)) {
+  Mutex::Locker lock(*g_decode_tbls_guard);
+  if (g_decode_tbls_map->count(signature)) {
     dout(12) << "[ cached table ] = " << signature << dendl;
     // copy the table out of the cache
-    memcpy(table, g_decode_tbls_map[signature].second.c_str(), k * (m + k)*32);
+    memcpy(table, (*g_decode_tbls_map)[signature].second.c_str(), k * (m + k)*32);
     // find item in LRU queue and push back
-    dout(12) << "[ cache size   ] = " << g_decode_tbls_lru.size() << dendl;
-    g_decode_tbls_lru.splice(g_decode_tbls_map[signature].first, g_decode_tbls_lru, g_decode_tbls_lru.end());
+    dout(12) << "[ cache size   ] = " << g_decode_tbls_lru->size() << dendl;
+    g_decode_tbls_lru->splice( (*g_decode_tbls_map)[signature].first, *g_decode_tbls_lru, g_decode_tbls_lru->end());
     found = true;
   }
 
@@ -192,28 +199,28 @@ ErasureCodeIsaDefault::put_decoding_table_to_cache(std::string &signature, unsig
 
   bufferptr cachetable;
 
-  Mutex::Locker lock(g_decode_tbls_guard);
+  Mutex::Locker lock(*g_decode_tbls_guard);
 
   // evt. shrink the LRU queue/map
-  if ((int)g_decode_tbls_lru.size() >= g_decode_tbls_lru_length) {
+  if ((int)g_decode_tbls_lru->size() >= ErasureCodeIsaTableCache::decoding_tables_lru_length) {
     dout(12) << "[ shrink lru   ] = " << signature << dendl;
     // reuse old buffer
-    cachetable = g_decode_tbls_map[g_decode_tbls_lru.front()].second;
+    cachetable = (*g_decode_tbls_map)[g_decode_tbls_lru->front()].second;
     // remove from map
-    g_decode_tbls_map.erase(g_decode_tbls_lru.front());
+    g_decode_tbls_map->erase(g_decode_tbls_lru->front());
     // remove from lru
-    g_decode_tbls_lru.pop_front();
+    g_decode_tbls_lru->pop_front();
     // add the new to the map
-    g_decode_tbls_map[signature] = std::make_pair(g_decode_tbls_lru.begin(), cachetable);
+    (*g_decode_tbls_map)[signature] = std::make_pair(g_decode_tbls_lru->begin(), cachetable);
     // add to the end of lru
-    g_decode_tbls_lru.push_back(signature);
+    g_decode_tbls_lru->push_back(signature);
   } else {
     dout(12) << "[ store table  ] = " << signature << dendl;
     // allocate a new buffer
     cachetable = buffer::create(k * (m + k)*32);
-    g_decode_tbls_lru.push_back(signature);
-    g_decode_tbls_map[signature] = std::make_pair(g_decode_tbls_lru.begin(), cachetable);
-    dout(12) << "[ cache size   ] = " << g_decode_tbls_lru.size() << dendl;
+    g_decode_tbls_lru->push_back(signature);
+    (*g_decode_tbls_map)[signature] = std::make_pair(g_decode_tbls_lru->begin(), cachetable);
+    dout(12) << "[ cache size   ] = " << g_decode_tbls_lru->size() << dendl;
   }
 
   // copy-in the new table
@@ -439,18 +446,46 @@ int ErasureCodeIsaDefault::parse(const map<std::string,
 void
 ErasureCodeIsaDefault::prepare()
 {
-  a = (unsigned char*) malloc(k * (m + k));
-  g_encode_tbls = (unsigned char*) malloc(k * (m + k)*32);
+  // setup shared encoding table and coefficients
+  unsigned char** p_enc_table = ErasureCodePluginIsa::tcache.getEncodingTable(matrixtype, k,m);
+  unsigned char** p_enc_coeff = ErasureCodePluginIsa::tcache.getEncodingCoefficient(matrixtype, k,m);
 
-  unsigned memory_lru_cache = k * (m + k) * 32 * g_decode_tbls_lru_length;
-  dout(10) << "[ cache memory ] = " << memory_lru_cache << " bytes" << dendl;
-  // build encoding table which needs to be computed once for a configure (k,m)
+  if (!*p_enc_coeff) {
+    dout(10) << "[ cache tables ] creating coeff for k=" << k << " m=" << m << dendl;
+    // build encoding coefficients which need to be computed once for a configure (k,m)
+    *p_enc_coeff = (unsigned char*) malloc(k * (m + k));
+    a = *p_enc_coeff;
+
+    if (matrixtype == kVandermonde)
+      gf_gen_rs_matrix(a, k + m, k);
+    if (matrixtype == kCauchy)
+      gf_gen_cauchy1_matrix(a, k + m, k);
+  } else {
+    a = *p_enc_coeff;
+  }
+
+  if (!*p_enc_table) {
+    dout(10) << "[ cache tables ] creating tables for k=" << k << " m=" << m << dendl;
+    // build encoding table which needs to be computed once for a configure (k,m)
+    *p_enc_table = (unsigned char*) malloc(k * (m + k)*32);
+    g_encode_tbls = *p_enc_table;
+    ec_init_tables(k, m, &a[k * k], g_encode_tbls);    
+  } else {
+    g_encode_tbls = *p_enc_table;
+  }
+    
+  // retrieve the guard mutex of the table cache
+  g_decode_tbls_guard = ErasureCodePluginIsa::tcache.getLock();
+
+  // setup shared decoding table from cache
+  g_decode_tbls_map = ErasureCodePluginIsa::tcache.getDecodingTables(matrixtype);
+  g_decode_tbls_lru = ErasureCodePluginIsa::tcache.getDecodingTablesLru(matrixtype);
+
+  unsigned memory_lru_cache = k * (m + k) * 32 * ErasureCodeIsaTableCache::decoding_tables_lru_length;
+  
+  dout(10) << "[ cache memory ] = " << memory_lru_cache << " bytes" << " [ matrix ] = " << ((matrixtype==kVandermonde)?"Vandermonde":"Cauchy") << dendl;
+
   assert((matrixtype == kVandermonde) || (matrixtype == kCauchy));
-  if (matrixtype == kVandermonde)
-    gf_gen_rs_matrix(a, k + m, k);
-  if (matrixtype == kCauchy)
-    gf_gen_cauchy1_matrix(a, k + m, k);
 
-  ec_init_tables(k, m, &a[k * k], g_encode_tbls);
 }
 // -----------------------------------------------------------------------------
