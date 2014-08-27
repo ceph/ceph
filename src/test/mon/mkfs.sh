@@ -150,7 +150,7 @@ function makedir() {
 function idempotent() {
     mon_mkfs --auth-supported=none
     mon_mkfs --auth-supported=none 2>&1 | tee $DIR/makedir.log
-    grep "$MON_DIR already exists" $DIR/makedir.log > /dev/null || return 1
+    grep "'$MON_DIR' already exists" $DIR/makedir.log > /dev/null || return 1
 }
 
 function run() {
