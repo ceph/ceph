@@ -186,9 +186,9 @@ class DaemonGroup(object):
             # Passing None (i.e. user left config blank) defaults to all roles (filtered by ``types``)
             None -> ['osd.0', 'osd.1', 'osd.2', 'mds.a', mds.b', 'mon.a']
             # Wildcards are expanded
-            ['mds.*', 'osd.0'] -> ['mds.a', 'mds.b', 'osd.0']
+            roles=['mds.*', 'osd.0'] -> ['mds.a', 'mds.b', 'osd.0']
             # Boring lists are unaltered
-            ['osd.0', 'mds.a'] -> ['osd.0', 'mds.a']
+            roles=['osd.0', 'mds.a'] -> ['osd.0', 'mds.a']
 
         :param roles: List (of roles or wildcards) or None (select all suitable roles)
         :param types: List of acceptable role types, for example ['osd', 'mds'].
