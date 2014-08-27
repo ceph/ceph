@@ -36,6 +36,8 @@ class MMDSGetMap;
 class MMonCommand;
 class MMDSLoadTargets;
 
+#define MDS_HEALTH_PREFIX "mds_health"
+
 class MDSMonitor : public PaxosService {
  public:
   // mds maps
@@ -133,6 +135,10 @@ public:
   void check_subs();
   void check_sub(Subscription *sub);
 
+private:
+  // MDS daemon GID to latest health state from that GID
+  std::map<uint64_t, MDSHealth> pending_daemon_health;
+  std::set<uint64_t> pending_daemon_health_rm;
 };
 
 #endif
