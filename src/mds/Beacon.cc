@@ -18,6 +18,8 @@
 
 #include "messages/MMDSBeacon.h"
 #include "mon/MonClient.h"
+#include "mds/MDS.h"
+#include "mds/MDLog.h"
 
 #include "Beacon.h"
 
@@ -166,8 +168,7 @@ void Beacon::_send()
 
   beacon->set_standby_for_rank(standby_for_rank);
   beacon->set_standby_for_name(standby_for_name);
-
-  // include _my_ feature set
+  beacon->set_health(health);
   beacon->set_compat(compat);
 
   monc->send_mon_message(beacon);
@@ -232,4 +233,32 @@ void Beacon::notify_want_state(MDSMap::DaemonState const newstate)
   want_state = newstate;
 }
 
+
+/**
+ * We are 'shown' an MDS briefly in order to update
+ * some health metrics that we will send in the next
+ * beacon.
+ */
+void Beacon::notify_health(MDS const *mds)
+{
+  Mutex::Locker l(lock);
+
+  // I'm going to touch this MDS, so it must be locked
+  assert(mds->mds_lock.is_locked_by_me());
+
+  health.metrics.clear();
+
+  // Detect MDS_HEALTH_TRIM condition
+  // Arbitrary factor of 2, indicates MDS is not trimming promptly
+  if (mds->mdlog->get_num_segments() > (size_t)(g_conf->mds_log_max_segments * 2)) {
+    std::ostringstream oss;
+    oss << "Behind on trimming (" << mds->mdlog->get_num_segments()
+      << "/" << g_conf->mds_log_max_segments << ")";
+
+    MDSHealthMetric m(MDS_HEALTH_TRIM, HEALTH_WARN, oss.str());
+    m.metadata["num_segments"] = mds->mdlog->get_num_segments();
+    m.metadata["max_segments"] = g_conf->mds_log_max_segments;
+    health.metrics.push_back(m);
+  }
+}
 

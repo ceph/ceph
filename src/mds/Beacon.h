@@ -20,10 +20,12 @@
 #include "include/Context.h"
 #include "common/Mutex.h"
 #include "msg/Dispatcher.h"
+#include "messages/MMDSBeacon.h"
 
 class MonClient;
 class MMDSBeacon;
 class Message;
+class MDS;
 
 
 /**
@@ -58,6 +60,9 @@ class Beacon : public Dispatcher
   bool was_laggy;
   utime_t laggy_until;
 
+  // Health status to be copied into each beacon message
+  MDSHealth health;
+
   // Ticker
   class C_MDS_BeaconSender : public Context {
     Beacon *beacon;
@@ -87,6 +92,7 @@ public:
 
   void notify_mdsmap(MDSMap const *mdsmap);
   void notify_want_state(MDSMap::DaemonState const newstate);
+  void notify_health(MDS const *mds);
 
   void set_standby_for(int rank_, std::string const &name_);
 
