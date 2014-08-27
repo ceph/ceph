@@ -56,6 +56,36 @@ PACKAGES['ceph']['rpm'] = [
     'python-ceph',
 ]
 
+deb_packages = {'ceph': [
+    'ceph',
+    'ceph-dbg',
+    'ceph-mds',
+    'ceph-mds-dbg',
+    'ceph-common',
+    'ceph-common-dbg',
+    'ceph-fuse',
+    'ceph-fuse-dbg',
+    'ceph-test',
+    'ceph-test-dbg',
+    'radosgw',
+    'radosgw-dbg',
+    'python-ceph',
+    'libcephfs1',
+    'libcephfs1-dbg',
+]}
+
+rpm_packages = {'ceph': [
+    'ceph-debuginfo',
+    'ceph-radosgw',
+    'ceph-test',
+    'ceph-devel',
+    'ceph',
+    'ceph-fuse',
+    'rest-bench',
+    'libcephfs_jni1',
+    'libcephfs1',
+    'python-ceph',
+]}
 
 def _run_and_log_error_if_fails(remote, args):
     """
@@ -729,38 +759,6 @@ def remove_sources(ctx, config):
                     system_type], remote, config.get('project', 'ceph'))
             p.spawn(remove_sources_pkgs[
                     system_type], remote, 'calamari')
-
-deb_packages = {'ceph': [
-    'ceph',
-    'ceph-dbg',
-    'ceph-mds',
-    'ceph-mds-dbg',
-    'ceph-common',
-    'ceph-common-dbg',
-    'ceph-fuse',
-    'ceph-fuse-dbg',
-    'ceph-test',
-    'ceph-test-dbg',
-    'radosgw',
-    'radosgw-dbg',
-    'python-ceph',
-    'libcephfs1',
-    'libcephfs1-dbg',
-]}
-
-rpm_packages = {'ceph': [
-    'ceph-debuginfo',
-    'ceph-radosgw',
-    'ceph-test',
-    'ceph-devel',
-    'ceph',
-    'ceph-fuse',
-    'rest-bench',
-    'libcephfs_jni1',
-    'libcephfs1',
-    'python-ceph',
-]}
-
 
 @contextlib.contextmanager
 def install(ctx, config):
