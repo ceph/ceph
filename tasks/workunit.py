@@ -140,7 +140,7 @@ def _delete_dir(ctx, role, created_mountpoint):
             client,
         ],
     )
-    log.info("Deleted dir {dir}".format(dir=mnt))
+    log.info("Deleted dir {dir}".format(dir=client))
 
     # If the mount was an artificially created dir, delete that too
     if created_mountpoint:

@@ -567,17 +567,27 @@ class CephManager:
     def osd_admin_socket(self, osd_id, command, check_status=True):
         return self.admin_socket('osd', osd_id, command, check_status)
 
+    def find_remote(self, service_type, service_id):
+        """
+        Get the Remote for the host where a particular service runs.
+
+        :param service_type: 'mds', 'osd', 'client'
+        :param service_id: The second part of a role, e.g. '0' for the role 'client.0'
+        :return: a Remote instance for the host where the requested role is placed
+        """
+        for _remote, roles_for_host in self.ctx.cluster.remotes.iteritems():
+            for id_ in teuthology.roles_of_type(roles_for_host, service_type):
+                if id_ == str(service_id):
+                    return _remote
+
+        raise KeyError("Service {0}.{1} not found".format(service_type, service_id))
+
     def admin_socket(self, service_type, service_id, command, check_status=True):
         """
         Remotely start up ceph specifying the admin socket
         """
         testdir = teuthology.get_testdir(self.ctx)
-        remote = None
-        for _remote, roles_for_host in self.ctx.cluster.remotes.iteritems():
-            for id_ in teuthology.roles_of_type(roles_for_host, service_type):
-                if id_ == str(service_id):
-                    remote = _remote
-        assert remote is not None
+        remote = self.find_remote(service_type, service_id)
         args = [
             'sudo',
             'adjust-ulimits',

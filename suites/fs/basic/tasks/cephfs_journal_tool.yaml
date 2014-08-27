@@ -1,0 +1,20 @@
+
+tasks:
+- ceph-fuse:
+- workunit:
+    clients:
+      all: [fs/misc/trivial_sync.sh]
+- ceph-fuse:
+    client.0: 
+        mounted: false
+- ceph.stop: [mds.*]
+- workunit:
+    clients:
+        client.0: [suites/cephfs_journal_tool_smoke.sh]
+- ceph.restart: [mds.*]
+- ceph-fuse:
+    client.0: 
+        mounted: true
+- workunit:
+    clients:
+      all: [fs/misc/trivial_sync.sh]
