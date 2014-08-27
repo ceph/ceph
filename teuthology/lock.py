@@ -355,7 +355,7 @@ def update_lock(name, description=None, status=None, ssh_pub_key=None):
         ssh_key = None
         while not ssh_key:
             time.sleep(10)
-            ssh_key = ssh_keyscan(name)
+            ssh_key = ssh_keyscan([name])
     updated = {}
     if description is not None:
         updated['description'] = description
@@ -377,13 +377,11 @@ def ssh_keyscan(hostnames):
     """
     Fetch the SSH public key of one or more hosts
     """
+    if isinstance(hostnames, basestring):
+        raise TypeError("'hostnames' must be a list")
     hostnames = [misc.canonicalize_hostname(name, user=None) for name in
                  hostnames]
-    args = ['ssh-keyscan', '-t', 'rsa']
-    if isinstance(hostnames, basestring):
-        args.append(hostnames)
-    else:
-        args.extend(hostnames)
+    args = ['ssh-keyscan', '-t', 'rsa'] + hostnames
     p = subprocess.Popen(
         args=args,
         stdout=subprocess.PIPE,
