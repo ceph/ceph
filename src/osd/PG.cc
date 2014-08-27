@@ -5935,6 +5935,18 @@ PG::RecoveryState::NotBackfilling::NotBackfilling(my_context ctx)
   context< RecoveryMachine >().log_enter(state_name);
 }
 
+boost::statechart::result
+PG::RecoveryState::NotBackfilling::react(const RemoteBackfillReserved &evt)
+{
+  return discard_event();
+}
+
+boost::statechart::result
+PG::RecoveryState::NotBackfilling::react(const RemoteReservationRejected &evt)
+{
+  return discard_event();
+}
+
 void PG::RecoveryState::NotBackfilling::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
