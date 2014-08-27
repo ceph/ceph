@@ -72,6 +72,7 @@ deb_packages = {'ceph': [
     'python-ceph',
     'libcephfs1',
     'libcephfs1-dbg',
+    'libcephfs-java',
 ]}
 
 rpm_packages = {'ceph': [
