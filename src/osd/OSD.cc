@@ -1669,8 +1669,10 @@ int OSD::shutdown()
   dout(10) << "recovery tp stopped" << dendl;
 
   op_tp.drain();
+  peering_wq.clear();
+  scrub_finalize_wq.clear();
   op_tp.stop();
-  dout(10) << "op tp stopped" << dendl;
+  dout(10) << "osd tp stopped" << dendl;
 
   command_tp.drain();
   command_tp.stop();
@@ -1714,7 +1716,6 @@ int OSD::shutdown()
     assert(pg_stat_queue.empty());
   }
 
-  peering_wq.clear();
   // Remove PGs
 #ifdef PG_DEBUG_REFS
   service.dump_live_pgids();
