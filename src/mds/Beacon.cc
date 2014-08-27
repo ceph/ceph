@@ -14,6 +14,8 @@
 
 
 #include "common/dout.h"
+#include "common/HeartbeatMap.h"
+
 #include "messages/MMDSBeacon.h"
 #include "mon/MonClient.h"
 
@@ -140,6 +142,13 @@ void Beacon::_send()
   }
   sender = new C_MDS_BeaconSender(this);
   timer.add_event_after(g_conf->mds_beacon_interval, sender);
+
+  if (!cct->get_heartbeat_map()->is_healthy()) {
+    /* If anything isn't progressing, let avoid sending a beacon so that
+     * the MDS will consider us laggy */
+    dout(1) << __func__ << " skipping beacon, heartbeat map not healthy" << dendl;
+    return;
+  }
 
   ++last_seq;
   dout(10) << __func__ << " " << ceph_mds_state_name(want_state)
