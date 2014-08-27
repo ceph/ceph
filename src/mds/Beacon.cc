@@ -79,10 +79,9 @@ bool Beacon::ms_dispatch(Message *m)
     if (m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
       handle_mds_beacon(static_cast<MMDSBeacon*>(m));
     }
+    return true;
   }
 
-  // Let message fall through to MDS so that we get the execution of
-  // his finished_queue and waiting_for_nolaggy stuff.
   return false;
 }
 

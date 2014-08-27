@@ -263,13 +263,18 @@ class MDS : public Dispatcher, public md_config_obs_t {
     
 
   // -- waiters --
+private:
   list<MDSInternalContextBase*> finished_queue;
+  void _advance_queues();
+public:
 
   void queue_waiter(MDSInternalContextBase *c) {
     finished_queue.push_back(c);
+    progress_thread.signal();
   }
   void queue_waiters(list<MDSInternalContextBase*>& ls) {
     finished_queue.splice( finished_queue.end(), ls );
+    progress_thread.signal();
   }
   bool queue_one_replay() {
     if (replay_queue.empty())
@@ -318,6 +323,19 @@ class MDS : public Dispatcher, public md_config_obs_t {
   void ms_handle_connect(Connection *con);
   bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con);
+
+private:
+  class ProgressThread : public Thread {
+    MDS *mds;
+    bool stopping;
+    Cond cond;
+  public:
+    ProgressThread(MDS *mds_) : mds(mds_), stopping(false) {}
+    void * entry(); 
+    void shutdown();
+    void signal() {cond.Signal();}
+  } progress_thread;
+  void _progress_thread();
 
  public:
   MDS(const std::string &n, Messenger *m, MonClient *mc);
