@@ -1,5 +1,7 @@
 [Unit]
 Description=Ceph cluster monitor daemon
+After=network-online.target
+Wants=network-online.target
 
 # According to:
 #   http://www.freedesktop.org/wiki/Software/systemd/NetworkTarget
