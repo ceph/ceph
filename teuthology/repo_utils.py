@@ -62,14 +62,21 @@ def clone_repo(repo_url, dest_path, branch):
         cwd=os.path.dirname(dest_path),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT)
-    if proc.wait() != 0:
-        not_found_str = "Remote branch %s not found" % branch
-        out = proc.stdout.read()
+
+    not_found_str = "Remote branch %s not found" % branch
+    out = proc.stdout.read()
+    result = proc.wait()
+    # Newer git versions will bail if the branch is not found, but older ones
+    # will not. Fortunately they both output similar text.
+    if not_found_str in out:
         log.error(out)
-        if not_found_str in out:
-            raise BranchNotFoundError(branch, repo_url)
-        else:
-            raise GitError("git clone failed!")
+        if result == 0:
+            # Old git left a repo with the wrong branch. Remove it.
+            shutil.rmtree(dest_path, ignore_errors=True)
+        raise BranchNotFoundError(branch, repo_url)
+    elif result != 0:
+        # Unknown error
+        raise GitError("git clone failed!")
 
 
 def fetch(repo_path):
