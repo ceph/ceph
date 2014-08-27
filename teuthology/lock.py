@@ -337,8 +337,12 @@ def list_locks(keyed_by_name=False, **kwargs):
         if 'machine_type' in kwargs:
             kwargs['machine_type'] = kwargs['machine_type'].replace(',','|')
         uri += '?' + urllib.urlencode(kwargs)
-    response = requests.get(uri)
-    success = response.ok
+    try:
+        response = requests.get(uri)
+    except requests.ConnectionError:
+        success = False
+    else:
+        success = response.ok
     if success:
         if not keyed_by_name:
             return response.json()
