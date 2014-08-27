@@ -2413,8 +2413,10 @@ int OSD::shutdown()
   dout(10) << "recovery tp stopped" << dendl;
 
   osd_tp.drain();
+  peering_wq.clear();
+  scrub_finalize_wq.clear();
   osd_tp.stop();
-  dout(10) << "op tp stopped" << dendl;
+  dout(10) << "osd tp stopped" << dendl;
 
   osd_op_tp.drain();
   osd_op_tp.stop();
@@ -2461,7 +2463,7 @@ int OSD::shutdown()
     Mutex::Locker l(pg_stat_queue_lock);
     assert(pg_stat_queue.empty());
   }
-  peering_wq.clear();
+
   // Remove PGs
 #ifdef PG_DEBUG_REFS
   service.dump_live_pgids();
