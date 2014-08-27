@@ -2911,13 +2911,11 @@ void Monitor::waitlist_or_zap_client(Message *m)
   }
 }
 
-bool Monitor::_ms_dispatch(Message *m)
+void Monitor::_ms_dispatch(Message *m)
 {
-  bool ret = true;
-
   if (is_shutdown()) {
     m->put();
-    return true;
+    return;
   }
 
   ConnectionRef connection = m->get_connection();
@@ -2955,13 +2953,14 @@ bool Monitor::_ms_dispatch(Message *m)
         return dispatch(s, m, false);
       }
       dout(1) << __func__ << " dropping stray message " << *m
-        << " from " << m->get_source_inst() << dendl;
-      return false;
+	      << " from " << m->get_source_inst() << dendl;
+      m->put();
+      return;
     }
 
     if (!exited_quorum.is_zero() && !src_is_mon) {
       waitlist_or_zap_client(m);
-      return true;
+      return;
     }
 
     dout(10) << "do not have session, making new one" << dendl;
@@ -3000,22 +2999,20 @@ bool Monitor::_ms_dispatch(Message *m)
 
   if (is_synchronizing() && !src_is_mon) {
     waitlist_or_zap_client(m);
-    return true;
+    return;
   }
 
-  ret = dispatch(s, m, src_is_mon);
+  dispatch(s, m, src_is_mon);
 
   if (s) {
     s->put();
   }
 
-  return ret;
+  return;
 }
 
-bool Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
+void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
 {
-  bool ret = true;
-
   assert(m != NULL);
 
   switch (m->get_type()) {
@@ -3174,10 +3171,10 @@ bool Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
       break;
 
     default:
-      ret = false;
+      dout(1) << "dropping unexpected " << *m << dendl;
+      m->put();
+      break;
   }
-
-  return ret;
 }
 
 void Monitor::handle_ping(MPing *m)
