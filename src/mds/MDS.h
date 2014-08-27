@@ -104,6 +104,9 @@ enum {
 
 
 
+namespace ceph {
+  struct heartbeat_handle_d;
+}
 class filepath;
 
 class MonClient;
@@ -145,6 +148,8 @@ class MDS : public Dispatcher, public md_config_obs_t {
   SafeTimer    timer;
 
  private:
+  ceph::heartbeat_handle_d *hb;  // Heartbeat for threads using mds_lock
+  void heartbeat_reset();
   Beacon  beacon;
   void set_want_state(MDSMap::DaemonState newstate);
  public:

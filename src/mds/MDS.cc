@@ -23,7 +23,6 @@
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
 
-
 #include "msg/Messenger.h"
 #include "mon/MonClient.h"
 
@@ -45,6 +44,8 @@
 #include "SnapClient.h"
 
 #include "InoTable.h"
+
+#include "common/HeartbeatMap.h"
 
 #include "common/perf_counters.h"
 
@@ -83,6 +84,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   Dispatcher(m->cct),
   mds_lock("MDS::mds_lock"),
   timer(m->cct, mds_lock),
+  hb(NULL),
   beacon(m->cct, mc, n),
   authorize_handler_cluster_registry(new AuthAuthorizeHandlerRegistry(m->cct,
 								      m->cct->_conf->auth_supported.length() ?
@@ -103,6 +105,8 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   op_tracker(cct, m->cct->_conf->mds_enable_op_tracker),
   finisher(cct),
   sessionmap(this), asok_hook(NULL) {
+
+  hb = cct->get_heartbeat_map()->add_worker("MDS");
 
   orig_argc = 0;
   orig_argv = NULL;
@@ -184,6 +188,10 @@ MDS::~MDS() {
   
   if (messenger)
     delete messenger;
+
+  if (hb) {
+    cct->get_heartbeat_map()->remove_worker(hb);
+  }
 }
 
 class MDSSocketHook : public AdminSocketHook {
@@ -220,6 +228,8 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
     op_tracker.dump_historic_ops(f);
   } else if (command == "session ls") {
     mds_lock.Lock();
+
+    heartbeat_reset();
 
     // Dump sessions, decorated with recovery/replay status
     f->open_array_section("sessions");
@@ -694,6 +704,8 @@ void MDS::reset_tick()
 
 void MDS::tick()
 {
+  heartbeat_reset();
+
   tick_event = 0;
 
   // reschedule
@@ -1743,6 +1755,14 @@ void MDS::suicide()
 
   // shut down messenger
   messenger->shutdown();
+
+  // Workaround unclean shutdown: HeartbeatMap will assert if
+  // worker is not removed (as we do in ~MDS), but ~MDS is not
+  // always called after suicide.
+  if (hb) {
+    cct->get_heartbeat_map()->remove_worker(hb);
+    hb = NULL;
+  }
 }
 
 void MDS::respawn()
@@ -1792,6 +1812,9 @@ bool MDS::ms_dispatch(Message *m)
 {
   bool ret;
   mds_lock.Lock();
+
+  heartbeat_reset();
+
   if (want_state == CEPH_MDS_STATE_DNE) {
     dout(10) << " stopping, discarding " << *m << dendl;
     m->put();
@@ -2016,6 +2039,8 @@ bool MDS::_dispatch(Message *m)
       dout(1) << "          " << this->mds_lock.is_locked_by_me() << dendl;
       ls.front()->complete(0);
       ls.pop_front();
+
+      heartbeat_reset();
     }
   }
 
@@ -2034,6 +2059,8 @@ bool MDS::_dispatch(Message *m)
       dout(7) << " processing laggy deferred " << *old << dendl;
       handle_deferrable_message(old);
     }
+
+    heartbeat_reset();
   }
 
   // done with all client replayed requests?
@@ -2314,3 +2341,17 @@ void MDS::set_want_state(MDSMap::DaemonState newstate)
     beacon.notify_want_state(newstate);
   }
 }
+
+/**
+ * Call this when you take mds_lock, or periodically if you're going to
+ * hold the lock for a long time (e.g. iterating over clients/inodes)
+ */
+void MDS::heartbeat_reset()
+{
+  assert(hb != NULL);
+  // NB not enabling suicide grace, because the mon takes care of killing us
+  // (by blacklisting us) when we fail to send beacons, and it's simpler to
+  // only have one way of dying.
+  cct->get_heartbeat_map()->reset_timeout(hb, g_conf->mds_beacon_grace, 0);
+}
+
