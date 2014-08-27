@@ -527,11 +527,11 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
 
   ostringstream oss;
   char buf[128];
-  snprintf(buf, sizeof(buf), "average_util: %04f, overload_util: %04f. ",
+  snprintf(buf, sizeof(buf), "average %04f, overload %04f. ",
 	   average_util, overload_util);
   oss << buf;
   std::string sep;
-  oss << "overloaded osds: ";
+  oss << "reweighted: ";
   bool changed = false;
   for (ceph::unordered_map<int,osd_stat_t>::const_iterator p =
 	 pgm.osd_stat.begin();
@@ -552,7 +552,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
       unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
       pending_inc.new_weight[p->first] = new_weight;
       char buf[128];
-      snprintf(buf, sizeof(buf), "%d [%04f -> %04f]", p->first,
+      snprintf(buf, sizeof(buf), "osd.%d [%04f -> %04f]", p->first,
 	       (float)weight / (float)0x10000,
 	       (float)new_weight / (float)0x10000);
       oss << buf << sep;
@@ -568,7 +568,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
 	sep = ", ";
 	pending_inc.new_weight[p->first] = new_weight;
 	char buf[128];
-	snprintf(buf, sizeof(buf), "%d [%04f -> %04f]", p->first,
+	snprintf(buf, sizeof(buf), "osd.%d [%04f -> %04f]", p->first,
 		 (float)weight / (float)0x10000,
 		 (float)new_weight / (float)0x10000);
 	oss << buf << sep;
