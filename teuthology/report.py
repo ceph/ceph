@@ -72,18 +72,24 @@ class ResultsSerializer(object):
         self.archive_base = archive_base or config.archive_base
         self.log = log or init_logging()
 
-    def job_info(self, run_name, job_id, pretty=False):
+
+    def job_info(self, run_name, job_id, pretty=False, simple=False):
         """
         Given a run name and job id, merge the job's YAML files together.
 
         :param run_name: The name of the run.
         :param job_id:   The job's id.
+        :param simple(bool): Read less data for speed (only orig.config.yaml/info.yaml)
         :returns:        A dict.
         """
         job_archive_dir = os.path.join(self.archive_base,
                                        run_name,
                                        job_id)
         job_info = {}
+
+        if simple:
+            self.yamls = ('orig.config.yaml', 'info.yaml')
+
         for yaml_name in self.yamls:
             yaml_path = os.path.join(job_archive_dir, yaml_name)
             if not os.path.exists(yaml_path):
@@ -93,14 +99,18 @@ class ResultsSerializer(object):
                 if partial_info is not None:
                     job_info.update(partial_info)
 
+        if 'job_id' not in job_info:
+            job_info['job_id'] = job_id
+
+        if simple:
+            return job_info
+
         log_path = os.path.join(job_archive_dir, 'teuthology.log')
         if os.path.exists(log_path):
             mtime = int(os.path.getmtime(log_path))
             mtime_dt = datetime.fromtimestamp(mtime)
             job_info['updated'] = str(mtime_dt)
 
-        if 'job_id' not in job_info:
-            job_info['job_id'] = job_id
 
         return job_info
 
