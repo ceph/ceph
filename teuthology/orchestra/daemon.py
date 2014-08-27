@@ -184,11 +184,13 @@ class DaemonGroup(object):
         ::
 
             # Passing None (i.e. user left config blank) defaults to all roles (filtered by ``types``)
-            None -> ['osd.0', 'osd.1', 'osd.2', 'mds.a', mds.b', 'mon.a']
+            None, types=['osd', 'mds', 'mon'] -> ['osd.0', 'osd.1', 'osd.2', 'mds.a', mds.b', 'mon.a']
             # Wildcards are expanded
-            roles=['mds.*', 'osd.0'] -> ['mds.a', 'mds.b', 'osd.0']
+            roles=['mds.*', 'osd.0'], types=['osd', 'mds', 'mon'] -> ['mds.a', 'mds.b', 'osd.0']
             # Boring lists are unaltered
-            roles=['osd.0', 'mds.a'] -> ['osd.0', 'mds.a']
+            roles=['osd.0', 'mds.a'], types=['osd', 'mds', 'mon'] -> ['osd.0', 'mds.a']
+            # Entries in role list that don't match types result in an exception
+            roles=['osd.0', 'mds.a'], types=['osd'] -> RuntimeError
 
         :param roles: List (of roles or wildcards) or None (select all suitable roles)
         :param types: List of acceptable role types, for example ['osd', 'mds'].
