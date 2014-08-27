@@ -23,9 +23,90 @@
 
 #include <uuid/uuid.h>
 
+
+
+/**
+ * Unique ID for each type of metric we can send to the mon, so that if the mon
+ * knows about the IDs then it can implement special behaviour for certain
+ * messages.
+ */
+enum mds_metric_t {
+  MDS_HEALTH_NULL = 0,
+  MDS_HEALTH_TRIM = 1
+};
+
+/**
+ * This structure is designed to allow some flexibility in how we emit health
+ * complaints, such that:
+ * - The mon doesn't have to have foreknowledge of all possible metrics: we can
+ *   implement new messages in the MDS and have the mon pass them through to the user
+ *   (enables us to do complex checks inside the MDS, and allows mon to be older version
+ *   than MDS)
+ * - The mon has enough information to perform reductions on some types of metric, for
+ *   example complaints about the same client from multiple MDSs where we might want
+ *   to reduce three "client X is stale on MDS y" metrics into one "client X is stale
+ *   on 3 MDSs" message.
+ */
+struct MDSHealthMetric
+{
+  mds_metric_t type;
+  health_status_t sev;
+  std::string message;
+  std::map<std::string, std::string> metadata;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    assert(type != MDS_HEALTH_NULL);
+    ::encode((uint16_t)type, bl);
+    ::encode((uint8_t)sev, bl);
+    ::encode(message, bl);
+    ::encode(metadata, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode((uint16_t&)type, bl);
+    assert(type != MDS_HEALTH_NULL);
+    ::decode((uint8_t&)sev, bl);
+    ::decode(message, bl);
+    ::decode(metadata, bl);
+    DECODE_FINISH(bl);
+  }
+
+  MDSHealthMetric() : type(MDS_HEALTH_NULL), sev(HEALTH_OK) {}
+  MDSHealthMetric(mds_metric_t type_, health_status_t sev_, std::string const &message_)
+    : type(type_), sev(sev_), message(message_) {}
+};
+WRITE_CLASS_ENCODER(MDSHealthMetric)
+
+
+/**
+ * Health metrics send by the MDS to the mon, so that the mon can generate
+ * user friendly warnings about undesirable states.
+ */
+struct MDSHealth
+{
+  std::list<MDSHealthMetric> metrics;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(metrics, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(metrics, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(MDSHealth)
+
+
 class MMDSBeacon : public PaxosServiceMessage {
 
-  static const int HEAD_VERSION = 2;
+  static const int HEAD_VERSION = 3;
 
   uuid_d fsid;
   uint64_t global_id;
@@ -37,6 +118,8 @@ class MMDSBeacon : public PaxosServiceMessage {
   string standby_for_name;
 
   CompatSet compat;
+
+  MDSHealth health;
 
  public:
   MMDSBeacon() : PaxosServiceMessage(MSG_MDS_BEACON, 0, HEAD_VERSION) { }
@@ -59,8 +142,11 @@ public:
   int get_standby_for_rank() { return standby_for_rank; }
   const string& get_standby_for_name() { return standby_for_name; }
 
-  CompatSet& get_compat() { return compat; }
+  CompatSet const& get_compat() const { return compat; }
   void set_compat(const CompatSet& c) { compat = c; }
+
+  MDSHealth const& get_health() const { return health; }
+  void set_health(const MDSHealth &h) { health = h; }
 
   void set_standby_for_rank(int r) { standby_for_rank = r; }
   void set_standby_for_name(string& n) { standby_for_name = n; }
@@ -81,6 +167,7 @@ public:
     ::encode(standby_for_rank, payload);
     ::encode(standby_for_name, payload);
     ::encode(compat, payload);
+    ::encode(health, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -94,6 +181,9 @@ public:
     ::decode(standby_for_name, p);
     if (header.version >= 2)
       ::decode(compat, p);
+    if (header.version >= 3) {
+      ::decode(health, p);
+    }
   }
 };
 
