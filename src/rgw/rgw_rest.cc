@@ -247,7 +247,7 @@ void dump_content_length(struct req_state *s, uint64_t len)
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
-  r = s->cio->print("Accept-Ranges: %s\n", "bytes");
+  r = s->cio->print("Accept-Ranges: %s\r\n", "bytes");
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
@@ -257,9 +257,9 @@ void dump_etag(struct req_state *s, const char *etag)
 {
   int r;
   if (s->prot_flags & RGW_REST_SWIFT)
-    r = s->cio->print("etag: %s\n", etag);
+    r = s->cio->print("etag: %s\r\n", etag);
   else
-    r = s->cio->print("ETag: \"%s\"\n", etag);
+    r = s->cio->print("ETag: \"%s\"\r\n", etag);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
@@ -328,7 +328,7 @@ static void dump_time_header(struct req_state *s, const char *name, time_t t)
   if (strftime(timestr, sizeof(timestr), "%a, %d %b %Y %H:%M:%S %Z", tmp) == 0)
     return;
 
-  int r = s->cio->print("%s: %s\n", name, timestr);
+  int r = s->cio->print("%s: %s\r\n", name, timestr);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
