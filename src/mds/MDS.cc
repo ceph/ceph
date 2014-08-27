@@ -104,7 +104,10 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   log_client(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
   op_tracker(cct, m->cct->_conf->mds_enable_op_tracker),
   finisher(cct),
-  sessionmap(this), asok_hook(NULL) {
+  sessionmap(this),
+  progress_thread(this),
+  asok_hook(NULL)
+{
 
   hb = cct->get_heartbeat_map()->add_worker("MDS");
 
@@ -683,6 +686,9 @@ int MDS::init(MDSMap::DaemonState wanted_state)
   // schedule tick
   reset_tick();
 
+  // Start handler for finished_queue
+  progress_thread.create();
+
   create_logger();
   set_up_admin_socket();
   g_conf->add_observer(this);
@@ -714,6 +720,10 @@ void MDS::tick()
   if (beacon.is_laggy()) {
     dout(5) << "tick bailing out since we seem laggy" << dendl;
     return;
+  } else {
+    // Wake up thread in case we use to be laggy and have waiting_for_nolaggy
+    // messages to progress.
+    progress_thread.signal();
   }
 
   // make sure mds log flushes, trims periodically
@@ -1756,6 +1766,8 @@ void MDS::suicide()
 
   op_tracker.on_shutdown();
 
+  progress_thread.shutdown();
+
   // shut down messenger
   messenger->shutdown();
 
@@ -1876,13 +1888,6 @@ bool MDS::handle_core_message(Message *m)
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_MDS);
     handle_mds_map(static_cast<MMDSMap*>(m));
     break;
-  case MSG_MDS_BEACON:
-    ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
-    // no-op, Beacon handles this on our behalf but we listen for the
-    // message to get the side effect of handling finished_queue and
-    // waiting_for_nolaggy at end of MDS dispatch.
-    m->put();
-    break;
 
     // misc
   case MSG_MON_COMMAND:
@@ -2002,6 +2007,53 @@ bool MDS::is_stale_message(Message *m)
   return false;
 }
 
+/**
+ * Advance finished_queue and waiting_for_nolaggy.
+ *
+ * Usually drain both queues, but may not drain waiting_for_nolaggy
+ * if beacon is currently laggy.
+ */
+void MDS::_advance_queues()
+{
+  assert(mds_lock.is_locked_by_me());
+
+  while (!finished_queue.empty()) {
+    dout(7) << "mds has " << finished_queue.size() << " queued contexts" << dendl;
+    dout(10) << finished_queue << dendl;
+    list<MDSInternalContextBase*> ls;
+    ls.swap(finished_queue);
+    while (!ls.empty()) {
+      dout(10) << " finish " << ls.front() << dendl;
+
+      dout(1) << "trigger:  " << this << dendl;
+      dout(1) << "          " << this->mds_lock.is_locked() << dendl;
+      dout(1) << "          " << this->mds_lock.is_locked_by_me() << dendl;
+      ls.front()->complete(0);
+      ls.pop_front();
+
+      heartbeat_reset();
+    }
+  }
+
+  while (!waiting_for_nolaggy.empty()) {
+    // stop if we're laggy now!
+    if (beacon.is_laggy())
+      break;
+
+    Message *old = waiting_for_nolaggy.front();
+    waiting_for_nolaggy.pop_front();
+
+    if (is_stale_message(old)) {
+      old->put();
+    } else {
+      dout(7) << " processing laggy deferred " << *old << dendl;
+      handle_deferrable_message(old);
+    }
+
+    heartbeat_reset();
+  }
+}
+
 /* If this function returns true, it has put the message. If it returns false,
  * it has not put the message. */
 bool MDS::_dispatch(Message *m)
@@ -2029,41 +2081,12 @@ bool MDS::_dispatch(Message *m)
     return true;
 
   // finish any triggered contexts
-  while (!finished_queue.empty()) {
-    dout(7) << "mds has " << finished_queue.size() << " queued contexts" << dendl;
-    dout(10) << finished_queue << dendl;
-    list<MDSInternalContextBase*> ls;
-    ls.swap(finished_queue);
-    while (!ls.empty()) {
-      dout(10) << " finish " << ls.front() << dendl;
+  _advance_queues();
 
-      dout(1) << "trigger:  " << this << dendl;
-      dout(1) << "          " << this->mds_lock.is_locked() << dendl;
-      dout(1) << "          " << this->mds_lock.is_locked_by_me() << dendl;
-      ls.front()->complete(0);
-      ls.pop_front();
-
-      heartbeat_reset();
-    }
-  }
-
-  while (!waiting_for_nolaggy.empty()) {
-
-    // stop if we're laggy now!
-    if (beacon.is_laggy())
-      return true;
-
-    Message *old = waiting_for_nolaggy.front();
-    waiting_for_nolaggy.pop_front();
-
-    if (is_stale_message(old)) {
-      old->put();
-    } else {
-      dout(7) << " processing laggy deferred " << *old << dendl;
-      handle_deferrable_message(old);
-    }
-
-    heartbeat_reset();
+  if (beacon.is_laggy()) {
+    // We've gone laggy during dispatch, don't do any
+    // more housekeeping
+    return true;
   }
 
   // done with all client replayed requests?
@@ -2358,3 +2381,33 @@ void MDS::heartbeat_reset()
   cct->get_heartbeat_map()->reset_timeout(hb, g_conf->mds_beacon_grace, 0);
 }
 
+
+void *MDS::ProgressThread::entry()
+{
+  Mutex::Locker l(mds->mds_lock);
+  while (true) {
+    while (!stopping && (mds->finished_queue.empty() && mds->waiting_for_nolaggy.empty())) {
+      cond.Wait(mds->mds_lock);
+    }
+
+    if (stopping) {
+      break;
+    }
+
+    mds->_advance_queues();
+  }
+
+  return NULL;
+}
+
+
+void MDS::ProgressThread::shutdown()
+{
+  assert(mds->mds_lock.is_locked_by_me());
+
+  stopping = true;
+  cond.Signal();
+  mds->mds_lock.Unlock();
+  join();
+  mds->mds_lock.Lock();
+}
