@@ -71,9 +71,9 @@ class MDSMonitor : public PaxosService {
   void create_initial();
   void update_from_paxos(bool *need_bootstrap);
   void create_pending(); 
-  void encode_pending(MonitorDBStore::Transaction *t);
+  void encode_pending(MonitorDBStore::TransactionRef t);
   // we don't require full versions; don't encode any.
-  virtual void encode_full(MonitorDBStore::Transaction *t) { }
+  virtual void encode_full(MonitorDBStore::TransactionRef t) { }
 
   void update_logger();
 

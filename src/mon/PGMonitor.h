@@ -69,7 +69,7 @@ private:
   version_t get_trim_to();
   void update_logger();
 
-  void encode_pending(MonitorDBStore::Transaction *t);
+  void encode_pending(MonitorDBStore::TransactionRef t);
   void read_pgmap_meta();
   void read_pgmap_full();
   void apply_pgmap_delta(bufferlist& bl);
@@ -180,7 +180,7 @@ public:
   bool should_stash_full() {
     return false;  // never
   }
-  virtual void encode_full(MonitorDBStore::Transaction *t) {
+  virtual void encode_full(MonitorDBStore::TransactionRef t) {
     assert(0 == "unimplemented encode_full");
   }
 
