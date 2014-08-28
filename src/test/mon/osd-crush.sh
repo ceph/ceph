@@ -192,16 +192,28 @@ function TEST_add_ruleset_failed() {
     ./ceph osd crush add-bucket $root host
     ./ceph osd crush rule create-simple test_rule1 $root osd firstn || return 1
     ./ceph osd crush rule create-simple test_rule2 $root osd firstn || return 1
-    #./ceph osd crush rule rm test_rule1
-    for i in `seq 3 255`
-    do
-      ./ceph osd crush rule create-simple test_rule$i $root osd firstn || return 1
-      Check_ruleset_id_match_rule_id test_rule$i || return 1
-    done
-
+    ./ceph osd getcrushmap > $dir/crushmap || return 1
+    ./crushtool --decompile $dir/crushmap > $dir/crushmap.txt || return 1
+    for i in $(seq 3 255)
+        do
+            cat <<EOF
+rule test_rule$i {
+	ruleset $i
+	type replicated
+	min_size 1
+	max_size 10
+	step take $root
+	step choose firstn 0 type osd
+	step emit
+}
+EOF
+    done >> $dir/crushmap.txt
+    ./crushtool --compile $dir/crushmap.txt -o $dir/crushmap || return 1
+    ./ceph osd setcrushmap -i $dir/crushmap  || return 1
     ./ceph osd crush rule create-simple test_rule_nospace $root osd firstn 2>&1 | grep "Error ENOSPC" || return 1
 
 }
+
 main osd-crush
 
 # Local Variables:
