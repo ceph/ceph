@@ -177,7 +177,7 @@ key=value pairs stored in an `erasure code profile`_.
  $ ceph osd pool create ecpool 12 12 erasure myprofile
 
 The *plugin* is dynamically loaded from *directory*  and expected to
-implement the *int __erasure_code_init(char *plugin_name)* function 
+implement the *int __erasure_code_init(char *plugin_name, char *directory)* function 
 which is responsible for registering an object derived from *ErasureCodePlugin* 
 in the registry. The `ErasureCodePluginExample <https://github.com/ceph/ceph/blob/v0.78/src/test/erasure-code/ErasureCodePluginExample.cc>`_ plugin reads:
 

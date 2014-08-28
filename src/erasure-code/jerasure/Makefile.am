@@ -33,6 +33,8 @@ jerasure_sources = \
   erasure-code/jerasure/ErasureCodePluginJerasure.cc \
   erasure-code/jerasure/ErasureCodeJerasure.cc
 
+erasure-code/jerasure/ErasureCodePluginJerasure.cc: ./ceph_ver.h
+
 libec_jerasure_generic_la_SOURCES = ${jerasure_sources}
 libec_jerasure_generic_la_CFLAGS = ${AM_CFLAGS}  \
 	-I$(srcdir)/erasure-code/jerasure/gf-complete/include \
@@ -107,5 +109,7 @@ libec_jerasure_la_LDFLAGS = ${AM_LDFLAGS} -version-info 2:0:0
 if LINUX
 libec_jerasure_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
+
+erasure-code/jerasure/ErasureCodePluginSelectJerasure.cc: ./ceph_ver.h
 
 erasure_codelib_LTLIBRARIES += libec_jerasure.la
