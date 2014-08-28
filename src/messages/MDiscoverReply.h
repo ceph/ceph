@@ -19,9 +19,7 @@
 #include "msg/Message.h"
 #include "include/filepath.h"
 
-#include <vector>
 #include <string>
-using namespace std;
 
 
 
@@ -37,7 +35,7 @@ using namespace std;
  * they are false if there is no returned data, ie the first group is empty.
  *
  * we also return errors:
- *   error_flag_dn(string) - the specified dentry dne
+ *   error_flag_dn(std::string) - the specified dentry dne
  *   error_flag_dir        - the last item wasn't a dir, so we couldn't continue.
  *
  * and sometimes,
@@ -79,7 +77,7 @@ class MDiscoverReply : public Message {
   // and the response
   bool flag_error_dn;
   bool flag_error_dir;
-  string error_dentry;   // dentry that was not found (to trigger waiters on asker)
+  std::string error_dentry;   // dentry that was not found (to trigger waiters on asker)
   bool unsolicited;
 
   __s32 dir_auth_hint;
@@ -99,7 +97,7 @@ class MDiscoverReply : public Message {
 
   bool is_flag_error_dn() { return flag_error_dn; }
   bool is_flag_error_dir() { return flag_error_dir; }
-  string& get_error_dentry() { return error_dentry; }
+  std::string& get_error_dentry() { return error_dentry; }
 
   int get_starts_with() { return starts_with; }
 
@@ -160,7 +158,7 @@ public:
   }
 
   //  void set_flag_forward() { flag_forward = true; }
-  void set_flag_error_dn(const string& dn) { 
+  void set_flag_error_dn(const std::string& dn) { 
     flag_error_dn = true; 
     error_dentry = dn; 
   }
@@ -170,7 +168,7 @@ public:
   void set_dir_auth_hint(int a) {
     dir_auth_hint = a;
   }
-  void set_error_dentry(const string& dn) {
+  void set_error_dentry(const std::string& dn) {
     error_dentry = dn;
   }
 
