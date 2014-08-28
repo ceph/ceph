@@ -304,3 +304,39 @@ size_t Session::get_request_count()
   return result;
 }
 
+void SessionMap::add_session(Session *s)
+{
+  dout(10) << __func__ << " s=" << s << " name=" << s->info.inst.name << dendl;
+
+  assert(session_map.count(s->info.inst.name) == 0);
+  session_map[s->info.inst.name] = s;
+  if (by_state.count(s->state) == 0)
+    by_state[s->state] = new xlist<Session*>;
+  by_state[s->state]->push_back(&s->item_session_list);
+  s->get();
+}
+
+void SessionMap::remove_session(Session *s)
+{
+  dout(10) << __func__ << " s=" << s << " name=" << s->info.inst.name << dendl;
+
+  s->trim_completed_requests(0);
+  s->item_session_list.remove_myself();
+  session_map.erase(s->info.inst.name);
+  s->put();
+}
+
+void SessionMap::touch_session(Session *session)
+{
+  dout(10) << __func__ << " s=" << session << " name=" << session->info.inst.name << dendl;
+
+  // Move to the back of the session list for this state (should
+  // already be on a list courtesy of add_session and set_state)
+  assert(session->item_session_list.is_on_list());
+  if (by_state.count(session->state) == 0)
+    by_state[session->state] = new xlist<Session*>;
+  by_state[session->state]->push_back(&session->item_session_list);
+
+  session->last_cap_renew = ceph_clock_now(g_ceph_context);
+}
+
