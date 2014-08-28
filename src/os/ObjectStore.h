@@ -80,6 +80,11 @@ static inline void encode(const map<string,bufferptr> *attrset, bufferlist &bl) 
   ::encode(*attrset, bl);
 }
 
+// Flag bits
+typedef uint32_t osflagbits_t;
+const int SKIP_JOURNAL_REPLAY = 1 << 0;
+const int SKIP_MOUNT_OMAP = 1 << 1;
+
 class ObjectStore {
 protected:
   string path;
@@ -93,11 +98,13 @@ public:
    * @param type type of store. This is a string from the configuration file.
    * @param data path (or other descriptor) for data
    * @param journal path (or other descriptor) for journal (optional)
+   * @param flags which filestores should check if applicable
    */
   static ObjectStore *create(CephContext *cct,
 			     const string& type,
 			     const string& data,
-			     const string& journal);
+			     const string& journal,
+			     osflagbits_t flag = 0);
 
   Logger *logger;
 
