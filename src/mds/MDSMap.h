@@ -25,7 +25,6 @@
 #include <set>
 #include <map>
 #include <string>
-using namespace std;
 
 #include "common/config.h"
 
@@ -125,7 +124,7 @@ public:
 
   struct mds_info_t {
     uint64_t global_id;
-    string name;
+    std::string name;
     int32_t rank;
     int32_t inc;
     MDSMap::DaemonState state;
@@ -133,8 +132,8 @@ public:
     entity_addr_t addr;
     utime_t laggy_since;
     int32_t standby_for_rank;
-    string standby_for_name;
-    set<int32_t> export_targets;
+    std::string standby_for_name;
+    std::set<int32_t> export_targets;
 
     mds_info_t() : global_id(0), rank(-1), inc(0), state(STATE_STANDBY), state_seq(0),
 		   standby_for_rank(MDS_NO_STANDBY_PREF) { }
@@ -175,7 +174,7 @@ protected:
   __u32 session_autoclose;
   uint64_t max_file_size;
 
-  set<int64_t> data_pools;  // file data pools available to clients (via an ioctl).  first is the default.
+  std::set<int64_t> data_pools;  // file data pools available to clients (via an ioctl).  first is the default.
   int64_t cas_pool;            // where CAS objects go
   int64_t metadata_pool;       // where fs metadata objects go
   
@@ -191,11 +190,11 @@ protected:
 
   uint32_t max_mds; /* The maximum number of active MDSes. Also, the maximum rank. */
 
-  set<int32_t> in;              // currently defined cluster
-  map<int32_t,int32_t> inc;     // most recent incarnation.
-  set<int32_t> failed, stopped; // which roles are failed or stopped
-  map<int32_t,uint64_t> up;        // who is in those roles
-  map<uint64_t,mds_info_t> mds_info;
+  std::set<int32_t> in;              // currently defined cluster
+  std::map<int32_t,int32_t> inc;     // most recent incarnation.
+  std::set<int32_t> failed, stopped; // which roles are failed or stopped
+  std::map<int32_t,uint64_t> up;        // who is in those roles
+  std::map<uint64_t,mds_info_t> mds_info;
 
   bool ever_allowed_snaps; //< the cluster has ever allowed snap creation
   bool explicitly_allowed_snaps; //< the user has explicitly enabled snap creation
@@ -264,7 +263,7 @@ public:
   int get_tableserver() const { return tableserver; }
   int get_root() const { return root; }
 
-  const set<int64_t> &get_data_pools() const { return data_pools; }
+  const std::set<int64_t> &get_data_pools() const { return data_pools; }
   int64_t get_first_data_pool() const { return *data_pools.begin(); }
   int64_t get_cas_pool() const { return cas_pool; }
   int64_t get_metadata_pool() const { return metadata_pool; }
@@ -272,7 +271,7 @@ public:
     return data_pools.count(poolid);
   }
 
-  const map<uint64_t,mds_info_t>& get_mds_info() { return mds_info; }
+  const std::map<uint64_t,mds_info_t>& get_mds_info() { return mds_info; }
   const mds_info_t& get_mds_info_gid(uint64_t gid) {
     assert(mds_info.count(gid));
     return mds_info[gid];
@@ -281,8 +280,8 @@ public:
     assert(up.count(m) && mds_info.count(up[m]));
     return mds_info[up[m]];
   }
-  uint64_t find_mds_gid_by_name(const string& s) {
-    for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
+  uint64_t find_mds_gid_by_name(const std::string& s) {
+    for (std::map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p) {
       if (p->second.name == s) {
@@ -304,7 +303,7 @@ public:
   }
   unsigned get_num_mds(int state) const {
     unsigned n = 0;
-    for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
+    for (std::map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p)
       if (p->second.state == state) ++n;
@@ -316,7 +315,7 @@ public:
     data_pools.insert(poolid);
   }
   int remove_data_pool(int64_t poolid) {
-    set<int64_t>::iterator p = data_pools.find(poolid);
+    std::set<int64_t>::iterator p = data_pools.find(poolid);
     if (p == data_pools.end())
       return -ENOENT;
     data_pools.erase(p);
@@ -324,45 +323,45 @@ public:
   }
 
   // sets
-  void get_mds_set(set<int>& s) {
+  void get_mds_set(std::set<int>& s) {
     s = in;
   }
-  void get_up_mds_set(set<int>& s) {
-    for (map<int32_t,uint64_t>::const_iterator p = up.begin();
+  void get_up_mds_set(std::set<int>& s) {
+    for (std::map<int32_t,uint64_t>::const_iterator p = up.begin();
 	 p != up.end();
 	 ++p)
       s.insert(p->first);
   }
-  void get_active_mds_set(set<int>& s) {
+  void get_active_mds_set(std::set<int>& s) {
     get_mds_set(s, MDSMap::STATE_ACTIVE);
   }
-  void get_failed_mds_set(set<int>& s) {
+  void get_failed_mds_set(std::set<int>& s) {
     s = failed;
   }
   int get_failed() {
     if (!failed.empty()) return *failed.begin();
     return -1;
   }
-  void get_stopped_mds_set(set<int>& s) {
+  void get_stopped_mds_set(std::set<int>& s) {
     s = stopped;
   }
-  void get_recovery_mds_set(set<int>& s) {
+  void get_recovery_mds_set(std::set<int>& s) {
     s = failed;
-    for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
+    for (std::map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p)
       if (p->second.state >= STATE_REPLAY && p->second.state <= STATE_STOPPING)
 	s.insert(p->second.rank);
   }
-  void get_clientreplay_or_active_or_stopping_mds_set(set<int>& s) {
-    for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
+  void get_clientreplay_or_active_or_stopping_mds_set(std::set<int>& s) {
+    for (std::map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p)
       if (p->second.state >= STATE_CLIENTREPLAY && p->second.state <= STATE_STOPPING)
 	s.insert(p->second.rank);
   }
-  void get_mds_set(set<int>& s, DaemonState state) {
-    for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
+  void get_mds_set(std::set<int>& s, DaemonState state) {
+    for (std::map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p)
       if (p->second.state == state)
@@ -372,14 +371,14 @@ public:
   int get_random_up_mds() {
     if (up.empty())
       return -1;
-    map<int32_t,uint64_t>::iterator p = up.begin();
+    std::map<int32_t,uint64_t>::iterator p = up.begin();
     for (int n = rand() % up.size(); n; n--)
       ++p;
     return p->first;
   }
 
-  const mds_info_t* find_by_name(const string& name) const {
-    for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
+  const mds_info_t* find_by_name(const std::string& name) const {
+    for (std::map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p) {
       if (p->second.name == name)
@@ -388,10 +387,10 @@ public:
     return NULL;
   }
 
-  uint64_t find_standby_for(int mds, string& name) {
-    map<uint64_t, mds_info_t>::const_iterator generic_standby
+  uint64_t find_standby_for(int mds, std::string& name) {
+    std::map<uint64_t, mds_info_t>::const_iterator generic_standby
       = mds_info.end();
-    for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
+    for (std::map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p) {
       if ((p->second.state != MDSMap::STATE_STANDBY && p->second.state != MDSMap::STATE_STANDBY_REPLAY) ||
@@ -407,8 +406,8 @@ public:
       return generic_standby->first;
     return 0;
   }
-  uint64_t find_unused_for(int mds, string& name) {
-    for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
+  uint64_t find_unused_for(int mds, std::string& name) {
+    for (std::map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p) {
       if (p->second.state != MDSMap::STATE_STANDBY ||
@@ -423,7 +422,7 @@ public:
     }
     return 0;
   }
-  uint64_t find_replacement_for(int mds, string& name) {
+  uint64_t find_replacement_for(int mds, std::string& name) {
     uint64_t standby = find_standby_for(mds, name);
     if (standby)
       return standby;
@@ -431,8 +430,8 @@ public:
       return find_unused_for(mds, name);
   }
 
-  void get_health(list<pair<health_status_t,string> >& summary,
-		  list<pair<health_status_t,string> > *detail) const;
+  void get_health(list<pair<health_status_t,std::string> >& summary,
+		  list<pair<health_status_t,std::string> > *detail) const;
 
   // mds states
   bool is_down(int m) const { return up.count(m) == 0; }
@@ -450,7 +449,7 @@ public:
    * Get MDS rank state if the rank is up, else STATE_NULL
    */
   DaemonState get_state(int m) const {
-    map<int32_t,uint64_t>::const_iterator u = up.find(m);
+    std::map<int32_t,uint64_t>::const_iterator u = up.find(m);
     if (u == up.end())
       return STATE_NULL;
     return get_state_gid(u->second);
@@ -460,7 +459,7 @@ public:
    * Get MDS daemon status by GID
    */
   DaemonState get_state_gid(uint64_t gid) const {
-    map<uint64_t,mds_info_t>::const_iterator i = mds_info.find(gid);
+    std::map<uint64_t,mds_info_t>::const_iterator i = mds_info.find(gid);
     if (i == mds_info.end())
       return STATE_NULL;
     return i->second.state;
@@ -498,7 +497,7 @@ public:
   bool is_laggy_gid(uint64_t gid) const {
     if (!mds_info.count(gid))
       return false;
-    map<uint64_t,mds_info_t>::const_iterator p = mds_info.find(gid);
+    std::map<uint64_t,mds_info_t>::const_iterator p = mds_info.find(gid);
     return p->second.laggy();
   }
 
@@ -510,7 +509,7 @@ public:
   bool is_degraded() const {   // degraded = some recovery in process.  fixes active membership and recovery_set.
     if (!failed.empty())
       return true;
-    for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
+    for (std::map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p)
       if (p->second.state >= STATE_REPLAY && p->second.state <= STATE_CLIENTREPLAY)
