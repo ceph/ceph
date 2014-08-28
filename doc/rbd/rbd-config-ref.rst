@@ -50,7 +50,7 @@ section of your configuration file. The settings include:
 :Description: Enable caching for RADOS Block Device (RBD).
 :Type: Boolean
 :Required: No
-:Default: ``false``
+:Default: ``true``
 
 
 ``rbd cache size``
@@ -93,6 +93,6 @@ section of your configuration file. The settings include:
 :Description: Start out in write-through mode, and switch to write-back after the first flush request is received. Enabling this is a conservative but safe setting in case VMs running on rbd are too old to send flushes, like the virtio driver in Linux before 2.6.32.
 :Type: Boolean
 :Required: No
-:Default: ``false``
+:Default: ``true``
 
 .. _Block Device: ../../rbd/rbd/
