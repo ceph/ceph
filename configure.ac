@@ -94,6 +94,7 @@ if yasm -f elf64 src/common/crc32c_intel_fast_asm.S -o /dev/null; then
 
       if yasm -f elf64 -i src/ceph/src/ceph/src/erasure-code/isa/isa-l/include/ src/erasure-code/isa/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm.s -o /dev/null 2> /dev/null ; then
          echo 'yasm can also build the isa-l stuff'
+         AC_DEFINE([HAVE_BETTER_YASM_ELF64], [1], [yasm can also build the isa-l])
 	 with_better_yasm=yes
       else
          echo "yasm doesn't build the isa-l stuff"

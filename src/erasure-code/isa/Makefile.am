@@ -38,6 +38,8 @@ isa_sources = \
 	erasure-code/isa/ErasureCodePluginIsa.cc \
 	erasure-code/isa/xor_op.cc
 
+erasure-code/isa/ErasureCodePluginIsa.cc: ./ceph_ver.h
+
 libec_isa_la_SOURCES = ${isa_sources}
 
 libec_isa_la_CFLAGS = ${AM_CFLAGS} -I $(srcdir)/erasure-code/isa/isa-l/include/
