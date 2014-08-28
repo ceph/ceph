@@ -4,6 +4,7 @@
  * Ceph distributed storage system
  *
  * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -14,6 +15,7 @@
  * 
  */
 
+#include "ceph_ver.h"
 #include "common/debug.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "ErasureCodeJerasure.h"
@@ -70,7 +72,9 @@ extern gf_t *gfp_array[];
 extern int  gfp_is_composite[];
 }
 
-int __erasure_code_init(char *plugin_name)
+const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
+
+int __erasure_code_init(char *plugin_name, char *directory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   int w[] = { 4, 8, 16, 32 };

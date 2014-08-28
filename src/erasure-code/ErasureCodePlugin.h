@@ -4,6 +4,7 @@
  * Ceph distributed storage system
  *
  * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -21,7 +22,8 @@
 #include "ErasureCodeInterface.h"
 
 extern "C" {
-  int __erasure_code_init(char *plugin_name);
+  const char *__erasure_code_version();
+  int __erasure_code_init(char *plugin_name, char *directory);
 }
 
 namespace ceph {
@@ -60,10 +62,11 @@ namespace ceph {
 		ostream &ss);
 
     int add(const std::string &name, ErasureCodePlugin *plugin);
+    int remove(const std::string &name);
     ErasureCodePlugin *get(const std::string &name);
 
     int load(const std::string &plugin_name,
-	     const map<std::string,std::string> &parameters,
+	     const std::string &directory,
 	     ErasureCodePlugin **plugin,
 	     ostream &ss);
 

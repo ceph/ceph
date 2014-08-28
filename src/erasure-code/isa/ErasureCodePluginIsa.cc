@@ -2,8 +2,10 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2014 CERN (Switzerland)
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Andreas-Joachim Peters <Andreas.Joachim.Peters@cern.ch>
+ * Author: Loic Dachary <loic@dachary.org>
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Lesser General Public
@@ -23,6 +25,7 @@
  */
 
 // -----------------------------------------------------------------------------
+#include "ceph_ver.h"
 #include "common/debug.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "ErasureCodeIsa.h"
@@ -74,7 +77,9 @@ public:
 
 // -----------------------------------------------------------------------------
 
-int __erasure_code_init(char *plugin_name)
+const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
+
+int __erasure_code_init(char *plugin_name, char *directory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   return instance.add(plugin_name, new ErasureCodePluginIsa());
