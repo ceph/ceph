@@ -206,7 +206,7 @@ public:
 
   const utime_t &get_leader_since() const;
 
-  void prepare_new_fingerprint(MonitorDBStore::Transaction *t);
+  void prepare_new_fingerprint(MonitorDBStore::TransactionRef t);
 
   // -- elector --
 private:
@@ -373,7 +373,7 @@ private:
    * We store a few things on the side that we don't want to get clobbered by sync.  This
    * includes the latest monmap and a lower bound on last_committed.
    */
-  void sync_stash_critical_state(MonitorDBStore::Transaction *tx);
+  void sync_stash_critical_state(MonitorDBStore::TransactionRef tx);
 
   /**
    * reset the sync timeout
@@ -780,7 +780,7 @@ public:
   /// read the ondisk features into the CompatSet pointed to by read_features
   static void read_features_off_disk(MonitorDBStore *store, CompatSet *read_features);
   void read_features();
-  void write_features(MonitorDBStore::Transaction &t);
+  void write_features(MonitorDBStore::TransactionRef t);
 
  public:
   Monitor(CephContext *cct_, string nm, MonitorDBStore *s,
@@ -819,7 +819,7 @@ public:
    * @return 0 on success, or negative error code
    */
   int write_fsid();
-  int write_fsid(MonitorDBStore::Transaction &t);
+  int write_fsid(MonitorDBStore::TransactionRef t);
 
   void do_admin_command(std::string command, cmdmap_t& cmdmap,
 			std::string format, ostream& ss);
@@ -887,15 +887,15 @@ public:
     }
 
     void _mark_convert_start() {
-      MonitorDBStore::Transaction tx;
-      tx.put("mon_convert", "on_going", 1);
+      MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+      tx->put("mon_convert", "on_going", 1);
       db->apply_transaction(tx);
     }
 
-    void _convert_finish_features(MonitorDBStore::Transaction &t);
+    void _convert_finish_features(MonitorDBStore::TransactionRef t);
     void _mark_convert_finish() {
-      MonitorDBStore::Transaction tx;
-      tx.erase("mon_convert", "on_going");
+      MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+      tx->erase("mon_convert", "on_going");
       _convert_finish_features(tx);
       db->apply_transaction(tx);
     }

@@ -355,8 +355,8 @@ void Monitor::read_features_off_disk(MonitorDBStore *store, CompatSet *features)
 
     bufferlist bl;
     features->encode(bl);
-    MonitorDBStore::Transaction t;
-    t.put(MONITOR_NAME, COMPAT_SET_LOC, bl);
+    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    t->put(MONITOR_NAME, COMPAT_SET_LOC, bl);
     store->apply_transaction(t);
   } else {
     bufferlist::iterator it = featuresbl.begin();
@@ -373,11 +373,11 @@ void Monitor::read_features()
   dout(10) << "required_features " << required_features << dendl;
 }
 
-void Monitor::write_features(MonitorDBStore::Transaction &t)
+void Monitor::write_features(MonitorDBStore::TransactionRef t)
 {
   bufferlist bl;
   features.encode(bl);
-  t.put(MONITOR_NAME, COMPAT_SET_LOC, bl);
+  t->put(MONITOR_NAME, COMPAT_SET_LOC, bl);
 }
 
 const char** Monitor::get_tracked_conf_keys() const
@@ -732,9 +732,18 @@ void Monitor::update_logger()
 void Monitor::shutdown()
 {
   dout(1) << "shutdown" << dendl;
+
   lock.Lock();
 
   state = STATE_SHUTDOWN;
+
+  if (paxos->is_writing() || paxos->is_writing_previous()) {
+    dout(10) << __func__ << " flushing" << dendl;
+    lock.Unlock();
+    store->flush();
+    lock.Lock();
+    dout(10) << __func__ << " flushed" << dendl;
+  }
 
   if (admin_hook) {
     AdminSocket* admin_socket = cct->get_admin_socket();
@@ -781,6 +790,12 @@ void Monitor::shutdown()
 
 void Monitor::bootstrap()
 {
+  if (paxos->is_writing() || paxos->is_writing_previous()) {
+    dout(10) << "bootstrap flushing pending write" << dendl;
+    lock.Unlock();
+    store->flush();
+    lock.Lock();
+  }
   dout(10) << "bootstrap" << dendl;
 
   sync_reset_requester();
@@ -902,9 +917,6 @@ void Monitor::_add_bootstrap_peer_hint(string cmd, cmdmap_t& cmdmap, ostream& ss
 void Monitor::_reset()
 {
   dout(10) << __func__ << dendl;
-
-  assert(state == STATE_ELECTING ||
-	 state == STATE_PROBING);
 
   cancel_probe_timeout();
   timecheck_finish();
@@ -1033,14 +1045,14 @@ void Monitor::sync_start(entity_inst_t &other, bool full)
 
   if (sync_full) {
     // stash key state, and mark that we are syncing
-    MonitorDBStore::Transaction t;
-    sync_stash_critical_state(&t);
-    t.put("mon_sync", "in_sync", 1);
+    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    sync_stash_critical_state(t);
+    t->put("mon_sync", "in_sync", 1);
 
     sync_last_committed_floor = MAX(sync_last_committed_floor, paxos->get_version());
     dout(10) << __func__ << " marking sync in progress, storing sync_last_committed_floor "
 	     << sync_last_committed_floor << dendl;
-    t.put("mon_sync", "last_committed_floor", sync_last_committed_floor);
+    t->put("mon_sync", "last_committed_floor", sync_last_committed_floor);
 
     store->apply_transaction(t);
 
@@ -1071,7 +1083,7 @@ void Monitor::sync_start(entity_inst_t &other, bool full)
   messenger->send_message(m, sync_provider);
 }
 
-void Monitor::sync_stash_critical_state(MonitorDBStore::Transaction *t)
+void Monitor::sync_stash_critical_state(MonitorDBStore::TransactionRef t)
 {
   dout(10) << __func__ << dendl;
   bufferlist backup_monmap;
@@ -1097,13 +1109,14 @@ void Monitor::sync_finish(version_t last_committed)
 
   if (sync_full) {
     // finalize the paxos commits
-    MonitorDBStore::Transaction tx;
-    paxos->read_and_prepare_transactions(&tx, sync_start_version, last_committed);
-    tx.put(paxos->get_name(), "last_committed", last_committed);
+    MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+    paxos->read_and_prepare_transactions(tx, sync_start_version,
+					 last_committed);
+    tx->put(paxos->get_name(), "last_committed", last_committed);
 
     dout(30) << __func__ << " final tx dump:\n";
     JSONFormatter f(true);
-    tx.dump(&f);
+    tx->dump(&f);
     f.flush(*_dout);
     *_dout << dendl;
 
@@ -1112,10 +1125,10 @@ void Monitor::sync_finish(version_t last_committed)
 
   assert(g_conf->mon_sync_requester_kill_at != 8);
 
-  MonitorDBStore::Transaction t;
-  t.erase("mon_sync", "in_sync");
-  t.erase("mon_sync", "force_sync");
-  t.erase("mon_sync", "last_committed_floor");
+  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  t->erase("mon_sync", "in_sync");
+  t->erase("mon_sync", "force_sync");
+  t->erase("mon_sync", "last_committed_floor");
   store->apply_transaction(t);
 
   assert(g_conf->mon_sync_requester_kill_at != 9);
@@ -1248,16 +1261,17 @@ void Monitor::handle_sync_get_chunk(MMonSync *m)
   }
 
   MMonSync *reply = new MMonSync(MMonSync::OP_CHUNK, sp.cookie);
-  MonitorDBStore::Transaction tx;
+  MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
 
   int left = g_conf->mon_sync_max_payload_size;
   while (sp.last_committed < paxos->get_version() && left > 0) {
     bufferlist bl;
     sp.last_committed++;
     store->get(paxos->get_name(), sp.last_committed, bl);
-    tx.put(paxos->get_name(), sp.last_committed, bl);
+    tx->put(paxos->get_name(), sp.last_committed, bl);
     left -= bl.length();
-    dout(20) << __func__ << " including paxos state " << sp.last_committed << dendl;
+    dout(20) << __func__ << " including paxos state " << sp.last_committed
+	     << dendl;
   }
   reply->last_committed = sp.last_committed;
 
@@ -1269,9 +1283,11 @@ void Monitor::handle_sync_get_chunk(MMonSync *m)
 
   if ((sp.full && sp.synchronizer->has_next_chunk()) ||
       sp.last_committed < paxos->get_version()) {
-    dout(10) << __func__ << " chunk, through version " << sp.last_committed << " key " << sp.last_key << dendl;
+    dout(10) << __func__ << " chunk, through version " << sp.last_committed
+	     << " key " << sp.last_key << dendl;
   } else {
-    dout(10) << __func__ << " last chunk, through version " << sp.last_committed << " key " << sp.last_key << dendl;
+    dout(10) << __func__ << " last chunk, through version " << sp.last_committed
+	     << " key " << sp.last_key << dendl;
     reply->op = MMonSync::OP_LAST_CHUNK;
 
     assert(g_conf->mon_sync_provider_kill_at != 3);
@@ -1280,7 +1296,7 @@ void Monitor::handle_sync_get_chunk(MMonSync *m)
     sync_providers.erase(sp.cookie);
   }
 
-  ::encode(tx, reply->chunk_bl);
+  ::encode(*tx, reply->chunk_bl);
 
   m->get_connection()->send_message(reply);
 }
@@ -1336,12 +1352,12 @@ void Monitor::handle_sync_chunk(MMonSync *m)
   assert(state == STATE_SYNCHRONIZING);
   assert(g_conf->mon_sync_requester_kill_at != 5);
 
-  MonitorDBStore::Transaction tx;
-  tx.append_from_encoded(m->chunk_bl);
+  MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+  tx->append_from_encoded(m->chunk_bl);
 
   dout(30) << __func__ << " tx dump:\n";
   JSONFormatter f(true);
-  tx.dump(&f);
+  tx->dump(&f);
   f.flush(*_dout);
   *_dout << dendl;
 
@@ -1351,13 +1367,14 @@ void Monitor::handle_sync_chunk(MMonSync *m)
 
   if (!sync_full) {
     dout(10) << __func__ << " applying recent paxos transactions as we go" << dendl;
-    MonitorDBStore::Transaction tx;
-    paxos->read_and_prepare_transactions(&tx, paxos->get_version() + 1, m->last_committed);
-    tx.put(paxos->get_name(), "last_committed", m->last_committed);
+    MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+    paxos->read_and_prepare_transactions(tx, paxos->get_version() + 1,
+					 m->last_committed);
+    tx->put(paxos->get_name(), "last_committed", m->last_committed);
 
     dout(30) << __func__ << " tx dump:\n";
     JSONFormatter f(true);
-    tx.dump(&f);
+    tx->dump(&f);
     f.flush(*_dout);
     *_dout << dendl;
 
@@ -1653,18 +1670,17 @@ void Monitor::handle_probe_reply(MMonProbe *m)
 void Monitor::join_election()
 {
   dout(10) << __func__ << dendl;
+  _reset();
   state = STATE_ELECTING;
 
   logger->inc(l_mon_num_elections);
-
-  _reset();
 }
 
 void Monitor::start_election()
 {
   dout(10) << "start_election" << dendl;
-  state = STATE_ELECTING;
   _reset();
+  state = STATE_ELECTING;
 
   logger->inc(l_mon_num_elections);
   logger->inc(l_mon_election_call);
@@ -1804,7 +1820,7 @@ void Monitor::apply_quorum_to_compatset_features()
     dout(1) << __func__ << " enabling new quorum features: " << diff << dendl;
     features = new_features;
 
-    MonitorDBStore::Transaction t;
+    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
     write_features(t);
     store->apply_transaction(t);
 
@@ -1834,9 +1850,9 @@ void Monitor::sync_force(Formatter *f, ostream& ss)
     free_formatter = true;
   }
 
-  MonitorDBStore::Transaction tx;
-  sync_stash_critical_state(&tx);
-  tx.put("mon_sync", "force_sync", 1);
+  MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+  sync_stash_critical_state(tx);
+  tx->put("mon_sync", "force_sync", 1);
   store->apply_transaction(tx);
 
   f->open_object_section("sync_force");
@@ -2380,6 +2396,11 @@ void Monitor::handle_command(MMonCommand *m)
   }
 
   if (prefix == "scrub") {
+    while (paxos->is_writing() || paxos->is_writing_previous()) {
+      lock.Unlock();
+      store->flush();
+      lock.Lock();
+    }
     if (is_leader()) {
       int r = scrub();
       reply_command(m, r, "", rdata, 0);
@@ -3944,17 +3965,17 @@ void Monitor::tick()
 
   if (is_leader() && paxos->is_active() && fingerprint.is_zero()) {
     // this is only necessary on upgraded clusters.
-    MonitorDBStore::Transaction t;
-    prepare_new_fingerprint(&t);
+    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    prepare_new_fingerprint(t);
     bufferlist tbl;
-    t.encode(tbl);
+    t->encode(tbl);
     paxos->propose_new_value(tbl, new C_NoopContext);
   }
 
   new_tick();
 }
 
-void Monitor::prepare_new_fingerprint(MonitorDBStore::Transaction *t)
+void Monitor::prepare_new_fingerprint(MonitorDBStore::TransactionRef t)
 {
   uuid_d nf;
   nf.generate_random();
@@ -3999,13 +4020,13 @@ int Monitor::check_fsid()
 
 int Monitor::write_fsid()
 {
-  MonitorDBStore::Transaction t;
+  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
   int r = write_fsid(t);
   store->apply_transaction(t);
   return r;
 }
 
-int Monitor::write_fsid(MonitorDBStore::Transaction &t)
+int Monitor::write_fsid(MonitorDBStore::TransactionRef t)
 {
   ostringstream ss;
   ss << monmap->get_fsid() << "\n";
@@ -4014,7 +4035,7 @@ int Monitor::write_fsid(MonitorDBStore::Transaction &t)
   bufferlist b;
   b.append(us);
 
-  t.put(MONITOR_NAME, "cluster_uuid", b);
+  t->put(MONITOR_NAME, "cluster_uuid", b);
   return 0;
 }
 
@@ -4024,7 +4045,7 @@ int Monitor::write_fsid(MonitorDBStore::Transaction &t)
  */
 int Monitor::mkfs(bufferlist& osdmapbl)
 {
-  MonitorDBStore::Transaction t;
+  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
 
   // verify cluster fsid
   int r = check_fsid();
@@ -4034,7 +4055,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   bufferlist magicbl;
   magicbl.append(CEPH_MON_ONDISK_MAGIC);
   magicbl.append("\n");
-  t.put(MONITOR_NAME, "magic", magicbl);
+  t->put(MONITOR_NAME, "magic", magicbl);
 
 
   features = get_supported_features();
@@ -4044,7 +4065,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   bufferlist monmapbl;
   monmap->encode(monmapbl, CEPH_FEATURES_ALL);
   monmap->set_epoch(0);     // must be 0 to avoid confusing first MonmapMonitor::update_from_paxos()
-  t.put("mkfs", "monmap", monmapbl);
+  t->put("mkfs", "monmap", monmapbl);
 
   if (osdmapbl.length()) {
     // make sure it's a valid osdmap
@@ -4056,7 +4077,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
       derr << "error decoding provided osdmap: " << e.what() << dendl;
       return -EINVAL;
     }
-    t.put("mkfs", "osdmap", osdmapbl);
+    t->put("mkfs", "osdmap", osdmapbl);
   }
 
   if (is_keyring_required()) {
@@ -4094,7 +4115,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 
     bufferlist keyringbl;
     keyring.encode_plaintext(keyringbl);
-    t.put("mkfs", "keyring", keyringbl);
+    t->put("mkfs", "keyring", keyringbl);
   }
   write_fsid(t);
   store->apply_transaction(t);
@@ -4247,7 +4268,7 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
 #define dout_prefix *_dout
 
 void Monitor::StoreConverter::_convert_finish_features(
-    MonitorDBStore::Transaction &t)
+    MonitorDBStore::TransactionRef t)
 {
   dout(20) << __func__ << dendl;
 
@@ -4271,7 +4292,7 @@ void Monitor::StoreConverter::_convert_finish_features(
   features.encode(features_bl);
 
   dout(20) << __func__ << " new features " << features << dendl;
-  t.put(MONITOR_NAME, COMPAT_SET_LOC, features_bl);
+  t->put(MONITOR_NAME, COMPAT_SET_LOC, features_bl);
 }
 
 
@@ -4366,11 +4387,11 @@ void Monitor::StoreConverter::_convert_monitor()
   assert(store->exists_bl_ss("feature_set"));
   assert(store->exists_bl_ss("election_epoch"));
 
-  MonitorDBStore::Transaction tx;
+  MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
 
   if (store->exists_bl_ss("joined")) {
     version_t joined = store->get_int("joined");
-    tx.put(MONITOR_NAME, "joined", joined);
+    tx->put(MONITOR_NAME, "joined", joined);
   }
 
   vector<string> keys;
@@ -4386,12 +4407,12 @@ void Monitor::StoreConverter::_convert_monitor()
     bufferlist bl;
     int r = store->get_bl_ss(bl, (*it).c_str(), 0);
     assert(r > 0);
-    tx.put(MONITOR_NAME, *it, bl);
+    tx->put(MONITOR_NAME, *it, bl);
   }
   version_t election_epoch = store->get_int("election_epoch");
-  tx.put(MONITOR_NAME, "election_epoch", election_epoch);
+  tx->put(MONITOR_NAME, "election_epoch", election_epoch);
 
-  assert(!tx.empty());
+  assert(!tx->empty());
   db->apply_transaction(tx);
   dout(10) << __func__ << " finished" << dendl;
 }
@@ -4436,9 +4457,9 @@ void Monitor::StoreConverter::_convert_machines(string machine)
     dout(20) << __func__ << " " << machine
 	     << " ver " << ver << " bl " << bl.length() << dendl;
 
-    MonitorDBStore::Transaction tx;
-    tx.put(machine, ver, bl);
-    tx.put(machine, "last_committed", ver);
+    MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+    tx->put(machine, ver, bl);
+    tx->put(machine, "last_committed", ver);
 
     if (has_gv && store->exists_bl_sn(machine_gv.c_str(), ver)) {
       stringstream s;
@@ -4449,7 +4470,7 @@ void Monitor::StoreConverter::_convert_machines(string machine)
       dout(20) << __func__ << " " << machine
 	       << " ver " << ver << " -> " << gv << dendl;
 
-      MonitorDBStore::Transaction paxos_tx;
+      MonitorDBStore::TransactionRef paxos_tx(new MonitorDBStore::Transaction);
 
       if (gvs.count(gv) == 0) {
         gvs.insert(gv);
@@ -4481,16 +4502,16 @@ void Monitor::StoreConverter::_convert_machines(string machine)
         bufferlist paxos_bl;
         int r = db->get("paxos", gv, paxos_bl);
         assert(r >= 0);
-        paxos_tx.append_from_encoded(paxos_bl);
+        paxos_tx->append_from_encoded(paxos_bl);
       }
       gv_map[gv].insert(make_pair(machine,ver));
 
       bufferlist tx_bl;
-      tx.encode(tx_bl);
-      paxos_tx.append_from_encoded(tx_bl);
+      tx->encode(tx_bl);
+      paxos_tx->append_from_encoded(tx_bl);
       bufferlist paxos_bl;
-      paxos_tx.encode(paxos_bl);
-      tx.put("paxos", gv, paxos_bl);
+      paxos_tx->encode(paxos_bl);
+      tx->put("paxos", gv, paxos_bl);
     }
     db->apply_transaction(tx);
   }
@@ -4499,10 +4520,10 @@ void Monitor::StoreConverter::_convert_machines(string machine)
   dout(20) << __func__ << " lc " << lc << " last_committed " << last_committed << dendl;
   assert(lc == last_committed);
 
-  MonitorDBStore::Transaction tx;
-  tx.put(machine, "first_committed", first_committed);
-  tx.put(machine, "last_committed", last_committed);
-  tx.put(machine, "conversion_first", first_committed);
+  MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+  tx->put(machine, "first_committed", first_committed);
+  tx->put(machine, "last_committed", last_committed);
+  tx->put(machine, "conversion_first", first_committed);
 
   if (store->exists_bl_ss(machine.c_str(), "latest")) {
     bufferlist latest_bl_raw;
@@ -4514,7 +4535,7 @@ void Monitor::StoreConverter::_convert_machines(string machine)
       goto out;
     }
 
-    tx.put(machine, "latest", latest_bl_raw);
+    tx->put(machine, "latest", latest_bl_raw);
 
     bufferlist::iterator lbl_it = latest_bl_raw.begin();
     bufferlist latest_bl;
@@ -4525,10 +4546,10 @@ void Monitor::StoreConverter::_convert_machines(string machine)
     dout(20) << __func__ << " machine " << machine
 	     << " latest ver " << latest_ver << dendl;
 
-    tx.put(machine, "full_latest", latest_ver);
+    tx->put(machine, "full_latest", latest_ver);
     stringstream os;
     os << "full_" << latest_ver;
-    tx.put(machine, os.str(), latest_bl);
+    tx->put(machine, os.str(), latest_bl);
   }
 out:
   db->apply_transaction(tx);
@@ -4558,8 +4579,8 @@ void Monitor::StoreConverter::_convert_osdmap_full()
              << " bl " << bl.length() << " bytes" << dendl;
 
     string full_key = "full_" + stringify(ver);
-    MonitorDBStore::Transaction tx;
-    tx.put("osdmap", full_key, bl);
+    MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+    tx->put("osdmap", full_key, bl);
     db->apply_transaction(tx);
   }
   dout(10) << __func__ << " found " << err << " conversion errors!" << dendl;
@@ -4592,18 +4613,18 @@ void Monitor::StoreConverter::_convert_paxos()
 
   // erase all paxos versions between [first, last_gv[, with first being the
   // first gv in the map.
-  MonitorDBStore::Transaction tx;
+  MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
   set<version_t>::iterator it = gvs.begin();
   dout(1) << __func__ << " first gv " << (*it)
 	  << " last gv " << last_gv << dendl;
   for (; it != gvs.end() && (*it < last_gv); ++it) {
-    tx.erase("paxos", *it);
+    tx->erase("paxos", *it);
   }
-  tx.put("paxos", "first_committed", last_gv);
-  tx.put("paxos", "last_committed", highest_gv);
-  tx.put("paxos", "accepted_pn", highest_accepted_pn);
-  tx.put("paxos", "last_pn", highest_last_pn);
-  tx.put("paxos", "conversion_first", last_gv);
+  tx->put("paxos", "first_committed", last_gv);
+  tx->put("paxos", "last_committed", highest_gv);
+  tx->put("paxos", "accepted_pn", highest_accepted_pn);
+  tx->put("paxos", "last_pn", highest_last_pn);
+  tx->put("paxos", "conversion_first", last_gv);
   db->apply_transaction(tx);
 
   dout(10) << __func__ << " finished" << dendl;

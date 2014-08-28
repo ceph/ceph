@@ -52,8 +52,8 @@ void Elector::bump_epoch(epoch_t e)
   dout(10) << "bump_epoch " << epoch << " to " << e << dendl;
   assert(epoch <= e);
   epoch = e;
-  MonitorDBStore::Transaction t;
-  t.put(Monitor::MONITOR_NAME, "election_epoch", epoch);
+  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  t->put(Monitor::MONITOR_NAME, "election_epoch", epoch);
   mon->store->apply_transaction(t);
 
   mon->join_election();
@@ -429,9 +429,9 @@ void Elector::dispatch(Message *m)
 		<< ", taking it"
 		<< dendl;
 	mon->monmap->decode(em->monmap_bl);
-        MonitorDBStore::Transaction t;
-        t.put("monmap", mon->monmap->epoch, em->monmap_bl);
-        t.put("monmap", "last_committed", mon->monmap->epoch);
+        MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+        t->put("monmap", mon->monmap->epoch, em->monmap_bl);
+        t->put("monmap", "last_committed", mon->monmap->epoch);
         mon->store->apply_transaction(t);
 	//mon->monmon()->paxos->stash_latest(mon->monmap->epoch, em->monmap_bl);
 	cancel_timer();
