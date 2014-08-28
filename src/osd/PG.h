@@ -1717,10 +1717,14 @@ public:
 
     struct NotBackfilling : boost::statechart::state< NotBackfilling, Active>, NamedState {
       typedef boost::mpl::list<
-	boost::statechart::transition< RequestBackfill, WaitLocalBackfillReserved>
+	boost::statechart::transition< RequestBackfill, WaitLocalBackfillReserved>,
+	boost::statechart::custom_reaction< RemoteBackfillReserved >,
+	boost::statechart::custom_reaction< RemoteReservationRejected >
 	> reactions;
       NotBackfilling(my_context ctx);
       void exit();
+      boost::statechart::result react(const RemoteBackfillReserved& evt);
+      boost::statechart::result react(const RemoteReservationRejected& evt);
     };
 
     struct RepNotRecovering;
