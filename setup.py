@@ -5,6 +5,15 @@ module_file = open("teuthology/__init__.py").read()
 metadata = dict(re.findall(r"__([a-z]+)__\s*=\s*['\"]([^'\"]*)['\"]", module_file))
 long_description = open('README.rst').read()
 
+install_requires=[
+    'setuptools',
+    ]
+
+install_requires.extend(
+    [ln.strip() for ln in open('requirements.txt').readlines() if ln and '#'
+     not in ln]
+)
+
 
 setup(
     name='teuthology',
@@ -23,12 +32,14 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Natural Language :: English',
         'Operating System :: POSIX :: Linux',
-        'Programming Language :: Python :: 2.7'
+        'Programming Language :: Python :: 2.7',
         'Topic :: Software Development :: Quality Assurance',
         'Topic :: Software Development :: Testing',
         'Topic :: System :: Distributed Computing',
         'Topic :: System :: Filesystems',
     ],
+    install_requires=install_requires,
+    tests_require=['nose >=1.0.0', 'fudge >=1.0.3'],
 
 
     # to find the code associated with entry point
