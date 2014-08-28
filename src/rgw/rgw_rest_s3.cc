@@ -2047,6 +2047,12 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(const string& auth_id, 
   return 0;
 }
 
+static void init_anon_user(struct req_state *s)
+{
+  rgw_get_anon_user(s->user);
+  s->perm_mask = RGW_PERM_FULL_CONTROL;
+}
+
 /*
  * verify that a signed request comes from the keyholder
  * by checking the signature against our locally-computed version
@@ -2067,6 +2073,11 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
     return -EPERM;
   }
 
+  if (s->op == OP_OPTIONS) {
+    init_anon_user(s);
+    return 0;
+  }
+
   if (!s->http_auth || !(*s->http_auth)) {
     auth_id = s->info.args.get("AWSAccessKeyId");
     if (auth_id.size()) {
@@ -2080,8 +2091,7 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
       qsr = true;
     } else {
       /* anonymous access */
-      rgw_get_anon_user(s->user);
-      s->perm_mask = RGW_PERM_FULL_CONTROL;
+      init_anon_user(s);
       return 0;
     }
   } else {
