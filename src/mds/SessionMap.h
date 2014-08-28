@@ -295,30 +295,10 @@ public:
     }
     return s;
   }
-  void add_session(Session *s) {
-    assert(session_map.count(s->info.inst.name) == 0);
-    session_map[s->info.inst.name] = s;
-    if (by_state.count(s->state) == 0)
-      by_state[s->state] = new xlist<Session*>;
-    by_state[s->state]->push_back(&s->item_session_list);
-    s->get();
-  }
-  void remove_session(Session *s) {
-    s->trim_completed_requests(0);
-    s->item_session_list.remove_myself();
-    session_map.erase(s->info.inst.name);
-    s->put();
-  }
-  void touch_session(Session *session) {
-    if (session->item_session_list.is_on_list()) {
-      if (by_state.count(session->state) == 0)
-	by_state[session->state] = new xlist<Session*>;
-      by_state[session->state]->push_back(&session->item_session_list);
-      session->last_cap_renew = ceph_clock_now(g_ceph_context);
-    } else {
-      assert(0);  // hrm, should happen?
-    }
-  }
+  void add_session(Session *s);
+  void remove_session(Session *s);
+  void touch_session(Session *session);
+
   Session *get_oldest_session(int state) {
     if (by_state.count(state) == 0 || by_state[state]->empty())
       return 0;
