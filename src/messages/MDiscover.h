@@ -19,9 +19,7 @@
 #include "msg/Message.h"
 #include "include/filepath.h"
 
-#include <vector>
 #include <string>
-using namespace std;
 
 
 class MDiscover : public Message {
@@ -40,7 +38,7 @@ class MDiscover : public Message {
   snapid_t  get_snapid() { return snapid; }
 
   filepath& get_want() { return want; }
-  const string& get_dentry(int n) { return want[n]; }
+  const std::string& get_dentry(int n) { return want[n]; }
 
   bool wants_base_dir() { return want_base_dir; }
   bool wants_xlocked() { return want_xlocked; }
