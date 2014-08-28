@@ -64,6 +64,7 @@ function SHARE_MON_TEST_set_pending() {
 
     # try again if the profile is pending
     local profile=profile
+    ./ceph osd erasure-code-profile ls
     # add to the pending OSD map without triggering a paxos proposal
     result=$(echo '{"prefix":"osdmonitor_prepare_command","prepare":"osd erasure-code-profile set","name":"'$profile'"}' | nc -U $dir/$id/ceph-mon.$id.asok | cut --bytes=5-)
     test $result = true || return 1
@@ -115,6 +116,7 @@ function SHARE_MON_TEST_rm_pending() {
 
     # try again if the profile is pending
     local profile=myprofile
+    ./ceph osd erasure-code-profile ls
     # add to the pending OSD map without triggering a paxos proposal
     result=$(echo '{"prefix":"osdmonitor_prepare_command","prepare":"osd erasure-code-profile set","name":"'$profile'"}' | nc -U $dir/$id/ceph-mon.$id.asok | cut --bytes=5-)
     test $result = true || return 1
