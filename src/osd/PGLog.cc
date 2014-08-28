@@ -22,6 +22,8 @@
 
 #define dout_subsys ceph_subsys_osd
 
+static coll_t META_COLL("meta");
+
 //////////////////// PGLog::IndexedLog ////////////////////
 
 void PGLog::IndexedLog::advance_rollback_info_trimmed_to(
@@ -152,8 +154,8 @@ void PGLog::clear_info_log(
   keys_to_remove.insert(PG::get_biginfo_key(pgid));
   keys_to_remove.insert(PG::get_info_key(pgid));
 
-  t->remove(coll_t::META_COLL, log_oid);
-  t->omap_rmkeys(coll_t::META_COLL, infos_oid, keys_to_remove);
+  t->remove(META_COLL, log_oid);
+  t->omap_rmkeys(META_COLL, infos_oid, keys_to_remove);
 }
 
 void PGLog::trim(
@@ -796,8 +798,8 @@ void PGLog::_write_log(
   }
   ::encode(log.can_rollback_to, keys["can_rollback_to"]);
 
-  t.omap_rmkeys(coll_t::META_COLL, log_oid, to_remove);
-  t.omap_setkeys(coll_t::META_COLL, log_oid, keys);
+  t.omap_rmkeys(META_COLL, log_oid, to_remove);
+  t.omap_setkeys(META_COLL, log_oid, keys);
 }
 
 bool PGLog::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
@@ -812,7 +814,7 @@ bool PGLog::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
 
   // legacy?
   struct stat st;
-  int r = store->stat(coll_t::META_COLL, log_oid, &st);
+  int r = store->stat(META_COLL, log_oid, &st);
   assert(r == 0);
   if (st.st_size > 0) {
     read_log_old(store, coll, log_oid, info, divergent_priors, log, missing, oss, log_keys_debug);
@@ -821,7 +823,7 @@ bool PGLog::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
     log.tail = info.log_tail;
     // will get overridden below if it had been recorded
     log.can_rollback_to = info.last_update;
-    ObjectMap::ObjectMapIterator p = store->get_omap_iterator(coll_t::META_COLL, log_oid);
+    ObjectMap::ObjectMapIterator p = store->get_omap_iterator(META_COLL, log_oid);
     if (p) for (p->seek_to_first(); p->valid() ; p->next()) {
       bufferlist bl = p->value();//Copy bufferlist before creating iterator
       bufferlist::iterator bp = bl.begin();
@@ -958,7 +960,7 @@ void PGLog::read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
   if (ondisklog_head > 0) {
     // read
     bufferlist bl;
-    store->read(coll_t::META_COLL, log_oid, ondisklog_tail, ondisklog_length, bl);
+    store->read(META_COLL, log_oid, ondisklog_tail, ondisklog_length, bl);
     if (bl.length() < ondisklog_length) {
       std::ostringstream oss;
       oss << "read_log got " << bl.length() << " bytes, expected "

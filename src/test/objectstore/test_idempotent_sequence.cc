@@ -79,8 +79,8 @@ std::string status_file;
 int run_diff(std::string& a_path, std::string& a_journal,
 	      std::string& b_path, std::string& b_journal)
 {
-  FileStore *a = new FileStore(a_path, a_journal, "a");
-  FileStore *b = new FileStore(b_path, b_journal, "b");
+  FileStore *a = new FileStore(a_path, a_journal, 0, "a");
+  FileStore *b = new FileStore(b_path, b_journal, 0, "b");
 
   int ret = 0;
   {

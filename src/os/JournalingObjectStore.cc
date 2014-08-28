@@ -21,6 +21,11 @@ void JournalingObjectStore::journal_stop()
 {
   dout(10) << "journal_stop" << dendl;
   finisher.stop();
+}
+
+// A journal_replay() makes journal writeable, this closes that out.
+void JournalingObjectStore::journal_write_close()
+{
   if (journal) {
     journal->close();
     delete journal;
