@@ -423,6 +423,7 @@ int main(int argc, const char **argv)
       cerr << argv[0] << ": error creating monfs: " << cpp_strerror(r) << std::endl;
       exit(1);
     }
+    store.close();
     cout << argv[0] << ": created monfs at " << g_conf->mon_data 
 	 << " for " << g_conf->name << std::endl;
     return 0;
@@ -554,11 +555,11 @@ int main(int argc, const char **argv)
     ::encode(v, final);
     ::encode(mapbl, final);
 
-    MonitorDBStore::Transaction t;
+    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
     // save it
-    t.put("monmap", v, mapbl);
-    t.put("monmap", "latest", final);
-    t.put("monmap", "last_committed", v);
+    t->put("monmap", v, mapbl);
+    t->put("monmap", "latest", final);
+    t->put("monmap", "last_committed", v);
     store->apply_transaction(t);
 
     dout(0) << "done." << dendl;
@@ -737,6 +738,8 @@ int main(int argc, const char **argv)
     kill(getpid(), SIGTERM);
 
   messenger->wait();
+
+  store->close();
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_mon_signal);

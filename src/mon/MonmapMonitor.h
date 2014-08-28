@@ -50,9 +50,9 @@ class MonmapMonitor : public PaxosService {
 
   void create_pending();
 
-  void encode_pending(MonitorDBStore::Transaction *t);
+  void encode_pending(MonitorDBStore::TransactionRef t);
   // we always encode the full map; we have no use for full versions
-  virtual void encode_full(MonitorDBStore::Transaction *t) { }
+  virtual void encode_full(MonitorDBStore::TransactionRef t) { }
 
   void on_active();
 

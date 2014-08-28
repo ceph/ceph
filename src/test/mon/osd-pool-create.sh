@@ -100,6 +100,7 @@ function TEST_erasure_crush_rule() {
 function TEST_erasure_crush_rule_pending() {
     local dir=$1
     run_mon $dir a --public-addr 127.0.0.1
+    ./ceph osd erasure-code-profile ls
     # try again if the ruleset creation is pending
     crush_ruleset=erasure_ruleset
     # add to the pending OSD map without triggering a paxos proposal
@@ -112,6 +113,7 @@ function TEST_erasure_crush_rule_pending() {
 function TEST_simple_crush_rule_pending() {
     local dir=$1
     run_mon $dir a --public-addr 127.0.0.1
+    ./ceph osd erasure-code-profile ls
     # try again if the ruleset creation is pending
     crush_ruleset=simple_ruleset
     ./ceph osd crush add-bucket host1 host
@@ -135,6 +137,7 @@ function TEST_erasure_code_profile_default() {
 function TEST_erasure_code_profile_default_pending() {
     local dir=$1
     run_mon $dir a --public-addr 127.0.0.1
+    ./ceph osd erasure-code-profile ls
     ./ceph osd erasure-code-profile rm default || return 1
     ! ./ceph osd erasure-code-profile ls | grep default || return 1
     # add to the pending OSD map without triggering a paxos proposal

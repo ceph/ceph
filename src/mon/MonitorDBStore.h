@@ -24,6 +24,7 @@
 
 #include "include/assert.h"
 #include "common/Formatter.h"
+#include "common/Finisher.h"
 #include "common/errno.h"
 
 class MonitorDBStore
@@ -31,6 +32,10 @@ class MonitorDBStore
   boost::scoped_ptr<KeyValueDB> db;
   bool do_dump;
   int dump_fd;
+
+  Finisher io_work;
+
+  bool is_open;
 
  public:
 
@@ -84,6 +89,8 @@ class MonitorDBStore
     }
   };
 
+  struct Transaction;
+  typedef ceph::shared_ptr<Transaction> TransactionRef;
   struct Transaction {
     list<Op> ops;
     uint64_t bytes, keys;
@@ -163,16 +170,16 @@ class MonitorDBStore
       ls.back()->compact_range("prefix4", "from", "to");
     }
 
-    void append(Transaction& other) {
-      ops.splice(ops.end(), other.ops);
-      keys += other.keys;
-      bytes += other.bytes;
+    void append(TransactionRef other) {
+      ops.splice(ops.end(), other->ops);
+      keys += other->keys;
+      bytes += other->bytes;
     }
 
     void append_from_encoded(bufferlist& bl) {
-      Transaction other;
+      TransactionRef other(new Transaction);
       bufferlist::iterator it = bl.begin();
-      other.decode(it);
+      other->decode(it);
       append(other);
     }
 
@@ -244,17 +251,19 @@ class MonitorDBStore
     }
   };
 
-  int apply_transaction(const MonitorDBStore::Transaction& t) {
+  int apply_transaction(MonitorDBStore::TransactionRef t) {
     KeyValueDB::Transaction dbt = db->get_transaction();
 
     if (do_dump) {
       bufferlist bl;
-      t.encode(bl);
+      t->encode(bl);
       bl.write_fd(dump_fd);
     }
 
     list<pair<string, pair<string,string> > > compact;
-    for (list<Op>::const_iterator it = t.ops.begin(); it != t.ops.end(); ++it) {
+    for (list<Op>::const_iterator it = t->ops.begin();
+	 it != t->ops.end();
+	 ++it) {
       const Op& op = *it;
       switch (op.type) {
       case Transaction::OP_PUT:
@@ -286,6 +295,38 @@ class MonitorDBStore
     return r;
   }
 
+  struct C_DoTransaction : public Context {
+    MonitorDBStore *store;
+    MonitorDBStore::TransactionRef t;
+    Context *oncommit;
+    C_DoTransaction(MonitorDBStore *s, MonitorDBStore::TransactionRef t,
+		    Context *f)
+      : store(s), t(t), oncommit(f)
+    {}
+    void finish(int r) {
+      int ret = store->apply_transaction(t);
+      oncommit->complete(ret);
+    }
+  };
+
+  /**
+   * queue transaction
+   *
+   * Queue a transaction to commit asynchronously.  Trigger a context
+   * on completion (without any locks held).
+   */
+  void queue_transaction(MonitorDBStore::TransactionRef t,
+			 Context *oncommit) {
+    io_work.queue(new C_DoTransaction(this, t, oncommit));
+  }
+
+  /**
+   * block and flush all io activity
+   */
+  void flush() {
+    io_work.wait_for_empty();
+  }
+
   class StoreIteratorImpl {
   protected:
     bool done;
@@ -295,26 +336,26 @@ class MonitorDBStore
     StoreIteratorImpl() : done(false) { }
     virtual ~StoreIteratorImpl() { }
 
-    bool add_chunk_entry(Transaction &tx,
+    bool add_chunk_entry(TransactionRef tx,
 			 string &prefix,
 			 string &key,
 			 bufferlist &value,
 			 uint64_t max) {
-      Transaction tmp;
+      TransactionRef tmp(new Transaction);
       bufferlist tmp_bl;
-      tmp.put(prefix, key, value);
-      tmp.encode(tmp_bl);
+      tmp->put(prefix, key, value);
+      tmp->encode(tmp_bl);
 
       bufferlist tx_bl;
-      tx.encode(tx_bl);
+      tx->encode(tx_bl);
 
       size_t len = tx_bl.length() + tmp_bl.length();
 
-      if (!tx.empty() && (len > max)) {
+      if (!tx->empty() && (len > max)) {
 	return false;
       }
 
-      tx.append(tmp);
+      tx->append(tmp);
       last_key.first = prefix;
       last_key.second = key;
 
@@ -341,7 +382,7 @@ class MonitorDBStore
     virtual bool has_next_chunk() {
       return !done && _is_valid();
     }
-    virtual void get_chunk_tx(Transaction &tx, uint64_t max) = 0;
+    virtual void get_chunk_tx(TransactionRef tx, uint64_t max) = 0;
     virtual pair<string,string> get_next_key() = 0;
   };
   typedef ceph::shared_ptr<StoreIteratorImpl> Synchronizer;
@@ -369,7 +410,7 @@ class MonitorDBStore
      *			    differ from the one passed on to the function)
      * @param last_key[out] Last key in the chunk
      */
-    virtual void get_chunk_tx(Transaction &tx, uint64_t max) {
+    virtual void get_chunk_tx(TransactionRef tx, uint64_t max) {
       assert(done == false);
       assert(iter->valid() == true);
 
@@ -510,12 +551,28 @@ class MonitorDBStore
 
   int open(ostream &out) {
     db->init();
-    return db->open(out);
+    int r = db->open(out);
+    if (r < 0)
+      return r;
+    io_work.start();
+    is_open = true;
+    return 0;
   }
 
   int create_and_open(ostream &out) {
     db->init();
-    return db->create_and_open(out);
+    int r = db->create_and_open(out);
+    if (r < 0)
+      return r;
+    io_work.start();
+    is_open = true;
+    return 0;
+  }
+
+  void close() {
+    // there should be no work queued!
+    io_work.stop();
+    is_open = false;
   }
 
   void compact() {
@@ -530,8 +587,12 @@ class MonitorDBStore
     return db->get_estimated_size(extras);
   }
 
-  MonitorDBStore(const string& path) :
-    db(0), do_dump(false), dump_fd(-1) {
+  MonitorDBStore(const string& path)
+    : db(0),
+      do_dump(false),
+      dump_fd(-1),
+      io_work(g_ceph_context, "monstore"),
+      is_open(false) {
     string::const_reverse_iterator rit;
     int pos = 0;
     for (rit = path.rbegin(); rit != path.rend(); ++rit, ++pos) {
@@ -565,11 +626,8 @@ class MonitorDBStore
       }
     }
   }
-  MonitorDBStore(KeyValueDB *db_ptr) :
-    db(0), do_dump(false), dump_fd(-1) {
-    db.reset(db_ptr);
-  }
   ~MonitorDBStore() {
+    assert(!is_open);
     if (do_dump)
       ::close(dump_fd);
   }

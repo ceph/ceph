@@ -380,7 +380,7 @@ public:
    *
    * @param t The transaction to hold all changes.
    */
-  virtual void encode_pending(MonitorDBStore::Transaction *t) = 0;
+  virtual void encode_pending(MonitorDBStore::TransactionRef t) = 0;
 
   /**
    * Discard the pending state
@@ -549,7 +549,7 @@ public:
   bool is_active() {
     return
       !is_proposing() &&
-      (paxos->is_active() || paxos->is_updating());
+      (paxos->is_active() || paxos->is_updating() || paxos->is_writing());
   }
 
   /**
@@ -580,7 +580,7 @@ public:
    *
    *  - we are not proposing a new version;
    *  - we are ready to be written to -- i.e., we have a pending value.
-   *  - paxos is (active or updating)
+   *  - paxos is (active or updating or writing or refresh)
    *
    * @returns true if writeable; false otherwise
    */
@@ -588,7 +588,7 @@ public:
     return
       !is_proposing() &&
       is_write_ready() &&
-      (paxos->is_active() || paxos->is_updating());
+      (paxos->is_active() || paxos->is_updating() || paxos->is_writing());
   }
 
   /**
@@ -680,7 +680,7 @@ public:
    * @param from the lower limit of the interval to be trimmed
    * @param to the upper limit of the interval to be trimmed (not including)
    */
-  void trim(MonitorDBStore::Transaction *t, version_t from, version_t to);
+  void trim(MonitorDBStore::TransactionRef t, version_t from, version_t to);
 
   /**
    * encode service-specific extra bits into trim transaction
@@ -688,7 +688,8 @@ public:
    * @param tx transaction
    * @param first new first_committed value
    */
-  virtual void encode_trim_extra(MonitorDBStore::Transaction *tx, version_t first) {}
+  virtual void encode_trim_extra(MonitorDBStore::TransactionRef tx,
+				 version_t first) {}
 
   /**
    * Get the version we should trim to.
@@ -722,7 +723,7 @@ public:
    *
    * @param t Transaction on which the full version shall be encoded.
    */
-  virtual void encode_full(MonitorDBStore::Transaction *t) = 0;
+  virtual void encode_full(MonitorDBStore::TransactionRef t) = 0;
 
   /**
    * @}
@@ -747,7 +748,7 @@ public:
    *					   purposes
    * @{
    */
-  void put_first_committed(MonitorDBStore::Transaction *t, version_t ver) {
+  void put_first_committed(MonitorDBStore::TransactionRef t, version_t ver) {
     t->put(get_service_name(), first_committed_name, ver);
   }
   /**
@@ -756,7 +757,7 @@ public:
    * @param t A transaction to which we add this put operation
    * @param ver The last committed version number being put
    */
-  void put_last_committed(MonitorDBStore::Transaction *t, version_t ver) {
+  void put_last_committed(MonitorDBStore::TransactionRef t, version_t ver) {
     t->put(get_service_name(), last_committed_name, ver);
 
     /* We only need to do this once, and that is when we are about to make our
@@ -775,7 +776,7 @@ public:
    * @param ver The version to which we will add the value
    * @param bl A bufferlist containing the version's value
    */
-  void put_version(MonitorDBStore::Transaction *t, version_t ver,
+  void put_version(MonitorDBStore::TransactionRef t, version_t ver,
 		   bufferlist& bl) {
     t->put(get_service_name(), ver, bl);
   }
@@ -787,7 +788,7 @@ public:
    * @param ver A version number
    * @param bl A bufferlist containing the version's value
    */
-  void put_version_full(MonitorDBStore::Transaction *t,
+  void put_version_full(MonitorDBStore::TransactionRef t,
 			version_t ver, bufferlist& bl) {
     string key = mon->store->combine_strings(full_prefix_name, ver);
     t->put(get_service_name(), key, bl);
@@ -799,7 +800,7 @@ public:
    * @param t The transaction to which we will add this put operation
    * @param ver A version number
    */
-  void put_version_latest_full(MonitorDBStore::Transaction *t, version_t ver) {
+  void put_version_latest_full(MonitorDBStore::TransactionRef t, version_t ver) {
     string key = mon->store->combine_strings(full_prefix_name, full_latest_name);
     t->put(get_service_name(), key, ver);
   }
@@ -810,7 +811,8 @@ public:
    * @param key The key to which we will add the value
    * @param bl A bufferlist containing the value
    */
-  void put_value(MonitorDBStore::Transaction *t, const string& key, bufferlist& bl) {
+  void put_value(MonitorDBStore::TransactionRef t,
+		 const string& key, bufferlist& bl) {
     t->put(get_service_name(), key, bl);
   }
 

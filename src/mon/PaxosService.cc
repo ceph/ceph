@@ -53,7 +53,8 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
   // make sure the client is still connected.  note that a proxied
   // connection will be disconnected with a null message; don't drop
   // those.  also ignore loopback (e.g., log) messages.
-  if (!m->get_connection()->is_connected() &&
+  if (m->get_connection() &&
+      !m->get_connection()->is_connected() &&
       m->get_connection() != mon->con_self &&
       m->get_connection()->get_messenger() != NULL) {
     dout(10) << " discarding message from disconnected client "
@@ -140,11 +141,11 @@ void PaxosService::remove_legacy_versions()
   dout(10) << __func__ << " conversion_first " << cf
 	   << " first committed " << fc << dendl;
 
-  MonitorDBStore::Transaction t;
+  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
   if (cf < fc) {
-    trim(&t, cf, fc);
+    trim(t, cf, fc);
   }
-  t.erase(get_service_name(), "conversion_first");
+  t->erase(get_service_name(), "conversion_first");
   mon->store->apply_transaction(t);
 }
 
@@ -187,26 +188,26 @@ void PaxosService::propose_pending()
    *	   to encode whatever is pending on the implementation class into a
    *	   bufferlist, so we can then propose that as a value through Paxos.
    */
-  MonitorDBStore::Transaction t;
+  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
   bufferlist bl;
 
   if (should_stash_full())
-    encode_full(&t);
+    encode_full(t);
 
-  encode_pending(&t);
+  encode_pending(t);
   have_pending = false;
 
   if (format_version > 0) {
-    t.put(get_service_name(), "format_version", format_version);
+    t->put(get_service_name(), "format_version", format_version);
   }
 
   dout(30) << __func__ << " transaction dump:\n";
   JSONFormatter f(true);
-  t.dump(&f);
+  t->dump(&f);
   f.flush(*_dout);
   *_dout << dendl;
 
-  t.encode(bl);
+  t->encode(bl);
 
   // apply to paxos
   proposing = true;
@@ -350,19 +351,19 @@ void PaxosService::maybe_trim()
   }
 
   dout(10) << __func__ << " trimming to " << trim_to << ", " << to_remove << " states" << dendl;
-  MonitorDBStore::Transaction t;
-  trim(&t, get_first_committed(), trim_to);
-  put_first_committed(&t, trim_to);
+  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  trim(t, get_first_committed(), trim_to);
+  put_first_committed(t, trim_to);
 
   // let the service add any extra stuff
-  encode_trim_extra(&t, trim_to);
+  encode_trim_extra(t, trim_to);
 
   bufferlist bl;
-  t.encode(bl);
+  t->encode(bl);
   paxos->propose_new_value(bl, NULL);
 }
 
-void PaxosService::trim(MonitorDBStore::Transaction *t,
+void PaxosService::trim(MonitorDBStore::TransactionRef t,
 			version_t from, version_t to)
 {
   dout(10) << __func__ << " from " << from << " to " << to << dendl;

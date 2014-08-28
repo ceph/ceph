@@ -11,16 +11,19 @@
 
 void Finisher::start()
 {
+  ldout(cct, 10) << __func__ << dendl;
   finisher_thread.create();
 }
 
 void Finisher::stop()
 {
+  ldout(cct, 10) << __func__ << dendl;
   finisher_lock.Lock();
   finisher_stop = true;
   finisher_cond.Signal();
   finisher_lock.Unlock();
   finisher_thread.join();
+  ldout(cct, 10) << __func__ << " finish" << dendl;
 }
 
 void Finisher::wait_for_empty()
