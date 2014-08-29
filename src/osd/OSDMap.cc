@@ -2587,7 +2587,7 @@ int OSDMap::get_erasure_code_profile_default(CephContext *cct,
 					     map<string,string> &profile_map,
 					     ostream *ss)
 {
-  int r = get_str_map(cct->_conf->osd_pool_default_erasure_code_profile,
+  int r = get_json_str_map(cct->_conf->osd_pool_default_erasure_code_profile,
 		      *ss,
 		      &profile_map);
   profile_map["directory"] =

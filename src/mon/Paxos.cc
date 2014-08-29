@@ -995,7 +995,7 @@ void Paxos::warn_on_future_time(utime_t t, entity_name_t from)
       utime_t warn_diff = now - last_clock_drift_warn;
       if (warn_diff >
 	  pow(g_conf->mon_clock_drift_warn_backoff, clock_drift_warned)) {
-	mon->clog.warn() << "message from " << from << " was stamped " << diff
+	mon->clog->warn() << "message from " << from << " was stamped " << diff
 			 << "s in the future, clocks not synchronized";
 	last_clock_drift_warn = ceph_clock_now(g_ceph_context);
 	++clock_drift_warned;

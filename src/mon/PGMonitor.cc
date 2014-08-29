@@ -80,7 +80,7 @@ void PGMonitor::on_active()
   update_logger();
 
   if (mon->is_leader())
-    mon->clog.info() << "pgmap " << pg_map << "\n";
+    mon->clog->info() << "pgmap " << pg_map << "\n";
 }
 
 void PGMonitor::update_logger()
