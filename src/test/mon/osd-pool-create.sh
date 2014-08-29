@@ -214,12 +214,12 @@ function TEST_replicated_pool_with_ruleset() {
         grep "doesn't exist" || return 1
 }
 
-function TEST_erasure_code_pool_LRC() {
+function TEST_erasure_code_pool_lrc() {
     local dir=$1
     run_mon $dir a --public-addr 127.0.0.1
 
     ./ceph osd erasure-code-profile set LRCprofile \
-             plugin=LRC \
+             plugin=lrc \
              mapping=DD_ \
              layers='[ [ "DDc", "" ] ]' || return 1
 

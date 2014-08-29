@@ -4,6 +4,7 @@
  * Ceph distributed storage system
  *
  * Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -32,7 +33,7 @@ TEST(ErasureCodePlugin, factory)
   parameters["layers"] = "[ [ \"DDc\", \"\" ] ]";
   ErasureCodeInterfaceRef erasure_code;
   EXPECT_FALSE(erasure_code);
-  EXPECT_EQ(0, instance.factory("LRC", parameters, &erasure_code, cerr));
+  EXPECT_EQ(0, instance.factory("lrc", parameters, &erasure_code, cerr));
   EXPECT_TRUE(erasure_code);
 }
 
@@ -51,8 +52,8 @@ int main(int argc, char **argv)
 /*
  * Local Variables:
  * compile-command: "cd ../.. ; make -j4 &&
- *   make unittest_erasure_code_plugin_LRC &&
- *   valgrind --tool=memcheck ./unittest_erasure_code_plugin_LRC \
+ *   make unittest_erasure_code_plugin_lrc &&
+ *   valgrind --tool=memcheck ./unittest_erasure_code_plugin_lrc \
  *      --gtest_filter=*.* --log-to-stderr=true --debug-osd=20"
  * End:
  */
