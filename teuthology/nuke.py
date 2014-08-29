@@ -4,6 +4,7 @@ import os
 import subprocess
 import time
 import yaml
+from StringIO import StringIO
 
 import teuthology
 from . import orchestra
@@ -73,6 +74,21 @@ def shutdown_daemons(ctx):
         log.info('Waiting for %s to finish shutdowns...', name)
         proc.wait()
 
+
+def kill_hadoop(ctx):
+    for remote in ctx.cluster.remotes.iterkeys():
+        pids_out = StringIO()
+        ps_proc = remote.run(args=[
+            "ps", "-eo", "pid,cmd",
+            run.Raw("|"), "grep", "java.*hadoop",
+            run.Raw("|"), "grep", "-v", "grep"
+            ], stdout=pids_out, check_status=False)
+
+        if ps_proc.exitstatus == 0:
+            for line in pids_out.getvalue().strip().split("\n"):
+                pid, cmdline = line.split(None, 1)
+                log.info("Killing PID {0} ({1})".format(pid, cmdline))
+                remote.run(args=["kill", "-9", pid], check_status=False)
 
 def find_kernel_mounts(ctx):
     nodes = {}
@@ -453,6 +469,8 @@ def nuke_helper(ctx, should_unlock):
         remove_osd_tmpfs(ctx)
         # log.info('Dealing with any kernel mounts...')
         # remove_kernel_mounts(ctx, need_reboot)
+        log.info("Terminating Hadoop services...")
+        kill_hadoop(ctx)
 
     if need_reboot:
         reboot(ctx, need_reboot)
