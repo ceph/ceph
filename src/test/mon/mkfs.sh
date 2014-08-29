@@ -42,6 +42,7 @@ function mon_mkfs() {
     ./ceph-mon \
         --id $MON_ID \
         --fsid $fsid \
+        --osd-pool-default-erasure-code-directory=.libs \
         --mkfs \
         --mon-data=$MON_DIR \
         --mon-initial-members=$MON_ID \
@@ -53,6 +54,7 @@ function mon_run() {
     ./ceph-mon \
         --id $MON_ID \
         --chdir= \
+        --osd-pool-default-erasure-code-directory=.libs \
         --mon-data=$MON_DIR \
         --log-file=$MON_DIR/log \
         --mon-cluster-log-file=$MON_DIR/log \
@@ -77,6 +79,7 @@ function auth_none() {
 
     ./ceph-mon \
         --id $MON_ID \
+        --osd-pool-default-erasure-code-directory=.libs \
         --mon-data=$MON_DIR \
         --extract-monmap $MON_DIR/monmap
 
@@ -136,6 +139,7 @@ function makedir() {
     # fail if recursive directory creation is needed
     ./ceph-mon \
         --id $MON_ID \
+        --osd-pool-default-erasure-code-directory=.libs \
         --mkfs \
         --mon-data=$toodeep 2>&1 | tee $DIR/makedir.log
     grep 'toodeep.*No such file' $DIR/makedir.log > /dev/null
