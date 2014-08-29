@@ -357,8 +357,9 @@ any other machine.  The existence of a vpshost field is how teuthology
 knows whether or not a database entry represents a physical or a virtual
 machine.
 
-The following needs to be set in ~/.config/libvirt/libvirt.conf in order to get the
-right virtual machine associations for the Inktank lab::
+The following needs to be set in ~/.config/libvirt/libvirt.conf or for some
+older versions of libvirt (like ubuntu precise) is ~/libvirt/libvirt.conf
+in order to get the right virtual machine associations for the Inktank lab::
 
     uri_aliases = [
         'mira001=qemu+ssh://ubuntu@mira001.front.sepia.ceph.com/system?no_tty=1',
@@ -376,6 +377,16 @@ right virtual machine associations for the Inktank lab::
         'mira017=qemu+ssh://ubuntu@mira017.front.sepia.ceph.com/system?no_tty=1',
         'mira018=qemu+ssh://ubuntu@mira018.front.sepia.ceph.com/system?no_tty=1',
         'mira020=qemu+ssh://ubuntu@mira020.front.sepia.ceph.com/system?no_tty=1',
+        'mira024=qemu+ssh://ubuntu@mira024.front.sepia.ceph.com/system?no_tty=1',
+        'mira029=qemu+ssh://ubuntu@mira029.front.sepia.ceph.com/system?no_tty=1',
+        'mira036=qemu+ssh://ubuntu@mira036.front.sepia.ceph.com/system?no_tty=1',
+        'mira043=qemu+ssh://ubuntu@mira043.front.sepia.ceph.com/system?no_tty=1',
+        'mira044=qemu+ssh://ubuntu@mira044.front.sepia.ceph.com/system?no_tty=1',
+        'mira074=qemu+ssh://ubuntu@mira074.front.sepia.ceph.com/system?no_tty=1',
+        'mira079=qemu+ssh://ubuntu@mira079.front.sepia.ceph.com/system?no_tty=1',
+        'mira081=qemu+ssh://ubuntu@mira081.front.sepia.ceph.com/system?no_tty=1',
+        'mira091=qemu+ssh://ubuntu@mira091.front.sepia.ceph.com/system?no_tty=1',
+        'mira098=qemu+ssh://ubuntu@mira098.front.sepia.ceph.com/system?no_tty=1',
         'vercoi01=qemu+ssh://ubuntu@vercoi01.front.sepia.ceph.com/system?no_tty=1',
         'vercoi02=qemu+ssh://ubuntu@vercoi02.front.sepia.ceph.com/system?no_tty=1',
         'vercoi03=qemu+ssh://ubuntu@vercoi03.front.sepia.ceph.com/system?no_tty=1',
