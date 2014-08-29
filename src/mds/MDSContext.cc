@@ -42,7 +42,12 @@ void MDSIOContextBase::complete(int r) {
   dout(10) << "MDSIOContextBase::complete: " << typeid(*this).name() << dendl;
   assert(mds != NULL);
   Mutex::Locker l(mds->mds_lock);
-  MDSContext::complete(r);
+  if (r == -EBLACKLISTED) {
+    derr << "MDSIOContextBase: blacklisted!  Restarting..." << dendl;
+    mds->respawn();
+  } else {
+    MDSContext::complete(r);
+  }
 }
 
 MDS *MDSIOContext::get_mds() {
