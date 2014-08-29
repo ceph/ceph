@@ -4,6 +4,7 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -17,7 +18,7 @@
 #include "ceph_ver.h"
 #include "common/debug.h"
 #include "erasure-code/ErasureCodePlugin.h"
-#include "ErasureCodeLRC.h"
+#include "ErasureCodeLrc.h"
 
 // re-include our assert
 #include "include/assert.h" 
@@ -28,15 +29,15 @@
 
 static ostream& _prefix(std::ostream* _dout)
 {
-  return *_dout << "ErasureCodePluginLRC: ";
+  return *_dout << "ErasureCodePluginLrc: ";
 }
 
-class ErasureCodePluginLRC : public ErasureCodePlugin {
+class ErasureCodePluginLrc : public ErasureCodePlugin {
 public:
   virtual int factory(const map<std::string,std::string> &parameters,
 		      ErasureCodeInterfaceRef *erasure_code) {
-    ErasureCodeLRC *interface;
-    interface = new ErasureCodeLRC();
+    ErasureCodeLrc *interface;
+    interface = new ErasureCodeLrc();
     stringstream ss;
     assert(parameters.count("directory") != 0);
     int r = interface->init(parameters, &ss);
@@ -55,5 +56,5 @@ const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
 int __erasure_code_init(char *plugin_name, char *directory)
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-  return instance.add(plugin_name, new ErasureCodePluginLRC());
+  return instance.add(plugin_name, new ErasureCodePluginLrc());
 }
