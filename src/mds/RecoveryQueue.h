@@ -23,13 +23,17 @@ class CInode;
 class MDS;
 
 class RecoveryQueue {
-  public:
+public:
   void enqueue(CInode *in);
   void advance();
+  void prioritize(CInode *in);   ///< do this inode now/soon
   RecoveryQueue(MDS *mds_) : mds(mds_) {}
 
-  private:
-  std::set<CInode*> file_recover_queue;
+private:
+  void _start(CInode *in);  ///< start recovering this file
+
+  std::set<CInode*> file_recover_queue;   ///< the queue
+  std::set<CInode*> file_recover_queue_front;  ///< elevated priority items
   std::set<CInode*> file_recovering;
   void _recovered(CInode *in, int r, uint64_t size, utime_t mtime);
   MDS *mds;
