@@ -11597,8 +11597,13 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
     agent_estimate_atime_temp(soid, &atime, NULL /*FIXME &temp*/);
 
     uint64_t atime_upper = 0, atime_lower = 0;
-    if (atime < 0 && obc->obs.oi.mtime != utime_t())
-      atime = ceph_clock_now(NULL).sec() - obc->obs.oi.mtime;
+    if (atime < 0 && obc->obs.oi.mtime != utime_t()) {
+      if (obc->obs.oi.local_mtime != utime_t()) {
+        atime = ceph_clock_now(NULL).sec() - obc->obs.oi.local_mtime;
+      } else {
+        atime = ceph_clock_now(NULL).sec() - obc->obs.oi.mtime;
+      }
+    }
     if (atime < 0)
       atime = pool.info.hit_set_period * pool.info.hit_set_count; // "infinite"
     if (atime >= 0) {
