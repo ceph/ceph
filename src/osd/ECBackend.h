@@ -389,7 +389,7 @@ public:
     ErasureCodeInterfaceRef ec_impl;
   public:
     ECRecPred(ErasureCodeInterfaceRef ec_impl) : ec_impl(ec_impl) {
-      for (unsigned i = 0; i < ec_impl->get_data_chunk_count(); ++i) {
+      for (unsigned i = 0; i < ec_impl->get_chunk_count(); ++i) {
 	want.insert(i);
       }
     }
