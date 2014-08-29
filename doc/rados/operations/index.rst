@@ -34,6 +34,7 @@ CRUSH algorithm.
 	data-placement
 	pools
 	erasure-code-profile
+	erasure-code-lrc
 	cache-tiering
 	placement-groups
 	crush-map
