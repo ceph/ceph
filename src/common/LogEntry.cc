@@ -130,38 +130,66 @@ int string_to_syslog_facility(string s)
   return LOG_USER;
 }
 
+string clog_type_to_string(clog_type t)
+{
+  switch (t) {
+    case CLOG_DEBUG:
+      return "debug";
+    case CLOG_INFO:
+      return "info";
+    case CLOG_WARN:
+      return "warn";
+    case CLOG_ERROR:
+      return "err";
+    case CLOG_SEC:
+      return "crit";
+    default:
+      assert(0);
+      return 0;
+  }
+}
+
 void LogEntry::log_to_syslog(string level, string facility)
 {
   int min = string_to_syslog_level(level);
-  int l = clog_type_to_syslog_level(type);
+  int l = clog_type_to_syslog_level(prio);
   if (l <= min) {
     int f = string_to_syslog_facility(facility);
-    syslog(l | f, "%s", stringify(*this).c_str());
+    syslog(l | f, "%s %lu : %s",
+        stringify(who).c_str(),
+        seq,
+        msg.c_str());
   }
 }
 
 void LogEntry::encode(bufferlist& bl) const
 {
-  ENCODE_START(2, 2, bl);
-  __u16 t = type;
+  ENCODE_START(3, 2, bl);
+  __u16 t = prio;
   ::encode(who, bl);
   ::encode(stamp, bl);
   ::encode(seq, bl);
   ::encode(t, bl);
   ::encode(msg, bl);
+  ::encode(channel, bl);
   ENCODE_FINISH(bl);
 }
 
 void LogEntry::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   __u16 t;
   ::decode(who, bl);
   ::decode(stamp, bl);
   ::decode(seq, bl);
   ::decode(t, bl);
-  type = (clog_type)t;
+  prio = (clog_type)t;
   ::decode(msg, bl);
+  if (struct_v >= 3) {
+    ::decode(channel, bl);
+  } else {
+    channel = CLOG_CHANNEL_DEFAULT;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -170,7 +198,8 @@ void LogEntry::dump(Formatter *f) const
   f->dump_stream("who") << who;
   f->dump_stream("stamp") << stamp;
   f->dump_unsigned("seq", seq);
-  f->dump_stream("type") << type;
+  f->dump_string("channel", channel);
+  f->dump_stream("priority") << prio;
   f->dump_string("message", msg);
 }
 

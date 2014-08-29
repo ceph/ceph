@@ -179,7 +179,8 @@ CompatSet OSD::get_osd_compat_set() {
 OSDService::OSDService(OSD *osd) :
   osd(osd),
   cct(osd->cct),
-  whoami(osd->whoami), store(osd->store), clog(osd->clog),
+  whoami(osd->whoami), store(osd->store),
+  log_client(osd->log_client), clog(osd->clog),
   pg_recovery_stats(osd->pg_recovery_stats),
   infos_oid(OSD::make_infos_oid()),
   cluster_messenger(osd->cluster_messenger),
@@ -611,9 +612,9 @@ void OSDService::check_nearfull_warning(const osd_stat_t &osd_stat)
   }
   last_msg = now;
   if (cur_state == FULL)
-    clog.error() << "OSD full dropping all updates " << (int)(ratio * 100) << "% full";
+    clog->error() << "OSD full dropping all updates " << (int)(ratio * 100) << "% full";
   else
-    clog.warn() << "OSD near full (" << (int)(ratio * 100) << "%)";
+    clog->warn() << "OSD near full (" << (int)(ratio * 100) << "%)";
 }
 
 bool OSDService::check_failsafe_full()
@@ -1257,7 +1258,7 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
   }
 
   dout(7) << *pg << " misdirected op in " << m->get_map_epoch() << dendl;
-  clog.warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
+  clog->warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
 	      << " pg " << m->get_pg()
 	      << " to osd." << whoami
 	      << " not " << pg->acting
@@ -1634,7 +1635,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   logger(NULL),
   recoverystate_perf(NULL),
   store(store_),
-  clog(cct, client_messenger, &mc->monmap, LogClient::NO_FLAGS),
+  log_client(cct, client_messenger, &mc->monmap, LogClient::NO_FLAGS),
+  clog(log_client.create_channel()),
   whoami(id),
   dev_path(dev), journal_path(jdev),
   dispatch_running(false),
@@ -2008,7 +2010,7 @@ int OSD::init()
     goto out;
 
   // tell monc about log_client so it will know about mon session resets
-  monc->set_log_client(&clog);
+  monc->set_log_client(&log_client);
 
   osd_tp.start();
   osd_op_tp.start();
@@ -4044,7 +4046,7 @@ void OSD::check_ops_in_flight()
     for (vector<string>::iterator i = warnings.begin();
         i != warnings.end();
         ++i) {
-      clog.warn() << *i;
+      clog->warn() << *i;
     }
   }
   return;
@@ -5313,7 +5315,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
   rs = ss.str();
   odata.append(ds);
   dout(0) << "do_command r=" << r << " " << rs << dendl;
-  clog.info() << rs << "\n";
+  clog->info() << rs << "\n";
   if (con) {
     MCommandReply *reply = new MCommandReply(r, rs);
     reply->set_tid(tid);
@@ -6306,25 +6308,25 @@ void OSD::handle_osd_map(MOSDMap *m)
 	if (service.is_preparing_to_stop() || service.is_stopping()) {
 	  service.got_stop_ack();
 	} else {
-	  clog.warn() << "map e" << osdmap->get_epoch()
+	  clog->warn() << "map e" << osdmap->get_epoch()
 		      << " wrongly marked me down";
 	}
       }
       else if (!osdmap->get_addr(whoami).probably_equals(client_messenger->get_myaddr()))
-	clog.error() << "map e" << osdmap->get_epoch()
+	clog->error() << "map e" << osdmap->get_epoch()
 		    << " had wrong client addr (" << osdmap->get_addr(whoami)
 		     << " != my " << client_messenger->get_myaddr() << ")";
       else if (!osdmap->get_cluster_addr(whoami).probably_equals(cluster_messenger->get_myaddr()))
-	clog.error() << "map e" << osdmap->get_epoch()
+	clog->error() << "map e" << osdmap->get_epoch()
 		    << " had wrong cluster addr (" << osdmap->get_cluster_addr(whoami)
 		     << " != my " << cluster_messenger->get_myaddr() << ")";
       else if (!osdmap->get_hb_back_addr(whoami).probably_equals(hb_back_server_messenger->get_myaddr()))
-	clog.error() << "map e" << osdmap->get_epoch()
+	clog->error() << "map e" << osdmap->get_epoch()
 		    << " had wrong hb back addr (" << osdmap->get_hb_back_addr(whoami)
 		     << " != my " << hb_back_server_messenger->get_myaddr() << ")";
       else if (osdmap->get_hb_front_addr(whoami) != entity_addr_t() &&
                !osdmap->get_hb_front_addr(whoami).probably_equals(hb_front_server_messenger->get_myaddr()))
-	clog.error() << "map e" << osdmap->get_epoch()
+	clog->error() << "map e" << osdmap->get_epoch()
 		    << " had wrong hb front addr (" << osdmap->get_hb_front_addr(whoami)
 		     << " != my " << hb_front_server_messenger->get_myaddr() << ")";
       
@@ -8093,7 +8095,7 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
   }
   if (!send_map->have_pg_pool(pgid.pool())) {
     dout(7) << "dropping request; pool did not exist" << dendl;
-    clog.warn() << m->get_source_inst() << " invalid " << m->get_reqid()
+    clog->warn() << m->get_source_inst() << " invalid " << m->get_reqid()
 		      << " pg " << m->get_pg()
 		      << " to osd." << whoami
 		      << " in e" << osdmap->get_epoch()
@@ -8103,7 +8105,7 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     return;
   } else if (send_map->get_pg_acting_role(pgid.pgid, whoami) < 0) {
     dout(7) << "we are invalid target" << dendl;
-    clog.warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
+    clog->warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
 		      << " pg " << m->get_pg()
 		      << " to osd." << whoami
 		      << " in e" << osdmap->get_epoch()
@@ -8520,12 +8522,12 @@ void OSD::check_config()
 {
   // some sanity checks
   if (g_conf->osd_map_cache_size <= g_conf->osd_map_max_advance + 2) {
-    clog.warn() << "osd_map_cache_size (" << g_conf->osd_map_cache_size << ")"
+    clog->warn() << "osd_map_cache_size (" << g_conf->osd_map_cache_size << ")"
 		<< " is not > osd_map_max_advance ("
 		<< g_conf->osd_map_max_advance << ")";
   }
   if (g_conf->osd_map_cache_size <= (int)g_conf->osd_pg_epoch_persisted_max_stale + 2) {
-    clog.warn() << "osd_map_cache_size (" << g_conf->osd_map_cache_size << ")"
+    clog->warn() << "osd_map_cache_size (" << g_conf->osd_map_cache_size << ")"
 		<< " is not > osd_pg_epoch_persisted_max_stale ("
 		<< g_conf->osd_pg_epoch_persisted_max_stale << ")";
   }

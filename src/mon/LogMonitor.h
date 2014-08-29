@@ -28,10 +28,74 @@ using namespace std;
 
 class MMonCommand;
 
-class LogMonitor : public PaxosService {
+static const string LOG_META_CHANNEL = "$channel";
+
+class LogMonitor : public PaxosService,
+                   public md_config_obs_t {
 private:
   multimap<utime_t,LogEntry> pending_log;
   LogSummary pending_summary, summary;
+
+  struct log_channel_info {
+
+    map<string,string> log_to_syslog;
+    map<string,string> syslog_level;
+    map<string,string> syslog_facility;
+    map<string,string> log_file;
+    map<string,string> log_file_level;
+
+    void clear() {
+      log_to_syslog.clear();
+      syslog_level.clear();
+      syslog_facility.clear();
+      log_file.clear();
+      log_file_level.clear();
+    }
+
+    void expand_channel_meta() {
+      expand_channel_meta(log_to_syslog);
+      expand_channel_meta(syslog_level);
+      expand_channel_meta(syslog_facility);
+      expand_channel_meta(log_file);
+      expand_channel_meta(log_file_level);
+    }
+    void expand_channel_meta(map<string,string> &m);
+    string expand_channel_meta(const string &input,
+                               const string &change_to);
+
+    bool do_log_to_syslog(const string &channel) {
+      return (get_str_map_key(log_to_syslog, channel,
+                              &CLOG_CHANNEL_DEFAULT) == "true");
+    }
+
+    string get_facility(const string &channel) {
+      return get_str_map_key(syslog_facility, channel,
+                             &CLOG_CHANNEL_DEFAULT);
+    }
+
+    string get_level(const string &channel) {
+      return get_str_map_key(syslog_level, channel,
+                             &CLOG_CHANNEL_DEFAULT);
+    }
+
+    string get_log_file(const string &channel) {
+      string fname;
+      if (log_file.count(channel) == 0) {
+        log_file[channel] = expand_channel_meta(
+                              get_str_map_key(log_file, channel,
+                                              &CLOG_CHANNEL_DEFAULT),
+                              channel);
+      }
+      return log_file[channel];
+    }
+
+    string get_log_file_level(const string &channel) {
+      return get_str_map_key(log_file_level, channel,
+                             &CLOG_CHANNEL_DEFAULT);
+    }
+  } channels;
+
+  void update_log_channels();
 
   void create_initial();
   void update_from_paxos(bool *need_bootstrap);
@@ -80,6 +144,12 @@ private:
  public:
   LogMonitor(Monitor *mn, Paxos *p, const string& service_name) 
     : PaxosService(mn, p, service_name) { }
+
+  void init() {
+    generic_dout(10) << "LogMonitor::init" << dendl;
+    g_conf->add_observer(this);
+    update_log_channels();
+  }
   
   void tick();  // check state, take actions
 
@@ -94,6 +164,22 @@ private:
    */
   int sub_name_to_id(const string& n);
 
-};
+  void on_shutdown() {
+    g_conf->remove_observer(this);
+  }
 
+  const char **get_tracked_conf_keys() const {
+    static const char* KEYS[] = {
+      "mon_cluster_log_to_syslog",
+      "mon_cluster_log_to_syslog_level",
+      "mon_cluster_log_to_syslog_facility",
+      "mon_cluster_log_file",
+      "mon_cluster_log_file_level",
+      NULL
+    };
+    return KEYS;
+  }
+  void handle_conf_change(const struct md_config_t *conf,
+                          const std::set<std::string> &changed);
+};
 #endif

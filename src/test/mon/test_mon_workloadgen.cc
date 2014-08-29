@@ -706,7 +706,7 @@ class OSDStub : public TestStub
       e.who = messenger->get_myinst();
       e.stamp = now;
       e.seq = seq++;
-      e.type = CLOG_DEBUG;
+      e.prio = CLOG_DEBUG;
       e.msg = "OSDStub::op_log";
       m->entries.push_back(e);
     }

@@ -1381,7 +1381,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   if (m->get_object_locator() != oloc) {
     dout(10) << " provided locator " << m->get_object_locator() 
 	     << " != object's " << obc->obs.oi.soid << dendl;
-    osd->clog.warn() << "bad locator " << m->get_object_locator() 
+    osd->clog->warn() << "bad locator " << m->get_object_locator() 
 		     << " on object " << oloc
 		     << " op " << *m << "\n";
   }
@@ -3244,7 +3244,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    r = pgbackend->objects_read_sync(
 	      soid, last, len, &t);
 	    if (!t.is_zero()) {
-	      osd->clog.error() << coll << " " << soid << " sparse-read found data in hole "
+	      osd->clog->error() << coll << " " << soid << " sparse-read found data in hole "
 				<< last << "~" << len << "\n";
 	    }
 	  }
@@ -3272,7 +3272,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    r = pgbackend->objects_read_sync(
 	      soid, last, len, &t);
 	    if (!t.is_zero()) {
-	      osd->clog.error() << coll << " " << soid << " sparse-read found data in hole "
+	      osd->clog->error() << coll << " " << soid << " sparse-read found data in hole "
 				<< last << "~" << len << "\n";
 	    }
 	  }
@@ -3675,7 +3675,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           map<snapid_t, interval_set<uint64_t> >::const_iterator coi;
           coi = ssc->snapset.clone_overlap.find(ci.cloneid);
           if (coi == ssc->snapset.clone_overlap.end()) {
-            osd->clog.error() << "osd." << osd->whoami << ": inconsistent clone_overlap found for oid "
+            osd->clog->error() << "osd." << osd->whoami << ": inconsistent clone_overlap found for oid "
 			      << soid << " clone " << *clone_iter;
             result = -EINVAL;
             break;
@@ -3690,7 +3690,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           map<snapid_t, uint64_t>::const_iterator si;
           si = ssc->snapset.clone_size.find(ci.cloneid);
           if (si == ssc->snapset.clone_size.end()) {
-            osd->clog.error() << "osd." << osd->whoami << ": inconsistent clone_size found for oid "
+            osd->clog->error() << "osd." << osd->whoami << ": inconsistent clone_size found for oid "
 			      << soid << " clone " << *clone_iter;
             result = -EINVAL;
             break;
@@ -9947,7 +9947,7 @@ bool ReplicatedPG::start_recovery_ops(
 
   if (missing.num_missing() > 0) {
     // this shouldn't happen!
-    osd->clog.error() << info.pgid << " recovery ending with " << missing.num_missing()
+    osd->clog->error() << info.pgid << " recovery ending with " << missing.num_missing()
 		      << ": " << missing.missing << "\n";
     return work_in_progress;
   }
@@ -9955,7 +9955,7 @@ bool ReplicatedPG::start_recovery_ops(
   if (needs_recovery()) {
     // this shouldn't happen!
     // We already checked num_missing() so we must have missing replicas
-    osd->clog.error() << info.pgid << " recovery ending with missing replicas\n";
+    osd->clog->error() << info.pgid << " recovery ending with missing replicas\n";
     return work_in_progress;
   }
 
@@ -10183,9 +10183,9 @@ int ReplicatedPG::prep_object_replica_pushes(
       }
     }
     if (uhoh)
-      osd->clog.error() << info.pgid << " missing primary copy of " << soid << ", unfound\n";
+      osd->clog->error() << info.pgid << " missing primary copy of " << soid << ", unfound\n";
     else
-      osd->clog.error() << info.pgid << " missing primary copy of " << soid
+      osd->clog->error() << info.pgid << " missing primary copy of " << soid
 			<< ", will try copies on " << missing_loc.get_locations(soid)
 			<< "\n";
     return 0;
@@ -11285,7 +11285,7 @@ void ReplicatedPG::agent_setup()
   }
 
   if (info.stats.stats_invalid) {
-    osd->clog.warn() << "pg " << info.pgid << " has invalid (post-split) stats; must scrub before tier agent can activate";
+    osd->clog->warn() << "pg " << info.pgid << " has invalid (post-split) stats; must scrub before tier agent can activate";
   }
 
   agent_choose_mode();
@@ -11961,7 +11961,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
     if (soid.snap == CEPH_SNAPDIR ||
 	soid.snap == CEPH_NOSNAP) {
       if (p->second.attrs.count(SS_ATTR) == 0) {
-	osd->clog.error() << mode << " " << info.pgid << " " << soid
+	osd->clog->error() << mode << " " << info.pgid << " " << soid
 			  << " no '" << SS_ATTR << "' attr";
         ++scrubber.shallow_errors;
 	continue;
@@ -11974,7 +11974,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       // did we finish the last oid?
       if (head != hobject_t() &&
 	  !pool.info.allow_incomplete_clones()) {
-	osd->clog.error() << mode << " " << info.pgid << " " << head
+	osd->clog->error() << mode << " " << info.pgid << " " << head
 			  << " missing clones";
         ++scrubber.shallow_errors;
       }
@@ -11992,7 +11992,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 
     // basic checks.
     if (p->second.attrs.count(OI_ATTR) == 0) {
-      osd->clog.error() << mode << " " << info.pgid << " " << soid
+      osd->clog->error() << mode << " " << info.pgid << " " << soid
 			<< " no '" << OI_ATTR << "' attr";
       ++scrubber.shallow_errors;
       continue;
@@ -12002,7 +12002,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
     object_info_t oi(bv);
 
     if (pgbackend->be_get_ondisk_size(oi.size) != p->second.size) {
-      osd->clog.error() << mode << " " << info.pgid << " " << soid
+      osd->clog->error() << mode << " " << info.pgid << " " << soid
 			<< " on disk size (" << p->second.size
 			<< ") does not match object info size ("
 			<< oi.size << ") adjusted for ondisk to ("
@@ -12054,19 +12054,19 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       }
     }
     if (!next_clone.is_min() && next_clone != soid) {
-      osd->clog.error() << mode << " " << info.pgid << " " << soid
+      osd->clog->error() << mode << " " << info.pgid << " " << soid
 			<< " expected clone " << next_clone;
       ++scrubber.shallow_errors;
     }
 
     if (soid.snap == CEPH_NOSNAP || soid.snap == CEPH_SNAPDIR) {
       if (soid.snap == CEPH_NOSNAP && !snapset.head_exists) {
-	osd->clog.error() << mode << " " << info.pgid << " " << soid
+	osd->clog->error() << mode << " " << info.pgid << " " << soid
 			  << " snapset.head_exists=false, but head exists";
         ++scrubber.shallow_errors;
       }
       if (soid.snap == CEPH_SNAPDIR && snapset.head_exists) {
-	osd->clog.error() << mode << " " << info.pgid << " " << soid
+	osd->clog->error() << mode << " " << info.pgid << " " << soid
 			  << " snapset.head_exists=true, but snapdir exists";
         ++scrubber.shallow_errors;
       }
@@ -12081,7 +12081,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       stat.num_object_clones++;
       
       if (head == hobject_t()) {
-	osd->clog.error() << mode << " " << info.pgid << " " << soid
+	osd->clog->error() << mode << " " << info.pgid << " " << soid
 			  << " found clone without head";
 	++scrubber.shallow_errors;
 	continue;
@@ -12092,7 +12092,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       }
 
       if (oi.size != snapset.clone_size[*curclone]) {
-	osd->clog.error() << mode << " " << info.pgid << " " << soid
+	osd->clog->error() << mode << " " << info.pgid << " " << soid
 			  << " size " << oi.size << " != clone_size "
 			  << snapset.clone_size[*curclone];
 	++scrubber.shallow_errors;
@@ -12123,7 +12123,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 
   if (!next_clone.is_min() &&
       !pool.info.allow_incomplete_clones()) {
-    osd->clog.error() << mode << " " << info.pgid
+    osd->clog->error() << mode << " " << info.pgid
 		      << " expected clone " << next_clone;
     ++scrubber.shallow_errors;
   }
@@ -12169,7 +12169,7 @@ void ReplicatedPG::_scrub_finish()
        !info.stats.hitset_stats_invalid) ||
       scrub_cstat.sum.num_whiteouts != info.stats.stats.sum.num_whiteouts ||
       scrub_cstat.sum.num_bytes != info.stats.stats.sum.num_bytes) {
-    osd->clog.error() << info.pgid << " " << mode
+    osd->clog->error() << info.pgid << " " << mode
 		      << " stat mismatch, got "
 		      << scrub_cstat.sum.num_objects << "/" << info.stats.stats.sum.num_objects << " objects, "
 		      << scrub_cstat.sum.num_object_clones << "/" << info.stats.stats.sum.num_object_clones << " clones, "
