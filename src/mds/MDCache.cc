@@ -8482,6 +8482,9 @@ void MDCache::dispatch_request(MDRequestRef& mdr)
     case CEPH_MDS_OP_EXPORTDIR:
       migrator->dispatch_export_dir(mdr);
       break;
+    case CEPH_MDS_OP_VALIDATE:
+      scrub_dentry_work(mdr);
+      break;
     default:
       assert(0);
     }
@@ -11509,7 +11512,13 @@ public:
     mdcache(mdc), mdr(mdr), on_finish(fin), formatter(f) {}
 
   void finish(int r) {
-    CInode::dump_validation_results(results, formatter);
+    if (r >= 0) { // we got into the scrubbing dump it
+      results.dump(formatter);
+    } else { // we failed the lookup or something; dump ourselves
+      formatter->open_object_section("results");
+      formatter->dump_int("return_code", r);
+      formatter->close_section(); // results
+    }
     mdcache->request_finish(mdr);
     on_finish->complete(r);
   }
@@ -11519,20 +11528,31 @@ void MDCache::scrub_dentry(const string& path, Formatter *f, Context *fin)
 {
   dout(10) << "scrub_dentry " << path << dendl;
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_VALIDATE);
-  set<SimpleLock*> rdlocks, wrlocks, xlocks;
   filepath fp(path.c_str());
   mdr->set_filepath(fp);
+  C_scrub_dentry_finish *csd = new C_scrub_dentry_finish(this, mdr, fin, f);
+  mdr->internal_op_finish = csd;
+  mdr->internal_op_private = &csd->results;
+  scrub_dentry_work(mdr);
+}
 
-  // TODO: this is not actually safe with multiple MDSes!
+void MDCache::scrub_dentry_work(MDRequestRef& mdr)
+{
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
   CInode *in = mds->server->rdlock_path_pin_ref(mdr, 0, rdlocks, true);
-  assert(in != NULL); // TODO: obviously can't keep this, but it helps ensure authness
+  if (NULL == in)
+    return;
+
+  // TODO: Remove this restriction
   assert(in->is_auth());
 
   bool locked = mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
   if (!locked)
     return;
-  C_scrub_dentry_finish *finisher = new C_scrub_dentry_finish(this, mdr,
-                                                              fin, f);
-  in->validate_disk_state(&finisher->results, finisher);
+
+  CInode::validated_data *vr =
+      static_cast<CInode::validated_data*>(mdr->internal_op_private);
+
+  in->validate_disk_state(vr, mdr->internal_op_finish);
   return;
 }

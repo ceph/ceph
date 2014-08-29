@@ -3684,6 +3684,15 @@ void CInode::validated_data::dump(Formatter *f) const
       f->dump_stream("error_str") << raw_rstats.error_str;
     }
     f->close_section(); // raw_rstats
+    // dump failure return code
+    int rc = 0;
+    if (backtrace.checked && backtrace.ondisk_read_retval)
+      rc = backtrace.ondisk_read_retval;
+    if (inode.checked && inode.ondisk_read_retval)
+      rc = inode.ondisk_read_retval;
+    if (raw_rstats.checked && raw_rstats.ondisk_read_retval)
+      rc = raw_rstats.ondisk_read_retval;
+    f->dump_int("return_code", rc);
   }
   f->close_section(); // results
 }
