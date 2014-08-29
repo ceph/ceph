@@ -171,7 +171,7 @@ int ErasureCodeLRC::layers_parse(string description_string,
 	  return ERROR_LRC_CONFIG_OPTIONS;
 	}
 	if (j->type() == json_spirit::str_type) {
-	  int err = get_str_map(j->get_str(), *ss, &layer.parameters);
+	  int err = get_json_str_map(j->get_str(), *ss, &layer.parameters);
 	  if (err)
 	    return err;
 	} else if (j->type() == json_spirit::obj_type) {
