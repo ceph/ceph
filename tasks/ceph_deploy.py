@@ -86,7 +86,7 @@ def is_healthy(ctx, config):
             logger=log.getChild('health'),
             )
         out = r.stdout.getvalue()
-        log.debug('Ceph health: %s', out.rstrip('\n'))
+        log.info('Ceph health: %s', out.rstrip('\n'))
         if out.split(None, 1)[0] == 'HEALTH_OK':
             break
         time.sleep(10)
@@ -114,10 +114,19 @@ def get_dev_for_osd(ctx, config):
         devs = teuthology.get_scratch_devices(remote)
         num_osd_per_host = list(teuthology.roles_of_type(roles_for_host, 'osd'))
         num_osds = len(num_osd_per_host)
-        assert num_osds <= len(devs), 'fewer disks than osds on ' + shortname
-        for dev in devs[:num_osds]:
-            dev_short = dev.split('/')[-1]
-            osd_devs.append('{host}:{dev}'.format(host=shortname, dev=dev_short))
+        if config.get('separate_journal_disk') is not None:
+            num_devs_reqd = 2 * num_osds
+            assert num_devs_reqd <= len(devs), 'fewer data and journal disks than required ' + shortname
+            for dindex in range(0,num_devs_reqd,2):
+                jd_index = dindex + 1
+                dev_short = devs[dindex].split('/')[-1]
+                jdev_short = devs[jd_index].split('/')[-1]
+                osd_devs.append('{host}:{dev}:{jdev}'.format(host=shortname, dev=dev_short, jdev=jdev_short))
+        else:
+            assert num_osds <= len(devs), 'fewer disks than osds ' + shortname
+            for dev in devs[:num_osds]:
+                dev_short = dev.split('/')[-1]
+                osd_devs.append('{host}:{dev}:{jdev}'.format(host=shortname, dev=dev_short, jdev=dev_short))
     return osd_devs
 
 def get_all_nodes(ctx, config):
@@ -240,16 +249,24 @@ def build_ceph_cluster(ctx, config):
                     raise RuntimeError("ceph-deploy: Failed to delete monitor")
 
         node_dev_list = get_dev_for_osd(ctx, config)
+        osd_create_cmd = './ceph-deploy osd create --zap-disk '
         for d in node_dev_list:
-            osd_create_cmds = './ceph-deploy osd create --zap-disk'+" "+d
-            estatus_osd = execute_ceph_deploy(ctx, config, osd_create_cmds)
+            if config.get('dmcrypt') is not None:
+                osd_create_cmd_d = osd_create_cmd+'--dmcrypt'+" "+d
+            else:
+                osd_create_cmd_d = osd_create_cmd+d
+            estatus_osd = execute_ceph_deploy(ctx, config, osd_create_cmd_d)
             if estatus_osd == 0:
                 log.info('successfully created osd')
                 no_of_osds += 1
             else:
-                zap_disk = './ceph-deploy disk zap'+" "+d
+                disks = []
+                disks = d.split(':')
+                dev_disk = disks[0]+":"+disks[1]
+                j_disk = disks[0]+":"+disks[2]
+                zap_disk = './ceph-deploy disk zap '+dev_disk+" "+j_disk
                 execute_ceph_deploy(ctx, config, zap_disk)
-                estatus_osd = execute_ceph_deploy(ctx, config, osd_create_cmds)
+                estatus_osd = execute_ceph_deploy(ctx, config, osd_create_cmd_d)
                 if estatus_osd == 0:
                     log.info('successfully created osd')
                     no_of_osds += 1
@@ -435,6 +452,9 @@ def task(ctx, config):
         - ceph-deploy:
              branch:
                 testing:
+             dmcrypt: yes
+             separate_journal_disk: yes
+
     """
     if config is None:
         config = {}
@@ -457,6 +477,8 @@ def task(ctx, config):
          lambda: build_ceph_cluster(ctx=ctx, config=dict(
                  conf=config.get('conf', {}),
                  branch=config.get('branch',{}),
+                 dmcrypt=config.get('dmcrypt',None),
+                 separate_journal_disk=config.get('separate_journal_disk',None),
                  mon_initial_members=config.get('mon_initial_members', None),
                  test_mon_destroy=config.get('test_mon_destroy', None),
                  )),
