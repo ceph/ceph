@@ -27,6 +27,9 @@ function run() {
 
     setup $dir || return 1
     run_mon $dir a --public-addr 127.0.0.1 || return 1
+    # check that erasure code plugins are preloaded
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
+    grep 'load: jerasure' $dir/a/log || return 1
     for id in $(seq 0 4) ; do
         run_osd $dir $id || return 1
     done
