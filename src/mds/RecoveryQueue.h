@@ -32,7 +32,8 @@ public:
 private:
   void _start(CInode *in);  ///< start recovering this file
 
-  std::set<CInode*> file_recover_queue;
+  std::set<CInode*> file_recover_queue;   ///< the queue
+  std::set<CInode*> file_recover_queue_front;  ///< elevated priority items
   std::set<CInode*> file_recovering;
   void _recovered(CInode *in, int r, uint64_t size, utime_t mtime);
   MDS *mds;

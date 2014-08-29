@@ -54,18 +54,27 @@ public:
 void RecoveryQueue::advance()
 {
   dout(10) << file_recover_queue.size() << " queued, "
+	   << file_recover_queue_front.size() << " prioritized, "
 	   << file_recovering.size() << " recovering" << dendl;
 
-  while (file_recovering.size() < g_conf->mds_max_file_recover &&
-	 !file_recover_queue.empty()) {
-    _start(*file_recover_queue.begin());
+  while (file_recovering.size() < g_conf->mds_max_file_recover) {
+    if (!file_recover_queue_front.empty()) {
+      CInode *in = *file_recover_queue_front.begin();
+      file_recover_queue_front.erase(file_recover_queue_front.begin());
+      file_recover_queue.erase(in);
+      _start(in);
+    } else if (!file_recover_queue.empty()) {
+      CInode *in = *file_recover_queue.begin();
+      file_recover_queue.erase(file_recover_queue.begin());
+      _start(in);
+    } else {
+      break;
+    }
   }
 }
 
 void RecoveryQueue::_start(CInode *in)
 {
-  file_recover_queue.erase(in);
-
   inode_t *pi = in->get_projected_inode();
 
   // blech
@@ -100,7 +109,7 @@ void RecoveryQueue::prioritize(CInode *in)
 
   if (file_recover_queue.count(in)) {
     dout(20) << *in << dendl;
-    _start(in);
+    file_recover_queue_front.insert(in);
     return;
   }
 
