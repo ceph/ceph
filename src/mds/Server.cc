@@ -903,7 +903,14 @@ void Server::submit_mdlog_entry(LogEvent *le, MDSInternalContextBase *fin, MDReq
  */
 void Server::respond_to_request(MDRequestRef& mdr, int r)
 {
-  reply_client_request(mdr, new MClientReply(mdr->client_request, r));
+  if (mdr->client_request) {
+    reply_client_request(mdr, new MClientReply(mdr->client_request, r));
+  } else if (mdr->internal_op > -1) {
+    dout(10) << "respond_to_request on internal request " << mdr << dendl;
+    if (!mdr->internal_op_finish)
+      assert(0 == "trying to respond to internal op without finisher");
+    mdr->internal_op_finish->complete(r);
+  }
 }
 
 void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
