@@ -13,3 +13,5 @@ tasks:
       snap_remove: 50
       rollback: 50
       copy_from: 50
+      setattr: 25
+      rmattr: 25
