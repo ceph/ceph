@@ -77,6 +77,37 @@ public:
   virtual void handle_response(int r, rgw_bucket_dir_header& header) = 0;
 };
 
+class BucketIndexShardsManager {
+private:
+  // Per shard setting manager, for example, marker.
+  map<string, string> value_by_shards;
+  const static char KEY_VALUE_SEPARATOR = '#';
+  const static char SHARDS_SEPARATOR = ',';
+public:
+  void add_item(const string& shard, const string& value) {
+    value_by_shards[shard] = value;
+  }
+  void to_string(string *out) const {
+    if (out) {
+      map<string, string>::const_iterator iter = value_by_shards.begin();
+      // No shards
+      if (value_by_shards.size() == 1) {
+        *out = iter->second;
+      } else {
+        for (; iter != value_by_shards.end(); ++iter) {
+          if (out->length()) {
+            // Not the first item, append a separator first
+            out->append(1, SHARDS_SEPARATOR);
+          }
+          out->append(iter->first);
+          out->append(1, KEY_VALUE_SEPARATOR);
+          out->append(iter->second);
+        }
+      }
+    }
+  }
+};
+
 /* bucket index */
 void cls_rgw_bucket_init(librados::ObjectWriteOperation& o);
 
@@ -92,7 +123,8 @@ void cls_rgw_bucket_init(librados::ObjectWriteOperation& o);
 int cls_rgw_bucket_index_init_op(librados::IoCtx &io_ctx,
         const vector<string>& bucket_objs, uint32_t max_aio);
 
-void cls_rgw_bucket_set_tag_timeout(librados::ObjectWriteOperation& o, uint64_t tag_timeout);
+int cls_rgw_bucket_set_tag_timeout(librados::IoCtx& io_ctx,
+    const vector<string>& bucket_objs, uint64_t tag_timeout, uint32_t max_aio);
 
 void cls_rgw_bucket_prepare_op(librados::ObjectWriteOperation& o, RGWModifyOp op, string& tag,
                                string& name, string& locator, bool log_op);
@@ -122,12 +154,22 @@ int cls_rgw_list_op(librados::IoCtx& io_ctx, const string & start_obj,
                     map<string, struct rgw_cls_list_ret>& list_results,
                     uint32_t max_aio);
 
-int cls_rgw_bucket_check_index_op(librados::IoCtx& io_ctx, string& oid,
-				  rgw_bucket_dir_header *existing_header,
-				  rgw_bucket_dir_header *calculated_header);
-int cls_rgw_bucket_rebuild_index_op(librados::IoCtx& io_ctx, string& oid);
+/**
+ * Check the bucket index.
+ *
+ * io_ctx          - IO context for rados.
+ * bucket_objs_ret - check result for all shards.
+ * max_aio         - the maximum number of AIO (for throttling).
+ *
+ * Return 0 on success, a failure code otherwise.
+ */
+int cls_rgw_bucket_check_index_op(librados::IoCtx& io_ctx,
+    map<string, struct rgw_cls_check_index_ret>& bucket_objs_ret, uint32_t max_aio);
+int cls_rgw_bucket_rebuild_index_op(librados::IoCtx& io_ctx, const vector<string>& bucket_objs,
+    uint32_t max_aio);
   
-int cls_rgw_get_dir_header(librados::IoCtx& io_ctx, string& oid, rgw_bucket_dir_header *header);
+int cls_rgw_get_dir_header(librados::IoCtx& io_ctx, map<string, rgw_cls_list_ret>& dir_headers,
+    uint32_t max_aio);
 int cls_rgw_get_dir_header_async(librados::IoCtx& io_ctx, string& oid, RGWGetDirHeader_CB *ctx);
 
 void cls_rgw_encode_suggestion(char op, rgw_bucket_dir_entry& dirent, bufferlist& updates);
