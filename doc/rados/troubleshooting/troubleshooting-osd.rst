@@ -134,6 +134,20 @@ If you start your cluster and an OSD won't start, check the following:
   actual mounts, you may have trouble starting OSDs. If you want to store the
   journal on a block device, you should partition your journal disk and assign
   one partition per OSD.
+  
+- **Check Max Threadcount:** If you have a node with a lot of OSDs, you may be
+  hitting the default maximum number of threads (e.g., usually 32k), especially
+  during recovery. You can increase the number of threads using ``sysctl`` to 
+  see if increasing the maximum number of threads to the maximum possible 
+  number of threads allowed (i.e.,  4194303) will help. For example:: 
+
+	sysctl -w kernel.pid_max=4194303
+
+  If increasing the maximum thread count resolves the issue, you can make it
+  permanent by including a ``kernel.pid_max`` setting in the 
+  ``/etc/sysctl.conf`` file. For example:: 
+
+	kernel.pid_max = 4194303
 
 - **Kernel Version:** Identify the kernel version and distribution you
   are using. Ceph uses some third party tools by default, which may be
@@ -145,6 +159,8 @@ If you start your cluster and an OSD won't start, check the following:
   (if it isn't already), and try again. If it segment faults again,
   contact the ceph-devel email list and provide your Ceph configuration
   file, your monitor output and the contents of your log file(s).
+  
+
 
 If you cannot resolve the issue and the email list isn't helpful, you may
 contact `Inktank`_ for support.
