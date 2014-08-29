@@ -11,7 +11,7 @@ To obtain a token from RADOS Gateway, you must create a user. For example::
 
 For details on RADOS Gateway administration, see `radosgw-admin`_. 
 
-.. _radosgw-admin: ../../man/8/radosgw-admin/ 
+.. _radosgw-admin: ../../../man/8/radosgw-admin/ 
 
 Auth Get
 --------
