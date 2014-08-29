@@ -4,6 +4,7 @@
  * Ceph distributed storage system
  *
  * Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -20,48 +21,48 @@
 #include "common/config.h"
 #include "include/stringify.h"
 #include "global/global_init.h"
-#include "erasure-code/LRC/ErasureCodeLRC.h"
+#include "erasure-code/lrc/ErasureCodeLrc.h"
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 
-TEST(ErasureCodeLRC, parse_ruleset)
+TEST(ErasureCodeLrc, parse_ruleset)
 {
-  ErasureCodeLRC LRC;
-  EXPECT_EQ("default", LRC.ruleset_root);
-  EXPECT_EQ("host", LRC.ruleset_steps.front().type);
+  ErasureCodeLrc lrc;
+  EXPECT_EQ("default", lrc.ruleset_root);
+  EXPECT_EQ("host", lrc.ruleset_steps.front().type);
 
   map<std::string,std::string> parameters;
   parameters["ruleset-root"] = "other";
-  EXPECT_EQ(0, LRC.parse_ruleset(parameters, &cerr));
-  EXPECT_EQ("other", LRC.ruleset_root);
+  EXPECT_EQ(0, lrc.parse_ruleset(parameters, &cerr));
+  EXPECT_EQ("other", lrc.ruleset_root);
 
   parameters["ruleset-steps"] = "[]";
-  EXPECT_EQ(0, LRC.parse_ruleset(parameters, &cerr));
-  EXPECT_TRUE(LRC.ruleset_steps.empty());
+  EXPECT_EQ(0, lrc.parse_ruleset(parameters, &cerr));
+  EXPECT_TRUE(lrc.ruleset_steps.empty());
 
   parameters["ruleset-steps"] = "0";
-  EXPECT_EQ(ERROR_LRC_ARRAY, LRC.parse_ruleset(parameters, &cerr));
+  EXPECT_EQ(ERROR_LRC_ARRAY, lrc.parse_ruleset(parameters, &cerr));
 
   parameters["ruleset-steps"] = "{";
-  EXPECT_EQ(ERROR_LRC_PARSE_JSON, LRC.parse_ruleset(parameters, &cerr));
+  EXPECT_EQ(ERROR_LRC_PARSE_JSON, lrc.parse_ruleset(parameters, &cerr));
 
   parameters["ruleset-steps"] = "[0]";
-  EXPECT_EQ(ERROR_LRC_ARRAY, LRC.parse_ruleset(parameters, &cerr));
+  EXPECT_EQ(ERROR_LRC_ARRAY, lrc.parse_ruleset(parameters, &cerr));
 
   parameters["ruleset-steps"] = "[[0]]";
-  EXPECT_EQ(ERROR_LRC_RULESET_OP, LRC.parse_ruleset(parameters, &cerr));
+  EXPECT_EQ(ERROR_LRC_RULESET_OP, lrc.parse_ruleset(parameters, &cerr));
 
   parameters["ruleset-steps"] = "[[\"choose\", 0]]";
-  EXPECT_EQ(ERROR_LRC_RULESET_TYPE, LRC.parse_ruleset(parameters, &cerr));
+  EXPECT_EQ(ERROR_LRC_RULESET_TYPE, lrc.parse_ruleset(parameters, &cerr));
 
   parameters["ruleset-steps"] = "[[\"choose\", \"host\", []]]";
-  EXPECT_EQ(ERROR_LRC_RULESET_N, LRC.parse_ruleset(parameters, &cerr));
+  EXPECT_EQ(ERROR_LRC_RULESET_N, lrc.parse_ruleset(parameters, &cerr));
 
   parameters["ruleset-steps"] = "[[\"choose\", \"host\", 2]]";
-  EXPECT_EQ(0, LRC.parse_ruleset(parameters, &cerr));
+  EXPECT_EQ(0, lrc.parse_ruleset(parameters, &cerr));
 
-  const ErasureCodeLRC::Step &step = LRC.ruleset_steps.front();
+  const ErasureCodeLrc::Step &step = lrc.ruleset_steps.front();
   EXPECT_EQ("choose", step.op);
   EXPECT_EQ("host", step.type);
   EXPECT_EQ(2, step.n);
@@ -71,16 +72,16 @@ TEST(ErasureCodeLRC, parse_ruleset)
     " [\"choose\", \"rack\", 2], "
     " [\"chooseleaf\", \"host\", 5], "
     "]";
-  EXPECT_EQ(0, LRC.parse_ruleset(parameters, &cerr));
-  EXPECT_EQ(2U, LRC.ruleset_steps.size());
+  EXPECT_EQ(0, lrc.parse_ruleset(parameters, &cerr));
+  EXPECT_EQ(2U, lrc.ruleset_steps.size());
   {
-    const ErasureCodeLRC::Step &step = LRC.ruleset_steps[0];
+    const ErasureCodeLrc::Step &step = lrc.ruleset_steps[0];
     EXPECT_EQ("choose", step.op);
     EXPECT_EQ("rack", step.type);
     EXPECT_EQ(2, step.n);
   }
   {
-    const ErasureCodeLRC::Step &step = LRC.ruleset_steps[1];
+    const ErasureCodeLrc::Step &step = lrc.ruleset_steps[1];
     EXPECT_EQ("chooseleaf", step.op);
     EXPECT_EQ("host", step.type);
     EXPECT_EQ(5, step.n);
@@ -127,8 +128,8 @@ TEST(ErasureCodeTest, create_ruleset)
     }
   }
 
-  ErasureCodeLRC LRC;
-  EXPECT_EQ(0, LRC.create_ruleset("rule1", *c, &cerr));
+  ErasureCodeLrc lrc;
+  EXPECT_EQ(0, lrc.create_ruleset("rule1", *c, &cerr));
 
   map<std::string,std::string> parameters;
   unsigned int racks = 2;
@@ -139,8 +140,8 @@ TEST(ErasureCodeTest, create_ruleset)
     " [\"chooseleaf\", \"host\", " + stringify(hosts) + "], "
     "]";
   const char *rule_name = "rule2";
-  EXPECT_EQ(0, LRC.parse_ruleset(parameters, &cerr));
-  EXPECT_EQ(1, LRC.create_ruleset(rule_name, *c, &cerr));
+  EXPECT_EQ(0, lrc.parse_ruleset(parameters, &cerr));
+  EXPECT_EQ(1, lrc.create_ruleset(rule_name, *c, &cerr));
 
   vector<__u32> weight;
   for (int o = 0; o < c->get_max_devices(); o++)
@@ -166,13 +167,13 @@ TEST(ErasureCodeTest, create_ruleset)
   EXPECT_EQ(second_rack, out[9] / num_host / num_osd);
 }
 
-TEST(ErasureCodeLRC, parse_kml)
+TEST(ErasureCodeLrc, parse_kml)
 {
-  ErasureCodeLRC LRC;
+  ErasureCodeLrc lrc;
   map<std::string,std::string> parameters;
-  EXPECT_EQ(0, LRC.parse_kml(parameters, &cerr));
+  EXPECT_EQ(0, lrc.parse_kml(parameters, &cerr));
   parameters["k"] = "4";
-  EXPECT_EQ(ERROR_LRC_ALL_OR_NOTHING, LRC.parse_kml(parameters, &cerr));
+  EXPECT_EQ(ERROR_LRC_ALL_OR_NOTHING, lrc.parse_kml(parameters, &cerr));
   const char *generated[] = { "mapping",
 			      "layers",
 			      "ruleset-steps" };
@@ -181,34 +182,34 @@ TEST(ErasureCodeLRC, parse_kml)
 
   for (int i = 0; i < 3; i++) {
     parameters[generated[i]] = "SET";
-    EXPECT_EQ(ERROR_LRC_GENERATED, LRC.parse_kml(parameters, &cerr));
+    EXPECT_EQ(ERROR_LRC_GENERATED, lrc.parse_kml(parameters, &cerr));
     parameters.erase(parameters.find(generated[i]));
   }
 
   parameters["k"] = "4";
   parameters["m"] = "2";
   parameters["l"] = "7";
-  EXPECT_EQ(ERROR_LRC_K_M_MODULO, LRC.parse_kml(parameters, &cerr));
+  EXPECT_EQ(ERROR_LRC_K_M_MODULO, lrc.parse_kml(parameters, &cerr));
 
   parameters["k"] = "3";
   parameters["m"] = "3";
   parameters["l"] = "3";
-  EXPECT_EQ(ERROR_LRC_K_MODULO, LRC.parse_kml(parameters, &cerr));
+  EXPECT_EQ(ERROR_LRC_K_MODULO, lrc.parse_kml(parameters, &cerr));
 
   parameters["k"] = "4";
   parameters["m"] = "2";
   parameters["l"] = "3";
-  EXPECT_EQ(0, LRC.parse_kml(parameters, &cerr));
+  EXPECT_EQ(0, lrc.parse_kml(parameters, &cerr));
   EXPECT_EQ("[ "
 	    " [ \"DDc_DDc_\", \"\" ],"
 	    " [ \"DDDc____\", \"\" ],"
 	    " [ \"____DDDc\", \"\" ],"
 	    "]", parameters["layers"]);
   EXPECT_EQ("DD__DD__", parameters["mapping"]);
-  EXPECT_EQ("chooseleaf", LRC.ruleset_steps[0].op);
-  EXPECT_EQ("host", LRC.ruleset_steps[0].type);
-  EXPECT_EQ(0, LRC.ruleset_steps[0].n);
-  EXPECT_EQ(1U, LRC.ruleset_steps.size());
+  EXPECT_EQ("chooseleaf", lrc.ruleset_steps[0].op);
+  EXPECT_EQ("host", lrc.ruleset_steps[0].type);
+  EXPECT_EQ(0, lrc.ruleset_steps[0].n);
+  EXPECT_EQ(1U, lrc.ruleset_steps.size());
   parameters.erase(parameters.find("mapping"));
   parameters.erase(parameters.find("layers"));
 
@@ -216,11 +217,11 @@ TEST(ErasureCodeLRC, parse_kml)
   parameters["m"] = "2";
   parameters["l"] = "3";
   parameters["ruleset-failure-domain"] = "osd";
-  EXPECT_EQ(0, LRC.parse_kml(parameters, &cerr));  
-  EXPECT_EQ("chooseleaf", LRC.ruleset_steps[0].op);
-  EXPECT_EQ("osd", LRC.ruleset_steps[0].type);
-  EXPECT_EQ(0, LRC.ruleset_steps[0].n);
-  EXPECT_EQ(1U, LRC.ruleset_steps.size());
+  EXPECT_EQ(0, lrc.parse_kml(parameters, &cerr));  
+  EXPECT_EQ("chooseleaf", lrc.ruleset_steps[0].op);
+  EXPECT_EQ("osd", lrc.ruleset_steps[0].type);
+  EXPECT_EQ(0, lrc.ruleset_steps[0].n);
+  EXPECT_EQ(1U, lrc.ruleset_steps.size());
   parameters.erase(parameters.find("mapping"));
   parameters.erase(parameters.find("layers"));
 
@@ -229,82 +230,82 @@ TEST(ErasureCodeLRC, parse_kml)
   parameters["l"] = "3";
   parameters["ruleset-failure-domain"] = "osd";
   parameters["ruleset-locality"] = "rack";
-  EXPECT_EQ(0, LRC.parse_kml(parameters, &cerr));  
-  EXPECT_EQ("choose", LRC.ruleset_steps[0].op);
-  EXPECT_EQ("rack", LRC.ruleset_steps[0].type);
-  EXPECT_EQ(2, LRC.ruleset_steps[0].n);
-  EXPECT_EQ("chooseleaf", LRC.ruleset_steps[1].op);
-  EXPECT_EQ("osd", LRC.ruleset_steps[1].type);
-  EXPECT_EQ(4, LRC.ruleset_steps[1].n);
-  EXPECT_EQ(2U, LRC.ruleset_steps.size());
+  EXPECT_EQ(0, lrc.parse_kml(parameters, &cerr));  
+  EXPECT_EQ("choose", lrc.ruleset_steps[0].op);
+  EXPECT_EQ("rack", lrc.ruleset_steps[0].type);
+  EXPECT_EQ(2, lrc.ruleset_steps[0].n);
+  EXPECT_EQ("chooseleaf", lrc.ruleset_steps[1].op);
+  EXPECT_EQ("osd", lrc.ruleset_steps[1].type);
+  EXPECT_EQ(4, lrc.ruleset_steps[1].n);
+  EXPECT_EQ(2U, lrc.ruleset_steps.size());
   parameters.erase(parameters.find("mapping"));
   parameters.erase(parameters.find("layers"));
 }
 
-TEST(ErasureCodeLRC, layers_description)
+TEST(ErasureCodeLrc, layers_description)
 {
-  ErasureCodeLRC LRC;
+  ErasureCodeLrc lrc;
   map<std::string,std::string> parameters;
 
   json_spirit::mArray description;
   EXPECT_EQ(ERROR_LRC_DESCRIPTION,
-	    LRC.layers_description(parameters, &description, &cerr));
+	    lrc.layers_description(parameters, &description, &cerr));
 
   {
     const char *description_string = "\"not an array\"";
     parameters["layers"] = description_string;
     EXPECT_EQ(ERROR_LRC_ARRAY,
-	      LRC.layers_description(parameters, &description, &cerr));
+	      lrc.layers_description(parameters, &description, &cerr));
   }
   {
     const char *description_string = "invalid json";
     parameters["layers"] = description_string;
     EXPECT_EQ(ERROR_LRC_PARSE_JSON,
-	      LRC.layers_description(parameters, &description, &cerr));
+	      lrc.layers_description(parameters, &description, &cerr));
   }
   {
     const char *description_string = "[]";
     parameters["layers"] = description_string;
-    EXPECT_EQ(0, LRC.layers_description(parameters, &description, &cerr));
+    EXPECT_EQ(0, lrc.layers_description(parameters, &description, &cerr));
   }
 }
 
-TEST(ErasureCodeLRC, layers_parse)
+TEST(ErasureCodeLrc, layers_parse)
 {
   {
-    ErasureCodeLRC LRC;
+    ErasureCodeLrc lrc;
     map<std::string,std::string> parameters;
 
     const char *description_string ="[ 0 ]";
     parameters["layers"] = description_string;
     json_spirit::mArray description;
-    EXPECT_EQ(0, LRC.layers_description(parameters, &description, &cerr));
+    EXPECT_EQ(0, lrc.layers_description(parameters, &description, &cerr));
     EXPECT_EQ(ERROR_LRC_ARRAY,
-	      LRC.layers_parse(description_string, description, &cerr));
+	      lrc.layers_parse(description_string, description, &cerr));
   }
 
   {
-    ErasureCodeLRC LRC;
+    ErasureCodeLrc lrc;
     map<std::string,std::string> parameters;
 
     const char *description_string ="[ [ 0 ] ]";
     parameters["layers"] = description_string;
     json_spirit::mArray description;
-    EXPECT_EQ(0, LRC.layers_description(parameters, &description, &cerr));
+    EXPECT_EQ(0, lrc.layers_description(parameters, &description, &cerr));
     EXPECT_EQ(ERROR_LRC_STR,
-	      LRC.layers_parse(description_string, description, &cerr));
+	      lrc.layers_parse(description_string, description, &cerr));
   }
 
   {
-    ErasureCodeLRC LRC;
+    ErasureCodeLrc lrc;
     map<std::string,std::string> parameters;
 
     const char *description_string ="[ [ \"\", 0 ] ]";
     parameters["layers"] = description_string;
     json_spirit::mArray description;
-    EXPECT_EQ(0, LRC.layers_description(parameters, &description, &cerr));
+    EXPECT_EQ(0, lrc.layers_description(parameters, &description, &cerr));
     EXPECT_EQ(ERROR_LRC_CONFIG_OPTIONS,
-	      LRC.layers_parse(description_string, description, &cerr));
+	      lrc.layers_parse(description_string, description, &cerr));
   }
 
   //
@@ -312,15 +313,15 @@ TEST(ErasureCodeLRC, layers_parse)
   // parameters.
   //
   {
-    ErasureCodeLRC LRC;
+    ErasureCodeLrc lrc;
     map<std::string,std::string> parameters;
 
     const char *description_string ="[ [ \"\", { \"a\": \"b\" }, \"ignored\" ] ]";
     parameters["layers"] = description_string;
     json_spirit::mArray description;
-    EXPECT_EQ(0, LRC.layers_description(parameters, &description, &cerr));
-    EXPECT_EQ(0, LRC.layers_parse(description_string, description, &cerr));
-    EXPECT_EQ("b", LRC.layers.front().parameters["a"]);
+    EXPECT_EQ(0, lrc.layers_description(parameters, &description, &cerr));
+    EXPECT_EQ(0, lrc.layers_parse(description_string, description, &cerr));
+    EXPECT_EQ("b", lrc.layers.front().parameters["a"]);
   }
 
   //
@@ -328,24 +329,24 @@ TEST(ErasureCodeLRC, layers_parse)
   // parameters.
   //
   {
-    ErasureCodeLRC LRC;
+    ErasureCodeLrc lrc;
     map<std::string,std::string> parameters;
 
     const char *description_string ="[ [ \"\", \"a=b c=d\" ] ]";
     parameters["layers"] = description_string;
     json_spirit::mArray description;
-    EXPECT_EQ(0, LRC.layers_description(parameters, &description, &cerr));
-    EXPECT_EQ(0, LRC.layers_parse(description_string, description, &cerr));
-    EXPECT_EQ("b", LRC.layers.front().parameters["a"]);
-    EXPECT_EQ("d", LRC.layers.front().parameters["c"]);
+    EXPECT_EQ(0, lrc.layers_description(parameters, &description, &cerr));
+    EXPECT_EQ(0, lrc.layers_parse(description_string, description, &cerr));
+    EXPECT_EQ("b", lrc.layers.front().parameters["a"]);
+    EXPECT_EQ("d", lrc.layers.front().parameters["c"]);
   }
 
 }
 
-TEST(ErasureCodeLRC, layers_sanity_checks)
+TEST(ErasureCodeLrc, layers_sanity_checks)
 {
   {
-    ErasureCodeLRC LRC;
+    ErasureCodeLrc lrc;
     map<std::string,std::string> parameters;
     parameters["mapping"] =
 	    "__DDD__DD";
@@ -357,29 +358,29 @@ TEST(ErasureCodeLRC, layers_sanity_checks)
       "  [ \"_____cDDD\", \"\" ],"
       "]";
     parameters["layers"] = description_string;
-    EXPECT_EQ(0, LRC.init(parameters, &cerr));
+    EXPECT_EQ(0, lrc.init(parameters, &cerr));
   }
   {
-    ErasureCodeLRC LRC;
+    ErasureCodeLrc lrc;
     map<std::string,std::string> parameters;
     const char *description_string =
       "[ "
       "]";
     parameters["layers"] = description_string;
-    EXPECT_EQ(ERROR_LRC_MAPPING, LRC.init(parameters, &cerr));
+    EXPECT_EQ(ERROR_LRC_MAPPING, lrc.init(parameters, &cerr));
   }
   {
-    ErasureCodeLRC LRC;
+    ErasureCodeLrc lrc;
     map<std::string,std::string> parameters;
     parameters["mapping"] = "";
     const char *description_string =
       "[ "
       "]";
     parameters["layers"] = description_string;
-    EXPECT_EQ(ERROR_LRC_LAYERS_COUNT, LRC.init(parameters, &cerr));
+    EXPECT_EQ(ERROR_LRC_LAYERS_COUNT, lrc.init(parameters, &cerr));
   }
   {
-    ErasureCodeLRC LRC;
+    ErasureCodeLrc lrc;
     map<std::string,std::string> parameters;
     parameters["directory"] = ".libs";
     parameters["mapping"] =
@@ -391,14 +392,14 @@ TEST(ErasureCodeLRC, layers_sanity_checks)
       "  [ \"AA\", \"\" ], "
       "]";
     parameters["layers"] = description_string;
-    EXPECT_EQ(ERROR_LRC_MAPPING_SIZE, LRC.init(parameters, &cerr));
+    EXPECT_EQ(ERROR_LRC_MAPPING_SIZE, lrc.init(parameters, &cerr));
   }
 }
 
-TEST(ErasureCodeLRC, layers_init)
+TEST(ErasureCodeLrc, layers_init)
 {
   {
-    ErasureCodeLRC LRC;
+    ErasureCodeLrc lrc;
     map<std::string,std::string> parameters;
 
     const char *description_string =
@@ -408,19 +409,19 @@ TEST(ErasureCodeLRC, layers_init)
     parameters["layers"] = description_string;
     parameters["directory"] = ".libs";
     json_spirit::mArray description;
-    EXPECT_EQ(0, LRC.layers_description(parameters, &description, &cerr));
-    EXPECT_EQ(0, LRC.layers_parse(description_string, description, &cerr));
-    EXPECT_EQ(0, LRC.layers_init());
-    EXPECT_EQ("5", LRC.layers.front().parameters["k"]);
-    EXPECT_EQ("2", LRC.layers.front().parameters["m"]);
-    EXPECT_EQ("jerasure", LRC.layers.front().parameters["plugin"]);
-    EXPECT_EQ("reed_sol_van", LRC.layers.front().parameters["technique"]);
+    EXPECT_EQ(0, lrc.layers_description(parameters, &description, &cerr));
+    EXPECT_EQ(0, lrc.layers_parse(description_string, description, &cerr));
+    EXPECT_EQ(0, lrc.layers_init());
+    EXPECT_EQ("5", lrc.layers.front().parameters["k"]);
+    EXPECT_EQ("2", lrc.layers.front().parameters["m"]);
+    EXPECT_EQ("jerasure", lrc.layers.front().parameters["plugin"]);
+    EXPECT_EQ("reed_sol_van", lrc.layers.front().parameters["technique"]);
   }
 }
 
-TEST(ErasureCodeLRC, init)
+TEST(ErasureCodeLrc, init)
 {
-  ErasureCodeLRC LRC;
+  ErasureCodeLrc lrc;
   map<std::string,std::string> parameters;
   parameters["mapping"] =
     "__DDD__DD";
@@ -432,26 +433,26 @@ TEST(ErasureCodeLRC, init)
     "]";
   parameters["layers"] = description_string;
   parameters["directory"] = ".libs";
-  EXPECT_EQ(0, LRC.init(parameters, &cerr));
+  EXPECT_EQ(0, lrc.init(parameters, &cerr));
 }
 
-TEST(ErasureCodeLRC, init_kml)
+TEST(ErasureCodeLrc, init_kml)
 {
-  ErasureCodeLRC LRC;
+  ErasureCodeLrc lrc;
   map<std::string,std::string> parameters;
   parameters["k"] = "4";
   parameters["m"] = "2";
   parameters["l"] = "3";
   parameters["directory"] = ".libs";
-  EXPECT_EQ(0, LRC.init(parameters, &cerr));
-  EXPECT_EQ((unsigned int)(4 + 2 + (4 + 2) / 3), LRC.get_chunk_count());
+  EXPECT_EQ(0, lrc.init(parameters, &cerr));
+  EXPECT_EQ((unsigned int)(4 + 2 + (4 + 2) / 3), lrc.get_chunk_count());
 }
 
-TEST(ErasureCodeLRC, minimum_to_decode)
+TEST(ErasureCodeLrc, minimum_to_decode)
 {
   // trivial : no erasures, the minimum is want_to_read
   {
-    ErasureCodeLRC LRC;
+    ErasureCodeLrc lrc;
     map<std::string,std::string> parameters;
     parameters["mapping"] =
       "__DDD__DD";
@@ -463,19 +464,19 @@ TEST(ErasureCodeLRC, minimum_to_decode)
       "]";
     parameters["layers"] = description_string;
     parameters["directory"] = ".libs";
-    EXPECT_EQ(0, LRC.init(parameters, &cerr));
+    EXPECT_EQ(0, lrc.init(parameters, &cerr));
     set<int> want_to_read;
     want_to_read.insert(1);
     set<int> available_chunks;
     available_chunks.insert(1);
     available_chunks.insert(2);
     set<int> minimum;
-    EXPECT_EQ(0, LRC.minimum_to_decode(want_to_read, available_chunks, &minimum));
+    EXPECT_EQ(0, lrc.minimum_to_decode(want_to_read, available_chunks, &minimum));
     EXPECT_EQ(want_to_read, minimum);
   }
   // locally repairable erasure
   {
-    ErasureCodeLRC LRC;
+    ErasureCodeLrc lrc;
     map<std::string,std::string> parameters;
     parameters["mapping"] =
 	    "__DDD__DD_";
@@ -488,20 +489,20 @@ TEST(ErasureCodeLRC, minimum_to_decode)
       "]";
     parameters["layers"] = description_string;
     parameters["directory"] = ".libs";
-    EXPECT_EQ(0, LRC.init(parameters, &cerr));
+    EXPECT_EQ(0, lrc.init(parameters, &cerr));
     EXPECT_EQ(parameters["mapping"].length(),
-	      LRC.get_chunk_count());
+	      lrc.get_chunk_count());
     {
       // want to read the last chunk
       set<int> want_to_read;
-      want_to_read.insert(LRC.get_chunk_count() - 1);
+      want_to_read.insert(lrc.get_chunk_count() - 1);
       // all chunks are available except the last chunk
       set<int> available_chunks;
-      for (int i = 0; i < (int)LRC.get_chunk_count() - 1; i++)
+      for (int i = 0; i < (int)lrc.get_chunk_count() - 1; i++)
 	available_chunks.insert(i);
       // _____DDDDc can recover c
       set<int> minimum;
-      EXPECT_EQ(0, LRC.minimum_to_decode(want_to_read, available_chunks, &minimum));
+      EXPECT_EQ(0, lrc.minimum_to_decode(want_to_read, available_chunks, &minimum));
       set<int> expected_minimum;
       expected_minimum.insert(5);
       expected_minimum.insert(6);
@@ -513,10 +514,10 @@ TEST(ErasureCodeLRC, minimum_to_decode)
       set<int> want_to_read;
       want_to_read.insert(0);
       set<int> available_chunks;
-      for (int i = 1; i < (int)LRC.get_chunk_count(); i++)
+      for (int i = 1; i < (int)lrc.get_chunk_count(); i++)
 	available_chunks.insert(i);
       set<int> minimum;
-      EXPECT_EQ(0, LRC.minimum_to_decode(want_to_read, available_chunks, &minimum));
+      EXPECT_EQ(0, lrc.minimum_to_decode(want_to_read, available_chunks, &minimum));
       set<int> expected_minimum;
       expected_minimum.insert(2);
       expected_minimum.insert(3);
@@ -526,7 +527,7 @@ TEST(ErasureCodeLRC, minimum_to_decode)
   }
   // implicit parity required
   {
-    ErasureCodeLRC LRC;
+    ErasureCodeLrc lrc;
     map<std::string,std::string> parameters;
     parameters["mapping"] =
 	    "__DDD__DD";
@@ -538,9 +539,9 @@ TEST(ErasureCodeLRC, minimum_to_decode)
       "]";
     parameters["layers"] = description_string;
     parameters["directory"] = ".libs";
-    EXPECT_EQ(0, LRC.init(parameters, &cerr));
+    EXPECT_EQ(0, lrc.init(parameters, &cerr));
     EXPECT_EQ(parameters["mapping"].length(),
-	      LRC.get_chunk_count());
+	      lrc.get_chunk_count());
     set<int> want_to_read;
     want_to_read.insert(8);
     //
@@ -558,7 +559,7 @@ TEST(ErasureCodeLRC, minimum_to_decode)
       // missing             (7)
       // missing             (8)
       set<int> minimum;
-      EXPECT_EQ(-EIO, LRC.minimum_to_decode(want_to_read, available_chunks, &minimum));
+      EXPECT_EQ(-EIO, lrc.minimum_to_decode(want_to_read, available_chunks, &minimum));
     }
     //
     // We want to read chunk 8 and encoding was done with
@@ -597,15 +598,15 @@ TEST(ErasureCodeLRC, minimum_to_decode)
       // missing             (7)
       // missing             (8)
       set<int> minimum;
-      EXPECT_EQ(0, LRC.minimum_to_decode(want_to_read, available_chunks, &minimum));
+      EXPECT_EQ(0, lrc.minimum_to_decode(want_to_read, available_chunks, &minimum));
       EXPECT_EQ(available_chunks, minimum);
     }
   }
 }
 
-TEST(ErasureCodeLRC, encode_decode)
+TEST(ErasureCodeLrc, encode_decode)
 {
-  ErasureCodeLRC LRC;
+  ErasureCodeLrc lrc;
   map<std::string,std::string> parameters;
   parameters["mapping"] =
     "__DD__DD";
@@ -617,28 +618,28 @@ TEST(ErasureCodeLRC, encode_decode)
     "]";
   parameters["layers"] = description_string;
   parameters["directory"] = ".libs";
-  EXPECT_EQ(0, LRC.init(parameters, &cerr));
-  EXPECT_EQ(4U, LRC.get_data_chunk_count());
+  EXPECT_EQ(0, lrc.init(parameters, &cerr));
+  EXPECT_EQ(4U, lrc.get_data_chunk_count());
   unsigned int stripe_width = g_conf->osd_pool_erasure_code_stripe_width;
-  unsigned int chunk_size = stripe_width / LRC.get_data_chunk_count();
-  EXPECT_EQ(chunk_size, LRC.get_chunk_size(stripe_width));
+  unsigned int chunk_size = stripe_width / lrc.get_data_chunk_count();
+  EXPECT_EQ(chunk_size, lrc.get_chunk_size(stripe_width));
   set<int> want_to_encode;
   map<int, bufferlist> encoded;
-  for (unsigned int i = 0; i < LRC.get_chunk_count(); ++i) {
+  for (unsigned int i = 0; i < lrc.get_chunk_count(); ++i) {
     want_to_encode.insert(i);
     bufferptr ptr(buffer::create_page_aligned(chunk_size));
     encoded[i].push_front(ptr);
   }
-  const vector<int> &mapping = LRC.get_chunk_mapping();
+  const vector<int> &mapping = lrc.get_chunk_mapping();
   char c = 'A';
-  for (unsigned int i = 0; i < LRC.get_data_chunk_count(); i++) {
+  for (unsigned int i = 0; i < lrc.get_data_chunk_count(); i++) {
     int j = mapping[i];
     string s(chunk_size, c);
     encoded[j].clear();
     encoded[j].append(s);
     c++;
   }
-  EXPECT_EQ(0, LRC.encode_chunks(want_to_encode, &encoded));
+  EXPECT_EQ(0, lrc.encode_chunks(want_to_encode, &encoded));
 
   {
     map<int, bufferlist> chunks;
@@ -652,14 +653,14 @@ TEST(ErasureCodeLRC, encode_decode)
     available_chunks.insert(5);
     available_chunks.insert(6);
     set<int> minimum;
-    EXPECT_EQ(0, LRC.minimum_to_decode(want_to_read, available_chunks, &minimum));
+    EXPECT_EQ(0, lrc.minimum_to_decode(want_to_read, available_chunks, &minimum));
     // only need three chunks from the second local layer
     EXPECT_EQ(3U, minimum.size()); 
     EXPECT_EQ(1U, minimum.count(4));
     EXPECT_EQ(1U, minimum.count(5));
     EXPECT_EQ(1U, minimum.count(6));
     map<int, bufferlist> decoded;
-    EXPECT_EQ(0, LRC.decode(want_to_read, chunks, &decoded));
+    EXPECT_EQ(0, lrc.decode(want_to_read, chunks, &decoded));
     string s(chunk_size, 'D');
     EXPECT_EQ(s, string(decoded[7].c_str(), chunk_size));
   }
@@ -679,12 +680,12 @@ TEST(ErasureCodeLRC, encode_decode)
     available_chunks.insert(6);
     available_chunks.insert(7);
     set<int> minimum;
-    EXPECT_EQ(0, LRC.minimum_to_decode(want_to_read, available_chunks, &minimum));
+    EXPECT_EQ(0, lrc.minimum_to_decode(want_to_read, available_chunks, &minimum));
     EXPECT_EQ(5U, minimum.size()); 
     EXPECT_EQ(available_chunks, minimum);
 
     map<int, bufferlist> decoded;
-    EXPECT_EQ(0, LRC.decode(want_to_read, encoded, &decoded));
+    EXPECT_EQ(0, lrc.decode(want_to_read, encoded, &decoded));
     string s(chunk_size, 'A');
     EXPECT_EQ(s, string(decoded[2].c_str(), chunk_size));
   }
@@ -705,7 +706,7 @@ TEST(ErasureCodeLRC, encode_decode)
     encoded.erase(3);
     encoded.erase(6);
     set<int> minimum;
-    EXPECT_EQ(0, LRC.minimum_to_decode(want_to_read, available_chunks, &minimum));
+    EXPECT_EQ(0, lrc.minimum_to_decode(want_to_read, available_chunks, &minimum));
     EXPECT_EQ(4U, minimum.size()); 
     // only need two chunks from the first local layer
     EXPECT_EQ(1U, minimum.count(0));
@@ -718,7 +719,7 @@ TEST(ErasureCodeLRC, encode_decode)
     EXPECT_EQ(1U, minimum.count(5));
 
     map<int, bufferlist> decoded;
-    EXPECT_EQ(0, LRC.decode(want_to_read, encoded, &decoded));
+    EXPECT_EQ(0, lrc.decode(want_to_read, encoded, &decoded));
     {
       string s(chunk_size, 'B');
       EXPECT_EQ(s, string(decoded[3].c_str(), chunk_size));
@@ -734,9 +735,9 @@ TEST(ErasureCodeLRC, encode_decode)
   }
 }
 
-TEST(ErasureCodeLRC, encode_decode_2)
+TEST(ErasureCodeLrc, encode_decode_2)
 {
-  ErasureCodeLRC LRC;
+  ErasureCodeLrc lrc;
   map<std::string,std::string> parameters;
   parameters["mapping"] =
     "DD__DD__";
@@ -748,28 +749,28 @@ TEST(ErasureCodeLRC, encode_decode_2)
     "]";
   parameters["layers"] = description_string;
   parameters["directory"] = ".libs";
-  EXPECT_EQ(0, LRC.init(parameters, &cerr));
-  EXPECT_EQ(4U, LRC.get_data_chunk_count());
+  EXPECT_EQ(0, lrc.init(parameters, &cerr));
+  EXPECT_EQ(4U, lrc.get_data_chunk_count());
   unsigned int stripe_width = g_conf->osd_pool_erasure_code_stripe_width;
-  unsigned int chunk_size = stripe_width / LRC.get_data_chunk_count();
-  EXPECT_EQ(chunk_size, LRC.get_chunk_size(stripe_width));
+  unsigned int chunk_size = stripe_width / lrc.get_data_chunk_count();
+  EXPECT_EQ(chunk_size, lrc.get_chunk_size(stripe_width));
   set<int> want_to_encode;
   map<int, bufferlist> encoded;
-  for (unsigned int i = 0; i < LRC.get_chunk_count(); ++i) {
+  for (unsigned int i = 0; i < lrc.get_chunk_count(); ++i) {
     want_to_encode.insert(i);
     bufferptr ptr(buffer::create_page_aligned(chunk_size));
     encoded[i].push_front(ptr);
   }
-  const vector<int> &mapping = LRC.get_chunk_mapping();
+  const vector<int> &mapping = lrc.get_chunk_mapping();
   char c = 'A';
-  for (unsigned int i = 0; i < LRC.get_data_chunk_count(); i++) {
+  for (unsigned int i = 0; i < lrc.get_data_chunk_count(); i++) {
     int j = mapping[i];
     string s(chunk_size, c);
     encoded[j].clear();
     encoded[j].append(s);
     c++;
   }
-  EXPECT_EQ(0, LRC.encode_chunks(want_to_encode, &encoded));
+  EXPECT_EQ(0, lrc.encode_chunks(want_to_encode, &encoded));
 
   {
     set<int> want_to_read;
@@ -789,7 +790,7 @@ TEST(ErasureCodeLRC, encode_decode_2)
     available_chunks.insert(6);
     available_chunks.insert(7);
     set<int> minimum;
-    EXPECT_EQ(0, LRC.minimum_to_decode(want_to_read, available_chunks, &minimum));
+    EXPECT_EQ(0, lrc.minimum_to_decode(want_to_read, available_chunks, &minimum));
     EXPECT_EQ(4U, minimum.size()); 
     EXPECT_EQ(1U, minimum.count(1));
     EXPECT_EQ(1U, minimum.count(4));
@@ -797,13 +798,13 @@ TEST(ErasureCodeLRC, encode_decode_2)
     EXPECT_EQ(1U, minimum.count(6));
 
     map<int, bufferlist> decoded;
-    EXPECT_EQ(0, LRC.decode(want_to_read, chunks, &decoded));
+    EXPECT_EQ(0, lrc.decode(want_to_read, chunks, &decoded));
     string s(chunk_size, 'A');
     EXPECT_EQ(s, string(decoded[0].c_str(), chunk_size));
   }
   {
     set<int> want_to_read;
-    for (unsigned int i = 0; i < LRC.get_chunk_count(); i++)
+    for (unsigned int i = 0; i < lrc.get_chunk_count(); i++)
       want_to_read.insert(i);
     map<int, bufferlist> chunks;
     chunks[1] = encoded[1];
@@ -818,7 +819,7 @@ TEST(ErasureCodeLRC, encode_decode_2)
     available_chunks.insert(6);
     available_chunks.insert(7);
     set<int> minimum;
-    EXPECT_EQ(0, LRC.minimum_to_decode(want_to_read, available_chunks, &minimum));
+    EXPECT_EQ(0, lrc.minimum_to_decode(want_to_read, available_chunks, &minimum));
     EXPECT_EQ(5U, minimum.size()); 
     EXPECT_EQ(1U, minimum.count(1));
     EXPECT_EQ(1U, minimum.count(3));
@@ -827,7 +828,7 @@ TEST(ErasureCodeLRC, encode_decode_2)
     EXPECT_EQ(1U, minimum.count(7));
 
     map<int, bufferlist> decoded;
-    EXPECT_EQ(0, LRC.decode(want_to_read, chunks, &decoded));
+    EXPECT_EQ(0, lrc.decode(want_to_read, chunks, &decoded));
     {
       string s(chunk_size, 'A');
       EXPECT_EQ(s, string(decoded[0].c_str(), chunk_size));
@@ -847,7 +848,7 @@ TEST(ErasureCodeLRC, encode_decode_2)
   }
   {
     set<int> want_to_read;
-    for (unsigned int i = 0; i < LRC.get_chunk_count(); i++)
+    for (unsigned int i = 0; i < lrc.get_chunk_count(); i++)
       want_to_read.insert(i);
     map<int, bufferlist> chunks;
     chunks[1] = encoded[1];
@@ -862,7 +863,7 @@ TEST(ErasureCodeLRC, encode_decode_2)
     available_chunks.insert(6);
     available_chunks.insert(7);
     set<int> minimum;
-    EXPECT_EQ(0, LRC.minimum_to_decode(want_to_read, available_chunks, &minimum));
+    EXPECT_EQ(0, lrc.minimum_to_decode(want_to_read, available_chunks, &minimum));
     EXPECT_EQ(5U, minimum.size()); 
     EXPECT_EQ(1U, minimum.count(1));
     EXPECT_EQ(1U, minimum.count(3));
@@ -871,7 +872,7 @@ TEST(ErasureCodeLRC, encode_decode_2)
     EXPECT_EQ(1U, minimum.count(7));
 
     map<int, bufferlist> decoded;
-    EXPECT_EQ(0, LRC.decode(want_to_read, chunks, &decoded));
+    EXPECT_EQ(0, lrc.decode(want_to_read, chunks, &decoded));
     {
       string s(chunk_size, 'A');
       EXPECT_EQ(s, string(decoded[0].c_str(), chunk_size));
@@ -905,11 +906,11 @@ TEST(ErasureCodeLRC, encode_decode_2)
     available_chunks.insert(5);
     available_chunks.insert(7);
     set<int> minimum;
-    EXPECT_EQ(0, LRC.minimum_to_decode(want_to_read, available_chunks, &minimum));
+    EXPECT_EQ(0, lrc.minimum_to_decode(want_to_read, available_chunks, &minimum));
     EXPECT_EQ(available_chunks, minimum); 
 
     map<int, bufferlist> decoded;
-    EXPECT_EQ(0, LRC.decode(want_to_read, chunks, &decoded));
+    EXPECT_EQ(0, lrc.decode(want_to_read, chunks, &decoded));
   }
 }
 
@@ -929,7 +930,7 @@ int main(int argc, char **argv)
  * Local Variables:
  * compile-command: "cd ../.. ;
  *   make -j4 && valgrind --tool=memcheck --leak-check=full \
- *      ./unittest_erasure_code_LRC \
+ *      ./unittest_erasure_code_lrc \
  *      --gtest_filter=*.* --log-to-stderr=true --debug-osd=20"
  * End:
  */

@@ -4,6 +4,7 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -25,7 +26,7 @@
 #include "erasure-code/ErasureCodePlugin.h"
 #include "json_spirit/json_spirit_writer.h"
 
-#include "ErasureCodeLRC.h"
+#include "ErasureCodeLrc.h"
 
 // re-include our assert to clobber boost's
 #include "include/assert.h"
@@ -36,10 +37,10 @@
 
 static ostream& _prefix(std::ostream* _dout)
 {
-  return *_dout << "ErasureCodeLRC: ";
+  return *_dout << "ErasureCodeLrc: ";
 }
 
-int ErasureCodeLRC::create_ruleset(const string &name,
+int ErasureCodeLrc::create_ruleset(const string &name,
 				   CrushWrapper &crush,
 				   ostream *ss) const
 {
@@ -92,7 +93,7 @@ int ErasureCodeLRC::create_ruleset(const string &name,
   return ruleset;
 }
 
-int ErasureCodeLRC::layers_description(const map<string,string> &parameters,
+int ErasureCodeLrc::layers_description(const map<string,string> &parameters,
 				       json_spirit::mArray *description,
 				       ostream *ss) const
 {
@@ -121,7 +122,7 @@ int ErasureCodeLRC::layers_description(const map<string,string> &parameters,
   return 0;
 }
 
-int ErasureCodeLRC::layers_parse(string description_string,
+int ErasureCodeLrc::layers_parse(string description_string,
 				 json_spirit::mArray description,
 				 ostream *ss)
 {
@@ -191,7 +192,7 @@ int ErasureCodeLRC::layers_parse(string description_string,
   return 0;
 } 
 
-int ErasureCodeLRC::layers_init()
+int ErasureCodeLrc::layers_init()
 {
   ErasureCodePluginRegistry &registry = ErasureCodePluginRegistry::instance();
   int err;
@@ -235,7 +236,7 @@ int ErasureCodeLRC::layers_init()
   return 0;
 }
 
-int ErasureCodeLRC::layers_sanity_checks(string description_string,
+int ErasureCodeLrc::layers_sanity_checks(string description_string,
 					 ostream *ss) const
 {
   int position = 0;
@@ -264,7 +265,7 @@ int ErasureCodeLRC::layers_sanity_checks(string description_string,
   return 0;
 }
 
-int ErasureCodeLRC::parse(const map<string,string> &parameters,
+int ErasureCodeLrc::parse(const map<string,string> &parameters,
 			  ostream *ss)
 {
   int r = ErasureCode::parse(parameters, ss);
@@ -277,7 +278,7 @@ int ErasureCodeLRC::parse(const map<string,string> &parameters,
   return parse_ruleset(parameters, ss);
 }
 
-int ErasureCodeLRC::parse_kml(map<string,string> &parameters,
+int ErasureCodeLrc::parse_kml(map<string,string> &parameters,
 			      ostream *ss)
 {
   int err = ErasureCode::parse(parameters, ss);
@@ -383,7 +384,7 @@ int ErasureCodeLRC::parse_kml(map<string,string> &parameters,
   return 0;
 }
 
-int ErasureCodeLRC::parse_ruleset(const map<string,string> &parameters,
+int ErasureCodeLrc::parse_ruleset(const map<string,string> &parameters,
 				  ostream *ss)
 {
   map<string,string>::const_iterator parameter;
@@ -434,7 +435,7 @@ int ErasureCodeLRC::parse_ruleset(const map<string,string> &parameters,
   return 0;
 }
 
-int ErasureCodeLRC::parse_ruleset_step(string description_string,
+int ErasureCodeLrc::parse_ruleset_step(string description_string,
 				       json_spirit::mArray description,
 				       ostream *ss)
 {
@@ -474,7 +475,7 @@ int ErasureCodeLRC::parse_ruleset_step(string description_string,
   return 0;
 }
 
-int ErasureCodeLRC::init(const map<string,string> &parameters,
+int ErasureCodeLrc::init(const map<string,string> &parameters,
 			 ostream *ss)
 {
   int r;
@@ -520,7 +521,7 @@ int ErasureCodeLRC::init(const map<string,string> &parameters,
   return layers_sanity_checks(description_string, ss);
 }
 
-set<int> ErasureCodeLRC::get_erasures(const set<int> &want,
+set<int> ErasureCodeLrc::get_erasures(const set<int> &want,
 				      const set<int> &available) const
 {
   set<int> result;
@@ -530,14 +531,14 @@ set<int> ErasureCodeLRC::get_erasures(const set<int> &want,
   return result;
 }
 
-unsigned int ErasureCodeLRC::get_chunk_size(unsigned int object_size) const
+unsigned int ErasureCodeLrc::get_chunk_size(unsigned int object_size) const
 {
   return layers.front().erasure_code->get_chunk_size(object_size);
 }
 
 void p(const set<int> &s) { cerr << s; } // for gdb
 
-int ErasureCodeLRC::minimum_to_decode(const set<int> &want_to_read,
+int ErasureCodeLrc::minimum_to_decode(const set<int> &want_to_read,
 				      const set<int> &available_chunks,
 				      set<int> *minimum)
 {
@@ -709,7 +710,7 @@ int ErasureCodeLRC::minimum_to_decode(const set<int> &want_to_read,
   return -EIO;
 }
 
-int ErasureCodeLRC::encode_chunks(const set<int> &want_to_encode,
+int ErasureCodeLrc::encode_chunks(const set<int> &want_to_encode,
 				  map<int, bufferlist> *encoded)
 {
   unsigned int top = layers.size();
@@ -747,7 +748,7 @@ int ErasureCodeLRC::encode_chunks(const set<int> &want_to_encode,
   return 0;
 }
 
-int ErasureCodeLRC::decode_chunks(const set<int> &want_to_read,
+int ErasureCodeLrc::decode_chunks(const set<int> &want_to_read,
 				  const map<int, bufferlist> &chunks,
 				  map<int, bufferlist> *decoded)
 {
