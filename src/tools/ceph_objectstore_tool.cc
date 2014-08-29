@@ -2149,7 +2149,7 @@ int main(int argc, char **argv)
   if (op == "list-lost" || op == "fix-lost") {
     unsigned LIST_AT_A_TIME = 100;
     unsigned scanned = 0;
-    int r;
+    int r = 0;
     vector<coll_t> colls_to_check;
     if (pgidstr.length()) {
       colls_to_check.push_back(coll_t(pgid));
