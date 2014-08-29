@@ -141,13 +141,50 @@ int cls_rgw_bucket_index_init_op(librados::IoCtx& io_ctx,
   return ret;
 }
 
-void cls_rgw_bucket_set_tag_timeout(ObjectWriteOperation& o, uint64_t tag_timeout)
-{
+static bool issue_bucket_set_tag_timeout_op(librados::IoCtx& io_ctx,
+    const string& oid, uint64_t timeout, BucketIndexAioManager *manager) {
   bufferlist in;
   struct rgw_cls_tag_timeout_op call;
-  call.tag_timeout = tag_timeout;
+  call.tag_timeout = timeout;
   ::encode(call, in);
-  o.exec("rgw", "bucket_set_tag_timeout", in);
+  ObjectWriteOperation op;
+  op.exec("rgw", "bucket_set_tag_timeout", in);
+  BucketIndexAioArg *arg = new BucketIndexAioArg(manager->get_next(), manager);
+  AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, NULL, bucket_index_op_completion_cb);
+  int r = io_ctx.aio_operate(oid, c, &op);
+  if (r >= 0) {
+    manager->add_pending(arg->id, c);
+  }
+  return r;
+}
+
+int cls_rgw_bucket_set_tag_timeout(librados::IoCtx& io_ctx, const vector<string>& bucket_objs,
+    uint64_t tag_timeout, uint32_t max_aio)
+{
+  int ret = 0;
+  vector<string>::const_iterator iter = bucket_objs.begin();
+  BucketIndexAioManager manager;
+  for (; iter != bucket_objs.end() && max_aio-- > 0; ++iter) {
+    ret = issue_bucket_set_tag_timeout_op(io_ctx, *iter, tag_timeout, &manager);
+    if (ret < 0)
+      break;
+  }
+
+  int num_completions, r = 0;
+  while (manager.wait_for_completions(0, &num_completions, &r)) {
+    if (r >= 0 && ret >= 0) {
+      for(int i = 0; i < num_completions && iter != bucket_objs.end(); ++i, ++iter) {
+        int issue_ret = issue_bucket_set_tag_timeout_op(io_ctx, *iter, tag_timeout, &manager);
+        if(issue_ret < 0) {
+          ret = issue_ret;
+          break;
+        }
+      }
+    } else if (ret >= 0) {
+      ret = r;
+    }
+  }
+  return ret;
 }
 
 void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, string& tag,
@@ -236,39 +273,91 @@ int cls_rgw_list_op(IoCtx& io_ctx, const string& start_obj,
   return ret;
 }
 
-int cls_rgw_bucket_check_index_op(IoCtx& io_ctx, string& oid,
-				  rgw_bucket_dir_header *existing_header,
-				  rgw_bucket_dir_header *calculated_header)
-{
-  bufferlist in, out;
-  int r = io_ctx.exec(oid, "rgw", "bucket_check_index", in, out);
-  if (r < 0)
-    return r;
-
-  struct rgw_cls_check_index_ret ret;
-  try {
-    bufferlist::iterator iter = out.begin();
-    ::decode(ret, iter);
-  } catch (buffer::error& err) {
-    return -EIO;
+static bool issue_bucket_check_index_op(IoCtx& io_ctx, const string& oid, BucketIndexAioManager *manager,
+    struct rgw_cls_check_index_ret *pdata) {
+  bufferlist in;
+  librados::ObjectReadOperation op;
+  op.exec("rgw", "bucket_check_index", in, new ClsBucketIndexOpCtx<struct rgw_cls_check_index_ret>(
+        pdata, NULL));
+  BucketIndexAioArg *arg = new BucketIndexAioArg(manager->get_next(), manager);
+  AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, NULL, bucket_index_op_completion_cb);
+  int r = io_ctx.aio_operate(oid, c, &op, NULL);
+  if (r >= 0) {
+    manager->add_pending(arg->id, c);
   }
-
-  if (existing_header)
-    *existing_header = ret.existing_header;
-  if (calculated_header)
-    *calculated_header = ret.calculated_header;
-
-  return 0;
+  return r;
 }
 
-int cls_rgw_bucket_rebuild_index_op(IoCtx& io_ctx, string& oid)
+int cls_rgw_bucket_check_index_op(IoCtx& io_ctx,
+    map<string, struct rgw_cls_check_index_ret>& bucket_objs_ret, uint32_t max_aio)
 {
-  bufferlist in, out;
-  int r = io_ctx.exec(oid, "rgw", "bucket_rebuild_index", in, out);
-  if (r < 0)
-    return r;
+  int ret = 0;
+  BucketIndexAioManager manager;
+  map<string, struct rgw_cls_check_index_ret>::iterator iter = bucket_objs_ret.begin();
+  for (; iter != bucket_objs_ret.end() && max_aio-- > 0; ++iter) {
+    ret = issue_bucket_check_index_op(io_ctx, iter->first, &manager, &iter->second);
+    if (ret < 0)
+      break;
+  }
 
-  return 0;
+  int num_completions, r = 0;
+  while (manager.wait_for_completions(0, &num_completions, &r)) {
+    if (r >= 0 && ret >= 0) {
+      for (int i = 0; i < num_completions && iter != bucket_objs_ret.end(); ++i, ++iter) {
+        int issue_ret = issue_bucket_check_index_op(io_ctx, iter->first, &manager, &iter->second);
+        if (issue_ret < 0) {
+          ret = issue_ret;
+          break;
+        }
+      }
+    } else if (ret >= 0) {
+      ret = r;
+    }
+  }
+  return ret;
+}
+
+static bool issue_bucket_rebuild_index_op(IoCtx& io_ctx, const string& oid,
+    BucketIndexAioManager *manager) {
+  bufferlist in;
+  librados::ObjectWriteOperation op;
+  op.exec("rgw", "bucket_rebuild_index", in);
+  BucketIndexAioArg *arg = new BucketIndexAioArg(manager->get_next(), manager);
+  AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, NULL, bucket_index_op_completion_cb);
+  int r = io_ctx.aio_operate(oid, c, &op);
+  if (r >= 0) {
+    manager->add_pending(arg->id, c);
+  }
+  return r;
+}
+
+int cls_rgw_bucket_rebuild_index_op(IoCtx& io_ctx, const vector<string>& bucket_objs,
+    uint32_t max_aio)
+{
+  int ret = 0;
+  BucketIndexAioManager manager;
+  vector<string>::const_iterator iter = bucket_objs.begin();
+  for (; iter != bucket_objs.end() && max_aio-- > 0; ++iter) {
+    ret = issue_bucket_rebuild_index_op(io_ctx, *iter, &manager);
+    if (ret < 0)
+      break;
+  }
+
+  int num_completions, r = 0;
+  while (manager.wait_for_completions(0, &num_completions, &r)) {
+    if (r >= 0 && ret >= 0) {
+      for (int i = 0; i < num_completions && iter != bucket_objs.end(); ++i, ++iter) {
+        int issue_ret = issue_bucket_rebuild_index_op(io_ctx, *iter, &manager);
+        if (issue_ret < 0) {
+          ret = issue_ret;
+          break;
+        }
+      }
+    } else if (ret >= 0) {
+      ret = r;
+    }
+  }
+  return ret;
 }
 
 void cls_rgw_encode_suggestion(char op, rgw_bucket_dir_entry& dirent, bufferlist& updates)
@@ -282,28 +371,33 @@ void cls_rgw_suggest_changes(ObjectWriteOperation& o, bufferlist& updates)
   o.exec("rgw", "dir_suggest_changes", updates);
 }
 
-int cls_rgw_get_dir_header(IoCtx& io_ctx, string& oid, rgw_bucket_dir_header *header)
+int cls_rgw_get_dir_header(IoCtx& io_ctx, map<string, rgw_cls_list_ret>& dir_headers,
+    uint32_t max_aio)
 {
-  bufferlist in, out;
-  struct rgw_cls_list_op call;
-  call.num_entries = 0;
-  ::encode(call, in);
-  int r = io_ctx.exec(oid, "rgw", "bucket_list", in, out);
-  if (r < 0)
-    return r;
-
-  struct rgw_cls_list_ret ret;
-  try {
-    bufferlist::iterator iter = out.begin();
-    ::decode(ret, iter);
-  } catch (buffer::error& err) {
-    return -EIO;
+  int ret = 0;
+  BucketIndexAioManager manager;
+  map<string, rgw_cls_list_ret>::iterator iter = dir_headers.begin();
+  for (; iter != dir_headers.end() && max_aio-- > 0; ++iter) {
+    ret = issue_bucket_list_op(io_ctx, iter->first, "", "", 0, &manager, &iter->second);
+    if (ret < 0)
+      break;
   }
 
-  if (header)
-    *header = ret.dir.header;
-
- return r;
+  int num_completions, r = 0;
+  while (manager.wait_for_completions(0, &num_completions, &r)) {
+    if (r >= 0 && ret >= 0) {
+      for (int i = 0; i < num_completions && iter != dir_headers.end(); ++i, ++iter) {
+        int issue_ret = issue_bucket_list_op(io_ctx, iter->first, "", "", 0, &manager, &iter->second);
+        if (issue_ret < 0) {
+          ret = issue_ret;
+          break;
+        }
+      }
+    } else if (ret >= 0) {
+      ret = r;
+    }
+  }
+  return ret;
 }
 
 class GetDirHeaderCompletion : public ObjectOperationCompletion {
