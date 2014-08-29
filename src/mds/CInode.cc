@@ -1797,7 +1797,7 @@ void CInode::_finish_frag_update(CDir *dir, MutationRef& mut)
 /* for more info on scatterlocks, see comments by Locker::scatter_writebehind */
 void CInode::finish_scatter_gather_update(int type)
 {
-  LogClient &clog = mdcache->mds->clog;
+  LogChannelRef clog = mdcache->mds->clog;
 
   dout(10) << "finish_scatter_gather_update " << type << " on " << *this << dendl;
   assert(is_auth());
@@ -1838,7 +1838,7 @@ void CInode::finish_scatter_gather_update(int type)
 
 	if (pf->fragstat.nfiles < 0 ||
 	    pf->fragstat.nsubdirs < 0) {
-	  clog.error() << "bad/negative dir size on "
+	  clog->error() << "bad/negative dir size on "
 	      << dir->dirfrag() << " " << pf->fragstat << "\n";
 	  assert(!"bad/negative fragstat" == g_conf->mds_verify_scatter);
 	  
@@ -1872,7 +1872,7 @@ void CInode::finish_scatter_gather_update(int type)
 	    break;
 	  }
 	if (all) {
-	  clog.error() << "unmatched fragstat on " << ino() << ", inode has "
+	  clog->error() << "unmatched fragstat on " << ino() << ", inode has "
 		       << pi->dirstat << ", dirfrags have " << dirstat << "\n";
 	  assert(!"unmatched fragstat" == g_conf->mds_verify_scatter);
 	  // trust the dirfrags for now
@@ -1884,7 +1884,7 @@ void CInode::finish_scatter_gather_update(int type)
 
       if (pi->dirstat.nfiles < 0 ||
 	  pi->dirstat.nsubdirs < 0) {
-	clog.error() << "bad/negative fragstat on " << ino()
+	clog->error() << "bad/negative fragstat on " << ino()
 	    << ", inode has " << pi->dirstat << "\n";
 	assert(!"bad/negative fragstat" == g_conf->mds_verify_scatter);
 
@@ -1967,7 +1967,7 @@ void CInode::finish_scatter_gather_update(int type)
 	    break;
 	  }
 	if (all) {
-	  clog.error() << "unmatched rstat on " << ino() << ", inode has "
+	  clog->error() << "unmatched rstat on " << ino() << ", inode has "
 		       << pi->rstat << ", dirfrags have " << rstat << "\n";
 	  assert(!"unmatched rstat" == g_conf->mds_verify_scatter);
 	  // trust the dirfrag for now

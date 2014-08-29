@@ -536,7 +536,7 @@ void Server::find_idle_sessions()
     
     utime_t age = now;
     age -= session->last_cap_renew;
-    mds->clog.info() << "closing stale session " << session->info.inst
+    mds->clog->info() << "closing stale session " << session->info.inst
 	<< " after " << age << "\n";
     dout(10) << "autoclosing stale session " << session->info.inst << " last " << session->last_cap_renew << dendl;
     kill_session(session, NULL);
@@ -640,7 +640,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   if (!mds->is_reconnect()) {
     // XXX maybe in the future we can do better than this?
     dout(1) << " no longer in reconnect state, ignoring reconnect, sending close" << dendl;
-    mds->clog.info() << "denied reconnect attempt (mds is "
+    mds->clog->info() << "denied reconnect attempt (mds is "
        << ceph_mds_state_name(mds->get_state())
        << ") from " << m->get_source_inst()
        << " after " << delay << " (allowed interval " << g_conf->mds_reconnect_timeout << ")\n";
@@ -651,7 +651,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 
   if (session->is_closed()) {
     dout(1) << " session is closed, ignoring reconnect, sending close" << dendl;
-    mds->clog.info() << "denied reconnect attempt (mds is "
+    mds->clog->info() << "denied reconnect attempt (mds is "
 	<< ceph_mds_state_name(mds->get_state())
 	<< ") from " << m->get_source_inst() << " (session is closed)\n";
     m->get_connection()->send_message(new MClientSession(CEPH_SESSION_CLOSE));
@@ -661,7 +661,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 
   // notify client of success with an OPEN
   m->get_connection()->send_message(new MClientSession(CEPH_SESSION_OPEN));
-  mds->clog.debug() << "reconnect by " << session->info.inst << " after " << delay << "\n";
+  mds->clog->debug() << "reconnect by " << session->info.inst << " after " << delay << "\n";
   
   // snaprealms
   for (vector<ceph_mds_snaprealm_reconnect>::iterator p = m->realms.begin();
@@ -1989,7 +1989,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 
   if (useino && useino != in->inode.ino) {
     dout(0) << "WARNING: client specified " << useino << " and i allocated " << in->inode.ino << dendl;
-    mds->clog.error() << mdr->client_request->get_source()
+    mds->clog->error() << mdr->client_request->get_source()
        << " specified ino " << useino
        << " but mds." << mds->whoami << " allocated " << in->inode.ino << "\n";
     //assert(0); // just for now.
