@@ -95,12 +95,12 @@ void EventOutput::list() const
       detail = eu->type;
     }
 
-    std::cerr << "0x"
+    std::cout << "0x"
       << std::hex << i->first << std::dec << " "
       << i->second.log_event->get_type_str() << ": "
       << " (" << detail << ")" << std::endl;
     for (std::vector<std::string>::iterator i = ev_paths.begin(); i != ev_paths.end(); ++i) {
-        std::cerr << "  " << *i << std::endl;
+        std::cout << "  " << *i << std::endl;
     }
   }
 }
@@ -116,8 +116,8 @@ void EventOutput::summary() const
     type_count[type] += 1;
   }
 
-  std::cerr << "Events by type:" << std::endl;
+  std::cout << "Events by type:" << std::endl;
   for (std::map<std::string, int>::iterator i = type_count.begin(); i != type_count.end(); ++i) {
-      std::cerr << "  " << i->first << ": " << i->second << std::endl;
+      std::cout << "  " << i->first << ": " << i->second << std::endl;
   }
 }
