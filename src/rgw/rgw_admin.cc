@@ -519,7 +519,7 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
     return r;
 
   map<RGWObjCategory, RGWStorageStats> stats;
-  uint64_t bucket_ver, master_ver;
+  string bucket_ver, master_ver;
   string max_marker;
   int ret = store->get_bucket_stats(bucket, &bucket_ver, &master_ver, stats, &max_marker);
   if (ret < 0) {
@@ -535,8 +535,8 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
   formatter->dump_string("marker", bucket.marker);
   formatter->dump_string("owner", bucket_info.owner);
   formatter->dump_int("mtime", mtime);
-  formatter->dump_int("ver", bucket_ver);
-  formatter->dump_int("master_ver", master_ver);
+  formatter->dump_string("ver", bucket_ver);
+  formatter->dump_string("master_ver", master_ver);
   formatter->dump_string("max_marker", max_marker);
   dump_bucket_usage(stats, formatter);
   formatter->close_section();

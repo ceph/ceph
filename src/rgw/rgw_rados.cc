@@ -80,7 +80,6 @@ static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 
 #define RGW_STATELOG_OBJ_PREFIX "statelog."
 
-
 #define dout_subsys ceph_subsys_rgw
 
 void RGWDefaultRegionInfo::dump(Formatter *f) const {
@@ -3851,7 +3850,7 @@ int RGWRados::open_bucket_index_shard(rgw_bucket& bucket, librados::IoCtx& index
   return 0;
 }
 
-static void translate_raw_stats(rgw_bucket_dir_header& header, map<RGWObjCategory, RGWStorageStats>& stats)
+static void accumulate_raw_stats(rgw_bucket_dir_header& header, map<RGWObjCategory, RGWStorageStats>& stats)
 {
   map<uint8_t, struct rgw_bucket_category_stats>::iterator iter = header.stats.begin();
   for (; iter != header.stats.end(); ++iter) {
@@ -3859,9 +3858,9 @@ static void translate_raw_stats(rgw_bucket_dir_header& header, map<RGWObjCategor
     RGWStorageStats& s = stats[category];
     struct rgw_bucket_category_stats& header_stats = iter->second;
     s.category = (RGWObjCategory)iter->first;
-    s.num_kb = ((header_stats.total_size + 1023) / 1024);
-    s.num_kb_rounded = ((header_stats.total_size_rounded + 1023) / 1024);
-    s.num_objects = header_stats.num_entries;
+    s.num_kb += ((header_stats.total_size + 1023) / 1024);
+    s.num_kb_rounded += ((header_stats.total_size_rounded + 1023) / 1024);
+    s.num_objects += header_stats.num_entries;
   }
 }
 
@@ -3870,21 +3869,23 @@ int RGWRados::bucket_check_index(rgw_bucket& bucket,
 				 map<RGWObjCategory, RGWStorageStats> *calculated_stats)
 {
   librados::IoCtx index_ctx;
-  string oid;
-
-  int ret = open_bucket_index(bucket, index_ctx, oid);
+  // key - bucket index object id
+  // value - bucket index check OP returned result with the given bucket index object (shard)
+  map<string, struct rgw_cls_check_index_ret> bucket_objs_ret;
+  int ret = open_bucket_index(bucket, index_ctx, bucket_objs_ret);
   if (ret < 0)
     return ret;
 
-  rgw_bucket_dir_header existing_header;
-  rgw_bucket_dir_header calculated_header;
-
-  ret = cls_rgw_bucket_check_index_op(index_ctx, oid, &existing_header, &calculated_header);
+  ret = cls_rgw_bucket_check_index_op(index_ctx, bucket_objs_ret, cct->_conf->rgw_bucket_index_max_aio);
   if (ret < 0)
     return ret;
 
-  translate_raw_stats(existing_header, *existing_stats);
-  translate_raw_stats(calculated_header, *calculated_stats);
+  // Aggregate results (from different shards if there is any)
+  map<string, struct rgw_cls_check_index_ret>::iterator iter;
+  for (iter = bucket_objs_ret.begin(); iter != bucket_objs_ret.end(); ++iter) {
+    accumulate_raw_stats(iter->second.existing_header, *existing_stats);
+    accumulate_raw_stats(iter->second.calculated_header, *calculated_stats);
+  }
 
   return 0;
 }
@@ -3892,13 +3893,12 @@ int RGWRados::bucket_check_index(rgw_bucket& bucket,
 int RGWRados::bucket_rebuild_index(rgw_bucket& bucket)
 {
   librados::IoCtx index_ctx;
-  string oid;
+  vector<string> bucket_objs;
+  int r = open_bucket_index(bucket, index_ctx, bucket_objs);
+  if (r < 0)
+    return r;
 
-  int ret = open_bucket_index(bucket, index_ctx, oid);
-  if (ret < 0)
-    return ret;
-
-  return cls_rgw_bucket_rebuild_index_op(index_ctx, oid);
+  return cls_rgw_bucket_rebuild_index_op(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio);
 }
 
 
@@ -5463,57 +5463,91 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
   return 0;
 }
 
-int RGWRados::get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_t *master_ver, map<RGWObjCategory, RGWStorageStats>& stats,
-                               string *max_marker)
+int RGWRados::get_bucket_stats(rgw_bucket& bucket, string *bucket_ver, string *master_ver,
+    map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker)
 {
-  rgw_bucket_dir_header header;
-  int r = cls_bucket_head(bucket, header);
+  map<string, rgw_bucket_dir_header> headers;
+  int r = cls_bucket_head(bucket, headers);
   if (r < 0)
     return r;
 
-  stats.clear();
-
-  translate_raw_stats(header, stats);
-
-  *bucket_ver = header.ver;
-  *master_ver = header.master_ver;
-
-  if (max_marker)
-    *max_marker = header.max_marker;
-
+  map<string, rgw_bucket_dir_header>::iterator iter = headers.begin();
+  BucketIndexShardsManager ver_mgr;
+  BucketIndexShardsManager master_ver_mgr;
+  BucketIndexShardsManager marker_mgr;
+  char buf[64];
+  for(; iter != headers.end(); ++iter) {
+    accumulate_raw_stats(iter->second, stats);
+    snprintf(buf, sizeof(buf), "%lu", iter->second.ver);
+    ver_mgr.add_item(iter->first, string(buf));
+    snprintf(buf, sizeof(buf), "%lu", iter->second.master_ver);
+    master_ver_mgr.add_item(iter->first, string(buf));
+    marker_mgr.add_item(iter->first, iter->second.max_marker);
+  }
+  ver_mgr.to_string(bucket_ver);
+  master_ver_mgr.to_string(master_ver);
+  marker_mgr.to_string(max_marker);
   return 0;
 }
 
 class RGWGetBucketStatsContext : public RGWGetDirHeader_CB {
   RGWGetBucketStats_CB *cb;
+  uint32_t pendings;
+  map<RGWObjCategory, RGWStorageStats> stats;
+  int ret_code;
+  bool should_cb;
+  Mutex lock;
 
 public:
-  RGWGetBucketStatsContext(RGWGetBucketStats_CB *_cb) : cb(_cb) {}
+  RGWGetBucketStatsContext(RGWGetBucketStats_CB *_cb, uint32_t _pendings)
+    : cb(_cb), pendings(_pendings), stats(), ret_code(0), should_cb(true),
+    lock("RGWGetBucketStatsContext") {}
+
   void handle_response(int r, rgw_bucket_dir_header& header) {
-    map<RGWObjCategory, RGWStorageStats> stats;
+    Mutex::Locker l(lock);
+    if (should_cb) {
+      if ( r >= 0) {
+        accumulate_raw_stats(header, stats);
+      } else {
+        ret_code = r;
+      }
 
-    if (r >= 0) {
-      translate_raw_stats(header, stats);
-      cb->set_response(header.ver, header.master_ver, &stats, header.max_marker);
+      // Are we all done?
+      if (--pendings == 0) {
+        if (!ret_code) {
+          cb->set_response(&stats);
+        }
+        cb->handle_response(ret_code);
+        cb->put();
+      }
     }
+  }
 
-    cb->handle_response(r);
-
-    cb->put();
+  void unset_cb() {
+    Mutex::Locker l(lock);
+    should_cb = false;
   }
 };
 
 int RGWRados::get_bucket_stats_async(rgw_bucket& bucket, RGWGetBucketStats_CB *ctx)
 {
-  RGWGetBucketStatsContext *get_ctx = new RGWGetBucketStatsContext(ctx);
-  int r = cls_bucket_head_async(bucket, get_ctx);
+  RGWBucketInfo binfo;
+  int r = get_bucket_instance_info(NULL, bucket, binfo, NULL, NULL);
+  if (r < 0)
+    return r;
+
+  int num_aio = 0;
+  RGWGetBucketStatsContext *get_ctx = new RGWGetBucketStatsContext(ctx, binfo.num_shards);
+  assert(get_ctx);
+  r = cls_bucket_head_async(bucket, get_ctx, &num_aio);
+  get_ctx->put();
   if (r < 0) {
     ctx->put();
-    delete get_ctx;
-    return r;
+    if (num_aio) {
+      get_ctx->unset_cb();
+    }
   }
-
-  return 0;
+  return r;
 }
 
 class RGWGetUserStatsContext : public RGWGetUserHeader_CB {
@@ -5922,21 +5956,21 @@ int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
     RGWBucketEnt& ent = iter->second;
     rgw_bucket& bucket = ent.bucket;
 
-    rgw_bucket_dir_header header;
-    int r = cls_bucket_head(bucket, header);
+    map<string, rgw_bucket_dir_header> headers;
+    int r = cls_bucket_head(bucket, headers);
     if (r < 0)
       return r;
 
-    ent.count = 0;
-    ent.size = 0;
-
-    RGWObjCategory category = main_category;
-    map<uint8_t, struct rgw_bucket_category_stats>::iterator iter = header.stats.find((uint8_t)category);
-    if (iter != header.stats.end()) {
-      struct rgw_bucket_category_stats& stats = iter->second;
-      ent.count = stats.num_entries;
-      ent.size = stats.total_size;
-      ent.size_rounded = stats.total_size_rounded;
+    map<string, rgw_bucket_dir_header>::iterator hiter = headers.begin();
+    for (; hiter != headers.end(); ++hiter) {
+      RGWObjCategory category = main_category;
+      map<uint8_t, struct rgw_bucket_category_stats>::iterator iter = (hiter->second.stats).find((uint8_t)category);
+      if (iter != hiter->second.stats.end()) {
+        struct rgw_bucket_category_stats& stats = iter->second;
+        ent.count += stats.num_entries;
+        ent.size += stats.total_size;
+        ent.size_rounded += stats.total_size_rounded;
+      }
     }
   }
 
@@ -6210,18 +6244,12 @@ int RGWRados::cls_obj_complete_cancel(rgw_bucket& bucket, string& tag, string& n
 int RGWRados::cls_obj_set_bucket_tag_timeout(rgw_bucket& bucket, uint64_t timeout)
 {
   librados::IoCtx index_ctx;
-  string oid;
-
-  int r = open_bucket_index(bucket, index_ctx, oid);
+  vector<string> bucket_objs;
+  int r = open_bucket_index(bucket, index_ctx, bucket_objs);
   if (r < 0)
     return r;
 
-  ObjectWriteOperation o;
-  cls_rgw_bucket_set_tag_timeout(o, timeout);
-
-  r = index_ctx.operate(oid, &o);
-
-  return r;
+  return cls_rgw_bucket_set_tag_timeout(index_ctx, bucket_objs, timeout, cct->_conf->rgw_bucket_index_max_aio);
 }
 
 int RGWRados::cls_bucket_list(rgw_bucket& bucket, const string& start, const string& prefix,
@@ -6522,34 +6550,44 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
   return 0;
 }
 
-int RGWRados::cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header)
+int RGWRados::cls_bucket_head(rgw_bucket& bucket, map<string, struct rgw_bucket_dir_header>& headers)
 {
   librados::IoCtx index_ctx;
-  string oid;
-  int r = open_bucket_index(bucket, index_ctx, oid);
+  map<string, struct rgw_cls_list_ret> list_results;
+  int r = open_bucket_index(bucket, index_ctx, list_results);
   if (r < 0)
     return r;
 
-  r = cls_rgw_get_dir_header(index_ctx, oid, &header);
+  r = cls_rgw_get_dir_header(index_ctx, list_results, cct->_conf->rgw_bucket_index_max_aio);
   if (r < 0)
     return r;
 
+  map<string, struct rgw_cls_list_ret>::iterator iter = list_results.begin();
+  for(; iter != list_results.end(); ++iter) {
+    headers[iter->first] = iter->second.dir.header;
+  }
   return 0;
 }
 
-int RGWRados::cls_bucket_head_async(rgw_bucket& bucket, RGWGetDirHeader_CB *ctx)
+int RGWRados::cls_bucket_head_async(rgw_bucket& bucket, RGWGetDirHeader_CB *ctx, int *num_aio)
 {
   librados::IoCtx index_ctx;
-  string oid;
-  int r = open_bucket_index(bucket, index_ctx, oid);
+  vector<string> bucket_objs;
+  int r = open_bucket_index(bucket, index_ctx, bucket_objs);
   if (r < 0)
     return r;
 
-  r = cls_rgw_get_dir_header_async(index_ctx, oid, ctx);
-  if (r < 0)
-    return r;
-
-  return 0;
+  vector<string>::iterator iter = bucket_objs.begin();
+  for (; iter != bucket_objs.end(); ++iter) {
+    r = cls_rgw_get_dir_header_async(index_ctx, *iter, static_cast<RGWGetDirHeader_CB*>(ctx->get()));
+    if (r < 0) {
+      ctx->put();
+      break;
+    } else {
+      (*num_aio)++;
+    }
+  }
+  return r;
 }
 
 int RGWRados::cls_user_get_header(const string& user_id, cls_user_header *header)
@@ -6600,8 +6638,8 @@ int RGWRados::cls_user_get_header_async(const string& user_id, RGWGetUserHeader_
 
 int RGWRados::cls_user_sync_bucket_stats(rgw_obj& user_obj, rgw_bucket& bucket)
 {
-  rgw_bucket_dir_header header;
-  int r = cls_bucket_head(bucket, header);
+  map<string, struct rgw_bucket_dir_header> headers;
+  int r = cls_bucket_head(bucket, headers);
   if (r < 0) {
     ldout(cct, 20) << "cls_bucket_header() returned " << r << dendl;
     return r;
@@ -6611,12 +6649,15 @@ int RGWRados::cls_user_sync_bucket_stats(rgw_obj& user_obj, rgw_bucket& bucket)
 
   bucket.convert(&entry.bucket);
 
-  map<uint8_t, struct rgw_bucket_category_stats>::iterator iter = header.stats.begin();
-  for (; iter != header.stats.end(); ++iter) {
-    struct rgw_bucket_category_stats& header_stats = iter->second;
-    entry.size += header_stats.total_size;
-    entry.size_rounded += header_stats.total_size_rounded;
-    entry.count += header_stats.num_entries;
+  map<string, struct rgw_bucket_dir_header>::iterator hiter = headers.begin();
+  for (; hiter != headers.end(); ++hiter) {
+    map<uint8_t, struct rgw_bucket_category_stats>::iterator iter = hiter->second.stats.begin();
+    for (; iter != hiter->second.stats.end(); ++iter) {
+      struct rgw_bucket_category_stats& header_stats = iter->second;
+      entry.size += header_stats.total_size;
+      entry.size_rounded += header_stats.total_size_rounded;
+      entry.count += header_stats.num_entries;
+    }
   }
 
   list<cls_user_bucket_entry> entries;
