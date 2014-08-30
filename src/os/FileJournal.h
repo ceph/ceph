@@ -288,6 +288,7 @@ private:
   // write thread
   Mutex write_lock;
   bool write_stop;
+  bool aio_stop;
 
   Cond commit_cond;
 
@@ -379,6 +380,7 @@ private:
     throttle_bytes(g_ceph_context, "filestore_bytes"),
     write_lock("FileJournal::write_lock", false, true, false, g_ceph_context),
     write_stop(false),
+    aio_stop(false),
     write_thread(this),
     write_finish_thread(this) { }
   ~FileJournal() {
