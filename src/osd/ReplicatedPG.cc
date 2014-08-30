@@ -11581,6 +11581,10 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
     dout(20) << __func__ << " skip (watchers) " << obc->obs.oi << dendl;
     return false;
   }
+  if (obc->is_blocked()) {
+    dout(20) << __func__ << " skip (blocked) " << obc->obs.oi << dendl;
+    return false;
+  }
 
   if (soid.snap == CEPH_NOSNAP) {
     int result = _verify_no_head_clones(soid, obc->ssc->snapset);
