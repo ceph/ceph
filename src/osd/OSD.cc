@@ -138,6 +138,8 @@
 
 #ifdef WITH_LTTNG
 #include "tracing/osd.h"
+#else
+#define tracepoint(...)
 #endif
 
 static coll_t META_COLL("meta");

@@ -36,6 +36,8 @@
 
 #ifdef WITH_LTTNG
 #include "tracing/librbd.h"
+#else
+#define tracepoint(...)
 #endif
 
 #define dout_subsys ceph_subsys_rbd

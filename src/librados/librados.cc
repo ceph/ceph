@@ -40,6 +40,8 @@
 
 #ifdef WITH_LTTNG
 #include "tracing/librados.h"
+#else
+#define tracepoint(...)
 #endif
 
 using std::string;
