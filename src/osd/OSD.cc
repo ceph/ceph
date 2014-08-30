@@ -5492,6 +5492,12 @@ void OSD::ms_fast_dispatch(Message *m)
     m->put();
     return;
   }
+  Session *session = static_cast<Session*>(m->get_connection()->get_priv());
+  if (!session) {
+    // we probably raced with someone calling mark_down on our connection
+    m->put();
+    return;
+  }
   OpRequestRef op = op_tracker.create_request<OpRequest>(m);
   {
 #ifdef WITH_LTTNG
@@ -5501,8 +5507,6 @@ void OSD::ms_fast_dispatch(Message *m)
         reqid.name._num, reqid.tid, reqid.inc);
   }
   OSDMapRef nextmap = service.get_nextmap_reserved();
-  Session *session = static_cast<Session*>(m->get_connection()->get_priv());
-  assert(session);
   {
     Mutex::Locker l(session->session_dispatch_lock);
     update_waiting_for_pg(session, nextmap);
@@ -5726,6 +5730,10 @@ bool OSD::dispatch_op_fast(OpRequestRef& op, OSDMapRef& osdmap) {
   if (msg_epoch > osdmap->get_epoch()) {
     Session *s = static_cast<Session*>(op->get_req()->
 				       get_connection()->get_priv());
+    if (!s) {
+      // drop the op if the session was nuked
+      return true;
+    }
     s->received_map_lock.Lock();
     epoch_t received_epoch = s->received_map_epoch;
     s->received_map_lock.Unlock();
