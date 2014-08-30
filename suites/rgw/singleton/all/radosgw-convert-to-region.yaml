@@ -15,8 +15,8 @@ overrides:
         size: 2000
         stddev: 500
 roles:
-- [mon.a, osd.0, osd.1, client.0]
-- [mon.b, mon.c, osd.2, osd.3, client.1]
+- [mon.a, osd.0, osd.1, osd.2, client.0]
+- [mon.b, mon.c, osd.3, osd.4, osd.5, client.1]
 
 tasks:
 - install:
