@@ -4,6 +4,7 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -43,7 +44,7 @@
 #define ERROR_LRC_K_MODULO		-(MAX_ERRNO + 20)
 #define ERROR_LRC_M_MODULO		-(MAX_ERRNO + 21)
 
-class ErasureCodeLRC : public ErasureCode {
+class ErasureCodeLrc : public ErasureCode {
 public:
   struct Layer {
     Layer(string _chunks_map) : chunks_map(_chunks_map) { }
@@ -71,13 +72,13 @@ public:
   };
   vector<Step> ruleset_steps;
 
-  ErasureCodeLRC() :
+  ErasureCodeLrc() :
     ruleset_root("default")
   {
     ruleset_steps.push_back(Step("chooseleaf", "host", 0));
   }
 
-  virtual ~ErasureCodeLRC() {}
+  virtual ~ErasureCodeLrc() {}
 
   set<int> get_erasures(const set<int> &need,
 			const set<int> &available) const;
