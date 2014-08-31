@@ -1,5 +1,9 @@
 #
-# See .mailmap for author normalization.
+# More information at
+#  https://wiki.ceph.com/Community/Ceph_contributors_list_maintenance_guide
+#
+# See .mailmap for name and mail normalization.
+# See .peoplemap for unique list of people
 #
 # To display the 10 organization who contributed 
 # most commits to ceph ( requires git >= 1.8.4 ):
