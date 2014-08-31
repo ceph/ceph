@@ -19,6 +19,7 @@
 #include <algorithm>
 
 #include "include/str_map.h"
+#include "include/ceph_features.h"
 #include "common/debug.h"
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
@@ -832,4 +833,9 @@ int ErasureCodeLrc::decode_chunks(const set<int> &want_to_read,
   } else {
     return 0;
   }
+}
+
+uint64_t ErasureCodeLrc::required_features() const
+{
+  return CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2;
 }

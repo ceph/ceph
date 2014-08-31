@@ -407,6 +407,12 @@ namespace ceph {
      */
     virtual int decode_concat(const map<int, bufferlist> &chunks,
 			      bufferlist *decoded) = 0;
+    /**
+     * Return the cluster wide features expected to run the plugin.
+     *
+     * @return the bitmask of the expected features.
+     */
+    virtual uint64_t required_features() const = 0;
   };
 
   typedef ceph::shared_ptr<ErasureCodeInterface> ErasureCodeInterfaceRef;

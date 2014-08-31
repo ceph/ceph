@@ -2,6 +2,7 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2014 CERN (Switzerland)
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Andreas-Joachim Peters <Andreas.Joachim.Peters@cern.ch>
  *
@@ -99,6 +100,8 @@ public:
                     ostream *ss) = 0;
 
   virtual void prepare() = 0;
+
+  virtual uint64_t required_features() const;
 
 };
 

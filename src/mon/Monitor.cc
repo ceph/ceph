@@ -347,6 +347,7 @@ CompatSet Monitor::get_supported_features()
   ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_SINGLE_PAXOS);
   ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES);
   ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC);
+  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODE_V2);
   return CompatSet(ceph_mon_feature_compat, ceph_mon_feature_ro_compat,
 		   ceph_mon_feature_incompat);
 }
@@ -1940,6 +1941,9 @@ void Monitor::apply_quorum_to_compatset_features()
   if (quorum_features & CEPH_FEATURE_OSD_ERASURE_CODES) {
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES);
   }
+  if (quorum_features & CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2) {
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODE_V2);
+  }
   if (quorum_features & CEPH_FEATURE_OSDMAP_ENC) {
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC);
   }
@@ -1962,6 +1966,9 @@ void Monitor::apply_compatset_features_to_quorum_requirements()
   required_features = 0;
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES)) {
     required_features |= CEPH_FEATURE_OSD_ERASURE_CODES;
+  }
+  if (features.incompat.contains(CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2)) {
+    required_features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2;
   }
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC)) {
     required_features |= CEPH_FEATURE_OSDMAP_ENC;

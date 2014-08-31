@@ -406,7 +406,8 @@ bool PG::search_for_missing(
     publish_stats_to_osd();
   if (found_missing &&
       (get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, NULL) &
-       CEPH_FEATURE_OSD_ERASURE_CODES)) {
+       CEPH_FEATURE_OSD_ERASURE_CODES)
+      ) {
     pg_info_t tinfo(oinfo);
     tinfo.pgid.shard = pg_whoami.shard;
     (*(ctx->info_map))[from.osd].push_back(
@@ -1235,6 +1236,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id)
 	all_support = false;
 	break;
       }
+      // ?? v2 plugin ??
     }
     if (all_support)
       compat_mode = false;
