@@ -522,6 +522,7 @@ function test_mon_osd()
       break
     fi
   done
+  ceph osd dump | grep 'osd.0 up'
 
   ceph osd thrash 10
   ceph osd down `seq 0 31`  # force everything down so that we can trust up
@@ -534,6 +535,8 @@ function test_mon_osd()
       break
     fi
   done
+  ! ceph osd dump | grep ' down '
+  
   # if you have more osds than this you are on your own
   for f in `seq 0 31`; do
     ceph osd in $f || true
