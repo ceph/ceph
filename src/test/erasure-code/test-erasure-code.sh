@@ -29,13 +29,13 @@ function run() {
     run_mon $dir a --public-addr 127.0.0.1 || return 1
     # check that erasure code plugins are preloaded
     CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
-    grep 'load: jerasure' $dir/a/log || return 1
+    grep 'load: jerasure.*lrc' $dir/a/log || return 1
     for id in $(seq 0 10) ; do
         run_osd $dir $id || return 1
     done
     # check that erasure code plugins are preloaded
     CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
-    grep 'load: jerasure' $dir/osd-0.log || return 1
+    grep 'load: jerasure.*lrc' $dir/osd-0.log || return 1
     create_erasure_coded_pool ecpool || return 1
     FUNCTIONS=${FUNCTIONS:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for TEST_function in $FUNCTIONS ; do
@@ -111,13 +111,13 @@ function plugin_exists() {
     return $status
 }
 
-function TEST_rados_put_get_LRC_advanced() {
+function TEST_rados_put_get_lrc_advanced() {
     local dir=$1
-    local poolname=pool-LRC
-    local profile=profile-LRC
+    local poolname=pool-lrc
+    local profile=profile-lrc
 
     ./ceph osd erasure-code-profile set $profile \
-        plugin=LRC \
+        plugin=lrc \
         mapping=DD_ \
         ruleset-steps='[ [ "chooseleaf", "osd", 0 ] ]' \
         layers='[ [ "DDc", "" ] ]'  || return 1
@@ -130,13 +130,13 @@ function TEST_rados_put_get_LRC_advanced() {
     ./ceph osd erasure-code-profile rm $profile
 }
 
-function TEST_rados_put_get_LRC_kml() {
+function TEST_rados_put_get_lrc_kml() {
     local dir=$1
-    local poolname=pool-LRC
-    local profile=profile-LRC
+    local poolname=pool-lrc
+    local profile=profile-lrc
 
     ./ceph osd erasure-code-profile set $profile \
-        plugin=LRC \
+        plugin=lrc \
         k=4 m=2 l=3 \
         ruleset-failure-domain=osd || return 1
     ./ceph osd pool create $poolname 12 12 erasure $profile \
@@ -259,7 +259,7 @@ function TEST_chunk_mapping() {
     verify_chunk_mapping $dir ecpool 0 1 || return 1
 
     ./ceph osd erasure-code-profile set remap-profile \
-        plugin=LRC \
+        plugin=lrc \
         layers='[ [ "_DD", "" ] ]' \
         mapping='_DD' \
         ruleset-steps='[ [ "choose", "osd", 0 ] ]' || return 1

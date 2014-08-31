@@ -8,8 +8,8 @@ from all the others. For instance if *jerasure* is configured with
 *k=8* and *m=4*, losing one OSD requires reading from the eleven
 others to repair.
 
-The *LRC* erasure code plugin creates local parity chunks to be able
-to recover using less OSDs. For instance if *LRC* is configured with
+The *lrc* erasure code plugin creates local parity chunks to be able
+to recover using less OSDs. For instance if *lrc* is configured with
 *k=8*, *m=4* and *l=4*, it will create an additional parity chunk for
 every four OSDs. When a single OSD is lost, it can be recovered with
 only four OSDs instead of eleven.
@@ -25,7 +25,7 @@ connected to the same switch, reduced bandwidth usage can actually be
 observed.::
 
         $ ceph osd erasure-code-profile set LRCprofile \
-             plugin=LRC \
+             plugin=lrc \
              k=4 m=2 l=3 \
              ruleset-failure-domain=host
         $ ceph osd pool create lrcpool 12 12 erasure LRCprofile
@@ -38,20 +38,20 @@ In Firefly the reduced bandwidth will only be observed if the primary
 OSD is in the same rack as the lost chunk.::
 
         $ ceph osd erasure-code-profile set LRCprofile \
-             plugin=LRC \
+             plugin=lrc \
              k=4 m=2 l=3 \
              ruleset-locality=rack \
              ruleset-failure-domain=host
         $ ceph osd pool create lrcpool 12 12 erasure LRCprofile
 
 
-Create an LRC profile
+Create an lrc profile
 =====================
 
-To create a new LRC erasure code profile::
+To create a new lrc erasure code profile::
 
         ceph osd erasure-code-profile set {name} \
-             plugin=LRC \
+             plugin=lrc \
              k={data-chunks} \
              m={coding-chunks} \
              l={locality} \
@@ -155,7 +155,7 @@ define locality sets, for instance datacenters and racks into
 datacenters. The **k/m/l** are implemented by generating a low level
 configuration.
 
-The *LRC* erasure code plugin recursively applies erasure code
+The *lrc* erasure code plugin recursively applies erasure code
 techniques so that recovering from the loss of some chunks only
 requires a subset of the available chunks, most of the time.
 
@@ -182,7 +182,7 @@ implies *K=2*, the *c* implies *M=1* and the *jerasure* plugin is used
 by default.::
 
         $ ceph osd erasure-code-profile set LRCprofile \
-             plugin=LRC \
+             plugin=lrc \
              mapping=DD_ \
              layers='[ [ "DDc", "" ] ]'
         $ ceph osd pool create lrcpool 12 12 erasure LRCprofile
@@ -196,7 +196,7 @@ observed. It is equivalent to **k=4**, **m=2** and **l=3** although
 the layout of the chunks is different::
 
         $ ceph osd erasure-code-profile set LRCprofile \
-             plugin=LRC \
+             plugin=lrc \
              mapping=__DD__DD \
              layers='[
                        [ "_cDD_cDD", "" ],
@@ -213,7 +213,7 @@ In Firefly the reduced bandwidth will only be observed if the primary
 OSD is in the same rack as the lost chunk.::
 
         $ ceph osd erasure-code-profile set LRCprofile \
-             plugin=LRC \
+             plugin=lrc \
              mapping=__DD__DD \
              layers='[
                        [ "_cDD_cDD", "" ],

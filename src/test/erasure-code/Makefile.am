@@ -144,24 +144,24 @@ endif
 check_PROGRAMS += unittest_erasure_code_plugin_isa
 endif
 
-unittest_erasure_code_LRC_SOURCES = \
-	test/erasure-code/TestErasureCodeLRC.cc \
-	${LRC_sources}
-unittest_erasure_code_LRC_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-unittest_erasure_code_LRC_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_erasure_code_lrc_SOURCES = \
+	test/erasure-code/TestErasureCodeLrc.cc \
+	${lrc_sources}
+unittest_erasure_code_lrc_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_erasure_code_lrc_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 if LINUX
-unittest_erasure_code_LRC_LDADD += -ldl
+unittest_erasure_code_lrc_LDADD += -ldl
 endif
-check_PROGRAMS += unittest_erasure_code_LRC
+check_PROGRAMS += unittest_erasure_code_lrc
 
-unittest_erasure_code_plugin_LRC_SOURCES = \
-	test/erasure-code/TestErasureCodePluginLRC.cc
-unittest_erasure_code_plugin_LRC_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-unittest_erasure_code_plugin_LRC_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_erasure_code_plugin_lrc_SOURCES = \
+	test/erasure-code/TestErasureCodePluginLrc.cc
+unittest_erasure_code_plugin_lrc_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+unittest_erasure_code_plugin_lrc_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 if LINUX
-unittest_erasure_code_plugin_LRC_LDADD += -ldl
+unittest_erasure_code_plugin_lrc_LDADD += -ldl
 endif
-check_PROGRAMS += unittest_erasure_code_plugin_LRC
+check_PROGRAMS += unittest_erasure_code_plugin_lrc
 
 unittest_erasure_code_example_SOURCES = \
 	erasure-code/ErasureCode.cc \
