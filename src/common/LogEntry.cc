@@ -156,9 +156,9 @@ void LogEntry::log_to_syslog(string level, string facility)
   if (l <= min) {
     int f = string_to_syslog_facility(facility);
     syslog(l | f, "%s %llu : %s",
-        stringify(who).c_str(),
-        seq,
-        msg.c_str());
+	   stringify(who).c_str(),
+	   (long long unsigned)seq,
+	   msg.c_str());
   }
 }
 
