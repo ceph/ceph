@@ -155,7 +155,7 @@ void LogEntry::log_to_syslog(string level, string facility)
   int l = clog_type_to_syslog_level(prio);
   if (l <= min) {
     int f = string_to_syslog_facility(facility);
-    syslog(l | f, "%s %lu : %s",
+    syslog(l | f, "%s %llu : %s",
         stringify(who).c_str(),
         seq,
         msg.c_str());
