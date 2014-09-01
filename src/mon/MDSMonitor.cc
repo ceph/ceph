@@ -13,6 +13,7 @@
  */
 
 #include <sstream>
+#include <boost/utility.hpp>
 
 #include "MDSMonitor.h"
 #include "Monitor.h"
@@ -581,7 +582,27 @@ void MDSMonitor::get_health(list<pair<health_status_t, string> >& summary,
     health.decode(bl_i);
 
     for (std::list<MDSHealthMetric>::iterator j = health.metrics.begin(); j != health.metrics.end(); ++j) {
-      summary.push_back(std::make_pair(j->sev, j->message));
+      int const rank = i->second.rank;
+      std::ostringstream message;
+      message << "mds" << rank << ": " << j->message;
+      summary.push_back(std::make_pair(j->sev, message.str()));
+
+      // There is no way for us to clealy associate detail entries with summary entries (#7192), so
+      // we duplicate the summary message in the detail string and tag the metadata on.
+      std::ostringstream detail_message;
+      detail_message << message.str();
+      if (j->metadata.size()) {
+        detail_message << "(";
+        std::map<std::string, std::string>::iterator k = j->metadata.begin();
+        while (k != j->metadata.end()) {
+          detail_message << k->first << ": " << k->second;
+          if (boost::next(k) != j->metadata.end()) {
+            detail_message << ", ";
+          }
+        }
+        detail_message << ")";
+      }
+      detail->push_back(std::make_pair(j->sev, detail_message.str()));
     }
   }
 }
