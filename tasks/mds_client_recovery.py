@@ -173,6 +173,7 @@ class TestClientRecovery(unittest.TestCase):
 
         # Bring the client back
         self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
         self.mount_a.create_destroy()
 
     def test_stale_caps(self):
