@@ -320,6 +320,41 @@ recovery operations to ensure optimal performance during recovery.
 :Type: 32-bit Integer
 :Default: ``1`` 
 
+``disk thread ioprio class``
+
+:Description: Warning: it will only be used if both ``disk thread
+	      ioprio class`` and ``disk thread ioprio priority`` are
+	      set to a non default value.  Sets the ioprio_set(2) I/O
+	      scheduling ``class`` for the disk thread. Acceptable
+	      values are ``idle``, ``be`` or ``rt``. The ``idle``
+	      class means the disk thread will have lower priority
+	      than any other thread in the OSD. This is useful to slow
+	      down scrubbing on an OSD that is busy handling client
+	      operations. ``be`` is the default and is the same
+	      priority as all other threads in the OSD. ``rt`` means
+	      the disk thread will have precendence over all other
+	      threads in the OSD. This is useful if scrubbing is much
+	      needed and must make progress at the expense of client
+	      operations. Note: Only works with the Linux Kernel CFQ
+	      scheduler.
+:Type: String
+:Default: the empty string
+
+``disk thread ioprio priority``
+
+:Description: Warning: it will only be used if both ``disk thread
+	      ioprio class`` and ``disk thread ioprio priority`` are
+	      set to a non default value. It sets the ioprio_set(2)
+	      I/O scheduling ``priority`` of the disk thread ranging
+	      from 0 (highest) to 7 (lowest). If all OSDs on a given
+	      host were in class ``idle`` and compete for I/O
+	      (i.e. due to controller congestion), it can be used to
+	      lower the disk thread priority of one OSD to 7 so that
+	      another OSD with priority 0 can potentially scrub
+	      faster. Note: Only works with the Linux Kernel CFQ
+	      scheduler.
+:Type: Integer in the range of 0 to 7 or -1 if not to be used.
+:Default: ``-1``
 
 ``osd op history size``
 
