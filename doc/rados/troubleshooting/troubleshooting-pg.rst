@@ -277,13 +277,17 @@ possible given unusual combinations of failures that allow the cluster
 to learn about writes that were performed before the writes themselves
 are recovered.  To mark the "unfound" objects as "lost"::
 
-	ceph pg 2.5 mark_unfound_lost revert
+	ceph pg 2.5 mark_unfound_lost revert|delete
 
 This the final argument specifies how the cluster should deal with
-lost objects.  Currently the only supported option is "revert", which
-will either roll back to a previous version of the object or (if it
-was a new object) forget about it entirely.  Use this with caution, as
-it may confuse applications that expected the object to exist.
+lost objects.  
+
+The "delete" option will forget about them entirely.
+
+The "revert" option (not available for erasure coded pools) will
+either roll back to a previous version of the object or (if it was a
+new object) forget about it entirely.  Use this with caution, as it
+may confuse applications that expected the object to exist.
 
 
 Homeless Placement Groups
