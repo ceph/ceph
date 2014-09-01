@@ -1,0 +1,23 @@
+#
+# More information at
+#  https://wiki.ceph.com/Community/Ceph_contributors_list_maintenance_guide
+#
+# See .mailmap for name and mail normalization.
+# See .organizationmap for organization affiliation
+#
+# In .mailmap, an individual may be represented by multiple mails which may reflect
+# an organization affiliation change that needs to be preserved to find out which
+# organization sponsored which commit.
+# 
+# The .peoplemap file aggregates these mails to show a single line for each person
+#
+# The names that need to be added to .peoplemap can be displayed with:
+#
+# git log --pretty='%aN <%aE>' $range | git -c mailmap.file=.peoplemap check-mailmap --stdin | sort | uniq | sed -e 's/\(.*\) \(<.*\)/\2 \1/' | uniq --skip-field=1 --all-repeated | sed -e 's/\(.*>\) \(.*\)/\2 \1/'
+#
+David Zafman <dzafman@redhat.com> David Zafman <david.zafman@inktank.com>
+John Spray <jspray@redhat.com> John Spray <john.spray@inktank.com>
+Loic Dachary <loic@dachary.org> Loic Dachary <loic-201408@dachary.org>
+Ross Turk <rturk@redhat.com> Ross Turk <ross.turk@inktank.com>
+Sage Weil <sweil@redhat.com> Sage Weil <sage@inktank.com>
+Yehuda Sadeh <ysadey@redhat.com> Yehuda Sadeh <yehuda@inktank.com>
