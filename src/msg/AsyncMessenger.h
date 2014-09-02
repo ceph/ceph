@@ -204,7 +204,7 @@ private:
    * @return a pointer to the newly-created connection. Caller does not own a
    * reference; take one if you need it.
    */
-  AsyncConnection *create_connect(const entity_addr_t& addr, int type);
+  AsyncConnectionRef create_connect(const entity_addr_t& addr, int type);
 
   /**
    * Queue up a Message for delivery to the entity specified
@@ -218,7 +218,7 @@ private:
    * @param dest_type The peer type of the address we're sending to
    * just drop silently under failure.
    */
-  void submit_message(Message *m, AsyncConnection *con,
+  void submit_message(Message *m, AsyncConnectionRef con,
                       const entity_addr_t& dest_addr, int dest_type);
 
   int _send_message(Message *m, const entity_inst_t& dest);
@@ -255,21 +255,21 @@ private:
    * NOTE: a Asyncconnection* with state CLOSED may still be in the map but is considered
    * invalid and can be replaced by anyone holding the msgr lock
    */
-  ceph::unordered_map<entity_addr_t, AsyncConnection*> conns;
+  ceph::unordered_map<entity_addr_t, AsyncConnectionRef> conns;
 
   /**
    * list of connection are in teh process of accepting
    *
    * These are not yet in the conns map.
    */
-  set<AsyncConnection*> accepting_conns;
+  set<AsyncConnectionRef> accepting_conns;
 
   /// internal cluster protocol version, if any, for talking to entities of the same type.
   int cluster_protocol;
 
-  AsyncConnection *_lookup_conn(const entity_addr_t& k) {
+  AsyncConnectionRef _lookup_conn(const entity_addr_t& k) {
     assert(lock.is_locked());
-    ceph::unordered_map<entity_addr_t, AsyncConnection*>::iterator p = conns.find(k);
+    ceph::unordered_map<entity_addr_t, AsyncConnectionRef>::iterator p = conns.find(k);
     if (p == conns.end())
       return NULL;
     if (!p->second->is_connected()) {
@@ -281,7 +281,7 @@ private:
     return p->second;
   }
 
-  void _stop_conn(AsyncConnection *c) {
+  void _stop_conn(AsyncConnectionRef c) {
     assert(lock.is_locked());
     if (c) {
       c->mark_down();
@@ -311,12 +311,12 @@ public:
   /**
    * This wraps _lookup_conn.
    */
-  AsyncConnection *lookup_conn(const entity_addr_t& k) {
+  AsyncConnectionRef lookup_conn(const entity_addr_t& k) {
     Mutex::Locker l(lock);
     return _lookup_conn(k);
   }
 
-  void accept_conn(AsyncConnection *conn) {
+  void accept_conn(AsyncConnectionRef conn) {
     Mutex::Locker l(lock);
     if (conns.count(conn->get_peer_addr()))
       delete conns[conn->get_peer_addr()];
@@ -325,7 +325,7 @@ public:
   }
 
   void learned_addr(const entity_addr_t &peer_addr_for_me);
-  AsyncConnection *add_accept(int sd);
+  AsyncConnectionRef add_accept(int sd);
 
   /**
    * This wraps ms_deliver_get_authorizer. We use it for AsyncConnection.

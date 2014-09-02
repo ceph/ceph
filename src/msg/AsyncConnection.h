@@ -248,4 +248,6 @@ class AsyncConnection : public Connection {
   ceph::shared_ptr<AuthSessionHandler> session_security;
 }; /* AsyncConnection */
 
+typedef boost::intrusive_ptr<AsyncConnection> AsyncConnectionRef;
+
 #endif

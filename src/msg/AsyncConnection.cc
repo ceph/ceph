@@ -26,42 +26,33 @@ ostream& AsyncConnection::_conn_prefix(std::ostream *_dout) {
 }
 
 class C_handle_read : public EventCallback {
-  AsyncConnection *conn;
+  AsyncConnectionRef conn;
 
  public:
-  C_handle_read(AsyncConnection *c): conn(c) {
-    conn->get();
-  }
+  C_handle_read(AsyncConnectionRef c): conn(c) {}
   void do_request(int fd) {
     conn->process();
-    conn->put();
   }
 };
 
 class C_handle_write : public EventCallback {
-  AsyncConnection *conn;
+  AsyncConnectionRef conn;
 
  public:
-  C_handle_write(AsyncConnection *c): conn(c) {
-    conn->get();
-  }
+  C_handle_write(AsyncConnectionRef c): conn(c) {}
   void do_request(int fd) {
     conn->handle_write();
-    conn->put();
   }
 };
 
 class C_handle_reset : public EventCallback {
   AsyncMessenger *msgr;
-  AsyncConnection *conn;
+  AsyncConnectionRef conn;
 
  public:
-  C_handle_reset(AsyncMessenger *m, AsyncConnection *c): msgr(m), conn(c) {
-    conn->get();
-  }
+  C_handle_reset(AsyncMessenger *m, AsyncConnectionRef c): msgr(m), conn(c) {}
   void do_request(int id) {
-    msgr->ms_deliver_handle_reset(conn);
-    conn->put();
+    msgr->ms_deliver_handle_reset(conn.get());
   }
 };
 
@@ -1023,9 +1014,7 @@ int AsyncConnection::_process_connection()
           session_security.reset();
         }
 
-        get();
         async_msgr->ms_deliver_handle_connect(this);
-        get();
         async_msgr->ms_deliver_handle_fast_connect(this);
 
         // reset connect state variables
@@ -1323,7 +1312,6 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
   }
 
   bool authorizer_valid;
-  get();
   if (!async_msgr->verify_authorizer(this, peer_type, connect.authorizer_protocol, authorizer_bl,
                                authorizer_reply, authorizer_valid, session_key) || !authorizer_valid) {
     ldout(async_msgr->cct,0) << __func__ << ": got bad authorizer" << dendl;
@@ -1335,7 +1323,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
   ldout(async_msgr->cct, 10) << __func__ << " accept:  setting up session_security." << dendl;
 
   // existing?
-  AsyncConnection *existing = async_msgr->lookup_conn(peer_addr);
+  AsyncConnectionRef existing = async_msgr->lookup_conn(peer_addr);
   if (existing) {
     if (connect.global_seq < existing->peer_global_seq) {
       ldout(async_msgr->cct, 10) << __func__ << " accept existing " << existing
@@ -1462,11 +1450,9 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
   }
   if (existing->policy.lossy) {
     // disconnect from the Connection
-    existing->get();
     async_msgr->ms_deliver_handle_reset(existing);
   } else {
     // queue a reset on the new connection, which we're dumping for the old
-    get();
     async_msgr->ms_deliver_handle_reset(this);
 
     // reset the in_seq if this is a hard reset from peer,
@@ -1515,9 +1501,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
                                session_key, get_features()));
 
   // notify
-  get();
   async_msgr->ms_deliver_handle_accept(this);
-  get();
   async_msgr->ms_deliver_handle_fast_accept(this);
 
   // ok!
@@ -1708,7 +1692,6 @@ void AsyncConnection::was_session_reset()
   discard_out_queue();
   outcoming_bl.clear();
 
-  get();
   async_msgr->ms_deliver_handle_remote_reset(this);
 
   if (randomize_out_seq()) {
@@ -1744,7 +1727,6 @@ int AsyncConnection::_send(Message *m)
   }
 
   // associate message with Connection (for benefit of encode_payload)
-  get();
   m->set_connection(this);
 
   uint64_t features = get_features();
