@@ -312,7 +312,7 @@ public:
   }
   std::map<std::string,bufferptr> *get_previous_projected_xattrs() {
       std::list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
-    for (p++;  // skip the most recent projected value
+    for (++p;  // skip the most recent projected value
 	 p != projected_nodes.rend();
 	 ++p)
       if ((*p)->xattrs)
