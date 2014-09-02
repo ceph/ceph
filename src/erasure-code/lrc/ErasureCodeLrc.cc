@@ -443,7 +443,7 @@ int ErasureCodeLrc::parse_ruleset_step(string description_string,
   json_spirit::write(description, json_string);
   string op;
   string type;
-  int n;
+  int n = 0;
   int position = 0;
   for (vector<json_spirit::mValue>::iterator i = description.begin();
        i != description.end();
