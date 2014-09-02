@@ -35,6 +35,7 @@
 #include "MDSMap.h"
 
 #include "SessionMap.h"
+#include "Beacon.h"
 
 
 #define CEPH_MDS_PROTOCOL    24 /* cluster internal */
@@ -103,6 +104,9 @@ enum {
 
 
 
+namespace ceph {
+  struct heartbeat_handle_d;
+}
 class filepath;
 
 class MonClient;
@@ -142,6 +146,14 @@ class MDS : public Dispatcher, public md_config_obs_t {
  public:
   Mutex        mds_lock;
   SafeTimer    timer;
+
+ private:
+  ceph::heartbeat_handle_d *hb;  // Heartbeat for threads using mds_lock
+  void heartbeat_reset();
+  Beacon  beacon;
+  void set_want_state(MDSMap::DaemonState newstate);
+ public:
+  utime_t get_laggy_until() {return beacon.get_laggy_until();}
 
   AuthAuthorizeHandlerRegistry *authorize_handler_cluster_registry;
   AuthAuthorizeHandlerRegistry *authorize_handler_service_registry;
@@ -225,8 +237,8 @@ class MDS : public Dispatcher, public md_config_obs_t {
     replay_queue.push_back(c);
   }
 
-  int get_state() { return state; } 
-  int get_want_state() { return want_state; } 
+  MDSMap::DaemonState get_state() { return state; } 
+  MDSMap::DaemonState get_want_state() { return want_state; } 
   bool is_creating() { return state == MDSMap::STATE_CREATING; }
   bool is_starting() { return state == MDSMap::STATE_STARTING; }
   bool is_standby()  { return state == MDSMap::STATE_STANDBY; }
@@ -251,13 +263,18 @@ class MDS : public Dispatcher, public md_config_obs_t {
     
 
   // -- waiters --
+private:
   list<MDSInternalContextBase*> finished_queue;
+  void _advance_queues();
+public:
 
   void queue_waiter(MDSInternalContextBase *c) {
     finished_queue.push_back(c);
+    progress_thread.signal();
   }
   void queue_waiters(list<MDSInternalContextBase*>& ls) {
     finished_queue.splice( finished_queue.end(), ls );
+    progress_thread.signal();
   }
   bool queue_one_replay() {
     if (replay_queue.empty())
@@ -267,25 +284,6 @@ class MDS : public Dispatcher, public md_config_obs_t {
     return true;
   }
   
-  // -- keepalive beacon --
-  version_t               beacon_last_seq;          // last seq sent to monitor
-  map<version_t,utime_t>  beacon_seq_stamp;         // seq # -> time sent
-  utime_t                 beacon_last_acked_stamp;  // last time we sent a beacon that got acked
-  bool was_laggy;
-  utime_t laggy_until;
-
-  bool is_laggy();
-  utime_t get_laggy_until() { return laggy_until; }
-
-  class C_MDS_BeaconSender : public MDSInternalContext {
-  public:
-    C_MDS_BeaconSender(MDS *m) : MDSInternalContext(m) {}
-    void finish(int r) {
-      mds->beacon_sender = 0;
-      mds->beacon_send();
-    }
-  } *beacon_sender;
-
   // tick and other timer fun
   class C_MDS_Tick : public MDSInternalContext {
   public:
@@ -325,6 +323,19 @@ class MDS : public Dispatcher, public md_config_obs_t {
   void ms_handle_connect(Connection *con);
   bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con);
+
+private:
+  class ProgressThread : public Thread {
+    MDS *mds;
+    bool stopping;
+    Cond cond;
+  public:
+    ProgressThread(MDS *mds_) : mds(mds_), stopping(false) {}
+    void * entry(); 
+    void shutdown();
+    void signal() {cond.Signal();}
+  } progress_thread;
+  void _progress_thread();
 
  public:
   MDS(const std::string &n, Messenger *m, MonClient *mc);
@@ -425,9 +436,6 @@ class MDS : public Dispatcher, public md_config_obs_t {
 
   void tick();
   
-  void beacon_start();
-  void beacon_send();
-  void handle_mds_beacon(MMDSBeacon *m);
 
   void inc_dispatch_depth() { ++dispatch_depth; }
   void dec_dispatch_depth() { --dispatch_depth; }
