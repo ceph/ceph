@@ -314,7 +314,7 @@ public:
       if (objs.size() == 1) {
         map<uint64_t, RGWObjManifestPart>::iterator iter = objs.begin();
         rgw_obj& obj = iter->second.loc;
-        return head_obj.object != obj.object;
+        return !(head_obj == obj);
       }
       return (objs.size() >= 2);
     }
@@ -1617,7 +1617,7 @@ public:
     return clone_objs(ctx, dst_obj, v, attrs, category, pmtime, truncate_dest, exclusive, xattr_cond);
   }
 
-  int rewrite_obj(const string& bucket_owner, rgw_obj& obj);
+  int rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj);
   /**
    * Copy an object.
    * dest_obj: the object to copy into
@@ -1651,7 +1651,7 @@ public:
                void *progress_data);
 
   int copy_obj_data(void *ctx,
-               const string& owner,
+               RGWBucketInfo& dest_bucket_info,
 	       void **handle, off_t end,
                rgw_obj& dest_obj,
                rgw_obj& src_obj,
