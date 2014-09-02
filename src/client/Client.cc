@@ -182,6 +182,9 @@ Client::Client(Messenger *m, MonClient *mc)
 
   num_flushing_caps = 0;
 
+  _dir_vxattrs_name_size = _vxattrs_calcu_name_size(_dir_vxattrs);
+  _file_vxattrs_name_size = _vxattrs_calcu_name_size(_file_vxattrs);
+
   lru.lru_set_max(cct->_conf->client_cache_size);
   lru.lru_set_midpoint(cct->_conf->client_cache_mid);
 
@@ -7409,43 +7412,15 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
 {
   int r;
 
-  if (strncmp(name, "ceph.", 5) == 0) {
-    string n(name);
-    char buf[256];
-
+  const VXattr *vxattr = _match_vxattr(in, name);
+  if (vxattr) {
     r = -ENODATA;
-    const OSDMap *osdmap = objecter->get_osdmap_read();
-    if ((in->is_file() && n.find("ceph.file.layout") == 0) ||
-	(in->is_dir() && in->has_dir_layout() && n.find("ceph.dir.layout") == 0)) {
-      string rest = n.substr(n.find("layout"));
-      if (rest == "layout") {
-	r = snprintf(buf, sizeof(buf),
-		     "stripe_unit=%lu stripe_count=%lu object_size=%lu pool=",
-		     (long unsigned)in->layout.fl_stripe_unit,
-		     (long unsigned)in->layout.fl_stripe_count,
-		     (long unsigned)in->layout.fl_object_size);
-	if (osdmap->have_pg_pool(in->layout.fl_pg_pool))
-	  r += snprintf(buf + r, sizeof(buf) - r, "%s",
-			osdmap->get_pool_name(in->layout.fl_pg_pool).c_str());
-	else
-	  r += snprintf(buf + r, sizeof(buf) - r, "%lu",
-			(long unsigned)in->layout.fl_pg_pool);
-      } else if (rest == "layout.stripe_unit") {
-	r = snprintf(buf, sizeof(buf), "%lu", (long unsigned)in->layout.fl_stripe_unit);
-      } else if (rest == "layout.stripe_count") {
-	r = snprintf(buf, sizeof(buf), "%lu", (long unsigned)in->layout.fl_stripe_count);
-      } else if (rest == "layout.object_size") {
-	r = snprintf(buf, sizeof(buf), "%lu", (long unsigned)in->layout.fl_object_size);
-      } else if (rest == "layout.pool") {
-	if (osdmap->have_pg_pool(in->layout.fl_pg_pool))
-	  r = snprintf(buf, sizeof(buf), "%s",
-		       osdmap->get_pool_name(in->layout.fl_pg_pool).c_str());
-	else
-	  r = snprintf(buf, sizeof(buf), "%lu",
-		       (long unsigned)in->layout.fl_pg_pool);
-      }
-    }
-    objecter->put_osdmap_read();
+
+    char buf[256];
+    // call pointer-to-member function
+    if (!(vxattr->exists_cb && !(this->*(vxattr->exists_cb))(in)))
+      r = (this->*(vxattr->getxattr_cb))(in, buf, sizeof(buf));
+
     if (size != 0) {
       if (r > (int)size) {
 	r = -ERANGE;
@@ -7499,6 +7474,9 @@ int Client::_listxattr(Inode *in, char *name, size_t size, int uid, int gid)
 	 ++p)
       r += p->first.length() + 1;
 
+    const VXattr *vxattrs = _get_vxattrs(in);
+    r += _vxattrs_name_size(vxattrs);
+
     if (size != 0) {
       if (size >= (unsigned)r) {
 	for (map<string,bufferptr>::iterator p = in->xattrs.begin();
@@ -7508,6 +7486,20 @@ int Client::_listxattr(Inode *in, char *name, size_t size, int uid, int gid)
 	  name += p->first.length();
 	  *name = '\0';
 	  name++;
+	}
+	if (vxattrs) {
+	  for (int i = 0; !vxattrs[i].name.empty(); i++) {
+	    const VXattr& vxattr = vxattrs[i];
+	    if (vxattr.hidden)
+	      continue;
+	    // call pointer-to-member function
+	    if(vxattr.exists_cb && !(this->*(vxattr.exists_cb))(in))
+	      continue;
+	    memcpy(name, vxattr.name.c_str(), vxattr.name.length());
+	    name += vxattr.name.length();
+	    *name = '\0';
+	    name++;
+	  }
 	}
       } else
 	r = -ERANGE;
@@ -7544,6 +7536,10 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
       strncmp(name, "security.", 9) &&
       strncmp(name, "trusted.", 8) &&
       strncmp(name, "ceph.", 5))
+    return -EOPNOTSUPP;
+
+  const VXattr *vxattr = _match_vxattr(in, name);
+  if (vxattr && vxattr->readonly)
     return -EOPNOTSUPP;
 
   if (!value)
@@ -7597,6 +7593,10 @@ int Client::_removexattr(Inode *in, const char *name, int uid, int gid)
       strncmp(name, "ceph.", 5))
     return -EOPNOTSUPP;
 
+  const VXattr *vxattr = _match_vxattr(in, name);
+  if (vxattr && vxattr->readonly)
+    return -EOPNOTSUPP;
+
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_RMXATTR);
   filepath path;
   in->make_nosnap_relative_path(path);
@@ -7626,6 +7626,180 @@ int Client::ll_removexattr(Inode *in, const char *name, int uid, int gid)
   return _removexattr(in, name, uid, gid);
 }
 
+bool Client::_vxattrcb_layout_exists(Inode *in)
+{
+  char *p = (char *)&in->layout;
+  for (size_t s = 0; s < sizeof(in->layout); s++, p++)
+    if (*p)
+      return true;
+  return false;
+}
+size_t Client::_vxattrcb_layout(Inode *in, char *val, size_t size)
+{
+  int r = snprintf(val, size,
+      "stripe_unit=%lld stripe_count=%lld object_size=%lld pool=",
+      (unsigned long long)in->layout.fl_stripe_unit,
+      (unsigned long long)in->layout.fl_stripe_count,
+      (unsigned long long)in->layout.fl_object_size);
+  const OSDMap *osdmap = objecter->get_osdmap_read();
+  if (osdmap->have_pg_pool(in->layout.fl_pg_pool))
+    r += snprintf(val + r, size - r, "%s",
+	osdmap->get_pool_name(in->layout.fl_pg_pool).c_str());
+  else
+    r += snprintf(val + r, size - r, "%lld",
+	(unsigned long long)in->layout.fl_pg_pool);
+  objecter->put_osdmap_read();
+  return r;
+}
+size_t Client::_vxattrcb_layout_stripe_unit(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%lld", (unsigned long long)in->layout.fl_stripe_unit);
+}
+size_t Client::_vxattrcb_layout_stripe_count(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%lld", (unsigned long long)in->layout.fl_stripe_count);
+}
+size_t Client::_vxattrcb_layout_object_size(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%lld", (unsigned long long)in->layout.fl_object_size);
+}
+size_t Client::_vxattrcb_layout_pool(Inode *in, char *val, size_t size)
+{
+  size_t r;
+  const OSDMap *osdmap = objecter->get_osdmap_read();
+  if (osdmap->have_pg_pool(in->layout.fl_pg_pool))
+    r = snprintf(val, size, "%s", osdmap->get_pool_name(in->layout.fl_pg_pool).c_str());
+  else
+    r = snprintf(val, size, "%lld", (unsigned long long)in->layout.fl_pg_pool);
+  objecter->put_osdmap_read();
+  return r;
+}
+size_t Client::_vxattrcb_dir_entries(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%lld", (unsigned long long)(in->dirstat.nfiles + in->dirstat.nsubdirs));
+}
+size_t Client::_vxattrcb_dir_files(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%lld", (unsigned long long)in->dirstat.nfiles);
+}
+size_t Client::_vxattrcb_dir_subdirs(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%lld", (unsigned long long)in->dirstat.nsubdirs);
+}
+size_t Client::_vxattrcb_dir_rentries(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%lld", (unsigned long long)(in->rstat.rfiles + in->rstat.rsubdirs));
+}
+size_t Client::_vxattrcb_dir_rfiles(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%lld", (unsigned long long)in->rstat.rfiles);
+}
+size_t Client::_vxattrcb_dir_rsubdirs(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%lld", (unsigned long long)in->rstat.rsubdirs);
+}
+size_t Client::_vxattrcb_dir_rbytes(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%lld", (unsigned long long)in->rstat.rbytes);
+}
+size_t Client::_vxattrcb_dir_rctime(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%ld.09%ld", (long)in->rstat.rctime.sec(),
+      (long)in->rstat.rctime.nsec());
+}
+
+#define CEPH_XATTR_NAME(_type, _name) "ceph." #_type "." #_name
+#define CEPH_XATTR_NAME2(_type, _name, _name2) "ceph." #_type "." #_name "." #_name2
+
+#define XATTR_NAME_CEPH(_type, _name)				\
+{								\
+  name: CEPH_XATTR_NAME(_type, _name),				\
+  getxattr_cb: &Client::_vxattrcb_ ## _type ## _ ## _name,	\
+  readonly: true,						\
+  hidden: false,						\
+  exists_cb: NULL,						\
+}
+#define XATTR_LAYOUT_FIELD(_type, _name, _field)		\
+{								\
+  name: CEPH_XATTR_NAME2(_type, _name, _field),			\
+  getxattr_cb: &Client::_vxattrcb_ ## _name ## _ ## _field,	\
+  readonly: false,						\
+  hidden: true,							\
+  exists_cb: &Client::_vxattrcb_layout_exists,			\
+}
+
+const Client::VXattr Client::_dir_vxattrs[] = {
+  {
+    name: "ceph.dir.layout",
+    getxattr_cb: &Client::_vxattrcb_layout,
+    readonly: false,
+    hidden: true,
+    exists_cb: &Client::_vxattrcb_layout_exists,
+  },
+  XATTR_LAYOUT_FIELD(dir, layout, stripe_unit),
+  XATTR_LAYOUT_FIELD(dir, layout, stripe_count),
+  XATTR_LAYOUT_FIELD(dir, layout, object_size),
+  XATTR_LAYOUT_FIELD(dir, layout, pool),
+  XATTR_NAME_CEPH(dir, entries),
+  XATTR_NAME_CEPH(dir, files),
+  XATTR_NAME_CEPH(dir, subdirs),
+  XATTR_NAME_CEPH(dir, rentries),
+  XATTR_NAME_CEPH(dir, rfiles),
+  XATTR_NAME_CEPH(dir, rsubdirs),
+  XATTR_NAME_CEPH(dir, rbytes),
+  XATTR_NAME_CEPH(dir, rctime),
+  { name: "" }     /* Required table terminator */
+};
+
+const Client::VXattr Client::_file_vxattrs[] = {
+  {
+    name: "ceph.file.layout",
+    getxattr_cb: &Client::_vxattrcb_layout,
+    readonly: false,
+    hidden: true,
+    exists_cb: &Client::_vxattrcb_layout_exists,
+  },
+  XATTR_LAYOUT_FIELD(file, layout, stripe_unit),
+  XATTR_LAYOUT_FIELD(file, layout, stripe_count),
+  XATTR_LAYOUT_FIELD(file, layout, object_size),
+  XATTR_LAYOUT_FIELD(file, layout, pool),
+  { name: "" }     /* Required table terminator */
+};
+
+const Client::VXattr *Client::_get_vxattrs(Inode *in)
+{
+  if (in->is_dir())
+    return _dir_vxattrs;
+  else if (in->is_file())
+    return _file_vxattrs;
+  return NULL;
+}
+
+const Client::VXattr *Client::_match_vxattr(Inode *in, const char *name)
+{
+  if (strncmp(name, "ceph.", 5) == 0) {
+    const VXattr *vxattr = _get_vxattrs(in);
+    if (vxattr) {
+      while (!vxattr->name.empty()) {
+	if (vxattr->name == name)
+	  return vxattr;
+	vxattr++;
+      }
+    }
+  }
+  return NULL;
+}
+
+size_t Client::_vxattrs_calcu_name_size(const VXattr *vxattr)
+{
+  size_t len = 0;
+  while (!vxattr->name.empty()) {
+    if (!vxattr->hidden)
+      len += vxattr->name.length() + 1;
+    vxattr++;
+  }
+  return len;
+}
 
 int Client::ll_readlink(Inode *in, char *buf, size_t buflen, int uid, int gid)
 {
