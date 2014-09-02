@@ -448,6 +448,9 @@ int FileStore::lfn_unlink(coll_t cid, const ghobject_t& o,
   assert(NULL != index.index);
   RWLock::WLocker l((index.index)->access_lock);
 
+  if (fdcache.lookup(o))
+    fdcache.clear(o);
+
   {
     IndexedPath path;
     int exist;
@@ -480,7 +483,6 @@ int FileStore::lfn_unlink(coll_t cid, const ghobject_t& o,
 	debug_obj_on_delete(o);
       }
       wbthrottle.clear_object(o); // should be only non-cache ref
-      fdcache.clear(o);
     } else {
       /* Ensure that replay of this op doesn't result in the object_map
        * going away.
