@@ -147,6 +147,7 @@ EXTRA_DIST += \
 	$(srcdir)/vstart.sh \
 	$(srcdir)/stop.sh \
 	ceph-run \
+	$(srcdir)/ceph-osd-prestart.sh \
 	$(srcdir)/ceph_common.sh \
 	$(srcdir)/init-radosgw \
 	$(srcdir)/init-radosgw.sysv \
@@ -216,6 +217,9 @@ doc_DATA = $(srcdir)/sample.ceph.conf sample.fetch_config
 
 shell_commondir = $(libdir)/ceph
 shell_common_SCRIPTS = ceph_common.sh
+
+ceph_libexecdir = $(libexecdir)/ceph
+ceph_libexec_SCRIPTS = ceph-osd-prestart.sh
 
 bash_completiondir = $(sysconfdir)/bash_completion.d
 bash_completion_DATA = $(srcdir)/bash_completion/ceph \
