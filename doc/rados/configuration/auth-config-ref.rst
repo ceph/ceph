@@ -245,34 +245,35 @@ setting (not recommended), or a path to a keyfile using the ``keyfile`` setting.
 Daemon Keyrings
 ---------------
 
-With the exception of the monitors, Ceph generates daemon keyrings in the same
-way that it generates user keyrings.  By default, the daemons store their
-keyrings inside their data directory.  The default keyring locations, and the
-capabilities necessary for the daemon to function, are shown below.
+Administrative users or deployment tools  (e.g., ``ceph-deploy``) may generate
+daemon keyrings in the same way as generating user keyrings.  By default, Ceph
+stores daemons keyrings inside their data directory. The default keyring
+locations, and the capabilities necessary for the daemon to function, are shown
+below.
 
 ``ceph-mon``
 
 :Location: ``$mon_data/keyring``
-:Capabilities: N/A
+:Capabilities: ``mon 'allow *'``
 
 ``ceph-osd``
 
 :Location: ``$osd_data/keyring``
-:Capabilities: ``mon 'allow rwx' osd 'allow *'``
+:Capabilities: ``mon 'allow profile osd' osd 'allow *'``
 
 ``ceph-mds``
 
 :Location: ``$mds_data/keyring``
-:Capabilities: ``mds 'allow rwx' mds 'allow *' osd 'allow *'``
+:Capabilities: ``mds 'allow' mon 'allow profile mds' osd 'allow rwx'``
 
 ``radosgw``
 
 :Location: ``$rgw_data/keyring``
-:Capabilities: ``mon 'allow rw' osd 'allow rwx'``
+:Capabilities: ``mon 'allow rwx' osd 'allow rwx'``
 
 
-Note that the monitor keyring contains a key but no capabilities, and
-is not part of the cluster ``auth`` database.
+.. note:: The monitor keyring (i.e., ``mon.``) contains a key but no 
+   capabilities, and is not part of the cluster ``auth`` database.
 
 The daemon data directory locations default to directories of the form::
 
@@ -416,6 +417,8 @@ yet implemented.
 **We recommend migrating all daemons to the newer versions and enabling the 
 foregoing flag** at the nearest practical time so that you may avail yourself 
 of the enhanced authentication.
+
+.. note:: Ceph kernel modules do not support signatures yet.
 
 
 .. _Storage Cluster Quick Start: ../../../start/quick-ceph-deploy/
