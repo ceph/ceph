@@ -1934,7 +1934,7 @@ next:
       }
     }
     if (need_rewrite) {
-      ret = store->rewrite_obj(bucket_info.owner, obj);
+      ret = store->rewrite_obj(bucket_info, obj);
       if (ret < 0) {
         cerr << "ERROR: object rewrite returned: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -2027,7 +2027,7 @@ next:
           if (!need_rewrite) {
             formatter->dump_string("status", "Skipped");
           } else {
-            r = store->rewrite_obj(bucket_info.owner, obj);
+            r = store->rewrite_obj(bucket_info, obj);
             if (r == 0) {
               formatter->dump_string("status", "Success");
             } else {
