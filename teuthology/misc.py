@@ -1047,13 +1047,15 @@ def get_valgrind_args(testdir, name, preamble, v):
             '--num-callers=50',
             '--suppressions={tdir}/valgrind.supp'.format(tdir=testdir),
             '--xml=yes',
-            '--xml-file={vdir}/{n}.log'.format(vdir=val_path, n=name)
+            '--xml-file={vdir}/{n}.log'.format(vdir=val_path, n=name),
+            '--time-stamp=yes',
             ]
     else:
         extra_args = [
             'valgrind',
             '--suppressions={tdir}/valgrind.supp'.format(tdir=testdir),
-            '--log-file={vdir}/{n}.log'.format(vdir=val_path, n=name)
+            '--log-file={vdir}/{n}.log'.format(vdir=val_path, n=name),
+            '--time-stamp=yes',
             ]
     args = [
         'cd', testdir,
