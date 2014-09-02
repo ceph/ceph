@@ -1114,15 +1114,7 @@ void MDLog::standby_trim_segments()
     if (seg->end > expire_pos)
       break;
     dout(10) << " removing segment " << seg->seq << "/" << seg->offset << dendl;
-    seg->dirty_dirfrags.clear_list();
-    seg->new_dirfrags.clear_list();
-    seg->dirty_inodes.clear_list();
-    seg->dirty_dentries.clear_list();
-    seg->open_files.clear_list();
-    seg->dirty_parent_inodes.clear_list();
-    seg->dirty_dirfrag_dir.clear_list();
-    seg->dirty_dirfrag_nest.clear_list();
-    seg->dirty_dirfrag_dirfragtree.clear_list();
+    mds->mdcache->standby_trim_segment(seg);
     remove_oldest_segment();
     removed_segment = true;
   }
