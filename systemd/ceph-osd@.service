@@ -1,0 +1,11 @@
+[Unit]
+Description=Ceph object storage daemon
+
+[Service]
+EnvironmentFile=-/etc/sysconfig/ceph
+Environment=CLUSTER=ceph
+ExecStart=/usr/bin/ceph-osd -f --cluster ${CLUSTER} --id %i
+ExecStartPre=/usr/libexec/ceph/ceph-osd-prestart.sh --cluster ${CLUSTER} --id %i
+
+[Install]
+WantedBy=multi-user.target

@@ -455,6 +455,7 @@ fi
 %endif
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/ceph_common.sh
+%{_libexecdir}/ceph/ceph-osd-prestart.sh
 %dir %{_libdir}/rados-classes
 %{_libdir}/rados-classes/libcls_rbd.so*
 %{_libdir}/rados-classes/libcls_hello.so*
