@@ -404,15 +404,23 @@ make %{?jobs:-j%{jobs}} check-local
 make DESTDIR=$RPM_BUILD_ROOT install
 find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
-install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
 install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
 mkdir -p $RPM_BUILD_ROOT/%{_sbindir}
-ln -sf ../../etc/init.d/ceph %{buildroot}/%{_sbindir}/rcceph
 ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/%{_sbindir}/rcceph-radosgw
 install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
 install -m 0644 -D src/rgw/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph-radosgw
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
+
+
+# systemd
+mkdir -p $RPM_BUILD_ROOT/usr/lib/systemd/system/
+install -m 0644 -D systemd/ceph-osd@.service $RPM_BUILD_ROOT/usr/lib/systemd/system/
+install -m 0644 -D systemd/ceph-mds@.service $RPM_BUILD_ROOT/usr/lib/systemd/system/
+install -m 0644 -D systemd/ceph-mon@.service $RPM_BUILD_ROOT/usr/lib/systemd/system/
+mkdir -p $RPM_BUILD_ROOT/usr/libexec/ceph/
+install -m 0755 -D src/ceph-osd-prestart.sh $RPM_BUILD_ROOT/usr/libexec/ceph/
+
 
 # udev rules
 install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rules
@@ -504,7 +512,6 @@ fi
 %{_bindir}/ceph-osdomap-tool
 %{_bindir}/ceph_mon_store_converter
 %{_bindir}/ceph_erasure_code
-%{_initrddir}/ceph
 /sbin/mkcephfs
 /sbin/mount.ceph
 %{_sbindir}/ceph-disk
@@ -512,7 +519,19 @@ fi
 %{_sbindir}/ceph-disk-activate
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/ceph-disk-udev
-%{_sbindir}/rcceph
+
+# systemd
+
+%dir /usr/lib/ceph
+/usr/lib/ceph/ceph-osd-prestart.sh
+%dir /usr/libexec
+%dir /usr/libexec/ceph
+/usr/libexec/ceph/ceph-osd-prestart.sh
+%dir /usr/lib/systemd/system/
+/usr/lib/systemd/system/ceph-osd@.service
+/usr/lib/systemd/system/ceph-mon@.service
+/usr/lib/systemd/system/ceph-mds@.service
+
 
 %dir %{_libdir}/rados-classes
 %{_libdir}/rados-classes/libcls_kvs.so*

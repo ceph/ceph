@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Tue Sep  2 16:39:31 UTC 2014 - osynge@suse.com
+
+- Added native support for systemd.
+  * Rather than using a sysV/systemd hybrid.
+
+-------------------------------------------------------------------
 Mon Aug 12 11:36:31 UTC 2014 - osynge@suse.com
 
 - Applied patch from upstream to detect systemd

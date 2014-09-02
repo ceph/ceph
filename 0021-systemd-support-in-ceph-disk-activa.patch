@@ -1,0 +1,35 @@
+From: Owen Synge <osynge@suse.com>
+Date: Tue, 2 Sep 2014 15:54:07 +0200
+Subject: [PATCH] systemd support in ceph-disk activate
+
+previous code just fails for systemd with an error
+---
+ src/ceph-disk | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/src/ceph-disk b/src/ceph-disk
+index 1113135..b8d8001 100755
+--- a/src/ceph-disk
++++ b/src/ceph-disk
+@@ -1634,6 +1634,21 @@ def start_daemon(
+                     'osd.{osd_id}'.format(osd_id=osd_id),
+                     ],
+                 )
++        elif os.path.exists(os.path.join(path, 'systemd')):
++            command_check_call(
++                [
++                    'systemctl',
++                    'enable',
++                    'ceph-osd@{osd_id}'.format(osd_id=osd_id),
++                    ],
++                )
++            command_check_call(
++                [
++                    'systemctl',
++                    'start',
++                    'ceph-osd@{osd_id}'.format(osd_id=osd_id),
++                    ],
++                )
+         else:
+             raise Error('{cluster} osd.{osd_id} is not tagged with an init system'.format(
+                     cluster=cluster,

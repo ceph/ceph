@@ -1,0 +1,226 @@
+From: Owen Synge <osynge@suse.com>
+Date: Tue, 2 Sep 2014 15:44:19 +0200
+Subject: [PATCH] init: add systemd service files
+
+This patch adds systemd service files. It is possible to start and
+enable multiple instances (per monid, osdid, mds name), e.g.
+
+ # systemctl start ceph-mon@node01
+ # systemctl enable ceph-mon@node01
+
+ # systemctl start ceph-osd@0
+ # systemctl enable ceph-osd@0
+
+The ceph cluster can be set in the system config file:
+
+ /etc/sysconfig/ceph
+
+adding or editing the CLUSTER environment variable.
+
+Signed-off-by: Federico Simoncelli <fsimonce@redhat.com>
+
+Rebase of c26477448e957faf0d4f51b588b20609c4bc9791
+
+Signed-off-by: Owen Synge <osynge@suse.com>
+---
+ ceph.spec.in              |  1 +
+ src/Makefile.am           |  4 ++++
+ src/ceph-osd-prestart.sh  | 50 +++++++++++++++++++++++++++++++++++++++++++++++
+ src/upstart/ceph-osd.conf | 31 +----------------------------
+ systemd/ceph-mds@.service | 10 ++++++++++
+ systemd/ceph-mon@.service | 17 ++++++++++++++++
+ systemd/ceph-osd@.service | 11 +++++++++++
+ 7 files changed, 94 insertions(+), 30 deletions(-)
+ create mode 100644 src/ceph-osd-prestart.sh
+ create mode 100644 systemd/ceph-mds@.service
+ create mode 100644 systemd/ceph-mon@.service
+ create mode 100644 systemd/ceph-osd@.service
+
+diff --git a/ceph.spec.in b/ceph.spec.in
+index 5454454..529ef8c 100644
+--- a/ceph.spec.in
++++ b/ceph.spec.in
+@@ -431,6 +431,7 @@ fi
+ %endif
+ %dir %{_libdir}/ceph
+ %{_libdir}/ceph/ceph_common.sh
++%{_libexecdir}/ceph/ceph-osd-prestart.sh
+ %dir %{_libdir}/rados-classes
+ %{_libdir}/rados-classes/libcls_rbd.so*
+ %{_libdir}/rados-classes/libcls_hello.so*
+diff --git a/src/Makefile.am b/src/Makefile.am
+index edec05e..42363b1 100644
+--- a/src/Makefile.am
++++ b/src/Makefile.am
+@@ -147,6 +147,7 @@ EXTRA_DIST += \
+ 	$(srcdir)/vstart.sh \
+ 	$(srcdir)/stop.sh \
+ 	ceph-run \
++	$(srcdir)/ceph-osd-prestart.sh \
+ 	$(srcdir)/ceph_common.sh \
+ 	$(srcdir)/init-radosgw \
+ 	$(srcdir)/init-radosgw.sysv \
+@@ -217,6 +218,9 @@ doc_DATA = $(srcdir)/sample.ceph.conf sample.fetch_config
+ shell_commondir = $(libdir)/ceph
+ shell_common_SCRIPTS = ceph_common.sh
+ 
++ceph_libexecdir = $(libexecdir)/ceph
++ceph_libexec_SCRIPTS = ceph-osd-prestart.sh
++
+ bash_completiondir = $(sysconfdir)/bash_completion.d
+ bash_completion_DATA = $(srcdir)/bash_completion/ceph \
+                $(srcdir)/bash_completion/rados \
+diff --git a/src/ceph-osd-prestart.sh b/src/ceph-osd-prestart.sh
+new file mode 100644
+index 0000000..77153c9
+--- /dev/null
++++ b/src/ceph-osd-prestart.sh
+@@ -0,0 +1,50 @@
++#!/bin/sh
++
++eval set -- "$(getopt -o i: --long id:,cluster: -- $@)"
++
++while true ; do
++	case "$1" in
++		-i|--id) id=$2; shift 2 ;;
++		--cluster) cluster=$2; shift 2 ;;
++		--) shift ; break ;;
++	esac
++done
++
++if [ -z "$id"  ]; then
++    echo "Usage: $0 [OPTIONS]"
++    echo "--id/-i ID        set ID portion of my name"
++    echo "--cluster NAME    set cluster name (default: ceph)"
++    exit 1;
++fi
++
++update="$(ceph-conf --cluster=${cluster:-ceph} --name=osd.$id --lookup osd_crush_update_on_start || :)"
++
++if [ "${update:-1}" = "1" -o "${update:-1}" = "true" ]; then
++    # update location in crush
++    hook="$(ceph-conf --cluster=${cluster:-ceph} --name=osd.$id --lookup osd_crush_location_hook || :)"
++    if [ -z "$hook" ]; then
++        hook="/usr/bin/ceph-crush-location"
++    fi
++    location="$($hook --cluster ${cluster:-ceph} --id $id --type osd)"
++    weight="$(ceph-conf --cluster=${cluster:-ceph} --name=osd.$id --lookup osd_crush_initial_weight || :)"
++    defaultweight=`df -P -k /var/lib/ceph/osd/${cluster:-ceph}-$id/ | tail -1 | awk '{ d= $2/1073741824 ; r = sprintf("%.2f", d); print r }'`
++    ceph \
++        --cluster="${cluster:-ceph}" \
++        --name="osd.$id" \
++        --keyring="/var/lib/ceph/osd/${cluster:-ceph}-$id/keyring" \
++        osd crush create-or-move \
++        -- \
++        "$id" \
++        "${weight:-${defaultweight:-1}}" \
++        $location
++fi
++
++journal="/var/lib/ceph/osd/${cluster:-ceph}-$id/journal"
++if [ -L "$journal" -a ! -e "$journal" ]; then
++    udevadm settle --timeout=5 || :
++    if [ -L "$journal" -a ! -e "$journal" ]; then
++        echo "ceph-osd($UPSTART_INSTANCE): journal not present, not starting yet." 1>&2
++        stop
++        exit 0
++    fi
++fi
+diff --git a/src/upstart/ceph-osd.conf b/src/upstart/ceph-osd.conf
+index 7175c2d..81469f2 100644
+--- a/src/upstart/ceph-osd.conf
++++ b/src/upstart/ceph-osd.conf
+@@ -15,36 +15,7 @@ pre-start script
+ 
+     install -d -m0755 /var/run/ceph
+ 
+-    update="$(ceph-conf --cluster=${cluster:-ceph} --name=osd.$id --lookup osd_crush_update_on_start || :)"
+-    if [ "${update:-1}" = "1" -o "${update:-1}" = "true" ]; then
+-        # update location in crush
+-	hook="$(ceph-conf --cluster=${cluster:-ceph} --name=osd.$id --lookup osd_crush_location_hook || :)"
+-	if [ -z "$hook" ]; then
+-	    hook="/usr/bin/ceph-crush-location"
+-	fi
+-	location="$($hook --cluster ${cluster:-ceph} --id $id --type osd)"
+-	weight="$(ceph-conf --cluster=${cluster:-ceph} --name=osd.$id --lookup osd_crush_initial_weight || :)"
+-	defaultweight=`df -P -k /var/lib/ceph/osd/${cluster:-ceph}-$id/ | tail -1 | awk '{ d= $2/1073741824 ; r = sprintf("%.2f", d); print r }'`
+-	ceph \
+-            --cluster="${cluster:-ceph}" \
+-            --name="osd.$id" \
+-            --keyring="/var/lib/ceph/osd/${cluster:-ceph}-$id/keyring" \
+-            osd crush create-or-move \
+-	    -- \
+-            "$id" \
+-	    "${weight:-${defaultweight:-1}}" \
+-	    $location
+-    fi
+-
+-    journal="/var/lib/ceph/osd/${cluster:-ceph}-$id/journal"
+-    if [ -L "$journal" -a ! -e "$journal" ]; then
+-        udevadm settle --timeout=5 || :
+-	if [ -L "$journal" -a ! -e "$journal" ]; then
+-            echo "ceph-osd($UPSTART_INSTANCE): journal not present, not starting yet." 1>&2
+-	    stop
+-	    exit 0
+-	fi
+-    fi
++    /usr/libexec/ceph/ceph-osd-prestart.sh --cluster="${cluster:-ceph}" -i "$id"
+ end script
+ 
+ instance ${cluster:-ceph}/$id
+diff --git a/systemd/ceph-mds@.service b/systemd/ceph-mds@.service
+new file mode 100644
+index 0000000..08bab79
+--- /dev/null
++++ b/systemd/ceph-mds@.service
+@@ -0,0 +1,10 @@
++[Unit]
++Description=Ceph metadata server daemon
++
++[Service]
++EnvironmentFile=-/etc/sysconfig/ceph
++Environment=CLUSTER=ceph
++ExecStart=/usr/bin/ceph-mds -f --cluster ${CLUSTER} --id %i
++
++[Install]
++WantedBy=multi-user.target
+diff --git a/systemd/ceph-mon@.service b/systemd/ceph-mon@.service
+new file mode 100644
+index 0000000..8ba0843
+--- /dev/null
++++ b/systemd/ceph-mon@.service
+@@ -0,0 +1,17 @@
++[Unit]
++Description=Ceph cluster monitor daemon
++
++# According to:
++#   http://www.freedesktop.org/wiki/Software/systemd/NetworkTarget
++# these can be removed once ceph-mon will dynamically change network
++# configuration.
++After=network-online.target
++Wants=network-online.target
++
++[Service]
++EnvironmentFile=-/etc/sysconfig/ceph
++Environment=CLUSTER=ceph
++ExecStart=/usr/bin/ceph-mon -f --cluster ${CLUSTER} --id %i
++
++[Install]
++WantedBy=multi-user.target
+diff --git a/systemd/ceph-osd@.service b/systemd/ceph-osd@.service
+new file mode 100644
+index 0000000..1811d7e
+--- /dev/null
++++ b/systemd/ceph-osd@.service
+@@ -0,0 +1,11 @@
++[Unit]
++Description=Ceph object storage daemon
++
++[Service]
++EnvironmentFile=-/etc/sysconfig/ceph
++Environment=CLUSTER=ceph
++ExecStart=/usr/bin/ceph-osd -f --cluster ${CLUSTER} --id %i
++ExecStartPre=/usr/libexec/ceph/ceph-osd-prestart.sh --cluster ${CLUSTER} --id %i
++
++[Install]
++WantedBy=multi-user.target
