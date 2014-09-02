@@ -148,7 +148,7 @@ Replayer::action_tracker_d &Replayer::tracker_for(action_id_t id) {
   return m_action_trackers[id % m_num_action_trackers];
 }
 
-void Replayer::run(const std::string replay_file) {
+void Replayer::run(const std::string& replay_file) {
   {
     librados::Rados rados;
     rados.init(NULL);

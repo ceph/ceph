@@ -77,7 +77,7 @@ public:
 
   ~Replayer();
 
-  void run(const std::string replay_file);
+  void run(const std::string &replay_file);
 
   librbd::RBD* get_rbd() {
     return m_rbd;
