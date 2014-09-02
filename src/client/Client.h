@@ -614,6 +614,49 @@ private:
   vinodeno_t _get_vino(Inode *in);
   inodeno_t _get_inodeno(Inode *in);
 
+  /*
+   * These define virtual xattrs exposing the recursive directory
+   * statistics and layout metadata.
+   */
+  struct VXattr {
+	  const string name;
+	  size_t (Client::*getxattr_cb)(Inode *in, char *val, size_t size);
+	  bool readonly, hidden;
+	  bool (Client::*exists_cb)(Inode *in);
+  };
+
+  bool _vxattrcb_layout_exists(Inode *in);
+  size_t _vxattrcb_layout(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_layout_stripe_unit(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_layout_stripe_count(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_layout_object_size(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_layout_pool(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_entries(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_files(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_subdirs(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_rentries(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_rfiles(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_rsubdirs(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_rbytes(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_rctime(Inode *in, char *val, size_t size);
+  size_t _vxattrs_calcu_name_size(const VXattr *vxattrs);
+
+  static const VXattr _dir_vxattrs[];
+  static const VXattr _file_vxattrs[];
+
+  static const VXattr *_get_vxattrs(Inode *in);
+  static const VXattr *_match_vxattr(Inode *in, const char *name);
+
+  size_t _file_vxattrs_name_size;
+  size_t _dir_vxattrs_name_size;
+  size_t _vxattrs_name_size(const VXattr *vxattrs) {
+	  if (vxattrs == _dir_vxattrs)
+		  return _dir_vxattrs_name_size;
+	  else if (vxattrs == _file_vxattrs)
+		  return _file_vxattrs_name_size;
+	  return 0;
+  }
+
 public:
   int mount(const std::string &mount_root);
   void unmount();
