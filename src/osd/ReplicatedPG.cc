@@ -1632,7 +1632,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
           // Check if in other hit sets
           map<time_t,HitSetRef>::iterator itor;
           bool in_other_hit_sets = false;
-          for (itor = agent_state->hit_set_map.begin(); itor != agent_state->hit_set_map.end(); itor++) {
+          for (itor = agent_state->hit_set_map.begin(); itor != agent_state->hit_set_map.end(); ++itor) {
             if (itor->second->contains(missing_oid)) {
               in_other_hit_sets = true;
               break;
