@@ -1053,7 +1053,7 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
 
       if (debug)
         cerr << "\tattrs: len " << as.data.size() << std::endl;
-      for (i = as.data.begin(); i != as.data.end(); i++) {
+      for (i = as.data.begin(); i != as.data.end(); ++i) {
         if (i->first == "_" || i->first == "snapset")
           continue;
         abl.clear();
