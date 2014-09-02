@@ -566,6 +566,7 @@ public:
   void send_expire_messages(map<int, MCacheExpire*>& expiremap);
   void trim_non_auth();      // trim out trimmable non-auth items
   bool trim_non_auth_subtree(CDir *directory);
+  void standby_trim_segment(LogSegment *ls);
   void try_trim_non_auth_subtree(CDir *dir);
   bool can_trim_non_auth_dirfrag(CDir *dir) {
     return my_ambiguous_imports.count((dir)->dirfrag()) == 0 &&
