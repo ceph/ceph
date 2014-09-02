@@ -232,8 +232,8 @@ public:
 
   void flush_logger();
 
-  size_t get_num_events() { return num_events; }
-  size_t get_num_segments() { return segments.size(); }  
+  size_t get_num_events() const { return num_events; }
+  size_t get_num_segments() const { return segments.size(); }
 
   uint64_t get_read_pos();
   uint64_t get_write_pos();
