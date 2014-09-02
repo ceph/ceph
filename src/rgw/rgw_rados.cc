@@ -3142,7 +3142,7 @@ public:
     }
 };
 
-int RGWRados::rewrite_obj(const string& bucket_owner, rgw_obj& obj)
+int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj)
 {
   map<string, bufferlist> attrset;
   off_t ofs = 0;
@@ -3169,7 +3169,7 @@ int RGWRados::rewrite_obj(const string& bucket_owner, rgw_obj& obj)
     return ret;
   }
 
-  return copy_obj_data((void *)&rctx, bucket_owner, &handle, end, obj, obj, max_chunk_size, NULL, mtime, attrset, RGW_OBJ_CATEGORY_MAIN, NULL, NULL);
+  return copy_obj_data((void *)&rctx, dest_bucket_info, &handle, end, obj, obj, max_chunk_size, NULL, mtime, attrset, RGW_OBJ_CATEGORY_MAIN, NULL, NULL);
 }
 
 /**
@@ -3389,7 +3389,8 @@ set_err_state:
   }
 
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
-    return copy_obj_data(ctx, dest_bucket_info.owner, &handle, end, dest_obj, src_obj, max_chunk_size, mtime, 0, src_attrs, category, ptag, err);
+    return copy_obj_data(ctx, dest_bucket_info, &handle, end, dest_obj, src_obj,
+                         max_chunk_size, mtime, 0, src_attrs, category, ptag, err);
   }
 
   RGWObjManifest::obj_iterator miter = astate->manifest.obj_begin();
@@ -3495,7 +3496,7 @@ done_ret:
 
 
 int RGWRados::copy_obj_data(void *ctx,
-               const string& owner,
+               RGWBucketInfo& dest_bucket_info,
 	       void **handle, off_t end,
                rgw_obj& dest_obj,
                rgw_obj& src_obj,
@@ -3514,8 +3515,8 @@ int RGWRados::copy_obj_data(void *ctx,
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
 
-  RGWPutObjProcessor_Atomic processor(owner, dest_obj.bucket, dest_obj.get_object(),
-                                      cct->_conf->rgw_obj_stripe_size, tag);
+  RGWPutObjProcessor_Atomic processor(dest_bucket_info.owner, dest_obj.bucket, dest_obj.get_object(),
+                                      cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled);
   int ret = processor.prepare(this, ctx, NULL);
   if (ret < 0)
     return ret;
