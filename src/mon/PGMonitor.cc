@@ -1258,7 +1258,7 @@ int64_t PGMonitor::get_rule_avail(OSDMap& osdmap, int ruleno)
   int r = osdmap.crush->get_rule_weight_osd_map(ruleno, &wm);
   if (r < 0)
     return r;
-  if(wm.size() == 0)
+  if(wm.empty())
     return 0;
   int64_t min = -1;
   for (map<int,float>::iterator p = wm.begin(); p != wm.end(); ++p) {
