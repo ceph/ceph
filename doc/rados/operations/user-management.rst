@@ -93,22 +93,37 @@ Authorization (Capabilities)
 Ceph uses the term "capabilities" (caps) to describe authorizing an
 authenticated user to exercise the functionality of the monitors, OSDs and
 metadata servers. Capabilities can also restrict access to data within a pool or
-a namespace within a pool. A Ceph administrative user sets a  user's
+a namespace within a pool. A Ceph administrative user sets a user's
 capabilities when creating or updating a user.
 
 Capability syntax follows the form::
 
-	{daemon-type} 'allow {capability} [pool={poolname}] [namespace={namespace-name}]'
+	{daemon-type} 'allow {capability}' [{daemon-type} 'allow {capability}']
 
-The daemon types include:
 
-- ``mon``
-- ``osd``
-- ``mds``
+- **Monitor Caps:** Monitor capabilities include ``r``, ``w``, ``x`` and 
+  ``allow profile {cap}``. For example:: 
+
+	mon 'allow rwx`
+	mon 'allow profile osd'
+
+- **OSD Caps:** OSD capabilities include ``r``, ``w``, ``x``, ``class-read``, 
+  ``class-write`` and ``profile osd``. Additionally, OSD capabilities also 
+  allow for pool and namespace settings. ::
+
+	osd 'allow {capability}' [pool={poolname}] [namespace={namespace-name}]
+
+- **Metadata Server Caps:** Metadata server capability simply requires ``allow``, 
+  or blank and does not parse anything further. :: 
+  
+	mds 'allow'
+
 
 .. note:: The Ceph Object Gateway daemon (``radosgw``) is a client of the 
-          Ceph Storage Cluster, so it isn't represented as a daemon type.
+          Ceph Storage Cluster, so it isn't represented as a Ceph Storage 
+          Cluster daemon type.
 
+The following entries describe each capability.
 
 ``allow``
 
@@ -158,6 +173,12 @@ The daemon types include:
 :Description: Gives a user permissions to connect as an OSD to other OSDs or 
               monitors. Conferred on OSDs to enable OSDs to handle replication
               heartbeat traffic and status reporting.
+
+
+``profile mds``
+
+:Description: Gives a user permissions to connect as a MDS to other MDSs or 
+              monitors.
 
 
 ``profile bootstrap-osd``
