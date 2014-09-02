@@ -22,20 +22,28 @@ Ceph provides an infinitely scalable :term:`Ceph Storage Cluster` based upon
 about in `RADOS - A Scalable, Reliable Storage Service for Petabyte-scale
 Storage Clusters`_.
 
-A Ceph Storage Cluster consists of two types of daemons. A :term:`Ceph Monitor`
-maintains a master copy of the cluster map. A cluster of Ceph monitors ensures
-high availability should a monitor daemon fail. 
+A Ceph Storage Cluster consists of two types of daemons:
 
-Storage cluster clients retrieve a copy of the cluster map from the Ceph
-Monitor. Storage cluster clients and each :term:`Ceph OSD Daemon` use the CRUSH
-algorithm to efficiently compute information about data location, instead of
-having to depend on a central lookup table. Ceph's high-level features include
-providing a native interface to the Ceph Storage Cluster via ``librados``, and a
-number of service interfaces built on top of ``librados``.
+- :term:`Ceph Monitor`
+- :term:s`Ceph OSD Daemon`
 
 .. ditaa::  +---------------+ +---------------+
             |      OSDs     | |    Monitors   |
             +---------------+ +---------------+
+
+A Ceph Monitor maintains a master copy of the cluster map. A cluster of Ceph
+monitors ensures high availability should a monitor daemon fail. Storage cluster
+clients retrieve a copy of the cluster map from the Ceph Monitor.
+
+A Ceph OSD Daemon checks its own state and the state of other OSDs and reports 
+back to monitors.
+
+Storage cluster clients and each :term:`Ceph OSD Daemon` use the CRUSH algorithm
+to efficiently compute information about data location, instead of having to
+depend on a central lookup table. Ceph's high-level features include providing a
+native interface to the Ceph Storage Cluster via ``librados``, and a number of
+service interfaces built on top of ``librados``.
+
 
 
 Storing Data
@@ -174,12 +182,148 @@ For details on configuring monitors, see the `Monitor Config Reference`_.
 High Availability Authentication
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Ceph clients can authenticate users with Ceph Monitors, Ceph OSD Daemons and
-Ceph Metadata Servers, using Ceph's Kerberos-like ``cephx`` protocol.
-Authenticated users gain authorization to read, write and execute Ceph commands.
-The Cephx authentication system avoids a single point of failure to ensure
-scalability and high availability.  For details on Cephx and how it differs
-from Kerberos, see `Ceph Authentication and Authorization`_.
+To identify users and protect against man-in-the-middle attacks, Ceph provides
+its ``cephx`` authentication system to authenticate users and daemons.
+
+.. note:: The ``cephx`` protocol does not address data encryption in transport 
+   (e.g., SSL/TLS) or encryption at rest.
+
+Cephx uses shared secret keys for authentication, meaning both the client and
+the monitor cluster have a copy of the client's secret key. The authentication
+protocol is such that both parties are able to prove to each other they have a
+copy of the key without actually revealing it. This provides mutual
+authentication, which means the cluster is sure the user possesses the secret
+key, and the user is sure that the cluster has a copy of the secret key.
+
+A key scalability feature of Ceph is to avoid a centralized interface to the
+Ceph object store, which means that Ceph clients must be able to interact with
+OSDs directly. To protect data, Ceph provides its ``cephx`` authentication
+system, which authenticates users operating Ceph clients. The ``cephx`` protocol
+operates in a manner with behavior similar to `Kerberos`_. 
+
+A user/actor invokes a Ceph client to contact a monitor. Unlike Kerberos, each
+monitor can authenticate users and distribute keys, so there is no single point
+of failure or bottleneck when using ``cephx``. The monitor returns an
+authentication data structure similar to a Kerberos ticket that contains a
+session key for use in obtaining Ceph services.  This session key is itself
+encrypted with the user's permanent  secret key, so that only the user can
+request services from the Ceph monitor(s). The client then uses the session key
+to request its desired services from the monitor, and the monitor provides the
+client with a ticket that will authenticate the client to the OSDs that actually
+handle data. Ceph monitors and OSDs share a secret, so the client can use the
+ticket provided by the monitor with any OSD or metadata server in the cluster.
+Like Kerberos, ``cephx`` tickets expire, so an attacker cannot use an expired
+ticket or session key obtained surreptitiously. This form of authentication will
+prevent attackers with access to the communications medium from either creating
+bogus messages under another user's identity or altering another user's
+legitimate messages, as long as the user's secret key is not divulged before it
+expires.
+
+To use ``cephx``, an administrator must set up users first. In the following
+diagram, the ``client.admin`` user invokes  ``ceph auth get-or-create-key`` from
+the command line to generate a username and secret key. Ceph's ``auth``
+subsystem generates the username and key, stores a copy with the monitor(s) and
+transmits the user's secret back to the ``client.admin`` user. This means that 
+the client and the monitor share a secret key.
+
+.. note:: The ``client.admin`` user must provide the user ID and 
+   secret key to the user in a secure manner. 
+
+.. ditaa:: +---------+     +---------+
+           | Client  |     | Monitor |
+           +---------+     +---------+
+                |  request to   |
+                | create a user |
+                |-------------->|----------+ create user
+                |               |          | and                 
+                |<--------------|<---------+ store key
+                | transmit key  |
+                |               |
+
+
+To authenticate with the monitor, the client passes in the user name to the
+monitor, and the monitor generates a session key and encrypts it with the secret
+key associated to the user name. Then, the monitor transmits the encrypted
+ticket back to the client. The client then decrypts the payload with the shared
+secret key to retrieve the session key. The session key identifies the user for
+the current session. The client then requests a ticket on behalf of the user
+signed by the session key. The monitor generates a ticket, encrypts it with the
+user's secret key and transmits it back to the client. The client decrypts the
+ticket and uses it to sign requests to OSDs and metadata servers throughout the
+cluster.
+
+.. ditaa:: +---------+     +---------+
+           | Client  |     | Monitor |
+           +---------+     +---------+
+                |  authenticate |
+                |-------------->|----------+ generate and
+                |               |          | encrypt                
+                |<--------------|<---------+ session key
+                | transmit      |
+                | encrypted     |
+                | session key   |
+                |               |             
+                |-----+ decrypt |
+                |     | session | 
+                |<----+ key     |              
+                |               |
+                |  req. ticket  |
+                |-------------->|----------+ generate and
+                |               |          | encrypt                
+                |<--------------|<---------+ ticket
+                | recv. ticket  |
+                |               |             
+                |-----+ decrypt |
+                |     | ticket  | 
+                |<----+         |              
+
+
+The ``cephx`` protocol authenticates ongoing communications between the client
+machine and the Ceph servers. Each message sent between a client and server,
+subsequent to the initial authentication, is signed using a ticket that the
+monitors, OSDs and metadata servers can verify with their shared secret.
+
+.. ditaa:: +---------+     +---------+     +-------+     +-------+
+           |  Client |     | Monitor |     |  MDS  |     |  OSD  |
+           +---------+     +---------+     +-------+     +-------+
+                |  request to   |              |             |
+                | create a user |              |             |               
+                |-------------->| mon and      |             |
+                |<--------------| client share |             |
+                |    receive    | a secret.    |             |
+                | shared secret |              |             |
+                |               |<------------>|             |
+                |               |<-------------+------------>|
+                |               | mon, mds,    |             |
+                | authenticate  | and osd      |             |  
+                |-------------->| share        |             |
+                |<--------------| a secret     |             |
+                |  session key  |              |             |
+                |               |              |             |
+                |  req. ticket  |              |             |
+                |-------------->|              |             |
+                |<--------------|              |             |
+                | recv. ticket  |              |             |
+                |               |              |             |
+                |   make request (CephFS only) |             |
+                |----------------------------->|             |
+                |<-----------------------------|             |
+                | receive response (CephFS only)             |
+                |                                            |
+                |                make request                |
+                |------------------------------------------->|  
+                |<-------------------------------------------|
+                               receive response
+
+The protection offered by this authentication is between the Ceph client and the
+Ceph server hosts. The authentication is not extended beyond the Ceph client. If
+the user accesses the Ceph client from a remote host, Ceph authentication is not
+applied to the connection between the user's host and the client host.
+
+
+For configuration details, see `Cephx Config Guide`_. For user management 
+details, see `User Management`_.
+
 
 .. index:: architecture; smart daemons and scalability
 
@@ -1451,3 +1595,6 @@ instance for high availability.
 .. _Erasure Code Notes: https://github.com/ceph/ceph/blob/40059e12af88267d0da67d8fd8d9cd81244d8f93/doc/dev/osd_internals/erasure_coding/developer_notes.rst
 .. _Cache Tiering: ../rados/operations/cache-tiering
 .. _Set Pool Values: ../rados/operations/pools#set-pool-values
+.. _Kerberos: http://en.wikipedia.org/wiki/Kerberos_(protocol)
+.. _Cephx Config Guide: ../rados/configuration/auth-config-ref
+.. _User Management: ../rados/operations/user-management
