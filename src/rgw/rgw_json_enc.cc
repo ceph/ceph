@@ -33,6 +33,11 @@ void encode_json(const char *name, const RGWUserCaps& val, Formatter *f)
 }
 
 
+void RGWOLHInfo::dump(Formatter *f) const
+{
+  encode_json("target", target, f);
+}
+
 void RGWObjManifestPart::dump(Formatter *f) const
 {
   f->open_object_section("loc");

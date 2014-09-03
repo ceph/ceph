@@ -70,6 +70,12 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_MANIFEST    	RGW_ATTR_PREFIX "manifest"
 #define RGW_ATTR_USER_MANIFEST  RGW_ATTR_PREFIX "user_manifest"
 
+#define RGW_ATTR_OLH_PREFIX     RGW_ATTR_PREFIX "olh."
+
+#define RGW_ATTR_OLH_INFO       RGW_ATTR_OLH_PREFIX "info"
+#define RGW_ATTR_OLH_VER        RGW_ATTR_OLH_PREFIX "ver"
+#define RGW_ATTR_OLH_PENDING_PREFIX RGW_ATTR_OLH_PREFIX "pending."
+
 #define RGW_BUCKETS_OBJ_SUFFIX ".buckets"
 
 #define RGW_MAX_PENDING_CHUNKS  16
