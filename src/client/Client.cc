@@ -3171,10 +3171,12 @@ void Client::trim_caps(MetaSession *s, int max)
       set<Dentry*>::iterator q = in->dn_set.begin();
       while (q != in->dn_set.end()) {
 	Dentry *dn = *q++;
-	if (dn->lru_is_expireable())
+	if (dn->lru_is_expireable()) {
 	  trim_dentry(dn);
-	else
+        } else {
+          ldout(cct, 20) << "  not expirable: " << dn->name << dendl;
 	  all = false;
+        }
       }
       if (all)
 	trimmed++;
@@ -3191,11 +3193,17 @@ void Client::trim_caps(MetaSession *s, int max)
   // notify kernel to invalidate top level directory entries. As a side effect,
   // unused inodes underneath these entries get pruned.
   if (dentry_invalidate_cb && s->caps.size() > max) {
-    for (ceph::unordered_map<string, Dentry*>::iterator p = root->dir->dentries.begin();
-	 p != root->dir->dentries.end();
-	 ++p) {
-      if (p->second->inode)
-	_schedule_invalidate_dentry_callback(p->second, false);
+    assert(root);
+    if (root->dir) {
+      for (ceph::unordered_map<string, Dentry*>::iterator p = root->dir->dentries.begin();
+           p != root->dir->dentries.end();
+           ++p) {
+        if (p->second->inode)
+          _schedule_invalidate_dentry_callback(p->second, false);
+      }
+    } else {
+      // This seems unnatural, as long as we are holding caps they must be on
+      // some descendent of the root, so why don't we have the root open?
     }
   }
 }
