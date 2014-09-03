@@ -57,6 +57,25 @@ static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, rgw_bucket& bu
 
 int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, RGWAccessControlPolicy *policy);
 
+struct RGWOLHInfo {
+  rgw_obj target;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(target, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(1, bl);
+     ::decode(target, bl);
+     DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(RGWOLHInfo)
+
 struct RGWUsageBatch {
   map<utime_t, rgw_usage_log_entry> m;
 
@@ -1721,6 +1740,9 @@ public:
   virtual int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
                        uint64_t *epoch, map<string, bufferlist> *attrs, bufferlist *first_chunk,
                        RGWObjVersionTracker *objv_tracker);
+
+  int get_olh(rgw_obj& obj, RGWOLHInfo *olh);
+  int set_olh(rgw_obj& obj, RGWOLHInfo& olh);
 
   virtual bool supports_omap() { return true; }
   int omap_get_vals(rgw_obj& obj, bufferlist& header, const std::string& marker, uint64_t count, std::map<string, bufferlist>& m);
