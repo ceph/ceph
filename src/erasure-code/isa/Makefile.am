@@ -1,6 +1,7 @@
 # ISA
 noinst_HEADERS += \
 	erasure-code/isa/ErasureCodeIsa.h \
+	erasure-code/isa/ErasureCodeIsaTableCache.h \
 	erasure-code/isa/xor_op.h \
 	erasure-code/isa/isa-l/erasure_code/ec_base.h \
 	erasure-code/isa/isa-l/include/erasure_code.h \
@@ -35,6 +36,7 @@ isa_sources = \
 	erasure-code/isa/isa-l/erasure_code/gf_vect_mul_avx.asm.s \
 	erasure-code/isa/isa-l/erasure_code/gf_vect_mul_sse.asm.s \
 	erasure-code/isa/ErasureCodeIsa.cc \
+	erasure-code/isa/ErasureCodeIsaTableCache.cc \
 	erasure-code/isa/ErasureCodePluginIsa.cc \
 	erasure-code/isa/xor_op.cc
 
