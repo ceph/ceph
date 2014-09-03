@@ -716,7 +716,7 @@ void AsyncConnection::process()
 
           ldout(async_msgr->cct, 20) << __func__ << " got " << front.length() << " + " << middle.length()
                               << " + " << data.length() << " byte message" << dendl;
-          Message *message = decode_message(async_msgr->cct, current_header, footer, front, middle, data);
+          Message *message = decode_message(async_msgr->cct, async_msgr->crcflags, current_header, footer, front, middle, data);
           if (!message) {
             ldout(async_msgr->cct, 1) << __func__ << " decode message failed " << dendl;
             goto fail;
@@ -1947,7 +1947,7 @@ int AsyncConnection::_send(Message *m)
                          << features << " " << m << " " << *m << dendl;
 
   // encode and copy out of *m
-  m->encode(features, !async_msgr->cct->_conf->ms_nocrc);
+  m->encode(features, async_msgr->crcflags);
 
   // prepare everything
   ceph_msg_header& header = m->get_header();
