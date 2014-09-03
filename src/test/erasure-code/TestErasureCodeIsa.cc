@@ -22,6 +22,9 @@
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 
+ErasureCodeIsaTableCache tcache;
+
+
 template <typename T>
 class IsaErasureCodeTest : public ::testing::Test {
 public:
@@ -34,7 +37,7 @@ TYPED_TEST_CASE(IsaErasureCodeTest, IsaTypes);
 
 TYPED_TEST(IsaErasureCodeTest, encode_decode)
 {
-  TypeParam Isa;
+  TypeParam Isa(tcache);
   map<std::string, std::string> parameters;
   parameters["k"] = "2";
   parameters["m"] = "2";
@@ -190,7 +193,7 @@ TYPED_TEST(IsaErasureCodeTest, encode_decode)
 
 TYPED_TEST(IsaErasureCodeTest, minimum_to_decode)
 {
-  TypeParam Isa;
+  TypeParam Isa(tcache);
   map<std::string, std::string> parameters;
   parameters["k"] = "2";
   parameters["m"] = "2";
@@ -286,7 +289,7 @@ TYPED_TEST(IsaErasureCodeTest, minimum_to_decode)
 
 TEST(IsaErasureCodeTest, encode)
 {
-  ErasureCodeIsaDefault Isa;
+  ErasureCodeIsaDefault Isa(tcache);
   map<std::string, std::string> parameters;
   parameters["k"] = "2";
   parameters["m"] = "2";
@@ -359,7 +362,7 @@ TYPED_TEST(IsaErasureCodeTest, isa_vandermonde_exhaustive)
   // Test all possible failure scenarios and reconstruction cases for
   // a (12,4) configuration using the vandermonde matrix
 
-  TypeParam Isa;
+  TypeParam Isa(tcache);
   map<std::string, std::string> parameters;
   parameters["k"] = "12";
   parameters["m"] = "4";
@@ -477,14 +480,14 @@ TYPED_TEST(IsaErasureCodeTest, isa_vandermonde_exhaustive)
     want_to_decode.erase(l1);
   }
   EXPECT_EQ(2516, cnt_cf);
-  EXPECT_EQ(2503, Isa.get_tbls_lru_size());
+  EXPECT_EQ(2506, tcache.getDecodingTableCacheSize()); // 3 entries from (2,2) test and 2503 from (12,4)
 }
 
 TYPED_TEST(IsaErasureCodeTest, isa_cauchy_exhaustive)
 {
   // Test all possible failure scenarios and reconstruction cases for
   // a (12,4) configuration using the cauchy matrix
-  TypeParam Isa(ErasureCodeIsaDefault::kCauchy);
+  TypeParam Isa(tcache,ErasureCodeIsaDefault::kCauchy);
   map<std::string, std::string> parameters;
   parameters["k"] = "12";
   parameters["m"] = "4";
@@ -604,7 +607,134 @@ TYPED_TEST(IsaErasureCodeTest, isa_cauchy_exhaustive)
     want_to_decode.erase(l1);
   }
   EXPECT_EQ(2516, cnt_cf);
-  EXPECT_EQ(2516, Isa.get_tbls_lru_size());
+  EXPECT_EQ(2516, tcache.getDecodingTableCacheSize(ErasureCodeIsaDefault::kCauchy));
+}
+
+TYPED_TEST(IsaErasureCodeTest, isa_cauchy_cache_trash)
+{
+  // Test all possible failure scenarios and reconstruction cases for
+  // a (12,4) configuration using the cauchy matrix
+  TypeParam Isa(tcache,ErasureCodeIsaDefault::kCauchy);
+  map<std::string, std::string> parameters;
+  parameters["k"] = "16";
+  parameters["m"] = "4";
+  parameters["technique"] = "cauchy";
+
+  Isa.init(parameters);
+
+  int k = 16;
+  int m = 4;
+
+#define LARGE_ENOUGH 2048
+  bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
+  in_ptr.zero();
+  in_ptr.set_length(0);
+  const char *payload =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  in_ptr.append(payload, strlen(payload));
+  bufferlist in;
+  in.push_front(in_ptr);
+
+  set<int>want_to_encode;
+
+  map<int, bufferlist> encoded;
+  for (int i = 0; i < (k + m); i++) {
+    want_to_encode.insert(i);
+  }
+
+
+  EXPECT_EQ(0, Isa.encode(want_to_encode,
+                          in,
+                          &encoded));
+
+  EXPECT_EQ((unsigned) (k + m), encoded.size());
+
+  unsigned length = encoded[0].length();
+
+  for (int i = 0; i < k; i++) {
+    EXPECT_EQ(0, strncmp(encoded[i].c_str(), in.c_str() + (i * length), length));
+  }
+
+  buffer::ptr enc[k + m];
+  // create buffers with a copy of the original data to be able to compare it after decoding
+  {
+    for (int i = 0; i < (k + m); i++) {
+      buffer::ptr newenc(buffer::create_page_aligned(LARGE_ENOUGH));
+      enc[i] = newenc;
+      enc[i].zero();
+      enc[i].set_length(0);
+      enc[i].append(encoded[i].c_str(), length);
+    }
+  }
+
+  // loop through all possible loss scenarios
+  bool err = true;
+  int cnt_cf = 0;
+
+  for (int l1 = 0; l1 < (k + m); l1++) {
+    map<int, bufferlist> degraded = encoded;
+    set<int> want_to_decode;
+    degraded.erase(l1);
+    want_to_decode.insert(l1);
+    err = DecodeAndVerify(Isa, degraded, want_to_decode, enc, length);
+    EXPECT_EQ(0, err);
+    cnt_cf++;
+    for (int l2 = l1 + 1; l2 < (k + m); l2++) {
+      degraded.erase(l2);
+      want_to_decode.insert(l2);
+      err = DecodeAndVerify(Isa, degraded, want_to_decode, enc, length);
+      EXPECT_EQ(0, err);
+      cnt_cf++;
+      for (int l3 = l2 + 1; l3 < (k + m); l3++) {
+        degraded.erase(l3);
+        want_to_decode.insert(l3);
+        err = DecodeAndVerify(Isa, degraded, want_to_decode, enc, length);
+        EXPECT_EQ(0, err);
+        cnt_cf++;
+        for (int l4 = l3 + 1; l4 < (k + m); l4++) {
+          degraded.erase(l4);
+          want_to_decode.insert(l4);
+          err = DecodeAndVerify(Isa, degraded, want_to_decode, enc, length);
+          EXPECT_EQ(0, err);
+          degraded[l4] = encoded[l4];
+          want_to_decode.erase(l4);
+          cnt_cf++;
+        }
+        degraded[l3] = encoded[l3];
+        want_to_decode.erase(l3);
+      }
+      degraded[l2] = encoded[l2];
+      want_to_decode.erase(l2);
+    }
+    degraded[l1] = encoded[l1];
+    want_to_decode.erase(l1);
+  }
+  EXPECT_EQ(6195, cnt_cf);
+  EXPECT_EQ(2516, tcache.getDecodingTableCacheSize(ErasureCodeIsaDefault::kCauchy));
 }
 
 TYPED_TEST(IsaErasureCodeTest, isa_xor_codec)
@@ -612,7 +742,7 @@ TYPED_TEST(IsaErasureCodeTest, isa_xor_codec)
   // Test all possible failure scenarios and reconstruction cases for
   // a (4,1) RAID-5 like configuration 
 
-  TypeParam Isa;
+  TypeParam Isa(tcache);
   map<std::string, std::string> parameters;
   parameters["k"] = "4";
   parameters["m"] = "1";
@@ -736,7 +866,7 @@ TEST(IsaErasureCodeTest, create_ruleset)
 
   {
     stringstream ss;
-    ErasureCodeIsaDefault isa;
+    ErasureCodeIsaDefault isa(tcache);
     map<std::string,std::string> parameters;
     parameters["k"] = "2";
     parameters["m"] = "2";
@@ -760,7 +890,7 @@ TEST(IsaErasureCodeTest, create_ruleset)
   }
   {
     stringstream ss;
-    ErasureCodeIsaDefault isa;
+    ErasureCodeIsaDefault isa(tcache);
     map<std::string,std::string> parameters;
     parameters["k"] = "2";
     parameters["m"] = "2";
@@ -772,7 +902,7 @@ TEST(IsaErasureCodeTest, create_ruleset)
   }
   {
     stringstream ss;
-    ErasureCodeIsaDefault isa;
+    ErasureCodeIsaDefault isa(tcache);
     map<std::string,std::string> parameters;
     parameters["k"] = "2";
     parameters["m"] = "2";
