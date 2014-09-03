@@ -86,7 +86,10 @@ public:
   void clear(const ghobject_t &hoid) {
     int registry_id = hoid.hobj.hash % registry_shards;
     registry[registry_id].clear(hoid);
-    assert(!registry[registry_id].lookup(hoid));
+    if (registry[registry_id].lookup(hoid)) {
+      registry[registry_id].dump_weak_refs();
+      assert(!registry[registry_id].lookup(hoid));
+    }
   }
 
   /// md_config_obs_t
