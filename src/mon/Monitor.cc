@@ -2771,6 +2771,25 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     session->put();
 }
 
+// fake connection attached to forwarded messages
+struct AnonConnection : public Connection {
+  AnonConnection(CephContext *cct) : Connection(cct, NULL) {}
+
+  int send_message(Message *m) {
+    assert(!"send_message on anonymous connection");
+  }
+  void send_keepalive() {
+    assert(!"send_keepalive on anonymous connection");
+  }
+  void mark_down() {
+    assert(!"mark_down on anonymous connection");
+  }
+  void mark_disposable() {
+    assert(!"mark_disposable on anonymous connection");
+  }
+  bool is_connected() { return false; }
+};
+
 //extract the original message and put it into the regular dispatch function
 void Monitor::handle_forward(MForward *m)
 {
@@ -2785,7 +2804,7 @@ void Monitor::handle_forward(MForward *m)
   } else {
     // see PaxosService::dispatch(); we rely on this being anon
     // (c->msgr == NULL)
-    ConnectionRef c = messenger->create_anon_connection();
+    ConnectionRef c(new AnonConnection(cct));
     MonSession *s = new MonSession(m->msg->get_source_inst(),
 				   static_cast<Connection*>(c.get()));
     c->set_priv(s->get());
