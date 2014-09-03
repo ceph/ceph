@@ -175,7 +175,7 @@ public:
     bufferlist::iterator p = bl.begin();
     p.seek(seek);
     try {
-      Message *n = decode_message(g_ceph_context, p);
+      Message *n = decode_message(g_ceph_context, 0, p);
       if (!n)
 	throw std::runtime_error("failed to decode");
       if (n->get_type() != m_object->get_type()) {
