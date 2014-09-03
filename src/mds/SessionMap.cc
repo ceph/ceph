@@ -285,6 +285,7 @@ size_t Session::get_request_count()
       member_offset(MDRequestImpl, item_session_request));
   while (!p.end()) {
     ++result;
+    ++p;
   }
 
   return result;
