@@ -50,13 +50,19 @@ class Filesystem(object):
 
         return list(result)
 
+    def get_config(self, key):
+        return self.mds_asok(['config', 'get', key])[key]
+
     def set_ceph_conf(self, subsys, key, value):
-        # Set config so that journal will be created in older format
-        if 'mds' not in self._ctx.ceph.conf:
-            self._ctx.ceph.conf['mds'] = {}
-        self._ctx.ceph.conf['mds'][key] = value
+        if subsys not in self._ctx.ceph.conf:
+            self._ctx.ceph.conf[subsys] = {}
+        self._ctx.ceph.conf[subsys][key] = value
         write_conf(self._ctx)  # XXX because we don't have the ceph task's config object, if they
                          # used a different config path this won't work.
+
+    def clear_ceph_conf(self, subsys, key):
+        del self._ctx.ceph.conf[subsys][key]
+        write_conf(self._ctx)
 
     def are_daemons_healthy(self):
         """
@@ -159,6 +165,7 @@ class Filesystem(object):
         """
         temp_bin_path = '/tmp/out.bin'
 
+        # FIXME get the metadata pool name from mdsmap instead of hardcoding
         self.client_remote.run(args=[
             'sudo', 'rados', '-p', 'metadata', 'get', object_id, temp_bin_path
         ])
