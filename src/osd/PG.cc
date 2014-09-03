@@ -5934,6 +5934,13 @@ PG::RecoveryState::RepRecovering::react(const BackfillTooFull &)
   return transit<RepNotRecovering>();
 }
 
+boost::statechart::result 
+PG::RecoveryState::RepRecovering::react(const RequestBackfillPrio &evt)
+{
+  post_event( evt );
+  return transit<RepNotRecovering>();
+}
+
 void PG::RecoveryState::RepRecovering::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
