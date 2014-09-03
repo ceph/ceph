@@ -222,6 +222,7 @@ enum {
   OPT_OBJECT_UNLINK,
   OPT_OBJECT_STAT,
   OPT_OBJECT_REWRITE,
+  OPT_OLH_GET,
   OPT_QUOTA_SET,
   OPT_QUOTA_ENABLE,
   OPT_QUOTA_DISABLE,
@@ -272,6 +273,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "mdlog") == 0 ||
       strcmp(cmd, "metadata") == 0 ||
       strcmp(cmd, "object") == 0 ||
+      strcmp(cmd, "olh") == 0 ||
       strcmp(cmd, "opstate") == 0 ||
       strcmp(cmd, "pool") == 0 ||
       strcmp(cmd, "pools") == 0 ||
@@ -382,6 +384,9 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_OBJECT_STAT;
     if (strcmp(cmd, "rewrite") == 0)
       return OPT_OBJECT_REWRITE;
+  } else if (strcmp(prev_cmd, "olh") == 0) {
+    if (strcmp(cmd, "get") == 0)
+      return OPT_OLH_GET;
   } else if (strcmp(prev_cmd, "region") == 0) {
     if (strcmp(cmd, "get") == 0)
       return OPT_REGION_GET;
@@ -1879,6 +1884,36 @@ next:
       cerr << "ERROR: read_usage() returned ret=" << ret << std::endl;
       return 1;
     }   
+  }
+
+  if (opt_cmd == OPT_OLH_GET /* || opt_cmd == OPT_OLH_SET */) {
+#warning clean up
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    if (object.empty()) {
+      cerr << "ERROR: object not specified" << std::endl;
+      return EINVAL;
+    }
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(bucket_name, bucket_info, bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+  }
+
+  if (opt_cmd == OPT_OLH_GET) {
+    RGWOLHInfo olh;
+    rgw_obj obj(bucket, object);
+    int ret = store->get_olh(obj, &olh);
+    if (ret < 0) {
+      cerr << "ERROR: failed reading olh: " << cpp_strerror(-ret) << dendl;
+      return -ret;
+    }
+    encode_json("olh", olg, formatter);
+    formatter->flush(cout);
   }
 
   if (opt_cmd == OPT_OBJECT_RM) {

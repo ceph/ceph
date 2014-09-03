@@ -5067,7 +5067,58 @@ int RGWRados::read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& 
   return ref.ioctx.operate(ref.oid, &op, NULL);
 }
 
-int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, uint64_t *epoch, map<string, bufferlist> *attrs, bufferlist *first_chunk,
+int RGWRados::get_olh(rgw_obj& obj, RGWOLHInfo *olh)
+{
+  rgw_rados_ref ref;
+  rgw_bucket bucket;
+  int r = get_obj_ref(obj, &ref, &bucket);
+  if (r < 0) {
+    return r;
+  }
+
+  map<string, bufferlist> unfiltered_attrset;
+  ObjectReadOperation op;
+  op.getxattrs(&unfiltered_attrset, NULL);
+
+  bufferlist outbl;
+  r = ref.ioctx.operate(ref.oid, &op, &outbl);
+
+  if (r < 0) {
+    return r;
+  }
+  map<string, bufferlist> attrset;
+  map<string, bufferlist>::iterator iter;
+  string check_prefix = RGW_ATTR_OLH_PREFIX;
+  for (iter = unfiltered_attrset.lower_bound(check_prefix);
+       iter != unfiltered_attrset.end(); ++iter) {
+    if (!str_startswith(iter->first, check_prefix))
+      break;
+    attrset[iter->first] = iter->second;
+  }
+
+  map<string, bufferlist>::iterator iter = attrset.find(RGW_ATTR_OLH_INFO);
+  if (iter == attrset.end()) { /* not an olh */
+    return -EINVAL;
+  }
+
+  try {
+    bufferlist::iterator biter = iter->second.begin();
+    ::decode(*olh, biter);
+  } catch (buffer::error& err) {
+    ldout(cct, 0) << "ERROR: failed to decode olh info" << dendl;
+    return -EIO;
+  }
+
+  return 0;
+}
+
+int RGWRados::set_olh(rgw_obj& obj, RGWOLHInfo& olh)
+{
+  return 0;
+}
+
+int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, uint64_t *epoch,
+                       map<string, bufferlist> *attrs, bufferlist *first_chunk,
                        RGWObjVersionTracker *objv_tracker)
 {
   rgw_rados_ref ref;
@@ -5107,6 +5158,11 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
     if (!str_startswith(iter->first, check_prefix))
       break;
     attrset[iter->first] = iter->second;
+  }
+
+  iter = attrset.find(RGW_ATTR_OLH_INFO);
+  if (iter != attrset.end()) {
+#warning implment me
   }
 
   if (psize)
