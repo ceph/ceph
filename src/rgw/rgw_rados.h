@@ -1326,29 +1326,6 @@ class RGWRados
     }
   }
 
-  int clone_objs_impl(void *ctx, rgw_obj& dst_obj, 
-                 vector<RGWCloneRangeInfo>& ranges,
-                 map<string, bufferlist> attrs,
-                 RGWObjCategory category,
-                 time_t *pmtime,
-                 bool truncate_dest,
-                 bool exclusive,
-                 pair<string, bufferlist> *cmp_xattr);
-
-  virtual int clone_obj(void *ctx, rgw_obj& dst_obj, off_t dst_ofs,
-                          rgw_obj& src_obj, off_t src_ofs,
-                          uint64_t size, time_t *pmtime,
-                          map<string, bufferlist> attrs,
-                          RGWObjCategory category) {
-    RGWCloneRangeInfo info;
-    vector<RGWCloneRangeInfo> v;
-    info.src = src_obj;
-    info.src_ofs = src_ofs;
-    info.dst_ofs = dst_ofs;
-    info.len = size;
-    v.push_back(info);
-    return clone_objs(ctx, dst_obj, v, attrs, category, pmtime, true, false);
-  }
   int complete_atomic_overwrite(RGWRadosCtx *rctx, RGWObjState *state, rgw_obj& obj);
 
   int update_placement_map();
@@ -1582,40 +1559,6 @@ public:
   }
   virtual int aio_wait(void *handle);
   virtual bool aio_completed(void *handle);
-  virtual int clone_objs(void *ctx, rgw_obj& dst_obj, 
-                         vector<RGWCloneRangeInfo>& ranges,
-                         map<string, bufferlist> attrs,
-                         RGWObjCategory category,
-                         time_t *pmtime, bool truncate_dest, bool exclusive) {
-    return clone_objs(ctx, dst_obj, ranges, attrs, category, pmtime, truncate_dest, exclusive, NULL);
-  }
-
-  int clone_objs(void *ctx, rgw_obj& dst_obj, 
-                 vector<RGWCloneRangeInfo>& ranges,
-                 map<string, bufferlist> attrs,
-                 RGWObjCategory category,
-                 time_t *pmtime,
-                 bool truncate_dest,
-                 bool exclusive,
-                 pair<string, bufferlist> *cmp_xattr);
-
-  int clone_obj_cond(void *ctx, rgw_obj& dst_obj, off_t dst_ofs,
-                rgw_obj& src_obj, off_t src_ofs,
-                uint64_t size, map<string, bufferlist> attrs,
-                RGWObjCategory category,
-                time_t *pmtime,
-                bool truncate_dest,
-                bool exclusive,
-                pair<string, bufferlist> *xattr_cond) {
-    RGWCloneRangeInfo info;
-    vector<RGWCloneRangeInfo> v;
-    info.src = src_obj;
-    info.src_ofs = src_ofs;
-    info.dst_ofs = dst_ofs;
-    info.len = size;
-    v.push_back(info);
-    return clone_objs(ctx, dst_obj, v, attrs, category, pmtime, truncate_dest, exclusive, xattr_cond);
-  }
 
   int rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj);
   /**
