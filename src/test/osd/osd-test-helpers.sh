@@ -68,3 +68,19 @@ function run_osd() {
 
     return $status
 }
+
+function get_osds() {
+    local poolname=$1
+    local objectname=$2
+
+    ./ceph osd map $poolname $objectname | \
+       perl -p -e 's/.*up \(\[(.*?)\].*/$1/; s/,/ /g'
+}
+
+function get_pg() {
+    local poolname=$1
+    local objectname=$2
+
+    ./ceph osd map $poolname $objectname | \
+       perl -p -e 's/.*\((.*?)\) -> up.*/$1/'
+}
