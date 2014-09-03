@@ -2226,7 +2226,7 @@ unsigned FileStore::_do_transaction(
   dout(10) << "_do_transaction on " << &t << dendl;
 
 #ifdef WITH_LTTNG
-  const char *osr_name = t.get_osr() ? ((OpSequencer*)t.get_osr())->get_name().c_str() : "<NULL>";
+  const char *osr_name = t.get_osr() ? static_cast<OpSequencer*>(t.get_osr())->get_name().c_str() : "<NULL>";
 #endif
 
   Transaction::iterator i = t.begin();
