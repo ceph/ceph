@@ -3152,10 +3152,11 @@ void Client::trim_caps(MetaSession *s, int max)
 
   int trimmed = 0;
   xlist<Cap*>::iterator p = s->caps.begin();
-  while (s->caps.size() > max && !p.end()) {
+  while ((s->caps.size() - trimmed) > max && !p.end()) {
     Cap *cap = *p;
     s->s_cap_iterator = cap;
     Inode *in = cap->inode;
+
     if (in->caps.size() > 1 && cap != in->auth_cap) {
       int mine = cap->issued | cap->implemented;
       int oissued = in->auth_cap ? in->auth_cap->issued : 0;
@@ -3178,8 +3179,10 @@ void Client::trim_caps(MetaSession *s, int max)
 	  all = false;
         }
       }
-      if (all)
+      if (all && in->ino != MDS_INO_ROOT) {
+        ldout(cct, 20) << __func__ << " counting as trimmed: " << *in << dendl;
 	trimmed++;
+      }
     }
 
     ++p;
