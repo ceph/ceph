@@ -120,6 +120,7 @@ class FuseMount(CephFSMount):
 
     def umount(self):
         try:
+            log.info('Running fusermount -u on {name}...'.format(name=self.client_remote.name))
             self.client_remote.run(
                 args=[
                     'sudo',
