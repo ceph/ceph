@@ -11,8 +11,10 @@ from teuthology.orchestra import run
 
 from teuthology.orchestra.run import CommandFailedError
 from teuthology.task import interactive
-from cephfs.filesystem import Filesystem
-from tasks.ceph_fuse import FuseMount
+
+from tasks.cephfs.cephfs_test_case import CephFSTestCase, run_tests
+from tasks.cephfs.filesystem import Filesystem
+from tasks.cephfs.fuse_mount import FuseMount
 
 
 log = logging.getLogger(__name__)
@@ -23,9 +25,8 @@ log = logging.getLogger(__name__)
 MDS_RESTART_GRACE = 60
 
 
-class TestClientRecovery(unittest.TestCase):
+class TestClientRecovery(CephFSTestCase):
     # Environment references
-    fs = None
     mount_a = None
     mount_b = None
     mds_session_timeout = None
@@ -82,28 +83,6 @@ class TestClientRecovery(unittest.TestCase):
         self.mount_a.create_destroy()
         self.mount_b.create_destroy()
 
-    def assert_session_count(self, expected, ls_data=None):
-        if ls_data is None:
-            ls_data = self.fs.mds_asok(['session', 'ls'])
-
-        self.assertEqual(expected, len(ls_data), "Expected {0} sessions, found {1}".format(
-            expected, len(ls_data)
-        ))
-
-    def assert_session_state(self, client_id,  expected_state):
-        self.assertEqual(
-            self._session_by_id(
-                self.fs.mds_asok(['session', 'ls'])).get(client_id, {'state': None})['state'],
-            expected_state)
-
-    def _session_list(self):
-        ls_data = self.fs.mds_asok(['session', 'ls'])
-        ls_data = [s for s in ls_data if s['state'] not in ['stale', 'closed']]
-        return ls_data
-
-    def _session_by_id(self, session_ls):
-        return dict([(s['id'], s) for s in session_ls])
-
     def test_reconnect_timeout(self):
         # Reconnect timeout
         # =================
@@ -123,7 +102,7 @@ class TestClientRecovery(unittest.TestCase):
         self.assert_session_count(2, ls_data)
 
         # The session for the dead client should have the 'reconnect' flag set
-        self.assertTrue(self._session_by_id(ls_data)[mount_a_client_id]['reconnecting'])
+        self.assertTrue(self.get_session(mount_a_client_id)['reconnecting'])
 
         # Wait for the reconnect state to clear, this should take the
         # reconnect timeout period.
@@ -384,49 +363,26 @@ def task(ctx, config):
     if mount_a.client_remote.hostname in fs.get_mds_hostnames():
         raise RuntimeError("Require first client to on separate server from MDSs")
 
-    # Attach environment references to test case
-    # ==========================================
-    TestClientRecovery.mds_reconnect_timeout = int(fs.mds_asok(
-        ['config', 'get', 'mds_reconnect_timeout']
-    )['mds_reconnect_timeout'])
-    TestClientRecovery.mds_session_timeout = int(fs.mds_asok(
-        ['config', 'get', 'mds_session_timeout']
-    )['mds_session_timeout'])
-    TestClientRecovery.ms_max_backoff = int(fs.mds_asok(
-        ['config', 'get', 'ms_max_backoff']
-    )['ms_max_backoff'])
-    TestClientRecovery.fs = fs
-    TestClientRecovery.mount_a = mount_a
-    TestClientRecovery.mount_b = mount_b
-
     # Stash references on ctx so that we can easily debug in interactive mode
     # =======================================================================
     ctx.filesystem = fs
     ctx.mount_a = mount_a
     ctx.mount_b = mount_b
 
-    # Execute test suite
-    # ==================
-    if config and 'test_name' in config:
-        suite = unittest.TestLoader().loadTestsFromName(
-            "teuthology.task.mds_client_recovery.{0}".format(config['test_name']))
-    else:
-        suite = unittest.TestLoader().loadTestsFromTestCase(TestClientRecovery)
-
-    if ctx.config.get("interactive-on-error", False):
-        InteractiveFailureResult.ctx = ctx
-        result_class = InteractiveFailureResult
-    else:
-        result_class = unittest.TextTestResult
-    result = unittest.TextTestRunner(
-        stream=LogStream(),
-        resultclass=result_class,
-        verbosity=2,
-        failfast=True).run(suite)
-
-    if not result.wasSuccessful():
-        result.printErrors()  # duplicate output at end for convenience
-        raise RuntimeError("Test failure.")
+    run_tests(ctx, config, TestClientRecovery, {
+        "mds_reconnect_timeout": int(fs.mds_asok(
+            ['config', 'get', 'mds_reconnect_timeout']
+        )['mds_reconnect_timeout']),
+        "mds_session_timeout": int(fs.mds_asok(
+            ['config', 'get', 'mds_session_timeout']
+        )['mds_session_timeout']),
+        "ms_max_backoff": int(fs.mds_asok(
+            ['config', 'get', 'ms_max_backoff']
+        )['ms_max_backoff']),
+        "fs": fs,
+        "mount_a": mount_a,
+        "mount_b": mount_b
+    })
 
     # Continue to any downstream tasks
     # ================================
