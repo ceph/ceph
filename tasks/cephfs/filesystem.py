@@ -3,6 +3,7 @@ from StringIO import StringIO
 import json
 import logging
 import time
+from tasks.ceph import write_conf
 
 from teuthology import misc
 from teuthology.nuke import clear_firewall
@@ -48,6 +49,14 @@ class Filesystem(object):
             result.add(mds_remote.hostname)
 
         return list(result)
+
+    def set_ceph_conf(self, subsys, key, value):
+        # Set config so that journal will be created in older format
+        if 'mds' not in self._ctx.ceph.conf:
+            self._ctx.ceph.conf['mds'] = {}
+        self._ctx.ceph.conf['mds'][key] = value
+        write_conf(self._ctx)  # XXX because we don't have the ceph task's config object, if they
+                         # used a different config path this won't work.
 
     def are_daemons_healthy(self):
         """
