@@ -139,6 +139,7 @@ public:
 
   int run(void)
   {
+    int ret_val = 0;
     rados_t cl;
     RETURN1_IF_NONZERO(rados_create(&cl, NULL));
     rados_conf_parse_argv(cl, m_argc, m_argv);
@@ -171,7 +172,8 @@ public:
       for (int i = 0; i < r; ++i)
 	++d;
       if (d == to_add.end()) {
-	return -EDOM;
+	ret_val = -EDOM;
+	goto out;
       }
       std::string oid(d->second);
       to_add.erase(d);
@@ -181,7 +183,8 @@ public:
       if (ret != 0) {
 	printf("%s: rados_write(%s) failed with error %d\n",
 	       get_id_str(), oid.c_str(), ret);
-	return ret;
+	ret_val = ret;
+	goto out;
       }
       ++added;
       if ((added % 25) == 0) {
@@ -195,10 +198,11 @@ public:
 
     printf("%s: added %d objects\n", get_id_str(), added);
 
+  out:
     rados_ioctx_destroy(io_ctx);
     rados_shutdown(cl);
 
-    return 0;
+    return ret_val;
   }
 private:
   std::string m_pool_name;
