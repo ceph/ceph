@@ -1,0 +1,88 @@
+#!/bin/bash
+
+original_image=
+hosts=
+image_prefix=
+prog=rbd-replay
+delay=0
+
+while test -n "$1"; do
+  case "$1" in
+    --original-image)
+        original_image="$2"
+        shift
+        ;;
+    --original-image=*)
+        original_image="${1#--original-image=}"
+        ;;
+    --image-prefix)
+        image_prefix="$2"
+        shift
+        ;;
+    --image-prefix=*)
+        image_prefix="${1#--image-prefix=}"
+        ;;
+    --exec)
+        prog="$2"
+        shift
+        ;;
+    --exec=*)
+        prog="${1#--exec=}"
+        ;;
+    --delay)
+        delay="$2"
+        shift
+        ;;
+    --delay=*)
+        delay="${1#--delay=}"
+        ;;
+    --help|-h)
+        echo "Usage: $0 [options] --original-image=<name> <host1> [<host2> [...]] -- <rbd-replay-args>"
+        echo "Options:"
+        echo "  --original-image=name  Name (and snap) of the image that was originally traced"
+        echo "  --image-prefix=prefix  Prefix of the image names to replay against"
+        echo "  --exec=program         Path to the rbd-replay executable"
+        echo "  --delay=seconds        Wait <seconds> between starting each replay"
+        exit 0
+        ;;
+    --)
+        # remaining args are passed directly to rbd-replay
+        shift
+        break
+        ;;
+    -*)
+        echo "Unrecognized argument: $1" >&2
+        echo "(If you want to pass an argument directly to rbd-replay, use it after '--'.)" >&2
+        exit 1
+        ;;
+    *)
+        hosts="$hosts $1"
+        ;;
+  esac
+  shift
+done
+
+if test -z "$original_image"; then
+   echo "Specify the original image name with --original-image." >&2
+   exit 1
+fi
+
+if test -z "$hosts"; then
+   echo "No hosts specified." >&2
+   exit 1
+fi
+
+if test -z "$image_prefix"; then
+   image_prefix="$original_image"
+fi
+
+index=0
+for host in $hosts; do
+    echo ssh $host "'$prog'" --map-image "'${original_image}=${image_prefix}-${index}'" "$@"
+    ssh $host "'$prog'" --map-image "'${original_image}=${image_prefix}-${index}'" "$@" &
+    index=$((index + 1))
+    if [ $delay -gt 0 ]; then
+       sleep $delay
+    fi
+done
+wait
