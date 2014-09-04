@@ -55,23 +55,26 @@ int ErasureCodeLrc::create_ruleset(const string &name,
   int root = crush.get_item_id(ruleset_root);
 
   int ruleset = 0;
-  for (int i = 0; i < crush.get_max_rules(); i++) {
-    if (crush.rule_exists(i) &&
-	crush.get_rule_mask_ruleset(i) >= ruleset) {
-      ruleset = crush.get_rule_mask_ruleset(i) + 1;
-    }
+  int rno = 0;
+  for (rno = 0; rno < crush.get_max_rules(); rno++) {
+    if (!crush.rule_exists(rno) && !crush.ruleset_exists(rno))
+       break;
   }
+  ruleset = rno;
 
   int steps = 3 + ruleset_steps.size();
   int min_rep = 3;
   int max_rep = 30;
-  crush_rule *rule = crush_make_rule(steps, ruleset,
-				     pg_pool_t::TYPE_ERASURE,
-				     min_rep, max_rep);
-  assert(rule);
+  int ret;
+  ret = crush.add_rule(steps, ruleset, pg_pool_t::TYPE_ERASURE,
+		  min_rep, max_rep, rno);
+  assert(ret == rno);
   int step = 0;
-  crush_rule_set_step(rule, step++, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 5, 0);
-  crush_rule_set_step(rule, step++, CRUSH_RULE_TAKE, root, 0);
+
+  ret = crush.set_rule_step(rno, step++, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 5, 0);
+  assert(ret == 0);
+  ret = crush.set_rule_step(rno, step++, CRUSH_RULE_TAKE, root, 0);
+  assert(ret == 0);
   // [ [ "choose", "rack", 2 ],
   //   [ "chooseleaf", "host", 5 ] ]
   for (vector<Step>::const_iterator i = ruleset_steps.begin();
@@ -84,12 +87,12 @@ int ErasureCodeLrc::create_ruleset(const string &name,
       *ss << "unknown crush type " << i->type;
       return -EINVAL;
     }
-    crush_rule_set_step(rule, step++, op, i->n, type);
+    ret = crush.set_rule_step(rno, step++, op, i->n, type);
+    assert(ret == 0);
   }
-  crush_rule_set_step(rule, step++, CRUSH_RULE_EMIT, 0, 0);
-  int rno = crush_add_rule(crush.crush, rule, -1);
+  ret = crush.set_rule_step(rno, step++, CRUSH_RULE_EMIT, 0, 0);
+  assert(ret == 0);
   crush.set_rule_name(rno, name);
-
   return ruleset;
 }
 
