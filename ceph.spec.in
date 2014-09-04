@@ -733,7 +733,7 @@ fi
 #################################################################################
 %files -n cephfs-java
 %defattr(-,root,root,-)
-%if 0%{?suse_version} > 1220 
+%if 0%{?suse_version} > 1220
 %{_javadir}/libcephfs-test.jar
 %endif
 %{_javadir}/libcephfs.jar
