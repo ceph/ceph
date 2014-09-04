@@ -5170,6 +5170,35 @@ int RGWRados::set_olh(rgw_obj& obj, RGWOLHInfo& olh)
   return 0;
 }
 
+int RGWRados::follow_olh(map<string, bufferlist>& attrset, rgw_obj& target)
+{
+  map<string, bufferlist> pending_entries;
+  filter_attrset(attrset, RGW_ATTR_OLH_PENDING_PREFIX, &pending_entries);
+
+  if (!pending_entries.empty()) {
+#warning fixme
+  }
+
+  map<string, bufferlist>::iterator iter = attrset.find(RGW_ATTR_OLH_INFO);
+  assert(iter != attrset.end());
+  RGWOLHInfo olh;
+  try {
+    bufferlist::iterator biter = iter->second.begin();
+    ::decode(olh, biter);
+  } catch (buffer::error& err) {
+    ldout(cct, 0) << "ERROR: failed to decode olh info" << dendl;
+    return -EIO;
+  }
+
+  if (olh.removed) {
+    return -ENOENT;
+  }
+
+  target = olh.target;
+
+  return 0;
+}
+
 int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, uint64_t *epoch,
                        map<string, bufferlist> *attrs, bufferlist *first_chunk,
                        RGWObjVersionTracker *objv_tracker)
@@ -5208,6 +5237,15 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
 
   map<string, bufferlist>::iterator iter = attrset.find(RGW_ATTR_OLH_INFO);
   if (iter != attrset.end()) {
+    /* this is an olh */
+    rgw_obj target;
+
+    r = follow_olh(attrset, target);
+    if (r < 0) {
+      return r;
+    }
+
+    return obj_stat(ctx, target, psize, pmtime, epoch, attrs, first_chunk, objv_tracker);
 #warning implment me
   }
 
