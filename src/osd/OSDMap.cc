@@ -993,6 +993,17 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
 	features |= CEPH_FEATURE_CRUSH_TUNABLES3;
     }
   }
+  if (entity_type == CEPH_ENTITY_TYPE_OSD) {
+    for (map<string,map<string,string> >::const_iterator p = erasure_code_profiles.begin();
+	 p != erasure_code_profiles.end();
+	 p++) {
+      const map<string,string> &profile = p->second;
+      map<string,string>::const_iterator plugin = profile.find("plugin");
+      if (plugin != profile.end() && (plugin->second == "isa" ||
+				      plugin->second == "lrc"))
+	features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2;
+    }
+  }
   mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL;
   if (entity_type != CEPH_ENTITY_TYPE_CLIENT)
     mask |= CEPH_FEATURE_OSD_ERASURE_CODES;
