@@ -48,6 +48,11 @@ on your host.::
 
 	sudo apt-get install python-dev python-pip python-virtualenv libxml2-dev libxslt-dev doxygen ditaa graphviz ant
 
+.. note::
+    There is a soft dependency on a single JS file that is intended for
+    navigating the different doc versions of ceph.com that depends on an external
+    HTTP service. More info in the `Ayni docs
+    <http://github.com/alfredodeza/ayni>`_
 
 
 Build the Documents
