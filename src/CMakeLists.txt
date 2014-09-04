@@ -15,7 +15,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic -Wall -Wtype-limits -Wignored-qual
 
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -ftemplate-depth-1024 -Wno-invalid-offsetof -Wnon-virtual-dtor -Wno-invalid-offsetof -Wstrict-null-sentinel -Woverloaded-virtual")
 
-set(EXTRALIBS uuid rt dl)
+set(EXTRALIBS uuid rt dl ${Boost_LIBS})
 
 if(${WITH_PROFILER})
   list(APPEND EXTRALIBS profiler)
@@ -58,6 +58,11 @@ execute_process(
   ${PYTHON_EXECUTABLE} -c "from distutils import sysconfig; print sysconfig.get_python_lib(1,0,prefix='${PYTHON_INSTALL_TEMPLATE}')"
   OUTPUT_VARIABLE PYTHON_INSTDIR
   OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+if(HAVE_XIO)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${Xio_INCLUDE_DIR}")
+  list(APPEND EXTRALIBS ${Xio_LIBRARY} ibverbs rdmacm pthread rt)
+endif(HAVE_XIO)
 
 if(${WITH_TCMALLOC})
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
@@ -115,6 +120,17 @@ set(crush_srcs
   crush/CrushTester.cc)
 
 add_subdirectory(json_spirit)
+
+set(xio_common_srcs)
+if(HAVE_XIO)
+  list(APPEND xio_common_srcs
+    msg/xio/XioConnection.cc
+    msg/xio/XioMsg.cc
+    msg/xio/XioPool.cc
+    msg/xio/XioMessenger.cc
+    msg/xio/XioPortal.cc
+    msg/xio/QueueStrategy.cc)
+endif(HAVE_XIO)
 
 set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
