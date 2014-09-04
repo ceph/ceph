@@ -24,6 +24,8 @@
 
 #define pdout(v, p) lpdout((g_ceph_context), v, p)
 
+#define dlog_p(sub, v) ldlog_p1((g_ceph_context), sub, v)
+
 #define generic_dout(v) lgeneric_dout((g_ceph_context), v)
 
 #define derr lderr((g_ceph_context))
