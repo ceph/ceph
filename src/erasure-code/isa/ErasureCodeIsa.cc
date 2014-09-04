@@ -2,6 +2,7 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2014 CERN (Switzerland)
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Andreas-Joachim Peters <Andreas.Joachim.Peters@cern.ch>
  *
@@ -18,6 +19,7 @@
 #include <errno.h>
 // -----------------------------------------------------------------------------
 #include "common/debug.h"
+#include "include/ceph_features.h"
 #include "ErasureCodeIsa.h"
 #include "xor_op.h"
 #include "crush/CrushWrapper.h"
@@ -119,6 +121,12 @@ int ErasureCodeIsa::decode_chunks(const set<int> &want_to_read,
   erasures[erasures_count] = -1;
   assert(erasures_count > 0);
   return isa_decode(erasures, data, coding, blocksize);
+}
+
+
+uint64_t ErasureCodeIsa::required_features() const
+{
+  return CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2;
 }
 
 // -----------------------------------------------------------------------------

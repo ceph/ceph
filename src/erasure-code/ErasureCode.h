@@ -85,6 +85,7 @@ namespace ceph {
 
     virtual int decode_concat(const map<int, bufferlist> &chunks,
 			      bufferlist *decoded);
+    virtual uint64_t required_features() const { return 0; }
   };
 }
 

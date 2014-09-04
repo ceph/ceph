@@ -5,6 +5,7 @@
  *
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
  * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -1259,7 +1260,16 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
   if ((osdmap.get_features(CEPH_ENTITY_TYPE_OSD, NULL) &
        CEPH_FEATURE_OSD_ERASURE_CODES) &&
       !(m->get_connection()->get_features() & CEPH_FEATURE_OSD_ERASURE_CODES)) {
-    dout(0) << __func__ << " osdmap requires Erasure Codes but osd at "
+    dout(0) << __func__ << " osdmap requires erasure code but osd at "
+            << m->get_orig_source_inst()
+            << " doesn't announce support -- ignore" << dendl;
+    goto ignore;
+  }
+
+  if ((osdmap.get_features(CEPH_ENTITY_TYPE_OSD, NULL) &
+       CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2) &&
+      !(m->get_connection()->get_features() & CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2)) {
+    dout(0) << __func__ << " osdmap requires erasure code plugins v2 but osd at "
             << m->get_orig_source_inst()
             << " doesn't announce support -- ignore" << dendl;
     goto ignore;
@@ -4513,6 +4523,17 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       dout(20) << "erasure code profile " << name << " try again" << dendl;
       goto wait;
     } else {
+      ErasureCodeInterfaceRef erasure_code;
+      int err = get_erasure_code(name, &erasure_code, ss);
+      if (err) {
+	ss << "failed to load plugin using profile " << name << std::endl;
+	return err;
+      }
+      err = check_cluster_features(erasure_code->required_features(), ss);
+      if (err == -EAGAIN)
+	goto wait;
+      if (err)
+	goto reply;
       dout(20) << "erasure code profile " << name << " set" << dendl;
       pending_inc.set_erasure_code_profile(name, profile_map);
     }

@@ -136,6 +136,7 @@ public:
   int layers_init();
   int layers_sanity_checks(string description_string,
 			   ostream *ss) const;
+  virtual uint64_t required_features() const;
 };
 
 #endif
