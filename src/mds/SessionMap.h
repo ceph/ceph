@@ -81,12 +81,13 @@ private:
   int importing_count;
   friend class SessionMap;
 
+public:
+
   // Ephemeral state for tracking progress of capability recalls
   utime_t recalled_at;  // When was I asked to SESSION_RECALL?
   uint32_t recall_count;  // How many caps was I asked to SESSION_RECALL?
   uint32_t recall_release_count;  // How many caps have I actually revoked?
 
-public:
   session_info_t info;                         ///< durable bits
 
   ConnectionRef connection;
@@ -333,8 +334,8 @@ public:
       if (p->second->info.inst.name.is_client())
 	s.insert(p->second->info.inst.name.num());
   }
-  void get_client_session_set(set<Session*>& s) {
-    for (ceph::unordered_map<entity_name_t,Session*>::iterator p = session_map.begin();
+  void get_client_session_set(set<Session*>& s) const {
+    for (ceph::unordered_map<entity_name_t,Session*>::const_iterator p = session_map.begin();
 	 p != session_map.end();
 	 ++p)
       if (p->second->info.inst.name.is_client())
