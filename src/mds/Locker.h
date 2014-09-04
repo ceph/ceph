@@ -66,6 +66,7 @@ private:
   void dispatch(Message *m);
   void handle_lock(MLock *m);
 
+  void tick();
 
   void nudge_log(SimpleLock *lock);
 
@@ -203,7 +204,9 @@ public:
 		      MClientCaps *ack=0);
   void handle_client_cap_release(class MClientCapRelease *m);
   void _do_cap_release(client_t client, inodeno_t ino, uint64_t cap_id, ceph_seq_t mseq, ceph_seq_t seq);
+  void caps_tick();
 
+  xlist<Capability*> revoking_caps;
 
   // local
 public:
