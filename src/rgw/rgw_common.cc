@@ -419,14 +419,14 @@ int gen_rand_base64(CephContext *cct, char *dest, int size) /* size should be th
   ret = get_random_bytes(buf, sizeof(buf));
   if (ret < 0) {
     lderr(cct) << "cannot get random bytes: " << cpp_strerror(-ret) << dendl;
-    return -1;
+    return ret;
   }
 
   ret = ceph_armor(tmp_dest, &tmp_dest[sizeof(tmp_dest)],
 		   (const char *)buf, ((const char *)buf) + ((size - 1) * 3 + 4 - 1) / 4);
   if (ret < 0) {
     lderr(cct) << "ceph_armor failed" << dendl;
-    return -1;
+    return ret;
   }
   tmp_dest[ret] = '\0';
   memcpy(dest, tmp_dest, size);
@@ -442,7 +442,7 @@ int gen_rand_alphanumeric_upper(CephContext *cct, char *dest, int size) /* size 
   int ret = get_random_bytes(dest, size);
   if (ret < 0) {
     lderr(cct) << "cannot get random bytes: " << cpp_strerror(-ret) << dendl;
-    return -1;
+    return ret;
   }
 
   int i;
@@ -462,7 +462,7 @@ int gen_rand_alphanumeric_lower(CephContext *cct, char *dest, int size) /* size 
   int ret = get_random_bytes(dest, size);
   if (ret < 0) {
     lderr(cct) << "cannot get random bytes: " << cpp_strerror(-ret) << dendl;
-    return -1;
+    return ret;
   }
 
   int i;
@@ -483,7 +483,7 @@ int gen_rand_alphanumeric(CephContext *cct, char *dest, int size) /* size should
   int ret = get_random_bytes(dest, size);
   if (ret < 0) {
     lderr(cct) << "cannot get random bytes: " << cpp_strerror(-ret) << dendl;
-    return -1;
+    return ret;
   }
 
   int i;
