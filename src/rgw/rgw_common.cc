@@ -455,6 +455,25 @@ int gen_rand_alphanumeric_upper(CephContext *cct, char *dest, int size) /* size 
   return 0;
 }
 
+static const char alphanum_lower_table[]="0123456789abcdefghijklmnopqrstuvwxyz";
+
+int gen_rand_alphanumeric_lower(CephContext *cct, char *dest, int size) /* size should be the required string size + 1 */
+{
+  int ret = get_random_bytes(dest, size);
+  if (ret < 0) {
+    lderr(cct) << "cannot get random bytes: " << cpp_strerror(-ret) << dendl;
+    return -1;
+  }
+
+  int i;
+  for (i=0; i<size - 1; i++) {
+    int pos = (unsigned)dest[i];
+    dest[i] = alphanum_lower_table[pos % (sizeof(alphanum_lower_table) - 1)];
+  }
+  dest[i] = '\0';
+
+  return 0;
+}
 
 // this is basically a modified base64 charset, url friendly
 static const char alphanum_table[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
