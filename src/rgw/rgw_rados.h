@@ -59,16 +59,21 @@ int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, 
 
 struct RGWOLHInfo {
   rgw_obj target;
+  bool removed;
+
+  RGWOLHInfo() : removed(false) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(target, bl);
+    ::encode(removed, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
      DECODE_START(1, bl);
      ::decode(target, bl);
+     ::decode(removed, bl);
      DECODE_FINISH(bl);
   }
 
@@ -1746,6 +1751,7 @@ public:
 
   int olh_init_modification(rgw_obj& obj, string *tag);
 
+  int follow_olh(map<string, bufferlist>& attrset, rgw_obj& target);
   int get_olh(rgw_obj& obj, RGWOLHInfo *olh);
   int set_olh(rgw_obj& obj, RGWOLHInfo& olh);
 
