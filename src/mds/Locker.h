@@ -50,6 +50,7 @@ class SimpleLock;
 class ScatterLock;
 class LocalLock;
 class MDCache;
+typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
 
 #include "SimpleLock.h"
 

@@ -32,7 +32,8 @@
  */
 enum mds_metric_t {
   MDS_HEALTH_NULL = 0,
-  MDS_HEALTH_TRIM = 1
+  MDS_HEALTH_TRIM = 1,
+  MDS_HEALTH_CLIENT_RECALL = 2
 };
 
 /**
