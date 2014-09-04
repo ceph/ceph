@@ -99,6 +99,7 @@ void Locker::dispatch(Message *m)
     // client sync
   case CEPH_MSG_CLIENT_CAPS:
     handle_client_caps(static_cast<MClientCaps*>(m));
+
     break;
   case CEPH_MSG_CLIENT_CAPRELEASE:
     handle_client_cap_release(static_cast<MClientCapRelease*>(m));
@@ -3121,8 +3122,15 @@ void Locker::handle_client_cap_release(MClientCapRelease *m)
     return;
   }
 
-  for (vector<ceph_mds_cap_item>::iterator p = m->caps.begin(); p != m->caps.end(); ++p)
+  Session *session = static_cast<Session *>(m->get_connection()->get_priv());
+
+  for (vector<ceph_mds_cap_item>::iterator p = m->caps.begin(); p != m->caps.end(); ++p) {
     _do_cap_release(client, inodeno_t((uint64_t)p->ino) , p->cap_id, p->migrate_seq, p->seq);
+  }
+
+  if (session) {
+    session->notify_cap_release(m->caps.size());
+  }
 
   m->put();
 }
