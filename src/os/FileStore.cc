@@ -1944,16 +1944,8 @@ int FileStore::_do_transactions(
   ThreadPool::TPHandle *handle)
 {
   int r = 0;
-
-  uint64_t bytes = 0, ops = 0;
-  for (list<Transaction*>::iterator p = tls.begin();
-       p != tls.end();
-       ++p) {
-    bytes += (*p)->get_num_bytes();
-    ops += (*p)->get_num_ops();
-  }
-
   int trans_num = 0;
+
   for (list<Transaction*>::iterator p = tls.begin();
        p != tls.end();
        ++p, trans_num++) {
