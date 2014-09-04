@@ -485,7 +485,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
       }
     }
 
-    if (num_pg_copies / num_osds < g_conf->mon_reweight_min_pgs_per_osd) {
+    if (!num_osds || (num_pg_copies / num_osds < g_conf->mon_reweight_min_pgs_per_osd)) {
       ostringstream oss;
       oss << "Refusing to reweight: we only have " << num_pg_copies
 	  << " PGs across " << num_osds << " osds!\n";
