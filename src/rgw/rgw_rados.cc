@@ -5120,6 +5120,18 @@ int RGWRados::olh_init_modification(rgw_obj& obj, string *tag)
   return 0;
 }
 
+static void filter_attrset(map<string, bufferlist>& unfiltered_attrset, const string& check_prefix,
+                           map<string, bufferlist> *attrset)
+{
+  map<string, bufferlist>::iterator iter;
+  for (iter = unfiltered_attrset.lower_bound(check_prefix);
+       iter != unfiltered_attrset.end(); ++iter) {
+    if (!str_startswith(iter->first, check_prefix))
+      break;
+    (*attrset)[iter->first] = iter->second;
+  }
+}
+
 int RGWRados::get_olh(rgw_obj& obj, RGWOLHInfo *olh)
 {
   map<string, bufferlist> unfiltered_attrset;
@@ -5134,16 +5146,10 @@ int RGWRados::get_olh(rgw_obj& obj, RGWOLHInfo *olh)
     return r;
   }
   map<string, bufferlist> attrset;
-  map<string, bufferlist>::iterator iter;
-  string check_prefix = RGW_ATTR_OLH_PREFIX;
-  for (iter = unfiltered_attrset.lower_bound(check_prefix);
-       iter != unfiltered_attrset.end(); ++iter) {
-    if (!str_startswith(iter->first, check_prefix))
-      break;
-    attrset[iter->first] = iter->second;
-  }
 
-  iter = attrset.find(RGW_ATTR_OLH_INFO);
+  filter_attrset(unfiltered_attrset, RGW_ATTR_OLH_PREFIX, &attrset);
+
+  map<string, bufferlist>::iterator iter = attrset.find(RGW_ATTR_OLH_INFO);
   if (iter == attrset.end()) { /* not an olh */
     return -EINVAL;
   }
@@ -5198,16 +5204,9 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
     return r;
 
   map<string, bufferlist> attrset;
-  map<string, bufferlist>::iterator iter;
-  string check_prefix = RGW_ATTR_PREFIX;
-  for (iter = unfiltered_attrset.lower_bound(check_prefix);
-       iter != unfiltered_attrset.end(); ++iter) {
-    if (!str_startswith(iter->first, check_prefix))
-      break;
-    attrset[iter->first] = iter->second;
-  }
+  filter_attrset(unfiltered_attrset, RGW_ATTR_PREFIX, &attrset);
 
-  iter = attrset.find(RGW_ATTR_OLH_INFO);
+  map<string, bufferlist>::iterator iter = attrset.find(RGW_ATTR_OLH_INFO);
   if (iter != attrset.end()) {
 #warning implment me
   }
