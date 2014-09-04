@@ -475,6 +475,17 @@ int gen_rand_alphanumeric_lower(CephContext *cct, char *dest, int size) /* size 
   return 0;
 }
 
+int gen_rand_alphanumeric_lower(CephContext *cct, string *str, int length)
+{
+  char buf[length + 1];
+  int ret = gen_rand_alphanumeric_lower(cct, buf, sizeof(buf));
+  if (ret < 0) {
+    return ret;
+  }
+  *str = buf;
+  return 0;
+}
+
 // this is basically a modified base64 charset, url friendly
 static const char alphanum_table[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
