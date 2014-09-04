@@ -1717,6 +1717,11 @@ public:
                        uint64_t *epoch, map<string, bufferlist> *attrs, bufferlist *first_chunk,
                        RGWObjVersionTracker *objv_tracker);
 
+  int obj_operate(rgw_obj& obj, librados::ObjectWriteOperation *op);
+  int obj_operate(rgw_obj& obj, librados::ObjectReadOperation *op);
+
+  int olh_init_modification(rgw_obj& obj, string *tag);
+
   int get_olh(rgw_obj& obj, RGWOLHInfo *olh);
   int set_olh(rgw_obj& obj, RGWOLHInfo& olh);
 
