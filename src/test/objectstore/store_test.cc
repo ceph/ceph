@@ -135,7 +135,7 @@ TEST_P(StoreTest, SimpleColPreHashTest) {
 
   int objs_per_folder = abs(merge_threshold) * 16 * g_ceph_context->_conf->filestore_split_multiple;
   boost::uniform_int<> folders_range(5, 256);
-  uint64_t expected_num_objs = (uint64_t)(objs_per_folder * folders_range(rng));
+  uint64_t expected_num_objs = (uint64_t)objs_per_folder * (uint64_t)folders_range(rng);
 
   char buf[100];
   snprintf(buf, 100, "1.%x_head", pg_id);
