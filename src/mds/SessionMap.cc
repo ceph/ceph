@@ -341,3 +341,39 @@ void SessionMap::touch_session(Session *session)
   session->last_cap_renew = ceph_clock_now(g_ceph_context);
 }
 
+/**
+ * Capped in response to a CEPH_MSG_CLIENT_CAPRELEASE message,
+ * with n_caps equal to the number of caps that were released
+ * in the message.  Used to update state about how many caps a
+ * client has released since it was last instructed to RECALL_STATE.
+ */
+void Session::notify_cap_release(size_t n_caps)
+{
+  if (!recalled_at.is_zero()) {
+    recall_release_count += n_caps;
+    if (recall_release_count >= recall_count) {
+      recalled_at = utime_t();
+      recall_count = 0;
+      recall_release_count = 0;
+    }
+  }
+}
+
+/**
+ * Called when a CEPH_MSG_CLIENT_SESSION->CEPH_SESSION_RECALL_STATE
+ * message is sent to the client.  Update our recall-related state
+ * in order to generate health metrics if the session doesn't see
+ * a commensurate number of calls to ::notify_cap_release
+ */
+void Session::notify_recall_sent(int const new_limit)
+{
+  if (recalled_at.is_zero()) {
+    // Entering recall phase, set up counters so we can later
+    // judge whether the client has respected the recall request
+    recalled_at = ceph_clock_now(g_ceph_context);
+    assert (new_limit < caps.size());  // Behaviour of Server::recall_client_state
+    recall_count = caps.size() - new_limit;
+    recall_release_count = 0;
+  }
+}
+
