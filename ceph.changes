@@ -3,7 +3,7 @@ Thu Sep  4 08:53:14 UTC 2014 - mjura@suse.com
 
 - Drop ceph-disk.patch which interfere with external SSD journals
   * Fix bnc#890737 
-  * Removed work around for very old ceph release on SLE11.
+  * Removed work around for instalation of old ceph release on SLE11.
 
 -------------------------------------------------------------------
 Thu Aug  7 10:37:32 UTC 2014 - osynge@suse.com
