@@ -121,10 +121,9 @@ std::ostream& RGWFormatter_Plain::dump_stream(const char *name)
   assert(0);
 }
 
-void RGWFormatter_Plain::dump_format(const char *name, const char *fmt, ...)
+void RGWFormatter_Plain::dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap)
 {
   char buf[LARGE_SIZE];
-  va_list ap;
   const char *format;
 
   struct plain_stack_entry& entry = stack.back();
@@ -139,39 +138,7 @@ void RGWFormatter_Plain::dump_format(const char *name, const char *fmt, ...)
   if (!should_print)
     return;
 
-  va_start(ap, fmt);
   vsnprintf(buf, LARGE_SIZE, fmt, ap);
-  va_end(ap);
-  if (len)
-    format = "\n%s";
-  else
-    format = "%s";
-
-  write_data(format, buf);
-}
-
-void RGWFormatter_Plain::dump_format_ns(const char *name, const char *fmt, const char *ns, ...)
-{
-  // ignore the namespace for now
-  char buf[LARGE_SIZE];
-  va_list ap;
-  const char *format;
-
-  struct plain_stack_entry& entry = stack.back();
-
-  if (!min_stack_level)
-    min_stack_level = stack.size();
-
-  bool should_print = (stack.size() == min_stack_level && !entry.size);
-
-  entry.size++;
-
-  if (!should_print)
-    return;
-
-  va_start(ap, fmt);
-  vsnprintf(buf, LARGE_SIZE, fmt, ap);
-  va_end(ap);
   if (len)
     format = "\n%s";
   else
