@@ -3510,7 +3510,9 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
 
   if (-1 == pending_inc.new_pool_max)
     pending_inc.new_pool_max = osdmap.pool_max;
-  int64_t pool = ++pending_inc.new_pool_max;
+  int64_t pool = osdmap.allocate_poolid(pending_inc.new_pool_max+1);
+  if (pool > pending_inc.new_pool_max)
+    pending_inc.new_pool_max = pool;
   pg_pool_t empty;
   pg_pool_t *pi = pending_inc.get_new_pool(pool, &empty);
   pi->type = pool_type;
