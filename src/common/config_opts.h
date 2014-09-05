@@ -280,6 +280,7 @@ OPTION(client_oc_max_objects, OPT_INT, 1000)      // max objects in cache
 OPTION(client_debug_force_sync_read, OPT_BOOL, false)     // always read synchronously (go to osds)
 OPTION(client_debug_inject_tick_delay, OPT_INT, 0) // delay the client tick for a number of seconds
 OPTION(client_max_inline_size, OPT_U64, 4096)
+OPTION(client_inject_release_failure, OPT_BOOL, false)  // synthetic client bug for testing
 // note: the max amount of "in flight" dirty data is roughly (max - target)
 OPTION(fuse_use_invalidate_cb, OPT_BOOL, false) // use fuse 2.8+ invalidate callback to keep page cache consistent
 OPTION(fuse_allow_other, OPT_BOOL, true)

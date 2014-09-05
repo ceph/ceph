@@ -2472,8 +2472,17 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
 	   << " dropping " << ccap_string(dropping)
 	   << dendl;
 
-  cap->issued &= retain;
-  cap->implemented &= cap->issued | used;
+  if (cct->_conf->client_inject_release_failure && revoking) {
+    // Simulated bug:
+    //  - tell the server we think issued is whatever they issued plus whatever we implemented
+    //  - leave what we have implemented in place
+    ldout(cct, 20) << __func__ << " injecting failure to release caps" << dendl;
+    cap->issued = cap->issued | cap->implemented;
+  } else {
+    // Normal behaviour
+    cap->issued &= retain;
+    cap->implemented &= cap->issued | used;
+  }
 
   uint64_t flush_tid = 0;
   snapid_t follows = 0;
@@ -4183,7 +4192,12 @@ void Client::flush_cap_releases()
        p != mds_sessions.end();
        ++p) {
     if (p->second->release && mdsmap->is_clientreplay_or_active_or_stopping(p->first)) {
-      p->second->con->send_message(p->second->release);
+      if (cct->_conf->client_inject_release_failure) {
+        ldout(cct, 20) << __func__ << " injecting failure to send cap release message" << dendl;
+        p->second->release->put();
+      } else {
+        p->second->con->send_message(p->second->release);
+      }
       p->second->release = 0;
     }
   }
