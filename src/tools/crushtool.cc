@@ -581,10 +581,8 @@ int main(int argc, const char **argv)
 	  dout(2) << "  item " << items[j] << " weight " << weights[j] << dendl;
 	}
 
-	crush_bucket *b = crush_make_bucket(buckettype, CRUSH_HASH_DEFAULT, type, j, items, weights);
-	assert(b);
 	int id;
-	int r = crush_add_bucket(crush.crush, 0, b, &id);
+	int r = crush.add_bucket(0, buckettype, CRUSH_HASH_DEFAULT, type, j, items, weights, &id);
 	if (r < 0) {
 	  dout(2) << "Couldn't add bucket: " << cpp_strerror(r) << dendl;
 	}
