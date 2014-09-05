@@ -6142,7 +6142,7 @@ bool MDCache::trim(int max, int count)
   while (lru.lru_get_size() + unexpirable > (unsigned)max) {
     CDentry *dn = static_cast<CDentry*>(lru.lru_expire());
     if (!dn) break;
-    if ((is_standby_replay && dn->get_linkage() &&
+    if ((is_standby_replay && dn->get_linkage()->inode &&
         dn->get_linkage()->inode->item_open_file.is_on_list()) ||
 	trim_dentry(dn, expiremap)) {
       unexpirables.push_back(dn);
@@ -6368,7 +6368,7 @@ bool MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<int, MCacheExpi
   // INODE
   if (in->is_auth()) {
     // eval stray after closing dirfrags
-    if (dn) {
+    if (dn && !mds->is_standby_replay()) {
       maybe_eval_stray(in);
       if (dn->get_num_ref() > 0)
 	return true;
@@ -6687,6 +6687,40 @@ void MDCache::try_trim_non_auth_subtree(CDir *dir)
   show_subtrees();
 }
 
+void MDCache::standby_trim_segment(LogSegment *ls)
+{
+  ls->new_dirfrags.clear_list();
+  ls->open_files.clear_list();
+
+  while (!ls->dirty_dirfrags.empty()) {
+    CDir *dir = ls->dirty_dirfrags.front();
+    dir->mark_clean();
+  }
+  while (!ls->dirty_inodes.empty()) {
+    CInode *in = ls->dirty_inodes.front();
+    in->mark_clean();
+  }
+  while (!ls->dirty_dentries.empty()) {
+    CDentry *dn = ls->dirty_dentries.front();
+    dn->mark_clean();
+  }
+  while (!ls->dirty_parent_inodes.empty()) {
+    CInode *in = ls->dirty_parent_inodes.front();
+    in->clear_dirty_parent();
+  }
+  while (!ls->dirty_dirfrag_dir.empty()) {
+    CInode *in = ls->dirty_dirfrag_dir.front();
+    in->filelock.remove_dirty();
+  }
+  while (!ls->dirty_dirfrag_nest.empty()) {
+    CInode *in = ls->dirty_dirfrag_nest.front();
+    in->nestlock.remove_dirty();
+  }
+  while (!ls->dirty_dirfrag_dirfragtree.empty()) {
+    CInode *in = ls->dirty_dirfrag_dirfragtree.front();
+    in->dirfragtreelock.remove_dirty();
+  }
+}
 
 /* This function DOES put the passed message before returning */
 void MDCache::handle_cache_expire(MCacheExpire *m)
