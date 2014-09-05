@@ -31,6 +31,9 @@ class SharedLRU {
   size_t max_size;
   Cond cond;
   unsigned size;
+public:
+  int waiting;
+private:
 
   map<K, typename list<pair<K, VPtr> >::iterator > contents;
   list<pair<K, VPtr> > lru;
@@ -86,7 +89,10 @@ class SharedLRU {
 
 public:
   SharedLRU(CephContext *cct = NULL, size_t max_size = 20)
-    : cct(cct), lock("SharedLRU::lock"), max_size(max_size), size(0) {}
+    : cct(cct), lock("SharedLRU::lock"),
+      max_size(max_size), size(0),
+      waiting(0)
+  {}
   
   ~SharedLRU() {
     contents.clear();
@@ -145,6 +151,7 @@ public:
     list<VPtr> to_release;
     {
       Mutex::Locker l(lock);
+      ++waiting;
       bool retry = false;
       do {
 	retry = false;
@@ -162,6 +169,7 @@ public:
 	if (retry)
 	  cond.Wait(lock);
       } while (retry);
+      --waiting;
     }
     return val;
   }
@@ -171,6 +179,7 @@ public:
     list<VPtr> to_release;
     {
       Mutex::Locker l(lock);
+      ++waiting;
       bool retry = false;
       do {
 	retry = false;
@@ -186,6 +195,7 @@ public:
 	if (retry)
 	  cond.Wait(lock);
       } while (retry);
+      --waiting;
     }
     return val;
   }
@@ -223,6 +233,8 @@ public:
     }
     return val;
   }
+
+  friend class SharedLRUTest;
 };
 
 #endif
