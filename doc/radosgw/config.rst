@@ -131,7 +131,7 @@ FastCGI and a log file. For example::
 	host = {host-name}
 	keyring = /etc/ceph/ceph.client.radosgw.keyring
 	rgw socket path = /var/run/ceph/ceph.radosgw.{instance-name}.fastcgi.sock
-	log file = /var/log/ceph/client.radosgw.{instance-name}.log
+	log file = /var/log/radosgw/client.radosgw.{instance-name}.log
 
 The ``[client.radosgw.*]`` portion of the gateway instance identifies this
 portion of the Ceph configuration file as configuring a Ceph Storage Cluster
@@ -142,7 +142,7 @@ instance name follows. For example::
 	host = ceph-gateway
 	keyring = /etc/ceph/ceph.client.radosgw.keyring
 	rgw socket path = /var/run/ceph/ceph.radosgw.gateway.fastcgi.sock
-	log file = /var/log/ceph/client.radosgw.gateway.log
+	log file = /var/log/radosgw/client.radosgw.{instance-name}.log
 
 .. note:: The ``host`` must be your machine hostname, not the FQDN. Make sure 
    that the name you use for the FastCGI socket is not the same as the one 
