@@ -1567,7 +1567,10 @@ reprotect_and_return_err:
 	return r;
       }
     }
-    resize_helper(ictx, size, prog_ctx);
+
+    r = resize_helper(ictx, size, prog_ctx);
+    if (r < 0)
+      return r;
 
     ldout(cct, 2) << "done." << dendl;
 
