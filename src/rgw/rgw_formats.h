@@ -42,6 +42,7 @@ public:
   virtual void dump_format_unquoted(const char *name, const char *fmt, ...) {
     assert(0 == "not implemented");
   }
+  virtual void dump_format_ns(const char *name, const char *ns, const char *fmt, ...);
   virtual int get_len() const;
   virtual void write_raw_data(const char *data);
 
