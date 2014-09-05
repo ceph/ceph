@@ -302,6 +302,23 @@ void RGWGetBucketLogging_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+void RGWGetBucketLocation_ObjStore_S3::send_response()
+{
+  dump_errno(s);
+  end_header(s, this);
+  dump_start(s);
+
+  string location_constraint(s->bucket_info.region);
+  if (s->bucket_info.region == "default")
+    location_constraint.clear();
+
+  s->formatter->dump_format_ns("LocationConstraint",
+			       "http://doc.s3.amazonaws.com/doc/2006-03-01/",
+			       "%s",location_constraint.c_str());
+
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
 static void dump_bucket_metadata(struct req_state *s, RGWBucketEnt& bucket)
 {
   char buf[32];
@@ -1716,6 +1733,8 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_get()
 {
   if (s->info.args.sub_resource_exists("logging"))
     return new RGWGetBucketLogging_ObjStore_S3;
+  else if (s->info.args.sub_resource_exists("location"))
+    return new RGWGetBucketLocation_ObjStore_S3;
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
   } else if (is_cors_op()) {
