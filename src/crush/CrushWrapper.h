@@ -52,16 +52,15 @@ using namespace std;
 class CrushWrapper {
   mutable Mutex mapper_lock;
 public:
-  struct crush_map *crush;
   std::map<int32_t, string> type_map; /* bucket/device type names */
   std::map<int32_t, string> name_map; /* bucket/device names */
   std::map<int32_t, string> rule_name_map;
 
+private:
+  struct crush_map *crush;
   /* reverse maps */
   bool have_rmaps;
   std::map<string, int> type_rmap, name_rmap, rule_name_rmap;
-
-private:
   void build_rmaps() {
     if (have_rmaps) return;
     build_rmap(type_map, type_rmap);
