@@ -42,10 +42,11 @@ cls_method_handle_t h_rgw_gc_remove;
 
 #define BI_PREFIX_CHAR 0x80
 
-#define BI_BUCKET_OBJS_INDEX 0
-#define BI_BUCKET_LOG_INDEX  1
+#define BI_BUCKET_OBJS_INDEX          0
+#define BI_BUCKET_LOG_INDEX           1
+#define BI_BUCKET_OBJ_INSTANCE_INDEX  2
 
-#define BI_BUCKET_LAST_INDEX  2
+#define BI_BUCKET_LAST_INDEX          3
 
 static string bucket_index_prefixes[] = { "", /* special handling for the objs index */
                                           "0_",
@@ -188,10 +189,88 @@ static int get_obj_vals(cls_method_context_t hctx, const string& start, const st
   return 0;
 }
 
-static void encode_index_key(const cls_rgw_obj_key& key, string *index_key)
+/*
+ * get a monotonically decreasing string representation.
+ * For num = x, num = y, where x > y, str(x) < str(y)
+ * Another property is that string size starts short and grows as num increases
+ */
+static void decreasing_str(uint64_t num, string *str)
 {
-  *index_key = key.name;
-  if (!key.instance.empty()) {
+  char buf[32];
+  if (num < 0x10) { /* 16 */
+    snprintf(buf, sizeof(buf), "9%02d", 15 - num);
+  } else if (num < 0x100) { /* 256 */
+    snprintf(buf, sizeof(buf), "8%03d", 255 - num);
+  } else if (num < 0x1000) /* 4096 */ {
+    snprintf(buf, sizeof(buf), "7%04d", 4095 - num);
+  } else if (num < 0x10000) /* 65536 */ {
+    snprintf(buf, sizeof(buf), "6%05d", 65535 - num);
+  } else if (num < 0x100000000) /* 4G */ {
+    snprintf(buf, sizeof(buf), "5%010d", 0xFFFFFFFF - num);
+  } else {
+    snprintf(buf, sizeof(buf), "4%020d",  -num);
+  }
+
+  *str = buf;
+}
+
+/*
+ * we now hold two different indexes for objects. The first one holds the list of objects in the
+ * order that we want them to be listed. The second one only holds the objects instances (for
+ * versioned objects), and they're not arranged in any particular order.
+ * When listing objects we'll use the first index, when doing operations on the objects themselves
+ * we'll use the second index. Note that regular objects only map to the first index anyway
+ */
+
+static void get_list_index_key(const string& obj, uint64_t index_ver, const string& instance, string *index_key)
+{
+  string ver_str;
+  decreasing_str(index_ver, &ver_str);
+  string instance_delim("\0i", 2);
+  string ver_delim("\0v", 2);
+
+  *index = obj;
+  index->append(ver_delim);
+  index->append(ver_str);
+  index->append(instance_delim);
+  index->append(instance);
+}
+
+static int encode_list_index_key(cls_method_context_t hctx, const cls_rgw_obj_key& key, string *index_key)
+{
+  if (key.instance.empty()) {
+    *index_key = key.name;
+    return 0;
+  }
+
+  string obj_index_key;
+  encode_obj_index_key(key, &obj_index_key);
+
+  rgw_bucket_dir_entry entry;
+
+  int ret = read_index_entry(hctx, obj_index_key, &entry);
+  if (ret == -ENOENT) {
+   /* couldn't find the entry, set key value after the current object */
+    char buf[2] = { 0x1, 0 };
+    string s(buf);
+    *index_key  = key.name + s;
+    return 0;
+  }
+  if (ret < 0) {
+    CLS_LOG(1, "ERROR: encode_list_index_key(): cls_cxx_map_get_val returned %d\n", ret);
+    return ret;
+  }
+
+  get_list_index_key(key.name, entry.index_ver, entry.instance, index_key);
+}
+
+static void encode_obj_index_key(const cls_rgw_obj_key& key, string *index_key)
+{
+  if (key.instance.empty()) {
+    *index_key = key.name;
+  } else {
+    *index_key = BI_BUCKET_OBJ_INSTANCE_INDEX;
+    index_key->append(key.name);
     string delim("\0i", 2);
     index_key->append(delim);
     index_key->append(key.instance);
@@ -248,7 +327,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   map<string, bufferlist> keys;
   string start_key;
-  encode_index_key(op.start_obj, &start_key);
+  encode_list_index_key(op.start_obj, &start_key);
   rc = get_obj_vals(hctx, start_key, op.filter_prefix, op.num_entries + 1, &keys);
   if (rc < 0)
     return rc;
@@ -463,7 +542,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   // get on-disk state
   bufferlist cur_value;
   string key;
-  encode_index_key(op.key, &key);
+  encode_obj_index_key(op.key, &key);
   int rc = cls_cxx_map_get_val(hctx, key, &cur_value);
   if (rc < 0 && rc != -ENOENT)
     return rc;
@@ -524,7 +603,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   // write out new key to disk
   bufferlist info_bl;
   ::encode(entry, info_bl);
-  encode_index_key(op.key, &key);
+  encode_obj_index_key(op.key, &key);
   rc = cls_cxx_map_set_val(hctx, key, &info_bl);
   if (rc < 0)
     return rc;
@@ -595,7 +674,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   bool ondisk = true;
 
   string key;
-  encode_index_key(op.key, &key);
+  encode_obj_index_key(op.key, &key);
   rc = read_index_entry(hctx, key, &entry);
   if (rc == -ENOENT) {
     entry.key = op.key;
@@ -707,7 +786,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
             remove_key.name.c_str(), remove_key.instance.c_str());
     struct rgw_bucket_dir_entry remove_entry;
     string k;
-    encode_index_key(remove_key, &k);
+    encode_obj_index_key(remove_key, &k);
     int ret = read_index_entry(hctx, k, &remove_entry);
     if (ret < 0) {
       CLS_LOG(1, "rgw_bucket_complete_op(): removing entries, read_index_entry name=%s instance=%s ret=%d\n",
@@ -774,7 +853,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
 
     bufferlist cur_disk_bl;
     string cur_change_key;
-    encode_index_key(cur_change.key, &cur_change_key);
+    encode_obj_index_key(cur_change.key, &cur_change_key);
     int ret = cls_cxx_map_get_val(hctx, cur_change_key, &cur_disk_bl);
     if (ret < 0 && ret != -ENOENT)
       return -EINVAL;
