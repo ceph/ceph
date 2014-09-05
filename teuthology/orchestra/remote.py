@@ -245,6 +245,14 @@ class Remote(object):
             self._distro = Distribution(lsb_info.stdout.getvalue().strip())
         return self._distro
 
+    @property
+    def arch(self):
+        if not hasattr(self, '_arch'):
+            proc = self.run(args=['uname', '-p'], stdout=StringIO())
+            proc.wait()
+            self._arch = proc.stdout.getvalue().strip()
+        return self._arch
+
 
 class Distribution(object):
     """
