@@ -161,6 +161,24 @@ public:
 
   iterator begin() { return iterator(_front); }
   iterator end() { return iterator(NULL); }
+
+  class const_iterator {
+  private:
+    item *cur;
+  public:
+    const_iterator(item *i = 0) : cur(i) {}
+    const T operator*() { return static_cast<const T>(cur->_item); }
+    const_iterator& operator++() {
+      assert(cur);
+      assert(cur->_list);
+      cur = cur->_next;
+      return *this;
+    }
+    bool end() const { return cur == 0; }
+  };
+
+  const_iterator begin() const { return const_iterator(_front); }
+  const_iterator end() const { return const_iterator(NULL); }
 };
 
 
