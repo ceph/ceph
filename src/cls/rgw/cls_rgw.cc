@@ -13,6 +13,7 @@
 #include "objclass/objclass.h"
 #include "cls/rgw/cls_rgw_ops.h"
 #include "common/Clock.h"
+#include "common/strtol.h"
 
 #include "global/global_context.h"
 
@@ -198,17 +199,17 @@ static void decreasing_str(uint64_t num, string *str)
 {
   char buf[32];
   if (num < 0x10) { /* 16 */
-    snprintf(buf, sizeof(buf), "9%02d", 15 - num);
+    snprintf(buf, sizeof(buf), "9%02lld", 15 - (long long)num);
   } else if (num < 0x100) { /* 256 */
-    snprintf(buf, sizeof(buf), "8%03d", 255 - num);
+    snprintf(buf, sizeof(buf), "8%03lld", 255 - (long long)num);
   } else if (num < 0x1000) /* 4096 */ {
-    snprintf(buf, sizeof(buf), "7%04d", 4095 - num);
+    snprintf(buf, sizeof(buf), "7%04lld", 4095 - (long long)num);
   } else if (num < 0x10000) /* 65536 */ {
-    snprintf(buf, sizeof(buf), "6%05d", 65535 - num);
+    snprintf(buf, sizeof(buf), "6%05lld", 65535 - (long long)num);
   } else if (num < 0x100000000) /* 4G */ {
-    snprintf(buf, sizeof(buf), "5%010d", 0xFFFFFFFF - num);
+    snprintf(buf, sizeof(buf), "5%010lld", 0xFFFFFFFF - (long long)num);
   } else {
-    snprintf(buf, sizeof(buf), "4%020d",  -num);
+    snprintf(buf, sizeof(buf), "4%020lld",  (long long)-num);
   }
 
   *str = buf;
@@ -229,12 +230,27 @@ static void get_list_index_key(const string& obj, uint64_t index_ver, const stri
   string instance_delim("\0i", 2);
   string ver_delim("\0v", 2);
 
-  *index = obj;
-  index->append(ver_delim);
-  index->append(ver_str);
-  index->append(instance_delim);
-  index->append(instance);
+  *index_key = obj;
+  index_key->append(ver_delim);
+  index_key->append(ver_str);
+  index_key->append(instance_delim);
+  index_key->append(instance);
 }
+
+static void encode_obj_index_key(const cls_rgw_obj_key& key, string *index_key)
+{
+  if (key.instance.empty()) {
+    *index_key = key.name;
+  } else {
+    *index_key = BI_BUCKET_OBJ_INSTANCE_INDEX;
+    index_key->append(key.name);
+    string delim("\0i", 2);
+    index_key->append(delim);
+    index_key->append(key.instance);
+  }
+}
+
+static int read_index_entry(cls_method_context_t hctx, string& name, struct rgw_bucket_dir_entry *entry);
 
 static int encode_list_index_key(cls_method_context_t hctx, const cls_rgw_obj_key& key, string *index_key)
 {
@@ -261,39 +277,96 @@ static int encode_list_index_key(cls_method_context_t hctx, const cls_rgw_obj_ke
     return ret;
   }
 
-  get_list_index_key(key.name, entry.index_ver, entry.instance, index_key);
+  get_list_index_key(key.name, entry.index_ver, key.instance, index_key);
+
+  return 0;
 }
 
-static void encode_obj_index_key(const cls_rgw_obj_key& key, string *index_key)
+static void split_key(const string& key, list<string>& vals)
 {
-  if (key.instance.empty()) {
-    *index_key = key.name;
-  } else {
-    *index_key = BI_BUCKET_OBJ_INSTANCE_INDEX;
-    index_key->append(key.name);
-    string delim("\0i", 2);
-    index_key->append(delim);
-    index_key->append(key.instance);
+  size_t pos = 0;
+  const char *p = key.c_str();
+  while (pos < key.size()) {
+    size_t len = strlen(p);
+    vals.push_back(p);
+    pos += len + 1;
+    p += len + 1;
   }
 }
 
-static void decode_index_key(const string index_key, cls_rgw_obj_key *key)
+/*
+ * object index key structure:
+ *
+ * <obj name>\0[i<instance id>]
+ */
+static void decode_obj_index_key(const string& index_key, cls_rgw_obj_key *key)
 {
   size_t len = strlen(index_key.c_str());
+
+  key->instance.clear();
+
   if (len == index_key.size()) {
     key->name = index_key;
-    key->instance.clear();
-    return;
-  }
-  key->name = index_key.substr(0, len);
-  if (len + 2 >= index_key.size()) {
-    key->instance.clear();
     return;
   }
 
-  // we know that index_key[len] == 0, due to strlen()
-  if (index_key[len + 1] == 'i') {
-    key->instance = index_key.substr(len + 2);
+  list<string> vals;
+  split_key(index_key, vals);
+
+  assert(!vals.empty());
+
+  list<string>::iterator iter = vals.begin();
+  key->name = *iter;
+  iter++;
+
+  assert(iter != vals.end());
+
+  for (; iter != vals.end(); ++iter) {
+    string& val = *iter;
+    if (val[0] == 'i') {
+      key->instance = val.substr(1);
+    }
+  }
+}
+
+/*
+ * list index key structure:
+ *
+ * <obj name>\0[v<ver>\0i<instance id>]
+ */
+static void decode_list_index_key(const string& index_key, cls_rgw_obj_key *key, uint64_t *ver)
+{
+  size_t len = strlen(index_key.c_str());
+
+  key->instance.clear();
+  *ver = 0;
+
+  if (len == index_key.size()) {
+    key->name = index_key;
+    return;
+  }
+
+  list<string> vals;
+  split_key(index_key, vals);
+
+  assert(!vals.empty());
+
+  list<string>::iterator iter = vals.begin();
+  key->name = *iter;
+  iter++;
+
+  assert(iter != vals.end());
+
+  for (; iter != vals.end(); ++iter) {
+    string& val = *iter;
+    if (val[0] == 'i') {
+      key->instance = val.substr(1);
+    } else if (val[0] == 'v') {
+      string err;
+      const char *s = val.c_str() + 1;
+      *ver = strict_strtoll(s, 10, &err);
+      assert(err.empty());
+    }
   }
 }
 
@@ -327,7 +400,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   map<string, bufferlist> keys;
   string start_key;
-  encode_list_index_key(op.start_obj, &start_key);
+  encode_list_index_key(hctx, op.start_obj, &start_key);
   rc = get_obj_vals(hctx, start_key, op.filter_prefix, op.num_entries + 1, &keys);
   if (rc < 0)
     return rc;
@@ -356,7 +429,8 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     }
 
     cls_rgw_obj_key key;
-    decode_index_key(kiter->first, &key);
+    uint64_t ver;
+    decode_list_index_key(kiter->first, &key, &ver);
 
     m[key] = entry;
 
