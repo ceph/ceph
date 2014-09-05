@@ -994,6 +994,8 @@ bool Journaler::_is_readable()
  */
 bool Journaler::is_readable() 
 {
+  Mutex::Locker l(lock);
+
   bool r = _is_readable();
   _prefetch();
   return r;
@@ -1048,7 +1050,9 @@ void Journaler::_finish_erase(int data_result, C_OnFinisher *completion)
  */
 bool Journaler::try_read_entry(bufferlist& bl)
 {
-  if (!is_readable()) {  // this may start a read. 
+  Mutex::Locker l(lock);
+
+  if (!_is_readable()) {  // this may start a read.
     ldout(cct, 10) << "try_read_entry at " << read_pos << " not readable" << dendl;
     return false;
   }
@@ -1071,10 +1075,16 @@ bool Journaler::try_read_entry(bufferlist& bl)
 
 void Journaler::wait_for_readable(Context *onreadable)
 {
-  ldout(cct, 10) << "wait_for_readable at " << read_pos << " onreadable " << onreadable << dendl;
-  assert(!_is_readable());
+  Mutex::Locker l(lock);
+
   assert(on_readable == 0);
-  on_readable = wrap_finisher(onreadable);
+  if (!_is_readable()) {
+    ldout(cct, 10) << "wait_for_readable at " << read_pos << " onreadable " << onreadable << dendl;
+    on_readable = wrap_finisher(onreadable);
+  } else {
+    // race with OSD reply
+    finisher->queue(onreadable, 0);
+  }
 }
 
 
