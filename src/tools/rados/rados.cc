@@ -170,6 +170,10 @@ void usage(ostream& out)
 "   --default\n"
 "        Use with ls to list objects in default namespace\n"
 "        Takes precedence over --all in case --all is in environment\n"
+"   --target-locator\n"
+"        Use with cp to specify the locator of the new object\n"
+"   --target-nspace\n"
+"        Use with cp to specify the namespace of the new object\n"
 "\n"
 "BENCH OPTIONS:\n"
 "   -t N\n"
@@ -400,20 +404,23 @@ static int do_copy_pool(Rados& rados, const char *src_pool, const char *target_p
     cerr << "cannot open target pool: " << target_pool << std::endl;
     return ret;
   }
+  src_ctx.set_namespace(all_nspaces);
   librados::NObjectIterator i = src_ctx.nobjects_begin();
   librados::NObjectIterator i_end = src_ctx.nobjects_end();
   for (; i != i_end; ++i) {
     string nspace = i->get_nspace();
     string oid = i->get_oid();
     string locator = i->get_locator();
-    stringstream name;
-    name << nspace << "/" << oid;
-    if (locator.size())
-        name << "(@" << locator << ")";
-    cout << src_pool << ":" << name  << " => "
-      << target_pool << ":" << name << std::endl;
 
-    target_ctx.locator_set_key(locator);
+    string target_name = (nspace.size() ? nspace + "/" : "") + oid;
+    string src_name = target_name;
+    if (locator.size())
+        src_name += "(@" + locator + ")";
+    cout << src_pool << ":" << src_name  << " => "
+      << target_pool << ":" << target_name << std::endl;
+
+    src_ctx.locator_set_key(locator);
+    src_ctx.set_namespace(nspace);
     target_ctx.set_namespace(nspace);
     ret = do_copy(src_ctx, oid.c_str(), target_ctx, oid.c_str());
     if (ret < 0) {
@@ -1150,6 +1157,7 @@ static int do_cache_evict(IoCtx& io_ctx, string oid)
 static int do_cache_flush_evict_all(IoCtx& io_ctx, bool blocking)
 {
   int errors = 0;
+  io_ctx.set_namespace(all_nspaces);
   try {
     librados::NObjectIterator i = io_ctx.nobjects_begin();
     librados::NObjectIterator i_end = io_ctx.nobjects_end();
@@ -1198,7 +1206,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   bool create_pool = false;
   const char *pool_name = NULL;
   const char *target_pool_name = NULL;
-  string oloc, target_oloc, nspace;
+  string oloc, target_oloc, nspace, target_nspace;
   int concurrent_ios = 16;
   unsigned op_size = default_op_size;
   bool cleanup = true;
@@ -1249,6 +1257,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("target_locator");
   if (i != opts.end()) {
     target_oloc = i->second;
+  }
+  i = opts.find("target_nspace");
+  if (i != opts.end()) {
+    target_nspace = i->second;
   }
   i = opts.find("category");
   if (i != opts.end()) {
@@ -1981,6 +1993,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (target_oloc.size()) {
       target_ctx.locator_set_key(target_oloc);
     }
+    if (target_nspace.size()) {
+      target_ctx.set_namespace(target_nspace);
+    }
 
     ret = do_copy(io_ctx, nargs[1], target_ctx, target_obj);
     if (ret < 0) {
@@ -2026,10 +2041,14 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       ret = -1;
       goto out;
     }
+    if (nspace.size())
+      target_ctx.set_namespace(nspace);
 
     ret = do_clone_data(io_ctx, nargs[1], target_ctx, target_obj);
     if (ret < 0) {
-      cerr << "error cloning " << pool_name << "/" << nargs[1] << " => " << target << "/" << target_obj << ": " << cpp_strerror(ret) << std::endl;
+      string src_name = (nspace.size() ? nspace + "/" : "") + nargs[1];
+      string target_name = (nspace.size() ? nspace + "/" : "") + target_obj;
+      cerr << "error cloning " << pool_name << ">" << src_name << " => " << target << ">" << target_name << ": " << cpp_strerror(ret) << std::endl;
       goto out;
     }
   } else if (strcmp(nargs[0], "rm") == 0) {
@@ -2041,7 +2060,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       const string & oid = *iter;
       ret = io_ctx.remove(oid);
       if (ret < 0) {
-        cerr << "error removing " << pool_name << "/" << oid << ": " << cpp_strerror(ret) << std::endl;
+        string name = (nspace.size() ? nspace + "/" : "" ) + oid;
+        cerr << "error removing " << pool_name << ">" << name << ": " << cpp_strerror(ret) << std::endl;
         goto out;
       }
     }
@@ -2690,6 +2710,8 @@ int main(int argc, const char **argv)
       opts["object_locator"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--target-locator" , (char *)NULL)) {
       opts["target_locator"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--target-nspace" , (char *)NULL)) {
+      opts["target_nspace"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--category", (char*)NULL)) {
       opts["category"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-t", "--concurrent-ios", (char*)NULL)) {
