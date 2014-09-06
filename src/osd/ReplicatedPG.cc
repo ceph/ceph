@@ -994,6 +994,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	  }
 	  if (is_unreadable_object(oid)) {
 	    wait_for_unreadable_object(oid, op);
+	    delete filter;
 	    return;
 	  }
 	  result = osd->store->read(coll, oid, 0, 0, osd_op.outdata);
@@ -1631,7 +1632,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
           // Check if in other hit sets
           map<time_t,HitSetRef>::iterator itor;
           bool in_other_hit_sets = false;
-          for (itor = agent_state->hit_set_map.begin(); itor != agent_state->hit_set_map.end(); itor++) {
+          for (itor = agent_state->hit_set_map.begin(); itor != agent_state->hit_set_map.end(); ++itor) {
             if (itor->second->contains(missing_oid)) {
               in_other_hit_sets = true;
               break;
