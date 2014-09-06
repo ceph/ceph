@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 # Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+# Copyright (C) 2014 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -98,6 +99,12 @@ function TEST_erasure_crush_rule() {
     ./ceph osd erasure-code-profile set myprofile
     ./ceph osd pool create $poolname 12 12 erasure myprofile
     ./ceph osd crush rule ls | grep $poolname || return 1
+    #
+    # a non existent crush ruleset given in argument is an error
+    # http://tracker.ceph.com/issues/9304
+    #
+    poolname=pool_erasure3
+    ! ./ceph osd pool create $poolname 12 12 erasure myprofile INVALIDRULESET || return 1
 }
 
 function TEST_erasure_crush_rule_pending() {
@@ -240,10 +247,11 @@ function TEST_erasure_code_pool_lrc() {
 function TEST_replicated_pool() {
     local dir=$1
     run_mon $dir a --public-addr 127.0.0.1
-    ./ceph osd pool create replicated 12 12 replicated 2>&1 | \
+    ./ceph osd pool create replicated 12 12 replicated replicated_ruleset 2>&1 | \
         grep "pool 'replicated' created" || return 1
-    ./ceph osd pool create replicated 12 12 replicated 2>&1 | \
+    ./ceph osd pool create replicated 12 12 replicated replicated_ruleset 2>&1 | \
         grep 'already exists' || return 1
+    ! ./ceph osd pool create replicated0 12 12 replicated INVALIDRULESET
     # default is replicated
     ./ceph osd pool create replicated1 12 12 2>&1 | \
         grep "pool 'replicated1' created" || return 1
