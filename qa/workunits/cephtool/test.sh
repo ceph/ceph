@@ -249,12 +249,12 @@ function test_tiering()
   ceph osd dump | grep "pool.*'cache6'" 2>&1 | grep "tier_of[ \t]\+$poolB_id"
 
   ceph osd tier remove basepoolA cache5 2>&1 | grep 'not a tier of'
-  ! ceph osd dump | grep "pool.*'cache5'" 2>&1 | grep "tier_of"
+  ! ceph osd dump | grep "pool.*'cache5'" 2>&1 | grep "tier_of" || exit 1
   ceph osd tier remove basepoolB cache6 2>&1 | grep 'not a tier of'
-  ! ceph osd dump | grep "pool.*'cache6'" 2>&1 | grep "tier_of"
+  ! ceph osd dump | grep "pool.*'cache6'" 2>&1 | grep "tier_of" || exit 1
 
-  ! ceph osd dump | grep "pool.*'basepoolA'" 2>&1 | grep "tiers"
-  ! ceph osd dump | grep "pool.*'basepoolB'" 2>&1 | grep "tiers"
+  ! ceph osd dump | grep "pool.*'basepoolA'" 2>&1 | grep "tiers" || exit 1
+  ! ceph osd dump | grep "pool.*'basepoolB'" 2>&1 | grep "tiers" || exit 1
 
   ceph osd pool delete cache6 cache6 --yes-i-really-really-mean-it
   ceph osd pool delete cache5 cache5 --yes-i-really-really-mean-it
@@ -592,7 +592,7 @@ function test_mon_osd()
       break
     fi
   done
-  ! ceph osd dump | grep ' down '
+  ! ceph osd dump | grep ' down ' || exit 1
   
   # if you have more osds than this you are on your own
   for f in `seq 0 31`; do
@@ -1116,7 +1116,7 @@ fi
 
 for i in ${tests_to_run[@]}; do
   set -x
-  test_${i} ;
+  test_${i}
   set +x
 done
 
