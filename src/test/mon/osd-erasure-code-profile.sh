@@ -64,11 +64,9 @@ function SHARE_MON_TEST_set_pending() {
 
     # try again if the profile is pending
     local profile=profile
-    ./ceph osd erasure-code-profile ls
-    # add to the pending OSD map without triggering a paxos proposal
-    result=$(echo '{"prefix":"osdmonitor_prepare_command","prepare":"osd erasure-code-profile set","name":"'$profile'"}' | nc -U $dir/$id/ceph-mon.$id.asok | cut --bytes=5-)
-    test $result = true || return 1
+    CEPH_ARGS='' ./ceph --mon-host=127.0.0.1 tell 'mon.*' injectargs -- --mon-debug-idempotency || return 1
     ./ceph osd erasure-code-profile set $profile --force || return 1
+    CEPH_ARGS='' ./ceph --mon-host=127.0.0.1 tell 'mon.*' injectargs -- --no-mon-debug-idempotency || return 1
     CEPH_ARGS='' ./ceph --admin-daemon $dir/$id/ceph-mon.$id.asok log flush || return 1
     grep "$profile try again" $dir/$id/log || return 1
 

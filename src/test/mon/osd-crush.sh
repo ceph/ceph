@@ -79,12 +79,10 @@ function TEST_crush_rule_create_simple_exists() {
     local ruleset=ruleset2
     local root=default
     local failure_domain=host
-    ./ceph osd erasure-code-profile ls
-    # add to the pending OSD map without triggering a paxos proposal
-    result=$(echo '{"prefix":"osdmonitor_prepare_command","prepare":"osd crush rule create-simple","name":"'$ruleset'","root":"'$root'","type":"'$failure_domain'"}' | nc -U $dir/a/ceph-mon.a.asok | cut --bytes=5-)
-    test $result = true || return 1
+    CEPH_ARGS='' ./ceph --mon-host=127.0.0.1 tell 'mon.*' injectargs -- --mon-debug-idempotency || return 1
     ./ceph osd crush rule create-simple $ruleset $root $failure_domain 2>&1 | \
         grep "$ruleset already exists" || return 1
+    CEPH_ARGS='' ./ceph --mon-host=127.0.0.1 tell 'mon.*' injectargs -- --no-mon-debug-idempotency || return 1
     ./ceph osd crush rule rm $ruleset || return 1
 }
 
@@ -125,25 +123,21 @@ function TEST_crush_rule_create_erasure() {
 function TEST_crush_rule_create_erasure_exists() {
     local dir=$1
     local ruleset=ruleset5
-    ./ceph osd erasure-code-profile ls
-    # add to the pending OSD map without triggering a paxos proposal
-    result=$(echo '{"prefix":"osdmonitor_prepare_command","prepare":"osd crush rule create-erasure","name":"'$ruleset'"}' | nc -U $dir/a/ceph-mon.a.asok | cut --bytes=5-)
-    test $result = true || return 1
+    CEPH_ARGS='' ./ceph --mon-host=127.0.0.1 tell 'mon.*' injectargs -- --mon-debug-idempotency || return 1
     ./ceph osd crush rule create-erasure $ruleset 2>&1 | \
         grep "$ruleset already exists" || return 1
+    CEPH_ARGS='' ./ceph --mon-host=127.0.0.1 tell 'mon.*' injectargs -- --no-mon-debug-idempotency || return 1
     ./ceph osd crush rule rm $ruleset || return 1
 }
 
 function TEST_crush_rule_create_erasure_profile_default_exists() {
     local dir=$1
     local ruleset=ruleset6
-    ./ceph osd erasure-code-profile ls
     ./ceph osd erasure-code-profile rm default || return 1
     ! ./ceph osd erasure-code-profile ls | grep default || return 1
-    # add to the pending OSD map without triggering a paxos proposal
-    result=$(echo '{"prefix":"osdmonitor_prepare_command","prepare":"osd erasure-code-profile set","name":"default"}' | nc -U $dir/a/ceph-mon.a.asok | cut --bytes=5-)
-    test $result = true || return 1
+    CEPH_ARGS='' ./ceph --mon-host=127.0.0.1 tell 'mon.*' injectargs -- --mon-debug-idempotency || return 1
     ./ceph osd crush rule create-erasure $ruleset || return 1
+    CEPH_ARGS='' ./ceph --mon-host=127.0.0.1 tell 'mon.*' injectargs -- --no-mon-debug-idempotency || return 1
     CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
     grep 'profile default already pending' $dir/a/log || return 1
     ./ceph osd crush rule rm $ruleset || return 1
