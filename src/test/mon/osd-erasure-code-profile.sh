@@ -109,21 +109,6 @@ function SHARE_MON_TEST_rm() {
     ./ceph osd erasure-code-profile rm $profile # cleanup
 }
 
-function SHARE_MON_TEST_rm_pending() {
-    local dir=$1
-    local id=$2
-
-    # try again if the profile is pending
-    local profile=myprofile
-    ./ceph osd erasure-code-profile ls
-    # add to the pending OSD map without triggering a paxos proposal
-    result=$(echo '{"prefix":"osdmonitor_prepare_command","prepare":"osd erasure-code-profile set","name":"'$profile'"}' | nc -U $dir/$id/ceph-mon.$id.asok | cut --bytes=5-)
-    test $result = true || return 1
-    ./ceph osd erasure-code-profile rm $profile || return 1
-    CEPH_ARGS='' ./ceph --admin-daemon $dir/$id/ceph-mon.$id.asok log flush || return 1
-    grep "$profile: creation canceled" $dir/$id/log || return 1
-}
-
 function SHARE_MON_TEST_get() {
     local dir=$1
     local id=$2
