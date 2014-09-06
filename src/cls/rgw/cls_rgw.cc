@@ -28,6 +28,7 @@ cls_method_handle_t h_rgw_bucket_check_index;
 cls_method_handle_t h_rgw_bucket_rebuild_index;
 cls_method_handle_t h_rgw_bucket_prepare_op;
 cls_method_handle_t h_rgw_bucket_complete_op;
+cls_method_handle_t h_rgw_bucket_link_olh;
 cls_method_handle_t h_rgw_bi_log_list_op;
 cls_method_handle_t h_rgw_dir_suggest_changes;
 cls_method_handle_t h_rgw_user_usage_log_add;
@@ -223,18 +224,22 @@ static void decreasing_str(uint64_t num, string *str)
  * we'll use the second index. Note that regular objects only map to the first index anyway
  */
 
-static void get_list_index_key(const string& obj, uint64_t index_ver, const string& instance, string *index_key)
+static void get_list_index_key(struct rgw_bucket_dir_entry& entry, bool pending, string *index_key)
 {
   string ver_str;
-  decreasing_str(index_ver, &ver_str);
+  decreasing_str(entry.ver.epoch, &ver_str);
   string instance_delim("\0i", 2);
   string ver_delim("\0v", 2);
 
-  *index_key = obj;
+  *index_key = entry.key.name;
   index_key->append(ver_delim);
   index_key->append(ver_str);
   index_key->append(instance_delim);
-  index_key->append(instance);
+  index_key->append(entry.key.instance);
+  if (pending) {
+    string pending_str("\0p", 2);
+    index_key->append(pending_str);
+  }
 }
 
 static void encode_obj_index_key(const cls_rgw_obj_key& key, string *index_key)
@@ -277,7 +282,7 @@ static int encode_list_index_key(cls_method_context_t hctx, const cls_rgw_obj_ke
     return ret;
   }
 
-  get_list_index_key(key.name, entry.index_ver, key.instance, index_key);
+  get_list_index_key(entry, entry.is_olh_pending(), index_key);
 
   return 0;
 }
@@ -334,12 +339,13 @@ static void decode_obj_index_key(const string& index_key, cls_rgw_obj_key *key)
  *
  * <obj name>\0[v<ver>\0i<instance id>]
  */
-static void decode_list_index_key(const string& index_key, cls_rgw_obj_key *key, uint64_t *ver)
+static void decode_list_index_key(const string& index_key, cls_rgw_obj_key *key, uint64_t *ver, bool *pending)
 {
   size_t len = strlen(index_key.c_str());
 
   key->instance.clear();
   *ver = 0;
+  *pending = false;
 
   if (len == index_key.size()) {
     key->name = index_key;
@@ -366,6 +372,8 @@ static void decode_list_index_key(const string& index_key, cls_rgw_obj_key *key,
       const char *s = val.c_str() + 1;
       *ver = strict_strtoll(s, 10, &err);
       assert(err.empty());
+    } else if (val[0] == 'p') {
+      *pending = true;
     }
   }
 }
@@ -886,6 +894,103 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   }
 
   return write_bucket_header(hctx, &header);
+}
+
+static int write_entry(cls_method_context_t hctx, struct rgw_bucket_dir_entry& entry, const string& key)
+{
+  bufferlist bl;
+  ::encode(entry, bl);
+  return cls_cxx_map_set_val(hctx, key, &bl);
+}
+
+static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  // decode request
+  rgw_cls_obj_link_olh_op op;
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(op, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: rgw_bucket_link_olh_op(): failed to decode request\n");
+    return -EINVAL;
+  }
+
+  string instance_key;
+  struct rgw_bucket_dir_entry instance_entry;
+  bool exists = !op.removed;
+
+  if (exists) {
+    encode_obj_index_key(op.key, &instance_key);
+    int ret = read_index_entry(hctx, instance_key, &instance_entry);
+    if (ret < 0) {
+      CLS_LOG(0, "ERROR: read_index_entry() key=%s ret=%d", instance_key.c_str(), ret);
+      return ret;
+    }
+  }
+
+  string instance_key;
+  struct rgw_bucket_dir_entry olh_entry;
+  ret = read_index_entry(hctx, op.olh_key, &olh_entry);
+  if (ret < 0 && ret != -ENOENT) {
+    CLS_LOG(0, "ERROR: read_index_entry() olh_key=%s ret=%d", op.olh_key.c_str(), ret);
+    return ret;
+  }
+  if (ret == 0 && !olh_entry.is_olh()) {
+    /* we don't allow overwriting of regular dirent with olh directly
+     * dirent needs to be explicitly removed prior
+     */
+    CLS_LOG(0, "ERROR: can't overwrite link olh into non-olh entry");
+    return -EINVAL;
+  }
+
+  olh_entry.ver.epoch++;
+
+  olh_entry.key = entry.key;
+  olh_entry.meta = entry.meta;
+  olh_entry.exists = !op.removed;
+  olh_entry.flags = RGW_BUCKET_DIRENT_FLAG_OLH;
+  olh_entry.tag = entry.tag;
+
+  /* write the olh entry */
+  ret = write_entry(hctx, olh_entry, op.olh_key);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: write_entry() olh_key=%s ret=%d", op.olh_key.c_str(), ret);
+    return ret;
+  }
+
+  string list_key;
+  if (entry.ver.epoch > 0) {
+    /* this instance has a previous list entry, remove that entry */
+    get_list_index_key(entry, entry.is_olh_pending(), &list_key);
+    ret = cls_cxx_map_remove_key(hctx, list_key);
+    if (ret < 0) {
+      CLS_LOG(0, "ERROR: cls_cxx_map_remove_key() list_key=%s ret=%d", list_key.c_str(), ret);
+      return ret;
+    }
+  }
+
+  if (exists) {
+    entry.ver.epoch = olh_entry.ver.epoch;
+
+    /* write the new instance entry with updated epoch */
+    ret = write_entry(hctx, entry, instance_key);
+    if (ret < 0) {
+      CLS_LOG(0, "ERROR: write_entry() instance_key=%s ret=%d", instance_key.c_str(), ret);
+      return ret;
+    }
+  } else {
+    entry = olh_entry;
+  }
+
+  /* write a new list entry for the object instance (now pending) */
+  get_list_index_key(entry, true, &list_key);
+  ret = write_entry(hctx, entry, instance_key);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: write_entry() instance_key=%s ret=%d", instance_key.c_str(), ret);
+    return ret;
+  }
+
+  return 0;
 }
 
 int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -1813,6 +1918,7 @@ void __cls_init()
   cls_register_cxx_method(h_class, "bucket_rebuild_index", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_rebuild_index, &h_rgw_bucket_rebuild_index);
   cls_register_cxx_method(h_class, "bucket_prepare_op", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_prepare_op, &h_rgw_bucket_prepare_op);
   cls_register_cxx_method(h_class, "bucket_complete_op", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_complete_op, &h_rgw_bucket_complete_op);
+  cls_register_cxx_method(h_class, "bucket_link_olh", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_link_olh, &h_rgw_bucket_link_olh);
   cls_register_cxx_method(h_class, "bi_log_list", CLS_METHOD_RD, rgw_bi_log_list, &h_rgw_bi_log_list_op);
   cls_register_cxx_method(h_class, "bi_log_trim", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_trim, &h_rgw_bi_log_list_op);
   cls_register_cxx_method(h_class, "dir_suggest_changes", CLS_METHOD_RD | CLS_METHOD_WR, rgw_dir_suggest_changes, &h_rgw_dir_suggest_changes);
